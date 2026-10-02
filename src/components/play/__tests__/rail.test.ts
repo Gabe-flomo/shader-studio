@@ -14,7 +14,7 @@ const store = vi.hoisted(() => {
   return m;
 });
 import {
-  RAIL_CATEGORIES, RAIL_CATEGORY_SHORTCUT, RAIL_PAGES, RAIL_PAGE_IDS, categoryBadge, categoryOf, firstPageOf, isRailPage, mappingsCountOf, pageCount, pageForTab, phonePageShown, stepIndex,
+  RAIL_CATEGORIES, RAIL_CATEGORY_SHORTCUT, RAIL_PAGES, RAIL_PAGE_IDS, categoryBadge, categoryOf, currentRailPage, firstPageOf, isRailPage, mappingsCountOf, pageCount, pageForTab, phonePageShown, stepIndex,
 } from '../railPages';
 import { DEFAULT_SPLIT, SPLIT_KEY, goToMappings, goToRailCategory, openLayerInSplit, parseSplitPrefs, railRatioFor, setAreaMeasure, showPageInSplit, shownRatio, usePlaySplit } from '../playSplit';
 import { followReveals } from '../PlaySplitArea';
@@ -29,17 +29,18 @@ describe('categories and pages', () => {
     for (const [cat, page] of listed) expect(categoryOf(page)).toBe(cat);
     // Controls and Mappings are one rail category (the owner's call, 2026-09-28): they're so closely related.
     // Rules is a category of its own (Signals until the implementation guide's phase 3; the id stays).
-    expect(RAIL_CATEGORIES.map(c => c.id)).toEqual(['controls', 'layers', 'signals', 'finish', 'engine']);
+    // The implementation guide's rail (phase 4): Inputs, Rules, Layers, Look, Sound.
+    expect(RAIL_CATEGORIES.map(c => c.id)).toEqual(['controls', 'signals', 'layers', 'finish', 'engine']);
   });
 
   it('gives each category the pages the owner listed', () => {
     const pages = Object.fromEntries(RAIL_CATEGORIES.map(c => [c.id, c.pages.map(p => RAIL_PAGES[p].label)]));
     expect(pages).toEqual({
-      controls: ['Controls', 'Mappings', 'MIDI file', 'Pad grid'],
-      layers: ['Layers', 'Background'],
+      controls: ['Inputs', 'MIDI file', 'Pad grid'],
       signals: ['Rules'],
-      finish: ['Picture', 'Sound'],
-      engine: ['Arrangement'],
+      layers: ['Layers', 'Background'],
+      finish: ['Picture'],
+      engine: ['Arrangement', 'Sound'],
     });
     for (const p of RAIL_PAGE_IDS) expect(RAIL_PAGES[p].description.length).toBeGreaterThan(10);
   });
@@ -50,9 +51,9 @@ describe('categories and pages', () => {
     expect(pageForTab('finish', 'sound')).toBe('finish-sound');
     expect(pageForTab('finish')).toBe('finish-picture');
     expect(pageForTab('engine')).toBe('engine-performance');
-    expect(pageForTab('mappings')).toBe('mappings');
+    expect(pageForTab('mappings')).toBe('controls');
     expect(firstPageOf('controls')).toBe('controls');
-    expect(categoryOf('mappings')).toBe('controls');
+    expect(currentRailPage('mappings')).toBe('controls');
     expect(isRailPage('pad-grid')).toBe(true);
     expect(isRailPage('notes')).toBe(false);
     expect(isRailPage('toString')).toBe(false);
@@ -109,7 +110,7 @@ describe('categories and pages', () => {
   it('on a phone, shows the picked page while its tab is open', () => {
     expect(phonePageShown('layers', 'picture', 'signals')).toBe('signals');
     expect(phonePageShown('controls', 'picture', 'signals')).toBe('controls');
-    expect(phonePageShown('mappings', 'picture', '')).toBe('mappings');
+    expect(phonePageShown('mappings', 'picture', '')).toBe('controls');
     expect(phonePageShown('finish', 'sound', 'finish-picture')).toBe('finish-sound');
   });
 
@@ -197,10 +198,10 @@ describe('the rail’s state', () => {
     expect(parseSplitPrefs(store.get(SPLIT_KEY) ?? null).railPageMemory).toMatchObject({ layers: 'background', controls: 'controls' });
   });
 
-  it('Mappings is always reachable: ⌘⇧M opens the split (if closed) and shows it', () => {
+  it('Mappings is always reachable: ⌘⇧M opens the split (if closed) on the Inputs board', () => {
     usePlaySplit.setState({ on: false, sidebar: 'rail', railPage: 'layers' });
     expect(goToMappings()).toBe(true);
-    expect(usePlaySplit.getState()).toMatchObject({ on: true, railPage: 'mappings' });
+    expect(usePlaySplit.getState()).toMatchObject({ on: true, railPage: 'controls' });
     // From the tab-strip panel too.
     usePlaySplit.setState({ on: true, sidebar: 'full', tab: 'controls' });
     expect(goToMappings()).toBe(true);
@@ -243,14 +244,14 @@ describe('pages into the panel', () => {
   });
 
   it('opens a layer’s full editor on the rail’s Layers page', () => {
-    usePlaySplit.setState({ sidebar: 'rail', railPage: 'mappings', tab: 'controls' });
+    usePlaySplit.setState({ sidebar: 'rail', railPage: 'pad-grid', tab: 'controls' });
     expect(openLayerInSplit('l9')).toBe(true);
     expect(usePlaySplit.getState()).toMatchObject({ railPage: 'layers', tab: 'controls' });
     expect(usePlayUi.getState().selected).toBe('l9');
   });
 
   it('follows reveals while the rail is out (a layer clicked on the picture, a Finish effect, a control group)', () => {
-    usePlaySplit.setState({ sidebar: 'rail', railPage: 'mappings' });
+    usePlaySplit.setState({ sidebar: 'rail', railPage: 'pad-grid' });
     const stop = followReveals();
     usePlayUi.getState().reveal('l1');
     expect(usePlaySplit.getState().railPage).toBe('layers');

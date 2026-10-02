@@ -20,7 +20,12 @@ import { getNodeDefinitionFor } from '../../nodes/definitions';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
-import type { PlayControl, PlayLayer, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
+import type { PlayControl, PlayLayer, PlayMapping, PlayRecord, PlayRoute, PlaySource, PlaySourceDef, SourceOutput } from '../../types/play';
+import { addFreeSource, patchRoute, patchSource, removeRoute, removeSource, routeToControl, routesInto } from '../../play/routeOps';
+import { rtAddSwing } from '../../play/kit/routes.js';
+import { useMapMode } from './inputs/mapMode';
+import { MapModeBar, MapTarget } from './inputs/MapTarget';
+import { InputsBoard } from './inputs/InputsBoard';
 import { CHANNELS, COLOUR_CHANNELS, CURVES, HAND_GESTURE_OPTIONS, HAND_READ_HINTS, HAND_SIDES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, PINCH_FINGERS, SENSOR_HINTS, SENSOR_LABELS, OPEN_READERS, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, withFire, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
 import { CAPTURE_POS, PER_GRAIN_READS, sensorReadsFor, type SensorRead } from '../../types/play';
 import { GRAIN_EACH, grainSensorLayer, isGranulatorRack, parseGrainsTarget } from '../../types/playAudioEngine';
@@ -65,7 +70,6 @@ import { PlayRailBar } from './PlayRail';
 import { phonePageShown, type RailPage } from './railPages';
 import { BackgroundPage, CardPage } from './FullPages';
 import { RulesPage } from './rules/RulesPage';
-import { groupCounts, groupMappings, type MappingGroupId } from './mappingGroups';
 import { ControlsBoard, type BoardSlot } from './ControlsBoard';
 import { AudioEnginePanel } from './engine/AudioEnginePanel';
 import { aeRack, aeSlot, aeSlotLabel, parseAuTarget, parseMacroTarget, patchSlot, rackMacros } from '../../types/playAudioEngine';
@@ -588,6 +592,24 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     { label: 'Map onto the pair', icon: 'plus', onSelect: () => addPairMapping(pairId) },
     { label: 'Unpair', icon: 'close', hint: 'Two separate sliders again; its pair mappings go', onSelect: () => update(p => unpair(p, pairId)) },
   ];
+  // Map mode (inputs/mapMode.ts): a click on a control routes the picked source there, or takes it off again.
+  const mapSrc = useMapMode(m => m.sourceId);
+  useEffect(() => {
+    if (!mapSrc) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') useMapMode.getState().stop(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mapSrc]);
+  const mapPick = (controlId: string) => {
+    if (!mapSrc) return;
+    const on = routesInto(play, controlId).find(x => x.sourceId === mapSrc);
+    if (on) { update(p => (on.mapping ? { ...p, mappings: p.mappings.filter(m => m.id !== on.sourceId) } : removeRoute(p, on.sourceId, on.routeId))); return; }
+    let said = '';
+    update(p => { const r = routeToControl(p, mapSrc, controlId); said = r.said; return r.play; });
+    if (said) toast.info(said);
+  };
+  /** What drives a control, in words: its mappings, and the record's sources routed onto it. */
+  const drivenLabels = (id: string) => [...play.mappings.filter(m => m.enabled && m.controlId === id).map(m => mappingLabel(m, play)), ...routesInto(play, id).filter(x => !x.mapping).map(x => `${x.label}${x.mode === 'add' ? ' (add)' : ''}`)];
   // A control's card (a pair's shows once, where its A is). `board`: the Controls board's trace slot and isolate.
   const renderOne = (c: PlayControl, i: number, board?: BoardSlot): ReactNode => {
     const pair = pairOf(play, c.id);
@@ -620,7 +642,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       );
     }
     return (
-    <LinkableControl key={c.id} id={c.id} play={play} onLink={linkControl}>
+    <MapTarget key={c.id} label={c.label} driven={!!mapSrc && routesInto(play, c.id).some(x => x.sourceId === mapSrc)} onPick={() => mapPick(c.id)}>
+    <LinkableControl id={c.id} play={play} onLink={linkControl}>
     <ContextMenuArea items={() => controlMenu(c.id)}>
     <ControlRow
       control={c}
@@ -640,7 +663,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       onAmount={amount => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, amount } : x) }))}
       value={readControlValue(nodes, c.target, play)}
       live={liveValues.get(c.id)}
-      drivenBy={play.mappings.filter(m => m.enabled && m.controlId === c.id).map(m => mappingLabel(m, play))}
+      drivenBy={drivenLabels(c.id)}
       touch={compact}
       onChange={v => writeControl(c, v)}
       onRename={label => update(p => { const rt = parseReaderTarget(c.target); return rt ? renameReader(p, rt.readerId, label) : { ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, label } : x) }; })}
@@ -660,6 +683,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     />
     </ContextMenuArea>
     </LinkableControl>
+    </MapTarget>
     );
   };
   // What drives a trace on the Controls board (a control id, or `pair:<id>`), for its isolated strip.
@@ -669,7 +693,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       if (!pair) return [];
       return [...(play.pairMappings ?? []).filter(m => m.enabled && m.pairId === pair.id).map(m => pairMappingLabel(m, play)), ...play.mappings.filter(m => m.enabled && (m.controlId === pair.a || m.controlId === pair.b)).map(m => mappingLabel(m, play))];
     }
-    return play.mappings.filter(m => m.enabled && m.controlId === key).map(m => mappingLabel(m, play));
+    return drivenLabels(key);
   };
   const renderControls = (inPanel: boolean) => (
     <div style={{ flex: 1, minHeight: play.notes && !compact && !inPanel ? 110 : 0, overflowY: 'auto', padding: inPanel ? '8px 16px 16px' : '6px 12px 12px' }}>
@@ -750,11 +774,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       return items;
       })()}</div>
   );
-  // `pages`: the MIDI file and the pad grid have pages of their own (the rail's, the phone's row); `workspace`: the full-width table.
-  const renderMappings = (inPanel: boolean, pages = false, workspace = false) => (
+  // `pages`: the MIDI file and the pad grid have pages of their own (the rail's, the phone's row).
+  const renderMappings = (inPanel: boolean, pages = false) => (
     <MappingsDrawer
       play={play}
-      mode={workspace && splitWide ? 'workspace' : compact || inPanel ? 'tab' : 'drawer'}
+      mode={compact || inPanel ? 'tab' : 'drawer'}
       grid={inPanel}
       pages={pages}
       height={drawerH}
@@ -767,6 +791,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       onAddPair={addPairMapping}
       onUpdatePair={(id, patch) => update(p => ({ ...p, pairMappings: (p.pairMappings ?? []).map(m => (m.id === id ? { ...m, ...patch } : m)) }))}
       onRemovePair={id => update(p => { const rest = (p.pairMappings ?? []).filter(m => m.id !== id); const out: PlayRecord = { ...p, pairMappings: rest }; if (!rest.length) delete out.pairMappings; return out; })}
+      onRecord={update}
       audioNodes={audioNodes}
       nullLayers={nullLayers}
       layerRefs={layerRefs}
@@ -780,7 +805,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
    */
   const renderPage = (page: RailPage, wide: boolean, touch: boolean): ReactNode => {
     switch (page) {
-      case 'controls': return <>{controlsHeader}{notesCard}{renderControls(true)}</>;
+      case 'controls': return (
+        <InputsBoard wide={wide} counts={{ controls: play.controls.length, sources: play.mappings.length + (play.sources?.length ?? 0) + (play.pairMappings?.length ?? 0) }}
+          controls={<>{controlsHeader}{notesCard}<div style={{ padding: '0 16px', flexShrink: 0 }}><MapModeBar /></div>{renderControls(true)}</>}
+          sources={renderMappings(true, true)} />
+      );
       case 'layers': return layersOk
         ? <LayersPanel play={play} touch={touch} split={wide} big extras={false} exposedTargets={new Set(play.controls.map(c => c.target))} onChange={update} onExpose={exposeControl} />
         : <LockedLayers play={play} />;
@@ -789,7 +818,6 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       case 'finish-picture':
       case 'finish-sound': return finishOk ? <FinishPanel play={play} onChange={update} touch={touch} wide={wide} only={page === 'finish-sound' ? 'sound' : 'picture'} /> : <LockedFinish play={play} />;
       case 'engine-performance': return <AudioEnginePanel play={play} onChange={update} touch={touch} wide={wide} />;
-      case 'mappings': return renderMappings(true, true, true);
       case 'midi-file': return (
         <CardPage title="MIDI file" intro="A MIDI file plays into the setup as if from a controller: its notes and CCs drive mappings, triggers and racks, in time with the picture.">
           <MidiFileSlot />
@@ -879,6 +907,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         </div>
       )}
       {!compact && (backgroundsOk ? <BackgroundRow play={play} onChange={update} /> : <LockedBackground />)}
+      {shown === 'controls' && <div style={{ padding: '0 12px', flexShrink: 0 }}><MapModeBar /></div>}
       {shown === 'controls' && renderControls(false)}
 
       {(compact ? tab === 'mappings' && !phoneOwn : sideView.drawer) && renderMappings(false, compact)}
@@ -1330,13 +1359,14 @@ function RangeEditor({ min, max, onRange }: { min: number; max: number; onRange:
 
 interface AudioNodeOption { id: string; label: string; bands: number }
 
-function MappingsDrawer({ play, mode, grid = false, pages = false, height, onResizeStart, open, onToggle, onAdd, onUpdate, onRemove, onAddPair, onUpdatePair, onRemovePair, audioNodes, nullLayers, layerRefs, addControlButton }: {
+function MappingsDrawer({ play, mode, grid = false, pages = false, height, onResizeStart, open, onToggle, onAdd, onUpdate, onRemove, onAddPair, onUpdatePair, onRemovePair, onRecord, audioNodes, nullLayers, layerRefs, addControlButton }: {
   play: PlayRecord;
+  /** Edits to the record's own sources (their cards, Learn, + Source). */
+  onRecord: (fn: (p: PlayRecord) => PlayRecord) => void;
   /**
    * `drawer`: folds under the controls with a draggable top edge. `tab`: fills the page (phones, the split view's panel).
-   * `workspace`: the rail's full-width page: a table grouped by source, filters, and the selected mapping's editor beside it.
    */
-  mode: 'drawer' | 'tab' | 'workspace';
+  mode: 'drawer' | 'tab';
   /** The rows as cards in columns (the split view's panel). */
   grid?: boolean;
   /** The MIDI file and the pad grid have pages of their own: leave them out. */
@@ -1360,6 +1390,8 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
 }) {
   const tk = useTokens();
   const meters = useSourceMeter(open ? play.mappings : EMPTY_MAPPINGS);
+  const ownSources = play.sources ?? NO_SOURCES;
+  const ownMeters = useSourceValues(open ? ownSources.map(x => x.id) : NO_IDS);
   // Learn: the next knob, key or MIDI note becomes a source. `learnFor` is a
   // mapping id (replace its source) or 'new' (add a mapping).
   const [learnFor, setLearnFor] = useState<string | null>(null);
@@ -1369,6 +1401,19 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
     void midiEngine.connectWebMidi({ retry: true });
     // A trigger row's Learn picks what fires it (key, note, click, OSC); every other Learn picks a source.
     const row = learnFor === 'new' ? undefined : play.mappings.find(m => m.id === learnFor);
+    // A source of the record: Learn replaces what it reads (a trigger source, what fires it).
+    const own = play.sources?.find(x => x.id === learnFor);
+    if (own) {
+      const src = own.source;
+      const done = (source: PlaySource) => {
+        if (sourceNeedsPro(source) && !can('play.sources')) { setLearnFor(null); openProSheet('play.sources'); return; }
+        onRecord(p => patchSource(p, own.id, { source }));
+        setLearnFor(null);
+      };
+      return src.kind === 'trigger'
+        ? playEngine.startLearnTrigger(trigger => done({ ...src, trigger: withFire(trigger, src.trigger.fire) }))
+        : playEngine.startLearn(done);
+    }
     if (row?.source.kind === 'trigger') {
       const src = row.source;
       return playEngine.startLearnTrigger(trigger => {
@@ -1422,7 +1467,6 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const toggleRow = (id: string) => setCollapsed(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const allCollapsed = play.mappings.length > 0 && play.mappings.every(m => collapsed.has(m.id));
-  const workspace = mode === 'workspace';
   const rowFor = (m: PlayMapping, opts: { collapsed: boolean; fixed?: boolean }) => (
     <MappingRow
       key={m.id}
@@ -1441,6 +1485,7 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
       onLearn={() => setLearnFor(l => (l === m.id ? null : m.id))}
       onUpdate={patch => onUpdate(m.id, patch)}
       onRemove={() => onRemove(m.id)}
+      onMap={() => useMapMode.getState().start(m.id, sourceLabel(m.source, play.controls, layerRefs))}
     />
   );
   const status = (
@@ -1494,13 +1539,13 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
         />
       )}
       <PanelHeader
-        title="Mappings"
+        title={mode === 'drawer' ? 'Mappings' : 'Sources'}
         hint={play.mappings.length ? `${play.mappings.length}` : undefined}
         chevron={mode === 'drawer' ? (open ? 'down' : 'up') : undefined}
         onClick={mode === 'drawer' ? onToggle : undefined}
         extra={open && (
           <>
-            {play.mappings.length > 1 && !workspace && (
+            {play.mappings.length > 1 && (
               <IconButton
                 icon={allCollapsed ? 'chevD' : 'chevU'}
                 label={allCollapsed ? 'Expand all mappings' : 'Collapse all mappings'}
@@ -1513,28 +1558,21 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
               {learnFor === 'new' ? 'Listening…' : 'Learn'}
             </Button>
             <Button size="sm" icon="plus" disabled={noControls} onClick={addDefaultMapping}>Add</Button>
+            {mode !== 'drawer' && <Button size="sm" icon="plus" variant="ghost" title="A source that drives nothing yet: pick what it reads, then Map it onto controls" onClick={() => onRecord(p => addFreeSource(p, allSources ? { kind: 'midi', signal: 'cc', channel: 0 } : { kind: 'mouse', axis: 'x' }).play)}>Source</Button>}
           </>
         )}
       />
-      {open && workspace && (
-        <MappingsWorkspace
-          play={play}
-          meters={meters}
-          status={status}
-          empty={emptyState}
-          renderRow={m => rowFor(m, { collapsed: false, fixed: true })}
-          pairs={play.pairs?.length ? <PairMappingsSection play={play} grid={false} audioNodes={audioNodes} layerRefs={layerRefs} onAdd={onAddPair} onUpdate={onUpdatePair} onRemove={onRemovePair} /> : null}
-          layerRefs={layerRefs}
-          onUpdate={onUpdate}
-        />
-      )}
-      {open && !workspace && (
+      {open && (
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: grid ? '8px 16px 16px' : '6px 12px 12px' }}>
           {status}
           <SoloStrip kind="mapping" total={play.mappings.length} />
           {play.midiFile && !pages && <MidiFileSlot />}
+          {ownSources.length > 0 && <div style={grid ? PANEL_GRID_WIDE : undefined}>{ownSources.map(d => (
+            <SourceCard key={d.id} def={d} play={play} meter={ownMeters.get(d.id) ?? 0} audioNodes={audioNodes} nullLayers={nullLayers} layerRefs={layerRefs}
+              learning={learnFor === d.id} onLearn={() => setLearnFor(l => (l === d.id ? null : d.id))} onChange={onRecord} />
+          ))}</div>}
           {play.mappings.length === 0 ? (
-            emptyState
+            ownSources.length ? null : emptyState
           ) : <div style={grid ? PANEL_GRID_WIDE : undefined}>{play.mappings.map(m => rowFor(m, { collapsed: collapsed.has(m.id) }))}</div>}
           {!!play.pairs?.length && (
             <PairMappingsSection play={play} grid={grid} audioNodes={audioNodes} layerRefs={layerRefs} onAdd={onAddPair} onUpdate={onUpdatePair} onRemove={onRemovePair} />
@@ -1548,129 +1586,9 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
   );
 }
 
-// ── Mappings workspace (the rail's full-width page) ─────────────────────────
-
-/**
- * Mappings full width: a table of source → control, grouped by the kind of
- * source (mappingGroups.ts), with live meters, a search and group filters;
- * the selected mapping's editor beside it. Up and down move the selection.
- */
-function MappingsWorkspace({ play, meters, status, empty, renderRow, pairs, layerRefs, onUpdate }: {
-  play: PlayRecord;
-  meters: Map<string, number>;
-  /** MIDI and hands status, the Learn prompt. */
-  status: ReactNode;
-  empty: ReactNode;
-  renderRow: (m: PlayMapping) => ReactNode;
-  pairs: ReactNode;
-  layerRefs: LayerRef[];
-  onUpdate: (id: string, patch: Partial<PlayMapping>) => void;
-}) {
-  const tk = useTokens();
-  const [query, setQuery] = useState('');
-  const [group, setGroup] = useState<MappingGroupId | 'all'>('all');
-  const [picked, setPicked] = useState('');
-  const listRef = useRef<HTMLDivElement>(null);
-  const label = useCallback((m: PlayMapping) => ({
-    source: m.increment ? `Increment ${incrementSummary(m.increment, play.signals, layerRefs)}` : sourceLabel(m.source, play.controls, layerRefs),
-    control: play.controls.find(c => c.id === m.controlId)?.label ?? 'missing control',
-  }), [play.controls, play.signals, layerRefs]);
-  const counts = useMemo(() => groupCounts(play.mappings), [play.mappings]);
-  const shownGroup = group !== 'all' && counts.some(c => c.id === group) ? group : 'all';
-  const groups = useMemo(() => groupMappings(play.mappings, label, query, shownGroup), [play.mappings, label, query, shownGroup]);
-  const visible = groups.flatMap(g => g.rows);
-  const selected = play.mappings.find(m => m.id === picked) ?? visible[0];
-  const pick = (id: string, focus = false) => {
-    setPicked(id);
-    if (focus) requestAnimationFrame(() => listRef.current?.querySelector<HTMLElement>(`[data-mapping-row="${CSS.escape(id)}"]`)?.focus());
-  };
-  const onListKey = (e: React.KeyboardEvent) => {
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-    const i = visible.findIndex(m => m.id === selected?.id);
-    const next = visible[Math.max(0, Math.min(visible.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
-    if (!next) return;
-    e.preventDefault();
-    pick(next.id, true);
-  };
-  const chip = (id: MappingGroupId | 'all', text: string, n: number) => {
-    const on = shownGroup === id;
-    return (
-      <button key={id} type="button" aria-pressed={on} onClick={() => setGroup(id)} style={{
-        height: 26, padding: '0 10px', border: 0, borderRadius: 999, cursor: 'pointer', whiteSpace: 'nowrap',
-        background: on ? tk.bg.selected : tk.bg.field, color: on ? tk.accent.text : tk.text.secondary, font: `600 11px ${fontFamily.ui}`,
-      }}>{text} <span style={{ font: `500 10.5px ${fontFamily.mono}`, color: on ? tk.accent.text : tk.text.faint }}>{n}</span></button>
-    );
-  };
-  return (
-    <div data-mappings-workspace="" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      {play.mappings.length > 0 && (
-        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '8px 16px', borderBottom: `1px solid ${tk.border.subtle}` }}>
-          <Field placeholder="Search sources and controls" aria-label="Search mappings" value={query} onChange={e => setQuery(e.target.value)} height={28} style={{ width: 240 }} leading={<Icon name="search" size={14} style={{ color: tk.text.faint }} />} />
-          {counts.length > 1 && chip('all', 'All', play.mappings.length)}
-          {counts.length > 1 && counts.map(c => chip(c.id, c.label, c.count))}
-        </div>
-      )}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-        <div data-pane="list" ref={listRef} onKeyDown={onListKey} style={{ width: 'clamp(340px, 48%, 560px)', flexShrink: 0, overflowY: 'auto', padding: '8px 12px 16px 16px', borderRight: `1px solid ${tk.border.default}` }}>
-          {status}
-          <SoloStrip kind="mapping" total={play.mappings.length} />
-          {play.mappings.length === 0 ? empty
-            : groups.length === 0 ? <div style={{ padding: '14px 4px', color: tk.text.faint }}>No mapping matches.</div>
-            : groups.map(g => (
-              <section key={g.id} data-mapping-group={g.id} style={{ marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, padding: '6px 4px 4px', color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                  <span>{g.label}</span>
-                  <span style={{ font: `500 10.5px ${fontFamily.mono}`, letterSpacing: 0 }}>{g.rows.length}</span>
-                </div>
-                <div role="listbox" aria-label={g.label} style={{ borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, overflow: 'hidden' }}>
-                  {g.rows.map((m, i) => {
-                    const l = label(m);
-                    const on = m.id === selected?.id;
-                    const meter = meters.get(m.id) ?? 0;
-                    return (
-                      <div
-                        key={m.id}
-                        role="option"
-                        aria-selected={on}
-                        tabIndex={on ? 0 : -1}
-                        data-mapping-row={m.id}
-                        onClick={() => pick(m.id)}
-                        style={{
-                          display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) 12px minmax(0, 1fr) 56px auto', alignItems: 'center', columnGap: 8,
-                          minHeight: 36, padding: '0 6px 0 10px', cursor: 'pointer', outline: 'none',
-                          borderTop: i ? `1px solid ${tk.border.subtle}` : undefined,
-                          background: on ? tk.bg.selected : 'transparent', boxShadow: on ? `inset 2px 0 0 ${tk.accent.base}` : undefined,
-                          opacity: m.enabled ? 1 : 0.55,
-                        }}
-                      >
-                        <span onClick={e => e.stopPropagation()} style={{ display: 'inline-flex' }}><Toggle checked={m.enabled} onChange={enabled => onUpdate(m.id, { enabled })} /></span>
-                        <span title={l.source} style={{ font: `600 12px ${fontFamily.ui}`, color: on ? tk.accent.text : tk.text.primary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.source}</span>
-                        <Icon name="chevR" size={12} style={{ color: tk.text.faint }} />
-                        <span title={l.control} style={{ font: `12px ${fontFamily.ui}`, color: tk.text.secondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.control}</span>
-                        <MappingMeter input={meter} output={applyCurve(meter, m.curve, m.curveY)} on={m.enabled} margin="0" />
-                        <span onClick={e => e.stopPropagation()} style={{ display: 'inline-flex' }}><SoloButton kind="mapping" id={m.id} /></span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
-          {pairs}
-        </div>
-        <div data-pane="side" style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '8px 16px 16px' }}>
-          {selected ? (
-            <>
-              <div style={{ margin: '6px 2px 0', color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Edit</div>
-              <div data-mapping-editor={selected.id} style={{ maxWidth: 640 }}>{renderRow(selected)}</div>
-            </>
-          ) : play.mappings.length ? <div style={{ padding: '14px 4px', color: tk.text.faint }}>Pick a mapping to edit it here.</div> : null}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 const EMPTY_MAPPINGS: PlayMapping[] = [];
+const NO_SOURCES: PlaySourceDef[] = [];
+const NO_IDS: string[] = [];
 const NO_LAYER_CANDIDATES: LayerCandidates[] = [];
 
 function joinParts(parts: string[]): string {
@@ -1796,8 +1714,10 @@ function PairMappingsSection({ play, grid, audioNodes, layerRefs, onAdd, onUpdat
   );
 }
 
-function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, layerRefs, meter, learning, assigned = false, collapsed, fixed = false, onToggle, onLearn, onUpdate, onRemove }: {
+function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, layerRefs, meter, learning, assigned = false, collapsed, fixed = false, onToggle, onLearn, onUpdate, onRemove, onMap }: {
   mapping: PlayMapping;
+  /** Map: drive more controls from this source (it becomes a source of the record on the first pick). */
+  onMap?: () => void;
   control: PlayControl | undefined;
   controls: PlayControl[];
   audioNodes: AudioNodeOption[];
@@ -1816,24 +1736,13 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
   onRemove: () => void;
 }) {
   const tk = useTokens();
-  const type = sourceType(m.source);
-  const readers = useNodeGraphStore(s => s.play.audioReaders?.readers) ?? NO_READERS;
   // Free maps from the mouse, keys and audio (play/planGates.ts). A Pro source made on Pro stays as it is, marked, and doesn't run.
   const allSources = useCan('play.sources');
   const locked = !allSources && sourceNeedsPro(m.source);
   const signals = useNodeGraphStore(s => s.play.signals);
-  const sourceSections = useMemo(() => sourcePickerSections(readers, !allSources, signals), [readers, allSources, signals]);
-  const pickSource = (v: string) => {
-    if (!allSources && sourceTypeNeedsPro(v)) { openProSheet('play.sources'); return; }
-    if (v.startsWith(SIGNAL_SOURCE)) { onUpdate({ source: signalSource(v.slice(SIGNAL_SOURCE.length)) }); return; }
-    if (v === OPEN_READERS) { useReadersPanel.getState().show({ mappingId: m.id, focus: m.source.kind === 'reader' ? m.source.readerId : '' }); return; }
-    // Set: the first signal that captures a number, and no glide (it jumps).
-    if (v === 'captured' && m.source.kind !== 'captured') { onUpdate({ source: { kind: 'captured', signal: (signals ?? []).find(s => s.capture && !s.capture.what.startsWith(CAPTURE_POS))?.id ?? signals?.[0]?.id ?? '', release: 'stay' }, smoothMs: 0 }); return; }
-    onUpdate({ source: sourceFromType(v as SourceType, m.source, otherControls[0]?.id ?? '', nullLayers[0]?.id ?? '', firstSensor(layerRefs), firstDataset()) });
-  };
+
   const numStyle = { width: 58, height: 26, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' as const };
   const labelStyle = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' as const, width: 54, flexShrink: 0 };
-  const otherControls = controls.filter(c => c.id !== m.controlId);
   const retarget = (id: string) => {
     const c = controls.find(x => x.id === id);
     // A control can't drive itself: drop a control source that now points at the target.
@@ -1924,7 +1833,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
           sourceEditor={<>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
               <span style={labelStyle}>Source</span>
-              <GroupedPicker ariaLabel="Source" value={type} sections={sourceSections} onChange={pickSource} height={26} style={{ flex: 1, minWidth: 0 }} width={300} searchPlaceholder="Search sources" />
+              <SourceFields source={m.source} controls={controls} excludeControlId={m.controlId} nullLayers={nullLayers} layerRefs={layerRefs} numStyle={numStyle} onChange={source => onUpdate({ source })} onCaptured={source => onUpdate({ source, smoothMs: 0 })} mappingId={m.id} pickerOnly />
               <IconButton icon="spark" label={learning ? 'Listening… (Esc to cancel)' : 'Learn: replace this source with the next input'} size="sm" active={learning} onClick={onLearn} />
             </div>
             <SourceOptions source={m.source} audioNodes={audioNodes} layerRefs={layerRefs} numStyle={numStyle} labelStyle={labelStyle} onChange={source => onUpdate({ source })} />
@@ -1940,43 +1849,9 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {chevron}
         <span style={{ ...labelStyle, width: 40 }}>Source</span>
-        <GroupedPicker ariaLabel="Source" value={type} sections={sourceSections} onChange={pickSource} height={26} style={{ flex: 1, minWidth: 0 }} width={300} searchPlaceholder="Search sources" />
-        {m.source.kind === 'null' && (
-          nullLayers.length === 0
-            ? <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Add a Null layer first</span>
-            : <>
-                <Select ariaLabel="Null layer" value={m.source.layerId} options={nullLayers.map(l => ({ value: l.id, label: l.label }))} onChange={v => onUpdate({ source: { kind: 'null', layerId: v, axis: m.source.kind === 'null' ? m.source.axis : 'x' } })} height={26} style={{ flex: 1, minWidth: 0 }} />
-                <Segmented size="sm" ariaLabel="Null axis" value={m.source.axis} options={[{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }]} onChange={v => onUpdate({ source: { kind: 'null', layerId: m.source.kind === 'null' ? m.source.layerId : '', axis: v } })} />
-              </>
-        )}
-        {m.source.kind === 'captured' && (() => {
-          const src = m.source;
-          return <>
-            <Select ariaLabel="Signal it takes the value from" value={src.signal} options={[...(signals ?? []).some(s => s.id === src.signal) ? [] : [{ value: src.signal, label: 'Pick a signal' }], ...(signals ?? []).map(s => ({ value: s.id, label: s.capture ? s.name : `${s.name} (captures nothing yet)` }))]} onChange={v => onUpdate({ source: { ...src, signal: v } })} height={26} style={{ flex: 1, minWidth: 0 }} />
-            <Segmented size="sm" ariaLabel="When the signal lets go" value={src.release} options={[
-              { value: 'stay', label: 'Stay', title: 'Keeps the value it was set to until the next capture' },
-              { value: 'back', label: 'Go back', title: 'The control goes back to its own slider when the signal is false' },
-              { value: 'value', label: 'Go to', title: 'Goes to a resting value when the signal is false' },
-            ]} onChange={release => onUpdate({ source: release === 'value' ? { ...src, release, rest: src.rest ?? 0 } : { kind: 'captured', signal: src.signal, release } })} />
-            {src.release === 'value' && <NumberInput value={src.rest ?? 0} step={0.01} title="Where it rests while the signal is false" onCommit={n => onUpdate({ source: { ...src, rest: n } })} style={{ ...numStyle, width: 52 }} />}
-          </>;
-        })()}
-        {m.source.kind === 'control' && (
-          otherControls.length === 0
-            ? <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Add a second control</span>
-            : <Select ariaLabel="Source control" value={m.source.controlId} options={otherControls.map(c => ({ value: c.id, label: c.label }))} onChange={v => onUpdate({ source: { kind: 'control', controlId: v } })} height={26} style={{ flex: 1, minWidth: 0 }} />
-        )}
-        {m.source.kind === 'midi' && m.source.signal === 'cc' && (waiting
-          ? <MidiWaitChip title="This row has no knob yet: the first CC that moves on any device becomes its CC (or type one in the Knob row below)" />
-          : <NumberInput value={m.source.cc ?? 0} min={0} max={127} step={1} title="CC number" onCommit={n => onUpdate({ source: { ...m.source, kind: 'midi', signal: 'cc', channel: m.source.kind === 'midi' ? m.source.channel : 0, cc: Math.max(0, Math.min(127, Math.round(n))) } })} style={{ ...numStyle, width: 44 }} />
-        )}
-        {m.source.kind === 'midi' && (
-          <Select ariaLabel="MIDI channel" value={`${m.source.channel}`} options={CHANNELS} onChange={v => onUpdate({ source: { ...(m.source as Extract<PlaySource, { kind: 'midi' }>), channel: parseInt(v, 10) || 0 } })} height={26} style={{ flexShrink: 0 }} />
-        )}
-        {m.source.kind === 'key' && (
-          <span style={{ height: 26, padding: '0 8px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', background: tk.bg.field, font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary }}>{keyName(m.source.code)}</span>
-        )}
+        <SourceFields source={m.source} controls={controls} excludeControlId={m.controlId} nullLayers={nullLayers} layerRefs={layerRefs} numStyle={numStyle} onChange={source => onUpdate({ source })} onCaptured={source => onUpdate({ source, smoothMs: 0 })} mappingId={m.id} />
         <SoloButton kind="mapping" id={m.id} />
+        {onMap && <IconButton icon="plus" label="Map: drive more controls from this source" size="sm" onClick={onMap} />}
         <IconButton icon="spark" label={learning ? 'Listening… (Esc to cancel)' : 'Learn: replace this source with the next input'} size="sm" active={learning} onClick={onLearn} />
         <IconButton icon="trash" label="Remove mapping" size="sm" tone="danger" onClick={onRemove} />
       </div>
@@ -2027,6 +1902,236 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
         <div style={{ marginTop: 6, color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Note number scaled 0–1 (last note: {midiNoteName(midiEngine.channelState(m.source.channel).lastNote)}).</div>
       )}
     </div>
+  );
+}
+
+/** The record's own sources' readings (0..1), polled for their meters. */
+function useSourceValues(ids: readonly string[]): Map<string, number> {
+  const [values, setValues] = useState<Map<string, number>>(() => new Map());
+  const key = ids.join('|');
+  useEffect(() => {
+    if (!key) return;
+    const list = key.split('|');
+    let raf = 0, last = 0;
+    const tick = (t: number) => {
+      raf = requestAnimationFrame(tick);
+      if (t - last < 50) return;
+      last = t;
+      setValues(prev => {
+        let changed = false;
+        const next = new Map<string, number>();
+        for (const id of list) { const v = Math.round((playEngine.sourceValue(id) ?? 0) * 100) / 100; next.set(id, v); if (prev.get(id) !== v) changed = true; }
+        return changed ? next : prev;
+      });
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [key]);
+  return values;
+}
+
+/**
+ * A source of the record on the Inputs board (implementation guide 7.1): its
+ * source and settings, read once, then each route onto a control (Replace
+ * sets it, Add moves it from its slider, with range, curve, smoothing and
+ * delay), or a Step output counting through its own range. Map adds a route:
+ * pick it, then click a control.
+ */
+function SourceCard({ def: s, play, meter, audioNodes, nullLayers, layerRefs, learning, onLearn, onChange }: {
+  def: PlaySourceDef;
+  play: PlayRecord;
+  meter: number;
+  audioNodes: AudioNodeOption[];
+  nullLayers: { id: string; label: string }[];
+  layerRefs: LayerRef[];
+  learning: boolean;
+  onLearn: () => void;
+  onChange: (fn: (p: PlayRecord) => PlayRecord) => void;
+}) {
+  const tk = useTokens();
+  const mapping = useMapMode(m => m.sourceId === s.id);
+  const numStyle = { width: 58, height: 26, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' as const };
+  const labelStyle = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' as const, width: 54, flexShrink: 0 };
+  const set = (patch: Partial<PlaySourceDef>) => onChange(p => patchSource(p, s.id, patch));
+  const name = s.label || sourceLabel(s.source, play.controls, layerRefs);
+  const routes = s.outputs.flatMap(o => o.routes);
+  const step = s.outputs.find((o): o is Extract<SourceOutput, { kind: 'step' }> => o.kind === 'step');
+  const sourceRow = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ ...labelStyle, width: 40 }}>Source</span>
+      <SourceFields source={s.source} controls={play.controls} nullLayers={nullLayers} layerRefs={layerRefs} numStyle={numStyle} onChange={source => set({ source })} onCaptured={source => set({ source })} />
+      <IconButton icon="spark" label={learning ? 'Listening… (Esc to cancel)' : 'Learn: replace this source with the next input'} size="sm" active={learning} onClick={onLearn} />
+      <IconButton icon="trash" label="Remove the source and its routes" size="sm" tone="danger" onClick={() => onChange(p => removeSource(p, s.id))} />
+    </div>
+  );
+  return (
+    <div data-source-card={s.id} style={{ marginTop: 6, padding: '8px 10px', borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${mapping || learning ? tk.accent.base : tk.border.default}`, opacity: s.enabled ? 1 : 0.55 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <Field value={s.label ?? ''} placeholder={name} aria-label="Source name" onChange={e => set({ label: e.target.value || undefined })} height={24} style={{ flex: 1, minWidth: 0, font: `600 12px ${fontFamily.ui}` }} />
+        <Button size="sm" icon="plus" variant={mapping ? 'primary' : 'secondary'} title="Map: then click each control it should drive" onClick={() => (mapping ? useMapMode.getState().stop() : useMapMode.getState().start(s.id, name))}>{mapping ? 'Done' : 'Map'}</Button>
+        <Toggle checked={s.enabled} onChange={enabled => set({ enabled })} />
+      </div>
+      {step ? (
+        <IncrementEditor
+          mapping={{ id: s.id, controlId: step.routes[0]?.to ?? '', source: s.source, outMin: step.lo, outMax: step.hi, curve: 'linear', smoothMs: 0, enabled: s.enabled, increment: step.step }}
+          control={play.controls.find(c => c.id === step.routes[0]?.to)}
+          layers={layerRefs}
+          numStyle={numStyle}
+          labelStyle={labelStyle}
+          onUpdate={patch => set({
+            ...(patch.source ? { source: patch.source } : {}),
+            ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
+            outputs: s.outputs.map(o => (o !== step ? o : { ...step, ...(patch.increment ? { step: patch.increment } : {}), ...(patch.outMin !== undefined ? { lo: patch.outMin } : {}), ...(patch.outMax !== undefined ? { hi: patch.outMax } : {}) })),
+          })}
+          sourceEditor={<>{sourceRow}<SourceOptions source={s.source} audioNodes={audioNodes} layerRefs={layerRefs} numStyle={numStyle} labelStyle={labelStyle} onChange={source => set({ source })} /></>}
+        />
+      ) : <>
+        {sourceRow}
+        <MappingMeter input={meter} output={meter} on={s.enabled} margin="6px 0 8px 60px" />
+        <SourceOptions source={s.source} audioNodes={audioNodes} layerRefs={layerRefs} numStyle={numStyle} labelStyle={labelStyle} onChange={source => set({ source })} />
+      </>}
+      <div style={{ marginTop: 6 }}>
+        {routes.map(r => <RouteRow key={r.id} route={r} play={play} meter={meter} numStyle={numStyle} labelStyle={labelStyle}
+          onPatch={patch => onChange(p => patchRoute(p, s.id, r.id, patch))} onRemove={() => onChange(p => removeRoute(p, s.id, r.id))} />)}
+        {!routes.length && <div style={{ color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, padding: '4px 0' }}>Drives nothing yet: press Map, then click a control. Rules can still watch it.</div>}
+      </div>
+    </div>
+  );
+}
+
+/** One route of a source: the control, Replace or Add, range, curve, smoothing and delay, on or off. */
+function RouteRow({ route: r, play, meter, numStyle, labelStyle, onPatch, onRemove }: {
+  route: PlayRoute;
+  play: PlayRecord;
+  meter: number;
+  numStyle: React.CSSProperties;
+  labelStyle: React.CSSProperties;
+  onPatch: (patch: Partial<PlayRoute>) => void;
+  onRemove: () => void;
+}) {
+  const tk = useTokens();
+  const [open, setOpen] = useState(false);
+  const c = play.controls.find(x => x.id === r.to);
+  const range = r.mode === 'add' ? `${r.outMin >= 0 ? '+' : ''}${round3(r.outMin)} … ${r.outMax >= 0 ? '+' : ''}${round3(r.outMax)}` : `${round3(r.outMin)} → ${round3(r.outMax)}`;
+  return (
+    <div data-route={r.id} style={{ padding: '5px 0', borderTop: `1px solid ${tk.border.subtle}`, opacity: r.enabled ? 1 : 0.55 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <IconButton icon={open ? 'chevD' : 'chevR'} label={open ? 'Fold' : 'Range, curve, smoothing'} size="sm" tooltip={false} onClick={() => setOpen(o => !o)} style={{ marginLeft: -6 }} />
+        <Select ariaLabel="Control" value={r.to} options={[...(c ? [] : [{ value: r.to, label: 'A missing control' }]), ...play.controls.map(x => ({ value: x.id, label: x.label }))]} height={26} style={{ flex: 1, minWidth: 0 }}
+          onChange={to => { const n = play.controls.find(x => x.id === to); onPatch(n && n.kind === 'float' && r.mode === 'replace' ? { to, outMin: n.min, outMax: n.max, channel: undefined } : { to, channel: undefined }); }} />
+        <Toggle checked={r.enabled} onChange={enabled => onPatch({ enabled })} />
+        <IconButton icon="close" label="Remove this route" size="sm" onClick={onRemove} />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, paddingLeft: 22 }}>
+        <Segmented size="sm" ariaLabel="How it drives" value={r.mode} onChange={mode => {
+          if (mode === r.mode) return;
+          const min = c?.kind === 'float' ? c.min : 0, max = c?.kind === 'float' ? c.max : 1;
+          onPatch(mode === 'add' ? { mode, ...rtAddSwing(min, max) } : { mode, outMin: min, outMax: max });
+        }} options={[{ value: 'replace', label: 'Set', title: 'Replace: the control follows the source over the range' }, { value: 'add', label: 'Add', title: 'Moves the control from its own slider: a swing around where it is' }]} />
+        {!open && <span style={{ color: tk.text.muted, font: `500 11px ${fontFamily.mono}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{range}</span>}
+      </div>
+      {open && <div style={{ padding: '6px 0 2px 22px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={labelStyle}>{r.mode === 'add' ? 'Swing' : 'Range'}</span>
+          <NumberInput value={r.outMin} title="At the source's minimum" onCommit={n => onPatch({ outMin: n })} style={numStyle} />
+          <span style={{ color: tk.text.faint }}>→</span>
+          <NumberInput value={r.outMax} title="At the source's maximum" onCommit={n => onPatch({ outMax: n })} style={numStyle} />
+          <IconButton icon="bidir" label="Invert" size="sm" onClick={() => onPatch({ outMin: r.outMax, outMax: r.outMin })} />
+          {c?.kind === 'color' && <Select ariaLabel="Colour channel" value={r.channel === undefined ? 'all' : `${r.channel}`} options={COLOUR_CHANNELS} onChange={v => onPatch({ channel: v === 'all' ? undefined : (parseInt(v, 10) as 0 | 1 | 2) })} height={26} />}
+          <span style={{ flex: 1 }} />
+          <Segmented size="sm" ariaLabel="Curve" value={r.curve} options={CURVES} onChange={v => onPatch(v === 'custom' ? { curve: 'custom', curveY: r.curveY ?? sampleCurve(r.curve) } : { curve: v })} />
+        </div>
+        {r.curve === 'custom' && <CurvePad value={r.curveY ?? sampleCurve('linear')} meter={meter} range={[r.outMin, r.outMax]} onChange={curveY => onPatch({ curveY })} onReset={() => onPatch({ curveY: sampleCurve('linear') })} />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+          <span style={labelStyle}>Smooth</span>
+          <NumberInput value={r.smoothMs ?? 0} min={0} max={5000} step={10} title="Smoothing in milliseconds" onCommit={n => onPatch({ smoothMs: Math.max(0, n) || undefined })} style={numStyle} />
+          <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>ms</span>
+          <span style={{ ...labelStyle, width: 'auto', marginLeft: 6 }}>Delay</span>
+          <NumberInput value={r.delayMs ?? 0} min={0} max={10000} step={10} title="Delay in milliseconds (at most 10 s)" onCommit={n => onPatch({ delayMs: n > 0 ? Math.min(10000, n) : undefined })} style={numStyle} />
+          <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>ms</span>
+        </div>
+      </div>}
+    </div>
+  );
+}
+const round3 = (x: number) => Math.round(x * 1000) / 1000;
+
+/**
+ * A source's picker and the fields its kind needs (a Null layer and axis, a
+ * captured signal, another control, a MIDI CC and channel, a key): the source
+ * row of a mapping and of a source card on the Inputs board.
+ */
+function SourceFields({ source, controls, excludeControlId, nullLayers, layerRefs, numStyle, onChange, onCaptured, mappingId, pickerOnly = false }: {
+  source: PlaySource;
+  controls: PlayControl[];
+  /** The control it drives (a control source can't be it). */
+  excludeControlId?: string;
+  nullLayers: { id: string; label: string }[];
+  layerRefs: LayerRef[];
+  numStyle: React.CSSProperties;
+  onChange: (source: PlaySource) => void;
+  /** Set picked: the source, with no glide (a mapping drops its smoothing). */
+  onCaptured: (source: PlaySource) => void;
+  /** The readers panel opens on this mapping. */
+  mappingId?: string;
+  pickerOnly?: boolean;
+}) {
+  const tk = useTokens();
+  const type = sourceType(source);
+  const readers = useNodeGraphStore(s => s.play.audioReaders?.readers) ?? NO_READERS;
+  const allSources = useCan('play.sources');
+  const signals = useNodeGraphStore(s => s.play.signals);
+  const sourceSections = useMemo(() => sourcePickerSections(readers, !allSources, signals), [readers, allSources, signals]);
+  const otherControls = controls.filter(c => c.id !== excludeControlId);
+  const pickSource = (v: string) => {
+    if (!allSources && sourceTypeNeedsPro(v)) { openProSheet('play.sources'); return; }
+    if (v.startsWith(SIGNAL_SOURCE)) { onChange(signalSource(v.slice(SIGNAL_SOURCE.length))); return; }
+    if (v === OPEN_READERS) { useReadersPanel.getState().show({ mappingId: mappingId ?? '', focus: source.kind === 'reader' ? source.readerId : '' }); return; }
+    // Set: the first signal that captures a number, and no glide (it jumps).
+    if (v === 'captured' && source.kind !== 'captured') { onCaptured({ kind: 'captured', signal: (signals ?? []).find(s => s.capture && !s.capture.what.startsWith(CAPTURE_POS))?.id ?? signals?.[0]?.id ?? '', release: 'stay' }); return; }
+    onChange(sourceFromType(v as SourceType, source, otherControls[0]?.id ?? '', nullLayers[0]?.id ?? '', firstSensor(layerRefs), firstDataset()));
+  };
+  const picker = <GroupedPicker ariaLabel="Source" value={type} sections={sourceSections} onChange={pickSource} height={26} style={{ flex: 1, minWidth: 0 }} width={300} searchPlaceholder="Search sources" />;
+  if (pickerOnly) return picker;
+  return (
+    <>
+      {picker}
+        {source.kind === 'null' && (
+          nullLayers.length === 0
+            ? <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Add a Null layer first</span>
+            : <>
+                <Select ariaLabel="Null layer" value={source.layerId} options={nullLayers.map(l => ({ value: l.id, label: l.label }))} onChange={v => onChange({ kind: 'null', layerId: v, axis: source.kind === 'null' ? source.axis : 'x' })} height={26} style={{ flex: 1, minWidth: 0 }} />
+                <Segmented size="sm" ariaLabel="Null axis" value={source.axis} options={[{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }]} onChange={v => onChange({ kind: 'null', layerId: source.kind === 'null' ? source.layerId : '', axis: v })} />
+              </>
+        )}
+        {source.kind === 'captured' && (() => {
+          const src = source;
+          return <>
+            <Select ariaLabel="Signal it takes the value from" value={src.signal} options={[...(signals ?? []).some(s => s.id === src.signal) ? [] : [{ value: src.signal, label: 'Pick a signal' }], ...(signals ?? []).map(s => ({ value: s.id, label: s.capture ? s.name : `${s.name} (captures nothing yet)` }))]} onChange={v => onChange({ ...src, signal: v })} height={26} style={{ flex: 1, minWidth: 0 }} />
+            <Segmented size="sm" ariaLabel="When the signal lets go" value={src.release} options={[
+              { value: 'stay', label: 'Stay', title: 'Keeps the value it was set to until the next capture' },
+              { value: 'back', label: 'Go back', title: 'The control goes back to its own slider when the signal is false' },
+              { value: 'value', label: 'Go to', title: 'Goes to a resting value when the signal is false' },
+            ]} onChange={release => onChange(release === 'value' ? { ...src, release, rest: src.rest ?? 0 } : { kind: 'captured', signal: src.signal, release })} />
+            {src.release === 'value' && <NumberInput value={src.rest ?? 0} step={0.01} title="Where it rests while the signal is false" onCommit={n => onChange({ ...src, rest: n })} style={{ ...numStyle, width: 52 }} />}
+          </>;
+        })()}
+        {source.kind === 'control' && (
+          otherControls.length === 0
+            ? <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Add a second control</span>
+            : <Select ariaLabel="Source control" value={source.controlId} options={otherControls.map(c => ({ value: c.id, label: c.label }))} onChange={v => onChange({ kind: 'control', controlId: v })} height={26} style={{ flex: 1, minWidth: 0 }} />
+        )}
+        {source.kind === 'midi' && source.signal === 'cc' && (isUnassignedCc(source)
+          ? <MidiWaitChip title="This row has no knob yet: the first CC that moves on any device becomes its CC (or type one in the Knob row below)" />
+          : <NumberInput value={source.cc ?? 0} min={0} max={127} step={1} title="CC number" onCommit={n => onChange({ ...source, kind: 'midi', signal: 'cc', channel: source.kind === 'midi' ? source.channel : 0, cc: Math.max(0, Math.min(127, Math.round(n))) })} style={{ ...numStyle, width: 44 }} />
+        )}
+        {source.kind === 'midi' && (
+          <Select ariaLabel="MIDI channel" value={`${source.channel}`} options={CHANNELS} onChange={v => onChange({ ...(source as Extract<PlaySource, { kind: 'midi' }>), channel: parseInt(v, 10) || 0 })} height={26} style={{ flexShrink: 0 }} />
+        )}
+        {source.kind === 'key' && (
+          <span style={{ height: 26, padding: '0 8px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', background: tk.bg.field, font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary }}>{keyName(source.code)}</span>
+        )}
+    </>
   );
 }
 

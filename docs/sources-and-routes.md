@@ -41,3 +41,24 @@ the source as the frame before left it.
 phase 4); layer sets carrying a record's own sources (with the board); a Macro
 slider source; reading control sources in dependency order (kept in record
 order so behaviour doesn't change).
+
+## The Inputs board (guide phase 4)
+
+On the rail, **Inputs** replaces Controls and Mappings. The page id stays `controls`, and a saved `mappings` page opens there. The rail now reads **Inputs, Rules, Layers, Look, Sound**. Sound holds the Audio engine and the sound effects.
+
+- **Controls column:** the controls board as before. Each control shows what drives it: its mappings, and every route from a source of the record (marked "(add)" for Add routes).
+- **Sources column:** the record's own sources as cards, then the old mapping cards. The mapping cards keep Learn, MIDI auto-learn, increments, trigger sources and pairs. **+ Source** adds a source that drives nothing yet.
+- **Map:** the + on a mapping card or Map on a source card starts Map mode (`inputs/mapMode.ts`). Every control becomes a target. A click routes the source there, or takes the route off. Esc or Done ends it.
+  - Map works in the sidebar's controls list too.
+  - On the first pick, a mapping becomes a source of the record with the same id (`routeOps.ts` `ownSource`), so its smoothing and delay state carry over.
+  - New routes follow `connectDefaults`: a number Adds ±half the control's range; an on/off input Sets it, with a 120 ms glide.
+- **Source card:** its source and options, Learn, and each route on two lines:
+  - the control, on/off and remove;
+  - Set or Add, with the range, the curve (drawn too), smoothing and delay folded.
+  - A Step output uses the Increment editor.
+- **Phones:** the two columns are tabs; Map mode shows the controls.
+
+Not done yet:
+- the shaded swing ring on sliders;
+- clickable route chips (they open the detail windows, phase 5);
+- grouping sources by kind.

@@ -217,7 +217,7 @@ const NONE: ReadonlySet<string> = new Set();
 const PAGE_TABS: Record<RailPage, PlayTab> = {
   controls: 'controls', layers: 'layers', signals: 'layers', background: 'layers',
   'finish-picture': 'finish', 'finish-sound': 'finish', 'engine-performance': 'engine',
-  mappings: 'mappings', 'midi-file': 'mappings', 'pad-grid': 'mappings',
+  'midi-file': 'mappings', 'pad-grid': 'mappings',
 };
 /** The tab-strip section a rail page belongs to (independent of the rail's own category grouping). */
 export function tabForPage(page: RailPage): PlayTab { return PAGE_TABS[page]; }

@@ -293,7 +293,8 @@ export function goToMappings(): boolean {
   const split = usePlaySplit.getState();
   if (!split.available) return false;
   if (!split.on) split.setOn(true);
-  showPageInSplit('mappings');
+  // The rail's Inputs board, or the tab-strip's own Mappings tab.
+  if (split.sidebar === 'rail') split.setRailPage('controls'); else split.setTab('mappings');
   return true;
 }
 
