@@ -19,6 +19,7 @@ import { SentenceBuilder } from './SentenceBuilder';
 import { ReactionEditor } from './ReactionEditor';
 import { Lamp } from './Lamp';
 import { usePlayUi } from '../playUi';
+import { openDetail } from '../detail/detailStore';
 
 type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
 
@@ -38,6 +39,7 @@ export function RuleCard({ rule: s, play, onChange, on, flash }: { rule: PlaySig
           onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} height={28} style={{ flex: 1, minWidth: 0, font: `600 12.5px ${fontFamily.ui}` }} />
         <Button size="sm" icon="play" onClick={() => playEngine.fireSignal(s.id)} title="Fire it now: its reactions run">Test</Button>
         <IconButton icon="bolt" label="Rule from this: a new rule for when this one starts" size="sm" onClick={() => usePlayUi.getState().askQuickRule({ when: { on: 'signal', signal: s.id } })} />
+        <IconButton icon="popout" label="Open its details: what it listens to and who listens to it" size="sm" onClick={() => openDetail('signal', s.id)} />
         <IconButton icon="trash" label="Delete rule" size="sm" tone="danger" onClick={() => onChange(p => deleteSignal(p, s.id))} />
       </div>
       <div style={{ marginTop: 10 }}>

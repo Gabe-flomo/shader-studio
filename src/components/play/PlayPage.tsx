@@ -26,6 +26,8 @@ import { rtAddSwing } from '../../play/kit/routes.js';
 import { useMapMode } from './inputs/mapMode';
 import { MapModeBar, MapTarget } from './inputs/MapTarget';
 import { InputsBoard } from './inputs/InputsBoard';
+import { DetailWindow } from './detail/DetailWindow';
+import { openDetail } from './detail/detailStore';
 import { CHANNELS, COLOUR_CHANNELS, CURVES, HAND_GESTURE_OPTIONS, HAND_READ_HINTS, HAND_SIDES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, PINCH_FINGERS, SENSOR_HINTS, SENSOR_LABELS, OPEN_READERS, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, withFire, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
 import { CAPTURE_POS, PER_GRAIN_READS, sensorReadsFor, type SensorRead } from '../../types/play';
 import { GRAIN_EACH, grainSensorLayer, isGranulatorRack, parseGrainsTarget } from '../../types/playAudioEngine';
@@ -851,6 +853,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     return (
       <div ref={rootRef} style={{ position: 'absolute', inset: 0 }}>
         {bigPanel}
+        <DetailWindow play={play} onChange={update} renderSource={id => <DetailSource id={id} play={play} update={update} audioNodes={audioNodes} nullLayers={nullLayers} layerRefs={layerRefs} />} />
         {embedOpen && <EmbedDialog onClose={() => setEmbedOpen(false)} />}
         <AudioReadersHost compact={compact} />
         <LayerContextMenu play={play} onChange={update} />
@@ -913,6 +916,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       {(compact ? tab === 'mappings' && !phoneOwn : sideView.drawer) && renderMappings(false, compact)}
       {compact && <PlayRailBar />}
       {bigPanel}
+      <DetailWindow play={play} onChange={update} renderSource={id => <DetailSource id={id} play={play} update={update} audioNodes={audioNodes} nullLayers={nullLayers} layerRefs={layerRefs} />} />
       {embedOpen && <EmbedDialog onClose={() => setEmbedOpen(false)} />}
       <AudioReadersHost compact={compact} />
       <LayerContextMenu play={play} onChange={update} />
@@ -1242,12 +1246,13 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
           </Tooltip>
         )}
         {driven && (
-          <span title={drivenBy.join(', ')} style={{ height: 20, padding: '0 7px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 4, background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 10.5px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>
+          <button type="button" data-driven-chip="" title={`${drivenBy.join(', ')}: open its details`} onClick={() => openDetail('control', control.id)} style={{ height: 20, padding: '0 7px', border: 0, borderRadius: 6, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 10.5px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>
             <Icon name="bidir" size={11} />{drivenBy[0]}{drivenBy.length > 1 ? ` +${drivenBy.length - 1}` : ''}
-          </span>
+          </button>
         )}
         {!exists && <span style={{ color: tk.status.warningText, font: `600 10.5px ${fontFamily.ui}` }}>{fate?.status === 'moved' ? 'moved' : 'missing'}</span>}
         <span style={{ display: 'flex', gap: 0, visibility: hover || touch ? 'visible' : 'hidden' }}>
+          <IconButton icon="popout" label="Open its details: what drives it, the rules on it, where it goes" size="sm" tooltip={false} onClick={() => openDetail('control', control.id)} />
           <IconButton icon="chevU" label="Move up" size="sm" disabled={index === 0} tooltip={false} onClick={() => onMove(-1)} />
           <IconButton icon="chevD" label="Move down" size="sm" disabled={index === count - 1} tooltip={false} onClick={() => onMove(1)} />
           <IconButton icon="trash" label={removeLabel} size="sm" tone="danger" tooltip={false} onClick={onRemove} />
@@ -1852,6 +1857,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
         <SourceFields source={m.source} controls={controls} excludeControlId={m.controlId} nullLayers={nullLayers} layerRefs={layerRefs} numStyle={numStyle} onChange={source => onUpdate({ source })} onCaptured={source => onUpdate({ source, smoothMs: 0 })} mappingId={m.id} />
         <SoloButton kind="mapping" id={m.id} />
         {onMap && <IconButton icon="plus" label="Map: drive more controls from this source" size="sm" onClick={onMap} />}
+        {!fixed && <IconButton icon="popout" label="Open its details" size="sm" onClick={() => openDetail('source', m.id)} />}
         <IconButton icon="spark" label={learning ? 'Listening… (Esc to cancel)' : 'Learn: replace this source with the next input'} size="sm" active={learning} onClick={onLearn} />
         <IconButton icon="trash" label="Remove mapping" size="sm" tone="danger" onClick={onRemove} />
       </div>
@@ -1903,6 +1909,38 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
       )}
     </div>
   );
+}
+
+/** A source in the detail window: a mapping's row, or a record source's card, with its own Learn. */
+function DetailSource({ id, play, update, audioNodes, nullLayers, layerRefs }: {
+  id: string;
+  play: PlayRecord;
+  update: (fn: (p: PlayRecord) => PlayRecord) => void;
+  audioNodes: AudioNodeOption[];
+  nullLayers: { id: string; label: string }[];
+  layerRefs: LayerRef[];
+}) {
+  const [learning, setLearning] = useState(false);
+  useEffect(() => {
+    if (!learning) return;
+    void midiEngine.connectWebMidi({ retry: true });
+    const set = (source: PlaySource) => {
+      update(p => (p.mappings.some(m => m.id === id) ? { ...p, mappings: p.mappings.map(m => (m.id === id ? { ...m, source } : m)) } : patchSource(p, id, { source })));
+      setLearning(false);
+    };
+    return playEngine.startLearn(set);
+  }, [learning, id, update]);
+  const m = play.mappings.find(x => x.id === id);
+  if (m) {
+    return <MappingRow mapping={m} control={play.controls.find(c => c.id === m.controlId)} controls={play.controls} audioNodes={audioNodes} nullLayers={nullLayers} layerRefs={layerRefs}
+      meter={0} learning={learning} collapsed={false} fixed onToggle={() => {}} onLearn={() => setLearning(l => !l)}
+      onUpdate={patch => update(p => ({ ...p, mappings: p.mappings.map(x => (x.id === id ? { ...x, ...patch } : x)) }))}
+      onRemove={() => update(p => ({ ...p, mappings: p.mappings.filter(x => x.id !== id) }))}
+      onMap={() => useMapMode.getState().start(id, sourceLabel(m.source, play.controls, layerRefs))} />;
+  }
+  const d = play.sources?.find(x => x.id === id);
+  if (!d) return null;
+  return <SourceCard def={d} play={play} meter={0} audioNodes={audioNodes} nullLayers={nullLayers} layerRefs={layerRefs} learning={learning} onLearn={() => setLearning(l => !l)} onChange={update} />;
 }
 
 /** The record's own sources' readings (0..1), polled for their meters. */
@@ -1970,6 +2008,7 @@ function SourceCard({ def: s, play, meter, audioNodes, nullLayers, layerRefs, le
         <Field value={s.label ?? ''} placeholder={name} aria-label="Source name" onChange={e => set({ label: e.target.value || undefined })} height={24} style={{ flex: 1, minWidth: 0, font: `600 12px ${fontFamily.ui}` }} />
         <Button size="sm" icon="plus" variant={mapping ? 'primary' : 'secondary'} title="Map: then click each control it should drive" onClick={() => (mapping ? useMapMode.getState().stop() : useMapMode.getState().start(s.id, name))}>{mapping ? 'Done' : 'Map'}</Button>
         <Toggle checked={s.enabled} onChange={enabled => set({ enabled })} />
+        <IconButton icon="popout" label="Open its details" size="sm" onClick={() => openDetail('source', s.id)} />
       </div>
       {step ? (
         <IncrementEditor
