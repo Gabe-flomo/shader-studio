@@ -506,6 +506,8 @@ export function sgParseValueRef(ref) {
   if (typeof ref !== 'string' || !ref) return null;
   if (ref.startsWith('ctl:')) return ref.length > 4 ? { kind: 'control', id: ref.slice(4) } : null;
   if (ref.startsWith('map:')) return ref.length > 4 ? { kind: 'mapping', id: ref.slice(4) } : null;
+  // A source's reading this frame, 0 to 1 (a source of the record, or an old mapping by its id).
+  if (ref.startsWith('src:')) return ref.length > 4 ? { kind: 'source', id: ref.slice(4) } : null;
   if (ref === 'mouse:x' || ref === 'mouse:y') return { kind: 'mouse', axis: ref.slice(6) };
   if (ref.startsWith('dist:')) {
     const i = ref.indexOf('|');

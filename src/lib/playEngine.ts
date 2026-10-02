@@ -18,6 +18,7 @@
  * mappings are live everywhere.
  */
 
+import { rtCurve, rtFrame, rtNew, rtRewind, rtSourcesOf, rtTriggersOf, type RtApplyHost, type RtSource, type RtState, type RtStepHost } from '../play/kit/routes.js';
 import { inputBus, paramChannelKey, type InputSource, type InputWriter } from './inputBus';
 import { midiEngine, type MidiEvent } from './midiEngine';
 import { keyboardClaimed } from './keyboardClaim';
@@ -27,13 +28,13 @@ import { audioEngine } from './audioEngine';
 import { oscClient, oscNumber, type OscMessage } from './oscClient';
 import { anchorDistance, beatAt, firesWhileHeld, newFireState, newTriggerState, noiseAt, proximityCondition, signalKey, stepFire, stepTrigger, triggerKey, type FireState, type TriggerState } from '../play/triggers';
 import { incAdvance, incFold, incGlide, incGliding, incNew, incRange, incRepeat, incReset, incThreshold, type IncState } from '../play/kit/increment.js';
-import { sgCondNew, sgCondRewind, sgCondStep, sgLagNew, sgLagStep, sgLinkClear, sgLinkDue, sgLinkFire, sgLinkNew, sgLinkPlan, sgLogic, type SgLinkPlan, type SgLinkState, type SgLoop, sgParseValueRef, sgShapeNew, sgShapeRewind, sgShapeStep, sgShaped, sgSignalOrder, type SgLagState, type SgShapeState, sgRunActions, sgScreenPoint, sgSwapNew, sgSwapStep, type SgCondState, type SgSwapState } from '../play/kit/signals.js';
+import { sgCondNew, sgCondRewind, sgCondStep, sgLinkClear, sgLinkDue, sgLinkFire, sgLinkNew, sgLinkPlan, sgLogic, type SgLinkPlan, type SgLinkState, type SgLoop, sgParseValueRef, sgShapeNew, sgShapeRewind, sgShapeStep, sgShaped, sgSignalOrder, type SgShapeState, sgRunActions, sgScreenPoint, sgSwapNew, sgSwapStep, type SgCondState, type SgSwapState } from '../play/kit/signals.js';
 import { readFinishValue } from '../types/playFinish';
 import { AUDIO_FX_TARGET_PREFIX, readAudioFxValue } from '../types/playAudioFx';
 import { signalNames } from '../play/signalNames';
 import { conditionRanges } from '../play/conditionRange';
 import { playPerfOn, recordPlayCounts, recordPlayStage, type PlayStage } from './perfStats';
-import type { PairAxis, PlayPair, PlayPairMapping, PlaySignal, ValueCondition } from '../types/play';
+import type { PairAxis, PlayPair, PlayPairMapping, PlaySignal, SourceOutput, ValueCondition } from '../types/play';
 import { geoAnchor } from '../play/kit/geometry.js';
 import { fnEval } from '../play/kit/fn.js';
 import type { TriggerSpec } from '../types/play';
@@ -78,19 +79,8 @@ export function bindingKeyOf(target: string): string {
 
 /** Source unit value → 0..1 shaped by the curve. A drawn curve interpolates its samples. */
 export function applyCurve(u: number, curve: PlayCurve, curveY?: number[]): number {
-  const x = u < 0 ? 0 : u > 1 ? 1 : u;
-  switch (curve) {
-    case 'exp': return x * x;
-    case 'log': return Math.sqrt(x);
-    case 'custom': {
-      if (!curveY || curveY.length < 2) return x;
-      const pos = x * (curveY.length - 1);
-      const i = Math.min(curveY.length - 2, Math.floor(pos));
-      const f = pos - i;
-      return curveY[i] + (curveY[i + 1] - curveY[i]) * f;
-    }
-    default: return x;
-  }
+  // The kit's (routes.js), so the app and a website shape values the same way.
+  return rtCurve(u, curve, curveY);
 }
 
 /** The samples a drawn curve starts from: the current preset curve, so switching to Draw changes nothing until you draw. */
@@ -138,10 +128,6 @@ export function isTypingTarget(el: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!node?.isContentEditable;
 }
 
-interface MappingState {
-  /** Smoothed output, in param units. */
-  value: number | undefined;
-}
 
 /** A pair mapping between frames: each axis's last driven value (held while it isn't driven), the axis swap, the per-axis conditions. */
 interface PairState { a: number | undefined; b: number | undefined; swap: SgSwapState; condA: SgCondState; condB: SgCondState }
@@ -188,7 +174,6 @@ export function signalSource(id: string): PlaySource {
 class PlayEngine implements InputSource {
   private record: PlayRecord = emptyPlayRecord();
   private controls = new Map<string, PlayControl>();
-  private state = new Map<string, MappingState>();
   /** Store param value per control id (what the slider says). */
   private base = new Map<string, ControlValue>();
   /** Last written value per control id, for the panel's live readout. */
@@ -413,12 +398,14 @@ class PlayEngine implements InputSource {
     for (const p of record.pairs ?? []) this.pairs.set(p.id, p);
     signalNames.set(record.signals);
     for (const id of [...this.pairState.keys()]) if (!(record.pairMappings ?? []).some(m => m.id === id)) this.pairState.delete(id);
-    this.mouseIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'mouse')
+    // What every source reads (old mappings and the record's own).
+    const srcs = rtSourcesOf(record).filter(x => x.enabled).map(x => x.source);
+    this.mouseIsBound = srcs.some(x => x.kind === 'mouse')
       || (record.pairMappings ?? []).some(m => m.enabled && (m.source.kind === 'position' ? m.source.anchor === 'mouse' || m.source.anchor === 'pointer' : m.source.source.kind === 'mouse'))
       || this.allTriggers().some(t => t.on === 'value' && readsMouse(t.value))
       || (record.pairMappings ?? []).some(m => m.enabled && (readsMouse(m.a.when?.value) || readsMouse(m.b.when?.value)));
-    this.tiltIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'tilt');
-    this.gamepadIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'gamepad');
+    this.tiltIsBound = srcs.some(x => x.kind === 'tilt');
+    this.gamepadIsBound = srcs.some(x => x.kind === 'gamepad');
     this.handsBound = usesHands(record);
     this.faceBound = usesFace(record);
     this.poseBound = usesPose(record);
@@ -428,7 +415,7 @@ class PlayEngine implements InputSource {
     poseFeed.configure(trackerOptionsFor('pose', record.pose));
     this.syncFeedSources();
     this.triggerKeysBound = new Set(this.allTriggers().map(triggerKey));
-    this.oscIsBound = record.mappings.some(m => m.enabled && (m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc')))
+    this.oscIsBound = srcs.some(x => x.kind === 'osc' || (x.kind === 'trigger' && x.trigger.on === 'osc'))
       || (record.pairMappings ?? []).some(m => m.enabled && m.source.kind === 'value' && (m.source.source.kind === 'osc' || (m.source.source.kind === 'trigger' && m.source.source.trigger.on === 'osc')))
       || (record.actions ?? []).some(a => a.enabled && a.trigger.on === 'osc');
     for (const id of [...this.actionFire.keys()]) if (!(record.actions ?? []).some(a => a.id === id)) this.actionFire.delete(id);
@@ -436,7 +423,8 @@ class PlayEngine implements InputSource {
     // A signal that lost its definition (or went) lets go of its key.
     const defined = new Set(this.signalOrder.map(s => s.id));
     for (const id of [...this.sigShape.keys()]) if (!defined.has(id) || !sgShaped(this.signalById.get(id))) this.sigShape.delete(id);
-    for (const id of [...this.mappingLag.keys()]) if (!record.mappings.some(m => m.id === id && (m.delayMs ?? 0) > 0)) this.mappingLag.delete(id);
+    // Route state (smoothing, delay lines) for routes that are gone.
+    { const routes = new Set(rtSourcesOf(record).flatMap(x => x.outputs.flatMap(o => o.routes.map(r => r.id)))); for (const m of [this.rt.smooth, this.rt.lag]) for (const id of [...m.keys()]) if (!routes.has(id)) m.delete(id); }
     for (const [id, on] of [...this.sigLevels]) if (!defined.has(id)) { this.sigLevels.delete(id); this.sigSeen.delete(id); if (on) this.release(signalKey(id)); }
     // A signal that went (or stopped capturing) forgets what it captured.
     for (const id of [...this.sigPayload.keys()]) if (!this.signalById.get(id)?.capture) this.sigPayload.delete(id);
@@ -454,7 +442,7 @@ class PlayEngine implements InputSource {
     }
     // Drop state for mappings that are gone; keep the rest so a re-label doesn't jump.
     const ids = new Set(record.mappings.map(m => m.id));
-    for (const id of [...this.state.keys()]) if (!ids.has(id)) this.state.delete(id);
+    for (const id of [...this.rt.values.keys()]) if (!ids.has(id) && !(record.sources ?? []).some(x => x.id === id)) this.rt.values.delete(id);
     for (const id of [...this.colour.keys()]) if (!this.controls.has(id)) this.colour.delete(id);
     for (const id of [...this.live.keys()]) if (!this.controls.has(id)) this.live.delete(id);
   }
@@ -473,6 +461,8 @@ class PlayEngine implements InputSource {
   /** Does an enabled mapping drive this control right now? */
   isDriven(controlId: string): boolean {
     for (const m of this.record.mappings) if (m.enabled && m.controlId === controlId) return true;
+    // A source's route onto it.
+    for (const s of this.record.sources ?? []) if (s.enabled && s.outputs.some(o => o.routes.some(r => r.enabled && r.to === controlId))) return true;
     for (const m of this.record.pairMappings ?? []) {
       const p = m.enabled ? this.pairs.get(m.pairId) : undefined;
       if (p && pairDrives(m, p, controlId)) return true;
@@ -710,6 +700,8 @@ class PlayEngine implements InputSource {
     }
     for (const a of r.actions ?? []) if (a.enabled) out.push(a.trigger);
     for (const m of r.pairMappings ?? []) if (m.enabled && m.source.kind === 'value' && m.source.source.kind === 'trigger') out.push(m.source.source.trigger);
+    // A record's own sources' triggers (a trigger source, a Step's), like mappings'.
+    for (const t of rtTriggersOf(r.sources)) out.push(t);
     // A signal defined by a trigger listens to it like any other (its keys bound, its condition ticked).
     for (const s of r.signals ?? []) if (s.when?.kind === 'trigger') out.push(s.when.trigger);
     this.triggerList = out;
@@ -737,6 +729,7 @@ class PlayEngine implements InputSource {
     this.condRanges = conditionRanges(r);
     this.enabledActions = (r.actions ?? []).filter(a => a.enabled);
     this.layersById = new Map(r.layers.map(l => [l.id, l]));
+    this.sources = rtSourcesOf(r);
     this.mappingsById = new Map(r.mappings.map(m => [m.id, m]));
   }
   /** The range a percent condition measures against (null: raw, or the range seen so far). */
@@ -778,6 +771,8 @@ class PlayEngine implements InputSource {
       case 'mouse': return r.axis === 'x' ? this.mouseX : this.mouseY;
       case 'distance': return this.anchorGap(r.a, r.b);
       case 'reading': return this.readSource({ kind: 'sensor', layerId: r.layerId, read: r.read as SensorRead, otherId: '' });
+      // A source's reading this frame (an old mapping's too, by its id).
+      case 'source': return this.sourceValue(r.id);
       case 'axis': { const p = this.anchorAt(r.anchor); return p ? (r.axis === 'x' ? p.x : p.y) : null; }
       case 'picture': {
         // The overlay's layer kit reads last frame's picture (its coarse grid); around a position, a small patch.
@@ -820,8 +815,6 @@ class PlayEngine implements InputSource {
   private sigLevels = new Map<string, boolean>();
   private sigSent = new Set<string>();
   private sigSeen = new Map<string, number>();
-  /** Mappings' delay lines (PlayMapping.delayMs). */
-  private mappingLag = new Map<string, SgLagState>();
   /** What each signal captured (a number, or a position 0..1 with y up): PlaySignal.capture. */
   private sigPayload = new Map<string, number | { x: number; y: number }>();
 
@@ -1478,7 +1471,7 @@ class PlayEngine implements InputSource {
       this.sigPayload.clear();
       sgLinkClear(this.links);
       for (const st of this.sigShape.values()) sgShapeRewind(st);
-      for (const st of this.mappingLag.values()) { st.t.length = 0; st.v.length = 0; }
+      rtRewind(this.rt);
     }
     this.lastTime = time;
     lap?.('inputs');
@@ -1496,63 +1489,10 @@ class PlayEngine implements InputSource {
     const driven = new Set<string>();
     this.layerMoved = false;
     this.incMoving = false;
-    // Colour controls start each frame from their base so an un-mapped channel keeps the slider's value.
-    for (const m of this.record.mappings) {
-      if (!m.enabled) continue;
-      const control = this.controls.get(m.controlId);
-      if (!control) continue;
-      let v: number;
-      if (m.increment) v = this.tickIncrement(m, dt);
-      else {
-        const reading = m.source.kind === 'trigger' ? this.readTrigger(m, dt) : this.readSource(m.source);
-        if (reading === null) continue;
-        // Set writes the captured number itself; every other source goes through the range and curve.
-        let target = m.source.kind === 'captured' ? reading : mapValue(reading, m);
-        // Delay: the value arrives late (before the smoothing); nothing is written until it has that much.
-        if ((m.delayMs ?? 0) > 0) {
-          let lag = this.mappingLag.get(m.id);
-          if (!lag) { lag = sgLagNew(); this.mappingLag.set(m.id, lag); }
-          const late = sgLagStep(lag, this.time, target, m.delayMs! / 1000);
-          if (late === null) continue;
-          target = late;
-        }
-        let st = this.state.get(m.id);
-        if (!st) { st = { value: undefined }; this.state.set(m.id, st); }
-        if (m.smoothMs <= 0 || st.value === undefined) {
-          v = target;
-        } else {
-          const alpha = 1 - Math.exp(-(dt * 1000) / m.smoothMs);
-          v = st.value + (target - st.value) * alpha;
-          // Settle exactly so a held knob stops producing sub-epsilon churn.
-          if (Math.abs(v - target) < 1e-4 * Math.max(1, Math.abs(m.outMax - m.outMin))) v = target;
-        }
-        st.value = v;
-      }
-      if (control.kind === 'action') {
-        // A button: fires once each time its mapping rises through the middle (a key down, a click, a beat).
-        const was = this.actionLevel.get(control.id) ?? 0;
-        this.actionLevel.set(control.id, v);
-        if (v >= 0.5 && was < 0.5) this.fireControl(control.id);
-        this.live.set(control.id, v);
-        driven.add(control.id);
-        continue;
-      }
-      if (control.kind !== 'color') { this.writePlain(control, v, write, driven); continue; }
-      const key = paramChannelKey(bindingKeyOf(control.target));
-      {
-        const buf = this.colourBuffer(control.id, driven.has(control.id));
-        if (m.channel === undefined) {
-          // Brightness: scale the base colour.
-          const base = this.baseColour(control.id);
-          buf[0] = base[0] * v; buf[1] = base[1] * v; buf[2] = base[2] * v;
-        } else {
-          buf[m.channel] = v;
-        }
-        write(key, buf);
-        this.live.set(control.id, buf);
-      }
-      driven.add(control.id);
-    }
+    // Sources and routes (play/kit/routes.js, shared with the web runtime): each source read once, then its routes written.
+    this.index();
+    this.curWrite = write; this.curDriven = driven;
+    rtFrame(this.rt, this.sources, this.rtStepHost, this.rtApplyHost, dt, this.time);
     // Pair mappings, after the plain ones: on a control both drive, the pair's wins.
     this.tickPairs(dt, write, driven);
     // Spreads, last: each member's value so far (a mapping's, else its slider's) plus the group's offset.
@@ -1576,6 +1516,65 @@ class PlayEngine implements InputSource {
     this.restoreOnce.clear();
     this.drivenLastFrame = driven;
     lap?.('mappings');
+  }
+
+  // ── Sources and routes: the engine's side of play/kit/routes.js ───────────
+
+  private rt: RtState = rtNew();
+  private sources: RtSource[] = [];
+  private curWrite: InputWriter = () => {};
+  private curDriven = new Set<string>();
+  /** A Step output of a record's own source, as the increment code reads it (a mapping's shape: its first route is where it starts from). */
+  private stepShapes = new WeakMap<object, PlayMapping>();
+  private stepShape(s: RtSource, o: Extract<SourceOutput, { kind: 'step' }>): PlayMapping {
+    if (s.fromMapping) return s.fromMapping;
+    let m = this.stepShapes.get(o);
+    if (!m) {
+      const r = o.routes[0];
+      m = { id: s.id, controlId: r?.to ?? '', source: s.source, outMin: o.lo, outMax: o.hi, curve: 'linear', smoothMs: 0, enabled: true, increment: o.step, ...(r?.channel !== undefined ? { channel: r.channel } : {}) };
+      this.stepShapes.set(o, m);
+    }
+    return m;
+  }
+  private rtStepHost: RtStepHost = {
+    has: id => this.controls.has(id),
+    read: (s, dt) => (s.source.kind === 'trigger' ? this.readTrigger(s.fromMapping ?? ({ id: s.id, source: s.source } as PlayMapping), dt) : this.readSource(s.source)),
+    step: (s, o, dt) => this.tickIncrement(this.stepShape(s, o), dt),
+  };
+  private rtApplyHost: RtApplyHost = {
+    kind: id => this.controls.get(id)?.kind ?? 'float',
+    base: id => this.base.get(id),
+    range: id => { const c = this.controls.get(id); return c ? [c.min, c.max] : [0, 1]; },
+    write: (id, route, v) => {
+      const control = this.controls.get(id);
+      if (!control) return;
+      const write = this.curWrite, driven = this.curDriven;
+      if (control.kind === 'action') {
+        // A button: fires once each time what drives it rises through the middle (a key down, a click, a beat).
+        const was = this.actionLevel.get(control.id) ?? 0;
+        this.actionLevel.set(control.id, v);
+        if (v >= 0.5 && was < 0.5) this.fireControl(control.id);
+        this.live.set(control.id, v);
+        driven.add(control.id);
+        return;
+      }
+      if (control.kind !== 'color') { this.writePlain(control, v, write, driven); return; }
+      // Colour controls start each frame from their base so an unmapped channel keeps the slider's value.
+      const buf = this.colourBuffer(control.id, driven.has(control.id));
+      if (route?.channel === undefined) {
+        // Brightness: scale the base colour.
+        const base = this.baseColour(control.id);
+        buf[0] = base[0] * v; buf[1] = base[1] * v; buf[2] = base[2] * v;
+      } else buf[route.channel] = v;
+      write(paramChannelKey(bindingKeyOf(control.target)), buf);
+      this.live.set(control.id, buf);
+      driven.add(control.id);
+    },
+  };
+
+  /** A source's reading this frame (0..1; `src:<id>`), or null while it has none. */
+  sourceValue(id: string): number | null {
+    return this.rt.values.get(id) ?? null;
   }
 
   /** Where an increment starts: its explicit start, else the control's value now (a colour: its channel, or full brightness). */
@@ -1878,7 +1877,7 @@ class PlayEngine implements InputSource {
     // A signal on its way (a delay) or held on (a hold or a linger counting) needs the next frames.
     for (const st of this.sigShape.values()) if (st.q.length || st.onAt >= 0 || st.held) return true;
     // A mapping's delay line still catching up.
-    for (const st of this.mappingLag.values()) if (st.t.length > 1 && st.v[st.v.length - 1] !== st.v[0]) return true;
+    for (const st of this.rt.lag.values()) if (st.t.length > 1 && st.v[st.v.length - 1] !== st.v[0]) return true;
     if ((this.record.actions ?? []).some(a => a.enabled && a.trigger.on === 'beat')) return true;
     // Learning with sound listens every frame.
     if ((this.learnCb || this.learnTriggerCb) && (liveAudio.isOn() || audioReaderBank.live())) return true;

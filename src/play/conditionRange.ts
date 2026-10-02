@@ -22,7 +22,7 @@ export function valueRange(play: PlayRecord, ref: string): ValueRange | null {
   const r = sgParseValueRef(ref);
   if (!r) return null;
   switch (r.kind) {
-    case 'mapping': case 'mouse': return [0, 1];
+    case 'mapping': case 'source': case 'mouse': return [0, 1];
     case 'distance': return null;
     case 'reading': return readingRange(r.read as SensorRead);
     case 'axis': case 'picture': return [0, 1];

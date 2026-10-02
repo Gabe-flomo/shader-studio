@@ -11,6 +11,7 @@
 import type { PlayRecord } from '../types/play';
 import { parseActionTarget, parsePropTarget } from '../types/play';
 import { mappingLabel } from './incrementUi';
+import { sourceLabel } from './playSources';
 
 export interface PlayDrive {
   controlId: string;
@@ -32,6 +33,8 @@ export function playDrivenMap(play: PlayRecord): Map<string, PlayDrive> {
   for (const c of play.controls) {
     if (c.kind === 'action' || parsePropTarget(c.target) || parseActionTarget(c.target)) continue;
     const sources = play.mappings.filter(m => m.enabled && m.controlId === c.id).map(m => mappingLabel(m, play));
+    // A source's route onto it (the newer shape of a mapping).
+    for (const s of play.sources ?? []) if (s.enabled && s.outputs.some(o => o.routes.some(r => r.enabled && r.to === c.id))) sources.push(s.label ?? sourceLabel(s.source, play.controls, play.layers));
     if (sources.length) out.set(driveKey(c.target), { controlId: c.id, controlLabel: c.label, sources });
   }
   cache.set(play, out);
@@ -40,10 +43,15 @@ export function playDrivenMap(play: PlayRecord): Map<string, PlayDrive> {
 
 /** Pause every mapping that drives a control: the Studio slider takes over again. */
 export function pauseDrive(play: PlayRecord, controlId: string): PlayRecord {
-  return { ...play, mappings: play.mappings.map(m => (m.controlId === controlId && m.enabled ? { ...m, enabled: false } : m)) };
+  const out: PlayRecord = { ...play, mappings: play.mappings.map(m => (m.controlId === controlId && m.enabled ? { ...m, enabled: false } : m)) };
+  if (play.sources) out.sources = play.sources.map(s => ({ ...s, outputs: s.outputs.map(o => ({ ...o, routes: o.routes.map(r => (r.to === controlId ? { ...r, enabled: false } : r)) })) }));
+  return out;
 }
 
 /** Take a control off the Play panel, with the mappings that drive it. */
 export function removeFromPlay(play: PlayRecord, controlId: string): PlayRecord {
-  return { ...play, controls: play.controls.filter(c => c.id !== controlId), mappings: play.mappings.filter(m => m.controlId !== controlId) };
+  const out: PlayRecord = { ...play, controls: play.controls.filter(c => c.id !== controlId), mappings: play.mappings.filter(m => m.controlId !== controlId) };
+  // Its routes go; the sources stay (a source can drive nothing).
+  if (play.sources) out.sources = play.sources.map(s => ({ ...s, outputs: s.outputs.map(o => ({ ...o, routes: o.routes.filter(r => r.to !== controlId) })) }));
+  return out;
 }

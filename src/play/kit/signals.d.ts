@@ -41,6 +41,7 @@ export function sgSwapStep(st: SgSwapState, va: number | null | undefined, vb: n
 export type SgValueRef =
   | { kind: 'control'; id: string }
   | { kind: 'mapping'; id: string }
+  | { kind: 'source'; id: string }
   | { kind: 'mouse'; axis: 'x' | 'y' }
   | { kind: 'distance'; a: string; b: string }
   | { kind: 'prop'; layerId: string; key: string }

@@ -150,13 +150,9 @@
     switch (shape) { case 'sine': return 0.5 - 0.5 * Math.cos(p * Math.PI * 2); case 'triangle': return 1 - Math.abs(2 * p - 1); case 'saw': return p; case 'square': return p < 0.5 ? 1 : 0; case 'random': return hash01(c); }
     return p;
   }
-  function curve(u, m) {
-    const x = u < 0 ? 0 : u > 1 ? 1 : u;
-    if (m.curve === 'exp') return x * x;
-    if (m.curve === 'log') return Math.sqrt(x);
-    if (m.curve === 'custom' && m.curveY && m.curveY.length > 1) { const pos = x * (m.curveY.length - 1); const i = Math.min(m.curveY.length - 2, Math.floor(pos)); return m.curveY[i] + (m.curveY[i + 1] - m.curveY[i]) * (pos - i); }
-    return x;
-  }
+  // A unit reading through a curve: the kit's (routes.js rtCurve), the same as the app's.
+  // (Without the kit, as some tests run the page, a plain linear shape.)
+  function curve(u, m) { return typeof SSKit !== 'undefined' && SSKit.routes ? SSKit.routes.curve(u, m.curve, m.curveY) : Math.max(0, Math.min(1, u)); }
   function triggerKey(t) {
     switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; case 'hand': return 'hand:' + t.side + ':' + t.gesture; case 'face': return 'face:' + t.gesture; case 'pose': return 'pose:' + t.gesture; case 'proximity': return 'prox:' + t.a + ':' + t.b + ':' + t.when + ':' + t.distance + ':' + t.margin; case 'reader': return 'reader:' + t.readerId + ':' + t.threshold + ':' + t.hysteresis; case 'value': return typeof SSKit !== 'undefined' && SSKit.signals ? SSKit.signals.valueKey(t) : 'val:' + t.value + ':' + t.cmp + ':' + t.threshold + ':' + t.hysteresis + ':' + t.tolerance; case 'signal': return 'sig:' + t.signal; }
     return '';
@@ -1317,7 +1313,7 @@ void main() {
       afxSlots.push(sl);
       afxUpdate(sl);
     }
-    const base = new Map(), live = new Map(), layerLive = new Map(), smooth = new Map(), trig = new Map(), actLevel = new Map();
+    const base = new Map(), live = new Map(), layerLive = new Map(), trig = new Map(), actLevel = new Map();
     const mouse = { x: 0.5, y: 0.5, down: 0, over: false };
     let time = typeof opts.startTime === 'number' && isFinite(opts.startTime) ? Math.max(0, opts.startTime) : 0, playing = !opts.paused, lastNow = 0, frame = 0;
     const bindings = B.paramBindings || {};
@@ -1482,6 +1478,8 @@ void main() {
       .concat(incMappings.filter(m => m.increment.on === 'trigger').map(m => m.increment.trigger))
       .concat(incMappings.filter(m => m.increment.resetOn).map(m => ({ on: 'signal', signal: m.increment.resetOn })))
       .concat(pairMappings.filter(m => m.source.kind === 'value' && m.source.source.kind === 'trigger').map(m => m.source.source.trigger))
+      // A record's own sources' triggers (the kit's routes.js), like mappings'.
+      .concat(typeof SSKit !== 'undefined' && SSKit.routes ? SSKit.routes.triggersOf(play.sources || []) : [])
       // A signal defined by a trigger listens to it like any other (the app's playEngine does the same).
       .concat((play.signals || []).filter(s => s.when && s.when.kind === 'trigger').map(s => s.when.trigger));
     const gamepad = i => (navigator.getGamepads ? navigator.getGamepads()[i] : null);
@@ -1495,6 +1493,7 @@ void main() {
     }
     for (const a of actions) if (a.trigger.on === 'key') keysUsed.add(a.trigger.code);
     for (const s of play.signals || []) if (s.when && s.when.kind === 'trigger' && s.when.trigger.on === 'key') keysUsed.add(s.when.trigger.code);
+    for (const s of play.sources || []) { if (s.enabled === false) continue; if (s.source.kind === 'key') keysUsed.add(s.source.code); if (s.source.kind === 'trigger' && s.source.trigger.on === 'key') keysUsed.add(s.source.trigger.code); }
     for (const m of incMappings) if (m.increment.on === 'trigger' && m.increment.trigger.on === 'key') keysUsed.add(m.increment.trigger.code);
     for (const m of pairMappings) { const s = m.source.kind === 'value' ? m.source.source : null; if (s && s.kind === 'key') keysUsed.add(s.code); if (s && s.kind === 'trigger' && s.trigger.on === 'key') keysUsed.add(s.trigger.code); }
     function readSource(s) {
@@ -1594,6 +1593,7 @@ void main() {
       if (r.kind === 'mouse') return r.axis === 'x' ? mouse.x : mouse.y;
       if (r.kind === 'distance') return anchorGap(r.a, r.b);
       if (r.kind === 'reading') return readSource({ kind: 'sensor', layerId: r.layerId, read: r.read, otherId: '' });
+      if (r.kind === 'source') { const v = rtState ? rtState.values.get(r.id) : undefined; return v === undefined ? null : v; }
       if (r.kind === 'axis') { const p = anchorAt(r.anchor); return p ? (r.axis === 'x' ? p.x : p.y) : null; }
       // The picture's brightness, from the layer kit's grid of the last frame (the app's PICTURE_PATCH around a position).
       if (r.kind === 'picture') {
@@ -1699,7 +1699,7 @@ void main() {
     }
     // A signal: its "When signal fires" triggers see a press and its release at once.
     // Signals sent this frame (by an action or a layer): true for the frame, for combinations to read.
-    const sigSent = new Set(), sigLevels = new Map(), sigSeen = new Map(), sigPayload = new Map(), mappingLag = new Map();
+    const sigSent = new Set(), sigLevels = new Map(), sigSeen = new Map(), sigPayload = new Map();
     const sigById = new Map((play.signals || []).map(s => [s.id, s]));
     function sigLevel(id) { return sigWorked.has(id) ? sigLevels.get(id) || false : sigSent.has(id); }
     // What a signal captures (sample and hold): a number from a value path, or a position from pos:<anchor>.
@@ -2014,6 +2014,57 @@ void main() {
       if (count > 0) for (const ev of INC.advance(st, inc, rg[0], rg[1], count)) { const sig = ev === 'step' ? inc.stepSignal : inc.resetSignal; if (sig) emitSignal(sig); }
       return INC.glide(st, inc, rg[0], rg[1], dt);
     }
+    // ── Sources and routes: the page's side of the kit's routes.js ──
+    const RT = typeof SSKit !== 'undefined' && SSKit.routes ? SSKit.routes : null;
+    const rtState = RT ? RT.state() : null;
+    const rtSources = RT ? RT.sourcesOf(play) : [];
+    let rtDriven = new Set(), rtMoved = false;
+    const lastOut = new Map(), stepShapes = new WeakMap();
+    // A Step output of a record's own source, in a mapping's shape (its first route is where it starts from).
+    function stepShape(s, o) {
+      if (s.fromMapping) return s.fromMapping;
+      let m = stepShapes.get(o);
+      if (!m) { const r = o.routes[0]; m = { id: s.id, controlId: r ? r.to : '', source: s.source, outMin: o.lo, outMax: o.hi, curve: 'linear', smoothMs: 0, enabled: true, increment: o.step, channel: r ? r.channel : undefined }; stepShapes.set(o, m); }
+      return m;
+    }
+    const rtRead = {
+      has: id => controls.has(id),
+      read: (s, dt) => (s.source.kind === 'trigger' ? readTrigger(s.fromMapping || { id: s.id, source: s.source }, dt) : readSource(s.source)),
+      step: (s, o, dt) => (INC ? tickIncrement(stepShape(s, o), dt) : null),
+    };
+    const rtApply = {
+      kind: id => { const c = controls.get(id); return !c ? 'float' : actTarget(c.target) ? 'action' : c.kind === 'color' ? 'color' : 'float'; },
+      base: id => base.get(id),
+      range: id => { const c = controls.get(id); return c ? [c.min, c.max] : [0, 1]; },
+      write: (id, route, v) => {
+        const c = controls.get(id), driven = rtDriven;
+        if (!c) return;
+        const key = route ? route.id : id;
+        if (lastOut.get(key) !== v) rtMoved = true;
+        lastOut.set(key, v);
+        const at = actTarget(c.target);
+        if (at) {
+          // Fires once each time what drives it rises through the middle (a key down, a click, a beat).
+          const was = actLevel.get(c.id) || 0;
+          actLevel.set(c.id, v);
+          if (v >= 0.5 && was < 0.5 && K) { K.act({ do: at.do, layerId: at.layerId, amount: c.amount || 1 }); needsDraw = true; }
+          live.set(c.id, v); driven.add(c.id); return;
+        }
+        const lt = layerTarget(c.target);
+        if (lt) { layerLive.set(lt.layerId + '::' + lt.key, v); live.set(c.id, v); driven.add(c.id); return; }
+        if (readerTarget(c.target) || grainsTarget(c.target)) { live.set(c.id, v); driven.add(c.id); return; }
+        const un = uniformFor(c); if (!un) return;
+        if (c.kind === 'color') {
+          const b = base.get(c.id) || [0, 0, 0];
+          let buf = colourBuf.get(c.id);
+          if (!buf || !driven.has(c.id)) { buf = [b[0], b[1], b[2]]; colourBuf.set(c.id, buf); }
+          const ch = route ? route.channel : undefined;
+          if (ch === undefined || ch === null) { buf[0] = b[0] * v; buf[1] = b[1] * v; buf[2] = b[2] * v; } else buf[ch] = v;
+          uniformValues[un] = buf; live.set(c.id, buf);
+        } else { uniformValues[un] = v; live.set(c.id, v); }
+        driven.add(c.id);
+      },
+    };
     function tickMappings(dt) {
       tickPads();
       if (grains.wired) tickGrains();
@@ -2035,7 +2086,7 @@ void main() {
         sigPayload.clear();
         if (links) SG.linkClear(links);
         for (const st of sigShape.values()) SG.shapeRewind(st);
-        for (const st of mappingLag.values()) { st.t.length = 0; st.v.length = 0; }
+        if (rtState) RT.rewind(rtState);
       }
       lastTime = time;
       tickConditionTriggers(dt);
@@ -2046,52 +2097,10 @@ void main() {
       tickActions(dt);
       const driven = new Set();
       let moved = false;
-      for (const m of play.mappings) {
-        if (!m.enabled) continue;
-        const c = controls.get(m.controlId); if (!c) continue;
-        let v;
-        if (m.increment) { if (!INC) continue; v = tickIncrement(m, dt); }
-        else {
-          const u = m.source.kind === 'trigger' ? readTrigger(m, dt) : readSource(m.source);
-          if (u === null) continue;
-          // Set writes the captured number itself; every other source goes through the range and curve.
-          let target = m.source.kind === 'captured' ? u : m.outMin + (m.outMax - m.outMin) * curve(u, m);
-          // Delay: the value arrives late, before the smoothing (the app's sgLagStep).
-          if (m.delayMs > 0 && SG && SG.lagStep) {
-            let lag = mappingLag.get(m.id);
-            if (!lag) { lag = SG.lagNew(); mappingLag.set(m.id, lag); }
-            const late = SG.lagStep(lag, time, target, m.delayMs / 1000);
-            if (late === null) continue;
-            target = late;
-          }
-          v = smooth.get(m.id);
-          if (m.smoothMs <= 0 || v === undefined) v = target;
-          else { const a = 1 - Math.exp(-(dt * 1000) / m.smoothMs); v = v + (target - v) * a; if (Math.abs(v - target) < 1e-4 * Math.max(1, Math.abs(m.outMax - m.outMin))) v = target; }
-        }
-        if (smooth.get(m.id) !== v) moved = true;
-        smooth.set(m.id, v);
-        const at = actTarget(c.target);
-        if (at) {
-          // Fires once each time its mapping rises through the middle (a key down, a click, a beat).
-          const was = actLevel.get(c.id) || 0;
-          actLevel.set(c.id, v);
-          if (v >= 0.5 && was < 0.5 && K) { K.act({ do: at.do, layerId: at.layerId, amount: c.amount || 1 }); needsDraw = true; }
-          live.set(c.id, v); driven.add(c.id); continue;
-        }
-        const lt = layerTarget(c.target);
-        if (lt) { layerLive.set(lt.layerId + '::' + lt.key, v); live.set(c.id, v); driven.add(c.id); continue; }
-        if (readerTarget(c.target)) { live.set(c.id, v); driven.add(c.id); continue; }
-        if (grainsTarget(c.target)) { live.set(c.id, v); driven.add(c.id); continue; }
-        const un = uniformFor(c); if (!un) continue;
-        if (c.kind === 'color') {
-          const b = base.get(c.id) || [0, 0, 0];
-          let buf = colourBuf.get(c.id);
-          if (!buf || !driven.has(c.id)) { buf = [b[0], b[1], b[2]]; colourBuf.set(c.id, buf); }
-          if (m.channel === undefined || m.channel === null) { buf[0] = b[0] * v; buf[1] = b[1] * v; buf[2] = b[2] * v; } else buf[m.channel] = v;
-          uniformValues[un] = buf; live.set(c.id, buf);
-        } else { uniformValues[un] = v; live.set(c.id, v); }
-        driven.add(c.id);
-      }
+      // Sources and routes (the kit's routes.js, the same frame as the app's): each source read once, its routes written in record order.
+      rtDriven = driven; rtMoved = false;
+      if (RT) RT.frame(rtState, rtSources, rtRead, rtApply, dt, time);
+      if (rtMoved) moved = true;
       tickPairs(dt, driven);
       if (tickSpreads(driven)) moved = true;
       for (const id of [...live.keys()]) if (!driven.has(id)) {
@@ -2559,7 +2568,7 @@ void main() {
       const steps = Array.isArray(o.steps) ? o.steps : [];
       if (K) K.reset(o.seed > 0 ? o.seed : 1);
       if (finishR) finishR.reset();
-      dropTargets(); frame = 0; smooth.clear(); trig.clear(); actLevel.clear(); overrides.clear(); pairState.clear(); condStates.clear(); incState.clear(); incFire.clear(); incCond.clear(); lastTime = -Infinity;
+      dropTargets(); frame = 0; if (rtState) { rtState.smooth.clear(); rtState.lag.clear(); rtState.values.clear(); } lastOut.clear(); trig.clear(); actLevel.clear(); overrides.clear(); pairState.clear(); condStates.clear(); incState.clear(); incFire.clear(); incCond.clear(); lastTime = -Infinity;
       return { gen, fdt, steps };
     };
     /** One deterministic frame at clock time `at`. */

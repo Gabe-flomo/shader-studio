@@ -92,7 +92,7 @@ export function parseTrackAnchor(ref: string): { kind: 'face' | 'pose'; point: n
 
 // ── Does a setup use a tracker? ──────────────────────────────────────────────
 
-type Uses = Pick<PlayRecord, 'mappings' | 'actions' | 'layers'> & Partial<Pick<PlayRecord, 'pairMappings' | 'signals'>>;
+type Uses = Pick<PlayRecord, 'mappings' | 'actions' | 'layers'> & Partial<Pick<PlayRecord, 'pairMappings' | 'signals' | 'sources'>>;
 
 function anchorOf(kind: 'face' | 'pose', ref: string | undefined): boolean { return !!ref && parseTrackAnchor(ref)?.kind === kind; }
 function condUses(kind: 'face' | 'pose', c: ValueCondition | undefined): boolean {
@@ -117,6 +117,7 @@ export function usesTracker(play: Uses, kind: 'face' | 'pose'): boolean {
   return play.mappings.some(m => sourceUses(kind, m.source) || (!!m.increment && ((m.increment.on === 'trigger' && triggerUses(kind, m.increment.trigger)) || (m.increment.on === 'repeat' && condUses(kind, m.increment.when)))))
     || (play.actions ?? []).some(a => triggerUses(kind, a.trigger))
     || (play.signals ?? []).some(s => s.when?.kind === 'trigger' && triggerUses(kind, s.when.trigger))
+    || (play.sources ?? []).some(s => s.enabled && (sourceUses(kind, s.source) || s.outputs.some(o => o.kind === 'step' && o.step.on === 'trigger' && triggerUses(kind, o.step.trigger))))
     || (play.pairMappings ?? []).some(m => pairUses(kind, m))
     || play.layers.some(l => l.kind === 'null' && l.follow === kind);
 }

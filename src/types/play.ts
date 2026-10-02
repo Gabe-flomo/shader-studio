@@ -451,8 +451,9 @@ export const DEFAULT_HAND_RESPONSIVENESS = 0.5;
 export const DEFAULT_HAND_STRICTNESS = 0.5;
 
 /** Does a setup read hands anywhere: a hand source, a gesture trigger (mapping or action), or a null following a hand? */
-export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'> & Partial<Pick<PlayRecord, 'pairMappings' | 'signals'>>): boolean {
+export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'> & Partial<Pick<PlayRecord, 'pairMappings' | 'signals' | 'sources'>>): boolean {
   return (play.pairMappings ?? []).some(pairMappingUsesHands)
+    || (play.sources ?? []).some(s => s.enabled && (s.source.kind === 'hand' || (s.source.kind === 'trigger' && triggerUsesHands(s.source.trigger)) || s.outputs.some(o => o.kind === 'step' && o.step.on === 'trigger' && triggerUsesHands(o.step.trigger))))
     || (play.signals ?? []).some(s => s.when?.kind === 'trigger' && triggerUsesHands(s.when.trigger)) || play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && triggerUsesHands(m.source.trigger))
     || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!parseHandAnchor(m.source.otherId))
     || (!!m.increment && ((m.increment.on === 'trigger' && triggerUsesHands(m.increment.trigger)) || (m.increment.on === 'repeat' && conditionUsesHands(m.increment.when)))))
@@ -825,6 +826,51 @@ export interface PlayAction {
   signal?: string;
 }
 
+// ── Sources and routes (implementation guide, phase 1: play/kit/routes.js) ─
+
+/**
+ * A Route: a source's link to one control. Replace sets the control (outMin
+ * at the source's 0, outMax at its 1, through the curve); Add moves it from
+ * where it is (outMin and outMax are the swing: by default half the control's
+ * range either way), summed with other Adds and kept in range. Smoothing and
+ * delay are per route, so an old mapping's behaviour carries over exactly.
+ */
+export interface PlayRoute {
+  id: string;
+  /** A control id. */
+  to: string;
+  mode: 'replace' | 'add';
+  outMin: number;
+  outMax: number;
+  curve: PlayCurve;
+  curveY?: number[];
+  /** Colour controls: the channel it writes (brightness when unset). */
+  channel?: 0 | 1 | 2;
+  smoothMs?: number;
+  delayMs?: number;
+  enabled: boolean;
+}
+
+/** What a source gives out: its value, or a Step (an increment counting through its own range lo..hi). */
+export type SourceOutput =
+  | { kind: 'value'; routes: PlayRoute[] }
+  | { kind: 'step'; step: PlayIncrement; lo: number; hi: number; routes: PlayRoute[] };
+
+/**
+ * A Source: something read once a frame (any PlaySource kind) with its
+ * outputs, each with any number of routes. A source can have none (it is
+ * still read, and conditions can watch it as `src:<id>`). Old mappings are
+ * read as sources too (play/kit/routes.js rtSourcesOf), one each.
+ */
+export interface PlaySourceDef {
+  id: string;
+  label?: string;
+  enabled: boolean;
+  source: PlaySource;
+  outputs: SourceOutput[];
+}
+export const ROUTES_PER_SOURCE_MAX = 32;
+
 export const ACTION_KINDS: readonly BuiltinActionKind[] = ['burst', 'scatter', 'reset', 'freeze', 'next', 'prev', 'shuffle', 'toggle', 'show', 'hide', 'drop', 'clear', 'goto', 'pad', 'multiply', 'cull'];
 
 /** Which actions make sense for which layer kinds. */
@@ -1119,6 +1165,8 @@ export interface PlayRecord {
   pairs?: PlayPair[];
   /** Settings of loops of linked signals (speed, laps, running), by their members. Absent = defaults. */
   loops?: PlayLoop[];
+  /** Sources with their outputs and routes (the newer shape of a mapping). Absent = none; old `mappings` still read. */
+  sources?: PlaySourceDef[];
   /** Mappings onto pairs (both axes at once, A or B, with axis swap). Absent = none. */
   pairMappings?: PlayPairMapping[];
   /** Spreads: controls offset together along a curve (docs/spread-control.md). Absent = none. */
@@ -1717,6 +1765,46 @@ function parseMapping(raw: unknown, controlIds: Set<string>): PlayMapping | null
 const pick = <T extends string>(v: unknown, all: readonly T[], d: T): T => (typeof v === 'string' && (all as readonly string[]).includes(v) ? (v as T) : d);
 
 /** An Increment from a file, or null when there is none. Numbers out of reason are brought back in. */
+/** Sources whose source is readable; routes only to controls of the record (a source left with none is kept: it can be watched). */
+function parseSourceDefs(raw: unknown, controlIds: ReadonlySet<string>, sourceOk: (s: PlaySource) => boolean): PlaySourceDef[] {
+  const out: PlaySourceDef[] = [];
+  const seen = new Set<string>();
+  for (const x of Array.isArray(raw) ? raw : []) {
+    const o = x as Record<string, unknown> | null;
+    const id = o && str(o.id);
+    const source = o ? parseSource(o.source) : null;
+    if (!o || !id || seen.has(id) || !source || !sourceOk(source)) continue;
+    seen.add(id);
+    const outputs: SourceOutput[] = [];
+    for (const y of Array.isArray(o.outputs) ? o.outputs : []) {
+      const p = y as Record<string, unknown> | null;
+      if (!p) continue;
+      const routes = (Array.isArray(p.routes) ? p.routes : []).map(parseRoute).filter((r): r is PlayRoute => !!r && controlIds.has(r.to)).slice(0, ROUTES_PER_SOURCE_MAX);
+      if (p.kind === 'step') {
+        const step = parseIncrement(p.step);
+        if (step) outputs.push({ kind: 'step', step, lo: num(p.lo, 0), hi: num(p.hi, 1), routes });
+      } else outputs.push({ kind: 'value', routes });
+    }
+    const def: PlaySourceDef = { id: id.slice(0, 80), enabled: o.enabled !== false, source, outputs: outputs.length ? outputs : [{ kind: 'value', routes: [] }] };
+    if (typeof o.label === 'string' && o.label.trim()) def.label = o.label.trim().slice(0, 60);
+    out.push(def);
+  }
+  return out;
+}
+
+function parseRoute(raw: unknown): PlayRoute | null {
+  const r = raw as Record<string, unknown> | null;
+  const id = r && str(r.id), to = r && str(r.to);
+  if (!r || !id || !to) return null;
+  const curve = typeof r.curve === 'string' && CURVES.has(r.curve) ? r.curve as PlayCurve : 'linear';
+  const out: PlayRoute = { id, to, mode: r.mode === 'add' ? 'add' : 'replace', outMin: num(r.outMin, 0), outMax: num(r.outMax, 1), curve, enabled: r.enabled !== false };
+  if (curve === 'custom') { const ys = curveY(r.curveY); if (ys) out.curveY = ys; else out.curve = 'linear'; }
+  if (r.channel === 0 || r.channel === 1 || r.channel === 2) out.channel = r.channel;
+  if (typeof r.smoothMs === 'number' && r.smoothMs > 0) out.smoothMs = Math.min(5000, r.smoothMs);
+  if (typeof r.delayMs === 'number' && r.delayMs > 0) out.delayMs = Math.min(10000, r.delayMs);
+  return out;
+}
+
 export function parseIncrement(raw: unknown): PlayIncrement | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
@@ -1881,6 +1969,8 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
     const ctl = new Set(out.controls.map(c => c.id));
     out.mappings = out.mappings.filter(m => ctl.has(m.controlId) && (m.source.kind !== 'control' || ctl.has(m.source.controlId)));
   }
+  const sources = parseSourceDefs(r.sources, new Set(out.controls.map(c => c.id)), x => layerOk(x) && (x.kind !== 'trigger' || triggerOk(x.trigger)));
+  if (sources.length) out.sources = sources;
   if (typeof r.notes === 'string' && r.notes.trim()) out.notes = r.notes.slice(0, 8000);
   const credit = parseSourceCredit(r.source);
   if (credit) out.source = credit;

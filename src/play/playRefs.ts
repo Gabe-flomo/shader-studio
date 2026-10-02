@@ -28,7 +28,7 @@
  */
 import {
   ACTION_TARGET_PREFIX, CAPTURE_POS, EVENT_ANCHOR, LAYER_TARGET_PREFIX, parseEventAnchor, PAD_ANCHOR, SIGNAL_ANCHOR, parseActionTarget, parseHandAnchor, parseSignalAnchor, parseLayerTarget, parseReaderTarget, readerControlTarget,
-  type PairSource, type PlayAction, type PlayControl, type PlayIncrement, type PlayMapping, type PlayPair, type PlayPairMapping, type PlaySignal, type PlaySource, type TriggerSpec, type ValueCondition,
+  type PairSource, type PlayAction, type PlayControl, type PlayIncrement, type PlayMapping, type PlayPair, type PlayPairMapping, type PlaySignal, type PlaySource, type PlaySourceDef, type TriggerSpec, type ValueCondition,
 } from '../types/play';
 import type { PlayLayer } from '../types/playLayers';
 import { parseAudioFxTarget, audioFxTarget, AUDIO_FX_TARGET_PREFIX } from '../types/playAudioFx';
@@ -76,6 +76,8 @@ export function mapTarget(target: string, f: RefFn): string {
 export function mapValueRef(ref: string, f: RefFn): string {
   if (ref.startsWith('ctl:')) return `ctl:${f('control', ref.slice(4))}`;
   if (ref.startsWith('map:')) return `map:${f('mapping', ref.slice(4))}`;
+  // A source is renamed like a mapping (an old mapping is a source with its id).
+  if (ref.startsWith('src:')) return `src:${f('mapping', ref.slice(4))}`;
   if (ref.startsWith('dist:')) {
     const i = ref.indexOf('|');
     if (i < 6) return ref;
@@ -153,6 +155,11 @@ export function mapAction(a: PlayAction, f: RefFn): PlayAction {
   const out: PlayAction = { ...a, layerId, trigger: mapTrigger(a.trigger, f) };
   if (a.signal) out.signal = f('signal', a.signal);
   return out;
+}
+
+/** A source: its id (renamed like a mapping), what it reads, and where each route goes. */
+export function mapSourceDef(s: PlaySourceDef, f: RefFn): PlaySourceDef {
+  return { ...s, id: f('mapping', s.id), source: mapSource(s.source, f), outputs: s.outputs.map(o => ({ ...o, routes: o.routes.map(r => ({ ...r, to: f('control', r.to) })).filter(r => r.to) })) };
 }
 
 /** A signal's own id and what it is defined by: its trigger, or the signals it combines. */

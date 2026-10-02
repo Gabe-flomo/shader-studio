@@ -257,7 +257,7 @@ describe('on a website', () => {
     expect(I.readerTarget('n::radius')).toBeNull();
     expect(I.readerTarget('layer:x::y')).toBeNull();
     // The runtime's mapping loop treats a reader control like a layer property: live only, no uniform write.
-    expect(runtimeSource).toContain("if (readerTarget(c.target)) { live.set(c.id, v); driven.add(c.id); continue; }");
+    expect(runtimeSource).toContain("if (readerTarget(c.target) || grainsTarget(c.target)) { live.set(c.id, v); driven.add(c.id); return; }");
     expect(runtimeSource).toContain('else if (readerTarget(c.target)) base.set(c.id, 0);');
   });
 });
