@@ -11,7 +11,10 @@ One window (`src/components/play/detail/DetailWindow.tsx`, on the shared Modal s
 Ways to open it:
 - On the Inputs board: a control's "driven by" chip, or the open button on a control's hover tools, a mapping card or a source card.
 - On the Rules page: the open button on a rule card.
+- On the Layers page: a layer property that is already a control has **Open its details** in its right-click menu (the + menu on touch), and an open button beside its check on desktop. A property that isn't a control offers nothing new.
+
+**Keep open:** the open button in the window's header turns it into a floating panel (`detail/FloatingPanel.tsx`): no scrim and no Esc, so the page behind stays usable (drag sliders, Map, drop a source's grip on a control). It starts at the bottom right and its header drags it anywhere. Back, Forward and the links work as in the window; opening another detail shows it in the panel. Its X closes it, and the next detail opens as a window again (`detailStore.ts` `pinned`, reset on close). Not on phones, where a detail fills the screen.
 
 What each section lists is worked out in `src/play/detailModel.ts`, which is pure and tested.
 
-Not done yet: a pop-out window, and opening from a layer's property rows and from the graph view (phase 6).
+Not done yet: opening from the graph view (phase 6).
