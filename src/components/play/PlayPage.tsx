@@ -26,6 +26,8 @@ import { rtAddSwing } from '../../play/kit/routes.js';
 import { useMapMode } from './inputs/mapMode';
 import { MapModeBar, MapTarget } from './inputs/MapTarget';
 import { InputsBoard } from './inputs/InputsBoard';
+import { SwingStrip } from './inputs/SwingStrip';
+import { controlSwing, type Swing } from '../../play/controlSwing';
 import { DetailWindow } from './detail/DetailWindow';
 import { startPlayNotes } from '../../lib/playNotes';
 import { openDetail } from './detail/detailStore';
@@ -625,6 +627,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   };
   /** What drives a control, in words: its mappings, and the record's sources routed onto it. */
   const drivenLabels = (id: string) => [...play.mappings.filter(m => m.enabled && m.controlId === id).map(m => mappingLabel(m, play)), ...routesInto(play, id).filter(x => !x.mapping).map(x => `${x.label}${x.mode === 'add' ? ' (add)' : ''}`)];
+  /** The swing ring: where its sources can move it, from its own slider value (Add routes swing around it). */
+  const swingOf = (c: PlayControl) => { const v = readControlValue(nodes, c.target, play); return controlSwing(play, c.id, typeof v === 'number' ? v : c.min); };
   // A control's card (a pair's shows once, where its A is). `board`: the Controls board's trace slot and isolate.
   const renderOne = (c: PlayControl, i: number, board?: BoardSlot): ReactNode => {
     const pair = pairOf(play, c.id);
@@ -679,6 +683,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       value={readControlValue(nodes, c.target, play)}
       live={liveValues.get(c.id)}
       drivenBy={drivenLabels(c.id)}
+      swing={c.kind === 'float' && !c.toggle ? swingOf(c) : null}
       touch={compact}
       onChange={v => writeControl(c, v)}
       onRename={label => update(p => { const rt = parseReaderTarget(c.target); return rt ? renameReader(p, rt.readerId, label) : { ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, label } : x) }; })}
@@ -1172,7 +1177,7 @@ function AddControlButton({ candidates, layers, finish, sound, layerById, taken,
 /** Where a control's value lives: a layer's property or a node's param. */
 interface ControlSource { kind: 'layer' | 'node' | 'reader'; title: string; param: string; within?: string; missing: boolean; go: () => void }
 
-function ControlRow({ control, index, count, exists, fate, onRelink, help, source, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, removeLabel = 'Remove from panel', onMap, onNull, onAmount, trace, onName, isolated = false }: {
+function ControlRow({ control, index, count, exists, fate, onRelink, help, source, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, removeLabel = 'Remove from panel', onMap, onNull, onAmount, trace, onName, isolated = false, swing }: {
   control: PlayControl;
   index: number;
   count: number;
@@ -1206,6 +1211,8 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
   /** The board: clicking the name isolates the graph (a double-click renames). */
   onName?: () => void;
   isolated?: boolean;
+  /** The part of its range its sources can move it across (play/controlSwing.ts), shaded under the slider. */
+  swing?: Swing | null;
 }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
@@ -1310,6 +1317,7 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
               ariaLabel={control.label}
               touch={touch}
             />
+            {swing && <SwingStrip swing={swing} min={control.min} max={control.max} step={control.step ?? 0.01} live={typeof live === 'number' ? live : undefined} />}
           </div>
         </div>
       )}

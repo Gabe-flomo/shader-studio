@@ -11,7 +11,9 @@ import { playEngine, type ControlValue } from '../../lib/playEngine';
 export function useLiveValues(play: PlayRecord): Map<string, ControlValue> {
   const [values, setValues] = useState<Map<string, ControlValue>>(() => new Map());
   const shownRef = useRef(values);
-  const anyMapped = play.mappings.some(m => m.enabled) || !!play.pairMappings?.some(m => m.enabled);
+  // The record's own sources drive controls too (routes): their live values show the same way.
+  const anyMapped = play.mappings.some(m => m.enabled) || !!play.pairMappings?.some(m => m.enabled)
+    || !!play.sources?.some(s => s.enabled && s.outputs.some(o => o.routes.some(r => r.enabled)));
   useEffect(() => {
     if (!anyMapped) return;
     let raf = 0;
