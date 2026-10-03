@@ -13,7 +13,9 @@
  *               from its notes when the track shows as Audio): select, mute,
  *               delete, trim their ends. Note editing is a follow-up.
  *   master      the engine's output, at the bottom
- *   devices     the selected track's chain (DeviceChain.tsx), at the bottom
+ *   devices     the selected track's chain (DeviceChain.tsx), at the bottom, or
+ *               (the Notes/Device switch) a MIDI clip's notes in the piano roll
+ *               (PianoRoll.tsx): double-click a clip to open it there
  *
  * Perf: transport ticks never re-render React. The playheads, a recording's
  * growing clip, the position readout and the meters move on their own
@@ -58,6 +60,7 @@ import { lockLead, selectRack } from './selectRack';
 import { LeadChip, useRackEdits } from './RackParts';
 import { UnitPicker } from './UnitPicker';
 import { DeviceChain, MasterChain } from './DeviceChain';
+import { PianoRoll } from './PianoRoll';
 
 type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
 
@@ -158,6 +161,9 @@ export function ArrangementPanel({ play, onChange, touch }: { play: PlayRecord; 
   const [clipSel, setClipSel] = useState<{ rack: string; index: number } | null>(null);
   const [picker, setPicker] = useState<{ rack: string; want: 'instrument' | 'effect' } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[]; title?: string } | null>(null);
+  // The device area shows the selected track's devices or (Notes) a MIDI clip in the piano roll: `t` is a time inside it, `key` refits on each open.
+  const [devView, setDevView] = useState<'device' | 'notes'>('device');
+  const [roll, setRoll] = useState<{ rack: string; t: number; key: number } | null>(null);
   const [chainH, setChainH] = useState(() => { try { return Number(localStorage.getItem('shader-studio:engine:chainH')) || 280; } catch { return 280; } });
   const lanes = useTapePreviews(s => s.lanes);
   // Previews follow the tape and the racks (each lane renders again only when its own track or rack changed).
@@ -182,6 +188,22 @@ export function ArrangementPanel({ play, onChange, touch }: { play: PlayRecord; 
     setPicker({ rack: id, want: 'instrument' });
   };
   const pickTrack = (id: string) => { selectRack(id); setChainOf('track'); };
+  /** Double-click a MIDI clip: its notes in the piano roll, in the device area. */
+  const openClip = (rack: string, t: number) => {
+    selectRack(rack);
+    setChainOf('track');
+    setRoll(r => ({ rack, t, key: (r?.key ?? 0) + 1 }));
+    setDevView('notes');
+    setChainH(h => Math.max(h, 420)); // room for the keys (not remembered: the drag sets that)
+  };
+  /** The Notes/Device switch: Notes opens the selected clip on this track, else its first. */
+  const showNotes = () => {
+    setDevView('notes');
+    if (!selRack || roll?.rack === selRack.id) return;
+    const clips = trackClips(arr.tracks[selRack.id], arr.length);
+    const c = (clipSel?.rack === selRack.id ? clips[clipSel.index] : undefined) ?? clips[0];
+    if (c) setRoll(r => ({ rack: selRack.id, t: c.t, key: (r?.key ?? 0) + 1 }));
+  };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (isTyping(e.target) || keyboardClaimed(e.nativeEvent)) return;
@@ -225,12 +247,32 @@ export function ArrangementPanel({ play, onChange, touch }: { play: PlayRecord; 
   const timeline = (
     <Timeline play={play} arr={arr} racks={racks} rows={rows} span={span} lanes={lanes} phase={phase} narrow={narrow} touch={touch}
       masterSelected={chainOf === 'master'} clipSel={clipSel} onClipSel={setClipSel} onPickTrack={pickTrack} onPickMaster={() => setChainOf('master')}
-      onAddTrack={addTrack} onMenu={setMenu} onChange={onChange} />
+      onAddTrack={addTrack} onMenu={setMenu} onChange={onChange} onOpenClip={openClip} />
   );
+  const rollHere = roll && selRack && roll.rack === selRack.id ? roll : null;
   const chain = chainOf === 'master'
     ? <MasterChain play={play} onChange={onChange} touch={touch} narrow={narrow} />
     : selRack
-      ? <DeviceChain rack={selRack} row={selRow!} play={play} onChange={onChange} touch={touch} narrow={narrow} onPick={want => setPicker({ rack: selRack.id, want })} />
+      ? (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle }}>
+            <Segmented<'device' | 'notes'> size="sm" ariaLabel="Device area" value={devView} onChange={v => (v === 'notes' ? showNotes() : setDevView('device'))}
+              options={[{ value: 'device', label: 'Device' }, { value: 'notes', label: 'Notes' }]} />
+            <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {devView === 'notes' ? 'Double-click another MIDI clip to edit it here' : 'Double-click a MIDI clip to edit its notes'}
+            </span>
+          </div>
+          {devView === 'device'
+            ? <DeviceChain rack={selRack} row={selRow!} play={play} onChange={onChange} touch={touch} narrow={narrow} onPick={want => setPicker({ rack: selRack.id, want })} />
+            : rollHere
+              ? (
+                <div style={{ flex: narrow ? 'none' : 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: narrow ? (touch ? 500 : 440) : undefined }}>
+                  <PianoRoll key={rollHere.key} rack={selRack} arr={arr} anchor={rollHere.t} color={selRow!.color} touch={touch} onAnchor={t => setRoll(r => (r ? { ...r, t } : r))} />
+                </div>
+              )
+              : <div style={{ flex: 1, minHeight: 80, display: 'grid', placeItems: 'center', color: tk.text.faint, font: `12px ${fontFamily.ui}`, padding: 12, textAlign: 'center' }}>{selRack.name} has no clips yet: record some notes, or double-click its lane to add one.</div>}
+        </div>
+      )
       : null;
 
   return (
@@ -456,11 +498,11 @@ function BpmField({ bpm, height }: { bpm: number; height: number }) {
 type RegisterEl = (el: HTMLElement | null, prev: { el: HTMLElement | null }) => void;
 type ClipSel = { rack: string; index: number } | null;
 
-function Timeline({ play, arr, racks, rows, span, lanes, phase, narrow, touch, masterSelected, clipSel, onClipSel, onPickTrack, onPickMaster, onAddTrack, onMenu, onChange }: {
+function Timeline({ play, arr, racks, rows, span, lanes, phase, narrow, touch, masterSelected, clipSel, onClipSel, onPickTrack, onPickMaster, onAddTrack, onMenu, onChange, onOpenClip }: {
   play: PlayRecord; arr: PlayArrangement; racks: readonly AeRack[]; rows: readonly TrackRow[]; span: number; lanes: Record<string, LanePreview>; phase: TapePhase;
   narrow: boolean; touch: boolean; masterSelected: boolean; clipSel: ClipSel; onClipSel: (s: ClipSel) => void;
   onPickTrack: (id: string) => void; onPickMaster: () => void; onAddTrack: () => void;
-  onMenu: (m: { x: number; y: number; items: MenuItem[]; title?: string }) => void; onChange: Change;
+  onMenu: (m: { x: number; y: number; items: MenuItem[]; title?: string }) => void; onChange: Change; onOpenClip: (rack: string, t: number) => void;
 }) {
   const tk = useTokens();
   const point = useTape(s => s.point);
@@ -563,7 +605,7 @@ function Timeline({ play, arr, racks, rows, span, lanes, phase, narrow, touch, m
             <Track play={play} arr={arr} rack={rack} row={masterSelected && row.selected ? { ...row, selected: false } : row} index={i} count={rows.length} track={arr.tracks[row.id]} span={span} preview={lanes[row.id]}
               narrow={narrow} touch={touch} recording={recRacks.includes(row.id)} clipSel={clipSel?.rack === row.id ? clipSel.index : -1}
               onClipSel={index => onClipSel(index < 0 ? null : { rack: row.id, index })} onSeek={seek} onPick={() => onPickTrack(row.id)} onMenu={onMenu} onChange={onChange}
-              registerHead={registerHead} registerRec={registerRec}
+              registerHead={registerHead} registerRec={registerRec} onOpenClip={t => onOpenClip(row.id, t)}
               onDragStart={() => setDrag({ id: row.id, over: i })} onDragEnd={() => setDrag(null)} />
             {drag && i === rows.length - 1 && drag.over === rows.length && <DropLine />}
           </div>
@@ -652,11 +694,11 @@ function VolumeBar({ value, onChange, label, touch }: { value: number; onChange:
   );
 }
 
-function Track({ play, arr, rack, row, index, count, track, span, preview, narrow, touch, recording, clipSel, onClipSel, onSeek, onPick, onMenu, onChange, registerHead, registerRec, onDragStart, onDragEnd }: {
+function Track({ play, arr, rack, row, index, count, track, span, preview, narrow, touch, recording, clipSel, onClipSel, onSeek, onPick, onMenu, onChange, registerHead, registerRec, onOpenClip, onDragStart, onDragEnd }: {
   play: PlayRecord; arr: PlayArrangement; rack: AeRack; row: TrackRow; index: number; count: number; track: ArrTrack | undefined; span: number; preview: LanePreview | undefined;
   narrow: boolean; touch: boolean; recording: boolean; clipSel: number; onClipSel: (index: number) => void; onSeek: (t: number, free?: boolean) => void; onPick: () => void;
   onMenu: (m: { x: number; y: number; items: MenuItem[]; title?: string }) => void; onChange: Change; registerHead: RegisterEl; registerRec: RegisterEl;
-  onDragStart: () => void; onDragEnd: () => void;
+  onOpenClip: (t: number) => void; onDragStart: () => void; onDragEnd: () => void;
 }) {
   const tk = useTokens();
   const edits = useRackEdits(rack, onChange);
@@ -724,7 +766,7 @@ function Track({ play, arr, rack, row, index, count, track, span, preview, narro
     <div style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', gap: narrow ? 4 : 8, padding: '3px 0' }}>
       {header}
       <Lane rack={rack} row={row} arr={arr} track={track} span={span} preview={preview} height={narrow ? (touch ? 64 : 54) : h} recording={recording}
-        selectedClip={clipSel} onSelectClip={i => { onPick(); onClipSel(i); }} onSeek={onSeek} onMenu={onMenu} registerHead={registerHead} registerRec={registerRec} controls={play.controls} />
+        selectedClip={clipSel} onSelectClip={i => { onPick(); onClipSel(i); }} onSeek={onSeek} onMenu={onMenu} registerHead={registerHead} registerRec={registerRec} controls={play.controls} onOpenClip={onOpenClip} />
     </div>
   );
 }
@@ -733,10 +775,11 @@ function Track({ play, arr, rack, row, index, count, track, span, preview, narro
 
 const EDGE_PX = 7;
 
-function Lane({ rack, row, arr, track, span, preview, height, recording, selectedClip, onSelectClip, onSeek, onMenu, registerHead, registerRec, controls }: {
+function Lane({ rack, row, arr, track, span, preview, height, recording, selectedClip, onSelectClip, onSeek, onMenu, registerHead, registerRec, controls, onOpenClip }: {
   rack: AeRack; row: TrackRow; arr: PlayArrangement; track: ArrTrack | undefined; span: number; preview: LanePreview | undefined; height: number; recording: boolean;
   selectedClip: number; onSelectClip: (i: number) => void; onSeek: (t: number, free?: boolean) => void;
   onMenu: (m: { x: number; y: number; items: MenuItem[]; title?: string }) => void; registerHead: RegisterEl; registerRec: RegisterEl; controls: PlayRecord['controls'];
+  onOpenClip: (t: number) => void;
 }) {
   const tk = useTokens();
   const ref = useRef<HTMLCanvasElement>(null);
@@ -828,6 +871,7 @@ function Lane({ rack, row, arr, track, span, preview, height, recording, selecte
       items: [
         { label: c.mute ? 'Unmute the clip' : 'Mute the clip', icon: c.mute ? 'eye' : 'eyeOff', hint: 'A muted clip stays on the lane and doesn’t play', onSelect: () => editArr(a => setClipMute(a, rack.id, index, !c.mute), `${c.mute ? 'Unmuted' : 'Muted'} a clip on ${rack.name}`) },
         { label: 'Delete the clip', icon: 'trash', danger: true, hint: 'Delete or Backspace', onSelect: () => { editArr(a => deleteClip(a, rack.id, index), `Deleted a clip on ${rack.name}`); onSelectClip(-1); } },
+        ...(midi ? [{ label: 'Edit notes', icon: 'piano' as IconName, hint: 'In the piano roll (double-click the clip)', onSelect: () => onOpenClip(c.t) }] : []),
       ],
     });
   };
@@ -907,10 +951,12 @@ function Lane({ rack, row, arr, track, span, preview, height, recording, selecte
     <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
       <canvas ref={ref} style={style} onPointerDown={onPointerDown} tabIndex={0}
         onDoubleClick={e => {
-          // A new note where you double-click a MIDI lane (a beat long, velocity 0.8), snapped to the beat (⇧ free).
+          // A MIDI clip (or a note in it) opens in the piano roll; empty lane gets a new note (a beat long, velocity 0.8), snapped to the beat (⇧ free).
           if (!midi) return;
           const phase = useTape.getState().phase;
-          if (phase === 'recording' || phase === 'counting' || hitNote(e.clientX, e.clientY)) return;
+          if (phase === 'recording' || phase === 'counting') return;
+          const h = hit(e.clientX);
+          if (h) { onOpenClip(clips[h.index].t); return; }
           const t = snapPoint(timeAt(e.clientX), bpm, 0, e.shiftKey), d = 60 / Math.max(1, bpm);
           const note: ArrNote = { t, n: pitchAt(e.clientY), v: 0.8, d };
           let at = -1;
@@ -926,7 +972,7 @@ function Lane({ rack, row, arr, track, span, preview, height, recording, selecte
         }}
         onPointerMove={e => { if (e.buttons) return; const hn = hitNote(e.clientX, e.clientY); if (hn) { setCursor(hn.edge ? 'ew-resize' : 'grab'); return; } const h = hit(e.clientX); setCursor(h?.edge ? 'ew-resize' : 'pointer'); }}
         onContextMenu={e => { e.preventDefault(); const h = hit(e.clientX); if (h) { onSelectClip(h.index); clipMenu(h.index, e.clientX, e.clientY); } }}
-        aria-label={`${rack.name}’s lane: ${clips.length} clip${clips.length === 1 ? '' : 's'}. Click a clip to select it (drag its ends to trim), or the lane to set the record point.${midi ? ' Drag a note to move it, its end to lengthen it, ⌥-drag for velocity, double-click to add one, Delete to remove it.' : ''}`} />
+        aria-label={`${rack.name}’s lane: ${clips.length} clip${clips.length === 1 ? '' : 's'}. Click a clip to select it (drag its ends to trim), or the lane to set the record point.${midi ? ' Drag a note to move it, its end to lengthen it, ⌥-drag for velocity, Delete to remove it; double-click a clip to edit it in the piano roll, empty lane to add a note.' : ''}`} />
       {recording && <div ref={recRef} aria-hidden style={{ position: 'absolute', top: 2, bottom: 2, left: 0, width: 0, borderRadius: 3, background: alpha(tk.status.danger, 0.28), boxShadow: `inset 0 0 0 1px ${alpha(tk.status.danger, 0.8)}`, pointerEvents: 'none' }} />}
       <div ref={headRef} style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 2, marginLeft: -1, pointerEvents: 'none', background: recording ? tk.status.danger : tk.text.primary, opacity: 0.8 }} />
       {sel && !trim && (
