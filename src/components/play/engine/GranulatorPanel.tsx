@@ -36,9 +36,15 @@ import { withEngine } from './engineOps';
 
 type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
 
-const SECTIONS: ReadonlyArray<{ title: string; keys: string[]; open?: boolean; mode?: number }> = [
-  { title: 'Emit', keys: ['emitDir', 'emitSpeed', 'emitSpread', 'emitEdge'], open: true, mode: 3 },
-  { title: 'Spectral', keys: ['band', 'bandWidth', 'bandSpread', 'bandSpeed', 'bandDir', 'bandEdge', 'shift', 'partials', 'fftSize'], open: true, mode: 4 },
+/**
+ * The setting sections. `show(mode, sub)` says when a section is there (sub: Spectral's Grains, 0 on the line, 1
+ * Emit, 2 Spread): Emit's motion also drives Spectral · Emit, and Area / Side only mean something in Spectral · Spread.
+ */
+const SECTIONS: ReadonlyArray<{ title: string; keys: string[]; open?: boolean; show?: (mode: number, sub: number) => boolean }> = [
+  { title: 'Spectral', keys: ['band', 'bandWidth', 'bandSpread', 'bandSpeed', 'bandDir', 'bandEdge', 'shift', 'partials', 'fftSize'], open: true, show: m => m === 4 },
+  { title: 'Spectral grains', keys: ['specGrains'], open: true, show: m => m === 4 },
+  { title: 'Emit', keys: ['emitDir', 'emitSpeed', 'emitSpread', 'emitEdge'], open: true, show: (m, sub) => m === 3 || (m === 4 && sub === 1) },
+  { title: 'Spread area', keys: ['specArea', 'specSide'], open: true, show: (m, sub) => m === 4 && sub === 2 },
   { title: 'Grains', keys: ['position', 'spray', 'size', 'sizeRand', 'density', 'window', 'skew'], open: true },
   { title: 'Pitch', keys: ['pitch', 'spread', 'pitchRand', 'fmRate', 'fmAmount'], open: true },
   { title: 'Scan and freeze', keys: ['scan', 'lfoRate', 'lfoDepth', 'freeze'] },
@@ -72,10 +78,11 @@ export function GranulatorPanel({ rack, slot, play, onChange, touch }: { rack: A
   };
   const [open, setOpen] = useState<Record<string, boolean>>(() => Object.fromEntries(SECTIONS.map(s => [s.title, !!s.open])));
   const mode = Math.round(valueOf('mode'));
+  const sub = Math.round(valueOf('specGrains'));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <SampleRow rack={rack} slot={slot} play={play} onChange={onChange} />
-      <GrainWave rack={rack} mode={mode} position={valueOf('position')} spray={valueOf('spray')} band={valueOf('band')} bandWidth={valueOf('bandWidth')} fftSize={valueOf('fftSize')}
+      <GrainWave rack={rack} mode={mode} sub={sub} area={valueOf('specArea')} side={Math.round(valueOf('specSide'))} position={valueOf('position')} spray={valueOf('spray')} band={valueOf('band')} bandWidth={valueOf('bandWidth')} fftSize={valueOf('fftSize')}
         onPosition={v => set('position', v)} onBand={v => set('band', v)} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ ...labelStyle(tk), width: 44 }}>Mode</span>
@@ -83,8 +90,8 @@ export function GranulatorPanel({ rack, slot, play, onChange, touch }: { rack: A
           options={GR_MODES.map((m, i) => ({ value: String(i), label: m, title: MODE_NOTES[i] }))} />
         <IconButton icon={exposed.has(auTarget(rack.id, AE_INST, '0')) ? 'check' : 'plus'} size="sm" disabled={exposed.has(auTarget(rack.id, AE_INST, '0'))} label="Make Mode a control" onClick={() => expose(grParam('mode')!)} />
       </div>
-      <span style={{ color: tk.text.muted, font: `11px/1.45 ${fontFamily.ui}` }}>{MODE_NOTES[mode] ?? ''}</span>
-      {SECTIONS.filter(sec => sec.mode === undefined || sec.mode === mode).map(sec => (
+      <span style={{ color: tk.text.muted, font: `11px/1.45 ${fontFamily.ui}` }}>{MODE_NOTES[mode] ?? ''}{mode === 4 ? ` ${SPEC_GRAIN_NOTES[sub] ?? ''}` : ''}</span>
+      {SECTIONS.filter(sec => !sec.show || sec.show(mode, sub)).map(sec => (
         <div key={sec.title} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           <button type="button" onClick={() => setOpen(o => ({ ...o, [sec.title]: !o[sec.title] }))} aria-expanded={!!open[sec.title]}
             style={{ ...labelStyle(tk), border: 0, background: 'none', padding: '2px 0', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -185,7 +192,13 @@ const MODE_NOTES = [
   'Spectral: grains play frequency bands of the sample instead of time slices: each resynthesises the strongest peaks of its band (Band, Band width) at the moment Position reads. Drag up and down on the spectrogram to move the band.',
 ];
 
-/** One setting: a ruler (log ones on a log scale), a list, or a toggle, with its + for a control. */
+/** Spectral's Grains, said after its mode note. */
+const SPEC_GRAIN_NOTES = [
+  'Grains: on the line, all at the moment Position reads (± Spray).',
+  'Grains: emitted, launched from Position and travelling through the sample like Emit’s (Direction, Travel speed, Emit spread, At the end), each taking the band’s peaks wherever it is.',
+  'Grains: spread, scattered over an Area around Position (either side, ahead or behind).',
+];
+
 /** One setting: its name, a slider (a list, a switch), and + to make it a control. `soft`: typing past the slider's end is kept. Shared with the sample player's Sample index. */
 export function ParamRow({ p, value, touch, exposed, onSet, onExpose, soft }: { p: GrParam; value: number; touch: boolean; exposed: boolean; onSet: (v: number) => void; onExpose: () => void; soft?: boolean }) {
   const tk = useTokens();
@@ -292,8 +305,8 @@ function SampleRow({ rack, slot, play, onChange }: { rack: AeRack; slot: AeSlot;
 
 // ── The waveform with the grains on it ───────────────────────────────────────
 
-function GrainWave({ rack, mode, position, spray, band, bandWidth, fftSize, onPosition, onBand }: {
-  rack: AeRack; mode: number; position: number; spray: number; band: number; bandWidth: number; fftSize: number; onPosition: (v: number) => void; onBand: (v: number) => void;
+function GrainWave({ rack, mode, sub, area, side, position, spray, band, bandWidth, fftSize, onPosition, onBand }: {
+  rack: AeRack; mode: number; sub: number; area: number; side: number; position: number; spray: number; band: number; bandWidth: number; fftSize: number; onPosition: (v: number) => void; onBand: (v: number) => void;
 }) {
   const tk = useTokens();
   const ref = useRef<HTMLCanvasElement>(null);
@@ -338,6 +351,13 @@ function GrainWave({ rack, mode, position, spray, band, bandWidth, fftSize, onPo
       const dur = ui?.duration || 0, half = dur > 0 ? Math.min(0.5, spray / dur) : 0;
       g.fillStyle = alpha(tk.accent.base, 0.12);
       g.fillRect((pos - half) * w, 0, half * 2 * w, h);
+      // Spectral · Spread: the Area its grains land in (as mappings drive it), either side, ahead or behind (wrapping round the ends).
+      if (spectral && sub === 2) {
+        const a = Math.min(1, playEngine.layerValue(auPropId(rack.id, AE_INST), String(grParam('specArea')!.addr), area));
+        const x0 = side === 1 ? pos : side === 2 ? pos - a : pos - a / 2;
+        g.fillStyle = alpha(tk.accent.base, 0.16);
+        for (const o of [-1, 0, 1]) g.fillRect((x0 + o) * w, 0, a * w, h);
+      }
       const peaks = ui?.peaks;
       if (spectral && specImg) {
         g.imageSmoothingEnabled = true;
@@ -365,6 +385,10 @@ function GrainWave({ rack, mode, position, spray, band, bandWidth, fftSize, onPo
         } else if (st.headCount && st.headAxis === 2) {
           for (let i = 0; i < st.headCount; i++) { const y = h - st.heads[i] * h; g.beginPath(); g.moveTo(0, y - 4); g.lineTo(0, y + 4); g.lineTo(7, y); g.closePath(); g.fill(); }
         }
+        // Spectral · Emit: the places in the sample its grains leave from, along the top as Emit's.
+        if (spectral && st.theadCount) {
+          for (let i = 0; i < st.theadCount; i++) { const x = st.theads[i] * w; g.beginPath(); g.moveTo(x - 4, 0); g.lineTo(x + 4, 0); g.lineTo(x, 7); g.closePath(); g.fill(); }
+        }
         // The live grains: a straight pill, no arc (docs/granulator.md, "Where a grain is drawn"). Classic/Flux/Cloud/Emit:
         // horizontal, its length its grain size, its x where it reads, its row (y) stable for its life (pan-based, or a
         // hash of its slot). Spectral: the same, but along the frequency axis at its file position, spanning its band.
@@ -385,7 +409,7 @@ function GrainWave({ rack, mode, position, spray, band, bandWidth, fftSize, onPo
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [rack.id, position, spray, ui, tk, spectral, specImg, band, bandWidth]);
+  }, [rack.id, position, spray, ui, tk, spectral, specImg, band, bandWidth, sub, area, side]);
   const at = (e: ReactPointerEvent<HTMLCanvasElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
     return { x: Math.max(0, Math.min(1, (e.clientX - r.left) / Math.max(1, r.width))), y: Math.max(0, Math.min(1, 1 - (e.clientY - r.top) / Math.max(1, r.height))) };

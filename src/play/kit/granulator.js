@@ -39,6 +39,10 @@ export const GR_DIRS = ['Forward', 'Backward', 'Both · alternate', 'Both · ran
 export const GR_EDGES = ['Wrap', 'Bounce', 'Respawn'];
 /** Spectral's analysis window (the hop is a quarter of it). */
 export const GR_FFT_SIZES = [1024, 2048, 4096];
+/** Where Spectral's grains sit in time: all on the play line (as before), emitted from it like Emit's, or spread in an area around it. */
+export const GR_SPEC_GRAINS = ['On the line', 'Emit', 'Spread'];
+/** Which side of Position Spectral's Spread puts its grains (Ahead: later in the sample). */
+export const GR_SIDES = ['Both', 'Ahead', 'Behind'];
 export const GR_FILTERS = ['Off', 'Low-pass', 'High-pass', 'Band-pass', 'Notch'];
 export const GR_WINDOWS = ['Hann', 'Triangle', 'Tukey', 'Rectangle'];
 
@@ -96,6 +100,9 @@ export const GR_PARAMS = [
   GR_P(46, 'shift', 'Shift', -2000, 2000, 0, 'Hz', { step: 1, hint: 'Spectral: moves every frequency of a grain up or down by this many hertz (inharmonic, unlike Pitch, which multiplies).' }),
   GR_P(47, 'partials', 'Partials', 1, 16, 8, '', { step: 1, hint: 'Spectral: how many of the band’s strongest peaks each grain plays back as sines.' }),
   GR_P(48, 'fftSize', 'Analysis window', 0, 2, 1, '', { kind: 'list', step: 1, values: GR_FFT_SIZES.map(String), hint: 'Spectral: the analysis window in samples (hop a quarter of it). Larger: finer frequencies, blurrier in time.' }),
+  GR_P(49, 'specGrains', 'Grains', 0, 2, 0, '', { kind: 'list', step: 1, values: GR_SPEC_GRAINS, hint: 'Spectral: where the grains sit in time. On the line: all at Position. Emit: launched from Position and travelling through the sample, as Emit’s (Direction, Travel speed, Emit spread, At the end). Spread: scattered in an Area around Position.' }),
+  GR_P(50, 'specArea', 'Area', 0, 1, 0.25, '', { step: 0.001, hint: 'Spectral · Spread: how much of the sample the grains land in around Position (1: the whole sample).' }),
+  GR_P(51, 'specSide', 'Side', 0, 2, 0, '', { kind: 'list', step: 1, values: GR_SIDES, hint: 'Spectral · Spread: the Area either side of Position, only ahead of it (later in the sample), or only behind it.' }),
 ];
 export const GR_KEYS = GR_PARAMS.map(p => p.key);
 
@@ -303,6 +310,7 @@ export function grMakeEngine() {
       fmRate: 0, fmAmount: 0, filter: 0, cutoff: 6000, resonance: 0.71, attack: 0.02, decay: 0.3, sustain: 0.8, release: 0.8, window: 0, skew: 0.5,
       scan: 0, lfoRate: 0, lfoDepth: 0.2, freeze: 0, hold: 0, drone: 0, cap: 64, voices: 8, root: 60, velocity: 1, level: 0.8, seed: 1, fromRate: 6,
       emitDir: 0, emitSpeed: 0.2, emitSpread: 0.1, emitEdge: 0, band: 0.35, bandWidth: 0.12, bandSpread: 0.1, bandSpeed: 0, bandDir: 0, bandEdge: 1, shift: 0, partials: 8, fftSize: 1,
+      specGrains: 0, specArea: 0.25, specSide: 0,
     };
     // Spectral: the analysis (made here when needed unless opts.autoSpectrum === false: the worklet gets it from the main thread).
     var autoSpec = !(opts && opts.autoSpectrum === false), spec = null, bufRate = sr, now = 0;
@@ -316,7 +324,7 @@ export function grMakeEngine() {
     voices.push({ on: false, note: 60, vel: 1, stage: 2, level: 1, rate: 0, relRate: 0, scan: 0, wait: 0, alt: false, drone: false, latched: false, keyUp: false, order: 0, eh: newHeads(), sh: newHeads(), origin: 0 });
     var pts = [], ptCutoff = NaN;
     var grains = [];
-    for (var gi = 0; gi < MAXG; gi++) grains.push({ on: false, v: 0, pos: 0, rate: 1, len: 1, age: 0, amp: 0, gl: 0, gr: 0, pan: 0, semis: 0, band: 0, energy: 0, np: 0, pinc: new Float64Array(16), pamp: new Float64Array(16), pph: new Float64Array(16) });
+    for (var gi = 0; gi < MAXG; gi++) grains.push({ on: false, v: 0, pos: 0, rate: 1, len: 1, age: 0, amp: 0, gl: 0, gr: 0, pan: 0, semis: 0, band: 0, energy: 0, np: 0, spec: false, fr: 0, pinc: new Float64Array(16), pamp: new Float64Array(16), pph: new Float64Array(16) });
     var live = 0;
 
     function wrap(x) { return x - Math.floor(x); }
@@ -393,8 +401,12 @@ export function grMakeEngine() {
       events.splice(i, 0, ev);
     }
     function GR_FFT(i) { i = i | 0; return i <= 0 ? 1024 : i >= 2 ? 4096 : 2048; }
-    /** Fill a grain with frame `fr`'s strongest peaks inside the band around `u` (up to Partials), shifted and pitched; false when none. */
-    function pickPartials(g, fr, u, semis) {
+    /**
+     * Fill a grain with frame `fr`'s strongest peaks inside the band around `u` (up to Partials), shifted and pitched; false when none.
+     * `keep`: a travelling grain moving on to a new frame keeps its partials' running phases (no clicks), new ones start in step.
+     */
+    function pickPartials(g, fr, u, semis, keep) {
+      var had = keep ? g.np : 0;
       var nyq = bufRate / 2, w = P.bandWidth / 2;
       var lo = bandHz(Math.max(0, u - w), nyq) * spec.size / bufRate, hi = bandHz(Math.min(1, u + w), nyq) * spec.size / bufRate;
       var want = Math.max(1, Math.min(16, Math.round(P.partials))), mul = Math.pow(2, semis / 12), n = 0, e2 = 0;
@@ -408,7 +420,7 @@ export function grMakeEngine() {
         g.pinc[n] = hz / sr; g.pamp[n] = a;
         // The phase of one steady oscillator at this frequency (from the engine's clock), so overlapping
         // grains of a partial add up instead of cancelling; no random numbers, so the sequence never shifts.
-        var ph = (hz / sr) * now; g.pph[n] = ph - Math.floor(ph);
+        if (n >= had) { var ph = (hz / sr) * now; g.pph[n] = ph - Math.floor(ph); }
         e2 += a * a; n++;
       }
       g.np = n; g.energy = Math.sqrt(e2);
@@ -424,8 +436,12 @@ export function grMakeEngine() {
       else v.wait = Math.max(1, sr / Math.max(0.01, P.density));
       if (mode === 3 && !v.eh.ok) headsInit(v.eh, P.emitDir | 0, rnd);
       if (mode === 4 && !v.sh.ok) headsInit(v.sh, P.bandDir | 0, rnd);
+      var specGrains = mode === 4 ? P.specGrains | 0 : 0;
+      if (specGrains === 1 && !v.eh.ok) headsInit(v.eh, P.emitDir | 0, rnd);
       // Always draw the same numbers, grain or not, so a cap never shifts the random sequence.
       var rSpray = rnd(), rSize = rnd(), rPitch = rnd(), rSpread = rnd(), rPan = rnd(), rLevel = rnd(), rRev = rnd(), rMute = rnd();
+      // Spectral · Spread draws one more (only there, so every other mode's sequence is as it was).
+      var rArea = specGrains === 2 ? rnd() : 0;
       v.alt = !v.alt;
       if (!bufLen || live >= cap) return;
       var slot = -1;
@@ -435,7 +451,10 @@ export function grMakeEngine() {
       var lfo = P.lfoDepth * 0.5 * Math.sin(2 * Math.PI * lfoPhase);
       var centre = wrap(P.position + v.scan + lfo);
       // Emit: the grain leaves from the next travelling spawn point.
-      if (mode === 3) { centre = headAt(v.eh, v.origin, P.emitSpread, v.eh.next); v.eh.next = (v.eh.next + 1) % HEADS; }
+      var head = -1;
+      if (mode === 3 || specGrains === 1) { head = v.eh.next; centre = headAt(v.eh, v.origin, P.emitSpread, head); v.eh.next = (head + 1) % HEADS; }
+      // Spectral · Spread: somewhere in the Area around Position (either side, ahead, or behind).
+      else if (specGrains === 2) { var side = P.specSide | 0; centre = wrap(centre + P.specArea * (side === 1 ? rArea : side === 2 ? -rArea : rArea - 0.5)); }
       var start = centre * bufLen + (rSpray * 2 - 1) * P.spray * (bufLen / Math.max(1e-9, bufDur));
       var spreadSemis, pan;
       if (mode === 2) { spreadSemis = (rSpread * 2 - 1) * P.spread / 2; pan = (rPan * 2 - 1) * Math.max(P.panRand, P.spread > 0 ? 0.6 : 0); }
@@ -449,7 +468,7 @@ export function grMakeEngine() {
       var overlap = mode === 0 ? 2 : Math.max(1, P.density * len / sr);
       amp *= (mode === 0 ? 1 : 1 / Math.sqrt(overlap)) * (1 - P.velocity + P.velocity * v.vel);
       var g = grains[slot];
-      g.np = 0; g.band = 0; g.energy = 0;
+      g.np = 0; g.band = 0; g.energy = 0; g.spec = false;
       if (mode === 4) {
         // Spectral: the band's strongest peaks at this moment of the sample, played back as sines.
         if (!spec || spec.size !== GR_FFT(P.fftSize) || spec.len !== bufLen) { if (!autoSpec) return; spec = analyse([bufL, bufR], GR_FFT(P.fftSize)); }
@@ -457,12 +476,13 @@ export function grMakeEngine() {
         var u = headAt(v.sh, P.band, P.bandSpread, k) + (rSpread * 2 - 1) * P.bandSpread / HEADS / 2;
         if (u < 0) u = 0; else if (u > 1) u = 1;
         var fr = Math.floor(wrap(start / bufLen) * spec.frames) % spec.frames;
-        if (!pickPartials(g, fr, u, semis, v.origin)) return;
-        g.band = u;
+        if (!pickPartials(g, fr, u, semis, false)) return;
+        g.band = u; g.spec = true; g.fr = fr;
       }
       g.on = true; g.v = vIndex; g.len = len; g.age = 0; g.amp = amp; g.semis = semis;
       if (rRev < P.reverse) { g.rate = -rate; g.pos = start + len * rate; } else { g.rate = rate; g.pos = start; }
-      if (mode === 4) { g.rate = 0; g.pos = start; }
+      // A spectral grain holds its moment, except in Spectral · Emit, where it travels on its spawn point's way at Travel speed (samples a frame).
+      if (mode === 4) { g.rate = head >= 0 ? v.eh.d[head] * P.emitSpeed * bufLen / sr : 0; g.pos = start; }
       g.gl = Math.cos((pan + 1) * Math.PI / 4); g.gr = Math.sin((pan + 1) * Math.PI / 4); g.pan = pan;
       live++;
       if (live > maxCount) maxCount = live;
@@ -486,7 +506,7 @@ export function grMakeEngine() {
       if (pan < -1) pan = -1; else if (pan > 1) pan = 1;
       var overlap = Math.max(1, rate0 * pts.length * len / sr);
       var g = grains[slot];
-      g.on = true; g.v = MAXV; g.len = len; g.age = 0; g.semis = semis; g.np = 0; g.band = 0; g.energy = 0;
+      g.on = true; g.v = MAXV; g.len = len; g.age = 0; g.semis = semis; g.np = 0; g.band = 0; g.energy = 0; g.spec = false;
       g.amp = Math.max(0, pt.amp) * (1 - P.levelRand * rLevel) / Math.sqrt(overlap);
       if (rRev < P.reverse) { g.rate = -rate; g.pos = start + len * rate; } else { g.rate = rate; g.pos = start; }
       g.gl = Math.cos((pan + 1) * Math.PI / 4); g.gr = Math.sin((pan + 1) * Math.PI / 4); g.pan = pan;
@@ -509,7 +529,7 @@ export function grMakeEngine() {
       var win = P.window | 0, skew = P.skew, filter = P.filter | 0, freeze = !!P.freeze;
       var fmInc = P.fmRate / sr, fmDepth = P.fmAmount / 12, lfoInc = P.lfoRate / sr;
       var scanInc = bufDur > 0 ? P.scan / bufDur / sr : 0;
-      var mode = P.mode | 0, emitInc = P.emitSpeed / sr, bandInc = P.bandSpeed / sr, emitEdge = P.emitEdge | 0, emitDir = P.emitDir | 0, bandEdge = P.bandEdge | 0, bandDir = P.bandDir | 0;
+      var mode = P.mode | 0, emits = mode === 3 || (mode === 4 && (P.specGrains | 0) === 1), emitInc = P.emitSpeed / sr, bandInc = P.bandSpeed / sr, emitEdge = P.emitEdge | 0, emitDir = P.emitDir | 0, bandEdge = P.bandEdge | 0, bandDir = P.bandDir | 0;
       for (var n = from; n < to; n++) {
         now = frame + n;
         gainS += (P.level - gainS) * smooth;
@@ -528,10 +548,11 @@ export function grMakeEngine() {
           } else if (v.stage === 2) v.level = P.sustain;
           else { v.level -= v.relRate; if (v.level <= 0) { v.level = 0; v.on = false; killGrains(vi); continue; } }
           if (!freeze) v.scan += scanInc;
-          if (mode === 3) {
+          if (emits) {
             v.origin = wrap(P.position + v.scan + P.lfoDepth * 0.5 * Math.sin(2 * Math.PI * lfoPhase));
             if (v.eh.ok && !freeze) headsStep(v.eh, v.origin, P.emitSpread, emitInc, emitEdge, emitDir, rnd);
-          } else if (mode === 4 && v.sh.ok && !freeze) headsStep(v.sh, P.band, P.bandSpread, bandInc, bandEdge, bandDir, rnd);
+          }
+          if (mode === 4 && v.sh.ok && !freeze) headsStep(v.sh, P.band, P.bandSpread, bandInc, bandEdge, bandDir, rnd);
           v.wait -= 1;
           if (v.wait <= 0 && v.stage !== 3) spawn(vi, v);
         }
@@ -542,8 +563,13 @@ export function grMakeEngine() {
             var g = grains[gi];
             if (!g.on) continue;
             var w = windowAt(win, g.age / g.len, skew) * g.amp * voices[g.v].level;
-            if (g.np) {
-              // A spectral grain: its partials from the sine table.
+            if (g.spec) {
+              // A spectral grain: its partials from the sine table. A travelling one (Spectral · Emit) takes
+              // the peaks of each new frame it reaches, its partials' phases running on.
+              if (g.rate !== 0) {
+                var gf = Math.floor(wrap(g.pos / bufLen) * spec.frames) % spec.frames;
+                if (gf !== g.fr) { g.fr = gf; pickPartials(g, gf, g.band, g.semis, true); }
+              }
               var sv = 0;
               for (var q = 0; q < g.np; q++) {
                 var ph = g.pph[q], x = ph * TBL, i0 = x | 0;
@@ -556,7 +582,7 @@ export function grMakeEngine() {
               l += sample(bufL, g.pos) * w * g.gl;
               r += sample(bufR, g.pos) * w * g.gr;
             }
-            g.pos += g.rate * fm;
+            g.pos += g.spec ? g.rate : g.rate * fm;
             if (++g.age >= g.len) { g.on = false; live--; }
           }
         }
@@ -650,6 +676,12 @@ export function grMakeEngine() {
           for (var vj = 0; vj < MAXV; vj++) { var vv = voices[vj]; if (vv.on && (mode === 3 ? vv.eh.ok : mode === 4 ? vv.sh.ok : false) && (!hv || vv.order > hv.order)) hv = vv; }
           o.headAxis = hv ? mode - 2 : 0; o.headCount = hv ? HEADS : 0;
           if (hv) for (var hi = 0; hi < HEADS; hi++) o.heads[hi] = mode === 3 ? headAt(hv.eh, hv.origin, P.emitSpread, hi) : headAt(hv.sh, P.band, P.bandSpread, hi);
+          // Spectral · Emit also has places in the sample its grains leave from (theads, drawn on the top edge).
+          if (o.theads) {
+            var th = hv && mode === 4 && (P.specGrains | 0) === 1 && hv.eh.ok;
+            o.theadCount = th ? HEADS : 0;
+            if (th) for (var tj = 0; tj < HEADS; tj++) o.theads[tj] = headAt(hv.eh, hv.origin, P.emitSpread, tj);
+          }
         }
         return o;
       },
@@ -677,7 +709,7 @@ export function grMakeEngine() {
 
 /** The readouts every engine fills (stats()). */
 export function grNewStats() {
-  return { count: 0, maxCount: 0, pos: new Float32Array(64), amp: new Float32Array(64), pitch: new Float32Array(64), size: new Float32Array(64), row: new Float32Array(64), band: new Float32Array(64), energy: new Float32Array(64), heads: new Float32Array(8), headCount: 0, headAxis: 0 };
+  return { count: 0, maxCount: 0, pos: new Float32Array(64), amp: new Float32Array(64), pitch: new Float32Array(64), size: new Float32Array(64), row: new Float32Array(64), band: new Float32Array(64), energy: new Float32Array(64), heads: new Float32Array(8), headCount: 0, headAxis: 0, theads: new Float32Array(8), theadCount: 0 };
 }
 
 // ── Where a grain is drawn / where its null goes (docs/granulator.md) ───────
@@ -839,7 +871,7 @@ class PfGranulator extends AudioWorkletProcessor {
     super();
     var p = (o && o.processorOptions) || {};
     this.e = grCreateEngine(sampleRate, p.seed || 1, { autoSpectrum: false });
-    this.st = { count: 0, maxCount: 0, pos: new Float32Array(64), amp: new Float32Array(64), pitch: new Float32Array(64), size: new Float32Array(64), row: new Float32Array(64), band: new Float32Array(64), energy: new Float32Array(64), heads: new Float32Array(8), headCount: 0, headAxis: 0 };
+    this.st = { count: 0, maxCount: 0, pos: new Float32Array(64), amp: new Float32Array(64), pitch: new Float32Array(64), size: new Float32Array(64), row: new Float32Array(64), band: new Float32Array(64), energy: new Float32Array(64), heads: new Float32Array(8), headCount: 0, headAxis: 0, theads: new Float32Array(8), theadCount: 0 };
     this.n = 0; this.alive = true;
     var self = this;
     this.port.onmessage = function (ev) { self.msg(ev.data); };
@@ -864,7 +896,7 @@ class PfGranulator extends AudioWorkletProcessor {
     this.e.sync(currentFrame);
     this.e.process(L, R, L.length);
     if (++this.n % 6 === 0) {
-      var s = this.e.stats(this.st), c = s.count, out = new Float32Array(12 + c * 7);
+      var s = this.e.stats(this.st), c = s.count, out = new Float32Array(12 + c * 7 + 9);
       out[0] = c; out[1] = s.maxCount; out[2] = s.headCount; out[3] = s.headAxis;
       for (var h = 0; h < 8; h++) out[4 + h] = s.heads[h];
       for (var i = 0; i < c; i++) {
@@ -872,6 +904,10 @@ class PfGranulator extends AudioWorkletProcessor {
         out[12 + 3 * c + i] = s.band[i]; out[12 + 4 * c + i] = s.energy[i];
         out[12 + 5 * c + i] = s.size[i]; out[12 + 6 * c + i] = s.row[i];
       }
+      // Spectral · Emit's places in the sample, after the grains (an older reader stops before them).
+      var tb = 12 + c * 7;
+      out[tb] = s.theadCount;
+      for (var t = 0; t < 8; t++) out[tb + 1 + t] = s.theads[t];
       this.port.postMessage(out, [out.buffer]);
     }
     return this.alive;
@@ -902,7 +938,7 @@ export function grLoadWorklet(ctx) {
   return p;
 }
 
-/** The worklet's packed readouts into `st`: count, most, spawn points, then per grain position, level, pitch, band, energy, size, row. */
+/** The worklet's packed readouts into `st`: count, most, spawn points, then per grain position, level, pitch, band, energy, size, row, then (when there) Spectral · Emit's places in the sample. */
 export function grReadStats(d, st) {
   if (!(d instanceof Float32Array) || d.length < 12) return st;
   const c = d[0] | 0;
@@ -912,6 +948,11 @@ export function grReadStats(d, st) {
     st.pos[i] = d[12 + i]; st.amp[i] = d[12 + c + i]; st.pitch[i] = d[12 + 2 * c + i];
     st.band[i] = d[12 + 3 * c + i]; st.energy[i] = d[12 + 4 * c + i];
     st.size[i] = d[12 + 5 * c + i]; st.row[i] = d[12 + 6 * c + i];
+  }
+  const tb = 12 + c * 7;
+  if (st.theads) {
+    st.theadCount = d.length >= tb + 9 ? d[tb] | 0 : 0;
+    for (let t = 0; t < 8 && st.theadCount; t++) st.theads[t] = d[tb + 1 + t];
   }
   return st;
 }
