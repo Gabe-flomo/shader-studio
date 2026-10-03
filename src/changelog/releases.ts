@@ -39,6 +39,18 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.4',
+    date: '2026-10-03',
+    title: 'Piano roll',
+    highlights: [
+      { area: 'Play', text: 'Double-click a MIDI clip in the Arrangement to edit its notes in a piano roll, under the tracks (the Notes/Device switch).', link: { kind: 'doc', path: 'docs/piano-roll.md' } },
+      { area: 'Play', text: 'Select, ⇧-select or drag a box; move notes in time and pitch, ⌥-drag to copy, drag an edge to change the length; B draws, 0 turns a note off.' },
+      { area: 'Play', text: 'Click a key to hear it. The tape’s scale tints its rows; F folds to the notes you use, G to the scale.' },
+      { area: 'Play', text: 'A velocity lane: drag the stems, draw them, or type a value.' },
+      { area: 'Play', text: 'Note functions: quantize (with an amount), transpose, fit to scale, invert, reverse, legato, ×2 and ÷2, humanize, chop, join and duplicate.' },
+    ],
+  },
+  {
     id: '2026.10.3',
     date: '2026-10-02',
     title: 'Input names',

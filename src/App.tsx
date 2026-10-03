@@ -747,6 +747,8 @@ function App() {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.shiftKey || !isFullscreenKey(e, { typing: isTyping(e.target), plainF: true })) return;
       if (document.querySelector('[role="dialog"]')) return;
+      // The piano roll's F is Fold (docs/piano-roll.md).
+      if ((e.target as Element | null)?.closest?.('[data-piano-roll]')) return;
       e.preventDefault();
       e.stopPropagation();
       void toggleFullscreenTarget('canvas');

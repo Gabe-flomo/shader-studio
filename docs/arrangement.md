@@ -147,3 +147,7 @@ clip grows the clip to cover it (`addNote`, `patchNote`, `deleteNote`,
 `clampNote`, `notePitchRange` in `types/playArrangement.ts`); notes stay sorted
 by time. Each edit is one undo step, and takes and renders play the edited
 notes.
+
+*3 Oct 2026.* Double-clicking a MIDI clip now opens it in the **piano roll**
+in the device area (docs/piano-roll.md); double-clicking empty lane still adds
+a note.
