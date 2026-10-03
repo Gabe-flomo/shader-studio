@@ -40,10 +40,11 @@ export const PassNode: NodeDefinition = {
     color: { type: 'vec3', label: 'Color', hint: 'What to draw into the texture.' },
     alpha: { type: 'float', label: 'Alpha', defaultValue: 1, hint: 'Stored with the colour (1 when unwired).' },
   },
+  // Color first: dropped onto a colour wire, a Pass sits in the chain (wire insert takes the first output).
   outputs: {
-    texture: { type: 'texture', label: 'Texture', hint: 'The picture as a texture: wire it into Sample, Edges, Blur or Glow (texture).' },
     color: { type: 'vec3', label: 'Color', hint: 'The texture at this pixel.' },
     alpha: { type: 'float', label: 'Alpha', hint: 'The texture\'s alpha at this pixel.' },
+    texture: { type: 'texture', label: 'Texture', hint: 'The picture as a texture: wire it into Sample, Edges, Blur or Glow (texture).' },
     previous: { type: 'texture', label: 'Previous', hint: 'This Pass\'s own picture from the frame before (feedback). Sample it, warp it and mix it back into this Pass\'s input for trails, smoke and reaction-diffusion.' },
   },
   defaultParams: { scale: '1', format: 'half', filter: 'linear', wrap: 'clamp' },
