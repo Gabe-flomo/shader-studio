@@ -152,7 +152,7 @@ describe('the record', () => {
   it('keeps Displace’s map and layer, and a stack with the new kinds round-trips through a Play record', () => {
     expect(parseFinishEffect({ id: 'd', kind: 'displace', map: 'motion' })!.map).toBe('motion');
     expect(parseFinishEffect({ id: 'd', kind: 'displace', map: 'slit' })!.map).toBe('noise');
-    const finish = parseFinish({ on: true, effects: FN_KINDS.slice(11).map((k, i) => ({ id: `e${i}`, kind: k })) })!;
+    const finish = parseFinish({ on: true, effects: FN_KINDS.slice(11, 20).map((k, i) => ({ id: `e${i}`, kind: k })) })!;
     expect(finish.effects.map(e => e.kind)).toEqual(['glitch', 'ripple', 'displace', 'mosaic', 'mirror', 'gradmap', 'posterize', 'edges', 'feedback']);
     const rec = parsePlayRecord(JSON.parse(JSON.stringify({ ...emptyPlayRecord(), finish: { ...finish, effects: finish.effects.map(e => (e.kind === 'ripple' ? { ...e, where: 'picture' } : e)) } })));
     expect(rec.finish?.effects.find(e => e.kind === 'ripple')?.where).toBe('picture');

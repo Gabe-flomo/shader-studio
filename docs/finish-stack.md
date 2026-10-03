@@ -1,7 +1,8 @@
 # The Finish stack
 
 Play's **Finish** tab: colour grading, lens and screen effects, film effects,
-camera shake, time displacement, warps, glitches and feedback over the **final**
+camera shake, time displacement, warps, glitches, feedback and stylised looks
+(pixel sort, halftone, ASCII, light leaks) over the **final**
 picture, the shader and every layer together. One ordered stack per Play record
 (`play.finish`). Any effect can show only **somewhere** (its Where: a layer's
 shape, the bright parts, or where the camera sees movement).
@@ -16,7 +17,9 @@ shape, the bright parts, or where the camera sees movement).
   `ColourWheel`, `CompareHandle`, `savedLooks`).
 - Tests: `src/play/__tests__/finish.test.ts`, `finishFollowups.test.ts`
   (the wipe, custom effects, presets, the library) and `finishMaps.test.ts`
-  (Where, the maps, the new effects, particles born where a map says); node packs carrying
+  (Where, the maps, the new effects, particles born where a map says) and
+  `finishCreative.test.ts` (pixel sort, halftone, ASCII, light leaks, presets and
+  swatches, the passes a stage effect splits a stack into); node packs carrying
   effects in `src/nodePacks/__tests__/nodePacks.test.ts`.
 
 ## Where it runs
@@ -37,7 +40,8 @@ it the renderer reports `ok: false` and the picture shows unfinished.
 ## The pass
 
 One fragment shader is built from the effects that are on (`fnBuildFinal`),
-compiled once per structure and cached. Numbers are uniforms (one `vec4[]` per
+compiled once per structure and cached (a stack with a stage effect is a few
+of them; see below). Numbers are uniforms (one `vec4[]` per
 effect), so dragging a slider or a mapping never recompiles.
 
 1. **Geometry**, last effect first: camera shake, lens distortion, CRT
@@ -47,9 +51,24 @@ effect), so dragging a slider or a mapping never recompiles.
    blue at offset points; time displacement chooses which frame each point reads.
 3. **Colour**, in the stack's order: grade, vignette, CRT mask, bloom, halation,
    grain, flicker, Glitch's colour blocks, gradient map, posterize, edges,
-   feedback, and your own effects wherever they sit in the stack.
+   feedback, light leaks, pixel sort, halftone, ASCII, and your own effects
+   wherever they sit in the stack.
 4. **The before/after wipe**, last: where it shows the picture before the stack,
    that is what is drawn (and the stack isn't run there at all).
+
+**Stage effects** read the picture *around* each point after the effects above
+them: Pixel sort (a run of pixels), Halftone and ASCII (a cell's centre)
+(`FN_STAGE_KINDS`). Each one starts a pass of its own (`fnSegments`): the pass
+before it draws into a full-size `RGBA8` target (premultiplied, upright) and the
+stage effect reads that through `fnRead`, so every effect above reaches it (a
+Grade then Halftone prints the graded colours). Geometry, the colour splits and
+Time displacement happen in the first pass only; the wipe in the last only.
+Only the last pass flips for an offline render's read-back, so Feedback reads
+its last frame through `uFeedFlip` (set for a render in every pass) instead of
+the output flip. A stack with no stage effect, or one only at the top, is still
+a single pass, built exactly as before. Every pass reads the same map textures,
+so a Where works wherever the effect lands. Edges and a Brightness map read the
+picture as it came in, so they never split a stack.
 
 Extra work only when asked for:
 
@@ -69,6 +88,7 @@ Extra work only when asked for:
   (`layerAlpha`) or the camera's motion map (`motion`).
 - **Feedback**: the finished frame is copied (`copyTexImage2D`, RGB) after the
   pass and read back by the next one.
+- **Stage passes**: two full-size `RGBA8` targets, used in turn.
 
 ## Grade
 
@@ -292,16 +312,56 @@ more block of the same pass, except Feedback (one copy of the output a frame).
 | **Ripple** | Rings of waves spreading from a centre (map a hand or the pointer onto the centre) | amount, wavelength, speed, fade out, centre |
 | **Displace** | Pushes the picture by a map: drifting noise (heat haze), the picture's brightness, a layer's alpha, or camera motion | amount, direction, scale, speed |
 | **Mosaic** | Big square pixels | cells |
-| **Mirror / kaleidoscope** | Segments 1 folds one half onto the other along a line through the centre; 2 and up make a kaleidoscope of mirrored wedges | segments, angle, centre |
+| **Mirror / kaleidoscope** | Segments 1 folds one half onto the other along a line through the centre; 2 and up make a kaleidoscope of mirrored wedges. Spin turns the picture under the mirrors; Zoom goes in or out, and spun or zoomed, the picture repeats as mirrored tiles past its edges | segments, angle, centre, spin, zoom |
 | **Gradient map** | Brightness becomes a shadows → midtones → highlights gradient | amount, midpoint, three colours |
-| **Posterize** | A few flat levels per channel, with a 4 × 4 ordered dither | levels, dither |
-| **Edges** | Outlines where the picture's brightness changes (read before the stack's colour steps), in a colour, over the picture or alone on black | amount, width, threshold, edges only, colour |
+| **Posterize** | A few flat levels per channel, with a 4 × 4 ordered dither; Colour below 1 maps brightness between a Dark and a Light palette colour (a handheld's greens, 1-bit) | levels, dither, colour, dark, light |
+| **Edges** | Outlines where the picture's brightness changes (read before the stack's colour steps), in a colour, over the picture or alone on black; Glow adds a soft halo, Rainbow colours the lines by their direction | amount, width, threshold, edges only, colour, glow, rainbow |
 | **Feedback** | The last finished frame drawn back in, zoomed, turned and drifted a little each frame: trails, tunnels, spirals; Lighten, Screen or Blend | amount, zoom, rotate, drift, hue drift, blend |
 
 Feedback starts empty (a new size, a render's first frame, or Reset), and in a
 render reads the frames in order, so a render is the same every time. Glitch,
 Ripple, noise Displace and Feedback keep the preview drawing while the clock
-runs (`fnAnimated`).
+runs (`fnAnimated`), as do a spinning Mirror and rainbow Edges.
+
+## Stylised looks
+
+From the creative-effects pass (#443, rebuilt on the effects above: where they
+overlapped, Glitch, Mirror, Posterize, Edges, Feedback and Displace stayed and
+took #443's presets and extras instead).
+
+| Effect | Group | What it does | Numbers |
+| --- | --- | --- | --- |
+| **Pixel sort** | Glitch | Each line along Direction is cut into staggered intervals of varied length; within one, the 24 samples brighter than Threshold are ranked and placed dark to bright in the bright places. A stage effect | threshold, length, direction, amount |
+| **Halftone** | Stylise | Dot screens sampled at each cell's centre: black only, or C, M, Y, K at print's screen angles, multiplied onto the paper colour. A stage effect | dot size, angle, colour, amount, paper |
+| **ASCII** | Stylise | Each cell picks one of ten 5 × 5 characters (`FN_ASCII_GLYPHS`, empty to dense) by brightness; coloured from the picture or one ink. A stage effect | character size, colour, background, contrast, ink |
+| **Light leaks** | Film | Three warm blobs drift round the edges, hot in the middle and redder at the fringe, screened over the picture | amount, hue, size, speed |
+
+## Presets, swatches and notes
+
+An effect's declaration (`FN_EFFECTS[kind]`) can carry `presets` (named sets of
+numbers: they only set numbers, so a mapping or control on one keeps working),
+`colours` (three hidden numbers edited as one swatch, each still a control
+target) and a `note` (a line under its sliders). The card shows a Preset row
+for any effect that has them, the one it's on lit (and named in the folded
+card's summary); one preset is always the defaults. Effects without an editor of
+their own get their sliders, swatches and note from the declaration.
+
+| Effect | Presets |
+| --- | --- |
+| Glitch | Subtle, Broken (default), Meltdown |
+| Displace | Liquid (default), Heat haze, Marble (for the Noise map) |
+| Mirror / kaleidoscope | Mirror (default), Mandala, Crystal, Butterfly |
+| Posterize | Poster (default), Retro PC, Handheld, 1-bit, Sunset duo |
+| Edges | Chalk (default), Neon, Ink outline, Laser |
+| Feedback | Ghosts (default), Tunnel, Smear, Vortex |
+| Halation | Subtle, Classic cine (default), Strong |
+| Pixel sort | Drip (default), Sideways, Melt |
+| Halftone | Comic (default), Newsprint, Pop art |
+| ASCII | Colour (default), Terminal, Big type |
+| Light leaks | Warm (default), Rose, Burn |
+
+Swatches: Vignette's colour, Bloom's tint, the Gradient map's three colours,
+Posterize's Dark and Light, Edges' colour, Halftone's paper, ASCII's ink.
 
 ## The before/after wipe
 
@@ -366,8 +426,8 @@ vec3 effect(vec2 uv, vec3 color) {
 - `effect` gets `uv` (the point on the picture, 0..1) and `color` (the colour so
   far, after the colour steps above it) and returns the new colour.
 - Helpers: `picture(uv)` reads the picture as it came in (the shader and the
-  layers, before the stack: this is one pass, so a neighbour's colour doesn't
-  include the steps above), `px` is one pixel in uv units, `time` the clock in
+  layers, before the stack: a neighbour's colour doesn't include the steps
+  above), `px` is one pixel in uv units, `time` the clock in
   seconds, `resolution` the size in pixels, `aspect` width over height.
 - Settings: each `uniform float name; // min..max = default` is a slider,
   optionally with `step s` and a label after it; `uniform int` is a whole-number
@@ -506,6 +566,12 @@ The warps, glitch, gradient map, posterize and mosaic are a few instructions
 each in the same pass; Edges adds four picture reads, Feedback one full-frame
 copy, and each map texture one small upload. (Not measured on the M3 Pro; they
 were checked for compiling and drawing in Chromium's software WebGL.)
+
+The stylised looks, measured the same way at 1440 × 900 (in the browser pane,
+another machine), each after a Grade so the stage ones run as a second pass:
+Grade alone 0.27 ms; with ASCII 0.32, Halftone 0.34, Edges with glow and rainbow
+0.38, Light leaks 0.43, Pixel sort 1.34 (24 samples and their ranking per
+pixel). Grade, Halftone, ASCII and Pixel sort together (four passes): 0.99.
 
 The live preview draws the finished frame at the overlay's size, capped at about
 2.1 million pixels, so a retina preview costs no more than a 1080p one. Renders
