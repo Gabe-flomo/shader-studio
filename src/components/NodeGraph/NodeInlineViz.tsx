@@ -3699,7 +3699,7 @@ function PassThumbViz({ node }: { node: GraphNode }) {
   const scaleText = scale === '0.5' ? '½' : scale === '0.25' ? '¼' : scale === '0.125' ? '⅛' : '1';
   return (
     <div style={{ ...vizContainer(), padding: 4 }}>
-      <canvas ref={ref} width={128} height={72} style={{ display: 'block', width: '100%', aspectRatio: '16 / 9', objectFit: 'contain', background: '#000', borderRadius: 3 }} />
+      <canvas ref={ref} width={128} height={72} style={{ display: 'block', maxWidth: '100%', maxHeight: 120, margin: '0 auto', background: '#000', borderRadius: 3 }} />
       <div style={{ fontSize: '9px', color: pal.overlay0, fontFamily: MONO, marginTop: 3 }}>texture · scale {scaleText} · {node.params.format === 'byte' ? '8-bit' : 'half float'}</div>
     </div>
   );
