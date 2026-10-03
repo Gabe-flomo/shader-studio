@@ -8,6 +8,7 @@
  * without a Pass must compile byte for byte as it did before. A change to
  * `__snapshots__/goldenShaders.test.ts.snap` is only acceptable in a commit
  * that deliberately changes the compiler for every graph, and must say why.
+ * Examples that have a Pass node are left out (they take the new path).
  */
 import { describe, expect, it, vi } from 'vitest';
 
@@ -37,7 +38,10 @@ function cyrb53(str: string, seed: number): string {
 const sha = (s: string) => `${cyrb53(s, 1)}${cyrb53(s, 7)}:${s.length}`;
 const sorted = (o: Record<string, unknown> | undefined) => Object.keys(o ?? {}).sort();
 
-const keys = Object.keys(EXAMPLE_GRAPHS).sort();
+type Nodes = Array<{ type: string; params?: Record<string, unknown> }>;
+/** Has a Pass node (at any depth)? The guarantee is about graphs without one; passGraph.test.ts covers those. */
+const hasPass = (nodes: Nodes): boolean => nodes.some(nd => nd.type === 'pass' || hasPass(((nd.params?.subgraph as { nodes?: Nodes } | undefined)?.nodes) ?? []));
+const keys = Object.keys(EXAMPLE_GRAPHS).filter(k => !hasPass(EXAMPLE_GRAPHS[k].nodes)).sort();
 
 describe('golden shaders: every example compiles as it did', () => {
   it('has the examples', () => expect(keys.length).toBeGreaterThan(100));
