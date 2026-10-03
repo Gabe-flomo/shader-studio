@@ -1261,6 +1261,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         // The Audio engine's racks follow the record too, and mapped plug-in parameters glide (lib/audioEngineHost.ts).
         const rec = playEngine.getRecord();
         audioEngineHost.frame(rec.audioEngine, rec.controls, fxValueOf);
+        // The tape's scale: racks with Snap to scale put live notes in it.
+        audioEngineHost.setScale(rec.arrangement?.scale);
       }
       material.uniforms.u_time.value = elapsed;
       // Clock followers (time readouts, keyframe playheads) get every frame: a listener call is

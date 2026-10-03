@@ -81,7 +81,16 @@ export interface PlayArrangement {
   fade: number;
   /** By rack id. */
   tracks: Record<string, ArrTrack>;
+  /**
+   * The tape's scale (Live's current scale, docs/piano-roll-plan.md): racks
+   * with Snap to scale put live notes in it while it's on; the piano roll
+   * highlights its notes. Absent: off.
+   */
+  scale?: ArrScale;
 }
+
+/** The tape's scale: on or off, its root (0 = C … 11 = B) and which scale (play/scales.ts id). */
+export interface ArrScale { on: boolean; root: number; name: string }
 
 export function emptyArrangement(bpm = 120): PlayArrangement {
   return { length: 0, loop: true, bpm, metronome: false, countIn: 0, fade: 0, tracks: {} };
@@ -637,6 +646,10 @@ export function parseArrangement(raw: unknown): PlayArrangement | undefined {
     fade: fin(o.fade) ? Math.round(clamp(o.fade, 0, FADE_MAX_MS)) : 0,
     tracks,
   };
+  if (o.scale && typeof o.scale === 'object') {
+    const sc = o.scale as Record<string, unknown>;
+    out.scale = { on: sc.on === true, root: fin(sc.root) ? Math.round(clamp(sc.root, 0, 11)) : 0, name: typeof sc.name === 'string' && /^[A-Za-z0-9]{1,24}$/.test(sc.name) ? sc.name : 'major' };
+  }
   // A tape recorded before a length existed (an old file): the length follows its material.
   if (!out.length) {
     let end = 0;
