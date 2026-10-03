@@ -74,9 +74,11 @@ export const PassNode: NodeDefinition = {
     const id = node.id;
     const tex = passUniform(id);
     return {
-      // vUv is 0–1 over the picture in every program, whatever its size.
-      code: `    vec4 ${id}_s = texture2D(${tex}, vUv);\n`,
-      outputVars: { texture: tex, color: `${id}_s.rgb`, alpha: `${id}_s.a`, previous: passPrevUniform(id) },
+      // Reads as expressions, not statements: a program that only wants this Pass's Previous (its
+      // own feedback) never reads the texture it is drawing into. vUv is 0–1 over the picture in
+      // every program, whatever its size.
+      code: '',
+      outputVars: { texture: tex, color: `texture2D(${tex}, vUv).rgb`, alpha: `texture2D(${tex}, vUv).a`, previous: passPrevUniform(id) },
     };
   },
 };
@@ -237,5 +239,76 @@ export const BlurTextureNode: NodeDefinition = {
     if (!tex) return { code: `    vec4 ${id}_acc = vec4(0.0);\n`, outputVars: { color: `${id}_acc.rgb`, alpha: `${id}_acc.a` } };
     const code = `    vec2 ${id}_uv = ${texUv(inputVars.uv ?? 'g_uv')};\n` + vogelBlur(id, tex, `${id}_uv`, p(node.params.radius, 8), tapsOf(node.params.quality));
     return { code, outputVars: { color: `${id}_acc.rgb`, alpha: `${id}_acc.a` } };
+  },
+};
+
+export const GlowTextureNode: NodeDefinition = {
+  type: 'glowTexture',
+  label: 'Glow (texture)',
+  category: 'Passes',
+  aliases: ['Bloom (texture)', 'Halo', 'Light bleed', 'Glow this frame'],
+  description: 'A glow from a Pass\'s texture, in the same frame: only the parts brighter than Threshold are kept, blurred by Radius (picture pixels) and scaled by Intensity. Add the result over your picture (Add Colors, Blend Modes: Add or Screen). The older Bloom reads last frame\'s picture.',
+  inputs: {
+    texture: { type: 'texture', label: 'Texture', hint: TEX_HINT },
+    uv: { type: 'vec2', label: 'UV', hint: UV_HINT },
+  },
+  outputs: {
+    glow: { type: 'vec3', label: 'Glow', hint: 'The light to add over the picture.' },
+  },
+  defaultParams: { threshold: 0.5, radius: 12, intensity: 1.5, quality: '24' },
+  paramDefs: {
+    threshold: { label: 'Threshold', type: 'float', min: 0, max: 2, step: 0.01, hint: 'Brightness a part needs to glow. 0 makes everything glow; above 1 only what is brighter than white (needs a half-float Pass).' },
+    radius: { label: 'Radius', type: 'float', min: 0, max: 64, step: 0.5, hint: 'How far the glow spreads, in picture pixels. Past about 12, set the Pass upstream to ½ for speed.' },
+    intensity: { label: 'Intensity', type: 'float', min: 0, max: 8, step: 0.05, hint: 'How bright the glow is.' },
+    quality: QUALITY,
+  },
+  assignable: false,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const tex = inputVars.texture;
+    if (!tex) return { code: `    vec3 ${id}_glow = vec3(0.0);\n`, outputVars: { glow: `${id}_glow` } };
+    const thr = p(node.params.threshold, 0.5);
+    // Each tap keeps only what is over the threshold (a soft knee 0.1 wide, so the cut doesn't ring).
+    const keep = (s: string) => `vec4(${s}.rgb * smoothstep(${thr}, ${thr} + 0.1, dot(${s}.rgb, ${LUMA})), ${s}.a)`;
+    const code = `    vec2 ${id}_uv = ${texUv(inputVars.uv ?? 'g_uv')};\n`
+      + vogelBlur(id, tex, `${id}_uv`, p(node.params.radius, 12), tapsOf(node.params.quality), keep)
+      + `    vec3 ${id}_glow = ${id}_acc.rgb * ${p(node.params.intensity, 1.5)};\n`;
+    return { code, outputVars: { glow: `${id}_glow` } };
+  },
+};
+
+export const DisplaceTextureNode: NodeDefinition = {
+  type: 'displaceTexture',
+  label: 'Displace (texture)',
+  category: 'Passes',
+  aliases: ['Displace by texture', 'Displacement map', 'Warp by texture', 'Refract'],
+  description: 'Reads Texture with its UV pushed by a second texture, Map: Map\'s red and green, centred on 0.5, move the read sideways and up by Amount (in picture pixels). Heat haze, glass and liquid looks; with a Pass\'s Previous as Texture, smoke and flow.',
+  inputs: {
+    texture: { type: 'texture', label: 'Texture', hint: TEX_HINT },
+    map: { type: 'texture', label: 'Map', hint: 'A Pass whose red and green say where to push the read (0.5 = stay). Unwired, nothing moves.' },
+    uv: { type: 'vec2', label: 'UV', hint: UV_HINT },
+  },
+  outputs: {
+    color: { type: 'vec3', label: 'Color' },
+    alpha: { type: 'float', label: 'Alpha' },
+  },
+  defaultParams: { amount: 20 },
+  paramDefs: {
+    amount: { label: 'Amount', type: 'float', min: -100, max: 100, step: 0.5, hint: 'How far the map pushes the read, in picture pixels, for a full swing of red or green.' },
+  },
+  assignable: false,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const tex = inputVars.texture;
+    if (!tex) return { code: `    vec4 ${id}_s = vec4(0.0);\n`, outputVars: { color: `${id}_s.rgb`, alpha: `${id}_s.a` } };
+    const map = inputVars.map;
+    const code = [
+      `    vec2 ${id}_uv = ${texUv(inputVars.uv ?? 'g_uv')};\n`,
+      map
+        ? `    vec2 ${id}_push = (texture2D(${map}, ${id}_uv).rg - 0.5) * 2.0 * ${p(node.params.amount, 20)} * ${passPxUniform(tex)};\n`
+        : `    vec2 ${id}_push = vec2(0.0);\n`,
+      `    vec4 ${id}_s = texture2D(${tex}, ${id}_uv + ${id}_push);\n`,
+    ].join('');
+    return { code, outputVars: { color: `${id}_s.rgb`, alpha: `${id}_s.a` } };
   },
 };

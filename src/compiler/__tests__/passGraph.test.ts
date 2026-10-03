@@ -208,3 +208,61 @@ describe('texture-sampling nodes', () => {
     expect(r.errors!.join(' ')).toMatch(/Expected vec3, got texture/);
   });
 });
+
+describe('feedback, glow and displace (phase 4)', () => {
+  /** A circle plus this Pass's own previous frame, read slightly offset: trails. */
+  function trails(): GraphNode[] {
+    return [
+      n('uv', 'node_1', 0, 0),
+      n('circleSDF', 'node_2', 0, 0, {}, { position: ['node_1', 'uv'] }),
+      n('floatToVec3', 'node_3', 0, 0, {}, { input: ['node_2', 'distance'] }),
+      n('sampleTexture', 'node_10', 0, 0, { offsetX: 2 }, { texture: ['node_4', 'previous'] }),
+      n('addColor', 'node_5', 0, 0, { scale: 0.95 }, { a: ['node_3', 'rgb'], b: ['node_10', 'color'] }),
+      n('pass', 'node_4', 0, 0, { scale: '0.5' }, { color: ['node_5', 'result'] }),
+      n('output', 'node_9', 0, 0, {}, { color: ['node_4', 'color'] }),
+    ];
+  }
+
+  it('cuts a loop through Previous and marks the pass for ping-pong', () => {
+    const r = compileGraph({ nodes: trails() });
+    expect(r.errors).toBeUndefined();
+    const [p] = r.passes!;
+    expect(p).toMatchObject({ slug: 'pass_4', previous: true, live: true, reads: [], readsPrevious: ['pass_4'] });
+    // The pass program reads its own last frame, and its own texture never.
+    expect(p.fragmentShader).toContain('texture2D(u_passprev_pass_4,');
+    expect(p.fragmentShader).not.toMatch(/texture2D\(u_pass_pass_4\b/);
+    expect(r.fragmentShader).toContain('texture2D(u_pass_pass_4, vUv)');
+  });
+
+  it('a pass read only through Previous by the picture is still drawn', () => {
+    const nodes = [
+      n('floatToVec3', 'node_3', 0, 0),
+      n('pass', 'node_4', 0, 0, {}, { color: ['node_3', 'rgb'] }),
+      n('sampleTexture', 'node_10', 0, 0, {}, { texture: ['node_4', 'previous'] }),
+      n('output', 'node_9', 0, 0, {}, { color: ['node_10', 'color'] }),
+    ];
+    const r = compileGraph({ nodes });
+    expect(r.passes![0]).toMatchObject({ previous: true, live: true });
+  });
+
+  it('compiles Glow and Displace over passes', () => {
+    const nodes = [
+      n('uv', 'node_1', 0, 0),
+      n('circleSDF', 'node_2', 0, 0, {}, { position: ['node_1', 'uv'] }),
+      n('floatToVec3', 'node_3', 0, 0, {}, { input: ['node_2', 'distance'] }),
+      n('pass', 'node_4', 0, 0, {}, { color: ['node_3', 'rgb'] }),
+      n('fbm', 'node_5', 0, 0, {}, { uv: ['node_1', 'uv'] }),
+      n('floatToVec3', 'node_6', 0, 0, {}, { input: ['node_5', 'value'] }),
+      n('pass', 'node_7', 0, 0, { scale: '0.25' }, { color: ['node_6', 'rgb'] }),
+      n('displaceTexture', 'node_8', 0, 0, { amount: 30 }, { texture: ['node_4', 'texture'], map: ['node_7', 'texture'] }),
+      n('glowTexture', 'node_11', 0, 0, { threshold: 0.3 }, { texture: ['node_4', 'texture'] }),
+      n('addColor', 'node_12', 0, 0, {}, { a: ['node_8', 'color'], b: ['node_11', 'glow'] }),
+      n('output', 'node_9', 0, 0, {}, { color: ['node_12', 'result'] }),
+    ];
+    const r = compileGraph({ nodes });
+    expect(r.errors).toBeUndefined();
+    expect(r.fragmentShader).toContain('texture2D(u_pass_pass_7, tdisp_8_uv).rg');
+    expect(r.fragmentShader).toMatch(/smoothstep\(u_p_tglowx11_threshold/);
+    expect(Object.keys(r.paramBindings)).toEqual(expect.arrayContaining(['node_8::amount', 'node_11::threshold', 'node_11::radius', 'node_11::intensity']));
+  });
+});
