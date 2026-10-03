@@ -52,7 +52,7 @@ describe('creative effects: declarations', () => {
       expect(d.presets!.some(pr => Object.entries(pr.values).every(([key, v]) => d.params.find(x => x.key === key)!.value === v)), `${k}: a preset is the default look`).toBe(true);
     }
     expect(FN_EFFECTS.halation.presets).toBe(FN_HALATION_PRESETS);
-    expect(FN_EFFECTS.feedback.presets!.map(p => p.name)).toEqual(['Ghosts', 'Tunnel', 'Smear', 'Vortex']);
+    expect(FN_EFFECTS.feedback.presets!.map(p => p.name)).toEqual(['Ghost trail', 'Tunnel', 'Spiral', 'Smear']);
     expect(FN_EFFECTS.mirror.presets!.map(p => p.name)).toEqual(['Mirror', 'Mandala', 'Crystal', 'Butterfly']);
     expect(FN_EFFECTS.edges.presets!.map(p => p.name)).toEqual(['Chalk', 'Neon', 'Ink outline', 'Laser']);
   });
@@ -90,7 +90,7 @@ describe('creative effects: passes', () => {
   });
 
   it('the first pass bends and samples the picture; later ones read the pass before; only the last draws the wipe', () => {
-    const list = [fx('mirror'), fx('chroma'), fx('grade'), fx('halftone'), fx('feedback')];
+    const list = [fx('mirror'), fx('chroma'), fx('grade'), fx('halftone'), fx('vignette')];
     const a = fnBuildFinal(list, { segment: 0 }), b = fnBuildFinal(list, { segment: 1 });
     expect(a.segments).toBe(2); expect(b.segments).toBe(2);
     expect(a.src).toContain('if (sd < 0.0) v -= 2.0 * sd * nrm;');
@@ -107,8 +107,8 @@ describe('creative effects: passes', () => {
     expect(b.src).toContain('vec3 fnRead(vec2 q)');
     expect(b.src).toContain('wipe = fnWipe(p);');
     expect(a.lut).toBe(true); expect(b.lut).toBe(false);
-    expect(a.feedback).toBe(false); expect(b.feedback).toBe(true);
-    expect(b.src).toContain('uniform float uFeedOn, uFeedFlip;');
+    expect(b.src).toContain('vignette_amount');
+    expect(a.src).not.toContain('vignette_amount);');
     // Both passes read the same map textures, so a Where works in either.
     expect(a.maps).toEqual(b.maps);
   });
