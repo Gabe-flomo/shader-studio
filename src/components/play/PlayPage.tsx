@@ -27,6 +27,8 @@ import { useMapMode } from './inputs/mapMode';
 import { MapModeBar, MapTarget } from './inputs/MapTarget';
 import { InputsBoard } from './inputs/InputsBoard';
 import { SwingStrip } from './inputs/SwingStrip';
+import { SourceDragHandle } from './inputs/SourceDragHandle';
+import { dropOutcome } from './inputs/sourceDrag';
 import { controlSwing, type Swing } from '../../play/controlSwing';
 import { DetailWindow } from './detail/DetailWindow';
 import { startPlayNotes } from '../../lib/playNotes';
@@ -617,13 +619,25 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [mapSrc]);
+  /** A route from this source onto this control, with the likely defaults (routeOps.ts), said in words. */
+  const routeSource = (sourceId: string, controlId: string) => {
+    let said = '';
+    update(p => { const r = routeToControl(p, sourceId, controlId); said = r.said; return r.play; });
+    if (said) toast.info(said);
+  };
   const mapPick = (controlId: string) => {
     if (!mapSrc) return;
     const on = routesInto(play, controlId).find(x => x.sourceId === mapSrc);
     if (on) { update(p => (on.mapping ? { ...p, mappings: p.mappings.filter(m => m.id !== on.sourceId) } : removeRoute(p, on.sourceId, on.routeId))); return; }
-    let said = '';
-    update(p => { const r = routeToControl(p, mapSrc, controlId); said = r.said; return r.play; });
-    if (said) toast.info(said);
+    routeSource(mapSrc, controlId);
+  };
+  // A source dropped on a control card (inputs/sourceDrag.ts): the same route a Map click makes, never taken off.
+  const dropSource = (sourceId: string, controlId: string) => {
+    const c = play.controls.find(x => x.id === controlId);
+    const out = dropOutcome(play, sourceId, controlId);
+    if (out === 'route') routeSource(sourceId, controlId);
+    else if (out === 'already') toast.info(`It already drives ${c?.label ?? 'that control'}`);
+    else if (out === 'full') toast.info('That source drives as many controls as it can');
   };
   /** What drives a control, in words: its mappings, and the record's sources routed onto it. */
   const drivenLabels = (id: string) => [...play.mappings.filter(m => m.enabled && m.controlId === id).map(m => mappingLabel(m, play)), ...routesInto(play, id).filter(x => !x.mapping).map(x => `${x.label}${x.mode === 'add' ? ' (add)' : ''}`)];
@@ -661,7 +675,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       );
     }
     return (
-    <MapTarget key={c.id} label={c.label} driven={!!mapSrc && routesInto(play, c.id).some(x => x.sourceId === mapSrc)} onPick={() => mapPick(c.id)}>
+    <MapTarget key={c.id} label={c.label} driven={!!mapSrc && routesInto(play, c.id).some(x => x.sourceId === mapSrc)} onPick={() => mapPick(c.id)} onDropSource={id => dropSource(id, c.id)}>
     <LinkableControl id={c.id} play={play} onLink={linkControl}>
     <ContextMenuArea items={() => controlMenu(c.id)}>
     <ControlRow
@@ -1795,7 +1809,11 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
     boxShadow: `inset 0 0 0 1px ${learning || assigned ? tk.accent.base : tk.border.default}`, opacity: m.enabled ? 1 : 0.55,
     transition: assigned ? 'none' : 'background 0.9s ease-out, box-shadow 0.9s ease-out',
   };
-  const chevron = fixed ? null : <IconButton icon={collapsed ? 'chevR' : 'chevD'} label={collapsed ? 'Expand mapping' : 'Collapse mapping'} size="sm" tooltip={false} onClick={onToggle} style={{ marginLeft: -6 }} />;
+  // The fold chevron (not in the detail window's editor), and the grip that drags the source onto a control.
+  const chevron = <>
+    {!fixed && <IconButton icon={collapsed ? 'chevR' : 'chevD'} label={collapsed ? 'Expand mapping' : 'Collapse mapping'} size="sm" tooltip={false} onClick={onToggle} style={{ marginLeft: -6 }} />}
+    {onMap && <SourceDragHandle id={m.id} label={sourceLabel(m.source, controls, layerRefs)} />}
+  </>;
   // Follow (the control moves with the source) or Increment (it moves in steps: docs/increment-mapping.md).
   const setKind = (k: 'follow' | 'increment') => {
     if (k === 'follow') { onUpdate({ increment: undefined }); return; }
@@ -2037,6 +2055,7 @@ function SourceCard({ def: s, play, meter, audioNodes, nullLayers, layerRefs, le
   return (
     <div data-source-card={s.id} style={{ marginTop: 6, padding: '8px 10px', borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${mapping || learning ? tk.accent.base : tk.border.default}`, opacity: s.enabled ? 1 : 0.55 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <SourceDragHandle id={s.id} label={name} />
         <Field value={s.label ?? ''} placeholder={name} aria-label="Source name" onChange={e => set({ label: e.target.value || undefined })} height={24} style={{ flex: 1, minWidth: 0, font: `600 12px ${fontFamily.ui}` }} />
         <Button size="sm" icon="plus" variant={mapping ? 'primary' : 'secondary'} title="Map: then click each control it should drive" onClick={() => (mapping ? useMapMode.getState().stop() : useMapMode.getState().start(s.id, name))}>{mapping ? 'Done' : 'Map'}</Button>
         <Toggle checked={s.enabled} onChange={enabled => set({ enabled })} />
@@ -2329,7 +2348,7 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
           {hint('lean %')}
         </>}
         <IconButton icon="dice" label="New seed: a different random path" size="sm" onClick={() => onChange({ ...source, seed: Math.floor(Math.random() * 100000) })} />
-        <Toggle checked={!!source.reseed} onChange={reseed => onChange(reseed ? { ...source, reseed } : (({ reseed: _r, ...rest }) => rest)(source))} label="New each play" />
+        <Toggle checked={!!source.reseed} onChange={reseed => { if (reseed) { onChange({ ...source, reseed }); return; } const rest = { ...source }; delete rest.reseed; onChange(rest); }} label="New each play" />
       </>);
     case 'osc':
       return (
