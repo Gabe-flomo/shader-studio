@@ -4,6 +4,9 @@
  * Burst 60 · Sparks". + Rule opens Quick rule (do it now, pick what
  * happens); the selected rule's card is beside the list.
  *
+ * Board / Graph (wide layouts only): the Graph view draws the whole setup,
+ * sources to rules to controls to layers (PlayGraphView, docs/graph-view.md).
+ *
  * The page shows a setup's older wiring (actions, a signal's When and links)
  * as the rules it plays as (play/rules.ts); the first edit here rewrites the
  * record that way, which plays the same.
@@ -14,6 +17,7 @@ import { fontFamily, radius } from '../../../theme/tokens';
 import type { PlayRecord, PlaySignal, TriggerSpec } from '../../../types/play';
 import { addRule, asRules, inputOf, ruleName, sharedFire } from '../../../play/rules';
 import { Button } from '../../ui/Button';
+import { Segmented } from '../../ui/Choice';
 import { Icon } from '../../ui/Icon';
 import { PageHeader, TwoPane } from '../FullPages';
 import { LoopsPanel } from '../SignalDefEditor';
@@ -26,6 +30,7 @@ import { signalStructure, type SignalShape } from '../signalFlow';
 import { ShapeBadge } from './ShapeBadge';
 import { useLamps } from './useLamps';
 import { Lamp } from './Lamp';
+import { PlayGraphView } from './PlayGraphView';
 
 type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
 
@@ -42,16 +47,21 @@ export function RulesPage({ play: raw, onChange: rawChange, wide }: { play: Play
   const picked = focus.tick > local.at ? focus.id : local.id;
   const pick = (id: string) => setLocal({ id, at: focus.tick });
   const selected = rules.find(r => r.id === picked) ?? rules[0];
-  // Quick rule: + Rule here, or asked for from elsewhere (Rule from this).
+  // Board or Graph; the graph needs room, so a narrow panel (a phone) always shows the board. Quick rule shows on the board.
+  const [mode, setMode] = useState<'board' | 'graph'>('board');
+  // Quick rule: + Rule here, or asked for from elsewhere (Rule from this). An ask is
+  // taken while rendering (React's "adjust state when a prop changes"), then cleared in the store.
   const ask = usePlayUi(s => s.quickRule);
   const [quick, setQuick] = useState<{ key: number; when?: TriggerSpec; layerId?: string } | null>(null);
-  useEffect(() => {
-    if (!ask.pending) return;
-    usePlayUi.getState().takeQuickRule();
-    setQuick({ key: Date.now(), when: ask.when, layerId: ask.layerId });
-  }, [ask]);
-  const startQuick = () => setQuick({ key: Date.now() });
+  const [seenAsk, setSeenAsk] = useState<typeof ask | null>(null);
+  if (ask !== seenAsk) {
+    setSeenAsk(ask);
+    if (ask.pending) { setQuick(q => ({ key: (q?.key ?? 0) + 1, when: ask.when, layerId: ask.layerId })); setMode('board'); }
+  }
+  useEffect(() => { if (ask.pending) usePlayUi.getState().takeQuickRule(); }, [ask]);
+  const startQuick = () => { setQuick(q => ({ key: (q?.key ?? 0) + 1 })); setMode('board'); };
   const [library, setLibrary] = useState(false);
+  const graph = wide && mode === 'graph';
   const list = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <LoopsPanel play={play} onChange={onChange} />
@@ -71,6 +81,8 @@ export function RulesPage({ play: raw, onChange: rawChange, wide }: { play: Play
   return (
     <>
       <PageHeader title="Rules" count={rules.length} extra={<>
+        {wide && <Segmented size="sm" ariaLabel="Show the rules as" value={mode} onChange={setMode}
+          options={[{ value: 'board', label: 'Board' }, { value: 'graph', label: 'Graph', title: 'The whole setup drawn: sources, rules, controls and layers' }]} />}
         <Button size="sm" variant="ghost" icon="star" onClick={() => setLibrary(true)}>Behaviours</Button>
         <Button size="sm" variant="primary" icon="plus" onClick={startQuick}>Rule</Button>
       </>} />
@@ -84,7 +96,7 @@ export function RulesPage({ play: raw, onChange: rawChange, wide }: { play: Play
             if (id) pick(id);
           }} />
       </div>}
-      <TwoPane wide={wide} list={list} side={side} />
+      {graph ? <PlayGraphView play={play} /> : <TwoPane wide={wide} list={list} side={side} />}
     </>
   );
 }

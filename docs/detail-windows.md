@@ -11,7 +11,8 @@ One window (`src/components/play/detail/DetailWindow.tsx`, on the shared Modal s
 Ways to open it:
 - On the Inputs board: a control's "driven by" chip, or the open button on a control's hover tools, a mapping card or a source card.
 - On the Rules page: the open button on a rule card.
+- In the Rules page's Graph view (`docs/graph-view.md`): a click on a source, a rule or a control.
 
 What each section lists is worked out in `src/play/detailModel.ts`, which is pure and tested.
 
-Not done yet: a pop-out window, and opening from a layer's property rows and from the graph view (phase 6).
+Not done yet: a pop-out window, and opening from a layer's property rows.
