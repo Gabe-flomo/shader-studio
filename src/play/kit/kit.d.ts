@@ -21,6 +21,8 @@ export interface KitEnv {
   layerTime?: (id: string, ms: number) => void;
   /** Sample the picture's coarse grid even when no layer reads it (a Granulator's things read their brightness). */
   needCoarse?: boolean;
+  /** Keep the camera's motion map (motionMap()) while there is a Camera layer, hidden or not. */
+  needMotion?: boolean;
   pointer: KitPointer;
   markers: boolean;
   editing: boolean;
@@ -98,6 +100,10 @@ export interface LayerKit {
   isAnimated(record: PlayRecord): boolean;
   /** A layer drawn alone on the last frame (listed in env.alphaLayers), or null. */
   layerCanvas(id: string): HTMLCanvasElement | null;
+  /** Where the camera saw movement lately (64 × 36, every channel the amount), or null when it wasn't sampled this frame. */
+  motionMap(): HTMLCanvasElement | null;
+  /** The motion map's amount (0..1) at (x, y) (0..1, y up), or null. */
+  motionAt(x: number, y: number): number | null;
   /** The last frame's picture brightness (0..1): 'lum' (Rec. 709), 'r', 'g' or 'b', around (x, y) within r picture heights, or the whole picture (x null). Null before a sample. */
   pictureAt(x: number | null, y: number | null, r: number, ch: 'lum' | 'r' | 'g' | 'b'): number | null;
   grainThings(record: PlayRecord, sourceId: string, boundaryId: string, value: (l: PlayLayer, key: string) => number, aspect: number): { things: GrainThing[]; cx: number; cy: number; all: number };

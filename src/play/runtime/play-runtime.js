@@ -2253,7 +2253,10 @@ void main() {
     const usesLive = play.mappings.some(m => m.source.kind === 'live' || (m.source.kind === 'trigger' && m.source.trigger.on === 'audio'))
       || actions.some(a => a.trigger.on === 'audio') || play.layers.some(l => l.kind === 'audio' && l.visible) || audioNodes.some(a => !a.src) || readersLive;
     const matteIds = new Set(play.layers.map(l => (l.trackMatte ? l.trackMatte.id : '')));
-    const usesCamera = play.layers.some(l => (l.visible || matteIds.has(l.id)) && (l.kind === 'camera' || ((l.kind === 'particles' || l.kind === 'glyphs' || l.kind === 'contours') && l.readFrom === 'camera')));
+    // A hidden Camera layer still lights the camera when something reads where it sees movement: the
+    // Finish stack's motion map (an effect's Where, Displace), or particles born where it moves.
+    const readsMotion = (!!(FK && FK.usesMotion) && !!play.finish && FK.usesMotion(play.finish)) || play.layers.some(l => l.visible && l.kind === 'particles' && l.spawn === 'motion');
+    const usesCamera = play.layers.some(l => (l.visible || matteIds.has(l.id) || (readsMotion && l.kind === 'camera')) && (l.kind === 'camera' || ((l.kind === 'particles' || l.kind === 'glyphs' || l.kind === 'contours') && l.readFrom === 'camera')));
     let camVideo = null;
     const fmt = (v, step) => { const d = step && step >= 1 ? 0 : step && step >= 0.1 ? 1 : step && step >= 0.01 ? 2 : 3; return Number(v).toFixed(d); };
     const hex = c => '#' + c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('');
@@ -2482,6 +2485,7 @@ void main() {
         shaderTap: layersTap || undefined,
         data: dsEntry,
         needCoarse: grainsBright || !!play.readsPicture,
+        needMotion: !!finishR && !!finish && !!FK.usesMotion && FK.usesMotion(finish),
       });
       // "Grains from" a layer: each Granulator with a source takes the things inside its boundary, this frame.
       for (const g of grains.racks.values()) {
@@ -2648,7 +2652,7 @@ void main() {
       if (finishR) {
         const ok = finishR.draw({
           finish, value: (e, k) => layerValue('finish:' + e.id, k, e[k]), picture: glCanvas, layers: layered ? ovCanvas : null,
-          layerAlpha: id => (K ? K.layerCanvas(id) : null), width: glCanvas.width, height: glCanvas.height, time, first: frame <= 1,
+          layerAlpha: id => (K ? K.layerCanvas(id) : null), motion: K ? K.motionMap() : null, width: glCanvas.width, height: glCanvas.height, time, first: frame <= 1,
         });
         fnCanvas.style.display = ok ? 'block' : 'none';
         finishDrew = ok;
@@ -2672,8 +2676,8 @@ void main() {
     }
     function finishMap() {
       if (!finishR) return null;
-      const t = finish.effects.find(e => e.kind === 'time' && e.enabled);
-      return t && t.map === 'layer' && t.layerId ? [t.layerId] : null;
+      const ids = FK.mapLayers ? FK.mapLayers(finish) : [];
+      return ids.length ? ids : null;
     }
     if (!follow) raf = requestAnimationFrame(tick);
     // The picture and its layers with both canvases, as one 2D canvas (read in the same task as the draw).

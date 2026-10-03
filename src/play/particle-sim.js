@@ -176,6 +176,13 @@ export function resizeParticles(st, count, rand = Math.random, dead = false) {
   return out;
 }
 
+/** The first index whose cumulative weight passes `r` (a binary search over a cumulative table). */
+export function pickCell(cdf, r) {
+  let lo = 0, hi = cdf.length - 1;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (cdf[mid] > r) hi = mid; else lo = mid + 1; }
+  return lo;
+}
+
 /** Where a new particle appears: an emitter zone if the layer has any, else the spawn setting. */
 function spawn(st, i, p, env, rand) {
   const a = rand() * TAU;
@@ -196,6 +203,18 @@ function spawn(st, i, p, env, rand) {
       st.y[i] = side === 2 ? 0 : side === 3 ? 1 : t;
       // Head into the picture, so a particle born on an edge isn't recycled at once.
       inward = side === 0 ? 0 : side === 1 ? Math.PI : side === 2 ? Math.PI / 2 : -Math.PI / 2;
+      break;
+    }
+    case 'motion': case 'bright': {
+      // Born where the camera saw movement, or on the bright parts of the picture (env.spawnMap: a
+      // cumulative table over the coarse grid, row 0 at the top): a cell in proportion to its weight,
+      // then a random point in it. With nothing there yet, anywhere.
+      const m = env.spawnMap;
+      if (m && m.total > 1e-6) {
+        const j = pickCell(m.cdf, rand() * m.total);
+        st.x[i] = ((j % m.w) + rand()) / m.w;
+        st.y[i] = 1 - (Math.floor(j / m.w) + rand()) / m.h;
+      } else { st.x[i] = rand(); st.y[i] = rand(); }
       break;
     }
     case 'center': case 'null': {

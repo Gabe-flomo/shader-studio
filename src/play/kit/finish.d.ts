@@ -1,11 +1,15 @@
 /** The Finish stack (see finish.js). */
 export interface FnParam { key: string; label: string; min: number; max: number; step: number; value: number; hint: string; hidden: boolean }
-export type FnKind = 'grade' | 'lens' | 'chroma' | 'vignette' | 'crt' | 'bloom' | 'halation' | 'grain' | 'flicker' | 'shake' | 'time';
+export type FnKind = 'grade' | 'lens' | 'chroma' | 'vignette' | 'crt' | 'bloom' | 'halation' | 'grain' | 'flicker' | 'shake' | 'time'
+  | 'glitch' | 'ripple' | 'displace' | 'mosaic' | 'mirror' | 'gradmap' | 'posterize' | 'edges' | 'feedback';
 export interface FnEffectDef { label: string; group: string; icon: string; summary: string; params: FnParam[] }
 export const FN_EFFECTS: Readonly<Record<FnKind, FnEffectDef>>;
 export const FN_KINDS: readonly FnKind[];
 export const FN_TONE_MODES: readonly string[];
 export const FN_TIME_MAPS: readonly string[];
+export const FN_WHERE: readonly ['all', 'layer', 'picture', 'motion'];
+export const FN_DISPLACE_MAPS: readonly ['noise', 'picture', 'layer', 'motion'];
+export const FN_MAP_MAX: number;
 export const FN_TIME_QUALITY: Readonly<Record<string, { frames: number; scale: number; cap: number }>>;
 export const FN_CURVE_CHANNELS: readonly ['rgb', 'r', 'g', 'b'];
 export const FN_HUE_CURVES: readonly ['hueSat', 'hueHue', 'lumaSat'];
@@ -36,6 +40,14 @@ export function fnDefaultEffect(kind: FnKind, id: string): FnEffect;
 export function fnActive(finish: FnFinish | null | undefined): boolean;
 export function fnRunning(finish: FnFinish | null | undefined): FnEffect[];
 export function fnAnimated(finish: FnFinish | null | undefined): boolean;
+/** An effect's Where ('all' when absent or odd). */
+export function fnWhereOf(e: { where?: unknown } | null | undefined): 'all' | 'layer' | 'picture' | 'motion';
+/** The map textures running effects read, in order: 'layer:<id>' and 'motion'. */
+export function fnMapKeys(effects: readonly FnEffect[]): string[];
+/** The layers a stack reads drawn alone (env.alphaLayers). */
+export function fnMapLayers(finish: FnFinish | null | undefined): string[];
+/** Does the stack read the camera's motion map? */
+export function fnUsesMotion(finish: FnFinish | null | undefined): boolean;
 
 export function fnCurvePoints(flat: readonly number[] | undefined): Array<[number, number]>;
 export function fnCurveEval(flat: readonly number[] | undefined, x: number): number;
@@ -71,7 +83,7 @@ export interface FnRing { readonly size: number; readonly count: number; readonl
 export function fnRing(size: number): FnRing;
 export function fnRingSize(quality: string, W: number, H: number): { frames: number; w: number; h: number; bytes: number };
 
-export function fnBuildFinal(effects: readonly FnEffect[], opts?: { tone?: string; hueCurves?: boolean; timeMap?: string; curves?: boolean }): { src: string; glow: boolean; time: boolean; lut: boolean; custom: string[] };
+export function fnBuildFinal(effects: readonly FnEffect[], opts?: { tone?: string; hueCurves?: boolean; timeMap?: string; curves?: boolean }): { src: string; glow: boolean; time: boolean; feedback: boolean; maps: string[]; lut: boolean; custom: string[] };
 
 export interface FnInput {
   finish: FnFinish;
@@ -79,6 +91,8 @@ export interface FnInput {
   picture: TexImageSource | { data: Uint8Array; width: number; height: number };
   layers?: TexImageSource | null;
   layerAlpha?: (id: string) => TexImageSource | null;
+  /** The camera's motion map (the kit's motionMap()), for a Where or Displace on motion; null reads none. */
+  motion?: TexImageSource | null;
   width: number;
   height: number;
   time: number;

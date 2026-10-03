@@ -1,8 +1,10 @@
 # The Finish stack
 
 Play's **Finish** tab: colour grading, lens and screen effects, film effects,
-camera shake and time displacement over the **final** picture, the shader and
-every layer together. One ordered stack per Play record (`play.finish`).
+camera shake, time displacement, warps, glitches and feedback over the **final**
+picture, the shader and every layer together. One ordered stack per Play record
+(`play.finish`). Any effect can show only **somewhere** (its Where: a layer's
+shape, the bright parts, or where the camera sees movement).
 
 - Engine: `src/play/kit/finish.js` (+ `finishGlsl.js`, shared with the Studio's
   Tone Map and CRT Mask nodes). Part of the layer kit, so the app and exported
@@ -12,8 +14,9 @@ every layer together. One ordered stack per Play record (`play.finish`).
 - Stack presets and Your effects (the device's lists): `src/play/finishLibrary.ts`.
 - UI: `src/components/play/finish/` (`FinishPanel`, `CurveEditor`,
   `ColourWheel`, `CompareHandle`, `savedLooks`).
-- Tests: `src/play/__tests__/finish.test.ts` and `finishFollowups.test.ts`
-  (the wipe, custom effects, presets, the library); node packs carrying
+- Tests: `src/play/__tests__/finish.test.ts`, `finishFollowups.test.ts`
+  (the wipe, custom effects, presets, the library) and `finishMaps.test.ts`
+  (Where, the maps, the new effects, particles born where a map says); node packs carrying
   effects in `src/nodePacks/__tests__/nodePacks.test.ts`.
 
 ## Where it runs
@@ -38,11 +41,13 @@ compiled once per structure and cached. Numbers are uniforms (one `vec4[]` per
 effect), so dragging a slider or a mapping never recompiles.
 
 1. **Geometry**, last effect first: camera shake, lens distortion, CRT
-   curvature bend where the picture is read.
-2. **Sampling**: chromatic aberration reads red and blue at offset points; time
-   displacement chooses which frame each point reads.
+   curvature, Glitch's blocks and tears, Ripple, Displace, Mosaic and Mirror
+   bend where the picture is read.
+2. **Sampling**: chromatic aberration and Glitch's colour split read red and
+   blue at offset points; time displacement chooses which frame each point reads.
 3. **Colour**, in the stack's order: grade, vignette, CRT mask, bloom, halation,
-   grain, flicker, and your own effects wherever they sit in the stack.
+   grain, flicker, Glitch's colour blocks, gradient map, posterize, edges,
+   feedback, and your own effects wherever they sit in the stack.
 4. **The before/after wipe**, last: where it shows the picture before the stack,
    that is what is drawn (and the stack isn't run there at all).
 
@@ -59,6 +64,11 @@ Extra work only when asked for:
 - **Time**: a `TEXTURE_2D_ARRAY` ring of reduced frames, written after the final
   pass.
 - **Curves**: baked into a 256 × 2 `RGBA8` lookup when they change.
+- **Maps** (a Where, Displace's or Time's Layer map): up to four textures,
+  `uM0`..`uM3` (`fnMapKeys`), uploaded each frame: a layer drawn alone
+  (`layerAlpha`) or the camera's motion map (`motion`).
+- **Feedback**: the finished frame is copied (`copyTexImage2D`, RGB) after the
+  pass and read back by the next one.
 
 ## Grade
 
@@ -242,6 +252,56 @@ The size shrinks further until the ring fits its cap (`fnRingSize`); at 1440 × 
 Medium keeps 32 frames at 472 × 295 (18 MB). Frames back is capped by the frames
 kept. Offline renders start the ring over on their first frame and fill it in
 order (`fnRing`), so a render is identical every time.
+
+## Where: an effect only somewhere
+
+Every effect (built-in or your own) has a **Where**, under its settings:
+
+| Where | The effect shows… |
+| --- | --- |
+| Everywhere (default) | everywhere, as before |
+| Where a layer is | where that layer is opaque: its alpha, drawn alone by the kit even when the layer is hidden (a shape on hand nulls makes it follow a hand) |
+| On the bright parts | by the picture's own brightness at each point |
+| Where the camera sees movement | by the kit's motion map (needs a Camera layer, which can be hidden) |
+
+**Invert** swaps in and out. In between, the effect fades: a warp moves the
+picture only that much (`q = mix(q0, q, w)`), a colour step changes it only
+that much (`c = mix(c0, c, w)`), a colour split splits only that much, and Time
+displacement looks back only that far. Saved as `where`, `whereLayer` and
+`whereInvert` on the effect; absent means everywhere, so older stacks are
+unchanged. The layers a stack reads are `fnMapLayers(finish)` (the hosts pass
+them as `env.alphaLayers`), and `fnUsesMotion(finish)` tells the kit to keep a
+motion map (`env.needMotion`).
+
+**The motion map** (`kit.motionMap()`, also `motionAt(x, y)`): the camera's
+coarse grid (64 × 36), per cell how much changed since the last frame, rising
+at once and fading over about a third of a second, so a gesture leaves a short
+trail. It is mirrored like the Camera layer. It exists only while the camera is
+sampled: a Camera layer, hidden or not, with something reading motion (a Where,
+Displace, or particles born where it moves). Offline renders have no live
+camera, so a motion map reads nothing there.
+
+## Warps, glitches and feedback
+
+Added together, in the spirit of TouchDesigner's image operators. Each is one
+more block of the same pass, except Feedback (one copy of the output a frame).
+
+| Effect | What it does | Numbers |
+| --- | --- | --- |
+| **Glitch** | Blocks jump sideways, bands of scanlines tear, red and blue split row by row, some blocks swap colour channels; it changes `Speed` times a second | amount, blocks, speed, colour split, tear, colour blocks |
+| **Ripple** | Rings of waves spreading from a centre (map a hand or the pointer onto the centre) | amount, wavelength, speed, fade out, centre |
+| **Displace** | Pushes the picture by a map: drifting noise (heat haze), the picture's brightness, a layer's alpha, or camera motion | amount, direction, scale, speed |
+| **Mosaic** | Big square pixels | cells |
+| **Mirror / kaleidoscope** | Segments 1 folds one half onto the other along a line through the centre; 2 and up make a kaleidoscope of mirrored wedges | segments, angle, centre |
+| **Gradient map** | Brightness becomes a shadows → midtones → highlights gradient | amount, midpoint, three colours |
+| **Posterize** | A few flat levels per channel, with a 4 × 4 ordered dither | levels, dither |
+| **Edges** | Outlines where the picture's brightness changes (read before the stack's colour steps), in a colour, over the picture or alone on black | amount, width, threshold, edges only, colour |
+| **Feedback** | The last finished frame drawn back in, zoomed, turned and drifted a little each frame: trails, tunnels, spirals; Lighten, Screen or Blend | amount, zoom, rotate, drift, hue drift, blend |
+
+Feedback starts empty (a new size, a render's first frame, or Reset), and in a
+render reads the frames in order, so a render is the same every time. Glitch,
+Ripple, noise Displace and Feedback keep the preview drawing while the clock
+runs (`fnAnimated`).
 
 ## The before/after wipe
 
@@ -441,6 +501,11 @@ renderer per frame, measured as 60 frames between two GPU syncs:
 | Halation (reference model: glow chain + three half-size passes) | 0.77 |
 | Time displacement (Medium) | 0.45 |
 | All eleven effects | 1.08 |
+
+The warps, glitch, gradient map, posterize and mosaic are a few instructions
+each in the same pass; Edges adds four picture reads, Feedback one full-frame
+copy, and each map texture one small upload. (Not measured on the M3 Pro; they
+were checked for compiling and drawing in Chromium's software WebGL.)
 
 The live preview draws the finished frame at the overlay's size, capped at about
 2.1 million pixels, so a retina preview costs no more than a 1080p one. Renders

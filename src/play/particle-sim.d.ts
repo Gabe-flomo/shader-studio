@@ -29,6 +29,8 @@ export interface ParticleEnv {
   sample: Uint8ClampedArray | null; sw: number; sh: number;
   attractorPoint: { x: number; y: number } | null;
   spawnPoint: { x: number; y: number } | null;
+  /** Spawn 'motion' or 'bright': a cumulative table over a w × h grid (row 0 at the top) to pick birth cells from. */
+  spawnMap?: { cdf: Float32Array; total: number; w: number; h: number } | null;
   modPoint?: { x: number; y: number } | null;
   zones?: CompiledZone[]; emitters?: CompiledZone[]; zoneById?: Map<string, CompiledZone>;
   W?: number; H?: number; dpr?: number; alpha?: number;
@@ -44,6 +46,8 @@ export function brightnessAt(sample: Uint8ClampedArray, sw: number, sh: number, 
 export function createParticles(count: number, rand?: () => number, dead?: boolean): ParticleState;
 export function resizeParticles(st: ParticleState, count: number, rand?: () => number, dead?: boolean): ParticleState;
 export function stepParticles(st: ParticleState, p: ParticleParams, env: ParticleEnv, rand?: () => number): void;
+/** The first index whose cumulative weight passes `r` (a binary search over a cumulative table). */
+export function pickCell(cdf: ArrayLike<number>, r: number): number;
 export function burstParticles(st: ParticleState, p: ParticleParams, env: ParticleEnv, amount: number, rand?: () => number): void;
 export function scatterParticles(st: ParticleState, p: ParticleParams, strength: number, rand?: () => number): void;
 export function resetParticles(st: ParticleState, p: ParticleParams, env: ParticleEnv, rand?: () => number): void;
