@@ -1,4 +1,5 @@
 import { can, openProSheet, requireFeature, useCan } from '../lib/plan';
+import { usePreviewQuality } from '../lib/previewQuality';
 import { recordActivity } from '../files/activity';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CanvasRecorder } from '../utils/CanvasRecorder';
@@ -151,6 +152,8 @@ type RecordMode  = 'mediarecorder' | 'ffmpeg';
 type RecordState = 'idle' | 'recording' | 'encoding' | 'done' | 'error';
 
 export function ExportModal({ canvas, offlineRender, external = false, onClose }: Props) {
+  // Exports are full resolution: the preview leaves Half/Third/Quarter while this is open (lib/previewQuality.ts).
+  useEffect(() => usePreviewQuality.getState().hold(), []);
   const tk = useTokens();
   const [fps, setFps]               = useState(60);
   const [duration, setDuration]     = useState(5);
