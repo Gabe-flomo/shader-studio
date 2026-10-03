@@ -31,6 +31,8 @@ import { usePlayUi } from '../playUi';
 import { startRule } from '../playSplit';
 import { wireRuleWhen } from '../miniMapperCore';
 import { useDetail, type DetailRef } from './detailStore';
+import { FloatingPanel } from './FloatingPanel';
+import { usePhoneDialog } from '../../ui/phoneDialog';
 import { LiveTrace } from './LiveTrace';
 
 type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
@@ -52,10 +54,17 @@ function Shown({ refd: ref, play: raw, onChange, renderSource, canBack, canForwa
   canBack: boolean; canForward: boolean; onBack: () => void; onForward: () => void; onClose: () => void;
 }) {
   const play = useMemo(() => asRules(raw), [raw]);
+  // Keep open: a floating panel beside the work instead of a window over it (not on a phone: no room beside).
+  const pinned = useDetail(d => d.pinned);
+  const setPinned = useDetail(d => d.setPinned);
+  const phone = usePhoneDialog();
+  const floating = pinned && !phone;
   const nav = (
     <>
       <IconButton icon="chevL" label="Back" size="sm" disabled={!canBack} onClick={onBack} />
       <IconButton icon="chevR" label="Forward" size="sm" disabled={!canForward} onClick={onForward} />
+      {!phone && <IconButton icon="popout" size="sm" active={floating} onClick={() => setPinned(!floating)}
+        label={floating ? 'Back to a window over the page' : 'Keep open: a floating panel you can work beside (close it with its X)'} />}
     </>
   );
   let title = '', subtitle = '', body: ReactNode = null, icon: 'sliders' | 'live' | 'bolt' = 'sliders';
@@ -77,11 +86,10 @@ function Shown({ refd: ref, play: raw, onChange, renderSource, canBack, canForwa
     icon = 'bolt';
     body = s ? <SignalBody id={s.id} play={play} onChange={onChange} /> : <Missing />;
   }
-  return (
-    <Modal title={title} subtitle={subtitle} icon={icon} headerActions={nav} onClose={onClose} width={560} height={640}>
-      <div data-detail={`${ref.kind}:${ref.id}`} style={{ padding: '12px 16px 16px', overflowY: 'auto', flex: 1, minHeight: 0 }}>{body}</div>
-    </Modal>
-  );
+  const content = <div data-detail={`${ref.kind}:${ref.id}`} style={{ padding: '12px 16px 16px', overflowY: 'auto', flex: 1, minHeight: 0 }}>{body}</div>;
+  return floating
+    ? <FloatingPanel title={title} subtitle={subtitle} icon={icon} headerActions={nav} onClose={onClose}>{content}</FloatingPanel>
+    : <Modal title={title} subtitle={subtitle} icon={icon} headerActions={nav} onClose={onClose} width={560} height={640}>{content}</Modal>;
 }
 
 function Missing() {

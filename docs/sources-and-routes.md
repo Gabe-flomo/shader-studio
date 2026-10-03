@@ -57,11 +57,14 @@ On the rail, **Inputs** replaces Controls and Mappings. The page id stays `contr
   - Set or Add, with the range, the curve (drawn too), smoothing and delay folded.
   - A Step output uses the Increment editor.
 - **Phones:** the two columns are tabs; Map mode shows the controls.
-
-Not done yet:
-- the shaded swing ring on sliders;
-- clickable route chips (they open the detail windows, phase 5);
-- grouping sources by kind.
+- **Route chips:** a control's "driven by" chip opens its detail window (phase 5, `detail-windows.md`).
+- **Swing ring:** under a driven slider, a thin strip is the control's range laid flat (the ruler above scrolls under its needle, so it can't show a span itself). The part its sources can move it across is shaded in the accent, with a tick at the live value. Worked out in `play/controlSwing.ts` (pure, tested), the way `rtFrame` plays routes:
+  - each Replace route (an old mapping is one) covers its range, either way round; several cover their union;
+  - Add routes sum on top of the last Replace, else the slider, so they reach from + Σ low ends to from + Σ high ends;
+  - all kept in the control's range. Colours, buttons and switches have no strip.
+  - Live values now poll for the record's own sources too, not only for mappings.
+- **Drag a source onto a control:** source cards and mapping cards have a grip. Drop it on a control card (on the board or in the sidebar's list) and the route is made as a Map click makes it (`routeToControl`, so `connectDefaults` applies). The drag carries its own type (`inputs/sourceDrag.ts`, tested), so only a source lights a control up ("Drop to drive …"). A drop never takes a route off: onto a control the source already drives, or from a source with as many routes as it may have, it says so instead. Map mode works as before.
+- **Sources by kind:** the sources column groups the record's own sources and the old mappings together by what they read: MIDI and OSC; keys, mouse and gamepad; audio; LFOs, clocks and noise; triggers; picture, hands and sensors; controls and data (`mappingGroups.ts` `groupSourceItems`, tested). Each heading folds its cards away and shows its count. From four cards on, a search box filters by name, what each reads and the controls it drives (a search shows folded groups too). Pair mappings, the MIDI file slot and the pad grid stay where they were. The sidebar's mappings drawer is unchanged.
 
 ## Random sources and readouts (guide phase 7)
 

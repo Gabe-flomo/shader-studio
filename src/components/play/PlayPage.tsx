@@ -26,6 +26,12 @@ import { rtAddSwing } from '../../play/kit/routes.js';
 import { useMapMode } from './inputs/mapMode';
 import { MapModeBar, MapTarget } from './inputs/MapTarget';
 import { InputsBoard } from './inputs/InputsBoard';
+import { SwingStrip } from './inputs/SwingStrip';
+import { SourceDragHandle } from './inputs/SourceDragHandle';
+import { SourceGroups } from './inputs/SourceGroups';
+import type { SourceItem } from './mappingGroups';
+import { dropOutcome } from './inputs/sourceDrag';
+import { controlSwing, type Swing } from '../../play/controlSwing';
 import { DetailWindow } from './detail/DetailWindow';
 import { startPlayNotes } from '../../lib/playNotes';
 import { openDetail } from './detail/detailStore';
@@ -615,16 +621,30 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [mapSrc]);
+  /** A route from this source onto this control, with the likely defaults (routeOps.ts), said in words. */
+  const routeSource = (sourceId: string, controlId: string) => {
+    let said = '';
+    update(p => { const r = routeToControl(p, sourceId, controlId); said = r.said; return r.play; });
+    if (said) toast.info(said);
+  };
   const mapPick = (controlId: string) => {
     if (!mapSrc) return;
     const on = routesInto(play, controlId).find(x => x.sourceId === mapSrc);
     if (on) { update(p => (on.mapping ? { ...p, mappings: p.mappings.filter(m => m.id !== on.sourceId) } : removeRoute(p, on.sourceId, on.routeId))); return; }
-    let said = '';
-    update(p => { const r = routeToControl(p, mapSrc, controlId); said = r.said; return r.play; });
-    if (said) toast.info(said);
+    routeSource(mapSrc, controlId);
+  };
+  // A source dropped on a control card (inputs/sourceDrag.ts): the same route a Map click makes, never taken off.
+  const dropSource = (sourceId: string, controlId: string) => {
+    const c = play.controls.find(x => x.id === controlId);
+    const out = dropOutcome(play, sourceId, controlId);
+    if (out === 'route') routeSource(sourceId, controlId);
+    else if (out === 'already') toast.info(`It already drives ${c?.label ?? 'that control'}`);
+    else if (out === 'full') toast.info('That source drives as many controls as it can');
   };
   /** What drives a control, in words: its mappings, and the record's sources routed onto it. */
   const drivenLabels = (id: string) => [...play.mappings.filter(m => m.enabled && m.controlId === id).map(m => mappingLabel(m, play)), ...routesInto(play, id).filter(x => !x.mapping).map(x => `${x.label}${x.mode === 'add' ? ' (add)' : ''}`)];
+  /** The swing ring: where its sources can move it, from its own slider value (Add routes swing around it). */
+  const swingOf = (c: PlayControl) => { const v = readControlValue(nodes, c.target, play); return controlSwing(play, c.id, typeof v === 'number' ? v : c.min); };
   // A control's card (a pair's shows once, where its A is). `board`: the Controls board's trace slot and isolate.
   const renderOne = (c: PlayControl, i: number, board?: BoardSlot): ReactNode => {
     const pair = pairOf(play, c.id);
@@ -657,7 +677,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       );
     }
     return (
-    <MapTarget key={c.id} label={c.label} driven={!!mapSrc && routesInto(play, c.id).some(x => x.sourceId === mapSrc)} onPick={() => mapPick(c.id)}>
+    <MapTarget key={c.id} label={c.label} driven={!!mapSrc && routesInto(play, c.id).some(x => x.sourceId === mapSrc)} onPick={() => mapPick(c.id)} onDropSource={id => dropSource(id, c.id)}>
     <LinkableControl id={c.id} play={play} onLink={linkControl}>
     <ContextMenuArea items={() => controlMenu(c.id)}>
     <ControlRow
@@ -679,6 +699,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       value={readControlValue(nodes, c.target, play)}
       live={liveValues.get(c.id)}
       drivenBy={drivenLabels(c.id)}
+      swing={c.kind === 'float' && !c.toggle ? swingOf(c) : null}
       touch={compact}
       onChange={v => writeControl(c, v)}
       onRename={label => update(p => { const rt = parseReaderTarget(c.target); return rt ? renameReader(p, rt.readerId, label) : { ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, label } : x) }; })}
@@ -1172,7 +1193,7 @@ function AddControlButton({ candidates, layers, finish, sound, layerById, taken,
 /** Where a control's value lives: a layer's property or a node's param. */
 interface ControlSource { kind: 'layer' | 'node' | 'reader'; title: string; param: string; within?: string; missing: boolean; go: () => void }
 
-function ControlRow({ control, index, count, exists, fate, onRelink, help, source, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, removeLabel = 'Remove from panel', onMap, onNull, onAmount, trace, onName, isolated = false }: {
+function ControlRow({ control, index, count, exists, fate, onRelink, help, source, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, removeLabel = 'Remove from panel', onMap, onNull, onAmount, trace, onName, isolated = false, swing }: {
   control: PlayControl;
   index: number;
   count: number;
@@ -1206,6 +1227,8 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
   /** The board: clicking the name isolates the graph (a double-click renames). */
   onName?: () => void;
   isolated?: boolean;
+  /** The part of its range its sources can move it across (play/controlSwing.ts), shaded under the slider. */
+  swing?: Swing | null;
 }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
@@ -1310,6 +1333,7 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
               ariaLabel={control.label}
               touch={touch}
             />
+            {swing && <SwingStrip swing={swing} min={control.min} max={control.max} step={control.step ?? 0.01} live={typeof live === 'number' ? live : undefined} />}
           </div>
         </div>
       )}
@@ -1507,6 +1531,17 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
       onMap={() => useMapMode.getState().start(m.id, sourceLabel(m.source, play.controls, layerRefs))}
     />
   );
+  // The header's count: the drawer lists mappings; the sources column, its own sources too.
+  const headCount = play.mappings.length + (mode === 'drawer' ? 0 : ownSources.length);
+  const sourceCard = (d: PlaySourceDef) => (
+    <SourceCard key={d.id} def={d} play={play} meter={ownMeters.get(d.id) ?? 0} audioNodes={audioNodes} nullLayers={nullLayers} layerRefs={layerRefs}
+      learning={learnFor === d.id} onLearn={() => setLearnFor(l => (l === d.id ? null : d.id))} onChange={onRecord} />
+  );
+  // What the sources column's search looks in: the card's name, what it reads, the controls it drives.
+  const controlLabel = (id: string) => play.controls.find(c => c.id === id)?.label;
+  const sourceWords = (x: SourceItem) => (x.kind === 'source'
+    ? [x.def.label, sourceLabel(x.def.source, play.controls, layerRefs), ...x.def.outputs.flatMap(o => o.routes.map(r => controlLabel(r.to)))]
+    : [sourceLabel(x.mapping.source, play.controls, layerRefs), controlLabel(x.mapping.controlId)]);
   const status = (
     <>
       {(learnFor || usesMidi(play)) && (
@@ -1559,7 +1594,7 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
       )}
       <PanelHeader
         title={mode === 'drawer' ? 'Mappings' : 'Sources'}
-        hint={play.mappings.length ? `${play.mappings.length}` : undefined}
+        hint={headCount ? `${headCount}` : undefined}
         chevron={mode === 'drawer' ? (open ? 'down' : 'up') : undefined}
         onClick={mode === 'drawer' ? onToggle : undefined}
         extra={open && (
@@ -1596,13 +1631,14 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
           {status}
           <SoloStrip kind="mapping" total={play.mappings.length} />
           {play.midiFile && !pages && <MidiFileSlot />}
-          {ownSources.length > 0 && <div style={grid ? PANEL_GRID_WIDE : undefined}>{ownSources.map(d => (
-            <SourceCard key={d.id} def={d} play={play} meter={ownMeters.get(d.id) ?? 0} audioNodes={audioNodes} nullLayers={nullLayers} layerRefs={layerRefs}
-              learning={learnFor === d.id} onLearn={() => setLearnFor(l => (l === d.id ? null : d.id))} onChange={onRecord} />
-          ))}</div>}
-          {play.mappings.length === 0 ? (
-            ownSources.length ? null : emptyState
-          ) : <div style={grid ? PANEL_GRID_WIDE : undefined}>{play.mappings.map(m => rowFor(m, { collapsed: collapsed.has(m.id) }))}</div>}
+          {!ownSources.length && !play.mappings.length ? emptyState : mode === 'drawer' ? <>
+            {ownSources.length > 0 && <div style={grid ? PANEL_GRID_WIDE : undefined}>{ownSources.map(sourceCard)}</div>}
+            {play.mappings.length > 0 && <div style={grid ? PANEL_GRID_WIDE : undefined}>{play.mappings.map(m => rowFor(m, { collapsed: collapsed.has(m.id) }))}</div>}
+          </> : (
+            // The sources column: own sources and old mappings together, by kind, with a search.
+            <SourceGroups sources={ownSources} mappings={play.mappings} words={sourceWords} gridStyle={grid ? PANEL_GRID_WIDE : undefined}
+              renderItem={x => (x.kind === 'source' ? sourceCard(x.def) : rowFor(x.mapping, { collapsed: collapsed.has(x.mapping.id) }))} />
+          )}
           {!!play.pairs?.length && (
             <PairMappingsSection play={play} grid={grid} audioNodes={audioNodes} layerRefs={layerRefs} onAdd={onAddPair} onUpdate={onUpdatePair} onRemove={onRemovePair} />
           )}
@@ -1787,7 +1823,11 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
     boxShadow: `inset 0 0 0 1px ${learning || assigned ? tk.accent.base : tk.border.default}`, opacity: m.enabled ? 1 : 0.55,
     transition: assigned ? 'none' : 'background 0.9s ease-out, box-shadow 0.9s ease-out',
   };
-  const chevron = fixed ? null : <IconButton icon={collapsed ? 'chevR' : 'chevD'} label={collapsed ? 'Expand mapping' : 'Collapse mapping'} size="sm" tooltip={false} onClick={onToggle} style={{ marginLeft: -6 }} />;
+  // The fold chevron (not in the detail window's editor), and the grip that drags the source onto a control.
+  const chevron = <>
+    {!fixed && <IconButton icon={collapsed ? 'chevR' : 'chevD'} label={collapsed ? 'Expand mapping' : 'Collapse mapping'} size="sm" tooltip={false} onClick={onToggle} style={{ marginLeft: -6 }} />}
+    {onMap && <SourceDragHandle id={m.id} label={sourceLabel(m.source, controls, layerRefs)} />}
+  </>;
   // Follow (the control moves with the source) or Increment (it moves in steps: docs/increment-mapping.md).
   const setKind = (k: 'follow' | 'increment') => {
     if (k === 'follow') { onUpdate({ increment: undefined }); return; }
@@ -2029,6 +2069,7 @@ function SourceCard({ def: s, play, meter, audioNodes, nullLayers, layerRefs, le
   return (
     <div data-source-card={s.id} style={{ marginTop: 6, padding: '8px 10px', borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${mapping || learning ? tk.accent.base : tk.border.default}`, opacity: s.enabled ? 1 : 0.55 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <SourceDragHandle id={s.id} label={name} />
         <Field value={s.label ?? ''} placeholder={name} aria-label="Source name" onChange={e => set({ label: e.target.value || undefined })} height={24} style={{ flex: 1, minWidth: 0, font: `600 12px ${fontFamily.ui}` }} />
         <Button size="sm" icon="plus" variant={mapping ? 'primary' : 'secondary'} title="Map: then click each control it should drive" onClick={() => (mapping ? useMapMode.getState().stop() : useMapMode.getState().start(s.id, name))}>{mapping ? 'Done' : 'Map'}</Button>
         <Toggle checked={s.enabled} onChange={enabled => set({ enabled })} />
@@ -2321,7 +2362,7 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
           {hint('lean %')}
         </>}
         <IconButton icon="dice" label="New seed: a different random path" size="sm" onClick={() => onChange({ ...source, seed: Math.floor(Math.random() * 100000) })} />
-        <Toggle checked={!!source.reseed} onChange={reseed => onChange(reseed ? { ...source, reseed } : (({ reseed: _r, ...rest }) => rest)(source))} label="New each play" />
+        <Toggle checked={!!source.reseed} onChange={reseed => { if (reseed) { onChange({ ...source, reseed }); return; } const rest = { ...source }; delete rest.reseed; onChange(rest); }} label="New each play" />
       </>);
     case 'osc':
       return (
