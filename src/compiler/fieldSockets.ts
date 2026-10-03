@@ -15,7 +15,6 @@
  * and all) as long as nothing inside it is rejected.
  */
 import type { GraphNode, NodeDefinition, SubgraphData } from '../types/nodeGraph';
-import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
 
 const READS_FRAME = 'it reads the previous frame';
 const CONTAINER = 'a 3D group renders its own scene, not a function of 2D position';
@@ -34,13 +33,11 @@ export const FIELD_IMPURE: Record<string, string> = {
   motionBlur: READS_FRAME,
   depthOfField: READS_FRAME,
   playLayers: 'it composites Play layers, which are whole pictures, not a function of position',
-  vParticles: 'particles are drawn in their own pass',
   sceneGroup: CONTAINER,
   marchLoopGroup: CONTAINER,
   giLitMarchGroup: CONTAINER,
   spaceWarpGroup: CONTAINER,
 };
-for (const t of PARTICLE_PIPELINE_TYPES) FIELD_IMPURE[t] = 'particles are drawn in their own pass';
 
 /**
  * The first node inside `group`'s subgraph (nested groups included) that can't

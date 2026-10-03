@@ -53,7 +53,7 @@ describe('rebuild', () => {
     const s1 = useNodeGraphStore.getState();
     expect(s1.paramUniforms).not.toBe(s0.paramUniforms);
     expect(s1.paramUniforms).toEqual(s0.paramUniforms);
-    expect(s1.particleSystems).not.toBe(s0.particleSystems);
+    expect(s1.paramBindings).not.toBe(s0.paramBindings);
     expect(s1.rebuildEpoch).toBe(s0.rebuildEpoch + 1);
   });
 

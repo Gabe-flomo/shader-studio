@@ -75,15 +75,15 @@ const media = (): PlayMedia => ({
   ],
 });
 
-describe('feedback, echo, particles and media in the bundle', () => {
+describe('feedback, echo and media in the bundle', () => {
   it('carries the passes and the files, without the dialog’s labels and sizes', () => {
     const html = buildPlayHtml({
       ...input(),
-      passes: { stateful: true, echo: { copies: 3, delay: 4 }, particles: [{ vertexShader: 'void main(){}', fragmentShader: 'void main(){}', count: 500, shape: 3 }] },
+      passes: { stateful: true, echo: { copies: 3, delay: 4 } },
       media: media(),
     });
     const bundle = JSON.parse(html.slice(html.indexOf('window.PLAY_BUNDLE = ') + 21, html.indexOf(';\nwindow.PLAY_OPTIONS'))) as Record<string, unknown>;
-    expect(bundle.passes).toEqual({ stateful: true, echo: { copies: 3, delay: 4 }, particles: [{ vertexShader: 'void main(){}', fragmentShader: 'void main(){}', count: 500, shape: 3 }] });
+    expect(bundle.passes).toEqual({ stateful: true, echo: { copies: 3, delay: 4 } });
     const m = bundle.media as { textures: Record<string, unknown>; videos: Record<string, unknown>; audio: unknown[] };
     expect(m.textures).toEqual({ u_tex_a: { src: PNG }, u_tex_b: { src: null } });
     expect(m.videos.u_vid_v).toEqual({ src: 'data:video/mp4;base64,AAAA', loop: true, speed: 1.5 });
@@ -92,7 +92,7 @@ describe('feedback, echo, particles and media in the bundle', () => {
   });
 
   it('a single-pass graph carries no passes', () => {
-    const html = buildPlayHtml({ ...input(), passes: { stateful: false, echo: null, particles: [] } });
+    const html = buildPlayHtml({ ...input(), passes: { stateful: false, echo: null } });
     expect(html).not.toContain('"passes"');
   });
 

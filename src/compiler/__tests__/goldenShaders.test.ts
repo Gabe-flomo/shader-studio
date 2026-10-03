@@ -1,8 +1,7 @@
 /**
  * Golden shaders (Pass node plan, phase 0: docs/pass-node-plan.md). Every
  * bundled example compiled today: its fragment shader (sha256 + length), the
- * uniform names it declares, its slider bindings, isStateful, echo and its
- * particle systems; and, for each example with a Play setup, the web export's
+ * uniform names it declares, its slider bindings, isStateful and echo; and, for each example with a Play setup, the web export's
  * bundle JSON and the "not supported" list.
  *
  * These snapshots are the zero-change guarantee for the Pass node: a graph
@@ -61,7 +60,6 @@ describe('golden shaders: every example compiles as it did', () => {
         isStateful: r.isStateful,
         echo: r.echo ?? null,
         nodeSlugs: r.nodeSlugMap ? sha(JSON.stringify([...r.nodeSlugMap].sort(([a], [b]) => (a < b ? -1 : 1)))) : null,
-        particleSystems: (r.particleSystems ?? []).map(p => ({ nodeId: p.nodeId, vs: sha(p.vertexShader), fs: sha(p.fragmentShader), count: p.count, shape: p.shape, uniforms: sorted(p.paramUniforms) })),
         passes: (r as { passes?: unknown }).passes ?? null,
       }).toMatchSnapshot();
     });
@@ -76,7 +74,7 @@ describe('golden shaders: every Play example exports the same bundle', () => {
       const nodes = resolveNodeAliases(EXAMPLE_GRAPHS[k].nodes, getNodeDefinition);
       const r = compileGraph({ nodes });
       const play = parsePlayRecord(EXAMPLE_GRAPHS[k].play);
-      const { input, missing } = webInputFrom({ ...r, particleSystems: r.particleSystems ?? [] }, play, { title: EXAMPLE_GRAPHS[k].label ?? k, aspect: 'free' });
+      const { input, missing } = webInputFrom(r, play, { title: EXAMPLE_GRAPHS[k].label ?? k, aspect: 'free' });
       expect({ bundle: sha(JSON.stringify(playBundle(input))), missing }).toMatchSnapshot();
     });
   }

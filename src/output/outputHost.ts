@@ -302,7 +302,7 @@ function startWatching(): void {
     if (useOutput.getState().source !== 'app') return;
     if (st.play !== p.play || st.fragmentShader !== p.fragmentShader || st.previewAspect !== p.previewAspect || st.paramBindings !== p.paramBindings
       || st.textureUniforms !== p.textureUniforms || st.nodeTextures !== p.nodeTextures || st.videoUniforms !== p.videoUniforms || st.isStateful !== p.isStateful
-      || st.echoConfig !== p.echoConfig || st.particleSystems !== p.particleSystems || st.datasets !== p.datasets) {
+      || st.echoConfig !== p.echoConfig || st.datasets !== p.datasets) {
       // Only media, aspect or passes changing: always rebuild; the play or shader: only when the structure did.
       if (st.previewAspect !== p.previewAspect || st.nodeTextures !== p.nodeTextures || st.videoUniforms !== p.videoUniforms || st.textureUniforms !== p.textureUniforms || st.datasets !== p.datasets) lastSig = '';
       scheduleRecord();

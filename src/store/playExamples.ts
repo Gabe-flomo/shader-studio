@@ -27,6 +27,9 @@ import {
 } from '../types/play';
 import { DEFAULT_PAD_GRID, type PlayPadGrid } from '../types/playMidi';
 import type { PlayAudioEngine } from '../types/playAudioEngine';
+import type { ArrNote, PlayArrangement } from '../types/playArrangement';
+import { FN_EFFECTS } from '../play/kit/finish.js';
+import { gpPreset } from '../play/kit/gpuParticles.js';
 import { MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type DrumPadLayer, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
 import type { DpSynth } from '../play/kit/drumPads.js';
 import { agPresetLayer } from '../play/kit/agents.js';
@@ -140,9 +143,10 @@ const rm = (id: string, role: RelationRole = 'member'): RelationMember => newRel
 /** A layer group (organisation in the Layers list: its layers must sit next to each other in `layers`). */
 const grp = (id: string, label: string, colour: GroupColour, layers: string[]): LayerGroup => ({ id, label, colour, layers });
 
-function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; audioReaders?: PlayAudioReaders; finish?: PlayFinish; audioFx?: PlayAudioFx; padGrid?: PlayPadGrid; signals?: PlaySignal[]; pairs?: PlayPair[]; pairMappings?: PlayPairMapping[]; audioEngine?: PlayAudioEngine; notes: string }): PlayRecord {
+function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; audioReaders?: PlayAudioReaders; finish?: PlayFinish; audioFx?: PlayAudioFx; padGrid?: PlayPadGrid; signals?: PlaySignal[]; pairs?: PlayPair[]; pairMappings?: PlayPairMapping[]; audioEngine?: PlayAudioEngine; arrangement?: PlayArrangement; notes: string }): PlayRecord {
   const out: PlayRecord = { version: 1, controls: p.controls ?? [], mappings: p.mappings ?? [], layers: p.layers ?? [] };
   if (p.audioEngine) out.audioEngine = p.audioEngine;
+  if (p.arrangement) out.arrangement = p.arrangement;
   if (p.groups?.length) out.groups = p.groups;
   if (p.actions?.length) out.actions = p.actions;
   out.notes = p.notes;
@@ -166,6 +170,12 @@ const axis = (outMin: number, outMax: number, o: Partial<PairAxis> = {}): PairAx
 /** A Finish effect at its defaults (every number filled in, as the parser keeps it), with `over` on top. Its id is its kind. */
 function fx(kind: FinishKind, over: Partial<FinishEffect> = {}): FinishEffect {
   return { ...newFinishEffect(kind, kind), ...over };
+}
+/** A Finish effect set from one of its card's presets (FN_EFFECTS[kind].presets), then `over`. */
+function fxPreset(kind: FinishKind, preset: string, over: Partial<FinishEffect> = {}): FinishEffect {
+  const pr = FN_EFFECTS[kind].presets?.find(x => x.name === preset);
+  if (!pr) throw new Error(`no ${kind} preset "${preset}"`);
+  return fx(kind, { ...pr.values, ...over });
 }
 /** An audio effect at its defaults with `over` on top, under `id`. */
 function afx(kind: AudioFxKind, id: string, over: Record<string, unknown> = {}): AudioFxEffect {
@@ -348,6 +358,49 @@ type Ex = { key: string; nodes: GraphNode[]; play: PlayRecord };
 const ex = (key: string, nodes: GraphNode[], p: PlayRecord): Ex => ({ key, nodes, play: p });
 
 // ── The examples, in learning order ──────────────────────────────────────────
+
+// ── Tape material for the Audio engine examples ─────────────────────────────
+
+/** Four bars of eighth notes in A minor pentatonic at 96 BPM (0.3125 s each), with a low root under each bar. */
+const PENTATONIC_RIFF: ArrNote[] = (() => {
+  const bars = [
+    [57, 60, 64, 69, 67, 64, 62, 60],
+    [57, 60, 64, 67, 69, 67, 64, 62],
+    [62, 64, 67, 69, 72, 69, 67, 64],
+    [60, 62, 64, 67, 64, 62, 60, 57],
+  ];
+  const roots = [45, 45, 50, 48];
+  const out: ArrNote[] = [];
+  bars.forEach((bar, b) => {
+    out.push({ t: b * 2.5, n: roots[b], v: 0.8, d: 2.2 });
+    bar.forEach((n, i) => out.push({ t: b * 2.5 + i * 0.3125, n, v: i % 2 ? 0.6 : 0.85, d: 0.28 }));
+  });
+  return out.sort((a, b) => a.t - b.t);
+})();
+
+/** Two bars of four-on-the-floor kicks at 120 BPM, with a ghost kick before each bar's end. */
+const KICK_PATTERN: ArrNote[] = [
+  ...Array.from({ length: 16 }, (_, i) => ({ t: i * 0.5, n: 36, v: i % 4 === 0 ? 1 : 0.85, d: 0.2 })),
+  { t: 3.75, n: 36, v: 0.5, d: 0.15 },
+  { t: 7.75, n: 36, v: 0.5, d: 0.15 },
+].sort((a, b) => a.t - b.t);
+
+/** A Particles node (Sound field preset) listening to the Audio engine's first track → Output. */
+function engineParticlesGraph(): GraphNode[] {
+  return [
+    {
+      id: 'field', type: 'gpuParticles', position: { x: 120, y: 160 },
+      inputs: { over: { type: 'vec3', label: 'Over' }, uv: { type: 'vec2', label: 'UV' } },
+      outputs: { color: { type: 'vec3', label: 'Color' }, particles: { type: 'vec3', label: 'Particles' }, density: { type: 'float', label: 'Density' } },
+      params: {
+        ...gpPreset('sound'), sound: 0, handX: 0.35, handY: 0.5, hand2X: 0.65, hand2Y: 0.5, _schemaVersion: 2,
+        soundFrom: 'track1', palette: 'ember', brightness: 8, size: 1.6, glow: 1, shock: 1.2,
+        __comment: 'The Sound field preset listening to the Play page\'s Audio engine: Sound from is Engine track 1 (the Kick rack). Each kick fires a Shockwave ring; Wave and Vibrate ripple the field with the sound.',
+      },
+    },
+    { id: 'out', type: 'output', position: { x: 560, y: 160 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'field', outputKey: 'color' } } }, outputs: {}, params: {} },
+  ];
+}
 
 const LIST: Ex[] = [
   // ─ Controls and inputs ─
@@ -1880,6 +1933,183 @@ Distance reads only while both hands are in view, so the rings hold their size w
 • Turn Direction to 0 for a sideways scan, or pick another Map on the Time displacement card (Brightness, Noise, Radial, or a layer).
 • Set Quality to High for 64 frames of history.`,
   })),
+  // ─ Finish: the newer looks (pixel sort, halftone, ASCII, light leaks) and the effects' presets ─
+  ex('finishPixelSort', quietGraph(), play({
+    display: { picture: true, backdrop: [0, 0, 0], source: 'image', image: { name: 'Ridges at dusk.jpg', src: RIDGES_AT_DUSK } },
+    finish: {
+      on: true,
+      effects: [
+        fxPreset('pixelsort', 'Drip'),
+        fxPreset('leaks', 'Warm'),
+        fx('grain', { amount: 0.15 }),
+        fx('vignette', { amount: 0.35 }),
+      ],
+    },
+    controls: [
+      ctl('thr', 'finish:pixelsort::threshold', 'Pixel sort · Threshold', 0, 1),
+      ctl('len', 'finish:pixelsort::length', 'Pixel sort · Length', 0, 1),
+      ctl('dir', 'finish:pixelsort::angle', 'Pixel sort · Direction', 0, 360, 1),
+      ctl('leak', 'finish:leaks::amount', 'Light leaks · Amount', 0, 1),
+      ctl('hue', 'finish:leaks::hue', 'Light leaks · Hue', 0, 360, 1),
+    ],
+    mappings: [
+      map('breathe', 'len', S.lfo('sine', 0.05), 0.12, 0.45, { smoothMs: 60 }),
+      map('drift', 'thr', S.lfo('sine', 0.031, 0.25), 0.38, 0.62, { smoothMs: 60 }),
+    ],
+    notes: `**What it shows.** Two of the newer Finish effects on a photo. **Pixel sort** finds the runs of pixels brighter than its Threshold and sorts them into streaks, so the sky and the sun drip down over the ridges. **Light leaks** wash warm light in from the edges, drifting slowly, like film fogged at the gate.
+
+**How it's built.** Background → Image holds the photo (the graph is paused). Finish: Pixel sort with its **Drip** preset, Light leaks with **Warm**, then a little Film grain and a Vignette. Two slow LFOs breathe the streaks' Length and move the Threshold, so different parts of the picture sort over time.
+
+**Try this.**
+• Pixel sort's presets: **Sideways** runs the streaks to the right; **Melt** sorts nearly everything.
+• Turn Direction to 90 and the streaks rise like heat.
+• Light leaks: **Rose** or **Burn**, or drag Hue round the colour wheel.
+• Background → Replace with your own photo.`,
+  })),
+  ex('finishPrint', fbmGraph({ scale: 1.6, timeScale: 0.08, preset: '1' }), play({
+    layers: [layer('text', 'title', 'Title', { text: 'POW!', y: 0.5, size: 0.3 })],
+    finish: {
+      on: true,
+      effects: [
+        fxPreset('posterize', 'Poster'),
+        fxPreset('edges', 'Ink outline'),
+        fxPreset('halftone', 'Comic'),
+      ],
+    },
+    controls: [
+      ctl('dot', 'finish:halftone::size', 'Halftone · Dot size', 2, 60, 0.5),
+      ctl('ang', 'finish:halftone::angle', 'Halftone · Angle', 0, 90, 1),
+      ctl('col', 'finish:halftone::colour', 'Halftone · Colour', 0, 1),
+      ctl('lev', 'finish:posterize::levels', 'Posterize · Levels', 2, 32, 1),
+      ctl('ink', 'finish:edges::amount', 'Edges · Amount', 0, 1),
+    ],
+    mappings: [map('dotPulse', 'dot', S.lfo('sine', 0.08), 7, 14, { smoothMs: 80 })],
+    notes: `**What it shows.** A comic-book print made only from Finish effects: **Posterize** flattens the colours into a few bands, **Edges** inks their outlines in black, and **Halftone** prints the result as cyan, magenta, yellow and black dots on cream paper, the way comics were printed.
+
+**How it's built.** A drifting FBM landscape through a Palette, with a text layer on top. Finish: Posterize (**Poster** preset), Edges (**Ink outline**), Halftone (**Comic**). Halftone starts a pass of its own, so it prints the posterized, outlined picture. A slow LFO swells the dots.
+
+**Try this.**
+• Halftone's **Newsprint** preset: black ink only, small dots. **Pop art**: huge dots at a jaunty angle.
+• Drag Halftone · Colour to 0 for one ink, or Posterize · Levels up for smoother colour.
+• Edges: try **Neon** for glowing outlines instead of ink.`,
+  })),
+  ex('finishTerminal', glowGraph({ radius: 0.24, falloff: 9, tint: [0.4, 1, 0.6], mode: 'ring', ringFreq: 10, comment: 'The circle whose rings ASCII redraws in characters. Its Radius breathes with an LFO.' }), play({
+    finish: {
+      on: true,
+      effects: [
+        fxPreset('feedback', 'Ghost trail'),
+        fxPreset('ascii', 'Terminal', { size: 18, contrast: 0.6 }),
+        fx('bloom', { amount: 0.35, threshold: 0.6 }),
+        fx('crt', { curvature: 0.15 }),
+      ],
+    },
+    controls: [
+      ctl('radius', 'circ::radius', 'Circle radius', 0.05, 0.5),
+      ctl('char', 'finish:ascii::size', 'ASCII · Character size', 4, 48, 0.5),
+      ctl('con', 'finish:ascii::contrast', 'ASCII · Contrast', 0, 1),
+      ctl('trail', 'finish:feedback::amount', 'Feedback · Amount', 0, 0.99),
+    ],
+    mappings: [map('breathe', 'radius', S.lfo('sine', 0.12), 0.12, 0.42, { smoothMs: 40 })],
+    notes: `**What it shows.** An old green terminal. **Feedback** keeps fading copies of earlier frames (ghost trails as the rings breathe), **ASCII** redraws everything as text characters, from sparse dots in the dark to dense blocks in the light, then Bloom and a slight CRT curve finish the screen.
+
+**How it's built.** Rings of glow from one circle (SDF Glow in Ring Light mode), its Radius breathing with an LFO. Finish: Feedback (**Ghost trail** preset), ASCII (**Terminal**: one ink colour), Bloom, CRT. ASCII starts a pass of its own, so it draws the ghost trails too.
+
+**Try this.**
+• ASCII's **Colour** preset takes each character's colour from the picture; **Big type** makes huge characters.
+• Feedback's **Tunnel** and **Spiral** presets zoom and spin the trails into the characters.
+• Drag ASCII · Character size down to 6 for a dense, detailed screen.`,
+  })),
+  ex('finishKaleidoscope', fbmGraph({ scale: 3, timeScale: 0.25, preset: '2' }), play({
+    finish: {
+      on: true,
+      effects: [
+        fxPreset('feedback', 'Tunnel'),
+        fxPreset('mirror', 'Mandala'),
+        fxPreset('edges', 'Neon'),
+      ],
+    },
+    controls: [
+      ctl('seg', 'finish:mirror::segments', 'Mirror · Segments', 1, 16, 1),
+      ctl('spin', 'finish:mirror::spin', 'Mirror · Spin', -1, 1),
+      ctl('zoom', 'finish:mirror::zoom', 'Mirror · Zoom', 0.25, 4),
+      ctl('fb', 'finish:feedback::amount', 'Feedback · Trail', 0, 0.99),
+      ctl('glow', 'finish:edges::glow', 'Edges · Glow', 0, 2),
+    ],
+    mappings: [map('breathe', 'zoom', S.lfo('sine', 0.04), 0.8, 1.6, { smoothMs: 80 })],
+    notes: `**What it shows.** Presets on three Finish effects, stacked into a moving mandala from a drifting noise. **Feedback** (Tunnel) leaves trails that grow and turn, **Mirror** (Mandala) folds them into six wedges, and **Edges** (Neon) keeps only their outlines, glowing in colours that follow their direction.
+
+**How it's built.** An FBM noise through a Palette, drifting fairly fast; an LFO slowly zooms the Mirror in and out. Each effect's card has a preset row at the top: one click sets its numbers, and you carry on from there. The order matters: the trails are folded, then outlined.
+
+**Try this.**
+• Mirror's other presets: **Mirror**, **Crystal** (twelve wedges, spinning back), **Butterfly**.
+• Feedback: **Spiral** for a whirl, **Smear** for a liquid blend.
+• Add a **Posterize** at the bottom and try its **Sunset duo** or **Handheld** preset: the neon becomes a two-colour print.
+• Drag the Finish cards into another order and watch the look change.`,
+  })),
+  // ─ Finish: the temporal effects (Datamosh, Echo, Motion extract) on moving content ─
+  ex('finishDatamoshEcho', fbmGraph({ scale: 2.2, timeScale: 0.05, preset: '4' }), play({
+    layers: [
+      layer('shape', 'orb', 'Orb', { shape: 'circle', x: 0.3, y: 0.5, w: 0.22, h: 0.22, fill: [1, 0.85, 0.4], fillOpacity: 1, stroke: [1, 0.95, 0.7], strokeWidth: 2, action: 'none' }),
+    ],
+    finish: {
+      on: true,
+      effects: [
+        fx('echo', { time: 5, count: 5, start: 0.85, decay: 0.7, mode: 3, strobe: 0, map: 'layer', layerId: 'orb' }),
+        fxPreset('datamosh', 'Bloom', { bleed: 0.03, block: 32, push: 1.6, sustain: 0.85, every: 4, map: 'layer', layerId: 'orb' }),
+        fx('vignette', { amount: 0.4 }),
+      ],
+    },
+    controls: [
+      ctl('ox', 'layer:orb::x', 'Orb · x', 0, 1),
+      ctl('oy', 'layer:orb::y', 'Orb · y', 0, 1),
+      ctl('echoes', 'finish:echo::count', 'Echo · Echoes', 1, 8, 1),
+      ctl('etime', 'finish:echo::time', 'Echo · Echo time', 1, 30, 1),
+      ctl('push', 'finish:datamosh::push', 'Datamosh · Push', 0, 3),
+      ctl('mosh', 'finish:datamosh::hold', 'Datamosh · Mosh (hold M)', 0, 1, 1),
+    ],
+    mappings: [
+      map('swingX', 'ox', S.lfo('sine', 0.37), 0.15, 0.85),
+      map('swingY', 'oy', S.lfo('sine', 0.53, 0.25), 0.25, 0.75),
+      map('holdM', 'mosh', S.key('KeyM'), 0, 1),
+    ],
+    notes: `**What it shows.** Two of the temporal Finish effects on one moving shape. **Echo** leaves sharp copies of the Orb a few frames apart behind it. **Datamosh** treats the picture like a video that lost its keyframes: the Orb's movement drags the landscape's old pixels along in blocks, smearing and blooming, until a keyframe every four seconds snaps it clean.
+
+**How it's built.** A drifting FBM landscape, and a Shape layer (the Orb) swung round by two LFOs. Finish:
+• **Echo** with Source **One layer: Orb** and Operator **Behind**: five copies of only the Orb, under it, each fainter (the Layer echo setup).
+• **Datamosh** from the Bloom preset, pushed harder (bigger blocks, more Push and Sustain), with **Motion from: Orb**: the Orb's movement moves the picture's blocks. Keyframe every 4 s heals it.
+• A Vignette.
+Holding **M** turns Datamosh's **Mosh** on: nothing heals while it's held.
+
+**Try this.**
+• Hold **M** for a few seconds and let go: the smear piles up, then the next keyframe clears it.
+• Datamosh presets: **Melt** (slow, liquid), **Blocky**, **Pulse** (a keyframe every second).
+• Echo: **Strobe echo** makes the copies jump instead of following; set Source back to Whole picture to echo everything.`,
+  })),
+  ex('finishMotionExtract', glowGraph({ radius: 0.16, falloff: 7, tint: [1, 0.75, 0.45], comment: 'A glowing circle swung round by two LFOs: the movement Motion extract shows.' }), play({
+    layers: [layer('text', 'word', 'Word', { text: 'MOVE', y: 0.3, size: 0.18 })],
+    finish: { on: true, effects: [fxPreset('motionx', 'Neon motion')] },
+    controls: [
+      ctl('px', 'circ::posX', 'Circle · x', -1, 1),
+      ctl('py', 'circ::posY', 'Circle · y', -1, 1),
+      ctl('wx', 'layer:word::x', 'Word · x', 0, 1),
+      ctl('delay', 'finish:motionx::delay', 'Motion extract · Delay', 1, 30, 1),
+      ctl('gain', 'finish:motionx::gain', 'Motion extract · Gain', 0, 8),
+      ctl('neon', 'finish:motionx::neon', 'Motion extract · Neon', 0, 1),
+    ],
+    mappings: [
+      map('orbitX', 'px', S.lfo('sine', 0.17), -0.7, 0.7),
+      map('orbitY', 'py', S.lfo('sine', 0.17, 0.25), -0.45, 0.45),
+      map('slide', 'wx', S.lfo('triangle', 0.15), 0.3, 0.7),
+    ],
+    notes: `**What it shows.** **Motion extract**: the picture inverted over a copy of itself from a few frames ago. Whatever stays still cancels out, so only what moves shows, as outlines. Here with the **Neon motion** preset: on black, what arrives glows cyan and what leaves glows magenta.
+
+**How it's built.** A glowing circle orbiting on two LFOs, and a text layer sliding left and right. Finish: Motion extract with its **Neon motion** preset. A still frame shows nothing at all: pause the clock and the picture goes black.
+
+**Try this.**
+• Delay: longer catches slower movement and draws thicker outlines.
+• Presets: **Classic grey** (the mid-grey version of the trick), **On black**.
+• Put it over a Camera or a Video layer: only you (or what moves in the video) shows.`,
+  })),
   ex('drumPads', glowGraph({ radius: 0.1, falloff: 16, tint: [1, 0.5, 0.3] }), play({
     layers: [
       drumKit('drums', 'Drums', [
@@ -2041,6 +2271,125 @@ Distance reads only while both hands are in view, so the rings hold their size w
 • Add a **Reverb** (Hall) or a **Distortion** (Wavefold, Bitcrush) after the filter, and drag the cards to change the order.
 • Readers hear → **Before**: the glow stops following the filter.
 • Record a take and render it: the render's sound has the sweep as you played it.`,
+  })),
+  // A MIDI clip on the tape, in a scale, with Snap to scale on the rack.
+  ex('pianoRollScale', glowGraph({ radius: 0.1, falloff: 10, tint: [0.4, 0.8, 1], mode: 'ring', ringFreq: 8, comment: 'The glow the notes swell: its Radius follows the Hits reader on the Tom keys rack.' }), play({
+    audioEngine: {
+      racks: [{
+        id: 'keys', name: 'Tom keys', effects: [], keyboard: true, midi: '', channel: 0, volume: 1, mute: false, scaleLock: 'nearest',
+        instrument: {
+          id: 'inst', kind: 'granulator', sample: { synth: 'tom', name: 'Tom' },
+          // By GR_PARAMS address: Classic mode, read from the start, short grains, pan random, a plucked
+          // envelope (attack, decay, no sustain, release), Scan 1 (the sample at its own speed), root C4, level.
+          params: { 0: 0, 1: 0, 3: 70, 9: 0.35, 17: 0.002, 18: 0.3, 19: 0, 20: 0.3, 23: 1, 31: 60, 33: 0.9 },
+        },
+      }],
+    },
+    arrangement: {
+      length: 10, loop: true, bpm: 96, metronome: false, countIn: 0, fade: 0,
+      tracks: { keys: { notes: PENTATONIC_RIFF, auto: {}, arm: true, clips: [{ t: 0, d: 10 }] } },
+      scale: { on: true, root: 9, name: 'minorPentatonic' },
+    },
+    audioFx: { chains: { 'rack:keys': { on: true, effects: [afx('reverb', 'verb', { type: 'hall', size: 0.6, decay: 2.4, mix: 0.28 })] } } },
+    audioReaders: { input: 'engine:keys', readers: [reader('hits', 'Hits', 160, 1.5, 30, 2, 160, [0.4, 0.8, 1])] },
+    controls: [
+      ctl('radius', 'circ::radius', 'Glow (the notes)', 0.05, 0.4),
+      ctl('size', 'au:keys:inst::3', 'Tom keys · Grain size', 2, 2000, 1),
+      ctl('decay', 'au:keys:inst::18', 'Tom keys · Decay', 0, 10),
+    ],
+    mappings: [map('glow', 'radius', { kind: 'reader', readerId: 'hits' }, 0.07, 0.3, { smoothMs: 25 })],
+    notes: `**What it shows.** A **MIDI clip** on the Audio engine's tape: four bars of a riff in **A minor pentatonic**, with the tape's **Scale** set to that scale and **Snap to scale** on the rack, so whatever you play on the computer keyboard lands in the scale too. The notes swell the glow through an audio reader.
+
+**How it's built.** One rack, **Tom keys**: a Granulator playing the generated tom (so no audio file comes with it) with a short, plucked envelope, through a hall reverb (Finish → Sound). The tape (Engine tab → Arrangement) holds one clip on its lane; the transport's Scale is **A Minor Pentatonic**, and the rack's **Snap to scale** is Nearest. The **Hits** reader listens to the rack and drives the glow's Radius.
+
+**Try this.**
+• Click the picture first (the browser starts sound on a click), then press **Play** on the transport.
+• **Double-click the clip** to open the **piano roll**: the scale's rows are tinted. Drag notes, draw new ones (B), or select some and press **Fit to scale** under Functions.
+• Play the computer keyboard (the rack's keyboard is on): any key you press is snapped to the nearest scale note. Set Snap to scale to Up or Down on the rack card, or change the Scale on the transport.
+• Change the instrument's Sample to the pad chord or a Library sound (on the desktop app, any Audio Unit synth).`,
+  })),
+  // A Granulator in Spectral mode, its grains emitted or spread in time.
+  ex('granulatorSpectral', glowGraph({ radius: 0.14, falloff: 10, tint: [0.75, 0.5, 1], comment: 'The glow follows how much energy the spectral grains carry (Grain energy, a sensor on the rack).' }), play({
+    audioEngine: {
+      racks: [{
+        id: 'spec', name: 'Spectral', effects: [], keyboard: false, midi: '', channel: 0, volume: 1, mute: false,
+        instrument: {
+          id: 'inst', kind: 'granulator', sample: { synth: 'pad', name: 'Pad chord' },
+          // Spectral mode, position, grain size, density, pan random, attack, release, drone, level,
+          // Emit's travel (direction both, speed, spread, bounce), the band (centre, width, spread, travel,
+          // both ways, bounce), partials, and Grains: Emit (0 on the line, 1 emit, 2 spread) with its Area.
+          params: {
+            0: 4, 1: 0.3, 3: 260, 5: 22, 9: 0.6, 17: 0.4, 20: 2, 28: 1, 33: 0.8,
+            36: 2, 37: 0.12, 38: 0.3, 39: 1,
+            40: 0.4, 41: 0.08, 42: 0.35, 43: 0.06, 44: 2, 45: 1, 47: 6, 49: 1, 50: 0.4,
+          },
+        },
+      }],
+    },
+    audioFx: { chains: { 'rack:spec': { on: true, effects: [afx('reverb', 'verb', { type: 'hall', size: 0.8, decay: 4, mix: 0.35 })] } } },
+    layers: [
+      layer('null', 'g1', 'Grain 1', { x: 0.3, y: 0.5, size: 10 }),
+      layer('null', 'g2', 'Grain 2', { x: 0.5, y: 0.5, size: 10 }),
+      layer('null', 'g3', 'Grain 3', { x: 0.7, y: 0.5, size: 10 }),
+      layer('null', 'g4', 'Grain 4', { x: 0.4, y: 0.5, size: 10 }),
+    ],
+    controls: [
+      ctl('grains', 'au:spec:inst::49', 'Spectral · Grains (0 line, 1 emit, 2 spread)', 0, 2, 1),
+      ctl('band', 'au:spec:inst::40', 'Spectral · Band', 0, 1),
+      ctl('pos', 'au:spec:inst::1', 'Spectral · Position', 0, 1),
+      ctl('radius', 'circ::radius', 'Glow (the grains’ energy)', 0.05, 0.4),
+      ...[1, 2, 3, 4].flatMap(i => [ctl(`g${i}x`, `layer:g${i}::x`, `Grain ${i} · x`, 0, 1), ctl(`g${i}y`, `layer:g${i}::y`, `Grain ${i} · y`, 0, 1)]),
+    ],
+    mappings: [
+      map('sweep', 'band', S.lfo('sine', 0.03), 0.2, 0.7, { smoothMs: 100 }),
+      map('scan', 'pos', S.lfo('triangle', 0.017, 0.5), 0.1, 0.8, { smoothMs: 100 }),
+      map('energy', 'radius', S.sensor('ae:spec', 'grainEnergySum'), 0.07, 0.32, { smoothMs: 60 }),
+      ...[1, 2, 3, 4].flatMap(i => [
+        map(`g${i}x`, `g${i}x`, S.sensor('ae:spec', 'grainPos', String(i)), 0.05, 0.95),
+        map(`g${i}y`, `g${i}y`, S.sensor('ae:spec', 'grainBand', String(i)), 0.15, 0.85, { smoothMs: 40 }),
+      ]),
+    ],
+    notes: `**What it shows.** The Granulator's **Spectral** mode: each grain plays a **band of frequencies** of the pad chord (its strongest partials, as sines) instead of a slice of time. With **Grains: Emit**, the grains are launched from Position and travel through the sample while they sound, so the chord's harmonics drift and smear. Four nulls show four grains: across is where in the sample a grain is, up is its band (low notes low, high notes high).
+
+**How it's built.** One rack, **Spectral**: a Granulator on the generated **pad chord** (A minor), with **Drone** on so it sounds by itself, through a long hall reverb. Two slow LFOs move the Band and the Position. Sensors on the rack drive the picture: **Grain energy** swells the glow, and grains 1 to 4's place and band move the nulls.
+
+**Try this.**
+• Click the picture first: the browser starts sound on a click.
+• Drag **Grains** to 2 (**Spread**): the grains scatter in an Area round Position instead; at 0 they all sit on the line.
+• Engine tab → Spectral card: watch the spectrogram, change **Band width**, **Partials** or **Shift** (inharmonic, bell-like), or Band travel to make the bands climb.
+• Turn Drone off and play it from a MIDI keyboard.`,
+  })),
+  // Particles in the graph listening to an Audio engine track.
+  ex('particlesEngineTrack', engineParticlesGraph(), play({
+    audioEngine: {
+      racks: [{
+        id: 'kick', name: 'Kick', effects: [], keyboard: false, midi: 'off', channel: 0, volume: 1, mute: false,
+        instrument: {
+          id: 'inst', kind: 'granulator', sample: { synth: 'kick', name: 'Kick' },
+          // Classic mode from the start of the sample at its own speed (Scan 1), a short envelope, root C1.
+          params: { 0: 0, 1: 0, 3: 150, 9: 0, 17: 0.001, 18: 0.35, 19: 0, 20: 0.12, 23: 1, 31: 36, 33: 1 },
+        },
+      }, {
+        id: 'pad', name: 'Pad', effects: [], keyboard: false, midi: 'off', channel: 0, volume: 0.6, mute: false,
+        instrument: {
+          id: 'inst', kind: 'granulator', sample: { synth: 'pad', name: 'Pad chord' },
+          // Cloud, position, spray, size, density, spread, pitch random, pan random, low-pass + cutoff, attack, release, scan LFO, drone, level.
+          params: { 0: 2, 1: 0.35, 2: 0.12, 3: 140, 5: 28, 7: 7, 8: 0.15, 9: 0.7, 14: 1, 15: 4000, 17: 0.6, 20: 1.5, 24: 0.07, 25: 0.12, 28: 1, 33: 0.6 },
+        },
+      }],
+    },
+    arrangement: {
+      length: 8, loop: true, bpm: 120, metronome: false, countIn: 0, fade: 0,
+      tracks: { kick: { notes: KICK_PATTERN, auto: {}, arm: true, clips: [{ t: 0, d: 8 }] } },
+    },
+    notes: `**What it shows.** A **Particles** node in the graph listening to a track of the Play page's **Audio engine**. Its **Sound from** is **Engine track 1**, the Kick rack: every kick on the tape fires a shockwave ring through the field, and the travelling sound ripples it. A pad drone plays on track 2 for atmosphere; the particles don't hear it.
+
+**How it's built.** The graph is a Particles node with the Sound field preset (a still disc of particles that sound moves). The Audio engine has two racks of generated sounds (no audio files): **Kick**, a Granulator on the generated kick, played by a two-bar clip on the tape; and **Pad**, a Granulator drone on the pad chord. In the graph, select the Particles node: Sound → **Sound from** picks the master or any track.
+
+**Try this.**
+• Click the picture first (the browser starts sound on a click), then press **Play** on the transport (Engine tab).
+• Double-click the Kick clip to open the piano roll and add or move kicks: each one is a ring.
+• Set Sound from to **Audio engine** (the master) and the pad joins in; or try the Launch preset on the node for a rocket's roar.`,
   })),
 ];
 

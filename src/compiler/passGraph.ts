@@ -28,7 +28,6 @@ import { VERTEX_SHADER } from './types';
 import { topologicalSort } from './topoSort';
 import { validateGraph } from './validate';
 import { generateFragmentShader } from './shaderAssembler';
-import { compileParticleChains } from './particleAssembler';
 import { computeNodeSlug } from './nodeSlug';
 import { PASS_SCALES } from '../nodes/definitions/passes';
 
@@ -243,13 +242,6 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     if (countSamplers(fin.fragmentShader) > MAX_SAMPLERS) errors.push(`The final picture samples more than ${MAX_SAMPLERS} textures (images, videos, passes, feedback) in one program`);
     if (errors.length) return failure(errors);
 
-    // GPU particle chains (pInit → … → pRender) are separate programs already.
-    const { systems: particleSystems } = compileParticleChains(nodes);
-    for (const ps of particleSystems) {
-      Object.assign(merged.paramUniforms, ps.paramUniforms);
-      Object.assign(merged.paramBindings, ps.paramBindings);
-    }
-
     return {
       vertexShader: VERTEX_SHADER,
       fragmentShader: fin.fragmentShader,
@@ -258,7 +250,6 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
       nodeOutputVars: fin.nodeOutputVars,
       ...merged,
       nodeSlugMap: slugs,
-      particleSystems,
       passes,
     };
   } catch (error) {

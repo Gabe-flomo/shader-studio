@@ -20,7 +20,6 @@ import { VERTEX_SHADER } from './types';
 import { topologicalSort } from './topoSort';
 import { validateGraph } from './validate';
 import { generateFragmentShader } from './shaderAssembler';
-import { compileParticleChains } from './particleAssembler';
 import { compilePassGraph, hasPassNode } from './passGraph';
 
 const EMPTY_OUTPUT_VARS = new Map<string, Record<string, string>>();
@@ -58,15 +57,6 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
     const { fragmentShader, nodeOutputVars, paramUniforms, paramBindings, textureUniforms, audioUniforms, liveUniforms, videoUniforms, isStateful, echo, nodeSlugMap, mlgDynamicOutputs } =
       generateFragmentShader(sortedNodes, nodes);
 
-    // 4. Compile GPU particle chains (pInit → … → pRender)
-    const { systems: particleSystems } = compileParticleChains(nodes);
-
-    // Merge particle param uniforms into the main paramUniforms so sliders work
-    for (const ps of particleSystems) {
-      Object.assign(paramUniforms, ps.paramUniforms);
-      Object.assign(paramBindings, ps.paramBindings);
-    }
-
     return {
       vertexShader: VERTEX_SHADER,
       fragmentShader,
@@ -82,7 +72,6 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
       echo,
       nodeSlugMap,
       mlgDynamicOutputs,
-      particleSystems,
     };
   } catch (error) {
     return {

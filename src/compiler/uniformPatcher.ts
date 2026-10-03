@@ -21,10 +21,6 @@ export const SKIP_UNIFORM_TYPES = new Set([
   // midiInput: channel / smooth_ms are read by the MIDI engine in JS; its outputs are
   // per-frame uniforms written by the input bus, not params.
   'midiInput',
-  // particleEmitter: uses `speed` and `max_particles` in JS-side conditionals to choose
-  // between field-flow mode (backward trace) and spawn-point mode (different GLSL branches).
-  // Slider changes trigger a full recompile; use input sockets for real-time animation.
-  'particleEmitter',
   // scope: min/max are read by ShaderCanvas (JS) to scale the waveform probe; the
   // node emits no GLSL of its own, so a uniform would be declared and never read.
   'scope',

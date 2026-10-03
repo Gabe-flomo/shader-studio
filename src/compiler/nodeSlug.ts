@@ -58,11 +58,6 @@ const TYPE_ABBREV: Record<string, string> = {
   fieldCell: 'fcell', arrayField: 'arr',
   gridUV: 'guvt', pixelate: 'pxl', dotMask: 'dot', sdfMask: 'sdmk',
   lumaRadius: 'lrad', rgbToCMYK: 'cmyk', cmykHalftone: 'cmykht',
-  // Vertex Particles
-  vParticles: 'vpart',
-  // Particle Pipeline
-  pInit: 'pinit', pRotate: 'prot', pWave: 'pwave',
-  pColorDist: 'pcdist', pSize: 'psz', pRender: 'prend',
   // Passes (render to texture)
   pass: 'pass', passOutput: 'pout', sampleTexture: 'smp', edgesTexture: 'edges', blurTexture: 'tblur',
   // Misc

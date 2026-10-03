@@ -100,7 +100,7 @@ Settings (few, flat, each with a hint):
 - The node declares its sampler through a new `NodeDefinition.declarationsFor` hook (the assembler adds per-instance top-level declarations); the line carries the node's settings as JSON after `// gpu-particles `. Number settings stay uniforms (`u_p_<slug>_<key>`), so a slider, a Play control or a mapping drives the engine without a recompile; the engine reads them from the material (app) or `uniformValues` (web). A keyframed number falls back to its default.
 - App: `src/play/gpuParticlesTexture.ts` runs a `gpHost` on ShaderCanvas's renderer before each drawn frame (after `renderer.resetState()`, as an `ExternalTexture`), steps only while the clock runs, starts over on ↺ and on Rebuild/context restore, and draws offline renders (Export) a frame at a time from a fresh start.
 - Web runtime (`play-runtime.js`): the same host on the page's WebGL2 context, before each picture; `renderAt` starts it over.
-- The `P:` chain (pInit … pRender) is deprecated (hidden from the browser, still compiles); the Particle Galaxy example now uses the Particles node.
+- The `P:` chain (pInit … pRender), Particle System (vParticles) and Particle Emitter were removed in 2026.10.5, with their compiler (`particleAssembler.ts`), the preview's three.js points pass and the web runtime's particle pass. Their examples use the Particles node; a saved graph that still holds one loads and its card and compile error say "<name> was removed — use the Particles node" (`src/nodes/definitions/removedNodes.ts`).
 
 **Measured** (Apple silicon, 608 × 756 preview): 256k and 1M about 2 ms a frame for the engine. 4M costs ~20–30 ms standalone but dropped the preview to a few fps in the app here; it is offered as the "fast GPU" tier.
 
