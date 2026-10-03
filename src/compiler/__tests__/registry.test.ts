@@ -34,6 +34,9 @@ const CONNECTION_GATED = new Set([
   // GI Lit March Group: the PBR lighting block is only emitted once a scene is wired
   'giLitMarchGroup.metallic', 'giLitMarchGroup.roughness', 'giLitMarchGroup.lightStrength',
   'giLitMarchGroup.giStrength', 'giLitMarchGroup.specStrength',
+  // Texture-sampling nodes (Passes) read black, and none of their settings, until a Pass is wired
+  'sampleTexture.offsetX', 'sampleTexture.offsetY', 'edgesTexture.strength', 'edgesTexture.width', 'blurTexture.radius',
+  'glowTexture.threshold', 'glowTexture.radius', 'glowTexture.intensity', 'displaceTexture.amount',
 ]);
 
 function makeNode(id: string, type: string, def: NodeDefinition, x = 0): GraphNode {

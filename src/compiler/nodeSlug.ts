@@ -64,7 +64,7 @@ const TYPE_ABBREV: Record<string, string> = {
   pInit: 'pinit', pRotate: 'prot', pWave: 'pwave',
   pColorDist: 'pcdist', pSize: 'psz', pRender: 'prend',
   // Passes (render to texture)
-  pass: 'pass', passOutput: 'pout',
+  pass: 'pass', passOutput: 'pout', sampleTexture: 'smp', edgesTexture: 'edges', blurTexture: 'tblur',
   // Misc
   expr: 'expr', customFn: 'cfn', scope: 'scope',
   sineLFO: 'lfo', squareLFO: 'slfo', sawtoothLFO: 'sawlfo',

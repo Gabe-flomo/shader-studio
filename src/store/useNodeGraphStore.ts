@@ -693,6 +693,8 @@ interface NodeGraphState {
   isStateful: boolean;
   /** Echo nodes present: snapshot ring the preview must keep (see nodes/definitions/echo.ts). */
   echoConfig: { copies: number; delay: number } | null;
+  /** Pass nodes' programs, in drawing order (compiler/passGraph.ts); null when the graph has no Pass node. */
+  passes: import('../compiler/types').PassProgram[] | null;
 
   /** Maps nodeId → GLSL slug, e.g. "node_49" → "cos_49". Used for code-panel highlighting. */
   nodeSlugMap: Map<string, string>;
@@ -1647,6 +1649,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   nodePreviews: {},
   isStateful: false,
   echoConfig: null,
+  passes: null,
   nodeSlugMap: new Map(),
   rawGlslShader: null,
   previewAspect: ((): PreviewAspect => {
@@ -4648,6 +4651,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       videoUniforms: result.videoUniforms,
       isStateful: result.isStateful,
       echoConfig: result.echo ?? null,
+      passes: result.passes ?? null,
       particleSystems: result.particleSystems ?? [],
       nodeSlugMap: result.nodeSlugMap ?? new Map(),
       // Probe values are read from the compiled program, so they only go

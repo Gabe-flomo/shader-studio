@@ -168,6 +168,8 @@ export interface GraphFeatures {
   liveUniforms: Record<string, string>;
   /** The shader reads a Data node's textures (src/data/dataGlsl.ts). */
   usesData?: boolean;
+  /** Has Pass nodes (render to texture): the page doesn't run them yet (docs/pass-node-plan.md, phase 5). */
+  passes?: boolean;
 }
 
 /**
@@ -179,6 +181,7 @@ export interface GraphFeatures {
 export function unsupportedFeatures(f: GraphFeatures): string[] {
   const out: string[] = [];
   if (Object.keys(f.liveUniforms).length) out.push('MIDI Input node outputs');
+  if (f.passes) out.push('Pass nodes (render to texture): the page draws the final picture without them');
   return out;
 }
 

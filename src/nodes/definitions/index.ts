@@ -140,7 +140,7 @@ export { VertexParticleSystemNode } from './vparticles';
 
 // GPU Particles (the engine in play/kit/gpuParticles.js)
 export { GpuParticlesNode } from './gpuParticles';
-export { PassNode, PassOutputNode } from './passes';
+export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode } from './passes';
 
 // Particle Pipeline Nodes (deprecated: Particles replaces them)
 export { PInitNode, PRotateNode, PWaveNode, PColorDistNode, PSizeNode, PRenderNode } from './pnodes';
@@ -272,7 +272,7 @@ import {
 import { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGBToCMYKNode, CMYKHalftoneNode } from './halftone';
 import { VertexParticleSystemNode } from './vparticles';
 import { GpuParticlesNode } from './gpuParticles';
-import { PassNode, PassOutputNode } from './passes';
+import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode } from './passes';
 import { PInitNode, PRotateNode, PWaveNode, PColorDistNode, PSizeNode, PRenderNode } from './pnodes';
 
 export const NODE_REGISTRY: Record<string, NodeDefinition> = {
@@ -468,6 +468,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Passes (render to texture): docs/pass-node-plan.md
   pass: PassNode,
   passOutput: PassOutputNode,
+  sampleTexture: SampleTextureNode,
+  edgesTexture: EdgesTextureNode,
+  blurTexture: BlurTextureNode,
   // Particle Pipeline (deprecated)
   pInit:      PInitNode,
   pRotate:    PRotateNode,

@@ -30,6 +30,8 @@ export interface CompiledForWeb {
   echo?: { copies: number; delay: number } | null;
   echoConfig?: { copies: number; delay: number } | null;
   particleSystems: { vertexShader: string; fragmentShader: string; count: number; shape: number }[];
+  /** Pass nodes' programs (compiler/passGraph.ts); absent or null without Pass nodes. */
+  passes?: readonly unknown[] | null;
 }
 
 /** What unsupportedFeatures reads, from a compile (a superset, so it keeps working as the runtime learns more). */
@@ -37,6 +39,7 @@ export function graphFeatures(c: CompiledForWeb, play: PlayRecord): GraphFeature
   const f = {
     textureUniforms: c.textureUniforms, videoUniforms: c.videoUniforms, audioUniforms: c.audioUniforms, liveUniforms: c.liveUniforms,
     isStateful: c.isStateful, particleSystems: c.particleSystems, usesEcho: /\bu_echo0\b/.test(c.fragmentShader), usesData: /\bu_ds_\w+/.test(c.fragmentShader), play,
+    ...(c.passes?.length ? { passes: true } : {}),
   };
   return f;
 }

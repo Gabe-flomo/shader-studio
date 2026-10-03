@@ -149,3 +149,62 @@ describe('Pass node compile', () => {
     expect(r.errors![0]).toMatch(/more than 16 textures/);
   });
 });
+
+describe('texture-sampling nodes', () => {
+  /** uv → circle → grey → Pass A → Edges → Pass B (½) → Blur → Add over the circle → output. */
+  function edgeGlow(): GraphNode[] {
+    return [
+      n('uv', 'node_1', 0, 0),
+      n('circleSDF', 'node_2', 0, 0, {}, { position: ['node_1', 'uv'] }),
+      n('floatToVec3', 'node_3', 0, 0, {}, { input: ['node_2', 'distance'] }),
+      n('pass', 'node_4', 0, 0, {}, { color: ['node_3', 'rgb'] }),
+      n('edgesTexture', 'node_5', 0, 0, {}, { texture: ['node_4', 'texture'] }),
+      n('pass', 'node_6', 0, 0, { scale: '0.5' }, { color: ['node_5', 'color'] }),
+      n('blurTexture', 'node_7', 0, 0, { radius: 6 }, { texture: ['node_6', 'texture'] }),
+      n('addColor', 'node_8', 0, 0, {}, { a: ['node_3', 'rgb'], b: ['node_7', 'color'] }),
+      n('output', 'node_9', 0, 0, {}, { color: ['node_8', 'result'] }),
+    ];
+  }
+
+  it('compiles the edge-glow chain into two passes and a final program', () => {
+    const r = compileGraph({ nodes: edgeGlow() });
+    expect(r.errors).toBeUndefined();
+    expect(r.passes!.map(p => p.slug)).toEqual(['pass_4', 'pass_6']);
+    const [a, b] = r.passes!;
+    expect(a.nodeIds.sort()).toEqual(['node_1', 'node_2', 'node_3']);
+    // Pass B runs Edges over Pass A's texture, in picture pixels.
+    expect(b.reads).toEqual(['pass_4']);
+    expect(b.fragmentShader).toContain('uniform sampler2D u_pass_pass_4;');
+    expect(b.fragmentShader).toContain('u_pass_pass_4_px');
+    expect(b.fragmentShader).not.toContain('circ_2');
+    // The final program blurs Pass B and adds the circle, computed again here.
+    expect(r.fragmentShader).toContain('texture2D(u_pass_pass_6,');
+    expect(r.fragmentShader).toContain('circ_2');
+    expect(r.fragmentShader).not.toContain('u_pass_pass_4;');
+    // Sliders stay uniforms with one name everywhere.
+    expect(r.paramBindings['node_7::radius']).toBe('u_p_tblurx7_radius');
+    expect(r.paramBindings['node_5::strength']).toBeTruthy();
+  });
+
+  it('reads black when no texture is wired', () => {
+    const nodes = [
+      n('blurTexture', 'node_7', 0, 0),
+      n('pass', 'node_4', 0, 0, {}, { color: ['node_7', 'color'] }),
+      n('output', 'node_9', 0, 0, {}, { color: ['node_4', 'color'] }),
+    ];
+    const r = compileGraph({ nodes });
+    expect(r.errors).toBeUndefined();
+    expect(r.passes![0].fragmentShader).toContain('vec4 tblur_7_acc = vec4(0.0);');
+  });
+
+  it('refuses a texture wire into a colour input', () => {
+    const nodes = [
+      n('floatToVec3', 'node_3', 0, 0),
+      n('pass', 'node_4', 0, 0, {}, { color: ['node_3', 'rgb'] }),
+      n('output', 'node_9', 0, 0, {}, { color: ['node_4', 'texture'] }),
+    ];
+    const r = compileGraph({ nodes });
+    expect(r.success).toBe(false);
+    expect(r.errors!.join(' ')).toMatch(/Expected vec3, got texture/);
+  });
+});
