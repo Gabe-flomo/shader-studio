@@ -28,6 +28,8 @@ import { MapModeBar, MapTarget } from './inputs/MapTarget';
 import { InputsBoard } from './inputs/InputsBoard';
 import { SwingStrip } from './inputs/SwingStrip';
 import { SourceDragHandle } from './inputs/SourceDragHandle';
+import { SourceGroups } from './inputs/SourceGroups';
+import type { SourceItem } from './mappingGroups';
 import { dropOutcome } from './inputs/sourceDrag';
 import { controlSwing, type Swing } from '../../play/controlSwing';
 import { DetailWindow } from './detail/DetailWindow';
@@ -1529,6 +1531,17 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
       onMap={() => useMapMode.getState().start(m.id, sourceLabel(m.source, play.controls, layerRefs))}
     />
   );
+  // The header's count: the drawer lists mappings; the sources column, its own sources too.
+  const headCount = play.mappings.length + (mode === 'drawer' ? 0 : ownSources.length);
+  const sourceCard = (d: PlaySourceDef) => (
+    <SourceCard key={d.id} def={d} play={play} meter={ownMeters.get(d.id) ?? 0} audioNodes={audioNodes} nullLayers={nullLayers} layerRefs={layerRefs}
+      learning={learnFor === d.id} onLearn={() => setLearnFor(l => (l === d.id ? null : d.id))} onChange={onRecord} />
+  );
+  // What the sources column's search looks in: the card's name, what it reads, the controls it drives.
+  const controlLabel = (id: string) => play.controls.find(c => c.id === id)?.label;
+  const sourceWords = (x: SourceItem) => (x.kind === 'source'
+    ? [x.def.label, sourceLabel(x.def.source, play.controls, layerRefs), ...x.def.outputs.flatMap(o => o.routes.map(r => controlLabel(r.to)))]
+    : [sourceLabel(x.mapping.source, play.controls, layerRefs), controlLabel(x.mapping.controlId)]);
   const status = (
     <>
       {(learnFor || usesMidi(play)) && (
@@ -1581,7 +1594,7 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
       )}
       <PanelHeader
         title={mode === 'drawer' ? 'Mappings' : 'Sources'}
-        hint={play.mappings.length ? `${play.mappings.length}` : undefined}
+        hint={headCount ? `${headCount}` : undefined}
         chevron={mode === 'drawer' ? (open ? 'down' : 'up') : undefined}
         onClick={mode === 'drawer' ? onToggle : undefined}
         extra={open && (
@@ -1618,13 +1631,14 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
           {status}
           <SoloStrip kind="mapping" total={play.mappings.length} />
           {play.midiFile && !pages && <MidiFileSlot />}
-          {ownSources.length > 0 && <div style={grid ? PANEL_GRID_WIDE : undefined}>{ownSources.map(d => (
-            <SourceCard key={d.id} def={d} play={play} meter={ownMeters.get(d.id) ?? 0} audioNodes={audioNodes} nullLayers={nullLayers} layerRefs={layerRefs}
-              learning={learnFor === d.id} onLearn={() => setLearnFor(l => (l === d.id ? null : d.id))} onChange={onRecord} />
-          ))}</div>}
-          {play.mappings.length === 0 ? (
-            ownSources.length ? null : emptyState
-          ) : <div style={grid ? PANEL_GRID_WIDE : undefined}>{play.mappings.map(m => rowFor(m, { collapsed: collapsed.has(m.id) }))}</div>}
+          {!ownSources.length && !play.mappings.length ? emptyState : mode === 'drawer' ? <>
+            {ownSources.length > 0 && <div style={grid ? PANEL_GRID_WIDE : undefined}>{ownSources.map(sourceCard)}</div>}
+            {play.mappings.length > 0 && <div style={grid ? PANEL_GRID_WIDE : undefined}>{play.mappings.map(m => rowFor(m, { collapsed: collapsed.has(m.id) }))}</div>}
+          </> : (
+            // The sources column: own sources and old mappings together, by kind, with a search.
+            <SourceGroups sources={ownSources} mappings={play.mappings} words={sourceWords} gridStyle={grid ? PANEL_GRID_WIDE : undefined}
+              renderItem={x => (x.kind === 'source' ? sourceCard(x.def) : rowFor(x.mapping, { collapsed: collapsed.has(x.mapping.id) }))} />
+          )}
           {!!play.pairs?.length && (
             <PairMappingsSection play={play} grid={grid} audioNodes={audioNodes} layerRefs={layerRefs} onAdd={onAddPair} onUpdate={onUpdatePair} onRemove={onRemovePair} />
           )}

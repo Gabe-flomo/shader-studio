@@ -1,9 +1,11 @@
 /**
- * mappingGroups.ts — the full-width Mappings page's table: mappings grouped
- * by the kind of source (MIDI, keys and mouse, audio…), filtered by a search
- * and a group. Pure, so the page and its tests share it.
+ * mappingGroups.ts — sources grouped by their kind (MIDI, keys and mouse,
+ * audio…), filtered by a search: the full-width Mappings page's table
+ * (old mappings), and the Inputs board's sources column (the record's own
+ * sources and the old mappings together, groupSourceItems). Pure, so the
+ * pages and their tests share it.
  */
-import type { PlayMapping, PlaySource } from '../../types/play';
+import type { PlayMapping, PlaySource, PlaySourceDef } from '../../types/play';
 
 export type MappingGroupId = 'midi' | 'keys' | 'audio' | 'motion' | 'triggers' | 'picture' | 'other';
 
@@ -17,7 +19,10 @@ export const MAPPING_GROUPS: ReadonlyArray<{ id: MappingGroupId; label: string; 
   { id: 'other', label: 'Controls and data', kinds: [] },
 ];
 
-export function mappingGroupOf(source: PlaySource): MappingGroupId {
+/** The group of a source: a PlaySource itself, or anything carrying one (a mapping, a source of the record). */
+export function mappingGroupOf(of: PlaySource | { source: PlaySource }): MappingGroupId {
+  // A PlaySource has a kind; a mapping and a source of the record carry theirs in `source`.
+  const source = 'kind' in of ? of : of.source;
   return MAPPING_GROUPS.find(g => g.kinds.includes(source.kind))?.id ?? 'other';
 }
 
@@ -54,4 +59,34 @@ export function groupCounts(mappings: readonly PlayMapping[]): Array<{ id: Mappi
   return MAPPING_GROUPS
     .map(g => ({ id: g.id, label: g.label, count: mappings.filter(m => mappingGroupOf(m.source) === g.id).length }))
     .filter(g => g.count > 0);
+}
+
+/** One card in the sources column: a source of the record, or an old mapping. */
+export type SourceItem = { kind: 'source'; def: PlaySourceDef } | { kind: 'mapping'; mapping: PlayMapping };
+export interface SourceItemGroup { id: MappingGroupId; label: string; items: SourceItem[] }
+
+export const sourceItemId = (x: SourceItem) => (x.kind === 'source' ? x.def.id : x.mapping.id);
+
+/**
+ * The sources column's cards in their groups (MAPPING_GROUPS order; in each,
+ * the record's own sources first, then the old mappings, each in the setup's
+ * order, as the column showed them before): those where any of `words(item)`
+ * (its name, what it reads, what it drives) holds `query`, any case. Empty
+ * groups are left out.
+ */
+export function groupSourceItems(
+  sources: readonly PlaySourceDef[],
+  mappings: readonly PlayMapping[],
+  words: (item: SourceItem) => ReadonlyArray<string | undefined>,
+  query = '',
+): SourceItemGroup[] {
+  const q = query.trim().toLowerCase();
+  const all: SourceItem[] = [...sources.map(def => ({ kind: 'source' as const, def })), ...mappings.map(mapping => ({ kind: 'mapping' as const, mapping }))];
+  const shown = q ? all.filter(x => words(x).some(w => !!w && w.toLowerCase().includes(q))) : all;
+  const out: SourceItemGroup[] = [];
+  for (const g of MAPPING_GROUPS) {
+    const items = shown.filter(x => mappingGroupOf(x.kind === 'source' ? x.def : x.mapping) === g.id);
+    if (items.length) out.push({ id: g.id, label: g.label, items });
+  }
+  return out;
 }
