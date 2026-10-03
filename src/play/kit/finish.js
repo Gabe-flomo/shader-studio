@@ -7,8 +7,11 @@
  *
  * One pass does the work: a fragment shader built from the stack (only the
  * effects that are on, in the stack's order) reads the picture and the layers
- * as two textures and writes the finished frame. Three things need more, and
- * only run when an effect asks for them:
+ * as two textures and writes the finished frame. An effect that reads around
+ * each point (FN_STAGE_KINDS: glitch, pixel sort, halftone, dither, ASCII,
+ * neon edges) starts a pass of its own over the one before (fnSegments), and
+ * trails read the frame drawn before. Three more things only run when an
+ * effect asks for them:
  *   glow   bloom, halation and CRT glow read small blurred copies of the frame
  *          (a quarter-size prefilter, then a quarter, an eighth and a
  *          sixteenth, each blurred across and down: seven tiny passes)
@@ -221,7 +224,194 @@ export const FN_EFFECTS = {
       FN_P('invert', 'Invert', 0, 1, 1, 0, 'Swaps now and the past across the map.'),
     ],
   },
+  // ── Creative effects ──────────────────────────────────────────────────────
+  // `presets` only set numbers (like halation's); `colours` are hidden numbers
+  // edited as a swatch; `note` is the card's line under the sliders.
+  trails: {
+    label: 'Trails', group: 'Time', icon: 'loop',
+    summary: 'Feedback: each frame leaves a fading copy, zoomed and turned',
+    params: [
+      FN_P('amount', 'Persistence', 0, 0.99, 0.01, 0.86, 'How long the trails last: each frame keeps this much of the last one.'),
+      FN_P('zoom', 'Zoom', -1, 1, 0.01, 0.25, 'The trails fly outward (right) or fall inward (left).'),
+      FN_P('rotate', 'Twist', -1, 1, 0.01, 0, 'The trails turn as they go.'),
+      FN_P('hue', 'Hue drift', -1, 1, 0.01, 0.15, 'The trails change colour as they age, round the colour wheel.'),
+      FN_P('mode', 'Smear', 0, 1, 1, 0, 'Off keeps the brightest of now and the trails (ghosts on the dark); on blends them (a long-exposure smear).'),
+    ],
+    presets: [
+      { name: 'Ghosts', values: { amount: 0.86, zoom: 0.25, rotate: 0, hue: 0.15, mode: 0 } },
+      { name: 'Tunnel', values: { amount: 0.94, zoom: 0.8, rotate: 0.25, hue: 0.4, mode: 0 } },
+      { name: 'Smear', values: { amount: 0.8, zoom: 0, rotate: 0, hue: 0, mode: 1 } },
+      { name: 'Vortex', values: { amount: 0.92, zoom: -0.45, rotate: 0.7, hue: -0.3, mode: 0 } },
+    ],
+    note: 'Feeds the finished frame back into the next one, as a video synth or TouchDesigner’s Feedback TOP does. Best over something that moves.',
+  },
+  kaleido: {
+    label: 'Kaleidoscope', group: 'Mirror & warp', icon: 'star',
+    summary: 'Mirrored wedges around a centre; 1 segment is a simple mirror',
+    params: [
+      FN_P('segments', 'Segments', 1, 16, 1, 6, 'How many mirrored pairs go round the centre. 1 is a mirror down the middle.'),
+      FN_P('rotate', 'Rotate', 0, 360, 1, 90, 'Turns the pattern, in degrees.'),
+      FN_P('spin', 'Spin', -1, 1, 0.01, 0.04, 'Turns the picture under the mirrors, in turns a second: the pattern keeps changing.'),
+      FN_P('zoom', 'Zoom', 0.25, 4, 0.01, 1.2, 'Closer in (right) or further out, where the picture repeats as mirrored tiles.'),
+      FN_P('cx', 'Centre X', 0, 1, 0.01, 0.5, 'Where the mirrors meet.'), FN_P('cy', 'Centre Y', 0, 1, 0.01, 0.5, 'Where the mirrors meet.'),
+    ],
+    presets: [
+      { name: 'Mandala', values: { segments: 6, rotate: 90, spin: 0.04, zoom: 1.2 } },
+      { name: 'Mirror', values: { segments: 1, rotate: 0, spin: 0, zoom: 1 } },
+      { name: 'Crystal', values: { segments: 12, rotate: 0, spin: -0.08, zoom: 0.6 } },
+      { name: 'Butterfly', values: { segments: 2, rotate: 90, spin: 0.02, zoom: 1.4 } },
+    ],
+  },
+  warp: {
+    label: 'Liquid warp', group: 'Mirror & warp', icon: 'wave',
+    summary: 'The picture flows like liquid or heat haze',
+    params: [
+      FN_P('amount', 'Amount', 0, 1, 0.01, 0.5, 'How far the picture is pushed around.'),
+      FN_P('scale', 'Scale', 0.2, 8, 0.05, 2, 'Big slow swells (left) or small ripples (right).'),
+      FN_P('speed', 'Speed', 0, 3, 0.01, 0.35, 'How fast it flows. 0 holds it still.'),
+      FN_P('swirl', 'Swirl', 0, 1, 0.01, 0.5, 'Gentle waves (left) or curling, marbled swirls (right).'),
+    ],
+    presets: [
+      { name: 'Liquid', values: { amount: 0.5, scale: 2, speed: 0.35, swirl: 0.5 } },
+      { name: 'Heat haze', values: { amount: 0.18, scale: 6, speed: 1.6, swirl: 0.1 } },
+      { name: 'Marble', values: { amount: 1, scale: 1.6, speed: 0.12, swirl: 1 } },
+    ],
+  },
+  glitch: {
+    label: 'Glitch', group: 'Glitch', icon: 'bolt',
+    summary: 'Torn rows, jumping blocks and split colour, like a broken signal',
+    params: [
+      FN_P('amount', 'Amount', 0, 1, 0.01, 0.45, 'How much of the picture breaks up.'),
+      FN_P('blocks', 'Block size', 0, 1, 0.01, 0.5, 'Thin torn lines (left) or big chunks (right).'),
+      FN_P('split', 'Colour split', 0, 1, 0.01, 0.5, 'How far red and blue slip apart.'),
+      FN_P('speed', 'Speed', 0, 30, 0.5, 8, 'How often it changes, in changes a second. 0 holds it.'),
+    ],
+    presets: [
+      { name: 'Subtle', values: { amount: 0.15, blocks: 0.2, split: 0.3, speed: 4 } },
+      { name: 'Broken', values: { amount: 0.45, blocks: 0.5, split: 0.5, speed: 8 } },
+      { name: 'Meltdown', values: { amount: 0.9, blocks: 0.8, split: 1, speed: 14 } },
+    ],
+  },
+  pixelsort: {
+    label: 'Pixel sort', group: 'Glitch', icon: 'sliders',
+    summary: 'Bright runs of pixels stretched into sorted streaks',
+    params: [
+      FN_P('threshold', 'Threshold', 0, 1, 0.01, 0.45, 'Only parts brighter than this are sorted: lower sorts more of the picture.'),
+      FN_P('length', 'Length', 0, 1, 0.01, 0.35, 'The longest a streak can be, as a share of the picture’s height.'),
+      FN_P('angle', 'Direction', 0, 360, 1, 270, 'Which way the streaks run (270 = falling down, 0 = to the right).'),
+      FN_P('amount', 'Amount', 0, 1, 0.01, 1, 'How much of the sorted picture shows.'),
+    ],
+    presets: [
+      { name: 'Drip', values: { threshold: 0.45, length: 0.35, angle: 270, amount: 1 } },
+      { name: 'Sideways', values: { threshold: 0.3, length: 0.6, angle: 0, amount: 1 } },
+      { name: 'Melt', values: { threshold: 0.15, length: 0.8, angle: 270, amount: 1 } },
+    ],
+  },
+  halftone: {
+    label: 'Halftone', group: 'Stylise', icon: 'grid',
+    summary: 'Printed dots: newsprint black or four-colour CMYK',
+    params: [
+      FN_P('size', 'Dot size', 2, 60, 0.5, 9, 'The dot spacing, in pixels of a 1080p picture.'),
+      FN_P('angle', 'Angle', 0, 90, 1, 45, 'The screen’s angle. The colour screens keep their offsets from it, as print does.'),
+      FN_P('colour', 'Colour', 0, 1, 0.01, 1, '0 is black ink only (newsprint), 1 is cyan, magenta, yellow and black dots.'),
+      FN_P('amount', 'Amount', 0, 1, 0.01, 1, 'How much of the print shows over the picture.'),
+      FN_P('paperR', 'Paper R', 0, 1, 0.01, 0.97, '', true), FN_P('paperG', 'Paper G', 0, 1, 0.01, 0.95, '', true), FN_P('paperB', 'Paper B', 0, 1, 0.01, 0.9, '', true),
+    ],
+    colours: [{ label: 'Paper', keys: ['paperR', 'paperG', 'paperB'], hint: 'The colour the dots are printed on.' }],
+    presets: [
+      { name: 'Comic', values: { size: 9, angle: 45, colour: 1, amount: 1, paperR: 0.97, paperG: 0.95, paperB: 0.9 } },
+      { name: 'Newsprint', values: { size: 6, angle: 45, colour: 0, amount: 1, paperR: 0.9, paperG: 0.88, paperB: 0.82 } },
+      { name: 'Pop art', values: { size: 22, angle: 15, colour: 1, amount: 1, paperR: 1, paperG: 1, paperB: 1 } },
+    ],
+  },
+  dither: {
+    label: 'Dither', group: 'Stylise', icon: 'dice',
+    summary: 'Few colours, big pixels and a dot pattern: retro computers and handhelds',
+    params: [
+      FN_P('levels', 'Levels', 2, 16, 1, 4, 'Shades per colour channel (or per tone in two-colour mode).'),
+      FN_P('pixel', 'Pixel size', 1, 24, 1, 4, 'How big each pixel is, in pixels of a 1080p picture.'),
+      FN_P('amount', 'Dither', 0, 1, 0.01, 1, 'How much the checkered pattern blends between shades. 0 is flat bands.'),
+      FN_P('colour', 'Colour', 0, 1, 0.01, 1, '1 keeps the picture’s colours; 0 maps brightness between the two palette colours.'),
+      FN_P('darkR', 'Dark R', 0, 1, 0.01, 0.06, '', true), FN_P('darkG', 'Dark G', 0, 1, 0.01, 0.05, '', true), FN_P('darkB', 'Dark B', 0, 1, 0.01, 0.16, '', true),
+      FN_P('lightR', 'Light R', 0, 1, 0.01, 1, '', true), FN_P('lightG', 'Light G', 0, 1, 0.01, 0.85, '', true), FN_P('lightB', 'Light B', 0, 1, 0.01, 0.6, '', true),
+    ],
+    colours: [
+      { label: 'Dark', keys: ['darkR', 'darkG', 'darkB'], hint: 'The palette’s darkest colour, when Colour is below 1.' },
+      { label: 'Light', keys: ['lightR', 'lightG', 'lightB'], hint: 'The palette’s lightest colour, when Colour is below 1.' },
+    ],
+    presets: [
+      { name: 'Retro PC', values: { levels: 4, pixel: 4, amount: 1, colour: 1 } },
+      { name: 'Handheld', values: { levels: 4, pixel: 4, amount: 0.8, colour: 0, darkR: 0.06, darkG: 0.22, darkB: 0.06, lightR: 0.61, lightG: 0.74, lightB: 0.06 } },
+      { name: '1-bit', values: { levels: 2, pixel: 1, amount: 1, colour: 0, darkR: 0, darkG: 0, darkB: 0, lightR: 1, lightG: 1, lightB: 1 } },
+      { name: 'Sunset duo', values: { levels: 6, pixel: 2, amount: 1, colour: 0, darkR: 0.12, darkG: 0.04, darkB: 0.24, lightR: 1, lightG: 0.62, lightB: 0.36 } },
+    ],
+  },
+  ascii: {
+    label: 'ASCII', group: 'Stylise', icon: 'text',
+    summary: 'The picture drawn in text characters',
+    params: [
+      FN_P('size', 'Character size', 4, 48, 0.5, 12, 'Height of a character cell, in pixels of a 1080p picture.'),
+      FN_P('colour', 'Colour', 0, 1, 0.01, 1, '1 colours each character from the picture; 0 uses the ink colour (a terminal).'),
+      FN_P('background', 'Background', 0, 1, 0.01, 0.12, 'How much of the picture shows dimly behind the characters.'),
+      FN_P('contrast', 'Contrast', 0, 1, 0.01, 0.4, 'Spreads the picture across more of the characters, from sparse dots to dense blocks.'),
+      FN_P('inkR', 'Ink R', 0, 1, 0.01, 0.3, '', true), FN_P('inkG', 'Ink G', 0, 1, 0.01, 1, '', true), FN_P('inkB', 'Ink B', 0, 1, 0.01, 0.5, '', true),
+    ],
+    colours: [{ label: 'Ink', keys: ['inkR', 'inkG', 'inkB'], hint: 'The characters’ colour when Colour is below 1.' }],
+    presets: [
+      { name: 'Colour', values: { size: 12, colour: 1, background: 0.12, contrast: 0.4 } },
+      { name: 'Terminal', values: { size: 10, colour: 0, background: 0, contrast: 0.5, inkR: 0.3, inkG: 1, inkB: 0.5 } },
+      { name: 'Big type', values: { size: 28, colour: 1, background: 0.3, contrast: 0.3 } },
+    ],
+  },
+  neon: {
+    label: 'Neon edges', group: 'Stylise', icon: 'spark',
+    summary: 'Glowing outlines along every edge, the rest pushed into the dark',
+    params: [
+      FN_P('glow', 'Glow', 0, 3, 0.01, 1.4, 'How bright the outlines are.'),
+      FN_P('width', 'Width', 0.5, 6, 0.05, 1.5, 'How thick the lines are, in pixels of a 1080p picture.'),
+      FN_P('background', 'Darken', 0, 1, 0.01, 0.85, 'How far the rest of the picture goes to black.'),
+      FN_P('rainbow', 'Rainbow', 0, 1, 0.01, 0.35, '0 colours the lines from the picture; 1 colours them by their direction, cycling slowly.'),
+    ],
+    presets: [
+      { name: 'Neon', values: { glow: 1.4, width: 1.5, background: 0.85, rainbow: 0.35 } },
+      { name: 'Ink outline', values: { glow: 0.8, width: 1, background: 0, rainbow: 0 } },
+      { name: 'Laser', values: { glow: 2.4, width: 2.5, background: 1, rainbow: 1 } },
+    ],
+  },
+  leaks: {
+    label: 'Light leaks', group: 'Film', icon: 'sun',
+    summary: 'Warm light washing in from the edges, drifting slowly',
+    params: [
+      FN_P('amount', 'Amount', 0, 1, 0.01, 0.6, 'How bright the leaks are.'),
+      FN_P('hue', 'Hue', 0, 360, 1, 22, 'Their colour: orange by default; 330 is a magenta leak, 200 a cool one.'),
+      FN_P('size', 'Size', 0, 1, 0.01, 0.55, 'Small flares at the edges (left) or broad washes (right).'),
+      FN_P('speed', 'Speed', 0, 2, 0.01, 0.3, 'How fast they drift. 0 holds them.'),
+    ],
+    presets: [
+      { name: 'Warm', values: { amount: 0.6, hue: 22, size: 0.55, speed: 0.3 } },
+      { name: 'Rose', values: { amount: 0.55, hue: 335, size: 0.7, speed: 0.2 } },
+      { name: 'Burn', values: { amount: 1, hue: 12, size: 0.85, speed: 0.6 } },
+    ],
+  },
 };
+
+/**
+ * Effects that read the picture around each point (neighbours, a cell's
+ * centre, a run of pixels). Each one starts a pass of its own, reading the
+ * stack above it as a texture, so the effects above reach it (a Grade then
+ * Halftone prints the graded colours).
+ */
+export const FN_STAGE_KINDS = ['glitch', 'pixelsort', 'halftone', 'dither', 'ascii', 'neon'];
+
+/** The stack's running effects split into passes: a new one at each FN_STAGE_KINDS effect (unless it is first). */
+export function fnSegments(effects) {
+  const out = [];
+  for (const e of effects) {
+    if (!out.length || (FN_STAGE_KINDS.includes(e.kind) && out[out.length - 1].length)) out.push([]);
+    out[out.length - 1].push(e);
+  }
+  return out;
+}
 
 /**
  * Halation presets for the card (they only set the sliders). Classic cine is
@@ -234,7 +424,7 @@ export const FN_HALATION_PRESETS = [
 ];
 
 /** The kinds in the Add menu's order. Each kind appears at most once in a stack. */
-export const FN_KINDS = ['grade', 'lens', 'chroma', 'vignette', 'crt', 'bloom', 'halation', 'grain', 'flicker', 'shake', 'time'];
+export const FN_KINDS = ['grade', 'lens', 'chroma', 'vignette', 'crt', 'bloom', 'halation', 'grain', 'flicker', 'leaks', 'shake', 'time', 'trails', 'kaleido', 'warp', 'halftone', 'dither', 'ascii', 'neon', 'glitch', 'pixelsort'];
 export const FN_TONE_MODES = ['none', 'aces', 'agx', 'hable', 'reinhard2', 'unreal', 'lottes', 'uchimura', 'tanh', 'oklab'];
 export const FN_TIME_MAPS = ['slit', 'luma', 'noise', 'radial', 'layer'];
 export const FN_TIME_QUALITY = { low: { frames: 16, scale: 0.25, cap: 8e6 }, medium: { frames: 32, scale: 0.5, cap: 20e6 }, high: { frames: 64, scale: 0.5, cap: 48e6 } };
@@ -314,7 +504,9 @@ export function fnRunning(finish) {
 }
 /** Does the stack change with the clock (so a paused shader still needs frames drawn while the clock runs)? */
 export function fnAnimated(finish) {
-  return fnRunning(finish).some(e => (e.kind === 'grain' && e.fps > 0) || e.kind === 'shake' || e.kind === 'flicker' || e.kind === 'time' || (e.kind === 'crt' && e.pulse > 0) || (e.kind === 'custom' && /\btime\b/.test(e.code)));
+  return fnRunning(finish).some(e => (e.kind === 'grain' && e.fps > 0) || e.kind === 'shake' || e.kind === 'flicker' || e.kind === 'time' || e.kind === 'trails'
+    || ((e.kind === 'warp' || e.kind === 'leaks' || e.kind === 'glitch') && e.speed > 0) || (e.kind === 'kaleido' && e.spin !== 0) || (e.kind === 'neon' && e.rainbow > 0)
+    || (e.kind === 'crt' && e.pulse > 0) || (e.kind === 'custom' && /\btime\b/.test(e.code)));
 }
 
 // ── Custom effects (effect code) ─────────────────────────────────────────────
@@ -823,6 +1015,7 @@ float fnNoise(vec3 x) {
 }
 float fnHash2(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
 float fnNoise2(vec2 x) { vec2 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(mix(fnHash2(i), fnHash2(i + vec2(1, 0)), f.x), mix(fnHash2(i + vec2(0, 1)), fnHash2(i + vec2(1, 1)), f.x), f.y); }
+vec3 fnHueC(float h) { return clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0); }
 float fnSoft(float v, float thr, float knee) { float k = max(knee, 1e-4); float q = clamp(v - thr + k, 0.0, 2.0 * k); return max(q * q / (4.0 * k), v - thr); }
 float fnEnergy1(float x, float headroom) {
   const float knee = 0.75;
@@ -938,18 +1131,240 @@ function fnTimeMapGlsl(map) {
 }
 
 /**
+ * ASCII's characters, darkest first: 5 × 5 bitmaps, bit (column + 5 × row),
+ * row 0 at the bottom. ' ', '.', ':', '-', '+', 'o', '%', '#', '*', '@'.
+ */
+export const FN_ASCII_GLYPHS = [0, 4, 131200, 14336, 145536, 476718, 20288345, 11512810, 22511061, 15652782];
+
+/** Helpers the creative effects in a pass need (`kinds`: the pass's own). */
+function fnCreativeGlsl(kinds) {
+  let g = '';
+  if (kinds.includes('trails')) g += `uniform sampler2D uFb;
+uniform float uFbOn, uFbFlip, uDt;
+vec3 fnHueRot(vec3 c, float a) { const vec3 k = vec3(0.57735027); float ca = cos(a); return c * ca + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - ca); }
+`;
+  if (kinds.includes('halftone')) g += `// One screen of a halftone: the centre (pixels) of the cell P is in, at angle ang, and P from that centre.
+vec2 fnHtCell(vec2 P, float ang, float sz, out vec2 local) {
+  float cs = cos(ang), sn = sin(ang);
+  vec2 r = vec2(cs * P.x + sn * P.y, -sn * P.x + cs * P.y);
+  vec2 cc = (floor(r / sz) + 0.5) * sz;
+  local = r - cc;
+  return vec2(cs * cc.x - sn * cc.y, sn * cc.x + cs * cc.y);
+}
+// A dot's cover at a point: area grows with the ink, with a pixel of smoothing.
+float fnHtDot(float ink, vec2 local, float sz) { float r = sqrt(clamp(ink, 0.0, 1.0)) * sz * 0.72; return clamp(r - length(local) + 0.5, 0.0, 1.0) * step(0.004, ink); }
+vec4 fnCmyk(vec3 c) { float k = 1.0 - max(c.r, max(c.g, c.b)); return vec4((1.0 - c - k) / max(1.0 - k, 1e-4), k); }
+float fnHtInk(vec2 P, float ang, float sz, int ch) {
+  vec2 l; vec2 cc = fnHtCell(P, ang, sz, l);
+  vec4 k = fnCmyk(fnRead(cc / uRes));
+  return fnHtDot(ch == 0 ? k.x : ch == 1 ? k.y : ch == 2 ? k.z : k.w, l, sz);
+}
+`;
+  if (kinds.includes('dither')) g += `// The 8 × 8 Bayer threshold of a cell, 0..1.
+float fnBayer(vec2 v) {
+  ivec2 i = ivec2(mod(v, 8.0));
+  int r = 0;
+  for (int b = 0; b < 3; b++) { int x = (i.x >> b) & 1, y = (i.y >> b) & 1; r |= ((x ^ y) << (5 - 2 * b)) | (y << (4 - 2 * b)); }
+  return (float(r) + 0.5) / 64.0;
+}
+`;
+  if (kinds.includes('ascii')) g += `const int FN_GLYPHS[${FN_ASCII_GLYPHS.length}] = int[${FN_ASCII_GLYPHS.length}](${FN_ASCII_GLYPHS.join(', ')});
+// Is the point l (0..1 in a cell) on glyph g's 5 × 5 bitmap (with a column and a row of space)?
+float fnGlyph(int g, vec2 l) {
+  ivec2 b = ivec2(floor(l * 6.0)) - ivec2(1, 1);
+  if (b.x < 0 || b.y < 0 || b.x > 4 || b.y > 4) return 0.0;
+  return float((FN_GLYPHS[g] >> (b.x + 5 * b.y)) & 1);
+}
+`;
+  return g;
+}
+
+/**
+ * The creative effects' colour steps. `c` is the colour so far, `p` the
+ * point on the output and `gQ` where it was read (after any bending); the
+ * effects that read around it (FN_STAGE_KINDS) start a pass of their own, so
+ * `fnRead` sees every effect above them.
+ */
+const FN_CREATIVE_OPS = {
+  trails: `{
+    float k = clamp(uDt * 60.0, 0.0, 6.0);
+    vec2 v = (p - 0.5) * vec2(uAspect, 1.0);
+    float r = trails_rotate * 0.03 * k;
+    v = mat2(cos(r), sin(r), -sin(r), cos(r)) * v / pow(1.0 + trails_zoom * 0.025, k);
+    vec2 fq = v / vec2(uAspect, 1.0) + 0.5;
+    if (uFbFlip > 0.5) fq.y = 1.0 - fq.y;
+    vec3 prev = texture(uFb, fq).rgb;
+    float inside = step(0.0, fq.x) * step(fq.x, 1.0) * step(0.0, fq.y) * step(fq.y, 1.0);
+    prev = fnHueRot(prev, trails_hue * 0.08 * k) * inside;
+    float keep = pow(trails_amount, k) * uFbOn;
+    c = trails_mode < 0.5 ? max(c, prev * keep) : mix(c, prev, keep);
+  }`,
+  leaks: `{
+    float t = uTime * leaks_speed;
+    vec2 v = (p - 0.5) * vec2(uAspect, 1.0);
+    vec3 add = vec3(0.0);
+    for (int i = 0; i < 3; i++) {
+      float fi = float(i);
+      float ang = t * (0.21 + 0.07 * fi) + fi * 2.4 + 0.6 * sin(t * 0.31 + fi * 1.9);
+      vec2 at = vec2(cos(ang) * (0.5 * uAspect + 0.1), sin(ang * 1.21 + fi) * 0.6);
+      float rad = mix(0.22, 0.85, leaks_size) * (0.75 + 0.25 * sin(t * 0.53 + fi * 3.1));
+      vec2 d = v - at;
+      float w = exp(-dot(d, d) / (rad * rad));
+      w *= 0.65 + 0.35 * fnNoise(vec3(v * 2.2, t * 0.4 + fi * 7.0));
+      // Hotter (toward white and yellow) in the middle, redder at the fringe, as light through film's base is.
+      vec3 col = fnHueC(fract(leaks_hue / 360.0 + (fi - 1.0) * 0.04 - (1.0 - w) * 0.05 + 1.0));
+      add += mix(col, vec3(1.0, 0.95, 0.85), w * w * 0.35) * w * 1.4;
+    }
+    c = 1.0 - (1.0 - c) * (1.0 - clamp(add * leaks_amount, 0.0, 1.0));
+  }`,
+  glitch: `{
+    float t = floor(uTime * glitch_speed);
+    float rows = mix(64.0, 7.0, glitch_blocks);
+    float band = floor(gQ.y * rows);
+    vec2 o = vec2(0.0);
+    float tear = fnHash(vec3(band, t, 1.0));
+    if (tear < glitch_amount * 0.45) o.x = (fnHash(vec3(band, t, 2.0)) - 0.5) * glitch_amount * 0.22;
+    vec2 cell = floor(gQ * vec2(rows * 0.35 * uAspect, rows * 0.35));
+    float hb = fnHash(vec3(cell, t + 7.0));
+    float blk = step(hb, glitch_amount * 0.16);
+    o += blk * (vec2(fnHash(vec3(cell, t + 3.0)), fnHash(vec3(cell, t + 5.0))) - 0.5) * vec2(0.18, 0.06) * glitch_amount;
+    float jit = fnHash(vec3(t, 4.0, 9.0));
+    vec2 sp = vec2(glitch_split * (0.004 + 0.012 * jit + 0.02 * blk), 0.0);
+    vec2 g = gQ + o;
+    c = vec3(fnRead(g + sp).r, fnRead(g).g, fnRead(g - sp).b);
+    float sw = fnHash(vec3(cell, t + 11.0));
+    if (blk > 0.5 && sw < 0.3) c = c.gbr;
+    else if (blk > 0.5 && sw < 0.45) c = 1.0 - c;
+    c *= 1.0 - 0.18 * glitch_amount * step(0.5, fract(gPx.y * 0.5)) * step(tear, glitch_amount * 0.45);
+  }`,
+  pixelsort: `{
+    // Each line along the direction is cut into intervals (staggered and of varied length per line, so
+    // neighbouring lines streak differently). In each, the samples brighter than the threshold are
+    // sorted by brightness, dark to bright, into the bright places; the dark ones stay where they are.
+    float thr = pixelsort_threshold;
+    if (fnLuma(c) >= thr && pixelsort_amount > 0.0) {
+      float an = radians(pixelsort_angle);
+      vec2 dir = vec2(cos(an), sin(an)), nrm = vec2(-dir.y, dir.x);
+      vec2 P = gQ * uRes;
+      float along = dot(P, dir), across = floor(dot(P, nrm));
+      float Ls = max(8.0, pixelsort_length * uRes.y) * (0.45 + 0.55 * fnHash(vec3(across, 3.1, 7.7)));
+      float t = fract((along + fnHash(vec3(across, 9.2, 1.3)) * Ls) / Ls);
+      vec2 P0 = P - dir * t * Ls;
+      const int M = 24;
+      float lum[M]; vec3 col[M];
+      float tpos = t * float(M) - 0.5, cnt = 0.0;
+      int nb = 0;
+      for (int i = 0; i < M; i++) {
+        col[i] = fnRead((P0 + dir * (float(i) + 0.5) / float(M) * Ls) / uRes);
+        lum[i] = fnLuma(col[i]);
+        if (lum[i] >= thr) { nb++; if (float(i) < tpos) cnt += 1.0; }
+      }
+      if (nb > 1) {
+        float kf = clamp(cnt - 1.0 + fract(tpos), 0.0, float(nb - 1));
+        int k0 = int(kf), k1 = min(k0 + 1, nb - 1);
+        vec3 c0 = c, c1 = c;
+        for (int i = 0; i < M; i++) {
+          if (lum[i] < thr) continue;
+          int r = 0;
+          for (int j = 0; j < M; j++) if (lum[j] >= thr && (lum[j] < lum[i] || (lum[j] == lum[i] && j < i))) r++;
+          if (r == k0) c0 = col[i];
+          if (r == k1) c1 = col[i];
+        }
+        c = mix(c, mix(c0, c1, fract(kf)), pixelsort_amount);
+      }
+    }
+  }`,
+  halftone: `{
+    float sz = max(2.0, halftone_size * uRes.y / 1080.0);
+    vec2 P = gQ * uRes;
+    float a0 = radians(halftone_angle);
+    vec3 paper = vec3(halftone_paperR, halftone_paperG, halftone_paperB);
+    vec2 l; vec2 cc = fnHtCell(P, a0, sz, l);
+    vec3 mono = paper * (1.0 - 0.92 * fnHtDot(1.0 - fnLuma(fnRead(cc / uRes)), l, sz));
+    vec3 cmyk = paper;
+    if (halftone_colour > 0.0) {
+      cmyk *= mix(vec3(1.0), vec3(0.0, 0.68, 0.94), fnHtInk(P, a0 - 0.5236, sz, 0));
+      cmyk *= mix(vec3(1.0), vec3(0.93, 0.0, 0.55), fnHtInk(P, a0 + 0.5236, sz, 1));
+      cmyk *= mix(vec3(1.0), vec3(1.0, 0.93, 0.0), fnHtInk(P, a0 - 0.7854, sz, 2));
+      cmyk *= mix(vec3(1.0), vec3(0.08), fnHtInk(P, a0, sz, 3));
+    }
+    c = mix(c, mix(mono, cmyk, halftone_colour), halftone_amount);
+  }`,
+  dither: `{
+    float cell = max(1.0, floor(dither_pixel * uRes.y / 1080.0 + 0.5));
+    vec2 ci = floor(gQ * uRes / cell);
+    vec3 src = cell > 1.0 ? fnRead((ci + 0.5) * cell / uRes) : c;
+    float n = max(2.0, floor(dither_levels + 0.5)) - 1.0;
+    float th = mix(0.5, fnBayer(ci), dither_amount);
+    vec3 col = clamp(floor(src * n + th) / n, 0.0, 1.0);
+    float tone = clamp(floor(fnLuma(src) * n + th) / n, 0.0, 1.0);
+    vec3 duo = mix(vec3(dither_darkR, dither_darkG, dither_darkB), vec3(dither_lightR, dither_lightG, dither_lightB), tone);
+    c = mix(duo, col, dither_colour);
+  }`,
+  ascii: `{
+    float cell = max(4.0, ascii_size * uRes.y / 1080.0);
+    vec2 P = gQ * uRes;
+    vec2 ci = floor(P / cell);
+    vec3 src = fnRead((ci + 0.5) * cell / uRes);
+    float L = fnLuma(src);
+    float g = clamp((L - 0.5) * (1.0 + ascii_contrast * 2.0) + 0.5 + ascii_contrast * 0.1, 0.0, 1.0);
+    int gi = int(clamp(floor(g * ${FN_ASCII_GLYPHS.length}.0), 0.0, ${FN_ASCII_GLYPHS.length - 1}.0));
+    float on = fnGlyph(gi, fract(P / cell));
+    float mx = max(src.r, max(src.g, src.b));
+    vec3 lit = src / max(mx, 1e-3) * (0.55 + 0.45 * smoothstep(0.0, 0.6, mx));
+    vec3 ink = mix(vec3(ascii_inkR, ascii_inkG, ascii_inkB) * (0.45 + 0.55 * g), lit, ascii_colour);
+    c = mix(src * ascii_background, ink, on);
+  }`,
+  neon: `{
+    vec2 o = max(0.5, neon_width * uRes.y / 1080.0) / uRes;
+    // Sobel in each colour channel, so an edge between two equally bright colours still shows.
+    vec3 tl = fnRead(gQ + vec2(-o.x, o.y)), tc = fnRead(gQ + vec2(0.0, o.y)), tr = fnRead(gQ + o);
+    vec3 ml = fnRead(gQ - vec2(o.x, 0.0)), mr = fnRead(gQ + vec2(o.x, 0.0));
+    vec3 bl = fnRead(gQ - o), bc = fnRead(gQ - vec2(0.0, o.y)), br = fnRead(gQ + vec2(o.x, -o.y));
+    vec3 gx = tr + 2.0 * mr + br - tl - 2.0 * ml - bl, gy = tl + 2.0 * tc + tr - bl - 2.0 * bc - br;
+    vec3 g2 = gx * gx + gy * gy;
+    float e = sqrt(max(g2.r, max(g2.g, g2.b)));
+    vec2 gr = g2.r >= max(g2.g, g2.b) ? vec2(gx.r, gy.r) : g2.g >= g2.b ? vec2(gx.g, gy.g) : vec2(gx.b, gy.b);
+    // A soft halo: colour differences across four directions at four times the width.
+    float halo = 0.0;
+    for (int i = 0; i < 4; i++) { float an = float(i) * 0.7853982; vec2 d = vec2(cos(an), sin(an)) * o * 4.0; halo += length(fnRead(gQ + d) - fnRead(gQ - d)); }
+    // The line takes the more vivid colour of its two sides, at full brightness.
+    vec2 n = normalize(gr + 1e-6) * o * 1.5;
+    vec3 sa = fnRead(gQ + n), sb = fnRead(gQ - n);
+    float va = max(sa.r, max(sa.g, sa.b)) - min(sa.r, min(sa.g, sa.b)), vb = max(sb.r, max(sb.g, sb.b)) - min(sb.r, min(sb.g, sb.b));
+    vec3 side = va >= vb ? sa : sb;
+    float mx = max(side.r, max(side.g, side.b));
+    vec3 own = mx > 0.02 ? side / mx : vec3(1.0);
+    own = clamp(mix(vec3(fnLuma(own)), own, 1.6), 0.0, 1.0);
+    vec3 bow = fnHueC(fract(atan(gr.y, gr.x) / 6.2831853 + uTime * 0.05));
+    vec3 col = mix(own, bow, neon_rainbow);
+    float line = smoothstep(0.1, 0.8, e), glow = smoothstep(0.05, 1.2, halo * 0.25) * 0.55;
+    c = c * (1.0 - neon_background) + col * (line + glow) * neon_glow;
+  }`,
+};
+
+/**
  * The final pass for the effects that run (see fnRunning), as GLSL. `opts`:
- * { tone, hueCurves, timeMap, floatGlow }. Also returns what it needs:
- * { src, glow, time, lut }.
+ * { tone, hueCurves, timeMap, floatGlow, segment }. A stack with an effect
+ * that reads around each point (FN_STAGE_KINDS) runs as several passes
+ * (fnSegments): `segment` picks one (0 = the first, which bends and samples
+ * the picture; later ones read the pass before as `uStage`; only the last
+ * draws the wipe). Also returns what it needs: { src, glow, time, lut,
+ * custom, segments, trails }.
  */
 export function fnBuildFinal(effects, opts = {}) {
+  const segs = fnSegments(effects);
+  const si = Math.max(0, Math.min(segs.length - 1, opts.segment | 0));
+  const first = si === 0, last = si === segs.length - 1;
+  const mine = segs[si] || [];
   const kinds = effects.map(e => e.kind);
-  const has = k => kinds.includes(k);
-  const glow = has('bloom') || has('halation') || (has('crt'));
-  const time = has('time');
+  const own = mine.map(e => e.kind);
+  const has = k => own.includes(k);
+  const glow = has('bloom') || has('halation') || has('crt');
+  const time = first && kinds.includes('time');
   let src = FN_COMMON;
   for (const k of kinds) if (FN_EFFECTS[k]) src += fnDefines(k);
-  src += `uniform float uOutFlip, uLive;\nuniform vec4 uWipe;\nout vec4 fragColor;\nvec2 gPx;\nfloat gEdge = 1.0;\n`;
+  src += `uniform float uOutFlip, uLive;\nuniform vec4 uWipe;\nout vec4 fragColor;\nvec2 gPx, gQ;\nfloat gEdge = 1.0;\n`;
   // The before/after wipe: 1 where the finished picture shows, 0 where the picture before the stack does.
   src += `float fnWipe(vec2 p) {
   float a = radians(uWipe.z);
@@ -979,17 +1394,29 @@ vec4 fetch(vec2 q) {
   return mix(a0, a1, f);
 }
 `;
-  } else src += 'vec4 fetch(vec2 q) { return scene(q); }\n';
-  // Custom effects: each its own function (in the stack's order), called with the colour so far.
+  } else if (first) src += 'vec4 fetch(vec2 q) { return scene(q); }\n';
+  else src += 'uniform sampler2D uStage;\nvec4 fetch(vec2 q) { return texture(uStage, q); }\n';
+  // What one point of the picture reads: the first pass's chromatic aberration, or the pass before.
+  let sample = 's = fetch(q);';
+  if (first && kinds.includes('chroma')) sample = `{
+    vec2 d = q - 0.5;
+    float sc = chroma_amount * 0.018 * pow(length(d * vec2(uAspect, 1.0)) * 1.25, chroma_falloff) / max(length(d * vec2(uAspect, 1.0)), 1e-4) * length(d * vec2(uAspect, 1.0));
+    vec2 o = normalize(d + 1e-6) * sc;
+    vec4 m = fetch(q);
+    s = vec4(fetch(q + o).r, m.g, fetch(q - o).b, m.a);
+  }`;
+  src += `vec4 fnSample(vec2 q) { vec4 s; ${sample} return s; }\nvec3 fnRead(vec2 q) { vec4 s = fnSample(q); return s.a > 1e-5 ? s.rgb / s.a : vec3(0.0); }\n`;
+  src += fnCreativeGlsl(own);
+  // Custom effects: each its own function (in the stack's order), called with the colour so far. Numbered across the whole stack, so each keeps its uniform's name in every pass.
   const customs = effects.filter(e => e.kind === 'custom');
   const customCalls = new Map();
-  if (customs.length) {
+  if (customs.some(e => mine.includes(e))) {
     src += 'vec3 fnPicture(vec2 uv) { vec4 s = scene(uv); return s.a > 1e-5 ? s.rgb / s.a : vec3(0.0); }\n';
-    customs.forEach((e, i) => { const st = fnCustomStage(e, i); src += st.glsl; customCalls.set(e, st.call); });
+    customs.forEach((e, i) => { if (!mine.includes(e)) return; const st = fnCustomStage(e, i); src += st.glsl; customCalls.set(e, st.call); });
   }
-  // Geometry: each effect bends where the picture is read. Applied last-first, so the stack's first effect bends the picture first.
+  // Geometry: each effect bends where the picture is read. Applied last-first, so the stack's first effect bends the picture first. First pass only.
   const warps = [];
-  for (const k of kinds) {
+  for (const k of first ? kinds : []) {
     if (k === 'shake') warps.push(`{
     float t = uTime * shake_speed;
     vec2 off = (vec2(fnNoise(vec3(t, 1.3, 0.0)), fnNoise(vec3(t, 7.9, 3.0))) - 0.5) * shake_amount * 0.06;
@@ -1016,10 +1443,30 @@ vec4 fetch(vec2 q) {
     vec2 e = smoothstep(vec2(0.0), vec2(0.004 + crt_curvature * 0.01), q) * smoothstep(vec2(0.0), vec2(0.004 + crt_curvature * 0.01), 1.0 - q);
     gEdge *= e.x * e.y;
   }`);
+    if (k === 'kaleido') warps.push(`{
+    vec2 cc = vec2(kaleido_cx, kaleido_cy);
+    vec2 v = (q - cc) * vec2(uAspect, 1.0);
+    float n = max(1.0, floor(kaleido_segments + 0.5)), seg = 6.2831853 / n;
+    float a = mod(atan(v.y, v.x) - radians(kaleido_rotate), seg);
+    a = abs(a - seg * 0.5) + uTime * kaleido_spin * 6.2831853;
+    v = vec2(cos(a), sin(a)) * length(v) / max(kaleido_zoom, 0.01);
+    q = 1.0 - abs(1.0 - mod(cc + v / vec2(uAspect, 1.0), 2.0));
+  }`);
+    if (k === 'warp') warps.push(`{
+    float t = uTime * warp_speed;
+    vec2 s0 = q * vec2(uAspect, 1.0) * warp_scale * 3.0, v = s0;
+    float sw = 0.3 + warp_swirl * 0.9;
+    for (int i = 1; i < 5; i++) {
+      float fi = float(i);
+      v += vec2(sin(v.y * 1.31 + t * 0.9 + fi * 1.7), cos(v.x * 1.17 - t * 0.7 + fi * 2.3)) * sw / fi;
+    }
+    q += (v - s0) * warp_amount * warp_amount * 0.16 / vec2(uAspect, 1.0);
+    q = 1.0 - abs(1.0 - mod(q, 2.0));
+  }`);
   }
   // Colour: each effect in the stack's order.
   const ops = [];
-  for (const e of effects) {
+  for (const e of mine) {
     const k = e.kind;
     if (k === 'custom') ops.push(customCalls.get(e));
     if (k === 'grade') ops.push('c = fnGrade(c);');
@@ -1076,45 +1523,38 @@ vec4 fetch(vec2 q) {
     float n = mix(fnHash(vec3(floor(t), 1.0, 2.0)), fnHash(vec3(floor(t) + 1.0, 1.0, 2.0)), smoothstep(0.0, 1.0, fract(t)));
     c *= 1.0 + (n - 0.5) * flicker_amount * 0.5;
   }`);
+    if (FN_CREATIVE_OPS[k]) ops.push(FN_CREATIVE_OPS[k]);
   }
-  let sample = 's = fetch(q);';
-  if (has('chroma')) sample = `{
-    vec2 d = q - 0.5;
-    float sc = chroma_amount * 0.018 * pow(length(d * vec2(uAspect, 1.0)) * 1.25, chroma_falloff) / max(length(d * vec2(uAspect, 1.0)), 1e-4) * length(d * vec2(uAspect, 1.0));
-    vec2 o = normalize(d + 1e-6) * sc;
-    vec4 m = fetch(q);
-    s = vec4(fetch(q + o).r, m.g, fetch(q - o).b, m.a);
-  }`;
   src += `void main() {
   vec2 p = gl_FragCoord.xy / uRes;
   if (uOutFlip > 0.5) p.y = 1.0 - p.y;
   gPx = p * uRes;
   float wipe = 1.0;
-  if (uWipe.x > 0.5) {
+  ${last ? `if (uWipe.x > 0.5) {
     wipe = fnWipe(p);
     if (wipe <= 0.0) {
       vec4 o = scene(p);
       fragColor = uLive > 0.5 ? vec4(o.rgb, 1.0) : vec4(o.a > 0.0 ? o.rgb / o.a : vec3(0.0), o.a);
       return;
     }
-  }
+  }` : ''}
   vec2 q = p;
   ${warps.reverse().join('\n  ')}
-  vec4 s;
-  ${sample}
+  gQ = q;
+  vec4 s = fnSample(q);
   float a = s.a;
   vec3 c = a > 1e-5 ? s.rgb / a : vec3(0.0);
   ${ops.join('\n  ')}
   c = clamp(c, 0.0, 1.0) * gEdge;
-  if (wipe < 1.0) {
+  ${last ? `if (wipe < 1.0) {
     vec4 o = scene(p);
     c = mix(o.a > 1e-5 ? o.rgb / o.a : vec3(0.0), c, wipe);
     a = mix(o.a, a, wipe);
   }
-  fragColor = uLive > 0.5 ? vec4(c * a, 1.0) : vec4(c, a);
+  fragColor = uLive > 0.5 ? vec4(c * a, 1.0) : vec4(c, a);` : '// A pass between: premultiplied, for the next pass to read.\n  fragColor = vec4(c * a, a);'}
 }
 `;
-  return { src, glow, time, lut: has('grade'), custom: customs.map(e => e.id) };
+  return { src, glow, time, lut: has('grade'), custom: customs.filter(e => mine.includes(e)).map(e => e.id), segments: segs.length, trails: has('trails') };
 }
 
 const FN_PREFILTER = (bloom, halation, crtGlow) => `${FN_COMMON}
@@ -1321,6 +1761,9 @@ export function fnCreate(canvasIn) {
   let halT = null;
   let outT = null;
   let ringT = null; // { key, tex, fb, w, h, ring }
+  let stageT = null; // two full-size targets for the passes between (fnSegments)
+  const fbT = { tex: makeTex(gl.LINEAR), w: 0, h: 0, valid: false }; // Trails: the frame before
+  let lastTime = null;
 
   function upload(tex, src, premultiply, flip) {
     scratch();
@@ -1474,20 +1917,30 @@ export function fnCreate(canvasIn) {
       if (k !== lutKey) { lutKey = k; scratch(); gl.bindTexture(gl.TEXTURE_2D, lutTex); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, fnBakeLut(grade.curves)); }
     }
     const opts = { tone: grade ? grade.tone || 'none' : 'none', curves: !!(grade && !fnCurvesNeutral(grade.curves)), hueCurves: !!(grade && fnHueCurvesUsed(grade.curves)), timeMap: time ? time.map || 'slit' : 'slit' };
-    const keyFor = list => 'final:' + list.map(e => (e.kind === 'custom' ? 'custom:' + e.code : e.kind)).join(',') + `|${opts.tone}|${opts.curves}|${opts.hueCurves}|${opts.timeMap}`;
-    let built = fnBuildFinal(effects, opts);
-    let fin = compile(keyFor(effects), built.src);
-    if (!fin && built.custom.length) {
+    const keyFor = (list, i) => `final:${i}:` + list.map(e => (e.kind === 'custom' ? 'custom:' + e.code : e.kind)).join(',') + `|${opts.tone}|${opts.curves}|${opts.hueCurves}|${opts.timeMap}`;
+    // One pass, or one per stage (fnSegments): every one has to compile.
+    const buildAll = list => {
+      const out = [];
+      for (let i = 0, n = fnSegments(list).length; i < n; i++) {
+        const built = fnBuildFinal(list, Object.assign({ segment: i }, opts));
+        const prog = compile(keyFor(list, i), built.src);
+        if (!prog) return null;
+        out.push({ built, prog });
+      }
+      return out;
+    };
+    let ran = effects;
+    let passes = buildAll(effects);
+    if (!passes && effects.some(e => e.kind === 'custom')) {
       // Each custom effect compiled alone but not together: run the stack without them.
       for (const e of effects) if (e.kind === 'custom') customErr[e.id] = customErr[e.id] || 'It doesn’t compile together with the rest of the stack (a name used twice?).';
-      const plain = effects.filter(e => e.kind !== 'custom');
-      if (!plain.length) return false;
-      built = fnBuildFinal(plain, opts);
-      fin = compile(keyFor(plain), built.src);
+      ran = effects.filter(e => e.kind !== 'custom');
+      if (!ran.length) return false;
+      passes = buildAll(ran);
     }
-    if (!fin) return false;
-    const ran = built.custom.length ? effects : effects.filter(e => e.kind !== 'custom');
-    if (built.glow && !glowPasses(input, effects, W, H, pixelsMode, value)) return false;
+    if (!passes) return false;
+    const needGlow = passes.some(x => x.built.glow), trails = passes.some(x => x.built.trails);
+    if (needGlow && !glowPasses(input, effects, W, H, pixelsMode, value)) return false;
     let ring = null;
     if (time) {
       ring = ensureRing(time, W, H);
@@ -1498,42 +1951,73 @@ export function fnCreate(canvasIn) {
       }
     }
     if (pixelsMode && (!outT || outT.w !== W || outT.h !== H)) { dropTarget(outT); outT = target(W, H, 1, false); }
-    // The final pass.
-    gl.useProgram(fin.prog);
-    common(fin, W, H, input, W, H, pixelsMode);
-    let ci = 0;
-    for (const e of ran) {
-      if (e.kind === 'custom') { const l = loc(fin, `U_cx${ci++}`); if (l) gl.uniform4fv(l, packedCustom(e, value)); continue; }
-      const l = loc(fin, `U_${e.kind}`); if (l) gl.uniform4fv(l, packed(e, value));
+    // Passes between (a stack with stage effects): two full-size targets, used in turn.
+    if (passes.length > 1 && (!stageT || stageT[0].w !== W || stageT[0].h !== H)) {
+      if (stageT) for (const t of stageT) dropTarget(t);
+      stageT = [target(W, H, 1, false), target(W, H, 1, false)];
     }
-    gl.uniform1f(loc(fin, 'uOutFlip'), pixelsMode ? 1 : 0);
-    gl.uniform1f(loc(fin, 'uLive'), pixelsMode ? 0 : 1);
+    // Trails: the frame before, and the time since it (so they fade the same at any frame rate).
+    const dtRaw = input.first || lastTime === null ? 1 / 60 : (input.time || 0) - lastTime;
+    const dt = dtRaw > 0 && dtRaw < 0.25 ? dtRaw : 1 / 60;
+    lastTime = input.time || 0;
+    if (!trails || input.first || fbT.w !== W || fbT.h !== H) fbT.valid = false;
+    if (trails && (fbT.w !== W || fbT.h !== H)) {
+      scratch(); gl.bindTexture(gl.TEXTURE_2D, fbT.tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, W, H, 0, gl.RGB, gl.UNSIGNED_BYTE, null);
+      fbT.w = W; fbT.h = H;
+    }
     const cmp = input.finish.compare;
-    if (cmp && cmp.on) {
-      const host = Object.assign({ id: FN_COMPARE_ID, kind: 'compare', enabled: true }, cmp);
-      const cv = (k, d) => { const v = value ? value(host, k) : cmp[k]; return typeof v === 'number' && isFinite(v) ? v : d; };
-      gl.uniform4f(loc(fin, 'uWipe'), 1, Math.max(0, Math.min(1, cv('pos', 0.5))), cv('angle', 0), Math.max(0, Math.min(1, cv('softness', 0))));
-    } else gl.uniform4f(loc(fin, 'uWipe'), 0, 0.5, 0, 0);
-    let unit = 2;
-    if (grade) bindTex(fin, 'uLut', unit++, lutTex);
-    if (built.glow) {
-      gl.uniform1f(loc(fin, 'uGlowFloat'), floatGlow ? 1 : 0);
-      bindTex(fin, 'uQ0', unit++, glowT.qb.texs[0]); bindTex(fin, 'uQ1', unit++, glowT.qb.texs[1]);
-      bindTex(fin, 'uE0', unit++, glowT.eb.texs[0]); bindTex(fin, 'uE1', unit++, glowT.eb.texs[1]);
-      bindTex(fin, 'uG0', unit++, glowT.gb.texs[0]); bindTex(fin, 'uG1', unit++, glowT.gb.texs[1]);
-      if (halT && effects.some(e => e.kind === 'halation')) bindTex(fin, 'uHM', unit++, halT.m.texs[0]);
-    }
-    if (ring) {
-      bindTex(fin, 'uRing', unit++, ring.tex, gl.TEXTURE_2D_ARRAY);
-      gl.uniform1f(loc(fin, 'uRingSize'), ring.ring.size);
-      gl.uniform1f(loc(fin, 'uRingHead'), Math.max(0, ring.ring.head));
-      gl.uniform1f(loc(fin, 'uRingCount'), ring.ring.count);
-      if (time.map === 'layer') bindTex(fin, 'uMap', unit++, mapTex);
-    }
-    draw(pixelsMode ? outT.fb : null, W, H);
+    const host = cmp && cmp.on ? Object.assign({ id: FN_COMPARE_ID, kind: 'compare', enabled: true }, cmp) : null;
+    const cv = (k, d) => { const v = value ? value(host, k) : cmp[k]; return typeof v === 'number' && isFinite(v) ? v : d; };
+    passes.forEach(({ built, prog: fin }, i) => {
+      const lastPass = i === passes.length - 1;
+      gl.useProgram(fin.prog);
+      common(fin, W, H, input, W, H, pixelsMode);
+      let ci = 0;
+      for (const e of ran) {
+        if (e.kind === 'custom') { const l = loc(fin, `U_cx${ci++}`); if (l) gl.uniform4fv(l, packedCustom(e, value)); continue; }
+        const l = loc(fin, `U_${e.kind}`); if (l) gl.uniform4fv(l, packed(e, value));
+      }
+      // Passes between draw upright and straight into a target; only the last flips for read-back.
+      gl.uniform1f(loc(fin, 'uOutFlip'), pixelsMode && lastPass ? 1 : 0);
+      gl.uniform1f(loc(fin, 'uLive'), pixelsMode ? 0 : 1);
+      if (host) gl.uniform4f(loc(fin, 'uWipe'), 1, Math.max(0, Math.min(1, cv('pos', 0.5))), cv('angle', 0), Math.max(0, Math.min(1, cv('softness', 0))));
+      else gl.uniform4f(loc(fin, 'uWipe'), 0, 0.5, 0, 0);
+      let unit = 2;
+      if (built.lut) bindTex(fin, 'uLut', unit++, lutTex);
+      if (built.glow) {
+        gl.uniform1f(loc(fin, 'uGlowFloat'), floatGlow ? 1 : 0);
+        bindTex(fin, 'uQ0', unit++, glowT.qb.texs[0]); bindTex(fin, 'uQ1', unit++, glowT.qb.texs[1]);
+        bindTex(fin, 'uE0', unit++, glowT.eb.texs[0]); bindTex(fin, 'uE1', unit++, glowT.eb.texs[1]);
+        bindTex(fin, 'uG0', unit++, glowT.gb.texs[0]); bindTex(fin, 'uG1', unit++, glowT.gb.texs[1]);
+        if (halT && effects.some(e => e.kind === 'halation')) bindTex(fin, 'uHM', unit++, halT.m.texs[0]);
+      }
+      if (ring && built.time) {
+        bindTex(fin, 'uRing', unit++, ring.tex, gl.TEXTURE_2D_ARRAY);
+        gl.uniform1f(loc(fin, 'uRingSize'), ring.ring.size);
+        gl.uniform1f(loc(fin, 'uRingHead'), Math.max(0, ring.ring.head));
+        gl.uniform1f(loc(fin, 'uRingCount'), ring.ring.count);
+        if (time.map === 'layer') bindTex(fin, 'uMap', unit++, mapTex);
+      }
+      if (i > 0) bindTex(fin, 'uStage', unit++, stageT[(i - 1) % 2].texs[0]);
+      if (built.trails) {
+        bindTex(fin, 'uFb', unit++, fbT.tex);
+        gl.uniform1f(loc(fin, 'uFbOn'), fbT.valid ? 1 : 0);
+        gl.uniform1f(loc(fin, 'uFbFlip'), pixelsMode ? 1 : 0);
+        gl.uniform1f(loc(fin, 'uDt'), dt);
+      }
+      draw(lastPass ? (pixelsMode ? outT.fb : null) : stageT[i % 2].fb, W, H);
+    });
     if (pixelsMode) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, outT.fb);
       gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, input.picture.data);
+    }
+    // This frame, as drawn, for the next frame's trails (RGB: the canvas has no alpha).
+    if (trails) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, pixelsMode ? outT.fb : null);
+      scratch(); gl.bindTexture(gl.TEXTURE_2D, fbT.tex);
+      gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, W, H);
+      fbT.valid = true;
     }
     // This frame into the ring, for the frames after it.
     if (ring) {
@@ -1551,7 +2035,7 @@ export function fnCreate(canvasIn) {
       }
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    lastInfo = { effects: ran.map(e => e.kind), glow: built.glow, floatGlow, ring: ring ? { frames: ring.ring.size, w: ring.w, h: ring.h, bytes: ring.bytes, count: ring.ring.count } : null, custom: customErr };
+    lastInfo = { effects: ran.map(e => e.kind), glow: needGlow, passes: passes.length, floatGlow, ring: ring ? { frames: ring.ring.size, w: ring.w, h: ring.h, bytes: ring.bytes, count: ring.ring.count } : null, custom: customErr };
     return true;
   }
 
@@ -1559,7 +2043,7 @@ export function fnCreate(canvasIn) {
     ok: true,
     canvas,
     draw(input) { try { return drawFrame(input); } catch (e) { lastError = String(e && e.message || e); return false; } },
-    reset() { if (ringT) ringT.ring.reset(); },
+    reset() { if (ringT) ringT.ring.reset(); fbT.valid = false; lastTime = null; },
     info() { return lastInfo ? Object.assign({ error: lastError }, lastInfo) : { error: lastError }; },
     error() { return lastError; },
     dispose() {
@@ -1568,6 +2052,8 @@ export function fnCreate(canvasIn) {
       if (glowT) for (const k of GLOW_LEVELS) dropTarget(glowT[k]);
       if (halT) for (const k of HAL_LEVELS) dropTarget(halT[k]);
       dropTarget(outT);
+      if (stageT) for (const t of stageT) dropTarget(t);
+      gl.deleteTexture(fbT.tex);
       if (ringT) { gl.deleteTexture(ringT.tex); gl.deleteFramebuffer(ringT.fb); }
       const lose = gl.getExtension('WEBGL_lose_context');
       if (lose) lose.loseContext();

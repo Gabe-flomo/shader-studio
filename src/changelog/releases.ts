@@ -39,6 +39,18 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.4',
+    date: '2026-10-03',
+    title: 'Creative effects',
+    highlights: [
+      { area: 'Play', text: 'Ten new effects in Look → + Add effect: Trails, Kaleidoscope, Liquid warp, Glitch, Pixel sort, Halftone, Dither, ASCII, Neon edges and Light leaks.' },
+      { area: 'Play', text: 'Trails feed each frame into the next, zoomed, turned and drifting in colour, for ghosts, tunnels and long-exposure smears.' },
+      { area: 'Play', text: 'Each one looks good the moment you add it, with a few presets to start from (Comic, Newsprint, Handheld, Mandala, Marble, Tunnel…).' },
+      { area: 'Play', text: 'Glitch, Pixel sort, Halftone, Dither, ASCII and Neon edges see every effect above them: a Grade then Halftone prints the graded colours.' },
+      { area: 'Play', text: 'Every setting can be mapped like the rest (audio, an LFO, the mouse), and all of it works in renders and published websites.', link: { kind: 'doc', path: 'docs/finish-stack.md', label: 'How the Finish stack works' } },
+    ],
+  },
+  {
     id: '2026.10.3',
     date: '2026-10-02',
     title: 'Input names',

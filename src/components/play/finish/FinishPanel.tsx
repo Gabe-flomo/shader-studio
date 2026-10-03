@@ -216,9 +216,9 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
       {finish.effects.length === 0 && (
         <div style={{ padding: '18px 14px', borderRadius: radius.md, background: tk.bg.panel, border: `1px dashed ${tk.border.strong}`, color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}` }}>
           <div style={{ color: tk.text.secondary, font: `650 12.5px ${fontFamily.ui}`, marginBottom: 4 }}>Finish the whole picture</div>
-          Effects here work on the final frame, the shader and every layer together, like a colourist’s grade and a lens on the camera. Start with a <b>Grade</b>, or add <b>Bloom</b>, <b>Film grain</b>, a <b>CRT</b> or <b>Time displacement</b>, or write your own under <b>+ Add effect → Your effects</b>. With nothing here the picture costs nothing extra.
+          Effects here work on the final frame, the shader and every layer together, like a colourist’s grade and a lens on the camera. Start with a <b>Grade</b>, or add <b>Bloom</b>, <b>Film grain</b>, a <b>CRT</b>, <b>Trails</b>, a <b>Kaleidoscope</b>, <b>Halftone</b> dots or a <b>Glitch</b>, or write your own under <b>+ Add effect → Your effects</b>. With nothing here the picture costs nothing extra.
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-            {(['grade', 'bloom', 'grain', 'vignette'] as FinishKind[]).map(k => <Button key={k} size="sm" icon="plus" onClick={() => add(k)}>{FINISH_EFFECTS[k].label}</Button>)}
+            {(['grade', 'bloom', 'grain', 'vignette', 'trails', 'kaleido'] as FinishKind[]).map(k => <Button key={k} size="sm" icon="plus" onClick={() => add(k)}>{FINISH_EFFECTS[k].label}</Button>)}
           </div>
         </div>
       )}
@@ -245,7 +245,7 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
       </div>
       {finish.effects.length > 1 && (
         <div style={{ marginTop: 10, color: tk.text.faint, font: `11px/1.45 ${fontFamily.ui}` }}>
-          Colour effects (your own included) run top to bottom. Camera shake, lens distortion and CRT curvature bend the picture before anything reads it; chromatic aberration and time displacement choose what is read.
+          Colour effects (your own included) run top to bottom. Camera shake, lens distortion, CRT curvature, the kaleidoscope and liquid warp bend the picture before anything reads it; chromatic aberration and time displacement choose what is read. Glitch, pixel sort, halftone, dither, ASCII and neon edges see every effect above them.
         </div>
       )}
     </div>
@@ -432,7 +432,20 @@ function editorFor(e: FinishEffect, k: RowKit, touch: boolean, layers: Array<{ i
     );
     case 'time': return <TimeEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
     case 'custom': return <CustomEditor e={e} k={k} touch={touch} onReplace={onReplace} />;
-    default: return <>{finishParamsOf(e).filter(p => !p.hidden).map(p => k.num(p.key))}</>;
+    default: {
+      // Any other effect: its presets (they only set numbers), its sliders, its colours and its note, as the kit declares them.
+      const def = FINISH_EFFECTS[e.kind as FinishKind];
+      const presets = def?.presets ?? [];
+      const current = presets.find(pr => Object.entries(pr.values).every(([key, v]) => Math.abs(num(e, key) - v) < 1e-6));
+      return (
+        <>
+          {presets.length > 0 && k.row('Preset', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{presets.map(pr => <Button key={pr.name} size="sm" variant={current === pr ? 'primary' : 'secondary'} onClick={() => onPatch(pr.values)}>{pr.name}</Button>)}</div>, 'Starting points: they only set the settings below.')}
+          {finishParamsOf(e).filter(p => !p.hidden).map(p => k.num(p.key))}
+          {(def?.colours ?? []).map(c => k.colour(c.label, c.keys, c.hint))}
+          {def?.note && k.note(def.note)}
+        </>
+      );
+    }
   }
 }
 

@@ -12,7 +12,7 @@ every layer together. One ordered stack per Play record (`play.finish`).
 - Stack presets and Your effects (the device's lists): `src/play/finishLibrary.ts`.
 - UI: `src/components/play/finish/` (`FinishPanel`, `CurveEditor`,
   `ColourWheel`, `CompareHandle`, `savedLooks`).
-- Tests: `src/play/__tests__/finish.test.ts` and `finishFollowups.test.ts`
+- Tests: `src/play/__tests__/finish.test.ts`, `finishCreative.test.ts` (the creative effects and passes) and `finishFollowups.test.ts`
   (the wipe, custom effects, presets, the library); node packs carrying
   effects in `src/nodePacks/__tests__/nodePacks.test.ts`.
 
@@ -38,13 +38,23 @@ compiled once per structure and cached. Numbers are uniforms (one `vec4[]` per
 effect), so dragging a slider or a mapping never recompiles.
 
 1. **Geometry**, last effect first: camera shake, lens distortion, CRT
-   curvature bend where the picture is read.
+   curvature, the kaleidoscope and liquid warp bend where the picture is read.
 2. **Sampling**: chromatic aberration reads red and blue at offset points; time
    displacement chooses which frame each point reads.
 3. **Colour**, in the stack's order: grade, vignette, CRT mask, bloom, halation,
    grain, flicker, and your own effects wherever they sit in the stack.
 4. **The before/after wipe**, last: where it shows the picture before the stack,
    that is what is drawn (and the stack isn't run there at all).
+
+**Stage effects** read the picture *around* each point (neighbours, a cell's
+centre, a run of pixels): Glitch, Pixel sort, Halftone, Dither, ASCII and Neon
+edges (`FN_STAGE_KINDS`). Each one starts a pass of its own (`fnSegments`): the
+pass before it draws into a full-size target (premultiplied) and the stage
+effect reads that as `uStage`, so every effect above it reaches it (a Grade then
+Halftone prints the graded colours). Geometry and sampling happen in the first
+pass only; the wipe in the last only. Passes between draw upright, so only the
+last one flips for an offline render's read-back. A stack with no stage effect
+(or one only at the top) is still a single pass.
 
 Extra work only when asked for:
 
@@ -59,6 +69,10 @@ Extra work only when asked for:
 - **Time**: a `TEXTURE_2D_ARRAY` ring of reduced frames, written after the final
   pass.
 - **Curves**: baked into a 256 × 2 `RGBA8` lookup when they change.
+- **Trails**: the drawn frame is copied (`copyTexSubImage2D`, RGB) into a
+  texture after the last pass and read by the next frame. It starts over on an
+  offline render's first frame, on `reset()`, and when the size changes.
+- **Stage passes**: two full-size `RGBA8` targets, used in turn.
 
 ## Grade
 
@@ -242,6 +256,29 @@ The size shrinks further until the ring fits its cap (`fnRingSize`); at 1440 × 
 Medium keeps 32 frames at 472 × 295 (18 MB). Frames back is capped by the frames
 kept. Offline renders start the ring over on their first frame and fill it in
 order (`fnRing`), so a render is identical every time.
+
+## Creative effects
+
+Effects artists reach for in TouchDesigner, After Effects and Resolume. Each has
+a few controls, defaults that look good straight away, and presets (they only
+set numbers, like halation's; `presets` in `FN_EFFECTS`). Colours are hidden
+numbers edited as a swatch (`colours`), still mappable channel by channel.
+
+| Effect | Kind | Group | What it does | Controls |
+| --- | --- | --- | --- | --- |
+| Trails | `trails` | Time | Feedback: the last drawn frame, zoomed, turned and hue-rotated, kept under (Lighten) or blended with (Smear) the new one. Fades per 60 fps frame, scaled by the real time between frames, so renders at any frame rate match. | Persistence, Zoom, Twist, Hue drift, Smear |
+| Kaleidoscope | `kaleido` | Mirror & warp | Folds the angle round a centre into mirrored wedges; beyond the picture it repeats as mirrored tiles. 1 segment is a mirror. | Segments, Rotate, Spin, Zoom, Centre |
+| Liquid warp | `warp` | Mirror & warp | An iterated sine flow field pushes where the picture is read. Amount is squared, so the low end is fine (heat haze) and the top folds the picture (marble). | Amount, Scale, Speed, Swirl |
+| Glitch | `glitch` | Glitch | Torn rows, displaced blocks (some channel-swapped or inverted), an RGB split, all re-rolled Speed times a second. | Amount, Block size, Colour split, Speed |
+| Pixel sort | `pixelsort` | Glitch | Each line along Direction is cut into staggered intervals of varied length; within one, the 24 samples brighter than Threshold are ranked and placed dark to bright in the bright places. | Threshold, Length, Direction, Amount |
+| Halftone | `halftone` | Stylise | Dot screens sampled at each cell's centre: black only, or C, M, Y, K at print's screen angles, multiplied onto the paper colour. | Dot size, Angle, Colour, Amount, Paper |
+| Dither | `dither` | Stylise | Big pixels, quantised per channel (or by brightness between two palette colours) with an 8 × 8 Bayer threshold. | Levels, Pixel size, Dither, Colour, Dark, Light |
+| ASCII | `ascii` | Stylise | Each cell picks one of ten 5 × 5 characters (`FN_ASCII_GLYPHS`, empty to dense) by brightness; coloured from the picture or one ink. | Character size, Colour, Background, Contrast, Ink |
+| Neon edges | `neon` | Stylise | Sobel in each colour channel (so equally bright colours still edge), a soft halo, lines in the more vivid side's colour or a slow rainbow by direction; the rest darkened. | Glow, Width, Darken, Rainbow |
+| Light leaks | `leaks` | Film | Three warm blobs drift round the edges, hot in the middle and redder at the fringe, screened over the picture. | Amount, Hue, Size, Speed |
+
+Moving ones (Trails, and the others with a speed or spin above 0) keep a paused
+shader's frames coming (`fnAnimated`).
 
 ## The before/after wipe
 
@@ -441,6 +478,13 @@ renderer per frame, measured as 60 frames between two GPU syncs:
 | Halation (reference model: glow chain + three half-size passes) | 0.77 |
 | Time displacement (Medium) | 0.45 |
 | All eleven effects | 1.08 |
+
+The creative effects, measured the same way at 1440 × 900 (another machine, in
+the browser pane), each after a Grade so the stage ones run as a second pass:
+Grade alone 0.28 ms; with Kaleidoscope 0.25, Liquid warp 0.27, ASCII 0.33,
+Dither 0.34, Halftone 0.34, Glitch 0.37, Trails 0.40, Neon edges 0.43, Light
+leaks 0.46, Pixel sort 1.25 (24 samples and their ranking per pixel). All ten
+together (six passes): 3.3 ms.
 
 The live preview draws the finished frame at the overlay's size, capped at about
 2.1 million pixels, so a retina preview costs no more than a 1080p one. Renders
