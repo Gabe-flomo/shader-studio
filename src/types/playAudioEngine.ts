@@ -112,6 +112,12 @@ export interface AeRack {
   midi: string;
   /** MIDI channel 1..16, or 0 for all. */
   channel: number;
+  /**
+   * Snap to scale (docs/piano-roll-plan.md): live notes into this rack are put
+   * in the tape's scale (when its Scale is on) — the nearest scale note (ties
+   * down, Live's rule), or always up or down. Absent: notes pass as played.
+   */
+  scaleLock?: 'nearest' | 'up' | 'down';
   /** 0..2 (1 = as is). */
   volume: number;
   mute: boolean;
@@ -713,6 +719,7 @@ export function parseAudioEngine(raw: unknown): PlayAudioEngine | undefined {
     if (typeof o.pads === 'string' && ID.test(o.pads)) rack.pads = o.pads;
     if (typeof o.source === 'string' && isSendSource(o.source)) rack.source = o.source;
     if (typeof o.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.color)) rack.color = o.color;
+    if (o.scaleLock === 'nearest' || o.scaleLock === 'up' || o.scaleLock === 'down') rack.scaleLock = o.scaleLock;
     // Macro Controls: RACK_MACROS of them when the file has any. A file from before them keeps none
     // stored, and reads as RACK_MACROS empty ones (`rackMacros`); the first edit writes them.
     if (Array.isArray(o.macros)) rack.macros = parseMacros(o.macros, rack);

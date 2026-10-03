@@ -27,6 +27,7 @@ import { Button, IconButton } from '../../ui/Button';
 import { Select } from '../../ui/Select';
 import { Segmented } from '../../ui/Choice';
 import { Icon } from '../../ui/Icon';
+import { NOTE_NAMES, SCALES } from '../../../play/scales';
 import type { IconName } from '../../ui/iconPaths';
 import { Menu, type MenuItem } from '../../ui/Menu';
 import { loadRackPresets, rackPresetSummary } from '../../../play/rackPresets';
@@ -376,6 +377,7 @@ function TransportBar({ play, arr, touch, narrow }: { play: PlayRecord; arr: Pla
           options={COUNT_INS.map(n => ({ value: String(n), label: n ? `Count-in ${n} bar${n > 1 ? 's' : ''}` : 'No count-in' }))}
           onChange={v => setArr(a => ({ ...a, countIn: Number(v) as CountIn }))} />
         <BpmField key={arr.bpm} bpm={arr.bpm} height={b} />
+        <ScaleField scale={arr.scale} height={b} />
         <span title={posEdit !== null ? 'Position: bar.beat, Enter to move there' : 'Where the tape is: bar.beat.sixteenth, and time / the tape’s length (click to edit)'}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 8px', height: b, boxSizing: 'border-box', borderRadius: radius.sm, background: tk.bg.field, minWidth: 0 }}>
           {posEdit !== null ? (
@@ -412,6 +414,24 @@ function TransportBar({ play, arr, touch, narrow }: { play: PlayRecord; arr: Pla
       )}
       {midi && <div style={{ padding: '2px 0' }}><MidiStatusChip monitor /></div>}
     </div>
+  );
+}
+
+/**
+ * The tape's scale (Live's current scale): racks with Snap to scale put live
+ * notes in it, and the piano roll shows its notes. "No scale" turns it off
+ * (the root and scale are kept for next time).
+ */
+function ScaleField({ scale, height }: { scale: PlayArrangement['scale']; height: number }) {
+  const on = !!scale?.on;
+  const set = (patch: Partial<NonNullable<PlayArrangement['scale']>>) => setArr(a => ({ ...a, scale: { on: true, root: 0, name: 'major', ...a.scale, ...patch } }));
+  return (
+    <span data-tape-scale="" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} title="The tape's scale: racks with Snap to scale (in MIDI in) play every note in key">
+      {on && <Select ariaLabel="Scale root" value={String(scale!.root)} height={height} style={{ width: 62 }} options={NOTE_NAMES.map((n, i) => ({ value: String(i), label: n }))} onChange={v => set({ root: Number(v) })} />}
+      <Select ariaLabel="Scale" value={on ? scale!.name : 'off'} height={height} style={{ flex: '0 1 150px', minWidth: 0 }}
+        options={[{ value: 'off', label: 'No scale' }, ...SCALES.map(sc => ({ value: sc.id, label: sc.name }))]}
+        onChange={v => (v === 'off' ? setArr(a => (a.scale ? { ...a, scale: { ...a.scale, on: false } } : a)) : set({ on: true, name: v }))} />
+    </span>
   );
 }
 

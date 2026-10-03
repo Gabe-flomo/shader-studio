@@ -12,25 +12,16 @@
  * one is set. `rng` is passed in so a take or a test replays the same.
  */
 import type { NotesScale, NotesSpec } from '../types/play';
+import { snapNote } from './scales';
 
 export interface NoteEvent { atMs: number; bytes: [number, number, number] }
 
-const SCALES: Record<NotesScale, number[]> = {
-  chromatic: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-  major: [0, 2, 4, 5, 7, 9, 11],
-  minor: [0, 2, 3, 5, 7, 8, 10],
-  pentatonic: [0, 2, 4, 7, 9],
-  blues: [0, 3, 5, 6, 7, 10],
-};
+/** Play notes' scales, as Live's (play/scales.ts). */
+const NOTES_SCALE_IDS: Record<NotesScale, string> = { chromatic: 'chromatic', major: 'major', minor: 'minor', pentatonic: 'majorPentatonic', blues: 'minorBlues' };
 
 /** A note moved to the nearest one in the scale (ties go down). */
 export function snapToScale(note: number, scale: NotesScale, root: number): number {
-  if (scale === 'chromatic') return note;
-  const steps = SCALES[scale];
-  for (let d = 0; d <= 6; d++) {
-    for (const n of [note - d, note + d]) if (n >= 0 && n <= 127 && steps.includes((((n - root) % 12) + 12) % 12)) return n;
-  }
-  return note;
+  return scale === 'chromatic' ? note : snapNote(note, NOTES_SCALE_IDS[scale], root);
 }
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
