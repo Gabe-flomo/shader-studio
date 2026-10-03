@@ -14,6 +14,7 @@ import { buildComboExamples } from './comboExamples';
 import { buildMatrixExamples } from './matrixExamples';
 import { buildDataExamples } from './dataExamples';
 import { buildGridExamples } from './gridExamples';
+import { buildPassExamples } from './passExamples';
 import { buildConvertExamples } from './convertExamples';
 import { PLAY_EXAMPLE_INDEX } from './playExampleIndex';
 import { defaultLayer, type PlayLayer, type PlayLayerKind } from '../types/play';
@@ -12262,7 +12263,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
 };
 
 // The Learn folder is built from the node definitions at load; its last lesson reuses a graph above.
-Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildLearn3dExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildConvertExamples());
+Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildLearn3dExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildConvertExamples(), buildPassExamples());
 
 // Every example's Play setup is in the rules shape (implementation guide, phase 9): authored with actions,
 // a signal's When and links where that reads easiest, opened as the rules they play as.
