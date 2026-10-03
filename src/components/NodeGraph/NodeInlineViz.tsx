@@ -1458,87 +1458,6 @@ export function AddColorsViz({ node }: { node: GraphNode }) {
   );
 }
 
-// ─── Viz — Particle Emitter ───────────────────────────────────────────────────
-
-export function ParticleEmitterViz({ node }: { node: GraphNode }) {
-  const count    = Number(node.params.max_particles ?? 50);
-  const lifetime = Number(node.params.lifetime ?? 2.0);
-  const angleDir = Number(node.params.angle_dir ?? 90);
-  const spread   = Number(node.params.angle_spread ?? 1.0);
-  const flowMode = (node.params.flow_mode as string) ?? 'linear';
-  const rate     = Math.round(count / Math.max(0.1, lifetime));
-
-  // Simple hash for dot placement (JS-side, deterministic)
-  const jHash = (n: number, s: number) => {
-    const x = Math.abs(Math.sin(n * 127.1 + s * 311.7)) * 43758.5453;
-    return x - Math.floor(x);
-  };
-
-  const cx = 24, cy = 28;
-  const dots = Array.from({ length: 12 }, (_, i) => {
-    if (flowMode === 'noise') {
-      // Curving trails — dots scattered in swirling pattern
-      const angle = jHash(i * 0.17, 1) * Math.PI * 2;
-      const r     = 4 + jHash(i * 0.37, 2) * 18;
-      const curl  = angle + r * 0.08;
-      return {
-        x: cx + Math.cos(curl) * r * 0.7,
-        y: cy + Math.sin(curl) * r * 0.5,
-        alpha: 0.35 + jHash(i, 3) * 0.65,
-        size: 1.5 + jHash(i * 0.5, 4) * 2,
-      };
-    } else if (flowMode === 'gravity') {
-      // Distributed across canvas, pulled toward center
-      return {
-        x: jHash(i * 0.17, 1) * 48,
-        y: jHash(i * 0.23, 1) * 48,
-        alpha: 0.35 + jHash(i, 2) * 0.65,
-        size: 1.5 + jHash(i * 0.5, 3) * 2,
-      };
-    } else {
-      // linear: fan out from center based on angle/spread
-      const base = (angleDir * Math.PI / 180);
-      const rand = jHash(i * 0.31, 0) * Math.PI * 2;
-      const a    = rand + (base - rand) * (1 - spread);
-      const d    = 4 + (i / 11) * 18;
-      return {
-        x: cx + Math.cos(a) * d,
-        y: cy - Math.sin(a) * d, // flip for screen coords
-        alpha: 0.3 + (1 - i / 11) * 0.7,
-        size: 1.5 + (1 - i / 11) * 2,
-      };
-    }
-  });
-
-  const modeLabel = flowMode === 'noise' ? 'noise flow' : flowMode === 'gravity' ? 'gravity field' : `${count} pts • ${lifetime.toFixed(1)}s`;
-
-  return (
-    <div style={{ ...vizContainer(), padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <svg width={48} height={48} style={{ flexShrink: 0, overflow: 'visible' }}>
-        {flowMode === 'linear' && (
-          <circle cx={cx} cy={cy} r={3} fill={pal.mauve} opacity={0.9} />
-        )}
-        {dots.map((d, i) => (
-          <circle
-            key={i}
-            cx={d.x} cy={d.y} r={d.size / 2}
-            fill={pal.mauve}
-            opacity={d.alpha}
-          />
-        ))}
-      </svg>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <span style={{ fontSize: '12px', color: pal.mauve, fontFamily: MONO, fontWeight: 600 }}>
-          ~{rate} / sec
-        </span>
-        <span style={{ fontSize: '9px', color: pal.overlay0, lineHeight: 1.3 }}>
-          {modeLabel}
-        </span>
-      </div>
-    </div>
-  );
-}
-
 // ─── Shaper Curve Viz ─────────────────────────────────────────────────────────
 
 function evalShaper(type: string, params: Record<string, unknown>): (x: number) => number {
@@ -1771,7 +1690,6 @@ const TYPE_COLORS: Record<DataType, string> = {
   mat3:        '#e8a020',
   scene3d:     '#cc88aa',
   spacewarp3d: '#aa88cc',
-  particle:    pal.yellow,
 };
 
 export function SubgraphMiniViz({ node }: { node: GraphNode }) {
@@ -5003,7 +4921,6 @@ function NodeInlineVizSwitch({ node }: { node: GraphNode }) {
     case 'mix':            return <MixViz                 node={node} />;
     case 'mapRange':       return <MapRangeViz            node={node} />;
     case 'addColor':       return <AddColorsViz           node={node} />;
-    case 'particleEmitter': return <ParticleEmitterViz   node={node} />;
     case 'expEase':
     case 'doubleExpSeat':
     case 'doubleExpSigmoid':
@@ -5307,7 +5224,6 @@ export const INLINE_VIZ_TYPES = new Set<string>([
   'posterize', 'grain', 'hueRange', 'audioInput',
   'colorRamp', 'blackbody', 'brightnessContrast', 'grid', 'gridLayout', 'neighborDist', 'printFloat', 'printText', 'waveTexture',
   'smoothstep', 'clamp', 'mix', 'addColor',
-  'particleEmitter',
   'expEase', 'doubleExpSeat', 'doubleExpSigmoid', 'logisticSigmoid',
   'circularEaseIn', 'circularEaseOut', 'doubleCircleSeat', 'doubleCircleSigmoid',
   'doubleEllipticSigmoid', 'quadBezierShaper', 'cubicBezierShaper',

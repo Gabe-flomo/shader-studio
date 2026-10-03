@@ -354,7 +354,7 @@ describe('exports and Present carry the frozen results', () => {
   });
 
   it('puts results (Normalize applied) and names in the bundle, never the notebook or the file', () => {
-    const compiled: CompiledForWeb = { fragmentShader: fs, paramUniforms: {}, paramBindings: {}, textureUniforms: {}, videoUniforms: {}, audioUniforms: {}, liveUniforms: {}, isStateful: false, particleSystems: [] };
+    const compiled: CompiledForWeb = { fragmentShader: fs, paramUniforms: {}, paramBindings: {}, textureUniforms: {}, videoUniforms: {}, audioUniforms: {}, liveUniforms: {}, isStateful: false };
     const { input, missing } = webInputFrom(compiled, play, { title: 'T', aspect: 'free', datasets });
     expect(missing).toEqual([]);
     expect(Object.keys(input.datasets ?? {}).sort()).toEqual(['named', 'notrun', 'temps', 'unused']);

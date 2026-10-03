@@ -1,20 +1,5 @@
 import type { NodeGraph } from '../types/nodeGraph';
 
-export interface ParticleSystemData {
-  /** ID of the pRender node that terminates this chain */
-  nodeId: string;
-  vertexShader: string;
-  fragmentShader: string;
-  /** Number of particles — baked from pInit.count */
-  count: number;
-  /** Shape index — baked from pInit.shape (0=Sphere, 1=Ball, 2=Box, 3=Disk, 4=Ring, 5=Spiral) */
-  shape: number;
-  /** Float param uniforms for this chain — merged into CompilationResult.paramUniforms */
-  paramUniforms: Record<string, number | number[]>;
-  /** `${nodeId}::${paramKey}` → uniform name — merged into CompilationResult.paramBindings */
-  paramBindings: Record<string, string>;
-}
-
 export interface CompilationResult {
   vertexShader: string;
   fragmentShader: string;
@@ -77,8 +62,6 @@ export interface CompilationResult {
   /** Maps marchLoopGroup nodeId → dynamic acc* output sockets added at compile time.
    *  Store uses this to patch node.outputs so sockets appear on the card. */
   mlgDynamicOutputs?: Map<string, Record<string, { type: string; label: string }>>;
-  /** One entry per vParticles node in the graph — ShaderCanvas creates a THREE.Points for each. */
-  particleSystems?: ParticleSystemData[];
 }
 
 export const VERTEX_SHADER = `varying vec2 vUv;

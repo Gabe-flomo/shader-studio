@@ -6,7 +6,7 @@
  *   ShaderStudioPlay.mount(element, bundle, options) → { destroy(), pause(), play(), get(id), set(id, v), fire(id), still(), renderAt(t, o), renderAtAsync(t, o), seekVideos(t), setPixelSize(s) }
  *
  * bundle:  { title, fragmentShader, uniforms, paramBindings, play, aspect, passes?, media? }
- *   passes: { stateful, echo: { copies, delay } | null, particles: [{ vertexShader, fragmentShader, count, shape }] }
+ *   passes: { stateful, echo: { copies, delay } | null }
  *   datasets: { [id]: { name, result, stream? } }  each dataset's frozen result; `stream`
  *             ({ transport: 'poll' | 'websocket' | 'sse', address, interval, mode, window, format?,
  *             normalize }) makes the page reconnect to a live feed and add its rows (needs the network)
@@ -74,8 +74,7 @@
  *
  * Around the fragment shader it runs what ShaderCanvas runs: previous-frame
  * feedback (ping-pong targets on u_prevFrame), echo (a ring of copies on
- * u_echo0…), GPU particle systems (points drawn additively with the app's
- * camera), images and videos on their samplers, and Audio Input nodes' bands
+ * u_echo0…), the graph's Particles nodes, images and videos on their samplers, and Audio Input nodes' bands
  * from their embedded song or the live input. A MIDI Input node's outputs
  * stay at rest.
  *
@@ -281,38 +280,6 @@ void main() {
   gl_FragColor = vec4(clamp(c.rgb + d * amp, 0.0, 1.0), c.a);
 }`;
   const ditherSeed = n => (n % 4096) + 0.5;
-  // A particle chain's vertex shader with what Three.js declares for it, and its point size scaled to CSS pixels.
-  function particleVertex(src) {
-    return 'uniform mat4 modelViewMatrix;\nuniform mat4 projectionMatrix;\nattribute vec3 position;\n' +
-      src.replace(/void\s+main\s*\(\s*\)/, 'void ssp_main()') +
-      '\nuniform float ssp_pointScale;\nvoid main() { ssp_main(); gl_PointSize *= ssp_pointScale; }\n';
-  }
-  // Mirrors buildParticleGeometry in ShaderCanvas: 0 sphere, 1 ball, 2 box, 3 disk, 4 ring, 5 spiral.
-  function particleGeometry(count, shape) {
-    const positions = new Float32Array(count * 3), normDists = new Float32Array(count), R = Math.random;
-    for (let i = 0; i < count; i++) {
-      let x = 0, y = 0, z = 0, nd = 1;
-      if (shape === 0 || shape === 1) {
-        const th = R() * Math.PI * 2, ph = Math.acos(2 * R() - 1), r = shape === 1 ? Math.cbrt(R()) : 1;
-        x = r * Math.sin(ph) * Math.cos(th); y = r * Math.sin(ph) * Math.sin(th); z = r * Math.cos(ph); nd = r;
-      } else if (shape === 2) {
-        x = R() * 2 - 1; y = R() * 2 - 1; z = R() * 2 - 1; nd = Math.min(1, Math.sqrt(x * x + y * y + z * z) / Math.sqrt(3));
-      } else if (shape === 3) {
-        const a = R() * Math.PI * 2, r = Math.sqrt(R()); x = r * Math.cos(a); z = r * Math.sin(a); nd = r;
-      } else if (shape === 4) {
-        const a = R() * Math.PI * 2, r = 0.85 + R() * 0.3; x = r * Math.cos(a); z = r * Math.sin(a); y = (R() - 0.5) * 0.1; nd = Math.min(r, 1);
-      } else if (shape === 5) {
-        const t = i / count, a = t * Math.PI * 8; x = t * Math.cos(a); z = t * Math.sin(a); y = (t - 0.5) * 0.3; nd = t;
-      }
-      positions[i * 3] = x; positions[i * 3 + 1] = y; positions[i * 3 + 2] = z; normDists[i] = nd;
-    }
-    return { positions, normDists };
-  }
-  // THREE.PerspectiveCamera's projection (column-major).
-  function perspective(fovDeg, aspect, near, far) {
-    const f = 1 / Math.tan(fovDeg * Math.PI / 360), nf = 1 / (near - far);
-    return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0]);
-  }
   // The app's font atlas (ShaderCanvas buildFontTexture): 16×16 ASCII cells of 64 px.
   let atlas = null;
   function fontAtlas() {
@@ -676,26 +643,22 @@ void main() {
     const media = bgOnly ? { audio: (B.media || {}).audio } : B.media || {};
     const stateful = !!passes.stateful;
     const echoCfg = passes.echo && passes.echo.copies > 0 ? passes.echo : null;
-    const particleDefs = passes.particles || [];
     const VS = 'attribute vec2 position; varying vec2 vUv; void main(){ vUv = position * 0.5 + 0.5; gl_Position = vec4(position, 0.0, 1.0); }';
     const shader = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, toGlsl(src, type === gl.VERTEX_SHADER, gl2, () => gl.getExtension('OES_standard_derivatives'))); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) || 'shader failed'); return s; };
-    // Attributes at fixed slots so every program shares one layout: 0 position, 1 a_normDist.
+    // The position attribute at slot 0, so every program shares one layout.
     const link = (vs, fs) => {
       const p = gl.createProgram();
       gl.attachShader(p, shader(gl.VERTEX_SHADER, vs));
       gl.attachShader(p, shader(gl.FRAGMENT_SHADER, fs));
       gl.bindAttribLocation(p, 0, 'position');
-      gl.bindAttribLocation(p, 1, 'a_normDist');
       gl.linkProgram(p);
       if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p) || 'link failed');
       return p;
     };
     let program, blitProgram = null;
-    const particles = [];
     try {
       program = link(VS, bgOnly ? BG_ONLY_FRAG : B.fragmentShader);
       if (stateful || echoCfg) blitProgram = link(VS, BLIT_FRAG);
-      for (const ps of particleDefs) particles.push(Object.assign({ program: link(particleVertex(ps.vertexShader), ps.fragmentShader) }, ps));
     } catch (e) { stage.append(el('div', 'ssp-error', 'The shader did not compile here: ' + e.message)); return { destroy() {} }; }
     gl.useProgram(program);
     const quad = gl.createBuffer();
@@ -1193,37 +1156,6 @@ void main() {
         v.shown = e.currentTime;
         upload(v.tex, e, false);
       }
-    };
-    // GPU particle systems: the app's THREE.Points, drawn additively over the picture with its camera.
-    for (const p of particles) {
-      const g = particleGeometry(p.count, p.shape);
-      p.pos = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, p.pos); gl.bufferData(gl.ARRAY_BUFFER, g.positions, gl.STATIC_DRAW);
-      p.dist = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, p.dist); gl.bufferData(gl.ARRAY_BUFFER, g.normDists, gl.STATIC_DRAW);
-      p.locs = new Map();
-    }
-    const drawParticles = () => {
-      const w = glCanvas.width, h = glCanvas.height;
-      const proj = perspective(60, w / Math.max(1, h), 0.01, 100);
-      const view = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, -3, 1]);
-      // The app draws at one device pixel per CSS pixel; keep the points the same size on screen.
-      const pointScale = w / Math.max(1, fitBox.clientWidth);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.viewport(0, 0, w, h);
-      gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-      for (const p of particles) {
-        gl.useProgram(p.program);
-        const pl = n => { if (!p.locs.has(n)) p.locs.set(n, gl.getUniformLocation(p.program, n)); return p.locs.get(n); };
-        gl.uniformMatrix4fv(pl('projectionMatrix'), false, proj);
-        gl.uniformMatrix4fv(pl('modelViewMatrix'), false, view);
-        setUniformAt(pl('ssp_pointScale'), pointScale);
-        setUniformAt(pl('u_time'), time);
-        for (const k in uniformValues) setUniformAt(pl(k), uniformValues[k]);
-        gl.bindBuffer(gl.ARRAY_BUFFER, p.pos); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ARRAY_BUFFER, p.dist); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 0, 0);
-        gl.drawArrays(gl.POINTS, 0, p.count);
-      }
-      gl.disable(gl.BLEND);
-      gl.disableVertexAttribArray(1);
     };
     // The pad grid (play.padGrid, kit/midi.js): pads from the shared MIDI listener, applied on this player's clock.
     const KM = typeof SSKit !== 'undefined' && SSKit.midi ? SSKit.midi : null;
@@ -2775,7 +2707,6 @@ void main() {
         // (90 frames at 60 fps), which is what the feedback looks like once it has built up.
         if (reduced && stateful && frame === 1 && !held) for (let i = 0; i < 89; i++) { drawPicture(); time += 1 / 60; }
         drawPicture();
-        if (particles.length) drawParticles();
         if (qPlan && !qPlan.direct) { const self = qPlan.items.find(i => i.item.kind === 'graph' && i.item.graph === 'this'); if (self) captureQueue(self.item.id); }
       }
       if (qPlan) for (const { item } of qPlan.items) {
@@ -3117,7 +3048,7 @@ void main() {
     shared.camera = null; shared.cameraStream = null;
   }
   // internals: the pure GPU and audio helpers, for tests.
-  window.ShaderStudioPlay = { version: 8, mount, enableMidi, listen: startLive, enableCamera, stopCamera, enableHands, internals: { toGlsl, particleGeometry, perspective, bandAmplitude, particleVertex, readerBandDb, readerRead, readerSmooth, readerGate, readerTarget, triggerKey } };
+  window.ShaderStudioPlay = { version: 8, mount, enableMidi, listen: startLive, enableCamera, stopCamera, enableHands, internals: { toGlsl, bandAmplitude, readerBandDb, readerRead, readerSmooth, readerGate, readerTarget, triggerKey } };
 
   // A full-page export: mount on #play with the page's options (URL params can override).
   if (window.PLAY_BUNDLE && document.getElementById('play')) {

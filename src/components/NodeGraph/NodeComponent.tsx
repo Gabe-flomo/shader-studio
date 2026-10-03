@@ -1,4 +1,5 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import { REMOVED_NODE_TYPES, removedNodeMessage } from '../../nodes/definitions/removedNodes';
 import { audioAccept, isAudioFile, notAudioMessage } from '../../lib/audioAccept';
 
 // Inject save-flash keyframe once
@@ -765,8 +766,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.id]);
 
-  if (!def) return null;
-
   /** Shell shared by the special cards (loop index, media inputs, scope, march loop ends). */
   const specialCardStyle = (extra?: React.CSSProperties): React.CSSProperties => ({
     position: 'absolute', left: node.position.x, top: node.position.y, width: 360, boxSizing: 'border-box',
@@ -781,6 +780,38 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     borderBottom: `1px solid ${tk.border.subtle}`, cursor: 'grab',
     background: tk.bg.head, borderRadius: `${radius.card}px ${radius.card}px 0 0`,
   };
+
+  if (!def) {
+    // A node type that was taken out of the app (an old save): a card that says so and can be removed.
+    const removed = removedNodeMessage(node.type);
+    if (!removed) return null;
+    return (
+      <div
+        data-node-id={node.id}
+        style={specialCardStyle({ cursor: 'default', boxShadow: `0 0 0 1.5px ${tc.red}, ${tk.shadow.card}` })}
+        onMouseDown={e => {
+          e.stopPropagation();
+          setSelectedNodeId(node.id);
+          selectNode(node.id, e.shiftKey || e.metaKey);
+          startNodeMouseDrag({
+            nodeId: node.id,
+            cardEl: (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-node-id]'),
+            startClient: { x: e.clientX, y: e.clientY },
+            startPosition: node.position,
+            getZoom,
+            threshold: 0,
+            commit: pos => updateNodePosition(node.id, pos),
+          });
+        }}
+      >
+        <div style={specialHeadStyle}>
+          <span style={{ fontWeight: 600, fontSize: 13.5, color: tc.red }}>{REMOVED_NODE_TYPES[node.type].label}</span>
+          <button onMouseDown={e => e.stopPropagation()} onClick={() => removeNode(node.id)} title="Remove this node" aria-label="Remove this node" style={{ background: 'none', border: 'none', color: tc.red, cursor: 'pointer', fontSize: '13px' }}>✕</button>
+        </div>
+        <div style={{ padding: '10px 14px', color: tk.text.secondary, lineHeight: 1.45 }}>{removed}.</div>
+      </div>
+    );
+  }
 
   // ── Loop Index node special card ─────────────────────────────────────────────
   if (node.type === 'loopIndex') {

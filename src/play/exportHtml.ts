@@ -100,8 +100,6 @@ export interface PlayPasses {
   stateful: boolean;
   /** Echo nodes: `copies` snapshots `delay` frames apart, bound to u_echo0… */
   echo: { copies: number; delay: number } | null;
-  /** GPU particle chains, drawn additively over the picture. */
-  particles: { vertexShader: string; fragmentShader: string; count: number; shape: number }[];
 }
 
 /** One input's file. `src` is a data URL, or null when none is loaded or it is too big to carry (`bytes` > 0). */
@@ -416,7 +414,7 @@ export function playBundle(input: PlayHtmlInput) {
     paramBindings: input.paramBindings,
     play,
     aspect: aspect ? { id: aspect.id, ratio: aspect.ratio } : { id: 'free', ratio: null },
-    ...(input.passes && (input.passes.stateful || input.passes.echo || input.passes.particles.length) ? { passes: input.passes } : {}),
+    ...(input.passes && (input.passes.stateful || input.passes.echo) ? { passes: input.passes } : {}),
     ...(input.media ? { media: runtimeMedia(input.media) } : {}),
     ...(input.handAssets && usesHands(input.play) && !input.play.hands?.source ? { hands: input.handAssets } : {}),
     ...(bundleTracks(input) ? { tracks: bundleTracks(input) } : {}),

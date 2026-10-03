@@ -36,7 +36,7 @@ function allNodes(nodes: GraphNode[], out = new Map<string, GraphNode>()): Map<s
 export function featuresOf(c: CompiledForWeb): SourceFeatures {
   return {
     textureUniforms: c.textureUniforms, videoUniforms: c.videoUniforms, audioUniforms: c.audioUniforms, liveUniforms: c.liveUniforms,
-    isStateful: c.isStateful, particleSystems: c.particleSystems.length, usesEcho: /\bu_echo0\b/.test(c.fragmentShader),
+    isStateful: c.isStateful, usesEcho: /\bu_echo0\b/.test(c.fragmentShader),
     ...(/\bu_ds_\w+/.test(c.fragmentShader) ? { usesData: true } : {}),
   };
 }
@@ -50,7 +50,7 @@ export function sourceLimits(s: PresentSource): string[] {
   if (!s.features) return s.limits;
   const f = s.features;
   // Everything the snapshot knows, whatever the runtime's list asks about.
-  const features = { ...f, particleSystems: new Array(f.particleSystems).fill(null), play: s.bundle.play };
+  const features = { ...f, play: s.bundle.play };
   return unsupportedFeatures(features as GraphFeatures & typeof features);
 }
 
@@ -79,7 +79,7 @@ export function snapshotFromGraph(nodes: GraphNode[], play: PlayRecord, meta: { 
   let result;
   try { result = compileGraph({ nodes }); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
   if (!result.success || !result.fragmentShader) return { ok: false, error: result.errors?.join('; ') || 'The graph did not compile' };
-  const compiled: CompiledForWeb = { ...result, particleSystems: result.particleSystems ?? [] };
+  const compiled: CompiledForWeb = result;
   const { input, missing } = webInputFrom(compiled, play, { title: meta.title, aspect: meta.aspect ?? 'free', media: meta.media ?? { textures: {}, videos: {}, audio: [] }, backgroundGraphs: queueGraphsForWeb(play).graphs, datasets: meta.datasets });
   const byId = allNodes(nodes);
   const shaderNodes: SourceNode[] = [];

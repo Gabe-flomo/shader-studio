@@ -33,7 +33,6 @@ export interface SourceFeatures {
   audioUniforms: Record<string, string>;
   liveUniforms: Record<string, string>;
   isStateful: boolean;
-  particleSystems: number;
   usesEcho: boolean;
   /** Reads a Data node's dataset (not carried into pages yet). */
   usesData?: boolean;
@@ -279,12 +278,8 @@ function parsePasses(v: unknown): PlayPasses | undefined {
   if (!isObj(v)) return undefined;
   const e = isObj(v.echo) ? v.echo : null;
   const echo = e && num(e.copies) && num(e.delay) ? { copies: Math.max(1, Math.min(16, Math.round(num(e.copies)!))), delay: Math.max(1, Math.min(600, Math.round(num(e.delay)!))) } : null;
-  const particles: PlayPasses['particles'] = [];
-  if (Array.isArray(v.particles)) for (const p of v.particles.slice(0, 16)) {
-    if (!isObj(p) || typeof p.vertexShader !== 'string' || typeof p.fragmentShader !== 'string') continue;
-    particles.push({ vertexShader: p.vertexShader, fragmentShader: p.fragmentShader, count: Math.max(1, Math.min(4_000_000, Math.round(num(p.count) ?? 1))), shape: Math.round(num(p.shape) ?? 0) });
-  }
-  return { stateful: v.stateful === true, echo, particles };
+  // Older snapshots may carry `particles` (the removed particle chains): dropped.
+  return { stateful: v.stateful === true, echo };
 }
 
 /** A media file: only data URLs of images, video and audio travel (never a link to somewhere else). */
@@ -373,7 +368,7 @@ function parseFeatures(v: unknown): SourceFeatures | undefined {
   return {
     textureUniforms: stringRecord(v.textureUniforms), videoUniforms: stringRecord(v.videoUniforms),
     audioUniforms: stringRecord(v.audioUniforms), liveUniforms: stringRecord(v.liveUniforms),
-    isStateful: v.isStateful === true, particleSystems: Math.max(0, Math.round(num(v.particleSystems) ?? 0)), usesEcho: v.usesEcho === true,
+    isStateful: v.isStateful === true, usesEcho: v.usesEcho === true,
     ...(v.usesData === true ? { usesData: true } : {}),
   };
 }

@@ -13,7 +13,6 @@ import { audioUniformName } from './audioUniformNames';
 import { coerce, coerceLossy } from '../lib/typesCompatible';
 import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { loopColour } from '../nodes/definitions/scene3d';
-import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
 import { frozenValueOf } from '../nodes/sliderFreeze';
 import {
   getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed,
@@ -697,9 +696,6 @@ export class ShaderAssembler {
   }
 
   private compileNode(node: GraphNode): void {
-        // Particle pipeline nodes are compiled by particleAssembler — skip here
-        if (PARTICLE_PIPELINE_TYPES.has(node.type)) return;
-
         const def = getNodeDefinitionFor(node);
         if (!def) return;
         const inField = this.fieldDepth > 0;

@@ -98,7 +98,6 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Chroma',   types: ['chromaShift', 'chromaticAberrationAuto', 'chromaticAberration'] },
     { label: 'Lighting', types: ['light', 'glowToColor', 'light2d', 'radianceCascadesApprox'] },
     { label: 'Warp',     types: ['gravitationalLens', 'floatWarp'] },
-    { label: 'Other',    types: ['particleEmitter'] },
   ],
   'Color Grading': [
     { label: 'Tone',  types: ['liftGammaGain', 'toneCurve', 'shadowsHighlights', 'toneMap'] },

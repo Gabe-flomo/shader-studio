@@ -2,6 +2,18 @@ import type { GraphNode } from '../types/nodeGraph';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 import { typesCompatible } from '../lib/typesCompatible';
 import { fieldChainProblems, fieldInputKeys } from './fieldSockets';
+import { removedNodeMessage } from '../nodes/definitions/removedNodes';
+
+/** Removed node types anywhere in the graph, groups included, as their messages (once each). */
+function removedNodeErrors(nodes: GraphNode[], out = new Set<string>()): Set<string> {
+  for (const n of nodes) {
+    const msg = removedNodeMessage(n.type);
+    if (msg) out.add(msg);
+    const sg = (n.params as Record<string, unknown> | undefined)?.subgraph as { nodes?: unknown } | undefined;
+    if (sg && Array.isArray(sg.nodes)) removedNodeErrors(sg.nodes as GraphNode[], out);
+  }
+  return out;
+}
 
 export interface ValidationResult {
   valid: boolean;
@@ -18,9 +30,11 @@ export function validateGraph(nodes: GraphNode[]): ValidationResult {
   if (outputNodes.length === 0) errors.push('Graph must have an Output node');
   if (outputNodes.length > 1) errors.push('Graph can only have one Output node');
 
-  // All types registered
+  // All types registered. A removed one says so, and what replaces it.
+  const removed = removedNodeErrors(visibleNodes);
+  errors.push(...removed);
   for (const node of visibleNodes) {
-    if (!getNodeDefinitionFor(node)) {
+    if (!getNodeDefinitionFor(node) && !removedNodeMessage(node.type)) {
       errors.push(`Unknown node type: ${node.type}`);
     }
   }

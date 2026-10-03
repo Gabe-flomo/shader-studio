@@ -58,11 +58,6 @@ const TYPE_ABBREV: Record<string, string> = {
   fieldCell: 'fcell', arrayField: 'arr',
   gridUV: 'guvt', pixelate: 'pxl', dotMask: 'dot', sdfMask: 'sdmk',
   lumaRadius: 'lrad', rgbToCMYK: 'cmyk', cmykHalftone: 'cmykht',
-  // Vertex Particles
-  vParticles: 'vpart',
-  // Particle Pipeline
-  pInit: 'pinit', pRotate: 'prot', pWave: 'pwave',
-  pColorDist: 'pcdist', pSize: 'psz', pRender: 'prend',
   // Misc
   expr: 'expr', customFn: 'cfn', scope: 'scope',
   sineLFO: 'lfo', squareLFO: 'slfo', sawtoothLFO: 'sawlfo',

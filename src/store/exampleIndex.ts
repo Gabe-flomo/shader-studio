@@ -32,6 +32,11 @@ export type ExampleGraph = {
   source?: SourceCredit;
   /** Datasets the graph's Data nodes read (src/data/types.ts), loaded with it. */
   datasets?: DatasetsRecord;
+  /**
+   * Pictures for nodes' image slots, loaded with the graph: `${nodeId}::${slot}` → a data URL
+   * (a bundled `?inline` asset), as if picked with the card's Load image.
+   */
+  images?: Record<string, string>;
 };
 
 /** What an example list shows for one example, without loading it. */
@@ -104,8 +109,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   spiralWorld3D: { label: "3D: Spiral World" },
   softMetaballs3D: { label: "3D: Soft Metaballs" },
   neonFloorGrid: { label: "Neon Floor Grid" },
-  particleFlowDrift: { label: "Particles: Flow Field" },
-  particleRain: { label: "Particles: Rain" },
+  particleFlowDrift: { label: "Particles: Flow Field", description: "A Particles node in a flow field: an FBM noise wired into Flow (Around) steers a quarter of a million particles along its contours, drawn as fine streaks coloured by their heading." },
+  particleRain: { label: "Particles: Rain", description: "A Particles node as rain: a line emitter at the top (through its Emitter socket), gravity and a little wind, and Thread drawing each drop as a falling streak." },
   motionBlurTrails: { label: "Motion Blur Trails" },
   tiltShiftScene: { label: "Tilt-Shift", description: "Tilt-Shift Blur keeps one horizontal band sharp and blurs away from it, like a miniature. The scene is a perspective floor grid so the depth reads." },
   rayMarchOutputs3D: { label: "3D: Hello Sphere" },
@@ -138,8 +143,12 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   webcamCmyk: { label: "Webcam CMYK", description: "Video Input (choose a file or the camera) sampled through Pixelate, then CMYK Halftone prints it as four rotated dot screens. Swap the halftone for Grid UV → Luma Radius → Dot Mask for a single-ink version." },
   particlesRoundShape: { label: "Particles round a Shape", description: "A Particles node talking to a 2D shader: a Circle SDF wired into Obstacle parts a breeze of particles round it, and an FBM noise wired into Flow swirls them along its contours." },
   particlesIn3dScene: { label: "Particles in a 3D Scene", description: "A Particles node inside a raymarched scene: the March Camera's rays give it the same camera and the March Loop's distance hides the particles behind the sphere." },
+  particleSoundField: { label: "Particles: Sound Field", description: "A still field of particles that sound ripples through: rings travel out with the sound and every hit fires a shockwave. Load a song on the Audio Input card; a steady beat stands in until then." },
+  particleDustInAir: { label: "Particles: Dust in Air", description: "The Dust in air preset: weightless motes drifting in 3D, lit by one warm light and blurred by a shallow focus, over a dim shaft of light." },
+  particleEmbers: { label: "Particles: Embers", description: "The Embers preset on a line at the bottom of the picture: sparks rise, curl and fade from yellow to red, lit by two orbiting lights." },
+  particleImageDissolve: { label: "Particles: Image Dissolve", description: "The Image dissolve preset: a photo made of particles that blows away on the wind and forms again, every twelve seconds." },
   inkInWater: { label: "Ink in Water", description: "A Particles node in its Ink look: a million particles curl through 3D currents into dark cores and hair-fine threads on white paper, seen through a drifting camera with a shallow focus." },
-  particleGalaxy: { label: "Particle Galaxy", description: "The particle pipeline: P: Init seeds points on a disc, P: Rotate spins them with differential twist, P: Wave adds a breathing ripple, P: Color by Distance and P: Size shade them, P: Render draws them additively over the FBM nebula below." },
+  particleGalaxy: { label: "Particle Galaxy", description: "A Particles node: a quarter of a million particles born on a ring, swirled round the centre while it pulls them in, curled by turbulence, coloured by their speed and lit by two orbiting lights, over an FBM nebula." },
   litStillLife: { label: "Lit Still Life", description: "The full 3D lighting stack. A Scene Group holds a capsule, a cone and a ground plane joined by smooth Union; the March Loop Group finds the surface; SDF AO and Soft Shadow read the scene again; Multi Light combines sun, sky and bounce; Tone Map finishes." },
   spaceAtlas: { label: "Space Atlas", description: "A 2D space node reshapes the plane before any pattern sees it. Möbius Transform (pole animated by Time) feeds Truchet tiles; Scanlines finish it. Swap in Polar, Log-Polar or Kaleidoscope to compare the maps — the card preview shows each one as a checkerboard." },
   publishAndKeyframes: { label: "Publish a Node + Keyframes", description: "An iterated group (3 passes: rotate, tile, circle) is a node in waiting — select it and press ✦ Publish as node to make it one, with Iterations as a slider. SDF Glow's Falloff has a keyframe track (see the Keys tab): 6 → 40 over three seconds, looping." },
@@ -219,7 +228,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Iterated Groups",   color: ctp.green, keys: ['groupCarryRings','groupCarryFBM','groupCarryDomainWarp','publishAndKeyframes'] },
   { label: "Fractals",          color: ctp.mauve, keys: ['newtonFractalZ5','gravitationalLens'] },
   { label: "Physics",           color: ctp.teal, keys: ['chladniFieldQuickDemo','chladniModeFreqDemo'] },
-  { label: "Particles",         color: ctp.pink, keys: ['particleFlowDrift','particleRain','particleGalaxy','inkInWater','particlesRoundShape','particlesIn3dScene'] },
+  { label: "Particles",         color: ctp.pink, keys: ['particlesRoundShape','particlesIn3dScene','particleSoundField','inkInWater','particleImageDissolve','particleDustInAir','particleEmbers','particleFlowDrift','particleRain','particleGalaxy'] },
   { label: "Inputs",            color: ctp.teal, keys: ['midiGlowKeys'] },
   { label: "Blur & Lens",       color: ctp.blue, keys: ['motionBlurTrails','tiltShiftScene','dofOrbitOrbs','dofDepthBlur','comboBlurDirectional'] },
   { label: "Functions",         color: ctp.sapphire, keys: ['ringGlow'] },
