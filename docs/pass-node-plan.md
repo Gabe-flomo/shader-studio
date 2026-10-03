@@ -1,6 +1,6 @@
 # Pass node: render to texture (plan, 2026-10-03)
 
-**Status:** plan only, no code yet.
+**Status:** phases 0, 1, 2 and 4 built (Pass node, Sample / Edges / Blur / Glow / Displace (texture), Previous feedback, live and offline rendering, the Passes 1 · Edge glow example). Phases 3, 5 and 6 are next.
 
 ## In plain words
 
