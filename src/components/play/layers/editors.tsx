@@ -353,7 +353,9 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
         )}
         {f.seg('Born', 'spawn', [
           { value: 'anywhere', label: 'Anywhere' }, { value: 'edges', label: 'Edges' }, { value: 'center', label: 'Centre' }, { value: 'null', label: 'At a null' },
-        ], 'Where new and respawned particles appear. Emitter shapes and emitter nulls take over when there are any.')}
+          { value: 'motion', label: 'Where it moves', title: 'Where the camera sees movement (needs a Camera layer; it can be hidden)' },
+          { value: 'bright', label: 'Bright parts', title: 'On the bright parts of the picture, the brightest most' },
+        ], 'Where new and respawned particles appear. Emitter shapes and emitter nulls take over when there are any. Where it moves needs a Camera layer (hide it to keep only the particles); with nothing moving yet they appear anywhere, and after that where something last moved.')}
         {g('spawn') === 'null' && nullPick('The null particles are born around.')}
         {(g('spawn') === 'center' || g('spawn') === 'null') && f.prop('spawnRadius')}
         {f.seg('At the edges', 'edges', [

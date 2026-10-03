@@ -32,6 +32,18 @@ describe('the history', () => {
     useDetail.getState().close();
     expect(useDetail.getState().at).toBe(-1);
   });
+
+  it('kept open (floating) holds as it moves on, and ends when closed', () => {
+    const d = useDetail.getState();
+    d.close();
+    expect(useDetail.getState().pinned).toBe(false);
+    d.open({ kind: 'control', id: 'a' });
+    useDetail.getState().setPinned(true);
+    useDetail.getState().open({ kind: 'source', id: 's' });
+    expect(useDetail.getState().pinned).toBe(true);
+    useDetail.getState().close();
+    expect(useDetail.getState().pinned).toBe(false);
+  });
 });
 
 describe('what it says', () => {

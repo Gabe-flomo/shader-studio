@@ -10,6 +10,7 @@ import { PREVIEW_ASPECTS } from '../../utils/graphImportPlan';
 import { timeReadoutRef } from '../../lib/timeTick';
 import { loadShortcutMap } from '../../hooks/useShortcuts';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './rebuildAction';
+import { PREVIEW_QUALITIES, usePreviewQuality } from '../../lib/previewQuality';
 
 // Header and footer bars for the shader preview. The picture itself is a render surface and
 // stays dark in both themes (callers wrap it in ThemeOverrideContext 'dark'), but these bars
@@ -55,6 +56,48 @@ export function AspectPicker({ onPanel = false }: { onPanel?: boolean } = {}) {
         );
       })}
     </div>
+  );
+}
+
+/**
+ * The preview's resolution (After Effects style): Full, Half, Third or
+ * Quarter. Lower renders fewer pixels, so a heavy scene keeps running; exports
+ * are always full resolution.
+ */
+export function PreviewQualityPicker({ onPanel = false }: { onPanel?: boolean } = {}) {
+  const tk = useTokens();
+  const scale = usePreviewQuality(s => s.scale);
+  const setScale = usePreviewQuality(s => s.setScale);
+  const ref = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const cur = PREVIEW_QUALITIES.find(q => Math.abs(q.value - scale) < 1e-6) ?? PREVIEW_QUALITIES[0];
+  return (
+    <>
+      <Tooltip label="Preview resolution" description="Render the preview at Full, Half, Third or Quarter resolution: lower runs heavy scenes faster. Exports are always full resolution." placement="bottom">
+        <button ref={ref} type="button" aria-label={`Preview resolution: ${cur.label}`} aria-expanded={open} onClick={() => setOpen(o => !o)} data-preview-quality={cur.label}
+          style={{ height: 26, minWidth: 34, padding: '0 7px', marginRight: 4, border: 0, borderRadius: radius.md, cursor: 'pointer', font: `600 11px ${fontFamily.ui}`,
+            background: cur.value < 1 ? alpha(tk.accent.base, 0.16) : 'transparent', color: cur.value < 1 ? tk.accent.text : onPanel ? tk.text.muted : alpha('#ffffff', 0.7) }}>
+          {cur.short}
+        </button>
+      </Tooltip>
+      {open && (
+        <Popover anchorRef={ref} onClose={() => setOpen(false)} width={180} padding={6}>
+          <div role="radiogroup" aria-label="Preview resolution" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {PREVIEW_QUALITIES.map(q => {
+              const on = q.value === cur.value;
+              return (
+                <button key={q.label} type="button" role="radio" aria-checked={on} onClick={() => { setScale(q.value); setOpen(false); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, height: 30, padding: '0 10px', border: 0, borderRadius: radius.md, cursor: 'pointer', textAlign: 'left',
+                    background: on ? tk.bg.selected : 'transparent', color: on ? tk.accent.text : tk.text.primary, font: `${on ? 600 : 500} 12.5px ${fontFamily.ui}` }}>
+                  <span style={{ flex: 1 }}>{q.label}</span>
+                  <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.mono}` }}>{q.value === 1 ? '1×' : q.short}</span>
+                </button>
+              );
+            })}
+          </div>
+        </Popover>
+      )}
+    </>
   );
 }
 

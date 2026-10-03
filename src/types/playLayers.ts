@@ -252,7 +252,8 @@ export interface ParticlesLayer extends LayerBase {
   bornSignal: string;
   /** A signal id sent whenever one or more particles die this step (age, a kill boundary, annihilation, a Cull action). '' = none. */
   diedSignal: string;
-  spawn: 'anywhere' | 'edges' | 'center' | 'null';
+  /** Where particles are born: anywhere, the edges, the centre, a null, where the camera sees movement (a Camera layer, hidden or not), or the picture's bright parts. */
+  spawn: 'anywhere' | 'edges' | 'center' | 'null' | 'motion' | 'bright';
   spawnRadius: number;
   /** Leaving the picture: come in the other side, bounce, be reborn (spawn setting), or reappear anywhere at random. */
   edges: 'wrap' | 'bounce' | 'respawn' | 'random';
@@ -1581,7 +1582,7 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     flat: E('wander', 'settle'), readFrom: E('picture', 'camera'), detail: E('coarse', 'fine'), collide: unit,
     flock: unit, flockRadius: N(0.005, 0.5), flockAlign: N(0, 2), flockCohere: N(0, 2), flockSeparate: N(0, 2), flockSpace: N(0.05, 1), scatter: N(0, 10), showField: B,
     attractor: E('none', 'mouse', 'press', 'null'), force: E('gravitate', 'spiral', 'repel'), strength: N(0), catchRadius: N(0),
-    emit: E('stream', 'burst', 'multiply'), spawn: E('anywhere', 'edges', 'center', 'null'), spawnRadius: N(0), edges: E('wrap', 'bounce', 'respawn', 'random'), life: N(0), fade: unit, seed: N(0, 1e9, true), nullId: S,
+    emit: E('stream', 'burst', 'multiply'), spawn: E('anywhere', 'edges', 'center', 'null', 'motion', 'bright'), spawnRadius: N(0), edges: E('wrap', 'bounce', 'respawn', 'random'), life: N(0), fade: unit, seed: N(0, 1e9, true), nullId: S,
     shape: E('dot', 'square', 'triangle', 'streak', 'ring', 'star', 'image'), rotate: E('heading', 'spin', 'none'), sprite: S, crop: B, tintSprite: B,
     size: N(0.1), sizeJitter: unit, opacity: unit, colour: E('tint', 'picture', 'palette'), color: C, palette: N(0, 9, true),
     paletteBy: E('heading', 'speed', 'age', 'brightness'), sizeBy: { t: 'enum', values: MODS }, sizeAmount: N(), opacityBy: { t: 'enum', values: MODS }, opacityAmount: N(),

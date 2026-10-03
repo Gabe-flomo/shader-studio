@@ -37,8 +37,12 @@ export const TOUCH_HOLD = 0.5;
 /** Notes shorter than this are stretched to it (a tap still sounds). */
 export const NOTE_MIN = 0.01;
 
-/** A note on the tape: `t` seconds from the tape's start, MIDI note `n`, velocity `v` 0..1, `d` seconds long. */
-export interface ArrNote { t: number; n: number; v: number; d: number }
+/**
+ * A note on the tape: `t` seconds from the tape's start, MIDI note `n`,
+ * velocity `v` 0..1, `d` seconds long. `off`: deactivated in the piano roll
+ * (kept and drawn, not played).
+ */
+export interface ArrNote { t: number; n: number; v: number; d: number; off?: boolean }
 
 export interface ArrTrack {
   notes: ArrNote[];
@@ -81,7 +85,16 @@ export interface PlayArrangement {
   fade: number;
   /** By rack id. */
   tracks: Record<string, ArrTrack>;
+  /**
+   * The tape's scale (Live's current scale, docs/piano-roll-plan.md): racks
+   * with Snap to scale put live notes in it while it's on; the piano roll
+   * highlights its notes. Absent: off.
+   */
+  scale?: ArrScale;
 }
+
+/** The tape's scale: on or off, its root (0 = C … 11 = B) and which scale (play/scales.ts id). */
+export interface ArrScale { on: boolean; root: number; name: string }
 
 export function emptyArrangement(bpm = 120): PlayArrangement {
   return { length: 0, loop: true, bpm, metronome: false, countIn: 0, fade: 0, tracks: {} };
@@ -418,7 +431,9 @@ export function clampNote(n: ArrNote, length: number): ArrNote {
   const max = length > 0 ? length : Infinity;
   const t = Math.max(0, Math.min(Number.isFinite(max) ? Math.max(0, max - NOTE_MIN) : n.t, n.t));
   const d = Math.max(NOTE_MIN, Math.min(Number.isFinite(max) ? max - t : n.d, n.d));
-  return { t: Math.round(t * 1e4) / 1e4, n: Math.max(0, Math.min(127, Math.round(n.n))), v: Math.max(0.01, Math.min(1, n.v)), d: Math.round(d * 1e4) / 1e4 };
+  const out: ArrNote = { t: Math.round(t * 1e4) / 1e4, n: Math.max(0, Math.min(127, Math.round(n.n))), v: Math.max(0.01, Math.min(1, n.v)), d: Math.round(d * 1e4) / 1e4 };
+  if (n.off) out.off = true;
+  return out;
 }
 
 /** The track with its clips extended to cover [t, t+d] (a note moved or added outside every clip would be silent). */
@@ -453,6 +468,36 @@ export function patchNote(arr: PlayArrangement, rack: string, index: number, ove
   const notes = sortNotes(t.notes.map((x, i) => (i === index ? n : x)));
   const track = coverNote({ ...t, notes }, n, length);
   return { arr: { ...arr, length, tracks: { ...arr.tracks, [rack]: track } }, index: notes.indexOf(n) };
+}
+
+/**
+ * A track's notes replaced (the piano roll's operations, play/pianoRoll.ts):
+ * each kept in range, sorted, and the tape grown to hold them. A note outside
+ * every clip grows clip `grow` to cover it (the clip open in the piano roll,
+ * joining any clip it reaches), or without one gets a clip of its own.
+ * `index[i]` is where `notes[i]` went.
+ */
+export function setTrackNotes(arr: PlayArrangement, rack: string, notes: readonly ArrNote[], grow?: number): { arr: PlayArrangement; index: number[] } {
+  const t = arr.tracks[rack] ?? emptyTrack();
+  const clamped = notes.slice(0, ARR_NOTES_MAX).map(n => clampNote(n, TAPE_MAX_SECONDS));
+  const order = clamped.map((_, i) => i).sort((a, b) => clamped[a].t - clamped[b].t || clamped[a].n - clamped[b].n || a - b);
+  const index: number[] = new Array(notes.length).fill(-1);
+  order.forEach((from, to) => { index[from] = to; });
+  const sorted = order.map(i => clamped[i]);
+  let length = arr.length;
+  for (const n of sorted) length = Math.min(TAPE_MAX_SECONDS, Math.max(length, n.t + n.d));
+  // The clips as they were, written down, so an edit doesn't change how they're worked out.
+  let clips = trackClips(t, arr.length);
+  const covered = (n: ArrNote) => clips.some(c => n.t >= c.t - 1e-6 && n.t + n.d <= c.t + c.d + 1e-6);
+  const open = grow !== undefined ? clips[grow] : undefined;
+  if (open) {
+    let a = open.t, b = open.t + open.d;
+    for (const n of sorted) if (!covered(n)) { a = Math.min(a, n.t); b = Math.max(b, n.t + n.d); }
+    if (a < open.t || b > open.t + open.d) clips = clipsWithPass(clips, round6(a), round6(b));
+  }
+  let track: ArrTrack = { ...t, clips, notes: sorted };
+  for (const n of sorted) track = coverNote(track, n, length);
+  return { arr: { ...arr, length, tracks: { ...arr.tracks, [rack]: track } }, index };
 }
 
 /** Remove a note. */
@@ -529,7 +574,8 @@ export function audibleArrangement(arr: PlayArrangement): PlayArrangement {
   let tracks: Record<string, ArrTrack> | null = null;
   for (const [id, t] of Object.entries(arr.tracks)) {
     const muted = (t.clips ?? []).filter(c => c.mute);
-    if (!muted.length) continue;
+    // Deactivated notes (the piano roll's 0) don't play either.
+    if (!muted.length && !t.notes.some(n => n.off)) continue;
     const off = (x: number, closed = false) => muted.some(c => inClip(x, c, closed));
     const auto: Record<string, number[]> = {};
     for (const [k, pts] of Object.entries(t.auto)) {
@@ -538,7 +584,7 @@ export function audibleArrangement(arr: PlayArrangement): PlayArrangement {
       if (kept.length) auto[k] = kept;
     }
     tracks ??= { ...arr.tracks };
-    tracks[id] = { ...t, notes: t.notes.filter(n => !off(n.t)), auto };
+    tracks[id] = { ...t, notes: t.notes.filter(n => !n.off && !off(n.t)), auto };
   }
   const out = tracks ? { ...arr, tracks } : arr;
   audibleCache.set(arr, out);
@@ -561,7 +607,9 @@ function parseNotes(raw: unknown): ArrNote[] {
     if (!x || typeof x !== 'object') continue;
     const o = x as Record<string, unknown>;
     if (!fin(o.t) || !fin(o.n) || o.t < 0 || o.t > TAPE_MAX_SECONDS + 1) continue;
-    out.push({ t: o.t, n: Math.round(clamp(o.n, 0, 127)), v: fin(o.v) ? clamp(o.v, 0.01, 1) : 1, d: fin(o.d) ? clamp(o.d, NOTE_MIN, TAPE_MAX_SECONDS + 1) : 0.25 });
+    const note: ArrNote = { t: o.t, n: Math.round(clamp(o.n, 0, 127)), v: fin(o.v) ? clamp(o.v, 0.01, 1) : 1, d: fin(o.d) ? clamp(o.d, NOTE_MIN, TAPE_MAX_SECONDS + 1) : 0.25 };
+    if (o.off === true) note.off = true;
+    out.push(note);
   }
   return out.sort((a, b) => a.t - b.t);
 }
@@ -637,6 +685,10 @@ export function parseArrangement(raw: unknown): PlayArrangement | undefined {
     fade: fin(o.fade) ? Math.round(clamp(o.fade, 0, FADE_MAX_MS)) : 0,
     tracks,
   };
+  if (o.scale && typeof o.scale === 'object') {
+    const sc = o.scale as Record<string, unknown>;
+    out.scale = { on: sc.on === true, root: fin(sc.root) ? Math.round(clamp(sc.root, 0, 11)) : 0, name: typeof sc.name === 'string' && /^[A-Za-z0-9]{1,24}$/.test(sc.name) ? sc.name : 'major' };
+  }
   // A tape recorded before a length existed (an old file): the length follows its material.
   if (!out.length) {
     let end = 0;

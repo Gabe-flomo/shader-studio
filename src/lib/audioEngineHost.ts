@@ -62,6 +62,8 @@ import { rackChainId } from '../types/playAudioFx';
 /** A Granulator rack that needs the native engine: Audio Unit effects follow it (docs/granulator.md). */
 const grainsSend = (r: AeRack): boolean => isGranulatorRack(r) && !r.source && r.effects.some(e => e.kind === 'au' && !!e.unit);
 import { siHold, siLetGo, siMode, siParam, siPick } from '../play/kit/samplerIndex.js';
+import { snapNote } from '../play/scales';
+import type { ArrScale } from '../types/playArrangement';
 
 type Invoke = <T>(cmd: string, args?: unknown, options?: { headers?: Record<string, string> }) => Promise<T>;
 type Listen = <T>(event: string, cb: (e: { payload: T }) => void) => Promise<() => void>;
@@ -278,6 +280,9 @@ class AudioEngineHost {
   private siHits = new Map<string, number>();
   /** Sample index: per rack, (channel, note) held → the notes sent for it, so note-offs match. */
   private siHeld = new Map<string, Map<number, number[]>>();
+  /** The tape's scale while it is on (Snap to scale), and per rack the notes it moved (channel·128 + played → sent), so each note-off matches its note-on. */
+  private scale: ArrScale | null = null;
+  private slHeld = new Map<string, Map<number, number>>();
 
   constructor() {
     engineSound.setHost({ spectrum: id => this.spectrum(id), has: id => this.has(id) });
@@ -833,6 +838,8 @@ class AudioEngineHost {
    * tape doesn't record itself). Notes go through a take.
    */
   input(rackId: string, bytes: number[], fromTape = false): void {
+    // Snap to scale, then the Sample index: what the tape records is what was sent. The tape plays back as recorded.
+    if (!fromTape) bytes = this.scaleLock(rackId, bytes);
     if (!fromTape) bytes = this.sampleIndex(rackId, bytes);
     if (!fromTape) for (const fn of this.inputTaps) fn(rackId, bytes);
     const kind = bytes[0] & 0xf0;
@@ -842,6 +849,45 @@ class AudioEngineHost {
       return;
     }
     this.send(rackId, bytes);
+  }
+
+  /**
+   * The tape's scale (Snap to scale, docs/piano-roll-plan.md). A change lets
+   * go of every note it moved first, so nothing is left hanging on a note the
+   * new scale wouldn't send a note-off to.
+   */
+  setScale(s: ArrScale | undefined): void {
+    const next = s && s.on ? s : null;
+    const cur = this.scale;
+    if (cur === next || (cur && next && cur.root === next.root && cur.name === next.name)) { this.scale = next; return; }
+    for (const [rackId, held] of [...this.slHeld]) {
+      this.slHeld.delete(rackId);
+      for (const [key, sent] of held) this.input(rackId, [0x80 | (key >> 7), sent, 0]);
+    }
+    this.scale = next;
+  }
+
+  /** A live note into a rack with Snap to scale, put in the tape's scale (its note-off follows it). Everything else passes as it is. */
+  private scaleLock(rackId: string, bytes: number[]): number[] {
+    const kind = bytes[0] & 0xf0;
+    if (kind === 0xb0 && (bytes[1] === 120 || bytes[1] === 123)) { this.slHeld.delete(rackId); return bytes; }
+    if (kind !== 0x90 && kind !== 0x80) return bytes;
+    const key = ((bytes[0] & 0x0f) << 7) | (bytes[1] & 0x7f);
+    const on = kind === 0x90 && bytes[2] > 0;
+    const held = this.slHeld.get(rackId);
+    if (!on) {
+      const sent = held?.get(key);
+      if (sent === undefined) return bytes;
+      held!.delete(key);
+      return sent === bytes[1] ? bytes : [bytes[0], sent, bytes[2] ?? 0];
+    }
+    const rack = aeRack(this.target, rackId), sc = this.scale;
+    if (!rack?.scaleLock || !sc) return bytes;
+    const sent = snapNote(bytes[1], sc.name, sc.root, rack.scaleLock);
+    const map = held ?? new Map<number, number>();
+    this.slHeld.set(rackId, map);
+    map.set(key, sent);
+    return sent === bytes[1] ? bytes : [bytes[0], sent, bytes[2]];
   }
 
   /**
@@ -909,6 +955,7 @@ class AudioEngineHost {
     const held = this.held.get(rackId);
     this.held.delete(rackId);
     this.siHeld.delete(rackId);
+    this.slHeld.delete(rackId);
     if (!held?.size) return;
     const w = this.web.get(rackId);
     if (w) { w.midi(0xb0, 123, 0); return; }
@@ -920,7 +967,7 @@ class AudioEngineHost {
     engineSend.stopAll();
     for (const w of this.web.values()) w.dispose();
     this.web.clear(); this.mirror.clear(); this.spectra.clear(); this.driven.clear(); this.held.clear();
-    this.siHits.clear(); this.siHeld.clear(); this.valueOf = null;
+    this.siHits.clear(); this.siHeld.clear(); this.slHeld.clear(); this.scale = null; this.valueOf = null;
     this.target = undefined; this.controls = []; this.running = null; this.again = false;
     rackKeyboard.setTarget('');
     this.offMidi?.(); this.offMidi = null;

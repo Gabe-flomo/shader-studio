@@ -46,6 +46,8 @@
  *   guides     a 2D context the size of the overlay: null markers and the hands' skeleton go there
  *              instead of `ctx` (optional; the Finish stack keeps them out of the finished picture)
  *   alphaLayers  ids of layers to draw alone as well (even hidden), for kit.layerCanvas(id) (optional)
+ *   needMotion   keep the camera's motion map (kit.motionMap()) even when no layer shows the camera,
+ *                as long as there is a Camera layer, hidden or not (the Finish stack reads it) (optional)
  *
  * The kit keeps per-layer state (particles, bodies, strokes, springs, text
  * sequences) between frames, keyed by layer id. Actions (burst, next line…)
@@ -124,6 +126,19 @@ export function createLayerKit() {
   const dStates = new Map(), dsCurrent = new Map();
   let queue = [];
   let coarse = null, fine = null, camSample = null, camPrev = null, motion = 0;
+  // The motion map: per cell of the camera's coarse grid, how much moved lately (0..1), rising at once
+  // and fading over about a third of a second, so a gesture leaves a short trail. `motionFresh`: it was
+  // updated this frame (an old map isn't handed out). Weighted-spawn tables for particles born where
+  // things move or where the picture is bright: the motion one keeps the last non-empty map, so
+  // particles keep coming from where something last moved.
+  let motionGrid = null, motionFresh = false, motionPainted = false, motionCdf = null, brightCdf = null;
+  /** A cumulative table over a grid's weights, for picking a cell in proportion to its weight. */
+  function cdfOf(weights, prev) {
+    const n = weights.length, cdf = prev && prev.cdf.length === n ? prev.cdf : new Float32Array(n);
+    let t = 0;
+    for (let i = 0; i < n; i++) { t += weights[i]; cdf[i] = t; }
+    return { cdf, total: t, w: KIT_COARSE_W, h: KIT_COARSE_H };
+  }
   const sensorVals = new Map();
   // Signals: the cumulative born/died count last seen for each particles or agents layer, so the this-step
   // born/died readings (`<id>::born` / `<id>::died`) can be the delta rather than the running total.
@@ -505,20 +520,45 @@ export function createLayerKit() {
       else if (l.kind === 'cloner') { const src = layers.find(x => x.id === l.sourceId); if (src && src.kind === 'script' && src.readPicture) needs.coarse = true; }
       else if (l.kind === 'contours') { if (l.readFrom === 'camera') { needs.cam = true; needs.camFine = needs.camFine || l.detail === 'fine'; } else if (l.detail === 'fine') needs.fine = true; else needs.coarse = true; }
       else if (l.kind === 'camera') needs.cam = true;
+      if (l.kind === 'particles' && l.spawn === 'bright') needs.coarse = true;
     }
+    // A motion map (the Finish stack's Where or Displace, particles born where things move) keeps the
+    // camera sampled while there is a Camera layer, even a hidden one.
+    const wantsMotion = !!env.needMotion || live.some(l => l.kind === 'particles' && l.spawn === 'motion');
+    if (wantsMotion && layers.some(l => l.kind === 'camera')) needs.cam = true;
     coarse = needs.coarse ? sampleInto('coarse', gl, KIT_COARSE_W, KIT_COARSE_H, false) : null;
     fine = needs.fine ? sampleInto('fine', gl, KIT_FINE_W, KIT_FINE_H, false) : null;
     const cam = env.camera && env.camera.readyState >= 2 ? env.camera : null;
     const camMirror = (layers.find(l => l.kind === 'camera') || { mirror: true }).mirror;
     camSample = cam && needs.cam ? sampleInto('cam', cam, KIT_COARSE_W, KIT_COARSE_H, camMirror) : null;
     const camFine = cam && needs.camFine ? sampleInto('camFine', cam, KIT_FINE_W, KIT_FINE_H, camMirror) : null;
+    motionFresh = false;
     if (camSample) {
-      // Motion: how much the camera image changed since last frame.
+      // Motion: how much the camera image changed since last frame, overall and per cell.
+      const cells = KIT_COARSE_W * KIT_COARSE_H;
+      if (!motionGrid) motionGrid = new Float32Array(cells);
+      const fall = Math.exp(-Math.max(0, env.dt || 0) / 0.35);
       let diff = 0;
-      if (camPrev) for (let i = 0; i < camSample.length; i += 4) diff += Math.abs(camSample[i] + camSample[i + 1] - camPrev[i] - camPrev[i + 1]);
+      for (let j = 0, i = 0; j < cells; j++, i += 4) {
+        const d = camPrev ? Math.abs(camSample[i] + camSample[i + 1] - camPrev[i] - camPrev[i + 1]) : 0;
+        diff += d;
+        motionGrid[j] = Math.max(motionGrid[j] * fall, Math.min(1, (d / 510) * 8));
+      }
       camPrev = new Uint8ClampedArray(camSample);
-      const m = Math.min(1, (diff / (camSample.length / 4) / 510) * 12);
+      const m = Math.min(1, (diff / cells / 510) * 12);
       motion = motion * 0.7 + m * 0.3;
+      motionFresh = true; motionPainted = false;
+      if (wantsMotion) { const t = cdfOf(motionGrid, motionCdf); if (t.total > 0.5 || !motionCdf) motionCdf = t; }
+    }
+    if (coarse && live.some(l => l.kind === 'particles' && l.spawn === 'bright')) {
+      // Bright parts of the picture, favouring the brightest (a soft threshold, squared).
+      const cells = KIT_COARSE_W * KIT_COARSE_H, wts = new Float32Array(cells);
+      for (let j = 0, i = 0; j < cells; j++, i += 4) {
+        const L = (coarse[i] * 0.2126 + coarse[i + 1] * 0.7152 + coarse[i + 2] * 0.0722) / 255;
+        const t = Math.max(0, Math.min(1, (L - 0.35) / 0.65));
+        wts[j] = t * t;
+      }
+      brightCdf = cdfOf(wts, brightCdf);
     }
     const pictureFor = (from, detail) => from === 'camera'
       ? (detail === 'fine' && camFine ? { s: camFine, w: KIT_FINE_W, h: KIT_FINE_H } : camSample ? { s: camSample, w: KIT_COARSE_W, h: KIT_COARSE_H } : null)
@@ -1203,6 +1243,7 @@ export function createLayerKit() {
       dt, time, aspect, sample: pic ? pic.s : null, sw: pic ? pic.w : KIT_COARSE_W, sh: pic ? pic.h : KIT_COARSE_H,
       attractorPoint: l.attractor === 'mouse' ? (pointer.over ? pointer : null) : l.attractor === 'press' ? (pointer.over && pointer.down ? pointer : null) : l.attractor === 'null' ? nul : null,
       spawnPoint: nul, modPoint: nul, zones: mine, emitters: mine.filter(z => z.action === 'emitter'), zoneById,
+      spawnMap: l.spawn === 'motion' ? motionCdf : l.spawn === 'bright' ? brightCdf : null,
       W, H, dpr, alpha: 1, sprite: l.shape === 'image' ? env.image(l.sprite) : null,
     };
     let s = parts.get(l.id);
@@ -1284,6 +1325,29 @@ export function createLayerKit() {
     },
     /** A layer drawn alone on the last frame (it was in env.alphaLayers), or null. */
     layerCanvas(id) { return alphaCanvases.get(id) || null; },
+    /**
+     * Where the camera saw movement lately, as a small canvas (64 × 36, row 0 at the top, mirrored
+     * like the Camera layer): every channel and alpha are the amount, 0..255. Null when the camera
+     * wasn't sampled this frame (no Camera layer, or nothing reads motion: env.needMotion).
+     */
+    motionMap() {
+      if (!motionGrid || !motionFresh) return null;
+      const c = klCanvas(pool, 'motionMap', KIT_COARSE_W, KIT_COARSE_H);
+      if (!motionPainted) {
+        const x = c.getContext('2d');
+        const img = x.createImageData(KIT_COARSE_W, KIT_COARSE_H);
+        for (let j = 0; j < motionGrid.length; j++) { const v = Math.round(motionGrid[j] * 255); const i = j * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = img.data[i + 3] = v; }
+        x.putImageData(img, 0, 0);
+        motionPainted = true;
+      }
+      return c;
+    },
+    /** The motion map's amount at (x, y) (0..1, y up), or null without one this frame. */
+    motionAt(x, y) {
+      if (!motionGrid || !motionFresh) return null;
+      const px = Math.max(0, Math.min(KIT_COARSE_W - 1, Math.floor(x * KIT_COARSE_W))), py = Math.max(0, Math.min(KIT_COARSE_H - 1, Math.floor((1 - y) * KIT_COARSE_H)));
+      return motionGrid[py * KIT_COARSE_W + px];
+    },
     /**
      * The things a Granulator's "Grains from" reads (docs/granulator.md), as the last frame left
      * them: a particles layer's live particles, a bodies layer's bodies, a null, or a Relationship

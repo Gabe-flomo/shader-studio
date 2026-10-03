@@ -15,8 +15,8 @@ vi.hoisted(() => {
 });
 import { TraceBuffer, addTraceDrawer, normalise, sampleTraces, setTraceSource, traceBuffer, traceLoopState } from '../controlTrace';
 import { boardGroupList, controlOrigin, groupControls, isMapped } from '../controlGroups';
-import { groupCounts, groupMappings, mappingGroupOf } from '../mappingGroups';
-import { emptyPlayRecord, type PlayControl, type PlayMapping, type PlayRecord } from '../../../types/play';
+import { groupCounts, groupMappings, groupSourceItems, mappingGroupOf, sourceItemId, type SourceItem } from '../mappingGroups';
+import { emptyPlayRecord, type PlayControl, type PlayMapping, type PlayRecord, type PlaySourceDef } from '../../../types/play';
 import { defaultLayer } from '../../../types/playLayers';
 
 describe('trace buffer', () => {
@@ -187,5 +187,34 @@ describe('the Mappings workspace’s groups', () => {
       { id: 'midi', label: 'MIDI and OSC', count: 1 }, { id: 'keys', label: 'Keys, mouse and gamepad', count: 2 },
       { id: 'motion', label: 'LFOs, clocks and noise', count: 1 }, { id: 'other', label: 'Controls and data', count: 1 },
     ]);
+  });
+});
+
+describe('the Inputs board’s sources column, by kind', () => {
+  const def = (id: string, source: PlaySourceDef['source'], label?: string): PlaySourceDef => ({ id, label, enabled: true, source, outputs: [{ kind: 'value', routes: [] }] });
+  const m = (id: string, source: PlayMapping['source']): PlayMapping => ({ id, controlId: 'c', source, outMin: 0, outMax: 1, curve: 'linear', smoothMs: 0, enabled: true });
+  const sources = [
+    def('s1', { kind: 'noise', type: 'smooth', rate: 1, seed: 1, steps: 0 }, 'Wobble'),
+    def('s2', { kind: 'key', code: 'KeyQ' }),
+  ];
+  const mappings = [m('m1', { kind: 'mouse', axis: 'x' }), m('m2', { kind: 'midi', signal: 'cc', channel: 0, cc: 7 }), m('m3', { kind: 'control', controlId: 'x' })];
+  const words = (x: SourceItem) => (x.kind === 'source' ? [x.def.label, x.def.source.kind] : [x.mapping.source.kind, 'Speed']);
+  const ids = (q = '') => groupSourceItems(sources, mappings, words, q).map(g => [g.id, g.items.map(sourceItemId)]);
+
+  it('classifies a source of the record, a mapping or a PlaySource alike', () => {
+    expect(mappingGroupOf(sources[0])).toBe('motion');
+    expect(mappingGroupOf(mappings[1])).toBe('midi');
+    expect(mappingGroupOf({ kind: 'tilt', axis: 'beta' })).toBe('picture');
+  });
+
+  it('groups own sources with mappings, own sources first in each group', () => {
+    expect(ids()).toEqual([['midi', ['m2']], ['keys', ['s2', 'm1']], ['motion', ['s1']], ['other', ['m3']]]);
+  });
+
+  it('filters by name or what it reads, any case; empty groups go', () => {
+    expect(ids('wob')).toEqual([['motion', ['s1']]]);
+    expect(ids('MOUSE')).toEqual([['keys', ['m1']]]);
+    expect(ids('speed').flatMap(([, x]) => x)).toEqual(['m2', 'm1', 'm3']);
+    expect(ids('nothing like it')).toEqual([]);
   });
 });

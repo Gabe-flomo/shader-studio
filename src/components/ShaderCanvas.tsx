@@ -1,4 +1,5 @@
 import { playableForPlan } from '../play/planGates';
+import { effectivePreviewQuality, usePreviewQuality } from '../lib/previewQuality';
 import { currentPlan, usePlan } from '../lib/plan';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
@@ -467,6 +468,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // Drawing buffer = CSS size × renderScale. Normally 1; raised only while
     // exporting at 2×/4× (see OfflineRenderHandle.setRenderScale).
     let renderScale = 1;
+    // The preview's resolution (Full, Half, Third, Quarter: lib/previewQuality.ts): a share of
+    // the drawing buffer, stretched to fit. Held at Full while exporting.
+    let previewQuality = effectivePreviewQuality();
+    const pixelRatio = () => renderScale * previewQuality;
     // Exact drawing-buffer size for export presets; null = CSS size × renderScale.
     let exportSize: { width: number; height: number } | null = null;
     let cssW = 1;
@@ -1084,7 +1089,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         renderer.setPixelRatio(1);
         renderer.setSize(exportSize.width, exportSize.height, false); // keep the CSS size
       } else {
-        renderer.setPixelRatio(renderScale);
+        renderer.setPixelRatio(pixelRatio());
         renderer.setSize(cssW, cssH);
       }
       const w = renderer.domElement.width;
@@ -1102,6 +1107,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (material.uniforms.u_prevFrame) material.uniforms.u_prevFrame.value = null;
       requestRender();
     };
+    // The preview's resolution changed (or an export took it to Full): resize the buffer.
+    const stopQuality = usePreviewQuality.subscribe(st => {
+      const q = effectivePreviewQuality(st);
+      if (q === previewQuality) return;
+      previewQuality = q;
+      applySize();
+    });
 
     const ro = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect;
@@ -1275,6 +1287,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         // The Audio engine's racks follow the record too, and mapped plug-in parameters glide (lib/audioEngineHost.ts).
         const rec = playEngine.getRecord();
         audioEngineHost.frame(rec.audioEngine, rec.controls, fxValueOf);
+        // The tape's scale: racks with Snap to scale put live notes in it.
+        audioEngineHost.setScale(rec.arrangement?.scale);
       }
       material.uniforms.u_time.value = elapsed;
       // Clock followers (time readouts, keyframe playheads) get every frame: a listener call is
@@ -2028,10 +2042,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const handleMouseMove = (e: MouseEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
       // Drawing-buffer pixels, so u_mouse matches gl_FragCoord at any render scale
-      const x = (e.clientX - rect.left) * renderScale;
-      const y = (e.clientY - rect.top) * renderScale;
+      const x = (e.clientX - rect.left) * pixelRatio();
+      const y = (e.clientY - rect.top) * pixelRatio();
       // Update u_mouse uniform (WebGL coords: 0 = bottom-left)
-      material.uniforms.u_mouse.value.set(x, rect.height * renderScale - y);
+      material.uniforms.u_mouse.value.set(x, rect.height * pixelRatio() - y);
       // The same place as 0..1 of the picture, for a take recording the performance.
       if (rect.width > 0 && rect.height > 0) inputBus.setMouse((e.clientX - rect.left) / rect.width, 1 - (e.clientY - rect.top) / rect.height);
       // Track for pixel readback (DOM coords: 0 = top-left)
@@ -2134,6 +2148,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       statsRT.dispose();
       costRt?.dispose();
       registerShaderCostMeasurer(null);
+      stopQuality();
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };

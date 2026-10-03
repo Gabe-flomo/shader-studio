@@ -6,7 +6,7 @@
  * See docs/finish-stack.md.
  */
 import {
-  FN_EFFECTS, FN_KINDS, FN_TONE_MODES, FN_TIME_MAPS, FN_TIME_QUALITY, FN_CURVE_CHANNELS, FN_HUE_CURVES, FN_COMPARE_ID, FN_COMPARE_PARAMS,
+  FN_EFFECTS, FN_KINDS, FN_TONE_MODES, FN_TIME_MAPS, FN_TIME_QUALITY, FN_WHERE, FN_DISPLACE_MAPS, FN_CURVE_CHANNELS, FN_HUE_CURVES, FN_COMPARE_ID, FN_COMPARE_PARAMS,
   fnDefaultEffect, fnDefaultCurves, fnDefaultCompare, fnParseCustom, fnMigrateHalation, type FnCompare, type FnCurves, type FnKind, type FnParam,
 } from '../play/kit/finish.js';
 import type { SealedBlob } from './userNode';
@@ -16,6 +16,10 @@ export type FinishKind = FnKind;
 export type FinishCurves = FnCurves;
 export type FinishTimeMap = 'slit' | 'luma' | 'noise' | 'radial' | 'layer';
 export type FinishTimeQuality = 'low' | 'medium' | 'high';
+/** Where an effect shows: everywhere, or weighted by a layer's alpha, the picture's brightness, or camera motion. */
+export type FinishWhere = 'all' | 'layer' | 'picture' | 'motion';
+/** What pushes the picture in Displace. */
+export type FinishDisplaceMap = 'noise' | 'picture' | 'layer' | 'motion';
 
 /** One effect in the stack: its kind's numbers (FN_EFFECTS[kind].params) as keys, plus what isn't a number. */
 export interface FinishEffect {
@@ -37,10 +41,16 @@ export interface FinishEffect {
   curves?: FinishCurves;
   /** Grade: the Look it started from, for the picker (the numbers can have moved since). */
   look?: string;
-  /** Time displacement: what decides how far back each part of the picture looks. */
-  map?: FinishTimeMap;
-  /** Time displacement with map 'layer': the layer whose alpha is the map. */
+  /** Time displacement: what decides how far back each part of the picture looks. Displace: what pushes the picture. */
+  map?: FinishTimeMap | FinishDisplaceMap;
+  /** Time displacement or Displace with map 'layer': the layer whose alpha is the map. */
   layerId?: string;
+  /** Any effect: where it shows (absent = everywhere). */
+  where?: FinishWhere;
+  /** Where 'layer': the layer whose alpha says where (it can be hidden). */
+  whereLayer?: string;
+  /** Where: swap in and out. */
+  whereInvert?: boolean;
   /** Time displacement: how many frames it keeps, and at what size. */
   quality?: FinishTimeQuality;
   [key: string]: unknown;
@@ -57,6 +67,8 @@ export interface PlayFinish {
 }
 
 export const FINISH_KINDS = FN_KINDS as readonly FinishKind[];
+export const FINISH_WHERE = FN_WHERE as readonly FinishWhere[];
+export const FINISH_DISPLACE_MAPS = FN_DISPLACE_MAPS as readonly FinishDisplaceMap[];
 export const FINISH_EFFECTS = FN_EFFECTS;
 export const FINISH_TONE_MODES = FN_TONE_MODES;
 
@@ -274,6 +286,16 @@ function parseCustomEffect(r: Record<string, unknown>): FinishEffect | null {
   const e = newCustomEffect({ name: typeof r.name === 'string' ? r.name : 'Custom effect', code, ...(typeof r.defId === 'string' && r.defId ? { defId: r.defId.slice(0, 80) } : {}), ...(sealed ? { sealed } : {}) }, id);
   e.enabled = r.enabled !== false;
   for (const p of finishParamsOf(e)) e[p.key] = clampNum(r[p.key], p);
+  return withWhere(e, r);
+}
+
+/** An effect's Where from a file: kept only when it is a known one other than everywhere. */
+function withWhere(e: FinishEffect, r: Record<string, unknown>): FinishEffect {
+  const w = r.where;
+  if (typeof w !== 'string' || w === 'all' || !(FN_WHERE as readonly string[]).includes(w)) return e;
+  e.where = w as FinishWhere;
+  if (w === 'layer') e.whereLayer = typeof r.whereLayer === 'string' ? r.whereLayer.slice(0, 80) : '';
+  if (r.whereInvert === true) e.whereInvert = true;
   return e;
 }
 
@@ -310,7 +332,11 @@ export function parseFinishEffect(raw: unknown): FinishEffect | null {
     e.layerId = typeof r.layerId === 'string' ? r.layerId.slice(0, 80) : '';
     e.quality = typeof r.quality === 'string' && r.quality in FN_TIME_QUALITY ? r.quality as FinishTimeQuality : 'medium';
   }
-  return e;
+  if (kind === 'displace') {
+    e.map = (FN_DISPLACE_MAPS as readonly string[]).includes(r.map as string) ? r.map as FinishDisplaceMap : 'noise';
+    e.layerId = typeof r.layerId === 'string' ? r.layerId.slice(0, 80) : '';
+  }
+  return withWhere(e, r);
 }
 
 /** The stack from a file: known effects only, one of each built-in kind (the first; custom effects any number), ids unique, and the wipe. Absent or empty (and on) = undefined. */

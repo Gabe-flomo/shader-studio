@@ -38,7 +38,7 @@ import { dragHandle, handleAt, handlePoints, insideBounds, layerBounds, maskBoun
 import { kmMaskLocal, kmMaskPath, kmMaskPlacement } from './kit/mattes.js';
 import { matteUsers } from '../types/playLayers';
 import { addMask, maskFromOutline } from './mattes';
-import { fnActive, fnAnimated, fnCreate, type FnEffect, type FnRenderer } from './kit/finish.js';
+import { fnActive, fnAnimated, fnCreate, fnMapLayers, fnUsesMotion, type FnEffect, type FnRenderer } from './kit/finish.js';
 import { finishPropId, renderableFinish } from '../types/playFinish';
 
 /** `vel` and `at`: a drum pad hit's velocity (0 lets a gate pad go) and the clock time it landed (takes stamp it there). */
@@ -206,10 +206,11 @@ class PlayOverlay {
 
   private finishValue = (e: FnEffect, key: string) => playEngine.layerValue(finishPropId(e.id), key, (e as Record<string, unknown>)[key] as number);
 
-  /** The layers the time map reads (its Layer map), drawn alone by the kit. */
+  /** The layers the Finish stack reads as maps (Time's or Displace's Layer map, an effect's Where), drawn alone by the kit. */
   private alphaLayers(): string[] | null {
-    const t = this.record.finish?.effects.find(e => e.kind === 'time' && e.enabled);
-    return this.hasFinish() && t && t.map === 'layer' && t.layerId ? [t.layerId] : null;
+    if (!this.hasFinish()) return null;
+    const ids = fnMapLayers(this.finish);
+    return ids.length ? ids : null;
   }
 
   private ensureFinishCanvases(): boolean {
@@ -664,6 +665,8 @@ class PlayOverlay {
     return {
       gl, W, H, dpr, time, dt,
       needCoarse: grainsReadPicture(this.record) || readsPicture(this.record),
+      // The Finish stack reads where the camera sees movement (an effect's Where, or Displace).
+      needMotion: this.hasFinish() && fnUsesMotion(this.finish),
       value: (l, k) => playEngine.layerValue(l.id, k, (l as unknown as Record<string, number>)[k]),
       pointer: this.replayPointer ?? this.pointer,
       markers: !forExport && this.guides,
@@ -772,7 +775,7 @@ class PlayOverlay {
     const fs = Math.min(1, Math.sqrt(FINISH_MAX_PIXELS / (W * H)));
     const finished = finishing && !!this.live?.draw({
       finish: this.finish!, value: this.finishValue, picture: gl, layers: canvas,
-      layerAlpha: id => this.kit.layerCanvas(id), width: Math.round(W * fs), height: Math.round(H * fs), time,
+      layerAlpha: id => this.kit.layerCanvas(id), motion: this.kit.motionMap(), width: Math.round(W * fs), height: Math.round(H * fs), time,
     });
     this.showFinish(finished);
     // Copied here, in the same animation frame the picture was drawn: the GL canvas keeps no
@@ -893,7 +896,7 @@ class PlayOverlay {
     if (!this.exportFinish.ok) return;
     this.exportFinish.draw({
       finish: this.finish!, value: this.finishValue, picture: { data: rgba, width, height }, pixels: true,
-      layerAlpha: id => this.exportKit?.layerCanvas(id) ?? null, width, height, time, first,
+      layerAlpha: id => this.exportKit?.layerCanvas(id) ?? null, motion: this.exportKit?.motionMap() ?? null, width, height, time, first,
     });
   }
 

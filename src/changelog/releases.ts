@@ -39,6 +39,19 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.4',
+    date: '2026-10-03',
+    title: 'Effects that know where',
+    highlights: [
+      { area: 'Play', text: 'Every Finish effect has a Where: everywhere, only where a layer is, on the bright parts, or where the camera sees movement, and Invert.', link: { kind: 'doc', path: 'docs/finish-stack.md' } },
+      { area: 'Play', text: 'Nine new Finish effects: Glitch, Ripple, Displace, Mosaic, Mirror, Gradient map, Posterize, Edges and Feedback trails.' },
+      { area: 'Play', text: 'Particles can be born where the camera sees movement, or on the bright parts of the picture.' },
+      { area: 'Play', text: 'On the Inputs board: drag a source onto a control to drive it, see each mapped slider’s swing as a ring, and find sources grouped by kind with search.' },
+      { area: 'Play', text: 'Open a detail window from a layer’s property row, and Keep open to leave it floating while you work.', link: { kind: 'doc', path: 'docs/detail-windows.md' } },
+      { area: 'Play', text: 'A Graph view on the Rules page draws sources, controls and rules as one picture; click any node for its details.', link: { kind: 'doc', path: 'docs/graph-view.md' } },
+    ],
+  },
+  {
     id: '2026.10.3',
     date: '2026-10-02',
     title: 'Input names',

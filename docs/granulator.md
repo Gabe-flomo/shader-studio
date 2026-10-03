@@ -110,7 +110,12 @@ We built:
     - Each grain reads the frame at its time position (Position, Spray, Scan, LFO as usual), takes the **Partials** (1–16) strongest peaks inside its band and plays them as **sines** from a table, each at the phase of one steady oscillator of that frequency (so overlapping grains add up), through its window. No random numbers are drawn for phases, so the sequence never shifts. A bank of sines is cheap and deterministic in a worklet; an inverse FFT would need a whole frame per grain.
     - **Band** (0–1 on a log axis from 20 Hz to half the sample's rate) and **Band width** (a share of that axis) pick the frequencies. **Band spread** spaces the grains' bands (eight spawn points on the frequency axis, as Emit's on the time axis), and **Band travel** / **Band direction** / **Band at the end** move them along it (Bounce by default).
     - **Pitch** (and the note, bend, Spread, Pitch random, FM) multiplies the frequencies; **Shift** adds hertz (inharmonic, like a frequency shifter). A band with no peaks is silent.
-    - The card shows the **spectrogram** (time across, frequency up) with the band; drag on it to set Position (across) and Band (up and down).
+    - **Grains** (2026-10-03): where the spectral grains sit in **time**. The default keeps every older save sounding the same, sample for sample.
+      - **On the line**: every grain reads the frame where Position is (± Spray), as before.
+      - **Emit**: grains are launched from Position like Emit mode's, from eight spawn points that travel through the sample, and use Emit's own settings (**Direction**, **Travel speed**, **Emit spread**, **At the end**; the card shows the Emit section in this case). Each grain also **travels while it sounds**, along its spawn point's direction at Travel speed. When it reaches a new analysis frame it takes that frame's peaks in its band, and the running phases of its partials carry over so it doesn't click. Travel speed 0 holds every grain still at its spawn point. Emit mode itself is unchanged.
+      - **Spread**: each grain lands at a random place in an **Area** around Position (0–1 of the sample; 1 is the whole sample). **Side** chooses where that area is: **Both** (centred on Position), **Ahead** (later in the sample) or **Behind**. The area wraps at the ends, and Spray still adds its small random offset. Spread draws one extra random number per grain, but only in this sub-mode, so the other modes' random sequences stay as they were.
+      - All three settings (`specGrains` 49, `specArea` 50, `specSide` 51) are mapping targets and macro-able, the same as every other setting.
+    - The card shows the **spectrogram** (time across, frequency up) with the band; drag on it to set Position (across) and Band (up and down). Each grain is drawn where it plays: on the line, at its travelling place (Emit, with the spawn points as triangles along the top, as in Emit mode, and the bands' points still on the left), or inside the shaded Area (Spread).
 - **Position** (0–1 of the file) and **Spray** (random start offset, 0–2 s, as Granulator II's Spray and III's Variation).
 - **Grain size** 2 ms–2 s and **Size random**.
 - **Density** 1–200 grains per second (Flux, Cloud).
@@ -133,7 +138,7 @@ We built:
   - per grain, `grainPos` / `grainAmp` / `grainRow` with the grain's number (1–16)
 
   - Spectral: `grainBandMean` (the sounding grains' mean band centre, 0–1 on the Band axis), `grainEnergySum`, and per grain `grainBand` / `grainEnergy`, so visuals can follow spectral grains
-  - the card also draws Emit's and Spectral's **spawn points** (triangles on the top edge for places in the sample, on the left edge for bands); the worklet posts them with the grains
+  - the card also draws Emit's and Spectral's **spawn points** (triangles on the top edge for places in the sample, on the left edge for bands); the worklet posts them with the grains. Spectral · Emit has both: the bands as `heads` / `headAxis` 2, and the places in the sample as `theads` / `theadCount`. These come after the grains in the packed message, so a pack without them reads as none.
 
   **Readouts → controls** makes controls for count, mean and spread (a group "Grains · <rack>"). **Grains → nulls** makes a few null layers that ride grains 1–8 (x = position in the file, y = the grain's stable row — see below), which particles, paths and the rest can follow.
 
@@ -223,6 +228,7 @@ Not built (yet):
 `src/play/__tests__/granulatorModes.test.ts`:
 
 - Emit: spawn points travel at Travel speed forward, backward and alternately; Wrap, Bounce and Respawn at the ends (Respawn the same for a seed); Spread 0 is one line, 1 is scattered; grains read at the spawn points; bit-exact renders per seed
+- Spectral's Grains: the default and an explicit On the line render the same samples; On the line keeps every grain at Position; Spread keeps grains inside the Area (Both / Ahead / Behind) and Area 0 is the line; Emit's spawn points and grains travel forward and backward at Travel speed, and each grain moves while it sounds; the three sound different from each other and each is bit-exact per seed; the extra spawn points round-trip through the worklet's packed message; the record keeps the new settings, clamped
 - Spectral: the analysis finds the right peaks with their amplitudes, the same every time; a low band plays the low tone and a high band the high one (zero crossings), Pitch multiplies and Shift adds hertz, an empty band is silent; band and energy readouts and the travelling bands; bit-exact renders per seed; the real AudioWorklet getting the analysis from the main thread; the worklet's packed readouts round-trip
 
 `src/play/__tests__/grainGroups.test.ts`: Grains → nulls makes a sealed top-level folder; a later layer stays outside it (even while the list shows it) or goes to the open group around it; a drop still puts one in; the seal survives a save.

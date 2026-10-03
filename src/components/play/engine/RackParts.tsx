@@ -14,6 +14,8 @@
  * (everything the page plays, or one layer's) through its effects
  * (lib/engineSend.ts); the page stops playing that sound itself.
  */
+import { NOTE_NAMES, scaleOf } from '../../../play/scales';
+import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useTokens } from '../../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
@@ -140,6 +142,7 @@ export function InputRow({ rack, onPatch, onKeyboard, touch }: { rack: AeRack; o
   const velocity = useRackKeyboard(s => s.velocity);
   const sustain = useRackKeyboard(s => s.sustain);
   const live = kbRack === rack.id;
+  const tapeScale = useNodeGraphStore(st => st.play.arrangement?.scale);
   const midiOptions = [
     { value: '', label: 'Any MIDI input' },
     { value: 'off', label: 'No MIDI' },
@@ -154,6 +157,21 @@ export function InputRow({ rack, onPatch, onKeyboard, touch }: { rack: AeRack; o
         <span style={{ ...labelStyle(tk), width: 64 }}>Played by</span>
         <Select ariaLabel="MIDI input" value={rack.midi} options={midiOptions} onChange={v => { if (v !== 'off') void midiEngine.connectWebMidi(); reroute({ midi: v }); }} height={28} style={{ flex: '1 1 150px', minWidth: 0 }} />
         <Select ariaLabel="MIDI channel" value={String(rack.channel)} options={channels} onChange={v => reroute({ channel: Number(v) })} height={28} style={{ flex: '0 1 130px', minWidth: 0 }} />
+      </div>
+      {/* Snap to scale (Live's Scale device on the current scale): every live note lands in the tape's scale. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <span style={{ ...labelStyle(tk), width: 64 }}>In key</span>
+        <Select ariaLabel="Snap to scale" value={rack.scaleLock ?? 'off'} height={28} style={{ flex: '0 1 170px', minWidth: 0 }}
+          options={[
+            { value: 'off', label: 'As played' },
+            { value: 'nearest', label: 'Snap to scale' },
+            { value: 'up', label: 'Snap to scale, up' },
+            { value: 'down', label: 'Snap to scale, down' },
+          ]}
+          onChange={v => reroute(v === 'off' ? { scaleLock: undefined } : { scaleLock: v as AeRack['scaleLock'] })} />
+        <span style={{ color: tk.text.muted, font: `11.5px ${fontFamily.ui}` }}>
+          {tapeScale?.on ? `${NOTE_NAMES[tapeScale.root]} ${scaleOf(tapeScale.name).name}` : rack.scaleLock ? 'Pick a scale in the tape’s transport' : ''}
+        </span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingLeft: 70 }}>
         <Toggle checked={rack.keyboard} onChange={onKeyboard} label={<span title={RACK_KEYBOARD_HINT}>Computer keyboard</span>} />

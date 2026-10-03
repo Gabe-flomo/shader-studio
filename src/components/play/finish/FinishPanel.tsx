@@ -44,7 +44,7 @@ import {
   finishParamOf, finishParamsOf, finishTarget, lookFromGrade, newCustomEffect, newFinishEffect, patchFinishEffect, withCustomCode,
   type FinishCompare, type FinishEffect, type FinishHost, type FinishKind, type PlayFinish,
 } from '../../../types/playFinish';
-import { FN_COMPARE_PARAMS, FN_HALATION_PRESETS, fnCheckCustom, fnDefaultCompare, fnParseCustom, fnRingSize, type FnParam } from '../../../play/kit/finish.js';
+import { FN_COMPARE_PARAMS, fnCheckCustom, fnDefaultCompare, fnParseCustom, fnRingSize, type FnParam } from '../../../play/kit/finish.js';
 
 const TONE_OPTIONS = [
   { value: 'none', label: 'None' }, { value: 'aces', label: 'ACES' }, { value: 'agx', label: 'AgX' }, { value: 'hable', label: 'Hable' },
@@ -59,7 +59,6 @@ const TIME_MAPS = [
   { value: 'layer', label: 'A layer', title: 'Where a layer is (even a hidden one), the past shows' },
 ];
 /** Halation presets (the kit's): they only set the sliders. */
-const HALATION_PRESETS = FN_HALATION_PRESETS;
 
 /** The Finish tab: the picture's stack, or the sound's effect chains (AudioFxPanel). */
 export function FinishPanel(props: {
@@ -233,7 +232,7 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
             touch={touch}
             focused={focus === e.id}
             focusTick={focusTick}
-            layers={play.layers.map(l => ({ id: l.id, label: l.label }))}
+            layers={play.layers.map(l => ({ id: l.id, label: l.label, kind: l.kind }))}
             exposed={exposed}
             onPatch={change => patch(e.id, change)}
             onReplace={next => setFinish(f => ({ ...f, effects: f.effects.map(x => (x.id === e.id ? next : x)) }))}
@@ -245,7 +244,7 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
       </div>
       {finish.effects.length > 1 && (
         <div style={{ marginTop: 10, color: tk.text.faint, font: `11px/1.45 ${fontFamily.ui}` }}>
-          Colour effects (your own included) run top to bottom. Camera shake, lens distortion and CRT curvature bend the picture before anything reads it; chromatic aberration and time displacement choose what is read.
+          Colour effects (your own included) run top to bottom. The warps (camera shake, lens distortion, CRT curvature, glitch blocks, ripple, displace, mosaic, mirror) bend the picture before anything reads it; chromatic aberration, the glitch’s colour split and time displacement choose what is read. Pixel sort, halftone and ASCII see every effect above them. Any effect can show only somewhere: its <b>Where</b>.
         </div>
       )}
     </div>
@@ -289,7 +288,7 @@ function EffectCard({ effect: e, index, count, dimmed, touch, focused, focusTick
   touch: boolean;
   focused: boolean;
   focusTick: number;
-  layers: Array<{ id: string; label: string }>;
+  layers: LayerRef[];
   exposed: Set<string>;
   onPatch: (change: Partial<FinishEffect>) => void;
   onReplace: (e: FinishEffect) => void;
@@ -360,7 +359,9 @@ function EffectCard({ effect: e, index, count, dimmed, touch, focused, focusTick
       )}
       {!folded && (
         <div style={{ padding: '0 10px 10px', opacity: e.enabled ? 1 : 0.55 }}>
+          {presetsFor(e, k, onPatch)}
           {editorFor(e, k, touch, layers, onPatch, onReplace)}
+          <WhereRows e={e} k={k} layers={layers} onPatch={onPatch} />
         </div>
       )}
       {menu && <Menu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} title={title} />}
@@ -418,25 +419,104 @@ function NumRow({ e, p, label, touch, exposed, onSet, onExpose }: { e: FinishHos
 
 // ── Editors ──────────────────────────────────────────────────────────────────
 
-function editorFor(e: FinishEffect, k: RowKit, touch: boolean, layers: Array<{ id: string; label: string }>, onPatch: (c: Partial<FinishEffect>) => void, onReplace: (e: FinishEffect) => void): ReactNode {
+/** An effect's presets (declared on the kit's effect; they only set numbers), the one it's on lit. */
+function presetsFor(e: FinishEffect, k: RowKit, onPatch: (c: Partial<FinishEffect>) => void): ReactNode {
+  if (e.kind === 'custom') return null;
+  const presets = FINISH_EFFECTS[e.kind as FinishKind]?.presets ?? [];
+  if (!presets.length) return null;
+  const current = presets.find(pr => Object.entries(pr.values).every(([key, v]) => Math.abs(num(e, key) - v) < 1e-6));
+  return k.row('Preset', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{presets.map(pr => <Button key={pr.name} size="sm" variant={current === pr ? 'primary' : 'secondary'} onClick={() => onPatch(pr.values as Partial<FinishEffect>)}>{pr.name}</Button>)}</div>, 'Starting points: they only set the settings below.');
+}
+
+function editorFor(e: FinishEffect, k: RowKit, touch: boolean, layers: LayerRef[], onPatch: (c: Partial<FinishEffect>) => void, onReplace: (e: FinishEffect) => void): ReactNode {
   switch (e.kind) {
     case 'grade': return <GradeEditor e={e} k={k} touch={touch} onPatch={onPatch} onReplace={onReplace} />;
-    case 'vignette': return <>{k.nums('amount', 'size', 'roundness', 'feather')}{k.colour('Colour', ['colorR', 'colorG', 'colorB'], 'Black darkens; any colour tints the edges instead.')}</>;
-    case 'bloom': return <>{k.nums('amount', 'threshold', 'radius')}{k.colour('Tint', ['tintR', 'tintG', 'tintB'], 'The glow’s colour: white keeps the colours of what glows.')}</>;
     case 'halation': return (
       <>
-        {k.row('Preset', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{HALATION_PRESETS.map(pr => <Button key={pr.name} size="sm" onClick={() => onPatch(pr.values)}>{pr.name}</Button>)}</div>, 'Starting points: they only set the sliders below.')}
         {k.nums('amount', 'reach', 'threshold', 'headroom', 'warmth', 'growth', 'conserve')}
         {k.note(<>Film’s halation: light bright enough to pass through the film bounces back and exposes the red layer from behind. It shows as a thin red bleed hugging bright edges and glints, landing on the darker picture right beside them (the bright part itself stays clean), orange where it is strongest. Only parts whose red is over <b>Threshold</b> bleed; a colour with little red in it (teal, blue) doesn’t. An 8-bit picture stops at white, so <b>Highlight headroom</b> guesses how much brighter the clipped parts really were. The defaults match a measured film-emulation grade.</>)}
       </>
     );
     case 'time': return <TimeEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
+    case 'displace': return <DisplaceEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
+    case 'feedback': return (
+      <>
+        {k.nums('amount', 'zoom', 'rotate', 'shiftX', 'shiftY', 'hue')}
+        {k.row('Blend', <Segmented size="sm" ariaLabel="Feedback blend" value={String(Math.round(num(e, 'mode')))} onChange={v => onPatch({ mode: Number(v) })} options={[
+          { value: '0', label: 'Lighten', title: 'Keep the brighter of now and the trail' },
+          { value: '1', label: 'Screen', title: 'Add the trail’s light' },
+          { value: '2', label: 'Blend', title: 'The trail over the present, by Amount' },
+        ]} />, 'How the last frame comes back in.')}
+        {k.note(<>The last finished frame comes back each frame, a little zoomed, turned and drifted: trails, tunnels and smears. Map Zoom or Rotate onto a hand or the beat.</>)}
+      </>
+    );
     case 'custom': return <CustomEditor e={e} k={k} touch={touch} onReplace={onReplace} />;
-    default: return <>{finishParamsOf(e).filter(p => !p.hidden).map(p => k.num(p.key))}</>;
+    default: {
+      // Any other effect, as the kit declares it: its sliders, its colours (three hidden numbers each) and its note.
+      const def = FINISH_EFFECTS[e.kind as FinishKind];
+      return (
+        <>
+          {finishParamsOf(e).filter(p => !p.hidden).map(p => k.num(p.key))}
+          {(def?.colours ?? []).map(c => k.colour(c.label, [...c.keys] as [string, string, string], c.hint))}
+          {def?.note && k.note(def.note)}
+        </>
+      );
+    }
   }
 }
 
-function TimeEditor({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit; layers: Array<{ id: string; label: string }>; onPatch: (c: Partial<FinishEffect>) => void }) {
+/** A layer as the Finish cards list it (Where, Layer maps). */
+type LayerRef = { id: string; label: string; kind: string };
+
+const WHERE_OPTIONS = [
+  { value: 'all', label: 'Everywhere' },
+  { value: 'layer', label: 'Where a layer is' },
+  { value: 'picture', label: 'On the bright parts' },
+  { value: 'motion', label: 'Where the camera sees movement' },
+];
+
+/** Every effect's Where: everywhere, or only where a map says (a layer, the picture's brightness, camera motion). */
+function WhereRows({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit; layers: LayerRef[]; onPatch: (c: Partial<FinishEffect>) => void }) {
+  const where = e.where ?? 'all';
+  const set = (w: string) => onPatch(w === 'all' ? { where: undefined, whereLayer: undefined, whereInvert: undefined } : { where: w as FinishEffect['where'], ...(w === 'layer' ? { whereLayer: e.whereLayer ?? '' } : { whereLayer: undefined }) });
+  return (
+    <>
+      {k.row('Where', <Select ariaLabel="Where the effect shows" value={where} height={26} options={WHERE_OPTIONS} onChange={set} />,
+        'Show this effect only somewhere: where a layer is (its shape, even hidden), on the bright parts of the picture, or where the camera sees movement. In between, it fades.')}
+      {where === 'layer' && k.row('Layer', <LayerPick layers={layers} value={e.whereLayer ?? ''} onChange={v => onPatch({ whereLayer: v })} />, 'The layer’s shape is where the effect shows. Hide the layer to keep only the effect. A shape on hand nulls makes it follow your hand.')}
+      {where === 'motion' && !layers.some(l => l.kind === 'camera') && k.note(<>Add a Camera layer for this (it can be hidden): the effect shows where the camera sees something move.</>)}
+      {where !== 'all' && k.row('Invert', <Toggle checked={!!e.whereInvert} onChange={on => onPatch({ whereInvert: on || undefined })} />, 'Swap: the effect shows everywhere except there.')}
+    </>
+  );
+}
+
+function LayerPick({ layers, value, onChange }: { layers: LayerRef[]; value: string; onChange: (id: string) => void }) {
+  return layers.length
+    ? <Select ariaLabel="Map layer" value={value} height={26} options={[{ value: '', label: 'Pick a layer' }, ...layers.map(l => ({ value: l.id, label: l.label }))]} onChange={onChange} />
+    : <span style={{ font: `11px ${fontFamily.ui}`, opacity: 0.7 }}>Add a layer (a shape, text, particles) to use as the map.</span>;
+}
+
+const DISPLACE_MAPS = [
+  { value: 'noise', label: 'Noise', title: 'Drifting noise, like heat haze' },
+  { value: 'picture', label: 'Brightness', title: 'Bright parts push one way, dark parts the other' },
+  { value: 'layer', label: 'A layer', title: 'Where a layer is, the picture is pushed' },
+  { value: 'motion', label: 'Motion', title: 'Where the camera sees movement, the picture is pushed' },
+];
+
+function DisplaceEditor({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit; layers: LayerRef[]; onPatch: (c: Partial<FinishEffect>) => void }) {
+  const map = e.map ?? 'noise';
+  return (
+    <>
+      {k.row('Map', <Select ariaLabel="Displace map" value={map} height={26} options={DISPLACE_MAPS.map(m => ({ value: m.value, label: m.label }))} onChange={v => onPatch({ map: v as FinishEffect['map'] })} />, 'What pushes the picture around.')}
+      {map === 'layer' && k.row('Layer', <LayerPick layers={layers} value={e.layerId ?? ''} onChange={v => onPatch({ layerId: v })} />, 'The layer’s alpha is the push: where it is opaque, the picture moves the most. It can be hidden and still work.')}
+      {map === 'motion' && !layers.some(l => l.kind === 'camera') && k.note(<>Add a Camera layer for this (it can be hidden).</>)}
+      {k.num('amount')}
+      {map === 'noise' ? k.nums('scale', 'speed') : k.num('angle')}
+    </>
+  );
+}
+
+function TimeEditor({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit; layers: LayerRef[]; onPatch: (c: Partial<FinishEffect>) => void }) {
   const map = e.map ?? 'slit';
   const size = fnRingSize(e.quality ?? 'medium', 1440, 900);
   return (
@@ -475,6 +555,8 @@ function effectSummary(e: FinishEffect): string {
     }
     return parts.length ? parts.join(', ') : 'Neutral';
   }
+  const preset = (FINISH_EFFECTS[e.kind as FinishKind]?.presets ?? []).find(pr => Object.entries(pr.values).every(([key, v]) => Math.abs(num(e, key) - v) < 1e-6));
+  if (preset) return preset.name;
   const changed = finishParamsOf(e).filter(p => !p.hidden).filter(p => Math.abs(num(e, p.key) - p.value) > 1e-3);
   const shown = (changed.length ? changed : finishParamsOf(e).filter(p => !p.hidden)).slice(0, 3);
   return shown.length ? shown.map(p => `${p.label.toLowerCase()} ${fmtNum(num(e, p.key))}`).join(' · ') : 'Default settings';
