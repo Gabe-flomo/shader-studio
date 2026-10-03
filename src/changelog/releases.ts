@@ -39,6 +39,21 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.5',
+    date: '2026-10-03',
+    title: 'Particles, piano roll and new looks',
+    highlights: [
+      { area: 'Studio', text: 'A new Particles node: up to 4 million GPU particles as glowing light or ink in water, in 2D or 3D with depth of field. Presets, and any setting can be wired in.', link: { kind: 'example', key: 'inkInWater' } },
+      { area: 'Studio', text: 'Particles can hold a picture and blow away, flow round shapes, stand in a 3D scene, follow your hands and react to sound, an Audio engine track included.', link: { kind: 'example', key: 'particleImageDissolve' } },
+      { area: 'Studio', text: 'The old particle nodes (Particle Emitter, the P: chain, Particle System) are gone: their examples use Particles, and old saves say what replaced them.' },
+      { area: 'Play', text: 'Piano roll: double-click a MIDI clip on the tape to edit its notes. Snap to scale puts the notes you play into the tape’s scale.', link: { kind: 'example', key: 'pianoRollScale', page: 'play' } },
+      { area: 'Play', text: 'The Granulator’s Spectral mode can emit its grains from Position or spread them in time.', link: { kind: 'example', key: 'granulatorSpectral', page: 'play' } },
+      { area: 'Play', text: 'New Finish looks: Pixel sort, Halftone, ASCII and Light leaks, and presets on Feedback, Mirror, Edges, Posterize and more.', link: { kind: 'example', key: 'finishPrint', page: 'play' } },
+      { area: 'Play', text: 'Datamosh, Motion extract and Echo. Feedback is fixed: no haze left behind, trails stay where things were, and a Source picks what leaves them.', link: { kind: 'example', key: 'finishDatamoshEcho', page: 'play' } },
+      { area: 'Studio', text: 'Preview resolution: run the preview at Full, Half, Third or Quarter size to keep heavy graphs smooth; exports stay full size.' },
+    ],
+  },
+  {
     id: '2026.10.4',
     date: '2026-10-03',
     title: 'Effects that know where',

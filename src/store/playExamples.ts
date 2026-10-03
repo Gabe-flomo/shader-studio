@@ -1997,7 +1997,7 @@ Distance reads only while both hands are in view, so the rings hold their size w
     finish: {
       on: true,
       effects: [
-        fxPreset('feedback', 'Ghosts'),
+        fxPreset('feedback', 'Ghost trail'),
         fxPreset('ascii', 'Terminal', { size: 18, contrast: 0.6 }),
         fx('bloom', { amount: 0.35, threshold: 0.6 }),
         fx('crt', { curvature: 0.15 }),
@@ -2012,44 +2012,103 @@ Distance reads only while both hands are in view, so the rings hold their size w
     mappings: [map('breathe', 'radius', S.lfo('sine', 0.12), 0.12, 0.42, { smoothMs: 40 })],
     notes: `**What it shows.** An old green terminal. **Feedback** keeps fading copies of earlier frames (ghost trails as the rings breathe), **ASCII** redraws everything as text characters, from sparse dots in the dark to dense blocks in the light, then Bloom and a slight CRT curve finish the screen.
 
-**How it's built.** Rings of glow from one circle (SDF Glow in Ring Light mode), its Radius breathing with an LFO. Finish: Feedback (**Ghosts** preset), ASCII (**Terminal**: one ink colour), Bloom, CRT. ASCII starts a pass of its own, so it draws the ghost trails too.
+**How it's built.** Rings of glow from one circle (SDF Glow in Ring Light mode), its Radius breathing with an LFO. Finish: Feedback (**Ghost trail** preset), ASCII (**Terminal**: one ink colour), Bloom, CRT. ASCII starts a pass of its own, so it draws the ghost trails too.
 
 **Try this.**
 • ASCII's **Colour** preset takes each character's colour from the picture; **Big type** makes huge characters.
-• Feedback's **Tunnel** and **Vortex** presets zoom and spin the trails into the characters.
+• Feedback's **Tunnel** and **Spiral** presets zoom and spin the trails into the characters.
 • Drag ASCII · Character size down to 6 for a dense, detailed screen.`,
   })),
-  ex('finishKaleidoscope', glowGraph({ radius: 0.12, posX: 0.35, falloff: 9, tint: [1, 0.45, 0.75], comment: 'A small glowing circle drifting about (LFOs move its centre): the Mirror folds it into a pattern.' }), play({
+  ex('finishKaleidoscope', fbmGraph({ scale: 3, timeScale: 0.25, preset: '2' }), play({
     finish: {
       on: true,
       effects: [
         fxPreset('feedback', 'Tunnel'),
         fxPreset('mirror', 'Mandala'),
         fxPreset('edges', 'Neon'),
-        fxPreset('posterize', 'Sunset duo'),
       ],
     },
     controls: [
-      ctl('px', 'circ::posX', 'Circle · x', -1, 1),
-      ctl('py', 'circ::posY', 'Circle · y', -1, 1),
       ctl('seg', 'finish:mirror::segments', 'Mirror · Segments', 1, 16, 1),
       ctl('spin', 'finish:mirror::spin', 'Mirror · Spin', -1, 1),
-      ctl('fb', 'finish:feedback::amount', 'Feedback · Amount', 0, 0.99),
+      ctl('zoom', 'finish:mirror::zoom', 'Mirror · Zoom', 0.25, 4),
+      ctl('fb', 'finish:feedback::amount', 'Feedback · Trail', 0, 0.99),
       ctl('glow', 'finish:edges::glow', 'Edges · Glow', 0, 2),
     ],
-    mappings: [
-      map('wanderX', 'px', S.lfo('sine', 0.07), -0.45, 0.45),
-      map('wanderY', 'py', S.lfo('sine', 0.045, 0.25), -0.35, 0.35),
-    ],
-    notes: `**What it shows.** Presets on four Finish effects, stacked into a moving mandala from one small circle. **Feedback** (Tunnel) leaves trails that grow and turn, **Mirror** (Mandala) folds them into six wedges, **Edges** (Neon) outlines every trail in glowing colour, and **Posterize** (Sunset duo) maps it all onto a purple-to-peach two-colour palette.
+    mappings: [map('breathe', 'zoom', S.lfo('sine', 0.04), 0.8, 1.6, { smoothMs: 80 })],
+    notes: `**What it shows.** Presets on three Finish effects, stacked into a moving mandala from a drifting noise. **Feedback** (Tunnel) leaves trails that grow and turn, **Mirror** (Mandala) folds them into six wedges, and **Edges** (Neon) keeps only their outlines, glowing in colours that follow their direction.
 
-**How it's built.** A glowing circle whose centre wanders on two LFOs. Each effect's card has a preset row at the top: one click sets its numbers, and you carry on from there. The order matters: the trails are folded, then outlined, then coloured.
+**How it's built.** An FBM noise through a Palette, drifting fairly fast; an LFO slowly zooms the Mirror in and out. Each effect's card has a preset row at the top: one click sets its numbers, and you carry on from there. The order matters: the trails are folded, then outlined.
 
 **Try this.**
 • Mirror's other presets: **Mirror**, **Crystal** (twelve wedges, spinning back), **Butterfly**.
-• Feedback: **Vortex** for a spiral, **Smear** for a liquid blend.
-• Posterize: **1-bit**, **Handheld** or **Retro PC**; or switch it off to see the Neon colours.
+• Feedback: **Spiral** for a whirl, **Smear** for a liquid blend.
+• Add a **Posterize** at the bottom and try its **Sunset duo** or **Handheld** preset: the neon becomes a two-colour print.
 • Drag the Finish cards into another order and watch the look change.`,
+  })),
+  // ─ Finish: the temporal effects (Datamosh, Echo, Motion extract) on moving content ─
+  ex('finishDatamoshEcho', fbmGraph({ scale: 2.2, timeScale: 0.05, preset: '4' }), play({
+    layers: [
+      layer('shape', 'orb', 'Orb', { shape: 'circle', x: 0.3, y: 0.5, w: 0.22, h: 0.22, fill: [1, 0.85, 0.4], fillOpacity: 1, stroke: [1, 0.95, 0.7], strokeWidth: 2, action: 'none' }),
+    ],
+    finish: {
+      on: true,
+      effects: [
+        fx('echo', { time: 5, count: 5, start: 0.85, decay: 0.7, mode: 3, strobe: 0, map: 'layer', layerId: 'orb' }),
+        fxPreset('datamosh', 'Bloom', { bleed: 0.03, block: 32, push: 1.6, sustain: 0.85, every: 4, map: 'layer', layerId: 'orb' }),
+        fx('vignette', { amount: 0.4 }),
+      ],
+    },
+    controls: [
+      ctl('ox', 'layer:orb::x', 'Orb · x', 0, 1),
+      ctl('oy', 'layer:orb::y', 'Orb · y', 0, 1),
+      ctl('echoes', 'finish:echo::count', 'Echo · Echoes', 1, 8, 1),
+      ctl('etime', 'finish:echo::time', 'Echo · Echo time', 1, 30, 1),
+      ctl('push', 'finish:datamosh::push', 'Datamosh · Push', 0, 3),
+      ctl('mosh', 'finish:datamosh::hold', 'Datamosh · Mosh (hold M)', 0, 1, 1),
+    ],
+    mappings: [
+      map('swingX', 'ox', S.lfo('sine', 0.37), 0.15, 0.85),
+      map('swingY', 'oy', S.lfo('sine', 0.53, 0.25), 0.25, 0.75),
+      map('holdM', 'mosh', S.key('KeyM'), 0, 1),
+    ],
+    notes: `**What it shows.** Two of the temporal Finish effects on one moving shape. **Echo** leaves sharp copies of the Orb a few frames apart behind it. **Datamosh** treats the picture like a video that lost its keyframes: the Orb's movement drags the landscape's old pixels along in blocks, smearing and blooming, until a keyframe every four seconds snaps it clean.
+
+**How it's built.** A drifting FBM landscape, and a Shape layer (the Orb) swung round by two LFOs. Finish:
+• **Echo** with Source **One layer: Orb** and Operator **Behind**: five copies of only the Orb, under it, each fainter (the Layer echo setup).
+• **Datamosh** from the Bloom preset, pushed harder (bigger blocks, more Push and Sustain), with **Motion from: Orb**: the Orb's movement moves the picture's blocks. Keyframe every 4 s heals it.
+• A Vignette.
+Holding **M** turns Datamosh's **Mosh** on: nothing heals while it's held.
+
+**Try this.**
+• Hold **M** for a few seconds and let go: the smear piles up, then the next keyframe clears it.
+• Datamosh presets: **Melt** (slow, liquid), **Blocky**, **Pulse** (a keyframe every second).
+• Echo: **Strobe echo** makes the copies jump instead of following; set Source back to Whole picture to echo everything.`,
+  })),
+  ex('finishMotionExtract', glowGraph({ radius: 0.16, falloff: 7, tint: [1, 0.75, 0.45], comment: 'A glowing circle swung round by two LFOs: the movement Motion extract shows.' }), play({
+    layers: [layer('text', 'word', 'Word', { text: 'MOVE', y: 0.3, size: 0.18 })],
+    finish: { on: true, effects: [fxPreset('motionx', 'Neon motion')] },
+    controls: [
+      ctl('px', 'circ::posX', 'Circle · x', -1, 1),
+      ctl('py', 'circ::posY', 'Circle · y', -1, 1),
+      ctl('wx', 'layer:word::x', 'Word · x', 0, 1),
+      ctl('delay', 'finish:motionx::delay', 'Motion extract · Delay', 1, 30, 1),
+      ctl('gain', 'finish:motionx::gain', 'Motion extract · Gain', 0, 8),
+      ctl('neon', 'finish:motionx::neon', 'Motion extract · Neon', 0, 1),
+    ],
+    mappings: [
+      map('orbitX', 'px', S.lfo('sine', 0.17), -0.7, 0.7),
+      map('orbitY', 'py', S.lfo('sine', 0.17, 0.25), -0.45, 0.45),
+      map('slide', 'wx', S.lfo('triangle', 0.15), 0.3, 0.7),
+    ],
+    notes: `**What it shows.** **Motion extract**: the picture inverted over a copy of itself from a few frames ago. Whatever stays still cancels out, so only what moves shows, as outlines. Here with the **Neon motion** preset: on black, what arrives glows cyan and what leaves glows magenta.
+
+**How it's built.** A glowing circle orbiting on two LFOs, and a text layer sliding left and right. Finish: Motion extract with its **Neon motion** preset. A still frame shows nothing at all: pause the clock and the picture goes black.
+
+**Try this.**
+• Delay: longer catches slower movement and draws thicker outlines.
+• Presets: **Classic grey** (the mid-grey version of the trick), **On black**.
+• Put it over a Camera or a Video layer: only you (or what moves in the video) shows.`,
   })),
   ex('drumPads', glowGraph({ radius: 0.1, falloff: 16, tint: [1, 0.5, 0.3] }), play({
     layers: [
@@ -2214,7 +2273,7 @@ Distance reads only while both hands are in view, so the rings hold their size w
 • Record a take and render it: the render's sound has the sweep as you played it.`,
   })),
   // A MIDI clip on the tape, in a scale, with Snap to scale on the rack.
-  ex('pianoRollScale', glowGraph({ radius: 0.1, falloff: 14, tint: [0.4, 0.8, 1], comment: 'The glow the notes swell: its Radius follows the Hits reader on the Tom keys rack.' }), play({
+  ex('pianoRollScale', glowGraph({ radius: 0.1, falloff: 10, tint: [0.4, 0.8, 1], mode: 'ring', ringFreq: 8, comment: 'The glow the notes swell: its Radius follows the Hits reader on the Tom keys rack.' }), play({
     audioEngine: {
       racks: [{
         id: 'keys', name: 'Tom keys', effects: [], keyboard: true, midi: '', channel: 0, volume: 1, mute: false, scaleLock: 'nearest',
@@ -2233,7 +2292,6 @@ Distance reads only while both hands are in view, so the rings hold their size w
     },
     audioFx: { chains: { 'rack:keys': { on: true, effects: [afx('reverb', 'verb', { type: 'hall', size: 0.6, decay: 2.4, mix: 0.28 })] } } },
     audioReaders: { input: 'engine:keys', readers: [reader('hits', 'Hits', 160, 1.5, 30, 2, 160, [0.4, 0.8, 1])] },
-    layers: [layer('audio', 'bars', 'Spectrum', { style: 'bars', y: 0.12, w: 1.7, h: 0.16, bars: 64, colour: 'palette', palette: 1, opacity: 0.7, toShader: false })],
     controls: [
       ctl('radius', 'circ::radius', 'Glow (the notes)', 0.05, 0.4),
       ctl('size', 'au:keys:inst::3', 'Tom keys · Grain size', 2, 2000, 1),
