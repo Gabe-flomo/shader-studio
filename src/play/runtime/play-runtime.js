@@ -1225,6 +1225,22 @@ void main() {
       gl.bindTexture(gl.TEXTURE_2D, padTex);
       for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
     }
+    // The graph's Particles nodes (kit/gpuParticles.js, the app's engine): stepped and drawn on this context before
+    // each picture, their textures bound to the samplers the nodes declare. Without WebGL2 float targets the
+    // samplers read nothing and each node passes its picture through.
+    const GPK = typeof SSKit !== 'undefined' && SSKit.gpuParticles ? SSKit.gpuParticles : null;
+    const gpUses = !bgOnly && B.fragmentShader.indexOf('// gpu-particles ') >= 0;
+    const gpHostR = gpUses && gl2 && GPK ? GPK.host(gl) : null;
+    const gpBlank = [];
+    if (gpHostR) gpHostR.bind(B.fragmentShader);
+    if (gpUses && (!gpHostR || gpHostR.unsupported)) {
+      const re = /uniform\s+sampler2D\s+(\w+)\s*;\s*\/\/ gpu-particles /g;
+      let m;
+      while ((m = re.exec(B.fragmentShader))) gpBlank.push(m[1]);
+      console.warn('[Playfield] ' + (gpHostR ? gpHostR.unsupported : 'Particles need WebGL2; the picture shows without them.'));
+    }
+    // The step the next picture's particles take (0 while paused), and whether they start over (a new render).
+    let gpDt = 0, gpReset = false;
     // The graph's Layers node: the layers' colour and distance field, uploaded after each frame's layers are drawn.
     const usesLayersNode = !bgOnly && /\bu_layers(Field)?\b/.test(B.fragmentShader);
     let layersTap = null, layersColourTex = null, layersFieldTex = null, layersFieldSize = [0, 0];
@@ -2532,6 +2548,8 @@ void main() {
     // The graph's picture: straight to the screen, or (feedback, echo) into a half-float target, then dithered to the screen as ShaderCanvas does.
     function drawPicture() {
       const W = glCanvas.width, H = glCanvas.height;
+      const gpOut = gpHostR && !gpHostR.unsupported ? gpHostR.frame({ width: W, height: H, dt: gpDt, time, mouse: [mouse.x, mouse.y], read: n => uniformValues[n], reset: gpReset }) : [];
+      gpDt = 0; gpReset = false;
       let target = null;
       if (stateful || echoCfg) {
         if (stateful && !pingPong) pingPong = [makeTarget(W, H), makeTarget(W, H)];
@@ -2567,6 +2585,8 @@ void main() {
       for (const v of videos) bindSampler(v.name, v.tex);
       for (const d of dataTex) bindSampler(d.name, d.tex);
       for (const c of dataCounts) setUniform(c.name, c.n);
+      for (const o of gpOut) bindSampler(o.uniform, o.texture || blank);
+      for (const n of gpBlank) bindSampler(n, blank);
       drawQuad();
       if (target) {
         if (echoCfg) captureEcho(target);
@@ -2587,6 +2607,7 @@ void main() {
       const steps = Array.isArray(o.steps) ? o.steps : [];
       if (K) K.reset(o.seed > 0 ? o.seed : 1);
       if (finishR) finishR.reset();
+      gpReset = true;
       dropTargets(); frame = 0; if (rtState) { rtState.smooth.clear(); rtState.lag.clear(); rtState.values.clear(); } lastOut.clear(); trig.clear(); actLevel.clear(); overrides.clear(); pairState.clear(); condStates.clear(); incState.clear(); incFire.clear(); incCond.clear(); lastTime = -Infinity;
       return { gen, fdt, steps };
     };
@@ -2627,6 +2648,7 @@ void main() {
       const showsThis = !qPlan || qPlan.items.some(i => i.item.kind === 'graph' && i.item.graph === 'this');
       if (!bgOnly && showsThis) {
         uploadVideos();
+        gpDt = running || held ? dt : 0;
         // Reduced motion's still frame of a feedback graph is the picture after its first 1.5 s
         // (90 frames at 60 fps), which is what the feedback looks like once it has built up.
         if (reduced && stateful && frame === 1 && !held) for (let i = 0; i < 89; i++) { drawPicture(); time += 1 / 60; }
@@ -2690,6 +2712,7 @@ void main() {
     return {
       destroy() {
         alive = false;
+        if (gpHostR) gpHostR.dispose();
         for (const close of feedClosers) close();
         cancelAnimationFrame(raf);
         ro.disconnect();

@@ -138,7 +138,10 @@ export { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGB
 // Vertex Particles (deprecated)
 export { VertexParticleSystemNode } from './vparticles';
 
-// Particle Pipeline Nodes
+// GPU Particles (the engine in play/kit/gpuParticles.js)
+export { GpuParticlesNode } from './gpuParticles';
+
+// Particle Pipeline Nodes (deprecated: Particles replaces them)
 export { PInitNode, PRotateNode, PWaveNode, PColorDistNode, PSizeNode, PRenderNode } from './pnodes';
 
 // Math
@@ -267,6 +270,7 @@ import {
 } from './shapers';
 import { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGBToCMYKNode, CMYKHalftoneNode } from './halftone';
 import { VertexParticleSystemNode } from './vparticles';
+import { GpuParticlesNode } from './gpuParticles';
 import { PInitNode, PRotateNode, PWaveNode, PColorDistNode, PSizeNode, PRenderNode } from './pnodes';
 
 export const NODE_REGISTRY: Record<string, NodeDefinition> = {
@@ -457,7 +461,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   gravityField:    GravityFieldNode,
   spiralField:     SpiralFieldNode,
   vParticles:      VertexParticleSystemNode,
-  // Particle Pipeline
+  // GPU Particles
+  gpuParticles: GpuParticlesNode,
+  // Particle Pipeline (deprecated)
   pInit:      PInitNode,
   pRotate:    PRotateNode,
   pWave:      PWaveNode,

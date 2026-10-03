@@ -166,6 +166,13 @@ export interface NodeDefinition {
    * as `u_tex_${node.id}_${slot}`.
    */
   textureSlots?: string[];
+  /**
+   * Top-level declarations this instance needs (a sampler an engine outside
+   * the shader fills, with a comment the hosts read): called with the node as
+   * generateGLSL sees it, its id the slug and each live param the name of its
+   * uniform. The GPU Particles node uses it (nodes/definitions/gpuParticles.ts).
+   */
+  declarationsFor?: (node: GraphNode) => string[];
 
   // Default parameter values
   defaultParams?: Record<string, unknown>;
