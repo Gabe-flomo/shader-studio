@@ -9,7 +9,8 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import { AudioWorkletNode as NodeWorkletNode, OfflineAudioContext as NodeOffline } from 'node-web-audio-api';
-import { GR_MODES, grAnalyse, grCreate, grLoadWorklet, grMakeEngine, grNewStats, grReadStats, grRender, grSettings, grSpectrumImage, grSummary, type GrStats } from '../kit/granulator.js';
+import { GR_MODES, GR_SIDES, GR_SPEC_GRAINS, grAnalyse, grParam, grCreate, grLoadWorklet, grMakeEngine, grNewStats, grReadStats, grRender, grSettings, grSpectrumImage, grSummary, type GrStats } from '../kit/granulator.js';
+import { AE_INST, parseAudioEngine } from '../../types/playAudioEngine';
 
 const SR = 48000;
 beforeAll(() => {
@@ -195,5 +196,114 @@ describe('Spectral', () => {
     expect(st.heads[3]).toBeCloseTo(0.3, 6);
     expect(Array.from(st.band.slice(0, 2))).toEqual([Math.fround(0.3), Math.fround(0.4)]);
     expect(Array.from(st.energy.slice(0, 2))).toEqual([Math.fround(0.05), Math.fround(0.07)]);
+  });
+});
+
+describe('Spectral grains: on the line, emitted, spread', () => {
+  const SAMPLE_SECS = 2;
+  /** A spectral drone for `secs` on a two-tone sample; the grains' file positions at the end, and the stats. */
+  function spec(over: Record<string, number>, secs: number, seed = 3): { pos: number[]; st: GrStats } {
+    const e = grMakeEngine()(SR, seed);
+    e.set(quiet({ mode: 4, band: 0.4, bandWidth: 1, bandSpread: 0, density: 60, size: 150, ...over }));
+    e.reset(seed);
+    e.setBuffer([tones([220, 880], SAMPLE_SECS)], SR);
+    const L = new Float32Array(128), R = new Float32Array(128);
+    for (let f = 0; f < secs * SR; f += 128) e.process(L, R, 128);
+    const st = e.stats(grNewStats());
+    return { pos: Array.from(st.pos.slice(0, st.count)), st };
+  }
+  const render = (over: Record<string, number>, seed = 4) =>
+    grRender({ channels: [tones([220, 660, 1500])], frames: SR, settings: quiet({ mode: 4, band: 0.45, bandWidth: 0.6, bandSpread: 0.2, size: 120, density: 40, spray: 0, ...over }), seed }).left;
+
+  it('is a list setting that starts On the line, so older saves sound as they did', () => {
+    expect(GR_SPEC_GRAINS).toEqual(['On the line', 'Emit', 'Spread']);
+    expect(GR_SIDES).toEqual(['Both', 'Ahead', 'Behind']);
+    expect(grParam('specGrains')).toMatchObject({ addr: 49, kind: 'list', value: 0 });
+    expect(grParam('specArea')).toMatchObject({ addr: 50, min: 0, max: 1 });
+    expect(grParam('specSide')).toMatchObject({ addr: 51, kind: 'list', value: 0 });
+    expect(grSettings(undefined).specGrains).toBe(0);
+    // No setting and an explicit "On the line" are the same samples (Area and Side mean nothing there).
+    const a = render({}), b = render({ specGrains: 0, specArea: 0.9, specSide: 2 });
+    expect(Array.from(a)).toEqual(Array.from(b));
+    // On the line: every grain reads where Position is.
+    const line = spec({ position: 0.3 }, 0.4);
+    expect(line.pos.length).toBeGreaterThan(3);
+    for (const p of line.pos) expect(p).toBeCloseTo(0.3, 4);
+    expect(line.st.theadCount).toBe(0);
+  });
+
+  it('Spread: grains land inside the Area around Position, either side, ahead or behind', () => {
+    const both = spec({ position: 0.5, specGrains: 2, specArea: 0.4, specSide: 0 }, 0.5);
+    expect(both.pos.length).toBeGreaterThan(5);
+    for (const p of both.pos) { expect(p).toBeGreaterThanOrEqual(0.3 - 1e-6); expect(p).toBeLessThanOrEqual(0.7 + 1e-6); }
+    expect(both.pos.some(p => p < 0.45)).toBe(true);
+    expect(both.pos.some(p => p > 0.55)).toBe(true);
+    const ahead = spec({ position: 0.5, specGrains: 2, specArea: 0.4, specSide: 1 }, 0.5);
+    for (const p of ahead.pos) { expect(p).toBeGreaterThanOrEqual(0.5 - 1e-6); expect(p).toBeLessThanOrEqual(0.9 + 1e-6); }
+    const behind = spec({ position: 0.5, specGrains: 2, specArea: 0.4, specSide: 2 }, 0.5);
+    for (const p of behind.pos) { expect(p).toBeGreaterThanOrEqual(0.1 - 1e-6); expect(p).toBeLessThanOrEqual(0.5 + 1e-6); }
+    // Area 0 is the line again.
+    for (const p of spec({ position: 0.5, specGrains: 2, specArea: 0 }, 0.3).pos) expect(p).toBeCloseTo(0.5, 4);
+  });
+
+  it('Emit: grains leave from spawn points travelling from Position, and travel on themselves', () => {
+    // One line (Emit spread 0), forward at 1 sample length a second: after 0.25 s the spawn points are at 0.5,
+    // and every live grain, riding on at the same speed, is there too.
+    const fwd = spec({ position: 0.25, specGrains: 1, emitSpread: 0, emitSpeed: 1, emitDir: 0, size: 100 }, 0.25);
+    expect(fwd.st.theadCount).toBe(8);
+    for (let i = 0; i < 8; i++) expect(fwd.st.theads[i]).toBeCloseTo(0.5, 2);
+    // The bands' spawn points are still posted on their own axis.
+    expect(fwd.st.headAxis).toBe(2);
+    expect(fwd.pos.length).toBeGreaterThan(2);
+    for (const p of fwd.pos) expect(p).toBeCloseTo(0.5, 2);
+    const back = spec({ position: 0.75, specGrains: 1, emitSpread: 0, emitSpeed: 1, emitDir: 1, size: 100 }, 0.25);
+    for (const p of back.pos) expect(p).toBeCloseTo(0.5, 2);
+    // A grain moves while it sounds: 0.5 sample lengths a second for 0.1 s.
+    const e = grMakeEngine()(SR, 3);
+    e.set(quiet({ mode: 4, band: 0.4, bandWidth: 1, bandSpread: 0, density: 5, size: 400, position: 0.2, specGrains: 1, emitSpread: 0, emitSpeed: 0.5 }));
+    e.reset(3);
+    e.setBuffer([tones([220, 880], SAMPLE_SECS)], SR);
+    const L = new Float32Array(128), R = new Float32Array(128);
+    e.process(L, R, 128);
+    const first = e.stats(grNewStats());
+    expect(first.count).toBe(1);
+    const p0 = first.pos[0];
+    for (let f = 0; f < 0.1 * SR; f += 128) e.process(L, R, 128);
+    expect(e.stats(grNewStats()).pos[0] - p0).toBeCloseTo(0.05, 2);
+  });
+
+  it('each way sounds different from the line, and each renders bit for bit for a seed', () => {
+    const line = render({ specGrains: 0 });
+    const emit = render({ specGrains: 1, emitSpeed: 0.6, emitSpread: 0.3, emitDir: 2 });
+    const spread = render({ specGrains: 2, specArea: 0.8 });
+    for (const d of [line, emit, spread]) expect(rms(d, Math.floor(0.2 * SR), SR)).toBeGreaterThan(0.005);
+    expect(Array.from(emit)).not.toEqual(Array.from(line));
+    expect(Array.from(spread)).not.toEqual(Array.from(line));
+    expect(Array.from(spread)).not.toEqual(Array.from(emit));
+    expect(Array.from(render({ specGrains: 1, emitSpeed: 0.6, emitSpread: 0.3, emitDir: 2 }))).toEqual(Array.from(emit));
+    expect(Array.from(render({ specGrains: 2, specArea: 0.8 }))).toEqual(Array.from(spread));
+  });
+
+  it('the worklet posts Spectral · Emit’s places in the sample after the grains (an older pack reads as none)', () => {
+    const st = grNewStats();
+    const c = 1, d = new Float32Array(12 + c * 7 + 9);
+    d[0] = c; d[2] = 8; d[3] = 2;
+    d[12 + 7] = 8;
+    for (let t = 0; t < 8; t++) d[12 + 7 + 1 + t] = t / 8;
+    grReadStats(d, st);
+    expect(st.theadCount).toBe(8);
+    expect(st.theads[4]).toBeCloseTo(0.5, 6);
+    grReadStats(new Float32Array(12 + c * 7), st);
+    expect(st.theadCount).toBe(0);
+  });
+
+  it('the record keeps the new settings, clamped', () => {
+    const raw = { racks: [{ id: 'gr', name: 'Grains', effects: [], keyboard: false, midi: '', channel: 0, volume: 1, mute: false,
+      instrument: { id: AE_INST, kind: 'granulator', params: { 0: 4, 49: 7, 50: 0.35, 51: 1 } } }] };
+    expect(parseAudioEngine(raw)!.racks[0].instrument!.params).toEqual({ 0: 4, 49: 2, 50: 0.35, 51: 1 });
+    const settings = grSettings({ 0: 4, 49: 1.4, 50: -1, 51: 2 });
+    expect(settings.specGrains).toBe(1);
+    expect(settings.specArea).toBe(0);
+    expect(settings.specSide).toBe(2);
   });
 });

@@ -11,6 +11,8 @@ export interface GrStats {
   band: Float32Array; energy: Float32Array;
   /** Emit / Spectral: the newest voice's travelling spawn points (0..1; places in the sample, or bands), how many (0: none), on which axis (1 time, 2 band, 0 none). */
   heads: Float32Array; headCount: number; headAxis: number;
+  /** Spectral · Emit: the newest voice's travelling places in the sample its grains leave from (0..1), and how many (0: none). */
+  theads: Float32Array; theadCount: number;
 }
 /** Spectral's analysis (grAnalyse): per STFT frame, up to `peaks` peaks, strongest first (fractional bins, sine amplitudes). */
 export interface GrSpectrum { size: number; hop: number; frames: number; peaks: number; len: number; bins: Float32Array; amps: Float32Array; count: Uint8Array; energy: Float32Array }
@@ -65,6 +67,8 @@ export const GR_MODES: readonly string[];
 export const GR_DIRS: readonly string[];
 export const GR_EDGES: readonly string[];
 export const GR_FFT_SIZES: readonly number[];
+export const GR_SPEC_GRAINS: readonly string[];
+export const GR_SIDES: readonly string[];
 export const GR_FILTERS: readonly string[];
 export const GR_WINDOWS: readonly string[];
 export const GR_PARAMS: readonly GrParam[];

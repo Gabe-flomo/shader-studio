@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.4',
+    date: '2026-10-03',
+    title: 'Spectral grains that move',
+    highlights: [
+      { area: 'Play', text: 'Granulator’s Spectral grains can leave the play line: emit them so they travel through the sample like Emit’s.', link: { kind: 'doc', path: 'docs/granulator.md', label: 'Granulator' } },
+      { area: 'Play', text: 'Or spread them over an Area around the play point: either side, ahead or behind.' },
+    ],
+  },
+  {
     id: '2026.10.3',
     date: '2026-10-02',
     title: 'Input names',
