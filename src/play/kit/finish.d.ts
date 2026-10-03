@@ -41,7 +41,7 @@ export function fnActive(finish: FnFinish | null | undefined): boolean;
 export function fnRunning(finish: FnFinish | null | undefined): FnEffect[];
 export function fnAnimated(finish: FnFinish | null | undefined): boolean;
 /** An effect's Where ('all' when absent or odd). */
-export function fnWhereOf(e: { where?: unknown } | null | undefined): 'all' | 'layer' | 'picture' | 'motion';
+export function fnWhereOf(e: { where?: unknown; [key: string]: unknown } | null | undefined): 'all' | 'layer' | 'picture' | 'motion';
 /** The map textures running effects read, in order: 'layer:<id>' and 'motion'. */
 export function fnMapKeys(effects: readonly FnEffect[]): string[];
 /** The layers a stack reads drawn alone (env.alphaLayers). */
