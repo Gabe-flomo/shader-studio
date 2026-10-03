@@ -11,6 +11,7 @@ export const PInitNode: NodeDefinition = {
   type: 'pInit',
   label: 'P: Init',
   category: 'Particles',
+  deprecated: true, // Particles (gpuParticles.ts) replaces the P: chain
   description: 'Initialize particle positions on a 3D shape. The starting point of every particle pipeline. Connect to P: Rotate, P: Wave, or directly to P: Render. Use with P: Render as the terminal; P: Rotate, P: Wave, P: Color by Distance and P: Size go in between.',
   inputs: {},
   outputs: { particles: { type: 'particle', label: 'Particles' } },
@@ -31,6 +32,7 @@ export const PRotateNode: NodeDefinition = {
   type: 'pRotate',
   label: 'P: Rotate',
   category: 'Particles',
+  deprecated: true, // Particles (gpuParticles.ts) replaces the P: chain
   description: 'Rotate particles around an axis over time. Differential rotation makes inner particles spin faster than outer ones — creates a galaxy-like twist. Use with P: Init upstream and P: Render downstream.',
   inputs: { particles: { type: 'particle', label: 'Particles' } },
   outputs: { particles: { type: 'particle', label: 'Particles' } },
@@ -49,6 +51,7 @@ export const PWaveNode: NodeDefinition = {
   type: 'pWave',
   label: 'P: Wave',
   category: 'Particles',
+  deprecated: true, // Particles (gpuParticles.ts) replaces the P: chain
   description: 'Oscillate particle positions over time along a chosen axis — radial (breathe), Y (ripple), or tangential (swirl). Use with P: Init upstream and P: Render downstream.',
   inputs: { particles: { type: 'particle', label: 'Particles' } },
   outputs: { particles: { type: 'particle', label: 'Particles' } },
@@ -67,6 +70,7 @@ export const PColorDistNode: NodeDefinition = {
   type: 'pColorDist',
   label: 'P: Color by Distance',
   category: 'Particles',
+  deprecated: true, // Particles (gpuParticles.ts) replaces the P: chain
   description: 'Color particles by their distance from the emitter center. Inner particles get colorCenter, outer particles get colorEdge. Mix Bias controls the transition curve. Use with P: Init upstream and P: Render downstream.',
   inputs: { particles: { type: 'particle', label: 'Particles' } },
   outputs: { particles: { type: 'particle', label: 'Particles' } },
@@ -92,6 +96,7 @@ export const PSizeNode: NodeDefinition = {
   type: 'pSize',
   label: 'P: Size',
   category: 'Particles',
+  deprecated: true, // Particles (gpuParticles.ts) replaces the P: chain
   description: 'Control particle point size. Perspective Attenuation makes distant particles appear smaller (realistic). Size × Distance scales size with distance factor — inner particles bigger if positive. Use with P: Init upstream and P: Render downstream.',
   inputs: { particles: { type: 'particle', label: 'Particles' } },
   outputs: { particles: { type: 'particle', label: 'Particles' } },
@@ -109,6 +114,7 @@ export const PRenderNode: NodeDefinition = {
   type: 'pRender',
   label: 'P: Render',
   category: 'Particles',
+  deprecated: true, // Particles (gpuParticles.ts) replaces the P: chain
   description: 'Terminal node: renders the particle pipeline as an additive 3D point cloud over the shader output. Softness controls how soft the particle circle edges are. Use with P: Init at the head of the chain; nothing wires after P: Render.',
   inputs: { particles: { type: 'particle', label: 'Particles' } },
   outputs: {},

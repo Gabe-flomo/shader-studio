@@ -26,6 +26,7 @@ import { HandsPill } from './play/HandsChip';
 import { applySolo, usePlayUi } from './play/playUi';
 import { applyGroupVisibility } from '../types/layerGroups';
 import { layersUniforms, setLayersTap, setLayersRenderer, releaseLayersRenderer } from '../play/layersTexture';
+import { bindGpuParticles, drawGpuParticles, gpuParticlesActive, releaseGpuParticlesRenderer, resetGpuParticles, setGpuParticlesRenderer } from '../play/gpuParticlesTexture';
 import { padGridUniforms } from '../lib/padGrid';
 import { attachLayerDrop } from '../play/layerDrop';
 import { videoEngine } from '../lib/videoEngine';
@@ -474,6 +475,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     rendererRef.current = renderer;
     // The Layers node's distance field is built on this renderer's GPU (play/kit/jfa.js).
     setLayersRenderer(renderer);
+    // So are the Particles nodes (play/kit/gpuParticles.js).
+    setGpuParticlesRenderer(renderer);
     onCanvasReady?.(renderer.domElement);
 
     // ── Frame scheduling ─────────────────────────────────────────────────────
@@ -598,6 +601,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const dataTextures = new DataTextureBinder(material.uniforms, () => requestRenderRef.current());
     dataTextures.bind(activeFs || '');
     dataTexRef.current = dataTextures;
+    bindGpuParticles(material.uniforms, activeFs || '');
+    /** The pointer in 0…1 of the picture (y up) for the Particles nodes; null before it has been over the canvas. */
+    const particleMouse = (w: number, h: number): [number, number] | null => {
+      const mu = material.uniforms.u_mouse.value as THREE.Vector2;
+      return mu.x === 0 && mu.y === 0 ? null : [mu.x / Math.max(1, w), mu.y / Math.max(1, h)];
+    };
 
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
@@ -872,6 +881,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         renderAtTime: (time: number, opts?: { dt?: number; first?: boolean }) => {
           ensureRT();
           const u = material.uniforms;
+          // Particles nodes: a render starts them over (with their pre-roll), then steps them a frame at a time.
+          if (gpuParticlesActive()) {
+            const first = !opts || !!opts.first;
+            drawGpuParticles(u, { width: exportW, height: exportH, dt: first ? 0 : opts?.dt ?? 1 / 60, time, mouse: particleMouse(renderer.domElement.width, renderer.domElement.height), reset: first });
+          }
           // The live loop's own history stays as it was: put its uniforms back after.
           const keep = ['u_time', 'u_prevFrame', ...Array.from({ length: 6 }, (_, i) => `u_echo${i}`)].map(k => [k, u[k]?.value] as const);
           const feedback = isStatefulRef.current && !!u.u_prevFrame;
@@ -1331,7 +1345,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       const layerDt = playing ? dt : 0;
       const videoActive = videoIdsRef.current.some(id => videoEngine.isPlaying(id));
       const shaderMoving = playing && (
-        usesTimeRef.current || hasTimeNodeRef.current || gpuParticlesRef.current.size > 0 ||
+        usesTimeRef.current || hasTimeNodeRef.current || gpuParticlesRef.current.size > 0 || gpuParticlesActive() ||
         audioAmps.size > 0 || liveValues.size > 0 || videoActive || isStatefulRef.current || echoRef.current !== null ||
         scopeIdsRef.current.size > 0 || previewNodeIdRef.current !== null
         || midiEngine.hasFile()
@@ -1373,6 +1387,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       } else if (plan.shader) {
         needsRender = false;
         idleFrames = 0;
+        // Particles nodes: stepped (while the clock runs) and drawn before the picture that reads them.
+        if (gpuParticlesActive()) {
+          const pw = renderer.domElement.width || 1, ph = renderer.domElement.height || 1;
+          gpuTimer.begin('particles');
+          drawGpuParticles(material.uniforms, { width: pw, height: ph, dt: playing ? dt : 0, time: elapsed, mouse: particleMouse(pw, ph) });
+          gpuTimer.end();
+        }
         if (isStatefulRef.current) {
           // Ping-pong: render to write RT, blit to screen with dithering
           ensurePingPong();
@@ -1967,6 +1988,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       const vsSrc = st.vertexShader || FALLBACK_VERTEX;
       const fsSrc = (st.rawGlslShader ?? st.fragmentShader) || FALLBACK_FRAGMENT;
       const uniforms = buildUniforms(material.uniforms);
+      // Particles nodes: new engines (their textures went with the old ones), bound under the new uniforms.
+      setGpuParticlesRenderer(null);
+      setGpuParticlesRenderer(renderer);
+      if (bindGpuParticles(uniforms, fsSrc)) reset.push('particles');
       const lastWorking = { vs: vertexShaderRef.current || material.vertexShader, fs: fragmentShaderRef.current || material.fragmentShader };
       material.dispose();
       let next = await compileFresh(vsSrc, fsSrc, uniforms);
@@ -2027,6 +2052,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       virtualTime = 0;
       lastRafTime = null;
       material.uniforms.u_time.value = 0;
+      resetGpuParticles();
       requestRender();
     };
     window.addEventListener('reset-time', handleResetTime);
@@ -2103,6 +2129,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       perspCameraRef.current   = null;
       sceneRef.current = null;
       releaseLayersRenderer(renderer);
+      releaseGpuParticlesRenderer(renderer);
       const loseCtx = renderer.getContext().getExtension('WEBGL_lose_context');
       loseCtx?.loseContext();
       gpuTimer.dispose();
@@ -2217,6 +2244,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     }
     // Data nodes' textures and row counts, as this shader declares them
     dataTexRef.current?.bind(activeFragmentShader);
+    // Particles nodes: an engine per node, sampled through the uniform each declares
+    bindGpuParticles(mat.uniforms, activeFragmentShader);
     // Always keep the font texture bound after recompile
     if (!mat.uniforms.u_fontTexture) mat.uniforms.u_fontTexture = { value: FONT_TEXTURE };
     else mat.uniforms.u_fontTexture.value = FONT_TEXTURE;

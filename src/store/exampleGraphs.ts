@@ -6619,7 +6619,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Particle Galaxy ──
   particleGalaxy: {
     label: 'Particle Galaxy',
-    description: 'The particle pipeline: P: Init seeds points on a disc, P: Rotate spins them with differential twist, P: Wave adds a breathing ripple, P: Color by Distance and P: Size shade them, P: Render draws them additively over the FBM nebula below.',
+    description: 'A Particles node: a quarter of a million particles born on a ring, swirled round the centre while it pulls them in, curled by turbulence, coloured by their speed and lit by two orbiting lights, glowing over the FBM nebula below.',
     counter: 10,
     nodes: [
       {
@@ -6679,76 +6679,31 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       {
         id: 'out',
         type: 'output',
-        position: { x: 1320, y: 200 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal', outputKey: 'color' } } },
+        position: { x: 1740, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'parts', outputKey: 'color' } } },
         outputs: {},
         params: {},
       },
       {
-        id: 'p0',
-        type: 'pInit',
-        position: { x: 60, y: 620 },
-        inputs: {},
-        outputs: { particles: { type: 'particle', label: 'Particles' } },
-        params: { shape: '2', count: 4000, radius: 1.2 },
-      },
-      {
-        id: 'p1',
-        type: 'pRotate',
-        position: { x: 480, y: 620 },
+        id: 'parts',
+        type: 'gpuParticles',
+        position: { x: 1320, y: 200 },
         inputs: {
-          particles: { type: 'particle', label: 'Particles', connection: { nodeId: 'p0', outputKey: 'particles' } },
+          over: { type: 'vec3', label: 'Over', connection: { nodeId: 'pal', outputKey: 'color' } },
+          uv: { type: 'vec2', label: 'UV' },
         },
-        outputs: { particles: { type: 'particle', label: 'Particles' } },
-        params: { axis: '1', rotSpeed: 0.25, rotVariance: 2.5, twirl: 0.6 },
-      },
-      {
-        id: 'p2',
-        type: 'pWave',
-        position: { x: 900, y: 620 },
-        inputs: {
-          particles: { type: 'particle', label: 'Particles', connection: { nodeId: 'p1', outputKey: 'particles' } },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' },
+          particles: { type: 'vec3', label: 'Particles' },
+          density: { type: 'float', label: 'Density' },
         },
-        outputs: { particles: { type: 'particle', label: 'Particles' } },
-        params: { waveAmp: 0.05, waveFreq: 3, waveSpeed: 1.5, waveAxis: 0 },
-      },
-      {
-        id: 'p3',
-        type: 'pColorDist',
-        position: { x: 1320, y: 620 },
-        inputs: {
-          particles: { type: 'particle', label: 'Particles', connection: { nodeId: 'p2', outputKey: 'particles' } },
-        },
-        outputs: { particles: { type: 'particle', label: 'Particles' } },
         params: {
-          colorCenterR: 0.97,
-          colorCenterG: 0.7,
-          colorCenterB: 0.45,
-          colorEdgeR: 0.34,
-          colorEdgeG: 0.53,
-          colorEdgeB: 0.96,
-          mixPow: 0.5,
+          count: '256k', emitter: 'ring', emit: 'stream', follow: 'none',
+          emitSize: 0.75, life: 6, speed: 0.02, spread: 0.5,
+          gravity: 0, turbulence: 0.25, swirl: 0.6, attract: 0.7, drag: 0.8,
+          size: 1.6, brightness: 1.5, palette: 'ice', colorBy: 'speed', glow: 0.8,
+          lights: '2', lightColor: [1, 0.7, 0.4], lightPower: 1.4, lightReach: 0.35, halo: 0.3, lightMotion: 'orbit',
         },
-      },
-      {
-        id: 'p4',
-        type: 'pSize',
-        position: { x: 1740, y: 620 },
-        inputs: {
-          particles: { type: 'particle', label: 'Particles', connection: { nodeId: 'p3', outputKey: 'particles' } },
-        },
-        outputs: { particles: { type: 'particle', label: 'Particles' } },
-        params: { sizeBase: 6, sizeByDist: 10, sizeAttenuation: 1 },
-      },
-      {
-        id: 'p5',
-        type: 'pRender',
-        position: { x: 2160, y: 620 },
-        inputs: {
-          particles: { type: 'particle', label: 'Particles', connection: { nodeId: 'p4', outputKey: 'particles' } },
-        },
-        outputs: {},
-        params: { opacity: 0.9, softness: 3 },
       },
     ],
   },
