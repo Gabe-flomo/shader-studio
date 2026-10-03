@@ -884,7 +884,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           // Particles nodes: a render starts them over (with their pre-roll), then steps them a frame at a time.
           if (gpuParticlesActive()) {
             const first = !opts || !!opts.first;
-            drawGpuParticles(u, { width: exportW, height: exportH, dt: first ? 0 : opts?.dt ?? 1 / 60, time, mouse: particleMouse(renderer.domElement.width, renderer.domElement.height), reset: first });
+            drawGpuParticles(material, { width: exportW, height: exportH, dt: first ? 0 : opts?.dt ?? 1 / 60, time, mouse: particleMouse(renderer.domElement.width, renderer.domElement.height), reset: first });
           }
           // The live loop's own history stays as it was: put its uniforms back after.
           const keep = ['u_time', 'u_prevFrame', ...Array.from({ length: 6 }, (_, i) => `u_echo${i}`)].map(k => [k, u[k]?.value] as const);
@@ -1389,7 +1389,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         if (gpuParticlesActive()) {
           const pw = renderer.domElement.width || 1, ph = renderer.domElement.height || 1;
           gpuTimer.begin('particles');
-          drawGpuParticles(material.uniforms, { width: pw, height: ph, dt: playing ? dt : 0, time: elapsed, mouse: particleMouse(pw, ph) });
+          drawGpuParticles(material, { width: pw, height: ph, dt: playing ? dt : 0, time: elapsed, mouse: particleMouse(pw, ph) });
           gpuTimer.end();
         }
         if (isStatefulRef.current) {

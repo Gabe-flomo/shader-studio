@@ -1,5 +1,6 @@
 import { BLANK_GRAPH } from './exampleIndex';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
+import { gpPreset } from '../play/kit/gpuParticles.js';
 
 import type { ExampleGraph } from './exampleIndex';
 import { PLAY_EXAMPLE_GRAPHS } from './playExamples';
@@ -6704,6 +6705,261 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           size: 1.6, brightness: 1.5, palette: 'ice', colorBy: 'speed', glow: 0.8,
           lights: '2', lightColor: [1, 0.7, 0.4], lightPower: 1.4, lightReach: 0.35, halo: 0.3, lightMotion: 'orbit',
         },
+      },
+    ],
+  },
+
+  // ── Ink in Water ──
+  inkInWater: {
+    label: 'Ink in Water',
+    description: 'A Particles node in its Ink look: a million particles let out of a small ball curl through 3D currents into dark cores and hair-fine threads on white paper, seen through a slowly drifting camera whose shallow focus turns the near and far ink to grey haze.',
+    counter: 3,
+    nodes: [
+      {
+        id: 'ink',
+        type: 'gpuParticles',
+        position: { x: 120, y: 160 },
+        inputs: {
+          over: { type: 'vec3', label: 'Over' },
+          uv: { type: 'vec2', label: 'UV' },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' },
+          particles: { type: 'vec3', label: 'Particles' },
+          density: { type: 'float', label: 'Density' },
+        },
+        params: { ...gpPreset('ink'), sound: 0, handX: 0.35, handY: 0.5, hand2X: 0.65, hand2Y: 0.5, _schemaVersion: 2 },
+      },
+      {
+        id: 'out',
+        type: 'output',
+        position: { x: 620, y: 160 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'ink', outputKey: 'color' } } },
+        outputs: {},
+        params: {},
+      },
+    ],
+  },
+
+  // ── Particles round a Shape ──
+  particlesRoundShape: {
+    label: 'Particles round a Shape',
+    description: 'A Particles node talking to a 2D shader: a Circle SDF wired into Obstacle parts a breeze of particles round it (they can\'t enter it, and pile up along its edge), an FBM noise wired into Flow (Around) swirls them along its contours, and an SDF Fill paints the disc over them. Change the circle, the noise or wire any shape in.',
+    counter: 7,
+    nodes: [
+      { id: 'uv', type: 'uv', position: { x: 60, y: 120 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 't', type: 'time', position: { x: 60, y: 300 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'disc',
+        type: 'circleSDF',
+        position: { x: 320, y: 60 },
+        inputs: {
+          position: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv', outputKey: 'uv' } },
+          radius: { type: 'float', label: 'Radius' },
+          offset: { type: 'vec2', label: 'Center' },
+        },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.32, posX: 0, posY: 0 },
+      },
+      {
+        id: 'n',
+        type: 'fbm',
+        position: { x: 320, y: 260 },
+        inputs: {
+          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv', outputKey: 'uv' } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 't', outputKey: 'time' } },
+          scale: { type: 'float', label: 'Frequency' },
+          time_scale: { type: 'float', label: 'Speed' },
+        },
+        outputs: { value: { type: 'float', label: 'Value' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
+        params: { octaves: 3, lacunarity: 2, gain: 0.5, scale: 1.2, time_scale: 0.15 },
+      },
+      {
+        id: 'parts',
+        type: 'gpuParticles',
+        position: { x: 700, y: 60 },
+        inputs: {
+          over: { type: 'vec3', label: 'Over' },
+          uv: { type: 'vec2', label: 'UV' },
+          obstacle: { type: 'float', label: 'Obstacle', connection: { nodeId: 'disc', outputKey: 'distance' } },
+          flow: { type: 'float', label: 'Flow', connection: { nodeId: 'n', outputKey: 'value' } },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' },
+          particles: { type: 'vec3', label: 'Particles' },
+          density: { type: 'float', label: 'Density' },
+        },
+        params: {
+          ...gpPreset('embers'), sound: 0, handX: 0.35, handY: 0.5, hand2X: 0.65, hand2Y: 0.5, _schemaVersion: 2,
+          count: '1m', emitter: 'disk', emitSize: 1.7, life: 7, speed: 0, spread: 1,
+          gravity: 0, wind: 0.45, turbulence: 0.12, scale: 1, swirl: 0, drag: 1.6,
+          size: 1, thread: 0.5, brightness: 1.2, palette: 'ice', colorBy: 'speed', glow: 0.8, lights: '0',
+          obstacleMode: 'sdf', flowForce: 0.5, flowMode: 'around',
+        },
+      },
+      {
+        id: 'fill',
+        type: 'sdfFill',
+        position: { x: 1100, y: 60 },
+        inputs: {
+          d: { type: 'float', label: 'SDF', connection: { nodeId: 'disc', outputKey: 'distance' } },
+          fillColor: { type: 'vec3', label: 'Fill' },
+          strokeColor: { type: 'vec3', label: 'Stroke' },
+          background: { type: 'vec3', label: 'Background', connection: { nodeId: 'parts', outputKey: 'color' } },
+          strokeWidth: { type: 'float', label: 'Stroke Width' },
+          antialias: { type: 'float', label: 'Softness' },
+        },
+        outputs: { result: { type: 'vec3', label: 'Color' }, alpha: { type: 'float', label: 'Alpha' } },
+        params: { strokeWidth: 0, antialias: 0.005, strokeAlign: 'center', aaMode: 'pixel' },
+      },
+      {
+        id: 'out',
+        type: 'output',
+        position: { x: 1460, y: 60 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'fill', outputKey: 'result' } } },
+        outputs: {},
+        params: {},
+      },
+    ],
+  },
+
+  // ── Particles in a 3D Scene ──
+  particlesIn3dScene: {
+    label: 'Particles in a 3D Scene',
+    description: 'A Particles node inside a raymarched scene. The March Camera\'s ray origin and direction go into Camera from / Camera ray, so the particles share the scene\'s camera and space; the Scene goes into Scene, so they stream round the sphere and slide off it; the March Loop\'s distance goes into Depth, so the sphere hides the ones behind it. The scene\'s colour is Over.',
+    counter: 8,
+    nodes: [
+      { id: 'uv', type: 'uv', position: { x: 50, y: 80 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 't', type: 'time', position: { x: 50, y: 200 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'scene',
+        type: 'sceneGroup',
+        position: { x: 300, y: 120 },
+        inputs: {},
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        params: {
+          label: 'Sphere',
+          subgraph: {
+            nodes: [
+              { id: 'sp', type: 'scenePos', position: { x: 80, y: 150 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
+              {
+                id: 'ball',
+                type: 'sphereSDF3D',
+                position: { x: 280, y: 150 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
+                params: { radius: 0.5 },
+              },
+            ],
+            outputNodeId: 'ball',
+            outputKey: 'dist',
+          },
+        },
+      },
+      {
+        id: 'cam',
+        type: 'marchCamera',
+        position: { x: 520, y: 20 },
+        inputs: {
+          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv', outputKey: 'uv' } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 't', outputKey: 'time' } },
+          camDist: { type: 'float', label: 'Cam Distance' },
+          camAngle: { type: 'float', label: 'Cam Angle' },
+          camElevation: { type: 'float', label: 'Elevation' },
+          rotSpeed: { type: 'float', label: 'Rot Speed' },
+          fov: { type: 'float', label: 'FOV' },
+          targetX: { type: 'float', label: 'Target X' },
+          targetY: { type: 'float', label: 'Target Y' },
+          targetZ: { type: 'float', label: 'Target Z' },
+        },
+        outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
+        params: { camDist: 2.8, camAngle: 1.2, camElevation: 0.35, rotSpeed: 0.12, fov: 1.5, targetX: 0, targetY: 0, targetZ: 0, aperture: 0, focalDist: 3, lensSpeed: 0 },
+      },
+      {
+        id: 'march',
+        type: 'marchLoopGroup',
+        position: { x: 860, y: 80 },
+        inputs: {
+          ro: { type: 'vec3', label: 'Ray Origin', connection: { nodeId: 'cam', outputKey: 'ro' } },
+          rd: { type: 'vec3', label: 'Ray Dir', connection: { nodeId: 'cam', outputKey: 'rd' } },
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene', outputKey: 'scene' } },
+          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv', outputKey: 'uv' } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 't', outputKey: 'time' } },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' },
+          dist: { type: 'float', label: 'Distance' },
+          depth: { type: 'float', label: 'Depth' },
+          normal: { type: 'vec3', label: 'Normal' },
+          iter: { type: 'float', label: 'Iter' },
+          iterCount: { type: 'float', label: 'Iter Count' },
+          hit: { type: 'float', label: 'Hit' },
+          pos: { type: 'vec3', label: 'Hit Pos' },
+        },
+        params: {
+          maxSteps: 64, maxDist: 20, stepScale: 1, volumetric: false, passthrough: 0.1, jitter: 0,
+          bg: [0.02, 0.02, 0.04], albedo: [0.55, 0.6, 0.7],
+          subgraph: {
+            nodes: [
+              {
+                id: 'mli',
+                type: 'marchLoopInputs',
+                position: { x: 80, y: 160 },
+                inputs: {},
+                outputs: {
+                  ro: { type: 'vec3', label: 'Ray Origin' },
+                  rd: { type: 'vec3', label: 'Ray Dir' },
+                  marchPos: { type: 'vec3', label: 'March Pos' },
+                  marchDist: { type: 'float', label: 'March Dist' },
+                },
+                params: { extraInputs: [] },
+              },
+              {
+                id: 'mlo',
+                type: 'marchLoopOutput',
+                position: { x: 420, y: 160 },
+                inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'mli', outputKey: 'marchPos' } } },
+                outputs: {},
+                params: { hiddenOutputs: [] },
+              },
+            ],
+            inputPorts: [],
+            outputPorts: [],
+          },
+        },
+      },
+      {
+        id: 'parts',
+        type: 'gpuParticles',
+        position: { x: 1220, y: 60 },
+        inputs: {
+          over: { type: 'vec3', label: 'Over', connection: { nodeId: 'march', outputKey: 'color' } },
+          uv: { type: 'vec2', label: 'UV' },
+          camOrigin: { type: 'vec3', label: 'Camera from', connection: { nodeId: 'cam', outputKey: 'ro' } },
+          camRay: { type: 'vec3', label: 'Camera ray', connection: { nodeId: 'cam', outputKey: 'rd' } },
+          depth: { type: 'float', label: 'Depth', connection: { nodeId: 'march', outputKey: 'dist' } },
+          scene: { type: 'scene3d', label: 'Scene', connection: { nodeId: 'scene', outputKey: 'scene' } },
+        },
+        outputs: {
+          color: { type: 'vec3', label: 'Color' },
+          particles: { type: 'vec3', label: 'Particles' },
+          density: { type: 'float', label: 'Density' },
+        },
+        params: {
+          ...gpPreset('embers'), sound: 0, handX: 0.35, handY: 0.5, hand2X: 0.65, hand2Y: 0.5, _schemaVersion: 2,
+          count: '256k', emitter: 'ring', emitSize: 0.95, life: 6, speed: 0.03, spread: 0.6,
+          gravity: 0, turbulence: 0.3, scale: 1.2, swirl: 0.9, attract: 0.35, drag: 1,
+          size: 1.4, thread: 0.3, brightness: 1.4, palette: 'ember', colorBy: 'life', glow: 0.9,
+          space: '3d', focus: 1, blur: 0.25, lights: '0', sceneReach: 1.5,
+        },
+      },
+      {
+        id: 'out',
+        type: 'output',
+        position: { x: 1600, y: 60 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'parts', outputKey: 'color' } } },
+        outputs: {},
+        params: {},
       },
     ],
   },

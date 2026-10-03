@@ -102,6 +102,8 @@ import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
 import { ColorSwatch } from '../ui/ColorPicker';
 import { PaletteTools } from './PaletteTools';
+import { ParticlePresets } from './ParticlePresets';
+import { socketVisible } from '../../lib/socketsOnDemand';
 import { StopPaletteStops } from './StopPaletteStops';
 import { toRgb } from '../../lib/colorMath';
 import { CardBadge, CardButton, CardDivider, KeyframedRuler, ParamLabel, ParamSocket, WiredChip } from './NodeCardParts';
@@ -292,6 +294,20 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
       }}
     >
       <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 13.5 }}>{def.label}</div>
+      {def.brief ? (
+        // A short card (NodeDefinition.brief): what it is, how to start; sockets by name; settings explain themselves.
+        <>
+          <DocText text={def.brief.summary} style={{ color: tc.subtext0, marginBottom: 8 }} />
+          <div style={{ color: tk.text.faint, fontSize: 10, fontWeight: 700, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>How to start</div>
+          <DocText text={def.brief.start.map(s => `- ${s}`).join('\n')} style={{ color: tc.subtext0, marginBottom: 8 }} />
+          <div style={{ color: tk.text.faint, fontSize: 10, fontWeight: 700, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Sockets</div>
+          <div style={{ color: tc.subtext0, fontSize: 11.5, marginBottom: 6 }}>
+            In: {inputEntries.filter(([k]) => !def.socketsOnDemand || !(k in def.socketsOnDemand)).map(([, s]) => s.label).join(', ')}. Right-click a setting → Control from outside to give it a socket too.
+            {' '}Out: {outputEntries.map(([, s]) => s.label).join(', ')}.
+          </div>
+          <div style={{ color: tk.text.faint, fontSize: 11 }}>Hover a setting's ? for what it does.</div>
+        </>
+      ) : <>
       {def.description && (
         <DocText text={Array.isArray(def.description) ? (def.description as string[]).join('\n') : def.description} style={{ color: tc.subtext0, marginBottom: 8 }} />
       )}
@@ -365,6 +381,7 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
           </pre>
         </div>
       )}
+      </>}
     </div>
   );
 }
@@ -2618,7 +2635,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 if (paramDef.type === 'bool') {
                   return (
                     <div key={paramKey} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 10px 4px 14px' }}>
-                      <ParamLabel>{paramDef.label}</ParamLabel>
+                      <ParamLabel title={paramDef.hint} help={paramDef.help}>{paramDef.label}</ParamLabel>
                       <Toggle checked={node.params[paramKey] === true} onChange={v => updateNodeParams(node.id, { [paramKey]: v }, { immediate: true })} />
                     </div>
                   );
@@ -2818,7 +2835,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           }}
         >{shortLabel}{extra}</span>
       )
-      : <ParamLabel muted={muted} title={paramDef.hint}>{paramDef.label}{extra}</ParamLabel>;
+      : <ParamLabel muted={muted} title={paramDef.hint} help={paramDef.help}>{paramDef.label}{extra}</ParamLabel>;
 
     // A connected matching input socket overrides the slider: show where the value comes from
     const socketConn = node.inputs[key]?.connection;
@@ -2832,7 +2849,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     if (isSocketConnected) {
       const srcExpr = getSourceExpr(shaderLines, nodeOutputVarMap, socketConn!.nodeId, socketConn!.outputKey);
       return (
-        <div key={key} style={rowStyle}>
+        <div key={key} data-param-key={key} style={rowStyle}>
           {labelNode(true, isParamExternal && lockIcon)}
           <WiredChip source={socketConn!} expr={srcExpr} locked={isParamExternal} />
         </div>
@@ -2948,6 +2965,44 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   // Param keys consumed as the second half of a `ParamDef.pair` group (e.g. Remap's inMax/outMax):
   // rendered together with their pair's owner, so they're skipped when the loop reaches them directly.
   const pairSecondaryKeys = new Set(Object.values(paramDefs).map(pd => pd.pair?.with).filter((v): v is string => !!v));
+  // Sections (ParamDef.section): a folding header before each run of params in one section. The
+  // first section starts open, the rest folded; folding is display only (the params stay uniforms).
+  const sectionKeys = new Map<string, string[]>();
+  for (const [k, pd] of Object.entries(paramDefs)) if (pd.section) sectionKeys.set(pd.section, [...(sectionKeys.get(pd.section) ?? []), k]);
+  const firstSection = sectionKeys.keys().next().value as string | undefined;
+  const sectionFolded = (name: string) => (name !== firstSection) !== !!foldedSections[`${node.id}:sec:${name}`];
+  const withSection = (key: string, pd: ParamDef, render: () => React.ReactNode): React.ReactNode => {
+    if (!pd.section) return render();
+    const keys = sectionKeys.get(pd.section) ?? [];
+    const folded = sectionFolded(pd.section);
+    if (keys[0] !== key) return folded ? null : render();
+    const changed = keys.filter(k => JSON.stringify(node.params[k]) !== JSON.stringify(def?.defaultParams?.[k])).length;
+    const name = pd.section;
+    return (
+      <React.Fragment key={`sec:${name}`}>
+        <button
+          type="button"
+          aria-expanded={!folded}
+          onMouseDown={e => e.stopPropagation()}
+          onClick={() => toggleFold(`${node.id}:sec:${name}`)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4, width: '100%', padding: '8px 12px 4px 12px', border: 0, background: 'none',
+            cursor: 'pointer', textAlign: 'left', color: tk.text.secondary, font: `600 12px ${fontFamily.ui}`, letterSpacing: 0.2,
+          }}
+          title={`Click to ${folded ? 'show' : 'fold'} ${name.toLowerCase()} settings (they keep working while folded)`}
+        >
+          <Icon name={folded ? 'chevR' : 'chevD'} size={13} style={{ color: tk.text.faint, flexShrink: 0 }} />
+          <span>{name}</span>
+          {folded && (
+            <span style={{ marginLeft: 'auto', font: `500 11px ${fontFamily.ui}`, color: tk.text.muted }}>
+              {changed ? `${changed} changed` : `${keys.length} settings`}
+            </span>
+          )}
+        </button>
+        {folded ? null : render()}
+      </React.Fragment>
+    );
+  };
   // Hairline between the sockets, params and outputs sections
   const sectionRule = <div aria-hidden style={{ height: 1, background: tk.border.subtle, margin: '6px 0' }} />;
 
@@ -3439,7 +3494,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
       <div style={{ padding: '6px 0' }}>
         {/* ── Inputs (always visible) ── */}
-        {Object.entries(node.inputs).filter(([key]) => Object.keys(def.inputs).length === 0 || key in def.inputs).map(([key, input]) => {
+        {Object.entries(node.inputs).filter(([key]) => (Object.keys(def.inputs).length === 0 || key in def.inputs) && socketVisible(node, def, key)).map(([key, input]) => {
           const isConnected = !!input.connection;
           const isExternal = externalInputKeys?.has(key) ?? false;
 
@@ -4033,7 +4088,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
         {/* ── Params (hidden when collapsed) ── */}
         {!collapsed && node.type !== 'matConst' && Object.keys(paramDefs).length > 0 && Object.keys(node.inputs).length > 0 && sectionRule}
-        {!collapsed && node.type !== 'matConst' && Object.entries(paramDefs).map(([key, paramDef]) => {
+        {/* ── Particles: one-click looks ── */}
+        {!collapsed && node.type === 'gpuParticles' && <ParticlePresets node={node} />}
+        {!collapsed && node.type !== 'matConst' && Object.entries(paramDefs).map(([key, paramDef]) => withSection(key, paramDef, () => {
           // A Stops Palette's count and colours are one gradient bar with the stops built in, not a row each.
           if (node.type === 'stopPalette') {
             if (key === 'stops') return <StopPaletteStops key={key} node={node} touch={isTouchDevice} />;
@@ -4185,7 +4242,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             const val = node.params[key] !== undefined ? String(node.params[key]) : (paramDef.options?.[0]?.value ?? '');
             return (
               <div key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
-                <ParamLabel>{paramDef.label}</ParamLabel>
+                <ParamLabel title={paramDef.hint} help={paramDef.help}>{paramDef.label}</ParamLabel>
                 <Select
                   ariaLabel={paramDef.label}
                   value={val}
@@ -4201,7 +4258,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             const vals = toRgb(node.params[key]);
             return (
               <div key={key} data-param-key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
-                <ParamLabel>{paramDef.label}</ParamLabel>
+                <ParamLabel title={paramDef.hint} help={paramDef.help}>{paramDef.label}</ParamLabel>
                 <ColorSwatch
                   label={paramDef.label}
                   value={vals}
@@ -4225,7 +4282,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           }
 
           return null;
-        })}
+        }))}
 
         {/* ── Palette tools: presets, paste, copy / convert ── */}
         {!collapsed && (node.type === 'palette' || node.type === 'stopPalette') && <PaletteTools node={node} />}

@@ -729,8 +729,16 @@ void main() {
       gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.BROWSER_DEFAULT_WEBGL);
       if (mips) { gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); }
     };
-    const locs = new Map();
-    const loc = n => { if (!locs.has(n)) locs.set(n, gl.getUniformLocation(program, n)); return locs.get(n); };
+    // Uniform locations per program: the picture's, or the Particles probe's while it draws (locProg).
+    let locProg = null;
+    const locsBy = new Map();
+    const loc = n => {
+      const p = locProg || program;
+      let m = locsBy.get(p);
+      if (!m) { m = new Map(); locsBy.set(p, m); }
+      if (!m.has(n)) m.set(n, gl.getUniformLocation(p, n));
+      return m.get(n);
+    };
     const uniformValues = Object.assign({}, B.uniforms || {});
     const setUniformAt = (l, v) => { if (!l) return; if (typeof v === 'number') gl.uniform1f(l, v); else if (Array.isArray(v)) { if (v.length === 2) gl.uniform2fv(l, v); else if (v.length === 3) gl.uniform3fv(l, v); else if (v.length === 4) gl.uniform4fv(l, v); } };
     const setUniform = (n, v) => setUniformAt(loc(n), v);
@@ -954,6 +962,8 @@ void main() {
     // Images: decoded onto a canvas and uploaded from there, as loadImageTexture.ts does; mipmapped, clamped.
     const blobUrls = [];
     const imageTex = new Map();
+    // Each loaded image's width / height (the Particles node's Image emitter lays its picture out by it).
+    const imageAspect = new Map();
     for (const name in media.textures || {}) {
       const m = media.textures[name];
       const t = texture(gl.LINEAR, [0, 0, 0, 0]);
@@ -964,6 +974,7 @@ void main() {
         const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight;
         c.getContext('2d').drawImage(im, 0, 0);
         upload(t, c, gl2 || (isPow2(c.width) && isPow2(c.height)));
+        imageAspect.set(name, c.width / Math.max(1, c.height));
         needsDraw = true;
       };
       im.src = m.src;
@@ -1241,6 +1252,105 @@ void main() {
     }
     // The step the next picture's particles take (0 while paused), and whether they start over (a new render).
     let gpDt = 0, gpReset = false;
+    // Wired settings (kit/gpuParticles.js gpProbeSlots): the graph compiled again with GPP_PROBE draws the wired
+    // values a pixel each (read back a frame or two late) and a field over the picture (obstacle, flow, depth),
+    // as the app does (play/gpuParticlesTexture.ts).
+    let gpProbeProg = null;
+    if (gpHostR && !gpHostR.unsupported && B.fragmentShader.indexOf('#ifdef GPP_PROBE') >= 0) {
+      try { gpProbeProg = link(VS, '#define GPP_PROBE 1\n' + B.fragmentShader); } catch (e) { console.warn('[Playfield] Particles: wired settings are not read here (' + e.message + ').'); }
+    }
+    const gpProbes = new Map();
+    const gpTarget = (w, h, internal, type, filter) => {
+      const t = texture(filter);
+      gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, gl.RGBA, type, null);
+      const fb = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+      return { tex: t, fb, w, h };
+    };
+    function gpProbeRun(b, W, H, vol) {
+      const spec = b.probe;
+      if (!gpProbeProg || !spec) return null;
+      let pr = gpProbes.get(b.uniform);
+      if (!pr) { pr = { vals: null, field: null, vol: null, reader: GPK.readback(gl) }; gpProbes.set(b.uniform, pr); }
+      const prevFb = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+      gl.useProgram(gpProbeProg); locProg = gpProbeProg;
+      bindPictureInputs(W, H);
+      for (const bb of gpHostR.bindings) bindSampler(bb.uniform, blank);
+      const slots = GPK.slots(spec).slice(0, 16);
+      if (slots.length) {
+        if (!pr.vals) pr.vals = gpTarget(16, 1, gl.RGBA32F, gl.FLOAT, gl.NEAREST);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, pr.vals.fb);
+        gl.enable(gl.SCISSOR_TEST);
+        setUniform(spec.m, 1);
+        // A one-pixel viewport reads the picture's centre; a two-pixel one half a picture right or up of it (the
+        // scissor keeps it off its neighbour).
+        slots.forEach((sl, i) => { gl.viewport(i - sl.dx, -sl.dy, 1 + sl.dx, 1 + sl.dy); gl.scissor(i, 0, 1, 1); setUniform(spec.s, i); drawQuad(); });
+        gl.disable(gl.SCISSOR_TEST);
+        pr.reader.request(pr.vals.fb, 16, 1);
+      }
+      let field = null;
+      if (GPK.probeField(spec)) {
+        const fh = spec.field.depth ? Math.max(96, Math.round(H / 3)) : 160, fw = Math.max(16, Math.round(fh * W / Math.max(1, H)));
+        if (!pr.field || pr.field.w !== fw || pr.field.h !== fh) {
+          if (pr.field) { gl.deleteTexture(pr.field.tex); gl.deleteFramebuffer(pr.field.fb); }
+          pr.field = gpTarget(fw, fh, gl.RGBA16F, gl.HALF_FLOAT, gl.LINEAR);
+        }
+        gl.bindFramebuffer(gl.FRAMEBUFFER, pr.field.fb);
+        gl.viewport(0, 0, fw, fh);
+        setUniform(spec.m, 2);
+        drawQuad();
+        field = { texture: pr.field.tex, w: fw, h: fh };
+      }
+      let volume = null;
+      if (spec.field.scene && spec.c) {
+        // The Scene's distance on a grid round the centre (kit GP_VOL² slices side by side).
+        const vw = GPK.vol * GPK.volTiles[0], vh = GPK.vol * GPK.volTiles[1];
+        if (!pr.vol) pr.vol = gpTarget(vw, vh, gl.RGBA16F, gl.HALF_FLOAT, gl.LINEAR);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, pr.vol.fb);
+        gl.viewport(0, 0, vw, vh);
+        setUniform(spec.c, [vol.centre[0], vol.centre[1], vol.centre[2], vol.half]);
+        setUniform(spec.m, 3);
+        drawQuad();
+        volume = { texture: pr.vol.tex, w: vw, h: vh };
+      }
+      setUniform(spec.m, 0);
+      locProg = null;
+      gl.useProgram(program);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, prevFb);
+      return { values: pr.reader.poll(), field, volume };
+    }
+    // Sound from (the Particles node): the mic, or the Audio engine's tracks as this page plays them (its
+    // granulator racks; the app's other instruments don't play on a web page, so they are silent here).
+    const gpWave = new Map();
+    function gpRackSound(g) {
+      if (!g || !g.an) return null;
+      g.an.getFloatFrequencyData(g.freq);
+      let w = gpWave.get(g);
+      if (!w) { w = new Float32Array(g.an.fftSize); gpWave.set(g, w); }
+      g.an.getFloatTimeDomainData(w);
+      return { freq: g.freq, wave: w, sampleRate: grains.ctx.sampleRate };
+    }
+    function gpSoundIn(source) {
+      if (source === 'live') {
+        if (shared.live.status !== 'on') return null;
+        updateLive();
+        return { freq: shared.live.freq, wave: shared.live.wave, sampleRate: shared.live.sr };
+      }
+      const racks = play.audioEngine && play.audioEngine.racks ? play.audioEngine.racks : [];
+      if (/^track\d$/.test(source)) { const r = racks[+source.slice(5) - 1]; return r ? gpRackSound(grains.racks.get(r.id)) : null; }
+      if (source !== 'master') return null;
+      // The master: every rack's power added up per bin, and their waves summed.
+      let out = null;
+      for (const g of grains.racks.values()) {
+        const one = gpRackSound(g);
+        if (!one) continue;
+        if (!out) { out = { freq: new Float32Array(one.freq.length).fill(-200), wave: new Float32Array(one.wave.length), sampleRate: one.sampleRate }; }
+        for (let i = 0; i < out.freq.length; i++) out.freq[i] = 10 * Math.log10(Math.pow(10, out.freq[i] / 10) + Math.pow(10, one.freq[i] / 10));
+        for (let i = 0; i < out.wave.length; i++) out.wave[i] += one.wave[i];
+      }
+      return out;
+    }
     // The graph's Layers node: the layers' colour and distance field, uploaded after each frame's layers are drawn.
     const usesLayersNode = !bgOnly && /\bu_layers(Field)?\b/.test(B.fragmentShader);
     let layersTap = null, layersColourTex = null, layersFieldTex = null, layersFieldSize = [0, 0];
@@ -2548,7 +2658,11 @@ void main() {
     // The graph's picture: straight to the screen, or (feedback, echo) into a half-float target, then dithered to the screen as ShaderCanvas does.
     function drawPicture() {
       const W = glCanvas.width, H = glCanvas.height;
-      const gpOut = gpHostR && !gpHostR.unsupported ? gpHostR.frame({ width: W, height: H, dt: gpDt, time, mouse: [mouse.x, mouse.y], read: n => uniformValues[n], reset: gpReset }) : [];
+      const gpOut = gpHostR && !gpHostR.unsupported ? gpHostR.frame({
+        width: W, height: H, dt: gpDt, time, mouse: [mouse.x, mouse.y], read: n => uniformValues[n], reset: gpReset,
+        texture: n => (imageAspect.has(n) ? { texture: imageTex.get(n), aspect: imageAspect.get(n) } : null),
+        probe: (b, vol) => gpProbeRun(b, W, H, vol), sound: gpSoundIn,
+      }) : [];
       gpDt = 0; gpReset = false;
       let target = null;
       if (stateful || echoCfg) {
@@ -2560,6 +2674,19 @@ void main() {
       gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fb : null);
       gl.viewport(0, 0, W, H);
       gl.useProgram(program);
+      bindPictureInputs(W, H);
+      for (const o of gpOut) bindSampler(o.uniform, o.texture || blank);
+      for (const n of gpBlank) bindSampler(n, blank);
+      drawQuad();
+      if (target) {
+        if (echoCfg) captureEcho(target);
+        blit(target.tex, null, W, H, ditherSeed(frame));
+        if (stateful) pingIdx = 1 - pingIdx;
+      }
+      gl.activeTexture(gl.TEXTURE0);
+    }
+    /** The graph's inputs on the current program (the picture's, or the Particles probe's): uniforms and samplers. */
+    function bindPictureInputs(W, H) {
       setUniform('u_time', time);
       setUniform('u_resolution', [W, H]);
       setUniform('u_mouse', [mouse.x * W, mouse.y * H]);
@@ -2579,21 +2706,12 @@ void main() {
         const ls = loc('u_layersFieldSize'); if (ls) gl.uniform2fv(ls, layersFieldSize);
         const ll = loc('u_layersFieldLinear'); if (ll) gl.uniform1f(ll, layersGpuField ? 1 : 0);
       }
-      if (stateful) bindSampler('u_prevFrame', pingPong[pingIdx].tex);
+      if (stateful) bindSampler('u_prevFrame', pingPong ? pingPong[pingIdx].tex : blank);
       if (echoCfg) for (let i = 0; i < 6; i++) bindSampler('u_echo' + i, echoRing[i] ? echoRing[i].tex : blank);
       for (const [n, t] of imageTex) bindSampler(n, t);
       for (const v of videos) bindSampler(v.name, v.tex);
       for (const d of dataTex) bindSampler(d.name, d.tex);
       for (const c of dataCounts) setUniform(c.name, c.n);
-      for (const o of gpOut) bindSampler(o.uniform, o.texture || blank);
-      for (const n of gpBlank) bindSampler(n, blank);
-      drawQuad();
-      if (target) {
-        if (echoCfg) captureEcho(target);
-        blit(target.tex, null, W, H, ditherSeed(frame));
-        if (stateful) pingIdx = 1 - pingIdx;
-      }
-      gl.activeTexture(gl.TEXTURE0);
     }
     // Held by renderAt: the picture stays what it drew until play() lets the clock run again.
     let held = false;
@@ -2713,6 +2831,8 @@ void main() {
       destroy() {
         alive = false;
         if (gpHostR) gpHostR.dispose();
+        for (const pr of gpProbes.values()) { pr.reader.dispose(); for (const t of [pr.vals, pr.field, pr.vol]) if (t) { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fb); } }
+        if (gpProbeProg) gl.deleteProgram(gpProbeProg);
         for (const close of feedClosers) close();
         cancelAnimationFrame(raf);
         ro.disconnect();

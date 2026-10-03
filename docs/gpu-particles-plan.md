@@ -1,6 +1,6 @@
 # GPU particles, TouchDesigner style (plan, 2026-10-03)
 
-**Status:** P0 and P2 shipped, P1 in part (see [What shipped](#what-shipped)). The plan below is as written; the Particles node follows it except where What shipped says otherwise.
+**Status:** P0 and P2 shipped, most of P1, P3, P4 and P5 in the creative-controls follow-up (see [What shipped](#what-shipped) and [creative controls](#what-shipped-creative-controls-stacked-on-the-node-above)). The plan below is as written; the Particles node follows it except where What shipped says otherwise.
 
 ## Why
 
@@ -104,11 +104,88 @@ Settings (few, flat, each with a hint):
 
 **Measured** (Apple silicon, 608 × 756 preview): 256k and 1M about 2 ms a frame for the engine. 4M costs ~20–30 ms standalone but dropped the preview to a few fps in the app here; it is offered as the "fast GPU" tier.
 
+## What shipped: creative controls (stacked on the node above)
+
+The node grew from a glow emitter into a creative tool. Everything below is in the same engine (`src/play/kit/gpuParticles.js`), so the app and web exports match.
+
+**Card.**
+- **Presets** (a chip row, `ParticlePresets.tsx`, data in `GP_PRESETS`): Ink in water, Embers, Dust in air, Image dissolve, Sound field, Launch, Hand swirl. A preset sets every setting (defaults, then its own) and keeps the inputs (hand positions, Sound level; Sound from unless the preset picks one).
+- **Sections** (`ParamDef.section`): Emit, Motion, Look, Camera, Lights, Sound, Hands. The first is open, the rest fold to "n changed". Folding is display only (`foldState.ts`), so a folded setting stays a uniform and its Play mapping keeps working. The node no longer uses `showWhen` anywhere.
+- **Help** (`ParamDef.help`): a "?" beside each setting's name shows what it does, a typical range and what it pairs with. The info card is short (`NodeDefinition.brief`): a summary, how to start, sockets by name.
+- **Inputs on demand** (`NodeDefinition.socketsOnDemand`, `lib/socketsOnDemand.ts`). The card shows Over, UV, Camera from, Camera ray, Depth, Scene, Obstacle and Emitter. Every other setting gets a socket when its slider is right-clicked → **Control from outside**; Hand / Hand 2 come from Hand X / Y, and Flow from Flow force. **Back to slider** unwires it and hides it again. The list lives in `params.__sockets`, and a wired socket always shows, so saved graphs keep theirs. The Play items stay in the same menu.
+
+**Look.**
+- **Ink** (Look): particles add absorbance and a colour-weighted sum into the half-float target. Compose turns that into cover `1 − e^−Σ` and the ink's own colour; the node lays it over the paper (or Over). Glow becomes the ink bleeding.
+- **Thread**: a second pass draws each particle as a 1-pixel line back along its velocity, so flows read as hair-fine threads. In 3D the sharp share of each particle goes to the lines and the blurred share to points.
+- Finer sizes (0.25 px; sub-pixel points dim by their area) and `gpUnitInk` keep the ink tone the same at every count.
+
+**3D** (Space).
+- A camera orbits the emitter (angle, tilt, distance, Drift: slow orbit, bob and breathing). The fragment depth is per particle.
+- **Depth of field**: a point grows to its circle of confusion and keeps its light or ink, so out of focus is haze or bokeh. Points above 7 px are thinned at random (survivors heavier), so blur costs no fill rate.
+- 3D curl noise is `∇a × ∇b` (divergence-free, two noise evaluations), so continuous emission folds into sheets and threads.
+
+**Image emitter.** The node's Image slot (`textureSlots: ['image']`).
+- A home pass gives every texel a place on the picture: a jittered grid cell, or a few random retries where the picture is below Image threshold (Ink: above it). It also gives a release order: noise patches plus grain.
+- A held particle springs home (critically damped) and doesn't age. **Release** lets them go patch by patch to gravity, wind and turbulence; back to 0 and they fly home.
+- The picture's cover (a 64² test averaged to 1 texel) sets each particle's share, so held particles show the picture at its own brightness.
+- **Burst** (a trigger: rising past 0.5) rebirths the pool, or on a picture kicks it apart.
+
+**Air.** Wind (gusting with the noise), Turbulence size, high Drag. The Dust in air preset is 64k motes in 3D with bokeh and one still light.
+
+**Sound** (Sound from: Graph / Mic / Audio engine master / engine track 1–8).
+- `gpSoundStep` turns a spectrum (or a plain level) into level, bass, mid, treble and hits: bass or level flux above a running average, at most ~8 a second.
+  - App: the mic is `liveAudio.raw()`; the engine is `engineSound.spectrum(master | rack id)`, with track N = the N-th rack.
+  - Web page: the mic, and the page's granulator racks (master is their sum). Other rack kinds don't play on a web page, so they're silent there.
+- **Wave**: rings travel out from the emitter at Wave speed, as loud as the sound was when they set off, through a 256-sample level history.
+- **Vibrate** shivers particles where the wave is.
+- **Shockwave**: a pressure pulse leaves on every hit. It pushes out as the front arrives and pulls back behind it, so the ring passes through without clearing the middle.
+- **Crunch**: a jitter following level and treble.
+- **Gust**: turbulence and its clock speed up with the level.
+- **Jet**: a rocket exhaust down from the emitter, widening, shedding vortices side to side, entraining air. It runs a little always and roars with the bass.
+- Sound level adds to all of it, and wiring an Audio input amplitude into its socket is one wire.
+
+**Hands.** Hands (off / one / two) and Hand X/Y, Hand 2 X/Y in 0…1 of the picture.
+- Each hand pulls (Hand pull, negative pushes) and stirs (Hand swirl) within Hand reach.
+- One step in Play: right-click Hand X → **Add as position with Y**, then choose a hand as the source (the X/Y pair maps both). Or right-click Hand X → **Add the Hand input** and wire any vec2 (the mouse, a null, an LFO pair) in centred coordinates; a wired Hand turns Hands on.
+
+**Interaction with other shaders: the probe.** Sockets carry values that exist only in the shader, so the node writes a probe under `#ifdef GPP_PROBE`. The hosts compile the graph a second time with it (app: a second `ShaderMaterial` on the same uniforms; web: a second program) and draw four modes:
+1. The wired values, one pixel each (`gpProbeSlots`). They are read back through a pixel buffer and fence (`gpReadback`, a frame or two late). Three's `readRenderTargetPixelsAsync` is avoided: it leaves its pixel buffer bound while it waits, which zeroes the app's own `readPixels` (exports, scopes).
+2. A field over the picture: Obstacle (an SDF, or a mask), Flow (its slope, or its contours), and a scene's Depth. The engine samples it on the GPU.
+   - 2D: particles slide round obstacles and part before them, and follow or circle the flow.
+   - 3D: a particle further than the scene's depth along its ray is discarded, so a raymarched object hides what's behind it.
+3. The **scene camera**: Camera from / Camera ray (a March Camera's ro / rd), read at three points. `gpSceneCamera` rebuilds any pinhole camera from them, so the particles share the scene's camera and space.
+4. The **Scene**: the wired SceneGroup's distance function evaluated on a 48³ grid round the centre (Scene size; slices side by side, 384 × 288). The simulation samples it trilinearly, so particles collide with, slide along and part round the scene's surfaces everywhere, seen or not.
+
+**Examples.**
+- Ink in Water.
+- Particles round a Shape: a Circle SDF as Obstacle, an FBM as Flow (Around), the disc drawn over them with SDF Fill.
+- Particles in a 3D Scene: a raymarched sphere; camera, Depth and Scene wired. Embers spiral in, wrap the sphere, pass in front of it and hide behind it.
+
+**Measured** (Apple silicon, offline render path, whole frame including the graph, 1080 × 1350):
+
+| Setup | ms per frame |
+|---|---|
+| Ink in water: 1M, 3D, DoF, threads | 5.0 |
+| Particles in a 3D Scene, 256k (probe, depth field, scene grid) | 2.3 |
+| Particles in a 3D Scene, 1M | 7.8 |
+| Particles round a Shape, 1M (probe field) | 2.5 |
+| Particle Galaxy, 256k 2D | 1.2 |
+| Particle Galaxy, 1M 2D | 3.2 |
+
+The live preview is noisier, because the GPU is shared with other previews.
+
 ## Phases left
 
-- **P1:** sprite shapes (ring, image), streaks, size over life, screen / soft-alpha blends, more palettes from the Palette node.
-- **P3:** emit from the picture / an image / Layers / an SDF; flow and gradient fields; bounds (wrap, kill, bounce).
-- **P4:** a Play particles layer on the same engine; Burst / Scatter / Reset actions; lights and attractors on nulls, hands and pose; audio to rate and force; a second `density` texture for other nodes.
-- **P5:** 3D: instanced shapes, an optional camera, a presets gallery.
-- **Budget:** the `gpuTimer` auto-downgrade (drop a tier when frames run long), and finding why 4M stalls in the app preview when it runs well on its own context.
-- Particles inside groups compile only through a plain group's path (iterated or scene-body groups don't declare the sampler).
+- **P1:** sprite shapes (ring, image), size over life, more palettes from the Palette node.
+- **P3:** emit from the graph's own picture or Layers (the Image emitter takes the node's own image), emit from an SDF's surface, bounds (wrap, kill, bounce).
+- **P4:**
+  - A Play particles layer on the same engine.
+  - Burst / Reset as Play rule actions. Rules can't target graph params today: Burst is a trigger param, so route a trigger source to it.
+  - A second `density` texture for other nodes.
+- **P5:** instanced shapes; lighting particles with the scene's lights and fog.
+- **Probe limits:**
+  - Values come a frame or two late.
+  - A scene with extra (main-scope) inputs can't be called from the probe: its probe copy doesn't compile, and the particles then ignore it.
+  - Obstacle and Flow act in the picture plane (x, y); in 3D use Scene.
+- **Budget:** the `gpuTimer` auto-downgrade, and why 4M stalls in the app preview.
+- Particles inside groups compile only through a plain group's path.
