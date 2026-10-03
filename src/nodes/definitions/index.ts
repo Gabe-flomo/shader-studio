@@ -80,8 +80,8 @@ export { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNod
 // Physics
 export { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode, WaveTermNode, ChladniFieldNode, ChladniSuperpositionNode, ChladniModeFreqNode } from './physics';
 
-// Particles & Fields
-export { ParticleEmitterNode, VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './particles';
+// Vector fields
+export { VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './vectorFields';
 
 // 3D / Volumetric
 export { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode } from './threed';
@@ -135,11 +135,8 @@ export { LFONode, BPMSyncNode } from './animations';
 // Halftone
 export { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGBToCMYKNode, CMYKHalftoneNode } from './halftone';
 
-// Vertex Particles (deprecated)
-export { VertexParticleSystemNode } from './vparticles';
-
-// Particle Pipeline Nodes
-export { PInitNode, PRotateNode, PWaveNode, PColorDistNode, PSizeNode, PRenderNode } from './pnodes';
+// GPU Particles (the engine in play/kit/gpuParticles.js)
+export { GpuParticlesNode } from './gpuParticles';
 
 // Math
 export {
@@ -208,7 +205,7 @@ import { LoopCarryNode } from './loop';
 import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode, ScatterNode } from './noise';
 import { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode, SphericalFoldFractalNode } from './fractals';
 import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode, WaveTermNode, ChladniFieldNode, ChladniSuperpositionNode, ChladniModeFreqNode } from './physics';
-import { ParticleEmitterNode, VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './particles';
+import { VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './vectorFields';
 import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode,
   SdfAoNode, SoftShadowNode, MultiLightNode, Fresnel3DNode, FakeSSSNode, VolumetricFogNode, MaterialSelectNode, GlassNode,
   MandelboxDENode, KIFSTetrahedronDENode, PhaseHGNode, FresnelSchlickNode, SpectralDispersionNode, BlinnPhongNode, GlassSceneNode,
@@ -266,8 +263,7 @@ import {
   QuadBezierShaperNode, CubicBezierShaperNode,
 } from './shapers';
 import { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGBToCMYKNode, CMYKHalftoneNode } from './halftone';
-import { VertexParticleSystemNode } from './vparticles';
-import { PInitNode, PRotateNode, PWaveNode, PColorDistNode, PSizeNode, PRenderNode } from './pnodes';
+import { GpuParticlesNode } from './gpuParticles';
 
 export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Sources
@@ -451,19 +447,12 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   chladniField: ChladniFieldNode,
   chladniSuperposition: ChladniSuperpositionNode,
   chladniModeFreq: ChladniModeFreqNode,
-  // Particles & Fields
-  particleEmitter: ParticleEmitterNode,
+  // Vector fields
   vectorField:     VectorFieldNode,
   gravityField:    GravityFieldNode,
   spiralField:     SpiralFieldNode,
-  vParticles:      VertexParticleSystemNode,
-  // Particle Pipeline
-  pInit:      PInitNode,
-  pRotate:    PRotateNode,
-  pWave:      PWaveNode,
-  pColorDist: PColorDistNode,
-  pSize:      PSizeNode,
-  pRender:    PRenderNode,
+  // GPU Particles
+  gpuParticles: GpuParticlesNode,
   // 3D / Volumetric
   raymarch3d: RaymarchNode,
   volumeClouds: VolumeCloudsNode,

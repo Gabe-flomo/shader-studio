@@ -17,7 +17,7 @@ import { MobilePreviewPill } from './components/shell/MobilePreviewPill';
 import { MobileIconSegment } from './components/shell/MobileIconSegment';
 import { Button, IconButton } from './components/ui/Button';
 import { ThemeOverrideContext, useTokens } from './theme/themeStore';
-import { AspectPicker, CanvasFullscreenButton, PreviewFooter, PreviewHeader } from './components/shell/PreviewChrome';
+import { AspectPicker, CanvasFullscreenButton, PreviewFooter, PreviewHeader, PreviewQualityPicker } from './components/shell/PreviewChrome';
 import { canvasFrameRef as canvasFrame, exitFullscreen, isFullscreenKey, isTyping, toggleFullscreenTarget, useFullscreen } from './lib/fullscreen';
 import { GuidesToggle } from './components/play/GuidesToggle';
 import { PANEL_WIDTHS, usePlayUi } from './components/play/playUi';
@@ -747,6 +747,8 @@ function App() {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.shiftKey || !isFullscreenKey(e, { typing: isTyping(e.target), plainF: true })) return;
       if (document.querySelector('[role="dialog"]')) return;
+      // The piano roll's F is Fold (docs/piano-roll.md).
+      if ((e.target as Element | null)?.closest?.('[data-piano-roll]')) return;
       e.preventDefault();
       e.stopPropagation();
       void toggleFullscreenTarget('canvas');
@@ -1439,6 +1441,7 @@ function App() {
             <ThemeOverrideContext.Provider value={null}>
               <PreviewHeader>
                 <AspectPicker onPanel />
+                <PreviewQualityPicker onPanel />
                 <CanvasFullscreenButton plainF={page === 'play'} />
                 {page === 'play' && <GuidesToggle />}
                 {page === 'play' && <SplitButton />}

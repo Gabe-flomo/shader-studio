@@ -66,10 +66,46 @@ export function CardBadge({ children, tone = 'warning' }: { children: ReactNode;
   );
 }
 
-/** Param name at the start of a row: fixed 66px so the rulers line up. */
-export function ParamLabel({ children, title, muted = false, onClick }: { children: ReactNode; title?: string; muted?: boolean; onClick?: () => void }) {
+/**
+ * A "?" beside a setting's name: hovering it shows the setting's fuller explanation (ParamDef.help)
+ * in a small panel, and in the status bar.
+ */
+export function HelpDot({ text }: { text: string }) {
   const tk = useTokens();
+  const [open, setOpen] = useState(false);
+  const setHint = useNodeGraphStore(s => s.setHoveredParamHint);
   return (
+    <span
+      aria-label="What this does"
+      onMouseEnter={() => { setOpen(true); setHint(text); }}
+      onMouseLeave={() => { setOpen(false); setHint(null); }}
+      onMouseDown={e => e.stopPropagation()}
+      style={{
+        position: 'relative', flexShrink: 0, width: 14, height: 14, borderRadius: 7, marginLeft: -4,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'help',
+        font: `600 9.5px ${fontFamily.ui}`, color: open ? tk.text.primary : tk.text.faint,
+        boxShadow: `inset 0 0 0 1px ${open ? tk.border.strong ?? tk.border.default : tk.border.default}`,
+      }}
+    >
+      ?
+      {open && (
+        <span
+          role="tooltip"
+          style={{
+            position: 'absolute', left: 18, top: -6, zIndex: 1200, width: 250, padding: '8px 10px', borderRadius: 8,
+            background: tk.bg.panel, color: tk.text.primary, boxShadow: tk.shadow.popover, pointerEvents: 'none',
+            font: `400 11.5px/1.45 ${fontFamily.ui}`, whiteSpace: 'normal', textAlign: 'left',
+          }}
+        >{text}</span>
+      )}
+    </span>
+  );
+}
+
+/** Param name at the start of a row: fixed 66px so the rulers line up. `help` adds a "?" after it. */
+export function ParamLabel({ children, title, muted = false, onClick, help }: { children: ReactNode; title?: string; muted?: boolean; onClick?: () => void; help?: string }) {
+  const tk = useTokens();
+  const label = (
     <span
       title={title}
       role={onClick ? 'link' : undefined}
@@ -84,6 +120,7 @@ export function ParamLabel({ children, title, muted = false, onClick }: { childr
       }}
     >{children}</span>
   );
+  return help ? <>{label}<HelpDot text={help} /></> : label;
 }
 
 /**

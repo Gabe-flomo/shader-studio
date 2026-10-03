@@ -1,4 +1,5 @@
 import { playableForPlan } from '../play/planGates';
+import { effectivePreviewQuality, usePreviewQuality } from '../lib/previewQuality';
 import { currentPlan, usePlan } from '../lib/plan';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
@@ -26,6 +27,7 @@ import { HandsPill } from './play/HandsChip';
 import { applySolo, usePlayUi } from './play/playUi';
 import { applyGroupVisibility } from '../types/layerGroups';
 import { layersUniforms, setLayersTap, setLayersRenderer, releaseLayersRenderer } from '../play/layersTexture';
+import { bindGpuParticles, drawGpuParticles, gpuParticlesActive, releaseGpuParticlesRenderer, resetGpuParticles, setGpuParticlesRenderer } from '../play/gpuParticlesTexture';
 import { padGridUniforms } from '../lib/padGrid';
 import { attachLayerDrop } from '../play/layerDrop';
 import { videoEngine } from '../lib/videoEngine';
@@ -34,7 +36,6 @@ import { emitTimeTick } from '../lib/timeTick';
 import { outputTap } from '../lib/outputTap';
 import { GpuTimer } from '../lib/gpuTimer';
 import { OfflineHistory } from '../lib/offlineHistory';
-import { seededRandom, stringSeed } from '../play/particle-sim.js';
 import { recordFrame, recordGpuPass, recordGpuCompile, setGpuTimerSupport, registerShaderCostMeasurer } from '../lib/perfStats';
 import { viewportSnapshot } from '../lib/viewport';
 import { onRebuild } from '../lib/rebuild';
@@ -43,71 +44,6 @@ import { DataTextureBinder } from '../data/dataTextures';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './shell/rebuildAction';
 
 export type CanvasHandle = { canvas: HTMLCanvasElement };
-
-// ── GPU particle geometry initialization by shape ─────────────────────────────
-/**
- * Where each particle starts. Seeded from the node's id, so the cloud is the
- * same every time the graph opens: a render (or a take) shows the particles
- * where they were when it was played.
- */
-function buildParticleGeometry(count: number, shape: number, seedKey: string): { positions: Float32Array; normDists: Float32Array } {
-  const R = seededRandom(stringSeed(seedKey));
-  const positions = new Float32Array(count * 3);
-  const normDists = new Float32Array(count);
-
-  for (let i = 0; i < count; i++) {
-    let x = 0, y = 0, z = 0, nd = 1;
-    switch (shape) {
-      case 0: { // Sphere — on surface
-        const theta = R() * Math.PI * 2;
-        const phi   = Math.acos(2 * R() - 1);
-        x = Math.sin(phi) * Math.cos(theta);
-        y = Math.sin(phi) * Math.sin(theta);
-        z = Math.cos(phi);
-        nd = 1.0;
-        break;
-      }
-      case 1: { // Ball — uniform in volume
-        const theta = R() * Math.PI * 2;
-        const phi   = Math.acos(2 * R() - 1);
-        const r     = Math.cbrt(R());
-        x = r * Math.sin(phi) * Math.cos(theta); y = r * Math.sin(phi) * Math.sin(theta); z = r * Math.cos(phi);
-        nd = r;
-        break;
-      }
-      case 2: { // Box — uniform in [-1,1]³
-        x = R() * 2 - 1; y = R() * 2 - 1; z = R() * 2 - 1;
-        nd = Math.min(1, Math.sqrt(x * x + y * y + z * z) / Math.sqrt(3));
-        break;
-      }
-      case 3: { // Disk — flat in XZ, uniform area
-        const angle = R() * Math.PI * 2;
-        const r     = Math.sqrt(R());
-        x = r * Math.cos(angle); z = r * Math.sin(angle); y = 0;
-        nd = r;
-        break;
-      }
-      case 4: { // Ring — thin ring in XZ at radius ≈1
-        const angle = R() * Math.PI * 2;
-        const r     = 0.85 + R() * 0.3;
-        x = r * Math.cos(angle); z = r * Math.sin(angle); y = (R() - 0.5) * 0.1;
-        nd = Math.min(r, 1);
-        break;
-      }
-      case 5: { // Spiral — Archimedean spiral in XZ
-        const t     = i / count;
-        const angle = t * Math.PI * 2 * 4;
-        x = t * Math.cos(angle); z = t * Math.sin(angle); y = (t - 0.5) * 0.3;
-        nd = t;
-        break;
-      }
-    }
-    positions[i * 3] = x; positions[i * 3 + 1] = y; positions[i * 3 + 2] = z;
-    normDists[i] = nd;
-  }
-
-  return { positions, normDists };
-}
 
 /** Handle returned to ExportModal for offline frame rendering + pixel readback */
 export interface OfflineRenderHandle {
@@ -382,9 +318,6 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   /** The Data nodes' textures (src/data/dataTextures.ts): bound per compile, refilled when a dataset changes. */
   const dataTexRef = useRef<DataTextureBinder | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
-  const particleSceneRef  = useRef<THREE.Scene | null>(null);
-  const perspCameraRef    = useRef<THREE.PerspectiveCamera | null>(null);
-  const gpuParticlesRef   = useRef<Map<string, THREE.Points>>(new Map());
   const animFrameRef = useRef<number>(0);
   // The frame loop's requestRender, for effects outside the setup effect
   const requestRenderRef = useRef<() => void>(() => {});
@@ -423,7 +356,6 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   const isStateful         = useNodeGraphStore((state) => state.isStateful);
   const echoConfig         = useNodeGraphStore((state) => state.echoConfig);
   useEffect(() => { echoRef.current = echoConfig; }, [echoConfig]);
-  const particleSystems    = useNodeGraphStore((state) => state.particleSystems);
   const setGlslErrors      = useNodeGraphStore((state) => state.setGlslErrors);
   const setPixelSample     = useNodeGraphStore((state) => state.setPixelSample);
   const setCurrentTime     = useNodeGraphStore((state) => state.setCurrentTime);
@@ -466,6 +398,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // Drawing buffer = CSS size × renderScale. Normally 1; raised only while
     // exporting at 2×/4× (see OfflineRenderHandle.setRenderScale).
     let renderScale = 1;
+    // The preview's resolution (Full, Half, Third, Quarter: lib/previewQuality.ts): a share of
+    // the drawing buffer, stretched to fit. Held at Full while exporting.
+    let previewQuality = effectivePreviewQuality();
+    const pixelRatio = () => renderScale * previewQuality;
     // Exact drawing-buffer size for export presets; null = CSS size × renderScale.
     let exportSize: { width: number; height: number } | null = null;
     let cssW = 1;
@@ -474,6 +410,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     rendererRef.current = renderer;
     // The Layers node's distance field is built on this renderer's GPU (play/kit/jfa.js).
     setLayersRenderer(renderer);
+    // So are the Particles nodes (play/kit/gpuParticles.js).
+    setGpuParticlesRenderer(renderer);
     onCanvasReady?.(renderer.domElement);
 
     // ── Frame scheduling ─────────────────────────────────────────────────────
@@ -598,6 +536,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const dataTextures = new DataTextureBinder(material.uniforms, () => requestRenderRef.current());
     dataTextures.bind(activeFs || '');
     dataTexRef.current = dataTextures;
+    bindGpuParticles(material.uniforms, activeFs || '');
+    /** The pointer in 0…1 of the picture (y up) for the Particles nodes; null before it has been over the canvas. */
+    const particleMouse = (w: number, h: number): [number, number] | null => {
+      const mu = material.uniforms.u_mouse.value as THREE.Vector2;
+      return mu.x === 0 && mu.y === 0 ? null : [mu.x / Math.max(1, w), mu.y / Math.max(1, h)];
+    };
 
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
@@ -706,13 +650,6 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       samples.sort((a, b) => a - b);
       return samples[Math.floor(samples.length / 2)];
     });
-
-    // ── 3D particle scene + perspective camera ────────────────────────────────
-    const particleScene = new THREE.Scene();
-    particleSceneRef.current = particleScene;
-    const perspCamera = new THREE.PerspectiveCamera(60, 1, 0.01, 100);
-    perspCamera.position.z = 3;
-    perspCameraRef.current = perspCamera;
 
     // ── Background layer: graph sources as a second program ─────────────────
     // A graph in a Background layer's queue (a bundled example, a saved graph)
@@ -863,15 +800,15 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           if (Array.isArray(value) && vec && typeof vec === 'object' && typeof vec.fromArray === 'function') vec.fromArray(value);
           // As the live loop writes the input bus: a colour as a plain [r, g, b].
           else u.value = Array.isArray(value) ? [...value] : value;
-          // GPU particle nodes read the same sliders.
-          for (const [, points] of gpuParticlesRef.current) {
-            const pu = (points.material as THREE.ShaderMaterial).uniforms[name];
-            if (pu && !(pu.value && typeof pu.value === 'object' && !Array.isArray(pu.value))) pu.value = Array.isArray(value) ? [...value] : value;
-          }
         },
         renderAtTime: (time: number, opts?: { dt?: number; first?: boolean }) => {
           ensureRT();
           const u = material.uniforms;
+          // Particles nodes: a render starts them over (with their pre-roll), then steps them a frame at a time.
+          if (gpuParticlesActive()) {
+            const first = !opts || !!opts.first;
+            drawGpuParticles(material, { width: exportW, height: exportH, dt: first ? 0 : opts?.dt ?? 1 / 60, time, mouse: particleMouse(renderer.domElement.width, renderer.domElement.height), reset: first });
+          }
           // The live loop's own history stays as it was: put its uniforms back after.
           const keep = ['u_time', 'u_prevFrame', ...Array.from({ length: 6 }, (_, i) => `u_echo${i}`)].map(k => [k, u[k]?.value] as const);
           const feedback = isStatefulRef.current && !!u.u_prevFrame;
@@ -893,16 +830,6 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           blitMat.uniforms.u_seed.value = ditherSeed(Math.floor(time * 100.0));
           renderer.setRenderTarget(exportReadbackRT);
           renderer.render(blitScene, camera);
-          // GPU particle nodes, added over the picture as the live preview draws them.
-          if (gpuParticlesRef.current.size > 0) {
-            for (const [, points] of gpuParticlesRef.current) {
-              const pu = (points.material as THREE.ShaderMaterial).uniforms;
-              if (pu.u_time) pu.u_time.value = time;
-            }
-            renderer.autoClear = false;
-            renderer.render(particleScene, perspCamera);
-            renderer.autoClear = true;
-          }
           renderer.setRenderTarget(null);
           for (const [k, v] of keep) if (u[k]) u[k].value = v;
         },
@@ -1070,7 +997,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         renderer.setPixelRatio(1);
         renderer.setSize(exportSize.width, exportSize.height, false); // keep the CSS size
       } else {
-        renderer.setPixelRatio(renderScale);
+        renderer.setPixelRatio(pixelRatio());
         renderer.setSize(cssW, cssH);
       }
       const w = renderer.domElement.width;
@@ -1078,8 +1005,6 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       material.uniforms.u_resolution.value.set(w, h);
       rt.setSize(w, h);
       floatRt.setSize(w, h);
-      perspCamera.aspect = w / h;
-      perspCamera.updateProjectionMatrix();
       // Resize ping-pong RTs and reset state
       if (pingPongA.current) { pingPongA.current.dispose(); pingPongA.current = null; }
       if (pingPongB.current) { pingPongB.current.dispose(); pingPongB.current = null; }
@@ -1088,6 +1013,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (material.uniforms.u_prevFrame) material.uniforms.u_prevFrame.value = null;
       requestRender();
     };
+    // The preview's resolution changed (or an export took it to Full): resize the buffer.
+    const stopQuality = usePreviewQuality.subscribe(st => {
+      const q = effectivePreviewQuality(st);
+      if (q === previewQuality) return;
+      previewQuality = q;
+      applySize();
+    });
 
     const ro = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect;
@@ -1261,18 +1193,14 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         // The Audio engine's racks follow the record too, and mapped plug-in parameters glide (lib/audioEngineHost.ts).
         const rec = playEngine.getRecord();
         audioEngineHost.frame(rec.audioEngine, rec.controls, fxValueOf);
+        // The tape's scale: racks with Snap to scale put live notes in it.
+        audioEngineHost.setScale(rec.arrangement?.scale);
       }
       material.uniforms.u_time.value = elapsed;
       // Clock followers (time readouts, keyframe playheads) get every frame: a listener call is
       // cheap, and throttling it made the readout visibly choppy once frames were throttled.
       // Always emitted: it also records the clock for clockNow() (freezing a keyframed slider).
       emitTimeTick(elapsed);
-
-      // ── GPU particle tick: just keep u_time in sync ────────────────────────
-      for (const [, points] of gpuParticlesRef.current) {
-        const psMat = points.material as THREE.ShaderMaterial;
-        if (psMat.uniforms.u_time) psMat.uniforms.u_time.value = elapsed;
-      }
 
       // ── Audio engine tick: push amplitude uniforms + draw live spectrum ──
       // tick() keys are the compiled uniform names (setUniformNames above).
@@ -1329,7 +1257,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       const layerDt = playing ? dt : 0;
       const videoActive = videoIdsRef.current.some(id => videoEngine.isPlaying(id));
       const shaderMoving = playing && (
-        usesTimeRef.current || hasTimeNodeRef.current || gpuParticlesRef.current.size > 0 ||
+        usesTimeRef.current || hasTimeNodeRef.current || gpuParticlesActive() ||
         audioAmps.size > 0 || liveValues.size > 0 || videoActive || isStatefulRef.current || echoRef.current !== null ||
         scopeIdsRef.current.size > 0 || previewNodeIdRef.current !== null
         || midiEngine.hasFile()
@@ -1371,6 +1299,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       } else if (plan.shader) {
         needsRender = false;
         idleFrames = 0;
+        // Particles nodes: stepped (while the clock runs) and drawn before the picture that reads them.
+        if (gpuParticlesActive()) {
+          const pw = renderer.domElement.width || 1, ph = renderer.domElement.height || 1;
+          gpuTimer.begin('particles');
+          drawGpuParticles(material, { width: pw, height: ph, dt: playing ? dt : 0, time: elapsed, mouse: particleMouse(pw, ph) });
+          gpuTimer.end();
+        }
         if (isStatefulRef.current) {
           // Ping-pong: render to write RT, blit to screen with dithering
           ensurePingPong();
@@ -1401,15 +1336,6 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           renderer.setRenderTarget(null);
           renderer.render(blitScene, camera);
           gpuTimer.end();
-        }
-
-        // ── GPU particles: render additively on top of the blitted background ──
-        if (gpuParticlesRef.current.size > 0) {
-          renderer.autoClear = false;
-          gpuTimer.begin('particles');
-          renderer.render(particleScene, perspCamera);
-          gpuTimer.end();
-          renderer.autoClear = true;
         }
 
         // ── Background layer: this graph is one source of the queue. Copied for the kit when it
@@ -1954,17 +1880,16 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       for (const t of Object.values(st.videoTextures)) collect(t);
       for (const t of textures) t.dispose();
       reset.push('textures');
-      // GPU particles: programs and buffers are made again on the next draw.
-      if (gpuParticlesRef.current.size > 0) {
-        for (const [, points] of gpuParticlesRef.current) { points.geometry.dispose(); (points.material as THREE.ShaderMaterial).dispose(); }
-        reset.push('particles');
-      }
       blitMat.dispose();
       probeDummy.dispose();
       // The program: the old material goes first, so three.js links a new one instead of reusing it.
       const vsSrc = st.vertexShader || FALLBACK_VERTEX;
       const fsSrc = (st.rawGlslShader ?? st.fragmentShader) || FALLBACK_FRAGMENT;
       const uniforms = buildUniforms(material.uniforms);
+      // Particles nodes: new engines (their textures went with the old ones), bound under the new uniforms.
+      setGpuParticlesRenderer(null);
+      setGpuParticlesRenderer(renderer);
+      if (bindGpuParticles(uniforms, fsSrc)) reset.push('particles');
       const lastWorking = { vs: vertexShaderRef.current || material.vertexShader, fs: fragmentShaderRef.current || material.fragmentShader };
       material.dispose();
       let next = await compileFresh(vsSrc, fsSrc, uniforms);
@@ -2003,10 +1928,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const handleMouseMove = (e: MouseEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
       // Drawing-buffer pixels, so u_mouse matches gl_FragCoord at any render scale
-      const x = (e.clientX - rect.left) * renderScale;
-      const y = (e.clientY - rect.top) * renderScale;
+      const x = (e.clientX - rect.left) * pixelRatio();
+      const y = (e.clientY - rect.top) * pixelRatio();
       // Update u_mouse uniform (WebGL coords: 0 = bottom-left)
-      material.uniforms.u_mouse.value.set(x, rect.height * renderScale - y);
+      material.uniforms.u_mouse.value.set(x, rect.height * pixelRatio() - y);
       // The same place as 0..1 of the picture, for a take recording the performance.
       if (rect.width > 0 && rect.height > 0) inputBus.setMouse((e.clientX - rect.left) / rect.width, 1 - (e.clientY - rect.top) / rect.height);
       // Track for pixel readback (DOM coords: 0 = top-left)
@@ -2025,6 +1950,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       virtualTime = 0;
       lastRafTime = null;
       material.uniforms.u_time.value = 0;
+      resetGpuParticles();
       requestRender();
     };
     window.addEventListener('reset-time', handleResetTime);
@@ -2090,23 +2016,16 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       previewScopeMatCache.forEach(disposeProbeMat);
       pingPongA.current?.dispose();
       pingPongB.current?.dispose();
-      // Dispose all GPU particle systems
-      for (const [, points] of gpuParticlesRef.current) {
-        points.geometry.dispose();
-        (points.material as THREE.ShaderMaterial).dispose();
-        particleScene.remove(points);
-      }
-      gpuParticlesRef.current.clear();
-      particleSceneRef.current = null;
-      perspCameraRef.current   = null;
       sceneRef.current = null;
       releaseLayersRenderer(renderer);
+      releaseGpuParticlesRenderer(renderer);
       const loseCtx = renderer.getContext().getExtension('WEBGL_lose_context');
       loseCtx?.loseContext();
       gpuTimer.dispose();
       statsRT.dispose();
       costRt?.dispose();
       registerShaderCostMeasurer(null);
+      stopQuality();
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };
@@ -2215,6 +2134,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     }
     // Data nodes' textures and row counts, as this shader declares them
     dataTexRef.current?.bind(activeFragmentShader);
+    // Particles nodes: an engine per node, sampled through the uniform each declares
+    bindGpuParticles(mat.uniforms, activeFragmentShader);
     // Always keep the font texture bound after recompile
     if (!mat.uniforms.u_fontTexture) mat.uniforms.u_fontTexture = { value: FONT_TEXTURE };
     else mat.uniforms.u_fontTexture.value = FONT_TEXTURE;
@@ -2296,78 +2217,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     }
   }, [videoUniforms, videoTextures]);
 
-  // Sync GPU particle systems: create/remove THREE.Points whenever store.particleSystems changes.
-  // Geometry is rebuilt from shape each time (shapes/counts only change on recompile, not slider moves).
-  useEffect(() => {
-    const pScene = particleSceneRef.current;
-    if (!pScene) return;
-
-    const existing = gpuParticlesRef.current;
-    const incoming = new Set(particleSystems.map(p => p.nodeId));
-
-    // Remove stale particle systems
-    for (const [nodeId, points] of existing) {
-      if (!incoming.has(nodeId)) {
-        pScene.remove(points);
-        points.geometry.dispose();
-        (points.material as THREE.ShaderMaterial).dispose();
-        existing.delete(nodeId);
-      }
-    }
-
-    for (const psData of particleSystems) {
-      const { nodeId, vertexShader, fragmentShader, count, shape, paramUniforms: pUniforms } = psData;
-
-      // Always recreate on topology change (new shaders, possibly different count/shape)
-      if (existing.has(nodeId)) {
-        const old = existing.get(nodeId)!;
-        pScene.remove(old);
-        old.geometry.dispose();
-        (old.material as THREE.ShaderMaterial).dispose();
-        existing.delete(nodeId);
-      }
-
-      const { positions, normDists } = buildParticleGeometry(count, shape, nodeId);
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position',    new THREE.BufferAttribute(positions, 3, false));
-      geo.setAttribute('a_normDist',  new THREE.BufferAttribute(normDists, 1, false));
-
-      // Build initial uniforms from paramUniforms + u_time
-      const uniforms: Record<string, { value: number | number[] }> = { u_time: { value: 0 } };
-      for (const [name, value] of Object.entries(pUniforms)) {
-        uniforms[name] = { value };
-      }
-
-      const mat = new THREE.ShaderMaterial({
-        vertexShader,
-        fragmentShader,
-        uniforms,
-        transparent: true,
-        depthTest:   false,
-        depthWrite:  false,
-        blending:    THREE.AdditiveBlending,
-      });
-
-      const points = new THREE.Points(geo, mat);
-      pScene.add(points);
-      existing.set(nodeId, points);
-    }
-  }, [particleSystems]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // Hot-update param uniform values without recompiling — runs only when paramUniforms
   // changes but fragmentShader has NOT changed (slider fast-path).
-  // Also syncs particle material uniforms since particle paramUniforms are merged in.
   useEffect(() => {
     const mat = materialRef.current;
     if (mat) {
       for (const [name, value] of Object.entries(paramUniforms)) {
         if (mat.uniforms[name]) mat.uniforms[name].value = value;
-      }
-    }
-    for (const [, points] of gpuParticlesRef.current) {
-      const pMat = points.material as THREE.ShaderMaterial;
-      for (const [name, value] of Object.entries(paramUniforms)) {
-        if (pMat.uniforms[name]) pMat.uniforms[name].value = value;
       }
     }
     // The store write already asked for a frame, but that frame can run before this effect (a

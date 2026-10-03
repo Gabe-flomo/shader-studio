@@ -95,7 +95,7 @@ describe('web runtime passes', () => {
   });
 
   it('feedback draws into alternating targets, reads the other, and dithers to the screen', () => {
-    const { frameCalls, gl } = run({ fragmentShader: FS, passes: { stateful: true, echo: null, particles: [] } }, 3);
+    const { frameCalls, gl } = run({ fragmentShader: FS, passes: { stateful: true, echo: null } }, 3);
     const fbs = frameCalls.filter(c => c[0] === 'createFramebuffer').length;
     expect(fbs).toBe(2);
     // Each frame: the picture into a target, then the blit to the screen (null).
@@ -112,24 +112,13 @@ describe('web runtime passes', () => {
   });
 
   it('echo keeps copies × one frame and rotates them every `delay` frames', () => {
-    const { frameCalls } = run({ fragmentShader: FS, passes: { stateful: false, echo: { copies: 2, delay: 2 }, particles: [] } }, 4);
+    const { frameCalls } = run({ fragmentShader: FS, passes: { stateful: false, echo: { copies: 2, delay: 2 } } }, 4);
     // One scene target and two echo slots.
     expect(frameCalls.filter(c => c[0] === 'createFramebuffer').length).toBe(3);
     // A blit per frame to the screen, plus a copy into the ring on frames 2 and 4.
     const blits = frameCalls.filter(c => c[0] === 'uniform1f' && (c[1] as { uniform: string }).uniform === 'u_seed');
     expect(blits.length).toBe(6);
     expect(blits.filter(c => c[2] === 0).length).toBe(2);
-  });
-
-  it('particles draw as points, additively, with the app’s camera', () => {
-    const vs = 'precision highp float;\nuniform float u_time;\nattribute float a_normDist;\nvoid main(){ gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_PointSize = 4.0; }';
-    const { calls, frameCalls, gl } = run({ fragmentShader: FS, passes: { stateful: false, echo: null, particles: [{ vertexShader: vs, fragmentShader: 'precision highp float; void main(){ gl_FragColor = vec4(1.0); }', count: 500, shape: 3 }] } });
-    const pvs = calls.filter(c => c[0] === 'shaderSource').map(c => c[2] as string).find(s => s.includes('ssp_main'));
-    expect(pvs).toContain('uniform mat4 projectionMatrix;');
-    expect(pvs).toContain('void main() { ssp_main(); gl_PointSize *= ssp_pointScale; }');
-    expect(frameCalls).toContainEqual(['drawArrays', gl.POINTS, 0, 500]);
-    expect(frameCalls).toContainEqual(['blendFunc', gl.SRC_ALPHA, gl.ONE]);
-    expect(calls).toContainEqual(['bindAttribLocation', expect.anything(), 1, 'a_normDist']);
   });
 
   it('an image input without an image reads blank, on a unit of its own', () => {
@@ -143,7 +132,7 @@ describe('web runtime passes', () => {
       const display = { picture: true, backdrop: [0, 0, 0], source, image: { name: 'a.png', src: 'data:image/png;base64,AAAA' }, video: { name: 'b.mp4', src: 'data:video/mp4;base64,AAAA', bytes: 3, loop: true, muted: true, rate: 1 } };
       const { calls, frameCalls } = run({
         fragmentShader: FS, play: { ...emptyPlayRecord(), display },
-        passes: { stateful: true, echo: null, particles: [] },
+        passes: { stateful: true, echo: null },
         media: { textures: {}, videos: { u_vid: { src: 'data:video/mp4;base64,AAAA', loop: true, speed: 1 } }, audio: [] },
       }, 3);
       const sources = calls.filter(c => c[0] === 'shaderSource').map(c => c[2] as string);
@@ -160,8 +149,6 @@ describe('web runtime helpers', () => {
   const { internals } = run({ fragmentShader: 'void main(){}' }, 0);
   const I = internals as unknown as {
     toGlsl: (s: string, vertex: boolean, webgl2: boolean, d: () => unknown) => string;
-    particleGeometry: (n: number, shape: number) => { positions: Float32Array; normDists: Float32Array };
-    perspective: (fov: number, aspect: number, near: number, far: number) => Float32Array;
     bandAmplitude: (freq: Float32Array, sr: number, fft: number, center: number, range: number) => number;
   };
 
@@ -169,26 +156,6 @@ describe('web runtime helpers', () => {
     expect(I.toGlsl('void main(){ float w = fwidth(1.0); }', false, false, () => ({}))).toMatch(/^#extension GL_OES_standard_derivatives : enable\n/);
     expect(I.toGlsl('void main(){}', false, false, () => ({}))).toBe('void main(){}');
     expect(I.toGlsl('#extension GL_OES_standard_derivatives : enable\nvoid main(){}', false, true, () => ({}))).not.toContain('#extension');
-  });
-
-  it('particle shapes: a disk is flat and inside the unit circle; a sphere is on it', () => {
-    const disk = I.particleGeometry(200, 3);
-    for (let i = 0; i < 200; i++) {
-      expect(disk.positions[i * 3 + 1]).toBe(0);
-      expect(Math.hypot(disk.positions[i * 3], disk.positions[i * 3 + 2])).toBeLessThanOrEqual(1);
-      expect(disk.normDists[i]).toBeCloseTo(Math.hypot(disk.positions[i * 3], disk.positions[i * 3 + 2]), 5);
-    }
-    const sphere = I.particleGeometry(50, 0);
-    for (let i = 0; i < 50; i++) expect(Math.hypot(sphere.positions[i * 3], sphere.positions[i * 3 + 1], sphere.positions[i * 3 + 2])).toBeCloseTo(1, 5);
-  });
-
-  it('the camera matches THREE.PerspectiveCamera(60°)', () => {
-    const m = I.perspective(60, 2, 0.01, 100);
-    const f = 1 / Math.tan(Math.PI / 6);
-    expect(m[0]).toBeCloseTo(f / 2, 6);
-    expect(m[5]).toBeCloseTo(f, 6);
-    expect(m[11]).toBe(-1);
-    expect(m[10]).toBeCloseTo(-(100 + 0.01) / (100 - 0.01), 6);
   });
 
   it('audio bands read as the app’s audio engine: mean dB over centre ± range, −100..0 dB → 0..1', () => {

@@ -6,7 +6,7 @@
  *   ShaderStudioPlay.mount(element, bundle, options) → { destroy(), pause(), play(), get(id), set(id, v), fire(id), still(), renderAt(t, o), renderAtAsync(t, o), seekVideos(t), setPixelSize(s) }
  *
  * bundle:  { title, fragmentShader, uniforms, paramBindings, play, aspect, passes?, media? }
- *   passes: { stateful, echo: { copies, delay } | null, particles: [{ vertexShader, fragmentShader, count, shape }] }
+ *   passes: { stateful, echo: { copies, delay } | null }
  *   datasets: { [id]: { name, result, stream? } }  each dataset's frozen result; `stream`
  *             ({ transport: 'poll' | 'websocket' | 'sse', address, interval, mode, window, format?,
  *             normalize }) makes the page reconnect to a live feed and add its rows (needs the network)
@@ -74,8 +74,7 @@
  *
  * Around the fragment shader it runs what ShaderCanvas runs: previous-frame
  * feedback (ping-pong targets on u_prevFrame), echo (a ring of copies on
- * u_echo0…), GPU particle systems (points drawn additively with the app's
- * camera), images and videos on their samplers, and Audio Input nodes' bands
+ * u_echo0…), the graph's Particles nodes, images and videos on their samplers, and Audio Input nodes' bands
  * from their embedded song or the live input. A MIDI Input node's outputs
  * stay at rest.
  *
@@ -281,38 +280,6 @@ void main() {
   gl_FragColor = vec4(clamp(c.rgb + d * amp, 0.0, 1.0), c.a);
 }`;
   const ditherSeed = n => (n % 4096) + 0.5;
-  // A particle chain's vertex shader with what Three.js declares for it, and its point size scaled to CSS pixels.
-  function particleVertex(src) {
-    return 'uniform mat4 modelViewMatrix;\nuniform mat4 projectionMatrix;\nattribute vec3 position;\n' +
-      src.replace(/void\s+main\s*\(\s*\)/, 'void ssp_main()') +
-      '\nuniform float ssp_pointScale;\nvoid main() { ssp_main(); gl_PointSize *= ssp_pointScale; }\n';
-  }
-  // Mirrors buildParticleGeometry in ShaderCanvas: 0 sphere, 1 ball, 2 box, 3 disk, 4 ring, 5 spiral.
-  function particleGeometry(count, shape) {
-    const positions = new Float32Array(count * 3), normDists = new Float32Array(count), R = Math.random;
-    for (let i = 0; i < count; i++) {
-      let x = 0, y = 0, z = 0, nd = 1;
-      if (shape === 0 || shape === 1) {
-        const th = R() * Math.PI * 2, ph = Math.acos(2 * R() - 1), r = shape === 1 ? Math.cbrt(R()) : 1;
-        x = r * Math.sin(ph) * Math.cos(th); y = r * Math.sin(ph) * Math.sin(th); z = r * Math.cos(ph); nd = r;
-      } else if (shape === 2) {
-        x = R() * 2 - 1; y = R() * 2 - 1; z = R() * 2 - 1; nd = Math.min(1, Math.sqrt(x * x + y * y + z * z) / Math.sqrt(3));
-      } else if (shape === 3) {
-        const a = R() * Math.PI * 2, r = Math.sqrt(R()); x = r * Math.cos(a); z = r * Math.sin(a); nd = r;
-      } else if (shape === 4) {
-        const a = R() * Math.PI * 2, r = 0.85 + R() * 0.3; x = r * Math.cos(a); z = r * Math.sin(a); y = (R() - 0.5) * 0.1; nd = Math.min(r, 1);
-      } else if (shape === 5) {
-        const t = i / count, a = t * Math.PI * 8; x = t * Math.cos(a); z = t * Math.sin(a); y = (t - 0.5) * 0.3; nd = t;
-      }
-      positions[i * 3] = x; positions[i * 3 + 1] = y; positions[i * 3 + 2] = z; normDists[i] = nd;
-    }
-    return { positions, normDists };
-  }
-  // THREE.PerspectiveCamera's projection (column-major).
-  function perspective(fovDeg, aspect, near, far) {
-    const f = 1 / Math.tan(fovDeg * Math.PI / 360), nf = 1 / (near - far);
-    return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0]);
-  }
   // The app's font atlas (ShaderCanvas buildFontTexture): 16×16 ASCII cells of 64 px.
   let atlas = null;
   function fontAtlas() {
@@ -676,26 +643,22 @@ void main() {
     const media = bgOnly ? { audio: (B.media || {}).audio } : B.media || {};
     const stateful = !!passes.stateful;
     const echoCfg = passes.echo && passes.echo.copies > 0 ? passes.echo : null;
-    const particleDefs = passes.particles || [];
     const VS = 'attribute vec2 position; varying vec2 vUv; void main(){ vUv = position * 0.5 + 0.5; gl_Position = vec4(position, 0.0, 1.0); }';
     const shader = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, toGlsl(src, type === gl.VERTEX_SHADER, gl2, () => gl.getExtension('OES_standard_derivatives'))); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) || 'shader failed'); return s; };
-    // Attributes at fixed slots so every program shares one layout: 0 position, 1 a_normDist.
+    // The position attribute at slot 0, so every program shares one layout.
     const link = (vs, fs) => {
       const p = gl.createProgram();
       gl.attachShader(p, shader(gl.VERTEX_SHADER, vs));
       gl.attachShader(p, shader(gl.FRAGMENT_SHADER, fs));
       gl.bindAttribLocation(p, 0, 'position');
-      gl.bindAttribLocation(p, 1, 'a_normDist');
       gl.linkProgram(p);
       if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p) || 'link failed');
       return p;
     };
     let program, blitProgram = null;
-    const particles = [];
     try {
       program = link(VS, bgOnly ? BG_ONLY_FRAG : B.fragmentShader);
       if (stateful || echoCfg) blitProgram = link(VS, BLIT_FRAG);
-      for (const ps of particleDefs) particles.push(Object.assign({ program: link(particleVertex(ps.vertexShader), ps.fragmentShader) }, ps));
     } catch (e) { stage.append(el('div', 'ssp-error', 'The shader did not compile here: ' + e.message)); return { destroy() {} }; }
     gl.useProgram(program);
     const quad = gl.createBuffer();
@@ -729,8 +692,16 @@ void main() {
       gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.BROWSER_DEFAULT_WEBGL);
       if (mips) { gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); }
     };
-    const locs = new Map();
-    const loc = n => { if (!locs.has(n)) locs.set(n, gl.getUniformLocation(program, n)); return locs.get(n); };
+    // Uniform locations per program: the picture's, or the Particles probe's while it draws (locProg).
+    let locProg = null;
+    const locsBy = new Map();
+    const loc = n => {
+      const p = locProg || program;
+      let m = locsBy.get(p);
+      if (!m) { m = new Map(); locsBy.set(p, m); }
+      if (!m.has(n)) m.set(n, gl.getUniformLocation(p, n));
+      return m.get(n);
+    };
     const uniformValues = Object.assign({}, B.uniforms || {});
     const setUniformAt = (l, v) => { if (!l) return; if (typeof v === 'number') gl.uniform1f(l, v); else if (Array.isArray(v)) { if (v.length === 2) gl.uniform2fv(l, v); else if (v.length === 3) gl.uniform3fv(l, v); else if (v.length === 4) gl.uniform4fv(l, v); } };
     const setUniform = (n, v) => setUniformAt(loc(n), v);
@@ -954,6 +925,8 @@ void main() {
     // Images: decoded onto a canvas and uploaded from there, as loadImageTexture.ts does; mipmapped, clamped.
     const blobUrls = [];
     const imageTex = new Map();
+    // Each loaded image's width / height (the Particles node's Image emitter lays its picture out by it).
+    const imageAspect = new Map();
     for (const name in media.textures || {}) {
       const m = media.textures[name];
       const t = texture(gl.LINEAR, [0, 0, 0, 0]);
@@ -964,6 +937,7 @@ void main() {
         const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight;
         c.getContext('2d').drawImage(im, 0, 0);
         upload(t, c, gl2 || (isPow2(c.width) && isPow2(c.height)));
+        imageAspect.set(name, c.width / Math.max(1, c.height));
         needsDraw = true;
       };
       im.src = m.src;
@@ -1183,37 +1157,6 @@ void main() {
         upload(v.tex, e, false);
       }
     };
-    // GPU particle systems: the app's THREE.Points, drawn additively over the picture with its camera.
-    for (const p of particles) {
-      const g = particleGeometry(p.count, p.shape);
-      p.pos = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, p.pos); gl.bufferData(gl.ARRAY_BUFFER, g.positions, gl.STATIC_DRAW);
-      p.dist = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, p.dist); gl.bufferData(gl.ARRAY_BUFFER, g.normDists, gl.STATIC_DRAW);
-      p.locs = new Map();
-    }
-    const drawParticles = () => {
-      const w = glCanvas.width, h = glCanvas.height;
-      const proj = perspective(60, w / Math.max(1, h), 0.01, 100);
-      const view = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, -3, 1]);
-      // The app draws at one device pixel per CSS pixel; keep the points the same size on screen.
-      const pointScale = w / Math.max(1, fitBox.clientWidth);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.viewport(0, 0, w, h);
-      gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-      for (const p of particles) {
-        gl.useProgram(p.program);
-        const pl = n => { if (!p.locs.has(n)) p.locs.set(n, gl.getUniformLocation(p.program, n)); return p.locs.get(n); };
-        gl.uniformMatrix4fv(pl('projectionMatrix'), false, proj);
-        gl.uniformMatrix4fv(pl('modelViewMatrix'), false, view);
-        setUniformAt(pl('ssp_pointScale'), pointScale);
-        setUniformAt(pl('u_time'), time);
-        for (const k in uniformValues) setUniformAt(pl(k), uniformValues[k]);
-        gl.bindBuffer(gl.ARRAY_BUFFER, p.pos); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ARRAY_BUFFER, p.dist); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 0, 0);
-        gl.drawArrays(gl.POINTS, 0, p.count);
-      }
-      gl.disable(gl.BLEND);
-      gl.disableVertexAttribArray(1);
-    };
     // The pad grid (play.padGrid, kit/midi.js): pads from the shared MIDI listener, applied on this player's clock.
     const KM = typeof SSKit !== 'undefined' && SSKit.midi ? SSKit.midi : null;
     const padCfg = play.padGrid && KM ? play.padGrid : null;
@@ -1224,6 +1167,121 @@ void main() {
     if (padTex) {
       gl.bindTexture(gl.TEXTURE_2D, padTex);
       for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+    }
+    // The graph's Particles nodes (kit/gpuParticles.js, the app's engine): stepped and drawn on this context before
+    // each picture, their textures bound to the samplers the nodes declare. Without WebGL2 float targets the
+    // samplers read nothing and each node passes its picture through.
+    const GPK = typeof SSKit !== 'undefined' && SSKit.gpuParticles ? SSKit.gpuParticles : null;
+    const gpUses = !bgOnly && B.fragmentShader.indexOf('// gpu-particles ') >= 0;
+    const gpHostR = gpUses && gl2 && GPK ? GPK.host(gl) : null;
+    const gpBlank = [];
+    if (gpHostR) gpHostR.bind(B.fragmentShader);
+    if (gpUses && (!gpHostR || gpHostR.unsupported)) {
+      const re = /uniform\s+sampler2D\s+(\w+)\s*;\s*\/\/ gpu-particles /g;
+      let m;
+      while ((m = re.exec(B.fragmentShader))) gpBlank.push(m[1]);
+      console.warn('[Playfield] ' + (gpHostR ? gpHostR.unsupported : 'Particles need WebGL2; the picture shows without them.'));
+    }
+    // The step the next picture's particles take (0 while paused), and whether they start over (a new render).
+    let gpDt = 0, gpReset = false;
+    // Wired settings (kit/gpuParticles.js gpProbeSlots): the graph compiled again with GPP_PROBE draws the wired
+    // values a pixel each (read back a frame or two late) and a field over the picture (obstacle, flow, depth),
+    // as the app does (play/gpuParticlesTexture.ts).
+    let gpProbeProg = null;
+    if (gpHostR && !gpHostR.unsupported && B.fragmentShader.indexOf('#ifdef GPP_PROBE') >= 0) {
+      try { gpProbeProg = link(VS, '#define GPP_PROBE 1\n' + B.fragmentShader); } catch (e) { console.warn('[Playfield] Particles: wired settings are not read here (' + e.message + ').'); }
+    }
+    const gpProbes = new Map();
+    const gpTarget = (w, h, internal, type, filter) => {
+      const t = texture(filter);
+      gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, gl.RGBA, type, null);
+      const fb = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+      return { tex: t, fb, w, h };
+    };
+    function gpProbeRun(b, W, H, vol) {
+      const spec = b.probe;
+      if (!gpProbeProg || !spec) return null;
+      let pr = gpProbes.get(b.uniform);
+      if (!pr) { pr = { vals: null, field: null, vol: null, reader: GPK.readback(gl) }; gpProbes.set(b.uniform, pr); }
+      const prevFb = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+      gl.useProgram(gpProbeProg); locProg = gpProbeProg;
+      bindPictureInputs(W, H);
+      for (const bb of gpHostR.bindings) bindSampler(bb.uniform, blank);
+      const slots = GPK.slots(spec).slice(0, 16);
+      if (slots.length) {
+        if (!pr.vals) pr.vals = gpTarget(16, 1, gl.RGBA32F, gl.FLOAT, gl.NEAREST);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, pr.vals.fb);
+        gl.enable(gl.SCISSOR_TEST);
+        setUniform(spec.m, 1);
+        // A one-pixel viewport reads the picture's centre; a two-pixel one half a picture right or up of it (the
+        // scissor keeps it off its neighbour).
+        slots.forEach((sl, i) => { gl.viewport(i - sl.dx, -sl.dy, 1 + sl.dx, 1 + sl.dy); gl.scissor(i, 0, 1, 1); setUniform(spec.s, i); drawQuad(); });
+        gl.disable(gl.SCISSOR_TEST);
+        pr.reader.request(pr.vals.fb, 16, 1);
+      }
+      let field = null;
+      if (GPK.probeField(spec)) {
+        const fh = spec.field.depth ? Math.max(96, Math.round(H / 3)) : 160, fw = Math.max(16, Math.round(fh * W / Math.max(1, H)));
+        if (!pr.field || pr.field.w !== fw || pr.field.h !== fh) {
+          if (pr.field) { gl.deleteTexture(pr.field.tex); gl.deleteFramebuffer(pr.field.fb); }
+          pr.field = gpTarget(fw, fh, gl.RGBA16F, gl.HALF_FLOAT, gl.LINEAR);
+        }
+        gl.bindFramebuffer(gl.FRAMEBUFFER, pr.field.fb);
+        gl.viewport(0, 0, fw, fh);
+        setUniform(spec.m, 2);
+        drawQuad();
+        field = { texture: pr.field.tex, w: fw, h: fh };
+      }
+      let volume = null;
+      if (spec.field.scene && spec.c) {
+        // The Scene's distance on a grid round the centre (kit GP_VOL² slices side by side).
+        const vw = GPK.vol * GPK.volTiles[0], vh = GPK.vol * GPK.volTiles[1];
+        if (!pr.vol) pr.vol = gpTarget(vw, vh, gl.RGBA16F, gl.HALF_FLOAT, gl.LINEAR);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, pr.vol.fb);
+        gl.viewport(0, 0, vw, vh);
+        setUniform(spec.c, [vol.centre[0], vol.centre[1], vol.centre[2], vol.half]);
+        setUniform(spec.m, 3);
+        drawQuad();
+        volume = { texture: pr.vol.tex, w: vw, h: vh };
+      }
+      setUniform(spec.m, 0);
+      locProg = null;
+      gl.useProgram(program);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, prevFb);
+      return { values: pr.reader.poll(), field, volume };
+    }
+    // Sound from (the Particles node): the mic, or the Audio engine's tracks as this page plays them (its
+    // granulator racks; the app's other instruments don't play on a web page, so they are silent here).
+    const gpWave = new Map();
+    function gpRackSound(g) {
+      if (!g || !g.an) return null;
+      g.an.getFloatFrequencyData(g.freq);
+      let w = gpWave.get(g);
+      if (!w) { w = new Float32Array(g.an.fftSize); gpWave.set(g, w); }
+      g.an.getFloatTimeDomainData(w);
+      return { freq: g.freq, wave: w, sampleRate: grains.ctx.sampleRate };
+    }
+    function gpSoundIn(source) {
+      if (source === 'live') {
+        if (shared.live.status !== 'on') return null;
+        updateLive();
+        return { freq: shared.live.freq, wave: shared.live.wave, sampleRate: shared.live.sr };
+      }
+      const racks = play.audioEngine && play.audioEngine.racks ? play.audioEngine.racks : [];
+      if (/^track\d$/.test(source)) { const r = racks[+source.slice(5) - 1]; return r ? gpRackSound(grains.racks.get(r.id)) : null; }
+      if (source !== 'master') return null;
+      // The master: every rack's power added up per bin, and their waves summed.
+      let out = null;
+      for (const g of grains.racks.values()) {
+        const one = gpRackSound(g);
+        if (!one) continue;
+        if (!out) { out = { freq: new Float32Array(one.freq.length).fill(-200), wave: new Float32Array(one.wave.length), sampleRate: one.sampleRate }; }
+        for (let i = 0; i < out.freq.length; i++) out.freq[i] = 10 * Math.log10(Math.pow(10, out.freq[i] / 10) + Math.pow(10, one.freq[i] / 10));
+        for (let i = 0; i < out.wave.length; i++) out.wave[i] += one.wave[i];
+      }
+      return out;
     }
     // The graph's Layers node: the layers' colour and distance field, uploaded after each frame's layers are drawn.
     const usesLayersNode = !bgOnly && /\bu_layers(Field)?\b/.test(B.fragmentShader);
@@ -2536,6 +2594,12 @@ void main() {
     // The graph's picture: straight to the screen, or (feedback, echo) into a half-float target, then dithered to the screen as ShaderCanvas does.
     function drawPicture() {
       const W = glCanvas.width, H = glCanvas.height;
+      const gpOut = gpHostR && !gpHostR.unsupported ? gpHostR.frame({
+        width: W, height: H, dt: gpDt, time, mouse: [mouse.x, mouse.y], read: n => uniformValues[n], reset: gpReset,
+        texture: n => (imageAspect.has(n) ? { texture: imageTex.get(n), aspect: imageAspect.get(n) } : null),
+        probe: (b, vol) => gpProbeRun(b, W, H, vol), sound: gpSoundIn,
+      }) : [];
+      gpDt = 0; gpReset = false;
       let target = null;
       if (stateful || echoCfg) {
         if (stateful && !pingPong) pingPong = [makeTarget(W, H), makeTarget(W, H)];
@@ -2546,6 +2610,19 @@ void main() {
       gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fb : null);
       gl.viewport(0, 0, W, H);
       gl.useProgram(program);
+      bindPictureInputs(W, H);
+      for (const o of gpOut) bindSampler(o.uniform, o.texture || blank);
+      for (const n of gpBlank) bindSampler(n, blank);
+      drawQuad();
+      if (target) {
+        if (echoCfg) captureEcho(target);
+        blit(target.tex, null, W, H, ditherSeed(frame));
+        if (stateful) pingIdx = 1 - pingIdx;
+      }
+      gl.activeTexture(gl.TEXTURE0);
+    }
+    /** The graph's inputs on the current program (the picture's, or the Particles probe's): uniforms and samplers. */
+    function bindPictureInputs(W, H) {
       setUniform('u_time', time);
       setUniform('u_resolution', [W, H]);
       setUniform('u_mouse', [mouse.x * W, mouse.y * H]);
@@ -2565,19 +2642,12 @@ void main() {
         const ls = loc('u_layersFieldSize'); if (ls) gl.uniform2fv(ls, layersFieldSize);
         const ll = loc('u_layersFieldLinear'); if (ll) gl.uniform1f(ll, layersGpuField ? 1 : 0);
       }
-      if (stateful) bindSampler('u_prevFrame', pingPong[pingIdx].tex);
+      if (stateful) bindSampler('u_prevFrame', pingPong ? pingPong[pingIdx].tex : blank);
       if (echoCfg) for (let i = 0; i < 6; i++) bindSampler('u_echo' + i, echoRing[i] ? echoRing[i].tex : blank);
       for (const [n, t] of imageTex) bindSampler(n, t);
       for (const v of videos) bindSampler(v.name, v.tex);
       for (const d of dataTex) bindSampler(d.name, d.tex);
       for (const c of dataCounts) setUniform(c.name, c.n);
-      drawQuad();
-      if (target) {
-        if (echoCfg) captureEcho(target);
-        blit(target.tex, null, W, H, ditherSeed(frame));
-        if (stateful) pingIdx = 1 - pingIdx;
-      }
-      gl.activeTexture(gl.TEXTURE0);
     }
     // Held by renderAt: the picture stays what it drew until play() lets the clock run again.
     let held = false;
@@ -2591,6 +2661,7 @@ void main() {
       const steps = Array.isArray(o.steps) ? o.steps : [];
       if (K) K.reset(o.seed > 0 ? o.seed : 1);
       if (finishR) finishR.reset();
+      gpReset = true;
       dropTargets(); frame = 0; if (rtState) { rtState.smooth.clear(); rtState.lag.clear(); rtState.values.clear(); } lastOut.clear(); trig.clear(); actLevel.clear(); overrides.clear(); pairState.clear(); condStates.clear(); incState.clear(); incFire.clear(); incCond.clear(); lastTime = -Infinity;
       return { gen, fdt, steps };
     };
@@ -2631,11 +2702,11 @@ void main() {
       const showsThis = !qPlan || qPlan.items.some(i => i.item.kind === 'graph' && i.item.graph === 'this');
       if (!bgOnly && showsThis) {
         uploadVideos();
+        gpDt = running || held ? dt : 0;
         // Reduced motion's still frame of a feedback graph is the picture after its first 1.5 s
         // (90 frames at 60 fps), which is what the feedback looks like once it has built up.
         if (reduced && stateful && frame === 1 && !held) for (let i = 0; i < 89; i++) { drawPicture(); time += 1 / 60; }
         drawPicture();
-        if (particles.length) drawParticles();
         if (qPlan && !qPlan.direct) { const self = qPlan.items.find(i => i.item.kind === 'graph' && i.item.graph === 'this'); if (self) captureQueue(self.item.id); }
       }
       if (qPlan) for (const { item } of qPlan.items) {
@@ -2694,6 +2765,9 @@ void main() {
     return {
       destroy() {
         alive = false;
+        if (gpHostR) gpHostR.dispose();
+        for (const pr of gpProbes.values()) { pr.reader.dispose(); for (const t of [pr.vals, pr.field, pr.vol]) if (t) { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fb); } }
+        if (gpProbeProg) gl.deleteProgram(gpProbeProg);
         for (const close of feedClosers) close();
         cancelAnimationFrame(raf);
         ro.disconnect();
@@ -2974,7 +3048,7 @@ void main() {
     shared.camera = null; shared.cameraStream = null;
   }
   // internals: the pure GPU and audio helpers, for tests.
-  window.ShaderStudioPlay = { version: 8, mount, enableMidi, listen: startLive, enableCamera, stopCamera, enableHands, internals: { toGlsl, particleGeometry, perspective, bandAmplitude, particleVertex, readerBandDb, readerRead, readerSmooth, readerGate, readerTarget, triggerKey } };
+  window.ShaderStudioPlay = { version: 8, mount, enableMidi, listen: startLive, enableCamera, stopCamera, enableHands, internals: { toGlsl, bandAmplitude, readerBandDb, readerRead, readerSmooth, readerGate, readerTarget, triggerKey } };
 
   // A full-page export: mount on #play with the page's options (URL params can override).
   if (window.PLAY_BUNDLE && document.getElementById('play')) {

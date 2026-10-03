@@ -1,10 +1,41 @@
 /** The Finish stack (see finish.js). */
 export interface FnParam { key: string; label: string; min: number; max: number; step: number; value: number; hint: string; hidden: boolean }
 export type FnKind = 'grade' | 'lens' | 'chroma' | 'vignette' | 'crt' | 'bloom' | 'halation' | 'grain' | 'flicker' | 'shake' | 'time'
-  | 'glitch' | 'ripple' | 'displace' | 'mosaic' | 'mirror' | 'gradmap' | 'posterize' | 'edges' | 'feedback';
-export interface FnEffectDef { label: string; group: string; icon: string; summary: string; params: FnParam[] }
+  | 'glitch' | 'ripple' | 'displace' | 'mosaic' | 'mirror' | 'gradmap' | 'posterize' | 'edges' | 'feedback' | 'echo'
+  | 'pixelsort' | 'halftone' | 'ascii' | 'leaks' | 'datamosh' | 'motionx';
+/** A starting point for an effect: it only sets numbers. */
+export interface FnPreset { name: string; values: Readonly<Record<string, number>> }
+/** A colour kept as three hidden numbers, edited as one swatch. */
+export interface FnColour { label: string; keys: readonly [string, string, string]; hint?: string }
+/** An effect's declaration: its numbers, and optionally presets, colour swatches and a note for its card. */
+export interface FnEffectDef { label: string; group: string; icon: string; summary: string; params: FnParam[]; presets?: readonly FnPreset[]; colours?: readonly FnColour[]; note?: string }
 export const FN_EFFECTS: Readonly<Record<FnKind, FnEffectDef>>;
 export const FN_KINDS: readonly FnKind[];
+/** Effects that read around each point after the effects above them: each starts a pass of its own (fnSegments). */
+export const FN_STAGE_KINDS: readonly FnKind[];
+/** Effects that keep frames of their own between draws (Datamosh, Motion extract): each heads a pass of its own. */
+export const FN_TEMPORAL_KINDS: readonly FnKind[];
+/** What Feedback and Echo keep (their Source). */
+export const FN_SOURCE_MAPS: readonly ['picture', 'layer', 'moving', 'bright'];
+export function fnSourceOf(e: { map?: unknown; [key: string]: unknown } | null | undefined): 'picture' | 'layer' | 'moving' | 'bright';
+/** Echo's copies this frame: frames back for each (index 0 = now) and the deepest frame read. */
+export function fnEchoPlan(time: number, count: number, strobe: boolean, n: number, moving?: boolean): { backs: number[]; deepest: number };
+/** What Datamosh's movement is measured on. */
+export const FN_MOSH_MAPS: readonly ['picture', 'layer'];
+export const FN_MOSH_LOW: number;
+export const FN_MOSH_REACH: number;
+export function fnMoshGrid(block: number, W: number, H: number): { lowW: number; lowH: number; bl: number; px: number; gw: number; gh: number };
+export function fnMoshKeyframe(every: number, time: number, last: number): { idx: number; key: boolean };
+export function fnMoshEncode(v: readonly [number, number]): number[];
+export function fnMoshDecode(bytes: readonly number[]): [number, number];
+export const FN_ECHO_MAX_DELAY: number;
+export const FN_ECHO_CAP: number;
+export const FN_ECHO_COPIES_CAP: number;
+export function fnEchoRingSize(delay: number, W: number, H: number, have?: number, cap?: number): { frames: number; w: number; h: number; bytes: number };
+export function fnEchoPixel(now: readonly number[], then: readonly number[], p?: Partial<Record<'gain' | 'colour' | 'background' | 'neon', number>>): number[];
+export function fnSegments<T extends { kind: string }>(effects: readonly T[]): T[][];
+/** ASCII's character bitmaps, darkest first (5 × 5, bit column + 5 × row from the bottom). */
+export const FN_ASCII_GLYPHS: readonly number[];
 export const FN_TONE_MODES: readonly string[];
 export const FN_TIME_MAPS: readonly string[];
 export const FN_WHERE: readonly ['all', 'layer', 'picture', 'motion'];
@@ -66,7 +97,7 @@ export const FN_HAL: Readonly<{
   sigma: number; gain: number; tail: number; knee: number; recv: readonly [number, number]; greenKnee: number; blue: number;
   amount: number; reach: number; threshold: number; headroom: number; warmth: number; growth: number; conserve: number; model: number; srcMax: number; whiteMax: number;
 }>;
-export const FN_HALATION_PRESETS: ReadonlyArray<{ name: string; values: Readonly<Record<string, number>> }>;
+export const FN_HALATION_PRESETS: readonly FnPreset[];
 export function fnMigrateHalation<T extends { kind: string; model?: unknown; [key: string]: unknown }>(e: T): T;
 export function fnHalSource(rgb: readonly number[], thresholdStops: number, headroom: number): [number, number];
 /** A halation source's soft ceiling: linear for small excesses, never past `max`. */
@@ -83,7 +114,7 @@ export interface FnRing { readonly size: number; readonly count: number; readonl
 export function fnRing(size: number): FnRing;
 export function fnRingSize(quality: string, W: number, H: number): { frames: number; w: number; h: number; bytes: number };
 
-export function fnBuildFinal(effects: readonly FnEffect[], opts?: { tone?: string; hueCurves?: boolean; timeMap?: string; curves?: boolean }): { src: string; glow: boolean; time: boolean; feedback: boolean; maps: string[]; lut: boolean; custom: string[] };
+export function fnBuildFinal(effects: readonly FnEffect[], opts?: { tone?: string; hueCurves?: boolean; timeMap?: string; curves?: boolean; segment?: number }): { src: string; glow: boolean; time: boolean; feedback: boolean; echo: boolean; mosh: boolean; mx: boolean; maps: string[]; lut: boolean; custom: string[]; segments: number };
 
 export interface FnInput {
   finish: FnFinish;
@@ -99,7 +130,7 @@ export interface FnInput {
   first?: boolean;
   pixels?: boolean;
 }
-export interface FnInfo { effects?: string[]; glow?: boolean; floatGlow?: boolean; ring?: { frames: number; w: number; h: number; bytes: number; count: number } | null; error: string; custom?: Record<string, string> }
+export interface FnInfo { effects?: string[]; glow?: boolean; passes?: number; floatGlow?: boolean; ring?: { frames: number; w: number; h: number; bytes: number; count: number } | null; error: string; custom?: Record<string, string>; mosh?: { bytes: number } | null; rings?: Record<string, { frames: number; w: number; h: number; bytes: number; count: number }>; feedback?: { bytes: number; float: boolean } | null }
 export interface FnRenderer {
   ok: boolean;
   canvas: HTMLCanvasElement | null;

@@ -145,7 +145,7 @@ describe('what the capture window mounts', () => {
     // A text layer swung by an LFO is a function of the time: no warm-up.
     expect(needsWarmup(input(), 'play')).toBe(false);
     expect(needsWarmup(input(), 'graph')).toBe(false);
-    expect(needsWarmup({ ...input(), passes: { stateful: true, echo: null, particles: [] } }, 'graph')).toBe(true);
+    expect(needsWarmup({ ...input(), passes: { stateful: true, echo: null } }, 'graph')).toBe(true);
     // Layers that simulate do.
     const particles = input(); particles.play.layers.push(defaultLayer('particles', 'p1', 'Dust'));
     expect(needsWarmup(particles, 'play')).toBe(true);

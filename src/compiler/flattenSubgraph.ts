@@ -29,7 +29,6 @@ import { MAX_GROUP_ITERATIONS } from '../nodes/definitions/group';
 import type { DataType, GraphNode, InputSocket, OutputSocket, SubgraphData } from '../types/nodeGraph';
 import type { UserNodeParam, UserNodePort } from '../types/userNode';
 import { ShaderAssembler } from './shaderAssembler';
-import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
 import { getNodeDefinition, getNodeDefinitionFor } from '../nodes/definitions';
 import { f, vec3Str } from '../nodes/definitions/helpers';
 
@@ -44,8 +43,7 @@ const IMPLICIT_GLOBALS: Array<{ name: string; type: string }> = [
 ];
 
 /**
- * Node types a flattened function can't contain. These are compiled by the
- * assembler outside the normal per-node path (particles), depend on per-frame
+ * Node types a flattened function can't contain. These depend on per-frame
  * framebuffer state (feedback / blur family), or register per-instance
  * sampler uniforms (media inputs). A clear refusal beats a broken shader.
  */
@@ -118,7 +116,6 @@ function markTextureInputs(subgraph: SubgraphData, slotIndex: Map<string, number
 /** Walk the subgraph (and nested groups) and return the first unsupported type, if any. */
 export function findUnsupportedNode(subgraph: SubgraphData, depth = 0): { node: GraphNode; reason: string } | null {
   for (const n of subgraph.nodes) {
-    if (PARTICLE_PIPELINE_TYPES.has(n.type)) return { node: n, reason: 'particle pipeline nodes compile outside the main shader' };
     if (STATEFUL_TYPES.has(n.type)) return { node: n, reason: 'it reads the previous frame' };
     if (MEDIA_TYPES.has(n.type)) return { node: n, reason: 'texture, audio, video and MIDI inputs are bound per instance' };
     if (OUTPUT_TYPES.has(n.type)) return { node: n, reason: 'output nodes belong to the graph, not a node' };

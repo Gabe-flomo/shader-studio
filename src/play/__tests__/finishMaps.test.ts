@@ -114,11 +114,13 @@ describe('the new effects', () => {
     expect(layer.src).toContain('vec2 d = vec2(cos(a), sin(a)) * fnM0(q);');
   });
 
-  it('Feedback reads the last finished frame, and only it asks the renderer to keep one', () => {
-    const fb = fnBuildFinal([fx('grade', 'g'), fx('feedback', 'f')]);
+  it('Feedback heads a pass of its own and reads its own history, and only it asks the renderer to keep one', () => {
+    const list = [fx('grade', 'g'), fx('feedback', 'f')];
+    expect(fnBuildFinal(list, { segment: 0 }).feedback).toBe(false);
+    const fb = fnBuildFinal(list, { segment: 1 });
     expect(fb.feedback).toBe(true);
-    expect(fb.src).toContain('uniform sampler2D uFeed;');
-    expect(fb.src).toContain('vec3 prev = texture(uFeed, fq).rgb * uFeedOn * inside;');
+    expect(fb.src).toContain('uniform sampler2D uFbPrev, uFbNow, uFbRaw, uFbRawPrev;');
+    expect(fb.src).toContain('vec4 tr = max(fnFbTrail(q) * feedback_amount - 0.003, 0.0) * uFbOn;');
     expect(fnBuildFinal([fx('grade', 'g')]).feedback).toBe(false);
   });
 
@@ -152,7 +154,7 @@ describe('the record', () => {
   it('keeps Displace’s map and layer, and a stack with the new kinds round-trips through a Play record', () => {
     expect(parseFinishEffect({ id: 'd', kind: 'displace', map: 'motion' })!.map).toBe('motion');
     expect(parseFinishEffect({ id: 'd', kind: 'displace', map: 'slit' })!.map).toBe('noise');
-    const finish = parseFinish({ on: true, effects: FN_KINDS.slice(11).map((k, i) => ({ id: `e${i}`, kind: k })) })!;
+    const finish = parseFinish({ on: true, effects: FN_KINDS.slice(11, 20).map((k, i) => ({ id: `e${i}`, kind: k })) })!;
     expect(finish.effects.map(e => e.kind)).toEqual(['glitch', 'ripple', 'displace', 'mosaic', 'mirror', 'gradmap', 'posterize', 'edges', 'feedback']);
     const rec = parsePlayRecord(JSON.parse(JSON.stringify({ ...emptyPlayRecord(), finish: { ...finish, effects: finish.effects.map(e => (e.kind === 'ripple' ? { ...e, where: 'picture' } : e)) } })));
     expect(rec.finish?.effects.find(e => e.kind === 'ripple')?.where).toBe('picture');

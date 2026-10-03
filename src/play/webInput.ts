@@ -29,14 +29,13 @@ export interface CompiledForWeb {
   /** The compile's echo config (the store keeps it as echoConfig). */
   echo?: { copies: number; delay: number } | null;
   echoConfig?: { copies: number; delay: number } | null;
-  particleSystems: { vertexShader: string; fragmentShader: string; count: number; shape: number }[];
 }
 
 /** What unsupportedFeatures reads, from a compile (a superset, so it keeps working as the runtime learns more). */
 export function graphFeatures(c: CompiledForWeb, play: PlayRecord): GraphFeatures {
   const f = {
     textureUniforms: c.textureUniforms, videoUniforms: c.videoUniforms, audioUniforms: c.audioUniforms, liveUniforms: c.liveUniforms,
-    isStateful: c.isStateful, particleSystems: c.particleSystems, usesEcho: /\bu_echo0\b/.test(c.fragmentShader), usesData: /\bu_ds_\w+/.test(c.fragmentShader), play,
+    isStateful: c.isStateful, usesEcho: /\bu_echo0\b/.test(c.fragmentShader), usesData: /\bu_ds_\w+/.test(c.fragmentShader), play,
   };
   return f;
 }
@@ -60,7 +59,6 @@ export function webInputFrom(c: CompiledForWeb, play: PlayRecord, opts: { title:
     passes: {
       stateful: c.isStateful,
       echo: c.echoConfig ?? c.echo ?? null,
-      particles: c.particleSystems.map(p => ({ vertexShader: p.vertexShader, fragmentShader: p.fragmentShader, count: p.count, shape: p.shape })),
     },
   };
   if (opts.media) input.media = opts.media;

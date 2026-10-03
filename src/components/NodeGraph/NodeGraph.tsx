@@ -14,6 +14,7 @@ import { explainPreview, previewLegend } from '../../lib/previewExplain';
 import { SmartConnectMenu } from './SmartConnectMenu';
 import { askConfirm, askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
+import { showSocketPatch, socketVisible, socketsForParam } from '../../lib/socketsOnDemand';
 import { candidateFor, candidateLabel, collectPlayCandidates, upstreamControls } from '../../play/playControls';
 import { addCandidateControl, driveWithNull, graphNullDrives } from '../play/layerOps';
 import { Minimap } from './Minimap';
@@ -1551,6 +1552,39 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
                   </>
                 )}
+                {(() => {
+                  // Inputs on demand (NodeDefinition.socketsOnDemand): this slider's socket, shown or hidden.
+                  if (!contextMenu.nodeId || !contextMenu.paramKey) return null;
+                  const here = displayNodes.find(n => n.id === contextMenu.nodeId);
+                  const hereDef = here ? getNodeDefinitionFor(here) : null;
+                  const keys = here ? socketsForParam(hereDef, contextMenu.paramKey) : [];
+                  if (!here || !hereDef || keys.length === 0) return null;
+                  return (
+                    <>
+                      <div style={{ padding: '4px 12px 2px', fontSize: '10px', letterSpacing: 0.6, textTransform: 'uppercase', color: tc.surface2 }}>Input</div>
+                      {keys.map(k => {
+                        const own = k === contextMenu.paramKey;
+                        const label = hereDef.inputs[k]?.label ?? k;
+                        const shown = socketVisible(here, hereDef, k);
+                        return (
+                          <button key={k} style={ctxBtnStyle}
+                            title={shown
+                              ? 'Take the wire out (if any) and hide the socket: the slider is in charge again'
+                              : `Give ${own ? 'this setting' : label} a socket, so a wire (audio, a hand, an LFO, any node) can drive it`}
+                            onClick={() => {
+                              const st = useNodeGraphStore.getState();
+                              if (shown && here.inputs[k]?.connection) st.disconnectInput(here.id, k);
+                              st.updateNodeParams(here.id, showSocketPatch(here, k, !shown), { immediate: true });
+                              setContextMenu(null);
+                            }}>
+                            {shown ? (own ? 'Back to slider' : `Remove the ${label} input`) : (own ? 'Control from outside' : `Add the ${label} input`)}
+                          </button>
+                        );
+                      })}
+                      <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                    </>
+                  );
+                })()}
                 {pastWires.length > 0 && (
                   <>
                     <div style={{ padding: '4px 12px 2px', fontSize: '10px', letterSpacing: 0.6, textTransform: 'uppercase', color: tc.surface2 }}>Reconnect</div>

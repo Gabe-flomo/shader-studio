@@ -100,7 +100,6 @@ export function compiledQueueGraph(item: BackgroundItem): QueueGraphResult | nul
       const limits: string[] = [];
       if (r.isStateful) limits.push('feedback (Previous Frame) starts from black each frame');
       if (r.echo && r.echo.copies > 0) limits.push('echo');
-      if (r.particleSystems?.length) limits.push('GPU particles');
       if (Object.keys(r.textureUniforms).length || Object.keys(r.videoUniforms).length) limits.push('its image and video inputs');
       if (Object.keys(r.audioUniforms).length || Object.keys(r.liveUniforms).length) limits.push('its audio and MIDI inputs');
       out = { key, vertexShader: r.vertexShader, fragmentShader: r.fragmentShader, uniforms: { ...r.paramUniforms }, limits };

@@ -13,7 +13,6 @@ import { audioUniformName } from './audioUniformNames';
 import { coerce, coerceLossy } from '../lib/typesCompatible';
 import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { loopColour } from '../nodes/definitions/scene3d';
-import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
 import { frozenValueOf } from '../nodes/sliderFreeze';
 import {
   getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed,
@@ -574,6 +573,8 @@ export class ShaderAssembler {
   // Float uniforms the input bus writes each frame: name → `${nodeId}::${channel}`.
   private liveUniforms: Record<string, string> = {};
   private videoUniforms: Record<string, string> = {};
+  /** Per-instance top-level declarations (NodeDefinition.declarationsFor), in order, each once. */
+  private declarations = new Set<string>();
   private nodeOutputs = new Map<string, Record<string, string>>();
   private mlgDynamicOutputs = new Map<string, Record<string, { type: string; label: string }>>();
   private sceneFnExtraParams = new Map<string, Array<{ name: string; type: string }>>();
@@ -695,9 +696,6 @@ export class ShaderAssembler {
   }
 
   private compileNode(node: GraphNode): void {
-        // Particle pipeline nodes are compiled by particleAssembler — skip here
-        if (PARTICLE_PIPELINE_TYPES.has(node.type)) return;
-
         const def = getNodeDefinitionFor(node);
         if (!def) return;
         const inField = this.fieldDepth > 0;
@@ -1260,6 +1258,7 @@ export class ShaderAssembler {
               const { patchedNode: patchedSub, uniforms: subUniforms, bindings: subBindings } = patchNodeParamsForUniforms(effectiveSubNode, subDef, fn => this.functions.add(fn), originalId);
               Object.assign(this.paramUniforms, subUniforms);
               Object.assign(this.paramBindings, subBindings);
+              subDef.declarationsFor?.(patchedSub).forEach(d => this.declarations.add(d));
               const subResult = subDef.generateGLSL(patchedSub, subInputVars);
               // For carry-mode nodes: strip the type from the declaration so we get
               // `    varName = f(varName);` instead of `    T varName = f(varName);`
@@ -3740,6 +3739,7 @@ export class ShaderAssembler {
         const { patchedNode, uniforms: nodeUniforms, bindings: nodeBindings } = patchNodeParamsForUniforms(sluggedNode, def, fn => this.functions.add(fn), node.id);
         Object.assign(this.paramUniforms, nodeUniforms);
         Object.assign(this.paramBindings, nodeBindings);
+        def.declarationsFor?.(patchedNode).forEach(d => this.declarations.add(d));
 
         const override = typeof node.params.__codeOverride === 'string'
           ? (node.params.__codeOverride as string).trim()
@@ -3822,9 +3822,10 @@ export class ShaderAssembler {
     const liveUniformDecls = Object.keys(this.liveUniforms)
       .map(name => `uniform float ${name};`)
       .join('\n');
-    const videoUniformDecls = Object.keys(this.videoUniforms)
-      .map(name => `uniform sampler2D ${name};`)
-      .join('\n');
+    const videoUniformDecls = [
+      ...Object.keys(this.videoUniforms).map(name => `uniform sampler2D ${name};`),
+      ...this.declarations,
+    ].join('\n');
 
     const fragmentShader = `precision highp float;
 #define PI 3.1415926538

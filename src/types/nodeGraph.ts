@@ -1,5 +1,5 @@
 // Data types that flow between nodes
-export type DataType = "float" | "vec2" | "vec3" | "vec4" | "mat2" | "mat3" | "scene3d" | "spacewarp3d" | "particle";
+export type DataType = "float" | "vec2" | "vec3" | "vec4" | "mat2" | "mat3" | "scene3d" | "spacewarp3d";
 
 // Socket (connection point on a node)
 export interface Socket {
@@ -121,6 +121,18 @@ export interface ParamDef {
    * renderer reaches it directly.
    */
   pair?: { with: string; label: string };
+  /**
+   * The card section this param sits in (e.g. "Motion"). Consecutive params with the same section
+   * get one header that folds them; the first section starts open, the rest folded. Folding is
+   * display only (foldState.ts): the params stay uniforms, so Play controls and mappings on a folded
+   * one keep working — unlike showWhen, which takes a hidden param out of the shader.
+   */
+  section?: string;
+  /**
+   * A fuller explanation than `hint` (what it does, a typical range, what it pairs with), shown
+   * from a "?" beside the setting's name on the card. `hint` stays the one-line tooltip.
+   */
+  help?: string;
 }
 
 // Node definition (blueprint)
@@ -166,6 +178,25 @@ export interface NodeDefinition {
    * as `u_tex_${node.id}_${slot}`.
    */
   textureSlots?: string[];
+  /**
+   * Top-level declarations this instance needs (a sampler an engine outside
+   * the shader fills, with a comment the hosts read): called with the node as
+   * generateGLSL sees it, its id the slug and each live param the name of its
+   * uniform. The GPU Particles node uses it (nodes/definitions/gpuParticles.ts).
+   */
+  declarationsFor?: (node: GraphNode) => string[];
+  /**
+   * A short info card instead of the long one: a summary and a few "how to start" steps; the
+   * sockets are listed by name only and the settings explain themselves from their "?" (ParamDef.help).
+   * For nodes with many settings (Particles).
+   */
+  brief?: { summary: string; start: string[] };
+  /**
+   * Inputs the card hides until they're wanted: socket key → the params whose slider brings it out
+   * (right-click → "Control from outside"). Shown while wired or listed in `params.__sockets`
+   * (lib/socketsOnDemand.ts). Display only; the compiler sees every input.
+   */
+  socketsOnDemand?: Record<string, string[]>;
 
   // Default parameter values
   defaultParams?: Record<string, unknown>;

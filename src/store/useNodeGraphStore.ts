@@ -81,6 +81,29 @@ function announcePlay(play: PlayRecord, openPlay: () => void): void {
     action: { label: 'Open Play', onClick: openPlay },
   });
 }
+
+/**
+ * An example's pictures (ExampleGraph.images) into its nodes' image slots, as the card's
+ * Load image does: the texture, and the thumbnail on the card. Dropped if another graph
+ * opened meanwhile; the example stays unsaved and clean.
+ */
+async function attachExampleImages(images: Record<string, string>, epoch: number): Promise<void> {
+  for (const [key, src] of Object.entries(images)) {
+    try {
+      const blob = await (await fetch(src)).blob();
+      const { texture, thumbnailDataUrl } = await loadImageTextureFromFile(new File([blob], key, { type: blob.type }));
+      const st = useNodeGraphStore.getState();
+      if (st.graphEpoch !== epoch) { texture.dispose(); return; }
+      st.setNodeTexture(key, texture);
+      const [nodeId, slot] = key.split('::');
+      const dirty = st.graphDirty;
+      useNodeGraphStore.setState(s => ({ nodes: s.nodes.map(n => (n.id === nodeId ? { ...n, params: { ...n.params, [`__tex_${slot}_thumb`]: thumbnailDataUrl } } : n)) }));
+      useNodeGraphStore.setState({ graphDirty: dirty });
+    } catch (e) {
+      console.error('[loadExampleGraph] could not load an example picture', e);
+    }
+  }
+}
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
 import type { ExprPreset } from '../types/exprPreset';
 import type { TransformPreset } from '../types/transformPreset';
@@ -104,6 +127,7 @@ import { planGraphImport, type PreviewAspect } from '../utils/graphImportPlan';
 import { loadFolders, createFolder, moveItemsToFolder } from '../utils/assetFolders';
 import type { FileResult } from '../utils/fileIO';
 import { BLANK_GRAPH, DEFAULT_EXAMPLE, loadExampleGraphs } from './exampleIndex';
+import { loadImageTextureFromFile } from '../lib/loadImageTexture';
 import { archiveCurrent, deleteHistory, readVersion } from './graphVersions';
 import type { ExampleGraph } from './exampleIndex';
 import { layoutByRank, estimateNodeHeight } from './graphLayout';
@@ -498,8 +522,6 @@ interface NodeGraphState {
   vertexShader: string;
   fragmentShader: string;
   compilationErrors: string[];
-  /** GPU particle systems compiled from pInit→…→pRender chains — consumed by ShaderCanvas. */
-  particleSystems: import('../compiler/types').ParticleSystemData[];
   /**
    * Uniform name → current value for all float params extracted by the compiler.
    * Updated in-place (without recompile) when sliders change eligible float params.
@@ -1592,7 +1614,6 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   vertexShader: '',
   fragmentShader: '',
   compilationErrors: [],
-  particleSystems: [],
   paramUniforms: {},
   paramBindings: {},
   play: emptyPlayRecord(),
@@ -4648,7 +4669,6 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       videoUniforms: result.videoUniforms,
       isStateful: result.isStateful,
       echoConfig: result.echo ?? null,
-      particleSystems: result.particleSystems ?? [],
       nodeSlugMap: result.nodeSlugMap ?? new Map(),
       // Probe values are read from the compiled program, so they only go
       // stale when the shader itself changed (or the program is rebuilt).
@@ -4853,6 +4873,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set({ currentGraph: null, graphDirty: false });
     announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
     if (example !== 'blank') announceGraphOpened({ kind: 'example', key: loadedKey });
+    if (graph.images) void attachExampleImages(graph.images, get().graphEpoch);
   },
 
   replaceGraph: (rawNodes) => {

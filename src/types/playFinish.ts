@@ -6,7 +6,7 @@
  * See docs/finish-stack.md.
  */
 import {
-  FN_EFFECTS, FN_KINDS, FN_TONE_MODES, FN_TIME_MAPS, FN_TIME_QUALITY, FN_WHERE, FN_DISPLACE_MAPS, FN_CURVE_CHANNELS, FN_HUE_CURVES, FN_COMPARE_ID, FN_COMPARE_PARAMS,
+  FN_EFFECTS, FN_KINDS, FN_TONE_MODES, FN_TIME_MAPS, FN_TIME_QUALITY, FN_WHERE, FN_DISPLACE_MAPS, FN_MOSH_MAPS, FN_SOURCE_MAPS, FN_CURVE_CHANNELS, FN_HUE_CURVES, FN_COMPARE_ID, FN_COMPARE_PARAMS,
   fnDefaultEffect, fnDefaultCurves, fnDefaultCompare, fnParseCustom, fnMigrateHalation, type FnCompare, type FnCurves, type FnKind, type FnParam,
 } from '../play/kit/finish.js';
 import type { SealedBlob } from './userNode';
@@ -20,6 +20,11 @@ export type FinishTimeQuality = 'low' | 'medium' | 'high';
 export type FinishWhere = 'all' | 'layer' | 'picture' | 'motion';
 /** What pushes the picture in Displace. */
 export type FinishDisplaceMap = 'noise' | 'picture' | 'layer' | 'motion';
+/** What Datamosh measures movement on: the picture, or a layer drawn alone (a Camera layer, hidden or not). */
+export type FinishMoshMap = 'picture' | 'layer';
+/** What Feedback and Echo keep: the picture, one layer (drawn alone), the parts that move, or the bright parts. */
+export type FinishSourceMap = 'picture' | 'layer' | 'moving' | 'bright';
+export const FINISH_SOURCE_MAPS = FN_SOURCE_MAPS as readonly FinishSourceMap[];
 
 /** One effect in the stack: its kind's numbers (FN_EFFECTS[kind].params) as keys, plus what isn't a number. */
 export interface FinishEffect {
@@ -41,9 +46,9 @@ export interface FinishEffect {
   curves?: FinishCurves;
   /** Grade: the Look it started from, for the picker (the numbers can have moved since). */
   look?: string;
-  /** Time displacement: what decides how far back each part of the picture looks. Displace: what pushes the picture. */
-  map?: FinishTimeMap | FinishDisplaceMap;
-  /** Time displacement or Displace with map 'layer': the layer whose alpha is the map. */
+  /** Time displacement: what decides how far back each part of the picture looks. Displace: what pushes the picture. Datamosh: what its movement is measured on. */
+  map?: FinishTimeMap | FinishDisplaceMap | FinishMoshMap | FinishSourceMap;
+  /** Time displacement or Displace with map 'layer': the layer whose alpha is the map. Datamosh with map 'layer': the layer whose movement moves the picture. */
   layerId?: string;
   /** Any effect: where it shows (absent = everywhere). */
   where?: FinishWhere;
@@ -334,6 +339,15 @@ export function parseFinishEffect(raw: unknown): FinishEffect | null {
   }
   if (kind === 'displace') {
     e.map = (FN_DISPLACE_MAPS as readonly string[]).includes(r.map as string) ? r.map as FinishDisplaceMap : 'noise';
+    e.layerId = typeof r.layerId === 'string' ? r.layerId.slice(0, 80) : '';
+  }
+  if (kind === 'feedback' || kind === 'echo') {
+    // Absent (a Feedback saved before Source) is the whole picture, as it was.
+    e.map = (FN_SOURCE_MAPS as readonly string[]).includes(r.map as string) ? r.map as FinishSourceMap : 'picture';
+    e.layerId = typeof r.layerId === 'string' ? r.layerId.slice(0, 80) : '';
+  }
+  if (kind === 'datamosh') {
+    e.map = (FN_MOSH_MAPS as readonly string[]).includes(r.map as string) ? r.map as FinishMoshMap : 'picture';
     e.layerId = typeof r.layerId === 'string' ? r.layerId.slice(0, 80) : '';
   }
   return withWhere(e, r);
