@@ -16,7 +16,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ThemeOverrideContext, useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
 import ShaderCanvas, { type OfflineRenderHandle } from '../ShaderCanvas';
-import { AspectPicker, CanvasFullscreenButton, PreviewFooter, PreviewHeader } from './PreviewChrome';
+import { AspectPicker, PreviewQualityPicker, CanvasFullscreenButton, PreviewFooter, PreviewHeader } from './PreviewChrome';
 import { MobilePreviewPill } from './MobilePreviewPill';
 import { PhoneFullscreenChrome } from './PhoneFullscreen';
 import { IconButton } from '../ui/Button';
@@ -105,6 +105,7 @@ export function PageCanvas({ page, tools, overlay, idleHint = 'Hover for colour'
           {tools}
           {tools && <span style={{ width: 8, flexShrink: 0 }} />}
           <AspectPicker onPanel />
+          <PreviewQualityPicker onPanel />
           <CanvasFullscreenButton />
           <IconButton icon="record" label="Record a video or take a Snapshot PNG of the picture" size="sm" onClick={openRecord} />
         </PreviewHeader>

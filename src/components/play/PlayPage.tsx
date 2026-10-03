@@ -64,7 +64,7 @@ import { reportFileResult } from '../shell/reportFileResult';
 import { LayersPanel } from './LayersPanel';
 import { FinishPanel } from './finish/FinishPanel';
 import { NotesCard } from './NotesCard';
-import { AspectPicker, CanvasFullscreenButton } from '../shell/PreviewChrome';
+import { AspectPicker, CanvasFullscreenButton, PreviewQualityPicker } from '../shell/PreviewChrome';
 import { NOTE_REF_TYPE, noteRef, type NoteRefKind } from './noteRefs';
 import { LayerContextMenu } from './LayerContextMenu';
 import { driveWithNull, graphNullDrives, layerNullDrives, pairedKey, type NullDrive } from './layerOps';
@@ -740,6 +740,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', overflowX: 'auto' }}>
             <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
             <AspectPicker onPanel />
+            <PreviewQualityPicker onPanel />
             <CanvasFullscreenButton onPanel plainF />
             <GuidesToggle onPanel />
           </div>
