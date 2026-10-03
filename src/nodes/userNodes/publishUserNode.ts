@@ -4,6 +4,7 @@
  * and registers the result.
  */
 
+import { inputTexts } from '../../lib/inputNames';
 import { GROUP_PORT_SENTINEL, type GraphNode, type SubgraphData, type DataType, type GroupInputPort } from '../../types/nodeGraph';
 import type { UserNodeDefinition, UserNodeIterations, UserNodeParam, UserNodePort, UserNodeTexture } from '../../types/userNode';
 import { flattenSubgraphToFunction, findTextureInputs } from '../../compiler/flattenSubgraph';
@@ -65,7 +66,8 @@ export type PublishSource =
   | { kind: 'group'; node: GraphNode }
   | { kind: 'node'; node: GraphNode }
   | { kind: 'subgraph'; subgraph: SubgraphData; label: string; iterations?: number }
-  | { kind: 'code'; code: string; entry?: string; label: string };
+  /** `inputText`: names and descriptions chosen on the card it came from (a Custom Function's), by parameter name. */
+  | { kind: 'code'; code: string; entry?: string; label: string; inputText?: Record<string, { label?: string; hint?: string }> };
 
 /** Node types that can be published on their own, without grouping first. */
 export const SINGLE_NODE_PUBLISH_TYPES: ReadonlySet<string> = new Set(['exprNode', 'customFn']);
@@ -132,7 +134,7 @@ export function sourceSubgraph(source: PublishSource): { subgraph: SubgraphData 
 /** The sockets a source offers, in a shape the publish dialog can turn into rows. */
 export interface SourcePorts {
   /** `slider` is a suggested range for a float port: a single node's slider input offers its current value as the default. */
-  inputs: Array<{ portKey: string; type: DataType; label: string; slider?: { min: number; max: number; default: number } }>;
+  inputs: Array<{ portKey: string; type: DataType; label: string; hint?: string; slider?: { min: number; max: number; default: number } }>;
   outputs: Array<{ portKey: string; type: DataType; label: string }>;
   textures: Array<{ sourceKey: string; label: string }>;
   /** Code sources: the functions found, and which one is the entry. */
@@ -145,7 +147,18 @@ export interface SourcePorts {
 
 export const CODE_RETURN_PORT = '__return__';
 
+/**
+ * What a source offers, with the names and descriptions chosen on the card it
+ * came from (lib/inputNames.ts) in place of the code's own names.
+ */
 export function describeSource(source: PublishSource): SourcePorts {
+  const ports = describeSourcePorts(source);
+  const text = source.kind === 'code' ? source.inputText ?? {} : source.kind === 'group' || source.kind === 'node' ? inputTexts(source.node) : {};
+  if (!Object.keys(text).length) return ports;
+  return { ...ports, inputs: ports.inputs.map(p => { const t = text[p.portKey]; return t ? { ...p, ...(t.label ? { label: t.label } : {}), ...(t.hint ? { hint: t.hint } : {}) } : p; }) };
+}
+
+function describeSourcePorts(source: PublishSource): SourcePorts {
   if (source.kind === 'code') {
     const parsed = parseCodeSource(source.code);
     if (!parsed.ok) return { inputs: [], outputs: [], textures: [], error: parsed.error };

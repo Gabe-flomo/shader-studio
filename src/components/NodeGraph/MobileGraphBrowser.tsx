@@ -9,6 +9,7 @@
  * in the graph — never by dragging, always by picking from a list.
  */
 
+import { inputLabelOf } from '../../lib/inputNames';
 import { toggleLineOff } from '../../lib/exprLines';
 import { errorMessage } from '../../utils/fileIO';
 import { ColorSwatch } from '../ui/ColorPicker';
@@ -312,7 +313,7 @@ function computeOverlayLayout(nodes: GraphNode[]) {
   const minX = Math.min(...xs), minY = Math.min(...ys);
   for (const n of nodes) {
     const inputs: OverlayPort[] = Object.entries(n.inputs).map(([key, inp], i) => ({
-      key, type: inp.type, label: inp.label, y: OVERLAY_TITLE_H + i * OVERLAY_PORT_ROW_H + OVERLAY_PORT_ROW_H / 2,
+      key, type: inp.type, label: inputLabelOf(n, key, inp.label), y: OVERLAY_TITLE_H + i * OVERLAY_PORT_ROW_H + OVERLAY_PORT_ROW_H / 2,
     }));
     const outputs: OverlayPort[] = Object.entries(n.outputs).map(([key, out], i) => ({
       key, type: out.type, label: out.label, y: OVERLAY_TITLE_H + i * OVERLAY_PORT_ROW_H + OVERLAY_PORT_ROW_H / 2,
@@ -2291,7 +2292,8 @@ export function MobileGraphBrowser() {
         .filter(([key, pd]) => !(key in node.inputs) && pd.type === 'vec3' && paramVisible(node, pd))
         .flatMap(([key]) => ['r', 'g', 'b'].map(axis => `${key}_${axis}`))
     );
-    const inputEntries = [...Object.entries(node.inputs), ...paramOnlyEntries].filter(([key]) => !vecComponentKeys.has(key));
+    // Inputs show the names chosen for them (Input names…).
+    const inputEntries = [...Object.entries(node.inputs).map(([key, inp]) => [key, { ...inp, label: inputLabelOf(node, key, inp.label) }] as typeof paramOnlyEntries[number]), ...paramOnlyEntries].filter(([key]) => !vecComponentKeys.has(key));
     // vec3 / vec3color / bool paramDefs (Palette's Offset/Amplitude/Freq/
     // Phase, any node with a plain on/off toggle, ...) don't fit the plain
     // slider-row shape paramOnlyEntries above assumes — a vec3 needs 3
@@ -4249,7 +4251,7 @@ export function MobileGraphBrowser() {
     if (!node) return null;
     const originalLocked = !!node.params?._groupOriginal && !!getNodeDefinitionFor(node)?.anchored;
     const canDelete = node.type !== 'output' && !originalLocked;
-    const openInputs = Object.entries(node.inputs).filter(([, inp]) => !inp.connection);
+    const openInputs = Object.entries(node.inputs).filter(([, inp]) => !inp.connection).map(([key, inp]) => [key, { ...inp, label: inputLabelOf(node, key, inp.label) }] as const);
     const outputs = Object.entries(node.outputs);
     // Every existing edge OUT of this node — one entry per (output, downstream
     // node+input) pair, since one output can feed several consumers. "Insert

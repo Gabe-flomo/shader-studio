@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.3',
+    date: '2026-10-02',
+    title: 'Input names',
+    highlights: [
+      { area: 'Studio', text: 'Name any node’s inputs in your own words and say what each is for (the pencil on a node card); the code stays the same.' },
+      { area: 'Studio', text: 'Publishing a node starts the Node Builder from those names, with each description as the input’s docstring.' },
+    ],
+  },
+  {
     id: '2026.10.2',
     date: '2026-10-02',
     title: 'Sharp zoom',

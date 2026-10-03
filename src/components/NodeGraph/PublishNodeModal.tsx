@@ -127,7 +127,7 @@ function PublishNodeModalInner({ source: initialSource, onClose, onPublished, ex
   const [code, setCode] = useState(initialSource.kind === 'code' ? (initialSource.code || STARTER_CODE) : '');
   const [entry, setEntry] = useState<string | undefined>(initialSource.kind === 'code' ? initialSource.entry : undefined);
   const source: PublishSource = useMemo(
-    () => (initialSource.kind === 'code' ? { kind: 'code', code, entry, label: initialSource.label } : initialSource),
+    () => (initialSource.kind === 'code' ? { kind: 'code', code, entry, label: initialSource.label, ...(initialSource.inputText ? { inputText: initialSource.inputText } : {}) } : initialSource),
     [initialSource, code, entry],
   );
   const { subgraph, label: sourceLabel, iterations: sourceIterations } = sourceSubgraph(source);
@@ -150,7 +150,7 @@ function PublishNodeModalInner({ source: initialSource, onClose, onPublished, ex
   }, [existing]);
 
   // ── Rows. Keyed by portKey so edits survive a re-parse of the code. ──────────
-  const freshInput = (p: { portKey: string; type: DataType; label: string; slider?: { min: number; max: number; default: number } }): PortRow => {
+  const freshInput = (p: { portKey: string; type: DataType; label: string; hint?: string; slider?: { min: number; max: number; default: number } }): PortRow => {
     const prev = existing?.inputs.find(i => i.label === p.label && i.type === p.type);
     // A single node's slider input keeps its slider (and current value) on the published port.
     const suggested = prev?.slider ?? p.slider;
@@ -158,7 +158,7 @@ function PublishNodeModalInner({ source: initialSource, onClose, onPublished, ex
       portKey: p.portKey, type: p.type, label: p.label,
       slider: !!suggested,
       min: suggested?.min ?? 0, max: suggested?.max ?? 1, default: suggested?.default ?? 0,
-      hint: prev?.hint ?? '',
+      hint: prev?.hint ?? p.hint ?? '',
     };
   };
   const freshOutput = (p: { portKey: string; type: DataType; label: string }): PortRow => {
