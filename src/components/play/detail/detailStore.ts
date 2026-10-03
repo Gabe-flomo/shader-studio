@@ -1,7 +1,9 @@
 /**
  * detailStore — the detail window's history (implementation guide 7.3): what
  * it shows (a control, a source or a signal), with back and forward like a
- * browser. Opening something new drops what was ahead. UI state only.
+ * browser. Opening something new drops what was ahead. `pinned`: kept open
+ * as a floating panel beside the work (FloatingPanel.tsx) rather than a
+ * modal window, until it is closed. UI state only.
  */
 import { create } from 'zustand';
 
@@ -12,6 +14,9 @@ interface DetailState {
   stack: DetailRef[];
   /** Where in the stack the window is (-1: closed). */
   at: number;
+  /** Kept open as a floating panel (no scrim), until closed. */
+  pinned: boolean;
+  setPinned: (pinned: boolean) => void;
   open: (ref: DetailRef) => void;
   back: () => void;
   forward: () => void;
@@ -23,6 +28,8 @@ const same = (a: DetailRef | undefined, b: DetailRef) => !!a && a.kind === b.kin
 export const useDetail = create<DetailState>((set, get) => ({
   stack: [],
   at: -1,
+  pinned: false,
+  setPinned: pinned => set({ pinned }),
   open: ref => {
     const { stack, at } = get();
     if (same(stack[at], ref)) return;
@@ -31,7 +38,8 @@ export const useDetail = create<DetailState>((set, get) => ({
   },
   back: () => set(s => ({ at: Math.max(0, s.at - 1) })),
   forward: () => set(s => ({ at: Math.min(s.stack.length - 1, s.at + 1) })),
-  close: () => set({ stack: [], at: -1 }),
+  // Closing ends the floating panel too: the next detail opens as a window again.
+  close: () => set({ stack: [], at: -1, pinned: false }),
 }));
 
 /** Open the detail window on something (from anywhere). */
