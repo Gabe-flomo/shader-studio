@@ -27,6 +27,8 @@ const HIDDEN_NODES = new Set([
   'rotatingLinesLoop', 'accumulateLoop', 'flowField', 'circlePack',
   'raymarch3d', 'volumeClouds', 'rayMarch', 'loopCarry', 'loop',
   'grid',
+  // Pass (render to texture): hidden until the renderer runs it (docs/pass-node-plan.md, phase 2).
+  'pass', 'passOutput',
 ]);
 
 const CATEGORY_SECTIONS: Array<{ label: string; categories: string[] }> = [

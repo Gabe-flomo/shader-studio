@@ -15,6 +15,35 @@ export interface ParticleSystemData {
   paramBindings: Record<string, string>;
 }
 
+/**
+ * One Pass node's program (compiler/passGraph.ts): drawn into the Pass's own
+ * texture before the final picture. Only graphs with a Pass node have these.
+ */
+export interface PassProgram {
+  /** The Pass node's id. */
+  nodeId: string;
+  /** Its slug: its samplers are u_pass_<slug> and u_passprev_<slug>. */
+  slug: string;
+  /** Shown in timers and the card: the node's label or "Pass". */
+  label: string;
+  fragmentShader: string;
+  /** Slugs of the passes this program samples this frame (drawn before it). */
+  reads: string[];
+  /** Slugs of the passes whose previous frame this program samples. */
+  readsPrevious: string[];
+  /** Size relative to the picture: 1, 0.5, 0.25 or 0.125. */
+  scale: number;
+  format: 'half' | 'byte';
+  filter: 'linear' | 'nearest';
+  wrap: 'clamp' | 'repeat' | 'mirror';
+  /** Something samples this Pass's Previous output: it keeps a second (ping-pong) texture. */
+  previous: boolean;
+  /** The final picture needs it, directly or through other passes; a pass nothing reads isn't drawn. */
+  live: boolean;
+  /** The graph nodes compiled into this program (not counting upstream Pass nodes it samples). */
+  nodeIds: string[];
+}
+
 export interface CompilationResult {
   vertexShader: string;
   fragmentShader: string;
@@ -79,6 +108,12 @@ export interface CompilationResult {
   mlgDynamicOutputs?: Map<string, Record<string, { type: string; label: string }>>;
   /** One entry per vParticles node in the graph — ShaderCanvas creates a THREE.Points for each. */
   particleSystems?: ParticleSystemData[];
+  /**
+   * Pass nodes' programs, in drawing order (compiler/passGraph.ts). Present
+   * only when the graph has a Pass node; `fragmentShader` is then the final
+   * picture's program, which samples them.
+   */
+  passes?: PassProgram[];
 }
 
 export const VERTEX_SHADER = `varying vec2 vUv;

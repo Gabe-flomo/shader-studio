@@ -1,0 +1,151 @@
+/**
+ * Pass node compiler (docs/pass-node-plan.md, phase 1): the cut into
+ * programs, their order, slug stability across programs, the Previous cycle
+ * cut and the errors. Pass-free graphs are covered by goldenShaders.test.ts.
+ */
+import { describe, expect, it, vi } from 'vitest';
+
+vi.hoisted(() => {
+  (globalThis as { localStorage?: unknown }).localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {}, key: () => null, length: 0, clear: () => {} };
+});
+
+import { compileGraph } from '../graphCompiler';
+import { hasPassNode, MAX_PASSES } from '../passGraph';
+import { n, group, port } from '../../store/graphBuilder';
+import type { GraphNode } from '../../types/nodeGraph';
+
+/** uv → circle → grey → Pass A → (color) → add with the circle again → output. */
+function simple(): GraphNode[] {
+  return [
+    n('uv', 'node_1', 0, 0),
+    n('circleSDF', 'node_2', 0, 0, { radius: 0.4 }, { position: ['node_1', 'uv'] }),
+    n('floatToVec3', 'node_3', 0, 0, {}, { input: ['node_2', 'distance'] }),
+    n('pass', 'node_4', 0, 0, {}, { color: ['node_3', 'rgb'] }),
+    n('addColor', 'node_5', 0, 0, { scale: 0.5 }, { a: ['node_4', 'color'], b: ['node_3', 'rgb'] }),
+    n('output', 'node_6', 0, 0, {}, { color: ['node_5', 'result'] }),
+  ];
+}
+
+const declared = (fs: string) => new Set((fs.match(/^uniform \w+ (\w+);/gm) ?? []).map(l => l.split(' ')[2].replace(';', '')));
+
+describe('Pass node compile', () => {
+  it('finds Pass nodes at the top level and inside groups', () => {
+    expect(hasPassNode(simple())).toBe(true);
+    expect(hasPassNode(simple().filter(x => x.type !== 'pass'))).toBe(false);
+  });
+
+  it('cuts the graph into a pass program and a final program', () => {
+    const r = compileGraph({ nodes: simple() });
+    expect(r.errors).toBeUndefined();
+    expect(r.success).toBe(true);
+    expect(r.passes).toHaveLength(1);
+    const [a] = r.passes!;
+    expect(a).toMatchObject({ nodeId: 'node_4', slug: 'pass_4', scale: 1, format: 'half', filter: 'linear', wrap: 'clamp', previous: false, live: true, reads: [], readsPrevious: [] });
+    expect(a.nodeIds.sort()).toEqual(['node_1', 'node_2', 'node_3']);
+    // The pass program draws the circle into its texture.
+    expect(a.fragmentShader).toContain('gl_FragColor = vec4(f2v_3');
+    expect(a.fragmentShader).not.toContain('u_pass_pass_4');
+    // The final program samples it and still computes the circle itself (Add reads it directly).
+    expect(r.fragmentShader).toContain('uniform sampler2D u_pass_pass_4;');
+    expect(r.fragmentShader).toContain('texture2D(u_pass_pass_4, vUv)');
+    expect(r.fragmentShader).toContain('circ_2');
+  });
+
+  it('names a node\'s uniforms the same in every program it lands in', () => {
+    const r = compileGraph({ nodes: simple() });
+    const radius = r.paramBindings['node_2::radius'];
+    expect(radius).toBeTruthy();
+    expect(declared(r.passes![0].fragmentShader).has(radius)).toBe(true);
+    expect(declared(r.fragmentShader).has(radius)).toBe(true);
+    expect(r.nodeSlugMap?.get('node_2')).toBe('circ_2');
+  });
+
+  it('leaves nodes only a Pass needs out of the final program', () => {
+    const nodes = simple();
+    nodes[4] = n('addColor', 'node_5', 0, 0, {}, { a: ['node_4', 'color'] });
+    const r = compileGraph({ nodes });
+    expect(r.success).toBe(true);
+    expect(r.fragmentShader).not.toContain('circ_2');
+    expect(r.passes![0].fragmentShader).toContain('circ_2');
+  });
+
+  it('orders chained passes and skips passes nothing reads', () => {
+    const nodes = [
+      n('uv', 'node_1', 0, 0),
+      n('circleSDF', 'node_2', 0, 0, {}, { position: ['node_1', 'uv'] }),
+      n('floatToVec3', 'node_3', 0, 0, {}, { input: ['node_2', 'distance'] }),
+      // B reads A, final reads B; C is drawn into but read by nothing.
+      n('pass', 'node_20', 0, 0, { scale: '0.5' }, { color: ['node_10', 'color'] }),
+      n('pass', 'node_10', 0, 0, {}, { color: ['node_3', 'rgb'] }),
+      n('pass', 'node_30', 0, 0, {}, { color: ['node_3', 'rgb'] }),
+      n('output', 'node_6', 0, 0, {}, { color: ['node_20', 'color'] }),
+    ];
+    const r = compileGraph({ nodes });
+    expect(r.errors).toBeUndefined();
+    const order = r.passes!.map(p => p.nodeId);
+    expect(order.indexOf('node_10')).toBeLessThan(order.indexOf('node_20'));
+    const by = Object.fromEntries(r.passes!.map(p => [p.nodeId, p]));
+    expect(by.node_20.reads).toEqual(['pass_10']);
+    expect(by.node_20.scale).toBe(0.5);
+    expect(by.node_10.live && by.node_20.live).toBe(true);
+    expect(by.node_30.live).toBe(false);
+  });
+
+  it('rejects a Pass fed its own picture (not through Previous)', () => {
+    const nodes = [
+      n('uv', 'node_1', 0, 0),
+      n('circleSDF', 'node_2', 0, 0, {}, { position: ['node_1', 'uv'] }),
+      n('floatToVec3', 'node_3', 0, 0, {}, { input: ['node_2', 'distance'] }),
+    ];
+    // A Pass whose input is its own colour output would be a real loop: rejected.
+    const loop = [...nodes,
+      n('addColor', 'node_5', 0, 0, {}, { a: ['node_3', 'rgb'], b: ['node_4', 'color'] }),
+      n('pass', 'node_4', 0, 0, {}, { color: ['node_5', 'result'] }),
+      n('output', 'node_6', 0, 0, {}, { color: ['node_4', 'color'] }),
+    ];
+    const bad = compileGraph({ nodes: loop });
+    expect(bad.success).toBe(false);
+    expect(bad.errors!.join(' ')).toMatch(/Previous/);
+  });
+
+  it('rejects a Pass inside a group', () => {
+    const inner = [n('uv', 'n_1', 0, 0), n('pass', 'n_2', 0, 0, {}, { color: port('c') })];
+    const nodes = [
+      n('uv', 'node_1', 0, 0),
+      n('floatToVec3', 'node_3', 0, 0),
+      group('group_9', 0, 0, { label: 'G', iterations: 1, inputs: [{ key: 'c', type: 'vec3', label: 'C', from: ['node_3', 'rgb'] }], outputs: [{ key: 'o', type: 'vec3', label: 'O', from: ['n_2', 'color'] }], nodes: inner }),
+      n('output', 'node_6', 0, 0, {}, { color: ['group_9', 'o'] }),
+    ];
+    const r = compileGraph({ nodes });
+    expect(r.success).toBe(false);
+    expect(r.errors![0]).toBe('Node group_9: Pass nodes go at the top level for now');
+  });
+
+  it(`allows up to ${MAX_PASSES} passes`, () => {
+    const nodes: GraphNode[] = [n('uv', 'node_1', 0, 0), n('floatToVec3', 'node_2', 0, 0)];
+    let prev: [string, string] = ['node_2', 'rgb'];
+    for (let i = 0; i < MAX_PASSES + 1; i++) { nodes.push(n('pass', `node_${100 + i}`, 0, 0, {}, { color: prev })); prev = [`node_${100 + i}`, 'color']; }
+    nodes.push(n('output', 'node_9', 0, 0, {}, { color: prev }));
+    const r = compileGraph({ nodes });
+    expect(r.success).toBe(false);
+    expect(r.errors![0]).toMatch(/up to 8 Pass nodes/);
+    const ok = compileGraph({ nodes: nodes.filter(x => x.id !== `node_${100 + MAX_PASSES}`).map(x => x.type === 'output' ? n('output', 'node_9', 0, 0, {}, { color: [`node_${100 + MAX_PASSES - 1}`, 'color'] }) : x) });
+    expect(ok.errors).toBeUndefined();
+    expect(ok.passes).toHaveLength(MAX_PASSES);
+  });
+
+  it('counts samplers per program', () => {
+    // 17 passes would be over the pass limit anyway; check the count with images instead.
+    const nodes: GraphNode[] = [n('uv', 'node_1', 0, 0)];
+    let acc: [string, string] | null = null;
+    for (let i = 0; i < 17; i++) {
+      nodes.push(n('textureInput', `node_${200 + i}`, 0, 0));
+      if (acc) { nodes.push(n('addColor', `node_${300 + i}`, 0, 0, {}, { a: acc, b: [`node_${200 + i}`, 'color'] })); acc = [`node_${300 + i}`, 'result']; }
+      else acc = [`node_${200 + i}`, 'color'];
+    }
+    nodes.push(n('pass', 'node_4', 0, 0, {}, { color: acc! }), n('output', 'node_6', 0, 0, {}, { color: ['node_4', 'color'] }));
+    const r = compileGraph({ nodes });
+    expect(r.success).toBe(false);
+    expect(r.errors![0]).toMatch(/more than 16 textures/);
+  });
+});

@@ -1772,6 +1772,7 @@ const TYPE_COLORS: Record<DataType, string> = {
   scene3d:     '#cc88aa',
   spacewarp3d: '#aa88cc',
   particle:    pal.yellow,
+  texture:     '#ff5c5c',
 };
 
 export function SubgraphMiniViz({ node }: { node: GraphNode }) {

@@ -559,6 +559,13 @@ interface FieldUnit {
 export interface ShaderAssemblerOptions {
   /** Output variables for node ids that exist outside the compiled node list. */
   seedOutputs?: Map<string, Record<string, string>>;
+  /**
+   * Fixed slugs for top-level nodes (node id → slug). Only the Pass node path
+   * (compiler/passGraph.ts) passes this: it compiles one graph as several
+   * programs and needs a node's uniforms named the same in each. Without it
+   * slugs are allocated in compile order, as they always have been.
+   */
+  slugs?: Map<string, string>;
 }
 
 export class ShaderAssembler {
@@ -587,6 +594,8 @@ export class ShaderAssembler {
   private sortedNodes: GraphNode[];
   private allNodes: GraphNode[];
   private seedOutputs = new Map<string, Record<string, string>>();
+  /** ShaderAssemblerOptions.slugs (Pass node path only). */
+  private fixedSlugs: Map<string, string> | undefined;
   // ── Field sockets (see compileFieldFunction) ──
   /** Top-level node id → the slug its main() copy was compiled under; a field function reuses it so uniform names match. */
   private topSlugs = new Map<string, string>();
@@ -616,6 +625,10 @@ export class ShaderAssembler {
         this.nodeOutputs.set(id, { ...vars });
         this.seedOutputs.set(id, { ...vars });
       }
+    }
+    if (opts?.slugs) {
+      this.fixedSlugs = opts.slugs;
+      for (const s of opts.slugs.values()) this.usedSlugs.add(s);
     }
     this.functions.add(GLSL_SMIN);
     this.functions.add(GLSL_SD_BOX);
@@ -721,7 +734,7 @@ export class ShaderAssembler {
         // Compute slug once per node for all GLSL variable naming (NOT for this.nodeOutputs keys)
         // Inside a field function the node keeps the slug of its main() copy, so its
         // param uniforms (named after the slug) are the same ones and its sliders stay live.
-        const nodeSlug = (inField ? this.topSlugs.get(node.id) : undefined) ?? computeNodeSlug(node, this.usedSlugs);
+        const nodeSlug = (inField ? this.topSlugs.get(node.id) : undefined) ?? this.fixedSlugs?.get(node.id) ?? computeNodeSlug(node, this.usedSlugs);
         if (!inField) {
           this.topSlugs.set(node.id, nodeSlug);
           this.nodeSlugMap.set(node.id, nodeSlug);
@@ -3873,6 +3886,7 @@ ${mainBody}}`.trim();
 export function generateFragmentShader(
   sortedNodes: GraphNode[],
   allNodes: GraphNode[],
+  opts?: ShaderAssemblerOptions,
 ): { fragmentShader: string; nodeOutputVars: Map<string, Record<string, string>>; paramUniforms: Record<string, number | number[]>; paramBindings: Record<string, string>; textureUniforms: Record<string, string>; audioUniforms: Record<string, string>; liveUniforms: Record<string, string>; videoUniforms: Record<string, string>; isStateful: boolean; echo: { copies: number; delay: number } | null; nodeSlugMap: Map<string, string>; mlgDynamicOutputs: Map<string, Record<string, { type: string; label: string }>> } {
-  return new ShaderAssembler(sortedNodes, allNodes).assemble();
+  return new ShaderAssembler(sortedNodes, allNodes, opts).assemble();
 }

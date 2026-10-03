@@ -56,6 +56,7 @@ const TYPE_COLOR: Record<DataType, string> = {
   scene3d:     '#cc88aa',
   spacewarp3d: '#aa88cc',
   particle:    '#f9e2af',
+  texture:     '#ff5c5c',
 };
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
