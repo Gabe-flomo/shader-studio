@@ -244,7 +244,7 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
       </div>
       {finish.effects.length > 1 && (
         <div style={{ marginTop: 10, color: tk.text.faint, font: `11px/1.45 ${fontFamily.ui}` }}>
-          Colour effects (your own included) run top to bottom. The warps (camera shake, lens distortion, CRT curvature, glitch blocks, ripple, displace, mosaic, mirror) bend the picture before anything reads it; chromatic aberration, the glitch’s colour split and time displacement choose what is read. Pixel sort, halftone and ASCII see every effect above them. Any effect can show only somewhere: its <b>Where</b>.
+          Colour effects (your own included) run top to bottom. The warps (camera shake, lens distortion, CRT curvature, glitch blocks, ripple, displace, mosaic, mirror) bend the picture before anything reads it; chromatic aberration, the glitch’s colour split and time displacement choose what is read. Pixel sort, halftone, ASCII, feedback, echo, datamosh and motion extract see every effect above them. Any effect can show only somewhere: its <b>Where</b>.
         </div>
       )}
     </div>
@@ -439,17 +439,9 @@ function editorFor(e: FinishEffect, k: RowKit, touch: boolean, layers: LayerRef[
     );
     case 'time': return <TimeEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
     case 'displace': return <DisplaceEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
-    case 'feedback': return (
-      <>
-        {k.nums('amount', 'zoom', 'rotate', 'shiftX', 'shiftY', 'hue')}
-        {k.row('Blend', <Segmented size="sm" ariaLabel="Feedback blend" value={String(Math.round(num(e, 'mode')))} onChange={v => onPatch({ mode: Number(v) })} options={[
-          { value: '0', label: 'Lighten', title: 'Keep the brighter of now and the trail' },
-          { value: '1', label: 'Screen', title: 'Add the trail’s light' },
-          { value: '2', label: 'Blend', title: 'The trail over the present, by Amount' },
-        ]} />, 'How the last frame comes back in.')}
-        {k.note(<>The last finished frame comes back each frame, a little zoomed, turned and drifted: trails, tunnels and smears. Map Zoom or Rotate onto a hand or the beat.</>)}
-      </>
-    );
+    case 'datamosh': return <DatamoshEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
+    case 'feedback': return <FeedbackEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
+    case 'echo': return <EchoEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
     case 'custom': return <CustomEditor e={e} k={k} touch={touch} onReplace={onReplace} />;
     default: {
       // Any other effect, as the kit declares it: its sliders, its colours (three hidden numbers each) and its note.
@@ -512,6 +504,93 @@ function DisplaceEditor({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit;
       {map === 'motion' && !layers.some(l => l.kind === 'camera') && k.note(<>Add a Camera layer for this (it can be hidden).</>)}
       {k.num('amount')}
       {map === 'noise' ? k.nums('scale', 'speed') : k.num('angle')}
+    </>
+  );
+}
+
+const SOURCE_OPTIONS = [
+  { value: 'picture', label: 'Whole picture' },
+  { value: 'layer', label: 'One layer' },
+  { value: 'moving', label: 'Moving parts' },
+  { value: 'bright', label: 'Bright parts' },
+];
+
+/** Feedback's and Echo's Source: the whole picture, one layer (only its trail, over the untouched picture), the moving or the bright parts. */
+function SourceRows({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit; layers: LayerRef[]; onPatch: (c: Partial<FinishEffect>) => void }) {
+  const src = (e.map as string) || 'picture';
+  return (
+    <>
+      {k.row('Source', <Select ariaLabel="What leaves the trail" value={src} height={26} options={SOURCE_OPTIONS} onChange={v => onPatch({ map: v as FinishEffect['map'], ...(v === 'layer' && !e.layerId ? { layerId: layers.find(l => l.kind !== 'background')?.id ?? '' } : {}) })} />,
+        'What leaves the trail: the whole picture, one layer (only it echoes, over the untouched picture; it can be hidden), the parts that moved since the frame before, or the bright parts.')}
+      {src === 'layer' && k.row('Layer', <LayerPick layers={layers} value={e.layerId ?? ''} onChange={v => onPatch({ layerId: v })} />, 'Only this layer leaves a trail. Hide it to show only the trail.')}
+    </>
+  );
+}
+
+const FEEDBACK_BLENDS = [
+  { value: '0', label: 'Lighten', title: 'Keep the brighter of the picture and the trail' },
+  { value: '1', label: 'Screen', title: 'Add the trail’s light, softly' },
+  { value: '3', label: 'Add', title: 'Add the trail’s light' },
+  { value: '4', label: 'Over', title: 'The trail over the picture, behind the source (needs a source with gaps: a layer, moving or bright parts)' },
+  { value: '2', label: 'Blend', title: 'The source smeared into its own past' },
+];
+
+function FeedbackEditor({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit; layers: LayerRef[]; onPatch: (c: Partial<FinishEffect>) => void }) {
+  return (
+    <>
+      <SourceRows e={e} k={k} layers={layers} onPatch={onPatch} />
+      {k.nums('amount', 'zoom', 'rotate', 'shiftX', 'shiftY', 'hue')}
+      {k.row('Blend', <Segmented size="sm" ariaLabel="Feedback blend" value={String(Math.round(num(e, 'mode')))} onChange={v => onPatch({ mode: Number(v) })} options={FEEDBACK_BLENDS} />, 'How the trail meets the live picture, which always stays sharp on top.')}
+      {k.note(<>The source’s past fades behind it each frame: at Zoom 0 trails stay where things were, crisp, and always fade out completely. Zoom, Rotate and Drift move the trail for tunnels and spirals. Pick one layer as the Source to give only it a trail.</>)}
+    </>
+  );
+}
+
+const ECHO_OPERATORS = [
+  { value: '0', label: 'Lighten', title: 'Keep the brighter of the picture and each copy' },
+  { value: '1', label: 'Add', title: 'Add each copy’s light' },
+  { value: '2', label: 'Screen', title: 'Add each copy’s light, softly' },
+  { value: '3', label: 'Behind', title: 'The copies under the source as it is now (needs a source with gaps: a layer, moving or bright parts)' },
+  { value: '4', label: 'In front', title: 'The copies over the picture' },
+];
+
+/** Echo (After Effects' Echo): its Source, its numbers, the operator, and a Layer echo starting point when there are layers. */
+function EchoEditor({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit; layers: LayerRef[]; onPatch: (c: Partial<FinishEffect>) => void }) {
+  const first = layers.find(l => l.kind !== 'background');
+  return (
+    <>
+      {first && k.row('Starting point', <Button size="sm" variant={e.map === 'layer' ? 'primary' : 'secondary'} onClick={() => onPatch({ map: 'layer', layerId: e.map === 'layer' && e.layerId ? e.layerId : first.id, time: 3, count: 5, start: 0.85, decay: 0.7, mode: 3, strobe: 0 })}>Layer echo</Button>,
+        'Only one layer echoes (the first, or the one picked below), its copies behind it over the untouched picture.')}
+      <SourceRows e={e} k={k} layers={layers} onPatch={onPatch} />
+      {k.nums('time', 'count', 'start', 'decay')}
+      {k.row('Operator', <Segmented size="sm" ariaLabel="Echo operator" value={String(Math.round(num(e, 'mode')))} onChange={v => onPatch({ mode: Number(v) })} options={ECHO_OPERATORS} />, 'How the copies meet the live picture.')}
+      {k.num('strobe')}
+      {k.note(<>Sharp copies of the source from a moment ago, each fainter than the last, like After Effects’ Echo. Echo time × Echoes reaches back at most 30 frames.</>)}
+    </>
+  );
+}
+
+/** Datamosh: what its movement is measured on (the picture, the camera, a layer), its sliders, and Mosh (held: a button, or mapped). */
+function DatamoshEditor({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit; layers: LayerRef[]; onPatch: (c: Partial<FinishEffect>) => void }) {
+  const cameras = layers.filter(l => l.kind === 'camera');
+  const onLayer = e.map === 'layer';
+  const from = !onLayer ? 'picture' : cameras.some(l => l.id === e.layerId) ? 'camera' : 'layer';
+  const options = [
+    { value: 'picture', label: 'The picture' },
+    ...(cameras.length || from === 'camera' ? [{ value: 'camera', label: 'The camera' }] : []),
+    { value: 'layer', label: 'A layer' },
+  ];
+  const setFrom = (v: string) => onPatch(v === 'picture' ? { map: 'picture' } : v === 'camera' ? { map: 'layer', layerId: cameras[0]?.id ?? e.layerId ?? '' } : { map: 'layer', layerId: cameras.some(l => l.id === e.layerId) ? '' : e.layerId ?? '' });
+  const hold = (on: boolean) => { if ((num(e, 'hold') >= 0.5) !== on) onPatch({ hold: on ? 1 : 0 }); };
+  return (
+    <>
+      {k.row('Motion from', <Select ariaLabel="Datamosh motion from" value={from} height={26} options={options} onChange={setFrom} />,
+        'Whose movement drags the picture around: the picture’s own, the camera’s (a Camera layer, which can be hidden: your movement smears the picture), or any layer’s.')}
+      {from === 'layer' && k.row('Layer', <LayerPick layers={layers} value={e.layerId ?? ''} onChange={v => onPatch({ layerId: v })} />, 'This layer’s movement moves the picture’s blocks. It can be hidden and still work.')}
+      {k.nums('amount', 'bleed', 'block', 'push', 'sustain', 'refresh', 'every', 'hold')}
+      {k.row('Mosh now', <Button size="sm" variant={num(e, 'hold') >= 0.5 ? 'primary' : 'secondary'} onPointerDown={() => hold(true)} onPointerUp={() => hold(false)} onPointerLeave={() => hold(false)}>Hold to mosh</Button>,
+        'Nothing heals while it is held. For a key or a rule, map it onto Mosh: a rule can send a signal, and a mapping from that signal turns Mosh on.')}
+      {k.note(<>A video with its keyframes cut out: each frame’s movement is measured block by block and applied to the <b>old</b> picture instead of the new one, so colours from before smear and bleed along whatever moves. Turn <b>Refresh</b> up and hold <b>Mosh</b> to mosh only on cue.{from === 'camera' ? ' Offline renders have no live camera, so there the picture holds still unless Refresh or a keyframe brings it back.' : ''}</>)}
     </>
   );
 }

@@ -1,8 +1,9 @@
 # The Finish stack
 
 Play's **Finish** tab: colour grading, lens and screen effects, film effects,
-camera shake, time displacement, warps, glitches, feedback and stylised looks
-(pixel sort, halftone, ASCII, light leaks) over the **final**
+camera shake, time displacement, warps, glitches, stylised looks (pixel sort,
+halftone, ASCII, light leaks) and temporal effects (feedback, echo, datamosh,
+motion extract) over the **final**
 picture, the shader and every layer together. One ordered stack per Play record
 (`play.finish`). Any effect can show only **somewhere** (its Where: a layer's
 shape, the bright parts, or where the camera sees movement).
@@ -19,7 +20,9 @@ shape, the bright parts, or where the camera sees movement).
   (the wipe, custom effects, presets, the library) and `finishMaps.test.ts`
   (Where, the maps, the new effects, particles born where a map says) and
   `finishCreative.test.ts` (pixel sort, halftone, ASCII, light leaks, presets and
-  swatches, the passes a stage effect splits a stack into); node packs carrying
+  swatches, the passes a stage effect splits a stack into) and
+  `finishTemporal.test.ts` (feedback, echo, datamosh and motion extract: their
+  records, passes, grids, rings and maths); node packs carrying
   effects in `src/nodePacks/__tests__/nodePacks.test.ts`.
 
 ## Where it runs
@@ -28,7 +31,7 @@ shape, the bright parts, or where the camera sees movement).
 | --- | --- |
 | Play preview, Stage (Full) | `play/overlay.ts` draws the layers as usual, then `fnCreate`'s renderer composites the WebGL picture and the layers' canvas into its own WebGL2 canvas, stacked above both. Null markers, hands and handles go on a separate guides canvas above that, so they are never graded or bent. |
 | Recordings (MediaRecorder) and PNG snapshots | `startCompositing` / `snapshot` copy the finished canvas instead of picture + layers. |
-| Takes, offline renders (FFmpeg, PNG sequence), transparent stills | `compositePixels` → `finishPixels`: the frame's RGBA goes through a second renderer (so the live preview's time ring is untouched) in pixels mode and is read back in place. Frame-exact: grain, flicker and shake are functions of the frame's time, and the time ring starts over on the first frame. |
+| Takes, offline renders (FFmpeg, PNG sequence), transparent stills | `compositePixels` → `finishPixels`: the frame's RGBA goes through a second renderer (so the live preview's time ring is untouched) in pixels mode and is read back in place. Frame-exact: grain, flicker and shake are functions of the frame's time, and the time ring and every temporal effect's frames start over on the first frame. |
 | Exported websites, Stage (Exact), Present | `play-runtime.js` creates the same renderer over its canvases when `SSKit.finish.active(play.finish)`. Mapped numbers drive it through the runtime's layer-property path. |
 
 With no effects, the stack bypassed, or every effect off, nothing is created and
@@ -51,21 +54,24 @@ effect), so dragging a slider or a mapping never recompiles.
    blue at offset points; time displacement chooses which frame each point reads.
 3. **Colour**, in the stack's order: grade, vignette, CRT mask, bloom, halation,
    grain, flicker, Glitch's colour blocks, gradient map, posterize, edges,
-   feedback, light leaks, pixel sort, halftone, ASCII, and your own effects
-   wherever they sit in the stack.
+   light leaks, pixel sort, halftone, ASCII, the temporal effects (feedback,
+   echo, datamosh, motion extract), and your own effects wherever they sit in
+   the stack.
 4. **The before/after wipe**, last: where it shows the picture before the stack,
    that is what is drawn (and the stack isn't run there at all).
 
 **Stage effects** read the picture *around* each point after the effects above
 them: Pixel sort (a run of pixels), Halftone and ASCII (a cell's centre)
-(`FN_STAGE_KINDS`). Each one starts a pass of its own (`fnSegments`): the pass
+(`FN_STAGE_KINDS`). The **temporal effects** (`FN_TEMPORAL_KINDS`: Feedback,
+Echo, Datamosh, Motion extract) keep frames of their own, so they split a stack
+the same way. Each one starts a pass of its own (`fnSegments`): the pass
 before it draws into a full-size `RGBA8` target (premultiplied, upright) and the
 stage effect reads that through `fnRead`, so every effect above reaches it (a
 Grade then Halftone prints the graded colours). Geometry, the colour splits and
 Time displacement happen in the first pass only; the wipe in the last only.
-Only the last pass flips for an offline render's read-back, so Feedback reads
-its last frame through `uFeedFlip` (set for a render in every pass) instead of
-the output flip. A stack with no stage effect, or one only at the top, is still
+Only the last pass flips for an offline render's read-back; the temporal
+effects keep their frames in the passes' own (upright) space, so a render reads
+them the same way the preview does. A stack with no stage effect, or one only at the top, is still
 a single pass, built exactly as before. Every pass reads the same map textures,
 so a Where works wherever the effect lands. Edges and a Brightness map read the
 picture as it came in, so they never split a stack.
@@ -86,8 +92,9 @@ Extra work only when asked for:
 - **Maps** (a Where, Displace's or Time's Layer map): up to four textures,
   `uM0`..`uM3` (`fnMapKeys`), uploaded each frame: a layer drawn alone
   (`layerAlpha`) or the camera's motion map (`motion`).
-- **Feedback**: the finished frame is copied (`copyTexImage2D`, RGB) after the
-  pass and read back by the next one.
+- **Temporal effects**: before the pass it heads, each runs passes of its own
+  over that pass's input (`temporalPass`): Feedback's history update, a frame
+  into Echo's or Motion extract's ring, Datamosh's three steps. Details below.
 - **Stage passes**: two full-size `RGBA8` targets, used in turn.
 
 ## Grade
@@ -304,7 +311,8 @@ camera, so a motion map reads nothing there.
 ## Warps, glitches and feedback
 
 Added together, in the spirit of TouchDesigner's image operators. Each is one
-more block of the same pass, except Feedback (one copy of the output a frame).
+more block of the same pass. (Feedback, added with them, is now one of the
+temporal effects, below.)
 
 | Effect | What it does | Numbers |
 | --- | --- | --- |
@@ -316,12 +324,9 @@ more block of the same pass, except Feedback (one copy of the output a frame).
 | **Gradient map** | Brightness becomes a shadows → midtones → highlights gradient | amount, midpoint, three colours |
 | **Posterize** | A few flat levels per channel, with a 4 × 4 ordered dither; Colour below 1 maps brightness between a Dark and a Light palette colour (a handheld's greens, 1-bit) | levels, dither, colour, dark, light |
 | **Edges** | Outlines where the picture's brightness changes (read before the stack's colour steps), in a colour, over the picture or alone on black; Glow adds a soft halo, Rainbow colours the lines by their direction | amount, width, threshold, edges only, colour, glow, rainbow |
-| **Feedback** | The last finished frame drawn back in, zoomed, turned and drifted a little each frame: trails, tunnels, spirals; Lighten, Screen or Blend | amount, zoom, rotate, drift, hue drift, blend |
 
-Feedback starts empty (a new size, a render's first frame, or Reset), and in a
-render reads the frames in order, so a render is the same every time. Glitch,
-Ripple, noise Displace and Feedback keep the preview drawing while the clock
-runs (`fnAnimated`), as do a spinning Mirror and rainbow Edges.
+Glitch, Ripple, noise Displace and the temporal effects keep the preview drawing
+while the clock runs (`fnAnimated`), as do a spinning Mirror and rainbow Edges.
 
 ## Stylised looks
 
@@ -335,6 +340,173 @@ took #443's presets and extras instead).
 | **Halftone** | Stylise | Dot screens sampled at each cell's centre: black only, or C, M, Y, K at print's screen angles, multiplied onto the paper colour. A stage effect | dot size, angle, colour, amount, paper |
 | **ASCII** | Stylise | Each cell picks one of ten 5 × 5 characters (`FN_ASCII_GLYPHS`, empty to dense) by brightness; coloured from the picture or one ink. A stage effect | character size, colour, background, contrast, ink |
 | **Light leaks** | Film | Three warm blobs drift round the edges, hot in the middle and redder at the fringe, screened over the picture | amount, hue, size, speed |
+
+## Temporal effects
+
+Feedback, Echo, Datamosh and Motion extract (`FN_TEMPORAL_KINDS`) keep frames of
+their own between draws. Each heads a pass of its own (`fnSegments`), and before
+that pass the renderer updates its frames (`temporalPass`) from the pass's input:
+the picture as the effects above it left it (the stage target of the pass
+before), or, first in the stack, the picture itself. They start empty on a new
+size, on a render's first frame and on Reset, and a render steps them frame by
+frame, so a render is the same every time and matches the preview: a browser
+check rendered each one live and through the offline path and compared, and
+rendered twice from a fresh renderer, with no difference (Feedback's Tunnel
+differs by at most 1/255, from float rounding).
+
+An effect that is gone from the stack lets go of its frames.
+
+### Feedback
+
+Trails that fade behind what moves, crisp, with the live picture sharp on top
+(the TouchDesigner Feedback TOP pattern: a history that is transformed, levelled
+and composited each frame).
+
+- **History**: a full-size pair of targets used in turn, half-float when the GPU
+  can draw it (`EXT_color_buffer_float`, else 8-bit), plus an 8-bit copy of the
+  source (for Moving parts and Over). Each frame:
+  `history = source ⊕ max(trail × Trail − 0.003, 0)`, where the trail is the last
+  history moved by Zoom, Rotate and Drift and turned by Hue drift, and ⊕ is the
+  Blend's (lighten and over keep the brighter, screen and add add light). The
+  small floor means a trail always fades out completely; before, an 8-bit copy of
+  the output kept the low values forever (3/255 × 0.85 rounds back up to 3/255),
+  which left a permanent haze over everywhere anything had moved.
+- **Crisp**: with Zoom, Rotate and Drift at 0 the trail is read texel for texel
+  (`texelFetch`), so it never blurs however long it lasts; moved, it is read
+  filtered (that softening is what a tunnel looks like).
+- **Local**: Zoom now defaults to 0, so trails stay where things were (it was
+  0.01: every trail grew from the centre over the whole picture). Tunnel and
+  Spiral are presets.
+- **Composite**: the trail meets the live picture by the Blend: Lighten, Screen,
+  Add, Over (the trail over the picture, under where the source is now: needs a
+  source with gaps) or Blend (the source smeared into its own past, the old
+  Smear).
+
+| Control | What it does |
+| --- | --- |
+| Source | Whole picture, One layer (drawn alone, hidden or not: only its trail, over the untouched picture), Moving parts (where it changed since the frame before), Bright parts |
+| Trail | How much of the trail stays each frame |
+| Zoom, Rotate, Drift X/Y | Move the trail each frame: tunnels and spirals |
+| Hue drift | Turns the trail's colour each frame |
+| Blend | Lighten, Screen, Add, Over, Blend |
+
+Presets: Ghost trail (default), Tunnel, Spiral, Smear.
+
+**Saved stacks**: a Feedback saved before this keeps its numbers (its zoom
+included) and gets Source = Whole picture, so it looks as it did, apart from
+the haze being gone and two changes of where it sits: it now feeds back the
+picture as the effects *above* it left it (not the finished frame, so effects
+below it no longer loop through it), and it heads a pass of its own.
+
+### Echo
+
+After Effects' Echo: sharp copies of the source from a moment ago.
+
+- A ring of past frames of the Source (`ensureFrameRing`, shared with Motion
+  extract's code): 4, 8, 16 or 32 frames, growing as needed and never
+  shrinking while its size stays, at full size up to 128 MB
+  (`FN_ECHO_COPIES_CAP`), so the copies are as sharp as the picture; past it the
+  frames are kept a little smaller.
+- Each frame the newest copy is Echo time frames back, the next twice that and
+  so on (`fnEchoPlan`), at most 30 frames back (fewer copies when Echo time ×
+  Echoes would reach further). The newest is Starting intensity strong, each
+  older Decay times the one after it, laid oldest first by the Operator:
+  Lighten, Add, Screen, Behind (under the source as it is now: needs a source
+  with gaps) or In front.
+- **Strobe** holds the copies still between steps: the newest is the last frame
+  on a multiple of Echo time, so they jump instead of following.
+
+| Control | What it does |
+| --- | --- |
+| Source | As Feedback's |
+| Echo time | Frames between one copy and the next |
+| Echoes | How many copies (1–8) |
+| Starting intensity, Decay | The newest copy's strength, and each older one's share of the one after it |
+| Operator | Lighten, Add, Screen, Behind, In front |
+| Strobe | Copies jump each Echo time instead of following |
+
+Presets: Echo (default: three copies four frames apart), Ghost trail, Strobe
+echo; with layers in the setup, **Layer echo** sets Source to the first layer
+(Behind, five copies).
+
+### Datamosh
+
+The codec glitch where a video loses its keyframes (I-frames) and the next
+frames' motion (P-frames) moves the *old* picture: colours from before smear
+and bleed, block by block, along whatever moves.
+
+1. **Brightness at a quarter size** (`FN_MOSH_LUMA`): each texel the mean of
+   4 × 4 pixels of the pass's input, or of a layer drawn alone (Motion from).
+2. **Block vectors** (`FN_MOSH_VEC`): one texel per block, where the block came
+   from in the frame before. Block matching on 16 samples a block: the last
+   vector (the predictor), the median of its neighbours' last vectors, then a
+   step search of 8, 4, 2 and 1 quarter-size pixels around the best so far
+   (±15, ±60 px of the full frame a frame). The cost adds a little per pixel
+   moved and per pixel away from the neighbours' median (an encoder's
+   preference too: on repeating textures, where many matches are as good, the
+   blocks agree), and a flat block doesn't move. **Sustain**: a block keeps the
+   larger of its new vector and what is left of its last one, so movement
+   lingers and swells (the classic "bloom"). Vectors are kept as 16 bits an axis
+   in an RGBA8 texel (`fnMoshEncode`).
+3. **The held picture moves** (`FN_MOSH_ADV`, full size): each pixel takes the
+   held picture from where its block's vector (× Push) says, a whole number of
+   pixels, read without filtering (so it never blurs however long it is held),
+   plus Bleed × the frame's residual (the frame minus the frame before, moved
+   the same way: what a codec would add). Refresh heals it toward the live
+   picture (Refresh² a frame); a keyframe (every Keyframe-every seconds, on the
+   clock, so a render's land on the same frames: `fnMoshKeyframe`), or the first
+   frame, takes the live picture as it is. While **Mosh** is on nothing heals.
+
+| Control | What it does |
+| --- | --- |
+| Motion from | The picture, the camera (a Camera layer, hidden or not: your movement smears the picture) or any layer |
+| Amount | How much of the moshed picture shows |
+| Bleed | How much of each frame's new detail gets through (0: only the old pixels move; 1: a clean picture) |
+| Block size | Pixels of a 1080p picture (8–96; a codec's are 16) |
+| Push | Vectors × this: above 1 smears faster than things move |
+| Sustain | How much a block keeps moving after the movement stops |
+| Refresh | How fast it heals to the live picture (0 never) |
+| Keyframe every | Seconds between snaps back to the live picture (0 never) |
+| Mosh | A switch: while on, nothing heals. The card's **Hold to mosh** button holds it |
+
+Presets: Bloom (default), Melt, Blocky, Pulse (a keyframe every second), On cue
+(heals fast: it moshes only while Mosh is held).
+
+**Mosh on cue**: Finish effects have no actions of their own (actions act on
+layers), so Mosh is a number, mappable like any other: map a key onto it (held:
+moshes while the key is down), or have a rule **send a signal** and map that
+signal (a trigger source on the signal) onto Mosh, or use **Set from a signal**.
+
+Offline renders have no live camera, so with Motion from the camera the picture
+holds still there (unless Refresh or a keyframe brings it back).
+
+### Motion extract
+
+The motion extraction trick: the frame inverted at 50 % over a copy from a moment
+ago, `0.5 + (then − now) / 2`, so whatever stayed still cancels to mid-grey and
+only movement shows, as edge-like outlines (`fnEchoPixel` is the maths).
+
+- A ring of past frames (as Echo's: 4–32 frames, growing, at most 64 MB,
+  `FN_ECHO_CAP`, past which the frames are kept smaller). Both frames compared
+  come from the ring, so a smaller ring still cancels still parts exactly.
+- Until the ring has Delay frames it compares with the oldest it has (the first
+  frame shows no movement).
+
+| Control | What it does |
+| --- | --- |
+| Delay | Frames ago (1–30): longer catches slower movement, thicker outlines |
+| Gain | Contrast of the movement |
+| Colour | 0 grey, 1 the picture's own colour shifts, 2 more vivid |
+| On black | 0 the classic mid-grey, 1 black (only how much changed: abs difference) |
+| Edges | Movement along the picture's own edges (now or then) shows more, flat areas less |
+| Neon | Two-tone: what arrives glows cyan, what leaves magenta |
+| Amount | How much of it shows over the picture |
+
+Presets: Classic grey (default), On black, Neon motion.
+
+Glow effects (Bloom, Halation, CRT glow) read the picture as it came in, not
+the temporal effects' output, so a Bloom after Motion extract glows from the
+original picture, not the outlines.
 
 ## Presets, swatches and notes
 
@@ -353,7 +525,10 @@ their own get their sliders, swatches and note from the declaration.
 | Mirror / kaleidoscope | Mirror (default), Mandala, Crystal, Butterfly |
 | Posterize | Poster (default), Retro PC, Handheld, 1-bit, Sunset duo |
 | Edges | Chalk (default), Neon, Ink outline, Laser |
-| Feedback | Ghosts (default), Tunnel, Smear, Vortex |
+| Feedback | Ghost trail (default), Tunnel, Spiral, Smear |
+| Echo | Echo (default), Ghost trail, Strobe echo; Layer echo on the card |
+| Datamosh | Bloom (default), Melt, Blocky, Pulse, On cue |
+| Motion extract | Classic grey (default), On black, Neon motion |
 | Halation | Subtle, Classic cine (default), Strong |
 | Pixel sort | Drip (default), Sideways, Melt |
 | Halftone | Comic (default), Newsprint, Pop art |
@@ -572,6 +747,23 @@ another machine), each after a Grade so the stage ones run as a second pass:
 Grade alone 0.27 ms; with ASCII 0.32, Halftone 0.34, Edges with glow and rainbow
 0.38, Light leaks 0.43, Pixel sort 1.34 (24 samples and their ranking per
 pixel). Grade, Halftone, ASCII and Pixel sort together (four passes): 0.99.
+
+The temporal effects, measured the same way at 1440 × 900 (headless Chrome,
+ANGLE Metal, an Apple laptop; 120 frames of a moving picture between two GPU
+syncs, uploads included):
+
+| Stack | ms / frame | Graphics memory |
+| --- | --- | --- |
+| Grade alone (the baseline) | 0.16 | |
+| Datamosh (Bloom) | 0.58 | 22 MB (two full-size pairs, the quarter-size brightness and vectors) |
+| Datamosh, block 8 | 0.51 | the same |
+| Motion extract, Delay 3 | 0.33 | 21 MB (4 frames) |
+| Motion extract, Delay 30 | 0.19 | 64 MB (32 frames, kept at 0.62 size) |
+| Feedback (Ghost trail) | 0.50 | 31 MB (half-float history and an 8-bit source, two of each) |
+| Feedback (Tunnel) | 0.45 | the same |
+| Echo (3 copies) | 0.29 | 83 MB (16 frames) |
+| Echo (8 copies, Moving parts) | 0.43 | 128 MB (32 frames, kept at 0.88 size) |
+| Grade, Datamosh, Motion extract, Echo (four passes) | 1.10 | |
 
 The live preview draws the finished frame at the overlay's size, capped at about
 2.1 million pixels, so a retina preview costs no more than a 1080p one. Renders
