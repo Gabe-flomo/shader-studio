@@ -63,7 +63,11 @@ export const FN_WATER_DETAILS: readonly ['low', 'medium', 'high'];
 export function fnWaterSourceOf(e: { source?: unknown; [key: string]: unknown } | null | undefined): FnWaterSource;
 export function fnWaterShapeOf(e: { shape?: unknown; [key: string]: unknown } | null | undefined): FnWaterShape;
 export function fnWaterMapShape(shape: string): boolean;
-export function fnWaterGrid(detail: string | undefined, W: number, H: number): { w: number; h: number };
+/** `scale`: the frame's height in picture heights (a Water layer's pond): Detail's rows scaled to match. */
+export function fnWaterGrid(detail: string | undefined, W: number, H: number, scale?: number): { w: number; h: number };
+/** The surface read back small: heights and waves (0..1) per texel, row 0 at the bottom (y up). */
+export interface FnWaterField { w: number; h: number; height: Float32Array; waves: Float32Array }
+export function fnWaterUnpack(px: Uint8Array, w: number, h: number): FnWaterField;
 export function fnWaterPlan(speed: number, rows: number): { sub: number; c: number; c2: number; dt: number };
 export function fnWaterDecay(damping: number): number;
 export function fnWaterDamp(damping: number, dt: number): number;
@@ -190,6 +194,8 @@ export interface FnInput {
   pointer?: { x: number; y: number; over?: boolean; down?: boolean } | null;
   /** Water's Layer source: where a layer is now (the kit's layerPoint), or null. */
   layerPoint?: (id: string) => { x: number; y: number } | null;
+  /** Water as a layer's pond: the frame's height in picture heights (its grid and its look keep the picture's units). 1 or none: the whole picture. */
+  waterScale?: number;
 }
 export interface FnInfo { effects?: string[]; glow?: boolean; passes?: number; floatGlow?: boolean; ring?: { frames: number; w: number; h: number; bytes: number; count: number } | null; error: string; custom?: Record<string, string>; mosh?: { bytes: number } | null; rings?: Record<string, { frames: number; w: number; h: number; bytes: number; count: number }>; feedback?: { bytes: number; float: boolean } | null; ascii?: { glyphs: string[]; cols: number; rows: number } | null; sortTrail?: { valid: boolean } | null; water?: { w?: number; h?: number; bytes?: number; float: boolean; substeps?: number; ticks?: number; steps?: number; c?: number } | null }
 export interface FnRenderer {
@@ -199,6 +205,8 @@ export interface FnRenderer {
   reset(): void;
   info(): FnInfo | null;
   error?(): string;
+  /** The Water surface as the last draw left it, read back about `rows` high, or null without one. */
+  waterField?(rows?: number): FnWaterField | null;
   dispose(): void;
 }
 export function fnCreate(canvas?: HTMLCanvasElement | null): FnRenderer;

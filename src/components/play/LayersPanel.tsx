@@ -64,6 +64,7 @@ import {
   type EditorContext, ClonerEditor, RelationshipEditor, ScriptEditor } from './layers/editors';
 import { AgentsEditor } from './layers/AgentsEditor';
 import { MotionEditor } from './layers/MotionEditor';
+import { WaterEditor } from './layers/WaterEditor';
 import { motionSourceStart } from '../../play/motionLayers';
 import { RulesSummary } from './rules/RulesSummary';
 import { startRule } from './playSplit';
@@ -868,6 +869,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
     case 'relationship': body = <RelationshipEditor f={f} ctx={ctx} />; break;
     case 'agents': body = <AgentsEditor f={f} ctx={ctx} />; break;
     case 'motion': body = <MotionEditor f={f} ctx={ctx} />; break;
+    case 'water': body = <WaterEditor f={f} ctx={ctx} />; break;
     case 'cloner': body = <ClonerEditor f={f} ctx={ctx} />; break;
     case 'script': body = <ScriptEditor f={f} ctx={ctx} />; break;
     case 'background': body = <BackgroundEditor f={f} ctx={ctx} />; break;

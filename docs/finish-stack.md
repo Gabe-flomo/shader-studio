@@ -343,6 +343,14 @@ drawing while the clock runs (`fnAnimated`), as do a spinning Mirror and rainbow
 
 ## Water
 
+> **Prefer the Water layer for ponds and boats** (docs/water-layer.md). It runs this
+> same simulation (one solver, the same settings and presets) as a layer: it has a
+> place, a size and a soft edge, and bends only the picture and the layers *below*
+> it, so a drawn boat above it doesn't wobble in its own wake; its wave height and
+> energy are readings and its waves a matte. The effect stays, unchanged for saved
+> stacks; its card's ⋯ → **Move to a layer** turns it into a Water layer, and the
+> Add effect menu points to the layer.
+
 **Water** (Warp group) is a simulated water surface over the picture: a source
 that moves leaves a wake, rain dimples it, a rule's Splash drops into it, and
 the waves travel, cross, bounce or run off the frame and fade. **Ripple** stays
@@ -459,6 +467,11 @@ step it picks and the test biting past 1/√2, energy kept undamped and lost at
 Damping's rate, viscosity, open edges, stamps adding no water, a wake behind a
 moving source and none from a still one, the same ticks at any frame rate,
 renders the same every time, rain, Splash, the record, the example).
+
+The surface's readers in the final pass take its units (`uWUnit`: the frame's
+heights per picture height, 1 here; a Water layer's pond sets more), and the
+renderer can read it back small (`waterField`, `fnWaterUnpack`) for a Water
+layer's readings and matte.
 
 Not done yet: the waves as a map for layers (particles riding them, the Layers
 node reading them) and for Displace; dispersion (real ripples spread into a

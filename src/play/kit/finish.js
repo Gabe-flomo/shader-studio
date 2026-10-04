@@ -1395,8 +1395,10 @@ export function fnWaterShapeOf(e) { return e && FN_WATER_SHAPES.includes(e.shape
 export function fnWaterMapShape(shape) { return shape === 'layer' || shape === 'picture'; }
 
 /** The grid for a frame size: Detail's rows (never more than the frame has), columns for its aspect. */
-export function fnWaterGrid(detail, W, H) {
-  const rows = FN_WATER.detail[detail] || FN_WATER.detail.medium;
+export function fnWaterGrid(detail, W, H, scale = 1) {
+  // `scale`: the frame's height in picture heights (a Water layer's pond, play/kit/waterLayer.js), so a cell
+  // is as big on the picture as the whole-picture water's at the same Detail.
+  const rows = Math.round((FN_WATER.detail[detail] || FN_WATER.detail.medium) * (scale > 0 && scale < 1 ? scale : 1));
   const h = Math.max(16, Math.min(rows, Math.round(H) || rows));
   return { w: Math.max(16, Math.round(h * Math.max(1, W) / Math.max(1, H))), h };
 }
@@ -2114,7 +2116,7 @@ vec4 fetch(vec2 q) {
   }`);
     if (k === 'water') warp(e, `{
     // Looking down through the surface: the picture is read where its slope bends the line of sight.
-    q -= fnWaterSlope(q) * water_refraction * ${fnGl(FN_WATER.view.bend)} / vec2(uAspect, 1.0);
+    q -= fnWaterSlope(q) * water_refraction * ${fnGl(FN_WATER.view.bend)} * uWUnit / vec2(uAspect, 1.0);
   }`);
     if (k === 'displace') {
       const map = FN_DISPLACE_MAPS.includes(e.map) ? e.map : 'noise';
@@ -2703,20 +2705,44 @@ void main() {
  */
 const FN_WATER_VIEW = `uniform sampler2D uWater;
 uniform vec2 uWTex;
+uniform float uWUnit;  // the frame's heights per picture height: 1 for the Finish stack, more for a Water layer's pond
 vec2 fnWaterSlope(vec2 p) {
   vec2 t = 1.0 / uWTex;
   vec2 g = vec2(texture(uWater, p + vec2(t.x, 0.0)).r - texture(uWater, p - vec2(t.x, 0.0)).r,
-                texture(uWater, p + vec2(0.0, t.y)).r - texture(uWater, p - vec2(0.0, t.y)).r) * 0.5 * uWTex.y;
+                texture(uWater, p + vec2(0.0, t.y)).r - texture(uWater, p - vec2(0.0, t.y)).r) * 0.5 * uWTex.y * uWUnit;
   // Softly limited, so the steepest crest (a fast source's bow) bends and tilts no more than a few times a gentle wave.
   return g / (1.0 + length(g) * ${fnGl(1 / FN_WATER.view.slopeMax)});
 }
 float fnWaterCurve(vec2 p) {
   vec2 t = 1.0 / uWTex;
   return (texture(uWater, p + vec2(t.x, 0.0)).r + texture(uWater, p - vec2(t.x, 0.0)).r + texture(uWater, p + vec2(0.0, t.y)).r
-    + texture(uWater, p - vec2(0.0, t.y)).r - 4.0 * texture(uWater, p).r) * uWTex.y * uWTex.y;
+    + texture(uWater, p - vec2(0.0, t.y)).r - 4.0 * texture(uWater, p).r) * uWTex.y * uWTex.y * uWUnit * uWUnit;
 }
 float fnWaves(vec2 p) { return clamp(max(abs(texture(uWater, p).r) * ${fnGl(FN_WATER.view.waveH)}, length(fnWaterSlope(p)) * ${fnGl(FN_WATER.view.waveS)}), 0.0, 1.0); }
 `;
+
+/**
+ * Water's surface read back small (a Water layer's readings and its Waves matte, play/kit/waterLayer.js):
+ * each texel the height (h ÷ 4 + ½, 16 bits in red and green) and fnWaves (blue). Row 0 at the bottom.
+ */
+const FN_WATER_PACK = `#version 300 es
+precision highp float;
+uniform vec2 uRes;
+${FN_WATER_VIEW}
+out vec4 o0;
+void main() {
+  vec2 p = gl_FragCoord.xy / uRes;
+  float q = floor(clamp(texture(uWater, p).r * 0.25 + 0.5, 0.0, 1.0) * 65535.0 + 0.5);
+  float hi = floor(q / 256.0);
+  o0 = vec4(hi / 255.0, (q - hi * 256.0) / 255.0, fnWaves(p), 1.0);
+}
+`;
+/** FN_WATER_PACK's pixels (RGBA, w × h, row 0 at the bottom) as heights and waves (0..1), row 0 at the bottom (y up). */
+export function fnWaterUnpack(px, w, h) {
+  const n = w * h, height = new Float32Array(n), waves = new Float32Array(n);
+  for (let i = 0; i < n; i++) { height[i] = ((px[i * 4] * 256 + px[i * 4 + 1]) / 65535 - 0.5) * 4; waves[i] = px[i * 4 + 2] / 255; }
+  return { w, h, height, waves };
+}
 
 /**
  * Water, one substep (fnWaterStep's maths): the height field (r: h now, g: h a substep ago) one
@@ -3357,6 +3383,25 @@ export function fnCreate(canvasIn) {
     return wT;
   }
   const waterDrops = new Float32Array(4 * FN_WATER.maxDrops);
+  // The last frame's units (heights of the frame per picture height) and the small read-back target (waterField).
+  let waterUnit = 1, packT = null;
+  function waterField(rows) {
+    if (!wT || !wT.out || gl.isContextLost()) return null;
+    const h = Math.max(4, Math.min(wT.h, Math.round(rows) || 90)), w = Math.max(4, Math.round(h * wT.w / wT.h));
+    if (!packT || packT.w !== w || packT.h !== h) { dropTarget(packT); packT = target(w, h, 1, false); }
+    const e = compile('wpack', FN_WATER_PACK);
+    if (!e) return null;
+    gl.useProgram(e.prog);
+    gl.uniform2f(loc(e, 'uRes'), w, h);
+    gl.uniform2f(loc(e, 'uWTex'), wT.w, wT.h);
+    gl.uniform1f(loc(e, 'uWUnit'), waterUnit);
+    bindTex(e, 'uWater', 0, wT.out);
+    draw(packT.fb, w, h);
+    const px = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return fnWaterUnpack(px, w, h);
+  }
   /**
    * Water's surface for this frame, before the passes: the ticks since the frame before (fnWaterFrame), each a few
    * substeps of FN_WATER_STEP with the source's stamps, the rain and any Splash. `maps`: the pass's map keys (a Layer shape's alpha).
@@ -3364,7 +3409,7 @@ export function fnCreate(canvasIn) {
   function waterPass(e, input, W, H, pixelsMode, value, maps) {
     if (!waterFloat) { dropWater(); return false; }
     const v = k => { const x = value ? value(e, k) : e[k]; return typeof x === 'number' && isFinite(x) ? x : WATER_DEF[k]; };
-    const g = fnWaterGrid(e.detail, W, H);
+    const g = fnWaterGrid(e.detail, W, H, input.waterScale);
     const T = ensureWater(g.w, g.h);
     const shape = fnWaterShapeOf(e), mapShape = fnWaterMapShape(shape);
     // Where the source is now: the pointer while it is over the picture, a layer's position, or Source X/Y.
@@ -3548,6 +3593,7 @@ export function fnCreate(canvasIn) {
     });
     // Water's surface, stepped to this frame (it reads a Layer shape's map, so after the maps).
     const waterFx = ran.find(e => e.kind === 'water');
+    waterUnit = input.waterScale > 0 && input.waterScale < 1 ? 1 / input.waterScale : 1;
     if (waterFx) waterPass(waterFx, input, W, H, pixelsMode, value, built.maps);
     if (pixelsMode && (!outT || outT.w !== W || outT.h !== H)) { dropTarget(outT); outT = target(W, H, 1, false); }
     // Passes before the last (a stack with stage effects): two full-size targets, used in turn.
@@ -3624,6 +3670,7 @@ export function fnCreate(canvasIn) {
       if (b.water) {
         bindTex(fin, 'uWater', unit++, wT && wT.out ? wT.out : clearTex);
         gl.uniform2f(loc(fin, 'uWTex'), wT ? wT.w : 1, wT ? wT.h : 1);
+        gl.uniform1f(loc(fin, 'uWUnit'), waterUnit);
       }
       if (b.feedback && fbT) {
         bindTex(fin, 'uFbPrev', unit++, fbT.prev); bindTex(fin, 'uFbNow', unit++, fbT.now);
@@ -3680,6 +3727,8 @@ export function fnCreate(canvasIn) {
     draw(input) { try { return drawFrame(input); } catch (e) { lastError = String(e && e.message || e); return false; } },
     reset() { if (ringT) ringT.ring.reset(); if (fbT) fbT.valid = false; if (moshT) { moshT.valid = false; moshT.kf = -1; } if (psT) { psT.valid = false; psT.lastT = null; } for (const R of rings.values()) { R.ring.reset(); R.n = 0; } if (wT) wT.state.valid = false; },
     info() { return lastInfo ? Object.assign({ error: lastError }, lastInfo) : { error: lastError }; },
+    /** The Water surface as the last draw left it, read back about `rows` high (fnWaterUnpack), or null without one. */
+    waterField(rows) { try { return waterField(rows); } catch (e) { lastError = String(e && e.message || e); return null; } },
     error() { return lastError; },
     dispose() {
       for (const e of programs.values()) if (e) gl.deleteProgram(e.prog);
@@ -3689,7 +3738,7 @@ export function fnCreate(canvasIn) {
       dropTarget(outT);
       if (stageT) for (const t of stageT) dropTarget(t);
       if (ringT) { gl.deleteTexture(ringT.tex); gl.deleteFramebuffer(ringT.fb); }
-      dropMosh(); dropFb(); dropPs(); dropAscii(); dropWater(); for (const k of [...rings.keys()]) dropRing(k);
+      dropMosh(); dropFb(); dropPs(); dropAscii(); dropWater(); dropTarget(packT); packT = null; for (const k of [...rings.keys()]) dropRing(k);
       const lose = gl.getExtension('WEBGL_lose_context');
       if (lose) lose.loseContext();
     },

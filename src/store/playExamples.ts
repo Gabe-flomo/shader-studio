@@ -2627,6 +2627,70 @@ Holding **M** turns Datamosh's **Mosh** on: nothing heals while it's held.
 • Move the pointer over the picture: the swarm gathers and swirls round it. Press B for a fresh cloud, R to start over.
 • Click the picture, then press **Play** on the Engine tab's transport: each kick blasts a ring out of the middle. Press **Enable hand tracking** on the picture and raise a hand.
 • In Studio, set the group's Sound from to **Level (and Beat)** and Beat to 120 for a silent stand-in kick. Right-click any slider inside the group → **Pin to the group card**, or **Follow a hand in Play** on a Hand X.`,
+  })),  // ─ The Water layer: a drawn boat sails ABOVE the water and leaves a wake without wobbling in it ─
+  ex('waterLayer', quietGraph(), play({
+    display: { picture: true, backdrop: [0, 0, 0], source: 'image', image: { name: 'Pool floor.jpg', src: POOL_FLOOR } },
+    layers: [
+      // Under the boat in the list, so it bends the pool floor but never the boat.
+      layer('water', 'water', 'Water', {
+        source: 'layer', sourceLayer: 'boat', shape: 'line', length: 0.09, angle: 0,
+        speed: 0.22, damping: 0.16, size: 0.035, strength: 1, refraction: 0.55, highlights: 0.5, rain: 3, drop: 0.01,
+      }),
+      layer('shape', 'boat', 'Boat', {
+        shape: 'box', x: 0.3, y: 0.5, w: 0.14, h: 0.055, round: 0.5, action: 'none',
+        fill: [0.96, 0.55, 0.2], fillOpacity: 1, stroke: [1, 0.97, 0.9], strokeWidth: 2.5,
+      }),
+    ],
+    controls: [
+      ctl('bx', 'layer:boat::x', 'Boat · x', 0, 1),
+      ctl('by', 'layer:boat::y', 'Boat · y', 0, 1),
+      ctl('rock', 'layer:boat::rotation', 'Boat · rocking', -30, 30),
+      ctl('px', 'layer:water::probeX', 'Water · Probe X', 0, 1),
+      ctl('py', 'layer:water::probeY', 'Water · Probe Y', 0, 1),
+      ctl('speed', 'layer:water::speed', 'Water · Wave speed', 0.05, 2),
+      ctl('damp', 'layer:water::damping', 'Water · Damping', 0, 1),
+      ctl('rain', 'layer:water::rain', 'Water · Rain', 0, 60, 0.5),
+      ctl('bend', 'layer:water::refraction', 'Water · Refraction', 0, 1),
+    ],
+    mappings: [
+      map('sailX', 'bx', S.lfo('sine', 0.11), 0.15, 0.85),
+      map('sailY', 'by', S.lfo('sine', 0.17, 0.25), 0.25, 0.75),
+      // The Probe sails with the boat (the same LFOs), a little behind it, where its own wake lifts it.
+      map('probeX', 'px', S.lfo('sine', 0.11), 0.15, 0.85),
+      map('probeY', 'py', S.lfo('sine', 0.17, 0.25), 0.25, 0.75),
+      map('rocking', 'rock', S.sensor('water', 'waveHeight'), -18, 18, { smoothMs: 150 }),
+    ],
+    signals: [
+      { id: 'splashClick', name: 'Splash where you click', inputs: [{ kind: 'trigger', trigger: T.click() }], do: [{ id: 'sc', do: 'splash', layerId: 'water', amount: 1, enabled: true, key: 'pointer', value: 0.05 }] },
+      { id: 'bigSplash', name: 'Big splash (Space)', inputs: [{ kind: 'trigger', trigger: T.key('Space') }], do: [{ id: 'bs', do: 'splash', layerId: 'water', amount: 1, enabled: true, key: 'random', value: 0.12 }] },
+    ],
+    notes: `**What it shows.** The **Water layer**: a simulated water surface that is a layer, with a place in the list. It bends and lights only what is **under** it, so the orange boat drawn **above** it sails across the pool, drags a V-shaped wake behind it and stays perfectly sharp: it doesn't wobble in its own wake. A light rain dimples the water; click to splash, press Space for a big one. The boat rocks on the waves under it.
+
+**The layers** (bottom to top).
+• The picture: Background → Image holds a pool's floor (the graph underneath is paused). Straight tile lines show the bending best.
+• **Water** (a Water layer, Region **Whole picture**): the same simulation as the Look stack's Water effect. Its **Source** is **A layer: Boat** and its **Shape** a **Line** as long as the hull (Length 0.09), so wherever the boat goes it presses a hull-shaped dimple into the water, and the water springs back behind it; that is the wake. **Rain** drops 3 raindrops a second at random places (the same places in every render). Because it is under the boat in the list, it bends the pool floor and nothing above it.
+• **Boat** (a Shape layer, a rounded orange box): drawn above the water, so it stays dry and sharp. Its Action is None, so it is only something to see (and the shape the water feels).
+
+**The controls.**
+• **Boat · x / y**: where the boat is. Two slow LFOs swing them (the mappings **sailX** and **sailY**), so it sails a looping path a little faster than the waves travel, which is what makes a V-shaped wake rather than rings.
+• **Water · Probe X / Y**: where the Water layer reads its **Wave height**. The same two LFOs move it with the boat, so it reads the water under the hull.
+• **Boat · rocking**: the boat's rotation. The mapping **rocking** turns the Water layer's **Wave height** reading (0.5 on still water) into a tilt of up to 18° each way, smoothed: the boat rocks as waves pass under it, including the waves of a splash.
+• **Water · Wave speed**: how fast the waves travel (picture heights a second). Slower than the boat makes a sharper V.
+• **Water · Damping**: how quickly the waves die away.
+• **Water · Rain**: raindrops a second (0 is dry).
+• **Water · Refraction**: how much the waves bend the floor under them.
+
+**The rules.**
+• **Splash where you click**: a click on the picture → **Splash · Water** under the pointer: a drop that rings outward.
+• **Big splash (Space)**: Space → a bigger Splash somewhere random. Watch the boat rock when its rings reach it.
+
+**Try this.**
+• On the Water card, set Region to **Ellipse**: the water becomes a pond with a soft edge (drag it on the picture); the boat's wake stays inside it.
+• Set Source to **The pointer** and Shape to **Point**, and drag across the picture: your own wake, under the boat.
+• Set Shape to **A layer's shape** and pick Boat: the hull's own outline pushes the water (best with a slow boat: a shape that jumps far between frames leaves ripples).
+• Drag the Boat layer below Water in the list: now the boat is under the water and bends with it. That is how the Look stack's Water effect treats every layer.
+• Give another layer a **Matte → Water**: it shows only where the water moves (its waves).
+• Render it: the waves tick with the clock, so every render (and the exported web page) comes out the same.`,
   })),
 ];
 
