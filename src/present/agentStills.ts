@@ -1,10 +1,11 @@
 /**
  * agentStills.ts — pictures of the Agents examples for the "How Agents work"
- * presentation (agentsSample.ts). The web player that runs Present canvases
- * doesn't run Agents groups yet (docs/agents-plan.md, P5), so their sources
- * carry these stills as posters: each rendered in the app with the example's
- * own offline render (renderAtTime, 1280 × 720, scaled to 640 × 360), at the
- * time in its name below. Loaded only when the sample is built.
+ * presentation (agentsSample.ts). The presets run live on its slides; these
+ * are their sources' posters, shown while a canvas isn't running (waiting for
+ * a free slot, off screen, or before its first frame) and on the page's and
+ * the list's thumbnails. Each was rendered in the app with the example's own
+ * offline render (renderAtTime, 1280 × 720, scaled to 640 × 360), at the time
+ * in its name below. Loaded only when the sample is built.
  */
 import slimeMold from './stills/still-slimeMold.jpg?inline';
 import agentParticles from './stills/still-agentParticles.jpg?inline';

@@ -341,7 +341,7 @@ export const SAMPLE_PRESENTATIONS: SamplePresentation[] = [
   { title: FIELD_TITLE, group: 'app', hint: 'Grid Pattern and Array with a shape of your own', still: 'comboArrayStars', build: buildFieldSocketsPresentation },
   { title: CONVERT_TITLE, group: 'app', hint: 'The Convert page: paste a shader, get nodes', still: 'convertCircleOptimised', build: buildConvertPresentation },
   { title: MAKING_TITLE, group: 'app', hint: 'Steps, blocks, snapshots, chips, live code, sharing', still: 'learnPalette', build: buildMakingPresentation },
-  { title: AGENTS_TITLE, group: 'app', hint: 'The Agents group: slime mold, particles and ants, built from nodes', still: 'agentRuleParticles', build: buildAgentsPresentation },
+  { title: AGENTS_TITLE, group: 'app', hint: 'The Agents group: slime mold, particles and ants, built from nodes', still: 'agentParticles', build: buildAgentsPresentation },
   // Topics: shaders themselves.
   { title: BOOK_TITLE, group: 'topic', hint: 'The Book of Shaders, chapter by chapter through Learn', still: 'learnFBM', build: buildBookPresentation },
   { title: SAMPLE_TITLE, group: 'topic', hint: 'Built from the Learn 3D lessons', still: 'learn3dLight', build: buildSamplePresentation },
