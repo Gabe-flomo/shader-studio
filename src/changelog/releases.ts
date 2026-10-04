@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.11',
+    date: '2026-10-03',
+    title: 'Agents: slime mold, built from nodes',
+    highlights: [
+      { area: 'Studio', text: 'A new Agents group in Simulation: wire the rule one agent follows (Sense, Steer, Move) and it runs for up to a million agents on the GPU.', link: { kind: 'doc', path: 'docs/agents-group.md' } },
+      { area: 'Studio', text: 'Emit, Deposit, Trail field and Draw agents go around it. The trail is an ordinary image you can colour, blur or glow.' },
+      { area: 'Studio', text: 'A Slime mold preset grows branching veins that keep reorganising, with every node explained.' },
+    ],
+  },
+  {
     id: '2026.10.10',
     date: '2026-10-03',
     title: 'Tidier cards',
