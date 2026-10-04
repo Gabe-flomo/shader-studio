@@ -12,6 +12,11 @@
  * variant off to the side and returns median GPU milliseconds per frame, so
  * the on-screen preview is not disturbed beyond the extra GPU load. Nodes
  * inside groups are measured when that group is the open scope.
+ *
+ * A graph with Pass nodes is several programs: every variant is measured as
+ * the whole list (each pass at its size, then the picture), so a node inside
+ * a pass costs what that pass saves. Pass nodes themselves aren't bypassed (a
+ * texture can't pass through); the Performance panel's per-pass rows time them.
  */
 import type { GraphNode } from '../types/nodeGraph';
 import { compileGraph } from '../compiler/graphCompiler';
@@ -45,7 +50,7 @@ export interface NodeCostReport {
   skipped: string[];
 }
 
-const OUTPUT_TYPES = new Set(['output', 'vec4Output']);
+const OUTPUT_TYPES = new Set(['output', 'vec4Output', 'pass']);
 const SOURCE_TYPES = new Set(['uv', 'pixelUV', 'time', 'mouse', 'fragCoord', 'resolution', 'loopIndex', 'scenePos', 'marchPos', 'marchDist', 'marchLoopInputs']);
 
 function labelOf(node: GraphNode): string {
@@ -82,7 +87,7 @@ export async function measureNodeCosts(opts: {
   if (!base.success) return null;
 
   onProgress?.(0, variants.length + 1, 'Whole graph');
-  const baselineA = await measure(base.fragmentShader, base.vertexShader, signal);
+  const baselineA = await measure(base.fragmentShader, base.vertexShader, signal, base.passes);
   if (baselineA === null || signal?.aborted) return null;
 
   const raw: { v: CostVariant; ms: number | null }[] = [];
@@ -91,10 +96,10 @@ export async function measureNodeCosts(opts: {
     const v = variants[i];
     onProgress?.(i + 1, variants.length + 1, v.label);
     const r = compileGraph({ nodes: v.nodes });
-    raw.push({ v, ms: r.success ? await measure(r.fragmentShader, r.vertexShader, signal) : null });
+    raw.push({ v, ms: r.success ? await measure(r.fragmentShader, r.vertexShader, signal, r.passes) : null });
   }
   // The GPU clock drifts while measuring; a second baseline at the end averages it out.
-  const baselineB = await measure(base.fragmentShader, base.vertexShader, signal);
+  const baselineB = await measure(base.fragmentShader, base.vertexShader, signal, base.passes);
   const baselineMs = baselineB === null ? baselineA : (baselineA + baselineB) / 2;
 
   const costs: NodeCost[] = raw.map(({ v, ms }) => ms === null

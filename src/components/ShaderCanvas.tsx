@@ -210,6 +210,12 @@ const NO_ERRORS: string[] = [];
 // Frame scheduling (see the render loop in the boot effect): after this many
 // consecutive frames with nothing to draw, stop asking for animation frames.
 const IDLE_FRAMES_BEFORE_STOP = 10;
+/**
+ * The picture's source with the pass programs' after it (docs/pass-node-plan.md), for what any
+ * program declares: Data nodes' textures. Without Pass nodes, the picture's source as it is.
+ */
+const withPassSources = (fs: string, passes: readonly string[]): string => (passes.length ? [fs, ...passes].join('\n') : fs);
+
 // Scope / eye-preview probes sample every N rendered frames (the scope buffer
 // holds 200 samples, so 20 Hz is plenty) instead of one GPU readback per
 // probe per frame.
@@ -616,10 +622,23 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // Only a compile with `passes` makes a runner; for every other graph it stays
     // null and the frame below takes exactly the path it always has.
     let passRunner: PassRunner | null = null;
+    let passSourcesBound = false;                      // Data / Particles nodes were last bound with pass programs' sources
     let passTargets: PassTargets | null = null;        // the live preview's textures
     let offlinePassTargets: PassTargets | null = null; // renderAtTime's own (never the preview's Previous buffers)
     setPassesRef.current = (passes, vsSrc) => {
       motionUseRef.current.passes = !!passes?.some(pp => readsMotionMap(pp.fragmentShader));
+      // Probes, scopes and the eye read a node only a Pass draws from that pass's program (phase 3).
+      const nextProbePasses = passes ?? [];
+      if (nextProbePasses !== probePasses) { probePasses = nextProbePasses; probePassVer++; }
+      // Data and Particles nodes before a Pass are in its program: bound from every program's source.
+      const hadPassSources = passSourcesBound;
+      passSourcesBound = !!passes?.length;
+      if (passSourcesBound || hadPassSources) {
+        const fs = useNodeGraphStore.getState().fragmentShader || '';
+        const sources = passes?.map(pp => pp.fragmentShader) ?? [];
+        dataTextures.bind(withPassSources(fs, sources));
+        bindGpuParticles(material.uniforms, fs, sources);
+      }
       if (!passes || passes.length === 0) {
         if (!passRunner) return;
         passRunner.dispose(); passRunner = null;
@@ -703,18 +722,55 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     costScene.add(costMesh);
     let costRt: THREE.WebGLRenderTarget | null = null;
     const nextFrame = () => new Promise<void>(r => requestAnimationFrame(() => r()));
-    registerShaderCostMeasurer(async (fsSrc, vsSrc, signal) => {
+    // Pass programs a variant draws (graphs with Pass nodes): each into a target at its own size.
+    const costPassRts = new Map<number, THREE.WebGLRenderTarget>();
+    registerShaderCostMeasurer(async (fsSrc, vsSrc, signal, passes) => {
       if (glContextLost) return null;
       const mat = new THREE.ShaderMaterial({ vertexShader: vsSrc, fragmentShader: fsSrc, uniforms: material.uniforms });
+      const passMats = (passes ?? []).filter(pp => pp.live).map(pp => ({ scale: pp.scale, mat: new THREE.ShaderMaterial({ vertexShader: vsSrc, fragmentShader: pp.fragmentShader, uniforms: material.uniforms }) }));
+      const done = () => { costMesh.material = material; mat.dispose(); for (const pm of passMats) pm.mat.dispose(); };
+      const linked = (m: THREE.ShaderMaterial) => {
+        const prog = (renderer.properties.get(m) as { currentProgram?: { program?: WebGLProgram } }).currentProgram?.program;
+        return !!prog && gl.getProgramParameter(prog, gl.LINK_STATUS) !== false;
+      };
+      for (const m of [...passMats.map(pm => pm.mat), mat]) {
+        costMesh.material = m;
+        try { await renderer.compileAsync(costScene, camera); } catch { done(); return null; }
+        if (!linked(m) || signal?.aborted) { flushGlErrors(); done(); return null; }
+      }
       costMesh.material = mat;
-      const done = () => { costMesh.material = material; mat.dispose(); };
-      try { await renderer.compileAsync(costScene, camera); } catch { done(); return null; }
-      const prog = (renderer.properties.get(mat) as { currentProgram?: { program?: WebGLProgram } }).currentProgram?.program;
-      if (!prog || gl.getProgramParameter(prog, gl.LINK_STATUS) === false || signal?.aborted) { flushGlErrors(); done(); return null; }
       if (!costRt || costRt.width !== floatRt.width || costRt.height !== floatRt.height) {
         costRt?.dispose();
         costRt = new THREE.WebGLRenderTarget(floatRt.width, floatRt.height, { type: RT_TYPE, depthBuffer: false, stencilBuffer: false });
+        for (const r of costPassRts.values()) r.dispose();
+        costPassRts.clear();
       }
+      const passRt = (scale: number) => {
+        let r = costPassRts.get(scale);
+        if (!r) {
+          r = new THREE.WebGLRenderTarget(Math.max(1, Math.round(floatRt.width * scale)), Math.max(1, Math.round(floatRt.height * scale)), { type: RT_TYPE, depthBuffer: false, stencilBuffer: false });
+          costPassRts.set(scale, r);
+        }
+        return r;
+      };
+      const res = material.uniforms.u_resolution.value as THREE.Vector2;
+      /** The frame's programs in order: each pass at its size (u_resolution its own, as it draws), then the picture. */
+      const drawAll = () => {
+        if (passMats.length) {
+          const rx = res.x, ry = res.y;
+          for (const pm of passMats) {
+            const r = passRt(pm.scale);
+            res.set(r.width, r.height);
+            costMesh.material = pm.mat;
+            renderer.setRenderTarget(r);
+            renderer.render(costScene, camera);
+          }
+          res.set(rx, ry);
+          costMesh.material = mat;
+        }
+        renderer.setRenderTarget(costRt);
+        renderer.render(costScene, camera);
+      };
       const WARMUP = 2, RUNS = 8;
       const samples: number[] = [];
       costResults.length = 0;
@@ -722,8 +778,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         const timed = i >= WARMUP;
         let t0 = 0;
         if (timed) { if (!gpuTimer.begin('cost')) t0 = performance.now(); }
-        renderer.setRenderTarget(costRt);
-        renderer.render(costScene, camera);
+        drawAll();
         renderer.setRenderTarget(null);
         if (timed) {
           if (t0) { gl.finish(); samples.push(performance.now() - t0); }
@@ -1027,6 +1082,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     let lastScopeFs: string | null = null;
     const previewScopeMatCache = new Map<string, THREE.ShaderMaterial>();
     let lastPreviewScopeFs: string | null = null;
+    // Pass programs (docs/pass-node-plan.md, phase 3): a node only a Pass draws is probed from its program.
+    // probePassVer moves on whenever they change, so the probe caches above start over.
+    let probePasses: readonly PassProgram[] = [];
+    let probePassVer = 0, lastProbePassVer = 0, lastScopePassVer = 0, lastPreviewPassVer = 0;
 
     // Build a 1-px probe shader: insert a new gl_FragColor at the very end of main()
     // using lastIndexOf('}') so it works even when nodes compile after the output node's
@@ -1037,16 +1096,43 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // changes its slug — one can be ahead of the other. Probing a name the
     // shader doesn't declare is an "undeclared identifier" error, so skip it
     // until both agree. Cached per shader text since this runs every frame.
-    let declaresFs: string | null = null;
-    const declaresCache = new Map<string, boolean>();
+    // One cache per program source (the picture's and, with Pass nodes, each pass's: see probeSrc).
+    const declaresCaches = new Map<string, Map<string, boolean>>();
     const fsDeclares = (fs: string, varName: string): boolean => {
-      if (declaresFs !== fs) { declaresFs = fs; declaresCache.clear(); }
+      let declaresCache = declaresCaches.get(fs);
+      if (!declaresCache) {
+        if (declaresCaches.size >= 12) declaresCaches.clear();
+        declaresCache = new Map();
+        declaresCaches.set(fs, declaresCache);
+      }
       let hit = declaresCache.get(varName);
       if (hit === undefined) {
         hit = new RegExp(`\\b${varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(fs);
         declaresCache.set(varName, hit);
       }
       return hit;
+    };
+
+    /**
+     * The program a probe reads a node's variable from (docs/pass-node-plan.md, phase 3): the
+     * picture's when it declares it; else, for a node only a Pass draws, that pass's program (its
+     * variables have the same names there: slugs are shared). `tag` keys the probe caches, `scale`
+     * is the pass's size (its u_resolution). Null while neither declares it (a recompile settling).
+     */
+    const probeSrc = (nodeId: string, varName: string, finalFs: string): { fs: string; tag: string; scale: number } | null => {
+      if (fsDeclares(finalFs, varName)) return { fs: finalFs, tag: '', scale: 1 };
+      for (const p of probePasses) {
+        if (p.nodeIds.includes(nodeId) && fsDeclares(p.fragmentShader, varName)) return { fs: p.fragmentShader, tag: `${p.slug}::`, scale: p.scale };
+      }
+      return null;
+    };
+    const probeRes = new THREE.Vector2(1, 1);
+    /** A probe of a pass program: its own size as u_resolution (as it draws), after the shared values were copied in. */
+    const fitProbe = (pm: THREE.ShaderMaterial, src: { scale: number }) => {
+      if (src.scale === 1 || !pm.uniforms.u_resolution) return;
+      const r = material.uniforms.u_resolution.value as THREE.Vector2;
+      probeRes.set(Math.max(1, Math.round(r.x * src.scale)), Math.max(1, Math.round(r.y * src.scale)));
+      pm.uniforms.u_resolution.value = probeRes;
     };
 
     const buildProbeShader = (fs: string, varName: string, varType: string): string => {
@@ -1591,10 +1677,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
 
             if (outputVars && selNode && curFs && curVs) {
               // If shader recompiled since last probe, stale materials must be rebuilt
-              if (lastProbeFs !== curFs) {
+              if (lastProbeFs !== curFs || lastProbePassVer !== probePassVer) {
                 probeMatCache.forEach(disposeProbeMat);
                 probeMatCache.clear();
                 lastProbeFs = curFs;
+                lastProbePassVer = probePassVer;
               }
               // If selected node changed, also clear cache (different set of varNames)
               if (lastProbedNodeId !== selId) {
@@ -1608,14 +1695,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
               for (const [outKey, varName] of Object.entries(outputVars)) {
                 const outSocket = selNode.outputs[outKey];
                 const varType   = outSocket?.type ?? 'float';
-                if (!fsDeclares(curFs, varName)) continue; // map and shader out of step; next frame
-
-                // Skip until the active shader actually declares this variable (see the scope probe).
-                if (!curFs.includes(varName)) continue;
+                // The picture's program, or the pass program that draws this node; neither yet: next frame.
+                const src = probeSrc(selId, varName, curFs);
+                if (!src) continue;
                 // Get or build a probe material for this variable
-                let pm = probeMatCache.get(varName);
+                let pm = probeMatCache.get(src.tag + varName);
                 if (!pm) {
-                  const probeFs = buildProbeShader(curFs, varName, varType);
+                  const probeFs = buildProbeShader(src.fs, varName, varType);
                   pm = new THREE.ShaderMaterial({
                     vertexShader: curVs,
                     fragmentShader: probeFs,
@@ -1625,18 +1711,21 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                       u_mouse:      { value: new THREE.Vector2(0, 0) },
                     },
                   });
-                  probeMatCache.set(varName, pm);
+                  probeMatCache.set(src.tag + varName, pm);
                 }
                 if (!probeReady(pm)) continue; // still compiling — probe it next sample
                 // Keep uniforms in sync with the live material
                 pm.uniforms.u_time.value = material.uniforms.u_time.value;
                 pm.uniforms.u_resolution.value = material.uniforms.u_resolution.value;
                 pm.uniforms.u_mouse.value = material.uniforms.u_mouse.value;
-                // Data nodes' textures and row counts, so a probed Data output reads real rows
+                // Data nodes' textures and row counts, so a probed Data output reads real rows; the Pass
+                // textures (and their pixel sizes), so a node after a Pass, or inside one, reads them.
+                // A pass program's probe takes every shared uniform (its sliders too), as the scopes do.
                 for (const [k, u] of Object.entries(material.uniforms)) {
-                  if (!k.startsWith('u_ds_')) continue;
+                  if (!src.tag && !k.startsWith('u_ds_') && !k.startsWith('u_pass')) continue;
                   if (pm.uniforms[k]) pm.uniforms[k].value = u.value; else pm.uniforms[k] = { value: u.value };
                 }
+                fitProbe(pm, src);
 
                 // Render into the isolated probe scene (never touches the main scene)
                 probeMesh.material = pm;
@@ -1672,10 +1761,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           const curScopeFs = fragmentShaderRef.current;
           const curScopeVs = vertexShaderRef.current;
           if (curScopeFs && curScopeVs) {
-            if (lastScopeFs !== curScopeFs) {
+            if (lastScopeFs !== curScopeFs || lastScopePassVer !== probePassVer) {
               scopeMatCache.forEach(disposeProbeMat);
               scopeMatCache.clear();
               lastScopeFs = curScopeFs;
+              lastScopePassVer = probePassVer;
             }
             for (const scopeId of scopeIds) {
               const scopeNode = nodeMapRef.current.get(scopeId);
@@ -1683,7 +1773,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
               const outputVars = nodeOutputVarMapRef.current.get(scopeNode.id);
               if (!outputVars?.value) continue;
               const varName = outputVars.value;
-              if (!fsDeclares(curScopeFs, varName)) continue;
+              const src = probeSrc(scopeNode.id, varName, curScopeFs);
+              if (!src) continue;
               // Scope node uses min/max params; LFO nodes derive range from offset ± amplitude
               let scopeMin: number;
               let scopeMax: number;
@@ -1697,10 +1788,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                 scopeMax = off + amp;
               }
               // Cache key includes min/max so probe shader is rebuilt when range changes
-              const cacheKey = `${varName}::${scopeMin}::${scopeMax}`;
+              const cacheKey = `${src.tag}${varName}::${scopeMin}::${scopeMax}`;
               let pm = scopeMatCache.get(cacheKey);
               if (!pm) {
-                const probeFs = buildScopeProbeShader(curScopeFs, varName, scopeMin, scopeMax);
+                const probeFs = buildScopeProbeShader(src.fs, varName, scopeMin, scopeMax);
                 const clonedUniforms: Record<string, { value: unknown }> = {};
                 for (const [k, u] of Object.entries(material.uniforms)) {
                   clonedUniforms[k] = { value: u.value };
@@ -1716,6 +1807,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
               for (const [k, u] of Object.entries(material.uniforms)) {
                 if (pm.uniforms[k]) pm.uniforms[k].value = u.value;
               }
+              fitProbe(pm, src);
               probeMesh.material = pm;
               renderer.setRenderTarget(probeRT);
               renderer.render(probeScene, camera);
@@ -1736,10 +1828,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
             const curFs = fragmentShaderRef.current;
             const curVs = vertexShaderRef.current;
             if (curFs && curVs) {
-              if (lastPreviewScopeFs !== curFs) {
+              if (lastPreviewScopeFs !== curFs || lastPreviewPassVer !== probePassVer) {
                 previewScopeMatCache.forEach(disposeProbeMat);
                 previewScopeMatCache.clear();
                 lastPreviewScopeFs = curFs;
+                lastPreviewPassVer = probePassVer;
               }
               const HP_RANGE = 100;
               const VEC2_RANGE = 10;
@@ -1749,11 +1842,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
               if (floatOutputKey) {
                 const outputVars = nodeOutputVarMapRef.current.get(previewId);
                 const varName    = outputVars?.[floatOutputKey];
-                if (varName && fsDeclares(curFs, varName)) {
-                  const cacheKey = `${varName}::-1::1`;
+                const src = varName ? probeSrc(previewId, varName, curFs) : null;
+                if (varName && src) {
+                  const cacheKey = `${src.tag}${varName}::-1::1`;
                   let pm = previewScopeMatCache.get(cacheKey);
                   if (!pm) {
-                    const probeFs = buildScopeProbeShader(curFs, varName, -1, 1);
+                    const probeFs = buildScopeProbeShader(src.fs, varName, -1, 1);
                     const clonedUniforms: Record<string, { value: unknown }> = {};
                     for (const [k, u] of Object.entries(material.uniforms)) clonedUniforms[k] = { value: u.value };
                     pm = new THREE.ShaderMaterial({ vertexShader: curVs, fragmentShader: probeFs, uniforms: clonedUniforms });
@@ -1762,6 +1856,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                   for (const [k, u] of Object.entries(material.uniforms)) {
                     if (pm.uniforms[k]) pm.uniforms[k].value = u.value;
                   }
+                  fitProbe(pm, src);
                   probeMesh.material = pm;
                   renderer.setRenderTarget(probeRT);
                   renderer.render(probeScene, camera);
@@ -1769,10 +1864,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                   renderer.readRenderTargetPixels(probeRT, 0, 0, 1, 1, probeBuf);
                   drawScopeCanvas(`__preview__${previewId}`, probeBuf[0] / 255, -1, 1);
 
-                  const hpCacheKey = `hp::${varName}`;
+                  const hpCacheKey = `hp::${src.tag}${varName}`;
                   let hpm = previewScopeMatCache.get(hpCacheKey);
                   if (!hpm) {
-                    const hpProbeFs = buildHighPrecFloatProbeShader(curFs, varName, HP_RANGE);
+                    const hpProbeFs = buildHighPrecFloatProbeShader(src.fs, varName, HP_RANGE);
                     const hpUniforms: Record<string, { value: unknown }> = {};
                     for (const [k, u] of Object.entries(material.uniforms)) hpUniforms[k] = { value: u.value };
                     hpm = new THREE.ShaderMaterial({ vertexShader: curVs, fragmentShader: hpProbeFs, uniforms: hpUniforms });
@@ -1781,6 +1876,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                   for (const [k, u] of Object.entries(material.uniforms)) {
                     if (hpm.uniforms[k]) hpm.uniforms[k].value = u.value;
                   }
+                  fitProbe(hpm, src);
                   probeMesh.material = hpm;
                   renderer.setRenderTarget(probeRT);
                   renderer.render(probeScene, camera);
@@ -1802,15 +1898,16 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                 const upType = upNode.outputs[upKey]?.type;
                 if (!upType) continue;
                 const upVarName = nodeOutputVarMapRef.current.get(upId)?.[upKey];
-                if (!upVarName || !fsDeclares(curFs, upVarName)) continue;
+                const upSrc = upVarName ? probeSrc(upId, upVarName, curFs) : null;
+                if (!upVarName || !upSrc) continue;
 
                 const probeKey = `__preview__${upId}:${upKey}`;
 
                 if (upType === 'float') {
-                  const upCacheKey = `hp::${upVarName}`;
+                  const upCacheKey = `hp::${upSrc.tag}${upVarName}`;
                   let upm = previewScopeMatCache.get(upCacheKey);
                   if (!upm) {
-                    const upProbeFs = buildHighPrecFloatProbeShader(curFs, upVarName, HP_RANGE);
+                    const upProbeFs = buildHighPrecFloatProbeShader(upSrc.fs, upVarName, HP_RANGE);
                     const upUniforms: Record<string, { value: unknown }> = {};
                     for (const [k, u] of Object.entries(material.uniforms)) upUniforms[k] = { value: u.value };
                     upm = new THREE.ShaderMaterial({ vertexShader: curVs, fragmentShader: upProbeFs, uniforms: upUniforms });
@@ -1819,6 +1916,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                   for (const [k, u] of Object.entries(material.uniforms)) {
                     if (upm.uniforms[k]) upm.uniforms[k].value = u.value;
                   }
+                  fitProbe(upm, upSrc);
                   probeMesh.material = upm;
                   renderer.setRenderTarget(probeRT);
                   renderer.render(probeScene, camera);
@@ -1828,10 +1926,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                   drawScopeCanvas(probeKey, upHpNorm, -HP_RANGE, HP_RANGE);
                 } else if (upType === 'vec2') {
                   // R=x_norm, G=y_norm, B=0, A=1.0 — A must be 1.0 to avoid premultiplied alpha corruption
-                  const upCacheKey = `sv2::${upVarName}`;
+                  const upCacheKey = `sv2::${upSrc.tag}${upVarName}`;
                   let upm = previewScopeMatCache.get(upCacheKey);
                   if (!upm) {
-                    const upProbeFs = buildSimpleVec2ProbeShader(curFs, upVarName, VEC2_RANGE);
+                    const upProbeFs = buildSimpleVec2ProbeShader(upSrc.fs, upVarName, VEC2_RANGE);
                     const upUniforms: Record<string, { value: unknown }> = {};
                     for (const [k, u] of Object.entries(material.uniforms)) upUniforms[k] = { value: u.value };
                     upm = new THREE.ShaderMaterial({ vertexShader: curVs, fragmentShader: upProbeFs, uniforms: upUniforms });
@@ -1840,6 +1938,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                   for (const [k, u] of Object.entries(material.uniforms)) {
                     if (upm.uniforms[k]) upm.uniforms[k].value = u.value;
                   }
+                  fitProbe(upm, upSrc);
                   probeMesh.material = upm;
                   renderer.setRenderTarget(probeRT);
                   renderer.render(probeScene, camera);
@@ -1851,10 +1950,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                   ]);
                 } else if (upType === 'vec3') {
                   // 1 byte per component, range ±1 (sufficient for color/normal vectors)
-                  const upCacheKey = `v3::${upVarName}`;
+                  const upCacheKey = `v3::${upSrc.tag}${upVarName}`;
                   let upm = previewScopeMatCache.get(upCacheKey);
                   if (!upm) {
-                    const upProbeFs = buildVecProbeShader(curFs, upVarName, 'vec3');
+                    const upProbeFs = buildVecProbeShader(upSrc.fs, upVarName, 'vec3');
                     const upUniforms: Record<string, { value: unknown }> = {};
                     for (const [k, u] of Object.entries(material.uniforms)) upUniforms[k] = { value: u.value };
                     upm = new THREE.ShaderMaterial({ vertexShader: curVs, fragmentShader: upProbeFs, uniforms: upUniforms });
@@ -1863,6 +1962,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                   for (const [k, u] of Object.entries(material.uniforms)) {
                     if (upm.uniforms[k]) upm.uniforms[k].value = u.value;
                   }
+                  fitProbe(upm, upSrc);
                   probeMesh.material = upm;
                   renderer.setRenderTarget(probeRT);
                   renderer.render(probeScene, camera);
@@ -1881,14 +1981,15 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
               for (const [outKey, outSocket] of Object.entries(previewNode.outputs)) {
                 if (outSocket.type !== 'vec2' && outSocket.type !== 'vec3') continue;
                 const ownVarName = nodeOutputVarMapRef.current.get(previewId)?.[outKey];
-                if (!ownVarName || !fsDeclares(curFs, ownVarName)) continue;
+                const ownSrc = ownVarName ? probeSrc(previewId, ownVarName, curFs) : null;
+                if (!ownVarName || !ownSrc) continue;
                 const ownProbeKey = `__preview__${previewId}:${outKey}`;
 
                 if (outSocket.type === 'vec2') {
-                  const ownCacheKey = `sv2::${ownVarName}`;
+                  const ownCacheKey = `sv2::${ownSrc.tag}${ownVarName}`;
                   let opm = previewScopeMatCache.get(ownCacheKey);
                   if (!opm) {
-                    const ownProbeFs = buildSimpleVec2ProbeShader(curFs, ownVarName, VEC2_RANGE);
+                    const ownProbeFs = buildSimpleVec2ProbeShader(ownSrc.fs, ownVarName, VEC2_RANGE);
                     const ownUniforms: Record<string, { value: unknown }> = {};
                     for (const [k, u] of Object.entries(material.uniforms)) ownUniforms[k] = { value: u.value };
                     opm = new THREE.ShaderMaterial({ vertexShader: curVs, fragmentShader: ownProbeFs, uniforms: ownUniforms });
@@ -1897,6 +1998,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                   for (const [k, u] of Object.entries(material.uniforms)) {
                     if (opm.uniforms[k]) opm.uniforms[k].value = u.value;
                   }
+                  fitProbe(opm, ownSrc);
                   probeMesh.material = opm;
                   renderer.setRenderTarget(probeRT);
                   renderer.render(probeScene, camera);
@@ -1907,10 +2009,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                     probeBuf[1] / 255 * VEC2_RANGE * 2 - VEC2_RANGE,
                   ]);
                 } else {
-                  const ownCacheKey = `v3::${ownVarName}`;
+                  const ownCacheKey = `v3::${ownSrc.tag}${ownVarName}`;
                   let opm = previewScopeMatCache.get(ownCacheKey);
                   if (!opm) {
-                    const ownProbeFs = buildVecProbeShader(curFs, ownVarName, 'vec3');
+                    const ownProbeFs = buildVecProbeShader(ownSrc.fs, ownVarName, 'vec3');
                     const ownUniforms: Record<string, { value: unknown }> = {};
                     for (const [k, u] of Object.entries(material.uniforms)) ownUniforms[k] = { value: u.value };
                     opm = new THREE.ShaderMaterial({ vertexShader: curVs, fragmentShader: ownProbeFs, uniforms: ownUniforms });
@@ -1919,6 +2021,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                   for (const [k, u] of Object.entries(material.uniforms)) {
                     if (opm.uniforms[k]) opm.uniforms[k].value = u.value;
                   }
+                  fitProbe(opm, ownSrc);
                   probeMesh.material = opm;
                   renderer.setRenderTarget(probeRT);
                   renderer.render(probeScene, camera);
@@ -2022,7 +2125,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       // Particles nodes: new engines (their textures went with the old ones), bound under the new uniforms.
       setGpuParticlesRenderer(null);
       setGpuParticlesRenderer(renderer);
-      if (bindGpuParticles(uniforms, fsSrc)) reset.push('particles');
+      if (bindGpuParticles(uniforms, fsSrc, st.rawGlslShader ? [] : (st.passes ?? []).map(pp => pp.fragmentShader))) reset.push('particles');
       const lastWorking = { vs: vertexShaderRef.current || material.vertexShader, fs: fragmentShaderRef.current || material.fragmentShader };
       material.dispose();
       let next = await compileFresh(vsSrc, fsSrc, uniforms);
@@ -2287,10 +2390,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         mat.uniforms[name] = { value };
       }
     }
-    // Data nodes' textures and row counts, as this shader declares them
-    dataTexRef.current?.bind(activeFragmentShader);
+    // Data nodes' textures and row counts, as this shader declares them (and, with Pass nodes, each
+    // pass program: a Data or Particles node before a Pass is compiled into that pass's program)
+    const passSources = rawGlslShader ? [] : (useNodeGraphStore.getState().passes ?? []).map(pp => pp.fragmentShader);
+    dataTexRef.current?.bind(withPassSources(activeFragmentShader, passSources));
     // Particles nodes: an engine per node, sampled through the uniform each declares
-    bindGpuParticles(mat.uniforms, activeFragmentShader);
+    bindGpuParticles(mat.uniforms, activeFragmentShader, passSources);
     // Always keep the font texture bound after recompile
     if (!mat.uniforms.u_fontTexture) mat.uniforms.u_fontTexture = { value: FONT_TEXTURE };
     else mat.uniforms.u_fontTexture.value = FONT_TEXTURE;

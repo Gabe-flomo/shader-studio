@@ -1,6 +1,23 @@
 # Pass node: render to texture (plan, 2026-10-03)
 
-**Status:** phases 0, 1, 2, 4 and 5 built (Pass node, Sample / Edges / Blur / Glow / Displace (texture), Previous feedback, live and offline rendering, the Passes 1 · Edge glow example, and exported web pages run them: see "What shipped (phase 5)" below). Phases 3 and 6 are next.
+**Status:** phases 0 to 6 built (Pass node, Sample / Edges / Blur / Glow / Displace (texture), Previous feedback, live and offline rendering, exported web pages, inspecting a pass, and Particles born from a Pass: see the "What shipped" sections below). Phase 7 is next.
+
+## What shipped (phase 3, inspecting, 2026-10-04)
+
+**How to inspect a pass.** Everything that reads a node's value now reads it from the program the node runs in, so the tools you use on any node work on the nodes inside a Pass too:
+
+- **The eye** on any card, inside a pass or after it, shows that node alone over the picture (the preview compiles the node's ancestors, Pass nodes and their programs included). The eye on a node before a Pass shows the picture that Pass will store.
+- **Select a card** and its outputs' values at the picture's centre show on it (the node probe). For a node only a Pass draws, the probe is a copy of that pass's program with the node's value written out, drawn with the pass's own `u_resolution` and every shared uniform (its sliders, the pass textures it reads).
+- **Scopes and the eye's waveform** (and the eye's upstream readouts) do the same: a variable the picture's program doesn't declare is read from the pass program that does.
+- **The Pass card** shows its texture live (as before) and now its size in pixels and its GPU time, or "not drawn: nothing reads it".
+- **Performance panel**: one row per pass under *Where the frame goes*, named after the Pass with its Scale ("Pass B · edges (½)"), in its Show passes colour, from the `pass:<slug>` GPU timers; the picture's row is "Picture". **Cost by node** times the whole program list for every variant (each pass at its size, then the picture), so a node inside a pass costs what that pass saves. Pass nodes aren't bypassed (a texture can't pass through); their rows above are their cost.
+- **Show passes** stays the whole graph's view while the eye previews part of it (the store keeps `programMap`, from a second compile of the whole graph only while previewing a graph with Pass or Agents nodes), so the toolbar button doesn't vanish and the tints don't change under the eye.
+
+**The limit lifted: things before a Pass.** A Data node or a Particles node placed before a Pass is compiled into that pass's program. They used to be found only in the picture's program (so a Particles node feeding a Pass drew nothing in it). Now the app and exported pages look for them in every pass program: Data textures are bound from all programs' sources; the Particles engine finds the node in a pass program, steps it before the passes draw, and its texture is a shared sampler every program reads; a Particles node with wired settings is probed from the program it is in. Graphs without Pass nodes bind exactly as before (the same single source).
+
+**Under the hood.** `compilePassGraph` merges each pass program's node variables into `nodeOutputVars` (the picture's win; slugs are shared so the names agree). ShaderCanvas's probes pick their program with `probeSrc` (the picture's when it declares the variable, else the pass whose `nodeIds` hold the node) and key their caches by it. The cost measurer (`ShaderCostMeasurer`) takes an optional pass list.
+
+**Not done.** The plain node probe of a node in the picture's own program still carries only time, resolution, the mouse, Data and pass textures (a node whose sliders are uniforms reads them as 0 there, as before this phase); scopes and pass-program probes take every uniform. Trail-step programs (Agents) aren't probed.
 
 ## What shipped (phase 5, websites, 2026-10-04)
 

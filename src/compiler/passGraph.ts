@@ -325,6 +325,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     });
     const errors: string[] = [];
     const passes: PassProgram[] = [];
+    // Each pass program's node variables (probes, scopes: a node only a pass draws is read from that program).
+    const passVars = new Map<string, Record<string, string>>();
     const merged = {
       paramUniforms: {} as Record<string, number | number[]>, paramBindings: {} as Record<string, string>,
       textureUniforms: {} as Record<string, string>, audioUniforms: {} as Record<string, string>,
@@ -355,6 +357,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
       };
       const r = compileList([...c.nodes.values(), sink]);
       absorb(r);
+      for (const [nid, vars] of r.nodeOutputVars) if (nid !== sink.id && !passVars.has(nid)) passVars.set(nid, vars);
       const slug = slugs.get(id)!;
       const label = typeof pass.params.label === 'string' && pass.params.label.trim() ? pass.params.label.trim() : 'Pass';
       if (countSamplers(r.fragmentShader) > MAX_SAMPLERS) errors.push(`Node ${id}: ${label} samples more than ${MAX_SAMPLERS} textures (images, videos, passes, feedback) in one program`);
@@ -466,8 +469,9 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
       vertexShader: VERTEX_SHADER,
       fragmentShader: fin.fragmentShader,
       success: true,
-      // Probes read the final program only (phase 3 adds pass programs).
-      nodeOutputVars: fin.nodeOutputVars,
+      // Probes and scopes: the final program's variables, and those of nodes only a pass program has
+      // (slugs are shared, so a node's variables have the same names in every program it lands in).
+      nodeOutputVars: new Map([...passVars, ...fin.nodeOutputVars]),
       ...merged,
       nodeSlugMap: slugs,
       passes,

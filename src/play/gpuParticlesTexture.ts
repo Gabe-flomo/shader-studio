@@ -33,19 +33,34 @@ blank.needsUpdate = true;
 let renderer: THREE.WebGLRenderer | null = null;
 let host: GpHost | null = null;
 let shader = '';
+/**
+ * With Pass nodes: the pass programs' sources (docs/pass-node-plan.md). A Particles node placed before a
+ * Pass is compiled into that pass's program, not the picture's: it is found there, and its probe draws
+ * from there. Empty for every other graph.
+ */
+let passSources: readonly string[] = [];
 let warned = false;
 const externals = new Map<string, THREE.ExternalTexture>();
 
 /** The graph compiled again with GPP_PROBE, on the live material's uniforms (one for all nodes). */
-let probe: { material: THREE.ShaderMaterial; source: THREE.ShaderMaterial; fs: string; scene: THREE.Scene; camera: THREE.Camera } | null = null;
+type Probe = { material: THREE.ShaderMaterial; source: THREE.ShaderMaterial; fs: string; scene: THREE.Scene; camera: THREE.Camera };
+let probe: Probe | null = null;
+/** The same for a pass program a Particles node is compiled into (by its source); none without Pass nodes. */
+const passProbes = new Map<string, Probe>();
 /** Each node's probe targets and its last values read back. */
 interface NodeProbe { reader: GpReadback; valuesRT: THREE.WebGLRenderTarget | null; fieldRT: THREE.WebGLRenderTarget | null; volRT: THREE.WebGLRenderTarget | null }
 const nodeProbes = new Map<string, NodeProbe>();
 const PROBE_PIXELS = 16;
 
+function disposeProbe(p: Probe): void {
+  p.material.dispose(); (p.scene.children[0] as THREE.Mesh | undefined)?.geometry.dispose();
+}
+
 function dropProbe(): void {
-  if (probe) { probe.material.dispose(); (probe.scene.children[0] as THREE.Mesh | undefined)?.geometry.dispose(); }
+  if (probe) disposeProbe(probe);
   probe = null;
+  for (const p of passProbes.values()) disposeProbe(p);
+  passProbes.clear();
   for (const np of nodeProbes.values()) { np.reader.dispose(); np.valuesRT?.dispose(); np.fieldRT?.dispose(); np.volRT?.dispose(); }
   nodeProbes.clear();
 }
@@ -77,11 +92,15 @@ export function releaseGpuParticlesRenderer(r: THREE.WebGLRenderer): void {
 /**
  * After a compile: find the shader's Particles nodes and give each sampler a
  * uniform entry (blank until its first frame). True when there are any.
+ * `passes`: with Pass nodes, the pass programs' sources, searched as well
+ * (a Particles node before a Pass is in that pass's program).
  */
-export function bindGpuParticles(uniforms: Record<string, THREE.IUniform>, fragmentShader: string): boolean {
-  shader = fragmentShader;
+export function bindGpuParticles(uniforms: Record<string, THREE.IUniform>, fragmentShader: string, passes?: readonly string[]): boolean {
+  passSources = passes?.length ? passes : [];
+  shader = passSources.length ? [fragmentShader, ...passSources].join('\n') : fragmentShader;
+  for (const [fs, p] of passProbes) if (!passSources.includes(fs)) { disposeProbe(p); passProbes.delete(fs); }
   const h = ensureHost();
-  const bindings = h ? h.bind(fragmentShader) : [];
+  const bindings = h ? h.bind(shader) : [];
   const want = new Set(bindings.map(b => b.uniform));
   for (const [name, ext] of externals) if (!want.has(name)) { ext.sourceTexture = null; externals.delete(name); }
   for (const b of bindings) {
@@ -139,25 +158,45 @@ export function particleSoundOf(source: string): GpSoundInput | null {
   return s ? { freq: s.freq, wave: s.wave, sampleRate: s.sampleRate } : null;
 }
 
-/** The probe copy of `material` (rebuilt when the material or its shader changes); null when no node needs one. */
-function ensureProbe(material: THREE.ShaderMaterial, bindings: GpBinding[]): typeof probe {
-  if (!bindings.some(b => b.probe)) { if (probe) dropProbe(); return null; }
-  if (probe && probe.source === material && probe.fs === material.fragmentShader) return probe;
-  dropProbe();
+function makeProbe(material: THREE.ShaderMaterial, fs: string): Probe {
   const m = new THREE.ShaderMaterial({
-    vertexShader: material.vertexShader, fragmentShader: material.fragmentShader, uniforms: material.uniforms,
+    vertexShader: material.vertexShader, fragmentShader: fs, uniforms: material.uniforms,
     defines: { GPP_PROBE: 1 }, depthTest: false, depthWrite: false,
   });
   const scene = new THREE.Scene();
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), m);
   mesh.frustumCulled = false;
   scene.add(mesh);
-  probe = { material: m, source: material, fs: material.fragmentShader, scene, camera: new THREE.Camera() };
+  return { material: m, source: material, fs, scene, camera: new THREE.Camera() };
+}
+
+/** The probe copy of `material` (rebuilt when the material or its shader changes); null when no node needs one. */
+function ensureProbe(material: THREE.ShaderMaterial, bindings: GpBinding[]): typeof probe {
+  if (!bindings.some(b => b.probe)) { if (probe) dropProbe(); return null; }
+  if (probe && probe.source === material && probe.fs === material.fragmentShader) return probe;
+  if (probe) disposeProbe(probe);
+  probe = makeProbe(material, material.fragmentShader);
   return probe;
 }
 
+/**
+ * The probe a node's wired values are drawn with: the picture's, or (a node the picture's program
+ * doesn't have: it is before a Pass) a probe copy of the pass program it is compiled into.
+ */
+function probeFor(material: THREE.ShaderMaterial, pr: Probe | null, b: GpBinding): Probe | null {
+  if (!passSources.length) return pr;
+  const decl = `uniform sampler2D ${b.uniform};`;
+  if (material.fragmentShader.includes(decl)) return pr;
+  const fs = passSources.find(s => s.includes(decl));
+  if (!fs) return pr;
+  let p = passProbes.get(fs);
+  if (p && p.source !== material) { disposeProbe(p); p = undefined; }
+  if (!p) { p = makeProbe(material, fs); passProbes.set(fs, p); }
+  return p;
+}
+
 /** Draw a node's probe (its wired values, its field) and hand back the latest values read and the field. */
-function runProbe(r: THREE.WebGLRenderer, pr: NonNullable<typeof probe>, b: GpBinding, width: number, height: number, vol: { centre: number[]; half: number }): { values: Float32Array | null; field: GpField | null; volume: GpField | null } | null {
+function runProbe(r: THREE.WebGLRenderer, pr: Probe, b: GpBinding, width: number, height: number, vol: { centre: number[]; half: number }): { values: Float32Array | null; field: GpField | null; volume: GpField | null } | null {
   const spec = b.probe;
   if (!spec) return null;
   let np = nodeProbes.get(b.uniform);
@@ -247,7 +286,7 @@ export function drawGpuParticles(material: THREE.ShaderMaterial, o: { width: num
     ...o,
     read: name => readUniform(uniforms, name),
     texture: name => nodePicture(r, uniforms, name),
-    probe: (b, vol) => (pr ? runProbe(r, pr, b, o.width, o.height, vol) : null),
+    probe: (b, vol) => { const p = pr ? probeFor(material, pr, b) : null; return p ? runProbe(r, p, b, o.width, o.height, vol) : null; },
     sound: particleSoundOf,
   });
   // The engine bound its own programs, framebuffers and textures: three.js must not trust its cache.

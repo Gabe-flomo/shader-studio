@@ -50,7 +50,7 @@ export function CanvasToolbar({
   const perfRef = useRef<HTMLSpanElement>(null);
   const [perfOpen, setPerfOpen] = useState(false);
   // Show passes: only offered when the graph compiles into more than one program (Pass nodes, Agents).
-  const multiProgram = useNodeGraphStore(s => !!(s.passes?.length || s.agents));
+  const multiProgram = useNodeGraphStore(s => !!(s.programMap?.passes?.length || s.programMap?.agents));
   const showPasses = useNodeGraphStore(s => s.showPasses);
   const setShowPasses = useNodeGraphStore(s => s.setShowPasses);
 

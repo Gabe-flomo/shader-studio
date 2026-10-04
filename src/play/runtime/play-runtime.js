@@ -1191,14 +1191,16 @@ void main() {
     // each picture, their textures bound to the samplers the nodes declare. Without WebGL2 float targets the
     // samplers read nothing and each node passes its picture through.
     const GPK = typeof SSKit !== 'undefined' && SSKit.gpuParticles ? SSKit.gpuParticles : null;
-    const gpUses = !bgOnly && B.fragmentShader.indexOf('// gpu-particles ') >= 0;
+    // With Pass nodes, a Particles node before a Pass is compiled into that pass's program: found there too.
+    const gpSrc = graphPasses ? B.fragmentShader + graphPasses.map(p => '\n' + p.fragmentShader).join('') : B.fragmentShader;
+    const gpUses = !bgOnly && gpSrc.indexOf('// gpu-particles ') >= 0;
     const gpHostR = gpUses && gl2 && GPK ? GPK.host(gl) : null;
     const gpBlank = [];
-    if (gpHostR) gpHostR.bind(B.fragmentShader);
+    if (gpHostR) gpHostR.bind(gpSrc);
     if (gpUses && (!gpHostR || gpHostR.unsupported)) {
       const re = /uniform\s+sampler2D\s+(\w+)\s*;\s*\/\/ gpu-particles /g;
       let m;
-      while ((m = re.exec(B.fragmentShader))) gpBlank.push(m[1]);
+      while ((m = re.exec(gpSrc))) if (gpBlank.indexOf(m[1]) < 0) gpBlank.push(m[1]);
       console.warn('[Playfield] ' + (gpHostR ? gpHostR.unsupported : 'Particles need WebGL2; the picture shows without them.'));
     }
     // The step the next picture's particles take (0 while paused), and whether they start over (a new render).
@@ -1209,6 +1211,20 @@ void main() {
     let gpProbeProg = null;
     if (gpHostR && !gpHostR.unsupported && B.fragmentShader.indexOf('#ifdef GPP_PROBE') >= 0) {
       try { gpProbeProg = link(VS, '#define GPP_PROBE 1\n' + B.fragmentShader); } catch (e) { console.warn('[Playfield] Particles: wired settings are not read here (' + e.message + ').'); }
+    }
+    // A Particles node only a pass program has (it is before a Pass): its probe is that program, compiled the same way.
+    const gpPassProbes = new Map();
+    function gpProbeProgFor(b) {
+      const decl = 'uniform sampler2D ' + b.uniform + ';';
+      if (!graphPasses || B.fragmentShader.indexOf(decl) >= 0) return gpProbeProg;
+      const pass = graphPasses.find(p => p.fragmentShader.indexOf(decl) >= 0 && p.fragmentShader.indexOf('#ifdef GPP_PROBE') >= 0);
+      if (!pass) return gpProbeProg;
+      if (!gpPassProbes.has(pass.slug)) {
+        let pp = null;
+        try { pp = link(VS, '#define GPP_PROBE 1\n' + pass.fragmentShader); } catch (e) { console.warn('[Playfield] Particles: wired settings are not read here (' + e.message + ').'); }
+        gpPassProbes.set(pass.slug, pp);
+      }
+      return gpPassProbes.get(pass.slug);
     }
     const gpProbes = new Map();
     const gpTarget = (w, h, internal, type, filter) => {
@@ -1221,11 +1237,12 @@ void main() {
     };
     function gpProbeRun(b, W, H, vol) {
       const spec = b.probe;
-      if (!gpProbeProg || !spec) return null;
+      const probeProg = gpProbeProgFor(b);
+      if (!probeProg || !spec) return null;
       let pr = gpProbes.get(b.uniform);
       if (!pr) { pr = { vals: null, field: null, vol: null, reader: GPK.readback(gl) }; gpProbes.set(b.uniform, pr); }
       const prevFb = gl.getParameter(gl.FRAMEBUFFER_BINDING);
-      gl.useProgram(gpProbeProg); locProg = gpProbeProg;
+      gl.useProgram(probeProg); locProg = probeProg;
       bindPictureInputs(W, H);
       for (const bb of gpHostR.bindings) bindSampler(bb.uniform, blank);
       const slots = GPK.slots(spec).slice(0, 16);
@@ -2756,6 +2773,8 @@ void main() {
         probe: (b, vol) => gpProbeRun(b, W, H, vol), sound: gpSoundIn,
       }) : [];
       gpDt = 0; gpReset = false;
+      // With Pass nodes the particles' textures are shared samplers too, so a pass program that has the node reads them.
+      if (graphPasses) for (const o of gpOut) graphTex.set(o.uniform, o.texture || null);
       let target = null;
       if (stateful || echoCfg) {
         if (stateful && !pingPong) pingPong = [makeTarget(W, H), makeTarget(W, H)];
