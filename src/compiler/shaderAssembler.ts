@@ -575,6 +575,27 @@ interface FieldUnit {
 }
 
 
+/**
+ * Ids of the nodes whose Texture output is read (anywhere: inside groups, and through a group's
+ * output port). Texture Input and Video gained that output in phase 7; only those it lists
+ * declare the `_px` their sampling nodes measure with.
+ */
+function wiredTextureOutputs(nodes: GraphNode[]): Set<string> {
+  const out = new Set<string>();
+  const visit = (list: GraphNode[]) => {
+    for (const n of list) {
+      for (const inp of Object.values(n.inputs ?? {})) if (inp.connection?.outputKey === 'texture') out.add(inp.connection.nodeId);
+      const sg = n.params?.subgraph as SubgraphData | undefined;
+      if (sg?.nodes) {
+        visit(sg.nodes);
+        for (const p of sg.outputPorts ?? []) if (p.fromOutputKey === 'texture') out.add(p.fromNodeId);
+      }
+    }
+  };
+  visit(nodes);
+  return out;
+}
+
 export interface ShaderAssemblerOptions {
   /** Output variables for node ids that exist outside the compiled node list. */
   seedOutputs?: Map<string, Record<string, string>>;
@@ -599,6 +620,12 @@ export interface ShaderAssemblerOptions {
    * to this pixel (a_pos = g_uv, heading 0, species 0). Only that preview passes it.
    */
   agentEye?: boolean;
+  /**
+   * A pass program's Scale (compiler/passGraph.ts): its u_resolution is the picture's times this,
+   * so a Texture Input's or Video's own texture measures one picture pixel as Scale / u_resolution.
+   * Only the pass path passes it, and it is read only when such a texture output is wired.
+   */
+  pictureScale?: number;
 }
 
 /** See ShaderAssemblerOptions.agentProgram. */
@@ -709,6 +736,10 @@ export class ShaderAssembler {
   /** ShaderAssemblerOptions.agentProgram (Agents path only). */
   private agentProgram: AgentProgramOptions | undefined;
   private agentEye = false;
+  /** Pass programs: the picture's scale (ShaderAssemblerOptions.pictureScale). */
+  private pictureScale = 1;
+  /** Texture Input / Video nodes (original ids) whose Texture output something reads (phase 7). */
+  private textureOutWired: Set<string> = new Set();
   // ── Field sockets (see compileFieldFunction) ──
   /** Top-level node id → the slug its main() copy was compiled under; a field function reuses it so uniform names match. */
   private topSlugs = new Map<string, string>();
@@ -741,6 +772,8 @@ export class ShaderAssembler {
     }
     this.agentProgram = opts?.agentProgram;
     this.agentEye = opts?.agentEye === true;
+    this.pictureScale = opts?.pictureScale ?? 1;
+    this.textureOutWired = wiredTextureOutputs(allNodes);
     if (opts?.slugs) {
       this.fixedSlugs = opts.slugs;
       for (const s of opts.slugs.values()) this.usedSlugs.add(s);
@@ -1388,6 +1421,7 @@ export class ShaderAssembler {
               Object.assign(this.paramUniforms, subUniforms);
               Object.assign(this.paramBindings, subBindings);
               subDef.declarationsFor?.(patchedSub).forEach(d => this.declarations.add(d));
+              this.declareTexturePx(subNode, originalId, subNode.id);
               const subResult = subDef.generateGLSL(patchedSub, subInputVars);
               // For carry-mode nodes: strip the type from the declaration so we get
               // `    varName = f(varName);` instead of `    T varName = f(varName);`
@@ -3847,6 +3881,18 @@ export class ShaderAssembler {
     return patchedNode;
   }
 
+  /**
+   * A Texture Input's or Video's Texture output (phase 7) feeds a sampling node: those measure
+   * offsets in picture pixels with `<sampler>_px`, so it is defined here, from u_resolution (a pass
+   * program's is the picture's times its Scale). Only when the output is wired: every other
+   * shader is the same text as before.
+   */
+  private declareTexturePx(node: GraphNode, origId: string, slug: string): void {
+    if ((node.type !== 'textureInput' && node.type !== 'videoInput') || !this.textureOutWired.has(origId)) return;
+    const sampler = node.type === 'textureInput' ? `u_tex_${slug}` : `u_vid_${slug}`;
+    this.declarations.add(`#define ${sampler}_px (vec2(${formatGlslLiteral(this.pictureScale, 'float')}) / u_resolution)`);
+  }
+
   /** Uniform-patch a compiler-built group node's own params (named by its slug, bound by its id). */
   private patchGroupSelf(node: GraphNode, nodeSlug: string): GraphNode {
     const def = getNodeDefinitionFor(node);
@@ -3864,11 +3910,17 @@ export class ShaderAssembler {
         if (nodeComment) {
           for (const line of nodeComment.split('\n')) this.mainCode.push(`    // ${line}\n`);
         }
-        const sluggedNode = { ...node, id: nodeSlug };
+        let sluggedNode = { ...node, id: nodeSlug };
+        // A param driven by a wire (`__param_<key>`): only inside groups until phase 7, where a plain
+        // group holding a Pass is opened onto the top level (compiler/passGroups.ts) with its param sockets.
+        for (const [k, v] of Object.entries(inputVars)) {
+          if (k.startsWith('__param_') && v) sluggedNode = { ...sluggedNode, params: { ...sluggedNode.params, [k.slice('__param_'.length)]: v } };
+        }
         const { patchedNode, uniforms: nodeUniforms, bindings: nodeBindings } = patchNodeParamsForUniforms(sluggedNode, def, fn => this.functions.add(fn), node.id);
         Object.assign(this.paramUniforms, nodeUniforms);
         Object.assign(this.paramBindings, nodeBindings);
         def.declarationsFor?.(patchedNode).forEach(d => this.declarations.add(d));
+        this.declareTexturePx(node, node.id, nodeSlug);
         // An Expression Block's / custom function's live sliders were resolved as literals before the
         // patch above made them uniforms: read the uniform, so a drag (or a Play control) moves it.
         inputVars = sliderUniformVars(node, patchedNode, inputVars);

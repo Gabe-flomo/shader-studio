@@ -124,17 +124,17 @@ describe('Pass node compile', () => {
     expect(bad.errors!.join(' ')).toMatch(/Previous/);
   });
 
-  it('rejects a Pass inside a group', () => {
+  it('rejects a Pass inside an iterated group (a plain one opens: passP7.test.ts)', () => {
     const inner = [n('uv', 'n_1', 0, 0), n('pass', 'n_2', 0, 0, {}, { color: port('c') })];
     const nodes = [
       n('uv', 'node_1', 0, 0),
       n('floatToVec3', 'node_3', 0, 0),
-      group('group_9', 0, 0, { label: 'G', iterations: 1, inputs: [{ key: 'c', type: 'vec3', label: 'C', from: ['node_3', 'rgb'] }], outputs: [{ key: 'o', type: 'vec3', label: 'O', from: ['n_2', 'color'] }], nodes: inner }),
+      group('group_9', 0, 0, { label: 'G', iterations: 3, inputs: [{ key: 'c', type: 'vec3', label: 'C', from: ['node_3', 'rgb'] }], outputs: [{ key: 'o', type: 'vec3', label: 'O', from: ['n_2', 'color'] }], nodes: inner }),
       n('output', 'node_6', 0, 0, {}, { color: ['group_9', 'o'] }),
     ];
     const r = compileGraph({ nodes });
     expect(r.success).toBe(false);
-    expect(r.errors![0]).toBe('Node group_9: Pass nodes go at the top level for now');
+    expect(r.errors![0]).toMatch(/^Node group_9: "G" repeats its nodes \(Iterations above 1\)/);
   });
 
   it(`allows up to ${MAX_PASSES} passes`, () => {

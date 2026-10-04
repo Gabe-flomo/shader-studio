@@ -9,7 +9,7 @@
 // lib/passRunner.ts runs too, so the two can't drift.
 //
 // Top-level names start with `ph` (the kit's one-scope rule).
-import { ppDrawn, ppPixel, ppPrevBound, ppSize, ppSplitsForParticles, ppStaged, ppTargetKey } from './passPlan.js';
+import { ppDrawn, ppPixel, ppPrevBound, ppRepeat, ppSize, ppSplitsForParticles, ppStaged, ppTargetKey } from './passPlan.js';
 
 /** A pass's texture settings as GL enums. */
 function phWrap(gl, w) {
@@ -18,7 +18,8 @@ function phWrap(gl, w) {
 
 /**
  * passes: the bundle's graphPasses, in drawing order: { slug, label, fragmentShader, scale,
- * format, filter, wrap, previous, live, afterAgents?, beforeParticles?, u: { tex, prev } } (u: the sampler names).
+ * format, filter, wrap, previous, live, afterAgents?, beforeParticles?, repeat?, u: { tex, prev, iter? } } (u: the sampler names;
+ * iter, a repeated pass's step uniform).
  * env: {
  *   link(fragmentShader) → WebGLProgram: compiled as the page compiles its picture (throws on error),
  *   use(program, w, h): make it current with every input the picture has, u_resolution = w × h,
@@ -41,6 +42,8 @@ export function phCreate(gl, passes, env) {
   for (const e of entries) {
     env.textures.set(e.u.tex, null); env.textures.set(e.u.prev, null);
     env.vec2s.set(e.u.tex + '_px', [1, 1]); env.vec2s.set(e.u.prev + '_px', [1, 1]);
+    // Repeat: its step ([step, count]), only for a repeated pass (it alone declares it).
+    if (e.u.iter) env.vec2s.set(e.u.iter, [0, ppRepeat(e)]);
   }
   const targets = new Map();
 
@@ -98,14 +101,20 @@ export function phCreate(gl, passes, env) {
       for (const d of ppStaged(drawn, stage, part)) {
         const t = targets.get(d.slug);
         if (!d.program) { env.textures.set(d.u.tex, null); continue; }
-        gl.bindFramebuffer(gl.FRAMEBUFFER, t.cur.fb);
-        gl.viewport(0, 0, t.w, t.h);
-        env.use(d.program, t.w, t.h);
-        env.quad();
-        env.done();
-        env.textures.set(d.u.tex, t.cur.tex);
-        // Ping-pong: this frame's picture is the next frame's Previous.
-        if (t.prev) { const c = t.cur; t.cur = t.prev; t.prev = c; }
+        // Repeat (phase 7): N draws, each reading the one before through Previous.
+        const n = ppRepeat(d);
+        for (let i = 0; i < n; i++) {
+          if (d.u.iter) env.vec2s.set(d.u.iter, [i, n]);
+          if (i > 0 && t.prev) env.textures.set(d.u.prev, t.prev.tex);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, t.cur.fb);
+          gl.viewport(0, 0, t.w, t.h);
+          env.use(d.program, t.w, t.h);
+          env.quad();
+          env.done();
+          env.textures.set(d.u.tex, t.cur.tex);
+          // Ping-pong: this frame's picture is the next frame's Previous (and the next repeat's).
+          if (t.prev) { const c = t.cur; t.cur = t.prev; t.prev = c; }
+        }
       }
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     },

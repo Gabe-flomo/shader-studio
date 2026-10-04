@@ -49,6 +49,16 @@ export function ppPrevBound(drawn, stage, part) {
   return drawn.filter(p => order(p) >= now);
 }
 
+/**
+ * How many times a pass draws this frame (Repeat, phase 7): 1 unless its `repeat` says more,
+ * at most 64. Each draw after the first reads the one before through its Previous; the
+ * first reads the frame before's last. Both hosts set the step uniform ([step, count]) before each draw.
+ */
+export function ppRepeat(p) {
+  const n = typeof p.repeat === 'number' && isFinite(p.repeat) ? Math.round(p.repeat) : 1;
+  return Math.max(1, Math.min(64, n));
+}
+
 /** One picture pixel in a texture's 0–1 coordinates (the `_px` uniforms). */
 export function ppPixel(w, h) {
   return [1 / Math.max(1, w), 1 / Math.max(1, h)];

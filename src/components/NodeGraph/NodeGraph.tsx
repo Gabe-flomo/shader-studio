@@ -2056,7 +2056,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     size="sm"
                     ariaLabel="Input type"
                     value={addingGroupInput.type}
-                    options={(['float', 'vec2', 'vec3', 'vec4'] as const).map(t => ({ value: t, label: t }))}
+                    // texture: a Pass's (or an image's) texture wired in from outside, for Sample / Edges / Blur inside (passes phase 7).
+                    options={(['float', 'vec2', 'vec3', 'vec4', 'texture'] as const).map(t => ({ value: t, label: t }))}
                     onChange={t => setAddingGroupInput(prev => prev ? { ...prev, type: t } : null)}
                   />
                   <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>

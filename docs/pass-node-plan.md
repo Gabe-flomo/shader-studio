@@ -1,6 +1,39 @@
 # Pass node: render to texture (plan, 2026-10-03)
 
-**Status:** phases 0 to 6 built (Pass node, Sample / Edges / Blur / Glow / Displace (texture), Previous feedback, live and offline rendering, exported web pages, inspecting a pass, and Particles born from a Pass: see the "What shipped" sections below). Phase 7 is next.
+**Status:** phases 0 to 7 built (Pass node, Sample / Edges / Blur / Glow / Displace (texture), Previous feedback, live and offline rendering, exported web pages, inspecting a pass, Particles born from a Pass, and phase 7's Passes in plain groups, Repeat and image textures: see the "What shipped" sections below).
+
+## What shipped (phase 7, 2026-10-04)
+
+**In plain words.**
+- **A Pass can live inside a plain group**, and texture wires can go in and out of one. A plain group is one that runs once (Iterations 1), isn't sealed, and isn't a 3D group. The group's inputs and outputs take `texture` (the group view's Add input has a texture type; an output takes whatever type is wired to it). Copy a group with a Pass in it and each copy draws a Pass of its own.
+- **Repeat N times.** A Pass has a **Repeat** setting (1 to 64, default 1). With N above 1 it draws N times each frame. Each draw reads the one before through **Previous**; the first reads the frame before's last. Two new outputs help: **Step** says which repeat is drawing (0 to N−1, and 0 when Repeat is 1), and **Steps** is N as a number. This is what jump-flood distance fields, wide blurs in small steps, and simulations stepped several times a frame need. The card shows `×N a frame` and its cost as `N × one draw = total ms GPU`, and the Performance row reads "Pass · … ×N".
+- **Texture Input and Video Input have a Texture output.** It is the image or video itself, ready for Sample, Edges, Blur, Glow and Displace (texture) and for Particles' Emit from, with no copy Pass in between. It covers the picture as Stretch does (Fit doesn't apply to it).
+- **Jump flood (texture)** is a new sampling node: one step of a jump flood (a 3×3 read at Reach picture pixels that keeps the nearest stored seed). It is what Passes 7 runs inside a repeated Pass.
+
+**Where a Pass still can't go, and why** (each gets an error on the group naming it):
+- An iterated group (Iterations above 1, or driven by Play): the Pass would be another whole picture drawn on every repeat. Use the Pass's own Repeat instead.
+- A sealed group: it stands for one closed function.
+- A 3D group (Scene, March loop, GI lit march, Space warp): its nodes run as a distance function at every ray step.
+- An Agents group: its nodes run once per walker.
+- A bypassed group with a Pass inside.
+- A published node: publishing refuses a group with a Pass, a sampling node wired to a texture, or a texture port. A published node is one GLSL function, and it can't take a texture as a wire.
+
+**Under the hood.**
+- *Groups* (`compiler/passGroups.ts`, only for graphs with a Pass inside a group). Each plain group holding a Pass is opened onto the top level before the cut. Its nodes keep their ids; a clash gets `<groupId>__` in front. Its port wires are followed to what feeds the group and to what reads it. Its overrides (`innerId::key`) are applied. Its wired param sockets (`ps_<innerId>_<key>`) drive the param through the node's `__param_<key>` input, as they do inside a group. The top-level compile now reads a `__param_` input the way the group compile always did. No top-level node had one before, which the golden snapshots confirm. After the compile, the group's id gets its outputs' variables (so its card and probes read them), and joins the program lists its nodes are in (for Show passes). Groups without a Pass compile inline exactly as before. A texture through a plain group's port was already only a sampler name passed along; a group whose texture port carries nothing compiles to the same text as one without the port (tested).
+- *Repeat.* `PassProgram.repeat` is present only above 1. A repeated Pass declares `uniform vec2 u_passiter_<slug>` (x the step, y the count) and nothing else changes. Step reads `.x`; with Repeat 1, Step is `0.0` and Steps a literal. Repeat is `compileTime` (never a uniform), so a Pass saved before phase 7 compiles to the same programs as one with Repeat 1 (tested). `kit/passPlan.js ppRepeat` is the count both hosts use: `lib/passRunner.ts` and `kit/passHost.js` loop N draws. Before each draw they set the step uniform, and from the second draw on they point Previous at the draw before. The GPU timer covers all N. The bundle's pass carries `repeat` and `u.iter` only when repeated. Offline renders take the same code path, so they are deterministic. Outside the pass, a repeated pass's Previous is the draw before its last one (two buffers ping-pong), not the frame before.
+- *Image textures.* The new output's variable is the node's own sampler (`u_tex_<slug>`, `u_vid_<slug>`). The sampling nodes measure offsets with `<sampler>_px`. The compiler defines it only when something reads the Texture output (`#define u_tex_<slug>_px (vec2(scale) / u_resolution)`, where scale is the pass program's Scale, so it is always one picture pixel), so no runtime change was needed in either host. Unwired, the node compiles exactly as before. Old saved nodes gain the new outputs (Texture, and the Pass's Step and Steps) on load through `syncSockets`, which only changes the card. Emit from finds a video's texture too: the app sizes it by `videoWidth`, and pages look it up among their videos.
+- *Examples with a picture.* `ExampleGraph.images` now also takes a Texture Input's id (no slot), which sets its card thumbnail.
+
+**Examples (the Passes folder).** Every node has a plain-language note; Expression Blocks explain each named line.
+- **Passes 7 · Jump-flood distance field**: shapes become seeds, and a ½ Pass (Nearest, half float, Repeat 10) floods them with Jump flood (texture) at a reach that halves each Step. A full-size read gives the distance, drawn as glowing contour rings.
+- **Passes 8 · Edges straight from a picture**: a Texture Input (ridges at dusk, bundled) wired straight into Edges and Blur (texture). It is one program with no Pass.
+- **Passes 9 · A reusable blur group**: a "Soft glow" group (a Pass and a Blur (texture)) used twice on a neon sign. The first copy is a ½ tight halo; the second, fed by the first, is a ⅛ wide bloom.
+
+**Zero-change.** The golden shader snapshots have no updates. The golden test now leaves out the whole Passes folder, because Passes 8 has no Pass node but uses the new output. The Pass examples 1 to 6 compile to the same programs; the tests compare a Pass without `repeat` to one with Repeat 1. The play-outputs golden (`src/play/__tests__/golden`) gained entries for the three new examples only.
+
+**Checked.** All 319 examples load and compile on the GPU (headless Chrome, ANGLE Metal, M3 Pro) with no GLSL errors. The three new examples were screenshotted in the app and as exported pages (a repeated pass, a Pass in a group and an image texture on a page). The eye preview of a node inside a group that holds a Pass draws that node.
+
+**Not done.** A Pass inside a nested plain group opens too, but only plain groups can hold one. Repeat's Step isn't drivable from Play (Repeat is compile-time). A Texture Input's Texture ignores Fit.
 
 ## What shipped (phase 6, particles from a Pass, 2026-10-04)
 
@@ -159,8 +192,8 @@ Sampling nodes are ordinary `NodeDefinition`s whose `texture` input resolves to 
 
 | Where | v1 |
 |---|---|
-| Pass inside any group (plain, scene, march loop, iterated, published/user node) | **Not allowed.** Error on the node: "Pass nodes go at the top level for now". A Pass inside an iterated group would mean N draws per frame. That's a separate feature ("repeat this pass N times"), wanted for wide blurs, JFA and reaction-diffusion; see later phases. |
-| Sampling node inside a plain/scene/iterated/march-loop group, fed through a group port | Not in v1: `texture` sockets can't cross group ports, and the wire refuses to connect. Later phase: a texture port is just a sampler name, so plain groups can pass one through. |
+| Pass inside any group (plain, scene, march loop, iterated, published/user node) | v1: **not allowed** ("Pass nodes go at the top level for now"). **Phase 7:** allowed in a plain group (opened for the cut); the other kinds get an error saying why. Repeat N is the Pass's own setting. |
+| Sampling node inside a plain/scene/iterated/march-loop group, fed through a group port | v1: not offered. **Phase 7:** a plain group's ports take `texture` (a sampler name passed through). |
 | Group (any kind, no Pass inside) upstream or downstream of a Pass | Fine: it's a node in whichever program needs it. |
 | Publishing a group that contains a Pass or sampling node | Blocked with a message (flattenSubgraph bakes one function, and can't hold a sampler parameter). |
 
@@ -230,7 +263,7 @@ This depends on the GPU Particles node (on `claude/release-oct-particles`, not o
 4. **More nodes.** Glow, Displace, the `previous` output (feedback). Examples: glow edges, reaction-diffusion at ½ Scale.
 5. **Websites.** Runtime runs passes. Removed from `unsupportedFeatures`. Parity test plus browser sweep. *(Built: see What shipped.)*
 6. **Particles from a Pass.** After GPU Particles is on main: `emitFrom`, the engine's birth sampling, Example 2. *(Built: see What shipped (phase 6).)*
-7. **Later.** Texture ports through plain groups. "Repeat N times" passes (wide separable blur, JFA, simulations). Texture Input or Video as a direct texture source, without a copy Pass.
+7. **Later.** Texture ports through plain groups. "Repeat N times" passes (wide separable blur, JFA, simulations). Texture Input or Video as a direct texture source, without a copy Pass. *(Built: see What shipped (phase 7).)*
 
 ## Tests
 
@@ -248,7 +281,7 @@ This depends on the GPU Particles node (on `claude/release-oct-particles`, not o
 2. **Should a node needed by two programs be recomputed, or should the user be warned to add a Pass?** Recommended: recompute silently, and mark it striped in Show passes.
 3. **Pass default Scale?** Recommended: 1. Blur and Glow cards suggest ½.
 4. **Default format?** Recommended: half float, so values above 1 survive for glow.
-5. **Should Texture Input and Video get a `texture` output, so Edges can read an image without a copy Pass?** Recommended: not in v1, because it would add an output to existing nodes. Revisit in Phase 7.
+5. **Should Texture Input and Video get a `texture` output, so Edges can read an image without a copy Pass?** Recommended: not in v1, because it would add an output to existing nodes. Revisit in Phase 7. *(Phase 7: added; it compiles to nothing new until wired.)*
 6. **Names of the new Blur and Glow nodes?** Recommended: "Blur (texture)" and "Glow (texture)". Leave the prev-frame nodes as they are, apart from a hint.
 7. **Maximum number of passes?** Recommended: 8. Revisit after the Performance rows show real costs.
 8. **Should particles that feed their own emitter Pass be allowed, with a one-frame lag?** Recommended: allow it, with a note on the card.
