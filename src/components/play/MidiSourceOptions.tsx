@@ -25,6 +25,7 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Segmented } from '../ui/Choice';
 import { Field } from '../ui/Field';
+import { rowField } from '../ui/rowLayout';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { DEFAULT_PAD_GRID } from '../../types/playMidi';
 
@@ -33,9 +34,9 @@ type PadSource = Extract<PlaySource, { kind: 'pad' }>;
 
 function Row({ label, labelStyle, children }: { label: string; labelStyle: CSSProperties; children: ReactNode }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
       <span style={labelStyle}>{label}</span>
-      {children}
+      <div style={rowField}>{children}</div>
     </div>
   );
 }
@@ -56,9 +57,9 @@ export function MidiWaitChip({ title, style }: { title: string; style?: CSSPrope
   const tk = useTokens();
   return (
     <span data-testid="midi-cc-unassigned" title={title}
-      style={{ height: 24, padding: '0 8px', display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 6, background: alpha(tk.accent.base, 0.1), color: tk.accent.text, font: `600 11px ${fontFamily.ui}`, whiteSpace: 'nowrap', ...style }}>
-      <span aria-hidden style={{ width: 6, height: 6, borderRadius: '50%', background: tk.accent.base, animation: 'midi-wait-pulse 1.4s ease-in-out infinite' }} />
-      Turn a knob…
+      style={{ height: 24, padding: '0 8px', display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 6, background: alpha(tk.accent.base, 0.1), color: tk.accent.text, font: `600 11px ${fontFamily.ui}`, whiteSpace: 'nowrap', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box', ...style }}>
+      <span aria-hidden style={{ width: 6, height: 6, borderRadius: '50%', background: tk.accent.base, flexShrink: 0, animation: 'midi-wait-pulse 1.4s ease-in-out infinite' }} />
+      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>Turn a knob…</span>
       <style>{'@keyframes midi-wait-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.6)}}@media (prefers-reduced-motion:reduce){@keyframes midi-wait-pulse{0%,100%{opacity:1;transform:none}50%{opacity:1;transform:none}}}'}</style>
     </span>
   );
@@ -116,9 +117,9 @@ function CcLocks({ source, labelStyle, onChange }: { source: MidiSource; labelSt
     <>
       <Row label="Knob" labelStyle={labelStyle}>
         {unassigned && !listening
-          ? <MidiWaitChip title="The first CC that moves on any device becomes this row's CC and channel" style={{ flex: 1 }} />
+          ? <MidiWaitChip title="The first CC that moves on any device becomes this row's CC and channel" style={{ flex: '1 1 110px' }} />
           : (
-            <span data-testid="midi-knob" style={{ flex: 1, minWidth: 0, height: 24, padding: '0 8px', display: 'inline-flex', alignItems: 'center', borderRadius: 6, background: flash ? alpha(tk.accent.base, 0.18) : tk.bg.field, color: listening ? tk.accent.text : tk.text.primary, font: `${flash ? 600 : 500} 11px ${fontFamily.mono}`, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', transition: 'background 0.8s ease-out' }}
+            <span data-testid="midi-knob" style={{ flex: '1 1 110px', minWidth: 0, height: 24, padding: '0 8px', display: 'inline-flex', alignItems: 'center', borderRadius: 6, background: flash ? alpha(tk.accent.base, 0.18) : tk.bg.field, color: listening ? tk.accent.text : tk.text.primary, font: `${flash ? 600 : 500} 11px ${fontFamily.mono}`, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', transition: 'background 0.8s ease-out' }}
               title={listening ? 'Waiting for the next knob (Esc keeps the current one)' : 'The knob this mapping follows. Type another CC number in the field above, or press Change… and turn the knob you want.'}>
               {listening ? 'Turn a knob…' : flash ? `Assigned ${knobText}` : knobText}
             </span>
@@ -129,7 +130,7 @@ function CcLocks({ source, labelStyle, onChange }: { source: MidiSource; labelSt
         </Button>
       </Row>
       <Row label="Active" labelStyle={labelStyle}>
-        <span data-testid="midi-active-input" style={{ flex: 1, minWidth: 0, height: 24, padding: '0 8px', display: 'inline-flex', alignItems: 'center', borderRadius: 6, background: tk.bg.field, color: active ? tk.text.primary : tk.text.faint, font: `500 11px ${fontFamily.mono}`, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
+        <span data-testid="midi-active-input" style={{ flex: '1 1 110px', minWidth: 0, height: 24, padding: '0 8px', display: 'inline-flex', alignItems: 'center', borderRadius: 6, background: tk.bg.field, color: active ? tk.text.primary : tk.text.faint, font: `500 11px ${fontFamily.mono}`, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
           title="The MIDI control touched last, on any device">
           {active ? activeLabel(active) : 'Touch a knob…'}
         </span>
@@ -264,7 +265,7 @@ export function PadSourceOptions({ source, labelStyle, numStyle, onChange }: {
   return (
     <>
       <Row label="Reads" labelStyle={labelStyle}>
-        <Segmented size="sm" wrap ariaLabel="Pad grid reading" value={source.read} options={PAD_GRID_READS.map(r => ({ value: r.value, label: r.label.replace(/^Pad /, ''), title: r.title }))} onChange={read => onChange({ ...source, read })} />
+        <Segmented size="sm" ariaLabel="Pad grid reading" value={source.read} options={PAD_GRID_READS.map(r => ({ value: r.value, label: r.label.replace(/^Pad /, ''), title: r.title }))} onChange={read => onChange({ ...source, read })} />
         {source.read === 'cell' && <>
           <NumberInput value={source.col + 1} min={1} max={pg?.cols ?? 32} step={1} title="Column (1 at the left)" onCommit={n => onChange({ ...source, col: Math.max(0, Math.round(n) - 1) })} style={{ ...numStyle, width: 40 }} />
           <NumberInput value={source.row + 1} min={1} max={pg?.rows ?? 32} step={1} title="Row (1 at the bottom)" onCommit={n => onChange({ ...source, row: Math.max(0, Math.round(n) - 1) })} style={{ ...numStyle, width: 40 }} />

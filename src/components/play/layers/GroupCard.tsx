@@ -120,9 +120,10 @@ export function GroupCard({ group, play, touch, hiddenAbove, onChange, onEnter, 
       </div>
 
       {/* What's inside: how many, which kinds; and the way in. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 0 20px', minHeight: 26 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '4px 0 0 20px', minHeight: 26 }}>
         <span style={{ color: tk.text.muted, font: `600 11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>{ids.length} layer{ids.length === 1 ? '' : 's'}</span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, minWidth: 0, overflow: 'hidden' }}>
+        {/* The kinds' icons: as many as fit (the rest are cut, on purpose). */}
+        <span data-overflow-ok="" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, minWidth: 0, overflow: 'hidden' }}>
           {kinds.slice(0, KIND_ICONS).map(({ layer, count }) => {
             const look = layerLook(layer, play.layerKinds, mode, tk.text.muted);
             return (

@@ -585,7 +585,7 @@ function Timeline({ play, arr, racks, rows, span, lanes, phase, narrow, touch, m
         {!narrow && <span style={{ width: HEAD_W, flexShrink: 0, color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
           {rows.length} track{rows.length === 1 ? '' : 's'} · {arr.length > 0 ? `${arr.length.toFixed(1)} s of ${TAPE_MAX_SECONDS}` : 'empty tape'}
         </span>}
-        <div ref={rulerRef} role="slider" aria-label="Record point: click or drag to move it, snapped to the beat grid (⇧: free); Home/End and ←/→ step when the engine has focus"
+        <div ref={rulerRef} data-overflow-ok="" role="slider" aria-label="Record point: click or drag to move it, snapped to the beat grid (⇧: free); Home/End and ←/→ step when the engine has focus"
           aria-valuemin={0} aria-valuemax={arr.length} aria-valuenow={point} aria-valuetext={barsBeats(point, arr.bpm)} tabIndex={0}
           onPointerDown={e => scrub(e, rulerTimeAt)}
           style={{ position: 'relative', flex: 1, minWidth: 0, height: 26, borderRadius: radius.sm, background: tk.bg.field, cursor: 'pointer', overflow: 'hidden' }}>
@@ -623,7 +623,7 @@ function Timeline({ play, arr, racks, rows, span, lanes, phase, narrow, touch, m
           A track is a rack: an instrument and its effects. {isTauri() ? 'Load an Audio Unit synth (Apple’s DLSMusicDevice is on every Mac), the sample player or the Granulator, add effects, and play it from a MIDI keyboard or the computer keyboard.' : 'In a browser a track plays the sample player or the Granulator; Audio Unit synths and effects need the desktop app on a Mac.'} Press Record and play: what you play lands on the track as a clip.
         </div>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', flexWrap: 'wrap' }}>
         <Button size="sm" variant={rows.length ? 'secondary' : 'primary'} icon="plus" disabled={rows.length >= AE_RACKS_MAX} onClick={onAddTrack}
           title={rows.length >= AE_RACKS_MAX ? `Up to ${AE_RACKS_MAX} tracks` : 'A new track: an instrument and its effects'}>Add track</Button>
         <Button size="sm" variant="ghost" icon="presets" disabled={rows.length >= AE_RACKS_MAX}

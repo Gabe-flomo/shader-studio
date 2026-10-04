@@ -32,7 +32,7 @@ export function PadGridCard() {
   const setPlay = useNodeGraphStore(s => s.setPlay);
   if (!pg) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
         <Button size="sm" variant="ghost" icon="grid" onClick={() => setPlay(p => ({ ...p, padGrid: { ...DEFAULT_PAD_GRID } }))}
           title="A Push or Launchpad's pads (or pads on screen) as a grid shader's cells: the Pad Grid node reads them">
           Set up a pad grid
@@ -224,7 +224,7 @@ function CellPicture({ pg }: { pg: PlayPadGrid }) {
       }}
       onPointerUp={up}
       onPointerCancel={up}
-      style={{ display: 'block', width: w, height: h, marginTop: 8, borderRadius: 6, cursor: 'pointer', touchAction: 'none', background: tk.bg.panel }}
+      style={{ display: 'block', width: w, maxWidth: '100%', height: 'auto', aspectRatio: `${w} / ${h}`, marginTop: 8, borderRadius: 6, cursor: 'pointer', touchAction: 'none', background: tk.bg.panel }}
     />
   );
 }

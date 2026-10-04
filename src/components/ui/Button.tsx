@@ -1,4 +1,4 @@
-import { useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { Children, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Icon } from './Icon';
@@ -9,7 +9,7 @@ type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 /**
  * Text button. One `primary` (ink) per surface; `ghost` for dismissals. `md` is 34px (modals),
- * `sm` is 30px (panels, toolbars).
+ * `sm` is 30px (panels, toolbars). It never grows past its container (the label ellipsises).
  */
 export function Button({
   variant = 'secondary', size = 'md', icon, children, style, disabled, ...rest
@@ -37,7 +37,7 @@ export function Button({
       onMouseLeave={() => setHover(false)}
       style={{
         height: h, padding: `0 ${size === 'md' ? 13 : 10}px`, borderRadius: size === 'md' ? radius.control : radius.md,
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, flexShrink: 0,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, flexShrink: 0, maxWidth: '100%', minWidth: 0,
         border: `1px solid ${p.border}`, background: hover && !disabled ? p.bgHover : p.bg, color: p.fg,
         font: `${variant === 'primary' ? 600 : 500} ${size === 'md' ? 12.5 : 12}px ${fontFamily.ui}`, whiteSpace: 'nowrap',
         cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.45 : variant === 'primary' && hover ? 0.88 : 1,
@@ -46,10 +46,19 @@ export function Button({
       }}
       {...rest}
     >
-      {icon && <Icon name={icon} size={15} />}
-      {children}
+      {icon && <Icon name={icon} size={15} style={{ flexShrink: 0 }} />}
+      {/* Never wider than its container: a long label ends in an ellipsis instead of running off a card. */}
+      {isText(children)
+        ? <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{children}</span>
+        : children}
     </button>
   );
+}
+
+/** Plain text (a string, a number, or several of them: `{name}.step`), which can end in an ellipsis. */
+function isText(children: ReactNode): boolean {
+  const parts = Children.toArray(children);
+  return parts.length > 0 && parts.every(c => typeof c === 'string' || typeof c === 'number');
 }
 
 /**

@@ -15,6 +15,7 @@ import { alpha, fontFamily, radius } from '../../../theme/tokens';
 import { Button, IconButton } from '../../ui/Button';
 import { Toggle, Segmented } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
+import { rowField } from '../../ui/rowLayout';
 import { Field } from '../../ui/Field';
 import { GY_SETS, gyList } from '../../../play/kit/glyphs.js';
 import { RulerSlider } from '../../ui/RulerSlider';
@@ -450,7 +451,7 @@ function Label({ text, hint }: { text: string; hint?: string }) {
   return hint ? <Tooltip label={text} description={hint} placement="top"><span style={{ ...st, cursor: 'help' }}>{text}</span></Tooltip> : <span style={st}>{text}</span>;
 }
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
-  return <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}><Label text={label} hint={hint} />{children}</div>;
+  return <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 6 }}><Label text={label} hint={hint} /><div style={rowField}>{children}</div></div>;
 }
 function Note({ children }: { children: ReactNode }) {
   const tk = useTokens();
@@ -941,7 +942,7 @@ function CustomEditor({ e, k, touch, onReplace, onEdit }: { e: FinishEffect; k: 
   const sliders = parsed.params.filter(p => !p.colour);
   const status = error
     ? <span style={{ color: tk.status.danger, font: `600 11px ${fontFamily.ui}` }}>Doesn’t compile: skipped</span>
-    : <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{sliders.length ? `${sliders.length} slider${sliders.length === 1 ? '' : 's'}` : 'No settings'}{parsed.colours.length ? ` · ${parsed.colours.length} colour${parsed.colours.length === 1 ? '' : 's'}` : ''}</span>;
+    : <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}`, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sliders.length ? `${sliders.length} slider${sliders.length === 1 ? '' : 's'}` : 'No settings'}{parsed.colours.length ? ` · ${parsed.colours.length} colour${parsed.colours.length === 1 ? '' : 's'}` : ''}</span>;
   // The first lines that say something (not the comments and the blank lines).
   const firstLines = code.split('\n').filter(l => l.trim() && !/^\s*\/\//.test(l)).slice(0, 4);
   return (
@@ -950,7 +951,7 @@ function CustomEditor({ e, k, touch, onReplace, onEdit }: { e: FinishEffect; k: 
       {!sealed && fromNodes && (
         <div style={{ marginTop: 6 }}>
           <MiniGraph graph={e.graph!} onOpen={onEdit} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 4, minWidth: 0 }}>
             {onEdit && <Button size="sm" icon="nodes" onClick={onEdit}>Edit nodes…</Button>}
             <span style={{ flex: 1 }} />
             {status}
@@ -964,7 +965,7 @@ function CustomEditor({ e, k, touch, onReplace, onEdit }: { e: FinishEffect; k: 
               {firstLines.join('\n') || '(no code)'}
             </button>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 4, minWidth: 0 }}>
             {onEdit && <Button size="sm" icon="code" onClick={onEdit}>Open editor…</Button>}
             <Button size="sm" variant="ghost" icon={open ? 'chevD' : 'chevR'} onClick={() => setOpen(!open)}>Code here</Button>
             <span style={{ flex: 1 }} />

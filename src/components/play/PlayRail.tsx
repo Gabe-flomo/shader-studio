@@ -223,7 +223,7 @@ export function RailPageTabs({ def, current, play, onPick }: {
     onPick(def.pages[next]);
   };
   return (
-    <div role="tablist" aria-label={`${def.label} pages`} onKeyDown={onKey} style={{ display: 'flex', gap: 2, minWidth: 0, overflowX: 'auto' }}>
+    <div role="tablist" aria-label={`${def.label} pages`} onKeyDown={onKey} data-overflow-ok="" style={{ display: 'flex', gap: 2, minWidth: 0, overflowX: 'auto' }}>
       {def.pages.map((p, i) => {
         const d = RAIL_PAGES[p];
         const n = pageCount(p, play);

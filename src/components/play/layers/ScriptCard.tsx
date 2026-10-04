@@ -21,7 +21,8 @@ export function DrawGlimpse({ files, onOpen, error }: { files: ReadonlyArray<{ n
       onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
       style={{ position: 'relative', cursor: 'pointer', borderRadius: radius.md, background: tk.bg.field, padding: '6px 10px 8px', overflow: 'hidden', boxShadow: error ? `inset 0 0 0 1.5px ${tk.status.danger}` : 'none' }}>
       <div style={{ font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', color: tk.text.faint, marginBottom: 3 }}>{g.lines.length && g.file ? `draw() · ${g.file}` : g.file}</div>
-      <pre style={{ margin: 0, font: `11.5px/1.45 ${fontFamily.mono}`, whiteSpace: 'pre', overflow: 'hidden', color: tk.text.primary, maxHeight: 8 * 16.7 }}>
+      {/* A glimpse: long lines are cut at the edge on purpose (the editor shows them whole). */}
+      <pre data-overflow-ok="" style={{ margin: 0, font: `11.5px/1.45 ${fontFamily.mono}`, whiteSpace: 'pre', overflow: 'hidden', color: tk.text.primary, maxHeight: 8 * 16.7 }}>
         {g.lines.map((line, i) => <div key={i}>{line ? tokenizeJsLine(line, pal).map((t, j) => <span key={j} style={{ color: t.color }}>{t.text}</span>) : ' '}</div>)}
       </pre>
       {(g.more || g.lines.length >= 6) && <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 44, background: `linear-gradient(to bottom, transparent, ${tk.bg.field})`, pointerEvents: 'none' }} />}

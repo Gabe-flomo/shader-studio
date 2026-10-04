@@ -50,6 +50,8 @@ import {
   candidateLabel, collectPlayCandidates, controlExists, controlHelp, findTargetNode, locateTarget, playId, readControlValue, targetParts, type PlayCandidate, type TargetFate,
 } from '../../play/playControls';
 import { Button, IconButton } from '../ui/Button';
+import { rowField, rowGroup } from '../ui/rowLayout';
+import { useNarrow } from '../../hooks/useNarrow';
 import { Segmented, Toggle } from '../ui/Choice';
 import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
@@ -124,6 +126,7 @@ import type { AudioReader } from '../../types/play';
 import type { PlayPairMapping } from '../../types/play';
 import { ContextMenuArea } from '../ui/ContextMenuArea';
 import { Menu, type MenuItem } from '../ui/Menu';
+import type { IconName } from '../ui/iconPaths';
 import { SpreadsSection } from './SpreadsSection';
 import { parseSpreadTarget } from '../../types/play';
 import { addToSpread, canSpread, makeSpread, removeFromSpread, spreadOf } from '../../play/spreads';
@@ -722,8 +725,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         </button>
       )}
       {missingReaderControls.length > 0 && readerChipDismissed !== missingReaderKey && (
-        <div data-reader-chip style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px', padding: '6px 8px', borderRadius: radius.md, background: alpha(tk.accent.base, 0.1), color: tk.text.secondary, font: `11.5px/1.4 ${fontFamily.ui}` }}>
-          <span style={{ flex: 1, minWidth: 0 }}>{missingReaderControls.length === 1 ? `The reader ${missingReaderControls[0].name} has no control yet.` : `${missingReaderControls.length} audio readers have no controls yet.`} Each reader can be a control here: its live level, to map as Another control or use in conditions.</span>
+        <div data-reader-chip style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '4px 0 8px', padding: '6px 8px', borderRadius: radius.md, background: alpha(tk.accent.base, 0.1), color: tk.text.secondary, font: `11.5px/1.4 ${fontFamily.ui}` }}>
+          <span style={{ flex: '1 1 160px', minWidth: 0 }}>{missingReaderControls.length === 1 ? `The reader ${missingReaderControls[0].name} has no control yet.` : `${missingReaderControls.length} audio readers have no controls yet.`} Each reader can be a control here: its live level, to map as Another control or use in conditions.</span>
           <Button size="sm" variant="primary" onClick={() => update(p => addMissingReaderControls(p, songLabel))} title="A 0–1 control per reader, in a group named after what they listen to">Add controls for {missingReaderControls.length} reader{missingReaderControls.length === 1 ? '' : 's'}</Button>
           <IconButton icon="close" label="Not now" size="sm" onClick={() => setReaderChipDismissed(missingReaderKey)} />
         </div>
@@ -1208,6 +1211,10 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
 }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
+  // A narrow card folds the hover tools into ⋯.
+  const headRef = useRef<HTMLDivElement>(null);
+  const tight = useNarrow(headRef, 260);
+  const [toolsMenu, setToolsMenu] = useState<{ x: number; y: number } | null>(null);
   const [details, setDetails] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(control.label);
@@ -1226,7 +1233,7 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
         boxShadow: `inset 0 0 0 1px ${driven ? alpha(tk.accent.base, 0.45) : tk.border.default}`, opacity: exists || fate?.status === 'moved' ? 1 : 0.6,
       }}
     >
-      <div data-card-bg="1" style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26, marginBottom: 6 }}>
+      <div ref={headRef} data-card-bg="1" style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26, marginBottom: 6 }}>
         <IconButton icon={details ? 'chevD' : 'chevR'} label={details ? 'Hide details' : 'Details: where it comes from'} size="sm" tooltip={false} onClick={() => setDetails(d => !d)} style={{ marginLeft: -6 }} />
         <span
           draggable
@@ -1257,17 +1264,31 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
           </Tooltip>
         )}
         {driven && (
-          <button type="button" data-driven-chip="" title={`${drivenBy.join(', ')}: open its details`} onClick={() => openDetail('control', control.id)} style={{ height: 20, padding: '0 7px', border: 0, borderRadius: 6, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 10.5px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>
-            <Icon name="bidir" size={11} />{drivenBy[0]}{drivenBy.length > 1 ? ` +${drivenBy.length - 1}` : ''}
+          <button type="button" data-driven-chip="" title={`${drivenBy.join(', ')}: open its details`} onClick={() => openDetail('control', control.id)} style={{ height: 20, padding: '0 7px', border: 0, borderRadius: 6, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 10.5px ${fontFamily.ui}`, whiteSpace: 'nowrap', minWidth: 0, flexShrink: 1, maxWidth: '50%' }}>
+            <Icon name="bidir" size={11} /><span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{drivenBy[0]}{drivenBy.length > 1 ? ` +${drivenBy.length - 1}` : ''}</span>
           </button>
         )}
         {!exists && <span style={{ color: tk.status.warningText, font: `600 10.5px ${fontFamily.ui}` }}>{fate?.status === 'moved' ? 'moved' : 'missing'}</span>}
-        <span style={{ display: 'flex', gap: 0, visibility: hover || touch ? 'visible' : 'hidden' }}>
-          <IconButton icon="popout" label="Open its details: what drives it, the rules on it, where it goes" size="sm" tooltip={false} onClick={() => openDetail('control', control.id)} />
-          <IconButton icon="chevU" label="Move up" size="sm" disabled={index === 0} tooltip={false} onClick={() => onMove(-1)} />
-          <IconButton icon="chevD" label="Move down" size="sm" disabled={index === count - 1} tooltip={false} onClick={() => onMove(1)} />
-          <IconButton icon="trash" label={removeLabel} size="sm" tone="danger" tooltip={false} onClick={onRemove} />
-        </span>
+        {/* On a narrow card the hover tools are one ⋯ button, so they never run past the edge. */}
+        {tight ? (
+          <span style={{ display: 'flex', flexShrink: 0, visibility: hover || touch || toolsMenu ? 'visible' : 'hidden' }}>
+            <IconButton icon="more" label="More: details, move, remove" size="sm" tooltip={false} onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setToolsMenu({ x: r.right - 200, y: r.bottom + 4 }); }} />
+            {toolsMenu && <Menu x={toolsMenu.x} y={toolsMenu.y} minWidth={200} onClose={() => setToolsMenu(null)} items={[
+              { label: 'Open its details', icon: 'popout', onSelect: () => openDetail('control', control.id) },
+              { label: 'Move up', icon: 'chevU', disabled: index === 0, onSelect: () => onMove(-1) },
+              { label: 'Move down', icon: 'chevD', disabled: index === count - 1, onSelect: () => onMove(1) },
+              'separator',
+              { label: removeLabel, icon: 'trash', danger: true, onSelect: onRemove },
+            ]} />}
+          </span>
+        ) : (
+          <span style={{ display: 'flex', gap: 0, flexShrink: 0, visibility: hover || touch ? 'visible' : 'hidden' }}>
+            <IconButton icon="popout" label="Open its details: what drives it, the rules on it, where it goes" size="sm" tooltip={false} onClick={() => openDetail('control', control.id)} />
+            <IconButton icon="chevU" label="Move up" size="sm" disabled={index === 0} tooltip={false} onClick={() => onMove(-1)} />
+            <IconButton icon="chevD" label="Move down" size="sm" disabled={index === count - 1} tooltip={false} onClick={() => onMove(1)} />
+            <IconButton icon="trash" label={removeLabel} size="sm" tone="danger" tooltip={false} onClick={onRemove} />
+          </span>
+        )}
       </div>
       <ControlBody control={control} value={value} liveOn={liveOn} driven={driven} exists={exists} source={source} onChange={onChange} onRange={onRange} touch={touch} swing={swing} />
       {trace}
@@ -1896,11 +1917,10 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
           labelStyle={labelStyle}
           onUpdate={onUpdate}
           sourceEditor={<>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-              <span style={labelStyle}>Source</span>
-              <SourceFields source={m.source} controls={controls} excludeControlId={m.controlId} nullLayers={nullLayers} layerRefs={layerRefs} numStyle={numStyle} onChange={source => onUpdate({ source })} onCaptured={source => onUpdate({ source, smoothMs: 0 })} mappingId={m.id} pickerOnly />
-              <IconButton icon="spark" label={learning ? 'Listening… (Esc to cancel)' : 'Learn: replace this source with the next input'} size="sm" active={learning} onClick={onLearn} />
-            </div>
+            <SourceFields source={m.source} controls={controls} excludeControlId={m.controlId} nullLayers={nullLayers} layerRefs={layerRefs} numStyle={numStyle} onChange={source => onUpdate({ source })} onCaptured={source => onUpdate({ source, smoothMs: 0 })} mappingId={m.id} pickerOnly
+              style={{ marginBottom: 6 }}
+              lead={<span style={labelStyle}>Source</span>}
+              actions={<IconButton icon="spark" label={learning ? 'Listening… (Esc to cancel)' : 'Learn: replace this source with the next input'} size="sm" active={learning} onClick={onLearn} />} />
             <SourceOptions source={m.source} audioNodes={audioNodes} layerRefs={layerRefs} numStyle={numStyle} labelStyle={labelStyle} onChange={source => onUpdate({ source })} />
           </>}
         />
@@ -1910,17 +1930,18 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
 
   return (
     <div style={{ ...frame, padding: '8px 10px' }}>
-      {/* Source row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {chevron}
-        <span style={{ ...labelStyle, width: 40 }}>Source</span>
-        <SourceFields source={m.source} controls={controls} excludeControlId={m.controlId} nullLayers={nullLayers} layerRefs={layerRefs} numStyle={numStyle} onChange={source => onUpdate({ source })} onCaptured={source => onUpdate({ source, smoothMs: 0 })} mappingId={m.id} />
-        <SoloButton kind="mapping" id={m.id} />
-        {onMap && <IconButton icon="plus" label="Map: drive more controls from this source" size="sm" onClick={onMap} />}
-        {!fixed && <IconButton icon="popout" label="Open its details" size="sm" onClick={() => openDetail('source', m.id)} />}
-        <IconButton icon="spark" label={learning ? 'Listening… (Esc to cancel)' : 'Learn: replace this source with the next input'} size="sm" active={learning} onClick={onLearn} />
-        <IconButton icon="trash" label="Remove mapping" size="sm" tone="danger" onClick={onRemove} />
-      </div>
+      {/* Source row: Solo and Learn stay; Map, details and Remove fold into ⋯ when the card is narrow */}
+      <SourceFields source={m.source} controls={controls} excludeControlId={m.controlId} nullLayers={nullLayers} layerRefs={layerRefs} numStyle={numStyle} onChange={source => onUpdate({ source })} onCaptured={source => onUpdate({ source, smoothMs: 0 })} mappingId={m.id}
+        lead={narrow => <>{chevron}{!narrow && <span style={{ ...labelStyle, width: 40 }}>Source</span>}</>}
+        actions={<>
+          <SoloButton kind="mapping" id={m.id} />
+          <IconButton icon="spark" label={learning ? 'Listening… (Esc to cancel)' : 'Learn: replace this source with the next input'} size="sm" active={learning} onClick={onLearn} />
+        </>}
+        secondary={[
+          ...(onMap ? [{ icon: 'plus' as const, label: 'Map: drive more controls from this source', onSelect: onMap }] : []),
+          ...(!fixed ? [{ icon: 'popout' as const, label: 'Open its details', onSelect: () => openDetail('source', m.id) }] : []),
+          { icon: 'trash', label: 'Remove mapping', danger: true, onSelect: onRemove },
+        ]} />
       {locked && (
         <button type="button" onClick={() => openProSheet('play.sources')} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', margin: '6px 0 0', padding: '6px 8px', border: 0, borderRadius: radius.md, cursor: 'pointer', background: alpha(tk.accent.base, 0.08), color: tk.text.secondary, font: `11.5px/1.4 ${fontFamily.ui}`, textAlign: 'left' }}>
           <ProBadge />
@@ -1951,18 +1972,22 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
       {m.curve === 'custom' && (
         <FedCurvePad feed={feed} value={m.curveY ?? sampleCurve('linear')} range={[m.outMin, m.outMax]} onChange={curveY => onUpdate({ curveY })} onReset={() => onUpdate({ curveY: sampleCurve('linear') })} />
       )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+      {/* Smooth, Delay, then Follow/Increment and On: each group wraps onto its own line when narrow */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 6 }}>
         <span style={labelStyle}>Smooth</span>
-        <NumberInput value={m.smoothMs} min={0} max={5000} step={10} title="Smoothing time in milliseconds" onCommit={n => onUpdate({ smoothMs: Math.max(0, n) })} style={numStyle} />
-        <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>ms</span>
-        {!m.increment && <>
-          <span style={{ ...labelStyle, width: 'auto', marginLeft: 6 }} title="The value arrives this much later (before the smoothing): several mappings from one source with growing delays follow one another">Delay</span>
-          <NumberInput value={m.delayMs ?? 0} min={0} max={10000} step={10} title="Delay in milliseconds (0 = none, at most 10 s)" onCommit={n => onUpdate({ delayMs: n > 0 ? Math.min(10000, n) : undefined })} style={numStyle} />
-          <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>ms</span>
-        </>}
-        <span style={{ flex: 1 }} />
-        {kindPicker}
-        <Toggle checked={m.enabled} onChange={enabled => onUpdate({ enabled })} label={m.enabled ? 'On' : 'Off'} />
+        <div style={{ ...rowField, rowGap: 6 }}>
+          <span style={rowGroup}>
+            <NumberInput value={m.smoothMs} min={0} max={5000} step={10} title="Smoothing time in milliseconds" onCommit={n => onUpdate({ smoothMs: Math.max(0, n) })} style={numStyle} />
+            <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>ms</span>
+          </span>
+          {!m.increment && <span style={rowGroup}>
+            <span style={{ ...labelStyle, width: 'auto', marginLeft: 6 }} title="The value arrives this much later (before the smoothing): several mappings from one source with growing delays follow one another">Delay</span>
+            <NumberInput value={m.delayMs ?? 0} min={0} max={10000} step={10} title="Delay in milliseconds (0 = none, at most 10 s)" onCommit={n => onUpdate({ delayMs: n > 0 ? Math.min(10000, n) : undefined })} style={numStyle} />
+            <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>ms</span>
+          </span>}
+          <span style={{ display: 'inline-flex', minWidth: 0, maxWidth: '100%', marginLeft: 'auto' }}>{kindPicker}</span>
+          <Toggle checked={m.enabled} onChange={enabled => onUpdate({ enabled })} label={m.enabled ? 'On' : 'Off'} />
+        </div>
       </div>
       {m.source.kind === 'midi' && m.source.signal === 'note' && !m.source.range && (
         <div style={{ marginTop: 6, color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Note number scaled 0–1 (last note: {midiNoteName(midiEngine.channelState(m.source.channel).lastNote)}).</div>
@@ -2033,12 +2058,10 @@ function SourceCard({ def: s, play, meter: meterGiven = 0, liveMeter = false, au
   const routes = s.outputs.flatMap(o => o.routes);
   const step = s.outputs.find((o): o is Extract<SourceOutput, { kind: 'step' }> => o.kind === 'step');
   const sourceRow = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ ...labelStyle, width: 40 }}>Source</span>
-      <SourceFields source={s.source} controls={play.controls} nullLayers={nullLayers} layerRefs={layerRefs} numStyle={numStyle} onChange={source => set({ source })} onCaptured={source => set({ source })} />
-      <IconButton icon="spark" label={learning ? 'Listening… (Esc to cancel)' : 'Learn: replace this source with the next input'} size="sm" active={learning} onClick={onLearn} />
-      <IconButton icon="trash" label="Remove the source and its routes" size="sm" tone="danger" onClick={() => onChange(p => removeSource(p, s.id))} />
-    </div>
+    <SourceFields source={s.source} controls={play.controls} nullLayers={nullLayers} layerRefs={layerRefs} numStyle={numStyle} onChange={source => set({ source })} onCaptured={source => set({ source })}
+      lead={<span style={{ ...labelStyle, width: 40 }}>Source</span>}
+      actions={<IconButton icon="spark" label={learning ? 'Listening… (Esc to cancel)' : 'Learn: replace this source with the next input'} size="sm" active={learning} onClick={onLearn} />}
+      secondary={[{ icon: 'trash', label: 'Remove the source and its routes', danger: true, onSelect: () => onChange(p => removeSource(p, s.id)) }]} />
   );
   return (
     <div data-source-card={s.id} style={{ marginTop: 6, padding: '8px 10px', borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${mapping || learning ? tk.accent.base : tk.border.default}`, opacity: s.enabled ? 1 : 0.55 }}>
@@ -2120,13 +2143,19 @@ function RouteRow({ route: r, play, feed, numStyle, labelStyle, onPatch, onRemov
           <Segmented size="sm" ariaLabel="Curve" value={r.curve} options={CURVES} onChange={v => onPatch(v === 'custom' ? { curve: 'custom', curveY: r.curveY ?? sampleCurve(r.curve) } : { curve: v })} />
         </div>
         {r.curve === 'custom' && <FedCurvePad feed={feed} value={r.curveY ?? sampleCurve('linear')} range={[r.outMin, r.outMax]} onChange={curveY => onPatch({ curveY })} onReset={() => onPatch({ curveY: sampleCurve('linear') })} />}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 6 }}>
           <span style={labelStyle}>Smooth</span>
-          <NumberInput value={r.smoothMs ?? 0} min={0} max={5000} step={10} title="Smoothing in milliseconds" onCommit={n => onPatch({ smoothMs: Math.max(0, n) || undefined })} style={numStyle} />
-          <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>ms</span>
-          <span style={{ ...labelStyle, width: 'auto', marginLeft: 6 }}>Delay</span>
-          <NumberInput value={r.delayMs ?? 0} min={0} max={10000} step={10} title="Delay in milliseconds (at most 10 s)" onCommit={n => onPatch({ delayMs: n > 0 ? Math.min(10000, n) : undefined })} style={numStyle} />
-          <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>ms</span>
+          <div style={{ ...rowField, rowGap: 6 }}>
+            <span style={rowGroup}>
+              <NumberInput value={r.smoothMs ?? 0} min={0} max={5000} step={10} title="Smoothing in milliseconds" onCommit={n => onPatch({ smoothMs: Math.max(0, n) || undefined })} style={numStyle} />
+              <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>ms</span>
+            </span>
+            <span style={rowGroup}>
+              <span style={{ ...labelStyle, width: 'auto', marginLeft: 6 }}>Delay</span>
+              <NumberInput value={r.delayMs ?? 0} min={0} max={10000} step={10} title="Delay in milliseconds (at most 10 s)" onCommit={n => onPatch({ delayMs: n > 0 ? Math.min(10000, n) : undefined })} style={numStyle} />
+              <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>ms</span>
+            </span>
+          </div>
         </div>
       </div>}
     </div>
@@ -2139,7 +2168,13 @@ const round3 = (x: number) => Math.round(x * 1000) / 1000;
  * captured signal, another control, a MIDI CC and channel, a key): the source
  * row of a mapping and of a source card on the Inputs board.
  */
-function SourceFields({ source, controls, excludeControlId, nullLayers, layerRefs, numStyle, onChange, onCaptured, mappingId, pickerOnly = false }: {
+/** A button of a source row that folds into its ⋯ menu when the card is narrow. */
+interface RowAction { icon: IconName; label: string; danger?: boolean; onSelect: () => void }
+
+/** Below this a source row puts its fields on a second line and its secondary buttons in a ⋯ menu. */
+const SOURCE_ROW_NARROW = 360;
+
+function SourceFields({ source, controls, excludeControlId, nullLayers, layerRefs, numStyle, onChange, onCaptured, mappingId, pickerOnly = false, lead, actions, secondary = [], style }: {
   source: PlaySource;
   controls: PlayControl[];
   /** The control it drives (a control source can't be it). */
@@ -2153,8 +2188,18 @@ function SourceFields({ source, controls, excludeControlId, nullLayers, layerRef
   /** The readers panel opens on this mapping. */
   mappingId?: string;
   pickerOnly?: boolean;
+  /** Before the picker: the fold chevron, the drag grip, the "Source" label. */
+  lead?: ReactNode | ((narrow: boolean) => ReactNode);
+  /** After the fields, always shown (Solo, Learn). */
+  actions?: ReactNode;
+  /** After those: buttons when there's room, a ⋯ menu when the card is narrow. */
+  secondary?: readonly RowAction[];
+  style?: React.CSSProperties;
 }) {
   const tk = useTokens();
+  const rowRef = useRef<HTMLDivElement>(null);
+  const narrow = useNarrow(rowRef, SOURCE_ROW_NARROW);
+  const [more, setMore] = useState<{ x: number; y: number } | null>(null);
   const type = sourceType(source);
   const readers = useNodeGraphStore(s => s.play.audioReaders?.readers) ?? NO_READERS;
   const allSources = useCan('play.sources');
@@ -2170,10 +2215,31 @@ function SourceFields({ source, controls, excludeControlId, nullLayers, layerRef
     onChange(sourceFromType(v as SourceType, source, otherControls[0]?.id ?? '', nullLayers[0]?.id ?? '', firstSensor(layerRefs), firstDataset()));
   };
   const picker = <GroupedPicker ariaLabel="Source" value={type} sections={sourceSections} onChange={pickSource} height={26} style={{ flex: 1, minWidth: 0 }} width={300} searchPlaceholder="Search sources" />;
-  if (pickerOnly) return picker;
+  const extras = pickerOnly ? null : sourceExtras();
+  const buttons = <>
+    {actions}
+    {narrow && secondary.length > 0
+      ? <IconButton icon="more" label="More: map, details, remove" size="sm" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMore({ x: r.left, y: r.bottom + 4 }); }} />
+      : secondary.map(a => <IconButton key={a.label} icon={a.icon} label={a.label} size="sm" tone={a.danger ? 'danger' : 'default'} onClick={a.onSelect} />)}
+  </>;
+  // Wide: one line that still wraps rather than clips. Narrow: the picker and the buttons on the
+  // first line (the picker's name ellipsised), the source's own fields on the next.
   return (
-    <>
-      {picker}
+    <div ref={rowRef} style={{ display: 'flex', alignItems: 'center', gap: 6, rowGap: 6, flexWrap: 'wrap', ...style }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: narrow ? '1 1 0' : '1 1 140px', minWidth: 0 }}>
+        {typeof lead === 'function' ? lead(narrow) : lead}
+        {picker}
+      </div>
+      {!narrow && extras && <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 auto', minWidth: 0, flexWrap: 'wrap' }}>{extras}</div>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, marginLeft: 'auto' }}>{buttons}</div>
+      {narrow && extras && <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 100%', minWidth: 0, flexWrap: 'wrap' }}>{extras}</div>}
+      {more && <Menu x={more.x} y={more.y} onClose={() => setMore(null)} items={secondary.map(a => ({ label: a.label, icon: a.icon, danger: a.danger, onSelect: a.onSelect }))} />}
+    </div>
+  );
+
+  // The fields a source kind needs beyond the picker (null when it needs none).
+  function sourceExtras(): ReactNode {
+    const parts = <>
         {source.kind === 'null' && (
           nullLayers.length === 0
             ? <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Add a Null layer first</span>
@@ -2209,8 +2275,9 @@ function SourceFields({ source, controls, excludeControlId, nullLayers, layerRef
         {source.kind === 'key' && (
           <span style={{ height: 26, padding: '0 8px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', background: tk.bg.field, font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary }}>{keyName(source.code)}</span>
         )}
-    </>
-  );
+    </>;
+    return source.kind === 'null' || source.kind === 'captured' || source.kind === 'control' || source.kind === 'midi' || source.kind === 'key' ? parts : null;
+  }
 }
 
 interface LayerRef { id: string; label: string; kind: string; shape?: string }
@@ -2242,9 +2309,9 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
   const [tiltAsk, setTiltAsk] = useState(() => playEngine.tiltNeedsPermission());
   const hint = (text: string) => <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{text}</span>;
   const row = (children: ReactNode) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
       <span style={labelStyle}>Options</span>
-      {children}
+      <div style={rowField}>{children}</div>
     </div>
   );
   switch (source.kind) {
@@ -2456,9 +2523,9 @@ function TriggerOptions({ source, layers, numStyle, labelStyle, onChange }: {
   onChange: (source: PlaySource) => void;
 }) {
   const row = (label: string, children: ReactNode, top = false) => (
-    <div style={{ display: 'flex', alignItems: top ? 'flex-start' : 'center', gap: 6, marginBottom: 6, flexWrap: top ? 'nowrap' : 'wrap' }}>
+    <div style={{ display: 'flex', alignItems: top ? 'flex-start' : 'baseline', gap: 6, marginBottom: 6 }}>
       <span style={top ? { ...labelStyle, lineHeight: '26px' } : labelStyle}>{label}</span>
-      {children}
+      {top ? <div style={{ flex: '1 1 0', minWidth: 0 }}>{children}</div> : <div style={rowField}>{children}</div>}
     </div>
   );
   const t = source.trigger;

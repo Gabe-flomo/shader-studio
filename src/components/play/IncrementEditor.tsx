@@ -19,6 +19,7 @@ import { Section } from './layers/Section';
 import { ConditionFields, SignalPicker } from './ConditionFields';
 import { TriggerPicker, type TriggerLayerRef } from './TriggerPicker';
 import { Segmented, Toggle } from '../ui/Choice';
+import { rowField } from '../ui/rowLayout';
 import { Select } from '../ui/Select';
 import { Button, IconButton } from '../ui/Button';
 import { NumberInput } from '../NodeGraph/NumberInput';
@@ -57,9 +58,9 @@ export function IncrementEditor({ mapping: m, control, layers, sourceEditor, num
   const set = (patch: Partial<PlayIncrement>) => onUpdate({ increment: { ...inc, ...patch } });
   const hint = (text: string) => <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{text}</span>;
   const row = (label: string, children: ReactNode) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 6 }}>
       <span style={labelStyle}>{label}</span>
-      {children}
+      <div style={rowField}>{children}</div>
     </div>
   );
   const small = { ...numStyle, width: 48 };

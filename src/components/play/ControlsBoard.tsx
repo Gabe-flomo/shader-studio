@@ -336,7 +336,10 @@ function TraceArea({ id, style, children }: { id: string; style: React.CSSProper
   return (
     <div ref={boxRef} data-trace-area={id} style={{ ...style, position: 'relative' }}>
       {children}
-      <canvas ref={canvasRef} aria-hidden style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none', zIndex: 1 }} />
+      {/* Clipped to the board: a canvas still sized for a wider board (before the observer catches up) never makes it scroll sideways. */}
+      <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 1 }}>
+        <canvas ref={canvasRef} style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none' }} />
+      </div>
     </div>
   );
 }
