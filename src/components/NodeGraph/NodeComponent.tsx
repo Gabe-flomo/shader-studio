@@ -113,6 +113,7 @@ import { driveKey, playDrivenMap } from '../../play/playDriven';
 import { driverOf } from '../../play/paramDrivers';
 import { PlayDriveChip } from './PlayDriveChip';
 import { MAX_GROUP_ITERATIONS } from '../../nodes/definitions/group';
+import { programTintColour, programTintsCached } from '../../lib/programTints';
 
 function adaptiveStep(value: number, baseStep: number): number {
   const abs = Math.abs(value);
@@ -478,6 +479,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const fragmentShader  = useNodeGraphStore(s => s.fragmentShader);
   const nodeOutputVarMap = useNodeGraphStore(s => s.nodeOutputVarMap);
   const previewNodeId   = useNodeGraphStore(s => s.previewNodeId);
+  // Show passes: the programs this node runs in (a stable array from the per-compile map, or null).
+  const programTags     = useNodeGraphStore(s => (s.showPasses ? programTintsCached(s.passes, s.agents, s.finalNodeIds).get(node.id) ?? null : null));
   const activeGroupId   = useNodeGraphStore(s => s.activeGroupId);
   // Check if the active group has iterations > 1 (assignOp / carryMode only meaningful in loops)
   const activeGroupIterations = typeof activeGroupNode?.params?.iterations === 'number' ? activeGroupNode.params.iterations : 1;
@@ -3185,11 +3188,27 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             : isBypassed ? `0 0 0 1.5px ${alpha(tk.status.warning, 0.65)}`
             : isMultiSelected ? `0 0 0 2px ${tk.accent.base}, 0 0 16px ${alpha(tk.accent.base, 0.25)}`
             : isSelected ? `0 0 0 1.5px ${tk.accent.base}`
+            : programTags ? `0 0 0 2.5px ${programTintColour(programTags[0])}, 0 0 18px ${alpha(programTintColour(programTags[0]), 0.3)}`
             : null,
           tk.shadow.card,
         ].filter(Boolean).join(', '),
       }}
     >
+      {/* Show passes: which program(s) this node runs in; striped when it is compiled into more than one. */}
+      {programTags && (
+        <div
+          title={programTags.length > 1 ? `Runs in ${programTags.length} programs: compiled once for each` : undefined}
+          style={{
+            position: 'absolute', bottom: '100%', right: 8, marginBottom: 6, padding: '2px 8px', borderRadius: 999,
+            font: `600 11px ${fontFamily.ui}`, color: '#fff', whiteSpace: 'nowrap', pointerEvents: 'auto',
+            background: programTags.length > 1
+              ? `repeating-linear-gradient(135deg, ${programTags.map((t, i) => `${programTintColour(t)} ${i * 8}px ${(i + 1) * 8}px`).join(', ')})`
+              : programTintColour(programTags[0]),
+          }}
+        >
+          {programTags.map(t => (t.kind === 'pass' ? `Pass: ${t.label}` : t.kind === 'agents' ? `Agents: ${t.label}` : 'Picture')).join(' · ')}
+        </div>
+      )}
       {/* Comment preview — appears above the card on hover; click to open the full editor */}
       {showCommentPreview && (nodeComment || nodeCredit) && !showCommentEditor && (
         <div

@@ -30,7 +30,7 @@
  */
 import * as THREE from 'three';
 import type { AgentDrawProgram, AgentGroupProgram, AgentParam, AgentsSpec, AgentTrailProgram } from '../compiler/types';
-import { agentDrawUniform, agentStateUniform, agentStepUniform, agentWindowUniform, trailUniform } from '../nodes/definitions/agents';
+import { agentDrawUniform, agentStateUniform, agentStepUniform, agentWindowUniform, trailStepUniforms, trailUniform } from '../nodes/definitions/agents';
 import { AG_BESSEL_UNIFORM, listenUniforms } from '../nodes/definitions/agentForces';
 import {
   AG_MAX_STEPS, AG_OFFLINE_CHUNK, AG_STEP_HZ, agBeatLevel, agGovern, agGovernorState, agKeep, agLiveState, agLiveSteps, agRate, agStepTime, agStepsPerFrame,
@@ -102,13 +102,14 @@ export class AgentTargets {
     r.setClearColor(prevColor, prevAlpha);
   }
 
-  /** A group's state (made, all dead, when its count changes). */
+  /** A group's state (made, all dead, when its count or its per-walker state changes). */
   group(g: AgentGroupProgram): GroupState {
-    const key = `${g.side}`;
+    const key = `${g.side}${g.stateC ? ':C' : ''}`;
     let s = this.groups.get(g.slug);
     if (s && s.key === key) return s;
     if (s) { s.rt[0].dispose(); s.rt[1].dispose(); this.dropListen(s); }
-    const make = () => new THREE.WebGLRenderTarget(g.side, g.side, { ...STATE_OPTS });
+    // State A and B; with per-walker state also C (species, memory, colour) and D (its deposit).
+    const make = () => new THREE.WebGLRenderTarget(g.side, g.side, { ...STATE_OPTS, count: g.stateC ? 4 : 2 });
     s = { key, side: g.side, rt: [make(), make()], cur: 0, step: 0, born: 0, live: agLiveState(), history: [], lastTarget: 0, listen: new Map(), burstEdge: {}, burstPending: false };
     this.clear(s.rt[0]); this.clear(s.rt[1]);
     this.renderer.setRenderTarget(null);
@@ -224,6 +225,8 @@ export interface AgentRunnerHost {
 }
 
 interface StepEntry { spec: AgentGroupProgram; material: THREE.ShaderMaterial; ready: boolean; failed: boolean; dropped?: boolean }
+/** A Trail's own step program (Add / Block wired), compiled like an update shader. */
+interface TrailEntry { slug: string; source: string; material: THREE.ShaderMaterial; ready: boolean; failed: boolean; dropped?: boolean }
 
 type Timer = { begin(name: string): boolean; end(): void };
 
@@ -253,11 +256,13 @@ export class AgentRunner {
   private compileMesh: THREE.Mesh;
   private placeholder = new THREE.MeshBasicMaterial();
   private depositMat = raw(AG_DEPOSIT_VERT, AG_DEPOSIT_FRAG, {
-    u_a: { value: null }, u_b: { value: null }, u_side: { value: 1 }, u_species: { value: 1 }, u_aspect: { value: 1 }, u_amount: { value: 1 }, u_size: { value: 1 },
+    u_a: { value: null }, u_b: { value: null }, u_d: { value: null }, u_side: { value: 1 }, u_species: { value: 1 }, u_stateC: { value: 0 }, u_what: { value: 0 },
+    u_aspect: { value: 1 }, u_amount: { value: 1 }, u_size: { value: 1 },
   }, true);
-  private trailMat = raw(AG_FULL_VERT, AG_TRAIL_FRAG, { u_src: { value: null }, u_diffuse: { value: 1 }, u_keep: { value: 0.9 }, u_wrap: { value: 1 } }, false);
+  private trailMat = raw(AG_FULL_VERT, AG_TRAIL_FRAG, { u_src: { value: null }, u_diffuse: { value: 1 }, u_keep: { value: 0.9 }, u_wrap: { value: 1 }, u_k5: { value: 0 }, u_signed: { value: 0 } }, false);
+  private trailSteps: TrailEntry[] = [];
   private drawMat = raw(AG_DRAW_VERT, AG_DRAW_FRAG, {
-    u_a: { value: null }, u_b: { value: null }, u_side: { value: 1 }, u_species: { value: 1 }, u_colorBy: { value: 0 },
+    u_a: { value: null }, u_b: { value: null }, u_c: { value: null }, u_stateC: { value: 0 }, u_side: { value: 1 }, u_species: { value: 1 }, u_colorBy: { value: 0 },
     u_aspect: { value: 1 }, u_size: { value: 1.5 }, u_bright: { value: 0.5 }, u_speedRef: { value: 0.5 },
     u_colA: { value: new THREE.Vector3(1, 1, 1) }, u_colB: { value: new THREE.Vector3(1, 1, 1) },
     u_prim: { value: 0 }, u_depth: { value: 0 }, u_field: { value: null }, u_viewSize: { value: new THREE.Vector2(1, 1) },
@@ -313,7 +318,7 @@ export class AgentRunner {
   private ensureUniforms(): void {
     const u = this.host.uniforms();
     for (const g of this.spec.groups) {
-      for (const n of [agentStateUniform(g.slug, 'A'), agentStateUniform(g.slug, 'B')]) if (!u[n]) u[n] = { value: null };
+      for (const n of [agentStateUniform(g.slug, 'A'), agentStateUniform(g.slug, 'B'), ...(g.stateC ? [agentStateUniform(g.slug, 'C'), agentStateUniform(g.slug, 'D')] : [])]) if (!u[n]) u[n] = { value: null };
       if (!u[agentStepUniform(g.slug)]) u[agentStepUniform(g.slug)] = { value: 0 };
       if (!(u[agentWindowUniform(g.slug)]?.value instanceof THREE.Vector4)) u[agentWindowUniform(g.slug)] = { value: new THREE.Vector4(0, 0, 0, 0) };
       for (const l of g.listeners) {
@@ -334,10 +339,22 @@ export class AgentRunner {
         }
       }
     }
-    for (const t of this.spec.trails) if (!u[trailUniform(t.slug)]) u[trailUniform(t.slug)] = { value: null };
-    for (const d of this.spec.draws) if (!u[agentDrawUniform(d.slug)]) u[agentDrawUniform(d.slug)] = { value: null };
+    for (const t of this.spec.trails) {
+      if (!u[trailUniform(t.slug)]) u[trailUniform(t.slug)] = { value: null };
+      if (!(u[`${trailUniform(t.slug)}_px`]?.value instanceof THREE.Vector2)) u[`${trailUniform(t.slug)}_px`] = { value: new THREE.Vector2(1, 1) };
+      if (t.stepShader) {
+        const n = trailStepUniforms(t.slug);
+        if (!u[n.src]) u[n.src] = { value: null };
+        if (!(u[n.step]?.value instanceof THREE.Vector4)) u[n.step] = { value: new THREE.Vector4() };
+      }
+    }
+    for (const d of this.spec.draws) {
+      if (!u[agentDrawUniform(d.slug)]) u[agentDrawUniform(d.slug)] = { value: null };
+      if (!(u[`${agentDrawUniform(d.slug)}_px`]?.value instanceof THREE.Vector2)) u[`${agentDrawUniform(d.slug)}_px`] = { value: new THREE.Vector2(1, 1) };
+    }
     if (this.boundTo !== u) {
       for (const e of this.steps) e.material.uniforms = u;
+      for (const e of this.trailSteps) e.material.uniforms = u;
       this.boundTo = u;
     }
   }
@@ -360,17 +377,27 @@ export class AgentRunner {
       return { spec: g, material, ready: false, failed: false };
     });
     for (const e of old.values()) this.drop(e);
+    // Trails' own step programs (Add / Block wired), kept while their source is unchanged.
+    const oldTrails = new Map(this.trailSteps.map(e => [e.slug, e]));
+    this.trailSteps = spec.trails.filter(t => t.stepShader).map(t => {
+      const prev = oldTrails.get(t.slug);
+      if (prev && !vsChanged && prev.source === t.stepShader) { oldTrails.delete(t.slug); return prev; }
+      const material = new THREE.ShaderMaterial({ vertexShader, fragmentShader: t.stepShader!, uniforms: u, depthTest: false, depthWrite: false });
+      return { slug: t.slug, source: t.stepShader!, material, ready: false, failed: false };
+    });
+    for (const e of oldTrails.values()) this.drop(e);
     this.boundTo = null;
     this.ensureUniforms();
     for (const e of this.steps) if (!e.ready && !e.failed) this.compile(e);
+    for (const e of this.trailSteps) if (!e.ready && !e.failed) this.compile(e);
   }
 
-  private drop(e: StepEntry): void {
+  private drop(e: StepEntry | TrailEntry): void {
     e.dropped = true;
     if (e.ready || e.failed) e.material.dispose();
   }
 
-  private compile(e: StepEntry): void {
+  private compile(e: StepEntry | TrailEntry): void {
     const { renderer, camera } = this.host;
     this.compileMesh.material = e.material;
     const settle = () => {
@@ -378,7 +405,7 @@ export class AgentRunner {
       if (e.dropped) { e.material.dispose(); return; }
       const gl = renderer.getContext();
       const prog = (renderer.properties.get(e.material) as { currentProgram?: { program?: WebGLProgram } }).currentProgram?.program;
-      if (prog && gl.getProgramParameter(prog, gl.LINK_STATUS) === false) { e.failed = true; this.host.onLinkFailed(e.spec.fragmentShader); }
+      if (prog && gl.getProgramParameter(prog, gl.LINK_STATUS) === false) { e.failed = true; this.host.onLinkFailed('spec' in e ? e.spec.fragmentShader : e.source); }
       this.host.onReady();
     };
     renderer.compileAsync(this.compileScene, camera).then(settle, () => { e.failed = true; if (e.dropped) e.material.dispose(); });
@@ -389,7 +416,9 @@ export class AgentRunner {
   recompileAll(): void {
     const spec = this.spec, vs = this.vertexShader;
     for (const e of this.steps) this.drop(e);
+    for (const e of this.trailSteps) this.drop(e);
     this.steps = [];
+    this.trailSteps = [];
     this.vertexShader = '';
     this.update(spec, vs);
   }
@@ -465,6 +494,9 @@ export class AgentRunner {
       if (this.spec.deposits.some(d => d.trail === t.slug && restarted.has(d.group))) targets.clearTrail(ts);
     }
     const bindTrails = () => { for (const [slug, ts] of trailState) u[trailUniform(slug)].value = ts.rt[ts.cur].texture; };
+    // A picture pixel in 0–1 texture units, for the sampling nodes' offsets (as a Pass's `_px`).
+    for (const t of this.spec.trails) (u[`${trailUniform(t.slug)}_px`].value as THREE.Vector2).set(1 / w, 1 / h);
+    for (const d of this.spec.draws) (u[`${agentDrawUniform(d.slug)}_px`].value as THREE.Vector2).set(1 / w, 1 / h);
 
     const prevAuto = renderer.autoClear;
     renderer.autoClear = false;
@@ -474,6 +506,8 @@ export class AgentRunner {
       const most = plan.reduce((m, p) => Math.max(m, p.steps), 0);
       for (let k = 0; k < most; k++) {
         const stepping = plan.filter(p => p.steps > k);
+        // The clock time of this step (the first stepping group's): a Trail's own step program reads it.
+        let stepTime: number | null = null;
         // 1. The rule, for every walker of every group stepping now (reading the trails as they are).
         bindTrails();
         for (const p of stepping) {
@@ -487,9 +521,9 @@ export class AgentRunner {
           (u[agentWindowUniform(g.slug)].value as THREE.Vector4).set(win.start, win.count, 0, 0);
           if (g.listeners.length) this.hear(targets, s, g, agStepTime(s.step, p.spf, p.preroll));
           u[agentStepUniform(g.slug)].value = s.step >>> 0;
-          u[agentStateUniform(g.slug, 'A')].value = s.rt[s.cur].textures[0];
-          u[agentStateUniform(g.slug, 'B')].value = s.rt[s.cur].textures[1];
+          this.bindState(g, s);
           if (timeUniform) timeUniform.value = agStepTime(s.step, p.spf, p.preroll);
+          if (stepTime === null) stepTime = agStepTime(s.step, p.spf, p.preroll);
           p.e.material.uniformsNeedUpdate = true;
           this.quad.material = p.e.material;
           const timed = k === 0 && (o.timer?.begin(`agents:${g.label} step`) ?? false);
@@ -498,8 +532,7 @@ export class AgentRunner {
           if (timed) o.timer!.end();
           s.cur = (1 - s.cur) as 0 | 1;
           s.step++;
-          u[agentStateUniform(g.slug, 'A')].value = s.rt[s.cur].textures[0];
-          u[agentStateUniform(g.slug, 'B')].value = s.rt[s.cur].textures[1];
+          this.bindState(g, s);
         }
         // 2. Deposits: the walkers as points added into their trails.
         const steppingSlugs = new Set(stepping.map(p => p.e.spec.slug));
@@ -514,6 +547,9 @@ export class AgentRunner {
           const du = this.depositMat.uniforms;
           du.u_a.value = gs.rt[gs.cur].textures[0];
           du.u_b.value = gs.rt[gs.cur].textures[1];
+          du.u_d.value = g.stateC ? gs.rt[gs.cur].textures[3] : null;
+          du.u_stateC.value = g.stateC ? 1 : 0;
+          du.u_what.value = d.what === 'velocity' ? 1 : 0;
           du.u_side.value = g.side; du.u_species.value = g.species; du.u_aspect.value = aspect;
           du.u_amount.value = this.read(d.params.amount, 1);
           du.u_size.value = Math.max(1, Math.min(4, Math.round(this.read(d.params.size, 1))));
@@ -529,13 +565,27 @@ export class AgentRunner {
         for (const t of this.spec.trails) {
           if (!fed.has(t.slug)) continue;
           const ts = trailState.get(t.slug)!;
-          const tu = this.trailMat.uniforms;
-          tu.u_src.value = ts.rt[ts.cur].texture;
-          tu.u_diffuse.value = this.read(t.params.diffuse, 1);
-          tu.u_keep.value = agKeep(this.read(t.params.halfLife, 0.1));
-          tu.u_wrap.value = t.edges === 'wrap' ? 1 : 0;
-          this.trailMat.uniformsNeedUpdate = true;
-          this.quad.material = this.trailMat;
+          const diffuse = this.read(t.params.diffuse, 1), keep = agKeep(this.read(t.params.halfLife, 0.1));
+          const wrap = t.edges === 'wrap' ? 1 : 0, k5 = t.kernel === 5 ? 1 : 0, signed = t.signed ? 1 : 0;
+          // Add / Block wired: the trail's own step program (once compiled), at this step's clock time.
+          const own = t.stepShader ? this.trailSteps.find(e => e.slug === t.slug && e.ready && !e.failed) : undefined;
+          if (t.stepShader && !own) continue;
+          if (own) {
+            const n = trailStepUniforms(t.slug);
+            u[n.src].value = ts.rt[ts.cur].texture;
+            (u[n.step].value as THREE.Vector4).set(diffuse, keep, wrap + 2 * k5 + 4 * signed, 1 / AG_STEP_HZ);
+            if (timeUniform && stepTime !== null) timeUniform.value = stepTime;
+            own.material.uniformsNeedUpdate = true;
+            this.quad.material = own.material;
+          } else {
+            const tu = this.trailMat.uniforms;
+            tu.u_src.value = ts.rt[ts.cur].texture;
+            tu.u_diffuse.value = diffuse;
+            tu.u_keep.value = keep;
+            tu.u_wrap.value = wrap; tu.u_k5.value = k5; tu.u_signed.value = signed;
+            this.trailMat.uniformsNeedUpdate = true;
+            this.quad.material = this.trailMat;
+          }
           const timed = k === 0 && (o.timer?.begin(`agents:${t.label} trail`) ?? false);
           renderer.setRenderTarget(ts.rt[1 - ts.cur]);
           renderer.render(this.quadScene, this.host.camera);
@@ -545,10 +595,7 @@ export class AgentRunner {
         // An offline run can be thousands of steps: hand the GPU each chunk as it goes.
         if (!o.live && k > 0 && k % AG_OFFLINE_CHUNK === 0) renderer.getContext().flush();
       }
-      for (const p of plan) {
-        u[agentStateUniform(p.e.spec.slug, 'A')].value = p.s.rt[p.s.cur].textures[0];
-        u[agentStateUniform(p.e.spec.slug, 'B')].value = p.s.rt[p.s.cur].textures[1];
-      }
+      for (const p of plan) this.bindState(p.e.spec, p.s);
       bindTrails();
       // 4. Draw agents.
       for (const d of this.spec.draws) {
@@ -566,6 +613,18 @@ export class AgentRunner {
       renderer.setRenderTarget(null);
     }
     this.frames++;
+  }
+
+  /** A group's state textures as its update shader (and anything else) reads them now. */
+  private bindState(g: AgentGroupProgram, s: GroupState): void {
+    const u = this.host.uniforms();
+    const tex = s.rt[s.cur].textures;
+    u[agentStateUniform(g.slug, 'A')].value = tex[0];
+    u[agentStateUniform(g.slug, 'B')].value = tex[1];
+    if (g.stateC && tex.length >= 4) {
+      u[agentStateUniform(g.slug, 'C')].value = tex[2];
+      u[agentStateUniform(g.slug, 'D')].value = tex[3];
+    }
   }
 
   private pass(mat: THREE.RawShaderMaterial, into: THREE.WebGLRenderTarget): void {
@@ -664,8 +723,10 @@ export class AgentRunner {
     const du = this.drawMat.uniforms;
     du.u_a.value = gs.rt[gs.cur].textures[0];
     du.u_b.value = gs.rt[gs.cur].textures[1];
+    du.u_c.value = g.stateC ? gs.rt[gs.cur].textures[2] : null;
+    du.u_stateC.value = g.stateC ? 1 : 0;
     du.u_side.value = g.side; du.u_species.value = g.species; du.u_aspect.value = aspect;
-    du.u_colorBy.value = ['single', 'species', 'speed', 'heading', 'age'].indexOf(d.colorBy);
+    du.u_colorBy.value = ['single', 'species', 'speed', 'heading', 'age', 'agent'].indexOf(d.colorBy);
     du.u_size.value = size;
     du.u_bright.value = bright;
     du.u_speedRef.value = this.read(d.params.speedRef as AgentParam, 0.5);
@@ -759,10 +820,16 @@ export class AgentRunner {
 
   dispose(): void {
     for (const e of this.steps) this.drop(e);
+    for (const e of this.trailSteps) this.drop(e);
+    this.trailSteps = [];
     const u = this.boundTo;
     if (u) {
-      for (const g of this.spec.groups) for (const n of [agentStateUniform(g.slug, 'A'), agentStateUniform(g.slug, 'B')]) if (u[n]) u[n].value = null;
-      for (const t of this.spec.trails) if (u[trailUniform(t.slug)]) u[trailUniform(t.slug)].value = null;
+      for (const g of this.spec.groups) for (const n of [agentStateUniform(g.slug, 'A'), agentStateUniform(g.slug, 'B'), agentStateUniform(g.slug, 'C'), agentStateUniform(g.slug, 'D')]) if (u[n]) u[n].value = null;
+      for (const t of this.spec.trails) {
+        if (u[trailUniform(t.slug)]) u[trailUniform(t.slug)].value = null;
+        const n = trailStepUniforms(t.slug);
+        if (u[n.src]) u[n.src].value = null;
+      }
       for (const d of this.spec.draws) if (u[agentDrawUniform(d.slug)]) u[agentDrawUniform(d.slug)].value = null;
     }
     this.steps = [];

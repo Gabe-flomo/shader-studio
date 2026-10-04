@@ -30,7 +30,7 @@ const HIDDEN_NODES = new Set([
   // Made by the compiler at the end of a Pass's program (compiler/passGraph.ts).
   'passOutput',
   // An Agents group's anchors (made with the group) and its update shader's end (compiler/agentGraph.ts).
-  'agentInputs', 'agentOutput', 'agentStepOut',
+  'agentInputs', 'agentOutput', 'agentStepOut', 'trailStepOut',
 ]);
 
 const CATEGORY_SECTIONS: Array<{ label: string; categories: string[] }> = [
@@ -99,7 +99,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
   ],
   // The Agents family (docs/agents-plan.md): the inside nodes only go into an open Agents group.
   Simulation: [
-    { label: 'Start here', types: ['slimeMoldPreset', 'particlesPreset', 'curlSmokePreset', 'soundBurstPreset', 'agentsGroup'] },
+    { label: 'Start here', types: ['slimeMoldPreset', 'multiSlimePreset', 'antsPreset', 'boidsPreset', 'strandsPreset', 'growPicturePreset', 'particlesPreset', 'curlSmokePreset', 'soundBurstPreset', 'agentsGroup'] },
     { label: 'Outside the group', types: ['agentEmit', 'agentDeposit', 'trailField', 'drawAgents'] },
     { label: 'Inside: walkers', types: ['agentSense', 'agentSteer', 'agentMove', 'agentBySpecies'] },
     { label: 'Inside: forces', types: ['agentGravity', 'agentWind', 'agentCurl', 'agentAttract', 'agentVortex', 'agentFlow', 'agentSoundKick'] },

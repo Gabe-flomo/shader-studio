@@ -25,11 +25,15 @@
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { fieldFn, p, pv3 } from './helpers';
 import { GP_PALETTES } from '../../play/kit/gpuParticles.js';
+import { AG_TRAIL_MEAN_GLSL } from '../../play/kit/agentShaders.js';
 
 // ── Names shared by the compiler, the engine and the nodes ──────────────────
 
-/** State textures of a group: A = (pos.xy, heading, age), B = (vel.xy, speed, life). */
-export const agentStateUniform = (slug: string, which: 'A' | 'B') => `u_ag${which}_${slug}`;
+/**
+ * State textures of a group: A = (pos.xy, heading, age), B = (vel.xy, speed, life); with per-walker
+ * state (agentStateC) also C = (species, memory.xy, colour packed in 24 bits) and D = its deposit (vec4).
+ */
+export const agentStateUniform = (slug: string, which: 'A' | 'B' | 'C' | 'D') => `u_ag${which}_${slug}`;
 /** The step number (uint) a group's update shader runs. */
 export const agentStepUniform = (slug: string) => `u_agStep_${slug}`;
 /** This step's birth window: (start, count, 0, 0) in agent indices. */
@@ -38,6 +42,8 @@ export const agentWindowUniform = (slug: string) => `u_agWin_${slug}`;
 export const trailUniform = (slug: string) => `u_trail_${slug}`;
 /** A Draw agents node's picture (half float, the picture's size). */
 export const agentDrawUniform = (slug: string) => `u_agdraw_${slug}`;
+/** A Trail with Add / Block wired: its own step program reads the trail as it was (`Src`) and its settings (`Step`). */
+export const trailStepUniforms = (slug: string) => ({ src: `u_trSrc_${slug}`, step: `u_trStep_${slug}` });
 
 /** Agent counts: the state texture's side for each tier (as the Particles node's). */
 export const AGENT_TIERS: Record<string, number> = { '64k': 256, '256k': 512, '1m': 1024, '4m': 2048 };
@@ -56,7 +62,11 @@ export const AGENT_INSIDE_TYPES = new Set([
   'agentIntegrate', 'agentAge', 'agentCollide', 'agentChladni',
 ]);
 /** The starters in the Simulation category: each builds a whole working setup (store/agentExamples.ts). */
-export const AGENT_PRESET_TYPES = new Set(['slimeMoldPreset', 'particlesPreset', 'curlSmokePreset', 'soundBurstPreset']);
+export const AGENT_PRESET_TYPES = new Set([
+  'slimeMoldPreset', 'particlesPreset', 'curlSmokePreset', 'soundBurstPreset',
+  // P3: species, food and obstacles
+  'multiSlimePreset', 'antsPreset', 'boidsPreset', 'strandsPreset', 'growPicturePreset',
+]);
 /** Nodes that go outside the group (engines and programs of their own). */
 export const AGENT_OUTSIDE_TYPES = new Set(['agentsGroup', 'agentEmit', 'agentDeposit', 'trailField', 'drawAgents']);
 
@@ -69,6 +79,17 @@ export const AGENT_GLOBALS: Array<[string, string]> = [
   ['vec2', 'a_pos'], ['vec2', 'a_vel'], ['float', 'a_heading'], ['float', 'a_speed'], ['float', 'a_age'],
   ['float', 'a_life'], ['float', 'a_species'], ['float', 'a_index'], ['float', 'a_random'], ['uint', 'a_seed'], ['bool', 'a_born'], ['uint', 'a_step'],
 ];
+/** Globals only programs with per-walker state (state C) define: its memory and its own colour. */
+export const AGENT_STATE_C_GLOBALS: Array<[string, string]> = [['vec2', 'a_mem'], ['vec3', 'a_colour']];
+
+/**
+ * Per-walker state (docs/agents-plan.md §3.3): state C = (species, memory.x, memory.y, colour) and
+ * D = the walker's own deposit (one amount per trail channel). Colour is 8 bits a channel packed
+ * into one float's 24 exact integer bits. Helpers for programs that have them.
+ */
+export const AG_STATE_C_GLSL = `float agPackColour(vec3 c) { vec3 q = floor(clamp(c, 0.0, 1.0) * 255.0 + 0.5); return q.r + q.g * 256.0 + q.b * 65536.0; }
+vec3 agUnpackColour(float f) { float b = floor(f / 65536.0); float g = floor((f - b * 65536.0) / 256.0); return vec3(f - b * 65536.0 - g * 256.0, g, b) / 255.0; }
+vec4 agOneHot(float s) { return vec4(equal(vec4(s), vec4(0.0, 1.0, 2.0, 3.0))); }`;
 
 const SPECIES_OPTIONS = [{ value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' }];
 const THIS_AGENT = 'Unwired: this agent\'s own.';
@@ -135,6 +156,11 @@ export const AGENT_INPUT_OUTPUTS: Record<string, { type: 'float' | 'vec2'; label
   index: { type: 'float', label: 'Index', expr: 'a_index', hint: 'Its number, 0 to the count − 1.' },
   random: { type: 'float', label: 'Random', expr: 'a_random', hint: 'A fresh 0–1 number for this walker every step (repeatable: it depends only on the step and the seed).' },
 };
+/** Agent Inputs' per-walker state outputs (they need state C; without it Memory reads 0 and Colour white). */
+export const AGENT_INPUT_STATE_OUTPUTS: Record<string, { type: 'vec2' | 'vec3'; label: string; expr: string; hint: string }> = {
+  memory: { type: 'vec2', label: 'Memory', expr: 'a_mem', hint: 'Two numbers this walker carries from step to step (what Agent Output\'s Memory set last step; 0 when born). Ants: carrying food or not.' },
+  colour: { type: 'vec3', label: 'Colour', expr: 'a_colour', hint: 'Its own colour (what Agent Output\'s Colour set last step; white when born).' },
+};
 
 export const AgentInputsNode: NodeDefinition = {
   type: 'agentInputs',
@@ -143,12 +169,13 @@ export const AgentInputsNode: NodeDefinition = {
   description: 'Inside an Agents group: this walker at the start of the step. The rule runs once for every walker, every step. Also carries any inputs you add to the group (a Trail\'s texture, a number…).',
   anchored: true,
   inputs: {},
-  outputs: Object.fromEntries(Object.entries(AGENT_INPUT_OUTPUTS).map(([k, o]) => [k, { type: o.type, label: o.label, hint: o.hint }])),
+  outputs: Object.fromEntries([...Object.entries(AGENT_INPUT_OUTPUTS), ...Object.entries(AGENT_INPUT_STATE_OUTPUTS)].map(([k, o]) => [k, { type: o.type, label: o.label, hint: o.hint }])),
   defaultParams: { extraInputs: [] },
   paramDefs: {},
   assignable: false,
   // The extra ports are rewired to their outer sources by the compiler; the fixed ones are globals.
-  generateGLSL: () => ({ code: '', outputVars: Object.fromEntries(Object.entries(AGENT_INPUT_OUTPUTS).map(([k, o]) => [k, o.expr])) }),
+  // Memory and Colour exist only with state C: the compiler gives the program it whenever they are read.
+  generateGLSL: () => ({ code: '', outputVars: Object.fromEntries([...Object.entries(AGENT_INPUT_OUTPUTS), ...Object.entries(AGENT_INPUT_STATE_OUTPUTS)].map(([k, o]) => [k, o.expr])) }),
 };
 
 export const AgentOutputNode: NodeDefinition = {
@@ -163,6 +190,9 @@ export const AgentOutputNode: NodeDefinition = {
     heading: { type: 'float', label: 'Heading', hint: 'Which way it faces now (Steer\'s or Move\'s Heading). Unwired: from Velocity, or its own.' },
     speed: { type: 'float', label: 'Speed', hint: 'Its speed now. Unwired: the length of Velocity, or its own.' },
     alive: { type: 'float', label: 'Alive', hint: 'Below 0.5 kills it (Emit can bring it back). Unwired: it lives until its Life runs out.' },
+    memory: { type: 'vec2', label: 'Memory', hint: 'Two numbers it keeps for next step (Agent Inputs\' Memory then). Ants: x = carrying food. Unwired: kept as they are.' },
+    deposit: { type: 'vec4', label: 'Deposit', hint: 'How much trail it leaves in each of the four channels this step (times Deposit\'s Amount). Unwired: 1 in its own species\' channel.' },
+    colour: { type: 'vec3', label: 'Colour', hint: 'Its own colour, for Draw agents\' Colour by Agent. Unwired: kept as it is (white when born).' },
   },
   outputs: {},
   defaultParams: {},
@@ -195,10 +225,19 @@ export const AgentStepOutNode: NodeDefinition = {
     const vel = v.velocity ?? (v.heading || v.speed ? `vec2(cos(${id}_h), sin(${id}_h)) * ${id}_s` : 'a_vel');
     const alive = v.alive ?? '1.0';
     const em = v.emit;
-    const birth = em
+    // Per-walker state (state C, D): the compiler sets params.stateC when the group has it.
+    const stateC = node.params.stateC === true;
+    // Born: its species from the Emit (by index when it doesn't say), no memory, white, its own channel.
+    const bornC = stateC
+      ? `        float ${id}_bs = ${em ? `${em}_sp >= 0.0 ? ${em}_sp : ` : ''}mod(a_index, a_speciesCount);\n        o_c = vec4(${id}_bs, 0.0, 0.0, 16777215.0); o_d = agOneHot(${id}_bs);\n`
+      : '';
+    const birth = (em
       ? `        o_a = ${em}_a; o_b = ${em}_b;\n`
       // No Emit wired: born anywhere on the picture, facing anywhere, living forever.
-      : `        uint ${id}_r = a_seed ^ 0x6A09E667u;\n        float ${id}_aspect = u_resolution.x / u_resolution.y;\n        vec2 ${id}_bp = (vec2(agRnd(${id}_r), agRnd(${id}_r)) * 2.0 - 1.0) * vec2(${id}_aspect, 1.0);\n        o_a = vec4(${id}_bp, agRnd(${id}_r) * 6.2831853 - 3.1415927, 0.0); o_b = vec4(0.0, 0.0, 0.0, 1.0e30);\n`;
+      : `        uint ${id}_r = a_seed ^ 0x6A09E667u;\n        float ${id}_aspect = u_resolution.x / u_resolution.y;\n        vec2 ${id}_bp = (vec2(agRnd(${id}_r), agRnd(${id}_r)) * 2.0 - 1.0) * vec2(${id}_aspect, 1.0);\n        o_a = vec4(${id}_bp, agRnd(${id}_r) * 6.2831853 - 3.1415927, 0.0); o_b = vec4(0.0, 0.0, 0.0, 1.0e30);\n`) + bornC;
+    const liveC = stateC
+      ? `        o_c = vec4(a_species, ${v.memory ?? 'a_mem'}, agPackColour(${v.colour ?? 'a_colour'}));\n        o_d = ${v.deposit ?? 'agOneHot(a_species)'};\n`
+      : '';
     return {
       code: [
         `    float ${id}_h = ${head};\n`,
@@ -210,6 +249,7 @@ export const AgentStepOutNode: NodeDefinition = {
         // Headings stay in −π…π so they keep their precision over a long run.
         `        o_a = vec4(${id}_p, mod(${id}_h + 3.1415927, 6.2831853) - 3.1415927, a_age);\n`,
         `        o_b = vec4(${id}_v, ${id}_s, ${id}_alive);\n`,
+        liveC,
         `    }\n`,
       ].join(''),
       outputVars: {},
@@ -357,18 +397,22 @@ export const AgentMoveNode: NodeDefinition = {
     speed: { type: 'float', label: 'Speed', hint: 'Picture units a second (the picture is 2 tall; one step is 1/60 s).' },
     position: { type: 'vec2', label: 'Position', hint: THIS_AGENT },
     also: { type: 'vec2', label: 'Also velocity', hint: 'A velocity added to the walk (a drift, a wind).' },
+    obstacle: { type: 'float', label: 'Obstacle ƒ', field: true, hint: 'A shape\'s distance (any SDF chain): walkers can\'t step where it is below 0. On Obstacle says what they do instead.' },
   },
   outputs: {
     position: { type: 'vec2', label: 'Position', hint: 'Where it ends up: wire into Agent Output.' },
     velocity: { type: 'vec2', label: 'Velocity' },
     heading: { type: 'float', label: 'Heading', hint: 'Its heading after the move (Bounce turns it round).' },
-    hit: { type: 'float', label: 'Hit', hint: '1 when it touched an edge this step.' },
+    hit: { type: 'float', label: 'Hit', hint: '1 when it touched an edge or an obstacle this step.' },
   },
-  defaultParams: { speed: 0.25, edges: 'wrap' },
+  defaultParams: { speed: 0.25, edges: 'wrap', onObstacle: 'turn' },
   paramDefs: {
     speed: { label: 'Speed', type: 'float', min: 0, max: 2, step: 0.005, hint: 'Picture units a second (the picture is 2 tall).' },
     edges: { label: 'Edges', type: 'select', hint: 'What happens at the edge of the picture.', options: [
       { value: 'wrap', label: 'Wrap' }, { value: 'bounce', label: 'Bounce' }, { value: 'slide', label: 'Slide' },
+    ] },
+    onObstacle: { label: 'On obstacle', type: 'select', hint: 'With Obstacle ƒ wired: Turn back stays put and turns round (slime, ants); Slide moves along the shape\'s edge.', options: [
+      { value: 'turn', label: 'Turn back' }, { value: 'slide', label: 'Slide along it' },
     ] },
   },
   assignable: false,
@@ -376,6 +420,7 @@ export const AgentMoveNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, v) => {
     const id = node.id;
     const edges = sel(node.params.edges, ['wrap', 'bounce', 'slide'], 'wrap');
+    const obstacle = fieldFn(v.obstacle);
     const speed = v.speed ?? p(node.params.speed, 0.25);
     const h = v.heading ?? 'a_heading';
     const lines = [
@@ -402,6 +447,29 @@ export const AgentMoveNode: NodeDefinition = {
         `    if (abs(${id}_p.y) > ${id}_b.y) ${id}_v.y = 0.0;\n`,
         `    ${id}_p = clamp(${id}_p, -${id}_b, ${id}_b);\n`,
       );
+    }
+    if (obstacle) {
+      // Inside the shape (its distance below 0) after the step: turn back where it stood, or slide out along the edge.
+      const at = (q: string) => `${obstacle}(${q}, vec2(0.0), 1.0, 0.0)`;
+      const from = v.position ?? 'a_pos';
+      lines.push(`    float ${id}_ob = ${at(`${id}_p`)};\n`);
+      if (sel(node.params.onObstacle, ['turn', 'slide'], 'turn') === 'turn') {
+        lines.push(
+          `    if (${id}_ob < 0.0) { ${id}_p = ${from}; ${id}_h += 3.1415927 + (fract(a_random * 4096.0) - 0.5) * 1.5; ${id}_v = -${id}_v; ${id}_hit = 1.0; }\n`,
+        );
+      } else {
+        lines.push(
+          `    if (${id}_ob < 0.0) {\n`,
+          `        float ${id}_e = 1e-3;\n`,
+          `        vec2 ${id}_n = vec2(${at(`${id}_p + vec2(${id}_e, 0.0)`)} - ${at(`${id}_p - vec2(${id}_e, 0.0)`)}, ${at(`${id}_p + vec2(0.0, ${id}_e)`)} - ${at(`${id}_p - vec2(0.0, ${id}_e)`)});\n`,
+          `        ${id}_n = length(${id}_n) > 1e-9 ? normalize(${id}_n) : -agDir(${id}_h);\n`,
+          `        ${id}_p -= ${id}_n * ${id}_ob;\n`,
+          `        ${id}_v -= ${id}_n * min(dot(${id}_v, ${id}_n), 0.0);\n`,
+          `        if (length(${id}_v) > 1e-6) ${id}_h = atan(${id}_v.y, ${id}_v.x);\n`,
+          `        ${id}_hit = 1.0;\n`,
+          `    }\n`,
+        );
+      }
     }
     return { code: lines.join(''), outputVars: { position: `${id}_p`, velocity: `${id}_v`, heading: `${id}_h`, hit: `${id}_hit` } };
   },
@@ -448,18 +516,25 @@ export const AgentEmitNode: NodeDefinition = {
   description: 'Where walkers are born and how they start. Fill gives everyone a place at once (slime); Rate gives birth to a stream of them a second, each living for Life; Keep full gives each walker a new life the moment it dies (particles). Speed, Spread and Life ± vary them; Burst gives everyone a new life at once. Chain Emits through Also for several sources.',
   inputs: {
     position: { type: 'vec2', label: 'Position', hint: 'The centre of the shape (picture units). Unwired: X and Y on the card.' },
+    where: { type: 'float', label: 'Where ƒ', field: true, hint: 'Shape Field: any chain of nodes as a function of position (noise, a shape, a picture\'s brightness); walkers are born where it is above Threshold.' },
+    picture: { type: 'texture', label: 'Picture', hint: 'Shape Picture: a texture (a Trail, a Pass); walkers are born where it is bright (more where brighter).' },
     also: { type: 'emitter', label: 'Also', hint: 'Another Emit: births are shared between the two by their Share.' },
   },
   outputs: {
     emitter: { type: 'emitter', label: 'Emitter', hint: 'Wire into an Agents group\'s Emit.' },
   },
-  defaultParams: { mode: 'fill', shape: 'disc', heading: 'inward', x: 0, y: 0, size: 0.6, rate: 20000, life: 0, lifeVar: 0.2, speed: 0, speedVar: 0, spread: 0, share: 1, burst: 0 },
+  defaultParams: { mode: 'fill', shape: 'disc', heading: 'inward', x: 0, y: 0, size: 0.6, rate: 20000, life: 0, lifeVar: 0.2, speed: 0, speedVar: 0, spread: 0, share: 1, burst: 0, species: 'each', threshold: 0.2 },
   paramDefs: {
     mode: { label: 'Births', type: 'select', hint: 'Fill: everyone is born at once when the simulation starts (slime). Rate: a stream of births a second. Keep full: born at once, each reborn the moment it dies (particles with a Life).', options: [
       { value: 'fill', label: 'Fill (all at once)' }, { value: 'rate', label: 'Rate (per second)' }, { value: 'respawn', label: 'Keep full (reborn when they die)' },
     ] },
     shape: { label: 'Shape', type: 'select', hint: 'Where in the picture they are born.', options: [
       { value: 'point', label: 'Point' }, { value: 'ring', label: 'Ring' }, { value: 'disc', label: 'Disc' }, { value: 'box', label: 'Box' }, { value: 'screen', label: 'Whole picture' },
+      { value: 'picture', label: 'Picture (where bright)' }, { value: 'field', label: 'Field (Where ƒ above Threshold)' },
+    ] },
+    threshold: { label: 'Threshold', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Picture / Field: how bright (how high) a place must be for walkers to be born there.', showWhen: { param: 'shape', value: ['picture', 'field'] } },
+    species: { label: 'Species', type: 'select', hint: 'Which species these walkers are (with the group\'s Species above 1). Each in turn shares them out evenly; chain one Emit per species to give each its own place.', options: [
+      { value: 'each', label: 'Each in turn' }, { value: '1', label: 'Species 1' }, { value: '2', label: 'Species 2' }, { value: '3', label: 'Species 3' }, { value: '4', label: 'Species 4' },
     ] },
     heading: { label: 'Facing', type: 'select', hint: 'Which way they face when born.', options: [
       { value: 'random', label: 'Random' }, { value: 'inward', label: 'Inward' }, { value: 'outward', label: 'Outward' },
@@ -478,10 +553,11 @@ export const AgentEmitNode: NodeDefinition = {
   },
   assignable: false,
   glslFunctions: [AG_DIR_GLSL],
+  glslFunctionsFor: (node: GraphNode) => (node.params.shape === 'picture' ? [AG_UV_GLSL] : []),
   // Compiled only into a group's update shader: its code runs for the walkers born this step.
   generateGLSL: (node: GraphNode, v) => {
     const id = node.id;
-    const shape = sel(node.params.shape, ['point', 'ring', 'disc', 'box', 'screen'], 'disc');
+    const shape = sel(node.params.shape, ['point', 'ring', 'disc', 'box', 'screen', 'picture', 'field'], 'disc');
     const facing = sel(node.params.heading, ['random', 'inward', 'outward'], 'inward');
     const em = `${id}_em`;
     const centre = v.position ?? `vec2(${p(node.params.x, 0)}, ${p(node.params.y, 0)})`;
@@ -493,6 +569,32 @@ export const AgentEmitNode: NodeDefinition = {
       box: `${id}_pp = ${id}_c + (vec2(${id}_r1, ${id}_r2) * 2.0 - 1.0) * ${size}; ${id}_out = length(${id}_pp - ${id}_c) > 1e-6 ? normalize(${id}_pp - ${id}_c) : vec2(1.0, 0.0);`,
       screen: `${id}_pp = (vec2(${id}_r1, ${id}_r2) * 2.0 - 1.0) * vec2(u_resolution.x / u_resolution.y, 1.0); ${id}_out = length(${id}_pp) > 1e-6 ? normalize(${id}_pp) : vec2(1.0, 0.0);`,
     };
+    // Picture / Field: rejection sampling over the whole picture, 8 hashed tries (the best one if none is taken).
+    const tex = v.picture;
+    const where = fieldFn(v.where);
+    const weight = shape === 'picture' && tex
+      ? `dot(texture(${tex}, agUv(${id}_q)).rgb, vec3(0.299, 0.587, 0.114))`
+      : shape === 'field' && where ? `${where}(${id}_q, vec2(0.0), 1.0, 0.0)` : '';
+    if (weight) {
+      const thr = p(node.params.threshold, 0.2);
+      const accept = shape === 'picture' ? `${id}_w > ${thr} ? clamp(${id}_w, 0.0, 1.0) : 0.0` : `${id}_w > ${thr} ? 1.0 : 0.0`;
+      place[shape] = [
+        `float ${id}_best = -1.0e30; vec2 ${id}_bq = vec2(0.0);`,
+        `        for (int ${id}_k = 0; ${id}_k < 8; ${id}_k++) {`,
+        `            vec2 ${id}_q = (vec2(agRnd(${id}_s), agRnd(${id}_s)) * 2.0 - 1.0) * vec2(u_resolution.x / u_resolution.y, 1.0);`,
+        `            float ${id}_w = ${weight};`,
+        `            float ${id}_p = ${accept};`,
+        `            if (${id}_p > ${id}_best) { ${id}_best = ${id}_p; ${id}_bq = ${id}_q; }`,
+        `            if (agRnd(${id}_s) < ${id}_p) { ${id}_bq = ${id}_q; break; }`,
+        `        }`,
+        `        ${id}_pp = ${id}_bq; ${id}_out = agDir(${id}_r1 * 6.2831853);`,
+      ].join('\n');
+    } else if (shape === 'picture' || shape === 'field') {
+      place[shape] = place.screen;
+    }
+    const speciesSel = sel(node.params.species, ['each', '1', '2', '3', '4'], 'each');
+    const species = speciesSel === 'each' ? '-1.0' : `${Number(speciesSel) - 1}.0`;
+    const stateC = node.params.__stateC === true;
     const head = facing === 'random' ? `${id}_r3 * 6.2831853 - 3.1415927` : facing === 'inward' ? `atan(-${id}_out.y, -${id}_out.x)` : `atan(${id}_out.y, ${id}_out.x)`;
     const life = p(node.params.life, 0);
     const spread = p(node.params.spread, 0);
@@ -501,6 +603,8 @@ export const AgentEmitNode: NodeDefinition = {
       `    vec4 ${em}_a = vec4(0.0);\n`,
       `    vec4 ${em}_b = vec4(0.0);\n`,
       `    float ${em}_w = max(${p(node.params.share, 1)}, 0.0);\n`,
+      // Its species (−1: by index, each in turn), only in groups with per-walker state (the compiler marks the Emit).
+      stateC ? `    float ${em}_sp = ${species};\n` : '',
       `    if (a_born) {\n`,
       `        uint ${id}_s = a_seed ^ 0x${(hashId(id) >>> 0).toString(16).padStart(8, '0')}u;\n`,
       `        float ${id}_r1 = agRnd(${id}_s), ${id}_r2 = agRnd(${id}_s), ${id}_r3 = agRnd(${id}_s), ${id}_r4 = agRnd(${id}_s);\n`,
@@ -523,7 +627,7 @@ export const AgentEmitNode: NodeDefinition = {
     if (v.also) {
       // Shared births: this Emit keeps its Share of them, the chain behind it the rest.
       lines.push(
-        `        if (agRnd(${id}_s) * (${em}_w + ${v.also}_w) >= ${em}_w) { ${em}_a = ${v.also}_a; ${em}_b = ${v.also}_b; }\n`,
+        `        if (agRnd(${id}_s) * (${em}_w + ${v.also}_w) >= ${em}_w) { ${em}_a = ${v.also}_a; ${em}_b = ${v.also}_b;${stateC ? ` ${em}_sp = ${v.also}_sp;` : ''} }\n`,
       );
     }
     lines.push(`    }\n`);
@@ -552,8 +656,11 @@ export const AgentDepositNode: NodeDefinition = {
   outputs: {
     deposit: { type: 'deposit', label: 'Deposit', hint: 'Wire into a Trail field\'s Deposit.' },
   },
-  defaultParams: { amount: 1, size: 1 },
+  defaultParams: { amount: 1, size: 1, what: 'trail' },
   paramDefs: {
+    what: { label: 'What', type: 'select', hint: 'Trail: each walker\'s own species channel (or what Agent Output\'s Deposit says). Velocity: its velocity in the first two channels and a count in the third, so the trail becomes a field of how the crowd moves (flocking).', options: [
+      { value: 'trail', label: 'Trail (by species, or Agent Output\'s Deposit)' }, { value: 'velocity', label: 'Velocity (for flocking)' },
+    ] },
     amount: { label: 'Amount', type: 'float', min: 0, max: 20, step: 0.01, hint: 'Trail each walker leaves per step.' },
     size: { label: 'Size', type: 'float', min: 1, max: 4, step: 1, hint: 'Trail pixels square each walker marks (1 is the classic look).' },
   },
@@ -569,6 +676,8 @@ export const TrailFieldNode: NodeDefinition = {
   description: 'The trail the walkers leave: every step it spreads out (Diffuse) and fades (Half-life). It is an ordinary texture: Amount at this pixel goes into a Palette or the Output, Texture into Glow, Blur or Sample (texture), and back into the Agents group for Sense to smell (it reads the trail as it was one step before).',
   inputs: {
     deposit: { type: 'deposit', label: 'Deposit', hint: 'A Deposit (or a chain of them).' },
+    add: { type: 'vec4', label: 'Add', hint: 'Painted into the trail every step, per second (one amount per channel), at each trail pixel: food from a picture, a shape, noise. Any chain of nodes; it reads that pixel\'s position.' },
+    block: { type: 'float', label: 'Block', hint: 'Where this is 1 the trail is wiped every step (0 leaves it): walls and obstacles nothing can smell through. Any chain of nodes.' },
   },
   outputs: {
     amount: { type: 'float', label: 'Amount', hint: 'The trail here, softly scaled to 0–1 by Gain: wire into a Palette.' },
@@ -576,13 +685,16 @@ export const TrailFieldNode: NodeDefinition = {
     channels: { type: 'vec4', label: 'Channels', hint: 'All four channels here, unscaled (one per species).' },
     texture: { type: 'texture', label: 'Texture', hint: 'The whole trail as a texture: into an Agents group (for Sense), Glow, Blur or Sample (texture).' },
   },
-  defaultParams: { resolution: '0.5', diffuse: 1, halfLife: 0.12, edges: 'wrap', gain: 0.15 },
+  defaultParams: { resolution: '0.5', diffuse: 1, halfLife: 0.12, edges: 'wrap', gain: 0.15, kernel: '3' },
   paramDefs: {
     resolution: { label: 'Resolution', type: 'select', hint: 'Size of the trail texture: a share of the picture, or a fixed height for a look that doesn\'t change with the window.', options: [
       { value: '0.5', label: '½ picture' }, { value: '0.25', label: '¼ picture' }, { value: '1', label: 'Full picture' },
       { value: '512', label: '512 rows' }, { value: '1024', label: '1024 rows' }, { value: '2048', label: '2048 rows' },
     ] },
-    diffuse: { label: 'Diffuse', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How much the trail spreads to its neighbours each step (a mix toward the 3×3 mean).' },
+    diffuse: { label: 'Diffuse', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How much the trail spreads to its neighbours each step (a mix toward the 3×3 mean, or the 5×5 blur).' },
+    kernel: { label: 'Spread', type: 'select', hint: '3×3: the slime paper\'s mean of the 8 neighbours. 5×5: a wider, smoother blur (a Gaussian-like 1-4-6-4-1), for soft fields such as flocking.', options: [
+      { value: '3', label: '3×3 mean' }, { value: '5', label: '5×5 blur' },
+    ] },
     halfLife: { label: 'Half-life', type: 'float', min: 0.005, max: 10, step: 0.005, hint: 'Seconds (simulated) for the trail to fade to half. Short makes thin, busy veins; long makes thick, slow ones.' },
     edges: { label: 'Edges', type: 'select', hint: 'Wrap joins opposite edges (matches Move\'s Wrap); Clamp keeps them apart.', options: [
       { value: 'wrap', label: 'Wrap' }, { value: 'clamp', label: 'Clamp' },
@@ -591,7 +703,8 @@ export const TrailFieldNode: NodeDefinition = {
   },
   assignable: false,
   // Compiled as a source only (the compiler strips its Deposit wire): node.id is the slug.
-  declarationsFor: (node: GraphNode) => [`uniform sampler2D ${trailUniform(node.id)};`],
+  // The sampling nodes (Sample, Blur, Glow, Edges (texture)) also read the picture's pixel size, `<sampler>_px`, as for a Pass.
+  declarationsFor: (node: GraphNode) => [`uniform sampler2D ${trailUniform(node.id)};`, `uniform vec2 ${trailUniform(node.id)}_px;`],
   glslFunctions: [AG_UV_GLSL],
   generateGLSL: (node: GraphNode) => {
     const id = node.id;
@@ -608,6 +721,45 @@ export const TrailFieldNode: NodeDefinition = {
   },
 };
 
+/**
+ * The end of a Trail's own step program (made by the compiler when Add or Block is wired; never in a
+ * graph): the spread and fade of agentShaders.js's fixed step, plus Add (per second) and Block. It
+ * runs over the trail's texture, so g_uv is each trail pixel's place in the picture.
+ */
+export const TrailStepOutNode: NodeDefinition = {
+  type: 'trailStepOut',
+  label: 'Trail step output',
+  category: 'Output',
+  description: 'Internal: what a Trail field\'s step program writes.',
+  inputs: {
+    add: { type: 'vec4', label: 'Add' },
+    block: { type: 'float', label: 'Block' },
+  },
+  outputs: {},
+  defaultParams: { trail: '' },
+  declarationsFor: (node: GraphNode) => {
+    const u = trailStepUniforms(String(node.params.trail));
+    return [`uniform sampler2D ${u.src};`, `uniform vec4 ${u.step};`];
+  },
+  glslFunctions: [AG_TRAIL_MEAN_GLSL],
+  generateGLSL: (node: GraphNode, v) => {
+    const id = node.id;
+    const u = trailStepUniforms(String(node.params.trail));
+    // u.step = (diffuse, keep, flags: 1 wrap + 2 the 5×5 blur + 4 signed, a step's seconds).
+    return {
+      code: [
+        `    ivec2 ${id}_p = ivec2(gl_FragCoord.xy);\n`,
+        `    int ${id}_f = int(${u.step}.z + 0.5);\n`,
+        `    vec4 ${id}_t = mix(texelFetch(${u.src}, ${id}_p, 0), agTrailMean(${u.src}, ${id}_p, textureSize(${u.src}, 0), ${id}_f & 1, (${id}_f >> 1) & 1), clamp(${u.step}.x, 0.0, 1.0)) * ${u.step}.y;\n`,
+        v.add ? `    ${id}_t += ${v.add} * ${u.step}.w;\n` : '',
+        v.block ? `    ${id}_t *= 1.0 - clamp(${v.block}, 0.0, 1.0);\n` : '',
+        `    gl_FragColor = (${id}_f & 4) != 0 ? ${id}_t : max(${id}_t, vec4(0.0));\n`,
+      ].join(''),
+      outputVars: {},
+    };
+  },
+};
+
 /** The Particles engine's palettes, for Draw agents (its names), or Colour A → B. */
 export const AG_PALETTE_OPTIONS = [
   { value: 'ab', label: 'Colour A → B' },
@@ -615,7 +767,7 @@ export const AG_PALETTE_OPTIONS = [
 ];
 export const DRAW_STYLES = ['points', 'glow', 'streaks', 'ink'] as const;
 export const GP_PALETTE_NAMES = Object.keys(GP_PALETTES);
-export const DRAW_COLOR_BY = ['single', 'species', 'speed', 'heading', 'age'] as const;
+export const DRAW_COLOR_BY = ['single', 'species', 'speed', 'heading', 'age', 'agent'] as const;
 
 export const DrawAgentsNode: NodeDefinition = {
   type: 'drawAgents',
@@ -651,6 +803,7 @@ export const DrawAgentsNode: NodeDefinition = {
     fade: { label: 'Fade with age', type: 'select', section: 'Look', hint: 'Walkers with a Life fade in at birth and out toward its end.', options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] },
     colorBy: { label: 'Colour by', type: 'select', section: 'Colour', hint: 'What picks each walker\'s colour along the palette (or between Colour A and B).', options: [
       { value: 'single', label: 'One colour (A / the palette\'s start)' }, { value: 'species', label: 'Species' }, { value: 'speed', label: 'Speed' }, { value: 'heading', label: 'Heading' }, { value: 'age', label: 'Age (share of its life)' },
+      { value: 'agent', label: 'Agent (its own Colour, set inside the group)' },
     ] },
     palette: { label: 'Palette', type: 'select', section: 'Colour', hint: 'Colour A → B, or one of the Particles node\'s palettes.', options: AG_PALETTE_OPTIONS },
     colorA: { label: 'Colour A', type: 'vec3color', section: 'Colour' },
@@ -671,7 +824,7 @@ export const DrawAgentsNode: NodeDefinition = {
   },
   assignable: false,
   // Compiled as a source only (the compiler strips its Agents wire): node.id is the slug.
-  declarationsFor: (node: GraphNode) => [`uniform sampler2D ${agentDrawUniform(node.id)};`],
+  declarationsFor: (node: GraphNode) => [`uniform sampler2D ${agentDrawUniform(node.id)};`, `uniform vec2 ${agentDrawUniform(node.id)}_px;`],
   glslFunctions: [AG_UV_GLSL],
   generateGLSL: (node: GraphNode, v) => {
     const id = node.id;
@@ -720,3 +873,20 @@ export const CurlSmokePresetNode = preset('curlSmokePreset', 'Curl smoke (preset
 /** Sound burst — shockwaves on a stand-in beat (a starter). */
 export const SoundBurstPresetNode = preset('soundBurstPreset', 'Sound burst (preset)', ['Shockwave preset', 'Beat particles', 'Audio particles'],
   'Adds particles that answer sound: a disc of glowing streaks that a ring of pressure blasts outward on every beat and a spring pulls back together. A silent stand-in beat (120 a minute) drives it until you give it real sound. Every node has a note.');
+
+// ── P3 presets: species, food and obstacles ─────────────────────────────────
+/** Multi-species slime — three colonies competing for room (a starter). */
+export const MultiSlimePresetNode = preset('multiSlimePreset', 'Multi-species slime (preset)', ['Three species', 'Competing slime', 'Species preset', 'Territories'],
+  'Adds three slime colonies of different colours that grow toward each other: each follows its own kind\'s trail and avoids the others\', so they carve the picture into living territories with sharp borders. Every node has a note.');
+/** Ants — a nest, food, and walkers that carry it home (a starter). */
+export const AntsPresetNode = preset('antsPreset', 'Ants (preset)', ['Ant colony', 'Foraging', 'Pheromone trails', 'Ant trails'],
+  'Adds an ant colony built from nodes: ants leave the nest, wander until they find food, pick it up and follow the home smell back, marking a food trail as they go, so busy roads form between the nest and the food. Each ant remembers whether it carries food (Memory). Every node has a note.');
+/** Boids — flocking through a velocity field (a starter). */
+export const BoidsPresetNode = preset('boidsPreset', 'Boids (preset)', ['Flocking', 'Flock', 'Murmuration', 'Swarm preset', 'Field boids'],
+  'Adds flocking built from nodes: every bird leaves its velocity in a blurred field, then steers to match the flow around it, drifts toward the crowd and away from a crush. Flocks gather, turn together and stream past each other. Every node has a note.');
+/** Strands — long flowing filaments (a starter). */
+export const StrandsPresetNode = preset('strandsPreset', 'Strands (preset)', ['Filaments', 'Hair', 'Flowing lines', 'Fibres'],
+  'Adds slime tuned for long flowing filaments: walkers that look far ahead and turn only a little, drawn as dark ink streaks on paper, so the picture fills with combed strands like hair or silk. Every node has a note.');
+/** Grow toward a picture — slime feeding on a picture's bright parts (a starter). */
+export const GrowPicturePresetNode = preset('growPicturePreset', 'Grow toward a picture (preset)', ['Slime picture', 'Feed on image', 'Food from a picture', 'Image slime'],
+  'Adds slime that feeds on a picture: its bright parts are food painted into the trail every step, so the network grows over them and draws the picture in veins. A built-in moonlit picture until you load your own into its Texture Input. Every node has a note.');

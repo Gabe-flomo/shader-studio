@@ -12,6 +12,7 @@ import { toast } from '../components/ui/toastStore';
 import { planSceneGroupAdd, planSmart3DAdd } from '../nodes/smart3d';
 import { askChoice } from '../components/ui/dialogStore';
 import { buildAgentsSubgraph, buildMarchRig, buildMarchSubgraph, buildSceneSubgraph, buildVolumetricRig, graphOutput, instantiateNode, twoDNodesBefore3D } from '../nodes/scene3dDefaults';
+import { agentEyeNodes } from '../compiler/agentGraph';
 import { agentPreset } from './agentExamples';
 import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES, AGENT_PRESET_TYPES } from '../nodes/definitions/agents';
 import { randomizedParams } from '../nodes/randomizeParams';
@@ -722,6 +723,11 @@ interface NodeGraphState {
   passes: import('../compiler/types').PassProgram[] | null;
   /** The Agents family's programs from the last compile (compiler/agentGraph.ts); null without one. */
   agents: import('../compiler/types').AgentsSpec | null;
+  /** With passes or agents: the nodes compiled into the final picture (Show passes). */
+  finalNodeIds: string[] | null;
+  /** Show passes: tint each card by the program it runs in (lib/programTints.ts). */
+  showPasses: boolean;
+  setShowPasses: (on: boolean) => void;
 
   /** Maps nodeId → GLSL slug, e.g. "node_49" → "cos_49". Used for code-panel highlighting. */
   nodeSlugMap: Map<string, string>;
@@ -1677,6 +1683,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   echoConfig: null,
   passes: null,
   agents: null,
+  finalNodeIds: null,
+  showPasses: false,
+  setShowPasses: (on: boolean) => set({ showPasses: on }),
   nodeSlugMap: new Map(),
   rawGlslShader: null,
   previewAspect: ((): PreviewAspect => {
@@ -3186,9 +3195,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           : n);
         set({ nodes });
         get().compile();
-        const what = type === 'slimeMoldPreset'
-          ? 'A million walkers that sense, turn, move and leave trail, coloured by a palette'
-          : 'A million particles moved by a chain of forces, drawn by Draw agents';
+        const what = ({
+          slimeMoldPreset: 'A million walkers that sense, turn, move and leave trail, coloured by a palette',
+          multiSlimePreset: 'Three slime colonies that follow their own trail and avoid each other\'s',
+          antsPreset: 'Ants that carry food from three piles to their nest along the smell they leave',
+          boidsPreset: 'Birds that flock through a field of their own velocities',
+          strandsPreset: 'Slime combed into long strands, drawn as ink on paper',
+          growPicturePreset: 'Slime that feeds on a picture\'s bright parts and maps it in veins',
+        } as Record<string, string>)[type] ?? 'A million particles moved by a chain of forces, drawn by Draw agents';
         toast.info(`${preset.label} added`, {
           message: `${what}${output ? ' and wired to the Output' : '. Add an Output node and wire the last node into it to see it'}. Every node has a note on what it does; double-click the Agents group to open the rule.`,
         });
@@ -4638,7 +4652,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         const groupNode = nodes.find(n => n.id === activeGroupId);
         const subgraph = groupNode?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
         const isInGroup = subgraph?.nodes.some(n => n.id === previewNodeId) ?? false;
-        graphNodes = isInGroup
+        // Inside an Agents group the eye shows what an agent standing at each pixel would see
+        // (compiler/agentGraph.ts agentEyeNodes); the simulation keeps running under it.
+        const eye = isInGroup && groupNode?.type === 'agentsGroup' ? agentEyeNodes(nodes, activeGroupId, previewNodeId) : null;
+        if (eye) {
+          const preview = buildPreviewGraph([...eye.rest, ...eye.copies], previewNodeId);
+          const ids = new Set(preview.map(n => n.id));
+          graphNodes = [...eye.rest.filter(n => !ids.has(n.id)), ...preview];
+        } else graphNodes = isInGroup
           ? buildGroupPreviewGraph(nodes, activeGroupId, previewNodeId)
           : buildPreviewGraph(nodes, previewNodeId);
       } else {
@@ -4724,6 +4745,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       echoConfig: result.echo ?? null,
       passes: result.passes ?? null,
       agents: result.agents ?? null,
+      finalNodeIds: result.finalNodeIds ?? null,
       nodeSlugMap: result.nodeSlugMap ?? new Map(),
       // Probe values are read from the compiled program, so they only go
       // stale when the shader itself changed (or the program is rebuilt).

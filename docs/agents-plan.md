@@ -1,6 +1,6 @@
 # Agents group: slime mold and particles built from nodes (plan, 2026-10-03)
 
-**Status:** P0, P1 (Slime) and P2 (Particles) shipped 2026-10-03/04; see "What shipped" below. P3 onward not built. User guide: docs/agents-group.md.
+**Status:** P0, P1 (Slime), P2 (Particles) and P3 (Species, food and obstacles) shipped 2026-10-03/04; see "What shipped" below. P4 onward not built. User guide: docs/agents-group.md.
 
 ## In plain words
 
@@ -68,6 +68,35 @@ The user moved two of P4's nodes into P2: **Sound kick** and **Chladni** shipped
 **Determinism** (checked in the browser for all four examples): two offline runs and live runs at 30, 60 and 120 Hz and at 60 Hz with a 150 ms stall reach bit-identical state A and B (FNV of the read-back floats), including the listener state (shock rings, level history) and the pre-roll.
 
 **Deferred from P2**: the group-level Sound from (P4); Gust as a Sound kick mode (Wind's Gusts covers the look); a wired Level socket on Sound kick (the level must be known to the engine for hits, so it is a slider; map audio to it in Play); the "Audio input node" part of the Particles node's Graph source; Emit's picture / field shapes (P3); Streaks of the Particles node's 3D / depth of field (P6); the eye preview inside the group (P3); website pages still don't run agents (P5, the export warns).
+
+## What shipped (P3 Species, food and obstacles, 2026-10-04)
+
+**Per-walker state** (state C and D, §3.3). A group gets two more MRT outputs and samplers only when it needs them (`needsStateC`: Species above 1, or Agent Output's new **Memory** / **Deposit** / **Colour** wired, or Agent Inputs' new **Memory** / **Colour** read). C = (species, memory.xy, colour packed 8 bits a channel into one float's 24 exact bits), D = the walker's own deposit (vec4, one amount per trail channel). With it the species is the one its Emit gave it (Emit's new **Species**: Each in turn, or 1–4; chained Emits give each colony its own place) and kept for life, not the index mod N. Deposit draws D × Amount; Draw agents reads the species from C and gains **Colour by Agent** (C's colour). A group without it compiles exactly as P2 (two outputs, species from the index): the P1/P2 examples' update shaders differ from main only by one unused `uniform vec2 u_trail_<slug>_px;` declaration (below). The plan's 4 × 8-bit packed deposit became a full vec4 in D, so amounts aren't quantised (16 MB more at 1M, ×2 ping-pong).
+
+**Food and obstacles.**
+- **Trail field Add / Block**: wiring either gives the trail a step program of its own (`trailStepOut` sink, compiled with the ordinary compiler over the trail's texture, so g_uv is each trail pixel's place): spread and fade as before, then `+ Add × dt`, then `× (1 − Block)`. Their chains are left out of the picture program when only the trail needs them; Passes they read are live and draw before the agents. The step program runs at the step's own clock time (determinism). **Spread: 5×5** (1-4-6-4-1, one 25-tap pass) beside the 3×3 mean, which is P1's step exactly (shared `AG_TRAIL_MEAN_GLSL`).
+- **Deposit What: Velocity** writes (vel × amount, amount, 0): the trail becomes a flow field with a count in its third channel; a trail fed by one keeps negative values (`signed`).
+- **Move Obstacle ƒ** (an SDF field socket; outer chains through the group's ports work): **Turn back** (stays, turns round with a little randomness) or **Slide** (pushed out along the gradient, inward velocity dropped).
+- **Emit Shape Picture / Field**: rejection sampling over the whole picture, 8 hashed tries, the first taken (else the best): Picture weighs each try by a texture's brightness (above Threshold), Field takes Where ƒ above Threshold.
+
+**Fixes found on the way** (agent programs only; picture programs untouched): nodes that read `vUv` directly (UV, Text, a Pass's colour) read the state texel inside an update shader; they now read the agent's place (`a_vUv`, set from a_pos; applied in `toAgentProgram`). The sampling nodes (Sample, Blur, Glow, Edges (texture)) need `<sampler>_px`, which Trail and Draw agents didn't declare: a Sample on a Trail failed to compile. Both now declare it and the runner sets it to one picture pixel.
+
+**Eye preview inside a group** (§12): the eye on an inside node compiles that node and the inside nodes it depends on into the picture program (`agentEyeNodes`, marked `__agentEye`; assembler option `agentEye` declares the agent globals and sets them to an agent standing at the pixel: a_pos = g_uv, heading 0, species 0, newborn, nothing remembered). Added ports are rewired to the outer sources, so a Sense on the trail shows this frame's trail through its three sensors; the rest of the graph stays, so the simulation keeps running under the preview.
+
+**Show passes** (the toolbar's layers button, offered when a graph compiles into more than one program): each card gets a ring and a chip in its program's colour: Pass n (cool), **Agents: <group>** (amber; the group's inside and outer port chains, Deposit, Trail and its step chain, Draw) and Picture (green); a node compiled into two programs is striped ("Runs in 2 programs"). The compile result gains `finalNodeIds`, trails `stepNodeIds` (`lib/programTints.ts`). The Pass node's own phase 3 (probes and scopes in pass programs) is still not built.
+
+**Presets** (each also an example, every node with a note, Expression Blocks explaining each named line):
+- **Multi-species slime** (`agentMultiSlime`): 1M, 3 species from three chained Emits (coral, teal, violet discs), Sense's default Channels (+1 own, −0.5 others), Crowding, **By species** speeds, one Deposit, a 3-channel Trail, a "Three colours" block. Colonies grow toward each other and carve stable, shifting territories.
+- **Ants** (`agentAnts`): 256k, 3 steps a frame, Keep full (life 30 s) from a nest. "Nest and food" and "Rocks" blocks outside feed the group's Places and Rocks ports (Move's Obstacle ƒ), the Trail's Block and the picture. An "Ant rule" block sets Memory (carrying, seconds since its source), Deposit (home smell searching, food smell carrying, weaker the longer it walked), Colour and a weak homing lean; "Which smell" picks Sense's Channels. Roads form from the nest to all three food piles within ~20 s and bend round the rocks; a long loop straightens into the short path.
+- **Boids** (`agentBoids`): 256k, Deposit Velocity into a ½-res 5×5 signed Trail; inside, Sample (texture) gives the flow, Sense the crowd's gradient (a "Count channel" block), a "Flock" block (align, cohere/separate past Packed, cruise; four sliders) → Curl breeze → Integrate (wrap). Streaks by heading over an evening sky: flocks gather, wheel and stream past each other.
+- **Strands** (`agentStrands`): 1M slime with far, narrow sensors (0.06, 15°), Turn 12°, Crowding (Sat 20) and a slow curl-noise drift into Move's Also velocity; Ink streaks on warm paper. Without the drift and Crowding it coarsened into one rope within 20 s.
+- **Grow toward a picture** (`agentGrowPicture`): 1M slime; a built-in "Moonlit picture" (moon, ridge rim, stars) or a Texture Input ("Yours" slider), Food = brightness², painted into the trail's second channel by Add, walkers born on it (Emit Field), Sense smells both channels (a "Smell both" block), the picture shows only the slime's own channel coloured by the picture. The moon fills with a labyrinth, the ridge is traced in orange, stars become nodes.
+
+**Determinism** (browser, M3 Pro, ANGLE Metal): for all five, two offline runs and live runs at 30, 60, 120 Hz and 60 Hz with a 150 ms stall reach bit-identical state A, B, C and D and trail texture (FNV of the read-back), Ants' 20 s pre-roll and trail step program included. Slime mold re-checked unchanged.
+
+**Measured** (M3 Pro, 1920 × 1080, each frame GPU-synced, every preset forced to 1M): Multi-species slime 11.8 ms a frame; Ants 14.2 ms (3 steps; steps alone 11.9 ms: a million ants crowd onto three roads and Deposit's overlapping points dominate); Boids 15.7 ms (steps 8.8 ms, the rest 2M-vertex streaks + glow); Strands 18.2 ms (steps 9.7 ms, the rest ink streaks); Grow toward a picture 10.3 ms; Slime mold 9.2 ms (unchanged). As shipped, Ants (256k) is 3.5 ms and Boids (256k) 3.9 ms.
+
+**Deferred from P3**: a separable two-pass 5×5 (one 25-tap pass is cheap enough at trail sizes); Emit Picture / Field limited to a region (it samples the whole picture); Show passes for programs inside groups other than Agents and the Pass node's phase 3 inspection; per-walker colour packing beyond 8 bits; exact neighbour boids (field boids as agreed).
 
 ---
 

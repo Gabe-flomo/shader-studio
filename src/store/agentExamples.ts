@@ -13,6 +13,8 @@
 import type { GraphNode } from '../types/nodeGraph';
 import type { ExampleGraph } from './exampleIndex';
 import { n } from './graphBuilder';
+import { agentsGroup, expr, note, withOutputs } from './agentExampleKit';
+import { antsNodes, boidsNodes, growPictureNodes, multiSlimeNodes, strandsNodes } from './agentExamplesP3';
 
 export const AGENT_EXAMPLE_INDEX: Record<string, { label: string; description: string }> = {
   slimeMold: {
@@ -27,6 +29,26 @@ export const AGENT_EXAMPLE_INDEX: Record<string, { label: string; description: s
     label: 'Curl smoke',
     description: 'Smoke built from nodes: a million particles rise from a small source, warm air (an Expression Block) lifting them less as they cool, while curl noise folds them into threads and a gusty breeze leans the plume over, drawn as ink streaks on paper.',
   },
+  agentMultiSlime: {
+    label: 'Multi-species slime',
+    description: 'Three slime colonies, coral, teal and violet, grow out of three discs toward each other. Each walker follows its own kind\'s trail and avoids the others\', so the picture is carved into living territories whose borders keep shifting. Species and a different speed for each come from one rule (By species).',
+  },
+  agentAnts: {
+    label: 'Ants',
+    description: 'An ant colony built from nodes: ants leave the nest, wander until they find food, pick it up and follow the home smell back, marking a food trail as they go. Busy roads form between the nest and three food piles and bend round the rocks. Each ant remembers whether it carries food (Memory) and leaves a smell of its own (Deposit).',
+  },
+  agentBoids: {
+    label: 'Boids',
+    description: 'Flocking without neighbour lists: every bird leaves its velocity in a blurred flow field (Deposit Velocity, a 5×5 Trail), then matches the flow around it, drifts toward the crowd and away from a crush. Flocks gather, turn together and stream through each other, coloured by heading.',
+  },
+  agentStrands: {
+    label: 'Strands',
+    description: 'Slime tuned for long flowing filaments: walkers look far ahead and turn only a little, so the network combs itself into strands like hair or silk, drawn as dark ink streaks on warm paper.',
+  },
+  agentGrowPicture: {
+    label: 'Grow toward a picture',
+    description: 'Slime feeding on a picture: its bright parts are food painted into the trail every step (Trail field Add) and walkers are born on them (Emit Field), so the network maps the picture in veins coloured by what they feed on. A built-in moonlit picture; load your own into the Texture Input.',
+  },
   agentSoundBurst: {
     label: 'Sound burst',
     description: 'Particles that answer sound: a disc of glowing streaks that a shockwave blasts outward on every beat and a spring pulls back together. A silent stand-in beat (120 a minute) drives it; set Sound from to the mic or the Audio engine for real music.',
@@ -35,12 +57,6 @@ export const AGENT_EXAMPLE_INDEX: Record<string, { label: string; description: s
 
 export const AGENT_EXAMPLE_KEYS = Object.keys(AGENT_EXAMPLE_INDEX);
 
-const note = (lines: string[]) => ({ __comment: lines.join('\n') });
-
-/** A node's sockets, its definition's, with a few made by hand (Agent Inputs' added ports). */
-function withOutputs(node: GraphNode, extra: Record<string, { type: GraphNode['outputs'][string]['type']; label: string }>): GraphNode {
-  return { ...node, outputs: { ...node.outputs, ...extra } };
-}
 
 /**
  * The Slime mold graph, ids as given, its top-left at (x, y). `outputId` is
@@ -173,6 +189,11 @@ export function buildAgentExamples(): Record<string, ExampleGraph> {
     agentParticles: { ...AGENT_EXAMPLE_INDEX.agentParticles, counter: 40, nodes: particlesNodes(0, 200) },
     agentCurlSmoke: { ...AGENT_EXAMPLE_INDEX.agentCurlSmoke, counter: 40, nodes: curlSmokeNodes(0, 200) },
     agentSoundBurst: { ...AGENT_EXAMPLE_INDEX.agentSoundBurst, counter: 40, nodes: soundBurstNodes(0, 200) },
+    agentMultiSlime: { ...AGENT_EXAMPLE_INDEX.agentMultiSlime, counter: 40, nodes: multiSlimeNodes(0, 200) },
+    agentAnts: { ...AGENT_EXAMPLE_INDEX.agentAnts, counter: 40, nodes: antsNodes(0, 200) },
+    agentBoids: { ...AGENT_EXAMPLE_INDEX.agentBoids, counter: 40, nodes: boidsNodes(0, 200) },
+    agentStrands: { ...AGENT_EXAMPLE_INDEX.agentStrands, counter: 40, nodes: strandsNodes(0, 200) },
+    agentGrowPicture: { ...AGENT_EXAMPLE_INDEX.agentGrowPicture, counter: 40, nodes: growPictureNodes(0, 200) },
   };
 }
 
@@ -188,39 +209,6 @@ export function slimeMoldPreset(nextId: () => string, at: { x: number; y: number
 
 // ── Particles built from nodes (P2): forces chained through Also, Integrate, Age / Life ──
 
-/**
- * An Expression Block (exprNode) with named lines, as the app saves one: its sockets are
- * its inputs, its result one output of `outputType`. `wires` connect its inputs by name.
- */
-function expr(id: string, x: number, y: number, o: {
-  label: string; inputs: Array<{ name: string; type: 'float' | 'vec2' | 'vec3' }>; lines: Array<[string, string]>;
-  result: string; outputType: 'float' | 'vec2' | 'vec3'; wires?: Record<string, [string, string]>; note: string[];
-}): GraphNode {
-  const node = n('exprNode', id, x, y, {
-    label: o.label,
-    inputs: o.inputs.map(i => ({ name: i.name, type: i.type, slider: null })),
-    outputType: o.outputType,
-    lines: o.lines.map(([lhs, rhs]) => ({ lhs, op: '=', rhs })),
-    result: o.result,
-    expr: o.result,
-    ...note(o.note),
-  });
-  node.inputs = Object.fromEntries(o.inputs.map(i => [i.name, {
-    type: i.type, label: `${i.name} (${i.type})`,
-    ...(o.wires?.[i.name] ? { connection: { nodeId: o.wires[i.name][0], outputKey: o.wires[i.name][1] } } : {}),
-  }]));
-  node.outputs = { result: { type: o.outputType, label: `Result (${o.outputType})` } };
-  return node;
-}
-
-/** The group node: its inside and settings, Emit wired in. */
-function agentsGroup(id: string, x: number, y: number, emitId: string, inside: GraphNode[], params: Record<string, unknown>): GraphNode {
-  return n('agentsGroup', id, x, y, {
-    tier: '1m', species: '1', stepsPerFrame: 2, seed: 1, preroll: 0,
-    subgraph: { nodes: inside, inputPorts: [], outputPorts: [] },
-    ...params,
-  }, { emit: [emitId, 'emitter'] });
-}
 
 /**
  * Particles: the Particles node's default look built from nodes. Embers are
@@ -510,6 +498,11 @@ const PRESET_BUILDERS: Record<string, { build: (x: number, y: number) => GraphNo
   particlesPreset: { build: (x, y) => particlesNodes(x, y, false), out: ['ptDraw', 'color'], label: 'Particles' },
   curlSmokePreset: { build: (x, y) => curlSmokeNodes(x, y, false), out: ['csDraw', 'color'], label: 'Curl smoke' },
   soundBurstPreset: { build: (x, y) => soundBurstNodes(x, y, false), out: ['sbDraw', 'color'], label: 'Sound burst' },
+  multiSlimePreset: { build: (x, y) => multiSlimeNodes(x, y, false), out: ['msColour', 'result'], label: 'Multi-species slime' },
+  antsPreset: { build: (x, y) => antsNodes(x, y, false), out: ['antDraw', 'color'], label: 'Ants' },
+  boidsPreset: { build: (x, y) => boidsNodes(x, y, false), out: ['bdDraw', 'color'], label: 'Boids' },
+  strandsPreset: { build: (x, y) => strandsNodes(x, y, false), out: ['stDraw', 'color'], label: 'Strands' },
+  growPicturePreset: { build: (x, y) => growPictureNodes(x, y, false), out: ['gpLook', 'result'], label: 'Grow toward a picture' },
 };
 
 /**

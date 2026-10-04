@@ -33,7 +33,7 @@ import { PASS_SCALES } from '../nodes/definitions/passes';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 import {
   agentStepNodes, asAgentSource, checkProgramWires, depositSpec, depositTargets, drawSpec, emitMode, engineParams, groupSide, groupSpecies,
-  hasAgentsNode, insideSlugs, isAgentEngineOnly, isAgentLoopWire, isAgentSource, listenersOf, MAX_AGENT_GROUPS, MAX_TRAILS, trailSpec,
+  hasAgentsNode, insideSlugs, isAgentEngineOnly, isAgentLoopWire, isAgentSource, listenersOf, MAX_AGENT_GROUPS, MAX_TRAILS, trailHasStepProgram, trailSpec, trailStepSink,
 } from './agentGraph';
 import { agentPlacementProblems, agentProgramProblems } from './agentRules';
 
@@ -215,14 +215,24 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     const output = nodes.find(n => n.type === 'output' || n.type === 'vec4Output')!;
     const outputAncestors = collect(wiresOf(output), byId, null, undefined, agents);
     // Each group's update shader: its inside plus the outer nodes wired into its ports and Emit.
-    const agentLists = new Map<string, { inside: GraphNode[]; sink: GraphNode; outer: Collected; problems: string[] }>();
+    const agentLists = new Map<string, { inside: GraphNode[]; sink: GraphNode; outer: Collected; problems: string[]; stateC: boolean }>();
     for (const g of groupNodes) {
-      const { inner, sink, starts, problems } = agentStepNodes(g);
-      agentLists.set(g.id, { inside: inner, sink, outer: collectOuter(starts, byId), problems });
+      const { inner, sink, starts, problems, stateC } = agentStepNodes(g);
+      const outer = collectOuter(starts, byId);
+      // With per-walker state the Emits also say which species they give birth to (a copy, marked for this program).
+      if (stateC) for (const [id, n] of outer.nodes) if (n.type === 'agentEmit') outer.nodes.set(id, { ...n, params: { ...n.params, __stateC: true } });
+      agentLists.set(g.id, { inside: inner, sink, outer, problems, stateC });
+    }
+    // Trails with Add / Block wired: their step program's nodes (the ancestors of those inputs).
+    const trailLists = new Map<string, Collected>();
+    if (agents) for (const t of nodes) {
+      if (t.type !== 'trailField' || !trailHasStepProgram(t)) continue;
+      trailLists.set(t.id, collect([t.inputs.add?.connection, t.inputs.block?.connection].filter((c): c is { nodeId: string; outputKey: string } => !!c), byId, null, undefined, true));
     }
     const onlyForPasses = new Set<string>();
     for (const c of passLists.values()) for (const [id, n] of c.nodes) if (n.type !== PASS_TYPE && !outputAncestors.nodes.has(id)) onlyForPasses.add(id);
     for (const a of agentLists.values()) for (const [id, n] of a.outer.nodes) if (!isAgentSource(n) && n.type !== PASS_TYPE && !outputAncestors.nodes.has(id)) onlyForPasses.add(id);
+    for (const c of trailLists.values()) for (const [id, n] of c.nodes) if (!isAgentSource(n) && n.type !== PASS_TYPE && !outputAncestors.nodes.has(id)) onlyForPasses.add(id);
     const finalList: Collected = { nodes: new Map(), reads: new Set(), readsPrevious: new Set() };
     for (const n of nodes) {
       if (n.type === PASS_TYPE || onlyForPasses.has(n.id)) continue;
@@ -270,6 +280,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         } else if (n.type === 'trailField') {
           liveAgents.add(id);
           for (const [dep, trail] of depositTo) if (trail === id) { const g = groupOf(dep); if (g) queue.push(g); }
+          const c = trailLists.get(id);
+          if (c) queue.push(...c.reads, ...c.readsPrevious, ...(c.agentReads ?? []));
         } else if (n.type === 'drawAgents') {
           liveAgents.add(id);
           const g = groupOf(id);
@@ -291,7 +303,11 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     for (const c of [finalList, ...passLists.values()]) for (const r of c.readsPrevious) previousRead.add(r);
 
     // 4. Compile each list with today's compiler.
-    const compileList = (list: GraphNode[]) => generateFragmentShader(topologicalSort(list), list, { slugs });
+    const compileList = (list: GraphNode[]) => generateFragmentShader(topologicalSort(list), list, {
+      slugs,
+      // The eye preview of a node inside an Agents group: its chain is in this picture (agentEyeNodes).
+      ...(agents && list.some(n => n.params?.__agentEye === true) ? { agentEye: true } : {}),
+    });
     const errors: string[] = [];
     const passes: PassProgram[] = [];
     const merged = {
@@ -371,6 +387,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
             slug: slugOf(g.id), side: groupSide(g), species: groupSpecies(g), seed: seedExpr,
             declarations: typeof seed === 'string' ? [`uniform float ${seed};`] : [],
             respawn: emit.mode === 'respawn',
+            ...(a.stateC ? { stateC: true } : {}),
           },
         });
         absorb(r);
@@ -378,6 +395,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         groups.push({
           nodeId: g.id, slug: slugOf(g.id), label, fragmentShader: r.fragmentShader,
           side: groupSide(g), species: groupSpecies(g),
+          ...(a.stateC ? { stateC: true } : {}),
           params: { stepsPerFrame: params.stepsPerFrame as number | string, seed: params.seed as number | string, preroll: params.preroll as number | string },
           emit,
           listeners: listenersOf(a.inside, slugOf, engine),
@@ -388,14 +406,31 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         });
       }
       const groupIds = new Set(groupNodes.map(g => g.id));
-      const trails: AgentTrailProgram[] = nodes.filter(n => n.type === 'trailField')
-        .map(n => ({ ...trailSpec(n, slugOf(n.id), engine(n)), live: liveAgents.has(n.id) }));
       const deposits: AgentDepositProgram[] = [];
       for (const [dep, trail] of depositTo) {
         const d = byId.get(dep)!;
         const g = d.inputs.agents?.connection?.nodeId;
         if (!g || !groupIds.has(g)) continue;
         deposits.push(depositSpec(d, slugOf(dep), slugOf(g), slugOf(trail), engine(d)));
+      }
+      const trails: AgentTrailProgram[] = [];
+      for (const n of nodes.filter(t => t.type === 'trailField')) {
+        const spec: AgentTrailProgram = { ...trailSpec(n, slugOf(n.id), engine(n)), live: liveAgents.has(n.id) };
+        // A trail that velocities go into keeps its negative values.
+        if (deposits.some(d => d.trail === spec.slug && d.what === 'velocity')) spec.signed = true;
+        const c = trailLists.get(n.id);
+        if (c) {
+          const list = [...c.nodes.values(), trailStepSink(n, spec.slug)];
+          const problems = checkProgramWires(list);
+          if (problems.length) { errors.push(...problems); continue; }
+          const r = compileList(list);
+          absorb(r);
+          if (countSamplers(r.fragmentShader) > MAX_SAMPLERS) errors.push(`Node ${n.id}: ${spec.label} samples more than ${MAX_SAMPLERS} textures (images, passes, trails) in its Add / Block`);
+          spec.stepShader = r.fragmentShader;
+          spec.readsPasses = [...c.reads].map(slugOf);
+          spec.stepNodeIds = [...c.nodes.values()].filter(x => x.type !== PASS_TYPE && !isAgentSource(x)).map(x => x.id);
+        }
+        trails.push(spec);
       }
       const draws: AgentDrawProgram[] = [];
       for (const d of nodes.filter(n => n.type === 'drawAgents')) {
@@ -421,6 +456,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
       ...merged,
       nodeSlugMap: slugs,
       passes,
+      finalNodeIds: finalNodes.filter(n => n.type !== PASS_TYPE && !(agents && isAgentSource(n))).map(n => n.id),
       ...(agentsSpec ? { agents: agentsSpec } : {}),
     };
   } catch (error) {
