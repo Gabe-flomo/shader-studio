@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.16',
+    date: '2026-10-04',
+    title: 'How Agents work',
+    highlights: [
+      { area: 'Present', text: 'A new sample presentation, How Agents work: the loop, every node, how settings change the result, and what the code does, with live sketches you can tweak.' },
+      { area: 'Studio', text: 'Expression Block sliders now really move their value: dragging Crowding’s sat inside the Slime mold changes it live, with no recompile.' },
+    ],
+  },
+  {
     id: '2026.10.15',
     date: '2026-10-04',
     title: 'Agents in Play: hands, sound and motion',
