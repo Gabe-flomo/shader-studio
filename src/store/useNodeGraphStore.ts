@@ -17,6 +17,8 @@ import { hasPassNode } from '../compiler/passGraph';
 import { agentPreset } from './agentExamples';
 import { addAgentPieceTo, agentStarter, freshIds, placeInFreeSpace, startRuleIn, type AgentPiece, type AgentRuleStart } from './agentSetup';
 import { particlesAsNodes } from './particlesAsNodes';
+import { applyRecipe, recipesFor } from '../nodes/recipes';
+import { closeRecipeOffer, noteNodeAdded } from './recipeOfferStore';
 import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES, AGENT_PRESET_TYPES } from '../nodes/definitions/agents';
 import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
@@ -826,6 +828,12 @@ interface NodeGraphState {
   addAgentPiece: (groupId: string, piece: AgentPiece) => void;
   /** An empty Agents rule's starting points (inside the group): Sense → Steer → Move, Curl noise → Integrate, or Move alone. */
   startAgentRule: (groupId: string, kind: AgentRuleStart) => void;
+  /**
+   * Build starter recipe `recipeId` round node `nodeId` (nodes/recipes; offered by RecipeOffer
+   * when the node is added): helper nodes in free space, wired, noted, the result on the Output.
+   * One undo step. Returns the ids added, or null when the node or recipe is gone.
+   */
+  applyStarterRecipe: (nodeId: string, recipeId: string) => string[] | null;
   /**
    * Spawn a pre-wired subgraph from a descriptor.
    * `origin` is the top-left anchor in canvas space.
@@ -3265,6 +3273,26 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     });
   },
 
+  applyStarterRecipe: (nodeId, recipeId) => {
+    closeRecipeOffer();
+    // Recipes are built on the top level, where the Output is.
+    if (get().activeGroupPath.length) return null;
+    const before = get().nodes;
+    const self = before.find(n => n.id === nodeId);
+    const recipe = self ? recipesFor(self.type).find(r => r.id === recipeId) : undefined;
+    if (!self || !recipe) return null;
+    const r = applyRecipe(before, nodeId, recipe, () => idGenerator.next());
+    if (!r) return null;
+    const label = getNodeDefinitionFor(self)?.label ?? self.type;
+    undoManager.push(before, { label: `Set up ${label}: ${recipe.label}` });
+    set({ nodes: r.nodes });
+    get().compile();
+    toast.info(`${label}: ${recipe.label}`, {
+      message: `${recipe.description}${r.shown ? ' It is on the Output now.' : ''} Every node it added has a note on what it does; undo takes it back to just the node.`,
+    });
+    return r.added;
+  },
+
   addNode: (type, position, overrideParams?) => {
     // ── The Agents family (docs/agents-plan.md) ──────────────────────────────
     // Sense, Steer, Move… run once per walker, so they only go inside an Agents
@@ -3668,6 +3696,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       set(state => ({ nodes: [...state.nodes, newNode] }));
     }
     get().compile();
+    // A plain add on the top level: offer the node's starter recipes (nodes/recipes), if any.
+    if (!activeGroupId && !overrideParams) noteNodeAdded(nodeId, type);
     return nodeId;
   },
 
