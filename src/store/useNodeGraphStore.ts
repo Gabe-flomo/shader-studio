@@ -11,7 +11,9 @@ import { askText } from '../components/ui/dialogStore';
 import { toast } from '../components/ui/toastStore';
 import { planSceneGroupAdd, planSmart3DAdd } from '../nodes/smart3d';
 import { askChoice } from '../components/ui/dialogStore';
-import { buildMarchRig, buildMarchSubgraph, buildSceneSubgraph, buildVolumetricRig, graphOutput, instantiateNode, twoDNodesBefore3D } from '../nodes/scene3dDefaults';
+import { buildAgentsSubgraph, buildMarchRig, buildMarchSubgraph, buildSceneSubgraph, buildVolumetricRig, graphOutput, instantiateNode, twoDNodesBefore3D } from '../nodes/scene3dDefaults';
+import { slimeMoldPreset } from './agentExamples';
+import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES } from '../nodes/definitions/agents';
 import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
 import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, usesHands, type PlayRecord, type PlayControl } from '../types/play';
@@ -393,6 +395,7 @@ function defaultSubgraphFor(type: string): SubgraphData | undefined {
   const nextId = () => idGenerator.next();
   if (type === 'sceneGroup') return buildSceneSubgraph(nextId);
   if (type === 'marchLoopGroup' || type === 'giLitMarchGroup') return buildMarchSubgraph(nextId);
+  if (type === 'agentsGroup') return buildAgentsSubgraph(nextId);
   return undefined;
 }
 
@@ -717,6 +720,8 @@ interface NodeGraphState {
   echoConfig: { copies: number; delay: number } | null;
   /** Pass nodes' programs, in drawing order (compiler/passGraph.ts); null when the graph has no Pass node. */
   passes: import('../compiler/types').PassProgram[] | null;
+  /** The Agents family's programs from the last compile (compiler/agentGraph.ts); null without one. */
+  agents: import('../compiler/types').AgentsSpec | null;
 
   /** Maps nodeId → GLSL slug, e.g. "node_49" → "cos_49". Used for code-panel highlighting. */
   nodeSlugMap: Map<string, string>;
@@ -1671,6 +1676,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   isStateful: false,
   echoConfig: null,
   passes: null,
+  agents: null,
   nodeSlugMap: new Map(),
   rawGlslShader: null,
   previewAspect: ((): PreviewAspect => {
@@ -2015,7 +2021,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const groupNode = activeNodes.find(n => n.id === id);
     // newPath = the path we'll be at after entering
     const newPath = [...activeGroupPath, id];
-    if ((groupNode?.type === 'sceneGroup' || groupNode?.type === 'marchLoopGroup' || groupNode?.type === 'giLitMarchGroup') && !groupNode.params?.subgraph) {
+    if ((groupNode?.type === 'sceneGroup' || groupNode?.type === 'marchLoopGroup' || groupNode?.type === 'giLitMarchGroup' || groupNode?.type === 'agentsGroup') && !groupNode.params?.subgraph) {
       // Saved before groups got their contents at creation: build them now.
       const startingSubgraph = defaultSubgraphFor(groupNode.type)!;
       set(state => ({
@@ -3151,6 +3157,39 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   addNode: (type, position, overrideParams?) => {
+    // ── The Agents family (docs/agents-plan.md) ──────────────────────────────
+    // Sense, Steer, Move… run once per walker, so they only go inside an Agents
+    // group; the group, Emit, Deposit, Trail and Draw are engines of their own
+    // and go on the top level. The Slime mold preset builds the whole setup.
+    {
+      const path = get().activeGroupPath;
+      const inside = path.length > 0 ? get().nodes.find(n => n.id === path[0]) : undefined;
+      const inAgents = path.length === 1 && inside?.type === 'agentsGroup';
+      const label = getNodeDefinition(type)?.label ?? type;
+      if (AGENT_INSIDE_TYPES.has(type) && !inAgents) {
+        toast.info(`${label} goes inside an Agents group`, { message: 'Double-click an Agents group (or press Open rule on it) and add it there.' });
+        return undefined;
+      }
+      if ((AGENT_OUTSIDE_TYPES.has(type) || type === 'slimeMoldPreset') && path.length > 0) {
+        toast.info(`${label} goes on the top level`, { message: 'Leave this group and add it there.' });
+        return undefined;
+      }
+      if (type === 'slimeMoldPreset') {
+        undoManager.push(get().nodes, { label: 'Added the Slime mold preset' });
+        const { nodes: added, colourId } = slimeMoldPreset(() => idGenerator.next(), position);
+        let nodes = [...get().nodes, ...added];
+        const output = graphOutput(get().nodes);
+        if (output) nodes = nodes.map(n => n.id === output.id
+          ? { ...n, inputs: { ...n.inputs, color: { ...n.inputs.color, connection: { nodeId: colourId, outputKey: 'color' } } } }
+          : n);
+        set({ nodes });
+        get().compile();
+        toast.info('Slime mold added', {
+          message: `A million walkers that sense, turn, move and leave trail, coloured by a palette${output ? ' and wired to the Output' : '. Add an Output node and wire the palette into it to see it'}. Every node has a note on what it does; double-click the Agents group to open the rule.`,
+        });
+        return added.find(n => n.type === 'agentsGroup')?.id;
+      }
+    }
     // ── 3D scene companion spawning ──────────────────────────────────────────
     // Adding a RayMarch node auto-spawns a SceneGroup to the left (pre-wired
     // scene→scene). Adding a SceneGroup auto-spawns a RayMarch to the right.
@@ -3400,6 +3439,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           ? undefined
           : def.defaultParams?.[key] as number | number[] | undefined,
       };
+    }
+    // An Agents group's added ports (its Agent Inputs' extra outputs) are sockets on the group too.
+    if (type === 'agentsGroup') {
+      const sub = mergedParams.subgraph as SubgraphData | undefined;
+      const extras = (sub?.nodes.find(n => n.type === 'agentInputs')?.params.extraInputs ?? []) as Array<{ key: string; type: DataType; label: string }>;
+      for (const e of extras) if (!inputs[e.key]) inputs[e.key] = { type: e.type, label: e.label };
     }
 
     // For customFn / exprNode: build sockets from the inputs array in params
@@ -4077,9 +4122,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         if (n.id !== groupNodeId) return n;
         const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
         if (!sg) return n;
-        // Update marchLoopInputs node's outputs + params.extraInputs
+        // Update marchLoopInputs node's outputs + params.extraInputs (Agent Inputs takes added ports the same way)
         const newSgNodes = sg.nodes.map(sn => {
-          if (sn.type !== 'marchLoopInputs') return sn;
+          if (sn.type !== 'marchLoopInputs' && sn.type !== 'agentInputs') return sn;
           const extraInputs = [
             ...((sn.params.extraInputs ?? []) as Array<{key: string; type: string; label: string}>),
             { key, type, label },
@@ -4105,7 +4150,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
         if (!sg) return n;
         const newSgNodes = sg.nodes.map(sn => {
-          if (sn.type !== 'marchLoopInputs') return sn;
+          if (sn.type !== 'marchLoopInputs' && sn.type !== 'agentInputs') return sn;
           const extraInputs = ((sn.params.extraInputs ?? []) as Array<{key: string; type: string; label: string}>).filter(e => e.key !== key);
           const { [key]: _removed, ...restOutputs } = sn.outputs;
           return { ...sn, outputs: restOutputs, params: { ...sn.params, extraInputs } };
@@ -4125,7 +4170,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
         if (!sg) return n;
         const newSgNodes = sg.nodes.map(sn => {
-          if (sn.type !== 'marchLoopInputs') return sn;
+          if (sn.type !== 'marchLoopInputs' && sn.type !== 'agentInputs') return sn;
           const extraInputs = ((sn.params.extraInputs ?? []) as Array<{key: string; type: string; label: string}>)
             .map(e => e.key === key ? { ...e, label: newLabel } : e);
           return { ...sn, outputs: { ...sn.outputs, [key]: { ...sn.outputs[key], label: newLabel } }, params: { ...sn.params, extraInputs } };
@@ -4673,6 +4718,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       isStateful: result.isStateful,
       echoConfig: result.echo ?? null,
       passes: result.passes ?? null,
+      agents: result.agents ?? null,
       nodeSlugMap: result.nodeSlugMap ?? new Map(),
       // Probe values are read from the compiled program, so they only go
       // stale when the shader itself changed (or the program is rebuilt).

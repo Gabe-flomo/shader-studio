@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import type { GraphNode, SubgraphData, DataType } from '../../types/nodeGraph';
 import { paletteNodePreset } from '../../nodes/definitions/color';
 import { scopeValueRegistry, floatValueRegistry, vectorValueRegistry } from '../../lib/scopeRegistry';
@@ -7,6 +7,8 @@ import { useThemeMode } from '../../theme/themeStore';
 import { pal, setVizPalette, MONO, vizContainer, setupViz, imageSize, blitImage, type Viz } from './vizKit';
 import { GenericViz, GENERIC_VIZ_TYPES } from './vizGeneric';
 import { passThumbRegistry } from '../../lib/passRunner';
+import { agentStatsFor, restartAgents, trailThumbRegistry, type AgentStats } from '../../lib/agentRunner';
+import { AGENT_TIERS } from '../../nodes/definitions/agents';
 
 // ─── Shared container ─────────────────────────────────────────────────────────
 
@@ -1692,6 +1694,9 @@ const TYPE_COLORS: Record<DataType, string> = {
   scene3d:     '#cc88aa',
   spacewarp3d: '#aa88cc',
   texture:     '#ff5c5c',
+  agents:      '#9be564',
+  emitter:     '#ffd166',
+  deposit:     '#c792ea',
 };
 
 export function SubgraphMiniViz({ node }: { node: GraphNode }) {
@@ -3705,6 +3710,54 @@ function PassThumbViz({ node }: { node: GraphNode }) {
   );
 }
 
+// ─── Agents group (docs/agents-plan.md): its numbers, Open rule and Start over ──
+
+function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?: (groupId: string) => void }) {
+  const [stats, setStats] = useState<AgentStats | undefined>(() => agentStatsFor(node.id));
+  useEffect(() => {
+    const t = setInterval(() => setStats(agentStatsFor(node.id)), 500);
+    return () => clearInterval(t);
+  }, [node.id]);
+  const count = stats?.count ?? (AGENT_TIERS[String(node.params.tier ?? '256k')] ?? 512) ** 2;
+  const spf = stats?.stepsPerFrame ?? Math.round(Number(node.params.stepsPerFrame ?? 2));
+  const behind = stats && stats.rate < 0.97 ? ` · running at ×${stats.rate.toFixed(2)}` : '';
+  const button: React.CSSProperties = {
+    flex: 1, height: 26, border: `1px solid ${pal.surface1}`, borderRadius: 5, background: 'transparent',
+    color: pal.text, font: `600 11px ${MONO}`, cursor: 'pointer',
+  };
+  return (
+    <div style={{ ...vizContainer(), padding: '6px 10px 8px' }} onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+      <div style={{ fontSize: '10px', color: pal.overlay0, fontFamily: MONO, marginBottom: 6 }}>
+        {count.toLocaleString('en-US')} agents · {spf} step{spf === 1 ? '' : 's'} a frame{behind}
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button type="button" style={button} title="Open the rule one walker follows every step (or double-click the card's title)" onClick={() => onEnterGroup?.(node.id)}>Open rule ↗</button>
+        <button type="button" style={button} title="Start the simulation over: everyone is born again at step 0" onClick={() => { restartAgents(node.id); window.dispatchEvent(new Event('agents-restart')); }}>↺ Start over</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Trail field: its texture (lib/agentRunner.ts draws it every few frames) ──
+
+function TrailThumbViz({ node }: { node: GraphNode }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = ref.current;
+    if (!c) return;
+    trailThumbRegistry.register(node.id, c);
+    return () => trailThumbRegistry.unregister(node.id);
+  }, [node.id]);
+  const res = String(node.params.resolution ?? '0.5');
+  const resText = res === '0.5' ? '½ picture' : res === '0.25' ? '¼ picture' : res === '1' ? 'full picture' : `${res} rows`;
+  return (
+    <div style={{ ...vizContainer(), padding: 4 }}>
+      <canvas ref={ref} width={128} height={72} style={{ display: 'block', maxWidth: '100%', maxHeight: 120, margin: '0 auto', background: '#000', borderRadius: 3 }} />
+      <div style={{ fontSize: '9px', color: pal.overlay0, fontFamily: MONO, marginTop: 3 }}>trail · {resText} · half float</div>
+    </div>
+  );
+}
+
 // ─── Texture Badge Viz (prevFrame, textureInput) ──────────────────────────────
 
 function TextureBadgeViz({ node }: { node: GraphNode }) {
@@ -4911,14 +4964,14 @@ export function PixelateViz({ node }: { node: GraphNode }) {
 
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
-export function NodeInlineViz({ node }: { node: GraphNode }) {
+export function NodeInlineViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?: (groupId: string) => void }) {
   setVizPalette(useCtp());
   const mode = useThemeMode();
   // Keyed on the theme: a flip remounts the drawing below so its effect runs again with the new palette
-  return <React.Fragment key={mode}><NodeInlineVizSwitch node={node} /></React.Fragment>;
+  return <React.Fragment key={mode}><NodeInlineVizSwitch node={node} onEnterGroup={onEnterGroup} /></React.Fragment>;
 }
 
-function NodeInlineVizSwitch({ node }: { node: GraphNode }) {
+function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?: (groupId: string) => void }) {
   // Table-driven families (2D spaces, falloff curves, echo…) live in vizGeneric.tsx
   if (GENERIC_VIZ_TYPES.has(node.type)) return <GenericViz node={node} />;
   switch (node.type) {
@@ -5092,6 +5145,8 @@ function NodeInlineVizSwitch({ node }: { node: GraphNode }) {
     case 'prevFrame':
     case 'textureInput':     return <TextureBadgeViz         node={node} />;
     case 'pass':             return <PassThumbViz            node={node} />;
+    case 'agentsGroup':      return <AgentsGroupViz          node={node} onEnterGroup={onEnterGroup} />;
+    case 'trailField':       return <TrailThumbViz           node={node} />;
     case 'vec2Const':        return <Vec2ConstViz            node={node} />;
     case 'matConst':         return <MatrixGridViz           node={node} />;
 

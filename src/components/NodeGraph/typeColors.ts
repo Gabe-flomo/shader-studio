@@ -11,4 +11,7 @@ export const TYPE_COLORS: Record<string, string> = {
   scene3d:     '#cc88aa',  // pastel pink for 3D scene wires
   spacewarp3d: '#aa88cc',  // pastel purple for space warp wires
   texture:     '#ff5c5c',  // coral for a Pass's texture (dashed: see ConnectionLine)
+  agents:      '#9be564',  // the Agents family (docs/agents-plan.md): a group's walkers
+  emitter:     '#ffd166',  //   an Emit's births
+  deposit:     '#c792ea',  //   Deposits on their way into a Trail
 };

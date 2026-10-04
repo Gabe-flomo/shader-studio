@@ -1,0 +1,10 @@
+export function agBody(src: string): string;
+export const AG_FULL_VERT: string;
+export const AG_DEPOSIT_VERT: string;
+export const AG_DEPOSIT_FRAG: string;
+export const AG_TRAIL_FRAG: string;
+export const AG_DRAW_VERT: string;
+export const AG_DRAW_FRAG: string;
+export const AG_DOWN_FRAG: string;
+export const AG_BLUR_FRAG: string;
+export const AG_COMPOSE_FRAG: string;

@@ -1,6 +1,6 @@
 # Agents group: slime mold and particles built from nodes (plan, 2026-10-03)
 
-**Status:** plan only. Nothing here is built yet.
+**Status:** P0 and P1 (Slime) shipped 2026-10-03; see "What shipped" below. P2 onward not built. User guide: docs/agents-group.md.
 
 ## In plain words
 
@@ -16,6 +16,33 @@
 **What doesn't change.** The Particles node keeps working exactly as it does. A graph without an Agents group compiles byte for byte as before, and a test enforces it.
 
 **Speed target.** A million walkers at 60 fps on Apple silicon, with the trail at half the picture's resolution.
+
+---
+
+## What shipped (P0 + P1, 2026-10-03)
+
+The open questions in §15 were answered as recommended: the Particles node stays as it is; Boids via the trail field (P3); no 3D in v1; trail ½ picture by default with fixed rows available; 2 steps a frame; at most 4 Agents groups per graph; under load fewer steps run, never fewer agents; the name is **Agents**, in a new **Simulation** category.
+
+**P0 guards**
+- `GP_SHADERS` exports the Particles engine's GLSL chunks unchanged; `src/play/__tests__/gpEngineShaders.test.ts` snapshots every one (cyrb53 + length). The Agents draw reuses `GP_DRAW_FRAG`, `GP_DOWN`, `GP_BLUR` and `GP_COMPOSE` byte for byte (only the `#version` line is dropped at use, because three.js adds its own).
+- The golden-shader filter leaves out Agents-family graphs as it does Pass graphs. `goldenShaders.test.ts.snap` is unchanged through P0 and P1 (no entry added, removed or updated).
+- The side finding was a real gap: nothing caught a Particles node in a field chain (it compiled, and its GPP_PROBE copy would put `return;` / `gl_FragColor` in a float field function). `gpuParticles` is now in `FIELD_IMPURE`, with a test.
+- Not done in P0: moving curl, wind, shock, plate and sound code into shared chunks. Nothing in P1 needs them; they move with P2 (forces) and P4 (sound), under the same snapshot.
+
+**P1 Slime**
+- Types `agents`, `emitter`, `deposit` (wire colours in `typeColors.ts`). Nodes in `src/nodes/definitions/agents.ts`: Agents (group), Agent Inputs / Agent Output (anchored), Sense, Steer (Jones, Smooth, Away), Move (Wrap, Bounce, Slide), By species (floats), Emit (Fill and Rate; point, ring, disc, box, whole picture; facing random / inward / outward; Life ± and Share for chained Emits), Deposit, Trail field (diffuse + half-life, ½ / ¼ / full / 512 / 1024 / 2048 rows, wrap or clamp), Draw agents (Points and Glow, colour by single / species / speed / heading). The "Slime mold (preset)" starter.
+- Compile: `compileGraph` branches on `hasPassNode || hasAgentsNode`. `compilePassGraph` (passGraph.ts, helpers in `agentGraph.ts`) cuts Trail and Draw as sources (that cut is also what makes the Trail → group loop legal), compiles each group's inside plus its outer port and Emit ancestors as one update shader under the new `agentProgram` assembler option (GLSL 3, two outputs, the agent prelude; applied to the finished text so the ordinary path is untouched), and returns `agents: { groups, deposits, trails, draws }` with each engine setting as a number or the uniform its slider writes. Passes that read a trail or a drawing draw after the agents (`afterAgents`); the others before.
+- State: A = (pos.xy, heading, age), B = (vel.xy, speed, life; ≤ 0 is dead), RGBA32F, MRT. State C (species, memory, per-agent deposit) is not built: species is the index mod Species, which is all P1 needs.
+- Rules (`agentRules.ts`): FIELD_IMPURE (except Play Layers), programs and engines, the 3D groups, and a scan of each node's emitted GLSL for `dFdx|dFdy|fwidth|gl_FragCoord`. Inside nodes refuse to be added outside a group (and outside nodes inside one) with a toast, and the compiler reports either placement on the card.
+- Engine: `src/play/kit/agentPlan.js` (pure schedule: steps, birth windows, live stepping with fall-behind and re-anchoring, the governor; its frame budget is the display's own interval, so a 30 Hz display isn't load), `src/play/kit/agentShaders.js` (deposit, trail step, draw), `src/lib/agentRunner.ts` (three.js; `AgentTargets` per live preview and per offline render). ShaderCanvas runs pre-passes → steps → draws → post-passes → picture, only when the compile has agents.
+- Determinism, checked in the browser (M3 Pro): the same render twice gives a bit-identical state after 120 steps; live runs at 30, 60 and 120 Hz, and one with a 150 ms stall, reach the same bits as the offline render.
+- UI: Simulation category (Start here / Outside the group / Inside an Agents group), the group card (count · steps · "running at ×…", Open rule ↗, ↺ Start over, double-click to enter, its added ports as sockets), Agent Inputs' card with + Add Input (texture allowed), the "This runs once for every agent, every step." banner, the "↺ last step" chip on the Trail → group wire (and on the texture port's wire inside), Trail card thumbnail, Performance rows `agents:<label> step / deposit / trail / draw`.
+- Website export: `unsupportedFeatures` lists "Agents groups: the page draws the picture without them".
+- The Slime mold example and preset: every node, inside the group too, has a plain-language note; `examples.test.ts` checks it. The preset uses a 1024-row trail (½ at 1080p packs a million walkers into thick, uniform tubes) and an ordinary Expression Block ("Crowding", r·e^(−r/60)) between Sense and Steer, standing in for Jones' one-agent-per-cell exclusion; without it the network coarsens into a few loops within a minute.
+- Performance (M3 Pro, 1M agents, 2 steps a frame, network formed): 5.8 ms a frame with the trail at ½ of 1080p (960 × 540); 9.5 ms with the preset's 1024 rows at 1080p (1820 × 1024). The update shader is about 0.9 ms a step and the trail step 0.2 ms; Deposit (one point per walker per step) is the rest, and it grows when walkers crowd into the same pixels (the first second of the preset, all walkers in a small disc, runs the governor down and the simulation falls behind, then catches its stride).
+- Tests: `agentGraph.test.ts` (programs, prelude, sink, uniform names, empty group, rules), `agentNodes.test.ts` (each node's emitted GLSL run on the CPU by a small evaluator, `glslEval.ts`: Sense's points and channels, Steer's four Jones branches, Move's edges, By species), `agentPlan.test.ts` (fixed steps, windows, live catch-up and fall-behind, governor), `gpEngineShaders.test.ts`, the notes check, the field-socket check. The slime sanity check ran in the browser: after 300 steps at 64k the trail's coefficient of variation is 3.6 against 0.46 for a random walk with the same deposit.
+
+**Deferred from P1** (with the phase that picks them up): Emit's picture / field shapes and Burst (P2/P3); state C, Memory, per-agent Deposit and Colour (P3); Trail Add ƒ / Block ƒ and the 5×5 kernel (P3); Draw Streaks, Ink and Lights (P2); pinned inner sliders on the group card and the live state thumbnail on it (P4); the eye preview inside the group and the Show passes tint (P3); Performance rows split per step are timed on each frame's first step only.
 
 ---
 
