@@ -23,7 +23,8 @@
  * aspect), the same space as g_uv; distances and speeds are in those units.
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
-import { fieldFn, p } from './helpers';
+import { fieldFn, p, pv3 } from './helpers';
+import { GP_PALETTES } from '../../play/kit/gpuParticles.js';
 
 // ── Names shared by the compiler, the engine and the nodes ──────────────────
 
@@ -48,7 +49,14 @@ export const TRAIL_RESOLUTIONS: Record<string, { scale?: number; rows?: number }
 
 /** The type of the group node and of the nodes that only make sense inside it. */
 export const AGENTS_GROUP_TYPE = 'agentsGroup';
-export const AGENT_INSIDE_TYPES = new Set(['agentInputs', 'agentOutput', 'agentSense', 'agentSteer', 'agentMove', 'agentBySpecies']);
+export const AGENT_INSIDE_TYPES = new Set([
+  'agentInputs', 'agentOutput', 'agentSense', 'agentSteer', 'agentMove', 'agentBySpecies',
+  // Particles (P2): forces, Integrate, Age / Life, and the nodes that move a walker directly.
+  'agentGravity', 'agentWind', 'agentCurl', 'agentAttract', 'agentVortex', 'agentFlow', 'agentSoundKick',
+  'agentIntegrate', 'agentAge', 'agentCollide', 'agentChladni',
+]);
+/** The starters in the Simulation category: each builds a whole working setup (store/agentExamples.ts). */
+export const AGENT_PRESET_TYPES = new Set(['slimeMoldPreset', 'particlesPreset', 'curlSmokePreset', 'soundBurstPreset']);
 /** Nodes that go outside the group (engines and programs of their own). */
 export const AGENT_OUTSIDE_TYPES = new Set(['agentsGroup', 'agentEmit', 'agentDeposit', 'trailField', 'drawAgents']);
 
@@ -59,7 +67,7 @@ export const AGENT_OUTSIDE_TYPES = new Set(['agentsGroup', 'agentEmit', 'agentDe
  */
 export const AGENT_GLOBALS: Array<[string, string]> = [
   ['vec2', 'a_pos'], ['vec2', 'a_vel'], ['float', 'a_heading'], ['float', 'a_speed'], ['float', 'a_age'],
-  ['float', 'a_life'], ['float', 'a_species'], ['float', 'a_index'], ['float', 'a_random'], ['uint', 'a_seed'], ['bool', 'a_born'],
+  ['float', 'a_life'], ['float', 'a_species'], ['float', 'a_index'], ['float', 'a_random'], ['uint', 'a_seed'], ['bool', 'a_born'], ['uint', 'a_step'],
 ];
 
 const SPECIES_OPTIONS = [{ value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' }];
@@ -437,7 +445,7 @@ export const AgentEmitNode: NodeDefinition = {
   label: 'Emit',
   category: 'Simulation',
   aliases: ['Spawn', 'Emitter', 'Birth', 'Agent emitter'],
-  description: 'Where walkers are born and how they start. Fill gives everyone a place at once (slime); Rate gives birth to a stream of them a second, each living for Life. Chain Emits through Also for several sources.',
+  description: 'Where walkers are born and how they start. Fill gives everyone a place at once (slime); Rate gives birth to a stream of them a second, each living for Life; Keep full gives each walker a new life the moment it dies (particles). Speed, Spread and Life ± vary them; Burst gives everyone a new life at once. Chain Emits through Also for several sources.',
   inputs: {
     position: { type: 'vec2', label: 'Position', hint: 'The centre of the shape (picture units). Unwired: X and Y on the card.' },
     also: { type: 'emitter', label: 'Also', hint: 'Another Emit: births are shared between the two by their Share.' },
@@ -445,10 +453,10 @@ export const AgentEmitNode: NodeDefinition = {
   outputs: {
     emitter: { type: 'emitter', label: 'Emitter', hint: 'Wire into an Agents group\'s Emit.' },
   },
-  defaultParams: { mode: 'fill', shape: 'disc', heading: 'inward', x: 0, y: 0, size: 0.6, rate: 20000, life: 0, lifeVar: 0.2, speed: 0, share: 1 },
+  defaultParams: { mode: 'fill', shape: 'disc', heading: 'inward', x: 0, y: 0, size: 0.6, rate: 20000, life: 0, lifeVar: 0.2, speed: 0, speedVar: 0, spread: 0, share: 1, burst: 0 },
   paramDefs: {
-    mode: { label: 'Births', type: 'select', hint: 'Fill: everyone is born at once when the simulation starts (slime). Rate: a stream of births a second.', options: [
-      { value: 'fill', label: 'Fill (all at once)' }, { value: 'rate', label: 'Rate (per second)' },
+    mode: { label: 'Births', type: 'select', hint: 'Fill: everyone is born at once when the simulation starts (slime). Rate: a stream of births a second. Keep full: born at once, each reborn the moment it dies (particles with a Life).', options: [
+      { value: 'fill', label: 'Fill (all at once)' }, { value: 'rate', label: 'Rate (per second)' }, { value: 'respawn', label: 'Keep full (reborn when they die)' },
     ] },
     shape: { label: 'Shape', type: 'select', hint: 'Where in the picture they are born.', options: [
       { value: 'point', label: 'Point' }, { value: 'ring', label: 'Ring' }, { value: 'disc', label: 'Disc' }, { value: 'box', label: 'Box' }, { value: 'screen', label: 'Whole picture' },
@@ -463,6 +471,9 @@ export const AgentEmitNode: NodeDefinition = {
     life: { label: 'Life', type: 'float', min: 0, max: 60, step: 0.1, hint: 'Seconds each lives. 0: forever.' },
     lifeVar: { label: 'Life ±', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How much Life varies, as a share of it.' },
     speed: { label: 'Speed', type: 'float', min: 0, max: 2, step: 0.01, hint: 'Starting speed along its facing (Move sets its own).' },
+    speedVar: { label: 'Speed ±', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How much the starting speed varies, as a share of it (0.45: the Particles node\'s).' },
+    spread: { label: 'Spread', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How far each one\'s direction strays from its facing toward a random one (1: any direction).' },
+    burst: { label: 'Burst', type: 'float', min: 0, max: 1, step: 0.01, hint: 'A trigger: each time it rises past 0.5 everyone is born again at once.', help: 'A trigger. Each time it rises past 0.5 every walker is born again at once, from this Emit. In Play, route a trigger source (a key, a beat, a pad) to it.' },
     share: { label: 'Share', type: 'float', min: 0, max: 10, step: 0.01, hint: 'With Also chained: this Emit\'s share of the births.' },
   },
   assignable: false,
@@ -484,6 +495,8 @@ export const AgentEmitNode: NodeDefinition = {
     };
     const head = facing === 'random' ? `${id}_r3 * 6.2831853 - 3.1415927` : facing === 'inward' ? `atan(-${id}_out.y, -${id}_out.x)` : `atan(${id}_out.y, ${id}_out.x)`;
     const life = p(node.params.life, 0);
+    const spread = p(node.params.spread, 0);
+    const respawn = sel(node.params.mode, ['fill', 'rate', 'respawn'], 'fill') === 'respawn';
     const lines = [
       `    vec4 ${em}_a = vec4(0.0);\n`,
       `    vec4 ${em}_b = vec4(0.0);\n`,
@@ -496,9 +509,16 @@ export const AgentEmitNode: NodeDefinition = {
       `        vec2 ${id}_out = vec2(1.0, 0.0);\n`,
       `        ${place[shape]}\n`,
       `        float ${id}_hd = ${head};\n`,
+      // Spread: the direction strays toward a random one. Speed ±: the speed varies.
+      `        float ${id}_r5 = agRnd(${id}_s), ${id}_r6 = agRnd(${id}_s), ${id}_r7 = agRnd(${id}_s);\n`,
+      `        vec2 ${id}_dir = agDir(${id}_hd);\n`,
+      `        if (${spread} > 0.0) { ${id}_dir = normalize(mix(${id}_dir, agDir(${id}_r5 * 6.2831853), ${spread}) + vec2(0.0, 1e-4)); ${id}_hd = atan(${id}_dir.y, ${id}_dir.x); }\n`,
+      `        float ${id}_sp = ${p(node.params.speed, 0)} * (1.0 + ${p(node.params.speedVar, 0)} * (${id}_r6 * 2.0 - 1.0));\n`,
       `        float ${id}_life = ${life} > 0.0 ? ${life} * (1.0 + ${p(node.params.lifeVar, 0.2)} * (${id}_r4 * 2.0 - 1.0)) : 1.0e30;\n`,
-      `        ${em}_a = vec4(${id}_pp, ${id}_hd, 0.0);\n`,
-      `        ${em}_b = vec4(agDir(${id}_hd) * ${p(node.params.speed, 0)}, ${p(node.params.speed, 0)}, max(${id}_life, 1e-3));\n`,
+      // Keep full: the first births come at every age, so they don't all die (and come back) together.
+      `        float ${id}_age0 = ${respawn ? `a_step == 0u && ${id}_life < 1.0e29 ? ${id}_r7 * ${id}_life : 0.0` : '0.0'};\n`,
+      `        ${em}_a = vec4(${id}_pp, ${id}_hd, ${id}_age0);\n`,
+      `        ${em}_b = vec4(${id}_dir * ${id}_sp, ${id}_sp, max(${id}_life, 1e-3));\n`,
     ];
     if (v.also) {
       // Shared births: this Emit keeps its Share of them, the chain behind it the rest.
@@ -513,7 +533,7 @@ export const AgentEmitNode: NodeDefinition = {
 };
 
 /** A stable 32-bit number from a node id, so two Emits in a chain draw different random numbers. */
-function hashId(s: string): number {
+export function hashId(s: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
   return h >>> 0;
@@ -588,34 +608,66 @@ export const TrailFieldNode: NodeDefinition = {
   },
 };
 
+/** The Particles engine's palettes, for Draw agents (its names), or Colour A → B. */
+export const AG_PALETTE_OPTIONS = [
+  { value: 'ab', label: 'Colour A → B' },
+  ...Object.keys(GP_PALETTES).map(k => ({ value: k, label: k[0].toUpperCase() + k.slice(1) })),
+];
+export const DRAW_STYLES = ['points', 'glow', 'streaks', 'ink'] as const;
+export const GP_PALETTE_NAMES = Object.keys(GP_PALETTES);
+export const DRAW_COLOR_BY = ['single', 'species', 'speed', 'heading', 'age'] as const;
+
 export const DrawAgentsNode: NodeDefinition = {
   type: 'drawAgents',
   label: 'Draw agents',
   category: 'Simulation',
-  aliases: ['Render agents', 'Agent points', 'Show agents'],
-  description: 'Draws every walker of an Agents group as a soft dot (Points), optionally with a glow, over the picture wired into Over. Colour by species, speed or heading.',
+  aliases: ['Render agents', 'Agent points', 'Show agents', 'Draw particles', 'Streaks', 'Ink'],
+  description: 'Draws every walker of an Agents group over the picture wired into Over, with the Particles node\'s looks: soft dots (Points), dots with a glow (Glow), short lines along their motion (Streaks), or dark ink on paper (Ink), lit by up to four moving lights. Colour by species, speed, heading or age, with Colour A → B or one of the Particles palettes.',
   inputs: {
     agents: { type: 'agents', label: 'Agents', hint: 'An Agents group\'s output.' },
-    over: { type: 'vec3', label: 'Over', hint: 'The picture to draw on. Unwired: black.' },
+    over: { type: 'vec3', label: 'Over', hint: 'The picture to draw on. Unwired: black (Ink: Paper).' },
   },
   outputs: {
-    color: { type: 'vec3', label: 'Color', hint: 'Over with the walkers\' light added.' },
-    density: { type: 'float', label: 'Density', hint: 'How much walker light is here.' },
+    color: { type: 'vec3', label: 'Color', hint: 'Over with the walkers drawn on it.' },
+    density: { type: 'float', label: 'Density', hint: 'How much walker light (Ink: ink) is here.' },
     texture: { type: 'texture', label: 'Texture', hint: 'The drawn walkers alone, as a texture.' },
   },
-  defaultParams: { style: 'points', colorBy: 'heading', size: 1.5, brightness: 0.5, glow: 1, colorA: [1, 0.75, 0.35], colorB: [0.25, 0.55, 1] },
+  defaultParams: {
+    style: 'points', colorBy: 'heading', palette: 'ab', size: 1.5, brightness: 0.5, glow: 1, scaleBy: 'walker', streak: 0.25, fade: 'on', speedRef: 0.5,
+    colorA: [1, 0.75, 0.35], colorB: [0.25, 0.55, 1], paper: [0.95, 0.95, 0.94],
+    lights: '0', lightColor: [1, 0.55, 0.25], lightPower: 1.6, lightReach: 0.3, halo: 0.5, lightMotion: 'orbit', lightOrbit: 0.5, lightX: 0, lightY: 0,
+  },
   paramDefs: {
-    style: { label: 'Style', type: 'select', hint: 'Points: soft dots. Glow: dots with a wide glow round them.', options: [
-      { value: 'points', label: 'Points' }, { value: 'glow', label: 'Glow' },
+    style: { label: 'Style', type: 'select', section: 'Look', hint: 'Points: soft dots. Glow: dots with a wide glow. Streaks: short lines along each walker\'s motion, glowing. Ink: dark ink laid on paper, bleeding a little.', options: [
+      { value: 'points', label: 'Points' }, { value: 'glow', label: 'Glow' }, { value: 'streaks', label: 'Streaks' }, { value: 'ink', label: 'Ink' },
     ] },
-    colorBy: { label: 'Colour by', type: 'select', hint: 'What picks each walker\'s colour between Colour A and B.', options: [
-      { value: 'single', label: 'One colour (A)' }, { value: 'species', label: 'Species' }, { value: 'speed', label: 'Speed' }, { value: 'heading', label: 'Heading' },
+    size: { label: 'Size', type: 'float', min: 0.25, max: 16, step: 0.25, section: 'Look', hint: 'Dot size in pixels (The crowd: pixels of a 720-pixel-high picture).' },
+    brightness: { label: 'Brightness', type: 'float', min: 0, max: 8, step: 0.01, section: 'Look', hint: 'Light (Ink: ink) each walker adds.' },
+    scaleBy: { label: 'Brightness of', type: 'select', section: 'Look', hint: 'Each walker: Brightness is one walker\'s light. The crowd: the Particles node\'s rule, so the whole cloud looks as bright at every count, size and picture size.', options: [
+      { value: 'walker', label: 'Each walker' }, { value: 'crowd', label: 'The crowd' },
     ] },
-    size: { label: 'Size', type: 'float', min: 1, max: 16, step: 0.25, hint: 'Dot size in pixels.' },
-    brightness: { label: 'Brightness', type: 'float', min: 0, max: 8, step: 0.01, hint: 'Light each walker adds.' },
-    glow: { label: 'Glow', type: 'float', min: 0, max: 4, step: 0.01, hint: 'How strong the glow is (Glow style).' },
-    colorA: { label: 'Colour A', type: 'vec3color' },
-    colorB: { label: 'Colour B', type: 'vec3color' },
+    glow: { label: 'Glow', type: 'float', min: 0, max: 4, step: 0.01, section: 'Look', hint: 'How strong the glow is (Glow and Streaks; Ink: how far it bleeds).' },
+    streak: { label: 'Streak', type: 'float', min: 0, max: 4, step: 0.01, section: 'Look', hint: 'Streaks (and Ink above 0): how long each line is, in seconds of travel × 0.12 (the Particles node\'s Thread).', showWhen: { param: 'style', value: ['streaks', 'ink'] } },
+    fade: { label: 'Fade with age', type: 'select', section: 'Look', hint: 'Walkers with a Life fade in at birth and out toward its end.', options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] },
+    colorBy: { label: 'Colour by', type: 'select', section: 'Colour', hint: 'What picks each walker\'s colour along the palette (or between Colour A and B).', options: [
+      { value: 'single', label: 'One colour (A / the palette\'s start)' }, { value: 'species', label: 'Species' }, { value: 'speed', label: 'Speed' }, { value: 'heading', label: 'Heading' }, { value: 'age', label: 'Age (share of its life)' },
+    ] },
+    palette: { label: 'Palette', type: 'select', section: 'Colour', hint: 'Colour A → B, or one of the Particles node\'s palettes.', options: AG_PALETTE_OPTIONS },
+    colorA: { label: 'Colour A', type: 'vec3color', section: 'Colour' },
+    colorB: { label: 'Colour B', type: 'vec3color', section: 'Colour' },
+    speedRef: { label: 'Fast is', type: 'float', min: 0.01, max: 8, step: 0.01, section: 'Colour', hint: 'Colour by Speed: the speed that reaches the end of the palette (picture units a second).' },
+    paper: { label: 'Paper', type: 'vec3color', section: 'Colour', hint: 'Ink: the paper\'s colour when nothing is wired into Over.', showWhen: { param: 'style', value: 'ink' } },
+    lights: { label: 'Lights', type: 'select', section: 'Lights', hint: 'Point lights that move round the picture: walkers near one glow brighter and larger, with a halo round each light (Glow, Streaks, Ink).', options: [
+      { value: '0', label: 'None' }, { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
+    ] },
+    lightColor: { label: 'Light colour', type: 'vec3color', section: 'Lights', hint: 'The first light\'s colour; the others are its neighbours round the colour wheel.', showWhen: { param: 'lights', value: ['1', '2', '3', '4'] } },
+    lightPower: { label: 'Light power', type: 'float', min: 0, max: 20, step: 0.01, section: 'Lights', hint: 'How bright the lights are.', showWhen: { param: 'lights', value: ['1', '2', '3', '4'] } },
+    lightReach: { label: 'Light reach', type: 'float', min: 0.01, max: 4, step: 0.01, section: 'Lights', hint: 'How far each light reaches (picture units).', showWhen: { param: 'lights', value: ['1', '2', '3', '4'] } },
+    halo: { label: 'Halo', type: 'float', min: 0, max: 4, step: 0.01, section: 'Lights', hint: 'The glow round each light itself.', showWhen: { param: 'lights', value: ['1', '2', '3', '4'] } },
+    lightMotion: { label: 'Light motion', type: 'select', section: 'Lights', hint: 'Orbit: they circle the centre. Still: they stand round it.', options: [{ value: 'orbit', label: 'Orbit' }, { value: 'still', label: 'Still' }], showWhen: { param: 'lights', value: ['1', '2', '3', '4'] } },
+    lightOrbit: { label: 'Orbit size', type: 'float', min: 0.1, max: 1.2, step: 0.01, section: 'Lights', hint: 'How far from the centre the lights go (picture units).', showWhen: { param: 'lights', value: ['1', '2', '3', '4'] } },
+    lightX: { label: 'Centre X', type: 'float', min: -2, max: 2, step: 0.01, section: 'Lights', hint: 'The centre the lights move round, across.', showWhen: { param: 'lights', value: ['1', '2', '3', '4'] } },
+    lightY: { label: 'Centre Y', type: 'float', min: -1, max: 1, step: 0.01, section: 'Lights', hint: 'The centre the lights move round, up.', showWhen: { param: 'lights', value: ['1', '2', '3', '4'] } },
   },
   assignable: false,
   // Compiled as a source only (the compiler strips its Agents wire): node.id is the slug.
@@ -624,8 +676,13 @@ export const DrawAgentsNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, v) => {
     const id = node.id;
     const tex = agentDrawUniform(id);
+    const ink = sel(node.params.style, [...DRAW_STYLES], 'points') === 'ink';
+    // Ink is premultiplied (ink colour × cover, cover): it covers the paper. Light adds to the picture.
+    const color = ink
+      ? `${v.over ?? pv3(node.params.paper, [0.95, 0.95, 0.94])} * (1.0 - clamp(${id}_s.a, 0.0, 1.0)) + max(${id}_s.rgb, vec3(0.0))`
+      : `${v.over ?? 'vec3(0.0)'} + max(${id}_s.rgb, vec3(0.0))`;
     return {
-      code: `    vec4 ${id}_s = texture2D(${tex}, agUv(g_uv));\n    vec3 ${id}_color = ${v.over ?? 'vec3(0.0)'} + max(${id}_s.rgb, vec3(0.0));\n`,
+      code: `    vec4 ${id}_s = texture2D(${tex}, agUv(g_uv));\n    vec3 ${id}_color = ${color};\n`,
       outputVars: { color: `${id}_color`, density: `max(${id}_s.a, 0.0)`, texture: tex },
     };
   },
@@ -647,3 +704,19 @@ export const SlimeMoldPresetNode: NodeDefinition = {
   paramDefs: {},
   generateGLSL: () => ({ code: '', outputVars: {} }),
 };
+
+const preset = (type: string, label: string, aliases: string[], description: string): NodeDefinition => ({
+  type, label, category: 'Simulation', aliases, description,
+  inputs: {}, outputs: {}, defaultParams: {}, paramDefs: {},
+  generateGLSL: () => ({ code: '', outputVars: {} }),
+});
+
+/** Particles — the Particles node's default look, built from nodes (a starter, never a node in a graph). */
+export const ParticlesPresetNode = preset('particlesPreset', 'Particles (preset)', ['Particles from nodes', 'Embers preset', 'Curl particles', 'Particle system'],
+  'Adds the Particles node\'s default look built from nodes you can open and rewire: a million embers born on a ring, carried by curl noise and a gentle swirl, pulled by the mouse, slowed by drag, fading over their life, drawn with glow and four orbiting lights. Every node it adds has a note saying what it does and what to try.');
+/** Curl smoke — ink-like smoke rising and curling (a starter). */
+export const CurlSmokePresetNode = preset('curlSmokePreset', 'Curl smoke (preset)', ['Smoke preset', 'Ink smoke', 'Rising smoke'],
+  'Adds smoke built from nodes: particles rise from a small source, warm air lifting them less as they cool, while curl noise folds them into threads and a gusty breeze leans them over, drawn as ink streaks on paper. Every node has a note.');
+/** Sound burst — shockwaves on a stand-in beat (a starter). */
+export const SoundBurstPresetNode = preset('soundBurstPreset', 'Sound burst (preset)', ['Shockwave preset', 'Beat particles', 'Audio particles'],
+  'Adds particles that answer sound: a disc of glowing streaks that a ring of pressure blasts outward on every beat and a spring pulls back together. A silent stand-in beat (120 a minute) drives it until you give it real sound. Every node has a note.');

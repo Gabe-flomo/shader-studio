@@ -1,6 +1,6 @@
 # Agents group: slime mold and particles built from nodes (plan, 2026-10-03)
 
-**Status:** P0 and P1 (Slime) shipped 2026-10-03; see "What shipped" below. P2 onward not built. User guide: docs/agents-group.md.
+**Status:** P0, P1 (Slime) and P2 (Particles) shipped 2026-10-03/04; see "What shipped" below. P3 onward not built. User guide: docs/agents-group.md.
 
 ## In plain words
 
@@ -43,6 +43,31 @@ The open questions in §15 were answered as recommended: the Particles node stay
 - Tests: `agentGraph.test.ts` (programs, prelude, sink, uniform names, empty group, rules), `agentNodes.test.ts` (each node's emitted GLSL run on the CPU by a small evaluator, `glslEval.ts`: Sense's points and channels, Steer's four Jones branches, Move's edges, By species), `agentPlan.test.ts` (fixed steps, windows, live catch-up and fall-behind, governor), `gpEngineShaders.test.ts`, the notes check, the field-socket check. The slime sanity check ran in the browser: after 300 steps at 64k the trail's coefficient of variation is 3.6 against 0.46 for a random walk with the same deposit.
 
 **Deferred from P1** (with the phase that picks them up): Emit's picture / field shapes and Burst (P2/P3); state C, Memory, per-agent Deposit and Colour (P3); Trail Add ƒ / Block ƒ and the 5×5 kernel (P3); Draw Streaks, Ink and Lights (P2); pinned inner sliders on the group card and the live state thumbnail on it (P4); the eye preview inside the group and the Show passes tint (P3); Performance rows split per step are timed on each frame's first step only.
+
+## What shipped (P2 Particles, 2026-10-04)
+
+The user moved two of P4's nodes into P2: **Sound kick** and **Chladni** shipped here, each with its own Sound from (the group-level Sound from stays P4).
+
+**Shared code (zero change for the Particles node)**
+- `gpuParticles.js` exports the engine's forces, sound, plate and look as small GLSL generators (`gpCurlAt`, `gpCurlOctave2`, `gpCurlPlane`, `gpGust`, `gpSwirl`, `gpAttractPull`, `gpHandFall`, `gpHandPush`, `gpFlowPush`, `gpWavePhase`, `gpWavePush`, `gpVibrate`, `gpCrunch`, `gpShockRing`, `gpShockPush`, `gpLevelGlsl`, `gpBesselGlsl`, `gpPlateGlsl`, `gpPlateStep`, `gpPaletteGlsl`, `gpFade`, `GP_LIGHTS`). `GP_SIM` and `GP_DRAW_VERT` are now written with them; called with the engine's own names they give its text back exactly, so `gpEngineShaders.test.ts.snap` is unchanged (all 12 chunks). The Agents nodes call the same generators with their names (`agentForces.test.ts` checks both sides).
+- The sound and plate state machines are the engine's own JS (`gpSoundStep`, `gpLevelsPush`, `gpRising`, `gpPlateListen`, `gpPlateTargets`, `gpPlateSmooth`, `gpPlateUniforms`, `gpBesselTable`), called by the agents runner once a step. `particleSoundOf` (Mic, the Audio engine) is shared from `gpuParticlesTexture.ts`.
+
+**Nodes** (`src/nodes/definitions/agentForces.ts`; all inside the group)
+- Forces, each with an **Also** (vec2) input they add to: **Gravity** (Angle or a Direction socket), **Wind** (gusts from the engine's noise), **Curl noise** (the engine's two-octave planar curl; Strength, Size, Evolve), **Attract / Repel** (the mouse, X/Y or a Target socket; Within Reach = the engine's hand force, Everywhere = its attractor; Swirl), **Vortex** (the engine's Swirl, strongest at Reach), **Flow** (Slope or Around a Field ƒ, read through the field function with central differences, no probe, no lag), **Sound kick** (Shockwave, Wave, Vibrate, Shake).
+- **Integrate**: v += F/m·dt, v *= e^(−drag·dt), Max speed, p += v·dt; edges Free, Wrap, Bounce, Slide or Die (Alive output).
+- **Age / Life**: Alive, Age, Age 0–1, the engine's Fade; Live for scales the life.
+- **Collide** and **Chladni** move the walker directly after Integrate (Position, Velocity in and out), as the engine does: Collide puts it back on a Shape ƒ's surface, drops the inward velocity (Bounce, Friction) and has the engine's cushion; Chladni is the engine's sand step on a square or round plate (N and M, or the sound stepping the figure on).
+- Listening nodes (Sound kick, Chladni) carry Sound from (Level and Beat / Mic / Audio engine / track), Level and **Beat**: a silent stand-in kick at a tempo, a pure function of the step's clock time (`agBeatLevel`), so a simulation driven by it is the same live and offline. Their uniforms are named by their slug (`u_agSnd_`, `u_agShk_`, `u_agLv_`, `u_agPlM_`, `u_agPlN_`, `u_agPlS_`, the shared `u_agBessel`); shared GLSL helpers take the per-node uniforms as arguments.
+
+**Emit**: Births **Keep full** (everyone born at step 0 at a random age, each born again the moment it dies: the prelude's `a_born` also takes a dead texel; `a_step` is a new agent global), **Speed ±**, **Spread**, **Burst** (a trigger: everyone born again on the next step). **Draw agents**: Styles **Streaks** (two vertices an agent, gl.LINES, the engine's Thread) and **Ink** (absorbance, the engine's ink compose over Paper), the engine's **Lights** (up to 4, `gpPlace`, halos in the compose), Colour by Age, the engine's palettes, Fade with age, Brightness of The crowd (the engine's `gpUnitBrightness` / `gpUnitInk` and 720-row sizes). The Particles node's info card points at the Particles preset.
+
+**Presets** (each also an example; every node, inside too, has a plain-language note; Expression Blocks explain each named line, which `examples.test.ts` now checks): **Particles** (ring, Keep full, Curl → Vortex → Attract (mouse) → Integrate → Agent Output with Age / Life; glow, Ember by age, 4 orbiting lights; an "Ember glow" Expression Block behind; pre-roll 4 s), **Curl smoke** (a "Rising heat" Expression Block as a force → Curl → Wind → Integrate; Ink streaks on paper; pre-roll 6 s), **Sound burst** (a "Spring back" Expression Block → Sound kick (Shockwave, Beat 120) → Curl → Integrate (bounce); Streaks by speed on Neon). All at 1M, 2 steps a frame.
+
+**Measured** (M3 Pro, headless Chrome on ANGLE Metal, 1M particles, 2 steps a frame, the picture 1920 × 1080, each frame finished on the GPU): Particles 7.1 ms a frame (steps alone 1.6 ms, about 0.8 ms a step; the rest is the 1M-point glow draw), Curl smoke 7.1 ms, Sound burst 10.3 ms (2M-vertex streaks + glow; steps 1.5 ms), Slime mold 11.2 ms by the same method.
+
+**Determinism** (checked in the browser for all four examples): two offline runs and live runs at 30, 60 and 120 Hz and at 60 Hz with a 150 ms stall reach bit-identical state A and B (FNV of the read-back floats), including the listener state (shock rings, level history) and the pre-roll.
+
+**Deferred from P2**: the group-level Sound from (P4); Gust as a Sound kick mode (Wind's Gusts covers the look); a wired Level socket on Sound kick (the level must be known to the engine for hits, so it is a slider; map audio to it in Play); the "Audio input node" part of the Particles node's Graph source; Emit's picture / field shapes (P3); Streaks of the Particles node's 3D / depth of field (P6); the eye preview inside the group (P3); website pages still don't run agents (P5, the export warns).
 
 ---
 

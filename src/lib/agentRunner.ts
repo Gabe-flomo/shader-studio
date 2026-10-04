@@ -20,14 +20,27 @@
  * State lives in an AgentTargets set: the live preview has one, an offline
  * render (renderAtTime) another, so a render never disturbs the preview's
  * simulation (the PassTargets / OfflineHistory rule).
+ *
+ * Listening nodes inside a group (Sound kick, Chladni) hear their sound once a
+ * step, before the rule runs, with the Particles engine's own code
+ * (gpSoundStep, gpLevelsPush, the plate's gpPlateListen / gpPlateTargets /
+ * gpPlateSmooth): their state (level, the level history, the shock rings in
+ * flight, the plate's figure) belongs to the group's state, so it starts over
+ * with it and a render of its own hears the same stand-in Beat at the same steps.
  */
 import * as THREE from 'three';
 import type { AgentDrawProgram, AgentGroupProgram, AgentParam, AgentsSpec, AgentTrailProgram } from '../compiler/types';
 import { agentDrawUniform, agentStateUniform, agentStepUniform, agentWindowUniform, trailUniform } from '../nodes/definitions/agents';
+import { AG_BESSEL_UNIFORM, listenUniforms } from '../nodes/definitions/agentForces';
 import {
-  AG_MAX_STEPS, AG_OFFLINE_CHUNK, agGovern, agGovernorState, agKeep, agLiveState, agLiveSteps, agRate, agStepTime, agStepsPerFrame,
+  AG_MAX_STEPS, AG_OFFLINE_CHUNK, AG_STEP_HZ, agBeatLevel, agGovern, agGovernorState, agKeep, agLiveState, agLiveSteps, agRate, agStepTime, agStepsPerFrame,
   agTargetStep, agTrailSize, agWindow, type AgLiveState,
 } from '../play/kit/agentPlan.js';
+import {
+  GP_BESSEL_N, GP_BESSEL_W, GP_LEVELS, GP_PALETTES, gpBesselTable, gpLevelsPush, gpLevelsState, gpPlace, gpPlateListen, gpPlateSmooth, gpPlateState,
+  gpPlateTargets, gpPlateUniforms, gpRising, gpSoundState, gpSoundStep, gpUnitBrightness, gpUnitInk,
+  type GpLevels, type GpParams, type GpPlateState, type GpSound, type GpSoundInput,
+} from '../play/kit/gpuParticles.js';
 import {
   AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_TRAIL_FRAG,
 } from '../play/kit/agentShaders.js';
@@ -51,7 +64,20 @@ export function restartAgents(nodeId?: string): void {
   if (nodeId) restartRequests.add(nodeId); else restartAll = true;
 }
 
-interface GroupState { key: string; side: number; rt: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget]; cur: 0 | 1; step: number; born: number; live: AgLiveState; history: Array<[number, number]>; lastTarget: number }
+/** What one listening node (Sound kick, Chladni) has heard so far: part of its group's simulation. */
+interface ListenState {
+  sound: GpSound; levels: GpLevels; levelTex: THREE.DataTexture;
+  shocks: Array<{ x: number; y: number; t0: number; s: number }>;
+  plate: GpPlateState;
+}
+interface GroupState {
+  key: string; side: number; rt: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget]; cur: 0 | 1; step: number; born: number;
+  live: AgLiveState; history: Array<[number, number]>; lastTarget: number;
+  /** Listening nodes' state, by their slug. */
+  listen: Map<string, ListenState>;
+  /** Emit's Burst: its last value (for the rising edge) and a burst waiting for the next step. */
+  burstEdge: Record<string, number>; burstPending: boolean;
+}
 interface TrailState { key: string; w: number; h: number; rt: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget]; cur: 0 | 1 }
 interface DrawState { key: string; w: number; h: number; acc: THREE.WebGLRenderTarget; glow: THREE.WebGLRenderTarget[]; out: THREE.WebGLRenderTarget }
 
@@ -81,9 +107,9 @@ export class AgentTargets {
     const key = `${g.side}`;
     let s = this.groups.get(g.slug);
     if (s && s.key === key) return s;
-    if (s) { s.rt[0].dispose(); s.rt[1].dispose(); }
+    if (s) { s.rt[0].dispose(); s.rt[1].dispose(); this.dropListen(s); }
     const make = () => new THREE.WebGLRenderTarget(g.side, g.side, { ...STATE_OPTS });
-    s = { key, side: g.side, rt: [make(), make()], cur: 0, step: 0, born: 0, live: agLiveState(), history: [], lastTarget: 0 };
+    s = { key, side: g.side, rt: [make(), make()], cur: 0, step: 0, born: 0, live: agLiveState(), history: [], lastTarget: 0, listen: new Map(), burstEdge: {}, burstPending: false };
     this.clear(s.rt[0]); this.clear(s.rt[1]);
     this.renderer.setRenderTarget(null);
     this.groups.set(g.slug, s);
@@ -94,7 +120,26 @@ export class AgentTargets {
   restartGroup(s: GroupState): void {
     this.clear(s.rt[0]); this.clear(s.rt[1]);
     this.renderer.setRenderTarget(null);
-    s.step = 0; s.born = 0; s.history.length = 0; s.lastTarget = 0;
+    s.step = 0; s.born = 0; s.history.length = 0; s.lastTarget = 0; s.burstPending = false;
+    this.dropListen(s);
+  }
+
+  /** A listening node's state in group `s` (made fresh, silent, when first heard or after a start over). */
+  listen(s: GroupState, slug: string): ListenState {
+    let l = s.listen.get(slug);
+    if (l) return l;
+    const levels = gpLevelsState();
+    const levelTex = new THREE.DataTexture(levels.levels, GP_LEVELS, 1, THREE.RedFormat, THREE.FloatType);
+    levelTex.minFilter = THREE.NearestFilter; levelTex.magFilter = THREE.NearestFilter;
+    levelTex.needsUpdate = true;
+    l = { sound: gpSoundState(), levels, levelTex, shocks: [], plate: gpPlateState() };
+    s.listen.set(slug, l);
+    return l;
+  }
+
+  private dropListen(s: GroupState): void {
+    for (const l of s.listen.values()) l.levelTex.dispose();
+    s.listen.clear();
   }
 
   /** A Trail's textures at the size it wants for a picture of w × h (made, empty, when that changes). */
@@ -129,7 +174,7 @@ export class AgentTargets {
     const acc = rt(w, h);
     const glow: THREE.WebGLRenderTarget[] = [];
     let out = acc;
-    if (d.style === 'glow') {
+    if (d.style !== 'points') {
       // GP's glow: ¼ and 1/16 size, each blurred (scratch + result), then composed over the points.
       const w1 = Math.ceil(w / 4), h1 = Math.ceil(h / 4), w2 = Math.ceil(w1 / 4), h2 = Math.ceil(h1 / 4);
       glow.push(rt(w1, h1), rt(w1, h1), rt(w2, h2), rt(w2, h2));
@@ -151,13 +196,13 @@ export class AgentTargets {
   /** Drop what the spec no longer has. */
   prune(spec: AgentsSpec): void {
     const gs = new Set(spec.groups.map(g => g.slug)), ts = new Set(spec.trails.map(t => t.slug)), ds = new Set(spec.draws.map(d => d.slug));
-    for (const [k, s] of this.groups) if (!gs.has(k)) { s.rt[0].dispose(); s.rt[1].dispose(); this.groups.delete(k); }
+    for (const [k, s] of this.groups) if (!gs.has(k)) { s.rt[0].dispose(); s.rt[1].dispose(); this.dropListen(s); this.groups.delete(k); }
     for (const [k, s] of this.trails) if (!ts.has(k)) { s.rt[0].dispose(); s.rt[1].dispose(); this.trails.delete(k); }
     for (const [k, s] of this.draws) if (!ds.has(k)) { this.disposeDraw(s); this.draws.delete(k); }
   }
 
   dispose(): void {
-    for (const s of this.groups.values()) { s.rt[0].dispose(); s.rt[1].dispose(); }
+    for (const s of this.groups.values()) { s.rt[0].dispose(); s.rt[1].dispose(); this.dropListen(s); }
     for (const s of this.trails.values()) { s.rt[0].dispose(); s.rt[1].dispose(); }
     for (const s of this.draws.values()) this.disposeDraw(s);
     this.groups.clear(); this.trails.clear(); this.draws.clear();
@@ -174,6 +219,8 @@ export interface AgentRunnerHost {
   onReady: () => void;
   /** An update shader didn't link: report the driver's log against its source. */
   onLinkFailed: (fragmentShader: string) => void;
+  /** What Sound from hears now ('live', 'master', 'track1'…): a spectrum, or null (the Particles node's source). */
+  sound?: (source: string) => GpSoundInput | null;
 }
 
 interface StepEntry { spec: AgentGroupProgram; material: THREE.ShaderMaterial; ready: boolean; failed: boolean; dropped?: boolean }
@@ -199,6 +246,9 @@ export class AgentRunner {
   private pointScene = new THREE.Scene();
   private points: THREE.Points;
   private pointGeometry = new THREE.BufferGeometry();
+  // Streaks: the same empty geometry drawn as line segments (two vertices an agent).
+  private lineScene = new THREE.Scene();
+  private lines: THREE.LineSegments;
   private compileScene = new THREE.Scene();
   private compileMesh: THREE.Mesh;
   private placeholder = new THREE.MeshBasicMaterial();
@@ -211,7 +261,14 @@ export class AgentRunner {
     u_aspect: { value: 1 }, u_size: { value: 1.5 }, u_bright: { value: 0.5 }, u_speedRef: { value: 0.5 },
     u_colA: { value: new THREE.Vector3(1, 1, 1) }, u_colB: { value: new THREE.Vector3(1, 1, 1) },
     u_prim: { value: 0 }, u_depth: { value: 0 }, u_field: { value: null }, u_viewSize: { value: new THREE.Vector2(1, 1) },
+    u_ink: { value: 0 }, u_fade: { value: 1 }, u_usePal: { value: 0 }, u_rainbow: { value: 0 }, u_thread: { value: 0 },
+    u_pal: { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] },
+    u_lights: { value: 0 }, u_lightZ: { value: new THREE.Vector4() },
+    u_light: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
+    u_lightCol: { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] },
   }, true);
+  /** J_n for round Chladni plates (made when one first needs it). */
+  private bessel: THREE.DataTexture | null = null;
   private downMat = raw(AG_FULL_VERT, AG_DOWN_FRAG, { u_src: { value: null }, u_texel: { value: new THREE.Vector2() } }, false);
   private blurMat = raw(AG_FULL_VERT, AG_BLUR_FRAG, { u_src: { value: null }, u_dir: { value: new THREE.Vector2() }, u_size: { value: new THREE.Vector2() } }, false);
   private composeMat = raw(AG_FULL_VERT, AG_COMPOSE_FRAG, {
@@ -239,6 +296,9 @@ export class AgentRunner {
     this.points = new THREE.Points(this.pointGeometry, this.depositMat);
     this.points.frustumCulled = false;
     this.pointScene.add(this.points);
+    this.lines = new THREE.LineSegments(this.pointGeometry, this.drawMat);
+    this.lines.frustumCulled = false;
+    this.lineScene.add(this.lines);
     this.compileMesh = new THREE.Mesh(host.geometry, this.placeholder);
     this.compileScene.add(this.compileMesh);
     this.thumbQuad = new THREE.Mesh(host.geometry, this.thumbMat);
@@ -256,6 +316,23 @@ export class AgentRunner {
       for (const n of [agentStateUniform(g.slug, 'A'), agentStateUniform(g.slug, 'B')]) if (!u[n]) u[n] = { value: null };
       if (!u[agentStepUniform(g.slug)]) u[agentStepUniform(g.slug)] = { value: 0 };
       if (!(u[agentWindowUniform(g.slug)]?.value instanceof THREE.Vector4)) u[agentWindowUniform(g.slug)] = { value: new THREE.Vector4(0, 0, 0, 0) };
+      for (const l of g.listeners) {
+        const n = listenUniforms(l.slug);
+        if (!(u[n.sound]?.value instanceof THREE.Vector4)) u[n.sound] = { value: new THREE.Vector4() };
+        if (!Array.isArray(u[n.shocks]?.value)) u[n.shocks] = { value: [0, 1, 2, 3].map(() => new THREE.Vector4()) };
+        if (!u[n.levels]) u[n.levels] = { value: null };
+        if (!Array.isArray(u[n.plateModes]?.value)) u[n.plateModes] = { value: Array.from({ length: 8 }, () => new THREE.Vector4()) };
+        if (!u[n.plateCount]) u[n.plateCount] = { value: 0 };
+        if (!u[n.plateShake]) u[n.plateShake] = { value: 0 };
+        if (l.kind === 'plate' && l.shape === 'circle' && !u[AG_BESSEL_UNIFORM]?.value) {
+          if (!this.bessel) {
+            this.bessel = new THREE.DataTexture(gpBesselTable(), GP_BESSEL_W, GP_BESSEL_N, THREE.RedFormat, THREE.FloatType);
+            this.bessel.minFilter = THREE.NearestFilter; this.bessel.magFilter = THREE.NearestFilter;
+            this.bessel.needsUpdate = true;
+          }
+          u[AG_BESSEL_UNIFORM] = { value: this.bessel };
+        }
+      }
     }
     for (const t of this.spec.trails) if (!u[trailUniform(t.slug)]) u[trailUniform(t.slug)] = { value: null };
     for (const d of this.spec.draws) if (!u[agentDrawUniform(d.slug)]) u[agentDrawUniform(d.slug)] = { value: null };
@@ -356,6 +433,8 @@ export class AgentRunner {
     for (const e of ready) {
       const g = e.spec;
       const s = targets.group(g);
+      // Emit's Burst (a trigger): each time it rises past 0.5, everyone is born again on the next step.
+      if (gpRising(s.burstEdge, 'burst', this.read(g.emit.burst, 0))) s.burstPending = true;
       const spf = agStepsPerFrame(this.read(g.params.stepsPerFrame, 2));
       const preroll = this.read(g.params.preroll, 0);
       let steps: number;
@@ -401,9 +480,12 @@ export class AgentRunner {
           const g = p.e.spec;
           const s = p.s;
           const n = g.side * g.side;
-          const win = agWindow(g.emit.mode, s.step, n, this.read(g.emit.rate, 0), s.born);
+          let win = agWindow(g.emit.mode, s.step, n, this.read(g.emit.rate, 0), s.born);
           s.born = win.born;
+          // Burst: everyone born again at once, on the first step after it fired.
+          if (s.burstPending) { win = { start: 0, count: n, born: win.born }; s.burstPending = false; }
           (u[agentWindowUniform(g.slug)].value as THREE.Vector4).set(win.start, win.count, 0, 0);
+          if (g.listeners.length) this.hear(targets, s, g, agStepTime(s.step, p.spf, p.preroll));
           u[agentStepUniform(g.slug)].value = s.step >>> 0;
           u[agentStateUniform(g.slug, 'A')].value = s.rt[s.cur].textures[0];
           u[agentStateUniform(g.slug, 'B')].value = s.rt[s.cur].textures[1];
@@ -475,7 +557,7 @@ export class AgentRunner {
         const g = this.spec.groups.find(x => x.slug === d.group);
         if (!gs || !g) { u[agentDrawUniform(d.slug)].value = null; continue; }
         const timed = o.timer?.begin(`agents:${g.label} draw`) ?? false;
-        u[agentDrawUniform(d.slug)].value = this.draw(targets.draw(d, w, h), d, g, gs, aspect).texture;
+        u[agentDrawUniform(d.slug)].value = this.draw(targets.draw(d, w, h), d, g, gs, aspect, o.time).texture;
         if (timed) o.timer!.end();
       }
     } finally {
@@ -494,30 +576,130 @@ export class AgentRunner {
     renderer.render(this.quadScene, this.host.camera);
   }
 
-  private draw(s: DrawState, d: AgentDrawProgram, g: AgentGroupProgram, gs: GroupState, aspect: number): THREE.WebGLRenderTarget {
+  /**
+   * One step of listening for group g's listening nodes, before its rule runs at `time` (the step's
+   * own clock): the Particles engine's code as it is. Sound from Mic or the Audio engine gives a
+   * spectrum; otherwise the level is Level plus the stand-in Beat (Level is added to a spectrum too).
+   */
+  private hear(targets: AgentTargets, s: GroupState, g: AgentGroupProgram, time: number): void {
+    const u = this.host.uniforms();
+    const dt = 1 / AG_STEP_HZ;
+    for (const l of g.listeners) {
+      const st = targets.listen(s, l.slug);
+      const n = listenUniforms(l.slug);
+      const heard = l.soundFrom !== 'graph' ? this.host.sound?.(l.soundFrom) ?? null : null;
+      const level = Math.max(0, this.read(l.params.level, 0)) + agBeatLevel(time, this.read(l.params.beat, 0));
+      gpSoundStep(st.sound, heard ?? { level: Math.min(2, level) }, dt);
+      if (heard) st.sound.level = Math.min(2, st.sound.level + level);
+      else st.sound.bass = st.sound.mid = st.sound.treble = st.sound.level;
+      (u[n.sound].value as THREE.Vector4).set(st.sound.level, st.sound.bass, st.sound.treble, st.sound.onset);
+      if (l.kind === 'kick') {
+        // A hit sends a ring out from where the centre is now (the last four stay in flight).
+        if (st.sound.hit) {
+          st.shocks.unshift({ x: this.read(l.params.x, 0), y: this.read(l.params.y, 0), t0: time, s: 0.4 + st.sound.onset });
+          st.shocks.length = Math.min(st.shocks.length, 4);
+        }
+        const sv = u[n.shocks].value as THREE.Vector4[];
+        for (let i = 0; i < 4; i++) { const k = st.shocks[i]; if (k) sv[i].set(k.x, k.y, k.t0, k.s); else sv[i].set(0, 0, 0, 0); }
+        gpLevelsPush(st.levels, st.sound.level, dt);
+        st.levelTex.needsUpdate = true;
+        u[n.levels].value = st.levelTex;
+        continue;
+      }
+      // A plate: its figure from N and M, or stepped on by the sound, gliding between figures.
+      const shape = l.shape ?? 'square';
+      const P = {
+        modeFrom: l.modeFrom ?? 'manual', modeN: this.read(l.params.modeN, 3), modeM: this.read(l.params.modeM, 5),
+        modes: this.read(l.params.modes, 1), plateFreq: this.read(l.params.plateFreq, 1), plateWeights: this.read(l.params.plateWeights, 0.5),
+      } as GpParams;
+      let want = null as ReturnType<typeof gpPlateTargets>;
+      if (P.modeFrom === 'sound') {
+        const bands = gpPlateListen(st.plate, { spectrum: heard?.freq ? heard : null, level: st.sound.level, hit: st.sound.hit, dt });
+        want = gpPlateTargets(P, shape, bands);
+        if (!want && !st.plate.modes.length) want = gpPlateTargets(P, shape, null);
+      } else want = gpPlateTargets(P, shape, null);
+      gpPlateSmooth(st.plate, want, dt, s.step === 0);
+      const pu = gpPlateUniforms(st.plate.modes, shape);
+      const mv = u[n.plateModes].value as THREE.Vector4[];
+      for (let i = 0; i < 8; i++) mv[i].fromArray(pu.values, i * 4);
+      u[n.plateCount].value = pu.count;
+      // Shake: the slider, harder with the level and on every hit (the Particles node's rule).
+      u[n.plateShake].value = this.read(l.params.shake, 0.6) * (0.6 + 0.8 * Math.min(st.sound.level, 1.5) + 1.2 * st.sound.onset);
+    }
+  }
+
+  /** A Draw's lights at `time`: the Particles node's (gpPlace), round its centre. */
+  private lightsFor(d: AgentDrawProgram, time: number, aspect: number): Array<{ x: number; y: number; reach: number; power: number; colour: number[] }> {
+    if (!d.lights) return [];
+    const orbit = this.read(d.params.lightOrbit as AgentParam, 0.5);
+    const P = {
+      follow: 'none', lights: String(d.lights), emitSize: (orbit - 0.2) / 0.7, lightMotion: d.lightMotion, space: '2d', hands: 'off',
+      lightReach: this.read(d.params.lightReach as AgentParam, 0.3), lightPower: this.read(d.params.lightPower as AgentParam, 1.6),
+      lightColor: this.readColour(d.params.lightColor, [1, 0.55, 0.25]),
+    } as unknown as GpParams;
+    const cx = this.read(d.params.lightX as AgentParam, 0), cy = this.read(d.params.lightY as AgentParam, 0);
+    return gpPlace(P, time, null, aspect).lights.map(l => ({ x: l.x + cx, y: l.y + cy, reach: l.reach, power: l.power, colour: l.colour }));
+  }
+
+  private draw(s: DrawState, d: AgentDrawProgram, g: AgentGroupProgram, gs: GroupState, aspect: number, time: number): THREE.WebGLRenderTarget {
     const { renderer } = this.host;
     const prevColor = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
     renderer.setClearColor(0x000000, 0);
     renderer.setRenderTarget(s.acc);
     renderer.clear(true, false, false);
     renderer.setClearColor(prevColor, prevAlpha);
+    const n = g.side * g.side;
+    const ink = d.style === 'ink';
+    const streak = Math.max(0, this.read(d.params.streak as AgentParam, 0.25));
+    const lines = d.style === 'streaks' || (ink && streak > 0);
+    let size = Math.max(0.1, this.read(d.params.size as AgentParam, 1.5));
+    let bright = this.read(d.params.brightness as AgentParam, 0.5);
+    if (d.scaleBy === 'crowd') {
+      // The Particles node's rule: sizes in pixels of a 720-pixel-high picture, smaller for big pools
+      // (fill rate), and each walker's light (ink) its share, so the cloud looks the same at every count.
+      size = Math.min(size, n > 1100000 ? 3 : n > 300000 ? 8 : 32);
+      bright *= ink ? gpUnitInk(n, size) : gpUnitBrightness(n, size);
+      size *= Math.max(0.5, s.h / 720);
+    }
     const du = this.drawMat.uniforms;
     du.u_a.value = gs.rt[gs.cur].textures[0];
     du.u_b.value = gs.rt[gs.cur].textures[1];
     du.u_side.value = g.side; du.u_species.value = g.species; du.u_aspect.value = aspect;
-    du.u_colorBy.value = d.colorBy === 'species' ? 1 : d.colorBy === 'speed' ? 2 : d.colorBy === 'heading' ? 3 : 0;
-    du.u_size.value = this.read(d.params.size as AgentParam, 1.5);
-    du.u_bright.value = this.read(d.params.brightness as AgentParam, 0.5);
+    du.u_colorBy.value = ['single', 'species', 'speed', 'heading', 'age'].indexOf(d.colorBy);
+    du.u_size.value = size;
+    du.u_bright.value = bright;
+    du.u_speedRef.value = this.read(d.params.speedRef as AgentParam, 0.5);
+    du.u_prim.value = lines ? 1 : 0;
+    du.u_thread.value = lines ? streak * 0.12 : 0;
+    du.u_ink.value = ink ? 1 : 0;
+    du.u_fade.value = d.fade ? 1 : 0;
+    const pal = d.palette === 'ab' ? undefined : GP_PALETTES[d.palette];
+    du.u_usePal.value = d.palette === 'ab' ? 0 : 1;
+    du.u_rainbow.value = d.palette !== 'ab' && !pal ? 1 : 0;
+    if (pal) (du.u_pal.value as THREE.Vector3[]).forEach((v, i) => v.fromArray(pal[i]));
     (du.u_colA.value as THREE.Vector3).fromArray(this.readColour(d.params.colorA, [1, 0.75, 0.35]));
     (du.u_colB.value as THREE.Vector3).fromArray(this.readColour(d.params.colorB, [0.25, 0.55, 1]));
     (du.u_viewSize.value as THREE.Vector2).set(s.w, s.h);
+    const lights = this.lightsFor(d, time, aspect);
+    const setLights = (uu: Record<string, THREE.IUniform>) => {
+      uu.u_lights.value = lights.length;
+      (uu.u_light.value as THREE.Vector4[]).forEach((v, i) => { const l = lights[i]; if (l) v.set(l.x, l.y, l.reach, l.power); else v.set(0, 0, 1, 0); });
+      (uu.u_lightCol.value as THREE.Vector3[]).forEach((v, i) => { const l = lights[i]; if (l) v.fromArray(l.colour); else v.set(0, 0, 0); });
+    };
+    setLights(du);
     this.drawMat.uniformsNeedUpdate = true;
-    this.points.material = this.drawMat;
-    this.pointGeometry.setDrawRange(0, g.side * g.side);
     renderer.setRenderTarget(s.acc);
-    renderer.render(this.pointScene, this.host.camera);
-    if (d.style !== 'glow') return s.acc;
-    // The Particles node's glow, unchanged: ¼ and 1/16 copies, blurred, composed over the points.
+    if (lines) {
+      this.pointGeometry.setDrawRange(0, 2 * n);
+      renderer.render(this.lineScene, this.host.camera);
+    } else {
+      this.points.material = this.drawMat;
+      this.pointGeometry.setDrawRange(0, n);
+      renderer.render(this.pointScene, this.host.camera);
+    }
+    if (d.style === 'points') return s.acc;
+    // The Particles node's glow, unchanged: ¼ and 1/16 copies, blurred, composed over the points
+    // with the lights' halos (Ink: the absorbance turned into ink covering the paper).
     const [d1, b1, d2, b2] = s.glow;
     const down = (src: THREE.WebGLRenderTarget, into: THREE.WebGLRenderTarget) => {
       this.downMat.uniforms.u_src.value = src.texture;
@@ -537,6 +719,9 @@ export class AgentRunner {
     (cu.u_size.value as THREE.Vector2).set(s.w, s.h);
     cu.u_aspect.value = aspect;
     cu.u_glow.value = this.read(d.params.glow as AgentParam, 1);
+    cu.u_halo.value = this.read(d.params.halo as AgentParam, 0.5);
+    cu.u_ink.value = ink ? 1 : 0;
+    setLights(cu);
     this.pass(this.composeMat, s.out);
     return s.out;
   }
@@ -584,6 +769,8 @@ export class AgentRunner {
     for (const m of [this.depositMat, this.trailMat, this.drawMat, this.downMat, this.blurMat, this.composeMat, this.thumbMat, this.placeholder]) m.dispose();
     this.pointGeometry.dispose();
     this.thumbRt?.dispose();
+    this.bessel?.dispose();
+    if (u?.[AG_BESSEL_UNIFORM]) u[AG_BESSEL_UNIFORM].value = null;
     for (const k of stats.keys()) if (this.spec.groups.some(g => g.nodeId === k)) stats.delete(k);
   }
 }

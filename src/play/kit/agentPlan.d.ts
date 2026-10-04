@@ -15,3 +15,4 @@ export interface AgGovernor { cap: number; slow: number; fast: number; base: num
 export function agGovernorState(): AgGovernor;
 export function agGovern(gov: AgGovernor, frameMs: number, budgetMs: number): number;
 export function agRate(history: Array<[number, number]>, ran: number, wanted: number): number;
+export function agBeatLevel(t: number, bpm: unknown): number;

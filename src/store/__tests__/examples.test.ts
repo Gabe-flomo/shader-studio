@@ -7,7 +7,8 @@ import { EXAMPLE_GRAPHS } from '../exampleGraphs';
 import { EXAMPLE_FOLDERS, EXAMPLE_INDEX } from '../exampleIndex';
 import { PLAY_EXAMPLE_KEYS } from '../playExampleIndex';
 import type { GraphNode } from '../../types/nodeGraph';
-import { slimeMoldPreset } from '../agentExamples';
+import { agentPreset, slimeMoldPreset } from '../agentExamples';
+import { AGENT_PRESET_TYPES } from '../../nodes/definitions/agents';
 import { parseActionTarget, parseLayerTarget, parsePlayRecord } from '../../types/play';
 import { parseFinishTarget } from '../../types/playFinish';
 import { collectPlayCandidates } from '../../play/playControls';
@@ -145,10 +146,38 @@ describe('bundled examples', () => {
       if (typeof note !== 'string' || note.trim().length < 20) missing.push(`${label}: ${n.id} (${n.type})`);
     });
     for (const k of agentKeys) check(k, EXAMPLE_GRAPHS[k].nodes);
-    // The Slime mold starter in the node browser builds the same nodes with fresh ids.
+    expect(agentKeys).toEqual(expect.arrayContaining(['slimeMold', 'agentParticles', 'agentCurlSmoke', 'agentSoundBurst']));
+    // The starters in the node browser build the same nodes with fresh ids.
     let i = 0;
     check('slimeMoldPreset', slimeMoldPreset(() => `p${i++}`, { x: 0, y: 0 }).nodes);
+    for (const type of AGENT_PRESET_TYPES) {
+      const preset = agentPreset(type, () => `p${i++}`, { x: 0, y: 0 });
+      expect(preset, type).not.toBeNull();
+      check(type, preset!.nodes);
+      // Its Output socket is a node it built.
+      expect(preset!.nodes.some(nd => nd.id === preset!.out.nodeId), type).toBe(true);
+    }
     expect(missing).toEqual([]);
+  });
+
+  it('an Agents example\'s Expression Blocks explain each named line in their note', () => {
+    // "Explained in their comment via named lines": every `float heat = …` line's name appears in the note.
+    const AGENTS = new Set(['agentsGroup', 'trailField', 'drawAgents', 'agentDeposit', 'agentEmit']);
+    const bad: string[] = [];
+    for (const k of keys) {
+      let agents = false;
+      walk(EXAMPLE_GRAPHS[k].nodes, nd => { if (AGENTS.has(nd.type)) agents = true; });
+      if (!agents) continue;
+      walk(EXAMPLE_GRAPHS[k].nodes, nd => {
+        if (nd.type !== 'exprNode') return;
+        const note = String(nd.params.__comment ?? '');
+        for (const line of (nd.params.lines ?? []) as Array<{ lhs: string }>) {
+          const name = line.lhs.trim().split(/\s+/).pop()!;
+          if (!new RegExp(`(^|\\W)${name}:`, 'm').test(note)) bad.push(`${k}/${nd.id}: line "${name}" is not explained ("${name}: …") in the note`);
+        }
+      });
+    }
+    expect(bad).toEqual([]);
   });
 
   it('the field-socket combos compile their shapes as field functions (one per wired socket)', () => {

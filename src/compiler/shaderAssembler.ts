@@ -588,6 +588,8 @@ export interface AgentProgramOptions {
   seed: string;
   /** Extra top-level declarations (the group's own param uniforms the prelude reads). */
   declarations: string[];
+  /** Emit's Keep full: a dead walker is born again on the next step, as well as in the birth window. */
+  respawn?: boolean;
 }
 
 /** The fixed part of an agent program: outputs, state samplers, the agent globals and the hash. */
@@ -621,11 +623,12 @@ function agentPrelude(o: AgentProgramOptions): string {
     `    vec4 a_sA = texelFetch(${A}, a_tex, 0);`,
     `    vec4 a_sB = texelFetch(${B}, a_tex, 0);`,
     '    a_index = float(a_tex.y * a_side + a_tex.x);',
-    `    a_born = mod(a_index - ${W}.x + a_count, a_count) < ${W}.y;`,
+    `    a_born = mod(a_index - ${W}.x + a_count, a_count) < ${W}.y${o.respawn ? ' || a_sB.w <= 0.0' : ''};`,
     // Dead and not born this step: keep the texel as it is, at almost no cost.
     '    if (!a_born && a_sB.w <= 0.0) { o_a = a_sA; o_b = a_sB; return; }',
     `    a_seed = agHash(uint(a_tex.y * a_side + a_tex.x) * 0x9E3779B1u ^ agHash(${agentStepUniform(o.slug)} ^ (uint(max(${o.seed}, 0.0)) * 0x85EBCA6Bu)));`,
     '    a_random = float(a_seed >> 8) / 16777216.0;',
+    `    a_step = ${agentStepUniform(o.slug)};`,
     '    a_pos = a_sA.xy; a_heading = a_sA.z; a_age = a_sA.w + a_dt;',
     '    a_vel = a_sB.xy; a_speed = a_sB.z; a_life = a_sB.w;',
     '    a_species = mod(a_index, a_speciesCount);',

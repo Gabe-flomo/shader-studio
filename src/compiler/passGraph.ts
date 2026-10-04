@@ -33,7 +33,7 @@ import { PASS_SCALES } from '../nodes/definitions/passes';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 import {
   agentStepNodes, asAgentSource, checkProgramWires, depositSpec, depositTargets, drawSpec, emitMode, engineParams, groupSide, groupSpecies,
-  hasAgentsNode, insideSlugs, isAgentEngineOnly, isAgentLoopWire, isAgentSource, MAX_AGENT_GROUPS, MAX_TRAILS, trailSpec,
+  hasAgentsNode, insideSlugs, isAgentEngineOnly, isAgentLoopWire, isAgentSource, listenersOf, MAX_AGENT_GROUPS, MAX_TRAILS, trailSpec,
 } from './agentGraph';
 import { agentPlacementProblems, agentProgramProblems } from './agentRules';
 
@@ -363,12 +363,14 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         ];
         if (problems.length) { errors.push(...problems); continue; }
         const seed = params.seed;
+        const emit = emitMode(g, byId, slugOf);
         const seedExpr = typeof seed === 'string' ? seed : `${Number(seed ?? 1).toFixed(1)}`;
         const r = generateFragmentShader(topologicalSort(list), list, {
           slugs,
           agentProgram: {
             slug: slugOf(g.id), side: groupSide(g), species: groupSpecies(g), seed: seedExpr,
             declarations: typeof seed === 'string' ? [`uniform float ${seed};`] : [],
+            respawn: emit.mode === 'respawn',
           },
         });
         absorb(r);
@@ -377,7 +379,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
           nodeId: g.id, slug: slugOf(g.id), label, fragmentShader: r.fragmentShader,
           side: groupSide(g), species: groupSpecies(g),
           params: { stepsPerFrame: params.stepsPerFrame as number | string, seed: params.seed as number | string, preroll: params.preroll as number | string },
-          emit: emitMode(g, byId, slugOf),
+          emit,
+          listeners: listenersOf(a.inside, slugOf, engine),
           readsTrails: [...(a.outer.agentReads ?? [])].filter(id => byId.get(id)?.type === 'trailField').map(slugOf),
           readsPasses: [...a.outer.reads].map(slugOf),
           live: liveAgents.has(g.id),

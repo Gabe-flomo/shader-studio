@@ -155,3 +155,27 @@ export function gpPlateState(): GpPlateState;
 export function gpPlateSmooth(st: GpPlateState, targets: GpPlateMode[] | null, dt: number, snap?: boolean): GpPlateMode[];
 export function gpPlateListen(st: GpPlateState, o: { spectrum?: GpSoundInput | null; graphBands?: number[] | null; level?: number; hit?: boolean | number; dt: number }): number[];
 export function gpPlateUniforms(modes: GpPlateMode[], shape: string): { values: Float32Array; count: number };
+
+/** Shared GLSL pieces (GP_SIM and GP_DRAW_VERT are written with them; the Agents force and draw nodes call them with their own names). */
+export function gpCurlAt(p: string, scale: string, time: string): string;
+export function gpCurlOctave2(q: string): string;
+export function gpCurlPlane(a: string, b: string): string;
+export function gpGust(a: string): string;
+export function gpSwirl(s: string, d: string, r: string, r2: string): string;
+export function gpAttractPull(a: string, g: string, r: string): string;
+export function gpHandFall(r: string, reach: string): string;
+export function gpHandPush(force: string, swirl: string, hd: string, hr: string, reach: string, fall: string): string;
+export function gpFlowPush(dir: string, gl: string, force: string): string;
+export function gpWavePhase(r: string, time: string, speed: string): string;
+export function gpWavePush(dir: string, wave: string, lv: string, ph: string): string;
+export function gpVibrate(dir: string, s: string, amount: string, lv: string, ph: string): string;
+export function gpCrunch(s: string, amount: string): string;
+export function gpShockRing(r: string, age: string, speed: string): string;
+export function gpShockPush(d: string, r: string, strength: string, ring: string, age: string): string;
+export function gpLevelGlsl(fn: string, levels: string, args?: string): string;
+export function gpBesselGlsl(fn: string, table: string): string;
+export function gpPlateGlsl(fn: string, o: { count: string; modes: string; shape: string; sym: string; J: string; args?: string }): string;
+export function gpPlateStep(indent: string, o: { half: string; plate: string; settle: string; shake: string; dt: string; shape: string; s: string; args?: string }): string;
+export function gpPaletteGlsl(fn: string, rainbow: string, pal: string): string;
+export function gpFade(a: string): string;
+export const GP_LIGHTS: string;

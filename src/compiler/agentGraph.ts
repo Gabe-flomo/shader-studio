@@ -19,14 +19,14 @@
  *    as numbers or the uniforms their sliders write.
  */
 import type { GraphNode, NodeDefinition, SubgraphData } from '../types/nodeGraph';
-import type { AgentDepositProgram, AgentDrawProgram, AgentParam, AgentTrailProgram } from './types';
+import type { AgentDepositProgram, AgentDrawProgram, AgentListener, AgentParam, AgentTrailProgram } from './types';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 import { patchNodeParamsForUniforms } from './uniformPatcher';
 import { typesCompatible } from '../lib/typesCompatible';
 import { fieldChainProblems, fieldInputKeys } from './fieldSockets';
 import { topologicalSort } from './topoSort';
 import { computeNodeSlug } from './nodeSlug';
-import { AGENT_TIERS, AGENTS_GROUP_TYPE, TRAIL_RESOLUTIONS } from '../nodes/definitions/agents';
+import { AGENT_TIERS, AGENTS_GROUP_TYPE, DRAW_COLOR_BY, DRAW_STYLES, GP_PALETTE_NAMES, TRAIL_RESOLUTIONS } from '../nodes/definitions/agents';
 
 /** Node types that send a graph down this path (at any depth). */
 export const AGENTS_FAMILY = new Set([AGENTS_GROUP_TYPE, 'trailField', 'drawAgents', 'agentDeposit', 'agentEmit']);
@@ -200,8 +200,13 @@ export function trailSpec(n: GraphNode, slug: string, params: Record<string, Age
 export function drawSpec(n: GraphNode, slug: string, groupSlug: string, params: Record<string, AgentParam | number[]>): Omit<AgentDrawProgram, 'live'> {
   return {
     nodeId: n.id, slug, group: groupSlug,
-    style: choice(n.params.style, ['points', 'glow'] as const, 'points'),
-    colorBy: choice(n.params.colorBy, ['single', 'species', 'speed', 'heading'] as const, 'heading'),
+    style: choice(n.params.style, DRAW_STYLES, 'points'),
+    colorBy: choice(n.params.colorBy, DRAW_COLOR_BY, 'heading'),
+    palette: choice(n.params.palette, ['ab', ...GP_PALETTE_NAMES], 'ab'),
+    lights: Math.max(0, Math.min(4, Math.round(Number(n.params.lights ?? 0)) || 0)),
+    lightMotion: choice(n.params.lightMotion, ['orbit', 'still'] as const, 'orbit'),
+    fade: choice(n.params.fade, ['on', 'off'] as const, 'on') === 'on',
+    scaleBy: choice(n.params.scaleBy, ['walker', 'crowd'] as const, 'walker'),
     params,
   };
 }
@@ -210,12 +215,30 @@ export function depositSpec(n: GraphNode, slug: string, groupSlug: string, trail
   return { nodeId: n.id, slug, group: groupSlug, trail: trailSlug, params: params as Record<string, AgentParam> };
 }
 
-/** The head of a group's Emit chain decides how births go (Fill or Rate). */
-export function emitMode(group: GraphNode, byId: Map<string, GraphNode>, slugOf: (id: string) => string): { mode: 'fill' | 'rate'; rate: AgentParam } {
+/** The head of a group's Emit chain decides how births go (Fill, Rate or Keep full) and carries Burst. */
+export function emitMode(group: GraphNode, byId: Map<string, GraphNode>, slugOf: (id: string) => string): { mode: 'fill' | 'rate' | 'respawn'; rate: AgentParam; burst: AgentParam } {
   const head = byId.get(group.inputs.emit?.connection?.nodeId ?? '');
-  if (head?.type !== 'agentEmit') return { mode: 'fill', rate: 0 };
-  const mode = choice(head.params.mode, ['fill', 'rate'] as const, 'fill');
+  if (head?.type !== 'agentEmit') return { mode: 'fill', rate: 0, burst: 0 };
+  const mode = choice(head.params.mode, ['fill', 'rate', 'respawn'] as const, 'fill');
   const { params } = engineParams(head, slugOf(head.id));
-  const rate = params.rate;
-  return { mode, rate: typeof rate === 'number' || typeof rate === 'string' ? rate : 0 };
+  const num = (v: unknown): AgentParam => (typeof v === 'number' || typeof v === 'string' ? v : 0);
+  return { mode, rate: num(params.rate), burst: num(params.burst) };
+}
+
+/** The nodes of a group's inside that listen (Sound kick, Chladni), for the engine. */
+export function listenersOf(inner: GraphNode[], slugOf: (id: string) => string, engine: (n: GraphNode) => Record<string, AgentParam | number[]>): AgentListener[] {
+  const out: AgentListener[] = [];
+  for (const n of inner) {
+    if (n.type !== 'agentSoundKick' && n.type !== 'agentChladni') continue;
+    const params = engine(n) as Record<string, AgentParam>;
+    const soundFrom = typeof n.params.soundFrom === 'string' ? n.params.soundFrom : 'graph';
+    if (n.type === 'agentSoundKick') { out.push({ nodeId: n.id, slug: slugOf(n.id), kind: 'kick', soundFrom, params }); continue; }
+    out.push({
+      nodeId: n.id, slug: slugOf(n.id), kind: 'plate', soundFrom, params,
+      shape: choice(n.params.shape, ['square', 'circle'] as const, 'square'),
+      modeFrom: choice(n.params.modeFrom, ['manual', 'sound'] as const, 'manual'),
+      symmetry: choice(n.params.symmetry, ['minus', 'plus'] as const, 'minus'),
+    });
+  }
+  return out;
 }
