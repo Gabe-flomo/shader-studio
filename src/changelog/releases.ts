@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.10',
+    date: '2026-10-03',
+    title: 'Tidier cards',
+    highlights: [
+      { area: 'Play', text: 'Rows of options turn into a dropdown when a card is too narrow for them, instead of running off its edge.' },
+      { area: 'Play', text: 'Mapping cards fit narrow panels: the source name shortens, Change…, Lock and Follow wrap onto their own lines, and the rest goes in the ⋯ menu.' },
+      { area: 'Play', text: 'Layer, control, rule and Look cards wrap their buttons too, so nothing is cut off at any panel width.' },
+    ],
+  },
+  {
     id: '2026.10.9',
     date: '2026-10-03',
     title: 'Water, Chladni sand and your own effects',
