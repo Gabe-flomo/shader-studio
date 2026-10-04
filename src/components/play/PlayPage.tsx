@@ -12,7 +12,7 @@ import { offerPlayExport } from '../playfile/exportMenus';
 import { can, openProSheet, requireFeature, useCan, usePlanName } from '../../lib/plan';
 import { sourceNeedsPro, sourceTypeNeedsPro, triggerNeedsPro, proOnlyParts } from '../../play/planGates';
 import { ProBadge, ProLock } from '../account/ProSheet';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { DataSourceOptions } from './DataSourceOptions';
@@ -40,7 +40,7 @@ import { CAPTURE_POS, PER_GRAIN_READS, sensorReadsFor, type SensorRead } from '.
 import { GRAIN_EACH, grainSensorLayer, isGranulatorRack, parseGrainsTarget } from '../../types/playAudioEngine';
 import { ConnectGuide } from './ConnectGuide';
 import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
-import { applyCurve, FN_BEAT_HZ, playEngine, sampleCurve, type ControlValue } from '../../lib/playEngine';
+import { applyCurve, FN_BEAT_HZ, playEngine, sampleCurve } from '../../lib/playEngine';
 import { fnEval } from '../../play/kit/fn.js';
 import { subscribeTimeTick } from '../../lib/timeTick';
 import { midiEngine, midiNoteName } from '../../lib/midiEngine';
@@ -97,7 +97,8 @@ import type { FaceGesture, PoseGesture } from '../../types/playTracking';
 import { handFeed } from '../../lib/handFeed';
 import { usesHands, type HandGesture } from '../../types/play';
 import { ColourPad } from './ColourPad';
-import { useLiveValues } from './useLiveValues';
+import { anyLiveMapped } from './useLiveValues';
+import { useLiveValue, usePolledNumber } from './liveValueStore';
 import { useStage } from './stageStore';
 import { useTakes } from '../../lib/takes';
 import { startOverMenuItem } from '../../play/startOver';
@@ -136,42 +137,8 @@ import { incrementSummary, mappingLabel } from '../../play/incrementUi';
 import { defaultIncrement, type PlayIncrement } from '../../types/play';
 import { recordBpm } from '../../types/playArrangement';
 
-// ── Live values (polled, not per store write) ───────────────────────────────
-
-/**
- * The engine's last written value per driven control, refreshed ~30 times a
- * second while anything is mapped. State only changes when a value does, so
- * an idle panel re-renders nothing.
- */
-const EMPTY_METERS: Map<string, number> = new Map();
-
-/** A source's raw unit reading, polled for the drawer's meters. */
-function useSourceMeter(mappings: PlayMapping[]): Map<string, number> {
-  const [values, setValues] = useState<Map<string, number>>(() => new Map());
-  useEffect(() => {
-    if (mappings.length === 0) return;
-    let raf = 0;
-    let last = 0;
-    const tick = (t: number) => {
-      raf = requestAnimationFrame(tick);
-      if (t - last < 50) return;
-      last = t;
-      setValues(prev => {
-        let changed = prev.size !== mappings.length;
-        const next = new Map<string, number>();
-        for (const m of mappings) {
-          const v = Math.round((playEngine.readMapping(m) ?? 0) * 100) / 100;
-          next.set(m.id, v);
-          if (prev.get(m.id) !== v) changed = true;
-        }
-        return changed ? next : prev;
-      });
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [mappings]);
-  return mappings.length === 0 ? EMPTY_METERS : values;
-}
+// Live values and meters are read where they show (liveValueStore.ts): a control's slider, a
+// mapping's meter. The page and the drawer don't hold them, so they don't render on every poll.
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -230,7 +197,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     if (wantsMidi) void midiEngine.connectWebMidi();
   }, [wantsMidi]);
 
-  const liveValues = useLiveValues(play);
+  // Live values are read per row (liveValueStore): the page itself doesn't render on every poll.
+  const liveOn = anyLiveMapped(play);
   const candidates = useMemo(() => collectPlayCandidates(nodes, paramBindings), [nodes, paramBindings]);
 
   const writeControl = useCallback((control: PlayControl, value: number | number[]) => {
@@ -657,10 +625,10 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       const pms = (play.pairMappings ?? []).filter(m => m.enabled && m.pairId === pair.id);
       return (
         <ContextMenuArea key={c.id} items={() => pairMenu(pair.id)}>
-          <PairCard
+          <LivePairCard
+            liveOn={liveOn}
             pair={pair} a={c} b={cb} touch={compact}
             values={[num(readControlValue(nodes, c.target, play)), num(readControlValue(nodes, cb.target, play))]}
-            live={[liveValues.get(c.id), liveValues.get(cb.id)]}
             drivenA={pms.some(m => pairDrives(m, pair, c.id)) || play.mappings.some(m => m.enabled && m.controlId === c.id)}
             drivenB={pms.some(m => pairDrives(m, pair, cb.id)) || play.mappings.some(m => m.enabled && m.controlId === cb.id)}
             drivenBy={[...pms.map(m => pairMappingLabel(m, play)), ...play.mappings.filter(m => m.enabled && (m.controlId === c.id || m.controlId === cb.id)).map(m => mappingLabel(m, play))]}
@@ -697,7 +665,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       } : undefined}
       onAmount={amount => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, amount } : x) }))}
       value={readControlValue(nodes, c.target, play)}
-      live={liveValues.get(c.id)}
+      liveOn={liveOn}
       drivenBy={drivenLabels(c.id)}
       swing={c.kind === 'float' && !c.toggle ? swingOf(c) : null}
       touch={compact}
@@ -785,7 +753,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         />
       ) : inPanel ? (
         <>
-          <SpreadsSection play={play} nodes={nodes} liveValues={liveValues} update={update} />
+          <SpreadsSection play={play} nodes={nodes} update={update} />
           <ControlsBoard play={play} renderCard={renderOne} drivenBy={traceDrivenBy} flatView={renderFlatControls(true)} />
         </>
       ) : renderFlatControls(false)}
@@ -1194,7 +1162,13 @@ function AddControlButton({ candidates, layers, finish, sound, layerById, taken,
 /** Where a control's value lives: a layer's property or a node's param. */
 interface ControlSource { kind: 'layer' | 'node' | 'reader'; title: string; param: string; within?: string; missing: boolean; go: () => void }
 
-function ControlRow({ control, index, count, exists, fate, onRelink, help, source, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, removeLabel = 'Remove from panel', onMap, onNull, onAmount, trace, onName, isolated = false, swing }: {
+/** A pair's card with its two live values, read here so only this card renders when they move. */
+function LivePairCard({ liveOn, ...props }: Omit<ComponentProps<typeof PairCard>, 'live'> & { liveOn: boolean }) {
+  const la = useLiveValue(props.a.id, liveOn), lb = useLiveValue(props.b.id, liveOn);
+  return <PairCard {...props} live={[la, lb]} />;
+}
+
+function ControlRow({ control, index, count, exists, fate, onRelink, help, source, value, liveOn, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, removeLabel = 'Remove from panel', onMap, onNull, onAmount, trace, onName, isolated = false, swing }: {
   control: PlayControl;
   index: number;
   count: number;
@@ -1207,7 +1181,8 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
   help: { hint?: string; comment?: string };
   source: ControlSource;
   value: number | number[] | undefined;
-  live: ControlValue | undefined;
+  /** Something is mapped: the row reads its own live value (liveValueStore). */
+  liveOn: boolean;
   drivenBy: string[];
   touch: boolean;
   onChange: (v: number | number[]) => void;
@@ -1239,7 +1214,6 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
   const driven = drivenBy.length > 0;
   const commitLabel = () => { setEditing(false); const t = draft.trim(); if (t && t !== control.label) onRename(t); else setDraft(control.label); };
 
-  const shown = driven && live !== undefined ? live : value;
   return (
     <div
       data-control-id={control.id}
@@ -1295,49 +1269,7 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
           <IconButton icon="trash" label={removeLabel} size="sm" tone="danger" tooltip={false} onClick={onRemove} />
         </span>
       </div>
-      {control.kind === 'action' ? (
-        // A button: press it here, or map a key, a click, a beat or a note onto it.
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Button size="sm" variant="primary" icon="play" disabled={!exists} onClick={() => playEngine.fireControl(control.id)} style={{ flex: 1, justifyContent: 'center', boxShadow: typeof live === 'number' && live >= 0.5 ? `0 0 0 2px ${alpha(tk.accent.base, 0.5)}` : undefined }}>
-            {source.param}
-          </Button>
-          {!driven && <span style={{ color: tk.text.faint, fontSize: 11 }}>Map a key or click to press it</span>}
-        </div>
-      ) : control.kind === 'color' ? (
-        // A mapping on a colour scales it or sets one channel; the rest comes from
-        // this colour, so it stays editable while driven. The live result shows beside it.
-        <ColourPad value={Array.isArray(value) ? value : [0, 0, 0]} live={driven && Array.isArray(live) ? live : undefined} disabled={!exists} onChange={onChange} />
-      ) : control.toggle ? (
-        // A switch: off is the low end, on the high end (a boolean control, a number underneath).
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Toggle
-            checked={typeof shown === 'number' && shown >= (control.min + control.max) / 2}
-            disabled={!exists || driven}
-            onChange={on => onChange(on ? control.max : control.min)}
-            label={typeof shown === 'number' && shown >= (control.min + control.max) / 2 ? 'On' : 'Off'}
-          />
-        </div>
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <RulerSlider
-              value={typeof shown === 'number' ? shown : control.min}
-              min={control.min}
-              max={control.max}
-              step={control.step ?? 0.01}
-              defaultValue={typeof value === 'number' ? value : (control.min + control.max) / 2}
-              disabled={!exists || driven}
-              onChange={onChange}
-              onType={onChange}
-              // Typing a value past the range widens it: the control keeps the new range.
-              onRange={onRange}
-              ariaLabel={control.label}
-              touch={touch}
-            />
-            {swing && <SwingStrip swing={swing} min={control.min} max={control.max} step={control.step ?? 0.01} live={typeof live === 'number' ? live : undefined} />}
-          </div>
-        </div>
-      )}
+      <ControlBody control={control} value={value} liveOn={liveOn} driven={driven} exists={exists} source={source} onChange={onChange} onRange={onRange} touch={touch} swing={swing} />
       {trace}
       {!exists && fate && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 6px', padding: '6px 8px', borderRadius: radius.md, background: alpha(tk.status.warning, 0.12), color: tk.text.secondary, font: `11.5px/1.4 ${fontFamily.ui}` }}>
@@ -1383,6 +1315,69 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
         </div>
       )}
     </div>
+  );
+}
+
+/** A control's slider, switch, colour or button: the part that shows its live value, so only it renders as that moves. */
+function ControlBody({ control, value, liveOn, driven, exists, source, onChange, onRange, touch, swing }: {
+  control: PlayControl;
+  value: number | number[] | undefined;
+  liveOn: boolean;
+  driven: boolean;
+  exists: boolean;
+  source: ControlSource;
+  onChange: (v: number | number[]) => void;
+  onRange: (min: number, max: number) => void;
+  touch: boolean;
+  swing?: Swing | null;
+}) {
+  const tk = useTokens();
+  const live = useLiveValue(control.id, liveOn);
+  const shown = driven && live !== undefined ? live : value;
+  return (
+    control.kind === 'action' ? (
+      // A button: press it here, or map a key, a click, a beat or a note onto it.
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Button size="sm" variant="primary" icon="play" disabled={!exists} onClick={() => playEngine.fireControl(control.id)} style={{ flex: 1, justifyContent: 'center', boxShadow: typeof live === 'number' && live >= 0.5 ? `0 0 0 2px ${alpha(tk.accent.base, 0.5)}` : undefined }}>
+          {source.param}
+        </Button>
+        {!driven && <span style={{ color: tk.text.faint, fontSize: 11 }}>Map a key or click to press it</span>}
+      </div>
+    ) : control.kind === 'color' ? (
+      // A mapping on a colour scales it or sets one channel; the rest comes from
+      // this colour, so it stays editable while driven. The live result shows beside it.
+      <ColourPad value={Array.isArray(value) ? value : [0, 0, 0]} live={driven && Array.isArray(live) ? live : undefined} disabled={!exists} onChange={onChange} />
+    ) : control.toggle ? (
+      // A switch: off is the low end, on the high end (a boolean control, a number underneath).
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Toggle
+          checked={typeof shown === 'number' && shown >= (control.min + control.max) / 2}
+          disabled={!exists || driven}
+          onChange={on => onChange(on ? control.max : control.min)}
+          label={typeof shown === 'number' && shown >= (control.min + control.max) / 2 ? 'On' : 'Off'}
+        />
+      </div>
+    ) : (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <RulerSlider
+            value={typeof shown === 'number' ? shown : control.min}
+            min={control.min}
+            max={control.max}
+            step={control.step ?? 0.01}
+            defaultValue={typeof value === 'number' ? value : (control.min + control.max) / 2}
+            disabled={!exists || driven}
+            onChange={onChange}
+            onType={onChange}
+            // Typing a value past the range widens it: the control keeps the new range.
+            onRange={onRange}
+            ariaLabel={control.label}
+            touch={touch}
+          />
+          {swing && <SwingStrip swing={swing} min={control.min} max={control.max} step={control.step ?? 0.01} live={typeof live === 'number' ? live : undefined} />}
+        </div>
+      </div>
+    )
   );
 }
 
@@ -1432,9 +1427,7 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
   addControlButton: ReactNode;
 }) {
   const tk = useTokens();
-  const meters = useSourceMeter(open ? play.mappings : EMPTY_MAPPINGS);
   const ownSources = play.sources ?? NO_SOURCES;
-  const ownMeters = useSourceValues(open ? ownSources.map(x => x.id) : NO_IDS);
   // Learn: the next knob, key or MIDI note becomes a source. `learnFor` is a
   // mapping id (replace its source) or 'new' (add a mapping).
   const [learnFor, setLearnFor] = useState<string | null>(null);
@@ -1520,7 +1513,7 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
       audioNodes={audioNodes}
       nullLayers={nullLayers}
       layerRefs={layerRefs}
-      meter={meters.get(m.id) ?? 0}
+      liveMeter={open}
       learning={learnFor === m.id}
       assigned={assigned?.id === m.id}
       collapsed={opts.collapsed}
@@ -1535,7 +1528,7 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
   // The header's count: the drawer lists mappings; the sources column, its own sources too.
   const headCount = play.mappings.length + (mode === 'drawer' ? 0 : ownSources.length);
   const sourceCard = (d: PlaySourceDef) => (
-    <SourceCard key={d.id} def={d} play={play} meter={ownMeters.get(d.id) ?? 0} audioNodes={audioNodes} nullLayers={nullLayers} layerRefs={layerRefs}
+    <SourceCard key={d.id} def={d} play={play} liveMeter={open} audioNodes={audioNodes} nullLayers={nullLayers} layerRefs={layerRefs}
       learning={learnFor === d.id} onLearn={() => setLearnFor(l => (l === d.id ? null : d.id))} onChange={onRecord} />
   );
   // What the sources column's search looks in: the card's name, what it reads, the controls it drives.
@@ -1652,9 +1645,7 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
   );
 }
 
-const EMPTY_MAPPINGS: PlayMapping[] = [];
 const NO_SOURCES: PlaySourceDef[] = [];
-const NO_IDS: string[] = [];
 const NO_LAYER_CANDIDATES: LayerCandidates[] = [];
 
 function joinParts(parts: string[]): string {
@@ -1780,7 +1771,7 @@ function PairMappingsSection({ play, grid, audioNodes, layerRefs, onAdd, onUpdat
   );
 }
 
-function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, layerRefs, meter, learning, assigned = false, collapsed, fixed = false, onToggle, onLearn, onUpdate, onRemove, onMap }: {
+function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, layerRefs, meter: meterGiven = 0, liveMeter = false, learning, assigned = false, collapsed, fixed = false, onToggle, onLearn, onUpdate, onRemove, onMap }: {
   mapping: PlayMapping;
   /** Map: drive more controls from this source (it becomes a source of the record on the first pick). */
   onMap?: () => void;
@@ -1789,7 +1780,10 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
   audioNodes: AudioNodeOption[];
   nullLayers: { id: string; label: string }[];
   layerRefs: LayerRef[];
-  meter: number;
+  /** A fixed reading (0 for a mapping being made); `liveMeter` reads the source itself instead. */
+  meter?: number;
+  /** Read the source here, for the meter (the drawer is open): only this row renders as it moves. */
+  liveMeter?: boolean;
   learning: boolean;
   /** The row was just given its knob (lib/midiAutoLearn.ts): a brief highlight. */
   assigned?: boolean;
@@ -1802,6 +1796,8 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
   onRemove: () => void;
 }) {
   const tk = useTokens();
+  // The meters read the source themselves (FedMeter): the row doesn't render as it moves.
+  const feed: MeterFeed = { read: () => Math.round((playEngine.readMapping(m) ?? 0) * 100) / 100, live: liveMeter, given: meterGiven };
   // Free maps from the mouse, keys and audio (play/planGates.ts). A Pro source made on Pro stays as it is, marked, and doesn't run.
   const allSources = useCan('play.sources');
   const locked = !allSources && sourceNeedsPro(m.source);
@@ -1817,7 +1813,6 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
   };
 
   // Where the source lands after the curve (0..1 of the range): what the control actually gets.
-  const shaped = applyCurve(meter, m.curve, m.curveY);
   const waiting = isUnassignedCc(m.source);
   const frame = {
     marginTop: 6, borderRadius: radius.card, background: assigned ? alpha(tk.accent.base, 0.12) : tk.bg.panel,
@@ -1861,7 +1856,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
           <SoloButton kind="mapping" id={m.id} />
           <Toggle checked={m.enabled} onChange={enabled => onUpdate({ enabled })} />
         </div>
-        <MappingMeter input={meter} output={shaped} on={m.enabled} margin="2px 0 0 22px" />
+        <FedMeter feed={feed} curved curve={m.curve} curveY={m.curveY} on={m.enabled} margin="2px 0 0 22px" />
       </div>
     );
   }
@@ -1884,7 +1879,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
             <span style={{ flex: 1, minWidth: 0 }}>Increments need Pro. It’s kept as it is but doesn’t run on Free.</span>
           </button>
         )}
-        <MappingMeter input={meter} output={meter} on={m.enabled} margin="6px 0 2px 60px" />
+        <FedMeter feed={feed} on={m.enabled} margin="6px 0 2px 60px" />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
           <span style={labelStyle}>Control</span>
           <Select ariaLabel="Control" value={m.controlId} options={controls.map(c => ({ value: c.id, label: c.label }))} onChange={retarget} height={26} style={{ flex: 1, minWidth: 0 }} />
@@ -1933,7 +1928,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
         </button>
       )}
       {/* Meter */}
-      <MappingMeter input={meter} output={shaped} on={m.enabled} margin="6px 0 8px 60px" />
+      <FedMeter feed={feed} curved curve={m.curve} curveY={m.curveY} on={m.enabled} margin="6px 0 8px 60px" />
       <SourceOptions source={m.source} audioNodes={audioNodes} layerRefs={layerRefs} numStyle={numStyle} labelStyle={labelStyle} onChange={source => onUpdate({ source })} />
       {/* Target row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1954,7 +1949,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
         <Segmented size="sm" ariaLabel="Curve" value={m.curve} options={CURVES} onChange={v => onUpdate(v === 'custom' ? { curve: 'custom', curveY: m.curveY ?? sampleCurve(m.curve) } : { curve: v })} />
       </div>
       {m.curve === 'custom' && (
-        <CurvePad value={m.curveY ?? sampleCurve('linear')} meter={meter} range={[m.outMin, m.outMax]} onChange={curveY => onUpdate({ curveY })} onReset={() => onUpdate({ curveY: sampleCurve('linear') })} />
+        <FedCurvePad feed={feed} value={m.curveY ?? sampleCurve('linear')} range={[m.outMin, m.outMax]} onChange={curveY => onUpdate({ curveY })} onReset={() => onUpdate({ curveY: sampleCurve('linear') })} />
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
         <span style={labelStyle}>Smooth</span>
@@ -2008,31 +2003,6 @@ function DetailSource({ id, play, update, audioNodes, nullLayers, layerRefs }: {
   return <SourceCard def={d} play={play} meter={0} audioNodes={audioNodes} nullLayers={nullLayers} layerRefs={layerRefs} learning={learning} onLearn={() => setLearning(l => !l)} onChange={update} />;
 }
 
-/** The record's own sources' readings (0..1), polled for their meters. */
-function useSourceValues(ids: readonly string[]): Map<string, number> {
-  const [values, setValues] = useState<Map<string, number>>(() => new Map());
-  const key = ids.join('|');
-  useEffect(() => {
-    if (!key) return;
-    const list = key.split('|');
-    let raf = 0, last = 0;
-    const tick = (t: number) => {
-      raf = requestAnimationFrame(tick);
-      if (t - last < 50) return;
-      last = t;
-      setValues(prev => {
-        let changed = false;
-        const next = new Map<string, number>();
-        for (const id of list) { const v = Math.round((playEngine.sourceValue(id) ?? 0) * 100) / 100; next.set(id, v); if (prev.get(id) !== v) changed = true; }
-        return changed ? next : prev;
-      });
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [key]);
-  return values;
-}
-
 /**
  * A source of the record on the Inputs board (implementation guide 7.1): its
  * source and settings, read once, then each route onto a control (Replace
@@ -2040,10 +2010,12 @@ function useSourceValues(ids: readonly string[]): Map<string, number> {
  * delay), or a Step output counting through its own range. Map adds a route:
  * pick it, then click a control.
  */
-function SourceCard({ def: s, play, meter, audioNodes, nullLayers, layerRefs, learning, onLearn, onChange }: {
+function SourceCard({ def: s, play, meter: meterGiven = 0, liveMeter = false, audioNodes, nullLayers, layerRefs, learning, onLearn, onChange }: {
   def: PlaySourceDef;
   play: PlayRecord;
-  meter: number;
+  meter?: number;
+  /** Read the source here, for its meter: only this card renders as it moves. */
+  liveMeter?: boolean;
   audioNodes: AudioNodeOption[];
   nullLayers: { id: string; label: string }[];
   layerRefs: LayerRef[];
@@ -2052,6 +2024,7 @@ function SourceCard({ def: s, play, meter, audioNodes, nullLayers, layerRefs, le
   onChange: (fn: (p: PlayRecord) => PlayRecord) => void;
 }) {
   const tk = useTokens();
+  const feed: MeterFeed = { read: () => Math.round((playEngine.sourceValue(s.id) ?? 0) * 100) / 100, live: liveMeter, given: meterGiven };
   const mapping = useMapMode(m => m.sourceId === s.id);
   const numStyle = { width: 58, height: 26, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' as const };
   const labelStyle = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' as const, width: 54, flexShrink: 0 };
@@ -2092,11 +2065,11 @@ function SourceCard({ def: s, play, meter, audioNodes, nullLayers, layerRefs, le
         />
       ) : <>
         {sourceRow}
-        <MappingMeter input={meter} output={meter} on={s.enabled} margin="6px 0 8px 60px" />
+        <FedMeter feed={feed} on={s.enabled} margin="6px 0 8px 60px" />
         <SourceOptions source={s.source} audioNodes={audioNodes} layerRefs={layerRefs} numStyle={numStyle} labelStyle={labelStyle} onChange={source => set({ source })} />
       </>}
       <div style={{ marginTop: 6 }}>
-        {routes.map(r => <RouteRow key={r.id} route={r} play={play} meter={meter} numStyle={numStyle} labelStyle={labelStyle}
+        {routes.map(r => <RouteRow key={r.id} route={r} play={play} feed={feed} numStyle={numStyle} labelStyle={labelStyle}
           onPatch={patch => onChange(p => patchRoute(p, s.id, r.id, patch))} onRemove={() => onChange(p => removeRoute(p, s.id, r.id))} />)}
         {!routes.length && <div style={{ color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, padding: '4px 0' }}>Drives nothing yet: press Map, then click a control. Rules can still watch it.</div>}
       </div>
@@ -2105,10 +2078,10 @@ function SourceCard({ def: s, play, meter, audioNodes, nullLayers, layerRefs, le
 }
 
 /** One route of a source: the control, Replace or Add, range, curve, smoothing and delay, on or off. */
-function RouteRow({ route: r, play, meter, numStyle, labelStyle, onPatch, onRemove }: {
+function RouteRow({ route: r, play, feed, numStyle, labelStyle, onPatch, onRemove }: {
   route: PlayRoute;
   play: PlayRecord;
-  meter: number;
+  feed: MeterFeed;
   numStyle: React.CSSProperties;
   labelStyle: React.CSSProperties;
   onPatch: (patch: Partial<PlayRoute>) => void;
@@ -2146,7 +2119,7 @@ function RouteRow({ route: r, play, meter, numStyle, labelStyle, onPatch, onRemo
           <span style={{ flex: 1 }} />
           <Segmented size="sm" ariaLabel="Curve" value={r.curve} options={CURVES} onChange={v => onPatch(v === 'custom' ? { curve: 'custom', curveY: r.curveY ?? sampleCurve(r.curve) } : { curve: v })} />
         </div>
-        {r.curve === 'custom' && <CurvePad value={r.curveY ?? sampleCurve('linear')} meter={meter} range={[r.outMin, r.outMax]} onChange={curveY => onPatch({ curveY })} onReset={() => onPatch({ curveY: sampleCurve('linear') })} />}
+        {r.curve === 'custom' && <FedCurvePad feed={feed} value={r.curveY ?? sampleCurve('linear')} range={[r.outMin, r.outMax]} onChange={curveY => onPatch({ curveY })} onReset={() => onPatch({ curveY: sampleCurve('linear') })} />}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
           <span style={labelStyle}>Smooth</span>
           <NumberInput value={r.smoothMs ?? 0} min={0} max={5000} step={10} title="Smoothing in milliseconds" onCommit={n => onPatch({ smoothMs: Math.max(0, n) || undefined })} style={numStyle} />
@@ -2560,6 +2533,21 @@ function FnPreview({ expr }: { expr: string }) {
     el.textContent = error ? '—' : value.toFixed(3);
   }), [expr]);
   return <span ref={ref} style={{ minWidth: 52, textAlign: 'right', flexShrink: 0, font: `11px ${fontFamily.mono}`, color: tk.text.faint }}>0.000</span>;
+}
+
+/** Where a meter's reading comes from: polled from the source while `live` (only the meter renders as it moves), else `given`. */
+type MeterFeed = { read: () => number; live: boolean; given: number };
+
+/** A mapping meter that reads its own source; with a curve, the bar is the curved value. */
+function FedMeter({ feed, curved = false, curve, curveY, on, margin }: { feed: MeterFeed; curved?: boolean; curve?: PlayMapping['curve']; curveY?: number[]; on: boolean; margin: string }) {
+  const meter = usePolledNumber(feed.read, feed.live, 50, feed.given);
+  return <MappingMeter input={meter} output={curved ? applyCurve(meter, curve as PlayMapping['curve'], curveY) : meter} on={on} margin={margin} />;
+}
+
+/** The curve editor with its live dot, read here. */
+function FedCurvePad({ feed, ...rest }: { feed: MeterFeed } & Omit<ComponentProps<typeof CurvePad>, 'meter'>) {
+  const meter = usePolledNumber(feed.read, feed.live, 50, feed.given);
+  return <CurvePad {...rest} meter={meter} />;
 }
 
 function MappingMeter({ input, output, on, margin }: { input: number; output: number; on: boolean; margin: string }) {

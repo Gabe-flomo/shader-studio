@@ -63,7 +63,7 @@ export const GP_DEFAULTS = {
   emitSize: 0.4, life: 4, speed: 0.08, spread: 0.4, burst: 0, threshold: 0.1, release: 0,
   gravity: 0, wind: 0, turbulence: 0.4, scale: 1, swirl: 0.3, attract: 0, drag: 1.0,
   look: 'light', paper: [0.95, 0.95, 0.94], ink: [0.03, 0.03, 0.04],
-  size: 2, thread: 0, brightness: 1, palette: 'ember', colorBy: 'life', glow: 0.8,
+  size: 2, thread: 0, brightness: 1, palette: 'ember', colorBy: 'life', glow: 0.45,
   space: '2d', camAngle: 0, camTilt: 12, camDistance: 3, drift: 0.15, focus: 1, blur: 0.35,
   lights: '4', lightColor: [1, 0.55, 0.25], lightPower: 1.6, lightReach: 0.3, halo: 0.5, lightMotion: 'orbit',
   soundFrom: 'graph', sound: 0, wave: 0, waveSpeed: 0.8, vibrate: 0, shock: 0, crunch: 0, gust: 0, jet: 0,
@@ -105,14 +105,14 @@ export const GP_PRESETS = {
   },
   embers: {
     label: 'Embers', hint: 'Sparks rising from a ring, lit by orbiting lights.',
-    set: { gravity: -0.12, turbulence: 0.55, swirl: 0.2, speed: 0.1, life: 4, size: 2, glow: 1, palette: 'ember' },
+    set: { gravity: -0.12, turbulence: 0.55, swirl: 0.2, speed: 0.1, life: 4, size: 2, glow: 0.6, palette: 'ember' },
   },
   dust: {
     label: 'Dust in air', hint: 'Motes floating in a light shaft: slow, weightless, drifting on a breeze, soft out of focus.',
     set: {
       count: '64k', emitter: 'box', emitSize: 1, life: 16, speed: 0.01, spread: 1,
       gravity: 0.01, wind: 0.05, turbulence: 0.22, scale: 0.45, swirl: 0, drag: 2.2,
-      size: 2, brightness: 2.2, palette: 'mono', colorBy: 'life', glow: 0.6,
+      size: 2, brightness: 2.2, palette: 'mono', colorBy: 'life', glow: 0.4,
       space: '3d', camTilt: 4, camDistance: 2.2, drift: 0.05, focus: 0.9, blur: 0.9,
       lights: '1', lightColor: [1, 0.82, 0.55], lightPower: 2.5, lightReach: 0.8, halo: 0.25, lightMotion: 'still',
     },
@@ -122,14 +122,14 @@ export const GP_PRESETS = {
     set: {
       count: '256k', emitter: 'image', emitSize: 0.85, threshold: 0.08, release: 0, life: 6, speed: 0, spread: 1,
       gravity: 0.12, wind: 0.35, turbulence: 0.7, scale: 0.8, swirl: 0, drag: 0.9,
-      size: 1.6, brightness: 1, glow: 0.25, lights: '0',
+      size: 1.6, brightness: 1, glow: 0.15, lights: '0',
     },
   },
   sound: {
     label: 'Sound field', hint: 'A still field of particles that sound ripples through from the centre. Wire an Audio input or map Sound level.',
     set: {
       count: '256k', emitter: 'disk', emitSize: 1.2, life: 4, speed: 0, spread: 1,
-      turbulence: 0.04, swirl: 0, drag: 4, size: 1.4, palette: 'aurora', colorBy: 'speed', brightness: 4, glow: 0.7,
+      turbulence: 0.04, swirl: 0, drag: 4, size: 1.4, palette: 'aurora', colorBy: 'speed', brightness: 4, glow: 0.45,
       lights: '0', wave: 1.2, waveSpeed: 0.8, vibrate: 0.6, shock: 0.8,
     },
   },
@@ -138,7 +138,7 @@ export const GP_PRESETS = {
     set: {
       count: '1m', emitter: 'box', emitSize: 1.4, life: 12, speed: 0.01, spread: 1,
       gravity: 0, turbulence: 0.35, scale: 0.8, swirl: 0, drag: 1.6, size: 1, brightness: 1.3,
-      palette: 'ember', colorBy: 'speed', glow: 1, lights: '1', lightColor: [1, 0.6, 0.3], lightPower: 2, lightReach: 0.5, halo: 0.6, lightMotion: 'still',
+      palette: 'ember', colorBy: 'speed', glow: 0.6, lights: '1', lightColor: [1, 0.6, 0.3], lightPower: 2, lightReach: 0.5, halo: 0.6, lightMotion: 'still',
       soundFrom: 'master', wave: 0.4, vibrate: 0.3, shock: 1.2, crunch: 0.5, gust: 0.6, jet: 1.2,
     },
   },
@@ -146,7 +146,7 @@ export const GP_PRESETS = {
     label: 'Hand swirl', hint: 'Two hands stir the cloud: map Hand X/Y to a hand (Play: Add as position with Y).',
     set: {
       count: '1m', emitter: 'disk', emitSize: 1.2, life: 8, speed: 0.02, spread: 1,
-      turbulence: 0.3, swirl: 0, drag: 1.4, size: 1, palette: 'aurora', colorBy: 'speed', glow: 0.8, lights: '2', lightPower: 1.2,
+      turbulence: 0.3, swirl: 0, drag: 1.4, size: 1, palette: 'aurora', colorBy: 'speed', glow: 0.45, lights: '2', lightPower: 1.2,
       hands: '2', handForce: 0.9, handSwirl: 1.2, handReach: 0.35,
     },
   },
@@ -491,6 +491,24 @@ export function gpEmit(st, mode, n, life, lifeVar, h) {
   return { start, count };
 }
 
+/**
+ * Where on the picture particle `i` of a pool of 2^bits lives (Image emitter): a scramble of the index,
+ * one to one, so the ring's births (a run of consecutive indices) land all over the picture instead of
+ * sweeping it row by row. Odd multipliers and xor-shifts are each invertible mod 2^bits. GP_SCATTER is
+ * the same in GLSL.
+ */
+export function gpScatter(i, bits) {
+  const m = bits >= 32 ? 0xffffffff : (2 ** bits) - 1, h = (bits + 1) >> 1;
+  let x = (i >>> 0) & m;
+  x = (Math.imul(x, 0x9e3779b1) + 0x7f4a7c15) & m;
+  x ^= x >>> h;
+  x = Math.imul(x, 0x85ebca77) & m;
+  x ^= x >>> h;
+  x = Math.imul(x, 0xc2b2ae3d) & m;
+  x ^= x >>> h;
+  return x >>> 0;
+}
+
 /** Is particle `i` in the window? (The simulation shader's test, for the tests.) */
 export function gpInWindow(i, start, count, n) {
   return ((i - start) % n + n) % n < count;
@@ -678,22 +696,42 @@ vec4 gpNoised(vec3 x) {
 }
 `;
 
+// gpScatter in GLSL (the tests check the JS one).
+const GP_SCATTER = `
+uint gpScatter(uint i, int bits) {
+  uint m = (1u << uint(bits)) - 1u, h = uint((bits + 1) >> 1);
+  uint x = i & m;
+  x = (x * 0x9e3779b1u + 0x7f4a7c15u) & m;
+  x ^= x >> h;
+  x = (x * 0x85ebca77u) & m;
+  x ^= x >> h;
+  x = (x * 0xc2b2ae3du) & m;
+  x ^= x >> h;
+  return x;
+}
+`;
+
 // Each particle's home on the picture (Image emitter): .xy where on it (0…1), .z 1 when it has one,
 // .w when it lets go as Release rises (patches of the picture together, with a little grain).
 const GP_HOME = `#version 300 es
 precision highp float;
 precision highp int;
 uniform highp sampler2D u_img;
-uniform int u_side, u_ink;
+uniform int u_side, u_ink, u_bits;
 uniform float u_threshold;
 out vec4 o;
 ${GP_HASH}
 ${GP_NOISE}
+${GP_SCATTER}
 void main() {
   ivec2 t = ivec2(gl_FragCoord.xy);
   uint s = gpHash(uint(t.y * u_side + t.x) * 2654435761u ^ 0x5bd1e995u);
   // A cell of a grid over the picture, jittered; where that is blank, a few random tries elsewhere.
-  vec2 uv = (vec2(t) + vec2(gpRnd(s), gpRnd(s))) / float(u_side);
+  // The cell is the particle's index scrambled (one particle a cell still), so the ring's births, a run
+  // of indices, scatter over the whole picture rather than sweeping up it row by row.
+  uint c = gpScatter(uint(t.y * u_side + t.x), u_bits);
+  ivec2 cell = ivec2(int(c % uint(u_side)), int(c / uint(u_side)));
+  vec2 uv = (vec2(cell) + vec2(gpRnd(s), gpRnd(s))) / float(u_side);
   float ok = 0.0;
   for (int k = 0; k < 6; k++) {
     vec4 c = textureLod(u_img, uv, 0.0);
@@ -1157,6 +1195,43 @@ void main() {
  * at the bottom), or null. It leaves the context's bindings as it found
  * them, except that a three.js host must still call renderer.resetState().
  */
+/**
+ * The blend function and equation, clear colour and colour mask of a context,
+ * without asking GL. Chromium answers those getParameter calls with a round
+ * trip to the GPU process (about 40 µs each, eight of them a frame here), so
+ * their setters on this context are wrapped once to remember what was set,
+ * starting from one real read. Read again after a lost context comes back.
+ */
+const gpShadows = new WeakMap();
+export function gpStateShadow(gl) {
+  let s = gpShadows.get(gl);
+  if (s) return s;
+  s = {};
+  const read = () => {
+    s.bsrc = gl.getParameter(gl.BLEND_SRC_RGB); s.bdst = gl.getParameter(gl.BLEND_DST_RGB);
+    s.basrc = gl.getParameter(gl.BLEND_SRC_ALPHA); s.badst = gl.getParameter(gl.BLEND_DST_ALPHA);
+    s.beq = gl.getParameter(gl.BLEND_EQUATION_RGB); s.beqa = gl.getParameter(gl.BLEND_EQUATION_ALPHA);
+    const c = gl.getParameter(gl.COLOR_CLEAR_VALUE), m = gl.getParameter(gl.COLOR_WRITEMASK);
+    s.clear = c ? [c[0], c[1], c[2], c[3]] : [0, 0, 0, 0];
+    s.mask = m ? [m[0], m[1], m[2], m[3]] : [true, true, true, true];
+  };
+  read();
+  const wrap = (name, after) => {
+    const f = gl[name];
+    if (typeof f !== 'function') return;
+    gl[name] = function () { const r = f.apply(gl, arguments); after.apply(null, arguments); return r; };
+  };
+  wrap('blendFunc', (a, b) => { s.bsrc = s.basrc = a; s.bdst = s.badst = b; });
+  wrap('blendFuncSeparate', (a, b, c, d) => { s.bsrc = a; s.bdst = b; s.basrc = c; s.badst = d; });
+  wrap('blendEquation', m => { s.beq = s.beqa = m; });
+  wrap('blendEquationSeparate', (a, b) => { s.beq = a; s.beqa = b; });
+  wrap('clearColor', (r, g, b, a) => { s.clear = [r, g, b, a]; });
+  wrap('colorMask', (r, g, b, a) => { s.mask = [!!r, !!g, !!b, !!a]; });
+  try { if (gl.canvas && gl.canvas.addEventListener) gl.canvas.addEventListener('webglcontextrestored', read); } catch (e) { /* no events */ }
+  gpShadows.set(gl, s);
+  return s;
+}
+
 export function gpCreate(gl) {
   if (gpUnsupported(gl)) return null;
   const f32 = !!gl.getExtension('EXT_color_buffer_float');
@@ -1267,7 +1342,7 @@ export function gpCreate(gl) {
     const hp = progs.home;
     gl.useProgram(hp.p);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, img);
-    gl.uniform1i(hp.u.u_img, 0); gl.uniform1i(hp.u.u_side, side);
+    gl.uniform1i(hp.u.u_img, 0); gl.uniform1i(hp.u.u_side, side); gl.uniform1i(hp.u.u_bits, Math.round(Math.log2(side * side)));
     gl.uniform1i(hp.u.u_ink, P.look === 'ink' ? 1 : 0); gl.uniform1f(hp.u.u_threshold, P.threshold);
     attach(home);
     gl.viewport(0, 0, side, side);
@@ -1466,13 +1541,15 @@ export function gpCreate(gl) {
     const ap = gpApplyProbe(o.params, pr && pr.spec, pr && pr.values, aspect);
     const P = ap.params, s = gpTierSide(P.count), n = s * s;
     const placeAt = t => { const pl = gpPlace(P, t, o.mouse, aspect); if (ap.emitAt) pl.emitAt = ap.emitAt; return pl; };
+    // The caller's state, put back afterwards. Blend, clear colour and mask come from the shadow (gpStateShadow): no GPU round trips.
+    const sh = gpStateShadow(gl);
     const saved = {
       fb: gl.getParameter(gl.FRAMEBUFFER_BINDING), vp: gl.getParameter(gl.VIEWPORT), prog: gl.getParameter(gl.CURRENT_PROGRAM),
       vao: gl.getParameter(gl.VERTEX_ARRAY_BINDING), active: gl.getParameter(gl.ACTIVE_TEXTURE),
       blend: gl.isEnabled(gl.BLEND), depth: gl.isEnabled(gl.DEPTH_TEST), scissor: gl.isEnabled(gl.SCISSOR_TEST), cull: gl.isEnabled(gl.CULL_FACE),
-      bsrc: gl.getParameter(gl.BLEND_SRC_RGB), bdst: gl.getParameter(gl.BLEND_DST_RGB), basrc: gl.getParameter(gl.BLEND_SRC_ALPHA), badst: gl.getParameter(gl.BLEND_DST_ALPHA),
-      beq: gl.getParameter(gl.BLEND_EQUATION_RGB), beqa: gl.getParameter(gl.BLEND_EQUATION_ALPHA), clear: gl.getParameter(gl.COLOR_CLEAR_VALUE),
-      mask: gl.getParameter(gl.COLOR_WRITEMASK), unpack: gl.getParameter(gl.UNPACK_ALIGNMENT),
+      bsrc: sh.bsrc, bdst: sh.bdst, basrc: sh.basrc, badst: sh.badst,
+      beq: sh.beq, beqa: sh.beqa, clear: sh.clear,
+      mask: sh.mask, unpack: gl.getParameter(gl.UNPACK_ALIGNMENT),
     };
     const units = [0, 1, 2, 3, 4, 5].map(i => { gl.activeTexture(gl.TEXTURE0 + i); return gl.getParameter(gl.TEXTURE_BINDING_2D); });
     let result = null;

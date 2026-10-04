@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.6',
+    date: '2026-10-03',
+    title: 'Smoother sound pages, scattered particles',
+    highlights: [
+      { area: 'Play', text: 'The Sound rail, Arrangement and Granulator no longer redraw the whole page while controls move: about half the work per frame, and less CPU.' },
+      { area: 'Studio', text: 'Particles on a picture spawn at random spots instead of a line sweeping up the image, both at first and after Release.' },
+      { area: 'Studio', text: 'Particle glow is gentler by default and in the presets, so bright scenes stop clipping to white.' },
+      { area: 'Play', text: 'Datamosh: Refresh now heals at a rate you can see, and Reset mosh snaps back to the live picture (also mappable to a key or a rule’s signal).' },
+    ],
+  },
+  {
     id: '2026.10.5',
     date: '2026-10-03',
     title: 'Particles, piano roll and new looks',
