@@ -261,7 +261,8 @@ export function DeviceChain({ rack, row, play, onChange, touch, narrow, onPick }
           {anyFolded ? 'Expand all' : 'Collapse all'}
         </Button>
       </div>
-      <div role="list" aria-label={`${rack.name}’s devices`}
+      {/* A rack scrolls sideways through its devices on purpose (Ableton's device view). */}
+      <div role="list" aria-label={`${rack.name}’s devices`} data-overflow-ok=""
         style={{ flex: 1, minHeight: narrow ? undefined : 0, display: 'flex', alignItems: narrow ? 'flex-start' : 'stretch', overflowX: 'auto', overflowY: 'hidden', padding: '0 12px 10px', height: narrow ? 460 : undefined, scrollSnapType: narrow ? 'x proximity' : undefined }}>
         {items}
         <button type="button" onClick={e => { const r = e.currentTarget.getBoundingClientRect(); addMenu(r.left, r.top); }} title="Add a device: an instrument, an Audio Unit effect or a Listener"

@@ -16,6 +16,7 @@
 import { VideoEditor } from './layers/VideoEditor';
 import { DrumPadEditor } from './layers/DrumPadEditor';
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useNarrow } from '../../hooks/useNarrow';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { accentColor } from '../../theme/categories';
 import type { LayerKindDef } from '../../types/layerKinds';
@@ -487,7 +488,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
 
   return (
     <>
-      <div style={{ height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px 0 14px', borderBottom: `1px solid ${tk.border.default}`, background: tk.bg.panel }}>
+      <div style={{ minHeight: 44, flexShrink: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, rowGap: 4, padding: '6px 8px 6px 14px', boxSizing: 'border-box', borderBottom: `1px solid ${tk.border.default}`, background: tk.bg.panel }}>
         <span style={{ font: `650 13px ${fontFamily.ui}` }}>Layers</span>
         {layerCount > 0 && <span style={{ color: tk.text.faint, font: `500 11.5px ${fontFamily.mono}` }}>{layerCount}</span>}
         <span style={{ flex: 1 }} />
@@ -584,7 +585,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
           <div style={{ margin: '18px 4px', padding: '16px 14px', borderRadius: radius.lg, border: `1px dashed ${tk.border.strong}`, color: tk.text.muted, lineHeight: 1.5 }}>
             <div style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.secondary, marginBottom: 4 }}>No layers yet</div>
             Layers sit on top of the picture: particles that flow along it, shapes that act as walls and emitters, text, images, falling letters, a brush, audio, ASCII, contours, a lens, your camera. Every number can be a control, and actions fire them from keys, beats and notes.
-            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span ref={emptyAddRef} style={{ display: 'inline-flex' }}>
                 <Button size="sm" variant="primary" icon="plus" aria-expanded={menuAnchor === 'empty'} onClick={() => setMenuAnchor(a => (a === 'empty' ? null : 'empty'))}>Add layer</Button>
               </span>
@@ -878,6 +879,14 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
   // otherwise — the same as a group's children), with a connector and a role chip.
   const narrow = typeof window !== 'undefined' && window.innerWidth < 640;
   const relIndent = narrow ? 12 : 18;
+  // A narrow card keeps its name readable: Move up / Move down go into the ⋯ menu.
+  const headRef = useRef<HTMLDivElement>(null);
+  const tight = useNarrow(headRef, 300);
+  const moveItems: MenuItem[] = tight && !isBackground && !headerOnly ? [
+    { label: 'Move up (drawn earlier)', icon: 'chevU', disabled: !canUp, onSelect: () => onMove(-1) },
+    { label: 'Move down (drawn later, on top)', icon: 'chevD', disabled: !canDown, onSelect: () => onMove(1) },
+    'separator',
+  ] : [];
 
   return (
     <div
@@ -901,6 +910,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
         </Tooltip>
       )}
       <div
+        ref={headRef}
         draggable={!editing}
         onDragStart={e => { e.dataTransfer.setData(NOTE_REF_TYPE, noteRef('layer', l.id)); e.dataTransfer.setData('text/plain', noteRef('layer', l.id)); e.dataTransfer.effectAllowed = 'copyMove'; }}
         title="Drag to move it in the list, or onto the notes to link it"
@@ -918,7 +928,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
             <Tooltip label={`Grouped under “${relNest.relLabel}”`}>
               <span aria-hidden style={{ width: 8, height: 8, borderRadius: 4, background: relNest.colour, flexShrink: 0 }} />
             </Tooltip>
-            <span style={{ flexShrink: 0, padding: '2px 6px', borderRadius: 999, background: alpha(relNest.colour, 0.16), color: relNest.colour, font: `650 10px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>{RELATION_ROLE_LABEL[relNest.role]}</span>
+            <span style={{ flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', padding: '2px 6px', borderRadius: 999, background: alpha(relNest.colour, 0.16), color: relNest.colour, font: `650 10px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>{RELATION_ROLE_LABEL[relNest.role]}</span>
             {relNest.extra > 0 && (
               <Tooltip label={`In ${relNest.extra} other relationship${relNest.extra === 1 ? '' : 's'} too`}>
                 <span style={{ flexShrink: 0, padding: '2px 5px', borderRadius: 999, background: tk.bg.field, color: tk.text.faint, font: `650 10px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>+{relNest.extra}</span>
@@ -931,12 +941,12 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
           <Toggle checked={l.visible} onChange={visible => set({ visible })} />
         </span>
         {/* A header-only row leaves moving to dragging and to the editor beside it, so the name has room. */}
-        {!isBackground && !headerOnly && <IconButton icon="chevU" label="Move up (drawn earlier)" size="sm" disabled={!canUp} tooltip={false} onClick={() => onMove(-1)} />}
-        {!isBackground && !headerOnly && <IconButton icon="chevD" label="Move down (drawn later, on top)" size="sm" disabled={!canDown} tooltip={false} onClick={() => onMove(1)} />}
+        {!isBackground && !headerOnly && !tight && <IconButton icon="chevU" label="Move up (drawn earlier)" size="sm" disabled={!canUp} tooltip={false} onClick={() => onMove(-1)} />}
+        {!isBackground && !headerOnly && !tight && <IconButton icon="chevD" label="Move down (drawn later, on top)" size="sm" disabled={!canDown} tooltip={false} onClick={() => onMove(1)} />}
         <span ref={moreRef} style={{ display: 'inline-flex' }}>
           <IconButton icon="more" label="More: duplicate, reset, delete" size="sm" tooltip={false} onClick={() => { const r = moreRef.current?.getBoundingClientRect(); setMenu(r ? { x: r.right - 220, y: r.bottom + 4 } : null); }} />
         </span>
-        {menu && <Menu x={menu.x} y={menu.y} minWidth={220} onClose={() => setMenu(null)} items={isBackground ? backgroundMenuItems({ onReset, onRemove }) : [...groupItems, 'separator', ...layerMenuItems({ onDuplicate, onReset, onRemove, onRule: () => startRule({ layerId: l.id }) })]} />}
+        {menu && <Menu x={menu.x} y={menu.y} minWidth={220} onClose={() => setMenu(null)} items={isBackground ? backgroundMenuItems({ onReset, onRemove }) : [...moveItems, ...groupItems, 'separator', ...layerMenuItems({ onDuplicate, onReset, onRemove, onRule: () => startRule({ layerId: l.id }) })]} />}
       </div>
       {relMembers && (
         <button

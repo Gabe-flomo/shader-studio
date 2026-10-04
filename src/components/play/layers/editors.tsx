@@ -32,6 +32,7 @@ import { BigEditorScaffold } from './BigEditorScaffold';
 import { AudioSourceRows, FontRow } from './rows';
 import { extractScriptParams } from './scriptExamples';
 import { Segmented } from '../../ui/Choice';
+import { ROW_INDENT } from '../../ui/rowLayout';
 import { GroupedPicker } from '../../ui/GroupedPicker';
 import { valueSections } from '../ConditionFields';
 import { layerFiles, sameFiles, scriptPatch, type ApplyOptions } from './scriptApply';
@@ -82,7 +83,7 @@ const READ_FROM: Choice[] = [{ value: 'picture', label: 'Picture', title: 'The s
 const nulls = (ctx: EditorContext, not = '') => ctx.layers.filter((x): x is NullLayer => x.kind === 'null' && x.id !== not);
 
 function Buttons({ children }: { children: ReactNode }) {
-  return <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '8px 0 0 68px' }}>{children}</div>;
+  return <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: `8px 0 0 ${ROW_INDENT}` }}>{children}</div>;
 }
 
 // Flocking's switch remembers the amount it had, so off and on again comes back the same.

@@ -100,7 +100,7 @@ export function SentenceBuilder({ rule, play, fire, onInputs, onCombine, onVerb 
           <span style={{ color: tk.text.faint, font: `12px ${fontFamily.ui}` }}>{learning === 0 ? 'Listening… move, press, pinch, play or make a sound' : 'Nothing yet: only a Test, or another rule sending it, turns it on.'}</span>
         </div>
       )}
-      <div style={{ display: 'flex', gap: 4, marginTop: 4, paddingLeft: 44 }}>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4, paddingLeft: 44 }}>
         <Button size="sm" variant="ghost" icon="spark" disabled={full} onClick={() => learn(inputs.length)}>{learning === inputs.length ? 'Listening…' : inputs.length ? 'Or when… (learn)' : 'Learn'}</Button>
         <Button size="sm" variant="ghost" icon="plus" disabled={full} onClick={() => onInputs([...inputs, { kind: 'trigger', trigger: { on: 'key', code: 'Space' } }])}>A key</Button>
         {others.length > 0 && <Button size="sm" variant="ghost" icon="bolt" disabled={full} onClick={() => onInputs([...inputs, { kind: 'signal', signal: others[0].id, as: 'mirror' }])}>Another rule</Button>}

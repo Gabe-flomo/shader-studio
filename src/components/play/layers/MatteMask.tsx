@@ -17,6 +17,7 @@ import { playOverlay } from '../../../play/overlay';
 import { Button, IconButton } from '../../ui/Button';
 import { Segmented, Toggle } from '../../ui/Choice';
 import { Icon } from '../../ui/Icon';
+import { rowField } from '../../ui/rowLayout';
 import { Menu } from '../../ui/Menu';
 import { Popover } from '../../ui/Popover';
 import { Select } from '../../ui/Select';
@@ -143,7 +144,7 @@ function MattePanel({ f, play, changePlay, onClose }: { f: FieldKit; play: PlayR
   };
   const label: React.CSSProperties = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 62, flexShrink: 0 };
   const row = (name: string, children: ReactNode) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}><span style={label}>{name}</span>{children}</div>
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10 }}><span style={label}>{name}</span><div style={rowField}>{children}</div></div>
   );
   const kindName = (x: PlayLayer) => BUILTIN_LAYER[x.kind]?.label ?? x.kind;
   return (

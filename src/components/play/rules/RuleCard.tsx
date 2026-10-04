@@ -35,10 +35,12 @@ export function RuleCard({ rule: s, play, onChange, on, flash }: { rule: PlaySig
   const head: React.CSSProperties = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.05em', textTransform: 'uppercase' };
   return (
     <div data-rule-card={s.id} style={{ padding: '10px 12px', borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {/* The name takes the room; the buttons wrap onto a line of their own on a narrow card. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, rowGap: 6, flexWrap: 'wrap' }}>
         <Lamp on={on} flash={flash} />
         <Field value={draft} aria-label="Rule name" onChange={e => setDraft(e.target.value)} onBlur={() => { if (draft.trim() && draft !== s.name) onChange(p => renameSignal(p, s.id, draft)); else setDraft(s.name); }}
-          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} height={28} style={{ flex: 1, minWidth: 0, font: `600 12.5px ${fontFamily.ui}` }} />
+          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} height={28} style={{ flex: '1 1 120px', minWidth: 0, font: `600 12.5px ${fontFamily.ui}` }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto', flexShrink: 0 }}>
         <Button size="sm" icon="play" onClick={() => playEngine.fireSignal(s.id)} title="Fire it now: its reactions run">Test</Button>
         <IconButton icon="bolt" label="Rule from this: a new rule for when this one starts" size="sm" onClick={() => usePlayUi.getState().askQuickRule({ when: { on: 'signal', signal: s.id } })} />
         <IconButton icon="star" label="Save as behaviour: use it again in other setups" size="sm" onClick={() => {
@@ -50,6 +52,7 @@ export function RuleCard({ rule: s, play, onChange, on, flash }: { rule: PlaySig
         }} />
         <IconButton icon="popout" label="Open its details: what it listens to and who listens to it" size="sm" onClick={() => openDetail('signal', s.id)} />
         <IconButton icon="trash" label="Delete rule" size="sm" tone="danger" onClick={() => onChange(p => deleteSignal(p, s.id))} />
+        </div>
       </div>
       <div style={{ marginTop: 10 }}>
         <SentenceBuilder rule={s} play={play} fire={fire}

@@ -15,6 +15,7 @@ import { alpha, fontFamily, radius } from '../../../theme/tokens';
 import { Button, IconButton } from '../../ui/Button';
 import { Toggle, Segmented } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
+import { rowField } from '../../ui/rowLayout';
 import { RulerSlider } from '../../ui/RulerSlider';
 import { Tooltip } from '../../ui/Tooltip';
 import { Icon } from '../../ui/Icon';
@@ -397,7 +398,7 @@ function Label({ text, hint }: { text: string; hint?: string }) {
   return hint ? <Tooltip label={text} description={hint} placement="top"><span style={{ ...st, cursor: 'help' }}>{text}</span></Tooltip> : <span style={st}>{text}</span>;
 }
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
-  return <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}><Label text={label} hint={hint} />{children}</div>;
+  return <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 6 }}><Label text={label} hint={hint} /><div style={rowField}>{children}</div></div>;
 }
 function Note({ children }: { children: ReactNode }) {
   const tk = useTokens();

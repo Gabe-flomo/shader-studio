@@ -278,7 +278,7 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
             style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0, height: 26, padding: '0 10px 0 8px', borderRadius: radius.md, border: 0, cursor: 'pointer', background: alpha(tk.accent.base, 0.1), color: tk.text.primary, textAlign: 'left' }}
           >
             <Icon name="slides" size={14} style={{ color: tk.accent.base, flexShrink: 0 }} />
-            <span style={{ font: `600 12px ${fontFamily.ui}`, flexShrink: 0 }}>{layer.label}</span>
+            <span style={{ font: `600 12px ${fontFamily.ui}`, flexShrink: 0, minWidth: 0, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{layer.label}</span>
             <span style={{ font: `11.5px ${fontFamily.ui}`, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{what}</span>
             <span style={{ flex: 1 }} />
             <Icon name="chevR" size={13} style={{ color: tk.text.faint, flexShrink: 0 }} />
@@ -309,7 +309,7 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
         <Tooltip label="Background" description="What the layers draw over. Shader is the graph; Colour a flat colour. Graph…, Image… and Video… add a Background layer with it as the first source: queue more there and step through them. Anything but the shader pauses the graph on the Play page (the Studio still runs it), and everything that reads the picture reads the background instead.">
           <span style={{ cursor: 'help' }}>{label('Background')}</span>
         </Tooltip>
-        <div ref={segRef} style={{ display: 'inline-flex' }}>
+        <div ref={segRef} style={{ display: 'inline-flex', minWidth: 0, maxWidth: '100%' }}>
           <Segmented<HeaderChoice> size="sm" ariaLabel="Background" value={source} onChange={choose} options={[
             { value: 'shader', label: 'Shader', title: 'The graph’s picture' },
             { value: 'graph', label: 'Graph…', title: 'Another graph (a saved one or an example): adds a Background layer' },

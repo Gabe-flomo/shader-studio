@@ -15,6 +15,7 @@ import { PARTICLE_PALETTES, paletteColour } from '../../../play/particle-sim.js'
 import { IconButton } from '../../ui/Button';
 import { Segmented, Toggle } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
+import { ROW_INDENT, rowField } from '../../ui/rowLayout';
 import { RulerSlider } from '../../ui/RulerSlider';
 import { Tooltip } from '../../ui/Tooltip';
 import { ContextMenuArea } from '../../ui/ContextMenuArea';
@@ -92,10 +93,12 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onEx
   const label = (text: string, hint?: string) => hint
     ? <Tooltip label={text} description={hint} placement="top"><span style={{ ...labelStyle, cursor: 'help' }}>{text}</span></Tooltip>
     : <span style={labelStyle}>{text}</span>;
+  // The label, then the field taking the rest of the width (min-width 0, so it can shrink); what
+  // follows the field wraps below it inside that column rather than running past the card.
   const row = (text: string, children: ReactNode, hint?: string) => (
-    <div key={`row:${text}`} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+    <div key={`row:${text}`} style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 6 }}>
       {label(text, hint)}
-      {children}
+      <div style={rowField}>{children}</div>
     </div>
   );
   const prop = (key: string, shortLabel?: string) => {
@@ -156,8 +159,7 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onEx
     ), hint);
   };
   const seg = (text: string, key: string, options: Choice[], hint?: string) =>
-    // Seven or more choices may not fit a phone's card on one line: they wrap.
-    row(text, <Segmented size="sm" ariaLabel={text} value={get<string>(key)} options={options} onChange={v => set({ [key]: v })} wrap={options.length >= 7} />, hint);
+    row(text, <Segmented size="sm" ariaLabel={text} value={get<string>(key)} options={options} onChange={v => set({ [key]: v })} />, hint);
   const select = (text: string, key: string, options: Choice[], hint?: string) =>
     row(text, <Select ariaLabel={text} value={String(get(key))} options={options} onChange={v => set({ [key]: v })} height={26} />, hint);
   const toggle = (text: string, key: string, what: string, hint?: string) =>
@@ -185,7 +187,7 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onEx
       <span style={{ width: 64, height: 14, borderRadius: 4, background: swatch(get<number>(key)), boxShadow: `inset 0 0 0 1px ${alpha('#000', 0.12)}` }} />
     </>
   ), 'Cosine palettes: colour = a + b·cos(2π(c·t + d)).');
-  const note = (text: ReactNode) => <div style={{ margin: '6px 0 0 68px', color: tk.text.faint, font: `11px/1.45 ${fontFamily.ui}` }}>{text}</div>;
+  const note = (text: ReactNode) => <div style={{ margin: `6px 0 0 ${ROW_INDENT}`, color: tk.text.faint, font: `11px/1.45 ${fontFamily.ui}` }}>{text}</div>;
   return {
     l, tk, numStyle, get, set: p => set(p as Record<string, unknown>),
     prop, props: (...keys) => keys.map(k => prop(k)), row, colour, seg, select, toggle, pick, palette, note,

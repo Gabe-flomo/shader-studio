@@ -342,7 +342,7 @@ export function FirePicker({ trigger: t, what, numStyle, onChange }: {
   // One wrapping box beside the row's label, so N and its unit (and the hint) line up under the modes.
   return (
     <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-      <Segmented size="sm" ariaLabel="When it fires" value={f.mode} options={fireModes(t)} wrap onChange={(mode: FireMode) => {
+      <Segmented size="sm" ariaLabel="When it fires" value={f.mode} options={fireModes(t)} onChange={(mode: FireMode) => {
         // The counters start from their own defaults: every 4th; 3 within a second.
         if (mode === 'nth') set({ mode, every: 4, unit: 'frames' });
         else if (mode === 'within') set({ mode, every: 3, unit: 'seconds', window: 1 });

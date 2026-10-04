@@ -15,6 +15,7 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
+import { rowField } from '../ui/rowLayout';
 import { Popover } from '../ui/Popover';
 import { Select } from '../ui/Select';
 import { RulerSlider } from '../ui/RulerSlider';
@@ -204,7 +205,7 @@ function BackgroundMattePanel({ play, onChange, onClose }: { play: PlayRecord; o
   const candidates = backgroundMatteCandidates(play.layers);
   const label: React.CSSProperties = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 62, flexShrink: 0 };
   const row = (name: string, children: ReactNode) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}><span style={label}>{name}</span>{children}</div>
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10 }}><span style={label}>{name}</span><div style={rowField}>{children}</div></div>
   );
   return (
     <div>

@@ -21,6 +21,7 @@ import { nodePreviewRenderer } from '../../../lib/nodePreviewRenderer';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
 import { Button, IconButton } from '../../ui/Button';
 import { Segmented, Toggle } from '../../ui/Choice';
+import { rowField } from '../../ui/rowLayout';
 import { Field } from '../../ui/Field';
 import { Icon } from '../../ui/Icon';
 import type { IconName } from '../../ui/iconPaths';
@@ -324,9 +325,9 @@ function SourceSettings({ it, tk, busy, onSet, onFile, onLinked, onLibrary, onGr
   onGraph: () => void;
 }) {
   const row = (label: string, children: ReactNode) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
       <span style={{ width: 54, flexShrink: 0, color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{label}</span>
-      {children}
+      <div style={rowField}>{children}</div>
     </div>
   );
   const note = (text: ReactNode, tone: 'faint' | 'warning' = 'faint') => (

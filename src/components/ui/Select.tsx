@@ -4,7 +4,7 @@ import { fontFamily, radius } from '../../theme/tokens';
 import { Icon } from './Icon';
 
 /** `group`: options in a row with the same group sit under one heading (an <optgroup>). */
-export interface SelectOption { value: string; label: string; group?: string }
+export interface SelectOption { value: string; label: string; group?: string; disabled?: boolean }
 
 /**
  * Dropdown: a native <select> sits transparently over the styled face (as in TypeSelect), so
@@ -40,8 +40,8 @@ export function Select({
         style={{ position: 'absolute', inset: 0, width: '100%', opacity: 0, cursor: 'pointer', font: 'inherit' }}
       >
         {groupOptions(options).map((g, i) => g.group
-          ? <optgroup key={`g${i}`} label={g.group}>{g.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup>
-          : g.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>))}
+          ? <optgroup key={`g${i}`} label={g.group}>{g.options.map(o => <option key={o.value} value={o.value} disabled={o.disabled}>{o.label}</option>)}</optgroup>
+          : g.options.map(o => <option key={o.value} value={o.value} disabled={o.disabled}>{o.label}</option>))}
       </select>
     </span>
   );

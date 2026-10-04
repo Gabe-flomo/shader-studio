@@ -211,6 +211,7 @@ export function RulerSlider({
     <div
       ref={trackRef}
       data-ruler-track=""
+      data-overflow-ok=""
       role="slider"
       aria-label={ariaLabel}
       aria-valuemin={min}
