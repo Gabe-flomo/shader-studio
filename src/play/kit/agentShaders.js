@@ -161,3 +161,26 @@ export const AG_DRAW_FRAG = agBody(GP_SHADERS.GP_DRAW_FRAG);
 export const AG_DOWN_FRAG = agBody(GP_SHADERS.GP_DOWN);
 export const AG_BLUR_FRAG = agBody(GP_SHADERS.GP_BLUR);
 export const AG_COMPOSE_FRAG = agBody(GP_SHADERS.GP_COMPOSE);
+
+/**
+ * An Agents group card's live thumbnail (P4): every u_stride-th walker as one additive point,
+ * amber, at its place in the picture (dead ones off screen). Not part of any picture.
+ */
+export const AG_THUMB_DOTS_VERT = `precision highp float;
+precision highp int;
+uniform highp sampler2D u_a;
+uniform highp sampler2D u_b;
+uniform int u_side, u_stride;
+uniform float u_aspect;
+void main() {
+  int id = gl_VertexID * u_stride;
+  ivec2 t = ivec2(id % u_side, id / u_side);
+  vec4 A = texelFetch(u_a, t, 0), B = texelFetch(u_b, t, 0);
+  if (B.w <= 0.0 || t.y >= u_side) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
+  gl_Position = vec4(A.x / u_aspect, A.y, 0.0, 1.0);
+  gl_PointSize = 1.0;
+}`;
+export const AG_THUMB_DOTS_FRAG = `precision highp float;
+uniform float u_gain;
+out vec4 o_col;
+void main() { o_col = vec4(vec3(1.0, 0.72, 0.32) * u_gain, 1.0); }`;

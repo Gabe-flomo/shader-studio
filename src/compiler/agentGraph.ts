@@ -256,13 +256,29 @@ export function emitMode(group: GraphNode, byId: Map<string, GraphNode>, slugOf:
   return { mode, rate: num(params.rate), burst: num(params.burst) };
 }
 
-/** The nodes of a group's inside that listen (Sound kick, Chladni), for the engine. */
-export function listenersOf(inner: GraphNode[], slugOf: (id: string) => string, engine: (n: GraphNode) => Record<string, AgentParam | number[]>): AgentListener[] {
+/**
+ * What a group's own Sound from shares with every listening node inside (P4): null when it is
+ * "Each node's own" (the default, and every group saved before P4), else its choice, Level and
+ * Beat (numbers, or the uniforms their sliders write).
+ */
+export function groupSound(group: GraphNode, params: Record<string, AgentParam | number[]>): { soundFrom: string; level: AgentParam; beat: AgentParam } | null {
+  const from = typeof group.params.soundFrom === 'string' ? group.params.soundFrom : 'nodes';
+  if (from === 'nodes') return null;
+  const num = (v: unknown): AgentParam => (typeof v === 'number' || typeof v === 'string' ? v : 0);
+  return { soundFrom: from, level: num(params.level), beat: num(params.beat) };
+}
+
+/**
+ * The nodes of a group's inside that listen (Sound kick, Chladni), for the engine. With the
+ * group's Sound from (`shared`), every one of them hears that, with the group's Level and Beat.
+ */
+export function listenersOf(inner: GraphNode[], slugOf: (id: string) => string, engine: (n: GraphNode) => Record<string, AgentParam | number[]>, shared?: ReturnType<typeof groupSound>): AgentListener[] {
   const out: AgentListener[] = [];
   for (const n of inner) {
     if (n.type !== 'agentSoundKick' && n.type !== 'agentChladni') continue;
-    const params = engine(n) as Record<string, AgentParam>;
-    const soundFrom = typeof n.params.soundFrom === 'string' ? n.params.soundFrom : 'graph';
+    const own = engine(n) as Record<string, AgentParam>;
+    const params = shared ? { ...own, level: shared.level, beat: shared.beat } : own;
+    const soundFrom = shared ? shared.soundFrom : typeof n.params.soundFrom === 'string' ? n.params.soundFrom : 'graph';
     if (n.type === 'agentSoundKick') { out.push({ nodeId: n.id, slug: slugOf(n.id), kind: 'kick', soundFrom, params }); continue; }
     out.push({
       nodeId: n.id, slug: slugOf(n.id), kind: 'plate', soundFrom, params,

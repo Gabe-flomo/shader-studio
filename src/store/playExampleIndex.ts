@@ -116,6 +116,8 @@ const ROWS: Array<[string, string, string]> = [
   ['lookBuilt', 'Look: effects from nodes and code', 'A duotone built from four Studio nodes and a tape wobble written in GLSL, both effects in the Look stack; the mouse fades the duotone in.'],
   // Last, so the examples before it keep their numbers.
   ['finishWater', 'Water: a wake, rain and splashes', 'A simulated water surface over a pool\'s floor: a toy boat drags a wake, a light rain dimples it, and a click splashes; the waves bend the tiles and catch the light.'],
+  // Agents P4: the Studio's Agents group played from here (after the rest, so their numbers stay).
+  ['agentsHandBeat', 'Agents: a hand and a beat', 'A million particles from a Studio Agents group: your hand (or the pointer) pulls and stirs them, a fist pushes them away, and the Audio engine\'s kick track blasts shockwaves through them.'],
 ];
 
 const num = (i: number) => String(i + 1).padStart(2, '0');
@@ -143,6 +145,7 @@ const GROUP_STARTS: Array<[string, string]> = [
   ['Finish', 'finishGrade'],
   ['Bigger pieces', 'particleGlow'],
   ['Build your own Look', 'lookBuilt'],
+  ['Agents in Play', 'agentsHandBeat'],
 ];
 export const PLAY_EXAMPLE_GROUPS: Array<{ label: string; keys: string[] }> = GROUP_STARTS.map(([label, first], i) => {
   const from = PLAY_EXAMPLE_KEYS.indexOf(first);

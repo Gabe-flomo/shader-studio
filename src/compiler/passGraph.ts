@@ -33,7 +33,7 @@ import { PASS_SCALES } from '../nodes/definitions/passes';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 import {
   agentStepNodes, asAgentSource, checkProgramWires, depositSpec, depositTargets, drawSpec, emitMode, engineParams, groupSide, groupSpecies,
-  hasAgentsNode, insideSlugs, isAgentEngineOnly, isAgentLoopWire, isAgentSource, listenersOf, MAX_AGENT_GROUPS, MAX_TRAILS, trailHasStepProgram, trailSpec, trailStepSink,
+  groupSound, hasAgentsNode, insideSlugs, isAgentEngineOnly, isAgentLoopWire, isAgentSource, listenersOf, MAX_AGENT_GROUPS, MAX_TRAILS, trailHasStepProgram, trailSpec, trailStepSink,
 } from './agentGraph';
 import { agentPlacementProblems, agentProgramProblems } from './agentRules';
 
@@ -396,9 +396,9 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
           nodeId: g.id, slug: slugOf(g.id), label, fragmentShader: r.fragmentShader,
           side: groupSide(g), species: groupSpecies(g),
           ...(a.stateC ? { stateC: true } : {}),
-          params: { stepsPerFrame: params.stepsPerFrame as number | string, seed: params.seed as number | string, preroll: params.preroll as number | string },
+          params: { stepsPerFrame: params.stepsPerFrame as number | string, seed: params.seed as number | string, preroll: params.preroll as number | string, ...(params.restart !== undefined ? { restart: params.restart as number | string } : {}) },
           emit,
-          listeners: listenersOf(a.inside, slugOf, engine),
+          listeners: listenersOf(a.inside, slugOf, engine, groupSound(g, params)),
           readsTrails: [...(a.outer.agentReads ?? [])].filter(id => byId.get(id)?.type === 'trailField').map(slugOf),
           readsPasses: [...a.outer.reads].map(slugOf),
           live: liveAgents.has(g.id),

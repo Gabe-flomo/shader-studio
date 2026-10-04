@@ -320,6 +320,9 @@ class PlayOverlay {
   /** The graph's Layers node reads what the layers draw: receive it after every frame (null = off). */
   setShaderTap(fn: ((tap: ShaderTap) => void) | null): void { this.shaderTap = fn; }
 
+  /** A Motion layer's grid as the kit last stepped it (the first one when `id` is empty), for the Motion (texture) node. */
+  motionGrid(id?: string): ReturnType<LayerKit['motionGrid']> { return this.kit.motionGrid(id); }
+
   /** Is there anything on the overlay: a visible layer, Layers only, or a background in place of the shader? */
   hasLayers(): boolean { return this.record.layers.some(l => l.visible || l.kind === 'motion') || playBackground.hidden() || playBackground.active() || playBackground.layerActive(); }
 

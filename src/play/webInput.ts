@@ -42,6 +42,7 @@ export function graphFeatures(c: CompiledForWeb, play: PlayRecord): GraphFeature
     isStateful: c.isStateful, usesEcho: /\bu_echo0\b/.test(c.fragmentShader), usesData: /\bu_ds_\w+/.test(c.fragmentShader), play,
     ...(c.passes?.length ? { passes: true } : {}),
     ...(c.agents?.groups.length ? { agents: true } : {}),
+    ...(/\bu_motionMap\b/.test(c.fragmentShader) ? { motionMap: true } : {}),
   };
   return f;
 }

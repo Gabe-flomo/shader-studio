@@ -84,8 +84,9 @@ export function collectParamCandidates(subgraph: SubgraphData): ParamCandidate[]
   };
 
   visit(subgraph.nodes, '', undefined, {});
+  // One group in: a plain group, or an Agents group (its rule's sliders are uniforms of its update shader).
   for (const g of subgraph.nodes) {
-    if (g.type !== 'group') continue;
+    if (g.type !== 'group' && g.type !== 'agentsGroup') continue;
     const inner = g.params.subgraph as SubgraphData | undefined;
     if (!inner) continue;
     visit(inner.nodes, `${g.id}::`, labelOf(g), g.params);

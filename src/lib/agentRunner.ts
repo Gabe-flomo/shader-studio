@@ -42,7 +42,7 @@ import {
   type GpLevels, type GpParams, type GpPlateState, type GpSound, type GpSoundInput,
 } from '../play/kit/gpuParticles.js';
 import {
-  AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_TRAIL_FRAG,
+  AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_THUMB_DOTS_FRAG, AG_THUMB_DOTS_VERT, AG_TRAIL_FRAG,
 } from '../play/kit/agentShaders.js';
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
 
@@ -50,6 +50,10 @@ type Uniforms = Record<string, THREE.IUniform>;
 
 /** Trail cards register a canvas here (by node id); the live runner draws their thumbnails into it. */
 export const trailThumbRegistry = new CanvasProbeRegistry();
+/** Agents group cards register a canvas here (by node id): the live runner draws the walkers into it as dots (P4). */
+export const agentThumbRegistry = new CanvasProbeRegistry();
+/** Most walkers a group card's thumbnail draws (every k-th one beyond it): the dots stay cheap at 4M. */
+const THUMB_DOTS = 1 << 16;
 
 /** What the group cards show: count, steps a frame and how fast the simulation keeps up. */
 export interface AgentStats { count: number; stepsPerFrame: number; rate: number; step: number }
@@ -292,6 +296,16 @@ export class AgentRunner {
   });
   private thumbQuad: THREE.Mesh;
   private thumbScene = new THREE.Scene();
+  // The group cards' live dots: a sample of the walkers as additive points (every `u_stride`-th one).
+  private dotsMat = raw(AG_THUMB_DOTS_VERT, AG_THUMB_DOTS_FRAG, {
+    u_a: { value: null }, u_b: { value: null }, u_side: { value: 1 }, u_stride: { value: 1 }, u_aspect: { value: 1 }, u_gain: { value: 0.3 },
+  }, true);
+  private dots: THREE.Points;
+  private dotsScene = new THREE.Scene();
+  private dotsRt: THREE.WebGLRenderTarget | null = null;
+  private dotsBuf: Uint8Array | null = null;
+  /** The picture's aspect at the last run (the dots thumbnail's shape). */
+  private aspect = 16 / 9;
 
   constructor(host: AgentRunnerHost) {
     this.host = host;
@@ -308,6 +322,9 @@ export class AgentRunner {
     this.compileScene.add(this.compileMesh);
     this.thumbQuad = new THREE.Mesh(host.geometry, this.thumbMat);
     this.thumbScene.add(this.thumbQuad);
+    this.dots = new THREE.Points(this.pointGeometry, this.dotsMat);
+    this.dots.frustumCulled = false;
+    this.dotsScene.add(this.dots);
   }
 
   get current(): AgentsSpec { return this.spec; }
@@ -453,6 +470,7 @@ export class AgentRunner {
     const u = this.host.uniforms();
     const w = Math.max(1, o.width), h = Math.max(1, o.height);
     const aspect = w / h;
+    if (o.live) this.aspect = aspect;
     const ready = this.steps.filter(e => e.spec.live && e.ready && !e.failed);
     const cap = o.live ? agGovern(this.gov, o.frameMs ?? 0, 1000 / 60) : Infinity;
 
@@ -468,7 +486,9 @@ export class AgentRunner {
       const preroll = this.read(g.params.preroll, 0);
       let steps: number;
       if (o.live) {
-        if (restartAll || restartRequests.has(g.nodeId)) { s.live = agLiveState(); }
+        // ↺ on the card, or the group's Start over trigger rising past 0.5 (a Play key, beat or rule): live only.
+        const restartTrigger = gpRising(s.burstEdge, 'restart', this.read(g.params.restart, 0));
+        if (restartAll || restartRequests.has(g.nodeId) || restartTrigger) { s.live = agLiveState(); }
         s.live.step = s.step;
         const r = agLiveSteps(s.live, o.time, spf, preroll, cap);
         if (r.restart) { targets.restartGroup(s); restarted.add(g.slug); }
@@ -787,8 +807,9 @@ export class AgentRunner {
     return s.out;
   }
 
-  /** Thumbnails for the Trail cards that are showing (the live runner, every few frames). */
+  /** Thumbnails for the Trail and Agents group cards that are showing (the live runner, every few frames). */
   drawThumbnails(targets: AgentTargets): void {
+    this.drawGroupDots(targets);
     const { renderer, camera } = this.host;
     for (const t of this.spec.trails) {
       const canvas = trailThumbRegistry.get(t.nodeId);
@@ -818,6 +839,51 @@ export class AgentRunner {
     }
   }
 
+  /** The Agents group cards' thumbnails: where the walkers are now, as dots (a sample of at most THUMB_DOTS). */
+  private drawGroupDots(targets: AgentTargets): void {
+    const { renderer, camera } = this.host;
+    for (const g of this.spec.groups) {
+      const canvas = agentThumbRegistry.get(g.nodeId);
+      if (!canvas) continue;
+      const W = 160, H = Math.max(8, Math.round(W / Math.max(0.25, this.aspect)));
+      if (!this.dotsRt || this.dotsRt.height !== H) {
+        this.dotsRt?.dispose();
+        this.dotsRt = new THREE.WebGLRenderTarget(W, H, { type: THREE.UnsignedByteType, depthBuffer: false });
+        this.dotsBuf = new Uint8Array(W * H * 4);
+      }
+      if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+      const ctx = canvas.getContext('2d');
+      if (!ctx) continue;
+      const gs = targets.groups.get(g.slug);
+      if (!gs) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); continue; }
+      const n = g.side * g.side;
+      const stride = Math.max(1, Math.ceil(n / THUMB_DOTS));
+      const du = this.dotsMat.uniforms;
+      du.u_a.value = gs.rt[gs.cur].textures[0];
+      du.u_b.value = gs.rt[gs.cur].textures[1];
+      du.u_side.value = g.side; du.u_stride.value = stride; du.u_aspect.value = this.aspect;
+      // Each dot as bright as an even spread over the thumbnail needs to read about 0.6: crowds saturate.
+      du.u_gain.value = Math.min(1, Math.max(0.04, 0.6 * W * H / Math.max(1, Math.ceil(n / stride))));
+      this.dotsMat.uniformsNeedUpdate = true;
+      const prevColor = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
+      const prevAuto = renderer.autoClear;
+      renderer.setClearColor(0x000000, 1);
+      renderer.setRenderTarget(this.dotsRt);
+      renderer.clear(true, false, false);
+      renderer.setClearColor(prevColor, prevAlpha);
+      renderer.autoClear = false;
+      this.pointGeometry.setDrawRange(0, Math.ceil(n / stride));
+      renderer.render(this.dotsScene, camera);
+      renderer.autoClear = prevAuto;
+      renderer.readRenderTargetPixels(this.dotsRt, 0, 0, W, H, this.dotsBuf!);
+      renderer.setRenderTarget(null);
+      const img = ctx.createImageData(W, H);
+      for (let y = 0; y < H; y++) img.data.set(this.dotsBuf!.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
+      ctx.putImageData(img, 0, 0);
+      canvas.dataset.dots = String(Math.ceil(n / stride));
+    }
+  }
+
   dispose(): void {
     for (const e of this.steps) this.drop(e);
     for (const e of this.trailSteps) this.drop(e);
@@ -833,7 +899,8 @@ export class AgentRunner {
       for (const d of this.spec.draws) if (u[agentDrawUniform(d.slug)]) u[agentDrawUniform(d.slug)].value = null;
     }
     this.steps = [];
-    for (const m of [this.depositMat, this.trailMat, this.drawMat, this.downMat, this.blurMat, this.composeMat, this.thumbMat, this.placeholder]) m.dispose();
+    for (const m of [this.depositMat, this.trailMat, this.drawMat, this.downMat, this.blurMat, this.composeMat, this.thumbMat, this.dotsMat, this.placeholder]) m.dispose();
+    this.dotsRt?.dispose();
     this.pointGeometry.dispose();
     this.thumbRt?.dispose();
     this.bessel?.dispose();

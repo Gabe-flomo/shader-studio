@@ -1435,6 +1435,19 @@ export function createLayerKit() {
       }
       return c;
     },
+    /**
+     * A Motion layer's grid (docs/motion-layer.md): per cell how much moved lately (0..1), cols × rows,
+     * row 0 at the top, as its last step left it; `id` empty: the first Motion layer that has one.
+     * `seq` changes whenever the grid was stepped. Null when there is none. The graph's Motion
+     * (texture) node reads it (play/motionTexture.ts).
+     */
+    motionGrid(id) {
+      for (const [lid, st] of motions) {
+        if (id && lid !== id) continue;
+        if (st.grid && st.cols > 0 && st.rows > 0) return { id: lid, grid: st.grid, cols: st.cols, rows: st.rows, seq: frameNo };
+      }
+      return null;
+    },
     /** The motion map's amount at (x, y) (0..1, y up), or null without one this frame. */
     motionAt(x, y) {
       if (!motionGrid || !motionFresh) return null;

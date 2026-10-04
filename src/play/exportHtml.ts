@@ -172,6 +172,8 @@ export interface GraphFeatures {
   passes?: boolean;
   /** Has an Agents group: the page doesn't run agents yet (docs/agents-plan.md, phase P5). */
   agents?: boolean;
+  /** Reads the Motion (texture) node (Agents P4): the page doesn't fill its texture yet. */
+  motionMap?: boolean;
 }
 
 /**
@@ -185,6 +187,7 @@ export function unsupportedFeatures(f: GraphFeatures): string[] {
   if (Object.keys(f.liveUniforms).length) out.push('MIDI Input node outputs');
   if (f.passes) out.push('Pass nodes (render to texture): the page draws the final picture without them');
   if (f.agents) out.push('Agents groups: the page draws the picture without them');
+  if (f.motionMap) out.push('Motion (texture) nodes: the page reads them as still');
   return out;
 }
 
