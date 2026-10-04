@@ -84,6 +84,10 @@ export interface GrEngineFactory {
   (sampleRate: number, seed?: number, opts?: { autoSpectrum?: boolean }): GrEngine;
   analyse(channels: Float32Array[], size: number): GrSpectrum;
   bandHz(u: number, nyquist: number): number;
+  idHash(id: number): number;
+  grainRow(id: number, pan: number, hasPan: boolean): number;
+  grainSpan(pos: number, size: number): [number, number];
+  grainOpacity(amp: number): number;
 }
 export function grMakeEngine(): GrEngineFactory;
 export function grAnalyse(channels: Float32Array[], size?: number): GrSpectrum;

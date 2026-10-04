@@ -40,6 +40,7 @@ import { matteUsers } from '../types/playLayers';
 import { addMask, maskFromOutline } from './mattes';
 import { fnActive, fnAnimated, fnCreate, fnMapLayers, fnUsesMotion, type FnEffect, type FnRenderer } from './kit/finish.js';
 import { finishPropId, renderableFinish } from '../types/playFinish';
+import { clientSize } from '../lib/elementSize';
 
 /** `vel` and `at`: a drum pad hit's velocity (0 lets a gate pad go) and the clock time it landed (takes stamp it there). */
 type KitAction = { do: ActionKind; layerId: string; amount: number; vel?: number; at?: number };
@@ -745,7 +746,8 @@ class PlayOverlay {
     if (!canvas || !ctx) return;
     this.lastGl = gl;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const W = Math.max(1, Math.round(gl.clientWidth * dpr)), H = Math.max(1, Math.round(gl.clientHeight * dpr));
+    const cs = clientSize(gl);
+    const W = Math.max(1, Math.round(cs.w * dpr)), H = Math.max(1, Math.round(cs.h * dpr));
     if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
     this.aspect = W / H;
     playEngine.setAspect(this.aspect);

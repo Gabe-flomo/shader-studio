@@ -20,6 +20,8 @@ import { Toggle } from '../ui/Choice';
 import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
 import { Select } from '../ui/Select';
+import { useLiveValue } from './liveValueStore';
+import { anyLiveMapped } from './useLiveValues';
 
 const CURVES: Array<{ value: SpreadCurve; label: string }> = [
   { value: 'linear', label: 'Linear' }, { value: 'easeIn', label: 'Ease in' }, { value: 'easeOut', label: 'Ease out' },
@@ -28,32 +30,33 @@ const CURVES: Array<{ value: SpreadCurve; label: string }> = [
 
 const fmt = (n: number) => (Math.abs(n) >= 100 ? n.toFixed(0) : Math.abs(n) >= 10 ? n.toFixed(1) : n.toFixed(2));
 
-export function SpreadsSection({ play, nodes, liveValues, update }: {
+export function SpreadsSection({ play, nodes, update }: {
   play: PlayRecord;
   nodes: GraphNode[];
-  liveValues: ReadonlyMap<string, unknown>;
   update: (fn: (p: PlayRecord) => PlayRecord) => void;
 }) {
   const spreads = play.spreads ?? [];
   if (!spreads.length) return null;
   return (
     <div data-spreads="" style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '2px 0 10px' }}>
-      {spreads.map(sp => <SpreadCard key={sp.id} sp={sp} play={play} nodes={nodes} liveValues={liveValues} update={update} />)}
+      {spreads.map(sp => <SpreadCard key={sp.id} sp={sp} play={play} nodes={nodes} update={update} />)}
     </div>
   );
 }
 
-function SpreadCard({ sp, play, nodes, liveValues, update }: {
-  sp: PlaySpread; play: PlayRecord; nodes: GraphNode[]; liveValues: ReadonlyMap<string, unknown>; update: (fn: (p: PlayRecord) => PlayRecord) => void;
+function SpreadCard({ sp, play, nodes, update }: {
+  sp: PlaySpread; play: PlayRecord; nodes: GraphNode[]; update: (fn: (p: PlayRecord) => PlayRecord) => void;
 }) {
   const tk = useTokens();
   const [open, setOpen] = useState(true);
   const [draft, setDraft] = useState<string | null>(null);
-  // A driven Amount or Shift shows its live value; otherwise the record's.
-  const liveNum = (id: string | undefined): number | undefined => { if (!id || !play.mappings.some(m => m.enabled && m.controlId === id)) return undefined; const v = liveValues.get(id); return typeof v === 'number' ? v : undefined; };
   const amountCtl = play.controls.find(c => c.target === spreadTarget(sp.id, 'amount'));
   const shiftCtl = play.controls.find(c => c.target === spreadTarget(sp.id, 'shift'));
-  const amount = liveNum(amountCtl?.id) ?? sp.amount, shift = liveNum(shiftCtl?.id) ?? sp.shift;
+  // A driven Amount or Shift shows its live value; otherwise the record's.
+  const liveOn = anyLiveMapped(play);
+  const amountLive = useLiveValue(amountCtl?.id, liveOn), shiftLive = useLiveValue(shiftCtl?.id, liveOn);
+  const liveNum = (id: string | undefined, v: unknown): number | undefined => { if (!id || !play.mappings.some(m => m.enabled && m.controlId === id)) return undefined; return typeof v === 'number' ? v : undefined; };
+  const amount = liveNum(amountCtl?.id, amountLive) ?? sp.amount, shift = liveNum(shiftCtl?.id, shiftLive) ?? sp.shift;
   const baseOf = (id: string): number | undefined => {
     const c = play.controls.find(x => x.id === id);
     if (!c) return undefined;

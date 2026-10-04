@@ -85,11 +85,16 @@ export function MidiStatusChip({ monitor: monitorAtFirst = false }: { monitor?: 
   const tk = useTokens();
   const [wm, setWm] = useState(() => midiEngine.webMidi());
   const [last, setLast] = useState(() => midiEngine.lastActivity());
-  const [now, setNow] = useState(0);
+  // Whole seconds since the last message: state changes once a second at most (not on every check).
+  const [ago, setAgo] = useState(0);
   const [monitor, setMonitor] = useState(monitorAtFirst);
   useEffect(() => {
     // A knob sends hundreds of messages a second: read the newest a few times a second, not per message.
-    const id = window.setInterval(() => { setLast(midiEngine.lastActivity()); setNow(Date.now()); }, 250);
+    const id = window.setInterval(() => {
+      const l = midiEngine.lastActivity();
+      setLast(l);
+      setAgo(l ? Math.max(0, Math.round((Date.now() - l.at) / 1000)) : 0);
+    }, 250);
     const off = midiEngine.subscribe(e => { if (e.kind === 'devices') setWm(midiEngine.webMidi()); });
     return () => { window.clearInterval(id); off(); };
   }, []);
@@ -103,7 +108,6 @@ export function MidiStatusChip({ monitor: monitorAtFirst = false }: { monitor?: 
     : status === 'unsupported' ? 'No Web MIDI in this browser (use Chrome or Edge)'
     : 'MIDI not connected';
   const why = midiEngine.blockReason();
-  const ago = last && now ? Math.max(0, Math.round((now - last.at) / 1000)) : 0;
   return (
     <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>

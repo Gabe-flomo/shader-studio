@@ -720,24 +720,29 @@ export function grNewStats() {
 // self-contained versions (grMakeEngine, so the worklet and this module
 // agree bit for bit).
 
+// One maker for these pure helpers, made on first use: grMakeEngine() builds every closure of the
+// engine, and the Granulator's view calls these for each grain on every frame it draws.
+let grShared = null;
+function grHelpers() { return grShared || (grShared = grMakeEngine()); }
+
 /** A stable pseudo-random 0..1 for an integer id (a grain's slot). */
 export function grIdHash(id) {
-  return grMakeEngine().idHash(id);
+  return grHelpers().idHash(id);
 }
 
 /** A grain's stable row 0..1 (0.5 the centre): pan-based when `hasPan`, else a hash of `id`. */
 export function grGrainRow(id, pan, hasPan) {
-  return grMakeEngine().grainRow(id, pan, hasPan);
+  return grHelpers().grainRow(id, pan, hasPan);
 }
 
 /** A grain's pill span `[start, end]` either side of `pos`, both 0..1 of the sample: its grain `size` (also 0..1). */
 export function grGrainSpan(pos, size) {
-  return grMakeEngine().grainSpan(pos, size);
+  return grHelpers().grainSpan(pos, size);
 }
 
 /** Opacity (0..1) from a grain's envelope amplitude (0..1). */
 export function grGrainOpacity(amp) {
-  return grMakeEngine().grainOpacity(amp);
+  return grHelpers().grainOpacity(amp);
 }
 
 /**
