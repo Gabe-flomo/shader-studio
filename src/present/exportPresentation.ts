@@ -124,7 +124,7 @@ function canvasHtml(id: string, s: PresentSource | undefined, aspect: number, po
   const camera = !still && playUsesCamera(s.bundle.play) ? '<button type="button" class="pp-over pp-camera" hidden title="The picture reads your camera. Nothing leaves this computer.">Enable camera</button>' : '';
   const sound = !still && s.bundle.media?.audio?.some(a => a.src) ? '<button type="button" class="pp-over pp-sound" hidden title="Play the song the picture reacts to">Play sound</button>' : '';
   const overs = camera || sound ? `<div class="pp-overs">${camera}${sound}</div>` : '';
-  return `<div class="pp-canvas" id="c-${esc(id)}" data-source="${esc(s.id)}" data-pointer="${pointer ? 1 : 0}"${start ? ` data-start="${start}"` : ''}${paused ? ' data-paused="1"' : ''}${still ? ' data-still="1"' : ''} style="aspect-ratio:${aspect};--ar:${aspect}"><div class="pp-host"${poster}></div>${overs}${still ? `<div class="pp-note">Still frame: the web player can’t run ${esc(limits.join(', '))} yet.</div>` : '<div class="pp-note pp-wait">Paused to keep the page light: other canvases are running.</div>'}</div>`;
+  return `<div class="pp-canvas" id="c-${esc(id)}" data-source="${esc(s.id)}" data-pointer="${pointer ? 1 : 0}"${start ? ` data-start="${start}"` : ''}${paused ? ' data-paused="1"' : ''}${still ? ' data-still="1"' : ''} style="aspect-ratio:${aspect};--ar:${aspect}"><div class="pp-host"${poster}></div>${overs}${still ? `<div class="pp-note">Still frame: the web player can’t run ${esc(limits.map(l => l.split(':')[0]).join(', '))} yet.</div>` : '<div class="pp-note pp-wait">Paused to keep the page light: other canvases are running.</div>'}</div>`;
 }
 
 /** The app's book icon (ui/iconPaths.ts), inline. */

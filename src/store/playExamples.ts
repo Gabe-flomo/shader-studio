@@ -56,7 +56,7 @@ function masked(l: PlayLayer, id: string, shape: MaskShape, nums: Partial<Record
  * are read from the code the way Apply reads them, and each starts at its
  * declared value (or `values`).
  */
-function scriptLayer(id: string, label: string, code: string, over: { mode?: '2d' | '3d'; clear?: boolean; readPicture?: boolean; blend?: string; opacity?: number; toShader?: boolean; values?: Record<string, number>; files?: { name: string; code: string }[]; p5?: true } = {}): PlayLayer {
+export function scriptLayer(id: string, label: string, code: string, over: { mode?: '2d' | '3d'; clear?: boolean; readPicture?: boolean; blend?: string; opacity?: number; toShader?: boolean; values?: Record<string, number>; files?: { name: string; code: string }[]; p5?: true } = {}): PlayLayer {
   const { values = {}, files, ...rest } = over;
   const r = extractScriptParams(code, files);
   if (!r.ok) throw new Error(`playExamples: script ${id}: ${r.error}`);
@@ -71,7 +71,7 @@ function p5Layer(id: string, key: string): PlayLayer {
   const sk = P5_EXAMPLE_SKETCHES[key];
   return scriptLayer(id, sk.label, sk.code, { files: sk.files, mode: sk.mode, p5: true, clear: false, values: sk.startAt });
 }
-const ctl = (id: string, target: string, label: string, min: number, max: number, step?: number): PlayControl =>
+export const ctl = (id: string, target: string, label: string, min: number, max: number, step?: number): PlayControl =>
   ({ id, target, kind: 'float', label, min, max, ...(step ? { step } : {}) });
 const colourCtl = (id: string, target: string, label: string): PlayControl => ({ id, target, kind: 'color', label, min: 0, max: 1 });
 const map = (id: string, controlId: string, source: PlaySource, outMin: number, outMax: number, opts: Partial<PlayMapping> = {}): PlayMapping =>
@@ -148,7 +148,7 @@ const rm = (id: string, role: RelationRole = 'member'): RelationMember => newRel
 /** A layer group (organisation in the Layers list: its layers must sit next to each other in `layers`). */
 const grp = (id: string, label: string, colour: GroupColour, layers: string[]): LayerGroup => ({ id, label, colour, layers });
 
-function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; audioReaders?: PlayAudioReaders; finish?: PlayFinish; audioFx?: PlayAudioFx; padGrid?: PlayPadGrid; signals?: PlaySignal[]; pairs?: PlayPair[]; pairMappings?: PlayPairMapping[]; audioEngine?: PlayAudioEngine; arrangement?: PlayArrangement; notes: string }): PlayRecord {
+export function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; audioReaders?: PlayAudioReaders; finish?: PlayFinish; audioFx?: PlayAudioFx; padGrid?: PlayPadGrid; signals?: PlaySignal[]; pairs?: PlayPair[]; pairMappings?: PlayPairMapping[]; audioEngine?: PlayAudioEngine; arrangement?: PlayArrangement; notes: string }): PlayRecord {
   const out: PlayRecord = { version: 1, controls: p.controls ?? [], mappings: p.mappings ?? [], layers: p.layers ?? [] };
   if (p.audioEngine) out.audioEngine = p.audioEngine;
   if (p.arrangement) out.arrangement = p.arrangement;
@@ -307,7 +307,7 @@ function layersGlowGraph(o: { falloff?: number; tint?: [number, number, number] 
 }
 
 /** A dim, small glow: a quiet backdrop when the layers are the point. */
-const quietGraph = () => glowGraph({ radius: 0.05, falloff: 30, tint: [0.25, 0.3, 0.5] });
+export const quietGraph = () => glowGraph({ radius: 0.05, falloff: 30, tint: [0.25, 0.3, 0.5] });
 
 // A star, as an SVG data URL, for the image example.
 const STAR_SVG = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><polygon points="100,8 124,74 194,74 138,116 160,186 100,144 40,186 62,116 6,74 76,74" fill="#fff"/></svg>');

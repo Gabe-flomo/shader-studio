@@ -191,7 +191,7 @@ export function PlayCanvas({ slotId, source, aspect, pointer, startTime, paused,
         </span>
       )}
       {!source && note('warning', 'Its source was removed from this presentation.')}
-      {source && limits.length > 0 && note('warning', `Still frame: the web player can’t run ${limits.join(', ')} yet.`)}
+      {source && limits.length > 0 && note('warning', `Still frame: the web player can’t run ${limits.map(l => l.split(':')[0]).join(', ')} yet.`)}
       {source && runnable && wanted && slot === 'waiting' && note('pause', 'Paused to keep the page light: other canvases are running.', (
         <button type="button" onClick={() => promote(slotId)} style={{ border: 0, borderRadius: 6, padding: '4px 9px', background: alpha('#ffffff', 0.16), color: '#fff', font: `600 11.5px ${fontFamily.ui}`, cursor: 'pointer' }}>Run</button>
       ))}

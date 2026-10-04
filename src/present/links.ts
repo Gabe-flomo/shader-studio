@@ -235,6 +235,7 @@ export const EXAMPLE_PRESENTATION_LINKS: Readonly<Record<string, readonly string
   put('Sketching over shaders', ['scriptFirst', 'scriptMouse', 'scriptPicture', 'scriptButtons', 'scriptParticles', 'scriptP5', 'scriptGlow']);
   put('Field sockets: one shape, many copies', ['comboGridShapeByWire', 'comboArrayStars', 'comboGridGroupFlower', 'comboArrayGroupMoons', 'comboGridPaintShapes']);
   put('Bring your own GLSL', ['convertCircle', 'convertCircleOptimised']);
+  put('How Agents work', ['slimeMold', 'agentParticles', 'agentCurlSmoke', 'agentSoundBurst', 'agentMultiSlime', 'agentAnts', 'agentBoids', 'agentStrands', 'agentGrowPicture', 'agentRuleSlime', 'agentRuleParticles', 'agentRuleAnts', 'agentsHandBeat']);
   return out;
 })();
 

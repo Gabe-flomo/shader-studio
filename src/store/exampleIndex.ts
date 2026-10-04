@@ -21,7 +21,7 @@ import { MATRIX_EXAMPLE_INDEX, MATRIX_EXAMPLE_KEYS } from './matrixExamples';
 import { DATA_EXAMPLE_INDEX, DATA_EXAMPLE_KEYS } from './dataExampleIndex';
 import { GRID_EXAMPLE_INDEX, GRID_EXAMPLE_KEYS } from './gridExamples';
 import { PASS_EXAMPLE_INDEX, PASS_EXAMPLE_KEYS } from './passExamples';
-import { AGENT_EXAMPLE_INDEX, AGENT_EXAMPLE_KEYS } from './agentExamples';
+import { AGENT_EXAMPLE_INDEX, AGENT_EXAMPLE_KEYS, AGENT_RULE_INDEX } from './agentExamples';
 import { CONVERT_EXAMPLE_INDEX, CONVERT_EXAMPLE_KEYS } from './convertExampleIndex';
 
 export type ExampleGraph = {
@@ -205,6 +205,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...PASS_EXAMPLE_INDEX,
   // The Agents group: slime mold and walkers built from nodes (agentExamples.ts).
   ...AGENT_EXAMPLE_INDEX,
+  // The same rules as Script layers, with a Play setup (agentSketchExamples.ts).
+  ...Object.fromEntries(Object.entries(AGENT_RULE_INDEX).map(([k, v]) => [k, { ...v, play: true }])),
   // The Convert folder (convertExampleIndex.ts, graphs in convertExamples.ts): what the Convert page makes of its Soft circle, as written and optimised.
   ...CONVERT_EXAMPLE_INDEX,
 };

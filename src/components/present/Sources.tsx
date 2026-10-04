@@ -111,7 +111,7 @@ export function SourceCard({ s, navigate, compact = false }: { s: PresentSource;
       {limits.length > 0 && (
         <div style={{ display: 'flex', gap: 6, color: tk.status.warningText, font: `500 11.5px/1.4 ${fontFamily.ui}` }}>
           <Icon name="warning" size={13} style={{ flexShrink: 0, marginTop: 1 }} />
-          <span>Shown as a still: the web player can’t run {limits.join(', ')} yet.</span>
+          <span>Shown as a still: the web player can’t run {limits.map(l => l.split(':')[0]).join(', ')} yet.</span>
         </div>
       )}
       {!graphHere && (
