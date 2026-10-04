@@ -4,7 +4,7 @@ import { useCan } from '../../lib/plan';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { SaveGraphForm, VersionsButton } from '../shell/GraphVersions';
 import { GraphLinkBadge } from '../shell/GraphLinks';
-import { useNodeGraphStore, SAVED_GRAPHS_CHANGED, loadCustomFns, EXAMPLE_INDEX, EXAMPLE_FOLDERS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset, loadKeyframePresets, deleteKeyframePreset, renameKeyframePreset } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, switchScopeFor, SAVED_GRAPHS_CHANGED, loadCustomFns, EXAMPLE_INDEX, EXAMPLE_FOLDERS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset, loadKeyframePresets, deleteKeyframePreset, renameKeyframePreset } from '../../store/useNodeGraphStore';
 import { NODE_REGISTRY, getNodeDefinitionFor } from '../../nodes/definitions';
 import { NodeBrowser } from './NodeBrowser';
 import { ImportGlslModal } from './ImportGlslModal';
@@ -43,6 +43,7 @@ import { creditSentence, type SourceCredit } from '../../types/credit';
 import { HistoryPanel, CountBadge, UnreadDot } from '../history/HistoryPanel';
 import { useUnseenActivity } from '../ui/activityStore';
 import { OPEN_WHATS_NEW, useWhatsNewUnread } from '../../changelog/releaseNotes';
+import { SwapSuggestions } from './SwitchNodePicker';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'builder' | 'functions' | 'expressions' | 'keyframes' | 'history';
@@ -369,7 +370,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   };
 
   const swapTargetLabel = swapTargetNodeId
-    ? (() => { const n = graphNodes.find(nd => nd.id === swapTargetNodeId); if (!n) return null; return getNodeDefinitionFor(n)?.label ?? n.type; })()
+    ? (() => { const n = graphNodes.find(nd => nd.id === swapTargetNodeId) ?? switchScopeFor(useNodeGraphStore.getState(), swapTargetNodeId)?.node; if (!n) return null; return getNodeDefinitionFor(n)?.label ?? n.type; })()
     : null;
 
   const toggleFolder = (label: string) =>
@@ -750,9 +751,12 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
 
       {/* Swap banner */}
       {swapTargetNodeId && (
-        <div style={{ margin: '0 12px 8px 14px', padding: '6px 6px 6px 10px', borderRadius: radius.md, background: alpha(tk.status.warning, 0.14), color: tk.status.warningText, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <span style={{ flex: 1 }}>Replacing <strong>{swapTargetLabel}</strong> — pick a node</span>
-          <IconButton icon="close" label="Cancel replace" size="sm" onClick={() => setSwapTargetNodeId(null)} />
+        <div style={{ margin: '0 12px 8px 14px', padding: '6px 6px 6px 10px', borderRadius: radius.md, background: alpha(tk.status.warning, 0.14), color: tk.status.warningText, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ flex: 1, minWidth: 0 }}>Replacing <strong>{swapTargetLabel}</strong> — pick a node</span>
+            <IconButton icon="close" label="Cancel replace" size="sm" onClick={() => setSwapTargetNodeId(null)} />
+          </div>
+          <SwapSuggestions key={swapTargetNodeId} nodeId={swapTargetNodeId} />
         </div>
       )}
 

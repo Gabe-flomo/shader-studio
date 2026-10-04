@@ -115,6 +115,8 @@ import { PlayDriveChip } from './PlayDriveChip';
 import { MAX_GROUP_ITERATIONS } from '../../nodes/definitions/group';
 import { programTintColour, programTintsCached } from '../../lib/programTints';
 import { VOLUMETRIC_LOOP_TYPES } from '../../nodes/volumetricAuto';
+import { SwitchNodePicker } from './SwitchNodePicker';
+import { showsSwitchPill } from './switchPickerModel';
 
 function adaptiveStep(value: number, baseStep: number): number {
   const abs = Math.abs(value);
@@ -4822,7 +4824,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           title doesn't get crowded as a node gains more of these toggles ── */}
       <div
         onMouseDown={e => e.stopPropagation()}
-        style={{ display: 'flex', gap: 2, alignItems: 'center', padding: '5px 8px', borderTop: `1px solid ${tk.border.subtle}` }}
+        style={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', padding: '5px 8px', borderTop: `1px solid ${tk.border.subtle}` }}
       >
         <span ref={infoButtonRef} style={{ display: 'inline-flex' }}>
           <CardButton icon="info" on={showNodeTooltip} label={showNodeTooltip ? 'Hide node info' : 'Node info'} onClick={() => setShowNodeTooltip(v => !v)} />
@@ -4850,6 +4852,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             onClick={() => randomizeNodeParams(node.id)}
             onContextMenu={e => setRandomizeMenu({ x: e.clientX, y: e.clientY })} />
         )}
+        {showsSwitchPill(node) && <SwitchNodePicker nodeId={node.id} nodeType={node.type} />}
       </div>
       {randomizeMenu && (
         <RandomizeMenu

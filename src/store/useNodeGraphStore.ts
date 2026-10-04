@@ -149,6 +149,7 @@ import { videoEngine } from '../lib/videoEngine';
 import { IdGenerator } from './managers/IdGenerator';
 import { UndoManager } from './managers/UndoManager';
 import { nodeName, nodesPhrase } from './historyLabels';
+import { applySwitchToList, groupRuleFor, planSwitch, retargetPlay, type SwitchContext } from '../nodes/switchNode';
 import { describePlayChange } from './playHistory';
 import { PresetManager } from './managers/PresetManager';
 import { CompilationService } from './managers/CompilationService';
@@ -684,7 +685,8 @@ interface NodeGraphState {
   // Swap mode — user shift-clicked a node; next palette click replaces it
   swapTargetNodeId: string | null;
   setSwapTargetNodeId: (id: string | null) => void;
-  swapNode: (nodeId: string, newType: string) => void;
+  /** Switch a node to another type in place (same id): wires mapped, settings, keyframes and Play controls kept (nodes/switchNode.ts). One undo step. */
+  swapNode: (nodeId: string, newType: string) => { ok: boolean; keptWires: number } | undefined;
 
   // In-canvas node search palette (Shift+Space)
   searchPaletteOpen: boolean;
@@ -1571,6 +1573,50 @@ function nodeInScope(state: { nodes: GraphNode[]; activeGroupPath: string[] }, i
   if (top) return top;
   if (state.activeGroupPath.length === 0) return undefined;
   return getActiveNodes(state.nodes, state.activeGroupPath)?.find(n => n.id === id);
+}
+
+/** The innermost group on `path` (a top-level group, or one nested a level in). */
+function groupAtPath(nodes: GraphNode[], path: readonly string[]): GraphNode | undefined {
+  const g0 = nodes.find(n => n.id === path[0]);
+  if (path.length < 2) return g0;
+  return (g0?.params.subgraph as SubgraphData | undefined)?.nodes.find(n => n.id === path[1]);
+}
+
+/** `nodes` with the innermost group on `path` replaced by `fn(group)`. */
+function mapGroupAtPath(nodes: GraphNode[], path: readonly string[], fn: (g: GraphNode) => GraphNode): GraphNode[] {
+  if (path.length === 1) return nodes.map(n => (n.id === path[0] && n.params.subgraph ? fn(n) : n));
+  return nodes.map(outer => {
+    if (outer.id !== path[0]) return outer;
+    const sg = outer.params.subgraph as SubgraphData | undefined;
+    if (!sg) return outer;
+    return { ...outer, params: { ...outer.params, subgraph: { ...sg, nodes: sg.nodes.map(n => (n.id === path[1] && n.params.subgraph ? fn(n) : n)) } } };
+  });
+}
+
+/**
+ * What switching `nodeId` needs to know about where it is: its scope (the
+ * level being edited), the types its wires bring (a group port's, an upstream
+ * output's), the group output ports that read it, and the group rules.
+ */
+export function switchScopeFor(state: Pick<NodeGraphState, 'nodes' | 'activeGroupPath'>, nodeId: string):
+  { scope: GraphNode[]; node: GraphNode; ctx: SwitchContext; path: string[] } | null {
+  const path = state.activeGroupPath;
+  const scope = path.length > 0 ? getActiveNodes(state.nodes, path) : state.nodes;
+  const node = scope?.find(n => n.id === nodeId);
+  if (!scope || !node) return null;
+  const group = path.length > 0 ? groupAtPath(state.nodes, path) : undefined;
+  const sg = group?.params.subgraph as SubgraphData | undefined;
+  const byId = new Map(scope.map(n => [n.id, n]));
+  const ctx: SwitchContext = {
+    sourceType: conn => {
+      if (conn.nodeId === GROUP_PORT_SENTINEL) return sg?.inputPorts?.find(p => p.key === conn.outputKey)?.type;
+      const src = byId.get(conn.nodeId);
+      return src ? (src.outputs[conn.outputKey]?.type ?? getNodeDefinitionFor(src)?.outputs[conn.outputKey]?.type) : undefined;
+    },
+    extraConsumers: (sg?.outputPorts ?? []).filter(p => p.fromNodeId === nodeId).map(p => ({ outputKey: p.fromOutputKey, type: p.type })),
+    disallowed: type => groupRuleFor(type, path, path.length > 0 ? state.nodes.find(n => n.id === path[0])?.type : undefined),
+  };
+  return { scope, node, ctx, path };
 }
 
 /**
@@ -3127,110 +3173,49 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   swapNode: (nodeId, newType) => {
-    const { nodes, activeGroupPath } = get();
-
-    // Resolve the node list to operate on — subgraph when inside a group, top-level otherwise
-    const workingNodes = activeGroupPath.length > 0
-      ? (getActiveNodes(nodes, activeGroupPath) ?? nodes)
-      : nodes;
-
-    const oldNode = workingNodes.find(n => n.id === nodeId);
-    if (!oldNode) return;
-    const def = getNodeDefinition(newType);
-    if (!def) return;
-
-    undoManager.push(nodes, { label: `Swapped ${nodeName(oldNode)} for ${def.label}`, nodeIds: [nodeId] });
-    const newId = idGenerator.next();
-
-    // Build new inputs, carrying over connections where types are compatible
-    const newInputs: Record<string, InputSocket> = {};
-    for (const [key, socket] of Object.entries(def.inputs)) {
-      const newSocket: InputSocket = {
-        ...socket,
-        defaultValue: def.paramDefs?.[key]
-          ? undefined
-          : def.defaultParams?.[key] as number | number[] | undefined,
-      };
-
-      // Priority 1: exact key match with compatible source type
-      const oldSock = oldNode.inputs[key];
-      if (oldSock?.connection) {
-        const srcNode = workingNodes.find(n => n.id === oldSock.connection!.nodeId);
-        const srcDef  = srcNode ? getNodeDefinitionFor(srcNode) : null;
-        const srcType = srcDef?.outputs[oldSock.connection!.outputKey]?.type;
-        if (srcType && typesCompatible(srcType, socket.type)) {
-          newSocket.connection = oldSock.connection;
-        }
-      }
-
-      // Priority 2: any connected old input whose source type is compatible
-      if (!newSocket.connection) {
-        for (const oldS of Object.values(oldNode.inputs)) {
-          if (!oldS.connection) continue;
-          const srcNode = workingNodes.find(n => n.id === oldS.connection!.nodeId);
-          const srcDef  = srcNode ? getNodeDefinitionFor(srcNode) : null;
-          const srcType = srcDef?.outputs[oldS.connection!.outputKey]?.type;
-          if (srcType && typesCompatible(srcType, socket.type)) {
-            newSocket.connection = oldS.connection;
-            break;
-          }
-        }
-      }
-
-      newInputs[key] = newSocket;
+    // Shift-click → pick in the palette, and the card's Switch picker: one path (nodes/switchNode.ts).
+    // The node keeps its id, so Play controls, mappings and group overrides keep pointing at it.
+    const st = get();
+    const where = switchScopeFor(st, nodeId);
+    if (!where) return undefined;
+    const { scope, node: oldNode, ctx, path } = where;
+    const plan = planSwitch(scope, oldNode, newType, ctx);
+    if (!plan) return undefined;
+    const blocked = ctx.disallowed?.(newType);
+    if (blocked) {
+      toast.info(blocked, { message: 'Switch it where that node is allowed.' });
+      return undefined;
     }
+    if (oldNode.type === newType) { set({ swapTargetNodeId: null }); return { ok: true, keptWires: plan.keptWires }; }
+    const from = nodeName(oldNode);
+    const to = plan.label;
+    const { play, lost: lostControls } = retargetPlay(st.play, nodeId, plan);
+    undoManager.push(st.nodes, { label: `Switched ${from} to ${to}`, nodeIds: [nodeId] }, st.play);
 
-    const newNodeObj: GraphNode = {
-      id: newId,
-      type: newType,
-      position: { ...oldNode.position },
-      inputs: newInputs,
-      outputs: { ...def.outputs },
-      params: { ...(def.defaultParams ?? {}) },
-    };
-
-    set(state => {
-      const path = state.activeGroupPath;
-      const srcNodes = path.length > 0 ? (getActiveNodes(state.nodes, path) ?? state.nodes) : state.nodes;
-
-      const updated = srcNodes
-        .filter(n => n.id !== nodeId)
-        .map(n => {
-          // Reroute downstream connections that pointed to oldNode's outputs
-          let changed = false;
-          const updatedInputs = { ...n.inputs };
-          for (const [key, sock] of Object.entries(n.inputs)) {
-            if (sock.connection?.nodeId !== nodeId) continue;
-            const oldOutputKey = sock.connection.outputKey;
-            let newOutputKey: string | null = null;
-            // Try same key first
-            if (newNodeObj.outputs[oldOutputKey]
-                && typesCompatible(newNodeObj.outputs[oldOutputKey].type, sock.type)) {
-              newOutputKey = oldOutputKey;
-            } else {
-              // First compatible output
-              for (const [outKey, out] of Object.entries(newNodeObj.outputs)) {
-                if (typesCompatible(out.type, sock.type)) { newOutputKey = outKey; break; }
-              }
-            }
-            updatedInputs[key] = newOutputKey
-              ? { ...sock, connection: { nodeId: newId, outputKey: newOutputKey } }
-              : { ...sock, connection: undefined };
-            changed = true;
-          }
-          return changed ? { ...n, inputs: updatedInputs } : n;
-        });
-
-      const newList = [...updated, newNodeObj];
-
-      if (path.length > 0) {
-        const newTop = setActiveNodes(state.nodes, path, newList);
-        return { nodes: newTop ?? state.nodes, swapTargetNodeId: null };
-      }
-      return { nodes: newList, swapTargetNodeId: null };
-    });
-
+    const list = applySwitchToList(scope, plan);
+    let nodes = path.length > 0 ? (setActiveNodes(st.nodes, path, list) ?? st.nodes) : list;
+    // A group output port reading the node follows the output map.
+    if (path.length > 0 && Object.keys(plan.outputMap).length) {
+      nodes = mapGroupAtPath(nodes, path, g => {
+        const sg = g.params.subgraph as SubgraphData;
+        if (!sg.outputPorts?.some(p => p.fromNodeId === nodeId)) return g;
+        const outputPorts = sg.outputPorts.map(p => (p.fromNodeId === nodeId && plan.outputMap[p.fromOutputKey]
+          ? { ...p, fromOutputKey: plan.outputMap[p.fromOutputKey] } : p));
+        return { ...g, params: { ...g.params, subgraph: { ...sg, outputPorts } } };
+      });
+    }
+    set({ nodes, swapTargetNodeId: null, ...(play !== st.play ? { play } : {}) });
     get().compile();
+
+    const wires = `${plan.keptWires} wire${plan.keptWires === 1 ? '' : 's'} kept`;
+    const notes: string[] = [];
+    if (plan.droppedWires) notes.push(`${plan.droppedWires} wire${plan.droppedWires === 1 ? '' : 's'} had no matching socket and came off.`);
+    if (plan.lostLabels.length) notes.push(`${to} has no ${plan.lostLabels.join(', ')} ${plan.lostLabels.length === 1 ? 'setting, so it was' : 'settings, so they were'} left behind.`);
+    if (lostControls.length) notes.push(`Play control${lostControls.length === 1 ? '' : 's'} ${lostControls.map(l => `“${l}”`).join(', ')} no longer reach${lostControls.length === 1 ? 'es' : ''} a setting.`);
+    const title = `Switched ${from} → ${to}; ${wires}`;
+    if (notes.length) toast.info(title, { message: `${notes.join(' ')} Undo puts it back.` });
+    else toast.success(title);
+    return { ok: plan.ok, keptWires: plan.keptWires };
   },
 
   undo: () => { get().undoSteps(1); },
