@@ -18,6 +18,9 @@ For a few thousand agents with flocking rules and predators on the Play page, us
    - **Boids**: flocking through a field: every bird leaves its velocity in a blurred trail and steers to match the flow around it; flocks gather, wheel and stream past each other.
    - **Strands**: slime combed into long flowing filaments, drawn as ink on paper.
    - **Grow toward a picture**: slime feeds on a picture's bright parts and draws it in veins. A built-in moonlit picture; load your own into its Texture Input and set Yours to 1.
+   - **Galaxy**: a million stars circle a bright core and crowd into two spiral arms that turn slowly; the arms light up blue as stars pass through them. Each star remembers its own orbit.
+   - **Mycelium**: a fungus colony creeps out of a spore: growing tips shy away from threads already there and new ones sprout on the young threads at the edge, so it branches outward into a fuzzy mould.
+   - **Sand on a plate**: a million grains on a ringing square plate gather on its still lines (a Chladni figure); a silent stand-in beat steps the plate from figure to figure.
 2. Press play. Double-click the Agents group to see the rule inside.
 3. Every node a preset adds has a note (the speech-bubble tab on the card) saying what it does and what to try.
 
@@ -28,10 +31,10 @@ For a few thousand agents with flocking rules and predators on the Play page, us
 | Node | What it does |
 |---|---|
 | **Agents** | The group. Its inside is the rule one walker follows every step. Count (64k to 4M), Species, Steps per frame, Seed, Pre-roll. Double-click it or press **Open rule ↗** to edit the rule. **↺ Start over** starts the simulation again. |
-| **Emit** | Where walkers are born. **Fill** gives everyone a place at once (slime); **Rate** gives birth to a stream of them a second, each living for Life; **Keep full** gives everyone a place at once, at a random age, and each a new life the moment it dies (particles). Shapes: point, ring, disc, box, whole picture, **Picture** (where a texture wired into Picture is bright) and **Field** (where a chain wired into Where ƒ is above Threshold). Facing: random, inward, outward. **Speed ±** and **Spread** vary how they set off; **Burst** (a trigger) gives everyone a new life at once. **Species** says which kind they are (chain one Emit per species to give each colony its own place). |
+| **Emit** | Where walkers are born. **Fill** gives everyone a place at once (slime); **Rate** gives birth to a stream of them a second, each living for Life; **Keep full** gives everyone a place at once, at a random age, and each a new life the moment it dies (particles). Shapes: point, **line** (across, Size each way), ring, disc, box, whole picture, **Picture** (where a texture wired into Picture is bright) and **Field** (where a chain wired into Where ƒ is above Threshold). With Picture or Field, **No place found** says what happens when none of its 8 tries lands somewhere bright enough: born at the best try anyway, or **not born this time** (it tries again later: walkers then only ever appear on the picture or the field, however sparse). Facing: random, inward, outward, up. **Speed ±** and **Spread** vary how they set off; **Burst** (a trigger) gives everyone a new life at once. **Species** says which kind they are (chain one Emit per species to give each colony its own place). |
 | **Deposit** | Every walker leaves Amount of trail on the pixel it stands on, every step, into the Trail field it's wired to: in its own species' channel, or what Agent Output's Deposit says. **What: Velocity** leaves its velocity and a count instead, so the trail becomes a field of how the crowd moves (flocking). |
 | **Trail field** | The trail. Each step it spreads (Diffuse) and fades (Half-life). **Amount** (0–1) goes into a palette or the Output; **Texture** goes back into the group for Sense, or into Glow, Blur or Sample (texture). Resolution: ½, ¼ or the full picture, or a fixed 512 / 1024 / 2048 rows for a look that doesn't change with the window. **Spread** 3×3 (the slime paper's) or a softer 5×5 blur. **Add** paints anything into the trail every step (food from a picture, a shape, noise); **Block** wipes it where it is 1 (walls nothing can smell through). |
-| **Draw agents** | Draws the walkers themselves over the picture wired into Over, with the Particles node's looks: soft dots (**Points**), dots with its glow (**Glow**), short lines along their motion (**Streaks**), or dark ink on paper (**Ink**). Colour by species, speed, heading, age or **Agent** (the Colour its rule set), between Colour A and B or along one of the Particles palettes; **Lights** (up to four, orbiting or still) brighten the walkers near them and add halos. **Brightness of The crowd** keeps the cloud as bright at any count, as the Particles node does. |
+| **Draw agents** | Draws the walkers themselves over the picture wired into Over, with the Particles node's looks: soft dots (**Points**), dots with its glow (**Glow**), short lines along their motion (**Streaks**), or dark ink on paper (**Ink**). Colour by species, speed, heading, age or **Agent** (the Colour its rule set), or the Particles node's own orders (**Speed, fast first**; **Heading, once round**), between Colour A and B or along one of the Particles palettes; **Lights** (up to four, orbiting or still) brighten the walkers near them and add halos. **Brightness of The crowd** keeps the cloud as bright at any count, as the Particles node does. |
 
 **Inside the group** (only here):
 
@@ -63,6 +66,12 @@ For a few thousand agents with flocking rules and predators on the Play page, us
 
 The group has a **Sound from** of its own (its Sound section): **Each node's own** (the default) leaves every listening node to its own card; any other choice (Level and Beat, Mic, Audio engine, Engine track 1–8) is shared by every Sound kick and Chladni inside, with the group's **Level** and **Beat**. One switch on the group card makes the whole rule hear the engine's kick track.
 
+## From the Particles node: Open as nodes
+
+Every Particles node has **Open as nodes ↗** under its presets. It builds the same particles as an Agents group under the node, with every setting it can carry: the emitter as Emit, Gravity, Wind, Turbulence, Swirl, Attract, the hands, Flow and the sound's Wave, Vibrate, Shockwave and Crunch as force nodes chained through Also, Drag in Integrate, Obstacle as Collide, Pattern as Chladni, the look and the lights in Draw agents. What was wired into the node comes along (Over, the Emitter position, a wired Turbulence or hand, the Obstacle and Flow shapes, through ports on the group). The copy is wired where the Particles node was; the node itself is left as it was, so compare them and delete it when you like. Undo takes it all back.
+
+Every node it adds has a note saying which of the Particles node's settings it carries. Anything it can't carry yet is listed (in the message, and at the end of the group's note): 3D (the camera, its drift and depth of field), the Image emitter holding its picture (the copy is born on the picture's bright parts but doesn't hold it), Gust and Jet, the Burst emit mode, UV.
+
 ## Play: controls, pins, hands, the Motion layer
 
 - **Every slider inside is a Play control.** Right-click any slider inside the group (or on the group card) → Add to Play controls, Drive with a null, MIDI learn, LFOs: they are uniforms of the update shader, so nothing recompiles. Play's Add control lists them as *Group › Node · Slider*.
@@ -70,6 +79,7 @@ The group has a **Sound from** of its own (its Sound section): **Each node's own
 - **The live dots.** The group card shows where the walkers are now (a sample of at most 65,536, drawn every tenth frame while the card is on screen).
 - **Hands, nulls, the pose and the mouse.** Attract / Repel's Target, Vortex's Centre at and Emit's At have **A hand or null (Hand X / Y)**: a place 0–1 across and up the picture, the Particles node's hand units, so a position mapping lands on it at any picture shape. Right-click Hand X → **Follow a hand in Play**: both sliders become Play controls paired as one position, mapped to the pointer over the picture and then a tracked hand's index fingertip (the hand wins once it has been seen). Or **Add as position with Y** in Play and map the pair to a null, the pose, a face or a layer.
 - **Start over and Burst as triggers.** The group's **Start over** slider and Emit's **Burst** rise past 0.5 to fire: route a key, a beat, a pad, a gesture or a rule to them.
+- **Readings: what the walkers are doing.** An Agents group reads like a layer: in a mapping's source pick *Layer sensor* and *<group> · walkers*, or in a rule's condition the *Agents groups* section. **Alive** (the share alive), **Speed** (their mean speed, 1 at a picture height a second), **Spread** (0 all in one place, 1 spread evenly over the picture), **Centre X / Y** (where their centre is, 0–1) and **Group 1–4** (each species' share of the live walkers). Map Centre X to a pan, Spread to a filter, or fire a rule when Alive drops below a half. They are summed on the GPU only while something reads them, and arrive a frame or two late (a take records what its mappings made of them).
 - **The Motion layer as a texture.** Sources → **Motion (texture)**: the Play page's first Motion layer's grid (docs/motion-layer.md). **Amount** is how much moved at a point (0–1); **Texture** goes into Emit's **Picture** (born where it moves), an Agents group's added port (Sense smells it, Sample (texture) reads it), a Trail's **Add** (food where people move: wire Amount, it is read at each trail pixel), Glow or Blur. It is a frame late, like the Layers node, and live input: a render reads what the layer saw then.
 
 **Example**: Play → *Agents in Play* → **Agents: a hand and a beat**: a million particles your hand (or the pointer) pulls and stirs, a fist pushes them away, B bursts them and R starts over, while the Audio engine's kick track (the group's Sound from: Engine track 1) blasts shockwaves through them.
@@ -103,6 +113,8 @@ Measured on an M3 Pro (Chrome, ANGLE Metal), one million walkers, 2 steps a fram
 
 The P3 presets at one million walkers, 1080p: Multi-species slime 11.8 ms a frame, Grow toward a picture 10.3 ms, Strands 18 ms (ink streaks), Boids 15.7 ms and Ants 14 ms (both ship at 256k: 3.9 and 3.5 ms).
 
+The P6 presets as shipped, 1080p: Galaxy (1M) 6.9 ms a frame, Mycelium (64k) 1.8 ms, Sand on a plate (1M) 5.6 ms. Readings cost nothing measurable.
+
 One million particles (the Particles preset), 2 steps a frame at 1080p: about **7 ms a frame**, of which the steps are 1.6 ms and the glowing draw the rest; Streaks (two vertices a particle) about 10 ms.
 
 Steps per frame also sets the pace: one step is 1/60 s of simulated time, so 2 steps a frame runs the particles twice as fast as the Particles node does. Set it to 1 for the Particles node's own pace. Lifetimes, Drag and forces are in simulated seconds; Beat, Evolve and the lights follow the clock.
@@ -110,7 +122,7 @@ Steps per frame also sets the pace: one step is 1/60 s of simulated time, so 2 s
 ## Limits for now
 
 - Up to 4 Agents groups and 4 Trail fields per graph; 4 species; 16 textures per program (each group counts its two state textures).
-- Not yet: 3D; readings (alive share, centroid) back into Play. See docs/agents-plan.md for the phases.
+- Not yet: 3D (the Particles node's camera and depth of field, a 3D Collide). See docs/agents-plan.md for the phases.
 
 ## On web pages
 
@@ -120,5 +132,6 @@ Exported pages (Export → web page or embed, and Present) run Agents groups as 
 - **Hands**: Follow a hand works through the page's own mappings: the pointer moves the place, and a tracked hand takes over once one is seen, when the page carries hand tracking (Include hand tracking, or a Video layer's analysed hands). Without it the pointer keeps it.
 - **Motion (texture)** reads the page's first Motion layer (a frame late, as in the app). A page without a Motion layer reads 0.
 - **Start over** and **Burst** work from the page's keys and rules as in Play.
+- **Readings** (Alive, Centre, Spread…) work on the page as in the app: the page sums only the groups its Play reads.
 - Pages with agents draw at one device pixel per CSS pixel (as the app does), and need WebGL2 with float render targets; without them the page draws the picture without the agents and says so in the browser console.
 - A million walkers run at 60 fps on an M3 Pro in Chrome (the engine about 10–13 ms a frame at 1080p, as in the app).

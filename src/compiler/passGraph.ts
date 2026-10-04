@@ -233,6 +233,21 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     for (const c of passLists.values()) for (const [id, n] of c.nodes) if (n.type !== PASS_TYPE && !outputAncestors.nodes.has(id)) onlyForPasses.add(id);
     for (const a of agentLists.values()) for (const [id, n] of a.outer.nodes) if (!isAgentSource(n) && n.type !== PASS_TYPE && !outputAncestors.nodes.has(id)) onlyForPasses.add(id);
     for (const c of trailLists.values()) for (const [id, n] of c.nodes) if (!isAgentSource(n) && n.type !== PASS_TYPE && !outputAncestors.nodes.has(id)) onlyForPasses.add(id);
+    // A node the final program keeps (one wired to nothing, such as a Particles node left beside its
+    // Open-as-nodes copy) needs what it reads there too, even when that also feeds a Pass or a group.
+    if (onlyForPasses.size) {
+      const stack = nodes.filter(n => n.type !== PASS_TYPE && !onlyForPasses.has(n.id) && !(agents && (isAgentEngineOnly(n) || isAgentSource(n))));
+      const seen = new Set(stack.map(n => n.id));
+      while (stack.length) {
+        for (const c of wiresOf(stack.pop()!)) {
+          const s = byId.get(c.nodeId);
+          if (!s || seen.has(s.id) || s.type === PASS_TYPE || (agents && (isAgentEngineOnly(s) || isAgentSource(s)))) continue;
+          seen.add(s.id);
+          onlyForPasses.delete(s.id);
+          stack.push(s);
+        }
+      }
+    }
     const finalList: Collected = { nodes: new Map(), reads: new Set(), readsPrevious: new Set() };
     for (const n of nodes) {
       if (n.type === PASS_TYPE || onlyForPasses.has(n.id)) continue;

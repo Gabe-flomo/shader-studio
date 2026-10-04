@@ -135,7 +135,7 @@ export interface AgentDrawProgram {
   slug: string;
   group: string;
   style: 'points' | 'glow' | 'streaks' | 'ink';
-  colorBy: 'single' | 'species' | 'speed' | 'heading' | 'age' | 'agent';
+  colorBy: 'single' | 'species' | 'speed' | 'heading' | 'age' | 'agent' | 'speedFast' | 'headingRound';
   /** 'ab' (Colour A → B) or a Particles palette's name. */
   palette: string;
   /** Point lights (0–4), how they move, fade with age, brightness per walker or for the crowd. */

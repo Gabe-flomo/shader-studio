@@ -15,6 +15,7 @@ import { passPrevUniform, passUniform } from '../nodes/definitions/passes';
 import { agentDrawUniform, agentStateUniform, agentStepUniform, agentWindowUniform, trailStepUniforms, trailUniform } from '../nodes/definitions/agents';
 import { AG_BESSEL_UNIFORM, listenUniforms } from '../nodes/definitions/agentForces';
 import { MOTION_MAP_UNIFORM } from '../nodes/definitions/motionMap';
+import { agentReadLayer } from '../lib/agentReadings';
 import { bakeLayerValues } from './playControls';
 import type { PlayRecord } from '../types/play';
 import type { PreviewAspect } from '../utils/graphImportPlan';
@@ -59,10 +60,14 @@ export function webPasses(passes: readonly PassProgram[]): WebPass[] {
 }
 
 /** The Agents family as the page runs it (kit/agentHost.js): what it runs, with its uniform names. */
-export function webAgents(a: AgentsSpec): WebAgents {
+export function webAgents(a: AgentsSpec, play?: PlayRecord): WebAgents {
+  // Groups the page's Play reads (sensors on `ag:<node id>`: a mapping, a source or a rule): the page sums their walkers.
+  const setup = play ? JSON.stringify(play) : '';
+  const reads = (id: string) => !!setup && (setup.includes(`"${agentReadLayer(id)}"`) || setup.includes(`read:${agentReadLayer(id)}::`));
   return {
-    groups: a.groups.map(({ nodeId: _n, nodeIds: _ids, readsTrails: _t, readsPasses: _p, listeners, ...g }) => ({
+    groups: a.groups.map(({ nodeId, nodeIds: _ids, readsTrails: _t, readsPasses: _p, listeners, ...g }) => ({
       ...g,
+      ...(reads(nodeId) ? { readAs: agentReadLayer(nodeId) } : {}),
       listeners: listeners.map(({ nodeId: _l, ...l }) => ({ ...l, u: listenUniforms(l.slug) })),
       u: {
         A: agentStateUniform(g.slug, 'A'), B: agentStateUniform(g.slug, 'B'), C: agentStateUniform(g.slug, 'C'), D: agentStateUniform(g.slug, 'D'),
@@ -106,7 +111,7 @@ export function webInputFrom(c: CompiledForWeb, play: PlayRecord, opts: { title:
     },
   };
   if (c.passes?.length) input.graphPasses = webPasses(c.passes);
-  if (c.agents && c.agents.groups.length + c.agents.trails.length + c.agents.draws.length > 0) input.agents = webAgents(c.agents);
+  if (c.agents && c.agents.groups.length + c.agents.trails.length + c.agents.draws.length > 0) input.agents = webAgents(c.agents, play);
   // The Motion (texture) node, read by any program: the page fills its sampler from its first Motion layer.
   if (webShaders(c).some(s => s.includes(MOTION_MAP_UNIFORM))) input.motionMap = MOTION_MAP_UNIFORM;
   if (opts.media) input.media = opts.media;

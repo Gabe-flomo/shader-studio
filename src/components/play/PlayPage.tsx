@@ -15,6 +15,7 @@ import { ProBadge, ProLock } from '../account/ProSheet';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { agentReadLayer } from '../../lib/agentReadings';
 import { DataSourceOptions } from './DataSourceOptions';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -454,10 +455,14 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   }, [groupTick, groupFocus, tk.accent.base]);
   // Layers a source or trigger can read: shapes (click, fill, hover), particles (speed, spread), cameras (motion), nulls (distance).
   // Granulator racks read like layers in the sensor pickers (their grains: docs/granulator.md), as `ae:<rackId>`.
+  // The graph's Agents groups (id and label, as a string so it only changes when they do).
+  const agentGroupsKey = useNodeGraphStore(s => s.nodes.filter(nd => nd.type === 'agentsGroup').map(nd => `${nd.id}\t${typeof nd.params.label === 'string' ? nd.params.label : ''}`).join('\n'));
   const layerRefs = useMemo(() => [
     ...play.layers.map(l => ({ id: l.id, label: l.label, kind: l.kind, ...(l.kind === 'shape' ? { shape: l.shape } : {}) })),
     ...(play.audioEngine?.racks ?? []).filter(isGranulatorRack).map(r => ({ id: grainSensorLayer(r.id), label: `${r.name} · grains`, kind: 'granulator' })),
-  ], [play.layers, play.audioEngine]);
+    // The graph's Agents groups read like layers too (alive, centre, spread…), as `ag:<node id>` (lib/agentReadings.ts).
+    ...(agentGroupsKey ? agentGroupsKey.split('\n').map(line => { const [id, label] = line.split('\t'); return { id: agentReadLayer(id), label: `${label || 'Agents'} · walkers`, kind: 'agentsGroup' }; }) : []),
+  ], [play.layers, play.audioEngine, agentGroupsKey]);
   // Desktop: the drawer's height, dragged from its top edge and remembered.
   const rootRef = useRef<HTMLDivElement>(null);
   const [drawerH, setDrawerH] = useState<number>(() => {

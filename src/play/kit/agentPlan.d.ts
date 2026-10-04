@@ -50,3 +50,7 @@ export interface AgDrawLook {
 }
 export function agDrawLook(d: { style: string; scaleBy: string; palette: string; colorBy: string; fade: boolean; params: Record<string, unknown> }, n: number, h: number, read: AgRead, readColour: AgReadColour): AgDrawLook;
 export function agLights(d: { lights: number; lightMotion: string; params: Record<string, unknown> }, read: AgRead, readColour: AgReadColour, time: number, aspect: number): Array<{ x: number; y: number; reach: number; power: number; colour: number[] }>;
+export const AG_GROUP_READS: readonly ['alive', 'speed', 'spread', 'centroidX', 'centroidY', 'group1', 'group2', 'group3', 'group4'];
+export type AgGroupRead = typeof AG_GROUP_READS[number];
+export function agReadPlan(side: number): Array<[number, number]>;
+export function agReadDecode(px: ArrayLike<number>, count: number, aspect: number): Record<AgGroupRead, number>;

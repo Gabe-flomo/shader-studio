@@ -66,6 +66,8 @@ export const AGENT_PRESET_TYPES = new Set([
   'slimeMoldPreset', 'particlesPreset', 'curlSmokePreset', 'soundBurstPreset',
   // P3: species, food and obstacles
   'multiSlimePreset', 'antsPreset', 'boidsPreset', 'strandsPreset', 'growPicturePreset',
+  // P6
+  'galaxyPreset', 'myceliumPreset', 'sandPlatePreset',
 ]);
 /** Nodes that go outside the group (engines and programs of their own). */
 export const AGENT_OUTSIDE_TYPES = new Set(['agentsGroup', 'agentEmit', 'agentDeposit', 'trailField', 'drawAgents']);
@@ -552,21 +554,24 @@ export const AgentEmitNode: NodeDefinition = {
   outputs: {
     emitter: { type: 'emitter', label: 'Emitter', hint: 'Wire into an Agents group\'s Emit.' },
   },
-  defaultParams: { mode: 'fill', shape: 'disc', heading: 'inward', at: 'point', x: 0, y: 0, handX: 0.5, handY: 0.5, size: 0.6, rate: 20000, life: 0, lifeVar: 0.2, speed: 0, speedVar: 0, spread: 0, share: 1, burst: 0, species: 'each', threshold: 0.2 },
+  defaultParams: { mode: 'fill', shape: 'disc', heading: 'inward', at: 'point', x: 0, y: 0, handX: 0.5, handY: 0.5, size: 0.6, rate: 20000, life: 0, lifeVar: 0.2, speed: 0, speedVar: 0, spread: 0, share: 1, burst: 0, species: 'each', threshold: 0.2, miss: 'best' },
   paramDefs: {
     mode: { label: 'Births', type: 'select', hint: 'Fill: everyone is born at once when the simulation starts (slime). Rate: a stream of births a second. Keep full: born at once, each reborn the moment it dies (particles with a Life).', options: [
       { value: 'fill', label: 'Fill (all at once)' }, { value: 'rate', label: 'Rate (per second)' }, { value: 'respawn', label: 'Keep full (reborn when they die)' },
     ] },
     shape: { label: 'Shape', type: 'select', hint: 'Where in the picture they are born.', options: [
-      { value: 'point', label: 'Point' }, { value: 'ring', label: 'Ring' }, { value: 'disc', label: 'Disc' }, { value: 'box', label: 'Box' }, { value: 'screen', label: 'Whole picture' },
+      { value: 'point', label: 'Point' }, { value: 'line', label: 'Line (across, Size each way)' }, { value: 'ring', label: 'Ring' }, { value: 'disc', label: 'Disc' }, { value: 'box', label: 'Box' }, { value: 'screen', label: 'Whole picture' },
       { value: 'picture', label: 'Picture (where bright)' }, { value: 'field', label: 'Field (Where ƒ above Threshold)' },
     ] },
     threshold: { label: 'Threshold', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Picture / Field: how bright (how high) a place must be for walkers to be born there.', showWhen: { param: 'shape', value: ['picture', 'field'] } },
+    miss: { label: 'No place found', type: 'select', hint: 'Picture / Field: when none of the 8 tries lands where it is bright enough (a sparse picture): born at the best try anyway, or not born this time (it tries again on a later birth; Keep full: the next step).', options: [
+      { value: 'best', label: 'Born at the best try' }, { value: 'skip', label: 'Not born this time' },
+    ], showWhen: { param: 'shape', value: ['picture', 'field'] } },
     species: { label: 'Species', type: 'select', hint: 'Which species these walkers are (with the group\'s Species above 1). Each in turn shares them out evenly; chain one Emit per species to give each its own place.', options: [
       { value: 'each', label: 'Each in turn' }, { value: '1', label: 'Species 1' }, { value: '2', label: 'Species 2' }, { value: '3', label: 'Species 3' }, { value: '4', label: 'Species 4' },
     ] },
     heading: { label: 'Facing', type: 'select', hint: 'Which way they face when born.', options: [
-      { value: 'random', label: 'Random' }, { value: 'inward', label: 'Inward' }, { value: 'outward', label: 'Outward' },
+      { value: 'random', label: 'Random' }, { value: 'inward', label: 'Inward' }, { value: 'outward', label: 'Outward' }, { value: 'up', label: 'Up' },
     ] },
     at: { label: 'At', type: 'select', hint: 'Where the shape\'s centre comes from when nothing is wired into Position.', help: 'X and Y: picture units. A hand or null: Hand X / Y, 0–1 across and up the picture, made for Play (right-click Hand X → Follow a hand).', options: [{ value: 'point', label: 'X and Y' }, { value: 'hand', label: 'A hand or null (Hand X / Y)' }] },
     x: { label: 'X', type: 'float', min: -2, max: 2, step: 0.01, hint: 'Centre of the shape, across.', showWhen: { param: 'at', value: 'point' } },
@@ -588,8 +593,8 @@ export const AgentEmitNode: NodeDefinition = {
   // Compiled only into a group's update shader: its code runs for the walkers born this step.
   generateGLSL: (node: GraphNode, v) => {
     const id = node.id;
-    const shape = sel(node.params.shape, ['point', 'ring', 'disc', 'box', 'screen', 'picture', 'field'], 'disc');
-    const facing = sel(node.params.heading, ['random', 'inward', 'outward'], 'inward');
+    const shape = sel(node.params.shape, ['point', 'line', 'ring', 'disc', 'box', 'screen', 'picture', 'field'], 'disc');
+    const facing = sel(node.params.heading, ['random', 'inward', 'outward', 'up'], 'inward');
     const em = `${id}_em`;
     const centre = v.position ?? (sel(node.params.at, ['point', 'hand'], 'point') === 'hand'
       ? agHandPlace(p(node.params.handX, 0.5), p(node.params.handY, 0.5))
@@ -597,6 +602,8 @@ export const AgentEmitNode: NodeDefinition = {
     const size = p(node.params.size, 0.6);
     const place: Record<string, string> = {
       point: `${id}_pp = ${id}_c; ${id}_out = agDir(${id}_r1 * 6.2831853);`,
+      // A line across, Size each way from the centre; outward is up (the Particles node's Line).
+      line: `${id}_pp = ${id}_c + vec2((${id}_r1 * 2.0 - 1.0) * ${size}, 0.0); ${id}_out = vec2(0.0, 1.0);`,
       ring: `${id}_out = agDir(${id}_r1 * 6.2831853); ${id}_pp = ${id}_c + ${size} * ${id}_out;`,
       disc: `${id}_out = agDir(${id}_r1 * 6.2831853); ${id}_pp = ${id}_c + ${size} * sqrt(${id}_r2) * ${id}_out;`,
       box: `${id}_pp = ${id}_c + (vec2(${id}_r1, ${id}_r2) * 2.0 - 1.0) * ${size}; ${id}_out = length(${id}_pp - ${id}_c) > 1e-6 ? normalize(${id}_pp - ${id}_c) : vec2(1.0, 0.0);`,
@@ -608,17 +615,19 @@ export const AgentEmitNode: NodeDefinition = {
     const weight = shape === 'picture' && tex
       ? `dot(texture(${tex}, agUv(${id}_q)).rgb, vec3(0.299, 0.587, 0.114))`
       : shape === 'field' && where ? `${where}(${id}_q, vec2(0.0), 1.0, 0.0)` : '';
+    // If none of the tries is taken: the best one (the default), or not born this time (it tries again later).
+    const skip = (shape === 'picture' || shape === 'field') && node.params.miss === 'skip';
     if (weight) {
       const thr = p(node.params.threshold, 0.2);
       const accept = shape === 'picture' ? `${id}_w > ${thr} ? clamp(${id}_w, 0.0, 1.0) : 0.0` : `${id}_w > ${thr} ? 1.0 : 0.0`;
       place[shape] = [
-        `float ${id}_best = -1.0e30; vec2 ${id}_bq = vec2(0.0);`,
+        `float ${id}_best = -1.0e30; vec2 ${id}_bq = vec2(0.0);${skip ? ` ${id}_miss = true;` : ''}`,
         `        for (int ${id}_k = 0; ${id}_k < 8; ${id}_k++) {`,
         `            vec2 ${id}_q = (vec2(agRnd(${id}_s), agRnd(${id}_s)) * 2.0 - 1.0) * vec2(u_resolution.x / u_resolution.y, 1.0);`,
         `            float ${id}_w = ${weight};`,
         `            float ${id}_p = ${accept};`,
         `            if (${id}_p > ${id}_best) { ${id}_best = ${id}_p; ${id}_bq = ${id}_q; }`,
-        `            if (agRnd(${id}_s) < ${id}_p) { ${id}_bq = ${id}_q; break; }`,
+        `            if (agRnd(${id}_s) < ${id}_p) { ${id}_bq = ${id}_q;${skip ? ` ${id}_miss = false;` : ''} break; }`,
         `        }`,
         `        ${id}_pp = ${id}_bq; ${id}_out = agDir(${id}_r1 * 6.2831853);`,
       ].join('\n');
@@ -628,7 +637,7 @@ export const AgentEmitNode: NodeDefinition = {
     const speciesSel = sel(node.params.species, ['each', '1', '2', '3', '4'], 'each');
     const species = speciesSel === 'each' ? '-1.0' : `${Number(speciesSel) - 1}.0`;
     const stateC = node.params.__stateC === true;
-    const head = facing === 'random' ? `${id}_r3 * 6.2831853 - 3.1415927` : facing === 'inward' ? `atan(-${id}_out.y, -${id}_out.x)` : `atan(${id}_out.y, ${id}_out.x)`;
+    const head = facing === 'up' ? '1.5707963' : facing === 'random' ? `${id}_r3 * 6.2831853 - 3.1415927` : facing === 'inward' ? `atan(-${id}_out.y, -${id}_out.x)` : `atan(${id}_out.y, ${id}_out.x)`;
     const life = p(node.params.life, 0);
     const spread = p(node.params.spread, 0);
     const respawn = sel(node.params.mode, ['fill', 'rate', 'respawn'], 'fill') === 'respawn';
@@ -644,6 +653,7 @@ export const AgentEmitNode: NodeDefinition = {
       `        vec2 ${id}_c = ${centre};\n`,
       `        vec2 ${id}_pp = ${id}_c;\n`,
       `        vec2 ${id}_out = vec2(1.0, 0.0);\n`,
+      skip ? `        bool ${id}_miss = false;\n` : '',
       `        ${place[shape]}\n`,
       `        float ${id}_hd = ${head};\n`,
       // Spread: the direction strays toward a random one. Speed ±: the speed varies.
@@ -656,6 +666,8 @@ export const AgentEmitNode: NodeDefinition = {
       `        float ${id}_age0 = ${respawn ? `a_step == 0u && ${id}_life < 1.0e29 ? ${id}_r7 * ${id}_life : 0.0` : '0.0'};\n`,
       `        ${em}_a = vec4(${id}_pp, ${id}_hd, ${id}_age0);\n`,
       `        ${em}_b = vec4(${id}_dir * ${id}_sp, ${id}_sp, max(${id}_life, 1e-3));\n`,
+      // Not born this time: dead (life 0), so it tries again on a later birth (Keep full: the next step).
+      skip ? `        if (${id}_miss) ${em}_b = vec4(0.0);\n` : '',
     ];
     if (v.also) {
       // Shared births: this Emit keeps its Share of them, the chain behind it the rest.
@@ -800,7 +812,7 @@ export const AG_PALETTE_OPTIONS = [
 ];
 export const DRAW_STYLES = ['points', 'glow', 'streaks', 'ink'] as const;
 export const GP_PALETTE_NAMES = Object.keys(GP_PALETTES);
-export const DRAW_COLOR_BY = ['single', 'species', 'speed', 'heading', 'age', 'agent'] as const;
+export const DRAW_COLOR_BY = ['single', 'species', 'speed', 'heading', 'age', 'agent', 'speedFast', 'headingRound'] as const;
 
 export const DrawAgentsNode: NodeDefinition = {
   type: 'drawAgents',
@@ -837,11 +849,12 @@ export const DrawAgentsNode: NodeDefinition = {
     colorBy: { label: 'Colour by', type: 'select', section: 'Colour', hint: 'What picks each walker\'s colour along the palette (or between Colour A and B).', options: [
       { value: 'single', label: 'One colour (A / the palette\'s start)' }, { value: 'species', label: 'Species' }, { value: 'speed', label: 'Speed' }, { value: 'heading', label: 'Heading' }, { value: 'age', label: 'Age (share of its life)' },
       { value: 'agent', label: 'Agent (its own Colour, set inside the group)' },
+      { value: 'speedFast', label: 'Speed, fast first (the Particles node\'s)' }, { value: 'headingRound', label: 'Heading, once round (the Particles node\'s)' },
     ] },
     palette: { label: 'Palette', type: 'select', section: 'Colour', hint: 'Colour A → B, or one of the Particles node\'s palettes.', options: AG_PALETTE_OPTIONS },
     colorA: { label: 'Colour A', type: 'vec3color', section: 'Colour' },
     colorB: { label: 'Colour B', type: 'vec3color', section: 'Colour' },
-    speedRef: { label: 'Fast is', type: 'float', min: 0.01, max: 8, step: 0.01, section: 'Colour', hint: 'Colour by Speed: the speed that reaches the end of the palette (picture units a second).' },
+    speedRef: { label: 'Fast is', type: 'float', min: 0.01, max: 8, step: 0.01, section: 'Colour', hint: 'Colour by Speed: the speed that reaches the end of the palette (Speed, fast first: its start), in picture units a second.' },
     paper: { label: 'Paper', type: 'vec3color', section: 'Colour', hint: 'Ink: the paper\'s colour when nothing is wired into Over.', showWhen: { param: 'style', value: 'ink' } },
     lights: { label: 'Lights', type: 'select', section: 'Lights', hint: 'Point lights that move round the picture: walkers near one glow brighter and larger, with a halo round each light (Glow, Streaks, Ink).', options: [
       { value: '0', label: 'None' }, { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
@@ -923,3 +936,14 @@ export const StrandsPresetNode = preset('strandsPreset', 'Strands (preset)', ['F
 /** Grow toward a picture — slime feeding on a picture's bright parts (a starter). */
 export const GrowPicturePresetNode = preset('growPicturePreset', 'Grow toward a picture (preset)', ['Slime picture', 'Feed on image', 'Food from a picture', 'Image slime'],
   'Adds slime that feeds on a picture: its bright parts are food painted into the trail every step, so the network grows over them and draws the picture in veins. A built-in moonlit picture until you load your own into its Texture Input. Every node has a note.');
+
+// ── P6 presets ───────────────────────────────────────────────────────────────
+/** Galaxy — stars on orbits crowding into two turning spiral arms (a starter). */
+export const GalaxyPresetNode = preset('galaxyPreset', 'Galaxy (preset)', ['Spiral galaxy', 'Stars', 'Density wave', 'Orbits', 'Space'],
+  'Adds a spiral galaxy built from nodes: a million stars circle a bright bulge and crowd into two spiral arms that turn slowly, the arms lit blue with young stars and pink knots, the core warm. Each star remembers its own orbit (Memory). Every node has a note.');
+/** Mycelium — a fungus colony branching out of a spore (a starter). */
+export const MyceliumPresetNode = preset('myceliumPreset', 'Mycelium (preset)', ['Fungus', 'Hyphae', 'Mould', 'Branching growth', 'Colony'],
+  'Adds a fungus colony built from nodes: growing tips shy away from threads already there, and new tips sprout on the young threads at the colony\'s edge, so it branches outward from a spore and fills in behind. Every node has a note.');
+/** Sand on a plate — Chladni figures from a silent beat (a starter). */
+export const SandPlatePresetNode = preset('sandPlatePreset', 'Sand on a plate (preset)', ['Chladni preset', 'Cymatics preset', 'Sand plate', 'Nodal lines'],
+  'Adds a million grains of sand on a ringing square plate: shaken off wherever the plate moves, they settle on its still lines and draw a Chladni figure, and a silent stand-in beat steps the plate from figure to figure. Every node has a note.');

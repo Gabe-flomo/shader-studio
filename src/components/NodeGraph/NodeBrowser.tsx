@@ -99,7 +99,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
   ],
   // The Agents family (docs/agents-plan.md): the inside nodes only go into an open Agents group.
   Simulation: [
-    { label: 'Start here', types: ['slimeMoldPreset', 'multiSlimePreset', 'antsPreset', 'boidsPreset', 'strandsPreset', 'growPicturePreset', 'particlesPreset', 'curlSmokePreset', 'soundBurstPreset', 'agentsGroup'] },
+    { label: 'Start here', types: ['slimeMoldPreset', 'multiSlimePreset', 'antsPreset', 'boidsPreset', 'strandsPreset', 'growPicturePreset', 'myceliumPreset', 'particlesPreset', 'curlSmokePreset', 'soundBurstPreset', 'galaxyPreset', 'sandPlatePreset', 'agentsGroup'] },
     { label: 'Outside the group', types: ['agentEmit', 'agentDeposit', 'trailField', 'drawAgents'] },
     { label: 'Inside: walkers', types: ['agentSense', 'agentSteer', 'agentMove', 'agentBySpecies'] },
     { label: 'Inside: forces', types: ['agentGravity', 'agentWind', 'agentCurl', 'agentAttract', 'agentVortex', 'agentFlow', 'agentSoundKick'] },

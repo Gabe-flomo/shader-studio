@@ -201,7 +201,7 @@ export const GpuParticlesNode: NodeDefinition = {
       'Wire Color into the Output (and a picture into Over, if you like).',
       'Pick a preset at the top of the card: Ink in water, Embers, Dust in air, Image dissolve, Sound field, Launch, Chladni sand, Singing plate, Cymatics bloom, Hand swirl.',
       'Unfold a section and hover a setting\'s ? for what it does. Most settings have a socket too.',
-      'Want to change the rules themselves? Try the Particles preset of the Agents group (Simulation): the same look, built from force nodes you can rewire.',
+      'Want to change the rules themselves? Press Open as nodes under the presets: the same particles as an Agents group built from force nodes you can rewire (or start from the Particles preset in Simulation).',
     ],
   },
   version: 3,

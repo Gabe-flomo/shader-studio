@@ -267,7 +267,7 @@ export function agHear(st, l, read, sound, time, first) {
 }
 
 /** Colour by: Draw agents' choice as the draw shader's index. */
-export const AG_COLOR_BY = ['single', 'species', 'speed', 'heading', 'age', 'agent'];
+export const AG_COLOR_BY = ['single', 'species', 'speed', 'heading', 'age', 'agent', 'speedFast', 'headingRound'];
 
 /**
  * How Draw agents `d` draws `n` walkers into a picture `h` pixels high: the draw shader's
@@ -308,4 +308,53 @@ export function agLights(d, read, readColour, time, aspect) {
   };
   const cx = read(d.params.lightX, 0), cy = read(d.params.lightY, 0);
   return gpPlace(P, time, null, aspect).lights.map(l => ({ x: l.x + cx, y: l.y + cy, reach: l.reach, power: l.power, colour: l.colour }));
+}
+
+/*
+ * Readings (P6): what a group's walkers add up to, for Play (sensors on `ag:<group node id>`).
+ * The hosts sum the state on the GPU (agentShaders.js AG_READ_FRAG, then AG_SUM_FRAG passes) into
+ * a 2 × 1 target and read it back asynchronously; these two pure functions are the schedule and
+ * the meaning, shared so the app and web pages can't drift.
+ */
+
+/** The readings a group gives, in the order Play lists them (the CPU Agents layer's names). */
+export const AG_GROUP_READS = ['alive', 'speed', 'spread', 'centroidX', 'centroidY', 'group1', 'group2', 'group3', 'group4'];
+
+/** The reduction's targets for a state of side × side: each pass's [width of one half, height]; the last is [1, 1]. */
+export function agReadPlan(side) {
+  const block = 8;
+  const out = [];
+  let w = Math.max(1, Math.ceil(side / block)), h = w;
+  out.push([w, h]);
+  while (w > 1 || h > 1) {
+    w = Math.max(1, Math.ceil(w / block)); h = Math.max(1, Math.ceil(h / block));
+    out.push([w, h]);
+  }
+  return out;
+}
+
+/**
+ * The readings (all 0…1) from the two summed texels `px` (8 floats: live, Σx, Σy, Σ(x² + y²), then
+ * Σ speed and the live of species 1–3) for `count` walkers in a picture of `aspect`:
+ *   alive       the share of the walkers alive
+ *   speed       their mean speed, 1 at a picture height (2 units) a second or more
+ *   spread      how spread out they are: 0 all in one place, about 1 spread evenly over the picture
+ *   centroidX/Y where their centre is, 0 left / bottom to 1 right / top
+ *   group1…4    the share of the live walkers of each species
+ * With nobody alive the centre stays in the middle and the rest read 0.
+ */
+export function agReadDecode(px, count, aspect) {
+  const n = Math.max(0, px[0]);
+  const out = { alive: count > 0 ? Math.min(1, n / count) : 0, speed: 0, spread: 0, centroidX: 0.5, centroidY: 0.5, group1: 0, group2: 0, group3: 0, group4: 0 };
+  if (!(n > 0)) return out;
+  const a = aspect > 0 ? aspect : 1;
+  const mx = px[1] / n, my = px[2] / n;
+  out.speed = Math.min(1, Math.max(0, px[4] / n / 2));
+  out.spread = Math.min(1, Math.sqrt(Math.max(0, px[3] / n - mx * mx - my * my)) / (Math.hypot(a, 1) / Math.sqrt(3)));
+  out.centroidX = Math.min(1, Math.max(0, mx / a * 0.5 + 0.5));
+  out.centroidY = Math.min(1, Math.max(0, my * 0.5 + 0.5));
+  const g1 = px[5] / n, g2 = px[6] / n, g3 = px[7] / n;
+  out.group1 = Math.min(1, Math.max(0, g1)); out.group2 = Math.min(1, Math.max(0, g2)); out.group3 = Math.min(1, Math.max(0, g3));
+  out.group4 = Math.min(1, Math.max(0, 1 - g1 - g2 - g3));
+  return out;
 }

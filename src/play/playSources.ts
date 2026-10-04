@@ -20,6 +20,7 @@ import type { PadGridRead } from '../types/playMidi';
 import { kmNoteName } from './kit/midi.js';
 import { FACE_GESTURE_LABELS, POSE_GESTURE_LABELS, TRACK_SOURCE_TYPES, trackAnchorLabel, trackSource, trackSourceLabel, type FaceSourceType, type PoseSourceType } from './trackSources';
 import { parseTrackAnchor } from '../types/playTracking';
+import { agentReadLabel } from '../lib/agentReadings';
 
 export type HandSourceType = `hand:${HandRead}`;
 /** `reader:<id>`: one audio reader. */
@@ -365,7 +366,7 @@ export function valueRefLabel(ref: string, ctx: LabelContext = {}): string {
     case 'source': { const m = ctx.mappings?.find(x => x.id === r.id); return m ? `${sourceLabel(m.source, ctx.controls, ctx.layers)} (source)` : 'A source'; }
     case 'mouse': return `Mouse ${r.axis.toUpperCase()}`;
     case 'distance': return `${anchorLabel(r.a, ctx.layers)} ↔ ${anchorLabel(r.b, ctx.layers)}`;
-    case 'reading': return `${ctx.layers?.find(l => l.id === r.layerId)?.label ?? 'Missing layer'} · ${SENSOR_LABELS[r.read as SensorRead] ?? r.read}`;
+    case 'reading': return `${ctx.layers?.find(l => l.id === r.layerId)?.label ?? agentReadLabel(r.layerId) ?? 'Missing layer'} · ${SENSOR_LABELS[r.read as SensorRead] ?? r.read}`;
     case 'axis': return `${anchorLabel(r.anchor, ctx.layers)} ${r.axis.toUpperCase()}`;
     case 'picture': return `${r.ch === 'lum' ? 'Brightness' : r.ch === 'r' ? 'Red' : r.ch === 'g' ? 'Green' : 'Blue'} ${r.region === 'all' ? 'of the picture' : `under ${anchorLabel(r.region, ctx.layers)}`}`;
     case 'prop': {
@@ -526,8 +527,8 @@ export const SENSOR_LABELS: Record<SensorRead, string> = {
 export const SENSOR_HINTS: Record<SensorRead, string> = {
   fill: 'How full of particles the shape is: 0.5 is as dense as average, 1 is twice that or more.',
   hover: '1 while the pointer is over the shape, else 0.',
-  speed: 'How fast the particles (or agents) are moving on average, against their Speed setting (agents: against the Max speed rule, else a picture height per second).',
-  spread: 'Particles: how spread out they are, near 0 in a clump, near 1 everywhere. A path shape: its points’ mean distance from their centre, 1 at half a picture height or more.',
+  speed: 'How fast the particles (or agents) are moving on average, against their Speed setting (agents: against the Max speed rule, else a picture height per second; an Agents group in the graph: 1 at a picture height a second).',
+  spread: 'Particles (and an Agents group\'s walkers): how spread out they are, near 0 in a clump, near 1 everywhere. A path shape: its points’ mean distance from their centre, 1 at half a picture height or more.',
   area: 'A path shape: the share of the picture it covers, 0 to 1 (lines and webs: the area their points span). Fades with the shape. A Motion layer: the share of its grid that is moving.',
   perimeter: 'A path shape: its outline’s length (a web: all its links), 1 as long as the picture’s own edge.',
   motion: 'How much is moving: in front of the camera (a Camera layer), or in a Motion layer\'s source (its Amount: 0 still, about 0.2 a hand waving in a corner, 1 the whole picture moving).',
@@ -541,10 +542,10 @@ export const SENSOR_HINTS: Record<SensorRead, string> = {
   lowmid: 'Low-mids, 150–600 Hz: body, warmth, most voices.',
   highmid: 'High-mids, 600 Hz–3 kHz: snares, leads, presence.',
   treble: 'Treble, 3–12 kHz: hi-hats, cymbals, air.',
-  alive: 'Agents: the share of the layer’s agents alive, 0 none, 1 all of them. Particles: the same, of Count.',
-  centroidX: 'Agents: where the live agents’ centre is across the picture, 0 the left edge, 1 the right.',
-  centroidY: 'Agents: where the live agents’ centre is up the picture, 0 the bottom, 1 the top.',
-  group1: 'Agents: the share of group 1 alive (its count is 1).', group2: 'Agents: the share of group 2 alive.', group3: 'Agents: the share of group 3 alive.', group4: 'Agents: the share of group 4 alive.',
+  alive: 'Agents: the share of the layer’s agents alive, 0 none, 1 all of them. Particles: the same, of Count. An Agents group in the graph: the share of its walkers alive (a frame or two late).',
+  centroidX: 'Agents (a layer, or a group in the graph): where the live agents’ centre is across the picture, 0 the left edge, 1 the right.',
+  centroidY: 'Agents (a layer, or a group in the graph): where the live agents’ centre is up the picture, 0 the bottom, 1 the top.',
+  group1: 'Agents: the share of group 1 alive (its count is 1). An Agents group in the graph: the share of its live walkers that are species 1.', group2: 'Agents: the share of group 2 alive. An Agents group in the graph: the share of species 2.', group3: 'Agents: the share of group 3 alive. An Agents group in the graph: the share of species 3.', group4: 'Agents: the share of group 4 alive. An Agents group in the graph: the share of species 4.',
   born: 'How many were born this step: a burst, a stream respawn, a Multiply bud, an Agents respawn. 0 most steps.',
   died: 'How many died this step: age, a kill boundary, an annihilation, a Cull action, a catch or an energy drain. 0 most steps.',
   gap: 'Relationship: how far apart its closest pair is (a chase: the closest chaser and prey), 0 touching, 1 a picture height or more.',

@@ -15,6 +15,7 @@ import type { ExampleGraph } from './exampleIndex';
 import { n } from './graphBuilder';
 import { agentsGroup, expr, note, withOutputs } from './agentExampleKit';
 import { antsNodes, boidsNodes, growPictureNodes, multiSlimeNodes, strandsNodes } from './agentExamplesP3';
+import { galaxyNodes, myceliumNodes, sandPlateNodes } from './agentExamplesP6';
 
 export const AGENT_EXAMPLE_INDEX: Record<string, { label: string; description: string }> = {
   slimeMold: {
@@ -48,6 +49,18 @@ export const AGENT_EXAMPLE_INDEX: Record<string, { label: string; description: s
   agentGrowPicture: {
     label: 'Grow toward a picture',
     description: 'Slime feeding on a picture: its bright parts are food painted into the trail every step (Trail field Add) and walkers are born on them (Emit Field), so the network maps the picture in veins coloured by what they feed on. A built-in moonlit picture; load your own into the Texture Input.',
+  },
+  agentGalaxy: {
+    label: 'Galaxy',
+    description: 'A spiral galaxy built from nodes: a million stars circle a bright bulge, each on its own orbit (it remembers its radius in Memory), and crowd into two spiral arms that turn slowly. The arms are a traffic jam the stars pass through, lit blue by young stars with pink knots; the core is warm.',
+  },
+  agentMycelium: {
+    label: 'Mycelium',
+    description: 'A fungus colony creeping out of a spore: every hypha is a short walk by a growing tip that shies away from threads already there, and new tips sprout on the young, thin threads at the colony\'s edge (Emit Field on the trail itself), so it branches outward and fills in behind its front.',
+  },
+  agentSandPlate: {
+    label: 'Sand on a plate',
+    description: 'A million grains of sand on a ringing square plate: shaken off wherever the plate moves, they settle on its still lines and draw a Chladni figure. A silent stand-in beat (the group\'s Sound from) steps the plate from figure to figure; give it real sound and the music picks them.',
   },
   agentSoundBurst: {
     label: 'Sound burst',
@@ -202,6 +215,9 @@ export function buildAgentExamples(): Record<string, ExampleGraph> {
     agentBoids: { ...AGENT_EXAMPLE_INDEX.agentBoids, counter: 40, nodes: boidsNodes(0, 200) },
     agentStrands: { ...AGENT_EXAMPLE_INDEX.agentStrands, counter: 40, nodes: strandsNodes(0, 200) },
     agentGrowPicture: { ...AGENT_EXAMPLE_INDEX.agentGrowPicture, counter: 40, nodes: growPictureNodes(0, 200) },
+    agentGalaxy: { ...AGENT_EXAMPLE_INDEX.agentGalaxy, counter: 40, nodes: galaxyNodes(0, 200) },
+    agentMycelium: { ...AGENT_EXAMPLE_INDEX.agentMycelium, counter: 40, nodes: myceliumNodes(0, 200) },
+    agentSandPlate: { ...AGENT_EXAMPLE_INDEX.agentSandPlate, counter: 40, nodes: sandPlateNodes(0, 200) },
   };
 }
 
@@ -511,6 +527,9 @@ const PRESET_BUILDERS: Record<string, { build: (x: number, y: number) => GraphNo
   boidsPreset: { build: (x, y) => boidsNodes(x, y, false), out: ['bdDraw', 'color'], label: 'Boids' },
   strandsPreset: { build: (x, y) => strandsNodes(x, y, false), out: ['stDraw', 'color'], label: 'Strands' },
   growPicturePreset: { build: (x, y) => growPictureNodes(x, y, false), out: ['gpLook', 'result'], label: 'Grow toward a picture' },
+  galaxyPreset: { build: (x, y) => galaxyNodes(x, y, false), out: ['gxDraw', 'color'], label: 'Galaxy' },
+  myceliumPreset: { build: (x, y) => myceliumNodes(x, y, false), out: ['myDraw', 'color'], label: 'Mycelium' },
+  sandPlatePreset: { build: (x, y) => sandPlateNodes(x, y, false), out: ['spDraw', 'color'], label: 'Sand on a plate' },
 };
 
 /**
