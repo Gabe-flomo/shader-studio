@@ -14,6 +14,7 @@ import type { PlayControl } from '../types/play';
 import { ctl, colourCtl, n, out, play, time, uv } from './graphBuilder';
 import type { ExampleGraph } from './exampleIndex';
 import { LEARN3D_EXAMPLE_INDEX } from './learn3dExampleIndex';
+import { volumetricOn } from '../nodes/volumetricAuto';
 
 // ── Small helpers ───────────────────────────────────────────────────────────
 
@@ -267,6 +268,32 @@ lesson('learn3dGI', [
 **How it is built.** One camera and one Scene Group (a sphere on a floor) wired into both loops; Split Vec2 → Compare → Select puts the plain one on the left and the GI one on the right; Tone Map finishes both. The GI loop's own lighting is on its card: Light Strength, GI Strength, Spec Strength, and the step counts for each extra ray.
 
 **Try.** Turn the **Camera angle** and **Camera height**: the shadow and the reflections stay put in the world while the plain half never changes its flat look. On the GI loop's card, lower **Roughness** toward 0: the sphere becomes a mirror and shows the floor. Raise **Metallic** and the reflections take the surface colour. Set **GI Strength** to 0 and the underside of the sphere goes darker: that light was bouncing off the floor.`);
+
+// The same glow, built by the loop's Volumetric switch instead of by hand: a plain torus
+// scene, then exactly what turning the switch on adds (nodes/volumetricAuto.ts).
+{
+  const ids = ['vt_dist', 'vt_glow', 'vt_colour'];
+  const plain = [
+    n('marchCamera', 'cam', 40, 220, { ...CAM, camDist: 3.2, camElevation: 0.55 }),
+    scene('scene', 40, 520, 'Scene', [
+      n('torusSDF3D', 'torus', 480, 200, { majorR: 0.75, minorR: 0.28 }, { pos: ['sp', 'pos'] }),
+    ], ['torus', 'dist'], 'One torus. Change it, or add shapes, and the glow follows: the loop measures whatever the scene returns.'),
+    loop('marchLoopGroup', 'march', 380, 220, {
+      bg: [0, 0, 0],
+      ...note('Volumetric is on: the switch on this card built the glow. Turn it off and the nodes it added go away and the solid torus is back; turn it on again and they return.'),
+    }),
+    out(['march', 'color'], 1100),
+  ];
+  lesson('learn3dVolumeSwitch', volumetricOn(() => ids.shift()!, plain, 'march').nodes, [
+    ctl('x', 'vt_colour::exposure', 'Glow brightness', 0.1, 5, 0.01),
+    colourCtl('t', 'vt_colour::tint', 'Glow colour'),
+    ctl('a', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
+  ], `**What it shows.** A torus made of light: the ray walks right through it and collects a little glow at every step, brightest where it crosses the most of the shape. Nothing here was wired by hand. It started as an ordinary solid torus, and turning on **Volumetric** on the March Loop card built the rest.
+
+**How it is built.** Turning the switch on adds three nodes, each with a note. Inside the loop (double-click it): Group Inputs → **Scene Distance** (how far the ray's point is from the torus at this step) → **Volume Glow**, set to **+=** so every step adds to a running total. After the loop: its **Glow** output → **Glow to Color** → Output, in place of the loop's Color (which shows surfaces, and there are none in volumetric mode). Turning the switch off takes those nodes away again and puts the loop's Color back on the Output; a node you changed is kept, with a line on its note.
+
+**Try.** Turn **Volumetric** off and on again on the March Loop card and watch the nodes come and go. Move **Glow brightness** and **Glow colour**. Open the loop and raise Volume Glow's **Shell** to 0.1 to light only the torus's skin, like a soap bubble. Add a shape on the top level: it goes into the Scene Group, beside the torus, and glows too.`);
+}
 
 // ── Assembly ────────────────────────────────────────────────────────────────
 

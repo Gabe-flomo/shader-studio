@@ -18,7 +18,7 @@ describe('Learn 3D lessons', () => {
     const i = EXAMPLE_FOLDERS.findIndex(f => f.label === 'Learn 3D');
     expect(EXAMPLE_FOLDERS[i - 1].label).toBe('Learn');
     expect(EXAMPLE_FOLDERS[i].keys).toEqual(LEARN3D_EXAMPLE_KEYS);
-    expect(LEARN3D_EXAMPLE_KEYS.length).toBe(8);
+    expect(LEARN3D_EXAMPLE_KEYS.length).toBe(9);
     LEARN3D_EXAMPLE_KEYS.forEach((k, n) => {
       expect(EXAMPLE_INDEX[k].label.startsWith(`3D ${n + 1} · `), k).toBe(true);
       expect(EXAMPLE_GRAPHS[k].label, k).toBe(EXAMPLE_INDEX[k].label);
