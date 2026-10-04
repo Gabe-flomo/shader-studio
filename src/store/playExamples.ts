@@ -15,7 +15,7 @@ import { extractScriptParams } from '../components/play/layers/scriptExamples';
 import { encodeKeys } from '../lib/takePlayback';
 import { P5_EXAMPLE_SKETCHES } from './p5ExampleSketches';
 import { SKETCH_3D, SKETCH_3D_SHAPES, SKETCH_3D_TEXTURE, SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIREFLIES, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_INK, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE, SKETCH_HALATION, SKETCH_ORBIT } from './playSketches';
-import { GRADE_LOOKS, applyLook, newFinishEffect, type FinishEffect, type FinishKind, type PlayFinish } from '../types/playFinish';
+import { GRADE_LOOKS, applyLook, newCustomEffect, newFinishEffect, type FinishEffect, type FinishKind, type PlayFinish } from '../types/playFinish';
 import { newAudioFxEffect, type AudioFxEffect, type AudioFxKind, type PlayAudioFx } from '../types/playAudioFx';
 // An original picture made for the Background example (tools/ridges-at-dusk.mjs), inlined as a data URL.
 import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
@@ -29,6 +29,7 @@ import { DEFAULT_PAD_GRID, type PlayPadGrid } from '../types/playMidi';
 import type { PlayAudioEngine } from '../types/playAudioEngine';
 import type { ArrNote, PlayArrangement } from '../types/playArrangement';
 import { FN_EFFECTS } from '../play/kit/finish.js';
+import { effectFromGraph, type EffectGraph } from '../play/lookGraph';
 import { gpPreset } from '../play/kit/gpuParticles.js';
 import { MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type DrumPadLayer, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
 import type { DpSynth } from '../play/kit/drumPads.js';
@@ -356,6 +357,51 @@ function builtTake(): PlayTake {
 
 type Ex = { key: string; nodes: GraphNode[]; play: PlayRecord };
 const ex = (key: string, nodes: GraphNode[], p: PlayRecord): Ex => ({ key, nodes, play: p });
+
+// ── Look effects you build (play/lookGraph.ts, docs/finish-stack.md "Effects from nodes") ──
+
+/**
+ * The node-built effect of the lookBuilt example: a duotone blended back over the picture, then a
+ * vignette. Each node's `__comment` says what it does; the comments are carried into the code the
+ * graph compiles to, above that node's lines.
+ */
+const DUOTONE_GRAPH: EffectGraph = {
+  v: 1,
+  nodes: [
+    // Picture colour → how bright this point is (0 black … 1 white).
+    { id: 'luma', type: 'luminance', x: 250, y: 40, wires: { color: ['in', 'color'] }, params: { __comment: 'How bright the picture is here: 0 is black, 1 is white.' } },
+    // That brightness painted from deep violet (dark) to warm cream (bright): a duotone of the picture.
+    { id: 'tone', type: 'colorize', x: 500, y: 40, wires: { field: ['luma', 'result'] }, params: { color: [1, 0.8, 0.5], background: [0.12, 0.05, 0.35], gain: 1, __comment: 'Paints the brightness from deep violet (dark) to warm cream (bright): a duotone.' } },
+    // The duotone soft-lit over the original picture, so the picture's own colour still shows through. Opacity is mapped to the mouse.
+    { id: 'blend', type: 'blendModes', x: 750, y: 40, wires: { base: ['in', 'color'], blend: ['tone', 'color'] }, params: { mode: 'soft_light', opacity: 0.85, strength: 1, __comment: 'Soft-lights the duotone over the picture; Opacity is how much of it shows.' } },
+    // Darkens the corners; its UV is the 0..1 point on the picture (from Effect inputs → UV).
+    { id: 'vig', type: 'vignette', x: 1000, y: 40, wires: { color: ['blend', 'result'], uv: ['in', 'uv'] }, params: { radius: 0.75, softness: 0.55, strength: 0.7, __comment: 'Darkens the corners of the picture.' } },
+    // What the effect gives back to the stack.
+    { id: 'out', type: 'fx:out', x: 1250, y: 40, wires: { color: ['vig', 'result'] } },
+  ],
+};
+/** DUOTONE_GRAPH compiled into a Look effect (its code is what renders, in the app and in exports). */
+function graphFx(graph: EffectGraph, id: string, name: string): FinishEffect {
+  const r = effectFromGraph(graph, { id, name });
+  if (!r.effect) throw new Error(`example effect ${id}: ${r.error}`);
+  return r.effect;
+}
+/** The code-built effect of the lookBuilt example, every line explained. */
+const WOBBLE_CODE = `// Tape wobble: each band of rows slides sideways a little, like a worn videotape.
+// Settings: each uniform below is a slider on the card (min..max = start, then its label | hint).
+uniform float amount; // 0..0.05 = 0.012 Amount | How far a band slides, in picture widths
+uniform float rows;   // 4..200 = 60 step 1 Bands | How many bands slide on their own
+uniform float speed;  // 0..10 = 2.5 Speed | How fast the wobble moves
+uniform vec3 tint;    // color = #ffe6cc Tint | Multiplied over the result
+
+vec3 effect(vec2 uv, vec3 color) {
+  float band = floor(uv.y * rows);                       // which band this point is in
+  float slide = sin(band * 1.7 + time * speed) * amount; // each band its own slide, moving with the clock
+  vec3 moved = picture(uv + vec2(slide, 0.0));           // the picture read from that far sideways
+  float edge = smoothstep(0.0, 0.004, abs(slide));       // bands that barely move keep the colour so far
+  return mix(color, moved, 0.85 * edge) * tint;          // mostly the slid picture, tinted warm
+}
+`;
 
 // ── The examples, in learning order ──────────────────────────────────────────
 
@@ -2390,6 +2436,33 @@ Holding **M** turns Datamosh's **Mosh** on: nothing heals while it's held.
 • Click the picture first (the browser starts sound on a click), then press **Play** on the transport (Engine tab).
 • Double-click the Kick clip to open the piano roll and add or move kicks: each one is a ring.
 • Set Sound from to **Audio engine** (the master) and the pad joins in; or try the Launch preset on the node for a rocket's roar.`,
+  })),
+  // ─ Look effects you build: one from nodes, one from code ─
+  ex('lookBuilt', fbmGraph({ scale: 2.4, timeScale: 0.1, preset: '3' }), play({
+    layers: [layer('text', 'title', 'Title', { text: 'BUILT', y: 0.5, size: 0.2 })],
+    finish: {
+      on: true,
+      effects: [
+        graphFx(DUOTONE_GRAPH, 'duotone', 'Duotone (nodes)'),
+        newCustomEffect({ name: 'Tape wobble (code)', code: WOBBLE_CODE }, 'wobble'),
+      ],
+    },
+    controls: [
+      ctl('duo', 'finish:duotone::opacity', 'Duotone · Opacity', 0, 1),
+      ctl('wob', 'finish:wobble::amount', 'Tape wobble · Amount', 0, 0.05),
+    ],
+    mappings: [
+      map('duoMouse', 'duo', S.mouse('x'), 0, 1, { smoothMs: 100 }),
+      map('wobLfo', 'wob', S.lfo('sine', 0.15), 0.002, 0.03, { smoothMs: 60 }),
+    ],
+    notes: `**What it shows.** Two Look effects you make yourself: **Duotone (nodes)** is built from Studio nodes, **Tape wobble (code)** is written in GLSL. Both are ordinary effects in the stack: their settings are sliders and controls, they take a Where, and they render in exports.
+
+**How it's built.** **Duotone** is a node graph (open it with **Edit nodes…** on its card): Effect inputs → **Luminance** (how bright each point is) → **Colorize** (that brightness painted violet to cream) → **Blend Modes** (soft-lit over the original picture; its Base is the Picture colour) → **Vignette** (its UV wired from the inputs' 0..1 UV) → Effect output. Every node slider became one of the effect's settings; mouse X drives its Opacity. **Tape wobble** is code (Open editor… on its card): each band of rows reads the picture slid sideways by a sine that moves with time; an LFO swells the slide.
+
+**Try this.**
+• Move the mouse left and right: the duotone fades in and out.
+• Duotone → **Edit nodes…**, then **+ Add node → Posterize**: it goes in just before the output. Use **Update effect**.
+• Tape wobble → **Open editor…** and change \`1.7\` to \`7.0\`: smaller, busier bands. Or + Add effect → **Nodes** for any single node (Hue Rotate, Tone Map, CRT Mask…).`,
   })),
 ];
 

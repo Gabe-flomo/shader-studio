@@ -763,6 +763,13 @@ exports[`golden shaders: every Play example exports the same bundle > letterDrop
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > lookBuilt 1`] = `
+{
+  "bundle": "1d5d0c9ea360fe076b508596e965:8907",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > maskReveal 1`] = `
 {
   "bundle": "0897e3d17901090ec27b394797c7:5186",
@@ -6947,6 +6954,31 @@ exports[`golden shaders: every example compiles as it did > litStillLife 1`] = `
     "u_p_stillxlifex0xsgxtrx0_tz",
   ],
   "paramValues": "01e4314ed772dd0989239de57646:1453",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > lookBuilt 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "19300d5e746f2616d90fc0870d76:2733",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0c68c5443a4a0b135b8e38284428:99",
+  "paramBindings": "051f7f8a0a53d612adb42fd6a404:151",
+  "paramUniforms": [
+    "u_p_fbmx0_gain",
+    "u_p_fbmx0_lacunarity",
+    "u_p_fbmx0_scale",
+    "u_p_fbmx0_time_scale",
+  ],
+  "paramValues": "1ac8885c968775170addd017c1ee:104",
   "passes": null,
   "success": true,
   "textureUniforms": {},

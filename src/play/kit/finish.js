@@ -746,10 +746,11 @@ export function fnUsesMotion(finish) {
  *
  * Each `uniform float` (or `int`) becomes a slider and a control target; a
  * comment after it gives `min..max = default`, optionally `step s` and a label
- * (`// 2..16 = 6 step 1 Levels`). A `uniform vec3` is a colour
- * (`// color = #rrggbb`), kept as three numbers `<name>.r`, `.g`, `.b`.
+ * (`// 2..16 = 6 step 1 Levels`), and ` | text` after that its hint
+ * (`// 0..1 = 0.5 Amount | How much of the effect shows`). A `uniform vec3`
+ * is a colour (`// color = #rrggbb`), kept as three numbers `<name>.r`, `.g`, `.b`.
  */
-export const FN_CUSTOM_RESERVED = ['id', 'kind', 'enabled', 'name', 'code', 'defId', 'sealed', 'source', 'look', 'tone', 'curves', 'map', 'layerId', 'quality', 'where', 'whereLayer', 'whereInvert', 'uv', 'color', 'effect', 'picture', 'px', 'time', 'resolution', 'aspect', 'main'];
+export const FN_CUSTOM_RESERVED = ['id', 'kind', 'enabled', 'name', 'code', 'defId', 'sealed', 'source', 'graph', 'look', 'tone', 'curves', 'map', 'layerId', 'quality', 'where', 'whereLayer', 'whereInvert', 'uv', 'color', 'effect', 'picture', 'px', 'time', 'resolution', 'aspect', 'main'];
 const FN_CUSTOM_MAX_NUMBERS = 32;
 const FN_NUM = '[-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?';
 
@@ -789,17 +790,21 @@ export function fnParseCustom(code) {
     if (FN_CUSTOM_RESERVED.includes(name) || /^(fn|FN_|U_|u[A-Z])/.test(name)) { errors.push(`Line ${i + 1}: “${name}” is a name the Finish pass uses; call the setting something else.`); return ''; }
     if (names.has(name)) { errors.push(`Line ${i + 1}: “${name}” is declared twice.`); return ''; }
     names.add(name);
+    // ` | text` at the end of the comment is the setting's hint (its tooltip).
+    const bar = comment.indexOf(' | ');
+    const hint = bar >= 0 ? comment.slice(bar + 3).trim() : '';
+    const body = bar >= 0 ? comment.slice(0, bar) : comment;
     if (type === 'vec3') {
-      const hex = /#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/.exec(comment);
+      const hex = /#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/.exec(body);
       const rgb = hex ? fnHexRgb(hex[1]) : [1, 1, 1];
-      const label = comment.replace(/colou?r\s*=?\s*/i, '').replace(/#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/, '').trim() || fnPretty(name);
+      const label = body.replace(/colou?r\s*=?\s*/i, '').replace(/#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/, '').trim() || fnPretty(name);
       const keys = ['r', 'g', 'b'].map(c => `${name}.${c}`);
-      keys.forEach((k, j) => params.push(Object.assign(FN_P(k, `${label} ${'RGB'[j]}`, 0, 1, 0.01, rgb[j], '', true), { colour: name, type: 'colour' })));
-      colours.push({ name, label, keys });
+      keys.forEach((k, j) => params.push(Object.assign(FN_P(k, `${label} ${'RGB'[j]}`, 0, 1, 0.01, rgb[j], hint, true), { colour: name, type: 'colour' })));
+      colours.push(hint ? { name, label, keys, hint } : { name, label, keys });
       return '';
     }
     let min = 0, max = 1, value = NaN, step = NaN;
-    let rest = comment.trim();
+    let rest = body.trim();
     const range = new RegExp(`^(${FN_NUM})\\s*\\.\\.\\s*(${FN_NUM})`).exec(rest);
     if (range) { min = +range[1]; max = +range[2]; rest = rest.slice(range[0].length).trim(); }
     const def = new RegExp(`^=\\s*(${FN_NUM})`).exec(rest);
@@ -813,7 +818,7 @@ export function fnParseCustom(code) {
     const whole = type === 'int' || (!!range && !/\./.test(range[0]) && Number.isInteger(value) && max - min >= 2);
     if (!isFinite(step) || step <= 0) step = whole ? 1 : Math.max(1e-4, +((max - min) / 100).toPrecision(2));
     value = Math.max(min, Math.min(max, value));
-    params.push(Object.assign(FN_P(name, label || fnPretty(name), min, max, step, value, ''), { type }));
+    params.push(Object.assign(FN_P(name, label || fnPretty(name), min, max, step, value, hint), { type }));
     return '';
   });
   if (params.length > FN_CUSTOM_MAX_NUMBERS) errors.push(`At most ${FN_CUSTOM_MAX_NUMBERS} numbers (a colour is three).`);

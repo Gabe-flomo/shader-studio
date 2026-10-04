@@ -14,8 +14,12 @@ shape, the bright parts, or where the camera sees movement).
 - Record, parsing, control targets, Looks, custom effects' records:
   `src/types/playFinish.ts`.
 - Stack presets and Your effects (the device's lists): `src/play/finishLibrary.ts`.
+- Effects from nodes (node effects and the Look effect editor's graphs, compiled
+  to effect code): `src/play/lookGraph.ts`, their stored form
+  `src/play/lookGraphRecord.ts`.
 - UI: `src/components/play/finish/` (`FinishPanel`, `CurveEditor`,
-  `ColourWheel`, `CompareHandle`, `savedLooks`).
+  `ColourWheel`, `CompareHandle`, `savedLooks`, and the Look effect editor:
+  `EffectEditor`, `EffectGraphEditor`, `MiniGraph`, `effectGraphLayout`).
 - Tests: `src/play/__tests__/finish.test.ts`, `finishFollowups.test.ts`
   (the wipe, custom effects, presets, the library) and `finishMaps.test.ts`
   (Where, the maps, the new effects, particles born where a map says) and
@@ -23,7 +27,10 @@ shape, the bright parts, or where the camera sees movement).
   swatches, the passes a stage effect splits a stack into) and
   `finishTemporal.test.ts` (feedback, echo, datamosh and motion extract: their
   records, passes, grids, rings and maths) and `finishLookMotion.test.ts`
-  (pixel sort's motion, ASCII's typed characters, the rules' Look actions);
+  (pixel sort's motion, ASCII's typed characters, the rules' Look actions) and
+  `lookGraph.test.ts` (effects from nodes: which nodes qualify, the code they
+  compile to and how it lands in the pass, hints in uniform comments, the graph
+  through the record, Your effects and a website export);
   node packs carrying
   effects in `src/nodePacks/__tests__/nodePacks.test.ts`.
 
@@ -691,9 +698,10 @@ Stored in `localStorage` as a list, `shader-studio:finish-presets`
 
 ## Custom effects
 
-**+ Add effect → Your effects → New effect code…** adds a custom effect
-(`kind: 'custom'`) with a posterize to start from. Its card has an **Effect
-code** editor (the GLSL page's editor, with error marks):
+**+ Add effect → Your effects → New effect…** opens the Look effect editor
+("Effects from nodes" below); its **Code** tab starts from a posterize. The
+result is a custom effect (`kind: 'custom'`). Its card shows the first lines,
+**Open editor…** and **Code here** (the GLSL page's editor, with error marks):
 
 ```glsl
 uniform float levels; // 2..16 = 5 Levels
@@ -713,7 +721,8 @@ vec3 effect(vec2 uv, vec3 color) {
   above), `px` is one pixel in uv units, `time` the clock in
   seconds, `resolution` the size in pixels, `aspect` width over height.
 - Settings: each `uniform float name; // min..max = default` is a slider,
-  optionally with `step s` and a label after it; `uniform int` is a whole-number
+  optionally with `step s` and a label after it, and ` | hint` after that (the
+  setting's tooltip); `uniform int` is a whole-number
   slider; `uniform vec3 name; // color = #rrggbb` is a colour, kept as three
   numbers `name.r`, `name.g`, `name.b`. No range means 0..1. Every one is a
   control target (`finish:<effect>::levels`), mapped like any other. Changing the
@@ -759,22 +768,173 @@ paper all bleed like that glint instead of two hundred times more, and the
 rim stays thin and red-orange rather than a wide yellow halo. The tail
 (Reach) defaults to 0.25.
 
-### From a graph (next step)
+## Effects from nodes
 
-Not built yet: a **Picture** source node in the Studio (the finished frame as
-a texture sample at a uv; a test image in the Studio's own preview) and
-**Publish as Finish effect** for a graph whose output depends on it. The
-compiler's output is GLSL ES 1.00 (`gl_FragColor`, `varying vUv`,
-`u_resolution`, `u_time`, parameter uniforms), so publishing would: compile the
-graph; rename `main` to `effect(vec2 vUv, vec3 color)` and turn the
-`gl_FragColor = …` into a `return`; map `u_resolution`/`u_time` to
-`resolution`/`time` and `texture2D(u_picture, x)` to `vec4(picture(x), 1.0)`;
-and write each exposed parameter (or Play control) as a
-`uniform float name; // min..max = value` line, so it becomes the effect's
-slider. The result is an ordinary custom effect, so everything above (the
-pass, errors, Your effects, packs, exports) applies unchanged.
+A Look effect can be made of Studio nodes: one node from the Add menu, or a
+small graph built in the **Look effect editor**. Either way the graph is
+compiled by the Studio's own compiler and rewritten into effect code
+(`src/play/lookGraph.ts`), so the result **is** an ordinary custom effect:
+its `code` is what the pass, offline renders, takes, stills, exported
+websites, Stage and Present run, and everything in "Custom effects" above
+(errors, Your effects, packs, controls) applies. The graph is kept beside the
+code (`graph`) only so the editor can open it again.
 
-Multi-pass custom effects (their own blurs, feedback) come after that.
+### + Add effect → Nodes
+
+Every node definition (built-in or one you published) that takes a colour and
+gives a colour is listed under **Nodes** in the Add menu (the menu has a search
+field: "hue", "blur", "colour grading"…). Picking one adds a one-node effect:
+
+- the picture's colour (after the effects above it) goes into the node's
+  colour input: a vec3/vec4 input keyed `color`/`base`/`bottom`… or labelled
+  Colour / RGB Colour / Base / Colour in (`colourSockets`);
+- a vec2 input labelled "UV (0-1)" gets the picture's 0..1 point; any other UV
+  input is left unwired, so it reads the Studio's centred coordinates as it
+  does in a graph (0,0 in the middle, −1..1 up and down);
+- its colour output (keyed `color`/`result`, or labelled Colour/Result) is the
+  effect's colour;
+- every float setting that isn't wired becomes one of the effect's settings
+  with the node's range, step, value, label and hint (` | hint` in the
+  uniform's comment), and so a slider on the card and a control target
+  (`finish:<effectId>::<setting>`); a colour setting becomes a colour. Menus,
+  switches and whole-number settings that change the code (`compileTime`) are
+  baked in; change them in the editor.
+
+**Which nodes are left out, and why** (`effectNodeProblem`, decided from what
+each node declares; the same rules decide what the editor's node list offers):
+
+| Left out | Why |
+| --- | --- |
+| Inputs or outputs of type `scene3d`, `spacewarp3d` or `texture` | a Look pass has no 3D scene and no Pass node textures |
+| Categories 3D Scene / Lighting / Primitives / Transforms / Fractals | they work on a ray's hit, depth or normal (Volumetric Fog, Multi Light…) |
+| Particles, Passes | their own simulation, their own render targets |
+| `textureSlots` or `declarationsFor` | an image or an engine outside the shader |
+| Field sockets (Grid Pattern, Array Field) | they take a shape as a function |
+| Mouse, Audio/MIDI/Video/Texture input, Data, Play Layers, Pad Grid | they read inputs the Studio feeds; map a Look setting to the mouse, audio or MIDI instead |
+| Previous Frame, Echo | earlier frames: use Feedback or Echo in the stack |
+| Loop/Utility/Functions nodes, Constants, Print | they need the Studio graph around them |
+| Sealed user nodes | their code would be readable in the effect's code |
+| Retired (deprecated) nodes | |
+| Anything whose code still reads a Studio-only uniform after compiling | named in the error (the mouse, audio, a texture) |
+
+The Studio's blurs and glows (Gaussian Blur, Radial Blur, Tilt Shift, Motion
+Blur) read the frame drawn before (`texture2D(u_prevFrame, q)`) as "the
+picture around a point"; in a Look effect that becomes `fxPrev(q)`, which reads
+the picture itself (`picture(q)`), so they blur the picture as it came into
+the stack. Bloom, Lens Blur and Depth of Field pass the sampler on to a helper
+and are left out. Today 27 built-in nodes qualify (the vitest suite and a GPU
+compile sweep check them all).
+
+### The Look effect editor
+
+**+ Add effect → Your effects → New effect…**, or **Edit nodes…** / **Open
+editor…** on a custom effect's card (and in its ⋯ menu), opens a large dialog
+(`EffectEditor`) with two tabs:
+
+- **Nodes** (`EffectGraphEditor`): a small node canvas. **Effect inputs**
+  (Picture colour, UV 0–1, Centred UV, Time) on the left, **Effect output**
+  (Colour) on the right, any nodes from **+ Add node** (searchable, by
+  category) between, and **Picture at** (the picture read at another point:
+  `picture(uv)`; unwired, this point). Drag from an output dot to an input dot
+  to wire; press a wired input to pick its wire up; drag a card by its title;
+  drag the background or scroll to pan, ctrl/⌘-scroll or − / + to zoom, the
+  frame button fits it all. A node that takes and gives a colour, added from
+  + Add node, goes into the chain just before the output; removing a node
+  joins the chain back up. Each node shows its settings as on its Studio card
+  (sliders, menus, switches, colours) and its comment (`__comment`), which
+  also goes into the code above its lines. **The code it makes** shows the
+  compiled code.
+- **Code**: the GLSL editor with the effect code template and error marks,
+  and the settings as sliders beside the preview. **Start from the nodes'
+  code** copies the graph's code here (from then on it is code).
+
+It is the Studio's node set on an editor of its own: the Studio's graph editor
+works on the one graph in its store (`useNodeGraphStore`, read in more than a hundred places
+across the canvas and its cards), so it can't host a second, separate graph inside
+the Play page.
+
+**Live.** While the dialog is open, the effect it makes is in the stack (at
+its place, or at the end for a new one) without undo steps, so the page's
+preview and the dialog's own (a copy of the finished picture,
+`playOverlay.acquirePicture`) show it exactly as it will be, Where included.
+**Before** turns it off for a look at the picture without it. **Use as effect**
+/ **Update effect** makes one undo step; **Cancel** (or Esc) puts the stack
+back as it was. **Save to Your effects** keeps it (the graph too) for every
+Play.
+
+**The card.** A graph effect's card shows the graph drawn small (`MiniGraph`,
+click to edit) and its settings; a code effect's card shows its first lines,
+**Open editor…**, and **Code here** (the inline editor). Typing code on the
+card (or in the Code tab) makes the effect plain code: the graph is dropped
+(`withCustomCode` without a graph), since the two would no longer agree.
+
+### How a graph compiles (`compileEffectGraph`)
+
+1. The graph becomes Studio `GraphNode`s: Effect output is an `output` node (a
+   `vec4Output` when a vec4 is wired in; unwired, the picture passes through),
+   Picture at a `customFn` with the body `picture(uv)`, and the inputs node is
+   not a node at all: each wire from it is a pre-resolved output
+   (`seedOutputs`: `fxColor`, `vUv`, `g_uv`, `u_time`, promoted to the socket's
+   type as any wire is).
+2. `topologicalSort` + `generateFragmentShader` compile it as the Studio would.
+3. The fragment shader is rewritten: precision, varyings and uniform
+   declarations go; `PI`/`TAU` become constants; unused helpers are pruned;
+   `main()` becomes `vec3 effect(vec2 vUv, vec3 fxColor)` with `gl_FragColor`
+   a local `fxOut` and `return fxOut.rgb`; `u_time` → `time`, `u_resolution` →
+   `resolution`; `texture2D(u_prevFrame, q)` → `fxPrev(q)`.
+4. Each live node setting (`paramUniforms` / `paramBindings`) that the code
+   reads becomes a `uniform` line named after the param (`angle`, `levels`),
+   or the node's type and the param when that name is taken, a GLSL word or a
+   name the pass uses (`colorize_color`, `grain_amount`; a setting is never
+   named like any word already in the code, since the pass `#define`s it). With
+   more than one node, labels name the node too ("Gain · Colorize"). A vec3
+   that isn't a colour (a position) is baked as a constant.
+5. Anything a Look pass can't give that is still read (`u_mouse`, audio, MIDI,
+   a texture) is an error naming it. At most 32 numbers, 60,000 characters.
+
+The effect's settings start at the nodes' values. Opening it again writes the
+stack's current values back into the nodes (`graphWithEffectValues`), and
+**Update effect** recompiles; settings that are still there keep their
+controls and mappings (same names).
+
+### Record
+
+```jsonc
+{ "id": "duotone", "kind": "custom", "name": "Duotone (nodes)", "code": "…compiled…",
+  "gain": 1, "opacity": 0.85, …,
+  "graph": { "v": 1, "nodes": [
+    { "id": "luma", "type": "luminance", "x": 250, "y": 40, "params": { "__comment": "…" }, "wires": { "color": ["in", "color"] } },
+    …,
+    { "id": "out", "type": "fx:out", "x": 1250, "y": 40, "wires": { "color": ["vig", "result"] } } ] } }
+```
+
+`parseEffectGraph` (`src/play/lookGraphRecord.ts`) checks it: at most 64 nodes,
+unique ids, one `fx:out`, plain JSON params, wires only to nodes that are there
+(`in` is the inputs node, never stored). A node effect also has `node: <type>`.
+Your effects keep `graph` the same way (`SavedEffect.graph`), so it travels in
+library ZIPs, `.playfile` libraries, profiles and the workspace folder's
+`presets/finish effects/<Name>.effect.json`. A sealed node pack drops the graph
+with the code sealed. `graph` is a reserved name for a setting.
+
+### Limits
+
+- One pass: an effect sees one point at a time plus `picture(…)` reads of the
+  picture as it came in. Multi-pass graphs (their own blurs of the stack so
+  far, feedback) aren't supported; a Pass node isn't offered.
+- No Studio inputs inside an effect (mouse, audio, MIDI, textures): map the
+  effect's settings to them instead, which is what Play mappings are for.
+- Groups, loops and code nodes (Custom Function, Expression) aren't in the
+  editor's list; write code in the Code tab instead.
+- The code signature stays `vec3 effect(vec2 uv, vec3 color)` with `time` a
+  global, as for every custom effect saved before.
+
+### Example
+
+**Look: effects from nodes and code** (`lookBuilt`, Play examples → Build your
+own Look): a Duotone built from four nodes (Luminance → Colorize → Blend Modes
+→ Vignette, each with a comment saying what it does) and a Tape wobble written
+in GLSL with every line commented; mouse X fades the duotone, an LFO swells the
+wobble.
 
 ## Controls and mappings
 

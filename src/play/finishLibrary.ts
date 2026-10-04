@@ -5,7 +5,8 @@
  *   Stack presets   a whole stack (its effects, their order and every
  *                   setting, curves and looks included), loaded as Replace
  *                   stack or Add to stack
- *   Your effects    custom effects (effect code), listed under
+ *   Your effects    custom effects (effect code, and the node graph it was
+ *                   built from when it was), listed under
  *                   "+ Add effect → Your effects"
  *
  * Both are lists in localStorage (like the palette presets), so they travel
@@ -18,6 +19,7 @@ import {
   FINISH_CUSTOM_MAX_CODE, finishEffectId, finishHostLabel, isSealedBlob, parseFinish, type FinishEffect, type PlayFinish,
 } from '../types/playFinish';
 import type { SealedBlob } from '../types/userNode';
+import { parseEffectGraph, type EffectGraph } from './lookGraphRecord';
 
 export const FINISH_PRESETS_KEY = 'shader-studio:finish-presets';
 export const FINISH_EFFECTS_KEY = 'shader-studio:finish-effects';
@@ -43,6 +45,8 @@ export interface SavedEffect {
   description?: string;
   /** The node pack it came with. */
   pack?: string;
+  /** Built from nodes: the graph `code` was compiled from (play/lookGraph.ts), for the node editor. */
+  graph?: EffectGraph;
 }
 
 /** Where the lists are kept: localStorage in the app, a map in tests. */
@@ -121,12 +125,14 @@ export function parseSavedEffect(raw: unknown): SavedEffect | null {
   const sealed = isSealedBlob(r.sealed) ? r.sealed : undefined;
   const code = typeof r.code === 'string' ? r.code.slice(0, FINISH_CUSTOM_MAX_CODE) : '';
   if (typeof r.id !== 'string' || !r.id || (!sealed && !code.trim())) return null;
+  const graph = sealed ? null : parseEffectGraph(r.graph);
   return {
     id: r.id.slice(0, 80), name: (typeof r.name === 'string' && r.name.trim() ? r.name.trim() : 'Custom effect').slice(0, 60),
     savedAt: typeof r.savedAt === 'number' ? r.savedAt : 0, code: sealed ? '' : code,
     ...(sealed ? { sealed } : {}),
     ...(typeof r.description === 'string' && r.description.trim() ? { description: r.description.trim().slice(0, 200) } : {}),
     ...(typeof r.pack === 'string' && r.pack ? { pack: r.pack.slice(0, 80) } : {}),
+    ...(graph ? { graph } : {}),
   };
 }
 
@@ -139,11 +145,11 @@ export function loadSavedEffects(kv: ListKV = localList): SavedEffect[] {
  * (a sealed one is never overwritten with code); otherwise one with the same
  * name is replaced, or a new one made.
  */
-export function saveEffect(e: { name: string; code: string; description?: string; id?: string }, kv: ListKV = localList): { result: FileResult; saved: SavedEffect | null } {
+export function saveEffect(e: { name: string; code: string; description?: string; id?: string; graph?: EffectGraph }, kv: ListKV = localList): { result: FileResult; saved: SavedEffect | null } {
   const list = loadSavedEffects(kv);
   const same = e.id ? list.find(x => x.id === e.id) : list.find(x => x.name === e.name.trim() && !x.sealed);
   if (same?.sealed) return { result: { ok: false, error: 'A sealed effect can’t be changed.' }, saved: null };
-  const saved = parseSavedEffect({ id: same?.id ?? newId('fx'), name: e.name, code: e.code, description: e.description ?? same?.description, savedAt: Date.now() });
+  const saved = parseSavedEffect({ id: same?.id ?? newId('fx'), name: e.name, code: e.code, description: e.description ?? same?.description, savedAt: Date.now(), ...(e.graph ? { graph: e.graph } : {}) });
   if (!saved) return { result: { ok: false, error: 'The effect has no code.' }, saved: null };
   const next = same ? list.map(x => (x.id === same.id ? saved : x)) : [...list, saved];
   return { result: writeList(kv, FINISH_EFFECTS_KEY, next), saved };
