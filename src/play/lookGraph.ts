@@ -85,6 +85,7 @@ const NO_NODE_TYPES: Record<string, string> = {
   mouse: 'it reads the mouse (map a Look setting to the mouse instead)',
   textureInput: 'it reads an image the Studio loads',
   videoInput: 'it reads a video the Studio plays',
+  baked: 'it plays a baked video the Studio keeps',
   audioInput: 'it listens to audio in the Studio (map a Look setting to an audio reader instead)',
   midiInput: 'it reads MIDI in the Studio (map a Look setting to MIDI instead)',
   data: 'it reads a dataset',

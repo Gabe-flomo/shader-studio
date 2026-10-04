@@ -17,7 +17,7 @@ import { PerfBadge, PerfPanel } from './PerfPanel';
  * current context (opens graph stats), zoom, fit, auto layout, minimap, clear.
  */
 export function CanvasToolbar({
-  nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, showMinimap, onToggleMinimap, showOutline, onToggleOutline, onClear, onClearMinimal, compact = false, readOnly = false, onOptimize,
+  nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, showMinimap, onToggleMinimap, showOutline, onToggleOutline, onClear, onClearMinimal, compact = false, readOnly = false, onOptimize, onBake,
 }: {
   nodes: readonly GraphNode[];
   topLevel: boolean;
@@ -41,6 +41,8 @@ export function CanvasToolbar({
   readOnly?: boolean;
   /** Open the optimise-graph dialog (runs of math cards → blocks). */
   onOptimize?: () => void;
+  /** Bake the picture (docs/bake.md): render the whole graph once to a video and play that instead. */
+  onBake?: () => void;
 }) {
   const tk = useTokens();
   const selected = useNodeGraphStore(s => s.selectedNodeIds.length);
@@ -125,6 +127,9 @@ export function CanvasToolbar({
       )}
       {onToggleOutline && (
         <IconButton icon="layoutGraph" label={showOutline ? 'Hide the outline' : 'Outline: list every node, jump to one, or step through the graph'} size="sm" active={!!showOutline} onClick={onToggleOutline} />
+      )}
+      {!readOnly && onBake && topLevel && (
+        <IconButton icon="record" label="Bake the picture: render it once to a video and play that instead (much lighter to run; Unbake brings it back)" size="sm" onClick={onBake} />
       )}
       {!readOnly && onOptimize && (
         <IconButton icon="spark" label="Optimise graph: fold runs of math cards into Expression Blocks, sliders kept, picture unchanged" size="sm" onClick={onOptimize} />

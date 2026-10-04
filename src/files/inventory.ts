@@ -15,6 +15,7 @@
 import { isLibraryKey, PRESENTATION_FOLDER_SCOPE, PRESENTATION_KEY_PREFIX, type KV } from '../utils/library';
 import { GRAPH_LINK_FIELD, normalizeLinks, PRESENTATION_LINK_FIELD } from '../present/links';
 import { describeSetting, groupSettings, settingLabel } from './appSettings';
+import { countBakedRefs } from '../lib/videoUsage';
 
 export type SectionId = 'graphs' | 'presentations' | 'glsl' | 'functions' | 'presets' | 'nodes' | 'scripts' | 'backgrounds' | 'settings';
 
@@ -568,7 +569,14 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
         const usedBy: UsedBy[] = [];
         const [one, many] = ext.refField === 'sampleId' ? ['A drum pad', 'drum pads'] : ['A Video layer', 'Video layers'];
         const layers = (c: number) => `${c === 1 ? one : `${c} ${many}`}`;
-        for (const g of graphs) { const c = g.raw.split(needle).length - 1; if (c) usedBy.push({ id: g.id, label: g.name, where: `${layers(c)} in its Play setup`, breaks: true }); }
+        for (const g of graphs) {
+          const c = g.raw.split(needle).length - 1;
+          if (!c) continue;
+          // Baked nodes (docs/bake.md) play a kept video too; they're named as such.
+          const b = ext.refField === 'videoId' ? countBakedRefs(g.raw, it.id) : 0;
+          const parts = [...(c - b ? [`${layers(c - b)} in its Play setup`] : []), ...(b ? [`${b === 1 ? 'A Baked node' : `${b} Baked nodes`} in the graph`] : [])];
+          usedBy.push({ id: g.id, label: g.name, where: parts.join(' and '), breaks: true });
+        }
         for (const p of presentations) { const c = p.raw.split(needle).length - 1; if (c) usedBy.push({ id: p.node.id, label: p.name, where: `${layers(c)} in a Play in it`, breaks: true }); }
         n.usedBy = usedBy;
         if (!usedBy.length) n.unused = 'No saved Play setup or presentation uses it';

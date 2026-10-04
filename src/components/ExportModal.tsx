@@ -23,6 +23,7 @@ import { PREVIEW_ASPECTS } from '../utils/graphImportPlan';
 import { playOverlay, type TransparentPicture } from '../play/overlay';
 import { playBackground, planGraphs, planShowsThis } from '../play/background';
 import { playVideoLayers } from '../play/videoLayers';
+import { bakedVideos } from '../lib/bakedVideos';
 import type { BqPlan } from '../play/kit/queue.js';
 import { midiEngine } from '../lib/midiEngine';
 import { formatDuration } from '../lib/midiFile';
@@ -527,6 +528,8 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
           if (abortRef.current) throw new Error('cancelled');
           frameActs = applier?.apply(t) ?? [];
           frameQueue = playOverlay.exportQueuePlan(t, firstFrame, frameActs, applier?.seed);
+          // Baked nodes: their videos on this frame before the shader reads them (docs/bake.md).
+          await bakedVideos.seek(t);
           // A Background layer: the sources showing at t (the shader only while this graph is one).
           // Play's image, video or colour background: no shader to render, the video seeks to the frame.
           if (frameQueue) { await queueFrame(offlineRender, frameQueue, t, queueScratch); if (planShowsThis(frameQueue)) renderAtTime(t, { dt: 1 / fps, first: firstRender }); }
@@ -614,6 +617,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
         const t = span.from + i / fps;
         const actions = applier?.apply(t) ?? [];
         const queue = playOverlay.exportQueuePlan(t, i === 0, actions, applier?.seed);
+        await bakedVideos.seek(t);
         if (queue) { await queueFrame(offlineRender, queue, t, queueScratch); if (planShowsThis(queue)) { renderAtTime(t, { dt: 1 / fps, first: i === 0 }); readPixels(pixels, w, h); } }
         else if (playBackground.active()) await playBackground.seek(t);
         else { renderAtTime(t, { dt: 1 / fps, first: i === 0 }); readPixels(pixels, w, h); }
@@ -712,6 +716,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
       const t = useNodeGraphStore.getState().currentTime;
       const pixels = new Uint8Array(w * h * 4);
       const queue = playOverlay.exportQueuePlan(t, true, []);
+      await bakedVideos.seek(t);
       if (queue) { await queueFrame(offlineRender, queue, t, new Uint8Array(w * h * 4)); if (planShowsThis(queue)) { renderAtTime(t); readPixels(pixels, w, h); } }
       else if (!playBackground.active()) { renderAtTime(t); readPixels(pixels, w, h); }
       playOverlay.compositePixels(pixels, w, h, t, 1 / 60, true, { transparent: true, picture });

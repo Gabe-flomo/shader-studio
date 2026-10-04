@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, State};
 
 mod audio_engine;
+mod bake;
 mod data_fetch;
 mod midi;
 mod playfile;
@@ -29,7 +30,8 @@ struct FfmpegState(Mutex<Option<FfmpegSession>>);
 // ── Tauri commands ────────────────────────────────────────────────────────────
 
 /// Start an FFmpeg encoding session.
-/// `codec` is one of: "h264", "prores", "prores4444" (keeps alpha), "ffv1"
+/// `codec` is one of: "h264", "prores", "prores4444" (keeps alpha), "ffv1",
+/// or "bake" (H.264 that seeks fast, for a Baked node: see bake.rs)
 /// `audio_wav`, when given, is the recording's sound as a WAV file's bytes: it's
 /// muxed in as the audio track (AAC in .mp4, PCM in .mov, FLAC in .mkv).
 /// Returns an error string if FFmpeg can't be found or the session is already active.
@@ -53,7 +55,9 @@ fn start_ffmpeg_encode(
     let ffmpeg_path = ffmpeg_sidecar::paths::ffmpeg_path();
 
     // Build codec-specific output args
+    let bake_args = bake::bake_codec_args(fps);
     let codec_args: Vec<&str> = match codec.as_str() {
+        "bake" => bake_args.iter().map(|s| s.as_str()).collect(),
         "prores" => vec![
             "-c:v", "prores_ks",
             "-profile:v", "3",         // ProRes 422 HQ
@@ -381,6 +385,9 @@ pub fn run() {
             audio_engine::safety::ae_plugin_retry,
             audio_engine::safety::ae_plugin_safety,
             mux_recording_audio,
+            bake::bake_temp_path,
+            bake::bake_take_file,
+            bake::bake_discard_file,
             open_url,
             data_fetch::fetch_url,
             data_fetch::kaggle_account,

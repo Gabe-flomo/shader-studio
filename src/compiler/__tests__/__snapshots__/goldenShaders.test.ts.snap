@@ -1496,6 +1496,49 @@ exports[`golden shaders: every example compiles as it did > audioEffects 1`] = `
 }
 `;
 
+exports[`golden shaders: every example compiles as it did > bakeHeavyScene 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "10a0d058ce74a807500a2117c36a:10978",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "15210d024049621ac0b13ea16a0e:498",
+  "paramBindings": "047b88924787b202b74eebb8eb36:1108",
+  "paramUniforms": [
+    "u_p_grainx0_amount",
+    "u_p_grainx0_scale",
+    "u_p_grainx0_seed",
+    "u_p_huerotatex0_angle",
+    "u_p_marchcamerx2_camAngle",
+    "u_p_marchcamerx2_camDist",
+    "u_p_marchcamerx2_fov",
+    "u_p_marchcamerx2_rotSpeed",
+    "u_p_marchloopgx4_albedo",
+    "u_p_marchloopgx4_bg",
+    "u_p_marchloopgx4_maxDist",
+    "u_p_marchloopgx4_stepScale",
+    "u_p_mulx0_b",
+    "u_p_vignettex0_radius",
+    "u_p_vignettex0_softness",
+    "u_p_vignettex0_strength",
+    "u_p_warpedxgyroidx3xsgxdomainwarpx0_gain",
+    "u_p_warpedxgyroidx3xsgxdomainwarpx0_lacunarity",
+    "u_p_warpedxgyroidx3xsgxdomainwarpx0_scale",
+    "u_p_warpedxgyroidx3xsgxdomainwarpx0_strength",
+    "u_p_warpedxgyroidx3xsgxgyroidfielx0_frequency",
+    "u_p_warpedxgyroidx3xsgxgyroidfielx0_thickness",
+  ],
+  "paramValues": "095696d1129ba00c9a90c2bf4da7:814",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
 exports[`golden shaders: every example compiles as it did > beatGrid 1`] = `
 {
   "audioUniforms": {
