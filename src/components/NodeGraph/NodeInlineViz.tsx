@@ -6,6 +6,7 @@ import { useCtp } from '../../theme/nodePalette';
 import { useThemeMode } from '../../theme/themeStore';
 import { pal, setVizPalette, MONO, vizContainer, setupViz, imageSize, blitImage, type Viz } from './vizKit';
 import { GenericViz, GENERIC_VIZ_TYPES } from './vizGeneric';
+import { passThumbRegistry } from '../../lib/passRunner';
 
 // ─── Shared container ─────────────────────────────────────────────────────────
 
@@ -1690,6 +1691,7 @@ const TYPE_COLORS: Record<DataType, string> = {
   mat3:        '#e8a020',
   scene3d:     '#cc88aa',
   spacewarp3d: '#aa88cc',
+  texture:     '#ff5c5c',
 };
 
 export function SubgraphMiniViz({ node }: { node: GraphNode }) {
@@ -3683,6 +3685,26 @@ function MouseBadgeViz(_props: { node: GraphNode }) {
   );
 }
 
+// ─── Pass thumbnail (lib/passRunner.ts draws it every few frames) ───────────
+
+function PassThumbViz({ node }: { node: GraphNode }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = ref.current;
+    if (!c) return;
+    passThumbRegistry.register(node.id, c);
+    return () => passThumbRegistry.unregister(node.id);
+  }, [node.id]);
+  const scale = String(node.params.scale ?? '1');
+  const scaleText = scale === '0.5' ? '½' : scale === '0.25' ? '¼' : scale === '0.125' ? '⅛' : '1';
+  return (
+    <div style={{ ...vizContainer(), padding: 4 }}>
+      <canvas ref={ref} width={128} height={72} style={{ display: 'block', maxWidth: '100%', maxHeight: 120, margin: '0 auto', background: '#000', borderRadius: 3 }} />
+      <div style={{ fontSize: '9px', color: pal.overlay0, fontFamily: MONO, marginTop: 3 }}>texture · scale {scaleText} · {node.params.format === 'byte' ? '8-bit' : 'half float'}</div>
+    </div>
+  );
+}
+
 // ─── Texture Badge Viz (prevFrame, textureInput) ──────────────────────────────
 
 function TextureBadgeViz({ node }: { node: GraphNode }) {
@@ -5069,6 +5091,7 @@ function NodeInlineVizSwitch({ node }: { node: GraphNode }) {
     case 'mouse':            return <MouseBadgeViz           node={node} />;
     case 'prevFrame':
     case 'textureInput':     return <TextureBadgeViz         node={node} />;
+    case 'pass':             return <PassThumbViz            node={node} />;
     case 'vec2Const':        return <Vec2ConstViz            node={node} />;
     case 'matConst':         return <MatrixGridViz           node={node} />;
 

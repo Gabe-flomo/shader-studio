@@ -18,6 +18,7 @@ import {
   PLOT_DB_MAX, PLOT_DB_MIN, READER_RANGE_DB, SPEC_TICKS, bandDb, formatHz, gainForTopDb, hzToUnit, placeLabels, readerBand, readerTopDb, unitToHz,
 } from '../../play/audioReaders';
 import { audioReaderBank } from '../../lib/audioReaderBank';
+import { useOnScreen } from '../../hooks/useOnScreen';
 
 const DARK = THEMES.dark;
 /** Minor gridlines between the labelled ticks. */
@@ -102,12 +103,13 @@ export function SpectrumView(props: SpectrumViewProps) {
     return () => ro.disconnect();
   }, [height]);
 
-  // Draw every frame while showing.
+  // Draw every frame while showing (not while scrolled out of view).
+  const onScreen = useOnScreen(wrap);
   useEffect(() => {
     let raf = 0;
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
-      draw(now);
+      if (onScreen.current) draw(now);
     };
     const draw = (now: number) => {
       const cv = canvas.current, s = st.current;

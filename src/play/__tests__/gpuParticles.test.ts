@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  GP_DEFAULTS, GP_SUBSTEP, gpBindings, gpEmit, gpEmitterState, gpHueRotate, gpInWindow, gpParams, gpPlace, gpSubsteps, gpTierSide, gpUnitBrightness,
+  GP_DEFAULTS, GP_SUBSTEP, GP_TIERS, gpBindings, gpEmit, gpEmitterState, gpHueRotate, gpInWindow, gpParams, gpPlace, gpScatter, gpSubsteps, gpTierSide, gpUnitBrightness,
 } from '../kit/gpuParticles.js';
 import { compileGraph } from '../../compiler/graphCompiler';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
@@ -92,6 +92,44 @@ describe('emission ring', () => {
     expect(gpInWindow(1, 8, 4, 10)).toBe(true);
     expect(gpInWindow(2, 8, 4, 10)).toBe(false);
     expect(gpInWindow(0, 0, 0, 10)).toBe(false);
+  });
+});
+
+describe('image homes (gpScatter)', () => {
+  it('is one to one over every pool size', () => {
+    for (const side of Object.values(GP_TIERS)) {
+      const bits = Math.log2(side * side), n = side * side;
+      const seen = new Uint8Array(n);
+      let outside = 0;
+      for (let i = 0; i < n; i++) {
+        const c = gpScatter(i, bits);
+        if (c >= n) outside++; else seen[c]++;
+      }
+      expect(outside).toBe(0);
+      // Every cell taken exactly once: Reform still rebuilds the whole picture.
+      expect(seen.every(v => v === 1)).toBe(true);
+    }
+  });
+
+  it('scatters a run of births over the picture instead of a band of rows', () => {
+    const side = 512, bits = 18;
+    const cell = (i: number) => { const c = gpScatter(i, bits); return [c % side, Math.floor(c / side)]; };
+    // A frame's births: a run of consecutive indices (the old mapping put 1000 of them in two rows).
+    const rows = new Set<number>(), cols = new Set<number>();
+    let sum = 0;
+    for (let i = 70000; i < 71000; i++) {
+      const [x, y] = cell(i); rows.add(y); cols.add(x);
+      const [x2, y2] = cell(i + 1);
+      sum += Math.hypot(x2 - x, y2 - y);
+    }
+    expect(rows.size).toBeGreaterThan(400);
+    expect(cols.size).toBeGreaterThan(400);
+    // Neighbours in the ring land far apart (a random pair is ~0.52 of the side apart on average).
+    expect(sum / 1000 / side).toBeGreaterThan(0.35);
+    // And the run covers the picture: every eighth of it, across and down, gets some.
+    const bands = new Set<number>();
+    for (let i = 70000; i < 71000; i++) { const [x, y] = cell(i); bands.add(Math.floor(y / 64) * 8 + Math.floor(x / 64)); }
+    expect(bands.size).toBe(64);
   });
 });
 

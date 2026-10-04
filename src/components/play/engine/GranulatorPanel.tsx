@@ -33,6 +33,8 @@ import { playId } from '../../../play/playControls';
 import { addGrainNulls, addGrainReadouts } from '../../../play/grainControls';
 import { usePlayUi } from '../playUi';
 import { withEngine } from './engineOps';
+import { clientSize } from '../../../lib/elementSize';
+import { useOnScreen } from '../../../hooks/useOnScreen';
 
 type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
 
@@ -334,13 +336,17 @@ function GrainWave({ rack, mode, sub, area, side, position, spray, band, bandWid
     return c;
     // fftSize: a new window is a new analysis.
   }, [spectral, ui, rack.id, tk.accent.base, fftSize]);
+  // Scrolled out of the device chain (or the page): no drawing until it shows again.
+  const shown = useOnScreen(ref);
   useEffect(() => {
     let raf = 0, lastCount = -1;
     const draw = () => {
       raf = requestAnimationFrame(draw);
       const c = ref.current;
-      if (!c) return;
-      const dpr = Math.min(2, window.devicePixelRatio || 1), w = c.clientWidth, h = c.clientHeight;
+      if (!c || !shown.current) return;
+      // The size as of the last layout (no forced layout each frame).
+      const cs = clientSize(c);
+      const dpr = Math.min(2, window.devicePixelRatio || 1), w = cs.w, h = cs.h;
       if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
       const g = c.getContext('2d');
       if (!g) return;

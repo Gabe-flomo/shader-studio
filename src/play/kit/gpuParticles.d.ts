@@ -74,6 +74,8 @@ export function gpSubsteps(dt: number, max?: number): { n: number; h: number };
 export function gpMaxSubsteps(n: number): number;
 export function gpEmitterState(): GpEmitterState;
 export function gpEmit(st: GpEmitterState, mode: string, n: number, life: number, lifeVar: number, h: number): { start: number; count: number };
+/** Particle i's cell on the picture (Image emitter): a one-to-one scramble of 0…2^bits − 1. */
+export function gpScatter(i: number, bits: number): number;
 export function gpInWindow(i: number, start: number, count: number, n: number): boolean;
 export function gpHueRotate(rgb: readonly number[], turns: number): GpRgb;
 export function gpPlace(p: GpParams, time: number, mouse: readonly number[] | null, aspect: number): GpPlacement;
@@ -94,6 +96,9 @@ export interface GpEngine {
   dispose(): void;
   readonly precision: 'float' | 'half';
 }
+/** The blend function and equation, clear colour and colour mask of `gl`, kept by wrapping its setters (no GPU round trips to read them). */
+export interface GpStateShadow { bsrc: number; bdst: number; basrc: number; badst: number; beq: number; beqa: number; clear: number[]; mask: boolean[] }
+export function gpStateShadow(gl: unknown): GpStateShadow;
 export function gpCreate(gl: WebGLRenderingContext | WebGL2RenderingContext | null | undefined): GpEngine | null;
 
 export interface GpHostFrame {

@@ -58,6 +58,9 @@ const TYPE_ABBREV: Record<string, string> = {
   fieldCell: 'fcell', arrayField: 'arr',
   gridUV: 'guvt', pixelate: 'pxl', dotMask: 'dot', sdfMask: 'sdmk',
   lumaRadius: 'lrad', rgbToCMYK: 'cmyk', cmykHalftone: 'cmykht',
+  // Passes (render to texture)
+  pass: 'pass', passOutput: 'pout', sampleTexture: 'smp', edgesTexture: 'edges', blurTexture: 'tblur',
+  glowTexture: 'tglow', displaceTexture: 'tdisp',
   // Misc
   expr: 'expr', customFn: 'cfn', scope: 'scope',
   sineLFO: 'lfo', squareLFO: 'slfo', sawtoothLFO: 'sawlfo',

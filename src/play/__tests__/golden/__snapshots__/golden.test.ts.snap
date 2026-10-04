@@ -934,6 +934,15 @@ exports[`golden outputs: examples > particleGlow 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > passEdgeGlow 1`] = `
+{
+  "gain": "- x120",
+  "radius": "- x120",
+  "strength": "- x120",
+  "width": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > pianoRollScale 1`] = `
 {
   "decay": "- x120",

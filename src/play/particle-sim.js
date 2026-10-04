@@ -1018,8 +1018,9 @@ function rgbOf(st, i, p, env, zones) {
  * v (the summed bumps) and rgb (colour × bump, summed; divide by v for the
  * blend of the colours there).
  */
-export function gooField(st, p, env, gw, gh, cell) {
-  const v = new Float32Array(gw * gh), rgb = new Float32Array(gw * gh * 3);
+export function gooField(st, p, env, gw, gh, cell, reuse = false) {
+  const b = reuse ? gooBuffers(st, gw * gh) : null;
+  const v = b ? b.v : new Float32Array(gw * gh), rgb = b ? b.rgb : new Float32Array(gw * gh * 3);
   const W = env.W, H = env.H, base = p.size * (env.dpr || 1), blend = Math.max(1, p.gooBlend ?? 2.5), zones = env.zones || [];
   for (let i = 0; i < st.count; i++) {
     if (!st.alive[i]) continue;
@@ -1029,6 +1030,15 @@ export function gooField(st, p, env, gw, gh, cell) {
     gooSplat(v, rgb, gw, gh, cell, st.x[i] * W, (1 - st.y[i]) * H, r * blend, w, rgbOf(st, i, p, env, zones));
   }
   return { v, rgb };
+}
+
+// The field's arrays per particle state, kept between frames (cleared, not made again: up to ~2.5 MB a frame).
+const gooBufs = new WeakMap();
+function gooBuffers(owner, n) {
+  let b = gooBufs.get(owner);
+  if (!b || b.v.length !== n) { b = { v: new Float32Array(n), rgb: new Float32Array(n * 3) }; gooBufs.set(owner, b); }
+  else { b.v.fill(0); b.rgb.fill(0); }
+  return b;
 }
 
 /**
@@ -1061,7 +1071,7 @@ function drawGoo(ctx, st, p, env) {
   const W = env.W, H = env.H, alpha = env.alpha == null ? 1 : env.alpha;
   const cell = gooCell(W, H, Math.max(1, p.size * (env.dpr || 1) * Math.max(1, p.gooBlend ?? 2.5)), st.alive ? st.alive.reduce((n, a) => n + (a ? 1 : 0), 0) : Infinity);
   const gw = Math.max(1, Math.ceil(W / cell)), gh = Math.max(1, Math.ceil(H / cell));
-  const { v, rgb } = gooField(st, p, env, gw, gh, cell);
+  const { v, rgb } = gooField(st, p, env, gw, gh, cell, true);
   gooBlit(ctx, st, v, rgb, gw, gh, cell, p.gooThreshold ?? 0.5, p.gooSoft ?? 0.2, alpha);
 }
 
@@ -1082,22 +1092,25 @@ export function gooBlit(ctx, holder, v, rgb, gw, gh, cell, t, soft, alpha) {
   // not blocky).
   const tt = Math.min(0.99, Math.max(0.01, t)), ss = Math.min(1, Math.max(0, soft));
   const window = (tt + (1 - tt) * ss) - tt * (1 - ss);
-  for (let k = 0, n = gw * gh; k < n; k++) {
-    const f = v[k], o = k * 4;
-    let a = 0;
-    if (f > 0 || ss < 1) {
-      const x = k % gw, y = (k - x) / gw;
-      const gx = (x + 1 < gw ? v[k + 1] : f) - (x > 0 ? v[k - 1] : f);
-      const gy = (y + 1 < gh ? v[k + gw] : f) - (y > 0 ? v[k - gw] : f);
-      const slope = Math.hypot(gx, gy) * 0.5;
-      if (slope > window) {
-        const u = Math.min(1, Math.max(0, (f - tt) / slope + 0.5));
-        a = u * u * (3 - 2 * u);
-      } else if (f > 0) a = gooAlpha(f, tt, ss);
+  // Row by row (no division per cell); the same cells in the same order.
+  for (let y = 0, k = 0; y < gh; y++) {
+    for (let x = 0; x < gw; x++, k++) {
+      const f = v[k], o = k * 4;
+      let a = 0;
+      if (f > 0 || ss < 1) {
+        const gx = (x + 1 < gw ? v[k + 1] : f) - (x > 0 ? v[k - 1] : f);
+        const gy = (y + 1 < gh ? v[k + gw] : f) - (y > 0 ? v[k - gw] : f);
+        // Flat (most of an empty field): slope 0, never past the window. Math.hypot is slow; skip it there.
+        const slope = gx === 0 && gy === 0 ? 0 : Math.hypot(gx, gy) * 0.5;
+        if (slope > window) {
+          const u = Math.min(1, Math.max(0, (f - tt) / slope + 0.5));
+          a = u * u * (3 - 2 * u);
+        } else if (f > 0) a = gooAlpha(f, tt, ss);
+      }
+      if (a <= 0) { d[o + 3] = 0; continue; }
+      const inv = 255 / Math.max(f, 1e-6);
+      d[o] = rgb[k * 3] * inv; d[o + 1] = rgb[k * 3 + 1] * inv; d[o + 2] = rgb[k * 3 + 2] * inv; d[o + 3] = a * 255;
     }
-    if (a <= 0) { d[o + 3] = 0; continue; }
-    const inv = 255 / Math.max(f, 1e-6);
-    d[o] = rgb[k * 3] * inv; d[o + 1] = rgb[k * 3 + 1] * inv; d[o + 2] = rgb[k * 3 + 2] * inv; d[o + 3] = a * 255;
   }
   st.goo.getContext('2d').putImageData(img, 0, 0);
   ctx.save();

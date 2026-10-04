@@ -60,4 +60,4 @@ export function drawParticles(ctx: CanvasRenderingContext2D, st: ParticleState, 
 export function gooAlpha(v: number, threshold: number, soft: number): number;
 export function gooKernel(d: number, R: number): number;
 export function gooCell(W: number, H: number, reach: number): number;
-export function gooField(st: ParticleState, p: ParticleParams, env: ParticleEnv & { W: number; H: number }, gw: number, gh: number, cell: number): { v: Float32Array; rgb: Float32Array };
+export function gooField(st: ParticleState, p: ParticleParams, env: ParticleEnv & { W: number; H: number }, gw: number, gh: number, cell: number, reuse?: boolean): { v: Float32Array; rgb: Float32Array };

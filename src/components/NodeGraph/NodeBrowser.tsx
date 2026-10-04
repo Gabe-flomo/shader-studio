@@ -27,12 +27,14 @@ const HIDDEN_NODES = new Set([
   'rotatingLinesLoop', 'accumulateLoop', 'flowField', 'circlePack',
   'raymarch3d', 'volumeClouds', 'rayMarch', 'loopCarry', 'loop',
   'grid',
+  // Made by the compiler at the end of a Pass's program (compiler/passGraph.ts).
+  'passOutput',
 ]);
 
 const CATEGORY_SECTIONS: Array<{ label: string; categories: string[] }> = [
   { label: 'Shapes',       categories: ['2D Primitives', 'SDF', '2D Space', '3D Primitives', '3D Boolean Ops', '3D Transforms', 'Combiners'] },
   { label: '3D',           categories: ['3D Scene', '3D Lighting', '3D Fractals', 'Loops'] },
-  { label: 'Color & Post', categories: ['Color', 'Color Grading', 'Post Processing', 'Effects'] },
+  { label: 'Color & Post', categories: ['Color', 'Color Grading', 'Post Processing', 'Effects', 'Passes'] },
   { label: 'Generators',   categories: ['Noise', 'Halftone', 'Fractals', 'Science', 'Particles', 'Particles & Fields', 'Grid', 'Field'] },
   { label: 'Math & Logic', categories: ['Sources', 'Animation', 'Math', 'Matrix', 'Shapers', 'Conditionals'] },
   { label: 'Functions',    categories: ['My Nodes', 'Functions'] },

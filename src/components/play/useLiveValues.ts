@@ -11,9 +11,7 @@ import { playEngine, type ControlValue } from '../../lib/playEngine';
 export function useLiveValues(play: PlayRecord): Map<string, ControlValue> {
   const [values, setValues] = useState<Map<string, ControlValue>>(() => new Map());
   const shownRef = useRef(values);
-  // The record's own sources drive controls too (routes): their live values show the same way.
-  const anyMapped = play.mappings.some(m => m.enabled) || !!play.pairMappings?.some(m => m.enabled)
-    || !!play.sources?.some(s => s.enabled && s.outputs.some(o => o.routes.some(r => r.enabled)));
+  const anyMapped = anyLiveMapped(play);
   useEffect(() => {
     if (!anyMapped) return;
     let raf = 0;
@@ -45,6 +43,12 @@ export function useLiveValues(play: PlayRecord): Map<string, ControlValue> {
     return () => cancelAnimationFrame(raf);
   }, [anyMapped, play.controls]);
   return anyMapped ? values : EMPTY_VALUES;
+}
+
+/** Whether anything drives controls (a live value can differ from the slider). The record's own sources drive controls too (routes). */
+export function anyLiveMapped(play: PlayRecord): boolean {
+  return play.mappings.some(m => m.enabled) || !!play.pairMappings?.some(m => m.enabled)
+    || !!play.sources?.some(s => s.enabled && s.outputs.some(o => o.routes.some(r => r.enabled)));
 }
 
 const EMPTY_VALUES: Map<string, ControlValue> = new Map();

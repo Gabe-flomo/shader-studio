@@ -36,6 +36,8 @@ import { emitTimeTick } from '../lib/timeTick';
 import { outputTap } from '../lib/outputTap';
 import { GpuTimer } from '../lib/gpuTimer';
 import { OfflineHistory } from '../lib/offlineHistory';
+import { PassRunner, PassTargets } from '../lib/passRunner';
+import type { PassProgram } from '../compiler/types';
 import { recordFrame, recordGpuPass, recordGpuCompile, setGpuTimerSupport, registerShaderCostMeasurer } from '../lib/perfStats';
 import { viewportSnapshot } from '../lib/viewport';
 import { onRebuild } from '../lib/rebuild';
@@ -315,6 +317,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
   // Installed by the boot effect: compiles (vs, fs) off to the side and swaps it in. Resolves false if superseded.
   const swapShaderRef = useRef<((vs: string, fs: string) => Promise<boolean>) | null>(null);
+  // Pass nodes (render to texture): installed by the boot effect; null passes = none (lib/passRunner.ts).
+  const setPassesRef = useRef<((passes: PassProgram[] | null, vs: string) => void) | null>(null);
   /** The Data nodes' textures (src/data/dataTextures.ts): bound per compile, refilled when a dataset changes. */
   const dataTexRef = useRef<DataTextureBinder | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -601,6 +605,41 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       return true;
     };
 
+    // ── Pass nodes (render to texture: docs/pass-node-plan.md) ──────────────
+    // Only a compile with `passes` makes a runner; for every other graph it stays
+    // null and the frame below takes exactly the path it always has.
+    let passRunner: PassRunner | null = null;
+    let passTargets: PassTargets | null = null;        // the live preview's textures
+    let offlinePassTargets: PassTargets | null = null; // renderAtTime's own (never the preview's Previous buffers)
+    setPassesRef.current = (passes, vsSrc) => {
+      if (!passes || passes.length === 0) {
+        if (!passRunner) return;
+        passRunner.dispose(); passRunner = null;
+        passTargets?.dispose(); passTargets = null;
+        offlinePassTargets?.dispose(); offlinePassTargets = null;
+        requestRender();
+        return;
+      }
+      // Pass programs may declare uniforms the final program doesn't: register them on the shared table.
+      const st = useNodeGraphStore.getState();
+      const u = material.uniforms;
+      for (const [name, value] of Object.entries(st.paramUniforms)) { if (u[name]) u[name].value = value; else u[name] = { value }; }
+      for (const name of Object.keys(st.textureUniforms)) if (!u[name]) u[name] = { value: st.nodeTextures[st.textureUniforms[name]] ?? null };
+      for (const name of Object.keys(st.videoUniforms)) if (!u[name]) u[name] = { value: null };
+      for (const name of [...Object.keys(st.audioUniforms), ...Object.keys(st.liveUniforms)]) if (!u[name]) u[name] = { value: 0 };
+      if (!passRunner) {
+        passRunner = new PassRunner({
+          renderer, geometry, camera,
+          uniforms: () => material.uniforms,
+          onReady: () => requestRender(),
+          onLinkFailed: src => { const errors = flushGlErrors(); if (errors.length > 0) useNodeGraphStore.getState().setGlslErrors(errors, src); },
+        });
+        passTargets = new PassTargets(renderer, supportsHalfFloat);
+      }
+      passRunner.update(passes, vsSrc || FALLBACK_VERTEX);
+      requestRender();
+    };
+
     // ── Node cost measurer (Performance panel, see lib/nodeCost.ts) ─────────
     // Compiles a shader variant off to the side, draws it a few times into an
     // offscreen target and returns the median GPU ms per draw. Without timer
@@ -753,6 +792,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         dispose: r => r.dispose(),
         draw: (t, into, prev, echoes) => {
           material.uniforms.u_time.value = t;
+          if (passRunner && offlinePassTargets) passRunner.run(offlinePassTargets, exportW, exportH);
           if (material.uniforms.u_prevFrame) material.uniforms.u_prevFrame.value = prev ? prev.texture : null;
           for (let i = 0; i < 6; i++) { const u = material.uniforms[`u_echo${i}`]; if (u) u.value = echoes[i]?.texture ?? null; }
           renderer.setRenderTarget(into);
@@ -813,14 +853,21 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           const keep = ['u_time', 'u_prevFrame', ...Array.from({ length: 6 }, (_, i) => `u_echo${i}`)].map(k => [k, u[k]?.value] as const);
           const feedback = isStatefulRef.current && !!u.u_prevFrame;
           const echo = echoRef.current;
+          // Pass nodes: textures of the render's own; a Pass's Previous steps like feedback does.
+          const passFeedback = !!passRunner?.hasPrevious;
+          if (passRunner) {
+            offlinePassTargets ??= new PassTargets(renderer, supportsHalfFloat);
+            if (!opts || !!opts.first || !offlineStarted) offlinePassTargets.clearPrevious();
+          }
           let picture: THREE.WebGLRenderTarget;
-          if (feedback || echo) {
+          if (feedback || echo || passFeedback) {
             // A still (no options) stands alone: its history is warmed up from scratch.
             const first = !opts || !!opts.first || !offlineStarted;
-            picture = history.frame(time, { dt: opts?.dt ?? 1 / 60, first, feedback, echo });
+            picture = history.frame(time, { dt: opts?.dt ?? 1 / 60, first, feedback: feedback || passFeedback, echo });
             offlineStarted = !!opts;
           } else {
             u.u_time.value = time;
+            if (passRunner && offlinePassTargets) passRunner.run(offlinePassTargets, exportW, exportH);
             renderer.setRenderTarget(exportRT);
             renderer.render(scene, camera);
             picture = exportRT!;
@@ -1260,7 +1307,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         usesTimeRef.current || hasTimeNodeRef.current || gpuParticlesActive() ||
         audioAmps.size > 0 || liveValues.size > 0 || videoActive || isStatefulRef.current || echoRef.current !== null ||
         scopeIdsRef.current.size > 0 || previewNodeIdRef.current !== null
-        || midiEngine.hasFile()
+        || midiEngine.hasFile() || (passRunner !== null && passRunner.hasPrevious)
       );
       // A Background layer on the Play page: its queue decides, and the graph runs only while
       // "this graph" shows. Else Play's image, video or colour: the graph doesn't run at all.
@@ -1305,6 +1352,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           gpuTimer.begin('particles');
           drawGpuParticles(material, { width: pw, height: ph, dt: playing ? dt : 0, time: elapsed, mouse: particleMouse(pw, ph) });
           gpuTimer.end();
+        }
+        // Pass nodes: their programs draw into their textures first (lib/passRunner.ts).
+        if (passRunner && passTargets) {
+          passRunner.run(passTargets, renderer.domElement.width || 1, renderer.domElement.height || 1, gpuTimer);
+          if (frameCount % 10 === 0 || !dynamic) passRunner.drawThumbnails(passTargets);
         }
         if (isStatefulRef.current) {
           // Ping-pong: render to write RT, blit to screen with dithering
@@ -1909,6 +1961,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       costMesh.material = next;
       materialRef.current = next;
       reset.unshift('the shader program');
+      // Pass programs and their textures, made again against the new uniforms.
+      if (passRunner) {
+        passTargets?.dispose(); offlinePassTargets?.dispose(); offlinePassTargets = null;
+        passRunner.recompileAll();
+        reset.push('pass textures');
+      }
       return reset;
     };
     const resetGpu = (): Promise<string[]> => {
@@ -1951,6 +2009,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       lastRafTime = null;
       material.uniforms.u_time.value = 0;
       resetGpuParticles();
+      passTargets?.clearPrevious();
       requestRender();
     };
     window.addEventListener('reset-time', handleResetTime);
@@ -2025,6 +2084,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       statsRT.dispose();
       costRt?.dispose();
       registerShaderCostMeasurer(null);
+      passRunner?.dispose(); passTargets?.dispose(); offlinePassTargets?.dispose();
+      setPassesRef.current = null;
       stopQuality();
       renderer.dispose();
       container.removeChild(renderer.domElement);
@@ -2188,6 +2249,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       }
     });
   }, [vertexShader, activeFragmentShader]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pass nodes: the compile's pass programs (null for every graph without a Pass node, which
+  // leaves the preview exactly as it was). Raw GLSL replaces the graph, passes and all.
+  const passes = useNodeGraphStore((state) => state.passes);
+  useEffect(() => {
+    setPassesRef.current?.(rawGlslShader ? null : passes, vertexShader);
+  }, [passes, rawGlslShader, vertexShader]);
 
   // Bind sampler2D texture uniforms — runs when textureUniforms or nodeTextures change.
   useEffect(() => {

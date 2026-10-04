@@ -55,6 +55,7 @@ const TYPE_COLOR: Record<DataType, string> = {
   mat3:        '#f5c842',
   scene3d:     '#cc88aa',
   spacewarp3d: '#aa88cc',
+  texture:     '#ff5c5c',
 };
 
 // ─── Styles ───────────────────────────────────────────────────────────────────

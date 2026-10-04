@@ -11,6 +11,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Color:           ctp.peach,
   Noise:           ctp.sapphire,
   Effects:         ctp.red,
+  Passes:          ctp.maroon,
   Loops:           ctp.sky,
   '2D Primitives': ctp.yellow,
   SDF:             ctp.pink,
@@ -24,4 +25,4 @@ export const CATEGORY_COLORS: Record<string, string> = {
 };
 
 // ── Types to hide from node listings (internal / special) ─────────────────────
-export const HIDDEN_TYPES = new Set(['group', 'forwardCamera', 'marchPos', 'marchDist', 'marchOutput', 'scenePos', 'sceneOutput', 'spaceWarpGroup']);
+export const HIDDEN_TYPES = new Set(['group', 'forwardCamera', 'marchPos', 'marchDist', 'marchOutput', 'scenePos', 'sceneOutput', 'spaceWarpGroup', 'passOutput']);
