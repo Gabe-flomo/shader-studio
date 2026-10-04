@@ -268,6 +268,9 @@ export interface PlayReaction {
   value?: number;
   /** A Look action: how long, in seconds (mosh, fxpulse). */
   seconds?: number;
+  /** A Splash at a point (`key` 'point'): where, 0..1 (y up). */
+  x?: number;
+  y?: number;
   /** once (when it turns on), held (while it is on), every (every N while on), release (when it turns off)… */
   fire?: FireSpec;
 }
@@ -860,9 +863,11 @@ export type BuiltinActionKind = 'burst' | 'scatter' | 'reset' | 'freeze' | 'next
  *   moshreset  Datamosh: Reset once (the picture snaps back), ending an action's Mosh
  *   fxpulse    any effect: its `key` at `value` for `seconds`, then back
  *   fxset      any effect: its `key` at `value` until the clock goes back
+ *   splash     Water: a drop `value` picture heights across, at its source (`key` 'source'), under the
+ *              pointer ('pointer'), somewhere random ('random') or at `x`, `y` ('point')
  */
-export type LookActionKind = 'mosh' | 'moshreset' | 'fxpulse' | 'fxset';
-export const LOOK_ACTION_KINDS: readonly LookActionKind[] = ['mosh', 'moshreset', 'fxpulse', 'fxset'];
+export type LookActionKind = 'mosh' | 'moshreset' | 'fxpulse' | 'fxset' | 'splash';
+export const LOOK_ACTION_KINDS: readonly LookActionKind[] = ['mosh', 'moshreset', 'fxpulse', 'fxset', 'splash'];
 export function isLookAction(kind: string): kind is LookActionKind { return (LOOK_ACTION_KINDS as readonly string[]).includes(kind); }
 /** A built-in action, a Look action, or a button a Script layer declares (`script:<key>`). */
 export type ActionKind = BuiltinActionKind | LookActionKind | 'signal' | 'notes' | `script:${string}`;
@@ -914,10 +919,12 @@ export interface PlayAction {
   signal?: string;
   /** Play notes (a rule's reaction): what and how. */
   notes?: NotesSpec;
-  /** A Look action's setting, value and seconds (see PlayReaction). */
+  /** A Look action's setting, value and seconds, and a Splash's point (see PlayReaction). */
   key?: string;
   value?: number;
   seconds?: number;
+  x?: number;
+  y?: number;
 }
 
 // ── Sources and routes (implementation guide, phase 1: play/kit/routes.js) ─
@@ -1316,10 +1323,12 @@ export interface TakeEvent {
   vel?: number;
   /** A drum pad hit: the pad (1-based) whose sound it played, after the sample index. Absent: its own. */
   slot?: number;
-  /** A Look action's setting, value and seconds. */
+  /** A Look action's setting, value and seconds, and a Splash's point. */
   key?: string;
   value?: number;
   seconds?: number;
+  x?: number;
+  y?: number;
 }
 
 /**
@@ -1689,12 +1698,14 @@ function parseAction(raw: unknown): PlayAction | null {
   return { id, trigger, do: kind, layerId, amount: Math.max(0, num(a.amount, kind === 'burst' ? 60 : 1)), enabled: a.enabled !== false };
 }
 
-/** A Look action's setting, value and seconds, each when it is there and sensible. */
-function parseLookFields(a: Record<string, unknown>): { key?: string; value?: number; seconds?: number } {
-  const out: { key?: string; value?: number; seconds?: number } = {};
+/** A Look action's setting, value and seconds, and a Splash's point, each when it is there and sensible. */
+function parseLookFields(a: Record<string, unknown>): { key?: string; value?: number; seconds?: number; x?: number; y?: number } {
+  const out: { key?: string; value?: number; seconds?: number; x?: number; y?: number } = {};
   if (typeof a.key === 'string' && a.key) out.key = a.key.slice(0, 80);
   if (typeof a.value === 'number' && Number.isFinite(a.value)) out.value = a.value;
   if (typeof a.seconds === 'number' && Number.isFinite(a.seconds)) out.seconds = Math.max(0, Math.min(600, a.seconds));
+  if (typeof a.x === 'number' && Number.isFinite(a.x)) out.x = Math.max(0, Math.min(1, a.x));
+  if (typeof a.y === 'number' && Number.isFinite(a.y)) out.y = Math.max(0, Math.min(1, a.y));
   return out;
 }
 

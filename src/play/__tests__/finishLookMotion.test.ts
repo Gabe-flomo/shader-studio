@@ -183,7 +183,7 @@ describe('Look actions in the kit', () => {
     expect(fnLookAct(st, { do: 'burst', layerId: 'p' }, 0)).toBe(false);
     expect(fnLookAct(st, { do: 'fxpulse', layerId: 'finish:g', key: 'amount' }, 0)).toBe(true);
     expect(st.entries.size).toBe(0);
-    expect([...FN_LOOK_ACTIONS]).toEqual(['mosh', 'moshreset', 'fxpulse', 'fxset']);
+    expect([...FN_LOOK_ACTIONS]).toEqual(['mosh', 'moshreset', 'fxpulse', 'fxset', 'splash']);
   });
 
   it('plays the same way twice from the same clock (a render)', () => {

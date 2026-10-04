@@ -43,9 +43,10 @@ import { finishPropId, renderableFinish } from '../types/playFinish';
 import { clientSize } from '../lib/elementSize';
 
 /** `vel` and `at`: a drum pad hit's velocity (0 lets a gate pad go) and the clock time it landed (takes stamp it there). */
-type KitAction = { do: ActionKind; layerId: string; amount: number; vel?: number; at?: number; key?: string; value?: number; seconds?: number };
-/** A Look action's own fields (its setting, value and seconds), when it has them. */
-const lookFields = (a: { key?: string; value?: number; seconds?: number }) => ({ ...(a.key !== undefined ? { key: a.key } : {}), ...(a.value !== undefined ? { value: a.value } : {}), ...(a.seconds !== undefined ? { seconds: a.seconds } : {}) });
+type KitAction = { do: ActionKind; layerId: string; amount: number; vel?: number; at?: number; key?: string; value?: number; seconds?: number; x?: number; y?: number };
+/** A Look action's own fields (its setting, value and seconds, a Splash's point), when it has them. */
+const lookFields = (a: { key?: string; value?: number; seconds?: number; x?: number; y?: number }) => ({ ...(a.key !== undefined ? { key: a.key } : {}), ...(a.value !== undefined ? { value: a.value } : {}), ...(a.seconds !== undefined ? { seconds: a.seconds } : {}),
+  ...(a.x !== undefined ? { x: a.x } : {}), ...(a.y !== undefined ? { y: a.y } : {}) });
 /** An audio layer's sound from a take: a frame, null (the input was off), or undefined (not recorded: the live sound). */
 export type TakeAudioSource = (l: PlayLayer) => KitAudio | null | undefined;
 
@@ -784,6 +785,8 @@ class PlayOverlay {
     const finished = finishing && !!this.live?.draw({
       finish: this.finish!, value: this.finishValue, picture: gl, layers: canvas,
       layerAlpha: id => this.kit.layerCanvas(id), motion: this.kit.motionMap(), width: Math.round(W * fs), height: Math.round(H * fs), time,
+      // Water's source: the pointer (a take's while it plays back) or a layer where the kit last drew it.
+      pointer: env.pointer, layerPoint: id => this.kit.layerPoint(id),
     });
     this.showFinish(finished);
     // Copied here, in the same animation frame the picture was drawn: the GL canvas keeps no
@@ -892,11 +895,14 @@ class PlayOverlay {
     if (first) fnLookReset(this.exportLooks);
     fnLookStep(this.exportLooks, time);
     for (const a of opts.actions ?? []) if (isLookAction(a.do)) fnLookAct(this.exportLooks, a, time);
+    // Water's pointer source in a render is the take's pointer (none without a take: the live pointer stays out of it).
+    this.exportPointer = opts.pointer ?? null;
     this.layPixels(rgba, width, height, time, dt, first, opts);
     this.finishPixels(rgba, width, height, time, first);
   }
   /** An offline render's Look actions (its take's, frame by frame): the live ones stay out of it. */
   private exportLooks = fnLookNew();
+  private exportPointer: KitPointer | null = null;
   private exportFinishValue = (e: FnEffect, key: string) => {
     const id = finishPropId(e.id);
     return fnLookValue(this.exportLooks, id, key) ?? playEngine.layerValueNoLooks(id, key, (e as Record<string, unknown>)[key] as number);
@@ -915,6 +921,8 @@ class PlayOverlay {
     this.exportFinish.draw({
       finish: this.finish!, value: this.exportFinishValue, picture: { data: rgba, width, height }, pixels: true,
       layerAlpha: id => this.exportKit?.layerCanvas(id) ?? null, motion: this.exportKit?.motionMap() ?? null, width, height, time, first,
+      // Water's source: the take's pointer at this frame, or a layer where the render's own kit drew it.
+      pointer: this.exportPointer, layerPoint: id => this.exportKit?.layerPoint(id) ?? null,
     });
   }
 

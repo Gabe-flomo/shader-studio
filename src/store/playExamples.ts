@@ -19,6 +19,8 @@ import { GRADE_LOOKS, applyLook, newFinishEffect, type FinishEffect, type Finish
 import { newAudioFxEffect, type AudioFxEffect, type AudioFxKind, type PlayAudioFx } from '../types/playAudioFx';
 // An original picture made for the Background example (tools/ridges-at-dusk.mjs), inlined as a data URL.
 import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
+// An original picture of a pool's floor for the Water example (tools/pool-floor.mjs): straight tile lines show the water bending the light.
+import POOL_FLOOR from './playAssets/pool-floor.jpg?inline';
 import {
   defaultLayer, handAnchor, type ActionKind, type AudioReader, type PlayAudioReaders, type FireSpec, type HandGesture, type HandRead, type HandSide, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
   type PlayLayer, type PlayLayerKind, type PlayMapping, type PlayRecord, type PlaySource, type PlayTake, type TakeTrack, type SensorRead, type TriggerMode, type TriggerSpec,
@@ -2109,6 +2111,53 @@ Holding **M** turns Datamosh's **Mosh** on: nothing heals while it's held.
 • Delay: longer catches slower movement and draws thicker outlines.
 • Presets: **Classic grey** (the mid-grey version of the trick), **On black**.
 • Put it over a Camera or a Video layer: only you (or what moves in the video) shows.`,
+  })),
+  // ─ Finish: Water, a simulated surface: a layer drags a wake, rain falls, clicks splash ─
+  ex('finishWater', quietGraph(), play({
+    display: { picture: true, backdrop: [0, 0, 0], source: 'image', image: { name: 'Pool floor.jpg', src: POOL_FLOOR } },
+    layers: [
+      layer('null', 'boat', 'Boat', { x: 0.3, y: 0.5, size: 8, color: '#ffb86b' }),
+    ],
+    finish: {
+      on: true,
+      effects: [
+        fx('water', { source: 'layer', sourceLayer: 'boat', shape: 'point', speed: 0.22, damping: 0.14, size: 0.04, strength: 1.2, refraction: 0.6, highlights: 0.5, rain: 3, drop: 0.01 }),
+        fx('chroma', { amount: 0.6, where: 'waves' }),
+      ],
+    },
+    controls: [
+      ctl('bx', 'layer:boat::x', 'Boat · x', 0, 1),
+      ctl('by', 'layer:boat::y', 'Boat · y', 0, 1),
+      ctl('speed', 'finish:water::speed', 'Water · Wave speed', 0.05, 2),
+      ctl('damp', 'finish:water::damping', 'Water · Damping', 0, 1),
+      ctl('rain', 'finish:water::rain', 'Water · Rain', 0, 60, 0.5),
+      ctl('bend', 'finish:water::refraction', 'Water · Refraction', 0, 1),
+      ctl('shine', 'finish:water::highlights', 'Water · Highlights', 0, 1),
+    ],
+    mappings: [
+      map('sailX', 'bx', S.lfo('sine', 0.11), 0.12, 0.88),
+      map('sailY', 'by', S.lfo('sine', 0.17, 0.25), 0.22, 0.78),
+    ],
+    signals: [
+      { id: 'splashClick', name: 'Splash where you click', inputs: [{ kind: 'trigger', trigger: T.click() }], do: [{ id: 'sc', do: 'splash', layerId: 'finish:water', amount: 1, enabled: true, key: 'pointer', value: 0.05 }] },
+      { id: 'bigSplash', name: 'Big splash (Space)', inputs: [{ kind: 'trigger', trigger: T.key('Space') }], do: [{ id: 'bs', do: 'splash', layerId: 'finish:water', amount: 1, enabled: true, key: 'random', value: 0.12 }] },
+    ],
+    notes: `**What it shows.** **Water**, a Look effect that simulates a water surface over the picture. An invisible boat sails round the pool and drags a wake behind it, a V of waves that spreads, crosses the others and fades; a light rain dimples the surface; click to splash. The tile lines bend under the waves and their crests catch the light.
+
+**How it's built.**
+• The picture: Background → Image holds a pool's floor (the graph underneath is paused). Straight lines and small detail show the water's bending best.
+• **Boat** (a Null layer): just a point; its marker shows only while you edit. Two slow LFOs swing its x and y (the **Boat · x / y** controls), so it sails a looping path faster than the waves travel, which is what makes a wake rather than rings. A null rather than a shape, because the Finish stack bends everything under it, layers too: a drawn boat would wobble in its own wake.
+• Finish → **Water**: Source **A layer: Boat**, Shape **Point**. Every frame it presses a small dimple into the water where the boat is; as the boat moves, the water it leaves springs back and the waves run off at **Wave speed**. **Rain** drops 3 raindrops a second at random places (the same places in every render). Open edges lets the waves run out of the frame.
+• Finish → **Chromatic aberration** with **Where → Where the water moves**: colour fringes only on the waves, none on still water.
+• Rules: **Splash where you click** (a click on the picture → Splash under the pointer) and **Big splash (Space)** (Space → a bigger Splash somewhere random). Both are a rule's Do → **Splash · Water**.
+• Controls: **Wave speed** (how fast the waves travel), **Damping** (how long they last), **Rain** (drops a second), **Refraction** (how much the waves bend the picture) and **Highlights** (glints and the bright bands crests focus).
+
+**Try this.**
+• On the Water card, set Source to **The pointer** and drag across the picture: a fast flick leaves a sharp V, a slow one only ripples. Give it **Bob** and hold still to make rings.
+• Water's presets: **Rain on glass**, **Ripple tank** (two bobbing points that interfere), **Shockwave** (then press Space).
+• Set the Boat null to **Follow: Mouse**: the wake trails a springy point that chases your pointer.
+• Add a Shape layer, hide it, and pick Shape → **A layer's shape** with it on the Water card: the whole shape pushes the water as it moves.
+• Render it: the waves are simulated by the clock, so every render comes out the same.`,
   })),
   ex('drumPads', glowGraph({ radius: 0.1, falloff: 16, tint: [1, 0.5, 0.3] }), play({
     layers: [

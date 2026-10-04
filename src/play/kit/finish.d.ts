@@ -1,10 +1,10 @@
 /** The Finish stack (see finish.js). */
 export interface FnParam { key: string; label: string; min: number; max: number; step: number; value: number; hint: string; hidden: boolean }
 export type FnKind = 'grade' | 'lens' | 'chroma' | 'vignette' | 'crt' | 'bloom' | 'halation' | 'grain' | 'flicker' | 'shake' | 'time'
-  | 'glitch' | 'ripple' | 'displace' | 'mosaic' | 'mirror' | 'gradmap' | 'posterize' | 'edges' | 'feedback' | 'echo'
+  | 'glitch' | 'ripple' | 'water' | 'displace' | 'mosaic' | 'mirror' | 'gradmap' | 'posterize' | 'edges' | 'feedback' | 'echo'
   | 'pixelsort' | 'halftone' | 'ascii' | 'leaks' | 'datamosh' | 'motionx';
-/** A starting point for an effect: it only sets numbers. */
-export interface FnPreset { name: string; values: Readonly<Record<string, number>> }
+/** A starting point for an effect: it sets numbers, and (`set`) a choice or two (Water's Source and Shape). */
+export interface FnPreset { name: string; values: Readonly<Record<string, number>>; set?: Readonly<Record<string, string>> }
 /** A colour kept as three hidden numbers, edited as one swatch. */
 export interface FnColour { label: string; keys: readonly [string, string, string]; hint?: string }
 /** An effect's declaration: its numbers, and optionally presets, colour swatches and a note for its card. */
@@ -41,21 +41,61 @@ export function fnSortTrails(e: { kind: string; [key: string]: unknown } | null 
 /** Does this ASCII effect draw typed characters (an atlas) instead of the built-in ones? */
 export function fnAsciiTyped(e: { kind: string; [key: string]: unknown } | null | undefined): boolean;
 /** Look actions (a rule's Do on a Finish effect): their kinds, and the state a host keeps of them. */
-export type FnLookKind = 'mosh' | 'moshreset' | 'fxpulse' | 'fxset';
+export type FnLookKind = 'mosh' | 'moshreset' | 'fxpulse' | 'fxset' | 'splash';
 export const FN_LOOK_ACTIONS: readonly FnLookKind[];
+/** Where a Splash lands (its `key`): at Water's source, somewhere random, or at its x, y. */
+export const FN_SPLASH_AT: readonly ['source', 'pointer', 'random', 'point'];
 export interface FnLookState { entries: Map<string, { value: number; start: number; until: number }>; last: number; changed: boolean }
-export interface FnLookAction { do: string; layerId: string; key?: string; value?: number; seconds?: number }
+export interface FnLookAction { do: string; layerId: string; key?: string; value?: number; seconds?: number; x?: number; y?: number }
 export function fnLookIs(kind: string): kind is FnLookKind;
 export function fnLookNew(): FnLookState;
 export function fnLookReset(st: FnLookState): void;
 export function fnLookStep(st: FnLookState, time: number): void;
 export function fnLookAct(st: FnLookState, a: FnLookAction, time: number): boolean;
 export function fnLookValue(st: FnLookState | null | undefined, id: string, key: string): number | undefined;
+/** Water: a simulated surface (see finish.js "Water"). */
+export const FN_WATER: Readonly<{ rate: number; maxC: number; maxTicks: number; maxSub: number; maxDrops: number; detail: Readonly<Record<'low' | 'medium' | 'high', number>>; push: number; dropPush: number; splash: number; crest: number; visc: number; view: Readonly<Record<string, number>> }>;
+export type FnWaterSource = 'pointer' | 'layer' | 'xy' | 'none';
+export type FnWaterShape = 'point' | 'line' | 'ring' | 'twin' | 'layer' | 'picture';
+export const FN_WATER_SOURCES: readonly FnWaterSource[];
+export const FN_WATER_SHAPES: readonly FnWaterShape[];
+export const FN_WATER_DETAILS: readonly ['low', 'medium', 'high'];
+export function fnWaterSourceOf(e: { source?: unknown; [key: string]: unknown } | null | undefined): FnWaterSource;
+export function fnWaterShapeOf(e: { shape?: unknown; [key: string]: unknown } | null | undefined): FnWaterShape;
+export function fnWaterMapShape(shape: string): boolean;
+export function fnWaterGrid(detail: string | undefined, W: number, H: number): { w: number; h: number };
+export function fnWaterPlan(speed: number, rows: number): { sub: number; c: number; c2: number; dt: number };
+export function fnWaterDecay(damping: number): number;
+export function fnWaterDamp(damping: number, dt: number): number;
+export function fnWaterTick(time: number): number;
+export function fnWaterHash(a: number, b: number): number;
+export function fnWaterRain(rate: number, tick: number): Array<[number, number]>;
+export function fnWaterBob(bob: number, t: number): number;
+/** How a source presses at (vx, vy) from its place: its dimple with the rim that holds what it pushed aside. */
+export function fnWaterPress(shape: string, vx: number, vy: number, size: number, length: number, angle: number, rows: number, bob?: number): number;
+/** A source's stamp where the water is at h: whole, unless it pushes h further its own way, when it fades out by cap. */
+export function fnWaterLimit(f: number, h: number, cap: number): number;
+export function fnWaterDrop(d: number, r: number): number;
+/** Mur's open boundary's factor at a Courant number² (see finish.js). */
+export function fnWaterMur(c2: number): number;
+export interface FnWaterGridState { w: number; h: number; now: Float32Array; prev: Float32Array }
+export function fnWaterStep(g: FnWaterGridState, o: { c2: number; damp: number; visc?: number; edges: number; force?: Float32Array | null }): FnWaterGridState;
+export function fnWaterEnergy(g: FnWaterGridState, c2: number): number;
+export interface FnWaterFrameState { valid: boolean; tick: number; lastT: number; p: { x: number; y: number } | null; splashSeen: number | undefined; pending: number[][] }
+export interface FnWaterStepPlan { p0: { x: number; y: number } | null; p1: { x: number; y: number } | null; b0: number; b1: number; s0: number; s1: number; drops: number[][] }
+export interface FnWaterFrameInput { time: number; first?: boolean; speed: number; rows: number; point: { x: number; y: number } | null; pointer?: { x: number; y: number } | null; bob: number; strength: number; rain: number; drop: number; splash?: { t: number; x: number; y: number; size: number } | null }
+export function fnWaterState(): FnWaterFrameState;
+export function fnWaterFrame(st: FnWaterFrameState, f: FnWaterFrameInput): { reset: boolean; steps: FnWaterStepPlan[]; plan: { sub: number; c: number; c2: number; dt: number }; ticks: number };
+export function fnWaterCpu(w: number, h: number, aspect?: number): {
+  readonly grid: FnWaterGridState;
+  state: FnWaterFrameState;
+  frame(f: Partial<FnWaterFrameInput> & { time: number; point?: { x: number; y: number } | null; value: (key: string) => number; shape?: string; occ?: Float32Array | null }): { reset: boolean; steps: FnWaterStepPlan[]; ticks: number };
+};
 /** ASCII's character bitmaps, darkest first (5 × 5, bit column + 5 × row from the bottom). */
 export const FN_ASCII_GLYPHS: readonly number[];
 export const FN_TONE_MODES: readonly string[];
 export const FN_TIME_MAPS: readonly string[];
-export const FN_WHERE: readonly ['all', 'layer', 'picture', 'motion'];
+export const FN_WHERE: readonly ['all', 'layer', 'picture', 'motion', 'waves'];
 export const FN_DISPLACE_MAPS: readonly ['noise', 'picture', 'layer', 'motion'];
 export const FN_MAP_MAX: number;
 export const FN_TIME_QUALITY: Readonly<Record<string, { frames: number; scale: number; cap: number }>>;
@@ -89,7 +129,7 @@ export function fnActive(finish: FnFinish | null | undefined): boolean;
 export function fnRunning(finish: FnFinish | null | undefined): FnEffect[];
 export function fnAnimated(finish: FnFinish | null | undefined): boolean;
 /** An effect's Where ('all' when absent or odd). */
-export function fnWhereOf(e: { where?: unknown; [key: string]: unknown } | null | undefined): 'all' | 'layer' | 'picture' | 'motion';
+export function fnWhereOf(e: { where?: unknown; [key: string]: unknown } | null | undefined): 'all' | 'layer' | 'picture' | 'motion' | 'waves';
 /** The map textures running effects read, in order: 'layer:<id>' and 'motion'. */
 export function fnMapKeys(effects: readonly FnEffect[]): string[];
 /** The layers a stack reads drawn alone (env.alphaLayers). */
@@ -131,7 +171,7 @@ export interface FnRing { readonly size: number; readonly count: number; readonl
 export function fnRing(size: number): FnRing;
 export function fnRingSize(quality: string, W: number, H: number): { frames: number; w: number; h: number; bytes: number };
 
-export function fnBuildFinal(effects: readonly FnEffect[], opts?: { tone?: string; hueCurves?: boolean; timeMap?: string; curves?: boolean; segment?: number }): { src: string; glow: boolean; time: boolean; feedback: boolean; echo: boolean; mosh: boolean; mx: boolean; maps: string[]; lut: boolean; ascAtlas: boolean; psTrail: boolean; custom: string[]; segments: number };
+export function fnBuildFinal(effects: readonly FnEffect[], opts?: { tone?: string; hueCurves?: boolean; timeMap?: string; curves?: boolean; segment?: number }): { src: string; glow: boolean; time: boolean; feedback: boolean; echo: boolean; mosh: boolean; mx: boolean; maps: string[]; water: boolean; lut: boolean; ascAtlas: boolean; psTrail: boolean; custom: string[]; segments: number };
 
 export interface FnInput {
   finish: FnFinish;
@@ -146,8 +186,12 @@ export interface FnInput {
   time: number;
   first?: boolean;
   pixels?: boolean;
+  /** Water's Pointer source: where the pointer is (0..1, y up) and whether it is over the picture. */
+  pointer?: { x: number; y: number; over?: boolean; down?: boolean } | null;
+  /** Water's Layer source: where a layer is now (the kit's layerPoint), or null. */
+  layerPoint?: (id: string) => { x: number; y: number } | null;
 }
-export interface FnInfo { effects?: string[]; glow?: boolean; passes?: number; floatGlow?: boolean; ring?: { frames: number; w: number; h: number; bytes: number; count: number } | null; error: string; custom?: Record<string, string>; mosh?: { bytes: number } | null; rings?: Record<string, { frames: number; w: number; h: number; bytes: number; count: number }>; feedback?: { bytes: number; float: boolean } | null; ascii?: { glyphs: string[]; cols: number; rows: number } | null; sortTrail?: { valid: boolean } | null }
+export interface FnInfo { effects?: string[]; glow?: boolean; passes?: number; floatGlow?: boolean; ring?: { frames: number; w: number; h: number; bytes: number; count: number } | null; error: string; custom?: Record<string, string>; mosh?: { bytes: number } | null; rings?: Record<string, { frames: number; w: number; h: number; bytes: number; count: number }>; feedback?: { bytes: number; float: boolean } | null; ascii?: { glyphs: string[]; cols: number; rows: number } | null; sortTrail?: { valid: boolean } | null; water?: { w?: number; h?: number; bytes?: number; float: boolean; substeps?: number; ticks?: number; steps?: number; c?: number } | null }
 export interface FnRenderer {
   ok: boolean;
   canvas: HTMLCanvasElement | null;

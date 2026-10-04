@@ -1,12 +1,12 @@
 # The Finish stack
 
 Play's **Finish** tab: colour grading, lens and screen effects, film effects,
-camera shake, time displacement, warps, glitches, stylised looks (pixel sort,
-halftone, ASCII, light leaks) and temporal effects (feedback, echo, datamosh,
-motion extract) over the **final**
+camera shake, time displacement, warps, glitches, a simulated water surface,
+stylised looks (pixel sort, halftone, ASCII, light leaks) and temporal effects
+(feedback, echo, datamosh, motion extract) over the **final**
 picture, the shader and every layer together. One ordered stack per Play record
 (`play.finish`). Any effect can show only **somewhere** (its Where: a layer's
-shape, the bright parts, or where the camera sees movement).
+shape, the bright parts, where the camera sees movement, or where the water moves).
 
 - Engine: `src/play/kit/finish.js` (+ `finishGlsl.js`, shared with the Studio's
   Tone Map and CRT Mask nodes). Part of the layer kit, so the app and exported
@@ -23,7 +23,8 @@ shape, the bright parts, or where the camera sees movement).
   swatches, the passes a stage effect splits a stack into) and
   `finishTemporal.test.ts` (feedback, echo, datamosh and motion extract: their
   records, passes, grids, rings and maths) and `finishLookMotion.test.ts`
-  (pixel sort's motion, ASCII's typed characters, the rules' Look actions);
+  (pixel sort's motion, ASCII's typed characters, the rules' Look actions) and
+  `finishWater.test.ts` (Water: the solver, its clock, rain, Splash, the example);
   node packs carrying
   effects in `src/nodePacks/__tests__/nodePacks.test.ts`.
 
@@ -50,8 +51,9 @@ of them; see below). Numbers are uniforms (one `vec4[]` per
 effect), so dragging a slider or a mapping never recompiles.
 
 1. **Geometry**, last effect first: camera shake, lens distortion, CRT
-   curvature, Glitch's blocks and tears, Ripple, Displace, Mosaic and Mirror
-   bend where the picture is read.
+   curvature, Glitch's blocks and tears, Ripple, Water, Displace, Mosaic and
+   Mirror bend where the picture is read. (Water's surface is stepped before
+   the passes, in passes of its own: see Water.)
 2. **Sampling**: chromatic aberration and Glitch's colour split read red and
    blue at offset points; time displacement chooses which frame each point reads.
 3. **Colour**, in the stack's order: grade, vignette, CRT mask, bloom, halation,
@@ -292,6 +294,7 @@ Every effect (built-in or your own) has a **Where**, under its settings:
 | Where a layer is | where that layer is opaque: its alpha, drawn alone by the kit even when the layer is hidden (a shape on hand nulls makes it follow a hand) |
 | On the bright parts | by the picture's own brightness at each point |
 | Where the camera sees movement | by the kit's motion map (needs a Camera layer, which can be hidden) |
+| Where the water moves | by the stack's Water surface: its height and slope at each point, 0 on still water (needs a Water effect) |
 
 **Invert** swaps in and out. In between, the effect fades: a warp moves the
 picture only that much (`q = mix(q0, q, w)`), a colour step changes it only
@@ -320,6 +323,7 @@ temporal effects, below.)
 | --- | --- | --- |
 | **Glitch** | Blocks jump sideways, bands of scanlines tear, red and blue split row by row, some blocks swap colour channels; it changes `Speed` times a second | amount, blocks, speed, colour split, tear, colour blocks |
 | **Ripple** | Rings of waves spreading from a centre (map a hand or the pointer onto the centre) | amount, wavelength, speed, fade out, centre |
+| **Water** | A simulated surface: a moving source leaves a wake, rain and splashes ripple and cross (below) | wave speed, damping, size, strength, bob, refraction, highlights, light angle, source X/Y, length, angle, rain, drop size, open edges |
 | **Displace** | Pushes the picture by a map: drifting noise (heat haze), the picture's brightness, a layer's alpha, or camera motion | amount, direction, scale, speed |
 | **Mosaic** | Big square pixels | cells |
 | **Mirror / kaleidoscope** | Segments 1 folds one half onto the other along a line through the centre; 2 and up make a kaleidoscope of mirrored wedges. Spin turns the picture under the mirrors; Zoom goes in or out, and spun or zoomed, the picture repeats as mirrored tiles past its edges | segments, angle, centre, spin, zoom |
@@ -327,8 +331,133 @@ temporal effects, below.)
 | **Posterize** | A few flat levels per channel, with a 4 × 4 ordered dither; Colour below 1 maps brightness between a Dark and a Light palette colour (a handheld's greens, 1-bit) | levels, dither, colour, dark, light |
 | **Edges** | Outlines where the picture's brightness changes (read before the stack's colour steps), in a colour, over the picture or alone on black; Glow adds a soft halo, Rainbow colours the lines by their direction | amount, width, threshold, edges only, colour, glow, rainbow |
 
-Glitch, Ripple, noise Displace and the temporal effects keep the preview drawing
-while the clock runs (`fnAnimated`), as do a spinning Mirror and rainbow Edges.
+Glitch, Ripple, Water, noise Displace and the temporal effects keep the preview
+drawing while the clock runs (`fnAnimated`), as do a spinning Mirror and rainbow Edges.
+
+## Water
+
+**Water** (Warp group) is a simulated water surface over the picture: a source
+that moves leaves a wake, rain dimples it, a rule's Splash drops into it, and
+the waves travel, cross, bounce or run off the frame and fade. **Ripple** stays
+as it was (rings drawn by a formula around a point); its card points to Water.
+
+![A pointer drawn across a pool's floor in one stroke: the bow wave and wake while it moves, then the waves running off the frame and settling](finish-stack/water-wake.jpg)
+
+![Rain on glass; Ripple tank (two bobbing points interfering); the Water example in the app; the same example as an exported website](finish-stack/water-looks.jpg)
+
+**The surface.** A height field `h` on a small grid (Detail: 180, 270 or 405
+rows, as many columns as the frame's shape needs, never more rows than the
+frame), stepped by the damped 2D wave equation in leapfrog form:
+
+    h' = d · (2h − h₋ + C² ∇²h + ν ∇²(h − h₋)) + f,   h₋' = h + f
+
+`C` is the Courant number (the cells a wave crosses in a step), kept at most
+`FN_WATER.maxC` = 0.5 (the 5-point Laplacian is stable up to 1/√2); `d` the
+damping (`fnWaterDamp`: a wave keeps √d a step, so `d = e^(−2·rate·dt)` falls
+at Damping's rate, 0.05 to 6 a second); `ν` a little viscosity, so the finest
+ripples (a cell or two long, the grid's own noise) die within a fraction of a
+second while real waves hardly feel it; `f` what the sources stamp. A stamp is a
+displacement: it shifts both heights, so it moves the surface without setting it
+moving by itself. The surface lives in two half-float targets (`RGBA16F`: `h`
+and `h₋`), used in turn; without a renderable half-float format it stays flat.
+
+**Edges.** *Open edges* 1 lets waves out through the frame (Mur's first-order
+open boundary, `fnWaterMur`: an edge texel becomes its inner neighbour as it
+was, plus `(C − 1)/(C + 1)` × the change; computed in the same pass from the
+neighbour's own step). A splash's ring leaves almost whole: what stays behind
+is under 3 % of its height. 0 reflects (an edge cell's missing neighbour is itself), like a tank's
+walls; in between mixes them.
+
+**Time.** The water ticks 60 times a second of the clock (`fnWaterTick`), never
+once per frame; each tick takes enough substeps that a wave at Wave speed
+crosses at most `maxC` cells in one (`fnWaterPlan`: 1 to 24 substeps). A frame
+runs the ticks since the frame before (at most 8: after a stall it catches up
+only that far). So a 30 fps render, a 144 Hz screen and an exported page step
+the same ticks; a render's first frame, a clock sent back or a reset start the
+water flat. `fnWaterFrame` plans a frame (the substeps, where the source is in
+each, the drops landing); the renderer and its CPU twin `fnWaterCpu` (the
+tests') run the same plan.
+
+**Sources.** *Source* is where the source is: **the pointer** (while it is over
+the picture; in a render, the take's pointer), **a layer** (any: a null, a
+following null on its spring, an Agents layer's centre, a text, a shape; hidden
+ones too; the kit's `layerPoint`), **a value** (Source X / Y, mappable like any
+number: an LFO, a hand, an XY pad), or **none** (only rain and splashes). The
+source presses a dimple (Strength deep, Size wide) into the water and stamps the
+*change* each substep: `f = −k · (P(now) − P(a substep ago))`. Holding still it
+adds nothing; moving, it pushes the water down ahead of it and lets it back up
+behind, so a wake trails it, a V when it moves faster than the waves. The
+frame's movement is spread over its substeps (between where the source was at
+the frame before and where it is now), so a fast flick leaves an unbroken wake.
+Appearing, going and **Bob** (the dimple's depth swinging Bob times a second)
+send out rings. The dimple comes with a low rim holding the water it pushed
+aside (`fnWaterPress`), so the level stays flat; a stamp that would push a crest
+further its own way fades as it nears twice the dimple's depth
+(`fnWaterLimit`), so a source keeping pace with its own bow wave can't pile it
+up without end.
+
+**Shapes.** **Point**, **Line** (Length long, at Angle), **Ring** (Length
+across), **Two points** (Length apart, at Angle: with Bob, two sources whose
+rings interfere), **A layer's shape** (that layer's alpha, drawn alone by the
+kit like a Where map: wherever the layer moves, the water moves; a still layer
+makes nothing unless it bobs) or **The bright parts** of the picture (the same,
+by brightness). A map shape is softened by Size first (a hard edge stamped on
+the grid would ring in its finest ripples).
+
+**Rain and Splash.** **Rain** drops a dimple with its ring (`fnWaterDrop`, no
+water added) at random places, Rain times a second on average (`fnWaterRain`: a
+jittered running total, so not on a beat, and the same places in every render).
+A rule's **Splash** (below) drops a bigger one at the source, under the pointer,
+somewhere random or at a point.
+
+**How it looks.** In the first pass the picture is read where the surface's
+slope bends the line of sight (**Refraction**; the slope is softly limited, so
+the steepest bow bends no more than a few times a gentle wave). In Water's own
+place in the stack, **Highlights** light it: a glint where a slope faces between
+the light (**Light angle**) and the eye, a little shading by slope, and
+caustics (crests focus the light into bright bands, troughs spread it thinner).
+
+**Where → Where the water moves.** Any effect in a stack with Water can show
+only on the waves (`fnWaves`: the height and slope there, 0 on still water).
+The Water example puts chromatic aberration there. Without a Water effect it
+shows nowhere.
+
+| Setting | What it does |
+| --- | --- |
+| Shape, Source, Layer | What touches the water and where (above) |
+| Size, Strength, Bob | The source's width and depth; Bob makes it ring while it holds still |
+| Length, Angle | Line, Ring and Two points |
+| Wave speed | Picture heights a second |
+| Damping | How quickly the waves die away |
+| Open edges | 1 runs off the frame, 0 bounces back |
+| Rain, Drop size | Raindrops a second, and how big |
+| Refraction, Highlights, Light angle | How the surface bends and lights the picture |
+| Detail | The grid: Low 180, Medium 270, High 405 rows; the waves move the same at every detail |
+
+Presets: **Pond** (the defaults), **Rain on glass** (Source none, quick small
+drops), **Boat wake**, **Ripple tank** (Two points bobbing, edges half closed)
+and **Shockwave** (fast, strong; fire a Splash). A preset may set the Source and
+Shape as well as numbers (`FnPreset.set`).
+
+The **Water** Play example: a null sails round a pool's floor on two LFOs and
+the water follows it with a light rain; a click splashes under the pointer and
+Space splashes somewhere random. The boat is a null because the Finish stack
+bends everything under it, layers too: a drawn boat would wobble in its own
+wake.
+
+Saved on the effect as its numbers plus `source`, `sourceLayer`, `shape`,
+`layerId` (a Layer shape's layer) and `detail`; odd values fall back to the
+pointer, a point and medium. Tests: `finishWater.test.ts` (stability at the
+step it picks and the test biting past 1/√2, energy kept undamped and lost at
+Damping's rate, viscosity, open edges, stamps adding no water, a wake behind a
+moving source and none from a still one, the same ticks at any frame rate,
+renders the same every time, rain, Splash, the record, the example).
+
+Not done yet: the waves as a map for layers (particles riding them, the Layers
+node reading them) and for Displace; dispersion (real ripples spread into a
+train of smaller ones; these travel as one crest, with the grid's own slight
+spreading).
+
 
 ## Stylised looks
 
@@ -586,13 +715,20 @@ Quick rule's chips) list, after the layers' actions:
 | Reset mosh · *Datamosh* | Datamosh | One frame of Reset (the picture snaps back to the live one), and an action's Mosh ends |
 | Pulse a setting · *any effect* | every effect with numbers | One of its numbers (any, hidden ones too) at a value for N seconds, then back to what it was (its slider, or its mapping) |
 | Set a setting · *any effect* | the same | One of its numbers at a value until the clock goes back (or a take starts over) |
+| Splash · *Water* | Water | A drop `value` picture heights across (0.06 by default) at the water's source, under the pointer (a click), somewhere random, or at a point x, y |
 
 So a Glitch burst is *Pulse Amount to 1 for 0.5 s*, a Feedback freeze *Set
 Trail to 0.98*. The record keeps them as reactions with `do` `mosh`,
-`moshreset`, `fxpulse` or `fxset`, `layerId` the effect's prop id
-(`finish:<effectId>`) and `key`, `value`, `seconds`
+`moshreset`, `fxpulse`, `fxset` or `splash`, `layerId` the effect's prop id
+(`finish:<effectId>`) and `key`, `value`, `seconds` (a Splash: `key` `source`,
+`pointer`, `random` or `point`, `value` its size, `x`, `y` its point)
 (`LookActionKind`, `parseReaction`); one whose effect is gone is dropped on
 load, as a reaction on a missing layer is.
+
+A Splash is an event rather than a value: it sets `splashT` (the clock time it
+fired), `splashX`, `splashY` and `splashSize` for half a second through the same
+channel, and the renderer drops it once, telling splashes apart by `splashT`
+(`fnWaterFrame`).
 
 **One value channel.** The actions don't change the record. The kit keeps a
 state (`fnLookNew`, `fnLookAct`, `fnLookStep`, `fnLookValue` in `finish.js`)
@@ -872,6 +1008,24 @@ syncs, uploads included):
 | Echo (3 copies) | 0.29 | 83 MB (16 frames) |
 | Echo (8 copies, Moving parts) | 0.43 | 128 MB (32 frames, kept at 0.88 size) |
 | Grade, Datamosh, Motion extract, Echo (four passes) | 1.10 | |
+
+Water, measured the same way at 1920 × 1080 (headless Chrome, ANGLE Metal, an
+Apple laptop; 240 frames of a moving pointer, a GPU sync each frame, a 1080p
+picture uploaded each frame):
+
+| Stack | ms / frame | Graphics memory |
+| --- | --- | --- |
+| Vignette alone (the baseline) | 0.88 | |
+| Ripple | 0.90 | |
+| Water, Medium (480 × 270, 4 substeps a tick at Pond's speed) | 1.04 | 3.1 MB (the surface twice, half-float; a map shape's occupancy twice, 8-bit) |
+| Water, Medium, Rain 20 | 1.03 | the same |
+| Water, Low (320 × 180) | 0.98 | 1.4 MB |
+| Water, High (720 × 405) | 1.14 | 7.0 MB |
+| Water, High at Wave speed 2 (24 substeps a tick, the most) | 1.89 | the same |
+| Water, The bright parts (an occupancy pass a frame) | 1.13 | |
+
+So the water itself costs about 0.15 ms a frame (up to 1 ms at the highest
+speed and detail), plus a little when a tick lands twice in a frame.
 
 The live preview draws the finished frame at the overlay's size, capped at about
 2.1 million pixels, so a retina preview costs no more than a 1080p one. Renders

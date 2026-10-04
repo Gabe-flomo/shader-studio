@@ -46,7 +46,7 @@ import {
   finishParamOf, finishParamsOf, finishTarget, lookFromGrade, newCustomEffect, newFinishEffect, patchFinishEffect, withCustomCode,
   type FinishCompare, type FinishEffect, type FinishHost, type FinishKind, type PlayFinish,
 } from '../../../types/playFinish';
-import { FN_COMPARE_PARAMS, FN_SORT_MOTION, fnCheckCustom, fnDefaultCompare, fnParseCustom, fnRingSize, type FnParam } from '../../../play/kit/finish.js';
+import { FN_COMPARE_PARAMS, FN_SORT_MOTION, fnCheckCustom, fnDefaultCompare, fnParseCustom, fnRingSize, type FnParam, type FnPreset } from '../../../play/kit/finish.js';
 
 const TONE_OPTIONS = [
   { value: 'none', label: 'None' }, { value: 'aces', label: 'ACES' }, { value: 'agx', label: 'AgX' }, { value: 'hable', label: 'Hable' },
@@ -421,13 +421,16 @@ function NumRow({ e, p, label, touch, exposed, onSet, onExpose }: { e: FinishHos
 
 // ── Editors ──────────────────────────────────────────────────────────────────
 
-/** An effect's presets (declared on the kit's effect; they only set numbers), the one it's on lit. */
+/** Is the effect on this preset: its numbers, and the choices it sets (Water's Source and Shape)? */
+const onPreset = (e: FinishEffect, pr: FnPreset) => Object.entries(pr.values).every(([key, v]) => Math.abs(num(e, key) - v) < 1e-6) && Object.entries(pr.set ?? {}).every(([key, v]) => e[key] === v);
+
+/** An effect's presets (declared on the kit's effect; they set numbers and maybe a choice), the one it's on lit. */
 function presetsFor(e: FinishEffect, k: RowKit, onPatch: (c: Partial<FinishEffect>) => void): ReactNode {
   if (e.kind === 'custom') return null;
   const presets = FINISH_EFFECTS[e.kind as FinishKind]?.presets ?? [];
   if (!presets.length) return null;
-  const current = presets.find(pr => Object.entries(pr.values).every(([key, v]) => Math.abs(num(e, key) - v) < 1e-6));
-  return k.row('Preset', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{presets.map(pr => <Button key={pr.name} size="sm" variant={current === pr ? 'primary' : 'secondary'} onClick={() => onPatch(pr.values as Partial<FinishEffect>)}>{pr.name}</Button>)}</div>, 'Starting points: they only set the settings below.');
+  const current = presets.find(pr => onPreset(e, pr));
+  return k.row('Preset', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{presets.map(pr => <Button key={pr.name} size="sm" variant={current === pr ? 'primary' : 'secondary'} onClick={() => onPatch({ ...pr.values, ...pr.set } as Partial<FinishEffect>)}>{pr.name}</Button>)}</div>, 'Starting points: they only set the settings below.');
 }
 
 function editorFor(e: FinishEffect, k: RowKit, touch: boolean, layers: LayerRef[], onPatch: (c: Partial<FinishEffect>) => void, onReplace: (e: FinishEffect) => void): ReactNode {
@@ -441,6 +444,7 @@ function editorFor(e: FinishEffect, k: RowKit, touch: boolean, layers: LayerRef[
     );
     case 'time': return <TimeEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
     case 'displace': return <DisplaceEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
+    case 'water': return <WaterEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
     case 'datamosh': return <DatamoshEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
     case 'ascii': return <AsciiEditor e={e} k={k} onPatch={onPatch} />;
     case 'pixelsort': return (
@@ -476,6 +480,7 @@ const WHERE_OPTIONS = [
   { value: 'layer', label: 'Where a layer is' },
   { value: 'picture', label: 'On the bright parts' },
   { value: 'motion', label: 'Where the camera sees movement' },
+  { value: 'waves', label: 'Where the water moves' },
 ];
 
 /** Every effect's Where: everywhere, or only where a map says (a layer, the picture's brightness, camera motion). */
@@ -485,9 +490,10 @@ function WhereRows({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit; laye
   return (
     <>
       {k.row('Where', <Select ariaLabel="Where the effect shows" value={where} height={26} options={WHERE_OPTIONS} onChange={set} />,
-        'Show this effect only somewhere: where a layer is (its shape, even hidden), on the bright parts of the picture, or where the camera sees movement. In between, it fades.')}
+        'Show this effect only somewhere: where a layer is (its shape, even hidden), on the bright parts of the picture, where the camera sees movement, or where the water moves. In between, it fades.')}
       {where === 'layer' && k.row('Layer', <LayerPick layers={layers} value={e.whereLayer ?? ''} onChange={v => onPatch({ whereLayer: v })} />, 'The layer’s shape is where the effect shows. Hide the layer to keep only the effect. A shape on hand nulls makes it follow your hand.')}
       {where === 'motion' && !layers.some(l => l.kind === 'camera') && k.note(<>Add a Camera layer for this (it can be hidden): the effect shows where the camera sees something move.</>)}
+      {where === 'waves' && k.note(<>The waves of this stack’s <b>Water</b> effect: the effect shows on the moving water and fades out where it lies flat. Without a Water effect it shows nowhere.</>)}
       {where !== 'all' && k.row('Invert', <Toggle checked={!!e.whereInvert} onChange={on => onPatch({ whereInvert: on || undefined })} />, 'Swap: the effect shows everywhere except there.')}
     </>
   );
@@ -515,6 +521,53 @@ function DisplaceEditor({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit;
       {map === 'motion' && !layers.some(l => l.kind === 'camera') && k.note(<>Add a Camera layer for this (it can be hidden).</>)}
       {k.num('amount')}
       {map === 'noise' ? k.nums('scale', 'speed') : k.num('angle')}
+    </>
+  );
+}
+
+const WATER_SOURCES = [
+  { value: 'pointer', label: 'The pointer' },
+  { value: 'layer', label: 'A layer' },
+  { value: 'xy', label: 'A value (Source X/Y)' },
+  { value: 'none', label: 'None (rain and splashes only)' },
+];
+const WATER_SHAPES = [
+  { value: 'point', label: 'Point' },
+  { value: 'line', label: 'Line' },
+  { value: 'ring', label: 'Ring' },
+  { value: 'twin', label: 'Two points' },
+  { value: 'layer', label: 'A layer’s shape' },
+  { value: 'picture', label: 'The bright parts' },
+];
+const WATER_DETAIL = [
+  { value: 'low', label: 'Low', title: '180 rows: cheapest, softer waves' },
+  { value: 'medium', label: 'Medium', title: '270 rows' },
+  { value: 'high', label: 'High', title: '405 rows: finer ripples, more work for the GPU' },
+];
+
+/** Water: what makes the waves (a source and its shape, rain), how they move, and how they look. */
+function WaterEditor({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit; layers: LayerRef[]; onPatch: (c: Partial<FinishEffect>) => void }) {
+  const shape = (e.shape as string) || 'point';
+  const mapShape = shape === 'layer' || shape === 'picture';
+  const source = (e.source as string) || 'pointer';
+  const firstLayer = layers.find(l => l.kind !== 'background')?.id ?? '';
+  return (
+    <>
+      {k.row('Shape', <Select ariaLabel="The source's shape" value={shape} height={26} options={WATER_SHAPES} onChange={v => onPatch({ shape: v as FinishEffect['shape'], ...(v === 'layer' && !e.layerId ? { layerId: firstLayer } : {}) })} />,
+        'What touches the water. A point, a line or a ring sits where the Source is; two points make interfering rings (give them Bob). A layer’s shape, or the bright parts of the picture, make waves wherever they move.')}
+      {shape === 'layer' && k.row('Layer', <LayerPick layers={layers} value={e.layerId ?? ''} onChange={v => onPatch({ layerId: v })} />, 'Its shape pushes the water as it moves (a still layer makes no waves unless it bobs). It can be hidden and still work.')}
+      {!mapShape && k.row('Source', <Select ariaLabel="Where the source is" value={source} height={26} options={WATER_SOURCES} onChange={v => onPatch({ source: v as FinishEffect['source'], ...(v === 'layer' && !e.sourceLayer ? { sourceLayer: firstLayer } : {}) })} />,
+        'Where the shape is: under the pointer while it is over the picture, on a layer (a null following your hand, a text, a shape: it can be hidden), or at Source X/Y, which you can map like any setting.')}
+      {!mapShape && source === 'layer' && k.row('Layer', <LayerPick layers={layers} value={(e.sourceLayer as string) ?? ''} onChange={v => onPatch({ sourceLayer: v })} />, 'The source rides this layer’s position. A null that follows the mouse or a hand makes a smooth, springy source.')}
+      {!mapShape && source === 'xy' && k.nums('x', 'y')}
+      {k.nums('size', 'strength', 'bob')}
+      {(shape === 'line' || shape === 'ring' || shape === 'twin') && k.num('length')}
+      {(shape === 'line' || shape === 'twin') && k.num('angle')}
+      {k.nums('speed', 'damping', 'edges')}
+      {k.nums('rain', 'drop')}
+      {k.nums('refraction', 'highlights', 'light')}
+      {k.row('Detail', <Segmented size="sm" ariaLabel="Water detail" value={(e.detail as string) || 'medium'} onChange={v => onPatch({ detail: v as FinishEffect['detail'] })} options={WATER_DETAIL} />, 'How fine the water’s grid is. The waves move the same at every detail and in every render.')}
+      {k.note(<>A simulated surface: waves travel at <b>Wave speed</b>, bounce, cross and fade by <b>Damping</b>. A source moving faster than the waves leaves a V-shaped wake like a boat; with <b>Bob</b> it rings while it holds still. A rule’s <b>Splash</b> (Rules → Do) drops into the water anywhere. Other effects can show only on the waves: their <b>Where → Where the water moves</b>.</>)}
     </>
   );
 }
@@ -682,7 +735,7 @@ function effectSummary(e: FinishEffect): string {
     }
     return parts.length ? parts.join(', ') : 'Neutral';
   }
-  const preset = (FINISH_EFFECTS[e.kind as FinishKind]?.presets ?? []).find(pr => Object.entries(pr.values).every(([key, v]) => Math.abs(num(e, key) - v) < 1e-6));
+  const preset = (FINISH_EFFECTS[e.kind as FinishKind]?.presets ?? []).find(pr => onPreset(e, pr));
   if (preset) return preset.name;
   const changed = finishParamsOf(e).filter(p => !p.hidden).filter(p => Math.abs(num(e, p.key) - p.value) > 1e-3);
   const shown = (changed.length ? changed : finishParamsOf(e).filter(p => !p.hidden)).slice(0, 3);

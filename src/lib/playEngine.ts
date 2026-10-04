@@ -515,7 +515,7 @@ class PlayEngine implements InputSource {
    * tickActions; a take playing back fires its recorded ones here (at the clock now, or `time`).
    */
   private looks = fnLookNew();
-  lookAct(a: { do: string; layerId: string; key?: string; value?: number; seconds?: number }, time = this.time): void {
+  lookAct(a: { do: string; layerId: string; key?: string; value?: number; seconds?: number; x?: number; y?: number }, time = this.time): void {
     fnLookAct(this.looks, a, time);
     inputBus.wake();
   }

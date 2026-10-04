@@ -24,6 +24,7 @@ export function doChoices(play: PlayRecord, preferLayer?: string): DoChoice[] {
     const id = finishPropId(e.id), name = finishHostLabel(e);
     const look = (k: LookActionKind) => out.push({ value: `${id}|${k}`, label: `${LOOK_ACTION_LABELS[k]} · ${name}`, layerId: id, do: k });
     if (e.kind === 'datamosh') { look('mosh'); look('moshreset'); }
+    if (e.kind === 'water') look('splash');
     if (finishParamsOf(e).length) { look('fxpulse'); look('fxset'); }
   }
   // Play notes on each rack of the Audio engine.
@@ -45,6 +46,8 @@ export function lookEffectOf(play: PlayRecord, layerId: string): FinishEffect | 
  */
 export function lookDefaults(kind: string, layerId: string, play: PlayRecord): Partial<PlayReaction> {
   if (kind === 'mosh') return { seconds: 2 };
+  // A Splash lands at the water's source, about a finger's width across.
+  if (kind === 'splash') return { key: 'source', value: 0.06 };
   if (kind !== 'fxpulse' && kind !== 'fxset') return {};
   const e = lookEffectOf(play, layerId);
   const ps = e ? finishParamsOf(e).filter(p => !p.hidden) : [];
@@ -71,6 +74,10 @@ export function reactionText(r: PlayReaction, play: PlayRecord): string {
     const v = typeof r.value === 'number' ? +r.value.toFixed(3) : 0, sec = typeof r.seconds === 'number' ? +r.seconds.toFixed(2) : 1;
     if (r.do === 'mosh') return `Mosh ${sec} s · ${name}`;
     if (r.do === 'moshreset') return `Reset mosh · ${name}`;
+    if (r.do === 'splash') {
+      const at = r.key === 'random' ? 'somewhere random' : r.key === 'pointer' ? 'under the pointer' : r.key === 'point' ? `at ${+(r.x ?? 0.5).toFixed(2)}, ${+(r.y ?? 0.5).toFixed(2)}` : 'at the source';
+      return `Splash ${at}, size ${typeof r.value === 'number' ? +r.value.toFixed(3) : 0.06} · ${name}`;
+    }
     return `${r.do === 'fxpulse' ? 'Pulse' : 'Set'} ${p?.label ?? r.key ?? 'a setting'} to ${v}${r.do === 'fxpulse' ? ` for ${sec} s` : ''} · ${name}`;
   }
   const l = play.layers.find(x => x.id === r.layerId);

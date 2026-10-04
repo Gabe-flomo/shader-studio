@@ -322,10 +322,13 @@ export function createLayerKit() {
   }
 
   let frameNo = 0;
+  // The last frame's record and host (layerPoint reads positions as that frame did), and its nulls lost from their hands.
+  let lastRecord = null, lastEnv = null, lostNulls = new Set();
   function frame(ctx, record, env0) {
     // `env` is swapped for a copy whose value() sees the relationships' driven positions once they have run.
     let env = env0;
     frameNo++;
+    lastRecord = record; lastEnv = env0;
     const W = env.W, H = env.H, dpr = env.dpr || 1, time = env.time, dt = Math.min(0.1, Math.max(0, env.dt));
     const aspect = W / H, pointer = env.pointer || { x: 0.5, y: 0.5, over: false, down: false };
     // A Background layer: its queue is the picture every layer reads (painted here, unless the
@@ -408,6 +411,7 @@ export function createLayerKit() {
       }
       env.override(l.id, 'x', s.x); env.override(l.id, 'y', s.y);
     }
+    lostNulls = handLost;
 
     // 1b. Relationships: a force simulation between member layers. From here on a member's x and y are the
     // simulation's (env.value sees them at once; the host is told through override, and a recorded place wins).
@@ -1326,6 +1330,19 @@ export function createLayerKit() {
     /** A layer drawn alone on the last frame (it was in env.alphaLayers), or null. */
     layerCanvas(id) { return alphaCanvases.get(id) || null; },
     /**
+     * Where a layer is as the last frame left it (0..1, y up), or null: a following null on its spring
+     * (null while it has lost its hand), an Agents layer's centre, else the layer's own x and y (a text,
+     * a shape, an image, a null…). Hidden layers count. The Finish stack's Water reads it for its source.
+     */
+    layerPoint(id) {
+      const l = lastRecord && lastEnv ? lastRecord.layers.find(x => x.id === id) : null;
+      if (!l) return null;
+      if (l.kind === 'null') { if (lostNulls.has(id)) return null; const s = springs.get(id); if (s) return { x: s.x, y: s.y }; }
+      if (l.kind === 'agents') { const c = agentCentre(id); if (c) return c; }
+      const x = lastEnv.value(l, 'x'), y = lastEnv.value(l, 'y');
+      return typeof x === 'number' && isFinite(x) && typeof y === 'number' && isFinite(y) ? { x, y } : null;
+    },
+    /**
      * Where the camera saw movement lately, as a small canvas (64 × 36, row 0 at the top, mirrored
      * like the Camera layer): every channel and alpha are the amount, 0..255. Null when the camera
      * wasn't sampled this frame (no Camera layer, or nothing reads motion: env.needMotion).
@@ -1420,6 +1437,6 @@ export function createLayerKit() {
      * makes every random choice after this repeatable; none or 0 is Math.random.
      */
     background,
-    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; dStates.clear(); dsCurrent.clear(); parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); rels.clear(); relGrids.clear(); ags.clear(); relDriven = new Set(); paths.clear(); pathFades.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); bornDiedSeen.clear(); },
+    reset(seed) { lostNulls = new Set(); sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; dStates.clear(); dsCurrent.clear(); parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); rels.clear(); relGrids.clear(); ags.clear(); relDriven = new Set(); paths.clear(); pathFades.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); bornDiedSeen.clear(); },
   };
 }
