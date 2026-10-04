@@ -352,7 +352,8 @@ export async function assemblePack(p: PackProject, env: PackEnv, o: { version?: 
     const fx = saved.find(x => x.id === e.id);
     if (!fx) { missing.push(`“${e.name}”`); continue; }
     const out: SavedEffect = { ...fx, pack: packCategory(p) };
-    if (p.sealed && !out.sealed) { out.sealed = sealCustomCode(out.code); out.code = ''; }
+    // Sealed: the code goes into the blob, and the node graph it was built from stays behind (it would show how it's made).
+    if (p.sealed && !out.sealed) { out.sealed = sealCustomCode(out.code); out.code = ''; delete out.graph; }
     finishEffects.push(out);
   }
   if (missing.length) notes.push(`Left out (not here any more): ${missing.join(', ')}.`);

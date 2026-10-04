@@ -12,6 +12,7 @@ import {
 import { GY_MAX, gyList } from '../play/kit/glyphs.js';
 import type { SealedBlob } from './userNode';
 import { decryptPayload, encryptPayload } from '../playfile/sealing';
+import { parseEffectGraph, type EffectGraph } from '../play/lookGraphRecord';
 
 export type FinishKind = FnKind;
 export type FinishCurves = FnCurves;
@@ -41,6 +42,11 @@ export interface FinishEffect {
   defId?: string;
   /** Custom: the code, encrypted, for an effect from a sealed node pack (filled in only in memory). */
   sealed?: SealedBlob;
+  /**
+   * Custom, built from nodes: the graph its `code` was compiled from (play/lookGraph.ts), so the
+   * node editor can open it again. Only the code is ever rendered; editing the code by hand drops it.
+   */
+  graph?: EffectGraph;
   /** Grade: the Tone Map node's mode ('none' = no tone mapping). */
   tone?: string;
   /** Grade: the curves ([x0, y0, x1, y1…] each, 0..1). */
@@ -225,16 +231,23 @@ export function renderableFinish(finish: PlayFinish | undefined): PlayFinish | u
 }
 
 /** A new custom effect in the stack, at its settings' defaults. */
-export function newCustomEffect(def: { name: string; code: string; defId?: string; sealed?: SealedBlob }, id = finishEffectId('custom')): FinishEffect {
-  const e: FinishEffect = { id, kind: 'custom', enabled: true, name: def.name.trim().slice(0, 60) || 'Custom effect', code: def.sealed ? '' : def.code, ...(def.defId ? { defId: def.defId } : {}), ...(def.sealed ? { sealed: def.sealed } : {}) };
+export function newCustomEffect(def: { name: string; code: string; defId?: string; sealed?: SealedBlob; graph?: EffectGraph }, id = finishEffectId('custom')): FinishEffect {
+  const e: FinishEffect = { id, kind: 'custom', enabled: true, name: def.name.trim().slice(0, 60) || 'Custom effect', code: def.sealed ? '' : def.code, ...(def.defId ? { defId: def.defId } : {}), ...(def.sealed ? { sealed: def.sealed } : {}), ...(def.graph && !def.sealed ? { graph: def.graph } : {}) };
   for (const p of fnParseCustom(finishCustomCode(e)).params) e[p.key] = p.value;
   return e;
 }
 
-/** A custom effect with new code: the settings it still has keep their values (clamped), new ones start at their defaults, gone ones go. */
-export function withCustomCode(e: FinishEffect, code: string): FinishEffect {
+/**
+ * A custom effect with new code: the settings it still has keep their values (clamped), new ones
+ * start at their defaults, gone ones go. Its Where stays. `graph` is the node graph the code was
+ * compiled from; without it the effect is plain code from now on (code edited by hand).
+ */
+export function withCustomCode(e: FinishEffect, code: string, graph?: EffectGraph): FinishEffect {
   const old = fnParseCustom(finishCustomCode(e)).params;
-  const out: FinishEffect = { id: e.id, kind: 'custom', enabled: e.enabled, name: e.name, code, ...(e.defId ? { defId: e.defId } : {}) };
+  const out: FinishEffect = { id: e.id, kind: 'custom', enabled: e.enabled, name: e.name, code, ...(e.defId ? { defId: e.defId } : {}), ...(graph ? { graph } : {}) };
+  if (e.where) out.where = e.where;
+  if (e.whereLayer !== undefined) out.whereLayer = e.whereLayer;
+  if (e.whereInvert) out.whereInvert = true;
   for (const p of fnParseCustom(code).params) {
     const v = e[p.key];
     out[p.key] = typeof v === 'number' && old.some(o => o.key === p.key) ? Math.max(p.min, Math.min(p.max, v)) : p.value;
@@ -285,7 +298,7 @@ export function parseCurves(raw: unknown): FinishCurves {
 }
 
 /** The longest custom effect code kept (characters). */
-export const FINISH_CUSTOM_MAX_CODE = 20000;
+export const FINISH_CUSTOM_MAX_CODE = 60000;
 
 /** A custom effect from a file: its name, code (or sealed blob) and settings, clamped to what the code declares. */
 function parseCustomEffect(r: Record<string, unknown>): FinishEffect | null {
@@ -293,7 +306,8 @@ function parseCustomEffect(r: Record<string, unknown>): FinishEffect | null {
   const code = typeof r.code === 'string' ? r.code.slice(0, FINISH_CUSTOM_MAX_CODE) : '';
   if (!sealed && !code.trim()) return null;
   const id = typeof r.id === 'string' && r.id.trim() ? r.id.slice(0, 80) : finishEffectId('custom');
-  const e = newCustomEffect({ name: typeof r.name === 'string' ? r.name : 'Custom effect', code, ...(typeof r.defId === 'string' && r.defId ? { defId: r.defId.slice(0, 80) } : {}), ...(sealed ? { sealed } : {}) }, id);
+  const graph = sealed ? null : parseEffectGraph(r.graph);
+  const e = newCustomEffect({ name: typeof r.name === 'string' ? r.name : 'Custom effect', code, ...(typeof r.defId === 'string' && r.defId ? { defId: r.defId.slice(0, 80) } : {}), ...(sealed ? { sealed } : {}), ...(graph ? { graph } : {}) }, id);
   e.enabled = r.enabled !== false;
   for (const p of finishParamsOf(e)) e[p.key] = clampNum(r[p.key], p);
   return withWhere(e, r);
