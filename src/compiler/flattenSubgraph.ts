@@ -115,11 +115,22 @@ function markTextureInputs(subgraph: SubgraphData, slotIndex: Map<string, number
 
 /** Walk the subgraph (and nested groups) and return the first unsupported type, if any. */
 export function findUnsupportedNode(subgraph: SubgraphData, depth = 0): { node: GraphNode; reason: string } | null {
+  // A texture port (phase 7 of the Pass plan): a function's argument can't be a texture wire.
+  const texPort = [...(subgraph.inputPorts ?? []), ...(subgraph.outputPorts ?? [])].find(p => p.type === 'texture');
+  if (texPort) {
+    const at = subgraph.nodes.find(m => Object.values(m.inputs).some(i => i.connection?.outputKey === texPort.key)) ?? subgraph.nodes[0];
+    if (at) return { node: at, reason: `its "${texPort.label}" port carries a texture, and a published node is one function that can't take one as a wire` };
+  }
   for (const n of subgraph.nodes) {
     if (STATEFUL_TYPES.has(n.type)) return { node: n, reason: 'it reads the previous frame' };
     if (MEDIA_TYPES.has(n.type)) return { node: n, reason: 'texture, audio, video and MIDI inputs are bound per instance' };
     if (OUTPUT_TYPES.has(n.type)) return { node: n, reason: 'output nodes belong to the graph, not a node' };
     if (!getNodeDefinitionFor(n)) return { node: n, reason: `unknown node type "${n.type}"` };
+    // Passes (docs/pass-node-plan.md): a published node is one GLSL function, which can't draw a
+    // picture of its own, nor take a texture as a wire (each texture is a sampler bound per use).
+    if (n.type === 'pass') return { node: n, reason: 'a Pass draws a picture of its own, and a published node is one function that cannot' };
+    if (Object.values(n.inputs ?? {}).some(i => i.type === 'texture' && i.connection))
+      return { node: n, reason: 'it reads or makes a texture, and a published node is one function that cannot take one as a wire' };
     if (n.type === 'group') {
       // The published node is itself the outer group, so a group here is
       // already level 2 — the compiler inlines at most two levels deep.

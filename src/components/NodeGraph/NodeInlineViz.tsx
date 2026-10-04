@@ -7,6 +7,7 @@ import { useThemeMode } from '../../theme/themeStore';
 import { pal, setVizPalette, MONO, vizContainer, setupViz, imageSize, blitImage, useVizScale, type Viz } from './vizKit';
 import { GenericViz, GENERIC_VIZ_TYPES } from './vizGeneric';
 import { passThumbRegistry } from '../../lib/passRunner';
+import { passRepeat } from '../../nodes/definitions/passes';
 import { getPerfSnapshot } from '../../lib/perfStats';
 import { agentStatsFor, agentThumbRegistry, restartAgents, trailThumbRegistry, type AgentStats } from '../../lib/agentRunner';
 import { AGENT_TIERS } from '../../nodes/definitions/agents';
@@ -3715,7 +3716,10 @@ function PassThumbViz({ node }: { node: GraphNode }) {
       const p = (st.programMap?.passes ?? st.passes)?.find(q => q.nodeId === node.id);
       const ms = p ? getPerfSnapshot().passes.find(r => r.name === `pass:${p.slug}`)?.avg : undefined;
       const size = ref.current?.dataset.size;
-      const text = [size, p && !p.live ? 'not drawn: nothing reads it' : null, ms != null && p?.live ? `${ms.toFixed(2)} ms GPU` : null].filter(Boolean).join(' · ');
+      // Repeat: the timer covers every draw, so the card says it is N × one draw's time.
+      const times = p?.repeat && p.repeat > 1 ? p.repeat : 1;
+      const cost = ms == null || !p?.live ? null : times > 1 ? `${times} × ${(ms / times).toFixed(2)} = ${ms.toFixed(2)} ms GPU` : `${ms.toFixed(2)} ms GPU`;
+      const text = [size, p && !p.live ? 'not drawn: nothing reads it' : null, cost].filter(Boolean).join(' · ');
       setLive(prev => (prev === text ? prev : text));
     };
     read();
@@ -3727,7 +3731,7 @@ function PassThumbViz({ node }: { node: GraphNode }) {
   return (
     <div style={{ ...vizContainer(), padding: 4 }}>
       <canvas ref={ref} width={128} height={72} style={{ display: 'block', maxWidth: '100%', maxHeight: 120, margin: '0 auto', background: '#000', borderRadius: 3 }} />
-      <div style={{ fontSize: '9px', color: pal.overlay0, fontFamily: MONO, marginTop: 3 }}>texture · scale {scaleText} · {node.params.format === 'byte' ? '8-bit' : 'half float'}</div>
+      <div style={{ fontSize: '9px', color: pal.overlay0, fontFamily: MONO, marginTop: 3 }}>texture · scale {scaleText} · {node.params.format === 'byte' ? '8-bit' : 'half float'}{passRepeat(node.params.repeat) > 1 ? ` · ×${passRepeat(node.params.repeat)} a frame` : ''}</div>
       {live && <div style={{ fontSize: '9px', color: pal.overlay0, fontFamily: MONO }}>{live}</div>}
     </div>
   );

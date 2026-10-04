@@ -2773,6 +2773,7 @@ void main() {
       // The graph's other programs, in the app's frame order (kit/passPlan.js ppFrameSteps): the passes a Particles
       // node reads, the particles, with agents the passes they read, their steps and drawings, the passes after
       // them; else the passes. Then the picture.
+      const gpVideoTex = n => { const v = videos.find(x => x.name === n); return v && v.el && v.el.videoWidth ? { texture: v.tex, aspect: v.el.videoWidth / Math.max(1, v.el.videoHeight) } : null; };
       const steps = PHK && PHK.steps ? PHK.steps({ passes: !!passHost, split: !!(passHost && passHost.splitsForParticles), particles: !!(gpHostR && !gpHostR.unsupported), agents: !!agentHost }) : [];
       for (const step of steps) {
         if (step.do === 'passes') passHost.run(W, H, step.stage, step.part);
@@ -2780,7 +2781,8 @@ void main() {
           gpOut = gpHostR.frame({
             width: W, height: H, dt: gpDt, time, mouse: [mouse.x, mouse.y], read: n => uniformValues[n], reset: gpReset,
             // A node's picture, or (Emit from) a pass's texture.
-            texture: n => (imageAspect.has(n) ? { texture: imageTex.get(n), aspect: imageAspect.get(n) } : graphTex.get(n) ? { texture: graphTex.get(n), aspect: 1 } : null),
+            // A Video's own texture too (Emit from wired straight to a Video Input's Texture, phase 7).
+            texture: n => (imageAspect.has(n) ? { texture: imageTex.get(n), aspect: imageAspect.get(n) } : graphTex.get(n) ? { texture: graphTex.get(n), aspect: 1 } : gpVideoTex(n)),
             probe: (b, vol) => gpProbeRun(b, W, H, vol), sound: gpSoundIn,
           });
           gpDt = 0; gpReset = false;

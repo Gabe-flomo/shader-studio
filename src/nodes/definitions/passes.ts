@@ -14,7 +14,7 @@
  * its texture. Its own program ends in a Pass output (passOutput) instead.
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, withNewOutputs } from './helpers';
 
 /** The sampler a Pass's picture is bound to, named by its slug (as its uniforms are). */
 export const passUniform = (slug: string) => `u_pass_${slug}`;
@@ -26,9 +26,28 @@ export const passPrevUniform = (slug: string) => `u_passprev_${slug}`;
  * so a 4-pixel blur is 4 pixels of the final picture at any Pass Scale.
  */
 export const passPxUniform = (sampler: string) => `${sampler}_px`;
+/**
+ * A repeated Pass's step (phase 7, Repeat): x = which repeat is drawing (0 first),
+ * y = how many. A vec2 so both hosts set it as they set the `_px` uniforms.
+ * Declared only by a Pass whose Repeat is above 1.
+ */
+export const passIterUniform = (slug: string) => `u_passiter_${slug}`;
+/** Most times a Pass can repeat in a frame. */
+export const MAX_PASS_REPEAT = 64;
+/** A Pass's Repeat as a whole number, 1 to MAX_PASS_REPEAT (1 when unset). */
+export function passRepeat(v: unknown): number {
+  const n = typeof v === 'number' && isFinite(v) ? Math.round(v) : 1;
+  return Math.max(1, Math.min(MAX_PASS_REPEAT, n));
+}
+
 
 /** Settings of a Pass that the engine reads (they never change the shader). */
 export const PASS_SCALES: Record<string, number> = { '1': 1, '0.5': 0.5, '0.25': 0.25, '0.125': 0.125 };
+
+const PASS_STEP_OUTPUTS: GraphNode['outputs'] = {
+  step: { type: 'float', label: 'Step', hint: 'With Repeat above 1: which repeat is drawing, 0 on the first, Repeat − 1 on the last (0 when Repeat is 1). Use it to start a jump flood from the shape on step 0, or to halve a reach each step.' },
+  steps: { type: 'float', label: 'Steps', hint: 'Repeat, as a number.' },
+};
 
 export const PassNode: NodeDefinition = {
   type: 'pass',
@@ -45,10 +64,13 @@ export const PassNode: NodeDefinition = {
     color: { type: 'vec3', label: 'Color', hint: 'The texture at this pixel.' },
     alpha: { type: 'float', label: 'Alpha', hint: 'The texture\'s alpha at this pixel.' },
     texture: { type: 'texture', label: 'Texture', hint: 'The picture as a texture: wire it into Sample, Edges, Blur or Glow (texture).' },
-    previous: { type: 'texture', label: 'Previous', hint: 'This Pass\'s own picture from the frame before (feedback). Sample it, warp it and mix it back into this Pass\'s input for trails, smoke and reaction-diffusion.' },
+    previous: { type: 'texture', label: 'Previous', hint: 'This Pass\'s own picture from the frame before (feedback). Sample it, warp it and mix it back into this Pass\'s input for trails, smoke and reaction-diffusion. With Repeat above 1, inside the pass it is the step before.' },
+    ...PASS_STEP_OUTPUTS,
   },
-  defaultParams: { scale: '1', format: 'half', filter: 'linear', wrap: 'clamp' },
+  defaultParams: { scale: '1', format: 'half', filter: 'linear', wrap: 'clamp', repeat: 1 },
+  syncSockets: withNewOutputs(PASS_STEP_OUTPUTS),
   paramDefs: {
+    repeat: { label: 'Repeat', type: 'float', min: 1, max: MAX_PASS_REPEAT, step: 1, hard: true, compileTime: true, hint: 'Draw this pass several times each frame, each time reading its own last result through Previous: a wide blur in small steps, a jump-flood distance field, a simulation stepped faster. Costs Repeat × the pass\'s time.' },
     scale: { label: 'Scale', type: 'select', hint: 'Size of the texture relative to the picture. ½ or ¼ makes wide blurs and glows cheap (and softer).', options: [
       { value: '1', label: '1 (full size)' }, { value: '0.5', label: '½' }, { value: '0.25', label: '¼' }, { value: '0.125', label: '⅛' },
     ] },
@@ -69,6 +91,8 @@ export const PassNode: NodeDefinition = {
     return [
       `uniform sampler2D ${tex};`, `uniform vec2 ${passPxUniform(tex)};`,
       `uniform sampler2D ${prev};`, `uniform vec2 ${passPxUniform(prev)};`,
+      // Repeat (phase 7): only a repeated Pass declares its step, so every other program reads as before.
+      ...(passRepeat(node.params.repeat) > 1 ? [`uniform vec2 ${passIterUniform(node.id)};`] : []),
     ];
   },
   generateGLSL: (node: GraphNode) => {
@@ -79,7 +103,12 @@ export const PassNode: NodeDefinition = {
       // own feedback) never reads the texture it is drawing into. vUv is 0–1 over the picture in
       // every program, whatever its size.
       code: '',
-      outputVars: { texture: tex, color: `texture2D(${tex}, vUv).rgb`, alpha: `texture2D(${tex}, vUv).a`, previous: passPrevUniform(id) },
+      outputVars: {
+        texture: tex, color: `texture2D(${tex}, vUv).rgb`, alpha: `texture2D(${tex}, vUv).a`, previous: passPrevUniform(id),
+        // Repeat: the step drawing now (a uniform the host sets before each draw), and how many.
+        step: passRepeat(node.params.repeat) > 1 ? `${passIterUniform(id)}.x` : '0.0',
+        steps: `${passRepeat(node.params.repeat)}.0`,
+      },
     };
   },
 };
@@ -311,5 +340,50 @@ export const DisplaceTextureNode: NodeDefinition = {
       `    vec4 ${id}_s = texture2D(${tex}, ${id}_uv + ${id}_push);\n`,
     ].join('');
     return { code, outputVars: { color: `${id}_s.rgb`, alpha: `${id}_s.a` } };
+  },
+};
+
+export const JumpFloodTextureNode: NodeDefinition = {
+  type: 'jumpFloodTexture',
+  label: 'Jump flood (texture)',
+  category: 'Passes',
+  aliases: ['JFA', 'Jump flooding', 'Distance field (texture)', 'Nearest seed', 'Voronoi (texture)'],
+  description: 'One step of a jump flood, the fast way to turn a shape into a distance field: reads the texture at this pixel and 8 places Reach picture pixels round it, where each pixel holds the place of a seed (red, green: a point in picture coordinates; blue 1: a seed is known), and keeps the nearest. Put it in a Pass that reads its own Previous with Repeat set (8 to 11), halving Reach each step, and every pixel ends up knowing the nearest point of the shape. Use a half-float Pass with Filter Nearest.',
+  inputs: {
+    texture: { type: 'texture', label: 'Texture', hint: 'A Pass whose pixels hold seeds (usually its own Previous). Unwired, nothing is found.' },
+    uv: { type: 'vec2', label: 'UV', hint: UV_HINT },
+    reach: { type: 'float', label: 'Reach', hint: 'How far the 8 reads are, in picture pixels. In a repeated Pass wire a reach that halves each Step (from about half the picture down to 1 pass pixel).' },
+  },
+  outputs: {
+    seed: { type: 'vec3', label: 'Seed', hint: 'The nearest seed found: its place (x, y, picture coordinates) and 1 in z, or 0 everywhere when none was. Wire it back into the Pass.' },
+    distance: { type: 'float', label: 'Distance', hint: 'How far this pixel is from that seed, in picture units (the picture is 2 tall). 4 when none was found.' },
+  },
+  defaultParams: { reach: 1 },
+  paramDefs: {
+    reach: { label: 'Reach', type: 'float', min: 0, max: 1024, step: 1, hint: 'How far the 8 reads are, in picture pixels (when Reach isn\'t wired).' },
+  },
+  assignable: false,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const tex = inputVars.texture;
+    if (!tex) return { code: `    vec3 ${id}_seed = vec3(0.0);\n    float ${id}_dist = 4.0;\n`, outputVars: { seed: `${id}_seed`, distance: `${id}_dist` } };
+    const here = inputVars.uv ?? 'g_uv';
+    const code = [
+      `    vec2 ${id}_here = ${here};\n`,
+      `    vec2 ${id}_uv = ${texUv(here)};\n`,
+      `    vec2 ${id}_step = ${passPxUniform(tex)} * ${inputVars.reach ?? p(node.params.reach, 1)};\n`,
+      `    vec3 ${id}_seed = vec3(0.0);\n`,
+      `    float ${id}_best = 1e9;\n`,
+      `    for (int ${id}_j = -1; ${id}_j <= 1; ${id}_j++) {\n`,
+      `        for (int ${id}_i = -1; ${id}_i <= 1; ${id}_i++) {\n`,
+      `            vec3 ${id}_s = texture2D(${tex}, ${id}_uv + vec2(float(${id}_i), float(${id}_j)) * ${id}_step).rgb;\n`,
+      `            vec2 ${id}_d = ${id}_s.xy - ${id}_here;\n`,
+      `            float ${id}_dd = dot(${id}_d, ${id}_d);\n`,
+      `            if (${id}_s.z > 0.5 && ${id}_dd < ${id}_best) { ${id}_best = ${id}_dd; ${id}_seed = vec3(${id}_s.xy, 1.0); }\n`,
+      `        }\n`,
+      `    }\n`,
+      `    float ${id}_dist = ${id}_seed.z > 0.5 ? sqrt(${id}_best) : 4.0;\n`,
+    ].join('');
+    return { code, outputVars: { seed: `${id}_seed`, distance: `${id}_dist` } };
   },
 };

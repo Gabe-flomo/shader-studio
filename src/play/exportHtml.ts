@@ -137,8 +137,10 @@ export interface WebPass {
   afterAgents?: boolean;
   /** Read by a Particles node: drawn before the particles step (kit/passPlan.js ppStaged part). */
   beforeParticles?: boolean;
-  /** u_pass_<slug> and u_passprev_<slug> (each with its `_px`). */
-  u: { tex: string; prev: string };
+  /** Repeat (phase 7): drawn this many times a frame, each reading the one before. Only when above 1. */
+  repeat?: number;
+  /** u_pass_<slug> and u_passprev_<slug> (each with its `_px`); iter, a repeated pass's step uniform. */
+  u: { tex: string; prev: string; iter?: string };
 }
 
 /**

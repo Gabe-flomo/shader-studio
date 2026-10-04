@@ -140,7 +140,9 @@ function readUniform(uniforms: Record<string, THREE.IUniform>, name: string): un
 function nodePicture(r: THREE.WebGLRenderer, uniforms: Record<string, THREE.IUniform>, name: string): { texture: WebGLTexture; aspect: number } | null {
   const t = uniforms[name]?.value;
   if (!(t instanceof THREE.Texture) || t === blank) return null;
-  const img = t.image as { width?: number; height?: number } | null;
+  // A Video's texture (Emit from wired straight to a Video Input, phase 7): an element, sized by videoWidth.
+  const raw = t.image as { width?: number; height?: number; videoWidth?: number; videoHeight?: number } | null;
+  const img = raw && raw.videoWidth ? { width: raw.videoWidth, height: raw.videoHeight } : raw;
   if (!img || !img.width || !img.height) return null;
   r.initTexture(t);
   const gl = (r.properties.get(t) as { __webglTexture?: WebGLTexture }).__webglTexture;
