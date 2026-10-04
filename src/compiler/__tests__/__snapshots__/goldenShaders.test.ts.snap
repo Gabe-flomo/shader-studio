@@ -765,7 +765,7 @@ exports[`golden shaders: every Play example exports the same bundle > letterDrop
 
 exports[`golden shaders: every Play example exports the same bundle > lookBuilt 1`] = `
 {
-  "bundle": "1d5d0c9ea360fe076b508596e965:8907",
+  "bundle": "1a8f18a33cd8731efd74b271773f:8907",
   "missing": [],
 }
 `;
