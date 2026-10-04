@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.22',
+    date: '2026-10-04',
+    title: 'Drag nodes in, a Water layer',
+    highlights: [
+      { area: 'Studio', text: 'Drag nodes from the browser onto the graph. Drop on a wire to insert the node into it; double-click and Enter still work.' },
+      { area: 'Play', text: 'A Water layer: a whole-picture or pond-shaped surface that bends only the layers below it, so a boat above it stays sharp in its own wake.', link: { kind: 'doc', path: 'docs/water-layer.md' } },
+      { area: 'Play', text: 'Water readings (wave height, energy, area) drive mappings and rules, and a Waves matte shows other layers only where the water moves.' },
+      { area: 'Play', text: 'The Water effect’s card has Move to a layer, which keeps its settings, controls and Splash rules.' },
+    ],
+  },
+  {
     id: '2026.10.21',
     date: '2026-10-04',
     title: 'Starter recipes, 3D that just works',
