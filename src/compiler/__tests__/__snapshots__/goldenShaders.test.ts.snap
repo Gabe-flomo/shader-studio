@@ -205,7 +205,7 @@ exports[`golden shaders: every Play example exports the same bundle > finishMoti
 
 exports[`golden shaders: every Play example exports the same bundle > finishPixelSort 1`] = `
 {
-  "bundle": "0452f528401be8063e7a6fbccc8c:55099",
+  "bundle": "17f6b531933fb9029d3ee690c801:55176",
   "missing": [],
 }
 `;
@@ -226,7 +226,7 @@ exports[`golden shaders: every Play example exports the same bundle > finishScre
 
 exports[`golden shaders: every Play example exports the same bundle > finishTerminal 1`] = `
 {
-  "bundle": "148a5a368ccb8e00dd857992e408:4685",
+  "bundle": "0c4566e6fc878d1c6dd4c1df066b:4722",
   "missing": [],
 }
 `;

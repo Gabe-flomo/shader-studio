@@ -22,7 +22,9 @@ shape, the bright parts, or where the camera sees movement).
   `finishCreative.test.ts` (pixel sort, halftone, ASCII, light leaks, presets and
   swatches, the passes a stage effect splits a stack into) and
   `finishTemporal.test.ts` (feedback, echo, datamosh and motion extract: their
-  records, passes, grids, rings and maths); node packs carrying
+  records, passes, grids, rings and maths) and `finishLookMotion.test.ts`
+  (pixel sort's motion, ASCII's typed characters, the rules' Look actions);
+  node packs carrying
   effects in `src/nodePacks/__tests__/nodePacks.test.ts`.
 
 ## Where it runs
@@ -336,10 +338,76 @@ took #443's presets and extras instead).
 
 | Effect | Group | What it does | Numbers |
 | --- | --- | --- | --- |
-| **Pixel sort** | Glitch | Each line along Direction is cut into staggered intervals of varied length; within one, the 24 samples brighter than Threshold are ranked and placed dark to bright in the bright places. A stage effect | threshold, length, direction, amount |
+| **Pixel sort** | Glitch | Each line along Direction is cut into staggered intervals of varied length; within one, the 24 samples brighter than Threshold are ranked and placed dark to bright in the bright places. A stage effect. Motion (below) makes the streaks move by themselves | threshold, length, direction, amount; flow, drip, breathe, wander, turbulence, trail, rate |
 | **Halftone** | Stylise | Dot screens sampled at each cell's centre: black only, or C, M, Y, K at print's screen angles, multiplied onto the paper colour. A stage effect | dot size, angle, colour, amount, paper |
-| **ASCII** | Stylise | Each cell picks one of ten 5 × 5 characters (`FN_ASCII_GLYPHS`, empty to dense) by brightness; coloured from the picture or one ink. A stage effect | character size, colour, background, contrast, ink |
+| **ASCII** | Stylise | Each cell picks a character by brightness: ten built-in 5 × 5 ones (`FN_ASCII_GLYPHS`, empty to dense), or typed characters and emoji (below); coloured from the picture, one ink, or (typed) their own colours. A stage effect | character size, colour, background, contrast, ink, own colours |
 | **Light leaks** | Film | Three warm blobs drift round the edges, hot in the middle and redder at the fringe, screened over the picture | amount, hue, size, speed |
+
+### Pixel sort motion
+
+Seven settings make the sorted streaks move over a still picture. All of them
+default to 0 (Rate to 0.5, which does nothing alone), so a stack saved before
+them looks as it did. Every one is a number like the others: mappable, a
+control target, in presets.
+
+| Control | What it does |
+| --- | --- |
+| Flow | The intervals slide along the sort direction at Flow picture heights a second (negative runs them back): the sorted gradients run like paint |
+| Drip | Each line gets a speed of its own (0.15 to 1.85 × Flow, from a smooth noise across the lines mixed with a hash) and a slow stretch and recoil of its interval, so streaks run and sag independently |
+| Breathe | The threshold rises and falls by up to this much, so the sorted areas swell and shrink |
+| Wander | The direction sways by up to this many degrees (a slow noise) |
+| Turbulence | Noise on where each line's intervals start and on each interval's threshold, so edges flicker and melt |
+| Trail | Sorted pixels keep some of the frame before; elsewhere the frame before fades behind them (`max(c, prev × keep)`), so a moving streak leaves a tail |
+| Rate | How fast Breathe, Wander and Turbulence move |
+
+Everything but Trail is a function of the clock (`uTime`), so a render is the
+same every time. **Trail** keeps the pass's own output: a Pixel sort whose
+Trail (as driven now) is above 0 ends its pass (`fnSortTrails`, `fnSegments`;
+last in the stack an empty pass follows it), and after that pass is drawn the
+renderer copies it (`blitFramebuffer`) into a full-size RGBA8 texture that the
+next frame reads (`uPsHist`). What stays a frame is `trail^(60 · dt)`, so a
+trail is as long at 30 fps as at 60, and in a render; the history starts empty
+on a render's first frame and on Reset. Measured on a still picture (480 × 270,
+frames a quarter of a second apart): the defaults change nothing between
+frames; Melt, Rain and Glitch drift change 4–17 / 255 on average, and two runs
+are identical.
+
+Presets: Drip and Sideways (still, as before), **Melt** (slow sagging streaks
+with a trail), **Rain** (fast thin streaks falling at their own speeds),
+**Glitch drift** (sideways, wandering and turbulent). The card shows the motion
+settings under **Motion**.
+
+![Pixel sort over a still picture, frames 0 to 1.5 s: the defaults hold still; Melt, Rain, Glitch drift, Flow alone and Breathe with Wander move.](finish-stack/pixelsort-motion.jpg)
+
+### ASCII characters
+
+ASCII draws either its built-in 5 × 5 characters (no characters typed: an ASCII
+saved before this is unchanged) or **typed characters**:
+
+- **Characters** is a text field; **Sets** are the Glyphs layer's sets
+  (`GY_SETS` in `play/kit/glyphs.js`, shared with that layer, which now shows
+  them as chips too): Classic (the layer's default ramp ` .:-=+*#%@`), Dense,
+  Blocks, Binary, Dots, Moon (the layer's emoji hint), Hearts, Weather.
+  Emoji stay whole (`gyList`: grapheme clusters).
+- The characters are drawn with a 2D canvas into an **atlas** (`gyAtlas`):
+  64 px cells, 12 a row, at most 96 characters; white text, emoji in their own
+  colours; each glyph fills the inner 7/8 of its cell (narrow characters widened,
+  wide ones squeezed; the margin keeps the mipmaps from bleeding). The atlas is
+  made again only when the characters or their order change.
+- **Order**: by measured coverage, dark to bright (`gyCoverage`: the mean of
+  alpha × brightness over the cell; `gyOrder` is a stable sort), unless **Keep
+  typed order** (`keepOrder`).
+- **Colour**: Picture (each character tinted by the picture: its brightness is
+  the shape), Ink (one colour) or **Own colours** (`own` 1: an emoji's own
+  colours, its alpha the shape).
+- In the pass the cell's glyph is read with `textureGrad` at half its true
+  footprint (a mipmap level sharper), and its coverage gets a little gain, so
+  small characters stay crisp.
+
+The same atlas code is in the kit, so exported websites and offline renders draw
+the same characters (with the fonts of the machine showing them).
+
+![ASCII with typed characters: the built-in ones and Classic (top), Moon emoji in their own colours and Blocks in one ink (bottom), over a grey ramp.](finish-stack/ascii-typed.jpg)
 
 ## Temporal effects
 
@@ -472,10 +540,9 @@ and bleed, block by block, along whatever moves.
 Presets: Bloom (default), Melt, Blocky, Pulse (a keyframe every second), On cue
 (heals fast: it moshes only while Mosh is held).
 
-**Mosh on cue**: Finish effects have no actions of their own (actions act on
-layers), so Mosh is a number, mappable like any other: map a key onto it (held:
-moshes while the key is down), or have a rule **send a signal** and map that
-signal (a trigger source on the signal) onto Mosh, or use **Set from a signal**.
+**Mosh on cue**: Mosh is a number, mappable like any other: map a key onto it
+(held: moshes while the key is down). A rule can do it directly with the Look
+actions (below): **Mosh** for some seconds and **Reset mosh**.
 
 Offline renders have no live camera, so with Motion from the camera the picture
 holds still there (unless Refresh or a keyframe brings it back).
@@ -508,6 +575,47 @@ Glow effects (Bloom, Halation, CRT glow) read the picture as it came in, not
 the temporal effects' output, so a Bloom after Motion extract glows from the
 original picture, not the outlines.
 
+## Look actions (rules)
+
+A rule's **Do** can act on a Look effect as well as on layers. The Do menu (and
+Quick rule's chips) list, after the layers' actions:
+
+| Do | For | What it does |
+| --- | --- | --- |
+| Mosh · *Datamosh* | Datamosh | Mosh on for N seconds (2 by default); fired again, it lasts until the later end |
+| Reset mosh · *Datamosh* | Datamosh | One frame of Reset (the picture snaps back to the live one), and an action's Mosh ends |
+| Pulse a setting · *any effect* | every effect with numbers | One of its numbers (any, hidden ones too) at a value for N seconds, then back to what it was (its slider, or its mapping) |
+| Set a setting · *any effect* | the same | One of its numbers at a value until the clock goes back (or a take starts over) |
+
+So a Glitch burst is *Pulse Amount to 1 for 0.5 s*, a Feedback freeze *Set
+Trail to 0.98*. The record keeps them as reactions with `do` `mosh`,
+`moshreset`, `fxpulse` or `fxset`, `layerId` the effect's prop id
+(`finish:<effectId>`) and `key`, `value`, `seconds`
+(`LookActionKind`, `parseReaction`); one whose effect is gone is dropped on
+load, as a reaction on a missing layer is.
+
+**One value channel.** The actions don't change the record. The kit keeps a
+state (`fnLookNew`, `fnLookAct`, `fnLookStep`, `fnLookValue` in `finish.js`)
+that the hosts read before their mappings' values:
+
+- **Live**: `playEngine.tickActions` fires them into its state;
+  `playEngine.layerValue` returns `override ?? look ?? mapping ?? base`, so the
+  preview, Stage (Full), the output window, conditions and takes' control
+  tracks all see them. `fnLookStep` runs once a tick (before the actions), lets
+  go of what has run out and forgets everything when the clock goes back;
+  whatever runs out stays at least the frame it started (a Reset is exactly one
+  frame).
+- **Takes**: the overlay hears them like any action, so a take records them as
+  events with their fields; playing back fires them into the engine
+  (`replayAct`, and the fast-forward of a scrub at each step's time).
+- **Offline renders**: `compositePixels` keeps a state of its own, started on
+  the first frame and fed the take's events frame by frame, and the render's
+  Finish reads it before `playEngine.layerValueNoLooks` (the live ones stay
+  out), so a render is the same every time.
+- **Exported websites, Stage (Exact), Present**: `play-runtime.js` keeps the
+  same state (`SSKit.finish.looks`), fires them from its action runner and
+  reads them in its `layerValue`; a deterministic render starts it over.
+
 ## Presets, swatches and notes
 
 An effect's declaration (`FN_EFFECTS[kind]`) can carry `presets` (named sets of
@@ -530,7 +638,7 @@ their own get their sliders, swatches and note from the declaration.
 | Datamosh | Bloom (default), Melt, Blocky, Pulse, On cue |
 | Motion extract | Classic grey (default), On black, Neon motion |
 | Halation | Subtle, Classic cine (default), Strong |
-| Pixel sort | Drip (default), Sideways, Melt |
+| Pixel sort | Drip (default), Sideways, Melt, Rain, Glitch drift |
 | Halftone | Comic (default), Newsprint, Pop art |
 | ASCII | Colour (default), Terminal, Big type |
 | Light leaks | Warm (default), Rose, Burn |

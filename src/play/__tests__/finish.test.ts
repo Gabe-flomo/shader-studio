@@ -457,7 +457,7 @@ describe('exports', () => {
     const html = buildPlayHtml(input());
     expect(html).toContain('"finish":{"on":true');
     expect(html).toContain('function fnCreate(');
-    expect(html).toContain("finish: { create: fnCreate, active: fnActive, mapLayers: fnMapLayers, usesMotion: fnUsesMotion }");
+    expect(html).toContain("finish: { create: fnCreate, active: fnActive, mapLayers: fnMapLayers, usesMotion: fnUsesMotion, looks: {");
   });
 
   it('the inlined kit hands the page a working finish API', () => {

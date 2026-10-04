@@ -15,6 +15,8 @@ import { alpha, fontFamily, radius } from '../../../theme/tokens';
 import { Button, IconButton } from '../../ui/Button';
 import { Toggle, Segmented } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
+import { Field } from '../../ui/Field';
+import { GY_SETS, gyList } from '../../../play/kit/glyphs.js';
 import { RulerSlider } from '../../ui/RulerSlider';
 import { Tooltip } from '../../ui/Tooltip';
 import { Icon } from '../../ui/Icon';
@@ -44,7 +46,7 @@ import {
   finishParamOf, finishParamsOf, finishTarget, lookFromGrade, newCustomEffect, newFinishEffect, patchFinishEffect, withCustomCode,
   type FinishCompare, type FinishEffect, type FinishHost, type FinishKind, type PlayFinish,
 } from '../../../types/playFinish';
-import { FN_COMPARE_PARAMS, fnCheckCustom, fnDefaultCompare, fnParseCustom, fnRingSize, type FnParam } from '../../../play/kit/finish.js';
+import { FN_COMPARE_PARAMS, FN_SORT_MOTION, fnCheckCustom, fnDefaultCompare, fnParseCustom, fnRingSize, type FnParam } from '../../../play/kit/finish.js';
 
 const TONE_OPTIONS = [
   { value: 'none', label: 'None' }, { value: 'aces', label: 'ACES' }, { value: 'agx', label: 'AgX' }, { value: 'hable', label: 'Hable' },
@@ -440,6 +442,15 @@ function editorFor(e: FinishEffect, k: RowKit, touch: boolean, layers: LayerRef[
     case 'time': return <TimeEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
     case 'displace': return <DisplaceEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
     case 'datamosh': return <DatamoshEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
+    case 'ascii': return <AsciiEditor e={e} k={k} onPatch={onPatch} />;
+    case 'pixelsort': return (
+      <>
+        {k.nums('threshold', 'length', 'angle', 'amount')}
+        <MotionHeading />
+        {k.nums(...FN_SORT_MOTION)}
+        {k.note(<>Motion makes the streaks alive even over a still picture: <b>Flow</b> runs them along their direction like paint, <b>Drip</b> gives each its own speed and stretch, <b>Breathe</b> swells and shrinks the sorted areas, <b>Wander</b> sways their direction, <b>Turbulence</b> melts their edges and <b>Trail</b> leaves a fading tail. All 0 is the still sort.</>)}
+      </>
+    );
     case 'feedback': return <FeedbackEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
     case 'echo': return <EchoEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
     case 'custom': return <CustomEditor e={e} k={k} touch={touch} onReplace={onReplace} />;
@@ -590,10 +601,44 @@ function DatamoshEditor({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit;
       {from === 'layer' && k.row('Layer', <LayerPick layers={layers} value={e.layerId ?? ''} onChange={v => onPatch({ layerId: v })} />, 'This layer’s movement moves the picture’s blocks. It can be hidden and still work.')}
       {k.nums('amount', 'bleed', 'block', 'push', 'sustain', 'refresh', 'every', 'hold')}
       {k.row('Mosh now', <Button size="sm" variant={num(e, 'hold') >= 0.5 ? 'primary' : 'secondary'} onPointerDown={() => hold(true)} onPointerUp={() => hold(false)} onPointerLeave={() => hold(false)}>Hold to mosh</Button>,
-        'Nothing heals while it is held. For a key or a rule, map it onto Mosh: a rule can send a signal, and a mapping from that signal turns Mosh on.')}
+        'Nothing heals while it is held. For a key, map it onto Mosh. A rule can do it too: its Do has Mosh (for some seconds) and Reset mosh for this effect.')}
       {k.row('Start over', <Button size="sm" variant="secondary" onPointerDown={() => reset(true)} onPointerUp={() => reset(false)} onPointerLeave={() => reset(false)}>Reset mosh</Button>,
-        'Snaps the picture back to the live one, then the mosh builds up again. Map a key or a rule’s signal onto Reset to do it on cue.')}
-      {k.note(<>A video with its keyframes cut out: each frame’s movement is measured block by block and applied to the <b>old</b> picture instead of the new one, so colours from before smear and bleed along whatever moves. Turn <b>Refresh</b> up and hold <b>Mosh</b> to mosh only on cue; <b>Reset mosh</b> starts it over.{from === 'camera' ? ' Offline renders have no live camera, so there the picture holds still unless Refresh or a keyframe brings it back.' : ''}</>)}
+        'Snaps the picture back to the live one, then the mosh builds up again. Map a key onto Reset, or give a rule the Do “Reset mosh”, to do it on cue.')}
+      {k.note(<>A video with its keyframes cut out: each frame’s movement is measured block by block and applied to the <b>old</b> picture instead of the new one, so colours from before smear and bleed along whatever moves. Turn <b>Refresh</b> up and hold <b>Mosh</b> to mosh only on cue; <b>Reset mosh</b> starts it over. On the Rules page a rule can do both: <b>Mosh</b> for some seconds and <b>Reset mosh</b> (and pulse or set any Look effect’s setting).{from === 'camera' ? ' Offline renders have no live camera, so there the picture holds still unless Refresh or a keyframe brings it back.' : ''}</>)}
+    </>
+  );
+}
+
+/** A small heading inside a card (Pixel sort's Motion). */
+function MotionHeading() {
+  const tk = useTokens();
+  return <div style={{ marginTop: 10, color: tk.text.muted, font: `650 11px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Motion</div>;
+}
+
+/**
+ * ASCII: the characters (typed, or the built-in ones), the Glyphs layer's sets, their order, and how
+ * they are coloured (the picture, one ink, or their own colours for emoji).
+ */
+function AsciiEditor({ e, k, onPatch }: { e: FinishEffect; k: RowKit; onPatch: (c: Partial<FinishEffect>) => void }) {
+  const chars = typeof e.chars === 'string' ? e.chars : '';
+  const typed = chars.length > 0;
+  const mode = typed && num(e, 'own') >= 0.5 ? 'own' : num(e, 'colour') >= 0.5 ? 'picture' : 'ink';
+  const count = typed ? gyList(chars).length : 10;
+  return (
+    <>
+      {k.row('Characters', <Field value={chars} placeholder="Built-in (10 tiny characters)" onChange={ev => onPatch({ chars: ev.target.value })} height={26} mono style={{ flex: 1, minWidth: 0 }} />,
+        'Type the characters to draw, darkest first if you keep their order. A space leaves the darkest cells empty. Emoji work, in their own colours if you like. Empty draws the built-in 5 × 5 characters.')}
+      {k.row('Sets', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        <Button size="sm" variant={!typed ? 'primary' : 'secondary'} onClick={() => onPatch({ chars: '' })} title="The built-in 5 × 5 characters">Built-in</Button>
+        {GY_SETS.map(g => <Button key={g.name} size="sm" variant={chars === g.chars ? 'primary' : 'secondary'} title={g.chars} onClick={() => onPatch({ chars: g.chars, own: gyList(g.chars).some(c => /\p{Extended_Pictographic}/u.test(c)) ? 1 : 0 })}>{g.name}</Button>)}
+      </div>, 'The Glyphs layer’s character sets. Emoji sets switch to their own colours.')}
+      {typed && k.row('Order', <Toggle checked={!!e.keepOrder} onChange={keepOrder => onPatch({ keepOrder })} label="Keep typed order" />,
+        `Off, the ${count} characters are put in order by how much of their cell they cover, dark to bright, whatever order you typed them in. On, the first is used for the darkest parts and the last for the brightest.`)}
+      {k.row('Colour', <Segmented size="sm" ariaLabel="ASCII colour" value={mode} onChange={v => onPatch(v === 'own' ? { own: 1 } : v === 'picture' ? { own: 0, colour: 1 } : { own: 0, colour: 0 })}
+        options={[{ value: 'picture', label: 'Picture' }, { value: 'ink', label: 'Ink' }, ...(typed ? [{ value: 'own', label: 'Own colours', title: 'Each character keeps its own colours (emoji)' }] : [])]} />,
+        'Picture tints each character with the picture under it; Ink draws them all in one colour; Own colours keeps an emoji’s colours.')}
+      {k.nums('size', 'colour', 'background', 'contrast')}
+      {mode !== 'own' && k.colour('Ink', ['inkR', 'inkG', 'inkB'], 'The characters’ colour when Colour is below 1.')}
     </>
   );
 }
