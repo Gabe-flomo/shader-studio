@@ -94,7 +94,35 @@ vec3 agUnpackColour(float f) { float b = floor(f / 65536.0); float g = floor((f 
 vec4 agOneHot(float s) { return vec4(equal(vec4(s), vec4(0.0, 1.0, 2.0, 3.0))); }`;
 
 const SPECIES_OPTIONS = [{ value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' }];
-const THIS_AGENT = 'Unwired: this agent\'s own.';
+const THIS_AGENT = 'Unwired: this walker\'s own (the card shows "← this walker\'s …").';
+
+/**
+ * What an unwired socket of a node inside an Agents group reads by itself, as the card's faint
+ * chip says it ("← this walker's position"), or null when it has no walker default (a slider, a
+ * plain 0). Only for the cards: the compiler's defaults are in each node's generateGLSL.
+ */
+const WALKER_READS: Record<string, string> = {
+  position: '← this walker\'s position', velocity: '← this walker\'s velocity', heading: '← this walker\'s heading',
+  random: '← a fresh random number', age: '← this walker\'s age', life: '← this walker\'s life',
+};
+const WALKER_SOCKETS: Record<string, string[]> = {
+  agentSense: ['position', 'heading'], agentSteer: ['heading', 'random'], agentMove: ['position', 'heading'],
+  agentWind: ['position'], agentCurl: ['position'], agentAttract: ['position'], agentVortex: ['position'], agentFlow: ['position'],
+  agentSoundKick: ['position'], agentIntegrate: ['position', 'velocity'], agentCollide: ['position', 'velocity'],
+  agentChladni: ['position', 'velocity'], agentAge: ['age', 'life'],
+};
+const OUTPUT_KEEPS: Record<string, string> = {
+  position: 'unchanged', velocity: 'unchanged', heading: 'unchanged', speed: 'unchanged', memory: 'unchanged', colour: 'unchanged',
+  alive: 'lives out its Life', deposit: 'its own species\' channel',
+};
+export function agentWalkerDefault(type: string, key: string, socketType: string): string | null {
+  if (type === 'agentOutput') return OUTPUT_KEEPS[key] ?? null;
+  if (type === 'agentSense' && key === 'channels') return 'its own kind +1, others −½';
+  if (WALKER_SOCKETS[type]?.includes(key)) return WALKER_READS[key] ?? null;
+  // Ordinary nodes (noise, shapes…) read the picture position by default: inside, that is where the walker stands.
+  if (key === 'uv' && socketType === 'vec2') return WALKER_READS.position;
+  return null;
+}
 
 /** `uv` in picture coordinates → 0–1 texture coordinates (Trail and Pass textures cover the picture). */
 export const AG_UV_GLSL = 'vec2 agUv(vec2 q) { return q / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5; }';
@@ -165,7 +193,7 @@ export const AgentsGroupNode: NodeDefinition = {
     preroll: { label: 'Pre-roll', type: 'float', min: 0, max: 30, step: 0.5, section: 'Steps', hint: 'Seconds simulated before the first frame, so the picture starts grown.' },
     soundFrom: { label: 'Sound from', type: 'select', section: 'Sound', hint: 'What every Sound kick and Chladni inside listens to.', help: 'Each node\'s own: every Sound kick and Chladni inside keeps its own Sound from, Level and Beat. Anything else is shared by all of them, so one choice here drives the whole rule. Level (and Beat): the Level slider below (map Live audio or a track to it in Play) plus the stand-in Beat. Mic: the live input (enable it in Play). Audio engine: the Play page\'s engine, its master or one track. Level is added to what is heard.', options: AGENT_GROUP_SOUND_FROM },
     level: { label: 'Level', type: 'float', min: 0, max: 1, step: 0.01, section: 'Sound', hint: 'How loud it is now, for every listening node inside (map audio to it in Play).', showWhen: { param: 'soundFrom', value: GROUP_HEARD } },
-    beat: { label: 'Beat', type: 'float', min: 0, max: 200, step: 1, section: 'Sound', hint: 'A silent stand-in beat, in beats a minute (0: off), for every listening node inside.', help: 'A silent stand-in for music while you build: a kick every beat at this tempo, as a level that jumps and decays. It is part of the simulation (the same every run), so recordings match. Set it to 0 when real sound drives Level.', showWhen: { param: 'soundFrom', value: GROUP_HEARD } },
+    beat: { label: 'Beat', type: 'float', min: 0, max: 200, step: 1, section: 'Sound', hint: 'A silent stand-in beat, in beats a minute (0: off), for every listening node inside.', help: 'A silent stand-in for music while you build: a kick every beat at this tempo, as a level that jumps and decays. It is part of the simulation (the same every run), so recordings match. Set it to 0 when real sound drives Level. On a Chladni plate each beat also jolts the sand (Shake rises with every hit) and steps it to the next figure, so a slow Beat reads as a regular pulse: that is the beat, not a glitch.', showWhen: { param: 'soundFrom', value: GROUP_HEARD } },
   },
   assignable: false,
   // Never compiled as a node of a program: the compiler builds its update shader from the inside.
@@ -295,14 +323,14 @@ export const AgentSenseNode: NodeDefinition = {
   aliases: ['Sensor', 'Sniff', 'Smell trail'],
   description: 'Reads the trail (or any field) at three points ahead of the walker: Distance ahead, Angle to the left, straight on, and Angle to the right. Wire Readings into Steer. Texture takes a Trail field (through an input of the group); Field ƒ takes any chain of nodes as a function of position (noise, a shape, a picture) and is read at the same three points.',
   inputs: {
-    texture: { type: 'texture', label: 'Texture', hint: 'A Trail field (or a Pass), wired in through an input on the group. Read as it was one step ago.' },
+    texture: { type: 'texture', label: 'Trail image', hint: 'What to smell: a Trail field\'s Image (or a Pass), wired in from outside through an input added on Agent Inputs. Read as it was one step ago.' },
     field: { type: 'float', label: 'Field ƒ', field: true, hint: 'Any chain of nodes, read as a function of position at each sensor (noise, a shape\'s distance, a picture\'s brightness). Added to the texture\'s reading.' },
     channels: { type: 'vec4', label: 'Channels', hint: 'How much each trail channel counts. Unwired: +1 for this walker\'s own species, −0.5 for the others (one species: just the first channel).' },
     angle: { type: 'float', label: 'Angle', hint: 'Degrees between the centre sensor and each side one.' },
     distance: { type: 'float', label: 'Distance', hint: 'How far ahead the sensors are, in picture units (the picture is 2 tall).' },
     position: { type: 'vec2', label: 'Position', hint: THIS_AGENT },
     heading: { type: 'float', label: 'Heading', hint: THIS_AGENT },
-    also: { type: 'vec3', label: 'Also', hint: 'Another Sense\'s Readings, added to these (sense two things at once).' },
+    also: { type: 'vec3', label: '+ Other readings', hint: 'Chain: another Sense\'s Readings, added to these (sense two things at once).' },
   },
   outputs: {
     readings: { type: 'vec3', label: 'Readings', hint: 'What the sensors read: x left, y centre, z right. Wire into Steer.' },
@@ -427,7 +455,7 @@ export const AgentMoveNode: NodeDefinition = {
     direction: { type: 'vec2', label: 'Direction', hint: 'Which way to go as a vector (wins over Heading when wired; it needn\'t be unit length).' },
     speed: { type: 'float', label: 'Speed', hint: 'Picture units a second (the picture is 2 tall; one step is 1/60 s).' },
     position: { type: 'vec2', label: 'Position', hint: THIS_AGENT },
-    also: { type: 'vec2', label: 'Also velocity', hint: 'A velocity added to the walk (a drift, a wind).' },
+    also: { type: 'vec2', label: '+ Drift', hint: 'A velocity added to the walk (a drift, a wind), in picture units a second.' },
     obstacle: { type: 'float', label: 'Obstacle ƒ', field: true, hint: 'A shape\'s distance (any SDF chain): walkers can\'t step where it is below 0. On Obstacle says what they do instead.' },
   },
   outputs: {
@@ -549,7 +577,7 @@ export const AgentEmitNode: NodeDefinition = {
     position: { type: 'vec2', label: 'Position', hint: 'The centre of the shape (picture units). Unwired: X and Y on the card.' },
     where: { type: 'float', label: 'Where ƒ', field: true, hint: 'Shape Field: any chain of nodes as a function of position (noise, a shape, a picture\'s brightness); walkers are born where it is above Threshold.' },
     picture: { type: 'texture', label: 'Picture', hint: 'Shape Picture: a texture (a Trail, a Pass); walkers are born where it is bright (more where brighter).' },
-    also: { type: 'emitter', label: 'Also', hint: 'Another Emit: births are shared between the two by their Share.' },
+    also: { type: 'emitter', label: '+ Another Emit', hint: 'Chain: wire another Emit here and births are shared between them by their Share (one Emit per place, or per species).' },
   },
   outputs: {
     emitter: { type: 'emitter', label: 'Emitter', hint: 'Wire into an Agents group\'s Emit.' },
@@ -696,7 +724,7 @@ export const AgentDepositNode: NodeDefinition = {
   description: 'Every walker of an Agents group leaves Amount of trail where it stands, every step, into the Trail field this is wired to (each species into its own channel). Chain Deposits through Also to put several groups into one Trail.',
   inputs: {
     agents: { type: 'agents', label: 'Agents', hint: 'An Agents group\'s output.' },
-    also: { type: 'deposit', label: 'Also', hint: 'Another Deposit going into the same Trail.' },
+    also: { type: 'deposit', label: '+ Another Deposit', hint: 'Chain: another Deposit (another group\'s walkers) going into the same Trail.' },
   },
   outputs: {
     deposit: { type: 'deposit', label: 'Deposit', hint: 'Wire into a Trail field\'s Deposit.' },
@@ -728,7 +756,7 @@ export const TrailFieldNode: NodeDefinition = {
     amount: { type: 'float', label: 'Amount', hint: 'The trail here, softly scaled to 0–1 by Gain: wire into a Palette.' },
     raw: { type: 'float', label: 'Raw', hint: 'The first channel\'s amount here, unscaled.' },
     channels: { type: 'vec4', label: 'Channels', hint: 'All four channels here, unscaled (one per species).' },
-    texture: { type: 'texture', label: 'Texture', hint: 'The whole trail as a texture: into an Agents group (for Sense), Glow, Blur or Sample (texture).' },
+    texture: { type: 'texture', label: 'Image', hint: 'The whole trail as an image (a texture): back into the Agents group for Sense (through an input you add on Agent Inputs), or into Glow, Blur or Sample (texture).' },
   },
   defaultParams: { resolution: '0.5', diffuse: 1, halfLife: 0.12, edges: 'wrap', gain: 0.15, kernel: '3' },
   paramDefs: {
@@ -827,7 +855,7 @@ export const DrawAgentsNode: NodeDefinition = {
   outputs: {
     color: { type: 'vec3', label: 'Color', hint: 'Over with the walkers drawn on it.' },
     density: { type: 'float', label: 'Density', hint: 'How much walker light (Ink: ink) is here.' },
-    texture: { type: 'texture', label: 'Texture', hint: 'The drawn walkers alone, as a texture.' },
+    texture: { type: 'texture', label: 'Image', hint: 'The drawn walkers alone, as an image (a texture): into Glow, Blur or another group.' },
   },
   defaultParams: {
     style: 'points', colorBy: 'heading', palette: 'ab', size: 1.5, brightness: 0.5, glow: 1, scaleBy: 'walker', streak: 0.25, fade: 'on', speedRef: 0.5,
@@ -896,7 +924,7 @@ export const SlimeMoldPresetNode: NodeDefinition = {
   label: 'Slime mold (preset)',
   category: 'Simulation',
   aliases: ['Physarum preset', 'Slime preset', 'Jones slime'],
-  description: 'Adds a working slime mold: a million walkers that sense the trail ahead, turn toward it, move and leave more trail, which spreads and fades. Veins form, join and pulse by themselves. Every node it adds has a note saying what it does and what to try.',
+  description: 'Adds a working slime mold: 262,144 walkers (256k) that sense the trail ahead, turn toward it, move and leave more trail, which spreads and fades. Veins form, join and pulse by themselves. Every node it adds has a note saying what it does and what to try.',
   inputs: {},
   outputs: {},
   defaultParams: {},
@@ -912,7 +940,7 @@ const preset = (type: string, label: string, aliases: string[], description: str
 
 /** Particles — the Particles node's default look, built from nodes (a starter, never a node in a graph). */
 export const ParticlesPresetNode = preset('particlesPreset', 'Particles (preset)', ['Particles from nodes', 'Embers preset', 'Curl particles', 'Particle system'],
-  'Adds the Particles node\'s default look built from nodes you can open and rewire: a million embers born on a ring, carried by curl noise and a gentle swirl, pulled by the mouse, slowed by drag, fading over their life, drawn with glow and four orbiting lights. Every node it adds has a note saying what it does and what to try.');
+  'Adds the Particles node\'s default look built from nodes you can open and rewire: 262,144 embers born on a ring, carried by curl noise and a gentle swirl, pulled by the mouse, slowed by drag, fading over their life, drawn with glow and four orbiting lights. Every node it adds has a note saying what it does and what to try.');
 /** Curl smoke — ink-like smoke rising and curling (a starter). */
 export const CurlSmokePresetNode = preset('curlSmokePreset', 'Curl smoke (preset)', ['Smoke preset', 'Ink smoke', 'Rising smoke'],
   'Adds smoke built from nodes: particles rise from a small source, warm air lifting them less as they cool, while curl noise folds them into threads and a gusty breeze leans them over, drawn as ink streaks on paper. Every node has a note.');
@@ -940,10 +968,10 @@ export const GrowPicturePresetNode = preset('growPicturePreset', 'Grow toward a 
 // ── P6 presets ───────────────────────────────────────────────────────────────
 /** Galaxy — stars on orbits crowding into two turning spiral arms (a starter). */
 export const GalaxyPresetNode = preset('galaxyPreset', 'Galaxy (preset)', ['Spiral galaxy', 'Stars', 'Density wave', 'Orbits', 'Space'],
-  'Adds a spiral galaxy built from nodes: a million stars circle a bright bulge and crowd into two spiral arms that turn slowly, the arms lit blue with young stars and pink knots, the core warm. Each star remembers its own orbit (Memory). Every node has a note.');
+  'Adds a spiral galaxy built from nodes: 262,144 stars circle a bright bulge and crowd into two spiral arms that turn slowly, the arms lit blue with young stars and pink knots, the core warm. Each star remembers its own orbit (Memory). Every node has a note.');
 /** Mycelium — a fungus colony branching out of a spore (a starter). */
 export const MyceliumPresetNode = preset('myceliumPreset', 'Mycelium (preset)', ['Fungus', 'Hyphae', 'Mould', 'Branching growth', 'Colony'],
   'Adds a fungus colony built from nodes: growing tips shy away from threads already there, and new tips sprout on the young threads at the colony\'s edge, so it branches outward from a spore and fills in behind. Every node has a note.');
 /** Sand on a plate — Chladni figures from a silent beat (a starter). */
 export const SandPlatePresetNode = preset('sandPlatePreset', 'Sand on a plate (preset)', ['Chladni preset', 'Cymatics preset', 'Sand plate', 'Nodal lines'],
-  'Adds a million grains of sand on a ringing square plate: shaken off wherever the plate moves, they settle on its still lines and draw a Chladni figure, and a silent stand-in beat steps the plate from figure to figure. Every node has a note.');
+  'Adds grains of sand on a ringing square plate: shaken off wherever the plate moves, they settle on its still lines and draw a Chladni figure. Its stand-in Beat is off (a still figure); set the group\'s Beat to 20 and each beat jolts the sand and steps the plate to the next figure. Every node has a note.');

@@ -1,6 +1,6 @@
 /**
  * agentPlayExample.ts — the Agents group on the Play page (docs/agents-plan.md, P4):
- * a million particles a hand steers (the pointer until a hand is seen) while the
+ * 262,144 particles a hand steers (the pointer until a hand is seen) while the
  * Audio engine's kick track blasts shockwaves through them. The graph lives here;
  * its Play setup (controls, the hand pair, the mappings, the engine) is in
  * playExamples.ts. Every node, inside the group too, carries a plain-language note.
@@ -36,14 +36,14 @@ export function handBeatNodes(): GraphNode[] {
     mode: 'shock', x: 0, y: 0, strength: 0.7, speed: 1.4, soundFrom: 'graph', level: 0, beat: 0,
     ...note([
       'Sound kick, Shockwave: every kick sends a ring of pressure out from the middle at 1.4 picture-heights a second, pushing the particles out as it passes.',
-      'It hears the group\'s Sound from (Engine track 1, the Kick rack): the group\'s choice wins over this card\'s own Sound section. Its Also adds Home.',
+      'It hears the group\'s Sound from (Engine track 1, the Kick rack): the group\'s choice wins over this card\'s own Sound section. Its "+ Another force" adds Home.',
       'Try: Kick Wave for rings as loud as the sound; Strength (pinned on the group card) 1.5 for harder blasts.',
     ]),
   }, { also: ['hbHome', 'result'] });
   const curl = n('agentCurl', HAND_EX.curl, 1260, 40, {
     strength: 0.35, size: 1.2, evolve: 0.25,
     ...note([
-      'Curl noise: slow swirling currents, so the swarm is never still between kicks and the hand. Its Also adds the kick and Home.',
+      'Curl noise: slow swirling currents, so the swarm is never still between kicks and the hand. Its "+ Another force" adds the kick and Home.',
       'Try: Size 3 for busier eddies; Strength 0 for a calm swarm that only the hand and the beat move.',
     ]),
   }, { also: [HAND_EX.kick, 'force'] });
@@ -52,7 +52,7 @@ export function handBeatNodes(): GraphNode[] {
     ...note([
       'Attract / Repel, Target "A hand or null": its Hand X / Y (0–1 across and up the picture) are Play controls paired as one position, and the pair follows a tracked hand\'s index fingertip; until a hand is seen, the pointer over the picture moves it.',
       'Within Reach 0.45 it pulls particles in and Swirl 1.6 stirs them round, like the Particles node\'s hands. Make a fist and Strength goes to −2.5: it pushes them away.',
-      'Its Also adds everything before it: this Force is the total. Try: in Studio, right-click Hand X → Follow a hand on any Hand X / Y slider (Vortex, Emit) to make your own.',
+      'Its "+ Another force" adds everything before it: this Force is the total. Try: in Studio, right-click Hand X → Follow a hand on any Hand X / Y slider (Vortex, Emit) to make your own.',
     ]),
   }, { also: [HAND_EX.curl, 'force'] });
   const integrate = n('agentIntegrate', 'hbMove', 2100, 80, {
@@ -84,7 +84,7 @@ export function handBeatNodes(): GraphNode[] {
     soundFrom: 'track1', level: 0, beat: 0,
     pinned: [`${HAND_EX.attract}::strength`, `${HAND_EX.attract}::swirl`, `${HAND_EX.kick}::strength`, `${HAND_EX.curl}::strength`],
     ...note([
-      'Agents: a million particles (1M), 2 steps a frame. Inside (double-click): Home → Sound kick → Curl noise → Attract / Repel, added through Also, then Integrate and Age / Life.',
+      'Agents: 262,144 particles (256k), 2 steps a frame (Count 1M for a denser swarm). Inside (double-click): Home → Sound kick → Curl noise → Attract / Repel, added up through "+ Another force", then Integrate and Age / Life.',
       'Sound from (Sound section) is Engine track 1: every Sound kick inside hears the Play page\'s Kick rack. Press Play on the Engine tab\'s transport (click the picture first). To try it in silence, set Sound from to Level (and Beat) and Beat to 120.',
       'Pinned: the hand\'s Strength and Swirl, the kick\'s Strength and the curl\'s Strength sit on this card (right-click a slider inside → Pin to the group card); right-click one here for Play.',
     ]),

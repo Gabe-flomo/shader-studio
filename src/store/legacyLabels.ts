@@ -41,6 +41,15 @@ const RENAMED_SOCKETS: Record<string, Record<string, readonly [string, string]>>
   smoothSubtract: { smoothness: ['Smoothness', 'Blend radius'] },
   step: { edge: ['Edge', 'Threshold'], x: ['X', 'Value'] },
   voronoi: { scale: ['Scale', 'Cell density'], jitter: ['Jitter', 'Randomness'], time_scale: ['Anim Speed', 'Speed'] },
+  // The Agents family in plain words (2026-10): the chain sockets and the trail's texture.
+  agentSense: { texture: ['Texture', 'Trail image'], also: ['Also', '+ Other readings'] },
+  agentMove: { also: ['Also velocity', '+ Drift'] },
+  agentEmit: { also: ['Also', '+ Another Emit'] },
+  agentDeposit: { also: ['Also', '+ Another Deposit'] },
+  trailField: { texture: ['Texture', 'Image'] },
+  drawAgents: { texture: ['Texture', 'Image'] },
+  ...Object.fromEntries(['agentGravity', 'agentWind', 'agentCurl', 'agentAttract', 'agentVortex', 'agentFlow', 'agentSoundKick']
+    .map(t => [t, { also: ['Also', '+ Another force'] as const }])),
 };
 
 /** Palette's per-channel sockets, replaced by one vec3 socket per group (offset, amplitude, freq, phase) */

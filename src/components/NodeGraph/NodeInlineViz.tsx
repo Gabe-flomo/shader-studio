@@ -9,6 +9,7 @@ import { GenericViz, GENERIC_VIZ_TYPES } from './vizGeneric';
 import { passThumbRegistry } from '../../lib/passRunner';
 import { agentStatsFor, agentThumbRegistry, restartAgents, trailThumbRegistry, type AgentStats } from '../../lib/agentRunner';
 import { AGENT_TIERS } from '../../nodes/definitions/agents';
+import { agentNextSteps, type AgentPiece } from '../../store/agentSetup';
 import { agentPinnedRows } from '../../nodes/agentPins';
 import { RulerSlider } from '../ui/RulerSlider';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -3724,13 +3725,25 @@ function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?
   }, [node.id]);
   // The live dots (P4): the runner draws where the walkers are into this canvas every few frames.
   const thumb = useRef<HTMLCanvasElement>(null);
+  const dotsShown = node.params.__dots !== 'off';
   useEffect(() => {
     const c = thumb.current;
-    if (!c) return;
+    if (!c || !dotsShown) return;
     agentThumbRegistry.register(node.id, c);
     return () => agentThumbRegistry.unregister(node.id);
-  }, [node.id]);
+  }, [node.id, dotsShown]);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
+  // The live dots and the Next steps panel can be hidden (remembered on the node, saved with the graph:
+  // a card setting, not a shader one, so it never recompiles).
+  const dotsOn = node.params.__dots !== 'off';
+  const stepsOn = node.params.__nextSteps !== 'off';
+  const setCardFlag = (key: '__dots' | '__nextSteps', on: boolean) => useNodeGraphStore.setState(s => ({
+    nodes: s.nodes.map(n => n.id === node.id ? { ...n, params: { ...n.params, [key]: on ? 'on' : 'off' } } : n),
+  }));
+  // What the group still lacks to show anything (a string, so the card re-renders only when it changes).
+  const stepKeys = useNodeGraphStore(s => stepsOn ? agentNextSteps(s.nodes, node.id).map(x => x.piece).join(',') : '');
+  const steps = stepKeys ? agentNextSteps(useNodeGraphStore.getState().nodes, node.id) : [];
+  const addPiece = (piece: AgentPiece) => useNodeGraphStore.getState().addAgentPiece(node.id, piece);
   const count = stats?.count ?? (AGENT_TIERS[String(node.params.tier ?? '256k')] ?? 512) ** 2;
   const spf = stats?.stepsPerFrame ?? Math.round(Number(node.params.stepsPerFrame ?? 2));
   const behind = stats && stats.rate < 0.97 ? ` · running at ×${stats.rate.toFixed(2)}` : '';
@@ -3745,11 +3758,45 @@ function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?
   const unpin = (path: string) => updateNodeParams(node.id, { pinned: ((node.params.pinned ?? []) as string[]).filter(p => p !== path) });
   return (
     <div style={{ ...vizContainer(), padding: '6px 10px 8px' }} onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
-      <canvas ref={thumb} width={160} height={90} title="Where the walkers are now (a sample of at most 65,536 of them)"
-        style={{ display: 'block', width: '100%', maxHeight: 140, objectFit: 'contain', margin: '0 auto 6px', background: '#000', borderRadius: 3 }} />
-      <div style={{ fontSize: '10px', color: pal.overlay0, fontFamily: MONO, marginBottom: 6 }}>
-        {count.toLocaleString('en-US')} agents · {spf} step{spf === 1 ? '' : 's'} a frame{behind}
+      {steps.length > 0 && (
+        <div style={{ border: `1px dashed ${pal.surface2}`, borderRadius: 6, padding: '6px 8px 8px', marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
+            <span style={{ flex: 1, fontSize: '10px', letterSpacing: '0.06em', textTransform: 'uppercase', color: pal.overlay0 }}>Next steps</span>
+            <button type="button" aria-label="Hide next steps" title="Hide these suggestions on this group"
+              onClick={() => setCardFlag('__nextSteps', false)}
+              style={{ width: 18, height: 18, padding: 0, border: 0, background: 'none', color: pal.overlay0, cursor: 'pointer', font: `600 12px ${MONO}` }}>×</button>
+          </div>
+          {steps.map(st => (
+            <div key={st.piece} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+              <button type="button" onClick={() => addPiece(st.piece)} title={st.why}
+                style={{ flexShrink: 0, height: 24, padding: '0 8px', border: `1px solid ${pal.surface1}`, borderRadius: 5, background: 'transparent', color: pal.text, font: `600 11px ${MONO}`, cursor: 'pointer' }}>
+                {st.piece === 'output' ? '' : '+ '}{st.label}
+              </button>
+              <span style={{ fontSize: '10.5px', lineHeight: 1.3, color: pal.overlay0 }}>{st.why}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {dotsOn && (
+        <canvas ref={thumb} width={160} height={90} title="Where the walkers are now (a sample of at most 65,536 of them)"
+          style={{ display: 'block', width: '100%', maxHeight: 140, objectFit: 'contain', margin: '0 auto 6px', background: '#000', borderRadius: 3 }} />
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '10px', color: pal.overlay0, fontFamily: MONO, marginBottom: 6 }}>
+        <span style={{ flex: 1 }}>{count.toLocaleString('en-US')} agents · {spf} step{spf === 1 ? '' : 's'} a frame{behind}</span>
+        <button type="button" onClick={() => setCardFlag('__dots', !dotsOn)}
+          title={dotsOn
+            ? 'Hide the live view of where the walkers are. It costs little (about 0.1 ms a frame on an M3 Pro: a sample of at most 65,536 walkers drawn every tenth frame, read back without waiting) and pauses by itself while the card is off screen.'
+            : 'Show a live view of where the walkers are on this card (about 0.1 ms a frame; paused while the card is off screen).'}
+          style={{ height: 18, padding: '0 6px', border: `1px solid ${pal.surface1}`, borderRadius: 4, background: 'transparent', color: pal.overlay0, font: `500 10px ${MONO}`, cursor: 'pointer' }}>
+          {dotsOn ? 'Hide view' : 'Show view'}
+        </button>
       </div>
+      {!stepsOn && agentNextSteps(useNodeGraphStore.getState().nodes, node.id).length > 0 && (
+        <button type="button" onClick={() => setCardFlag('__nextSteps', true)}
+          style={{ display: 'block', marginBottom: 6, padding: 0, border: 0, background: 'none', color: pal.overlay0, font: `500 10px ${MONO}`, cursor: 'pointer', textDecoration: 'underline' }}>
+          Show next steps
+        </button>
+      )}
       <div style={{ display: 'flex', gap: 6 }}>
         <button type="button" style={button} title="Open the rule one walker follows every step (or double-click the card's title)" onClick={() => onEnterGroup?.(node.id)}>Open rule ↗</button>
         <button type="button" style={button} title="Start the simulation over: everyone is born again at step 0" onClick={() => { restartAgents(node.id); window.dispatchEvent(new Event('agents-restart')); }}>↺ Start over</button>

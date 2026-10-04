@@ -11,7 +11,7 @@ import { agentsGroup, expr, groupInput, note, withOutputs } from './agentExample
 // ── Galaxy ──────────────────────────────────────────────────────────────────
 
 /**
- * Galaxy: a million stars circling a bright bulge, crowding into two spiral arms
+ * Galaxy: 262,144 stars circling a bright bulge, crowding into two spiral arms
  * that turn slowly (a density wave: the arms are a pattern the stars pass through,
  * not the same stars), warm in the core and blue in the arms, with a few pink
  * star-forming knots. Each star remembers its own orbit (Memory), so the galaxy
@@ -98,7 +98,7 @@ export function galaxyNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     mode: 'fill', shape: 'disc', heading: 'random', x: 0, y: 0, size: 0.95, life: 0, share: 3,
     ...note([
       'Emit (the disc): three quarters of the stars are born anywhere in a wide disc (radius 0.95); each circles at the radius it was born at.',
-      'Its Also chains the bulge Emit in: births are shared by Share (3 here, 1 there).',
+      'Its "+ Another Emit" chains the bulge Emit in: births are shared by Share (3 here, 1 there).',
     ]),
   }, { also: ['gxBulge', 'emitter'] });
   const bulge = n('agentEmit', 'gxBulge', X(0), Y(-160), {
@@ -111,9 +111,9 @@ export function galaxyNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   const group = agentsGroup('galaxy', X(420), Y(0), 'gxDisc', [inputs, time, orbit, colour, output], {
     label: 'Galaxy', preroll: 2,
     ...note([
-      'Agents: a million stars (1M), 2 steps a frame. Inside (double-click): Orbit and arms moves each star round its orbit, Star colour colours it.',
+      'Agents: 262,144 stars (256k), 2 steps a frame. Inside (double-click): Orbit and arms moves each star round its orbit, Star colour colours it.',
       'Pre-roll 2: two seconds simulated before the first frame, so the stars have found their places in the arms when it appears.',
-      'Try: Count 256k for a sparser, grainier galaxy; Steps per frame 4 to spin it twice as fast.',
+      'Try: Count 1M for a denser, smoother galaxy; Steps per frame 4 to spin it twice as fast.',
     ]),
   });
   const uv = n('uv', 'gxUv', X(420), Y(420), { ...note(['UV: where each pixel is, for the glow behind the stars.']) });
@@ -131,7 +131,7 @@ export function galaxyNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ],
   });
   const draw = n('drawAgents', 'gxDraw', X(1260), Y(0), {
-    style: 'glow', colorBy: 'agent', palette: 'ab', scaleBy: 'crowd', size: 1.5, brightness: 1.3, glow: 1.1, fade: 'off', lights: '0',
+    style: 'glow', colorBy: 'agent', palette: 'ab', scaleBy: 'crowd', size: 1.5, brightness: 1.7, glow: 1.3, fade: 'off', lights: '0',
     ...note([
       'Draw agents, Glow: every star a soft dot in its own colour (Colour by Agent: Star colour inside the group), with the Particles node\'s glow, so the crowded core and arms bloom.',
       'Try: Brightness 1 for a blazing core; Style Points for a crisp star field.',
@@ -189,7 +189,7 @@ export function myceliumNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     outputType: 'vec2',
     wires: { p: ['myIn', 'position'] },
     note: [
-      'Spread out (an Expression Block): a gentle drift away from the spore (Drift, 0.03 a second), added to the tip\'s walk (Move\'s Also velocity), as hyphae grow outward looking for food.',
+      'Spread out (an Expression Block): a gentle drift away from the spore (Drift, 0.03 a second), added to the tip\'s walk (Move\'s "+ Drift"), as hyphae grow outward looking for food.',
       'away: the direction from the middle to the tip.',
       'Try: Drift 0 for a colony that grows as much inward as out; 0.1 for long, combed, star-like rays.',
     ],
@@ -225,7 +225,7 @@ export function myceliumNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ...note([
       'Emit (branches): 200 new tips a second (Rate), each sprouting on a young thread (Shape Field: Young threads above 0.6, wired into Where ƒ), facing anywhere, and growing for about 5 s.',
       'No place found: Not born this time. While the colony is tiny most tries miss, so it starts slowly and speeds up as it grows, instead of tips appearing in empty ground.',
-      'Its Also chains the spore in: births are shared by Share.',
+      'Its "+ Another Emit" chains the spore in: births are shared by Share.',
     ]),
   }, { where: ['myYoung', 'result'], also: ['mySpore', 'emitter'] });
   const spore = n('agentEmit', 'mySpore', X(0), Y(-260), {
@@ -278,7 +278,7 @@ export function myceliumNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
 // ── Sand on a plate ─────────────────────────────────────────────────────────
 
 /**
- * Sand on a plate: a million grains on a square metal plate that a silent beat sets
+ * Sand on a plate: grains on a square metal plate that a silent beat (off by default) sets
  * ringing. The sand is shaken off wherever the plate moves and comes to rest on its
  * still lines, drawing a Chladni figure; every beat the plate rings at another
  * mode and the sand runs to the new figure.
@@ -296,7 +296,8 @@ export function sandPlateNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     size: 0.92, x: 0, y: 0, settle: 1, shake: 0.9, soundFrom: 'graph', level: 0, beat: 0,
     ...note([
       'Chladni: the plate (square, 0.92 each way from the middle). Where it moves, the grain is shaken about (Shake 0.9); everywhere it slides down toward the still lines (Settle 1). That is how sand draws a Chladni figure.',
-      'Mode from Sound: what the plate hears picks the figure, and here it hears the group\'s silent Beat: each beat steps the figure on, three modes summed (Modes 3, Weights 0.5) for lace-like figures.',
+      'Mode from Sound: what the plate hears picks the figure. The group\'s stand-in Beat is off, so it hears silence and holds N 3, M 5 (three modes summed: Modes 3, Weights 0.5, a lace-like figure).',
+      'Why the sand pulses with a Beat: every beat shakes the plate much harder for a moment (Shake rises with each hit) and steps it to the next figure, which the sand takes a second or two to find. At Beat 20 that is a jolt every three seconds: the beat, not a glitch.',
       'Try: Mode from N and M with N 3, M 5 for one classic still figure; Plate Round for rings and spokes; Settle 4 for crisp, fast lines.',
     ]),
   });
@@ -312,10 +313,10 @@ export function sandPlateNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ]),
   });
   const group = agentsGroup('sand', X(420), Y(0), 'spEmit', [inputs, plate, output], {
-    label: 'Sand on a plate', soundFrom: 'graph', level: 0, beat: 20, preroll: 3,
+    label: 'Sand on a plate', soundFrom: 'graph', level: 0, beat: 0, preroll: 3,
     ...note([
-      'Agents: a million grains of sand (1M), 2 steps a frame. Inside (double-click): just Chladni, the plate.',
-      'Sound from Level (and Beat), Beat 20: a silent stand-in, a kick every three seconds, so the figure changes on its own. Set Beat to 0 and Sound from to the Mic or the Audio engine to let music pick the figures.',
+      'Agents: 262,144 grains of sand (256k), 2 steps a frame. Inside (double-click): just Chladni, the plate.',
+      'Sound from Level (and Beat), Beat 0: silent, so the sand settles into one still figure. Turn it on: Beat 20 is a silent stand-in kick every three seconds that jolts the sand and steps the plate to a new figure each time (it reads as a pulse). Or set Sound from to the Mic or the Audio engine to let music pick the figures.',
       'Pre-roll 3: the sand has found its first figure when the picture appears.',
     ]),
   });
@@ -339,7 +340,7 @@ export function sandPlateNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ],
   });
   const draw = n('drawAgents', 'spDraw', X(1260), Y(0), {
-    style: 'glow', colorBy: 'speed', palette: 'gold', speedRef: 0.4, scaleBy: 'crowd', size: 1, brightness: 1.6, glow: 0.8, fade: 'off', lights: '0',
+    style: 'glow', colorBy: 'speed', palette: 'gold', speedRef: 0.4, scaleBy: 'crowd', size: 1, brightness: 2, glow: 0.8, fade: 'off', lights: '0',
     ...note([
       'Draw agents, Glow: every grain a small soft dot, coloured by how fast it moves along the Gold palette (Fast is 0.4): grains resting on a line are pale gold, grains being shaken across the plate darker amber, so the figure stands out and you can see the sand run when it changes.',
       'Try: Palette Ice for frost; Brightness 2 for a glowing figure.',

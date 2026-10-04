@@ -52,3 +52,17 @@ export function wirePath(from: Point, to: Point): string {
   ]);
 }
 
+
+/**
+ * A backward wire routed over the top of the cards it would cross, through a channel at `overY`
+ * (above the cards between the two sockets), with the point where its label sits: the middle of
+ * that channel, in clear space. The Agents group's trail loop (the "↺ last step" wire) uses it.
+ */
+export function loopWirePath(from: Point, to: Point, overY: number): { d: string; mid: Point } {
+  const outX = from.x + LEAD;
+  const inX = to.x - LEAD;
+  return {
+    d: rounded([from, { x: outX, y: from.y }, { x: outX, y: overY }, { x: inX, y: overY }, { x: inX, y: to.y }, to]),
+    mid: { x: (outX + inX) / 2, y: overY },
+  };
+}

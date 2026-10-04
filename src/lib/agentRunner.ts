@@ -294,8 +294,12 @@ export class AgentRunner {
   }, true);
   private dots: THREE.Points;
   private dotsScene = new THREE.Scene();
-  private dotsRt: THREE.WebGLRenderTarget | null = null;
-  private dotsBuf: Uint8Array | null = null;
+  /**
+   * Each group card's dots: its own small target and a read started into a pixel buffer, picked up
+   * a frame or more later when the GPU has finished (no stall: a synchronous read here waited for
+   * the whole frame's simulation, about 0.35–0.9 ms a frame on average on an M3 Pro).
+   */
+  private dotReads = new Map<string, { rt: THREE.WebGLRenderTarget; W: number; H: number; pbo: WebGLBuffer | null; sync: WebGLSync | null; buf: Uint8Array }>();
   /** The picture's aspect at the last run (the dots thumbnail's shape). */
   private aspect = 16 / 9;
   // Readings for Play (P6): the live state summed on the GPU into 2 × 1 texels, read back without a stall.
@@ -829,20 +833,37 @@ export class AgentRunner {
   /** The Agents group cards' thumbnails: where the walkers are now, as dots (a sample of at most THUMB_DOTS). */
   private drawGroupDots(targets: AgentTargets): void {
     const { renderer, camera } = this.host;
+    const gl = renderer.getContext() as WebGL2RenderingContext;
+    const async = typeof gl.fenceSync === 'function';
     for (const g of this.spec.groups) {
       const canvas = agentThumbRegistry.get(g.nodeId);
-      if (!canvas) continue;
+      if (!canvas) { this.dropDots(g.nodeId); continue; }
       const W = 160, H = Math.max(8, Math.round(W / Math.max(0.25, this.aspect)));
-      if (!this.dotsRt || this.dotsRt.height !== H) {
-        this.dotsRt?.dispose();
-        this.dotsRt = new THREE.WebGLRenderTarget(W, H, { type: THREE.UnsignedByteType, depthBuffer: false });
-        this.dotsBuf = new Uint8Array(W * H * 4);
+      let d = this.dotReads.get(g.nodeId);
+      if (d && d.H !== H) { this.dropDots(g.nodeId); d = undefined; }
+      if (!d) {
+        d = { rt: new THREE.WebGLRenderTarget(W, H, { type: THREE.UnsignedByteType, depthBuffer: false }), W, H, pbo: null, sync: null, buf: new Uint8Array(W * H * 4) };
+        this.dotReads.set(g.nodeId, d);
       }
       if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
       const ctx = canvas.getContext('2d');
       if (!ctx) continue;
       const gs = targets.groups.get(g.slug);
       if (!gs) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); continue; }
+      const show = () => {
+        const img = ctx.createImageData(W, H);
+        for (let y = 0; y < H; y++) img.data.set(d!.buf.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
+        ctx.putImageData(img, 0, 0);
+      };
+      // A read started earlier: show it once the GPU is done; until then leave the card as it is.
+      if (d.sync) {
+        if (gl.getSyncParameter(d.sync, gl.SYNC_STATUS) !== gl.SIGNALED) continue;
+        gl.deleteSync(d.sync); d.sync = null;
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, d.pbo);
+        gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, d.buf);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        show();
+      }
       const n = g.side * g.side;
       const stride = Math.max(1, Math.ceil(n / THUMB_DOTS));
       const du = this.dotsMat.uniforms;
@@ -855,20 +876,48 @@ export class AgentRunner {
       const prevColor = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
       const prevAuto = renderer.autoClear;
       renderer.setClearColor(0x000000, 1);
-      renderer.setRenderTarget(this.dotsRt);
+      renderer.setRenderTarget(d.rt);
       renderer.clear(true, false, false);
       renderer.setClearColor(prevColor, prevAlpha);
       renderer.autoClear = false;
       this.pointGeometry.setDrawRange(0, Math.ceil(n / stride));
       renderer.render(this.dotsScene, camera);
       renderer.autoClear = prevAuto;
-      renderer.readRenderTargetPixels(this.dotsRt, 0, 0, W, H, this.dotsBuf!);
+      if (async) {
+        // Start the read into a pixel buffer; the next call picks it up (no wait for the GPU).
+        const fb = (renderer.properties.get(d.rt) as { __webglFramebuffer?: WebGLFramebuffer }).__webglFramebuffer ?? null;
+        if (fb) {
+          if (!d.pbo) {
+            d.pbo = gl.createBuffer();
+            gl.bindBuffer(gl.PIXEL_PACK_BUFFER, d.pbo);
+            gl.bufferData(gl.PIXEL_PACK_BUFFER, d.buf.byteLength, gl.STREAM_READ);
+          } else gl.bindBuffer(gl.PIXEL_PACK_BUFFER, d.pbo);
+          const prevRead = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING);
+          gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fb);
+          gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+          gl.bindFramebuffer(gl.READ_FRAMEBUFFER, prevRead);
+          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+          d.sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        }
+      } else {
+        renderer.readRenderTargetPixels(d.rt, 0, 0, W, H, d.buf);
+        show();
+      }
       renderer.setRenderTarget(null);
-      const img = ctx.createImageData(W, H);
-      for (let y = 0; y < H; y++) img.data.set(this.dotsBuf!.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
-      ctx.putImageData(img, 0, 0);
       canvas.dataset.dots = String(Math.ceil(n / stride));
     }
+    for (const id of [...this.dotReads.keys()]) if (!this.spec.groups.some(g => g.nodeId === id)) this.dropDots(id);
+  }
+
+  /** Lets a group card's dots go (its card is off screen, hidden, or the group is gone). */
+  private dropDots(nodeId: string): void {
+    const d = this.dotReads.get(nodeId);
+    if (!d) return;
+    const gl = this.host.renderer.getContext() as WebGL2RenderingContext;
+    if (d.sync) gl.deleteSync(d.sync);
+    if (d.pbo) gl.deleteBuffer(d.pbo);
+    d.rt.dispose();
+    this.dotReads.delete(nodeId);
   }
 
   dispose(): void {
@@ -889,7 +938,7 @@ export class AgentRunner {
     for (const m of [this.depositMat, this.trailMat, this.drawMat, this.downMat, this.blurMat, this.composeMat, this.thumbMat, this.dotsMat, this.readMat, this.sumMat, this.placeholder]) m.dispose();
     for (const r of this.reads.values()) { for (const rt of r.rts) rt.dispose(); r.reader.dispose(); }
     this.reads.clear();
-    this.dotsRt?.dispose();
+    for (const id of [...this.dotReads.keys()]) this.dropDots(id);
     this.pointGeometry.dispose();
     this.thumbRt?.dispose();
     this.bessel?.dispose();

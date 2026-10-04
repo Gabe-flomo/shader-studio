@@ -3,6 +3,10 @@ import type { GraphNode, SubgraphData } from '../../types/nodeGraph';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { ConnectionLine } from './ConnectionLine';
 import { TYPE_COLORS } from './typeColors';
+import { loopWirePath } from './wirePath';
+
+/** A card's width (world units), for routing the trail loop over the cards it would cross. */
+const CARD_W = 360;
 import { getDragPosition, getSocketElement, getSocketOffset, subscribeLayout, type Pt } from './socketRegistry';
 
 export interface EdgeInfo {
@@ -97,13 +101,33 @@ export const WireLayer = React.memo(function WireLayer({
       const lineType = sourceNode.outputs[input.connection.outputKey]?.type
         ?? srcDef?.outputs[input.connection.outputKey]?.type;
       const edgeKey = edgeKeyOf(input.connection.nodeId, input.connection.outputKey, node.id, inputKey);
+      // A Trail going back into its Agents group (or, inside, the group's texture port into the rule) is
+      // read as it was one step before: the loop's one legal cycle (docs/agents-plan.md §12).
+      const lastStep = (sourceNode.type === 'trailField' && node.type === 'agentsGroup')
+        || (sourceNode.type === 'agentInputs' && lineType === 'texture');
+      // The trail loop runs backward (the Trail sits right of its group): it goes over the top of the
+      // cards between the two, so the wire and its "↺ last step" label sit in clear space.
+      let overY: number | undefined;
+      let mid = { x: (fromPos.x + toPos.x) / 2, y: (fromPos.y + toPos.y) / 2 };
+      if (lastStep && sourceNode.type === 'trailField' && toPos.x < fromPos.x - 40) {
+        const lo = toPos.x - 40, hi = fromPos.x + 40;
+        const low = Math.max(fromPos.y, toPos.y);
+        let top = Math.min(positionOf(sourceNode.id)?.y ?? fromPos.y, positionOf(node.id)?.y ?? toPos.y);
+        for (const other of displayNodes) {
+          const p = positionOf(other.id);
+          if (!p || p.x > hi || p.x + CARD_W < lo || p.y > low || p.y < top - 900) continue;
+          top = Math.min(top, p.y);
+        }
+        overY = top - 44;
+        mid = loopWirePath(fromPos, toPos, overY).mid;
+      }
       edges.set(edgeKey, {
         info: {
           fromNodeId: input.connection.nodeId, fromOutputKey: input.connection.outputKey,
           toNodeId: node.id, toInputKey: inputKey,
           fromType: lineType ?? 'float', toType: input.type as string,
         },
-        mid: { x: (fromPos.x + toPos.x) / 2, y: (fromPos.y + toPos.y) / 2 },
+        mid,
       });
       wires.push(
         <ConnectionLine
@@ -113,14 +137,11 @@ export const WireLayer = React.memo(function WireLayer({
           dataType={lineType}
           edgeKey={edgeKey}
           dimmed={dimming && !spotlightEdges.has(edgeKey)}
+          overY={overY}
         />,
       );
-      // A Trail going back into its Agents group (or, inside, the group's texture port into the rule) is
-      // read as it was one step before: the loop's one legal cycle (docs/agents-plan.md §12).
-      const lastStep = (sourceNode.type === 'trailField' && node.type === 'agentsGroup')
-        || (sourceNode.type === 'agentInputs' && lineType === 'texture');
       if (lastStep) {
-        const mx = (fromPos.x + toPos.x) / 2, my = (fromPos.y + toPos.y) / 2;
+        const mx = mid.x, my = mid.y;
         wires.push(
           <g key={`${node.id}-${inputKey}-laststep`} transform={`translate(${mx}, ${my})`} style={{ pointerEvents: 'none', opacity: dimming && !spotlightEdges.has(edgeKey) ? 0.08 : 1 }}>
             <title>Read as it was one step before: the trail the walkers left last step.</title>
