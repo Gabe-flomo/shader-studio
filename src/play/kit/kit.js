@@ -63,6 +63,7 @@ import { agCreate, agStep, agDraw, agReset, agScatter, agElements, agElement, AG
 import { hdDraw } from './hands.js';
 import { fcDraw } from './face.js';
 import { psDraw } from './pose.js';
+import { dmCreate, dmBoxOf } from './displace.js';
 import { kmApplyBackgroundMatte, kmApplyMasks, kmApplyTrack, kmMatteSources, kmTrackOf } from './mattes.js';
 import { bqState, bqAct, bqPlan, bqCompose } from './queue.js';
 import { mtCreate, mtStep, mtSampleSize, mtLook, mtHeat, mtMaskAlpha, MT_READS } from './motion.js';
@@ -93,6 +94,10 @@ export function klPictureAt(grid, W, H, x, y, r, ch) {
     sum += val((py * W + px) * 4); n++;
   }
   return n ? sum / n : null;
+}
+/** Is this layer's Displacement Map on (displace.js)? Not on the kinds that can't be matted. */
+function dispOn(l) {
+  return !!(l.displace && l.displace.on !== false) && l.kind !== 'null' && l.kind !== 'background' && l.kind !== 'drumpad' && l.kind !== 'relationship' && l.kind !== 'motion';
 }
 const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, video: 1, lens: 1, script: 1, relationship: 1, agents: 1, motion: 1, water: 1 };
 
@@ -130,6 +135,8 @@ export function createLayerKit() {
   const paths = new Map(), pathFades = new Map();
   // Layers drawn alone this frame for the host (env.alphaLayers), by id.
   const alphaCanvases = new Map();
+  // Displacement maps (a layer's Displace): one small WebGL2 canvas, made on first use.
+  let displacer = null;
   const frozen = new Set(), shown = new Map(), lastVisible = new Map();
   // Data layers: each one's stepping, and per dataset the current row of the first Data layer showing it (for s.data()).
   const dStates = new Map(), dsCurrent = new Map();
@@ -385,6 +392,8 @@ export function createLayerKit() {
     if (alphaIds) for (const id of alphaIds) matteSources.add(id);
     // The Background's own matte layer runs (and draws on its own canvas) even while hidden, like any other matte.
     if (bgMatte && byId.has(bgMatte.id)) matteSources.add(bgMatte.id);
+    // A layer another one's Displacement Map reads runs (and draws on its own canvas) even while hidden, like a matte.
+    for (const l of layers) if (dispOn(l) && l.displace.map === 'layer' && byId.has(l.displace.layerId) && isVisible(l)) matteSources.add(l.displace.layerId);
     // A layer a Motion layer watches runs (and draws on its own canvas, once) even while hidden, like a matte.
     for (const l of layers) if (l.kind === 'motion' && l.readFrom === 'layer' && l.sourceId && l.sourceId !== l.id && byId.has(l.sourceId) && byId.get(l.sourceId).kind !== 'motion') matteSources.add(l.sourceId);
     // A layer whose shape a Water layer stamps runs (and draws on its own canvas, once) even while hidden.
@@ -1226,7 +1235,7 @@ export function createLayerKit() {
     // among themselves), cut by its matte and masks, then laid on the picture with its blend.
     const glyphSources = new Set();
     for (const l of layers) if (l.kind === 'glyphs' && l.readFrom === 'layer' && l.sourceId && l.sourceId !== l.id && isVisible(l)) glyphSources.add(l.sourceId);
-    const ownCanvas = l => glyphSources.has(l.id) || matteSources.has(l.id) || relPicSources.has(l.id) || !!kmTrackOf(l, byId) || !!(l.masks && l.masks.length);
+    const ownCanvas = l => glyphSources.has(l.id) || matteSources.has(l.id) || relPicSources.has(l.id) || !!kmTrackOf(l, byId) || !!(l.masks && l.masks.length) || dispOn(l);
     const rendered = new Map();
     function renderLayer(l) {
       if (rendered.has(l.id)) return rendered.get(l.id);
@@ -1239,10 +1248,36 @@ export function createLayerKit() {
       else drawOne(o, l, false);
       o.setTransform(1, 0, 0, 1, 0, 0); o.globalAlpha = 1;
       const m = kmTrackOf(l, byId);
-      if (m) { const mc = matteCanvas(m); if (mc) kmApplyTrack(pool, o, mc, l.trackMatte, W, H); }
-      if (l.masks && l.masks.length && l.kind !== 'background') kmApplyMasks(pool, o, l, k => env.value(l, k), W, H);
+      // As in After Effects: masks, then effects (the Displacement Map moves the masked layer), then the track matte.
+      if (dispOn(l)) {
+        if (l.masks && l.masks.length) kmApplyMasks(pool, o, l, k => env.value(l, k), W, H);
+        displaceLayer(o, off, l);
+        if (m) { const mc = matteCanvas(m); if (mc) kmApplyTrack(pool, o, mc, l.trackMatte, W, H); }
+      } else {
+        if (m) { const mc = matteCanvas(m); if (mc) kmApplyTrack(pool, o, mc, l.trackMatte, W, H); }
+        if (l.masks && l.masks.length && l.kind !== 'background') kmApplyMasks(pool, o, l, k => env.value(l, k), W, H);
+      }
       rendered.set(l.id, off);
       return off;
+    }
+    /**
+     * A layer's Displacement Map (displace.js): its canvas, drawn alone, is moved by the map (another
+     * layer drawn alone, or the picture) on the GPU and copied back. Without WebGL2 it stays unmoved.
+     */
+    function displaceLayer(o, off, l) {
+      const d = l.displace;
+      let map = null;
+      if (d.map === 'layer') { const ml = byId.get(d.layerId); map = ml && ml.id !== l.id ? renderLayer(ml) : null; }
+      else map = gl;
+      let box = null;
+      // Stretch and Tile work on the map's visible part: its box, found on a 128 × 72 grid.
+      if (map && d.map === 'layer' && d.behaviour !== 'center') { const g = sampleInto('dmbox', map, 128, 72, false); box = g ? dmBoxOf(g, 128, 72) : null; }
+      if (!displacer) displacer = dmCreate();
+      const out = displacer.apply(off, map, { h: d.h, v: d.v, behaviour: d.behaviour, wrap: d.wrap, maxH: env.value(l, 'disp_maxH'), maxV: env.value(l, 'disp_maxV'), box }, W, H);
+      if (!out) return;
+      o.setTransform(1, 0, 0, 1, 0, 0); o.globalAlpha = 1; o.globalCompositeOperation = 'copy';
+      o.drawImage(out, 0, 0);
+      o.globalCompositeOperation = 'source-over';
     }
     // Motion layers watch their sources now, before anything draws, so their mattes, the particles born
     // where they move and their readings all see this frame's movement. A layer watched is rendered once
@@ -1645,8 +1680,10 @@ export function createLayerKit() {
       // A crossfade under way, or a sketch showing in the background.
       if (bqLast && record.layers[0] && record.layers[0].id === bqLast.layerId && (bqLast.fading || bqLast.items.some(i => i.item.kind === 'script'))) return true;
       const mattes = kmMatteSources(record.layers, l => (shown.has(l.id) ? shown.get(l.id) : l.visible));
-      // A Motion layer measures while hidden too, and a Water layer's waves keep moving.
-      return record.layers.some(l => ((shown.has(l.id) ? shown.get(l.id) : l.visible) || mattes.has(l.id) || l.kind === 'motion' || l.kind === 'water') && (KIT_ANIMATED[l.kind] || (l.kind === 'null' && l.follow !== 'none') || (l.kind === 'text' && (l.sequence || !!l.reads)) || (l.kind === 'contours' && l.flow !== 0) || (l.kind === 'glyphs' && l.readFrom === 'camera') || (l.kind === 'data' && dStates.has(l.id) && dStates.get(l.id).from >= 0)));
+      // A displacement map moves its layer while hidden too.
+      for (const l of record.layers) if (dispOn(l) && l.displace.map === 'layer' && (shown.has(l.id) ? shown.get(l.id) : l.visible)) mattes.add(l.displace.layerId);
+      // A Motion layer measures while hidden too.
+      return record.layers.some(l => ((shown.has(l.id) ? shown.get(l.id) : l.visible) || mattes.has(l.id) || l.kind === 'motion') && (KIT_ANIMATED[l.kind] || (l.kind === 'null' && l.follow !== 'none') || (l.kind === 'text' && (l.sequence || !!l.reads)) || (l.kind === 'contours' && l.flow !== 0) || (l.kind === 'glyphs' && l.readFrom === 'camera') || (l.kind === 'data' && dStates.has(l.id) && dStates.get(l.id).from >= 0)));
     },
     /**
      * Forget all state (a new recording starts from scratch). `seed` (a take's)

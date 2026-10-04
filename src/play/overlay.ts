@@ -36,7 +36,7 @@ import { kitDataset } from './dataLayer';
 import { klFontFor } from './kit/layers.js';
 import { dragHandle, handleAt, handlePoints, insideBounds, layerBounds, maskBounds, maskPatchFor, outlinePoints, patchFor, type Bounds, type Handle } from './transform';
 import { kmMaskLocal, kmMaskPath, kmMaskPlacement } from './kit/mattes.js';
-import { matteUsers } from '../types/playLayers';
+import { displaceUsers, matteUsers } from '../types/playLayers';
 import { addMask, maskFromOutline } from './mattes';
 import { fnActive, fnAnimated, fnCreate, fnLookAct, fnLookNew, fnLookReset, fnLookStep, fnLookValue, fnMapLayers, fnUsesMotion, type FnEffect, type FnRenderer } from './kit/finish.js';
 import { finishPropId, renderableFinish } from '../types/playFinish';
@@ -312,7 +312,7 @@ class PlayOverlay {
   private emitMask(layerId: string, maskId: string): void { this.selectedMask = maskId; for (const cb of this.maskListeners) cb(layerId, maskId); }
 
   /** Can this layer be picked and dragged on the picture: shown, or hidden because it is another layer's matte. */
-  private handled(l: PlayLayer): boolean { return l.visible || matteUsers(this.record.layers, l.id).length > 0; }
+  private handled(l: PlayLayer): boolean { return l.visible || matteUsers(this.record.layers, l.id).length > 0 || displaceUsers(this.record.layers, l.id).length > 0; }
 
   /** Draw the guides (null markers, handles, zone outlines, fields) or just the picture. */
   setGuides(on: boolean): void { this.guides = on; }

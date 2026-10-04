@@ -32,6 +32,7 @@
  */
 import { FN_TONE_GLSL, FN_TONE_FUNCTIONS, FN_CRT_MASK_GLSL } from './finishGlsl.js';
 import { gyAtlas } from './glyphs.js';
+import { DM_GLSL, DM_HINTS, DM_CHANNELS, DM_BEHAVIOURS, dmChannelGlsl, dmBoxOf } from './displace.js';
 
 // ── The catalogue ────────────────────────────────────────────────────────────
 
@@ -294,12 +295,15 @@ export const FN_EFFECTS = {
   },
   displace: {
     label: 'Displace', group: 'Warp', icon: 'curve',
-    summary: 'Pushes the picture around by a map: noise, brightness, a layer or motion',
+    summary: 'Pushes the picture around by a map: noise, brightness, a layer or motion; or by a layer’s channels, like After Effects’ Displacement Map',
     params: [
       FN_P('amount', 'Amount', 0, 1, 0.01, 0.3, 'How far the picture is pushed.'),
       FN_P('angle', 'Direction', 0, 360, 1, 0, 'Brightness, layer and motion maps: which way the push goes.'),
       FN_P('scale', 'Scale', 0.5, 20, 0.1, 4, 'Noise map: the size of the ripples (larger = finer).'),
       FN_P('speed', 'Speed', 0, 2, 0.01, 0.3, 'Noise map: how fast it drifts, like heat haze.'),
+      // Push → By channels (a layer or picture map): After Effects' Displacement Map (displace.js).
+      FN_P('maxH', 'Max horizontal', -300, 300, 1, 50, 'By channels: ' + DM_HINTS.maxH),
+      FN_P('maxV', 'Max vertical', -300, 300, 1, 50, 'By channels: ' + DM_HINTS.maxV),
     ],
     // For the Noise map (the default): the other maps don't use Scale or Speed.
     presets: [
@@ -637,6 +641,21 @@ export const FN_TIME_MAPS = ['slit', 'luma', 'noise', 'radial', 'layer'];
 export const FN_WHERE = ['all', 'layer', 'picture', 'motion', 'waves'];
 /** What pushes the picture in Displace. */
 export const FN_DISPLACE_MAPS = ['noise', 'picture', 'layer', 'motion'];
+/**
+ * How Displace pushes with a picture or layer map: 'direction' (dispMode absent: every stack before the
+ * Displacement Map) pushes along Direction by the map's brightness or alpha; 'channels' is After
+ * Effects' Displacement Map: one channel moves sideways, another up and down, by Max horizontal /
+ * vertical (pixels of a 1080-tall picture), with a map behaviour and Wrap (e.chanH, e.chanV, e.behaviour, e.wrap).
+ */
+export const FN_DISPLACE_PUSH = ['direction', 'channels'];
+/** Does this Displace use the Displacement Map (By channels, with a picture or layer map)? */
+export function fnDisplaceChannels(e) {
+  return !!e && e.kind === 'displace' && e.dispMode === 'channels' && (e.map === 'picture' || e.map === 'layer');
+}
+/** A By-channels Displace's settings, checked (displace.js). */
+function fnDispOpts(e) {
+  return { h: DM_CHANNELS.includes(e.chanH) ? e.chanH : 'red', v: DM_CHANNELS.includes(e.chanV) ? e.chanV : 'green', behaviour: DM_BEHAVIOURS.includes(e.behaviour) ? e.behaviour : 'center', wrap: e.wrap === true };
+}
 /** The most map textures (layers drawn alone, the motion map) one pass reads. */
 export const FN_MAP_MAX = 4;
 export const FN_TIME_QUALITY = { low: { frames: 16, scale: 0.25, cap: 8e6 }, medium: { frames: 32, scale: 0.5, cap: 20e6 }, high: { frames: 64, scale: 0.5, cap: 48e6 } };
@@ -757,6 +776,31 @@ export function fnMapKeys(effects) {
     add(fnMapKey(fnWhereOf(e), e.whereLayer));
   }
   return keys;
+}
+let fnBoxCanvas = null;
+/**
+ * A map's visible box (displace.js dmBoxOf) from a layer drawn alone: a canvas (read on a
+ * 128 × 72 grid) or pixels ({ data, width, height }, row 0 at the top). Null when empty or unreadable.
+ */
+function fnBoxOf(src) {
+  if (!src) return null;
+  const w = 128, h = 72;
+  try {
+    if (src.data && src.width && src.height) {
+      const g = new Uint8ClampedArray(w * h * 4);
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+        const sx = Math.min(src.width - 1, Math.floor((i + 0.5) / w * src.width)), sy = Math.min(src.height - 1, Math.floor((j + 0.5) / h * src.height));
+        g[(j * w + i) * 4 + 3] = src.data[(sy * src.width + sx) * 4 + 3];
+      }
+      return dmBoxOf(g, w, h);
+    }
+    if (typeof document === 'undefined') return null;
+    if (!fnBoxCanvas) fnBoxCanvas = document.createElement('canvas');
+    fnBoxCanvas.width = w; fnBoxCanvas.height = h;
+    const x = fnBoxCanvas.getContext('2d', { willReadFrequently: true });
+    x.clearRect(0, 0, w, h); x.drawImage(src, 0, 0, w, h);
+    return dmBoxOf(x.getImageData(0, 0, w, h).data, w, h);
+  } catch (err) { return null; }
 }
 /** The layers a stack reads drawn alone (the host asks the kit for them: env.alphaLayers). */
 export function fnMapLayers(finish) {
@@ -1992,6 +2036,8 @@ export function fnBuildFinal(effects, opts = {}) {
   if (stage) src += 'vec2 gQ, gP;\n';
   // The picture's own brightness (straight colour) at a point: the Brightness map, Displace and Edges.
   src += 'float fnPicLuma(vec2 p) { vec4 s = scene(p); return s.a > 1e-5 ? fnLuma(s.rgb / s.a) : 0.0; }\n';
+  // The Displacement Map's helpers (displace.js) and its map's visible box (Stretch and Tile).
+  if (first && effects.some(fnDisplaceChannels)) src += 'uniform vec4 uDispBox;\n' + DM_GLSL;
   // The map textures: a layer drawn alone (its alpha) or the motion map (its brightness).
   maps.forEach((k, i) => { src += `uniform sampler2D uM${i};\nfloat fnM${i}(vec2 p) { return texture(uM${i}, p).${k === 'motion' ? 'r' : 'a'}; }\n`; });
   // Water's surface (drawn by the renderer before the passes: see fnCreate's waterPass), for its own warp and
@@ -2118,7 +2164,19 @@ vec4 fetch(vec2 q) {
     // Looking down through the surface: the picture is read where its slope bends the line of sight.
     q -= fnWaterSlope(q) * water_refraction * ${fnGl(FN_WATER.view.bend)} * uWUnit / vec2(uAspect, 1.0);
   }`);
-    if (k === 'displace') {
+    if (k === 'displace' && fnDisplaceChannels(e)) {
+      // After Effects' Displacement Map: each direction reads one channel of the map (straight colour) where it is drawn.
+      const o = fnDispOpts(e);
+      const read = e.map === 'layer' ? mapRead(fnMapKey('layer', e.layerId)) : null;
+      const idx = read ? maps.indexOf(fnMapKey('layer', e.layerId)) : -1;
+      const m = e.map === 'picture'
+        ? 'vec4 ds = scene(q); vec4 m = vec4(ds.a > 1e-5 ? ds.rgb / ds.a : vec3(0.0), ds.a);'
+        : idx >= 0 ? `vec4 m = texture(uM${idx}, dmMapUv(q, uDispBox, ${DM_BEHAVIOURS.indexOf(o.behaviour).toFixed(1)}));` : 'vec4 m = vec4(0.5);';
+      warp(e, `{
+    ${m}
+    q -= dmOffset(${dmChannelGlsl(o.h, 'm')}, ${dmChannelGlsl(o.v, 'm')}, vec2(displace_maxH, displace_maxV), uAspect);${o.wrap ? '\n    q = fract(q);' : ''}
+  }`);
+    } else if (k === 'displace') {
       const map = FN_DISPLACE_MAPS.includes(e.map) ? e.map : 'noise';
       const read = map === 'picture' ? null : mapRead(fnMapKey(map, e.layerId));
       const d = map === 'noise'
@@ -3542,6 +3600,7 @@ export function fnCreate(canvasIn) {
     const shapeOf = e => (e.kind === 'custom' ? 'custom:' + e.code : e.kind)
       + (fnWhereOf(e) === 'all' ? '' : `@${fnWhereOf(e)}:${fnWhereOf(e) === 'layer' ? e.whereLayer || '' : ''}${e.whereInvert ? '!' : ''}`)
       + (e.kind === 'displace' ? `~${e.map || 'noise'}:${e.map === 'layer' ? e.layerId || '' : ''}` : '')
+      + (fnDisplaceChannels(e) ? `~ch:${JSON.stringify(fnDispOpts(e))}` : '')
       + (e.kind === 'time' && e.map === 'layer' ? `~${e.layerId || ''}` : '')
       + (e.kind === 'datamosh' && e.map === 'layer' ? `~${e.layerId || ''}` : '')
       + ((e.kind === 'feedback' || e.kind === 'echo') ? `~${fnSourceOf(e)}:${e.map === 'layer' ? e.layerId || '' : ''}` : '')
@@ -3591,6 +3650,9 @@ export function fnCreate(canvasIn) {
       const m = key === 'motion' ? input.motion || null : input.layerAlpha ? input.layerAlpha(key.slice(6)) : null;
       if (m) upload(mapTexs[i], m, false, true); else clearMap(mapTexs[i]);
     });
+    // A By-channels Displace stretching or tiling a layer: that layer's visible box.
+    const dispFx = ran.find(fnDisplaceChannels);
+    const dispBox = dispFx && dispFx.map === 'layer' && fnDispOpts(dispFx).behaviour !== 'center' && input.layerAlpha ? fnBoxOf(input.layerAlpha(dispFx.layerId)) : null;
     // Water's surface, stepped to this frame (it reads a Layer shape's map, so after the maps).
     const waterFx = ran.find(e => e.kind === 'water');
     waterUnit = input.waterScale > 0 && input.waterScale < 1 ? 1 / input.waterScale : 1;
@@ -3639,6 +3701,7 @@ export function fnCreate(canvasIn) {
       // A later pass has no ring, so the pass before takes that unit (never more than 16 in all).
       if (pi > 0) bindTex(fin, 'uStage', unit++, stageT[(pi - 1) % 2].texs[0]);
       b.maps.forEach((_, i) => bindTex(fin, `uM${i}`, unit++, mapTexs[i]));
+      if (dispFx) { const bl = loc(fin, 'uDispBox'); if (bl) gl.uniform4f(bl, dispBox ? dispBox.x0 : 0, dispBox ? dispBox.y0 : 0, dispBox ? dispBox.x1 : 1, dispBox ? dispBox.y1 : 1); }
       if (b.mosh) bindTex(fin, 'uMosh', unit++, moshT && moshT.out ? moshT.out : clearTex);
       const mxR = rings.get('motionx'), ecR = rings.get('echo');
       if (b.mx && mxR) {

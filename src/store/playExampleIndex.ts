@@ -120,6 +120,9 @@ const ROWS: Array<[string, string, string]> = [
   ['agentsHandBeat', 'Agents: a hand and a beat', 'A million particles from a Studio Agents group: your hand (or the pointer) pulls and stirs them, a fist pushes them away, and the Audio engine\'s kick track blasts shockwaves through them.'],
   // The Water layer (after the rest, so their numbers stay).
   ['waterLayer', 'Water layer: a boat and its wake', 'A drawn boat sails above a Water layer: it drags a V-shaped wake and rocks on the waves without wobbling in them, a light rain falls, and a click splashes.'],
+  // The Displacement Map (after the rest, so their numbers stay).
+  ['displaceText', 'Displace: text rippling through a map', 'A word displaced by a hidden layer of waves: its red pushes the letters sideways, its alpha up and down, as After Effects’ Displacement Map.'],
+  ['displaceParticles', 'Displace: particles by the shader, the picture by a word', 'Particles displaced by the shader’s red and green as they drift, and the whole picture bent by a hidden word in the Look’s Displace, By channels.'],
 ];
 
 const num = (i: number) => String(i + 1).padStart(2, '0');
@@ -148,6 +151,7 @@ const GROUP_STARTS: Array<[string, string]> = [
   ['Bigger pieces', 'particleGlow'],
   ['Build your own Look', 'lookBuilt'],
   ['Agents in Play', 'agentsHandBeat'],
+  ['Displacement maps', 'displaceText'],
 ];
 export const PLAY_EXAMPLE_GROUPS: Array<{ label: string; keys: string[] }> = GROUP_STARTS.map(([label, first], i) => {
   const from = PLAY_EXAMPLE_KEYS.indexOf(first);

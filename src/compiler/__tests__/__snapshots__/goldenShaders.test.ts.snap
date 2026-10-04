@@ -161,6 +161,27 @@ exports[`golden shaders: every Play example exports the same bundle > dataWeathe
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > displaceNoiseMap 1`] = `
+{
+  "bundle": "1fab61b50af9101480c9f5b92e9e:7935",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > displaceParticles 1`] = `
+{
+  "bundle": "075192d7636fae18d0fb2c521b2f:5856",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > displaceText 1`] = `
+{
+  "bundle": "100c1059254f7e011fb1d31ec0d6:5789",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > drumPads 1`] = `
 {
   "bundle": "186bbfde6fbb64008fb5847dc3a1:11078",
@@ -2698,6 +2719,89 @@ exports[`golden shaders: every example compiles as it did > dataWeatherYear 1`] 
     "u_p_remapx0xc2_outMin",
   ],
   "paramValues": "03cc660be3eb5c1046584f980d31:854",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > displaceNoiseMap 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "026936e8c650d20841eee346bc08:6475",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "151a8c99249077125c6d7363b1ae:107",
+  "paramBindings": "1b6ad01f1a1ece04a400a36d17df:475",
+  "paramUniforms": [
+    "u_p_dmapx0_maxH",
+    "u_p_dmapx0_maxV",
+    "u_p_fbmx0_gain",
+    "u_p_fbmx0_lacunarity",
+    "u_p_fbmx0_scale",
+    "u_p_fbmx0_time_scale",
+    "u_p_truchetx0_aa",
+    "u_p_truchetx0_animate",
+    "u_p_truchetx0_color_a",
+    "u_p_truchetx0_color_b",
+    "u_p_truchetx0_line_width",
+    "u_p_truchetx0_scale",
+  ],
+  "paramValues": "0d5a69f2f5b2f11b47f33cea2058:348",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > displaceParticles 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0cdf8d1651417b1fe792eb49db12:2735",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0c68c5443a4a0b135b8e38284428:99",
+  "paramBindings": "051f7f8a0a53d612adb42fd6a404:151",
+  "paramUniforms": [
+    "u_p_fbmx0_gain",
+    "u_p_fbmx0_lacunarity",
+    "u_p_fbmx0_scale",
+    "u_p_fbmx0_time_scale",
+  ],
+  "paramValues": "0e9f777475e01b1df1add9da098c:105",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > displaceText 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "19300d5e746f2616d90fc0870d76:2733",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0c68c5443a4a0b135b8e38284428:99",
+  "paramBindings": "051f7f8a0a53d612adb42fd6a404:151",
+  "paramUniforms": [
+    "u_p_fbmx0_gain",
+    "u_p_fbmx0_lacunarity",
+    "u_p_fbmx0_scale",
+    "u_p_fbmx0_time_scale",
+  ],
+  "paramValues": "04a852615369a31a07ca28569c89:105",
   "passes": null,
   "success": true,
   "textureUniforms": {},

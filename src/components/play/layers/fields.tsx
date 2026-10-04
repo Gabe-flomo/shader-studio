@@ -21,7 +21,7 @@ import { Tooltip } from '../../ui/Tooltip';
 import { ContextMenuArea } from '../../ui/ContextMenuArea';
 import { pairedKey } from '../layerOps';
 import { MiniMapperAddButton } from './MiniMapperAddButton';
-import { MASK_DEFAULTS, maskKeyParts } from '../../../types/playLayers';
+import { DISP_PROPS, MASK_DEFAULTS, maskKeyParts, type DispProp } from '../../../types/playLayers';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { openDetail } from '../detail/detailStore';
 
@@ -106,7 +106,7 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onEx
     if (!def) return null;
     const exposed = exposedTargets.has(layerTarget(l.id, key));
     const mk = maskKeyParts(key);
-    const fallback = typeof defaults[key] === 'number' ? defaults[key] as number : mk ? MASK_DEFAULTS[mk.prop] : undefined;
+    const fallback = typeof defaults[key] === 'number' ? defaults[key] as number : mk ? MASK_DEFAULTS[mk.prop] : key in DISP_PROPS ? DISP_PROPS[key as DispProp].value : undefined;
     // A slider a script declared may have no value yet (a file from before it was declared): show its low end rather than crash.
     const raw = get<number>(key);
     const value = typeof raw === 'number' && Number.isFinite(raw) ? raw : (fallback ?? def.min);

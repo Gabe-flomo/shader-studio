@@ -101,6 +101,8 @@ export const FN_TONE_MODES: readonly string[];
 export const FN_TIME_MAPS: readonly string[];
 export const FN_WHERE: readonly ['all', 'layer', 'picture', 'motion', 'waves'];
 export const FN_DISPLACE_MAPS: readonly ['noise', 'picture', 'layer', 'motion'];
+export const FN_DISPLACE_PUSH: readonly ['direction', 'channels'];
+export function fnDisplaceChannels(e: { kind: string; [key: string]: unknown } | null | undefined): boolean;
 export const FN_MAP_MAX: number;
 export const FN_TIME_QUALITY: Readonly<Record<string, { frames: number; scale: number; cap: number }>>;
 export const FN_CURVE_CHANNELS: readonly ['rgb', 'r', 'g', 'b'];

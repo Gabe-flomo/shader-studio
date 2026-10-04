@@ -331,7 +331,7 @@ temporal effects, below.)
 | **Glitch** | Blocks jump sideways, bands of scanlines tear, red and blue split row by row, some blocks swap colour channels; it changes `Speed` times a second | amount, blocks, speed, colour split, tear, colour blocks |
 | **Ripple** | Rings of waves spreading from a centre (map a hand or the pointer onto the centre) | amount, wavelength, speed, fade out, centre |
 | **Water** | A simulated surface: a moving source leaves a wake, rain and splashes ripple and cross (below) | wave speed, damping, size, strength, bob, refraction, highlights, light angle, source X/Y, length, angle, rain, drop size, open edges |
-| **Displace** | Pushes the picture by a map: drifting noise (heat haze), the picture's brightness, a layer's alpha, or camera motion | amount, direction, scale, speed |
+| **Displace** | Pushes the picture by a map: drifting noise (heat haze), the picture's brightness, a layer's alpha, or camera motion. With a picture or layer map, **Push → By channels** is After Effects' Displacement Map: one channel moves it sideways, another up and down, by Max (see [displacement-map.md](displacement-map.md)); older stacks keep **One way** | amount, direction, scale, speed; By channels: max horizontal, max vertical |
 | **Mosaic** | Big square pixels | cells |
 | **Mirror / kaleidoscope** | Segments 1 folds one half onto the other along a line through the centre; 2 and up make a kaleidoscope of mirrored wedges. Spin turns the picture under the mirrors; Zoom goes in or out, and spun or zoomed, the picture repeats as mirrored tiles past its edges | segments, angle, centre, spin, zoom |
 | **Gradient map** | Brightness becomes a shadows → midtones → highlights gradient | amount, midpoint, three colours |

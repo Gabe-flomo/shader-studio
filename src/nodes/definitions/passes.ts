@@ -14,7 +14,8 @@
  * its texture. Its own program ends in a Pass output (passOutput) instead.
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { fieldFn, p } from './helpers';
+import { DM_CHANNELS, DM_CHANNEL_LABELS, DM_GLSL, DM_HINTS, dmChannelGlsl } from '../../play/kit/displace.js';
 
 /** The sampler a Pass's picture is bound to, named by its slug (as its uniforms are). */
 export const passUniform = (slug: string) => `u_pass_${slug}`;
@@ -311,5 +312,78 @@ export const DisplaceTextureNode: NodeDefinition = {
       `    vec4 ${id}_s = texture2D(${tex}, ${id}_uv + ${id}_push);\n`,
     ].join('');
     return { code, outputVars: { color: `${id}_s.rgb`, alpha: `${id}_s.a` } };
+  },
+};
+
+// ── Displacement Map (After Effects) ─────────────────────────────────────────
+
+const DM_CHANNEL_SELECT = DM_CHANNELS.map(c => ({ value: c, label: DM_CHANNEL_LABELS[c] }));
+
+/**
+ * After Effects' Displacement Map: the Source is read where the Map's channels
+ * push it (play/kit/displace.js has the rules, shared with Play's layers and
+ * the Look). The Source is either a texture (a Pass, or anything that hands a
+ * sampler) or a field chain read at the shifted position (field sockets: any
+ * chain that is a pure function of position, such as noise, shapes, Texture
+ * Input). A chain that isn't (previous frame, particles, Play layers) is
+ * refused on the card: put a Pass after it and wire its Texture instead.
+ */
+export const DisplacementMapNode: NodeDefinition = {
+  type: 'displacementMap',
+  label: 'Displacement Map',
+  category: 'Passes',
+  aliases: ['Displace by map', 'AE displacement map', 'Displace channels', 'Displacement', 'Map displace'],
+  description: 'After Effects’ Displacement Map: moves the Source by the Map’s colours. One channel of the Map (red, green, blue, alpha, luminance, hue, lightness, saturation, or a fixed amount) pushes sideways, another up and down; mid-grey stays put, white pushes the full Max, black the full Max the other way. Source can be a texture (a Pass) or any colour chain that is a function of position (noise, shapes, Texture Input), read at the pushed place. A chain that reads the previous frame or particles can’t be read elsewhere: put a Pass after it and wire its Texture.',
+  inputs: {
+    source: { type: 'vec3', label: 'Source ƒ', field: true, hint: 'A colour chain (noise, shapes, Texture Input…), read at the pushed position. Used when Source texture is not wired. A Pass\'s Color here reads this pixel only: wire its Texture into Source texture instead.' },
+    sourceTex: { type: 'texture', label: 'Source texture', hint: 'A Pass\'s Texture: the picture to push. Wins over Source ƒ.' },
+    map: { type: 'vec3', label: 'Map', hint: 'The colour whose channels push the Source, at this pixel (any chain). Unwired: mid-grey, nothing moves.' },
+    mapAlpha: { type: 'float', label: 'Map alpha', defaultValue: 1, hint: 'The Map\'s alpha (the Alpha channel reads it; colour channels fade to no push where it is 0). 1 when unwired.' },
+    mapTex: { type: 'texture', label: 'Map texture', hint: 'A Pass\'s Texture as the Map (its colour and alpha). Wins over Map.' },
+    uv: { type: 'vec2', label: 'UV', hint: UV_HINT },
+  },
+  outputs: {
+    color: { type: 'vec3', label: 'Color', hint: 'The Source, pushed.' },
+    alpha: { type: 'float', label: 'Alpha', hint: 'The Source texture\'s alpha where it was read (1 for a Source ƒ chain).' },
+  },
+  defaultParams: { hChan: 'red', vChan: 'green', maxH: 50, maxV: 50, edges: 'clamp' },
+  paramDefs: {
+    hChan: { label: 'Horizontal', type: 'select', options: DM_CHANNEL_SELECT, hint: 'Use for horizontal displacement.', help: `${DM_HINTS.h} ${DM_HINTS.channels}` },
+    vChan: { label: 'Vertical', type: 'select', options: DM_CHANNEL_SELECT, hint: 'Use for vertical displacement.', help: `${DM_HINTS.v} ${DM_HINTS.channels}` },
+    maxH: { label: 'Max horizontal', type: 'float', min: -300, max: 300, step: 0.5, hint: 'Pixels (of a 1080-tall picture) a full channel pushes sideways.', help: DM_HINTS.maxH },
+    maxV: { label: 'Max vertical', type: 'float', min: -300, max: 300, step: 0.5, hint: 'Pixels (of a 1080-tall picture) a full channel pushes up or down.', help: DM_HINTS.maxV },
+    edges: { label: 'Edges', type: 'select', hint: 'What a read pushed past the edge of the picture sees.', help: 'Clamp: the nearest edge pixel (a texture) or the chain past the edge (a Source ƒ chain goes on forever). Wrap pixels around: the other side of the picture, as After Effects\' Wrap Pixels Around.', options: [
+      { value: 'clamp', label: 'Clamp' }, { value: 'wrap', label: 'Wrap pixels around' },
+    ] },
+  },
+  glslFunction: DM_GLSL,
+  assignable: false,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const base = inputVars.uv ?? 'g_uv';
+    const aspect = '(u_resolution.x / u_resolution.y)';
+    const wrap = node.params.edges === 'wrap';
+    const m = `${id}_m`;
+    const lines: string[] = [];
+    lines.push(inputVars.mapTex
+      ? `    vec4 ${m} = texture2D(${inputVars.mapTex}, ${texUv(base)});\n`
+      : `    vec4 ${m} = vec4(${inputVars.map ?? 'vec3(0.5)'}, ${inputVars.mapAlpha ?? '1.0'});\n`);
+    // How far, in 0–1 picture coordinates (y up); mid-grey = 0.
+    lines.push(`    vec2 ${id}_d = dmOffset(${dmChannelGlsl(String(node.params.hChan ?? 'red'), m)}, ${dmChannelGlsl(String(node.params.vChan ?? 'green'), m)}, vec2(${p(node.params.maxH, 50)}, ${p(node.params.maxV, 50)}), ${aspect});\n`);
+    const fn = fieldFn(inputVars.source);
+    if (inputVars.sourceTex) {
+      lines.push(`    vec2 ${id}_q = ${texUv(base)} - ${id}_d;\n`);
+      lines.push(wrap ? `    ${id}_q = fract(${id}_q);\n` : `    ${id}_q = clamp(${id}_q, 0.0, 1.0);\n`);
+      lines.push(`    vec4 ${id}_s = texture2D(${inputVars.sourceTex}, ${id}_q);\n`);
+    } else if (fn) {
+      // The chain at the pushed place, in the picture's centred coordinates (a picture height = 2).
+      lines.push(`    vec2 ${id}_q = ${base} - ${id}_d * vec2(2.0 * ${aspect}, 2.0);\n`);
+      if (wrap) lines.push(`    ${id}_q = mod(${id}_q + vec2(${aspect}, 1.0), vec2(2.0 * ${aspect}, 2.0)) - vec2(${aspect}, 1.0);\n`);
+      lines.push(`    vec4 ${id}_s = vec4(${fn}(${id}_q, vec2(0.0), 0.0, 0.0), 1.0);\n`);
+    } else {
+      // Nothing to push: transparent black (the push is still worked out, so its sliders stay live).
+      lines.push(`    vec4 ${id}_s = vec4(0.0, 0.0, 0.0, 0.0 * ${id}_d.x);\n`);
+    }
+    return { code: lines.join(''), outputVars: { color: `${id}_s.rgb`, alpha: `${id}_s.a` } };
   },
 };

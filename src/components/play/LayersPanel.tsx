@@ -72,7 +72,7 @@ import { layerPositionPair } from '../../play/pairs';
 import { DataLayerEditor } from './layers/DataLayerEditor';
 import { MatteMaskBar } from './layers/MatteMask';
 import { matteMaskSummary } from '../../play/mattes';
-import { matteUsers } from '../../types/playLayers';
+import { displaceUsers, matteUsers } from '../../types/playLayers';
 import { dragFileCount, dragHasFiles } from '../../play/layerDrop';
 import { addDroppedLayers, dropLabel } from './dropLayers';
 import { appDropMakers } from './dropMakers';
@@ -973,6 +973,21 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
           <span style={{ whiteSpace: 'nowrap' }}>Matte for</span>
           <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {matteOf.map((u, k) => (
+              <span key={u.id}>
+                {k > 0 && ', '}
+                <button type="button" onClick={() => reveal(u.id)} style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.accent.text, font: 'inherit' }}>{u.label}</button>
+              </span>
+            ))}
+          </span>
+          {!l.visible && <span style={{ whiteSpace: 'nowrap' }}>· hidden</span>}
+        </div>
+      )}
+      {displaceUsers(play.layers, l.id).length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, margin: '2px 0 0 20px', color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, minWidth: 0 }}>
+          <Icon name="curve" size={13} style={{ color: tk.accent.base }} />
+          <span style={{ whiteSpace: 'nowrap' }}>Displaces</span>
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {displaceUsers(play.layers, l.id).map((u, k) => (
               <span key={u.id}>
                 {k > 0 && ', '}
                 <button type="button" onClick={() => reveal(u.id)} style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.accent.text, font: 'inherit' }}>{u.label}</button>
