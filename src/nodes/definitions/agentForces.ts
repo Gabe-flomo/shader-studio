@@ -17,7 +17,7 @@
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { fieldFn, p } from './helpers';
-import { hashId } from './agents';
+import { agHandParams, agHandPlace, hashId } from './agents';
 import {
   GP_SHADERS, gpAttractPull, gpBesselGlsl, gpCrunch, gpCurlAt, gpCurlOctave2, gpCurlPlane, gpFade, gpFlowPush, gpGust,
   gpHandFall, gpHandPush, gpLevelGlsl, gpPlateGlsl, gpPlateStep, gpShockPush, gpShockRing, gpSwirl, gpVibrate, gpWavePhase, gpWavePush,
@@ -57,7 +57,7 @@ const SOUND_FROM_OPTIONS = [
   ...[1, 2, 3, 4, 5, 6, 7, 8].map(k => ({ value: `track${k}`, label: `Engine track ${k}` })),
 ];
 const SOUND_PARAMS = {
-  soundFrom: { label: 'Sound from', type: 'select' as const, section: 'Sound', hint: 'What it listens to.', help: 'Level (and Beat): the Level slider (map Live audio or an audio track to it in Play) plus the stand-in Beat. Mic: the live input (enable it in Play). Audio engine: the Play page\'s engine, its master or one track. The Level slider is added to what is heard.', options: SOUND_FROM_OPTIONS },
+  soundFrom: { label: 'Sound from', type: 'select' as const, section: 'Sound', hint: 'What it listens to.', help: 'Level (and Beat): the Level slider (map Live audio or an audio track to it in Play) plus the stand-in Beat. Mic: the live input (enable it in Play). Audio engine: the Play page\'s engine, its master or one track. The Level slider is added to what is heard. When the Agents group\'s own Sound from is set (anything but Each node\'s own), it wins: every listening node inside hears the group\'s, with its Level and Beat.', options: SOUND_FROM_OPTIONS },
   level: { label: 'Level', type: 'float' as const, min: 0, max: 1, step: 0.01, section: 'Sound', hint: 'How loud it is now (map audio to it in Play).' },
   beat: { label: 'Beat', type: 'float' as const, min: 0, max: 200, step: 1, section: 'Sound', hint: 'A stand-in beat, in beats a minute (0: off). Silent: it only moves the numbers.', help: 'A silent stand-in for music while you build: a kick every beat at this tempo, as a level that jumps and decays. It is part of the simulation (the same every run), so recordings match. Set it to 0 when real sound drives Level.' },
 };
@@ -179,13 +179,14 @@ export const AgentAttractNode: NodeDefinition = {
     also: ALSO,
   },
   outputs: FORCE_OUT,
-  defaultParams: { target: 'mouse', x: 0, y: 0, strength: 0.8, reach: 0.35, swirl: 0, falloff: 'reach' },
+  defaultParams: { target: 'mouse', x: 0, y: 0, handX: 0.5, handY: 0.5, strength: 0.8, reach: 0.35, swirl: 0, falloff: 'reach' },
   paramDefs: {
-    target: { label: 'Target', type: 'select', hint: 'Where the point is when nothing is wired into Target.', options: [
-      { value: 'mouse', label: 'The mouse' }, { value: 'point', label: 'X and Y' },
+    target: { label: 'Target', type: 'select', hint: 'Where the point is when nothing is wired into Target.', help: 'The mouse: the pointer over the picture. X and Y: a point in picture units. A hand or null: Hand X / Y (0–1 across and up), made for Play: right-click Hand X → Follow a hand, and a tracked hand (or the pointer, until a hand is seen) moves the point.', options: [
+      { value: 'mouse', label: 'The mouse' }, { value: 'point', label: 'X and Y' }, { value: 'hand', label: 'A hand or null (Hand X / Y)' },
     ] },
     x: { label: 'X', type: 'float', min: -2, max: 2, step: 0.01, hint: 'The point, across (picture units).', showWhen: { param: 'target', value: 'point' } },
     y: { label: 'Y', type: 'float', min: -1, max: 1, step: 0.01, hint: 'The point, up.', showWhen: { param: 'target', value: 'point' } },
+    ...agHandParams('target', 'hand', 'The point'),
     strength: { label: 'Strength', type: 'float', min: -8, max: 8, step: 0.01, hint: 'How hard it pulls; negative pushes away.' },
     reach: { label: 'Reach', type: 'float', min: 0.02, max: 4, step: 0.01, hint: 'How far it reaches (picture units).' },
     swirl: { label: 'Swirl', type: 'float', min: -8, max: 8, step: 0.01, hint: 'Stirs them round the point (negative: the other way).' },
@@ -197,7 +198,8 @@ export const AgentAttractNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, v) => {
     const id = node.id;
     const pos = v.position ?? 'a_pos';
-    const target = v.target ?? (sel(node.params.target, ['mouse', 'point'], 'mouse') === 'mouse' ? MOUSE : `vec2(${p(node.params.x, 0)}, ${p(node.params.y, 0)})`);
+    const at = sel(node.params.target, ['mouse', 'point', 'hand'], 'mouse');
+    const target = v.target ?? (at === 'mouse' ? MOUSE : at === 'hand' ? agHandPlace(p(node.params.handX, 0.5), p(node.params.handY, 0.5)) : `vec2(${p(node.params.x, 0)}, ${p(node.params.y, 0)})`);
     const strength = v.strength ?? p(node.params.strength, 0.8);
     const reach = p(node.params.reach, 0.35), swirl = p(node.params.swirl, 0);
     const lines = [`    vec2 ${id}_t = ${target};\n`];
@@ -232,17 +234,22 @@ export const AgentVortexNode: NodeDefinition = {
     also: ALSO,
   },
   outputs: FORCE_OUT,
-  defaultParams: { x: 0, y: 0, strength: 0.3, reach: 0.5 },
+  defaultParams: { at: 'point', x: 0, y: 0, handX: 0.5, handY: 0.5, strength: 0.3, reach: 0.5 },
   paramDefs: {
-    x: { label: 'X', type: 'float', min: -2, max: 2, step: 0.01, hint: 'The centre, across.' },
-    y: { label: 'Y', type: 'float', min: -1, max: 1, step: 0.01, hint: 'The centre, up.' },
+    at: { label: 'Centre at', type: 'select', hint: 'Where the centre is when nothing is wired into Centre.', help: 'X and Y: picture units. The mouse: the pointer. A hand or null: Hand X / Y (0–1 across and up), made for Play (right-click Hand X → Follow a hand).', options: [
+      { value: 'point', label: 'X and Y' }, { value: 'mouse', label: 'The mouse' }, { value: 'hand', label: 'A hand or null (Hand X / Y)' },
+    ] },
+    x: { label: 'X', type: 'float', min: -2, max: 2, step: 0.01, hint: 'The centre, across.', showWhen: { param: 'at', value: 'point' } },
+    y: { label: 'Y', type: 'float', min: -1, max: 1, step: 0.01, hint: 'The centre, up.', showWhen: { param: 'at', value: 'point' } },
+    ...agHandParams('at', 'hand', 'The centre'),
     strength: { label: 'Strength', type: 'float', min: -8, max: 8, step: 0.01, hint: 'How hard it swirls; negative turns the other way.' },
     reach: { label: 'Reach', type: 'float', min: 0.02, max: 4, step: 0.01, hint: 'The radius where it swirls hardest (0.5: the Particles node\'s).' },
   },
   assignable: false,
   generateGLSL: (node: GraphNode, v) => {
     const id = node.id;
-    const c = v.centre ?? `vec2(${p(node.params.x, 0)}, ${p(node.params.y, 0)})`;
+    const at = sel(node.params.at, ['point', 'mouse', 'hand'], 'point');
+    const c = v.centre ?? (at === 'mouse' ? MOUSE : at === 'hand' ? agHandPlace(p(node.params.handX, 0.5), p(node.params.handY, 0.5)) : `vec2(${p(node.params.x, 0)}, ${p(node.params.y, 0)})`);
     const reach = p(node.params.reach, 0.5);
     return {
       code: [

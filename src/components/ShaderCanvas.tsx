@@ -27,6 +27,7 @@ import { HandsPill } from './play/HandsChip';
 import { applySolo, usePlayUi } from './play/playUi';
 import { applyGroupVisibility } from '../types/layerGroups';
 import { layersUniforms, setLayersTap, setLayersRenderer, releaseLayersRenderer } from '../play/layersTexture';
+import { motionTextureHasData, motionUniforms, readsMotionMap, refreshMotionTexture } from '../play/motionTexture';
 import { bindGpuParticles, drawGpuParticles, gpuParticlesActive, particleSoundOf, releaseGpuParticlesRenderer, resetGpuParticles, setGpuParticlesRenderer } from '../play/gpuParticlesTexture';
 import { padGridUniforms } from '../lib/padGrid';
 import { attachLayerDrop } from '../play/layerDrop';
@@ -347,6 +348,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   // Does the compiled shader read u_time at all? If not, a playing clock
   // changes nothing on screen and the loop can idle.
   const usesTimeRef    = useRef(false);
+  /** Which programs read the Motion (texture) node (play/motionTexture.ts): the picture, the passes, the agents. */
+  const motionUseRef   = useRef({ final: false, passes: false, agents: false });
   // Audio / video input node ids, kept in sync with nodesRef so the frame
   // loop doesn't filter the whole node list every frame.
   const audioIdsRef    = useRef<string[]>([]);
@@ -524,7 +527,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])),
       u_fontTexture: { value: FONT_TEXTURE },
       // The graph's Layers node (play/layersTexture.ts); shared objects, refreshed in place each frame.
-      ...layersUniforms, ...padGridUniforms,
+      ...layersUniforms, ...padGridUniforms, ...motionUniforms,
     };
     for (const [name, value] of Object.entries(pu))  initialUniforms[name] = { value };
     for (const name of Object.keys(tu))              initialUniforms[name] = { value: null };
@@ -616,6 +619,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     let passTargets: PassTargets | null = null;        // the live preview's textures
     let offlinePassTargets: PassTargets | null = null; // renderAtTime's own (never the preview's Previous buffers)
     setPassesRef.current = (passes, vsSrc) => {
+      motionUseRef.current.passes = !!passes?.some(pp => readsMotionMap(pp.fragmentShader));
       if (!passes || passes.length === 0) {
         if (!passRunner) return;
         passRunner.dispose(); passRunner = null;
@@ -651,7 +655,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     let agentTargets: AgentTargets | null = null;        // the live preview's simulation
     let offlineAgentTargets: AgentTargets | null = null; // renderAtTime's own (the preview's is never touched)
     let lastAgentFrame = 0;
+    /** A program reads the Motion (texture) node and there is a grid to read (or one to clear). */
+    const readsMotionNow = () => {
+      const m = motionUseRef.current;
+      return (m.final || m.passes || m.agents) && (motionTextureHasData() || playOverlay.motionGrid() !== null);
+    };
     setAgentsRef.current = (agents, vsSrc) => {
+      motionUseRef.current.agents = !!agents && (agents.groups.some(g => readsMotionMap(g.fragmentShader)) || agents.trails.some(t => readsMotionMap(t.stepShader)));
       if (!agents || agents.groups.length + agents.trails.length + agents.draws.length === 0) {
         if (!agentRunner) return;
         agentRunner.dispose(); agentRunner = null;
@@ -755,7 +765,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         const uniforms: Record<string, THREE.IUniform> = {
           u_time: { value: 0 }, u_resolution: shared.u_resolution, u_mouse: shared.u_mouse, u_prevFrame: { value: null },
           ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])),
-          u_fontTexture: { value: FONT_TEXTURE }, ...layersUniforms, ...padGridUniforms,
+          u_fontTexture: { value: FONT_TEXTURE }, ...layersUniforms, ...padGridUniforms, ...motionUniforms,
         };
         for (const [name, value] of Object.entries(c.uniforms)) uniforms[name] = { value: Array.isArray(value) ? [...value] : value };
         const m = new THREE.ShaderMaterial({ vertexShader: c.vertexShader, fragmentShader: c.fragmentShader, uniforms });
@@ -1361,6 +1371,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         scopeIdsRef.current.size > 0 || previewNodeIdRef.current !== null
         || midiEngine.hasFile() || (passRunner !== null && passRunner.hasPrevious)
         || (agentRunner !== null && agentRunner.active)
+        // The Motion (texture) node: a Motion layer measures every frame, so a graph reading it keeps drawing.
+        || readsMotionNow()
       );
       // A Background layer on the Play page: its queue decides, and the graph runs only while
       // "this graph" shows. Else Play's image, video or colour: the graph doesn't run at all.
@@ -1399,6 +1411,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       } else if (plan.shader) {
         needsRender = false;
         idleFrames = 0;
+        // The Motion (texture) node's grid, as the overlay's last frame left it (a frame late, like the Layers node).
+        if (readsMotionNow()) refreshMotionTexture(renderer.domElement.width || 1, renderer.domElement.height || 1);
         // Particles nodes: stepped (while the clock runs) and drawn before the picture that reads them.
         if (gpuParticlesActive()) {
           const pw = renderer.domElement.width || 1, ph = renderer.domElement.height || 1;
@@ -1958,7 +1972,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const buildUniforms = (prev: Record<string, THREE.IUniform>) => buildPreviewUniforms(
       useNodeGraphStore.getState(), prev,
       { width: renderer.domElement.width, height: renderer.domElement.height },
-      { u_fontTexture: { value: FONT_TEXTURE }, ...layersUniforms, ...padGridUniforms },
+      { u_fontTexture: { value: FONT_TEXTURE }, ...layersUniforms, ...padGridUniforms, ...motionUniforms },
     );
     /** Compile a material off to the side; null (and the errors reported) when it doesn't link. */
     const compileFresh = async (vsSrc: string, fsSrc: string, uniforms: Record<string, THREE.IUniform>): Promise<THREE.ShaderMaterial | null> => {
@@ -2261,6 +2275,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // Every shader *declares* u_time in its preamble; what matters is whether
     // the body reads it (a Time node, keyframe curves, rotate(..., u_time)…).
     setLayersTap(/\bu_layers(Field)?\b/.test(activeFragmentShader), () => requestRenderRef.current());
+    motionUseRef.current.final = readsMotionMap(activeFragmentShader);
     usesTimeRef.current = /\bu_time\b/.test(activeFragmentShader.replace(/uniform\s+float\s+u_time\s*;/g, ''));
     // Register uniforms on the shared uniforms object — the new program is
     // compiled against it, and the old one ignores names it doesn't declare.

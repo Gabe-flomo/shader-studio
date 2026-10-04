@@ -9,3 +9,5 @@ export const AG_DRAW_FRAG: string;
 export const AG_DOWN_FRAG: string;
 export const AG_BLUR_FRAG: string;
 export const AG_COMPOSE_FRAG: string;
+export const AG_THUMB_DOTS_VERT: string;
+export const AG_THUMB_DOTS_FRAG: string;

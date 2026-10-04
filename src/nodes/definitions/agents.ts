@@ -104,7 +104,32 @@ float agRnd(inout uint s) { s = agHash(s); return float(s >> 8) / 16777216.0; }`
 
 const sel = (v: unknown, allowed: string[], fallback: string) => (typeof v === 'string' && allowed.includes(v) ? v : fallback);
 
+/**
+ * A place from Play (P4): Hand X / Y, 0–1 across and up the picture, the Particles node's hand
+ * units. In Play, right-click Hand X → Follow a hand (or Add as position with Y, then map the pair
+ * to a hand, a null, the pose or the pointer): the anchor's 0–1 lands on them unchanged, at any
+ * aspect. As a point in picture units (y −1…1, x scaled by the aspect).
+ */
+export const agHandPlace = (hx: string, hy: string) => `vec2((${hx} * 2.0 - 1.0) * (u_resolution.x / u_resolution.y), ${hy} * 2.0 - 1.0)`;
+/** Hand X / Y sliders, shown while `gate` is `value`. */
+export const agHandParams = (gate: string, value: string, what: string) => ({
+  handX: { label: 'Hand X', type: 'float' as const, min: 0, max: 1, step: 0.001, hint: `${what}, across: 0 left, 1 right.`, help: 'Made for Play: right-click → Follow a hand (or Add as position with Y and map the pair to a hand, a null, the pose or the pointer). 0–1 across the picture at any shape, like the Particles node\'s Hand X.', showWhen: { param: gate, value } },
+  handY: { label: 'Hand Y', type: 'float' as const, min: 0, max: 1, step: 0.001, hint: `${what}, up: 0 bottom, 1 top.`, showWhen: { param: gate, value } },
+});
+
 // ── The group ────────────────────────────────────────────────────────────────
+
+/**
+ * The group's Sound from (P4): 'nodes' leaves every listening node (Sound kick, Chladni) to its
+ * own Sound from, Level and Beat; any other choice is shared by all of them (compiler/agentGraph.ts
+ * listenersOf). The choices after 'nodes' are the listening nodes' own.
+ */
+export const AGENT_GROUP_SOUND_FROM = [
+  { value: 'nodes', label: 'Each node\'s own' }, { value: 'graph', label: 'Level (and Beat)' }, { value: 'live', label: 'Mic' }, { value: 'master', label: 'Audio engine' },
+  ...[1, 2, 3, 4, 5, 6, 7, 8].map(k => ({ value: `track${k}`, label: `Engine track ${k}` })),
+];
+/** Sound from choices that hear something (all but 'nodes'): Level and Beat show for them. */
+const GROUP_HEARD = AGENT_GROUP_SOUND_FROM.map(o => o.value).filter(v => v !== 'nodes');
 
 export const AgentsGroupNode: NodeDefinition = {
   type: AGENTS_GROUP_TYPE,
@@ -126,15 +151,19 @@ export const AgentsGroupNode: NodeDefinition = {
   outputs: {
     agents: { type: 'agents', label: 'Agents', hint: 'Wire into Deposit (they leave trail) or Draw agents (to see them).' },
   },
-  defaultParams: { tier: '256k', species: '1', stepsPerFrame: 2, seed: 1, preroll: 0 },
+  defaultParams: { tier: '256k', species: '1', stepsPerFrame: 2, seed: 1, preroll: 0, soundFrom: 'nodes', level: 0, beat: 0, pinned: [], restart: 0 },
   paramDefs: {
     tier: { label: 'Count', type: 'select', section: 'Agents', hint: 'How many walkers.', help: 'How many walkers there are. 256k runs anywhere; 1M is the slime look on a laptop GPU; 4M wants a fast GPU.', options: [
       { value: '64k', label: '64k' }, { value: '256k', label: '256k' }, { value: '1m', label: '1M' }, { value: '4m', label: '4M' },
     ] },
+    restart: { label: 'Start over', type: 'float', min: 0, max: 1, step: 0.01, section: 'Agents', hint: 'A trigger: each time it rises past 0.5 the simulation starts over (as ↺ Start over does).', help: 'A trigger for Play: route a key, a beat, a gesture or a rule to it and every walker is born again at step 0, the trails cleared, as the card\'s ↺ Start over does. Live only: a recording or a rendered video runs from its own start.' },
     species: { label: 'Species', type: 'select', section: 'Agents', hint: 'Kinds of walker (by index); each deposits in its own trail channel.', options: SPECIES_OPTIONS },
     stepsPerFrame: { label: 'Steps per frame', type: 'float', min: 1, max: 8, step: 1, hard: true, section: 'Steps', hint: 'Steps the rule runs each frame at 60 fps: the simulation\'s speed.', help: 'How many times every walker runs its rule each frame (at 60 frames a second). More is faster growth. When the GPU can\'t keep up, fewer steps run and the simulation falls behind the clock; the count of walkers never changes.' },
     seed: { label: 'Seed', type: 'float', min: 0, max: 1000, step: 1, section: 'Steps', hint: 'A different seed gives a different (but repeatable) run.' },
     preroll: { label: 'Pre-roll', type: 'float', min: 0, max: 30, step: 0.5, section: 'Steps', hint: 'Seconds simulated before the first frame, so the picture starts grown.' },
+    soundFrom: { label: 'Sound from', type: 'select', section: 'Sound', hint: 'What every Sound kick and Chladni inside listens to.', help: 'Each node\'s own: every Sound kick and Chladni inside keeps its own Sound from, Level and Beat. Anything else is shared by all of them, so one choice here drives the whole rule. Level (and Beat): the Level slider below (map Live audio or a track to it in Play) plus the stand-in Beat. Mic: the live input (enable it in Play). Audio engine: the Play page\'s engine, its master or one track. Level is added to what is heard.', options: AGENT_GROUP_SOUND_FROM },
+    level: { label: 'Level', type: 'float', min: 0, max: 1, step: 0.01, section: 'Sound', hint: 'How loud it is now, for every listening node inside (map audio to it in Play).', showWhen: { param: 'soundFrom', value: GROUP_HEARD } },
+    beat: { label: 'Beat', type: 'float', min: 0, max: 200, step: 1, section: 'Sound', hint: 'A silent stand-in beat, in beats a minute (0: off), for every listening node inside.', help: 'A silent stand-in for music while you build: a kick every beat at this tempo, as a level that jumps and decays. It is part of the simulation (the same every run), so recordings match. Set it to 0 when real sound drives Level.', showWhen: { param: 'soundFrom', value: GROUP_HEARD } },
   },
   assignable: false,
   // Never compiled as a node of a program: the compiler builds its update shader from the inside.
@@ -523,7 +552,7 @@ export const AgentEmitNode: NodeDefinition = {
   outputs: {
     emitter: { type: 'emitter', label: 'Emitter', hint: 'Wire into an Agents group\'s Emit.' },
   },
-  defaultParams: { mode: 'fill', shape: 'disc', heading: 'inward', x: 0, y: 0, size: 0.6, rate: 20000, life: 0, lifeVar: 0.2, speed: 0, speedVar: 0, spread: 0, share: 1, burst: 0, species: 'each', threshold: 0.2 },
+  defaultParams: { mode: 'fill', shape: 'disc', heading: 'inward', at: 'point', x: 0, y: 0, handX: 0.5, handY: 0.5, size: 0.6, rate: 20000, life: 0, lifeVar: 0.2, speed: 0, speedVar: 0, spread: 0, share: 1, burst: 0, species: 'each', threshold: 0.2 },
   paramDefs: {
     mode: { label: 'Births', type: 'select', hint: 'Fill: everyone is born at once when the simulation starts (slime). Rate: a stream of births a second. Keep full: born at once, each reborn the moment it dies (particles with a Life).', options: [
       { value: 'fill', label: 'Fill (all at once)' }, { value: 'rate', label: 'Rate (per second)' }, { value: 'respawn', label: 'Keep full (reborn when they die)' },
@@ -539,8 +568,10 @@ export const AgentEmitNode: NodeDefinition = {
     heading: { label: 'Facing', type: 'select', hint: 'Which way they face when born.', options: [
       { value: 'random', label: 'Random' }, { value: 'inward', label: 'Inward' }, { value: 'outward', label: 'Outward' },
     ] },
-    x: { label: 'X', type: 'float', min: -2, max: 2, step: 0.01, hint: 'Centre of the shape, across.' },
-    y: { label: 'Y', type: 'float', min: -1, max: 1, step: 0.01, hint: 'Centre of the shape, up.' },
+    at: { label: 'At', type: 'select', hint: 'Where the shape\'s centre comes from when nothing is wired into Position.', help: 'X and Y: picture units. A hand or null: Hand X / Y, 0–1 across and up the picture, made for Play (right-click Hand X → Follow a hand).', options: [{ value: 'point', label: 'X and Y' }, { value: 'hand', label: 'A hand or null (Hand X / Y)' }] },
+    x: { label: 'X', type: 'float', min: -2, max: 2, step: 0.01, hint: 'Centre of the shape, across.', showWhen: { param: 'at', value: 'point' } },
+    y: { label: 'Y', type: 'float', min: -1, max: 1, step: 0.01, hint: 'Centre of the shape, up.', showWhen: { param: 'at', value: 'point' } },
+    ...agHandParams('at', 'hand', 'The centre of the shape'),
     size: { label: 'Size', type: 'float', min: 0, max: 2, step: 0.01, hint: 'Radius of the ring or disc, half-width of the box (picture units).' },
     rate: { label: 'Rate', type: 'float', min: 0, max: 1000000, step: 100, hint: 'Births a second (Rate mode).' },
     life: { label: 'Life', type: 'float', min: 0, max: 60, step: 0.1, hint: 'Seconds each lives. 0: forever.' },
@@ -560,7 +591,9 @@ export const AgentEmitNode: NodeDefinition = {
     const shape = sel(node.params.shape, ['point', 'ring', 'disc', 'box', 'screen', 'picture', 'field'], 'disc');
     const facing = sel(node.params.heading, ['random', 'inward', 'outward'], 'inward');
     const em = `${id}_em`;
-    const centre = v.position ?? `vec2(${p(node.params.x, 0)}, ${p(node.params.y, 0)})`;
+    const centre = v.position ?? (sel(node.params.at, ['point', 'hand'], 'point') === 'hand'
+      ? agHandPlace(p(node.params.handX, 0.5), p(node.params.handY, 0.5))
+      : `vec2(${p(node.params.x, 0)}, ${p(node.params.y, 0)})`);
     const size = p(node.params.size, 0.6);
     const place: Record<string, string> = {
       point: `${id}_pp = ${id}_c; ${id}_out = agDir(${id}_r1 * 6.2831853);`,

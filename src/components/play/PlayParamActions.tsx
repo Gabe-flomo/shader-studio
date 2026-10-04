@@ -7,6 +7,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { candidateFor, candidateLabel, collectPlayCandidates } from '../../play/playControls';
 import { addCandidateControl, driveWithNull, graphNullDrives } from './layerOps';
 import { toast } from '../ui/toastStore';
+import { canFollowHand, followHand } from '../../play/followHand';
 import { Button } from '../ui/Button';
 import { useTokens } from '../../theme/themeStore';
 
@@ -32,6 +33,12 @@ export function PlayParamActions({ nodeId, paramKey }: { nodeId: string; paramKe
           setPlay(p => driveWithNull(p, drives, label).play);
           toast.success(`Added “${label}”`, { message: 'In Play, drag the dot on the picture to change the value.', action: openPlay });
         }}>Drive with a null</Button>
+      )}
+      {canFollowHand(candidates, c) && (
+        <Button size="sm" icon="target" onClick={() => {
+          setPlay(p => followHand(p, candidates, c).play);
+          toast.success('Follows a hand in Play', { message: 'Turn the camera on in Play and raise a hand; until a hand is seen, the pointer moves it.', action: openPlay });
+        }}>Follow a hand</Button>
       )}
     </span>
   );

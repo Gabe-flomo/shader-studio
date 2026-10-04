@@ -36,6 +36,8 @@ import { gpPreset } from '../play/kit/gpuParticles.js';
 import { MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type DrumPadLayer, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
 import type { DpSynth } from '../play/kit/drumPads.js';
 import { agPresetLayer } from '../play/kit/agents.js';
+import { HAND_EX, handBeatNodes } from './agentPlayExample';
+import { FOLLOW_HAND_ANCHOR } from '../play/followHand';
 import type { GroupColour, LayerGroup } from '../types/layerGroups';
 
 // ── Record helpers ───────────────────────────────────────────────────────────
@@ -2572,6 +2574,59 @@ Holding **M** turns Datamosh's **Mosh** on: nothing heals while it's held.
 • Move the mouse left and right: the duotone fades in and out.
 • Duotone → **Edit nodes…**, then **+ Add node → Posterize**: it goes in just before the output. Use **Update effect**.
 • Tape wobble → **Open editor…** and change \`1.7\` to \`7.0\`: smaller, busier bands. Or + Add effect → **Nodes** for any single node (Hue Rotate, Tone Map, CRT Mask…).`,
+  })),
+  // The Agents group on the Play page (Agents P4): a hand steers a million particles, the engine's kick blasts them.
+  ex('agentsHandBeat', handBeatNodes(), play({
+    controls: [
+      ctl('hx', `${HAND_EX.group}::${HAND_EX.attract}::handX`, 'Hand X', 0, 1),
+      ctl('hy', `${HAND_EX.group}::${HAND_EX.attract}::handY`, 'Hand Y', 0, 1),
+      ctl('pull', `${HAND_EX.group}::${HAND_EX.attract}::strength`, 'Hand strength', -3, 3),
+      ctl('kick', `${HAND_EX.group}::${HAND_EX.kick}::strength`, 'Kick strength', 0, 2),
+      ctl('burst', `${HAND_EX.emit}::burst`, 'Burst', 0, 1),
+      ctl('again', `${HAND_EX.group}::restart`, 'Start over', 0, 1),
+    ],
+    pairs: [{ id: 'hand', label: 'Hand', a: 'hx', b: 'hy', position: true }],
+    // The pointer first, then the hand: the later mapping wins once a hand has been seen (play/followHand.ts).
+    pairMappings: [
+      { id: 'byPointer', pairId: 'hand', source: { kind: 'position', anchor: 'pointer' }, affect: 'both', a: axis(0, 1, { smoothMs: 60 }), b: axis(0, 1, { smoothMs: 60 }), enabled: true },
+      { id: 'byHand', pairId: 'hand', source: { kind: 'position', anchor: FOLLOW_HAND_ANCHOR }, affect: 'both', a: axis(0, 1, { smoothMs: 60 }), b: axis(0, 1, { smoothMs: 60 }), enabled: true },
+    ],
+    mappings: [
+      map('fist', 'pull', S.trig(T.hand('any', 'fist'), 'envelope', { attack: 30, decay: 10, sustain: 1, release: 250 }), 1.2, -2.5),
+      map('keyB', 'burst', S.trig(T.key('KeyB'), 'envelope', { attack: 0, decay: 10, sustain: 1, release: 50 }), 0, 1),
+      map('keyR', 'again', S.trig(T.key('KeyR'), 'envelope', { attack: 0, decay: 10, sustain: 1, release: 50 }), 0, 1),
+    ],
+    audioEngine: {
+      racks: [{
+        id: 'kick', name: 'Kick', effects: [], keyboard: false, midi: 'off', channel: 0, volume: 1, mute: false,
+        instrument: {
+          id: 'inst', kind: 'granulator', sample: { synth: 'kick', name: 'Kick' },
+          // Classic mode from the start of the sample at its own speed (Scan 1), a short envelope, root C1.
+          params: { 0: 0, 1: 0, 3: 150, 9: 0, 17: 0.001, 18: 0.35, 19: 0, 20: 0.12, 23: 1, 31: 36, 33: 1 },
+        },
+      }],
+    },
+    arrangement: {
+      length: 8, loop: true, bpm: 120, metronome: false, countIn: 0, fade: 0,
+      tracks: { kick: { notes: KICK_PATTERN, auto: {}, arm: true, clips: [{ t: 0, d: 8 }] } },
+    },
+    notes: `**What it shows.** A Studio **Agents group** played from the Play page: a million particles that your hand steers, while the **Audio engine**'s kick track blasts shockwaves through them. No camera? The pointer over the picture steers them until a hand is seen.
+
+**How it's built.** The graph (Studio) is the **Hand swarm** group: inside, Home → **Sound kick** → Curl noise → **Attract / Repel** → Integrate, drawn as neon streaks. Every node has a note (the speech-bubble tab on its card). The group's **Sound from** is **Engine track 1**, so every Sound kick inside hears the **Kick** rack, whose clip on the tape plays a two-bar kick pattern at 120 bpm. Attract's Target is **A hand or null**: its **Hand X / Y** (0–1 across and up the picture) are Play controls.
+
+**The controls.**
+• **Hand X / Hand Y**: where the hand pulls, paired as one position (**Hand**). Two pair mappings drive it: **the pointer** over the picture, then **a hand's index fingertip** (either hand). The hand's mapping comes second, so once a hand has been seen it wins.
+• **Hand strength**: how hard the hand pulls (negative pushes). A mapping from the **fist** gesture sends it to −2.5 while you hold a fist: open hand gathers, fist scatters.
+• **Kick strength**: how hard each kick's shockwave pushes.
+• **Burst**: Emit's Burst. A mapping from **B** fires it: everyone is born again at once, where they are born.
+• **Start over**: the group's own Start over (the card's ↺ as a trigger). A mapping from **R** fires it: the simulation begins again at step 0.
+
+**The rules.** Fist → Hand strength (an envelope that holds while the fist does), B → Burst, R → Start over. All three are mappings from trigger sources, so you can re-point them in Mappings (a beat, a pad, a MIDI note, a gesture).
+
+**Try this.**
+• Move the pointer over the picture: the swarm gathers and swirls round it. Press B for a fresh cloud, R to start over.
+• Click the picture, then press **Play** on the Engine tab's transport: each kick blasts a ring out of the middle. Press **Enable hand tracking** on the picture and raise a hand.
+• In Studio, set the group's Sound from to **Level (and Beat)** and Beat to 120 for a silent stand-in kick. Right-click any slider inside the group → **Pin to the group card**, or **Follow a hand in Play** on a Hand X.`,
   })),
 ];
 

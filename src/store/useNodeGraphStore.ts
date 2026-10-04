@@ -3685,8 +3685,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       if (state.nodes.some(n => n.id === nodeId)) {
         const node = state.nodes.find(n => n.id === nodeId)!;
         // If this is a group node being updated with override keys (innerNodeId::paramKey),
-        // also sync those values into the subgraph nodes' params
-        if (node.type === 'group') {
+        // also sync those values into the subgraph nodes' params. An Agents group's pinned
+        // sliders and Play controls on its inside write the same way (docs/agents-group.md).
+        if (node.type === 'group' || node.type === 'agentsGroup') {
           const sg = node.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
           if (sg) {
             let updatedSgNodes = sg.nodes;

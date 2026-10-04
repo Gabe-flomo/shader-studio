@@ -7,8 +7,12 @@ import { useThemeMode } from '../../theme/themeStore';
 import { pal, setVizPalette, MONO, vizContainer, setupViz, imageSize, blitImage, type Viz } from './vizKit';
 import { GenericViz, GENERIC_VIZ_TYPES } from './vizGeneric';
 import { passThumbRegistry } from '../../lib/passRunner';
-import { agentStatsFor, restartAgents, trailThumbRegistry, type AgentStats } from '../../lib/agentRunner';
+import { agentStatsFor, agentThumbRegistry, restartAgents, trailThumbRegistry, type AgentStats } from '../../lib/agentRunner';
 import { AGENT_TIERS } from '../../nodes/definitions/agents';
+import { agentPinnedRows } from '../../nodes/agentPins';
+import { RulerSlider } from '../ui/RulerSlider';
+import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { extendRangePatch } from '../../nodes/sliderRange';
 
 // ─── Shared container ─────────────────────────────────────────────────────────
 
@@ -3718,6 +3722,15 @@ function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?
     const t = setInterval(() => setStats(agentStatsFor(node.id)), 500);
     return () => clearInterval(t);
   }, [node.id]);
+  // The live dots (P4): the runner draws where the walkers are into this canvas every few frames.
+  const thumb = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = thumb.current;
+    if (!c) return;
+    agentThumbRegistry.register(node.id, c);
+    return () => agentThumbRegistry.unregister(node.id);
+  }, [node.id]);
+  const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const count = stats?.count ?? (AGENT_TIERS[String(node.params.tier ?? '256k')] ?? 512) ** 2;
   const spf = stats?.stepsPerFrame ?? Math.round(Number(node.params.stepsPerFrame ?? 2));
   const behind = stats && stats.rate < 0.97 ? ` · running at ×${stats.rate.toFixed(2)}` : '';
@@ -3725,8 +3738,15 @@ function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?
     flex: 1, height: 26, border: `1px solid ${pal.surface1}`, borderRadius: 5, background: 'transparent',
     color: pal.text, font: `600 11px ${MONO}`, cursor: 'pointer',
   };
+  // Pinned sliders (P4): inner nodes' sliders shown on the card. Each writes the inner node's own
+  // value (the store syncs `inner::key` into the inside), so the uniform, Play controls and MIDI are
+  // the inner slider's; right-click keeps the Play menu (data-param-key names the inner slider).
+  const pinned = agentPinnedRows(node);
+  const unpin = (path: string) => updateNodeParams(node.id, { pinned: ((node.params.pinned ?? []) as string[]).filter(p => p !== path) });
   return (
     <div style={{ ...vizContainer(), padding: '6px 10px 8px' }} onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+      <canvas ref={thumb} width={160} height={90} title="Where the walkers are now (a sample of at most 65,536 of them)"
+        style={{ display: 'block', width: '100%', maxHeight: 140, objectFit: 'contain', margin: '0 auto 6px', background: '#000', borderRadius: 3 }} />
       <div style={{ fontSize: '10px', color: pal.overlay0, fontFamily: MONO, marginBottom: 6 }}>
         {count.toLocaleString('en-US')} agents · {spf} step{spf === 1 ? '' : 's'} a frame{behind}
       </div>
@@ -3734,6 +3754,29 @@ function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?
         <button type="button" style={button} title="Open the rule one walker follows every step (or double-click the card's title)" onClick={() => onEnterGroup?.(node.id)}>Open rule ↗</button>
         <button type="button" style={button} title="Start the simulation over: everyone is born again at step 0" onClick={() => { restartAgents(node.id); window.dispatchEvent(new Event('agents-restart')); }}>↺ Start over</button>
       </div>
+      {pinned.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: '9px', letterSpacing: '0.08em', textTransform: 'uppercase', color: pal.overlay0, marginBottom: 2 }}>Pinned</div>
+          {pinned.map(r => (
+            <div key={r.path} data-param-key={r.path} style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 30 }}
+              title={`${r.nodeLabel} · ${r.label} (inside the group). Right-click for Play.`}>
+              <span style={{ width: 96, flexShrink: 0, display: 'flex', flexDirection: 'column', lineHeight: 1.15, overflow: 'hidden' }}>
+                <span style={{ fontSize: '10.5px', color: pal.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
+                <span style={{ fontSize: '9px', color: pal.overlay0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.nodeLabel}</span>
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <RulerSlider value={r.value} min={r.min} max={r.max} step={r.step} defaultValue={r.defaultValue}
+                  ariaLabel={`${r.nodeLabel} ${r.label}`}
+                  onChange={v => updateNodeParams(node.id, { [r.path]: v }, { immediate: true })}
+                  onType={v => updateNodeParams(node.id, { [r.path]: v }, { immediate: true })}
+                  onRange={(lo, hi) => updateNodeParams(node.id, Object.fromEntries(Object.entries(extendRangePatch(r.key, lo, hi)).map(([k, v]) => [`${r.innerId}::${k}`, v])))} />
+              </div>
+              <button type="button" aria-label={`Unpin ${r.label}`} title="Unpin: take it off the card (the slider inside stays)" onClick={() => unpin(r.path)}
+                style={{ width: 20, height: 20, padding: 0, border: 0, background: 'none', color: pal.overlay0, cursor: 'pointer', font: `600 12px ${MONO}` }}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

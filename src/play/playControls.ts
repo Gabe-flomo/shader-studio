@@ -72,7 +72,7 @@ function collectColourCandidates(nodes: GraphNode[]): PlayCandidate[] {
   };
   visit(nodes, '', undefined, {});
   for (const g of nodes) {
-    if (g.type !== 'group') continue;
+    if (g.type !== 'group' && g.type !== 'agentsGroup') continue;
     const inner = g.params.subgraph as SubgraphData | undefined;
     if (inner) visit(inner.nodes, `${g.id}::`, labelOf(g), g.params);
   }

@@ -104,6 +104,8 @@ export interface LayerKit {
   layerPoint(id: string): { x: number; y: number } | null;
   /** Where the camera saw movement lately (64 × 36, every channel the amount), or null when it wasn't sampled this frame. */
   motionMap(): HTMLCanvasElement | null;
+  /** A Motion layer's grid (row 0 at the top), the first one when `id` is empty; null when none has one. */
+  motionGrid(id?: string): { id: string; grid: Float32Array; cols: number; rows: number; seq: number } | null;
   /** The motion map's amount (0..1) at (x, y) (0..1, y up), or null. */
   motionAt(x: number, y: number): number | null;
   /** The last frame's picture brightness (0..1): 'lum' (Rec. 709), 'r', 'g' or 'b', around (x, y) within r picture heights, or the whole picture (x null). Null before a sample. */

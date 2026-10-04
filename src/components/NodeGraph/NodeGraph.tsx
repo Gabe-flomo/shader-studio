@@ -2,6 +2,8 @@ import React, { useRef, useState, useEffect, useLayoutEffect, useCallback, useMe
 import { createPortal } from 'react-dom';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { getNodeDefinition, getNodeDefinitionFor } from '../../nodes/definitions';
+import { canPinAgentParam } from '../../nodes/agentPins';
+import { canFollowHand, followHand } from '../../play/followHand';
 import { NodeComponent } from './NodeComponent';
 import { NodeSearchPalette } from './NodeSearchPalette';
 import { CanvasToolbar } from '../shell/CanvasToolbar';
@@ -1553,11 +1555,57 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                             Drive with a null in Play
                           </button>
                         )}
+                        {canFollowHand(playParam.candidates, playParam.c) && (
+                          <button style={ctxBtnStyle}
+                            title="This slider and its X/Y partner as a position in Play that follows a tracked hand's index fingertip (and the pointer until a hand is seen)"
+                            onClick={() => {
+                              const c = playParam.c!;
+                              let ok = '';
+                              useNodeGraphStore.getState().setPlay(p => { const r = followHand(p, playParam.candidates, c); ok = r.pairId; return r.play; });
+                              if (ok) toast.success('Follows a hand in Play', { message: 'Turn the camera on in Play and raise a hand; until a hand is seen, the pointer over the picture moves it.', action: openPlay });
+                              setContextMenu(null);
+                            }}>
+                            Follow a hand in Play
+                          </button>
+                        )}
                       </>
                     )}
                     <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
                   </>
                 )}
+                {(() => {
+                  // An Agents group's pinned sliders (P4): pin a slider of a node inside the group to the
+                  // group's card, or unpin one (from inside, or from the card's own row).
+                  if (!contextMenu.nodeId || !contextMenu.paramKey) return null;
+                  const st = useNodeGraphStore.getState();
+                  let group: import('../../types/nodeGraph').GraphNode | undefined;
+                  let path = '';
+                  const top = st.nodes.find(n => n.id === contextMenu.nodeId);
+                  if (top?.type === 'agentsGroup' && contextMenu.paramKey.includes('::')) { group = top; path = contextMenu.paramKey; }
+                  else if (activeGroupPath.length === 1 && !contextMenu.paramKey.includes('::')) {
+                    const g = st.nodes.find(n => n.id === activeGroupPath[0]);
+                    const here = displayNodes.find(n => n.id === contextMenu.nodeId);
+                    if (g?.type === 'agentsGroup' && canPinAgentParam(here, contextMenu.paramKey)) { group = g; path = `${contextMenu.nodeId}::${contextMenu.paramKey}`; }
+                  }
+                  if (!group) return null;
+                  const list = ((group.params.pinned ?? []) as string[]).filter(p => typeof p === 'string');
+                  const on = list.includes(path);
+                  const gid = group.id;
+                  return (
+                    <>
+                      <button style={ctxBtnStyle}
+                        title={on ? 'Take it off the Agents group\'s card (the slider inside stays)' : 'Show this slider on the Agents group\'s card too, so it can be changed without opening the group'}
+                        onClick={() => {
+                          st.updateNodeParams(gid, { pinned: on ? list.filter(p => p !== path) : [...list, path] });
+                          if (!on) toast.success('Pinned to the group card');
+                          setContextMenu(null);
+                        }}>
+                        {on ? 'Unpin from the group card' : 'Pin to the group card'}
+                      </button>
+                      <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                    </>
+                  );
+                })()}
                 {(() => {
                   // Inputs on demand (NodeDefinition.socketsOnDemand): this slider's socket, shown or hidden.
                   if (!contextMenu.nodeId || !contextMenu.paramKey) return null;

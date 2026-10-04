@@ -1,6 +1,6 @@
 # Agents group: slime mold and particles built from nodes (plan, 2026-10-03)
 
-**Status:** P0, P1 (Slime), P2 (Particles) and P3 (Species, food and obstacles) shipped 2026-10-03/04; see "What shipped" below. P4 onward not built. User guide: docs/agents-group.md.
+**Status:** P0, P1 (Slime), P2 (Particles), P3 (Species, food and obstacles) and P4 (Play) shipped 2026-10-03/04; see "What shipped" below. P5 onward not built. User guide: docs/agents-group.md.
 
 ## In plain words
 
@@ -97,6 +97,30 @@ The user moved two of P4's nodes into P2: **Sound kick** and **Chladni** shipped
 **Measured** (M3 Pro, 1920 × 1080, each frame GPU-synced, every preset forced to 1M): Multi-species slime 11.8 ms a frame; Ants 14.2 ms (3 steps; steps alone 11.9 ms: a million ants crowd onto three roads and Deposit's overlapping points dominate); Boids 15.7 ms (steps 8.8 ms, the rest 2M-vertex streaks + glow); Strands 18.2 ms (steps 9.7 ms, the rest ink streaks); Grow toward a picture 10.3 ms; Slime mold 9.2 ms (unchanged). As shipped, Ants (256k) is 3.5 ms and Boids (256k) 3.9 ms.
 
 **Deferred from P3**: a separable two-pass 5×5 (one 25-tap pass is cheap enough at trail sizes); Emit Picture / Field limited to a region (it samples the whole picture); Show passes for programs inside groups other than Agents and the Pass node's phase 3 inspection; per-walker colour packing beyond 8 bits; exact neighbour boids (field boids as agreed).
+
+## What shipped (P4 Play, 2026-10-04)
+
+**Group Sound from.** The Agents group's new Sound section: **Sound from** (*Each node's own*, the default and every group saved before; or Level and Beat / Mic / Audio engine / Engine track 1–8), **Level**, **Beat**. When set, `listenersOf` (agentGraph.ts, through `groupSound`) hands every Sound kick and Chladni inside the group's choice and the group's Level and Beat uniforms; the runner's `hear` is unchanged, so the Particles engine's `gpSoundStep` / `gpLevelsPush` run as they were (gpEngineShaders snapshot untouched). The update shader doesn't change with it (tested). Checked in the browser: the group's Beat 120 drives a kick whose own Beat is 0; Engine track 1 is what the runner asks the host for (a stand-in spectrum on `host.sound`, no audio played, gives a hit every 0.5 s).
+
+**Inner sliders in Play.** `collectParamCandidates` and the colour walk go one level into an Agents group as into a plain group, so every live inner slider is a Play candidate (`group::inner::key`, bound by its last two parts to the update shader's uniform): Add control, Map to…, the right-click Play menu inside the group, Drive with a null. The store's override sync (`group::inner::key` written into the inner node too) now covers `agentsGroup`, so Play writes, pins and the inner card always agree.
+
+**Pinned sliders and the live dots.** `params.pinned` (`inner::key` paths; `nodes/agentPins.ts`): the group card lists them under a thumbnail of the walkers (`agentThumbRegistry`; the runner draws at most 65,536 of them as additive points every tenth frame while the card is mounted, ~0.7 ms with its read-back). Right-click a slider inside → Pin to the group card / Unpin; right-click a pinned row for the inner slider's Play menu. The presets pin nothing (their group params change by the new defaults only).
+
+**Hands into targets.** Attract / Repel Target, Vortex Centre at (new select, default X and Y) and Emit At (new, default X and Y) gain **A hand or null**: Hand X / Y in 0–1 across and up (`agHandPlace`, the Particles node's hand units, aspect-correct), so a position pair maps a hand, null, pose or pointer straight onto them. **Follow a hand in Play** (`play/followHand.ts`, on the right-click Play menu and the phone's slider settings) is the Particles node's "Add as position with Y" flow finished in one step: both controls, a position pair, and two pair mappings, the pointer then `hand:any:8` (the later wins once a hand has been seen). The defaults generate the same GLSL as before.
+
+**Triggers.** The group gains **Start over** (a trigger slider: rising past 0.5 restarts the live simulation, as ↺ does; offline renders ignore it). Emit's Burst was already one. Checked on the Play page: R → Start over restarts at step 0; B → Burst.
+
+**Motion (texture).** A new Sources node (`nodes/definitions/motionMap.ts`): Amount (0–1, × Gain) at UV and the grid as a `texture` (`u_motionMap`, with `_px` for the sampling nodes). The kit's `motionGrid(id)` exposes a Motion layer's grid; `play/motionTexture.ts` copies the first one into an 8-bit texture after each overlay frame (row-flipped so it covers the picture like a Pass), and ShaderCanvas refreshes it when the picture, a pass, an update shader or a trail step program reads it (and keeps drawing while one does). Not in FIELD_IMPURE (a texture read at a point). Web pages: `unsupportedFeatures` lists it (the page reads it as still). Checked in the browser: the texture equals the kit's grid cell for cell; an Emit with Shape Picture ← Motion (texture) gives birth along a moving dot a Motion layer watches.
+
+**Example** (Play, *Agents in Play* → **Agents: a hand and a beat**, `agentsHandBeat`; graph in `store/agentPlayExample.ts`): a 1M "Hand swarm" (Home → Sound kick → Curl → Attract (hand) → Integrate; Age / Life; neon streaks), group Sound from Engine track 1 with the Kick rack and a two-bar clip, the Hand pair (pointer, then a hand), Fist → Hand strength −2.5, B → Burst, R → Start over, four pinned sliders. Every node, inside too, has a note; the Play notes explain every control and rule.
+
+**Zero change.** `goldenShaders.test.ts.snap` and `gpEngineShaders.test.ts.snap` are untouched; the only snapshot change is one added Play golden-outputs entry (the new example). Every P1–P3 Agents example compiles to byte-identical programs on this branch and on main (final picture, update shaders, trail step programs, listeners, emit, deposit and draw specs); the group's spec gains a `restart` engine param and its binding, no GLSL.
+
+**Determinism** (browser, M3 Pro): the example (silent engine) and Sound burst reach bit-identical state offline twice and live at 30, 60, 120 Hz and with a stall; so does the example with the group's own Beat 120.
+
+**Measured** (1M, 1920 × 1080, GPU-synced, same session, alternating): Slime mold 10.0 / 9.5 ms a frame on this branch against 10.1 on main, Particles 6.7 / 6.6 against 7.5, Sound burst 8.3 / 7.9 against 8.9 / 8.4: unchanged within the machine's noise (the programs are identical). The example 12–13 ms (Sound burst's streaks plus the hand).
+
+**Deferred from P4**: readings back into Play (alive share, centroid: P6); the Particles node's own spawn map from Motion (texture); choosing which Motion layer (it reads the first); Motion (texture) on web pages (P5 with the rest of agents); a wired Level socket on the group.
 
 ---
 

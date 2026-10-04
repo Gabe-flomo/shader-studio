@@ -48,7 +48,7 @@ Any layer's **Matte → + Where it moves (Motion layer)** adds a hidden Motion l
 
 Particles → Birth and death → Born **Where it moves** → **In**: *Camera (a Camera layer)* is the old behaviour (the camera's own motion map); a Motion layer uses that layer's grid. Particles are born in a cell in proportion to its movement (the last grid with something moving, so they keep coming from where something last moved). The Motion card's **Add particles born here** makes such a layer. Combined with a matte (particles matted by the same Motion layer) they show only where it moves.
 
-The Studio's **GPU Particles node** is not changed. *Follow-up:* let it read a Motion layer's grid as a spawn map (it would need the grid as a texture from the overlay, like the Layers node's tap).
+The Studio's **GPU Particles node** is not changed. The grid is a texture in the graph now: the **Motion (texture)** node (Sources; `nodes/definitions/motionMap.ts`, filled by `play/motionTexture.ts` from the first Motion layer after each overlay frame, a frame late) gives **Amount** at a point and the whole grid as a **Texture**, for an Agents group (Emit Picture: born where it moves; a Trail's Add: food where it moves; Sense) or Sample, Glow, Blur. *Follow-up:* the Particles node's own spawn map could read the same texture.
 
 ## Everywhere the kit runs
 

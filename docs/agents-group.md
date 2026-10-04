@@ -61,6 +61,19 @@ For a few thousand agents with flocking rules and predators on the Play page, us
 
 **Sound.** Sound kick and Chladni listen to **Sound from**: the **Level** slider (map Live audio or a track to it in Play), the **Mic**, or the Play page's **Audio engine** (its master or a track). **Beat** is a silent stand-in kick at a tempo while you build: it only moves numbers, and it is part of the simulation, so a recording matches the preview. Set it to 0 when real sound drives Level.
 
+The group has a **Sound from** of its own (its Sound section): **Each node's own** (the default) leaves every listening node to its own card; any other choice (Level and Beat, Mic, Audio engine, Engine track 1–8) is shared by every Sound kick and Chladni inside, with the group's **Level** and **Beat**. One switch on the group card makes the whole rule hear the engine's kick track.
+
+## Play: controls, pins, hands, the Motion layer
+
+- **Every slider inside is a Play control.** Right-click any slider inside the group (or on the group card) → Add to Play controls, Drive with a null, MIDI learn, LFOs: they are uniforms of the update shader, so nothing recompiles. Play's Add control lists them as *Group › Node · Slider*.
+- **Pinned sliders.** Right-click a slider inside → **Pin to the group card**: it shows on the card under the dots, so Turn, Speed or a force's Strength can be changed without opening the group. It is the inner slider itself (the same value, uniform and Play control); right-click it on the card for Play, or **Unpin**. The presets don't pin anything; the Play example pins four.
+- **The live dots.** The group card shows where the walkers are now (a sample of at most 65,536, drawn every tenth frame while the card is on screen).
+- **Hands, nulls, the pose and the mouse.** Attract / Repel's Target, Vortex's Centre at and Emit's At have **A hand or null (Hand X / Y)**: a place 0–1 across and up the picture, the Particles node's hand units, so a position mapping lands on it at any picture shape. Right-click Hand X → **Follow a hand in Play**: both sliders become Play controls paired as one position, mapped to the pointer over the picture and then a tracked hand's index fingertip (the hand wins once it has been seen). Or **Add as position with Y** in Play and map the pair to a null, the pose, a face or a layer.
+- **Start over and Burst as triggers.** The group's **Start over** slider and Emit's **Burst** rise past 0.5 to fire: route a key, a beat, a pad, a gesture or a rule to them.
+- **The Motion layer as a texture.** Sources → **Motion (texture)**: the Play page's first Motion layer's grid (docs/motion-layer.md). **Amount** is how much moved at a point (0–1); **Texture** goes into Emit's **Picture** (born where it moves), an Agents group's added port (Sense smells it, Sample (texture) reads it), a Trail's **Add** (food where people move: wire Amount, it is read at each trail pixel), Glow or Blur. It is a frame late, like the Layers node, and live input: a render reads what the layer saw then.
+
+**Example**: Play → *Agents in Play* → **Agents: a hand and a beat**: a million particles your hand (or the pointer) pulls and stirs, a fist pushes them away, B bursts them and R starts over, while the Audio engine's kick track (the group's Sound from: Engine track 1) blasts shockwaves through them.
+
 Any ordinary node can join the rule: noise to wobble the turn, a shape's distance into Sense's Field ƒ to avoid it, an Expression Block to reshape the readings (the preset's **Crowding** does this), Time, Audio Input, MIDI. Every unwired socket on the Agents nodes means "this walker", and every node that would read the pixel's position reads the walker's position instead.
 
 What can't go inside, and why (the card says so):
@@ -98,4 +111,5 @@ Steps per frame also sets the pace: one step is 1/60 s of simulated time, so 2 s
 
 - Up to 4 Agents groups and 4 Trail fields per graph; 4 species; 16 textures per program (each group counts its two state textures).
 - Exported web pages don't run agents yet: Export warns, and the page draws the picture without them.
-- Not yet: Sound from on the group itself, pinned sliders on the group card, 3D. See docs/agents-plan.md for the phases.
+- Exported web pages read Motion (texture) as still (Export says so).
+- Not yet: 3D; readings (alive share, centroid) back into Play. See docs/agents-plan.md for the phases.
