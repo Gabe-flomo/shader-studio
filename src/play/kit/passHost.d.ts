@@ -9,6 +9,7 @@ export interface PhPass {
   previous: boolean;
   live: boolean;
   afterAgents?: boolean;
+  beforeParticles?: boolean;
   u: { tex: string; prev: string };
 }
 export interface PhEnv<P = unknown, T = unknown> {
@@ -22,7 +23,8 @@ export interface PhEnv<P = unknown, T = unknown> {
 }
 export interface PhHost {
   hasPrevious: boolean;
-  run(w: number, h: number, stage?: 'pre' | 'post'): void;
+  splitsForParticles: boolean;
+  run(w: number, h: number, stage?: 'pre' | 'post', part?: 'particles' | 'rest'): void;
   clearPrevious(): void;
   dispose(): void;
 }

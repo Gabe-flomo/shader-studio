@@ -9,7 +9,7 @@
 // lib/passRunner.ts runs too, so the two can't drift.
 //
 // Top-level names start with `ph` (the kit's one-scope rule).
-import { ppDrawn, ppPixel, ppSize, ppStaged, ppTargetKey } from './passPlan.js';
+import { ppDrawn, ppPixel, ppPrevBound, ppSize, ppSplitsForParticles, ppStaged, ppTargetKey } from './passPlan.js';
 
 /** A pass's texture settings as GL enums. */
 function phWrap(gl, w) {
@@ -18,7 +18,7 @@ function phWrap(gl, w) {
 
 /**
  * passes: the bundle's graphPasses, in drawing order: { slug, label, fragmentShader, scale,
- * format, filter, wrap, previous, live, afterAgents?, u: { tex, prev } } (u: the sampler names).
+ * format, filter, wrap, previous, live, afterAgents?, beforeParticles?, u: { tex, prev } } (u: the sampler names).
  * env: {
  *   link(fragmentShader) → WebGLProgram: compiled as the page compiles its picture (throws on error),
  *   use(program, w, h): make it current with every input the picture has, u_resolution = w × h,
@@ -75,23 +75,27 @@ export function phCreate(gl, passes, env) {
   return {
     /** Some pass keeps its previous frame (the page keeps drawing it like feedback). */
     hasPrevious: entries.some(e => e.live && e.previous),
+    /** Some pass the frame draws is read by the Particles nodes: run part 'particles' before them, then 'rest'. */
+    splitsForParticles: ppSplitsForParticles(ppDrawn(entries)),
     /**
-     * Draw the passes the picture needs for a picture of w × h (the stage's, with agents),
-     * and leave their textures in env.textures for every program after them.
+     * Draw the passes the picture needs for a picture of w × h (the stage's, with agents; the
+     * part's, round the particles), and leave their textures in env.textures for every program after them.
      */
-    run(w, h, stage) {
+    run(w, h, stage, part) {
       const drawn = ppDrawn(entries);
       const keep = new Set(drawn.map(d => d.slug));
       for (const [slug, t] of targets) if (!keep.has(slug)) { drop(t); targets.delete(slug); }
       const px = ppPixel(w, h);
       // Every pass's previous frame first: a pass earlier in the order may read a later one's Previous.
+      // (Not a pass an earlier call this frame drew: its sampler keeps the frame before: ppPrevBound.)
+      const fresh = new Set(ppPrevBound(drawn, stage, part).map(d => d.slug));
       for (const d of drawn) {
         const t = ensure(d, w, h);
-        if (t.prev) env.textures.set(d.u.prev, t.prev.tex);
+        if (t.prev && fresh.has(d.slug)) env.textures.set(d.u.prev, t.prev.tex);
         env.vec2s.set(d.u.tex + '_px', px.slice());
         env.vec2s.set(d.u.prev + '_px', px.slice());
       }
-      for (const d of ppStaged(drawn, stage)) {
+      for (const d of ppStaged(drawn, stage, part)) {
         const t = targets.get(d.slug);
         if (!d.program) { env.textures.set(d.u.tex, null); continue; }
         gl.bindFramebuffer(gl.FRAMEBUFFER, t.cur.fb);

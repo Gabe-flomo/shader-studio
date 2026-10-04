@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import type { PassProgram } from '../compiler/types';
 import { passPrevUniform, passPxUniform, passUniform } from '../nodes/definitions/passes';
-import { ppDrawn, ppPixel, ppSize, ppStaged, ppTargetKey } from '../play/kit/passPlan.js';
+import { ppDrawn, ppPixel, ppPrevBound, ppSize, ppSplitsForParticles, ppStaged, ppTargetKey } from '../play/kit/passPlan.js';
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
 
 /** Pass cards register a canvas here (by node id); the live runner draws their thumbnails into it. */
@@ -126,6 +126,8 @@ export class PassRunner {
   get passes(): readonly PassProgram[] { return this.entries.map(e => e.spec); }
   /** Some pass keeps its previous frame: the preview keeps drawing while the clock runs. */
   get hasPrevious(): boolean { return this.entries.some(e => e.spec.live && e.spec.previous); }
+  /** Some pass the frame draws is read by the Particles nodes: run part 'particles' before them, then 'rest'. */
+  get splitsForParticles(): boolean { return ppSplitsForParticles(ppDrawn(this.entries.map(e => e.spec))); }
 
   /** The uniforms each pass adds to the shared table. */
   private ensureUniforms(): void {
@@ -205,9 +207,10 @@ export class PassRunner {
    * and bind their textures for the final program. `time` labels GPU timers
    * (live only). u_resolution is each pass's own size while it draws. `stage`
    * (graphs with agents only) draws just the passes before ('pre') or after
-   * ('post') the agents step.
+   * ('post') the agents step. `part` (when splitsForParticles) draws the passes
+   * the particles read ('particles', before them) or the others ('rest').
    */
-  run(targets: PassTargets, w: number, h: number, timer?: { begin(name: string): boolean; end(): void }, stage?: 'pre' | 'post'): void {
+  run(targets: PassTargets, w: number, h: number, timer?: { begin(name: string): boolean; end(): void }, stage?: 'pre' | 'post', part?: 'particles' | 'rest'): void {
     this.ensureUniforms();
     const u = this.host.uniforms();
     const { renderer, camera } = this.host;
@@ -215,16 +218,18 @@ export class PassRunner {
     targets.prune(new Set(drawn.map(d => d.slug)));
     const [pxX, pxY] = ppPixel(w, h);
     // Every pass's previous frame first: a pass earlier in the order may read a later one's Previous.
+    // (Not a pass an earlier call this frame drew: its sampler keeps the frame before: ppPrevBound.)
+    const fresh = new Set(ppPrevBound(drawn, stage, part).map(d => d.slug));
     for (const d of drawn) {
       const t = targets.ensure(d, w, h);
-      if (t.prev) u[passPrevUniform(d.slug)].value = t.prev.texture;
+      if (t.prev && fresh.has(d.slug)) u[passPrevUniform(d.slug)].value = t.prev.texture;
       (u[passPxUniform(passUniform(d.slug))].value as THREE.Vector2).set(pxX, pxY);
       (u[passPxUniform(passPrevUniform(d.slug))].value as THREE.Vector2).set(pxX, pxY);
     }
     const res = u.u_resolution?.value as THREE.Vector2 | undefined;
     const rx = res?.x ?? w, ry = res?.y ?? h;
     // With agents (lib/agentRunner.ts) the frame draws passes in two stages: before the agents step, and after it.
-    for (const d of ppStaged(drawn, stage)) {
+    for (const d of ppStaged(drawn, stage, part)) {
       const t = targets.get(d.slug)!;
       const e = d.entry;
       if (!e.ready || e.failed) { u[passUniform(d.slug)].value = null; continue; }

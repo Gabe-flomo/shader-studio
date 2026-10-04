@@ -21,6 +21,7 @@ import { parsePlayRecord, emptyPlayRecord } from '../../types/play';
 import { webInputFrom } from '../webInput';
 import { kitScript, playBundle } from '../exportHtml';
 import { phCreate } from '../kit/passHost.js';
+import { ppFrameSteps } from '../kit/passPlan.js';
 import { PassRunner, PassTargets } from '../../lib/passRunner';
 import type { CompilationResult, PassProgram } from '../../compiler/types';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -68,14 +69,45 @@ describe('the web bundle', () => {
   });
 
   it('the kit hands the runtime the pass host', () => {
-    const SSKit = new Function(`${kitScript()}\nreturn SSKit;`)() as { passes: { create: unknown } };
+    const SSKit = new Function(`${kitScript()}\nreturn SSKit;`)() as { passes: { create: unknown; steps: typeof ppFrameSteps } };
     expect(typeof SSKit.passes.create).toBe('function');
+    // And the frame's order, the one the app's live preview and its offline renders run.
+    expect(SSKit.passes.steps({ passes: true, split: true, particles: true, agents: true })).toEqual(ppFrameSteps({ passes: true, split: true, particles: true, agents: true }));
+  });
+});
+
+describe('one frame order for the live preview and pages (kit/passPlan.js ppFrameSteps)', () => {
+  const order = (o: Parameters<typeof ppFrameSteps>[0]) => ppFrameSteps(o).map(s => [s.do, s.stage ?? '', s.part ?? '', s.last ? 'last' : ''].filter(Boolean).join(':'));
+
+  it('a graph with nothing but its picture has no steps', () => {
+    expect(ppFrameSteps({ passes: false, split: false, particles: false, agents: false })).toEqual([]);
+  });
+
+  it('passes, particles and agents keep the order they had (particles, then passes; agents between pre and post)', () => {
+    expect(order({ passes: true, split: false, particles: false, agents: false })).toEqual(['passes:last']);
+    expect(order({ passes: true, split: false, particles: true, agents: false })).toEqual(['particles', 'passes:last']);
+    expect(order({ passes: false, split: false, particles: true, agents: true })).toEqual(['particles', 'agents']);
+    expect(order({ passes: true, split: false, particles: false, agents: true })).toEqual(['passes:pre', 'agents', 'passes:post:last']);
+  });
+
+  it('the passes the agents read draw before their step', () => {
+    const steps = ppFrameSteps({ passes: true, split: false, particles: true, agents: true });
+    const agents = steps.findIndex(s => s.do === 'agents');
+    const pre = steps.findIndex(s => s.do === 'passes' && s.stage === 'pre');
+    expect(pre).toBeGreaterThanOrEqual(0);
+    expect(pre).toBeLessThan(agents);
+    expect(steps.filter(s => s.last)).toEqual([{ do: 'passes', stage: 'post', last: true }]);
+  });
+
+  it('with Emit from, the passes the particles read draw first', () => {
+    expect(order({ passes: true, split: true, particles: true, agents: false })).toEqual(['passes:particles', 'particles', 'passes:rest:last']);
+    expect(order({ passes: true, split: true, particles: true, agents: true })).toEqual(['passes:particles', 'particles', 'passes:pre:rest', 'agents', 'passes:post:rest:last']);
   });
 });
 
 /** One draw: which pass, into which of its textures (0, 1, … in order of first use), at what size, what it saw. */
 interface Draw { slug: string; into: number; w: number; h: number; res: string; prev: number | null }
-type Frame = { w: number; h: number; stage?: 'pre' | 'post'; clear?: boolean };
+type Frame = { w: number; h: number; stage?: 'pre' | 'post'; part?: 'particles' | 'rest'; clear?: boolean };
 
 /** Numbers each pass's textures in the order they are first seen (the draw target first, then its Previous). */
 function numbering() {
@@ -118,7 +150,7 @@ async function appDraws(passes: PassProgram[], frames: Frame[]): Promise<Draw[]>
   targets = new PassTargets(renderer, true);
   for (const f of frames) {
     if (f.clear) targets.clearPrevious();
-    runner.run(targets, f.w, f.h, undefined, f.stage);
+    runner.run(targets, f.w, f.h, undefined, f.stage, f.part);
   }
   return out;
 }
@@ -150,7 +182,7 @@ function pageDraws(passes: PassProgram[], frames: Frame[]): Draw[] {
   const host = phCreate(gl, passes.map(p => ({ ...p, u: { tex: `u_pass_${p.slug}`, prev: `u_passprev_${p.slug}` } })), env);
   for (const f of frames) {
     if (f.clear) host.clearPrevious();
-    host.run(f.w, f.h, f.stage);
+    host.run(f.w, f.h, f.stage, f.part);
   }
   return out;
 }
@@ -188,5 +220,45 @@ describe('the same schedule in the app and on a page (kit/passPlan.js)', () => {
     const app = await appDraws(staged, f2), page = pageDraws(staged, f2);
     expect(page).toEqual(app);
     expect(page.map(d => d.slug)).toEqual([staged[0].slug, staged[1].slug]);
+  });
+
+  it('with Particles reading a pass: those draw first (part particles), the rest after', async () => {
+    const r = edgeGlow();
+    const split = r.passes!.map((p, i) => ({ ...p, beforeParticles: i === 0 }));
+    const f2 = [{ w: 960, h: 540, part: 'particles' as const }, { w: 960, h: 540, part: 'rest' as const }];
+    const app = await appDraws(split, f2), page = pageDraws(split, f2);
+    expect(page).toEqual(app);
+    expect(page.map(d => d.slug)).toEqual([split[0].slug, split[1].slug]);
+  });
+
+  it('a pass drawn in an earlier call of the frame keeps its Previous at the frame before', async () => {
+    // The feedback pass draws before the particles; the picture still reads last frame's Previous of it.
+    const r = compileGraph({ nodes: feedbackGraph() }) as CompilationResult;
+    const fbSlug = r.passes!.find(p => p.previous)!.slug;
+    const split = r.passes!.map(p => ({ ...p, beforeParticles: p.slug === fbSlug }));
+    const f = [
+      { w: 960, h: 540, part: 'particles' as const }, { w: 960, h: 540, part: 'rest' as const },
+      { w: 960, h: 540, part: 'particles' as const }, { w: 960, h: 540, part: 'rest' as const },
+    ];
+    const app = await appDraws(split, f), page = pageDraws(split, f);
+    expect(page).toEqual(app);
+    // The app's shared uniform: after the 'rest' call it must still hold the texture the pass read
+    // (its previous frame), not the one it just drew.
+    const uniforms: Record<string, THREE.IUniform> = { u_resolution: { value: new THREE.Vector2(1, 1) } };
+    const renderer = {
+      compileAsync: () => Promise.resolve(), getContext: () => ({ getProgramParameter: () => true, LINK_STATUS: 0 }),
+      properties: { get: () => ({}) }, setRenderTarget: () => {}, clear: () => {}, render: () => {},
+    } as unknown as THREE.WebGLRenderer;
+    const runner = new PassRunner({ renderer, geometry: new THREE.PlaneGeometry(2, 2), camera: new THREE.Camera(), uniforms: () => uniforms, onReady: () => {}, onLinkFailed: () => {} });
+    runner.update(split, 'void main() {}');
+    await new Promise(res => setTimeout(res, 0));
+    expect(runner.splitsForParticles).toBe(true);
+    const targets = new PassTargets(renderer, true);
+    runner.run(targets, 960, 540, undefined, undefined, 'particles');
+    const drawn = uniforms[`u_pass_${fbSlug}`].value;
+    const before = uniforms[`u_passprev_${fbSlug}`].value;
+    expect(before).not.toBe(drawn);
+    runner.run(targets, 960, 540, undefined, undefined, 'rest');
+    expect(uniforms[`u_passprev_${fbSlug}`].value).toBe(before);
   });
 });

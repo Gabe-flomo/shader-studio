@@ -32,6 +32,11 @@ export interface PassProgram {
    * through other passes), so it draws after the agents step; otherwise before.
    */
   afterAgents?: boolean;
+  /**
+   * A Particles node reads it (its Emit from, or a Flow / Obstacle through it), directly or through
+   * other passes: it draws before the particles step, the rest after. Only present when true.
+   */
+  beforeParticles?: boolean;
 }
 
 /**

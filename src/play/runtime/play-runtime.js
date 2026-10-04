@@ -2767,14 +2767,34 @@ void main() {
     // The graph's picture: straight to the screen, or (feedback, echo) into a half-float target, then dithered to the screen as ShaderCanvas does.
     function drawPicture() {
       const W = glCanvas.width, H = glCanvas.height;
-      const gpOut = gpHostR && !gpHostR.unsupported ? gpHostR.frame({
-        width: W, height: H, dt: gpDt, time, mouse: [mouse.x, mouse.y], read: n => uniformValues[n], reset: gpReset,
-        texture: n => (imageAspect.has(n) ? { texture: imageTex.get(n), aspect: imageAspect.get(n) } : null),
-        probe: (b, vol) => gpProbeRun(b, W, H, vol), sound: gpSoundIn,
-      }) : [];
-      gpDt = 0; gpReset = false;
-      // With Pass nodes the particles' textures are shared samplers too, so a pass program that has the node reads them.
-      if (graphPasses) for (const o of gpOut) graphTex.set(o.uniform, o.texture || null);
+      let gpOut = [];
+      // The Motion (texture) node's grid, before anything reads it.
+      if (motionName) refreshMotion(W, H);
+      // The graph's other programs, in the app's frame order (kit/passPlan.js ppFrameSteps): the passes a Particles
+      // node reads, the particles, with agents the passes they read, their steps and drawings, the passes after
+      // them; else the passes. Then the picture.
+      const steps = PHK && PHK.steps ? PHK.steps({ passes: !!passHost, split: !!(passHost && passHost.splitsForParticles), particles: !!(gpHostR && !gpHostR.unsupported), agents: !!agentHost }) : [];
+      for (const step of steps) {
+        if (step.do === 'passes') passHost.run(W, H, step.stage, step.part);
+        else if (step.do === 'particles') {
+          gpOut = gpHostR.frame({
+            width: W, height: H, dt: gpDt, time, mouse: [mouse.x, mouse.y], read: n => uniformValues[n], reset: gpReset,
+            // A node's picture, or (Emit from) a pass's texture.
+            texture: n => (imageAspect.has(n) ? { texture: imageTex.get(n), aspect: imageAspect.get(n) } : graphTex.get(n) ? { texture: graphTex.get(n), aspect: 1 } : null),
+            probe: (b, vol) => gpProbeRun(b, W, H, vol), sound: gpSoundIn,
+          });
+          gpDt = 0; gpReset = false;
+          // With Pass nodes the particles' textures are shared samplers too, so a pass program that has the node reads them.
+          if (graphPasses) for (const o of gpOut) graphTex.set(o.uniform, o.texture || null);
+        } else {
+          const nowMs = performance.now();
+          // A renderAt (held) steps exactly to its time, as the app's offline renders do; else live, with the governor.
+          agentHost.run({ width: W, height: H, time, live: !held, frameMs: lastAgentFrame ? nowMs - lastAgentFrame : 0 });
+          lastAgentFrame = nowMs;
+          // An Agents group's readings the page's setup reads (sensors on `ag:<id>`, a frame or two late).
+          if (agentHost.readings) for (const [layer, vals] of agentHost.readings()) for (const k in vals) sensors.set(layer + '::' + k, vals[k]);
+        }
+      }
       let target = null;
       if (stateful || echoCfg) {
         if (stateful && !pingPong) pingPong = [makeTarget(W, H), makeTarget(W, H)];
@@ -2782,19 +2802,6 @@ void main() {
         if (echoCfg && echoRing.length !== echoCfg.copies) { echoRing.forEach(dropTarget); echoRing = []; for (let i = 0; i < echoCfg.copies; i++) echoRing.push(makeTarget(W, H)); }
         target = stateful ? pingPong[1 - pingIdx] : sceneTarget;
       }
-      // The graph's other programs draw into their textures first: with agents, the passes they read, then the
-      // steps and the drawings, then the passes that read trails or drawings (as ShaderCanvas); else the passes.
-      if (motionName) refreshMotion(W, H);
-      if (agentHost) {
-        if (passHost) passHost.run(W, H, 'pre');
-        const nowMs = performance.now();
-        // A renderAt (held) steps exactly to its time, as the app's offline renders do; else live, with the governor.
-        agentHost.run({ width: W, height: H, time, live: !held, frameMs: lastAgentFrame ? nowMs - lastAgentFrame : 0 });
-        lastAgentFrame = nowMs;
-        // An Agents group's readings the page's setup reads (sensors on `ag:<id>`, a frame or two late).
-        if (agentHost.readings) for (const [layer, vals] of agentHost.readings()) for (const k in vals) sensors.set(layer + '::' + k, vals[k]);
-        if (passHost) passHost.run(W, H, 'post');
-      } else if (passHost) passHost.run(W, H);
       gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fb : null);
       gl.viewport(0, 0, W, H);
       gl.useProgram(program);

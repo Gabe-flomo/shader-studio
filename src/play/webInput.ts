@@ -54,7 +54,7 @@ export function graphFeatures(c: CompiledForWeb, play: PlayRecord): GraphFeature
 export function webPasses(passes: readonly PassProgram[]): WebPass[] {
   return passes.map(p => ({
     slug: p.slug, label: p.label, fragmentShader: p.fragmentShader, scale: p.scale, format: p.format, filter: p.filter, wrap: p.wrap,
-    previous: p.previous, live: p.live, ...(p.afterAgents ? { afterAgents: true } : {}),
+    previous: p.previous, live: p.live, ...(p.afterAgents ? { afterAgents: true } : {}), ...(p.beforeParticles ? { beforeParticles: true } : {}),
     u: { tex: passUniform(p.slug), prev: passPrevUniform(p.slug) },
   }));
 }

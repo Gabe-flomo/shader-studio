@@ -38,6 +38,7 @@ import { outputTap } from '../lib/outputTap';
 import { GpuTimer } from '../lib/gpuTimer';
 import { OfflineHistory } from '../lib/offlineHistory';
 import { PassRunner, PassTargets } from '../lib/passRunner';
+import { ppFrameSteps } from '../play/kit/passPlan.js';
 import { AgentRunner, AgentTargets } from '../lib/agentRunner';
 import type { AgentsSpec } from '../compiler/types';
 import type { PassProgram } from '../compiler/types';
@@ -901,7 +902,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         dispose: r => r.dispose(),
         draw: (t, into, prev, echoes) => {
           material.uniforms.u_time.value = t;
-          if (passRunner && offlinePassTargets) passRunner.run(offlinePassTargets, exportW, exportH);
+          if (passRunner && offlinePassTargets) passRunner.run(offlinePassTargets, exportW, exportH, undefined, undefined, passRunner.splitsForParticles ? 'rest' : undefined);
           if (material.uniforms.u_prevFrame) material.uniforms.u_prevFrame.value = prev ? prev.texture : null;
           for (let i = 0; i < 6; i++) { const u = material.uniforms[`u_echo${i}`]; if (u) u.value = echoes[i]?.texture ?? null; }
           renderer.setRenderTarget(into);
@@ -954,6 +955,17 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         renderAtTime: (time: number, opts?: { dt?: number; first?: boolean }) => {
           ensureRT();
           const u = material.uniforms;
+          // Passes a Particles node reads (Emit from): drawn at this frame's time before the particles step,
+          // into the render's own textures (the rest draw after, below). A graph without them skips this.
+          const keepTime = u.u_time.value;
+          const split = !!passRunner?.splitsForParticles;
+          if (passRunner && split) {
+            offlinePassTargets ??= new PassTargets(renderer, supportsHalfFloat);
+            if (!opts || !!opts.first || !offlineStarted) offlinePassTargets.clearPrevious();
+            u.u_time.value = time;
+            passRunner.run(offlinePassTargets, exportW, exportH, undefined, undefined, 'particles');
+            u.u_time.value = keepTime;
+          }
           // Particles nodes: a render starts them over (with their pre-roll), then steps them a frame at a time.
           if (gpuParticlesActive()) {
             const first = !opts || !!opts.first;
@@ -974,7 +986,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           const passFeedback = !!passRunner?.hasPrevious;
           if (passRunner) {
             offlinePassTargets ??= new PassTargets(renderer, supportsHalfFloat);
-            if (!opts || !!opts.first || !offlineStarted) offlinePassTargets.clearPrevious();
+            // (Already started over above when some pass draws before the particles.)
+            if ((!opts || !!opts.first || !offlineStarted) && !split) offlinePassTargets.clearPrevious();
           }
           let picture: THREE.WebGLRenderTarget;
           if (feedback || echo || passFeedback) {
@@ -984,7 +997,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
             offlineStarted = !!opts;
           } else {
             u.u_time.value = time;
-            if (passRunner && offlinePassTargets) passRunner.run(offlinePassTargets, exportW, exportH);
+            if (passRunner && offlinePassTargets) passRunner.run(offlinePassTargets, exportW, exportH, undefined, undefined, split ? 'rest' : undefined);
             renderer.setRenderTarget(exportRT);
             renderer.render(scene, camera);
             picture = exportRT!;
@@ -1499,31 +1512,30 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         idleFrames = 0;
         // The Motion (texture) node's grid, as the overlay's last frame left it (a frame late, like the Layers node).
         if (readsMotionNow()) refreshMotionTexture(renderer.domElement.width || 1, renderer.domElement.height || 1);
-        // Particles nodes: stepped (while the clock runs) and drawn before the picture that reads them.
-        if (gpuParticlesActive()) {
-          const pw = renderer.domElement.width || 1, ph = renderer.domElement.height || 1;
-          gpuTimer.begin('particles');
-          drawGpuParticles(material, { width: pw, height: ph, dt: playing ? dt : 0, time: elapsed, mouse: particleMouse(pw, ph) });
-          gpuTimer.end();
-        }
-        // The Agents family: passes the agents read, then the steps and the drawings, then the passes
-        // that read trails or drawings (lib/agentRunner.ts). Without agents, the Pass path below as it was.
-        if (agentRunner && agentTargets) {
-          const aw = renderer.domElement.width || 1, ah = renderer.domElement.height || 1;
-          if (passRunner && passTargets) passRunner.run(passTargets, aw, ah, gpuTimer, 'pre');
-          const nowMs = performance.now();
-          agentRunner.run(agentTargets, { width: aw, height: ah, time: elapsed, live: true, frameMs: lastAgentFrame ? nowMs - lastAgentFrame : 0, timer: gpuTimer });
-          lastAgentFrame = nowMs;
-          if (frameCount % 10 === 0 || !dynamic) agentRunner.drawThumbnails(agentTargets);
-          if (passRunner && passTargets) {
-            passRunner.run(passTargets, aw, ah, gpuTimer, 'post');
-            if (frameCount % 10 === 0 || !dynamic) passRunner.drawThumbnails(passTargets);
+        // Before the picture, its other programs in the frame's order (kit/passPlan.js ppFrameSteps, the
+        // same in offline renders and on exported pages): the passes a Particles node reads (docs/pass-node-
+        // plan.md phase 6), the particles (stepped while the clock runs), the passes the agents read, the
+        // agents' steps and drawings (lib/agentRunner.ts), then the passes after them (lib/passRunner.ts).
+        // A graph without Pass, Particles or Agents nodes has no steps.
+        const fw = renderer.domElement.width || 1, fh = renderer.domElement.height || 1;
+        const frameSteps = ppFrameSteps({
+          passes: !!(passRunner && passTargets), split: !!passRunner?.splitsForParticles,
+          particles: gpuParticlesActive(), agents: !!(agentRunner && agentTargets),
+        });
+        for (const step of frameSteps) {
+          if (step.do === 'passes') {
+            passRunner!.run(passTargets!, fw, fh, gpuTimer, step.stage, step.part);
+            if (step.last && (frameCount % 10 === 0 || !dynamic)) passRunner!.drawThumbnails(passTargets!);
+          } else if (step.do === 'particles') {
+            gpuTimer.begin('particles');
+            drawGpuParticles(material, { width: fw, height: fh, dt: playing ? dt : 0, time: elapsed, mouse: particleMouse(fw, fh) });
+            gpuTimer.end();
+          } else {
+            const nowMs = performance.now();
+            agentRunner!.run(agentTargets!, { width: fw, height: fh, time: elapsed, live: true, frameMs: lastAgentFrame ? nowMs - lastAgentFrame : 0, timer: gpuTimer });
+            lastAgentFrame = nowMs;
+            if (frameCount % 10 === 0 || !dynamic) agentRunner!.drawThumbnails(agentTargets!);
           }
-        } else
-        // Pass nodes: their programs draw into their textures first (lib/passRunner.ts).
-        if (passRunner && passTargets) {
-          passRunner.run(passTargets, renderer.domElement.width || 1, renderer.domElement.height || 1, gpuTimer);
-          if (frameCount % 10 === 0 || !dynamic) passRunner.drawThumbnails(passTargets);
         }
         if (isStatefulRef.current) {
           // Ping-pong: render to write RT, blit to screen with dithering
