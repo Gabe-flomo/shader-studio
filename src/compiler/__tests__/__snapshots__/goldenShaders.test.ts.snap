@@ -240,7 +240,7 @@ exports[`golden shaders: every Play example exports the same bundle > finishTime
 
 exports[`golden shaders: every Play example exports the same bundle > finishWater 1`] = `
 {
-  "bundle": "0493cdaa4695100d948cad91acc4:121036",
+  "bundle": "197ab67f6af71f12af6e804fd1d2:121036",
   "missing": [],
 }
 `;
