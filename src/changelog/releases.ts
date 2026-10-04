@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.17',
+    date: '2026-10-04',
+    title: 'Agents and passes on the web',
+    highlights: [
+      { area: 'Studio', text: 'Exported web pages now run Pass node graphs and Agents groups, matching the app frame for frame. Export no longer warns about them.', link: { kind: 'doc', path: 'docs/agents-group.md' } },
+      { area: 'Studio', text: 'On a page, agents hear Level and Beat, the mic after the visitor allows it, and the page’s Granulator tracks; hands follow its tracker or the pointer.' },
+      { area: 'Present', text: 'Presentations keep the agents and passes of the examples they show, so they still run after the presentation is reopened.' },
+    ],
+  },
+  {
     id: '2026.10.16',
     date: '2026-10-04',
     title: 'How Agents work',
