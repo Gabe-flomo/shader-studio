@@ -33,6 +33,11 @@ export function gpProject(cam: GpCamera, xyz: readonly number[], aspect: number)
 export function gpUnitInk(n: number, size: number): number;
 
 export const GP_TIERS: Record<string, number>;
+/** The engine's GLSL chunks, unchanged (gpEngineShaders.test.ts snapshots them). */
+export const GP_SHADERS: {
+  GP_QUAD_VERT: string; GP_HASH: string; GP_NOISE: string; GP_SCATTER: string; GP_HOME: string; GP_COVER: string; GP_SIM: string;
+  GP_DRAW_VERT: string; GP_DRAW_FRAG: string; GP_DOWN: string; GP_BLUR: string; GP_COMPOSE: string;
+};
 export const GP_SHAPES: string[];
 export const GP_PALETTES: Record<string, GpRgb[] | null>;
 export const GP_DEFAULTS: GpParams;

@@ -1,0 +1,25 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`GP engine shaders are unchanged > GP_BLUR 1`] = `"15863386dcaef3099b0c929b4291:433"`;
+
+exports[`GP engine shaders are unchanged > GP_COMPOSE 1`] = `"1d81091840a2d015f7cb2e7556f3:1212"`;
+
+exports[`GP engine shaders are unchanged > GP_COVER 1`] = `"1676f7fcad732f1a2549b33ec820:387"`;
+
+exports[`GP engine shaders are unchanged > GP_DOWN 1`] = `"19e5d43cd3eb75021df1566999b5:372"`;
+
+exports[`GP engine shaders are unchanged > GP_DRAW_FRAG 1`] = `"1237b27f74181d06cc1421dad991:567"`;
+
+exports[`GP engine shaders are unchanged > GP_DRAW_VERT 1`] = `"0b2e4f36bf77d50053c622ab1cbb:4489"`;
+
+exports[`GP engine shaders are unchanged > GP_HASH 1`] = `"0efbb988509b1a16b532be8506a8:354"`;
+
+exports[`GP engine shaders are unchanged > GP_HOME 1`] = `"1f93caeb0a247a03edc94e0b604e:3588"`;
+
+exports[`GP engine shaders are unchanged > GP_NOISE 1`] = `"0ba251ff36b03d034d66449542d6:1725"`;
+
+exports[`GP engine shaders are unchanged > GP_QUAD_VERT 1`] = `"15d31454c50e8d07e2cca95a3bc9:150"`;
+
+exports[`GP engine shaders are unchanged > GP_SCATTER 1`] = `"17b8318472e3b713b0aa2b4364d0:277"`;
+
+exports[`GP engine shaders are unchanged > GP_SIM 1`] = `"0739557f47c75715f2a8a19d4362:16512"`;

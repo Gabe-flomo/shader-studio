@@ -33,6 +33,8 @@ export const FIELD_IMPURE: Record<string, string> = {
   motionBlur: READS_FRAME,
   depthOfField: READS_FRAME,
   playLayers: 'it composites Play layers, which are whole pictures, not a function of position',
+  // docs/field-sockets.md lists particles among the rejected nodes; this entry is what enforces it.
+  gpuParticles: 'its particles are simulated and drawn by an engine outside the shader, not a function of position',
   sceneGroup: CONTAINER,
   marchLoopGroup: CONTAINER,
   giLitMarchGroup: CONTAINER,

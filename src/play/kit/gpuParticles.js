@@ -1596,6 +1596,17 @@ void main() {
 }`;
 
 /**
+ * The engine's GLSL, as the shared chunks other engines reuse (the Agents
+ * group's Draw agents: docs/agents-plan.md). Exported as they are: the strings
+ * above are never edited for a second user, and gpEngineShaders.test.ts
+ * snapshots every one, so a change to any of them shows up as a failing test.
+ */
+export const GP_SHADERS = {
+  GP_QUAD_VERT, GP_HASH, GP_NOISE, GP_SCATTER, GP_HOME, GP_COVER, GP_SIM,
+  GP_DRAW_VERT, GP_DRAW_FRAG, GP_DOWN, GP_BLUR, GP_COMPOSE,
+};
+
+/**
  * One particle system on `gl`, or null where it can't run (gpUnsupported says
  * why, or a shader didn't compile). `frame` steps it by dt and draws it at
  * width × height; it returns the texture to sample (RGBA16F, linear, row 0
