@@ -8,9 +8,8 @@
  * (kit/agentHost.js). Each source is the example as it is, with two changes
  * made here: a Play control for each setting a slide talks about (group
  * sliders are uniforms, so dragging one changes the next step without a
- * recompile), and 256k walkers on a trail of at most 512 rows, so several
- * canvases on one slide stay smooth (except the two that need a million to
- * look like themselves: FULL_SIZE). The presets' stills (agentStills.ts)
+ * recompile). The presets run 256k walkers as they ship, light enough for
+ * several canvases on one slide. The presets' stills (agentStills.ts)
  * stay as posters, shown while a canvas waits for its turn to run. The one
  * JavaScript copy left (store/agentSketches.ts) is on "The loop", for the
  * sensors of a few walkers, which the group can't draw. The GLSL quoted is
@@ -28,16 +27,6 @@ import { newId, type Block, type Presentation, type PresentSource, type Step } f
 import type { GraphNode } from '../types/nodeGraph';
 
 export const AGENTS_TITLE = 'How Agents work';
-
-/** Walkers in a group on the slides, and the most trail rows: light enough for several canvases at once. */
-const SLIDE_TIER = '256k';
-const SLIDE_TRAIL = '512';
-/**
- * Presets that keep their own size (a million walkers, 1024 trail rows): at a quarter of the
- * walkers their trail is too faint for what they show (three colonies' territories; a network
- * over the whole picture). Each shares its slide with at most two 256k canvases.
- */
-const FULL_SIZE = new Set(['agentMultiSlime', 'agentGrowPicture']);
 
 const ctl = (id: string, target: string, label: string, min: number, max: number, step?: number): PlayControl =>
   ({ id, target, kind: 'float', label, min, max, ...(step ? { step } : {}) });
@@ -83,19 +72,13 @@ const SLIDE_CONTROLS: Record<string, PlayControl[]> = {
 };
 
 /**
- * An example as a source for the slides: SLIDE_TIER walkers and trails of at most SLIDE_TRAIL
- * rows (FULL_SIZE ones as they are), and SLIDE_CONTROLS added to its Play setup. It stays an example source, so Refresh
- * takes the preset as it is (a million walkers, its own Play setup).
+ * An example as a source for the slides, as it ships (256k walkers), with SLIDE_CONTROLS added to
+ * its Play setup. It stays an example source, so Refresh takes the preset as it is (its own Play setup).
  */
 async function slideSource(key: string): Promise<PresentSource> {
   const g = (await loadExampleGraphs())[key];
   if (!g) throw new Error(`agentsSample: no example ${key}`);
-  const nodes = migrateLoadedNodes(g.nodes).map((n): GraphNode => {
-    if (FULL_SIZE.has(key)) return n;
-    if (n.type === 'agentsGroup') return { ...n, params: { ...n.params, tier: SLIDE_TIER } };
-    if (n.type === 'trailField' && Number(n.params?.resolution) > Number(SLIDE_TRAIL)) return { ...n, params: { ...n.params, resolution: SLIDE_TRAIL } };
-    return n;
-  });
+  const nodes: GraphNode[] = migrateLoadedNodes(g.nodes);
   const play = migrateLoadedPlay(parsePlayRecord(g.play ?? null), g.nodes);
   const extra = SLIDE_CONTROLS[key] ?? [];
   const r = snapshotFromGraph(nodes, { ...play, controls: [...play.controls, ...extra] }, { title: EXAMPLE_INDEX[key]?.label ?? g.label, from: { kind: 'example', key }, datasets: g.datasets });
@@ -188,8 +171,8 @@ The **Agents group** is a **simulation**. Inside it is a rule that runs once for
 
 That's why it looks different on the canvas: the group has an inside you open (double-click it, or **Open rule ↗**), it has wire colours of its own, and one wire goes *backwards*: the trail feeds the walkers that made it.
 
-**On these slides** the real presets run live, on the GPU, as they do in the Studio and on an exported page. Most run 256k walkers here (the presets have up to a million) so several can run at once, and their settings are sliders: dragging one changes the next step, with no restart. Open any of them from **Examples → Simulation**.`),
-      live('slimeMold', 'Slime mold, running: 256k walkers here, a million in the preset. Examples → Simulation → Slime mold'),
+**On these slides** the real presets run live, on the GPU, as they do in the Studio and on an exported page. They run 256k walkers, as the presets ship (raise Count for more), so several can run at once, and their settings are sliders: dragging one changes the next step, with no restart. Open any of them from **Examples → Simulation**.`),
+      live('slimeMold', 'Slime mold, running: 262,144 walkers. Examples → Simulation → Slime mold'),
     ], 2),
 
     // 2 ─────────────────────────────────────────────────────────────────────
@@ -206,7 +189,7 @@ Then the whole trail **spreads and fades**, and on the next step the walkers sen
 This canvas is the same rule written out in a few dozen lines of JavaScript, on fewer walkers, because it can draw what the group can't: set [[control:sensors]] to 10 to see what ten walkers smell (the bright sensor won). [[control:steps]] is how many steps run each frame: the simulation's speed. Shorten [[control:halfLife]] and the veins thin out and wander.`, [
         ['sensors', 'Show the sensors of'], ['steps', 'Steps per frame'], ['halfLife', 'Trail half-life (s)'],
       ]),
-      text(`**In the Studio** the loop is a wire: the Trail field's **Texture** goes back into the Agents group. It carries a small **↺ last step** chip, because inside the group the trail is always as it was one step before: every walker reads the same trail, then they all deposit at once.
+      text(`**In the Studio** the loop is a wire: the Trail field's **Image** goes back into the Agents group (over the top of the cards between). It carries a small **↺ last step** chip, because inside the group the trail is always as it was one step before: every walker reads the same trail, then they all deposit at once.
 
 Anywhere else (a Palette, a Glow, a Pass) the trail is as of this frame.`),
     ]),
@@ -220,7 +203,7 @@ Anywhere else (a Palette, a Glow, a Pass) the trail is as of this frame.`),
 | **Agents** | The group. Its inside is the rule one walker follows every step. | Count (64k to 4M), Species, Steps per frame, Seed, Pre-roll; **Open rule ↗**, **↺ Start over** |
 | **Emit** | Where walkers are born. | **Fill** (everyone at once), **Rate** (a stream), **Keep full** (born again when they die). Point, ring, disc, box, whole picture, **Picture**, **Field**. Facing, Speed ±, Spread, **Burst**, Species |
 | **Deposit** | Each walker leaves trail where it stands, every step. | Amount. **What: Velocity** leaves its motion instead, so the trail becomes a flow field (Boids) |
-| **Trail field** | The shared smell: it spreads (Diffuse) and fades (Half-life). | Resolution (½, ¼, full, or a fixed 512 / 1024 / 2048 rows), Spread 3×3 or 5×5, **Add** (food) and **Block** (walls). **Amount** colours the picture; **Texture** goes back in |
+| **Trail field** | The shared smell: it spreads (Diffuse) and fades (Half-life). | Resolution (½, ¼, full, or a fixed 512 / 1024 / 2048 rows), Spread 3×3 or 5×5, **Add** (food) and **Block** (walls). **Amount** colours the picture; **Image** goes back in |
 | **Draw agents** | Draws the walkers themselves over a picture. | Points, Glow, Streaks, Ink; colour by species, speed, heading, age or **Agent**; Lights; Brightness of the crowd |
 
 Slime colours the **trail** (Trail → Palette → Output). Particles draw the **walkers** (Draw agents → Output) and need no trail at all.`),
@@ -231,7 +214,7 @@ Slime colours the **trail** (Trail → Palette → Output). Particles draw the *
     step('Inside: the slime rule', [
       interactive('slimeMold', `Double-click the group: this runs once for every walker, every step, left to right. The canvas is the Slime mold preset; its sliders are the nodes' own.
 
-- **Agent Inputs** / **Agent Output**: the walker at the start and the end of the step. Anything unwired on Output keeps its value, so an empty group stands still.
+- **Agent Inputs** / **Agent Output**: the walker at the start and the end of the step. Agent Inputs lists **This walker** (its own values) and **From outside the group** (inputs you add, which are sockets on the Agents card: here the Trail). Anything unwired on Output stays "unchanged", so an empty group stands still.
 - **Sense**: three points [[control:distance]] ahead, [[control:angle]] to each side. It reads a texture (the trail) and/or any chain of nodes wired into **Field ƒ**.
 - **Crowding**: an ordinary Expression Block, $r\\,e^{-r/\\text{sat}}$ with sat = [[control:sat]]: trail that is very crowded smells *less* good.
 - **Steer**, **Jones** mode: straight on if the centre wins, a random side if both sides beat it, otherwise [[control:turn]] toward the stronger side, plus a little [[control:jitter]]. (**Smooth** turns in proportion; **Away** runs from the strongest.)
@@ -240,14 +223,14 @@ Slime colours the **trail** (Trail → Palette → Output). Particles draw the *
         ['distance', 'Sense · Distance'], ['angle', 'Sense · Angle'], ['sat', 'Crowding · sat'], ['turn', 'Steer · Turn'], ['jitter', 'Steer · Jitter'], ['speed', 'Move · Speed'],
       ]),
       glsl(dedent(slimeRule), 'The Slime mold preset’s rule, as the app compiles it: Sense, Steer and Move marked', slimeMarks),
-      text(`**Unwired means this walker.** A socket left empty reads the walker's own position, heading or age. And any ordinary node that would read the pixel's position reads the walker's instead, so noise, a shape's distance, Time, Audio or an Expression Block can join the rule (Crowding is one).
+      text(`**Unwired means this walker.** A socket left empty reads the walker's own position, heading or age, and the card says so in faint type ("← this walker's position"). And any ordinary node that would read the pixel's position reads the walker's instead, so noise, a shape's distance, Time, Audio or an Expression Block can join the rule (Crowding is one).
 
 **What can't go inside**, and the card says why: nodes that read the previous frame (Echo, Previous Frame, the blurs, Bloom), since a walker is not a pixel; programs of their own (Pass, another Agents group, Trail, Deposit, Emit, Draw agents, the Particles node, the Output); ray marches (Scene Group, March Loop, GI March, Space Warp), too costly per walker; and anything that reads screen derivatives or gl_FragCoord.`),
     ], 2),
 
     // 5 ─────────────────────────────────────────────────────────────────────
     step('Particles: forces that add up', [
-      interactive('agentParticles', `Particles use the same group with different nodes inside. Each **force** has an **Also** input: wire them in a row and they add up, so the order doesn't matter, only which forces are in the chain. Then **Integrate** turns the total into motion and **Age / Life** ends each particle; Emit's **Keep full** gives it a new life on the ring.
+      interactive('agentParticles', `Particles use the same group with different nodes inside. Each **force** has a **+ Another force** input: wire them in a row and they add up, so the order doesn't matter, only which forces are in the chain. Then **Integrate** turns the total into motion and **Age / Life** ends each particle; Emit's **Keep full** gives it a new life on the ring.
 
 Move over the picture: the mouse pulls and stirs. Try [[control:curl]] at 0 (only the swirl is left), a bigger [[control:curlSize]] for small tight eddies, [[control:vortex]] the other way, or [[control:attract]] below 0 to blow them away from the mouse. Raise [[control:drag]] for syrup, lower it for long loose flights.`, [
         ['curl', 'Curl noise · Strength'], ['curlSize', 'Curl noise · Size'], ['evolve', 'Curl noise · Evolve'], ['vortex', 'Vortex'], ['attract', 'Attract (mouse)'], ['drag', 'Integrate · Drag'], ['maxSpeed', 'Integrate · Max speed'], ['life', 'Emit · Life (s)'],
@@ -346,7 +329,7 @@ Try **Play → Agents in Play → Agents: a hand and a beat** (last picture).`),
       glsl(prelude.text, 'Start of the Slime mold update shader: one fragment is one walker, its state read from A and B', prelude.marks),
       text(`**4. A step** = every group's update (reading the trail as it was) → Deposit draws one point per walker, added into the trail → the trail spreads and fades. **A frame** = K steps → Draw agents → the picture.
 
-**5. The clock.** A step is 1/60 s and the state depends only on the step number and the Seed, so a render matches the preview. When the GPU can't keep up, fewer steps run and the simulation falls behind; walkers are never dropped. A million slime walkers take about 5.8 ms a frame with a ½-size trail, a million particles about 7 ms, mostly drawing (M3 Pro).
+**5. The clock.** A step is 1/60 s and the state depends only on the step number and the Seed, so a render matches the preview. When the GPU can't keep up, fewer steps run and the simulation falls behind; walkers are never dropped. The presets ship at 256k; a million slime walkers take about 5.8 ms a frame with a ½-size trail, a million particles about 7 ms, mostly drawing (M3 Pro).
 
 **6. Sliders are uniforms.** Every slider on the Agents nodes is a uniform (\`u_p_<node>_<setting>\`, such as \`u_p_agentsteerx0_turn\` on step 4), so dragging it changes the next step without a recompile and the simulation keeps going. It can be a Play control or a mapping like any other slider.
 

@@ -52,7 +52,7 @@ export function expr(id: string, x: number, y: number, o: {
 /** The group node: its inside and settings, Emit wired in. */
 export function agentsGroup(id: string, x: number, y: number, emitId: string, inside: GraphNode[], params: Record<string, unknown>): GraphNode {
   return n('agentsGroup', id, x, y, {
-    tier: '1m', species: '1', stepsPerFrame: 2, seed: 1, preroll: 0,
+    tier: '256k', species: '1', stepsPerFrame: 2, seed: 1, preroll: 0,
     subgraph: { nodes: inside, inputPorts: [], outputPorts: [] },
     ...params,
   }, { emit: [emitId, 'emitter'] });

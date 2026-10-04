@@ -40,7 +40,7 @@ describe('Agents compile', () => {
     expect(a.draws).toHaveLength(0);
     const [g] = a.groups;
     const [t] = a.trails;
-    expect(g).toMatchObject({ nodeId: 'slime', side: 1024, species: 1, emit: { mode: 'fill' }, live: true });
+    expect(g).toMatchObject({ nodeId: 'slime', side: 512, species: 1, emit: { mode: 'fill' }, live: true }); // the preset ships at 256k
     expect(g.readsTrails).toEqual([t.slug]);
     expect(a.deposits[0]).toMatchObject({ group: g.slug, trail: t.slug });
     expect(t).toMatchObject({ scale: null, rows: 1024, edges: 'wrap', live: true });
@@ -63,7 +63,7 @@ describe('Agents compile', () => {
     expect(fs).toContain('layout(location = 1) out highp vec4 o_b;');
     expect(fs).toContain(`uniform sampler2D u_agA_${slug};`);
     expect(fs).toContain(`uniform highp uint u_agStep_${slug};`);
-    expect(fs).toContain('const int a_side = 1024;');
+    expect(fs).toContain('const int a_side = 512;');
     expect(fs).not.toContain('g_uv = (vUv - 0.5) * 2.0');
     expect(fs).toContain('vec2 g_uv = a_pos;');
     expect(fs).not.toContain('gl_FragColor');

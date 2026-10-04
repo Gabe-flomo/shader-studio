@@ -1,6 +1,6 @@
 import React from 'react';
 import { TYPE_COLORS } from './typeColors';
-import { wirePath } from './wirePath';
+import { loopWirePath, wirePath } from './wirePath';
 
 interface Point { x: number; y: number }
 
@@ -16,11 +16,13 @@ interface Props {
    */
   edgeKey?: string;
   dimmed?: boolean;
+  /** Route a backward wire over the cards through a channel at this y (loopWirePath). */
+  overY?: number;
 }
 
 /** Elbow wire between two world-space points. Memoised — see the comparator. */
-export const ConnectionLine = React.memo(function ConnectionLine({ from, to, dataType, edgeKey, dimmed = false }: Props) {
-  const path = wirePath(from, to);
+export const ConnectionLine = React.memo(function ConnectionLine({ from, to, dataType, edgeKey, dimmed = false, overY }: Props) {
+  const path = overY !== undefined ? loopWirePath(from, to, overY).d : wirePath(from, to);
   const color = (dataType && TYPE_COLORS[dataType]) ? TYPE_COLORS[dataType] : '#8a8d99';
 
   return (
@@ -52,5 +54,5 @@ export const ConnectionLine = React.memo(function ConnectionLine({ from, to, dat
 }, (a, b) =>
   a.from.x === b.from.x && a.from.y === b.from.y &&
   a.to.x === b.to.x && a.to.y === b.to.y &&
-  a.dataType === b.dataType && a.edgeKey === b.edgeKey && a.dimmed === b.dimmed,
+  a.dataType === b.dataType && a.edgeKey === b.edgeKey && a.dimmed === b.dimmed && a.overY === b.overY,
 );
