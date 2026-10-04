@@ -34,6 +34,23 @@ export const FN_ECHO_COPIES_CAP: number;
 export function fnEchoRingSize(delay: number, W: number, H: number, have?: number, cap?: number): { frames: number; w: number; h: number; bytes: number };
 export function fnEchoPixel(now: readonly number[], then: readonly number[], p?: Partial<Record<'gain' | 'colour' | 'background' | 'neon', number>>): number[];
 export function fnSegments<T extends { kind: string }>(effects: readonly T[]): T[][];
+/** Pixel sort's motion settings (Flow, Drip, Breathe, Wander, Turbulence, Trail, Rate). */
+export const FN_SORT_MOTION: readonly string[];
+/** Does this Pixel sort keep a trail (the renderer's `trailOn`, else Trail above 0)? It then ends its pass. */
+export function fnSortTrails(e: { kind: string; [key: string]: unknown } | null | undefined): boolean;
+/** Does this ASCII effect draw typed characters (an atlas) instead of the built-in ones? */
+export function fnAsciiTyped(e: { kind: string; [key: string]: unknown } | null | undefined): boolean;
+/** Look actions (a rule's Do on a Finish effect): their kinds, and the state a host keeps of them. */
+export type FnLookKind = 'mosh' | 'moshreset' | 'fxpulse' | 'fxset';
+export const FN_LOOK_ACTIONS: readonly FnLookKind[];
+export interface FnLookState { entries: Map<string, { value: number; start: number; until: number }>; last: number; changed: boolean }
+export interface FnLookAction { do: string; layerId: string; key?: string; value?: number; seconds?: number }
+export function fnLookIs(kind: string): kind is FnLookKind;
+export function fnLookNew(): FnLookState;
+export function fnLookReset(st: FnLookState): void;
+export function fnLookStep(st: FnLookState, time: number): void;
+export function fnLookAct(st: FnLookState, a: FnLookAction, time: number): boolean;
+export function fnLookValue(st: FnLookState | null | undefined, id: string, key: string): number | undefined;
 /** ASCII's character bitmaps, darkest first (5 × 5, bit column + 5 × row from the bottom). */
 export const FN_ASCII_GLYPHS: readonly number[];
 export const FN_TONE_MODES: readonly string[];
@@ -114,7 +131,7 @@ export interface FnRing { readonly size: number; readonly count: number; readonl
 export function fnRing(size: number): FnRing;
 export function fnRingSize(quality: string, W: number, H: number): { frames: number; w: number; h: number; bytes: number };
 
-export function fnBuildFinal(effects: readonly FnEffect[], opts?: { tone?: string; hueCurves?: boolean; timeMap?: string; curves?: boolean; segment?: number }): { src: string; glow: boolean; time: boolean; feedback: boolean; echo: boolean; mosh: boolean; mx: boolean; maps: string[]; lut: boolean; custom: string[]; segments: number };
+export function fnBuildFinal(effects: readonly FnEffect[], opts?: { tone?: string; hueCurves?: boolean; timeMap?: string; curves?: boolean; segment?: number }): { src: string; glow: boolean; time: boolean; feedback: boolean; echo: boolean; mosh: boolean; mx: boolean; maps: string[]; lut: boolean; ascAtlas: boolean; psTrail: boolean; custom: string[]; segments: number };
 
 export interface FnInput {
   finish: FnFinish;
@@ -130,7 +147,7 @@ export interface FnInput {
   first?: boolean;
   pixels?: boolean;
 }
-export interface FnInfo { effects?: string[]; glow?: boolean; passes?: number; floatGlow?: boolean; ring?: { frames: number; w: number; h: number; bytes: number; count: number } | null; error: string; custom?: Record<string, string>; mosh?: { bytes: number } | null; rings?: Record<string, { frames: number; w: number; h: number; bytes: number; count: number }>; feedback?: { bytes: number; float: boolean } | null }
+export interface FnInfo { effects?: string[]; glow?: boolean; passes?: number; floatGlow?: boolean; ring?: { frames: number; w: number; h: number; bytes: number; count: number } | null; error: string; custom?: Record<string, string>; mosh?: { bytes: number } | null; rings?: Record<string, { frames: number; w: number; h: number; bytes: number; count: number }>; feedback?: { bytes: number; float: boolean } | null; ascii?: { glyphs: string[]; cols: number; rows: number } | null; sortTrail?: { valid: boolean } | null }
 export interface FnRenderer {
   ok: boolean;
   canvas: HTMLCanvasElement | null;

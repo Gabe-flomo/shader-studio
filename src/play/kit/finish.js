@@ -31,6 +31,7 @@
  * outside the GPU.
  */
 import { FN_TONE_GLSL, FN_TONE_FUNCTIONS, FN_CRT_MASK_GLSL } from './finishGlsl.js';
+import { gyAtlas } from './glyphs.js';
 
 // ── The catalogue ────────────────────────────────────────────────────────────
 
@@ -400,18 +401,30 @@ export const FN_EFFECTS = {
   // centre), so each starts a pass of its own (FN_STAGE_KINDS, fnSegments) and sees every effect above it.
   pixelsort: {
     label: 'Pixel sort', group: 'Glitch', icon: 'sliders',
-    summary: 'Bright runs of pixels stretched into sorted streaks',
+    summary: 'Bright runs of pixels stretched into sorted streaks, still or running like paint',
     params: [
       FN_P('threshold', 'Threshold', 0, 1, 0.01, 0.45, 'Only parts brighter than this are sorted: lower sorts more of the picture.'),
       FN_P('length', 'Length', 0, 1, 0.01, 0.35, 'The longest a streak can be, as a share of the picture’s height.'),
       FN_P('angle', 'Direction', 0, 360, 1, 270, 'Which way the streaks run (270 = falling down, 0 = to the right).'),
       FN_P('amount', 'Amount', 0, 1, 0.01, 1, 'How much of the sorted picture shows.'),
+      // Motion (all 0 = the still streaks of before). Each is a function of the clock (Trail of the frame
+      // before too), so a render plays them back the same every time.
+      FN_P('flow', 'Flow', -1, 1, 0.01, 0, 'Streaks slide along their direction, like running paint: picture heights a second (minus runs them backwards). 0 holds them still.'),
+      FN_P('drip', 'Drip', 0, 1, 0.01, 0, 'Each streak gets a speed and a stretch of its own, so they run and sag independently instead of moving as one sheet.'),
+      FN_P('breathe', 'Breathe', 0, 0.5, 0.01, 0, 'The threshold rises and falls slowly by this much, so the sorted areas swell and shrink.'),
+      FN_P('wander', 'Wander', 0, 90, 1, 0, 'The streaks’ direction sways either way by up to this many degrees.'),
+      FN_P('turbulence', 'Turbulence', 0, 1, 0.01, 0, 'Noise on where each streak starts and on its edge, so the edges flicker and melt.'),
+      FN_P('trail', 'Trail', 0, 0.98, 0.01, 0, 'Sorted pixels keep some of the frame before, and moving streaks leave a fading tail.'),
+      FN_P('rate', 'Rate', 0, 4, 0.01, 0.5, 'How fast Breathe, Wander and Turbulence move.'),
     ],
     presets: [
-      { name: 'Drip', values: { threshold: 0.45, length: 0.35, angle: 270, amount: 1 } },
-      { name: 'Sideways', values: { threshold: 0.3, length: 0.6, angle: 0, amount: 1 } },
-      { name: 'Melt', values: { threshold: 0.15, length: 0.8, angle: 270, amount: 1 } },
+      { name: 'Drip', values: { threshold: 0.45, length: 0.35, angle: 270, amount: 1, flow: 0, drip: 0, breathe: 0, wander: 0, turbulence: 0, trail: 0, rate: 0.5 } },
+      { name: 'Sideways', values: { threshold: 0.3, length: 0.6, angle: 0, amount: 1, flow: 0, drip: 0, breathe: 0, wander: 0, turbulence: 0, trail: 0, rate: 0.5 } },
+      { name: 'Melt', values: { threshold: 0.2, length: 0.7, angle: 270, amount: 1, flow: 0.08, drip: 0.75, breathe: 0.06, wander: 0, turbulence: 0.35, trail: 0.6, rate: 0.3 } },
+      { name: 'Rain', values: { threshold: 0.35, length: 0.22, angle: 270, amount: 1, flow: 0.55, drip: 1, breathe: 0, wander: 5, turbulence: 0.15, trail: 0.7, rate: 0.6 } },
+      { name: 'Glitch drift', values: { threshold: 0.3, length: 0.55, angle: 0, amount: 1, flow: 0.12, drip: 0.4, breathe: 0.12, wander: 20, turbulence: 0.8, trail: 0.3, rate: 1.2 } },
     ],
+    note: 'Flow, Drip, Breathe, Wander, Turbulence and Trail make the streaks move by themselves, even over a still picture.',
   },
   halftone: {
     label: 'Halftone', group: 'Stylise', icon: 'grid',
@@ -439,6 +452,7 @@ export const FN_EFFECTS = {
       FN_P('background', 'Background', 0, 1, 0.01, 0.12, 'How much of the picture shows dimly behind the characters.'),
       FN_P('contrast', 'Contrast', 0, 1, 0.01, 0.4, 'Spreads the picture across more of the characters, from sparse dots to dense blocks.'),
       FN_P('inkR', 'Ink R', 0, 1, 0.01, 0.3, '', true), FN_P('inkG', 'Ink G', 0, 1, 0.01, 1, '', true), FN_P('inkB', 'Ink B', 0, 1, 0.01, 0.5, '', true),
+      FN_P('own', 'Own colours', 0, 1, 0.01, 0, 'Typed characters only: 1 keeps each glyph’s own colours (emoji), 0 tints it by Colour.', true),
     ],
     colours: [{ label: 'Ink', keys: ['inkR', 'inkG', 'inkB'], hint: 'The characters’ colour when Colour is below 1.' }],
     presets: [
@@ -534,13 +548,31 @@ export function fnSourceOf(e) {
 /** What Datamosh's movement is measured on: the picture itself, or a layer drawn alone (a Camera layer, hidden or not). */
 export const FN_MOSH_MAPS = ['picture', 'layer'];
 
-/** Running effects split into passes: a new one at each FN_STAGE_KINDS or FN_TEMPORAL_KINDS effect (unless it is first). */
+/** Pixel sort's motion settings (0 = still), shown in a Motion section of their own on its card. */
+export const FN_SORT_MOTION = ['flow', 'drip', 'breathe', 'wander', 'turbulence', 'trail', 'rate'];
+
+/**
+ * Does this Pixel sort keep a trail (its sorted picture from the frame before)? The renderer marks
+ * it (`trailOn`, from Trail as driven now); elsewhere Trail above 0 says so.
+ */
+export function fnSortTrails(e) {
+  return !!e && e.kind === 'pixelsort' && (e.trailOn !== undefined ? !!e.trailOn : (+e.trail || 0) > 0);
+}
+
+/**
+ * Running effects split into passes: a new one at each FN_STAGE_KINDS or FN_TEMPORAL_KINDS effect
+ * (unless it is first). A Pixel sort with a trail also ends its pass, so the pass's output is the
+ * sorted picture alone (kept for the next frame); last in the stack, an empty pass follows it.
+ */
 export function fnSegments(effects) {
   const out = [];
+  let cut = false;
   for (const e of effects) {
-    if (!out.length || ((FN_STAGE_KINDS.includes(e.kind) || FN_TEMPORAL_KINDS.includes(e.kind)) && out[out.length - 1].length)) out.push([]);
+    if (!out.length || cut || ((FN_STAGE_KINDS.includes(e.kind) || FN_TEMPORAL_KINDS.includes(e.kind)) && out[out.length - 1].length)) out.push([]);
     out[out.length - 1].push(e);
+    cut = fnSortTrails(e);
   }
+  if (cut) out.push([]);
   return out;
 }
 
@@ -611,6 +643,8 @@ export function fnDefaultEffect(kind, id) {
   if (kind === 'displace') { e.map = 'noise'; e.layerId = ''; }
   if (kind === 'datamosh' || kind === 'feedback' || kind === 'echo') { e.map = 'picture'; e.layerId = ''; }
   if (kind === 'halation') e.model = FN_HAL.model;
+  // ASCII: no typed characters draws the built-in 5 × 5 ones (FN_ASCII_GLYPHS); typed ones are ordered by how much they cover unless keepOrder.
+  if (kind === 'ascii') { e.chars = ''; e.keepOrder = false; }
   return e;
 }
 
@@ -654,7 +688,8 @@ export function fnAnimated(finish) {
   return fnRunning(finish).some(e => (e.kind === 'grain' && e.fps > 0) || e.kind === 'shake' || e.kind === 'flicker' || e.kind === 'time' || (e.kind === 'crt' && e.pulse > 0) || (e.kind === 'custom' && /\btime\b/.test(e.code))
     || (e.kind === 'glitch' && e.speed > 0 && e.amount > 0) || (e.kind === 'ripple' && e.speed !== 0) || (e.kind === 'displace' && (e.map === 'motion' || ((e.map || 'noise') === 'noise' && e.speed > 0)))
     || e.kind === 'feedback' || FN_TEMPORAL_KINDS.includes(e.kind) || fnWhereOf(e) === 'motion'
-    || (e.kind === 'mirror' && (+e.spin || 0) !== 0) || (e.kind === 'edges' && e.rainbow > 0) || (e.kind === 'leaks' && e.speed > 0 && e.amount > 0));
+    || (e.kind === 'mirror' && (+e.spin || 0) !== 0) || (e.kind === 'edges' && e.rainbow > 0) || (e.kind === 'leaks' && e.speed > 0 && e.amount > 0)
+    || (e.kind === 'pixelsort' && ((+e.flow || 0) !== 0 || e.drip > 0 || (e.rate > 0 && (e.breathe > 0 || e.wander > 0 || e.turbulence > 0)) || e.trail > 0)));
 }
 
 // ── Maps: what an effect's Where (and Displace, and Time's Layer map) reads ────
@@ -1426,8 +1461,14 @@ vec3 fnHueTurn(vec3 c, float t) {
  */
 export const FN_ASCII_GLYPHS = [0, 4, 131200, 14336, 145536, 476718, 20288345, 11512810, 22511061, 15652782];
 
-/** Helpers a pass's stage effects need (`kinds`: the pass's own). They read around a point with fnRead. */
-function fnStageGlsl(kinds) {
+/** Does this ASCII effect draw typed characters (from an atlas texture) rather than the built-in 5 × 5 ones? */
+export function fnAsciiTyped(e) {
+  return !!e && e.kind === 'ascii' && typeof e.chars === 'string' && e.chars.length > 0;
+}
+
+/** Helpers a pass's stage effects need (`mine`: the pass's own effects). They read around a point with fnRead. */
+function fnStageGlsl(mine) {
+  const kinds = mine.map(e => e.kind);
   let g = '';
   if (kinds.includes('halftone')) g += `// One screen of a halftone: the centre (pixels) of the cell P is in, at angle ang, and P from that centre.
 vec2 fnHtCell(vec2 P, float ang, float sz, out vec2 local) {
@@ -1446,7 +1487,11 @@ float fnHtInk(vec2 P, float ang, float sz, int ch) {
   return fnHtDot(ch == 0 ? k.x : ch == 1 ? k.y : ch == 2 ? k.z : k.w, l, sz);
 }
 `;
-  if (kinds.includes('ascii')) g += `const int FN_GLYPHS[${FN_ASCII_GLYPHS.length}] = int[${FN_ASCII_GLYPHS.length}](${FN_ASCII_GLYPHS.join(', ')});
+  // Typed characters: an atlas of glyphs (drawn by gyAtlas, darkest first), uAscN of them in a uAscGrid of cells.
+  if (mine.some(fnAsciiTyped)) g += 'uniform sampler2D uAscAtlas;\nuniform float uAscN;\nuniform vec2 uAscGrid;\n';
+  // A Pixel sort's trail: the sorted picture from the frame before (premultiplied), whether there is one, and how much of it stays this frame.
+  if (mine.some(fnSortTrails)) g += 'uniform sampler2D uPsHist;\nuniform float uPsOn, uPsKeep;\n';
+  if (kinds.includes('ascii') && !mine.some(fnAsciiTyped)) g += `const int FN_GLYPHS[${FN_ASCII_GLYPHS.length}] = int[${FN_ASCII_GLYPHS.length}](${FN_ASCII_GLYPHS.join(', ')});
 // Is the point l (0..1 in a cell) on glyph g's 5 × 5 bitmap (with a column and a row of space)?
 float fnGlyph(int g, vec2 l) {
   ivec2 b = ivec2(floor(l * 6.0)) - ivec2(1, 1);
@@ -1463,18 +1508,30 @@ float fnGlyph(int g, vec2 l) {
  * first pass the picture as sampled there.
  */
 const FN_STAGE_OPS = {
-  pixelsort: `{
+  pixelsort: trail => `{
     // Each line along the direction is cut into intervals (staggered and of varied length per line, so
     // neighbouring lines streak differently). In each, the samples brighter than the threshold are
     // sorted by brightness, dark to bright, into the bright places; the dark ones stay where they are.
-    float thr = pixelsort_threshold;
+    // Motion, all from the clock: Breathe moves the threshold, Wander the direction, Flow slides each
+    // line's intervals along it (Drip: at a speed and with a stretch of each line's own), Turbulence
+    // jitters where each interval starts and its threshold.
+    float ph = uTime * pixelsort_rate;
+    float thr = clamp(pixelsort_threshold + pixelsort_breathe * (0.8 * sin(ph * 1.9) + 0.2 * sin(ph * 0.53 + 1.3)), 0.0, 1.0);
+    float an = radians(pixelsort_angle + pixelsort_wander * (fnNoise(vec3(ph * 0.4, 4.2, 1.9)) * 2.0 - 1.0));
+    vec2 dir = vec2(cos(an), sin(an)), nrm = vec2(-dir.y, dir.x);
+    vec2 P = gQ * uRes;
+    float along = dot(P, dir), across = floor(dot(P, nrm));
+    float hA = fnHash(vec3(across, 3.1, 7.7)), hB = fnHash(vec3(across, 9.2, 1.3));
+    float Ls = max(8.0, pixelsort_length * uRes.y) * (0.45 + 0.55 * hA);
+    float sp = mix(1.0, 0.15 + 1.7 * mix(fnNoise(vec3(across * 0.06, 2.3, 5.1)), fnHash(vec3(across, 5.5, 2.2)), 0.5), pixelsort_drip);
+    float off = pixelsort_flow * uTime * uRes.y * sp
+      + pixelsort_drip * Ls * 0.22 * sin(uTime * (0.4 + 0.9 * hA) + hB * 6.2831853)
+      + pixelsort_turbulence * Ls * 0.3 * (fnNoise(vec3(across * 0.045, ph * 3.0, 7.3)) * 2.0 - 1.0);
+    float u = (along - off) / Ls + hB;
+    float t = fract(u);
+    thr = clamp(thr + pixelsort_turbulence * 0.12 * (fnNoise(vec3(across * 0.03, floor(u) * 1.7, ph * 2.5)) * 2.0 - 1.0), 0.0, 1.0);
+    bool sorted = false;
     if (fnLuma(c) >= thr && pixelsort_amount > 0.0) {
-      float an = radians(pixelsort_angle);
-      vec2 dir = vec2(cos(an), sin(an)), nrm = vec2(-dir.y, dir.x);
-      vec2 P = gQ * uRes;
-      float along = dot(P, dir), across = floor(dot(P, nrm));
-      float Ls = max(8.0, pixelsort_length * uRes.y) * (0.45 + 0.55 * fnHash(vec3(across, 3.1, 7.7)));
-      float t = fract((along + fnHash(vec3(across, 9.2, 1.3)) * Ls) / Ls);
       vec2 P0 = P - dir * t * Ls;
       const int M = 24;
       float lum[M]; vec3 col[M];
@@ -1497,8 +1554,16 @@ const FN_STAGE_OPS = {
           if (r == k1) s1 = col[i];
         }
         c = mix(c, mix(s0, s1, fract(kf)), pixelsort_amount);
+        sorted = true;
       }
-    }
+    }${trail ? `
+    // Trail: the sorted picture from the frame before (this pass's own output, kept by the renderer). Sorted
+    // parts keep uPsKeep of it; elsewhere it fades behind them (a moving streak leaves a tail).
+    if (uPsOn > 0.5) {
+      vec4 hp = texelFetch(uPsHist, ivec2(gl_FragCoord.xy), 0);
+      vec3 prev = hp.a > 1e-5 ? hp.rgb / hp.a : vec3(0.0);
+      c = sorted ? mix(c, prev, uPsKeep) : max(c, prev * uPsKeep);
+    }` : ''}
   }`,
   halftone: `{
     float sz = max(2.0, halftone_size * uRes.y / 1080.0);
@@ -1516,7 +1581,28 @@ const FN_STAGE_OPS = {
     }
     c = mix(c, mix(mono, cmyk, halftone_colour), halftone_amount);
   }`,
-  ascii: `{
+  ascii: typed => typed ? `{
+    // Typed characters (an atlas, darkest first): each cell picks one by brightness and draws it tinted
+    // (by the picture or the ink: its brightness is the shape), or in its own colours (emoji).
+    float cell = max(4.0, ascii_size * uRes.y / 1080.0);
+    vec2 P = gQ * uRes;
+    vec2 ci = floor(P / cell);
+    vec3 src = fnRead((ci + 0.5) * cell / uRes);
+    float L = fnLuma(src);
+    float g = clamp((L - 0.5) * (1.0 + ascii_contrast * 2.0) + 0.5 + ascii_contrast * 0.1, 0.0, 1.0);
+    float gi = clamp(floor(g * uAscN), 0.0, uAscN - 1.0);
+    vec2 l = fract(P / cell);
+    vec2 cr = vec2(mod(gi, uAscGrid.x), floor(gi / uAscGrid.x));
+    // Half the true footprint: a mipmap level sharper, so small characters stay crisp (the atlas's margins keep neighbours out).
+    vec2 dd = 0.5 / (cell * uAscGrid);
+    vec4 gs = textureGrad(uAscAtlas, (cr + vec2(l.x, 1.0 - l.y)) / uAscGrid, vec2(dd.x, 0.0), vec2(0.0, dd.y));
+    float mx = max(src.r, max(src.g, src.b));
+    vec3 lit = src / max(mx, 1e-3) * (0.55 + 0.45 * smoothstep(0.0, 0.6, mx));
+    vec3 ink = mix(vec3(ascii_inkR, ascii_inkG, ascii_inkB) * (0.45 + 0.55 * g), lit, ascii_colour);
+    // A little gain on the coverage: a small character's strokes, averaged down, would read too faint.
+    float on = mix(gs.a * fnLuma(gs.rgb), gs.a, ascii_own) * 1.35;
+    c = mix(src * ascii_background, mix(ink, gs.rgb, ascii_own), clamp(on, 0.0, 1.0));
+  }` : `{
     float cell = max(4.0, ascii_size * uRes.y / 1080.0);
     vec2 P = gQ * uRes;
     vec2 ci = floor(P / cell);
@@ -1736,7 +1822,9 @@ vec4 fetch(vec2 q) {
   for (const e of mine) {
     const k = e.kind;
     if (k === 'custom') op(e, customCalls.get(e));
-    if (FN_STAGE_OPS[k]) op(e, FN_STAGE_OPS[k]);
+    if (k === 'pixelsort') op(e, FN_STAGE_OPS.pixelsort(fnSortTrails(e)));
+    else if (k === 'ascii') op(e, FN_STAGE_OPS.ascii(fnAsciiTyped(e)));
+    else if (FN_STAGE_OPS[k]) op(e, FN_STAGE_OPS[k]);
     if (k === 'leaks') op(e, `{
     float t = uTime * leaks_speed;
     vec2 v = (p - 0.5) * vec2(uAspect, 1.0);
@@ -1935,7 +2023,7 @@ vec4 fetch(vec2 q) {
   }`
     : 's = fetch(q);';
   // Stage effects read elsewhere: what this pass reads there (the same splits), as straight colour.
-  if (stage) src += `vec4 fnSample(vec2 q, vec2 p) {\n  vec4 s;\n  ${sample}\n  return s;\n}\nvec3 fnRead(vec2 q) { vec4 s = fnSample(q, gP); return s.a > 1e-5 ? s.rgb / s.a : vec3(0.0); }\n` + fnStageGlsl(own);
+  if (stage) src += `vec4 fnSample(vec2 q, vec2 p) {\n  vec4 s;\n  ${sample}\n  return s;\n}\nvec3 fnRead(vec2 q) { vec4 s = fnSample(q, gP); return s.a > 1e-5 ? s.rgb / s.a : vec3(0.0); }\n` + fnStageGlsl(mine);
   src += `void main() {
   vec2 p = gl_FragCoord.xy / uRes;
   if (uOutFlip > 0.5) p.y = 1.0 - p.y;
@@ -1966,7 +2054,7 @@ vec4 fetch(vec2 q) {
   fragColor = vec4(c * a, a);`}
 }
 `;
-  return { src, glow, time, feedback, echo, mosh, mx, maps, lut: has('grade'), custom: customs.filter(e => mine.includes(e)).map(e => e.id), segments: segs.length };
+  return { src, glow, time, feedback, echo, mosh, mx, maps, lut: has('grade'), ascAtlas: mine.some(fnAsciiTyped), psTrail: mine.some(fnSortTrails), custom: customs.filter(e => mine.includes(e)).map(e => e.id), segments: segs.length };
 }
 
 const FN_PREFILTER = (bloom, halation, crtGlow) => `${FN_COMMON}
@@ -2247,6 +2335,58 @@ void main() {
   oHeld = clamp(mix(h, cur, uHeal), 0.0, 1.0);
 }
 `;
+
+// ── Look actions: rules firing Finish effects ────────────────────────────────
+
+/**
+ * A rule's Do can act on a Look (Finish) effect: Mosh (Datamosh's Mosh on for some seconds), Reset
+ * mosh (one Reset, and any Mosh an action started ends), Pulse a setting (a value for some seconds,
+ * then back to what it was) and Set a setting (a value until the clock goes back or the session
+ * starts over). They don't change the record: the host keeps a fnLookNew() state and reads each
+ * number through fnLookValue before its mappings' (the app's playEngine.layerValue, the web
+ * runtime's layerValue), so they reach the renderer the way a mapping does.
+ *
+ * An action is { do, layerId: 'finish:<effectId>', key?, value?, seconds? }. Its times are the
+ * clock's, so a take plays back and renders the same: fnLookStep(state, time) once a frame (before
+ * the frame's actions) lets go of what has run out, and forgets everything when the clock goes back.
+ * Something that runs out stays at least the frame it started (a Reset, 0 s, is exactly one frame).
+ */
+export const FN_LOOK_ACTIONS = ['mosh', 'moshreset', 'fxpulse', 'fxset'];
+/** Is this action kind one of the Look actions? */
+export function fnLookIs(kind) { return FN_LOOK_ACTIONS.includes(kind); }
+/** A host's state: what is set now (`<id>::<key>` → value, start, until), the clock last stepped, and whether anything changed (the host redraws). */
+export function fnLookNew() { return { entries: new Map(), last: -Infinity, changed: false }; }
+/** Forget everything (a take or a render starting over). */
+export function fnLookReset(st) { if (st.entries.size) st.changed = true; st.entries.clear(); st.last = -Infinity; }
+/** One frame's clock: what has run out goes; a clock sent back forgets everything. */
+export function fnLookStep(st, time) {
+  if (time < st.last - 1e-6 && st.entries.size) { st.entries.clear(); st.changed = true; }
+  st.last = time;
+  for (const [k, x] of st.entries) if (time >= x.until && time > x.start) { st.entries.delete(k); st.changed = true; }
+}
+/** An action fires at `time` (the clock). Returns whether it was a Look action. */
+export function fnLookAct(st, a, time) {
+  if (!a || !fnLookIs(a.do) || typeof a.layerId !== 'string' || !a.layerId) return false;
+  const id = a.layerId;
+  const secs = v => (typeof v === 'number' && isFinite(v) ? Math.max(0, Math.min(600, v)) : 1);
+  const put = (key, value, until) => st.entries.set(`${id}::${key}`, { value, start: time, until });
+  st.changed = true;
+  if (a.do === 'mosh') {
+    const prev = st.entries.get(`${id}::hold`);
+    put('hold', 1, Math.max(time + secs(a.seconds), prev ? prev.until : -Infinity));
+  } else if (a.do === 'moshreset') {
+    st.entries.delete(`${id}::hold`);
+    put('reset', 1, time);
+  } else if (typeof a.key === 'string' && a.key && typeof a.value === 'number' && isFinite(a.value)) {
+    put(a.key, a.value, a.do === 'fxset' ? Infinity : time + secs(a.seconds));
+  }
+  return true;
+}
+/** A Look action's value for a number now (`id`: 'finish:<effectId>'), or undefined. */
+export function fnLookValue(st, id, key) {
+  const x = st && st.entries.size ? st.entries.get(`${id}::${key}`) : undefined;
+  return x ? x.value : undefined;
+}
 
 // ── The renderer ─────────────────────────────────────────────────────────────
 
@@ -2701,6 +2841,36 @@ export function fnCreate(canvasIn) {
     return true;
   }
 
+  // Pixel sort's trail: its sorted picture from the frame before (full size, 8-bit, premultiplied).
+  let psT = null; // { key, tex, fb, valid, lastT }
+  function dropPs() { if (!psT) return; gl.deleteTexture(psT.tex); gl.deleteFramebuffer(psT.fb); psT = null; }
+  function ensurePs(W, H) {
+    const key = `${W}x${H}`;
+    if (psT && psT.key === key) return psT;
+    dropPs();
+    const t = target(W, H, 1, false, gl.NEAREST);
+    psT = { key, tex: t.texs[0], fb: t.fb, valid: false, lastT: null };
+    return psT;
+  }
+  // ASCII's typed characters: their atlas (gyAtlas, darkest first), made again only when the characters or their order change.
+  let ascT = null; // { key, tex, n, cols, rows }
+  function dropAscii() { if (!ascT) return; gl.deleteTexture(ascT.tex); ascT = null; }
+  function ensureAscii(e) {
+    const key = `${e.keepOrder ? 1 : 0}|${e.chars}`;
+    if (ascT && ascT.key === key) return ascT;
+    const at = gyAtlas(e.chars, !!e.keepOrder);
+    if (!at) return ascT;
+    dropAscii();
+    const tex = makeTex(gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, at.canvas);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    ascT = { key, tex, n: at.n, cols: at.cols, rows: at.rows, glyphs: at.glyphs };
+    return ascT;
+  }
+
   let lastInfo = null;
   function drawFrame(input) {
     if (gl.isContextLost()) return false;
@@ -2715,6 +2885,13 @@ export function fnCreate(canvasIn) {
     const pixelsMode = !!(input.pixels && input.picture && input.picture.data);
     const W = Math.max(1, Math.round(input.width)), H = Math.max(1, Math.round(input.height));
     const value = input.value || null;
+    // A Pixel sort keeps a trail while its Trail (as driven now) is above 0: that changes its passes (fnSegments).
+    for (let i = 0; i < effects.length; i++) {
+      const e = effects[i];
+      if (e.kind !== 'pixelsort') continue;
+      const tv = value ? value(e, 'trail') : e.trail;
+      effects[i] = Object.assign({}, e, { trailOn: typeof tv === 'number' && tv > 0 });
+    }
     if (!pixelsMode && (canvas.width !== W || canvas.height !== H)) { canvas.width = W; canvas.height = H; }
     // Sources.
     if (!input.picture) return false;
@@ -2732,7 +2909,8 @@ export function fnCreate(canvasIn) {
       + (e.kind === 'displace' ? `~${e.map || 'noise'}:${e.map === 'layer' ? e.layerId || '' : ''}` : '')
       + (e.kind === 'time' && e.map === 'layer' ? `~${e.layerId || ''}` : '')
       + (e.kind === 'datamosh' && e.map === 'layer' ? `~${e.layerId || ''}` : '')
-      + ((e.kind === 'feedback' || e.kind === 'echo') ? `~${fnSourceOf(e)}:${e.map === 'layer' ? e.layerId || '' : ''}` : '');
+      + ((e.kind === 'feedback' || e.kind === 'echo') ? `~${fnSourceOf(e)}:${e.map === 'layer' ? e.layerId || '' : ''}` : '')
+      + (fnSortTrails(e) ? '~trail' : '') + (fnAsciiTyped(e) ? '~typed' : '');
     const keyFor = (list, i) => `final:${i}:` + list.map(shapeOf).join(',') + `|${opts.tone}|${opts.curves}|${opts.hueCurves}|${opts.timeMap}`;
     // One pass, or one per stage effect (fnSegments): every one has to compile.
     const buildAll = list => {
@@ -2761,6 +2939,10 @@ export function fnCreate(canvasIn) {
     if (!ran.some(e => e.kind === 'motionx')) dropRing('motionx');
     if (!ran.some(e => e.kind === 'echo')) dropRing('echo');
     if (!ran.some(e => e.kind === 'feedback')) dropFb();
+    if (!ran.some(fnSortTrails)) dropPs();
+    const asc = ran.find(fnAsciiTyped);
+    if (asc) ensureAscii(asc); else dropAscii();
+    if (ran.some(fnSortTrails)) { const P = ensurePs(W, H); if (input.first) { P.valid = false; P.lastT = null; } }
     const segs = fnSegments(ran);
     if (built.glow && !glowPasses(input, ran, W, H, pixelsMode, value)) return false;
     let ring = null;
@@ -2830,12 +3012,37 @@ export function fnCreate(canvasIn) {
         gl.uniform1fv(loc(fin, 'uEcM'), ecR.M);
         gl.uniform1f(loc(fin, 'uEcN'), ecR.copies);
       }
+      if (b.ascAtlas && ascT) {
+        bindTex(fin, 'uAscAtlas', unit++, ascT.tex);
+        gl.uniform1f(loc(fin, 'uAscN'), ascT.n);
+        gl.uniform2f(loc(fin, 'uAscGrid'), ascT.cols, ascT.rows);
+      }
+      if (b.psTrail && psT) {
+        // How much of the frame before stays: Trail a 60th of a second, so a trail is as long at any frame rate (and in a render).
+        const pe = ran.find(fnSortTrails);
+        const tv = pe ? (value ? value(pe, 'trail') : pe.trail) : 0;
+        const now = input.time || 0;
+        const dt = psT.lastT === null ? 1 / 60 : Math.max(0, Math.min(0.25, now - psT.lastT));
+        bindTex(fin, 'uPsHist', unit++, psT.tex);
+        gl.uniform1f(loc(fin, 'uPsOn'), psT.valid ? 1 : 0);
+        gl.uniform1f(loc(fin, 'uPsKeep'), Math.pow(Math.max(0, Math.min(0.98, typeof tv === 'number' ? tv : 0)), dt * 60));
+      }
       if (b.feedback && fbT) {
         bindTex(fin, 'uFbPrev', unit++, fbT.prev); bindTex(fin, 'uFbNow', unit++, fbT.now);
         bindTex(fin, 'uFbRaw', unit++, fbT.raw); bindTex(fin, 'uFbRawPrev', unit++, fbT.rawPrev);
         gl.uniform1f(loc(fin, 'uFbOn'), fbT.on ? 1 : 0);
       }
       draw(lastPass ? (pixelsMode ? outT.fb : null) : stageT[pi % 2].fb, W, H);
+      // A Pixel sort with a trail ends its pass (fnSegments): what it drew is kept for the next frame.
+      if (b.psTrail && psT && !lastPass) {
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, stageT[pi % 2].fb);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, psT.fb);
+        gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+        psT.valid = true;
+        psT.lastT = input.time || 0;
+      }
     });
     if (pixelsMode) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, outT.fb);
@@ -2862,6 +3069,8 @@ export function fnCreate(canvasIn) {
       mosh: moshT ? { bytes: moshT.bytes } : null,
       rings: Object.fromEntries([...rings].map(([k, R]) => [k, { frames: R.ring.size, w: R.w, h: R.h, bytes: R.bytes, count: R.ring.count }])),
       feedback: fbT ? { bytes: fbT.bytes, float: floatGlow } : null,
+      ascii: ascT ? { glyphs: ascT.glyphs.slice(), cols: ascT.cols, rows: ascT.rows } : null,
+      sortTrail: psT ? { valid: psT.valid } : null,
     };
     return true;
   }
@@ -2870,7 +3079,7 @@ export function fnCreate(canvasIn) {
     ok: true,
     canvas,
     draw(input) { try { return drawFrame(input); } catch (e) { lastError = String(e && e.message || e); return false; } },
-    reset() { if (ringT) ringT.ring.reset(); if (fbT) fbT.valid = false; if (moshT) { moshT.valid = false; moshT.kf = -1; } for (const R of rings.values()) { R.ring.reset(); R.n = 0; } },
+    reset() { if (ringT) ringT.ring.reset(); if (fbT) fbT.valid = false; if (moshT) { moshT.valid = false; moshT.kf = -1; } if (psT) { psT.valid = false; psT.lastT = null; } for (const R of rings.values()) { R.ring.reset(); R.n = 0; } },
     info() { return lastInfo ? Object.assign({ error: lastError }, lastInfo) : { error: lastError }; },
     error() { return lastError; },
     dispose() {
@@ -2881,7 +3090,7 @@ export function fnCreate(canvasIn) {
       dropTarget(outT);
       if (stageT) for (const t of stageT) dropTarget(t);
       if (ringT) { gl.deleteTexture(ringT.tex); gl.deleteFramebuffer(ringT.fb); }
-      dropMosh(); dropFb(); for (const k of [...rings.keys()]) dropRing(k);
+      dropMosh(); dropFb(); dropPs(); dropAscii(); for (const k of [...rings.keys()]) dropRing(k);
       const lose = gl.getExtension('WEBGL_lose_context');
       if (lose) lose.loseContext();
     },

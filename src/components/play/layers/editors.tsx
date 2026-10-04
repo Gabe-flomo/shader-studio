@@ -18,6 +18,7 @@ import { detachLayer, editKind, kindUses, layerKindRegistry, saveLayerAsKind, us
 import { KindDialog } from './KindDialog';
 import { addKindToList, applyKindLook, removeKindFromFile, removeKindFromList } from './kindActions';
 import { Field } from '../../ui/Field';
+import { GY_SETS } from '../../../play/kit/glyphs.js';
 import { NumberInput } from '../../NodeGraph/NumberInput';
 import { CameraChip } from '../chips';
 import { HandsChip, ShowHandToggle } from '../HandsChip';
@@ -630,6 +631,7 @@ export function GlyphsEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
           { value: 'lines', label: 'Lines', title: 'Angle by brightness' }, { value: 'cross', label: 'Cross' },
         ], 'The picture redrawn on a grid: characters picked by brightness, or dots, squares, lines and crosses sized by it.')}
         {style === 'ascii' && f.row('Characters', <Field value={f.get<string>('chars')} onChange={e => f.set({ chars: e.target.value })} height={26} mono style={{ flex: 1, minWidth: 0 }} />, 'From dark to bright. A space leaves the darkest cells empty. Emoji work too: 🌑🌒🌓🌔🌕.')}
+        {style === 'ascii' && f.row('Sets', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{GY_SETS.map(g => <Button key={g.name} size="sm" variant={f.get<string>('chars') === g.chars ? 'primary' : 'secondary'} title={g.chars} onClick={() => f.set({ chars: g.chars })}>{g.name}</Button>)}</div>, 'Ready-made ramps (the Finish stack’s ASCII effect has the same ones).')}
         {f.props('cell', 'contrast')}
         {style === 'ascii' && f.props('shift', 'spread')}
         {f.toggle('Invert', 'invert', 'Bright parts get the small glyphs')}
