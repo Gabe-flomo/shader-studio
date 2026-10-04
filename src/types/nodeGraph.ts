@@ -1,5 +1,7 @@
 // Data types that flow between nodes
-export type DataType = "float" | "vec2" | "vec3" | "vec4" | "mat2" | "mat3" | "scene3d" | "spacewarp3d";
+export type DataType = "float" | "vec2" | "vec3" | "vec4" | "mat2" | "mat3" | "scene3d" | "spacewarp3d"
+  /** A Pass node's picture (compiler/passGraph.ts): the name of a sampler2D, wired only into texture-sampling nodes. */
+  | "texture";
 
 // Socket (connection point on a node)
 export interface Socket {

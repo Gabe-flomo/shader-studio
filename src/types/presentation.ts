@@ -36,6 +36,8 @@ export interface SourceFeatures {
   usesEcho: boolean;
   /** Reads a Data node's dataset (not carried into pages yet). */
   usesData?: boolean;
+  /** Has Pass nodes (render to texture; not run by pages yet). */
+  passes?: boolean;
 }
 
 /** A node of the source graph that has lines in its shader (for code blocks that quote one). */

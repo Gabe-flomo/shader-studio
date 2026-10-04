@@ -31,6 +31,8 @@ export const ConnectionLine = React.memo(function ConnectionLine({ from, to, dat
         strokeWidth={2.5}
         strokeLinecap="round"
         strokeLinejoin="round"
+        // A Pass's texture travels as a whole picture, not a value per pixel: dashed so it reads differently.
+        strokeDasharray={dataType === 'texture' ? '7 5' : undefined}
         fill="none"
         style={{ pointerEvents: 'none' }}
       />
