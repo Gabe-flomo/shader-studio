@@ -24,6 +24,32 @@ For a few thousand agents with flocking rules and predators on the Play page, us
 2. Press play. Double-click the Agents group to see the rule inside.
 3. Every node a preset adds has a note (the speech-bubble tab on the card) saying what it does and what to try.
 
+## Using Agents with your shaders
+
+The walkers don't need a preset's picture: anything you have built from ordinary nodes, or written as your own shader, can steer them, feed them, give birth to them, colour them, or use what they leave behind. Four doors, and every one takes any chain of nodes:
+
+| Door | What goes in | What it does |
+|---|---|---|
+| **Field ƒ** (Sense, Flow), **Obstacle ƒ** (Move), **Shape ƒ** (Collide), **Where ƒ** (Emit) | Any float chain: an SDF, noise, a UV trick, a picture's brightness | The chain is read **at the walker's own position** (Sense: at each of its three sensors; Flow: either side of it, for the slope). Wire the chain into a port on the group (+ Add Input on Agent Inputs, type number), then the port into the socket (Emit, outside the group, takes the chain directly). UV inside that chain is the walker's position. |
+| **Picture** (Emit) | Any texture: a Pass, a Trail, Motion (texture) | Walkers are born where it is bright. Draw your shader into a **Pass** and wire its Texture here. Wire the same Texture into a texture port on the group, and **Sample (texture)** inside reads its colour where the walker is (an unwired UV is the walker's position). |
+| **Add** and **Block** (Trail field) | Any chain (Add: a vec4, one amount per channel; Block: a float) | Add paints the chain into the trail every step at each trail pixel: **food**. Block wipes the trail where it is 1: **walls** nothing smells through. Put food in a channel the walkers smell but the picture doesn't show (Sense's Channels), and you see the veins, not the food. |
+| **Texture** (Trail field) | — | The trail as a texture any shader can use, exactly as it uses a Pass: **Sample**, **Blur**, **Glow** or **Edges (texture)**. A blurred trail is a mask; Edges' Direction bends UVs round the veins. |
+
+One chain can go to several places at once: the same SDF can be food (Trail Add), a wall (Obstacle ƒ) and part of the picture, so the drawing and the rule always agree.
+
+**Examples** (Examples → *Agents with shaders*), each one pattern, every node explained in its note:
+
+- **Slime on SDF rings**: a Circle SDF repeated into rings → Trail field **Add** (food). The slime settles on the rings and bridges them.
+- **Shapes as walls**: Shape SDFs (heart, star) and a Circle SDF joined with min() → Move's **Obstacle ƒ**, the Trail's **Block**, and a second Sense whose **Gradient** bends a slow wind round them.
+- **Ink along a noise field**: Fractal Noise (FBM) → Flow's **Field ƒ** in Around mode (the noise's curl): ink strands that follow its contours.
+- **Spirals from polar UV**: UV → Polar Space → a spiral → Sense's **Field ƒ**, added to the trail: the slime grows into turning spiral arms.
+- **Born from your shader**: your shader → **Pass** → Emit **Picture** (born on its bright parts) and, inside, **Sample (texture)** for each spark's colour (kept in Memory), drawn over a dimmed copy of the shader.
+- **Trails reshape a shader**: Trail **Texture** → Edges (texture) bends an ordinary shader's UV, Blur (texture) masks in a hot second version of it.
+- **Slime traces outlines**: a picture → Pass → **Edges (texture)** → a second Pass → a second **Sense** (through Also) and Emit Picture: the slime draws the picture's outlines. Load your own picture into its Texture Input.
+- **Rings that pulse to sound**: one ring SDF, swelling with a beat (Audio Input or a silent stand-in), both drawn and pulling particles down onto it through **Flow** (Slope, negative Strength).
+
+What can't be read inside: a chain that reads the previous frame (Echo, Bloom, the old blurs) or screen derivatives. A Pass can: draw that chain into a Pass first and wire its Texture in.
+
 ## The nodes
 
 **Outside** (the top level of the graph):
