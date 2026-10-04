@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.9',
+    date: '2026-10-03',
+    title: 'Water, Chladni sand and your own effects',
+    highlights: [
+      { area: 'Play', text: 'Water: a real wave surface in Look. Drag a wake with the pointer or any layer, add rain, or splash from a rule; the waves bend the picture and catch the light.', link: { kind: 'example', key: 'finishWater', page: 'play' } },
+      { area: 'Play', text: 'Any node that takes a colour and gives one is now a Look effect, with its settings as sliders. Build your own from nodes or GLSL and save it to Your effects.', link: { kind: 'example', key: 'lookBuilt', page: 'play' } },
+      { area: 'Studio', text: 'Particles can be sand on a Chladni plate, square or round: the sound picks the figure, and several modes add up to lacy patterns.', link: { kind: 'example', key: 'particleChladniSand' } },
+      { area: 'Studio', text: 'New particle examples shaped by fields: a star outline, currents filling a heart, and cymatics in 3D.' },
+    ],
+  },
+  {
     id: '2026.10.8',
     date: '2026-10-03',
     title: 'Motion layer, piano roll window, livelier looks',
