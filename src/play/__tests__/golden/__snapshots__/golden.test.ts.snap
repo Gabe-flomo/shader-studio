@@ -503,6 +503,14 @@ exports[`golden outputs: examples > learn3dVolume 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > learn3dVolumeSwitch 1`] = `
+{
+  "a": "- x120",
+  "t": "- x120",
+  "x": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > learnBricks 1`] = `
 {
   "h": "- x120",
