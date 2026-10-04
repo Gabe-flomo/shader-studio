@@ -7,6 +7,9 @@
  *
  * bundle:  { title, fragmentShader, uniforms, paramBindings, play, aspect, passes?, media? }
  *   passes: { stateful, echo: { copies, delay } | null }
+ *   graphPasses: [{ slug, label, fragmentShader, scale, format, filter, wrap, previous, live, afterAgents?,
+ *             u: { tex, prev } }]  Pass nodes' programs in drawing order (kit/passHost.js on kit/passPlan.js,
+ *             the app's schedule); each draws into its texture before the picture, which samples u.tex
  *   datasets: { [id]: { name, result, stream? } }  each dataset's frozen result; `stream`
  *             ({ transport: 'poll' | 'websocket' | 'sse', address, interval, mode, window, format?,
  *             normalize }) makes the page reconnect to a live feed and add its rows (needs the network)
@@ -74,7 +77,7 @@
  *
  * Around the fragment shader it runs what ShaderCanvas runs: previous-frame
  * feedback (ping-pong targets on u_prevFrame), echo (a ring of copies on
- * u_echo0…), the graph's Particles nodes, images and videos on their samplers, and Audio Input nodes' bands
+ * u_echo0…), Pass nodes (render to texture), the graph's Particles nodes, images and videos on their samplers, and Audio Input nodes' bands
  * from their embedded song or the live input. A MIDI Input node's outputs
  * stay at rest.
  *
@@ -569,8 +572,12 @@ void main() {
     const followPage = opts.followPage !== false;
     const markers = opts.markers == null ? !bg : !!opts.markers;
     const stillForReducedMotion = opts.stillForReducedMotion !== false;
-    // Feedback and echo work per pixel, and the app draws them at one device pixel per CSS pixel: so does the page.
-    const perPixel = !!(B.passes && (B.passes.stateful || B.passes.echo));
+    // Pass nodes (bundle.graphPasses, kit/passHost.js): programs drawn into textures before the picture.
+    const graphPasses = Array.isArray(B.graphPasses) && B.graphPasses.length ? B.graphPasses : null;
+    // Every program the page compiles from the graph (the picture's and the passes'), for what they read.
+    const allShaders = B.fragmentShader + (graphPasses ? graphPasses.map(p => '\n' + p.fragmentShader).join('') : '');
+    // Feedback, echo and passes work per pixel, and the app draws them at one device pixel per CSS pixel: so does the page.
+    const perPixel = !!(B.passes && (B.passes.stateful || B.passes.echo)) || !!graphPasses;
     const maxDpr = opts.maxDpr || (perPixel ? 1 : bg ? 1.5 : 2);
     const showPanel = !bg && opts.panel !== false;
     const pointerOn = !bg && opts.pointer !== false;
@@ -714,7 +721,7 @@ void main() {
       gl.activeTexture(gl.TEXTURE0 + u); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(l, u);
     };
     // Text nodes read the same 16×16 ASCII atlas the app builds (only drawn when the shader reads it).
-    let fontTex = !bgOnly && (B.fragmentShader.match(/\bu_fontTexture\b/g) || []).length > 1 ? texture(gl.LINEAR) : white;
+    let fontTex = !bgOnly && (allShaders.match(/\bu_fontTexture\b/g) || []).length > 1 ? texture(gl.LINEAR) : white;
     if (fontTex !== white) upload(fontTex, fontAtlas(), false);
 
     // Datasets (B.datasets: each one's frozen result and name, never the notebook). Data layers and
@@ -754,13 +761,13 @@ void main() {
       return t;
     };
     const dataTex = [], dataCounts = [];
-    if (!bgOnly && gl2 && /u_ds_/.test(B.fragmentShader)) {
+    if (!bgOnly && gl2 && /u_ds_/.test(allShaders)) {
       const seenU = new Set();
       let m;
       const reT = /uniform\s+sampler2D\s+(u_ds_\w+)\s*;\s*\/\/\s*data-columns\s+([a-z][a-z0-9]*)\s+(\S*)/g;
-      while ((m = reT.exec(B.fragmentShader))) { if (seenU.has(m[1])) continue; seenU.add(m[1]); const cols = m[3] ? m[3].split(',').map(c => decodeURIComponent(c)) : []; dataTex.push({ name: m[1], id: m[2], cols, tex: dataTexture(m[2], cols) }); }
+      while ((m = reT.exec(allShaders))) { if (seenU.has(m[1])) continue; seenU.add(m[1]); const cols = m[3] ? m[3].split(',').map(c => decodeURIComponent(c)) : []; dataTex.push({ name: m[1], id: m[2], cols, tex: dataTexture(m[2], cols) }); }
       const reN = /uniform\s+float\s+(u_ds_\w+_n)\s*;\s*\/\/\s*data-count\s+([a-z][a-z0-9]*)/g;
-      while ((m = reN.exec(B.fragmentShader))) { if (seenU.has(m[1])) continue; seenU.add(m[1]); const r = dsResult(m[2]); dataCounts.push({ name: m[1], id: m[2], n: r && r.kind === 'table' ? r.rows : 0 }); }
+      while ((m = reN.exec(allShaders))) { if (seenU.has(m[1])) continue; seenU.add(m[1]); const r = dsResult(m[2]); dataCounts.push({ name: m[1], id: m[2], n: r && r.kind === 'table' ? r.rows : 0 }); }
     }
 
     // Live datasets (a stream exported with Reconnect): the page connects to the same feed and adds each
@@ -1162,7 +1169,7 @@ void main() {
     const padCfg = play.padGrid && KM ? play.padGrid : null;
     const padG = padCfg ? KM.gridFit(null, padCfg) : null;
     // The Pad Grid node's texture (one texel per cell), filled before each frame.
-    const padTex = !bgOnly && padG && /\bu_padGrid\b/.test(B.fragmentShader) ? gl.createTexture() : null;
+    const padTex = !bgOnly && padG && /\bu_padGrid\b/.test(allShaders) ? gl.createTexture() : null;
     const padBytes = padTex ? new Uint8Array(padCfg.cols * padCfg.rows * 4) : null;
     if (padTex) {
       gl.bindTexture(gl.TEXTURE_2D, padTex);
@@ -1284,7 +1291,7 @@ void main() {
       return out;
     }
     // The graph's Layers node: the layers' colour and distance field, uploaded after each frame's layers are drawn.
-    const usesLayersNode = !bgOnly && /\bu_layers(Field)?\b/.test(B.fragmentShader);
+    const usesLayersNode = !bgOnly && /\bu_layers(Field)?\b/.test(allShaders);
     let layersTap = null, layersColourTex = null, layersFieldTex = null, layersFieldSize = [0, 0];
     // The distance field on the GPU (kit/jfa.js, a jump flood over the colour's alpha) on WebGL2;
     // the kit's CPU field (16-bit packed, u_layersFieldLinear 0) where that can't run.
@@ -1318,6 +1325,41 @@ void main() {
         gl.activeTexture(gl.TEXTURE0);
       };
     }
+
+    // Pass nodes (docs/pass-node-plan.md, phase 5): the kit's passHost.js draws each pass program into its
+    // texture before the picture, on the schedule the app runs (kit/passPlan.js). Every program the graph
+    // compiled reads the picture's inputs (bindPictureInputs) plus these shared samplers and vec2s, as the
+    // app's programs share one uniform table. Without WebGL2 the samplers read nothing (as before phase 5).
+    const graphTex = new Map(), graphVec2 = new Map();
+    const PHK = typeof SSKit !== 'undefined' && SSKit.passes ? SSKit.passes : null;
+    // Each extra program's samplers, bound blank before its inputs: one nothing feeds reads transparent black (as in the app).
+    const samplerNames = new Map();
+    const blankSamplers = p => {
+      let names = samplerNames.get(p);
+      if (!names) {
+        names = [];
+        const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS) || 0;
+        for (let i = 0; i < n; i++) { const info = gl.getActiveUniform(p, i); if (info && info.type === gl.SAMPLER_2D) names.push(info.name.replace(/\[0\]$/, '')); }
+        samplerNames.set(p, names);
+      }
+      for (const n of names) bindSampler(n, blank);
+    };
+    const progEnv = {
+      link: fs => link(VS, fs),
+      use: (p, w, h) => { gl.useProgram(p); locProg = p; blankSamplers(p); bindPictureInputs(w, h); },
+      done: () => { locProg = null; gl.useProgram(program); },
+      quad: () => drawQuad(),
+      textures: graphTex, vec2s: graphVec2,
+      halfFloat: gl2 && !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float')),
+    };
+    let passHost = null;
+    if (!bgOnly && graphPasses) {
+      for (const p of graphPasses) { graphTex.set(p.u.tex, null); graphTex.set(p.u.prev, null); }
+      if (gl2 && PHK) passHost = PHK.create(gl, graphPasses, progEnv);
+      else console.warn('[Playfield] Pass nodes need WebGL2: the picture draws without them.');
+    }
+    // A pass that keeps its previous frame changes with every frame drawn, like feedback.
+    const passFeedback = !!(passHost && passHost.hasPrevious);
 
     // Size: contain letterboxes to the exported shape; cover fills the box.
     const ratio = fit === 'contain' && B.aspect && B.aspect.ratio ? B.aspect.ratio : null;
@@ -2617,6 +2659,8 @@ void main() {
         if (echoCfg && echoRing.length !== echoCfg.copies) { echoRing.forEach(dropTarget); echoRing = []; for (let i = 0; i < echoCfg.copies; i++) echoRing.push(makeTarget(W, H)); }
         target = stateful ? pingPong[1 - pingIdx] : sceneTarget;
       }
+      // The graph's other programs (Pass nodes) draw into their textures first.
+      if (passHost) passHost.run(W, H);
       gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fb : null);
       gl.viewport(0, 0, W, H);
       gl.useProgram(program);
@@ -2658,6 +2702,9 @@ void main() {
       for (const v of videos) bindSampler(v.name, v.tex);
       for (const d of dataTex) bindSampler(d.name, d.tex);
       for (const c of dataCounts) setUniform(c.name, c.n);
+      // Pass textures (and their `_px`): only graphs with Pass nodes have any.
+      for (const [n, t] of graphTex) bindSampler(n, t || blank);
+      for (const [n, v] of graphVec2) setUniform(n, v);
     }
     // Held by renderAt: the picture stays what it drew until play() lets the clock run again.
     let held = false;
@@ -2672,6 +2719,7 @@ void main() {
       if (K) K.reset(o.seed > 0 ? o.seed : 1);
       if (finishR) finishR.reset();
       gpReset = true;
+      if (passHost) passHost.clearPrevious();
       if (looks) LK.reset(looks);
       dropTargets(); frame = 0; if (rtState) { rtState.smooth.clear(); rtState.lag.clear(); rtState.values.clear(); } lastOut.clear(); trig.clear(); actLevel.clear(); overrides.clear(); pairState.clear(); condStates.clear(); incState.clear(); incFire.clear(); incCond.clear(); lastTime = -Infinity;
       return { gen, fdt, steps };
@@ -2700,7 +2748,7 @@ void main() {
       else { tickAudioNodes(); moved = tickMappings(dt); }
       for (const sl of afxSlots) afxUpdate(sl);
       // Feedback and echo change with every frame drawn, so while paused they draw only when something changes (as in the app).
-      if (!playing && (stateful || echoCfg) && !needsDraw && !moved && frame > 1) { refreshPanel(now); return; }
+      if (!playing && (stateful || echoCfg || passFeedback) && !needsDraw && !moved && frame > 1) { refreshPanel(now); return; }
       paint(dt, running);
       refreshPanel(now);
     }
@@ -2716,7 +2764,7 @@ void main() {
         gpDt = running || held ? dt : 0;
         // Reduced motion's still frame of a feedback graph is the picture after its first 1.5 s
         // (90 frames at 60 fps), which is what the feedback looks like once it has built up.
-        if (reduced && stateful && frame === 1 && !held) for (let i = 0; i < 89; i++) { drawPicture(); time += 1 / 60; }
+        if (reduced && (stateful || passFeedback) && frame === 1 && !held) for (let i = 0; i < 89; i++) { drawPicture(); time += 1 / 60; }
         drawPicture();
         if (qPlan && !qPlan.direct) { const self = qPlan.items.find(i => i.item.kind === 'graph' && i.item.graph === 'this'); if (self) captureQueue(self.item.id); }
       }
@@ -2779,6 +2827,7 @@ void main() {
       destroy() {
         alive = false;
         if (gpHostR) gpHostR.dispose();
+        if (passHost) passHost.dispose();
         for (const pr of gpProbes.values()) { pr.reader.dispose(); for (const t of [pr.vals, pr.field, pr.vol]) if (t) { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fb); } }
         if (gpProbeProg) gl.deleteProgram(gpProbeProg);
         for (const close of feedClosers) close();

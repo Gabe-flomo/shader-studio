@@ -16,8 +16,9 @@
  *               off-screen, and shows a still frame for reduced motion
  *
  * The runtime runs what the app's canvas does: previous-frame feedback and
- * echo (ping-pong targets), image, video and audio inputs (carried in the page
- * as data URLs), and GPU particle systems. `unsupportedFeatures` lists what a
+ * echo (ping-pong targets), Pass nodes (render to texture, on the app's own
+ * schedule: kit/passPlan.js), image, video and audio inputs (carried in the
+ * page as data URLs), and GPU particle systems. `unsupportedFeatures` lists what a
  * graph uses that it still can't run, `leftBehind` what stays out of the page,
  * and `mediaCarried` what each image, video or song adds to it.
  */
@@ -56,6 +57,8 @@ import granulatorSource from './kit/granulator.js?raw';
 import macrosSource from './kit/macros.js?raw';
 import jfaSource from './kit/jfa.js?raw';
 import gpuParticlesSource from './kit/gpuParticles.js?raw';
+import passPlanSource from './kit/passPlan.js?raw';
+import passHostSource from './kit/passHost.js?raw';
 import type { AeGrainSample } from '../types/playAudioEngine';
 import { renderableFinish } from '../types/playFinish';
 import { applyGroupVisibility } from '../types/layerGroups';
@@ -78,6 +81,8 @@ export interface PlayHtmlInput {
   aspect: PreviewAspect;
   /** Extra passes the picture needs; absent means a single fragment pass. */
   passes?: PlayPasses;
+  /** Pass nodes' programs, in drawing order (webInput.ts webPasses); absent without a Pass node. */
+  graphPasses?: WebPass[];
   /** The files the graph's inputs read. */
   media?: PlayMedia;
   /** Hand tracking's files (play/handExport.ts), when the author chose to include them. */
@@ -102,6 +107,26 @@ export interface PlayPasses {
   stateful: boolean;
   /** Echo nodes: `copies` snapshots `delay` frames apart, bound to u_echo0… */
   echo: { copies: number; delay: number } | null;
+}
+
+/**
+ * A Pass node's program as the page runs it (kit/passHost.js): compiler/types.ts PassProgram
+ * without the node lists, plus the sampler names it fills (nodes/definitions/passes.ts), so the
+ * page never builds a uniform name of its own.
+ */
+export interface WebPass {
+  slug: string;
+  label: string;
+  fragmentShader: string;
+  scale: number;
+  format: 'half' | 'byte';
+  filter: 'linear' | 'nearest';
+  wrap: 'clamp' | 'repeat' | 'mirror';
+  previous: boolean;
+  live: boolean;
+  afterAgents?: boolean;
+  /** u_pass_<slug> and u_passprev_<slug> (each with its `_px`). */
+  u: { tex: string; prev: string };
 }
 
 /** One input's file. `src` is a data URL, or null when none is loaded or it is too big to carry (`bytes` > 0). */
@@ -168,8 +193,6 @@ export interface GraphFeatures {
   liveUniforms: Record<string, string>;
   /** The shader reads a Data node's textures (src/data/dataGlsl.ts). */
   usesData?: boolean;
-  /** Has Pass nodes (render to texture): the page doesn't run them yet (docs/pass-node-plan.md, phase 5). */
-  passes?: boolean;
   /** Has an Agents group: the page doesn't run agents yet (docs/agents-plan.md, phase P5). */
   agents?: boolean;
   /** Reads the Motion (texture) node (Agents P4): the page doesn't fill its texture yet. */
@@ -178,14 +201,13 @@ export interface GraphFeatures {
 
 /**
  * Human-readable list of things in this graph the standalone page can't run.
- * Feedback, echo, particles, image, video and audio inputs and Data nodes (the
- * page carries their datasets' results) all run there; a MIDI Input node's
+ * Feedback, echo, Pass nodes, particles, image, video and audio inputs and Data
+ * nodes (the page carries their datasets' results) all run there; a MIDI Input node's
  * outputs don't yet (the page's MIDI drives mappings only).
  */
 export function unsupportedFeatures(f: GraphFeatures): string[] {
   const out: string[] = [];
   if (Object.keys(f.liveUniforms).length) out.push('MIDI Input node outputs');
-  if (f.passes) out.push('Pass nodes (render to texture): the page draws the final picture without them');
   if (f.agents) out.push('Agents groups: the page draws the picture without them');
   if (f.motionMap) out.push('Motion (texture) nodes: the page reads them as still');
   return out;
@@ -426,6 +448,8 @@ export function playBundle(input: PlayHtmlInput) {
     play,
     aspect: aspect ? { id: aspect.id, ratio: aspect.ratio } : { id: 'free', ratio: null },
     ...(input.passes && (input.passes.stateful || input.passes.echo) ? { passes: input.passes } : {}),
+    // Only graphs with Pass nodes carry their programs: every other bundle serializes as before.
+    ...(input.graphPasses?.length ? { graphPasses: input.graphPasses } : {}),
     ...(input.media ? { media: runtimeMedia(input.media) } : {}),
     ...(input.handAssets && usesHands(input.play) && !input.play.hands?.source ? { hands: input.handAssets } : {}),
     ...(bundleTracks(input) ? { tracks: bundleTracks(input) } : {}),
@@ -446,10 +470,10 @@ function runtimeOptions(o: EmbedOptions) {
  * createLayerKit. The kit's files keep their top-level names distinct so
  * they can share this scope.
  */
-export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, p5Source, fontsSource, glyphsSource, layersSource, mattesSource, bodiesSource, relationshipSource, agentsSource, motionSource, handsSource, tracksSource, faceSource, poseSource, queueSource, dataSource, midiSource, kitSource, finishGlslSource, finishSource, signalsSource, routesSource, incrementSource, audioFxSource, drumPadsSource, granulatorSource, macrosSource, fnSource, spreadSource, jfaSource, gpuParticlesSource];
+export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, p5Source, fontsSource, glyphsSource, layersSource, mattesSource, bodiesSource, relationshipSource, agentsSource, motionSource, handsSource, tracksSource, faceSource, poseSource, queueSource, dataSource, midiSource, kitSource, finishGlslSource, finishSource, signalsSource, routesSource, incrementSource, audioFxSource, drumPadsSource, granulatorSource, macrosSource, fnSource, spreadSource, jfaSource, gpuParticlesSource, passPlanSource, passHostSource];
 export function kitScript(): string {
   const body = KIT_SOURCES.map(src => src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
-  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, tracks: { decode: tkDecode, fromBase64: tkFromBase64, driver: tkDriver, drive: tkDrive, handsFrame: tkHandsFrame, videoTime: tkVideoTime, subjectAge: tkSubjectAge }, face: { create: fcCreate, update: fcUpdate, read: fcRead, gate: fcGate, point: fcPoint }, pose: { create: psCreate, update: psUpdate, read: psRead, gate: psGate, point: psPoint }, data: { unit: kdUnit, column: kdColumn }, midi: { lockRecord: kmLockRecord, lockRead: kmLockRead, rangeRead: kmRangeRead, noteUnit: kmNoteUnit, gridFit: kmGridFit, gridMessage: kmGridMessage, gridFill: kmGridFill, gridRead: kmGridRead }, finish: { create: fnCreate, active: fnActive, mapLayers: fnMapLayers, usesMotion: fnUsesMotion, looks: { create: fnLookNew, act: fnLookAct, step: fnLookStep, value: fnLookValue, reset: fnLookReset, is: fnLookIs } }, audioFx: { chain: afCreateChain, loadWorklet: afLoadWorklet, needsWorklet: afNeedsWorklet }, drumPads: { sampler: dpCreateSampler, numbers: dpHitNumbers, key: dpKey, synth: dpSynthBuffer, padOfKey: dpPadOfKey, padOfNote: dpPadOfNote, padOfCell: dpPadOfCell, slots: dpSlots, pick: dpPickPad, hash: dpHash01 }, granulator: { create: grCreate, settings: grSettings, summary: grSummary, synth: grSynthBuffer, params: GR_PARAMS, fromPoints: grFromPoints }, macros: { curve: mcCurve, value: mcTargetValue }, signals: { gate: sgGate, condNew: sgCondNew, condStep: sgCondStep, condRewind: sgCondRewind, logic: sgLogic, order: sgSignalOrder, signalPlan: sgSignalPlan, levelDeps: sgLevelDeps, pulseLinks: sgPulseLinks, reactions: sgReactions, shapeNew: sgShapeNew, shapeRewind: sgShapeRewind, shaped: sgShaped, shapeStep: sgShapeStep, lagNew: sgLagNew, lagStep: sgLagStep, linkPlan: sgLinkPlan, linkNew: sgLinkNew, linkClear: sgLinkClear, linkFire: sgLinkFire, linkDue: sgLinkDue, runActions: sgRunActions, swapNew: sgSwapNew, swapStep: sgSwapStep, parseRef: sgParseValueRef, point: sgScreenPoint, valueKey: sgValueKey, depth: SG_DEPTH }, routes: { state: rtNew, sourcesOf: rtSourcesOf, frame: rtFrame, rewind: rtRewind, curve: rtCurve, map: rtMap, triggersOf: rtTriggersOf }, increment: { create: incNew, range: incRange, fold: incFold, threshold: incThreshold, repeat: incRepeat, advance: incAdvance, reset: incReset, glide: incGlide }, fn: { eval: fnEval }, spread: { weight: spWeight, weights: spWeights, value: spValue }, jfa: { create: jfCreate }, gpuParticles: { host: gpHost, readback: gpReadback, slots: gpProbeSlots, probeField: gpProbeField, vol: GP_VOL, volTiles: GP_VOL_TILES } };\n})();\n`;
+  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, tracks: { decode: tkDecode, fromBase64: tkFromBase64, driver: tkDriver, drive: tkDrive, handsFrame: tkHandsFrame, videoTime: tkVideoTime, subjectAge: tkSubjectAge }, face: { create: fcCreate, update: fcUpdate, read: fcRead, gate: fcGate, point: fcPoint }, pose: { create: psCreate, update: psUpdate, read: psRead, gate: psGate, point: psPoint }, data: { unit: kdUnit, column: kdColumn }, midi: { lockRecord: kmLockRecord, lockRead: kmLockRead, rangeRead: kmRangeRead, noteUnit: kmNoteUnit, gridFit: kmGridFit, gridMessage: kmGridMessage, gridFill: kmGridFill, gridRead: kmGridRead }, finish: { create: fnCreate, active: fnActive, mapLayers: fnMapLayers, usesMotion: fnUsesMotion, looks: { create: fnLookNew, act: fnLookAct, step: fnLookStep, value: fnLookValue, reset: fnLookReset, is: fnLookIs } }, audioFx: { chain: afCreateChain, loadWorklet: afLoadWorklet, needsWorklet: afNeedsWorklet }, drumPads: { sampler: dpCreateSampler, numbers: dpHitNumbers, key: dpKey, synth: dpSynthBuffer, padOfKey: dpPadOfKey, padOfNote: dpPadOfNote, padOfCell: dpPadOfCell, slots: dpSlots, pick: dpPickPad, hash: dpHash01 }, granulator: { create: grCreate, settings: grSettings, summary: grSummary, synth: grSynthBuffer, params: GR_PARAMS, fromPoints: grFromPoints }, macros: { curve: mcCurve, value: mcTargetValue }, signals: { gate: sgGate, condNew: sgCondNew, condStep: sgCondStep, condRewind: sgCondRewind, logic: sgLogic, order: sgSignalOrder, signalPlan: sgSignalPlan, levelDeps: sgLevelDeps, pulseLinks: sgPulseLinks, reactions: sgReactions, shapeNew: sgShapeNew, shapeRewind: sgShapeRewind, shaped: sgShaped, shapeStep: sgShapeStep, lagNew: sgLagNew, lagStep: sgLagStep, linkPlan: sgLinkPlan, linkNew: sgLinkNew, linkClear: sgLinkClear, linkFire: sgLinkFire, linkDue: sgLinkDue, runActions: sgRunActions, swapNew: sgSwapNew, swapStep: sgSwapStep, parseRef: sgParseValueRef, point: sgScreenPoint, valueKey: sgValueKey, depth: SG_DEPTH }, routes: { state: rtNew, sourcesOf: rtSourcesOf, frame: rtFrame, rewind: rtRewind, curve: rtCurve, map: rtMap, triggersOf: rtTriggersOf }, increment: { create: incNew, range: incRange, fold: incFold, threshold: incThreshold, repeat: incRepeat, advance: incAdvance, reset: incReset, glide: incGlide }, fn: { eval: fnEval }, spread: { weight: spWeight, weights: spWeights, value: spValue }, jfa: { create: jfCreate }, gpuParticles: { host: gpHost, readback: gpReadback, slots: gpProbeSlots, probeField: gpProbeField, vol: GP_VOL, volTiles: GP_VOL_TILES }, passes: { create: phCreate } };\n})();\n`;
 }
 
 /**

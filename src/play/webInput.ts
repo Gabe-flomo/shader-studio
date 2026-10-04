@@ -9,7 +9,9 @@
  * compiled off-screen (a Present snapshot) go through the same code and
  * produce the same page.
  */
-import { unsupportedFeatures, type GraphFeatures, type PlayHtmlInput, type PlayMedia } from './exportHtml';
+import { unsupportedFeatures, type GraphFeatures, type PlayHtmlInput, type PlayMedia, type WebPass } from './exportHtml';
+import type { PassProgram } from '../compiler/types';
+import { passPrevUniform, passUniform } from '../nodes/definitions/passes';
 import { bakeLayerValues } from './playControls';
 import type { PlayRecord } from '../types/play';
 import type { PreviewAspect } from '../utils/graphImportPlan';
@@ -30,7 +32,7 @@ export interface CompiledForWeb {
   echo?: { copies: number; delay: number } | null;
   echoConfig?: { copies: number; delay: number } | null;
   /** Pass nodes' programs (compiler/passGraph.ts); absent or null without Pass nodes. */
-  passes?: readonly unknown[] | null;
+  passes?: readonly PassProgram[] | null;
   /** The Agents family's programs (compiler/agentGraph.ts); absent or null without one. */
   agents?: { groups: readonly unknown[] } | null;
 }
@@ -40,11 +42,19 @@ export function graphFeatures(c: CompiledForWeb, play: PlayRecord): GraphFeature
   const f = {
     textureUniforms: c.textureUniforms, videoUniforms: c.videoUniforms, audioUniforms: c.audioUniforms, liveUniforms: c.liveUniforms,
     isStateful: c.isStateful, usesEcho: /\bu_echo0\b/.test(c.fragmentShader), usesData: /\bu_ds_\w+/.test(c.fragmentShader), play,
-    ...(c.passes?.length ? { passes: true } : {}),
     ...(c.agents?.groups.length ? { agents: true } : {}),
     ...(/\bu_motionMap\b/.test(c.fragmentShader) ? { motionMap: true } : {}),
   };
   return f;
+}
+
+/** Pass programs as the page runs them (kit/passHost.js): what it draws, with their sampler names. */
+export function webPasses(passes: readonly PassProgram[]): WebPass[] {
+  return passes.map(p => ({
+    slug: p.slug, label: p.label, fragmentShader: p.fragmentShader, scale: p.scale, format: p.format, filter: p.filter, wrap: p.wrap,
+    previous: p.previous, live: p.live, ...(p.afterAgents ? { afterAgents: true } : {}),
+    u: { tex: passUniform(p.slug), prev: passPrevUniform(p.slug) },
+  }));
 }
 
 /**
@@ -68,11 +78,12 @@ export function webInputFrom(c: CompiledForWeb, play: PlayRecord, opts: { title:
       echo: c.echoConfig ?? c.echo ?? null,
     },
   };
+  if (c.passes?.length) input.graphPasses = webPasses(c.passes);
   if (opts.media) input.media = opts.media;
   if (opts.backgroundGraphs && Object.keys(opts.backgroundGraphs).length) input.backgroundGraphs = opts.backgroundGraphs;
   // The datasets the page reads (Data nodes in the shader, Data layers, data mappings, s.data()): their results only.
   if (opts.datasets) {
-    const sets = datasetsForWeb(opts.datasets, play, [c.fragmentShader], { live: opts.liveData });
+    const sets = datasetsForWeb(opts.datasets, play, [c.fragmentShader, ...(c.passes ?? []).map(p => p.fragmentShader)], { live: opts.liveData });
     if (Object.keys(sets).length) input.datasets = sets;
   }
   return { input, missing: unsupportedFeatures(graphFeatures(c, play)) };
