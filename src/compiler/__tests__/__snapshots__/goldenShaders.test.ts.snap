@@ -93,7 +93,7 @@ exports[`golden shaders: every Play example exports the same bundle > convertCir
 
 exports[`golden shaders: every Play example exports the same bundle > convertCircleOptimised 1`] = `
 {
-  "bundle": "1b346ed3358d930958d4d9a584c0:3378",
+  "bundle": "0803cde008db56159ce31ff39ddf:3456",
   "missing": [],
 }
 `;
@@ -2318,7 +2318,7 @@ exports[`golden shaders: every example compiles as it did > convertCircleOptimis
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1c88dbc0a1ec8e043b74912255bf:2614",
+  "fragmentShader": "1757ae071f922502820702bd9b94:2692",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "16e25733d29c140e07513c0c3853:144",
