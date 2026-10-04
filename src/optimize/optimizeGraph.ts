@@ -64,7 +64,7 @@ export interface Fold {
 export interface OptimizeReport { folds: Fold[]; before: number; after: number }
 export interface OptimizeResult { nodes: GraphNode[]; report: OptimizeReport }
 
-const NEVER = new Set(['output', 'vec4Output', 'group', 'sceneGroup', 'spaceWarpGroup', 'marchLoopGroup', 'giLitMarchGroup', 'loopCarry', 'loopIndex', 'exprNode', 'customFn', 'constants', 'constant', 'colorPicker', 'layers', 'playLayers', 'motionMap', 'padGrid', 'scope', 'echo', 'prevFrame', 'textureInput', 'videoInput', 'audioInput', 'midiInput', 'pass', 'passOutput',
+const NEVER = new Set(['output', 'vec4Output', 'group', 'sceneGroup', 'spaceWarpGroup', 'marchLoopGroup', 'giLitMarchGroup', 'loopCarry', 'loopIndex', 'exprNode', 'customFn', 'constants', 'constant', 'colorPicker', 'layers', 'playLayers', 'motionMap', 'padGrid', 'scope', 'echo', 'prevFrame', 'textureInput', 'videoInput', 'baked', 'audioInput', 'midiInput', 'pass', 'passOutput',
   // The Agents family (docs/agents-plan.md): engines, and nodes that read the agent globals of an update shader
   'agentsGroup', 'agentInputs', 'agentOutput', 'agentStepOut', 'agentSense', 'agentSteer', 'agentMove', 'agentBySpecies', 'agentEmit', 'agentDeposit', 'trailField', 'drawAgents', 'slimeMoldPreset',
   'agentGravity', 'agentWind', 'agentCurl', 'agentAttract', 'agentVortex', 'agentFlow', 'agentSoundKick', 'agentIntegrate', 'agentAge', 'agentCollide', 'agentChladni',

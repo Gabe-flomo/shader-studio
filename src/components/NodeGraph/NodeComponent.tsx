@@ -114,6 +114,8 @@ import { driverOf } from '../../play/paramDrivers';
 import { PlayDriveChip } from './PlayDriveChip';
 import { MAX_GROUP_ITERATIONS } from '../../nodes/definitions/group';
 import { programTintColour, programTintsCached } from '../../lib/programTints';
+import { BakedCardBody } from '../bake/BakedCardBody';
+import { bakedSourceName } from '../../nodes/definitions/baked';
 
 function adaptiveStep(value: number, baseStep: number): number {
   const abs = Math.abs(value);
@@ -179,7 +181,7 @@ function hzToSlider(hz: number): number {
   return Math.round(Math.pow(Math.max(0, ratio), 1 / 0.6) * 1000);
 }
 
-const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput', 'midiInput', 'data']);
+const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput', 'baked', 'midiInput', 'data']);
 let zCounter = 10; // incremented each time a node is brought to front
 const LFO_TYPES    = new Set(['lfo']);
 // Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
@@ -1276,6 +1278,66 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           <AudioInputModal node={node} onClose={() => setShowAudioInputModal(false)} />
         )}
       </>
+    );
+  }
+
+  // ── Baked node card (docs/bake.md): poster, what it is, Unbake / Re-bake ─────
+  if (node.type === 'baked') {
+    const sock = (dir: 'in' | 'out', key: string, type: string, connected: boolean) => (
+      <div
+        data-socket={dir}
+        ref={el => { registerSocket(node.id, dir, key, el); }}
+        onMouseUp={dir === 'in' ? e => { e.stopPropagation(); onEndConnection(node.id, key); } : undefined}
+        onMouseDown={dir === 'out' ? e => { e.stopPropagation(); onStartConnection(node.id, key, e); } : undefined}
+        onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); if (dir === 'in') onTapInputSocket?.(node.id, key); else onTapOutputSocket?.(node.id, key); }}
+        style={{
+          width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12, borderRadius: '50%', flexShrink: 0, touchAction: 'manipulation',
+          background: dir === 'out' || connected ? TYPE_COLORS[type] ?? '#888' : '#333', border: `2px solid ${TYPE_COLORS[type] ?? '#888'}`,
+          cursor: dir === 'out' ? 'crosshair' : 'pointer',
+          ...(dir === 'in' ? { marginLeft: isTouchDevice ? '-11px' : '-6px' } : { marginRight: isTouchDevice ? '-11px' : '-6px' }),
+        }}
+      />
+    );
+    return (
+      <div data-node-id={node.id} style={specialCardStyle()}>
+        <div
+          onMouseDown={(e) => {
+            if (e.button === 2) return;
+            e.stopPropagation();
+            startNodeMouseDrag({
+              nodeId: node.id,
+              cardEl: (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-node-id]'),
+              startClient: { x: e.clientX, y: e.clientY },
+              startPosition: node.position,
+              getZoom,
+              threshold: 0,
+              commit: pos => updateNodePosition(node.id, pos),
+              onSettle: () => setSelectedNodeId(isSelected ? null : node.id),
+            });
+          }}
+          style={specialHeadStyle}
+        >
+          <span style={{ fontWeight: 600, fontSize: '11px', color: tc.mauve, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={typeof node.params.__comment === 'string' ? node.params.__comment : undefined}>
+            Baked: {bakedSourceName(node)}
+          </span>
+          <button onMouseDown={e => e.stopPropagation()} onClick={() => removeNode(node.id)} title="Remove (the live nodes go with it; Undo brings them back)" style={{ background: 'none', border: 'none', color: tc.red, cursor: 'pointer', fontSize: '13px' }}>✕</button>
+        </div>
+        <BakedCardBody node={node} tc={tc} />
+        <div style={{ padding: '3px 0 5px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '4px' }}>
+            {sock('in', 'uv', 'vec2', !!node.inputs.uv?.connection)}
+            <span style={{ fontSize: '10px', color: tc.subtext0 }}>UV</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
+            {Object.entries(node.outputs).map(([key, out]) => (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
+                <span style={{ fontSize: '10px', color: tc.subtext0 }}>{out.label}</span>
+                {sock('out', key, out.type, true)}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     );
   }
 

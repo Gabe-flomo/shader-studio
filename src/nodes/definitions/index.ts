@@ -10,6 +10,8 @@ import { getUserNodeDefinition, getAllUserNodeDefinitions } from '../userNodes/u
 import { knobParamDefs, withInputExpressions } from '../../glsl/inputExpr';
 import { VideoInputNode } from './sources';
 export { VideoInputNode };
+import { BakedNode } from './baked';
+export { BakedNode };
 import { MidiInputNode } from './midi';
 export { MidiInputNode };
 import { DataNode } from './data';
@@ -295,6 +297,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   loopIndex: LoopIndexNode,
   audioInput: AudioInputNode,
   videoInput: VideoInputNode,
+  baked: BakedNode,
   midiInput: MidiInputNode,
   data: DataNode,
   playLayers: PlayLayersNode,

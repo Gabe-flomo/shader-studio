@@ -24,6 +24,7 @@ import { PASS_EXAMPLE_INDEX, PASS_EXAMPLE_KEYS } from './passExamples';
 import { AGENT_EXAMPLE_INDEX, AGENT_EXAMPLE_KEYS, AGENT_RULE_INDEX } from './agentExamples';
 import { AGENT_SHADER_EXAMPLE_INDEX, AGENT_SHADER_EXAMPLE_KEYS } from './agentShaderExamples';
 import { CONVERT_EXAMPLE_INDEX, CONVERT_EXAMPLE_KEYS } from './convertExampleIndex';
+import { BAKE_EXAMPLE_INDEX } from './bakeExamples';
 
 export type ExampleGraph = {
   label: string; nodes: GraphNode[]; counter: number;
@@ -212,6 +213,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...Object.fromEntries(Object.entries(AGENT_RULE_INDEX).map(([k, v]) => [k, { ...v, play: true }])),
   // The Convert folder (convertExampleIndex.ts, graphs in convertExamples.ts): what the Convert page makes of its Soft circle, as written and optimised.
   ...CONVERT_EXAMPLE_INDEX,
+  // Bake (bakeExamples.ts, docs/bake.md): a heavy scene to freeze into a video, live effects on top.
+  ...BAKE_EXAMPLE_INDEX,
 };
 
 // The default graph to load on startup
@@ -251,7 +254,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Blur & Lens",       color: ctp.blue, keys: ['motionBlurTrails','tiltShiftScene','dofOrbitOrbs','dofDepthBlur','comboBlurDirectional'] },
   { label: "Functions",         color: ctp.sapphire, keys: ['ringGlow'] },
   { label: "3D Basics",         color: ctp.sky, keys: ['raymarchSpheres','rayMarchOutputs3D','shapesAndGround3D','softMetaballs3D','normalColorDemo'] },
-  { label: "3D SDF",            color: ctp.sky, keys: ['sdfPolarRepeat','sdfBend3D','sdCrossScene3D','infinitePillars3D','spiralWorld3D','gyroidWarped','mlgWiggleTunnel','voxelTerrain'] },
+  { label: "3D SDF",            color: ctp.sky, keys: ['sdfPolarRepeat','sdfBend3D','sdCrossScene3D','infinitePillars3D','spiralWorld3D','gyroidWarped','bakeHeavyScene','mlgWiggleTunnel','voxelTerrain'] },
   { label: "3D Lighting",       color: '#f9c468', keys: ['fresnelSchlickRim','refractDirFakeGlass','glassPhysical','glassMetaballs','litStillLife'] },
   { label: "GI Lighting",       color: ctp.green, keys: ['giSphereGround','giBoxFrame'] },
   { label: "Volumetric",        color: '#f5a97f', keys: ['glowMarcher','volAnimatedRepeat','volumeGlowDemo'] },

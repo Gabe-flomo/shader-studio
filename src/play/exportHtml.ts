@@ -172,11 +172,14 @@ export interface PlayMediaFile {
   scaledTo?: number | null;
 }
 
+/** A Baked node's video (docs/bake.md): the page shows frame (t − start) × fps, looped or held, as the app does. */
+export interface BakedVideoClock { start: number; duration: number; fps: number; loop: 'none' | 'seamless' }
+
 export interface PlayMedia {
   /** sampler uniform → its image. */
   textures?: Record<string, PlayMediaFile>;
   /** sampler uniform → its video. */
-  videos?: Record<string, PlayMediaFile & { loop: boolean; speed: number }>;
+  videos?: Record<string, PlayMediaFile & { loop: boolean; speed: number; clock?: BakedVideoClock }>;
   /** Audio Input nodes: the uniform per band (index = band), and how the bands are read. */
   audio?: (PlayMediaFile & { id: string; uniforms: string[]; bands: number[]; range: number; mode: string })[];
   /** Video layers' files, by layer id (the page puts each in its layer as `src`). */

@@ -20,6 +20,9 @@ export class IdGenerator {
       }
       const subgraph = node.params?.subgraph as SubgraphData | undefined;
       if (subgraph?.nodes?.length) this.syncFromGraph(subgraph.nodes);
+      // A Baked node's tucked nodes (lib/bake/graphOps.ts) come back on Unbake: their ids stay taken.
+      const baked = node.params?._bake as { nodes?: GraphNode[] } | undefined;
+      if (Array.isArray(baked?.nodes)) this.syncFromGraph(baked.nodes);
     }
   }
 }

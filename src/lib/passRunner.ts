@@ -125,6 +125,8 @@ export class PassRunner {
 
   get passes(): readonly PassProgram[] { return this.entries.map(e => e.spec); }
   /** Some pass keeps its previous frame: the preview keeps drawing while the clock runs. */
+  /** Every program compiled (or failed): a render started now draws them all (lib/bake/runner.ts waits for this). */
+  get settled(): boolean { return this.entries.every(e => e.ready || e.failed); }
   get hasPrevious(): boolean { return this.entries.some(e => e.spec.live && e.spec.previous); }
   /** Some pass the frame draws is read by the Particles nodes: run part 'particles' before them, then 'rest'. */
   get splitsForParticles(): boolean { return ppSplitsForParticles(ppDrawn(this.entries.map(e => e.spec))); }

@@ -965,19 +965,50 @@ void main() {
     const videos = [];
     for (const name in media.videos || {}) {
       const m = media.videos[name];
-      const v = { name, tex: texture(gl.LINEAR, [0, 0, 0, 0]), el: null, shown: -1 };
+      // A Baked node's video (docs/bake.md) carries its clock: it shows frame (t − start) × fps, as in the app.
+      const clock = m && m.clock && m.clock.fps > 0 ? m.clock : null;
+      const v = { name, tex: texture(gl.LINEAR, [0, 0, 0, 0]), el: null, shown: -1, clock };
       videos.push(v);
       if (!m || !m.src) continue;
       const e = document.createElement('video');
-      e.muted = true; e.loop = m.loop !== false; e.playsInline = true; e.preload = 'auto';
+      e.muted = true; e.loop = clock ? clock.loop === 'seamless' : m.loop !== false; e.playsInline = true; e.preload = 'auto';
       e.setAttribute('playsinline', ''); e.setAttribute('muted', '');
       const url = dataToBlobUrl(m.src); if (url !== m.src) blobUrls.push(url);
       e.src = url;
-      e.addEventListener('loadedmetadata', () => { e.playbackRate = m.speed > 0 ? m.speed : 1; });
+      e.addEventListener('loadedmetadata', () => {
+        if (!clock) e.playbackRate = m.speed > 0 ? m.speed : 1;
+        // Its texel size, for nodes that read it as a texture (Blur, Edges…) and an alpha bake's seam.
+        if (e.videoWidth > 0) uniformValues[name + '_px'] = [1 / e.videoWidth, 1 / e.videoHeight];
+      });
       e.addEventListener('loadeddata', () => { needsDraw = true; });
       e.addEventListener('seeked', () => { needsDraw = true; });
       v.el = e;
     }
+    // Baked videos: the frame for clock time t, and where to seek for it (lib/bake/plan.ts bakeFrameAt, bakeVideoTime).
+    const bakeFrameAt = (t, c) => {
+      const n = Math.max(1, Math.round(c.duration * c.fps));
+      const f = Math.floor((t - c.start) * c.fps + 1e-6);
+      return c.loop === 'seamless' ? ((f % n) + n) % n : Math.min(n - 1, Math.max(0, f));
+    };
+    const bakeTarget = c => (bakeFrameAt(time, c) + 0.5) / c.fps;
+    // Live: on the clock's frame, nudging the speed rather than jumping (lib/bakedVideos.ts follow).
+    const followBaked = run => {
+      for (const v of videos) {
+        const e = v.el, c = v.clock;
+        if (!c || !e || e.readyState < 1) continue;
+        const target = bakeTarget(c), d = isFinite(e.duration) && e.duration > 0 ? e.duration : c.duration;
+        let diff = target - e.currentTime;
+        if (c.loop === 'seamless' && Math.abs(diff) > d / 2) diff -= Math.sign(diff) * d;
+        if (run && (c.loop === 'seamless' || (time >= c.start && time < c.start + c.duration))) {
+          if (e.paused) { const p = e.play(); if (p && p.catch) p.catch(() => {}); }
+          if (Math.abs(diff) > 0.25) { if (!e.seeking) e.currentTime = target; }
+          else { const r = Math.abs(diff) < 0.5 / c.fps ? 1 : 1 + Math.max(-0.2, Math.min(0.2, diff * 2)); if (Math.abs(e.playbackRate - r) > 1e-3) e.playbackRate = r; }
+        } else {
+          if (!e.paused) e.pause();
+          if (Math.abs(diff) > 0.5 / c.fps && !e.seeking) e.currentTime = target;
+        }
+      }
+    };
     // The background's image or video (a colour needs neither). The video follows the page's clock, as in the app.
     let bgEl = null, bgVideo = null, bgMuted = true;
     const bgVid = bgDisp.video || {};
@@ -2762,7 +2793,7 @@ void main() {
     const runVideos = run => {
       if (run === videosRunning) return;
       videosRunning = run;
-      for (const v of videos) if (v.el) { if (run) { const p = v.el.play(); if (p && p.catch) p.catch(() => {}); } else v.el.pause(); }
+      for (const v of videos) if (v.el && !v.clock) { if (run) { const p = v.el.play(); if (p && p.catch) p.catch(() => {}); } else v.el.pause(); }
     };
     // The graph's picture: straight to the screen, or (feedback, echo) into a half-float target, then dithered to the screen as ShaderCanvas does.
     function drawPicture() {
@@ -2876,6 +2907,7 @@ void main() {
       if (ctxLost || held) return;
       const running = (follow ? fed.playing : playing) && !reduced && !document.hidden && !(pauseOffscreen && !onScreen);
       runVideos(running);
+      followBaked(running);
       followBackground(running);
       followLayerVideos(running);
       if ((pauseOffscreen && !onScreen) || document.hidden) return;
@@ -3119,6 +3151,16 @@ void main() {
             // Its length still being worked out (see above): wait for it, or the clock can't place it.
             if (e.duration === Infinity) await wait(e, 'durationchange', 3000);
             await seekTo(e, videoLayerTimeAt(l.playing ? at : 0, e.duration, l.speed, !!l.loop, l.start || 0));
+          })());
+        }
+        // Baked videos: the frame for this moment (the clock is set to it before the capture draws).
+        for (const v of videos) {
+          const e = v.el, c = v.clock;
+          if (!c || !e) continue;
+          jobs.push((async () => {
+            if (e.readyState < 1) await wait(e, 'loadedmetadata', 4000);
+            await seekTo(e, (bakeFrameAt(at, c) + 0.5) / c.fps);
+            v.shown = -1;
           })());
         }
         if (bgVideo) {

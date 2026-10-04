@@ -52,7 +52,7 @@ const STATEFUL_TYPES = new Set([
   'gaussianBlur', 'bloom', 'radialBlur', 'tiltShiftBlur', 'lensBlur', 'motionBlur', 'depthOfField',
 ]);
 // textureInput is allowed: each one becomes a sampler2D argument (see spec.textures).
-const MEDIA_TYPES = new Set(['audioInput', 'videoInput', 'midiInput']);
+const MEDIA_TYPES = new Set(['audioInput', 'videoInput', 'midiInput', 'baked']);
 const OUTPUT_TYPES = new Set(['output', 'vec4Output', 'scope']);
 
 export interface FlattenSpec {

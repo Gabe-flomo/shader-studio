@@ -123,6 +123,7 @@ import { registerUserNode, unregisterUserNode, getUserNode, exportUserNodes, imp
 import { sealDefinition } from '../playfile/sealing';
 import { runRebuildHandlers } from '../lib/rebuild';
 import type { KeyframePreset } from '../types/keyframePreset';
+import { bakedInfo } from '../nodes/definitions/baked';
 import { getNodeDefinition, getNodeDefinitionFor, resolveNodeAliases, resolveSubgraphAliases, NODE_ALIASES, aliasParams, clearNodeDefinitionCache } from '../nodes/definitions';
 import { paletteNodeCoeffs, STOP_PALETTE_MAX } from '../nodes/definitions/color';
 import { autoFitCosineStops, fitCosineStops } from '../lib/palette';
@@ -643,6 +644,15 @@ interface NodeGraphState {
 
   // Preview mode — isolates a single node's output for focused editing
   previewNodeId: string | null;
+  /**
+   * While a bake renders (lib/bake/runner.ts): the graph it renders, compiled
+   * in place of the open graph (and the eye's preview) until it's set back to
+   * null. The open graph's nodes are untouched.
+   */
+  bakeGraph: GraphNode[] | null;
+  setBakeGraph: (nodes: GraphNode[] | null) => void;
+  /** A fresh node id (for nodes built outside the store's own actions, e.g. a Baked node). */
+  newNodeId: () => string;
 
   // Mobile keyframe editor — cross-cutting UI state, not graph data. Read
   // and written by two siblings in the mobile layout: MobileGraphBrowser
@@ -1589,10 +1599,13 @@ function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTe
   }
   const videos: NonNullable<PlayMedia['videos']> = {};
   for (const [uniform, id] of Object.entries(st.videoUniforms)) {
-    const m = mediaSource(id), p = byId.get(id)?.params ?? {};
+    const m = mediaSource(id), n = byId.get(id), p = n?.params ?? {};
+    // A Baked node's video keeps to the page's clock as it does in the app (docs/bake.md).
+    const bake = n?.type === 'baked' ? bakedInfo(n) : null;
     videos[uniform] = {
-      label: labelOf(id, 'Video Input'), name: m?.name ?? '', src: m?.dataUrl ?? null, bytes: m?.dataUrl?.length ?? (m?.tooBig ? m.bytes : 0),
-      loop: p._loop !== false, speed: typeof p._speed === 'number' && p._speed > 0 ? p._speed : 1,
+      label: bake ? `Baked: ${bake.source}` : labelOf(id, 'Video Input'), name: m?.name ?? (typeof p.fileName === 'string' ? p.fileName : ''), src: m?.dataUrl ?? null, bytes: m?.dataUrl?.length ?? (m?.tooBig ? m.bytes : bake?.bytes ?? 0),
+      loop: bake ? bake.loop === 'seamless' : p._loop !== false, speed: typeof p._speed === 'number' && p._speed > 0 ? p._speed : 1,
+      ...(bake ? { clock: { start: bake.start, duration: bake.duration, fps: bake.fps, loop: bake.loop } } : {}),
     };
   }
   // Every Audio Input node, wired into the shader or not: Play mappings can read its bands either way.
@@ -1689,6 +1702,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   }),
   scopeProbeValues: {},
   previewNodeId: null,
+  bakeGraph: null,
+  newNodeId: () => idGenerator.next(),
+  setBakeGraph: (nodes) => {
+    set({ bakeGraph: nodes });
+    get().compile();
+  },
   mobileKeyframeEditor: null,
   mobileKeyframeTool: 'select',
   mobileNodeOverlayOpen: false,
@@ -4815,9 +4834,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       clearNodeDefinitionCache();
       recompileUserNodes();
     }
-    const { nodes, previewNodeId, activeGroupId } = get();
+    const { nodes, previewNodeId, activeGroupId, bakeGraph } = get();
     let graphNodes: GraphNode[];
-    if (previewNodeId) {
+    if (bakeGraph) {
+      // A bake rendering: exactly the graph it asked for.
+      graphNodes = bakeGraph;
+    } else if (previewNodeId) {
       // Check if the preview target lives inside a group's subgraph rather than at the top level
       const isTopLevel = nodes.some(n => n.id === previewNodeId);
       if (!isTopLevel && activeGroupId) {
@@ -4853,7 +4875,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const prevNodes = get().nodes;
     let patchedForAcc = prevNodes;
     let nodesChanged = false;
-    if (result.mlgDynamicOutputs && result.mlgDynamicOutputs.size > 0) {
+    // A bake's compile (bakeGraph) says nothing about the open graph's sockets: leave them be.
+    if (bakeGraph) { /* nothing to patch */ }
+    else if (result.mlgDynamicOutputs && result.mlgDynamicOutputs.size > 0) {
       patchedForAcc = patchedForAcc.map(node => {
         const dynSockets = result.mlgDynamicOutputs!.get(node.id);
         if (!dynSockets) return node;
@@ -4903,7 +4927,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const shaderChanged = result.fragmentShader !== get().fragmentShader;
     // Show passes: the whole graph's programs, even while the eye previews part of it.
     let whole: typeof result | null = result;
-    if (previewNodeId && (hasPassNode(nodes) || hasAgentsNode(nodes))) {
+    if (bakeGraph) whole = null;
+    else if (previewNodeId && (hasPassNode(nodes) || hasAgentsNode(nodes))) {
       const full = compileGraph({ nodes });
       whole = full.success ? full : null;
     }
