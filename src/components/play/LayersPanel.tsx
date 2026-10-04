@@ -62,6 +62,8 @@ import {
   AudioEditor, BodiesEditor, BrushEditor, CameraEditor, ContoursEditor, GlyphsEditor, ImageEditor, LensEditor, NullEditor, ParticlesEditor, ShapeEditor, TextEditor,
   type EditorContext, ClonerEditor, RelationshipEditor, ScriptEditor } from './layers/editors';
 import { AgentsEditor } from './layers/AgentsEditor';
+import { MotionEditor } from './layers/MotionEditor';
+import { motionSourceStart } from '../../play/motionLayers';
 import { RulesSummary } from './rules/RulesSummary';
 import { startRule } from './playSplit';
 import { layerPositionPair } from '../../play/pairs';
@@ -204,7 +206,9 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
     const is3d = variant === 'script3d';
     const n = play.layers.filter(l => l.kind === kind && (kind !== 'script' || (l.kind === 'script' && (l.mode === '3d') === is3d))).length + 1;
     const id = playId('layer');
-    const made = defaultLayer(kind, id, `${is3d ? '3D Script' : KIND[kind].label} ${n}`);
+    const made0 = defaultLayer(kind, id, `${is3d ? '3D Script' : KIND[kind].label} ${n}`);
+    // A Motion layer starts on the camera when there is one, else on the setup's first Video layer.
+    const made = made0.kind === 'motion' ? { ...made0, ...motionSourceStart(play.layers) } : made0;
     // Added while the list shows a group: it goes in that group (not a sealed one: a Granulator's grain nulls).
     onChange(p => { const next = { ...p, layers: [...p.layers, is3d ? ({ ...made, ...script3dDefaults() } as PlayLayer) : made] }; return placeNewLayer(next, id, entered); });
     leaveSealed();
@@ -862,6 +866,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
     case 'bodies': body = <BodiesEditor f={f} ctx={ctx} />; break;
     case 'relationship': body = <RelationshipEditor f={f} ctx={ctx} />; break;
     case 'agents': body = <AgentsEditor f={f} ctx={ctx} />; break;
+    case 'motion': body = <MotionEditor f={f} ctx={ctx} />; break;
     case 'cloner': body = <ClonerEditor f={f} ctx={ctx} />; break;
     case 'script': body = <ScriptEditor f={f} ctx={ctx} />; break;
     case 'background': body = <BackgroundEditor f={f} ctx={ctx} />; break;

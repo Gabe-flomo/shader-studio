@@ -660,7 +660,7 @@ export type CaptureRelease = 'stay' | 'back' | 'value';
 export const DATA_ROW_COLUMN = '#row';
 
 /** Layer kinds with a centre on the picture: what proximity triggers and distance sensors can measure from. */
-export const ANCHOR_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'particles', 'bodies', 'brush', 'script', 'cloner', 'data', 'video', 'relationship', 'agents'];
+export const ANCHOR_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'particles', 'bodies', 'brush', 'script', 'cloner', 'data', 'video', 'relationship', 'agents', 'motion'];
 
 /** Layer kinds a Relationship layer can move: they have an x and a y of their own (a relationship stands at its centroid). */
 export const RELATION_MEMBER_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'cloner', 'data', 'video', 'relationship'];
@@ -679,6 +679,7 @@ export const RELATION_MEMBER_KINDS: readonly string[] = ['null', 'shape', 'text'
 export type SensorRead = 'fill' | 'hover' | 'speed' | 'spread' | 'motion' | 'distance' | 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble' | 'area' | 'perimeter'
   | 'gap' | 'closing' | 'chaseSpeed' | 'sight' | 'catch' | 'sinceCatch' | 'catches' | 'picture'
   | 'alive' | 'centroidX' | 'centroidY' | 'group1' | 'group2' | 'group3' | 'group4' | 'born' | 'died'
+  | 'moveX' | 'moveY' | 'dirX' | 'dirY'
   | 'grains' | 'grainMean' | 'grainSpread' | 'grainLevel' | 'grainPitch' | 'grainPos' | 'grainAmp'
   | 'grainBandMean' | 'grainEnergySum' | 'grainBand' | 'grainEnergy' | 'grainRow';
 /** Granulator reads taken per grain (the grain's number in otherId). */
@@ -690,6 +691,8 @@ export function sensorKey(s: { layerId: string; read: string; otherId?: string }
 /** An Agents layer's readings (docs/agents-layer.md). */
 export const AGENT_READS: readonly SensorRead[] = ['alive', 'speed', 'spread', 'centroidX', 'centroidY', 'group1', 'group2', 'group3', 'group4', 'catch', 'catches', 'born', 'died', 'distance'];
 export const RELATION_READS: readonly SensorRead[] = ['gap', 'closing', 'chaseSpeed', 'sight', 'catch', 'sinceCatch', 'catches', 'picture', 'distance'];
+/** A Motion layer's readings (docs/motion-layer.md): Amount, Area, Where X/Y, Direction X/Y. */
+export const MOTION_READS: readonly SensorRead[] = ['motion', 'area', 'moveX', 'moveY', 'dirX', 'dirY', 'distance'];
 export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
   shape: ['fill', 'hover', 'picture', 'distance'],
   particles: ['speed', 'spread', 'alive', 'born', 'died', 'distance'],
@@ -699,6 +702,7 @@ export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
   text: ['picture', 'distance'], image: ['picture', 'distance'], lens: ['picture', 'distance'], bodies: ['distance'], brush: ['distance'], script: ['distance'], cloner: ['picture', 'distance'], data: ['picture', 'distance'], video: ['picture', 'distance'],
   relationship: RELATION_READS,
   agents: AGENT_READS,
+  motion: MOTION_READS,
   // A Granulator rack, as the sensor pickers list it (layer id `ae:<rackId>`).
   granulator: ['grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainBandMean', 'grainEnergySum', 'grainPos', 'grainAmp', 'grainBand', 'grainEnergy', 'grainRow'],
 };
@@ -816,7 +820,7 @@ export type {
   BlendMode, MatteMode, NullLayer, TextLayer, ImageLayer, ParticlesLayer, ParticleField, ParticleShape, ParticleModulator,
   ShapeLayer, ZoneAction, AudioLayer, GlyphsLayer, ContoursLayer, LensLayer, BrushLayer, BodiesLayer, CameraLayer, VideoLayer, VideoFit, VideoSound,
   PlayLayer, PlayLayerKind, LayerNumericProp, BackgroundLayer, BackgroundItem, BackgroundItemKind, DataLayer, DataView, DataSplit, TrackMatte, LayerMask, MaskShape, MaskOp, MaskProp,
-  RelationshipLayer, RelationMember, RelationKind, RelationRole, RelationWall, PictureChannel,
+  RelationshipLayer, RelationMember, RelationKind, RelationRole, RelationWall, PictureChannel, MotionLayer, MotionShow,
 } from './playLayers';
 export { LAYER_KINDS, LAYER_NUMERIC_PROPS, layerNumericProps, defaultLayer, parseLayer, queueSlot, videoLayerTimeAt, videoReaderInput, videoLayerOfInput, RELATION_MAX_MEMBERS, relationPictureKey, newRelationMember } from './playLayers';
 import { parseTakeDataFeeds, type TakeDataFeed } from '../data/streams/takeDataTypes';
@@ -1671,7 +1675,7 @@ function parseHands(v: unknown): PlayHands | null {
   return out;
 }
 
-const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble', 'area', 'perimeter', 'gap', 'closing', 'chaseSpeed', 'sight', 'catch', 'sinceCatch', 'catches', 'picture', 'alive', 'born', 'died', 'grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainPos', 'grainAmp', 'grainBandMean', 'grainEnergySum', 'grainBand', 'grainEnergy', 'grainRow']);
+const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble', 'area', 'perimeter', 'gap', 'closing', 'chaseSpeed', 'sight', 'catch', 'sinceCatch', 'catches', 'picture', 'alive', 'born', 'died', 'grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainPos', 'grainAmp', 'grainBandMean', 'grainEnergySum', 'grainBand', 'grainEnergy', 'grainRow', 'moveX', 'moveY', 'dirX', 'dirY']);
 
 function parseAction(raw: unknown): PlayAction | null {
   if (!raw || typeof raw !== 'object') return null;

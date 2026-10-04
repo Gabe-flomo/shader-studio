@@ -33,6 +33,7 @@ import layersSource from './kit/layers.js?raw';
 import bodiesSource from './kit/bodies.js?raw';
 import relationshipSource from './kit/relationship.js?raw';
 import agentsSource from './kit/agents.js?raw';
+import motionSource from './kit/motion.js?raw';
 import handsSource from './kit/hands.js?raw';
 import tracksSource from './kit/tracks.js?raw';
 import faceSource from './kit/face.js?raw';
@@ -191,11 +192,11 @@ const AUDIO_BAND_READS = new Set(['level', 'bass', 'lowmid', 'highmid', 'treble'
 
 const sizeText = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
-/** Does a Play read the camera (a Camera layer, or particles, glyphs or contours reading from it)? As the runtime decides. */
+/** Does a Play read the camera (a Camera layer, or particles, glyphs, contours or a Motion layer reading from it)? As the runtime decides. */
 export function playUsesCamera(play: PlayRecord): boolean {
-  // A hidden layer still reads the camera when it is another layer's matte.
+  // A hidden layer still reads the camera when it is another layer's matte; a Motion layer always measures.
   const mattes = new Set(play.layers.map(l => l.trackMatte?.id ?? ''));
-  return play.layers.some(l => (l.visible || mattes.has(l.id)) && (l.kind === 'camera' || ((l.kind === 'particles' || l.kind === 'glyphs' || l.kind === 'contours') && l.readFrom === 'camera')));
+  return play.layers.some(l => (l.kind === 'motion' && l.readFrom === 'camera') || ((l.visible || mattes.has(l.id)) && (l.kind === 'camera' || ((l.kind === 'particles' || l.kind === 'glyphs' || l.kind === 'contours') && l.readFrom === 'camera'))));
 }
 
 /**
@@ -439,7 +440,7 @@ function runtimeOptions(o: EmbedOptions) {
  * createLayerKit. The kit's files keep their top-level names distinct so
  * they can share this scope.
  */
-export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, p5Source, fontsSource, glyphsSource, layersSource, mattesSource, bodiesSource, relationshipSource, agentsSource, handsSource, tracksSource, faceSource, poseSource, queueSource, dataSource, midiSource, kitSource, finishGlslSource, finishSource, signalsSource, routesSource, incrementSource, audioFxSource, drumPadsSource, granulatorSource, macrosSource, fnSource, spreadSource, jfaSource, gpuParticlesSource];
+export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, p5Source, fontsSource, glyphsSource, layersSource, mattesSource, bodiesSource, relationshipSource, agentsSource, motionSource, handsSource, tracksSource, faceSource, poseSource, queueSource, dataSource, midiSource, kitSource, finishGlslSource, finishSource, signalsSource, routesSource, incrementSource, audioFxSource, drumPadsSource, granulatorSource, macrosSource, fnSource, spreadSource, jfaSource, gpuParticlesSource];
 export function kitScript(): string {
   const body = KIT_SOURCES.map(src => src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
   return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, tracks: { decode: tkDecode, fromBase64: tkFromBase64, driver: tkDriver, drive: tkDrive, handsFrame: tkHandsFrame, videoTime: tkVideoTime, subjectAge: tkSubjectAge }, face: { create: fcCreate, update: fcUpdate, read: fcRead, gate: fcGate, point: fcPoint }, pose: { create: psCreate, update: psUpdate, read: psRead, gate: psGate, point: psPoint }, data: { unit: kdUnit, column: kdColumn }, midi: { lockRecord: kmLockRecord, lockRead: kmLockRead, rangeRead: kmRangeRead, noteUnit: kmNoteUnit, gridFit: kmGridFit, gridMessage: kmGridMessage, gridFill: kmGridFill, gridRead: kmGridRead }, finish: { create: fnCreate, active: fnActive, mapLayers: fnMapLayers, usesMotion: fnUsesMotion, looks: { create: fnLookNew, act: fnLookAct, step: fnLookStep, value: fnLookValue, reset: fnLookReset, is: fnLookIs } }, audioFx: { chain: afCreateChain, loadWorklet: afLoadWorklet, needsWorklet: afNeedsWorklet }, drumPads: { sampler: dpCreateSampler, numbers: dpHitNumbers, key: dpKey, synth: dpSynthBuffer, padOfKey: dpPadOfKey, padOfNote: dpPadOfNote, padOfCell: dpPadOfCell, slots: dpSlots, pick: dpPickPad, hash: dpHash01 }, granulator: { create: grCreate, settings: grSettings, summary: grSummary, synth: grSynthBuffer, params: GR_PARAMS, fromPoints: grFromPoints }, macros: { curve: mcCurve, value: mcTargetValue }, signals: { gate: sgGate, condNew: sgCondNew, condStep: sgCondStep, condRewind: sgCondRewind, logic: sgLogic, order: sgSignalOrder, signalPlan: sgSignalPlan, levelDeps: sgLevelDeps, pulseLinks: sgPulseLinks, reactions: sgReactions, shapeNew: sgShapeNew, shapeRewind: sgShapeRewind, shaped: sgShaped, shapeStep: sgShapeStep, lagNew: sgLagNew, lagStep: sgLagStep, linkPlan: sgLinkPlan, linkNew: sgLinkNew, linkClear: sgLinkClear, linkFire: sgLinkFire, linkDue: sgLinkDue, runActions: sgRunActions, swapNew: sgSwapNew, swapStep: sgSwapStep, parseRef: sgParseValueRef, point: sgScreenPoint, valueKey: sgValueKey, depth: SG_DEPTH }, routes: { state: rtNew, sourcesOf: rtSourcesOf, frame: rtFrame, rewind: rtRewind, curve: rtCurve, map: rtMap, triggersOf: rtTriggersOf }, increment: { create: incNew, range: incRange, fold: incFold, threshold: incThreshold, repeat: incRepeat, advance: incAdvance, reset: incReset, glide: incGlide }, fn: { eval: fnEval }, spread: { weight: spWeight, weights: spWeights, value: spValue }, jfa: { create: jfCreate }, gpuParticles: { host: gpHost, readback: gpReadback, slots: gpProbeSlots, probeField: gpProbeField, vol: GP_VOL, volTiles: GP_VOL_TILES } };\n})();\n`;

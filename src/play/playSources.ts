@@ -515,9 +515,10 @@ export function repeatHint(what: ActionKind | `mode:${TriggerMode}`, fire: FireS
 }
 
 export const SENSOR_LABELS: Record<SensorRead, string> = {
-  fill: 'Fill', hover: 'Hover', speed: 'Speed', spread: 'Spread', motion: 'Motion', distance: 'Distance', level: 'Level', bass: 'Bass', lowmid: 'Low-mid', highmid: 'High-mid', treble: 'Treble', area: 'Area', perimeter: 'Perimeter',
+  fill: 'Fill', hover: 'Hover', speed: 'Speed', spread: 'Spread', motion: 'Motion amount', distance: 'Distance', level: 'Level', bass: 'Bass', lowmid: 'Low-mid', highmid: 'High-mid', treble: 'Treble', area: 'Area', perimeter: 'Perimeter',
   alive: 'Alive', centroidX: 'Centre X', centroidY: 'Centre Y', group1: 'Group 1 alive', group2: 'Group 2 alive', group3: 'Group 3 alive', group4: 'Group 4 alive',
   born: 'Born this step', died: 'Died this step',
+  moveX: 'Where X', moveY: 'Where Y', dirX: 'Direction X', dirY: 'Direction Y',
   gap: 'Gap', closing: 'Closing', chaseSpeed: 'Chase speed', sight: 'In sight', catch: 'Catch', sinceCatch: 'Since catch', catches: 'Catches', picture: 'Picture',
   grains: 'Grain count', grainMean: 'Grain position', grainSpread: 'Grain spread', grainLevel: 'Grain level', grainPitch: 'Grain pitch', grainPos: 'One grain’s position', grainAmp: 'One grain’s level',
   grainBandMean: 'Grain band (mean)', grainEnergySum: 'Grain energy', grainBand: 'One grain’s band', grainEnergy: 'One grain’s energy', grainRow: 'One grain’s row',
@@ -527,9 +528,13 @@ export const SENSOR_HINTS: Record<SensorRead, string> = {
   hover: '1 while the pointer is over the shape, else 0.',
   speed: 'How fast the particles (or agents) are moving on average, against their Speed setting (agents: against the Max speed rule, else a picture height per second).',
   spread: 'Particles: how spread out they are, near 0 in a clump, near 1 everywhere. A path shape: its points’ mean distance from their centre, 1 at half a picture height or more.',
-  area: 'A path shape: the share of the picture it covers, 0 to 1 (lines and webs: the area their points span). Fades with the shape.',
+  area: 'A path shape: the share of the picture it covers, 0 to 1 (lines and webs: the area their points span). Fades with the shape. A Motion layer: the share of its grid that is moving.',
   perimeter: 'A path shape: its outline’s length (a web: all its links), 1 as long as the picture’s own edge.',
-  motion: 'How much is moving in front of the camera.',
+  motion: 'How much is moving: in front of the camera (a Camera layer), or in a Motion layer\'s source (its Amount: 0 still, about 0.2 a hand waving in a corner, 1 the whole picture moving).',
+  moveX: 'A Motion layer: where the movement is across the picture (its centre), 0 the left edge, 1 the right. Stays where it was while nothing moves.',
+  moveY: 'A Motion layer: where the movement is up the picture (its centre), 0 the bottom, 1 the top. Stays where it was while nothing moves.',
+  dirX: 'A Motion layer: which way things move across the picture. 0.5 is still (or up and down only), 1 rightward and 0 leftward at 1.5 picture heights a second or faster.',
+  dirY: 'A Motion layer: which way things move up the picture. 0.5 is still, 1 upward and 0 downward at 1.5 picture heights a second or faster.',
   distance: 'How far this layer’s centre is from another layer or a point on a hand: 0 touching, 1 a picture height or more.',
   level: 'How loud the layer’s sound is overall (its Gain scales it).',
   bass: 'Bass, 25–150 Hz: kicks and bass lines.',

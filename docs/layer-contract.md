@@ -21,6 +21,8 @@ capture it and move a layer there ("when a particle annihilates, the circle
 jumps to where it happened"). A signal made with **New** beside a particle
 event takes that position already. No position before the first event.
 
+A **Motion** layer's readings (Amount, Area, Where X/Y, Direction X/Y) are listed the same way; see docs/motion-layer.md.
+
 Readings are 0 to 1 except the counts (Born this step, Died this step): a
 percent condition on those uses the range seen so far (`readingRange`).
 
