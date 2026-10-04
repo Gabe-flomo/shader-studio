@@ -19,11 +19,42 @@ export function sameLive(a: ControlValue | undefined, b: ControlValue | undefine
   return false;
 }
 
+// ── Polled readings on one shared frame ─────────────────────────────────────
+
+/** The pollers that run every `ms`, and when they last ran. */
+type Bucket = { ms: number; last: number; fns: Set<(t: number) => void> };
+const buckets = new Map<number, Bucket>();
+let pollRaf = 0;
+function pollLoop(t: number): void {
+  let any = false;
+  for (const b of buckets.values()) {
+    if (!b.fns.size) continue;
+    any = true;
+    if (t - b.last < b.ms) continue;
+    b.last = t;
+    for (const f of b.fns) f(t);
+  }
+  pollRaf = any ? requestAnimationFrame(pollLoop) : 0;
+}
+
+/**
+ * Run `f` about every `ms` on one shared animation frame. Everything with the
+ * same pace runs in the same frame, so React renders their updates together
+ * (one commit, not one per meter on its own clock).
+ */
+export function onPollFrame(f: (t: number) => void, ms: number): () => void {
+  let b = buckets.get(ms);
+  if (!b) { b = { ms, last: 0, fns: new Set() }; buckets.set(ms, b); }
+  b.fns.add(f);
+  if (!pollRaf && typeof requestAnimationFrame === 'function') pollRaf = requestAnimationFrame(pollLoop);
+  return () => { b.fns.delete(f); };
+}
+
 /** A store over `read` (playEngine.liveValue in the app; tests pass their own and drive `poll`). */
 export function createLiveValueStore(read: Read, schedule = true) {
   const listeners = new Map<string, Set<() => void>>();
   const shown = new Map<string, ControlValue>();
-  let raf = 0, last = 0;
+  let stop: (() => void) | null = null;
   const copy = (v: ControlValue): ControlValue => (Array.isArray(v) ? [v[0], v[1], v[2]] : v);
   /** Read each watched control; tell its listeners when its value moved. */
   const poll = (): void => {
@@ -33,12 +64,6 @@ export function createLiveValueStore(read: Read, schedule = true) {
       if (v === undefined) shown.delete(id); else shown.set(id, copy(v));
       for (const l of set) l();
     }
-  };
-  const tick = (t: number): void => {
-    raf = listeners.size ? requestAnimationFrame(tick) : 0;
-    if (t - last < 33) return;
-    last = t;
-    poll();
   };
   return {
     poll,
@@ -52,13 +77,13 @@ export function createLiveValueStore(read: Read, schedule = true) {
         if (v === undefined) shown.delete(id); else shown.set(id, copy(v));
       }
       set.add(l);
-      if (schedule && !raf && typeof requestAnimationFrame === 'function') raf = requestAnimationFrame(tick);
+      if (schedule && !stop) stop = onPollFrame(poll, 33);
       return () => {
         const s = listeners.get(id);
         if (!s) return;
         s.delete(l);
         if (!s.size) { listeners.delete(id); shown.delete(id); }
-        if (!listeners.size && raf) { cancelAnimationFrame(raf); raf = 0; }
+        if (!listeners.size && stop) { stop(); stop = null; }
       };
     },
     get(id: string): ControlValue | undefined { return shown.get(id); },
@@ -67,21 +92,6 @@ export function createLiveValueStore(read: Read, schedule = true) {
 }
 
 const store = createLiveValueStore(id => playEngine.liveValue(id));
-
-// ── Polled readings on one shared frame ─────────────────────────────────────
-
-const pollers = new Set<(t: number) => void>();
-let pollRaf = 0;
-function pollLoop(t: number): void {
-  pollRaf = pollers.size ? requestAnimationFrame(pollLoop) : 0;
-  for (const f of pollers) f(t);
-}
-/** Run `f` on the shared animation frame until the returned function is called. */
-export function onPollFrame(f: (t: number) => void): () => void {
-  pollers.add(f);
-  if (!pollRaf) pollRaf = requestAnimationFrame(pollLoop);
-  return () => { pollers.delete(f); };
-}
 
 /**
  * A number read every `ms` while `on` (a meter): the component renders again
@@ -94,12 +104,7 @@ export function usePolledNumber(read: () => number, on: boolean, ms: number, fal
   const [v, setV] = useState(fallback);
   useEffect(() => {
     if (!on) return;
-    let last = 0;
-    return onPollFrame(t => {
-      if (t - last < ms) return;
-      last = t;
-      setV(readRef.current());
-    });
+    return onPollFrame(() => setV(readRef.current()), ms);
   }, [on, ms]);
   return on ? v : fallback;
 }

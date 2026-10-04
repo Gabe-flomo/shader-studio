@@ -89,3 +89,27 @@ describe('createLiveValueStore', () => {
     expect(store.get('a')).toBeUndefined();
   });
 });
+
+describe('onPollFrame', () => {
+  it('runs pollers of one pace in the same frame, each at its pace, and stops when none are left', async () => {
+    const frames: Array<(t: number) => void> = [];
+    vi.stubGlobal('requestAnimationFrame', (f: (t: number) => void) => { frames.push(f); return frames.length; });
+    vi.resetModules();
+    const { onPollFrame } = await import('../liveValueStore');
+    const runFrame = (t: number) => { const f = frames.shift(); f?.(t); };
+    const a: number[] = [], b: number[] = [], c: number[] = [];
+    const offA = onPollFrame(t => a.push(t), 50);
+    const offB = onPollFrame(t => b.push(t), 50);
+    const offC = onPollFrame(t => c.push(t), 33);
+    for (let t = 100; t <= 300; t += 1000 / 60) runFrame(t);
+    expect(a).toEqual(b); // the same frames
+    expect(a.length).toBeGreaterThanOrEqual(4);
+    for (let i = 1; i < a.length; i++) expect(a[i] - a[i - 1]).toBeGreaterThanOrEqual(50);
+    for (let i = 1; i < c.length; i++) expect(c[i] - c[i - 1]).toBeGreaterThanOrEqual(33);
+    expect(c.length).toBeGreaterThan(a.length);
+    offA(); offB(); offC();
+    runFrame(400);
+    expect(frames.length).toBe(0); // the loop stopped
+    vi.unstubAllGlobals();
+  });
+});
