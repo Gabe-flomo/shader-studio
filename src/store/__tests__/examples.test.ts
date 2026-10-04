@@ -6,6 +6,7 @@ import { getNodeDefinition, resolveNodeAliases } from '../../nodes/definitions';
 import { EXAMPLE_GRAPHS } from '../exampleGraphs';
 import { EXAMPLE_FOLDERS, EXAMPLE_INDEX } from '../exampleIndex';
 import { PLAY_EXAMPLE_KEYS } from '../playExampleIndex';
+import { PASS_EXAMPLE_KEYS } from '../passExamples';
 import type { GraphNode } from '../../types/nodeGraph';
 import { agentPreset, slimeMoldPreset } from '../agentExamples';
 import { AGENT_PRESET_TYPES } from '../../nodes/definitions/agents';
@@ -178,6 +179,23 @@ describe('bundled examples', () => {
       });
     }
     expect(bad).toEqual([]);
+  });
+
+  it('every node of a Passes example has a plain-language note, and its Expression Blocks explain each named line', () => {
+    // The user's rule for the Pass examples (docs/pass-node-plan.md): every card says what it does and why.
+    const passKeys = PASS_EXAMPLE_KEYS;
+    expect(passKeys.length).toBeGreaterThanOrEqual(6);
+    const missing: string[] = [];
+    for (const k of passKeys) walk(EXAMPLE_GRAPHS[k].nodes, nd => {
+      const note = String(nd.params?.__comment ?? '');
+      if (note.trim().length < 20) missing.push(`${k}: ${nd.id} (${nd.type})`);
+      if (nd.type !== 'exprNode') return;
+      for (const line of (nd.params.lines ?? []) as Array<{ lhs: string }>) {
+        const name = line.lhs.trim().split(/\s+/).pop()!;
+        if (!new RegExp(`(^|\\W)${name}( = [^\\n:]*)?:`, 'm').test(note)) missing.push(`${k}/${nd.id}: line "${name}" is not explained in the note`);
+      }
+    });
+    expect(missing).toEqual([]);
   });
 
   it('the field-socket combos compile their shapes as field functions (one per wired socket)', () => {

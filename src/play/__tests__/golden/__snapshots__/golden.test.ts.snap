@@ -1003,6 +1003,45 @@ exports[`golden outputs: examples > passEdgeGlow 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > passFeedbackTrails 1`] = `
+{
+  "decay": "- x120",
+  "swirl": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > passGlowBright 1`] = `
+{
+  "glow": "- x120",
+  "threshold": "- x120",
+  "wide": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > passParticleEdges 1`] = `
+{
+  "curl": "- x120",
+  "edge": "- x120",
+  "life": "- x120",
+  "rise": "- x120",
+  "strength": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > passReactionDiffusion 1`] = `
+{
+  "feed": "- x120",
+  "kill": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > passSlimeEdges 1`] = `
+{
+  "strength": "- x120",
+  "width": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > pianoRollScale 1`] = `
 {
   "decay": "- x120",

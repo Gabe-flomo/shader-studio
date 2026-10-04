@@ -2,6 +2,30 @@
 
 **Status:** phases 0 to 6 built (Pass node, Sample / Edges / Blur / Glow / Displace (texture), Previous feedback, live and offline rendering, exported web pages, inspecting a pass, and Particles born from a Pass: see the "What shipped" sections below). Phase 7 is next.
 
+## What shipped (phase 6, particles from a Pass, 2026-10-04)
+
+**In plain words.** The Particles node has a new socket, **Emit from**. Wire a Pass's Texture into it and the particles are born where that texture is bright, all over the picture: wire Edges (texture) through a Pass and sparks come off the outlines of whatever moves. **Image threshold** sets how bright a place must be (brighter places get more births). The emitter's own shape still gives each particle its speed, direction and life; only where it is born changes. A particle that finds nowhere bright enough waits for its next turn, so a sparse texture has fewer particles alive (raise Brightness). Obstacle and Flow already read any chain, so a Sample (texture) of a Pass wired into Flow or Obstacle steers the particles with a pass; those passes now draw before the particles too.
+
+**Zero-change.** Unwired, the node compiles exactly as before: its declaration line (`GP_MARK`, the engine's settings comment) is the same text, nothing else is added, and no pass is reordered. Wired, it writes one more comment into its code, `// gpu-particles-from <its sampler> <the pass's sampler>` (`GP_FROM_MARK`), which `gpBindings` reads into the binding's `from`. The engine's shaders (`GP_SHADERS`, the gpEngineShaders snapshot) are unchanged: births from a texture use `GP_SIM_FROM_SHADER`, built from `GP_SIM` with only `gpSpawn` changed (the shape's birth becomes `gpSpawnShape`, and the new `gpSpawn` keeps its speed and life and moves the place onto the texture), linked the first time a node needs it. `gpFromBirth` is the same search in JS for the tests: up to 16 random points of the texture, each kept with a chance of its luma × alpha when that is at least the threshold; none kept, not born this time. Seeded from the particle and the substep, so a render is the same every time.
+
+**Frame order.** A pass a Particles node reads (anything wired into it but Over and UV, through other passes) is marked `beforeParticles` by the compiler (only when true; a pass with a Particles node in it, or one drawn after the agents, can't be, and the particles then read its previous frame). `kit/passPlan.js` gains `ppFrameSteps`: the passes the particles read, the particles, the passes the agents read, the agents, the passes after them; the app's live loop and exported pages both run it (`ppStaged` takes a `part`, 'particles' or 'rest'). An offline render draws the `beforeParticles` passes at its own time and size before stepping the particles. `ppPrevBound` fixes a pass drawn in an earlier call of the frame (the 'pre' stage with agents, or before the particles): its Previous sampler keeps the frame before instead of being pointed at the picture it just drew.
+
+**Websites.** The bundle's passes carry `beforeParticles` when set; the page's particles engine looks for Particles nodes in every pass program, binds their textures as shared samplers, samples Emit from through the pass textures, and runs the same `ppFrameSteps`.
+
+**The Agents group** already took a Pass: Emit's **Picture** (shape Picture) accepts a Pass's Texture (verified: the group's update shader samples it and the pass draws in the 'pre' stage, before the agents), and a Trail's **Add** or Emit's **Where ƒ** can read a chain through Edges (texture) of a Pass (Passes 6 · Slime along edges).
+
+**Examples (the Passes folder).** Every node has a plain-language note; Expression Blocks explain each named line (the examples test checks it).
+- **Passes 2 · Particles born on edges**: drifting metaballs → Pass A → Edges (texture) → Pass B (½) → Particles' Emit from; a rim glow (Blur (texture) of Pass B) and the blobs laid over the sparks.
+- **Passes 3 · Feedback trails**: three lights; Sample (texture) reads the Trails pass's Previous, zoomed and turned (Swirl), faded (Decay) and cooled; Play controls Decay and Swirl.
+- **Passes 4 · Reaction-diffusion**: Gray-Scott in a ½ Pass, the neighbours from Blur (texture) of its Previous, a wandering seed; Feed and Kill in Play.
+- **Passes 5 · Glow only the bright parts**: a neon sign; a threshold keeps the tubes, Pass B (½) and Pass C (⅛) give a tight halo and a wide bloom, added over Pass A. Its notes are the "how to inspect a pass" guide.
+- **Passes 6 · Slime along edges**: the Grow toward a picture slime fed by Edges (texture) of a Pass: walkers are born on the outlines and smell them through the trail.
+- Passes 1 · Edge glow gained notes on its UV, Time and Output cards (comment lines only).
+
+**Checked.** All 308 examples load and compile on the GPU (ANGLE Metal, M3 Pro) with no GLSL errors. Offline sequences of Passes 2 at 640 × 360 hash the same whatever the live preview is doing; the exported page of Passes 2 runs the sparks off the outlines.
+
+**Not done (phase 7 and later).** Emit from samples the whole picture (the emitter's shape isn't a mask over it, as the plan first said). Births in 3D land on the picture's plane (z = 0). Emit from reads a texture only (a Trail's texture works too, a frame late). Offline renders of agents that read a Pass still step the agents before drawing those passes: that fix is a separate change (renderAtTime is left as it was for agents).
+
 ## What shipped (phase 3, inspecting, 2026-10-04)
 
 **How to inspect a pass.** Everything that reads a node's value now reads it from the program the node runs in, so the tools you use on any node work on the nodes inside a Pass too:
@@ -26,7 +50,7 @@
 - **One uniform table, as in the app.** Each pass program is compiled as three.js compiles a ShaderMaterial (the GLSL 1 → 3 defines and its precisions) with the compile's vertex shader, drawn on the quad the app draws (three's `PlaneGeometry(2, 2)`: its diagonal and vertex order, so vUv interpolates exactly as in the app; Agents P5 needed it bit for bit), and with every input the picture has (`bindPictureInputs`: Time, the mouse, the uniforms Play drives, images, videos, Data textures, feedback, echo, the pad grid), `u_resolution` set to the pass's own size. The pass samplers and their `_px` are two small maps the runtime binds in every program it draws (empty, and so no work, without Pass nodes). Samplers nothing feeds read blank, as the app's empty texture. Data nodes, Text and the Pad Grid in a pass program are found by scanning every program's source, not only the picture's.
 - **Page behaviour.** A page with Pass nodes draws at one device pixel per CSS pixel, as feedback pages do and as the app does. A pass with Previous keeps the page drawing like feedback (paused, it redraws only when something changes), and reduced motion's still frame warms it up like feedback. Without WebGL2 the page draws the picture with the pass samplers blank (and says so in the console).
 - **Parity** (`src/play/__tests__/webPasses.test.ts`): the app's `PassRunner` and the page's host, each on a recording stand-in for its GPU, draw the same passes into the same textures at the same sizes with the same `u_resolution` and Previous, frame after frame, through a resize, a cleared render and the two agents stages, for Passes 1 · Edge glow and a feedback graph (Previous at ½, an 8-bit nearest/repeat ¼ pass as a map, Displace and Glow). In the browser (M3 Pro, headless Chrome on ANGLE Metal): the app's offline render and the exported page's `renderAt` after 2 s at 960 × 540 differ by at most 2 levels of 255 (the app's readback dither; mean 0.26 for Edge glow, 0.18 for the feedback graph), and the page running live shows the same picture.
-- **Not in pages yet:** a Particles node reading a texture inside a pass program (the app doesn't either); phase 3's inspection is app-only by nature.
+- **Not in pages yet:** phase 3's inspection is app-only by nature. (A Particles node inside a pass program, and Emit from, came in phases 3 and 6.)
 
 
 ## In plain words
@@ -202,10 +226,10 @@ This depends on the GPU Particles node (on `claude/release-oct-particles`, not o
 0. **Golden shaders (no Pass code).** Add `src/compiler/__tests__/goldenShaders.test.ts`: for every `EXAMPLE_GRAPHS` entry, the learn examples and the compiler fixtures, snapshot `compileGraph`'s `fragmentShader` (full text, or sha256 plus length for large ones), the uniform name sets, `isStateful`, `echo` and `particleSystems`. Also snapshot `buildPlayHtml`'s bundle JSON for the Play examples. Merge on main first.
 1. **Compiler cut.** Add the Pass node, the `texture` socket type, `passGraph.ts` and the `slugs` option. Pass stays hidden from the node browser. Unit tests: program lists, order, slug stability, the `previous` cycle cut, the group errors, sampler-count errors. Golden snapshots unchanged.
 2. **Live + offline rendering.** `passRunner.ts` and `passPlan.js`. Pass visible, plus Sample, Edges and Blur (texture), the card thumbnail, texture wires and the boundary chip. `renderAtTime` support. Export warns via `unsupportedFeatures`. Example 1 added.
-3. **Inspecting.** Probes, eye preview and scopes in pass programs. Per-pass Performance rows. Node-cost measurer over the program list. The Show passes toggle.
+3. **Inspecting.** Probes, eye preview and scopes in pass programs. Per-pass Performance rows. Node-cost measurer over the program list. The Show passes toggle. *(Built: see What shipped (phase 3).)*
 4. **More nodes.** Glow, Displace, the `previous` output (feedback). Examples: glow edges, reaction-diffusion at ½ Scale.
 5. **Websites.** Runtime runs passes. Removed from `unsupportedFeatures`. Parity test plus browser sweep. *(Built: see What shipped.)*
-6. **Particles from a Pass.** After GPU Particles is on main: `emitFrom`, the engine's birth sampling, Example 2.
+6. **Particles from a Pass.** After GPU Particles is on main: `emitFrom`, the engine's birth sampling, Example 2. *(Built: see What shipped (phase 6).)*
 7. **Later.** Texture ports through plain groups. "Repeat N times" passes (wide separable blur, JFA, simulations). Texture Input or Video as a direct texture source, without a copy Pass.
 
 ## Tests

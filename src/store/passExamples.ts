@@ -7,13 +7,16 @@
  */
 import type { ExampleGraph } from './exampleIndex';
 import type { PlayRecord } from '../types/play';
-import { ctl, n, out, time, uv } from './graphBuilder';
+import { ctl, n } from './graphBuilder';
+import { buildPassExamplesMore, PASS_EXAMPLE_INDEX_MORE } from './passExamplesMore';
 
 export const PASS_EXAMPLE_INDEX: Record<string, { label: string; description: string; play: true }> = {
   passEdgeGlow: {
     label: 'Passes 1 · Edge glow', play: true,
     description: 'Render to texture, chained: a picture is drawn into a Pass, Edges (texture) finds its outlines by reading the pixels around each one, a second Pass at half size holds the edges, Blur (texture) spreads them into a glow, and an Expression Block lays the glow over the original. Every step is in the same frame.',
   },
+  // Passes 2 to 5 (passExamplesMore.ts): particles born on edges, feedback trails, reaction-diffusion, glow the bright parts.
+  ...PASS_EXAMPLE_INDEX_MORE,
 };
 
 /** The ordered keys, for the Passes folder. */
@@ -67,8 +70,8 @@ export function buildPassExamples(): Record<string, ExampleGraph> {
     ...PASS_EXAMPLE_INDEX.passEdgeGlow,
     counter: 40,
     nodes: [
-      uv(40, 160),
-      time(40, 400),
+      n('uv', 'uv', 40, 160, note('UV: this pixel\'s place in the picture (centred, a picture height is 2). The noise below is read at it.')),
+      n('time', 'time', 40, 400, note('Time: seconds since the clock started. It drifts the noise, so the bands and their edges keep moving.')),
       n('fbm', 'noise', 300, 220, { scale: 2.2, time_scale: 0.12, octaves: 4,
         ...note('The picture to outline, made in the graph so the example needs no image: slow fractal noise drifting with Time. Any picture works here: a Texture Input, a Video, a 3D scene.') },
         { uv: ['uv', 'uv'], time: ['time', 'time'] }),
@@ -96,7 +99,7 @@ export function buildPassExamples(): Record<string, ExampleGraph> {
       n('constant', 'glowGain', 1860, 640, { value: 2.2, label: 'Glow gain',
         ...note('How bright the glow is. A constant (not a slider inside the Expression Block) so Play can drive it: see the Glow control.') }),
       composite,
-      out(['glowOver', 'result'], 2640, 300),
+      n('output', 'out', 2640, 300, note('Output: the final picture, the glow laid over the picture. This program runs last, after Pass A and Pass B have drawn their textures.'), { color: ['glowOver', 'result'] }),
     ],
     play: playRecord([
       ctl('gain', 'glowGain::value', 'Glow', 0, 6, 0.05),
@@ -110,5 +113,6 @@ export function buildPassExamples(): Record<string, ExampleGraph> {
 **Try.** Raise Glow width: at ½ size it stays cheap. Set Pass B's Scale to ¼ for a softer, cheaper glow, or to 1 for a tighter one. Wire Pass A's Color straight to the Output to see the picture alone, or Pass B's to see just the edges. Swap the noise for a Texture Input to outline a photo.`),
   };
 
+  Object.assign(graphs, buildPassExamplesMore());
   return graphs;
 }
