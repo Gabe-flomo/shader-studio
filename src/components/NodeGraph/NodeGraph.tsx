@@ -7,7 +7,8 @@ import { canFollowHand, followHand } from '../../play/followHand';
 import { NodeComponent } from './NodeComponent';
 import { NodeSearchPalette } from './NodeSearchPalette';
 import { CanvasToolbar } from '../shell/CanvasToolbar';
-import { registerSocket, setLayoutZoomGetter, getSocketOffset, getDragPosition, publishView, getCardSize, isDragging, subscribeCardSizes, forgetNodeLayout, type Pt } from './socketRegistry';
+import { setVizScale, vizScaleForZoom } from './vizKit';
+import { registerSocket, remeasureAllSockets, setLayoutZoomGetter, getSocketOffset, getDragPosition, publishView, getCardSize, isDragging, subscribeCardSizes, forgetNodeLayout, type Pt } from './socketRegistry';
 import { WireLayer, type EdgeInfo } from './WireLayer';
 import { buildNodeErrors } from '../../compiler/nodeErrors';
 import { suggestConnections, type Suggestion } from './smartConnect';
@@ -79,7 +80,8 @@ const CRISP_ZOOM = typeof navigator !== 'undefined' && (
   (/AppleWebKit/.test(navigator.userAgent) && !/Chrome|Chromium|Edg\//.test(navigator.userAgent))
   || (() => { try { return localStorage.getItem('shader-studio:crisp-zoom') === '1' || /[?&]crispZoom\b/.test(location.search); } catch { return false; } })()
 );
-const CRISP_ZOOM_SETTLE_MS = 250;
+/** How long the zoom holds still before it counts as settled (layout zoom, sharp canvases). Trackpad pinch events come every frame, so this is well clear of a gesture. */
+const CRISP_ZOOM_SETTLE_MS = 160;
 
 export const NodeGraph = React.memo(function NodeGraph({ transparent = false, redesignToolbar = false, locked = false }: {
   transparent?: boolean;
@@ -379,29 +381,48 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   const worldRef = useRef<HTMLDivElement>(null);
   const zoomLayerRef = useRef<HTMLDivElement>(null);
   // WebKit (the desktop app, Safari) draws a scaled layer from its unscaled pixels: zoomed in, cards
-  // look like an enlarged picture. Once the zoom stops changing it becomes layout zoom, which WebKit
-  // lays out and draws at full sharpness; while it changes it stays a cheap scale. Chromium re-sharpens a
-  // scale by itself, so it keeps the scale.
+  // look like an enlarged picture. Once a zoom above 100% stops changing it becomes layout zoom, which
+  // WebKit lays out and draws at full sharpness; while it changes it stays a cheap scale. Chromium
+  // re-sharpens a scale by itself, so it keeps the scale.
+  //
+  // Below 100% it always stays a scale. Layout zoom there runs into WebKit's minimum font size: any text
+  // set at 9px or more is never drawn smaller than 9px (12px at 40% came out 22.5px in layout terms), so
+  // labels overflowed their cards, values clipped and wires missed their sockets; a scale shrinks a card
+  // as one picture, and zoomed out there are more pixels than it needs, so it stays sharp.
+  //
+  // Every zoom that holds still for CRISP_ZOOM_SETTLE_MS "settles": the sockets are re-measured against
+  // the layout it ended on, and the cards' canvases redraw at device pixels × zoom (setVizScale).
   const crispTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settleZoom = useCallback((z: number) => {
+    crispTimer.current = null;
+    const el = zoomLayerRef.current;
+    if (!el || el.dataset.z !== String(z)) return;
+    if (CRISP_ZOOM && z > 1) {
+      el.style.transform = '';
+      el.style.zoom = String(z);
+      el.dataset.mode = 'zoom';
+    }
+    setVizScale(vizScaleForZoom(z));
+    // The next frame has the settled layout; measure then (not now, which would force it mid-task).
+    requestAnimationFrame(remeasureAllSockets);
+  }, []);
   const applyZoomLayer = useCallback((z: number) => {
     const el = zoomLayerRef.current;
     if (!el) return;
-    if (!CRISP_ZOOM) { el.style.transform = `scale(${z})`; return; }
     if (el.dataset.z === String(z)) return;
     el.dataset.z = String(z);
-    el.style.zoom = '';
-    el.style.transform = `scale(${z})`;
     if (crispTimer.current) clearTimeout(crispTimer.current);
-    crispTimer.current = setTimeout(() => {
-      crispTimer.current = null;
-      const now = zoomLayerRef.current;
-      if (!now || now.dataset.z !== String(z)) return;
-      now.style.transform = '';
-      now.style.zoom = String(z);
-    }, CRISP_ZOOM_SETTLE_MS);
-  }, []);
+    const wasLayoutZoom = el.dataset.mode === 'zoom';
+    // 100% is no transform at all (sharp everywhere, nothing to hand off). Otherwise a scale for now.
+    el.style.zoom = '';
+    el.style.transform = z === 1 ? '' : `scale(${z})`;
+    el.dataset.mode = 'scale';
+    // Leaving layout zoom lays the cards out at 100% again: re-measure the sockets on that layout.
+    if (wasLayoutZoom) requestAnimationFrame(remeasureAllSockets);
+    crispTimer.current = setTimeout(() => settleZoom(z), CRISP_ZOOM_SETTLE_MS);
+  }, [settleZoom]);
   useLayoutEffect(() => { applyZoomLayer(zoomRef.current); }, [applyZoomLayer]);
-  useEffect(() => () => { if (crispTimer.current) clearTimeout(crispTimer.current); }, []);
+  useEffect(() => () => { if (crispTimer.current) clearTimeout(crispTimer.current); setVizScale(1); }, []);
   const viewCommitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitView = useCallback(() => {
     if (viewCommitTimer.current) { clearTimeout(viewCommitTimer.current); viewCommitTimer.current = null; }
@@ -1805,8 +1826,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           pointerEvents: locked ? 'none' : undefined,
         }}
       >
-        {/* The zoom: a scale while it changes, then (WebKit) layout zoom once it settles, so text is redrawn sharp. Set by applyView only. */}
-        <div ref={zoomLayerRef} data-zoom-layer="" style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, transformOrigin: '0 0' }}>
+        {/* The zoom: a scale while it changes (and always below 100%), then (WebKit) layout zoom once a zoom above 100% settles, so text is redrawn sharp. Set by applyView only. */}
+        <div ref={zoomLayerRef} data-zoom-layer="" data-crisp={CRISP_ZOOM ? '' : undefined} style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, transformOrigin: '0 0' }}>
         {/* Wires — data-derived from node positions + measured socket offsets */}
         <WireLayer
           displayNodes={displayNodes}

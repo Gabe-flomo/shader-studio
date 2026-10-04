@@ -2,6 +2,7 @@
  * vizKit — shared plumbing for the inline node visuals (NodeInlineViz and vizGeneric).
  */
 import type React from 'react';
+import { useSyncExternalStore } from 'react';
 import { ctp } from '../../theme/palette';
 import type { CtpPalette } from '../../theme/nodePalette';
 import { fontFamily } from '../../theme/tokens';
@@ -20,6 +21,31 @@ export const vizContainer = (): React.CSSProperties => ({
   overflow: 'hidden',
 });
 
+// ── Render scale for the graph zoom ─────────────────────────────────────────
+// A card's canvases are bitmaps: zoomed in, the graph shows them enlarged. Once the zoom settles,
+// NodeGraph sets this to the zoom (in steps, never below 1) and NodeInlineViz remounts its drawing
+// (keyed on it, like the theme), so every viz redraws at device pixels × zoom and stays sharp.
+let vizScale = 1;
+const vizScaleListeners = new Set<() => void>();
+/** Quantise a graph zoom to the canvas render scale: 1 up to 100%, then half steps (1.5, 2, 2.5). */
+export function vizScaleForZoom(zoom: number): number {
+  return zoom <= 1.05 ? 1 : Math.min(2.5, Math.ceil(zoom * 2 - 0.1) / 2);
+}
+export function setVizScale(scale: number): void {
+  if (scale === vizScale) return;
+  vizScale = scale;
+  for (const cb of vizScaleListeners) cb();
+}
+export function getVizScale(): number { return vizScale; }
+/** The current canvas render scale (re-renders when it changes). */
+export function useVizScale(): number {
+  return useSyncExternalStore(
+    cb => { vizScaleListeners.add(cb); return () => { vizScaleListeners.delete(cb); }; },
+    getVizScale,
+    getVizScale,
+  );
+}
+
 /**
  * Size a viz canvas to the box it is shown in, at device resolution, and hand
  * back a context in CSS pixels. Drawing code keeps its W×H maths; nothing is
@@ -27,7 +53,7 @@ export const vizContainer = (): React.CSSProperties => ({
  * `bw`/`bh` are the bitmap size for ImageData work.
  */
 export function setupViz(canvas: HTMLCanvasElement): { ctx: CanvasRenderingContext2D; W: number; H: number; bw: number; bh: number; dpr: number } | null {
-  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const dpr = Math.min(4, Math.min(3, window.devicePixelRatio || 1) * vizScale);
   const W = Math.max(1, canvas.clientWidth || canvas.width);
   const H = Math.max(1, canvas.clientHeight || canvas.height);
   const bw = Math.round(W * dpr), bh = Math.round(H * dpr);
