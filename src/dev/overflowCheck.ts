@@ -5,7 +5,8 @@
  *
  * `findOverflow(root)` lists the elements that
  *   - stick out past the root, or past an ancestor inside it that clips or
- *     scrolls (only the outermost offender is listed, not its children), or
+ *     scrolls (only the outermost offender is listed, not its children),
+ *   - hold text that runs past those edges (a label wider than its button), or
  *   - scroll sideways (overflow auto/scroll with scrollWidth > clientWidth).
  * Text that ends in an ellipsis, text fields and elements marked
  * `data-overflow-ok` (a deliberate sideways scroller, a measuring copy) are
@@ -84,6 +85,21 @@ export function findOverflow(root: Element): OverflowHit[] {
       if (FIELDS.has(child.tagName)) continue;
       // An ellipsis cuts what's inside it on purpose.
       if (cs.textOverflow === 'ellipsis' && clips(cs)) continue;
+      // Text that runs past the edge (a label wider than its button), not just boxes.
+      if (shown && !offenders.has(child)) {
+        const inside = clips(cs) && box.width > 0 ? { left: Math.max(parentBounds.left, box.left), right: Math.min(parentBounds.right, box.right) } : parentBounds;
+        for (const node of child.childNodes) {
+          if (node.nodeType !== Node.TEXT_NODE || !node.textContent?.trim()) continue;
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          const t = range.getBoundingClientRect();
+          const past = Math.max(t.right - inside.right, inside.left - t.left);
+          if (t.width > 0 && past > TOLERANCE) {
+            hits.push({ path: describe(child, root), kind: 'sticks-out', by: Math.round(past), text: node.textContent.trim().slice(0, 40), el: child });
+            break;
+          }
+        }
+      }
       bounds.set(child, clips(cs) && box.width > 0
         ? { left: Math.max(parentBounds.left, box.left), right: Math.min(parentBounds.right, box.right) }
         : parentBounds);

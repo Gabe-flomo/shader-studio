@@ -1,4 +1,4 @@
-import { useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { Children, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Icon } from './Icon';
@@ -48,11 +48,17 @@ export function Button({
     >
       {icon && <Icon name={icon} size={15} style={{ flexShrink: 0 }} />}
       {/* Never wider than its container: a long label ends in an ellipsis instead of running off a card. */}
-      {typeof children === 'string' || typeof children === 'number'
+      {isText(children)
         ? <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{children}</span>
         : children}
     </button>
   );
+}
+
+/** Plain text (a string, a number, or several of them: `{name}.step`), which can end in an ellipsis. */
+function isText(children: ReactNode): boolean {
+  const parts = Children.toArray(children);
+  return parts.length > 0 && parts.every(c => typeof c === 'string' || typeof c === 'number');
 }
 
 /**
