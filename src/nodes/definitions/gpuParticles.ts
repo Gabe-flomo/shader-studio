@@ -11,6 +11,9 @@
  * into the node's own picture, and Release lets them go. Sound (the graph's
  * Audio input, the mic or a Play Audio engine track) sends waves, shocks,
  * crunch, gusts and a jet through them; two hand positions pull and stir them.
+ * Pattern makes them sand on a vibrating Chladni plate (square or round): the
+ * sound (or N and M) picks the plate's modes and the sand gathers on its still
+ * lines.
  *
  * The node writes no simulation itself: it declares a sampler and, in a
  * comment on it, its settings (a number, or the uniform a slider drives). The
@@ -92,6 +95,18 @@ const PARAMS: Record<string, ParamDef> = {
     flowForce: { label: 'Flow force', type: 'float', min: -2, max: 2, step: 0.01, hint: 'How hard the Flow wire steers.', help: 'How strongly the Flow socket steers the particles: they climb its slopes (negative: slide down), or with Flow along: round its contours, so a noise or a shape becomes a current.' },
     flowMode: { label: 'Flow along', type: 'select', hint: 'Up the slopes or round them.', help: 'Slope: particles move uphill on the Flow value (towards bright). Around: they circle along its contours, flowing round shapes.', options: opts([['slope', 'Slope'], ['around', 'Around']]) },
     sceneReach: { label: 'Scene size', type: 'float', min: 0.5, max: 10, step: 0.05, hint: 'How far round the centre the Scene is felt.', help: 'With a Scene wired: how far from the centre (in scene units) the particles feel its surfaces. The scene is sampled on a 48-cell grid across twice this, so keep it just big enough to hold the objects: smaller is more precise.' },
+  }),
+  ...sec('Pattern', {
+    pattern: { label: 'Pattern', type: 'select', hint: 'Sand on a vibrating plate.', help: 'A Chladni plate: the particles are sand on a vibrating plate and gather on its still (nodal) lines. Square: the classic metal plate. Round: rings and spokes. The plate is the emitter\'s area (Emitter size sets how big), so use a Box emitter for Square and a Disc for Round. Pairs with Mode from, Modes, Settle speed and Shake. Off: no plate.', options: opts([['off', 'Off'], ['square', 'Chladni square'], ['circle', 'Chladni round']]) },
+    modeFrom: { label: 'Mode from', type: 'select', hint: 'Sound or N and M.', help: 'Sound: what the particles hear (Sound from) picks the plate\'s modes: the loudest pitch picks the main figure and other loud bands add theirs, gliding as the music changes. Manual: N and M pick the figure. With silence Sound keeps the last figure (or N and M\'s at the start).', options: opts([['sound', 'Sound'], ['manual', 'Manual']]) },
+    modes: { label: 'Modes', type: 'float', min: 1, max: 8, step: 1, hint: 'How many figures are summed.', help: 'How many of the plate\'s modes are summed at once. 1 is a clean single figure; 3–5 overlap into complex, lace-like figures (how much each extra one counts is Weights).' },
+    modeN: { label: 'N', type: 'float', min: 0, max: 12, step: 1, hint: 'Manual: the first mode number.', help: 'Manual: the figure\'s first number. Square: waves across one way; Round: how many straight spokes cross the plate. Try N 3, M 5 on a square plate. Times Frequency.' },
+    modeM: { label: 'M', type: 'float', min: 0, max: 12, step: 1, hint: 'Manual: the second mode number.', help: 'Manual: the figure\'s second number. Square: waves across the other way (equal to N it moves up one); Round: how many still rings inside the rim (0: spokes only). Times Frequency.' },
+    plateFreq: { label: 'Frequency', type: 'float', min: 0.5, max: 3, step: 0.01, hint: 'Higher: finer, busier figures.', help: 'How high up the plate\'s modes the figures are: above 1 finer, busier figures with more lines; below 1 broad simple ones. Sound: spreads the pitches over more modes. Manual: multiplies N and M.' },
+    plateWeights: { label: 'Weights', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How much the extra modes count.', help: 'How much the other modes count next to the main one. 0: only the loudest (or N and M) shows, a clean figure. 1: every summed mode weighs nearly as much, so they mix into complex figures. Pairs with Modes.' },
+    settle: { label: 'Settle speed', type: 'float', min: 0, max: 4, step: 0.01, hint: 'How fast the sand finds the lines.', help: 'How fast the sand slides to the still lines. Low (0.3) is a slow drift, so a changing figure leaves trails; high (2–3) snaps it into crisp lines.' },
+    shake: { label: 'Shake', type: 'float', min: 0, max: 3, step: 0.01, hint: 'How hard the plate shakes the sand.', help: 'How hard the plate shakes the sand where it moves: sand off the lines jumps about until it finds one. Louder sound and every hit shake harder. 0: the sand only slides; 1–2 is lively.' },
+    symmetry: { label: 'Symmetry', type: 'select', hint: 'How the modes combine.', help: 'Square: Minus is the classic Chladni figure (cos·cos − cos·cos), Plus its twin (+), with lines through the corners. Round: Minus lines every mode up; Plus turns every other one by half a lobe, so their spokes interleave into stars.', options: opts([['minus', 'Minus'], ['plus', 'Plus']]) },
   }),
   ...sec('Look', {
     look: { label: 'Look', type: 'select', hint: 'Light or Ink.', help: 'Light: particles glow and their light is added to the picture (black backgrounds). Ink: they are dark ink laid on paper (or on Over), darkest where they crowd: the ink-in-water look.', options: opts([['light', 'Light'], ['ink', 'Ink']]) },
@@ -178,19 +193,19 @@ export const GpuParticlesNode: NodeDefinition = {
   type: 'gpuParticles',
   label: 'Particles',
   category: 'Particles',
-  aliases: ['GPU particles', 'Particle system', 'Glow particles', 'TouchDesigner particles', 'Lights', 'Fireflies', 'Sparks', 'Ink', 'Ink in water', 'Dust', 'Image particles', 'Dissolve', 'Sound particles', 'Rocket', 'Exhaust'],
-  description: 'Up to 4 million particles on the GPU, glowing (Light) or laid down as ink (Ink), in 2D or through a drifting 3D camera with depth of field. They can hold a picture and blow away, react to sound and hands, and flow round shapes or stand inside a raymarched scene.',
+  aliases: ['GPU particles', 'Particle system', 'Glow particles', 'TouchDesigner particles', 'Lights', 'Fireflies', 'Sparks', 'Ink', 'Ink in water', 'Dust', 'Image particles', 'Dissolve', 'Sound particles', 'Rocket', 'Exhaust', 'Chladni', 'Cymatics', 'Sand plate', 'Nodal lines'],
+  description: 'Up to 4 million particles on the GPU, glowing (Light) or laid down as ink (Ink), in 2D or through a drifting 3D camera with depth of field. They can hold a picture and blow away, react to sound and hands, gather into Chladni figures on a plate the sound plays, and flow round shapes or stand inside a raymarched scene.',
   brief: {
     summary: 'Up to 4 million particles on the GPU: glowing light or ink on paper, in 2D or 3D with depth of field. They can hold a picture and blow away, react to sound and hands, flow round shapes and stand inside a raymarched scene.',
     start: [
       'Wire Color into the Output (and a picture into Over, if you like).',
-      'Pick a preset at the top of the card: Ink in water, Embers, Dust in air, Image dissolve, Sound field, Launch, Hand swirl.',
+      'Pick a preset at the top of the card: Ink in water, Embers, Dust in air, Image dissolve, Sound field, Launch, Chladni sand, Singing plate, Cymatics bloom, Hand swirl.',
       'Unfold a section and hover a setting\'s ? for what it does. Most settings have a socket too.',
     ],
   },
-  version: 2,
+  version: 3,
   migrateParams: (params) => {
-    // v2 (creative controls): every new setting at its default; the old ones as they were.
+    // v2 (creative controls), v3 (Chladni plate): every new setting at its default; the old ones as they were.
     const d = defaults();
     for (const k of Object.keys(d)) if (params[k] === undefined) params[k] = d[k];
     return params;
