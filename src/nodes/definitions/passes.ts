@@ -414,6 +414,9 @@ export const DisplacementMapNode: NodeDefinition = {
       lines.push(`    vec4 ${id}_s = vec4(0.0, 0.0, 0.0, 0.0 * ${id}_d.x);\n`);
     }
     return { code: lines.join(''), outputVars: { color: `${id}_s.rgb`, alpha: `${id}_s.a` } };
+  },
+};
+
 export const JumpFloodTextureNode: NodeDefinition = {
   type: 'jumpFloodTexture',
   label: 'Jump flood (texture)',

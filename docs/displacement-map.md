@@ -87,7 +87,7 @@ Texture instead.
 - Play → *Displace: particles by the shader, the picture by a word*: a
   Particles layer displaced by the picture's red and green (with Wrap), and
   the Look's Displace By channels reading a hidden word's luminance.
-- Passes → *Passes 7 · Displacement Map: a picture pushed by noise*: the node
+- Passes → *Passes 10 · Displacement Map: a picture pushed by noise*: the node
   with a Truchet chain as Source ƒ and FBM noise as the Map (luminance).
 
 ## Not done
