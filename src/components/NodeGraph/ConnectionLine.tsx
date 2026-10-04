@@ -16,21 +16,24 @@ interface Props {
    */
   edgeKey?: string;
   dimmed?: boolean;
+  /** A node being dragged would go into this wire: drawn thick with a halo. */
+  lit?: boolean;
   /** Route a backward wire over the cards through a channel at this y (loopWirePath). */
   overY?: number;
 }
 
 /** Elbow wire between two world-space points. Memoised — see the comparator. */
-export const ConnectionLine = React.memo(function ConnectionLine({ from, to, dataType, edgeKey, dimmed = false, overY }: Props) {
+export const ConnectionLine = React.memo(function ConnectionLine({ from, to, dataType, edgeKey, dimmed = false, lit = false, overY }: Props) {
   const path = overY !== undefined ? loopWirePath(from, to, overY).d : wirePath(from, to);
   const color = (dataType && TYPE_COLORS[dataType]) ? TYPE_COLORS[dataType] : '#8a8d99';
 
   return (
     <g style={{ opacity: dimmed ? 0.08 : 1, transition: 'opacity 0.1s' }}>
+      {lit && <path d={path} stroke={color} strokeWidth={12} strokeOpacity={0.3} strokeLinecap="round" strokeLinejoin="round" fill="none" style={{ pointerEvents: 'none' }} />}
       <path
         d={path}
         stroke={color}
-        strokeWidth={2.5}
+        strokeWidth={lit ? 4 : 2.5}
         strokeLinecap="round"
         strokeLinejoin="round"
         // A Pass's texture travels as a whole picture, not a value per pixel: dashed so it reads differently.
@@ -54,5 +57,5 @@ export const ConnectionLine = React.memo(function ConnectionLine({ from, to, dat
 }, (a, b) =>
   a.from.x === b.from.x && a.from.y === b.from.y &&
   a.to.x === b.to.x && a.to.y === b.to.y &&
-  a.dataType === b.dataType && a.edgeKey === b.edgeKey && a.dimmed === b.dimmed && a.overY === b.overY,
+  a.dataType === b.dataType && a.edgeKey === b.edgeKey && a.dimmed === b.dimmed && a.lit === b.lit && a.overY === b.overY,
 );

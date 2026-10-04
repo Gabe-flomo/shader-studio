@@ -5,6 +5,7 @@ import './index.css'
 import App from './App.tsx'
 import { Toaster } from './components/ui/Toaster'
 import { DialogHost } from './components/ui/DialogHost'
+import { NodeDragGhost } from './components/NodeGraph/NodeDragGhost'
 import { ProSheetHost } from './components/account/ProSheet'
 import { PlayfileHost } from './components/playfile/PlayfileHost'
 import { BuilderWindowHost } from './components/nodePacks/BuilderWindowHost'
@@ -93,7 +94,7 @@ if (import.meta.env.DEV) {
 // Dev-only component gallery for the redesign primitives: open the app with #ui.
 // import.meta.env.DEV is false in production builds, so the gallery isn't bundled.
 function startApp() {
-  root.render(<><App /><Toaster /><BackgroundsHost /><LinkedPickerHost /><DialogHost /><ProSheetHost /><PlayfileHost /><BuilderWindowHost /><PerformanceBar /></>)
+  root.render(<><App /><Toaster /><BackgroundsHost /><LinkedPickerHost /><DialogHost /><NodeDragGhost /><ProSheetHost /><PlayfileHost /><BuilderWindowHost /><PerformanceBar /></>)
   // Songs stop when the graph that owns them is closed or they're deleted.
   void import('./lib/audioSync').then(m => m.startAudioSync())
   // Text layers' fonts from linked folders (docs/linked-folders.md) are read from disk.
