@@ -582,6 +582,7 @@ function DatamoshEditor({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit;
   ];
   const setFrom = (v: string) => onPatch(v === 'picture' ? { map: 'picture' } : v === 'camera' ? { map: 'layer', layerId: cameras[0]?.id ?? e.layerId ?? '' } : { map: 'layer', layerId: cameras.some(l => l.id === e.layerId) ? '' : e.layerId ?? '' });
   const hold = (on: boolean) => { if ((num(e, 'hold') >= 0.5) !== on) onPatch({ hold: on ? 1 : 0 }); };
+  const reset = (on: boolean) => { if ((num(e, 'reset') >= 0.5) !== on) onPatch({ reset: on ? 1 : 0 }); };
   return (
     <>
       {k.row('Motion from', <Select ariaLabel="Datamosh motion from" value={from} height={26} options={options} onChange={setFrom} />,
@@ -590,7 +591,9 @@ function DatamoshEditor({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit;
       {k.nums('amount', 'bleed', 'block', 'push', 'sustain', 'refresh', 'every', 'hold')}
       {k.row('Mosh now', <Button size="sm" variant={num(e, 'hold') >= 0.5 ? 'primary' : 'secondary'} onPointerDown={() => hold(true)} onPointerUp={() => hold(false)} onPointerLeave={() => hold(false)}>Hold to mosh</Button>,
         'Nothing heals while it is held. For a key or a rule, map it onto Mosh: a rule can send a signal, and a mapping from that signal turns Mosh on.')}
-      {k.note(<>A video with its keyframes cut out: each frame’s movement is measured block by block and applied to the <b>old</b> picture instead of the new one, so colours from before smear and bleed along whatever moves. Turn <b>Refresh</b> up and hold <b>Mosh</b> to mosh only on cue.{from === 'camera' ? ' Offline renders have no live camera, so there the picture holds still unless Refresh or a keyframe brings it back.' : ''}</>)}
+      {k.row('Start over', <Button size="sm" variant="secondary" onPointerDown={() => reset(true)} onPointerUp={() => reset(false)} onPointerLeave={() => reset(false)}>Reset mosh</Button>,
+        'Snaps the picture back to the live one, then the mosh builds up again. Map a key or a rule’s signal onto Reset to do it on cue.')}
+      {k.note(<>A video with its keyframes cut out: each frame’s movement is measured block by block and applied to the <b>old</b> picture instead of the new one, so colours from before smear and bleed along whatever moves. Turn <b>Refresh</b> up and hold <b>Mosh</b> to mosh only on cue; <b>Reset mosh</b> starts it over.{from === 'camera' ? ' Offline renders have no live camera, so there the picture holds still unless Refresh or a keyframe brings it back.' : ''}</>)}
     </>
   );
 }
