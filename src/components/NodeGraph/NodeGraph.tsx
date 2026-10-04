@@ -10,11 +10,14 @@ import { CanvasToolbar } from '../shell/CanvasToolbar';
 import { setVizScale, vizScaleForZoom } from './vizKit';
 import { registerSocket, remeasureAllSockets, setLayoutZoomGetter, getSocketOffset, getDragPosition, publishView, getCardSize, isDragging, subscribeCardSizes, forgetNodeLayout, type Pt } from './socketRegistry';
 import { WireLayer, type EdgeInfo } from './WireLayer';
+import { registerDropTarget, edgeInfoFromKey } from './nodeDrop';
 import { buildNodeErrors } from '../../compiler/nodeErrors';
 import { suggestConnections, type Suggestion } from './smartConnect';
 import { suggestQuickAdds, type QuickAdd } from './quickAdds';
 import { explainPreview, previewLegend } from '../../lib/previewExplain';
 import { SmartConnectMenu } from './SmartConnectMenu';
+import { RecipeOffer } from './RecipeOffer';
+import { useRecipeOffer } from '../../store/recipeOfferStore';
 import { askConfirm, askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
 import { showSocketPatch, socketVisible, socketsForParam } from '../../lib/socketsOnDemand';
@@ -958,6 +961,8 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
         const onScreen = left + size.w * z > 0 && top + size.h * z > 0 && left < view.width && top < view.height;
         if (!onScreen) handleMinimapPanTo(node.position.x + size.w / 2, node.position.y + size.h / 2);
       }
+      // A node with starter recipes shows its recipe offer instead (RecipeOffer): one popover at a time.
+      if (useRecipeOffer.getState().offer?.nodeId === nodeId) return;
       const suggestions = suggestConnections({
         nodes: displayNodesRef.current, from: { nodeId, key, dir: 'out' }, socketPos: socketWorld,
         labelOf: n => (typeof n.params?.label === 'string' && n.params.label) || getNodeDefinitionFor(n)?.label || n.type,
@@ -1120,6 +1125,16 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       return { x: (cx - p.x) / z, y: (cy - p.y) / z };
     });
   }, [registerViewportCenterGetter]);
+
+  // A node dragged out of the node browser lands here (nodeDrop.ts): the canvas says where the pointer is in the
+  // graph, whether it takes drops, and which wire a data-edge key names.
+  useEffect(() => registerDropTarget({
+    get el() { return canvasRef.current; },
+    blocked: () => lockedRef.current,
+    toWorld: (sx, sy) => screenToWorld(sx, sy),
+    zoom: () => zoomRef.current,
+    edgeInfo: key => edgeInfoFromKey(displayNodesRef.current, key),
+  }), [screenToWorld]);
 
   // ── Shift+socket spotlight — which edges are highlighted ─────────────────────
   // Each entry is { fromNodeId, fromOutputKey, toNodeId, toInputKey }
@@ -2146,6 +2161,9 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           />
         );
       })()}
+
+      {/* Starter recipes for a node just added (nodes/recipes): a small offer beside it */}
+      <RecipeOffer nodes={displayNodes} canvasRef={canvasRef} pan={pan} zoom={zoom} />
 
       {/* Feature 1: Alt-click socket filtered palette */}
       {smartConnect && (() => {

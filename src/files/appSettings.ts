@@ -59,6 +59,7 @@ const KNOWN: Record<string, SettingInfo> = {
   'shader-studio:phoneSplit:studio': S('Split view on a phone (Studio)', 'studio'),
   'codePanel_height': S('Code panel height', 'studio'),
   'nodepalette_favorites': S('Favourite nodes', 'studio'),
+  'shader-studio:settings:starterRecipesOff': S('Starter recipes turned off', 'studio', { hint: 'Every node with starter recipes offers them again when added' }),
   // Play
   'shader-studio:play:split': S('Split view', 'play'),
   'shader-studio:play:panel': S('Open panel', 'play'),

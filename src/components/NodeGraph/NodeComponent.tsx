@@ -114,6 +114,7 @@ import { driverOf } from '../../play/paramDrivers';
 import { PlayDriveChip } from './PlayDriveChip';
 import { MAX_GROUP_ITERATIONS } from '../../nodes/definitions/group';
 import { programTintColour, programTintsCached } from '../../lib/programTints';
+import { VOLUMETRIC_LOOP_TYPES } from '../../nodes/volumetricAuto';
 
 function adaptiveStep(value: number, baseStep: number): number {
   const abs = Math.abs(value);
@@ -2811,7 +2812,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   return (
                     <div key={paramKey} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 10px 4px 14px' }}>
                       <ParamLabel title={paramDef.hint} help={paramDef.help}>{paramDef.label}</ParamLabel>
-                      <Toggle checked={node.params[paramKey] === true} onChange={v => updateNodeParams(node.id, { [paramKey]: v }, { immediate: true })} />
+                      <Toggle checked={node.params[paramKey] === true} onChange={v => paramKey === 'volumetric'
+                        ? useNodeGraphStore.getState().setLoopVolumetric(node.id, v)
+                        : updateNodeParams(node.id, { [paramKey]: v }, { immediate: true })} />
                     </div>
                   );
                 }
@@ -4494,7 +4497,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             return (
               <div key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
                 <ParamLabel>{paramDef.label}</ParamLabel>
-                <Toggle checked={val} onChange={v => updateNodeParams(node.id, { [key]: v })} />
+                <Toggle checked={val} onChange={v => key === 'volumetric' && VOLUMETRIC_LOOP_TYPES.has(node.type)
+                  ? useNodeGraphStore.getState().setLoopVolumetric(node.id, v)
+                  : updateNodeParams(node.id, { [key]: v })} />
               </div>
             );
           }

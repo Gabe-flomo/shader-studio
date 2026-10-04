@@ -74,6 +74,17 @@ export class UndoManager {
     try { run(); } finally { this.suspended--; }
   }
 
+  /** Fold every step made after the step with id `afterId` (0 for all of them) into one: the first
+   *  of them already holds the state from before the whole gesture, so dropping the rest makes the
+   *  gesture a single undo. Named by `meta`. (A drop that adds a node and wires it in.) */
+  collapseSince(afterId: number, meta?: UndoMeta): void {
+    const first = this.history.findIndex(e => e.id > afterId);
+    if (first < 0) return;
+    this.history.length = first + 1;
+    if (meta) Object.assign(this.history[first], meta);
+    this.changed();
+  }
+
   /** Name the newest step after the fact (an action that only knows what it did once it ran). */
   labelTop(meta: UndoMeta): void {
     const top = this.history[this.history.length - 1];

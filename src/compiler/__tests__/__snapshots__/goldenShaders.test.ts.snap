@@ -427,6 +427,13 @@ exports[`golden shaders: every Play example exports the same bundle > learn3dVol
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > learn3dVolumeSwitch 1`] = `
+{
+  "bundle": "1a87eb2383bd08064286eed9debb:10390",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > learnBricks 1`] = `
 {
   "bundle": "193c490798e0121093e2e636d096:4986",
@@ -5263,6 +5270,51 @@ exports[`golden shaders: every example compiles as it did > learn3dVolume 1`] = 
     "u_p_scenex0xsgxsphx0_radius",
   ],
   "paramValues": "1f531fbf97c76b113ce0905d6931:1043",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > learn3dVolumeSwitch 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "16e2ff81e737a013c84408b3af60:7788",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1b9e5a84d418620e19b0fce6aa7c:357",
+  "paramBindings": "09eb8cc2f42ea512a882dc689e57:1155",
+  "paramUniforms": [
+    "u_p_glowtocolox0_exposure",
+    "u_p_glowtocolox0_tint",
+    "u_p_marchcamerx0_aperture",
+    "u_p_marchcamerx0_camAngle",
+    "u_p_marchcamerx0_camDist",
+    "u_p_marchcamerx0_camElevation",
+    "u_p_marchcamerx0_focalDist",
+    "u_p_marchcamerx0_fov",
+    "u_p_marchcamerx0_lensSpeed",
+    "u_p_marchcamerx0_rotSpeed",
+    "u_p_marchcamerx0_targetX",
+    "u_p_marchcamerx0_targetY",
+    "u_p_marchcamerx0_targetZ",
+    "u_p_marchloopgx0_albedo",
+    "u_p_marchloopgx0_bg",
+    "u_p_marchloopgx0_jitter",
+    "u_p_marchloopgx0_maxDist",
+    "u_p_marchloopgx0_passthrough",
+    "u_p_marchloopgx0_stepScale",
+    "u_p_marchloopgx0xmlxvolumeglowx0_density",
+    "u_p_marchloopgx0xmlxvolumeglowx0_falloff",
+    "u_p_marchloopgx0xmlxvolumeglowx0_shell",
+    "u_p_scenex0xsgxtorx0_majorR",
+    "u_p_scenex0xsgxtorx0_minorR",
+  ],
+  "paramValues": "000d6e6025ed5e10ebaf104fb47a:854",
   "passes": null,
   "success": true,
   "textureUniforms": {},
