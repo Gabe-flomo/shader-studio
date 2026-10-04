@@ -188,6 +188,12 @@ function MattePanel({ f, play, changePlay, onClose }: { f: FieldKit; play: PlayR
             </div>
           ))}
           {matte.kind === 'motion' && <div style={{ marginTop: 6, color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>Shows {l.label} where {matte.label} sees movement. Its Sensitivity, Delay and Smoothing decide how much counts; Invert shows it where nothing moves.</div>}
+          {matte.kind === 'water' && row('Feather', (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <RulerSlider value={matte.feather} min={0} max={0.3} defaultValue={0.02} ariaLabel="Feather of where the water moves" onChange={feather => changePlay(p => ({ ...p, layers: p.layers.map(x => (x.id === matte.id && x.kind === 'water' ? { ...x, feather } : x)) }))} />
+            </div>
+          ))}
+          {matte.kind === 'water' && <div style={{ marginTop: 6, color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>Shows {l.label} where {matte.label}’s water moves (its waves), fading out where the water lies flat. Invert shows it on the still water instead.</div>}
           {matte.kind !== 'background' && row('Matte', <Toggle checked={matte.visible} onChange={visible => changePlay(p => ({ ...p, layers: p.layers.map(x => (x.id === matte.id ? { ...x, visible } : x)) }))} label="Show it on the picture too" />)}
           <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center' }}>
             <Button size="sm" onClick={() => { onClose(); reveal(matte.id); }}>Go to {matte.label}</Button>

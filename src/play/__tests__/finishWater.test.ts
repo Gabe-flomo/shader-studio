@@ -96,7 +96,7 @@ describe('declaration', () => {
   });
 });
 
-describe('the solver', () => {
+describe('the solver', { timeout: 30_000 }, () => { // CPU-heavy; under a busy full run 5 s was not enough
   it('picks enough substeps that a wave crosses at most maxC cells in one, at the speed asked', () => {
     for (const rows of Object.values(FN_WATER.detail)) {
       for (const speed of [0.05, 0.2, 0.35, 0.7, 1, 1.5, 2]) {

@@ -17,6 +17,7 @@
 import { LINKED_PREFIX, LINKED_REF_MAX, isLinkedRef } from '../files/linkedRefs';
 import { DP_CHOKES, DP_INDEX_MODES, DP_PADS, DP_PARAMS, DP_SYNTHS, dpKey, type DpIndexMode, type DpMode, type DpSynth } from '../play/kit/drumPads.js';
 import { AG_GROUPS, AG_MAX, AG_RULES, AG_RULE_TYPES, AG_TARGETS, AG_CHANNELS, agPresetLayer } from '../play/kit/agents.js';
+import { WL_PARAMS } from '../play/kit/waterLayer.js';
 
 export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken' | 'difference' | 'exclusion' | 'add';
 
@@ -716,6 +717,42 @@ export interface MotionLayer extends LayerBase {
   blend: BlendMode;
 }
 
+/** Where a Water layer's water is: the whole picture, a box or an ellipse (a pond). */
+export type WaterRegion = 'all' | 'rect' | 'ellipse';
+
+/**
+ * A water surface as a layer: the Finish stack's Water simulation (one solver,
+ * play/kit/finish.js), over the picture and the layers below it only, in its
+ * region (the whole picture or a pond with a soft edge). Its sources come from
+ * anywhere (the pointer, any layer, layers above it included, Source X/Y); its
+ * readings (Wave height at its Probe, Energy, Area) are sources and conditions;
+ * as a matte it is its Waves (where the water moves). A rule's Splash drops into
+ * it. play/kit/waterLayer.js, docs/water-layer.md.
+ */
+export interface WaterLayer extends LayerBase {
+  kind: 'water';
+  region: WaterRegion;
+  /** The pond's centre (0..1, y up) and size (picture heights), and how soft its rim is (picture heights). */
+  x: number; y: number; w: number; h: number; soft: number;
+  /** What makes waves and where (the Water effect's Source and Shape). */
+  source: 'pointer' | 'layer' | 'xy' | 'none';
+  /** source 'layer': the layer the source rides (any, hidden or above this one too). */
+  sourceLayer: string;
+  shape: 'point' | 'line' | 'ring' | 'twin' | 'layer' | 'picture';
+  /** shape 'layer': the layer whose shape pushes the water (it runs while hidden). */
+  shapeLayer: string;
+  detail: 'low' | 'medium' | 'high';
+  /** The Water effect's numbers (Source X/Y as sourceX, sourceY), with its ranges: play/kit/waterLayer.js WL_PARAMS. */
+  speed: number; damping: number; size: number; strength: number; bob: number; refraction: number; highlights: number; light: number;
+  sourceX: number; sourceY: number; length: number; angle: number; rain: number; drop: number; edges: number;
+  /** Where Wave height is read (0..1, y up). */
+  probeX: number; probeY: number;
+  /** As a matte (its Waves): how soft the edge of "where the water moves" is, in picture heights. */
+  feather: number;
+  opacity: number;
+  blend: BlendMode;
+}
+
 /** The webcam, as a layer (like an image), a mask, or what particles, glyphs and contours read. Its motion is a sensor source. */
 export interface CameraLayer extends LayerBase {
   kind: 'camera';
@@ -1391,10 +1428,10 @@ export interface DataLayer extends LayerBase {
 let dataItemCount: (l: DataLayer) => number = () => 0;
 export function setDataItemCount(fn: (l: DataLayer) => number): void { dataItemCount = fn; }
 
-export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer | DataLayer | VideoLayer | DrumPadLayer | RelationshipLayer | AgentsLayer | MotionLayer;
+export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer | DataLayer | VideoLayer | DrumPadLayer | RelationshipLayer | AgentsLayer | MotionLayer | WaterLayer;
 export type PlayLayerKind = PlayLayer['kind'];
 
-export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background', 'data', 'video', 'drumpad', 'relationship', 'agents', 'motion'];
+export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background', 'data', 'video', 'drumpad', 'relationship', 'agents', 'motion', 'water'];
 
 /** The starter sketch a new Script layer holds. */
 export const DEFAULT_SCRIPT = `// A sketch: setup runs once, draw runs every frame.
@@ -1541,6 +1578,11 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
   agents: agentDefaults(),
   bodies: { toShader: true, source: 'letters', text: 'PLAY', count: 24, size: 48, gravity: 1, angle: 0, bounce: 0.35, friction: 0.3, font: 'sans', fontUrl: '', colour: 'tint', color: [1, 1, 1], palette: 1, solidPicture: false, threshold: 0.6, scatter: 1, opacity: 1, blend: 'normal' },
   camera: { toShader: true, x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, color: [0, 0, 0], mirror: true, blend: 'normal', matte: 'over' },
+  water: {
+    toShader: false, region: 'all', x: 0.5, y: 0.5, w: 1, h: 0.6, soft: 0.04, source: 'pointer', sourceLayer: '', shape: 'point', shapeLayer: '', detail: 'medium',
+    ...(Object.fromEntries(WL_PARAMS.map(p => [p.key, p.value])) as Pick<WaterLayer, 'speed' | 'damping' | 'size' | 'strength' | 'bob' | 'refraction' | 'highlights' | 'light' | 'sourceX' | 'sourceY' | 'length' | 'angle' | 'rain' | 'drop' | 'edges'>),
+    probeX: 0.5, probeY: 0.5, feather: 0.02, opacity: 1, blend: 'normal',
+  },
   motion: { toShader: false, readFrom: 'camera', sourceId: '', mirror: true, sensitivity: 0.5, delay: 2, smoothing: 0.6, cell: 0.04, show: 'extract', look: 'neon', gain: 3, feather: 0.03, opacity: 1, blend: 'screen' },
   video: {
     toShader: true, videoId: '', fileName: '', bytes: 0, fit: 'contain', x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, mirror: false, color: [0, 0, 0], blend: 'normal', matte: 'over',
@@ -1665,6 +1707,12 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     font: E('sans', 'serif', 'mono'), fontUrl: S, colour: E('tint', 'palette'), color: C, palette: N(0, 9, true), solidPicture: B, threshold: unit, scatter: N(0, 10), opacity: unit, blend: blendF,
   },
   camera: { toShader: B, x: N(), y: N(), scale: N(0.01), rotation: N(), opacity: unit, color: C, mirror: B, blend: blendF, matte: matteF },
+  water: {
+    toShader: B, region: E('all', 'rect', 'ellipse'), x: N(), y: N(), w: N(0.01, 4), h: N(0.01, 4), soft: N(0, 1),
+    source: E('pointer', 'layer', 'xy', 'none'), sourceLayer: S, shape: E('point', 'line', 'ring', 'twin', 'layer', 'picture'), shapeLayer: S, detail: E('medium', 'low', 'high'),
+    ...Object.fromEntries(WL_PARAMS.map(p => [p.key, N(p.min, p.max)])),
+    probeX: N(), probeY: N(), feather: N(0, 1), opacity: unit, blend: blendF,
+  },
   motion: {
     toShader: B, readFrom: E('camera', 'picture', 'layer'), sourceId: S, mirror: B, sensitivity: unit, delay: N(1, 30, true), smoothing: N(0, 0.99), cell: N(0.005, 0.5),
     show: E('hidden', 'extract', 'heat', 'mask'), look: E('grey', 'black', 'neon'), gain: N(0, 20), feather: N(0, 1), opacity: unit, blend: blendF,
@@ -2084,6 +2132,17 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'friction', label: 'Friction', min: 0, max: 1, hint: 'How quickly sliding bodies stop.' },
     { key: 'threshold', label: 'Solid above', min: 0, max: 1, hint: 'Solid picture: brightness at or above this is solid ground.' },
     { key: 'scatter', label: 'Scatter', min: 0, max: 5, hint: 'How hard a Scatter (the button, or an action) throws them. Multiplies the action\'s amount.' },
+    OPACITY,
+  ],
+  water: [
+    X('Centre of the pond'), Y('Centre of the pond'),
+    { key: 'w', label: 'Width', min: 0.05, max: 2, hint: 'Region Box or Ellipse: how wide the pond is, in picture heights.' },
+    { key: 'h', label: 'Height', min: 0.05, max: 2, hint: 'Region Box or Ellipse: how tall the pond is, in picture heights.' },
+    { key: 'soft', label: 'Soft edge', min: 0, max: 0.3, hint: 'How gently the pond fades out at its rim, in picture heights. 0 is a hard edge.' },
+    ...WL_PARAMS.map(p => ({ key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, hard: true, hint: p.hint.replace('“A value”', 'A value') })),
+    { key: 'probeX', label: 'Probe X', min: 0, max: 1, hint: 'Where Wave height is read, across the picture. Map a layer’s X onto it to read the water under it.' },
+    { key: 'probeY', label: 'Probe Y', min: 0, max: 1, hint: 'Where Wave height is read, up the picture.' },
+    { key: 'feather', label: 'Feather', min: 0, max: 0.3, hint: 'As a matte (its Waves): how soft the edge of "where the water moves" is, in picture heights.' },
     OPACITY,
   ],
   motion: [

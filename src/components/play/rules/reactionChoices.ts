@@ -18,7 +18,11 @@ export function doChoices(play: PlayRecord, preferLayer?: string): DoChoice[] {
   const first = layers.findIndex(l => l.id === preferLayer);
   if (first > 0) layers.unshift(...layers.splice(first, 1));
   const out: DoChoice[] = [];
-  for (const l of layers) for (const k of actionsForLayer(l)) out.push({ value: `${l.id}|${k}`, label: `${actionLabel(k, l)} · ${l.label}`, layerId: l.id, do: k });
+  for (const l of layers) {
+    // A Water layer: Splash drops into it (a Look action on the layer: play/kit/finish.js fnLookAct).
+    if (l.kind === 'water') out.push({ value: `${l.id}|splash`, label: `${LOOK_ACTION_LABELS.splash} · ${l.label}`, layerId: l.id, do: 'splash' });
+    for (const k of actionsForLayer(l)) out.push({ value: `${l.id}|${k}`, label: `${actionLabel(k, l)} · ${l.label}`, layerId: l.id, do: k });
+  }
   // Look (Finish) effects: Datamosh's Mosh and Reset mosh, and pulsing or setting any effect's setting.
   for (const e of play.finish?.effects ?? []) {
     const id = finishPropId(e.id), name = finishHostLabel(e);
@@ -69,7 +73,8 @@ export function reactionText(r: PlayReaction, play: PlayRecord): string {
   if (r.do === NOTES_ACTION && r.notes) return `Play ${notesSummary(r.notes)} · ${play.audioEngine?.racks.find(x => x.id === r.notes!.rackId)?.name ?? 'a missing rack'}`;
   if (isLookAction(r.do)) {
     const e = lookEffectOf(play, r.layerId);
-    const name = e ? finishHostLabel(e) : 'a removed Look effect';
+    const water = e ? undefined : play.layers.find(x => x.id === r.layerId && x.kind === 'water');
+    const name = e ? finishHostLabel(e) : water ? water.label : 'a removed Look effect';
     const p = e && r.key ? finishParamOf(e, r.key) : undefined;
     const v = typeof r.value === 'number' ? +r.value.toFixed(3) : 0, sec = typeof r.seconds === 'number' ? +r.seconds.toFixed(2) : 1;
     if (r.do === 'mosh') return `Mosh ${sec} s · ${name}`;

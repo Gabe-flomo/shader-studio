@@ -1407,6 +1407,13 @@ exports[`golden shaders: every Play example exports the same bundle > scriptPict
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > waterLayer 1`] = `
+{
+  "bundle": "1e5f64b8ec110015485bdc25b416:122049",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > waveInterference 1`] = `
 {
   "bundle": "18e3f70a173df60996435f05e076:3868",
@@ -11542,6 +11549,33 @@ exports[`golden shaders: every example compiles as it did > voxelTerrain 1`] = `
     "u_p_voxelxterrainx0xsgxvoxelizex0_size",
   ],
   "paramValues": "02a276db088fee04cc5cbe5a6958:875",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > waterLayer 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "077559657acb62137dd6b9ab97da:2505",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "114fc1423b9ff8180a87e7c8256e:86",
+  "paramBindings": "10beb17b7abf521d9cb650b436af:234",
+  "paramUniforms": [
+    "u_p_circx0_posX",
+    "u_p_circx0_posY",
+    "u_p_circx0_radius",
+    "u_p_lightx0_brightness",
+    "u_p_lightx0_innerFalloff",
+    "u_p_lightx0_tint",
+  ],
+  "paramValues": "0f6d3d7c68dbb317bcb90f54b8f2:169",
   "passes": null,
   "success": true,
   "textureUniforms": {},

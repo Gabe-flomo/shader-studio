@@ -66,6 +66,8 @@ import { psDraw } from './pose.js';
 import { kmApplyBackgroundMatte, kmApplyMasks, kmApplyTrack, kmMatteSources, kmTrackOf } from './mattes.js';
 import { bqState, bqAct, bqPlan, bqCompose } from './queue.js';
 import { mtCreate, mtStep, mtSampleSize, mtLook, mtHeat, mtMaskAlpha, MT_READS } from './motion.js';
+import { fnCreate } from './finish.js';
+import { WL_FIELD_ROWS, WL_READS, wlRegion, wlEffect, wlValue, wlToLocal, wlEdgeAlpha, wlReadings, wlMatteAlpha } from './waterLayer.js';
 import { kdState, kdAct, kdPlan, kdTextItems, kdFrame, kdDrawTable, kdColumn, kdText, kdChunkText, kdWrapText, kdScriptView } from './data.js';
 
 const KIT_COARSE_W = 64, KIT_COARSE_H = 36, KIT_FINE_W = 128, KIT_FINE_H = 72;
@@ -92,7 +94,7 @@ export function klPictureAt(grid, W, H, x, y, r, ch) {
   }
   return n ? sum / n : null;
 }
-const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, video: 1, lens: 1, script: 1, relationship: 1, agents: 1, motion: 1 };
+const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, video: 1, lens: 1, script: 1, relationship: 1, agents: 1, motion: 1, water: 1 };
 
 /**
  * A value as words for a Text layer that reads one (implementation guide 8):
@@ -120,6 +122,10 @@ export function createLayerKit() {
   const ags = new Map();
   // Motion layers: each one's grid, frames and readings (motion.js), and the frame its matte was last made.
   const motions = new Map(), motionMattes = new Map();
+  // Water layers: each one's surface (a Finish renderer of its own running one Water effect: waterLayer.js), its
+  // read-back field and the frame it was stepped; their Waves mattes and soft edges by the frame they were made.
+  const waters = new Map(), waterMattes = new Map(), waterEdges = new Map();
+  const dropWaterState = id => { const st = waters.get(id); if (st && st.r) st.r.dispose(); waters.delete(id); waterMattes.delete(id); waterEdges.delete(id); };
   // Path shapes: each one's geometry last frame (for picking on the picture) and its fade (On lost: Fade).
   const paths = new Map(), pathFades = new Map();
   // Layers drawn alone this frame for the host (env.alphaLayers), by id.
@@ -361,6 +367,7 @@ export function createLayerKit() {
     }
     const ids = new Set(layers.map(l => l.id));
     for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts, bqStates, dStates, paths, pathFades, rels, relGrids, ags, motions, motionMattes]) for (const id of [...m.keys()]) if (!ids.has(id)) { if (m === scripts) klSketchDispose(m.get(id)); m.delete(id); }
+    for (const id of [...waters.keys()]) if (!ids.has(id)) dropWaterState(id);
     // Sketch sources that left the queue (or whose layer did) stop keeping state.
     if (bqSketches.size) { const inQueue = new Set(bq ? record.layers[0].sources.map(s => s.id) : []); for (const id of [...bqSketches.keys()]) if (!inQueue.has(id)) { klSketchDispose(bqSketches.get(id)); bqSketches.delete(id); } }
     // A visibility change in the panel wins over an earlier show/hide action.
@@ -380,6 +387,8 @@ export function createLayerKit() {
     if (bgMatte && byId.has(bgMatte.id)) matteSources.add(bgMatte.id);
     // A layer a Motion layer watches runs (and draws on its own canvas, once) even while hidden, like a matte.
     for (const l of layers) if (l.kind === 'motion' && l.readFrom === 'layer' && l.sourceId && l.sourceId !== l.id && byId.has(l.sourceId) && byId.get(l.sourceId).kind !== 'motion') matteSources.add(l.sourceId);
+    // A layer whose shape a Water layer stamps runs (and draws on its own canvas, once) even while hidden.
+    for (const l of layers) if (l.kind === 'water' && l.shape === 'layer' && l.shapeLayer && l.shapeLayer !== l.id && byId.has(l.shapeLayer) && byId.get(l.shapeLayer).kind !== 'water') matteSources.add(l.shapeLayer);
     // Motion layers always measure: their eye and Show only decide what they draw.
     const hasMotion = layers.some(l => l.kind === 'motion');
     const live = matteSources.size || hasMotion ? layers.filter(l => isVisible(l) || matteSources.has(l.id) || l.kind === 'motion') : vis;
@@ -966,8 +975,122 @@ export function createLayerKit() {
       b.drawImage(small, 0, 0, W, H);
       return big;
     }
-    /** What a layer is as a matte: a Motion layer's "where it moves", any other layer as drawn. */
-    const matteCanvas = m => (m.kind === 'motion' ? motionMatte(m) : renderLayer(m));
+    // ── Water layers (waterLayer.js, docs/water-layer.md) ──
+    /** Where a layer is now (0..1, y up), or null: a following null on its spring (null while its hand is lost), an Agents layer's centre, else its x and y. */
+    const pointOf = id => {
+      const s = byId.get(id);
+      if (!s) return null;
+      if (s.kind === 'null') { if (handLost.has(id)) return null; const sp = springs.get(id); if (sp) return { x: sp.x, y: sp.y }; }
+      if (s.kind === 'agents') { const c = agentCentre(id); if (c) return c; }
+      const x = env.value(s, 'x'), y = env.value(s, 'y');
+      return typeof x === 'number' && isFinite(x) && typeof y === 'number' && isFinite(y) ? { x, y } : null;
+    };
+    /** A full-size canvas cut to a Water layer's region (its own size). */
+    const waterCrop = (src, key, reg) => {
+      if (reg.shape === 'all' && src.width === W && src.height === H) return src;
+      const cc = klCanvas(pool, key, reg.w, reg.h), x = cc.getContext('2d');
+      x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = 1; x.globalCompositeOperation = 'source-over'; x.clearRect(0, 0, reg.w, reg.h);
+      try { x.drawImage(src, reg.x0 * src.width / W, reg.y0 * src.height / H, reg.w * src.width / W, reg.h * src.height / H, 0, 0, reg.w, reg.h); } catch (err) { /* nothing drawn yet */ }
+      return cc;
+    };
+    /**
+     * A Water layer's surface, stepped once a frame: what is under it (the picture and the layers drawn so far,
+     * cut to its region) goes through its own Finish renderer with one Water effect (the Finish stack's solver
+     * and look), then the surface is read back small for its readings and its Waves matte. `c`: where to draw
+     * it (null: hidden, it still runs).
+     */
+    function stepWater(l, c) {
+      let st = waters.get(l.id);
+      if (!st) { st = { r: null, first: true, frame: -1, field: null, reg: null }; waters.set(l.id, st); }
+      const v = k => env.value(l, k);
+      if (st.frame !== frameNo) {
+        st.frame = frameNo;
+        const reg = wlRegion(l, v, W, H);
+        st.reg = reg;
+        if (st.r === null) { try { st.r = fnCreate(null); } catch (err) { st.r = false; } if (st.r && !st.r.ok) { st.r.dispose(); st.r = false; } }
+        let drew = false;
+        if (st.r) {
+          const below = klCanvas(pool, 'wlBelow:' + l.id, reg.w, reg.h), b = below.getContext('2d');
+          b.setTransform(1, 0, 0, 1, 0, 0); b.globalAlpha = 1; b.globalCompositeOperation = 'source-over';
+          b.fillStyle = klCss(env.backdrop || [0, 0, 0]); b.fillRect(0, 0, reg.w, reg.h);
+          // The picture under every layer (unless Layers only hides it, or a transparent export leaves it out), then the layers below this one.
+          const showPic = !env.transparent && (!!bq || !env.hidden);
+          try {
+            if (showPic && gl) b.drawImage(gl, reg.x0 * gl.width / W, reg.y0 * gl.height / H, reg.w * gl.width / W, reg.h * gl.height / H, 0, 0, reg.w, reg.h);
+            if (ctx.canvas) b.drawImage(ctx.canvas, reg.x0, reg.y0, reg.w, reg.h, 0, 0, reg.w, reg.h);
+          } catch (err) { /* no picture yet */ }
+          const loc = p => (p ? wlToLocal(reg, p, W, H) : null);
+          const pp = pointer && pointer.over && isFinite(pointer.x) ? Object.assign(loc(pointer), { over: true }) : null;
+          drew = st.r.draw({
+            finish: { on: true, effects: [wlEffect(l)] }, value: wlValue(reg, v, W, H), picture: below, layers: null,
+            layerAlpha: id => { const s = byId.get(id); const cv = s && s.id !== l.id ? renderLayer(s) : null; return cv ? waterCrop(cv, 'wlMap:' + l.id, reg) : null; },
+            width: reg.w, height: reg.h, time, first: st.first, pointer: pp, layerPoint: id => loc(pointOf(id)), waterScale: reg.scale,
+          });
+          st.first = false;
+        }
+        st.field = drew && st.r.waterField ? st.r.waterField(WL_FIELD_ROWS) : null;
+        st.drew = drew;
+        // Readings: the height under its Probe, the energy of the whole surface, the share of it moving.
+        const r = wlReadings(st.field, reg.shape, wlToLocal(reg, { x: v('probeX'), y: v('probeY') }, W, H));
+        for (const k of WL_READS) report(env, l.id + '::' + k, r[k]);
+      }
+      if (!c || !st.drew || env.transparent) return st;
+      const op = v('opacity');
+      if (!(op > 0)) return st;
+      const reg = st.reg;
+      let img = st.r.canvas;
+      if (reg.shape !== 'all') {
+        // A pond: the surface faded out over Soft edge at its rim.
+        const m = klCanvas(pool, 'wlOut:' + l.id, reg.w, reg.h), mx = m.getContext('2d');
+        mx.setTransform(1, 0, 0, 1, 0, 0); mx.globalAlpha = 1; mx.globalCompositeOperation = 'copy';
+        mx.drawImage(img, 0, 0, reg.w, reg.h);
+        mx.globalCompositeOperation = 'destination-in';
+        mx.imageSmoothingEnabled = true;
+        mx.drawImage(waterEdge(l, reg, v('soft')), 0, 0, reg.w, reg.h);
+        mx.globalCompositeOperation = 'source-over';
+        img = m;
+      }
+      c.globalAlpha = op; c.globalCompositeOperation = KL_BLEND[l.blend] || 'source-over';
+      c.drawImage(img, reg.x0, reg.y0, reg.w, reg.h);
+      c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+      return st;
+    }
+    /** A pond's soft edge as an alpha canvas (at most 256 across), made again only when its shape, size or softness change. */
+    function waterEdge(l, reg, soft) {
+      const mw = Math.max(2, Math.min(256, reg.w)), mh = Math.max(2, Math.round(mw * reg.h / reg.w));
+      const key = reg.shape + '|' + reg.w + '|' + reg.h + '|' + (+soft || 0).toFixed(4) + '|' + H;
+      const cv = klCanvas(pool, 'wlEdge:' + l.id, mw, mh);
+      if (waterEdges.get(l.id) === key) return cv;
+      waterEdges.set(l.id, key);
+      const x = cv.getContext('2d'), img = x.createImageData(mw, mh);
+      for (let j = 0; j < mh; j++) for (let i = 0; i < mw; i++) {
+        const k = (j * mw + i) * 4;
+        img.data[k] = img.data[k + 1] = img.data[k + 2] = 255;
+        img.data[k + 3] = Math.round(255 * wlEdgeAlpha(reg.shape, (i + 0.5) / mw, 1 - (j + 0.5) / mh, reg.w, reg.h, H, soft));
+      }
+      x.putImageData(img, 0, 0);
+      return cv;
+    }
+    /** A Water layer as a matte: white where the water moves (its Waves), the picture's size. Once a frame (the surface as last stepped). */
+    function waterMatte(l) {
+      const big = klCanvas(pool, 'wlMatte:' + l.id, W, H);
+      if (waterMattes.get(l.id) === frameNo) return big;
+      waterMattes.set(l.id, frameNo);
+      const b = big.getContext('2d');
+      b.setTransform(1, 0, 0, 1, 0, 0); b.globalAlpha = 1; b.globalCompositeOperation = 'source-over'; b.clearRect(0, 0, W, H);
+      const st = waters.get(l.id);
+      if (!st || !st.field || !st.reg) return big;
+      const f = st.field, a = wlMatteAlpha(f, st.reg, H, env.value(l, 'feather'), env.value(l, 'soft'));
+      const small = klCanvas(pool, 'wlMask:' + l.id, f.w, f.h), x = small.getContext('2d');
+      const img = x.createImageData(f.w, f.h);
+      for (let j = 0; j < a.length; j++) { const i = j * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = Math.round(a[j] * 255); }
+      x.putImageData(img, 0, 0);
+      b.imageSmoothingEnabled = true; b.imageSmoothingQuality = 'high';
+      b.drawImage(small, st.reg.x0, st.reg.y0, st.reg.w, st.reg.h);
+      return big;
+    }
+    /** What a layer is as a matte: a Motion layer's "where it moves", a Water layer's waves, any other layer as drawn. */
+    const matteCanvas = m => (m.kind === 'motion' ? motionMatte(m) : m.kind === 'water' ? waterMatte(m) : renderLayer(m));
     /** A Motion layer's look: nothing (Hidden), the movement itself, a heat map, or its matte. */
     function drawMotion(c, l, v) {
       const st = motions.get(l.id);
@@ -1030,6 +1153,7 @@ export function createLayerKit() {
           case 'data': drawData(c, l, v); break;
           case 'agents': drawAgentsLayer(c, l, v); break;
           case 'motion': drawMotion(c, l, v); break;
+          case 'water': stepWater(l, c); break;
           case 'particles': drawParticleLayer(c, l, v, env, record, zones, zoneById, pictureFor(l.readFrom, l.detail), pending.get(l.id), W, H, dpr, aspect, time, dt, pointer, gl); break;
           case 'bodies': {
             const sizeH = (v('size') * dpr) / H;
@@ -1171,6 +1295,8 @@ export function createLayerKit() {
       ctx.drawImage(buf, 0, 0);
       for (const l of layers) if (drawn(l) && l.toShader === false) drawLayer(ctx, l);
     } else for (const l of layers) if (drawn(l)) drawLayer(ctx, l);
+    // Water layers always run (their readings and Waves matte): a hidden one is stepped here, drawing nothing.
+    for (const l of layers) if (l.kind === 'water') { const st = waters.get(l.id); if (!st || st.frame !== frameNo) stepWater(l, null); }
 
     // While editing: a particles layer's field and forces, on top (never into the Layers node).
     if (env.editing) for (const l of layers) {
@@ -1252,7 +1378,7 @@ export function createLayerKit() {
 
     // 8. Let go of the canvases of layers that no longer draw on their own or have masks, and of Motion layers that are gone.
     for (const k in pool) {
-      if (/^mt(Matte|Mask|Heat|Look):/.test(k)) { if (!byId.has(k.slice(k.indexOf(':') + 1))) { pool[k].width = pool[k].height = 0; delete pool[k]; } continue; }
+      if (/^(mt(Matte|Mask|Heat|Look)|wl(Below|Map|Out|Edge|Matte|Mask)):/.test(k)) { if (!byId.has(k.slice(k.indexOf(':') + 1))) { pool[k].width = pool[k].height = 0; delete pool[k]; } continue; }
       if (k.startsWith('lay:') ? !rendered.get(k.slice(4)) : k.startsWith('mk:') ? !(rendered.get(k.slice(3)) && byId.get(k.slice(3)).masks) : false) { pool[k].width = pool[k].height = 0; delete pool[k]; }
     }
   }
@@ -1519,14 +1645,16 @@ export function createLayerKit() {
       // A crossfade under way, or a sketch showing in the background.
       if (bqLast && record.layers[0] && record.layers[0].id === bqLast.layerId && (bqLast.fading || bqLast.items.some(i => i.item.kind === 'script'))) return true;
       const mattes = kmMatteSources(record.layers, l => (shown.has(l.id) ? shown.get(l.id) : l.visible));
-      // A Motion layer measures while hidden too.
-      return record.layers.some(l => ((shown.has(l.id) ? shown.get(l.id) : l.visible) || mattes.has(l.id) || l.kind === 'motion') && (KIT_ANIMATED[l.kind] || (l.kind === 'null' && l.follow !== 'none') || (l.kind === 'text' && (l.sequence || !!l.reads)) || (l.kind === 'contours' && l.flow !== 0) || (l.kind === 'glyphs' && l.readFrom === 'camera') || (l.kind === 'data' && dStates.has(l.id) && dStates.get(l.id).from >= 0)));
+      // A Motion layer measures while hidden too, and a Water layer's waves keep moving.
+      return record.layers.some(l => ((shown.has(l.id) ? shown.get(l.id) : l.visible) || mattes.has(l.id) || l.kind === 'motion' || l.kind === 'water') && (KIT_ANIMATED[l.kind] || (l.kind === 'null' && l.follow !== 'none') || (l.kind === 'text' && (l.sequence || !!l.reads)) || (l.kind === 'contours' && l.flow !== 0) || (l.kind === 'glyphs' && l.readFrom === 'camera') || (l.kind === 'data' && dStates.has(l.id) && dStates.get(l.id).from >= 0)));
     },
     /**
      * Forget all state (a new recording starts from scratch). `seed` (a take's)
      * makes every random choice after this repeatable; none or 0 is Math.random.
      */
     background,
-    reset(seed) { lostNulls = new Set(); sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; dStates.clear(); dsCurrent.clear(); parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); rels.clear(); relGrids.clear(); ags.clear(); relDriven = new Set(); motions.clear(); motionMattes.clear(); paths.clear(); pathFades.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); bornDiedSeen.clear(); },
+    /** Let go of what lives outside the canvases' pool (each Water layer's WebGL renderer): the kit is done with. */
+    dispose() { for (const id of [...waters.keys()]) dropWaterState(id); },
+    reset(seed) { lostNulls = new Set(); sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; dStates.clear(); dsCurrent.clear(); parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); rels.clear(); relGrids.clear(); ags.clear(); relDriven = new Set(); motions.clear(); motionMattes.clear(); for (const id of [...waters.keys()]) dropWaterState(id); paths.clear(); pathFades.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); bornDiedSeen.clear(); },
   };
 }
