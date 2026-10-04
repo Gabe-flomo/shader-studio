@@ -9,16 +9,25 @@ Link them on the **Files page → Linked folders** (or from any picker's **Link 
 | Where | How | After a restart |
 | --- | --- | --- |
 | Desktop app | a folder picked in the system dialog; read through read-only Rust commands (`lf_*`) | works straight away (if the drive is there) |
-| Chrome, Edge | a File System Access directory handle (read mode), kept in IndexedDB like the workspace folder's | the browser wants one click: **Allow again** |
+| Chrome, Edge | a File System Access directory handle (read mode), kept in IndexedDB like the workspace folder's | the browser wants one click: **Reconnect** |
 | Safari, Firefox | not available: they can't open a folder on your computer | the pickers keep their file inputs (files are copied into the library as before) |
 
 ## The model
 
-A linked folder is `{ id, name, kind, backend, path | handle, addedAt }` in IndexedDB (`shader-studio-linked`, store `kv`, key `folders`). `kind` (Anything, Samples, Images, Videos, Fonts) is only a hint: the pickers start in a folder of their kind, and the Files view's filter starts there.
+A linked folder is `{ id, name, kind, backend, path | handle, addedAt }`, kept **one record per folder**:
+
+- Desktop: `<app data>/linked-folders.json` (`~/Library/Application Support/com.shaderstudio.app/` on a Mac), through `lf_store_list` / `lf_store_put` / `lf_store_remove` in `src-tauri/src/linked.rs` (atomic writes; a damaged file is never written over). Not sandboxed, so a path is all it needs: no security-scoped bookmark. The page registers the roots with `lf_set_roots` when it reads the list.
+- Browser: IndexedDB `shader-studio-linked`, store `kv`, key `folder:<id>` (a directory handle can only live there).
+
+Each change (link, rename, kind, relocate, unlink) writes or removes only its own folder, so a window, tab or second copy of the app that read the list earlier can't write over folders linked elsewhere, and a link made before the list was read joins it. The list is read again on window focus and when another window or tab says it changed (`BroadcastChannel('playfield-linked-folders')`). A folder that couldn't be saved stays linked for the session (with an error toast) and is saved on the next try.
+
+Until 2026.10.7 the whole list was one array under `kv` / `folders`, rewritten from memory on every change (and IndexedDB errors were swallowed), which could lose folders linked in another window or before the list was read, or after WebKit closed the database connection. That array is moved over the first time the list is read (on the desktop into the data folder) and then removed.
+
+`kind` (Anything, Samples, Images, Videos, Fonts) is only a hint: the pickers start in a folder of their kind, and the Files view's filter starts there.
 
 Status per folder: **Connected**, **Needs your OK** (a browser after a restart), **Not found** (drive unplugged, moved, renamed or deleted), or **Checking…**. Folders are checked when the app first needs them, on window focus, and (in a browser, while linked files are in use) every 15 seconds.
 
-Actions: **Link a folder…**, **Rename…**, **Mostly for** (the kind), **Allow again** / **Check again**, **Find it somewhere else…** (point the same linked folder at a new place: its id is kept, so everything using its files finds them again when the paths inside are the same), **Unlink** (nothing on disk is touched; Undo for a few seconds).
+Actions: **Link a folder…**, **Rename…**, **Mostly for** (the kind), **Reconnect** / **Check again**, **Find it somewhere else…** (**Relocate…** in a folder's notice) (point the same linked folder at a new place: its id is kept, so everything using its files finds them again when the paths inside are the same), **Unlink** (**Remove** in the notice; nothing on disk is touched; Undo for a few seconds). A folder that isn't there is never dropped by itself: it stays listed as **Not found** with Check again / Relocate… / Remove.
 
 ## References
 

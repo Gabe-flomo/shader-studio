@@ -10,6 +10,14 @@
 //!
 //! A watcher per root tells the page ("linked-changed", with the root and the
 //! changed paths) when a file there changes, so an edited sample reloads.
+//!
+//! The list of linked folders itself is kept here too, in
+//! `<app data>/linked-folders.json` (`lf_store_list` / `lf_store_put` /
+//! `lf_store_remove`), one entry per folder, written atomically. Each change
+//! touches only its own folder, read fresh from disk, so a window (or a second
+//! copy of the app) that loaded the list earlier can't write over folders
+//! linked elsewhere. The page's WebKit IndexedDB used to hold it as one array,
+//! rewritten whole from memory on every change (the page migrates that list).
 
 use notify::{RecursiveMode, Watcher};
 use serde::Serialize;
@@ -19,12 +27,15 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter, State};
+use serde_json::{json, Value};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 #[derive(Default)]
 pub struct LinkedState {
     roots: Mutex<HashSet<PathBuf>>,
     watchers: Mutex<HashMap<PathBuf, notify::RecommendedWatcher>>,
+    /// One change to the saved list at a time.
+    store: Mutex<()>,
 }
 
 #[derive(Serialize, Debug)]
@@ -217,9 +228,121 @@ pub fn lf_unwatch(state: State<'_, LinkedState>, root: String) -> Result<(), Str
     Ok(())
 }
 
+// ── The saved list ──────────────────────────────────────────────────────────
+
+const STORE_FILE: &str = "linked-folders.json";
+
+fn store_path(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path().app_data_dir().map(|d| d.join(STORE_FILE)).map_err(|e| e.to_string())
+}
+
+fn id_of(f: &Value) -> Option<&str> {
+    f.get("id").and_then(|i| i.as_str()).filter(|i| !i.is_empty())
+}
+
+/// The saved folders (an entry needs a string `id`; anything else is skipped).
+/// No file yet is an empty list; one that can't be read is an error, so a
+/// change never writes over a list it couldn't read.
+pub fn store_read(path: &Path) -> Result<Vec<Value>, String> {
+    let bytes = match fs::read(path) {
+        Ok(b) => b,
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(format!("Couldn't read the linked folders list: {e}")),
+    };
+    let v: Value = serde_json::from_slice(&bytes).map_err(|e| format!("The linked folders list is damaged: {e}"))?;
+    let list = v.get("folders").and_then(|f| f.as_array()).cloned().unwrap_or_default();
+    Ok(list.into_iter().filter(|f| id_of(f).is_some()).collect())
+}
+
+fn store_write(path: &Path, folders: &[Value]) -> Result<(), String> {
+    let body = serde_json::to_vec_pretty(&json!({ "version": 1, "folders": folders })).map_err(|e| e.to_string())?;
+    crate::recovery::write_atomic(path, &body).map_err(|e| format!("Couldn't save the linked folders list: {e}"))
+}
+
+/// Add a folder, or replace the one with its id (in place, so the order stays).
+pub fn store_put(path: &Path, folder: Value) -> Result<(), String> {
+    let id = id_of(&folder).ok_or("A linked folder needs an id.")?.to_string();
+    let mut list = store_read(path)?;
+    match list.iter_mut().find(|f| id_of(f) == Some(id.as_str())) {
+        Some(had) => *had = folder,
+        None => list.push(folder),
+    }
+    store_write(path, &list)
+}
+
+/// Forget a folder (only the list changes; nothing on disk is touched).
+pub fn store_remove(path: &Path, id: &str) -> Result<(), String> {
+    let list = store_read(path)?;
+    let kept: Vec<Value> = list.iter().filter(|f| id_of(f) != Some(id)).cloned().collect();
+    if kept.len() == list.len() {
+        return Ok(());
+    }
+    store_write(path, &kept)
+}
+
+#[tauri::command]
+pub fn lf_store_list(app: AppHandle, state: State<'_, LinkedState>) -> Result<Vec<Value>, String> {
+    let _g = state.store.lock().map_err(|e| e.to_string())?;
+    store_read(&store_path(&app)?)
+}
+
+#[tauri::command]
+pub fn lf_store_put(app: AppHandle, state: State<'_, LinkedState>, folder: Value) -> Result<(), String> {
+    let _g = state.store.lock().map_err(|e| e.to_string())?;
+    store_put(&store_path(&app)?, folder)
+}
+
+#[tauri::command]
+pub fn lf_store_remove(app: AppHandle, state: State<'_, LinkedState>, id: String) -> Result<(), String> {
+    let _g = state.store.lock().map_err(|e| e.to_string())?;
+    store_remove(&store_path(&app)?, &id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn folder(id: &str, path: &str) -> Value {
+        json!({ "id": id, "name": id, "kind": "samples", "backend": "desktop", "path": path, "addedAt": 1 })
+    }
+
+    fn ids(l: &[Value]) -> Vec<String> {
+        l.iter().map(|f| f["id"].as_str().unwrap().to_string()).collect()
+    }
+
+    #[test]
+    fn store_keeps_every_folder() {
+        let d = tmp_root("store");
+        let p = d.join("linked-folders.json");
+        assert!(store_read(&p).unwrap().is_empty());
+        store_put(&p, folder("a", "/Volumes/x/A")).unwrap();
+        store_put(&p, folder("b", "/Users/me/B")).unwrap();
+        store_put(&p, folder("c", "/Users/me/C")).unwrap();
+        assert_eq!(ids(&store_read(&p).unwrap()), ["a", "b", "c"]);
+        // Replacing keeps the order; removing takes only that one.
+        let mut b = folder("b", "/Users/me/B2");
+        b["name"] = json!("Renamed");
+        store_put(&p, b).unwrap();
+        store_remove(&p, "a").unwrap();
+        store_remove(&p, "nope").unwrap();
+        let l = store_read(&p).unwrap();
+        assert_eq!(ids(&l), ["b", "c"]);
+        assert_eq!(l[0]["name"], "Renamed");
+        assert_eq!(l[0]["path"], "/Users/me/B2");
+        assert!(store_put(&p, json!({ "name": "no id" })).is_err());
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn a_damaged_list_is_never_written_over() {
+        let d = tmp_root("damaged");
+        let p = d.join("linked-folders.json");
+        fs::write(&p, b"{ not json").unwrap();
+        assert!(store_read(&p).is_err());
+        assert!(store_put(&p, folder("a", "/x")).is_err());
+        assert_eq!(fs::read(&p).unwrap(), b"{ not json");
+        fs::remove_dir_all(&d).unwrap();
+    }
 
     fn tmp_root(tag: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("ss-lf-test-{tag}-{}", std::process::id()));
