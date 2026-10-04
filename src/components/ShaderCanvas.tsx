@@ -27,7 +27,7 @@ import { HandsPill } from './play/HandsChip';
 import { applySolo, usePlayUi } from './play/playUi';
 import { applyGroupVisibility } from '../types/layerGroups';
 import { layersUniforms, setLayersTap, setLayersRenderer, releaseLayersRenderer } from '../play/layersTexture';
-import { bindGpuParticles, drawGpuParticles, gpuParticlesActive, releaseGpuParticlesRenderer, resetGpuParticles, setGpuParticlesRenderer } from '../play/gpuParticlesTexture';
+import { bindGpuParticles, drawGpuParticles, gpuParticlesActive, particleSoundOf, releaseGpuParticlesRenderer, resetGpuParticles, setGpuParticlesRenderer } from '../play/gpuParticlesTexture';
 import { padGridUniforms } from '../lib/padGrid';
 import { attachLayerDrop } from '../play/layerDrop';
 import { videoEngine } from '../lib/videoEngine';
@@ -673,6 +673,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           uniforms: () => material.uniforms,
           onReady: () => requestRender(),
           onLinkFailed: src => { const errors = flushGlErrors(); if (errors.length > 0) useNodeGraphStore.getState().setGlslErrors(errors, src); },
+          // Sound kick and Chladni hear what the Particles node hears (Mic, the Audio engine).
+          sound: particleSoundOf,
         });
         agentTargets = new AgentTargets(renderer, supportsHalfFloat);
       }

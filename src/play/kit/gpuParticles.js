@@ -1004,6 +1004,131 @@ export function gpUnsupported(gl) {
   return null;
 }
 
+/*
+ * Shared GLSL pieces (docs/agents-plan.md §11): the engine's forces, sound, plate and look, as
+ * small generators that GP_SIM and GP_DRAW_VERT below are written with, and that the Agents
+ * group's force and draw nodes (nodes/definitions/agentForces.ts, kit/agentShaders.js) call with
+ * their own names. Called with this engine's names they give back its text exactly, which
+ * gpEngineShaders.test.ts proves byte for byte: the Particles node never changes because of them.
+ */
+/** The curl noise's position in noise space: p scaled (2.4 a unit at Size 1) and moved through time. */
+export const gpCurlAt = (p, scale, time) => `${p} * 2.4 * ${scale} + vec3(0.0, 0.0, ${time})`;
+/** The curl's second octave, read at q (a gpNoised value with its derivatives). */
+export const gpCurlOctave2 = q => `gpNoised(${q} * 2.03 + vec3(17.1, 5.3, 31.4))`;
+/** Curl in the picture's plane from two octaves a and b (with a little depth in z). */
+export const gpCurlPlane = (a, b) => `vec3(${a}.z, -${a}.y, ${a}.w * 0.4) + 0.5 * vec3(${b}.z, -${b}.y, ${b}.w * 0.4)`;
+/** The wind's gusts from the first octave: 0.15…1.35 round 0.75. */
+export const gpGust = a => `0.75 + 0.6 * ${a}.x`;
+/** Swirl round a point: s · the perpendicular of d, strongest at radius √r2 (d from the centre, r its length). */
+export const gpSwirl = (s, d, r, r2) => `${s} * vec2(-${d}.y, ${d}.x) / ${r} * (${r} / (${r2} + ${r} * ${r}))`;
+/** The attractor's pull: a · g (to it) / r / (0.2 + r): strong near it, falling off far away. */
+export const gpAttractPull = (a, g, r) => `${a} * ${g} / ${r} / (0.2 + ${r})`;
+/** A hand's reach: a Gaussian of the distance r over Reach. */
+export const gpHandFall = (r, reach) => `exp(-${r} * ${r} / (${reach} * ${reach}))`;
+/** A hand's push and stir (vec3): Force toward it (less in its core), Swirl round it, times its fall. */
+export const gpHandPush = (force, swirl, hd, hr, reach, fall) =>
+  `(${force} * ${hd} / ${hr} * min(${hr} / (0.25 * ${reach}), 1.0) * 3.0 + ${swirl} * vec3(-${hd}.y, ${hd}.x, 0.0) / ${hr} * 3.0) * ${fall}`;
+/** Flow along a field: the direction dir (its length gl, the slope), the slope's pull capped at 3. */
+export const gpFlowPush = (dir, gl, force) => `${dir} / ${gl} * min(${gl}, 3.0) * ${force} * 0.8`;
+/** The sound wave's phase at distance r: rings a quarter of a picture apart moving out at speed. */
+export const gpWavePhase = (r, time, speed) => `6.2831853 * (${r} * 4.0 - ${time} * ${speed} * 4.0)`;
+/** The wave's push along dir (vec3), as loud as the sound was when it set off (lv). */
+export const gpWavePush = (dir, wave, lv, ph) => `${dir} * (${wave} * ${lv} * sin(${ph}) * 3.0)`;
+/** Vibrate (vec3): a shiver along and across dir, strongest where the wave is. s is a gpRnd state. */
+export const gpVibrate = (dir, s, amount, lv, ph) => `(${dir} * (gpRnd(${s}) * 2.0 - 1.0) + 0.5 * gpUnit(${s})) * (${amount} * ${lv} * (0.6 + 0.4 * cos(${ph})) * 14.0)`;
+/** Crunch (vec3): the air shaking at random, as hard as amount. */
+export const gpCrunch = (s, amount) => `gpUnit(${s}) * (${amount} * 26.0)`;
+/** A shock ring's front at distance r, age seconds after the hit: 0 on the front, in ring widths. */
+export const gpShockRing = (r, age, speed) => `(${r} - ${age} * ${speed}) / 0.07`;
+/** The shock's pressure pulse: out as the front arrives, back behind it, fading with age. */
+export const gpShockPush = (d, r, strength, ring, age) => `${d} / ${r} * (${strength} * 16.0 * ${ring} * exp(-${ring} * ${ring}) * exp(-${age} * 1.5))`;
+/** The sound heard `ago` seconds back, from a GP_LEVELS × 1 history (60 a second, newest first). `args` adds leading parameters (the history as a sampler). */
+export const gpLevelGlsl = (fn, levels, args = '') => `float ${fn}(${args}float ago) {
+  float x = clamp(ago * 60.0, 0.0, ${GP_LEVELS - 2}.0);
+  int i = int(x);
+  return mix(texelFetch(${levels}, ivec2(i, 0), 0).r, texelFetch(${levels}, ivec2(i + 1, 0), 0).r, x - float(i));
+}`;
+/** J_n(x) from the Bessel table (gpBesselTable), linear between samples. */
+export const gpBesselGlsl = (fn, table) => `float ${fn}(float n, float x) {
+  float fx = clamp(x / ${GP_BESSEL_X}.0 * ${GP_BESSEL_W - 1}.0, 0.0, ${GP_BESSEL_W - 1}.0 - 0.001);
+  int i = int(fx), r = int(n + 0.5);
+  return mix(texelFetch(${table}, ivec2(i, r), 0).r, texelFetch(${table}, ivec2(i + 1, r), 0).r, fract(fx));
+}`;
+/**
+ * A Chladni plate's displacement at q (−1…1 across it): the weighted sum of its modes vec4(n, m, k, w).
+ * `o` names the shape (1 square, 2 round), the symmetry (1 plus), the mode count and array, and J_n;
+ * `o.args` adds parameters after q (the count and the modes, passed in).
+ */
+export const gpPlateGlsl = (fn, o) => `float ${fn}(vec2 q${o.args ?? ''}) {
+  float u = 0.0;
+  for (int j = 0; j < ${GP_PLATE_MAX}; j++) {
+    if (j >= ${o.count}) break;
+    vec4 md = ${o.modes}[j];
+    if (${o.shape} == 1) {
+      vec2 X = (q * 0.5 + 0.5) * 3.14159265;
+      float sg = (${o.sym} == 1 || md.x == md.y) ? 1.0 : -1.0;
+      u += md.w * (cos(md.x * X.x) * cos(md.y * X.y) + sg * cos(md.y * X.x) * cos(md.x * X.y));
+    } else {
+      // Plus turns every other mode by half a lobe, so their spokes interleave.
+      float turn = (${o.sym} == 1 && (j & 1) == 1) ? 1.5707963 : 0.0;
+      u += md.w * ${o.J}(md.x, md.z * length(q)) * cos(md.x * atan(q.y, q.x + 1e-7) + turn);
+    }
+  }
+  return u;
+}`;
+/**
+ * The sand's step on a plate, as statements (`i` the indent): c (vec2, from the plate's centre) moves
+ * down |u| to the nearest still line, never past it, and is shaken by how much the plate moves there;
+ * the rim puts it back on. `o` names the plate function (and `o.args`, more arguments after q), its
+ * half-size, Settle, Shake, the step, the shape (1 square), the random state.
+ */
+export const gpPlateStep = (i, o) => `${i}vec2 q = c / ${o.half};
+${i}float e = 0.003;
+${i}float a0 = ${o.plate}(q${o.args ?? ''});
+${i}vec2 gr = vec2(${o.plate}(q + vec2(e, 0.0)${o.args ?? ''}) - a0, ${o.plate}(q + vec2(0.0, e)${o.args ?? ''}) - a0) / e;
+${i}float gl = length(gr), aa = abs(a0);
+${i}// How far the nearest still line is (plate units), roughly.
+${i}float dist = aa / max(gl, 1e-3);
+${i}vec2 mv = vec2(0.0);
+${i}if (gl > 1e-4) {
+${i}  // Down the slope of |u|, never past the line (at most half the way there in a step).
+${i}  float sp = min(${o.settle} * 0.9 * min(aa * 10.0, 1.0), 0.5 * dist / max(${o.dt}, 1e-4));
+${i}  mv = -sign(a0) * gr / gl * sp * ${o.dt};
+${i}}
+${i}// The shaking: a random kick as big as the plate moves here, fading to a grain on the lines.
+${i}float kick = ${o.shake} * (0.12 * min(dist * 8.0, 1.0) * (0.4 + 0.6 * min(aa * 2.0, 1.0)) + 0.03);
+${i}mv += (gpUnit(${o.s}).xy) * kick * sqrt(${o.dt});
+${i}q += mv;
+${i}// The rim: back onto the plate.
+${i}if (${o.shape} == 1) q = clamp(q, -1.0, 1.0) - 2.0 * max(abs(q) - 1.0, 0.0) * sign(q);
+${i}else { float rq = length(q); if (rq > 1.0) q *= max(0.0, 2.0 - rq) / rq; }
+${i}c = q * ${o.half};`;
+/** The colour gradient (four stops, or a rainbow) over 0…1. */
+export const gpPaletteGlsl = (fn, rainbow, pal) => `vec3 ${fn}(float t) {
+  if (${rainbow} == 1) return clamp(abs(fract(t + vec3(0.0, 2.0, 1.0) / 3.0) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+  t = clamp(t, 0.0, 1.0) * 3.0;
+  int k = int(min(floor(t), 2.0));
+  return mix(${pal}[k], ${pal}[k + 1], t - float(k));
+}`;
+/** A particle's fade in and out over its life (a = age / life). */
+export const gpFade = a => `smoothstep(0.0, 0.06, ${a}) * (1.0 - smoothstep(0.5, 1.0, ${a}))`;
+/**
+ * The lights on one particle, as statements: L (its light, a dim ambient when there are lights) and
+ * near (how close to them it is). Reads P.xyz, u_lights, u_light[4] (x, y, reach, power), u_lightZ,
+ * u_lightCol[4] and u_deep (0: flat, the depth ignored).
+ */
+export const GP_LIGHTS = `  vec3 L = vec3(u_lights > 0 ? 0.22 : 1.0);
+  float near = 0.0;
+  for (int j = 0; j < 4; j++) {
+    if (j >= u_lights) break;
+    vec3 d = P.xyz - vec3(u_light[j].xy, u_lightZ[j]);
+    if (u_deep == 0) d.z = 0.0;
+    float q = dot(d, d) / (u_light[j].z * u_light[j].z);
+    float e = u_light[j].w / (1.0 + q);
+    L += u_lightCol[j] * e;
+    near += e;
+  }`;
+
 const GP_QUAD_VERT = `#version 300 es
 void main() {
   vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
@@ -1156,35 +1281,11 @@ float gpVolAt(vec3 q) {
   return mix(texture(u_vol, a).r, texture(u_vol, b).r, z - z0);
 }
 // The sound heard 'ago' seconds back (the history is 60 a second, newest first).
-float gpLevel(float ago) {
-  float x = clamp(ago * 60.0, 0.0, ${GP_LEVELS - 2}.0);
-  int i = int(x);
-  return mix(texelFetch(u_levels, ivec2(i, 0), 0).r, texelFetch(u_levels, ivec2(i + 1, 0), 0).r, x - float(i));
-}
+${gpLevelGlsl('gpLevel', 'u_levels')}
 // J_n(x) from the table (row n, x over 0…${GP_BESSEL_X}), linear between samples.
-float gpJ(float n, float x) {
-  float fx = clamp(x / ${GP_BESSEL_X}.0 * ${GP_BESSEL_W - 1}.0, 0.0, ${GP_BESSEL_W - 1}.0 - 0.001);
-  int i = int(fx), r = int(n + 0.5);
-  return mix(texelFetch(u_bessel, ivec2(i, r), 0).r, texelFetch(u_bessel, ivec2(i + 1, r), 0).r, fract(fx));
-}
+${gpBesselGlsl('gpJ', 'u_bessel')}
 // The plate's displacement at q (−1…1 across it): the weighted sum of its modes. 0 on the nodal lines.
-float gpPlate(vec2 q) {
-  float u = 0.0;
-  for (int j = 0; j < ${GP_PLATE_MAX}; j++) {
-    if (j >= u_plateN) break;
-    vec4 md = u_plateMode[j];
-    if (u_plate == 1) {
-      vec2 X = (q * 0.5 + 0.5) * 3.14159265;
-      float sg = (u_plateSym == 1 || md.x == md.y) ? 1.0 : -1.0;
-      u += md.w * (cos(md.x * X.x) * cos(md.y * X.y) + sg * cos(md.y * X.x) * cos(md.x * X.y));
-    } else {
-      // Plus turns every other mode by half a lobe, so their spokes interleave.
-      float turn = (u_plateSym == 1 && (j & 1) == 1) ? 1.5707963 : 0.0;
-      u += md.w * gpJ(md.x, md.z * length(q)) * cos(md.x * atan(q.y, q.x + 1e-7) + turn);
-    }
-  }
-  return u;
-}
+${gpPlateGlsl('gpPlate', { count: 'u_plateN', modes: 'u_plateMode', shape: 'u_plate', sym: 'u_plateSym', J: 'gpJ' })}
 void gpSpawn(float i, vec4 H, out vec4 P, out vec4 V) {
   uint s = gpHash(uint(i) * 1664525u ^ gpHash(u_seed + 1013904223u));
   float life = max(0.05, u_life * (1.0 + u_lifeVar * (gpRnd(s) * 2.0 - 1.0)));
@@ -1227,8 +1328,8 @@ void main() {
   vec3 f = vec3(0.0, -u_gravity, 0.0);
   float gust = 1.0;
   if (u_turb != 0.0 || u_wind != 0.0) {
-    vec3 q = p * 2.4 * u_scale + vec3(0.0, 0.0, u_noiseTime);
-    vec4 a = gpNoised(q), b = gpNoised(q * 2.03 + vec3(17.1, 5.3, 31.4));
+    vec3 q = ${gpCurlAt('p', 'u_scale', 'u_noiseTime')};
+    vec4 a = gpNoised(q), b = ${gpCurlOctave2('q')};
     vec3 c;
     if (u_deep == 1) {
       // Curl noise in 3D: the cross product of two gradients is divergence-free, so streams fold into
@@ -1236,18 +1337,18 @@ void main() {
       c = cross(a.yzw, b.yzw) * 1.6 + 0.35 * vec3(a.z, -a.y, 0.0);
     } else {
       // In the picture's plane (with a little depth, so it isn't flat).
-      c = vec3(a.z, -a.y, a.w * 0.4) + 0.5 * vec3(b.z, -b.y, b.w * 0.4);
+      c = ${gpCurlPlane('a', 'b')};
     }
     f += c * u_turb;
-    gust = 0.75 + 0.6 * a.x;
+    gust = ${gpGust('a')};
   }
   f.x += u_wind * gust;
   vec2 d = p.xy - u_emitAt;
   float r = length(d) + 1e-4;
-  f.xy += u_swirl * vec2(-d.y, d.x) / r * (r / (0.25 + r * r));
+  f.xy += ${gpSwirl('u_swirl', 'd', 'r', '0.25')};
   vec3 g = vec3(u_attractAt, 0.0) - p;
   float ra = length(g) + 1e-4;
-  f += u_attract * g / ra / (0.2 + ra);
+  f += ${gpAttractPull('u_attract', 'g', 'ra')};
   // What the person does: hands pull (or push) and stir; a sound wave travels out and shakes them.
   vec3 fx = vec3(0.0);
   for (int j = 0; j < 2; j++) {
@@ -1255,8 +1356,8 @@ void main() {
     vec3 hd = vec3(u_hand[j].xy, 0.0) - p;
     if (u_deep == 0) hd.z = 0.0;
     float hr = length(hd) + 1e-4;
-    float fall = exp(-hr * hr / (u_handReach * u_handReach));
-    fx += (u_handForce * hd / hr * min(hr / (0.25 * u_handReach), 1.0) * 3.0 + u_handSwirl * vec3(-hd.y, hd.x, 0.0) / hr * 3.0) * fall;
+    float fall = ${gpHandFall('hr', 'u_handReach')};
+    fx += ${gpHandPush('u_handForce', 'u_handSwirl', 'hd', 'hr', 'u_handReach', 'fall')};
   }
   if (u_wave != 0.0 || u_vibrate != 0.0) {
     vec3 sd = p - vec3(u_emitAt, 0.0);
@@ -1264,10 +1365,10 @@ void main() {
     vec3 sdir = sd / sr;
     float lv = gpLevel(sr / u_waveSpeed);
     // Rings a quarter of a picture apart, moving out at Wave speed, as loud as the sound was when they set off.
-    float ph = 6.2831853 * (sr * 4.0 - u_time * u_waveSpeed * 4.0);
-    fx += sdir * (u_wave * lv * sin(ph) * 3.0);
+    float ph = ${gpWavePhase('sr', 'u_time', 'u_waveSpeed')};
+    fx += ${gpWavePush('sdir', 'u_wave', 'lv', 'ph')};
     // Vibrate: a shiver, strongest where the wave is.
-    fx += (sdir * (gpRnd(s) * 2.0 - 1.0) + 0.5 * gpUnit(s)) * (u_vibrate * lv * (0.6 + 0.4 * cos(ph)) * 14.0);
+    fx += ${gpVibrate('sdir', 's', 'u_vibrate', 'lv', 'ph')};
   }
   // Shockwaves: a ring of pressure leaves the emitter on each hit and pushes everything it passes.
   for (int j = 0; j < 4; j++) {
@@ -1276,13 +1377,13 @@ void main() {
     vec3 kd = p - vec3(u_shock[j].xy, 0.0);
     if (u_deep == 0) kd.z = 0.0;
     float kr = length(kd) + 1e-4;
-    float ring = (kr - age * u_shockSpeed) / 0.07;
+    float ring = ${gpShockRing('kr', 'age', 'u_shockSpeed')};
     // A pressure pulse: pushed out as the front arrives, pulled back behind it, so the ring shows and passes
     // on without clearing the middle.
-    fx += kd / kr * (u_shock[j].w * 16.0 * ring * exp(-ring * ring) * exp(-age * 1.5));
+    fx += ${gpShockPush('kd', 'kr', 'u_shock[j].w', 'ring', 'age')};
   }
   // Crunch: the air shakes, harder the louder and brighter the sound.
-  if (u_crunch > 0.0) fx += gpUnit(s) * (u_crunch * 26.0);
+  if (u_crunch > 0.0) fx += ${gpCrunch('s', 'u_crunch')};
   if (u_jet > 0.0) {
     // A jet (a rocket's exhaust) down from the emitter: fast at its core, widening, shedding vortices
     // side to side as it goes, and drawing the air round it in.
@@ -1329,7 +1430,7 @@ void main() {
         float gl = length(gr);
         if (gl > 1e-5) {
           vec2 dir = u_flow == 2 ? vec2(-gr.y, gr.x) : gr;
-          v.xy += dir / gl * min(gl, 3.0) * u_flowForce * 0.8 * u_dt;
+          v.xy += ${gpFlowPush('dir', 'gl', 'u_flowForce')} * u_dt;
         }
       }
       if (u_obstacle > 0) {
@@ -1380,27 +1481,7 @@ void main() {
     // is shaken by how much the plate moves where it lies, so it can't rest anywhere else. In 3D the plate
     // lies flat (x, z) at the emitter's height and the sand settles onto it.
     vec2 c = u_deep == 1 ? vec2(p.x - u_emitAt.x, p.z) : p.xy - u_emitAt;
-    vec2 q = c / u_plateHalf;
-    float e = 0.003;
-    float a0 = gpPlate(q);
-    vec2 gr = vec2(gpPlate(q + vec2(e, 0.0)) - a0, gpPlate(q + vec2(0.0, e)) - a0) / e;
-    float gl = length(gr), aa = abs(a0);
-    // How far the nearest still line is (plate units), roughly.
-    float dist = aa / max(gl, 1e-3);
-    vec2 mv = vec2(0.0);
-    if (gl > 1e-4) {
-      // Down the slope of |u|, never past the line (at most half the way there in a step).
-      float sp = min(u_settle * 0.9 * min(aa * 10.0, 1.0), 0.5 * dist / max(u_dt, 1e-4));
-      mv = -sign(a0) * gr / gl * sp * u_dt;
-    }
-    // The shaking: a random kick as big as the plate moves here, fading to a grain on the lines.
-    float kick = u_shake * (0.12 * min(dist * 8.0, 1.0) * (0.4 + 0.6 * min(aa * 2.0, 1.0)) + 0.03);
-    mv += (gpUnit(s).xy) * kick * sqrt(u_dt);
-    q += mv;
-    // The rim: back onto the plate.
-    if (u_plate == 1) q = clamp(q, -1.0, 1.0) - 2.0 * max(abs(q) - 1.0, 0.0) * sign(q);
-    else { float rq = length(q); if (rq > 1.0) q *= max(0.0, 2.0 - rq) / rq; }
-    c = q * u_plateHalf;
+${gpPlateStep('    ', { half: 'u_plateHalf', plate: 'gpPlate', settle: 'u_settle', shake: 'u_shake', dt: 'u_dt', shape: 'u_plate', s: 's' })}
     // The sand's own flight dies away fast on the plate.
     v *= exp(-6.0 * u_dt);
     if (u_deep == 1) { p.x = u_emitAt.x + c.x; p.z = c.y; p.y += (u_emitAt.y - p.y) * (1.0 - exp(-8.0 * u_dt)); }
@@ -1433,12 +1514,7 @@ uniform vec3 u_lightCol[4];
 out vec4 v_col;
 out float v_dist;
 ${GP_HASH}
-vec3 gpPalette(float t) {
-  if (u_rainbow == 1) return clamp(abs(fract(t + vec3(0.0, 2.0, 1.0) / 3.0) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
-  t = clamp(t, 0.0, 1.0) * 3.0;
-  int k = int(min(floor(t), 2.0));
-  return mix(u_pal[k], u_pal[k + 1], t - float(k));
-}
+${gpPaletteGlsl('gpPalette', 'u_rainbow', 'u_pal')}
 void gpCull() { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; v_col = vec4(0.0); v_dist = 0.0; }
 void main() {
   // Points: one vertex a particle. Thread: two, its head and a tail back along its velocity.
@@ -1448,7 +1524,7 @@ void main() {
   vec4 P = texelFetch(u_pos, t, 0), V = texelFetch(u_vel, t, 0);
   if (V.w <= 0.0 || P.w >= V.w) { gpCull(); return; }
   float a = P.w / V.w;
-  float fade = smoothstep(0.0, 0.06, a) * (1.0 - smoothstep(0.5, 1.0, a));
+  float fade = ${gpFade('a')};
   vec3 c;
   if (u_image == 1) c = textureLod(u_img, texelFetch(u_home, t, 0).xy, 0.0).rgb;
   else if (u_ink == 1) c = u_inkCol;
@@ -1458,17 +1534,7 @@ void main() {
     else if (u_colorBy == 2) k = fract(atan(V.y, V.x) / 6.2831853 + 0.5);
     c = gpPalette(k);
   }
-  vec3 L = vec3(u_lights > 0 ? 0.22 : 1.0);
-  float near = 0.0;
-  for (int j = 0; j < 4; j++) {
-    if (j >= u_lights) break;
-    vec3 d = P.xyz - vec3(u_light[j].xy, u_lightZ[j]);
-    if (u_deep == 0) d.z = 0.0;
-    float q = dot(d, d) / (u_light[j].z * u_light[j].z);
-    float e = u_light[j].w / (1.0 + q);
-    L += u_lightCol[j] * e;
-    near += e;
-  }
+${GP_LIGHTS}
   vec3 pos = P.xyz - V.xyz * (u_thread * float(end));
   float s = u_size * u_px * (1.0 + 0.35 * min(near, 4.0));
   float w = fade * u_bright * u_part;

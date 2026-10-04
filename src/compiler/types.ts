@@ -54,8 +54,13 @@ export interface AgentGroupProgram {
   species: number;
   /** stepsPerFrame, seed, preroll. */
   params: Record<string, AgentParam>;
-  /** How the birth windows go: everyone at step 0 (fill), or `rate` a second. */
-  emit: { mode: 'fill' | 'rate'; rate: AgentParam };
+  /**
+   * How the birth windows go: everyone at step 0 (fill), `rate` a second, or everyone at step 0 and
+   * each again as it dies (respawn: Keep full). `burst` is the head Emit's Burst trigger (0 if none).
+   */
+  emit: { mode: 'fill' | 'rate' | 'respawn'; rate: AgentParam; burst: AgentParam };
+  /** Nodes inside that listen (Sound kick, Chladni): the engine fills their uniforms every step. */
+  listeners: AgentListener[];
   /** Slugs of the Trails and Passes its update shader samples. */
   readsTrails: string[];
   readsPasses: string[];
@@ -63,6 +68,24 @@ export interface AgentGroupProgram {
   live: boolean;
   /** Graph nodes compiled into it (inside and outside the group). */
   nodeIds: string[];
+}
+
+/**
+ * A Sound kick or Chladni node inside a group (nodes/definitions/agentForces.ts): what it hears
+ * (Sound from, Level, Beat) and, for a plate, how its modes are picked. Its uniforms are named by
+ * `slug` (listenUniforms).
+ */
+export interface AgentListener {
+  nodeId: string;
+  slug: string;
+  kind: 'kick' | 'plate';
+  soundFrom: string;
+  /** A plate: square or round, its modes from N and M or the sound, minus or plus. */
+  shape?: 'square' | 'circle';
+  modeFrom?: 'manual' | 'sound';
+  symmetry?: 'minus' | 'plus';
+  /** level, beat, x, y (kick); modeN, modeM, modes, plateFreq, plateWeights, shake (plate). */
+  params: Record<string, AgentParam>;
 }
 
 /** A Deposit: one group's walkers drawn as points into one Trail, every step. */
@@ -94,9 +117,16 @@ export interface AgentDrawProgram {
   nodeId: string;
   slug: string;
   group: string;
-  style: 'points' | 'glow';
-  colorBy: 'single' | 'species' | 'speed' | 'heading';
-  /** size, brightness, glow, colorA, colorB. */
+  style: 'points' | 'glow' | 'streaks' | 'ink';
+  colorBy: 'single' | 'species' | 'speed' | 'heading' | 'age';
+  /** 'ab' (Colour A → B) or a Particles palette's name. */
+  palette: string;
+  /** Point lights (0–4), how they move, fade with age, brightness per walker or for the crowd. */
+  lights: number;
+  lightMotion: 'orbit' | 'still';
+  fade: boolean;
+  scaleBy: 'walker' | 'crowd';
+  /** size, brightness, glow, streak, speedRef, colorA, colorB, light settings. */
   params: Record<string, AgentParam | number[]>;
   live: boolean;
 }

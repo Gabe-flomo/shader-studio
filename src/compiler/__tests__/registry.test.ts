@@ -40,6 +40,14 @@ const CONNECTION_GATED = new Set([
   // The Agents engine reads these from the uniform table (lib/agentRunner.ts), not the picture's shader
   'trailField.diffuse', 'trailField.halfLife',
   'drawAgents.size', 'drawAgents.brightness', 'drawAgents.glow', 'drawAgents.colorA', 'drawAgents.colorB',
+  'drawAgents.streak', 'drawAgents.speedRef', 'drawAgents.lightColor', 'drawAgents.lightPower', 'drawAgents.lightReach',
+  'drawAgents.halo', 'drawAgents.lightOrbit', 'drawAgents.lightX', 'drawAgents.lightY',
+  // … and what the listening nodes hear (Sound from, Level, Beat; a plate's figure; where a shock ring starts)
+  'agentSoundKick.x', 'agentSoundKick.y', 'agentSoundKick.level', 'agentSoundKick.beat',
+  'agentChladni.modeN', 'agentChladni.modeM', 'agentChladni.modes', 'agentChladni.plateFreq', 'agentChladni.plateWeights',
+  'agentChladni.shake', 'agentChladni.level', 'agentChladni.beat',
+  // Flow and Collide do nothing, and read none of their settings, until a field is wired into Field ƒ / Shape ƒ
+  'agentFlow.strength', 'agentFlow.step', 'agentCollide.margin', 'agentCollide.cushion', 'agentCollide.bounce', 'agentCollide.friction',
 ]);
 
 function makeNode(id: string, type: string, def: NodeDefinition, x = 0): GraphNode {

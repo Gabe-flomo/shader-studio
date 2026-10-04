@@ -19,6 +19,18 @@ export const AGENT_EXAMPLE_INDEX: Record<string, { label: string; description: s
     label: 'Slime mold',
     description: 'A million walkers on the GPU, built from nodes: each one senses the trail ahead (left, centre, right), turns toward the strongest smell, moves and leaves more trail, which spreads and fades. Veins form, join, thicken and pulse by themselves (Jones 2010, Physarum polycephalum). Double-click the Agents group to open the rule.',
   },
+  agentParticles: {
+    label: 'Particles from nodes',
+    description: 'The Particles node\'s default look built from nodes you can open and rewire: a million embers born on a ring, carried by curl noise and a gentle swirl, pulled and stirred by the mouse, slowed by drag and fading over their life, drawn with glow and four orbiting lights. Double-click the Agents group to see the chain of forces.',
+  },
+  agentCurlSmoke: {
+    label: 'Curl smoke',
+    description: 'Smoke built from nodes: a million particles rise from a small source, warm air (an Expression Block) lifting them less as they cool, while curl noise folds them into threads and a gusty breeze leans the plume over, drawn as ink streaks on paper.',
+  },
+  agentSoundBurst: {
+    label: 'Sound burst',
+    description: 'Particles that answer sound: a disc of glowing streaks that a shockwave blasts outward on every beat and a spring pulls back together. A silent stand-in beat (120 a minute) drives it; set Sound from to the mic or the Audio engine for real music.',
+  },
 };
 
 export const AGENT_EXAMPLE_KEYS = Object.keys(AGENT_EXAMPLE_INDEX);
@@ -158,6 +170,9 @@ export function slimeMoldNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
 export function buildAgentExamples(): Record<string, ExampleGraph> {
   return {
     slimeMold: { ...AGENT_EXAMPLE_INDEX.slimeMold, counter: 40, nodes: slimeMoldNodes(0, 200) },
+    agentParticles: { ...AGENT_EXAMPLE_INDEX.agentParticles, counter: 40, nodes: particlesNodes(0, 200) },
+    agentCurlSmoke: { ...AGENT_EXAMPLE_INDEX.agentCurlSmoke, counter: 40, nodes: curlSmokeNodes(0, 200) },
+    agentSoundBurst: { ...AGENT_EXAMPLE_INDEX.agentSoundBurst, counter: 40, nodes: soundBurstNodes(0, 200) },
   };
 }
 
@@ -167,7 +182,345 @@ export function buildAgentExamples(): Record<string, ExampleGraph> {
  * id of the colour node to wire into the graph's Output.
  */
 export function slimeMoldPreset(nextId: () => string, at: { x: number; y: number }): { nodes: GraphNode[]; colourId: string } {
-  const nodes = slimeMoldNodes(at.x, at.y, false);
+  const r = agentPreset('slimeMoldPreset', nextId, at)!;
+  return { nodes: r.nodes, colourId: r.out.nodeId };
+}
+
+// ── Particles built from nodes (P2): forces chained through Also, Integrate, Age / Life ──
+
+/**
+ * An Expression Block (exprNode) with named lines, as the app saves one: its sockets are
+ * its inputs, its result one output of `outputType`. `wires` connect its inputs by name.
+ */
+function expr(id: string, x: number, y: number, o: {
+  label: string; inputs: Array<{ name: string; type: 'float' | 'vec2' | 'vec3' }>; lines: Array<[string, string]>;
+  result: string; outputType: 'float' | 'vec2' | 'vec3'; wires?: Record<string, [string, string]>; note: string[];
+}): GraphNode {
+  const node = n('exprNode', id, x, y, {
+    label: o.label,
+    inputs: o.inputs.map(i => ({ name: i.name, type: i.type, slider: null })),
+    outputType: o.outputType,
+    lines: o.lines.map(([lhs, rhs]) => ({ lhs, op: '=', rhs })),
+    result: o.result,
+    expr: o.result,
+    ...note(o.note),
+  });
+  node.inputs = Object.fromEntries(o.inputs.map(i => [i.name, {
+    type: i.type, label: `${i.name} (${i.type})`,
+    ...(o.wires?.[i.name] ? { connection: { nodeId: o.wires[i.name][0], outputKey: o.wires[i.name][1] } } : {}),
+  }]));
+  node.outputs = { result: { type: o.outputType, label: `Result (${o.outputType})` } };
+  return node;
+}
+
+/** The group node: its inside and settings, Emit wired in. */
+function agentsGroup(id: string, x: number, y: number, emitId: string, inside: GraphNode[], params: Record<string, unknown>): GraphNode {
+  return n('agentsGroup', id, x, y, {
+    tier: '1m', species: '1', stepsPerFrame: 2, seed: 1, preroll: 0,
+    subgraph: { nodes: inside, inputPorts: [], outputPorts: [] },
+    ...params,
+  }, { emit: [emitId, 'emitter'] });
+}
+
+/**
+ * Particles: the Particles node's default look built from nodes. Embers are
+ * born on a ring and carried by curl noise and a gentle swirl, the mouse
+ * pulls and stirs them, drag slows them, and they fade over their life,
+ * drawn with glow and four orbiting lights.
+ */
+export function particlesNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
+  const X = (dx: number) => x + dx, Y = (dy: number) => y + dy;
+  // ── Inside: the rule every particle follows, every step ──
+  const inputs = n('agentInputs', 'ptIn', 0, 160, {
+    _groupOriginal: true, extraInputs: [],
+    ...note([
+      'Agent Inputs: this particle as the step begins: where it is, how fast it moves, how old it is.',
+      'Every force to the right reads its own position from here when its Position socket is left unwired, so nothing needs wiring from this card.',
+    ]),
+  });
+  const curl = n('agentCurl', 'ptCurl', 420, 40, {
+    strength: 0.4, size: 1, evolve: 0.15,
+    ...note([
+      'Curl noise: swirling currents that never bunch up (the Particles node\'s Turbulence, 0.4). It is the main motion: particles fold into streams and eddies.',
+      'Evolve 0.15 lets the currents drift slowly, so the streams keep changing.',
+      'Try: Strength 1.5 for a storm; Size 3 for small, tight eddies; Evolve 0 for a still river.',
+    ]),
+  });
+  const swirl = n('agentVortex', 'ptSwirl', 840, 40, {
+    x: 0, y: 0, strength: 0.3, reach: 0.5,
+    ...note([
+      'Vortex: a gentle swirl round the middle, counter-clockwise, strongest half a picture-height out (the Particles node\'s Swirl, 0.3).',
+      'Why: it turns the ring\'s outward spray into a slowly turning wheel. Its Also input adds the curl noise in, so its Force is curl + swirl.',
+      'Try: −0.6 to spin the other way; 0 to let the curl alone carry them.',
+    ]),
+  }, { also: ['ptCurl', 'force'] });
+  const mouse = n('agentAttract', 'ptMouse', 1260, 40, {
+    target: 'mouse', strength: 0.8, reach: 0.35, swirl: 0.6, falloff: 'reach',
+    ...note([
+      'Attract / Repel: the mouse pulls nearby particles in and stirs them round it (within 0.35), like the Particles node\'s hands.',
+      'Its Also adds the chain so far, so this Force is the total: curl + swirl + mouse.',
+      'Try: Strength −2 to blow them away from the pointer; wire a hand or a null from Play into Target instead of the mouse.',
+    ]),
+  }, { also: ['ptSwirl', 'force'] });
+  const integrate = n('agentIntegrate', 'ptMove', 1680, 80, {
+    drag: 1, maxSpeed: 4, mass: 1, edges: 'free',
+    ...note([
+      'Integrate: turns the total force into motion. Velocity gains Force × one step, Drag 1 bleeds a little speed away every step (the Particles node\'s), and position moves by velocity × one step.',
+      'Edges Free: particles may drift off the picture; they live out their Life there and are born again on the ring.',
+      'Try: Drag 0.2 for long, loose flights; 4 for syrup.',
+    ]),
+  }, { force: ['ptMouse', 'force'] });
+  const age = n('agentAge', 'ptAge', 1680, 660, {
+    span: 1,
+    ...note([
+      'Age / Life: how old the particle is against the Life Emit gave it (4 s ± half). Alive drops to 0 when its time is up.',
+      'Why: dead particles are what Emit (Keep full) gives a new life on the ring, so the stream never runs dry.',
+      'Try: Live for 0.5 to halve every life (a tighter ring of embers).',
+    ]),
+  });
+  const output = n('agentOutput', 'ptOut', 2100, 140, {
+    _groupOriginal: true,
+    ...note([
+      'Agent Output: the particle at the end of the step: Position and Velocity from Integrate, Alive from Age / Life.',
+      'Heading and Speed are left unwired, so they follow from the Velocity.',
+    ]),
+  }, { position: ['ptMove', 'position'], velocity: ['ptMove', 'velocity'], alive: ['ptAge', 'alive'] });
+
+  // ── Outside ──
+  const emit = n('agentEmit', 'ptEmit', X(0), Y(0), {
+    mode: 'respawn', shape: 'ring', heading: 'outward', x: 0, y: 0, size: 0.4, life: 4, lifeVar: 0.5, speed: 0.08, speedVar: 0.45, spread: 0.4,
+    ...note([
+      'Emit: particles are born on a ring (radius 0.4) moving outward at about 0.08, each direction straying a little (Spread 0.4), each living 4 s ± half: the Particles node\'s defaults.',
+      'Births Keep full: every particle is born at once at a random age, and each is born again the moment it dies, so the ring always streams.',
+      'Try: Shape Point for a fountain; Speed 0.4 for a burst of sparks; route a beat to Burst to send everyone out again at once.',
+    ]),
+  });
+  const group = agentsGroup('particles', X(420), Y(0), 'ptEmit', [inputs, curl, swirl, mouse, integrate, age, output], {
+    label: 'Particles',
+    preroll: 4,
+    ...note([
+      'Agents: a million particles (1M), each running the rule inside (double-click to open it) every step, 2 steps a frame (about 7 ms a frame at 1080p on an M3 Pro, drawing included).',
+      'The rule is a chain of forces (Curl noise → Vortex → Attract), added up through their Also inputs, then Integrate moves the particle and Age / Life ends it.',
+      'Pre-roll 4: four seconds are simulated before the first frame, so the ring is already streaming when it appears.',
+      'Try: Count 256k on a slower GPU; Steps per frame 1 to move at the Particles node\'s own pace (2 is twice as lively).',
+    ]),
+  });
+  const bg = n('uv', 'ptUv', X(420), Y(380), { ...note(['UV: where each pixel is, for the background glow (y −1 at the bottom to 1 at the top).']) });
+  const glow = expr('ptBg', X(840), Y(380), {
+    label: 'Ember glow',
+    inputs: [{ name: 'uv', type: 'vec2' }],
+    lines: [['float r', 'length(uv)'], ['float halo', 'exp(-r * r * 2.5)']],
+    result: 'vec3(0.012, 0.008, 0.01) + vec3(1.0, 0.32, 0.06) * 0.05 * halo',
+    outputType: 'vec3',
+    wires: { uv: ['ptUv', 'uv'] },
+    note: [
+      'Ember glow (an Expression Block): the dark background the particles are drawn over.',
+      'r: how far this pixel is from the middle. halo: 1 in the middle, fading out with distance (e^(−2.5·r²)).',
+      'Result: near-black, warmed with a faint orange where halo is high, as if the embers lit the air.',
+    ],
+  });
+  const draw = n('drawAgents', 'ptDraw', X(1260), Y(0), {
+    style: 'glow', colorBy: 'age', palette: 'ember', scaleBy: 'crowd', size: 2, brightness: 0.7, glow: 0.45, fade: 'on',
+    lights: '4', lightColor: [1, 0.55, 0.25], lightPower: 1.6, lightReach: 0.3, halo: 0.5, lightMotion: 'orbit', lightOrbit: 0.48,
+    ...note([
+      'Draw agents: every particle as a soft dot with the Particles node\'s glow, coloured along the Ember palette by age (pale yellow when born, deep red as it dies) and fading in and out over its life.',
+      'Four lights orbit the ring: particles near one shine brighter and larger, and each light has a halo. Brightness of The crowd keeps the cloud as bright at any count (0.7: every particle here is alive at once, where the Particles node keeps about two in three).',
+      'Try: Style Streaks; Palette Ice or Aurora; Lights None for plain embers.',
+    ]),
+  }, { agents: ['particles', 'agents'], over: ['ptBg', 'result'] });
+  const nodes = [emit, group, bg, glow, draw];
+  if (withOutput) nodes.push(n('output', 'ptOutput', X(1680), Y(0), { ...note(['Output: the drawn particles over the glow are the picture.']) }, { color: ['ptDraw', 'color'] }));
+  return nodes;
+}
+
+/**
+ * Curl smoke: particles rise from a small source, warm air lifting them less
+ * as they cool, curl noise folding them into threads and a gusty breeze
+ * leaning them over, drawn as ink streaks on paper.
+ */
+export function curlSmokeNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
+  const X = (dx: number) => x + dx, Y = (dy: number) => y + dy;
+  const inputs = n('agentInputs', 'csIn', 0, 160, {
+    _groupOriginal: true, extraInputs: [],
+    ...note([
+      'Agent Inputs: this bit of smoke as the step begins. Its Age (seconds since it left the source) goes to Rising heat.',
+      'The forces read its position from here by themselves.',
+    ]),
+  });
+  const heat = expr('csHeat', 420, 40, {
+    label: 'Rising heat',
+    inputs: [{ name: 'age', type: 'float' }],
+    lines: [['float heat', 'exp(-age * 0.5)']],
+    result: 'vec2(0.0, 0.75 * heat + 0.06)',
+    outputType: 'vec2',
+    wires: { age: ['csIn', 'age'] },
+    note: [
+      'Rising heat (an Expression Block, used as a force): warm smoke rises, and rises less as it cools.',
+      'heat: 1 when the smoke leaves the source, halving about every 1.4 s (e^(−age / 2)).',
+      'Result: an upward push of 0.75 × heat, plus a little lift that never fades (0.06), so old smoke still drifts up.',
+    ],
+  });
+  const curl = n('agentCurl', 'csCurl', 840, 40, {
+    strength: 0.45, size: 1.4, evolve: 0.3,
+    ...note([
+      'Curl noise: eddies that fold the rising column into curls and threads. Near the source Rising heat is stronger, so the column holds; higher up the heat fades and the eddies take over.',
+      'Its Also adds Rising heat in.',
+      'Try: Size 3 for finer, busier turbulence; Strength 1.5 to tear the column apart.',
+    ]),
+  }, { also: ['csHeat', 'result'] });
+  const wind = n('agentWind', 'csWind', 1260, 40, {
+    strength: 0.12, angle: 0, gust: 1, size: 0.6, evolve: 0.2,
+    ...note([
+      'Wind: a light breeze to the right with gusts, so the column leans and sways instead of standing straight. Its Also adds heat and curl: this Force is the total.',
+      'Try: Angle 180 to blow it left; Strength 0 for still air.',
+    ]),
+  }, { also: ['csCurl', 'force'] });
+  const integrate = n('agentIntegrate', 'csMove', 1680, 80, {
+    drag: 1.4, maxSpeed: 3, mass: 1, edges: 'free',
+    ...note([
+      'Integrate: the total force moves the smoke. Drag 1.4 keeps it slow and floaty, like smoke in still air.',
+      'Try: Drag 0.5 for a fast, thin plume.',
+    ]),
+  }, { force: ['csWind', 'force'] });
+  const age = n('agentAge', 'csAge', 1680, 660, {
+    span: 1,
+    ...note([
+      'Age / Life: each bit of smoke lives about 7 s; Alive goes to 0 at the end and Emit sends it up from the source again.',
+    ]),
+  });
+  const output = n('agentOutput', 'csOut', 2100, 140, {
+    _groupOriginal: true,
+    ...note(['Agent Output: Position and Velocity from Integrate, Alive from Age / Life. Heading follows the velocity (Draw uses it for the streaks).']),
+  }, { position: ['csMove', 'position'], velocity: ['csMove', 'velocity'], alive: ['csAge', 'alive'] });
+
+  const emit = n('agentEmit', 'csEmit', X(0), Y(0), {
+    mode: 'respawn', shape: 'disc', heading: 'random', x: 0, y: -0.8, size: 0.08, life: 7, lifeVar: 0.4, speed: 0.05, speedVar: 0.5, spread: 1,
+    ...note([
+      'Emit: the source, a small disc (radius 0.08) near the bottom (y −0.8). Each bit of smoke starts almost still in a random direction and lives 7 s ± 40%.',
+      'Keep full: smoke that dies is sent up from the source again at once.',
+      'Try: Shape Ring with Size 0.3 for a smoke ring; X −1 to move the source left.',
+    ]),
+  });
+  const group = agentsGroup('smoke', X(420), Y(0), 'csEmit', [inputs, heat, curl, wind, integrate, age, output], {
+    label: 'Curl smoke',
+    preroll: 6,
+    ...note([
+      'Agents: a million bits of smoke (1M), 2 steps a frame. Inside (double-click): Rising heat → Curl noise → Wind, added through Also, then Integrate and Age / Life.',
+      'Pre-roll 6: six seconds are simulated before the first frame, so the plume has already risen when it appears.',
+    ]),
+  });
+  const draw = n('drawAgents', 'csDraw', X(840), Y(0), {
+    style: 'ink', colorBy: 'single', palette: 'ab', colorA: [0.03, 0.03, 0.04], paper: [0.95, 0.95, 0.94],
+    scaleBy: 'crowd', size: 0.6, brightness: 1.6, glow: 0.35, streak: 0.25, fade: 'on', lights: '0',
+    ...note([
+      'Draw agents, Ink: each bit of smoke lays a short streak of dark ink (Streak 0.25, along its motion) on pale paper; where many overlap the ink goes dark, and a little bleeds round it (Glow).',
+      'Brightness of The crowd: the ink is shared out so the plume looks the same at any count. Fade with age thins the smoke as it gets old.',
+      'Try: Style Glow with Palette Mono on a dark Over for white smoke.',
+    ]),
+  }, { agents: ['smoke', 'agents'] });
+  const nodes = [emit, group, draw];
+  if (withOutput) nodes.push(n('output', 'csOutput', X(1260), Y(0), { ...note(['Output: the smoke on paper is the picture.']) }, { color: ['csDraw', 'color'] }));
+  return nodes;
+}
+
+/**
+ * Sound burst: a disc of glowing streaks that a ring of pressure blasts
+ * outward on every beat and a spring pulls back together. A silent
+ * stand-in beat (120 a minute) drives it until real sound does.
+ */
+export function soundBurstNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
+  const X = (dx: number) => x + dx, Y = (dy: number) => y + dy;
+  const inputs = n('agentInputs', 'sbIn', 0, 160, {
+    _groupOriginal: true, extraInputs: [],
+    ...note([
+      'Agent Inputs: this particle as the step begins. Its Position goes to Spring back; the other nodes read it by themselves.',
+    ]),
+  });
+  const spring = expr('sbSpring', 420, 40, {
+    label: 'Spring back',
+    inputs: [{ name: 'p', type: 'vec2' }],
+    lines: [['float r', 'length(p)'], ['float over', 'max(r - 0.55, 0.0)']],
+    result: '-p / max(r, 1e-4) * over * 6.0',
+    outputType: 'vec2',
+    wires: { p: ['sbIn', 'position'] },
+    note: [
+      'Spring back (an Expression Block, used as a force): pulls particles that a beat threw out back toward the disc.',
+      'r: how far the particle is from the middle. over: how far past the disc\'s edge (0.55) it is; 0 inside.',
+      'Result: a pull toward the middle, 6 × over, so inside the disc nothing pulls and outside it pulls harder the further out.',
+    ],
+  });
+  const kick = n('agentSoundKick', 'sbKick', 840, 40, {
+    mode: 'shock', x: 0, y: 0, strength: 0.6, speed: 1.4, soundFrom: 'graph', level: 0, beat: 120,
+    ...note([
+      'Sound kick, Shockwave: every beat sends a ring of pressure out from the middle at 1.4 picture-heights a second, pushing particles out as it arrives and back behind it (the Particles node\'s Shock).',
+      'Beat 120 is a silent stand-in: 120 kicks a minute, part of the simulation, so a recording matches the preview. Its Also adds Spring back.',
+      'Try: Beat 0 and Sound from Mic or Audio engine (or map Level to an audio track in Play); Kick Wave or Vibrate for other answers to the sound.',
+    ]),
+  }, { also: ['sbSpring', 'result'] });
+  const curl = n('agentCurl', 'sbCurl', 1260, 40, {
+    strength: 0.25, size: 1.3, evolve: 0.2,
+    ...note([
+      'Curl noise: a soft drift so the disc is never still between beats. Its Also adds the kick and the spring: this Force is the total.',
+    ]),
+  }, { also: ['sbKick', 'force'] });
+  const integrate = n('agentIntegrate', 'sbMove', 1680, 80, {
+    drag: 2.5, maxSpeed: 6, mass: 1, edges: 'bounce',
+    ...note([
+      'Integrate: the force moves the particles; Drag 2.5 stops a blast quickly, so every beat reads as a sharp burst that settles.',
+      'Edges Bounce keeps particles thrown far on the picture.',
+      'Try: Drag 0.8 for long, floaty blasts.',
+    ]),
+  }, { force: ['sbCurl', 'force'] });
+  const age = n('agentAge', 'sbAge', 1680, 660, {
+    span: 1,
+    ...note(['Age / Life: each particle lives about 6 s, then Emit gives it a new place in the disc.']),
+  });
+  const output = n('agentOutput', 'sbOut', 2100, 140, {
+    _groupOriginal: true,
+    ...note(['Agent Output: Position and Velocity from Integrate, Alive from Age / Life.']),
+  }, { position: ['sbMove', 'position'], velocity: ['sbMove', 'velocity'], alive: ['sbAge', 'alive'] });
+
+  const emit = n('agentEmit', 'sbEmit', X(0), Y(0), {
+    mode: 'respawn', shape: 'disc', heading: 'random', x: 0, y: 0, size: 0.55, life: 6, lifeVar: 0.5, speed: 0,
+    ...note([
+      'Emit: particles are born anywhere in a disc (radius 0.55), still, each living 6 s ± half; Keep full gives each a new place when it dies.',
+    ]),
+  });
+  const group = agentsGroup('burst', X(420), Y(0), 'sbEmit', [inputs, spring, kick, curl, integrate, age, output], {
+    label: 'Sound burst',
+    ...note([
+      'Agents: a million particles (1M), 2 steps a frame. Inside (double-click): Spring back → Sound kick → Curl noise, added through Also, then Integrate and Age / Life.',
+    ]),
+  });
+  const draw = n('drawAgents', 'sbDraw', X(840), Y(0), {
+    style: 'streaks', colorBy: 'speed', palette: 'neon', speedRef: 0.6, scaleBy: 'crowd', size: 2, brightness: 0.8, glow: 0.6, streak: 0.35, fade: 'on', lights: '0',
+    ...note([
+      'Draw agents, Streaks: each particle is a short glowing line along its motion, coloured by speed on the Neon palette (Fast is 0.6): resting particles are violet, and a ring passing through shows as a bright cyan front.',
+      'Try: Streak 1 for long trails after each beat; Colour by Age for calmer colours.',
+    ]),
+  }, { agents: ['burst', 'agents'] });
+  const nodes = [emit, group, draw];
+  if (withOutput) nodes.push(n('output', 'sbOutput', X(1260), Y(0), { ...note(['Output: the streaks are the picture.']) }, { color: ['sbDraw', 'color'] }));
+  return nodes;
+}
+
+/** The starters in the node browser: each builds its example's nodes (minus the Output) and names the node to wire into the Output. */
+const PRESET_BUILDERS: Record<string, { build: (x: number, y: number) => GraphNode[]; out: [string, string]; label: string }> = {
+  slimeMoldPreset: { build: (x, y) => slimeMoldNodes(x, y, false), out: ['slimeColour', 'color'], label: 'Slime mold' },
+  particlesPreset: { build: (x, y) => particlesNodes(x, y, false), out: ['ptDraw', 'color'], label: 'Particles' },
+  curlSmokePreset: { build: (x, y) => curlSmokeNodes(x, y, false), out: ['csDraw', 'color'], label: 'Curl smoke' },
+  soundBurstPreset: { build: (x, y) => soundBurstNodes(x, y, false), out: ['sbDraw', 'color'], label: 'Sound burst' },
+};
+
+/**
+ * A preset (the node browser's starter `type`) with fresh ids (`nextId`), for adding to a graph:
+ * the same nodes as its example, minus the Output. Returns the nodes and the socket to wire into
+ * the graph's Output.
+ */
+export function agentPreset(type: string, nextId: () => string, at: { x: number; y: number }): { nodes: GraphNode[]; out: { nodeId: string; outputKey: string }; label: string } | null {
+  const b = PRESET_BUILDERS[type];
+  if (!b) return null;
+  const nodes = b.build(at.x, at.y);
   const ids = new Map<string, string>();
   const collect = (list: GraphNode[]) => {
     for (const nd of list) {
@@ -184,5 +537,5 @@ export function slimeMoldPreset(nextId: () => string, at: { x: number; y: number
     const params = sg?.nodes ? { ...nd.params, subgraph: { ...sg, nodes: sg.nodes.map(remap) } } : nd.params;
     return { ...nd, id: ids.get(nd.id)!, inputs, params };
   };
-  return { nodes: nodes.map(remap), colourId: ids.get('slimeColour')! };
+  return { nodes: nodes.map(remap), out: { nodeId: ids.get(b.out[0])!, outputKey: b.out[1] }, label: b.label };
 }

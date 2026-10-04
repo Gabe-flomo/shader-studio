@@ -12,8 +12,8 @@ import { toast } from '../components/ui/toastStore';
 import { planSceneGroupAdd, planSmart3DAdd } from '../nodes/smart3d';
 import { askChoice } from '../components/ui/dialogStore';
 import { buildAgentsSubgraph, buildMarchRig, buildMarchSubgraph, buildSceneSubgraph, buildVolumetricRig, graphOutput, instantiateNode, twoDNodesBefore3D } from '../nodes/scene3dDefaults';
-import { slimeMoldPreset } from './agentExamples';
-import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES } from '../nodes/definitions/agents';
+import { agentPreset } from './agentExamples';
+import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES, AGENT_PRESET_TYPES } from '../nodes/definitions/agents';
 import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
 import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, usesHands, type PlayRecord, type PlayControl } from '../types/play';
@@ -3170,22 +3170,27 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         toast.info(`${label} goes inside an Agents group`, { message: 'Double-click an Agents group (or press Open rule on it) and add it there.' });
         return undefined;
       }
-      if ((AGENT_OUTSIDE_TYPES.has(type) || type === 'slimeMoldPreset') && path.length > 0) {
+      if ((AGENT_OUTSIDE_TYPES.has(type) || AGENT_PRESET_TYPES.has(type)) && path.length > 0) {
         toast.info(`${label} goes on the top level`, { message: 'Leave this group and add it there.' });
         return undefined;
       }
-      if (type === 'slimeMoldPreset') {
-        undoManager.push(get().nodes, { label: 'Added the Slime mold preset' });
-        const { nodes: added, colourId } = slimeMoldPreset(() => idGenerator.next(), position);
+      if (AGENT_PRESET_TYPES.has(type)) {
+        const preset = agentPreset(type, () => idGenerator.next(), position);
+        if (!preset) return undefined;
+        undoManager.push(get().nodes, { label: `Added the ${preset.label} preset` });
+        const { nodes: added, out } = preset;
         let nodes = [...get().nodes, ...added];
         const output = graphOutput(get().nodes);
         if (output) nodes = nodes.map(n => n.id === output.id
-          ? { ...n, inputs: { ...n.inputs, color: { ...n.inputs.color, connection: { nodeId: colourId, outputKey: 'color' } } } }
+          ? { ...n, inputs: { ...n.inputs, color: { ...n.inputs.color, connection: out } } }
           : n);
         set({ nodes });
         get().compile();
-        toast.info('Slime mold added', {
-          message: `A million walkers that sense, turn, move and leave trail, coloured by a palette${output ? ' and wired to the Output' : '. Add an Output node and wire the palette into it to see it'}. Every node has a note on what it does; double-click the Agents group to open the rule.`,
+        const what = type === 'slimeMoldPreset'
+          ? 'A million walkers that sense, turn, move and leave trail, coloured by a palette'
+          : 'A million particles moved by a chain of forces, drawn by Draw agents';
+        toast.info(`${preset.label} added`, {
+          message: `${what}${output ? ' and wired to the Output' : '. Add an Output node and wire the last node into it to see it'}. Every node has a note on what it does; double-click the Agents group to open the rule.`,
         });
         return added.find(n => n.type === 'agentsGroup')?.id;
       }

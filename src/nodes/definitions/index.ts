@@ -138,7 +138,8 @@ export { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGB
 // GPU Particles (the engine in play/kit/gpuParticles.js)
 export { GpuParticlesNode } from './gpuParticles';
 export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode } from './passes';
-export { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, DrawAgentsNode, SlimeMoldPresetNode } from './agents';
+export { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode } from './agents';
+export { AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode } from './agentForces';
 
 // Math
 export {
@@ -267,7 +268,8 @@ import {
 import { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGBToCMYKNode, CMYKHalftoneNode } from './halftone';
 import { GpuParticlesNode } from './gpuParticles';
 import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode } from './passes';
-import { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, DrawAgentsNode, SlimeMoldPresetNode } from './agents';
+import { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode } from './agents';
+import { AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode } from './agentForces';
 
 export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Sources
@@ -479,6 +481,21 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   trailField: TrailFieldNode,
   drawAgents: DrawAgentsNode,
   slimeMoldPreset: SlimeMoldPresetNode,
+  particlesPreset: ParticlesPresetNode,
+  curlSmokePreset: CurlSmokePresetNode,
+  soundBurstPreset: SoundBurstPresetNode,
+  // Particles inside an Agents group (P2): forces, Integrate, Age / Life, Collide, Chladni.
+  agentGravity: AgentGravityNode,
+  agentWind: AgentWindNode,
+  agentCurl: AgentCurlNode,
+  agentAttract: AgentAttractNode,
+  agentVortex: AgentVortexNode,
+  agentFlow: AgentFlowNode,
+  agentSoundKick: AgentSoundKickNode,
+  agentIntegrate: AgentIntegrateNode,
+  agentAge: AgentAgeNode,
+  agentCollide: AgentCollideNode,
+  agentChladni: AgentChladniNode,
   // 3D / Volumetric
   raymarch3d: RaymarchNode,
   volumeClouds: VolumeCloudsNode,

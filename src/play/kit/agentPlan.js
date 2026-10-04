@@ -138,3 +138,16 @@ export function agRate(history, ran, wanted) {
   for (const [a, b] of history) { r += a; w += b; }
   return w > 0 ? Math.min(1, r / w) : 1;
 }
+
+/**
+ * The stand-in Beat of a listening node (Sound kick, Chladni): a silent kick
+ * every beat at `bpm`, as a level that jumps to 1 on the beat and decays.
+ * A pure function of the step's time, so a simulation driven by it is the
+ * same live and offline. 0 (or less) is off.
+ */
+export function agBeatLevel(t, bpm) {
+  const b = typeof bpm === 'number' && isFinite(bpm) ? bpm : 0;
+  if (!(b > 0) || !(t >= 0)) return 0;
+  const beats = t * b / 60 + 1e-9;
+  return Math.exp(-(beats - Math.floor(beats)) * 9);
+}

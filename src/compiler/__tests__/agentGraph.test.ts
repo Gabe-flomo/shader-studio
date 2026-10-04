@@ -12,7 +12,7 @@ vi.hoisted(() => {
 
 import { compileGraph } from '../graphCompiler';
 import { hasAgentsNode } from '../agentGraph';
-import { slimeMoldNodes } from '../../store/agentExamples';
+import { curlSmokeNodes, particlesNodes, slimeMoldNodes, soundBurstNodes } from '../../store/agentExamples';
 import { n } from '../../store/graphBuilder';
 import type { GraphNode, SubgraphData } from '../../types/nodeGraph';
 
@@ -145,5 +145,82 @@ describe('Agents compile', () => {
     expect(r.errors).toBeUndefined();
     const main = r.agents!.groups[0].fragmentShader.slice(r.agents!.groups[0].fragmentShader.indexOf('void main()'));
     expect(main.indexOf('vec2 g_uv = a_pos;')).toBeLessThan(main.indexOf('wob'));
+  });
+});
+
+describe('Agents compile: particles (P2)', () => {
+  it('compiles the Particles, Curl smoke and Sound burst examples', () => {
+    for (const nodes of [particlesNodes(0, 0), curlSmokeNodes(0, 0), soundBurstNodes(0, 0)]) {
+      const r = compileGraph({ nodes });
+      expect(r.errors).toBeUndefined();
+      expect(r.success).toBe(true);
+      expect(r.agents!.groups).toHaveLength(1);
+      expect(r.agents!.draws).toHaveLength(1);
+      expect(r.agents!.deposits).toHaveLength(0);
+    }
+  });
+
+  it('Keep full: the prelude also gives a dead walker a new life, and the first births come at every age', () => {
+    const r = compileGraph({ nodes: particlesNodes(0, 0) });
+    const g = r.agents!.groups[0];
+    expect(g.emit).toEqual({ mode: 'respawn', rate: r.paramBindings['ptEmit::rate'], burst: r.paramBindings['ptEmit::burst'] });
+    const fs = g.fragmentShader;
+    expect(fs).toMatch(/a_born = mod\(a_index - u_agWin_\w+\.x \+ a_count, a_count\) < u_agWin_\w+\.y \|\| a_sB\.w <= 0\.0;/);
+    expect(fs).toContain(`a_step = u_agStep_${g.slug};`);
+    expect(fs).toMatch(/_age0 = a_step == 0u && \w+_life < 1\.0e29 \? \w+_r7 \* \w+_life : 0\.0;/);
+    // Slime (Fill) keeps the plain window.
+    expect(compileGraph({ nodes: slime() }).agents!.groups[0].fragmentShader).not.toContain('|| a_sB.w <= 0.0');
+  });
+
+  it('forces chain through Also into Integrate, and Integrate into Agent Output', () => {
+    const r = compileGraph({ nodes: particlesNodes(0, 0) });
+    const fs = r.agents!.groups[0].fragmentShader;
+    const main = fs.slice(fs.indexOf('void main()'));
+    const curl = main.match(/vec2 (\w+)_f = \(vec3\(\w+_a\.z/)![1];
+    const swirl = main.match(new RegExp(`vec2 (\\w+)_f = [^;]* \\+ ${curl}_f;`))![1];
+    const mouse = main.match(new RegExp(`vec2 (\\w+)_f = \\([^;]*\\)\\.xy \\+ ${swirl}_f;`))![1];
+    expect(main).toMatch(new RegExp(`vec2 \\w+_v = a_vel \\+ ${mouse}_f / max\\(`));
+    expect(main).toContain('u_mouse / u_resolution.y');
+  });
+
+  it('a group with a Sound kick or Chladni lists it as a listener, with its uniforms by its slug', () => {
+    const r = compileGraph({ nodes: soundBurstNodes(0, 0) });
+    const g = r.agents!.groups[0];
+    expect(g.listeners).toHaveLength(1);
+    const l = g.listeners[0];
+    expect(l).toMatchObject({ nodeId: 'sbKick', kind: 'kick', soundFrom: 'graph' });
+    expect(l.slug).toBe(r.nodeSlugMap!.get('sbKick'));
+    expect(l.params.beat).toBe(r.paramBindings['sbKick::beat']);
+    expect(g.fragmentShader).toContain(`uniform vec4 u_agShk_${l.slug}[4];`);
+    expect(g.fragmentShader).toContain(`uniform vec4 u_agSnd_${l.slug};`);
+    // A plate inside: its modes, count and shake; a round one, the Bessel table.
+    const nodes = soundBurstNodes(0, 0).map(x => x.id !== 'burst' ? x : {
+      ...x, params: { ...x.params, subgraph: { ...(x.params.subgraph as SubgraphData), nodes: [
+        ...(x.params.subgraph as SubgraphData).nodes.map(m => m.id === 'sbOut' ? { ...m, inputs: { ...m.inputs, position: { ...m.inputs.position, connection: { nodeId: 'plate', outputKey: 'position' } } } } : m),
+        n('agentChladni', 'plate', 0, 0, { shape: 'circle', modeFrom: 'sound' }, { position: ['sbMove', 'position'], velocity: ['sbMove', 'velocity'] }),
+      ] } },
+    });
+    const r2 = compileGraph({ nodes });
+    expect(r2.errors).toBeUndefined();
+    const g2 = r2.agents!.groups[0];
+    expect(g2.listeners.map(x => x.kind).sort()).toEqual(['kick', 'plate']);
+    expect(g2.listeners.find(x => x.kind === 'plate')).toMatchObject({ shape: 'circle', modeFrom: 'sound', symmetry: 'minus' });
+    expect(g2.fragmentShader).toContain('uniform highp sampler2D u_agBessel;');
+  });
+
+  it('Draw agents: the style, palette, lights and Ink\'s paper reach the engine and the picture', () => {
+    const r = compileGraph({ nodes: particlesNodes(0, 0) });
+    expect(r.agents!.draws[0]).toMatchObject({ style: 'glow', colorBy: 'age', palette: 'ember', lights: 4, lightMotion: 'orbit', fade: true, scaleBy: 'crowd' });
+    const smoke = compileGraph({ nodes: curlSmokeNodes(0, 0) });
+    expect(smoke.agents!.draws[0]).toMatchObject({ style: 'ink', lights: 0 });
+    // Ink covers the paper (premultiplied); light adds to the picture.
+    expect(smoke.fragmentShader).toMatch(/\* \(1\.0 - clamp\(\w+_s\.a, 0\.0, 1\.0\)\) \+ max\(/);
+    expect(r.fragmentShader).not.toContain('1.0 - clamp(');
+  });
+
+  it('the new inside nodes refuse to go outside a group', () => {
+    const r = compileGraph({ nodes: [...particlesNodes(0, 0), n('agentCurl', 'strayCurl', 0, 0)] });
+    expect(r.success).toBe(false);
+    expect(r.errors!.join('\n')).toMatch(/Node strayCurl: Curl noise goes inside an Agents group\./);
   });
 });

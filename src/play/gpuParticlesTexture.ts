@@ -128,8 +128,8 @@ function nodePicture(r: THREE.WebGLRenderer, uniforms: Record<string, THREE.IUni
   return gl ? { texture: gl, aspect: img.width / img.height } : null;
 }
 
-/** Sound from: what the engine hears now from the mic, or the Play Audio engine's master or a track. */
-function soundOf(source: string): GpSoundInput | null {
+/** Sound from: what the engine hears now from the mic, or the Play Audio engine's master or a track (the Agents group's listeners hear the same). */
+export function particleSoundOf(source: string): GpSoundInput | null {
   if (source === 'live') return liveAudio.raw();
   let rack: string | null = null;
   if (source === 'master') rack = ENGINE_MASTER;
@@ -248,7 +248,7 @@ export function drawGpuParticles(material: THREE.ShaderMaterial, o: { width: num
     read: name => readUniform(uniforms, name),
     texture: name => nodePicture(r, uniforms, name),
     probe: (b, vol) => (pr ? runProbe(r, pr, b, o.width, o.height, vol) : null),
-    sound: soundOf,
+    sound: particleSoundOf,
   });
   // The engine bound its own programs, framebuffers and textures: three.js must not trust its cache.
   r.resetState();
