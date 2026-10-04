@@ -4,7 +4,7 @@ import { paletteNodePreset } from '../../nodes/definitions/color';
 import { scopeValueRegistry, floatValueRegistry, vectorValueRegistry } from '../../lib/scopeRegistry';
 import { useCtp } from '../../theme/nodePalette';
 import { useThemeMode } from '../../theme/themeStore';
-import { pal, setVizPalette, MONO, vizContainer, setupViz, imageSize, blitImage, type Viz } from './vizKit';
+import { pal, setVizPalette, MONO, vizContainer, setupViz, imageSize, blitImage, useVizScale, type Viz } from './vizKit';
 import { GenericViz, GENERIC_VIZ_TYPES } from './vizGeneric';
 import { passThumbRegistry } from '../../lib/passRunner';
 import { agentStatsFor, agentThumbRegistry, restartAgents, trailThumbRegistry, type AgentStats } from '../../lib/agentRunner';
@@ -5010,8 +5010,10 @@ export function PixelateViz({ node }: { node: GraphNode }) {
 export function NodeInlineViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?: (groupId: string) => void }) {
   setVizPalette(useCtp());
   const mode = useThemeMode();
-  // Keyed on the theme: a flip remounts the drawing below so its effect runs again with the new palette
-  return <React.Fragment key={mode}><NodeInlineVizSwitch node={node} onEnterGroup={onEnterGroup} /></React.Fragment>;
+  const scale = useVizScale();
+  // Keyed on the theme and the zoom's render scale: a flip remounts the drawing below so its effect runs
+  // again with the new palette, or at the new resolution once a zoom settles
+  return <React.Fragment key={`${mode}:${scale}`}><NodeInlineVizSwitch node={node} onEnterGroup={onEnterGroup} /></React.Fragment>;
 }
 
 function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?: (groupId: string) => void }) {
