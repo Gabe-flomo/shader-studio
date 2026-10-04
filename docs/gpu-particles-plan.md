@@ -241,6 +241,10 @@ In 3D the plate lies flat (x, z) at the emitter's height, the sand settles onto 
 - Lines break up for a moment while a figure morphs, as real sand re-settling does.
 - Obstacle and Flow still act alongside a plate, which is useful for creative mixes but can blur its lines.
 
+## What shipped: Emit from a Pass
+
+The **Emit from** socket takes a Pass's Texture (docs/pass-node-plan.md, phase 6): particles are born where it is bright (luma × alpha at least **Image threshold**, kept with a chance of their brightness), all over the picture; the emitter's shape still gives their speed, direction and life. Wire Edges (texture) through a Pass for sparks off outlines (Passes 2 · Particles born on edges). Unwired, the node and the engine's shaders are byte for byte as before; wired, the node adds one `// gpu-particles-from` comment and the engine links a second simulation program (`GP_SIM_FROM_SHADER`: GP_SIM with only its births changed). The passes it reads draw before the particles step, live, offline and on exported pages. A Particles node placed before a Pass (compiled into that pass's program) now works in the app and on pages, its wired settings probed from that program.
+
 ## Phases left
 
 - **P1:** sprite shapes (ring, image), size over life, more palettes from the Palette node.

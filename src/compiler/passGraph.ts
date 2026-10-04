@@ -314,6 +314,30 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
       const c = passLists.get(id)!;
       if ((c.agentReads?.size ?? 0) > 0 || [...c.reads, ...c.readsPrevious].some(r => afterAgents.has(r))) afterAgents.add(id);
     }
+    // Passes a Particles node reads (wired into it, except Over and UV: the picture it is laid on), and the
+    // passes those read, draw before the particles step (phase 6: Emit from, and a Flow or Obstacle read
+    // through a pass), so the engine sees this frame's texture. A pass that itself has a Particles node, or
+    // draws after the agents, can't: the particles then read its previous frame. Without a Particles node
+    // reading a pass, nothing is marked and the frame runs as it always has.
+    const beforeParticles = new Set<string>();
+    const particleNodes = nodes.filter(nd => nd.type === 'gpuParticles');
+    if (particleNodes.length) {
+      const starts = particleNodes.flatMap(pn => Object.entries(pn.inputs)
+        .filter(([k, i]) => !!i.connection && k !== 'over' && k !== 'uv').map(([, i]) => i.connection!));
+      const reached = collect(starts, byId, null, undefined, agents);
+      const canBefore = (id: string): boolean => {
+        const c = passLists.get(id);
+        if (!c || afterAgents.has(id)) return false;
+        if ([...c.nodes.values()].some(x => x.type === 'gpuParticles')) return false;
+        return [...c.reads].every(canBefore);
+      };
+      const mark = (id: string) => {
+        if (beforeParticles.has(id) || !canBefore(id)) return;
+        beforeParticles.add(id);
+        for (const r of passLists.get(id)!.reads) mark(r);
+      };
+      for (const r of reached.reads) mark(r);
+    }
     const previousRead = new Set<string>();
     for (const c of [finalList, ...passLists.values()]) for (const r of c.readsPrevious) previousRead.add(r);
 
@@ -325,6 +349,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     });
     const errors: string[] = [];
     const passes: PassProgram[] = [];
+    // Each pass program's node variables (probes, scopes: a node only a pass draws is read from that program).
+    const passVars = new Map<string, Record<string, string>>();
     const merged = {
       paramUniforms: {} as Record<string, number | number[]>, paramBindings: {} as Record<string, string>,
       textureUniforms: {} as Record<string, string>, audioUniforms: {} as Record<string, string>,
@@ -355,6 +381,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
       };
       const r = compileList([...c.nodes.values(), sink]);
       absorb(r);
+      for (const [nid, vars] of r.nodeOutputVars) if (nid !== sink.id && !passVars.has(nid)) passVars.set(nid, vars);
       const slug = slugs.get(id)!;
       const label = typeof pass.params.label === 'string' && pass.params.label.trim() ? pass.params.label.trim() : 'Pass';
       if (countSamplers(r.fragmentShader) > MAX_SAMPLERS) errors.push(`Node ${id}: ${label} samples more than ${MAX_SAMPLERS} textures (images, videos, passes, feedback) in one program`);
@@ -368,6 +395,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         previous: previousRead.has(id), live: live.has(id),
         nodeIds: [...c.nodes.values()].filter(n => n.type !== PASS_TYPE).map(n => n.id),
         ...(agents ? { afterAgents: afterAgents.has(id) } : {}),
+        ...(beforeParticles.has(id) ? { beforeParticles: true } : {}),
       });
     }
     // 5. With agents: each group's update shader, and the engine's view of deposits, trails and drawings.
@@ -466,8 +494,9 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
       vertexShader: VERTEX_SHADER,
       fragmentShader: fin.fragmentShader,
       success: true,
-      // Probes read the final program only (phase 3 adds pass programs).
-      nodeOutputVars: fin.nodeOutputVars,
+      // Probes and scopes: the final program's variables, and those of nodes only a pass program has
+      // (slugs are shared, so a node's variables have the same names in every program it lands in).
+      nodeOutputVars: new Map([...passVars, ...fin.nodeOutputVars]),
       ...merged,
       nodeSlugMap: slugs,
       passes,

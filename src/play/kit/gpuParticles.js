@@ -212,6 +212,13 @@ export const GP_BLUR_CAP = 7;
 
 /** The marker the node writes in the compiled shader, before its JSON. */
 export const GP_MARK = '// gpu-particles ';
+/**
+ * Emit from (a Pass texture, docs/pass-node-plan.md phase 6): the node writes
+ * `// gpu-particles-from <its sampler> <the texture's sampler>` into its code,
+ * only when the socket is wired, so its declaration line (GP_MARK) and every
+ * other shader stay exactly as they were.
+ */
+export const GP_FROM_MARK = '// gpu-particles-from ';
 
 /** Side of the state texture for a count tier (256k when unknown). */
 export function gpTierSide(tier) {
@@ -239,6 +246,11 @@ export function gpBindings(fragmentShader) {
     while ((mb = rb.exec(fs))) if (mb[1] === stem && !bands.some(b => b[1] === +mb[2])) bands.push([mb[1] + '_' + mb[2], +mb[2]]);
     bands.sort((a, b) => a[1] - b[1]);
   }
+  // Emit from: each node's texture, by its sampler.
+  const froms = new Map();
+  const rf = /\/\/ gpu-particles-from (\w+) (\w+)/g;
+  let mf;
+  while ((mf = rf.exec(fs))) if (!froms.has(mf[1])) froms.set(mf[1], mf[2]);
   let m;
   while ((m = re.exec(fs))) {
     if (seen.has(m[1])) continue;
@@ -251,6 +263,7 @@ export function gpBindings(fragmentShader) {
       uniform: m[1], params: cfg.p && typeof cfg.p === 'object' ? cfg.p : {},
       image: typeof cfg.img === 'string' ? cfg.img : null, audio: am ? am[1] : null, audioBands: bands.map(b => b[0]),
       probe: pr && typeof pr.m === 'string' && typeof pr.s === 'string' ? gpProbeSpec(pr) : null,
+      ...(froms.has(m[1]) ? { from: froms.get(m[1]) } : {}),
     });
   }
   return out;
@@ -545,6 +558,34 @@ export function gpScatter(i, bits) {
   x = Math.imul(x, 0xc2b2ae3d) & m;
   x ^= x >>> h;
   return x >>> 0;
+}
+
+/** gpHash in JS (uint32). */
+function gpHashU(x) {
+  x >>>= 0;
+  x ^= x >>> 16; x = Math.imul(x, 0x7feb352d) >>> 0;
+  x ^= x >>> 15; x = Math.imul(x, 0x846ca68b) >>> 0;
+  x ^= x >>> 16;
+  return x >>> 0;
+}
+
+/**
+ * Emit from: where particle `i` is born at substep `seed` (GP_FROM_SPAWN's search, in JS for the
+ * tests): up to GP_FROM_TRIES random points of the texture (`sample(u, v)` → [r, g, b, a]), the first
+ * whose luma × alpha is at least `threshold` kept with a chance of that brightness. [u, v] (0…1 over
+ * the picture), or null: not born this time.
+ */
+export const GP_FROM_TRIES = 16;
+export function gpFromBirth(sample, i, seed, threshold) {
+  let s = gpHashU((Math.imul(i >>> 0, 2246822519) ^ gpHashU((seed + 3266489917) >>> 0)) >>> 0);
+  const rnd = () => { s = gpHashU(s); return (s >>> 8) / 16777216; };
+  for (let k = 0; k < GP_FROM_TRIES; k++) {
+    const u = rnd(), v = rnd();
+    const c = sample(u, v);
+    const a = (0.299 * Math.max(0, c[0]) + 0.587 * Math.max(0, c[1]) + 0.114 * Math.max(0, c[2])) * Math.min(1, Math.max(0, c[3]));
+    if (a >= threshold && rnd() <= a) return [u, v];
+  }
+  return null;
 }
 
 /** Is particle `i` in the window? (The simulation shader's test, for the tests.) */
@@ -1661,6 +1702,33 @@ void main() {
   o = vec4(c, acc.a);
 }`;
 
+// Emit from (a Pass texture): the emitter's own birth gives the speed, direction and life; the place is a
+// random point of the texture where it is bright. Up to GP_FROM_TRIES points are tried, each kept with a
+// chance of its brightness (luma × alpha, at least Image threshold), so brighter places get more births.
+// None kept: not born this time (its turn comes round again). gpFromBirth is the same search in JS.
+const GP_FROM_SPAWN = `uniform highp sampler2D u_from;
+uniform float u_fromThr;
+void gpSpawn(float i, vec4 H, out vec4 P, out vec4 V) {
+  gpSpawnShape(i, H, P, V);
+  uint s = gpHash(uint(i) * 2246822519u ^ gpHash(u_seed + 3266489917u));
+  for (int k = 0; k < ${GP_FROM_TRIES}; k++) {
+    vec2 uv = vec2(gpRnd(s), gpRnd(s));
+    vec4 c = textureLod(u_from, uv, 0.0);
+    float a = dot(max(c.rgb, vec3(0.0)), vec3(0.299, 0.587, 0.114)) * clamp(c.a, 0.0, 1.0);
+    if (a >= u_fromThr && gpRnd(s) <= a) {
+      P.xyz = vec3((uv * 2.0 - 1.0) * vec2(u_aspect, 1.0), 0.0) + V.xyz * P.w;
+      return;
+    }
+  }
+  V.w = 0.0;
+}
+`;
+const GP_SIM_FROM = GP_SIM
+  .replace('void gpSpawn(float i, vec4 H, out vec4 P, out vec4 V) {', 'void gpSpawnShape(float i, vec4 H, out vec4 P, out vec4 V) {')
+  .replace('\nvoid main() {', '\n' + GP_FROM_SPAWN + 'void main() {');
+/** The simulation shader with Emit from (for the tests: GP_SIM with only its births changed). */
+export const GP_SIM_FROM_SHADER = GP_SIM_FROM;
+
 /**
  * The engine's GLSL, as the shared chunks other engines reuse (the Agents
  * group's Draw agents: docs/agents-plan.md). Exported as they are: the strings
@@ -1750,6 +1818,13 @@ export function gpCreate(gl) {
     cover: link(GP_QUAD_VERT, GP_COVER),
   };
   if (Object.values(progs).some(x => !x)) { for (const x of Object.values(progs)) if (x) gl.deleteProgram(x.p); return null; }
+  // The simulation with Emit from, linked the first time a node has it wired (undefined: not yet; null: didn't link).
+  let simFrom;
+  const simFor = ctx => {
+    if (!ctx.from) return progs.sim;
+    if (simFrom === undefined) simFrom = link(GP_QUAD_VERT, GP_SIM_FROM);
+    return simFrom || progs.sim;
+  };
   const vao = gl.createVertexArray();
   const fbo = gl.createFramebuffer();
   const stateFormat = f32 ? [gl.RGBA32F, gl.FLOAT] : [gl.RGBA16F, gl.HALF_FLOAT];
@@ -1849,7 +1924,7 @@ export function gpCreate(gl) {
   function substep(P, n, h, time, place, ctx) {
     let win = gpEmit(emitter, P.emit, n, P.life, 0.5, h);
     if (burstNow && !ctx.image) { win = { start: 0, count: n }; burstNow = false; }
-    const sim = progs.sim, u = sim.u;
+    const sim = simFor(ctx), u = sim.u;
     gl.useProgram(sim.p);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, state[0][0]);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, state[0][1]);
@@ -1901,6 +1976,11 @@ export function gpCreate(gl) {
       gl.uniform1i(u.u_plateSym, P.symmetry === 'plus' ? 1 : 0); gl.uniform1i(u.u_plateN, pl.count);
       gl.uniform1f(u.u_plateHalf, Math.max(0.02, P.emitSize)); gl.uniform1f(u.u_settle, P.settle); gl.uniform1f(u.u_shake, pl.shake);
       if (u.u_plateMode) gl.uniform4fv(u.u_plateMode, pl.values);
+    }
+    if (sim !== progs.sim) {
+      // Emit from: the texture births sample, and how bright a place must be (Image threshold).
+      gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, ctx.fromTex || blankTex);
+      gl.uniform1i(u.u_from, 7); gl.uniform1f(u.u_fromThr, P.threshold);
     }
     attach(state[1][0], state[1][1]);
     gl.viewport(0, 0, side, side);
@@ -2046,7 +2126,8 @@ export function gpCreate(gl) {
       beq: sh.beq, beqa: sh.beqa, clear: sh.clear,
       mask: sh.mask, unpack: gl.getParameter(gl.UNPACK_ALIGNMENT),
     };
-    const units = [0, 1, 2, 3, 4, 5, 6].map(i => { gl.activeTexture(gl.TEXTURE0 + i); return gl.getParameter(gl.TEXTURE_BINDING_2D); });
+    // (Emit from binds unit 7 as well.)
+    const units = (o.fromOn ? [0, 1, 2, 3, 4, 5, 6, 7] : [0, 1, 2, 3, 4, 5, 6]).map(i => { gl.activeTexture(gl.TEXTURE0 + i); return gl.getParameter(gl.TEXTURE_BINDING_2D); });
     let result = null;
     try {
       gl.disable(gl.DEPTH_TEST); gl.disable(gl.SCISSOR_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND);
@@ -2063,7 +2144,8 @@ export function gpCreate(gl) {
       }
       lastTime = time;
       // The picture, when the emitter is Image and one is loaded (else it falls back to a disc).
-      const img = P.emitter === 'image' && o.image ? o.image : null;
+      // (Emit from wired: born on its texture instead, so the Image emitter's picture isn't held.)
+      const img = P.emitter === 'image' && o.image && !o.fromOn ? o.image : null;
       const imgAspect = img && o.imageAspect > 0 ? o.imageAspect : 1;
       const spec = pr && pr.spec;
       const field = pr && pr.field && pr.field.texture ? pr.field : null;
@@ -2072,6 +2154,7 @@ export function gpCreate(gl) {
         field, obstacle: spec && spec.field.obstacle ? (P.obstacleMode === 'mask' ? 2 : 1) : 0,
         flow: spec && spec.field.flow ? (P.flowMode === 'around' ? 2 : 1) : 0, depth: !!(spec && spec.field.depth),
         cam: null, audio: sound, volume: pr && pr.volume && pr.volume.texture ? pr.volume : null, plate: null,
+        from: !!o.fromOn, fromTex: o.from || null,
       };
       const p2 = img || P.emitter !== 'image' ? P : { ...P, emitter: 'disk' };
       if (img) buildHomes(P, img);
@@ -2154,7 +2237,7 @@ export function gpCreate(gl) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, saved.fb);
       gl.viewport(saved.vp[0], saved.vp[1], saved.vp[2], saved.vp[3]);
       gl.useProgram(saved.prog); gl.bindVertexArray(saved.vao);
-      for (let i = 6; i >= 0; i--) { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, units[i]); }
+      for (let i = units.length - 1; i >= 0; i--) { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, units[i]); }
       gl.activeTexture(saved.active);
       gl.pixelStorei(gl.UNPACK_ALIGNMENT, saved.unpack);
       gl.blendFuncSeparate(saved.bsrc, saved.bdst, saved.basrc, saved.badst);
@@ -2170,6 +2253,7 @@ export function gpCreate(gl) {
     freeState(); freeLook();
     gl.deleteTexture(levelsTex); gl.deleteTexture(blankTex); if (besselTex) gl.deleteTexture(besselTex); for (const c of coverTex) gl.deleteTexture(c.t);
     for (const x of Object.values(progs)) gl.deleteProgram(x.p);
+    if (simFrom) gl.deleteProgram(simFrom.p);
     gl.deleteVertexArray(vao); gl.deleteFramebuffer(fbo);
     broken = true;
   }
@@ -2251,7 +2335,9 @@ export function gpHost(gl) {
         let e = engines.get(b.uniform);
         if (e === undefined) { e = reason ? null : gpCreate(gl); engines.set(b.uniform, e); }
         const params = gpParams(b.params, o.read);
-        const pic = e && b.image && params.emitter === 'image' && o.texture ? o.texture(b.image) : null;
+        const pic = e && b.image && params.emitter === 'image' && !b.from && o.texture ? o.texture(b.image) : null;
+        // Emit from: the Pass texture it is born on (null before the pass first draws: nothing is born yet).
+        const from = e && b.from && o.texture ? o.texture(b.from) : null;
         const lv = b.audio && o.read ? gpNum(o.read(b.audio)) : null;
         const bands = b.audioBands && b.audioBands.length > 1 && o.read ? b.audioBands.map(k => gpNum(o.read(k)) || 0) : null;
         const pv = b.probe && o.probe ? o.probe(b, { centre: [0, 0, 0], half: params.sceneReach }) : null;
@@ -2259,6 +2345,7 @@ export function gpHost(gl) {
         const texture = e ? e.frame({
           params, width: o.width, height: o.height, dt: o.dt, time: o.time, mouse: o.mouse, reset: o.reset,
           image: pic ? pic.texture : null, imageAspect: pic ? pic.aspect : 1, level: lv || 0, sound: snd, bands,
+          ...(b.from ? { fromOn: true, from: from ? from.texture : null } : {}),
           probe: b.probe ? { spec: b.probe, values: pv ? pv.values : null, field: pv ? pv.field : null, volume: pv ? pv.volume : null } : null,
         }) : null;
         out.push({ uniform: b.uniform, texture, look: params.look });

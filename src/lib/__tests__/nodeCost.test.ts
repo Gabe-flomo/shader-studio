@@ -44,4 +44,24 @@ describe('nodeCost', () => {
     expect(report!.costs[0].ms).toBe(3);
     expect(report!.costs[0].share).toBe(0.75);
   });
+
+  it('times the whole program list with Pass nodes, and never bypasses a Pass', async () => {
+    const uv = mk('uv', 'uv', 0); const c = mk('c', 'circleSDF', 200); const f = mk('f', 'floatToVec3', 300);
+    const p = mk('p', 'pass', 400, { scale: '0.5' }); const b = mk('b', 'blurTexture', 500); const o = mk('o', 'output', 600);
+    c.inputs.position.connection = { nodeId: 'uv', outputKey: 'uv' };
+    f.inputs.input.connection = { nodeId: 'c', outputKey: 'distance' };
+    p.inputs.color.connection = { nodeId: 'f', outputKey: 'rgb' };
+    b.inputs.texture.connection = { nodeId: 'p', outputKey: 'texture' };
+    o.inputs.color.connection = { nodeId: 'b', outputKey: 'color' };
+    const nodes = [uv, c, f, p, b, o];
+    const { variants, skipped } = buildCostVariants(nodes, []);
+    expect(skipped).toContain('p');
+    expect(variants.map(v => v.nodeId)).not.toContain('p');
+    const seen: Array<number | null> = [];
+    const measure = async (_fs: string, _vs: string, _signal?: AbortSignal, passes?: readonly { scale: number }[]) => { seen.push(passes ? passes.length : null); return 1; };
+    await measureNodeCosts({ nodes, scopePath: [], measure, size: { width: 100, height: 50 } });
+    // Every measurement (baselines and the variants) is handed the pass programs.
+    expect(seen.length).toBe(variants.length + 2);
+    expect(seen.every(k => k === 1)).toBe(true);
+  });
 });

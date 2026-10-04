@@ -193,8 +193,11 @@ export function getPlayPerfSnapshot(): PlayPerfSnapshot {
 // ShaderCanvas registers a function that compiles a shader off to the side,
 // draws it a few times into an offscreen target and returns the median GPU
 // milliseconds per frame (CPU-with-finish when timer queries are missing).
-// nodeCost.ts drives it once per node.
-export type ShaderCostMeasurer = (fragmentShader: string, vertexShader: string, signal?: AbortSignal) => Promise<number | null>;
+// nodeCost.ts drives it once per node. With Pass nodes (docs/pass-node-plan.md) it is handed the
+// pass programs as well and times the whole frame's list: each pass drawn at its own size, then the
+// picture, so a node's cost by absence counts the pass it is in.
+export interface CostPassProgram { fragmentShader: string; scale: number; live: boolean }
+export type ShaderCostMeasurer = (fragmentShader: string, vertexShader: string, signal?: AbortSignal, passes?: readonly CostPassProgram[]) => Promise<number | null>;
 let measurer: ShaderCostMeasurer | null = null;
 
 export function registerShaderCostMeasurer(fn: ShaderCostMeasurer | null): void { measurer = fn; }

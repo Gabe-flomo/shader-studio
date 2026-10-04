@@ -480,7 +480,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const nodeOutputVarMap = useNodeGraphStore(s => s.nodeOutputVarMap);
   const previewNodeId   = useNodeGraphStore(s => s.previewNodeId);
   // Show passes: the programs this node runs in (a stable array from the per-compile map, or null).
-  const programTags     = useNodeGraphStore(s => (s.showPasses ? programTintsCached(s.passes, s.agents, s.finalNodeIds).get(node.id) ?? null : null));
+  const programTags     = useNodeGraphStore(s => (s.showPasses && s.programMap ? programTintsCached(s.programMap.passes, s.programMap.agents, s.programMap.finalNodeIds).get(node.id) ?? null : null));
   const activeGroupId   = useNodeGraphStore(s => s.activeGroupId);
   // Check if the active group has iterations > 1 (assignOp / carryMode only meaningful in loops)
   const activeGroupIterations = typeof activeGroupNode?.params?.iterations === 'number' ? activeGroupNode.params.iterations : 1;

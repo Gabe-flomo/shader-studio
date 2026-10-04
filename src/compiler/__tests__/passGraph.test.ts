@@ -69,6 +69,22 @@ describe('Pass node compile', () => {
     expect(r.passes![0].fragmentShader).toContain('circ_2');
   });
 
+  it('gives probes the variables of nodes only a pass program has (phase 3)', () => {
+    const nodes = simple();
+    nodes[4] = n('addColor', 'node_5', 0, 0, {}, { a: ['node_4', 'color'] });
+    const r = compileGraph({ nodes });
+    // circ_2 is drawn only by the pass: its variables come from the pass program, by the same slug.
+    const vars = r.nodeOutputVars.get('node_2');
+    expect(vars).toBeTruthy();
+    expect(r.fragmentShader).not.toContain(vars!.distance);
+    expect(r.passes![0].fragmentShader).toContain(vars!.distance);
+    expect(r.passes![0].nodeIds).toContain('node_2');
+    // The final program's own nodes keep their variables from the final program.
+    expect(r.fragmentShader).toContain(r.nodeOutputVars.get('node_5')!.result);
+    // The compiler's own Pass output never shows.
+    expect([...r.nodeOutputVars.keys()].some(k => k.endsWith('__out'))).toBe(false);
+  });
+
   it('orders chained passes and skips passes nothing reads', () => {
     const nodes = [
       n('uv', 'node_1', 0, 0),

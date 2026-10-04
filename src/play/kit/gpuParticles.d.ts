@@ -46,6 +46,10 @@ export const GP_MAX_DT: number;
 export const GP_SUBSTEP: number;
 export const GP_PREROLL: number;
 export const GP_MARK: string;
+export const GP_FROM_MARK: string;
+export const GP_FROM_TRIES: number;
+export const GP_SIM_FROM_SHADER: string;
+export function gpFromBirth(sample: (u: number, v: number) => readonly number[], i: number, seed: number, threshold: number): [number, number] | null;
 
 export interface GpProbeSpec {
   m: string; s: string; c: string | null; f: string[]; v2: string[]; cam: boolean;
@@ -69,7 +73,7 @@ export interface GpSoundInput { freq?: Float32Array; wave?: Float32Array; sample
 export interface GpSound { level: number; bass: number; mid: number; treble: number; avg: number; avgBass: number; since: number; onset: number; hit: number }
 export function gpSoundState(): GpSound;
 export function gpSoundStep(st: GpSound, input: GpSoundInput | null, dt: number): GpSound;
-export interface GpBinding { uniform: string; params: Record<string, unknown>; image: string | null; audio: string | null; audioBands: string[]; probe: GpProbeSpec | null }
+export interface GpBinding { uniform: string; params: Record<string, unknown>; image: string | null; audio: string | null; audioBands: string[]; probe: GpProbeSpec | null; /** Emit from: the texture's sampler (only when wired). */ from?: string }
 export interface GpEmitterState { head: number; carry: number; clock: number; burst: number }
 export interface GpLight { x: number; y: number; z: number; reach: number; power: number; colour: GpRgb }
 export interface GpPlacement { emitAt: [number, number]; attractAt: [number, number]; lights: GpLight[]; hands: [number, number][] }
@@ -93,6 +97,8 @@ export interface GpFrame {
   params: GpParams; width: number; height: number; dt: number; time: number;
   mouse: readonly number[] | null; reset?: boolean;
   image?: WebGLTexture | null; imageAspect?: number; level?: number; sound?: GpSoundInput | null;
+  /** Emit from wired, and its texture (null: not drawn yet, nothing is born). */
+  fromOn?: boolean; from?: WebGLTexture | null;
   probe?: { spec: GpProbeSpec; values: ArrayLike<number> | null; field: GpField | null; volume?: GpField | null } | null;
 }
 /** The probe's field over the picture: rgb obstacle, flow, depth (RGBA16F, linear), and its size. */

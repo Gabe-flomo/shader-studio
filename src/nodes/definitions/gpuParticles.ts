@@ -31,9 +31,15 @@
  * values, read back a frame late) and a small field over the picture (the
  * obstacle, the flow and a scene's depth, sampled on the GPU). See
  * docs/gpu-particles-plan.md.
+ *
+ * Emit from (a Pass's texture, docs/pass-node-plan.md phase 6): wired, the
+ * particles are born where that texture is bright (Image threshold sets how
+ * bright), e.g. on the edges an Edges (texture) node found. The node then
+ * writes one more comment into its code naming the texture (GP_FROM_MARK);
+ * unwired, it compiles exactly as before.
  */
 import type { GraphNode, InputSocket, NodeDefinition, ParamDef } from '../../types/nodeGraph';
-import { GP_DEFAULTS, GP_MARK, GP_SOCKET_FLOATS, GP_VOL, GP_VOL_TILES, gpProbeSlots, gpProbeSpec } from '../../play/kit/gpuParticles.js';
+import { GP_DEFAULTS, GP_FROM_MARK, GP_MARK, GP_SOCKET_FLOATS, GP_VOL, GP_VOL_TILES, gpProbeSlots, gpProbeSpec } from '../../play/kit/gpuParticles.js';
 
 /** The node's sampler, named by its slug (as its param uniforms are). */
 export function gpuParticlesUniform(slug: string): string {
@@ -166,6 +172,7 @@ const INPUTS: Record<string, InputSocket> = {
   obstacle: { type: 'float', label: 'Obstacle', hint: 'A shape the particles flow round (an SDF, or a mask: see Obstacle is).' },
   flow: { type: 'float', label: 'Flow', hint: 'A value whose slopes (or contours) steer the particles: a noise, a shape, a picture.' },
   emitAt: { type: 'vec2', label: 'Emitter', hint: 'Where the emitter is (centred coordinates). Unwired: the centre.' },
+  emitFrom: { type: 'texture', label: 'Emit from', hint: 'A Pass\'s Texture: particles are born where it is bright (Image threshold sets how bright), all over the picture. Wire Edges (texture) through a Pass for sparks off outlines.' },
   hand: { type: 'vec2', label: 'Hand', hint: 'A first hand\'s position (centred coordinates): turns Hands on.' },
   hand2: { type: 'vec2', label: 'Hand 2', hint: 'A second hand\'s position.' },
   camOrigin: { type: 'vec3', label: 'Camera from', hint: '3D: a scene camera\'s ray origin (March Camera ro). With Camera ray, the particles stand in that scene.' },
@@ -247,6 +254,8 @@ export const GpuParticlesNode: NodeDefinition = {
     const uv = inputVars.uv ?? 'g_uv';
     const ink = node.params.look === 'ink';
     const lines = [
+      // Emit from (only when wired): the texture the engine samples births from, by its sampler.
+      ...(inputVars.emitFrom ? [`    ${GP_FROM_MARK}${gpuParticlesUniform(id)} ${inputVars.emitFrom}\n`] : []),
       `    vec4 ${id}_s = texture2D(${gpuParticlesUniform(id)}, clamp(gpp_screen(${uv}), 0.0, 1.0));\n`,
     ];
     if (ink) {

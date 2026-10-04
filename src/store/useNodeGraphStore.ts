@@ -12,7 +12,8 @@ import { toast } from '../components/ui/toastStore';
 import { planSceneGroupAdd, planSmart3DAdd } from '../nodes/smart3d';
 import { askChoice } from '../components/ui/dialogStore';
 import { buildAgentsSubgraph, buildMarchRig, buildMarchSubgraph, buildSceneSubgraph, buildVolumetricRig, graphOutput, instantiateNode, twoDNodesBefore3D } from '../nodes/scene3dDefaults';
-import { agentEyeNodes } from '../compiler/agentGraph';
+import { agentEyeNodes, hasAgentsNode } from '../compiler/agentGraph';
+import { hasPassNode } from '../compiler/passGraph';
 import { agentPreset } from './agentExamples';
 import { addAgentPieceTo, agentStarter, freshIds, placeInFreeSpace, startRuleIn, type AgentPiece, type AgentRuleStart } from './agentSetup';
 import { particlesAsNodes } from './particlesAsNodes';
@@ -735,6 +736,12 @@ interface NodeGraphState {
   agents: import('../compiler/types').AgentsSpec | null;
   /** With passes or agents: the nodes compiled into the final picture (Show passes). */
   finalNodeIds: string[] | null;
+  /**
+   * Show passes' view of the whole graph: its programs (lib/programTints.ts). The compile's own while
+   * nothing is previewed; while the eye previews a node, the whole graph's (the preview compiles only
+   * what that node needs), so the toggle and the tints stay as they were. Null for a one-program graph.
+   */
+  programMap: { passes: import('../compiler/types').PassProgram[] | null; agents: import('../compiler/types').AgentsSpec | null; finalNodeIds: string[] | null } | null;
   /** Show passes: tint each card by the program it runs in (lib/programTints.ts). */
   showPasses: boolean;
   setShowPasses: (on: boolean) => void;
@@ -1698,6 +1705,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   passes: null,
   agents: null,
   finalNodeIds: null,
+  programMap: null,
   showPasses: false,
   setShowPasses: (on: boolean) => set({ showPasses: on }),
   nodeSlugMap: new Map(),
@@ -4863,7 +4871,17 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
 
     const shaderChanged = result.fragmentShader !== get().fragmentShader;
+    // Show passes: the whole graph's programs, even while the eye previews part of it.
+    let whole: typeof result | null = result;
+    if (previewNodeId && (hasPassNode(nodes) || hasAgentsNode(nodes))) {
+      const full = compileGraph({ nodes });
+      whole = full.success ? full : null;
+    }
+    const programMap = whole && (whole.passes || whole.agents)
+      ? { passes: whole.passes ?? null, agents: whole.agents ?? null, finalNodeIds: whole.finalNodeIds ?? null }
+      : null;
     set({
+      programMap,
       ...(nodesChanged ? { nodes: patchedForAcc } : {}),
       vertexShader: result.vertexShader,
       fragmentShader: result.fragmentShader,

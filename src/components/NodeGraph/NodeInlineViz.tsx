@@ -7,6 +7,7 @@ import { useThemeMode } from '../../theme/themeStore';
 import { pal, setVizPalette, MONO, vizContainer, setupViz, imageSize, blitImage, useVizScale, type Viz } from './vizKit';
 import { GenericViz, GENERIC_VIZ_TYPES } from './vizGeneric';
 import { passThumbRegistry } from '../../lib/passRunner';
+import { getPerfSnapshot } from '../../lib/perfStats';
 import { agentStatsFor, agentThumbRegistry, restartAgents, trailThumbRegistry, type AgentStats } from '../../lib/agentRunner';
 import { AGENT_TIERS } from '../../nodes/definitions/agents';
 import { agentNextSteps, type AgentPiece } from '../../store/agentSetup';
@@ -3705,12 +3706,29 @@ function PassThumbViz({ node }: { node: GraphNode }) {
     passThumbRegistry.register(node.id, c);
     return () => passThumbRegistry.unregister(node.id);
   }, [node.id]);
+  // Its size in pixels (the runner writes it on the canvas) and its GPU time (the `pass:<slug>` timer, as in
+  // the Performance panel), twice a second.
+  const [live, setLive] = useState('');
+  useEffect(() => {
+    const read = () => {
+      const st = useNodeGraphStore.getState();
+      const p = (st.programMap?.passes ?? st.passes)?.find(q => q.nodeId === node.id);
+      const ms = p ? getPerfSnapshot().passes.find(r => r.name === `pass:${p.slug}`)?.avg : undefined;
+      const size = ref.current?.dataset.size;
+      const text = [size, p && !p.live ? 'not drawn: nothing reads it' : null, ms != null && p?.live ? `${ms.toFixed(2)} ms GPU` : null].filter(Boolean).join(' · ');
+      setLive(prev => (prev === text ? prev : text));
+    };
+    read();
+    const t = setInterval(read, 500);
+    return () => clearInterval(t);
+  }, [node.id]);
   const scale = String(node.params.scale ?? '1');
   const scaleText = scale === '0.5' ? '½' : scale === '0.25' ? '¼' : scale === '0.125' ? '⅛' : '1';
   return (
     <div style={{ ...vizContainer(), padding: 4 }}>
       <canvas ref={ref} width={128} height={72} style={{ display: 'block', maxWidth: '100%', maxHeight: 120, margin: '0 auto', background: '#000', borderRadius: 3 }} />
       <div style={{ fontSize: '9px', color: pal.overlay0, fontFamily: MONO, marginTop: 3 }}>texture · scale {scaleText} · {node.params.format === 'byte' ? '8-bit' : 'half float'}</div>
+      {live && <div style={{ fontSize: '9px', color: pal.overlay0, fontFamily: MONO }}>{live}</div>}
     </div>
   );
 }

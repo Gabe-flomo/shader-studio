@@ -11,6 +11,28 @@ import { measureNodeCosts, type NodeCostReport } from '../../lib/nodeCost';
 import { SKIP_UNIFORM_TYPES } from '../../compiler/uniformPatcher';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
 import type { GraphNode } from '../../types/nodeGraph';
+import type { PassProgram } from '../../compiler/types';
+import { programTintColour } from '../../lib/programTints';
+
+const SCALE_MARK: Record<number, string> = { 0.5: ' (½)', 0.25: ' (¼)', 0.125: ' (⅛)' };
+
+/**
+ * A GPU timer's row: the picture ('main'), the particles, an Agents engine step, or one row per
+ * Pass (`pass:<slug>`, docs/pass-node-plan.md phase 3): its label and Scale, in its Show passes
+ * colour. Null for a pass no longer in the graph (its timer's last average lingers).
+ */
+function gpuRow(name: string, passes: readonly PassProgram[] | null): { label: string; sub: string; tint: string | null } | null {
+  if (name === 'main') return { label: passes?.length ? 'Picture' : 'Shader', sub: 'GPU', tint: null };
+  if (name === 'particles') return { label: 'Particles', sub: 'GPU', tint: null };
+  if (name.startsWith('pass:')) {
+    const i = passes ? passes.findIndex(p => p.slug === name.slice(5)) : -1;
+    if (i < 0) return null;
+    const p = passes![i];
+    return { label: `${p.label}${SCALE_MARK[p.scale] ?? ''}`, sub: 'GPU', tint: programTintColour({ kind: 'pass', label: p.label, index: i }) };
+  }
+  if (name.startsWith('agents:')) return { label: name.slice(7), sub: 'GPU', tint: null };
+  return { label: name, sub: 'GPU', tint: null };
+}
 
 /** 60 fps frame budget in ms */
 const BUDGET_MS = 1000 / 60;
@@ -118,7 +140,7 @@ function Sparkline({ values, budget, color, warn }: { values: readonly number[];
 function Bar({ label, value, max, unit, color, sub }: { label: string; value: number; max: number; unit: string; color: string; sub?: string }) {
   const tk = useTokens();
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '112px 1fr 64px', alignItems: 'center', gap: 10, fontSize: 12 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr 64px', alignItems: 'center', gap: 10, fontSize: 12 }}>
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}{sub && <span style={{ color: tk.text.faint }}> · {sub}</span>}</span>
       <span style={{ height: 8, borderRadius: 4, background: tk.bg.field, overflow: 'hidden' }}>
         <span style={{ display: 'block', height: '100%', width: `${Math.min(100, (value / Math.max(max, 1e-6)) * 100)}%`, borderRadius: 4, background: color }} />
@@ -153,6 +175,8 @@ export function PerfPanel({ onClose }: { onClose: () => void }) {
   const revealNode = useNodeGraphStore(s => s.revealNode);
   const shape = useMemo(() => shaderShape(fragmentShader ?? ''), [fragmentShader]);
   const triggers = useMemo(() => recompileTriggers(nodes), [nodes]);
+  const graphPasses = useNodeGraphStore(s => s.passes);
+  const gpuRows = snap.passes.flatMap(p => { const r = gpuRow(p.name, graphPasses); return r ? [{ ...r, name: p.name, avg: p.avg }] : []; });
 
   const gpuOk = snap.gpuTimer === 'supported';
   const frame = gpuOk ? snap.gpu : snap.cpu;
@@ -222,12 +246,15 @@ export function PerfPanel({ onClose }: { onClose: () => void }) {
         )}
       </div>
 
-      {(snap.passes.length > 0 || snap.probeMs !== null) && (
+      {(gpuRows.length > 0 || snap.probeMs !== null) && (
         <div style={section}>
           <div style={caps}>Where the frame goes</div>
-          {snap.passes.map(p => (
-            <Bar key={p.name} label={p.name === 'main' ? 'Shader' : p.name === 'particles' ? 'Particles' : p.name} value={p.avg} max={Math.max(frameAvg ?? 0, ...snap.passes.map(q => q.avg))} unit="ms" color={tk.accent.base} sub="GPU" />
+          {gpuRows.map(p => (
+            <Bar key={p.name} label={p.label} value={p.avg} max={Math.max(frameAvg ?? 0, ...gpuRows.map(q => q.avg))} unit="ms" color={p.tint ?? tk.accent.base} sub={p.sub} />
           ))}
+          {gpuRows.some(p => p.name.startsWith('pass:')) && (
+            <div style={note}>Each Pass draws its program into its texture first, at its Scale (½ is a quarter of the pixels). A slow pass with a wide Blur or Glow after it: set it to ½ or ¼.</div>
+          )}
           {snap.probeMs !== null && (
             <Bar label="Probes and readouts" value={snap.probeMs} max={Math.max(frameAvg ?? 0, snap.probeMs)} unit="ms" color={tk.text.faint} sub={`CPU · ${Math.round(snap.readbacks ?? 0)} readbacks`} />
           )}
