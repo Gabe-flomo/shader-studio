@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.25',
+    date: '2026-10-04',
+    title: 'Bake: render and replace',
+    highlights: [
+      { area: 'Studio', text: 'Bake… renders a node or the whole picture to a video and puts it back as a Baked node, so heavy 3D and agents play back for almost nothing.', link: { kind: 'doc', path: 'docs/bake.md' } },
+      { area: 'Studio', text: 'Unbake brings back the live nodes exactly; Re-bake renders again; baked videos live in the Library and work in Play and on web pages.' },
+    ],
+  },
+  {
     id: '2026.10.24',
     date: '2026-10-04',
     title: 'Switch a node in place',
