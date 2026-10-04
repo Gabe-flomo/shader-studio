@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.13',
+    date: '2026-10-04',
+    title: 'Live Expression sliders',
+    highlights: [
+      { area: 'Studio', text: 'Dragging an Expression Block’s slider no longer recompiles the shader, and inside an Agents group it no longer restarts the simulation.' },
+    ],
+  },
+  {
     id: '2026.10.12',
     date: '2026-10-04',
     title: 'Agents: particles from nodes',
