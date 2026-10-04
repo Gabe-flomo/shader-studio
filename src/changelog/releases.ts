@@ -39,6 +39,18 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.19',
+    date: '2026-10-04',
+    title: 'Agents with shaders, a friendlier Agents group',
+    highlights: [
+      { area: 'Studio', text: 'New examples folder, Agents with shaders: eight graphs that plug the Agents group into ordinary nodes and your own shaders, every node explained.', link: { kind: 'example', key: 'agentShaderOutlines' } },
+      { area: 'Studio', text: 'A new Agents group asks Particles, Slime or Empty and builds a working starter; Next steps adds Emit, Draw, Trail or Output in one click.' },
+      { area: 'Studio', text: 'Inside a group, Agent Inputs shows “This walker” and “From outside the group”, settings use plainer names, and each one has a “?”.' },
+      { area: 'Studio', text: 'Agents presets and examples start at 256k walkers with the same trail strength, and land in free space with their cards untangled.' },
+      { area: 'Studio', text: 'Recordings and video exports now match the preview when agents read a Pass: traced outlines sit on the picture instead of stretching.' },
+    ],
+  },
+  {
     id: '2026.10.18',
     date: '2026-10-04',
     title: 'Open as nodes, agent readings, galaxies',
