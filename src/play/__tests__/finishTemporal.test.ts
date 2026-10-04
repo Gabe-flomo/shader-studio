@@ -34,7 +34,7 @@ describe('temporal effects: declarations', () => {
         expect(p.value).toBeLessThanOrEqual(p.max);
       }
     }
-    expect(FN_EFFECTS.datamosh.params.map(p => p.key)).toEqual(['amount', 'bleed', 'block', 'push', 'sustain', 'refresh', 'every', 'hold']);
+    expect(FN_EFFECTS.datamosh.params.map(p => p.key)).toEqual(['amount', 'bleed', 'block', 'push', 'sustain', 'refresh', 'every', 'hold', 'reset']);
     expect(FN_EFFECTS.motionx.params.map(p => p.key)).toEqual(['delay', 'gain', 'colour', 'background', 'edges', 'neon', 'amount']);
     // Mosh is a switch (0 / 1), so a key or a signal can hold it.
     const hold = FN_EFFECTS.datamosh.params.find(p => p.key === 'hold')!;

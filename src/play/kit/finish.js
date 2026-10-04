@@ -473,9 +473,10 @@ export const FN_EFFECTS = {
       FN_P('block', 'Block size', 8, 96, 1, 24, 'The size of the blocks that move together, in pixels of a 1080p picture. A video codec’s are 16.'),
       FN_P('push', 'Push', 0, 3, 0.01, 1, 'How far each block moves for the movement it sees: above 1 smears faster than things move.'),
       FN_P('sustain', 'Sustain', 0, 0.98, 0.01, 0.6, 'How much a block keeps moving after the movement stops (the classic “bloom” swell). 0 stops at once.'),
-      FN_P('refresh', 'Refresh', 0, 1, 0.01, 0, 'How quickly the picture heals back to the live one, each frame. 0 never does.'),
+      FN_P('refresh', 'Refresh', 0, 1, 0.01, 0, 'How quickly the picture heals back to the live one: 0.1 takes about a second, 1 almost at once. 0 never does.'),
       FN_P('every', 'Keyframe every', 0, 8, 0.05, 0, 'Snaps back to the live picture every so many seconds (a keyframe). 0 never does.'),
       FN_P('hold', 'Mosh', 0, 1, 1, 0, 'While on, nothing heals: no Refresh and no keyframes. Map a key or a rule’s signal onto it to mosh on cue.'),
+      FN_P('reset', 'Reset', 0, 1, 1, 0, 'Each time this turns on, the picture snaps back to the live one (even while Mosh is on). Map a key or a rule’s signal onto it.', true),
     ],
     presets: [
       { name: 'Bloom', values: { amount: 1, bleed: 0.06, block: 24, push: 1, sustain: 0.6, refresh: 0, every: 0 } },
@@ -2534,7 +2535,7 @@ export function fnCreate(canvasIn) {
     const g = fnMoshGrid(24, W, H);
     // The vector targets are a texel per quarter-size pixel (room for the smallest blocks); a frame draws only gw × gh of it.
     moshT = {
-      key, i: 0, valid: false, kf: -1, out: null,
+      key, i: 0, valid: false, kf: -1, out: null, resetOn: false, lastT: null,
       st: [target(W, H, 2, false, gl.NEAREST), target(W, H, 2, false, gl.NEAREST)],
       low: [target(g.lowW, g.lowH, 1, false), target(g.lowW, g.lowH, 1, false)],
       vec: [target(g.lowW, g.lowH, 1, false, gl.NEAREST), target(g.lowW, g.lowH, 1, false, gl.NEAREST)],
@@ -2645,7 +2646,7 @@ export function fnCreate(canvasIn) {
       return true;
     }
     const M = ensureMosh(W, H);
-    if (input.first) { M.valid = false; M.kf = -1; }
+    if (input.first) { M.valid = false; M.kf = -1; M.lastT = null; }
     const g = fnMoshGrid(v('block', 24), W, H);
     const cur = M.i, prev = 1 - M.i;
     // 1. The brightness motion is measured on, at a quarter size: this pass's input, or a layer drawn alone (a camera).
@@ -2671,7 +2672,15 @@ export function fnCreate(canvasIn) {
     const hold = v('hold', 0) >= 0.5;
     const kf = fnMoshKeyframe(v('every', 0), input.time || 0, M.kf);
     M.kf = kf.idx;
+    // Reset: one keyframe as it turns on. Refresh heals at a rate per second (the same at any frame rate).
+    const resetOn = v('reset', 0) >= 0.5;
+    const fire = resetOn && !M.resetOn;
+    M.resetOn = resetOn;
+    const now = input.time || 0;
+    const dt = M.lastT === null ? 1 / 60 : Math.max(0, Math.min(0.25, now - M.lastT));
+    M.lastT = now;
     const refresh = Math.max(0, Math.min(1, v('refresh', 0)));
+    const heal = refresh > 0 ? 1 - Math.exp(-dt * 10 * refresh) : 0;
     const adv = compile('moshadv', FN_MOSH_ADV);
     if (!adv) return false;
     gl.useProgram(adv.prog);
@@ -2680,10 +2689,10 @@ export function fnCreate(canvasIn) {
     gl.uniform2f(loc(adv, 'uLow'), g.lowW, g.lowH);
     gl.uniform1f(loc(adv, 'uBl'), g.bl);
     gl.uniform1f(loc(adv, 'uValid'), M.valid ? 1 : 0);
-    gl.uniform1f(loc(adv, 'uKey'), kf.key && !hold ? 1 : 0);
+    gl.uniform1f(loc(adv, 'uKey'), fire || (kf.key && !hold) ? 1 : 0);
     gl.uniform1f(loc(adv, 'uBleed'), Math.max(0, Math.min(1, v('bleed', 0.06))));
     gl.uniform1f(loc(adv, 'uPush'), Math.max(0, Math.min(3, v('push', 1))));
-    gl.uniform1f(loc(adv, 'uHeal'), hold ? 0 : refresh * refresh);
+    gl.uniform1f(loc(adv, 'uHeal'), hold ? 0 : heal);
     bindTex(adv, 'uHeld', 3, M.st[prev].texs[0]); bindTex(adv, 'uPrevSrc', 4, M.st[prev].texs[1]); bindTex(adv, 'uVec', 5, M.vec[cur].texs[0]);
     draw(M.st[cur].fb, W, H);
     M.out = M.st[cur].texs[0];
