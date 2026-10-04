@@ -9,7 +9,8 @@
  *   1. Simulate: the state lives in two pairs of float textures, one texel a
  *      particle (pos.xyz + age, vel.xyz + life). One fullscreen pass with two
  *      render targets moves every particle (gravity, wind, curl-noise
- *      turbulence, swirl, an attractor, drag, up to two hands, a sound wave)
+ *      turbulence, swirl, an attractor, drag, up to two hands, a sound wave,
+ *      a Chladni plate whose nodal lines gather the sand)
  *      and gives birth to the texels in the emission window: a ring
  *      [head, head + n) that walks round the pool, so emitting is a uniform,
  *      not a search. A frame's dt is split into equal substeps of at most
@@ -68,6 +69,7 @@ export const GP_DEFAULTS = {
   lights: '4', lightColor: [1, 0.55, 0.25], lightPower: 1.6, lightReach: 0.3, halo: 0.5, lightMotion: 'orbit',
   soundFrom: 'graph', sound: 0, wave: 0, waveSpeed: 0.8, vibrate: 0, shock: 0, crunch: 0, gust: 0, jet: 0,
   obstacleMode: 'sdf', flowForce: 1, flowMode: 'slope', sceneReach: 2,
+  pattern: 'off', modeFrom: 'sound', symmetry: 'minus', modes: 3, modeN: 3, modeM: 5, plateFreq: 1, plateWeights: 0.5, settle: 1, shake: 0.6,
   hands: 'off', handX: 0.35, handY: 0.5, hand2X: 0.65, hand2Y: 0.5, handForce: 0.8, handSwirl: 0.6, handReach: 0.35,
 };
 /** The number settings' ranges (physical limits, not the sliders'). */
@@ -79,6 +81,7 @@ export const GP_LIMITS = {
   lightPower: [0, 50], lightReach: [0.01, 10], halo: [0, 10],
   sound: [0, 10], wave: [0, 20], waveSpeed: [0.05, 10], vibrate: [0, 20], shock: [0, 20], crunch: [0, 20], gust: [0, 20], jet: [0, 20],
   flowForce: [-20, 20], sceneReach: [0.2, 50],
+  modes: [1, 8], modeN: [0, 15], modeM: [0, 15], plateFreq: [0.25, 4], plateWeights: [0, 1], settle: [0, 10], shake: [0, 10],
   handX: [-2, 3], handY: [-2, 3], hand2X: [-2, 3], hand2Y: [-2, 3], handForce: [-20, 20], handSwirl: [-20, 20], handReach: [0.02, 4],
 };
 const GP_CHOICES = {
@@ -87,6 +90,7 @@ const GP_CHOICES = {
   lights: ['0', '1', '2', '3', '4'], lightMotion: ['orbit', 'still'], hands: ['off', '1', '2'],
   soundFrom: ['graph', 'live', 'master', 'track1', 'track2', 'track3', 'track4', 'track5', 'track6', 'track7', 'track8'],
   obstacleMode: ['sdf', 'mask'], flowMode: ['slope', 'around'],
+  pattern: ['off', 'square', 'circle'], modeFrom: ['sound', 'manual'], symmetry: ['minus', 'plus'],
 };
 
 /**
@@ -140,6 +144,30 @@ export const GP_PRESETS = {
       gravity: 0, turbulence: 0.35, scale: 0.8, swirl: 0, drag: 1.6, size: 1, brightness: 1.3,
       palette: 'ember', colorBy: 'speed', glow: 0.6, lights: '1', lightColor: [1, 0.6, 0.3], lightPower: 2, lightReach: 0.5, halo: 0.6, lightMotion: 'still',
       soundFrom: 'master', wave: 0.4, vibrate: 0.3, shock: 1.2, crunch: 0.5, gust: 0.6, jet: 1.2,
+    },
+  },
+  chladni: {
+    label: 'Chladni sand', hint: 'Sand on a square metal plate: the sound picks the plate\'s modes and the sand gathers on the still lines between them. Pick Sound from, or set Mode from to Manual and turn N and M.',
+    set: {
+      count: '256k', emitter: 'box', emitSize: 0.85, life: 30, speed: 0, spread: 1,
+      turbulence: 0, swirl: 0, drag: 6, size: 1.2, brightness: 1.6, palette: 'gold', colorBy: 'life', glow: 0.25, lights: '0',
+      pattern: 'square', modeFrom: 'sound', symmetry: 'minus', modes: 3, modeN: 3, modeM: 5, plateFreq: 1, plateWeights: 0.45, settle: 1.2, shake: 0.7,
+    },
+  },
+  singing: {
+    label: 'Singing plate', hint: 'A round plate that sings: its rings and spokes follow the pitch, morphing as the notes change.',
+    set: {
+      count: '256k', emitter: 'disk', emitSize: 0.88, life: 30, speed: 0, spread: 1,
+      turbulence: 0, swirl: 0, drag: 6, size: 1.2, brightness: 1.5, palette: 'ice', colorBy: 'life', glow: 0.5, lights: '0',
+      pattern: 'circle', modeFrom: 'sound', symmetry: 'minus', modes: 2, modeN: 4, modeM: 3, plateFreq: 1.5, plateWeights: 0.35, settle: 1.2, shake: 0.6,
+    },
+  },
+  cymatics: {
+    label: 'Cymatics bloom', hint: 'Many modes at once on a round plate, high and evenly weighted: lace-like figures that bloom and morph with the music.',
+    set: {
+      count: '1m', emitter: 'disk', emitSize: 0.88, life: 30, speed: 0, spread: 1,
+      turbulence: 0, swirl: 0, drag: 6, size: 0.8, brightness: 2.4, palette: 'neon', colorBy: 'life', glow: 0.9, lights: '0',
+      pattern: 'circle', modeFrom: 'sound', symmetry: 'plus', modes: 5, modeN: 6, modeM: 4, plateFreq: 2, plateWeights: 0.85, settle: 2.2, shake: 0.45,
     },
   },
   hands: {
@@ -202,6 +230,15 @@ export function gpBindings(fragmentShader) {
   const fs = fragmentShader || '';
   const re = /uniform\s+sampler2D\s+(\w+)\s*;\s*\/\/ gpu-particles (\{[^\n]*\})/g;
   const am = /uniform\s+float\s+(u_audio_\w+)\s*;/.exec(fs);
+  // Every band of that same Audio Input (u_audio_<slug>_<band>), low to high as its bands are listed.
+  const bands = [];
+  if (am) {
+    const stem = am[1].replace(/_\d+$/, '');
+    const rb = /uniform\s+float\s+(u_audio_\w+?)_(\d+)\s*;/g;
+    let mb;
+    while ((mb = rb.exec(fs))) if (mb[1] === stem && !bands.some(b => b[1] === +mb[2])) bands.push([mb[1] + '_' + mb[2], +mb[2]]);
+    bands.sort((a, b) => a[1] - b[1]);
+  }
   let m;
   while ((m = re.exec(fs))) {
     if (seen.has(m[1])) continue;
@@ -212,7 +249,7 @@ export function gpBindings(fragmentShader) {
     const pr = cfg.probe && typeof cfg.probe === 'object' ? cfg.probe : null;
     out.push({
       uniform: m[1], params: cfg.p && typeof cfg.p === 'object' ? cfg.p : {},
-      image: typeof cfg.img === 'string' ? cfg.img : null, audio: am ? am[1] : null,
+      image: typeof cfg.img === 'string' ? cfg.img : null, audio: am ? am[1] : null, audioBands: bands.map(b => b[0]),
       probe: pr && typeof pr.m === 'string' && typeof pr.s === 'string' ? gpProbeSpec(pr) : null,
     });
   }
@@ -268,6 +305,7 @@ export const GP_SOCKET_FLOATS = [
   'size', 'thread', 'brightness', 'glow',
   'camAngle', 'camDistance', 'focus', 'blur',
   'sound', 'wave', 'vibrate', 'shock', 'crunch', 'gust', 'jet', 'handForce', 'handSwirl', 'flowForce',
+  'modeN', 'modeM', 'plateFreq', 'plateWeights', 'settle', 'shake',
 ];
 /** Position sockets (the graph's centred coordinates: y ±1, x ±aspect): the two hands and the emitter. */
 export const GP_SOCKET_POINTS = ['hand', 'hand2', 'emitAt'];
@@ -545,6 +583,313 @@ export function gpLevelsPush(st, level, dt) {
   return k;
 }
 
+/*
+ * Chladni plates (Pattern): sand on a vibrating plate gathers on its nodal lines, where the plate
+ * stands still. The plate's displacement is a weighted sum of modes, u = Σ w·φ(n, m), each
+ * particle is pushed down |u| towards u = 0 and shaken by how much the plate moves where it is.
+ *   Square plate:  φ = cos(nπX)·cos(mπY) ∓ cos(mπX)·cos(nπY), X and Y 0…1 across the plate.
+ *   Round plate:   φ = J_n(k·r)·cos(nθ), k putting m still rings inside a free rim (gpPlateWave).
+ * The sound picks the modes: its spectrum in GP_PLATE_BANDS bands, low to high; each band names a
+ * mode a step further up the plate's modes (ordered by pitch), the loudest weighs most, and the
+ * weights glide (gpPlateSmooth) so one figure morphs into the next. Both shapes are the same in GLSL.
+ */
+/** How many modes the plate sums at most (the shader's array). */
+export const GP_PLATE_MAX = 8;
+/** The shortest time a figure holds before the sound may change it (seconds): the sand has to settle. */
+export const GP_PLATE_HOLD = 2;
+/** How many bands the sound is heard in for the plate. */
+export const GP_PLATE_BANDS = 8;
+/** The Bessel table: J_n for n < GP_BESSEL_N, x in [0, GP_BESSEL_X] at GP_BESSEL_W samples. */
+export const GP_BESSEL_N = 16;
+export const GP_BESSEL_X = 64;
+export const GP_BESSEL_W = 1024;
+
+/**
+ * J_n(x), the Bessel function of the first kind, from its integral (1/π)∫₀^π cos(nτ − x·sinτ) dτ.
+ * The midpoint rule is exact here to float precision while n + x < 2 × samples (the integrand is a
+ * smooth periodic function), so 200 samples cover the table.
+ */
+export function gpBessel(n, x) {
+  const S = 200;
+  let sum = 0;
+  for (let i = 0; i < S; i++) {
+    const t = (i + 0.5) / S * Math.PI;
+    sum += Math.cos(n * t - x * Math.sin(t));
+  }
+  return sum / S;
+}
+
+let gpBesselCache = null;
+/** The table the shader reads (row n, GP_BESSEL_W samples over [0, GP_BESSEL_X]), built once. */
+export function gpBesselTable() {
+  if (gpBesselCache) return gpBesselCache;
+  const t = new Float32Array(GP_BESSEL_N * GP_BESSEL_W);
+  for (let n = 0; n < GP_BESSEL_N; n++) {
+    for (let i = 0; i < GP_BESSEL_W; i++) t[n * GP_BESSEL_W + i] = gpBessel(n, i / (GP_BESSEL_W - 1) * GP_BESSEL_X);
+  }
+  gpBesselCache = t;
+  return t;
+}
+
+const gpZeroCache = new Map();
+/** The m-th positive zero of J_n (m ≥ 1): a round plate's wave number with m rings (its rim one of them). */
+export function gpBesselZero(n, m) {
+  const key = n * 100 + m;
+  if (gpZeroCache.has(key)) return gpZeroCache.get(key);
+  let found = 0, x = n === 0 ? 0.05 : n * 0.5 + 0.05, f = gpBessel(n, x), z = NaN;
+  while (x < 200) {
+    const x2 = x + 0.05, f2 = gpBessel(n, x2);
+    if (f * f2 < 0) {
+      let a = x, b = x2, fa = f;
+      for (let i = 0; i < 40; i++) { const c = (a + b) / 2, fc = gpBessel(n, c); if (fa * fc <= 0) b = c; else { a = c; fa = fc; } }
+      if (++found === m) { z = (a + b) / 2; break; }
+    }
+    x = x2; f = f2;
+  }
+  gpZeroCache.set(key, z);
+  return z;
+}
+
+const gpWaveCache = new Map();
+/**
+ * A round plate's wave number with m rings inside a free rim (n spokes): the first zero of J_n′
+ * past the m-th zero of J_n, so J_n(k·r) has m still circles for r < 1 and the rim moves (a real
+ * Chladni disc, free at its edge, doesn't hold its sand at the rim). m = 0: spokes only (n ≥ 1).
+ */
+export function gpPlateWave(n, m) {
+  const key = n * 100 + m;
+  if (gpWaveCache.has(key)) return gpWaveCache.get(key);
+  const dJ = x => (n === 0 ? -gpBessel(1, x) : (gpBessel(n - 1, x) - gpBessel(n + 1, x)) / 2);
+  // (J_n′'s first zero is above n: start there, clear of the flat start where J_n′ is ~0.)
+  let x = m > 0 ? gpBesselZero(n, m) + 1e-3 : Math.max(0.05, n), f = dJ(x), k = NaN;
+  while (x < 200) {
+    const x2 = x + 0.05, f2 = dJ(x2);
+    if (f * f2 < 0) {
+      let a = x, b = x2, fa = f;
+      for (let i = 0; i < 40; i++) { const c = (a + b) / 2, fc = dJ(c); if (fa * fc <= 0) b = c; else { a = c; fa = fc; } }
+      k = (a + b) / 2;
+      break;
+    }
+    x = x2; f = f2;
+  }
+  gpWaveCache.set(key, k);
+  return k;
+}
+
+const gpPeakCache = new Map();
+/** The biggest |J_n| up to x = k: a round mode's peak, so every mode weighs what its weight says. */
+function gpBesselPeak(n, k) {
+  const key = n + ':' + k;
+  if (gpPeakCache.has(key)) return gpPeakCache.get(key);
+  let pk = 0;
+  for (let i = 0; i <= 64; i++) pk = Math.max(pk, Math.abs(gpBessel(n, i / 64 * k)));
+  gpPeakCache.set(key, pk || 1);
+  return pk || 1;
+}
+
+/** A square plate's mode at (x, y) in −1…1 across it: the Chladni formula (sign −1 or +1; n = m adds). */
+export function gpChladniSquare(n, m, sign, x, y) {
+  const X = (x + 1) / 2 * Math.PI, Y = (y + 1) / 2 * Math.PI;
+  const s = n === m ? 1 : sign;
+  return Math.cos(n * X) * Math.cos(m * Y) + s * Math.cos(m * X) * Math.cos(n * Y);
+}
+
+/** A round plate's mode at (x, y), the rim at radius 1: J_n(k·r)·cos(nθ + turn), m rings inside a free rim (gpPlateWave). */
+export function gpChladniCircle(n, m, x, y, turn) {
+  return gpBessel(n, gpPlateWave(n, m) * Math.hypot(x, y)) * Math.cos(n * Math.atan2(y, x) + (turn || 0));
+}
+
+/**
+ * The sound in GP_PLATE_BANDS bands (log-spaced, 80 Hz…5 kHz) from a spectrum ({ freq: dB per bin,
+ * sampleRate }): each band's loudest bin, 0…1 above the noise floor, tilted up a little as music is
+ * loudest in the bass.
+ */
+export function gpPlateBands(input) {
+  const out = new Array(GP_PLATE_BANDS).fill(0);
+  if (!input || !input.freq || !(input.sampleRate > 0)) return out;
+  const lo = 80, hi = 5000;
+  for (let b = 0; b < GP_PLATE_BANDS; b++) {
+    const a = lo * Math.pow(hi / lo, b / GP_PLATE_BANDS), z = lo * Math.pow(hi / lo, (b + 1) / GP_PLATE_BANDS);
+    // The band's loudest bin, not its average: a note (one pitch) shows as loud as it is.
+    const f = input.freq, binHz = input.sampleRate / 2 / f.length;
+    const i0 = Math.max(1, Math.floor(a / binHz)), i1 = Math.min(f.length - 1, Math.max(i0, Math.ceil(z / binHz) - 1));
+    let peak = -100;
+    for (let i = i0; i <= i1; i++) peak = Math.max(peak, f[i]);
+    out[b] = Math.max(0, gpDbUnit(peak) - 0.2) / 0.8 * (1 + 0.08 * b);
+  }
+  return out;
+}
+
+const gpTables = {};
+/**
+ * The plate's modes ordered by pitch (each a figure), lowest first. Square: (n, m) with n < m and
+ * n + m even (the figures symmetric across both centre lines, as on a plate held at its centre), by
+ * n² + m² (how a square plate's frequencies go). Round: (n spokes, m rings), by wave number.
+ */
+export function gpPlateTable(shape) {
+  if (gpTables[shape]) return gpTables[shape];
+  const out = [];
+  if (shape === 'circle') {
+    for (let n = 0; n <= 12; n++) for (let m = n === 0 ? 1 : 0; m <= 8; m++) { const k = gpPlateWave(n, m); if (k < 40 && !(n <= 1 && m === 0)) out.push({ n, m, f: k }); }
+  } else {
+    for (let n = 0; n <= 15; n++) for (let m = n + 2; m <= 15; m += 2) out.push({ n, m, f: n * n + m * m });
+  }
+  out.sort((a, b) => a.f - b.f || a.n - b.n);
+  gpTables[shape] = out;
+  return out;
+}
+
+/** Where a mode is in the table (square: either order, which has the same lines), or −1. */
+function gpPlateIndex(table, shape, n, m) {
+  const a = shape === 'circle' ? n : Math.min(n, m), b = shape === 'circle' ? m : Math.max(n, m);
+  return table.findIndex(e => e.n === a && e.m === b);
+}
+
+/**
+ * Can mode `e` join the figure so far without breaking its symmetry? Square: the same parity as the
+ * main mode (every term then mirrors the same way across both centre lines). Round: its spokes a
+ * multiple of the figure's (rings, n = 0, go with anything), so the figure keeps its n-fold symmetry.
+ */
+export function gpPlateFits(shape, chosen, e) {
+  if (!chosen.length) return true;
+  if (shape !== 'circle') return e.n % 2 === chosen[0].n % 2;
+  const g = chosen.reduce((acc, c) => (c.n > 0 && (acc === 0 || c.n < acc) ? c.n : acc), 0);
+  return e.n === 0 || g === 0 || e.n % g === 0;
+}
+
+/** The mode in the table nearest position `at` that fits the figure and isn't in it yet (null: none). */
+function gpPlateNear(table, shape, chosen, at) {
+  for (let d = 0; d < table.length; d++) {
+    for (const i of d ? [at + d, at - d] : [at]) {
+      const e = table[i];
+      if (e && gpPlateFits(shape, chosen, e) && !chosen.some(c => c.n === e.n && c.m === e.m)) return e;
+    }
+  }
+  return null;
+}
+
+/**
+ * The modes the plate should sum now: [{ n, m, w }] (weights 0…1, the strongest 1).
+ * Manual: N and M (times Frequency), then the next modes up the table that keep its symmetry, each
+ * weighing Weights less. Sound (`bands`, low to high): the loudest band picks the main mode (higher
+ * bands, higher modes: Frequency spreads them further up), the next loudest add theirs (the nearest
+ * modes that keep the symmetry) weighing Weights × how loud they are next to it; a low Weights keeps
+ * only the loudest. Modes is how many at most. Null when the sound is silent (the plate keeps its figure).
+ */
+export function gpPlateTargets(P, shape, bands) {
+  const table = gpPlateTable(shape), last = table.length - 1;
+  const count = Math.max(1, Math.min(GP_PLATE_MAX, Math.round(P.modes)));
+  const out = [];
+  if (P.modeFrom === 'manual' || !bands) {
+    let n = Math.max(0, Math.round(P.modeN * P.plateFreq)), m = Math.max(0, Math.round(P.modeM * P.plateFreq));
+    if (shape === 'circle') { n = Math.min(n, 12); m = Math.max(n === 0 ? 1 : 0, Math.min(m, 8)); }
+    else { n = Math.min(n, 15); m = Math.min(m, 15); if (n === m) { if (m < 15) m++; else n--; } }
+    out.push({ n, m, w: 1 });
+    let at = gpPlateIndex(table, shape, n, m);
+    if (at < 0) at = table.findIndex(e => e.f >= (shape === 'circle' ? gpPlateWave(n, m) : n * n + m * m));
+    if (at < 0) at = last;
+    for (let k = 1; k < count; k++) {
+      const e = gpPlateNear(table, shape, out, Math.min(last, at + k));
+      if (e) out.push({ n: e.n, m: e.m, w: P.plateWeights * Math.pow(0.8, k - 1) });
+    }
+    return out;
+  }
+  const order = bands.map((e, b) => [e, b]).filter(x => x[0] > 0).sort((a, b) => b[0] - a[0]);
+  if (!order.length || order[0][0] < 0.02) return null;
+  const top = order[0][0];
+  const step = 1.6 * Math.max(0.25, P.plateFreq);
+  const sharp = 1 + (1 - P.plateWeights) * 5;
+  for (const [e, b] of order) {
+    if (out.length >= count) break;
+    const w = out.length ? P.plateWeights * Math.pow(e / top, sharp) : 1;
+    if (w <= 0.01) break;
+    const at = Math.max(0, Math.min(last, Math.round(1 + b * step + (P.plateFreq - 1) * 4)));
+    const md = gpPlateNear(table, shape, out, at);
+    if (md) out.push({ n: md.n, m: md.m, w });
+  }
+  return out;
+}
+
+/** A plate's figure as it glides: the modes it sums (each with its weight now), the bands heard, the hit count. */
+export function gpPlateState() {
+  return { modes: [], bands: new Array(GP_PLATE_BANDS).fill(0), step: 0, since: 10, lead: -1, leadSince: 10 };
+}
+
+/**
+ * One frame of the figure gliding to `targets` (null: hold): each weight follows its target over
+ * about half a second, a new mode grows from 0 and an old one fades out, so the figure morphs.
+ * `snap` jumps straight there (a fresh start). Keeps the GP_PLATE_MAX heaviest.
+ */
+export function gpPlateSmooth(st, targets, dt, snap) {
+  if (!targets) return st.modes;
+  if (snap || !st.modes.length) {
+    st.modes = targets.map(t => ({ n: t.n, m: t.m, w: t.w }));
+    return st.modes;
+  }
+  const a = 1 - Math.exp(-Math.max(0, dt) * 2.2);
+  for (const md of st.modes) {
+    const t = targets.find(x => x.n === md.n && x.m === md.m);
+    md.w += ((t ? t.w : 0) - md.w) * a;
+  }
+  for (const t of targets) if (!st.modes.some(x => x.n === t.n && x.m === t.m)) st.modes.push({ n: t.n, m: t.m, w: t.w * a });
+  st.modes = st.modes.filter(md => md.w > 0.004 || targets.some(x => x.n === md.n && x.m === md.m));
+  st.modes.sort((x, y) => y.w - x.w);
+  if (st.modes.length > GP_PLATE_MAX) st.modes.length = GP_PLATE_MAX;
+  return st.modes;
+}
+
+/**
+ * The bands the plate hears this frame, smoothed (quick to rise, slower to fall), from a spectrum, the
+ * graph's Audio Input bands (low to high), or a plain level: with only a level, each hit steps the
+ * figure on (a melody of modes) and louder reaches higher, so a beat still makes figures change.
+ */
+export function gpPlateListen(st, o) {
+  let raw;
+  if (o.spectrum) raw = gpPlateBands(o.spectrum);
+  else if (o.graphBands && o.graphBands.length > 1 && Math.max(...o.graphBands) > 0.02) {
+    raw = new Array(GP_PLATE_BANDS).fill(0);
+    const g = o.graphBands;
+    g.forEach((v, i) => { const b = Math.min(GP_PLATE_BANDS - 1, Math.floor(i * GP_PLATE_BANDS / g.length)); raw[b] = Math.max(raw[b], Math.max(0, +v || 0)); });
+  } else {
+    // A hit steps the figure on, but not more often than GP_PLATE_HOLD: the sand needs time to settle.
+    if (o.hit && st.since >= GP_PLATE_HOLD) { st.step++; st.since = 0; }
+    const lv = Math.max(0, +o.level || 0);
+    raw = new Array(GP_PLATE_BANDS).fill(0);
+    const b = (st.step * 3) % GP_PLATE_BANDS;
+    [1, 0, 0.3, 0.75, 0, 0.55, 0.4].forEach((k, j) => { if (k) raw[(b + j) % GP_PLATE_BANDS] = lv * k; });
+  }
+  const h = Math.max(0, Math.min(0.25, +o.dt || 0));
+  st.since += h; st.leadSince += h;
+  for (let b = 0; b < GP_PLATE_BANDS; b++) {
+    const cur = st.bands[b], v = raw[b];
+    st.bands[b] = cur + (v - cur) * (1 - Math.exp(-h * (v > cur ? 12 : 3)));
+  }
+  // The loudest band leads until another is clearly louder (a fifth more), and not for less than
+  // GP_PLATE_HOLD, so two near-equal bands don't flip the figure back and forth.
+  let top = 0;
+  for (let b = 1; b < GP_PLATE_BANDS; b++) if (st.bands[b] > st.bands[top]) top = b;
+  if (st.lead < 0) st.lead = top;
+  else if (top !== st.lead && st.bands[top] > st.bands[st.lead] * 1.2 && st.leadSince >= GP_PLATE_HOLD) { st.lead = top; st.leadSince = 0; }
+  const out = st.bands.slice();
+  out[st.lead] = Math.max(out[st.lead], out[top] * 1.0001);
+  return out;
+}
+
+/**
+ * The modes as the shader takes them: vec4(n, m, k, w) each, w normalised so the sum swings about
+ * ±1 (a round mode by its own peak), and k a round mode's wave number.
+ */
+export function gpPlateUniforms(modes, shape) {
+  const v = new Float32Array(GP_PLATE_MAX * 4);
+  const total = modes.reduce((s, md) => s + Math.abs(md.w), 0) || 1;
+  modes.slice(0, GP_PLATE_MAX).forEach((md, i) => {
+    let k = 0, peak = 2;
+    if (shape === 'circle') { k = gpPlateWave(md.n, md.n === 0 ? Math.max(1, md.m) : md.m); peak = gpBesselPeak(md.n, k); }
+    v.set([md.n, md.m, k, md.w / total / peak], i * 4);
+  });
+  return { values: v, count: Math.min(GP_PLATE_MAX, modes.length) };
+}
+
 /** `rgb` turned round the hue circle by `turns` (luma kept, as a YIQ rotation). */
 export function gpHueRotate(rgb, turns) {
   const a = turns * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
@@ -789,6 +1134,11 @@ uniform vec2 u_fieldTexel;
 uniform highp sampler2D u_vol;
 uniform int u_volOn;
 uniform vec4 u_volC;
+// A Chladni plate (Pattern): 1 square, 2 round; its modes vec4(n, m, k, weight); Symmetry 1 is plus.
+uniform highp sampler2D u_bessel;
+uniform int u_plate, u_plateSym, u_plateN;
+uniform float u_plateHalf, u_settle, u_shake;
+uniform vec4 u_plateMode[${GP_PLATE_MAX}];
 layout(location = 0) out vec4 o_pos;
 layout(location = 1) out vec4 o_vel;
 ${GP_HASH}
@@ -811,6 +1161,30 @@ float gpLevel(float ago) {
   int i = int(x);
   return mix(texelFetch(u_levels, ivec2(i, 0), 0).r, texelFetch(u_levels, ivec2(i + 1, 0), 0).r, x - float(i));
 }
+// J_n(x) from the table (row n, x over 0…${GP_BESSEL_X}), linear between samples.
+float gpJ(float n, float x) {
+  float fx = clamp(x / ${GP_BESSEL_X}.0 * ${GP_BESSEL_W - 1}.0, 0.0, ${GP_BESSEL_W - 1}.0 - 0.001);
+  int i = int(fx), r = int(n + 0.5);
+  return mix(texelFetch(u_bessel, ivec2(i, r), 0).r, texelFetch(u_bessel, ivec2(i + 1, r), 0).r, fract(fx));
+}
+// The plate's displacement at q (−1…1 across it): the weighted sum of its modes. 0 on the nodal lines.
+float gpPlate(vec2 q) {
+  float u = 0.0;
+  for (int j = 0; j < ${GP_PLATE_MAX}; j++) {
+    if (j >= u_plateN) break;
+    vec4 md = u_plateMode[j];
+    if (u_plate == 1) {
+      vec2 X = (q * 0.5 + 0.5) * 3.14159265;
+      float sg = (u_plateSym == 1 || md.x == md.y) ? 1.0 : -1.0;
+      u += md.w * (cos(md.x * X.x) * cos(md.y * X.y) + sg * cos(md.y * X.x) * cos(md.x * X.y));
+    } else {
+      // Plus turns every other mode by half a lobe, so their spokes interleave.
+      float turn = (u_plateSym == 1 && (j & 1) == 1) ? 1.5707963 : 0.0;
+      u += md.w * gpJ(md.x, md.z * length(q)) * cos(md.x * atan(q.y, q.x + 1e-7) + turn);
+    }
+  }
+  return u;
+}
 void gpSpawn(float i, vec4 H, out vec4 P, out vec4 V) {
   uint s = gpHash(uint(i) * 1664525u ^ gpHash(u_seed + 1013904223u));
   float life = max(0.05, u_life * (1.0 + u_lifeVar * (gpRnd(s) * 2.0 - 1.0)));
@@ -828,6 +1202,8 @@ void gpSpawn(float i, vec4 H, out vec4 P, out vec4 V) {
   else if (u_shape == 4) { n = gpUnit(s); p = n; }
   else if (u_shape == 5) { n = gpUnit(s); p = n * pow(gpRnd(s), 1.0 / 3.0); }
   else if (u_shape == 6) { p = vec3(gpRnd(s), gpRnd(s), gpRnd(s)) * 2.0 - 1.0; n = gpUnit(s); }
+  // A plate in 3D lies flat (x, z): a disc or a line is born lying on it.
+  if (u_plate > 0 && u_deep == 1) { p = p.xzy; n = n.xzy; }
   vec3 dir = normalize(mix(n, gpUnit(s), u_spread) + vec3(0.0, 1e-4, 0.0));
   float sp = u_speed * (0.55 + 0.9 * gpRnd(s));
   // Born at a random point of this substep, so a stream has no stripes.
@@ -999,6 +1375,37 @@ void main() {
     }
   }
   p += v * u_dt;
+  if (u_plate > 0) {
+    // A Chladni plate: sand slides down |u| to the nodal lines (u = 0), where the plate stands still, and
+    // is shaken by how much the plate moves where it lies, so it can't rest anywhere else. In 3D the plate
+    // lies flat (x, z) at the emitter's height and the sand settles onto it.
+    vec2 c = u_deep == 1 ? vec2(p.x - u_emitAt.x, p.z) : p.xy - u_emitAt;
+    vec2 q = c / u_plateHalf;
+    float e = 0.003;
+    float a0 = gpPlate(q);
+    vec2 gr = vec2(gpPlate(q + vec2(e, 0.0)) - a0, gpPlate(q + vec2(0.0, e)) - a0) / e;
+    float gl = length(gr), aa = abs(a0);
+    // How far the nearest still line is (plate units), roughly.
+    float dist = aa / max(gl, 1e-3);
+    vec2 mv = vec2(0.0);
+    if (gl > 1e-4) {
+      // Down the slope of |u|, never past the line (at most half the way there in a step).
+      float sp = min(u_settle * 0.9 * min(aa * 10.0, 1.0), 0.5 * dist / max(u_dt, 1e-4));
+      mv = -sign(a0) * gr / gl * sp * u_dt;
+    }
+    // The shaking: a random kick as big as the plate moves here, fading to a grain on the lines.
+    float kick = u_shake * (0.12 * min(dist * 8.0, 1.0) * (0.4 + 0.6 * min(aa * 2.0, 1.0)) + 0.03);
+    mv += (gpUnit(s).xy) * kick * sqrt(u_dt);
+    q += mv;
+    // The rim: back onto the plate.
+    if (u_plate == 1) q = clamp(q, -1.0, 1.0) - 2.0 * max(abs(q) - 1.0, 0.0) * sign(q);
+    else { float rq = length(q); if (rq > 1.0) q *= max(0.0, 2.0 - rq) / rq; }
+    c = q * u_plateHalf;
+    // The sand's own flight dies away fast on the plate.
+    v *= exp(-6.0 * u_dt);
+    if (u_deep == 1) { p.x = u_emitAt.x + c.x; p.z = c.y; p.y += (u_emitAt.y - p.y) * (1.0 - exp(-8.0 * u_dt)); }
+    else { p.xy = u_emitAt + c; p.z *= exp(-4.0 * u_dt); }
+  }
   o_pos = vec4(p, age);
   o_vel = vec4(v, V.w);
 }`;
@@ -1299,6 +1706,8 @@ export function gpCreate(gl) {
   let sound = gpSoundState(), shocks = [], noiseClock = 0;
   // A 1 × 1 stand-in for a missing picture.
   const blankTex = tex(gl.RGBA8, gl.UNSIGNED_BYTE, gl.NEAREST, 1, 1);
+  // The plate (Pattern): its figure gliding between modes, and J_n for the round plate (filled when first needed).
+  let plate = gpPlateState(), plateShape = '', besselTex = null;
   // The picture's cover, 64² → 16² → 4² → 1².
   const coverTex = [64, 16, 4, 1].map(n => ({ t: tex(gl.RGBA16F, gl.HALF_FLOAT, gl.LINEAR, n, n), w: n, h: n }));
 
@@ -1407,6 +1816,15 @@ export function gpCreate(gl) {
     gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, ctx.volume ? ctx.volume.texture : blankTex);
     gl.uniform1i(u.u_vol, 5); gl.uniform1i(u.u_volOn, ctx.volume ? 1 : 0);
     gl.uniform4f(u.u_volC, 0, 0, 0, P.sceneReach);
+    const pl = ctx.plate;
+    gl.uniform1i(u.u_plate, pl ? pl.shape : 0);
+    gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, besselTex || blankTex);
+    gl.uniform1i(u.u_bessel, 6);
+    if (pl) {
+      gl.uniform1i(u.u_plateSym, P.symmetry === 'plus' ? 1 : 0); gl.uniform1i(u.u_plateN, pl.count);
+      gl.uniform1f(u.u_plateHalf, Math.max(0.02, P.emitSize)); gl.uniform1f(u.u_settle, P.settle); gl.uniform1f(u.u_shake, pl.shake);
+      if (u.u_plateMode) gl.uniform4fv(u.u_plateMode, pl.values);
+    }
     attach(state[1][0], state[1][1]);
     gl.viewport(0, 0, side, side);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -1551,7 +1969,7 @@ export function gpCreate(gl) {
       beq: sh.beq, beqa: sh.beqa, clear: sh.clear,
       mask: sh.mask, unpack: gl.getParameter(gl.UNPACK_ALIGNMENT),
     };
-    const units = [0, 1, 2, 3, 4, 5].map(i => { gl.activeTexture(gl.TEXTURE0 + i); return gl.getParameter(gl.TEXTURE_BINDING_2D); });
+    const units = [0, 1, 2, 3, 4, 5, 6].map(i => { gl.activeTexture(gl.TEXTURE0 + i); return gl.getParameter(gl.TEXTURE_BINDING_2D); });
     let result = null;
     try {
       gl.disable(gl.DEPTH_TEST); gl.disable(gl.SCISSOR_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND);
@@ -1564,7 +1982,7 @@ export function gpCreate(gl) {
         gl.viewport(0, 0, side, side);
         for (const pair of state) { attach(pair[0], pair[1]); clear(); }
         emitter = gpEmitterState(); seed = 0; needPreroll = true; levels = gpLevelsState();
-        sound = gpSoundState(); shocks = [];
+        sound = gpSoundState(); shocks = []; plate = gpPlateState();
       }
       lastTime = time;
       // The picture, when the emitter is Image and one is loaded (else it falls back to a disc).
@@ -1576,15 +1994,16 @@ export function gpCreate(gl) {
         image: !!img, img, deep: P.space === '3d', imgHalf: [P.emitSize * imgAspect, P.emitSize], aspect,
         field, obstacle: spec && spec.field.obstacle ? (P.obstacleMode === 'mask' ? 2 : 1) : 0,
         flow: spec && spec.field.flow ? (P.flowMode === 'around' ? 2 : 1) : 0, depth: !!(spec && spec.field.depth),
-        cam: null, audio: sound, volume: pr && pr.volume && pr.volume.texture ? pr.volume : null,
+        cam: null, audio: sound, volume: pr && pr.volume && pr.volume.texture ? pr.volume : null, plate: null,
       };
       const p2 = img || P.emitter !== 'image' ? P : { ...P, emitter: 'disk' };
       if (img) buildHomes(P, img);
       // The sound: what's heard now (Sound from: a spectrum from the mic or the Audio engine, else the
       // graph's level), its history moving on with the clock, and a shock ring on each hit.
       if (+o.dt > 0) {
-        gpSoundStep(sound, o.sound || { level: (+o.level || 0) }, o.dt);
-        sound.level = Math.min(2, sound.level + P.sound);
+        // Sound level (the slider or its socket) is heard with the graph's level, so a beat wired into it hits too.
+        gpSoundStep(sound, o.sound || { level: Math.min(2, (+o.level || 0) + P.sound) }, o.dt);
+        if (o.sound) sound.level = Math.min(2, sound.level + P.sound);
         if (!o.sound) { sound.bass = sound.mid = sound.treble = sound.level; }
         if (sound.hit && P.shock > 0) {
           const at = placeAt(time).emitAt;
@@ -1596,11 +2015,42 @@ export function gpCreate(gl) {
         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, GP_LEVELS, 1, gl.RED, gl.FLOAT, levels.levels);
       }
+      // The plate (Pattern): which modes it sums this frame, from the sound or from N and M, gliding.
+      if (P.pattern === 'off') plateShape = '';
+      else {
+        // A plate just switched on (or changed shape): a fresh figure, and all the sand poured on again.
+        if (plateShape !== P.pattern) { plate = gpPlateState(); plateShape = P.pattern; if (!img) burstNow = true; }
+        if (P.pattern === 'circle' && !besselTex) {
+          besselTex = tex(gl.R32F, gl.FLOAT, gl.NEAREST, GP_BESSEL_W, GP_BESSEL_N, gl.RED);
+          gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, GP_BESSEL_W, GP_BESSEL_N, gl.RED, gl.FLOAT, gpBesselTable());
+        }
+        let targets = null;
+        if (P.modeFrom === 'manual') targets = gpPlateTargets(P, P.pattern, null);
+        else {
+          const heard = gpPlateListen(plate, {
+            spectrum: o.sound && o.sound.freq ? o.sound : null, graphBands: o.bands, level: sound.level,
+            hit: +o.dt > 0 && sound.hit, dt: o.dt,
+          });
+          targets = gpPlateTargets(P, P.pattern, heard);
+          // Silent from the start: N and M's figure until the sound comes.
+          if (!targets && !plate.modes.length) targets = gpPlateTargets(P, P.pattern, null);
+        }
+        gpPlateSmooth(plate, targets, +o.dt || 0, needPreroll);
+        const pu = gpPlateUniforms(plate.modes, P.pattern);
+        ctx.plate = {
+          shape: P.pattern === 'circle' ? 2 : 1, values: pu.values, count: pu.count,
+          // Shake: the slider, harder with the level and on every hit (the sand jumps, then settles again).
+          shake: P.shake * (0.6 + 0.8 * Math.min(sound.level, 1.5) + 1.2 * sound.onset),
+        };
+      }
       // Burst (a trigger): a picture jumps apart; otherwise the whole pool is born again at once.
       if (gpRising(edges, 'burst', P.burst)) { if (ctx.image) kick = 1.2; else burstNow = true; }
       gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
       if (needPreroll) {
         needPreroll = false;
+        // A plate starts with all its sand poured on at once (a stream would take a whole life to fill it).
+        if (ctx.plate && !ctx.image) burstNow = true;
         // Coarser for the big pools: the pre-roll is one frame's work.
         const span = Math.min(GP_PREROLL, P.life * 1.5), rate = n > 1100000 ? 10 : n > 300000 ? 20 : 30;
         const steps = Math.ceil(span * rate);
@@ -1627,7 +2077,7 @@ export function gpCreate(gl) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, saved.fb);
       gl.viewport(saved.vp[0], saved.vp[1], saved.vp[2], saved.vp[3]);
       gl.useProgram(saved.prog); gl.bindVertexArray(saved.vao);
-      for (let i = 5; i >= 0; i--) { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, units[i]); }
+      for (let i = 6; i >= 0; i--) { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, units[i]); }
       gl.activeTexture(saved.active);
       gl.pixelStorei(gl.UNPACK_ALIGNMENT, saved.unpack);
       gl.blendFuncSeparate(saved.bsrc, saved.bdst, saved.basrc, saved.badst);
@@ -1641,7 +2091,7 @@ export function gpCreate(gl) {
 
   function dispose() {
     freeState(); freeLook();
-    gl.deleteTexture(levelsTex); gl.deleteTexture(blankTex); for (const c of coverTex) gl.deleteTexture(c.t);
+    gl.deleteTexture(levelsTex); gl.deleteTexture(blankTex); if (besselTex) gl.deleteTexture(besselTex); for (const c of coverTex) gl.deleteTexture(c.t);
     for (const x of Object.values(progs)) gl.deleteProgram(x.p);
     gl.deleteVertexArray(vao); gl.deleteFramebuffer(fbo);
     broken = true;
@@ -1726,11 +2176,12 @@ export function gpHost(gl) {
         const params = gpParams(b.params, o.read);
         const pic = e && b.image && params.emitter === 'image' && o.texture ? o.texture(b.image) : null;
         const lv = b.audio && o.read ? gpNum(o.read(b.audio)) : null;
+        const bands = b.audioBands && b.audioBands.length > 1 && o.read ? b.audioBands.map(k => gpNum(o.read(k)) || 0) : null;
         const pv = b.probe && o.probe ? o.probe(b, { centre: [0, 0, 0], half: params.sceneReach }) : null;
         const snd = params.soundFrom !== 'graph' && o.sound ? o.sound(params.soundFrom) : null;
         const texture = e ? e.frame({
           params, width: o.width, height: o.height, dt: o.dt, time: o.time, mouse: o.mouse, reset: o.reset,
-          image: pic ? pic.texture : null, imageAspect: pic ? pic.aspect : 1, level: lv || 0, sound: snd,
+          image: pic ? pic.texture : null, imageAspect: pic ? pic.aspect : 1, level: lv || 0, sound: snd, bands,
           probe: b.probe ? { spec: b.probe, values: pv ? pv.values : null, field: pv ? pv.field : null, volume: pv ? pv.volume : null } : null,
         }) : null;
         out.push({ uniform: b.uniform, texture, look: params.look });
