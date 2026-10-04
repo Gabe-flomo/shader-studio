@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.21',
+    date: '2026-10-04',
+    title: 'Starter recipes, 3D that just works',
+    highlights: [
+      { area: 'Studio', text: 'Starter recipes: add a Grid, a noise, an SDF, a Pass and more, and a small card offers one-click setups. Just the node, Esc or Don’t ask again skip it.', link: { kind: 'doc', path: 'docs/starter-recipes.md' } },
+      { area: 'Studio', text: 'Every node a recipe adds has a note on what it does and why, and the whole recipe is one undo step.' },
+      { area: 'Studio', text: 'Any 3D shape you add lands in your scene, joined and placed beside what is there. A scene, camera and loop are built only when there is none.' },
+      { area: 'Studio', text: 'The Volumetric switch builds its glow: Scene Distance, Volume Glow and Glow to Color, wired and explained; off removes them again.' },
+    ],
+  },
+  {
     id: '2026.10.20',
     date: '2026-10-04',
     title: 'Passes you can inspect, sharper desktop zoom',
