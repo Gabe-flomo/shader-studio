@@ -93,7 +93,7 @@ exports[`golden shaders: every Play example exports the same bundle > convertCir
 
 exports[`golden shaders: every Play example exports the same bundle > convertCircleOptimised 1`] = `
 {
-  "bundle": "168c7d2837290e196b4864aae16b:2919",
+  "bundle": "1b346ed3358d930958d4d9a584c0:3378",
   "missing": [],
 }
 `;
@@ -2318,15 +2318,19 @@ exports[`golden shaders: every example compiles as it did > convertCircleOptimis
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1889d1080dbc7e1d42cdde5fd281:2459",
+  "fragmentShader": "1c88dbc0a1ec8e043b74912255bf:2614",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "16e25733d29c140e07513c0c3853:144",
-  "paramBindings": "0f293be22a2dd7042cc103c39e4e:51",
+  "paramBindings": "15c11283071a4409797e4b21ecd1:241",
   "paramUniforms": [
     "u_p_colorpickex8_color",
+    "u_p_exprnodex1_d_scale",
+    "u_p_exprnodex1_m_edge0",
+    "u_p_exprnodex1_m_edge1",
+    "u_p_exprnodex1_subtract_b",
   ],
-  "paramValues": "15999a2de9bb0d1400d85b1dcffe:40",
+  "paramValues": "0f5d1a41b6d3401968fcdba8b6ea:166",
   "passes": null,
   "success": true,
   "textureUniforms": {},
