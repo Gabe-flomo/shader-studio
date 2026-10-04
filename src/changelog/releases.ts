@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.7',
+    date: '2026-10-03',
+    title: 'The Pass node',
+    highlights: [
+      { area: 'Studio', text: 'A Pass node renders everything before it into an image, so nodes after it can read that image anywhere: blur it, find its edges, glow it.' },
+      { area: 'Studio', text: 'New texture nodes after a Pass: Sample, Edges, Blur, Glow and Displace. A Pass’s Previous output feeds the last frame back in for trails.', link: { kind: 'doc', path: 'docs/pass-node-plan.md' } },
+      { area: 'Studio', text: 'Graphs without a Pass node compile and render exactly as before.' },
+      { area: 'Studio', text: 'Example: Passes 1 · Edge glow, with every node explained.' },
+    ],
+  },
+  {
     id: '2026.10.6',
     date: '2026-10-03',
     title: 'Smoother sound pages, scattered particles',
