@@ -98,7 +98,29 @@ export function patchNodeParamsForUniforms(
   const uniforms: Record<string, ParamUniformValue> = {};
   const bindings: Record<string, string> = {};
 
-  if (SKIP_UNIFORM_TYPES.has(node.type) || !def.paramDefs) {
+  if (SKIP_UNIFORM_TYPES.has(node.type)) {
+    return { patchedNode: node, uniforms, bindings };
+  }
+  // An Expression Block's / custom function's own sliders aren't paramDefs: they are the
+  // node's `inputs` entries with a slider. Each live slider becomes a uniform too, so a
+  // drag is a uniform write instead of a recompile (which, inside an Agents group, also
+  // restarted the simulation). A slider turned off stays baked (nodes/sliderFreeze.ts).
+  if (node.type === 'exprNode' || node.type === 'customFn') {
+    const safeId = node.id.replace(/_/g, 'x');
+    const patchedParams = { ...node.params };
+    const declared = (node.params.inputs as Array<{ name: string; type?: string; slider?: unknown }> | undefined) ?? [];
+    for (const inp of declared) {
+      if (inp.slider == null || (inp.type && inp.type !== 'float')) continue;
+      const val = node.params[inp.name];
+      if (typeof val !== 'number') continue;
+      const uniformName = `u_p_${safeId}_${inp.name}`;
+      patchedParams[inp.name] = uniformName;
+      uniforms[uniformName] = val;
+      bindings[paramBindingKey(bindingId, inp.name)] = uniformName;
+    }
+    return { patchedNode: { ...node, params: patchedParams }, uniforms, bindings };
+  }
+  if (!def.paramDefs) {
     return { patchedNode: node, uniforms, bindings };
   }
 

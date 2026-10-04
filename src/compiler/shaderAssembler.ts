@@ -7,6 +7,9 @@ import { f as formatFloat, FIELD_FN_PREFIX } from '../nodes/definitions/helpers'
 import { fieldInputKeys, fieldProblemOf, FIELD_IMPURE } from './fieldSockets';
 import { topologicalSort } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
+
+/** A slider value the uniform patcher replaced with its uniform's name. */
+const isSliderUniform = (v: unknown): v is string => typeof v === 'string' && v.startsWith('u_p_');
 import { computeNodeSlug } from './nodeSlug';
 import { midiOutputKeys, midiUniformName, liveChannelKey } from '../lib/midiOutputs';
 import { audioUniformName } from './audioUniformNames';
@@ -245,11 +248,13 @@ export function resolveInputVars(
       if (sharedFunction) registerFn(sharedFunction);
       glslFunctions.forEach(fn => registerFn(fn));
       inputVars[inputKey] = expr;
-    } else if ((node.type === 'customFn' || node.type === 'exprNode') && typeof node.params[inputKey] === 'number') {
+    } else if ((node.type === 'customFn' || node.type === 'exprNode') && (typeof node.params[inputKey] === 'number' || isSliderUniform(node.params[inputKey]))) {
       const cfInputs = (node.params.inputs as Array<{ name: string; slider?: unknown }>) ?? [];
       const cfInp = cfInputs.find(c => c.name === inputKey);
       if (cfInp?.slider != null) {
-        inputVars[inputKey] = formatGlslLiteral(node.params[inputKey] as number, 'float');
+        // A live slider is a uniform (patchNodeParamsForUniforms); an unpatched one is baked.
+        const v = node.params[inputKey];
+        inputVars[inputKey] = typeof v === 'string' ? v : formatGlslLiteral(v as number, 'float');
       } else {
         // A slider turned off is frozen at the value it had (nodes/sliderFreeze.ts).
         const frozen = frozenValueOf(node, inputKey);
@@ -329,10 +334,13 @@ function resolveInputFallback(
       }
     }
   }
-  if ((node.type === 'exprNode' || node.type === 'customFn') && typeof node.params[inputKey] === 'number') {
+  if ((node.type === 'exprNode' || node.type === 'customFn') && (typeof node.params[inputKey] === 'number' || isSliderUniform(node.params[inputKey]))) {
     const cfInputs = (node.params.inputs as Array<{ name: string; slider?: unknown }>) ?? [];
     const cfInp = cfInputs.find(c => c.name === inputKey);
-    if (cfInp?.slider != null) return formatGlslLiteral(node.params[inputKey] as number, 'float');
+    if (cfInp?.slider != null) {
+      const v = node.params[inputKey];
+      return typeof v === 'string' ? v : formatGlslLiteral(v as number, 'float');
+    }
     const frozen = frozenValueOf(node, inputKey);
     if (frozen !== undefined) return formatGlslLiteral(frozen, 'float');
   }
