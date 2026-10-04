@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.12',
+    date: '2026-10-04',
+    title: 'Agents: particles from nodes',
+    highlights: [
+      { area: 'Studio', text: 'Force nodes for the Agents group: Gravity, Wind, Curl noise, Attract / Repel, Vortex, Flow, Collide, Sound kick and Chladni. Chain them and they add up.', link: { kind: 'doc', path: 'docs/agents-group.md' } },
+      { area: 'Studio', text: 'Integrate (drag, speed, edges) and Age / Life, and Draw agents gains Streaks, Ink and Lights.' },
+      { area: 'Studio', text: 'Presets: Particles, Curl smoke and Sound burst, built from nodes you can open and rewire. Every node is explained.' },
+    ],
+  },
+  {
     id: '2026.10.11',
     date: '2026-10-03',
     title: 'Agents: slime mold, built from nodes',
