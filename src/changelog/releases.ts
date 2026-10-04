@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.20',
+    date: '2026-10-04',
+    title: 'Passes you can inspect, sharper desktop zoom',
+    highlights: [
+      { area: 'Studio', text: 'Passes: probes, scopes and the eye now work on nodes inside a pass, and Performance has a row per pass. Data and Particles nodes work before a Pass.', link: { kind: 'doc', path: 'docs/pass-node-plan.md' } },
+      { area: 'Studio', text: 'Particles can be born from a Pass: wire it into Emit from and they appear where the pass is bright, such as along edges.' },
+      { area: 'Studio', text: 'New Passes examples: particles born on edges, feedback trails, reaction-diffusion, glow only the bright parts, and slime along edges.' },
+      { area: 'Studio', text: 'Desktop zoom: text stays in place and fits its cards when you zoom out, and sliders and wires redraw sharp after you zoom in.' },
+    ],
+  },
+  {
     id: '2026.10.19',
     date: '2026-10-04',
     title: 'Agents with shaders, a friendlier Agents group',
