@@ -10,6 +10,17 @@ import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
 
 /** A slider value the uniform patcher replaced with its uniform's name. */
 const isSliderUniform = (v: unknown): v is string => typeof v === 'string' && v.startsWith('u_p_');
+
+/** Unwired Expression / custom-function inputs whose slider the patcher made a uniform read that uniform. */
+function sliderUniformVars(node: GraphNode, patched: GraphNode, vars: Record<string, string>): Record<string, string> {
+  if (node.type !== 'exprNode' && node.type !== 'customFn') return vars;
+  let out = vars;
+  for (const inp of (node.params.inputs as Array<{ name: string }> | undefined) ?? []) {
+    const u = patched.params[inp.name];
+    if (isSliderUniform(u) && !node.inputs[inp.name]?.connection) out = out === vars ? { ...vars, [inp.name]: u } : (out[inp.name] = u, out);
+  }
+  return out;
+}
 import { computeNodeSlug } from './nodeSlug';
 import { midiOutputKeys, midiUniformName, liveChannelKey } from '../lib/midiOutputs';
 import { audioUniformName } from './audioUniformNames';
@@ -3858,6 +3869,9 @@ export class ShaderAssembler {
         Object.assign(this.paramUniforms, nodeUniforms);
         Object.assign(this.paramBindings, nodeBindings);
         def.declarationsFor?.(patchedNode).forEach(d => this.declarations.add(d));
+        // An Expression Block's / custom function's live sliders were resolved as literals before the
+        // patch above made them uniforms: read the uniform, so a drag (or a Play control) moves it.
+        inputVars = sliderUniformVars(node, patchedNode, inputVars);
 
         const override = typeof node.params.__codeOverride === 'string'
           ? (node.params.__codeOverride as string).trim()
