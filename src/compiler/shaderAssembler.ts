@@ -16,7 +16,7 @@ import { audioUniformName } from './audioUniformNames';
 import { coerce, coerceLossy } from '../lib/typesCompatible';
 import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { loopColour } from '../nodes/definitions/scene3d';
-import { AG_HASH_GLSL, AGENT_GLOBALS, agentStateUniform, agentStepUniform, agentWindowUniform } from '../nodes/definitions/agents';
+import { AG_HASH_GLSL, AG_STATE_C_GLSL, AGENT_GLOBALS, AGENT_STATE_C_GLOBALS, agentStateUniform, agentStepUniform, agentWindowUniform } from '../nodes/definitions/agents';
 import { frozenValueOf } from '../nodes/sliderFreeze';
 import {
   getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed,
@@ -582,6 +582,12 @@ export interface ShaderAssemblerOptions {
    * emitted text is exactly what it always was.
    */
   agentProgram?: AgentProgramOptions;
+  /**
+   * The picture has an Agents group's inside nodes copied in for the eye preview
+   * (compiler/agentGraph.ts agentEyeNodes): the agent globals are declared and set
+   * to this pixel (a_pos = g_uv, heading 0, species 0). Only that preview passes it.
+   */
+  agentEye?: boolean;
 }
 
 /** See ShaderAssemblerOptions.agentProgram. */
@@ -598,6 +604,11 @@ export interface AgentProgramOptions {
   declarations: string[];
   /** Emit's Keep full: a dead walker is born again on the next step, as well as in the birth window. */
   respawn?: boolean;
+  /**
+   * Per-walker state: two more outputs and samplers, C = (species, memory.xy, packed colour) and
+   * D = its deposit. The species is then read from C (set at birth by the Emit), not the index.
+   */
+  stateC?: boolean;
 }
 
 /** The fixed part of an agent program: outputs, state samplers, the agent globals and the hash. */
@@ -606,8 +617,10 @@ function agentHeader(o: AgentProgramOptions): string {
   return [
     'layout(location = 0) out highp vec4 o_a;',
     'layout(location = 1) out highp vec4 o_b;',
+    ...(o.stateC ? ['layout(location = 2) out highp vec4 o_c;', 'layout(location = 3) out highp vec4 o_d;'] : []),
     `uniform sampler2D ${agentStateUniform(o.slug, 'A')};`,
     `uniform sampler2D ${agentStateUniform(o.slug, 'B')};`,
+    ...(o.stateC ? [`uniform sampler2D ${agentStateUniform(o.slug, 'C')};`, `uniform sampler2D ${agentStateUniform(o.slug, 'D')};`] : []),
     `uniform highp uint ${agentStepUniform(o.slug)};`,
     `uniform vec4 ${agentWindowUniform(o.slug)};`,
     ...o.declarations,
@@ -617,8 +630,10 @@ function agentHeader(o: AgentProgramOptions): string {
     // One step is 1/60 s of simulated time, whatever the frame rate (determinism: docs/agents-plan.md §8).
     'const float a_dt = 1.0 / 60.0;',
     ...AGENT_GLOBALS.map(([t, name]) => `${t} ${name};`),
+    ...(o.stateC ? AGENT_STATE_C_GLOBALS.map(([t, name]) => `${t} ${name};`) : []),
     'vec4 a_ownChannels;',
     AG_HASH_GLSL,
+    ...(o.stateC ? [AG_STATE_C_GLSL] : []),
     '',
   ].join('\n');
 }
@@ -630,16 +645,20 @@ function agentPrelude(o: AgentProgramOptions): string {
     '    ivec2 a_tex = ivec2(gl_FragCoord.xy);',
     `    vec4 a_sA = texelFetch(${A}, a_tex, 0);`,
     `    vec4 a_sB = texelFetch(${B}, a_tex, 0);`,
+    ...(o.stateC ? [`    vec4 a_sC = texelFetch(${agentStateUniform(o.slug, 'C')}, a_tex, 0);`, `    vec4 a_sD = texelFetch(${agentStateUniform(o.slug, 'D')}, a_tex, 0);`] : []),
     '    a_index = float(a_tex.y * a_side + a_tex.x);',
     `    a_born = mod(a_index - ${W}.x + a_count, a_count) < ${W}.y${o.respawn ? ' || a_sB.w <= 0.0' : ''};`,
     // Dead and not born this step: keep the texel as it is, at almost no cost.
-    '    if (!a_born && a_sB.w <= 0.0) { o_a = a_sA; o_b = a_sB; return; }',
+    o.stateC
+      ? '    if (!a_born && a_sB.w <= 0.0) { o_a = a_sA; o_b = a_sB; o_c = a_sC; o_d = a_sD; return; }'
+      : '    if (!a_born && a_sB.w <= 0.0) { o_a = a_sA; o_b = a_sB; return; }',
     `    a_seed = agHash(uint(a_tex.y * a_side + a_tex.x) * 0x9E3779B1u ^ agHash(${agentStepUniform(o.slug)} ^ (uint(max(${o.seed}, 0.0)) * 0x85EBCA6Bu)));`,
     '    a_random = float(a_seed >> 8) / 16777216.0;',
     `    a_step = ${agentStepUniform(o.slug)};`,
     '    a_pos = a_sA.xy; a_heading = a_sA.z; a_age = a_sA.w + a_dt;',
     '    a_vel = a_sB.xy; a_speed = a_sB.z; a_life = a_sB.w;',
-    '    a_species = mod(a_index, a_speciesCount);',
+    // With per-walker state the species is the one its Emit gave it (state C); else its index's.
+    o.stateC ? '    a_species = a_sC.x; a_mem = a_sC.yz; a_colour = agUnpackColour(a_sC.w);' : '    a_species = mod(a_index, a_speciesCount);',
     o.species > 1
       ? '    a_ownChannels = (vec4(equal(vec4(a_species), vec4(0.0, 1.0, 2.0, 3.0))) * 1.5 - 0.5) * vec4(lessThan(vec4(0.0, 1.0, 2.0, 3.0), vec4(a_speciesCount)));'
       : '    a_ownChannels = vec4(1.0, 0.0, 0.0, 0.0);',
@@ -678,6 +697,7 @@ export class ShaderAssembler {
   private fixedSlugs: Map<string, string> | undefined;
   /** ShaderAssemblerOptions.agentProgram (Agents path only). */
   private agentProgram: AgentProgramOptions | undefined;
+  private agentEye = false;
   // ── Field sockets (see compileFieldFunction) ──
   /** Top-level node id → the slug its main() copy was compiled under; a field function reuses it so uniform names match. */
   private topSlugs = new Map<string, string>();
@@ -709,6 +729,7 @@ export class ShaderAssembler {
       }
     }
     this.agentProgram = opts?.agentProgram;
+    this.agentEye = opts?.agentEye === true;
     if (opts?.slugs) {
       this.fixedSlugs = opts.slugs;
       for (const s of opts.slugs.values()) this.usedSlugs.add(s);
@@ -3947,7 +3968,7 @@ void main() {
 ${mainBody}}`.trim();
 
     return {
-      fragmentShader: this.agentProgram ? toAgentProgram(fragmentShader, this.agentProgram) : fragmentShader,
+      fragmentShader: this.agentProgram ? toAgentProgram(fragmentShader, this.agentProgram) : this.agentEye ? toAgentEyeProgram(fragmentShader) : fragmentShader,
       nodeOutputVars: this.nodeOutputs,
       paramUniforms: this.paramUniforms,
       paramBindings: this.paramBindings,
@@ -3972,10 +3993,47 @@ ${mainBody}}`.trim();
 function toAgentProgram(fs: string, o: AgentProgramOptions): string {
   const pixelPrelude = '    vec2 g_uv = (vUv - 0.5) * 2.0;\n    g_uv.x *= u_resolution.x / u_resolution.y;\n';
   if (!fs.includes(pixelPrelude) || !fs.includes('\nvarying vec2 vUv;\n')) throw new Error('Agents: the update shader could not be assembled');
-  return fs
+  const out = fs
     .replace('precision highp float;\n', 'precision highp float;\nprecision highp int;\n')
     .replace('\nvarying vec2 vUv;\n', `\nvarying vec2 vUv;\n${agentHeader(o)}`)
     .replace(pixelPrelude, agentPrelude(o));
+  // Nodes that read the pixel's 0–1 place directly (vUv: the UV node, Text, a Pass's colour) read the
+  // agent's place instead: vUv here is the state texel, which is no place in the picture at all.
+  if (!/\bvUv\b/.test(out.replace('\nvarying vec2 vUv;\n', '\n'))) return out;
+  const [head, ...rest] = out.split('\nvarying vec2 vUv;\n');
+  return `${head}\nvarying vec2 vUv;\nvec2 a_vUv;\n${rest.join('\nvarying vec2 vUv;\n').replace(/\bvUv\b/g, 'a_vUv')
+    .replace('    vec2 g_uv = a_pos;\n', '    vec2 g_uv = a_pos;\n    a_vUv = a_pos / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5;\n')}`;
+}
+
+/**
+ * The eye preview's picture (ShaderAssemblerOptions.agentEye): the agent globals declared, and set
+ * after the pixel prelude to an agent standing at this pixel, facing right, species 0, newborn,
+ * remembering nothing, its random number 0.5.
+ */
+function toAgentEyeProgram(fs: string): string {
+  const pixelPrelude = '    vec2 g_uv = (vUv - 0.5) * 2.0;\n    g_uv.x *= u_resolution.x / u_resolution.y;\n';
+  if (!fs.includes(pixelPrelude) || !fs.includes('\nvarying vec2 vUv;\n')) return fs;
+  const header = [
+    'const float a_dt = 1.0 / 60.0;',
+    'const float a_speciesCount = 1.0;',
+    'const float a_count = 1.0;',
+    ...AGENT_GLOBALS.map(([t, name]) => `${t} ${name};`),
+    ...AGENT_STATE_C_GLOBALS.map(([t, name]) => `${t} ${name};`),
+    'vec4 a_ownChannels;',
+    AG_HASH_GLSL,
+    AG_STATE_C_GLSL,
+    '',
+  ].join('\n');
+  const set = [
+    '    a_pos = g_uv; a_vel = vec2(0.0); a_heading = 0.0; a_speed = 0.0; a_age = 0.0; a_life = 1.0e30;',
+    '    a_species = 0.0; a_index = 0.0; a_random = 0.5; a_seed = 0u; a_born = false; a_step = 0u;',
+    '    a_mem = vec2(0.0); a_colour = vec3(1.0); a_ownChannels = vec4(1.0, 0.0, 0.0, 0.0);',
+    '',
+  ].join('\n');
+  return fs
+    .replace('precision highp float;\n', 'precision highp float;\nprecision highp int;\n')
+    .replace('\nvarying vec2 vUv;\n', `\nvarying vec2 vUv;\n${header}`)
+    .replace(pixelPrelude, pixelPrelude + set);
 }
 
 export function generateFragmentShader(

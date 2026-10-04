@@ -26,4 +26,4 @@ export const CATEGORY_COLORS: Record<string, string> = {
 };
 
 // ── Types to hide from node listings (internal / special) ─────────────────────
-export const HIDDEN_TYPES = new Set(['group', 'forwardCamera', 'marchPos', 'marchDist', 'marchOutput', 'scenePos', 'sceneOutput', 'spaceWarpGroup', 'passOutput', 'agentInputs', 'agentOutput', 'agentStepOut']);
+export const HIDDEN_TYPES = new Set(['group', 'forwardCamera', 'marchPos', 'marchDist', 'marchOutput', 'scenePos', 'sceneOutput', 'spaceWarpGroup', 'passOutput', 'agentInputs', 'agentOutput', 'agentStepOut', 'trailStepOut']);

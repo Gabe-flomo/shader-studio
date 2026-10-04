@@ -94,7 +94,7 @@ export const groupSpecies = (g: GraphNode) => Math.max(1, Math.min(4, Math.round
  *  - the outer nodes upstream of the group's ports and Emit (gathered by the caller's `collect`).
  * `innerIds` are the inside nodes, for the placement and purity rules.
  */
-export function agentStepNodes(group: GraphNode): { inner: GraphNode[]; sink: GraphNode; starts: Array<{ nodeId: string; outputKey: string }>; problems: string[] } {
+export function agentStepNodes(group: GraphNode): { inner: GraphNode[]; sink: GraphNode; starts: Array<{ nodeId: string; outputKey: string }>; problems: string[]; stateC: boolean } {
   const sg = group.params.subgraph as SubgraphData | undefined;
   const nodes = sg?.nodes ?? [];
   const problems: string[] = [];
@@ -120,14 +120,32 @@ export function agentStepNodes(group: GraphNode): { inner: GraphNode[]; sink: Gr
   const inner = nodes.filter(n => n.type !== 'agentOutput').map(rewire);
   const out = outputNode ? rewire(outputNode) : null;
   const sinkInputs: GraphNode['inputs'] = {};
-  for (const key of ['position', 'velocity', 'heading', 'speed', 'alive']) {
+  const SINK_TYPES: Record<string, 'vec2' | 'float' | 'vec3' | 'vec4'> = {
+    position: 'vec2', velocity: 'vec2', heading: 'float', speed: 'float', alive: 'float', memory: 'vec2', deposit: 'vec4', colour: 'vec3',
+  };
+  for (const [key, type] of Object.entries(SINK_TYPES)) {
     const inp = out?.inputs[key];
-    sinkInputs[key] = { type: key === 'position' || key === 'velocity' ? 'vec2' : 'float', label: key, ...(inp?.connection ? { connection: inp.connection } : {}) };
+    if (!inp?.connection && !['position', 'velocity', 'heading', 'speed', 'alive'].includes(key)) continue;
+    sinkInputs[key] = { type, label: key, ...(inp?.connection ? { connection: inp.connection } : {}) };
   }
   if (group.inputs.emit?.connection) sinkInputs.emit = { type: 'emitter', label: 'Emit', connection: group.inputs.emit.connection };
-  const sink: GraphNode = { id: `${group.id}__step`, type: 'agentStepOut', position: { x: 0, y: 0 }, params: {}, outputs: {}, inputs: sinkInputs };
+  const stateC = needsStateC(group, nodes, out);
+  const sink: GraphNode = { id: `${group.id}__step`, type: 'agentStepOut', position: { x: 0, y: 0 }, params: stateC ? { stateC: true } : {}, outputs: {}, inputs: sinkInputs };
   if (!outputNode) problems.push(`Node ${group.id}: ${labelOf(group)} has no Agent Output inside; open it and Start over, or add the preset again.`);
-  return { inner, sink, starts, problems };
+  return { inner, sink, starts, problems, stateC };
+}
+
+/**
+ * Does a group need per-walker state (state C and D, docs/agents-plan.md §3.3)? When it has more
+ * than one species (each keeps the species its Emit gave it), when Agent Output sets Memory,
+ * Deposit or Colour, or when anything inside reads Agent Inputs' Memory or Colour. Otherwise the
+ * update shader is exactly P1's: two outputs, the species from the index.
+ */
+export function needsStateC(group: GraphNode, inside: GraphNode[], out: GraphNode | null | undefined): boolean {
+  if (groupSpecies(group) > 1) return true;
+  if (out && ['memory', 'deposit', 'colour'].some(k => out.inputs[k]?.connection)) return true;
+  const inputsId = inside.find(n => n.type === 'agentInputs')?.id;
+  return !!inputsId && inside.some(n => Object.values(n.inputs).some(i => i.connection?.nodeId === inputsId && (i.connection.outputKey === 'memory' || i.connection.outputKey === 'colour')));
 }
 
 /** Slugs for each group's inside, after the top level's (the same `used` set, so none collide). */
@@ -192,6 +210,8 @@ export function trailSpec(n: GraphNode, slug: string, params: Record<string, Age
     nodeId: n.id, slug, label: labelOf(n, getNodeDefinitionFor(n)),
     scale: res.scale ?? null, rows: res.rows ?? null,
     edges: choice(n.params.edges, ['wrap', 'clamp'] as const, 'wrap'),
+    kernel: choice(String(n.params.kernel ?? '3'), ['3', '5'] as const, '3') === '5' ? 5 : 3,
+    signed: false,
     params: params as Record<string, AgentParam>,
   };
 }
@@ -212,7 +232,18 @@ export function drawSpec(n: GraphNode, slug: string, groupSlug: string, params: 
 }
 
 export function depositSpec(n: GraphNode, slug: string, groupSlug: string, trailSlug: string, params: Record<string, AgentParam | number[]>): AgentDepositProgram {
-  return { nodeId: n.id, slug, group: groupSlug, trail: trailSlug, params: params as Record<string, AgentParam> };
+  return { nodeId: n.id, slug, group: groupSlug, trail: trailSlug, what: choice(n.params.what, ['trail', 'velocity'] as const, 'trail'), params: params as Record<string, AgentParam> };
+}
+
+/** A Trail with Add or Block wired gets a step program of its own (its spread and fade, plus those). */
+export const trailHasStepProgram = (n: GraphNode) => !!(n.inputs.add?.connection || n.inputs.block?.connection);
+
+/** The end of a Trail's step program (TrailStepOutNode), wired to what its Add and Block are. */
+export function trailStepSink(n: GraphNode, slug: string): GraphNode {
+  const inputs: GraphNode['inputs'] = {};
+  if (n.inputs.add?.connection) inputs.add = { type: 'vec4', label: 'Add', connection: n.inputs.add.connection };
+  if (n.inputs.block?.connection) inputs.block = { type: 'float', label: 'Block', connection: n.inputs.block.connection };
+  return { id: `${n.id}__trail`, type: 'trailStepOut', position: { x: 0, y: 0 }, params: { trail: slug }, outputs: {}, inputs };
 }
 
 /** The head of a group's Emit chain decides how births go (Fill, Rate or Keep full) and carries Burst. */
@@ -241,4 +272,48 @@ export function listenersOf(inner: GraphNode[], slugOf: (id: string) => string, 
     });
   }
   return out;
+}
+
+/**
+ * The eye preview of a node inside an Agents group (docs/agents-plan.md §12): "what an agent
+ * standing at each pixel would see". A per-agent value has no picture of its own, so the target
+ * and the inside nodes it depends on are compiled into the PICTURE program, marked
+ * `__agentEye`: there the agent globals are this pixel (a_pos = g_uv, heading 0, species 0,
+ * nothing remembered; ShaderAssemblerOptions.agentEye), so Sense's readings, a Flow or Collide
+ * field, a Steer's turn show as a picture. The added ports are rewired to what is wired into the
+ * group outside (a Trail reads this frame's trail). Everything else in the graph stays, so the
+ * simulation keeps running under the preview. Returns null when the node isn't inside `groupId`.
+ * `promote` wires the chosen output into a fresh Output (the store's buildPreviewGraph).
+ */
+export function agentEyeNodes(nodes: GraphNode[], groupId: string, innerId: string): { copies: GraphNode[]; rest: GraphNode[] } | null {
+  const group = nodes.find(n => n.id === groupId);
+  if (group?.type !== AGENTS_GROUP_TYPE) return null;
+  const sg = group.params.subgraph as SubgraphData | undefined;
+  const inside = sg?.nodes ?? [];
+  if (!inside.some(n => n.id === innerId)) return null;
+  const inputsNode = inside.find(n => n.type === 'agentInputs');
+  const extras = new Set(((inputsNode?.params.extraInputs ?? []) as Array<{ key: string }>).map(e => e.key));
+  const byId = new Map(inside.map(n => [n.id, n]));
+  const want = new Set<string>();
+  const stack = [innerId];
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (want.has(id)) continue;
+    const n = byId.get(id);
+    if (!n || n.type === 'agentOutput') continue;
+    want.add(id);
+    for (const inp of Object.values(n.inputs)) if (inp.connection && byId.has(inp.connection.nodeId)) stack.push(inp.connection.nodeId);
+  }
+  const copies = inside.filter(n => want.has(n.id)).map(n => {
+    const inputs = Object.fromEntries(Object.entries(n.inputs).map(([k, inp]) => {
+      const c = inp.connection;
+      if (!c || !inputsNode || c.nodeId !== inputsNode.id || !extras.has(c.outputKey)) return [k, inp];
+      const outer = group.inputs[c.outputKey]?.connection;
+      if (outer) return [k, { ...inp, connection: outer }];
+      const { connection: _drop, ...restInp } = inp;
+      return [k, restInp];
+    }));
+    return { ...n, inputs, params: { ...n.params, __agentEye: true } };
+  });
+  return { copies, rest: nodes.filter(n => n.type !== 'output' && n.type !== 'vec4Output') };
 }

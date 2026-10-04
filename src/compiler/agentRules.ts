@@ -96,7 +96,8 @@ export function agentPlacementProblems(nodes: GraphNode[], defOf: (n: GraphNode)
   const out: string[] = [];
   const visit = (list: GraphNode[], where: 'top' | 'agents' | 'group') => {
     for (const n of list) {
-      if (AGENT_INSIDE_TYPES.has(n.type) && where !== 'agents') out.push(`Node ${n.id}: ${labelOf(n, defOf(n))} goes inside an Agents group.`);
+      // An inside node copied into the picture for the eye preview (agentEyeNodes) is allowed there.
+      if (AGENT_INSIDE_TYPES.has(n.type) && where !== 'agents' && n.params?.__agentEye !== true) out.push(`Node ${n.id}: ${labelOf(n, defOf(n))} goes inside an Agents group.`);
       if (AGENT_OUTSIDE_TYPES.has(n.type) && where !== 'top') out.push(`Node ${n.id}: ${labelOf(n, defOf(n))} goes at the top level of the graph, outside any group.`);
       const sub = n.params?.subgraph as SubgraphData | undefined;
       if (sub?.nodes) visit(sub.nodes, n.type === 'agentsGroup' ? 'agents' : 'group');

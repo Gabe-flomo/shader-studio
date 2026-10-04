@@ -2,6 +2,7 @@ export function agBody(src: string): string;
 export const AG_FULL_VERT: string;
 export const AG_DEPOSIT_VERT: string;
 export const AG_DEPOSIT_FRAG: string;
+export const AG_TRAIL_MEAN_GLSL: string;
 export const AG_TRAIL_FRAG: string;
 export const AG_DRAW_VERT: string;
 export const AG_DRAW_FRAG: string;

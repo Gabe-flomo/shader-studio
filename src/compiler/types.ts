@@ -52,6 +52,8 @@ export interface AgentGroupProgram {
   /** Side of the state texture: count = side². */
   side: number;
   species: number;
+  /** Per-walker state (state C and D: species, memory, colour, its own deposit): four state textures, not two. */
+  stateC?: boolean;
   /** stepsPerFrame, seed, preroll. */
   params: Record<string, AgentParam>;
   /**
@@ -95,6 +97,8 @@ export interface AgentDepositProgram {
   /** Slugs of its group and its Trail. */
   group: string;
   trail: string;
+  /** Trail: its species' channel (or its own Deposit with state C). Velocity: (vel × amount, amount, 0). */
+  what?: 'trail' | 'velocity';
   params: Record<string, AgentParam>;
 }
 
@@ -107,6 +111,19 @@ export interface AgentTrailProgram {
   scale: number | null;
   rows: number | null;
   edges: 'wrap' | 'clamp';
+  /** Its spread: the 3×3 mean or the 5×5 blur. */
+  kernel?: 3 | 5;
+  /** Velocity deposits go in: negative values are kept. */
+  signed?: boolean;
+  /**
+   * Add / Block wired: the step as a program of its own (GLSL for a ShaderMaterial over the trail's
+   * texture; it samples trailStepUniforms(slug).src and reads .step), else the fixed step.
+   */
+  stepShader?: string;
+  /** Slugs of the Passes its step program samples (they draw before the agents). */
+  readsPasses?: string[];
+  /** Graph nodes compiled into its step program (Show passes). */
+  stepNodeIds?: string[];
   /** diffuse, halfLife. */
   params: Record<string, AgentParam>;
   live: boolean;
@@ -118,7 +135,7 @@ export interface AgentDrawProgram {
   slug: string;
   group: string;
   style: 'points' | 'glow' | 'streaks' | 'ink';
-  colorBy: 'single' | 'species' | 'speed' | 'heading' | 'age';
+  colorBy: 'single' | 'species' | 'speed' | 'heading' | 'age' | 'agent';
   /** 'ab' (Colour A → B) or a Particles palette's name. */
   palette: string;
   /** Point lights (0–4), how they move, fade with age, brightness per walker or for the crowd. */
@@ -207,6 +224,8 @@ export interface CompilationResult {
    * picture's program, which samples them.
    */
   passes?: PassProgram[];
+  /** With Pass or Agents programs: the graph nodes compiled into the final picture (Show passes). */
+  finalNodeIds?: string[];
   /**
    * The Agents family's programs (compiler/agentGraph.ts). Present only when
    * the graph has an Agents-family node; `fragmentShader` is then the final
