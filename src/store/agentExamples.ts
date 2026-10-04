@@ -20,15 +20,15 @@ import { galaxyNodes, myceliumNodes, sandPlateNodes } from './agentExamplesP6';
 export const AGENT_EXAMPLE_INDEX: Record<string, { label: string; description: string }> = {
   slimeMold: {
     label: 'Slime mold',
-    description: 'A million walkers on the GPU, built from nodes: each one senses the trail ahead (left, centre, right), turns toward the strongest smell, moves and leaves more trail, which spreads and fades. Veins form, join, thicken and pulse by themselves (Jones 2010, Physarum polycephalum). Double-click the Agents group to open the rule.',
+    description: 'Hundreds of thousands of walkers on the GPU, built from nodes: each one senses the trail ahead (left, centre, right), turns toward the strongest smell, moves and leaves more trail, which spreads and fades. Veins form, join, thicken and pulse by themselves (Jones 2010, Physarum polycephalum). Double-click the Agents group to open the rule.',
   },
   agentParticles: {
     label: 'Particles from nodes',
-    description: 'The Particles node\'s default look built from nodes you can open and rewire: a million embers born on a ring, carried by curl noise and a gentle swirl, pulled and stirred by the mouse, slowed by drag and fading over their life, drawn with glow and four orbiting lights. Double-click the Agents group to see the chain of forces.',
+    description: 'The Particles node\'s default look built from nodes you can open and rewire: 262,144 embers born on a ring, carried by curl noise and a gentle swirl, pulled and stirred by the mouse, slowed by drag and fading over their life, drawn with glow and four orbiting lights. Double-click the Agents group to see the chain of forces.',
   },
   agentCurlSmoke: {
     label: 'Curl smoke',
-    description: 'Smoke built from nodes: a million particles rise from a small source, warm air (an Expression Block) lifting them less as they cool, while curl noise folds them into threads and a gusty breeze leans the plume over, drawn as ink streaks on paper.',
+    description: 'Smoke built from nodes: 262,144 particles rise from a small source, warm air (an Expression Block) lifting them less as they cool, while curl noise folds them into threads and a gusty breeze leans the plume over, drawn as ink streaks on paper.',
   },
   agentMultiSlime: {
     label: 'Multi-species slime',
@@ -52,7 +52,7 @@ export const AGENT_EXAMPLE_INDEX: Record<string, { label: string; description: s
   },
   agentGalaxy: {
     label: 'Galaxy',
-    description: 'A spiral galaxy built from nodes: a million stars circle a bright bulge, each on its own orbit (it remembers its radius in Memory), and crowd into two spiral arms that turn slowly. The arms are a traffic jam the stars pass through, lit blue by young stars with pink knots; the core is warm.',
+    description: 'A spiral galaxy built from nodes: 262,144 stars circle a bright bulge, each on its own orbit (it remembers its radius in Memory), and crowd into two spiral arms that turn slowly. The arms are a traffic jam the stars pass through, lit blue by young stars with pink knots; the core is warm.',
   },
   agentMycelium: {
     label: 'Mycelium',
@@ -60,7 +60,7 @@ export const AGENT_EXAMPLE_INDEX: Record<string, { label: string; description: s
   },
   agentSandPlate: {
     label: 'Sand on a plate',
-    description: 'A million grains of sand on a ringing square plate: shaken off wherever the plate moves, they settle on its still lines and draw a Chladni figure. A silent stand-in beat (the group\'s Sound from) steps the plate from figure to figure; give it real sound and the music picks them.',
+    description: 'Grains of sand on a ringing square plate: shaken off wherever the plate moves, they settle on its still lines and draw a Chladni figure. The stand-in Beat is off, so the figure holds still: set the group\'s Beat to 20 (or give it real sound) and every beat jolts the sand and steps the plate to the next figure.',
   },
   agentSoundBurst: {
     label: 'Sound burst',
@@ -161,21 +161,22 @@ export function slimeMoldNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   const group: GraphNode = {
     ...n('agentsGroup', 'slime', X(420), Y(0), {
       label: 'Slime mold',
-      tier: '1m', species: '1', stepsPerFrame: 2, seed: 1, preroll: 0,
+      tier: '256k', species: '1', stepsPerFrame: 2, seed: 1, preroll: 0,
       subgraph: { nodes: [inputs, sense, crowd, steer, move, output], inputPorts: [], outputPorts: [] },
       ...note([
-        'Agents: a million walkers (1M) that each run the rule inside this group (double-click it) every step, 2 steps a frame (about 7 ms a frame on an M3 Pro).',
+        'Agents: 262,144 walkers (256k) that each run the rule inside this group (double-click it) every step, 2 steps a frame.',
         'Emit says where they are born; their Agents output goes to Deposit, so they leave trail.',
         'Its Trail input is the Trail field below, read back one step late: that loop is what makes the walkers follow each other.',
-        'Try: Count 256k on a slower GPU, Steps per frame 4 for faster growth, a new Seed for a different run, then Start over.',
+        'Try: Count 1M on a fast GPU (about 7 ms a frame on an M3 Pro; set Deposit\'s Amount to 1), Steps per frame 4 for faster growth, a new Seed for a different run, then Start over.',
       ]),
     }, { emit: ['slimeEmit', 'emitter'] }),
   };
   group.inputs = { ...group.inputs, trail: { type: 'texture', label: 'Trail', connection: { nodeId: 'slimeTrail', outputKey: 'texture' } } };
   const deposit = n('agentDeposit', 'slimeDeposit', X(840), Y(0), {
-    amount: 1, size: 1,
+    amount: 4, size: 1,
     ...note([
-      'Deposit: every walker drops 1 unit of trail on the pixel it stands on, every step.',
+      'Deposit: every walker drops 4 units of trail on the pixel it stands on, every step.',
+      'Why 4: the presets run 262,144 walkers (256k), a quarter of a million, so each leaves four times as much to keep the trail as strong as a million leaving 1 (raise Count to 1M and set this back to 1).',
       'Why: the trail is the only way walkers know about each other. More walkers on a path leave more trail, which pulls in more walkers: that feedback builds the veins.',
     ]),
   }, { agents: ['slime', 'agents'] });
@@ -183,7 +184,7 @@ export function slimeMoldNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     resolution: '1024', diffuse: 1, halfLife: 0.05, edges: 'wrap', gain: 0.04,
     ...note([
       'Trail field: 1024 rows tall (the width follows the picture), so the network looks the same in a small preview and a 4K export. Each step it spreads (Diffuse 1: every pixel becomes the 3×3 average) and fades (half gone in 0.05 simulated seconds, about 3 steps).',
-      'Its Texture goes back into the Agents group for Sense; its Amount (0–1) colours the picture.',
+      'Its Image goes back into the Agents group for Sense (the "↺ last step" wire); its Amount (0–1) colours the picture.',
       'Try: a longer Half-life for thick, slow rivers; a shorter one for fine lace. ½ picture is cheaper but packs the walkers tighter (thicker veins). Gain makes the picture brighter or darker without changing the simulation.',
     ]),
   }, { deposit: ['slimeDeposit', 'deposit'] });
@@ -231,7 +232,7 @@ export function slimeMoldPreset(nextId: () => string, at: { x: number; y: number
   return { nodes: r.nodes, colourId: r.out.nodeId };
 }
 
-// ── Particles built from nodes (P2): forces chained through Also, Integrate, Age / Life ──
+// ── Particles built from nodes (P2): forces chained through "+ Another force", Integrate, Age / Life ──
 
 
 /**
@@ -262,7 +263,7 @@ export function particlesNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     x: 0, y: 0, strength: 0.3, reach: 0.5,
     ...note([
       'Vortex: a gentle swirl round the middle, counter-clockwise, strongest half a picture-height out (the Particles node\'s Swirl, 0.3).',
-      'Why: it turns the ring\'s outward spray into a slowly turning wheel. Its Also input adds the curl noise in, so its Force is curl + swirl.',
+      'Why: it turns the ring\'s outward spray into a slowly turning wheel. Its "+ Another force" input adds the curl noise in, so its Force is curl + swirl.',
       'Try: −0.6 to spin the other way; 0 to let the curl alone carry them.',
     ]),
   }, { also: ['ptCurl', 'force'] });
@@ -270,7 +271,7 @@ export function particlesNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     target: 'mouse', strength: 0.8, reach: 0.35, swirl: 0.6, falloff: 'reach',
     ...note([
       'Attract / Repel: the mouse pulls nearby particles in and stirs them round it (within 0.35), like the Particles node\'s hands.',
-      'Its Also adds the chain so far, so this Force is the total: curl + swirl + mouse.',
+      'Its "+ Another force" adds the chain so far, so this Force is the total: curl + swirl + mouse.',
       'Try: Strength −2 to blow them away from the pointer; wire a hand or a null from Play into Target instead of the mouse.',
     ]),
   }, { also: ['ptSwirl', 'force'] });
@@ -311,10 +312,10 @@ export function particlesNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     label: 'Particles',
     preroll: 4,
     ...note([
-      'Agents: a million particles (1M), each running the rule inside (double-click to open it) every step, 2 steps a frame (about 7 ms a frame at 1080p on an M3 Pro, drawing included).',
-      'The rule is a chain of forces (Curl noise → Vortex → Attract), added up through their Also inputs, then Integrate moves the particle and Age / Life ends it.',
+      'Agents: 262,144 particles (256k), each running the rule inside (double-click to open it) every step, 2 steps a frame.',
+      'The rule is a chain of forces (Curl noise → Vortex → Attract), added up through their "+ Another force" inputs, then Integrate moves the particle and Age / Life ends it.',
       'Pre-roll 4: four seconds are simulated before the first frame, so the ring is already streaming when it appears.',
-      'Try: Count 256k on a slower GPU; Steps per frame 1 to move at the Particles node\'s own pace (2 is twice as lively).',
+      'Try: Count 1M for a denser cloud (about 7 ms a frame at 1080p on an M3 Pro, drawing included); Steps per frame 1 to move at the Particles node\'s own pace (2 is twice as lively).',
     ]),
   });
   const bg = n('uv', 'ptUv', X(420), Y(380), { ...note(['UV: where each pixel is, for the background glow (y −1 at the bottom to 1 at the top).']) });
@@ -332,7 +333,7 @@ export function particlesNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ],
   });
   const draw = n('drawAgents', 'ptDraw', X(1260), Y(0), {
-    style: 'glow', colorBy: 'age', palette: 'ember', scaleBy: 'crowd', size: 2, brightness: 0.7, glow: 0.45, fade: 'on',
+    style: 'glow', colorBy: 'age', palette: 'ember', scaleBy: 'crowd', size: 2, brightness: 0.85, glow: 0.45, fade: 'on',
     lights: '4', lightColor: [1, 0.55, 0.25], lightPower: 1.6, lightReach: 0.3, halo: 0.5, lightMotion: 'orbit', lightOrbit: 0.48,
     ...note([
       'Draw agents: every particle as a soft dot with the Particles node\'s glow, coloured along the Ember palette by age (pale yellow when born, deep red as it dies) and fading in and out over its life.',
@@ -376,14 +377,14 @@ export function curlSmokeNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     strength: 0.45, size: 1.4, evolve: 0.3,
     ...note([
       'Curl noise: eddies that fold the rising column into curls and threads. Near the source Rising heat is stronger, so the column holds; higher up the heat fades and the eddies take over.',
-      'Its Also adds Rising heat in.',
+      'Its "+ Another force" adds Rising heat in.',
       'Try: Size 3 for finer, busier turbulence; Strength 1.5 to tear the column apart.',
     ]),
   }, { also: ['csHeat', 'result'] });
   const wind = n('agentWind', 'csWind', 1260, 40, {
     strength: 0.12, angle: 0, gust: 1, size: 0.6, evolve: 0.2,
     ...note([
-      'Wind: a light breeze to the right with gusts, so the column leans and sways instead of standing straight. Its Also adds heat and curl: this Force is the total.',
+      'Wind: a light breeze to the right with gusts, so the column leans and sways instead of standing straight. Its "+ Another force" adds heat and curl: this Force is the total.',
       'Try: Angle 180 to blow it left; Strength 0 for still air.',
     ]),
   }, { also: ['csCurl', 'force'] });
@@ -417,7 +418,7 @@ export function curlSmokeNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     label: 'Curl smoke',
     preroll: 6,
     ...note([
-      'Agents: a million bits of smoke (1M), 2 steps a frame. Inside (double-click): Rising heat → Curl noise → Wind, added through Also, then Integrate and Age / Life.',
+      'Agents: 262,144 bits of smoke (256k), 2 steps a frame (Count 1M for denser smoke). Inside (double-click): Rising heat → Curl noise → Wind, added up through "+ Another force", then Integrate and Age / Life.',
       'Pre-roll 6: six seconds are simulated before the first frame, so the plume has already risen when it appears.',
     ]),
   });
@@ -465,14 +466,14 @@ export function soundBurstNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     mode: 'shock', x: 0, y: 0, strength: 0.6, speed: 1.4, soundFrom: 'graph', level: 0, beat: 120,
     ...note([
       'Sound kick, Shockwave: every beat sends a ring of pressure out from the middle at 1.4 picture-heights a second, pushing particles out as it arrives and back behind it (the Particles node\'s Shock).',
-      'Beat 120 is a silent stand-in: 120 kicks a minute, part of the simulation, so a recording matches the preview. Its Also adds Spring back.',
+      'Beat 120 is a silent stand-in: 120 kicks a minute, part of the simulation, so a recording matches the preview. Its "+ Another force" adds Spring back.',
       'Try: Beat 0 and Sound from Mic or Audio engine (or map Level to an audio track in Play); Kick Wave or Vibrate for other answers to the sound.',
     ]),
   }, { also: ['sbSpring', 'result'] });
   const curl = n('agentCurl', 'sbCurl', 1260, 40, {
     strength: 0.25, size: 1.3, evolve: 0.2,
     ...note([
-      'Curl noise: a soft drift so the disc is never still between beats. Its Also adds the kick and the spring: this Force is the total.',
+      'Curl noise: a soft drift so the disc is never still between beats. Its "+ Another force" adds the kick and the spring: this Force is the total.',
     ]),
   }, { also: ['sbKick', 'force'] });
   const integrate = n('agentIntegrate', 'sbMove', 1680, 80, {
@@ -501,7 +502,7 @@ export function soundBurstNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   const group = agentsGroup('burst', X(420), Y(0), 'sbEmit', [inputs, spring, kick, curl, integrate, age, output], {
     label: 'Sound burst',
     ...note([
-      'Agents: a million particles (1M), 2 steps a frame. Inside (double-click): Spring back → Sound kick → Curl noise, added through Also, then Integrate and Age / Life.',
+      'Agents: 262,144 particles (256k), 2 steps a frame (Count 1M for a denser disc). Inside (double-click): Spring back → Sound kick → Curl noise, added up through "+ Another force", then Integrate and Age / Life.',
     ]),
   });
   const draw = n('drawAgents', 'sbDraw', X(840), Y(0), {

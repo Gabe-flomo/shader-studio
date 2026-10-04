@@ -238,10 +238,9 @@ describe('the samples that teach the app', () => {
     expect(agents.length).toBe(10);
     for (const s of agents) {
       expect(sourceLimits(s), s.title).toEqual([]);
-      // 256k walkers on at most 512 trail rows, but for the two that need a million to show what they show.
-      const full = s.from.kind === 'example' && ['agentMultiSlime', 'agentGrowPicture'].includes(s.from.key);
-      for (const g of s.bundle.agents!.groups) expect(g.side, `${s.title}: walkers`).toBe(full ? 1024 : 512);
-      for (const t of s.bundle.agents!.trails) expect(t.rows ?? 0, `${s.title}: trail rows`).toBeLessThanOrEqual(full ? 1024 : 512);
+      // The presets as they ship: 256k walkers (a 512² state), trails of at most 1024 rows.
+      for (const g of s.bundle.agents!.groups) expect(g.side, `${s.title}: walkers`).toBe(512);
+      for (const t of s.bundle.agents!.trails) expect(t.rows ?? 0, `${s.title}: trail rows`).toBeLessThanOrEqual(1024);
       // Every control is a uniform of the bundle, so a slider changes the next step without a recompile.
       for (const c of s.bundle.play.controls) expect(s.bundle.paramBindings[c.target.split('::').slice(-2).join('::')], `${s.title}: ${c.target}`).toBeTruthy();
     }

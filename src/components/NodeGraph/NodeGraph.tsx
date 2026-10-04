@@ -25,6 +25,7 @@ import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
+import { ruleIsEmpty } from '../../store/agentSetup';
 import { Segmented } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
 import { TYPE_COLORS } from './typeColors';
@@ -249,25 +250,29 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     return activeGroupNode.type === 'sceneGroup' || activeGroupNode.type === 'spaceWarpGroup' || activeGroupNode.type === 'marchLoopGroup' || activeGroupNode.type === 'giLitMarchGroup';
   }, [activeGroupNode]);
 
+  // An Agents group has its own anchored Agent Inputs / Agent Output cards (ports are added on Agent
+  // Inputs), so it never shows the generic Group inputs / Group output terminals.
+  const isInsideAgentsGroup = activeGroupNode?.type === 'agentsGroup';
+
   // Position the Group Output terminal to the right of all subgraph nodes
   const groupOutputTerminalPos = React.useMemo(() => {
-    if (!activeGroupId) return null;
+    if (!activeGroupId || isInsideAgentsGroup) return null;
     if (displayNodes.length === 0) return { x: 500, y: 160 }; // default for empty group
     const maxX = Math.max(...displayNodes.map(n => n.position.x)) + NODE_WIDTH + 80;
     const ys   = displayNodes.map(n => n.position.y);
     const midY = (Math.min(...ys) + Math.max(...ys)) / 2 - 40;
     return { x: maxX, y: midY };
-  }, [activeGroupId, displayNodes]);
+  }, [activeGroupId, displayNodes, isInsideAgentsGroup]);
 
   // Position the Group Input terminal to the left of all subgraph nodes
   const groupInputTerminalPos = React.useMemo(() => {
-    if (!activeGroupId) return null;
+    if (!activeGroupId || isInsideAgentsGroup) return null;
     if (displayNodes.length === 0) return { x: 80, y: 160 }; // default for empty group
     const minX = Math.min(...displayNodes.map(n => n.position.x)) - 220;
     const ys   = displayNodes.map(n => n.position.y);
     const midY = (Math.min(...ys) + Math.max(...ys)) / 2 - 40;
     return { x: minX, y: midY };
-  }, [activeGroupId, displayNodes]);
+  }, [activeGroupId, displayNodes, isInsideAgentsGroup]);
 
   // Compile problems mapped onto the cards that caused them (shown on the card, not only in the error panel)
   const glslErrors      = useNodeGraphStore(s => s.glslErrors);
@@ -279,6 +284,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   );
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string | null; paramKey?: string } | null>(null);
+  const [emptyRuleDismissed, setEmptyRuleDismissed] = useState<Set<string>>(() => new Set());
   const [addingGroupInput, setAddingGroupInput] = useState<{ name: string; type: import('../../types/nodeGraph').DataType } | null>(null);
   const [editingOutputPortKey, setEditingOutputPortKey] = useState<string | null>(null);
   const [editingOutputPortLabel, setEditingOutputPortLabel] = useState('');
@@ -1454,6 +1460,33 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
               This runs once for every agent, every step.
             </span>
           )}
+        </div>
+      )}
+
+      {/* An empty Agents rule: the walkers stand still. Suggest a starting rule (one click adds and wires it). */}
+      {isInsideAgentsGroup && activeGroupPath.length === 1 && activeGroupNode && ruleIsEmpty(activeGroupNode) && !emptyRuleDismissed.has(activeGroupNode.id) && (
+        <div style={{
+          position: 'absolute', top: redesignToolbar ? 108 : 56, left: 12, zIndex: 20, maxWidth: 560,
+          display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', borderRadius: 10,
+          background: tk.bg.panel, boxShadow: tk.shadow.float, color: tk.text.secondary, fontSize: 12.5, userSelect: 'none',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <span style={{ flex: 1, lineHeight: 1.45 }}>
+              This rule is empty, so the walkers stand still. Add nodes between Agent Inputs and Agent Output, or start from one of these:
+            </span>
+            <IconButton icon="close" label="Hide" size="sm" tooltip={false}
+              onClick={() => setEmptyRuleDismissed(s => new Set(s).add(activeGroupNode.id))} />
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {([
+              ['slime', '+ Slime: Sense → Steer → Move', 'Walkers smell the trail ahead, turn toward it and step on (adds a Deposit and a Trail field outside when missing).'],
+              ['particles', '+ Particles: Curl noise → Integrate', 'Swirling currents push every particle; Integrate moves it; Age / Life ends it so Emit can give it a new life.'],
+              ['walk', '+ Just walk: Move', 'Every walker steps forward along its heading.'],
+            ] as const).map(([kind, label, why]) => (
+              <Button key={kind} size="sm" variant="secondary" title={why} style={{ height: 28 }}
+                onClick={() => useNodeGraphStore.getState().startAgentRule(activeGroupNode.id, kind)}>{label}</Button>
+            ))}
+          </div>
         </div>
       )}
 

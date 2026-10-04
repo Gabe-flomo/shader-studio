@@ -23,9 +23,10 @@ import {
   gpHandFall, gpHandPush, gpLevelGlsl, gpPlateGlsl, gpPlateStep, gpShockPush, gpShockRing, gpSwirl, gpVibrate, gpWavePhase, gpWavePush,
 } from '../../play/kit/gpuParticles.js';
 
-const THIS_AGENT = 'Unwired: this walker\'s own.';
-const ALSO = { type: 'vec2' as const, label: 'Also', hint: 'Another force (or a chain of them), added to this one. Wire forces in a row and they add up.' };
-const FORCE_OUT = { force: { type: 'vec2' as const, label: 'Force', hint: 'This force plus Also: wire into the next force\'s Also, or into Integrate\'s Force.' } };
+const THIS_AGENT = 'Unwired: this walker\'s own (the card shows "← this walker\'s …").';
+/** The chain socket (key `also`, kept for saved graphs): another force wired here is added to this one. */
+const ALSO = { type: 'vec2' as const, label: '+ Another force', hint: 'Chain: wire another force (or a chain of them) here and they add up. Forces in a row, e.g. Curl noise → Vortex → Attract, then the last one into Integrate\'s Force.' };
+const FORCE_OUT = { force: { type: 'vec2' as const, label: 'Force', hint: 'This force plus any chained into "+ Another force": wire into the next force\'s "+ Another force", or into Integrate\'s Force.' } };
 const sel = (v: unknown, allowed: string[], fallback: string) => (typeof v === 'string' && allowed.includes(v) ? v : fallback);
 const plus = (also: string | undefined) => (also ? ` + ${also}` : '');
 /** The pointer in picture coordinates (the Mouse node's formula). */
@@ -59,7 +60,7 @@ const SOUND_FROM_OPTIONS = [
 const SOUND_PARAMS = {
   soundFrom: { label: 'Sound from', type: 'select' as const, section: 'Sound', hint: 'What it listens to.', help: 'Level (and Beat): the Level slider (map Live audio or an audio track to it in Play) plus the stand-in Beat. Mic: the live input (enable it in Play). Audio engine: the Play page\'s engine, its master or one track. The Level slider is added to what is heard. When the Agents group\'s own Sound from is set (anything but Each node\'s own), it wins: every listening node inside hears the group\'s, with its Level and Beat.', options: SOUND_FROM_OPTIONS },
   level: { label: 'Level', type: 'float' as const, min: 0, max: 1, step: 0.01, section: 'Sound', hint: 'How loud it is now (map audio to it in Play).' },
-  beat: { label: 'Beat', type: 'float' as const, min: 0, max: 200, step: 1, section: 'Sound', hint: 'A stand-in beat, in beats a minute (0: off). Silent: it only moves the numbers.', help: 'A silent stand-in for music while you build: a kick every beat at this tempo, as a level that jumps and decays. It is part of the simulation (the same every run), so recordings match. Set it to 0 when real sound drives Level.' },
+  beat: { label: 'Beat', type: 'float' as const, min: 0, max: 200, step: 1, section: 'Sound', hint: 'A stand-in beat, in beats a minute (0: off). Silent: it only moves the numbers.', help: 'A silent stand-in for music while you build: a kick every beat at this tempo, as a level that jumps and decays. It is part of the simulation (the same every run), so recordings match. Set it to 0 when real sound drives Level. On a Chladni plate each beat also jolts the sand (Shake rises with every hit) and steps it to the next figure, so a slow Beat reads as a regular pulse: that is the beat, not a glitch.' },
 };
 
 // ── Forces ──────────────────────────────────────────────────────────────────

@@ -64,7 +64,7 @@ import { VideoInputModal } from './VideoInputModal';
 import { MidiInputCard } from './MidiInputCard';
 import { GroupParamPicker } from './GroupParamPicker';
 import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
-import { AGENT_INPUT_OUTPUTS } from '../../nodes/definitions/agents';
+import { AGENT_INPUT_OUTPUTS, AGENT_INPUT_STATE_OUTPUTS, agentWalkerDefault } from '../../nodes/definitions/agents';
 import { VECTORIZABLE_NODES, VEC4_CAPABLE_NODES } from '../../nodes/definitions/math';
 import { registerSocket, getView } from './socketRegistry';
 import { startNodeMouseDrag, startNodeTouchDrag } from './nodeDrag';
@@ -101,7 +101,7 @@ import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
-import { Toggle } from '../ui/Choice';
+import { Segmented, Toggle } from '../ui/Choice';
 import { ColorSwatch } from '../ui/ColorPicker';
 import { PaletteTools } from './PaletteTools';
 import { ParticlePresets } from './ParticlePresets';
@@ -1662,17 +1662,154 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     });
   };
 
-  if (node.type === 'marchLoopInputs' || node.type === 'agentInputs') {
-    const isAgents = node.type === 'agentInputs';
+  // ── Agent Inputs (inside an Agents group): this walker's own values, then what comes in from outside ──
+  if (node.type === 'agentInputs') {
+    const extraInputs = (node.params.extraInputs ?? []) as Array<{ key: string; type: string; label: string }>;
+    const own = [...Object.entries(AGENT_INPUT_OUTPUTS), ...Object.entries(AGENT_INPUT_STATE_OUTPUTS)];
+    const sectionHead: React.CSSProperties = { padding: '10px 14px 2px', font: `600 11px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', color: tk.text.muted };
+    const sectionNote: React.CSSProperties = { padding: '0 14px 6px', fontSize: 11.5, lineHeight: 1.45, color: tk.text.faint };
+    const outRow = (key: string, type: string, label: React.ReactNode, title: string, extra?: React.ReactNode) => {
+      const color = TYPE_COLORS[type] ?? tk.text.faint;
+      return (
+        <div
+          key={key}
+          title={title}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, minHeight: 24, padding: '0 0 0 14px', position: 'relative' }}
+          onMouseEnter={() => { holdTip(); setHoveredOutput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'out' }); }}
+          onMouseLeave={leaveOutputSocket}
+          onDoubleClick={e => { e.stopPropagation(); useNodeGraphStore.getState().disconnectOutput(node.id, key); }}
+        >
+          {extra}
+          <span style={{ fontSize: 12.5, color: tk.text.secondary }}>{label}</span>
+          <div
+            data-socket="out"
+            ref={el => { if (el) registerSocket(node.id, 'out', key, el); }}
+            onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
+            style={{
+              width: 12, height: 12, borderRadius: '50%', boxSizing: 'border-box', marginRight: -6, flexShrink: 0, cursor: 'crosshair',
+              background: hoveredOutput === key ? tk.bg.panel : color, border: `2px solid ${color}`, boxShadow: `0 0 0 2px ${tk.bg.panel}`,
+            }}
+          />
+        </div>
+      );
+    };
+    const TYPE_WORDS: Record<string, string> = { float: 'number', vec2: 'pair (x, y)', vec3: 'colour / 3 numbers', vec4: '4 numbers', texture: 'image' };
+    return (
+      <div
+        data-node-id={node.id}
+        style={specialCardStyle({ zIndex, width: 300 })}
+        onMouseDown={() => { setZIndex(++zCounter); }}
+        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); }}
+      >
+        <div
+          style={specialHeadStyle}
+          onMouseDown={handleAnchorDragMouseDown}
+          onClick={() => { setSelectedNodeId(isSelected ? null : node.id); selectNode(node.id, false); }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontWeight: 600, fontSize: 13, color: tk.text.primary }}>
+            <Icon name="import" size={14} />Agent Inputs
+          </span>
+        </div>
+
+        <div style={sectionHead}>This walker</div>
+        <div style={sectionNote}>
+          Its own values as each step begins. You rarely need to wire these: any unwired socket inside the group already reads them (the faint “← this walker’s …” on a node).
+        </div>
+        <div style={{ paddingBottom: 6 }}>
+          {own.map(([key, o]) => outRow(key, o.type, o.label, `${o.label}: ${o.hint}`))}
+        </div>
+
+        <div style={{ ...sectionHead, borderTop: `1px solid ${tk.border.subtle}`, paddingTop: 10 }}>From outside the group</div>
+        <div style={sectionNote}>
+          Each input added here is also a socket on the Agents card, where you wire it (a Trail’s Image, a number, a picture).
+        </div>
+        <div style={{ paddingBottom: 4 }}>
+          {extraInputs.length === 0 && (
+            <div style={{ padding: '0 14px 4px', fontSize: 11.5, fontStyle: 'italic', color: tk.text.faint }}>None yet.</div>
+          )}
+          {extraInputs.map(({ key, type, label }) => outRow(key, type,
+            editingPortKey === `mlgin_${key}` ? (
+              <input
+                autoFocus
+                aria-label="Input name"
+                value={editingPortLabel}
+                onChange={e => setEditingPortLabel(e.target.value)}
+                onMouseDown={e => e.stopPropagation()}
+                onBlur={() => {
+                  if (editingPortLabel.trim() && activeGroupId) renameMarchLoopInput(activeGroupId, key, editingPortLabel.trim());
+                  setEditingPortKey(null);
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                  if (e.key === 'Escape') setEditingPortKey(null);
+                }}
+                style={{ width: 110, fontSize: 12, background: tk.bg.field, border: `1px solid ${tk.border.default}`, color: tk.text.primary, borderRadius: 5, padding: '1px 5px', outline: 'none' }}
+              />
+            ) : (
+              <span style={{ cursor: 'text', color: tk.text.primary }} onDoubleClick={() => { setEditingPortKey(`mlgin_${key}`); setEditingPortLabel(label); }}>
+                {label} <span style={{ color: tk.text.faint, fontSize: 11 }}>({TYPE_WORDS[type] ?? type})</span>
+              </span>
+            ),
+            `${label}: wired on the Agents card (outside the group). Double-click the name to rename it.`,
+            <IconButton icon="close" label={`Remove ${label}`} size="sm" tone="danger" tooltip={false}
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => activeGroupId && removeMarchLoopInput(activeGroupId, key)} />,
+          ))}
+        </div>
+        <div style={{ borderTop: `1px solid ${tk.border.subtle}`, padding: 8 }} onMouseDown={e => e.stopPropagation()}>
+          {addingMarchInput ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <input
+                autoFocus
+                aria-label="Input name"
+                placeholder="Name (e.g. Trail, Strength)"
+                value={addingMarchInput.name}
+                onChange={e => setAddingMarchInput(prev => prev ? { ...prev, name: e.target.value } : prev)}
+                onKeyDown={e => {
+                  e.stopPropagation();
+                  if (e.key === 'Escape') setAddingMarchInput(null);
+                  if (e.key === 'Enter' && addingMarchInput.name.trim() && activeGroupId) {
+                    addMarchLoopInput(activeGroupId, addingMarchInput.name.trim(), addingMarchInput.type, addingMarchInput.name.trim());
+                    setAddingMarchInput(null);
+                  }
+                }}
+                style={{ width: '100%', boxSizing: 'border-box', height: 30, fontSize: 12.5, background: tk.bg.field, border: 0, borderRadius: 6, color: tk.text.primary, padding: '0 8px', outline: 'none' }}
+              />
+              <Segmented
+                fill size="sm" ariaLabel="What it carries"
+                value={addingMarchInput.type as 'float' | 'vec2' | 'vec3' | 'vec4' | 'texture'}
+                options={([['float', 'Number'], ['vec2', 'x, y'], ['vec3', 'Colour'], ['vec4', '4'], ['texture', 'Image']] as const).map(([value, label]) => ({ value, label }))}
+                onChange={t => setAddingMarchInput(prev => prev ? { ...prev, type: t } : prev)}
+              />
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                <Button size="sm" variant="ghost" style={{ height: 28 }} onClick={() => setAddingMarchInput(null)}>Cancel</Button>
+                <Button size="sm" variant="primary" style={{ height: 28 }} disabled={!addingMarchInput.name.trim()}
+                  onClick={() => {
+                    if (addingMarchInput.name.trim() && activeGroupId) {
+                      addMarchLoopInput(activeGroupId, addingMarchInput.name.trim(), addingMarchInput.type, addingMarchInput.name.trim());
+                      setAddingMarchInput(null);
+                    }
+                  }}>Add</Button>
+              </div>
+            </div>
+          ) : (
+            <Button size="sm" variant="ghost" icon="plus" style={{ width: '100%', height: 28 }}
+              title="Adds a socket on the Agents card (outside the group) and its matching output here"
+              onClick={() => setAddingMarchInput({ name: '', type: 'texture' })}>Add an input from outside</Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (node.type === 'marchLoopInputs') {
     const extraInputs = (node.params.extraInputs ?? []) as Array<{key: string; type: string; label: string}>;
-    const fixedOutputs: ReadonlyArray<{ key: string; type: string; label: string }> = isAgents
-      ? Object.entries(AGENT_INPUT_OUTPUTS).map(([key, o]) => ({ key, type: o.type, label: o.label }))
-      : [
-        { key: 'ro',        type: 'vec3',  label: 'Ray Origin' },
-        { key: 'rd',        type: 'vec3',  label: 'Ray Dir' },
-        { key: 'marchPos',  type: 'vec3',  label: 'March Pos' },
-        { key: 'marchDist', type: 'float', label: 'March Dist' },
-      ];
+    const fixedOutputs: ReadonlyArray<{ key: string; type: string; label: string }> = [
+      { key: 'ro',        type: 'vec3',  label: 'Ray Origin' },
+      { key: 'rd',        type: 'vec3',  label: 'Ray Dir' },
+      { key: 'marchPos',  type: 'vec3',  label: 'March Pos' },
+      { key: 'marchDist', type: 'float', label: 'March Dist' },
+    ];
 
     return (
       <div
@@ -1698,13 +1835,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           onClick={() => { setSelectedNodeId(isSelected ? null : node.id); selectNode(node.id, false); }}
         >
           <span style={{ fontSize: '10px' }}>&#9668;</span>
-          {isAgents ? 'Agent Inputs' : 'Group Inputs'}
+          Group Inputs
         </div>
-        {isAgents && (
-          <div style={{ padding: '5px 10px 0', fontSize: 10.5, lineHeight: 1.4, color: tc.subtext0, maxWidth: 220 }}>
-            This walker as the step begins. Every unwired socket to the right reads its own value.
-          </div>
-        )}
 
         {/* Fixed outputs */}
         <div style={{ padding: '6px 0' }}>
@@ -1815,7 +1947,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 style={{ ...inputStyle_, width: '100%', boxSizing: 'border-box' }}
               />
               <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                {(isAgents ? ['float', 'vec2', 'vec3', 'vec4', 'texture'] as DataType[] : ['float', 'vec2', 'vec3', 'vec4'] as DataType[]).map(t => (
+                {(['float', 'vec2', 'vec3', 'vec4'] as DataType[]).map(t => (
                   <button
                     key={t}
                     onClick={() => setAddingMarchInput(prev => prev ? { ...prev, type: t } : prev)}
@@ -3516,6 +3648,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       {node.type === 'pass' && <NodeInlineViz node={node} />}
       {/* The Agents family (docs/agents-plan.md): the group's numbers and Open rule, a Trail's texture */}
       {(node.type === 'agentsGroup' || node.type === 'trailField') && <NodeInlineViz node={node} onEnterGroup={onEnterGroup} />}
+      {node.type === 'agentOutput' && (
+        <div style={{ padding: '8px 14px', fontSize: 11.5, lineHeight: 1.45, color: tk.text.faint, borderBottom: `1px solid ${tk.border.subtle}` }}>
+          What this walker becomes at the end of the step. Anything left unwired stays as it was, so an empty rule stands still.
+        </div>
+      )}
 
       {/* ── In-card preview (visible when 👁 is active) ── */}
       {/* Semantic inline viz: replaces shader thumbnail for supported types */}
@@ -3801,6 +3938,23 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   )}
                 </span>
               )}
+              {/* Inside an Agents group: what an unwired socket reads by itself (an implicit wire from this walker). */}
+              {!isConnected && !isExternal && activeGroupNode?.type === 'agentsGroup' && (() => {
+                const reads = agentWalkerDefault(node.type, key, input.type);
+                if (!reads) return null;
+                return (
+                  <span
+                    title={node.type === 'agentOutput'
+                      ? 'Unwired: the walker keeps what it had (or what the other sockets imply). Wire something here to change it.'
+                      : 'Unwired: this socket reads the walker running the rule, by itself. Wire something to use another value.'}
+                    style={{
+                      marginLeft: 6, flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      font: `italic 500 11px ${fontFamily.ui}`, color: tk.text.faint, padding: '1px 6px', borderRadius: 5,
+                      border: `1px dashed ${alpha(TYPE_COLORS[input.type] || '#888', 0.45)}`, opacity: socketOpacity,
+                    }}
+                  >{reads}</span>
+                );
+              })()}
               {/* Input expression: a ƒ mark (faint on hover when unset; the expression as a chip when set). Click opens the editor. */}
               {showExprMark && (
                 <button
