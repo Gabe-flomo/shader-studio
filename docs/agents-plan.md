@@ -1,6 +1,6 @@
 # Agents group: slime mold and particles built from nodes (plan, 2026-10-03)
 
-**Status:** P0, P1 (Slime), P2 (Particles), P3 (Species, food and obstacles) and P4 (Play) shipped 2026-10-03/04; see "What shipped" below. P5 onward not built. User guide: docs/agents-group.md.
+**Status:** P0, P1 (Slime), P2 (Particles), P3 (Species, food and obstacles), P4 (Play) and P5 (Websites) shipped 2026-10-03/04; see "What shipped" below. P6 not built. User guide: docs/agents-group.md.
 
 ## In plain words
 
@@ -121,6 +121,28 @@ The user moved two of P4's nodes into P2: **Sound kick** and **Chladni** shipped
 **Measured** (1M, 1920 × 1080, GPU-synced, same session, alternating): Slime mold 10.0 / 9.5 ms a frame on this branch against 10.1 on main, Particles 6.7 / 6.6 against 7.5, Sound burst 8.3 / 7.9 against 8.9 / 8.4: unchanged within the machine's noise (the programs are identical). The example 12–13 ms (Sound burst's streaks plus the hand).
 
 **Deferred from P4**: readings back into Play (alive share, centroid: P6); the Particles node's own spawn map from Motion (texture); choosing which Motion layer (it reads the first); Motion (texture) on web pages (P5 with the rest of agents); a wired Level socket on the group.
+
+## What shipped (P5 Websites, 2026-10-04)
+
+Built on the Pass node's phase 5 (pages run Pass programs on one uniform table, `kit/passHost.js`, shipped first in the same PR).
+
+**Shared, so the hosts can't drift.** The per-frame logic that was inside `lib/agentRunner.ts` moved into `kit/agentPlan.js` as pure functions both hosts call: `agGroupSteps` (Burst and Start over edges, live stepping with the governor's cap and fall-behind, offline exact steps, start over), `agStepWindow` (birth windows and Burst), `agGroupState` / `agRestartGroup`, `agListenState` / `agHear` (Sound kick and Chladni: the Particles engine's `gpSoundStep`, `gpLevelsPush`, `gpPlate*` as they were), `agDrawLook` (size, brightness, The crowd, palette, colours, glow) and `agLights`. The app's runner calls them and gives bit-identical state to main (offline twice and live at 30 / 60 / 120 Hz and with a stall, for Slime mold, Ants, Multi-species slime, Particles, Sound burst and the hand-and-beat example: FNV hashes of state A, B, C, D and the trail equal to main's, checked in the browser by swapping main's runner back in). `agentPlan.js` now imports from `gpuParticles.js`; the GLSL is `kit/agentShaders.js` (and through it `GP_SHADERS`) unchanged: `gpEngineShaders.test.ts.snap` untouched.
+
+**The page's host** (`kit/agentHost.js`, `ahCreate`, `SSKit.agents`): raw WebGL2 on the page's context. RGBA32F MRT state (A, B; C, D with per-walker state), half-float trails (wrap or clamp) and drawings, the glow targets, the Bessel table and each kick's level history (R32F). One step in Jones' order: every group's update shader (at the step's own `u_time`, its `u_agStep` as a uint, its birth window, its listeners' uniforms) → every Deposit (additive points) → every Trail's step (the fixed 3×3 / 5×5 program, or the Trail's own Add / Block program) → Draw agents (points or streaks, then the Particles engine's down / blur / compose). Each uniform is set by its declared type (as three.js does). Offline (a page's `renderAt`, its captures and Present stills): exactly the steps to each frame's time; `renderAt` starts the simulation over. Live: the governor and fall-behind of `agentPlan.js`.
+
+**The bundle** gains `agents` (and `motionMap`) only when present (`webInput.ts webAgents`): the spec without node lists, each part with the uniform names it fills, from `nodes/definitions/agents.ts` and `agentForces.ts` (the page never builds a name). Other bundles serialize as before: the golden bundle snapshots are unchanged. `unsupportedFeatures` no longer lists Agents groups or Motion (texture).
+
+**The runtime** draws, per frame, as ShaderCanvas does: the passes the agents read (`pre`), the agents, the passes that read trails or drawings (`post`), then the picture. Update shaders and Trail step programs read every input the picture has (one uniform table, as in the app). The graph's extra programs (passes, update shaders, Trail steps) are drawn exactly as the app draws them: three's `PlaneGeometry(2, 2)` (its diagonal and vertex order) through the compile's `VERTEX_SHADER` (vUv from the uv attribute) with three's precisions. That was needed: with the page's own quad (the other diagonal) vUv differed by an ulp on one triangle, which Grow toward a picture's Trail step (it reads the picture through vUv) turned into a different simulation within a few seconds. The picture's own program keeps its path (existing pages unchanged).
+- **Sound:** Sound from Mic is the page's live input (after Listen to audio); Audio engine / Engine track is the page's Granulator racks (`gpSoundIn`, the Particles node's). The page doesn't play the tape, so a track whose sound comes from clips is silent there (the hand-and-beat example's kicks need notes on the page); its other controls work.
+- **Hands:** through the page's mappings (Follow a hand's pair mappings: the pointer, then `hand:any:8` once a hand is seen), with the page's hand tracker when it carries one, else the pointer. Checked: the pointer steers the swarm on the exported example, R starts it over, B bursts.
+- **Motion (texture):** the page fills `u_motionMap` (and its `_px`) from the kit's `motionGrid` of its first Motion layer, row-flipped, a frame late, as `play/motionTexture.ts`. Checked: a hidden dot swept by an LFO and watched by a Motion layer; the exported page's walkers are born where it moves.
+- **Scripted checks:** the page's mount handle gains `programs()` (the context and the pass and agent hosts; the agent host's `state()`), used by the parity sweep.
+
+**Parity** (`src/play/__tests__/webAgents.test.ts`): the app's `AgentRunner` and the page's host, each on a recording stand-in for its GPU, run the same programs in the same order with the same step numbers, birth windows, step clocks, listener values and draw counts, live at 60 Hz through a stall and the governor and offline, for Slime mold, Sound burst, Particles and Ants; plus the bundle, the names and the shared functions. In the browser (M3 Pro, headless Chrome on ANGLE Metal, 960 × 540): the app's offline render and the exported page's `renderAt` reach **bit-identical simulation state** (A, B, C, D and every trail) for all ten agents examples and a round Chladni plate (Bessel table, Beat-driven figure), frame by frame to 2 s (up to 1,560 steps with Ants' pre-roll); their pictures after 3 s differ by at most 2 levels of 255 (the app's readback dither) for every one, and for both Pass graphs.
+
+**Measured** (same session, 1M walkers, 1920 × 1080, each frame GPU-synced): the page's engine against the app's: Slime mold 13.3 / 12.9 ms, Particles 9.8 / 9.3, Sound burst 10.7 / 10.3, Agents: a hand and a beat 9.6 / 12.2. Exported pages running live (headless Chrome, 1920 × 993 background page and 1620 × 993 player): Slime mold and Sound burst hold 60 fps with 120 steps a second (keeping up).
+
+**Deferred from P5**: the tape (Audio engine clips) on pages; choosing which Motion layer (the first, as in the app); a Particles node reading a texture inside a pass or update program (the app doesn't either).
 
 ---
 
@@ -385,7 +407,7 @@ This is consistent with GP's measured 2 ms for 1M (engine) and 5 ms for 1M with 
 
 ## 9. Website export
 
-- **Until P5:** `unsupportedFeatures` lists "Agents groups: the page draws the picture without them". Export warns rather than silently differing.
+- **Until P5:** `unsupportedFeatures` lists "Agents groups: the page draws the picture without them". Export warns rather than silently differing. (P5 shipped: the line is gone; see What shipped (P5).)
 - **P5:**
   - The runtime runs agent programs through the shared `agentPlan.js` schedule and the shared GLSL chunks.
   - The Pass node's phase 5 (the runtime compiling N programs on one uniform table) is a prerequisite and ships first, or in the same PR.
@@ -471,7 +493,7 @@ More in P6: Sand on a plate (Chladni), Sound field (Sound kick), Food from a pic
   - Sound kick and Chladni nodes plus group Sound from.
   - The pinned-slider overrides on the group card.
   - Motion (texture) source, hands/pose/null targets, Burst / Start over as rule targets.
-- **P5 Websites.**
+- **P5 Websites.** *(Built: see What shipped (P5).)*
   - Runtime runs agents (after or with Pass phase 5); removed from `unsupportedFeatures`.
   - Parity test and browser sweep.
 - **P6 More.**

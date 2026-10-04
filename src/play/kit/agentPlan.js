@@ -1,8 +1,13 @@
 // agentPlan.js — the Agents engine's schedule (docs/agents-plan.md §3.4, §7, §8).
 //
-// Pure: no GPU. The app (src/lib/agentRunner.ts) uses it; the web runtime will
-// share it when pages run agents (P5), as passPlan.js is shared for passes.
-// Every top-level name keeps the `ag`/`AG_` prefix (the layer kit's rule).
+// Pure: no GPU. The app (src/lib/agentRunner.ts, three.js) and web pages
+// (kit/agentHost.js, the page's own WebGL2) both run it, as passPlan.js is
+// shared for passes: the schedule, each frame's steps per group, the birth
+// windows, what the listening nodes hear and how Draw agents looks are worked
+// out here once, so the two hosts can't drift. They only differ in how they
+// put the result on the GPU. Every top-level name keeps the `ag`/`AG_` prefix
+// (the layer kit's rule).
+import { GP_PALETTES, gpLevelsPush, gpLevelsState, gpPlace, gpPlateListen, gpPlateSmooth, gpPlateState, gpPlateTargets, gpPlateUniforms, gpRising, gpSoundState, gpSoundStep, gpUnitBrightness, gpUnitInk } from './gpuParticles.js';
 //
 // Determinism: a simulation is defined by its step number. One step is 1/60 s
 // of simulated time; at clock time t a group has run floor(t · 60 · steps per
@@ -150,4 +155,157 @@ export function agBeatLevel(t, bpm) {
   if (!(b > 0) || !(t >= 0)) return 0;
   const beats = t * b / 60 + 1e-9;
   return Math.exp(-(beats - Math.floor(beats)) * 9);
+}
+
+/*
+ * Per-frame logic shared by both hosts (P5). `read(p, fallback)` reads a node setting: a number
+ * as it is, or the uniform a slider writes (by name), else the fallback; `readColour(p, fallback)`
+ * the same for a colour ([r, g, b]).
+ */
+
+/** A group's simulation state that isn't on the GPU; a host adds its textures to it. */
+export function agGroupState() {
+  return { step: 0, born: 0, live: agLiveState(), history: [], lastTarget: 0, listen: new Map(), burstEdge: {}, burstPending: false };
+}
+
+/** Back to step 0 with nobody born (the host clears the state textures and the listeners' state). */
+export function agRestartGroup(s) {
+  s.step = 0; s.born = 0; s.history.length = 0; s.lastTarget = 0; s.burstPending = false;
+}
+
+/**
+ * How many steps group `g` runs this frame. o: { live, time, cap, restart (↺ on its card) }.
+ * Live: as many as the clock asks for, at most `cap`; the group's Start over trigger (or `restart`)
+ * starts it over, as a clock that went back does. Offline: exactly the steps up to `time` (a
+ * time before the group's step starts it over). `restartState()` is called at the moment the
+ * simulation starts over, to clear it. Emit's Burst is noted for the next step (agStepWindow).
+ */
+export function agGroupSteps(s, g, read, o, restartState) {
+  // Emit's Burst (a trigger): each time it rises past 0.5, everyone is born again on the next step.
+  if (gpRising(s.burstEdge, 'burst', read(g.emit.burst, 0))) s.burstPending = true;
+  const spf = agStepsPerFrame(read(g.params.stepsPerFrame, 2));
+  const preroll = read(g.params.preroll, 0);
+  if (o.live) {
+    // ↺ on the card, or the group's Start over trigger rising past 0.5 (a Play key, beat or rule): live only.
+    const trigger = gpRising(s.burstEdge, 'restart', read(g.params.restart, 0));
+    if (o.restart || trigger) s.live = agLiveState();
+    s.live.step = s.step;
+    const r = agLiveSteps(s.live, o.time, spf, preroll, o.cap);
+    if (r.restart) restartState();
+    const wanted = Math.max(0, r.target - s.lastTarget);
+    s.lastTarget = r.target;
+    return { steps: r.steps, spf, preroll, restarted: r.restart, rate: agRate(s.history, r.restart ? wanted : r.steps, wanted || r.steps) };
+  }
+  const target = agTargetStep(o.time, spf, preroll);
+  let restarted = false;
+  if (target < s.step) { restartState(); restarted = true; }
+  return { steps: Math.max(0, target - s.step), spf, preroll, restarted, rate: 1 };
+}
+
+/** This step's birth window for group `g` of `n` agents ({ start, count }); a pending Burst is everyone. */
+export function agStepWindow(s, g, n, read) {
+  let win = agWindow(g.emit.mode, s.step, n, read(g.emit.rate, 0), s.born);
+  s.born = win.born;
+  // Burst: everyone born again at once, on the first step after it fired.
+  if (s.burstPending) { win = { start: 0, count: n, born: win.born }; s.burstPending = false; }
+  return win;
+}
+
+/** What one listening node (Sound kick, Chladni) has heard so far: part of its group's simulation. */
+export function agListenState() {
+  return { sound: gpSoundState(), levels: gpLevelsState(), shocks: [], plate: gpPlateState() };
+}
+
+/**
+ * One step of listening for node `l` (agents spec listener), before its group's rule runs at
+ * `time` (the step's own clock): the Particles engine's code as it is. Sound from Mic or the
+ * Audio engine gives a spectrum (`sound(source)`); otherwise the level is Level plus the stand-in
+ * Beat (Level is added to a spectrum too). `first`: the group's step 0 (the plate snaps).
+ * Returns the uniform values: sound (level, bass, treble, onset); a kick its four shock rings
+ * (x, y, start, strength) and `levels` (the level history moved on); a plate its modes, count, shake.
+ */
+export function agHear(st, l, read, sound, time, first) {
+  const dt = 1 / AG_STEP_HZ;
+  const heard = l.soundFrom !== 'graph' && sound ? sound(l.soundFrom) || null : null;
+  const level = Math.max(0, read(l.params.level, 0)) + agBeatLevel(time, read(l.params.beat, 0));
+  gpSoundStep(st.sound, heard || { level: Math.min(2, level) }, dt);
+  if (heard) st.sound.level = Math.min(2, st.sound.level + level);
+  else st.sound.bass = st.sound.mid = st.sound.treble = st.sound.level;
+  const out = { sound: [st.sound.level, st.sound.bass, st.sound.treble, st.sound.onset] };
+  if (l.kind === 'kick') {
+    // A hit sends a ring out from where the centre is now (the last four stay in flight).
+    if (st.sound.hit) {
+      st.shocks.unshift({ x: read(l.params.x, 0), y: read(l.params.y, 0), t0: time, s: 0.4 + st.sound.onset });
+      st.shocks.length = Math.min(st.shocks.length, 4);
+    }
+    const shocks = [];
+    for (let i = 0; i < 4; i++) { const k = st.shocks[i]; if (k) shocks.push(k.x, k.y, k.t0, k.s); else shocks.push(0, 0, 0, 0); }
+    gpLevelsPush(st.levels, st.sound.level, dt);
+    out.shocks = shocks;
+    out.levels = st.levels.levels;
+    return out;
+  }
+  // A plate: its figure from N and M, or stepped on by the sound, gliding between figures.
+  const shape = l.shape || 'square';
+  const P = {
+    modeFrom: l.modeFrom || 'manual', modeN: read(l.params.modeN, 3), modeM: read(l.params.modeM, 5),
+    modes: read(l.params.modes, 1), plateFreq: read(l.params.plateFreq, 1), plateWeights: read(l.params.plateWeights, 0.5),
+  };
+  let want = null;
+  if (P.modeFrom === 'sound') {
+    const bands = gpPlateListen(st.plate, { spectrum: heard && heard.freq ? heard : null, level: st.sound.level, hit: st.sound.hit, dt });
+    want = gpPlateTargets(P, shape, bands);
+    if (!want && !st.plate.modes.length) want = gpPlateTargets(P, shape, null);
+  } else want = gpPlateTargets(P, shape, null);
+  gpPlateSmooth(st.plate, want, dt, first);
+  const pu = gpPlateUniforms(st.plate.modes, shape);
+  out.modes = pu.values;
+  out.count = pu.count;
+  // Shake: the slider, harder with the level and on every hit (the Particles node's rule).
+  out.shake = read(l.params.shake, 0.6) * (0.6 + 0.8 * Math.min(st.sound.level, 1.5) + 1.2 * st.sound.onset);
+  return out;
+}
+
+/** Colour by: Draw agents' choice as the draw shader's index. */
+export const AG_COLOR_BY = ['single', 'species', 'speed', 'heading', 'age', 'agent'];
+
+/**
+ * How Draw agents `d` draws `n` walkers into a picture `h` pixels high: the draw shader's
+ * settings (size, brightness, points or lines, ink, fade, colours) and the glow's. Brightness of
+ * The crowd is the Particles node's rule: sizes in pixels of a 720-pixel-high picture, smaller for
+ * big pools (fill rate), and each walker's light (ink) its share, so the cloud looks the same at
+ * every count.
+ */
+export function agDrawLook(d, n, h, read, readColour) {
+  const ink = d.style === 'ink';
+  const streak = Math.max(0, read(d.params.streak, 0.25));
+  const lines = d.style === 'streaks' || (ink && streak > 0);
+  let size = Math.max(0.1, read(d.params.size, 1.5));
+  let bright = read(d.params.brightness, 0.5);
+  if (d.scaleBy === 'crowd') {
+    size = Math.min(size, n > 1100000 ? 3 : n > 300000 ? 8 : 32);
+    bright *= ink ? gpUnitInk(n, size) : gpUnitBrightness(n, size);
+    size *= Math.max(0.5, h / 720);
+  }
+  const pal = d.palette === 'ab' ? undefined : GP_PALETTES[d.palette];
+  return {
+    ink, lines, size, bright, colorBy: AG_COLOR_BY.indexOf(d.colorBy), speedRef: read(d.params.speedRef, 0.5),
+    thread: lines ? streak * 0.12 : 0, fade: !!d.fade,
+    usePal: d.palette !== 'ab', rainbow: d.palette !== 'ab' && !pal, pal: pal || null,
+    colA: readColour(d.params.colorA, [1, 0.75, 0.35]), colB: readColour(d.params.colorB, [0.25, 0.55, 1]),
+    glow: read(d.params.glow, 1), halo: read(d.params.halo, 0.5),
+  };
+}
+
+/** Draw agents' lights at `time` (the Particles node's, gpPlace), round its centre: [{ x, y, reach, power, colour }]. */
+export function agLights(d, read, readColour, time, aspect) {
+  if (!d.lights) return [];
+  const orbit = read(d.params.lightOrbit, 0.5);
+  const P = {
+    follow: 'none', lights: String(d.lights), emitSize: (orbit - 0.2) / 0.7, lightMotion: d.lightMotion, space: '2d', hands: 'off',
+    lightReach: read(d.params.lightReach, 0.3), lightPower: read(d.params.lightPower, 1.6),
+    lightColor: readColour(d.params.lightColor, [1, 0.55, 0.25]),
+  };
+  const cx = read(d.params.lightX, 0), cy = read(d.params.lightY, 0);
+  return gpPlace(P, time, null, aspect).lights.map(l => ({ x: l.x + cx, y: l.y + cy, reach: l.reach, power: l.power, colour: l.colour }));
 }

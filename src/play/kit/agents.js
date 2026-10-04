@@ -33,7 +33,7 @@ export const AG_GROUPS = 4;
 /** The fixed simulation step, seconds of simulated time. */
 export const AG_STEP = 1 / 60;
 /** Fixed steps one frame may take at most: a stalled frame drops the rest rather than freezing the page. */
-const AG_MAX_STEPS = 8;
+const AG_LAYER_MAX_STEPS = 8;
 /** gravity (all pairs): past this many agents only pairs within AG_FAR_PAIRS count, through the spatial hash. */
 const AG_PAIRS_ALL = 1200, AG_FAR_PAIRS = 0.4;
 /** Readings a layer reports (`<id>::<read>`), all 0..1. */
@@ -639,7 +639,7 @@ function agRevive(st, l, i, aspect) {
  *   zone(layerId)      a shape's zone ({ dist(x, y) }, negative inside), or null
  *   picture   { s, w, h } the kit's coarse RGBA grid, or null
  * Takes as many fixed steps as the accumulated time allows (at most
- * AG_MAX_STEPS). Afterwards st.reads holds the readings.
+ * AG_LAYER_MAX_STEPS). Afterwards st.reads holds the readings.
  */
 export function agStep(st, l, v, dt, aspect, makeRand, info) {
   const key = agKey(l);
@@ -656,11 +656,11 @@ export function agStep(st, l, v, dt, aspect, makeRand, info) {
     st.acc += Math.max(0, dt) * Math.max(0, v('speed'));
     const subs = Math.max(1, Math.min(4, Math.round(v('substeps') || 1)));
     let steps = 0;
-    while (st.acc >= AG_STEP && steps < AG_MAX_STEPS) {
+    while (st.acc >= AG_STEP && steps < AG_LAYER_MAX_STEPS) {
       for (let s = 0; s < subs; s++) agSubstep(st, rules, AG_STEP / subs, aspect, full);
       st.acc -= AG_STEP; st.steps++; steps++;
     }
-    if (steps >= AG_MAX_STEPS) st.acc = Math.min(st.acc, AG_STEP);
+    if (steps >= AG_LAYER_MAX_STEPS) st.acc = Math.min(st.acc, AG_STEP);
   }
   st.reads = agReadings(st, aspect, rules);
   return st;

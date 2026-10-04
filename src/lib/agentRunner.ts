@@ -33,14 +33,10 @@ import type { AgentDrawProgram, AgentGroupProgram, AgentParam, AgentsSpec, Agent
 import { agentDrawUniform, agentStateUniform, agentStepUniform, agentWindowUniform, trailStepUniforms, trailUniform } from '../nodes/definitions/agents';
 import { AG_BESSEL_UNIFORM, listenUniforms } from '../nodes/definitions/agentForces';
 import {
-  AG_MAX_STEPS, AG_OFFLINE_CHUNK, AG_STEP_HZ, agBeatLevel, agGovern, agGovernorState, agKeep, agLiveState, agLiveSteps, agRate, agStepTime, agStepsPerFrame,
-  agTargetStep, agTrailSize, agWindow, type AgLiveState,
+  AG_MAX_STEPS, AG_OFFLINE_CHUNK, AG_STEP_HZ, agDrawLook, agGovern, agGovernorState, agGroupState, agGroupSteps, agHear, agKeep, agLights, agLiveState,
+  agListenState, agRestartGroup, agStepTime, agStepWindow, agTrailSize, type AgGroupState, type AgListenState,
 } from '../play/kit/agentPlan.js';
-import {
-  GP_BESSEL_N, GP_BESSEL_W, GP_LEVELS, GP_PALETTES, gpBesselTable, gpLevelsPush, gpLevelsState, gpPlace, gpPlateListen, gpPlateSmooth, gpPlateState,
-  gpPlateTargets, gpPlateUniforms, gpRising, gpSoundState, gpSoundStep, gpUnitBrightness, gpUnitInk,
-  type GpLevels, type GpParams, type GpPlateState, type GpSound, type GpSoundInput,
-} from '../play/kit/gpuParticles.js';
+import { GP_BESSEL_N, GP_BESSEL_W, GP_LEVELS, gpBesselTable, type GpSoundInput } from '../play/kit/gpuParticles.js';
 import {
   AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_THUMB_DOTS_FRAG, AG_THUMB_DOTS_VERT, AG_TRAIL_FRAG,
 } from '../play/kit/agentShaders.js';
@@ -68,19 +64,14 @@ export function restartAgents(nodeId?: string): void {
   if (nodeId) restartRequests.add(nodeId); else restartAll = true;
 }
 
-/** What one listening node (Sound kick, Chladni) has heard so far: part of its group's simulation. */
-interface ListenState {
-  sound: GpSound; levels: GpLevels; levelTex: THREE.DataTexture;
-  shocks: Array<{ x: number; y: number; t0: number; s: number }>;
-  plate: GpPlateState;
-}
-interface GroupState {
-  key: string; side: number; rt: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget]; cur: 0 | 1; step: number; born: number;
-  live: AgLiveState; history: Array<[number, number]>; lastTarget: number;
-  /** Listening nodes' state, by their slug. */
-  listen: Map<string, ListenState>;
-  /** Emit's Burst: its last value (for the rising edge) and a burst waiting for the next step. */
-  burstEdge: Record<string, number>; burstPending: boolean;
+/** What one listening node (Sound kick, Chladni) has heard so far (kit/agentPlan.js), and its level history as a texture. */
+interface ListenState extends AgListenState { levelTex: THREE.DataTexture }
+/**
+ * A group's simulation: the schedule's state (kit/agentPlan.js agGroupState: step, births, the live
+ * clock, Burst and Start over edges, the listening nodes' state by slug) and its state textures.
+ */
+interface GroupState extends AgGroupState<ListenState> {
+  key: string; side: number; rt: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget]; cur: 0 | 1;
 }
 interface TrailState { key: string; w: number; h: number; rt: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget]; cur: 0 | 1 }
 interface DrawState { key: string; w: number; h: number; acc: THREE.WebGLRenderTarget; glow: THREE.WebGLRenderTarget[]; out: THREE.WebGLRenderTarget }
@@ -114,7 +105,7 @@ export class AgentTargets {
     if (s) { s.rt[0].dispose(); s.rt[1].dispose(); this.dropListen(s); }
     // State A and B; with per-walker state also C (species, memory, colour) and D (its deposit).
     const make = () => new THREE.WebGLRenderTarget(g.side, g.side, { ...STATE_OPTS, count: g.stateC ? 4 : 2 });
-    s = { key, side: g.side, rt: [make(), make()], cur: 0, step: 0, born: 0, live: agLiveState(), history: [], lastTarget: 0, listen: new Map(), burstEdge: {}, burstPending: false };
+    s = { ...(agGroupState() as AgGroupState<ListenState>), key, side: g.side, rt: [make(), make()], cur: 0 };
     this.clear(s.rt[0]); this.clear(s.rt[1]);
     this.renderer.setRenderTarget(null);
     this.groups.set(g.slug, s);
@@ -125,7 +116,7 @@ export class AgentTargets {
   restartGroup(s: GroupState): void {
     this.clear(s.rt[0]); this.clear(s.rt[1]);
     this.renderer.setRenderTarget(null);
-    s.step = 0; s.born = 0; s.history.length = 0; s.lastTarget = 0; s.burstPending = false;
+    agRestartGroup(s);
     this.dropListen(s);
   }
 
@@ -133,11 +124,11 @@ export class AgentTargets {
   listen(s: GroupState, slug: string): ListenState {
     let l = s.listen.get(slug);
     if (l) return l;
-    const levels = gpLevelsState();
-    const levelTex = new THREE.DataTexture(levels.levels, GP_LEVELS, 1, THREE.RedFormat, THREE.FloatType);
+    const st = agListenState();
+    const levelTex = new THREE.DataTexture(st.levels.levels, GP_LEVELS, 1, THREE.RedFormat, THREE.FloatType);
     levelTex.minFilter = THREE.NearestFilter; levelTex.magFilter = THREE.NearestFilter;
     levelTex.needsUpdate = true;
-    l = { sound: gpSoundState(), levels, levelTex, shocks: [], plate: gpPlateState() };
+    l = { ...st, levelTex };
     s.listen.set(slug, l);
     return l;
   }
@@ -445,6 +436,9 @@ export class AgentRunner {
     if (typeof p === 'string') { const v = this.host.uniforms()[p]?.value; return typeof v === 'number' && isFinite(v) ? v : fallback; }
     return fallback;
   }
+  /** read and readColour as the shared schedule calls them (kit/agentPlan.js). */
+  private reader = (p: unknown, fallback: number) => this.read(p as AgentParam, fallback);
+  private colourReader = (p: unknown, fallback: number[]) => this.readColour(p as AgentParam, fallback);
 
   private readColour(p: AgentParam | number[] | undefined, fallback: number[]): number[] {
     if (Array.isArray(p)) return p;
@@ -480,28 +474,12 @@ export class AgentRunner {
     for (const e of ready) {
       const g = e.spec;
       const s = targets.group(g);
-      // Emit's Burst (a trigger): each time it rises past 0.5, everyone is born again on the next step.
-      if (gpRising(s.burstEdge, 'burst', this.read(g.emit.burst, 0))) s.burstPending = true;
-      const spf = agStepsPerFrame(this.read(g.params.stepsPerFrame, 2));
-      const preroll = this.read(g.params.preroll, 0);
-      let steps: number;
-      if (o.live) {
-        // ↺ on the card, or the group's Start over trigger rising past 0.5 (a Play key, beat or rule): live only.
-        const restartTrigger = gpRising(s.burstEdge, 'restart', this.read(g.params.restart, 0));
-        if (restartAll || restartRequests.has(g.nodeId) || restartTrigger) { s.live = agLiveState(); }
-        s.live.step = s.step;
-        const r = agLiveSteps(s.live, o.time, spf, preroll, cap);
-        if (r.restart) { targets.restartGroup(s); restarted.add(g.slug); }
-        steps = r.steps;
-        const wanted = Math.max(0, r.target - s.lastTarget);
-        s.lastTarget = r.target;
-        stats.set(g.nodeId, { count: g.side * g.side, stepsPerFrame: spf, rate: agRate(s.history, r.restart ? wanted : steps, wanted || steps), step: s.step + steps });
-      } else {
-        const target = agTargetStep(o.time, spf, preroll);
-        if (target < s.step) { targets.restartGroup(s); restarted.add(g.slug); }
-        steps = Math.max(0, target - s.step);
-      }
-      plan.push({ e, s, steps, spf, preroll });
+      // The schedule (kit/agentPlan.js, shared with web pages): Burst, Start over, the live clock or the offline step.
+      const r = agGroupSteps(s, g, this.reader, { live: o.live, time: o.time, cap, restart: o.live && (restartAll || restartRequests.has(g.nodeId)) }, () => {
+        targets.restartGroup(s); restarted.add(g.slug);
+      });
+      if (o.live) stats.set(g.nodeId, { count: g.side * g.side, stepsPerFrame: r.spf, rate: r.rate, step: s.step + r.steps });
+      plan.push({ e, s, steps: r.steps, spf: r.spf, preroll: r.preroll });
     }
     if (o.live) { restartAll = false; restartRequests.clear(); }
 
@@ -533,11 +511,7 @@ export class AgentRunner {
         for (const p of stepping) {
           const g = p.e.spec;
           const s = p.s;
-          const n = g.side * g.side;
-          let win = agWindow(g.emit.mode, s.step, n, this.read(g.emit.rate, 0), s.born);
-          s.born = win.born;
-          // Burst: everyone born again at once, on the first step after it fired.
-          if (s.burstPending) { win = { start: 0, count: n, born: win.born }; s.burstPending = false; }
+          const win = agStepWindow(s, g, g.side * g.side, this.reader);
           (u[agentWindowUniform(g.slug)].value as THREE.Vector4).set(win.start, win.count, 0, 0);
           if (g.listeners.length) this.hear(targets, s, g, agStepTime(s.step, p.spf, p.preroll));
           u[agentStepUniform(g.slug)].value = s.step >>> 0;
@@ -662,62 +636,24 @@ export class AgentRunner {
    */
   private hear(targets: AgentTargets, s: GroupState, g: AgentGroupProgram, time: number): void {
     const u = this.host.uniforms();
-    const dt = 1 / AG_STEP_HZ;
     for (const l of g.listeners) {
       const st = targets.listen(s, l.slug);
       const n = listenUniforms(l.slug);
-      const heard = l.soundFrom !== 'graph' ? this.host.sound?.(l.soundFrom) ?? null : null;
-      const level = Math.max(0, this.read(l.params.level, 0)) + agBeatLevel(time, this.read(l.params.beat, 0));
-      gpSoundStep(st.sound, heard ?? { level: Math.min(2, level) }, dt);
-      if (heard) st.sound.level = Math.min(2, st.sound.level + level);
-      else st.sound.bass = st.sound.mid = st.sound.treble = st.sound.level;
-      (u[n.sound].value as THREE.Vector4).set(st.sound.level, st.sound.bass, st.sound.treble, st.sound.onset);
+      // What it hears this step (kit/agentPlan.js agHear, shared with web pages), into its uniforms.
+      const r = agHear(st, l, this.reader, this.host.sound, time, s.step === 0);
+      (u[n.sound].value as THREE.Vector4).fromArray(r.sound);
       if (l.kind === 'kick') {
-        // A hit sends a ring out from where the centre is now (the last four stay in flight).
-        if (st.sound.hit) {
-          st.shocks.unshift({ x: this.read(l.params.x, 0), y: this.read(l.params.y, 0), t0: time, s: 0.4 + st.sound.onset });
-          st.shocks.length = Math.min(st.shocks.length, 4);
-        }
         const sv = u[n.shocks].value as THREE.Vector4[];
-        for (let i = 0; i < 4; i++) { const k = st.shocks[i]; if (k) sv[i].set(k.x, k.y, k.t0, k.s); else sv[i].set(0, 0, 0, 0); }
-        gpLevelsPush(st.levels, st.sound.level, dt);
+        for (let i = 0; i < 4; i++) sv[i].fromArray(r.shocks!, i * 4);
         st.levelTex.needsUpdate = true;
         u[n.levels].value = st.levelTex;
         continue;
       }
-      // A plate: its figure from N and M, or stepped on by the sound, gliding between figures.
-      const shape = l.shape ?? 'square';
-      const P = {
-        modeFrom: l.modeFrom ?? 'manual', modeN: this.read(l.params.modeN, 3), modeM: this.read(l.params.modeM, 5),
-        modes: this.read(l.params.modes, 1), plateFreq: this.read(l.params.plateFreq, 1), plateWeights: this.read(l.params.plateWeights, 0.5),
-      } as GpParams;
-      let want = null as ReturnType<typeof gpPlateTargets>;
-      if (P.modeFrom === 'sound') {
-        const bands = gpPlateListen(st.plate, { spectrum: heard?.freq ? heard : null, level: st.sound.level, hit: st.sound.hit, dt });
-        want = gpPlateTargets(P, shape, bands);
-        if (!want && !st.plate.modes.length) want = gpPlateTargets(P, shape, null);
-      } else want = gpPlateTargets(P, shape, null);
-      gpPlateSmooth(st.plate, want, dt, s.step === 0);
-      const pu = gpPlateUniforms(st.plate.modes, shape);
       const mv = u[n.plateModes].value as THREE.Vector4[];
-      for (let i = 0; i < 8; i++) mv[i].fromArray(pu.values, i * 4);
-      u[n.plateCount].value = pu.count;
-      // Shake: the slider, harder with the level and on every hit (the Particles node's rule).
-      u[n.plateShake].value = this.read(l.params.shake, 0.6) * (0.6 + 0.8 * Math.min(st.sound.level, 1.5) + 1.2 * st.sound.onset);
+      for (let i = 0; i < 8; i++) mv[i].fromArray(r.modes!, i * 4);
+      u[n.plateCount].value = r.count;
+      u[n.plateShake].value = r.shake;
     }
-  }
-
-  /** A Draw's lights at `time`: the Particles node's (gpPlace), round its centre. */
-  private lightsFor(d: AgentDrawProgram, time: number, aspect: number): Array<{ x: number; y: number; reach: number; power: number; colour: number[] }> {
-    if (!d.lights) return [];
-    const orbit = this.read(d.params.lightOrbit as AgentParam, 0.5);
-    const P = {
-      follow: 'none', lights: String(d.lights), emitSize: (orbit - 0.2) / 0.7, lightMotion: d.lightMotion, space: '2d', hands: 'off',
-      lightReach: this.read(d.params.lightReach as AgentParam, 0.3), lightPower: this.read(d.params.lightPower as AgentParam, 1.6),
-      lightColor: this.readColour(d.params.lightColor, [1, 0.55, 0.25]),
-    } as unknown as GpParams;
-    const cx = this.read(d.params.lightX as AgentParam, 0), cy = this.read(d.params.lightY as AgentParam, 0);
-    return gpPlace(P, time, null, aspect).lights.map(l => ({ x: l.x + cx, y: l.y + cy, reach: l.reach, power: l.power, colour: l.colour }));
   }
 
   private draw(s: DrawState, d: AgentDrawProgram, g: AgentGroupProgram, gs: GroupState, aspect: number, time: number): THREE.WebGLRenderTarget {
@@ -728,40 +664,30 @@ export class AgentRunner {
     renderer.clear(true, false, false);
     renderer.setClearColor(prevColor, prevAlpha);
     const n = g.side * g.side;
-    const ink = d.style === 'ink';
-    const streak = Math.max(0, this.read(d.params.streak as AgentParam, 0.25));
-    const lines = d.style === 'streaks' || (ink && streak > 0);
-    let size = Math.max(0.1, this.read(d.params.size as AgentParam, 1.5));
-    let bright = this.read(d.params.brightness as AgentParam, 0.5);
-    if (d.scaleBy === 'crowd') {
-      // The Particles node's rule: sizes in pixels of a 720-pixel-high picture, smaller for big pools
-      // (fill rate), and each walker's light (ink) its share, so the cloud looks the same at every count.
-      size = Math.min(size, n > 1100000 ? 3 : n > 300000 ? 8 : 32);
-      bright *= ink ? gpUnitInk(n, size) : gpUnitBrightness(n, size);
-      size *= Math.max(0.5, s.h / 720);
-    }
+    // The look (kit/agentPlan.js agDrawLook, shared with web pages): size, brightness, points or lines, colours.
+    const look = agDrawLook(d, n, s.h, this.reader, this.colourReader);
+    const { ink, lines } = look;
     const du = this.drawMat.uniforms;
     du.u_a.value = gs.rt[gs.cur].textures[0];
     du.u_b.value = gs.rt[gs.cur].textures[1];
     du.u_c.value = g.stateC ? gs.rt[gs.cur].textures[2] : null;
     du.u_stateC.value = g.stateC ? 1 : 0;
     du.u_side.value = g.side; du.u_species.value = g.species; du.u_aspect.value = aspect;
-    du.u_colorBy.value = ['single', 'species', 'speed', 'heading', 'age', 'agent'].indexOf(d.colorBy);
-    du.u_size.value = size;
-    du.u_bright.value = bright;
-    du.u_speedRef.value = this.read(d.params.speedRef as AgentParam, 0.5);
+    du.u_colorBy.value = look.colorBy;
+    du.u_size.value = look.size;
+    du.u_bright.value = look.bright;
+    du.u_speedRef.value = look.speedRef;
     du.u_prim.value = lines ? 1 : 0;
-    du.u_thread.value = lines ? streak * 0.12 : 0;
+    du.u_thread.value = look.thread;
     du.u_ink.value = ink ? 1 : 0;
-    du.u_fade.value = d.fade ? 1 : 0;
-    const pal = d.palette === 'ab' ? undefined : GP_PALETTES[d.palette];
-    du.u_usePal.value = d.palette === 'ab' ? 0 : 1;
-    du.u_rainbow.value = d.palette !== 'ab' && !pal ? 1 : 0;
-    if (pal) (du.u_pal.value as THREE.Vector3[]).forEach((v, i) => v.fromArray(pal[i]));
-    (du.u_colA.value as THREE.Vector3).fromArray(this.readColour(d.params.colorA, [1, 0.75, 0.35]));
-    (du.u_colB.value as THREE.Vector3).fromArray(this.readColour(d.params.colorB, [0.25, 0.55, 1]));
+    du.u_fade.value = look.fade ? 1 : 0;
+    du.u_usePal.value = look.usePal ? 1 : 0;
+    du.u_rainbow.value = look.rainbow ? 1 : 0;
+    if (look.pal) (du.u_pal.value as THREE.Vector3[]).forEach((v, i) => v.fromArray(look.pal![i]));
+    (du.u_colA.value as THREE.Vector3).fromArray(look.colA);
+    (du.u_colB.value as THREE.Vector3).fromArray(look.colB);
     (du.u_viewSize.value as THREE.Vector2).set(s.w, s.h);
-    const lights = this.lightsFor(d, time, aspect);
+    const lights = agLights(d, this.reader, this.colourReader, time, aspect);
     const setLights = (uu: Record<string, THREE.IUniform>) => {
       uu.u_lights.value = lights.length;
       (uu.u_light.value as THREE.Vector4[]).forEach((v, i) => { const l = lights[i]; if (l) v.set(l.x, l.y, l.reach, l.power); else v.set(0, 0, 1, 0); });
@@ -799,8 +725,8 @@ export class AgentRunner {
     cu.u_acc.value = s.acc.texture; cu.u_g1.value = d1.texture; cu.u_g2.value = d2.texture;
     (cu.u_size.value as THREE.Vector2).set(s.w, s.h);
     cu.u_aspect.value = aspect;
-    cu.u_glow.value = this.read(d.params.glow as AgentParam, 1);
-    cu.u_halo.value = this.read(d.params.halo as AgentParam, 0.5);
+    cu.u_glow.value = look.glow;
+    cu.u_halo.value = look.halo;
     cu.u_ink.value = ink ? 1 : 0;
     setLights(cu);
     this.pass(this.composeMat, s.out);

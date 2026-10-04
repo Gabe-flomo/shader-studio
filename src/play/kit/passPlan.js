@@ -1,9 +1,10 @@
 // passPlan.js — the frame schedule for Pass nodes (docs/pass-node-plan.md).
 //
-// Pure: no GPU. The app (src/lib/passRunner.ts) uses it today; the web
-// runtime will share it once pages run passes (phase 5), the way Finish and
-// the JFA share code between hosts. A pass is { slug, scale, live, previous }
-// from the compile (compiler/types.ts PassProgram), already in drawing order.
+// Pure: no GPU. The app (src/lib/passRunner.ts, three.js) and web pages
+// (kit/passHost.js, the page's own WebGL2) both run their passes by it, the
+// way Finish and the JFA share code between hosts, so the two can't drift.
+// A pass is { slug, scale, live, previous, afterAgents? } from the compile
+// (compiler/types.ts PassProgram), already in drawing order.
 
 /** A pass's texture size for a picture of w × h: scale × the picture, at least 1 × 1. */
 export function ppSize(w, h, scale) {
@@ -14,6 +15,16 @@ export function ppSize(w, h, scale) {
 /** The passes drawn this frame, in order: those the picture needs (directly or through other passes). */
 export function ppDrawn(passes) {
   return passes.filter(p => p.live);
+}
+
+/**
+ * Of the passes drawn this frame, those a stage draws, in order. Without a stage (a graph
+ * without agents) every one; with agents the frame draws them in two stages: 'pre' (before
+ * the agents step: the passes the agents read) and 'post' (those that read a Trail or a
+ * Draw agents, so they draw after it).
+ */
+export function ppStaged(drawn, stage) {
+  return stage ? drawn.filter(p => (stage === 'post') === !!p.afterAgents) : drawn;
 }
 
 /** One picture pixel in a texture's 0–1 coordinates (the `_px` uniforms). */

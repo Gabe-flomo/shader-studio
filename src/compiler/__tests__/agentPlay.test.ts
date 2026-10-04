@@ -16,11 +16,11 @@ import { n } from '../../store/graphBuilder';
 import { collectPlayCandidates } from '../../play/playControls';
 import { followHand, canFollowHand, FOLLOW_HAND_ANCHOR } from '../../play/followHand';
 import { agentPinnedRows } from '../../nodes/agentPins';
-import { unsupportedFeatures } from '../../play/exportHtml';
+import { webInputFrom } from '../../play/webInput';
 import { readsMotionMap } from '../../play/motionTexture';
 import { AgentAttractNode, AgentVortexNode } from '../../nodes/definitions/agentForces';
 import { AgentEmitNode } from '../../nodes/definitions/agents';
-import { usesHands, type PlayRecord } from '../../types/play';
+import { emptyPlayRecord, usesHands, type PlayRecord } from '../../types/play';
 import type { GraphNode, SubgraphData } from '../../types/nodeGraph';
 
 const inside = (g: GraphNode) => (g.params.subgraph as SubgraphData).nodes;
@@ -116,14 +116,15 @@ describe('hands into Target sockets', () => {
 });
 
 describe('Motion (texture)', () => {
-  it('compiles in the picture, reads the shared map and is listed as not on web pages', () => {
+  it('compiles in the picture, reads the shared map, and web pages fill it (P5)', () => {
     const nodes = [n('motionMap', 'mm', 0, 0, { gain: 2 }), n('output', 'out', 400, 0, {}, { color: ['mm', 'amount'] })];
     const r = compileGraph({ nodes });
     expect(r.success).toBe(true);
     expect(readsMotionMap(r.fragmentShader)).toBe(true);
     expect(r.fragmentShader).toContain('uniform sampler2D u_motionMap;');
-    expect(unsupportedFeatures({ liveUniforms: {}, motionMap: true })).toContain('Motion (texture) nodes: the page reads them as still');
-    expect(unsupportedFeatures({ liveUniforms: {} })).toEqual([]);
+    const { input, missing } = webInputFrom(r, emptyPlayRecord(), { title: 'x', aspect: 'free' });
+    expect(missing).toEqual([]);
+    expect(input.motionMap).toBe('u_motionMap');
   });
 
   it('goes into an Agents group program: Emit Picture born where it moves', () => {

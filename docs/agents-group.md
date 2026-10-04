@@ -110,6 +110,15 @@ Steps per frame also sets the pace: one step is 1/60 s of simulated time, so 2 s
 ## Limits for now
 
 - Up to 4 Agents groups and 4 Trail fields per graph; 4 species; 16 textures per program (each group counts its two state textures).
-- Exported web pages don't run agents yet: Export warns, and the page draws the picture without them.
-- Exported web pages read Motion (texture) as still (Export says so).
 - Not yet: 3D; readings (alive share, centroid) back into Play. See docs/agents-plan.md for the phases.
+
+## On web pages
+
+Exported pages (Export → web page or embed, and Present) run Agents groups as the app does: every group's rule, Deposit, Trail fields (with Add / Block), Draw agents (points, glow, streaks, ink, lights), species and per-walker state, steps per frame and falling behind under load, Seed and Pre-roll. The page runs the app's own schedule and shaders, so on the same machine a page's render of a moment is the app's render of it, bit for bit (the simulation state; the picture differs only by the app's dithering).
+
+- **Sound kick and Chladni**: Level and Beat work everywhere. Mic works once the visitor clicks Listen to audio on the page. Audio engine and Engine track: only the page's Granulator racks are heard, and only while they play (notes from MIDI or pads); the page doesn't play the tape (clips), and other instruments don't play on pages, so those tracks are silent there.
+- **Hands**: Follow a hand works through the page's own mappings: the pointer moves the place, and a tracked hand takes over once one is seen, when the page carries hand tracking (Include hand tracking, or a Video layer's analysed hands). Without it the pointer keeps it.
+- **Motion (texture)** reads the page's first Motion layer (a frame late, as in the app). A page without a Motion layer reads 0.
+- **Start over** and **Burst** work from the page's keys and rules as in Play.
+- Pages with agents draw at one device pixel per CSS pixel (as the app does), and need WebGL2 with float render targets; without them the page draws the picture without the agents and says so in the browser console.
+- A million walkers run at 60 fps on an M3 Pro in Chrome (the engine about 10–13 ms a frame at 1080p, as in the app).

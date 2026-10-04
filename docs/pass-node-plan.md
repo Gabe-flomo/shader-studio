@@ -1,6 +1,16 @@
 # Pass node: render to texture (plan, 2026-10-03)
 
-**Status:** phases 0, 1, 2 and 4 built (Pass node, Sample / Edges / Blur / Glow / Displace (texture), Previous feedback, live and offline rendering, the Passes 1 · Edge glow example). Phases 3, 5 and 6 are next.
+**Status:** phases 0, 1, 2, 4 and 5 built (Pass node, Sample / Edges / Blur / Glow / Displace (texture), Previous feedback, live and offline rendering, the Passes 1 · Edge glow example, and exported web pages run them: see "What shipped (phase 5)" below). Phases 3 and 6 are next.
+
+## What shipped (phase 5, websites, 2026-10-04)
+
+- **The bundle** gains `graphPasses` only when the graph has a Pass node (`webInput.ts webPasses`): each pass's program, scale, format, filter, wrap, Previous, live and `afterAgents`, plus the sampler names it fills (`u: { tex, prev }`, from `nodes/definitions/passes.ts`, so the page never builds a uniform name of its own). Node lists stay in the app. Every other bundle serializes as before: the golden bundle snapshots are unchanged. `unsupportedFeatures` no longer lists Pass nodes.
+- **The page's host** is `play/kit/passHost.js` (`phCreate`, inlined into every page with the kit as `SSKit.passes`): raw WebGL2 on the page's own context, no three.js. Its schedule is `kit/passPlan.js`, the same module the app's `lib/passRunner.ts` runs: which passes draw (`ppDrawn`), in what order and stage (`ppStaged`, new, now used by the app too), their sizes (`ppSize`), `_px` (`ppPixel`) and when targets are made again (`ppTargetKey`: a resize or a settings change makes them again, black). Previous ping-pongs as in the app, and a new render (`renderAt`) clears it (`clearPrevious`), as an offline render does in the app.
+- **One uniform table, as in the app.** Each pass program is compiled as three.js compiles a ShaderMaterial (the GLSL 1 → 3 defines and its precisions) with the compile's vertex shader, drawn on the quad the app draws (three's `PlaneGeometry(2, 2)`: its diagonal and vertex order, so vUv interpolates exactly as in the app; Agents P5 needed it bit for bit), and with every input the picture has (`bindPictureInputs`: Time, the mouse, the uniforms Play drives, images, videos, Data textures, feedback, echo, the pad grid), `u_resolution` set to the pass's own size. The pass samplers and their `_px` are two small maps the runtime binds in every program it draws (empty, and so no work, without Pass nodes). Samplers nothing feeds read blank, as the app's empty texture. Data nodes, Text and the Pad Grid in a pass program are found by scanning every program's source, not only the picture's.
+- **Page behaviour.** A page with Pass nodes draws at one device pixel per CSS pixel, as feedback pages do and as the app does. A pass with Previous keeps the page drawing like feedback (paused, it redraws only when something changes), and reduced motion's still frame warms it up like feedback. Without WebGL2 the page draws the picture with the pass samplers blank (and says so in the console).
+- **Parity** (`src/play/__tests__/webPasses.test.ts`): the app's `PassRunner` and the page's host, each on a recording stand-in for its GPU, draw the same passes into the same textures at the same sizes with the same `u_resolution` and Previous, frame after frame, through a resize, a cleared render and the two agents stages, for Passes 1 · Edge glow and a feedback graph (Previous at ½, an 8-bit nearest/repeat ¼ pass as a map, Displace and Glow). In the browser (M3 Pro, headless Chrome on ANGLE Metal): the app's offline render and the exported page's `renderAt` after 2 s at 960 × 540 differ by at most 2 levels of 255 (the app's readback dither; mean 0.26 for Edge glow, 0.18 for the feedback graph), and the page running live shows the same picture.
+- **Not in pages yet:** a Particles node reading a texture inside a pass program (the app doesn't either); phase 3's inspection is app-only by nature.
+
 
 ## In plain words
 
@@ -144,7 +154,7 @@ This depends on the GPU Particles node (on `claude/release-oct-particles`, not o
 
 - The bundle gains `passes.graphPasses` **only when present**. The existing conditional spread stays as is, so bundles without passes serialize the same (golden test).
 - The schedule logic is pure JS in `src/play/kit/passPlan.js`: pass order, sizes from scale, which passes are live, ping-pong and Previous reset rules. The app's `passRunner.ts` and `play-runtime.js` both import it, the way Finish and JFA share code between hosts. The runtime already compiles one graph program and binds its uniform table. It compiles N programs and binds the same table to each.
-- Until the runtime phase ships, `unsupportedFeatures` lists "Pass nodes (render to texture)", so export warns rather than silently drawing something different.
+- Until the runtime phase ships, `unsupportedFeatures` lists "Pass nodes (render to texture)", so export warns rather than silently drawing something different. (Phase 5 shipped: the line is gone.)
 - A parity test runs the same small pass graph through `passPlan.js` in both hosts' wrappers and compares the schedule. A pixel test in the browser sweep compares app and exported page.
 
 ### Performance budget
@@ -177,7 +187,7 @@ This depends on the GPU Particles node (on `claude/release-oct-particles`, not o
 2. **Live + offline rendering.** `passRunner.ts` and `passPlan.js`. Pass visible, plus Sample, Edges and Blur (texture), the card thumbnail, texture wires and the boundary chip. `renderAtTime` support. Export warns via `unsupportedFeatures`. Example 1 added.
 3. **Inspecting.** Probes, eye preview and scopes in pass programs. Per-pass Performance rows. Node-cost measurer over the program list. The Show passes toggle.
 4. **More nodes.** Glow, Displace, the `previous` output (feedback). Examples: glow edges, reaction-diffusion at ½ Scale.
-5. **Websites.** Runtime runs passes. Removed from `unsupportedFeatures`. Parity test plus browser sweep.
+5. **Websites.** Runtime runs passes. Removed from `unsupportedFeatures`. Parity test plus browser sweep. *(Built: see What shipped.)*
 6. **Particles from a Pass.** After GPU Particles is on main: `emitFrom`, the engine's birth sampling, Example 2.
 7. **Later.** Texture ports through plain groups. "Repeat N times" passes (wide separable blur, JFA, simulations). Texture Input or Video as a direct texture source, without a copy Pass.
 

@@ -36,7 +36,7 @@ export interface SourceFeatures {
   usesEcho: boolean;
   /** Reads a Data node's dataset (not carried into pages yet). */
   usesData?: boolean;
-  /** Has Pass nodes (render to texture; not run by pages yet). */
+  /** Has Pass nodes (render to texture; pages run them since Pass phase 5). */
   passes?: boolean;
   /** Has an Agents group (not run by pages yet: docs/agents-plan.md, P5). */
   agents?: boolean;
@@ -351,6 +351,37 @@ function parseWebDatasets(v: unknown): WebDatasets | undefined {
   return Object.keys(out).length ? out : undefined;
 }
 
+/**
+ * Plain data from a snapshot's program lists (Pass programs, the Agents family): kept as
+ * it was written, bounded like the picture's own shader (strings ≤ 2 MB, arrays ≤ 4096,
+ * nesting ≤ 12). Anything that isn't JSON data (or past a bound) drops the whole value.
+ */
+function boundedData(v: unknown, depth = 0): unknown {
+  if (depth > 12) return undefined;
+  if (v === null || typeof v === 'boolean') return v;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+  if (typeof v === 'string') return v.length <= 2_000_000 ? v : undefined;
+  if (Array.isArray(v)) {
+    if (v.length > 4096) return undefined;
+    const out: unknown[] = [];
+    for (const x of v) { const y = boundedData(x, depth + 1); if (y === undefined) return undefined; out.push(y); }
+    return out;
+  }
+  if (isObj(v)) {
+    const keys = Object.keys(v);
+    if (keys.length > 4096) return undefined;
+    const out: Record<string, unknown> = {};
+    for (const k of keys) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') return undefined;
+      const y = boundedData(v[k], depth + 1);
+      if (y === undefined) { if (v[k] === undefined) continue; return undefined; }
+      out[k] = y;
+    }
+    return out;
+  }
+  return undefined;
+}
+
 function parseBundle(v: unknown): PlayHtmlInput | null {
   if (!isObj(v)) return null;
   const fragmentShader = typeof v.fragmentShader === 'string' && v.fragmentShader.length > 0 && v.fragmentShader.length < 2_000_000 ? v.fragmentShader : null;
@@ -364,6 +395,12 @@ function parseBundle(v: unknown): PlayHtmlInput | null {
   if (media) out.media = media;
   const datasets = parseWebDatasets(v.datasets);
   if (datasets) out.datasets = datasets;
+  // Pass programs and the Agents family travel as the export wrote them (webInput.ts), so the page can run them.
+  const graphPasses = Array.isArray(v.graphPasses) ? boundedData(v.graphPasses) : undefined;
+  if (graphPasses) out.graphPasses = graphPasses as PlayHtmlInput['graphPasses'];
+  const agents = isObj(v.agents) ? boundedData(v.agents) : undefined;
+  if (agents) out.agents = agents as PlayHtmlInput['agents'];
+  if (typeof v.motionMap === 'string' && /^[A-Za-z_]\w{0,63}$/.test(v.motionMap)) out.motionMap = v.motionMap;
   return out;
 }
 

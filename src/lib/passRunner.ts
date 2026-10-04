@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import type { PassProgram } from '../compiler/types';
 import { passPrevUniform, passPxUniform, passUniform } from '../nodes/definitions/passes';
-import { ppDrawn, ppPixel, ppSize, ppTargetKey } from '../play/kit/passPlan.js';
+import { ppDrawn, ppPixel, ppSize, ppStaged, ppTargetKey } from '../play/kit/passPlan.js';
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
 
 /** Pass cards register a canvas here (by node id); the live runner draws their thumbnails into it. */
@@ -223,9 +223,8 @@ export class PassRunner {
     }
     const res = u.u_resolution?.value as THREE.Vector2 | undefined;
     const rx = res?.x ?? w, ry = res?.y ?? h;
-    for (const d of drawn) {
-      // With agents (lib/agentRunner.ts) the frame draws passes in two stages: before the agents step, and after it.
-      if (stage && (stage === 'post') !== !!d.afterAgents) continue;
+    // With agents (lib/agentRunner.ts) the frame draws passes in two stages: before the agents step, and after it.
+    for (const d of ppStaged(drawn, stage)) {
       const t = targets.get(d.slug)!;
       const e = d.entry;
       if (!e.ready || e.failed) { u[passUniform(d.slug)].value = null; continue; }
