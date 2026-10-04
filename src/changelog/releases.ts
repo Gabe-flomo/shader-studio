@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.15',
+    date: '2026-10-04',
+    title: 'Agents in Play: hands, sound and motion',
+    highlights: [
+      { area: 'Studio', text: 'Every slider inside an Agents group is a Play control: map MIDI, LFOs, readers or a null to it, or pin it to the group card. The card shows the walkers live.' },
+      { area: 'Studio', text: 'Sound from on the Agents group: the mic, the Audio engine or one of its tracks drives every Sound kick and Chladni inside.' },
+      { area: 'Studio', text: 'Walkers follow a hand: set Attract to a hand or null, then Follow a hand in Play. Motion (texture) lets them be born or fed where things move.' },
+      { area: 'Play', text: 'Example: Agents in Play, a million particles following your hand and a beat.' },
+    ],
+  },
+  {
     id: '2026.10.14',
     date: '2026-10-04',
     title: 'Agents: species, food and walls',
