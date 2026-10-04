@@ -7,6 +7,7 @@ import { EXAMPLE_GRAPHS } from '../exampleGraphs';
 import { EXAMPLE_FOLDERS, EXAMPLE_INDEX } from '../exampleIndex';
 import { PLAY_EXAMPLE_KEYS } from '../playExampleIndex';
 import type { GraphNode } from '../../types/nodeGraph';
+import { slimeMoldPreset } from '../agentExamples';
 import { parseActionTarget, parseLayerTarget, parsePlayRecord } from '../../types/play';
 import { parseFinishTarget } from '../../types/playFinish';
 import { collectPlayCandidates } from '../../play/playControls';
@@ -130,6 +131,24 @@ describe('bundled examples', () => {
       });
     }
     expect(bad).toEqual([]);
+  });
+
+  it('every node of an Agents example or preset has a plain-language note (docs/agents-plan.md §12)', () => {
+    // The user's rule for the Agents family: a preset explains itself, node by node, inside the group too.
+    const AGENTS = new Set(['agentsGroup', 'trailField', 'drawAgents', 'agentDeposit', 'agentEmit']);
+    const isAgents = (nodes: GraphNode[]) => { let hit = false; walk(nodes, n => { if (AGENTS.has(n.type)) hit = true; }); return hit; };
+    const agentKeys = keys.filter(k => isAgents(EXAMPLE_GRAPHS[k].nodes));
+    expect(agentKeys).toContain('slimeMold');
+    const missing: string[] = [];
+    const check = (label: string, nodes: GraphNode[]) => walk(nodes, n => {
+      const note = n.params?.__comment;
+      if (typeof note !== 'string' || note.trim().length < 20) missing.push(`${label}: ${n.id} (${n.type})`);
+    });
+    for (const k of agentKeys) check(k, EXAMPLE_GRAPHS[k].nodes);
+    // The Slime mold starter in the node browser builds the same nodes with fresh ids.
+    let i = 0;
+    check('slimeMoldPreset', slimeMoldPreset(() => `p${i++}`, { x: 0, y: 0 }).nodes);
+    expect(missing).toEqual([]);
   });
 
   it('the field-socket combos compile their shapes as field functions (one per wired socket)', () => {

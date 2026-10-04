@@ -27,6 +27,86 @@ export interface PassProgram {
   live: boolean;
   /** The graph nodes compiled into this program (not counting upstream Pass nodes it samples). */
   nodeIds: string[];
+  /**
+   * Only in a graph with agents: it samples a Trail or Draw agents (directly or
+   * through other passes), so it draws after the agents step; otherwise before.
+   */
+  afterAgents?: boolean;
+}
+
+/**
+ * A node's settings as the agents engine reads them: a number, or the name of
+ * the uniform a slider (Play control, mapping) writes. Read through the shared
+ * uniform table each frame, so moving a slider never recompiles.
+ */
+export type AgentParam = number | string;
+
+/** One Agents group's update shader (compiler/agentGraph.ts, docs/agents-plan.md). */
+export interface AgentGroupProgram {
+  nodeId: string;
+  /** Its slug: state samplers u_agA_<slug> / u_agB_<slug>, u_agStep_<slug>, u_agWin_<slug>. */
+  slug: string;
+  label: string;
+  /** GLSL 3, two outputs (state A and B); runs over the state texture, one fragment per agent. */
+  fragmentShader: string;
+  /** Side of the state texture: count = side². */
+  side: number;
+  species: number;
+  /** stepsPerFrame, seed, preroll. */
+  params: Record<string, AgentParam>;
+  /** How the birth windows go: everyone at step 0 (fill), or `rate` a second. */
+  emit: { mode: 'fill' | 'rate'; rate: AgentParam };
+  /** Slugs of the Trails and Passes its update shader samples. */
+  readsTrails: string[];
+  readsPasses: string[];
+  /** The picture needs it (directly or through a trail, drawing or pass). */
+  live: boolean;
+  /** Graph nodes compiled into it (inside and outside the group). */
+  nodeIds: string[];
+}
+
+/** A Deposit: one group's walkers drawn as points into one Trail, every step. */
+export interface AgentDepositProgram {
+  nodeId: string;
+  slug: string;
+  /** Slugs of its group and its Trail. */
+  group: string;
+  trail: string;
+  params: Record<string, AgentParam>;
+}
+
+/** A Trail field: a ping-pong texture that spreads and fades every step. */
+export interface AgentTrailProgram {
+  nodeId: string;
+  slug: string;
+  label: string;
+  /** A share of the picture, or a fixed number of rows (the aspect follows the picture). */
+  scale: number | null;
+  rows: number | null;
+  edges: 'wrap' | 'clamp';
+  /** diffuse, halfLife. */
+  params: Record<string, AgentParam>;
+  live: boolean;
+}
+
+/** A Draw agents node: its group's walkers drawn into a texture each frame. */
+export interface AgentDrawProgram {
+  nodeId: string;
+  slug: string;
+  group: string;
+  style: 'points' | 'glow';
+  colorBy: 'single' | 'species' | 'speed' | 'heading';
+  /** size, brightness, glow, colorA, colorB. */
+  params: Record<string, AgentParam | number[]>;
+  live: boolean;
+}
+
+/** Everything the agents engine runs for a graph (present only when it has an Agents-family node). */
+export interface AgentsSpec {
+  groups: AgentGroupProgram[];
+  deposits: AgentDepositProgram[];
+  trails: AgentTrailProgram[];
+  draws: AgentDrawProgram[];
 }
 
 export interface CompilationResult {
@@ -97,6 +177,12 @@ export interface CompilationResult {
    * picture's program, which samples them.
    */
   passes?: PassProgram[];
+  /**
+   * The Agents family's programs (compiler/agentGraph.ts). Present only when
+   * the graph has an Agents-family node; `fragmentShader` is then the final
+   * picture's program, which samples the trails and drawings.
+   */
+  agents?: AgentsSpec;
 }
 
 export const VERTEX_SHADER = `varying vec2 vUv;

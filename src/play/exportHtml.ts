@@ -170,6 +170,8 @@ export interface GraphFeatures {
   usesData?: boolean;
   /** Has Pass nodes (render to texture): the page doesn't run them yet (docs/pass-node-plan.md, phase 5). */
   passes?: boolean;
+  /** Has an Agents group: the page doesn't run agents yet (docs/agents-plan.md, phase P5). */
+  agents?: boolean;
 }
 
 /**
@@ -182,6 +184,7 @@ export function unsupportedFeatures(f: GraphFeatures): string[] {
   const out: string[] = [];
   if (Object.keys(f.liveUniforms).length) out.push('MIDI Input node outputs');
   if (f.passes) out.push('Pass nodes (render to texture): the page draws the final picture without them');
+  if (f.agents) out.push('Agents groups: the page draws the picture without them');
   return out;
 }
 

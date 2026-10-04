@@ -138,6 +138,7 @@ export { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGB
 // GPU Particles (the engine in play/kit/gpuParticles.js)
 export { GpuParticlesNode } from './gpuParticles';
 export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode } from './passes';
+export { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, DrawAgentsNode, SlimeMoldPresetNode } from './agents';
 
 // Math
 export {
@@ -266,6 +267,7 @@ import {
 import { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGBToCMYKNode, CMYKHalftoneNode } from './halftone';
 import { GpuParticlesNode } from './gpuParticles';
 import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode } from './passes';
+import { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, DrawAgentsNode, SlimeMoldPresetNode } from './agents';
 
 export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Sources
@@ -463,6 +465,20 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   blurTexture: BlurTextureNode,
   glowTexture: GlowTextureNode,
   displaceTexture: DisplaceTextureNode,
+  // Agents (slime mold and walkers built from nodes): docs/agents-plan.md
+  agentsGroup: AgentsGroupNode,
+  agentInputs: AgentInputsNode,
+  agentOutput: AgentOutputNode,
+  agentStepOut: AgentStepOutNode,
+  agentSense: AgentSenseNode,
+  agentSteer: AgentSteerNode,
+  agentMove: AgentMoveNode,
+  agentBySpecies: AgentBySpeciesNode,
+  agentEmit: AgentEmitNode,
+  agentDeposit: AgentDepositNode,
+  trailField: TrailFieldNode,
+  drawAgents: DrawAgentsNode,
+  slimeMoldPreset: SlimeMoldPresetNode,
   // 3D / Volumetric
   raymarch3d: RaymarchNode,
   volumeClouds: VolumeCloudsNode,

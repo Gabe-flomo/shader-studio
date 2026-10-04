@@ -27,7 +27,7 @@ const BY_ACCENT: Record<string, Accent> = {
   'Post Processing': 'red', Loops: 'sky', '2D Primitives': 'yellow', Combiners: 'mauve', Spaces: 'flamingo', Grid: 'sky',
   Field: 'sapphire', Shapers: 'yellow', Science: 'teal', Fractals: 'mauve', Output: 'overlay0', '3D Primitives': 'pink',
   '3D Transforms': 'pink', '3D Boolean Ops': 'sky', '3D Fractals': 'pink', Animation: 'lavender', Conditionals: 'flamingo',
-  Utility: 'overlay0', Particles: 'yellow', 'Particles & Fields': 'yellow', SDF: 'pink', 'Group Presets': 'yellow',
+  Utility: 'overlay0', Particles: 'yellow', 'Particles & Fields': 'yellow', SDF: 'pink', 'Group Presets': 'yellow', Simulation: 'green',
   Functions: 'sky',
 };
 

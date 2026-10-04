@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { GraphNode, SubgraphData } from '../../types/nodeGraph';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { ConnectionLine } from './ConnectionLine';
+import { TYPE_COLORS } from './typeColors';
 import { getDragPosition, getSocketElement, getSocketOffset, subscribeLayout, type Pt } from './socketRegistry';
 
 export interface EdgeInfo {
@@ -114,6 +115,20 @@ export const WireLayer = React.memo(function WireLayer({
           dimmed={dimming && !spotlightEdges.has(edgeKey)}
         />,
       );
+      // A Trail going back into its Agents group (or, inside, the group's texture port into the rule) is
+      // read as it was one step before: the loop's one legal cycle (docs/agents-plan.md §12).
+      const lastStep = (sourceNode.type === 'trailField' && node.type === 'agentsGroup')
+        || (sourceNode.type === 'agentInputs' && lineType === 'texture');
+      if (lastStep) {
+        const mx = (fromPos.x + toPos.x) / 2, my = (fromPos.y + toPos.y) / 2;
+        wires.push(
+          <g key={`${node.id}-${inputKey}-laststep`} transform={`translate(${mx}, ${my})`} style={{ pointerEvents: 'none', opacity: dimming && !spotlightEdges.has(edgeKey) ? 0.08 : 1 }}>
+            <title>Read as it was one step before: the trail the walkers left last step.</title>
+            <rect x={-38} y={-10} width={76} height={20} rx={10} fill="#1b1d24" stroke={TYPE_COLORS.texture} strokeWidth={1.5} />
+            <text x={0} y={4} textAnchor="middle" fontSize={11} fontFamily="system-ui, -apple-system, sans-serif" fontWeight={600} fill="#ffd2d2">↺ last step</text>
+          </g>,
+        );
+      }
     }
   }
 

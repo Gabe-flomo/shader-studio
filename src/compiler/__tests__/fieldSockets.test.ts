@@ -81,6 +81,20 @@ describe('field sockets', () => {
     expect(r.errors?.join('\n')).toMatch(/^Node echo: Echo \(After-image\) can't be part of a shape wired into Grid Pattern's Shape: it reads the previous frame\.$/m);
   });
 
+  it('(d2) a Particles node in a field chain is rejected, as docs/field-sockets.md says', () => {
+    // It used to compile: its probe copy (GPP_PROBE) then put `return;` and gl_FragColor inside
+    // a float field function, and its picture is drawn by an engine, not a function of position.
+    const nodes: GraphNode[] = [
+      n('gpuParticles', 'parts', 0, 0),
+      n('splitVec3', 'sp', 200, 0, {}, { v: ['parts', 'color'] }),
+      n('gridPattern', 'gp', 400, 0, {}, { shape: ['sp', 'x'] }),
+      out(['gp', 'color'], 600),
+    ];
+    const r = compileGraph({ nodes });
+    expect(r.success).toBe(false);
+    expect(r.errors?.join('\n')).toMatch(/^Node parts: Particles can't be part of a shape wired into Grid Pattern's Shape: its particles are simulated and drawn by an engine outside the shader, not a function of position\.$/m);
+  });
+
   it('(e) one chain wired into two field sockets emits one function', () => {
     const nodes: GraphNode[] = [
       n('circleSDF', 'circ', 200, 0, { radius: 0.1 }),

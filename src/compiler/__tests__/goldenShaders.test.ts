@@ -8,7 +8,8 @@
  * without a Pass must compile byte for byte as it did before. A change to
  * `__snapshots__/goldenShaders.test.ts.snap` is only acceptable in a commit
  * that deliberately changes the compiler for every graph, and must say why.
- * Examples that have a Pass node are left out (they take the new path).
+ * Examples that have a Pass node or an Agents-family node are left out (they
+ * take the multi-program path; docs/agents-plan.md section 10).
  */
 import { describe, expect, it, vi } from 'vitest';
 
@@ -39,8 +40,13 @@ const sha = (s: string) => `${cyrb53(s, 1)}${cyrb53(s, 7)}:${s.length}`;
 const sorted = (o: Record<string, unknown> | undefined) => Object.keys(o ?? {}).sort();
 
 type Nodes = Array<{ type: string; params?: Record<string, unknown> }>;
-/** Has a Pass node (at any depth)? The guarantee is about graphs without one; passGraph.test.ts covers those. */
-const hasPass = (nodes: Nodes): boolean => nodes.some(nd => nd.type === 'pass' || hasPass(((nd.params?.subgraph as { nodes?: Nodes } | undefined)?.nodes) ?? []));
+/** The node types that send a graph down the multi-program path (Pass, and the Agents family: docs/agents-plan.md). */
+const MULTI_PROGRAM = new Set(['pass', 'agentsGroup', 'trailField', 'drawAgents', 'agentDeposit', 'agentEmit']);
+/**
+ * Has a Pass or Agents-family node (at any depth)? The guarantee is about graphs without
+ * one; passGraph.test.ts and agentGraph.test.ts cover those.
+ */
+const hasPass = (nodes: Nodes): boolean => nodes.some(nd => MULTI_PROGRAM.has(nd.type) || hasPass(((nd.params?.subgraph as { nodes?: Nodes } | undefined)?.nodes) ?? []));
 const keys = Object.keys(EXAMPLE_GRAPHS).filter(k => !hasPass(EXAMPLE_GRAPHS[k].nodes)).sort();
 
 describe('golden shaders: every example compiles as it did', () => {

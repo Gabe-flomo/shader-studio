@@ -1,7 +1,12 @@
 // Data types that flow between nodes
 export type DataType = "float" | "vec2" | "vec3" | "vec4" | "mat2" | "mat3" | "scene3d" | "spacewarp3d"
   /** A Pass node's picture (compiler/passGraph.ts): the name of a sampler2D, wired only into texture-sampling nodes. */
-  | "texture";
+  | "texture"
+  /**
+   * The Agents family (docs/agents-plan.md), carried only between its own nodes:
+   * a group's state (agents), an Emit's births (emitter), Deposits on their way into a Trail (deposit).
+   */
+  | "agents" | "emitter" | "deposit";
 
 // Socket (connection point on a node)
 export interface Socket {

@@ -1407,7 +1407,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
               const outerSg = outer?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
               gn = outerSg?.nodes.find(n => n.id === gid);
             }
-            const defaultLbl = gn?.type === 'sceneGroup' ? 'Scene Group' : gn?.type === 'spaceWarpGroup' ? 'Space Warp Group' : gn?.type === 'marchLoopGroup' ? 'March Loop Group' : gn?.type === 'giLitMarchGroup' ? 'GI Lit March Group' : 'Group';
+            const defaultLbl = gn?.type === 'sceneGroup' ? 'Scene Group' : gn?.type === 'spaceWarpGroup' ? 'Space Warp Group' : gn?.type === 'marchLoopGroup' ? 'March Loop Group' : gn?.type === 'giLitMarchGroup' ? 'GI Lit March Group' : gn?.type === 'agentsGroup' ? 'Agents' : 'Group';
             const lbl = typeof gn?.params?.label === 'string' ? gn.params.label : defaultLbl;
             const isLast = depth === activeGroupPath.length - 1;
             return (
@@ -1425,6 +1425,12 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             );
           })}
           <span style={{ marginLeft: 6, font: `500 11px ${fontFamily.mono}`, color: tk.text.faint }}>esc to exit</span>
+          {nodes.find(n => n.id === activeGroupPath[0])?.type === 'agentsGroup' && activeGroupPath.length === 1 && (
+            // Inside an Agents group (docs/agents-plan.md): what the inside is, in one line.
+            <span style={{ marginLeft: 10, paddingLeft: 10, borderLeft: `1px solid ${tk.border.subtle}`, color: tk.text.muted, fontWeight: 500 }}>
+              This runs once for every agent, every step.
+            </span>
+          )}
         </div>
       )}
 

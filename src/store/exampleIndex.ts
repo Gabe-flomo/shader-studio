@@ -21,6 +21,7 @@ import { MATRIX_EXAMPLE_INDEX, MATRIX_EXAMPLE_KEYS } from './matrixExamples';
 import { DATA_EXAMPLE_INDEX, DATA_EXAMPLE_KEYS } from './dataExampleIndex';
 import { GRID_EXAMPLE_INDEX, GRID_EXAMPLE_KEYS } from './gridExamples';
 import { PASS_EXAMPLE_INDEX, PASS_EXAMPLE_KEYS } from './passExamples';
+import { AGENT_EXAMPLE_INDEX, AGENT_EXAMPLE_KEYS } from './agentExamples';
 import { CONVERT_EXAMPLE_INDEX, CONVERT_EXAMPLE_KEYS } from './convertExampleIndex';
 
 export type ExampleGraph = {
@@ -202,6 +203,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...GRID_EXAMPLE_INDEX,
   // Pass nodes, render to texture (passExamples.ts).
   ...PASS_EXAMPLE_INDEX,
+  // The Agents group: slime mold and walkers built from nodes (agentExamples.ts).
+  ...AGENT_EXAMPLE_INDEX,
   // The Convert folder (convertExampleIndex.ts, graphs in convertExamples.ts): what the Convert page makes of its Soft circle, as written and optimised.
   ...CONVERT_EXAMPLE_INDEX,
 };
@@ -226,6 +229,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Curves & Shapes",   color: ctp.lavender, keys: LEARN_CURVES_KEYS },
   { label: "Color & Lighting",  color: ctp.peach, keys: [...LEARN_COLOR_KEYS, 'neonGlow','colorStopsCycle'] },
   { label: "Passes",            color: ctp.maroon, keys: PASS_EXAMPLE_KEYS },
+  { label: "Simulation",        color: ctp.green, keys: AGENT_EXAMPLE_KEYS },
   { label: "Effects & Lens",    color: ctp.mauve, keys: ['echoTrails','feedbackSmear','crtTv','lensBarrel'] },
   { label: "Space & Texture",   color: ctp.flamingo, keys: ['waveTextureDemo','waveInterference','magicTextureDemo','neonFloorGrid','spaceAtlas'] },
   { label: "Grid",              color: ctp.sky, keys: [...GRID_EXAMPLE_KEYS, ...LEARN_GRID_KEYS, 'gridNeighborDisplaced','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','beatGrid'] },

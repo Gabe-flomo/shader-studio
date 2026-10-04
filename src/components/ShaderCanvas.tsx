@@ -37,6 +37,8 @@ import { outputTap } from '../lib/outputTap';
 import { GpuTimer } from '../lib/gpuTimer';
 import { OfflineHistory } from '../lib/offlineHistory';
 import { PassRunner, PassTargets } from '../lib/passRunner';
+import { AgentRunner, AgentTargets } from '../lib/agentRunner';
+import type { AgentsSpec } from '../compiler/types';
 import type { PassProgram } from '../compiler/types';
 import { recordFrame, recordGpuPass, recordGpuCompile, setGpuTimerSupport, registerShaderCostMeasurer } from '../lib/perfStats';
 import { viewportSnapshot } from '../lib/viewport';
@@ -319,6 +321,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   const swapShaderRef = useRef<((vs: string, fs: string) => Promise<boolean>) | null>(null);
   // Pass nodes (render to texture): installed by the boot effect; null passes = none (lib/passRunner.ts).
   const setPassesRef = useRef<((passes: PassProgram[] | null, vs: string) => void) | null>(null);
+  // The Agents family: installed by the boot effect; null agents = none (lib/agentRunner.ts).
+  const setAgentsRef = useRef<((agents: AgentsSpec | null, vs: string) => void) | null>(null);
   /** The Data nodes' textures (src/data/dataTextures.ts): bound per compile, refilled when a dataset changes. */
   const dataTexRef = useRef<DataTextureBinder | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -640,6 +644,44 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       requestRender();
     };
 
+    // ── The Agents family (docs/agents-plan.md) ─────────────────────────────
+    // Only a compile with `agents` makes a runner; every other graph leaves it null
+    // and the frame below takes exactly the path it always has.
+    let agentRunner: AgentRunner | null = null;
+    let agentTargets: AgentTargets | null = null;        // the live preview's simulation
+    let offlineAgentTargets: AgentTargets | null = null; // renderAtTime's own (the preview's is never touched)
+    let lastAgentFrame = 0;
+    setAgentsRef.current = (agents, vsSrc) => {
+      if (!agents || agents.groups.length + agents.trails.length + agents.draws.length === 0) {
+        if (!agentRunner) return;
+        agentRunner.dispose(); agentRunner = null;
+        agentTargets?.dispose(); agentTargets = null;
+        offlineAgentTargets?.dispose(); offlineAgentTargets = null;
+        requestRender();
+        return;
+      }
+      // Update shaders may declare uniforms the final program doesn't: register them on the shared table.
+      const st = useNodeGraphStore.getState();
+      const u = material.uniforms;
+      for (const [name, value] of Object.entries(st.paramUniforms)) { if (u[name]) u[name].value = value; else u[name] = { value }; }
+      for (const name of Object.keys(st.textureUniforms)) if (!u[name]) u[name] = { value: st.nodeTextures[st.textureUniforms[name]] ?? null };
+      for (const name of Object.keys(st.videoUniforms)) if (!u[name]) u[name] = { value: null };
+      for (const name of [...Object.keys(st.audioUniforms), ...Object.keys(st.liveUniforms)]) if (!u[name]) u[name] = { value: 0 };
+      if (!agentRunner) {
+        agentRunner = new AgentRunner({
+          renderer, geometry, camera,
+          uniforms: () => material.uniforms,
+          onReady: () => requestRender(),
+          onLinkFailed: src => { const errors = flushGlErrors(); if (errors.length > 0) useNodeGraphStore.getState().setGlslErrors(errors, src); },
+        });
+        agentTargets = new AgentTargets(renderer, supportsHalfFloat);
+      }
+      agentRunner.update(agents, vsSrc || FALLBACK_VERTEX);
+      // Dev-only, like window.__shaderStudio: scripted checks time and step the live simulation through it.
+      if (import.meta.env.DEV) (window as unknown as { __shaderStudioAgents?: unknown }).__shaderStudioAgents = { runner: agentRunner, targets: agentTargets, renderer };
+      requestRender();
+    };
+
     // ── Node cost measurer (Performance panel, see lib/nodeCost.ts) ─────────
     // Compiles a shader variant off to the side, draws it a few times into an
     // offscreen target and returns the median GPU ms per draw. Without timer
@@ -806,6 +848,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         },
       });
       let offlineStarted = false;
+      let offlineAgentsStarted = false;
 
       const handle: OfflineRenderHandle = {
         get width()  { ensureRT(); return exportW; },
@@ -853,6 +896,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           const keep = ['u_time', 'u_prevFrame', ...Array.from({ length: 6 }, (_, i) => `u_echo${i}`)].map(k => [k, u[k]?.value] as const);
           const feedback = isStatefulRef.current && !!u.u_prevFrame;
           const echo = echoRef.current;
+          // Agents: a simulation of the render's own, stepped exactly to this frame's time (a still starts at step 0).
+          if (agentRunner) {
+            offlineAgentTargets ??= new AgentTargets(renderer, supportsHalfFloat);
+            if (!opts || !!opts.first || !offlineAgentsStarted) offlineAgentTargets.resetAll();
+            agentRunner.run(offlineAgentTargets, { width: exportW, height: exportH, time, live: false });
+            offlineAgentsStarted = !!opts;
+          }
           // Pass nodes: textures of the render's own; a Pass's Previous steps like feedback does.
           const passFeedback = !!passRunner?.hasPrevious;
           if (passRunner) {
@@ -1308,6 +1358,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         audioAmps.size > 0 || liveValues.size > 0 || videoActive || isStatefulRef.current || echoRef.current !== null ||
         scopeIdsRef.current.size > 0 || previewNodeIdRef.current !== null
         || midiEngine.hasFile() || (passRunner !== null && passRunner.hasPrevious)
+        || (agentRunner !== null && agentRunner.active)
       );
       // A Background layer on the Play page: its queue decides, and the graph runs only while
       // "this graph" shows. Else Play's image, video or colour: the graph doesn't run at all.
@@ -1353,6 +1404,20 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           drawGpuParticles(material, { width: pw, height: ph, dt: playing ? dt : 0, time: elapsed, mouse: particleMouse(pw, ph) });
           gpuTimer.end();
         }
+        // The Agents family: passes the agents read, then the steps and the drawings, then the passes
+        // that read trails or drawings (lib/agentRunner.ts). Without agents, the Pass path below as it was.
+        if (agentRunner && agentTargets) {
+          const aw = renderer.domElement.width || 1, ah = renderer.domElement.height || 1;
+          if (passRunner && passTargets) passRunner.run(passTargets, aw, ah, gpuTimer, 'pre');
+          const nowMs = performance.now();
+          agentRunner.run(agentTargets, { width: aw, height: ah, time: elapsed, live: true, frameMs: lastAgentFrame ? nowMs - lastAgentFrame : 0, timer: gpuTimer });
+          lastAgentFrame = nowMs;
+          if (frameCount % 10 === 0 || !dynamic) agentRunner.drawThumbnails(agentTargets);
+          if (passRunner && passTargets) {
+            passRunner.run(passTargets, aw, ah, gpuTimer, 'post');
+            if (frameCount % 10 === 0 || !dynamic) passRunner.drawThumbnails(passTargets);
+          }
+        } else
         // Pass nodes: their programs draw into their textures first (lib/passRunner.ts).
         if (passRunner && passTargets) {
           passRunner.run(passTargets, renderer.domElement.width || 1, renderer.domElement.height || 1, gpuTimer);
@@ -1967,6 +2032,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         passRunner.recompileAll();
         reset.push('pass textures');
       }
+      if (agentRunner) {
+        agentTargets?.dispose(); offlineAgentTargets?.dispose(); offlineAgentTargets = null;
+        agentRunner.recompileAll();
+        reset.push('agents');
+      }
       return reset;
     };
     const resetGpu = (): Promise<string[]> => {
@@ -2010,9 +2080,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       material.uniforms.u_time.value = 0;
       resetGpuParticles();
       passTargets?.clearPrevious();
+      agentTargets?.resetAll();
       requestRender();
     };
     window.addEventListener('reset-time', handleResetTime);
+    // An Agents group's ↺ Start over (lib/agentRunner.ts restartAgents): draw a frame so it shows even while paused.
+    const handleAgentsRestart = () => requestRender();
+    window.addEventListener('agents-restart', handleAgentsRestart);
 
     // Seek to an arbitrary time when 'seek-time' is fired (e.g. from the
     // keyframe editor jumping the preview to the selected keyframe's moment).
@@ -2058,6 +2132,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       renderer.domElement.removeEventListener('mousemove', handleMouseMove);
       renderer.domElement.removeEventListener('mouseleave', handleMouseLeave);
       window.removeEventListener('reset-time', handleResetTime);
+      window.removeEventListener('agents-restart', handleAgentsRestart);
       window.removeEventListener('seek-time', handleSeekTime);
       window.removeEventListener('step-time', handleStepTime);
       rt.dispose();
@@ -2086,6 +2161,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       registerShaderCostMeasurer(null);
       passRunner?.dispose(); passTargets?.dispose(); offlinePassTargets?.dispose();
       setPassesRef.current = null;
+      agentRunner?.dispose(); agentTargets?.dispose(); offlineAgentTargets?.dispose();
+      setAgentsRef.current = null;
       stopQuality();
       renderer.dispose();
       container.removeChild(renderer.domElement);
@@ -2256,6 +2333,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   useEffect(() => {
     setPassesRef.current?.(rawGlslShader ? null : passes, vertexShader);
   }, [passes, rawGlslShader, vertexShader]);
+  // The Agents family: the compile's update shaders and engine settings (null for every graph without one).
+  const agents = useNodeGraphStore((state) => state.agents);
+  useEffect(() => {
+    setAgentsRef.current?.(rawGlslShader ? null : agents, vertexShader);
+  }, [agents, rawGlslShader, vertexShader]);
 
   // Bind sampler2D texture uniforms — runs when textureUniforms or nodeTextures change.
   useEffect(() => {

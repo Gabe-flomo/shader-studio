@@ -29,13 +29,15 @@ const HIDDEN_NODES = new Set([
   'grid',
   // Made by the compiler at the end of a Pass's program (compiler/passGraph.ts).
   'passOutput',
+  // An Agents group's anchors (made with the group) and its update shader's end (compiler/agentGraph.ts).
+  'agentInputs', 'agentOutput', 'agentStepOut',
 ]);
 
 const CATEGORY_SECTIONS: Array<{ label: string; categories: string[] }> = [
   { label: 'Shapes',       categories: ['2D Primitives', 'SDF', '2D Space', '3D Primitives', '3D Boolean Ops', '3D Transforms', 'Combiners'] },
   { label: '3D',           categories: ['3D Scene', '3D Lighting', '3D Fractals', 'Loops'] },
   { label: 'Color & Post', categories: ['Color', 'Color Grading', 'Post Processing', 'Effects', 'Passes'] },
-  { label: 'Generators',   categories: ['Noise', 'Halftone', 'Fractals', 'Science', 'Particles', 'Particles & Fields', 'Grid', 'Field'] },
+  { label: 'Generators',   categories: ['Noise', 'Halftone', 'Fractals', 'Science', 'Particles', 'Particles & Fields', 'Simulation', 'Grid', 'Field'] },
   { label: 'Math & Logic', categories: ['Sources', 'Animation', 'Math', 'Matrix', 'Shapers', 'Conditionals'] },
   { label: 'Functions',    categories: ['My Nodes', 'Functions'] },
   { label: 'Utility',      categories: ['Utility', 'Output'] },
@@ -94,6 +96,12 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Seat',    types: ['doubleExpSeat', 'doubleCircleSeat'] },
     { label: 'Sigmoid', types: ['doubleExpSigmoid', 'logisticSigmoid', 'doubleCircleSigmoid', 'doubleEllipticSigmoid'] },
     { label: 'Bezier',  types: ['quadBezierShaper', 'cubicBezierShaper'] },
+  ],
+  // The Agents family (docs/agents-plan.md): the inside nodes only go into an open Agents group.
+  Simulation: [
+    { label: 'Start here', types: ['slimeMoldPreset', 'agentsGroup'] },
+    { label: 'Outside the group', types: ['agentEmit', 'agentDeposit', 'trailField', 'drawAgents'] },
+    { label: 'Inside an Agents group', types: ['agentSense', 'agentSteer', 'agentMove', 'agentBySpecies'] },
   ],
   Effects: [
     { label: 'Blur',     types: ['gaussianBlur', 'bloom', 'radialBlur', 'tiltShiftBlur', 'lensBlur', 'depthOfField'] },

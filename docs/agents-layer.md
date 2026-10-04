@@ -2,6 +2,8 @@
 
 *Stage 1 of a general simulation engine. Built 28 Sep 2026.*
 
+> For a million agents (slime mold, networks), use the Studio's **Agents group** instead: docs/agents-group.md.
+
 An **Agents** layer holds many entities (200 by default, up to 5000 across
 all groups) and moves them with a **stack of rules**. Each agent has a
 position, a velocity, a heading, an age, an energy, a group and a seed of

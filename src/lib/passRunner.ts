@@ -203,9 +203,11 @@ export class PassRunner {
   /**
    * Draw the passes the picture needs into `targets`, for a picture of w × h,
    * and bind their textures for the final program. `time` labels GPU timers
-   * (live only). u_resolution is each pass's own size while it draws.
+   * (live only). u_resolution is each pass's own size while it draws. `stage`
+   * (graphs with agents only) draws just the passes before ('pre') or after
+   * ('post') the agents step.
    */
-  run(targets: PassTargets, w: number, h: number, timer?: { begin(name: string): boolean; end(): void }): void {
+  run(targets: PassTargets, w: number, h: number, timer?: { begin(name: string): boolean; end(): void }, stage?: 'pre' | 'post'): void {
     this.ensureUniforms();
     const u = this.host.uniforms();
     const { renderer, camera } = this.host;
@@ -222,6 +224,8 @@ export class PassRunner {
     const res = u.u_resolution?.value as THREE.Vector2 | undefined;
     const rx = res?.x ?? w, ry = res?.y ?? h;
     for (const d of drawn) {
+      // With agents (lib/agentRunner.ts) the frame draws passes in two stages: before the agents step, and after it.
+      if (stage && (stage === 'post') !== !!d.afterAgents) continue;
       const t = targets.get(d.slug)!;
       const e = d.entry;
       if (!e.ready || e.failed) { u[passUniform(d.slug)].value = null; continue; }

@@ -57,6 +57,18 @@ export function buildMarchSubgraph(nextId: () => string): SubgraphData {
   return { nodes: [inputs, output], inputPorts: [], outputPorts: [] };
 }
 
+/**
+ * A new Agents group's inside (docs/agents-plan.md): Agent Inputs, with a Trail
+ * port ready for a Trail field's texture, and Agent Output. Nothing is wired, so
+ * the walkers stand still until a rule (Sense → Steer → Move) goes between them.
+ */
+export function buildAgentsSubgraph(nextId: () => string): SubgraphData {
+  const inputs = fresh(nextId, 'agentInputs', { x: 0, y: 160 }, { _groupOriginal: true, extraInputs: [{ key: 'trail', type: 'texture', label: 'Trail' }] });
+  inputs.outputs = { ...inputs.outputs, trail: { type: 'texture', label: 'Trail' } };
+  const output = fresh(nextId, 'agentOutput', { x: 900, y: 160 }, { _groupOriginal: true });
+  return { nodes: [inputs, output], inputPorts: [], outputPorts: [] };
+}
+
 export type MarchLoopType = 'marchLoopGroup' | 'giLitMarchGroup';
 
 /**

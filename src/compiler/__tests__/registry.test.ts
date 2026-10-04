@@ -37,6 +37,9 @@ const CONNECTION_GATED = new Set([
   // Texture-sampling nodes (Passes) read black, and none of their settings, until a Pass is wired
   'sampleTexture.offsetX', 'sampleTexture.offsetY', 'edgesTexture.strength', 'edgesTexture.width', 'blurTexture.radius',
   'glowTexture.threshold', 'glowTexture.radius', 'glowTexture.intensity', 'displaceTexture.amount',
+  // The Agents engine reads these from the uniform table (lib/agentRunner.ts), not the picture's shader
+  'trailField.diffuse', 'trailField.halfLife',
+  'drawAgents.size', 'drawAgents.brightness', 'drawAgents.glow', 'drawAgents.colorA', 'drawAgents.colorB',
 ]);
 
 function makeNode(id: string, type: string, def: NodeDefinition, x = 0): GraphNode {

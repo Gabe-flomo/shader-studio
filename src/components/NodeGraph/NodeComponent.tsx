@@ -64,6 +64,7 @@ import { VideoInputModal } from './VideoInputModal';
 import { MidiInputCard } from './MidiInputCard';
 import { GroupParamPicker } from './GroupParamPicker';
 import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
+import { AGENT_INPUT_OUTPUTS } from '../../nodes/definitions/agents';
 import { VECTORIZABLE_NODES, VEC4_CAPABLE_NODES } from '../../nodes/definitions/math';
 import { registerSocket, getView } from './socketRegistry';
 import { startNodeMouseDrag, startNodeTouchDrag } from './nodeDrag';
@@ -1658,14 +1659,17 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     });
   };
 
-  if (node.type === 'marchLoopInputs') {
+  if (node.type === 'marchLoopInputs' || node.type === 'agentInputs') {
+    const isAgents = node.type === 'agentInputs';
     const extraInputs = (node.params.extraInputs ?? []) as Array<{key: string; type: string; label: string}>;
-    const fixedOutputs = [
-      { key: 'ro',        type: 'vec3',  label: 'Ray Origin' },
-      { key: 'rd',        type: 'vec3',  label: 'Ray Dir' },
-      { key: 'marchPos',  type: 'vec3',  label: 'March Pos' },
-      { key: 'marchDist', type: 'float', label: 'March Dist' },
-    ] as const;
+    const fixedOutputs: ReadonlyArray<{ key: string; type: string; label: string }> = isAgents
+      ? Object.entries(AGENT_INPUT_OUTPUTS).map(([key, o]) => ({ key, type: o.type, label: o.label }))
+      : [
+        { key: 'ro',        type: 'vec3',  label: 'Ray Origin' },
+        { key: 'rd',        type: 'vec3',  label: 'Ray Dir' },
+        { key: 'marchPos',  type: 'vec3',  label: 'March Pos' },
+        { key: 'marchDist', type: 'float', label: 'March Dist' },
+      ];
 
     return (
       <div
@@ -1691,8 +1695,13 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           onClick={() => { setSelectedNodeId(isSelected ? null : node.id); selectNode(node.id, false); }}
         >
           <span style={{ fontSize: '10px' }}>&#9668;</span>
-          Group Inputs
+          {isAgents ? 'Agent Inputs' : 'Group Inputs'}
         </div>
+        {isAgents && (
+          <div style={{ padding: '5px 10px 0', fontSize: 10.5, lineHeight: 1.4, color: tc.subtext0, maxWidth: 220 }}>
+            This walker as the step begins. Every unwired socket to the right reads its own value.
+          </div>
+        )}
 
         {/* Fixed outputs */}
         <div style={{ padding: '6px 0' }}>
@@ -1803,7 +1812,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 style={{ ...inputStyle_, width: '100%', boxSizing: 'border-box' }}
               />
               <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                {(['float', 'vec2', 'vec3', 'vec4'] as DataType[]).map(t => (
+                {(isAgents ? ['float', 'vec2', 'vec3', 'vec4', 'texture'] as DataType[] : ['float', 'vec2', 'vec3', 'vec4'] as DataType[]).map(t => (
                   <button
                     key={t}
                     onClick={() => setAddingMarchInput(prev => prev ? { ...prev, type: t } : prev)}
@@ -3202,7 +3211,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         onTouchStart={handleHeaderTouchStart}
         onDoubleClick={e => {
           e.stopPropagation();
-          if (node.type === 'sceneGroup' && !savingMode) onEnterGroup?.(node.id);
+          if ((node.type === 'sceneGroup' || node.type === 'agentsGroup') && !savingMode) onEnterGroup?.(node.id);
           else setCollapsed(v => !v);
         }}
         style={{
@@ -3486,6 +3495,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
       {/* A Pass's texture, always shown: drawn every few frames by lib/passRunner.ts */}
       {node.type === 'pass' && <NodeInlineViz node={node} />}
+      {/* The Agents family (docs/agents-plan.md): the group's numbers and Open rule, a Trail's texture */}
+      {(node.type === 'agentsGroup' || node.type === 'trailField') && <NodeInlineViz node={node} onEnterGroup={onEnterGroup} />}
 
       {/* ── In-card preview (visible when 👁 is active) ── */}
       {/* Semantic inline viz: replaces shader thumbnail for supported types */}
@@ -3528,7 +3539,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
       <div style={{ padding: '6px 0' }}>
         {/* ── Inputs (always visible) ── */}
-        {Object.entries(node.inputs).filter(([key]) => (Object.keys(def.inputs).length === 0 || key in def.inputs) && socketVisible(node, def, key)).map(([key, input]) => {
+        {Object.entries(node.inputs).filter(([key]) => (Object.keys(def.inputs).length === 0 || key in def.inputs || node.type === 'agentsGroup') && socketVisible(node, def, key)).map(([key, input]) => {
           const isConnected = !!input.connection;
           const isExternal = externalInputKeys?.has(key) ?? false;
 
