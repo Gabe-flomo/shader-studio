@@ -14,6 +14,7 @@ import { PLAY_EXAMPLE_INDEX } from './playExampleIndex';
 import { extractScriptParams } from '../components/play/layers/scriptExamples';
 import { encodeKeys } from '../lib/takePlayback';
 import { P5_EXAMPLE_SKETCHES } from './p5ExampleSketches';
+import { SKETCH_DISPLACE_WAVES } from './playSketches';
 import { SKETCH_3D, SKETCH_3D_SHAPES, SKETCH_3D_TEXTURE, SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIREFLIES, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_INK, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE, SKETCH_HALATION, SKETCH_ORBIT } from './playSketches';
 import { GRADE_LOOKS, applyLook, newCustomEffect, newFinishEffect, type FinishEffect, type FinishKind, type PlayFinish } from '../types/playFinish';
 import { newAudioFxEffect, type AudioFxEffect, type AudioFxKind, type PlayAudioFx } from '../types/playAudioFx';
@@ -33,7 +34,7 @@ import type { ArrNote, PlayArrangement } from '../types/playArrangement';
 import { FN_EFFECTS } from '../play/kit/finish.js';
 import { effectFromGraph, type EffectGraph } from '../play/lookGraph';
 import { gpPreset } from '../play/kit/gpuParticles.js';
-import { MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type DrumPadLayer, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
+import { defaultDisplace, MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type DrumPadLayer, type LayerDisplace, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
 import type { DpSynth } from '../play/kit/drumPads.js';
 import { agPresetLayer } from '../play/kit/agents.js';
 import { HAND_EX, handBeatNodes } from './agentPlayExample';
@@ -50,6 +51,10 @@ function masked(l: PlayLayer, id: string, shape: MaskShape, nums: Partial<Record
   const out = { ...l, masks: [...(l.masks ?? []), { id, shape, points: o.points ?? [], op: o.op ?? 'add', invert: o.invert ?? false }] } as Record<string, unknown>;
   for (const k of MASK_PROP_KEYS) out[maskKey(id, k)] = nums[k] ?? MASK_DEFAULTS[k];
   return out as unknown as PlayLayer;
+}
+/** The layer with a Displacement Map (play/kit/displace.js), its maxima as the parser keeps them. */
+function displaced(l: PlayLayer, d: Partial<LayerDisplace>, maxH: number, maxV: number): PlayLayer {
+  return { ...l, displace: { ...defaultDisplace(), ...d }, disp_maxH: maxH, disp_maxV: maxV } as unknown as PlayLayer;
 }
 /**
  * A Script layer holding `code`: the sliders, toggles and buttons it declares
@@ -2691,6 +2696,67 @@ Holding **M** turns Datamosh's **Mosh** on: nothing heals while it's held.
 • Drag the Boat layer below Water in the list: now the boat is under the water and bends with it. That is how the Look stack's Water effect treats every layer.
 • Give another layer a **Matte → Water**: it shows only where the water moves (its waves).
 • Render it: the waves tick with the clock, so every render (and the exported web page) comes out the same.`,
+  })),
+  // ── Displacement Map (After Effects): a layer displaced by another, by the picture, and the Look by a word ──
+  ex('displaceText', fbmGraph({ scale: 1.6, timeScale: 0.03, preset: '3' }), play({
+    layers: [
+      displaced(layer('text', 'title', 'Title', { text: 'RIPPLE', size: 0.26, weight: 800, color: [1, 0.97, 0.9], toShader: false }),
+        { map: 'layer', layerId: 'waves', h: 'red', v: 'alpha', behaviour: 'center', wrap: false }, 60, 30),
+      { ...scriptLayer('waves', 'Waves (map)', SKETCH_DISPLACE_WAVES, { toShader: false }), visible: false } as PlayLayer,
+    ],
+    controls: [
+      ctl('mh', 'layer:title::disp_maxH', 'Title · Max horizontal', -200, 200, 1),
+      ctl('mv', 'layer:title::disp_maxV', 'Title · Max vertical', -200, 200, 1),
+      ctl('waves', 'layer:waves::p_waves', 'Waves', 1, 20, 0.5),
+    ],
+    mappings: [map('breathe', 'mh', S.lfo('sine', 0.08), 15, 90)],
+    notes: `**What it shows.** After Effects' **Displacement Map** on one layer. The Title's own pixels are moved by a map before they meet the picture; the shader under it isn't touched.
+
+**How it's built.**
+• **Title** (a Text layer): its **Displace** section (the Displace button under its name) reads the **Waves (map)** layer. **Horizontal: Red**, **Vertical: Alpha**, **Max horizontal** 60 and **Max vertical** 30 (pixels of a 1080-tall picture). Mid-grey leaves a pixel where it is; brighter pushes it right (or up), darker left (or down).
+• **Waves (map)** (a Script layer, hidden): rows of red and of alpha that rise and fall in waves and drift down the picture. It is hidden, but it still runs, because the Title reads it (like a matte). Its row in the list says *Displaces Title*.
+• The shader: a slow FBM landscape, only there to sit behind the Title.
+• An LFO breathes **Max horizontal** between 15 and 90 (Max is a layer number, so any control or mapping can drive it).
+
+**Try this.**
+• Title → Displace: set **Horizontal** to **Off** for a purely vertical wobble, or **Full** to slide the whole word by Max.
+• Turn the Waves layer's eye on to see the map doing the work.
+• Set the Title's Displace **Map** to **The picture**: the landscape's own colours push the letters.
+• Drag **Waves** on the panel for finer ripples.`,
+  })),
+  ex('displaceParticles', fbmGraph({ scale: 2.4, timeScale: 0.06, preset: '6' }), play({
+    layers: [
+      displaced(layer('particles', 'dust', 'Dust', {
+        toShader: false, count: 900, field: 'noise', noiseScale: 1.2, noiseEvolve: 0.2, speed: 0.4, steer: 0.3, size: 7, sizeJitter: 0.5,
+        trail: 0.9, life: 6, fade: 0.3, spawn: 'anywhere', attractor: 'none', colour: 'tint', color: [1, 0.95, 0.85], opacity: 1, flock: 0, seed: 11,
+      }), { map: 'picture', layerId: '', h: 'red', v: 'green', behaviour: 'center', wrap: true }, 140, 140),
+      layer('text', 'word', 'Word (map)', { text: 'FLOW', size: 0.34, weight: 900, color: [1, 1, 1], visible: false, toShader: false }),
+    ],
+    finish: {
+      on: true,
+      effects: [
+        fx('displace', { map: 'layer', layerId: 'word', dispMode: 'channels', chanH: 'luminance', chanV: 'off', behaviour: 'center', wrap: false, maxH: 70, maxV: 50 }),
+        fx('vignette', { amount: 0.35 }),
+      ],
+    },
+    controls: [
+      ctl('pmax', 'layer:dust::disp_maxH', 'Dust · Max horizontal', -300, 300, 1),
+      ctl('pmaxv', 'layer:dust::disp_maxV', 'Dust · Max vertical', -300, 300, 1),
+      ctl('lookmax', 'finish:displace::maxH', 'Look · Max horizontal', -300, 300, 1),
+    ],
+    notes: `**What it shows.** The Displacement Map twice: on a layer, by the shader, and in the Look, by a hidden word.
+
+**How it's built.**
+• The shader: a drifting FBM landscape through a colourful palette. It is the map for the Dust.
+• **Dust** (a Particles layer): its **Displace** reads **The picture**, **Horizontal: Red**, **Vertical: Green**, Max 140 each way, **Wrap pixels around** on. Where the landscape is red the dust shifts right, where it is green it shifts up; the trails bend with the colours. Only the Dust moves: the landscape stays put.
+• **Word (map)** (a Text layer, hidden): the word FLOW, white. Nothing draws it; the Look reads it.
+• Look → **Displace** with Map **A layer: Word (map)** and Push **By channels**: **Horizontal: Luminance**, **Vertical: Off**, Max horizontal 70. Inside the letters (white) the whole finished picture slides right by 70 pixels; outside them the map is empty, which pushes nothing. You see the word as a refraction.
+• A Vignette.
+
+**Try this.**
+• Drag **Dust · Max horizontal** to 0 and back: the dust snaps to where it really is.
+• In the Look's Displace, set **Vertical** to **Luminance** too, or set **Behaviour** to **Tile map** to repeat the word across the picture.
+• Show the Word layer to see what the Look is reading.`,
   })),
 ];
 

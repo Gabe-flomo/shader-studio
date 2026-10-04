@@ -4,8 +4,8 @@
  * drawn outlines all go through these, so a matte never loops and a removed
  * mask takes its controls with it.
  */
-import { defaultLayer, layerTarget, type BackgroundMatte, type LayerMask, type MaskOp, type MaskShape, type PlayLayer, type PlayRecord, type ShapeLayer, type TrackMatte } from '../types/play';
-import { canBeMatte, canHaveMatte, MASK_DEFAULTS, MASK_PROP_KEYS, MASKS_MAX, maskKey, matteUsers, matteWouldCycle, type MaskProp } from '../types/playLayers';
+import { defaultLayer, layerTarget, type BackgroundMatte, type LayerDisplace, type LayerMask, type MaskOp, type MaskShape, type PlayLayer, type PlayRecord, type ShapeLayer, type TrackMatte } from '../types/play';
+import { canBeMatte, canHaveMatte, defaultDisplace, DISP_PROP_KEYS, DISP_PROPS, MASK_DEFAULTS, MASK_PROP_KEYS, MASKS_MAX, maskKey, matteUsers, matteWouldCycle, type MaskProp } from '../types/playLayers';
 import { playId } from './playControls';
 import { newMotionLayer } from './motionLayers';
 
@@ -225,4 +225,54 @@ export function matteMaskSummary(play: PlayRecord, l: PlayLayer): string {
   const n = l.masks?.length ?? 0;
   if (n) parts.push(`${n} mask${n === 1 ? '' : 's'}`);
   return parts.join('  ·  ');
+}
+
+// ── Displacement map ─────────────────────────────────────────────────────────
+
+/**
+ * Give the layer a Displacement Map reading `mapId` ('' = the picture), at
+ * After Effects' defaults (Red sideways, Green up and down) with its maxima.
+ * A map layer used for the first time is hidden, like a matte: it shows
+ * through the layer it moves.
+ */
+export function addDisplace(p: PlayRecord, layerId: string, mapId = ''): PlayRecord {
+  const l = p.layers.find(x => x.id === layerId);
+  if (!l || !canHaveMatte(l.kind) || l.displace) return p;
+  const m = mapId && mapId !== layerId ? p.layers.find(x => x.id === mapId) : undefined;
+  const displace = defaultDisplace(m ? m.id : '');
+  return {
+    ...p,
+    layers: p.layers.map(x => {
+      if (x.id === layerId) { const out = { ...x, displace } as Record<string, unknown>; for (const k of DISP_PROP_KEYS) out[k] = DISP_PROPS[k].value; return out as unknown as PlayLayer; }
+      return m && x.id === m.id && m.kind !== 'background' ? { ...x, visible: false } : x;
+    }),
+  };
+}
+
+/** Change the layer's Displacement Map (map, channels, behaviour, wrap). */
+export function patchDisplace(p: PlayRecord, layerId: string, patch: Partial<LayerDisplace>): PlayRecord {
+  return withLayer(p, layerId, l => {
+    if (!l.displace) return l;
+    const d = { ...l.displace, ...patch };
+    if (d.layerId === layerId) d.layerId = '';
+    if (d.map === 'layer' && !d.layerId) d.map = 'picture';
+    return { ...l, displace: d };
+  });
+}
+
+/** Take the layer's Displacement Map off, with its numbers and the controls that drove them. */
+export function removeDisplace(p: PlayRecord, layerId: string): PlayRecord {
+  const targets = new Set(DISP_PROP_KEYS.map(k => layerTarget(layerId, k)));
+  const controls = p.controls.filter(c => !targets.has(c.target));
+  const kept = new Set(controls.map(c => c.id));
+  return {
+    ...withLayer(p, layerId, l => {
+      const out = { ...l } as Record<string, unknown>;
+      for (const k of DISP_PROP_KEYS) delete out[k];
+      delete out.displace;
+      return out as unknown as PlayLayer;
+    }),
+    controls,
+    mappings: p.mappings.filter(m => kept.has(m.controlId)),
+  };
 }

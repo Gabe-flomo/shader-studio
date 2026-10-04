@@ -17,6 +17,7 @@
 import { LINKED_PREFIX, LINKED_REF_MAX, isLinkedRef } from '../files/linkedRefs';
 import { DP_CHOKES, DP_INDEX_MODES, DP_PADS, DP_PARAMS, DP_SYNTHS, dpKey, type DpIndexMode, type DpMode, type DpSynth } from '../play/kit/drumPads.js';
 import { AG_GROUPS, AG_MAX, AG_RULES, AG_RULE_TYPES, AG_TARGETS, AG_CHANNELS, agPresetLayer } from '../play/kit/agents.js';
+import { DM_BEHAVIOURS, DM_CHANNELS, DM_DEFAULTS, DM_HINTS, type DmBehaviour, type DmChannel } from '../play/kit/displace.js';
 import { WL_PARAMS } from '../play/kit/waterLayer.js';
 
 export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken' | 'difference' | 'exclusion' | 'add';
@@ -66,6 +67,27 @@ export interface LayerMask {
   invert: boolean;
 }
 
+/**
+ * A layer's Displacement Map (After Effects' effect; see play/kit/displace.js):
+ * its pixels are moved by a map before it meets the picture. The map is
+ * another layer drawn alone (it runs while hidden, like a matte) or the
+ * picture under the layers. Max horizontal / vertical are numbers on the
+ * layer (`disp_maxH`, `disp_maxV`) so controls and mappings drive them.
+ */
+export interface LayerDisplace {
+  /** Off keeps the settings but draws the layer unmoved. */
+  on: boolean;
+  /** 'layer': the layer `layerId` drawn alone. 'picture': the picture under the layers (the shader or Background). */
+  map: 'layer' | 'picture';
+  layerId: string;
+  /** The channel that moves pixels sideways, and the one that moves them up and down. */
+  h: DmChannel;
+  v: DmChannel;
+  behaviour: DmBehaviour;
+  /** Wrap pixels around: what is pushed off one edge comes in at the other. */
+  wrap: boolean;
+}
+
 interface LayerBase {
   id: string;
   label: string;
@@ -76,6 +98,8 @@ interface LayerBase {
   trackMatte?: TrackMatte;
   /** Absent or empty: no masks. Not on nulls or the Background layer. */
   masks?: LayerMask[];
+  /** Absent: not displaced. Same layers as mattes and masks. */
+  displace?: LayerDisplace;
 }
 
 /** A draggable point. Its position is a source ("Null X" / "Null Y") and can be a control. */
@@ -1824,8 +1848,49 @@ export function parseLayer(raw: unknown): PlayLayer | null {
         out[maskKey(m.id, prop)] = typeof v === 'number' && Number.isFinite(v) ? Math.max(d.lo, Math.min(d.hi, v)) : MASK_DEFAULTS[prop];
       }
     }
+    const disp = parseDisplace(l.displace, id);
+    if (disp) {
+      out.displace = disp;
+      for (const k of DISP_PROP_KEYS) { const v = l[k], d = DISP_PROPS[k]; out[k] = typeof v === 'number' && Number.isFinite(v) ? Math.max(d.lo, Math.min(d.hi, v)) : d.value; }
+    }
   }
   return out as unknown as PlayLayer;
+}
+
+// ── Displacement map ─────────────────────────────────────────────────────────
+
+export type DispProp = 'disp_maxH' | 'disp_maxV';
+/** A displaced layer's numbers: slider range, what a file may hold, default and tooltip. */
+export const DISP_PROPS: Readonly<Record<DispProp, { label: string; min: number; max: number; lo: number; hi: number; value: number; hint: string }>> = {
+  disp_maxH: { label: 'Max horizontal', min: -300, max: 300, lo: -4000, hi: 4000, value: DM_DEFAULTS.maxH, hint: DM_HINTS.maxH },
+  disp_maxV: { label: 'Max vertical', min: -300, max: 300, lo: -4000, hi: 4000, value: DM_DEFAULTS.maxV, hint: DM_HINTS.maxV },
+};
+export const DISP_PROP_KEYS = Object.keys(DISP_PROPS) as DispProp[];
+
+/** A fresh Displacement Map reading `layerId` (or the picture when empty). */
+export function defaultDisplace(layerId = ''): LayerDisplace {
+  return { on: true, map: layerId ? 'layer' : 'picture', layerId, h: DM_DEFAULTS.h as DmChannel, v: DM_DEFAULTS.v as DmChannel, behaviour: DM_DEFAULTS.behaviour as DmBehaviour, wrap: DM_DEFAULTS.wrap };
+}
+
+/** A layer's displacement from a file, or null (absent or not an object). A map that is the layer itself reads the picture. */
+export function parseDisplace(v: unknown, selfId: string): LayerDisplace | null {
+  if (!v || typeof v !== 'object') return null;
+  const r = v as Record<string, unknown>;
+  const layerId = typeof r.layerId === 'string' && r.layerId !== selfId ? r.layerId.slice(0, 80) : '';
+  return {
+    on: r.on !== false,
+    map: r.map === 'layer' && layerId ? 'layer' : 'picture',
+    layerId,
+    h: (DM_CHANNELS as readonly string[]).includes(r.h as string) ? r.h as DmChannel : DM_DEFAULTS.h as DmChannel,
+    v: (DM_CHANNELS as readonly string[]).includes(r.v as string) ? r.v as DmChannel : DM_DEFAULTS.v as DmChannel,
+    behaviour: (DM_BEHAVIOURS as readonly string[]).includes(r.behaviour as string) ? r.behaviour as DmBehaviour : DM_DEFAULTS.behaviour as DmBehaviour,
+    wrap: r.wrap === true,
+  };
+}
+
+/** The layers whose Displacement Map reads `id`. */
+export function displaceUsers(layers: readonly PlayLayer[], id: string): PlayLayer[] {
+  return layers.filter(l => l.displace && l.displace.map === 'layer' && l.displace.layerId === id && l.id !== id);
 }
 
 // ── Track mattes and masks ───────────────────────────────────────────────────
@@ -1918,9 +1983,9 @@ export function motionWatchers(layers: readonly PlayLayer[], id: string): PlayLa
   return layers.filter(l => l.kind === 'motion' && l.readFrom === 'layer' && l.sourceId === id && l.id !== id);
 }
 
-/** Does a hidden layer still run: it is another layer's matte, or a Motion layer watches it. */
+/** Does a hidden layer still run: it is another layer's matte or displacement map, or a Motion layer watches it. */
 export function runsWhileHidden(layers: readonly PlayLayer[], id: string): boolean {
-  return matteUsers(layers, id).length > 0 || motionWatchers(layers, id).length > 0;
+  return matteUsers(layers, id).length > 0 || motionWatchers(layers, id).length > 0 || displaceUsers(layers, id).length > 0;
 }
 
 /** Mattes that point at a missing layer or a null, or round in a loop, dropped (a file loads whatever it says). */
@@ -2300,7 +2365,9 @@ function agentNumericProps(l: AgentsLayer): LayerNumericProp[] {
  * at hand.
  */
 export function layerNumericProps(l: PlayLayer): ReadonlyArray<LayerNumericProp> {
-  const own = kindNumericProps(l);
+  const kind = kindNumericProps(l);
+  // A displaced layer's maxima: "Displace · Max horizontal".
+  const own = l.displace ? [...kind, ...DISP_PROP_KEYS.map(k => { const d = DISP_PROPS[k]; return { key: k, label: `Displace · ${d.label}`, min: d.min, max: d.max, step: 1, hint: d.hint }; })] : kind;
   if (!l.masks?.length) return own;
   // A mask's numbers follow the layer's own: "Mask 1 · Feather".
   return [...own, ...l.masks.flatMap(m => MASK_PROP_KEYS.map(p => {

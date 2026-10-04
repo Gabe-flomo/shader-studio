@@ -10,6 +10,7 @@ import {
   fnDefaultEffect, fnDefaultCurves, fnDefaultCompare, fnParseCustom, fnMigrateHalation, type FnCompare, type FnCurves, type FnKind, type FnParam,
 } from '../play/kit/finish.js';
 import { GY_MAX, gyList } from '../play/kit/glyphs.js';
+import { DM_BEHAVIOURS, DM_CHANNELS, type DmBehaviour, type DmChannel } from '../play/kit/displace.js';
 import type { SealedBlob } from './userNode';
 import { decryptPayload, encryptPayload } from '../playfile/sealing';
 import { parseEffectGraph, type EffectGraph } from '../play/lookGraphRecord';
@@ -61,6 +62,15 @@ export interface FinishEffect {
   map?: FinishTimeMap | FinishDisplaceMap | FinishMoshMap | FinishSourceMap;
   /** Time displacement or Displace with map 'layer': the layer whose alpha is the map. Datamosh with map 'layer': the layer whose movement moves the picture. */
   layerId?: string;
+  /** Displace with a picture or layer map: 'channels' is After Effects' Displacement Map (absent = 'direction', as before). */
+  dispMode?: 'direction' | 'channels';
+  /** Displace by channels: the map's channel that moves the picture sideways, and the one that moves it up and down. */
+  chanH?: DmChannel;
+  chanV?: DmChannel;
+  /** Displace by channels: Center (in place), Stretch or Tile the layer map's visible part. */
+  behaviour?: DmBehaviour;
+  /** Displace by channels: wrap pixels around (else the edge pixels repeat). */
+  wrap?: boolean;
   /** Any effect: where it shows (absent = everywhere). */
   where?: FinishWhere;
   /** Where 'layer': the layer whose alpha says where (it can be hidden). */
@@ -371,6 +381,14 @@ export function parseFinishEffect(raw: unknown): FinishEffect | null {
   if (kind === 'displace') {
     e.map = (FN_DISPLACE_MAPS as readonly string[]).includes(r.map as string) ? r.map as FinishDisplaceMap : 'noise';
     e.layerId = typeof r.layerId === 'string' ? r.layerId.slice(0, 80) : '';
+    // By channels (the Displacement Map): kept only when chosen, so older stacks read back exactly as they were.
+    if (r.dispMode === 'channels') {
+      e.dispMode = 'channels';
+      e.chanH = (DM_CHANNELS as readonly string[]).includes(r.chanH as string) ? r.chanH as DmChannel : 'red';
+      e.chanV = (DM_CHANNELS as readonly string[]).includes(r.chanV as string) ? r.chanV as DmChannel : 'green';
+      e.behaviour = (DM_BEHAVIOURS as readonly string[]).includes(r.behaviour as string) ? r.behaviour as DmBehaviour : 'center';
+      e.wrap = r.wrap === true;
+    }
   }
   if (kind === 'feedback' || kind === 'echo') {
     // Absent (a Feedback saved before Source) is the whole picture, as it was.

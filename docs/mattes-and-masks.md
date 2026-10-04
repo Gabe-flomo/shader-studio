@@ -7,6 +7,8 @@ Two ways to cut a layer:
 - **Matte**: another layer decides where this one shows, by that layer's **Alpha** (where it is solid) or its **Luma** (where it is bright), either way **Inverted** if you like. Any layer can be matted and any layer can be a matte: particles, text, images, the camera, shapes, Script layers (2D and 3D), cloners, brushes, glyphs, contours, audio, lenses, bodies, and the Background layer (the picture itself). Nulls draw nothing, so they are neither.
 - **Mask**: a shape the layer owns (not a layer of its own): a rectangle, an ellipse, a polygon clicked corner by corner, or a freehand outline. Masks move and turn with their layer, have **Feather**, **Expand**, **Opacity** and **Invert**, and combine by **Add**, **Subtract** or **Intersect** when there are several.
 
+A third button, **Displace**, gives the layer After Effects' Displacement Map: its own pixels moved by another layer (hidden or not, like a matte) or by the picture. See [displacement-map.md](displacement-map.md); it runs after the masks and before the matte.
+
 ## Using them
 
 Every layer card (except nulls and the Background layer) starts with two buttons.

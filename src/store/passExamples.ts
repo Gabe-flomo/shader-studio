@@ -10,6 +10,7 @@ import type { PlayRecord } from '../types/play';
 import { ctl, n } from './graphBuilder';
 import { buildPassExamplesMore, PASS_EXAMPLE_INDEX_MORE } from './passExamplesMore';
 import { buildPassExamplesP7, PASS_EXAMPLE_INDEX_P7 } from './passExamplesP7';
+import { buildDisplacementExamples, DISPLACEMENT_EXAMPLE_INDEX } from './displacementExamples';
 
 export const PASS_EXAMPLE_INDEX: Record<string, { label: string; description: string; play: true }> = {
   passEdgeGlow: {
@@ -20,6 +21,8 @@ export const PASS_EXAMPLE_INDEX: Record<string, { label: string; description: st
   ...PASS_EXAMPLE_INDEX_MORE,
   // Passes 7 to 9 (passExamplesP7.ts): a repeated jump-flood Pass, Edges straight from a picture, a blur group.
   ...PASS_EXAMPLE_INDEX_P7,
+  // The Displacement Map node (displacementExamples.ts).
+  ...DISPLACEMENT_EXAMPLE_INDEX,
 };
 
 /** The ordered keys, for the Passes folder. */
@@ -116,7 +119,7 @@ export function buildPassExamples(): Record<string, ExampleGraph> {
 **Try.** Raise Glow width: at ½ size it stays cheap. Set Pass B's Scale to ¼ for a softer, cheaper glow, or to 1 for a tighter one. Wire Pass A's Color straight to the Output to see the picture alone, or Pass B's to see just the edges. Swap the noise for a Texture Input to outline a photo.`),
   };
 
-  Object.assign(graphs, buildPassExamplesMore());
+  Object.assign(graphs, buildPassExamplesMore(), buildDisplacementExamples());
   Object.assign(graphs, buildPassExamplesP7());
   return graphs;
 }
