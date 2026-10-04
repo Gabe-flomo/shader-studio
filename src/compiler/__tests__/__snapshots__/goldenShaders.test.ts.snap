@@ -163,7 +163,7 @@ exports[`golden shaders: every Play example exports the same bundle > drumPads 1
 
 exports[`golden shaders: every Play example exports the same bundle > finishDatamoshEcho 1`] = `
 {
-  "bundle": "0ebce3ae1a536e1366d6c05ba020:5407",
+  "bundle": "17b0c817e21332142324f8be9b53:5417",
   "missing": [],
 }
 `;
@@ -7741,7 +7741,7 @@ exports[`golden shaders: every example compiles as it did > particleDustInAir 1`
     "u_p_gpuparticlx0_waveSpeed",
     "u_p_gpuparticlx0_wind",
   ],
-  "paramValues": "1378cfbd3896950a11a6c2354f03:1533",
+  "paramValues": "04197e085078f51fd8e47ed42aac:1533",
   "passes": null,
   "success": true,
   "textureUniforms": {
@@ -8032,7 +8032,7 @@ exports[`golden shaders: every example compiles as it did > particleImageDissolv
     "u_p_gpuparticlx0_waveSpeed",
     "u_p_gpuparticlx0_wind",
   ],
-  "paramValues": "0342b8a84bb7fb18755809776507:1531",
+  "paramValues": "0ad1d5591c82c00e57f45aae0e21:1531",
   "passes": null,
   "success": true,
   "textureUniforms": {
