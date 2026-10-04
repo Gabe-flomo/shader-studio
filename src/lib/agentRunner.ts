@@ -34,13 +34,14 @@ import { agentDrawUniform, agentStateUniform, agentStepUniform, agentWindowUnifo
 import { AG_BESSEL_UNIFORM, listenUniforms } from '../nodes/definitions/agentForces';
 import {
   AG_MAX_STEPS, AG_OFFLINE_CHUNK, AG_STEP_HZ, agDrawLook, agGovern, agGovernorState, agGroupState, agGroupSteps, agHear, agKeep, agLights, agLiveState,
-  agListenState, agRestartGroup, agStepTime, agStepWindow, agTrailSize, type AgGroupState, type AgListenState,
+  agListenState, agReadDecode, agReadPlan, agRestartGroup, agStepTime, agStepWindow, agTrailSize, type AgGroupState, type AgListenState,
 } from '../play/kit/agentPlan.js';
-import { GP_BESSEL_N, GP_BESSEL_W, GP_LEVELS, gpBesselTable, type GpSoundInput } from '../play/kit/gpuParticles.js';
+import { GP_BESSEL_N, GP_BESSEL_W, GP_LEVELS, gpBesselTable, gpReadback, type GpReadback, type GpSoundInput } from '../play/kit/gpuParticles.js';
 import {
-  AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_THUMB_DOTS_FRAG, AG_THUMB_DOTS_VERT, AG_TRAIL_FRAG,
+  AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_READ_FRAG, AG_SUM_FRAG, AG_THUMB_DOTS_FRAG, AG_THUMB_DOTS_VERT, AG_TRAIL_FRAG,
 } from '../play/kit/agentShaders.js';
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
+import { agentReadingsWanted, publishAgentReadings, setAgentGroups } from './agentReadings';
 
 type Uniforms = Record<string, THREE.IUniform>;
 
@@ -297,6 +298,12 @@ export class AgentRunner {
   private dotsBuf: Uint8Array | null = null;
   /** The picture's aspect at the last run (the dots thumbnail's shape). */
   private aspect = 16 / 9;
+  // Readings for Play (P6): the live state summed on the GPU into 2 × 1 texels, read back without a stall.
+  private readMat = raw(AG_FULL_VERT, AG_READ_FRAG, {
+    u_a: { value: null }, u_b: { value: null }, u_c: { value: null }, u_side: { value: 1 }, u_species: { value: 1 }, u_stateC: { value: 0 }, u_w: { value: 1 },
+  }, false);
+  private sumMat = raw(AG_FULL_VERT, AG_SUM_FRAG, { u_src: { value: null }, u_inW: { value: 1 }, u_inH: { value: 1 }, u_w: { value: 1 } }, false);
+  private reads = new Map<string, { side: number; rts: THREE.WebGLRenderTarget[]; reader: GpReadback; busy: boolean; last: Float32Array | null; count: number; aspect: number }>();
 
   constructor(host: AgentRunnerHost) {
     this.host = host;
@@ -369,6 +376,7 @@ export class AgentRunner {
 
   /** Take a new compile's agents. Update shaders whose source is unchanged are kept (a slider never gets here). */
   update(spec: AgentsSpec, vertexShader: string): void {
+    setAgentGroups(spec.groups.map(g => ({ nodeId: g.nodeId, label: g.label })));
     const old = new Map(this.steps.map(e => [e.spec.slug, e]));
     const vsChanged = vertexShader !== this.vertexShader;
     this.vertexShader = vertexShader;
@@ -601,12 +609,65 @@ export class AgentRunner {
         u[agentDrawUniform(d.slug)].value = this.draw(targets.draw(d, w, h), d, g, gs, aspect, o.time).texture;
         if (timed) o.timer!.end();
       }
+      // 5. Readings for Play, for the groups something reads (live only: a render has no Play to read them).
+      if (o.live) this.readings(targets, aspect, o.timer);
     } finally {
       if (timeUniform) timeUniform.value = keepTime;
       renderer.autoClear = prevAuto;
       renderer.setRenderTarget(null);
     }
     this.frames++;
+  }
+
+  /**
+   * Readings (lib/agentReadings.ts): for every group Play reads, what arrived from the GPU is
+   * published; when no read is in flight, its state is summed (kit/agentShaders.js AG_READ_FRAG,
+   * then AG_SUM_FRAG, down to 2 × 1 texels) and a read of those started (gpReadback: a pixel
+   * buffer and a fence, so nothing waits). The values are a frame or two late.
+   */
+  private readings(targets: AgentTargets, aspect: number, timer?: Timer): void {
+    const { renderer } = this.host;
+    const live = new Set<string>();
+    for (const g of this.spec.groups) {
+      if (!g.live || !agentReadingsWanted(g.nodeId)) continue;
+      const gs = targets.groups.get(g.slug);
+      if (!gs) continue;
+      live.add(g.nodeId);
+      let r = this.reads.get(g.nodeId);
+      if (r && r.side !== g.side) { for (const rt of r.rts) rt.dispose(); r.reader.dispose(); r = undefined; }
+      if (!r) {
+        const rts = agReadPlan(g.side).map(([w, h]) => new THREE.WebGLRenderTarget(2 * w, h, {
+          type: THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, stencilBuffer: false,
+        }));
+        r = { side: g.side, rts, reader: gpReadback(renderer.getContext() as WebGL2RenderingContext), busy: false, last: null, count: g.side * g.side, aspect };
+        this.reads.set(g.nodeId, r);
+      }
+      const px = r.reader.poll();
+      if (px && px !== r.last) {
+        r.last = px; r.busy = false;
+        publishAgentReadings(g.nodeId, agReadDecode(px, r.count, r.aspect));
+      }
+      if (r.busy) continue;
+      const timed = timer?.begin(`agents:${g.label} readings`) ?? false;
+      const plan = agReadPlan(g.side);
+      const ru = this.readMat.uniforms;
+      const tex = gs.rt[gs.cur].textures;
+      ru.u_a.value = tex[0]; ru.u_b.value = tex[1]; ru.u_c.value = g.stateC ? tex[2] : null;
+      ru.u_side.value = g.side; ru.u_species.value = g.species; ru.u_stateC.value = g.stateC ? 1 : 0; ru.u_w.value = plan[0][0];
+      this.pass(this.readMat, r.rts[0]);
+      for (let k = 1; k < plan.length; k++) {
+        const su = this.sumMat.uniforms;
+        su.u_src.value = r.rts[k - 1].texture;
+        su.u_inW.value = plan[k - 1][0]; su.u_inH.value = plan[k - 1][1]; su.u_w.value = plan[k][0];
+        this.pass(this.sumMat, r.rts[k]);
+      }
+      const last = r.rts[r.rts.length - 1];
+      const fb = (renderer.properties.get(last) as { __webglFramebuffer?: WebGLFramebuffer }).__webglFramebuffer ?? null;
+      if (fb && r.reader.request(fb, 2, 1)) { r.busy = true; r.count = g.side * g.side; r.aspect = aspect; }
+      if (timed) timer!.end();
+    }
+    // Groups nobody reads any more (or gone): their targets go.
+    for (const [id, r] of this.reads) if (!live.has(id)) { for (const rt of r.rts) rt.dispose(); r.reader.dispose(); this.reads.delete(id); }
   }
 
   /** A group's state textures as its update shader (and anything else) reads them now. */
@@ -825,7 +886,9 @@ export class AgentRunner {
       for (const d of this.spec.draws) if (u[agentDrawUniform(d.slug)]) u[agentDrawUniform(d.slug)].value = null;
     }
     this.steps = [];
-    for (const m of [this.depositMat, this.trailMat, this.drawMat, this.downMat, this.blurMat, this.composeMat, this.thumbMat, this.dotsMat, this.placeholder]) m.dispose();
+    for (const m of [this.depositMat, this.trailMat, this.drawMat, this.downMat, this.blurMat, this.composeMat, this.thumbMat, this.dotsMat, this.readMat, this.sumMat, this.placeholder]) m.dispose();
+    for (const r of this.reads.values()) { for (const rt of r.rts) rt.dispose(); r.reader.dispose(); }
+    this.reads.clear();
     this.dotsRt?.dispose();
     this.pointGeometry.dispose();
     this.thumbRt?.dispose();

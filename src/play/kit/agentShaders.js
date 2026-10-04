@@ -138,6 +138,9 @@ void main() {
   else if (u_colorBy == 2) k = clamp(B.z / max(u_speedRef, 1e-4), 0.0, 1.0);
   else if (u_colorBy == 3) k = 0.5 + 0.5 * cos(A.z);
   else if (u_colorBy == 4) k = a;
+  // The Particles node's own ways: fast ones take the palette's start; the heading once round it.
+  else if (u_colorBy == 6) k = 1.0 - clamp(B.z / max(u_speedRef, 1e-4), 0.0, 1.0);
+  else if (u_colorBy == 7) k = fract(atan(B.y, B.x) / 6.2831853 + 0.5);
   vec3 c = u_usePal == 1 ? agPalette(k) : mix(u_colA, u_colB, k);
   if (u_colorBy == 5) {
     // Agent: the colour its rule set (Agent Output's Colour), 8 bits a channel packed in C.w.
@@ -184,3 +187,58 @@ export const AG_THUMB_DOTS_FRAG = `precision highp float;
 uniform float u_gain;
 out vec4 o_col;
 void main() { o_col = vec4(vec3(1.0, 0.72, 0.32) * u_gain, 1.0); }`;
+
+/*
+ * Readings (P6): a group's walkers summed on the GPU into a 2 × 1 target, read back a frame or two
+ * later without a stall (gpReadback). Two halves side by side, each summing 8 × 8 blocks a pass:
+ * half 0 = (live walkers, Σx, Σy, Σ(x² + y²)), half 1 = (Σ speed, live of species 1, 2, 3).
+ * The first pass reads the state (A, B and, with per-walker state, C for the species), the next
+ * ones sum the previous pass, until one texel is left in each half (agReadPlan, agReadDecode).
+ */
+export const AG_READ_BLOCK = 8;
+
+export const AG_READ_FRAG = `precision highp float;
+precision highp int;
+uniform highp sampler2D u_a;
+uniform highp sampler2D u_b;
+uniform highp sampler2D u_c;
+uniform int u_side, u_species, u_stateC, u_w;
+out vec4 o;
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  int half_ = p.x >= u_w ? 1 : 0;
+  ivec2 b = ivec2(p.x - half_ * u_w, p.y) * ${AG_READ_BLOCK};
+  vec4 s = vec4(0.0);
+  for (int j = 0; j < ${AG_READ_BLOCK}; j++) for (int i = 0; i < ${AG_READ_BLOCK}; i++) {
+    ivec2 t = b + ivec2(i, j);
+    if (t.x >= u_side || t.y >= u_side) continue;
+    vec4 B = texelFetch(u_b, t, 0);
+    if (B.w <= 0.0) continue;
+    if (half_ == 0) {
+      vec2 q = texelFetch(u_a, t, 0).xy;
+      s += vec4(1.0, q, dot(q, q));
+    } else {
+      float sp = u_stateC == 1 ? texelFetch(u_c, t, 0).x : float((t.y * u_side + t.x) % u_species);
+      s += vec4(length(B.xy), vec3(equal(ivec3(int(sp + 0.5)), ivec3(0, 1, 2))));
+    }
+  }
+  o = s;
+}`;
+
+export const AG_SUM_FRAG = `precision highp float;
+precision highp int;
+uniform highp sampler2D u_src;
+uniform int u_inW, u_inH, u_w;
+out vec4 o;
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  int half_ = p.x >= u_w ? 1 : 0;
+  ivec2 b = ivec2(p.x - half_ * u_w, p.y) * ${AG_READ_BLOCK};
+  vec4 s = vec4(0.0);
+  for (int j = 0; j < ${AG_READ_BLOCK}; j++) for (int i = 0; i < ${AG_READ_BLOCK}; i++) {
+    ivec2 t = b + ivec2(i, j);
+    if (t.x >= u_inW || t.y >= u_inH) continue;
+    s += texelFetch(u_src, ivec2(t.x + half_ * u_inW, t.y), 0);
+  }
+  o = s;
+}`;

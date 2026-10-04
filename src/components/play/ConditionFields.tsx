@@ -14,6 +14,7 @@ import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { playEngine } from '../../lib/playEngine';
+import { AGENT_GROUP_READS, agentReadLayer } from '../../lib/agentReadings';
 import { sgParseValueRef, sgScreenPoint } from '../../play/kit/signals.js';
 import { COND_LABELS, SENSOR_HINTS, SENSOR_LABELS, anchorLayers, anchorOptions, valueRefLabel, type LabelContext } from '../../play/playSources';
 import { layerPorts } from '../../play/layerPorts';
@@ -46,6 +47,12 @@ export function valueSections(play: PlayRecord): PickerSection[] {
   // What layers measure (hover, fill, speed…): layerPorts' readings, watched straight from the layer.
   const readingItems = play.layers.flatMap(l => layerPorts(l).readings.map(r => ({ value: `read:${l.id}::${r}`, label: `${l.label} · ${SENSOR_LABELS[r]}`, icon: 'eye' as const, description: SENSOR_HINTS[r], keywords: `${l.kind} reading sensor` })));
   if (readingItems.length) out.push({ heading: 'Layer readings', items: readingItems });
+  // The graph's Agents groups: how many walkers are alive, where their centre is… (lib/agentReadings.ts, a frame or two late).
+  const groupItems = useNodeGraphStore.getState().nodes.filter(nd => nd.type === 'agentsGroup').flatMap(nd => {
+    const label = typeof nd.params.label === 'string' && nd.params.label ? nd.params.label : 'Agents';
+    return AGENT_GROUP_READS.map(r => ({ value: `read:${agentReadLayer(nd.id)}::${r}`, label: `${label} · ${SENSOR_LABELS[r]}`, icon: 'eye' as const, description: SENSOR_HINTS[r], keywords: 'agents group walkers reading sensor' }));
+  });
+  if (groupItems.length) out.push({ heading: 'Agents groups', items: groupItems });
   // Where things are, one axis at a time (0..1, Y up): a region test is a band on X and one on Y, combined.
   const posItems = anchorLayers(play.layers).flatMap(l => (['x', 'y'] as const).map(a => ({ value: `ax:${a}:${l.id}`, label: `${l.label} · position ${a.toUpperCase()}`, icon: 'target' as const, description: `Where its centre is ${a === 'x' ? 'across' : 'up'} the picture, 0 to 1`, keywords: 'position region inside where' })));
   if (usesHands(play) || play.layers.some(l => l.kind === 'camera')) for (const side of ['right', 'left'] as const) for (const a of ['x', 'y'] as const) posItems.push({ value: `ax:${a}:hand:${side}:${HAND_PINCH_POINT}`, label: `${side === 'right' ? 'Right' : 'Left'} pinch point ${a.toUpperCase()}`, icon: 'target' as const, description: 'Halfway between the thumb and index tips', keywords: 'hand position region' });

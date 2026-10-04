@@ -69,7 +69,8 @@ const NEVER = new Set(['output', 'vec4Output', 'group', 'sceneGroup', 'spaceWarp
   'agentsGroup', 'agentInputs', 'agentOutput', 'agentStepOut', 'agentSense', 'agentSteer', 'agentMove', 'agentBySpecies', 'agentEmit', 'agentDeposit', 'trailField', 'drawAgents', 'slimeMoldPreset',
   'agentGravity', 'agentWind', 'agentCurl', 'agentAttract', 'agentVortex', 'agentFlow', 'agentSoundKick', 'agentIntegrate', 'agentAge', 'agentCollide', 'agentChladni',
   'particlesPreset', 'curlSmokePreset', 'soundBurstPreset',
-  'trailStepOut', 'multiSlimePreset', 'antsPreset', 'boidsPreset', 'strandsPreset', 'growPicturePreset']);
+  'trailStepOut', 'multiSlimePreset', 'antsPreset', 'boidsPreset', 'strandsPreset', 'growPicturePreset',
+  'galaxyPreset', 'myceliumPreset', 'sandPlatePreset']);
 const DECL = /^\s*(float|vec[234]|mat[234]|int|bool)\s+([A-Za-z_]\w*)\s*=\s*(.+);\s*$/;
 /** Names a block input can't have: GLSL functions, types and keywords, and the app's own prefixes. */
 const RESERVED = new Set('sin cos tan asin acos atan pow exp log exp2 log2 sqrt inversesqrt abs sign floor ceil fract mod min max clamp mix step smoothstep length distance dot cross normalize reflect refract faceforward texture2D texture radians degrees any all not float int bool vec2 vec3 vec4 mat2 mat3 mat4 if else for while do return const uniform varying in out inout void main discard true false struct sampler2D precision highp mediump lowp dFdx dFdy fwidth'.split(' '));

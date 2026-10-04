@@ -14,6 +14,7 @@ import { askChoice } from '../components/ui/dialogStore';
 import { buildAgentsSubgraph, buildMarchRig, buildMarchSubgraph, buildSceneSubgraph, buildVolumetricRig, graphOutput, instantiateNode, twoDNodesBefore3D } from '../nodes/scene3dDefaults';
 import { agentEyeNodes } from '../compiler/agentGraph';
 import { agentPreset } from './agentExamples';
+import { particlesAsNodes } from './particlesAsNodes';
 import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES, AGENT_PRESET_TYPES } from '../nodes/definitions/agents';
 import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
@@ -691,6 +692,12 @@ interface NodeGraphState {
   duplicateGroup: (groupId: string) => string | null;
   duplicateNode: (nodeId: string) => string | null;
   duplicateNodes: (nodeIds: string[]) => void;
+  /**
+   * Open as nodes (Particles node, docs/agents-plan.md §11): an Agents-group copy of a top-level
+   * Particles node's settings, placed under it; what read the node reads the copy's Draw agents
+   * instead. The original is left as it was. Returns the new group's id (null if it can't).
+   */
+  openParticlesAsNodes: (nodeId: string) => string | null;
 
   // Texture inputs — maps nodeId → loaded THREE.Texture (or null if not yet loaded)
   // Populated by NodeComponent file picker; consumed by ShaderCanvas to bind sampler2D uniforms.
@@ -2360,6 +2367,49 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     get().compile();
   },
 
+  openParticlesAsNodes: (nodeId) => {
+    const st = get();
+    const src = st.nodes.find(nd => nd.id === nodeId);
+    if (!src || src.type !== 'gpuParticles') {
+      toast.info('Open as nodes works on a Particles node at the top level', { message: 'Leave the group it is in (or move it out) and try again.' });
+      return null;
+    }
+    const made = particlesAsNodes(src, () => idGenerator.next(), { x: src.position.x, y: src.position.y + 520 });
+    undoManager.push(st.nodes, { label: 'Opened Particles as nodes' });
+    // What read the Particles node reads the copy's Draw agents now (the original stays, unwired).
+    let kept = 0;
+    const rewired = st.nodes.map(nd => {
+      let changed = false;
+      const inputs = Object.fromEntries(Object.entries(nd.inputs).map(([k, inp]) => {
+        const c = inp.connection;
+        if (!c || c.nodeId !== nodeId) return [k, inp];
+        const to = made.outputs[c.outputKey as 'color' | 'particles' | 'density'];
+        if (!to) { kept++; return [k, inp]; }
+        changed = true;
+        return [k, { ...inp, connection: { ...to } }];
+      }));
+      return changed ? { ...nd, inputs } : nd;
+    });
+    set({ nodes: [...rewired, ...made.nodes] });
+    // An Image emitter: the node's picture, copied into the Texture Input the copy is born on.
+    const tex = made.imageId ? st.nodeTextures[`${nodeId}::image`] : null;
+    if (made.imageId && tex) {
+      const copy = tex.clone();
+      copy.needsUpdate = true;
+      get().setNodeTexture(made.imageId, copy);
+      const img = tex.image as { width?: number; height?: number } | undefined;
+      const aspect = img?.width && img.height ? img.width / img.height : 1;
+      const thumb = src.params.__tex_image_thumb;
+      set(s2 => ({ nodes: s2.nodes.map(nd => (nd.id === made.imageId ? { ...nd, params: { ...nd.params, _imageAspect: aspect, ...(typeof thumb === 'string' ? { _thumbnailUrl: thumb } : {}) } } : nd)) }));
+    }
+    get().compile();
+    const notCarried = made.missing.length ? ` Not carried over yet: ${made.missing.join(' ')}` : '';
+    toast.info('Particles opened as nodes', {
+      message: `An Agents group with the same settings is below it${kept ? ' (its Particles output still reads the original: the copy has no "particles alone" with Over wired)' : ', wired where the Particles node was'}; the Particles node is left as it was: delete it when you like. Double-click the group to see its forces; every node has a note.${notCarried}`,
+      ...(made.missing.length ? { sticky: true } : {}),
+    });
+    return made.groupId;
+  },
   setNodeTexture: (nodeId, texture) => set(state => ({
     nodeTextures: { ...state.nodeTextures, [nodeId]: texture },
   })),
@@ -3202,6 +3252,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           boidsPreset: 'Birds that flock through a field of their own velocities',
           strandsPreset: 'Slime combed into long strands, drawn as ink on paper',
           growPicturePreset: 'Slime that feeds on a picture\'s bright parts and maps it in veins',
+          galaxyPreset: 'A million stars circling a bright core, crowding into two turning spiral arms',
+          myceliumPreset: 'A fungus colony that branches out of a spore, drawn by a palette',
+          sandPlatePreset: 'A million grains of sand drawing Chladni figures on a ringing plate',
         } as Record<string, string>)[type] ?? 'A million particles moved by a chain of forces, drawn by Draw agents';
         toast.info(`${preset.label} added`, {
           message: `${what}${output ? ' and wired to the Output' : '. Add an Output node and wire the last node into it to see it'}. Every node has a note on what it does; double-click the Agents group to open the rule.`,

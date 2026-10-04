@@ -16,9 +16,9 @@
 // then Draw agents.
 //
 // Top-level names start with `ah` (the kit's one-scope rule).
-import { AG_OFFLINE_CHUNK, AG_STEP_HZ, agDrawLook, agGovern, agGovernorState, agGroupState, agGroupSteps, agHear, agKeep, agLights, agListenState, agLiveState, agRestartGroup, agStepTime, agStepWindow, agTrailSize } from './agentPlan.js';
-import { AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_TRAIL_FRAG } from './agentShaders.js';
-import { GP_BESSEL_N, GP_BESSEL_W, GP_LEVELS, gpBesselTable } from './gpuParticles.js';
+import { AG_OFFLINE_CHUNK, AG_STEP_HZ, agDrawLook, agGovern, agGovernorState, agGroupState, agGroupSteps, agHear, agKeep, agLights, agListenState, agLiveState, agReadDecode, agReadPlan, agRestartGroup, agStepTime, agStepWindow, agTrailSize } from './agentPlan.js';
+import { AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_READ_FRAG, AG_SUM_FRAG, AG_TRAIL_FRAG } from './agentShaders.js';
+import { GP_BESSEL_N, GP_BESSEL_W, GP_LEVELS, gpBesselTable, gpReadback } from './gpuParticles.js';
 
 /** Why a page can't run agents here, or null. */
 export function ahUnsupported(gl) {
@@ -227,6 +227,46 @@ export function ahCreate(gl, spec, env) {
     gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, t || blank); gl.uniform1i(u.loc, i);
   });
   const quadInto = (fb, w, h) => { gl.bindFramebuffer(gl.FRAMEBUFFER, fb); gl.viewport(0, 0, w, h); env.quad(); };
+
+  // Readings for the page's Play (P6): only for groups its setup reads (`readAs`, the sensor layer
+  // `ag:<id>`), as the app does: the state summed on the GPU to 2 × 1 texels (kit/agentShaders.js),
+  // read back without a stall (gpReadback), decoded by the shared agReadDecode. A frame or two late.
+  const readProgs = groups.some(g => g.readAs) ? (() => {
+    try { return { read: raw(AG_FULL_VERT, AG_READ_FRAG), sum: raw(AG_FULL_VERT, AG_SUM_FRAG) }; } catch (e) { warn('The agents readings', e); return null; }
+  })() : null;
+  const R = new Map(), readOut = new Map();
+  const dropRead = r => { for (const l of r.levels) { gl.deleteFramebuffer(l.fb); gl.deleteTexture(l.t); } r.reader.dispose(); };
+  const readings = (aspect) => {
+    if (!readProgs) return;
+    for (const g of groups) {
+      const gs = g.readAs ? G.get(g.slug) : null;
+      if (!gs) continue;
+      let r = R.get(g.slug);
+      if (r && r.side !== g.side) { dropRead(r); r = null; }
+      if (!r) {
+        const levels = agReadPlan(g.side).map(([w, h]) => { const t = tex(gl.RGBA32F, gl.RGBA, gl.FLOAT, gl.NEAREST, gl.CLAMP_TO_EDGE, 2 * w, h); return { t, fb: fbOf([t]), w, h }; });
+        r = { side: g.side, levels, reader: gpReadback(gl), busy: false, last: null, count: g.side * g.side, aspect };
+        R.set(g.slug, r);
+      }
+      const px = r.reader.poll();
+      if (px && px !== r.last) { r.last = px; r.busy = false; readOut.set(g.readAs, agReadDecode(px, r.count, r.aspect)); }
+      if (r.busy) continue;
+      const t = gs.tex[gs.cur];
+      const P = readProgs.read;
+      gl.useProgram(P.p);
+      samplers(P, [['u_a', t[0]], ['u_b', t[1]], ['u_c', g.stateC ? t[2] : null]]);
+      ahSet(gl, P.u, 'u_side', g.side); ahSet(gl, P.u, 'u_species', g.species); ahSet(gl, P.u, 'u_stateC', g.stateC ? 1 : 0); ahSet(gl, P.u, 'u_w', r.levels[0].w);
+      quadInto(r.levels[0].fb, 2 * r.levels[0].w, r.levels[0].h);
+      for (let k = 1; k < r.levels.length; k++) {
+        const S = readProgs.sum, a = r.levels[k - 1], b = r.levels[k];
+        gl.useProgram(S.p);
+        samplers(S, [['u_src', a.t]]);
+        ahSet(gl, S.u, 'u_inW', a.w); ahSet(gl, S.u, 'u_inH', a.h); ahSet(gl, S.u, 'u_w', b.w);
+        quadInto(b.fb, 2 * b.w, b.h);
+      }
+      if (r.reader.request(r.levels[r.levels.length - 1].fb, 2, 1)) { r.busy = true; r.count = g.side * g.side; r.aspect = aspect; }
+    }
+  };
   const bindState = (g, s) => {
     const t = s.tex[s.cur];
     env.textures.set(g.u.A, t[0]); env.textures.set(g.u.B, t[1]);
@@ -443,11 +483,15 @@ export function ahCreate(gl, spec, env) {
         if (!gs || !g) { env.textures.set(d.u.tex, null); continue; }
         env.textures.set(d.u.tex, drawAgents(drawTargets(d, w, h), d, g, gs, aspect, o.time));
       }
+      // 5. Readings for the page's Play (live only).
+      if (o.live) readings(aspect);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.activeTexture(gl.TEXTURE0);
     },
     /** The simulation as it stands (scripted checks): per group its state textures, framebuffers and step; per trail and drawing its targets. */
     state() { return { groups: G, trails: T, draws: D }; },
+    /** The latest readings of the groups the page's setup reads: [sensor layer (`ag:<id>`), { alive, centroidX… }]. */
+    readings() { return [...readOut]; },
     /** Start everything over: every group dead at step 0, every trail empty (a new render). */
     reset() {
       for (const s of G.values()) { restartGroup(s); s.live = agLiveState(); }
@@ -458,6 +502,9 @@ export function ahCreate(gl, spec, env) {
       for (const s of G.values()) dropGroup(s);
       for (const s of T.values()) s.rt.forEach(dropLook);
       for (const s of D.values()) { dropLook(s.acc); s.glow.forEach(dropLook); if (s.out !== s.acc) dropLook(s.out); }
+      for (const r of R.values()) dropRead(r);
+      R.clear(); readOut.clear();
+      if (readProgs) { gl.deleteProgram(readProgs.read.p); gl.deleteProgram(readProgs.sum.p); }
       G.clear(); T.clear(); D.clear();
       for (const e of steps) if (e.p) gl.deleteProgram(e.p);
       for (const e of trailSteps.values()) if (e.p) gl.deleteProgram(e.p);

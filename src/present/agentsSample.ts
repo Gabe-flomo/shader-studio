@@ -352,7 +352,9 @@ Try **Play → Agents in Play → Agents: a hand and a beat** (last picture).`),
 
 **7. On a web page.** An exported page (and these slides) carries the same update shaders and runs them in its own WebGL2 (\`kit/agentHost.js\`, no three.js), with the schedule, Burst, Start over, what Sound kick hears and how Draw agents looks shared with the app's runner (\`kit/agentPlan.js\`), so the page steps the simulation the way the Studio does.
 
-**Coming next:** "Open as nodes" for the Particles node, readings (how many are alive, where the crowd is) back into Play, and 3D.`),
+**8. Back from the GPU.** "Open as nodes" on a Particles node builds the same particles as a group; and a group reads like a layer in Play: how many are alive, where the crowd is, how spread out and fast, summed on the GPU only while something reads it, a frame or two late.
+
+**Coming next:** 3D.`),
       glsl(trailMain, 'The trail’s step (fixed engine code): spread toward the 3×3 (or 5×5) mean, then fade by 2^(−dt / half-life)', linesBetween(trailMain, 'vec4 t = mix(')),
     ], 2),
   ];

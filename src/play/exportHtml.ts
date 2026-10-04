@@ -148,6 +148,8 @@ export interface WebAgents {
     listeners: Array<Omit<AgentListener, 'nodeId'> & { u: { sound: string; shocks: string; levels: string; plateModes: string; plateCount: string; plateShake: string } }>;
     /** State samplers A–D, the step (uint) and the birth window (vec4). */
     u: { A: string; B: string; C: string; D: string; step: string; win: string };
+    /** The sensor layer (`ag:<node id>`) the page's Play reads this group's readings as; absent when nothing does. */
+    readAs?: string;
   }>;
   deposits: Array<Omit<AgentDepositProgram, 'nodeId'>>;
   trails: Array<Omit<AgentTrailProgram, 'nodeId' | 'stepNodeIds' | 'readsPasses'> & { u: { tex: string; src: string; step: string } }>;

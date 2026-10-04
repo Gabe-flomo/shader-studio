@@ -56,6 +56,7 @@ import { tkDrive, tkDriver, tkHandsFrame, tkSubjectAge, tkVideoTime, type TkFram
 import { DEFAULT_FACE, DEFAULT_POSE, bakeFor, parseTrackAnchor, usesFace, usesPose, type PlayTracker } from '../types/playTracking';
 import type { VideoLayer } from '../types/playLayers';
 import { readDataSource } from '../play/dataLayer';
+import { agentReading, agentReadingByKey, isAgentReadLayer } from './agentReadings';
 import { hdAge, hdCreate, hdGate, hdPlacement, hdPoint, hdRead, hdTrackerOptions, hdUpdate, type HdState } from '../play/kit/hands.js';
 import { CAPTURE_POS, DEFAULT_HANDS, PAD_ANCHOR, parseEventAnchor, parseHandAnchor, parseSignalAnchor, usesHands, type FireMode, type HandGesture, type HandSide, type PlayLayer } from '../types/play';
 
@@ -534,6 +535,7 @@ class PlayEngine implements InputSource {
 
   /** What a layer last reported under `key` (a Data layer's `<id>::row`, for its panel), or undefined. */
   sensor(key: string): number | undefined {
+    if (isAgentReadLayer(key)) return agentReadingByKey(key);
     return this.sensors.get(key);
   }
 
@@ -1373,6 +1375,8 @@ class PlayEngine implements InputSource {
           return d === null ? null : Math.min(1, d);
         }
         if (AUDIO_READS.has(source.read)) return this.audioBand(source.layerId, source.read as LiveBand);
+        // An Agents group's readings (`ag:<id>`): summed on the GPU while something reads them.
+        if (isAgentReadLayer(source.layerId)) return agentReading(source.layerId, source.read) ?? null;
         return this.sensors.get(sensorKey(source)) ?? null;
       }
       case 'data':

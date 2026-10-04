@@ -1,6 +1,6 @@
 # Agents group: slime mold and particles built from nodes (plan, 2026-10-03)
 
-**Status:** P0, P1 (Slime), P2 (Particles), P3 (Species, food and obstacles), P4 (Play) and P5 (Websites) shipped 2026-10-03/04; see "What shipped" below. P6 not built. User guide: docs/agents-group.md.
+**Status:** P0, P1 (Slime), P2 (Particles), P3 (Species, food and obstacles), P4 (Play), P5 (Websites) and P6 without 3D (Open as nodes, readings into Play, three presets) shipped 2026-10-03/04; see "What shipped" below. 3D waits. User guide: docs/agents-group.md.
 
 ## In plain words
 
@@ -143,6 +143,38 @@ Built on the Pass node's phase 5 (pages run Pass programs on one uniform table, 
 **Measured** (same session, 1M walkers, 1920 × 1080, each frame GPU-synced): the page's engine against the app's: Slime mold 13.3 / 12.9 ms, Particles 9.8 / 9.3, Sound burst 10.7 / 10.3, Agents: a hand and a beat 9.6 / 12.2. Exported pages running live (headless Chrome, 1920 × 993 background page and 1620 × 993 player): Slime mold and Sound burst hold 60 fps with 120 steps a second (keeping up).
 
 **Deferred from P5**: the tape (Audio engine clips) on pages; choosing which Motion layer (the first, as in the app); a Particles node reading a texture inside a pass or update program (the app doesn't either).
+
+
+## What shipped (P6, no 3D, 2026-10-04)
+
+The user decided 3D waits: everything in P6 except 3D (z in state, the Particles node's camera and depth of field in Draw, 3D Collide through the scene grid) and the Play layer hosting the same engine.
+
+**Open as nodes** (the Particles card, under its presets; `store/particlesAsNodes.ts`, store action `openParticlesAsNodes`). One undoable change builds an Agents-group copy of the node's current settings under it and rewires what read the Particles node to the copy's Draw agents (Color → Color, Density → Density; Particles → Color when Over is unwired). The Particles node itself is left as it was (it is now wired to nothing; delete it when happy). Every node it adds has a note naming the settings it carries.
+- Mapped: Count, Emitter (Point and Line facing up, Ring and Disc outward, Box random; Sphere and Ball become a Disc), Emitter size, Life (± half, the engine's), Speed (± 0.45), Spread, Burst; Gravity, Wind (its gusts from the same noise), Turbulence and Turbulence size (Curl noise, Evolve 0.15 = the engine's noise clock), Swirl (Vortex at the emitter, reach 0.5), Attract (Everywhere, at the centre or the mouse), Drag (Integrate, no speed limit), Hands (one Attract within reach per hand, at Hand X / Y or a wired position), Flow (Flow node, Slope or Around), Obstacle (Collide, SDF or Mask through a "Mask to distance" block), Pattern (Chladni with every plate setting), Wave / Vibrate / Shockwave / Crunch (a Sound kick each: Wave, Vibrate, Shockwave at 1.4, Shake), Sound from and Sound level (the group's Sound from and Level), Mouse moves Emitter (a Mouse node into Emit and the group's Emitter port) or Attractor; Look (Light → Glow, Thread → Streaks, Ink → Ink with its colour and paper), Size, Brightness (× 0.7: every walker is alive at once), Glow, Colours, Colour by, Lights (count, colour, power, reach, halo, motion, the orbit from the emitter size); pre-roll min(6, 1.5 × Life) as the engine's; Steps per frame 1 (the node's own pace).
+- Wired sockets: Over → Draw agents' Over; Emitter → Emit's Position and a group port for Vortex and the Sound kicks; Hand / Hand 2, Flow, Obstacle and every wired setting a force has a socket for (Gravity, Wind, Turbulence, Swirl, Attract, Drag, Hand pull, Flow force, Wave, Vibrate, Shockwave, Crunch) → ports on Agent Inputs.
+- Not carried yet, listed in the toast and kept in the group's note: 3D (Space, the camera, Drift, Focus, Blur, Camera from / ray, Depth, Scene), Sphere / Ball as 3D shapes, the Image emitter holding its picture (the copy is born on the picture's bright parts: a Texture Input with the picture copied in, Emit Field, "Not born this time"; no homes, no Release, not the picture's colours), Emit Burst mode (all together every Life), Gust, Jet, Mouse moves A light, UV, a moving emitter's plate and lights, Sound from Graph's Audio input node (map it to the group's Level), and wired settings whose node has only a slider (Emit's, Draw's, Turbulence size, Hand swirl, Chladni's; their value is set).
+- To make the copy match, small additions that change no existing program: Emit's Shape **Line** and Facing **Up**; Draw agents' Colour by **Speed, fast first** and **Heading, once round** (the Particles engine's own formulas, `u_colorBy` 6 and 7 in `AG_DRAW_VERT`). Checked in the browser on eight Particles examples (Flow drift, Chladni sand, Round shape, Ink in water, Sound field, Star outline, Galaxy, Rain): the copy's frames match the node's in structure and colour (flow structures, the plate figure, the wake round the shape), 2D and silence aside.
+- A compiler fix found on the way: a node left in the picture program (the original Particles node, wired to nothing) that reads a node only a group's program needs (its Emitter wire, now also the copy's Emit's) got `vec2(undefined)`. `compilePassGraph` now keeps the ancestors of every node the picture program keeps; graphs that compiled before compile the same (checked below).
+
+**Readings back into Play** (`lib/agentReadings.ts`, `kit/agentPlan.js` `agReadPlan` / `agReadDecode`, `kit/agentShaders.js` `AG_READ_FRAG` / `AG_SUM_FRAG`). An Agents group reads like a layer on the sensor layer `ag:<group node id>`: Alive (share alive), Speed (mean, 1 at a picture height a second), Spread (0 in one place, 1 spread evenly), Centre X / Y (0–1), Group 1–4 (each species' share of the live walkers): the CPU Agents layer's names. Only what is read is computed: a Play read (a mapping source, a rule condition `read:ag:…`, a meter) marks the group wanted for 2 s, and the live runner then sums its state on the GPU (8 × 8 blocks a pass into two halves, 1M walkers: 128² → 16² → 2² → 1 texel each) and reads 2 × 1 texels back with the Particles engine's `gpReadback` (a pixel buffer and a fence, one in flight; nothing waits). The values are the live simulation's, a frame or two late; a take records what its mappings made of them. Lists: the mapping drawer's Layer sensor picker (*<group> · walkers*), the rule condition picker (*Agents groups*), labels everywhere. Web pages: the bundle marks a group `readAs` only when its Play reads it (other bundles unchanged), the page's host sums it the same way and the runtime sets the sensors.
+- Checked in the browser: GPU readings against the same numbers worked out on the CPU from a read-back of the live state agree within 4 × 10⁻⁸ (Multi-species slime with per-walker species, Sound burst, Mycelium); the first reading arrives one or two frames after the first read. App and exported page: a control mapped from Sound burst's Centre X drives Draw agents' Brightness to 2 × 0.49 in both.
+- Cost: within the noise at 1M (Slime mold 9.9 / 10.2 ms a frame with / without, Galaxy 7.0 / 7.0, Multi-species slime 10.7 / 11.0; same session, alternating blocks).
+- Side finding, fixed: Play's record parser dropped sensor sources reading Centre X / Y or Group 1–4 (the CPU Agents layer's readings too) because they weren't in its list of known reads.
+
+**Presets** (each also an example, every node, inside too, with a note; Expression Blocks explain each named line; `agentExamplesP6.ts`):
+- **Galaxy** (`agentGalaxy`): 1M stars, each on its own circular orbit kept in Memory (the radius it was born at), with a flat rotation curve; an "Orbit and arms" block bends every orbit by a two-armed log spiral that turns slowly, so stars crowd into arms they stream through (a density wave), and lights the crowded stars blue (young stars, a few pink knots) against warm bulge stars. Two chained Emits (bulge and disc), glow by Agent colour over a faint core haze. Stable for ever (no integration drift: the orbit is exact).
+- **Mycelium** (`agentMycelium`): 64k room, about a thousand growing tips at once (Rate 200, Life 5). Tips shy away from threads (Steer Away) and drift outward; new tips sprout on the young, thin threads at the colony's edge: Emit Shape Field with Where ƒ = "Young threads" (a·(1−a)·4 of the Trail's own Amount) and Emit's new **No place found: Not born this time**, chained with a tiny spore share. The colony starts slowly, then branches outward into a fuzzy mould disc over about a minute; threads last (half-life 60 s); tips glow faintly.
+- **Sand on a plate** (`agentSandPlate`): 1M grains poured over a square plate (Emit Box), Chladni alone inside (Modes 3, Mode from Sound) hearing the group's Sound from Level and Beat 20: every kick steps the figure on and the sand runs to the new lines. Gold by speed (resting grains pale, running ones amber) over a brushed metal plate.
+- Tried and left out: Rain on glass (the streaks read as falling rain, not drops on a pane, after four tunings).
+- Emit's **No place found** (Picture / Field shapes): Born at the best try (the default; the GLSL is as before) or Not born this time (dead, so Keep full tries again the next step).
+
+**Zero change.** `goldenShaders.test.ts.snap` and `gpEngineShaders.test.ts.snap` are untouched (no entry added, removed or updated). Every existing multi-program example (all nine Agents examples, the hand-and-beat Play example in both its forms, the Pass example) compiles to byte-identical results on this branch and on main: final picture, pass programs, update shaders, Trail step programs, the whole agents spec, uniforms and bindings (a dump of all twelve compared key by key). The engine shaders gain two branches (Draw's colour orders 6 and 7) and two new programs (readings), used only when asked for.
+
+**Determinism** (browser, M3 Pro, ANGLE Metal): Galaxy, Mycelium and Sand on a plate reach bit-identical state A, B, C (Galaxy's memory and colour) and trail offline twice and live at 30, 60, 120 Hz and 60 Hz with a 150 ms stall (FNV of the read-back), at 2 s and again at 8 s (Mycelium, its branching births) and 7 s (Sand, two beats).
+
+**Measured** (1920 × 1080, GPU-synced, as shipped): Galaxy 1M 6.9 ms a frame (steps 2.2 ms, the rest the 1M glow draw), Mycelium 64k 1.8 ms (steps 1.4 ms: the 1024-row trail), Sand on a plate 1M 5.6 ms (steps 1.5 ms).
+
+**Deferred from P6**: 3D (z in the state, the camera and depth of field in Draw agents, 3D Collide through the scene grid); a Play layer hosting the engine; the Image emitter holding its picture (homes, Release); Gust and Jet as nodes; per-socket wiring for Emit's and Draw's settings; readings of a Trail (how much trail there is, where); Rain on glass.
 
 ---
 
@@ -368,7 +400,7 @@ The rule lives in `compiler/agentRules.ts`, next to `fieldSockets.ts`. Its messa
 - **Sound.** Sound kick and Chladni nodes inside, Sound from on the group (above). Audio Input amplitude into any socket is one wire.
 - **Hands, pose, nulls and the mouse** go into Attract/Repel, Vortex and Emit Position.
 - **Motion layer as food and as an emitter (P4).** Expose a Motion layer's grid as a texture: a **Motion (texture)** source node, the follow-up `docs/motion-layer.md` already names. It goes into the Trail's Add ƒ (food: slime grows toward where people move), Emit's Picture (born where it moves) or a Sense. Until then, the Layers node gives a frame-late version.
-- **Readings (P6).** Alive share and centroid, by a 1-texel reduction read back with GP's `gpReadback` (a frame or two late), listed as layer sensors.
+- **Readings (P6, shipped).** Alive share, centre, spread, mean speed and each species' share, by a reduction to 2 × 1 texels read back with GP's `gpReadback` (a frame or two late), only while Play reads them: sensors on `ag:<group node id>` in the mapping and rule pickers.
 
 ## 7. Performance budget and limits
 
@@ -466,7 +498,7 @@ Instead:
 | **Strands** | Slime with Distance 30 px, Turn 12°, low jitter | Trail with fast decay, Draw Streaks Ink on paper |
 | **Particles** | Curl noise → Vortex → Attract (mouse) → Integrate (drag) → Age/Life | Emit ring, rate; Draw Glow + 4 lights |
 
-More in P6: Sand on a plate (Chladni), Sound field (Sound kick), Food from a picture (Trail Add ƒ = an image), Walls (Move Obstacle ƒ = text SDF), Hand slime.
+More in P6: Sand on a plate (Chladni), Sound field (Sound kick), Food from a picture (Trail Add ƒ = an image), Walls (Move Obstacle ƒ = text SDF), Hand slime. Shipped in P6: Galaxy, Mycelium and Sand on a plate (Grow toward a picture is the food-from-a-picture one, P3).
 
 ## 13. Phases (each ships on its own PR against main, with What's new entries)
 
@@ -496,7 +528,7 @@ More in P6: Sand on a plate (Chladni), Sound field (Sound kick), Food from a pic
 - **P5 Websites.** *(Built: see What shipped (P5).)*
   - Runtime runs agents (after or with Pass phase 5); removed from `unsupportedFeatures`.
   - Parity test and browser sweep.
-- **P6 More.**
+- **P6 More.** *(Built without 3D: see What shipped (P6, no 3D).)*
   - More presets, "Open as nodes" on the Particles card, readings back into Play.
   - 3D (z in state, GP's camera and DoF in Draw, 3D Collide through the scene grid).
   - A Play layer hosting the same engine.

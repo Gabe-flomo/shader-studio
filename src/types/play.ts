@@ -708,6 +708,8 @@ export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
   motion: MOTION_READS,
   // A Granulator rack, as the sensor pickers list it (layer id `ae:<rackId>`).
   granulator: ['grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainBandMean', 'grainEnergySum', 'grainPos', 'grainAmp', 'grainBand', 'grainEnergy', 'grainRow'],
+  // An Agents group in the graph, as the sensor pickers list it (layer id `ag:<node id>`, lib/agentReadings.ts).
+  agentsGroup: ['alive', 'speed', 'spread', 'centroidX', 'centroidY', 'group1', 'group2', 'group3', 'group4'],
 };
 /** A path shape (corners that are nulls) also reads its area, perimeter and spread. */
 const PATH_READS: readonly SensorRead[] = ['area', 'perimeter', 'spread', 'fill', 'hover', 'distance'];
@@ -1684,7 +1686,7 @@ function parseHands(v: unknown): PlayHands | null {
   return out;
 }
 
-const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble', 'area', 'perimeter', 'gap', 'closing', 'chaseSpeed', 'sight', 'catch', 'sinceCatch', 'catches', 'picture', 'alive', 'born', 'died', 'grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainPos', 'grainAmp', 'grainBandMean', 'grainEnergySum', 'grainBand', 'grainEnergy', 'grainRow', 'moveX', 'moveY', 'dirX', 'dirY']);
+const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble', 'area', 'perimeter', 'gap', 'closing', 'chaseSpeed', 'sight', 'catch', 'sinceCatch', 'catches', 'picture', 'alive', 'born', 'died', 'centroidX', 'centroidY', 'group1', 'group2', 'group3', 'group4', 'grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainPos', 'grainAmp', 'grainBandMean', 'grainEnergySum', 'grainBand', 'grainEnergy', 'grainRow', 'moveX', 'moveY', 'dirX', 'dirY']);
 
 function parseAction(raw: unknown): PlayAction | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -2114,8 +2116,10 @@ export function parsePlayRecordAsSaved(raw: unknown): PlayRecord {
   const keptIds = new Set(keptControls.map(c => c.id));
   // A trigger or sensor on a layer needs that layer too.
   // A granulator rack's grains read as sensors on `ae:<rackId>` (docs/granulator.md).
+  // An Agents group's readings read as sensors on `ag:<node id>` (the graph's, so kept whatever the layers).
   const layerOk = (src: PlaySource) => (src.kind !== 'null' && src.kind !== 'sensor') || layerIds.has(src.layerId)
-    || (src.kind === 'sensor' && isGranulatorRack(aeRack(audioEngine, rackOfSensorLayer(src.layerId))));
+    || (src.kind === 'sensor' && isGranulatorRack(aeRack(audioEngine, rackOfSensorLayer(src.layerId))))
+    || (src.kind === 'sensor' && src.layerId.startsWith('ag:'));
   // A layer, a hand or tracked point, the pointer on the picture, a signal's captured position, or where a particles layer's latest event was.
   const anchorOk = (ref: string) => layerIds.has(ref) || !!parseHandAnchor(ref) || !!parseTrackAnchor(ref) || ref === 'pointer' || !!parseSignalAnchor(ref) || (() => { const ev = parseEventAnchor(ref); return !!ev && layerIds.has(ev.layerId); })();
   const triggerOk = (t: TriggerSpec) => t.on === 'zone' ? layerIds.has(t.layerId) : t.on === 'proximity' ? anchorOk(t.a) && anchorOk(t.b) : t.on === 'reader' ? readerIds.has(t.readerId) : true;

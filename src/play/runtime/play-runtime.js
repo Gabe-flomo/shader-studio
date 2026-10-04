@@ -2772,6 +2772,8 @@ void main() {
         // A renderAt (held) steps exactly to its time, as the app's offline renders do; else live, with the governor.
         agentHost.run({ width: W, height: H, time, live: !held, frameMs: lastAgentFrame ? nowMs - lastAgentFrame : 0 });
         lastAgentFrame = nowMs;
+        // An Agents group's readings the page's setup reads (sensors on `ag:<id>`, a frame or two late).
+        if (agentHost.readings) for (const [layer, vals] of agentHost.readings()) for (const k in vals) sensors.set(layer + '::' + k, vals[k]);
         if (passHost) passHost.run(W, H, 'post');
       } else if (passHost) passHost.run(W, H);
       gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fb : null);
