@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.24',
+    date: '2026-10-04',
+    title: 'Switch a node in place',
+    highlights: [
+      { area: 'Studio', text: 'Switch on a node card (or right-click → Switch to…) turns it into a similar node, keeping its wires: Union to Intersect, Sphere to Cone, sin to cos.' },
+      { area: 'Studio', text: 'Settings carry over by name and meaning, and Play controls, keyframes and comments stay with the node; one undo step.' },
+    ],
+  },
+  {
     id: '2026.10.23',
     date: '2026-10-04',
     title: 'Displacement Map, passes in groups',
