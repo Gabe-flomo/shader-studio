@@ -12,6 +12,7 @@ import { candidateLabel, playId, targetParts, type PlayCandidate } from '../../p
 import { resetKindLayer } from '../../play/layerKinds';
 import { dropMatteRefs } from '../../play/mattes';
 import { dropMotionRefs } from '../../play/motionLayers';
+import { dropWaterRefs } from '../../play/waterLayers';
 
 /** Remove a layer and the controls, mappings and actions that read or drive it. */
 export function removeLayer(p: PlayRecord, id: string): PlayRecord {
@@ -20,7 +21,7 @@ export function removeLayer(p: PlayRecord, id: string): PlayRecord {
   const out: PlayRecord = {
     ...p,
     // A layer that used it as its matte goes back to no matte; a path that used it as a corner loses that corner.
-    layers: dropMotionRefs(dropMatteRefs(p.layers.filter(l => l.id !== id), id), id).map(l => (l.kind === 'shape' && l.pointIds?.includes(id) ? { ...l, pointIds: l.pointIds.filter(x => x !== id) }
+    layers: dropWaterRefs(dropMotionRefs(dropMatteRefs(p.layers.filter(l => l.id !== id), id), id), id).map(l => (l.kind === 'shape' && l.pointIds?.includes(id) ? { ...l, pointIds: l.pointIds.filter(x => x !== id) }
       // A relationship loses the member (and a member reading the layer's alpha reads brightness again).
       : l.kind === 'relationship' && l.members.some(m => m.id === id || m.layerId === id) ? { ...l, members: l.members.filter(m => m.id !== id).map(m => (m.layerId === id ? { ...m, layerId: '', channel: m.channel === 'layer' ? 'brightness' : m.channel } : m)) }
       // An Agents rule aimed at it has no target (the rule stays, idle); a null following its agents stops.

@@ -9,7 +9,9 @@ import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
 import { askText } from '../components/ui/dialogStore';
 import { toast } from '../components/ui/toastStore';
-import { planSceneGroupAdd, planSmart3DAdd } from '../nodes/smart3d';
+import { LIGHTING_CATEGORY, MARCH_GROUP_TYPES, planSceneGroupAdd, planSmart3DAdd } from '../nodes/smart3d';
+import { addToScene, buildSceneSubgraphFor, camerasToWiden, rigSettingsFor, sceneRole, targetScene } from '../nodes/scene3dShapes';
+import { VOLUMETRIC_LOOP_TYPES, volumetricOff, volumetricOn } from '../nodes/volumetricAuto';
 import { askChoice } from '../components/ui/dialogStore';
 import { buildAgentsSubgraph, buildMarchRig, buildMarchSubgraph, buildSceneSubgraph, buildVolumetricRig, graphOutput, instantiateNode, twoDNodesBefore3D } from '../nodes/scene3dDefaults';
 import { agentEyeNodes, hasAgentsNode } from '../compiler/agentGraph';
@@ -99,13 +101,15 @@ async function attachExampleImages(images: Record<string, string>, epoch: number
   for (const [key, src] of Object.entries(images)) {
     try {
       const blob = await (await fetch(src)).blob();
-      const { texture, thumbnailDataUrl } = await loadImageTextureFromFile(new File([blob], key, { type: blob.type }));
+      const { texture, thumbnailDataUrl, imageAspect } = await loadImageTextureFromFile(new File([blob], key, { type: blob.type }));
       const st = useNodeGraphStore.getState();
       if (st.graphEpoch !== epoch) { texture.dispose(); return; }
       st.setNodeTexture(key, texture);
       const [nodeId, slot] = key.split('::');
       const dirty = st.graphDirty;
-      useNodeGraphStore.setState(s => ({ nodes: s.nodes.map(n => (n.id === nodeId ? { ...n, params: { ...n.params, [`__tex_${slot}_thumb`]: thumbnailDataUrl } } : n)) }));
+      // A key without a slot is a Texture Input's picture (Passes 8): its card's thumbnail, as its Load image sets it.
+      const thumb = slot ? { [`__tex_${slot}_thumb`]: thumbnailDataUrl } : { _thumbnailUrl: thumbnailDataUrl, _imageAspect: imageAspect };
+      useNodeGraphStore.setState(s => ({ nodes: s.nodes.map(n => (n.id === nodeId ? { ...n, params: { ...n.params, ...thumb } } : n)) }));
       useNodeGraphStore.setState({ graphDirty: dirty });
     } catch (e) {
       console.error('[loadExampleGraph] could not load an example picture', e);
@@ -148,6 +152,7 @@ import { videoEngine } from '../lib/videoEngine';
 import { IdGenerator } from './managers/IdGenerator';
 import { UndoManager } from './managers/UndoManager';
 import { nodeName, nodesPhrase } from './historyLabels';
+import { applySwitchToList, groupRuleFor, planSwitch, retargetPlay, type SwitchContext } from '../nodes/switchNode';
 import { describePlayChange } from './playHistory';
 import { PresetManager } from './managers/PresetManager';
 import { CompilationService } from './managers/CompilationService';
@@ -428,7 +433,8 @@ function startsA3DScene(type: string, nodes: GraphNode[]): boolean {
   const def = getNodeDefinition(type);
   if (!def) return false;
   const plan = type === 'sceneGroup' ? planSceneGroupAdd(nodes, { x: 0, y: 0 }) : planSmart3DAdd(type, def, nodes, { x: 0, y: 0 });
-  return plan.kind === 'wrap-scene' && plan.spawnMarch;
+  if (def.category === LIGHTING_CATEGORY && type !== 'glass3d') return !nodes.some(n => MARCH_GROUP_TYPES.has(n.type));
+  return plan.kind === 'wrap-scene' && plan.spawnMarch && !(type !== 'sceneGroup' && targetScene(nodes, { x: 0, y: 0 }));
 }
 
 /** The loop's Color into the Output node's colour input. */
@@ -691,7 +697,8 @@ interface NodeGraphState {
   // Swap mode — user shift-clicked a node; next palette click replaces it
   swapTargetNodeId: string | null;
   setSwapTargetNodeId: (id: string | null) => void;
-  swapNode: (nodeId: string, newType: string) => void;
+  /** Switch a node to another type in place (same id): wires mapped, settings, keyframes and Play controls kept (nodes/switchNode.ts). One undo step. */
+  swapNode: (nodeId: string, newType: string) => { ok: boolean; keptWires: number } | undefined;
 
   // In-canvas node search palette (Shift+Space)
   searchPaletteOpen: boolean;
@@ -708,6 +715,8 @@ interface NodeGraphState {
   duplicateGroup: (groupId: string) => string | null;
   duplicateNode: (nodeId: string) => string | null;
   duplicateNodes: (nodeIds: string[]) => void;
+  /** The Volumetric switch on a march loop: on builds Scene Distance → Volume Glow (+=) → Glow to Color; off removes them (nodeGraph/volumetricAuto.ts). One undo step. */
+  setLoopVolumetric: (nodeId: string, on: boolean) => void;
   /**
    * Open as nodes (Particles node, docs/agents-plan.md §11): an Agents-group copy of a top-level
    * Particles node's settings, placed under it; what read the node reads the copy's Draw agents
@@ -1578,6 +1587,50 @@ function nodeInScope(state: { nodes: GraphNode[]; activeGroupPath: string[] }, i
   return getActiveNodes(state.nodes, state.activeGroupPath)?.find(n => n.id === id);
 }
 
+/** The innermost group on `path` (a top-level group, or one nested a level in). */
+function groupAtPath(nodes: GraphNode[], path: readonly string[]): GraphNode | undefined {
+  const g0 = nodes.find(n => n.id === path[0]);
+  if (path.length < 2) return g0;
+  return (g0?.params.subgraph as SubgraphData | undefined)?.nodes.find(n => n.id === path[1]);
+}
+
+/** `nodes` with the innermost group on `path` replaced by `fn(group)`. */
+function mapGroupAtPath(nodes: GraphNode[], path: readonly string[], fn: (g: GraphNode) => GraphNode): GraphNode[] {
+  if (path.length === 1) return nodes.map(n => (n.id === path[0] && n.params.subgraph ? fn(n) : n));
+  return nodes.map(outer => {
+    if (outer.id !== path[0]) return outer;
+    const sg = outer.params.subgraph as SubgraphData | undefined;
+    if (!sg) return outer;
+    return { ...outer, params: { ...outer.params, subgraph: { ...sg, nodes: sg.nodes.map(n => (n.id === path[1] && n.params.subgraph ? fn(n) : n)) } } };
+  });
+}
+
+/**
+ * What switching `nodeId` needs to know about where it is: its scope (the
+ * level being edited), the types its wires bring (a group port's, an upstream
+ * output's), the group output ports that read it, and the group rules.
+ */
+export function switchScopeFor(state: Pick<NodeGraphState, 'nodes' | 'activeGroupPath'>, nodeId: string):
+  { scope: GraphNode[]; node: GraphNode; ctx: SwitchContext; path: string[] } | null {
+  const path = state.activeGroupPath;
+  const scope = path.length > 0 ? getActiveNodes(state.nodes, path) : state.nodes;
+  const node = scope?.find(n => n.id === nodeId);
+  if (!scope || !node) return null;
+  const group = path.length > 0 ? groupAtPath(state.nodes, path) : undefined;
+  const sg = group?.params.subgraph as SubgraphData | undefined;
+  const byId = new Map(scope.map(n => [n.id, n]));
+  const ctx: SwitchContext = {
+    sourceType: conn => {
+      if (conn.nodeId === GROUP_PORT_SENTINEL) return sg?.inputPorts?.find(p => p.key === conn.outputKey)?.type;
+      const src = byId.get(conn.nodeId);
+      return src ? (src.outputs[conn.outputKey]?.type ?? getNodeDefinitionFor(src)?.outputs[conn.outputKey]?.type) : undefined;
+    },
+    extraConsumers: (sg?.outputPorts ?? []).filter(p => p.fromNodeId === nodeId).map(p => ({ outputKey: p.fromOutputKey, type: p.type })),
+    disallowed: type => groupRuleFor(type, path, path.length > 0 ? state.nodes.find(n => n.id === path[0])?.type : undefined),
+  };
+  return { scope, node, ctx, path };
+}
+
 /**
  * The files a web export carries for the graph's inputs: each Texture Input's
  * picture (encoded from its decoded canvas), and the videos and songs
@@ -2404,9 +2457,39 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const updated = setActiveNodes(nodes, activeGroupPath, [...activeNodes, ...newNodes]);
       if (updated) set({ nodes: updated });
     } else {
-      set(state => ({ nodes: [...state.nodes, ...newNodes] }));
+      // A loose 3D shape copied on the top level goes into the scene the graph draws, like an added one.
+      let top = [...nodes];
+      const intoScene: string[] = [];
+      for (const copy of newNodes) {
+        const def = getNodeDefinitionFor(copy);
+        const role = def ? sceneRole(def) : null;
+        const target = role ? targetScene(top, copy.position) : null;
+        const sub = target?.params.subgraph as SubgraphData | undefined;
+        const placed = role && target && sub ? addToScene(() => idGenerator.next(), sub, { ...copy }, role, { byHand: false }) : null;
+        if (target && placed) {
+          top = top.map(n => n.id === target.id ? { ...n, params: { ...n.params, subgraph: placed.subgraph } } : n);
+          intoScene.push(def!.label);
+        } else top.push(copy);
+      }
+      set({ nodes: top });
+      if (intoScene.length) toast.info('3D node placed', { message: `The copy of ${intoScene.join(', ')} went into the existing Scene Group, joined with a Union and moved beside what was there.` });
     }
     get().compile();
+  },
+  setLoopVolumetric: (nodeId, on) => {
+    const { nodes, activeGroupPath } = get();
+    const scope = getActiveNodes(nodes, activeGroupPath) ?? nodes;
+    const loop = scope.find(n => n.id === nodeId);
+    if (!loop) return;
+    if (!VOLUMETRIC_LOOP_TYPES.has(loop.type)) { get().updateNodeParams(nodeId, { volumetric: on }, { immediate: true }); return; }
+    if ((loop.params.volumetric === true) === on) return;
+    undoManager.push(nodes, { label: on ? 'Turned Volumetric on' : 'Turned Volumetric off', nodeIds: [nodeId] });
+    const r = on ? volumetricOn(() => idGenerator.next(), scope, nodeId) : volumetricOff(scope, nodeId);
+    const updated = activeGroupPath.length ? setActiveNodes(nodes, activeGroupPath, r.nodes) : r.nodes;
+    if (!updated) return;
+    set({ nodes: updated });
+    get().compile();
+    if (r.summary) toast.info(on ? 'Volumetric on' : 'Volumetric off', { message: r.summary });
   },
 
   openParticlesAsNodes: (nodeId) => {
@@ -3111,110 +3194,49 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   swapNode: (nodeId, newType) => {
-    const { nodes, activeGroupPath } = get();
-
-    // Resolve the node list to operate on — subgraph when inside a group, top-level otherwise
-    const workingNodes = activeGroupPath.length > 0
-      ? (getActiveNodes(nodes, activeGroupPath) ?? nodes)
-      : nodes;
-
-    const oldNode = workingNodes.find(n => n.id === nodeId);
-    if (!oldNode) return;
-    const def = getNodeDefinition(newType);
-    if (!def) return;
-
-    undoManager.push(nodes, { label: `Swapped ${nodeName(oldNode)} for ${def.label}`, nodeIds: [nodeId] });
-    const newId = idGenerator.next();
-
-    // Build new inputs, carrying over connections where types are compatible
-    const newInputs: Record<string, InputSocket> = {};
-    for (const [key, socket] of Object.entries(def.inputs)) {
-      const newSocket: InputSocket = {
-        ...socket,
-        defaultValue: def.paramDefs?.[key]
-          ? undefined
-          : def.defaultParams?.[key] as number | number[] | undefined,
-      };
-
-      // Priority 1: exact key match with compatible source type
-      const oldSock = oldNode.inputs[key];
-      if (oldSock?.connection) {
-        const srcNode = workingNodes.find(n => n.id === oldSock.connection!.nodeId);
-        const srcDef  = srcNode ? getNodeDefinitionFor(srcNode) : null;
-        const srcType = srcDef?.outputs[oldSock.connection!.outputKey]?.type;
-        if (srcType && typesCompatible(srcType, socket.type)) {
-          newSocket.connection = oldSock.connection;
-        }
-      }
-
-      // Priority 2: any connected old input whose source type is compatible
-      if (!newSocket.connection) {
-        for (const oldS of Object.values(oldNode.inputs)) {
-          if (!oldS.connection) continue;
-          const srcNode = workingNodes.find(n => n.id === oldS.connection!.nodeId);
-          const srcDef  = srcNode ? getNodeDefinitionFor(srcNode) : null;
-          const srcType = srcDef?.outputs[oldS.connection!.outputKey]?.type;
-          if (srcType && typesCompatible(srcType, socket.type)) {
-            newSocket.connection = oldS.connection;
-            break;
-          }
-        }
-      }
-
-      newInputs[key] = newSocket;
+    // Shift-click → pick in the palette, and the card's Switch picker: one path (nodes/switchNode.ts).
+    // The node keeps its id, so Play controls, mappings and group overrides keep pointing at it.
+    const st = get();
+    const where = switchScopeFor(st, nodeId);
+    if (!where) return undefined;
+    const { scope, node: oldNode, ctx, path } = where;
+    const plan = planSwitch(scope, oldNode, newType, ctx);
+    if (!plan) return undefined;
+    const blocked = ctx.disallowed?.(newType);
+    if (blocked) {
+      toast.info(blocked, { message: 'Switch it where that node is allowed.' });
+      return undefined;
     }
+    if (oldNode.type === newType) { set({ swapTargetNodeId: null }); return { ok: true, keptWires: plan.keptWires }; }
+    const from = nodeName(oldNode);
+    const to = plan.label;
+    const { play, lost: lostControls } = retargetPlay(st.play, nodeId, plan);
+    undoManager.push(st.nodes, { label: `Switched ${from} to ${to}`, nodeIds: [nodeId] }, st.play);
 
-    const newNodeObj: GraphNode = {
-      id: newId,
-      type: newType,
-      position: { ...oldNode.position },
-      inputs: newInputs,
-      outputs: { ...def.outputs },
-      params: { ...(def.defaultParams ?? {}) },
-    };
-
-    set(state => {
-      const path = state.activeGroupPath;
-      const srcNodes = path.length > 0 ? (getActiveNodes(state.nodes, path) ?? state.nodes) : state.nodes;
-
-      const updated = srcNodes
-        .filter(n => n.id !== nodeId)
-        .map(n => {
-          // Reroute downstream connections that pointed to oldNode's outputs
-          let changed = false;
-          const updatedInputs = { ...n.inputs };
-          for (const [key, sock] of Object.entries(n.inputs)) {
-            if (sock.connection?.nodeId !== nodeId) continue;
-            const oldOutputKey = sock.connection.outputKey;
-            let newOutputKey: string | null = null;
-            // Try same key first
-            if (newNodeObj.outputs[oldOutputKey]
-                && typesCompatible(newNodeObj.outputs[oldOutputKey].type, sock.type)) {
-              newOutputKey = oldOutputKey;
-            } else {
-              // First compatible output
-              for (const [outKey, out] of Object.entries(newNodeObj.outputs)) {
-                if (typesCompatible(out.type, sock.type)) { newOutputKey = outKey; break; }
-              }
-            }
-            updatedInputs[key] = newOutputKey
-              ? { ...sock, connection: { nodeId: newId, outputKey: newOutputKey } }
-              : { ...sock, connection: undefined };
-            changed = true;
-          }
-          return changed ? { ...n, inputs: updatedInputs } : n;
-        });
-
-      const newList = [...updated, newNodeObj];
-
-      if (path.length > 0) {
-        const newTop = setActiveNodes(state.nodes, path, newList);
-        return { nodes: newTop ?? state.nodes, swapTargetNodeId: null };
-      }
-      return { nodes: newList, swapTargetNodeId: null };
-    });
-
+    const list = applySwitchToList(scope, plan);
+    let nodes = path.length > 0 ? (setActiveNodes(st.nodes, path, list) ?? st.nodes) : list;
+    // A group output port reading the node follows the output map.
+    if (path.length > 0 && Object.keys(plan.outputMap).length) {
+      nodes = mapGroupAtPath(nodes, path, g => {
+        const sg = g.params.subgraph as SubgraphData;
+        if (!sg.outputPorts?.some(p => p.fromNodeId === nodeId)) return g;
+        const outputPorts = sg.outputPorts.map(p => (p.fromNodeId === nodeId && plan.outputMap[p.fromOutputKey]
+          ? { ...p, fromOutputKey: plan.outputMap[p.fromOutputKey] } : p));
+        return { ...g, params: { ...g.params, subgraph: { ...sg, outputPorts } } };
+      });
+    }
+    set({ nodes, swapTargetNodeId: null, ...(play !== st.play ? { play } : {}) });
     get().compile();
+
+    const wires = `${plan.keptWires} wire${plan.keptWires === 1 ? '' : 's'} kept`;
+    const notes: string[] = [];
+    if (plan.droppedWires) notes.push(`${plan.droppedWires} wire${plan.droppedWires === 1 ? '' : 's'} had no matching socket and came off.`);
+    if (plan.lostLabels.length) notes.push(`${to} has no ${plan.lostLabels.join(', ')} ${plan.lostLabels.length === 1 ? 'setting, so it was' : 'settings, so they were'} left behind.`);
+    if (lostControls.length) notes.push(`Play control${lostControls.length === 1 ? '' : 's'} ${lostControls.map(l => `“${l}”`).join(', ')} no longer reach${lostControls.length === 1 ? 'es' : ''} a setting.`);
+    const title = `Switched ${from} → ${to}; ${wires}`;
+    if (notes.length) toast.info(title, { message: `${notes.join(' ')} Undo puts it back.` });
+    else toast.success(title);
+    return { ok: plan.ok, keptWires: plan.keptWires };
   },
 
   undo: () => { get().undoSteps(1); },
@@ -3439,14 +3461,42 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const plan = type === 'sceneGroup'
         ? planSceneGroupAdd(get().nodes, position)
         : smartDef ? planSmart3DAdd(type, smartDef, get().nodes, position) : { kind: 'none' as const };
+      const role = smartDef && type !== 'sceneGroup' ? sceneRole(smartDef) : null;
+      // ── Into the scene that's already there ──────────────────────────────
+      // A shape on the top level of a graph that already draws a Scene Group goes
+      // inside it, joined by a Union and moved beside what's there; a warp bends
+      // the whole scene (nodes/scene3dShapes.ts). Only a loop with a free Scene
+      // input (handled below) gets a new group instead.
+      if (smartDef && role && plan.kind === 'wrap-scene' && !plan.attachToMarchId) {
+        const target = targetScene(get().nodes, position);
+        const sub = target?.params.subgraph as SubgraphData | undefined;
+        const nextId = () => idGenerator.next();
+        const placed = target && sub ? addToScene(nextId, sub, instantiateNode(nextId(), type, smartDef, position), role, { byHand: false }) : null;
+        if (target && placed) {
+          undoManager.push(get().nodes, { label: `Added ${smartDef.label} to ${typeof target.params.label === 'string' && target.params.label ? target.params.label : 'the Scene Group'}` });
+          const widen = placed.spread ? camerasToWiden(get().nodes, target.id, placed.spread) : [];
+          set({ nodes: get().nodes.map(n => {
+            if (n.id === target.id) return { ...n, params: { ...n.params, subgraph: placed.subgraph } };
+            const w = widen.find(c => c.id === n.id);
+            return w ? { ...n, params: { ...n.params, camDist: w.camDist, _autoCamDist: w.camDist } } : n;
+          }) });
+          get().compile();
+          toast.info('3D node placed', { message: `${smartDef.label} went into the existing Scene Group: ${placed.summary}${widen.length ? ' The camera moved back to keep everything in view.' : ''} Double-click the group to edit it.` });
+          return target.id;
+        }
+      }
       if (smartDef && plan.kind === 'wrap-scene') {
         undoManager.push(get().nodes, { label: `Added ${type === 'sceneGroup' ? 'a Scene Group' : smartDef.label}` });
         const nextId = () => idGenerator.next();
-        // A Scene Group from the palette brings its default Sphere; a shape is wrapped in one.
+        // A Scene Group from the palette brings its default Sphere; a shape is wrapped in one
+        // (a warp or modifier with a partner shape, so it shows).
         const isGroup = type === 'sceneGroup';
         const subgraph = isGroup
           ? buildSceneSubgraph(nextId)
-          : buildSceneSubgraph(nextId, { node: instantiateNode(nextId(), type, smartDef, { x: 300, y: 200 }), posInput: plan.posInput, distOutput: plan.distOutput });
+          : role
+            ? buildSceneSubgraphFor(nextId, instantiateNode(nextId(), type, smartDef, { x: 300, y: 200 }), role)
+            : buildSceneSubgraph(nextId, { node: instantiateNode(nextId(), type, smartDef, { x: 300, y: 200 }), posInput: plan.posInput, distOutput: plan.distOutput });
+        const partner = role && role.kind !== 'shape' ? (subgraph.nodes.find(n => n.type === 'sphereSDF3D' || n.type === 'boxSDF3D')) : undefined;
         const group = instantiateNode(nextId(), 'sceneGroup', getNodeDefinition('sceneGroup')!, position, {
           ...(isGroup ? {} : { label: smartDef.label }),
           subgraph,
@@ -3462,7 +3512,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           const rig = buildMarchRig(nextId, 'marchLoopGroup', {
             camera: { x: position.x - 440, y: position.y + 120 }, scene: position, loop: { x: position.x + 440, y: position.y },
           }, group);
-          nodes = [...nodes, rig.camera, rig.loop];
+          const tuned = rigSettingsFor(type);
+          nodes = [...nodes, { ...rig.camera, params: { ...rig.camera.params, ...tuned.camera } }, { ...rig.loop, params: { ...rig.loop.params, ...tuned.loop } }];
           if (plan.outputNodeId) {
             nodes = wireLoopToOutput(nodes, plan.outputNodeId, rig.loop.id);
             note += ', with a camera and march loop wired to the Output.';
@@ -3472,13 +3523,32 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         } else {
           note += isGroup ? '. Wire its Scene into a march loop.' : '. Double-click it to edit the shape.';
         }
+        if (partner) note += ` A small ${partner.type === 'boxSDF3D' ? 'box' : 'sphere'} inside shows what ${smartDef.label} does (it has a note).`;
         set({ nodes });
         get().compile();
         toast.info(isGroup ? 'Scene Group added' : '3D node placed', { message: note });
         return group.id;
       }
-      if (smartDef && plan.kind === 'wire-lighting') {
-        undoManager.push(get().nodes, { label: `Added ${smartDef.label}` });
+      // A lighting node with no scene to light: the scene comes first (camera → Scene
+      // Group with a Sphere → loop on the Output), then it is wired to it below.
+      let litRig: GraphNode[] | null = null;
+      let litPlan = plan;
+      if (smartDef && smartDef.category === LIGHTING_CATEGORY && type !== 'glass3d' && plan.kind === 'none' && !get().nodes.some(n => MARCH_GROUP_TYPES.has(n.type))) {
+        const rig = buildMarchRig(() => idGenerator.next(), 'marchLoopGroup', {
+          camera: { x: position.x - 1320, y: position.y }, scene: { x: position.x - 880, y: position.y }, loop: { x: position.x - 440, y: position.y },
+        });
+        litRig = [rig.camera, rig.scene, rig.loop];
+        litPlan = planSmart3DAdd(type, smartDef, [...get().nodes, ...litRig], position);
+      }
+      if (smartDef && litPlan.kind === 'wire-lighting') {
+        const plan = litPlan;
+        undoManager.push(get().nodes, { label: `Added ${smartDef.label}${litRig ? ' and a 3D scene' : ''}` });
+        if (litRig) {
+          let withRig = [...get().nodes, ...litRig];
+          const output = graphOutput(get().nodes);
+          if (output) withRig = wireLoopToOutput(withRig, output.id, plan.marchId);
+          set({ nodes: withRig });
+        }
         const node = instantiateNode(idGenerator.next(), type, smartDef, position);
         for (const w of plan.wires) {
           if (node.inputs[w.input]) node.inputs[w.input] = { ...node.inputs[w.input], connection: { nodeId: plan.marchId, outputKey: w.fromKey } };
@@ -3492,7 +3562,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         set(state => ({ nodes: [...state.nodes, node] }));
         get().compile();
         const wired = plan.wires.map(w => w.input).concat(plan.sceneSourceId && node.inputs.scene ? ['scene'] : []);
-        if (wired.length) toast.info(`${smartDef.label} wired to the march loop`, { message: `Connected: ${wired.join(', ')}.` });
+        if (litRig) toast.info('3D node placed', { message: `${smartDef.label} lights a 3D scene, so one was added: a camera, a Scene Group with a Sphere inside, and a march loop${graphOutput(get().nodes) ? ' wired to the Output' : ''}.${wired.length ? ` ${smartDef.label} is wired to the loop (${wired.join(', ')}).` : ''}` });
+        else if (wired.length) toast.info(`${smartDef.label} wired to the march loop`, { message: `Connected: ${wired.join(', ')}.` });
         return node.id;
       }
       if (type === 'rayMarch') {
@@ -3699,6 +3770,23 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     };
 
     const { activeGroupId, activeGroupPath } = get();
+    // Inside a Scene Group: a shape is wired from Scene Pos and into the scene's
+    // output (joined by a Union when something is there already), so it shows.
+    if (activeGroupId) {
+      const holder = getActiveNodes(get().nodes, activeGroupPath.slice(0, -1))?.find(n => n.id === activeGroupId);
+      const role = holder?.type === 'sceneGroup' ? sceneRole(def) : null;
+      const active = role ? getActiveNodes(get().nodes, activeGroupPath) : null;
+      if (role && active && !overrideParams) {
+        const placed = addToScene(() => idGenerator.next(), { nodes: active, inputPorts: [], outputPorts: [] }, newNode, role, { byHand: true, at: position });
+        const updated = placed ? setActiveNodes(get().nodes, activeGroupPath, placed.subgraph.nodes) : null;
+        if (placed && updated) {
+          set({ nodes: updated });
+          get().compile();
+          if (role.kind === 'shape') toast.info(`${def.label} wired into the scene`, { message: placed.summary });
+          return nodeId;
+        }
+      }
+    }
     if (activeGroupId) {
       // Inside a group view — insert into the active subgraph.
       // Use the path-based helper so nested groups (depth > 1) are handled correctly;

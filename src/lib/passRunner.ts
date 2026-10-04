@@ -16,8 +16,8 @@
  */
 import * as THREE from 'three';
 import type { PassProgram } from '../compiler/types';
-import { passPrevUniform, passPxUniform, passUniform } from '../nodes/definitions/passes';
-import { ppDrawn, ppPixel, ppPrevBound, ppSize, ppSplitsForParticles, ppStaged, ppTargetKey } from '../play/kit/passPlan.js';
+import { passIterUniform, passPrevUniform, passPxUniform, passUniform } from '../nodes/definitions/passes';
+import { ppDrawn, ppPixel, ppPrevBound, ppRepeat, ppSize, ppSplitsForParticles, ppStaged, ppTargetKey } from '../play/kit/passPlan.js';
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
 
 /** Pass cards register a canvas here (by node id); the live runner draws their thumbnails into it. */
@@ -140,6 +140,11 @@ export class PassRunner {
         const px = passPxUniform(name);
         if (!u[px] || !(u[px].value instanceof THREE.Vector2)) u[px] = { value: new THREE.Vector2(1, 1) };
       }
+      // Repeat: the step uniform ([step, count]), only for a repeated pass (it alone declares it).
+      if (ppRepeat(spec) > 1) {
+        const it = passIterUniform(spec.slug);
+        if (!u[it] || !(u[it].value instanceof THREE.Vector2)) u[it] = { value: new THREE.Vector2(0, ppRepeat(spec)) };
+      }
     }
     if (this.boundTo !== u) {
       for (const e of this.entries) e.material.uniforms = u;
@@ -238,12 +243,19 @@ export class PassRunner {
       res?.set(t.w, t.h);
       this.mesh.material = e.material;
       const timed = timer?.begin(`pass:${d.slug}`) ?? false;
-      renderer.setRenderTarget(t.cur);
-      renderer.render(this.scene, camera);
+      // Repeat (phase 7): N draws, each reading the one before through Previous (the timer covers all N).
+      const n = ppRepeat(d);
+      const iter = n > 1 ? u[passIterUniform(d.slug)]?.value as THREE.Vector2 | undefined : undefined;
+      for (let i = 0; i < n; i++) {
+        if (iter) iter.set(i, n);
+        if (i > 0 && t.prev) u[passPrevUniform(d.slug)].value = t.prev.texture;
+        renderer.setRenderTarget(t.cur);
+        renderer.render(this.scene, camera);
+        u[passUniform(d.slug)].value = t.cur.texture;
+        // Ping-pong: this frame's picture is the next frame's Previous (and the next repeat's).
+        if (t.prev) { const c = t.cur; t.cur = t.prev; t.prev = c; }
+      }
       if (timed) timer!.end();
-      u[passUniform(d.slug)].value = t.cur.texture;
-      // Ping-pong: this frame's picture is the next frame's Previous.
-      if (t.prev) { const c = t.cur; t.cur = t.prev; t.prev = c; }
     }
     res?.set(rx, ry);
     renderer.setRenderTarget(null);

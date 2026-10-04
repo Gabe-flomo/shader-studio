@@ -711,3 +711,29 @@ function draw(s) {
   label('lamps (clipped)', left - 3 * u, 12 * u);
 }
 `;
+
+/** The map for the Displacement Map text example: waves of red and alpha (see its own comment). */
+export const SKETCH_DISPLACE_WAVES = `// The displacement map for the Title, drawn hidden (its eye is off; the
+// Title's Displace reads it anyway, like a matte). Two sets of waves run
+// down the picture in rows:
+//   red   moves the Title sideways  (its Displace: Horizontal = Red)
+//   alpha moves it up and down      (its Displace: Vertical = Alpha)
+// Mid-grey red (128) and half alpha leave a row where it is.
+const params = {
+  waves: { value: 5, min: 1, max: 20, step: 0.5, label: 'Waves' },
+  speed: { value: 0.35, min: 0, max: 2, step: 0.01, label: 'Speed' },
+};
+
+function draw(s) {
+  const { ctx, width, height, time, params } = s;
+  ctx.clearRect(0, 0, width, height);
+  const band = 1; // one row of pixels at a time, so the waves are smooth
+  for (let y = 0; y < height; y += band) {
+    const v = y / height;
+    const red = 0.5 + 0.5 * Math.sin((v * params.waves + time * params.speed) * Math.PI * 2);
+    const alpha = 0.5 + 0.45 * Math.sin((v * params.waves * 0.5 - time * params.speed * 0.7) * Math.PI * 2);
+    ctx.fillStyle = 'rgba(' + Math.round(red * 255) + ', 128, 128, ' + alpha.toFixed(3) + ')';
+    ctx.fillRect(0, y, width, band);
+  }
+}
+`;

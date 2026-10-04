@@ -62,6 +62,7 @@ import { driverOf } from '../../play/paramDrivers';
 import { PlayDriveChip } from './PlayDriveChip';
 import { InputExprPopover } from './InputExprPopover';
 import { canHaveInputExpr, getInputExpr } from '../../glsl/inputExpr';
+import { VOLUMETRIC_LOOP_TYPES } from '../../nodes/volumetricAuto';
 
 /** Breadcrumb segment in the phone graph header: the current one is bold and dark. */
 const crumbStyle = (tk: Tokens, current: boolean): React.CSSProperties => ({
@@ -2680,7 +2681,9 @@ export function MobileGraphBrowser() {
             <input
               type="checkbox"
               checked={val}
-              onChange={e => updateNodeParams(node.id, { [key]: e.target.checked }, { immediate: true })}
+              onChange={e => key === 'volumetric' && VOLUMETRIC_LOOP_TYPES.has(node.type)
+                ? useNodeGraphStore.getState().setLoopVolumetric(node.id, e.target.checked)
+                : updateNodeParams(node.id, { [key]: e.target.checked }, { immediate: true })}
               style={{ width: '18px', height: '18px', accentColor: tc.mauve, cursor: 'pointer' }}
             />
           </div>

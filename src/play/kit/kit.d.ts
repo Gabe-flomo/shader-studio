@@ -119,6 +119,8 @@ export interface LayerKit {
   background(record: PlayRecord, env: Pick<KitEnv, 'time' | 'value' | 'allowDirect'>): BqPlan | null;
   /** Forget all state; `seed` makes the layers' random choices repeatable (a take). */
   reset(seed?: number): void;
+  /** Let go of each Water layer's WebGL renderer (a kit about to be dropped). */
+  dispose(): void;
 }
 
 export function createLayerKit(): LayerKit;

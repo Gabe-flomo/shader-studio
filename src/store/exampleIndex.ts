@@ -37,7 +37,7 @@ export type ExampleGraph = {
   /** Datasets the graph's Data nodes read (src/data/types.ts), loaded with it. */
   datasets?: DatasetsRecord;
   /**
-   * Pictures for nodes' image slots, loaded with the graph: `${nodeId}::${slot}` → a data URL
+   * Pictures for nodes' image slots, loaded with the graph: `${nodeId}::${slot}` (or a Texture Input's id) → a data URL
    * (a bundled `?inline` asset), as if picked with the card's Load image.
    */
   images?: Record<string, string>;

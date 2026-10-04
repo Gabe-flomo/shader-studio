@@ -14,6 +14,7 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
+import { nodeDragProps, nodeDragStyle, type DropPayload } from './nodeDrop';
 
 // ── Nodes hidden from browser ─────────────────────────────────────────────────
 const HIDDEN_NODES = new Set([
@@ -371,16 +372,19 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
 
 // ── Node pill ─────────────────────────────────────────────────────────────────
 function NodePill({
-  type, label, description,
+  label, description,
   isSelected, isHighlighted,
   onSingleClick, onDoubleClick,
-  swapMode, btnRef,
+  swapMode, btnRef, drag, onDragEnd,
 }: {
   type: string; label: string; description?: string;
   isSelected: boolean; isHighlighted: boolean;
   onSingleClick: () => void; onDoubleClick: () => void;
   swapMode: boolean;
   btnRef?: (el: HTMLButtonElement | null) => void;
+  /** Pressing and moving carries the node to the graph (nodeDrop.ts); none when it can't be added by hand. */
+  drag: DropPayload | null;
+  onDragEnd?: () => void;
 }) {
   const tk = useTokens();
   const [hovered, setHovered] = useState(false);
@@ -388,12 +392,8 @@ function NodePill({
   return (
     <button
       ref={btnRef}
-      title={description ?? `Click to preview · Double-click to ${swapMode ? 'replace' : 'add'}`}
-      draggable={!swapMode}
-      onDragStart={e => {
-        e.dataTransfer.setData('application/shader-studio-node', type);
-        e.dataTransfer.effectAllowed = 'copy';
-      }}
+      title={description ?? `Click to preview · Double-click to ${swapMode ? 'replace' : 'add'}${drag && !swapMode ? ' · or drag it onto the graph' : ''}`}
+      {...nodeDragProps(swapMode ? null : drag, onDragEnd)}
       onClick={onSingleClick}
       onDoubleClick={onDoubleClick}
       onMouseEnter={() => setHovered(true)}
@@ -403,7 +403,7 @@ function NodePill({
         background: on ? tk.bg.selected : hovered ? tk.bg.hover : tk.bg.field,
         boxShadow: on ? `inset 0 0 0 1.5px ${tk.accent.base}` : 'none',
         color: on ? tk.accent.text : tk.text.secondary, font: `${on ? 600 : 500} 12.5px ${fontFamily.ui}`,
-        cursor: swapMode ? 'pointer' : 'grab', userSelect: 'none', whiteSpace: 'nowrap',
+        cursor: swapMode ? 'pointer' : 'grab', ...nodeDragStyle, whiteSpace: 'nowrap',
         transition: 'background 0.12s, box-shadow 0.12s',
       }}
     >
@@ -426,6 +426,10 @@ function CapsLabel({ children, rule = false }: { children: ReactNode; rule?: boo
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface NodeBrowserProps {
   onAdd: (type: string) => void;
+  /** Add `type` at a graph position (a pill dragged onto the graph). Left out: pills don't drag. */
+  onDragAdd?: (type: string, position: { x: number; y: number }) => string | undefined;
+  /** After a drop, e.g. to close a drawer. */
+  onDragDone?: () => void;
   swapTargetNodeId: string | null;
   favorites: string[];
   onToggleFavorite: (type: string) => void;
@@ -437,7 +441,7 @@ interface NodeBrowserProps {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export function NodeBrowser({
-  onAdd, swapTargetNodeId, favorites, onToggleFavorite, nodeButtonRefs, searchQuery,
+  onAdd, onDragAdd, onDragDone, swapTargetNodeId, favorites, onToggleFavorite, nodeButtonRefs, searchQuery,
   context, onGlslInsert,
 }: NodeBrowserProps) {
   const tk = useTokens();
@@ -513,6 +517,8 @@ export function NodeBrowser({
             onSingleClick={() => handleNodeClick(def.type)}
             onDoubleClick={() => handleNodeDblClick(def.type)}
             swapMode={!!swapTargetNodeId}
+            drag={onDragAdd && !isGlsl ? { label: def.label, type: def.type, place: pos => onDragAdd(def.type, pos) } : null}
+            onDragEnd={() => { setPreviewType(null); onDragDone?.(); }}
             btnRef={el => { if (el) nodeButtonRefs.current.set(def.type, el); else nodeButtonRefs.current.delete(def.type); }}
           />
         ))}

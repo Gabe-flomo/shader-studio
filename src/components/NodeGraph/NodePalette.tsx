@@ -4,9 +4,10 @@ import { useCan } from '../../lib/plan';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { SaveGraphForm, VersionsButton } from '../shell/GraphVersions';
 import { GraphLinkBadge } from '../shell/GraphLinks';
-import { useNodeGraphStore, SAVED_GRAPHS_CHANGED, loadCustomFns, EXAMPLE_INDEX, EXAMPLE_FOLDERS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset, loadKeyframePresets, deleteKeyframePreset, renameKeyframePreset } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, switchScopeFor, SAVED_GRAPHS_CHANGED, loadCustomFns, EXAMPLE_INDEX, EXAMPLE_FOLDERS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset, loadKeyframePresets, deleteKeyframePreset, renameKeyframePreset } from '../../store/useNodeGraphStore';
 import { NODE_REGISTRY, getNodeDefinitionFor } from '../../nodes/definitions';
 import { NodeBrowser } from './NodeBrowser';
+import { nodeDragProps, nodeDragStyle, type DropPayload } from './nodeDrop';
 import { ImportGlslModal } from './ImportGlslModal';
 import { FolderableList } from './FolderableList';
 import type { CustomFnPreset } from '../../types/customFnPreset';
@@ -43,6 +44,7 @@ import { creditSentence, type SourceCredit } from '../../types/credit';
 import { HistoryPanel, CountBadge, UnreadDot } from '../history/HistoryPanel';
 import { useUnseenActivity } from '../ui/activityStore';
 import { OPEN_WHATS_NEW, useWhatsNewUnread } from '../../changelog/releaseNotes';
+import { SwapSuggestions } from './SwitchNodePicker';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'builder' | 'functions' | 'expressions' | 'keyframes' | 'history';
@@ -67,7 +69,7 @@ const SIDEBAR_TABS: Array<{ id: TabId; label: string; icon: IconName; color: (tk
 ];
 
 // ── Saved-item row ────────────────────────────────────────────────────────────
-function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename, onEdit, editLabel = 'Edit', onExport, hint, tag, extra, thumb, source }: {
+function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename, onEdit, editLabel = 'Edit', onExport, hint, tag, extra, thumb, source, drag, onDragDone }: {
   label: string; icon: IconName; color: string;
   /** Where an example comes from: a small credit line under the name. */
   source?: SourceCredit;
@@ -91,6 +93,9 @@ function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false,
   onExport?: () => void;
   /** Always shown before the hover actions (a saved graph's version count). */
   extra?: React.ReactNode;
+  /** Pressing and moving drags the item onto the graph (nodeDrop.ts). */
+  drag?: DropPayload | null;
+  onDragDone?: () => void;
 }) {
   const tk = useTokens();
   const [hovered, setHovered] = useState(false);
@@ -109,11 +114,12 @@ function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false,
         // The second click of a double-click shouldn't collapse the preview it just opened
         onClick={e => { if (onDoubleClick && e.detail > 1) return; onClick(); }}
         onDoubleClick={onDoubleClick}
+        {...nodeDragProps(drag ?? null, onDragDone)}
         aria-expanded={preview !== undefined ? selected : undefined}
-        title={hint ? `${label} — ${hint}` : onDoubleClick ? `${label} · double-click to add` : label}
+        title={hint ? `${label} — ${hint}` : onDoubleClick ? `${label} · double-click to add${drag ? ' or drag onto the graph' : ''}` : label}
         style={{
           flex: 1, minWidth: 0, height: source ? undefined : 32, alignSelf: 'stretch', border: 0, background: 'none', padding: 0, textAlign: 'left', cursor: 'pointer',
-          color: tk.text.secondary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          color: tk.text.secondary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...(drag ? nodeDragStyle : {}),
           ...(source ? { display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 } : {}),
         }}
       >{source ? <><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span><CreditTag source={source} size={10.5} compact /></> : label}</button>
@@ -369,7 +375,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   };
 
   const swapTargetLabel = swapTargetNodeId
-    ? (() => { const n = graphNodes.find(nd => nd.id === swapTargetNodeId); if (!n) return null; return getNodeDefinitionFor(n)?.label ?? n.type; })()
+    ? (() => { const n = graphNodes.find(nd => nd.id === swapTargetNodeId) ?? switchScopeFor(useNodeGraphStore.getState(), swapTargetNodeId)?.node; if (!n) return null; return getNodeDefinitionFor(n)?.label ?? n.type; })()
     : null;
 
   const toggleFolder = (label: string) =>
@@ -393,7 +399,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               leading={<Icon name="search" size={15} style={{ color: tk.text.faint }} />}
               style={{ flexShrink: 0, marginBottom: 6 }}
             />
-            <NodeBrowser onAdd={handleAdd} swapTargetNodeId={swapTargetNodeId} favorites={favorites} onToggleFavorite={onToggleFavorite} nodeButtonRefs={nodeButtonRefs} searchQuery={query} context={context} onGlslInsert={onGlslInsert} />
+            <NodeBrowser onAdd={handleAdd} onDragAdd={(type, pos) => addNode(type, pos)} onDragDone={onNodeAdded} swapTargetNodeId={swapTargetNodeId} favorites={favorites} onToggleFavorite={onToggleFavorite} nodeButtonRefs={nodeButtonRefs} searchQuery={query} context={context} onGlslInsert={onGlslInsert} />
             {query.trim().length > 0 && (() => {
               // Examples that match the search too, under their own heading: "blur" finds the
               // Blur & Lens folder, "3D" the 3D examples, "midi" the MIDI one.
@@ -472,7 +478,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               {favorites.map(t => {
                 const def = NODE_REGISTRY[t];
                 if (!def) return null;
-                return <ItemRow key={t} label={def.label} icon="starF" color={tabColor('favorites')} onClick={() => handleAdd(t)} onDelete={() => onToggleFavorite(t)} />;
+                return <ItemRow key={t} label={def.label} icon="starF" color={tabColor('favorites')} onClick={() => handleAdd(t)} drag={swapTargetNodeId ? null : { label: def.label, type: t, place: pos => addNode(t, pos) }} onDragDone={onNodeAdded} onDelete={() => onToggleFavorite(t)} />;
               })}
             </div>
           );
@@ -585,6 +591,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                 if (!d) return null;
                 return (
                   <ItemRow label={d.label} icon="spark" color={tk.kind.fn} tag={d.sealed ? 'Sealed' : undefined}
+                    drag={{ label: d.label, type: d.id, place: pos => addNode(d.id, pos) }} onDragDone={onNodeAdded}
                     onClick={() => { addNode(d.id, spawnPoint()); onNodeAdded?.(); }}
                     onEdit={d.source ? () => {
                       if (d.source?.kind === 'code') { setPublishExisting(d.id); setPublishSource({ kind: 'code', code: d.source.code, entry: d.source.entry, label: d.label }); return; }
@@ -615,6 +622,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                 const sub = p.subgraph;
                 return (
                   <ItemRow label={p.label} icon="presets" color={tabColor('presets')}
+                    drag={{ label: p.label, place: pos => instantiateGroupPreset(p.id, pos) }} onDragDone={onNodeAdded}
                     selected={selectedSaved === p.id} onClick={() => toggleSaved(p.id)} onDoubleClick={place}
                     preview={<SavedItemPreview name={p.label} kind="Group"
                       signature={`${sub.nodes.length} nodes · ${sub.inputPorts.length} in · ${sub.outputPorts.length} out`}
@@ -636,6 +644,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                       onCommit={() => { renameTransformPreset(p.id, renameTransformValue); setRenamingTransformId(null); refreshTransformPresets(); }}
                       onCancel={() => setRenamingTransformId(null)} />
                   : <ItemRow label={p.label} icon="layout" color={tabColor('presets')}
+                      drag={{ label: p.label, type: 'transformVec', place: pos => addNode('transformVec', pos, { outputType: p.outputType, exprX: p.exprX, exprY: p.exprY, exprZ: p.exprZ, exprW: p.exprW, ...(p.comment ? { __comment: p.comment } : {}) }) }} onDragDone={onNodeAdded}
                       selected={selectedSaved === p.id} onClick={() => toggleSaved(p.id)}
                       onDoubleClick={() => { addNode('transformVec', placeAt(), { outputType: p.outputType, exprX: p.exprX, exprY: p.exprY, exprZ: p.exprZ, exprW: p.exprW, ...(p.comment ? { __comment: p.comment } : {}) }); onNodeAdded?.(); }}
                       preview={<SavedItemPreview name={p.label} kind="Transform Vec"
@@ -670,6 +679,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                 return (
                   <ItemRow label={p.label} icon="fn" color={tabColor('functions')}
                     thumb={<FnThumbnail preset={p} size={22} />}
+                    drag={{ label: p.label, type: 'customFn', place: pos => addNode('customFn', pos, { label: p.label, inputs: p.inputs, outputType: p.outputType, body: p.body, glslFunctions: p.glslFunctions, ...(p.comment ? { __comment: p.comment } : {}) }) }} onDragDone={onNodeAdded}
                     selected={selectedSaved === p.id} onClick={() => toggleSaved(p.id)} onDoubleClick={place}
                     preview={<SavedItemPreview name={p.label} kind="Custom Function" signature={signatureOf(p.label, p.outputType, p.inputs)} comment={p.comment} onAdd={place} picture={<FnThumbnail preset={p} size={56} radius={radius.md} />} />}
                     onDelete={() => { deleteCustomFn(p.id); refreshPresets(); }} />
@@ -693,6 +703,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                     onCommit={() => { renameExprPreset(p.id, renameExprValue); setRenamingExprId(null); refreshExprPresets(); }}
                     onCancel={() => setRenamingExprId(null)} />
                 : <ItemRow label={p.label} icon="expr" color={tabColor('expressions')}
+                    drag={{ label: p.label, type: 'exprNode', place: pos => addNode('exprNode', pos, { label: p.label, inputs: p.inputs, outputType: p.outputType, lines: p.lines, result: p.result, ...(p.comment ? { __comment: p.comment } : {}) }) }} onDragDone={onNodeAdded}
                     selected={selectedSaved === p.id} onClick={() => toggleSaved(p.id)}
                     onDoubleClick={() => { addNode('exprNode', placeAt(), { label: p.label, inputs: p.inputs, outputType: p.outputType, lines: p.lines, result: p.result, ...(p.comment ? { __comment: p.comment } : {}) }); onNodeAdded?.(); }}
                     preview={<SavedItemPreview name={p.label} kind="Expression Block"
@@ -750,9 +761,12 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
 
       {/* Swap banner */}
       {swapTargetNodeId && (
-        <div style={{ margin: '0 12px 8px 14px', padding: '6px 6px 6px 10px', borderRadius: radius.md, background: alpha(tk.status.warning, 0.14), color: tk.status.warningText, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <span style={{ flex: 1 }}>Replacing <strong>{swapTargetLabel}</strong> — pick a node</span>
-          <IconButton icon="close" label="Cancel replace" size="sm" onClick={() => setSwapTargetNodeId(null)} />
+        <div style={{ margin: '0 12px 8px 14px', padding: '6px 6px 6px 10px', borderRadius: radius.md, background: alpha(tk.status.warning, 0.14), color: tk.status.warningText, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ flex: 1, minWidth: 0 }}>Replacing <strong>{swapTargetLabel}</strong> — pick a node</span>
+            <IconButton icon="close" label="Cancel replace" size="sm" onClick={() => setSwapTargetNodeId(null)} />
+          </div>
+          <SwapSuggestions key={swapTargetNodeId} nodeId={swapTargetNodeId} />
         </div>
       )}
 

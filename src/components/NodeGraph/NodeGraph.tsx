@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import { openSwitchPicker, showsSwitchPill } from './switchPickerModel';
 import { createPortal } from 'react-dom';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { getNodeDefinition, getNodeDefinitionFor } from '../../nodes/definitions';
@@ -10,6 +11,7 @@ import { CanvasToolbar } from '../shell/CanvasToolbar';
 import { setVizScale, vizScaleForZoom } from './vizKit';
 import { registerSocket, remeasureAllSockets, setLayoutZoomGetter, getSocketOffset, getDragPosition, publishView, getCardSize, isDragging, subscribeCardSizes, forgetNodeLayout, type Pt } from './socketRegistry';
 import { WireLayer, type EdgeInfo } from './WireLayer';
+import { registerDropTarget, edgeInfoFromKey } from './nodeDrop';
 import { buildNodeErrors } from '../../compiler/nodeErrors';
 import { suggestConnections, type Suggestion } from './smartConnect';
 import { suggestQuickAdds, type QuickAdd } from './quickAdds';
@@ -1130,6 +1132,16 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
     });
   }, [registerViewportCenterGetter]);
 
+  // A node dragged out of the node browser lands here (nodeDrop.ts): the canvas says where the pointer is in the
+  // graph, whether it takes drops, and which wire a data-edge key names.
+  useEffect(() => registerDropTarget({
+    get el() { return canvasRef.current; },
+    blocked: () => lockedRef.current,
+    toWorld: (sx, sy) => screenToWorld(sx, sy),
+    zoom: () => zoomRef.current,
+    edgeInfo: key => edgeInfoFromKey(displayNodesRef.current, key),
+  }), [screenToWorld]);
+
   // ── Shift+socket spotlight — which edges are highlighted ─────────────────────
   // Each entry is { fromNodeId, fromOutputKey, toNodeId, toInputKey }
   const spotSocket = dragConnection ? null : shiftHeld ? hoveredSocket : settledSocket;
@@ -1848,6 +1860,16 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                 })()}
                 {clickedNode && !isGroup && !isSceneGroup && !isSpaceWarpGroup && !isMarchLoopGroup && (
                   <>
+                    {showsSwitchPill(clickedNode) && (
+                      <button style={ctxBtnStyle} title="Turn it into a similar node, wires and settings kept" onClick={() => {
+                        const id = clickedNode.id;
+                        setContextMenu(null);
+                        // The card's own Switch list opens (after this menu has gone, so it takes the focus).
+                        requestAnimationFrame(() => { if (!openSwitchPicker(id)) useNodeGraphStore.getState().setSwapTargetNodeId(id); });
+                      }}>
+                        Switch to… <span style={{ color: tc.surface2, fontSize: '10px' }}>⇧-click title</span>
+                      </button>
+                    )}
                     <button style={ctxBtnStyle} onClick={() => {
                       duplicateNode(clickedNode.id);
                       setContextMenu(null);
@@ -2075,7 +2097,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     size="sm"
                     ariaLabel="Input type"
                     value={addingGroupInput.type}
-                    options={(['float', 'vec2', 'vec3', 'vec4'] as const).map(t => ({ value: t, label: t }))}
+                    // texture: a Pass's (or an image's) texture wired in from outside, for Sample / Edges / Blur inside (passes phase 7).
+                    options={(['float', 'vec2', 'vec3', 'vec4', 'texture'] as const).map(t => ({ value: t, label: t }))}
                     onChange={t => setAddingGroupInput(prev => prev ? { ...prev, type: t } : null)}
                   />
                   <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>

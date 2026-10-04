@@ -39,6 +39,49 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.24',
+    date: '2026-10-04',
+    title: 'Switch a node in place',
+    highlights: [
+      { area: 'Studio', text: 'Switch on a node card (or right-click → Switch to…) turns it into a similar node, keeping its wires: Union to Intersect, Sphere to Cone, sin to cos.' },
+      { area: 'Studio', text: 'Settings carry over by name and meaning, and Play controls, keyframes and comments stay with the node; one undo step.' },
+    ],
+  },
+  {
+    id: '2026.10.23',
+    date: '2026-10-04',
+    title: 'Displacement Map, passes in groups',
+    highlights: [
+      { area: 'Play', text: 'Displacement Map, as in After Effects: any layer pushed by another layer or the picture, by red, green, blue, alpha, luminance, hue, lightness or saturation.', link: { kind: 'doc', path: 'docs/displacement-map.md' } },
+      { area: 'Play', text: 'Layers have a Displace button next to Matte and Mask; Look’s Displace gains By channels; Studio gets a Displacement Map node.' },
+      { area: 'Studio', text: 'A Pass can live inside a plain group, and texture wires can cross groups: build a blur group once and reuse it.', link: { kind: 'doc', path: 'docs/pass-node-plan.md' } },
+      { area: 'Studio', text: 'Repeat on a Pass runs it up to 64 times a frame, for wide blurs, distance fields and faster simulations; a Jump flood node turns a shape into a distance field.' },
+      { area: 'Studio', text: 'Texture Input and Video have a Texture output, so Edges, Blur and Particles can read a picture directly, with no copy Pass.' },
+    ],
+  },
+  {
+    id: '2026.10.22',
+    date: '2026-10-04',
+    title: 'Drag nodes in, a Water layer',
+    highlights: [
+      { area: 'Studio', text: 'Drag nodes from the browser onto the graph. Drop on a wire to insert the node into it; double-click and Enter still work.' },
+      { area: 'Play', text: 'A Water layer: a whole-picture or pond-shaped surface that bends only the layers below it, so a boat above it stays sharp in its own wake.', link: { kind: 'doc', path: 'docs/water-layer.md' } },
+      { area: 'Play', text: 'Water readings (wave height, energy, area) drive mappings and rules, and a Waves matte shows other layers only where the water moves.' },
+      { area: 'Play', text: 'The Water effect’s card has Move to a layer, which keeps its settings, controls and Splash rules.' },
+    ],
+  },
+  {
+    id: '2026.10.21',
+    date: '2026-10-04',
+    title: 'Starter recipes, 3D that just works',
+    highlights: [
+      { area: 'Studio', text: 'Starter recipes: add a Grid, a noise, an SDF, a Pass and more, and a small card offers one-click setups. Just the node, Esc or Don’t ask again skip it.', link: { kind: 'doc', path: 'docs/starter-recipes.md' } },
+      { area: 'Studio', text: 'Every node a recipe adds has a note on what it does and why, and the whole recipe is one undo step.' },
+      { area: 'Studio', text: 'Any 3D shape you add lands in your scene, joined and placed beside what is there. A scene, camera and loop are built only when there is none.' },
+      { area: 'Studio', text: 'The Volumetric switch builds its glow: Scene Distance, Volume Glow and Glow to Color, wired and explained; off removes them again.' },
+    ],
+  },
+  {
     id: '2026.10.20',
     date: '2026-10-04',
     title: 'Passes you can inspect, sharper desktop zoom',

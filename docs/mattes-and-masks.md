@@ -7,6 +7,8 @@ Two ways to cut a layer:
 - **Matte**: another layer decides where this one shows, by that layer's **Alpha** (where it is solid) or its **Luma** (where it is bright), either way **Inverted** if you like. Any layer can be matted and any layer can be a matte: particles, text, images, the camera, shapes, Script layers (2D and 3D), cloners, brushes, glyphs, contours, audio, lenses, bodies, and the Background layer (the picture itself). Nulls draw nothing, so they are neither.
 - **Mask**: a shape the layer owns (not a layer of its own): a rectangle, an ellipse, a polygon clicked corner by corner, or a freehand outline. Masks move and turn with their layer, have **Feather**, **Expand**, **Opacity** and **Invert**, and combine by **Add**, **Subtract** or **Intersect** when there are several.
 
+A third button, **Displace**, gives the layer After Effects' Displacement Map: its own pixels moved by another layer (hidden or not, like a matte) or by the picture. See [displacement-map.md](displacement-map.md); it runs after the masks and before the matte.
+
 ## Using them
 
 Every layer card (except nulls and the Background layer) starts with two buttons.
@@ -15,6 +17,7 @@ Every layer card (except nulls and the Background layer) starts with two buttons
 
 - **A hand path** (a Shape → Path through nulls on your fingertips, see tracking.md) makes a matte you hold between your hands: the layer shows inside the frame your thumbs and index fingers make (or everywhere else, inverted). With Hand lost → Fade, the matte fades out while a hand is away.
 - **Where it moves** makes a hidden **Motion** layer the matte: the layer shows only where the camera, the picture or a video moves, with the Motion layer's Feather for a soft edge and the matte's Invert for where nothing moves (docs/motion-layer.md).
+- A **Water** layer as the matte is its waves: the layer shows only where the water moves, with the Water layer's Feather for a soft edge and the matte's Invert for the still water (docs/water-layer.md).
 - **New shape** makes a solid white Shape layer (a box in the middle of the picture, no zone action), puts it right above the layer in the stack, hooks it up as an Alpha matte and selects it, so its handles are on the picture straight away.
 - A layer becomes **hidden** the first time it is used as a matte, as in After Effects. It keeps running (particles move, scripts draw) and still works as the matte; its eye switch is "Show matte". The matted layer keeps its own visibility.
 - **In the list**, a matte that sits right after the layer it mattes is tucked under it, joined by an elbow, with *Matte for …* under its name (a link back). A folded card says *Matte · Shape 1 · Alpha · 2 masks*. A hidden matte isn't dimmed like a hidden layer: it is at work.

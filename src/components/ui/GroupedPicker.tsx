@@ -119,7 +119,7 @@ export function GroupedPicker({
 }
 
 /** The open list: mounted only while open, so a closed picker costs a button. */
-function PickerPanel({
+export function PickerPanel({
   listId, sections, value, ariaLabel, title, asSheet, width, withSearch, initialQuery, searchPlaceholder, anchorRef, onPick, onClose,
 }: {
   listId: string;

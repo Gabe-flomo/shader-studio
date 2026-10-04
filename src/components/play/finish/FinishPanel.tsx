@@ -17,6 +17,7 @@ import { Toggle, Segmented } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
 import { rowField } from '../../ui/rowLayout';
 import { Field } from '../../ui/Field';
+import { DM_BEHAVIOURS, DM_BEHAVIOUR_LABELS, DM_CHANNELS, DM_CHANNEL_LABELS, DM_HINTS } from '../../../play/kit/displace.js';
 import { GY_SETS, gyList } from '../../../play/kit/glyphs.js';
 import { RulerSlider } from '../../ui/RulerSlider';
 import { Tooltip } from '../../ui/Tooltip';
@@ -29,6 +30,7 @@ import { askConfirm, askText } from '../../ui/dialogStore';
 import { toast } from '../../ui/toastStore';
 import { moveItem } from '../../../lib/reorder';
 import { playId } from '../../../play/playControls';
+import { moveWaterToLayer } from '../../../play/waterLayers';
 import { Section } from '../layers/Section';
 import { BigEditorScaffold } from '../layers/BigEditorScaffold';
 import { usePlayUi } from '../playUi';
@@ -159,6 +161,14 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
     else push(e);
   };
   const lastDraft = useRef<string | null>(null);
+  // Water → a Water layer at the top of the layers, its settings, controls and Splashes kept (play/waterLayers.ts).
+  const toLayer = (e: FinishEffect) => {
+    let made = '', left = 0;
+    onChange(p => { const r = moveWaterToLayer(p, e.id, playId('layer'), 'Water'); made = r.id; left = r.wavesLeft; return r.play; });
+    if (!made) return;
+    usePlayUi.getState().setTab('layers');
+    toast.success('Water is a layer now', { message: `It is at the top of the layers, with the same settings, controls and Splashes. Move layers above it to keep them dry (a boat on the water).${left ? ` ${left === 1 ? 'One effect' : `${left} effects`} here showed only where the water moves: give ${left === 1 ? 'it' : 'them'} a Where of their own.` : ''}` });
+  };
   const add = (value: string) => {
     if (value === NEW_EFFECT) { lastDraft.current = null; setEditing({ original: null }); return; }
     if (value.startsWith(NODE_PREFIX)) {
@@ -183,7 +193,9 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
       const d = FINISH_EFFECTS[k];
       const inStack = finish.effects.some(e => e.kind === k);
       const list = groups.get(d.group) ?? [];
-      list.push({ value: k, label: d.label, description: inStack ? 'Already in the stack' : d.summary, icon: d.icon as IconName, disabled: inStack });
+      // Water: the layer is usually the better fit (it has a place, and bends only what is under it).
+      const summary = k === 'water' ? `${d.summary}. Prefer the Water layer for ponds and boats (Layers → Add layer → Water): it bends only the layers below it` : d.summary;
+      list.push({ value: k, label: d.label, description: inStack ? 'Already in the stack' : summary, icon: d.icon as IconName, disabled: inStack });
       groups.set(d.group, list);
     }
     const yours: PickerSection['items'][number][] = [
@@ -279,6 +291,7 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
             onExpose={p => expose(e, p)}
             onReorder={(from, to) => setFinish(f => ({ ...f, effects: moveItem(f.effects, from, to) }))}
             onRemove={() => setFinish(f => ({ ...f, effects: f.effects.filter(x => x.id !== e.id) }))}
+            onToLayer={e.kind === 'water' ? () => toLayer(e) : undefined}
             onEdit={e.kind === 'custom' && !e.sealed ? () => setEditing({ original: e }) : undefined}
           />
         ))}
@@ -331,8 +344,10 @@ function WipeCard({ compare, touch, exposed, onPatch, onExpose }: {
 
 // ── One effect ───────────────────────────────────────────────────────────────
 
-function EffectCard({ effect: e, index, count, dimmed, touch, focused, focusTick, layers, exposed, onPatch, onReplace, onExpose, onReorder, onRemove, onEdit }: {
+function EffectCard({ effect: e, index, count, dimmed, touch, focused, focusTick, layers, exposed, onPatch, onReplace, onExpose, onReorder, onRemove, onEdit, onToLayer }: {
   effect: FinishEffect;
+  /** Water: turn it into a Water layer. */
+  onToLayer?: () => void;
   index: number;
   count: number;
   dimmed: boolean;
@@ -384,6 +399,7 @@ function EffectCard({ effect: e, index, count, dimmed, touch, focused, focusTick
       } } as MenuItem]),
     ] as MenuItem[] : []),
     { label: 'Reset to defaults', icon: 'resetParams', onSelect: () => onReplace(custom ? { ...newCustomEffect({ name: title, code: e.code ?? '', ...(e.defId ? { defId: e.defId } : {}), ...(e.sealed ? { sealed: e.sealed } : {}), ...(e.graph ? { graph: e.graph } : {}) }, e.id), enabled: e.enabled } : { ...newFinishEffect(e.kind as FinishKind, e.id), enabled: e.enabled }) },
+    ...(onToLayer ? [{ label: 'Move to a layer', icon: 'layers', hint: 'A Water layer with these settings: it bends only the layers below it', onSelect: onToLayer } as MenuItem] : []),
     { label: 'Remove', icon: 'trash', danger: true, onSelect: onRemove },
   ];
   const k = kitFor(e, touch, exposed, onPatch, onExpose);
@@ -564,15 +580,44 @@ const DISPLACE_MAPS = [
   { value: 'motion', label: 'Motion', title: 'Where the camera sees movement, the picture is pushed' },
 ];
 
+const DISPLACE_PUSH = [
+  { value: 'direction', label: 'One way', title: 'Brightness (or a layer’s alpha) pushes along Direction' },
+  { value: 'channels', label: 'By channels', title: 'After Effects’ Displacement Map: one channel moves sideways, another up and down' },
+];
+const DM_CHANNEL_OPTIONS = DM_CHANNELS.map(c => ({ value: c, label: DM_CHANNEL_LABELS[c] }));
+const DM_BEHAVIOUR_OPTIONS = DM_BEHAVIOURS.map(b => ({ value: b, label: DM_BEHAVIOUR_LABELS[b] }));
+
 function DisplaceEditor({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit; layers: LayerRef[]; onPatch: (c: Partial<FinishEffect>) => void }) {
   const map = e.map ?? 'noise';
+  const canChannels = map === 'picture' || map === 'layer';
+  const channels = canChannels && e.dispMode === 'channels';
+  // Switching to By channels starts at After Effects' defaults; switching back keeps them for later.
+  const setPush = (v: string) => onPatch(v === 'channels'
+    ? { dispMode: 'channels', chanH: e.chanH ?? 'red', chanV: e.chanV ?? 'green', behaviour: e.behaviour ?? 'center', wrap: e.wrap ?? false }
+    : { dispMode: undefined });
   return (
     <>
       {k.row('Map', <Select ariaLabel="Displace map" value={map} height={26} options={DISPLACE_MAPS.map(m => ({ value: m.value, label: m.label }))} onChange={v => onPatch({ map: v as FinishEffect['map'] })} />, 'What pushes the picture around.')}
-      {map === 'layer' && k.row('Layer', <LayerPick layers={layers} value={e.layerId ?? ''} onChange={v => onPatch({ layerId: v })} />, 'The layer’s alpha is the push: where it is opaque, the picture moves the most. It can be hidden and still work.')}
+      {map === 'layer' && k.row('Layer', <LayerPick layers={layers} value={e.layerId ?? ''} onChange={v => onPatch({ layerId: v })} />, channels
+        ? 'The layer drawn alone is the map: its colours and alpha push the picture. It can be hidden and still work.'
+        : 'The layer’s alpha is the push: where it is opaque, the picture moves the most. It can be hidden and still work.')}
       {map === 'motion' && !layers.some(l => l.kind === 'camera') && k.note(<>Add a Camera layer for this (it can be hidden).</>)}
-      {k.num('amount')}
-      {map === 'noise' ? k.nums('scale', 'speed') : k.num('angle')}
+      {canChannels && k.row('Push', <Segmented size="sm" ariaLabel="How the map pushes" value={channels ? 'channels' : 'direction'} options={DISPLACE_PUSH} onChange={setPush} />,
+        'One way: brightness (or the layer’s alpha) pushes along Direction by Amount. By channels: After Effects’ Displacement Map, where one channel of the map moves the picture sideways and another up and down, mid-grey staying put.')}
+      {channels ? (
+        <>
+          {k.row('Horizontal', <Select ariaLabel="Use for horizontal displacement" value={e.chanH ?? 'red'} height={26} options={DM_CHANNEL_OPTIONS} onChange={v => onPatch({ chanH: v as FinishEffect['chanH'] })} />, `${DM_HINTS.h} ${DM_HINTS.channels}`)}
+          {k.row('Vertical', <Select ariaLabel="Use for vertical displacement" value={e.chanV ?? 'green'} height={26} options={DM_CHANNEL_OPTIONS} onChange={v => onPatch({ chanV: v as FinishEffect['chanV'] })} />, `${DM_HINTS.v} ${DM_HINTS.channels}`)}
+          {k.nums('maxH', 'maxV')}
+          {map === 'layer' && k.row('Behaviour', <Select ariaLabel="Displacement map behaviour" value={e.behaviour ?? 'center'} height={26} options={DM_BEHAVIOUR_OPTIONS} onChange={v => onPatch({ behaviour: v as FinishEffect['behaviour'] })} />, DM_HINTS.behaviour)}
+          {k.row('Edges', <Toggle checked={!!e.wrap} onChange={wrap => onPatch({ wrap })} label="Wrap pixels around" />, 'On: what is pushed off one edge comes back in at the other. Off: the edge pixels repeat.')}
+        </>
+      ) : (
+        <>
+          {k.num('amount')}
+          {map === 'noise' ? k.nums('scale', 'speed') : k.num('angle')}
+        </>
+      )}
     </>
   );
 }
@@ -619,6 +664,7 @@ function WaterEditor({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit; la
       {k.nums('rain', 'drop')}
       {k.nums('refraction', 'highlights', 'light')}
       {k.row('Detail', <Segmented size="sm" ariaLabel="Water detail" value={(e.detail as string) || 'medium'} onChange={v => onPatch({ detail: v as FinishEffect['detail'] })} options={WATER_DETAIL} />, 'How fine the water’s grid is. The waves move the same at every detail and in every render.')}
+      {k.note(<>For a pond, or a boat sailing on the water, use the <b>Water layer</b> instead (this card’s ⋯ → <b>Move to a layer</b> turns this into one): it has a place among the layers and bends only the ones below it, so a boat drawn above it doesn’t wobble in its own wake.</>)}
       {k.note(<>A simulated surface: waves travel at <b>Wave speed</b>, bounce, cross and fade by <b>Damping</b>. A source moving faster than the waves leaves a V-shaped wake like a boat; with <b>Bob</b> it rings while it holds still. A rule’s <b>Splash</b> (Rules → Do) drops into the water anywhere. Other effects can show only on the waves: their <b>Where → Where the water moves</b>.</>)}
     </>
   );

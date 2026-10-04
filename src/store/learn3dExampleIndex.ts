@@ -15,6 +15,7 @@ const ROWS: Array<[string, string, string]> = [
   ['learn3dOrbit',   'Moving the camera',             'The object stays still and the camera circles it: Time drives the camera\'s angle. The colours are the surface normals, fixed to the world, so you can see which side you are on.'],
   ['learn3dVolume',  'Glow: through the shape',       'The same sphere two ways: on the left the loop stops at the surface; on the right it walks straight through in volumetric mode, adding a little glow at every step.'],
   ['learn3dGI',      'GI lighting vs the plain loop', 'The same scene through the plain March Loop (left, one light, no shadows) and the GI Lit March Loop (right: shadows, sky light, bounce light and reflections).'],
+  ['learn3dVolumeSwitch', 'Glow from the Volumetric switch', 'An ordinary torus scene with the March Loop\'s Volumetric switch turned on: the switch built Scene Distance, Volume Glow and Glow to Color itself, each with a note. Turn it off and they go away.'],
 ];
 
 export const LEARN3D_EXAMPLE_KEYS: string[] = ROWS.map(r => r[0]);

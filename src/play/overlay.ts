@@ -36,7 +36,7 @@ import { kitDataset } from './dataLayer';
 import { klFontFor } from './kit/layers.js';
 import { dragHandle, handleAt, handlePoints, insideBounds, layerBounds, maskBounds, maskPatchFor, outlinePoints, patchFor, type Bounds, type Handle } from './transform';
 import { kmMaskLocal, kmMaskPath, kmMaskPlacement } from './kit/mattes.js';
-import { matteUsers } from '../types/playLayers';
+import { displaceUsers, matteUsers } from '../types/playLayers';
 import { addMask, maskFromOutline } from './mattes';
 import { fnActive, fnAnimated, fnCreate, fnLookAct, fnLookNew, fnLookReset, fnLookStep, fnLookValue, fnMapLayers, fnUsesMotion, type FnEffect, type FnRenderer } from './kit/finish.js';
 import { finishPropId, renderableFinish } from '../types/playFinish';
@@ -284,7 +284,7 @@ class PlayOverlay {
    */
   exportQueuePlan(time: number, first: boolean, actions: readonly KitAction[], seed = 0): BqPlan | null {
     if (!playBackground.layerActive()) return null;
-    if (first || !this.exportKit) { this.exportKit = createLayerKit(); this.exportKit.reset(seed); }
+    if (first || !this.exportKit) { this.exportKit?.dispose(); this.exportKit = createLayerKit(); this.exportKit.reset(seed); }
     for (const a of actions) this.exportKit.act(a);
     this.exportPrepared = true;
     return this.exportKit.background(this.record, { time, value: this.value, allowDirect: false });
@@ -312,7 +312,7 @@ class PlayOverlay {
   private emitMask(layerId: string, maskId: string): void { this.selectedMask = maskId; for (const cb of this.maskListeners) cb(layerId, maskId); }
 
   /** Can this layer be picked and dragged on the picture: shown, or hidden because it is another layer's matte. */
-  private handled(l: PlayLayer): boolean { return l.visible || matteUsers(this.record.layers, l.id).length > 0; }
+  private handled(l: PlayLayer): boolean { return l.visible || matteUsers(this.record.layers, l.id).length > 0 || displaceUsers(this.record.layers, l.id).length > 0; }
 
   /** Draw the guides (null markers, handles, zone outlines, fields) or just the picture. */
   setGuides(on: boolean): void { this.guides = on; }
@@ -324,7 +324,7 @@ class PlayOverlay {
   motionGrid(id?: string): ReturnType<LayerKit['motionGrid']> { return this.kit.motionGrid(id); }
 
   /** Is there anything on the overlay: a visible layer, Layers only, or a background in place of the shader? */
-  hasLayers(): boolean { return this.record.layers.some(l => l.visible || l.kind === 'motion') || playBackground.hidden() || playBackground.active() || playBackground.layerActive(); }
+  hasLayers(): boolean { return this.record.layers.some(l => l.visible || l.kind === 'motion' || l.kind === 'water') || playBackground.hidden() || playBackground.active() || playBackground.layerActive(); }
 
   /** Anything moving on its own keeps the render loop running. */
   isAnimated(): boolean { return this.kit.isAnimated(this.record) || !!this.drawing; }
@@ -938,7 +938,7 @@ class PlayOverlay {
     // A take's seed: the render's random choices are the ones made when it played back.
     // exportQueuePlan may have started this frame already (a Background layer), actions and all.
     if (!this.exportPrepared) {
-      if (first || !this.exportKit) { this.exportKit = createLayerKit(); this.exportKit.reset(opts.seed ?? 0); }
+      if (first || !this.exportKit) { this.exportKit?.dispose(); this.exportKit = createLayerKit(); this.exportKit.reset(opts.seed ?? 0); }
       // A take's actions that fired by this frame (bursts, Next line, script buttons).
       for (const a of opts.actions ?? []) this.exportKit.act(a);
     }
@@ -960,6 +960,8 @@ class PlayOverlay {
     const dpr = Math.max(1, height / Math.max(1, this.canvas?.clientHeight || height));
     const env = this.env(pic, width, height, dpr, time, dt, true);
     env.alphaLayers = this.alphaLayers();
+    // A Splash into a Water layer comes from the take's own Look actions (as the Finish stack's does), never the live ones.
+    env.value = (l, k) => fnLookValue(this.exportLooks, l.id, k) ?? playEngine.layerValueNoLooks(l.id, k, (l as unknown as Record<string, number>)[k]);
     if (opts.pointer) env.pointer = opts.pointer; // a take's pointer, frame by frame
     const takeAudio = opts.audio;
     if (takeAudio) {

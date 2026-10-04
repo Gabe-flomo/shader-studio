@@ -29,13 +29,14 @@ import { topologicalSort } from './topoSort';
 import { validateGraph } from './validate';
 import { generateFragmentShader } from './shaderAssembler';
 import { computeNodeSlug } from './nodeSlug';
-import { PASS_SCALES } from '../nodes/definitions/passes';
+import { PASS_SCALES, passRepeat } from '../nodes/definitions/passes';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 import {
   agentStepNodes, asAgentSource, checkProgramWires, depositSpec, depositTargets, drawSpec, emitMode, engineParams, groupSide, groupSpecies,
   groupSound, hasAgentsNode, insideSlugs, isAgentEngineOnly, isAgentLoopWire, isAgentSource, listenersOf, MAX_AGENT_GROUPS, MAX_TRAILS, trailHasStepProgram, trailSpec, trailStepSink,
 } from './agentGraph';
 import { agentPlacementProblems, agentProgramProblems } from './agentRules';
+import { expandPassGroups } from './passGroups';
 
 export const PASS_TYPE = 'pass';
 /** Most Pass nodes in one graph. */
@@ -108,6 +109,7 @@ function collect(starts: Array<{ nodeId: string; outputKey: string }>, byId: Map
     }
     if (src.type === PASS_TYPE) {
       if (c.outputKey === 'previous') out.readsPrevious.add(src.id);
+      else if (isStepKey(c.outputKey)) { /* Repeat's Step / Steps: a uniform and a number, not a read */ }
       else {
         if (src.id === self) throw new Error(`Node ${src.id}: this loop feeds a Pass its own picture; wire its Previous output instead`);
         out.reads.add(src.id);
@@ -142,6 +144,9 @@ function collectOuter(starts: Array<{ nodeId: string; outputKey: string }>, byId
   return collect(emits, byId, null, out, true);
 }
 
+/** A Pass's Step and Steps outputs (Repeat): read anywhere, even inside its own program; never a texture read. */
+const isStepKey = (k: string) => k === 'step' || k === 'steps';
+
 const wiresOf = (n: GraphNode) => Object.values(n.inputs).flatMap(i => (i.connection ? [i.connection] : []));
 
 /** Kahn's sort of the passes by what they sample this frame; null on a loop. */
@@ -163,20 +168,17 @@ const countSamplers = (fs: string) => (fs.match(/^uniform sampler2D \w+;/gm) ?? 
 
 export function compilePassGraph(graph: NodeGraph): CompilationResult {
   try {
-    const { nodes } = graph;
     // Agents-family nodes (agentGraph.ts) add their own programs; without one, everything below runs as it always has.
-    const agents = hasAgentsNode(nodes);
+    const agents = hasAgentsNode(graph.nodes);
     if (agents) {
-      const placement = agentPlacementProblems(nodes, getNodeDefinitionFor);
+      const placement = agentPlacementProblems(graph.nodes, getNodeDefinitionFor);
       if (placement.length) return failure(placement);
     }
-    // Pass nodes inside groups aren't supported (a Pass in an iterated group would be N draws a frame).
-    const nested: string[] = [];
-    for (const n of nodes) {
-      const sg = n.params?.subgraph as Sub;
-      if (n.type !== PASS_TYPE && sg?.nodes && hasPassNode(sg.nodes)) nested.push(`Node ${n.id}: Pass nodes go at the top level for now`);
-    }
-    if (nested.length) return failure(nested);
+    // A Pass inside a plain group (phase 7): the group is opened onto the top level for the cut
+    // (compiler/passGroups.ts). Inside any other kind of group, an error saying why.
+    const opened = expandPassGroups(graph.nodes);
+    if ('errors' in opened) return failure(opened.errors);
+    const nodes = opened.nodes;
 
     const validation = validateGraph(nodes);
     if (!validation.valid) return failure(validation.errors ?? ['Invalid graph']);
@@ -188,7 +190,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     // 1. Slugs, once for the whole graph, in the usual sort order (Previous wires left out, so feedback isn't a cycle;
     //    with agents, the wires out of a group, Deposit or Emit too, so a Trail read back by its group isn't one either).
     const cut = (c: { nodeId: string; outputKey: string } | undefined) => !!c && (
-      (c.outputKey === 'previous' && byId.get(c.nodeId)?.type === PASS_TYPE) || (agents && isAgentLoopWire(c, byId)));
+      ((c.outputKey === 'previous' || isStepKey(c.outputKey)) && byId.get(c.nodeId)?.type === PASS_TYPE) || (agents && isAgentLoopWire(c, byId)));
     const withoutPrevious = nodes.map(n => {
       const wires = Object.entries(n.inputs);
       if (!wires.some(([, i]) => cut(i.connection))) return n;
@@ -259,7 +261,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
       for (const c of wiresOf(n)) {
         const src = byId.get(c.nodeId);
         if (src?.type !== PASS_TYPE) continue;
-        (c.outputKey === 'previous' ? finalList.readsPrevious : finalList.reads).add(src.id);
+        if (!isStepKey(c.outputKey)) (c.outputKey === 'previous' ? finalList.readsPrevious : finalList.reads).add(src.id);
         if (!finalList.nodes.has(src.id)) finalList.nodes.set(src.id, asSource(src));
       }
     }
@@ -342,8 +344,10 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     for (const c of [finalList, ...passLists.values()]) for (const r of c.readsPrevious) previousRead.add(r);
 
     // 4. Compile each list with today's compiler.
-    const compileList = (list: GraphNode[]) => generateFragmentShader(topologicalSort(list), list, {
+    const compileList = (list: GraphNode[], pictureScale?: number) => generateFragmentShader(topologicalSort(list), list, {
       slugs,
+      // A pass program's size relative to the picture (read only by a wired Texture Input / Video Texture).
+      ...(pictureScale !== undefined && pictureScale !== 1 ? { pictureScale } : {}),
       // The eye preview of a node inside an Agents group: its chain is in this picture (agentEyeNodes).
       ...(agents && list.some(n => n.params?.__agentEye === true) ? { agentEye: true } : {}),
     });
@@ -379,7 +383,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
           alpha: { type: 'float', label: 'Alpha', ...(pass.inputs.alpha?.connection ? { connection: pass.inputs.alpha.connection } : { defaultValue: 1 }) },
         },
       };
-      const r = compileList([...c.nodes.values(), sink]);
+      const r = compileList([...c.nodes.values(), sink], PASS_SCALES[String(pass.params.scale ?? '1')] ?? 1);
       absorb(r);
       for (const [nid, vars] of r.nodeOutputVars) if (nid !== sink.id && !passVars.has(nid)) passVars.set(nid, vars);
       const slug = slugs.get(id)!;
@@ -396,6 +400,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         nodeIds: [...c.nodes.values()].filter(n => n.type !== PASS_TYPE).map(n => n.id),
         ...(agents ? { afterAgents: afterAgents.has(id) } : {}),
         ...(beforeParticles.has(id) ? { beforeParticles: true } : {}),
+        ...(passRepeat(pass.params.repeat) > 1 ? { repeat: passRepeat(pass.params.repeat) } : {}),
       });
     }
     // 5. With agents: each group's update shader, and the engine's view of deposits, trails and drawings.
@@ -490,17 +495,36 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     if (countSamplers(fin.fragmentShader) > MAX_SAMPLERS) errors.push(`The final picture samples more than ${MAX_SAMPLERS} textures (images, videos, passes, feedback) in one program`);
     if (errors.length) return failure(errors);
 
+    // Probes and scopes: the final program's variables, and those of nodes only a pass program has
+    // (slugs are shared, so a node's variables have the same names in every program it lands in).
+    const nodeOutputVars = new Map([...passVars, ...fin.nodeOutputVars]);
+    let finalNodeIds = finalNodes.filter(n => n.type !== PASS_TYPE && !(agents && isAgentSource(n))).map(n => n.id);
+    // An opened group (a Pass inside it): its card reads its outputs from the nodes behind them, and
+    // Show passes tints it as the programs its nodes run in.
+    for (const [gid, g] of opened.groups) {
+      const behind = (w: { nodeId: string; outputKey: string } | undefined, depth = 0): string | undefined => {
+        if (!w) return undefined;
+        const og = opened.groups.get(w.nodeId);
+        if (og && depth < 8) return behind(og.outputs[w.outputKey], depth + 1);
+        return nodeOutputVars.get(w.nodeId)?.[w.outputKey];
+      };
+      const vars: Record<string, string> = {};
+      for (const [k, w] of Object.entries(g.outputs)) { const v = behind(w); if (v) vars[k] = v; }
+      nodeOutputVars.set(gid, vars);
+      const inner = new Set(g.inner);
+      if (finalNodeIds.some(id => inner.has(id))) finalNodeIds = [...finalNodeIds, gid];
+      for (const p of passes) if (p.nodeIds.some(id => inner.has(id))) p.nodeIds = [...p.nodeIds, gid];
+    }
+
     return {
       vertexShader: VERTEX_SHADER,
       fragmentShader: fin.fragmentShader,
       success: true,
-      // Probes and scopes: the final program's variables, and those of nodes only a pass program has
-      // (slugs are shared, so a node's variables have the same names in every program it lands in).
-      nodeOutputVars: new Map([...passVars, ...fin.nodeOutputVars]),
+      nodeOutputVars,
       ...merged,
       nodeSlugMap: slugs,
       passes,
-      finalNodeIds: finalNodes.filter(n => n.type !== PASS_TYPE && !(agents && isAgentSource(n))).map(n => n.id),
+      finalNodeIds,
       ...(agentsSpec ? { agents: agentsSpec } : {}),
     };
   } catch (error) {

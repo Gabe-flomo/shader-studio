@@ -663,7 +663,7 @@ export type CaptureRelease = 'stay' | 'back' | 'value';
 export const DATA_ROW_COLUMN = '#row';
 
 /** Layer kinds with a centre on the picture: what proximity triggers and distance sensors can measure from. */
-export const ANCHOR_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'particles', 'bodies', 'brush', 'script', 'cloner', 'data', 'video', 'relationship', 'agents', 'motion'];
+export const ANCHOR_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'particles', 'bodies', 'brush', 'script', 'cloner', 'data', 'video', 'relationship', 'agents', 'motion', 'water'];
 
 /** Layer kinds a Relationship layer can move: they have an x and a y of their own (a relationship stands at its centroid). */
 export const RELATION_MEMBER_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'cloner', 'data', 'video', 'relationship'];
@@ -683,6 +683,7 @@ export type SensorRead = 'fill' | 'hover' | 'speed' | 'spread' | 'motion' | 'dis
   | 'gap' | 'closing' | 'chaseSpeed' | 'sight' | 'catch' | 'sinceCatch' | 'catches' | 'picture'
   | 'alive' | 'centroidX' | 'centroidY' | 'group1' | 'group2' | 'group3' | 'group4' | 'born' | 'died'
   | 'moveX' | 'moveY' | 'dirX' | 'dirY'
+  | 'waveHeight' | 'energy'
   | 'grains' | 'grainMean' | 'grainSpread' | 'grainLevel' | 'grainPitch' | 'grainPos' | 'grainAmp'
   | 'grainBandMean' | 'grainEnergySum' | 'grainBand' | 'grainEnergy' | 'grainRow';
 /** Granulator reads taken per grain (the grain's number in otherId). */
@@ -696,6 +697,8 @@ export const AGENT_READS: readonly SensorRead[] = ['alive', 'speed', 'spread', '
 export const RELATION_READS: readonly SensorRead[] = ['gap', 'closing', 'chaseSpeed', 'sight', 'catch', 'sinceCatch', 'catches', 'picture', 'distance'];
 /** A Motion layer's readings (docs/motion-layer.md): Amount, Area, Where X/Y, Direction X/Y. */
 export const MOTION_READS: readonly SensorRead[] = ['motion', 'area', 'moveX', 'moveY', 'dirX', 'dirY', 'distance'];
+/** A Water layer's readings (docs/water-layer.md): Wave height at its Probe, Energy, Area (the share of it moving). */
+export const WATER_READS: readonly SensorRead[] = ['waveHeight', 'energy', 'area', 'distance'];
 export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
   shape: ['fill', 'hover', 'picture', 'distance'],
   particles: ['speed', 'spread', 'alive', 'born', 'died', 'distance'],
@@ -706,6 +709,7 @@ export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
   relationship: RELATION_READS,
   agents: AGENT_READS,
   motion: MOTION_READS,
+  water: WATER_READS,
   // A Granulator rack, as the sensor pickers list it (layer id `ae:<rackId>`).
   granulator: ['grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainBandMean', 'grainEnergySum', 'grainPos', 'grainAmp', 'grainBand', 'grainEnergy', 'grainRow'],
   // An Agents group in the graph, as the sensor pickers list it (layer id `ag:<node id>`, lib/agentReadings.ts).
@@ -824,8 +828,8 @@ export function defaultIncrement(step = 0.1, bpm = 120): PlayIncrement {
 export type {
   BlendMode, MatteMode, NullLayer, TextLayer, ImageLayer, ParticlesLayer, ParticleField, ParticleShape, ParticleModulator,
   ShapeLayer, ZoneAction, AudioLayer, GlyphsLayer, ContoursLayer, LensLayer, BrushLayer, BodiesLayer, CameraLayer, VideoLayer, VideoFit, VideoSound,
-  PlayLayer, PlayLayerKind, LayerNumericProp, BackgroundLayer, BackgroundItem, BackgroundItemKind, DataLayer, DataView, DataSplit, TrackMatte, LayerMask, MaskShape, MaskOp, MaskProp,
-  RelationshipLayer, RelationMember, RelationKind, RelationRole, RelationWall, PictureChannel, MotionLayer, MotionShow,
+  PlayLayer, PlayLayerKind, LayerNumericProp, BackgroundLayer, BackgroundItem, BackgroundItemKind, DataLayer, DataView, DataSplit, TrackMatte, LayerDisplace, LayerMask, MaskShape, MaskOp, MaskProp,
+  RelationshipLayer, RelationMember, RelationKind, RelationRole, RelationWall, PictureChannel, MotionLayer, MotionShow, WaterLayer, WaterRegion,
 } from './playLayers';
 export { LAYER_KINDS, LAYER_NUMERIC_PROPS, layerNumericProps, defaultLayer, parseLayer, queueSlot, videoLayerTimeAt, videoReaderInput, videoLayerOfInput, RELATION_MAX_MEMBERS, relationPictureKey, newRelationMember } from './playLayers';
 import { parseTakeDataFeeds, type TakeDataFeed } from '../data/streams/takeDataTypes';
@@ -1686,7 +1690,7 @@ function parseHands(v: unknown): PlayHands | null {
   return out;
 }
 
-const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble', 'area', 'perimeter', 'gap', 'closing', 'chaseSpeed', 'sight', 'catch', 'sinceCatch', 'catches', 'picture', 'alive', 'born', 'died', 'centroidX', 'centroidY', 'group1', 'group2', 'group3', 'group4', 'grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainPos', 'grainAmp', 'grainBandMean', 'grainEnergySum', 'grainBand', 'grainEnergy', 'grainRow', 'moveX', 'moveY', 'dirX', 'dirY']);
+const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble', 'area', 'perimeter', 'gap', 'closing', 'chaseSpeed', 'sight', 'catch', 'sinceCatch', 'catches', 'picture', 'alive', 'born', 'died', 'centroidX', 'centroidY', 'group1', 'group2', 'group3', 'group4', 'grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainPos', 'grainAmp', 'grainBandMean', 'grainEnergySum', 'grainBand', 'grainEnergy', 'grainRow', 'moveX', 'moveY', 'dirX', 'dirY', 'waveHeight', 'energy']);
 
 function parseAction(raw: unknown): PlayAction | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -2083,6 +2087,7 @@ export function parsePlayRecordAsSaved(raw: unknown): PlayRecord {
   layers = repairMattes(normaliseBackgroundLayer(syncLayerKinds(layers, layerKinds)));
   // Controls on a layer property need that layer; mappings reading a null need that null.
   const layerIds = new Set(layers.map(l => l.id));
+  const waterIds = new Set(layers.filter(l => l.kind === 'water').map(l => l.id));
   // Controls on a Finish effect's number need that effect.
   const finish = parseFinish(r.finish);
   const effectIds = new Set(finishHosts(finish).map(e => e.id));
@@ -2145,8 +2150,8 @@ export function parsePlayRecordAsSaved(raw: unknown): PlayRecord {
   const signals = parseSignals(r.signals);
   // A reaction on a missing layer goes, as an action would; a trigger input on something missing goes too.
   for (const s of signals) {
-    // A Look action needs its effect ('finish:<effectId>').
-    if (s.do) { const d = s.do.filter(x => x.do === SIGNAL_ACTION || x.do === NOTES_ACTION || (isLookAction(x.do) ? x.layerId.startsWith(FINISH_TARGET_PREFIX) && effectIds.has(x.layerId.slice(FINISH_TARGET_PREFIX.length)) : layerIds.has(x.layerId))); if (d.length) s.do = d; else delete s.do; }
+    // A Look action needs its effect ('finish:<effectId>'); a Splash may drop into a Water layer instead.
+    if (s.do) { const d = s.do.filter(x => x.do === SIGNAL_ACTION || x.do === NOTES_ACTION || (isLookAction(x.do) ? (x.layerId.startsWith(FINISH_TARGET_PREFIX) && effectIds.has(x.layerId.slice(FINISH_TARGET_PREFIX.length))) || (x.do === 'splash' && waterIds.has(x.layerId)) : layerIds.has(x.layerId))); if (d.length) s.do = d; else delete s.do; }
     if (s.inputs) { const k = s.inputs.filter(x => x.kind !== 'trigger' || triggerOk(x.trigger)); if (k.length) s.inputs = k; else delete s.inputs; }
   }
   if (signals.length) out.signals = signals;

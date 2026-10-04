@@ -10,7 +10,8 @@ export interface PhPass {
   live: boolean;
   afterAgents?: boolean;
   beforeParticles?: boolean;
-  u: { tex: string; prev: string };
+  repeat?: number;
+  u: { tex: string; prev: string; iter?: string };
 }
 export interface PhEnv<P = unknown, T = unknown> {
   link(fragmentShader: string): P;

@@ -4,6 +4,7 @@ import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { ConnectionLine } from './ConnectionLine';
 import { TYPE_COLORS } from './typeColors';
 import { loopWirePath } from './wirePath';
+import { edgeKeyOf, useNodeDrag } from './nodeDrop';
 
 /** A card's width (world units), for routing the trail loop over the cards it would cross. */
 const CARD_W = 360;
@@ -39,8 +40,6 @@ interface Props {
 }
 
 // Same format NodeGraph uses for spotlightEdges.
-const edgeKeyOf = (fromNodeId: string, fromOutputKey: string, toNodeId: string, toInputKey: string) =>
-  `${fromNodeId}:${fromOutputKey}→${toNodeId}:${toInputKey}`;
 
 /**
  * Draws every wire in the current scope from *data*: a wire's endpoint is the
@@ -82,6 +81,8 @@ export const WireLayer = React.memo(function WireLayer({
   // Rebuilt every render; the delegated hover handlers below close over it.
   const edges = new Map<string, { info: EdgeInfo; mid: Pt }>();
 
+  // A node dragged over a wire it would go into lights that wire.
+  const dropEdge = useNodeDrag(s => s.drag?.edge ?? null);
   const dimming = spotlightEdges.size > 0;
   const wires: React.ReactNode[] = [];
   for (const node of displayNodes) {
@@ -137,6 +138,7 @@ export const WireLayer = React.memo(function WireLayer({
           dataType={lineType}
           edgeKey={edgeKey}
           dimmed={dimming && !spotlightEdges.has(edgeKey)}
+          lit={dropEdge === edgeKey}
           overY={overY}
         />,
       );

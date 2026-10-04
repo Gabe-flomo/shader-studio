@@ -17,6 +17,8 @@
 import { LINKED_PREFIX, LINKED_REF_MAX, isLinkedRef } from '../files/linkedRefs';
 import { DP_CHOKES, DP_INDEX_MODES, DP_PADS, DP_PARAMS, DP_SYNTHS, dpKey, type DpIndexMode, type DpMode, type DpSynth } from '../play/kit/drumPads.js';
 import { AG_GROUPS, AG_MAX, AG_RULES, AG_RULE_TYPES, AG_TARGETS, AG_CHANNELS, agPresetLayer } from '../play/kit/agents.js';
+import { DM_BEHAVIOURS, DM_CHANNELS, DM_DEFAULTS, DM_HINTS, type DmBehaviour, type DmChannel } from '../play/kit/displace.js';
+import { WL_PARAMS } from '../play/kit/waterLayer.js';
 
 export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken' | 'difference' | 'exclusion' | 'add';
 
@@ -65,6 +67,27 @@ export interface LayerMask {
   invert: boolean;
 }
 
+/**
+ * A layer's Displacement Map (After Effects' effect; see play/kit/displace.js):
+ * its pixels are moved by a map before it meets the picture. The map is
+ * another layer drawn alone (it runs while hidden, like a matte) or the
+ * picture under the layers. Max horizontal / vertical are numbers on the
+ * layer (`disp_maxH`, `disp_maxV`) so controls and mappings drive them.
+ */
+export interface LayerDisplace {
+  /** Off keeps the settings but draws the layer unmoved. */
+  on: boolean;
+  /** 'layer': the layer `layerId` drawn alone. 'picture': the picture under the layers (the shader or Background). */
+  map: 'layer' | 'picture';
+  layerId: string;
+  /** The channel that moves pixels sideways, and the one that moves them up and down. */
+  h: DmChannel;
+  v: DmChannel;
+  behaviour: DmBehaviour;
+  /** Wrap pixels around: what is pushed off one edge comes in at the other. */
+  wrap: boolean;
+}
+
 interface LayerBase {
   id: string;
   label: string;
@@ -75,6 +98,8 @@ interface LayerBase {
   trackMatte?: TrackMatte;
   /** Absent or empty: no masks. Not on nulls or the Background layer. */
   masks?: LayerMask[];
+  /** Absent: not displaced. Same layers as mattes and masks. */
+  displace?: LayerDisplace;
 }
 
 /** A draggable point. Its position is a source ("Null X" / "Null Y") and can be a control. */
@@ -711,6 +736,42 @@ export interface MotionLayer extends LayerBase {
   /** show 'extract': how strongly the change shows. */
   gain: number;
   /** As a matte (and show 'mask'): how soft its edge is, in picture heights. */
+  feather: number;
+  opacity: number;
+  blend: BlendMode;
+}
+
+/** Where a Water layer's water is: the whole picture, a box or an ellipse (a pond). */
+export type WaterRegion = 'all' | 'rect' | 'ellipse';
+
+/**
+ * A water surface as a layer: the Finish stack's Water simulation (one solver,
+ * play/kit/finish.js), over the picture and the layers below it only, in its
+ * region (the whole picture or a pond with a soft edge). Its sources come from
+ * anywhere (the pointer, any layer, layers above it included, Source X/Y); its
+ * readings (Wave height at its Probe, Energy, Area) are sources and conditions;
+ * as a matte it is its Waves (where the water moves). A rule's Splash drops into
+ * it. play/kit/waterLayer.js, docs/water-layer.md.
+ */
+export interface WaterLayer extends LayerBase {
+  kind: 'water';
+  region: WaterRegion;
+  /** The pond's centre (0..1, y up) and size (picture heights), and how soft its rim is (picture heights). */
+  x: number; y: number; w: number; h: number; soft: number;
+  /** What makes waves and where (the Water effect's Source and Shape). */
+  source: 'pointer' | 'layer' | 'xy' | 'none';
+  /** source 'layer': the layer the source rides (any, hidden or above this one too). */
+  sourceLayer: string;
+  shape: 'point' | 'line' | 'ring' | 'twin' | 'layer' | 'picture';
+  /** shape 'layer': the layer whose shape pushes the water (it runs while hidden). */
+  shapeLayer: string;
+  detail: 'low' | 'medium' | 'high';
+  /** The Water effect's numbers (Source X/Y as sourceX, sourceY), with its ranges: play/kit/waterLayer.js WL_PARAMS. */
+  speed: number; damping: number; size: number; strength: number; bob: number; refraction: number; highlights: number; light: number;
+  sourceX: number; sourceY: number; length: number; angle: number; rain: number; drop: number; edges: number;
+  /** Where Wave height is read (0..1, y up). */
+  probeX: number; probeY: number;
+  /** As a matte (its Waves): how soft the edge of "where the water moves" is, in picture heights. */
   feather: number;
   opacity: number;
   blend: BlendMode;
@@ -1391,10 +1452,10 @@ export interface DataLayer extends LayerBase {
 let dataItemCount: (l: DataLayer) => number = () => 0;
 export function setDataItemCount(fn: (l: DataLayer) => number): void { dataItemCount = fn; }
 
-export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer | DataLayer | VideoLayer | DrumPadLayer | RelationshipLayer | AgentsLayer | MotionLayer;
+export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer | DataLayer | VideoLayer | DrumPadLayer | RelationshipLayer | AgentsLayer | MotionLayer | WaterLayer;
 export type PlayLayerKind = PlayLayer['kind'];
 
-export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background', 'data', 'video', 'drumpad', 'relationship', 'agents', 'motion'];
+export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background', 'data', 'video', 'drumpad', 'relationship', 'agents', 'motion', 'water'];
 
 /** The starter sketch a new Script layer holds. */
 export const DEFAULT_SCRIPT = `// A sketch: setup runs once, draw runs every frame.
@@ -1541,6 +1602,11 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
   agents: agentDefaults(),
   bodies: { toShader: true, source: 'letters', text: 'PLAY', count: 24, size: 48, gravity: 1, angle: 0, bounce: 0.35, friction: 0.3, font: 'sans', fontUrl: '', colour: 'tint', color: [1, 1, 1], palette: 1, solidPicture: false, threshold: 0.6, scatter: 1, opacity: 1, blend: 'normal' },
   camera: { toShader: true, x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, color: [0, 0, 0], mirror: true, blend: 'normal', matte: 'over' },
+  water: {
+    toShader: false, region: 'all', x: 0.5, y: 0.5, w: 1, h: 0.6, soft: 0.04, source: 'pointer', sourceLayer: '', shape: 'point', shapeLayer: '', detail: 'medium',
+    ...(Object.fromEntries(WL_PARAMS.map(p => [p.key, p.value])) as Pick<WaterLayer, 'speed' | 'damping' | 'size' | 'strength' | 'bob' | 'refraction' | 'highlights' | 'light' | 'sourceX' | 'sourceY' | 'length' | 'angle' | 'rain' | 'drop' | 'edges'>),
+    probeX: 0.5, probeY: 0.5, feather: 0.02, opacity: 1, blend: 'normal',
+  },
   motion: { toShader: false, readFrom: 'camera', sourceId: '', mirror: true, sensitivity: 0.5, delay: 2, smoothing: 0.6, cell: 0.04, show: 'extract', look: 'neon', gain: 3, feather: 0.03, opacity: 1, blend: 'screen' },
   video: {
     toShader: true, videoId: '', fileName: '', bytes: 0, fit: 'contain', x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, mirror: false, color: [0, 0, 0], blend: 'normal', matte: 'over',
@@ -1665,6 +1731,12 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     font: E('sans', 'serif', 'mono'), fontUrl: S, colour: E('tint', 'palette'), color: C, palette: N(0, 9, true), solidPicture: B, threshold: unit, scatter: N(0, 10), opacity: unit, blend: blendF,
   },
   camera: { toShader: B, x: N(), y: N(), scale: N(0.01), rotation: N(), opacity: unit, color: C, mirror: B, blend: blendF, matte: matteF },
+  water: {
+    toShader: B, region: E('all', 'rect', 'ellipse'), x: N(), y: N(), w: N(0.01, 4), h: N(0.01, 4), soft: N(0, 1),
+    source: E('pointer', 'layer', 'xy', 'none'), sourceLayer: S, shape: E('point', 'line', 'ring', 'twin', 'layer', 'picture'), shapeLayer: S, detail: E('medium', 'low', 'high'),
+    ...Object.fromEntries(WL_PARAMS.map(p => [p.key, N(p.min, p.max)])),
+    probeX: N(), probeY: N(), feather: N(0, 1), opacity: unit, blend: blendF,
+  },
   motion: {
     toShader: B, readFrom: E('camera', 'picture', 'layer'), sourceId: S, mirror: B, sensitivity: unit, delay: N(1, 30, true), smoothing: N(0, 0.99), cell: N(0.005, 0.5),
     show: E('hidden', 'extract', 'heat', 'mask'), look: E('grey', 'black', 'neon'), gain: N(0, 20), feather: N(0, 1), opacity: unit, blend: blendF,
@@ -1776,8 +1848,49 @@ export function parseLayer(raw: unknown): PlayLayer | null {
         out[maskKey(m.id, prop)] = typeof v === 'number' && Number.isFinite(v) ? Math.max(d.lo, Math.min(d.hi, v)) : MASK_DEFAULTS[prop];
       }
     }
+    const disp = parseDisplace(l.displace, id);
+    if (disp) {
+      out.displace = disp;
+      for (const k of DISP_PROP_KEYS) { const v = l[k], d = DISP_PROPS[k]; out[k] = typeof v === 'number' && Number.isFinite(v) ? Math.max(d.lo, Math.min(d.hi, v)) : d.value; }
+    }
   }
   return out as unknown as PlayLayer;
+}
+
+// ── Displacement map ─────────────────────────────────────────────────────────
+
+export type DispProp = 'disp_maxH' | 'disp_maxV';
+/** A displaced layer's numbers: slider range, what a file may hold, default and tooltip. */
+export const DISP_PROPS: Readonly<Record<DispProp, { label: string; min: number; max: number; lo: number; hi: number; value: number; hint: string }>> = {
+  disp_maxH: { label: 'Max horizontal', min: -300, max: 300, lo: -4000, hi: 4000, value: DM_DEFAULTS.maxH, hint: DM_HINTS.maxH },
+  disp_maxV: { label: 'Max vertical', min: -300, max: 300, lo: -4000, hi: 4000, value: DM_DEFAULTS.maxV, hint: DM_HINTS.maxV },
+};
+export const DISP_PROP_KEYS = Object.keys(DISP_PROPS) as DispProp[];
+
+/** A fresh Displacement Map reading `layerId` (or the picture when empty). */
+export function defaultDisplace(layerId = ''): LayerDisplace {
+  return { on: true, map: layerId ? 'layer' : 'picture', layerId, h: DM_DEFAULTS.h as DmChannel, v: DM_DEFAULTS.v as DmChannel, behaviour: DM_DEFAULTS.behaviour as DmBehaviour, wrap: DM_DEFAULTS.wrap };
+}
+
+/** A layer's displacement from a file, or null (absent or not an object). A map that is the layer itself reads the picture. */
+export function parseDisplace(v: unknown, selfId: string): LayerDisplace | null {
+  if (!v || typeof v !== 'object') return null;
+  const r = v as Record<string, unknown>;
+  const layerId = typeof r.layerId === 'string' && r.layerId !== selfId ? r.layerId.slice(0, 80) : '';
+  return {
+    on: r.on !== false,
+    map: r.map === 'layer' && layerId ? 'layer' : 'picture',
+    layerId,
+    h: (DM_CHANNELS as readonly string[]).includes(r.h as string) ? r.h as DmChannel : DM_DEFAULTS.h as DmChannel,
+    v: (DM_CHANNELS as readonly string[]).includes(r.v as string) ? r.v as DmChannel : DM_DEFAULTS.v as DmChannel,
+    behaviour: (DM_BEHAVIOURS as readonly string[]).includes(r.behaviour as string) ? r.behaviour as DmBehaviour : DM_DEFAULTS.behaviour as DmBehaviour,
+    wrap: r.wrap === true,
+  };
+}
+
+/** The layers whose Displacement Map reads `id`. */
+export function displaceUsers(layers: readonly PlayLayer[], id: string): PlayLayer[] {
+  return layers.filter(l => l.displace && l.displace.map === 'layer' && l.displace.layerId === id && l.id !== id);
 }
 
 // ── Track mattes and masks ───────────────────────────────────────────────────
@@ -1870,9 +1983,9 @@ export function motionWatchers(layers: readonly PlayLayer[], id: string): PlayLa
   return layers.filter(l => l.kind === 'motion' && l.readFrom === 'layer' && l.sourceId === id && l.id !== id);
 }
 
-/** Does a hidden layer still run: it is another layer's matte, or a Motion layer watches it. */
+/** Does a hidden layer still run: it is another layer's matte or displacement map, or a Motion layer watches it. */
 export function runsWhileHidden(layers: readonly PlayLayer[], id: string): boolean {
-  return matteUsers(layers, id).length > 0 || motionWatchers(layers, id).length > 0;
+  return matteUsers(layers, id).length > 0 || motionWatchers(layers, id).length > 0 || displaceUsers(layers, id).length > 0;
 }
 
 /** Mattes that point at a missing layer or a null, or round in a loop, dropped (a file loads whatever it says). */
@@ -2086,6 +2199,17 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'scatter', label: 'Scatter', min: 0, max: 5, hint: 'How hard a Scatter (the button, or an action) throws them. Multiplies the action\'s amount.' },
     OPACITY,
   ],
+  water: [
+    X('Centre of the pond'), Y('Centre of the pond'),
+    { key: 'w', label: 'Width', min: 0.05, max: 2, hint: 'Region Box or Ellipse: how wide the pond is, in picture heights.' },
+    { key: 'h', label: 'Height', min: 0.05, max: 2, hint: 'Region Box or Ellipse: how tall the pond is, in picture heights.' },
+    { key: 'soft', label: 'Soft edge', min: 0, max: 0.3, hint: 'How gently the pond fades out at its rim, in picture heights. 0 is a hard edge.' },
+    ...WL_PARAMS.map(p => ({ key: p.key, label: p.label, min: p.min, max: p.max, step: p.step, hard: true, hint: p.hint.replace('“A value”', 'A value') })),
+    { key: 'probeX', label: 'Probe X', min: 0, max: 1, hint: 'Where Wave height is read, across the picture. Map a layer’s X onto it to read the water under it.' },
+    { key: 'probeY', label: 'Probe Y', min: 0, max: 1, hint: 'Where Wave height is read, up the picture.' },
+    { key: 'feather', label: 'Feather', min: 0, max: 0.3, hint: 'As a matte (its Waves): how soft the edge of "where the water moves" is, in picture heights.' },
+    OPACITY,
+  ],
   motion: [
     { key: 'sensitivity', label: 'Sensitivity', min: 0, max: 1, hard: true, hint: 'How small a change counts as movement. High catches a finger; low only big, contrasty movement (and ignores camera noise and flicker).' },
     { key: 'delay', label: 'Delay', min: 1, max: 30, step: 1, hard: true, hint: 'Frames back the picture now is compared with. Longer catches slower movement and draws thicker outlines.' },
@@ -2241,7 +2365,9 @@ function agentNumericProps(l: AgentsLayer): LayerNumericProp[] {
  * at hand.
  */
 export function layerNumericProps(l: PlayLayer): ReadonlyArray<LayerNumericProp> {
-  const own = kindNumericProps(l);
+  const kind = kindNumericProps(l);
+  // A displaced layer's maxima: "Displace · Max horizontal".
+  const own = l.displace ? [...kind, ...DISP_PROP_KEYS.map(k => { const d = DISP_PROPS[k]; return { key: k, label: `Displace · ${d.label}`, min: d.min, max: d.max, step: 1, hint: d.hint }; })] : kind;
   if (!l.masks?.length) return own;
   // A mask's numbers follow the layer's own: "Mask 1 · Feather".
   return [...own, ...l.masks.flatMap(m => MASK_PROP_KEYS.map(p => {

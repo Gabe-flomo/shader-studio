@@ -18,7 +18,7 @@ import { getNodeDefinition, resolveNodeAliases } from '../../nodes/definitions';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
 import { n } from '../../store/graphBuilder';
 import { parsePlayRecord, emptyPlayRecord } from '../../types/play';
-import { webInputFrom } from '../webInput';
+import { webInputFrom, webPasses } from '../webInput';
 import { kitScript, playBundle } from '../exportHtml';
 import { phCreate } from '../kit/passHost.js';
 import { ppFrameSteps } from '../kit/passPlan.js';
@@ -106,7 +106,7 @@ describe('one frame order for the live preview and pages (kit/passPlan.js ppFram
 });
 
 /** One draw: which pass, into which of its textures (0, 1, … in order of first use), at what size, what it saw. */
-interface Draw { slug: string; into: number; w: number; h: number; res: string; prev: number | null }
+interface Draw { slug: string; into: number; w: number; h: number; res: string; prev: number | null; step?: string }
 type Frame = { w: number; h: number; stage?: 'pre' | 'post'; part?: 'particles' | 'rest'; clear?: boolean };
 
 /** Numbers each pass's textures in the order they are first seen (the draw target first, then its Previous). */
@@ -141,7 +141,9 @@ async function appDraws(passes: PassProgram[], frames: Frame[]): Promise<Draw[]>
       const into = idOf(slug, target);
       const bound = uniforms[`u_passprev_${slug}`]?.value as THREE.Texture | null;
       if (t.prev) expect(bound).toBe(t.prev.texture);
-      out.push({ slug, into, w: target!.width, h: target!.height, res: `${res.x}x${res.y}`, prev: t.prev ? idOf(slug, t.prev) : null });
+      // Repeat (phase 7): the step uniform as it was for this draw.
+      const it = uniforms[`u_passiter_${slug}`]?.value as THREE.Vector2 | undefined;
+      out.push({ slug, into, w: target!.width, h: target!.height, res: `${res.x}x${res.y}`, prev: t.prev ? idOf(slug, t.prev) : null, ...(it ? { step: `${it.x}/${it.y}` } : {}) });
     },
   } as unknown as THREE.WebGLRenderer;
   const runner = new PassRunner({ renderer, geometry: new THREE.PlaneGeometry(2, 2), camera: new THREE.Camera(), uniforms: () => uniforms, onReady: () => {}, onLinkFailed: () => {} });
@@ -168,18 +170,21 @@ function pageDraws(passes: PassProgram[], frames: Frame[]): Draw[] {
     viewport: (_x: number, _y: number, w: number, h: number) => { vp = [w, h]; },
   } as Record<string, unknown>, { get: (o, k: string) => (k in o ? o[k] : /^[A-Z0-9_]+$/.test(k) ? k : () => {}) });
   const textures = new Map<string, { id: number } | null>();
+  const vec2s = new Map<string, number[]>();
   const env = {
     link: (fs: string) => ({ slug: passes.find(p => p.fragmentShader === fs)!.slug }),
     use: (p: { slug: string }, w: number, h: number) => {
       const prev = textures.get(`u_passprev_${p.slug}`);
       const into = idOf(p.slug, fb!.tex);
       const keeps = passes.find(x => x.slug === p.slug)!.previous;
-      out.push({ slug: p.slug, into, w: vp[0], h: vp[1], res: `${w}x${h}`, prev: keeps && prev ? idOf(p.slug, prev) : null });
+      const it = vec2s.get(`u_passiter_${p.slug}`);
+      out.push({ slug: p.slug, into, w: vp[0], h: vp[1], res: `${w}x${h}`, prev: keeps && prev ? idOf(p.slug, prev) : null, ...(it ? { step: `${it[0]}/${it[1]}` } : {}) });
     },
     done: () => {}, quad: () => {},
-    textures, vec2s: new Map(), halfFloat: true,
+    textures, vec2s, halfFloat: true,
   };
-  const host = phCreate(gl, passes.map(p => ({ ...p, u: { tex: `u_pass_${p.slug}`, prev: `u_passprev_${p.slug}` } })), env);
+  // The sampler names as the bundle gives them (webPasses), the step uniform with them when repeated.
+  const host = phCreate(gl, webPasses(passes).map(w => ({ ...w, ...(passes.find(p => p.slug === w.slug)!.afterAgents ? { afterAgents: true } : {}), ...(passes.find(p => p.slug === w.slug)!.beforeParticles ? { beforeParticles: true } : {}) })), env);
   for (const f of frames) {
     if (f.clear) host.clearPrevious();
     host.run(f.w, f.h, f.stage, f.part);
@@ -260,5 +265,42 @@ describe('the same schedule in the app and on a page (kit/passPlan.js)', () => {
     expect(before).not.toBe(drawn);
     runner.run(targets, 960, 540, undefined, undefined, 'rest');
     expect(uniforms[`u_passprev_${fbSlug}`].value).toBe(before);
+  });
+});
+
+describe('Repeat N times (phase 7)', () => {
+  /** Feedback at ½ repeated 4 times a frame (Step read inside it), and a plain pass after it. */
+  function repeated(times: number): GraphNode[] {
+    const nodes = feedbackGraph();
+    const i = nodes.findIndex(x => x.id === 'node_4');
+    nodes[i] = n('pass', 'node_4', 0, 0, { scale: '0.5', repeat: times }, { color: ['node_13', 'result'] });
+    // The Step joins the mix inside the pass's own program, so it is read where it draws.
+    const mix = nodes.findIndex(x => x.id === 'node_13');
+    nodes[mix] = n('addColor', 'node_13', 0, 0, {}, { a: ['node_3', 'color'], b: ['node_10', 'color'], scale: ['node_4', 'step'] });
+    return nodes;
+  }
+
+  it('the app and the page draw a repeated pass N times, each reading the draw before', async () => {
+    const r = compileGraph({ nodes: repeated(4) }) as CompilationResult;
+    expect(r.errors).toBeUndefined();
+    const fb = r.passes!.find(p => p.previous)!;
+    expect(fb.repeat).toBe(4);
+    const frames = [{ w: 960, h: 540 }, { w: 960, h: 540 }, { w: 640, h: 360, clear: true }];
+    const app = await appDraws(r.passes!, frames), page = pageDraws(r.passes!, frames);
+    expect(page).toEqual(app);
+    const mine = page.filter(d => d.slug === fb.slug);
+    expect(mine.length).toBe(4 * frames.length);
+    // Ping-pong inside the frame: each draw goes into the texture the one before read, and reads the one before.
+    expect(mine.slice(0, 5).map(d => [d.into, d.prev, d.step])).toEqual([[0, 1, '0/4'], [1, 0, '1/4'], [0, 1, '2/4'], [1, 0, '3/4'], [0, 1, '0/4']]);
+    // The other pass draws once a frame and sets no step.
+    expect(page.filter(d => d.slug !== fb.slug).every(d => d.step === undefined)).toBe(true);
+  });
+
+  it('the bundle carries Repeat and the step uniform only for a repeated pass', () => {
+    const one = webPasses((compileGraph({ nodes: feedbackGraph() }) as CompilationResult).passes!);
+    for (const p of one) { expect(p).not.toHaveProperty('repeat'); expect(p.u).not.toHaveProperty('iter'); }
+    const four = webPasses((compileGraph({ nodes: repeated(4) }) as CompilationResult).passes!);
+    const fb = four.find(p => p.repeat)!;
+    expect(fb).toMatchObject({ repeat: 4, u: { iter: `u_passiter_${fb.slug}` } });
   });
 });

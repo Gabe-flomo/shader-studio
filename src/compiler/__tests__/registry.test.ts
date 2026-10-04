@@ -35,7 +35,7 @@ const CONNECTION_GATED = new Set([
   'giLitMarchGroup.metallic', 'giLitMarchGroup.roughness', 'giLitMarchGroup.lightStrength',
   'giLitMarchGroup.giStrength', 'giLitMarchGroup.specStrength',
   // Texture-sampling nodes (Passes) read black, and none of their settings, until a Pass is wired
-  'sampleTexture.offsetX', 'sampleTexture.offsetY', 'edgesTexture.strength', 'edgesTexture.width', 'blurTexture.radius',
+  'sampleTexture.offsetX', 'sampleTexture.offsetY', 'edgesTexture.strength', 'edgesTexture.width', 'blurTexture.radius', 'jumpFloodTexture.reach',
   'glowTexture.threshold', 'glowTexture.radius', 'glowTexture.intensity', 'displaceTexture.amount',
   // The Agents engine reads these from the uniform table (lib/agentRunner.ts), not the picture's shader
   'trailField.diffuse', 'trailField.halfLife',

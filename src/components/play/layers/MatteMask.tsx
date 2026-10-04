@@ -6,13 +6,16 @@
  * brightness (luma), optionally inverted; or a new Shape layer made for it.
  * Mask: rectangles, ellipses and outlines drawn on the picture that belong to
  * this layer. The open mask is the one with handles on the picture.
+ * Displace: After Effects' Displacement Map on this layer's own pixels, by
+ * another layer (hidden or not) or the picture (play/kit/displace.js).
  * The record edits are in play/mattes.ts; the kit draws them (kit/mattes.js).
  */
 import { useRef, useState, type ReactNode } from 'react';
 import { fontFamily, radius } from '../../../theme/tokens';
 import { layerNumericProps, type LayerMask, type MaskOp, type PlayLayer, type PlayRecord } from '../../../types/play';
-import { canBeMatte, canHaveMatte, maskKey, maskLabel, matteCandidates, MASKS_MAX, type MaskProp } from '../../../types/playLayers';
-import { addMask, addMatteMotion, addMatteShape, matteSummary, moveMask, patchMask, patchTrackMatte, removeMask, setTrackMatte } from '../../../play/mattes';
+import { canBeMatte, canHaveMatte, maskKey, maskLabel, matteCandidates, MASKS_MAX, type LayerDisplace, type MaskProp } from '../../../types/playLayers';
+import { addDisplace, addMask, addMatteMotion, addMatteShape, matteSummary, moveMask, patchDisplace, patchMask, patchTrackMatte, removeDisplace, removeMask, setTrackMatte } from '../../../play/mattes';
+import { DM_BEHAVIOURS, DM_BEHAVIOUR_LABELS, DM_CHANNELS, DM_CHANNEL_LABELS, DM_HINTS } from '../../../play/kit/displace.js';
 import { playOverlay } from '../../../play/overlay';
 import { Button, IconButton } from '../../ui/Button';
 import { Segmented, Toggle } from '../../ui/Choice';
@@ -90,6 +93,17 @@ export function MatteMaskBar({ f, play, changePlay, drawing, onSelect }: {
             {masks.length ? 'Add mask' : 'Mask'}
           </Button>
         </span>
+        {!l.displace && (
+          <Button
+            size="sm"
+            icon="curve"
+            title="Displacement Map: move this layer’s pixels by another layer or the picture, like After Effects"
+            onClick={() => { onSelect(); changePlay(p => addDisplace(p, l.id, play.layers.find(x => x.id !== l.id && canBeMatte(x.kind) && x.kind !== 'background')?.id ?? '')); }}
+            style={{ height: 26 }}
+          >
+            Displace
+          </Button>
+        )}
       </div>
       {matteOpen && (
         <Popover anchorRef={matteRef} onClose={() => setMatteOpen(false)} width={296} padding={12}>
@@ -120,7 +134,68 @@ export function MatteMaskBar({ f, play, changePlay, drawing, onSelect }: {
         </div>
       )}
       {masks.length > 0 && <MaskList f={f} changePlay={changePlay} onSelect={onSelect} />}
+      {l.displace && <DisplacePanel f={f} play={play} changePlay={changePlay} />}
     </>
+  );
+}
+
+const CHANNEL_OPTIONS = DM_CHANNELS.map(c => ({ value: c, label: DM_CHANNEL_LABELS[c] }));
+const BEHAVIOUR_OPTIONS = DM_BEHAVIOURS.map(b => ({ value: b, label: DM_BEHAVIOUR_LABELS[b] }));
+
+/** The layer's Displacement Map: its map, channels, maxima (mappable), behaviour and edges. Folded to one line by default. */
+function DisplacePanel({ f, play, changePlay }: { f: FieldKit; play: PlayRecord; changePlay: (fn: (p: PlayRecord) => PlayRecord) => void }) {
+  const { l, tk } = f;
+  const d = l.displace!;
+  const [open, setOpen] = useState(false);
+  const reveal = usePlayUi(s => s.reveal);
+  const patch = (c: Partial<LayerDisplace>) => changePlay(p => patchDisplace(p, l.id, c));
+  const mapLayer = d.map === 'layer' ? play.layers.find(x => x.id === d.layerId) : undefined;
+  const candidates = play.layers.filter(x => x.id !== l.id && canBeMatte(x.kind) && x.kind !== 'background');
+  const summary = `${mapLayer ? mapLayer.label : 'The picture'} · ${DM_CHANNEL_LABELS[d.h]} / ${DM_CHANNEL_LABELS[d.v]}${d.on ? '' : ' · off'}`;
+  return (
+    <div style={{ marginTop: 6, borderRadius: radius.md, background: tk.bg.subtle, boxShadow: `inset 0 0 0 1px ${tk.border.subtle}`, padding: '2px 6px 2px 4px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, minHeight: 30 }}>
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen(o => !o)}
+          style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'none', padding: '4px 2px', cursor: 'pointer', textAlign: 'left' }}
+        >
+          <Icon name={open ? 'chevD' : 'chevR'} size={12} style={{ color: tk.text.faint }} />
+          <Icon name="curve" size={14} style={{ color: tk.accent.base }} />
+          <span style={{ font: `600 12px ${fontFamily.ui}`, color: tk.text.primary, whiteSpace: 'nowrap' }}>Displace</span>
+          <span style={{ font: `11.5px ${fontFamily.ui}`, color: tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</span>
+        </button>
+        <Toggle checked={d.on} onChange={on => patch({ on })} />
+        <IconButton icon="trash" label="Remove the Displacement Map" size="sm" tone="danger" onClick={() => changePlay(p => removeDisplace(p, l.id))} />
+      </div>
+      {open && (
+        <div style={{ padding: '0 2px 8px 18px' }}>
+          {f.row('Map', (
+            <Select
+              ariaLabel="Displacement map layer"
+              height={26}
+              style={{ flex: 1 }}
+              value={d.map === 'layer' ? d.layerId : ''}
+              onChange={id => patch(id ? { map: 'layer', layerId: id } : { map: 'picture', layerId: '' })}
+              options={[
+                { value: '', label: 'The picture (shader or background)' },
+                ...candidates.map(x => ({ value: x.id, label: `${x.label}${x.visible ? '' : ' (hidden)'}`, group: 'Layers' })),
+              ]}
+            />
+          ), DM_HINTS.map)}
+          {f.row('Horiz.', <Select ariaLabel="Use for horizontal displacement" height={26} value={d.h} options={CHANNEL_OPTIONS} onChange={v => patch({ h: v as LayerDisplace['h'] })} />, `${DM_HINTS.h} ${DM_HINTS.channels}`)}
+          {f.row('Vert.', <Select ariaLabel="Use for vertical displacement" height={26} value={d.v} options={CHANNEL_OPTIONS} onChange={v => patch({ v: v as LayerDisplace['v'] })} />, `${DM_HINTS.v} ${DM_HINTS.channels}`)}
+          {f.prop('disp_maxH', 'Max horiz.')}
+          {f.prop('disp_maxV', 'Max vert.')}
+          {f.row('Behaviour', <Select ariaLabel="Displacement map behaviour" height={26} value={d.behaviour} options={BEHAVIOUR_OPTIONS} onChange={v => patch({ behaviour: v as LayerDisplace['behaviour'] })} />, DM_HINTS.behaviour)}
+          {f.row('Edges', <Toggle checked={d.wrap} onChange={wrap => patch({ wrap })} label="Wrap pixels around" />, DM_HINTS.wrap)}
+          {mapLayer && f.row('Show', <Toggle checked={mapLayer.visible} onChange={visible => changePlay(p => ({ ...p, layers: p.layers.map(x => (x.id === mapLayer.id ? { ...x, visible } : x)) }))} label="Show it on the picture too" />, 'The map layer works while hidden; show it to see what is pushing.')}
+          {mapLayer && <div style={{ marginTop: 6 }}><Button size="sm" onClick={() => reveal(mapLayer.id)}>Go to {mapLayer.label}</Button></div>}
+          {f.note('Mid-grey in the map leaves pixels where they are; brighter pushes right and up by up to Max, darker left and down. Max is in pixels of a 1080-pixel-tall picture.')}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -188,6 +263,12 @@ function MattePanel({ f, play, changePlay, onClose }: { f: FieldKit; play: PlayR
             </div>
           ))}
           {matte.kind === 'motion' && <div style={{ marginTop: 6, color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>Shows {l.label} where {matte.label} sees movement. Its Sensitivity, Delay and Smoothing decide how much counts; Invert shows it where nothing moves.</div>}
+          {matte.kind === 'water' && row('Feather', (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <RulerSlider value={matte.feather} min={0} max={0.3} defaultValue={0.02} ariaLabel="Feather of where the water moves" onChange={feather => changePlay(p => ({ ...p, layers: p.layers.map(x => (x.id === matte.id && x.kind === 'water' ? { ...x, feather } : x)) }))} />
+            </div>
+          ))}
+          {matte.kind === 'water' && <div style={{ marginTop: 6, color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>Shows {l.label} where {matte.label}’s water moves (its waves), fading out where the water lies flat. Invert shows it on the still water instead.</div>}
           {matte.kind !== 'background' && row('Matte', <Toggle checked={matte.visible} onChange={visible => changePlay(p => ({ ...p, layers: p.layers.map(x => (x.id === matte.id ? { ...x, visible } : x)) }))} label="Show it on the picture too" />)}
           <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center' }}>
             <Button size="sm" onClick={() => { onClose(); reveal(matte.id); }}>Go to {matte.label}</Button>

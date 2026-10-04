@@ -60,7 +60,7 @@ const TYPE_ABBREV: Record<string, string> = {
   lumaRadius: 'lrad', rgbToCMYK: 'cmyk', cmykHalftone: 'cmykht',
   // Passes (render to texture)
   pass: 'pass', passOutput: 'pout', sampleTexture: 'smp', edgesTexture: 'edges', blurTexture: 'tblur',
-  glowTexture: 'tglow', displaceTexture: 'tdisp',
+  glowTexture: 'tglow', displaceTexture: 'tdisp', displacementMap: 'dmap',
   // Misc
   expr: 'expr', customFn: 'cfn', scope: 'scope',
   sineLFO: 'lfo', squareLFO: 'slfo', sawtoothLFO: 'sawlfo',
