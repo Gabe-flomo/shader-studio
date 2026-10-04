@@ -14,7 +14,7 @@ import { ctl, n } from './graphBuilder';
 
 export const DISPLACEMENT_EXAMPLE_INDEX: Record<string, { label: string; description: string; play: true }> = {
   displaceNoiseMap: {
-    label: 'Passes 7 · Displacement Map: a picture pushed by noise', play: true,
+    label: 'Passes 10 · Displacement Map: a picture pushed by noise', play: true,
     description: 'After Effects’ Displacement Map as a node: a Truchet pattern (the Source) is pushed around by drifting noise (the Map), read by its luminance. Mid-grey noise leaves the tiles where they are; bright noise pushes them right and up, dark noise left and down, by up to Max pixels.',
   },
 };

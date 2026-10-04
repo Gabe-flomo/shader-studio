@@ -11,7 +11,7 @@
  */
 import { unsupportedFeatures, type GraphFeatures, type PlayHtmlInput, type PlayMedia, type WebAgents, type WebPass } from './exportHtml';
 import type { AgentsSpec, PassProgram } from '../compiler/types';
-import { passPrevUniform, passUniform } from '../nodes/definitions/passes';
+import { passIterUniform, passPrevUniform, passUniform } from '../nodes/definitions/passes';
 import { agentDrawUniform, agentStateUniform, agentStepUniform, agentWindowUniform, trailStepUniforms, trailUniform } from '../nodes/definitions/agents';
 import { AG_BESSEL_UNIFORM, listenUniforms } from '../nodes/definitions/agentForces';
 import { MOTION_MAP_UNIFORM } from '../nodes/definitions/motionMap';
@@ -55,7 +55,8 @@ export function webPasses(passes: readonly PassProgram[]): WebPass[] {
   return passes.map(p => ({
     slug: p.slug, label: p.label, fragmentShader: p.fragmentShader, scale: p.scale, format: p.format, filter: p.filter, wrap: p.wrap,
     previous: p.previous, live: p.live, ...(p.afterAgents ? { afterAgents: true } : {}), ...(p.beforeParticles ? { beforeParticles: true } : {}),
-    u: { tex: passUniform(p.slug), prev: passPrevUniform(p.slug) },
+    ...(p.repeat ? { repeat: p.repeat } : {}),
+    u: { tex: passUniform(p.slug), prev: passPrevUniform(p.slug), ...(p.repeat ? { iter: passIterUniform(p.slug) } : {}) },
   }));
 }
 

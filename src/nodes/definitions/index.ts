@@ -138,7 +138,7 @@ export { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGB
 
 // GPU Particles (the engine in play/kit/gpuParticles.js)
 export { GpuParticlesNode } from './gpuParticles';
-export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode, DisplacementMapNode } from './passes';
+export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 export { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, TrailStepOutNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode, MultiSlimePresetNode, AntsPresetNode, BoidsPresetNode, StrandsPresetNode, GrowPicturePresetNode, GalaxyPresetNode, MyceliumPresetNode, SandPlatePresetNode } from './agents';
 export { AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode } from './agentForces';
 
@@ -269,7 +269,7 @@ import {
 } from './shapers';
 import { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGBToCMYKNode, CMYKHalftoneNode } from './halftone';
 import { GpuParticlesNode } from './gpuParticles';
-import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode, DisplacementMapNode } from './passes';
+import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 import { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, TrailStepOutNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode, MultiSlimePresetNode, AntsPresetNode, BoidsPresetNode, StrandsPresetNode, GrowPicturePresetNode, GalaxyPresetNode, MyceliumPresetNode, SandPlatePresetNode } from './agents';
 import { AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode } from './agentForces';
 
@@ -477,6 +477,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   glowTexture: GlowTextureNode,
   displaceTexture: DisplaceTextureNode,
   displacementMap: DisplacementMapNode,
+  jumpFloodTexture: JumpFloodTextureNode,
   // Agents (slime mold and walkers built from nodes): docs/agents-plan.md
   agentsGroup: AgentsGroupNode,
   agentInputs: AgentInputsNode,

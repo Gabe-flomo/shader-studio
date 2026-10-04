@@ -1,6 +1,6 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { audioUniformName } from '../../compiler/audioUniformNames';
-import { p } from './helpers';
+import { p, withNewOutputs } from './helpers';
 
 /**
  * Loop Index — outputs the current iteration counter `i` when placed inside
@@ -185,6 +185,14 @@ export const PrevFrameNode: NodeDefinition = {
   },
 };
 
+/** Phase 7 (docs/pass-node-plan.md): the image or video itself as a texture, straight into the sampling nodes. */
+const TEXTURE_INPUT_TEXTURE: GraphNode['outputs'] = {
+  texture: { type: 'texture', label: 'Texture', hint: 'The image itself as a texture: wire it into Sample, Edges, Blur, Glow or Displace (texture), or Particles\' Emit from, with no copy Pass in between. It covers the picture as Stretch does (Fit doesn\'t apply).' },
+};
+const VIDEO_INPUT_TEXTURE: GraphNode['outputs'] = {
+  texture: { type: 'texture', label: 'Texture', hint: 'The video itself as a texture: wire it into Sample, Edges, Blur, Glow or Displace (texture), or Particles\' Emit from, with no copy Pass in between.' },
+};
+
 export const TextureInputNode: NodeDefinition = {
   type: 'textureInput',
   label: 'Texture Input',
@@ -197,7 +205,9 @@ export const TextureInputNode: NodeDefinition = {
     color: { type: 'vec3',  label: 'Color' },
     alpha: { type: 'float', label: 'Alpha' },
     uv:    { type: 'vec2',  label: 'UV (pass-through)' },
+    ...TEXTURE_INPUT_TEXTURE,
   },
+  syncSockets: withNewOutputs(TEXTURE_INPUT_TEXTURE),
   defaultParams: { fit: 'stretch', _imageAspect: 1 },
   paramDefs: {
     fit: { label: 'Fit', type: 'select', hint: 'Stretch fills exactly, Fit shows the whole image with padding, Fill crops to cover.', options: [
@@ -243,7 +253,9 @@ export const TextureInputNode: NodeDefinition = {
         `    vec3 ${id}_color = ${id}_sample.rgb;\n`,
         `    float ${id}_alpha = ${id}_sample.a;\n`,
       ].join(''),
-      outputVars: { color: `${id}_color`, alpha: `${id}_alpha`, uv: uvVar },
+      // Texture: the image itself, for Sample / Edges / Blur / Glow / Displace (texture) and Particles' Emit
+      // from, without a copy Pass (phase 7). Its `_px` is declared by the compiler only when this is wired.
+      outputVars: { color: `${id}_color`, alpha: `${id}_alpha`, uv: uvVar, texture: `u_tex_${id}` },
     };
   },
 };
@@ -303,7 +315,9 @@ export const VideoInputNode: NodeDefinition = {
     color: { type: 'vec3',  label: 'Color' },
     alpha: { type: 'float', label: 'Alpha' },
     uv:    { type: 'vec2',  label: 'UV (pass-through)' },
+    ...VIDEO_INPUT_TEXTURE,
   },
+  syncSockets: withNewOutputs(VIDEO_INPUT_TEXTURE),
   defaultParams: {
     _fileName: '',
     _hasFile: false,
@@ -321,7 +335,7 @@ export const VideoInputNode: NodeDefinition = {
         `    vec3 ${id}_color = ${id}_sample.rgb;\n`,
         `    float ${id}_alpha = ${id}_sample.a;\n`,
       ].join(''),
-      outputVars: { color: `${id}_color`, alpha: `${id}_alpha`, uv: uvVar },
+      outputVars: { color: `${id}_color`, alpha: `${id}_alpha`, uv: uvVar, texture: `u_vid_${id}` },
     };
   },
 };

@@ -28,7 +28,7 @@ function gpuRow(name: string, passes: readonly PassProgram[] | null): { label: s
     const i = passes ? passes.findIndex(p => p.slug === name.slice(5)) : -1;
     if (i < 0) return null;
     const p = passes![i];
-    return { label: `${p.label}${SCALE_MARK[p.scale] ?? ''}`, sub: 'GPU', tint: programTintColour({ kind: 'pass', label: p.label, index: i }) };
+    return { label: `${p.label}${SCALE_MARK[p.scale] ?? ''}${p.repeat && p.repeat > 1 ? ` ×${p.repeat}` : ''}`, sub: 'GPU', tint: programTintColour({ kind: 'pass', label: p.label, index: i }) };
   }
   if (name.startsWith('agents:')) return { label: name.slice(7), sub: 'GPU', tint: null };
   return { label: name, sub: 'GPU', tint: null };

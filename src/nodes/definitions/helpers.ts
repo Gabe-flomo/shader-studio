@@ -1,4 +1,4 @@
-import type { NodeDefinition } from '../../types/nodeGraph';
+import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 
 // Helper: emit a number or uniform-name string as a GLSL float literal.
 // Accepts a string so that p() results (uniform names) pass through unchanged.
@@ -75,4 +75,18 @@ export const FIELD_FN_PREFIX = 'fieldfn_';
  */
 export function fieldFn(v: string | undefined): string | undefined {
   return v && v.startsWith(FIELD_FN_PREFIX) && /^\w+$/.test(v) ? v : undefined;
+}
+
+/**
+ * Sockets the definition gained after nodes were saved (the Pass's Step outputs, Texture Input's
+ * and Video's Texture): appended to an old node's outputs on load, so its card shows them. Only
+ * the card changes; the shader reads an output only when something is wired to it.
+ */
+export function withNewOutputs(added: GraphNode['outputs']): (node: GraphNode) => GraphNode {
+  return node => {
+    const have = node.outputs;
+    if (!have || !Object.keys(have).length) return node;
+    const missing = Object.entries(added).filter(([k]) => !have[k]);
+    return missing.length ? { ...node, outputs: { ...have, ...Object.fromEntries(missing.map(([k, v]) => [k, { type: v.type, label: v.label }])) } } : node;
+  };
 }

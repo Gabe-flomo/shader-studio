@@ -101,13 +101,15 @@ async function attachExampleImages(images: Record<string, string>, epoch: number
   for (const [key, src] of Object.entries(images)) {
     try {
       const blob = await (await fetch(src)).blob();
-      const { texture, thumbnailDataUrl } = await loadImageTextureFromFile(new File([blob], key, { type: blob.type }));
+      const { texture, thumbnailDataUrl, imageAspect } = await loadImageTextureFromFile(new File([blob], key, { type: blob.type }));
       const st = useNodeGraphStore.getState();
       if (st.graphEpoch !== epoch) { texture.dispose(); return; }
       st.setNodeTexture(key, texture);
       const [nodeId, slot] = key.split('::');
       const dirty = st.graphDirty;
-      useNodeGraphStore.setState(s => ({ nodes: s.nodes.map(n => (n.id === nodeId ? { ...n, params: { ...n.params, [`__tex_${slot}_thumb`]: thumbnailDataUrl } } : n)) }));
+      // A key without a slot is a Texture Input's picture (Passes 8): its card's thumbnail, as its Load image sets it.
+      const thumb = slot ? { [`__tex_${slot}_thumb`]: thumbnailDataUrl } : { _thumbnailUrl: thumbnailDataUrl, _imageAspect: imageAspect };
+      useNodeGraphStore.setState(s => ({ nodes: s.nodes.map(n => (n.id === nodeId ? { ...n, params: { ...n.params, ...thumb } } : n)) }));
       useNodeGraphStore.setState({ graphDirty: dirty });
     } catch (e) {
       console.error('[loadExampleGraph] could not load an example picture', e);

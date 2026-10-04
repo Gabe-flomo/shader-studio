@@ -37,6 +37,11 @@ export interface PassProgram {
    * other passes: it draws before the particles step, the rest after. Only present when true.
    */
   beforeParticles?: boolean;
+  /**
+   * Repeat (phase 7): drawn this many times each frame, each draw reading the one before through
+   * its Previous (the first, the frame before's last). Only present when above 1.
+   */
+  repeat?: number;
 }
 
 /**

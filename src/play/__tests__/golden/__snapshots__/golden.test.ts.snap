@@ -1026,12 +1026,26 @@ exports[`golden outputs: examples > particleGlow 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > passBlurGroup 1`] = `
+{
+  "bloom": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > passEdgeGlow 1`] = `
 {
   "gain": "- x120",
   "radius": "- x120",
   "strength": "- x120",
   "width": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > passEdgesFromPicture 1`] = `
+{
+  "gain": "- x120",
+  "soft": "- x120",
+  "strength": "- x120",
 }
 `;
 
@@ -1047,6 +1061,12 @@ exports[`golden outputs: examples > passGlowBright 1`] = `
   "glow": "- x120",
   "threshold": "- x120",
   "wide": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > passJumpFlood 1`] = `
+{
+  "width": "- x120",
 }
 `;
 
