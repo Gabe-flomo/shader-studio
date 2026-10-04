@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import { openSwitchPicker, showsSwitchPill } from './switchPickerModel';
 import { createPortal } from 'react-dom';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { getNodeDefinition, getNodeDefinitionFor } from '../../nodes/definitions';
@@ -1829,6 +1830,16 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                 )}
                 {clickedNode && !isGroup && !isSceneGroup && !isSpaceWarpGroup && !isMarchLoopGroup && (
                   <>
+                    {showsSwitchPill(clickedNode) && (
+                      <button style={ctxBtnStyle} title="Turn it into a similar node, wires and settings kept" onClick={() => {
+                        const id = clickedNode.id;
+                        setContextMenu(null);
+                        // The card's own Switch list opens (after this menu has gone, so it takes the focus).
+                        requestAnimationFrame(() => { if (!openSwitchPicker(id)) useNodeGraphStore.getState().setSwapTargetNodeId(id); });
+                      }}>
+                        Switch to… <span style={{ color: tc.surface2, fontSize: '10px' }}>⇧-click title</span>
+                      </button>
+                    )}
                     <button style={ctxBtnStyle} onClick={() => {
                       duplicateNode(clickedNode.id);
                       setContextMenu(null);
