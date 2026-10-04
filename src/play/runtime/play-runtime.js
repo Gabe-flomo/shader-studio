@@ -3,13 +3,18 @@
  * exports (a full HTML page or a paste-in embed snippet). Plain ES2020, no
  * imports, no framework.
  *
- *   ShaderStudioPlay.mount(element, bundle, options) → { destroy(), pause(), play(), get(id), set(id, v), fire(id), still(), renderAt(t, o), renderAtAsync(t, o), seekVideos(t), setPixelSize(s) }
+ *   ShaderStudioPlay.mount(element, bundle, options) → { destroy(), pause(), play(), get(id), set(id, v), fire(id), still(), renderAt(t, o), renderAtAsync(t, o), seekVideos(t), setPixelSize(s), programs() }
  *
  * bundle:  { title, fragmentShader, uniforms, paramBindings, play, aspect, passes?, media? }
  *   passes: { stateful, echo: { copies, delay } | null }
  *   graphPasses: [{ slug, label, fragmentShader, scale, format, filter, wrap, previous, live, afterAgents?,
  *             u: { tex, prev } }]  Pass nodes' programs in drawing order (kit/passHost.js on kit/passPlan.js,
  *             the app's schedule); each draws into its texture before the picture, which samples u.tex
+ *   agents:  { groups, deposits, trails, draws, bessel }  the Agents family (kit/agentHost.js on kit/agentPlan.js
+ *             and the Particles engine's shaders): update shaders, Deposit, Trail fields and Draw agents, each
+ *             with the uniform names it fills (`u`); stepped and drawn before the picture
+ *   motionMap: 'u_motionMap'  a program reads the Motion (texture) node: its sampler, filled from the
+ *             page's first Motion layer (a frame late, as in the app)
  *   datasets: { [id]: { name, result, stream? } }  each dataset's frozen result; `stream`
  *             ({ transport: 'poll' | 'websocket' | 'sse', address, interval, mode, window, format?,
  *             normalize }) makes the page reconnect to a live feed and add its rows (needs the network)
@@ -77,7 +82,7 @@
  *
  * Around the fragment shader it runs what ShaderCanvas runs: previous-frame
  * feedback (ping-pong targets on u_prevFrame), echo (a ring of copies on
- * u_echo0…), Pass nodes (render to texture), the graph's Particles nodes, images and videos on their samplers, and Audio Input nodes' bands
+ * u_echo0…), Pass nodes (render to texture), Agents groups, the graph's Particles nodes, images and videos on their samplers, and Audio Input nodes' bands
  * from their embedded song or the live input. A MIDI Input node's outputs
  * stay at rest.
  *
@@ -251,6 +256,9 @@
   // GLSL 1 source as WebGL2 runs it: the defines Three.js puts ahead of a ShaderMaterial.
   const VERT3 = '#version 300 es\n#define attribute in\n#define varying out\n#define texture2D texture\n';
   const FRAG3 = '#version 300 es\n#define varying in\nlayout(location = 0) out highp vec4 pc_fragColor;\n#define gl_FragColor pc_fragColor\n#define gl_FragDepthEXT gl_FragDepth\n#define texture2D texture\n#define textureCube texture\n#define texture2DProj textureProj\n#define texture2DLodEXT textureLod\n#define texture2DProjLodEXT textureProjLod\n#define textureCubeLodEXT textureLod\n#define texture2DGradEXT textureGrad\n#define texture2DProjGradEXT textureProjGrad\n#define textureCubeGradEXT textureGrad\n';
+  // GLSL 3 source as the app's renderer runs it (an Agents group's update shader: a ShaderMaterial with
+  // glslVersion GLSL3, which writes its own outputs): the same defines without gl_FragColor, and the precisions three.js adds.
+  const FRAG3_GLSL3 = '#version 300 es\n#define varying in\n#define gl_FragDepthEXT gl_FragDepth\n#define texture2D texture\n#define textureCube texture\n#define texture2DProj textureProj\n#define texture2DLodEXT textureLod\n#define texture2DProjLodEXT textureProjLod\n#define textureCubeLodEXT textureLod\n#define texture2DGradEXT textureGrad\n#define texture2DProjGradEXT textureProjGrad\n#define textureCubeGradEXT textureGrad\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\n';
   function toGlsl(src, vertex, webgl2, derivatives) {
     if (webgl2) return (vertex ? VERT3 : FRAG3) + src.replace(/^[ \t]*#extension[^\n]*$/gm, '');
     // WebGL1: fwidth and friends are an extension there.
@@ -557,6 +565,7 @@ void main() {
       usesCamera: !!(inner && inner.usesCamera),
       setScript(layerId, code) { if (typeof layerId === 'string' && typeof code === 'string') carry.scripts.set(layerId, code); call('setScript')(layerId, code); },
       still: call('still'),
+      programs: call('programs'),
       /** Mount again on a fresh context from where the clock and the controls are (what the Rebuild button does). */
       rebuild() { rebuild(); },
       /** 'ok', or 'lost' while the GPU is away; `restarts` counts the rebuilds so far. */
@@ -574,10 +583,13 @@ void main() {
     const stillForReducedMotion = opts.stillForReducedMotion !== false;
     // Pass nodes (bundle.graphPasses, kit/passHost.js): programs drawn into textures before the picture.
     const graphPasses = Array.isArray(B.graphPasses) && B.graphPasses.length ? B.graphPasses : null;
-    // Every program the page compiles from the graph (the picture's and the passes'), for what they read.
-    const allShaders = B.fragmentShader + (graphPasses ? graphPasses.map(p => '\n' + p.fragmentShader).join('') : '');
-    // Feedback, echo and passes work per pixel, and the app draws them at one device pixel per CSS pixel: so does the page.
-    const perPixel = !!(B.passes && (B.passes.stateful || B.passes.echo)) || !!graphPasses;
+    // The Agents family (bundle.agents, kit/agentHost.js): simulations stepped and drawn before the picture.
+    const graphAgents = B.agents && Array.isArray(B.agents.groups) && B.agents.groups.length + B.agents.trails.length + B.agents.draws.length > 0 ? B.agents : null;
+    // Every program the page compiles from the graph (the picture's, the passes', the update shaders and Trail steps), for what they read.
+    const allShaders = B.fragmentShader + (graphPasses ? graphPasses.map(p => '\n' + p.fragmentShader).join('') : '')
+      + (graphAgents ? graphAgents.groups.map(g => '\n' + g.fragmentShader).join('') + graphAgents.trails.map(t => (t.stepShader ? '\n' + t.stepShader : '')).join('') : '');
+    // Feedback, echo, passes and agents work per pixel, and the app draws them at one device pixel per CSS pixel: so does the page.
+    const perPixel = !!(B.passes && (B.passes.stateful || B.passes.echo)) || !!graphPasses || !!graphAgents;
     const maxDpr = opts.maxDpr || (perPixel ? 1 : bg ? 1.5 : 2);
     const showPanel = !bg && opts.panel !== false;
     const pointerOn = !bg && opts.pointer !== false;
@@ -1344,11 +1356,49 @@ void main() {
       }
       for (const n of names) bindSampler(n, blank);
     };
+    // The graph's extra programs (passes, update shaders, Trail steps) are drawn as the app draws them: three's
+    // PlaneGeometry(2, 2) (its two triangles, diagonal and vertex order) through the compile's vertex shader
+    // (compiler/types.ts VERTEX_SHADER, vUv from the uv attribute), with the precisions three.js puts ahead of a
+    // ShaderMaterial. Then vUv and every texture read land exactly where the app's do, which a simulation
+    // needs bit for bit (a Trail's own step reads the picture through vUv). The picture's own program keeps its path.
+    const VS_APP = 'attribute vec3 position;\nattribute vec2 uv;\nvarying vec2 vUv;\nvoid main() {\n    vUv = uv;\n    gl_Position = vec4(position, 1.0);\n}';
+    const PRECISION3 = 'precision highp float;\nprecision highp int;\nprecision highp sampler2D;\n';
+    const linkApp = (fs, glsl3) => {
+      const sh = (type, src) => { const x = gl.createShader(type); gl.shaderSource(x, src); gl.compileShader(x); if (!gl.getShaderParameter(x, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(x) || 'shader failed'); return x; };
+      const p = gl.createProgram();
+      gl.attachShader(p, sh(gl.VERTEX_SHADER, VERT3 + PRECISION3 + VS_APP));
+      const body = fs.replace(/^[ \t]*#extension[^\n]*$/gm, '');
+      // GLSL 3 (an update shader writes its own outputs): no gl_FragColor define; else the defines toGlsl adds.
+      gl.attachShader(p, sh(gl.FRAGMENT_SHADER, glsl3 ? FRAG3_GLSL3 + body : FRAG3 + PRECISION3 + body));
+      gl.bindAttribLocation(p, 0, 'position');
+      gl.bindAttribLocation(p, 1, 'uv');
+      gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p) || 'link failed');
+      return p;
+    };
+    let appQuad = null;
+    const drawAppQuad = () => {
+      if (!appQuad) {
+        appQuad = gl.createVertexArray();
+        gl.bindVertexArray(appQuad);
+        const buf = (target, data) => { const b = gl.createBuffer(); gl.bindBuffer(target, b); gl.bufferData(target, data, gl.STATIC_DRAW); return b; };
+        buf(gl.ARRAY_BUFFER, new Float32Array([-1, 1, 0, 1, 1, 0, -1, -1, 0, 1, -1, 0]));
+        gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+        buf(gl.ARRAY_BUFFER, new Float32Array([0, 1, 1, 1, 0, 0, 1, 0]));
+        gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+        buf(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 2, 1, 2, 3, 1]));
+      } else gl.bindVertexArray(appQuad);
+      gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+      gl.bindVertexArray(null);
+    };
     const progEnv = {
-      link: fs => link(VS, fs),
+      link: fs => linkApp(fs, false),
+      link3: fs => linkApp(fs, true),
+      read: n => uniformValues[n],
+      sound: source => gpSoundIn(source),
       use: (p, w, h) => { gl.useProgram(p); locProg = p; blankSamplers(p); bindPictureInputs(w, h); },
       done: () => { locProg = null; gl.useProgram(program); },
-      quad: () => drawQuad(),
+      quad: drawAppQuad,
       textures: graphTex, vec2s: graphVec2,
       halfFloat: gl2 && !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float')),
     };
@@ -1360,6 +1410,58 @@ void main() {
     }
     // A pass that keeps its previous frame changes with every frame drawn, like feedback.
     const passFeedback = !!(passHost && passHost.hasPrevious);
+    // The Agents family (docs/agents-plan.md §9, P5): the kit's agentHost.js steps every group's rule, Deposit
+    // and Trail and draws Draw agents before the picture, on the schedule the app runs (kit/agentPlan.js),
+    // with Sound kick and Chladni hearing what the page hears (gpSoundIn: the mic, the page's Granulator racks).
+    const AHK = typeof SSKit !== 'undefined' && SSKit.agents ? SSKit.agents : null;
+    let agentHost = null, lastAgentFrame = 0;
+    if (!bgOnly && graphAgents) {
+      if (gl2 && AHK) agentHost = AHK.create(gl, graphAgents, progEnv);
+      else {
+        for (const g of graphAgents.groups) for (const k of ['A', 'B', 'C', 'D']) graphTex.set(g.u[k], null);
+        for (const t of graphAgents.trails) graphTex.set(t.u.tex, null);
+        for (const d of graphAgents.draws) graphTex.set(d.u.tex, null);
+        console.warn('[Playfield] Agents need WebGL2: the picture draws without them.');
+      }
+    }
+    const agentsOn = !!(agentHost && agentHost.active);
+    // The Motion (texture) node: the first Motion layer's grid (the kit's motionGrid), copied into an 8-bit
+    // texture after each frame's layers (so a frame late, as in the app: play/motionTexture.ts), row 0 at the bottom.
+    const motionName = !bgOnly && typeof B.motionMap === 'string' && B.motionMap ? B.motionMap : null;
+    const motion = { tex: null, seq: -1, id: '', empty: true };
+    if (motionName) {
+      motion.tex = texture(gl.LINEAR, [0, 0, 0, 0]);
+      graphTex.set(motionName, motion.tex);
+      graphVec2.set(motionName + '_px', [1, 1]);
+    }
+    const refreshMotion = (W, H) => {
+      graphVec2.set(motionName + '_px', [1 / Math.max(1, W), 1 / Math.max(1, H)]);
+      const g = K && K.motionGrid ? K.motionGrid('') : null;
+      if (!g) {
+        if (motion.empty) return;
+        // No Motion layer (any more): read 0 everywhere.
+        gl.bindTexture(gl.TEXTURE_2D, motion.tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+        motion.empty = true; motion.seq = -1; motion.id = '';
+        return;
+      }
+      if (g.seq === motion.seq && g.id === motion.id) return;
+      motion.seq = g.seq; motion.id = g.id; motion.empty = false;
+      const data = new Uint8Array(g.cols * g.rows * 4);
+      for (let r = 0; r < g.rows; r++) {
+        // Kit row r (from the top) → texture row rows-1-r (from the bottom).
+        const src = r * g.cols, dst = (g.rows - 1 - r) * g.cols;
+        for (let c = 0; c < g.cols; c++) {
+          const v = Math.max(0, Math.min(255, Math.round(g.grid[src + c] * 255)));
+          const i = (dst + c) * 4;
+          data[i] = data[i + 1] = data[i + 2] = v; data[i + 3] = 255;
+        }
+      }
+      gl.bindTexture(gl.TEXTURE_2D, motion.tex);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, g.cols, g.rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    };
 
     // Size: contain letterboxes to the exported shape; cover fills the box.
     const ratio = fit === 'contain' && B.aspect && B.aspect.ratio ? B.aspect.ratio : null;
@@ -2360,7 +2462,9 @@ void main() {
     const readerVideo = !!(readers.cfg && readers.cfg.input && ((readers.cfg.input.indexOf('video:') === 0 && lVideos.has(readers.cfg.input.slice(6))) || (readers.cfg.input.indexOf('pads:') === 0 && drums.kits.has(readers.cfg.input.slice(5)))));
     const readersLive = !!(readers.cfg && readers.cfg.readers.length) && (!readers.cfg.input || (readerNode ? !readerNode.src : !readerVideo));
     const usesLive = play.mappings.some(m => m.source.kind === 'live' || (m.source.kind === 'trigger' && m.source.trigger.on === 'audio'))
-      || actions.some(a => a.trigger.on === 'audio') || play.layers.some(l => l.kind === 'audio' && l.visible) || audioNodes.some(a => !a.src) || readersLive;
+      || actions.some(a => a.trigger.on === 'audio') || play.layers.some(l => l.kind === 'audio' && l.visible) || audioNodes.some(a => !a.src) || readersLive
+      // A Sound kick or Chladni in an Agents group that listens to the Mic.
+      || !!(agentHost && graphAgents.groups.some(g => g.listeners.some(l => l.soundFrom === 'live')));
     const matteIds = new Set(play.layers.map(l => (l.trackMatte ? l.trackMatte.id : '')));
     // A hidden Camera layer still lights the camera when something reads where it sees movement: the
     // Finish stack's motion map (an effect's Where, Displace), or particles born where it moves.
@@ -2659,8 +2763,17 @@ void main() {
         if (echoCfg && echoRing.length !== echoCfg.copies) { echoRing.forEach(dropTarget); echoRing = []; for (let i = 0; i < echoCfg.copies; i++) echoRing.push(makeTarget(W, H)); }
         target = stateful ? pingPong[1 - pingIdx] : sceneTarget;
       }
-      // The graph's other programs (Pass nodes) draw into their textures first.
-      if (passHost) passHost.run(W, H);
+      // The graph's other programs draw into their textures first: with agents, the passes they read, then the
+      // steps and the drawings, then the passes that read trails or drawings (as ShaderCanvas); else the passes.
+      if (motionName) refreshMotion(W, H);
+      if (agentHost) {
+        if (passHost) passHost.run(W, H, 'pre');
+        const nowMs = performance.now();
+        // A renderAt (held) steps exactly to its time, as the app's offline renders do; else live, with the governor.
+        agentHost.run({ width: W, height: H, time, live: !held, frameMs: lastAgentFrame ? nowMs - lastAgentFrame : 0 });
+        lastAgentFrame = nowMs;
+        if (passHost) passHost.run(W, H, 'post');
+      } else if (passHost) passHost.run(W, H);
       gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fb : null);
       gl.viewport(0, 0, W, H);
       gl.useProgram(program);
@@ -2720,6 +2833,7 @@ void main() {
       if (finishR) finishR.reset();
       gpReset = true;
       if (passHost) passHost.clearPrevious();
+      if (agentHost) agentHost.reset();
       if (looks) LK.reset(looks);
       dropTargets(); frame = 0; if (rtState) { rtState.smooth.clear(); rtState.lag.clear(); rtState.values.clear(); } lastOut.clear(); trig.clear(); actLevel.clear(); overrides.clear(); pairState.clear(); condStates.clear(); incState.clear(); incFire.clear(); incCond.clear(); lastTime = -Infinity;
       return { gen, fdt, steps };
@@ -2764,7 +2878,7 @@ void main() {
         gpDt = running || held ? dt : 0;
         // Reduced motion's still frame of a feedback graph is the picture after its first 1.5 s
         // (90 frames at 60 fps), which is what the feedback looks like once it has built up.
-        if (reduced && (stateful || passFeedback) && frame === 1 && !held) for (let i = 0; i < 89; i++) { drawPicture(); time += 1 / 60; }
+        if (reduced && (stateful || passFeedback || agentsOn) && frame === 1 && !held) for (let i = 0; i < 89; i++) { drawPicture(); time += 1 / 60; }
         drawPicture();
         if (qPlan && !qPlan.direct) { const self = qPlan.items.find(i => i.item.kind === 'graph' && i.item.graph === 'this'); if (self) captureQueue(self.item.id); }
       }
@@ -2828,6 +2942,7 @@ void main() {
         alive = false;
         if (gpHostR) gpHostR.dispose();
         if (passHost) passHost.dispose();
+        if (agentHost) agentHost.dispose();
         for (const pr of gpProbes.values()) { pr.reader.dispose(); for (const t of [pr.vals, pr.field, pr.vol]) if (t) { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fb); } }
         if (gpProbeProg) gl.deleteProgram(gpProbeProg);
         for (const close of feedClosers) close();
@@ -2872,6 +2987,11 @@ void main() {
       step(now) { tick(typeof now === 'number' ? now : performance.now()); },
       /** Follow mode: these layers are drawn alone as well, for layer(id). */
       showAlone(ids) { fed.alpha = Array.isArray(ids) ? ids.filter(id => typeof id === 'string') : []; },
+      /**
+       * The graph's other programs, for scripted checks (the parity sweep against the app): the context and
+       * the hosts running Pass nodes (kit/passHost.js) and the Agents family (kit/agentHost.js: its state()).
+       */
+      programs() { return { gl, passes: passHost, agents: agentHost }; },
       /** The canvases the picture is made of: the shader's, the layers', the Finish stack's (null unless it drew), and one layer drawn alone. */
       canvases() {
         return { picture: glCanvas, layers: ovCanvas, finished: finishR && finishDrew ? fnCanvas : null, layer: id => (K ? K.layerCanvas(id) : null) };
