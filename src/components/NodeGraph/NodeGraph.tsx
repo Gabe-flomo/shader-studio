@@ -7,7 +7,8 @@ import { canFollowHand, followHand } from '../../play/followHand';
 import { NodeComponent } from './NodeComponent';
 import { NodeSearchPalette } from './NodeSearchPalette';
 import { CanvasToolbar } from '../shell/CanvasToolbar';
-import { registerSocket, setLayoutZoomGetter, getSocketOffset, getDragPosition, publishView, getCardSize, isDragging, subscribeCardSizes, forgetNodeLayout, type Pt } from './socketRegistry';
+import { setVizScale, vizScaleForZoom } from './vizKit';
+import { registerSocket, remeasureAllSockets, setLayoutZoomGetter, getSocketOffset, getDragPosition, publishView, getCardSize, isDragging, subscribeCardSizes, forgetNodeLayout, type Pt } from './socketRegistry';
 import { WireLayer, type EdgeInfo } from './WireLayer';
 import { buildNodeErrors } from '../../compiler/nodeErrors';
 import { suggestConnections, type Suggestion } from './smartConnect';
@@ -24,6 +25,7 @@ import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
+import { ruleIsEmpty } from '../../store/agentSetup';
 import { Segmented } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
 import { TYPE_COLORS } from './typeColors';
@@ -79,7 +81,8 @@ const CRISP_ZOOM = typeof navigator !== 'undefined' && (
   (/AppleWebKit/.test(navigator.userAgent) && !/Chrome|Chromium|Edg\//.test(navigator.userAgent))
   || (() => { try { return localStorage.getItem('shader-studio:crisp-zoom') === '1' || /[?&]crispZoom\b/.test(location.search); } catch { return false; } })()
 );
-const CRISP_ZOOM_SETTLE_MS = 250;
+/** How long the zoom holds still before it counts as settled (layout zoom, sharp canvases). Trackpad pinch events come every frame, so this is well clear of a gesture. */
+const CRISP_ZOOM_SETTLE_MS = 160;
 
 export const NodeGraph = React.memo(function NodeGraph({ transparent = false, redesignToolbar = false, locked = false }: {
   transparent?: boolean;
@@ -247,25 +250,29 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     return activeGroupNode.type === 'sceneGroup' || activeGroupNode.type === 'spaceWarpGroup' || activeGroupNode.type === 'marchLoopGroup' || activeGroupNode.type === 'giLitMarchGroup';
   }, [activeGroupNode]);
 
+  // An Agents group has its own anchored Agent Inputs / Agent Output cards (ports are added on Agent
+  // Inputs), so it never shows the generic Group inputs / Group output terminals.
+  const isInsideAgentsGroup = activeGroupNode?.type === 'agentsGroup';
+
   // Position the Group Output terminal to the right of all subgraph nodes
   const groupOutputTerminalPos = React.useMemo(() => {
-    if (!activeGroupId) return null;
+    if (!activeGroupId || isInsideAgentsGroup) return null;
     if (displayNodes.length === 0) return { x: 500, y: 160 }; // default for empty group
     const maxX = Math.max(...displayNodes.map(n => n.position.x)) + NODE_WIDTH + 80;
     const ys   = displayNodes.map(n => n.position.y);
     const midY = (Math.min(...ys) + Math.max(...ys)) / 2 - 40;
     return { x: maxX, y: midY };
-  }, [activeGroupId, displayNodes]);
+  }, [activeGroupId, displayNodes, isInsideAgentsGroup]);
 
   // Position the Group Input terminal to the left of all subgraph nodes
   const groupInputTerminalPos = React.useMemo(() => {
-    if (!activeGroupId) return null;
+    if (!activeGroupId || isInsideAgentsGroup) return null;
     if (displayNodes.length === 0) return { x: 80, y: 160 }; // default for empty group
     const minX = Math.min(...displayNodes.map(n => n.position.x)) - 220;
     const ys   = displayNodes.map(n => n.position.y);
     const midY = (Math.min(...ys) + Math.max(...ys)) / 2 - 40;
     return { x: minX, y: midY };
-  }, [activeGroupId, displayNodes]);
+  }, [activeGroupId, displayNodes, isInsideAgentsGroup]);
 
   // Compile problems mapped onto the cards that caused them (shown on the card, not only in the error panel)
   const glslErrors      = useNodeGraphStore(s => s.glslErrors);
@@ -277,6 +284,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   );
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string | null; paramKey?: string } | null>(null);
+  const [emptyRuleDismissed, setEmptyRuleDismissed] = useState<Set<string>>(() => new Set());
   const [addingGroupInput, setAddingGroupInput] = useState<{ name: string; type: import('../../types/nodeGraph').DataType } | null>(null);
   const [editingOutputPortKey, setEditingOutputPortKey] = useState<string | null>(null);
   const [editingOutputPortLabel, setEditingOutputPortLabel] = useState('');
@@ -379,29 +387,48 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   const worldRef = useRef<HTMLDivElement>(null);
   const zoomLayerRef = useRef<HTMLDivElement>(null);
   // WebKit (the desktop app, Safari) draws a scaled layer from its unscaled pixels: zoomed in, cards
-  // look like an enlarged picture. Once the zoom stops changing it becomes layout zoom, which WebKit
-  // lays out and draws at full sharpness; while it changes it stays a cheap scale. Chromium re-sharpens a
-  // scale by itself, so it keeps the scale.
+  // look like an enlarged picture. Once a zoom above 100% stops changing it becomes layout zoom, which
+  // WebKit lays out and draws at full sharpness; while it changes it stays a cheap scale. Chromium
+  // re-sharpens a scale by itself, so it keeps the scale.
+  //
+  // Below 100% it always stays a scale. Layout zoom there runs into WebKit's minimum font size: any text
+  // set at 9px or more is never drawn smaller than 9px (12px at 40% came out 22.5px in layout terms), so
+  // labels overflowed their cards, values clipped and wires missed their sockets; a scale shrinks a card
+  // as one picture, and zoomed out there are more pixels than it needs, so it stays sharp.
+  //
+  // Every zoom that holds still for CRISP_ZOOM_SETTLE_MS "settles": the sockets are re-measured against
+  // the layout it ended on, and the cards' canvases redraw at device pixels × zoom (setVizScale).
   const crispTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settleZoom = useCallback((z: number) => {
+    crispTimer.current = null;
+    const el = zoomLayerRef.current;
+    if (!el || el.dataset.z !== String(z)) return;
+    if (CRISP_ZOOM && z > 1) {
+      el.style.transform = '';
+      el.style.zoom = String(z);
+      el.dataset.mode = 'zoom';
+    }
+    setVizScale(vizScaleForZoom(z));
+    // The next frame has the settled layout; measure then (not now, which would force it mid-task).
+    requestAnimationFrame(remeasureAllSockets);
+  }, []);
   const applyZoomLayer = useCallback((z: number) => {
     const el = zoomLayerRef.current;
     if (!el) return;
-    if (!CRISP_ZOOM) { el.style.transform = `scale(${z})`; return; }
     if (el.dataset.z === String(z)) return;
     el.dataset.z = String(z);
-    el.style.zoom = '';
-    el.style.transform = `scale(${z})`;
     if (crispTimer.current) clearTimeout(crispTimer.current);
-    crispTimer.current = setTimeout(() => {
-      crispTimer.current = null;
-      const now = zoomLayerRef.current;
-      if (!now || now.dataset.z !== String(z)) return;
-      now.style.transform = '';
-      now.style.zoom = String(z);
-    }, CRISP_ZOOM_SETTLE_MS);
-  }, []);
+    const wasLayoutZoom = el.dataset.mode === 'zoom';
+    // 100% is no transform at all (sharp everywhere, nothing to hand off). Otherwise a scale for now.
+    el.style.zoom = '';
+    el.style.transform = z === 1 ? '' : `scale(${z})`;
+    el.dataset.mode = 'scale';
+    // Leaving layout zoom lays the cards out at 100% again: re-measure the sockets on that layout.
+    if (wasLayoutZoom) requestAnimationFrame(remeasureAllSockets);
+    crispTimer.current = setTimeout(() => settleZoom(z), CRISP_ZOOM_SETTLE_MS);
+  }, [settleZoom]);
   useLayoutEffect(() => { applyZoomLayer(zoomRef.current); }, [applyZoomLayer]);
-  useEffect(() => () => { if (crispTimer.current) clearTimeout(crispTimer.current); }, []);
+  useEffect(() => () => { if (crispTimer.current) clearTimeout(crispTimer.current); setVizScale(1); }, []);
   const viewCommitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitView = useCallback(() => {
     if (viewCommitTimer.current) { clearTimeout(viewCommitTimer.current); viewCommitTimer.current = null; }
@@ -1436,6 +1463,33 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         </div>
       )}
 
+      {/* An empty Agents rule: the walkers stand still. Suggest a starting rule (one click adds and wires it). */}
+      {isInsideAgentsGroup && activeGroupPath.length === 1 && activeGroupNode && ruleIsEmpty(activeGroupNode) && !emptyRuleDismissed.has(activeGroupNode.id) && (
+        <div style={{
+          position: 'absolute', top: redesignToolbar ? 108 : 56, left: 12, zIndex: 20, maxWidth: 560,
+          display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', borderRadius: 10,
+          background: tk.bg.panel, boxShadow: tk.shadow.float, color: tk.text.secondary, fontSize: 12.5, userSelect: 'none',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <span style={{ flex: 1, lineHeight: 1.45 }}>
+              This rule is empty, so the walkers stand still. Add nodes between Agent Inputs and Agent Output, or start from one of these:
+            </span>
+            <IconButton icon="close" label="Hide" size="sm" tooltip={false}
+              onClick={() => setEmptyRuleDismissed(s => new Set(s).add(activeGroupNode.id))} />
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {([
+              ['slime', '+ Slime: Sense → Steer → Move', 'Walkers smell the trail ahead, turn toward it and step on (adds a Deposit and a Trail field outside when missing).'],
+              ['particles', '+ Particles: Curl noise → Integrate', 'Swirling currents push every particle; Integrate moves it; Age / Life ends it so Emit can give it a new life.'],
+              ['walk', '+ Just walk: Move', 'Every walker steps forward along its heading.'],
+            ] as const).map(([kind, label, why]) => (
+              <Button key={kind} size="sm" variant="secondary" title={why} style={{ height: 28 }}
+                onClick={() => useNodeGraphStore.getState().startAgentRule(activeGroupNode.id, kind)}>{label}</Button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Right-click context menu — rendered via portal so it's outside the transformed canvas tree */}
       {contextMenu && createPortal(
         <div
@@ -1805,8 +1859,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           pointerEvents: locked ? 'none' : undefined,
         }}
       >
-        {/* The zoom: a scale while it changes, then (WebKit) layout zoom once it settles, so text is redrawn sharp. Set by applyView only. */}
-        <div ref={zoomLayerRef} data-zoom-layer="" style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, transformOrigin: '0 0' }}>
+        {/* The zoom: a scale while it changes (and always below 100%), then (WebKit) layout zoom once a zoom above 100% settles, so text is redrawn sharp. Set by applyView only. */}
+        <div ref={zoomLayerRef} data-zoom-layer="" data-crisp={CRISP_ZOOM ? '' : undefined} style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, transformOrigin: '0 0' }}>
         {/* Wires — data-derived from node positions + measured socket offsets */}
         <WireLayer
           displayNodes={displayNodes}

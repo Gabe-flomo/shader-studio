@@ -70,3 +70,14 @@ input, textarea, [contenteditable]:not([contenteditable="false"]), pre, code, [d
   user-select: none;
   -webkit-touch-callout: none;
 }
+
+/* The node graph's zoom layer where it hands off to layout zoom (WebKit: the desktop app, Safari).
+   WebKit fits the system font's letter spacing to the size it is drawn at, so under layout zoom a 12px
+   label set at 160% is laid out as 19px text and comes out narrower than the same label scaled: text
+   jumped a few pixels sideways inside its card when the zoom settled. Fixed spacing keeps every card
+   laid out the same at every zoom (it is a touch tighter at 100%). !important because cards set
+   `font` shorthands inline, which would reset it. */
+[data-zoom-layer][data-crisp],
+[data-zoom-layer][data-crisp] * {
+  font-optical-sizing: none !important;
+}

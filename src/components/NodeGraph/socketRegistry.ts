@@ -100,8 +100,11 @@ function cardOf(el: HTMLElement): HTMLElement | null {
 }
 
 function measureSocket(k: string, el: HTMLElement, card: HTMLElement) {
-  const z = zoomGetter() || 1;
   const cr = card.getBoundingClientRect();
+  // Screen px per world unit, read off the card itself (its on-screen width over its layout width), so the
+  // conversion holds whether the zoom is a scale() or layout zoom (WebKit, settled) and whichever way the
+  // engine reports rects under layout zoom. The live zoom is the fallback for a card with no layout yet.
+  const z = (card.offsetWidth > 0 && cr.width > 0) ? cr.width / card.offsetWidth : (zoomGetter() || 1);
   const er = el.getBoundingClientRect();
   socketOffsets.set(k, {
     x: (er.left + er.width  / 2 - cr.left) / z,
@@ -153,6 +156,16 @@ export function registerSocket(nodeId: string, dir: 'in' | 'out', key: string, e
       cardEls.delete(nodeId);
     }
   }
+  scheduleNotify();
+}
+
+/**
+ * Re-measure every mounted socket. The graph calls it after its zoom changes between a scale() and layout
+ * zoom (the WebKit handoff): text and borders can land a fraction of a pixel elsewhere without the card's
+ * size changing, so the card observer alone wouldn't catch it.
+ */
+export function remeasureAllSockets() {
+  for (const nodeId of cardEls.keys()) remeasureCard(nodeId);
   scheduleNotify();
 }
 

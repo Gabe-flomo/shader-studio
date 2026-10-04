@@ -15,6 +15,7 @@ import { buildAgentsSubgraph, buildMarchRig, buildMarchSubgraph, buildSceneSubgr
 import { agentEyeNodes, hasAgentsNode } from '../compiler/agentGraph';
 import { hasPassNode } from '../compiler/passGraph';
 import { agentPreset } from './agentExamples';
+import { addAgentPieceTo, agentStarter, freshIds, placeInFreeSpace, startRuleIn, type AgentPiece, type AgentRuleStart } from './agentSetup';
 import { particlesAsNodes } from './particlesAsNodes';
 import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES, AGENT_PRESET_TYPES } from '../nodes/definitions/agents';
 import { randomizedParams } from '../nodes/randomizeParams';
@@ -415,6 +416,8 @@ function legacySceneReturnWire(sg: { nodes: GraphNode[]; outputNodeId?: string; 
 
 /** Set while an add re-runs after the "Adding a 3D scene" question, so it isn't asked twice. */
 let skip3DAsk = false;
+/** Set while a bare Agents group is added after its "start with" question (Empty group). */
+let skipAgentsAsk = false;
 
 /** Would adding `type` at the top level build a new 3D scene (camera, loop and Output takeover)? */
 function startsA3DScene(type: string, nodes: GraphNode[]): boolean {
@@ -819,6 +822,10 @@ interface NodeGraphState {
 
   // Actions
   addNode: (type: string, position: { x: number; y: number }, overrideParams?: Record<string, unknown>) => string | undefined;
+  /** "Next steps" on an Agents group card: adds and wires an Emit, Draw agents, Deposit + Trail, or the Output (store/agentSetup.ts). */
+  addAgentPiece: (groupId: string, piece: AgentPiece) => void;
+  /** An empty Agents rule's starting points (inside the group): Sense → Steer → Move, Curl noise → Integrate, or Move alone. */
+  startAgentRule: (groupId: string, kind: AgentRuleStart) => void;
   /**
    * Spawn a pre-wired subgraph from a descriptor.
    * `origin` is the top-left anchor in canvas space.
@@ -3223,6 +3230,41 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     return n;
   },
 
+  addAgentPiece: (groupId, piece) => {
+    const before = get().nodes;
+    const r = addAgentPieceTo(before, groupId, piece, () => idGenerator.next());
+    if (!r) return;
+    undoManager.push(before, { label: `Added ${piece === 'emit' ? 'an Emit' : piece === 'draw' ? 'Draw agents' : piece === 'trail' ? 'a Deposit and a Trail' : 'the walkers to the Output'}` });
+    set({ nodes: r.nodes });
+    get().compile();
+    toast.info('Done', { message: r.message });
+  },
+
+  startAgentRule: (groupId, kind) => {
+    const before = get().nodes;
+    const g = before.find(n => n.id === groupId);
+    if (!g || g.type !== 'agentsGroup') return;
+    undoManager.push(before, { label: 'Started the rule' });
+    const sg = g.params.subgraph as SubgraphData;
+    const inside = startRuleIn(g, kind, () => idGenerator.next());
+    // The group's own sockets follow Agent Inputs' ports (the slime rule adds a Trail port).
+    const ports = ((inside.find(n => n.type === 'agentInputs')?.params.extraInputs ?? []) as Array<{ key: string; type: DataType; label: string }>);
+    const inputs = { ...g.inputs };
+    for (const p of ports) if (!inputs[p.key]) inputs[p.key] = { type: p.type, label: p.label };
+    set({ nodes: before.map(n => n.id === groupId ? { ...n, inputs, params: { ...n.params, subgraph: { ...sg, nodes: inside } } } : n) });
+    // Outside, a slime rule needs its trail and a particles rule wants a way to be seen.
+    if (kind === 'slime' && !before.some(n => n.type === 'agentDeposit' && n.inputs.agents?.connection?.nodeId === groupId)) {
+      const r = addAgentPieceTo(get().nodes, groupId, 'trail', () => idGenerator.next());
+      if (r) set({ nodes: r.nodes });
+    }
+    get().compile();
+    toast.info('Rule started', {
+      message: kind === 'slime' ? 'Sense → Steer → Move: walkers follow the trail they leave (a Deposit and a Trail field were added outside when missing).'
+        : kind === 'particles' ? 'Curl noise → Integrate, and Age / Life: particles drift on swirling currents and live out the Life Emit gives them.'
+        : 'Move: every walker steps forward along its heading.',
+    });
+  },
+
   addNode: (type, position, overrideParams?) => {
     // ── The Agents family (docs/agents-plan.md) ──────────────────────────────
     // Sense, Steer, Move… run once per walker, so they only go inside an Agents
@@ -3241,11 +3283,47 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         toast.info(`${label} goes on the top level`, { message: 'Leave this group and add it there.' });
         return undefined;
       }
+      // A bare Agents group from the node browser: ask what to start with (a working setup round
+      // it, or the empty group), then add that. The add runs again with the answer.
+      if (type === 'agentsGroup' && path.length === 0 && !overrideParams && !skipAgentsAsk) {
+        void askChoice('Add an Agents group', [
+          { id: 'empty', label: 'Empty group' },
+          { id: 'slime', label: 'Slime (with a Trail)' },
+          { id: 'particles', label: 'Particles', variant: 'primary' },
+        ], { message: 'Agents need a place to be born (Emit) and a way to be seen (Draw agents, or a Trail they leave). Start with a working setup round the group, wired to the Output and over what it shows now, or with the empty group to build it yourself. Every node it adds has a note.' })
+          .then(choice => {
+            if (!choice) return;
+            if (choice === 'empty') {
+              skipAgentsAsk = true;
+              try { get().addNode(type, position); } finally { skipAgentsAsk = false; }
+              return;
+            }
+            const kind = choice as 'particles' | 'slime';
+            const before = get().nodes;
+            const output = graphOutput(before);
+            const starter = agentStarter(kind, output?.inputs.color?.connection ?? null);
+            const { nodes: fresh, idOf } = freshIds(starter.nodes, () => idGenerator.next());
+            const placed = placeInFreeSpace(before, fresh, position);
+            undoManager.push(before, { label: `Added an Agents group (${kind === 'particles' ? 'Particles' : 'Slime'})` });
+            let nodes = [...before, ...placed];
+            const out = { nodeId: idOf(starter.out.nodeId), outputKey: starter.out.outputKey };
+            if (output) nodes = nodes.map(n => n.id === output.id ? { ...n, inputs: { ...n.inputs, color: { ...n.inputs.color, connection: out } } } : n);
+            set({ nodes });
+            get().compile();
+            get().focusNode(idOf(starter.groupId));
+            toast.info(kind === 'particles' ? 'Particles added' : 'Slime added', {
+              message: `${kind === 'particles' ? 'Emit → Agents (Curl noise → Integrate inside) → Draw agents' : 'Emit → Agents (Sense → Steer → Move inside) → Deposit → Trail field → palette'}${output ? ', wired to the Output over what it showed' : ''}. Double-click the group to open its rule; every node has a note.`,
+            });
+          });
+        return undefined;
+      }
       if (AGENT_PRESET_TYPES.has(type)) {
         const preset = agentPreset(type, () => idGenerator.next(), position);
         if (!preset) return undefined;
         undoManager.push(get().nodes, { label: `Added the ${preset.label} preset` });
-        const { nodes: added, out } = preset;
+        const { out } = preset;
+        // In free space beside the graph, its own cards apart: never on top of what is there.
+        const added = placeInFreeSpace(get().nodes, preset.nodes, position);
         let nodes = [...get().nodes, ...added];
         const output = graphOutput(get().nodes);
         if (output) nodes = nodes.map(n => n.id === output.id
@@ -3254,16 +3332,18 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         set({ nodes });
         get().compile();
         const what = ({
-          slimeMoldPreset: 'A million walkers that sense, turn, move and leave trail, coloured by a palette',
+          slimeMoldPreset: '262,144 walkers (256k) that sense, turn, move and leave trail, coloured by a palette',
           multiSlimePreset: 'Three slime colonies that follow their own trail and avoid each other\'s',
           antsPreset: 'Ants that carry food from three piles to their nest along the smell they leave',
           boidsPreset: 'Birds that flock through a field of their own velocities',
           strandsPreset: 'Slime combed into long strands, drawn as ink on paper',
           growPicturePreset: 'Slime that feeds on a picture\'s bright parts and maps it in veins',
-          galaxyPreset: 'A million stars circling a bright core, crowding into two turning spiral arms',
+          galaxyPreset: 'Stars circling a bright core, crowding into two turning spiral arms',
           myceliumPreset: 'A fungus colony that branches out of a spore, drawn by a palette',
-          sandPlatePreset: 'A million grains of sand drawing Chladni figures on a ringing plate',
-        } as Record<string, string>)[type] ?? 'A million particles moved by a chain of forces, drawn by Draw agents';
+          sandPlatePreset: 'Grains of sand drawing a Chladni figure on a ringing plate (its stand-in Beat is off; turn it on for changing figures)',
+        } as Record<string, string>)[type] ?? 'Particles moved by a chain of forces, drawn by Draw agents';
+        const gid = added.find(n => n.type === 'agentsGroup')?.id;
+        if (gid) get().focusNode(gid);
         toast.info(`${preset.label} added`, {
           message: `${what}${output ? ' and wired to the Output' : '. Add an Output node and wire the last node into it to see it'}. Every node has a note on what it does; double-click the Agents group to open the rule.`,
         });

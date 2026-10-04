@@ -84,7 +84,7 @@ export function multiSlimeNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     mode: 'fill', shape: 'disc', heading: 'outward', x: -0.75, y: -0.35, size: 0.12, species: '1', share: 1,
     ...note([
       'Emit (coral, species 1): a third of the walkers start in a small disc on the left, facing outward.',
-      'Its Also takes the teal Emit, which takes the violet one: births are shared between the three by their Share (1 each).',
+      'Its "+ Another Emit" takes the teal Emit, whose own takes the violet one: births are shared between the three by their Share (1 each).',
       'Try: move the discs; give one colony a larger Share for more walkers.',
     ]),
   }, { also: ['msEmitB', 'emitter'] });
@@ -99,23 +99,24 @@ export function multiSlimeNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   let group = agentsGroup('multiSlime', X(420), Y(0), 'msEmitA', [inputs, sense, crowd, steer, speeds, move, output], {
     label: 'Three colonies', species: '3',
     ...note([
-      'Agents: a million walkers (1M) of 3 species, each running the rule inside (double-click) every step, 2 steps a frame.',
+      'Agents: 262,144 walkers (256k) of 3 species, each running the rule inside (double-click) every step, 2 steps a frame.',
       'Species 3: each walker keeps the species its Emit gave it, deposits into that species\' trail channel, and senses its own channel against the others.',
       'Try: Species 2 (and drop one Emit) for a two-way front; a new Seed and Start over for a different map.',
     ]),
   });
   group = groupInput(group, 'trail', 'texture', 'Trail', ['msTrail', 'texture']);
   const deposit = n('agentDeposit', 'msDeposit', X(840), Y(0), {
-    amount: 1, size: 1, what: 'trail',
+    amount: 4, size: 1, what: 'trail',
     ...note([
-      'Deposit: every walker leaves 1 unit of trail a step in its own species\' channel (red for coral, green for teal, blue for violet).',
+      'Deposit: every walker leaves 4 units of trail a step in its own species\' channel (red for coral, green for teal, blue for violet).',
+      'Why 4: the presets run 262,144 walkers (256k), a quarter of a million, so each leaves four times as much to keep the trail as strong as a million leaving 1 (raise Count to 1M and set this back to 1).',
     ]),
   }, { agents: ['multiSlime', 'agents'] });
   const trail = n('trailField', 'msTrail', X(1260), Y(0), {
     resolution: '1024', diffuse: 1, halfLife: 0.06, edges: 'wrap', gain: 0.04,
     ...note([
       'Trail field: three channels, one per species, 1024 rows tall; each step it spreads (3×3) and fades (half gone in 0.06 s).',
-      'Its Texture goes back into the group for Sense; its Channels colour the picture.',
+      'Its Image goes back into the group for Sense (the "↺ last step" wire); its Channels colour the picture.',
     ]),
   }, { deposit: ['msDeposit', 'deposit'] });
   const colour = expr('msColour', X(1680), Y(0), {
@@ -389,7 +390,7 @@ export function boidsNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     outputType: 'vec2',
     wires: { flow: ['bdFlow', 'color'], grad: ['bdSense', 'gradient'], v: ['bdIn', 'velocity'] },
     note: [
-      'Flock (an Expression Block): the three boid rules, read from the field instead of from neighbours. Its Result is a force for Curl noise\'s Also. Its four sliders tune the flock.',
+      'Flock (an Expression Block): the three boid rules, read from the field instead of from neighbours. Its Result is a force for Curl noise\'s "+ Another force". Its four sliders tune the flock.',
       'crowd: how many birds are around (the field\'s count). avg: their average velocity.',
       'align: steer toward the average velocity (match the flock) by Align W, more where there are more birds.',
       'cohere: drift up the crowd\'s slope (toward the flock) by Cohere W while fewer than Packed are around, and down it once more are (separation).',
@@ -400,7 +401,7 @@ export function boidsNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   const curl = n('agentCurl', 'bdCurl', 1680, 100, {
     strength: 0.35, size: 1.2, evolve: 0.25,
     ...note([
-      'Curl noise: a swirling breeze added to Flock (its Also), so flocks wheel, split and meet instead of all ending up flying one way.',
+      'Curl noise: a swirling breeze added to Flock (its "+ Another force"), so flocks wheel, split and meet instead of all ending up flying one way.',
       'Try: 0 and the whole sky slowly agrees on one direction; 0.8 for restless murmurations.',
     ]),
   }, { also: ['bdFlock', 'result'] });
@@ -509,7 +510,7 @@ export function strandsNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   const drift = n('agentCurl', 'stDrift', 840, 760, {
     strength: 0.15, size: 0.6, evolve: 0.04,
     ...note([
-      'Curl noise, used as a drift: a slow, smooth swirl of currents that carries every walker a little (Move\'s Also velocity).',
+      'Curl noise, used as a drift: a slow, smooth swirl of currents that carries every walker a little (Move\'s "+ Drift").',
       'Why: walkers that follow each other AND the same current line up side by side, so the network combs out into long flowing strands instead of a web of straight lines.',
       'Try: 0 for a web; 0.4 for hair caught in a whirlpool; Size 1.5 for tighter waves.',
     ]),
@@ -530,14 +531,14 @@ export function strandsNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   let group = agentsGroup('strands', X(420), Y(0), 'stEmit', [inputs, sense, crowd, steer, drift, move, output], {
     label: 'Strands', preroll: 8,
     ...note([
-      'Agents: a million walkers (1M), 2 steps a frame, running the slime rule tuned for strands (double-click to see it): Sense → Crowding → Steer → Move, with a curl-noise drift.',
+      'Agents: 262,144 walkers (256k), 2 steps a frame, running the slime rule tuned for strands (double-click to see it): Sense → Crowding → Steer → Move, with a curl-noise drift.',
       'Pre-roll 8: eight seconds simulated first, so the strands have combed out when the picture appears.',
     ]),
   });
   group = groupInput(group, 'trail', 'texture', 'Trail', ['stTrail', 'texture']);
   const deposit = n('agentDeposit', 'stDeposit', X(840), Y(0), {
-    amount: 1, size: 1,
-    ...note(['Deposit: every walker leaves 1 unit of trail a step: strands are where many have walked.']),
+    amount: 4, size: 1,
+    ...note(['Deposit: every walker leaves 4 units of trail a step: strands are where many have walked.', 'Why 4: the presets run 262,144 walkers (256k), a quarter of a million, so each leaves four times as much to keep the trail as strong as a million leaving 1 (raise Count to 1M and set this back to 1).']),
   }, { agents: ['strands', 'agents'] });
   const trail = n('trailField', 'stTrail', X(1260), Y(0), {
     resolution: '1024', diffuse: 0.6, halfLife: 0.04, edges: 'wrap', gain: 0.04,
@@ -690,14 +691,14 @@ export function growPictureNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   let group = agentsGroup('growPicture', X(420), Y(0), 'gpEmit', [inputs, both, sense, crowd, steer, move, output], {
     label: 'Slime on a picture', preroll: 6,
     ...note([
-      'Agents: a million walkers (1M), the slime rule (Sense → Crowding → Steer → Move), 2 steps a frame.',
+      'Agents: 262,144 walkers (256k), the slime rule (Sense → Crowding → Steer → Move), 2 steps a frame.',
       'Pre-roll 6: six seconds simulated first, so the veins have found the picture when it appears.',
     ]),
   });
   group = groupInput(group, 'trail', 'texture', 'Trail', ['gpTrail', 'texture']);
   const deposit = n('agentDeposit', 'gpDeposit', X(840), Y(0), {
-    amount: 1, size: 1,
-    ...note(['Deposit: every walker leaves 1 unit of trail a step, on top of the food the picture paints in.']),
+    amount: 4, size: 1,
+    ...note(['Deposit: every walker leaves 4 units of trail a step, on top of the food the picture paints in.', 'Why 4: the presets run 262,144 walkers (256k), a quarter of a million, so each leaves four times as much to keep the trail as strong as a million leaving 1 (raise Count to 1M and set this back to 1). The food and the walkers\' trail then weigh as they did at a million.']),
   }, { agents: ['growPicture', 'agents'] });
   const trail = n('trailField', 'gpTrail', X(1260), Y(0), {
     resolution: '1024', diffuse: 1, halfLife: 0.05, edges: 'wrap', gain: 0.02,

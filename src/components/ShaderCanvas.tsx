@@ -892,6 +892,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         }
       };
 
+      // With agents, renderAtTime draws the 'pre' passes before they step; the picture then draws only the 'post' ones.
+      let offlinePassStage: 'post' | undefined;
       // Feedback and echo for offline frames: targets of their own, so the live preview's history is untouched.
       const history = new OfflineHistory<THREE.WebGLRenderTarget>({
         create: () => {
@@ -902,7 +904,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         dispose: r => r.dispose(),
         draw: (t, into, prev, echoes) => {
           material.uniforms.u_time.value = t;
-          if (passRunner && offlinePassTargets) passRunner.run(offlinePassTargets, exportW, exportH, undefined, undefined, passRunner.splitsForParticles ? 'rest' : undefined);
+          if (passRunner && offlinePassTargets) passRunner.run(offlinePassTargets, exportW, exportH, undefined, offlinePassStage, passRunner.splitsForParticles ? 'rest' : undefined);
           if (material.uniforms.u_prevFrame) material.uniforms.u_prevFrame.value = prev ? prev.texture : null;
           for (let i = 0; i < 6; i++) { const u = material.uniforms[`u_echo${i}`]; if (u) u.value = echoes[i]?.texture ?? null; }
           renderer.setRenderTarget(into);
@@ -975,19 +977,26 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           const keep = ['u_time', 'u_prevFrame', ...Array.from({ length: 6 }, (_, i) => `u_echo${i}`)].map(k => [k, u[k]?.value] as const);
           const feedback = isStatefulRef.current && !!u.u_prevFrame;
           const echo = echoRef.current;
-          // Agents: a simulation of the render's own, stepped exactly to this frame's time (a still starts at step 0).
-          if (agentRunner) {
-            offlineAgentTargets ??= new AgentTargets(renderer, supportsHalfFloat);
-            if (!opts || !!opts.first || !offlineAgentsStarted) offlineAgentTargets.resetAll();
-            agentRunner.run(offlineAgentTargets, { width: exportW, height: exportH, time, live: false });
-            offlineAgentsStarted = !!opts;
-          }
           // Pass nodes: textures of the render's own; a Pass's Previous steps like feedback does.
           const passFeedback = !!passRunner?.hasPrevious;
           if (passRunner) {
             offlinePassTargets ??= new PassTargets(renderer, supportsHalfFloat);
             // (Already started over above when some pass draws before the particles.)
             if ((!opts || !!opts.first || !offlineStarted) && !split) offlinePassTargets.clearPrevious();
+          }
+          // Agents: a simulation of the render's own, stepped exactly to this frame's time (a still starts at step 0).
+          // As the live loop: the passes the agents read draw first (else they'd read the preview's, at its size).
+          offlinePassStage = undefined;
+          if (agentRunner) {
+            offlineAgentTargets ??= new AgentTargets(renderer, supportsHalfFloat);
+            if (!opts || !!opts.first || !offlineAgentsStarted) offlineAgentTargets.resetAll();
+            if (passRunner && offlinePassTargets) {
+              u.u_time.value = time;
+              passRunner.run(offlinePassTargets, exportW, exportH, undefined, 'pre');
+              offlinePassStage = 'post';
+            }
+            agentRunner.run(offlineAgentTargets, { width: exportW, height: exportH, time, live: false });
+            offlineAgentsStarted = !!opts;
           }
           let picture: THREE.WebGLRenderTarget;
           if (feedback || echo || passFeedback) {
@@ -997,7 +1006,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
             offlineStarted = !!opts;
           } else {
             u.u_time.value = time;
-            if (passRunner && offlinePassTargets) passRunner.run(offlinePassTargets, exportW, exportH, undefined, undefined, split ? 'rest' : undefined);
+            if (passRunner && offlinePassTargets) passRunner.run(offlinePassTargets, exportW, exportH, undefined, offlinePassStage, split ? 'rest' : undefined);
             renderer.setRenderTarget(exportRT);
             renderer.render(scene, camera);
             picture = exportRT!;
