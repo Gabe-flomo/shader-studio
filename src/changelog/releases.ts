@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.18',
+    date: '2026-10-04',
+    title: 'Open as nodes, agent readings, galaxies',
+    highlights: [
+      { area: 'Studio', text: 'Open as nodes on the Particles card builds an editable Agents-group copy of its settings next to it; the original stays as it was.' },
+      { area: 'Play', text: 'An Agents group reads like a layer: Alive, Speed, Spread, Centre X / Y and each species’ share, for mappings and rules.' },
+      { area: 'Studio', text: 'New presets: Galaxy (spiral arms from orbiting stars), Mycelium (a branching mould colony) and Sand on a plate.' },
+      { area: 'Present', text: 'How Agents work now runs the real presets on its slides, with sliders tied to their own settings.' },
+    ],
+  },
+  {
     id: '2026.10.17',
     date: '2026-10-04',
     title: 'Agents and passes on the web',
