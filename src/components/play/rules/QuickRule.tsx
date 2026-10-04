@@ -18,7 +18,7 @@ import { playEngine } from '../../../lib/playEngine';
 import { subjectOf, verbsFor } from '../../../play/signalVerbs';
 import { Button } from '../../ui/Button';
 import { labelContext } from '../ConditionFields';
-import { defaultAmount, doChoices } from './reactionChoices';
+import { defaultAmount, doChoices, lookDefaults } from './reactionChoices';
 
 /** How many Do chips show before "More…". */
 const CHIPS = 8;
@@ -57,7 +57,7 @@ export function QuickRule({ play, when: given, layerId, onMake, onCancel }: {
     if (!v) return;
     const fire: FireSpec | undefined = v.fire;
     const l = play.layers.find(x => x.id === c?.layerId);
-    onMake(v.trigger, c ? { do: c.do, layerId: c.layerId, amount: defaultAmount(c.do, l), enabled: true, ...(c.do === SIGNAL_ACTION ? { signal: '' } : {}), ...(c.do === NOTES_ACTION && c.rackId ? { notes: defaultNotes(c.rackId) } : {}), ...(fire ? { fire } : {}) } : null);
+    onMake(v.trigger, c ? { do: c.do, layerId: c.layerId, amount: defaultAmount(c.do, l), enabled: true, ...lookDefaults(c.do, c.layerId, play), ...(c.do === SIGNAL_ACTION ? { signal: '' } : {}), ...(c.do === NOTES_ACTION && c.rackId ? { notes: defaultNotes(c.rackId) } : {}), ...(fire ? { fire } : {}) } : null);
   };
   const box: React.CSSProperties = { padding: '12px 14px', borderRadius: radius.card, background: alpha(tk.accent.base, 0.06), boxShadow: `inset 0 0 0 1px ${alpha(tk.accent.base, 0.45)}`, marginBottom: 10 };
   const chip = (on: boolean): React.CSSProperties => ({ height: 28, padding: '0 11px', borderRadius: 14, border: 0, cursor: 'pointer', font: `${on ? 600 : 500} 12px ${fontFamily.ui}`, background: on ? tk.bg.selected : tk.bg.field, color: on ? tk.accent.text : tk.text.primary, boxShadow: on ? `inset 0 0 0 1px ${tk.accent.base}` : 'none' });

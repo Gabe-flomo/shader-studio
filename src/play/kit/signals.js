@@ -392,6 +392,13 @@ export function sgReactions(signals) {
     const a = { id: r.id, trigger, do: r.do, layerId: r.layerId || '', amount: r.amount, enabled: r.enabled !== false };
     if (r.signal !== undefined) a.signal = r.signal;
     if (r.notes) a.notes = r.notes;
+    // A Look action (finish.js fnLookAct): the setting, value and seconds it carries.
+    if (r.key !== undefined) a.key = r.key;
+    if (r.value !== undefined) a.value = r.value;
+    if (r.seconds !== undefined) a.seconds = r.seconds;
+    // A Splash at a point (Water): where.
+    if (r.x !== undefined) a.x = r.x;
+    if (r.y !== undefined) a.y = r.y;
     out.push(a);
   }
   return out;

@@ -1,6 +1,6 @@
 # GPU particles, TouchDesigner style (plan, 2026-10-03)
 
-**Status:** P0 and P2 shipped, most of P1, P3, P4 and P5 in the creative-controls follow-up (see [What shipped](#what-shipped) and [creative controls](#what-shipped-creative-controls-stacked-on-the-node-above)). The plan below is as written; the Particles node follows it except where What shipped says otherwise.
+**Status:** P0 and P2 shipped, most of P1, P3, P4 and P5 in the creative-controls follow-up (see [What shipped](#what-shipped) and [creative controls](#what-shipped-creative-controls-stacked-on-the-node-above)), then Chladni plates (see [Chladni plates](#what-shipped-chladni-plates-pattern)). The plan below is as written; the Particles node follows it except where What shipped says otherwise.
 
 ## Why
 
@@ -109,8 +109,8 @@ Settings (few, flat, each with a hint):
 The node grew from a glow emitter into a creative tool. Everything below is in the same engine (`src/play/kit/gpuParticles.js`), so the app and web exports match.
 
 **Card.**
-- **Presets** (a chip row, `ParticlePresets.tsx`, data in `GP_PRESETS`): Ink in water, Embers, Dust in air, Image dissolve, Sound field, Launch, Hand swirl. A preset sets every setting (defaults, then its own) and keeps the inputs (hand positions, Sound level; Sound from unless the preset picks one).
-- **Sections** (`ParamDef.section`): Emit, Motion, Look, Camera, Lights, Sound, Hands. The first is open, the rest fold to "n changed". Folding is display only (`foldState.ts`), so a folded setting stays a uniform and its Play mapping keeps working. The node no longer uses `showWhen` anywhere.
+- **Presets** (a chip row, `ParticlePresets.tsx`, data in `GP_PRESETS`): Ink in water, Embers, Dust in air, Image dissolve, Sound field, Launch, Chladni sand, Singing plate, Cymatics bloom, Hand swirl. A preset sets every setting (defaults, then its own) and keeps the inputs (hand positions, Sound level; Sound from unless the preset picks one).
+- **Sections** (`ParamDef.section`): Emit, Motion, Pattern, Look, Camera, Lights, Sound, Hands. The first is open, the rest fold to "n changed". Folding is display only (`foldState.ts`), so a folded setting stays a uniform and its Play mapping keeps working. The node no longer uses `showWhen` anywhere.
 - **Help** (`ParamDef.help`): a "?" beside each setting's name shows what it does, a typical range and what it pairs with. The info card is short (`NodeDefinition.brief`): a summary, how to start, sockets by name.
 - **Inputs on demand** (`NodeDefinition.socketsOnDemand`, `lib/socketsOnDemand.ts`). The card shows Over, UV, Camera from, Camera ray, Depth, Scene, Obstacle and Emitter. Every other setting gets a socket when its slider is right-clicked → **Control from outside**; Hand / Hand 2 come from Hand X / Y, and Flow from Flow force. **Back to slider** unwires it and hides it again. The list lives in `params.__sockets`, and a wired socket always shows, so saved graphs keep theirs. The Play items stay in the same menu.
 
@@ -173,6 +173,73 @@ The node grew from a glow emitter into a creative tool. Everything below is in t
 | Particle Galaxy, 1M 2D | 3.2 |
 
 The live preview is noisier, because the GPU is shared with other previews.
+
+## What shipped: Chladni plates (Pattern)
+
+Sound used to move particles only in circles (rings and shockwaves from the emitter). **Pattern** makes them sand on a vibrating plate instead: the sound picks the plate's modes, and the sand gathers on the nodal lines where the plate stands still. It's in the same engine, so the app and web exports match.
+
+**The plate.** The plate's displacement is a weighted sum of modes, `u = Σ w·φ(n, m)`, over the emitter's area (Emitter size is the plate's half size).
+- **Chladni square:** `φ = cos(nπX)·cos(mπY) ∓ cos(mπX)·cos(nπY)`, with X and Y running 0…1 across the plate. Symmetry Minus is the classic figure; Plus is its twin, with lines through the corners. When n = m the terms always add.
+- **Chladni round:** `φ = J_n(k·r)·cos(nθ)`, with n spokes and m still rings inside a free rim. k (`gpPlateWave`) is the first zero of J_n′ past the m-th zero of J_n, so the rim moves, as on a real disc.
+  - A first version clamped the rim (k the m-th zero of J_n). The rim was then a nodal line of every mode, and it hoarded the sand.
+  - M = 0 is spokes only; the lowest figure is the two-spoke cross. Symmetry Plus turns every other mode by half a lobe, so their spokes interleave into stars.
+  - J_n comes from its integral, `(1/π)∫cos(nτ − x·sinτ)dτ`, using 200 midpoints (exact for n + x < 400).
+  - It is tabulated once (16 orders × 1024 samples over 0…64, an R32F texture, filled the first time a round plate runs) and read with texelFetch plus a lerp.
+
+**The sand.** Each substep, the simulation pass:
+- moves a particle down |u| towards u = 0, along `−sign(u)·∇u` (a finite-difference gradient), at up to Settle speed, and never more than half the way to the line in one step;
+- kicks it at random, as hard as the plate moves there (Shake × distance to the line, saturating). Sand can't rest on the moving parts, and lines stay crisp because the kicks vanish on them;
+- adds a small grain (Shake × 0.03 per √s), so a line has a pixel or two of body;
+- reflects the sand back in at the plate's edge, and damps its own flight fast.
+In 3D the plate lies flat (x, z) at the emitter's height, the sand settles onto it, and a disc or line emitter is born lying on it.
+
+**Picking modes** (`gpPlateTargets`, `gpPlateListen`, `gpPlateSmooth`, all tested):
+- **Mode table** (`gpPlateTable`): the plate's modes ordered by pitch.
+  - Square: (n, m) with n < m and n + m even, by n² + m². These are the figures symmetric across both centre lines.
+  - Round: (n, m) by wave number.
+- **Sound** (Mode from: Sound) is heard in 8 log-spaced bands from 80 Hz to 5 kHz.
+  - Each band is measured by its loudest bin, so a single note shows as loud as it is. The bands are smoothed: quick to rise, slower to fall.
+  - The loudest band picks the main mode (weight 1): higher bands pick higher modes, and Frequency spreads them further up the table.
+  - The next-loudest bands each add the nearest mode that keeps the figure's symmetry, up to Modes in all. A square keeps the main mode's parity; a round plate takes spoke counts that are multiples of the figure's, or rings.
+  - Their weights are Weights × (their level / the loudest)^(1 + 5·(1 − Weights)). At Weights 0 only the loudest mode shows; at 1 they mix into lace.
+  - Silence holds the figure. If it's silent from the start, N and M's figure shows.
+- **Where the sound comes from:** the spectrum comes from Sound from (the mic, or the Audio engine's master or a track).
+  - With Sound from Graph, every band of the graph's first Audio Input is used (`audioBands` in `gpBindings`, low to high), once they're louder than 0.02.
+  - With only a level (Sound level, a stand-in beat), each hit steps the figure on to a new set of bands.
+- **Holding a figure** (`GP_PLATE_HOLD`, 2 s): the sand needs time to settle, so a figure holds at least this long.
+  - Hits closer together than that don't step the figure on.
+  - The loudest band keeps leading until another is a fifth louder.
+  - Without the hold, a beat twice a second, or two near-equal bands, re-formed the figure faster than the sand could find it, and complex figures stayed in fragments.
+- **Manual** (Mode from: Manual): N and M (times Frequency) pick the main mode. Equal values on a square move apart, since the minus figure would vanish. The modes after it in the table that keep its symmetry add in, each weighing Weights × 0.8^k.
+- **Morphing:** each weight glides to its target with a time constant of about 0.45 s. New modes grow from 0 and old ones fade out, so one figure morphs into the next rather than flickering. Shake is boosted by the level (×0.6…1.8) and by every hit, so the sand jumps on a beat and settles again.
+- **Pouring the sand:** switching the plate on, changing its shape or starting over pours all the sand on at once, as a burst on the first substep. A stream alone would take a whole Life to fill the plate.
+
+**Settings** (section Pattern, each with a "?"):
+- Pattern (Off, Chladni square, Chladni round), Mode from (Sound, Manual), Modes (1–8), N, M, Frequency, Weights, Settle speed, Shake, Symmetry (Minus, Plus).
+- N, M, Frequency, Weights, Settle speed and Shake have sockets (Control from outside).
+- The node is version 3: older nodes get the new settings at their defaults.
+
+**Presets:**
+- Chladni sand: square, 256k, gold.
+- Singing plate: round, ice.
+- Cymatics bloom: round, 1M, five modes at high Frequency and Weights, Symmetry Plus, neon.
+
+**Also fixed:** Sound level (the slider or its socket) now counts towards hits. Before, only the graph's Audio Input could fire one, so a beat wired into Sound level never fired Shockwave. The Sound Field example's stand-in beat now fires its rings, as its description says.
+
+**Examples** (every node has a plain-language comment; each Expression line is named and explained in the comment):
+- **Particles: Chladni Sand.** A square plate.
+  - An Audio Input with six bands (150 Hz to 4 kHz) is what the plate hears once a song is loaded.
+  - A stand-in beat in Sound level (a hit every 1.6 s while the song is quiet) steps through figures until then.
+  - A dark steel plate is drawn under the sand with an Expression into Over.
+- **Particles: Cymatics in 3D.** The Singing plate lying flat in 3D (camera tilted 50°, drifting, a little blur), with the same Audio Input and stand-in beat.
+- **Particles: Star Outline.** A star's Shape SDF turned into a ridge along its outline, `−3·d²`, wired into Flow (Slope). Particles born everywhere climb to the outline; Swirl runs them round it, with Thread on.
+- **Particles: Currents into a Heart.** Flow is a slope into a heart's SDF plus an FBM noise that fades out at the heart's edge. Particles ride the noise's currents in, then the node's curl Turbulence stirs them inside, so they fill the heart instead of piling on the noise's peaks.
+
+**Limits:**
+- The plate is the emitter's area. Use a Box for Square and a Disc for Round; a ring or point works too, but the sand starts in the wrong place.
+- The plate stays square or round in picture units, so a narrow picture crops a big plate (the examples use 0.7).
+- Lines break up for a moment while a figure morphs, as real sand re-settling does.
+- Obstacle and Flow still act alongside a plate, which is useful for creative mixes but can blur its lines.
 
 ## Phases left
 

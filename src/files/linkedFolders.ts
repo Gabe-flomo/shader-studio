@@ -11,11 +11,12 @@
  *             per folder says when a file changed.
  *   Browser   a File System Access directory handle (Chrome, Edge), kept in
  *             IndexedDB like the workspace folder's; after a restart the browser
- *             wants one click to allow it again (status 'permission').
+ *             wants one click to allow it again (status 'permission', "Reconnect").
  *             Safari and Firefox have no folder access: `linkedSupport()` is 'none'.
  *   Memory    tests (and a stand-in anywhere) through `addLinkedFolder(…, fs)`.
  *
  *   loadLinkedFolders()                 read the list, check each folder, start watching
+ *   refreshLinkedFolders()              read the list again (another window changed it; focus)
  *   linkFolder({ kind? })               pick a folder and link it → the folder, or null
  *   renameLinkedFolder · setLinkedKind · unlinkFolder (→ undo) · reconnectLinkedFolder · relocateLinkedFolder
  *   listLinked(folderId, dir)           one folder's entries (folders first, then files, natural order)
@@ -24,6 +25,9 @@
  *                                       or why not: 'folder' (not connected), 'permission', 'file' (missing), 'bad'
  *   statLinked(ref)                     its size and time, or null
  *   onLinkedChange(cb)                  a file in use changed or went (cb gets the refs; null = anything)
+ *
+ * The list is kept one record per folder (desktop: the app's data folder;
+ * browser: IndexedDB), see "Keeping the list" below.
  *
  * Files here are never counted by the storage limit: they aren't stored.
  */
@@ -229,34 +233,211 @@ export const THUMBS = 'thumbs';
 
 let dbP: Promise<IDBDatabase | null> | null = null;
 export function linkedDb(): Promise<IDBDatabase | null> {
-  return (dbP ??= new Promise(resolve => {
+  if (dbP) return dbP;
+  const p: Promise<IDBDatabase | null> = new Promise(resolve => {
     try {
       if (typeof indexedDB === 'undefined') { resolve(null); return; }
       const req = indexedDB.open(DB, 1);
       req.onupgradeneeded = () => { for (const s of [KV, THUMBS]) if (!req.result.objectStoreNames.contains(s)) req.result.createObjectStore(s); };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => resolve(null);
-    } catch { resolve(null); }
-  }));
+      req.onsuccess = () => {
+        const db = req.result;
+        // A connection WebKit (or another tab's upgrade) closed is opened again next
+        // time, not kept: every write through a closed one fails.
+        const drop = () => { if (dbP === p) dbP = null; try { db.close(); } catch { /* closed */ } };
+        db.onversionchange = drop;
+        (db as IDBDatabase & { onclose: (() => void) | null }).onclose = drop;
+        resolve(db);
+      };
+      req.onerror = () => { if (dbP === p) dbP = null; resolve(null); };
+    } catch { resolve(null); queueMicrotask(() => { if (dbP === p) dbP = null; }); }
+  });
+  dbP = p;
+  return p;
 }
-export async function linkedIdb<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest | void): Promise<T | undefined> {
-  const db = await linkedDb();
-  if (!db) return undefined;
-  return new Promise(resolve => {
-    try {
+
+/** One request in a transaction; rejects when it fails (opening the database again, once, when its connection went). */
+async function idbRun<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest | void, retry = true): Promise<T | undefined> {
+  const opened = linkedDb();
+  const db = await opened;
+  if (!db) throw new Error('No IndexedDB here (a private window?).');
+  try {
+    return await new Promise<T | undefined>((resolve, reject) => {
       const t = db.transaction(store, mode);
       const req = fn(t.objectStore(store));
       t.oncomplete = () => resolve(req ? (req.result as T) : undefined);
-      t.onerror = () => resolve(undefined);
-      t.onabort = () => resolve(undefined);
-    } catch { resolve(undefined); }
-  });
+      t.onerror = () => reject(t.error ?? req?.error ?? new Error('IndexedDB error'));
+      t.onabort = () => reject(t.error ?? new Error('IndexedDB transaction aborted'));
+    });
+  } catch (e) {
+    // "The database connection is closing" / "Connection to Indexed Database server lost": open it again.
+    const name = (e as { name?: string })?.name;
+    if (retry && (name === 'InvalidStateError' || name === 'UnknownError' || name === 'TransactionInactiveError')) {
+      if (dbP === opened) dbP = null;
+      try { db.close(); } catch { /* closed */ }
+      return idbRun(store, mode, fn, false);
+    }
+    throw e;
+  }
 }
 
-async function saveList(folders: LinkedFolder[]): Promise<void> {
-  // Memory folders are for this session (tests); desktop paths and handles are kept.
-  const keep = folders.filter(f => f.backend !== 'memory').map(f => ({ ...f }));
-  await linkedIdb(KV, 'readwrite', s => s.put(keep, 'folders'));
+/** Lenient: undefined when it fails (thumbnails, which are only a cache). */
+export async function linkedIdb<T>(store: string, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest | void): Promise<T | undefined> {
+  try { return await idbRun<T>(store, mode, fn); } catch { return undefined; }
+}
+
+// The list of linked folders is kept one record per folder, so a change only
+// ever writes its own folder: nothing can write a whole list over folders
+// linked in another window, tab or copy of the app, or before the list was read.
+//   Desktop   the app's data folder (linked-folders.json, through lf_store_* in
+//             src-tauri/src/linked.rs), not WebKit's storage
+//   Browser   IndexedDB `kv`, key `folder:<id>` (a directory handle can only live there)
+// Older versions kept one array under `folders` (rewritten whole on every
+// change): it's moved over, once, the first time the list is read.
+
+/** What's kept of a folder (no memory backends, no session state). */
+export type SavedFolder = LinkedFolder;
+
+export interface LinkedListStore {
+  list(): Promise<SavedFolder[]>;
+  put(f: SavedFolder): Promise<void>;
+  remove(id: string): Promise<void>;
+}
+
+const LEGACY = 'folders';
+const REC = 'folder:';
+const validSaved = (f: unknown): f is SavedFolder => !!f && typeof (f as SavedFolder).id === 'string' && !!(f as SavedFolder).id && typeof (f as SavedFolder).backend === 'string';
+const toSaved = (f: LinkedFolder): SavedFolder => {
+  const out: SavedFolder = { id: f.id, name: f.name, kind: f.kind, backend: f.backend, addedAt: f.addedAt };
+  if (f.path) out.path = f.path;
+  if (f.handle) out.handle = f.handle;
+  return out;
+};
+
+/** The legacy single array, if it's still there. */
+async function readLegacy(): Promise<SavedFolder[]> {
+  const got = await idbRun<unknown>(KV, 'readonly', s => s.get(LEGACY));
+  return Array.isArray(got) ? got.filter(validSaved) : [];
+}
+
+/** Browser: one IndexedDB record per folder. */
+export function idbListStore(): LinkedListStore {
+  return {
+    async list() {
+      // Move the old single array over (its folders become records, unless one's already there).
+      const legacy = await readLegacy();
+      if (legacy.length) {
+        await idbRun(KV, 'readwrite', s => {
+          for (const f of legacy) {
+            const key = REC + f.id;
+            const r = s.get(key);
+            r.onsuccess = () => { if (!r.result) s.put(f, key); };
+          }
+          s.delete(LEGACY);
+        });
+      } else {
+        // An empty legacy array: drop it so it's never read again.
+        await idbRun(KV, 'readwrite', s => { s.delete(LEGACY); }).catch(() => {});
+      }
+      const out: SavedFolder[] = [];
+      await idbRun(KV, 'readonly', s => {
+        const range = IDBKeyRange.bound(REC, `${REC}￿`);
+        const req = s.openCursor(range);
+        req.onsuccess = () => { const c = req.result; if (!c) return; if (validSaved(c.value)) out.push(c.value); c.continue(); };
+        return req;
+      });
+      return out.sort((a, b) => (a.addedAt ?? 0) - (b.addedAt ?? 0));
+    },
+    async put(f) { await idbRun(KV, 'readwrite', s => s.put(f, REC + f.id)); },
+    async remove(id) { await idbRun(KV, 'readwrite', s => s.delete(REC + id)); },
+  };
+}
+
+/**
+ * Desktop: the list in the app's data folder (src-tauri/src/linked.rs). The
+ * first time, folders WebKit's IndexedDB still has (the old array, or records)
+ * are moved over, and then dropped from there.
+ */
+export function desktopListStore(invoke: Invoke = async (cmd, args) => (await tauri())(cmd, args)): LinkedListStore {
+  let migrated = false;
+  const fromIdb = async (): Promise<SavedFolder[]> => {
+    // WebKit's storage can stall; the list mustn't wait on it for long.
+    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000));
+    const read = (async () => {
+      const legacy = await readLegacy();
+      const recs = await idbListStore().list().catch(() => [] as SavedFolder[]);
+      const seen = new Set<string>();
+      return [...legacy, ...recs].filter(f => f.backend === 'desktop' && !!f.path && !seen.has(f.id) && !!seen.add(f.id));
+    })();
+    return Promise.race([read, timeout]);
+  };
+  return {
+    async list() {
+      const saved = (await invoke<unknown[]>('lf_store_list')).filter(validSaved);
+      if (!migrated) {
+        migrated = true;
+        try {
+          const old = await fromIdb();
+          const have = new Set(saved.map(f => f.id));
+          const add = old.filter(f => !have.has(f.id));
+          for (const f of add) { const s = { ...f }; delete s.handle; await invoke('lf_store_put', { folder: s }); saved.push(s); }
+          // Moved: the page's copy goes, so a folder unlinked later can't come back from it.
+          if (old.length) await idbRun(KV, 'readwrite', s => { s.delete(LEGACY); for (const f of old) s.delete(REC + f.id); });
+        } catch (e) { migrated = false; if ((e as Error)?.message !== 'timeout') console.warn('[linked] couldn’t move the older list over', e); }
+      }
+      return saved;
+    },
+    async put(f) { const s = { ...f }; delete s.handle; await invoke('lf_store_put', { folder: s }); },
+    async remove(id) { await invoke('lf_store_remove', { id }); },
+  };
+}
+
+let listStore: LinkedListStore | null = null;
+const store = (): LinkedListStore => (listStore ??= linkedSupport() === 'desktop' ? desktopListStore() : idbListStore());
+/** Tests: keep the list somewhere else (null: back to the default). */
+export function setLinkedListStore(s: LinkedListStore | null): void { listStore = s; }
+
+/** Other windows and tabs: the list changed, read it again. */
+let channel: BroadcastChannel | null | undefined;
+const bus = () => {
+  if (channel === undefined) {
+    try { channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('playfield-linked-folders') : null; } catch { channel = null; }
+    if (channel) channel.onmessage = () => { void refreshLinkedFolders(); };
+  }
+  return channel;
+};
+const announce = () => { try { bus()?.postMessage('changed'); } catch { /* closed */ } };
+
+/** Folders that are linked this session but couldn't be saved (tried again on the next change or focus). */
+const unsaved = new Set<string>();
+
+async function saveFolder(f: LinkedFolder): Promise<boolean> {
+  if (f.backend === 'memory') return true;
+  unsaved.add(f.id); // (also: on its way, so a list read meanwhile keeps it)
+  try {
+    await store().put(toSaved(f));
+    unsaved.delete(f.id);
+    announce();
+    return true;
+  } catch (e) {
+    unsaved.add(f.id);
+    console.warn('[linked] couldn’t save a linked folder', e);
+    warnUnsaved(f, e);
+    return false;
+  }
+}
+
+async function dropFolder(id: string): Promise<void> {
+  unsaved.delete(id);
+  try { await store().remove(id); announce(); } catch (e) { console.warn('[linked] couldn’t remove a linked folder from the list', e); }
+}
+
+let warned = 0;
+function warnUnsaved(f: LinkedFolder, e: unknown): void {
+  if (Date.now() - warned < 10_000) return;
+  warned = Date.now();
+  void import('../components/ui/toastStore').then(({ toast }) => toast.error(`“${f.name}” is linked, but couldn’t be saved`, {
+    message: `It works until the app closes; the app tries again. ${e instanceof Error ? e.message : String(e)}`,
+  })).catch(() => {});
 }
 
 // ── The store ───────────────────────────────────────────────────────────────
@@ -315,26 +496,108 @@ export async function checkLinkedFolder(id: string): Promise<LinkedStatus> {
   return s;
 }
 
+/** Changes made here, numbered: a list read from storage before a change doesn't undo it. */
+let gen = 0;
+const touched = new Map<string, number>();
+const touch = (id: string) => { touched.set(id, ++gen); };
+
+function stopFolder(id: string): void {
+  watchers.get(id)?.();
+  watchers.delete(id);
+  backends.delete(id);
+  forgetFolder(id);
+}
+
+/**
+ * Bring the in-memory list in line with what's saved (read when `since` was
+ * the change number). Folders changed here since then stay as they are here;
+ * memory folders (tests) and ones that couldn't be saved yet stay too. Folders
+ * gone from the list stop; ones moved elsewhere are opened again. Returns the
+ * ids that are new or moved (to check).
+ */
+function applySaved(saved: SavedFolder[], since: number): string[] {
+  const st = useLinkedFolders.getState();
+  const local = (id: string) => (touched.get(id) ?? 0) > since;
+  const savedIds = new Set(saved.map(f => f.id));
+  const next: LinkedFolder[] = [];
+  const fresh: string[] = [];
+  for (const f of saved) {
+    const had = st.folders.find(x => x.id === f.id);
+    if (local(f.id)) { if (had) next.push(had); continue; }
+    if (!had) { next.push(f); fresh.push(f.id); continue; }
+    // (A handle read again is a new object for the same folder: compare what it points at by name.)
+    const moved = had.backend !== f.backend || had.path !== f.path || had.handle?.name !== f.handle?.name;
+    if (moved) { stopFolder(f.id); fresh.push(f.id); }
+    next.push(moved ? { ...had, ...f } : had.name !== f.name || had.kind !== f.kind ? { ...had, name: f.name, kind: f.kind } : had);
+  }
+  for (const f of st.folders) {
+    if (savedIds.has(f.id)) continue;
+    if (f.backend === 'memory' || unsaved.has(f.id) || local(f.id)) next.push(f);
+    else stopFolder(f.id);
+  }
+  const status: Record<string, LinkedStatus> = {};
+  for (const f of next) status[f.id] = fresh.includes(f.id) ? 'checking' : st.status[f.id] ?? 'checking';
+  const same = next.length === st.folders.length && next.every((f, i) => f === st.folders[i]);
+  if (!same || !st.loaded) useLinkedFolders.setState({ loaded: true, folders: next, status });
+  return fresh;
+}
+
+let listing: Promise<boolean> | null = null;
+/** Read the saved list into memory (once; again after it failed). True when it was read. */
+function readList(): Promise<boolean> {
+  return (listing ??= (async () => {
+    const since = gen;
+    try {
+      applySaved(await store().list(), since);
+      return true;
+    } catch (e) {
+      console.warn('[linked] couldn’t read the linked folders list', e);
+      listing = null;
+      if (!useLinkedFolders.getState().loaded) useLinkedFolders.setState({ loaded: true });
+      return false;
+    }
+  })());
+}
+
 let loading: Promise<void> | null = null;
 /** Read the list and check each folder. Safe to call again (does it once). */
 export function loadLinkedFolders(): Promise<void> {
   return (loading ??= (async () => {
-    const saved = (await linkedIdb<LinkedFolder[]>(KV, 'readonly', s => s.get('folders'))) ?? [];
-    const mem = useLinkedFolders.getState().folders.filter(f => f.backend === 'memory');
-    const folders = [...saved.filter(f => f && typeof f.id === 'string'), ...mem];
-    useLinkedFolders.setState({ loaded: true, folders, status: Object.fromEntries(folders.map(f => [f.id, 'checking' as LinkedStatus])) });
+    const ok = await readList();
+    if (!ok) loading = null;
     await registerRoots();
-    await Promise.all(folders.map(f => checkLinkedFolder(f.id)));
+    await Promise.all(useLinkedFolders.getState().folders.map(f => checkLinkedFolder(f.id)));
     startRecheck();
   })());
 }
 
+/**
+ * Read the list again (another window or tab changed it, the window got focus)
+ * and save any folder that couldn't be saved before.
+ */
+export async function refreshLinkedFolders(): Promise<void> {
+  if (!useLinkedFolders.getState().loaded) { await loadLinkedFolders(); return; }
+  for (const id of [...unsaved]) { const f = getLinkedFolder(id); if (f) await saveFolder(f); else unsaved.delete(id); }
+  const since = gen;
+  let saved: SavedFolder[];
+  try { saved = await store().list(); } catch { return; }
+  const before = useLinkedFolders.getState().folders;
+  const fresh = applySaved(saved, since);
+  if (!fresh.length && useLinkedFolders.getState().folders === before) return;
+  await registerRoots();
+  await Promise.all(fresh.map(id => checkLinkedFolder(id)));
+  emitChange(null);
+}
+
 /** Link a folder that's already open (a test's memory folder, a handle from elsewhere). */
 export async function addLinkedFolder(f: Omit<LinkedFolder, 'id' | 'addedAt' | 'kind'> & { id?: string; kind?: LinkedKindHint }, fs?: LinkedFs): Promise<LinkedFolder> {
+  // The saved list first, so this one joins it (never the other way round).
+  await readList();
   const folder: LinkedFolder = { ...f, id: f.id ?? newLinkedId(), name: cleanName(f.name), kind: f.kind ?? guessKind(f.name), addedAt: Date.now() };
   if (fs) backends.set(folder.id, fs);
-  useLinkedFolders.setState(st => ({ loaded: true, folders: [...st.folders.filter(x => x.id !== folder.id), folder] }));
-  await saveList(useLinkedFolders.getState().folders);
+  touch(folder.id);
+  useLinkedFolders.setState(st => ({ loaded: true, folders: [...st.folders.filter(x => x.id !== folder.id), folder], status: { ...st.status, [folder.id]: 'checking' } }));
+  await saveFolder(folder);
   await registerRoots();
   await checkLinkedFolder(folder.id);
   return folder;
@@ -344,8 +607,13 @@ export async function addLinkedFolder(f: Omit<LinkedFolder, 'id' | 'addedAt' | '
 export async function linkFolder(o: { kind?: LinkedKindHint } = {}): Promise<LinkedFolder | null> {
   const picked = await pickFolder();
   if (!picked) return null;
+  await readList();
   const same = useLinkedFolders.getState().folders.find(f => (picked.path && f.path === picked.path));
-  if (same) { await checkLinkedFolder(same.id); return same; }
+  if (same) {
+    if (unsaved.has(same.id)) await saveFolder(same);
+    await checkLinkedFolder(same.id);
+    return same;
+  }
   return addLinkedFolder({ ...picked, kind: o.kind });
 }
 
@@ -369,14 +637,23 @@ async function pickFolder(): Promise<Pick<LinkedFolder, 'name' | 'backend' | 'pa
   throw new Error(UNSUPPORTED_TEXT);
 }
 
+/** Change one folder here and save just that folder. */
+async function changeFolder(id: string, fn: (f: LinkedFolder) => LinkedFolder): Promise<LinkedFolder | null> {
+  const had = getLinkedFolder(id);
+  if (!had) return null;
+  const next = fn(had);
+  touch(id);
+  useLinkedFolders.setState(st => ({ folders: st.folders.map(f => (f.id === id ? next : f)) }));
+  await saveFolder(next);
+  return next;
+}
+
 export async function renameLinkedFolder(id: string, name: string): Promise<void> {
-  useLinkedFolders.setState(st => ({ folders: st.folders.map(f => (f.id === id ? { ...f, name: cleanName(name) } : f)) }));
-  await saveList(useLinkedFolders.getState().folders);
+  await changeFolder(id, f => ({ ...f, name: cleanName(name) }));
 }
 
 export async function setLinkedKind(id: string, kind: LinkedKindHint): Promise<void> {
-  useLinkedFolders.setState(st => ({ folders: st.folders.map(f => (f.id === id ? { ...f, kind } : f)) }));
-  await saveList(useLinkedFolders.getState().folders);
+  await changeFolder(id, f => ({ ...f, kind }));
 }
 
 /** Unlink a folder (nothing on disk is touched). Returns a function that links it back (same id, so setups find it again). */
@@ -384,22 +661,21 @@ export async function unlinkFolder(id: string): Promise<(() => Promise<void>) | 
   const f = getLinkedFolder(id);
   if (!f) return null;
   const fs = backends.get(id);
-  watchers.get(id)?.();
-  watchers.delete(id);
-  backends.delete(id);
-  forgetFolder(id);
+  stopFolder(id);
+  touch(id);
   useLinkedFolders.setState(st => {
     const status = { ...st.status };
     delete status[id];
     return { folders: st.folders.filter(x => x.id !== id), status };
   });
-  await saveList(useLinkedFolders.getState().folders);
+  if (f.backend !== 'memory') await dropFolder(id);
   await registerRoots();
   emitChange(null);
   return async () => {
     if (fs) backends.set(id, fs);
-    useLinkedFolders.setState(st => ({ folders: [...st.folders.filter(x => x.id !== id), f] }));
-    await saveList(useLinkedFolders.getState().folders);
+    touch(id);
+    useLinkedFolders.setState(st => ({ folders: [...st.folders.filter(x => x.id !== id), f], status: { ...st.status, [id]: 'checking' } }));
+    await saveFolder(f);
     await registerRoots();
     await checkLinkedFolder(id);
     emitChange(null);
@@ -422,17 +698,15 @@ export async function reconnectLinkedFolder(id: string): Promise<LinkedStatus> {
  * has a new name). It keeps its id, so everything that uses its files finds
  * them again when the paths inside are the same.
  */
-export async function relocateLinkedFolder(id: string): Promise<boolean> {
+export async function relocateLinkedFolder(id: string, picked?: Pick<LinkedFolder, 'backend' | 'path' | 'handle'>, fs?: LinkedFs): Promise<boolean> {
   const f = getLinkedFolder(id);
   if (!f) return false;
-  const picked = await pickFolder();
-  if (!picked) return false;
-  watchers.get(id)?.();
-  watchers.delete(id);
-  backends.delete(id);
-  forgetFolder(id);
-  useLinkedFolders.setState(st => ({ folders: st.folders.map(x => (x.id === id ? { ...x, backend: picked.backend, path: picked.path, handle: picked.handle } : x)) }));
-  await saveList(useLinkedFolders.getState().folders);
+  const to = picked ?? await pickFolder();
+  if (!to) return false;
+  stopFolder(id);
+  if (fs) backends.set(id, fs);
+  setStatus(id, 'checking');
+  await changeFolder(id, x => ({ ...x, backend: to.backend, path: to.path, handle: to.handle }));
   await registerRoots();
   await checkLinkedFolder(id);
   emitChange(null);
@@ -582,7 +856,9 @@ let rechecking = false;
 function startRecheck(): void {
   if (rechecking || typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
   rechecking = true;
-  window.addEventListener('focus', () => { void recheckLinked(); });
+  // Another window or copy of the app may have changed the list meanwhile.
+  window.addEventListener('focus', () => { void refreshLinkedFolders().then(() => recheckLinked()); });
+  bus();
   // The desktop watches; a browser can only look again.
   if (linkedSupport() === 'browser') window.setInterval(() => { if (document.visibilityState === 'visible' && (cache.size || problems.size)) void recheckLinked(); }, 15_000);
 }
@@ -612,6 +888,7 @@ export async function devLinkOpfs(name: string, files: Record<string, Blob | str
 export function resetLinkedForTests(): void {
   for (const w of watchers.values()) w();
   watchers.clear(); backends.clear(); cache.clear(); problems.clear();
-  loading = null;
+  loading = null; listing = null; dbP = null;
+  unsaved.clear(); touched.clear(); gen = 0;
   useLinkedFolders.setState({ loaded: false, folders: [], status: {} });
 }

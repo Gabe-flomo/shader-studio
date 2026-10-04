@@ -49,6 +49,7 @@ export const BUILTIN_LAYERS: readonly BuiltinLayer[] = [
   { kind: 'agents', group: 'particles', label: 'Agents', hint: 'Many agents moved by a stack of rules: flocks (boids), n-body gravity, spring nets, predators and prey, flow fields. Rules seek, flee, align, orbit, catch… Seeded, so takes and websites run the same.', icon: 'swarm' },
   { kind: 'glyphs', group: 'effects', label: 'Glyphs', hint: 'The picture as ASCII, halftone dots, squares or lines.', icon: 'hash' },
   { kind: 'contours', group: 'effects', label: 'Contours', hint: 'Topographic lines through the picture\'s brightness.', icon: 'loop' },
+  { kind: 'motion', group: 'effects', label: 'Motion', hint: 'Where things move in the camera, the picture or a video: a readout (amount, where, which way) for mappings and rules, a matte that shows another layer only where it moves, and a place particles are born. Shows the movement, a heat map or nothing.', icon: 'eye' },
   { kind: 'lens', group: 'effects', label: 'Lens', hint: 'A circle that magnifies, pixelates, blurs or inverts what is under it.', icon: 'search' },
   { kind: 'null', group: 'inputs', label: 'Null', hint: 'A point to drag or animate. Drives mappings, follows things, emits or absorbs particles.', icon: 'grip' },
   { kind: 'audio', group: 'inputs', label: 'Audio', hint: 'Live sound as a waveform, bars, a ring or a blob.', icon: 'wave' },

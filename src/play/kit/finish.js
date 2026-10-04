@@ -31,6 +31,7 @@
  * outside the GPU.
  */
 import { FN_TONE_GLSL, FN_TONE_FUNCTIONS, FN_CRT_MASK_GLSL } from './finishGlsl.js';
+import { gyAtlas } from './glyphs.js';
 
 // ── The catalogue ────────────────────────────────────────────────────────────
 
@@ -256,6 +257,40 @@ export const FN_EFFECTS = {
       FN_P('cx', 'Centre X', 0, 1, 0.01, 0.5, 'Where the rings start. Map a hand or the pointer onto it.'),
       FN_P('cy', 'Centre Y', 0, 1, 0.01, 0.5, 'Where the rings start.'),
     ],
+    note: 'Rings drawn by a formula around one point. For waves that travel, cross each other and trail behind a moving source, use Water.',
+  },
+  // Water is a real simulation (a height field stepped by the wave equation: see "Water" below and
+  // docs/finish-stack.md). A source (the pointer, a layer, a value) stamps into it as it moves, so it
+  // leaves a wake; rain and a rule's Splash drop into it; the surface bends and lights the picture.
+  water: {
+    label: 'Water', group: 'Warp', icon: 'wave',
+    summary: 'A water surface: a moving source leaves a wake, rain and splashes ripple and cross',
+    params: [
+      FN_P('speed', 'Wave speed', 0.05, 2, 0.01, 0.35, 'How fast the waves travel, in picture heights a second.'),
+      FN_P('damping', 'Damping', 0, 1, 0.01, 0.12, 'How quickly the waves die away: low lasts a long time (a still pond), high settles almost at once (thick liquid).'),
+      FN_P('size', 'Size', 0.005, 0.25, 0.001, 0.035, 'How big the source is, in picture heights: a fingertip or a boat. Bigger makes longer waves.'),
+      FN_P('strength', 'Strength', 0, 2, 0.01, 1, 'How tall the waves are: the source’s, the rain’s and a splash’s.'),
+      FN_P('bob', 'Bob', 0, 6, 0.05, 0, 'Times a second the source bobs up and down, sending out rings even while it holds still. 0: it only makes waves as it moves.'),
+      FN_P('refraction', 'Refraction', 0, 1, 0.01, 0.55, 'How much the waves bend the picture under them, like looking through water.'),
+      FN_P('highlights', 'Highlights', 0, 1, 0.01, 0.4, 'Light glinting off the slopes of the waves, and the bright bands their crests focus underneath (caustics).'),
+      FN_P('light', 'Light angle', 0, 360, 1, 135, 'Which way the light comes from across the picture (90 = from the top, 0 = from the right).'),
+      FN_P('x', 'Source X', 0, 1, 0.001, 0.5, 'Source “A value”: where the source is across. Map an LFO, a hand or an XY pad onto it.'),
+      FN_P('y', 'Source Y', 0, 1, 0.001, 0.5, 'Source “A value”: where the source is, up.'),
+      FN_P('length', 'Length', 0, 1, 0.005, 0.2, 'Line: how long it is. Ring: how wide across. Twin: how far apart the two points are. In picture heights.'),
+      FN_P('angle', 'Angle', 0, 360, 1, 0, 'Line and Twin: which way they lie.'),
+      FN_P('rain', 'Rain', 0, 60, 0.5, 0, 'Raindrops a second, landing at random places (the same places in every render). 0 is dry.'),
+      FN_P('drop', 'Drop size', 0.003, 0.08, 0.001, 0.012, 'How big each raindrop is, in picture heights.'),
+      FN_P('edges', 'Open edges', 0, 1, 0.01, 1, '1: waves run off the picture as if the water went on. 0: they bounce back off the frame, like the walls of a tank.'),
+    ],
+    // Presets set numbers and, with `set`, the Source and Shape (see FnPreset).
+    presets: [
+      { name: 'Pond', values: { speed: 0.35, damping: 0.12, size: 0.035, strength: 1, bob: 0, refraction: 0.55, highlights: 0.4, rain: 0, edges: 1 }, set: { shape: 'point' } },
+      { name: 'Rain on glass', values: { speed: 0.7, damping: 0.55, size: 0.02, strength: 0.9, bob: 0, refraction: 0.8, highlights: 0.55, rain: 14, drop: 0.009, edges: 1 }, set: { source: 'none' } },
+      { name: 'Boat wake', values: { speed: 0.3, damping: 0.18, size: 0.045, strength: 1.3, bob: 0, refraction: 0.5, highlights: 0.5, rain: 0, edges: 1 }, set: { shape: 'point' } },
+      { name: 'Ripple tank', values: { speed: 0.3, damping: 0.1, size: 0.025, strength: 2, bob: 3, refraction: 0.5, highlights: 0.7, length: 0.24, angle: 0, rain: 0, edges: 0.6 }, set: { shape: 'twin', source: 'xy' } },
+      { name: 'Shockwave', values: { speed: 1.4, damping: 0.45, size: 0.06, strength: 2, bob: 0, refraction: 1, highlights: 0.3, rain: 0, edges: 1 }, set: { shape: 'point' } },
+    ],
+    note: 'Move the source and it leaves a wake; give it Bob and it rings while it holds still. A rule’s Splash drops into the water anywhere. Other effects can show only where the water moves: their Where → Where the water moves.',
   },
   displace: {
     label: 'Displace', group: 'Warp', icon: 'curve',
@@ -400,18 +435,30 @@ export const FN_EFFECTS = {
   // centre), so each starts a pass of its own (FN_STAGE_KINDS, fnSegments) and sees every effect above it.
   pixelsort: {
     label: 'Pixel sort', group: 'Glitch', icon: 'sliders',
-    summary: 'Bright runs of pixels stretched into sorted streaks',
+    summary: 'Bright runs of pixels stretched into sorted streaks, still or running like paint',
     params: [
       FN_P('threshold', 'Threshold', 0, 1, 0.01, 0.45, 'Only parts brighter than this are sorted: lower sorts more of the picture.'),
       FN_P('length', 'Length', 0, 1, 0.01, 0.35, 'The longest a streak can be, as a share of the picture’s height.'),
       FN_P('angle', 'Direction', 0, 360, 1, 270, 'Which way the streaks run (270 = falling down, 0 = to the right).'),
       FN_P('amount', 'Amount', 0, 1, 0.01, 1, 'How much of the sorted picture shows.'),
+      // Motion (all 0 = the still streaks of before). Each is a function of the clock (Trail of the frame
+      // before too), so a render plays them back the same every time.
+      FN_P('flow', 'Flow', -1, 1, 0.01, 0, 'Streaks slide along their direction, like running paint: picture heights a second (minus runs them backwards). 0 holds them still.'),
+      FN_P('drip', 'Drip', 0, 1, 0.01, 0, 'Each streak gets a speed and a stretch of its own, so they run and sag independently instead of moving as one sheet.'),
+      FN_P('breathe', 'Breathe', 0, 0.5, 0.01, 0, 'The threshold rises and falls slowly by this much, so the sorted areas swell and shrink.'),
+      FN_P('wander', 'Wander', 0, 90, 1, 0, 'The streaks’ direction sways either way by up to this many degrees.'),
+      FN_P('turbulence', 'Turbulence', 0, 1, 0.01, 0, 'Noise on where each streak starts and on its edge, so the edges flicker and melt.'),
+      FN_P('trail', 'Trail', 0, 0.98, 0.01, 0, 'Sorted pixels keep some of the frame before, and moving streaks leave a fading tail.'),
+      FN_P('rate', 'Rate', 0, 4, 0.01, 0.5, 'How fast Breathe, Wander and Turbulence move.'),
     ],
     presets: [
-      { name: 'Drip', values: { threshold: 0.45, length: 0.35, angle: 270, amount: 1 } },
-      { name: 'Sideways', values: { threshold: 0.3, length: 0.6, angle: 0, amount: 1 } },
-      { name: 'Melt', values: { threshold: 0.15, length: 0.8, angle: 270, amount: 1 } },
+      { name: 'Drip', values: { threshold: 0.45, length: 0.35, angle: 270, amount: 1, flow: 0, drip: 0, breathe: 0, wander: 0, turbulence: 0, trail: 0, rate: 0.5 } },
+      { name: 'Sideways', values: { threshold: 0.3, length: 0.6, angle: 0, amount: 1, flow: 0, drip: 0, breathe: 0, wander: 0, turbulence: 0, trail: 0, rate: 0.5 } },
+      { name: 'Melt', values: { threshold: 0.2, length: 0.7, angle: 270, amount: 1, flow: 0.08, drip: 0.75, breathe: 0.06, wander: 0, turbulence: 0.35, trail: 0.6, rate: 0.3 } },
+      { name: 'Rain', values: { threshold: 0.35, length: 0.22, angle: 270, amount: 1, flow: 0.55, drip: 1, breathe: 0, wander: 5, turbulence: 0.15, trail: 0.7, rate: 0.6 } },
+      { name: 'Glitch drift', values: { threshold: 0.3, length: 0.55, angle: 0, amount: 1, flow: 0.12, drip: 0.4, breathe: 0.12, wander: 20, turbulence: 0.8, trail: 0.3, rate: 1.2 } },
     ],
+    note: 'Flow, Drip, Breathe, Wander, Turbulence and Trail make the streaks move by themselves, even over a still picture.',
   },
   halftone: {
     label: 'Halftone', group: 'Stylise', icon: 'grid',
@@ -439,6 +486,7 @@ export const FN_EFFECTS = {
       FN_P('background', 'Background', 0, 1, 0.01, 0.12, 'How much of the picture shows dimly behind the characters.'),
       FN_P('contrast', 'Contrast', 0, 1, 0.01, 0.4, 'Spreads the picture across more of the characters, from sparse dots to dense blocks.'),
       FN_P('inkR', 'Ink R', 0, 1, 0.01, 0.3, '', true), FN_P('inkG', 'Ink G', 0, 1, 0.01, 1, '', true), FN_P('inkB', 'Ink B', 0, 1, 0.01, 0.5, '', true),
+      FN_P('own', 'Own colours', 0, 1, 0.01, 0, 'Typed characters only: 1 keeps each glyph’s own colours (emoji), 0 tints it by Colour.', true),
     ],
     colours: [{ label: 'Ink', keys: ['inkR', 'inkG', 'inkB'], hint: 'The characters’ colour when Colour is below 1.' }],
     presets: [
@@ -534,13 +582,31 @@ export function fnSourceOf(e) {
 /** What Datamosh's movement is measured on: the picture itself, or a layer drawn alone (a Camera layer, hidden or not). */
 export const FN_MOSH_MAPS = ['picture', 'layer'];
 
-/** Running effects split into passes: a new one at each FN_STAGE_KINDS or FN_TEMPORAL_KINDS effect (unless it is first). */
+/** Pixel sort's motion settings (0 = still), shown in a Motion section of their own on its card. */
+export const FN_SORT_MOTION = ['flow', 'drip', 'breathe', 'wander', 'turbulence', 'trail', 'rate'];
+
+/**
+ * Does this Pixel sort keep a trail (its sorted picture from the frame before)? The renderer marks
+ * it (`trailOn`, from Trail as driven now); elsewhere Trail above 0 says so.
+ */
+export function fnSortTrails(e) {
+  return !!e && e.kind === 'pixelsort' && (e.trailOn !== undefined ? !!e.trailOn : (+e.trail || 0) > 0);
+}
+
+/**
+ * Running effects split into passes: a new one at each FN_STAGE_KINDS or FN_TEMPORAL_KINDS effect
+ * (unless it is first). A Pixel sort with a trail also ends its pass, so the pass's output is the
+ * sorted picture alone (kept for the next frame); last in the stack, an empty pass follows it.
+ */
 export function fnSegments(effects) {
   const out = [];
+  let cut = false;
   for (const e of effects) {
-    if (!out.length || ((FN_STAGE_KINDS.includes(e.kind) || FN_TEMPORAL_KINDS.includes(e.kind)) && out[out.length - 1].length)) out.push([]);
+    if (!out.length || cut || ((FN_STAGE_KINDS.includes(e.kind) || FN_TEMPORAL_KINDS.includes(e.kind)) && out[out.length - 1].length)) out.push([]);
     out[out.length - 1].push(e);
+    cut = fnSortTrails(e);
   }
+  if (cut) out.push([]);
   return out;
 }
 
@@ -557,17 +623,18 @@ FN_EFFECTS.halation.presets = FN_HALATION_PRESETS;
 
 /** The kinds in the Add menu's order. Each kind appears at most once in a stack. */
 export const FN_KINDS = ['grade', 'lens', 'chroma', 'vignette', 'crt', 'bloom', 'halation', 'grain', 'flicker', 'shake', 'time',
-  'glitch', 'ripple', 'displace', 'mosaic', 'mirror', 'gradmap', 'posterize', 'edges', 'feedback', 'echo', 'pixelsort', 'halftone', 'ascii', 'leaks',
+  'glitch', 'ripple', 'water', 'displace', 'mosaic', 'mirror', 'gradmap', 'posterize', 'edges', 'feedback', 'echo', 'pixelsort', 'halftone', 'ascii', 'leaks',
   'datamosh', 'motionx'];
 export const FN_TONE_MODES = ['none', 'aces', 'agx', 'hable', 'reinhard2', 'unreal', 'lottes', 'uchimura', 'tanh', 'oklab'];
 export const FN_TIME_MAPS = ['slit', 'luma', 'noise', 'radial', 'layer'];
 /**
  * Where an effect shows (every effect, custom ones too): everywhere, or weighted by a map (0..1)
  * read at each point of the picture: a layer's alpha (the layer drawn alone, hidden or not), the
- * picture's own brightness, or where the camera sees movement (the kit's motion map). `whereInvert`
- * swaps in and out. Absent = everywhere, so older records are unchanged.
+ * picture's own brightness, where the camera sees movement (the kit's motion map), or where the
+ * stack's Water moves (its wave height: nothing without a Water effect). `whereInvert` swaps in
+ * and out. Absent = everywhere, so older records are unchanged.
  */
-export const FN_WHERE = ['all', 'layer', 'picture', 'motion'];
+export const FN_WHERE = ['all', 'layer', 'picture', 'motion', 'waves'];
 /** What pushes the picture in Displace. */
 export const FN_DISPLACE_MAPS = ['noise', 'picture', 'layer', 'motion'];
 /** The most map textures (layers drawn alone, the motion map) one pass reads. */
@@ -611,6 +678,10 @@ export function fnDefaultEffect(kind, id) {
   if (kind === 'displace') { e.map = 'noise'; e.layerId = ''; }
   if (kind === 'datamosh' || kind === 'feedback' || kind === 'echo') { e.map = 'picture'; e.layerId = ''; }
   if (kind === 'halation') e.model = FN_HAL.model;
+  // ASCII: no typed characters draws the built-in 5 × 5 ones (FN_ASCII_GLYPHS); typed ones are ordered by how much they cover unless keepOrder.
+  if (kind === 'ascii') { e.chars = ''; e.keepOrder = false; }
+  // Water: the pointer stamps a point; a Layer source or a Layer shape names its layer (sourceLayer, layerId).
+  if (kind === 'water') { e.source = 'pointer'; e.sourceLayer = ''; e.shape = 'point'; e.layerId = ''; e.detail = 'medium'; }
   return e;
 }
 
@@ -653,8 +724,9 @@ export function fnRunning(finish) {
 export function fnAnimated(finish) {
   return fnRunning(finish).some(e => (e.kind === 'grain' && e.fps > 0) || e.kind === 'shake' || e.kind === 'flicker' || e.kind === 'time' || (e.kind === 'crt' && e.pulse > 0) || (e.kind === 'custom' && /\btime\b/.test(e.code))
     || (e.kind === 'glitch' && e.speed > 0 && e.amount > 0) || (e.kind === 'ripple' && e.speed !== 0) || (e.kind === 'displace' && (e.map === 'motion' || ((e.map || 'noise') === 'noise' && e.speed > 0)))
-    || e.kind === 'feedback' || FN_TEMPORAL_KINDS.includes(e.kind) || fnWhereOf(e) === 'motion'
-    || (e.kind === 'mirror' && (+e.spin || 0) !== 0) || (e.kind === 'edges' && e.rainbow > 0) || (e.kind === 'leaks' && e.speed > 0 && e.amount > 0));
+    || e.kind === 'feedback' || FN_TEMPORAL_KINDS.includes(e.kind) || fnWhereOf(e) === 'motion' || e.kind === 'water'
+    || (e.kind === 'mirror' && (+e.spin || 0) !== 0) || (e.kind === 'edges' && e.rainbow > 0) || (e.kind === 'leaks' && e.speed > 0 && e.amount > 0)
+    || (e.kind === 'pixelsort' && ((+e.flow || 0) !== 0 || e.drip > 0 || (e.rate > 0 && (e.breathe > 0 || e.wander > 0 || e.turbulence > 0)) || e.trail > 0)));
 }
 
 // ── Maps: what an effect's Where (and Displace, and Time's Layer map) reads ────
@@ -662,7 +734,7 @@ export function fnAnimated(finish) {
 /** An effect's Where ('all' when absent or odd). */
 export function fnWhereOf(e) {
   const w = e && e.where;
-  return w === 'layer' || w === 'picture' || w === 'motion' ? w : 'all';
+  return w === 'layer' || w === 'picture' || w === 'motion' || w === 'waves' ? w : 'all';
 }
 function fnMapKey(kind, layerId) {
   if (kind === 'motion') return 'motion';
@@ -680,6 +752,8 @@ export function fnMapKeys(effects) {
     if (e.kind === 'time' && e.map === 'layer') add(fnMapKey('layer', e.layerId));
     if (e.kind === 'displace') add(fnMapKey(e.map, e.layerId));
     if ((e.kind === 'datamosh' || e.kind === 'feedback' || e.kind === 'echo') && e.map === 'layer') add(fnMapKey('layer', e.layerId));
+    // Water with a layer as its Shape stamps that layer's alpha.
+    if (e.kind === 'water' && fnWaterShapeOf(e) === 'layer') add(fnMapKey('layer', e.layerId));
     add(fnMapKey(fnWhereOf(e), e.whereLayer));
   }
   return keys;
@@ -711,10 +785,11 @@ export function fnUsesMotion(finish) {
  *
  * Each `uniform float` (or `int`) becomes a slider and a control target; a
  * comment after it gives `min..max = default`, optionally `step s` and a label
- * (`// 2..16 = 6 step 1 Levels`). A `uniform vec3` is a colour
- * (`// color = #rrggbb`), kept as three numbers `<name>.r`, `.g`, `.b`.
+ * (`// 2..16 = 6 step 1 Levels`), and ` | text` after that its hint
+ * (`// 0..1 = 0.5 Amount | How much of the effect shows`). A `uniform vec3`
+ * is a colour (`// color = #rrggbb`), kept as three numbers `<name>.r`, `.g`, `.b`.
  */
-export const FN_CUSTOM_RESERVED = ['id', 'kind', 'enabled', 'name', 'code', 'defId', 'sealed', 'source', 'look', 'tone', 'curves', 'map', 'layerId', 'quality', 'where', 'whereLayer', 'whereInvert', 'uv', 'color', 'effect', 'picture', 'px', 'time', 'resolution', 'aspect', 'main'];
+export const FN_CUSTOM_RESERVED = ['id', 'kind', 'enabled', 'name', 'code', 'defId', 'sealed', 'source', 'graph', 'look', 'tone', 'curves', 'map', 'layerId', 'quality', 'where', 'whereLayer', 'whereInvert', 'uv', 'color', 'effect', 'picture', 'px', 'time', 'resolution', 'aspect', 'main'];
 const FN_CUSTOM_MAX_NUMBERS = 32;
 const FN_NUM = '[-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?';
 
@@ -754,17 +829,21 @@ export function fnParseCustom(code) {
     if (FN_CUSTOM_RESERVED.includes(name) || /^(fn|FN_|U_|u[A-Z])/.test(name)) { errors.push(`Line ${i + 1}: “${name}” is a name the Finish pass uses; call the setting something else.`); return ''; }
     if (names.has(name)) { errors.push(`Line ${i + 1}: “${name}” is declared twice.`); return ''; }
     names.add(name);
+    // ` | text` at the end of the comment is the setting's hint (its tooltip).
+    const bar = comment.indexOf(' | ');
+    const hint = bar >= 0 ? comment.slice(bar + 3).trim() : '';
+    const body = bar >= 0 ? comment.slice(0, bar) : comment;
     if (type === 'vec3') {
-      const hex = /#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/.exec(comment);
+      const hex = /#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/.exec(body);
       const rgb = hex ? fnHexRgb(hex[1]) : [1, 1, 1];
-      const label = comment.replace(/colou?r\s*=?\s*/i, '').replace(/#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/, '').trim() || fnPretty(name);
+      const label = body.replace(/colou?r\s*=?\s*/i, '').replace(/#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/, '').trim() || fnPretty(name);
       const keys = ['r', 'g', 'b'].map(c => `${name}.${c}`);
-      keys.forEach((k, j) => params.push(Object.assign(FN_P(k, `${label} ${'RGB'[j]}`, 0, 1, 0.01, rgb[j], '', true), { colour: name, type: 'colour' })));
-      colours.push({ name, label, keys });
+      keys.forEach((k, j) => params.push(Object.assign(FN_P(k, `${label} ${'RGB'[j]}`, 0, 1, 0.01, rgb[j], hint, true), { colour: name, type: 'colour' })));
+      colours.push(hint ? { name, label, keys, hint } : { name, label, keys });
       return '';
     }
     let min = 0, max = 1, value = NaN, step = NaN;
-    let rest = comment.trim();
+    let rest = body.trim();
     const range = new RegExp(`^(${FN_NUM})\\s*\\.\\.\\s*(${FN_NUM})`).exec(rest);
     if (range) { min = +range[1]; max = +range[2]; rest = rest.slice(range[0].length).trim(); }
     const def = new RegExp(`^=\\s*(${FN_NUM})`).exec(rest);
@@ -778,7 +857,7 @@ export function fnParseCustom(code) {
     const whole = type === 'int' || (!!range && !/\./.test(range[0]) && Number.isInteger(value) && max - min >= 2);
     if (!isFinite(step) || step <= 0) step = whole ? 1 : Math.max(1e-4, +((max - min) / 100).toPrecision(2));
     value = Math.max(min, Math.min(max, value));
-    params.push(Object.assign(FN_P(name, label || fnPretty(name), min, max, step, value, ''), { type }));
+    params.push(Object.assign(FN_P(name, label || fnPretty(name), min, max, step, value, hint), { type }));
     return '';
   });
   if (params.length > FN_CUSTOM_MAX_NUMBERS) errors.push(`At most ${FN_CUSTOM_MAX_NUMBERS} numbers (a colour is three).`);
@@ -1260,6 +1339,296 @@ export function fnEchoPixel(now, then, p = {}) {
   return out.map(x => fnClamp01(x));
 }
 
+// ── Water (a simulated surface) ──────────────────────────────────────────────
+
+/**
+ * Water is a height field h on a small grid (FN_WATER.detail rows, as many columns as the frame's
+ * aspect needs), stepped by the damped 2D wave equation in the usual leapfrog form:
+ *
+ *   h' = d · (2h − h₋ + C² ∇²h + ν ∇²(h − h₋)) + f,   h₋' = h + f
+ *
+ * ∇² is the 5-point Laplacian (an edge cell's missing neighbour is itself, so the frame reflects,
+ * unless Open edges lets waves out through it: Mur's first-order open boundary, fnWaterMur), C the Courant number (the cells a wave
+ * crosses in a step: stable up to 1/√2, kept to FN_WATER.maxC), d the damping per step, ν a little
+ * viscosity (FN_WATER.visc: the shortest ripples, a cell or two long, die within a fraction of a
+ * second, as on real water, while waves a few cells long hardly feel it) and f what
+ * the drops add: a displacement, so it shifts the height a step ago too and sets nothing moving by
+ * itself. Each texel keeps h and h₋. fnWaterStep is the same step on the CPU.
+ *
+ * Time: the water ticks FN_WATER.rate times a second of the clock (fnWaterTick), never per frame, so
+ * a 30 fps render, a 144 Hz screen and an exported page step the same ticks; each tick takes enough
+ * substeps that a wave at Wave speed crosses at most maxC cells in one (fnWaterPlan). A frame runs
+ * the ticks since the frame before (at most maxTicks: after a stall it only catches up that far). A
+ * render's first frame, a clock sent back or a reset start the water flat (fnWaterFrame).
+ *
+ * A source presses a dimple into the surface, Strength × push deep (times its bob), with a low rim
+ * holding the water it pushed aside (fnWaterPress), and stamps the change in it each substep:
+ * f = −k (P(now) − P(a substep ago)). Holding still it adds nothing; moving, it pushes the water
+ * down ahead of it and lets it back up behind, so a wake trails it (a V when it moves faster than
+ * the waves); appearing, going, or bobbing (its depth swinging) sends out rings. With its rim it adds
+ * no water, so the level stays flat. A stamp that would push a crest (or a trough) further its own
+ * way fades as it nears FN_WATER.crest × the dimple's depth, so a source keeping pace with its own
+ * bow wave can't pile it up without end. A map shape (a layer's alpha, the bright parts) is its own
+ * dimple, without a rim. A frame's movement is spread
+ * over its substeps (from where the source was at the frame before to where it is now), so a fast
+ * flick leaves an unbroken wake. Rain (fnWaterRain) and a rule's Splash drop a bump with no volume
+ * of its own (a dimple inside a ring: fnWaterDrop) once, at a tick.
+ */
+export const FN_WATER = {
+  rate: 60, maxC: 0.5, maxTicks: 8, maxSub: 24, maxDrops: 8,
+  detail: { low: 180, medium: 270, high: 405 },
+  // How deep a source presses and a raindrop pushes, per unit of Strength (a splash pushes splash × a raindrop),
+  // and how much of the way to its dimple a source pulls the water each substep, where its shape is solid.
+  push: 0.5, dropPush: 0.6, splash: 1.2, crest: 2, visc: 0.006,
+  // Seeing it: how far a unit of slope (per picture height) bends the picture at Refraction 1 (picture heights), how far it
+  // tilts the surface for the light, how bright a unit of curvature makes the caustics, and Where → waves' scale on height and slope.
+  view: { bend: 0.005, tilt: 0.05, caustic: 0.00015, slopeMax: 60, waveH: 2.5, waveS: 0.05 },
+};
+/** Where Water's source is: the pointer, a layer's position, its Source X/Y numbers, or nowhere (only rain and splashes). */
+export const FN_WATER_SOURCES = ['pointer', 'layer', 'xy', 'none'];
+/** The source's shape: a point, a line, a ring, two points (interference), a layer's alpha, or the picture's bright parts. */
+export const FN_WATER_SHAPES = ['point', 'line', 'ring', 'twin', 'layer', 'picture'];
+export const FN_WATER_DETAILS = ['low', 'medium', 'high'];
+export function fnWaterSourceOf(e) { return e && FN_WATER_SOURCES.includes(e.source) ? e.source : 'pointer'; }
+export function fnWaterShapeOf(e) { return e && FN_WATER_SHAPES.includes(e.shape) ? e.shape : 'point'; }
+/** Does the shape stamp a map (a layer's alpha, the bright parts) rather than a shape at the source's place? */
+export function fnWaterMapShape(shape) { return shape === 'layer' || shape === 'picture'; }
+
+/** The grid for a frame size: Detail's rows (never more than the frame has), columns for its aspect. */
+export function fnWaterGrid(detail, W, H) {
+  const rows = FN_WATER.detail[detail] || FN_WATER.detail.medium;
+  const h = Math.max(16, Math.min(rows, Math.round(H) || rows));
+  return { w: Math.max(16, Math.round(h * Math.max(1, W) / Math.max(1, H))), h };
+}
+/**
+ * A tick's substeps at a Wave speed (picture heights a second) on a grid `rows` high: as few as keep
+ * C at most maxC. `c` is the Courant number each substep uses (lower than asked only past maxSub).
+ */
+export function fnWaterPlan(speed, rows) {
+  const cells = Math.max(0, Math.min(4, +speed || 0)) * rows / FN_WATER.rate;
+  const sub = Math.max(1, Math.min(FN_WATER.maxSub, Math.ceil(cells / FN_WATER.maxC - 1e-9)));
+  const c = Math.min(FN_WATER.maxC, cells / sub);
+  return { sub, c, c2: c * c, dt: 1 / (FN_WATER.rate * sub) };
+}
+/** Damping (0..1) as a rate: the waves' height falls by e each 1 / rate seconds (0.05 a second at 0, 6 at 1). */
+export function fnWaterDecay(damping) {
+  const d = Math.max(0, Math.min(1, +damping || 0));
+  return 0.05 + 6 * d * d;
+}
+/**
+ * The step's d for a Damping over a substep of `dt` seconds. d multiplies both heights the step mixes,
+ * so a wave keeps √d of itself a step: d = e^(−2 · rate · dt) makes it fall at fnWaterDecay's rate.
+ */
+export function fnWaterDamp(damping, dt) { return Math.exp(-2 * dt * fnWaterDecay(damping)); }
+/** The tick the clock is on. */
+export function fnWaterTick(time) { return Math.floor(Math.max(0, +time || 0) * FN_WATER.rate + 1e-6); }
+/** A number in 0..1 from two integers, the same in every browser (rain's places, a random splash). */
+export function fnWaterHash(a, b) {
+  let h = (Math.imul((a | 0) ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul((b | 0) + 0x632be5ab, 0xc2b2ae35)) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 0x7feb352d) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x846ca68b) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+/**
+ * The raindrops landing at tick `n` at `rate` drops a second: [x, y] each (0..1, y up). The count
+ * comes from a jittered running total (rate × (n + 0.95 · hash)), so drops come at the right rate on
+ * average but not on a beat, and every render places them the same.
+ */
+export function fnWaterRain(rate, n) {
+  const l = Math.max(0, +rate || 0) / FN_WATER.rate;
+  if (!(l > 0)) return [];
+  const R = k => l * (k + 0.95 * fnWaterHash(k, 7));
+  const count = Math.max(0, Math.min(FN_WATER.maxDrops, Math.floor(R(n + 1)) - Math.floor(R(n))));
+  const out = [];
+  for (let i = 0; i < count; i++) out.push([fnWaterHash(n, 2 * i + 11), fnWaterHash(n, 2 * i + 12)]);
+  return out;
+}
+/** The source's bob at time t: 1 when still (Bob 0), else swinging 0..2 at Bob times a second. */
+export function fnWaterBob(bob, t) {
+  return bob > 0 ? 1 + Math.sin(2 * Math.PI * bob * t) : 1;
+}
+/**
+ * How a source presses the water at (vx, vy) picture heights from its place: [depth, reach]. Its shape
+ * (a point, a line Length long at Angle, a ring Length across, or two points Length apart) is a
+ * distance d from it, Size wide (σ = Size / 2, at least about a cell at `rows` rows): the dimple, as
+ * deep as its bob says, with its rim, bob · exp(−q) − r · exp(−q / 4) with q = d² / 2σ² (r = ¼ round
+ * a point, ½ across a line or a ring, so at rest the rim holds what the dimple pushed aside, and a
+ * bobbing dimple breathes water in and out like a plunger). The step shader's fnWPress.
+ */
+export function fnWaterPress(shape, vx, vy, size, length, angle, rows, bob = 1) {
+  const sg = Math.max(size * 0.5, 1.2 / rows);
+  const a = angle * Math.PI / 180, ax = Math.cos(a) * length * 0.5, ay = Math.sin(a) * length * 0.5;
+  let d, rim = 0.25;
+  if (shape === 'line') {
+    const px = vx + ax, py = vy + ay, bx = 2 * ax, by = 2 * ay, bb = bx * bx + by * by;
+    const t = bb > 1e-12 ? Math.max(0, Math.min(1, (px * bx + py * by) / bb)) : 0;
+    d = Math.hypot(px - bx * t, py - by * t); rim = 0.5;
+  } else if (shape === 'ring') { d = Math.abs(Math.hypot(vx, vy) - length * 0.5); rim = 0.5; }
+  else if (shape === 'twin') d = Math.min(Math.hypot(vx - ax, vy - ay), Math.hypot(vx + ax, vy + ay));
+  else d = Math.hypot(vx, vy);
+  const q = d * d / (2 * sg * sg);
+  return bob * Math.exp(-q) - rim * Math.exp(-q / 4);
+}
+/** A source's stamp `f` where the water is at `h`: whole, unless it pushes h further its own way, when it fades out by `cap`. */
+export function fnWaterLimit(f, h, cap) {
+  return f * h > 0 ? f * Math.max(0, 1 - Math.abs(h) / Math.max(1e-6, cap)) : f;
+}
+/** A raindrop's or a splash's bump at distance d from its centre, radius r: a dimple inside a ring holding the same volume, so it adds none. */
+export function fnWaterDrop(d, r) {
+  const q = d * d / (2 * r * r);
+  return Math.exp(-q) - 0.25 * Math.exp(-q / 4);
+}
+/**
+ * One substep on the CPU (the step shader's maths): `g` { w, h, now, prev } (Float32Arrays, row 0 at
+ * the bottom), `o` { c2, damp, visc?, edges (0 reflects, 1 lets waves out), force? (per cell) }. Returns the grid one substep on (new arrays).
+ */
+export function fnWaterStep(g, o) {
+  const { w, h, now, prev } = g;
+  const out = new Float32Array(w * h);
+  const at = (i, j) => now[Math.max(0, Math.min(h - 1, j)) * w + Math.max(0, Math.min(w - 1, i))];
+  // The plain step at a cell (no stamps, no soaking up): what an edge cell's open boundary reads of its neighbour.
+  const visc = o.visc || 0;
+  const pat = (i, j) => prev[Math.max(0, Math.min(h - 1, j)) * w + Math.max(0, Math.min(w - 1, i))];
+  const lapAt = (f, i, j) => f(i - 1, j) + f(i + 1, j) + f(i, j - 1) + f(i, j + 1) - 4 * f(i, j);
+  const next = (i, j) => o.damp * (2 * now[j * w + i] - prev[j * w + i] + o.c2 * lapAt(at, i, j) + visc * (lapAt(at, i, j) - lapAt(pat, i, j)));
+  const edges = Math.max(0, Math.min(1, o.edges || 0)), mur = fnWaterMur(o.c2);
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) {
+      const k = j * w + i, c = now[k];
+      let v = next(i, j);
+      if (edges > 0 && (i === 0 || j === 0 || i === w - 1 || j === h - 1)) {
+        // Open edges: the frame's own cells let a wave out (Mur's boundary: the cell inside, a step on, travelling out).
+        let sum = 0, n = 0;
+        if (i === 0) { sum += at(1, j) + mur * (next(1, j) - c); n++; }
+        if (i === w - 1) { sum += at(w - 2, j) + mur * (next(w - 2, j) - c); n++; }
+        if (j === 0) { sum += at(i, 1) + mur * (next(i, 1) - c); n++; }
+        if (j === h - 1) { sum += at(i, h - 2) + mur * (next(i, h - 2) - c); n++; }
+        v += (sum / n - v) * edges;
+      }
+      out[k] = v;
+    }
+  }
+  // The stamps move the surface without setting it moving: both heights shift (a kick to h' alone would be a push that keeps going).
+  if (!o.force) return { w, h, now: out, prev: now };
+  const was = Float32Array.from(now);
+  for (let k = 0; k < w * h; k++) { out[k] += o.force[k]; was[k] += o.force[k]; }
+  return { w, h, now: out, prev: was };
+}
+/**
+ * Mur's open boundary's factor at a Courant number² c2: (C − 1) / (C + 1). An edge cell becomes its
+ * inner neighbour as it was, plus this × (that neighbour a step on − the edge cell now): a wave
+ * travelling out of the frame carries on as if the water went on (head-on, entirely; at a slant,
+ * mostly). Measured on a splash, over 99% of it leaves (fnWaterStep, the tests).
+ */
+export function fnWaterMur(c2) { const c = Math.sqrt(Math.max(0, c2)); return (c - 1) / (c + 1); }
+/**
+ * The leapfrog scheme's energy: Σ (h − h₋)² plus C² × Σ over neighbouring cells of (hᵢ − hⱼ)(hᵢ₋ − hⱼ₋).
+ * Undamped (and without edges soaking up) it stays the same step after step; damping takes it down.
+ */
+export function fnWaterEnergy(g, c2) {
+  const { w, h, now, prev } = g;
+  let e = 0;
+  for (let k = 0; k < w * h; k++) e += (now[k] - prev[k]) ** 2;
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) {
+      const k = j * w + i;
+      if (i + 1 < w) e += c2 * (now[k] - now[k + 1]) * (prev[k] - prev[k + 1]);
+      if (j + 1 < h) e += c2 * (now[k] - now[k + w]) * (prev[k] - prev[k + w]);
+    }
+  }
+  return e;
+}
+
+/** A Water effect's frame-to-frame state (kept by the renderer, and by fnWaterCpu). */
+export function fnWaterState() { return { valid: false, tick: 0, lastT: 0, p: null, splashSeen: undefined, pending: [] }; }
+/**
+ * One frame of water, planned: whether it starts flat, and the substeps to run, each with what its
+ * stamps need: the source's place a substep ago and now (p0, p1; null when there is none), its bob
+ * then and now (b0, b1), how far through the frame's movement each is (s0, s1: a map shape's
+ * occupancy goes from the frame before's to this one's) and the drops landing [x, y, radius, push].
+ * `f`: { time, first, speed, rows, point ({x, y} or null), bob, strength, rain, drop, splash ({ t, x,
+ * y, size } or null: the latest Splash, x −1 at the source, −2 somewhere random, −3 under `pointer`
+ * ({x, y} or null; at the source without one)) }. The renderer and the CPU twin run the same plan.
+ */
+export function fnWaterFrame(st, f) {
+  const time = Math.max(0, +f.time || 0);
+  const n = fnWaterTick(time);
+  const reset = !!f.first || !st.valid || time < st.lastT - 1e-6;
+  if (reset) { st.valid = true; st.tick = n; st.p = f.point ? { x: f.point.x, y: f.point.y } : null; st.pending = []; }
+  // A rule's Splash: once for each one fired (its time tells them apart), at the next tick.
+  const sp = f.splash;
+  if (sp && isFinite(sp.t) && sp.t !== st.splashSeen) {
+    st.splashSeen = sp.t;
+    let x = sp.x, y = sp.y;
+    if (x === -1 || x === -3) { const q = (x === -3 && f.pointer) || f.point || st.p; x = q ? q.x : 0.5; y = q ? q.y : 0.5; }
+    else if (!(x >= 0)) { const k = Math.round(sp.t * 1000); x = 0.1 + 0.8 * fnWaterHash(k, 3); y = 0.1 + 0.8 * fnWaterHash(k, 5); }
+    st.pending.push([x, y, Math.max(0.004, +sp.size || 0.05), FN_WATER.dropPush * FN_WATER.splash * (+f.strength || 0)]);
+  }
+  const plan = fnWaterPlan(f.speed, f.rows);
+  let count = Math.max(0, n - st.tick);
+  if (count > FN_WATER.maxTicks) { st.tick = n - FN_WATER.maxTicks; count = FN_WATER.maxTicks; }
+  const steps = [];
+  const pA = st.p, pB = f.point ? { x: f.point.x, y: f.point.y } : null;
+  // Where the source is a fraction s through the frame's movement (one that just appeared, or just went, holds its place).
+  const at = s => (pA && pB ? { x: pA.x + (pB.x - pA.x) * s, y: pA.y + (pB.y - pA.y) * s } : pB && s > 0 ? pB : pA && s < 1 ? pA : null);
+  const total = count * plan.sub;
+  const dropR = Math.max(0.002, +f.drop || 0.012), rainPush = FN_WATER.dropPush * (+f.strength || 0);
+  for (let t = 0; t < count; t++) {
+    const tick = st.tick + t + 1;
+    const drops = fnWaterRain(f.rain, tick).map(([x, y]) => [x, y, dropR, rainPush]);
+    if (t === 0 && st.pending.length) { drops.push(...st.pending); st.pending = []; }
+    for (let k = 0; k < plan.sub; k++) {
+      const i = t * plan.sub + k, s0 = i / total, s1 = (i + 1) / total;
+      const t0 = (tick - 1 + k / plan.sub) / FN_WATER.rate, t1 = (tick - 1 + (k + 1) / plan.sub) / FN_WATER.rate;
+      steps.push({ p0: at(s0), p1: at(s1), b0: fnWaterBob(f.bob, t0), b1: fnWaterBob(f.bob, t1), s0, s1, drops: k === 0 ? drops.slice(0, FN_WATER.maxDrops) : [] });
+    }
+  }
+  st.tick = n; st.lastT = time; st.p = pB;
+  return { reset, steps, plan, ticks: count };
+}
+
+/**
+ * The renderer's water on the CPU, for the tests: the same plan (fnWaterFrame), stamps and step on a
+ * w × h grid. `frame(f)` takes fnWaterFrame's input plus `value(key)` (the effect's numbers), `shape`,
+ * and `occ` (a map shape's occupancy now, a number per cell); `grid` is the height field.
+ */
+export function fnWaterCpu(w, h, aspect = w / h) {
+  const st = fnWaterState();
+  let g = { w, h, now: new Float32Array(w * h), prev: new Float32Array(w * h) };
+  let occPrev = null;
+  return {
+    get grid() { return g; },
+    state: st,
+    frame(f) {
+      const v = k => f.value(k);
+      const out = fnWaterFrame(st, Object.assign({ rows: h, speed: v('speed'), bob: v('bob'), strength: v('strength'), rain: v('rain'), drop: v('drop') }, f));
+      if (out.reset) { g = { w, h, now: new Float32Array(w * h), prev: new Float32Array(w * h) }; occPrev = f.occ || null; }
+      const damp = fnWaterDamp(v('damping'), out.plan.dt);
+      const shape = f.shape || 'point', k = FN_WATER.push * v('strength');
+      const occNow = f.occ || null, occThen = occPrev || occNow;
+      for (const s of out.steps) {
+        const force = new Float32Array(w * h);
+        for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+          const u = (i + 0.5) / w, y = (j + 0.5) / h;
+          let o0 = 0, o1 = 0;
+          if (fnWaterMapShape(shape)) {
+            if (occNow) { const a = occThen[j * w + i], b = occNow[j * w + i]; o0 = (a + (b - a) * s.s0) * s.b0; o1 = (a + (b - a) * s.s1) * s.b1; }
+          } else {
+            if (s.p0) o0 = fnWaterPress(shape, (u - s.p0.x) * aspect, y - s.p0.y, v('size'), v('length'), v('angle'), h, s.b0);
+            if (s.p1) o1 = fnWaterPress(shape, (u - s.p1.x) * aspect, y - s.p1.y, v('size'), v('length'), v('angle'), h, s.b1);
+          }
+          let fc = fnWaterLimit(-k * (o1 - o0), g.now[j * w + i], FN_WATER.crest * k);
+          for (const d of s.drops) fc -= d[3] * fnWaterDrop(Math.hypot((u - d[0]) * aspect, y - d[1]), d[2]);
+          force[j * w + i] = fc;
+        }
+        g = fnWaterStep(g, { c2: out.plan.c2, damp, visc: FN_WATER.visc, edges: v('edges'), force });
+      }
+      occPrev = occNow;
+      return out;
+    },
+  };
+}
+
 // ── Shaders ──────────────────────────────────────────────────────────────────
 
 const FN_COMMON = `#version 300 es
@@ -1426,8 +1795,14 @@ vec3 fnHueTurn(vec3 c, float t) {
  */
 export const FN_ASCII_GLYPHS = [0, 4, 131200, 14336, 145536, 476718, 20288345, 11512810, 22511061, 15652782];
 
-/** Helpers a pass's stage effects need (`kinds`: the pass's own). They read around a point with fnRead. */
-function fnStageGlsl(kinds) {
+/** Does this ASCII effect draw typed characters (from an atlas texture) rather than the built-in 5 × 5 ones? */
+export function fnAsciiTyped(e) {
+  return !!e && e.kind === 'ascii' && typeof e.chars === 'string' && e.chars.length > 0;
+}
+
+/** Helpers a pass's stage effects need (`mine`: the pass's own effects). They read around a point with fnRead. */
+function fnStageGlsl(mine) {
+  const kinds = mine.map(e => e.kind);
   let g = '';
   if (kinds.includes('halftone')) g += `// One screen of a halftone: the centre (pixels) of the cell P is in, at angle ang, and P from that centre.
 vec2 fnHtCell(vec2 P, float ang, float sz, out vec2 local) {
@@ -1446,7 +1821,11 @@ float fnHtInk(vec2 P, float ang, float sz, int ch) {
   return fnHtDot(ch == 0 ? k.x : ch == 1 ? k.y : ch == 2 ? k.z : k.w, l, sz);
 }
 `;
-  if (kinds.includes('ascii')) g += `const int FN_GLYPHS[${FN_ASCII_GLYPHS.length}] = int[${FN_ASCII_GLYPHS.length}](${FN_ASCII_GLYPHS.join(', ')});
+  // Typed characters: an atlas of glyphs (drawn by gyAtlas, darkest first), uAscN of them in a uAscGrid of cells.
+  if (mine.some(fnAsciiTyped)) g += 'uniform sampler2D uAscAtlas;\nuniform float uAscN;\nuniform vec2 uAscGrid;\n';
+  // A Pixel sort's trail: the sorted picture from the frame before (premultiplied), whether there is one, and how much of it stays this frame.
+  if (mine.some(fnSortTrails)) g += 'uniform sampler2D uPsHist;\nuniform float uPsOn, uPsKeep;\n';
+  if (kinds.includes('ascii') && !mine.some(fnAsciiTyped)) g += `const int FN_GLYPHS[${FN_ASCII_GLYPHS.length}] = int[${FN_ASCII_GLYPHS.length}](${FN_ASCII_GLYPHS.join(', ')});
 // Is the point l (0..1 in a cell) on glyph g's 5 × 5 bitmap (with a column and a row of space)?
 float fnGlyph(int g, vec2 l) {
   ivec2 b = ivec2(floor(l * 6.0)) - ivec2(1, 1);
@@ -1463,18 +1842,30 @@ float fnGlyph(int g, vec2 l) {
  * first pass the picture as sampled there.
  */
 const FN_STAGE_OPS = {
-  pixelsort: `{
+  pixelsort: trail => `{
     // Each line along the direction is cut into intervals (staggered and of varied length per line, so
     // neighbouring lines streak differently). In each, the samples brighter than the threshold are
     // sorted by brightness, dark to bright, into the bright places; the dark ones stay where they are.
-    float thr = pixelsort_threshold;
+    // Motion, all from the clock: Breathe moves the threshold, Wander the direction, Flow slides each
+    // line's intervals along it (Drip: at a speed and with a stretch of each line's own), Turbulence
+    // jitters where each interval starts and its threshold.
+    float ph = uTime * pixelsort_rate;
+    float thr = clamp(pixelsort_threshold + pixelsort_breathe * (0.8 * sin(ph * 1.9) + 0.2 * sin(ph * 0.53 + 1.3)), 0.0, 1.0);
+    float an = radians(pixelsort_angle + pixelsort_wander * (fnNoise(vec3(ph * 0.4, 4.2, 1.9)) * 2.0 - 1.0));
+    vec2 dir = vec2(cos(an), sin(an)), nrm = vec2(-dir.y, dir.x);
+    vec2 P = gQ * uRes;
+    float along = dot(P, dir), across = floor(dot(P, nrm));
+    float hA = fnHash(vec3(across, 3.1, 7.7)), hB = fnHash(vec3(across, 9.2, 1.3));
+    float Ls = max(8.0, pixelsort_length * uRes.y) * (0.45 + 0.55 * hA);
+    float sp = mix(1.0, 0.15 + 1.7 * mix(fnNoise(vec3(across * 0.06, 2.3, 5.1)), fnHash(vec3(across, 5.5, 2.2)), 0.5), pixelsort_drip);
+    float off = pixelsort_flow * uTime * uRes.y * sp
+      + pixelsort_drip * Ls * 0.22 * sin(uTime * (0.4 + 0.9 * hA) + hB * 6.2831853)
+      + pixelsort_turbulence * Ls * 0.3 * (fnNoise(vec3(across * 0.045, ph * 3.0, 7.3)) * 2.0 - 1.0);
+    float u = (along - off) / Ls + hB;
+    float t = fract(u);
+    thr = clamp(thr + pixelsort_turbulence * 0.12 * (fnNoise(vec3(across * 0.03, floor(u) * 1.7, ph * 2.5)) * 2.0 - 1.0), 0.0, 1.0);
+    bool sorted = false;
     if (fnLuma(c) >= thr && pixelsort_amount > 0.0) {
-      float an = radians(pixelsort_angle);
-      vec2 dir = vec2(cos(an), sin(an)), nrm = vec2(-dir.y, dir.x);
-      vec2 P = gQ * uRes;
-      float along = dot(P, dir), across = floor(dot(P, nrm));
-      float Ls = max(8.0, pixelsort_length * uRes.y) * (0.45 + 0.55 * fnHash(vec3(across, 3.1, 7.7)));
-      float t = fract((along + fnHash(vec3(across, 9.2, 1.3)) * Ls) / Ls);
       vec2 P0 = P - dir * t * Ls;
       const int M = 24;
       float lum[M]; vec3 col[M];
@@ -1497,8 +1888,16 @@ const FN_STAGE_OPS = {
           if (r == k1) s1 = col[i];
         }
         c = mix(c, mix(s0, s1, fract(kf)), pixelsort_amount);
+        sorted = true;
       }
-    }
+    }${trail ? `
+    // Trail: the sorted picture from the frame before (this pass's own output, kept by the renderer). Sorted
+    // parts keep uPsKeep of it; elsewhere it fades behind them (a moving streak leaves a tail).
+    if (uPsOn > 0.5) {
+      vec4 hp = texelFetch(uPsHist, ivec2(gl_FragCoord.xy), 0);
+      vec3 prev = hp.a > 1e-5 ? hp.rgb / hp.a : vec3(0.0);
+      c = sorted ? mix(c, prev, uPsKeep) : max(c, prev * uPsKeep);
+    }` : ''}
   }`,
   halftone: `{
     float sz = max(2.0, halftone_size * uRes.y / 1080.0);
@@ -1516,7 +1915,28 @@ const FN_STAGE_OPS = {
     }
     c = mix(c, mix(mono, cmyk, halftone_colour), halftone_amount);
   }`,
-  ascii: `{
+  ascii: typed => typed ? `{
+    // Typed characters (an atlas, darkest first): each cell picks one by brightness and draws it tinted
+    // (by the picture or the ink: its brightness is the shape), or in its own colours (emoji).
+    float cell = max(4.0, ascii_size * uRes.y / 1080.0);
+    vec2 P = gQ * uRes;
+    vec2 ci = floor(P / cell);
+    vec3 src = fnRead((ci + 0.5) * cell / uRes);
+    float L = fnLuma(src);
+    float g = clamp((L - 0.5) * (1.0 + ascii_contrast * 2.0) + 0.5 + ascii_contrast * 0.1, 0.0, 1.0);
+    float gi = clamp(floor(g * uAscN), 0.0, uAscN - 1.0);
+    vec2 l = fract(P / cell);
+    vec2 cr = vec2(mod(gi, uAscGrid.x), floor(gi / uAscGrid.x));
+    // Half the true footprint: a mipmap level sharper, so small characters stay crisp (the atlas's margins keep neighbours out).
+    vec2 dd = 0.5 / (cell * uAscGrid);
+    vec4 gs = textureGrad(uAscAtlas, (cr + vec2(l.x, 1.0 - l.y)) / uAscGrid, vec2(dd.x, 0.0), vec2(0.0, dd.y));
+    float mx = max(src.r, max(src.g, src.b));
+    vec3 lit = src / max(mx, 1e-3) * (0.55 + 0.45 * smoothstep(0.0, 0.6, mx));
+    vec3 ink = mix(vec3(ascii_inkR, ascii_inkG, ascii_inkB) * (0.45 + 0.55 * g), lit, ascii_colour);
+    // A little gain on the coverage: a small character's strokes, averaged down, would read too faint.
+    float on = mix(gs.a * fnLuma(gs.rgb), gs.a, ascii_own) * 1.35;
+    c = mix(src * ascii_background, mix(ink, gs.rgb, ascii_own), clamp(on, 0.0, 1.0));
+  }` : `{
     float cell = max(4.0, ascii_size * uRes.y / 1080.0);
     vec2 P = gQ * uRes;
     vec2 ci = floor(P / cell);
@@ -1572,6 +1992,10 @@ export function fnBuildFinal(effects, opts = {}) {
   src += 'float fnPicLuma(vec2 p) { vec4 s = scene(p); return s.a > 1e-5 ? fnLuma(s.rgb / s.a) : 0.0; }\n';
   // The map textures: a layer drawn alone (its alpha) or the motion map (its brightness).
   maps.forEach((k, i) => { src += `uniform sampler2D uM${i};\nfloat fnM${i}(vec2 p) { return texture(uM${i}, p).${k === 'motion' ? 'r' : 'a'}; }\n`; });
+  // Water's surface (drawn by the renderer before the passes: see fnCreate's waterPass), for its own warp and
+  // light and for any effect's Where → Where the water moves. Every pass of a stack with Water can read it.
+  const water = kinds.includes('water');
+  if (water) src += FN_WATER_VIEW;
   if (has('posterize') || feedback) src += FN_HELPERS;
   // The temporal effects' own frames (drawn by the renderer before this pass: see fnCreate's temporalPass).
   const mosh = has('datamosh'), mx = has('motionx'), echo = has('echo');
@@ -1593,7 +2017,7 @@ export function fnBuildFinal(effects, opts = {}) {
   effects.forEach((e, i) => {
     const w = fnWhereOf(e);
     if (w === 'all') return;
-    const read = w === 'picture' ? (p => `fnPicLuma(${p})`) : mapRead(fnMapKey(w, e.whereLayer));
+    const read = w === 'picture' ? (p => `fnPicLuma(${p})`) : w === 'waves' ? (water ? (p => `fnWaves(${p})`) : null) : mapRead(fnMapKey(w, e.whereLayer));
     const m = read ? read('p') : '0.0';
     src += `float fnW${i}(vec2 p) { float m = clamp(${m}, 0.0, 1.0); return ${e.whereInvert ? '1.0 - m' : 'm'}; }\n`;
     weight.set(e, `fnW${i}`);
@@ -1688,6 +2112,10 @@ vec4 fetch(vec2 q) {
     vec2 dir = r > 1e-5 ? v / r : vec2(0.0);
     q += dir * k * ripple_amount * 0.03 / vec2(uAspect, 1.0);
   }`);
+    if (k === 'water') warp(e, `{
+    // Looking down through the surface: the picture is read where its slope bends the line of sight.
+    q -= fnWaterSlope(q) * water_refraction * ${fnGl(FN_WATER.view.bend)} / vec2(uAspect, 1.0);
+  }`);
     if (k === 'displace') {
       const map = FN_DISPLACE_MAPS.includes(e.map) ? e.map : 'noise';
       const read = map === 'picture' ? null : mapRead(fnMapKey(map, e.layerId));
@@ -1736,7 +2164,9 @@ vec4 fetch(vec2 q) {
   for (const e of mine) {
     const k = e.kind;
     if (k === 'custom') op(e, customCalls.get(e));
-    if (FN_STAGE_OPS[k]) op(e, FN_STAGE_OPS[k]);
+    if (k === 'pixelsort') op(e, FN_STAGE_OPS.pixelsort(fnSortTrails(e)));
+    else if (k === 'ascii') op(e, FN_STAGE_OPS.ascii(fnAsciiTyped(e)));
+    else if (FN_STAGE_OPS[k]) op(e, FN_STAGE_OPS[k]);
     if (k === 'leaks') op(e, `{
     float t = uTime * leaks_speed;
     vec2 v = (p - 0.5) * vec2(uAspect, 1.0);
@@ -1778,6 +2208,22 @@ vec4 fetch(vec2 q) {
     // Neon: what arrives (brighter now) cyan, what leaves magenta.
     d = mix(d, (l < 0.0 ? vec3(0.1, 0.95, 1.0) : vec3(1.0, 0.15, 0.85)) * l * 1.6, motionx_neon);
     c = mix(c, clamp(mix(0.5 + 0.5 * d, abs(d), motionx_background), 0.0, 1.0), motionx_amount);
+  }`);
+    if (k === 'water') op(e, `{
+    // Light on the surface: a glint where a slope faces between the light and the eye, a little shading by
+    // slope, and caustics (crests focus the light under them into bright bands, troughs spread it thinner).
+    vec2 sl = fnWaterSlope(p);
+    vec3 n = normalize(vec3(-sl * ${fnGl(FN_WATER.view.tilt)}, 1.0));
+    float la = radians(water_light);
+    vec3 L = normalize(vec3(cos(la), sin(la), 1.6));
+    vec3 Hv = normalize(L + vec3(0.0, 0.0, 1.0));
+    float spec = pow(max(dot(n, Hv), 0.0), 40.0) - pow(Hv.z, 40.0);
+    float shade = dot(n, L) - L.z;
+    float caus = clamp(-fnWaterCurve(p) * ${fnGl(FN_WATER.view.caustic)}, -0.6, 1.5);
+    vec3 x = toLin(c);
+    x *= max(0.0, 1.0 + (caus + shade * 0.8) * water_highlights);
+    x += max(spec, 0.0) * water_highlights * 1.6;
+    c = toSrgb(x);
   }`);
     if (k === 'grade') op(e, 'c = fnGrade(c);');
     if (k === 'vignette') op(e, `{
@@ -1935,7 +2381,7 @@ vec4 fetch(vec2 q) {
   }`
     : 's = fetch(q);';
   // Stage effects read elsewhere: what this pass reads there (the same splits), as straight colour.
-  if (stage) src += `vec4 fnSample(vec2 q, vec2 p) {\n  vec4 s;\n  ${sample}\n  return s;\n}\nvec3 fnRead(vec2 q) { vec4 s = fnSample(q, gP); return s.a > 1e-5 ? s.rgb / s.a : vec3(0.0); }\n` + fnStageGlsl(own);
+  if (stage) src += `vec4 fnSample(vec2 q, vec2 p) {\n  vec4 s;\n  ${sample}\n  return s;\n}\nvec3 fnRead(vec2 q) { vec4 s = fnSample(q, gP); return s.a > 1e-5 ? s.rgb / s.a : vec3(0.0); }\n` + fnStageGlsl(mine);
   src += `void main() {
   vec2 p = gl_FragCoord.xy / uRes;
   if (uOutFlip > 0.5) p.y = 1.0 - p.y;
@@ -1966,7 +2412,7 @@ vec4 fetch(vec2 q) {
   fragColor = vec4(c * a, a);`}
 }
 `;
-  return { src, glow, time, feedback, echo, mosh, mx, maps, lut: has('grade'), custom: customs.filter(e => mine.includes(e)).map(e => e.id), segments: segs.length };
+  return { src, glow, time, feedback, echo, mosh, mx, maps, water, lut: has('grade'), ascAtlas: mine.some(fnAsciiTyped), psTrail: mine.some(fnSortTrails), custom: customs.filter(e => mine.includes(e)).map(e => e.id), segments: segs.length };
 }
 
 const FN_PREFILTER = (bloom, halation, crtGlow) => `${FN_COMMON}
@@ -2247,6 +2693,197 @@ void main() {
   oHeld = clamp(mix(h, cur, uHeal), 0.0, 1.0);
 }
 `;
+
+// ── Water's own passes ───────────────────────────────────────────────────────
+
+/**
+ * Reading Water's surface in the final pass: its height (uWater, half-float, filtered), its slope
+ * (per picture height, from the neighbouring texels) and its curvature, and Where → Where the water
+ * moves (fnWaves: 0 on still water, 1 on a good wave).
+ */
+const FN_WATER_VIEW = `uniform sampler2D uWater;
+uniform vec2 uWTex;
+vec2 fnWaterSlope(vec2 p) {
+  vec2 t = 1.0 / uWTex;
+  vec2 g = vec2(texture(uWater, p + vec2(t.x, 0.0)).r - texture(uWater, p - vec2(t.x, 0.0)).r,
+                texture(uWater, p + vec2(0.0, t.y)).r - texture(uWater, p - vec2(0.0, t.y)).r) * 0.5 * uWTex.y;
+  // Softly limited, so the steepest crest (a fast source's bow) bends and tilts no more than a few times a gentle wave.
+  return g / (1.0 + length(g) * ${fnGl(1 / FN_WATER.view.slopeMax)});
+}
+float fnWaterCurve(vec2 p) {
+  vec2 t = 1.0 / uWTex;
+  return (texture(uWater, p + vec2(t.x, 0.0)).r + texture(uWater, p - vec2(t.x, 0.0)).r + texture(uWater, p + vec2(0.0, t.y)).r
+    + texture(uWater, p - vec2(0.0, t.y)).r - 4.0 * texture(uWater, p).r) * uWTex.y * uWTex.y;
+}
+float fnWaves(vec2 p) { return clamp(max(abs(texture(uWater, p).r) * ${fnGl(FN_WATER.view.waveH)}, length(fnWaterSlope(p)) * ${fnGl(FN_WATER.view.waveS)}), 0.0, 1.0); }
+`;
+
+/**
+ * Water, one substep (fnWaterStep's maths): the height field (r: h now, g: h a substep ago) one
+ * substep on, with the source's stamp (the change in its dimple: fnWaterPress at its place, or a map
+ * shape's occupancy) and the drops landing (fnWaterDrop). Half-float, texel for texel.
+ */
+const FN_WATER_STEP = `#version 300 es
+precision highp float;
+precision highp int;
+uniform sampler2D uH, uOcc0, uOcc1;
+uniform vec2 uRes;
+uniform float uAspect, uC2, uDamp, uEdge, uK;  // uK: the dimple's depth (Strength × push)
+uniform int uShape;
+uniform float uSize, uLen, uAng;
+uniform vec4 uSrc;   // the source's place a substep ago (xy) and now (zw)
+uniform vec2 uOn;    // whether it was there a substep ago and is now
+uniform vec2 uBob;   // its bob a substep ago and now
+uniform vec2 uS;     // how far through the frame's movement, a substep ago and now (a map shape's occupancy)
+uniform vec4 uDrop[${FN_WATER.maxDrops}];
+uniform int uDropN;
+out vec4 o0;
+float fnH(ivec2 c, ivec2 m) { return texelFetch(uH, clamp(c, ivec2(0), m), 0).r; }
+vec2 fnHH(ivec2 c, ivec2 m) { return texelFetch(uH, clamp(c, ivec2(0), m), 0).rg; }
+// A texel a substep on, before stamps: the damped leapfrog step (fnWaterStep).
+float fnNext(ivec2 c, ivec2 m) {
+  vec2 s = texelFetch(uH, c, 0).rg;
+  vec2 lap = fnHH(c - ivec2(1, 0), m) + fnHH(c + ivec2(1, 0), m) + fnHH(c - ivec2(0, 1), m) + fnHH(c + ivec2(0, 1), m) - 4.0 * s;
+  // The wave equation, and a little viscosity on the change (lap.x − lap.y): the shortest ripples die first.
+  return uDamp * (2.0 * s.x - s.y + uC2 * lap.x + ${fnGl(FN_WATER.visc)} * (lap.x - lap.y));
+}
+// fnWaterPress: the dimple (bob deep) with its rim.
+float fnWPress(vec2 v, float bob) {
+  float sg = max(uSize * 0.5, 1.2 / uRes.y);
+  vec2 a = vec2(cos(uAng), sin(uAng)) * uLen * 0.5;
+  float d, rim = 0.25;
+  if (uShape == 1) { vec2 pa = v + a, ba = 2.0 * a; float t = dot(ba, ba) > 1e-12 ? clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0) : 0.0; d = length(pa - ba * t); rim = 0.5; }
+  else if (uShape == 2) { d = abs(length(v) - uLen * 0.5); rim = 0.5; }
+  else if (uShape == 3) d = min(length(v - a), length(v + a));
+  else d = length(v);
+  float q = d * d / (2.0 * sg * sg);
+  return bob * exp(-q) - rim * exp(-q * 0.25);
+}
+void main() {
+  ivec2 c = ivec2(gl_FragCoord.xy), m = ivec2(uRes) - 1;
+  vec2 s = texelFetch(uH, c, 0).rg;
+  float hn = fnNext(c, m);
+  if (uEdge > 0.0 && (c.x == 0 || c.y == 0 || c.x == m.x || c.y == m.y)) {
+    // Open edges (fnWaterMur): an edge texel becomes its inner neighbour as it was, plus the factor × (that neighbour a step on − itself).
+    float k = (sqrt(uC2) - 1.0) / (sqrt(uC2) + 1.0), sum = 0.0, n = 0.0;
+    if (c.x == 0) { ivec2 q = ivec2(1, c.y); sum += fnH(q, m) + k * (fnNext(q, m) - s.x); n += 1.0; }
+    if (c.x == m.x) { ivec2 q = ivec2(m.x - 1, c.y); sum += fnH(q, m) + k * (fnNext(q, m) - s.x); n += 1.0; }
+    if (c.y == 0) { ivec2 q = ivec2(c.x, 1); sum += fnH(q, m) + k * (fnNext(q, m) - s.x); n += 1.0; }
+    if (c.y == m.y) { ivec2 q = ivec2(c.x, m.y - 1); sum += fnH(q, m) + k * (fnNext(q, m) - s.x); n += 1.0; }
+    hn = mix(hn, sum / n, clamp(uEdge, 0.0, 1.0));
+  }
+  vec2 uv = (vec2(c) + 0.5) / uRes, asp = vec2(uAspect, 1.0);
+  // The source's stamp: the change in its dimple over the substep (fnWaterLimit keeps it from piling a crest up).
+  float o0s, o1s;
+  if (uShape == 4) {
+    float a0 = texture(uOcc0, uv).r, a1 = texture(uOcc1, uv).r;
+    o0s = mix(a0, a1, uS.x) * uBob.x; o1s = mix(a0, a1, uS.y) * uBob.y;
+  } else {
+    o0s = uOn.x * fnWPress((uv - uSrc.xy) * asp, uBob.x);
+    o1s = uOn.y * fnWPress((uv - uSrc.zw) * asp, uBob.y);
+  }
+  float f = -uK * (o1s - o0s);
+  if (f * s.x > 0.0) f *= max(0.0, 1.0 - abs(s.x) / max(1e-6, ${fnGl(FN_WATER.crest)} * uK));
+  for (int i = 0; i < ${FN_WATER.maxDrops}; i++) {
+    if (i >= uDropN) break;
+    vec4 d = uDrop[i];
+    float q = dot((uv - d.xy) * asp, (uv - d.xy) * asp) / (2.0 * d.z * d.z);
+    f -= d.w * (exp(-q) - 0.25 * exp(-q * 0.25));
+  }
+  // The stamps move the surface without setting it moving: both heights shift by f.
+  o0 = vec4(hn + f, s.x + f, 0.0, 1.0);
+}
+`;
+
+/**
+ * Water's map shapes, at the grid's size: a layer's alpha (drawn alone by the kit: uMap), or the
+ * picture's bright parts (its brightness from 0.55 to 0.85, the picture as it came in, before the stack).
+ */
+const FN_WATER_OCC = `${FN_COMMON}
+uniform sampler2D uMap;
+uniform float uFromMap, uSoft;
+out vec4 o0;
+float fnOcc(vec2 p) {
+  if (uFromMap > 0.5) return texture(uMap, p).a;
+  vec4 s = scene(p);
+  return smoothstep(0.55, 0.85, s.a > 1e-5 ? fnLuma(s.rgb / s.a) : 0.0) * s.a;
+}
+void main() {
+  // Softened by Size (uSoft: picture heights): a hard edge stamped on the grid would ring in its finest ripples.
+  vec2 p = gl_FragCoord.xy / uRes, r = vec2(uSoft / uAspect, uSoft);
+  float o = fnOcc(p) * 2.0, n = 2.0;
+  for (int i = 0; i < 12; i++) {
+    float a = float(i) * 0.5235988, k = (i % 2 == 0) ? 1.0 : 0.55;
+    o += fnOcc(p + vec2(cos(a), sin(a)) * r * k); n += 1.0;
+  }
+  o0 = vec4(o / n, 0.0, 0.0, 1.0);
+}
+`;
+
+// ── Look actions: rules firing Finish effects ────────────────────────────────
+
+/**
+ * A rule's Do can act on a Look (Finish) effect: Mosh (Datamosh's Mosh on for some seconds), Reset
+ * mosh (one Reset, and any Mosh an action started ends), Pulse a setting (a value for some seconds,
+ * then back to what it was), Set a setting (a value until the clock goes back or the session
+ * starts over) and Splash (Water: a drop `value` picture heights across at its source, under the
+ * pointer, somewhere random or at x, y: `key` 'source', 'pointer', 'random' or 'point'; the renderer
+ * drops it once, telling splashes apart by the time they fired, `splashT`). They don't change the record: the host keeps a fnLookNew() state and reads each
+ * number through fnLookValue before its mappings' (the app's playEngine.layerValue, the web
+ * runtime's layerValue), so they reach the renderer the way a mapping does.
+ *
+ * An action is { do, layerId: 'finish:<effectId>', key?, value?, seconds? }. Its times are the
+ * clock's, so a take plays back and renders the same: fnLookStep(state, time) once a frame (before
+ * the frame's actions) lets go of what has run out, and forgets everything when the clock goes back.
+ * Something that runs out stays at least the frame it started (a Reset, 0 s, is exactly one frame).
+ */
+export const FN_LOOK_ACTIONS = ['mosh', 'moshreset', 'fxpulse', 'fxset', 'splash'];
+/** Where a Splash lands: at Water's source, under the pointer, somewhere random, or at a point (its x, y). */
+export const FN_SPLASH_AT = ['source', 'pointer', 'random', 'point'];
+/** Is this action kind one of the Look actions? */
+export function fnLookIs(kind) { return FN_LOOK_ACTIONS.includes(kind); }
+/** A host's state: what is set now (`<id>::<key>` → value, start, until), the clock last stepped, and whether anything changed (the host redraws). */
+export function fnLookNew() { return { entries: new Map(), last: -Infinity, changed: false }; }
+/** Forget everything (a take or a render starting over). */
+export function fnLookReset(st) { if (st.entries.size) st.changed = true; st.entries.clear(); st.last = -Infinity; }
+/** One frame's clock: what has run out goes; a clock sent back forgets everything. */
+export function fnLookStep(st, time) {
+  if (time < st.last - 1e-6 && st.entries.size) { st.entries.clear(); st.changed = true; }
+  st.last = time;
+  for (const [k, x] of st.entries) if (time >= x.until && time > x.start) { st.entries.delete(k); st.changed = true; }
+}
+/** An action fires at `time` (the clock). Returns whether it was a Look action. */
+export function fnLookAct(st, a, time) {
+  if (!a || !fnLookIs(a.do) || typeof a.layerId !== 'string' || !a.layerId) return false;
+  const id = a.layerId;
+  const secs = v => (typeof v === 'number' && isFinite(v) ? Math.max(0, Math.min(600, v)) : 1);
+  const put = (key, value, until) => st.entries.set(`${id}::${key}`, { value, start: time, until });
+  st.changed = true;
+  if (a.do === 'mosh') {
+    const prev = st.entries.get(`${id}::hold`);
+    put('hold', 1, Math.max(time + secs(a.seconds), prev ? prev.until : -Infinity));
+  } else if (a.do === 'moshreset') {
+    st.entries.delete(`${id}::hold`);
+    put('reset', 1, time);
+  } else if (a.do === 'splash') {
+    // Kept half a second (the renderer may draw a frame late); the renderer drops each splash once, by its time.
+    const at = FN_SPLASH_AT.includes(a.key) ? a.key : 'source';
+    const num = (v, d) => (typeof v === 'number' && isFinite(v) ? Math.max(0, Math.min(1, v)) : d);
+    const until = time + 0.5;
+    put('splashT', time, until);
+    put('splashX', at === 'point' ? num(a.x, 0.5) : at === 'random' ? -2 : at === 'pointer' ? -3 : -1, until);
+    put('splashY', at === 'point' ? num(a.y, 0.5) : -1, until);
+    put('splashSize', typeof a.value === 'number' && isFinite(a.value) ? Math.max(0.005, Math.min(0.3, a.value)) : 0.06, until);
+  } else if (typeof a.key === 'string' && a.key && typeof a.value === 'number' && isFinite(a.value)) {
+    put(a.key, a.value, a.do === 'fxset' ? Infinity : time + secs(a.seconds));
+  }
+  return true;
+}
+/** A Look action's value for a number now (`id`: 'finish:<effectId>'), or undefined. */
+export function fnLookValue(st, id, key) {
+  const x = st && st.entries.size ? st.entries.get(`${id}::${key}`) : undefined;
+  return x ? x.value : undefined;
+}
 
 // ── The renderer ─────────────────────────────────────────────────────────────
 
@@ -2701,6 +3338,129 @@ export function fnCreate(canvasIn) {
     return true;
   }
 
+  // ── Water: its height field (two half-float targets at the grid's size, used in turn) and a map shape's
+  // occupancy (two 8-bit ones: now and the frame before). Without a half-float target the water stays flat.
+  const waterFloat = floatGlow || !!gl.getExtension('EXT_color_buffer_half_float');
+  const WATER_DEF = Object.fromEntries(FN_EFFECTS.water.params.map(p => [p.key, p.value]));
+  let wT = null; // { key, w, h, st, i, occ, oi, occValid, state, out, bytes, last }
+  function dropWater() { if (!wT) return; for (const t of [...wT.st, ...wT.occ]) dropTarget(t); wT = null; }
+  const clearTarget = t => { gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb); gl.viewport(0, 0, t.w, t.h); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); };
+  function ensureWater(w, h) {
+    const key = `${w}x${h}`;
+    if (wT && wT.key === key) return wT;
+    const state = wT ? wT.state : fnWaterState();
+    dropWater();
+    // A new size starts the water flat.
+    state.valid = false;
+    wT = { key, w, h, st: [target(w, h, 1, true, gl.LINEAR), target(w, h, 1, true, gl.LINEAR)], i: 0, occ: [target(w, h, 1, false), target(w, h, 1, false)], oi: 0, occValid: false, state, out: null, bytes: 2 * w * h * 8 + 2 * w * h * 4, last: null };
+    for (const t of wT.st) clearTarget(t);
+    return wT;
+  }
+  const waterDrops = new Float32Array(4 * FN_WATER.maxDrops);
+  /**
+   * Water's surface for this frame, before the passes: the ticks since the frame before (fnWaterFrame), each a few
+   * substeps of FN_WATER_STEP with the source's stamps, the rain and any Splash. `maps`: the pass's map keys (a Layer shape's alpha).
+   */
+  function waterPass(e, input, W, H, pixelsMode, value, maps) {
+    if (!waterFloat) { dropWater(); return false; }
+    const v = k => { const x = value ? value(e, k) : e[k]; return typeof x === 'number' && isFinite(x) ? x : WATER_DEF[k]; };
+    const g = fnWaterGrid(e.detail, W, H);
+    const T = ensureWater(g.w, g.h);
+    const shape = fnWaterShapeOf(e), mapShape = fnWaterMapShape(shape);
+    // Where the source is now: the pointer while it is over the picture, a layer's position, or Source X/Y.
+    const src = fnWaterSourceOf(e);
+    let point = null;
+    if (!mapShape) {
+      if (src === 'pointer') { const pp = input.pointer; if (pp && pp.over !== false && isFinite(pp.x) && isFinite(pp.y)) point = { x: +pp.x, y: +pp.y }; }
+      else if (src === 'layer') { const lp = e.sourceLayer && input.layerPoint ? input.layerPoint(e.sourceLayer) : null; if (lp && isFinite(lp.x) && isFinite(lp.y)) point = { x: lp.x, y: lp.y }; }
+      else if (src === 'xy') point = { x: v('x'), y: v('y') };
+    }
+    // A rule's Splash (finish.js fnLookAct) shows up as numbers beside the effect's own.
+    const sT = value ? value(e, 'splashT') : undefined;
+    const splash = typeof sT === 'number' && isFinite(sT)
+      ? { t: sT, x: value(e, 'splashX') ?? -1, y: value(e, 'splashY') ?? -1, size: value(e, 'splashSize') ?? 0.06 } : null;
+    const pp = input.pointer && input.pointer.over !== false && isFinite(input.pointer.x) ? { x: +input.pointer.x, y: +input.pointer.y } : null;
+    const plan = fnWaterFrame(T.state, { time: input.time || 0, first: !!input.first, speed: v('speed'), rows: g.h, point, pointer: pp, bob: v('bob'), strength: v('strength'), rain: v('rain'), drop: v('drop'), splash });
+    if (plan.reset) { for (const t of T.st) clearTarget(t); T.occValid = false; }
+    // A map shape: its occupancy now (a layer's alpha, or the bright parts), and the frame before's.
+    let occThen = clearTex, occNow = clearTex;
+    if (mapShape) {
+      const occ = compile('wocc', FN_WATER_OCC);
+      if (!occ) return false;
+      const mi = shape === 'layer' ? maps.indexOf('layer:' + (e.layerId || '')) : -1;
+      const nx = 1 - T.oi;
+      gl.useProgram(occ.prog);
+      common(occ, g.w, g.h, input, W, H, pixelsMode);
+      gl.uniform1f(loc(occ, 'uFromMap'), shape === 'layer' ? 1 : 0);
+      gl.uniform1f(loc(occ, 'uSoft'), Math.max(v('size') * 0.5, 1.5 / g.h));
+      bindTex(occ, 'uMap', 2, mi >= 0 ? mapTexs[mi] : clearTex);
+      draw(T.occ[nx].fb, g.w, g.h);
+      occNow = T.occ[nx].texs[0];
+      occThen = T.occValid ? T.occ[T.oi].texs[0] : occNow;
+      T.oi = nx; T.occValid = true;
+    }
+    const step = compile('wstep', FN_WATER_STEP);
+    if (!step) return false;
+    gl.useProgram(step.prog);
+    gl.uniform2f(loc(step, 'uRes'), g.w, g.h);
+    gl.uniform1f(loc(step, 'uAspect'), W / Math.max(1, H));
+    gl.uniform1f(loc(step, 'uC2'), plan.plan.c2);
+    gl.uniform1f(loc(step, 'uDamp'), fnWaterDamp(v('damping'), plan.plan.dt));
+    gl.uniform1f(loc(step, 'uEdge'), Math.max(0, Math.min(1, v('edges'))));
+    gl.uniform1f(loc(step, 'uK'), FN_WATER.push * v('strength'));
+    gl.uniform1i(loc(step, 'uShape'), mapShape ? 4 : Math.max(0, ['point', 'line', 'ring', 'twin'].indexOf(shape)));
+    gl.uniform1f(loc(step, 'uSize'), v('size'));
+    gl.uniform1f(loc(step, 'uLen'), v('length'));
+    gl.uniform1f(loc(step, 'uAng'), v('angle') * Math.PI / 180);
+    bindTex(step, 'uOcc0', 1, occThen); bindTex(step, 'uOcc1', 2, occNow);
+    for (const s of plan.steps) {
+      const a = s.p0 || s.p1 || { x: 0, y: 0 }, b = s.p1 || s.p0 || { x: 0, y: 0 };
+      gl.uniform4f(loc(step, 'uSrc'), a.x, a.y, b.x, b.y);
+      gl.uniform2f(loc(step, 'uOn'), s.p0 ? 1 : 0, s.p1 ? 1 : 0);
+      gl.uniform2f(loc(step, 'uBob'), s.b0, s.b1);
+      gl.uniform2f(loc(step, 'uS'), s.s0, s.s1);
+      s.drops.forEach((d, i) => waterDrops.set(d, i * 4));
+      gl.uniform4fv(loc(step, 'uDrop'), waterDrops);
+      gl.uniform1i(loc(step, 'uDropN'), s.drops.length);
+      bindTex(step, 'uH', 0, T.st[T.i].texs[0]);
+      draw(T.st[1 - T.i].fb, g.w, g.h);
+      T.i = 1 - T.i;
+    }
+    T.out = T.st[T.i].texs[0];
+    T.last = { substeps: plan.plan.sub, ticks: plan.ticks, steps: plan.steps.length, c: plan.plan.c };
+    return true;
+  }
+
+  // Pixel sort's trail: its sorted picture from the frame before (full size, 8-bit, premultiplied).
+  let psT = null; // { key, tex, fb, valid, lastT }
+  function dropPs() { if (!psT) return; gl.deleteTexture(psT.tex); gl.deleteFramebuffer(psT.fb); psT = null; }
+  function ensurePs(W, H) {
+    const key = `${W}x${H}`;
+    if (psT && psT.key === key) return psT;
+    dropPs();
+    const t = target(W, H, 1, false, gl.NEAREST);
+    psT = { key, tex: t.texs[0], fb: t.fb, valid: false, lastT: null };
+    return psT;
+  }
+  // ASCII's typed characters: their atlas (gyAtlas, darkest first), made again only when the characters or their order change.
+  let ascT = null; // { key, tex, n, cols, rows }
+  function dropAscii() { if (!ascT) return; gl.deleteTexture(ascT.tex); ascT = null; }
+  function ensureAscii(e) {
+    const key = `${e.keepOrder ? 1 : 0}|${e.chars}`;
+    if (ascT && ascT.key === key) return ascT;
+    const at = gyAtlas(e.chars, !!e.keepOrder);
+    if (!at) return ascT;
+    dropAscii();
+    const tex = makeTex(gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, at.canvas);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    ascT = { key, tex, n: at.n, cols: at.cols, rows: at.rows, glyphs: at.glyphs };
+    return ascT;
+  }
+
   let lastInfo = null;
   function drawFrame(input) {
     if (gl.isContextLost()) return false;
@@ -2715,6 +3475,13 @@ export function fnCreate(canvasIn) {
     const pixelsMode = !!(input.pixels && input.picture && input.picture.data);
     const W = Math.max(1, Math.round(input.width)), H = Math.max(1, Math.round(input.height));
     const value = input.value || null;
+    // A Pixel sort keeps a trail while its Trail (as driven now) is above 0: that changes its passes (fnSegments).
+    for (let i = 0; i < effects.length; i++) {
+      const e = effects[i];
+      if (e.kind !== 'pixelsort') continue;
+      const tv = value ? value(e, 'trail') : e.trail;
+      effects[i] = Object.assign({}, e, { trailOn: typeof tv === 'number' && tv > 0 });
+    }
     if (!pixelsMode && (canvas.width !== W || canvas.height !== H)) { canvas.width = W; canvas.height = H; }
     // Sources.
     if (!input.picture) return false;
@@ -2732,7 +3499,8 @@ export function fnCreate(canvasIn) {
       + (e.kind === 'displace' ? `~${e.map || 'noise'}:${e.map === 'layer' ? e.layerId || '' : ''}` : '')
       + (e.kind === 'time' && e.map === 'layer' ? `~${e.layerId || ''}` : '')
       + (e.kind === 'datamosh' && e.map === 'layer' ? `~${e.layerId || ''}` : '')
-      + ((e.kind === 'feedback' || e.kind === 'echo') ? `~${fnSourceOf(e)}:${e.map === 'layer' ? e.layerId || '' : ''}` : '');
+      + ((e.kind === 'feedback' || e.kind === 'echo') ? `~${fnSourceOf(e)}:${e.map === 'layer' ? e.layerId || '' : ''}` : '')
+      + (fnSortTrails(e) ? '~trail' : '') + (fnAsciiTyped(e) ? '~typed' : '');
     const keyFor = (list, i) => `final:${i}:` + list.map(shapeOf).join(',') + `|${opts.tone}|${opts.curves}|${opts.hueCurves}|${opts.timeMap}`;
     // One pass, or one per stage effect (fnSegments): every one has to compile.
     const buildAll = list => {
@@ -2761,6 +3529,11 @@ export function fnCreate(canvasIn) {
     if (!ran.some(e => e.kind === 'motionx')) dropRing('motionx');
     if (!ran.some(e => e.kind === 'echo')) dropRing('echo');
     if (!ran.some(e => e.kind === 'feedback')) dropFb();
+    if (!ran.some(fnSortTrails)) dropPs();
+    if (!ran.some(e => e.kind === 'water')) dropWater();
+    const asc = ran.find(fnAsciiTyped);
+    if (asc) ensureAscii(asc); else dropAscii();
+    if (ran.some(fnSortTrails)) { const P = ensurePs(W, H); if (input.first) { P.valid = false; P.lastT = null; } }
     const segs = fnSegments(ran);
     if (built.glow && !glowPasses(input, ran, W, H, pixelsMode, value)) return false;
     let ring = null;
@@ -2773,6 +3546,9 @@ export function fnCreate(canvasIn) {
       const m = key === 'motion' ? input.motion || null : input.layerAlpha ? input.layerAlpha(key.slice(6)) : null;
       if (m) upload(mapTexs[i], m, false, true); else clearMap(mapTexs[i]);
     });
+    // Water's surface, stepped to this frame (it reads a Layer shape's map, so after the maps).
+    const waterFx = ran.find(e => e.kind === 'water');
+    if (waterFx) waterPass(waterFx, input, W, H, pixelsMode, value, built.maps);
     if (pixelsMode && (!outT || outT.w !== W || outT.h !== H)) { dropTarget(outT); outT = target(W, H, 1, false); }
     // Passes before the last (a stack with stage effects): two full-size targets, used in turn.
     if (passes.length > 1 && (!stageT || stageT[0].w !== W || stageT[0].h !== H)) {
@@ -2830,12 +3606,41 @@ export function fnCreate(canvasIn) {
         gl.uniform1fv(loc(fin, 'uEcM'), ecR.M);
         gl.uniform1f(loc(fin, 'uEcN'), ecR.copies);
       }
+      if (b.ascAtlas && ascT) {
+        bindTex(fin, 'uAscAtlas', unit++, ascT.tex);
+        gl.uniform1f(loc(fin, 'uAscN'), ascT.n);
+        gl.uniform2f(loc(fin, 'uAscGrid'), ascT.cols, ascT.rows);
+      }
+      if (b.psTrail && psT) {
+        // How much of the frame before stays: Trail a 60th of a second, so a trail is as long at any frame rate (and in a render).
+        const pe = ran.find(fnSortTrails);
+        const tv = pe ? (value ? value(pe, 'trail') : pe.trail) : 0;
+        const now = input.time || 0;
+        const dt = psT.lastT === null ? 1 / 60 : Math.max(0, Math.min(0.25, now - psT.lastT));
+        bindTex(fin, 'uPsHist', unit++, psT.tex);
+        gl.uniform1f(loc(fin, 'uPsOn'), psT.valid ? 1 : 0);
+        gl.uniform1f(loc(fin, 'uPsKeep'), Math.pow(Math.max(0, Math.min(0.98, typeof tv === 'number' ? tv : 0)), dt * 60));
+      }
+      if (b.water) {
+        bindTex(fin, 'uWater', unit++, wT && wT.out ? wT.out : clearTex);
+        gl.uniform2f(loc(fin, 'uWTex'), wT ? wT.w : 1, wT ? wT.h : 1);
+      }
       if (b.feedback && fbT) {
         bindTex(fin, 'uFbPrev', unit++, fbT.prev); bindTex(fin, 'uFbNow', unit++, fbT.now);
         bindTex(fin, 'uFbRaw', unit++, fbT.raw); bindTex(fin, 'uFbRawPrev', unit++, fbT.rawPrev);
         gl.uniform1f(loc(fin, 'uFbOn'), fbT.on ? 1 : 0);
       }
       draw(lastPass ? (pixelsMode ? outT.fb : null) : stageT[pi % 2].fb, W, H);
+      // A Pixel sort with a trail ends its pass (fnSegments): what it drew is kept for the next frame.
+      if (b.psTrail && psT && !lastPass) {
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, stageT[pi % 2].fb);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, psT.fb);
+        gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+        psT.valid = true;
+        psT.lastT = input.time || 0;
+      }
     });
     if (pixelsMode) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, outT.fb);
@@ -2862,6 +3667,9 @@ export function fnCreate(canvasIn) {
       mosh: moshT ? { bytes: moshT.bytes } : null,
       rings: Object.fromEntries([...rings].map(([k, R]) => [k, { frames: R.ring.size, w: R.w, h: R.h, bytes: R.bytes, count: R.ring.count }])),
       feedback: fbT ? { bytes: fbT.bytes, float: floatGlow } : null,
+      ascii: ascT ? { glyphs: ascT.glyphs.slice(), cols: ascT.cols, rows: ascT.rows } : null,
+      sortTrail: psT ? { valid: psT.valid } : null,
+      water: wT ? Object.assign({ w: wT.w, h: wT.h, bytes: wT.bytes, float: waterFloat }, wT.last) : (ran.some(e => e.kind === 'water') ? { float: waterFloat } : null),
     };
     return true;
   }
@@ -2870,7 +3678,7 @@ export function fnCreate(canvasIn) {
     ok: true,
     canvas,
     draw(input) { try { return drawFrame(input); } catch (e) { lastError = String(e && e.message || e); return false; } },
-    reset() { if (ringT) ringT.ring.reset(); if (fbT) fbT.valid = false; if (moshT) { moshT.valid = false; moshT.kf = -1; } for (const R of rings.values()) { R.ring.reset(); R.n = 0; } },
+    reset() { if (ringT) ringT.ring.reset(); if (fbT) fbT.valid = false; if (moshT) { moshT.valid = false; moshT.kf = -1; } if (psT) { psT.valid = false; psT.lastT = null; } for (const R of rings.values()) { R.ring.reset(); R.n = 0; } if (wT) wT.state.valid = false; },
     info() { return lastInfo ? Object.assign({ error: lastError }, lastInfo) : { error: lastError }; },
     error() { return lastError; },
     dispose() {
@@ -2881,7 +3689,7 @@ export function fnCreate(canvasIn) {
       dropTarget(outT);
       if (stageT) for (const t of stageT) dropTarget(t);
       if (ringT) { gl.deleteTexture(ringT.tex); gl.deleteFramebuffer(ringT.fb); }
-      dropMosh(); dropFb(); for (const k of [...rings.keys()]) dropRing(k);
+      dropMosh(); dropFb(); dropPs(); dropAscii(); dropWater(); for (const k of [...rings.keys()]) dropRing(k);
       const lose = gl.getExtension('WEBGL_lose_context');
       if (lose) lose.loseContext();
     },

@@ -3,7 +3,7 @@
  * field, zone action and action kind does. Shown under the choices and in
  * tooltips.
  */
-import { scriptActionKey, type ActionKind, type BuiltinActionKind, type ParticleField, type PlayLayer, type ZoneAction } from '../../../types/play';
+import { isLookAction, scriptActionKey, type ActionKind, type BuiltinActionKind, type LookActionKind, type ParticleField, type PlayLayer, type ZoneAction } from '../../../types/play';
 
 export const FIELD_HELP: Record<ParticleField, { label: string; title: string; body: string }> = {
   flow: { label: 'Flow', title: 'Brightness is a direction', body: 'Each particle reads the brightness under it and turns it into a heading: black points right, and the heading rotates as the picture gets brighter (Turns = full rotations from black to white). At Turns 1, black and white point the same way and mid grey the opposite, so particles skate along bright shapes\' edges and never get inside them.' },
@@ -38,6 +38,9 @@ export const ACTION_LABELS: Record<BuiltinActionKind, string> = {
   pad: 'Play pad', multiply: 'Multiply: bud now', cull: 'Multiply: cull',
 };
 
+/** The Look actions (a rule's Do on a Finish effect). */
+export const LOOK_ACTION_LABELS: Record<LookActionKind, string> = { mosh: 'Mosh', moshreset: 'Reset mosh', fxpulse: 'Pulse a setting', fxset: 'Set a setting', splash: 'Splash' };
+
 /** Change background: what next, previous, random, go to and reset mean on a Background layer. */
 const BACKGROUND_ACTION_LABELS: Partial<Record<BuiltinActionKind, string>> = {
   next: 'Next background', prev: 'Previous background', shuffle: 'Random background', goto: 'Go to background', reset: 'Back to Index',
@@ -50,6 +53,7 @@ const DATA_ACTION_LABELS: Partial<Record<BuiltinActionKind, string>> = {
 
 /** The label of an action: a built-in's, or a script button's label (its param label, or the key). */
 export function actionLabel(kind: ActionKind, l?: PlayLayer): string {
+  if (isLookAction(kind)) return LOOK_ACTION_LABELS[kind];
   const key = scriptActionKey(kind);
   if (key === null) return (l?.kind === 'background' ? BACKGROUND_ACTION_LABELS[kind as BuiltinActionKind] : l?.kind === 'data' ? DATA_ACTION_LABELS[kind as BuiltinActionKind] : undefined) ?? ACTION_LABELS[kind as BuiltinActionKind] ?? kind;
   const def = l?.kind === 'script' ? l.paramDefs.find(d => d.key === key) : undefined;

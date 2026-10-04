@@ -137,6 +137,7 @@ export { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGB
 
 // GPU Particles (the engine in play/kit/gpuParticles.js)
 export { GpuParticlesNode } from './gpuParticles';
+export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode } from './passes';
 
 // Math
 export {
@@ -264,6 +265,7 @@ import {
 } from './shapers';
 import { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGBToCMYKNode, CMYKHalftoneNode } from './halftone';
 import { GpuParticlesNode } from './gpuParticles';
+import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode } from './passes';
 
 export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Sources
@@ -453,6 +455,14 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   spiralField:     SpiralFieldNode,
   // GPU Particles
   gpuParticles: GpuParticlesNode,
+  // Passes (render to texture): docs/pass-node-plan.md
+  pass: PassNode,
+  passOutput: PassOutputNode,
+  sampleTexture: SampleTextureNode,
+  edgesTexture: EdgesTextureNode,
+  blurTexture: BlurTextureNode,
+  glowTexture: GlowTextureNode,
+  displaceTexture: DisplaceTextureNode,
   // 3D / Volumetric
   raymarch3d: RaymarchNode,
   volumeClouds: VolumeCloudsNode,

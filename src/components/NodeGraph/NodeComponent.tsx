@@ -181,7 +181,7 @@ const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', '
 let zCounter = 10; // incremented each time a node is brought to front
 const LFO_TYPES    = new Set(['lfo']);
 // Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
-const ALWAYS_VIZ_TYPES = new Set([...LFO_TYPES, 'remap', 'audioInput']);
+const ALWAYS_VIZ_TYPES = new Set([...LFO_TYPES, 'remap', 'audioInput', 'pass']);
 // Float-output nodes that should render a grayscale shader thumbnail instead of the scope waveform
 const GRAYSCALE_PREVIEW_TYPES = new Set(['fbm', 'voronoi', 'noiseFloat', 'sdSegment', 'mask', 'luminance', 'sobel', 'compare', 'select']);
 
@@ -3483,6 +3483,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           </div>
         );
       })()}
+
+      {/* A Pass's texture, always shown: drawn every few frames by lib/passRunner.ts */}
+      {node.type === 'pass' && <NodeInlineViz node={node} />}
 
       {/* ── In-card preview (visible when 👁 is active) ── */}
       {/* Semantic inline viz: replaces shader thumbnail for supported types */}

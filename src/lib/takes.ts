@@ -66,7 +66,7 @@ const MIN_GAP = 1 / 62;
 // ── Capture ──────────────────────────────────────────────────────────────────
 
 interface RawTrack { meta: Omit<TakeTrack, 'keys'>; t: number[]; v: number[] }
-type KitAction = { do: ActionKind; layerId: string; amount: number; vel?: number };
+type KitAction = { do: ActionKind; layerId: string; amount: number; vel?: number; key?: string; value?: number; seconds?: number; x?: number; y?: number };
 
 /** The MIDI node's channel writes this frame (the bus's one tap, shared by every capture). */
 const busNow = new Map<string, number>();
@@ -98,7 +98,10 @@ export class TakeCapture {
     this.play = play;
     this.keep = keep;
     this.seed = seed;
-    this.offAct = playOverlay.onAct(a => this.pending.push({ do: a.do, layerId: a.layerId, amount: a.amount, ...(a.vel !== undefined ? { vel: a.vel } : {}), ...(a.at !== undefined ? { at: a.at } : {}) }));
+    // A Look action keeps its setting, value and seconds, so it plays back and renders the same.
+    this.offAct = playOverlay.onAct(a => this.pending.push({ do: a.do, layerId: a.layerId, amount: a.amount, ...(a.vel !== undefined ? { vel: a.vel } : {}), ...(a.at !== undefined ? { at: a.at } : {}),
+      ...(a.key !== undefined ? { key: a.key } : {}), ...(a.value !== undefined ? { value: a.value } : {}), ...(a.seconds !== undefined ? { seconds: a.seconds } : {}),
+      ...(a.x !== undefined ? { x: a.x } : {}), ...(a.y !== undefined ? { y: a.y } : {}) }));
   }
 
   dispose(): void { this.offAct(); this.data.dispose(); }

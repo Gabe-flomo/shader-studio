@@ -20,10 +20,14 @@ import { VERTEX_SHADER } from './types';
 import { topologicalSort } from './topoSort';
 import { validateGraph } from './validate';
 import { generateFragmentShader } from './shaderAssembler';
+import { compilePassGraph, hasPassNode } from './passGraph';
 
 const EMPTY_OUTPUT_VARS = new Map<string, Record<string, string>>();
 
 export function compileGraph(graph: NodeGraph): CompilationResult {
+  // Pass nodes (render to texture) cut the graph into several programs. Only graphs that have
+  // one take this branch; everything below is the single-program compile, unchanged.
+  if (hasPassNode(graph.nodes)) return compilePassGraph(graph);
   try {
     const { nodes } = graph;
 

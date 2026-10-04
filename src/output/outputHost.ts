@@ -228,7 +228,7 @@ function sendMapping(): void {
 /** Things only the app can do, that the output (the web player, fed from here) leaves out. */
 function outputNotes(play: PlayRecord): string[] {
   const n: string[] = [];
-  if (play.layers.some(l => l.kind === 'camera' || ((l.kind === 'particles' || l.kind === 'glyphs' || l.kind === 'contours') && (l as { readFrom?: string }).readFrom === 'camera'))) n.push('Camera layers: the output has no camera of its own, so they stay dark there.');
+  if (play.layers.some(l => l.kind === 'camera' || ((l.kind === 'particles' || l.kind === 'glyphs' || l.kind === 'contours' || l.kind === 'motion') && (l as { readFrom?: string }).readFrom === 'camera'))) n.push('Camera layers: the output has no camera of its own, so they stay dark there.');
   if (play.padGrid) n.push('The pad grid’s cells come from your controller here; the output shows them at rest.');
   return n;
 }

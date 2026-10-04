@@ -18,6 +18,7 @@ import { detachLayer, editKind, kindUses, layerKindRegistry, saveLayerAsKind, us
 import { KindDialog } from './KindDialog';
 import { addKindToList, applyKindLook, removeKindFromFile, removeKindFromList } from './kindActions';
 import { Field } from '../../ui/Field';
+import { GY_SETS } from '../../../play/kit/glyphs.js';
 import { NumberInput } from '../../NodeGraph/NumberInput';
 import { CameraChip } from '../chips';
 import { HandsChip, ShowHandToggle } from '../HandsChip';
@@ -354,10 +355,14 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
         )}
         {f.seg('Born', 'spawn', [
           { value: 'anywhere', label: 'Anywhere' }, { value: 'edges', label: 'Edges' }, { value: 'center', label: 'Centre' }, { value: 'null', label: 'At a null' },
-          { value: 'motion', label: 'Where it moves', title: 'Where the camera sees movement (needs a Camera layer; it can be hidden)' },
+          { value: 'motion', label: 'Where it moves', title: 'Where a Motion layer sees movement, or the camera (a Camera layer, hidden or not)' },
           { value: 'bright', label: 'Bright parts', title: 'On the bright parts of the picture, the brightest most' },
-        ], 'Where new and respawned particles appear. Emitter shapes and emitter nulls take over when there are any. Where it moves needs a Camera layer (hide it to keep only the particles); with nothing moving yet they appear anywhere, and after that where something last moved.')}
+        ], 'Where new and respawned particles appear. Emitter shapes and emitter nulls take over when there are any. Where it moves reads a Motion layer (the camera, the picture or a video) or, with In: Camera, a Camera layer (hide it to keep only the particles); with nothing moving yet they appear anywhere, and after that where something last moved.')}
         {g('spawn') === 'null' && nullPick('The null particles are born around.')}
+        {g('spawn') === 'motion' && f.select('In', 'motionId', [
+          { value: '', label: 'Camera (a Camera layer)' },
+          ...ctx.layers.filter(x => x.kind === 'motion').map(x => ({ value: x.id, label: x.label })),
+        ], 'Whose movement they are born in: a Motion layer (it can watch the camera, the picture or a Video layer; set its Sensitivity and Cell size there), or the camera\'s own motion map (needs a Camera layer).')}
         {(g('spawn') === 'center' || g('spawn') === 'null') && f.prop('spawnRadius')}
         {f.seg('At the edges', 'edges', [
           { value: 'wrap', label: 'Wrap', title: 'Leave one side, come back on the other' }, { value: 'bounce', label: 'Bounce', title: 'Bounce off the edges' },
@@ -631,6 +636,7 @@ export function GlyphsEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
           { value: 'lines', label: 'Lines', title: 'Angle by brightness' }, { value: 'cross', label: 'Cross' },
         ], 'The picture redrawn on a grid: characters picked by brightness, or dots, squares, lines and crosses sized by it.')}
         {style === 'ascii' && f.row('Characters', <Field value={f.get<string>('chars')} onChange={e => f.set({ chars: e.target.value })} height={26} mono style={{ flex: 1, minWidth: 0 }} />, 'From dark to bright. A space leaves the darkest cells empty. Emoji work too: 🌑🌒🌓🌔🌕.')}
+        {style === 'ascii' && f.row('Sets', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{GY_SETS.map(g => <Button key={g.name} size="sm" variant={f.get<string>('chars') === g.chars ? 'primary' : 'secondary'} title={g.chars} onClick={() => f.set({ chars: g.chars })}>{g.name}</Button>)}</div>, 'Ready-made ramps (the Finish stack’s ASCII effect has the same ones).')}
         {f.props('cell', 'contrast')}
         {style === 'ascii' && f.props('shift', 'spread')}
         {f.toggle('Invert', 'invert', 'Bright parts get the small glyphs')}

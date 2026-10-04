@@ -112,6 +112,7 @@ const KNOWN: Record<string, SettingInfo> = {
   // Windows
   'playfield:builderWindow': S('Builder window', 'windows'),
   'playfield:history-window': S('History window', 'windows'),
+  'playfield:piano-roll-window': S('Piano roll window', 'windows'),
   // Sharing and account
   'shader-studio:settings:trustedAuthors': S('Trusted authors', 'sharing', { data: true }),
   'shader-studio:settings:packAuthor': S('Node pack author name', 'sharing'),

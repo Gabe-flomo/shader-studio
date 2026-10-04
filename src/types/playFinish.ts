@@ -6,18 +6,24 @@
  * See docs/finish-stack.md.
  */
 import {
-  FN_EFFECTS, FN_KINDS, FN_TONE_MODES, FN_TIME_MAPS, FN_TIME_QUALITY, FN_WHERE, FN_DISPLACE_MAPS, FN_MOSH_MAPS, FN_SOURCE_MAPS, FN_CURVE_CHANNELS, FN_HUE_CURVES, FN_COMPARE_ID, FN_COMPARE_PARAMS,
+  FN_EFFECTS, FN_KINDS, FN_TONE_MODES, FN_WATER_SOURCES, FN_WATER_SHAPES, FN_WATER_DETAILS, FN_TIME_MAPS, FN_TIME_QUALITY, FN_WHERE, FN_DISPLACE_MAPS, FN_MOSH_MAPS, FN_SOURCE_MAPS, FN_CURVE_CHANNELS, FN_HUE_CURVES, FN_COMPARE_ID, FN_COMPARE_PARAMS,
   fnDefaultEffect, fnDefaultCurves, fnDefaultCompare, fnParseCustom, fnMigrateHalation, type FnCompare, type FnCurves, type FnKind, type FnParam,
 } from '../play/kit/finish.js';
+import { GY_MAX, gyList } from '../play/kit/glyphs.js';
 import type { SealedBlob } from './userNode';
 import { decryptPayload, encryptPayload } from '../playfile/sealing';
+import { parseEffectGraph, type EffectGraph } from '../play/lookGraphRecord';
 
 export type FinishKind = FnKind;
 export type FinishCurves = FnCurves;
 export type FinishTimeMap = 'slit' | 'luma' | 'noise' | 'radial' | 'layer';
 export type FinishTimeQuality = 'low' | 'medium' | 'high';
-/** Where an effect shows: everywhere, or weighted by a layer's alpha, the picture's brightness, or camera motion. */
-export type FinishWhere = 'all' | 'layer' | 'picture' | 'motion';
+/** Where an effect shows: everywhere, or weighted by a layer's alpha, the picture's brightness, camera motion, or the stack's Water's waves. */
+export type FinishWhere = 'all' | 'layer' | 'picture' | 'motion' | 'waves';
+/** Water: where its source is, its shape, and how fine its grid is. */
+export type FinishWaterSource = 'pointer' | 'layer' | 'xy' | 'none';
+export type FinishWaterShape = 'point' | 'line' | 'ring' | 'twin' | 'layer' | 'picture';
+export type FinishWaterDetail = 'low' | 'medium' | 'high';
 /** What pushes the picture in Displace. */
 export type FinishDisplaceMap = 'noise' | 'picture' | 'layer' | 'motion';
 /** What Datamosh measures movement on: the picture, or a layer drawn alone (a Camera layer, hidden or not). */
@@ -40,6 +46,11 @@ export interface FinishEffect {
   defId?: string;
   /** Custom: the code, encrypted, for an effect from a sealed node pack (filled in only in memory). */
   sealed?: SealedBlob;
+  /**
+   * Custom, built from nodes: the graph its `code` was compiled from (play/lookGraph.ts), so the
+   * node editor can open it again. Only the code is ever rendered; editing the code by hand drops it.
+   */
+  graph?: EffectGraph;
   /** Grade: the Tone Map node's mode ('none' = no tone mapping). */
   tone?: string;
   /** Grade: the curves ([x0, y0, x1, y1…] each, 0..1). */
@@ -58,6 +69,18 @@ export interface FinishEffect {
   whereInvert?: boolean;
   /** Time displacement: how many frames it keeps, and at what size. */
   quality?: FinishTimeQuality;
+  /** ASCII: the characters it draws, darkest first ('' = the built-in 5 × 5 ones); emoji work. */
+  chars?: string;
+  /** ASCII: use typed characters in the order typed (else they are ordered by how much of their cell they cover). */
+  keepOrder?: boolean;
+  /** Water: where its source is (the pointer, a layer's position, its Source X/Y, or none: only rain and splashes). */
+  source?: FinishWaterSource;
+  /** Water with source 'layer': the layer whose position is the source. */
+  sourceLayer?: string;
+  /** Water: the source's shape; 'layer' stamps the layer `layerId`'s alpha, 'picture' the picture's bright parts. */
+  shape?: FinishWaterShape;
+  /** Water: how fine its grid is (180, 270 or 405 rows). */
+  detail?: FinishWaterDetail;
   [key: string]: unknown;
 }
 
@@ -220,16 +243,23 @@ export function renderableFinish(finish: PlayFinish | undefined): PlayFinish | u
 }
 
 /** A new custom effect in the stack, at its settings' defaults. */
-export function newCustomEffect(def: { name: string; code: string; defId?: string; sealed?: SealedBlob }, id = finishEffectId('custom')): FinishEffect {
-  const e: FinishEffect = { id, kind: 'custom', enabled: true, name: def.name.trim().slice(0, 60) || 'Custom effect', code: def.sealed ? '' : def.code, ...(def.defId ? { defId: def.defId } : {}), ...(def.sealed ? { sealed: def.sealed } : {}) };
+export function newCustomEffect(def: { name: string; code: string; defId?: string; sealed?: SealedBlob; graph?: EffectGraph }, id = finishEffectId('custom')): FinishEffect {
+  const e: FinishEffect = { id, kind: 'custom', enabled: true, name: def.name.trim().slice(0, 60) || 'Custom effect', code: def.sealed ? '' : def.code, ...(def.defId ? { defId: def.defId } : {}), ...(def.sealed ? { sealed: def.sealed } : {}), ...(def.graph && !def.sealed ? { graph: def.graph } : {}) };
   for (const p of fnParseCustom(finishCustomCode(e)).params) e[p.key] = p.value;
   return e;
 }
 
-/** A custom effect with new code: the settings it still has keep their values (clamped), new ones start at their defaults, gone ones go. */
-export function withCustomCode(e: FinishEffect, code: string): FinishEffect {
+/**
+ * A custom effect with new code: the settings it still has keep their values (clamped), new ones
+ * start at their defaults, gone ones go. Its Where stays. `graph` is the node graph the code was
+ * compiled from; without it the effect is plain code from now on (code edited by hand).
+ */
+export function withCustomCode(e: FinishEffect, code: string, graph?: EffectGraph): FinishEffect {
   const old = fnParseCustom(finishCustomCode(e)).params;
-  const out: FinishEffect = { id: e.id, kind: 'custom', enabled: e.enabled, name: e.name, code, ...(e.defId ? { defId: e.defId } : {}) };
+  const out: FinishEffect = { id: e.id, kind: 'custom', enabled: e.enabled, name: e.name, code, ...(e.defId ? { defId: e.defId } : {}), ...(graph ? { graph } : {}) };
+  if (e.where) out.where = e.where;
+  if (e.whereLayer !== undefined) out.whereLayer = e.whereLayer;
+  if (e.whereInvert) out.whereInvert = true;
   for (const p of fnParseCustom(code).params) {
     const v = e[p.key];
     out[p.key] = typeof v === 'number' && old.some(o => o.key === p.key) ? Math.max(p.min, Math.min(p.max, v)) : p.value;
@@ -280,7 +310,7 @@ export function parseCurves(raw: unknown): FinishCurves {
 }
 
 /** The longest custom effect code kept (characters). */
-export const FINISH_CUSTOM_MAX_CODE = 20000;
+export const FINISH_CUSTOM_MAX_CODE = 60000;
 
 /** A custom effect from a file: its name, code (or sealed blob) and settings, clamped to what the code declares. */
 function parseCustomEffect(r: Record<string, unknown>): FinishEffect | null {
@@ -288,7 +318,8 @@ function parseCustomEffect(r: Record<string, unknown>): FinishEffect | null {
   const code = typeof r.code === 'string' ? r.code.slice(0, FINISH_CUSTOM_MAX_CODE) : '';
   if (!sealed && !code.trim()) return null;
   const id = typeof r.id === 'string' && r.id.trim() ? r.id.slice(0, 80) : finishEffectId('custom');
-  const e = newCustomEffect({ name: typeof r.name === 'string' ? r.name : 'Custom effect', code, ...(typeof r.defId === 'string' && r.defId ? { defId: r.defId.slice(0, 80) } : {}), ...(sealed ? { sealed } : {}) }, id);
+  const graph = sealed ? null : parseEffectGraph(r.graph);
+  const e = newCustomEffect({ name: typeof r.name === 'string' ? r.name : 'Custom effect', code, ...(typeof r.defId === 'string' && r.defId ? { defId: r.defId.slice(0, 80) } : {}), ...(sealed ? { sealed } : {}), ...(graph ? { graph } : {}) }, id);
   e.enabled = r.enabled !== false;
   for (const p of finishParamsOf(e)) e[p.key] = clampNum(r[p.key], p);
   return withWhere(e, r);
@@ -349,6 +380,18 @@ export function parseFinishEffect(raw: unknown): FinishEffect | null {
   if (kind === 'datamosh') {
     e.map = (FN_MOSH_MAPS as readonly string[]).includes(r.map as string) ? r.map as FinishMoshMap : 'picture';
     e.layerId = typeof r.layerId === 'string' ? r.layerId.slice(0, 80) : '';
+  }
+  if (kind === 'ascii') {
+    // Absent (an ASCII saved before typed characters) is the built-in characters, as it was.
+    e.chars = typeof r.chars === 'string' ? gyList(r.chars).slice(0, GY_MAX).join('') : '';
+    e.keepOrder = r.keepOrder === true;
+  }
+  if (kind === 'water') {
+    e.source = (FN_WATER_SOURCES as readonly string[]).includes(r.source as string) ? r.source as FinishWaterSource : 'pointer';
+    e.sourceLayer = typeof r.sourceLayer === 'string' ? r.sourceLayer.slice(0, 80) : '';
+    e.shape = (FN_WATER_SHAPES as readonly string[]).includes(r.shape as string) ? r.shape as FinishWaterShape : 'point';
+    e.layerId = typeof r.layerId === 'string' ? r.layerId.slice(0, 80) : '';
+    e.detail = (FN_WATER_DETAILS as readonly string[]).includes(r.detail as string) ? r.detail as FinishWaterDetail : 'medium';
   }
   return withWhere(e, r);
 }

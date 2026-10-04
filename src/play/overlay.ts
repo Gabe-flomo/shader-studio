@@ -16,7 +16,7 @@
 import { readsPicture } from './conditionRange';
 import { playPerfOn, recordPlayLayer, recordPlayStage } from '../lib/perfStats';
 import type { ActionKind, PlayLayer, PlayRecord } from '../types/play';
-import { DEFAULT_HANDS, emptyPlayRecord } from '../types/play';
+import { DEFAULT_HANDS, emptyPlayRecord, isLookAction } from '../types/play';
 import { DEFAULT_FACE, DEFAULT_POSE } from '../types/playTracking';
 import { playEngine } from '../lib/playEngine';
 import { liveAudio } from '../lib/liveAudio';
@@ -38,12 +38,15 @@ import { dragHandle, handleAt, handlePoints, insideBounds, layerBounds, maskBoun
 import { kmMaskLocal, kmMaskPath, kmMaskPlacement } from './kit/mattes.js';
 import { matteUsers } from '../types/playLayers';
 import { addMask, maskFromOutline } from './mattes';
-import { fnActive, fnAnimated, fnCreate, fnMapLayers, fnUsesMotion, type FnEffect, type FnRenderer } from './kit/finish.js';
+import { fnActive, fnAnimated, fnCreate, fnLookAct, fnLookNew, fnLookReset, fnLookStep, fnLookValue, fnMapLayers, fnUsesMotion, type FnEffect, type FnRenderer } from './kit/finish.js';
 import { finishPropId, renderableFinish } from '../types/playFinish';
 import { clientSize } from '../lib/elementSize';
 
 /** `vel` and `at`: a drum pad hit's velocity (0 lets a gate pad go) and the clock time it landed (takes stamp it there). */
-type KitAction = { do: ActionKind; layerId: string; amount: number; vel?: number; at?: number };
+type KitAction = { do: ActionKind; layerId: string; amount: number; vel?: number; at?: number; key?: string; value?: number; seconds?: number; x?: number; y?: number };
+/** A Look action's own fields (its setting, value and seconds, a Splash's point), when it has them. */
+const lookFields = (a: { key?: string; value?: number; seconds?: number; x?: number; y?: number }) => ({ ...(a.key !== undefined ? { key: a.key } : {}), ...(a.value !== undefined ? { value: a.value } : {}), ...(a.seconds !== undefined ? { seconds: a.seconds } : {}),
+  ...(a.x !== undefined ? { x: a.x } : {}), ...(a.y !== undefined ? { y: a.y } : {}) });
 /** An audio layer's sound from a take: a frame, null (the input was off), or undefined (not recorded: the live sound). */
 export type TakeAudioSource = (l: PlayLayer) => KitAudio | null | undefined;
 
@@ -96,7 +99,7 @@ class PlayOverlay {
   private shaderTap: ((tap: ShaderTap) => void) | null = null;
 
   constructor() {
-    playEngine.onAction(a => this.fire({ do: a.do, layerId: a.layerId, amount: a.amount }));
+    playEngine.onAction(a => this.fire({ do: a.do, layerId: a.layerId, amount: a.amount, ...lookFields(a) }));
     // The picture's brightness (`pic:` values): what the layer kit sampled of the last frame.
     playEngine.setPictureReader((x, y, r, ch) => this.kit.pictureAt(x, y, r, ch));
     // Drum pads: every hit goes through here (a take records it), and comes back to play.
@@ -117,7 +120,8 @@ class PlayOverlay {
   private fire(a: KitAction): void {
     if (this.replaying) return;
     if (a.do === 'pad') for (const cb of this.padListeners) cb(a);
-    else this.kit.act(a);
+    // A Look action already changed its effect's numbers (playEngine.tickActions); a take still records it.
+    else if (!isLookAction(a.do)) this.kit.act(a);
     for (const cb of this.actListeners) cb(a);
   }
 
@@ -138,6 +142,8 @@ class PlayOverlay {
    */
   setReplaying(on: boolean, seed = 0): void {
     this.replaying = on;
+    // Look actions start over too: a take's own fire as it plays.
+    playEngine.resetLooks();
     if (!on) { this.replayPointer = null; this.replayAudio = null; }
     this.seed = on ? seed : 0;
     this.kit.reset(this.seed);
@@ -148,6 +154,7 @@ class PlayOverlay {
   /** An action from the take playing back. */
   replayAct(a: KitAction): void {
     if (a.do === 'pad') { for (const cb of this.padListeners) cb(a); return; }
+    if (isLookAction(a.do)) { playEngine.lookAct(a); return; }
     this.kit.act(a);
   }
   /** Start the layers over (a take scrubbed backwards), with the take's seed. */
@@ -175,7 +182,7 @@ class PlayOverlay {
     if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }
     const ctx = off.getContext('2d');
     if (!ctx) return;
-    for (const a of actions) this.kit.act(a);
+    for (const a of actions) { if (isLookAction(a.do)) playEngine.lookAct(a, time); else this.kit.act(a); }
     const env = this.env(gl, W, H, Math.min(2, window.devicePixelRatio || 1), time, dt, true);
     env.background = playBackground.kitBackground();
     if (pointer) env.pointer = pointer;
@@ -314,7 +321,7 @@ class PlayOverlay {
   setShaderTap(fn: ((tap: ShaderTap) => void) | null): void { this.shaderTap = fn; }
 
   /** Is there anything on the overlay: a visible layer, Layers only, or a background in place of the shader? */
-  hasLayers(): boolean { return this.record.layers.some(l => l.visible) || playBackground.hidden() || playBackground.active() || playBackground.layerActive(); }
+  hasLayers(): boolean { return this.record.layers.some(l => l.visible || l.kind === 'motion') || playBackground.hidden() || playBackground.active() || playBackground.layerActive(); }
 
   /** Anything moving on its own keeps the render loop running. */
   isAnimated(): boolean { return this.kit.isAnimated(this.record) || !!this.drawing; }
@@ -778,6 +785,8 @@ class PlayOverlay {
     const finished = finishing && !!this.live?.draw({
       finish: this.finish!, value: this.finishValue, picture: gl, layers: canvas,
       layerAlpha: id => this.kit.layerCanvas(id), motion: this.kit.motionMap(), width: Math.round(W * fs), height: Math.round(H * fs), time,
+      // Water's source: the pointer (a take's while it plays back) or a layer where the kit last drew it.
+      pointer: env.pointer, layerPoint: id => this.kit.layerPoint(id),
     });
     this.showFinish(finished);
     // Copied here, in the same animation frame the picture was drawn: the GL canvas keeps no
@@ -882,9 +891,22 @@ class PlayOverlay {
    *   'drop'  left out: only the layers, over nothing
    */
   compositePixels(rgba: Uint8Array, width: number, height: number, time: number, dt: number, first: boolean, opts: CompositeOptions = {}): void {
+    // A take's Look actions (Mosh, Pulse a setting…) on the render's own state, from its first frame.
+    if (first) fnLookReset(this.exportLooks);
+    fnLookStep(this.exportLooks, time);
+    for (const a of opts.actions ?? []) if (isLookAction(a.do)) fnLookAct(this.exportLooks, a, time);
+    // Water's pointer source in a render is the take's pointer (none without a take: the live pointer stays out of it).
+    this.exportPointer = opts.pointer ?? null;
     this.layPixels(rgba, width, height, time, dt, first, opts);
     this.finishPixels(rgba, width, height, time, first);
   }
+  /** An offline render's Look actions (its take's, frame by frame): the live ones stay out of it. */
+  private exportLooks = fnLookNew();
+  private exportPointer: KitPointer | null = null;
+  private exportFinishValue = (e: FnEffect, key: string) => {
+    const id = finishPropId(e.id);
+    return fnLookValue(this.exportLooks, id, key) ?? playEngine.layerValueNoLooks(id, key, (e as Record<string, unknown>)[key] as number);
+  };
 
   /**
    * The Finish stack over one offline frame, in place (straight alpha, row 0
@@ -897,8 +919,10 @@ class PlayOverlay {
     if (!this.exportFinish) this.exportFinish = fnCreate(null);
     if (!this.exportFinish.ok) return;
     this.exportFinish.draw({
-      finish: this.finish!, value: this.finishValue, picture: { data: rgba, width, height }, pixels: true,
+      finish: this.finish!, value: this.exportFinishValue, picture: { data: rgba, width, height }, pixels: true,
       layerAlpha: id => this.exportKit?.layerCanvas(id) ?? null, motion: this.exportKit?.motionMap() ?? null, width, height, time, first,
+      // Water's source: the take's pointer at this frame, or a layer where the render's own kit drew it.
+      pointer: this.exportPointer, layerPoint: id => this.exportKit?.layerPoint(id) ?? null,
     });
   }
 

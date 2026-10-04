@@ -2,7 +2,7 @@
  * LinkedBrowser — the one "From a linked folder" browser (docs/linked-folders.md),
  * used by every asset picker (through LinkedPickerHost) and by the Files
  * page's Linked folders view: which folder, its state (with the one-click
- * Allow again / Check again / Find it…), a lazy tree you walk into, a search
+ * Reconnect / Check again / Find it… / Remove), a lazy tree you walk into, a search
  * over the folder and everything under it, the picker's type filter,
  * thumbnails, posters and waveforms, and a preview of the chosen file.
  *
@@ -21,7 +21,7 @@ import { Segmented } from '../ui/Choice';
 import { Select } from '../ui/Select';
 import { toast } from '../ui/toastStore';
 import {
-  UNSUPPORTED_TEXT, checkLinkedFolder, linkFolder, linkedSupport, listLinked, loadLinkedFolders, onLinkedChange, reconnectLinkedFolder, relocateLinkedFolder, resolveLinked, searchLinked, useLinkedFolders,
+  UNSUPPORTED_TEXT, checkLinkedFolder, linkFolder, linkedSupport, listLinked, loadLinkedFolders, onLinkedChange, reconnectLinkedFolder, relocateLinkedFolder, resolveLinked, searchLinked, unlinkFolder, useLinkedFolders,
   type LinkedEntry, type LinkedFolder, type LinkedStatus,
 } from '../../files/linkedFolders';
 import { firstFiles, hintFilter, linkedRef, mediaKindOf, pickerEntries, type LinkedFilter } from '../../files/linkedRefs';
@@ -63,16 +63,20 @@ export function FolderTrouble({ folder, status, compact }: { folder: LinkedFolde
     <div role="status" style={{ display: 'flex', flexDirection: compact ? 'column' : 'row', alignItems: compact ? 'flex-start' : 'center', gap: 8, padding: '9px 12px', borderRadius: radius.md, background: alpha(c, 0.1), boxShadow: `inset 0 0 0 1px ${alpha(c, 0.3)}` }}>
       <span style={{ flex: 1, minWidth: 0, font: `12px/1.45 ${fontFamily.ui}`, color: tk.text.secondary }}>
         {status === 'permission'
-          ? <><b style={{ color: tk.text.primary }}>Allow “{folder.name}” again.</b> The browser asks once per visit before the app may read a folder.</>
-          : <><b style={{ color: tk.text.primary }}>“{folder.name}” isn’t there.</b> {folder.backend === 'desktop' ? 'Is the drive plugged in? Was it moved or renamed?' : 'It may have been moved, renamed or deleted.'} Setups that use its files show them as missing until it’s back.</>}
+          ? <><b style={{ color: tk.text.primary }}>Reconnect “{folder.name}”.</b> It’s still linked: the browser just asks once per visit before the app may read a folder.</>
+          : <><b style={{ color: tk.text.primary }}>“{folder.name}” isn’t there.</b> {folder.backend === 'desktop' ? `Is the drive plugged in? Was it moved or renamed?${folder.path ? ` (It was at ${folder.path}.)` : ''}` : 'It may have been moved, renamed or deleted.'} It stays linked: setups that use its files show them as missing until it’s back, or until you relocate it.</>}
       </span>
       <span style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
         {status === 'permission'
-          ? <Button size="sm" variant="primary" disabled={busy} onClick={() => void run(() => reconnectLinkedFolder(folder.id))}>Allow again</Button>
+          ? <Button size="sm" variant="primary" icon="link" disabled={busy} onClick={() => void run(() => reconnectLinkedFolder(folder.id))} title="The browser asks once per visit before the app may read this folder again">Reconnect</Button>
           : <>
             <Button size="sm" disabled={busy} onClick={() => void run(() => reconnectLinkedFolder(folder.id))}>Check again</Button>
-            <Button size="sm" variant="primary" disabled={busy} onClick={() => void run(() => relocateLinkedFolder(folder.id))} title="Point this linked folder at where it is now: files inside keep their paths, so setups find them again">Find it…</Button>
+            <Button size="sm" variant="primary" disabled={busy} onClick={() => void run(() => relocateLinkedFolder(folder.id))} title="Point this linked folder at where it is now: files inside keep their paths, so setups find them again">Relocate…</Button>
           </>}
+        <Button size="sm" variant="ghost" disabled={busy} title="Take it off the list (nothing on disk is touched)" onClick={() => void run(async () => {
+          const undo = await unlinkFolder(folder.id);
+          if (undo) toast.info(`Removed “${folder.name}”`, { message: 'Nothing on disk was touched. Setups that use its files show them as missing until it’s linked again.', action: { label: 'Undo', onClick: () => { void undo(); } } });
+        })}>Remove</Button>
       </span>
     </div>
   );

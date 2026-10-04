@@ -15,10 +15,12 @@ import { extractScriptParams } from '../components/play/layers/scriptExamples';
 import { encodeKeys } from '../lib/takePlayback';
 import { P5_EXAMPLE_SKETCHES } from './p5ExampleSketches';
 import { SKETCH_3D, SKETCH_3D_SHAPES, SKETCH_3D_TEXTURE, SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIREFLIES, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_INK, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE, SKETCH_HALATION, SKETCH_ORBIT } from './playSketches';
-import { GRADE_LOOKS, applyLook, newFinishEffect, type FinishEffect, type FinishKind, type PlayFinish } from '../types/playFinish';
+import { GRADE_LOOKS, applyLook, newCustomEffect, newFinishEffect, type FinishEffect, type FinishKind, type PlayFinish } from '../types/playFinish';
 import { newAudioFxEffect, type AudioFxEffect, type AudioFxKind, type PlayAudioFx } from '../types/playAudioFx';
 // An original picture made for the Background example (tools/ridges-at-dusk.mjs), inlined as a data URL.
 import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
+// An original picture of a pool's floor for the Water example (tools/pool-floor.mjs): straight tile lines show the water bending the light.
+import POOL_FLOOR from './playAssets/pool-floor.jpg?inline';
 import {
   defaultLayer, handAnchor, type ActionKind, type AudioReader, type PlayAudioReaders, type FireSpec, type HandGesture, type HandRead, type HandSide, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
   type PlayLayer, type PlayLayerKind, type PlayMapping, type PlayRecord, type PlaySource, type PlayTake, type TakeTrack, type SensorRead, type TriggerMode, type TriggerSpec,
@@ -29,6 +31,7 @@ import { DEFAULT_PAD_GRID, type PlayPadGrid } from '../types/playMidi';
 import type { PlayAudioEngine } from '../types/playAudioEngine';
 import type { ArrNote, PlayArrangement } from '../types/playArrangement';
 import { FN_EFFECTS } from '../play/kit/finish.js';
+import { effectFromGraph, type EffectGraph } from '../play/lookGraph';
 import { gpPreset } from '../play/kit/gpuParticles.js';
 import { MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type DrumPadLayer, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
 import type { DpSynth } from '../play/kit/drumPads.js';
@@ -356,6 +359,51 @@ function builtTake(): PlayTake {
 
 type Ex = { key: string; nodes: GraphNode[]; play: PlayRecord };
 const ex = (key: string, nodes: GraphNode[], p: PlayRecord): Ex => ({ key, nodes, play: p });
+
+// ── Look effects you build (play/lookGraph.ts, docs/finish-stack.md "Effects from nodes") ──
+
+/**
+ * The node-built effect of the lookBuilt example: a duotone blended back over the picture, then a
+ * vignette. Each node's `__comment` says what it does; the comments are carried into the code the
+ * graph compiles to, above that node's lines.
+ */
+const DUOTONE_GRAPH: EffectGraph = {
+  v: 1,
+  nodes: [
+    // Picture colour → how bright this point is (0 black … 1 white).
+    { id: 'luma', type: 'luminance', x: 250, y: 40, wires: { color: ['in', 'color'] }, params: { __comment: 'How bright the picture is here: 0 is black, 1 is white.' } },
+    // That brightness painted from deep violet (dark) to warm cream (bright): a duotone of the picture.
+    { id: 'tone', type: 'colorize', x: 500, y: 40, wires: { field: ['luma', 'result'] }, params: { color: [1, 0.8, 0.5], background: [0.12, 0.05, 0.35], gain: 1, __comment: 'Paints the brightness from deep violet (dark) to warm cream (bright): a duotone.' } },
+    // The duotone soft-lit over the original picture, so the picture's own colour still shows through. Opacity is mapped to the mouse.
+    { id: 'blend', type: 'blendModes', x: 750, y: 40, wires: { base: ['in', 'color'], blend: ['tone', 'color'] }, params: { mode: 'soft_light', opacity: 0.85, strength: 1, __comment: 'Soft-lights the duotone over the picture; Opacity is how much of it shows.' } },
+    // Darkens the corners; its UV is the 0..1 point on the picture (from Effect inputs → UV).
+    { id: 'vig', type: 'vignette', x: 1000, y: 40, wires: { color: ['blend', 'result'], uv: ['in', 'uv'] }, params: { radius: 0.75, softness: 0.55, strength: 0.7, __comment: 'Darkens the corners of the picture.' } },
+    // What the effect gives back to the stack.
+    { id: 'out', type: 'fx:out', x: 1250, y: 40, wires: { color: ['vig', 'result'] } },
+  ],
+};
+/** DUOTONE_GRAPH compiled into a Look effect (its code is what renders, in the app and in exports). */
+function graphFx(graph: EffectGraph, id: string, name: string): FinishEffect {
+  const r = effectFromGraph(graph, { id, name });
+  if (!r.effect) throw new Error(`example effect ${id}: ${r.error}`);
+  return r.effect;
+}
+/** The code-built effect of the lookBuilt example, every line explained. */
+const WOBBLE_CODE = `// Tape wobble: each band of rows slides sideways a little, like a worn videotape.
+// Settings: each uniform below is a slider on the card (min..max = start, then its label | hint).
+uniform float amount; // 0..0.05 = 0.012 Amount | How far a band slides, in picture widths
+uniform float rows;   // 4..200 = 60 step 1 Bands | How many bands slide on their own
+uniform float speed;  // 0..10 = 2.5 Speed | How fast the wobble moves
+uniform vec3 tint;    // color = #ffe6cc Tint | Multiplied over the result
+
+vec3 effect(vec2 uv, vec3 color) {
+  float band = floor(uv.y * rows);                       // which band this point is in
+  float slide = sin(band * 1.7 + time * speed) * amount; // each band its own slide, moving with the clock
+  vec3 moved = picture(uv + vec2(slide, 0.0));           // the picture read from that far sideways
+  float edge = smoothstep(0.0, 0.004, abs(slide));       // bands that barely move keep the colour so far
+  return mix(color, moved, 0.85 * edge) * tint;          // mostly the slid picture, tinted warm
+}
+`;
 
 // ── The examples, in learning order ──────────────────────────────────────────
 
@@ -1677,6 +1725,66 @@ Actions use them like keys, and they work on websites too (a background can reac
 • Title → Matte → **Luma**, then give the Window a grey fill: the text dims to match.
 • Select the Window in the list: its handles work while it is hidden. Make it a Box, or draw a Polygon.`,
   })),
+  // A Motion layer watching the picture (or the camera, or a video): its matte reveals a photo, particles are born in it, its readings drive a readout and two rules.
+  ex('motionReveal', glowGraph({ radius: 0.16, falloff: 10, tint: [0.45, 0.8, 1], comment: 'The glow that moves: its position orbits (two LFOs) and its radius jumps every few seconds (a square LFO). The Watcher layer sees that movement.' }), play({
+    layers: [
+      layer('image', 'photo', 'Photo · shows where it moves', { src: RIDGES_AT_DUSK, scale: 1.02, toShader: false, trackMatte: { id: 'watch', mode: 'alpha', invert: false } }),
+      layer('motion', 'watch', 'Watcher', { visible: false, readFrom: 'picture', sensitivity: 0.7, delay: 2, smoothing: 0.85, cell: 0.035, show: 'mask', feather: 0.05 }),
+      layer('particles', 'sparks', 'Sparks · born where it moves', {
+        toShader: false, count: 900, emit: 'burst', spawn: 'motion', motionId: 'watch', life: 1.4, fade: 0.6, field: 'noise', noiseScale: 2, speed: 0.7, size: 2.2, sizeJitter: 0.5,
+        colour: 'palette', palette: 2, paletteBy: 'age', trail: 0.55, blend: 'screen', seed: 11,
+      }),
+      layer('text', 'state', 'Status', { text: 'STILL\nSOMETHING MOVED', sequence: true, interval: 0, transition: 'fade', x: 0.5, y: 0.08, size: 0.04, weight: 700, font: 'mono', color: [1, 0.9, 0.7], toShader: false }),
+      layer('text', 'readout', 'Readout · follows the movement', { text: 'movement {v}', reads: 'read:watch::motion', readFormat: 'template', readDecimals: 2, x: 0.5, y: 0.5, size: 0.04, weight: 600, font: 'mono', color: [0.7, 1, 0.9], toShader: false }),
+    ],
+    controls: [
+      ctl('gx', 'circ::posX', 'Glow X (an LFO moves it)', -1.6, 1.6),
+      ctl('gy', 'circ::posY', 'Glow Y (an LFO moves it)', -0.9, 0.9),
+      ctl('gr', 'circ::radius', 'Glow size (jumps every 4 s)', 0.05, 0.5),
+      ctl('sens', 'layer:watch::sensitivity', 'Watcher · Sensitivity', 0, 1),
+      ctl('feather', 'layer:watch::feather', 'Watcher · Feather', 0, 0.3),
+      ctl('rx', 'layer:readout::x', 'Readout X (Where X)', 0, 1),
+      ctl('ry', 'layer:readout::y', 'Readout Y (Where Y)', 0, 1),
+    ],
+    mappings: [
+      map('orbitX', 'gx', S.lfo('sine', 0.13), -1.1, 1.1),
+      map('orbitY', 'gy', S.lfo('sine', 0.13, 0.25), -0.55, 0.55),
+      map('jump', 'gr', S.lfo('square', 0.125), 0.12, 0.34),
+      map('whereX', 'rx', S.sensor('watch', 'moveX'), 0.15, 0.85, { smoothMs: 250 }),
+      map('whereY', 'ry', S.sensor('watch', 'moveY'), 0.15, 0.9, { smoothMs: 250 }),
+    ],
+    signals: [
+      { id: 'starts', name: 'Movement starts: sparks burst and the status says so', inputs: [{ kind: 'trigger', trigger: when('read:watch::motion', 'crossUp', 0.2, 0.05) }],
+        do: [{ id: 'starts_burst', do: 'burst', layerId: 'sparks', amount: 60, enabled: true }, { id: 'starts_text', do: 'next', layerId: 'state', amount: 1, enabled: true }] },
+      { id: 'big', name: 'A big movement (Area past 0.08): a bigger burst', inputs: [{ kind: 'trigger', trigger: when('read:watch::area', 'crossUp', 0.08, 0.02) }],
+        do: [{ id: 'big_burst', do: 'burst', layerId: 'sparks', amount: 220, enabled: true }] },
+      { id: 'stops', name: 'Movement stops: the status goes back to STILL', inputs: [{ kind: 'trigger', trigger: when('read:watch::motion', 'crossDown', 0.08, 0.03) }],
+        do: [{ id: 'stops_text', do: 'reset', layerId: 'state', amount: 1, enabled: true }] },
+    ],
+    notes: `**What it shows.** A **Motion** layer turns movement into something you can use: a matte, a place particles are born, and readings (how much moves, where, which way) for mappings and rules. Here it watches the **picture**, a glow that orbits and jumps, so it works without a camera. Switch it to your webcam or a video and the same setup follows you.
+
+**Start here.** Layers → **Watcher** → Source → **Camera** (then **Turn on camera**), and wave. Or add a **Video** layer and pick Source → **A layer** → your video (hide the video to use only its movement).
+
+**The layers, bottom to top.**
+• **Photo · shows where it moves**: a photo with **Matte → Watcher**: it shows only where the Watcher sees movement, a soft-edged trail behind the glow.
+• **Watcher** (Motion, hidden): watches the Picture. Sensitivity 0.7 catches the glow's soft edge; Delay 2 frames; Smoothing 0.85 makes the matte linger like a trail; Cell size 0.035; Feather 0.05 softens the matte's edge. Hidden, it still measures: hiding only stops it drawing.
+• **Sparks · born where it moves**: particles with Born → **Where it moves**, In → **Watcher**. They only exist when a rule bursts them, and always inside the movement.
+• **Status**: two lines, STILL and SOMETHING MOVED, stepped by the rules.
+• **Readout · follows the movement**: a Text layer that reads the Watcher's **Amount** ("movement 0.42"); its X and Y follow **Where X/Y**.
+
+**The controls.** *Glow X / Y / size* are the shader's circle, moved by three LFOs (the thing that moves). *Watcher · Sensitivity* and *Feather* are the Motion layer's own numbers: drag them to see the matte widen or soften. *Readout X / Y* are driven by the Watcher's Where X and Where Y (smoothed 250 ms, kept off the edges), so the words chase the movement.
+
+**The rules.**
+• *Movement starts*: Amount crosses up through 0.2 → burst 60 sparks where it moves, and the status steps to SOMETHING MOVED.
+• *A big movement*: Area (the share of the grid moving) crosses up through 0.08, which happens when the glow jumps in size → burst 220.
+• *Movement stops*: Amount falls under 0.08 → the status goes back to STILL.
+
+**Try this.**
+• Photo → Matte → **Invert**: the photo everywhere except where it moves.
+• Watcher → Show → **Heat map** and its eye on, to see the grid it measures; or **Movement** for the motion-extract look.
+• Rules → Behaviours: *Motion starts*, *Big movement* and *Motion stops* make the same rules for any Motion layer.
+• Map **Direction X** (Watcher's readings, under Accepts and emits) onto something: 0.5 is still, 1 rightward, 0 leftward.`,
+  })),
 
   // ─ Hands ─
   ex('handFingertips', quietGraph(), play({
@@ -2110,6 +2218,53 @@ Holding **M** turns Datamosh's **Mosh** on: nothing heals while it's held.
 • Presets: **Classic grey** (the mid-grey version of the trick), **On black**.
 • Put it over a Camera or a Video layer: only you (or what moves in the video) shows.`,
   })),
+  // ─ Finish: Water, a simulated surface: a layer drags a wake, rain falls, clicks splash ─
+  ex('finishWater', quietGraph(), play({
+    display: { picture: true, backdrop: [0, 0, 0], source: 'image', image: { name: 'Pool floor.jpg', src: POOL_FLOOR } },
+    layers: [
+      layer('null', 'boat', 'Boat', { x: 0.3, y: 0.5, size: 8, color: '#ffb86b' }),
+    ],
+    finish: {
+      on: true,
+      effects: [
+        fx('water', { source: 'layer', sourceLayer: 'boat', shape: 'point', speed: 0.22, damping: 0.14, size: 0.04, strength: 1.2, refraction: 0.6, highlights: 0.5, rain: 3, drop: 0.01 }),
+        fx('chroma', { amount: 0.6, where: 'waves' }),
+      ],
+    },
+    controls: [
+      ctl('bx', 'layer:boat::x', 'Boat · x', 0, 1),
+      ctl('by', 'layer:boat::y', 'Boat · y', 0, 1),
+      ctl('speed', 'finish:water::speed', 'Water · Wave speed', 0.05, 2),
+      ctl('damp', 'finish:water::damping', 'Water · Damping', 0, 1),
+      ctl('rain', 'finish:water::rain', 'Water · Rain', 0, 60, 0.5),
+      ctl('bend', 'finish:water::refraction', 'Water · Refraction', 0, 1),
+      ctl('shine', 'finish:water::highlights', 'Water · Highlights', 0, 1),
+    ],
+    mappings: [
+      map('sailX', 'bx', S.lfo('sine', 0.11), 0.12, 0.88),
+      map('sailY', 'by', S.lfo('sine', 0.17, 0.25), 0.22, 0.78),
+    ],
+    signals: [
+      { id: 'splashClick', name: 'Splash where you click', inputs: [{ kind: 'trigger', trigger: T.click() }], do: [{ id: 'sc', do: 'splash', layerId: 'finish:water', amount: 1, enabled: true, key: 'pointer', value: 0.05 }] },
+      { id: 'bigSplash', name: 'Big splash (Space)', inputs: [{ kind: 'trigger', trigger: T.key('Space') }], do: [{ id: 'bs', do: 'splash', layerId: 'finish:water', amount: 1, enabled: true, key: 'random', value: 0.12 }] },
+    ],
+    notes: `**What it shows.** **Water**, a Look effect that simulates a water surface over the picture. An invisible boat sails round the pool and drags a wake behind it, a V of waves that spreads, crosses the others and fades; a light rain dimples the surface; click to splash. The tile lines bend under the waves and their crests catch the light.
+
+**How it's built.**
+• The picture: Background → Image holds a pool's floor (the graph underneath is paused). Straight lines and small detail show the water's bending best.
+• **Boat** (a Null layer): just a point; its marker shows only while you edit. Two slow LFOs swing its x and y (the **Boat · x / y** controls), so it sails a looping path faster than the waves travel, which is what makes a wake rather than rings. A null rather than a shape, because the Finish stack bends everything under it, layers too: a drawn boat would wobble in its own wake.
+• Finish → **Water**: Source **A layer: Boat**, Shape **Point**. Every frame it presses a small dimple into the water where the boat is; as the boat moves, the water it leaves springs back and the waves run off at **Wave speed**. **Rain** drops 3 raindrops a second at random places (the same places in every render). Open edges lets the waves run out of the frame.
+• Finish → **Chromatic aberration** with **Where → Where the water moves**: colour fringes only on the waves, none on still water.
+• Rules: **Splash where you click** (a click on the picture → Splash under the pointer) and **Big splash (Space)** (Space → a bigger Splash somewhere random). Both are a rule's Do → **Splash · Water**.
+• Controls: **Wave speed** (how fast the waves travel), **Damping** (how long they last), **Rain** (drops a second), **Refraction** (how much the waves bend the picture) and **Highlights** (glints and the bright bands crests focus).
+
+**Try this.**
+• On the Water card, set Source to **The pointer** and drag across the picture: a fast flick leaves a sharp V, a slow one only ripples. Give it **Bob** and hold still to make rings.
+• Water's presets: **Rain on glass**, **Ripple tank** (two bobbing points that interfere), **Shockwave** (then press Space).
+• Set the Boat null to **Follow: Mouse**: the wake trails a springy point that chases your pointer.
+• Add a Shape layer, hide it, and pick Shape → **A layer's shape** with it on the Water card: the whole shape pushes the water as it moves.
+• Render it: the waves are simulated by the clock, so every render comes out the same.`,
+  })),
   ex('drumPads', glowGraph({ radius: 0.1, falloff: 16, tint: [1, 0.5, 0.3] }), play({
     layers: [
       drumKit('drums', 'Drums', [
@@ -2390,6 +2545,33 @@ Holding **M** turns Datamosh's **Mosh** on: nothing heals while it's held.
 • Click the picture first (the browser starts sound on a click), then press **Play** on the transport (Engine tab).
 • Double-click the Kick clip to open the piano roll and add or move kicks: each one is a ring.
 • Set Sound from to **Audio engine** (the master) and the pad joins in; or try the Launch preset on the node for a rocket's roar.`,
+  })),
+  // ─ Look effects you build: one from nodes, one from code ─
+  ex('lookBuilt', fbmGraph({ scale: 2.4, timeScale: 0.1, preset: '3' }), play({
+    layers: [layer('text', 'title', 'Title', { text: 'BUILT', y: 0.5, size: 0.2 })],
+    finish: {
+      on: true,
+      effects: [
+        graphFx(DUOTONE_GRAPH, 'duotone', 'Duotone (nodes)'),
+        newCustomEffect({ name: 'Tape wobble (code)', code: WOBBLE_CODE }, 'wobble'),
+      ],
+    },
+    controls: [
+      ctl('duo', 'finish:duotone::opacity', 'Duotone · Opacity', 0, 1),
+      ctl('wob', 'finish:wobble::amount', 'Tape wobble · Amount', 0, 0.05),
+    ],
+    mappings: [
+      map('duoMouse', 'duo', S.mouse('x'), 0, 1, { smoothMs: 100 }),
+      map('wobLfo', 'wob', S.lfo('sine', 0.15), 0.002, 0.03, { smoothMs: 60 }),
+    ],
+    notes: `**What it shows.** Two Look effects you make yourself: **Duotone (nodes)** is built from Studio nodes, **Tape wobble (code)** is written in GLSL. Both are ordinary effects in the stack: their settings are sliders and controls, they take a Where, and they render in exports.
+
+**How it's built.** **Duotone** is a node graph (open it with **Edit nodes…** on its card): Effect inputs → **Luminance** (how bright each point is) → **Colorize** (that brightness painted violet to cream) → **Blend Modes** (soft-lit over the original picture; its Base is the Picture colour) → **Vignette** (its UV wired from the inputs' 0..1 UV) → Effect output. Every node slider became one of the effect's settings; mouse X drives its Opacity. **Tape wobble** is code (Open editor… on its card): each band of rows reads the picture slid sideways by a sine that moves with time; an LFO swells the slide.
+
+**Try this.**
+• Move the mouse left and right: the duotone fades in and out.
+• Duotone → **Edit nodes…**, then **+ Add node → Posterize**: it goes in just before the output. Use **Update effect**.
+• Tape wobble → **Open editor…** and change \`1.7\` to \`7.0\`: smaller, busier bands. Or + Add effect → **Nodes** for any single node (Hue Rotate, Tone Map, CRT Mask…).`,
   })),
 ];
 

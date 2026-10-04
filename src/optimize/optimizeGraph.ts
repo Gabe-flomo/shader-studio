@@ -64,7 +64,7 @@ export interface Fold {
 export interface OptimizeReport { folds: Fold[]; before: number; after: number }
 export interface OptimizeResult { nodes: GraphNode[]; report: OptimizeReport }
 
-const NEVER = new Set(['output', 'vec4Output', 'group', 'sceneGroup', 'spaceWarpGroup', 'marchLoopGroup', 'giLitMarchGroup', 'loopCarry', 'loopIndex', 'exprNode', 'customFn', 'constants', 'constant', 'colorPicker', 'layers', 'playLayers', 'padGrid', 'scope', 'echo', 'prevFrame', 'textureInput', 'videoInput', 'audioInput', 'midiInput']);
+const NEVER = new Set(['output', 'vec4Output', 'group', 'sceneGroup', 'spaceWarpGroup', 'marchLoopGroup', 'giLitMarchGroup', 'loopCarry', 'loopIndex', 'exprNode', 'customFn', 'constants', 'constant', 'colorPicker', 'layers', 'playLayers', 'padGrid', 'scope', 'echo', 'prevFrame', 'textureInput', 'videoInput', 'audioInput', 'midiInput', 'pass', 'passOutput']);
 const DECL = /^\s*(float|vec[234]|mat[234]|int|bool)\s+([A-Za-z_]\w*)\s*=\s*(.+);\s*$/;
 /** Names a block input can't have: GLSL functions, types and keywords, and the app's own prefixes. */
 const RESERVED = new Set('sin cos tan asin acos atan pow exp log exp2 log2 sqrt inversesqrt abs sign floor ceil fract mod min max clamp mix step smoothstep length distance dot cross normalize reflect refract faceforward texture2D texture radians degrees any all not float int bool vec2 vec3 vec4 mat2 mat3 mat4 if else for while do return const uniform varying in out inout void main discard true false struct sampler2D precision highp mediump lowp dFdx dFdy fwidth'.split(' '));
@@ -100,6 +100,8 @@ function foldable(n: GraphNode, def: NodeDefinition | undefined, opts: Required<
   if (opts.only && !opts.only.has(n.id)) return false;
   if (n.bypassed || (n.assignOp && n.assignOp !== '=') || n.carryMode) return false;
   if (Object.keys(n.inputs).length === 0) return false;
+  // Texture-sampling nodes read a Pass's sampler: they stay cards.
+  if (Object.values(n.inputs).some(i => i.type === 'texture')) return false;
   if (Object.keys(n.params).some(k => k.startsWith('__kf') || k.startsWith('__param'))) return false;
   if (def.glslFunction || def.glslFunctions?.length || def.glslFunctionsFor) return false;
   return true;
