@@ -1390,7 +1390,10 @@ void main() {
     // Layers talk back: sensors (zone fill, speed…) and where following nulls are. The layer kit (inlined ahead of this file) draws them.
     const sensors = new Map(), overrides = new Map();
     const K = typeof SSKit !== 'undefined' ? SSKit.createLayerKit() : null;
-    const layerValue = (id, key, fb) => { const k = id + '::' + key; let v = overrides.get(k); if (v === undefined) v = layerLive.get(k); return v === undefined ? fb : v; };
+    // The rules' Look actions on Finish effects (Mosh, Pulse a setting…: the kit's finish.js fnLookAct), read before the mappings' values.
+    const LK = typeof SSKit !== 'undefined' && SSKit.finish && SSKit.finish.looks ? SSKit.finish.looks : null;
+    const looks = LK ? LK.create() : null;
+    const layerValue = (id, key, fb) => { const k = id + '::' + key; let v = overrides.get(k); if (v === undefined && looks) v = LK.value(looks, id, key); if (v === undefined) v = layerLive.get(k); return v === undefined ? fb : v; };
     const value = (l, k) => layerValue(l.id, k, l[k]);
     // Drum pad layers (the kit's drumPads.js): each pad's sample from its data URL, or a generated drum,
     // decoded as the page opens; heard once the visitor's first click or key lets sound start.
@@ -1977,6 +1980,7 @@ void main() {
     }
     // Actions (burst, next line, drop…): by their trigger's mode, once per press unless it says every frame, every N or on release.
     // Send a signal passes its signal on down the chain in the same frame (each signal once a frame, a limited depth).
+    let lookMoved = false;
     function tickActions(dt) {
       // A chain looks at signal-fired actions again in the same frame: their clocks move once a frame (as the app does).
       const stepped = new Set();
@@ -1989,8 +1993,10 @@ void main() {
         if (again && inp.presses <= f.slot.st.seen) return 0;
         return f.fresh ? 0 : Math.min(4, stepFire(f.slot.st, a.trigger.fire, inp.presses, inp.gate, again ? 0 : dt, time));
       };
-      if (SG) { SG.runActions(actions, fires, a => { if (K) K.act(a); }, emitSignal); return; }
-      for (const a of actions) { const n = fires(a); if (a.do !== 'signal' && K) for (let i = 0; i < n; i++) K.act(a); }
+      // A Look action changes a Finish effect's numbers (layerValue reads them); the rest go to the layer kit.
+      const act = a => { if (looks && LK.is(a.do)) LK.act(looks, a, time); else if (K) K.act(a); };
+      if (SG) { SG.runActions(actions, fires, act, emitSignal); return; }
+      for (const a of actions) { const n = fires(a); if (a.do !== 'signal') for (let i = 0; i < n; i++) act(a); }
     }
     // Pair mappings: a position drives both axes (x → A, y → B), a single source A, B or both, each axis with its own
     // range, curve and smoothing; an axis whose condition doesn't hold keeps its last value; an axis swap moves between them.
@@ -2165,6 +2171,8 @@ void main() {
         if (rtState) RT.rewind(rtState);
       }
       lastTime = time;
+      // Look actions that have run out let go (a clock sent back forgets them all).
+      if (looks) { LK.step(looks, time); if (looks.changed) { looks.changed = false; lookMoved = true; } }
       tickConditionTriggers(dt);
       tickRelationshipSignals();
       tickMultiplySignals();
@@ -2172,7 +2180,8 @@ void main() {
       tickSignalLevels();
       tickActions(dt);
       const driven = new Set();
-      let moved = false;
+      let moved = lookMoved || !!(looks && looks.changed);
+      lookMoved = false; if (looks) looks.changed = false;
       // Sources and routes (the kit's routes.js, the same frame as the app's): each source read once, its routes written in record order.
       rtDriven = driven; rtMoved = false;
       if (RT) RT.frame(rtState, rtSources, rtRead, rtApply, dt, time);
@@ -2663,6 +2672,7 @@ void main() {
       if (K) K.reset(o.seed > 0 ? o.seed : 1);
       if (finishR) finishR.reset();
       gpReset = true;
+      if (looks) LK.reset(looks);
       dropTargets(); frame = 0; if (rtState) { rtState.smooth.clear(); rtState.lag.clear(); rtState.values.clear(); } lastOut.clear(); trig.clear(); actLevel.clear(); overrides.clear(); pairState.clear(); condStates.clear(); incState.clear(); incFire.clear(); incCond.clear(); lastTime = -Infinity;
       return { gen, fdt, steps };
     };

@@ -262,6 +262,12 @@ export interface PlayReaction {
   signal?: string;
   /** Play notes: what and how. */
   notes?: NotesSpec;
+  /** A Look action (LookActionKind): the effect's setting it changes (fxpulse, fxset). */
+  key?: string;
+  /** A Look action: the value it sets (fxpulse, fxset). */
+  value?: number;
+  /** A Look action: how long, in seconds (mosh, fxpulse). */
+  seconds?: number;
   /** once (when it turns on), held (while it is on), every (every N while on), release (when it turns off)… */
   fire?: FireSpec;
 }
@@ -824,7 +830,7 @@ import { parseLayerKinds, syncLayerKinds, type LayerKindDef } from './layerKinds
 import { parseSourceCredit, type SourceCredit } from './credit';
 import { parseProjection, type ProjectionRecord } from './projection';
 import { parseLayerGroups, tidyGroups, type LayerGroup } from './layerGroups';
-import { finishHosts, finishPropId, isFinishEmpty, parseFinish, parseFinishTarget, type PlayFinish } from './playFinish';
+import { FINISH_TARGET_PREFIX, finishHosts, finishPropId, isFinishEmpty, parseFinish, parseFinishTarget, type PlayFinish } from './playFinish';
 import { audioFxEffects, audioFxPropId, isAudioFxEmpty, parseAudioFx, parseAudioFxTarget, type PlayAudioFx } from './playAudioFx';
 import { aeRack, auPropId, auTargetExists, isAudioEngineEmpty, isGranulatorRack, macroPropId, parseAudioEngine, parseAuTarget, parseGrainsTarget, parseMacroTarget, rackOfSensorLayer, type PlayAudioEngine } from './playAudioEngine';
 import { arrangementFor, isArrangementEmpty, parseArrangement, type PlayArrangement } from './playArrangement';
@@ -851,8 +857,19 @@ export type { LayerGroup } from './layerGroups';
  *   pad      drum pads: play pad number `amount` (1 = the first; docs/drum-pads.md)
  */
 export type BuiltinActionKind = 'burst' | 'scatter' | 'reset' | 'freeze' | 'next' | 'prev' | 'shuffle' | 'toggle' | 'show' | 'hide' | 'drop' | 'clear' | 'goto' | 'pad' | 'multiply' | 'cull';
-/** A built-in action, or a button a Script layer declares (`script:<key>`). */
-export type ActionKind = BuiltinActionKind | 'signal' | 'notes' | `script:${string}`;
+/**
+ * Actions on a Look (Finish) effect instead of a layer (play/kit/finish.js fnLookAct): their `layerId`
+ * is the effect's finishPropId ('finish:<effectId>').
+ *   mosh       Datamosh: Mosh on for `seconds`
+ *   moshreset  Datamosh: Reset once (the picture snaps back), ending an action's Mosh
+ *   fxpulse    any effect: its `key` at `value` for `seconds`, then back
+ *   fxset      any effect: its `key` at `value` until the clock goes back
+ */
+export type LookActionKind = 'mosh' | 'moshreset' | 'fxpulse' | 'fxset';
+export const LOOK_ACTION_KINDS: readonly LookActionKind[] = ['mosh', 'moshreset', 'fxpulse', 'fxset'];
+export function isLookAction(kind: string): kind is LookActionKind { return (LOOK_ACTION_KINDS as readonly string[]).includes(kind); }
+/** A built-in action, a Look action, or a button a Script layer declares (`script:<key>`). */
+export type ActionKind = BuiltinActionKind | LookActionKind | 'signal' | 'notes' | `script:${string}`;
 /** The action that sends a signal (its `signal`) instead of doing something to a layer. */
 export const SIGNAL_ACTION = 'signal' as const;
 /** The reaction that plays notes on a rack of the Audio engine (its `notes`) instead of doing something to a layer. */
@@ -901,6 +918,10 @@ export interface PlayAction {
   signal?: string;
   /** Play notes (a rule's reaction): what and how. */
   notes?: NotesSpec;
+  /** A Look action's setting, value and seconds (see PlayReaction). */
+  key?: string;
+  value?: number;
+  seconds?: number;
 }
 
 // ── Sources and routes (implementation guide, phase 1: play/kit/routes.js) ─
@@ -1299,6 +1320,10 @@ export interface TakeEvent {
   vel?: number;
   /** A drum pad hit: the pad (1-based) whose sound it played, after the sample index. Absent: its own. */
   slot?: number;
+  /** A Look action's setting, value and seconds. */
+  key?: string;
+  value?: number;
+  seconds?: number;
 }
 
 /**
@@ -1668,13 +1693,28 @@ function parseAction(raw: unknown): PlayAction | null {
   return { id, trigger, do: kind, layerId, amount: Math.max(0, num(a.amount, kind === 'burst' ? 60 : 1)), enabled: a.enabled !== false };
 }
 
+/** A Look action's setting, value and seconds, each when it is there and sensible. */
+function parseLookFields(a: Record<string, unknown>): { key?: string; value?: number; seconds?: number } {
+  const out: { key?: string; value?: number; seconds?: number } = {};
+  if (typeof a.key === 'string' && a.key) out.key = a.key.slice(0, 80);
+  if (typeof a.value === 'number' && Number.isFinite(a.value)) out.value = a.value;
+  if (typeof a.seconds === 'number' && Number.isFinite(a.seconds)) out.seconds = Math.max(0, Math.min(600, a.seconds));
+  return out;
+}
+
 /** One Do of a signal: an action kind (a Send a signal needs its signal), with its firing mode. */
 function parseReaction(raw: unknown): PlayReaction | null {
   const a = raw as Record<string, unknown> | null;
   const id = a && str(a.id);
   if (!a || !id) return null;
-  const kind = typeof a.do === 'string' && ((ACTION_KINDS as readonly string[]).includes(a.do) || scriptActionKey(a.do) || a.do === SIGNAL_ACTION || a.do === NOTES_ACTION) ? (a.do as ActionKind) : null;
+  const kind = typeof a.do === 'string' && ((ACTION_KINDS as readonly string[]).includes(a.do) || isLookAction(a.do) || scriptActionKey(a.do) || a.do === SIGNAL_ACTION || a.do === NOTES_ACTION) ? (a.do as ActionKind) : null;
   if (!kind) return null;
+  if (isLookAction(kind)) {
+    const r: PlayReaction = { id, do: kind, layerId: (str(a.layerId) ?? '').slice(0, 120), amount: 1, enabled: a.enabled !== false, ...parseLookFields(a) };
+    const f = parseFire(a.fire);
+    if (f) r.fire = f;
+    return r;
+  }
   if (kind === NOTES_ACTION) {
     const notes = parseNotes(a.notes);
     if (!notes) return null;
@@ -2090,7 +2130,8 @@ export function parsePlayRecordAsSaved(raw: unknown): PlayRecord {
   const signals = parseSignals(r.signals);
   // A reaction on a missing layer goes, as an action would; a trigger input on something missing goes too.
   for (const s of signals) {
-    if (s.do) { const d = s.do.filter(x => x.do === SIGNAL_ACTION || x.do === NOTES_ACTION || layerIds.has(x.layerId)); if (d.length) s.do = d; else delete s.do; }
+    // A Look action needs its effect ('finish:<effectId>').
+    if (s.do) { const d = s.do.filter(x => x.do === SIGNAL_ACTION || x.do === NOTES_ACTION || (isLookAction(x.do) ? x.layerId.startsWith(FINISH_TARGET_PREFIX) && effectIds.has(x.layerId.slice(FINISH_TARGET_PREFIX.length)) : layerIds.has(x.layerId))); if (d.length) s.do = d; else delete s.do; }
     if (s.inputs) { const k = s.inputs.filter(x => x.kind !== 'trigger' || triggerOk(x.trigger)); if (k.length) s.inputs = k; else delete s.inputs; }
   }
   if (signals.length) out.signals = signals;
@@ -2404,9 +2445,9 @@ export function parseTake(raw: unknown): PlayTake | null {
     const x = e as Record<string, unknown>;
     const at = num(x.t), amount = num(x.amount);
     if (at === null || at < 0 || at > length + 1 || typeof x.do !== 'string' || typeof x.layerId !== 'string') continue;
-    if (!(ACTION_KINDS as readonly string[]).includes(x.do) && !scriptActionKey(x.do)) continue;
+    if (!(ACTION_KINDS as readonly string[]).includes(x.do) && !isLookAction(x.do) && !scriptActionKey(x.do)) continue;
     const vel = num(x.vel), slot = num(x.slot);
-    events.push({ t: at, do: x.do as ActionKind, layerId: x.layerId, amount: amount ?? 1, ...(vel !== null ? { vel: Math.max(0, Math.min(1, vel)) } : {}), ...(slot !== null && slot >= 1 && slot <= 128 ? { slot: Math.round(slot) } : {}) });
+    events.push({ t: at, do: x.do as ActionKind, layerId: x.layerId, amount: amount ?? 1, ...(vel !== null ? { vel: Math.max(0, Math.min(1, vel)) } : {}), ...(slot !== null && slot >= 1 && slot <= 128 ? { slot: Math.round(slot) } : {}), ...(isLookAction(x.do) ? parseLookFields(x) : {}) });
   }
   events.sort((a, b) => a.t - b.t);
   const dataFeeds = parseTakeDataFeeds(t.dataFeeds, length);

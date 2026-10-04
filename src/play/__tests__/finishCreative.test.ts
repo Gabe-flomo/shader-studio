@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  FN_ASCII_GLYPHS, FN_EFFECTS, FN_HALATION_PRESETS, FN_KINDS, FN_STAGE_KINDS, fnAnimated, fnBuildFinal, fnDefaultEffect, fnRunning, fnSegments, type FnEffect, type FnKind,
+  FN_ASCII_GLYPHS, FN_EFFECTS, FN_HALATION_PRESETS, FN_KINDS, FN_SORT_MOTION, FN_STAGE_KINDS, fnAnimated, fnBuildFinal, fnDefaultEffect, fnRunning, fnSegments, type FnEffect, type FnKind,
 } from '../kit/finish.js';
 import { finishNumericProps, finishTarget, newFinishEffect, parseFinish, parseFinishEffect, readFinishValue } from '../../types/playFinish';
 import { emptyPlayRecord, parsePlayRecord, type PlayRecord } from '../../types/play';
@@ -23,7 +23,9 @@ describe('creative effects: declarations', () => {
       expect(d.label && d.group && d.icon && d.summary, k).toBeTruthy();
       const sliders = d.params.filter(p => !p.hidden);
       expect(sliders.length, k).toBeGreaterThanOrEqual(2);
-      expect(sliders.length, `${k}: few controls`).toBeLessThanOrEqual(6);
+      // Pixel sort's motion settings sit in a section of their own on its card.
+      const basic = k === 'pixelsort' ? sliders.filter(p => !FN_SORT_MOTION.includes(p.key)) : sliders;
+      expect(basic.length, `${k}: few controls`).toBeLessThanOrEqual(6);
       for (const p of d.params) {
         expect(p.hint || p.hidden, `${k}.${p.key} explains itself`).toBeTruthy();
         expect(p.value, `${k}.${p.key}`).toBeGreaterThanOrEqual(p.min);

@@ -23,18 +23,20 @@ import { useTokens } from '../../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
 import { IconButton } from '../../ui/Button';
 import { Select } from '../../ui/Select';
-import { Segmented } from '../../ui/Choice';
+import { Segmented, Toggle } from '../../ui/Choice';
 import { toast } from '../../ui/toastStore';
-import { NOTE_NAMES, inScale, scaleOf } from '../../../play/scales';
+import { NOTE_NAMES, SCALES, inScale, scaleOf } from '../../../play/scales';
+import { formatLength, formatPosition, parsePosition, scaleBadge } from '../../../play/pianoRollWindow';
 import {
   DEFAULT_GRID, GRID_DIVS, chopNotes, deleteNotes, drawVelocityLine, duplicateNotes, fitToScale, gridLabel, gridStep, humanizeNotes, invertNotes, joinNotes, legatoNotes,
   moveNotes, nudgeVelocity, pasteNotes, quantizeNotes, resizeNotes, reverseNotes, rollRows, selectRect, selectionSpan, setVelocity, splitNotes, stepGrid, stretchNotes,
   toggleNotesOff, transposeNotes, type FoldMode, type GridDiv, type GridSetting, type NoteEdit,
 } from '../../../play/pianoRoll';
 import {
-  beatSeconds, emptyArrangement, recordBpm, setTrackNotes, trackClips, trimClip, type ArrClip, type ArrNote, type PlayArrangement,
+  beatSeconds, emptyArrangement, recordBpm, setTrackNotes, trackClips, trimClip, type ArrClip, type ArrNote, type ArrScale, type PlayArrangement,
 } from '../../../types/playArrangement';
-import type { AeRack } from '../../../types/playAudioEngine';
+import { patchRack, type AeRack } from '../../../types/playAudioEngine';
+import { withEngine } from './engineOps';
 import { audioEngineHost } from '../../../lib/audioEngineHost';
 import { keyboardClaimed } from '../../../lib/keyboardClaim';
 import { tape, useTape } from '../../../lib/tape';
@@ -48,6 +50,8 @@ function editArr(fn: (a: PlayArrangement) => PlayArrangement, label: string): vo
 const KEYS_W = 52;
 const RULER_H = 24;
 const VEL_H = 64;
+const VEL_H_WINDOW = 96;
+const PANEL_W = 236;
 const EDGE = 6;
 
 const isTyping = (t: EventTarget | null) => {
@@ -59,9 +63,9 @@ const isBlack = (p: number) => [1, 3, 6, 8, 10].includes(p % 12);
 const noteName = (p: number) => `${NOTE_NAMES[p % 12]}${Math.floor(p / 12) - 2}`;
 
 /** A folded section's open state, remembered per section. */
-function useSection(id: string): [boolean, (v: boolean) => void] {
+function useSection(id: string, def = false): [boolean, (v: boolean) => void] {
   const key = `shader-studio:pianoRoll:${id}`;
-  const [open, setOpen] = useState(() => { try { return localStorage.getItem(key) === '1'; } catch { return false; } });
+  const [open, setOpen] = useState(() => { try { const v = localStorage.getItem(key); return v === null ? def : v === '1'; } catch { return def; } });
   const set = useCallback((v: boolean) => { setOpen(v); try { localStorage.setItem(key, v ? '1' : '0'); } catch { /* private window */ } }, [key]);
   return [open, set];
 }
@@ -89,9 +93,12 @@ type Drag =
   | { kind: 'ruler'; x0: number; y0: number; view: View }
   | { kind: 'brace'; edge: 'start' | 'end'; clip: ArrClip; t: number };
 
-export function PianoRoll({ rack, arr, anchor, color, touch, onAnchor }: {
+export function PianoRoll({ rack, arr, anchor, color, touch, onAnchor, layout = 'panel' }: {
   rack: AeRack; arr: PlayArrangement; anchor: number; color: string; touch: boolean; onAnchor: (t: number) => void;
+  /** 'window': the big editor (PianoRollWindow.tsx), with Live's clip panel on the left and the velocity lane open. */
+  layout?: 'panel' | 'window';
 }) {
+  const win = layout === 'window';
   const tk = useTokens();
   const track = arr.tracks[rack.id];
   const notes = useMemo(() => track?.notes ?? [], [track]);
@@ -108,13 +115,15 @@ export function PianoRoll({ rack, arr, anchor, color, touch, onAnchor }: {
   const [grid, setGrid] = useState<GridSetting>(DEFAULT_GRID);
   const [fold, setFold] = useState<FoldMode>('none');
   const [tint, setTint] = useState(true);
-  const [fnOpen, setFnOpen] = useSection('functions');
-  const [velOpen, setVelOpen] = useSection('velocity');
+  const [fnOpen, setFnOpen] = useSection(win ? 'window-functions' : 'functions');
+  const [velOpen, setVelOpen] = useSection(win ? 'window-velocity' : 'velocity', win);
+  // The window's clip panel: shown unless the screen is narrow (a phone), then a toolbar chip brings it.
+  const [panelOpen, setPanelOpen] = useSection('window-panel', typeof window === 'undefined' || window.innerWidth >= 720);
   const [quant, setQuant] = useState({ amount: 100, ends: false });
   const [human, setHuman] = useState({ amount: 20, seed: 1 });
   const [chop, setChop] = useState(2);
   const [insert, setInsert] = useState<number | null>(null);
-    const [cursor, setCursor] = useState('default');
+  const [cursor, setCursor] = useState('default');
   const rootRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLCanvasElement>(null), keysRef = useRef<HTMLCanvasElement>(null), rulerRef = useRef<HTMLCanvasElement>(null), velRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null), headRef = useRef<HTMLDivElement>(null);
@@ -172,7 +181,8 @@ export function PianoRoll({ rack, arr, anchor, color, touch, onAnchor }: {
 
   const preview = useRef<{ notes: readonly ArrNote[]; sel: readonly number[] } | null>(null);
   const marquee = useRef<{ t0: number; t1: number; p0: number; p1: number } | null>(null);
-  const S = useRef({ notes, sel, view, rows, rowOf, clip, step, size, tint, scale, insert, color, tk, velOpen });
+  const velH = win ? VEL_H_WINDOW : VEL_H;
+  const S = useRef({ notes, sel, view, rows, rowOf, clip, step, size, tint, scale, insert, color, tk, velOpen, velH });
 
   const paint = useCallback(() => {
     const s = S.current;
@@ -301,18 +311,18 @@ export function PianoRoll({ rack, arr, anchor, color, touch, onAnchor }: {
 
     // Velocity: a stem per note in the clip (the selection brighter).
     if (s.velOpen) {
-      const vg = prep(velRef.current, w, VEL_H);
+      const vg = prep(velRef.current, w, s.velH);
       if (vg) {
-        vg.fillStyle = T.bg.field; vg.fillRect(0, 0, w, VEL_H);
+        vg.fillStyle = T.bg.field; vg.fillRect(0, 0, w, s.velH);
         vg.fillStyle = alpha(T.text.primary, 0.06);
-        for (const f of [0.25, 0.5, 0.75]) vg.fillRect(0, Math.round(VEL_H - 4 - f * (VEL_H - 10)), w, 1);
+        for (const f of [0.25, 0.5, 0.75]) vg.fillRect(0, Math.round(s.velH - 4 - f * (s.velH - 10)), w, 1);
         ns.forEach((n, i) => {
           if (!editable(n)) return;
           const sx = x(n.t);
           if (sx < -4 || sx > w + 4) return;
-          const on = sl.has(i), top = VEL_H - 4 - n.v * (VEL_H - 10);
+          const on = sl.has(i), top = s.velH - 4 - n.v * (s.velH - 10);
           vg.fillStyle = n.off ? T.text.faint : on ? T.text.primary : alpha(s.color, 0.9);
-          vg.fillRect(Math.round(sx), top, on ? 2 : 1.5, VEL_H - 4 - top);
+          vg.fillRect(Math.round(sx), top, on ? 2 : 1.5, s.velH - 4 - top);
           vg.beginPath(); vg.arc(sx + 1, top, on ? 3.5 : 3, 0, Math.PI * 2); vg.fill();
         });
       }
@@ -321,9 +331,9 @@ export function PianoRoll({ rack, arr, anchor, color, touch, onAnchor }: {
 
   // What the painters read, kept current; then a paint.
   useLayoutEffect(() => {
-    S.current = { notes, sel, view, rows, rowOf, clip, step, size, tint, scale, insert, color, tk, velOpen };
+    S.current = { notes, sel, view, rows, rowOf, clip, step, size, tint, scale, insert, color, tk, velOpen, velH };
     paint();
-  }, [paint, notes, sel, view, rows, rowOf, clip, step, size, tint, scale, insert, color, tk, velOpen]);
+  }, [paint, notes, sel, view, rows, rowOf, clip, step, size, tint, scale, insert, color, tk, velOpen, velH]);
   const raf = useRef(0);
   const repaint = () => { if (!raf.current) raf.current = requestAnimationFrame(() => { raf.current = 0; paint(); }); };
   useEffect(() => () => cancelAnimationFrame(raf.current), []);
@@ -606,7 +616,7 @@ export function PianoRoll({ rack, arr, anchor, color, touch, onAnchor }: {
     }
     return best;
   };
-  const velAt = (py: number) => Math.max(0.01, Math.min(1, (VEL_H - 4 - py) / (VEL_H - 10)));
+  const velAt = (py: number) => Math.max(0.01, Math.min(1, (velH - 4 - py) / (velH - 10)));
   const onVelDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!view || live) return;
     rootRef.current?.focus({ preventScroll: true });
@@ -643,7 +653,7 @@ export function PianoRoll({ rack, arr, anchor, color, touch, onAnchor }: {
     const d: Drag = { kind: 'vel', base: [...notes], sel: s, y0: py };
     capture(e, ev => {
       const q = local(ev, velRef.current);
-      preview.current = nudgeVelocity(d.base, d.sel, (d.y0 - q.py) / (VEL_H - 10));
+      preview.current = nudgeVelocity(d.base, d.sel, (d.y0 - q.py) / (velH - 10));
       repaint();
     }, () => {
       const p = preview.current;
@@ -692,7 +702,11 @@ export function PianoRoll({ rack, arr, anchor, color, touch, onAnchor }: {
       commit(ed, 'Transposed notes');
       if (ed.sel.length) audition(ed.notes[ed.sel[0]].n, 160);
     } else if (k === 'delete' || k === 'backspace') { done(); if (s.length) commit(deleteNotes(notes, s), 'Deleted notes'); } // never the arrangement's clip
-    else if (k === 'escape') { done(); setSel([]); setDraw(false); setSplitTool(false); }
+    else if (k === 'escape') {
+      // Nothing to let go of: Esc goes on (the window closes).
+      if (!sel.length && !draw && !splitTool) return;
+      done(); setSel([]); setDraw(false); setSplitTool(false);
+    }
     else if (k === '0' && s.length) { done(); commit(toggleNotesOff(notes, s), 'Deactivated notes'); }
     else if (k === 'b') { done(); setDraw(d => !d); setSplitTool(false); }
     else if (k === 'e') { done(); setSplitTool(d => !d); setDraw(false); }
@@ -715,61 +729,73 @@ export function PianoRoll({ rack, arr, anchor, color, touch, onAnchor }: {
   const bars = clip ? `bars ${Math.floor(clip.t / (beat * 4)) + 1}–${Math.max(Math.floor(clip.t / (beat * 4)) + 1, Math.ceil((clip.t + clip.d) / (beat * 4) - 1e-6))}` : '';
 
   if (!clip) {
-    return <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: tk.text.faint, font: `12px ${fontFamily.ui}` }}>This clip is gone. Double-click a MIDI clip on a lane to edit its notes.</div>;
+    return <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: tk.text.faint, font: `12px ${fontFamily.ui}`, padding: 16, textAlign: 'center' }}>This clip is gone. Double-click a MIDI clip on a lane to edit its notes.</div>;
   }
-  return (
-    <div ref={rootRef} tabIndex={0} onKeyDown={onKeyDown} data-piano-roll="" aria-label={`Piano roll: ${rack.name}, clip ${clipIndex + 1}`}
-      style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', outline: 'none', background: tk.bg.panel }}>
-      <div role="toolbar" aria-label="Piano roll" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', flexWrap: 'wrap', borderBottom: `1px solid ${tk.border.subtle}` }}>
-        <span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
-        <span style={{ font: `650 12px ${fontFamily.ui}`, color: tk.text.primary, whiteSpace: 'nowrap' }}>{rack.name} · clip {clipIndex + 1}</span>
-        <span style={{ font: `11px ${fontFamily.ui}`, color: tk.text.faint, whiteSpace: 'nowrap' }}>{bars}</span>
-        <Sep />
-        <IconButton icon="edit" size="sm" active={draw} aria-pressed={draw} label="Draw mode: click or drag to add notes, click one to delete it (B)" onClick={() => { setDraw(!draw); setSplitTool(false); }} />
-        <ToolChip on={splitTool} label="Split" title="Split tool: click a note to split it there (E)" onClick={() => { setSplitTool(!splitTool); setDraw(false); }} h={btnH} />
-        <Sep />
-        <Select ariaLabel="Grid" value={grid.div} height={btnH} style={{ width: 132 }} options={gridOptions} onChange={v => setGrid(g => ({ ...g, div: v as GridDiv }))} />
-        <ToolChip on={grid.triplet} label="3" title="Triplet grid (⌘3)" onClick={() => setGrid(g => ({ ...g, triplet: !g.triplet }))} h={btnH} />
-        <Sep />
-        <Segmented<FoldMode> size="sm" ariaLabel="Rows" value={fold} onChange={changeFold}
-          options={[{ value: 'none', label: 'All' }, { value: 'notes', label: 'Fold', shortcut: 'f' }, { value: 'scale', label: 'Scale', shortcut: 'g', disabled: !scale }]} />
-        <ToolChip on={tint && !!scale} label="K" title={scale ? `Highlight ${NOTE_NAMES[scale.root]} ${scaleOf(scale.name).name} (K)` : 'Pick a scale in the transport to highlight its notes'} onClick={() => setTint(!tint)} h={btnH} />
-        <Sep />
-        <IconButton icon="minus" size="sm" label="Zoom out (−)" onClick={() => zoomBy(1 / 1.4)} />
-        <IconButton icon="plus" size="sm" label="Zoom in (+)" onClick={() => zoomBy(1.4)} />
-        <IconButton icon="fit" size="sm" label="Show the whole clip (X); the selection: Z" onClick={() => fit()} />
-        <span style={{ flex: 1 }} />
-        <span style={{ font: `11px ${fontFamily.ui}`, color: tk.text.faint, whiteSpace: 'nowrap' }}>{sel.length ? `${sel.length} selected` : `${clipIdx.length} notes`}</span>
-        <ToolChip on={fnOpen} label="Functions" title={fnOpen ? 'Hide the note functions' : 'Quantize, transpose, fit to scale, invert, reverse, legato, stretch, humanize, chop, join, duplicate'} onClick={() => setFnOpen(!fnOpen)} h={btnH} />
-        <ToolChip on={velOpen} label="Velocity" title={velOpen ? 'Hide the velocity lane' : 'Show the velocity lane'} onClick={() => setVelOpen(!velOpen)} h={btnH} />
-      </div>
-      {fnOpen && (
-        <div aria-label="Note functions" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', flexWrap: 'wrap', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, font: `11px ${fontFamily.ui}`, color: tk.text.muted }}>
-          <span title="What the functions change">On {target}:</span>
-          <Fn label="Quantize" title={`To the grid (${gridLabel(step || beat / 4, bpm, grid.triplet)}), by the amount (⌘U)`} onClick={() => run((ns, x) => quantizeNotes(ns, x, step || beat / 4, quant.amount / 100, quant.ends), 'Quantized notes')} h={btnH} />
-          <NumField label="Quantize amount (%)" value={quant.amount} min={0} max={100} suffix="%" onChange={v => setQuant(q => ({ ...q, amount: v }))} h={btnH} />
-          <label title="Quantize the ends too" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><input type="checkbox" checked={quant.ends} onChange={e => setQuant(q => ({ ...q, ends: e.target.checked }))} />Ends</label>
+
+  // The note functions: a row under the toolbar (panel), or the clip panel's Notes section (window), where each group gets its own line.
+  const gap = win ? <span aria-hidden style={{ flexBasis: '100%', height: 2 }} /> : <Sep />;
+  const fitScale = () => scale && run((ns, x) => fitToScale(ns, x, scale), 'Fitted notes to the scale');
+  const fnItems = (
+    <>
+      <Fn label="Quantize" title={`To the grid (${gridLabel(step || beat / 4, bpm, grid.triplet)}), by the amount (⌘U)`} onClick={() => run((ns, x) => quantizeNotes(ns, x, step || beat / 4, quant.amount / 100, quant.ends), 'Quantized notes')} h={btnH} />
+      <NumField label="Quantize amount (%)" value={quant.amount} min={0} max={100} suffix="%" onChange={v => setQuant(q => ({ ...q, amount: v }))} h={btnH} />
+      <label title="Quantize the ends too" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><input type="checkbox" checked={quant.ends} onChange={e => setQuant(q => ({ ...q, ends: e.target.checked }))} />Ends</label>
+      {gap}
+      <Fn label="−12" title="Down an octave" onClick={() => run((ns, x) => transposeNotes(ns, x, -12), 'Transposed notes')} h={btnH} />
+      <Fn label="−1" title="Down a semitone" onClick={() => run((ns, x) => transposeNotes(ns, x, -1), 'Transposed notes')} h={btnH} />
+      <Fn label="+1" title="Up a semitone" onClick={() => run((ns, x) => transposeNotes(ns, x, 1), 'Transposed notes')} h={btnH} />
+      <Fn label="+12" title="Up an octave" onClick={() => run((ns, x) => transposeNotes(ns, x, 12), 'Transposed notes')} h={btnH} />
+      {!win && <Fn label="Fit to scale" disabled={!scale} title={scale ? `Each note to the nearest of ${NOTE_NAMES[scale.root]} ${scaleOf(scale.name).name}` : 'Pick a scale in the transport first'} onClick={fitScale} h={btnH} />}
+      <Fn label="Invert" title="Upside down: the highest note becomes the lowest" onClick={() => run(invertNotes, 'Inverted notes')} h={btnH} />
+      {gap}
+      <Fn label="Reverse" title="Backwards in time" onClick={() => run(reverseNotes, 'Reversed notes')} h={btnH} />
+      <Fn label="Legato" title="Each note to the start of the next" onClick={() => run(legatoNotes, 'Made notes legato')} h={btnH} />
+      <Fn label="×2" title="Twice as long (from the first note)" onClick={() => run((ns, x) => stretchNotes(ns, x, 2), 'Stretched notes')} h={btnH} />
+      <Fn label="÷2" title="Half as long (from the first note)" onClick={() => run((ns, x) => stretchNotes(ns, x, 0.5), 'Stretched notes')} h={btnH} />
+      {win && gap}
+      <Fn label="Humanize" title="Nudge timing and velocity a little; the same seed gives the same result" onClick={() => { run((ns, x) => humanizeNotes(ns, x, { time: (human.amount / 100) * beat / 8, vel: human.amount / 100 * 0.25 }, human.seed), 'Humanized notes'); setHuman(h => ({ ...h, seed: h.seed + 1 })); }} h={btnH} />
+      <NumField label="Humanize amount (%)" value={human.amount} min={0} max={100} suffix="%" onChange={v => setHuman(h => ({ ...h, amount: v }))} h={btnH} />
+      {gap}
+      <Fn label="Chop" title="Each note into equal parts (⌘E)" onClick={() => run((ns, x) => chopNotes(ns, x, chop), 'Chopped notes')} h={btnH} />
+      <NumField label="Chop parts" value={chop} min={2} max={64} onChange={setChop} h={btnH} />
+      <Fn label="Join" title="Notes of the same pitch into one (⌘J)" onClick={() => run(joinNotes, 'Joined notes')} h={btnH} />
+      <Fn label="Duplicate" title="A copy right after (⌘D)" onClick={() => run((ns, x) => duplicateNotes(ns, x, step), 'Duplicated notes')} h={btnH} />
+    </>
+  );
+
+  const toolbar = (
+    <div role="toolbar" aria-label="Piano roll" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', flexWrap: 'wrap', borderBottom: `1px solid ${tk.border.subtle}` }}>
+      {win && <ToolChip on={panelOpen} label="Clip" title={panelOpen ? 'Hide the clip panel' : 'Show the clip panel: the clip, its scale and the note functions'} onClick={() => setPanelOpen(!panelOpen)} h={btnH} />}
+      {!win && (
+        <>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
+          <span style={{ font: `650 12px ${fontFamily.ui}`, color: tk.text.primary, whiteSpace: 'nowrap' }}>{rack.name} · clip {clipIndex + 1}</span>
+          <span style={{ font: `11px ${fontFamily.ui}`, color: tk.text.faint, whiteSpace: 'nowrap' }}>{bars}</span>
           <Sep />
-          <Fn label="−12" title="Down an octave" onClick={() => run((ns, x) => transposeNotes(ns, x, -12), 'Transposed notes')} h={btnH} />
-          <Fn label="−1" title="Down a semitone" onClick={() => run((ns, x) => transposeNotes(ns, x, -1), 'Transposed notes')} h={btnH} />
-          <Fn label="+1" title="Up a semitone" onClick={() => run((ns, x) => transposeNotes(ns, x, 1), 'Transposed notes')} h={btnH} />
-          <Fn label="+12" title="Up an octave" onClick={() => run((ns, x) => transposeNotes(ns, x, 12), 'Transposed notes')} h={btnH} />
-          <Fn label="Fit to scale" disabled={!scale} title={scale ? `Each note to the nearest of ${NOTE_NAMES[scale.root]} ${scaleOf(scale.name).name}` : 'Pick a scale in the transport first'} onClick={() => scale && run((ns, x) => fitToScale(ns, x, scale), 'Fitted notes to the scale')} h={btnH} />
-          <Fn label="Invert" title="Upside down: the highest note becomes the lowest" onClick={() => run(invertNotes, 'Inverted notes')} h={btnH} />
-          <Sep />
-          <Fn label="Reverse" title="Backwards in time" onClick={() => run(reverseNotes, 'Reversed notes')} h={btnH} />
-          <Fn label="Legato" title="Each note to the start of the next" onClick={() => run(legatoNotes, 'Made notes legato')} h={btnH} />
-          <Fn label="×2" title="Twice as long (from the first note)" onClick={() => run((ns, x) => stretchNotes(ns, x, 2), 'Stretched notes')} h={btnH} />
-          <Fn label="÷2" title="Half as long (from the first note)" onClick={() => run((ns, x) => stretchNotes(ns, x, 0.5), 'Stretched notes')} h={btnH} />
-          <Fn label="Humanize" title="Nudge timing and velocity a little; the same seed gives the same result" onClick={() => { run((ns, x) => humanizeNotes(ns, x, { time: (human.amount / 100) * beat / 8, vel: human.amount / 100 * 0.25 }, human.seed), 'Humanized notes'); setHuman(h => ({ ...h, seed: h.seed + 1 })); }} h={btnH} />
-          <NumField label="Humanize amount (%)" value={human.amount} min={0} max={100} suffix="%" onChange={v => setHuman(h => ({ ...h, amount: v }))} h={btnH} />
-          <Sep />
-          <Fn label="Chop" title="Each note into equal parts (⌘E)" onClick={() => run((ns, x) => chopNotes(ns, x, chop), 'Chopped notes')} h={btnH} />
-          <NumField label="Chop parts" value={chop} min={2} max={64} onChange={setChop} h={btnH} />
-          <Fn label="Join" title="Notes of the same pitch into one (⌘J)" onClick={() => run(joinNotes, 'Joined notes')} h={btnH} />
-          <Fn label="Duplicate" title="A copy right after (⌘D)" onClick={() => run((ns, x) => duplicateNotes(ns, x, step), 'Duplicated notes')} h={btnH} />
-        </div>
+        </>
       )}
+      <IconButton icon="edit" size="sm" active={draw} aria-pressed={draw} label="Draw mode: click or drag to add notes, click one to delete it (B)" onClick={() => { setDraw(!draw); setSplitTool(false); }} />
+      <ToolChip on={splitTool} label="Split" title="Split tool: click a note to split it there (E)" onClick={() => { setSplitTool(!splitTool); setDraw(false); }} h={btnH} />
+      <Sep />
+      <Select ariaLabel="Grid" value={grid.div} height={btnH} style={{ width: 132 }} options={gridOptions} onChange={v => setGrid(g => ({ ...g, div: v as GridDiv }))} />
+      <ToolChip on={grid.triplet} label="3" title="Triplet grid (⌘3)" onClick={() => setGrid(g => ({ ...g, triplet: !g.triplet }))} h={btnH} />
+      <Sep />
+      <Segmented<FoldMode> size="sm" ariaLabel="Rows" value={fold} onChange={changeFold}
+        options={[{ value: 'none', label: 'All' }, { value: 'notes', label: 'Fold', shortcut: 'f' }, { value: 'scale', label: 'Scale', shortcut: 'g', disabled: !scale }]} />
+      {!win && <ToolChip on={tint && !!scale} label="K" title={scale ? `Highlight ${NOTE_NAMES[scale.root]} ${scaleOf(scale.name).name} (K)` : 'Pick a scale in the transport to highlight its notes'} onClick={() => setTint(!tint)} h={btnH} />}
+      <Sep />
+      <IconButton icon="minus" size="sm" label="Zoom out (−)" onClick={() => zoomBy(1 / 1.4)} />
+      <IconButton icon="plus" size="sm" label="Zoom in (+)" onClick={() => zoomBy(1.4)} />
+      <IconButton icon="fit" size="sm" label="Show the whole clip (X); the selection: Z" onClick={() => fit()} />
+      <span style={{ flex: 1 }} />
+      <span style={{ font: `11px ${fontFamily.ui}`, color: tk.text.faint, whiteSpace: 'nowrap' }}>{sel.length ? `${sel.length} selected` : `${clipIdx.length} notes`}</span>
+      {!win && <ToolChip on={fnOpen} label="Functions" title={fnOpen ? 'Hide the note functions' : 'Quantize, transpose, fit to scale, invert, reverse, legato, stretch, humanize, chop, join, duplicate'} onClick={() => setFnOpen(!fnOpen)} h={btnH} />}
+      <ToolChip on={velOpen} label="Velocity" title={velOpen ? 'Hide the velocity lane' : 'Show the velocity lane'} onClick={() => setVelOpen(!velOpen)} h={btnH} />
+    </div>
+  );
+
+  const editor = (
+    <>
       <div style={{ flexShrink: 0, display: 'flex' }}>
         <div style={{ width: KEYS_W, flexShrink: 0, background: tk.bg.field, borderRight: `1px solid ${tk.border.subtle}`, color: tk.text.faint, font: `9.5px ${fontFamily.mono}`, display: 'grid', placeItems: 'center' }}>{gridLabel(step, bpm, grid.triplet)}</div>
         <canvas ref={rulerRef} onPointerDown={onRulerDown} title="Drag down to zoom in, up to zoom out, sideways to scroll; drag the clip brace’s ends to trim it"
@@ -793,10 +819,155 @@ export function PianoRoll({ rack, arr, anchor, color, touch, onAnchor }: {
             <VelInput value={velShown} disabled={!sel.length} onCommit={v => commit(setVelocity(notes, sel, v / 127), 'Changed velocity')} />
           </div>
           <canvas ref={velRef} onPointerDown={onVelDown} aria-label="Velocity: drag a stem (every selected stem moves together); in Draw mode draw them, ⇧ for a straight ramp"
-            style={{ flex: 1, minWidth: 0, height: VEL_H, display: 'block', cursor: draw ? 'crosshair' : 'ns-resize', touchAction: 'none' }} />
+            style={{ flex: 1, minWidth: 0, height: velH, display: 'block', cursor: draw ? 'crosshair' : 'ns-resize', touchAction: 'none' }} />
         </div>
       )}
+    </>
+  );
+
+  return (
+    <div ref={rootRef} tabIndex={0} onKeyDown={onKeyDown} data-piano-roll={layout} aria-label={`Piano roll: ${rack.name}, clip ${clipIndex + 1}`}
+      style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', outline: 'none', background: tk.bg.panel }}>
+      {toolbar}
+      {win ? (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+          {panelOpen && <ClipPanel rack={rack} arr={arr} clip={clip} clipIndex={clipIndex} color={color} notes={clipIdx.length} live={live} h={btnH}
+            tint={tint} onTint={setTint} onAnchor={onAnchor} onFitScale={fitScale} fnOpen={fnOpen} onFnOpen={setFnOpen} target={target} fnItems={fnItems} />}
+          <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{editor}</div>
+        </div>
+      ) : (
+        <>
+          {fnOpen && (
+            <div aria-label="Note functions" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', flexWrap: 'wrap', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, font: `11px ${fontFamily.ui}`, color: tk.text.muted }}>
+              <span title="What the functions change">On {target}:</span>
+              {fnItems}
+            </div>
+          )}
+          {editor}
+        </>
+      )}
     </div>
+  );
+}
+
+/** Settings changes (the scale, the loop) aren't undo steps, as in the transport. */
+function setArrSetting(fn: (a: PlayArrangement) => PlayArrangement): void {
+  useNodeGraphStore.getState().setPlay(p => ({ ...p, arrangement: fn(p.arrangement ?? emptyArrangement(recordBpm(p.mappings))) }), false);
+}
+
+/**
+ * The window's clip panel, where Live has it: the clip (start, end, length,
+ * the tape's loop), its key (the tape's scale, the highlight, Snap to scale
+ * for the clip's rack, Fit to scale) and the note functions.
+ */
+function ClipPanel({ rack, arr, clip, clipIndex, color, notes, live, h, tint, onTint, onAnchor, onFitScale, fnOpen, onFnOpen, target, fnItems }: {
+  rack: AeRack; arr: PlayArrangement; clip: ArrClip; clipIndex: number; color: string; notes: number; live: boolean; h: number;
+  tint: boolean; onTint: (v: boolean) => void; onAnchor: (t: number) => void; onFitScale: () => void;
+  fnOpen: boolean; onFnOpen: (v: boolean) => void; target: string; fnItems: ReactNode;
+}) {
+  const tk = useTokens();
+  const [scaleOpen, setScaleOpen] = useSection('window-scale', true);
+  const bpm = arr.bpm;
+  const sc = arr.scale;
+  const on = !!sc?.on;
+  const key = scaleBadge(sc);
+  const setScale = (patch: Partial<ArrScale>) => setArrSetting(a => ({ ...a, scale: { on: true, root: 0, name: 'major', ...a.scale, ...patch } }));
+  const trim = (from: number, to: number) => {
+    if (live) return;
+    editArr(a => trimClip(a, rack.id, clipIndex, from, to), `Trimmed a clip on ${rack.name}`);
+    if (Math.abs(from - clip.t) > 1e-6) onAnchor(Math.max(0, from));
+  };
+  const snap = (v: string) => {
+    audioEngineHost.releaseHeld(rack.id);
+    useNodeGraphStore.getState().setPlay(p => withEngine(p, patchRack(p.audioEngine, rack.id, { scaleLock: v === 'off' ? undefined : v as AeRack['scaleLock'] })), { label: `Snap to scale on ${rack.name}` });
+  };
+  const label: CSSProperties = { width: 52, flexShrink: 0, color: tk.text.muted, font: `11px ${fontFamily.ui}` };
+  const row: CSSProperties = { display: 'flex', alignItems: 'center', gap: 6 };
+  return (
+    <div aria-label="Clip" data-clip-panel="" style={{ width: PANEL_W, flexShrink: 0, minHeight: 0, overflowY: 'auto', boxSizing: 'border-box', borderRight: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, font: `11.5px ${fontFamily.ui}`, color: tk.text.secondary }}>
+      <PanelSection title="Clip" open>
+        <div style={{ ...row, gap: 7 }}>
+          <span style={{ width: 10, height: 10, borderRadius: 2, background: color, flexShrink: 0 }} />
+          <b style={{ font: `650 12.5px ${fontFamily.ui}`, color: tk.text.primary, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rack.name}</b>
+          <span style={{ color: tk.text.faint, whiteSpace: 'nowrap' }}>clip {clipIndex + 1}</span>
+        </div>
+        <div style={row}><span style={label}>Start</span><PosField label="Clip start (bar.beat.sixteenth)" value={clip.t} bpm={bpm} h={h} disabled={live} onCommit={t => trim(t, clip.t + clip.d)} /></div>
+        <div style={row}><span style={label}>End</span><PosField label="Clip end (bar.beat.sixteenth)" value={clip.t + clip.d} bpm={bpm} h={h} disabled={live} onCommit={t => trim(clip.t, t)} /></div>
+        <div style={row}><span style={label}>Length</span><PosField length label="Clip length (bars.beats.sixteenths)" value={clip.d} bpm={bpm} h={h} disabled={live} onCommit={d => trim(clip.t, clip.t + d)} /></div>
+        <Toggle checked={arr.loop} onChange={v => setArrSetting(a => ({ ...a, loop: v }))} label={<span title="The tape loops from its end back to the start (the transport’s Loop)">Loop the tape</span>} />
+        <span style={{ color: tk.text.faint }}>{notes} note{notes === 1 ? '' : 's'} · {Math.round(bpm)} BPM</span>
+      </PanelSection>
+      <PanelSection title="Scale" open={scaleOpen} onToggle={setScaleOpen} summary={key || 'Off'}>
+        <div style={row}>
+          <Toggle checked={on} onChange={v => (v ? setScale({ on: true }) : setArrSetting(a => (a.scale ? { ...a, scale: { ...a.scale, on: false } } : a)))}
+            label={<span title="The tape’s scale (the transport’s Scale): the roll highlights it, Fit to scale and Snap to scale use it">Scale</span>} />
+          {key && <span data-scale-badge="" style={{ marginLeft: 'auto', padding: '1px 6px', borderRadius: 999, background: alpha(tk.accent.base, 0.16), color: tk.accent.text, font: `700 10.5px ${fontFamily.ui}` }}>{key}</span>}
+        </div>
+        <div style={row}>
+          <Select ariaLabel="Scale root" value={String(sc?.root ?? 0)} height={h} style={{ width: 62, flexShrink: 0 }} options={NOTE_NAMES.map((n, i) => ({ value: String(i), label: n }))} onChange={v => setScale({ root: Number(v) })} />
+          <Select ariaLabel="Scale name" value={sc?.name ?? 'major'} height={h} style={{ flex: 1, minWidth: 0 }} options={SCALES.map(s => ({ value: s.id, label: s.name }))} onChange={v => setScale({ name: v })} />
+        </div>
+        <Toggle checked={tint && on} disabled={!on} onChange={onTint} label={<span title="Tint the scale’s rows, the root stronger (K)">Highlight scale</span>} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={{ color: tk.text.muted }}>Notes played into {rack.name}</span>
+          <Select ariaLabel="Snap played notes to scale" value={rack.scaleLock ?? 'off'} height={h}
+            options={[
+              { value: 'off', label: 'As played' },
+              { value: 'nearest', label: 'Snap to scale' },
+              { value: 'up', label: 'Snap to scale, up' },
+              { value: 'down', label: 'Snap to scale, down' },
+            ]}
+            onChange={snap} />
+          <span style={{ color: tk.text.faint, font: `10.5px/1.4 ${fontFamily.ui}` }}>
+            {rack.scaleLock ? (on ? `Keys, MIDI and pads land in ${key}.` : 'Turn the scale on to snap.') : 'The rack’s “In key” (MIDI in): snap puts what you play in the scale.'}
+          </span>
+        </div>
+        <Fn label="Fit to scale" disabled={!on || live} title={on ? `Each note in the clip (or the selection) to the nearest of ${key}` : 'Turn the scale on first'} onClick={onFitScale} h={h} />
+      </PanelSection>
+      <PanelSection title="Notes" open={fnOpen} onToggle={onFnOpen} summary="Quantize, transpose, ×2 ÷2…">
+        <span style={{ color: tk.text.faint }}>On {target}:</span>
+        <div aria-label="Note functions" style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', font: `11px ${fontFamily.ui}`, color: tk.text.muted }}>{fnItems}</div>
+      </PanelSection>
+    </div>
+  );
+}
+
+/** A section of the clip panel: a header (a fold when `onToggle`), a one-line summary while folded. */
+function PanelSection({ title, open, onToggle, summary, children }: { title: string; open: boolean; onToggle?: (v: boolean) => void; summary?: string; children: ReactNode }) {
+  const tk = useTokens();
+  const head: CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: 0, border: 0, background: 'none', color: tk.text.primary, font: `700 10.5px ${fontFamily.ui}`, letterSpacing: '0.05em', textTransform: 'uppercase', cursor: onToggle ? 'pointer' : 'default', textAlign: 'left' };
+  return (
+    <section style={{ display: 'flex', flexDirection: 'column', gap: 7, padding: '10px 12px', borderBottom: `1px solid ${tk.border.subtle}` }}>
+      {onToggle
+        ? (
+          <button type="button" aria-expanded={open} onClick={() => onToggle(!open)} style={head}>
+            <span aria-hidden style={{ display: 'inline-block', width: 8, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 120ms', color: tk.text.faint }}>▸</span>
+            {title}
+            {!open && summary && <span style={{ marginLeft: 'auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tk.text.faint, font: `500 11px ${fontFamily.ui}`, letterSpacing: 0, textTransform: 'none' }}>{summary}</span>}
+          </button>
+        )
+        : <div style={head}>{title}</div>}
+      {open && children}
+    </section>
+  );
+}
+
+/** A position or length typed as bars.beats.sixteenths (Live's clip fields). */
+function PosField({ label, value, bpm, h, length, disabled, onCommit }: { label: string; value: number; bpm: number; h: number; length?: boolean; disabled?: boolean; onCommit: (t: number) => void }) {
+  const tk = useTokens();
+  const shown = length ? formatLength(value, bpm) : formatPosition(value, bpm);
+  const [text, setText] = useState<string | null>(null);
+  const commit = () => {
+    if (text !== null && text.trim() !== shown) {
+      const t = parsePosition(text, bpm, length);
+      if (t !== null && Math.abs(t - value) > 1e-6) onCommit(t);
+    }
+    setText(null);
+  };
+  return (
+    <input aria-label={label} title={label} disabled={disabled} value={text ?? shown} onChange={e => setText(e.target.value)} onBlur={commit}
+      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); else if (e.key === 'Escape') { e.stopPropagation(); setText(null); } }}
+      style={{ flex: 1, minWidth: 0, height: h, padding: '0 6px', boxSizing: 'border-box', borderRadius: radius.sm, border: `1px solid ${tk.border.default}`, background: tk.bg.panel, color: tk.text.primary, font: `600 11.5px ${fontFamily.mono}`, opacity: disabled ? 0.5 : 1 }} />
   );
 }
 
