@@ -43,7 +43,7 @@ export const RELEASES: Release[] = [
     date: '2026-10-04',
     title: 'Displacement Map, passes in groups',
     highlights: [
-      { area: 'Play', text: 'Displacement Map, as in After Effects: any layer pushed by another layer or the picture, by its red, green, blue, alpha, luminance, hue, lightness or saturation.', link: { kind: 'doc', path: 'docs/displacement-map.md' } },
+      { area: 'Play', text: 'Displacement Map, as in After Effects: any layer pushed by another layer or the picture, by red, green, blue, alpha, luminance, hue, lightness or saturation.', link: { kind: 'doc', path: 'docs/displacement-map.md' } },
       { area: 'Play', text: 'Layers have a Displace button next to Matte and Mask; Look’s Displace gains By channels; Studio gets a Displacement Map node.' },
       { area: 'Studio', text: 'A Pass can live inside a plain group, and texture wires can cross groups: build a blur group once and reuse it.', link: { kind: 'doc', path: 'docs/pass-node-plan.md' } },
       { area: 'Studio', text: 'Repeat on a Pass runs it up to 64 times a frame, for wide blurs, distance fields and faster simulations; a Jump flood node turns a shape into a distance field.' },
