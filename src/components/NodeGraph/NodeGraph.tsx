@@ -10,6 +10,7 @@ import { CanvasToolbar } from '../shell/CanvasToolbar';
 import { setVizScale, vizScaleForZoom } from './vizKit';
 import { registerSocket, remeasureAllSockets, setLayoutZoomGetter, getSocketOffset, getDragPosition, publishView, getCardSize, isDragging, subscribeCardSizes, forgetNodeLayout, type Pt } from './socketRegistry';
 import { WireLayer, type EdgeInfo } from './WireLayer';
+import { registerDropTarget, edgeInfoFromKey } from './nodeDrop';
 import { buildNodeErrors } from '../../compiler/nodeErrors';
 import { suggestConnections, type Suggestion } from './smartConnect';
 import { suggestQuickAdds, type QuickAdd } from './quickAdds';
@@ -1124,6 +1125,16 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       return { x: (cx - p.x) / z, y: (cy - p.y) / z };
     });
   }, [registerViewportCenterGetter]);
+
+  // A node dragged out of the node browser lands here (nodeDrop.ts): the canvas says where the pointer is in the
+  // graph, whether it takes drops, and which wire a data-edge key names.
+  useEffect(() => registerDropTarget({
+    get el() { return canvasRef.current; },
+    blocked: () => lockedRef.current,
+    toWorld: (sx, sy) => screenToWorld(sx, sy),
+    zoom: () => zoomRef.current,
+    edgeInfo: key => edgeInfoFromKey(displayNodesRef.current, key),
+  }), [screenToWorld]);
 
   // ── Shift+socket spotlight — which edges are highlighted ─────────────────────
   // Each entry is { fromNodeId, fromOutputKey, toNodeId, toInputKey }
