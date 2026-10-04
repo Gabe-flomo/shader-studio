@@ -205,7 +205,7 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...PASS_EXAMPLE_INDEX,
   // The Agents group: slime mold and walkers built from nodes (agentExamples.ts).
   ...AGENT_EXAMPLE_INDEX,
-  // The same rules as Script layers, with a Play setup (agentSketchExamples.ts).
+  // The Slime mold rule as a Script layer, with a Play setup (agentSketchExamples.ts).
   ...Object.fromEntries(Object.entries(AGENT_RULE_INDEX).map(([k, v]) => [k, { ...v, play: true }])),
   // The Convert folder (convertExampleIndex.ts, graphs in convertExamples.ts): what the Convert page makes of its Soft circle, as written and optimised.
   ...CONVERT_EXAMPLE_INDEX,

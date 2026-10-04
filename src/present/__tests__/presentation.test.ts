@@ -232,6 +232,25 @@ describe('the samples that teach the app', () => {
     }
   });
 
+  it('How Agents work runs the real presets: live, at slide size, their sliders the nodes’ own', async () => {
+    const p = await SAMPLE_PRESENTATIONS.find(s => s.title === 'How Agents work')!.build(0);
+    const agents = p.sources.filter(s => s.bundle.agents);
+    expect(agents.length).toBe(10);
+    for (const s of agents) {
+      expect(sourceLimits(s), s.title).toEqual([]);
+      // 256k walkers on at most 512 trail rows, but for the two that need a million to show what they show.
+      const full = s.from.kind === 'example' && ['agentMultiSlime', 'agentGrowPicture'].includes(s.from.key);
+      for (const g of s.bundle.agents!.groups) expect(g.side, `${s.title}: walkers`).toBe(full ? 1024 : 512);
+      for (const t of s.bundle.agents!.trails) expect(t.rows ?? 0, `${s.title}: trail rows`).toBeLessThanOrEqual(full ? 1024 : 512);
+      // Every control is a uniform of the bundle, so a slider changes the next step without a recompile.
+      for (const c of s.bundle.play.controls) expect(s.bundle.paramBindings[c.target.split('::').slice(-2).join('::')], `${s.title}: ${c.target}`).toBeTruthy();
+    }
+    // The one JavaScript copy left draws the sensors, which the group can't.
+    const sketches = p.sources.filter(s => s.bundle.play.layers.some(l => l.kind === 'script'));
+    expect(sketches.map(s => s.from.kind === 'example' ? s.from.key : '')).toEqual(['agentRuleSlime']);
+    expect(p.steps.flatMap(s => s.blocks).some(b => b.type === 'interactive' && b.source === sketches[0].id && b.controls.some(c => c.controlId === 'sensors'))).toBe(true);
+  });
+
   it('Bring your own GLSL quotes the fix-up card’s own rewrite, and the Soft circle the page starts with', async () => {
     const card = suggestFixups(FIXUP_BEFORE).find(f => f.id === 'hoist-writes');
     expect(card?.title).toBe('Give each write a line of its own');

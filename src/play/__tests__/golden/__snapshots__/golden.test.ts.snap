@@ -1,37 +1,5 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`golden outputs: examples > agentRuleAnts 1`] = `
-{
-  "angle": "- x120",
-  "ants": "- x120",
-  "distance": "- x120",
-  "fade": "- x120",
-  "halfLife": "- x120",
-  "jitter": "- x120",
-  "rock": "- x120",
-  "speed": "- x120",
-  "steps": "- x120",
-  "turn": "- x120",
-}
-`;
-
-exports[`golden outputs: examples > agentRuleParticles 1`] = `
-{
-  "attract": "- x120",
-  "beat": "- x120",
-  "curl": "- x120",
-  "curlSize": "- x120",
-  "drag": "- x120",
-  "evolve": "- x120",
-  "gravity": "- x120",
-  "life": "- x120",
-  "maxSpeed": "- x120",
-  "shock": "- x120",
-  "steps": "- x120",
-  "vortex": "- x120",
-}
-`;
-
 exports[`golden outputs: examples > agentRuleSlime 1`] = `
 {
   "angle": "- x120",
