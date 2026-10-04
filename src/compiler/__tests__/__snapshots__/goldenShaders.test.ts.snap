@@ -238,6 +238,13 @@ exports[`golden shaders: every Play example exports the same bundle > finishTime
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > finishWater 1`] = `
+{
+  "bundle": "197ab67f6af71f12af6e804fd1d2:121036",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > flowAroundWords 1`] = `
 {
   "bundle": "02e3bc81229d670b6dfc21b7e03e:6458",
@@ -3553,6 +3560,33 @@ exports[`golden shaders: every example compiles as it did > finishTime 1`] = `
     "u_p_fbmx0_time_scale",
   ],
   "paramValues": "06b5fc5753bf371bd597c783c827:104",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > finishWater 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "077559657acb62137dd6b9ab97da:2505",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "114fc1423b9ff8180a87e7c8256e:86",
+  "paramBindings": "10beb17b7abf521d9cb650b436af:234",
+  "paramUniforms": [
+    "u_p_circx0_posX",
+    "u_p_circx0_posY",
+    "u_p_circx0_radius",
+    "u_p_lightx0_brightness",
+    "u_p_lightx0_innerFalloff",
+    "u_p_lightx0_tint",
+  ],
+  "paramValues": "0f6d3d7c68dbb317bcb90f54b8f2:169",
   "passes": null,
   "success": true,
   "textureUniforms": {},

@@ -2735,6 +2735,8 @@ void main() {
         const ok = finishR.draw({
           finish, value: (e, k) => layerValue('finish:' + e.id, k, e[k]), picture: glCanvas, layers: layered ? ovCanvas : null,
           layerAlpha: id => (K ? K.layerCanvas(id) : null), motion: K ? K.motionMap() : null, width: glCanvas.width, height: glCanvas.height, time, first: frame <= 1,
+          // Water's source: the pointer over the picture, or a layer where the kit last drew it.
+          pointer: { x: mouse.x, y: mouse.y, over: !!mouse.over, down: !!mouse.down }, layerPoint: id => (K && K.layerPoint ? K.layerPoint(id) : null),
         });
         fnCanvas.style.display = ok ? 'block' : 'none';
         finishDrew = ok;

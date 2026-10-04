@@ -21,7 +21,7 @@ describe('maps: what a stack reads', () => {
   it('an effect with no Where (or an odd one) shows everywhere', () => {
     expect(fnWhereOf(fx('grade', 'g'))).toBe('all');
     expect(fnWhereOf({ where: 'nowhere' })).toBe('all');
-    expect(FN_WHERE).toEqual(['all', 'layer', 'picture', 'motion']);
+    expect(FN_WHERE).toEqual(['all', 'layer', 'picture', 'motion', 'waves']);
   });
 
   it('collects layer and motion maps once each, in stack order, up to the limit', () => {
@@ -155,7 +155,7 @@ describe('the record', () => {
     expect(parseFinishEffect({ id: 'd', kind: 'displace', map: 'motion' })!.map).toBe('motion');
     expect(parseFinishEffect({ id: 'd', kind: 'displace', map: 'slit' })!.map).toBe('noise');
     const finish = parseFinish({ on: true, effects: FN_KINDS.slice(11, 20).map((k, i) => ({ id: `e${i}`, kind: k })) })!;
-    expect(finish.effects.map(e => e.kind)).toEqual(['glitch', 'ripple', 'displace', 'mosaic', 'mirror', 'gradmap', 'posterize', 'edges', 'feedback']);
+    expect(finish.effects.map(e => e.kind)).toEqual(['glitch', 'ripple', 'water', 'displace', 'mosaic', 'mirror', 'gradmap', 'posterize', 'edges']);
     const rec = parsePlayRecord(JSON.parse(JSON.stringify({ ...emptyPlayRecord(), finish: { ...finish, effects: finish.effects.map(e => (e.kind === 'ripple' ? { ...e, where: 'picture' } : e)) } })));
     expect(rec.finish?.effects.find(e => e.kind === 'ripple')?.where).toBe('picture');
     expect(fnRunning(rec.finish).length).toBe(9);

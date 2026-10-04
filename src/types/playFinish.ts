@@ -6,7 +6,7 @@
  * See docs/finish-stack.md.
  */
 import {
-  FN_EFFECTS, FN_KINDS, FN_TONE_MODES, FN_TIME_MAPS, FN_TIME_QUALITY, FN_WHERE, FN_DISPLACE_MAPS, FN_MOSH_MAPS, FN_SOURCE_MAPS, FN_CURVE_CHANNELS, FN_HUE_CURVES, FN_COMPARE_ID, FN_COMPARE_PARAMS,
+  FN_EFFECTS, FN_KINDS, FN_TONE_MODES, FN_WATER_SOURCES, FN_WATER_SHAPES, FN_WATER_DETAILS, FN_TIME_MAPS, FN_TIME_QUALITY, FN_WHERE, FN_DISPLACE_MAPS, FN_MOSH_MAPS, FN_SOURCE_MAPS, FN_CURVE_CHANNELS, FN_HUE_CURVES, FN_COMPARE_ID, FN_COMPARE_PARAMS,
   fnDefaultEffect, fnDefaultCurves, fnDefaultCompare, fnParseCustom, fnMigrateHalation, type FnCompare, type FnCurves, type FnKind, type FnParam,
 } from '../play/kit/finish.js';
 import { GY_MAX, gyList } from '../play/kit/glyphs.js';
@@ -18,8 +18,12 @@ export type FinishKind = FnKind;
 export type FinishCurves = FnCurves;
 export type FinishTimeMap = 'slit' | 'luma' | 'noise' | 'radial' | 'layer';
 export type FinishTimeQuality = 'low' | 'medium' | 'high';
-/** Where an effect shows: everywhere, or weighted by a layer's alpha, the picture's brightness, or camera motion. */
-export type FinishWhere = 'all' | 'layer' | 'picture' | 'motion';
+/** Where an effect shows: everywhere, or weighted by a layer's alpha, the picture's brightness, camera motion, or the stack's Water's waves. */
+export type FinishWhere = 'all' | 'layer' | 'picture' | 'motion' | 'waves';
+/** Water: where its source is, its shape, and how fine its grid is. */
+export type FinishWaterSource = 'pointer' | 'layer' | 'xy' | 'none';
+export type FinishWaterShape = 'point' | 'line' | 'ring' | 'twin' | 'layer' | 'picture';
+export type FinishWaterDetail = 'low' | 'medium' | 'high';
 /** What pushes the picture in Displace. */
 export type FinishDisplaceMap = 'noise' | 'picture' | 'layer' | 'motion';
 /** What Datamosh measures movement on: the picture, or a layer drawn alone (a Camera layer, hidden or not). */
@@ -69,6 +73,14 @@ export interface FinishEffect {
   chars?: string;
   /** ASCII: use typed characters in the order typed (else they are ordered by how much of their cell they cover). */
   keepOrder?: boolean;
+  /** Water: where its source is (the pointer, a layer's position, its Source X/Y, or none: only rain and splashes). */
+  source?: FinishWaterSource;
+  /** Water with source 'layer': the layer whose position is the source. */
+  sourceLayer?: string;
+  /** Water: the source's shape; 'layer' stamps the layer `layerId`'s alpha, 'picture' the picture's bright parts. */
+  shape?: FinishWaterShape;
+  /** Water: how fine its grid is (180, 270 or 405 rows). */
+  detail?: FinishWaterDetail;
   [key: string]: unknown;
 }
 
@@ -373,6 +385,13 @@ export function parseFinishEffect(raw: unknown): FinishEffect | null {
     // Absent (an ASCII saved before typed characters) is the built-in characters, as it was.
     e.chars = typeof r.chars === 'string' ? gyList(r.chars).slice(0, GY_MAX).join('') : '';
     e.keepOrder = r.keepOrder === true;
+  }
+  if (kind === 'water') {
+    e.source = (FN_WATER_SOURCES as readonly string[]).includes(r.source as string) ? r.source as FinishWaterSource : 'pointer';
+    e.sourceLayer = typeof r.sourceLayer === 'string' ? r.sourceLayer.slice(0, 80) : '';
+    e.shape = (FN_WATER_SHAPES as readonly string[]).includes(r.shape as string) ? r.shape as FinishWaterShape : 'point';
+    e.layerId = typeof r.layerId === 'string' ? r.layerId.slice(0, 80) : '';
+    e.detail = (FN_WATER_DETAILS as readonly string[]).includes(r.detail as string) ? r.detail as FinishWaterDetail : 'medium';
   }
   return withWhere(e, r);
 }

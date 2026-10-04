@@ -39,7 +39,7 @@ export const ACTION_LABELS: Record<BuiltinActionKind, string> = {
 };
 
 /** The Look actions (a rule's Do on a Finish effect). */
-export const LOOK_ACTION_LABELS: Record<LookActionKind, string> = { mosh: 'Mosh', moshreset: 'Reset mosh', fxpulse: 'Pulse a setting', fxset: 'Set a setting' };
+export const LOOK_ACTION_LABELS: Record<LookActionKind, string> = { mosh: 'Mosh', moshreset: 'Reset mosh', fxpulse: 'Pulse a setting', fxset: 'Set a setting', splash: 'Splash' };
 
 /** Change background: what next, previous, random, go to and reset mean on a Background layer. */
 const BACKGROUND_ACTION_LABELS: Partial<Record<BuiltinActionKind, string>> = {

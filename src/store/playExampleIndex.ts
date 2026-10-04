@@ -108,12 +108,14 @@ const ROWS: Array<[string, string, string]> = [
   ['pianoRollScale', 'Piano roll: a clip in a scale', 'A four-bar riff on the tape in A minor pentatonic, with the tape\'s Scale on and Snap to scale on the rack; double-click the clip for the piano roll.'],
   ['granulatorSpectral', 'Granulator: Spectral, emitted grains', 'A Granulator in Spectral mode playing frequency bands of the pad chord, its grains emitted and travelling; four nulls show where and which band.'],
   ['particlesEngineTrack', 'Particles: hear an engine track', 'A Particles node in the graph listening to the Audio engine\'s Kick track: every kick on the tape fires a shockwave through the field.'],
-  // Bigger pieces that put several techniques together (their graphs live in exampleGraphs.ts).
+  // Bigger pieces that put several techniques together (most of their graphs live in exampleGraphs.ts).
   ['particleGlow', 'Particle Glow', 'Emitter, absorber and flock, glowing through the Layers node.'],
   ['flowAroundWords', 'Flow Around Words', 'Particles over an FBM landscape part around a word that acts as a wall.'],
   ['letterDrop', 'Letter Drop', 'Physics bodies: letters slide down a funnel of drawn shapes and pile on a glowing hill.'],
   // Look effects you build (after the bigger pieces, so the numbers before it stay as they were).
   ['lookBuilt', 'Look: effects from nodes and code', 'A duotone built from four Studio nodes and a tape wobble written in GLSL, both effects in the Look stack; the mouse fades the duotone in.'],
+  // Last, so the examples before it keep their numbers.
+  ['finishWater', 'Water: a wake, rain and splashes', 'A simulated water surface over a pool\'s floor: a toy boat drags a wake, a light rain dimples it, and a click splashes; the waves bend the tiles and catch the light.'],
 ];
 
 const num = (i: number) => String(i + 1).padStart(2, '0');

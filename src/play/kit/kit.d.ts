@@ -100,6 +100,8 @@ export interface LayerKit {
   isAnimated(record: PlayRecord): boolean;
   /** A layer drawn alone on the last frame (listed in env.alphaLayers), or null. */
   layerCanvas(id: string): HTMLCanvasElement | null;
+  /** Where a layer is as the last frame left it (0..1, y up): a following null on its spring, an Agents layer's centre, else its x and y; null when it has none (or lost its hand). */
+  layerPoint(id: string): { x: number; y: number } | null;
   /** Where the camera saw movement lately (64 × 36, every channel the amount), or null when it wasn't sampled this frame. */
   motionMap(): HTMLCanvasElement | null;
   /** The motion map's amount (0..1) at (x, y) (0..1, y up), or null. */
