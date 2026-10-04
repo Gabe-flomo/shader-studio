@@ -314,7 +314,7 @@ class PlayOverlay {
   setShaderTap(fn: ((tap: ShaderTap) => void) | null): void { this.shaderTap = fn; }
 
   /** Is there anything on the overlay: a visible layer, Layers only, or a background in place of the shader? */
-  hasLayers(): boolean { return this.record.layers.some(l => l.visible) || playBackground.hidden() || playBackground.active() || playBackground.layerActive(); }
+  hasLayers(): boolean { return this.record.layers.some(l => l.visible || l.kind === 'motion') || playBackground.hidden() || playBackground.active() || playBackground.layerActive(); }
 
   /** Anything moving on its own keeps the render loop running. */
   isAnimated(): boolean { return this.kit.isAnimated(this.record) || !!this.drawing; }

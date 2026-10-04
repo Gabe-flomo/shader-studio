@@ -353,10 +353,14 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
         )}
         {f.seg('Born', 'spawn', [
           { value: 'anywhere', label: 'Anywhere' }, { value: 'edges', label: 'Edges' }, { value: 'center', label: 'Centre' }, { value: 'null', label: 'At a null' },
-          { value: 'motion', label: 'Where it moves', title: 'Where the camera sees movement (needs a Camera layer; it can be hidden)' },
+          { value: 'motion', label: 'Where it moves', title: 'Where a Motion layer sees movement, or the camera (a Camera layer, hidden or not)' },
           { value: 'bright', label: 'Bright parts', title: 'On the bright parts of the picture, the brightest most' },
-        ], 'Where new and respawned particles appear. Emitter shapes and emitter nulls take over when there are any. Where it moves needs a Camera layer (hide it to keep only the particles); with nothing moving yet they appear anywhere, and after that where something last moved.')}
+        ], 'Where new and respawned particles appear. Emitter shapes and emitter nulls take over when there are any. Where it moves reads a Motion layer (the camera, the picture or a video) or, with In: Camera, a Camera layer (hide it to keep only the particles); with nothing moving yet they appear anywhere, and after that where something last moved.')}
         {g('spawn') === 'null' && nullPick('The null particles are born around.')}
+        {g('spawn') === 'motion' && f.select('In', 'motionId', [
+          { value: '', label: 'Camera (a Camera layer)' },
+          ...ctx.layers.filter(x => x.kind === 'motion').map(x => ({ value: x.id, label: x.label })),
+        ], 'Whose movement they are born in: a Motion layer (it can watch the camera, the picture or a Video layer; set its Sensitivity and Cell size there), or the camera\'s own motion map (needs a Camera layer).')}
         {(g('spawn') === 'center' || g('spawn') === 'null') && f.prop('spawnRadius')}
         {f.seg('At the edges', 'edges', [
           { value: 'wrap', label: 'Wrap', title: 'Leave one side, come back on the other' }, { value: 'bounce', label: 'Bounce', title: 'Bounce off the edges' },

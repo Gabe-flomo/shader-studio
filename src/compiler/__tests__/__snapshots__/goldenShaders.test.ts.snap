@@ -2,7 +2,7 @@
 
 exports[`golden shaders: every Play example exports the same bundle > audioEffects 1`] = `
 {
-  "bundle": "1c6c13de174e2e1bd6f80174abfa:4946",
+  "bundle": "07569290a46daf0ef9821123c079:4946",
   "missing": [],
 }
 `;
@@ -23,7 +23,7 @@ exports[`golden shaders: every Play example exports the same bundle > bgColourSk
 
 exports[`golden shaders: every Play example exports the same bundle > bgPhotoFlow 1`] = `
 {
-  "bundle": "180bd37e1fad2813af5b1a84b847:55451",
+  "bundle": "06096c7fc66f3707f81417399b98:55465",
   "missing": [],
 }
 `;
@@ -156,112 +156,112 @@ exports[`golden shaders: every Play example exports the same bundle > dataWeathe
 
 exports[`golden shaders: every Play example exports the same bundle > drumPads 1`] = `
 {
-  "bundle": "1d5207bda3856f0fd9a1eb1d9253:11064",
+  "bundle": "186bbfde6fbb64008fb5847dc3a1:11078",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishDatamoshEcho 1`] = `
 {
-  "bundle": "17b0c817e21332142324f8be9b53:5417",
+  "bundle": "1f89e632ffe8010050645de5fc7f:5417",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishGrade 1`] = `
 {
-  "bundle": "0d9502a84a631f1452bb392980c2:5201",
+  "bundle": "018aafa82a299d043b7fe8d49e62:5201",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishHalation 1`] = `
 {
-  "bundle": "1e74a0a92d95821c1b2c370916a8:6962",
+  "bundle": "024d9a1728fb9410ae5feb81e84a:6962",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishKaleidoscope 1`] = `
 {
-  "bundle": "06e8b14e731651160a8f01a039e7:4442",
+  "bundle": "09b131e855f1730e8f17968d6066:4442",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishLooks 1`] = `
 {
-  "bundle": "1367ea9da4aa3413b56e003ffa4f:5191",
+  "bundle": "159dca73610eb4010233380a751a:5191",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishMotionExtract 1`] = `
 {
-  "bundle": "04f8b9355538b214865e35b31cba:4855",
+  "bundle": "030450de65e76411ca8498f1f54f:4855",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishPixelSort 1`] = `
 {
-  "bundle": "0452f528401be8063e7a6fbccc8c:55099",
+  "bundle": "1539ec9bdc493e0162661fb0af06:55099",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishPrint 1`] = `
 {
-  "bundle": "076d4c96d7c80c0e0f1fd49eab7d:4807",
+  "bundle": "020f4c7f99e178194fa168d684e6:4807",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishScreen 1`] = `
 {
-  "bundle": "02e44f74a3829f0b51057f3d3447:4884",
+  "bundle": "13a5d1991c7ab6191af308c5b86d:4884",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishTerminal 1`] = `
 {
-  "bundle": "148a5a368ccb8e00dd857992e408:4685",
+  "bundle": "0e15d0e6a7f30919218e98cbd74b:4685",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishTime 1`] = `
 {
-  "bundle": "0652c98419c1c70e41172d0be2da:5337",
+  "bundle": "15c677589fe574110ff0cec0a5cb:5337",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > flowAroundWords 1`] = `
 {
-  "bundle": "09018ba5239f391ea6215399070f:6444",
+  "bundle": "02e3bc81229d670b6dfc21b7e03e:6458",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > granulator 1`] = `
 {
-  "bundle": "0b99140b43a05e02b0a5d9e58fa0:10481",
+  "bundle": "1d4edea5c8487201a4917eb1f344:10495",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > granulatorSpectral 1`] = `
 {
-  "bundle": "0878a85e92be1809a94ef733cf5f:8206",
+  "bundle": "0de7e1fe9b844600f63d50e1643c:8206",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > gridLavaLamp 1`] = `
 {
-  "bundle": "19fcced039fa1a1a73eae74e67e0:7411",
+  "bundle": "103eef6919bd961b7c4d5373a127:7425",
   "missing": [],
 }
 `;
@@ -324,35 +324,35 @@ exports[`golden shaders: every Play example exports the same bundle > gridTourRi
 
 exports[`golden shaders: every Play example exports the same bundle > handFingertips 1`] = `
 {
-  "bundle": "0c36f5f9c59e9d11101e2a2ad380:5547",
+  "bundle": "0ece829ec396af1749cf757de040:5561",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > handPaths 1`] = `
 {
-  "bundle": "06e56fdfd2b9d902b22b76e5c3e5:6292",
+  "bundle": "1a933816613b051c8307aa3fdee1:6292",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > handPinch 1`] = `
 {
-  "bundle": "02f472082818e311d86f0aad6568:6225",
+  "bundle": "141d990e29006a1f0ab569958e5e:6239",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > handProximity 1`] = `
 {
-  "bundle": "14d1c43c8b00d318a7691ce1a381:5015",
+  "bundle": "0920f65763227e10381e78477885:5015",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > handTwoHands 1`] = `
 {
-  "bundle": "1b2d12da183d011c822e9d9064aa:4547",
+  "bundle": "0cec53885f5d8a19f3258e4ae022:4547",
   "missing": [],
 }
 `;
@@ -758,7 +758,7 @@ exports[`golden shaders: every Play example exports the same bundle > learnYUV 1
 
 exports[`golden shaders: every Play example exports the same bundle > letterDrop 1`] = `
 {
-  "bundle": "1fe8fcdb0720ca020f4d28c6d8c2:5484",
+  "bundle": "05fde3d2491ca303f794f8c4a5fc:5484",
   "missing": [],
 }
 `;
@@ -828,7 +828,14 @@ exports[`golden shaders: every Play example exports the same bundle > matrixWhat
 
 exports[`golden shaders: every Play example exports the same bundle > matteParticles 1`] = `
 {
-  "bundle": "1f2a6c1cfccf9600185f35a50458:55319",
+  "bundle": "0240996906785103b83ddbfba430:55333",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > motionReveal 1`] = `
+{
+  "bundle": "0e349ac62af65d18d8965c8ab988:58988",
   "missing": [],
 }
 `;
@@ -856,28 +863,28 @@ exports[`golden shaders: every Play example exports the same bundle > p5Webgl 1`
 
 exports[`golden shaders: every Play example exports the same bundle > particleGlow 1`] = `
 {
-  "bundle": "10cfc11e8b12ee0adc073ae330b9:6945",
+  "bundle": "0f403153ca397b102be9c29c388d:6959",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > particlesEngineTrack 1`] = `
 {
-  "bundle": "1188d59f50c83d0cfa5aa4e66e64:11296",
+  "bundle": "131ef20fe4fc07155db0ad465206:11296",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > pianoRollScale 1`] = `
 {
-  "bundle": "0b2fac6f4ad38417480c0f288946:6180",
+  "bundle": "1dcfd46f956cb91ba7123fec10cf:6181",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playAttractor 1`] = `
 {
-  "bundle": "04004ea2fdcd250ef6cc6916764e:4432",
+  "bundle": "192398a9505e511fb7f34d09d365:4446",
   "missing": [],
 }
 `;
@@ -891,7 +898,7 @@ exports[`golden shaders: every Play example exports the same bundle > playAudioL
 
 exports[`golden shaders: every Play example exports the same bundle > playAudioReaders 1`] = `
 {
-  "bundle": "106ae5e3dbb8ba152583f88efa81:5855",
+  "bundle": "1ceed0a44116ff1f41218182f984:5869",
   "missing": [],
 }
 `;
@@ -912,14 +919,14 @@ exports[`golden shaders: every Play example exports the same bundle > playBoids 
 
 exports[`golden shaders: every Play example exports the same bundle > playBrush 1`] = `
 {
-  "bundle": "0060156bff10340478a64aa8fb0f:4844",
+  "bundle": "0f2d64e61446ab15885a3a458082:4858",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playBursts 1`] = `
 {
-  "bundle": "04e15f041f02c2037c422894cdaf:4851",
+  "bundle": "1f351976083c9318c1eeee460cd2:4865",
   "missing": [],
 }
 `;
@@ -933,14 +940,14 @@ exports[`golden shaders: every Play example exports the same bundle > playCamera
 
 exports[`golden shaders: every Play example exports the same bundle > playChase 1`] = `
 {
-  "bundle": "01c91183d94f1117445e86801c22:7188",
+  "bundle": "11312a97d88e901fed8cd92bf983:7202",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playClimb 1`] = `
 {
-  "bundle": "12a0aa95c3cd471e88b27a412555:5989",
+  "bundle": "1712d9f2e3114011590f4df6554a:6017",
   "missing": [],
 }
 `;
@@ -954,7 +961,7 @@ exports[`golden shaders: every Play example exports the same bundle > playColour
 
 exports[`golden shaders: every Play example exports the same bundle > playConditions 1`] = `
 {
-  "bundle": "02334015becb711329a869933647:6911",
+  "bundle": "19fc2b0a2e82ed1b94eaa554df27:6925",
   "missing": [],
 }
 `;
@@ -996,7 +1003,7 @@ exports[`golden shaders: every Play example exports the same bundle > playDrawnS
 
 exports[`golden shaders: every Play example exports the same bundle > playEmitAbsorb 1`] = `
 {
-  "bundle": "0e0a8c5512506e02ffa82025bcbf:5039",
+  "bundle": "1265c293128d9705ca9c75ebd0f1:5053",
   "missing": [],
 }
 `;
@@ -1010,21 +1017,21 @@ exports[`golden shaders: every Play example exports the same bundle > playExprKn
 
 exports[`golden shaders: every Play example exports the same bundle > playFlock 1`] = `
 {
-  "bundle": "1bd8468a48f47f15e81bf6a33db1:5098",
+  "bundle": "19c8d8996d0c521d5afe46e1a172:5112",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playFlow 1`] = `
 {
-  "bundle": "09c3bbff9e68331948028af54a11:4813",
+  "bundle": "1d09900456203f04e961b28422a6:4827",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playForces 1`] = `
 {
-  "bundle": "06761b83ae7e7608b33c0c42d86e:6331",
+  "bundle": "095d8c1a81fe650fc20efa7dea8c:6345",
   "missing": [],
 }
 `;
@@ -1066,7 +1073,7 @@ exports[`golden shaders: every Play example exports the same bundle > playKeys 1
 
 exports[`golden shaders: every Play example exports the same bundle > playLayersOnly 1`] = `
 {
-  "bundle": "0229b325b17a9410423ebba119d3:4935",
+  "bundle": "04dc943446df870ccb54c6aff8d1:4949",
   "missing": [],
 }
 `;
@@ -1094,7 +1101,7 @@ exports[`golden shaders: every Play example exports the same bundle > playLiveAu
 
 exports[`golden shaders: every Play example exports the same bundle > playLooks 1`] = `
 {
-  "bundle": "18a56f55adc17306ad43922b1e33:4723",
+  "bundle": "12782b60f89bee0e255d3c49f2c4:4737",
   "missing": [],
 }
 `;
@@ -1115,7 +1122,7 @@ exports[`golden shaders: every Play example exports the same bundle > playMouse 
 
 exports[`golden shaders: every Play example exports the same bundle > playMultiply 1`] = `
 {
-  "bundle": "031548ef8efaeb015edee9f6741c:6004",
+  "bundle": "1f84d5f4ee030908ffb5b8113bf3:6018",
   "missing": [],
 }
 `;
@@ -1129,7 +1136,7 @@ exports[`golden shaders: every Play example exports the same bundle > playNoise 
 
 exports[`golden shaders: every Play example exports the same bundle > playNoiseField 1`] = `
 {
-  "bundle": "0084732f07dd8a0b1ab712d1d2b1:4695",
+  "bundle": "13fafe52c31ee210f4241e05a779:4709",
   "missing": [],
 }
 `;
@@ -1178,28 +1185,28 @@ exports[`golden shaders: every Play example exports the same bundle > playPairs 
 
 exports[`golden shaders: every Play example exports the same bundle > playParticleMask 1`] = `
 {
-  "bundle": "191b6ff8b6533e19f6a9839669c2:4588",
+  "bundle": "08f707c6ec4f98061b12c245255b:4602",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playPictureShape 1`] = `
 {
-  "bundle": "02344b3874c2cf017f7aaeeaa066:5203",
+  "bundle": "1e37dfdff7bee91eb54afcea0669:5217",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playPlexus 1`] = `
 {
-  "bundle": "10ca802071b86b170b916742f0ce:4449",
+  "bundle": "0d8fd149e917341d06ed8d824dd1:4463",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playPortals 1`] = `
 {
-  "bundle": "1cf8f8313b8ebd05f4603040c1f3:5826",
+  "bundle": "1da3d102fb1a18168fcb10830efb:5840",
   "missing": [],
 }
 `;
@@ -1213,21 +1220,21 @@ exports[`golden shaders: every Play example exports the same bundle > playPredat
 
 exports[`golden shaders: every Play example exports the same bundle > playProximity 1`] = `
 {
-  "bundle": "0f1daf4f4cae8d0e047851c42233:7003",
+  "bundle": "0a2713455dc3171e9d908cfa86a1:7031",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playSensors 1`] = `
 {
-  "bundle": "047197691eea24101dfc40143cd7:5554",
+  "bundle": "0fb7b3fd0a7d431be16f3c20cfe9:5568",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playShapeTriggers 1`] = `
 {
-  "bundle": "185d1d03f021e30bca8cf2147dc6:8735",
+  "bundle": "072582ee5b8a8917306b88934a58:8763",
   "missing": [],
 }
 `;
@@ -1241,7 +1248,7 @@ exports[`golden shaders: every Play example exports the same bundle > playSpring
 
 exports[`golden shaders: every Play example exports the same bundle > playTake 1`] = `
 {
-  "bundle": "11cae89cd904ed07eb3c6431e0b9:7303",
+  "bundle": "088d7d63e04965004b28dbde2468:7303",
   "missing": [],
 }
 `;
@@ -1269,7 +1276,7 @@ exports[`golden shaders: every Play example exports the same bundle > playTilt 1
 
 exports[`golden shaders: every Play example exports the same bundle > playTintZones 1`] = `
 {
-  "bundle": "017a5c13c1004514e815a09e915a:5521",
+  "bundle": "04b7210f87d30e07678c349bf565:5535",
   "missing": [],
 }
 `;
@@ -1283,14 +1290,14 @@ exports[`golden shaders: every Play example exports the same bundle > playTrigge
 
 exports[`golden shaders: every Play example exports the same bundle > playVideoSound 1`] = `
 {
-  "bundle": "023fcbfd8bcc3c1edda55667b2e7:5940",
+  "bundle": "17a23f9f57ffbd03fab22a40ca9e:5954",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playWalls 1`] = `
 {
-  "bundle": "195668a24a5a661322b22f43ef56:6824",
+  "bundle": "0257318d37316818dd47b9043645:6852",
   "missing": [],
 }
 `;
@@ -7468,6 +7475,33 @@ exports[`golden shaders: every example compiles as it did > motionBlurTrails 1`]
     "u_p_motionblurx0_scene_weight",
   ],
   "paramValues": "1c2ee654a49b1f170f7851d990fa:580",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > motionReveal 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1d1f6fec6bd95d0893e5544c25c5:2657",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "114fc1423b9ff8180a87e7c8256e:86",
+  "paramBindings": "10beb17b7abf521d9cb650b436af:234",
+  "paramUniforms": [
+    "u_p_circx0_posX",
+    "u_p_circx0_posY",
+    "u_p_circx0_radius",
+    "u_p_lightx0_brightness",
+    "u_p_lightx0_innerFalloff",
+    "u_p_lightx0_tint",
+  ],
+  "paramValues": "148a42ca72dc1f0a9f383b5e7ce4:167",
   "passes": null,
   "success": true,
   "textureUniforms": {},
