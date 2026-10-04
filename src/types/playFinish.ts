@@ -9,6 +9,7 @@ import {
   FN_EFFECTS, FN_KINDS, FN_TONE_MODES, FN_TIME_MAPS, FN_TIME_QUALITY, FN_WHERE, FN_DISPLACE_MAPS, FN_MOSH_MAPS, FN_SOURCE_MAPS, FN_CURVE_CHANNELS, FN_HUE_CURVES, FN_COMPARE_ID, FN_COMPARE_PARAMS,
   fnDefaultEffect, fnDefaultCurves, fnDefaultCompare, fnParseCustom, fnMigrateHalation, type FnCompare, type FnCurves, type FnKind, type FnParam,
 } from '../play/kit/finish.js';
+import { GY_MAX, gyList } from '../play/kit/glyphs.js';
 import type { SealedBlob } from './userNode';
 import { decryptPayload, encryptPayload } from '../playfile/sealing';
 
@@ -58,6 +59,10 @@ export interface FinishEffect {
   whereInvert?: boolean;
   /** Time displacement: how many frames it keeps, and at what size. */
   quality?: FinishTimeQuality;
+  /** ASCII: the characters it draws, darkest first ('' = the built-in 5 × 5 ones); emoji work. */
+  chars?: string;
+  /** ASCII: use typed characters in the order typed (else they are ordered by how much of their cell they cover). */
+  keepOrder?: boolean;
   [key: string]: unknown;
 }
 
@@ -349,6 +354,11 @@ export function parseFinishEffect(raw: unknown): FinishEffect | null {
   if (kind === 'datamosh') {
     e.map = (FN_MOSH_MAPS as readonly string[]).includes(r.map as string) ? r.map as FinishMoshMap : 'picture';
     e.layerId = typeof r.layerId === 'string' ? r.layerId.slice(0, 80) : '';
+  }
+  if (kind === 'ascii') {
+    // Absent (an ASCII saved before typed characters) is the built-in characters, as it was.
+    e.chars = typeof r.chars === 'string' ? gyList(r.chars).slice(0, GY_MAX).join('') : '';
+    e.keepOrder = r.keepOrder === true;
   }
   return withWhere(e, r);
 }

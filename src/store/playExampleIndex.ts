@@ -84,6 +84,7 @@ const ROWS: Array<[string, string, string]> = [
   ['bgQueue', 'Background queue', 'Two graphs and a photo in a Background layer: keys 1, 2, 3 and a beat step through them, crossfading, with fireflies reading the picture.'],
   ['matteParticles', 'Matte: a photo through particles', 'A track matte: the photo shows only where a hidden particles layer (and its trails) is.'],
   ['maskReveal', 'Masks: text through a moving window', 'Text matted by a hidden circle that sweeps across, over ASCII cut by a feathered mask of its own.'],
+  ['motionReveal', 'Motion: reveal and trigger where it moves', 'A Motion layer watches the picture (or your camera, or a video): its matte reveals a photo, sparks are born in it, a readout follows it, and rules fire when movement starts, gets big and stops.'],
   ['handFingertips', 'Hands: fingertips move particles', 'Nulls follow your fingertips: particles flow from your index finger into your thumb.'],
   ['handPinch', 'Hands: pinch, point and fist', 'Pinch drives a slider, a fist fires a burst, pointing toggles a setting.'],
   ['handTwoHands', 'Hands: two at once', 'How far apart your hands are zooms the picture; their heights mix the colour.'],

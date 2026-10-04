@@ -2,7 +2,7 @@
 
 exports[`golden shaders: every Play example exports the same bundle > audioEffects 1`] = `
 {
-  "bundle": "1c6c13de174e2e1bd6f80174abfa:4946",
+  "bundle": "07569290a46daf0ef9821123c079:4946",
   "missing": [],
 }
 `;
@@ -23,7 +23,7 @@ exports[`golden shaders: every Play example exports the same bundle > bgColourSk
 
 exports[`golden shaders: every Play example exports the same bundle > bgPhotoFlow 1`] = `
 {
-  "bundle": "180bd37e1fad2813af5b1a84b847:55451",
+  "bundle": "06096c7fc66f3707f81417399b98:55465",
   "missing": [],
 }
 `;
@@ -156,112 +156,112 @@ exports[`golden shaders: every Play example exports the same bundle > dataWeathe
 
 exports[`golden shaders: every Play example exports the same bundle > drumPads 1`] = `
 {
-  "bundle": "1d5207bda3856f0fd9a1eb1d9253:11064",
+  "bundle": "186bbfde6fbb64008fb5847dc3a1:11078",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishDatamoshEcho 1`] = `
 {
-  "bundle": "17b0c817e21332142324f8be9b53:5417",
+  "bundle": "1f89e632ffe8010050645de5fc7f:5417",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishGrade 1`] = `
 {
-  "bundle": "0d9502a84a631f1452bb392980c2:5201",
+  "bundle": "018aafa82a299d043b7fe8d49e62:5201",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishHalation 1`] = `
 {
-  "bundle": "1e74a0a92d95821c1b2c370916a8:6962",
+  "bundle": "024d9a1728fb9410ae5feb81e84a:6962",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishKaleidoscope 1`] = `
 {
-  "bundle": "06e8b14e731651160a8f01a039e7:4442",
+  "bundle": "09b131e855f1730e8f17968d6066:4442",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishLooks 1`] = `
 {
-  "bundle": "1367ea9da4aa3413b56e003ffa4f:5191",
+  "bundle": "159dca73610eb4010233380a751a:5191",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishMotionExtract 1`] = `
 {
-  "bundle": "04f8b9355538b214865e35b31cba:4855",
+  "bundle": "030450de65e76411ca8498f1f54f:4855",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishPixelSort 1`] = `
 {
-  "bundle": "0452f528401be8063e7a6fbccc8c:55099",
+  "bundle": "1f986208caa33a10383fd77fe618:55176",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishPrint 1`] = `
 {
-  "bundle": "076d4c96d7c80c0e0f1fd49eab7d:4807",
+  "bundle": "020f4c7f99e178194fa168d684e6:4807",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishScreen 1`] = `
 {
-  "bundle": "02e44f74a3829f0b51057f3d3447:4884",
+  "bundle": "13a5d1991c7ab6191af308c5b86d:4884",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishTerminal 1`] = `
 {
-  "bundle": "148a5a368ccb8e00dd857992e408:4685",
+  "bundle": "19998826ccdb9217fd19e7b0e1de:4722",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > finishTime 1`] = `
 {
-  "bundle": "0652c98419c1c70e41172d0be2da:5337",
+  "bundle": "15c677589fe574110ff0cec0a5cb:5337",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > flowAroundWords 1`] = `
 {
-  "bundle": "09018ba5239f391ea6215399070f:6444",
+  "bundle": "02e3bc81229d670b6dfc21b7e03e:6458",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > granulator 1`] = `
 {
-  "bundle": "0b99140b43a05e02b0a5d9e58fa0:10481",
+  "bundle": "1d4edea5c8487201a4917eb1f344:10495",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > granulatorSpectral 1`] = `
 {
-  "bundle": "0878a85e92be1809a94ef733cf5f:8206",
+  "bundle": "0de7e1fe9b844600f63d50e1643c:8206",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > gridLavaLamp 1`] = `
 {
-  "bundle": "19fcced039fa1a1a73eae74e67e0:7411",
+  "bundle": "103eef6919bd961b7c4d5373a127:7425",
   "missing": [],
 }
 `;
@@ -324,35 +324,35 @@ exports[`golden shaders: every Play example exports the same bundle > gridTourRi
 
 exports[`golden shaders: every Play example exports the same bundle > handFingertips 1`] = `
 {
-  "bundle": "0c36f5f9c59e9d11101e2a2ad380:5547",
+  "bundle": "0ece829ec396af1749cf757de040:5561",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > handPaths 1`] = `
 {
-  "bundle": "06e56fdfd2b9d902b22b76e5c3e5:6292",
+  "bundle": "1a933816613b051c8307aa3fdee1:6292",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > handPinch 1`] = `
 {
-  "bundle": "02f472082818e311d86f0aad6568:6225",
+  "bundle": "141d990e29006a1f0ab569958e5e:6239",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > handProximity 1`] = `
 {
-  "bundle": "14d1c43c8b00d318a7691ce1a381:5015",
+  "bundle": "0920f65763227e10381e78477885:5015",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > handTwoHands 1`] = `
 {
-  "bundle": "1b2d12da183d011c822e9d9064aa:4547",
+  "bundle": "0cec53885f5d8a19f3258e4ae022:4547",
   "missing": [],
 }
 `;
@@ -758,7 +758,7 @@ exports[`golden shaders: every Play example exports the same bundle > learnYUV 1
 
 exports[`golden shaders: every Play example exports the same bundle > letterDrop 1`] = `
 {
-  "bundle": "1fe8fcdb0720ca020f4d28c6d8c2:5484",
+  "bundle": "05fde3d2491ca303f794f8c4a5fc:5484",
   "missing": [],
 }
 `;
@@ -828,7 +828,14 @@ exports[`golden shaders: every Play example exports the same bundle > matrixWhat
 
 exports[`golden shaders: every Play example exports the same bundle > matteParticles 1`] = `
 {
-  "bundle": "1f2a6c1cfccf9600185f35a50458:55319",
+  "bundle": "0240996906785103b83ddbfba430:55333",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > motionReveal 1`] = `
+{
+  "bundle": "0e349ac62af65d18d8965c8ab988:58988",
   "missing": [],
 }
 `;
@@ -856,28 +863,28 @@ exports[`golden shaders: every Play example exports the same bundle > p5Webgl 1`
 
 exports[`golden shaders: every Play example exports the same bundle > particleGlow 1`] = `
 {
-  "bundle": "10cfc11e8b12ee0adc073ae330b9:6945",
+  "bundle": "0f403153ca397b102be9c29c388d:6959",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > particlesEngineTrack 1`] = `
 {
-  "bundle": "1ed1f169e467e91afbd2b154d162:12439",
+  "bundle": "131ef20fe4fc07155db0ad465206:11296",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > pianoRollScale 1`] = `
 {
-  "bundle": "0b2fac6f4ad38417480c0f288946:6180",
+  "bundle": "1dcfd46f956cb91ba7123fec10cf:6181",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playAttractor 1`] = `
 {
-  "bundle": "04004ea2fdcd250ef6cc6916764e:4432",
+  "bundle": "192398a9505e511fb7f34d09d365:4446",
   "missing": [],
 }
 `;
@@ -891,7 +898,7 @@ exports[`golden shaders: every Play example exports the same bundle > playAudioL
 
 exports[`golden shaders: every Play example exports the same bundle > playAudioReaders 1`] = `
 {
-  "bundle": "106ae5e3dbb8ba152583f88efa81:5855",
+  "bundle": "1ceed0a44116ff1f41218182f984:5869",
   "missing": [],
 }
 `;
@@ -912,14 +919,14 @@ exports[`golden shaders: every Play example exports the same bundle > playBoids 
 
 exports[`golden shaders: every Play example exports the same bundle > playBrush 1`] = `
 {
-  "bundle": "0060156bff10340478a64aa8fb0f:4844",
+  "bundle": "0f2d64e61446ab15885a3a458082:4858",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playBursts 1`] = `
 {
-  "bundle": "04e15f041f02c2037c422894cdaf:4851",
+  "bundle": "1f351976083c9318c1eeee460cd2:4865",
   "missing": [],
 }
 `;
@@ -933,14 +940,14 @@ exports[`golden shaders: every Play example exports the same bundle > playCamera
 
 exports[`golden shaders: every Play example exports the same bundle > playChase 1`] = `
 {
-  "bundle": "01c91183d94f1117445e86801c22:7188",
+  "bundle": "11312a97d88e901fed8cd92bf983:7202",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playClimb 1`] = `
 {
-  "bundle": "12a0aa95c3cd471e88b27a412555:5989",
+  "bundle": "1712d9f2e3114011590f4df6554a:6017",
   "missing": [],
 }
 `;
@@ -954,7 +961,7 @@ exports[`golden shaders: every Play example exports the same bundle > playColour
 
 exports[`golden shaders: every Play example exports the same bundle > playConditions 1`] = `
 {
-  "bundle": "02334015becb711329a869933647:6911",
+  "bundle": "19fc2b0a2e82ed1b94eaa554df27:6925",
   "missing": [],
 }
 `;
@@ -996,7 +1003,7 @@ exports[`golden shaders: every Play example exports the same bundle > playDrawnS
 
 exports[`golden shaders: every Play example exports the same bundle > playEmitAbsorb 1`] = `
 {
-  "bundle": "0e0a8c5512506e02ffa82025bcbf:5039",
+  "bundle": "1265c293128d9705ca9c75ebd0f1:5053",
   "missing": [],
 }
 `;
@@ -1010,21 +1017,21 @@ exports[`golden shaders: every Play example exports the same bundle > playExprKn
 
 exports[`golden shaders: every Play example exports the same bundle > playFlock 1`] = `
 {
-  "bundle": "1bd8468a48f47f15e81bf6a33db1:5098",
+  "bundle": "19c8d8996d0c521d5afe46e1a172:5112",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playFlow 1`] = `
 {
-  "bundle": "09c3bbff9e68331948028af54a11:4813",
+  "bundle": "1d09900456203f04e961b28422a6:4827",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playForces 1`] = `
 {
-  "bundle": "06761b83ae7e7608b33c0c42d86e:6331",
+  "bundle": "095d8c1a81fe650fc20efa7dea8c:6345",
   "missing": [],
 }
 `;
@@ -1066,7 +1073,7 @@ exports[`golden shaders: every Play example exports the same bundle > playKeys 1
 
 exports[`golden shaders: every Play example exports the same bundle > playLayersOnly 1`] = `
 {
-  "bundle": "0229b325b17a9410423ebba119d3:4935",
+  "bundle": "04dc943446df870ccb54c6aff8d1:4949",
   "missing": [],
 }
 `;
@@ -1094,7 +1101,7 @@ exports[`golden shaders: every Play example exports the same bundle > playLiveAu
 
 exports[`golden shaders: every Play example exports the same bundle > playLooks 1`] = `
 {
-  "bundle": "18a56f55adc17306ad43922b1e33:4723",
+  "bundle": "12782b60f89bee0e255d3c49f2c4:4737",
   "missing": [],
 }
 `;
@@ -1115,7 +1122,7 @@ exports[`golden shaders: every Play example exports the same bundle > playMouse 
 
 exports[`golden shaders: every Play example exports the same bundle > playMultiply 1`] = `
 {
-  "bundle": "031548ef8efaeb015edee9f6741c:6004",
+  "bundle": "1f84d5f4ee030908ffb5b8113bf3:6018",
   "missing": [],
 }
 `;
@@ -1129,7 +1136,7 @@ exports[`golden shaders: every Play example exports the same bundle > playNoise 
 
 exports[`golden shaders: every Play example exports the same bundle > playNoiseField 1`] = `
 {
-  "bundle": "0084732f07dd8a0b1ab712d1d2b1:4695",
+  "bundle": "13fafe52c31ee210f4241e05a779:4709",
   "missing": [],
 }
 `;
@@ -1178,28 +1185,28 @@ exports[`golden shaders: every Play example exports the same bundle > playPairs 
 
 exports[`golden shaders: every Play example exports the same bundle > playParticleMask 1`] = `
 {
-  "bundle": "191b6ff8b6533e19f6a9839669c2:4588",
+  "bundle": "08f707c6ec4f98061b12c245255b:4602",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playPictureShape 1`] = `
 {
-  "bundle": "02344b3874c2cf017f7aaeeaa066:5203",
+  "bundle": "1e37dfdff7bee91eb54afcea0669:5217",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playPlexus 1`] = `
 {
-  "bundle": "10ca802071b86b170b916742f0ce:4449",
+  "bundle": "0d8fd149e917341d06ed8d824dd1:4463",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playPortals 1`] = `
 {
-  "bundle": "1cf8f8313b8ebd05f4603040c1f3:5826",
+  "bundle": "1da3d102fb1a18168fcb10830efb:5840",
   "missing": [],
 }
 `;
@@ -1213,21 +1220,21 @@ exports[`golden shaders: every Play example exports the same bundle > playPredat
 
 exports[`golden shaders: every Play example exports the same bundle > playProximity 1`] = `
 {
-  "bundle": "0f1daf4f4cae8d0e047851c42233:7003",
+  "bundle": "0a2713455dc3171e9d908cfa86a1:7031",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playSensors 1`] = `
 {
-  "bundle": "047197691eea24101dfc40143cd7:5554",
+  "bundle": "0fb7b3fd0a7d431be16f3c20cfe9:5568",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playShapeTriggers 1`] = `
 {
-  "bundle": "185d1d03f021e30bca8cf2147dc6:8735",
+  "bundle": "072582ee5b8a8917306b88934a58:8763",
   "missing": [],
 }
 `;
@@ -1241,7 +1248,7 @@ exports[`golden shaders: every Play example exports the same bundle > playSpring
 
 exports[`golden shaders: every Play example exports the same bundle > playTake 1`] = `
 {
-  "bundle": "11cae89cd904ed07eb3c6431e0b9:7303",
+  "bundle": "088d7d63e04965004b28dbde2468:7303",
   "missing": [],
 }
 `;
@@ -1269,7 +1276,7 @@ exports[`golden shaders: every Play example exports the same bundle > playTilt 1
 
 exports[`golden shaders: every Play example exports the same bundle > playTintZones 1`] = `
 {
-  "bundle": "017a5c13c1004514e815a09e915a:5521",
+  "bundle": "04b7210f87d30e07678c349bf565:5535",
   "missing": [],
 }
 `;
@@ -1283,14 +1290,14 @@ exports[`golden shaders: every Play example exports the same bundle > playTrigge
 
 exports[`golden shaders: every Play example exports the same bundle > playVideoSound 1`] = `
 {
-  "bundle": "023fcbfd8bcc3c1edda55667b2e7:5940",
+  "bundle": "17a23f9f57ffbd03fab22a40ca9e:5954",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > playWalls 1`] = `
 {
-  "bundle": "195668a24a5a661322b22f43ef56:6824",
+  "bundle": "0257318d37316818dd47b9043645:6852",
   "missing": [],
 }
 `;
@@ -4762,11 +4769,11 @@ exports[`golden shaders: every example compiles as it did > inkInWater 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "173bd1e14cc478008c6acaf7b162:6601",
+  "fragmentShader": "11d715606e14801167c36b0db5d6:6014",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1cab490cbbc536019fe03cf6f98b:40",
-  "paramBindings": "1a50b769138a6a0939f2069e9110:2321",
+  "paramBindings": "15f8a6a92d30ed0823ae99f87482:2017",
   "paramUniforms": [
     "u_p_gpuparticlx0_attract",
     "u_p_gpuparticlx0_blur",
@@ -4798,17 +4805,10 @@ exports[`golden shaders: every example compiles as it did > inkInWater 1`] = `
     "u_p_gpuparticlx0_lightColor",
     "u_p_gpuparticlx0_lightPower",
     "u_p_gpuparticlx0_lightReach",
-    "u_p_gpuparticlx0_modeM",
-    "u_p_gpuparticlx0_modeN",
-    "u_p_gpuparticlx0_modes",
     "u_p_gpuparticlx0_paper",
-    "u_p_gpuparticlx0_plateFreq",
-    "u_p_gpuparticlx0_plateWeights",
     "u_p_gpuparticlx0_release",
     "u_p_gpuparticlx0_scale",
     "u_p_gpuparticlx0_sceneReach",
-    "u_p_gpuparticlx0_settle",
-    "u_p_gpuparticlx0_shake",
     "u_p_gpuparticlx0_shock",
     "u_p_gpuparticlx0_size",
     "u_p_gpuparticlx0_sound",
@@ -4823,7 +4823,7 @@ exports[`golden shaders: every example compiles as it did > inkInWater 1`] = `
     "u_p_gpuparticlx0_waveSpeed",
     "u_p_gpuparticlx0_wind",
   ],
-  "paramValues": "1115991a66646f107d6554df0be2:1753",
+  "paramValues": "081b4e4b5b051c1dc98f6d935ee5:1534",
   "passes": null,
   "success": true,
   "textureUniforms": {
@@ -7483,6 +7483,33 @@ exports[`golden shaders: every example compiles as it did > motionBlurTrails 1`]
 }
 `;
 
+exports[`golden shaders: every example compiles as it did > motionReveal 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1d1f6fec6bd95d0893e5544c25c5:2657",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "114fc1423b9ff8180a87e7c8256e:86",
+  "paramBindings": "10beb17b7abf521d9cb650b436af:234",
+  "paramUniforms": [
+    "u_p_circx0_posX",
+    "u_p_circx0_posY",
+    "u_p_circx0_radius",
+    "u_p_lightx0_brightness",
+    "u_p_lightx0_innerFalloff",
+    "u_p_lightx0_tint",
+  ],
+  "paramValues": "148a42ca72dc1f0a9f383b5e7ce4:167",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
 exports[`golden shaders: every example compiles as it did > neonFloorGrid 1`] = `
 {
   "audioUniforms": {},
@@ -7689,184 +7716,16 @@ exports[`golden shaders: every example compiles as it did > p5Webgl 1`] = `
 }
 `;
 
-exports[`golden shaders: every example compiles as it did > particleChladniSand 1`] = `
-{
-  "audioUniforms": {
-    "u_audio_audio_0_0": "audio",
-    "u_audio_audio_0_1": "audio",
-    "u_audio_audio_0_2": "audio",
-    "u_audio_audio_0_3": "audio",
-    "u_audio_audio_0_4": "audio",
-    "u_audio_audio_0_5": "audio",
-  },
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "135883f5208c960ef64d7545ee94:9500",
-  "isStateful": false,
-  "liveUniforms": {},
-  "nodeSlugs": "1cfad4c8d4a4800261bdf3566528:123",
-  "paramBindings": "06508d052eebd20dc943fb1c50a4:2375",
-  "paramUniforms": [
-    "u_p_gpuparticlx0_attract",
-    "u_p_gpuparticlx0_blur",
-    "u_p_gpuparticlx0_brightness",
-    "u_p_gpuparticlx0_burst",
-    "u_p_gpuparticlx0_camAngle",
-    "u_p_gpuparticlx0_camDistance",
-    "u_p_gpuparticlx0_camTilt",
-    "u_p_gpuparticlx0_crunch",
-    "u_p_gpuparticlx0_drag",
-    "u_p_gpuparticlx0_drift",
-    "u_p_gpuparticlx0_emitSize",
-    "u_p_gpuparticlx0_flowForce",
-    "u_p_gpuparticlx0_focus",
-    "u_p_gpuparticlx0_glow",
-    "u_p_gpuparticlx0_gravity",
-    "u_p_gpuparticlx0_gust",
-    "u_p_gpuparticlx0_halo",
-    "u_p_gpuparticlx0_hand2X",
-    "u_p_gpuparticlx0_hand2Y",
-    "u_p_gpuparticlx0_handForce",
-    "u_p_gpuparticlx0_handReach",
-    "u_p_gpuparticlx0_handSwirl",
-    "u_p_gpuparticlx0_handX",
-    "u_p_gpuparticlx0_handY",
-    "u_p_gpuparticlx0_ink",
-    "u_p_gpuparticlx0_jet",
-    "u_p_gpuparticlx0_life",
-    "u_p_gpuparticlx0_lightColor",
-    "u_p_gpuparticlx0_lightPower",
-    "u_p_gpuparticlx0_lightReach",
-    "u_p_gpuparticlx0_modeM",
-    "u_p_gpuparticlx0_modeN",
-    "u_p_gpuparticlx0_modes",
-    "u_p_gpuparticlx0_paper",
-    "u_p_gpuparticlx0_plateFreq",
-    "u_p_gpuparticlx0_plateWeights",
-    "u_p_gpuparticlx0_release",
-    "u_p_gpuparticlx0_scale",
-    "u_p_gpuparticlx0_sceneReach",
-    "u_p_gpuparticlx0_settle",
-    "u_p_gpuparticlx0_shake",
-    "u_p_gpuparticlx0_shock",
-    "u_p_gpuparticlx0_size",
-    "u_p_gpuparticlx0_sound",
-    "u_p_gpuparticlx0_speed",
-    "u_p_gpuparticlx0_spread",
-    "u_p_gpuparticlx0_swirl",
-    "u_p_gpuparticlx0_thread",
-    "u_p_gpuparticlx0_threshold",
-    "u_p_gpuparticlx0_turbulence",
-    "u_p_gpuparticlx0_vibrate",
-    "u_p_gpuparticlx0_wave",
-    "u_p_gpuparticlx0_waveSpeed",
-    "u_p_gpuparticlx0_wind",
-  ],
-  "paramValues": "13694a489fa3cc0079e3f9226865:1742",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {
-    "u_tex_gpuparticl_0_image": "sand::image",
-  },
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
-exports[`golden shaders: every example compiles as it did > particleCymatics3d 1`] = `
-{
-  "audioUniforms": {
-    "u_audio_audio_0_0": "audio",
-    "u_audio_audio_0_1": "audio",
-    "u_audio_audio_0_2": "audio",
-    "u_audio_audio_0_3": "audio",
-    "u_audio_audio_0_4": "audio",
-    "u_audio_audio_0_5": "audio",
-  },
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "1155dfd66998041349b26059a632:8372",
-  "isStateful": false,
-  "liveUniforms": {},
-  "nodeSlugs": "11a8fd42e30d201c0c77d4f80693:84",
-  "paramBindings": "05b56cae87a4c00fe5b53adf45f7:2429",
-  "paramUniforms": [
-    "u_p_gpuparticlx0_attract",
-    "u_p_gpuparticlx0_blur",
-    "u_p_gpuparticlx0_brightness",
-    "u_p_gpuparticlx0_burst",
-    "u_p_gpuparticlx0_camAngle",
-    "u_p_gpuparticlx0_camDistance",
-    "u_p_gpuparticlx0_camTilt",
-    "u_p_gpuparticlx0_crunch",
-    "u_p_gpuparticlx0_drag",
-    "u_p_gpuparticlx0_drift",
-    "u_p_gpuparticlx0_emitSize",
-    "u_p_gpuparticlx0_flowForce",
-    "u_p_gpuparticlx0_focus",
-    "u_p_gpuparticlx0_glow",
-    "u_p_gpuparticlx0_gravity",
-    "u_p_gpuparticlx0_gust",
-    "u_p_gpuparticlx0_halo",
-    "u_p_gpuparticlx0_hand2X",
-    "u_p_gpuparticlx0_hand2Y",
-    "u_p_gpuparticlx0_handForce",
-    "u_p_gpuparticlx0_handReach",
-    "u_p_gpuparticlx0_handSwirl",
-    "u_p_gpuparticlx0_handX",
-    "u_p_gpuparticlx0_handY",
-    "u_p_gpuparticlx0_ink",
-    "u_p_gpuparticlx0_jet",
-    "u_p_gpuparticlx0_life",
-    "u_p_gpuparticlx0_lightColor",
-    "u_p_gpuparticlx0_lightPower",
-    "u_p_gpuparticlx0_lightReach",
-    "u_p_gpuparticlx0_modeM",
-    "u_p_gpuparticlx0_modeN",
-    "u_p_gpuparticlx0_modes",
-    "u_p_gpuparticlx0_paper",
-    "u_p_gpuparticlx0_plateFreq",
-    "u_p_gpuparticlx0_plateWeights",
-    "u_p_gpuparticlx0_release",
-    "u_p_gpuparticlx0_scale",
-    "u_p_gpuparticlx0_sceneReach",
-    "u_p_gpuparticlx0_settle",
-    "u_p_gpuparticlx0_shake",
-    "u_p_gpuparticlx0_shock",
-    "u_p_gpuparticlx0_size",
-    "u_p_gpuparticlx0_sound",
-    "u_p_gpuparticlx0_speed",
-    "u_p_gpuparticlx0_spread",
-    "u_p_gpuparticlx0_swirl",
-    "u_p_gpuparticlx0_thread",
-    "u_p_gpuparticlx0_threshold",
-    "u_p_gpuparticlx0_turbulence",
-    "u_p_gpuparticlx0_vibrate",
-    "u_p_gpuparticlx0_wave",
-    "u_p_gpuparticlx0_waveSpeed",
-    "u_p_gpuparticlx0_wind",
-  ],
-  "paramValues": "1e49967fbfce131b2b8705126d2c:1742",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {
-    "u_tex_gpuparticl_0_image": "plate::image",
-  },
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
 exports[`golden shaders: every example compiles as it did > particleDustInAir 1`] = `
 {
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "07f7e40476702b09070f92b9c2e6:7084",
+  "fragmentShader": "0b7fa2cc0a9ed20a8c60bfb51f4d:6497",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1d233d3ba651370e0d0191b9f35a:78",
-  "paramBindings": "0d2cfc69b38a200c702686e11d27:2375",
+  "paramBindings": "1d3ffa5cd7e7bc125051c87c3ba2:2064",
   "paramUniforms": [
     "u_p_gpuparticlx0_attract",
     "u_p_gpuparticlx0_blur",
@@ -7898,17 +7757,10 @@ exports[`golden shaders: every example compiles as it did > particleDustInAir 1`
     "u_p_gpuparticlx0_lightColor",
     "u_p_gpuparticlx0_lightPower",
     "u_p_gpuparticlx0_lightReach",
-    "u_p_gpuparticlx0_modeM",
-    "u_p_gpuparticlx0_modeN",
-    "u_p_gpuparticlx0_modes",
     "u_p_gpuparticlx0_paper",
-    "u_p_gpuparticlx0_plateFreq",
-    "u_p_gpuparticlx0_plateWeights",
     "u_p_gpuparticlx0_release",
     "u_p_gpuparticlx0_scale",
     "u_p_gpuparticlx0_sceneReach",
-    "u_p_gpuparticlx0_settle",
-    "u_p_gpuparticlx0_shake",
     "u_p_gpuparticlx0_shock",
     "u_p_gpuparticlx0_size",
     "u_p_gpuparticlx0_sound",
@@ -7923,7 +7775,7 @@ exports[`golden shaders: every example compiles as it did > particleDustInAir 1`
     "u_p_gpuparticlx0_waveSpeed",
     "u_p_gpuparticlx0_wind",
   ],
-  "paramValues": "025e6cd05b05cc08d0bc2597d8cc:1752",
+  "paramValues": "04197e085078f51fd8e47ed42aac:1533",
   "passes": null,
   "success": true,
   "textureUniforms": {
@@ -7939,11 +7791,11 @@ exports[`golden shaders: every example compiles as it did > particleEmbers 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0dd61f8ff7162b0c11288dfa7176:7704",
+  "fragmentShader": "0b393312ae418c02c8fea275174b:7117",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "00a9dd0d008f6e074943e3a70f01:98",
-  "paramBindings": "01870e0aaa22330783ababd6df87:2539",
+  "paramBindings": "1303214d3006bb10cc179e75f9eb:2214",
   "paramUniforms": [
     "u_p_gpuparticlx0_attract",
     "u_p_gpuparticlx0_blur",
@@ -7975,17 +7827,10 @@ exports[`golden shaders: every example compiles as it did > particleEmbers 1`] =
     "u_p_gpuparticlx0_lightColor",
     "u_p_gpuparticlx0_lightPower",
     "u_p_gpuparticlx0_lightReach",
-    "u_p_gpuparticlx0_modeM",
-    "u_p_gpuparticlx0_modeN",
-    "u_p_gpuparticlx0_modes",
     "u_p_gpuparticlx0_paper",
-    "u_p_gpuparticlx0_plateFreq",
-    "u_p_gpuparticlx0_plateWeights",
     "u_p_gpuparticlx0_release",
     "u_p_gpuparticlx0_scale",
     "u_p_gpuparticlx0_sceneReach",
-    "u_p_gpuparticlx0_settle",
-    "u_p_gpuparticlx0_shake",
     "u_p_gpuparticlx0_shock",
     "u_p_gpuparticlx0_size",
     "u_p_gpuparticlx0_sound",
@@ -8002,7 +7847,7 @@ exports[`golden shaders: every example compiles as it did > particleEmbers 1`] =
     "u_p_mkv2x0_x",
     "u_p_mkv2x0_y",
   ],
-  "paramValues": "02a5ad37e7e5ae1e5fad4d2e7234:1795",
+  "paramValues": "1d322b8b9b0fd10d63560464905b:1576",
   "passes": null,
   "success": true,
   "textureUniforms": {
@@ -8018,11 +7863,11 @@ exports[`golden shaders: every example compiles as it did > particleFlowDrift 1`
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "08263ca7e220660ac839bec8fa5b:7755",
+  "fragmentShader": "06709f00f81a141c0dfc097aa8e9:7168",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "07518c2c38f05f1318fe5be7c682:107",
-  "paramBindings": "18e424a9a9f03b0e1c5cc9340424:2761",
+  "paramBindings": "07832c981cf6d314f2344fe026b0:2422",
   "paramUniforms": [
     "u_p_fbmx0_gain",
     "u_p_fbmx0_lacunarity",
@@ -8058,17 +7903,10 @@ exports[`golden shaders: every example compiles as it did > particleFlowDrift 1`
     "u_p_gpuparticlx0_lightColor",
     "u_p_gpuparticlx0_lightPower",
     "u_p_gpuparticlx0_lightReach",
-    "u_p_gpuparticlx0_modeM",
-    "u_p_gpuparticlx0_modeN",
-    "u_p_gpuparticlx0_modes",
     "u_p_gpuparticlx0_paper",
-    "u_p_gpuparticlx0_plateFreq",
-    "u_p_gpuparticlx0_plateWeights",
     "u_p_gpuparticlx0_release",
     "u_p_gpuparticlx0_scale",
     "u_p_gpuparticlx0_sceneReach",
-    "u_p_gpuparticlx0_settle",
-    "u_p_gpuparticlx0_shake",
     "u_p_gpuparticlx0_shock",
     "u_p_gpuparticlx0_size",
     "u_p_gpuparticlx0_sound",
@@ -8083,92 +7921,11 @@ exports[`golden shaders: every example compiles as it did > particleFlowDrift 1`
     "u_p_gpuparticlx0_waveSpeed",
     "u_p_gpuparticlx0_wind",
   ],
-  "paramValues": "10bcfb5ab9196807844fad9e8cf9:1848",
+  "paramValues": "10cbe35fb3f0840cf80a058997e2:1629",
   "passes": null,
   "success": true,
   "textureUniforms": {
     "u_tex_gpuparticl_0_image": "fd_parts::image",
-  },
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
-exports[`golden shaders: every example compiles as it did > particleFlowIntoShape 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "0860619e578e1d1ae7ee29b68e00:10210",
-  "isStateful": false,
-  "liveUniforms": {},
-  "nodeSlugs": "0be09fe538933c086a9303f152ca:154",
-  "paramBindings": "1c66c6da441cf605f96369655f37:2571",
-  "paramUniforms": [
-    "u_p_fbmx0_gain",
-    "u_p_fbmx0_lacunarity",
-    "u_p_fbmx0_scale",
-    "u_p_fbmx0_time_scale",
-    "u_p_gpuparticlx0_attract",
-    "u_p_gpuparticlx0_blur",
-    "u_p_gpuparticlx0_brightness",
-    "u_p_gpuparticlx0_burst",
-    "u_p_gpuparticlx0_camAngle",
-    "u_p_gpuparticlx0_camDistance",
-    "u_p_gpuparticlx0_camTilt",
-    "u_p_gpuparticlx0_crunch",
-    "u_p_gpuparticlx0_drag",
-    "u_p_gpuparticlx0_drift",
-    "u_p_gpuparticlx0_emitSize",
-    "u_p_gpuparticlx0_flowForce",
-    "u_p_gpuparticlx0_focus",
-    "u_p_gpuparticlx0_glow",
-    "u_p_gpuparticlx0_gravity",
-    "u_p_gpuparticlx0_gust",
-    "u_p_gpuparticlx0_halo",
-    "u_p_gpuparticlx0_hand2X",
-    "u_p_gpuparticlx0_hand2Y",
-    "u_p_gpuparticlx0_handForce",
-    "u_p_gpuparticlx0_handReach",
-    "u_p_gpuparticlx0_handSwirl",
-    "u_p_gpuparticlx0_handX",
-    "u_p_gpuparticlx0_handY",
-    "u_p_gpuparticlx0_ink",
-    "u_p_gpuparticlx0_jet",
-    "u_p_gpuparticlx0_life",
-    "u_p_gpuparticlx0_lightColor",
-    "u_p_gpuparticlx0_lightPower",
-    "u_p_gpuparticlx0_lightReach",
-    "u_p_gpuparticlx0_modeM",
-    "u_p_gpuparticlx0_modeN",
-    "u_p_gpuparticlx0_modes",
-    "u_p_gpuparticlx0_paper",
-    "u_p_gpuparticlx0_plateFreq",
-    "u_p_gpuparticlx0_plateWeights",
-    "u_p_gpuparticlx0_release",
-    "u_p_gpuparticlx0_scale",
-    "u_p_gpuparticlx0_sceneReach",
-    "u_p_gpuparticlx0_settle",
-    "u_p_gpuparticlx0_shake",
-    "u_p_gpuparticlx0_shock",
-    "u_p_gpuparticlx0_size",
-    "u_p_gpuparticlx0_sound",
-    "u_p_gpuparticlx0_speed",
-    "u_p_gpuparticlx0_spread",
-    "u_p_gpuparticlx0_swirl",
-    "u_p_gpuparticlx0_thread",
-    "u_p_gpuparticlx0_threshold",
-    "u_p_gpuparticlx0_turbulence",
-    "u_p_gpuparticlx0_vibrate",
-    "u_p_gpuparticlx0_wave",
-    "u_p_gpuparticlx0_waveSpeed",
-    "u_p_gpuparticlx0_wind",
-  ],
-  "paramValues": "00aa22cfb3aebf0057ecd26a2860:1848",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {
-    "u_tex_gpuparticl_0_image": "parts::image",
   },
   "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
   "videoUniforms": {},
@@ -8255,11 +8012,11 @@ exports[`golden shaders: every example compiles as it did > particleImageDissolv
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0cafd19d76995100b83325863a1a:7492",
+  "fragmentShader": "0a26e787873711051b31c5014353:6905",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "172fc9791dc7480d19953432a1f0:65",
-  "paramBindings": "17eadf7238fbb0077029c55cb216:2429",
+  "paramBindings": "10c5a66729223b10636c98330f8e:2111",
   "paramUniforms": [
     "u_p_gpuparticlx0_attract",
     "u_p_gpuparticlx0_blur",
@@ -8291,17 +8048,10 @@ exports[`golden shaders: every example compiles as it did > particleImageDissolv
     "u_p_gpuparticlx0_lightColor",
     "u_p_gpuparticlx0_lightPower",
     "u_p_gpuparticlx0_lightReach",
-    "u_p_gpuparticlx0_modeM",
-    "u_p_gpuparticlx0_modeN",
-    "u_p_gpuparticlx0_modes",
     "u_p_gpuparticlx0_paper",
-    "u_p_gpuparticlx0_plateFreq",
-    "u_p_gpuparticlx0_plateWeights",
     "u_p_gpuparticlx0_release",
     "u_p_gpuparticlx0_scale",
     "u_p_gpuparticlx0_sceneReach",
-    "u_p_gpuparticlx0_settle",
-    "u_p_gpuparticlx0_shake",
     "u_p_gpuparticlx0_shock",
     "u_p_gpuparticlx0_size",
     "u_p_gpuparticlx0_sound",
@@ -8316,7 +8066,7 @@ exports[`golden shaders: every example compiles as it did > particleImageDissolv
     "u_p_gpuparticlx0_waveSpeed",
     "u_p_gpuparticlx0_wind",
   ],
-  "paramValues": "12f2c30b827cca038b13847357ab:1750",
+  "paramValues": "0ad1d5591c82c00e57f45aae0e21:1531",
   "passes": null,
   "success": true,
   "textureUniforms": {
@@ -8332,11 +8082,11 @@ exports[`golden shaders: every example compiles as it did > particleRain 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0f0a3273c2aa6010e1a67129118b:7731",
+  "fragmentShader": "0c6e95d88824a315d332a2666fc3:7144",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "15f10de206b806074f66cd56dbb1:108",
-  "paramBindings": "1cd29c1a96d2f0004234be53ebf2:2595",
+  "paramBindings": "0106a28c069ca5010c7f9612cabb:2263",
   "paramUniforms": [
     "u_p_gpuparticlx0_attract",
     "u_p_gpuparticlx0_blur",
@@ -8368,17 +8118,10 @@ exports[`golden shaders: every example compiles as it did > particleRain 1`] = `
     "u_p_gpuparticlx0_lightColor",
     "u_p_gpuparticlx0_lightPower",
     "u_p_gpuparticlx0_lightReach",
-    "u_p_gpuparticlx0_modeM",
-    "u_p_gpuparticlx0_modeN",
-    "u_p_gpuparticlx0_modes",
     "u_p_gpuparticlx0_paper",
-    "u_p_gpuparticlx0_plateFreq",
-    "u_p_gpuparticlx0_plateWeights",
     "u_p_gpuparticlx0_release",
     "u_p_gpuparticlx0_scale",
     "u_p_gpuparticlx0_sceneReach",
-    "u_p_gpuparticlx0_settle",
-    "u_p_gpuparticlx0_shake",
     "u_p_gpuparticlx0_shock",
     "u_p_gpuparticlx0_size",
     "u_p_gpuparticlx0_sound",
@@ -8395,7 +8138,7 @@ exports[`golden shaders: every example compiles as it did > particleRain 1`] = `
     "u_p_mkv2x0_x",
     "u_p_mkv2x0_y",
   ],
-  "paramValues": "0122705845478513a97c2ab4583b:1789",
+  "paramValues": "1736a90b61c40c18166db2e132ce:1570",
   "passes": null,
   "success": true,
   "textureUniforms": {
@@ -8413,11 +8156,11 @@ exports[`golden shaders: every example compiles as it did > particleSoundField 1
   },
   "echo": null,
   "errors": null,
-  "fragmentShader": "17ec6ed5e049e81ebe823fde2fde:7809",
+  "fragmentShader": "162e333f0c40740e57c5e5d8b218:7222",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "04cbfd5386c3e0085b3572c0c2a1:84",
-  "paramBindings": "0670d676aa5ab20dd8dc011b439d:2429",
+  "paramBindings": "1234d0f0366fac09ac56a6b9fd30:2111",
   "paramUniforms": [
     "u_p_gpuparticlx0_attract",
     "u_p_gpuparticlx0_blur",
@@ -8449,17 +8192,10 @@ exports[`golden shaders: every example compiles as it did > particleSoundField 1
     "u_p_gpuparticlx0_lightColor",
     "u_p_gpuparticlx0_lightPower",
     "u_p_gpuparticlx0_lightReach",
-    "u_p_gpuparticlx0_modeM",
-    "u_p_gpuparticlx0_modeN",
-    "u_p_gpuparticlx0_modes",
     "u_p_gpuparticlx0_paper",
-    "u_p_gpuparticlx0_plateFreq",
-    "u_p_gpuparticlx0_plateWeights",
     "u_p_gpuparticlx0_release",
     "u_p_gpuparticlx0_scale",
     "u_p_gpuparticlx0_sceneReach",
-    "u_p_gpuparticlx0_settle",
-    "u_p_gpuparticlx0_shake",
     "u_p_gpuparticlx0_shock",
     "u_p_gpuparticlx0_size",
     "u_p_gpuparticlx0_sound",
@@ -8474,91 +8210,11 @@ exports[`golden shaders: every example compiles as it did > particleSoundField 1
     "u_p_gpuparticlx0_waveSpeed",
     "u_p_gpuparticlx0_wind",
   ],
-  "paramValues": "1604a2243b62031775ab075bef8b:1740",
+  "paramValues": "02fcf487eb8eb204963ed6ef8895:1521",
   "passes": null,
   "success": true,
   "textureUniforms": {
     "u_tex_gpuparticl_0_image": "field::image",
-  },
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
-exports[`golden shaders: every example compiles as it did > particleStarOutline 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "1a82c4902cfae01cfd035bad26d8:8848",
-  "isStateful": false,
-  "liveUniforms": {},
-  "nodeSlugs": "1e4e98f54c16f102e9f42925fe4b:98",
-  "paramBindings": "18a6d12d58083e0f20451a393352:2529",
-  "paramUniforms": [
-    "u_p_gpuparticlx0_attract",
-    "u_p_gpuparticlx0_blur",
-    "u_p_gpuparticlx0_brightness",
-    "u_p_gpuparticlx0_burst",
-    "u_p_gpuparticlx0_camAngle",
-    "u_p_gpuparticlx0_camDistance",
-    "u_p_gpuparticlx0_camTilt",
-    "u_p_gpuparticlx0_crunch",
-    "u_p_gpuparticlx0_drag",
-    "u_p_gpuparticlx0_drift",
-    "u_p_gpuparticlx0_emitSize",
-    "u_p_gpuparticlx0_flowForce",
-    "u_p_gpuparticlx0_focus",
-    "u_p_gpuparticlx0_glow",
-    "u_p_gpuparticlx0_gravity",
-    "u_p_gpuparticlx0_gust",
-    "u_p_gpuparticlx0_halo",
-    "u_p_gpuparticlx0_hand2X",
-    "u_p_gpuparticlx0_hand2Y",
-    "u_p_gpuparticlx0_handForce",
-    "u_p_gpuparticlx0_handReach",
-    "u_p_gpuparticlx0_handSwirl",
-    "u_p_gpuparticlx0_handX",
-    "u_p_gpuparticlx0_handY",
-    "u_p_gpuparticlx0_ink",
-    "u_p_gpuparticlx0_jet",
-    "u_p_gpuparticlx0_life",
-    "u_p_gpuparticlx0_lightColor",
-    "u_p_gpuparticlx0_lightPower",
-    "u_p_gpuparticlx0_lightReach",
-    "u_p_gpuparticlx0_modeM",
-    "u_p_gpuparticlx0_modeN",
-    "u_p_gpuparticlx0_modes",
-    "u_p_gpuparticlx0_paper",
-    "u_p_gpuparticlx0_plateFreq",
-    "u_p_gpuparticlx0_plateWeights",
-    "u_p_gpuparticlx0_release",
-    "u_p_gpuparticlx0_scale",
-    "u_p_gpuparticlx0_sceneReach",
-    "u_p_gpuparticlx0_settle",
-    "u_p_gpuparticlx0_shake",
-    "u_p_gpuparticlx0_shock",
-    "u_p_gpuparticlx0_size",
-    "u_p_gpuparticlx0_sound",
-    "u_p_gpuparticlx0_speed",
-    "u_p_gpuparticlx0_spread",
-    "u_p_gpuparticlx0_swirl",
-    "u_p_gpuparticlx0_thread",
-    "u_p_gpuparticlx0_threshold",
-    "u_p_gpuparticlx0_turbulence",
-    "u_p_gpuparticlx0_vibrate",
-    "u_p_gpuparticlx0_wave",
-    "u_p_gpuparticlx0_waveSpeed",
-    "u_p_gpuparticlx0_wind",
-    "u_p_shapex0_m_pts",
-    "u_p_shapex0_n_pts",
-    "u_p_shapex0_r",
-  ],
-  "paramValues": "176d7ebd87457210e2e58049c678:1818",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {
-    "u_tex_gpuparticl_0_image": "parts::image",
   },
   "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
   "videoUniforms": {},
@@ -8570,11 +8226,11 @@ exports[`golden shaders: every example compiles as it did > particlesEngineTrack
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "07b782194e17c713892e1f54e909:6466",
+  "fragmentShader": "156fda8ef283d7155e7c491963b5:5879",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "07fbccb31f333e132003b7d962b7:42",
-  "paramBindings": "0670d676aa5ab20dd8dc011b439d:2429",
+  "paramBindings": "1234d0f0366fac09ac56a6b9fd30:2111",
   "paramUniforms": [
     "u_p_gpuparticlx0_attract",
     "u_p_gpuparticlx0_blur",
@@ -8606,17 +8262,10 @@ exports[`golden shaders: every example compiles as it did > particlesEngineTrack
     "u_p_gpuparticlx0_lightColor",
     "u_p_gpuparticlx0_lightPower",
     "u_p_gpuparticlx0_lightReach",
-    "u_p_gpuparticlx0_modeM",
-    "u_p_gpuparticlx0_modeN",
-    "u_p_gpuparticlx0_modes",
     "u_p_gpuparticlx0_paper",
-    "u_p_gpuparticlx0_plateFreq",
-    "u_p_gpuparticlx0_plateWeights",
     "u_p_gpuparticlx0_release",
     "u_p_gpuparticlx0_scale",
     "u_p_gpuparticlx0_sceneReach",
-    "u_p_gpuparticlx0_settle",
-    "u_p_gpuparticlx0_shake",
     "u_p_gpuparticlx0_shock",
     "u_p_gpuparticlx0_size",
     "u_p_gpuparticlx0_sound",
@@ -8631,7 +8280,7 @@ exports[`golden shaders: every example compiles as it did > particlesEngineTrack
     "u_p_gpuparticlx0_waveSpeed",
     "u_p_gpuparticlx0_wind",
   ],
-  "paramValues": "0e74e3e1b303600fd1036e5d3732:1740",
+  "paramValues": "17bb1b8523a71a1541babc80a514:1521",
   "passes": null,
   "success": true,
   "textureUniforms": {
@@ -8647,11 +8296,11 @@ exports[`golden shaders: every example compiles as it did > particlesIn3dScene 1
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "18be678e3ad1741ea3910ef87e17:13561",
+  "fragmentShader": "14e96e80e69f7e1b91e9fb36ce67:12974",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "039659d92193b70ea594759badb6:261",
-  "paramBindings": "026dbf808b8f64143471912df30b:3197",
+  "paramBindings": "0d1d7c630650d6140261c6e0a20b:2879",
   "paramUniforms": [
     "u_p_gpuparticlx0_attract",
     "u_p_gpuparticlx0_blur",
@@ -8683,17 +8332,10 @@ exports[`golden shaders: every example compiles as it did > particlesIn3dScene 1
     "u_p_gpuparticlx0_lightColor",
     "u_p_gpuparticlx0_lightPower",
     "u_p_gpuparticlx0_lightReach",
-    "u_p_gpuparticlx0_modeM",
-    "u_p_gpuparticlx0_modeN",
-    "u_p_gpuparticlx0_modes",
     "u_p_gpuparticlx0_paper",
-    "u_p_gpuparticlx0_plateFreq",
-    "u_p_gpuparticlx0_plateWeights",
     "u_p_gpuparticlx0_release",
     "u_p_gpuparticlx0_scale",
     "u_p_gpuparticlx0_sceneReach",
-    "u_p_gpuparticlx0_settle",
-    "u_p_gpuparticlx0_shake",
     "u_p_gpuparticlx0_shock",
     "u_p_gpuparticlx0_size",
     "u_p_gpuparticlx0_sound",
@@ -8725,7 +8367,7 @@ exports[`golden shaders: every example compiles as it did > particlesIn3dScene 1
     "u_p_marchloopgx0_stepScale",
     "u_p_spherex0xsgxsphx0_radius",
   ],
-  "paramValues": "1f02ae756b20050902d813e5ce44:2331",
+  "paramValues": "05f896071010e5195edad92eabfe:2112",
   "passes": null,
   "success": true,
   "textureUniforms": {
@@ -8741,11 +8383,11 @@ exports[`golden shaders: every example compiles as it did > particlesRoundShape 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1cb25c1cce8f38023a7ab19025c7:8737",
+  "fragmentShader": "17a1cf055c84e519cc25becd7dfe:8150",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1a80e77153437e11d246abc97764:121",
-  "paramBindings": "1d2433dafb42391147736a4bc19b:2721",
+  "paramBindings": "071250297ac1950aaa1b4bfa50c9:2403",
   "paramUniforms": [
     "u_p_circx0_posX",
     "u_p_circx0_posY",
@@ -8785,17 +8427,10 @@ exports[`golden shaders: every example compiles as it did > particlesRoundShape 
     "u_p_gpuparticlx0_lightColor",
     "u_p_gpuparticlx0_lightPower",
     "u_p_gpuparticlx0_lightReach",
-    "u_p_gpuparticlx0_modeM",
-    "u_p_gpuparticlx0_modeN",
-    "u_p_gpuparticlx0_modes",
     "u_p_gpuparticlx0_paper",
-    "u_p_gpuparticlx0_plateFreq",
-    "u_p_gpuparticlx0_plateWeights",
     "u_p_gpuparticlx0_release",
     "u_p_gpuparticlx0_scale",
     "u_p_gpuparticlx0_sceneReach",
-    "u_p_gpuparticlx0_settle",
-    "u_p_gpuparticlx0_shake",
     "u_p_gpuparticlx0_shock",
     "u_p_gpuparticlx0_size",
     "u_p_gpuparticlx0_sound",
@@ -8810,7 +8445,7 @@ exports[`golden shaders: every example compiles as it did > particlesRoundShape 
     "u_p_gpuparticlx0_waveSpeed",
     "u_p_gpuparticlx0_wind",
   ],
-  "paramValues": "162c7f4d49988404dfacaaf74005:1949",
+  "paramValues": "05f8a0a92f7d9a06bedf384c7e00:1730",
   "passes": null,
   "success": true,
   "textureUniforms": {

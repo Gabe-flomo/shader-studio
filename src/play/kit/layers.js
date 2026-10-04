@@ -8,6 +8,7 @@
  */
 import { paletteCssAt, paletteColour } from '../particle-sim.js';
 import { klParseFontUrl } from './fonts.js';
+import { gyList } from './glyphs.js';
 import { K3_SKETCH_NAMES, k3Create, k3Helpers, k3Setup, k3Begin, k3End, k3Dispose } from './sketch3d.js';
 import { kp5Detect, kp5Host, kp5Helpers, kp5Webgl, kp5Step, kp5HasDraw, kp5Console } from './p5.js';
 
@@ -607,9 +608,7 @@ export function klDrawAudio(ctx, l, v, W, H, dpr, audio, st, time) {
  * tones, ZWJ families) stay whole instead of splitting into halves.
  */
 export function klGlyphList(chars) {
-  const text = String(chars || '');
-  if (typeof Intl !== 'undefined' && Intl.Segmenter) return Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text), x => x.segment);
-  return Array.from(text);
+  return gyList(chars);
 }
 
 /** A strip of the ramp's characters, white (emoji keep their colours), one cell each. Cached per ramp and size. */

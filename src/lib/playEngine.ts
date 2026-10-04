@@ -39,7 +39,8 @@ import { geoAnchor } from '../play/kit/geometry.js';
 import { fnEval } from '../play/kit/fn.js';
 import type { TriggerSpec } from '../types/play';
 import type { LfoShape, PlayAction, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource, SensorRead } from '../types/play';
-import { sensorKey } from '../types/play';
+import { isLookAction, sensorKey } from '../types/play';
+import { fnLookAct, fnLookNew, fnLookReset, fnLookStep, fnLookValue } from '../play/kit/finish.js';
 import { parseGrainsTarget } from '../types/playAudioEngine';
 import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parsePropTarget, parseReaderTarget, spreadPropId } from '../types/play';
 import { spValue, spWeight } from '../play/kit/spread.js';
@@ -493,11 +494,33 @@ class PlayEngine implements InputSource {
     return this.live.get(controlId);
   }
 
-  /** A layer property right now: what a mapping drives it to, else the layer's own value. */
+  /**
+   * A layer property right now: what a mapping drives it to, else the layer's own value. A Finish
+   * effect's number (`finish:<effectId>`) also hears the rules' Look actions (Mosh, Pulse a setting…),
+   * which win over its mappings while they last.
+   */
   layerValue(layerId: string, key: string, base: number): number {
+    const k = `${layerId}::${key}`;
+    return this.overrides.get(k) ?? fnLookValue(this.looks, layerId, key) ?? this.layerLive.get(k) ?? base;
+  }
+
+  /** layerValue without the Look actions: an offline render keeps its own (playOverlay.compositePixels). */
+  layerValueNoLooks(layerId: string, key: string, base: number): number {
     const k = `${layerId}::${key}`;
     return this.overrides.get(k) ?? this.layerLive.get(k) ?? base;
   }
+
+  /**
+   * The rules' Look actions on Finish effects (play/kit/finish.js fnLookAct): live they fire from
+   * tickActions; a take playing back fires its recorded ones here (at the clock now, or `time`).
+   */
+  private looks = fnLookNew();
+  lookAct(a: { do: string; layerId: string; key?: string; value?: number; seconds?: number }, time = this.time): void {
+    fnLookAct(this.looks, a, time);
+    inputBus.wake();
+  }
+  /** Forget every Look action (a take starts over). */
+  resetLooks(): void { fnLookReset(this.looks); }
 
   /** What a mapping drives a layer property to right now, without overrides (undefined: not driven). The tape's touch detection reads it. */
   drivenValue(layerId: string, key: string): number | undefined {
@@ -1068,7 +1091,11 @@ class PlayEngine implements InputSource {
       stepped.add(a.id);
       if (again && presses <= slot.st.seen) return 0;
       return fresh ? 0 : Math.min(4, stepFire(slot.st, a.trigger.fire, presses, gate, again ? 0 : dt, this.time));
-    }, a => { for (const cb of this.actionListeners) cb(a); }, id => this.emitSignal(id), this.chainStats);
+    }, a => {
+      // A Look action changes a Finish effect's numbers here (layerValue reads them); the listeners still hear it, so a take records it.
+      if (isLookAction(a.do)) fnLookAct(this.looks, a, this.time);
+      for (const cb of this.actionListeners) cb(a);
+    }, id => this.emitSignal(id), this.chainStats);
   }
 
   // ── Hands ─────────────────────────────────────────────────────────────────
@@ -1484,6 +1511,8 @@ class PlayEngine implements InputSource {
   private tickInputsInner(dt: number, time: number, write: InputWriter, lap: ((stage: PlayStage) => void) | null): void {
     this.time = time;
     this.frame++;
+    // Look actions that have run out let go (a take playing back fires its own into the same state).
+    fnLookStep(this.looks, time);
     if (this.muted) {
       // The take fires what was recorded. Back live, triggers start from "nothing yet": presses made meanwhile don't fire.
       this.actionFire.clear();
@@ -1532,6 +1561,8 @@ class PlayEngine implements InputSource {
     if (this.gamepadIsBound && this.performing) inputBus.wake();
     const driven = new Set<string>();
     this.layerMoved = false;
+    // A Look action started or ran out: the Finish stack redraws.
+    if (this.looks.changed) { this.looks.changed = false; this.layerMoved = true; }
     this.incMoving = false;
     // Sources and routes (play/kit/routes.js, shared with the web runtime): each source read once, then its routes written.
     this.index();
