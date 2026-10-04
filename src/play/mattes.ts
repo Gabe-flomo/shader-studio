@@ -7,6 +7,7 @@
 import { defaultLayer, layerTarget, type BackgroundMatte, type LayerMask, type MaskOp, type MaskShape, type PlayLayer, type PlayRecord, type ShapeLayer, type TrackMatte } from '../types/play';
 import { canBeMatte, canHaveMatte, MASK_DEFAULTS, MASK_PROP_KEYS, MASKS_MAX, maskKey, matteUsers, matteWouldCycle, type MaskProp } from '../types/playLayers';
 import { playId } from './playControls';
+import { newMotionLayer } from './motionLayers';
 
 const r4 = (n: number) => Math.round(n * 1e4) / 1e4;
 const withLayer = (p: PlayRecord, id: string, fn: (l: PlayLayer) => PlayLayer): PlayRecord => ({ ...p, layers: p.layers.map(l => (l.id === id ? fn(l) : l)) });
@@ -54,6 +55,23 @@ export function addMatteShape(p: PlayRecord, layerId: string, aspect = 16 / 9): 
   } as ShapeLayer;
   const layers = [...p.layers];
   layers.splice(i + 1, 0, shape);
+  return { play: setTrackMatte({ ...p, layers }, layerId, id, { mode: 'alpha', invert: false }), id };
+}
+
+/**
+ * "Show only where it moves": a new Motion layer as the layer's matte, placed
+ * right above it, watching what a new Motion layer watches (the camera, or the
+ * setup's first Video layer), hidden (it keeps measuring). Its Feather softens
+ * the edge; the matte's Invert shows the layer where nothing moves instead.
+ */
+export function addMatteMotion(p: PlayRecord, layerId: string): { play: PlayRecord; id: string } {
+  const i = p.layers.findIndex(x => x.id === layerId);
+  const l = p.layers[i];
+  if (!l || !canHaveMatte(l.kind)) return { play: p, id: '' };
+  const id = playId('layer');
+  const m = newMotionLayer(p.layers, id, `${l.label} · where it moves`, { visible: false, show: 'mask' });
+  const layers = [...p.layers];
+  layers.splice(i + 1, 0, m);
   return { play: setTrackMatte({ ...p, layers }, layerId, id, { mode: 'alpha', invert: false }), id };
 }
 

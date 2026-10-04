@@ -36,10 +36,14 @@ import { AudioFxPanel } from './AudioFxPanel';
 import { ColourWheel } from './ColourWheel';
 import { deleteLook, loadSavedLooks, saveLook, SAVED_LOOKS_CHANGED, type SavedLook } from './savedLooks';
 import {
-  applyStackPreset, deleteStackPreset, EFFECT_TEMPLATE, FINISH_LIBRARY_CHANGED, loadSavedEffects, loadStackPresets, renameStackPreset, saveEffect, saveStackPreset,
+  applyStackPreset, deleteStackPreset, FINISH_LIBRARY_CHANGED, loadSavedEffects, loadStackPresets, renameStackPreset, saveEffect, saveStackPreset,
   type StackPreset,
 } from '../../../play/finishLibrary';
 import { GlslEditor } from '../../code/GlslEditor';
+import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
+import { effectNodeSockets, FX_OUT_TYPE, nodeEffect, nodeEffectDefs, type EffectGraph } from '../../../play/lookGraph';
+import { EffectEditor } from './EffectEditor';
+import { MiniGraph } from './MiniGraph';
 import type { PlayControl, PlayRecord } from '../../../types/play';
 import {
   FINISH_COMPARE_ID, FINISH_EFFECTS, FINISH_KINDS, FINISH_TIME_QUALITY, GRADE_LOOKS, applyLook, compareHost, emptyFinish, finishCustomCode, finishHostLabel, finishHosts,
@@ -132,11 +136,39 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
     setFinish(f => ({ ...f, on: true, effects: [...f.effects, e] }));
     usePlayUi.getState().revealFinish(e.id);
   };
+  // The Look effect editor (New effect…, or Edit on a custom effect's card). While it is open the
+  // effect it makes is live in the stack without undo steps; Use makes one step, Cancel puts the stack back.
+  const [editing, setEditing] = useState<{ original: FinishEffect | null } | null>(null);
+  const putDraft = (e: FinishEffect) => useNodeGraphStore.getState().setPlay(p => {
+    const f = p.finish ?? emptyFinish();
+    const effects = f.effects.some(x => x.id === e.id) ? f.effects.map(x => (x.id === e.id ? e : x)) : [...f.effects, e];
+    return { ...p, finish: { ...f, effects } };
+  }, false);
+  const doneEditing = (e: FinishEffect | null, original: FinishEffect | null, draftId: string | null) => {
+    // Back to the stack as it was (no undo step), then the result as one step.
+    useNodeGraphStore.getState().setPlay(p => {
+      const f = p.finish;
+      if (!f) return p;
+      const effects = original ? f.effects.map(x => (x.id === original.id ? original : x)) : f.effects.filter(x => x.id !== draftId);
+      return { ...p, finish: effects.length || !f.on ? { ...f, effects } : undefined };
+    }, false);
+    setEditing(null);
+    if (!e) return;
+    if (original) setFinish(f => ({ ...f, effects: f.effects.map(x => (x.id === e.id ? e : x)) }));
+    else push(e);
+  };
+  const lastDraft = useRef<string | null>(null);
   const add = (value: string) => {
-    if (value === NEW_CODE) { push(newCustomEffect({ name: 'Posterize', code: EFFECT_TEMPLATE })); return; }
+    if (value === NEW_EFFECT) { lastDraft.current = null; setEditing({ original: null }); return; }
+    if (value.startsWith(NODE_PREFIX)) {
+      const r = nodeEffect(value.slice(NODE_PREFIX.length));
+      if (r.effect) push(r.effect);
+      else toast.error('Couldn’t add the node', { message: r.error });
+      return;
+    }
     if (value.startsWith(SAVED_PREFIX)) {
       const d = lib.effects.find(x => x.id === value.slice(SAVED_PREFIX.length));
-      if (d) push(newCustomEffect({ name: d.name, code: d.code, defId: d.id, ...(d.sealed ? { sealed: d.sealed } : {}) }));
+      if (d) push(newCustomEffect({ name: d.name, code: d.code, defId: d.id, ...(d.sealed ? { sealed: d.sealed } : {}), ...(d.graph ? { graph: d.graph } : {}) }));
       return;
     }
     const kind = value as FinishKind;
@@ -154,10 +186,15 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
       groups.set(d.group, list);
     }
     const yours: PickerSection['items'][number][] = [
-      ...lib.effects.map(d => ({ value: SAVED_PREFIX + d.id, label: d.name, description: d.description || (d.sealed ? `Sealed${d.pack ? ` · ${d.pack}` : ''}` : d.pack ? `From ${d.pack}` : 'Your effect code'), icon: 'code' as IconName })),
-      { value: NEW_CODE, label: 'New effect code…', description: 'Write vec3 effect(vec2 uv, vec3 color) in GLSL; uniforms become sliders', icon: 'plus' as IconName },
+      ...lib.effects.map(d => ({ value: SAVED_PREFIX + d.id, label: d.name, description: d.description || (d.sealed ? `Sealed${d.pack ? ` · ${d.pack}` : ''}` : d.pack ? `From ${d.pack}` : d.graph ? 'Your effect, from nodes' : 'Your effect code'), icon: (d.graph ? 'nodes' : 'code') as IconName })),
+      { value: NEW_EFFECT, label: 'New effect…', description: 'Build one from nodes or write it in GLSL, with a live preview', icon: 'plus' as IconName },
     ];
-    return [...[...groups].map(([heading, items]) => ({ heading, items })), { heading: 'Your effects', items: yours }];
+    // Every Studio node that takes a colour and gives a colour (play/lookGraph.ts nodeEffectDefs).
+    const nodes: PickerSection['items'][number][] = nodeEffectDefs().map(d => ({
+      value: NODE_PREFIX + d.type, label: d.label, icon: 'nodes' as IconName, keywords: `node ${d.category} ${(d.aliases ?? []).join(' ')}`,
+      description: `${d.category} node${d.description ? ` · ${d.description.split(/(?<=\.)\s/)[0]}` : ''}`.slice(0, 110),
+    }));
+    return [...[...groups].map(([heading, items]) => ({ heading, items })), { heading: 'Your effects', items: yours }, { heading: 'Nodes', items: nodes }];
   }, [finish.effects, lib.effects]);
 
   // Stack presets: save, and load (Replace stack / Add to stack), rename, delete.
@@ -207,7 +244,7 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
         <Button size="sm" icon="presets" onClick={ev => { const r = (ev.currentTarget as HTMLElement).getBoundingClientRect(); setPresetMenu({ x: r.left, y: r.bottom + 4 }); }}>Presets</Button>
         <span style={{ flex: 1 }} />
         <div style={{ minWidth: 170 }}>
-          <GroupedPicker value="" placeholder="+ Add effect" ariaLabel="Add an effect" title="Add an effect" sections={sections} onChange={add} width={300} search={false} />
+          <GroupedPicker value="" placeholder="+ Add effect" ariaLabel="Add an effect" title="Add an effect" sections={sections} onChange={add} width={320} search searchPlaceholder="Search effects and nodes" />
         </div>
       </div>
       {presetMenu && <Menu x={presetMenu.x} y={presetMenu.y} items={presetItems} onClose={() => setPresetMenu(null)} title="Stack presets" minWidth={230} />}
@@ -241,9 +278,19 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
             onExpose={p => expose(e, p)}
             onReorder={(from, to) => setFinish(f => ({ ...f, effects: moveItem(f.effects, from, to) }))}
             onRemove={() => setFinish(f => ({ ...f, effects: f.effects.filter(x => x.id !== e.id) }))}
+            onEdit={e.kind === 'custom' && !e.sealed ? () => setEditing({ original: e }) : undefined}
           />
         ))}
       </div>
+      {editing && (
+        <EffectEditor
+          initial={editing.original}
+          finishOn={finish.on}
+          touch={touch}
+          onDraft={d => { lastDraft.current = d.id; putDraft(d); }}
+          onDone={e => doneEditing(e, editing.original, lastDraft.current)}
+        />
+      )}
       {finish.effects.length > 1 && (
         <div style={{ marginTop: 10, color: tk.text.faint, font: `11px/1.45 ${fontFamily.ui}` }}>
           Colour effects (your own included) run top to bottom. The warps (camera shake, lens distortion, CRT curvature, glitch blocks, ripple, displace, mosaic, mirror) bend the picture before anything reads it; chromatic aberration, the glitch’s colour split and time displacement choose what is read. Pixel sort, halftone, ASCII, feedback, echo, datamosh and motion extract see every effect above them. Any effect can show only somewhere: its <b>Where</b>.
@@ -253,7 +300,8 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
   );
 }
 
-const NEW_CODE = '__code';
+const NEW_EFFECT = '__new';
+const NODE_PREFIX = 'node:';
 const SAVED_PREFIX = 'saved:';
 
 // ── The before/after wipe ───────────────────────────────────────────────────
@@ -282,7 +330,7 @@ function WipeCard({ compare, touch, exposed, onPatch, onExpose }: {
 
 // ── One effect ───────────────────────────────────────────────────────────────
 
-function EffectCard({ effect: e, index, count, dimmed, touch, focused, focusTick, layers, exposed, onPatch, onReplace, onExpose, onReorder, onRemove }: {
+function EffectCard({ effect: e, index, count, dimmed, touch, focused, focusTick, layers, exposed, onPatch, onReplace, onExpose, onReorder, onRemove, onEdit }: {
   effect: FinishEffect;
   index: number;
   count: number;
@@ -298,12 +346,14 @@ function EffectCard({ effect: e, index, count, dimmed, touch, focused, focusTick
   /** Move the card at `from` to `to` (this card's buttons, or another card dropped on this one). */
   onReorder: (from: number, to: number) => void;
   onRemove: () => void;
+  /** Open the Look effect editor on it (custom effects). */
+  onEdit?: () => void;
 }) {
   const onMove = (to: number) => onReorder(index, to);
   const tk = useTokens();
   const custom = e.kind === 'custom';
   const title = finishHostLabel(e);
-  const icon: IconName = custom ? 'code' : FINISH_EFFECTS[e.kind as FinishKind].icon as IconName;
+  const icon: IconName = custom ? (e.graph ? 'nodes' : 'code') : FINISH_EFFECTS[e.kind as FinishKind].icon as IconName;
   const foldKey = `finish:${e.id}`;
   // Folded by default (the stack can get long): an explicit choice sticks, remembered per effect id.
   const foldStored = usePlayUi(s => s.folded[foldKey]);
@@ -323,15 +373,16 @@ function EffectCard({ effect: e, index, count, dimmed, touch, focused, focusTick
     { label: 'Move down', icon: 'chevD', disabled: index === count - 1, onSelect: () => onMove(index + 1) },
     'separator',
     ...(custom ? [
+      ...(onEdit ? [{ label: e.graph ? 'Edit nodes…' : 'Open in the effect editor…', icon: e.graph ? 'nodes' : 'code', hint: 'Nodes or code, with a live preview', onSelect: onEdit } as MenuItem] : []),
       { label: 'Rename…', icon: 'edit', onSelect: () => { void askText('Rename the effect', { label: 'Name', initial: title, confirmLabel: 'Rename' }).then(n => { if (n?.trim()) onPatch({ name: n.trim().slice(0, 60) }); }); } },
       ...(e.sealed ? [] : [{ label: e.defId ? 'Save to Your effects (update)' : 'Save to Your effects', icon: 'save', hint: 'Keep it in + Add effect → Your effects', onSelect: () => {
-        const { result, saved } = saveEffect({ name: title, code: e.code ?? '', ...(e.defId && loadSavedEffects().some(x => x.id === e.defId && !x.sealed) ? { id: e.defId } : {}) });
+        const { result, saved } = saveEffect({ name: title, code: e.code ?? '', ...(e.graph ? { graph: e.graph } : {}), ...(e.defId && loadSavedEffects().some(x => x.id === e.defId && !x.sealed) ? { id: e.defId } : {}) });
         if (!result.ok || !saved) { toast.error('Couldn’t save the effect', { message: result.ok ? undefined : result.error }); return; }
         onPatch({ defId: saved.id });
         toast.success(`Saved “${saved.name}”`, { message: 'It is under + Add effect → Your effects, in library exports and node packs.' });
       } } as MenuItem]),
     ] as MenuItem[] : []),
-    { label: 'Reset to defaults', icon: 'resetParams', onSelect: () => onReplace(custom ? { ...newCustomEffect({ name: title, code: e.code ?? '', ...(e.defId ? { defId: e.defId } : {}), ...(e.sealed ? { sealed: e.sealed } : {}) }, e.id), enabled: e.enabled } : { ...newFinishEffect(e.kind as FinishKind, e.id), enabled: e.enabled }) },
+    { label: 'Reset to defaults', icon: 'resetParams', onSelect: () => onReplace(custom ? { ...newCustomEffect({ name: title, code: e.code ?? '', ...(e.defId ? { defId: e.defId } : {}), ...(e.sealed ? { sealed: e.sealed } : {}), ...(e.graph ? { graph: e.graph } : {}) }, e.id), enabled: e.enabled } : { ...newFinishEffect(e.kind as FinishKind, e.id), enabled: e.enabled }) },
     { label: 'Remove', icon: 'trash', danger: true, onSelect: onRemove },
   ];
   const k = kitFor(e, touch, exposed, onPatch, onExpose);
@@ -362,7 +413,7 @@ function EffectCard({ effect: e, index, count, dimmed, touch, focused, focusTick
       {!folded && (
         <div style={{ padding: '0 10px 10px', opacity: e.enabled ? 1 : 0.55 }}>
           {presetsFor(e, k, onPatch)}
-          {editorFor(e, k, touch, layers, onPatch, onReplace)}
+          {editorFor(e, k, touch, layers, onPatch, onReplace, onEdit)}
           <WhereRows e={e} k={k} layers={layers} onPatch={onPatch} />
         </div>
       )}
@@ -433,7 +484,7 @@ function presetsFor(e: FinishEffect, k: RowKit, onPatch: (c: Partial<FinishEffec
   return k.row('Preset', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{presets.map(pr => <Button key={pr.name} size="sm" variant={current === pr ? 'primary' : 'secondary'} onClick={() => onPatch({ ...pr.values, ...pr.set } as Partial<FinishEffect>)}>{pr.name}</Button>)}</div>, 'Starting points: they only set the settings below.');
 }
 
-function editorFor(e: FinishEffect, k: RowKit, touch: boolean, layers: LayerRef[], onPatch: (c: Partial<FinishEffect>) => void, onReplace: (e: FinishEffect) => void): ReactNode {
+function editorFor(e: FinishEffect, k: RowKit, touch: boolean, layers: LayerRef[], onPatch: (c: Partial<FinishEffect>) => void, onReplace: (e: FinishEffect) => void, onEdit?: () => void): ReactNode {
   switch (e.kind) {
     case 'grade': return <GradeEditor e={e} k={k} touch={touch} onPatch={onPatch} onReplace={onReplace} />;
     case 'halation': return (
@@ -457,7 +508,7 @@ function editorFor(e: FinishEffect, k: RowKit, touch: boolean, layers: LayerRef[
     );
     case 'feedback': return <FeedbackEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
     case 'echo': return <EchoEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
-    case 'custom': return <CustomEditor e={e} k={k} touch={touch} onReplace={onReplace} />;
+    case 'custom': return <CustomEditor e={e} k={k} touch={touch} onReplace={onReplace} onEdit={onEdit} />;
     default: {
       // Any other effect, as the kit declares it: its sliders, its colours (three hidden numbers each) and its note.
       const def = FINISH_EFFECTS[e.kind as FinishKind];
@@ -724,7 +775,11 @@ function lookName(id: string): string {
 function fmtNum(v: number): string { return Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''); }
 
 function effectSummary(e: FinishEffect): string {
-  if (e.kind === 'custom') return e.sealed ? `Sealed${e.name ? ` · ${e.name}` : ''}` : e.name || 'Your effect code';
+  if (e.kind === 'custom') {
+    if (e.sealed) return `Sealed${e.name ? ` · ${e.name}` : ''}`;
+    if (e.graph) return graphSummary(e.graph);
+    return e.name || 'Your effect code';
+  }
   if (e.kind === 'grade') {
     const parts: string[] = [];
     if (e.look) parts.push(lookName(e.look) || 'Custom');
@@ -852,13 +907,22 @@ function errorLinesOf(err: string): Map<number, string> {
   return out;
 }
 
-function CustomEditor({ e, k, touch, onReplace }: { e: FinishEffect; k: RowKit; touch: boolean; onReplace: (e: FinishEffect) => void }) {
+/** A graph effect's one line: its node, or the nodes it is made of. */
+function graphSummary(g: EffectGraph): string {
+  const labels = g.nodes.flatMap(n => { const s = effectNodeSockets(n); return n.type === FX_OUT_TYPE || !s ? [] : [s.label]; });
+  if (g.node) return `Node · ${labels[0] ?? g.node}`;
+  return labels.length ? `Nodes · ${labels.slice(0, 4).join(', ')}${labels.length > 4 ? '…' : ''}` : 'Nodes · the picture as it is';
+}
+
+function CustomEditor({ e, k, touch, onReplace, onEdit }: { e: FinishEffect; k: RowKit; touch: boolean; onReplace: (e: FinishEffect) => void; onEdit?: () => void }) {
   const tk = useTokens();
   const sealed = !!e.sealed;
+  const fromNodes = !!e.graph;
   const code = sealed ? '' : e.code ?? '';
   const [draft, setDraft] = useState(code);
-  const [open, setOpen] = useState(!sealed);
-  // The record's code changed elsewhere (undo, a preset): show it.
+  // The code itself folds away: the card shows its first lines (or the nodes it was built from) and the editor opens on demand.
+  const [open, setOpen] = useState(false);
+  // The record's code changed elsewhere (undo, a preset, the effect editor): show it.
   const committed = useRef(code);
   useEffect(() => { if (code !== committed.current) { committed.current = code; setDraft(code); } }, [code]);
   const [error, setError] = useState('');
@@ -867,6 +931,7 @@ function CustomEditor({ e, k, touch, onReplace }: { e: FinishEffect; k: RowKit; 
     if (sealed) { setError(''); return; }
     const t = setTimeout(() => {
       setError(fnCheckCustom(draft));
+      // Typed by hand: the effect is plain code from now on (withCustomCode without a graph).
       if (draft !== committed.current) { committed.current = draft; onReplace(withCustomCode(e, draft)); }
     }, 350);
     return () => clearTimeout(t);
@@ -874,30 +939,48 @@ function CustomEditor({ e, k, touch, onReplace }: { e: FinishEffect; k: RowKit; 
   }, [draft, sealed]);
   const parsed = useMemo(() => fnParseCustom(finishCustomCode(e)), [e]);
   const sliders = parsed.params.filter(p => !p.colour);
+  const status = error
+    ? <span style={{ color: tk.status.danger, font: `600 11px ${fontFamily.ui}` }}>Doesn’t compile: skipped</span>
+    : <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{sliders.length ? `${sliders.length} slider${sliders.length === 1 ? '' : 's'}` : 'No settings'}{parsed.colours.length ? ` · ${parsed.colours.length} colour${parsed.colours.length === 1 ? '' : 's'}` : ''}</span>;
+  // The first lines that say something (not the comments and the blank lines).
+  const firstLines = code.split('\n').filter(l => l.trim() && !/^\s*\/\//.test(l)).slice(0, 4);
   return (
     <>
-      {sealed
-        ? <Note>Sealed effect{e.name ? ` “${e.name}”` : ''}: its code isn’t shown. Its settings work like any other.</Note>
-        : (
-          <div style={{ marginTop: 6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Button size="sm" variant="ghost" icon={open ? 'chevD' : 'chevR'} onClick={() => setOpen(!open)}>Effect code</Button>
-              <span style={{ flex: 1 }} />
-              {error
-                ? <span style={{ color: tk.status.danger, font: `600 11px ${fontFamily.ui}` }}>Doesn’t compile: skipped</span>
-                : <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{sliders.length ? `${sliders.length} slider${sliders.length === 1 ? '' : 's'}` : 'No settings'}{parsed.colours.length ? ` · ${parsed.colours.length} colour${parsed.colours.length === 1 ? '' : 's'}` : ''}</span>}
-            </div>
-            {open && (
-              <div style={{ display: 'flex', height: touch ? 220 : 260, marginTop: 4, borderRadius: radius.sm, overflow: 'hidden', border: `1px solid ${error ? tk.status.danger : tk.border.default}` }}>
-                <GlslEditor value={draft} onChange={setDraft} ariaLabel={`${e.name ?? 'Custom effect'} code`} errorLines={errorLinesOf(error)} />
-              </div>
-            )}
-            {error && <pre style={{ margin: '6px 0 0', padding: '6px 8px', borderRadius: radius.sm, background: alpha(tk.status.danger, 0.1), color: tk.status.danger, font: `11px/1.45 ${fontFamily.mono}`, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 120, overflow: 'auto' }}>{error}</pre>}
-            {open && <Note>Write <code>vec3 effect(vec2 uv, vec3 color)</code>. <code>picture(uv)</code> reads the picture as it came in, <code>px</code> is one pixel, <code>time</code> the clock. Each <code>uniform float name; // 0..1 = 0.5</code> is a slider (and a control), <code>uniform vec3 name; // color = #ff8800</code> a colour. A broken effect is skipped; the picture never goes blank.</Note>}
+      {sealed && <Note>Sealed effect{e.name ? ` “${e.name}”` : ''}: its code isn’t shown. Its settings work like any other.</Note>}
+      {!sealed && fromNodes && (
+        <div style={{ marginTop: 6 }}>
+          <MiniGraph graph={e.graph!} onOpen={onEdit} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            {onEdit && <Button size="sm" icon="nodes" onClick={onEdit}>Edit nodes…</Button>}
+            <span style={{ flex: 1 }} />
+            {status}
           </div>
-        )}
+        </div>
+      )}
+      {!sealed && !fromNodes && (
+        <div style={{ marginTop: 6 }}>
+          {!open && (
+            <button type="button" onClick={onEdit ?? (() => setOpen(true))} title="Open the code" style={{ display: 'block', width: '100%', boxSizing: 'border-box', textAlign: 'left', margin: 0, padding: '6px 8px', border: `1px solid ${tk.border.subtle}`, borderRadius: radius.sm, background: tk.bg.field, color: tk.text.muted, font: `10.5px/1.45 ${fontFamily.mono}`, whiteSpace: 'pre', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }}>
+              {firstLines.join('\n') || '(no code)'}
+            </button>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            {onEdit && <Button size="sm" icon="code" onClick={onEdit}>Open editor…</Button>}
+            <Button size="sm" variant="ghost" icon={open ? 'chevD' : 'chevR'} onClick={() => setOpen(!open)}>Code here</Button>
+            <span style={{ flex: 1 }} />
+            {status}
+          </div>
+          {open && (
+            <div style={{ display: 'flex', height: touch ? 220 : 260, marginTop: 4, borderRadius: radius.sm, overflow: 'hidden', border: `1px solid ${error ? tk.status.danger : tk.border.default}` }}>
+              <GlslEditor value={draft} onChange={setDraft} ariaLabel={`${e.name ?? 'Custom effect'} code`} errorLines={errorLinesOf(error)} />
+            </div>
+          )}
+          {error && <pre style={{ margin: '6px 0 0', padding: '6px 8px', borderRadius: radius.sm, background: alpha(tk.status.danger, 0.1), color: tk.status.danger, font: `11px/1.45 ${fontFamily.mono}`, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 120, overflow: 'auto' }}>{error}</pre>}
+          {open && <Note>Write <code>vec3 effect(vec2 uv, vec3 color)</code>. <code>picture(uv)</code> reads the picture as it came in, <code>px</code> is one pixel, <code>time</code> the clock. Each <code>uniform float name; // 0..1 = 0.5</code> is a slider (and a control), <code>uniform vec3 name; // color = #ff8800</code> a colour. A broken effect is skipped; the picture never goes blank.</Note>}
+        </div>
+      )}
       {sliders.map(p => k.num(p.key))}
-      {parsed.colours.map(c => k.colour(c.label, c.keys))}
+      {parsed.colours.map(c => k.colour(c.label, c.keys, c.hint || undefined))}
     </>
   );
 }

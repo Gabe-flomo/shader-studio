@@ -390,7 +390,7 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
     } else if (key === FINISH_PRESETS_KEY) {
       finishPresets = listItems(key, parsed, 'presets', 'preset', 'fstack', x => { const fx = arr(obj(x.finish)?.effects).map(obj); return fx.length ? fx.map(e => (str(e?.kind) === 'custom' ? str(e?.name) ?? 'Custom' : str(e?.kind) ?? '?')).join(', ') : 'Empty'; });
     } else if (key === FINISH_EFFECTS_KEY) {
-      finishEffects = listItems(key, parsed, 'presets', 'preset', 'feffect', x => [x.sealed ? 'Sealed' : `${(str(x.code) ?? '').split('\n').length} lines`, str(x.pack) ? `from ${str(x.pack)}` : ''].filter(Boolean).join(' · '));
+      finishEffects = listItems(key, parsed, 'presets', 'preset', 'feffect', x => [x.sealed ? 'Sealed' : `${(str(x.code) ?? '').split('\n').length} lines`, obj(x.graph) ? `from ${plural(arr(obj(x.graph)?.nodes).filter(n => obj(n)?.type !== 'fx:out').length, 'node')}` : '', str(x.pack) ? `from ${str(x.pack)}` : ''].filter(Boolean).join(' · '));
     } else if (key === FINISH_LOOKS_KEY) {
       finishLooks = listItems(key, parsed, 'presets', 'preset', 'flook', x => `${Object.keys(obj(x.values) ?? {}).length} settings${str(x.tone) && str(x.tone) !== 'none' ? ` · ${str(x.tone)}` : ''}`);
     } else if (key === DRUM_KITS_KEY) {

@@ -116,7 +116,7 @@ export function fnCompareOn(finish: FnFinish | null | undefined): boolean;
 
 /** A custom effect's setting: a number (float or int), or one channel of a colour (`<name>.r`…, hidden). */
 export interface FnCustomParam extends FnParam { type: 'float' | 'int' | 'colour'; colour?: string }
-export interface FnCustomParsed { params: FnCustomParam[]; colours: Array<{ name: string; label: string; keys: [string, string, string] }>; lines: string[]; error: string }
+export interface FnCustomParsed { params: FnCustomParam[]; colours: Array<{ name: string; label: string; keys: [string, string, string]; hint?: string }>; lines: string[]; error: string }
 export const FN_CUSTOM_RESERVED: readonly string[];
 export function fnParseCustom(code: string): FnCustomParsed;
 export function fnCustomDefaults(code: string): Record<string, number>;

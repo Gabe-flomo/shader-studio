@@ -2323,7 +2323,8 @@ void main() {
     // A hidden Camera layer still lights the camera when something reads where it sees movement: the
     // Finish stack's motion map (an effect's Where, Displace), or particles born where it moves.
     const readsMotion = (!!(FK && FK.usesMotion) && !!play.finish && FK.usesMotion(play.finish)) || play.layers.some(l => l.visible && l.kind === 'particles' && l.spawn === 'motion');
-    const usesCamera = play.layers.some(l => (l.visible || matteIds.has(l.id) || (readsMotion && l.kind === 'camera')) && (l.kind === 'camera' || ((l.kind === 'particles' || l.kind === 'glyphs' || l.kind === 'contours') && l.readFrom === 'camera')));
+    // A Motion layer watching the camera measures (and so needs it) even while hidden.
+    const usesCamera = play.layers.some(l => (l.kind === 'motion' && l.readFrom === 'camera') || ((l.visible || matteIds.has(l.id) || (readsMotion && l.kind === 'camera')) && (l.kind === 'camera' || ((l.kind === 'particles' || l.kind === 'glyphs' || l.kind === 'contours') && l.readFrom === 'camera'))));
     let camVideo = null;
     const fmt = (v, step) => { const d = step && step >= 1 ? 0 : step && step >= 0.1 ? 1 : step && step >= 0.01 ? 2 : 3; return Number(v).toFixed(d); };
     const hex = c => '#' + c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('');

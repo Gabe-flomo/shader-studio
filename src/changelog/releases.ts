@@ -39,6 +39,19 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.8',
+    date: '2026-10-03',
+    title: 'Motion layer, piano roll window, livelier looks',
+    highlights: [
+      { area: 'Play', text: 'A Motion layer: how much moves, where and which way, as readings for mappings and rules; a matte that shows a layer only where it moves; particles born there.', link: { kind: 'doc', path: 'docs/motion-layer.md' } },
+      { area: 'Play', text: 'Double-click a MIDI clip to edit it in a big piano roll window, with the clip’s key, Highlight scale and Snap to scale in its side panel.', link: { kind: 'doc', path: 'docs/piano-roll.md' } },
+      { area: 'Play', text: 'Pixel sort moves on its own: Flow, Drip, Breathe, Wander, Turbulence and Trail, with Melt, Rain and Glitch drift presets.' },
+      { area: 'Play', text: 'ASCII takes your own characters, the ASCII layer’s sets, or emoji in their own colours.' },
+      { area: 'Play', text: 'Rules can now fire Look effects: Mosh for a few seconds, Reset mosh, or pulse or set any effect’s setting.' },
+      { area: 'Files', text: 'Linked folders stay linked, however many and wherever you link them from. A missing folder shows as Not found, with Relocate.', link: { kind: 'doc', path: 'docs/linked-folders.md' } },
+    ],
+  },
+  {
     id: '2026.10.7',
     date: '2026-10-03',
     title: 'The Pass node',

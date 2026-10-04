@@ -33,7 +33,7 @@ function folderMenu(f: LinkedFolder, status: string | undefined): MenuItem[] {
     ...KIND_HINTS.map(k => ({ label: k.label, icon: (k.value === f.kind ? 'check' : undefined), onSelect: () => { void setLinkedKind(f.id, k.value); } }) as MenuItem),
     'separator',
     status === 'permission'
-      ? { label: 'Allow again', icon: 'link', onSelect: () => { void reconnectLinkedFolder(f.id); } }
+      ? { label: 'Reconnect', icon: 'link', onSelect: () => { void reconnectLinkedFolder(f.id); } }
       : { label: 'Check again', icon: 'rebuild', onSelect: () => { void reconnectLinkedFolder(f.id); } },
     { label: 'Find it somewhere else…', icon: 'folder', hint: 'It moved, or the drive has a new name: files inside keep their paths', onSelect: () => { void relocateLinkedFolder(f.id).catch(e => toast.error('Couldn’t use that folder', { message: e instanceof Error ? e.message : String(e) })); } },
     'separator',

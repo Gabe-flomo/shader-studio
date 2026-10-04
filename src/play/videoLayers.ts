@@ -22,7 +22,7 @@
  * too): the preview claims them, and the videos (and their sound) pause when
  * it goes.
  */
-import { matteUsers, videoLayerTimeAt, type PlayLayer, type VideoLayer } from '../types/playLayers';
+import { runsWhileHidden, videoLayerTimeAt, type PlayLayer, type VideoLayer } from '../types/playLayers';
 import type { PlayRecord } from '../types/play';
 import { addVideoFile, getVideo } from '../lib/backgroundLibrary';
 import { audioEngine } from '../lib/audioEngine';
@@ -207,7 +207,7 @@ class PlayVideoLayers {
 
   /** Does this layer run now: a preview is up, and it shows, is a matte, or is heard or listened to. */
   private runs(l: VideoLayer): boolean {
-    return this.claims > 0 && (l.visible || l.sound !== 'off' || matteUsers(this.all, l.id).length > 0);
+    return this.claims > 0 && (l.visible || l.sound !== 'off' || runsWhileHidden(this.all, l.id));
   }
 
   /** Keep the videos on the graph clock (the live preview, once a frame). */
@@ -268,7 +268,7 @@ class PlayVideoLayers {
   async seek(time: number): Promise<void> {
     for (const l of this.layers) {
       const v = this.entries.get(l.id)?.el;
-      if (!v || !(l.visible || matteUsers(this.all, l.id).length > 0)) continue;
+      if (!v || !(l.visible || runsWhileHidden(this.all, l.id))) continue;
       if (v.readyState < 1) await waitFor(v, 'loadedmetadata', 4000);
       if (!v.paused) v.pause();
       const target = videoLayerTimeAt(l.playing ? time : 0, v.duration, l.speed, l.loop, l.start);

@@ -17,7 +17,9 @@ afterEach(() => { playEngine.setRecord(emptyPlayRecord()); playEngine.setBaseVal
 
 const sparks = { ...defaultLayer('particles', 'p', 'Sparks'), emit: 'burst' } as PlayLayer;
 const words = defaultLayer('text', 'w', 'Words') as PlayLayer;
-const base = (): PlayRecord => ({ ...emptyPlayRecord(), layers: [sparks, words], controls: [{ id: 'r', target: 'n::r', kind: 'float', label: 'Radius', min: 0, max: 10 }] });
+// A Motion layer too, for the Motion behaviours' slot (last, so the plain Layer slots still pick the particles first).
+const watcher = defaultLayer('motion', 'mo', 'Motion') as PlayLayer;
+const base = (): PlayRecord => ({ ...emptyPlayRecord(), layers: [sparks, words, watcher], controls: [{ id: 'r', target: 'n::r', kind: 'float', label: 'Radius', min: 0, max: 10 }] });
 const byId = (id: string) => BUILT_IN_BEHAVIOURS.find(b => b.id === id)!;
 
 describe('the starter set', () => {

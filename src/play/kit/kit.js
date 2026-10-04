@@ -65,6 +65,7 @@ import { fcDraw } from './face.js';
 import { psDraw } from './pose.js';
 import { kmApplyBackgroundMatte, kmApplyMasks, kmApplyTrack, kmMatteSources, kmTrackOf } from './mattes.js';
 import { bqState, bqAct, bqPlan, bqCompose } from './queue.js';
+import { mtCreate, mtStep, mtSampleSize, mtLook, mtHeat, mtMaskAlpha, MT_READS } from './motion.js';
 import { kdState, kdAct, kdPlan, kdTextItems, kdFrame, kdDrawTable, kdColumn, kdText, kdChunkText, kdWrapText, kdScriptView } from './data.js';
 
 const KIT_COARSE_W = 64, KIT_COARSE_H = 36, KIT_FINE_W = 128, KIT_FINE_H = 72;
@@ -91,7 +92,7 @@ export function klPictureAt(grid, W, H, x, y, r, ch) {
   }
   return n ? sum / n : null;
 }
-const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, video: 1, lens: 1, script: 1, relationship: 1, agents: 1 };
+const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, video: 1, lens: 1, script: 1, relationship: 1, agents: 1, motion: 1 };
 
 /**
  * A value as words for a Text layer that reads one (implementation guide 8):
@@ -117,6 +118,8 @@ export function createLayerKit() {
   let relDriven = new Set();
   // Agents layers: each one's simulation (agents.js).
   const ags = new Map();
+  // Motion layers: each one's grid, frames and readings (motion.js), and the frame its matte was last made.
+  const motions = new Map(), motionMattes = new Map();
   // Path shapes: each one's geometry last frame (for picking on the picture) and its fade (On lost: Fade).
   const paths = new Map(), pathFades = new Map();
   // Layers drawn alone this frame for the host (env.alphaLayers), by id.
@@ -357,7 +360,7 @@ export function createLayerKit() {
       try { ctx.drawImage(env.gl, 0, 0, W, H); } catch (err) { /* no picture to copy yet */ }
     }
     const ids = new Set(layers.map(l => l.id));
-    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts, bqStates, dStates, paths, pathFades, rels, relGrids, ags]) for (const id of [...m.keys()]) if (!ids.has(id)) { if (m === scripts) klSketchDispose(m.get(id)); m.delete(id); }
+    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts, bqStates, dStates, paths, pathFades, rels, relGrids, ags, motions, motionMattes]) for (const id of [...m.keys()]) if (!ids.has(id)) { if (m === scripts) klSketchDispose(m.get(id)); m.delete(id); }
     // Sketch sources that left the queue (or whose layer did) stop keeping state.
     if (bqSketches.size) { const inQueue = new Set(bq ? record.layers[0].sources.map(s => s.id) : []); for (const id of [...bqSketches.keys()]) if (!inQueue.has(id)) { klSketchDispose(bqSketches.get(id)); bqSketches.delete(id); } }
     // A visibility change in the panel wins over an earlier show/hide action.
@@ -375,7 +378,11 @@ export function createLayerKit() {
     if (alphaIds) for (const id of alphaIds) matteSources.add(id);
     // The Background's own matte layer runs (and draws on its own canvas) even while hidden, like any other matte.
     if (bgMatte && byId.has(bgMatte.id)) matteSources.add(bgMatte.id);
-    const live = matteSources.size ? layers.filter(l => isVisible(l) || matteSources.has(l.id)) : vis;
+    // A layer a Motion layer watches runs (and draws on its own canvas, once) even while hidden, like a matte.
+    for (const l of layers) if (l.kind === 'motion' && l.readFrom === 'layer' && l.sourceId && l.sourceId !== l.id && byId.has(l.sourceId) && byId.get(l.sourceId).kind !== 'motion') matteSources.add(l.sourceId);
+    // Motion layers always measure: their eye and Show only decide what they draw.
+    const hasMotion = layers.some(l => l.kind === 'motion');
+    const live = matteSources.size || hasMotion ? layers.filter(l => isVisible(l) || matteSources.has(l.id) || l.kind === 'motion') : vis;
 
     // 1. Nulls that follow something ride a spring; their position is reported back to the host.
     // A null following a hand that is out of view is lost (path shapes read it) once tracking runs or
@@ -528,7 +535,8 @@ export function createLayerKit() {
     }
     // A motion map (the Finish stack's Where or Displace, particles born where things move) keeps the
     // camera sampled while there is a Camera layer, even a hidden one.
-    const wantsMotion = !!env.needMotion || live.some(l => l.kind === 'particles' && l.spawn === 'motion');
+    // (Particles born in a Motion layer read that layer's own grid instead.)
+    const wantsMotion = !!env.needMotion || live.some(l => l.kind === 'particles' && l.spawn === 'motion' && !(l.motionId && byId.has(l.motionId) && byId.get(l.motionId).kind === 'motion'));
     if (wantsMotion && layers.some(l => l.kind === 'camera')) needs.cam = true;
     coarse = needs.coarse ? sampleInto('coarse', gl, KIT_COARSE_W, KIT_COARSE_H, false) : null;
     fine = needs.fine ? sampleInto('fine', gl, KIT_FINE_W, KIT_FINE_H, false) : null;
@@ -940,6 +948,52 @@ export function createLayerKit() {
       elemCache.delete(l.id);
       agDraw(c, st, l, v, W, H, dpr, aspect, KL_BLEND[l.blend] || 'source-over');
     }
+    /** A Motion layer as a matte: white, solid where it moves (feathered), the picture's size. Once a frame. */
+    function motionMatte(l) {
+      const st = motions.get(l.id);
+      const big = klCanvas(pool, 'mtMatte:' + l.id, W, H);
+      if (motionMattes.get(l.id) === frameNo) return big;
+      motionMattes.set(l.id, frameNo);
+      const b = big.getContext('2d');
+      b.setTransform(1, 0, 0, 1, 0, 0); b.globalAlpha = 1; b.globalCompositeOperation = 'source-over'; b.clearRect(0, 0, W, H);
+      if (!st || !st.grid) return big;
+      const a = mtMaskAlpha(st, env.value(l, 'feather'), env.value(l, 'cell'));
+      const small = klCanvas(pool, 'mtMask:' + l.id, st.cols, st.rows), x = small.getContext('2d');
+      const img = x.createImageData(st.cols, st.rows);
+      for (let j = 0; j < a.length; j++) { const i = j * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = Math.round(a[j] * 255); }
+      x.putImageData(img, 0, 0);
+      b.imageSmoothingEnabled = true; b.imageSmoothingQuality = 'high';
+      b.drawImage(small, 0, 0, W, H);
+      return big;
+    }
+    /** What a layer is as a matte: a Motion layer's "where it moves", any other layer as drawn. */
+    const matteCanvas = m => (m.kind === 'motion' ? motionMatte(m) : renderLayer(m));
+    /** A Motion layer's look: nothing (Hidden), the movement itself, a heat map, or its matte. */
+    function drawMotion(c, l, v) {
+      const st = motions.get(l.id);
+      if (!st || !st.grid || l.show === 'hidden') return;
+      const op = v('opacity');
+      if (!(op > 0)) return;
+      let img = null;
+      if (l.show === 'mask') img = motionMatte(l);
+      else if (l.show === 'heat') {
+        const small = klCanvas(pool, 'mtHeat:' + l.id, st.cols, st.rows), x = small.getContext('2d');
+        const d = x.createImageData(st.cols, st.rows);
+        for (let j = 0; j < st.grid.length; j++) { const g = st.grid[j], col = mtHeat(g), i = j * 4; d.data[i] = col[0] * 255; d.data[i + 1] = col[1] * 255; d.data[i + 2] = col[2] * 255; d.data[i + 3] = Math.min(1, g * 1.5) * 255; }
+        x.putImageData(d, 0, 0);
+        img = small;
+      } else {
+        const look = klCanvas(pool, 'mtLook:' + l.id, st.w, st.h), x = look.getContext('2d');
+        const d = x.createImageData(st.w, st.h);
+        mtLook(st, d.data, l.look, v('gain'));
+        x.putImageData(d, 0, 0);
+        img = look;
+      }
+      c.globalAlpha = op; c.globalCompositeOperation = KL_BLEND[l.blend] || 'source-over';
+      c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+      c.drawImage(img, 0, 0, W, H);
+      c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+    }
     const drawOne = (c, l, guides) => {
       const v = k => env.value(l, k);
       c.save();
@@ -975,6 +1029,7 @@ export function createLayerKit() {
           case 'script': drawScript(c, l, v); break;
           case 'data': drawData(c, l, v); break;
           case 'agents': drawAgentsLayer(c, l, v); break;
+          case 'motion': drawMotion(c, l, v); break;
           case 'particles': drawParticleLayer(c, l, v, env, record, zones, zoneById, pictureFor(l.readFrom, l.detail), pending.get(l.id), W, H, dpr, aspect, time, dt, pointer, gl); break;
           case 'bodies': {
             const sizeH = (v('size') * dpr) / H;
@@ -1060,16 +1115,35 @@ export function createLayerKit() {
       else drawOne(o, l, false);
       o.setTransform(1, 0, 0, 1, 0, 0); o.globalAlpha = 1;
       const m = kmTrackOf(l, byId);
-      if (m) { const mc = renderLayer(m); if (mc) kmApplyTrack(pool, o, mc, l.trackMatte, W, H); }
+      if (m) { const mc = matteCanvas(m); if (mc) kmApplyTrack(pool, o, mc, l.trackMatte, W, H); }
       if (l.masks && l.masks.length && l.kind !== 'background') kmApplyMasks(pool, o, l, k => env.value(l, k), W, H);
       rendered.set(l.id, off);
       return off;
+    }
+    // Motion layers watch their sources now, before anything draws, so their mattes, the particles born
+    // where they move and their readings all see this frame's movement. A layer watched is rendered once
+    // here (it is on its own canvas) and the same canvas is drawn later.
+    for (const l of layers) {
+      if (l.kind !== 'motion') continue;
+      const v = k => env.value(l, k);
+      let st = motions.get(l.id);
+      if (!st) { st = mtCreate(); motions.set(l.id, st); }
+      let src = null;
+      if (l.readFrom === 'camera') src = cam;
+      else if (l.readFrom === 'picture') src = gl;
+      else { const s = l.sourceId && l.sourceId !== l.id ? byId.get(l.sourceId) : null; src = s && s.kind !== 'motion' ? renderLayer(s) : null; }
+      const sz = mtSampleSize(aspect);
+      const rgba = src ? sampleInto('mtSample', src, sz.w, sz.h, l.readFrom === 'camera' && !!l.mirror) : null;
+      if (rgba) mtStep(st, rgba, sz.w, sz.h, { sensitivity: v('sensitivity'), delay: v('delay'), smoothing: v('smoothing'), cell: v('cell'), aspect, dt });
+      else if (st.grid) { st.grid.fill(0); st.reads = Object.assign({}, st.reads, { motion: 0, area: 0, dirX: 0.5, dirY: 0.5 }); }
+      for (const k of MT_READS) report(env, l.id + '::' + k, st.reads[k]);
+      report(env, l.id + '::ax', st.reads.moveX); report(env, l.id + '::ay', st.reads.moveY);
     }
     // The Background matted by a layer: cut what is already on `ctx` (painted above) by that
     // layer's alpha or luma, same as a layer's own track matte, before anything else draws over it.
     if (bgMatte && !env.transparent) {
       const ml = byId.get(bgMatte.id);
-      const mc = ml && renderLayer(ml);
+      const mc = ml && matteCanvas(ml);
       if (mc) kmApplyBackgroundMatte(pool, ctx, mc, bgMatte, W, H);
     }
     // Text, images and the camera with a Reveal or Luma picture matte already chose how they meet the picture.
@@ -1176,8 +1250,9 @@ export function createLayerKit() {
     // A relationship's forces (its Show forces switch): with the guides, never in the finished picture.
     if (env.markers) for (const l of vis) if (l.kind === 'relationship' && l.debug && rels.has(l.id)) rlDraw(gx, rels.get(l.id), l, k => env.value(l, k), W, H, dpr, aspect);
 
-    // 8. Let go of the canvases of layers that no longer draw on their own or have masks.
+    // 8. Let go of the canvases of layers that no longer draw on their own or have masks, and of Motion layers that are gone.
     for (const k in pool) {
+      if (/^mt(Matte|Mask|Heat|Look):/.test(k)) { if (!byId.has(k.slice(k.indexOf(':') + 1))) { pool[k].width = pool[k].height = 0; delete pool[k]; } continue; }
       if (k.startsWith('lay:') ? !rendered.get(k.slice(4)) : k.startsWith('mk:') ? !(rendered.get(k.slice(3)) && byId.get(k.slice(3)).masks) : false) { pool[k].width = pool[k].height = 0; delete pool[k]; }
     }
   }
@@ -1247,7 +1322,8 @@ export function createLayerKit() {
       dt, time, aspect, sample: pic ? pic.s : null, sw: pic ? pic.w : KIT_COARSE_W, sh: pic ? pic.h : KIT_COARSE_H,
       attractorPoint: l.attractor === 'mouse' ? (pointer.over ? pointer : null) : l.attractor === 'press' ? (pointer.over && pointer.down ? pointer : null) : l.attractor === 'null' ? nul : null,
       spawnPoint: nul, modPoint: nul, zones: mine, emitters: mine.filter(z => z.action === 'emitter'), zoneById,
-      spawnMap: l.spawn === 'motion' ? motionCdf : l.spawn === 'bright' ? brightCdf : null,
+      // Born where it moves: in the Motion layer it names (that layer's grid), else where the camera saw movement.
+      spawnMap: l.spawn === 'motion' ? (l.motionId && motions.has(l.motionId) ? motions.get(l.motionId).cdf : motionCdf) : l.spawn === 'bright' ? brightCdf : null,
       W, H, dpr, alpha: 1, sprite: l.shape === 'image' ? env.image(l.sprite) : null,
     };
     let s = parts.get(l.id);
@@ -1430,13 +1506,14 @@ export function createLayerKit() {
       // A crossfade under way, or a sketch showing in the background.
       if (bqLast && record.layers[0] && record.layers[0].id === bqLast.layerId && (bqLast.fading || bqLast.items.some(i => i.item.kind === 'script'))) return true;
       const mattes = kmMatteSources(record.layers, l => (shown.has(l.id) ? shown.get(l.id) : l.visible));
-      return record.layers.some(l => ((shown.has(l.id) ? shown.get(l.id) : l.visible) || mattes.has(l.id)) && (KIT_ANIMATED[l.kind] || (l.kind === 'null' && l.follow !== 'none') || (l.kind === 'text' && (l.sequence || !!l.reads)) || (l.kind === 'contours' && l.flow !== 0) || (l.kind === 'glyphs' && l.readFrom === 'camera') || (l.kind === 'data' && dStates.has(l.id) && dStates.get(l.id).from >= 0)));
+      // A Motion layer measures while hidden too.
+      return record.layers.some(l => ((shown.has(l.id) ? shown.get(l.id) : l.visible) || mattes.has(l.id) || l.kind === 'motion') && (KIT_ANIMATED[l.kind] || (l.kind === 'null' && l.follow !== 'none') || (l.kind === 'text' && (l.sequence || !!l.reads)) || (l.kind === 'contours' && l.flow !== 0) || (l.kind === 'glyphs' && l.readFrom === 'camera') || (l.kind === 'data' && dStates.has(l.id) && dStates.get(l.id).from >= 0)));
     },
     /**
      * Forget all state (a new recording starts from scratch). `seed` (a take's)
      * makes every random choice after this repeatable; none or 0 is Math.random.
      */
     background,
-    reset(seed) { lostNulls = new Set(); sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; dStates.clear(); dsCurrent.clear(); parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); rels.clear(); relGrids.clear(); ags.clear(); relDriven = new Set(); paths.clear(); pathFades.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); bornDiedSeen.clear(); },
+    reset(seed) { lostNulls = new Set(); sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; dStates.clear(); dsCurrent.clear(); parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); rels.clear(); relGrids.clear(); ags.clear(); relDriven = new Set(); motions.clear(); motionMattes.clear(); paths.clear(); pathFades.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); bornDiedSeen.clear(); },
   };
 }

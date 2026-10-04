@@ -84,6 +84,7 @@ const ROWS: Array<[string, string, string]> = [
   ['bgQueue', 'Background queue', 'Two graphs and a photo in a Background layer: keys 1, 2, 3 and a beat step through them, crossfading, with fireflies reading the picture.'],
   ['matteParticles', 'Matte: a photo through particles', 'A track matte: the photo shows only where a hidden particles layer (and its trails) is.'],
   ['maskReveal', 'Masks: text through a moving window', 'Text matted by a hidden circle that sweeps across, over ASCII cut by a feathered mask of its own.'],
+  ['motionReveal', 'Motion: reveal and trigger where it moves', 'A Motion layer watches the picture (or your camera, or a video): its matte reveals a photo, sparks are born in it, a readout follows it, and rules fire when movement starts, gets big and stops.'],
   ['handFingertips', 'Hands: fingertips move particles', 'Nulls follow your fingertips: particles flow from your index finger into your thumb.'],
   ['handPinch', 'Hands: pinch, point and fist', 'Pinch drives a slider, a fist fires a burst, pointing toggles a setting.'],
   ['handTwoHands', 'Hands: two at once', 'How far apart your hands are zooms the picture; their heights mix the colour.'],
@@ -111,6 +112,8 @@ const ROWS: Array<[string, string, string]> = [
   ['particleGlow', 'Particle Glow', 'Emitter, absorber and flock, glowing through the Layers node.'],
   ['flowAroundWords', 'Flow Around Words', 'Particles over an FBM landscape part around a word that acts as a wall.'],
   ['letterDrop', 'Letter Drop', 'Physics bodies: letters slide down a funnel of drawn shapes and pile on a glowing hill.'],
+  // Look effects you build (after the bigger pieces, so the numbers before it stay as they were).
+  ['lookBuilt', 'Look: effects from nodes and code', 'A duotone built from four Studio nodes and a tape wobble written in GLSL, both effects in the Look stack; the mouse fades the duotone in.'],
   // Last, so the examples before it keep their numbers.
   ['finishWater', 'Water: a wake, rain and splashes', 'A simulated water surface over a pool\'s floor: a toy boat drags a wake, a light rain dimples it, and a click splashes; the waves bend the tiles and catch the light.'],
 ];
@@ -139,6 +142,7 @@ const GROUP_STARTS: Array<[string, string]> = [
   ['Recording', 'playTake'],
   ['Finish', 'finishGrade'],
   ['Bigger pieces', 'particleGlow'],
+  ['Build your own Look', 'lookBuilt'],
 ];
 export const PLAY_EXAMPLE_GROUPS: Array<{ label: string; keys: string[] }> = GROUP_STARTS.map(([label, first], i) => {
   const from = PLAY_EXAMPLE_KEYS.indexOf(first);
