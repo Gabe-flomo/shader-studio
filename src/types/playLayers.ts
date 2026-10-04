@@ -254,6 +254,8 @@ export interface ParticlesLayer extends LayerBase {
   diedSignal: string;
   /** Where particles are born: anywhere, the edges, the centre, a null, where the camera sees movement (a Camera layer, hidden or not), or the picture's bright parts. */
   spawn: 'anywhere' | 'edges' | 'center' | 'null' | 'motion' | 'bright';
+  /** spawn 'motion': a Motion layer whose movement they are born in; '' = the camera's own motion map (a Camera layer). */
+  motionId: string;
   spawnRadius: number;
   /** Leaving the picture: come in the other side, bounce, be reborn (spawn setting), or reappear anywhere at random. */
   edges: 'wrap' | 'bounce' | 'respawn' | 'random';
@@ -676,6 +678,42 @@ export interface AgentsLayer extends LayerBase {
   diedSignal: string;
   [groupKey: `g${number}_${string}`]: number | RGB;
   [ruleKey: `r${number}_${string}`]: number;
+}
+
+/** What a Motion layer shows: nothing (readings only), the movement itself, a heat map, or its matte (white where it moves). */
+export type MotionShow = 'hidden' | 'extract' | 'heat' | 'mask';
+
+/**
+ * Where things move in a source: the camera, the picture, or another layer (a
+ * Video layer, particles…). Its readings (Amount, Area, Where X/Y, Direction
+ * X/Y) are sources and conditions; as a matte it shows another layer only where
+ * it moves; particles can be born in it. It keeps measuring while hidden: the
+ * eye (and Show) only decide what it draws. play/kit/motion.js, docs/motion-layer.md.
+ */
+export interface MotionLayer extends LayerBase {
+  kind: 'motion';
+  readFrom: 'camera' | 'picture' | 'layer';
+  /** readFrom 'layer': the layer it watches (it keeps running while hidden). */
+  sourceId: string;
+  /** readFrom 'camera': flip left to right, like the Camera layer. */
+  mirror: boolean;
+  /** 0..1: how small a change counts as movement (play/kit/motion.js mtThreshold). */
+  sensitivity: number;
+  /** Frames back the frame now is compared with (1..30): longer catches slower movement. */
+  delay: number;
+  /** 0..0.99: how slowly the grid and the readings follow (per 60th of a second). */
+  smoothing: number;
+  /** Cell size of the grid, in picture heights. */
+  cell: number;
+  show: MotionShow;
+  /** show 'extract': grey (classic), black, or neon (cyan arriving, magenta leaving). */
+  look: 'grey' | 'black' | 'neon';
+  /** show 'extract': how strongly the change shows. */
+  gain: number;
+  /** As a matte (and show 'mask'): how soft its edge is, in picture heights. */
+  feather: number;
+  opacity: number;
+  blend: BlendMode;
 }
 
 /** The webcam, as a layer (like an image), a mask, or what particles, glyphs and contours read. Its motion is a sensor source. */
@@ -1353,10 +1391,10 @@ export interface DataLayer extends LayerBase {
 let dataItemCount: (l: DataLayer) => number = () => 0;
 export function setDataItemCount(fn: (l: DataLayer) => number): void { dataItemCount = fn; }
 
-export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer | DataLayer | VideoLayer | DrumPadLayer | RelationshipLayer | AgentsLayer;
+export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer | DataLayer | VideoLayer | DrumPadLayer | RelationshipLayer | AgentsLayer | MotionLayer;
 export type PlayLayerKind = PlayLayer['kind'];
 
-export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background', 'data', 'video', 'drumpad', 'relationship', 'agents'];
+export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background', 'data', 'video', 'drumpad', 'relationship', 'agents', 'motion'];
 
 /** The starter sketch a new Script layer holds. */
 export const DEFAULT_SCRIPT = `// A sketch: setup runs once, draw runs every frame.
@@ -1474,7 +1512,7 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
     field: 'flow', speed: 1, steer: 0.5, turns: 1, angle: 0, noiseScale: 3, noiseEvolve: 0.2, flat: 'wander', readFrom: 'picture', detail: 'coarse', collide: 0,
     flock: 0, flockRadius: 0.06, flockAlign: 1, flockCohere: 0.6, flockSeparate: 1.2, flockSpace: 0.4, scatter: 1, showField: false,
     attractor: 'none', force: 'gravitate', strength: 1, catchRadius: 0.02,
-    emit: 'stream', spawn: 'anywhere', spawnRadius: 0.2, edges: 'wrap', life: 0, fade: 0, seed: 0, nullId: '',
+    emit: 'stream', spawn: 'anywhere', spawnRadius: 0.2, edges: 'wrap', life: 0, fade: 0, seed: 0, nullId: '', motionId: '',
     splitRate: 1, splitJitter: 0.3, splitChildren: 1, splitPush: 0.08, multSpread: 0.035, multLife: 'stay', multAfter: 'hold', grow: 'itself', fullness: 100,
     returnSpring: 1, pairRadius: 0.3, seekSpeed: 0.15, loopHold: 6, splitSignal: '', fullSignal: '', annihilateSignal: '', clearedSignal: '', bornSignal: '', diedSignal: '',
     shape: 'dot', rotate: 'heading', sprite: '', crop: false, tintSprite: false, size: 2, sizeJitter: 0.3, opacity: 0.8,
@@ -1503,6 +1541,7 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
   agents: agentDefaults(),
   bodies: { toShader: true, source: 'letters', text: 'PLAY', count: 24, size: 48, gravity: 1, angle: 0, bounce: 0.35, friction: 0.3, font: 'sans', fontUrl: '', colour: 'tint', color: [1, 1, 1], palette: 1, solidPicture: false, threshold: 0.6, scatter: 1, opacity: 1, blend: 'normal' },
   camera: { toShader: true, x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, color: [0, 0, 0], mirror: true, blend: 'normal', matte: 'over' },
+  motion: { toShader: false, readFrom: 'camera', sourceId: '', mirror: true, sensitivity: 0.5, delay: 2, smoothing: 0.6, cell: 0.04, show: 'extract', look: 'neon', gain: 3, feather: 0.03, opacity: 1, blend: 'screen' },
   video: {
     toShader: true, videoId: '', fileName: '', bytes: 0, fit: 'contain', x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, mirror: false, color: [0, 0, 0], blend: 'normal', matte: 'over',
     playing: true, loop: true, speed: 1, start: 0, follow: true, sound: 'off', volume: 0.8,
@@ -1582,7 +1621,7 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     flat: E('wander', 'settle'), readFrom: E('picture', 'camera'), detail: E('coarse', 'fine'), collide: unit,
     flock: unit, flockRadius: N(0.005, 0.5), flockAlign: N(0, 2), flockCohere: N(0, 2), flockSeparate: N(0, 2), flockSpace: N(0.05, 1), scatter: N(0, 10), showField: B,
     attractor: E('none', 'mouse', 'press', 'null'), force: E('gravitate', 'spiral', 'repel'), strength: N(0), catchRadius: N(0),
-    emit: E('stream', 'burst', 'multiply'), spawn: E('anywhere', 'edges', 'center', 'null', 'motion', 'bright'), spawnRadius: N(0), edges: E('wrap', 'bounce', 'respawn', 'random'), life: N(0), fade: unit, seed: N(0, 1e9, true), nullId: S,
+    emit: E('stream', 'burst', 'multiply'), spawn: E('anywhere', 'edges', 'center', 'null', 'motion', 'bright'), spawnRadius: N(0), edges: E('wrap', 'bounce', 'respawn', 'random'), life: N(0), fade: unit, seed: N(0, 1e9, true), nullId: S, motionId: S,
     shape: E('dot', 'square', 'triangle', 'streak', 'ring', 'star', 'image'), rotate: E('heading', 'spin', 'none'), sprite: S, crop: B, tintSprite: B,
     size: N(0.1), sizeJitter: unit, opacity: unit, colour: E('tint', 'picture', 'palette'), color: C, palette: N(0, 9, true),
     paletteBy: E('heading', 'speed', 'age', 'brightness'), sizeBy: { t: 'enum', values: MODS }, sizeAmount: N(), opacityBy: { t: 'enum', values: MODS }, opacityAmount: N(),
@@ -1626,6 +1665,10 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     font: E('sans', 'serif', 'mono'), fontUrl: S, colour: E('tint', 'palette'), color: C, palette: N(0, 9, true), solidPicture: B, threshold: unit, scatter: N(0, 10), opacity: unit, blend: blendF,
   },
   camera: { toShader: B, x: N(), y: N(), scale: N(0.01), rotation: N(), opacity: unit, color: C, mirror: B, blend: blendF, matte: matteF },
+  motion: {
+    toShader: B, readFrom: E('camera', 'picture', 'layer'), sourceId: S, mirror: B, sensitivity: unit, delay: N(1, 30, true), smoothing: N(0, 0.99), cell: N(0.005, 0.5),
+    show: E('hidden', 'extract', 'heat', 'mask'), look: E('grey', 'black', 'neon'), gain: N(0, 20), feather: N(0, 1), opacity: unit, blend: blendF,
+  },
   relationship: {
     toShader: B, members: { t: 'members' }, relation: E('chase', 'repel', 'attract'), speed: N(0, 5), accel: N(0, 20), turn: unit, sight: N(0, 3), flee: N(0, 3), wander: N(0, 2),
     strength: N(0, 5), repelDistance: N(0.001, 3), repelCurve: E('linear', 'inverse'), attractMode: E('keep', 'overshoot'), minDistance: N(0, 3), falloff: unit,
@@ -1740,7 +1783,7 @@ export function parseLayer(raw: unknown): PlayLayer | null {
 // ── Track mattes and masks ───────────────────────────────────────────────────
 
 /** Nulls draw nothing and the Background layer is the picture: every other kind can be matted and masked. */
-export function canHaveMatte(kind: PlayLayerKind): boolean { return kind !== 'null' && kind !== 'background' && kind !== 'drumpad' && kind !== 'relationship'; }
+export function canHaveMatte(kind: PlayLayerKind): boolean { return kind !== 'null' && kind !== 'background' && kind !== 'drumpad' && kind !== 'relationship' && kind !== 'motion'; }
 
 /** Anything that draws can be a matte, the Background layer (the picture) included. */
 export function canBeMatte(kind: PlayLayerKind): boolean { return kind !== 'null' && kind !== 'drumpad' && kind !== 'relationship'; }
@@ -1820,6 +1863,16 @@ export function matteCandidates(layers: readonly PlayLayer[], consumerId: string
 /** The layers that use `id` as their matte. */
 export function matteUsers(layers: readonly PlayLayer[], id: string): PlayLayer[] {
   return layers.filter(l => l.trackMatte?.id === id);
+}
+
+/** Motion layers watching this layer (readFrom 'layer'): it keeps running while hidden, like a matte. */
+export function motionWatchers(layers: readonly PlayLayer[], id: string): PlayLayer[] {
+  return layers.filter(l => l.kind === 'motion' && l.readFrom === 'layer' && l.sourceId === id && l.id !== id);
+}
+
+/** Does a hidden layer still run: it is another layer's matte, or a Motion layer watches it. */
+export function runsWhileHidden(layers: readonly PlayLayer[], id: string): boolean {
+  return matteUsers(layers, id).length > 0 || motionWatchers(layers, id).length > 0;
 }
 
 /** Mattes that point at a missing layer or a null, or round in a loop, dropped (a file loads whatever it says). */
@@ -2031,6 +2084,15 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'friction', label: 'Friction', min: 0, max: 1, hint: 'How quickly sliding bodies stop.' },
     { key: 'threshold', label: 'Solid above', min: 0, max: 1, hint: 'Solid picture: brightness at or above this is solid ground.' },
     { key: 'scatter', label: 'Scatter', min: 0, max: 5, hint: 'How hard a Scatter (the button, or an action) throws them. Multiplies the action\'s amount.' },
+    OPACITY,
+  ],
+  motion: [
+    { key: 'sensitivity', label: 'Sensitivity', min: 0, max: 1, hard: true, hint: 'How small a change counts as movement. High catches a finger; low only big, contrasty movement (and ignores camera noise and flicker).' },
+    { key: 'delay', label: 'Delay', min: 1, max: 30, step: 1, hard: true, hint: 'Frames back the picture now is compared with. Longer catches slower movement and draws thicker outlines.' },
+    { key: 'smoothing', label: 'Smoothing', min: 0, max: 0.99, hard: true, hint: 'How slowly the grid and the readings follow. 0 is raw and jumpy; 0.9 lingers like a trail.' },
+    { key: 'cell', label: 'Cell size', min: 0.01, max: 0.25, hint: 'The grid\'s cell, in picture heights. Small cells follow fingers; big ones whole bodies (and are steadier).' },
+    { key: 'gain', label: 'Gain', min: 0, max: 10, hint: 'Show → Movement: how strongly the change shows.' },
+    { key: 'feather', label: 'Feather', min: 0, max: 0.3, hint: 'As a matte (and Show → Matte): how soft the edge of "where it moves" is, in picture heights.' },
     OPACITY,
   ],
   camera: [

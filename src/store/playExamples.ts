@@ -1723,6 +1723,66 @@ Actions use them like keys, and they work on websites too (a background can reac
 • Title → Matte → **Luma**, then give the Window a grey fill: the text dims to match.
 • Select the Window in the list: its handles work while it is hidden. Make it a Box, or draw a Polygon.`,
   })),
+  // A Motion layer watching the picture (or the camera, or a video): its matte reveals a photo, particles are born in it, its readings drive a readout and two rules.
+  ex('motionReveal', glowGraph({ radius: 0.16, falloff: 10, tint: [0.45, 0.8, 1], comment: 'The glow that moves: its position orbits (two LFOs) and its radius jumps every few seconds (a square LFO). The Watcher layer sees that movement.' }), play({
+    layers: [
+      layer('image', 'photo', 'Photo · shows where it moves', { src: RIDGES_AT_DUSK, scale: 1.02, toShader: false, trackMatte: { id: 'watch', mode: 'alpha', invert: false } }),
+      layer('motion', 'watch', 'Watcher', { visible: false, readFrom: 'picture', sensitivity: 0.7, delay: 2, smoothing: 0.85, cell: 0.035, show: 'mask', feather: 0.05 }),
+      layer('particles', 'sparks', 'Sparks · born where it moves', {
+        toShader: false, count: 900, emit: 'burst', spawn: 'motion', motionId: 'watch', life: 1.4, fade: 0.6, field: 'noise', noiseScale: 2, speed: 0.7, size: 2.2, sizeJitter: 0.5,
+        colour: 'palette', palette: 2, paletteBy: 'age', trail: 0.55, blend: 'screen', seed: 11,
+      }),
+      layer('text', 'state', 'Status', { text: 'STILL\nSOMETHING MOVED', sequence: true, interval: 0, transition: 'fade', x: 0.5, y: 0.08, size: 0.04, weight: 700, font: 'mono', color: [1, 0.9, 0.7], toShader: false }),
+      layer('text', 'readout', 'Readout · follows the movement', { text: 'movement {v}', reads: 'read:watch::motion', readFormat: 'template', readDecimals: 2, x: 0.5, y: 0.5, size: 0.04, weight: 600, font: 'mono', color: [0.7, 1, 0.9], toShader: false }),
+    ],
+    controls: [
+      ctl('gx', 'circ::posX', 'Glow X (an LFO moves it)', -1.6, 1.6),
+      ctl('gy', 'circ::posY', 'Glow Y (an LFO moves it)', -0.9, 0.9),
+      ctl('gr', 'circ::radius', 'Glow size (jumps every 4 s)', 0.05, 0.5),
+      ctl('sens', 'layer:watch::sensitivity', 'Watcher · Sensitivity', 0, 1),
+      ctl('feather', 'layer:watch::feather', 'Watcher · Feather', 0, 0.3),
+      ctl('rx', 'layer:readout::x', 'Readout X (Where X)', 0, 1),
+      ctl('ry', 'layer:readout::y', 'Readout Y (Where Y)', 0, 1),
+    ],
+    mappings: [
+      map('orbitX', 'gx', S.lfo('sine', 0.13), -1.1, 1.1),
+      map('orbitY', 'gy', S.lfo('sine', 0.13, 0.25), -0.55, 0.55),
+      map('jump', 'gr', S.lfo('square', 0.125), 0.12, 0.34),
+      map('whereX', 'rx', S.sensor('watch', 'moveX'), 0.15, 0.85, { smoothMs: 250 }),
+      map('whereY', 'ry', S.sensor('watch', 'moveY'), 0.15, 0.9, { smoothMs: 250 }),
+    ],
+    signals: [
+      { id: 'starts', name: 'Movement starts: sparks burst and the status says so', inputs: [{ kind: 'trigger', trigger: when('read:watch::motion', 'crossUp', 0.2, 0.05) }],
+        do: [{ id: 'starts_burst', do: 'burst', layerId: 'sparks', amount: 60, enabled: true }, { id: 'starts_text', do: 'next', layerId: 'state', amount: 1, enabled: true }] },
+      { id: 'big', name: 'A big movement (Area past 0.08): a bigger burst', inputs: [{ kind: 'trigger', trigger: when('read:watch::area', 'crossUp', 0.08, 0.02) }],
+        do: [{ id: 'big_burst', do: 'burst', layerId: 'sparks', amount: 220, enabled: true }] },
+      { id: 'stops', name: 'Movement stops: the status goes back to STILL', inputs: [{ kind: 'trigger', trigger: when('read:watch::motion', 'crossDown', 0.08, 0.03) }],
+        do: [{ id: 'stops_text', do: 'reset', layerId: 'state', amount: 1, enabled: true }] },
+    ],
+    notes: `**What it shows.** A **Motion** layer turns movement into something you can use: a matte, a place particles are born, and readings (how much moves, where, which way) for mappings and rules. Here it watches the **picture**, a glow that orbits and jumps, so it works without a camera. Switch it to your webcam or a video and the same setup follows you.
+
+**Start here.** Layers → **Watcher** → Source → **Camera** (then **Turn on camera**), and wave. Or add a **Video** layer and pick Source → **A layer** → your video (hide the video to use only its movement).
+
+**The layers, bottom to top.**
+• **Photo · shows where it moves**: a photo with **Matte → Watcher**: it shows only where the Watcher sees movement, a soft-edged trail behind the glow.
+• **Watcher** (Motion, hidden): watches the Picture. Sensitivity 0.7 catches the glow's soft edge; Delay 2 frames; Smoothing 0.85 makes the matte linger like a trail; Cell size 0.035; Feather 0.05 softens the matte's edge. Hidden, it still measures: hiding only stops it drawing.
+• **Sparks · born where it moves**: particles with Born → **Where it moves**, In → **Watcher**. They only exist when a rule bursts them, and always inside the movement.
+• **Status**: two lines, STILL and SOMETHING MOVED, stepped by the rules.
+• **Readout · follows the movement**: a Text layer that reads the Watcher's **Amount** ("movement 0.42"); its X and Y follow **Where X/Y**.
+
+**The controls.** *Glow X / Y / size* are the shader's circle, moved by three LFOs (the thing that moves). *Watcher · Sensitivity* and *Feather* are the Motion layer's own numbers: drag them to see the matte widen or soften. *Readout X / Y* are driven by the Watcher's Where X and Where Y (smoothed 250 ms, kept off the edges), so the words chase the movement.
+
+**The rules.**
+• *Movement starts*: Amount crosses up through 0.2 → burst 60 sparks where it moves, and the status steps to SOMETHING MOVED.
+• *A big movement*: Area (the share of the grid moving) crosses up through 0.08, which happens when the glow jumps in size → burst 220.
+• *Movement stops*: Amount falls under 0.08 → the status goes back to STILL.
+
+**Try this.**
+• Photo → Matte → **Invert**: the photo everywhere except where it moves.
+• Watcher → Show → **Heat map** and its eye on, to see the grid it measures; or **Movement** for the motion-extract look.
+• Rules → Behaviours: *Motion starts*, *Big movement* and *Motion stops* make the same rules for any Motion layer.
+• Map **Direction X** (Watcher's readings, under Accepts and emits) onto something: 0.5 is still, 1 rightward, 0 leftward.`,
+  })),
 
   // ─ Hands ─
   ex('handFingertips', quietGraph(), play({

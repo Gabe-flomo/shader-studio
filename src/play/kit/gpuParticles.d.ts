@@ -12,6 +12,8 @@ export interface GpParams {
   lights: string; lightColor: GpRgb; lightPower: number; lightReach: number; halo: number; lightMotion: string;
   soundFrom: string; sound: number; wave: number; waveSpeed: number; vibrate: number; shock: number; crunch: number; gust: number; jet: number;
   obstacleMode: string; flowForce: number; flowMode: string; sceneReach: number;
+  pattern: string; modeFrom: string; symmetry: string; modes: number; modeN: number; modeM: number;
+  plateFreq: number; plateWeights: number; settle: number; shake: number;
   hands: string; handX: number; handY: number; hand2X: number; hand2Y: number; handForce: number; handSwirl: number; handReach: number;
 }
 
@@ -62,7 +64,7 @@ export interface GpSoundInput { freq?: Float32Array; wave?: Float32Array; sample
 export interface GpSound { level: number; bass: number; mid: number; treble: number; avg: number; avgBass: number; since: number; onset: number; hit: number }
 export function gpSoundState(): GpSound;
 export function gpSoundStep(st: GpSound, input: GpSoundInput | null, dt: number): GpSound;
-export interface GpBinding { uniform: string; params: Record<string, unknown>; image: string | null; audio: string | null; probe: GpProbeSpec | null }
+export interface GpBinding { uniform: string; params: Record<string, unknown>; image: string | null; audio: string | null; audioBands: string[]; probe: GpProbeSpec | null }
 export interface GpEmitterState { head: number; carry: number; clock: number; burst: number }
 export interface GpLight { x: number; y: number; z: number; reach: number; power: number; colour: GpRgb }
 export interface GpPlacement { emitAt: [number, number]; attractAt: [number, number]; lights: GpLight[]; hands: [number, number][] }
@@ -125,3 +127,26 @@ export function gpHost(gl: WebGLRenderingContext | WebGL2RenderingContext | null
 
 export interface GpReadback { request(fb: WebGLFramebuffer | null, w: number, h: number): boolean; poll(): Float32Array | null; dispose(): void }
 export function gpReadback(gl: WebGL2RenderingContext): GpReadback;
+
+/** Chladni plates (Pattern). */
+export interface GpPlateMode { n: number; m: number; w: number }
+export interface GpPlateState { modes: GpPlateMode[]; bands: number[]; step: number; since: number; lead: number; leadSince: number }
+export const GP_PLATE_HOLD: number;
+export const GP_PLATE_MAX: number;
+export const GP_PLATE_BANDS: number;
+export const GP_BESSEL_N: number;
+export const GP_BESSEL_X: number;
+export const GP_BESSEL_W: number;
+export function gpBessel(n: number, x: number): number;
+export function gpBesselTable(): Float32Array;
+export function gpBesselZero(n: number, m: number): number;
+export function gpPlateWave(n: number, m: number): number;
+export function gpChladniSquare(n: number, m: number, sign: number, x: number, y: number): number;
+export function gpChladniCircle(n: number, m: number, x: number, y: number, turn?: number): number;
+export function gpPlateTable(shape: string): { n: number; m: number; f: number }[];
+export function gpPlateBands(input: GpSoundInput | null): number[];
+export function gpPlateTargets(P: GpParams, shape: string, bands: number[] | null): GpPlateMode[] | null;
+export function gpPlateState(): GpPlateState;
+export function gpPlateSmooth(st: GpPlateState, targets: GpPlateMode[] | null, dt: number, snap?: boolean): GpPlateMode[];
+export function gpPlateListen(st: GpPlateState, o: { spectrum?: GpSoundInput | null; graphBands?: number[] | null; level?: number; hit?: boolean | number; dt: number }): number[];
+export function gpPlateUniforms(modes: GpPlateMode[], shape: string): { values: Float32Array; count: number };

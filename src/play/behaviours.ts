@@ -42,6 +42,9 @@ const slot = (key: string) => `$slot:${key}`;
 const tmplRoute = (to: string, mode: 'add' | 'replace'): PlayRoute => ({ id: 'r', to: slot(to), mode, outMin: mode === 'add' ? '$swing' : '$full', outMax: mode === 'add' ? '$swing' : '$full', curve: 'linear', enabled: true } as unknown as PlayRoute);
 const tmplSource = (id: string, source: PlaySourceDef['source'], route: PlayRoute): PlaySourceDef => ({ id, enabled: true, source, outputs: [{ kind: 'value', routes: [route] }] });
 const tmplRule = (id: string, name: string, trigger: TriggerSpec, layerKey: string, act: string, amount = 1): PlaySignal => ({ id, name, inputs: [{ kind: 'trigger', trigger }], do: [{ id: `${id}_do`, do: act as never, layerId: slot(layerKey), amount, enabled: true }] });
+/** A condition on a Motion layer's reading (`read:<layer>::<read>`), as a trigger. */
+const motionWhen = (read: string, cmp: 'crossUp' | 'crossDown', threshold: number, hysteresis: number): TriggerSpec => ({ on: 'value', value: `read:${slot('motion')}::${read}`, cmp, threshold, hysteresis, tolerance: 0.01 });
+const MOTION_SLOT: BehaviourSlot = { key: 'motion', kind: 'layer', label: 'Motion layer', layerKinds: ['motion'] };
 
 /** The starter set. `$first` as an action means the slot layer's first action. */
 export const BUILT_IN_BEHAVIOURS: readonly Behaviour[] = [
@@ -66,6 +69,15 @@ export const BUILT_IN_BEHAVIOURS: readonly Behaviour[] = [
   { id: 'b_kick_text', name: 'Kick steps the text', hint: 'Each bass hit moves a text to its next line', needs: ['audio'], builtIn: true,
     slots: [{ key: 'layer', kind: 'layer', label: 'Text', layerKinds: ['text'] }],
     rules: [tmplRule('t1', 'When the bass hits', { on: 'audio', band: 'bass', threshold: 0.6 }, 'layer', 'next')], sources: [] },
+  { id: 'b_motion_starts', name: 'Motion starts', hint: 'When something starts moving (a Motion layer’s Amount rises past 0.15), do a layer’s first action', needs: [], builtIn: true,
+    slots: [MOTION_SLOT, { key: 'layer', kind: 'layer', label: 'Layer' }],
+    rules: [tmplRule('t1', 'When movement starts', motionWhen('motion', 'crossUp', 0.15, 0.05), 'layer', '$first')], sources: [] },
+  { id: 'b_motion_big', name: 'Big movement', hint: 'When most of the picture moves (Area past 0.35), particles burst', needs: [], builtIn: true,
+    slots: [MOTION_SLOT, { key: 'layer', kind: 'layer', label: 'Particles', layerKinds: ['particles'] }],
+    rules: [tmplRule('t1', 'When a big movement happens', motionWhen('area', 'crossUp', 0.35, 0.1), 'layer', 'burst', 80)], sources: [] },
+  { id: 'b_motion_stops', name: 'Motion stops', hint: 'When everything is still again (Amount falls under 0.06), hide a layer', needs: [], builtIn: true,
+    slots: [MOTION_SLOT, { key: 'layer', kind: 'layer', label: 'Layer' }],
+    rules: [tmplRule('t1', 'When movement stops', motionWhen('motion', 'crossDown', 0.06, 0.03), 'layer', 'hide')], sources: [] },
   { id: 'b_every_bar', name: 'Every bar', hint: 'Every 4 beats at 120 bpm, do a layer’s first action', needs: [], builtIn: true,
     slots: [{ key: 'layer', kind: 'layer', label: 'Layer' }],
     rules: [tmplRule('t1', 'Every 4 beats', { on: 'beat', bpm: 120, beats: 4 }, 'layer', '$first')], sources: [] },

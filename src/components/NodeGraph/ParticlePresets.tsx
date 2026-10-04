@@ -1,6 +1,7 @@
 /**
  * ParticlePresets — one-click looks for the Particles node (Ink in water,
- * Embers, Dust in air, Image dissolve, Sound field, Hand swirl), as a row of
+ * Embers, Dust in air, Image dissolve, Sound field, Launch, the Chladni
+ * plates: Chladni sand, Singing plate, Cymatics bloom; Hand swirl), as a row of
  * chips at the top of its card. A preset sets every setting (the defaults,
  * then its own: play/kit/gpuParticles.js GP_PRESETS), so it always looks the
  * same; the hand positions and the sound level are inputs and are kept.

@@ -12,7 +12,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { fontFamily, radius } from '../../../theme/tokens';
 import { layerNumericProps, type LayerMask, type MaskOp, type PlayLayer, type PlayRecord } from '../../../types/play';
 import { canBeMatte, canHaveMatte, maskKey, maskLabel, matteCandidates, MASKS_MAX, type MaskProp } from '../../../types/playLayers';
-import { addMask, addMatteShape, matteSummary, moveMask, patchMask, patchTrackMatte, removeMask, setTrackMatte } from '../../../play/mattes';
+import { addMask, addMatteMotion, addMatteShape, matteSummary, moveMask, patchMask, patchTrackMatte, removeMask, setTrackMatte } from '../../../play/mattes';
 import { playOverlay } from '../../../play/overlay';
 import { Button, IconButton } from '../../ui/Button';
 import { Segmented, Toggle } from '../../ui/Choice';
@@ -20,6 +20,7 @@ import { Icon } from '../../ui/Icon';
 import { Menu } from '../../ui/Menu';
 import { Popover } from '../../ui/Popover';
 import { Select } from '../../ui/Select';
+import { RulerSlider } from '../../ui/RulerSlider';
 import { toast } from '../../ui/toastStore';
 import { BUILTIN_LAYER } from './addLayerCatalog';
 import { usePlayUi } from '../playUi';
@@ -139,6 +140,12 @@ function MattePanel({ f, play, changePlay, onClose }: { f: FieldKit; play: PlayR
       if (made) { reveal(made); toast.success('Added a shape as the matte', { message: 'It is hidden; drag its handles on the picture to move the window.' }); }
       return;
     }
+    if (id === '__motion') {
+      let made = '';
+      changePlay(p => { const r = addMatteMotion(p, l.id); made = r.id; return r.play; });
+      if (made) toast.success('Showing it only where things move', { message: 'A hidden Motion layer is the matte. Turn the camera on (or point it at a video) in its card; Feather softens the edge, Invert shows it where nothing moves.' });
+      return;
+    }
     changePlay(p => setTrackMatte(p, l.id, id));
   };
   const label: React.CSSProperties = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 62, flexShrink: 0 };
@@ -166,6 +173,7 @@ function MattePanel({ f, play, changePlay, onClose }: { f: FieldKit; play: PlayR
             { value: '', label: 'None' },
             ...candidates.map(x => ({ value: x.id, label: `${x.label}${x.visible ? '' : ' (hidden)'}`, group: 'Layers' })),
             { value: '__new', label: '+ New shape', group: 'Make one' },
+            { value: '__motion', label: '+ Where it moves (Motion layer)', group: 'Make one' },
           ]}
         />
       ))}
@@ -173,6 +181,12 @@ function MattePanel({ f, play, changePlay, onClose }: { f: FieldKit; play: PlayR
         <>
           {row('By', <Segmented size="sm" ariaLabel="Matte by" value={t.mode} options={[{ value: 'alpha', label: 'Alpha', title: 'Where the matte is solid' }, { value: 'luma', label: 'Luma', title: 'Where the matte is bright' }]} onChange={mode => changePlay(p => patchTrackMatte(p, l.id, { mode }))} />)}
           {row('Invert', <Toggle checked={t.invert} onChange={invert => changePlay(p => patchTrackMatte(p, l.id, { invert }))} label={t.invert ? 'Where the matte isn’t' : 'Where the matte is'} />)}
+          {matte.kind === 'motion' && row('Feather', (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <RulerSlider value={matte.feather} min={0} max={0.3} defaultValue={0.03} ariaLabel="Feather of where it moves" onChange={feather => changePlay(p => ({ ...p, layers: p.layers.map(x => (x.id === matte.id && x.kind === 'motion' ? { ...x, feather } : x)) }))} />
+            </div>
+          ))}
+          {matte.kind === 'motion' && <div style={{ marginTop: 6, color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>Shows {l.label} where {matte.label} sees movement. Its Sensitivity, Delay and Smoothing decide how much counts; Invert shows it where nothing moves.</div>}
           {matte.kind !== 'background' && row('Matte', <Toggle checked={matte.visible} onChange={visible => changePlay(p => ({ ...p, layers: p.layers.map(x => (x.id === matte.id ? { ...x, visible } : x)) }))} label="Show it on the picture too" />)}
           <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center' }}>
             <Button size="sm" onClick={() => { onClose(); reveal(matte.id); }}>Go to {matte.label}</Button>
