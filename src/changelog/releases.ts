@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.14',
+    date: '2026-10-04',
+    title: 'Agents: species, food and walls',
+    highlights: [
+      { area: 'Studio', text: 'Walkers can belong to up to four species, each with its own trail, and keep their own memory, deposit and colour.', link: { kind: 'doc', path: 'docs/agents-group.md' } },
+      { area: 'Studio', text: 'Trail field gains Add (food) and Block (walls); Move steers around obstacles; Emit can start walkers from a picture or a field.' },
+      { area: 'Studio', text: 'New presets: Multi-species slime, Ants (roads from nest to food), Boids, Strands, and slime that grows toward a picture.' },
+      { area: 'Studio', text: 'Look inside: the eye preview shows what a walker standing there would see, and Show passes colours each node by the program it runs in.' },
+    ],
+  },
+  {
     id: '2026.10.13',
     date: '2026-10-04',
     title: 'Live Expression sliders',
