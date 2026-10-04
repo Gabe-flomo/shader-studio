@@ -1,5 +1,26 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`golden shaders: every Play example exports the same bundle > agentRuleAnts 1`] = `
+{
+  "bundle": "0905a49eb51ce104145678fe404d:13037",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > agentRuleParticles 1`] = `
+{
+  "bundle": "0d5a31e2da7b1715383acf9f6836:12970",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > agentRuleSlime 1`] = `
+{
+  "bundle": "1bda2318f4ac03045f679b74e6f4:14351",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > audioEffects 1`] = `
 {
   "bundle": "07569290a46daf0ef9821123c079:4946",
@@ -93,7 +114,7 @@ exports[`golden shaders: every Play example exports the same bundle > convertCir
 
 exports[`golden shaders: every Play example exports the same bundle > convertCircleOptimised 1`] = `
 {
-  "bundle": "1b346ed3358d930958d4d9a584c0:3378",
+  "bundle": "0803cde008db56159ce31ff39ddf:3456",
   "missing": [],
 }
 `;
@@ -1400,6 +1421,87 @@ exports[`golden shaders: every Play example exports the same bundle > waveInterf
 }
 `;
 
+exports[`golden shaders: every example compiles as it did > agentRuleAnts 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "077559657acb62137dd6b9ab97da:2505",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "114fc1423b9ff8180a87e7c8256e:86",
+  "paramBindings": "10beb17b7abf521d9cb650b436af:234",
+  "paramUniforms": [
+    "u_p_circx0_posX",
+    "u_p_circx0_posY",
+    "u_p_circx0_radius",
+    "u_p_lightx0_brightness",
+    "u_p_lightx0_innerFalloff",
+    "u_p_lightx0_tint",
+  ],
+  "paramValues": "0f6d3d7c68dbb317bcb90f54b8f2:169",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > agentRuleParticles 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "077559657acb62137dd6b9ab97da:2505",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "114fc1423b9ff8180a87e7c8256e:86",
+  "paramBindings": "10beb17b7abf521d9cb650b436af:234",
+  "paramUniforms": [
+    "u_p_circx0_posX",
+    "u_p_circx0_posY",
+    "u_p_circx0_radius",
+    "u_p_lightx0_brightness",
+    "u_p_lightx0_innerFalloff",
+    "u_p_lightx0_tint",
+  ],
+  "paramValues": "0f6d3d7c68dbb317bcb90f54b8f2:169",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > agentRuleSlime 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "077559657acb62137dd6b9ab97da:2505",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "114fc1423b9ff8180a87e7c8256e:86",
+  "paramBindings": "10beb17b7abf521d9cb650b436af:234",
+  "paramUniforms": [
+    "u_p_circx0_posX",
+    "u_p_circx0_posY",
+    "u_p_circx0_radius",
+    "u_p_lightx0_brightness",
+    "u_p_lightx0_innerFalloff",
+    "u_p_lightx0_tint",
+  ],
+  "paramValues": "0f6d3d7c68dbb317bcb90f54b8f2:169",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
 exports[`golden shaders: every example compiles as it did > audioEffects 1`] = `
 {
   "audioUniforms": {},
@@ -2318,7 +2420,7 @@ exports[`golden shaders: every example compiles as it did > convertCircleOptimis
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1c88dbc0a1ec8e043b74912255bf:2614",
+  "fragmentShader": "1757ae071f922502820702bd9b94:2692",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "16e25733d29c140e07513c0c3853:144",

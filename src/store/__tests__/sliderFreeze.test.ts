@@ -59,8 +59,16 @@ describe.each(['exprNode', 'customFn'] as const)('%s input slider off freezes th
 
   beforeEach(() => codeGraph(type));
 
+  // A live slider is a uniform (a drag writes it, no recompile); off, the value is baked.
+  const expectLive = (v: number) => {
+    const u = st().paramBindings['code::a'];
+    expect(u).toMatch(/^u_p_/);
+    expect(aLine(st().fragmentShader, type)).toContain(u);
+    expect(st().paramUniforms[u]).toBeCloseTo(v, 12);
+  };
+
   it('plain: keeps the slider value (it used to drop to 0.0)', () => {
-    expect(aLine(st().fragmentShader, type)).toContain('0.7');
+    expectLive(0.7);
     toggle(false, { time: 0 });
     const inp = (node('code').params.inputs as SliderInputDef[])[0];
     expect(inp).toMatchObject({ slider: null, frozen: 0.7, range: { min: 0, max: 1 } });
@@ -68,7 +76,7 @@ describe.each(['exprNode', 'customFn'] as const)('%s input slider off freezes th
     toggle(true, { time: 0 });
     expect((node('code').params.inputs as SliderInputDef[])[0]).toEqual({ name: 'a', type: 'float', slider: { min: 0, max: 1 } });
     expect(node('code').params.a).toBe(0.7);
-    expect(aLine(st().fragmentShader, type)).toContain('0.7');
+    expectLive(0.7);
   });
 
   it('keyframed: bakes the curve at the current time and pauses the keyframes; on resumes them', () => {

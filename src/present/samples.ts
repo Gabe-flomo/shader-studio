@@ -1,7 +1,7 @@
 /**
  * samples.ts — the presentations the Present page offers ready-made, in two
  * groups. Learn the app (teachingSamples.ts): the Studio, a first Play, field
- * sockets, the Convert page, making a lesson. Topics: the Book of Shaders path
+ * sockets, the Convert page, making a lesson, the Agents group (agentsSample.ts). Topics: the Book of Shaders path
  * (teachingSamples.ts), ray marching (sample.ts), matrices, playing a shader,
  * sketching over a shader with Script layers, and finishing the picture
  * (grading, lens, film and time effects). Each is built from bundled
@@ -13,6 +13,7 @@ import { blocks, linesBetween, presentation, sources, step } from './sampleKit';
 import { sampleFonts, withTypography } from './sampleStyle';
 import { PALETTE_PRESETS, paletteFill } from '../lib/backgroundLibrary';
 import type { BlockAspect, Presentation, Step } from '../types/presentation';
+import { AGENTS_TITLE, buildAgentsPresentation } from './agentsSample';
 import { BOOK_TITLE, CONVERT_TITLE, FIELD_TITLE, FIRST_PLAY_TITLE, MAKING_TITLE, STUDIO_TITLE, buildBookPresentation, buildConvertPresentation, buildFieldSocketsPresentation, buildFirstPlayPresentation, buildMakingPresentation, buildStudioPresentation } from './teachingSamples';
 
 export interface SamplePresentation {
@@ -340,6 +341,7 @@ export const SAMPLE_PRESENTATIONS: SamplePresentation[] = [
   { title: FIELD_TITLE, group: 'app', hint: 'Grid Pattern and Array with a shape of your own', still: 'comboArrayStars', build: buildFieldSocketsPresentation },
   { title: CONVERT_TITLE, group: 'app', hint: 'The Convert page: paste a shader, get nodes', still: 'convertCircleOptimised', build: buildConvertPresentation },
   { title: MAKING_TITLE, group: 'app', hint: 'Steps, blocks, snapshots, chips, live code, sharing', still: 'learnPalette', build: buildMakingPresentation },
+  { title: AGENTS_TITLE, group: 'app', hint: 'The Agents group: slime mold, particles and ants, built from nodes', still: 'agentRuleParticles', build: buildAgentsPresentation },
   // Topics: shaders themselves.
   { title: BOOK_TITLE, group: 'topic', hint: 'The Book of Shaders, chapter by chapter through Learn', still: 'learnFBM', build: buildBookPresentation },
   { title: SAMPLE_TITLE, group: 'topic', hint: 'Built from the Learn 3D lessons', still: 'learn3dLight', build: buildSamplePresentation },

@@ -111,6 +111,8 @@ export function patchNodeParamsForUniforms(
     const declared = (node.params.inputs as Array<{ name: string; type?: string; slider?: unknown }> | undefined) ?? [];
     for (const inp of declared) {
       if (inp.slider == null || (inp.type && inp.type !== 'float')) continue;
+      // A keyframed slider plays its curve (the compiler's kf_ path), not a uniform.
+      if (!isKeyframeBypassed(node, inp.name) && getKeyframeConfig(node, inp.name)) continue;
       const val = node.params[inp.name];
       if (typeof val !== 'number') continue;
       const uniformName = `u_p_${safeId}_${inp.name}`;

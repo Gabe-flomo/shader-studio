@@ -55,7 +55,23 @@ export const AGENT_EXAMPLE_INDEX: Record<string, { label: string; description: s
   },
 };
 
-export const AGENT_EXAMPLE_KEYS = Object.keys(AGENT_EXAMPLE_INDEX);
+/** The same rules by hand (agentSketchExamples.ts): Script layers that run on web pages and the Present page, where the group doesn't yet. */
+export const AGENT_RULE_INDEX: Record<string, { label: string; description: string }> = {
+  agentRuleSlime: {
+    label: 'Slime rule, by hand (JS)',
+    description: 'The Slime mold rule written again as a small JavaScript sketch, so it runs on web pages and the Present page: Sense, Crowding, Steer, Move, Deposit, then the trail spreads and fades. Every setting is a slider; Show the sensors draws what a few walkers smell. Species 3 gives three competing colonies.',
+  },
+  agentRuleParticles: {
+    label: 'Particles rule, by hand (JS)',
+    description: 'The Particles preset\'s chain of forces as a small JavaScript sketch: gravity, curl noise, a vortex, the mouse and a shockwave on a silent beat add up, then Integrate and Age / Life. Set a force to 0 to take it out of the chain.',
+  },
+  agentRuleAnts: {
+    label: 'Ants rule, by hand (JS)',
+    description: 'The Ants preset\'s rule as a small JavaScript sketch: each ant remembers whether it carries food, follows one smell and lays the other, weaker the further it walked. Roads form between the nest and the food and bend round the rock.',
+  },
+};
+
+export const AGENT_EXAMPLE_KEYS = [...Object.keys(AGENT_EXAMPLE_INDEX), ...Object.keys(AGENT_RULE_INDEX)];
 
 
 /**
