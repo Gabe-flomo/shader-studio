@@ -1195,6 +1195,43 @@ void main() {
  * at the bottom), or null. It leaves the context's bindings as it found
  * them, except that a three.js host must still call renderer.resetState().
  */
+/**
+ * The blend function and equation, clear colour and colour mask of a context,
+ * without asking GL. Chromium answers those getParameter calls with a round
+ * trip to the GPU process (about 40 µs each, eight of them a frame here), so
+ * their setters on this context are wrapped once to remember what was set,
+ * starting from one real read. Read again after a lost context comes back.
+ */
+const gpShadows = new WeakMap();
+export function gpStateShadow(gl) {
+  let s = gpShadows.get(gl);
+  if (s) return s;
+  s = {};
+  const read = () => {
+    s.bsrc = gl.getParameter(gl.BLEND_SRC_RGB); s.bdst = gl.getParameter(gl.BLEND_DST_RGB);
+    s.basrc = gl.getParameter(gl.BLEND_SRC_ALPHA); s.badst = gl.getParameter(gl.BLEND_DST_ALPHA);
+    s.beq = gl.getParameter(gl.BLEND_EQUATION_RGB); s.beqa = gl.getParameter(gl.BLEND_EQUATION_ALPHA);
+    const c = gl.getParameter(gl.COLOR_CLEAR_VALUE), m = gl.getParameter(gl.COLOR_WRITEMASK);
+    s.clear = c ? [c[0], c[1], c[2], c[3]] : [0, 0, 0, 0];
+    s.mask = m ? [m[0], m[1], m[2], m[3]] : [true, true, true, true];
+  };
+  read();
+  const wrap = (name, after) => {
+    const f = gl[name];
+    if (typeof f !== 'function') return;
+    gl[name] = function () { const r = f.apply(gl, arguments); after.apply(null, arguments); return r; };
+  };
+  wrap('blendFunc', (a, b) => { s.bsrc = s.basrc = a; s.bdst = s.badst = b; });
+  wrap('blendFuncSeparate', (a, b, c, d) => { s.bsrc = a; s.bdst = b; s.basrc = c; s.badst = d; });
+  wrap('blendEquation', m => { s.beq = s.beqa = m; });
+  wrap('blendEquationSeparate', (a, b) => { s.beq = a; s.beqa = b; });
+  wrap('clearColor', (r, g, b, a) => { s.clear = [r, g, b, a]; });
+  wrap('colorMask', (r, g, b, a) => { s.mask = [!!r, !!g, !!b, !!a]; });
+  try { if (gl.canvas && gl.canvas.addEventListener) gl.canvas.addEventListener('webglcontextrestored', read); } catch (e) { /* no events */ }
+  gpShadows.set(gl, s);
+  return s;
+}
+
 export function gpCreate(gl) {
   if (gpUnsupported(gl)) return null;
   const f32 = !!gl.getExtension('EXT_color_buffer_float');
@@ -1504,13 +1541,15 @@ export function gpCreate(gl) {
     const ap = gpApplyProbe(o.params, pr && pr.spec, pr && pr.values, aspect);
     const P = ap.params, s = gpTierSide(P.count), n = s * s;
     const placeAt = t => { const pl = gpPlace(P, t, o.mouse, aspect); if (ap.emitAt) pl.emitAt = ap.emitAt; return pl; };
+    // The caller's state, put back afterwards. Blend, clear colour and mask come from the shadow (gpStateShadow): no GPU round trips.
+    const sh = gpStateShadow(gl);
     const saved = {
       fb: gl.getParameter(gl.FRAMEBUFFER_BINDING), vp: gl.getParameter(gl.VIEWPORT), prog: gl.getParameter(gl.CURRENT_PROGRAM),
       vao: gl.getParameter(gl.VERTEX_ARRAY_BINDING), active: gl.getParameter(gl.ACTIVE_TEXTURE),
       blend: gl.isEnabled(gl.BLEND), depth: gl.isEnabled(gl.DEPTH_TEST), scissor: gl.isEnabled(gl.SCISSOR_TEST), cull: gl.isEnabled(gl.CULL_FACE),
-      bsrc: gl.getParameter(gl.BLEND_SRC_RGB), bdst: gl.getParameter(gl.BLEND_DST_RGB), basrc: gl.getParameter(gl.BLEND_SRC_ALPHA), badst: gl.getParameter(gl.BLEND_DST_ALPHA),
-      beq: gl.getParameter(gl.BLEND_EQUATION_RGB), beqa: gl.getParameter(gl.BLEND_EQUATION_ALPHA), clear: gl.getParameter(gl.COLOR_CLEAR_VALUE),
-      mask: gl.getParameter(gl.COLOR_WRITEMASK), unpack: gl.getParameter(gl.UNPACK_ALIGNMENT),
+      bsrc: sh.bsrc, bdst: sh.bdst, basrc: sh.basrc, badst: sh.badst,
+      beq: sh.beq, beqa: sh.beqa, clear: sh.clear,
+      mask: sh.mask, unpack: gl.getParameter(gl.UNPACK_ALIGNMENT),
     };
     const units = [0, 1, 2, 3, 4, 5].map(i => { gl.activeTexture(gl.TEXTURE0 + i); return gl.getParameter(gl.TEXTURE_BINDING_2D); });
     let result = null;

@@ -96,6 +96,9 @@ export interface GpEngine {
   dispose(): void;
   readonly precision: 'float' | 'half';
 }
+/** The blend function and equation, clear colour and colour mask of `gl`, kept by wrapping its setters (no GPU round trips to read them). */
+export interface GpStateShadow { bsrc: number; bdst: number; basrc: number; badst: number; beq: number; beqa: number; clear: number[]; mask: boolean[] }
+export function gpStateShadow(gl: unknown): GpStateShadow;
 export function gpCreate(gl: WebGLRenderingContext | WebGL2RenderingContext | null | undefined): GpEngine | null;
 
 export interface GpHostFrame {

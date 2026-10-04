@@ -15,17 +15,15 @@ import { readerControlOf, readerGroupName } from '../../play/readerControls';
 import { Button } from '../ui/Button';
 import { usePlayUi } from './playUi';
 import { useReadersPanel } from './readersPanelUi';
+import { onPollFrame } from './liveValueStore';
 
 /** Readers' levels for meters, about 30 times a second (null while their input is off). */
 export function useReaderLevels(readers: readonly AudioReader[]): Map<string, number | null> {
   const [v, setV] = useState<Map<string, number | null>>(() => new Map());
   useEffect(() => {
     if (!readers.length) { setV(prev => (prev.size ? new Map() : prev)); return; }
-    let raf = 0, last = 0;
-    const tick = (t: number) => {
-      raf = requestAnimationFrame(tick);
-      if (t - last < 33) return;
-      last = t;
+    // On the shared ~30 fps poll (liveValueStore), so it renders in the same commit as the live controls.
+    const tick = () => {
       audioReaderBank.update();
       setV(prev => {
         let changed = prev.size !== readers.length;
@@ -39,8 +37,7 @@ export function useReaderLevels(readers: readonly AudioReader[]): Map<string, nu
         return changed ? next : prev;
       });
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    return onPollFrame(tick, 33);
   }, [readers]);
   return v;
 }
