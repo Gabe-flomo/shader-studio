@@ -38,6 +38,8 @@ export interface SourceFeatures {
   usesData?: boolean;
   /** Has Pass nodes (render to texture; not run by pages yet). */
   passes?: boolean;
+  /** Has an Agents group (not run by pages yet: docs/agents-plan.md, P5). */
+  agents?: boolean;
 }
 
 /** A node of the source graph that has lines in its shader (for code blocks that quote one). */
@@ -372,6 +374,8 @@ function parseFeatures(v: unknown): SourceFeatures | undefined {
     audioUniforms: stringRecord(v.audioUniforms), liveUniforms: stringRecord(v.liveUniforms),
     isStateful: v.isStateful === true, usesEcho: v.usesEcho === true,
     ...(v.usesData === true ? { usesData: true } : {}),
+    ...(v.passes === true ? { passes: true } : {}),
+    ...(v.agents === true ? { agents: true } : {}),
   };
 }
 
