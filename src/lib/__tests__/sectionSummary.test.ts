@@ -42,9 +42,7 @@ describe('summarizeSection', () => {
     expect(summary(view, 'Look', { contrast: 1.4 }).text).toBe(`${sectionKeys(view, 'Look').length} controls · 1 changed`);
   });
 
-  it('a select with an Off choice that gates its section is a feature section (Focus, Colour key)', () => {
-    expect(summary(view, 'Focus', {}).text).toBe('Off');
-    expect(summary(view, 'Focus', { dof: 'slice' }).text).toBe('On · 5 controls');
+  it('a select with an Off choice that gates its section is a feature section (Colour key)', () => {
     expect(summary(view, 'Colour key', {}).text).toBe('Off');
     expect(summary(view, 'Colour key', { keyMode: 'color' }).on).toBe(true);
   });
@@ -85,7 +83,7 @@ describe('bool showWhen gates (toggle → visibility)', () => {
     expect(isParamVisible(hlCount, { highlights: false }, TimeCubeViewNode.defaultParams)).toBe(false);
     expect(isParamVisible(hlCount, {}, TimeCubeViewNode.defaultParams)).toBe(false);
     expect(isParamVisible(hlCount, { highlights: true }, TimeCubeViewNode.defaultParams)).toBe(true);
-    for (const [gate, key] of [['motion', 'liftUp'], ['effects', 'fxHue']] as const) {
+    for (const [gate, key] of [['motion', 'liftUp'], ['keyAnimate', 'pulse']] as const) {
       expect(isParamVisible(TimeCubeViewNode.paramDefs![key], { [gate]: true }, TimeCubeViewNode.defaultParams)).toBe(true);
     }
   });
@@ -108,13 +106,13 @@ describe('switchOnPatch', () => {
   const view = TimeCubeViewNode;
   const defs = view.paramDefs!;
 
-  it('turning Frame motion / Frame effects on gives still-default controls a visible start', () => {
+  it('turning Frame motion / Animate the key on gives still-default controls a visible start', () => {
     const motion = switchOnPatch('motion', defs.motion, {}, view.defaultParams);
     expect(motion.motion).toBe(true);
     expect(Object.keys(motion).filter(k => k !== 'motion').every(k => motion[k] !== view.defaultParams![k])).toBe(true);
     expect(Object.keys(motion).length).toBeGreaterThan(1);
-    const fx = switchOnPatch('effects', defs.effects, {}, view.defaultParams);
-    expect(Object.keys(fx).length).toBeGreaterThan(1);
+    const anim = switchOnPatch('keyAnimate', defs.keyAnimate, {}, view.defaultParams);
+    expect(anim).toEqual({ keyAnimate: true, pulse: 1 });
   });
 
   it('keeps a value the user already set', () => {
@@ -127,8 +125,8 @@ describe('switchOnPatch', () => {
   });
 
   it('every feature switch on Time Cube View has something visible once on', () => {
-    // Highlights draws with its defaults (Count 3); motion and effects need their starting values.
-    for (const key of ['motion', 'effects']) {
+    // Highlights draws with its defaults (Count 3); motion needs its starting values.
+    for (const key of ['motion']) {
       const on = { ...view.defaultParams, ...switchOnPatch(key, defs[key], {}, view.defaultParams) };
       const section = defs[key].section!;
       expect(summary(view, section, on).changed, section).toBeGreaterThan(0);

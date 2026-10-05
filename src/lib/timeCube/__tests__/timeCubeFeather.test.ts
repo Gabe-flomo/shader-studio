@@ -101,11 +101,11 @@ const view = (params: Record<string, unknown>): GraphNode[] => [
 ];
 
 describe('the view', () => {
-  it('Feather, its side and curve are live uniforms in Slice and Flow (no recompile), with highlights, key, motion and focus', () => {
+  it('Feather, its side and curve are live uniforms in Slice and Flow (no recompile), with highlights, key, pulse and motion', () => {
     for (const params of [
       { timeFeather: 12 },
       { timeMode: 'flow', timeFeather: 12, highlights: true, keyMode: 'hue', keyAnimate: true },
-      { highlights: true, motion: true, effects: true, dof: 'slice', timeFeather: 8, featherSide: 0, featherCurve: 0.5 },
+      { highlights: true, motion: true, timeFeather: 8, featherSide: 0, featherCurve: 0.5 },
     ]) {
       const r = compileGraph({ nodes: view(params) });
       expect(r.errors ?? []).toEqual([]);

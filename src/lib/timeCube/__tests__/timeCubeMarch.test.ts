@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {}, key: () => null, length: 0, clear: () => {} });
 
 import { combNext, freeFlight, rayRoundBox, rayRoundBoxEnter } from '../march';
-import { blurRadius, blurTaps, combDistance, lightningBurst, roundBox } from '../style';
+import { combDistance, roundBox } from '../style';
 import { compileGraph } from '../../../compiler/graphCompiler';
 import { n } from '../../../store/graphBuilder';
 
@@ -122,30 +122,6 @@ describe('where in a step to read', () => {
   });
 });
 
-describe('depth of field and lightning you can see', () => {
-  it('the default Blur blurs the ends of the box by several pixels (it was one or two)', () => {
-    const F = 3.8, t = F + 0.8, px = 2 / (1080 * 1.8) * t;
-    expect(blurRadius(t, F, 0.5, 1, 16, px) / px).toBeGreaterThan(5);
-    expect(blurRadius(F, F, 0.5, 1, 16, px)).toBe(0);
-  });
-  it('the blur takes enough reads to cover its disc evenly; one in focus; a thin read needs few', () => {
-    expect(blurTaps(0.3, true, 1)).toBe(1);
-    expect(blurTaps(16, true, 1)).toBe(32);
-    expect(blurTaps(16, false, 1)).toBe(8);
-    expect(blurTaps(3, true, 1)).toBeGreaterThanOrEqual(6);
-    expect(blurTaps(16, true, 0.001)).toBe(1);
-  });
-  it('a lightning flash stays bright for several frames at 60 fps, at any rate', () => {
-    for (const rate of [1, 2.5, 10]) {
-      let k = 0;
-      while (lightningBurst(k, rate, 7, 0.1, (k + 0.5) / rate)[2] === 0 && k < 50) k++;
-      let bright = 0;
-      for (let f = 0; f < 120; f++) if (lightningBurst(k, rate, 7, 0.1, k / rate + f / 60)[2] > 0.3) bright++;
-      expect(bright, `rate ${rate}`).toBeGreaterThanOrEqual(5);
-    }
-  });
-});
-
 describe('the view draws the planes exactly', () => {
   const code = (params: Record<string, unknown>) => compileGraph({ nodes: [
     n('timeCube', 'src', 0, 0), n('timeCubeView', 'v', 300, 0, params, { volume: ['src', 'volume'] }), n('output', 'out', 600, 0, {}, { color: ['v', 'color'] }),
@@ -160,10 +136,5 @@ describe('the view draws the planes exactly', () => {
     expect(hl.success).toBe(true);
     expect(hl.fragmentShader).toMatch(/tcCombNext\(\w+_gf, \w+_dir, \w+_hl\)/);
     expect(hl.fragmentShader).toMatch(/tcFootprint\(/);
-  });
-  it('the blur reads a turned golden-angle disc, Smooth or Fast', () => {
-    const smooth = code({ dof: 'slice' }).fragmentShader;
-    expect(smooth).toMatch(/tcSampleBlur\(u_\w+, [^;]*tcBlurTaps\([^;]*, 1\.0,/);
-    expect(code({ dof: 'slice', blurQuality: 'fast' }).fragmentShader).toMatch(/tcBlurTaps\([^;]*, 0\.0,/);
   });
 });
