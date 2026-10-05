@@ -394,7 +394,7 @@ exports[`golden shaders: every Play example exports the same bundle > learn3dCam
 
 exports[`golden shaders: every Play example exports the same bundle > learn3dCombine 1`] = `
 {
-  "bundle": "021c019ccf44dc1be211bd165f67:11859",
+  "bundle": "1119acdaf6a94a1f4914b1e8319c:11901",
   "missing": [],
 }
 `;
@@ -408,42 +408,42 @@ exports[`golden shaders: every Play example exports the same bundle > learn3dDis
 
 exports[`golden shaders: every Play example exports the same bundle > learn3dGI 1`] = `
 {
-  "bundle": "0c822eea34ba9a0a1b8c20c42bee:20826",
+  "bundle": "0f05ae7efa2c0017af2082e1b4e1:20804",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > learn3dLight 1`] = `
 {
-  "bundle": "07efefff0af7130814f1ab044bb7:12206",
+  "bundle": "07ee2e2dd0706113240786d00a02:12248",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > learn3dMarch 1`] = `
 {
-  "bundle": "175c8f30df6ea9152329be9bfdd7:9751",
+  "bundle": "0837c9b823ec1713ea88ca3f3073:9793",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > learn3dOrbit 1`] = `
 {
-  "bundle": "0576456391013816866744501b64:10709",
+  "bundle": "1fc1d0cb90c5de07da85b9fa31ea:10751",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > learn3dVolume 1`] = `
 {
-  "bundle": "0e49e7abb1d4ab0376a7537e6c29:14770",
+  "bundle": "1c1cf9942587030903bc6a32cdcc:15026",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > learn3dVolumeSwitch 1`] = `
 {
-  "bundle": "1a87eb2383bd08064286eed9debb:10390",
+  "bundle": "14777123977bf504199214fd0190:10692",
   "missing": [],
 }
 `;
@@ -3159,11 +3159,11 @@ exports[`golden shaders: every example compiles as it did > fcOrb 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "13d936d59d2d291b0a69a6722380:8836",
+  "fragmentShader": "0b1eb6acfdb3ec025db68dfc28f3:9186",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "09d7e93677af4f03e43917332785:627",
-  "paramBindings": "12db4b2f0df2080a4b336ac90e83:1075",
+  "paramBindings": "024bb61fbbc35b16b8cc6116d0f0:1120",
   "paramUniforms": [
     "u_p_gyroidxorbx0xsgxmulx0_b",
     "u_p_gyroidxorbx0xsgxsdfintersex0_k",
@@ -3177,6 +3177,7 @@ exports[`golden shaders: every example compiles as it did > fcOrb 1`] = `
     "u_p_marchcamerx0_targetY",
     "u_p_marchcamerx0_targetZ",
     "u_p_marchloopgx0_bg",
+    "u_p_marchloopgx0_jitter",
     "u_p_marchloopgx0_maxDist",
     "u_p_marchloopgx0_passthrough",
     "u_p_marchloopgx0_stepScale",
@@ -3188,7 +3189,7 @@ exports[`golden shaders: every example compiles as it did > fcOrb 1`] = `
     "u_p_marchloopgx0xmlxpalx0_speed",
     "u_p_mulx0xc3_b",
   ],
-  "paramValues": "1d6a8ecb582e2f022293b503ce5c:880",
+  "paramValues": "14a037f4d8546205ba609583d0e5:910",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -4051,11 +4052,11 @@ exports[`golden shaders: every example compiles as it did > glowMarcher 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "18d26d59c4e4e918fda8c8397967:6417",
+  "fragmentShader": "10678ad8f773120603ef1fe15c9e:6767",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "177d80e3185d6a16451d839dc4a2:394",
-  "paramBindings": "1f97bb4b2a4ff718bb75b5cb6295:632",
+  "paramBindings": "0e6fc112a2f8b80971bad96be8ed:676",
   "paramUniforms": [
     "u_p_addx9_b",
     "u_p_marchcamerx2_camAngle",
@@ -4064,6 +4065,7 @@ exports[`golden shaders: every example compiles as it did > glowMarcher 1`] = `
     "u_p_marchcamerx2_rotSpeed",
     "u_p_marchloopgx4_albedo",
     "u_p_marchloopgx4_bg",
+    "u_p_marchloopgx4_jitter",
     "u_p_marchloopgx4_maxDist",
     "u_p_marchloopgx4_passthrough",
     "u_p_marchloopgx4_stepScale",
@@ -4074,7 +4076,7 @@ exports[`golden shaders: every example compiles as it did > glowMarcher 1`] = `
     "u_p_mulx8_b",
     "u_p_spherex3xsgxsphx3_radius",
   ],
-  "paramValues": "099dac9d31592910d0d31839e82e:463",
+  "paramValues": "14a5417a5fb52919ea2e86f60cee:493",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -5095,7 +5097,7 @@ exports[`golden shaders: every example compiles as it did > learn3dCombine 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "138cc068ee64d808936aae8d951c:9099",
+  "fragmentShader": "12d297eacf3d310ec5b09ea92ae5:9138",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1db89a16a0e7cc19e283aed14d8f:393",
@@ -5131,7 +5133,7 @@ exports[`golden shaders: every example compiles as it did > learn3dCombine 1`] =
     "u_p_scenex0xsgxtrx0xc2_ty",
     "u_p_scenex0xsgxtrx0xc2_tz",
   ],
-  "paramValues": "0c3d01b8f281cd0481ea3f65048a:1005",
+  "paramValues": "1500fc3f5d4cee0d64dbab76c3bb:1005",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -5170,7 +5172,7 @@ exports[`golden shaders: every example compiles as it did > learn3dGI 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "15185162b0227b1fe322e4b6e6a8:17801",
+  "fragmentShader": "0b36c7ab8477d219d0206d91a7a3:17776",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0acaa8a94e755d06e3854cfe85d1:501",
@@ -5207,7 +5209,7 @@ exports[`golden shaders: every example compiles as it did > learn3dGI 1`] = `
     "u_p_scenex0xsgxsdfunionx0_k",
     "u_p_scenex0xsgxsphx0_radius",
   ],
-  "paramValues": "1b07050c7b523400567d3cf5e27b:1040",
+  "paramValues": "09f85cc7518c931f14813ad8fee6:1040",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -5221,7 +5223,7 @@ exports[`golden shaders: every example compiles as it did > learn3dLight 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "14e0bd49736f69136ec0258ab39c:9340",
+  "fragmentShader": "04f345d9316ebd1c33ac42a0a75b:9379",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0b92cd9ee9b18d064f4506653ee9:312",
@@ -5258,7 +5260,7 @@ exports[`golden shaders: every example compiles as it did > learn3dLight 1`] = `
     "u_p_multilightx0_sunR",
     "u_p_scenex0xsgxsphx0_radius",
   ],
-  "paramValues": "13aecbbc1bbf6f08dfb23fa3fbf4:986",
+  "paramValues": "192b891abc861a048cddefa14867:986",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -5272,7 +5274,7 @@ exports[`golden shaders: every example compiles as it did > learn3dMarch 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "00aa0327aac943039fe5c3871a11:7720",
+  "fragmentShader": "0038891340a55d045c6f7a92379f:7759",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "180a7cace96fd51324eb558161d6:265",
@@ -5300,7 +5302,7 @@ exports[`golden shaders: every example compiles as it did > learn3dMarch 1`] = `
     "u_p_rampx0_color3",
     "u_p_scenex0xsgxsphx0_radius",
   ],
-  "paramValues": "13a70dc25650e61c1c6bba7f0038:722",
+  "paramValues": "09fff27e4c5af915e5e1f9ebd005:722",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -5314,7 +5316,7 @@ exports[`golden shaders: every example compiles as it did > learn3dOrbit 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1e915c42bf7c5d098877322f2f01:8322",
+  "fragmentShader": "09499b7d6aebfc1e528323537670:8361",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "11b75ce20e17db13584f5f9638e6:356",
@@ -5343,7 +5345,7 @@ exports[`golden shaders: every example compiles as it did > learn3dOrbit 1`] = `
     "u_p_scenex0xsgxroundedboxx0_sizeZ",
     "u_p_scenex0xsgxsdfunionx0_k",
   ],
-  "paramValues": "0cc238f6631c5d023e0321835187:785",
+  "paramValues": "124824b38d0df6068f3f8406ded8:785",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -5357,7 +5359,7 @@ exports[`golden shaders: every example compiles as it did > learn3dVolume 1`] = 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "06437ee40de3f609f6cf5e2c2880:11747",
+  "fragmentShader": "15d155373d6a2f058b7607681b99:12000",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0b58e82eb6192d0b1f17555cdb32:548",
@@ -5393,7 +5395,7 @@ exports[`golden shaders: every example compiles as it did > learn3dVolume 1`] = 
     "u_p_marchloopgx0xc2xmlxvolumeglowx0_shell",
     "u_p_scenex0xsgxsphx0_radius",
   ],
-  "paramValues": "1f531fbf97c76b113ce0905d6931:1043",
+  "paramValues": "18f905bd9fd3310a8b400287820f:1043",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -5407,7 +5409,7 @@ exports[`golden shaders: every example compiles as it did > learn3dVolumeSwitch 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "16e2ff81e737a013c84408b3af60:7788",
+  "fragmentShader": "0825412c1e10e816ca55a1204455:8087",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1b9e5a84d418620e19b0fce6aa7c:357",
@@ -5438,7 +5440,7 @@ exports[`golden shaders: every example compiles as it did > learn3dVolumeSwitch 
     "u_p_scenex0xsgxtorx0_majorR",
     "u_p_scenex0xsgxtorx0_minorR",
   ],
-  "paramValues": "000d6e6025ed5e10ebaf104fb47a:854",
+  "paramValues": "0f4d162040b21a042ada0ef2dfc3:854",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -11564,11 +11566,11 @@ exports[`golden shaders: every example compiles as it did > volAnimatedRepeat 1`
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1bbaf63e5ea1f01748e45eda0b99:10586",
+  "fragmentShader": "0a35a66bda2bef00c9960f80563b:10937",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1900a81c5a76320e66e60ff445bf:855",
-  "paramBindings": "0875e431b0f3c4080cdb7366ad8f:1654",
+  "paramBindings": "1b3a6ce0f14abb172e087b496dbb:1698",
   "paramUniforms": [
     "u_p_chromashifx8_angle_deg",
     "u_p_chromashifx8_contrast",
@@ -11582,6 +11584,7 @@ exports[`golden shaders: every example compiles as it did > volAnimatedRepeat 1`
     "u_p_marchcamerx2_rotSpeed",
     "u_p_marchloopgx4_albedo",
     "u_p_marchloopgx4_bg",
+    "u_p_marchloopgx4_jitter",
     "u_p_marchloopgx4_maxDist",
     "u_p_marchloopgx4_passthrough",
     "u_p_marchloopgx4_stepScale",
@@ -11605,7 +11608,7 @@ exports[`golden shaders: every example compiles as it did > volAnimatedRepeat 1`
     "u_p_repeatedxspheresx3xsgxtrx0_ty",
     "u_p_repeatedxspheresx3xsgxtrx0_tz",
   ],
-  "paramValues": "0b484085ac33a11106ce2b88e22c:1277",
+  "paramValues": "1b9410b4c7b24418ae32734f6c93:1307",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -11619,7 +11622,7 @@ exports[`golden shaders: every example compiles as it did > volumeGlowDemo 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1369fc9760d8a71057c3ac643bae:7728",
+  "fragmentShader": "074b89988ac7151e8f88884ac27b:8027",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1966746852154703817e43a1f620:309",
@@ -11649,7 +11652,7 @@ exports[`golden shaders: every example compiles as it did > volumeGlowDemo 1`] =
     "u_p_marchloopgx0xmlxvolumeglowx0_shell",
     "u_p_scenex0xsgxsphx0_radius",
   ],
-  "paramValues": "04e587695e180f0670ea34486f8b:821",
+  "paramValues": "171f42f9bc88f6120adb46b2c878:821",
   "passes": null,
   "success": true,
   "textureUniforms": {},

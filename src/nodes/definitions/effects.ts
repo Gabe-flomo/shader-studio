@@ -1,6 +1,7 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { f, p, pv3, zeroFor } from './helpers';
 import { PALETTE_GLSL_FN } from './color';
+import { MARCH_STEP_REF_KEY, stepWeightGlsl } from '../../compiler/marchJitter';
 // Shared with the Play page's Finish stack (play/kit/finish.js), so both tone-map and mask the same way.
 import { FN_CRT_MASK_GLSL, FN_TONE_FUNCTIONS, FN_TONE_GLSL } from '../../play/kit/finishGlsl.js';
 
@@ -172,8 +173,10 @@ export const LightNode: NodeDefinition = {
     inner:  { type: 'float', label: 'Inner', hint: 'Glow inside the shape, from the edge inward (Inner falloff). Add it to Glow for a neon tube.' },
     tinted: { type: 'vec3',  label: 'Tinted', hint: 'Glow × Tint, ready for the Output.' },
   },
-  defaultParams: { mode: 'glow', brightness: 10.0, ringFreq: 8.0, tint: [1.0, 0.85, 0.6], innerFalloff: 8.0 },
+  // perDistance: on for new nodes; saved graphs without it keep counting per step.
+  defaultParams: { mode: 'glow', brightness: 10.0, ringFreq: 8.0, tint: [1.0, 0.85, 0.6], innerFalloff: 8.0, perDistance: true },
   paramDefs: {
+    perDistance: { label: 'Per distance', type: 'bool', hint: 'Only in a volumetric March Loop, summed with +=: adds glow for the length of ray each step covers, not once per step, so the glow doesn\'t form rings that follow the shapes (banding). Anywhere else it changes nothing.' },
     tint: { label: 'Tint', type: 'vec3color', hint: 'Colour of the Tinted output when nothing is wired to Tint.' },
     mode: {
       label: 'Mode', type: 'select',
@@ -223,6 +226,12 @@ float simpleLight(float d, float brightness) {
     }
     // Inner light: distance measured from the edge inward, zero outside
     code += `    float ${outVar}_inner = exp(-clamp(${innerFalloff}, 0.1, 100.0) * max(-(${distVar}), 0.0)) * step(${distVar}, 0.0);\n`;
+    // Per distance in a volumetric loop body: the March Loop compiler sets the reference step.
+    const stepRef = inputVars[MARCH_STEP_REF_KEY];
+    if (stepRef) {
+      const w = stepWeightGlsl(distVar, stepRef, `clamp(${brightVar}, 0.1, 100.0)`);
+      code += `    ${outVar} *= ${w};\n    ${outVar}_inner *= ${w};\n`;
+    }
     code += `    vec3 ${outVar}_tinted = ${tintVar} * ${outVar};\n`;
     return { code, outputVars: { glow: outVar, inner: `${outVar}_inner`, tinted: `${outVar}_tinted` } };
   },

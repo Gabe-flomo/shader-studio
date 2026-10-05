@@ -87,7 +87,8 @@ describe('web runtime passes', () => {
   it('prepares GLSL as Three.js does on WebGL2', () => {
     const { calls } = run({ fragmentShader: FS });
     const sources = calls.filter(c => c[0] === 'shaderSource').map(c => c[2] as string);
-    expect(sources.length).toBe(2);
+    // The picture's program and the dithering blit's.
+    expect(sources.length).toBe(4);
     for (const s of sources) expect(s.startsWith('#version 300 es\n')).toBe(true);
     expect(sources[1]).toContain('#define gl_FragColor pc_fragColor');
     expect(sources[1]).toContain('#define texture2D texture');
@@ -140,8 +141,21 @@ describe('web runtime passes', () => {
       expect(frameCalls.filter(c => c[0] === 'drawArrays'), source).toEqual([]);
       expect(calls.filter(c => c[0] === 'createFramebuffer'), source).toEqual([]);
     }
-    // The shader, as ever, draws each frame.
-    expect(run({ fragmentShader: FS }, 2).frameCalls.filter(c => c[0] === 'drawArrays').length).toBe(2);
+    // The shader, as ever, draws each frame (into the half-float target, then the dithering blit).
+    expect(run({ fragmentShader: FS }, 2).frameCalls.filter(c => c[0] === 'drawArrays').length).toBe(4);
+  });
+
+  it('without feedback or echo the picture still goes through a half-float target and the dither to the screen', () => {
+    const { frameCalls, gl } = run({ fragmentShader: FS }, 3);
+    // One target, made once, in half float.
+    expect(frameCalls.filter(c => c[0] === 'createFramebuffer').length).toBe(1);
+    expect(frameCalls).toContainEqual(['texImage2D', gl.TEXTURE_2D, 0, gl.RGBA16F, expect.any(Number), expect.any(Number), 0, gl.RGBA, gl.HALF_FLOAT, null]);
+    // Each frame: the picture into the target, then a blit with a fresh dither seed to the screen.
+    const seeds = frameCalls.filter(c => c[0] === 'uniform1f' && (c[1] as { uniform: string }).uniform === 'u_seed').map(c => c[2]);
+    expect(seeds.length).toBe(3);
+    expect(new Set(seeds).size).toBe(3);
+    const binds = frameCalls.filter(c => c[0] === 'bindFramebuffer' && c[1] === gl.FRAMEBUFFER).map(c => c[2]);
+    expect(binds[binds.length - 1]).toBeNull();
   });
 });
 

@@ -29,6 +29,7 @@ import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { loopColour } from '../nodes/definitions/scene3d';
 import { AG_HASH_GLSL, AG_STATE_C_GLSL, AGENT_GLOBALS, AGENT_STATE_C_GLOBALS, agentStateUniform, agentStepUniform, agentWindowUniform } from '../nodes/definitions/agents';
 import { frozenValueOf } from '../nodes/sliderFreeze';
+import { marchJitterDecl, MARCH_STEP_REF_KEY } from './marchJitter';
 import {
   getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed,
   getAxisKeyframeConfig, generateVectorKeyframeGLSL, socketHasVectorKeyframes, VECTOR_AXES,
@@ -2591,6 +2592,7 @@ export class ShaderAssembler {
                     }
                     continue;
                   }
+                  if (mlVolumetric && gn.params.perDistance === true) gnInputVars[MARCH_STEP_REF_KEY] = mlPassthrough;
                   const gnResult = gDef.generateGLSL(this.patchBodyNode(gn, gDef, origIdBySlug(mlGrpSlugMap, gnOrigId)), gnInputVars);
                   bodyLines.push(gnResult.code);
                   // Handle assignOp accumulators nested inside this inline group
@@ -2683,6 +2685,8 @@ export class ShaderAssembler {
                 continue;
               }
 
+              // Per distance: weight this step's sample by the step the ray takes from here (compiler/marchJitter.ts).
+              if (mlVolumetric && snEffective.params.perDistance === true) snInputVars[MARCH_STEP_REF_KEY] = mlPassthrough;
               const snResult = snDef.generateGLSL(this.patchBodyNode(snEffective, snDef, origIdBySlug(mlSubSlugMap, origId)), snInputVars);
 
               // ── assignOp in body: route output through inout accumulator ──────────
@@ -2770,11 +2774,11 @@ export class ShaderAssembler {
           // Declare inout accumulator vars in main() before the march loop
           const accumDecls = mlBodyAccumulators.map(a => `    ${a.type} ${a.varName} = ${a.initExpr};\n`).join('');
 
-          // Jitter: offset the first step by a hash of ray origin to remove banding
-          const jitterDecl = mlJitter !== '0.0'
-            ? `    float ${nodeSlug}_jh = fract(sin(dot(${mlRo}.xy + ${mlRd}.xy, vec2(127.1, 311.7))) * 43758.5453);\n`
-            + `    float ${nodeSlug}_t   = 0.001 + ${mlJitter} * ${nodeSlug}_jh * (${mlMaxDist} / float(${mlMaxSteps}));\n`
-            : `    float ${nodeSlug}_t   = 0.001;\n`;
+          // Jitter: start each pixel's ray a little way along, by a different amount, to remove banding
+          const jitterDecl = marchJitterDecl({
+            slug: nodeSlug, params: rawNode.params, jitter: mlJitter, ro: mlRo, rd: mlRd, maxDist: mlMaxDist,
+            maxSteps: mlMaxSteps, volumetric: mlVolumetric, passthrough: mlPassthrough, addFunction: fn => this.functions.add(fn),
+          });
 
           const marchLoopLines = mlVolumetric ? [
             // Volumetric mode: no hit detection, runs all steps.
@@ -3343,6 +3347,7 @@ export class ShaderAssembler {
                     }
                     continue;
                   }
+                  if (mlVolumetric && gn.params.perDistance === true) gnInputVars[MARCH_STEP_REF_KEY] = mlPassthrough;
                   const gnResult = gDef.generateGLSL(this.patchBodyNode(gn, gDef, origIdBySlug(mlGrpSlugMap, gnOrigId)), gnInputVars);
                   bodyLines.push(gnResult.code);
                   const gnSlugKey = gn.id.slice(mlGrpPrefix.length);
@@ -3430,6 +3435,8 @@ export class ShaderAssembler {
                 continue;
               }
 
+              // Per distance: weight this step's sample by the step the ray takes from here (compiler/marchJitter.ts).
+              if (mlVolumetric && snEffective.params.perDistance === true) snInputVars[MARCH_STEP_REF_KEY] = mlPassthrough;
               const snResult = snDef.generateGLSL(this.patchBodyNode(snEffective, snDef, origIdBySlug(mlSubSlugMap, origId)), snInputVars);
 
               if (sn.assignOp && sn.assignOp !== '=') {
@@ -3509,10 +3516,11 @@ export class ShaderAssembler {
 
           const accumDecls = mlBodyAccumulators.map(a => `    ${a.type} ${a.varName} = ${a.initExpr};\n`).join('');
 
-          const jitterDecl = mlJitter !== '0.0'
-            ? `    float ${nodeSlug}_jh = fract(sin(dot(${mlRo}.xy + ${mlRd}.xy, vec2(127.1, 311.7))) * 43758.5453);\n`
-            + `    float ${nodeSlug}_t   = 0.001 + ${mlJitter} * ${nodeSlug}_jh * (${mlMaxDist} / float(${mlMaxSteps}));\n`
-            : `    float ${nodeSlug}_t   = 0.001;\n`;
+          // Jitter: start each pixel's ray a little way along, by a different amount, to remove banding
+          const jitterDecl = marchJitterDecl({
+            slug: nodeSlug, params: rawNode.params, jitter: mlJitter, ro: mlRo, rd: mlRd, maxDist: mlMaxDist,
+            maxSteps: mlMaxSteps, volumetric: mlVolumetric, passthrough: mlPassthrough, addFunction: fn => this.functions.add(fn),
+          });
 
           const giMarchLoopLines = mlVolumetric ? [
             accumDecls,
