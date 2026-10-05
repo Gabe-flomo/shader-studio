@@ -38,7 +38,7 @@ import {
   getKeyframeConfig, getAxisKeyframeConfig,
 } from '../../compiler/keyframes';
 import type { Keyframe, KeyframeEasing, KeyframeLoopMode } from '../../compiler/keyframes';
-import { SKIP_UNIFORM_TYPES } from '../../compiler/uniformPatcher';
+import { SKIP_UNIFORM_TYPES, isParamVisible } from '../../compiler/uniformPatcher';
 import { NumberInput } from './NumberInput';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { useTokens } from '../../theme/themeStore';
@@ -111,12 +111,9 @@ const ASSIGN_OP_EXCLUDED = new Set(['output', 'vec4Output', 'loopIndex', 'loopCa
 // SDF's `r` input <-> `r` paramDef), same min/max/step, same showWhen
 // conditional visibility — just without desktop's bidirectional-range /
 // custom-max power-user controls.
-function paramVisible(node: GraphNode, paramDef: { showWhen?: { param: string; value: string | string[] } }): boolean {
-  if (!paramDef.showWhen) return true;
-  // A gate param an older save never had reads as its default (same rule as isParamVisible)
-  const val = node.params[paramDef.showWhen.param] ?? getNodeDefinitionFor(node)?.defaultParams?.[paramDef.showWhen.param];
-  const want = paramDef.showWhen.value;
-  return Array.isArray(want) ? want.includes(val as string) : val === want;
+function paramVisible(node: GraphNode, paramDef: ParamDef): boolean {
+  // Same rule as the card and the compiler (a bool gate reads as 'true' / 'false').
+  return isParamVisible(paramDef, node.params, getNodeDefinitionFor(node)?.defaultParams);
 }
 function sliderableParam(node: GraphNode, key: string) {
   const def = getNodeDefinitionFor(node);
