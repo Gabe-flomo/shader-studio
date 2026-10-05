@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.32',
+    date: '2026-10-04',
+    title: 'Cleaner time cubes',
+    highlights: [
+      { area: 'Studio', text: 'Time Cube View: clean slice and highlight edges, no stray sheets or hatching, and a smooth depth of field with Fast / Smooth quality.' },
+      { area: 'Studio', text: 'Colour key regrouped, with a live "keeps about 4%" readout and one-click swatches from the slice. Lightning now clearly flashes.' },
+      { area: 'Studio', text: 'Time Cube source: 16-bit precision for averaged and median frames.' },
+    ],
+  },
+  {
     id: '2026.10.31',
     date: '2026-10-04',
     title: 'No more march banding',
