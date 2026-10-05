@@ -171,12 +171,6 @@ what the Output showed (or a stand-in noise picture when nothing).
 |---|---|---|
 | Breathe a shape | LFO → Remap (−1…1 → 0.15…0.45) → Circle SDF → SDF Fill | An LFO only shows once it drives something |
 
-### Print Text (`printText`): Built
-
-| Recipe | Graph | Why |
-|---|---|---|
-| Coloured title | Mask → Colorize | The node only gives a mask |
-
 ### Picture effects: Bloom, Vignette, Grain, Tone Map, Chroma Shift, Saturation, Hue Rotate, Posterize, Scanlines, Brightness / Contrast, Tone Curve, Invert, CMYK Halftone: Built
 
 | Recipe | Graph | Why |
@@ -197,7 +191,7 @@ Particles / Slime (with a Trail) / Empty group, asked before the add (see above)
 | Time | "Speed" (× k), "Loop every N s" (mod), "Ping-pong 0…1" (sin → remap) | Time on its own drives nothing visible; better offered on a slider's right-click |
 | Audio Input, smoothing | Envelope / smoothing node before the mapping | No dedicated smoothing node yet (Play mappings smooth) |
 | Mandelbrot / Julia, Newton, IFS | Mouse → Julia C; Time → zoom | Already full pictures; recipes would be "make it interactive" |
-| Truchet, Chladni, Electron Orbital | Palette on the field output; Time on a parameter | Complete generators; small gain |
+| Truchet, Chladni | Palette on the field output; Time on a parameter | Complete generators; small gain |
 | Field Accumulate / Metaball Threshold | Grid → Field Accumulate → Threshold → palette (a metaball grid) | Good teaching recipe; a few more params to tune |
 | Domain Warp | → Fractal Noise → Palette (the reverse of Noise's Marbled) | Easy to add |
 | Swirl / Ripple / UV Warp nodes | UV → warp → a stripe or checker picture, so the warp is visible | Easy to add |

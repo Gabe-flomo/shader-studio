@@ -1,11 +1,11 @@
 /**
  * scene3dShapes.ts — how a 3D node is wired into a Scene Group so it shows.
  *
- * Every scene-space node (3D primitives, 3D transforms, 3D fractals) plays one
+ * Every scene-space node (3D primitives, 3D transforms, 3D boolean ops) plays one
  * of three roles, read from its sockets:
  *
- *   - shape:    position in, distance out (Sphere, Box, Menger Sponge, KIFS,
- *               Gyroid's Surface…). Wired Scene Pos → shape → Scene Output.
+ *   - shape:    position in, distance out (Sphere, Box, Gyroid's Surface…).
+ *               Wired Scene Pos → shape → Scene Output.
  *   - warp:     position in, position out (Repeat, Twist, Fold…). On its own it
  *               draws nothing, so a new scene gets a small partner shape after
  *               it (a sphere or a box, with a note) to show what it does; added
@@ -184,10 +184,9 @@ function secondHalf(nextId: () => string, node: GraphNode, role: Extract<SceneRo
 
 /**
  * Camera and loop settings a new scene needs for a node that is far bigger than
- * the default view (the Mandelbox reaches about 10 units out).
+ * the default view.
  */
 export function rigSettingsFor(type: string): { camera?: Record<string, unknown>; loop?: Record<string, unknown> } {
-  if (type === 'mandelboxDE') return { camera: { camDist: 13 }, loop: { maxDist: 40, maxSteps: 128 } };
   // Their distance is only an estimate (it runs ahead of the true one), so the loop steps shorter.
   if (type === 'gyroidField' || type === 'schwarzPField') return { loop: { stepScale: 0.4, maxSteps: 160 } };
   return {};

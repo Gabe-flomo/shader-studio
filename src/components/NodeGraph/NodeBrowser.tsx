@@ -38,7 +38,7 @@ const HIDDEN_NODES = new Set([
 
 const CATEGORY_SECTIONS: Array<{ label: string; categories: string[] }> = [
   { label: 'Shapes',       categories: ['2D Primitives', 'SDF', '2D Space', '3D Primitives', '3D Boolean Ops', '3D Transforms', 'Combiners'] },
-  { label: '3D',           categories: ['3D Scene', '3D Lighting', '3D Fractals', 'Loops'] },
+  { label: '3D',           categories: ['3D Scene', '3D Lighting', 'Loops'] },
   { label: 'Color & Post', categories: ['Color', 'Color Grading', 'Post Processing', 'Effects', 'Passes'] },
   { label: 'Generators',   categories: ['Noise', 'Halftone', 'Fractals', 'Science', 'Particles', 'Particles & Fields', 'Simulation', 'Grid', 'Field'] },
   { label: 'Math & Logic', categories: ['Sources', 'Animation', 'Math', 'Matrix', 'Shapers', 'Conditionals'] },
@@ -146,7 +146,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Gaussian',  types: ['gaussianField', 'fieldAccumulate'] },
     { label: 'Noisy SDF', types: ['noisyGridSDF'] },
     { label: 'Threshold', types: ['metaballThreshold'] },
-    { label: 'Falloff',   types: ['distanceFalloff', 'glowFalloff'] },
+    { label: 'Falloff',   types: ['distanceFalloff'] },
   ],
 };
 

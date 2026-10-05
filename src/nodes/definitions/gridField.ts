@@ -281,44 +281,6 @@ export const DistanceFalloffNode: NodeDefinition = {
   },
 };
 
-// ─── Glow Falloff ─────────────────────────────────────────────────────────────
-// Bounded inverse-square glow: brightness / (1 + d^power · k).
-// Safe for carry accumulation — stays finite at d=0.
-
-export const GlowFalloffNode: NodeDefinition = {
-  type: 'glowFalloff',
-  label: 'Glow Falloff',
-  category: 'Field',
-  description: 'Bounded inverse-square glow: brightness/(1+d^p·k). Stays finite at d=0 — safe for carry accumulation. Use for point lights and metaball glow.',
-  inputs: {
-    distance:   { type: 'float', label: 'Distance'   },
-    brightness: { type: 'float', label: 'Brightness' },
-  },
-  outputs: {
-    glow: { type: 'float', label: 'Glow' },
-  },
-  defaultParams: { brightness: 0.5, k: 20.0, power: 2.0 },
-  paramDefs: {
-    brightness: { label: 'Brightness', type: 'float', min: 0.001, max: 2.0,  step: 0.01, hint: 'Peak glow at distance 0.' },
-    k:          { label: 'Falloff rate',          type: 'float', min: 0.5,   max: 50.0, step: 0.5, hint: 'Higher fades faster.'  },
-    power:      { label: 'Power',      type: 'float', min: 1.0,   max: 4.0,  step: 0.1, hint: 'Exponent on distance. 2 is inverse-square; higher falls off harder.' },
-  },
-  glslFunction: `float glowFalloffFn(float dist, float brightness, float k, float power) {
-    return brightness / (1.0 + pow(max(dist, 0.0), power) * k);
-}`,
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id   = node.id;
-    const dist = inputVars.distance   ?? '0.0';
-    const br   = inputVars.brightness ?? p(node.params.brightness, 0.5);
-    const k    = p(node.params.k,     20.0);
-    const pw   = p(node.params.power,  2.0);
-    return {
-      code: `    float ${id}_glow = glowFalloffFn(${dist}, ${br}, ${k}, ${pw});\n`,
-      outputVars: { glow: `${id}_glow` },
-    };
-  },
-};
-
 // ─── Noisy Grid SDF ───────────────────────────────────────────────────────────
 // Smooth-min of noise-displaced circle SDFs over a grid neighborhood.
 // Circles merge organically when noise brings them close together.

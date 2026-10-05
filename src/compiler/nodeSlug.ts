@@ -50,7 +50,7 @@ const TYPE_ABBREV: Record<string, string> = {
   // Domain Repetition (IQ article)
   mirroredRepeat2D: 'mrep2', limitedRepeat2D: 'lrep2', angularRepeat2D: 'arep2',
   mirroredRepeat3D: 'mrep3',
-  sdCross3D: 'xcross', mengerSponge: 'menger',
+  sdCross3D: 'xcross',
   // Groups / loops
   group: 'grp',
   marchLoopInputs: 'mli', marchLoopOutput: 'mlo', marchSceneDist: 'msd',

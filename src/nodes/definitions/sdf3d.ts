@@ -1253,14 +1253,14 @@ export const MirroredRepeat3DNode: NodeDefinition = {
 /**
  * SD Cross 3D
  * Union of three infinite square bars intersecting at the origin — the
- * building block of the Menger Sponge and a useful standalone primitive.
+ * building block of a Menger sponge and a useful standalone primitive.
  * (From Inigo Quilez "Menger Sponge" article.)
  */
 export const SdCrossNode: NodeDefinition = {
   type: 'sdCross3D',
   label: 'SD Cross 3D',
   category: '3D Primitives',
-  description: 'Union of three infinite square bars along each axis — the cross shape used to build Menger Sponge. size = bar half-thickness.',
+  description: 'Union of three infinite square bars along each axis — the cross shape used to build a Menger sponge. size = bar half-thickness.',
   inputs: {
     pos:  { type: 'vec3',  label: 'Position' },
     size: { type: 'float', label: 'Size' },
@@ -1284,56 +1284,6 @@ export const SdCrossNode: NodeDefinition = {
       ].join(''),
       outputVars: { dist: `${id}_dist` },
     };
-  },
-};
-
-/**
- * Menger Sponge SDF
- * Classic fractal formed by iteratively subtracting a cross-shaped hole from
- * a cube. Each iteration triples the frequency of detail. 1–4 iterations.
- * (From Inigo Quilez "Menger Sponge" article.)
- */
-export const MengerSpongeNode: NodeDefinition = {
-  type: 'mengerSponge',
-  label: 'Menger Sponge',
-  category: '3D Fractals',
-  description: 'Iterative fractal SDF. iterations=3 is real-time; 5+ is too slow. Connect inside SceneGroup → MarchLoopGroup. Increase MarchLoopGroup Max Steps to 128–200.',
-  inputs: {
-    pos:  { type: 'vec3',  label: 'Position' },
-    size: { type: 'float', label: 'Size' },
-  },
-  outputs: { dist: { type: 'float', label: 'Distance' } },
-  defaultParams: { size: 1.0, iterations: 3 },
-  paramDefs: {
-    size:       { label: 'Size',       type: 'float',  min: 0.1, max: 5.0, step: 0.05 },
-    iterations: { label: 'Iterations', type: 'select', options: [1,2,3,4].map(n => ({ value: String(n), label: String(n) })) },
-  },
-  glslFunction: SDF3D_PRIMS_GLSL,
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id    = node.id;
-    const pv    = inputVars.pos  || 'vec3(0.0)';
-    const sz    = inputVars.size || p(node.params.size, 1.0);
-    const iters = Math.max(1, Math.min(4, Number(node.params.iterations) || 3));
-    const lines: string[] = [
-      // Normalize to unit cube, evaluate box SDF, then iterate
-      `    vec3  ${id}_p = ${pv} / ${sz};\n`,
-      `    float ${id}_d = sdf3d_box(${id}_p, vec3(1.0));\n`,
-      `    float ${id}_s = 1.0;\n`,
-    ];
-    for (let m = 0; m < iters; m++) {
-      lines.push(`    { // menger iter ${m + 1}\n`);
-      lines.push(`    vec3  ${id}_a${m} = mod(${id}_p * ${id}_s, 2.0) - 1.0;\n`);
-      lines.push(`    ${id}_s *= 3.0;\n`);
-      lines.push(`    vec3  ${id}_r${m} = abs(1.0 - 3.0 * abs(${id}_a${m}));\n`);
-      lines.push(`    float ${id}_da${m} = max(${id}_r${m}.x, ${id}_r${m}.y);\n`);
-      lines.push(`    float ${id}_db${m} = max(${id}_r${m}.y, ${id}_r${m}.z);\n`);
-      lines.push(`    float ${id}_dc${m} = max(${id}_r${m}.z, ${id}_r${m}.x);\n`);
-      lines.push(`    float ${id}_c${m}  = (min(${id}_da${m}, min(${id}_db${m}, ${id}_dc${m})) - 1.0) / ${id}_s;\n`);
-      lines.push(`    ${id}_d = max(${id}_d, ${id}_c${m}); }\n`);
-    }
-    // Scale distance back to world space
-    lines.push(`    float ${id}_dist = ${id}_d * ${sz};\n`);
-    return { code: lines.join(''), outputVars: { dist: `${id}_dist` } };
   },
 };
 

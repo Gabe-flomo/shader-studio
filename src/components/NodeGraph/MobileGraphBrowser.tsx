@@ -2270,7 +2270,7 @@ export function MobileGraphBrowser() {
     // sockets, so they're already in node.inputs. Some paramDefs never do —
     // a group's own Iterations (a group's `inputs` is built entirely from
     // its ports/ps_ sockets, never its own type's paramDefs), and select-type
-    // params generally (a dropdown like Menger Sponge's Iterations or Mirror
+    // params generally (a dropdown like Raymarch 3D's Shape or Mirror
     // Fold's Symmetry isn't a wireable socket on any node type, so it's
     // never declared in def.inputs either) — so they'd otherwise never get a
     // row here at all. Desktop renders every float/int/select paramDef

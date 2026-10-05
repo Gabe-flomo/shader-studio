@@ -346,7 +346,6 @@ const CURVES: Record<string, Curve> = {
       default:         return 1 / (1 + Math.pow(Math.max(d, 0), pw) * k);
     }
   } }] },
-  glowFalloff: { x: [0, 2], xLabel: 'distance', series: [{ label: 'glow', color: p => p.yellow, fn: (d, n) => num(n, 'brightness', 0.5) / (1 + Math.pow(Math.max(d, 0), num(n, 'power', 2)) * num(n, 'k', 8)) }] },
   metaballThreshold: { x: [0, 2], y: [0, 1], xLabel: 'field', marker: n => num(n, 'threshold', 0.8), series: [
     { label: 'blob', color: p => p.blue, fn: (f, n) => smoothstep(num(n, 'threshold', 0.8) - num(n, 'softness', 0.05), num(n, 'threshold', 0.8) + num(n, 'softness', 0.05), f) },
     { label: 'edge', color: p => p.peach, fn: (f, n) => 1 - smoothstep(0, num(n, 'softness', 0.05) * 2, Math.abs(f - num(n, 'threshold', 0.8))) },
