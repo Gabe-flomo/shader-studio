@@ -95,9 +95,12 @@ outline. The settings are grouped into sections, and each section folds:
 | Slice | Time | **Slice**: the box stands still and Offset moves the crisp frame through it. **Flow**: the crisp frame stays at Frame position and the clip flows through the box past it (see "Flow"). |
 | | Offset | Where the slice sits: 0 is the first frame, 1 the last. |
 | | Frame position, Flow speed, Flow time | Flow only: where the crisp frame sits (0 the front), how fast the clip moves through the box (clip lengths a second, negative runs it backwards), and an offset to drive it by hand. |
-| | Before opacity | How solid the frames before the slice (earlier) are, looking straight through all of them in time. 0.2 lets 80 % of what's behind through. The default is 0.45. |
-| | After opacity | How solid the frames after the slice (later) are. 1 is a solid block. Its sides show each frame's edge pixels running through time: the slit-scan on the outside of the box. |
-| | Slice face | How solid the frame at the slice is. At 1 that frame is drawn crisply, exactly where the ray crosses the plane, not at a march step. |
+| | Before opacity | How solid the frames before the slice (earlier) are: what half the box's length of them hides, looking straight through in time (see "Opacity" below). 0.5 lets half of what's behind through, 0.25 is a light haze. The default is 0.25. |
+| | After opacity | How solid the frames after the slice (later) are, measured the same way. 1 is a solid block. Its sides show each frame's edge pixels running through time: the slit-scan on the outside of the box. |
+| | Feather (frames) | Softens the line between Before and After: the opacity fades from one to the other over this many frames instead of changing at once at the slice. 0 (a new node's default) is the hard line. 16 is about an eighth of a 128-frame box. Live: dragging it never recompiles. |
+| | Feather side | Where the fade sits: −1 before the slice (the default: the frames leading up to it fade in), 0 centred on it, 1 after it (the first frames after it start see-through). In between slides the fade along. |
+| | Feather curve | The fade's shape: 0 smooth at both ends, −1 eases in (stays see-through longer, then firms up near the end), 1 eases out (firms up early). |
+| | Slice face | How solid the frame at the slice is. At 1 that frame is drawn crisply, exactly where the ray crosses the plane, not at a march step. The feather leaves it as it is; lower it as well for an entirely soft look. |
 | | Tilt X° / Tilt Y° | Tilts the slice so time runs across the frame. The cut face becomes a slit-scan. |
 | Shape | Corner roundness | 0 is a sharp box, 1 rounds the edges by half the frame's height: a pill. The default is 0.4. |
 | | Edge softness | Feathers the silhouette and the slice frame's border, like the blurry edges in the reference pictures. 0 is a crisp (anti-aliased) edge. |
@@ -220,11 +223,15 @@ Each node in them has a note.
   - A triangle LFO (0.5 ± 0.47, 14 s a round trip) sweeps the slice.
   - The soft look: Corner roundness 0.4, Edge softness 0.2, a faint lilac rim
     glow, no outline.
+  - Feather 16: the 16 frames just before the slice fade from see-through to
+    solid, so the past melts into the present instead of meeting it at a line.
 - **Time cube: soft pill**
   - After the soft boxes in product illustrations: a pill on white, seen flat
     (Flatten 1), the crisp frame on its face, pastel sides (Side tint 0.85,
     peach to mint), a pink rim glow and a faint shadow.
   - Flow mode with the frame at the front, so the face plays the video.
+  - No feather: with the frame at the very front, a Before feather would haze
+    the face (and wrap round to the back), which spoils the crisp face.
 - **Time cube: highlighted frames loop**
   - Six frames twelve apart, outlined in amber and lifted out of the box.
   - A sawtooth LFO runs the slice through the clip; the highlighted frames ride
@@ -330,12 +337,41 @@ colour    += (1 − alpha) · alpha_step · sample
 alpha     += (1 − alpha) · alpha_step
 ```
 
-- **τ(o)**, the transfer function, is −ln(1 − o) up to 0.95. That makes an
-  opacity "what the region hides looking through its whole length in time",
-  however many steps it takes. From 0.95 it climbs steeply to 1000 at 1, so 1
-  is a hard surface rather than thick fog.
+- **τ(o)**, the transfer function (`plan.ts opticalDepth`, GLSL `tcDepth`),
+  is −ln(1 − o) / 0.5 per box length up to 0.85. That makes an opacity "what a
+  slab half the box long in time hides, looking straight through it", however
+  many steps it takes: a step hides 1 − (1 − o)^(step / (0.5 × time length)).
+  Half the box is how deep the frames before (or after) the slice are at the
+  default Offset, so 0.5 looks half see-through and the slider is even from 0
+  to 0.85 (`slabOpacity`: 0, 0.25, 0.5 and 0.75 hide 0, ¼, ½ and ¾). The look
+  doesn't change with Quality, Frames, Time stretch or Box size.
+- **Above 0.85** the frames firm up into a surface: τ rises on a log scale
+  (eased in, power 1.5) from τ(0.85) ≈ 3.8 to 1000 at 1, a hard surface. Each
+  tick of the slider blends each frame with fewer of its neighbours, so the
+  block sharpens step by step instead of snapping on the last tick. (By then
+  the slab already hides 85 %; what changes is how crisp the frames are.)
+- **Before this change** (view schema 1) an opacity was what the whole box
+  hid, and from 0.95 τ climbed from 3 to 1000: the frames before the slice at
+  0.75 hid only half of what was behind, and nearly all the firming up was in
+  the slider's top 5 %. Graphs saved before are converted when they load
+  (`migrateOpacity`: the same τ, so they look as they did; 0.45, the old
+  default, becomes 0.26, and 1 stays 1): Before, After and Kept opacity, their
+  keyframes, group overrides, and Play controls, mappings and takes on them (a
+  control keeps its step). Others, Highlights' Others and Dark is clear
+  multiply an opacity, so where they are below 1 the old and new curves differ
+  a little (soft key edges are a touch softer).
 - **Where each voxel's opacity comes from:**
-  - the side of the slice plane it is on (Before / After);
+  - the side of the slice plane it is on (Before / After), or, with a
+    **Feather**, where it is on the ramp between them (`style.ts
+    featherOpacity`, GLSL `tcFeather`): Before and After are mixed as they look
+    (the opacities, not τ), over Feather frames placed by Feather side and
+    shaped by Feather curve. A march step still lies on one side of the slice
+    (it stops on the plane); its middle picks the side, so Feather 0 is exactly
+    the hard step. The ramp is read at the step's jittered point, the same
+    per-pixel jitter the colour read uses, so inside the ramp the opacity
+    changes as fine grain instead of in bands one step wide. In Flow the ramp
+    wraps round the box's ends as the clip does: with the frame near the front,
+    the Before fade continues at the back;
   - Dark is clear;
   - the key: matching voxels take Key opacity, the rest Others × their side's
     opacity.
@@ -428,7 +464,7 @@ softness (the coverage belongs to the box).
 **Flow.** The clip time read at box time z is fract(z + τ − Frame position),
 with τ = Flow time + Flow speed × seconds (`style.ts flowTime`). At the frame
 the clip plays; a frame of the clip moves toward the front as τ grows and
-comes round at the back. Before / After are measured from the frame. In Flow
+comes round at the back. Before / After, and the Feather, are measured from the frame. In Flow
 the comb of highlights is shifted by the same amount, so highlighted frames
 belong to the clip and ride the flow; Send through sends the frame at the slice
 (plus Start).
@@ -521,6 +557,20 @@ main's build, in one session; headless WebKit, then headless Chrome), ms:
 | Long exposure | 0.87 | 0.90 | 0.83 | 0.89 |
 | Isolate a colour | 2.63 | 2.43 | 2.61 | 2.38 |
 | Slit-scan | 0.50 | 0.50 | 0.48 | 0.46 |
+
+Temporal feather, at 1920 × 1080 by wall clock over 30 offline frames (best
+of five, three runs), the box example with its camera close so the box fills
+the picture, ms (main's build first, for the opacity change):
+
+| | Chrome | WebKit |
+|---|---|---|
+| main | 1.20–1.40 | 1.33–1.60 |
+| Feather 0 | 1.27–1.37 | 1.50–1.60 |
+| Feather 16 (the example's) | 1.34–1.38 | 1.47–1.60 |
+| Feather 48, centred | 1.40–1.51 | 1.50–1.63 |
+
+The feather is one more function of box time a step and no more reads: within
+the noise up to a modest feather, about 0.1 ms with a wide one.
 
 Building a volume:
 
@@ -618,8 +668,16 @@ They cover:
 
 - frame-stack planning: counts, spacing, caps and memory, tile rounding, and
   the tile ↔ atlas mapping;
-- the transfer function: opacity over a length, the hard surface at 1, before
+- the transfer function: opacity over half the box whatever the steps, the
+  sliders even through a slab (0, 0.25, 0.5, 0.75, 1), the knee and the hard
+  surface at 1 with no snap, old opacities converting to the same depth, before
   and after, Dark is clear, the key modes;
+- the feather (`timeCubeFeather.test.ts`): 0 is the hard step, the three
+  sides and the slide between them, the curves, the wrap in Flow (and none in
+  Slice), the ramp read at the jittered point; Feather, side and curve live in
+  Slice and Flow with highlights, key, motion and focus (dragging them leaves
+  the shader unchanged); the box example's feather and notes; old graphs and
+  their Play controls migrating;
 - the slice plane and box mapping;
 - compiling: one sampler per Time Cube, shared helpers, the layout defines,
   every slider live, a March Camera wired in, an unwired view;

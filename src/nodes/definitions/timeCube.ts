@@ -3,6 +3,7 @@ import { p, pv3 } from './helpers';
 import { planFrameStack, stackSettingsOf, FRAME_WIDTHS, MAX_FRAMES, MIN_FRAMES } from '../../lib/timeCube/plan';
 import { DEMO_META } from '../../lib/timeCube/frames';
 import { APERTURE } from '../../lib/timeCube/style';
+import { KNEE_EASE, migrateOpacity, OD_SOLID, OPACITY_KNEE, OPACITY_REF } from '../../lib/timeCube/plan';
 
 /**
  * Time cube (docs/time-cube.md): a video as a box of time.
@@ -83,12 +84,38 @@ const TC_FRAMES = `float tcFrames(sampler2D tex, vec4 lay, vec2 inset, vec3 q, o
     return f - f0;
 }`;
 
-/** Optical depth across the box's length in time for an opacity (plan.ts opticalDepth): 1 is a hard surface. */
+/**
+ * Optical depth across the box's length in time for an opacity (plan.ts opticalDepth): up to the
+ * knee the opacity is what a slab OPACITY_REF of the box thick hides, so the sliders are even; above
+ * it the frames firm up evenly into the hard surface at 1.
+ */
 const TC_DEPTH = `float tcDepth(float o) {
     o = clamp(o, 0.0, 1.0);
-    if (o <= 0.95) return -log(1.0 - o);
-    float k = (o - 0.95) / 0.05;
-    return 2.9957323 + (1000.0 - 2.9957323) * k * k;
+    if (o >= 1.0) return ${fx(OD_SOLID)};
+    if (o <= ${fx(OPACITY_KNEE)}) return -log(1.0 - o) * ${fx(1 / OPACITY_REF)};
+    return ${fx(-Math.log(1 - OPACITY_KNEE) / OPACITY_REF)} * pow(${fx(OD_SOLID / (-Math.log(1 - OPACITY_KNEE) / OPACITY_REF))}, pow((o - ${fx(OPACITY_KNEE)}) / ${fx(1 - OPACITY_KNEE)}, ${fx(KNEE_EASE)}));
+}`;
+
+/**
+ * The temporal feather (style.ts featherEase, featherOpacity): Before / After opacity ramping over
+ * fe.x of box time instead of stepping at the slice s. fe = (width, side −1 before / 0 centred / 1
+ * after, curve, wrap). gm (the step's middle) picks the side as the hard step does; g (the step's
+ * jittered point) reads the ramp.
+ */
+const TC_FEATHER = `float tcEase(float x, float c) {
+    x = clamp(x, 0.0, 1.0);
+    c = clamp(c, -1.0, 1.0);
+    float s = x * x * (3.0 - 2.0 * x);
+    return c < 0.0 ? mix(s, x * x, -c) : mix(s, 1.0 - (1.0 - x) * (1.0 - x), c);
+}
+float tcFeather(float gm, float g, float s, vec4 fe, float bo, float ao) {
+    float base = gm < s ? bo : ao;
+    if (fe.x <= 0.0) return base;
+    float w = min(fe.x, 1.0);
+    float d = g - s + 0.5 * w * (1.0 - clamp(fe.y, -1.0, 1.0));
+    if (fe.w > 0.5) d = fract(d);
+    if (d < 0.0 || d >= w) return base;
+    return mix(bo, ao, tcEase(d / w, fe.z));
 }`;
 
 const TC_HUESAT = `vec2 tcHueSat(vec3 c) {
@@ -405,7 +432,8 @@ export const TimeCubeNode: NodeDefinition = {
 
 /** The view's defaults. The GLSL reads a missing setting (an older save) as its default. */
 const VIEW_DEFAULTS = {
-  timeMode: 'slice', slice: 0.5, framePos: 0.5, flowSpeed: 0.05, flowTime: 0, before: 0.45, after: 1, sliceOpacity: 1, tiltX: 0, tiltY: 0,
+  timeMode: 'slice', slice: 0.5, framePos: 0.5, flowSpeed: 0.05, flowTime: 0, before: 0.25, after: 1, sliceOpacity: 1, tiltX: 0, tiltY: 0,
+  timeFeather: 0, featherSide: -1, featherCurve: 0,
   roundness: 0.4, feather: 0.18, bulge: 0,
   rimStrength: 0.35, rimWidth: 0.08, rimColor: [0.78, 0.6, 1], tintAmount: 0, tintFrom: [1, 0.8, 0.55], tintTo: [0.7, 0.93, 0.75], tintAlong: 'diagonal',
   shadow: 0, shadowSoftness: 0.3, shadowGap: 0.06,
@@ -429,9 +457,12 @@ const VIEW_PARAMS: Record<string, ParamDef> = {
   framePos:     { section: 'Slice', label: 'Frame position', type: 'float', min: 0, max: 1, step: 0.001, showWhen: { param: 'timeMode', value: 'flow' }, hint: 'Flow: where the crisp frame sits in the box, 0 the front (where time starts) to 1 the back.' },
   flowSpeed:    { section: 'Slice', label: 'Flow speed', type: 'float', min: -1, max: 1, step: 0.005, showWhen: { param: 'timeMode', value: 'flow' }, hint: 'Flow: how fast the video moves through the box, in clip lengths a second (0.05 plays the whole clip at the frame every 20 s). Negative runs it backwards.' },
   flowTime:     { section: 'Slice', label: 'Flow time', type: 'float', min: 0, max: 1, step: 0.001, showWhen: { param: 'timeMode', value: 'flow' }, hint: 'Flow: an offset added to the flow, in clip lengths. Wire Time, an LFO or a Play control into it to drive the flow yourself (set Flow speed 0).' },
-  before:       { section: 'Slice', label: 'Before opacity', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How solid the frames before the slice are, looking through all of them: 0.2 lets most of what is behind show through.' },
-  after:        { section: 'Slice', label: 'After opacity', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How solid the frames after the slice are. 1 is a solid block whose sides show each frame\'s edge pixels through time.' },
-  sliceOpacity: { section: 'Slice', label: 'Slice face', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How solid the frame at the slice is: 1 shows that frame crisply.' },
+  before:       { section: 'Slice', label: 'Before opacity', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How solid the frames before the slice are: what half the box\'s length of them hides, looking straight through. 0.5 lets half of what is behind through; 0.25 is a light haze.' },
+  after:        { section: 'Slice', label: 'After opacity', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How solid the frames after the slice are, measured the same way. 1 is a solid block whose sides show each frame\'s edge pixels through time.' },
+  timeFeather:  { section: 'Slice', label: 'Feather (frames)', type: 'float', min: 0, max: 64, step: 0.5, hint: 'Softens the line between Before and After: the opacity fades from one to the other over this many frames, instead of changing at once at the slice. 0 is the hard line; 12 fades over about a tenth of a 128-frame box.' },
+  featherSide:  { section: 'Slice', label: 'Feather side', type: 'float', min: -1, max: 1, step: 0.05, hint: 'Where the fade sits: −1 before the slice (the frames leading up to it fade in), 0 centred on it, 1 after it.' },
+  featherCurve: { section: 'Slice', label: 'Feather curve', type: 'float', min: -1, max: 1, step: 0.05, hint: 'The fade\'s shape: 0 smooth at both ends, −1 eases in (stays see-through longer, then firms up near the end), 1 eases out (firms up early).' },
+  sliceOpacity: { section: 'Slice', label: 'Slice face', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How solid the frame at the slice is: 1 shows that frame crisply. Lower it with a Feather for an entirely soft look.' },
   tiltX:        { section: 'Slice', label: 'Tilt X°', type: 'float', min: -75, max: 75, step: 0.5, hint: 'Tilts the slice so time runs across the frame from left to right: the slit-scan look.' },
   tiltY:        { section: 'Slice', label: 'Tilt Y°', type: 'float', min: -75, max: 75, step: 0.5, hint: 'Tilts the slice so time runs from bottom to top.' },
 
@@ -545,6 +576,14 @@ export function keyAnimOn(P: Record<string, unknown>): boolean {
   return num(P.pulse) > 0 || num(P.lightning) > 0 || num(P.keyHueDrift) !== 0;
 }
 
+/**
+ * Time Cube View's schema. 2: the opacity sliders (Before, After, Kept) are what half the box's
+ * length hides (plan.ts OPACITY_REF), even from 0 to 1; before, they were what the whole box hid and
+ * jumped to solid above 0.95. Loading an older graph converts them (plan.ts migrateOpacity).
+ */
+export const TIME_CUBE_VIEW_VERSION = 2;
+const OPACITY_PARAMS = new Set(['before', 'after', 'keyOpacity']);
+
 /** The axes across a frame (not time), per stack axis: the march's box grows along them for moved frames. */
 const PERP: Record<string, string> = { z: 'vec3(1.0, 1.0, 0.0)', x: 'vec3(0.0, 1.0, 1.0)', y: 'vec3(1.0, 0.0, 1.0)' };
 
@@ -559,6 +598,7 @@ export const TimeCubeViewNode: NodeDefinition = {
     start: [
       'Wire a Time Cube\'s Volume in and the Color out to the Output.',
       'Drag Offset, or wire an LFO (amplitude 0.5, offset 0.5) into it to sweep through time.',
+      'Before / After opacity: 0.5 is half see-through, 1 solid. Feather (frames) fades the line at the slice into a gradient over that many frames.',
       'Shape: Corner roundness and Edge softness. Glow: a rim, a pastel side tint, a shadow; set Background light for the soft-pill look.',
       'Highlights: Count above 0 picks out frames Spacing apart; they travel with Offset and loop round. Frame motion: Lift moves frames up as the slice passes.',
       'To place it in a raymarched scene: wire a March Camera\'s Ray Origin and Ray Dir in, the March Loop\'s Color into Background and its Distance into Scene distance.',
@@ -577,10 +617,30 @@ export const TimeCubeViewNode: NodeDefinition = {
     color: { type: 'vec3', label: 'Color', hint: 'The box over the background.' },
     alpha: { type: 'float', label: 'Alpha', hint: 'How much of this pixel the box covers, with its glow, outline and shadow.' },
   },
-  defaultParams: { ...VIEW_DEFAULTS },
+  // Schema 2: Before / After / Kept opacity are measured over half the box (plan.ts OPACITY_REF), so
+  // the sliders are even; graphs saved before are converted on load to look as they did.
+  defaultParams: { ...VIEW_DEFAULTS, _schemaVersion: TIME_CUBE_VIEW_VERSION },
+  version: TIME_CUBE_VIEW_VERSION,
+  migrateParamValue: (key, value, fromVersion) =>
+    fromVersion < TIME_CUBE_VIEW_VERSION && OPACITY_PARAMS.has(key) && typeof value === 'number' ? migrateOpacity(value) : value,
+  migrateParams: (params, fromVersion) => {
+    if (fromVersion >= TIME_CUBE_VIEW_VERSION) return params;
+    const out = { ...params };
+    for (const k of OPACITY_PARAMS) {
+      // A node saved without the setting drew the old default.
+      const v = typeof out[k] === 'number' ? out[k] as number : (k === 'before' ? 0.45 : 1);
+      out[k] = migrateOpacity(v);
+      const kf = out[`__keyframes_${k}`];
+      if (Array.isArray(kf)) {
+        out[`__keyframes_${k}`] = kf.map(e => (e && typeof e === 'object' && typeof (e as { v?: unknown }).v === 'number'
+          ? { ...e, v: migrateOpacity((e as { v: number }).v) } : e));
+      }
+    }
+    return out;
+  },
   paramDefs: VIEW_PARAMS,
   assignable: false,
-  glslFunctions: [TC_TILE, TC_SAMPLE, TC_FRAMES, TC_DEPTH, TC_HUESAT, TC_KEY, TC_UVT, TC_SHAPE, TC_MOTION, TC_FX, TC_PULSE, TC_BLUR, TC_RAYSEG, TC_MARCH],
+  glslFunctions: [TC_TILE, TC_SAMPLE, TC_FRAMES, TC_DEPTH, TC_FEATHER, TC_HUESAT, TC_KEY, TC_UVT, TC_SHAPE, TC_MOTION, TC_FX, TC_PULSE, TC_BLUR, TC_RAYSEG, TC_MARCH],
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id, P = node.params;
     const D = VIEW_DEFAULTS as Record<string, unknown>;
@@ -866,6 +926,8 @@ export const TimeCubeViewNode: NodeDefinition = {
       `    float $_kx = tan(radians(clamp(${f('tiltX')}, -85.0, 85.0)));\n`,
       `    float $_ky = tan(radians(clamp(${f('tiltY')}, -85.0, 85.0)));\n`,
       `    vec4 $_st = vec4($_sl0, $_kx, $_ky, ${AX});\n`,
+      // Temporal feather (style.ts featherOpacity): its width in box time, side, curve; in Flow it wraps round.
+      `    vec4 $_tf = vec4(max(${f('timeFeather')}, 0.0) / max(${lay}.z - 1.0, 1.0), ${f('featherSide')}, ${f('featherCurve')}, ${flow ? '1.0' : '0.0'});\n`,
       // Highlights: a comb of frames in time (style.ts highlightComb).
       `    float $_fs = 1.0 / max(${lay}.z - 1.0, 1.0);\n`,
       ...(HL ? [`    float $_hlOn = step(1.0, ${f('hlCount')});\n`] : ['    float $_hlOn = 0.0;\n']),
@@ -1007,9 +1069,11 @@ export const TimeCubeViewNode: NodeDefinition = {
         // even when rounding puts its plane a hair behind the slice's: else pixels flip between the two.
         '            if ($_th <= $_tb + 1e-4) { $_tb = max($_th, $_ta); $_ev = 2; $_gH = $_cn; $_hNeed = $_hOn; }\n',
       ] : []),
-      // The stretch [ta, tb] lies on one side of the slice: its opacity before the picture is read.
+      // The stretch [ta, tb] lies on one side of the slice: its opacity before the picture is read. With a
+      // feather, the ramp is read at the stretch's jittered point, so it shows as fine grain, not bands.
       '            float $_gmid = $_gA + $_gS * (0.5 * ($_ta + $_tb) - $_en);\n',
-      `            float $_ob = $_gmid < $_sl0 ? ${f('before')} : ${f('after')};\n`,
+      '            float $_gj = $_gA + $_gS * ($_ta + $_j * ($_tb - $_ta) - $_en);\n',
+      `            float $_ob = tcFeather($_gmid, $_gj, $_sl0, $_tf, ${f('before')}, ${f('after')});\n`,
       hlDim,
       // Read where a ray through this stuff would most likely stop: at the start of a nearly solid stretch (its surface), anywhere in a thin one.
       '            float $_tm = $_ta + tcFreeFlight($_j, tcDepth($_ob) / $_tl, $_tb - $_ta);\n',

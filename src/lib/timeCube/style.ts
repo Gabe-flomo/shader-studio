@@ -288,3 +288,44 @@ export function frameFx(c: V3, t: number, age: number, hue: number, levels: numb
   }
   return [clamp(r, 0, 1), clamp(g, 0, 1), clamp(b, 0, 1)];
 }
+
+// ── Temporal feather ─────────────────────────────────────────────────────────
+
+/**
+ * The feather's curve (GLSL tcEase), x 0–1 across it: 0 smooth (eases in and out), toward −1 it
+ * eases in (stays near Before longer, then firms up), toward 1 it eases out (firms up early).
+ */
+export function featherEase(x: number, curve: number): number {
+  const t = clamp(x, 0, 1), c = clamp(curve, -1, 1);
+  const s = t * t * (3 - 2 * t);
+  return c < 0 ? s + (t * t - s) * -c : s + (1 - (1 - t) * (1 - t) - s) * c;
+}
+
+export interface TimeFeather {
+  /** How long the ramp is, in box time (0–1): Feather frames / (frames − 1). 0 is the hard step. */
+  width: number;
+  /** Where it sits: −1 before the slice (leading up to it), 0 centred on it, 1 after it. */
+  side: number;
+  /** featherEase's curve. */
+  curve: number;
+  /** Flow: the ramp wraps round the box's ends, as the clip does. */
+  wrap: boolean;
+}
+
+/**
+ * Before / After opacity with a temporal feather (GLSL tcFeather): instead of the hard step at the
+ * slice `s`, the opacity ramps from Before to After over `width` of box time. `gStep` is the march
+ * step's middle, which decides the side as before (so width 0 is exactly the old step); `g` is where
+ * in the step the ramp is read (the step's jittered point, so the ramp shows as fine grain, never
+ * as bands one step wide). Opacities are mixed as they look (the sliders are even), not as depths.
+ */
+export function featherOpacity(gStep: number, g: number, s: number, before: number, after: number, f: TimeFeather): number {
+  const base = gStep < s ? before : after;
+  if (!(f.width > 0)) return base;
+  const w = Math.min(f.width, 1);
+  const side = clamp(f.side, -1, 1);
+  let d = g - s + 0.5 * w * (1 - side);
+  if (f.wrap) d = fract(d);
+  if (d < 0 || d >= w) return base;
+  return before + (after - before) * featherEase(d / w, f.curve);
+}

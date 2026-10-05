@@ -164,27 +164,86 @@ export function capText(plan: StackPlan): string {
 
 // ── Transfer function ────────────────────────────────────────────────────────
 
-const OD_95 = -Math.log(0.05);
-const OD_MAX = 1000;
+/**
+ * The reference thickness the opacity sliders are measured over, as a share of the box's length in
+ * time: half the box, which is how deep the frames before (or after) the slice are at the default
+ * Offset 0.5. An opacity is how much a slab this thick hides, looking straight through it in time:
+ * 0.5 lets half of what is behind it through, 1 is solid. The look does not change with Quality (the
+ * step count), Frames, Time stretch or Box size. GLSL: tcDepth in the view.
+ */
+export const OPACITY_REF = 0.5;
 
 /**
- * Optical depth across the box's full length in time for an opacity setting. Opacity is "how much
- * of what is behind this region it hides, looking straight through all of it": 0.3 lets 70 % of the
- * light through the whole box. Near 1 it climbs steeply, so 1 is a hard, opaque surface (a frame
- * face) rather than thick fog. GLSL: tcDepth.
+ * Where the opacity sliders stop measuring a see-through slab and start firming the frames up into
+ * a solid surface (GLSL tcDepth). Up to here an opacity is exactly what a slab OPACITY_REF thick
+ * hides. Above it the depth rises on a log scale (easing in) to the hard surface at 1, so the last
+ * stretch of the slider sharpens the block step by step (frames blended over fewer and fewer of
+ * their neighbours) instead of snapping from a soft blend to crisp on the final tick.
+ */
+export const OPACITY_KNEE = 0.85;
+/** The depth used for an opacity of 1 (as before the change): opaque within a hair of the surface. */
+export const OD_SOLID = 1000;
+const OD_KNEE = -Math.log(1 - OPACITY_KNEE) / OPACITY_REF;
+/** How the firming eases in above the knee (on the log of the depth): 1.5 starts it gently. */
+export const KNEE_EASE = 1.5;
+
+/**
+ * Optical depth across the box's full length in time for an opacity (GLSL tcDepth): up to the knee
+ * the opacity holds over OPACITY_REF of the box, so a step `len` long hides 1 − (1 − v)^(len / (ref
+ * × time length)) of what is behind it; then on to OD_SOLID, a hard, opaque surface (a frame face).
  */
 export function opticalDepth(opacity: number): number {
   const o = clamp(opacity, 0, 1);
   if (o <= 0) return 0;
-  if (o <= 0.95) return -Math.log(1 - o);
-  // From −ln 0.05 (≈ 3.0, continuous at 0.95) up to 1000 at 1: opaque within a hair of the surface.
-  const k = (o - 0.95) / 0.05;
-  return OD_95 + (OD_MAX - OD_95) * k * k;
+  if (o >= 1) return OD_SOLID;
+  if (o <= OPACITY_KNEE) return -Math.log(1 - o) / OPACITY_REF;
+  return OD_KNEE * Math.pow(OD_SOLID / OD_KNEE, Math.pow((o - OPACITY_KNEE) / (1 - OPACITY_KNEE), KNEE_EASE));
+}
+
+/** The opacity whose depth is `depth` (the inverse of opticalDepth). */
+export function opacityForDepth(depth: number): number {
+  if (depth <= 0) return 0;
+  if (depth >= OD_SOLID) return 1;
+  if (depth <= OD_KNEE) return 1 - Math.exp(-depth * OPACITY_REF);
+  return OPACITY_KNEE + (1 - OPACITY_KNEE) * Math.pow(Math.log(depth / OD_KNEE) / Math.log(OD_SOLID / OD_KNEE), 1 / KNEE_EASE);
 }
 
 /** Alpha of one march step `len` long, in a box whose time axis is `timeLen` long. */
 export function stepAlpha(opacity: number, len: number, timeLen: number): number {
   return 1 - Math.exp(-opticalDepth(opacity) * len / Math.max(1e-6, timeLen));
+}
+
+/**
+ * What a slab of time `thick` (a share of the box's length) hides at an opacity: the composite of
+ * marching through it in `steps` steps. At thick = OPACITY_REF it is the opacity itself, whatever
+ * the steps: the sliders are even from 0 to 1.
+ */
+export function slabOpacity(opacity: number, thick: number, steps = 64): number {
+  let a = 0;
+  const one = stepAlpha(opacity, thick / steps, 1);
+  for (let i = 0; i < steps; i++) a += (1 - a) * one;
+  return a;
+}
+
+// Before view schema 2 an opacity was what the whole box's length hid, and from 0.95
+// it climbed steeply to a surface at 1: most of the change was in the top 5 % of the slider.
+const OD_95 = -Math.log(0.05);
+const OD_MAX = 1000;
+/** The optical depth (whole box) an opacity setting had before the change (schema 1). */
+export function legacyOpticalDepth(opacity: number): number {
+  const o = clamp(opacity, 0, 1);
+  if (o <= 0) return 0;
+  if (o <= 0.95) return -Math.log(1 - o);
+  const k = (o - 0.95) / 0.05;
+  return OD_95 + (OD_MAX - OD_95) * k * k;
+}
+
+/**
+ * An opacity saved before the change, in today's units, so an old graph looks as it did: the same
+ * optical depth. 1 stays 1; 0.45 (the old default) becomes about 0.26.
+ */
+export function migrateOpacity(old: number): number {
+  return Math.round(opacityForDepth(legacyOpticalDepth(old)) * 1e4) / 1e4;
 }
 
 const luma = (c: readonly number[]) => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
