@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { summarizeSection, sectionSwitchKey } from '../sectionSummary';
+import { summarizeSection, sectionSwitchKey, switchOnPatch } from '../sectionSummary';
 import { isParamVisible } from '../../compiler/uniformPatcher';
 import { TimeCubeViewNode, TimeCubeNode } from '../../nodes/definitions/timeCube';
 import { getNodeDefinition } from '../../nodes/definitions';
@@ -101,5 +101,38 @@ describe('bool showWhen gates (toggle → visibility)', () => {
         if (gate?.type === 'bool') expect(['true', 'false']).toEqual(expect.arrayContaining([pd.showWhen.value].flat()));
       }
     }
+  });
+});
+
+describe('switchOnPatch', () => {
+  const view = TimeCubeViewNode;
+  const defs = view.paramDefs!;
+
+  it('turning Frame motion / Frame effects on gives still-default controls a visible start', () => {
+    const motion = switchOnPatch('motion', defs.motion, {}, view.defaultParams);
+    expect(motion.motion).toBe(true);
+    expect(Object.keys(motion).filter(k => k !== 'motion').every(k => motion[k] !== view.defaultParams![k])).toBe(true);
+    expect(Object.keys(motion).length).toBeGreaterThan(1);
+    const fx = switchOnPatch('effects', defs.effects, {}, view.defaultParams);
+    expect(Object.keys(fx).length).toBeGreaterThan(1);
+  });
+
+  it('keeps a value the user already set', () => {
+    const patch = switchOnPatch('motion', defs.motion, { liftUp: -0.4 }, view.defaultParams);
+    expect('liftUp' in patch).toBe(false);
+  });
+
+  it('a switch without starting values only writes itself', () => {
+    expect(switchOnPatch('highlights', defs.highlights, {}, view.defaultParams)).toEqual({ highlights: true });
+  });
+
+  it('every feature switch on Time Cube View has something visible once on', () => {
+    // Highlights draws with its defaults (Count 3); motion and effects need their starting values.
+    for (const key of ['motion', 'effects']) {
+      const on = { ...view.defaultParams, ...switchOnPatch(key, defs[key], {}, view.defaultParams) };
+      const section = defs[key].section!;
+      expect(summary(view, section, on).changed, section).toBeGreaterThan(0);
+    }
+    expect(view.defaultParams!.hlCount).toBeGreaterThan(0);
   });
 });

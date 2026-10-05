@@ -75,7 +75,7 @@ import { videoEngine } from '../../lib/videoEngine';
 import { errorMessage } from '../../utils/fileIO';
 import type { FileResult } from '../../utils/fileIO';
 import { isParamVisible } from '../../compiler/uniformPatcher';
-import { summarizeSection } from '../../lib/sectionSummary';
+import { summarizeSection, switchOnPatch } from '../../lib/sectionSummary';
 import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { Menu } from '../ui/Menu';
@@ -4564,7 +4564,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 <ParamLabel>{paramDef.label}</ParamLabel>
                 <Toggle checked={val} onChange={v => key === 'volumetric' && VOLUMETRIC_LOOP_TYPES.has(node.type)
                   ? useNodeGraphStore.getState().setLoopVolumetric(node.id, v)
-                  : updateNodeParams(node.id, { [key]: v })} />
+                  // Switching a feature on also gives its still-default controls their starting values (whenOn).
+                  : updateNodeParams(node.id, v ? switchOnPatch(key, paramDef, node.params, def?.defaultParams) : { [key]: v })} />
               </div>
             );
           }

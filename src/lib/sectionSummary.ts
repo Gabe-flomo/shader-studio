@@ -78,3 +78,20 @@ export function summarizeSection(
   }
   return { controls, changed, text: `${plural(controls, 'control')}${changedText}` };
 }
+
+/**
+ * The params to write when a bool switch is turned on: the switch itself, plus its `whenOn`
+ * starting values for any control still at its default (a value you chose is left alone).
+ */
+export function switchOnPatch(
+  key: string,
+  pd: ParamDef,
+  params: Record<string, unknown>,
+  defaults?: Record<string, unknown>,
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = { [key]: true };
+  for (const [k, v] of Object.entries(pd.whenOn ?? {})) {
+    if (sameValue(valueOf(k, params, defaults), defaults?.[k])) patch[k] = v;
+  }
+  return patch;
+}
