@@ -2,6 +2,7 @@ import type { GraphNode, NodeDefinition, ParamDef } from '../../types/nodeGraph'
 import { p, pv3 } from './helpers';
 import { planFrameStack, stackSettingsOf, FRAME_WIDTHS, MAX_FRAMES, MIN_FRAMES } from '../../lib/timeCube/plan';
 import { DEMO_META } from '../../lib/timeCube/frames';
+import { APERTURE } from '../../lib/timeCube/style';
 
 /**
  * Time cube (docs/time-cube.md): a video as a box of time.
@@ -218,19 +219,38 @@ vec4 tcBurstAt(float k, vec4 ll) {
     float h2 = tcHash(k * 2.17 + ll.y * 5.3 + 23.0);
     float age = s - k - h0 * 0.5;
     float fire = step(h2, 0.8) * step(0.0, age);
-    float flick = 0.55 + 0.45 * step(0.35, tcHash(floor(ll.w * 24.0) + k * 7.0));
-    return vec4(h1, max(ll.z, 0.002) * (0.4 + 0.75 * h2), fire * exp(-max(age, 0.0) * 8.0) * flick, 0.0);
+    float flick = 0.7 + 0.3 * step(0.35, tcHash(floor(ll.w * 24.0) + k * 7.0));
+    return vec4(h1, max(ll.z, 0.002) * (0.4 + 0.75 * h2), fire * exp(-max(age, 0.0) / max(ll.x, 0.01) * 10.0) * flick, 0.0);
 }
 float tcBurst(float x, vec4 b) { return b.z * (1.0 - smoothstep(b.y * 0.35, b.y, abs(x - b.x))); }`;
 
-/** Depth of field on the frames: four reads round the point, `r` across (frame units); one read when in focus. */
-const TC_BLUR = `vec3 tcSampleBlur(sampler2D tex, vec4 lay, vec2 inset, vec3 q, vec2 r) {
+/**
+ * Depth of field on the frames (lib/timeCube/style.ts blurTaps): `n` reads spread evenly over a disc
+ * `r` across (frame units) on a golden-angle spiral, turned by `rot` (a per-pixel angle), so what
+ * is left over is fine grain, not copies of the picture; one read when in focus. Both frames either
+ * side of the time are read at each point, as tcSample does.
+ */
+const TC_BLUR = `vec3 tcSampleBlur(sampler2D tex, vec4 lay, vec2 inset, vec3 q, vec2 r, float rot, float n) {
     if (r.x + r.y < 2e-4) return tcSample(tex, lay, inset, q);
-    vec3 c = tcSample(tex, lay, inset, q + vec3(r * vec2(0.35, 0.6), 0.0));
-    c += tcSample(tex, lay, inset, q + vec3(r * vec2(-0.6, 0.35), 0.0));
-    c += tcSample(tex, lay, inset, q + vec3(r * vec2(-0.35, -0.6), 0.0));
-    c += tcSample(tex, lay, inset, q + vec3(r * vec2(0.6, -0.35), 0.0));
-    return c * 0.25;
+    float f = clamp(q.z, 0.0, 1.0) * (lay.z - 1.0);
+    float f0 = floor(f);
+    float f1 = min(f0 + 1.0, lay.z - 1.0);
+    vec3 c = vec3(0.0);
+    // Each read turns by the golden angle (a rotation, not a cos and sin per read).
+    vec2 d = vec2(cos(rot), sin(rot));
+    mat2 G = mat2(-0.7373688, 0.6754903, -0.6754903, -0.7373688);
+    float inv = 1.0 / n;
+    for (int i = 0; i < 32; i++) {
+        if (float(i) >= n) break;
+        vec2 uv = clamp(q.xy + d * sqrt((float(i) + 0.5) * inv) * r, inset, 1.0 - inset);
+        c += mix(texture2D(tex, tcTile(lay, f0, uv)).rgb, texture2D(tex, tcTile(lay, f1, uv)).rgb, f - f0);
+        d = G * d;
+    }
+    return c * inv;
+}
+float tcBlurTaps(float rpx, float fine, float share) {
+    float n = fine > 0.5 ? clamp(0.6 * rpx * rpx, 6.0, 32.0) : clamp(0.25 * rpx * rpx, 4.0, 8.0);
+    return rpx < 0.5 ? 1.0 : max(ceil(n * clamp(share * 8.0, 0.0, 1.0)), 1.0);
 }`;
 
 /** Closest approach of a ray to a segment: (distance, distance along the ray). */
@@ -248,7 +268,77 @@ vec2 tcRaySeg(vec3 ro, vec3 rd, vec3 a, vec3 b) {
     return vec2(length(ro + rd * t - a - ba * s), t);
 }`;
 
-const axisOf = (v: unknown) => (v === 'x' || v === 'y' ? v : 'z');
+/**
+ * The march's exact parts (lib/timeCube/march.ts): where a ray first meets a rounded box (rd of unit
+ * length; -1 for a miss), after Inigo Quilez's rounded-box intersection; the next highlighted frame
+ * after box time g going `dir`; and where in a step to read the volume (a free flight: near the
+ * step's start when it is nearly solid, anywhere in it when thin).
+ */
+const TC_MARCH = `float tcRayRoundBoxIn(vec3 ro, vec3 rd, vec3 b, float r) {
+    vec3 size = b - r;
+    vec3 m = 1.0 / (rd + vec3(equal(rd, vec3(0.0))) * 1e-12);
+    vec3 n = m * ro;
+    vec3 k = abs(m) * b;
+    vec3 t1 = -n - k, t2 = -n + k;
+    float tN = max(max(t1.x, t1.y), t1.z);
+    float tF = min(min(t2.x, t2.y), t2.z);
+    if (tN > tF || tF < 0.0) return -1.0;
+    vec3 s = vec3(greaterThanEqual(ro + tN * rd, vec3(0.0))) * 2.0 - 1.0;
+    vec3 o = ro * s, d = rd * s;
+    vec3 pos = o + tN * d - size;
+    pos = max(pos.xyz, pos.yzx);
+    if (min(min(pos.x, pos.y), pos.z) < 0.0) return tN;
+    vec3 oc = o - size, dd = d * d, oo = oc * oc, od = oc * d;
+    float ra2 = r * r, t = 1e20;
+    float bb = od.x + od.y + od.z, c = oo.x + oo.y + oo.z - ra2, h = bb * bb - c;
+    if (h > 0.0) t = -bb - sqrt(h);
+    float a = dd.y + dd.z; bb = od.y + od.z; c = oo.y + oo.z - ra2; h = bb * bb - a * c;
+    if (h > 0.0 && a > 1e-12) { h = (-bb - sqrt(h)) / a; if (h > 0.0 && h < t && abs(o.x + d.x * h) < size.x) t = h; }
+    a = dd.z + dd.x; bb = od.z + od.x; c = oo.z + oo.x - ra2; h = bb * bb - a * c;
+    if (h > 0.0 && a > 1e-12) { h = (-bb - sqrt(h)) / a; if (h > 0.0 && h < t && abs(o.y + d.y * h) < size.y) t = h; }
+    a = dd.x + dd.y; bb = od.x + od.y; c = oo.x + oo.y - ra2; h = bb * bb - a * c;
+    if (h > 0.0 && a > 1e-12) { h = (-bb - sqrt(h)) / a; if (h > 0.0 && h < t && abs(o.z + d.z * h) < size.z) t = h; }
+    return t > 1e19 ? -1.0 : t;
+}
+float tcCombOne(float g, float dir, float base, float S, float n) {
+    float x = (g - base) / S;
+    if (dir > 0.0) {
+        float k = max(floor(x) + 1.0, 0.0);
+        if (base + k * S <= g) k += 1.0;
+        return k > n - 1.0 ? 1e9 : base + k * S;
+    }
+    float k = min(ceil(x) - 1.0, n - 1.0);
+    if (base + k * S >= g) k -= 1.0;
+    return k < 0.0 ? -1e9 : base + k * S;
+}
+float tcCombNext(float g, float dir, vec4 hl) {
+    float S = max(hl.y, 1e-4), n = max(floor(hl.z + 0.5), 1.0);
+    if (hl.w < 0.5) return tcCombOne(g, dir, hl.x, S, n);
+    float m0 = floor(g - hl.x);
+    float best = dir * 1e9;
+    for (int m = -1; m <= 1; m++) {
+        float c = tcCombOne(g, dir, hl.x + m0 + float(m), S, n);
+        if (dir > 0.0 ? c < best : c > best) best = c;
+    }
+    return best;
+}
+float tcFreeFlight(float j, float sigma, float len) {
+    float tau = sigma * len;
+    if (tau < 1e-4) return j * len;
+    return min(-log(1.0 - j * (1.0 - exp(-tau))) / sigma, len);
+}
+float tcSide(vec3 p, vec3 B, vec4 st) {
+    vec3 w = tcUvt((p + B) * (0.5 / B), st.w);
+    return w.z - st.y * (w.x - 0.5) - st.z * (w.y - 0.5);
+}
+float tcFootprint(vec3 rd, vec3 gd, vec3 gn, float px) {
+    float dn = dot(rd, gn);
+    vec3 w = gd - gn * (dot(gd, rd) / (abs(dn) > 1e-4 ? dn : (dn < 0.0 ? -1e-4 : 1e-4)));
+    w -= rd * dot(w, rd);
+    return px * clamp(length(w), 1.0, 12.0);
+}`;
+
+const axisOf = (v: unknown) =>(v === 'x' || v === 'y' ? v : 'z');
 const AXIS_CODE: Record<string, string> = { z: '0.0', x: '1.0', y: '2.0' };
 const STEPS: Record<string, number> = { draft: 96, good: 160, best: 288 };
 
@@ -266,7 +356,7 @@ export const TimeCubeNode: NodeDefinition = {
   },
   defaultParams: {
     source: 'demo', videoId: '', fileName: '', frames: 128, frameWidth: '256', start: 0, end: 0, spacing: 'count', step: 0.1,
-    combine: 'pick', subFrames: 4, order: 'time', sortBy: 'brightness', invert: false, seed: 1, keyColor: [0.85, 0.12, 0.12], keyTolerance: 0.25,
+    combine: 'pick', subFrames: 4, precision: '8', order: 'time', sortBy: 'brightness', invert: false, seed: 1, keyColor: [0.85, 0.12, 0.12], keyTolerance: 0.25,
   },
   paramDefs: {
     frames: { section: 'Stack', label: 'Frames', type: 'float', min: MIN_FRAMES, max: MAX_FRAMES, step: 1, hard: true, showWhen: { param: 'spacing', value: 'count' }, hint: 'How many frames to stack, spread evenly from Start to End.', help: 'How many frames to stack, spread evenly from Start to End. More frames make a smoother box but take longer to build and more memory (the card shows how much). Up to 256.' },
@@ -283,6 +373,10 @@ export const TimeCubeNode: NodeDefinition = {
       { value: 'difference', label: 'Motion (only what moved)' },
       { value: 'median', label: 'Median (moving things vanish)' },
     ], hint: 'Each stacked frame is one frame of the video, or several from its slot of time combined.', help: 'Pick takes one frame per slot. The others read Sub-frames frames spread over the slot and combine them: Average is a long exposure (motion blur), Brightest keeps light trails, Darkest dark ones, Motion keeps only what changed, Median keeps what stayed put. They decode Sub-frames times as many frames (the card says how long that takes).' },
+    precision: { section: 'Frames from', label: 'Precision', type: 'select', showWhen: { param: 'combine', value: ['average', 'max', 'min', 'difference', 'median'] }, options: [
+      { value: '8', label: '8-bit (the video\'s own)' },
+      { value: '16', label: '16-bit float' },
+    ], hint: 'How finely the combined frames are kept. 16-bit keeps the in-between shades an Average or Median makes (smooth gradients, no banding) and takes twice the memory (the card shows it).' },
     subFrames: { section: 'Frames from', label: 'Sub-frames', type: 'float', min: 2, max: 16, step: 1, hard: true, showWhen: { param: 'combine', value: ['average', 'max', 'min', 'difference', 'median'] }, hint: 'Frames read for each stacked frame when combining.' },
     order: { section: 'Order', label: 'Frame order', type: 'select', options: [
       { value: 'time', label: 'Time' },
@@ -321,10 +415,10 @@ const VIEW_DEFAULTS = {
   fxHue: 0, fxPosterize: 0, fxAgeGrey: 0,
   axis: 'z', depth: 1.6, size: 1, quality: 'good',
   brightness: 0, contrast: 1, darkClear: 0, background: [0.05, 0.05, 0.07],
-  keyMode: 'off', keyColor: [0.85, 0.12, 0.12], keyTolerance: 0.08, lumaLo: 0.6, lumaHi: 1, keySoftness: 0.06, keyOpacity: 1, othersOpacity: 0.2, othersGrey: 0.5,
-  keyHueShift: 0, keyHueDrift: 0, pulse: 0, pulseDir: 'forward', pulseSpeed: 0.25, pulsePhase: 0, pulseCount: 3, pulseWidth: 0.15, pulseSoftness: 0.5,
+  keyMode: 'off', keyColor: [0.85, 0.12, 0.12], keyTolerance: 0.12, lumaLo: 0.6, lumaHi: 1, keySoftness: 0.06, keyOpacity: 1, othersOpacity: 0.2, othersGrey: 0.5,
+  keyAnimate: false, keyHueShift: 0, keyHueDrift: 0, pulse: 0, pulseDir: 'forward', pulseSpeed: 0.25, pulsePhase: 0, pulseCount: 3, pulseWidth: 0.15, pulseSoftness: 0.5,
   lightning: 0, lightningRate: 2, lightningWidth: 0.15, lightningSeed: 1,
-  blur: 0.5, focus: 1, maxBlur: 16,
+  blur: 0.5, focus: 1, maxBlur: 16, blurQuality: 'smooth',
   outline: 'off', edgeWidth: 1, edgeOpacity: 0.6, sliceEdge: 0, edgeColor: [0.92, 0.93, 0.96],
   camDist: 3.8, camAngle: 0.6, camElevation: 0.4, rotSpeed: 0, swing: 0, ortho: 0, fov: 1.8,
 };
@@ -393,28 +487,32 @@ const VIEW_PARAMS: Record<string, ParamDef> = {
   darkClear:    { section: 'Look', label: 'Dark is clear', type: 'float', min: -1, max: 1, step: 0.01, hint: 'Above 0 makes dark pixels see-through (footage on black); below 0 makes light pixels see-through (footage on white, or a light background).' },
   background:   { section: 'Look', label: 'Background', type: 'vec3color', hint: 'Behind the box (unless something is wired to Background).' },
 
-  keyMode:      { section: 'Colour key', label: 'Key', type: 'select', options: [{ value: 'off', label: 'Off' }, { value: 'color', label: 'A colour' }, { value: 'hue', label: 'A hue (any brightness)' }, { value: 'luma', label: 'A brightness range' }], hint: 'Pick out a colour: what matches stays solid through time, everything else fades.' },
-  keyColor:     { section: 'Colour key', label: 'Key colour', type: 'vec3color', showWhen: { param: 'keyMode', value: ['color', 'hue'] }, hint: 'The colour (or hue) to keep.' },
-  keyTolerance: { section: 'Colour key', label: 'Tolerance', type: 'float', min: 0, max: 1, step: 0.005, showWhen: { param: 'keyMode', value: ['color', 'hue'] }, hint: 'How far from the key colour still counts as a match.' },
-  lumaLo:       { section: 'Colour key', label: 'Brightness from', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyMode', value: 'luma' }, pair: { with: 'lumaHi', label: 'Brightness range' }, hint: 'Darkest brightness kept.' },
-  lumaHi:       { section: 'Colour key', label: 'Brightness to', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyMode', value: 'luma' }, hint: 'Brightest brightness kept.' },
-  keySoftness:  { section: 'Colour key', label: 'Softness', type: 'float', min: 0, max: 0.5, step: 0.005, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'A soft edge to the match.' },
-  keyOpacity:   { section: 'Colour key', label: 'Key opacity', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'How solid the matching colour is, before and after the slice alike: 1 leaves a solid trail.' },
-  othersOpacity:{ section: 'Colour key', label: 'Others', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'Opacity of everything else, times Before / After: low makes the rest ghostly.' },
-  keyHueShift:  { section: 'Colour key', label: 'Key hue shift', type: 'float', min: -1, max: 1, step: 0.005, showWhen: { param: 'keyMode', value: ['color', 'hue'] }, hint: 'Turns the key colour round the colour wheel (1 = once round). Map it to an LFO or a knob on Play to sweep which colour is kept.' },
-  keyHueDrift:  { section: 'Colour key', label: 'Key hue drift', type: 'float', min: -1, max: 1, step: 0.005, showWhen: { param: 'keyMode', value: ['color', 'hue'] }, hint: 'Turns the key colour round the wheel on its own, in turns a second.' },
-  pulse:        { section: 'Colour key', label: 'Pulse', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'Shows the keyed colour only in bands that travel through time. 0: all of it at once.' },
-  pulseDir:     { section: 'Colour key', label: 'Pulse direction', type: 'select', options: [{ value: 'forward', label: 'Forward (first to last frame)' }, { value: 'backward', label: 'Backward' }, { value: 'bounce', label: 'Back and forth' }, { value: 'outward', label: 'Out from the slice' }], showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'Which way the pulse travels.' },
-  pulseSpeed:   { section: 'Colour key', label: 'Pulse speed', type: 'float', min: -4, max: 4, step: 0.01, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'Bands a second.' },
-  pulsePhase:   { section: 'Colour key', label: 'Pulse phase', type: 'float', min: 0, max: 1, step: 0.001, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'Moves the bands by hand (or from an LFO or Play): one band spacing across 0–1.' },
-  pulseCount:   { section: 'Colour key', label: 'Pulse count', type: 'float', min: 1, max: 16, step: 1, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'How many bands at once along the box.' },
-  pulseWidth:   { section: 'Colour key', label: 'Pulse width', type: 'float', min: 0.01, max: 1, step: 0.01, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'How much of the space between bands each band fills.' },
-  pulseSoftness:{ section: 'Colour key', label: 'Pulse softness', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'Soft (1) or hard (0) band edges.' },
-  lightning:    { section: 'Colour key', label: 'Lightning', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'Sharp, short flashes of the keyed colour through random stretches of time. Up to 0.5 they come in on top; from 0.5 to 1 the rest of the key fades, so at 1 only the flashes show it.' },
-  lightningRate:{ section: 'Colour key', label: 'Flashes a second', type: 'float', min: 0.1, max: 20, step: 0.1, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'How often a flash can strike.' },
-  lightningWidth:{ section: 'Colour key', label: 'Flash width', type: 'float', min: 0.01, max: 1, step: 0.01, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'How much of the box (in time) a flash lights.' },
-  lightningSeed:{ section: 'Colour key', label: 'Flash seed', type: 'float', min: 0, max: 100, step: 1, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'A different seed, a different pattern of flashes.' },
-  othersGrey:   { section: 'Colour key', label: 'Others grey', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'Drains the colour from everything that doesn\'t match.' },
+  // The colour key, in three parts: what to keep, what happens to everything else, and the animation.
+  keyMode:      { section: 'Colour key', label: 'Keep', type: 'select', options: [{ value: 'off', label: 'Off' }, { value: 'color', label: 'A colour' }, { value: 'hue', label: 'A hue (any shade of it)' }, { value: 'luma', label: 'A brightness range' }], hint: 'Keep one colour solid through time and fade everything else. The card shows how much of the video it keeps; pick a colour from the slice frame there.' },
+  keyColor:     { section: 'Colour key', label: 'Colour', type: 'vec3color', showWhen: { param: 'keyMode', value: ['color', 'hue'] }, hint: 'The colour to keep. Click a swatch under the settings to take one from the slice frame.' },
+  keyTolerance: { section: 'Colour key', label: 'How close', type: 'float', min: 0, max: 1, step: 0.005, showWhen: { param: 'keyMode', value: ['color', 'hue'] }, hint: 'How far from the colour still counts: about 0.1 keeps close shades only, 0.3 a broad range. Raise it if the card says it keeps nothing.' },
+  lumaLo:       { section: 'Colour key', label: 'Brightness from', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyMode', value: 'luma' }, pair: { with: 'lumaHi', label: 'Brightness range' }, hint: 'The darkest brightness kept.' },
+  lumaHi:       { section: 'Colour key', label: 'Brightness to', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyMode', value: 'luma' }, hint: 'The brightest brightness kept.' },
+  keySoftness:  { section: 'Colour key', label: 'Soft edge', type: 'float', min: 0, max: 0.5, step: 0.005, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'Fades the match in over this much more, instead of a hard cut.' },
+  keyOpacity:   { section: 'Colour key', label: 'Kept opacity', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'How solid what is kept is, before and after the slice alike: 1 leaves a solid trail through time.' },
+  keyHueShift:  { section: 'Colour key', label: 'Shift the colour', type: 'float', min: -1, max: 1, step: 0.005, showWhen: { param: 'keyMode', value: ['color', 'hue'] }, hint: 'Turns the colour to keep round the colour wheel (1 = once round). Map it to an LFO or a knob on Play to sweep which colour is kept.' },
+
+  othersOpacity:{ section: 'Key: everything else', label: 'Opacity', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'How solid everything that is not kept is, times Before / After: 0 hides it, low makes it a ghost.' },
+  othersGrey:   { section: 'Key: everything else', label: 'Drain colour', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'Turns everything that is not kept grey: 1 fully.' },
+
+  keyAnimate:   { section: 'Key: animate', label: 'Animate the key', type: 'bool', whenOn: { pulse: 1, lightning: 0.4 }, hint: 'Makes what is kept pulse through the box, flash like lightning, or drift round the colour wheel (needs Keep set above). Starts with pulses and some lightning, so you can see it.' },
+  keyHueDrift:  { section: 'Key: animate', label: 'Colour drift', type: 'float', min: -1, max: 1, step: 0.005, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'Turns the colour to keep round the wheel on its own, in turns a second (a colour or hue key).' },
+  pulse:        { section: 'Key: animate', label: 'Pulse', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'Shows what is kept only in bands that travel through time: 1 fully, 0 no pulse (all of it shows).' },
+  pulseDir:     { section: 'Key: animate', label: 'Pulse direction', type: 'select', options: [{ value: 'forward', label: 'Forward (first to last frame)' }, { value: 'backward', label: 'Backward' }, { value: 'bounce', label: 'Back and forth' }, { value: 'outward', label: 'Out from the slice' }], showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'Which way the bands travel.' },
+  pulseSpeed:   { section: 'Key: animate', label: 'Pulse speed', type: 'float', min: -4, max: 4, step: 0.01, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'Bands a second.' },
+  pulsePhase:   { section: 'Key: animate', label: 'Pulse position', type: 'float', min: 0, max: 1, step: 0.001, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'Moves the bands by hand (or from an LFO or Play): one band spacing across 0–1.' },
+  pulseCount:   { section: 'Key: animate', label: 'Bands', type: 'float', min: 1, max: 16, step: 1, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'How many bands at once along the box.' },
+  pulseWidth:   { section: 'Key: animate', label: 'Band width', type: 'float', min: 0.01, max: 1, step: 0.01, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'How much of the space between bands each band fills.' },
+  pulseSoftness:{ section: 'Key: animate', label: 'Band softness', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'Soft (1) or hard (0) band edges.' },
+  lightning:    { section: 'Key: animate', label: 'Lightning', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'Short flashes through random stretches of time: what is kept flares toward white and the rest of the stretch lights up. Up to 0.5 they come in on top of the pulse; from 0.5 to 1 the rest fades, so at 1 only the flashes show what is kept. 0: none.' },
+  lightningRate:{ section: 'Key: animate', label: 'Flashes a second', type: 'float', min: 0.1, max: 20, step: 0.1, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'How often a flash can strike.' },
+  lightningWidth:{ section: 'Key: animate', label: 'Flash length', type: 'float', min: 0.01, max: 1, step: 0.01, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'How much of the box (in time) a flash lights.' },
+  lightningSeed:{ section: 'Key: animate', label: 'Flash pattern', type: 'float', min: 0, max: 100, step: 1, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'A different number, a different pattern of flashes (the same number always gives the same one).' },
 
   outline:      { section: 'Outline', label: 'Outline', type: 'select', options: [{ value: 'off', label: 'Off' }, { value: 'silhouette', label: 'Silhouette (follows the soft shape)' }, { value: 'edges', label: 'Box edges (wireframe)' }], hint: 'A thin line round the box: its outer silhouette, or all twelve edges (the back ones behind the frames).' },
   edgeWidth:    { section: 'Outline', label: 'Line width', type: 'float', min: 0, max: 6, step: 0.1, hint: 'Thickness of the lines in pixels (the outline, the slice outline and the highlight outlines). 0 hides them.' },
@@ -426,6 +524,7 @@ const VIEW_PARAMS: Record<string, ParamDef> = {
   blur:         { section: 'Focus', label: 'Blur', type: 'float', showWhen: { param: 'dof', value: ['distance', 'slice'] }, min: 0, max: 2, step: 0.01, hint: 'Depth of field: frames and edges away from Focus go soft. 0 turns it off.' },
   focus:        { section: 'Focus', label: 'Focus', type: 'float', showWhen: { param: 'dof', value: ['distance', 'slice'] }, min: 0.05, max: 3, step: 0.01, hint: 'Where the picture is sharp, as a share of the distance to the box\'s middle (or to the slice): 1 right on it, 0.8 nearer the camera, 1.2 beyond.' },
   maxBlur:      { section: 'Focus', label: 'Max blur', type: 'float', showWhen: { param: 'dof', value: ['distance', 'slice'] }, min: 1, max: 48, step: 0.5, hint: 'The most anything blurs, in pixels.' },
+  blurQuality:  { section: 'Focus', label: 'Blur quality', type: 'select', showWhen: { param: 'dof', value: ['distance', 'slice'] }, options: [{ value: 'smooth', label: 'Smooth' }, { value: 'fast', label: 'Fast' }], hint: 'Smooth reads the picture up to 32 times where it is most blurred, so the blur is soft and even; Fast reads it at most 8 times (grainier, quicker).' },
 
   camDist:      { section: 'Camera', label: 'Cam Distance', type: 'float', min: 0.5, max: 20, step: 0.05, hint: 'How far the built-in camera is from the box (when Ray Origin / Ray Dir are not wired).' },
   camAngle:     { section: 'Camera', label: 'Angle', type: 'float', min: -6.28, max: 6.28, step: 0.01, hint: 'Orbit angle round the box, in radians.' },
@@ -435,6 +534,16 @@ const VIEW_PARAMS: Record<string, ParamDef> = {
   ortho:        { section: 'Camera', label: 'Flatten (isometric)', type: 'float', min: 0, max: 1, step: 0.01, hint: 'From perspective (0) to orthographic (1): parallel edges stay parallel, like an isometric drawing.' },
   fov:          { section: 'Camera', label: 'Zoom', type: 'float', min: 0.5, max: 5, step: 0.01, hint: 'Lens length: higher is zoomed in, with less perspective. With a March Camera wired, set it to that camera\'s FOV so lines stay the same width.' },
 };
+
+/**
+ * Is the key's animation (pulse, lightning, colour drift) on? Its switch; a save from before the
+ * switch counts as on when it animates (a pulse, lightning or drift set).
+ */
+export function keyAnimOn(P: Record<string, unknown>): boolean {
+  if (P.keyAnimate !== undefined) return P.keyAnimate === true;
+  const num = (v: unknown) => (typeof v === 'number' ? v : 0);
+  return num(P.pulse) > 0 || num(P.lightning) > 0 || num(P.keyHueDrift) !== 0;
+}
 
 /** The axes across a frame (not time), per stack axis: the march's box grows along them for moved frames. */
 const PERP: Record<string, string> = { z: 'vec3(1.0, 1.0, 0.0)', x: 'vec3(0.0, 1.0, 1.0)', y: 'vec3(1.0, 0.0, 1.0)' };
@@ -471,7 +580,7 @@ export const TimeCubeViewNode: NodeDefinition = {
   defaultParams: { ...VIEW_DEFAULTS },
   paramDefs: VIEW_PARAMS,
   assignable: false,
-  glslFunctions: [TC_TILE, TC_SAMPLE, TC_FRAMES, TC_DEPTH, TC_HUESAT, TC_KEY, TC_UVT, TC_SHAPE, TC_MOTION, TC_FX, TC_PULSE, TC_BLUR, TC_RAYSEG],
+  glslFunctions: [TC_TILE, TC_SAMPLE, TC_FRAMES, TC_DEPTH, TC_HUESAT, TC_KEY, TC_UVT, TC_SHAPE, TC_MOTION, TC_FX, TC_PULSE, TC_BLUR, TC_RAYSEG, TC_MARCH],
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id, P = node.params;
     const D = VIEW_DEFAULTS as Record<string, unknown>;
@@ -494,7 +603,9 @@ export const TimeCubeViewNode: NodeDefinition = {
     const pulseDir = P.pulseDir === 'backward' || P.pulseDir === 'bounce' || P.pulseDir === 'outward' ? P.pulseDir : 'forward';
     // Optional features are switched on by a toggle (one recompile); their sliders are then live. Off,
     // their code is left out of the march, which keeps the plain view as fast as it was.
+    const ANIM = keyAnimOn(P);
     const HL = P.highlights === true, MOT = P.motion === true, FX = P.effects === true, DOF = P.dof === 'distance' || P.dof === 'slice';
+    const smoothBlur = P.blurQuality !== 'fast';
     const lay = volLayout(V), inset = volPx(V);
     const slice = inputVars.slice ?? f('slice');
     const wired = !!(inputVars.ro && inputVars.rd);
@@ -510,61 +621,94 @@ export const TimeCubeViewNode: NodeDefinition = {
     const tmap = (z: string) => (flow ? `fract(${z} + $_fsh)` : z);
     /** Depth of field: the blur's radius (world units) at distance t along the ray, capped at Max blur. */
     const cocAt = (t: string) => (DOF ? `min($_ap * abs(${t} - $_F) / max($_F, 1e-3), $_mxb * ${pixAt(t)})` : '0.0');
+    /**
+     * The volume at `q` blurred by the depth of field at distance t along the ray: as many reads as
+     * the blur's size in pixels calls for (style.ts blurTaps: Smooth up to 32, Fast up to 8), times
+     * `share`, how much this read can still show (a thin stretch behind others needs few). Each stretch
+     * turns the disc a little further, so thin ones add up to a smooth blur too.
+     */
+    const blurAt = (q: string, t: string, share: string) =>
+      `tcSampleBlur(${V}, ${lay}, ${inset}, ${q}, ${cocAt(t)} * $_ruv, $_brot, tcBlurTaps(${cocAt(t)} / ${pixAt(t)}, ${smoothBlur ? '1.0' : '0.0'}, ${share}))`;
     /** The time to read at box time z: mapped (Flow), then sent through (the first highlighted frame's picture). */
     const timeAt = (z: string) => (HL ? `mix(${tmap(z)}, $_sendT, $_send)` : tmap(z));
     /** The volume at a frame point `w`, blurred by the depth of field at distance t along the ray. */
     const sampleAt = (w: string, t: string) => (DOF
-      ? `tcSampleBlur(${V}, ${lay}, ${inset}, vec3(${w}.xy, ${timeAt(`${w}.z`)}), ${cocAt(t)} * $_ruv)`
+      ? blurAt(`vec3(${w}.xy, ${timeAt(`${w}.z`)})`, t, '1.0')
       : `tcSample(${V}, ${lay}, ${inset}, vec3(${w}.xy, ${timeAt(`${w}.z`)}))`);
     /** Per-frame effects on a colour, when on. */
     const fxOn = (c: string, t: string, age: string) => (FX ? `tcFx(${c}, ${t}, ${age}, $_fx)` : c);
     /** Frame motion's fade, when on. */
     const fadeBy = (b: string) => (MOT ? ` * (1.0 - $_fade * ${b})` : '');
     /**
-     * Where the ray meets a box of half size `bx` (sphere tracing in from the search box's entry and back
-     * from its exit: the rounded box's distance is exact, so a few steps land on the surface), into
-     * `en` / `ex`. With `md` / `tS`, also the least distance to it along the ray (minus how deep, when
-     * the ray goes in): a miss reads it off the trace, which slows near the shape; a ray that goes in
-     * only shallowly (near the silhouette) refines it by golden-section search between entry and exit
-     * (the distance along a line to a convex shape has one minimum). Deep rays need no more.
+     * Where the ray meets a box of half size `bx`, into `en` / `ex` (lib/timeCube/march.ts). A plain
+     * rounded box seen from outside its bounds is met exactly (tcRayRoundBoxIn, and the same test from
+     * beyond the box looking back for the exit): sphere tracing ran out of steps on rays that skim a
+     * face, which cut wedges and flat bevels out of the box and left curved sheets over moved frames.
+     * A bulging box, or a camera inside the bounds, is sphere traced (64 steps). With `md` / `tS`, also
+     * the least distance to it along the ray (minus how deep, when the ray goes in): a miss finds it by
+     * golden-section search over the search box (the distance along a line to a convex shape has one
+     * minimum); a ray that goes in only shallowly (near the silhouette) refines it the same way between
+     * entry and exit. Deep rays need no more.
      */
     const trace = (bx: string, en: string, ex: string, md?: string, tS?: string) => {
       const at = (t: string) => `tcShape($_ro + $_rd * ${t}, ${bx}, $_rb)`;
+      const golden = (lo: string, hi: string, n: number, ind: string) => [
+        `float $_ga = ${lo}, $_gb = ${hi};\n`,
+        'float $_gc = $_gb - 0.618034 * ($_gb - $_ga), $_gd = $_ga + 0.618034 * ($_gb - $_ga);\n',
+        `float $_fc = ${at('$_gc')}, $_fd = ${at('$_gd')};\n`,
+        `for (int $_i = 0; $_i < ${n}; $_i++) {\n`,
+        `    if ($_fc < $_fd) { $_gb = $_gd; $_gd = $_gc; $_fd = $_fc; $_gc = $_gb - 0.618034 * ($_gb - $_ga); $_fc = ${at('$_gc')}; }\n`,
+        `    else { $_ga = $_gc; $_gc = $_gd; $_fc = $_fd; $_gd = $_ga + 0.618034 * ($_gb - $_ga); $_fd = ${at('$_gd')}; }\n`,
+        '}\n',
+        `${tS} = $_fc < $_fd ? $_gc : $_gd;\n`,
+        `${md} = min($_fc, $_fd);\n`,
+      ].map(l => ind + l);
       return [
         '    {\n',
-        '        float $_t = $_t0, $_mn = 1e3, $_tn = $_t0;\n',
-        '        for (int $_i = 0; $_i < 32; $_i++) {\n',
-        `            float $_d = ${at('$_t')};\n`,
-        '            if ($_d < $_mn) { $_mn = $_d; $_tn = $_t; }\n',
-        '            if ($_d < 1e-4 || $_t > $_t1) break;\n',
-        '            $_t += max($_d * $_ks, 1e-4);\n',
-        '        }\n',
-        ...(md ? [`        ${md} = $_mn; ${tS} = $_tn;\n`] : []),
-        '        if ($_mn < 1e-4) {\n',
-        `            ${en} = $_t;\n`,
-        '            float $_u = $_t1;\n',
-        '            for (int $_i = 0; $_i < 32; $_i++) {\n',
-        `                float $_d = ${at('$_u')};\n`,
-        `                if ($_d < 1e-4 || $_u < ${en}) break;\n`,
-        '                $_u -= max($_d * $_ks, 1e-4);\n',
+        `        float $_rr = min($_rb.x, min(${bx}.x, min(${bx}.y, ${bx}.z)));\n`,
+        `        vec3 $_ab = abs($_ro) - ${bx};\n`,
+        '        bool $_hit = false;\n',
+        '        float $_mn = 1e3, $_tn = $_t0;\n',
+        '        if ($_rb.y <= 0.0 && max($_ab.x, max($_ab.y, $_ab.z)) > 0.0) {\n',
+        `            float $_te = tcRayRoundBoxIn($_ro, $_rd, ${bx}, $_rr);\n`,
+        '            if ($_te >= 0.0) {\n',
+        '                float $_tB = $_t1 + 1.0;\n',
+        `                float $_tx = tcRayRoundBoxIn($_ro + $_rd * $_tB, -$_rd, ${bx}, $_rr);\n`,
+        `                ${en} = $_te; ${ex} = max($_tB - max($_tx, 0.0), $_te); $_hit = true;\n`,
         '            }\n',
-        `            ${ex} = max($_u, ${en});\n`,
+        '        } else {\n',
+        '            float $_t = $_t0;\n',
+        '            for (int $_i = 0; $_i < 64; $_i++) {\n',
+        `                float $_d = ${at('$_t')};\n`,
+        '                if ($_d < $_mn) { $_mn = $_d; $_tn = $_t; }\n',
+        '                if ($_d < 1e-4 || $_t > $_t1) break;\n',
+        '                $_t += max($_d * $_ks, 1e-4);\n',
+        '            }\n',
+        '            if ($_mn < 1e-4) {\n',
+        `                ${en} = $_t;\n`,
+        '                float $_u = $_t1;\n',
+        '                for (int $_i = 0; $_i < 64; $_i++) {\n',
+        `                    float $_d = ${at('$_u')};\n`,
+        `                    if ($_d < 1e-4 || $_u < ${en}) break;\n`,
+        '                    $_u -= max($_d * $_ks, 1e-4);\n',
+        '                }\n',
+        `                ${ex} = max($_u, ${en});\n`,
+        '                $_hit = true;\n',
+        '            }\n',
+        '        }\n',
         ...(md ? [
-          `            float $_ga = ${en}, $_gb = ${ex};\n`,
-          `            ${tS} = 0.5 * ($_ga + $_gb);\n`,
+          '        if ($_hit) {\n',
+          `            ${tS} = 0.5 * (${en} + ${ex});\n`,
           `            ${md} = ${at(tS!)};\n`,
           `            if (-${md} < $_mg) {\n`,
-          '                float $_gc = $_gb - 0.618034 * ($_gb - $_ga), $_gd = $_ga + 0.618034 * ($_gb - $_ga);\n',
-          `                float $_fc = ${at('$_gc')}, $_fd = ${at('$_gd')};\n`,
-          '                for (int $_i = 0; $_i < 10; $_i++) {\n',
-          `                    if ($_fc < $_fd) { $_gb = $_gd; $_gd = $_gc; $_fd = $_fc; $_gc = $_gb - 0.618034 * ($_gb - $_ga); $_fc = ${at('$_gc')}; }\n`,
-          `                    else { $_ga = $_gc; $_gc = $_gd; $_fc = $_fd; $_gd = $_ga + 0.618034 * ($_gb - $_ga); $_fd = ${at('$_gd')}; }\n`,
-          '                }\n',
-          `                ${tS} = $_fc < $_fd ? $_gc : $_gd;\n`,
-          `                ${md} = min($_fc, $_fd);\n`,
+          ...golden(en, ex, 10, '                '),
           '            }\n',
+          '        } else if ($_mn < 1e3) {\n',
+          `            ${md} = $_mn; ${tS} = $_tn;\n`,
+          '        } else {\n',
+          ...golden('$_t0', '$_t1', 18, '            '),
+          '        }\n',
         ] : []),
-        '        }\n',
         '    }\n',
       ].join('');
     };
@@ -602,13 +746,38 @@ export const TimeCubeViewNode: NodeDefinition = {
       `            float $_k = mix(${keyOf('$_c0')}, ${keyOf('$_c1')}, $_fwt);\n`,
       // Pulse: the keyed colour shows in bands travelling through time; lightning: in short flashes.
       `            float $_kv = mix(1.0, tcPulse(${pulseDir === 'backward' ? '1.0 - $_gv' : pulseDir === 'outward' ? 'abs($_gv - $_sl0)' : '$_gv'}, $_pp), $_pls);\n`,
-      '            if ($_lt > 0.0) $_kv = max($_kv * (1.0 - clamp(2.0 * $_lt - 1.0, 0.0, 1.0)), min(2.0 * $_lt, 1.0) * max(tcBurst($_gv, $_lb0), tcBurst($_gv, $_lb1)));\n',
+      '            float $_flash = $_lt > 0.0 ? min(2.0 * $_lt, 1.0) * max(tcBurst($_gv, $_lb0), tcBurst($_gv, $_lb1)) : 0.0;\n',
+      '            if ($_lt > 0.0) $_kv = max($_kv * (1.0 - clamp(2.0 * $_lt - 1.0, 0.0, 1.0)), $_flash);\n',
       `            $_op = $_op * ${f('othersOpacity')} * (1.0 - $_k) + ${f('keyOpacity')} * $_kv * $_k;\n`,
+      // A flash lights its stretch of time: the keyed colour flares toward white and the rest of the stretch lights up.
+      '            $_op = max($_op, $_flash * (1.0 - $_k));\n',
       `            $_c = mix($_c, vec3(dot($_c, ${LUMA})), ${f('othersGrey')} * (1.0 - $_k));\n`,
+      '            vec3 $_flashC = mix($_c, vec3(1.0), 0.6);\n',
+      '            $_flash *= 0.6;\n',
     ].join('');
     const tintCoord = tintAlong === 'time' ? '$_wv.z' : tintAlong === 'height' ? '$_qv.y' : 'clamp(0.5 * ($_qv.y + $_wv.z), 0.0, 1.0)';
+    /**
+     * How wide a pixel is across a sheet's border (lib/timeCube/march.ts sheetFootprint): a pixel's
+     * width, stretched as much as the sheet is turned away from the camera, in the units of the
+     * sheet's shape distance `dvar` at `pt` (its gradient by small differences). A sheet seen nearly
+     * edge-on squeezes its border into less than a pixel, so a pixel-wide ramp in the sheet's own
+     * plane stepped and dotted; this keeps borders and outlines one pixel soft on screen. Worked out
+     * only near the border (deep inside the sheet it changes nothing), so it costs only edge pixels.
+     */
+    const footprint = (pt: string, dvar: string, px: string, out: string) => [
+      `            float ${out} = ${px};\n`,
+      `            if (abs(${dvar}) < 16.0 * ${out}) {\n`,
+      '                vec3 $_wq; float $_bq;\n',
+      '                float $_he = 1e-3 * $_mnB;\n',
+      `                vec3 $_gd = (vec3(${shapeAt(`${pt} + vec3($_he, 0.0, 0.0)`, '$_wq', '$_bq')}, ${shapeAt(`${pt} + vec3(0.0, $_he, 0.0)`, '$_wq', '$_bq')}, ${shapeAt(`${pt} + vec3(0.0, 0.0, $_he)`, '$_wq', '$_bq')}) - ${dvar}) / $_he;\n`,
+      `                float $_g0 = tcSide(${pt}, $_B, $_st);\n`,
+      `                vec3 $_gn = vec3(tcSide(${pt} + vec3(1.0, 0.0, 0.0), $_B, $_st), tcSide(${pt} + vec3(0.0, 1.0, 0.0), $_B, $_st), tcSide(${pt} + vec3(0.0, 0.0, 1.0), $_B, $_st)) - $_g0;\n`,
+      `                ${out} = tcFootprint($_rd, $_gd, $_gn, ${out});\n`,
+      '            }\n',
+    ].join('');
     // The frame at the slice, where the ray crosses the plane (exactly, not at a step): worked out once,
-    // before the march, as premultiplied colour and alpha; the march composites it in order.
+    // before the march, as premultiplied colour and alpha; the march composites it in order, between
+    // the stretch of the ray in front of the plane and the stretch behind it.
     const sliceFacePre = [
       '        vec4 $_sf = vec4(0.0);\n',
       '        if ($_ls >= 0.0) {\n',
@@ -616,7 +785,7 @@ export const TimeCubeViewNode: NodeDefinition = {
       '            vec3 $_ws; float $_bs;\n',
       `            float $_ds = ${shapeAt('$_ps', '$_ws', '$_bs')};\n`,
       `            vec3 $_sc = ${fxOn(look(sampleAt('$_ws', '$_ls')), tmap('$_ws.z'), '0.0')};\n`,
-      `            float $_spx = ${pixAt('$_ls')};\n`,
+      footprint('$_ps', '$_ds', pixAt('$_ls'), '$_spx'),
       // Inside the shape, its border feathered by the Edge softness (or the depth of field's blur): the frame fades into the sides.
       `            float $_sin = 1.0 - smoothstep(-max(max($_fe, ${cocAt('$_ls')}), $_spx), 0.5 * $_spx, $_ds);\n`,
       `            float $_so = $_ew > 0.0 ? clamp(${f('sliceEdge')}, 0.0, 1.0) * (1.0 - smoothstep(0.5 * $_ew * $_spx, (0.5 * $_ew + 1.0) * $_spx, abs($_ds))) : 0.0;\n`,
@@ -624,12 +793,10 @@ export const TimeCubeViewNode: NodeDefinition = {
       `            $_sf = vec4(mix($_sc, ${edgeCol}, $_so / max($_sa, 1e-4)) * $_sa, $_sa);\n`,
       '        }\n',
     ].join('');
-    const sliceFace = '            { $_acc.rgb += (1.0 - $_acc.a) * $_sf.rgb; $_acc.a += (1.0 - $_acc.a) * $_sf.a; }\n';
-    // Highlighted frames: the part of this step inside the nearest one dims Others less; crossing
-    // it composites the frame as a sheet, read crisply at its own time (lib/timeCube/style.ts stepInHighlight).
-    const highlight = !HL ? '' : [
-      '            float $_ah = 0.0;\n',
-      '            vec3 $_hc = vec3(0.0);\n',
+    // Highlighted frames: the part of a stretch of the ray inside the nearest one dims Others less
+    // (lib/timeCube/style.ts stepInHighlight); the march stops on each one's plane and draws it there
+    // as a sheet, read crisply at its own time, between the stretches in front of it and behind it.
+    const hlDim = !HL ? '' : [
       '            if ($_hlOn > 0.5) {\n',
       '                float $_g1 = $_gA + $_gS * ($_ta - $_en);\n',
       '                float $_g2 = $_gA + $_gS * ($_tb - $_en);\n',
@@ -637,20 +804,22 @@ export const TimeCubeViewNode: NodeDefinition = {
       '                float $_cg = $_gm - tcComb($_gm, $_hl);\n',
       '                float $_ov = max(min($_hi, $_cg + $_hw) - max($_lo, $_cg - $_hw), 0.0);\n',
       '                float $_fr = $_hi - $_lo > 1e-6 ? $_ov / ($_hi - $_lo) : step(abs($_gm - $_cg), $_hw);\n',
-      `                $_op *= mix(clamp(${f('hlOthers')}, 0.0, 1.0), 1.0, $_fr);\n`,
-      '                float $_cr = min($_ov / (2.0 * $_hw), 1.0);\n',
-      '                if ($_cr > 0.0) {\n',
-      '                    float $_tc = abs($_gS) > 1e-6 ? clamp($_en + ($_cg - $_gA) / $_gS, $_ta, $_tb) : $_tm;\n',
-      '                    vec3 $_pc = $_ro + $_rd * $_tc;\n',
-      '                    vec3 $_wc; float $_bc;\n',
-      `                    float $_dc = ${shapeAt('$_pc', '$_wc', '$_bc')};\n`,
-      `                    $_hc = mix(${fxOn(look(`tcSample(${V}, ${lay}, ${inset}, vec3($_wc.xy, ${timeAt('$_wc.z')}))`), tmap('$_wc.z'), 'max($_sl0 - $_cg, 0.0)')}, ${c3('hlColor')}, clamp(${f('hlTint')}, 0.0, 1.0));\n`,
-      `                    float $_cpx = ${pixAt('$_tc')};\n`,
-      '                    float $_hin = 1.0 - smoothstep(-$_cpx, $_cpx, $_dc);\n',
-      `                    float $_hol = $_ew > 0.0 ? clamp(${f('hlEdge')}, 0.0, 1.0) * (1.0 - smoothstep(0.5 * $_ew * $_cpx, (0.5 * $_ew + 1.0) * $_cpx, abs($_dc))) : 0.0;\n`,
-      `                    $_hc = mix($_hc, ${c3('hlColor')}, $_hol);\n`,
-      `                    $_ah = $_cr * max(clamp(${f('hlOpacity')}, 0.0, 1.0) * $_hin, $_hol)${fadeBy('$_bc')} * ${coverAt('$_pc')};\n`,
-      '                }\n',
+      `                $_ob *= mix(clamp(${f('hlOthers')}, 0.0, 1.0), 1.0, $_fr);\n`,
+      '            }\n',
+    ].join('');
+    const hlSheet = !HL ? '' : [
+      '            if ($_ev == 2) {\n',
+      '                vec3 $_pc = $_ro + $_rd * $_th;\n',
+      '                vec3 $_wc; float $_bc;\n',
+      `                float $_dc = ${shapeAt('$_pc', '$_wc', '$_bc')};\n`,
+      `                vec3 $_hc = mix(${fxOn(look(`tcSample(${V}, ${lay}, ${inset}, vec3($_wc.xy, ${timeAt('$_wc.z')}))`), tmap('$_wc.z'), 'max($_sl0 - $_gH, 0.0)')}, ${c3('hlColor')}, clamp(${f('hlTint')}, 0.0, 1.0));\n`,
+      footprint('$_pc', '$_dc', pixAt('$_th'), '$_cpx').replace(/^ {12}/gm, '                '),
+      '                float $_hin = 1.0 - smoothstep(-0.5 * $_cpx, 0.5 * $_cpx, $_dc);\n',
+      `                float $_hol = $_ew > 0.0 ? clamp(${f('hlEdge')}, 0.0, 1.0) * (1.0 - smoothstep(0.5 * $_ew * $_cpx, (0.5 * $_ew + 1.0) * $_cpx, abs($_dc))) : 0.0;\n`,
+      `                $_hc = mix($_hc, ${c3('hlColor')}, $_hol);\n`,
+      `                float $_ah = max(clamp(${f('hlOpacity')}, 0.0, 1.0) * $_hin, $_hol)${fadeBy('$_bc')} * ${coverAt('$_pc')};\n`,
+      '                $_acc.rgb += (1.0 - $_acc.a) * $_ah * $_hc;\n',
+      '                $_acc.a += (1.0 - $_acc.a) * $_ah;\n',
       '            }\n',
     ].join('');
     const edgesBlock = outline !== 'edges' ? '' : [
@@ -735,13 +904,13 @@ export const TimeCubeViewNode: NodeDefinition = {
       `    float $_rw = max(${f('rimWidth')}, 1e-3) * $_sz;\n`,
       `    float $_scn = ${inputVars.sceneDist ? `max(${inputVars.sceneDist}, 0.0)` : '1e9'};\n`,
       // Key colour turned round the wheel (by hand, or drifting); pulse and lightning.
-      ...(keyMode === 'color' || keyMode === 'hue' ? [`    vec3 $_kc = clamp(tcHueTurn(${c3('keyColor')}, ${f('keyHueShift')} + u_time * ${f('keyHueDrift')}), 0.0, 1.0);\n`] : []),
+      ...(keyMode === 'color' || keyMode === 'hue' ? [`    vec3 $_kc = clamp(tcHueTurn(${c3('keyColor')}, ${f('keyHueShift')}${ANIM ? ` + u_time * ${f('keyHueDrift')}` : ''}), 0.0, 1.0);\n`] : []),
       ...(keyMode === 'off' ? [] : [
-        `    float $_pls = clamp(${f('pulse')}, 0.0, 1.0);\n`,
+        `    float $_pls = ${ANIM ? `clamp(${f('pulse')}, 0.0, 1.0)` : '0.0'};\n`,
         `    float $_pph = ${f('pulsePhase')} + u_time * ${f('pulseSpeed')};\n`,
         ...(pulseDir === 'bounce' ? [`    $_pph = (1.0 - abs(1.0 - mod($_pph, 2.0))) * max(${f('pulseCount')}, 1.0);\n`] : []),
         `    vec4 $_pp = vec4(max(floor(${f('pulseCount')} + 0.5), 1.0), ${f('pulseWidth')}, ${f('pulseSoftness')}, $_pph);\n`,
-        `    float $_lt = clamp(${f('lightning')}, 0.0, 1.0);\n`,
+        `    float $_lt = ${ANIM ? `clamp(${f('lightning')}, 0.0, 1.0)` : '0.0'};\n`,
         `    vec4 $_ll = vec4(${f('lightningRate')}, ${f('lightningSeed')}, ${f('lightningWidth')}, u_time);\n`,
         '    float $_lk = floor($_ll.w * max($_ll.x, 0.01));\n',
         '    vec4 $_lb0 = $_lt > 0.0 ? tcBurstAt($_lk, $_ll) : vec4(0.0);\n',
@@ -749,7 +918,9 @@ export const TimeCubeViewNode: NodeDefinition = {
       ]),
       // Depth of field: the aperture, the focus distance along each ray, the blur cap.
       ...(DOF ? [
-        `    float $_ap = max(${f('blur')}, 0.0) * 0.08 * $_sz;\n`,
+        `    float $_ap = max(${f('blur')}, 0.0) * ${APERTURE} * $_sz;\n`,
+        // The disc's turn, per pixel (interleaved gradient noise, offset from the march's own).
+        '    float $_brot = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy + vec2(17.0, 59.0), vec2(0.06711056, 0.00583715))));\n',
         `    vec3 $_fp = ${P.dof === 'slice' ? '(tcBoxQ(vec3(0.5, 0.5, $_sl0), ' + AX + ') * 2.0 - 1.0) * $_B' : 'vec3(0.0)'};\n`,
         `    float $_F = max(${f('focus')}, 0.01) * max(dot($_fp - $_ro, $_rd), 0.05);\n`,
         `    float $_mxb = max(${f('maxBlur')}, 0.0);\n`,
@@ -788,6 +959,7 @@ export const TimeCubeViewNode: NodeDefinition = {
       // With frames moved, only what is still inside the box is softened, step by step.
       `    float $_cov = smoothstep(-0.5 * $_pxS, max(${DOF ? `max($_fe, ${cocAt('$_tS')})` : '$_fe'}, $_pxS), -$_md);\n`,
       ...(MOT ? ['    float $_cvEnd = $_mw.w > 0.5 ? 1.0 : $_cov;\n', '    float $_cvIn = $_mw.w > 0.5 ? $_cov : 1.0;\n'] : ['    float $_cvEnd = $_cov;\n']),
+      '    float $_cvF = 0.0;\n',
       '    if ($_ex > $_en && $_far > $_en) {\n',
       // The slice plane: where along the ray it is crossed, if it is (the side function is linear along the ray).
       `        vec3 $_wA = tcUvt(($_ro + $_rd * $_en + $_B) * $_iB, ${AX});\n`,
@@ -798,20 +970,49 @@ export const TimeCubeViewNode: NodeDefinition = {
       '        float $_gS = ($_gB - $_gA) / max($_len, 1e-6);\n',
       '        float $_f0 = $_gA - $_sl0, $_f1 = $_gB - $_sl0;\n',
       '        float $_ls = $_f0 * $_f1 < 0.0 ? $_en + $_len * $_f0 / ($_f0 - $_f1) : -1.0;\n',
+      // Focus on the slice: sharp exactly where this ray crosses the slice plane.
+      ...(P.dof === 'slice' ? [`        if ($_ls >= 0.0) $_F = max(${f('focus')}, 0.01) * $_ls;\n`] : []),
       sliceFacePre,
       `        float $_dl = length(2.0 * $_Bx) / ${steps}.0;\n`,
-      // Where in each step to sample, per pixel (interleaved gradient noise): fine grain instead of the bands a fixed step draws.
+      // Where in each stretch to read, per pixel (interleaved gradient noise): fine grain instead of the bands a fixed step draws.
       '        float $_j = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n',
       `        float $_tl = 2.0 * ${timeLen};\n`,
-      '        int $_n = int(ceil($_len / $_dl));\n',
-      `        for (int $_i = 0; $_i < ${steps}; $_i++) {\n`,
-      '            if ($_i >= $_n || $_acc.a > 0.995) break;\n',
-      '            float $_ta = $_en + float($_i) * $_dl;\n',
+      // The march goes in steps of dl, but stops exactly on the slice plane and on each highlighted
+      // frame's plane (lib/timeCube/march.ts): each is drawn there, between the stretch in front of it
+      // and the stretch behind it, so nothing about them depends on where the steps happen to fall.
+      '        bool $_sDone = $_ls < 0.0;\n',
+      '        float $_ta = $_en;\n',
+      ...(HL ? [
+        '        float $_dir = $_gS >= 0.0 ? 1.0 : -1.0;\n',
+        '        float $_gH = -1e9 * $_dir;\n',
+        '        bool $_hOn = $_hlOn > 0.5 && abs($_gS) > 1e-6;\n',
+        '        bool $_hNeed = $_hOn;\n',
+        '        float $_th = 1e9, $_cn = 0.0;\n',
+      ] : []),
+      `        for (int $_i = 0; $_i < ${steps + 2 + (HL ? 40 : 0)}; $_i++) {\n`,
+      '            if ($_ta >= $_far || $_acc.a > 0.995) break;\n',
       '            float $_tb = min($_ta + $_dl, $_far);\n',
-      '            float $_tm = mix($_ta, $_tb, $_j);\n',
-      '            bool $_cross = $_ls >= $_ta && $_ls < $_tb;\n',
-      '            if ($_cross && $_ls < $_tm)\n',
-      sliceFace,
+      '            int $_ev = 0;\n',
+      '            if (!$_sDone && $_ls <= $_tb) { $_tb = max($_ls, $_ta); $_ev = 1; }\n',
+      ...(HL ? [
+        // The next highlighted frame's plane along the ray: found once, then again only after it is drawn.
+        '            if ($_hNeed) {\n',
+        '                float $_gt = $_gA + $_gS * ($_ta - $_en);\n',
+        '                float $_gf = $_dir > 0.0 ? max($_gt - 1e-5, $_gH + 1e-5) : min($_gt + 1e-5, $_gH - 1e-5);\n',
+        '                $_cn = tcCombNext($_gf, $_dir, $_hl);\n',
+        '                $_th = abs($_cn) < 1e8 ? $_en + ($_cn - $_gA) / $_gS : 1e9;\n',
+        '                $_hNeed = false;\n',
+        '            }\n',
+        // A highlighted frame on the slice is drawn first (it is the slice frame's outline and tint),
+        // even when rounding puts its plane a hair behind the slice's: else pixels flip between the two.
+        '            if ($_th <= $_tb + 1e-4) { $_tb = max($_th, $_ta); $_ev = 2; $_gH = $_cn; $_hNeed = $_hOn; }\n',
+      ] : []),
+      // The stretch [ta, tb] lies on one side of the slice: its opacity before the picture is read.
+      '            float $_gmid = $_gA + $_gS * (0.5 * ($_ta + $_tb) - $_en);\n',
+      `            float $_ob = $_gmid < $_sl0 ? ${f('before')} : ${f('after')};\n`,
+      hlDim,
+      // Read where a ray through this stuff would most likely stop: at the start of a nearly solid stretch (its surface), anywhere in a thin one.
+      '            float $_tm = $_ta + tcFreeFlight($_j, tcDepth($_ob) / $_tl, $_tb - $_ta);\n',
       '            vec3 $_pm = $_ro + $_rd * $_tm;\n',
       '            vec3 $_qv = ($_pm + $_B) * $_iB;\n',
       ...(MOT ? [
@@ -824,30 +1025,33 @@ export const TimeCubeViewNode: NodeDefinition = {
       '            float $_gv = $_gA + $_gS * ($_tm - $_en);\n',
       `            vec3 $_sq = vec3($_wv.xy, ${timeAt('$_wv.z')});\n`,
       ...(keyMode === 'off'
-        ? [DOF ? `            vec3 $_c = tcSampleBlur(${V}, ${lay}, ${inset}, $_sq, ${cocAt('$_tm')} * $_ruv);\n` : `            vec3 $_c = tcSample(${V}, ${lay}, ${inset}, $_sq);\n`]
+        ? [DOF ? `            vec3 $_c = ${blurAt('$_sq', '$_tm', '(1.0 - $_acc.a) * (1.0 - exp(-tcDepth($_ob) * ($_tb - $_ta) / $_tl))')};\n` : `            vec3 $_c = tcSample(${V}, ${lay}, ${inset}, $_sq);\n`]
         : [
           '            vec3 $_c0, $_c1;\n',
           `            float $_fwt = tcFrames(${V}, ${lay}, ${inset}, $_sq, $_c0, $_c1);\n`,
           '            vec3 $_c = mix($_c0, $_c1, $_fwt);\n',
         ]),
       // Transfer function (lib/timeCube/plan.ts voxelOpacity): before / after the slice, dark (or light) is clear, the key.
-      `            float $_op = $_gv < $_sl0 ? ${f('before')} : ${f('after')};\n`,
+      '            float $_op = $_ob;\n',
       `            float $_dc0 = clamp(${f('darkClear')}, -1.0, 1.0);\n`,
       `            float $_lv = dot($_c, ${LUMA});\n`,
       '            $_op *= 1.0 - abs($_dc0) + abs($_dc0) * ($_dc0 >= 0.0 ? smoothstep(0.02, 0.4, $_lv) : 1.0 - smoothstep(0.6, 0.98, $_lv));\n',
       keyLines,
       ...(MOT ? ['            $_op *= $_mk * (1.0 - $_fade * $_bv);\n'] : []),
-      highlight,
       `            float $_al = (1.0 - exp(-tcDepth($_op) * ($_tb - $_ta) / $_tl))${MOT ? ` * ${coverAt('$_pm')}` : ''};\n`,
       `            vec3 $_col = ${fxOn(look('$_c'), '$_sq.z', 'max($_sl0 - $_gv, 0.0)')};\n`,
       `            $_col = mix($_col, mix(${c3('tintFrom')}, ${c3('tintTo')}, smoothstep(0.0, 1.0, ${tintCoord})), clamp(${f('tintAmount')}, 0.0, 1.0));\n`,
-      ...(HL ? ['            $_acc.rgb += (1.0 - $_acc.a) * $_ah * $_hc;\n', '            $_acc.a += (1.0 - $_acc.a) * $_ah;\n'] : []),
+      ...(keyMode === 'off' ? [] : ['            $_col = mix($_col, $_flashC, $_flash);\n']),
       '            $_acc.rgb += (1.0 - $_acc.a) * $_al * $_col;\n',
       '            $_acc.a += (1.0 - $_acc.a) * $_al;\n',
-      '            if ($_cross && $_ls >= $_tm)\n',
-      sliceFace,
+      '            if ($_ev == 1) { $_cvF = (1.0 - $_acc.a) * $_sf.a; $_acc.rgb += (1.0 - $_acc.a) * $_sf.rgb; $_acc.a += $_cvF; $_sDone = true; }\n',
+      hlSheet,
+      '            $_ta = $_tb;\n',
+      ...(DOF ? ['            $_brot += 2.3999632;\n'] : []),
       '        }\n',
       '    }\n',
+      // The edge softness fades the box near its silhouette, but not the slice frame: it has its own rounded, feathered border.
+      '    $_cvEnd = max($_cvEnd, $_cvF);\n',
       edgesBlock,
       outline === 'silhouette'
         ? `    $_eF = $_tS > $_scn ? 0.0 : tcLine(abs($_md), $_pxS, ${cocAt('$_tS')}, $_ew);\n`

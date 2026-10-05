@@ -117,6 +117,7 @@ import { MAX_GROUP_ITERATIONS } from '../../nodes/definitions/group';
 import { programTintColour, programTintsCached } from '../../lib/programTints';
 import { BakedCardBody } from '../bake/BakedCardBody';
 import { TimeCubeCardBody } from '../timeCube/TimeCubeCardBody';
+import { TimeCubeViewKeyInfo } from '../timeCube/TimeCubeViewKeyInfo';
 import { bakedSourceName } from '../../nodes/definitions/baked';
 import { VOLUMETRIC_LOOP_TYPES } from '../../nodes/volumetricAuto';
 import { SwitchNodePicker } from './SwitchNodePicker';
@@ -4578,6 +4579,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {/* ── Data: the dataset, its size and the way into the editor ── */}
         {!collapsed && node.type === 'data' && <DataCardBody node={node} touch={isTouchDevice} onOpen={() => setShowDataEditor(true)} />}
         {!collapsed && node.type === 'timeCube' && <TimeCubeCardBody node={node} touch={isTouchDevice} />}
+        {!collapsed && node.type === 'timeCubeView' && <TimeCubeViewKeyInfo node={node} touch={isTouchDevice} />}
 
         {/* ── CustomFn / ExprNode slider params (hidden when collapsed) ── */}
         {!collapsed && (node.type === 'customFn' || node.type === 'exprNode') && (() => {

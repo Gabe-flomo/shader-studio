@@ -44,7 +44,7 @@ describe('summarizeSection', () => {
 
   it('a select with an Off choice that gates its section is a feature section (Focus, Colour key)', () => {
     expect(summary(view, 'Focus', {}).text).toBe('Off');
-    expect(summary(view, 'Focus', { dof: 'slice' }).text).toBe('On · 4 controls');
+    expect(summary(view, 'Focus', { dof: 'slice' }).text).toBe('On · 5 controls');
     expect(summary(view, 'Colour key', {}).text).toBe('Off');
     expect(summary(view, 'Colour key', { keyMode: 'color' }).on).toBe(true);
   });

@@ -1648,7 +1648,9 @@ function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTe
   for (const [uniform, key] of Object.entries(st.textureUniforms)) {
     const [id, slot] = key.split('::');
     const label = slot ? `${labelOf(id, 'a node')} (${slot})` : labelOf(id, 'Texture Input');
-    const enc = imageDataUrl(st.nodeTextures[key]?.image);
+    // A 16-bit Time Cube atlas is a half-float texture: the page gets its 8-bit canvas (time-cube deep.ts).
+    const tex = st.nodeTextures[key];
+    const enc = imageDataUrl((tex?.userData as { canvas8?: HTMLCanvasElement } | undefined)?.canvas8 ?? tex?.image);
     // A Time Cube's atlas of frames (docs/time-cube.md) is read without mipmaps, as in the app.
     const flat = byId.get(id)?.type === 'timeCube';
     textures[uniform] = { label, name: '', src: enc?.dataUrl ?? null, bytes: enc?.dataUrl.length ?? 0, scaledTo: enc?.scaledTo ?? null, ...(flat ? { flat: true } : {}) };

@@ -221,16 +221,17 @@ export const hash = (n: number) => fract(Math.sin(n * 12.9898 + 4.1414) * 43758.
 
 /**
  * A lightning burst (GLSL tcBurstAt): slot k of a clock at `rate` a second. It strikes (4 slots in
- * 5) at a random moment in the first half of its slot, at a random place in time, and dies away
- * fast. Returns [centre, width, strength now].
+ * 5) at a random moment in the first half of its slot, at a random place in time, flickers, and dies
+ * away over about a fifth of a second (whatever the rate: at 2.5 a second a flash used to last only
+ * 50 ms, a frame or two, and was easy to miss). Returns [centre, width, strength now].
  */
 export function lightningBurst(k: number, rate: number, seed: number, width: number, seconds: number): [number, number, number] {
   const s = seconds * Math.max(rate, 0.01);
   const h0 = hash(k + seed * 17.17), h1 = hash(k * 1.31 + seed * 3.7 + 11), h2 = hash(k * 2.17 + seed * 5.3 + 23);
   const age = s - k - h0 * 0.5;
   const fire = (h2 <= 0.8 ? 1 : 0) * (age >= 0 ? 1 : 0);
-  const flick = 0.55 + 0.45 * (hash(Math.floor(seconds * 24) + k * 7) >= 0.35 ? 1 : 0);
-  return [h1, Math.max(width, 0.002) * (0.4 + 0.75 * h2), fire * Math.exp(-Math.max(age, 0) * 8) * flick];
+  const flick = 0.7 + 0.3 * (hash(Math.floor(seconds * 24) + k * 7) >= 0.35 ? 1 : 0);
+  return [h1, Math.max(width, 0.002) * (0.4 + 0.75 * h2), fire * Math.exp(-Math.max(age, 0) / Math.max(rate, 0.01) * 10) * flick];
 }
 
 /**
@@ -245,14 +246,30 @@ export function keyVisibility(band: number, pulse: number, lightning: number, fl
 
 // ── Depth of field ───────────────────────────────────────────────────────────
 
+/** The lens's aperture per unit of Blur, in box sizes (GLSL: the view's APERTURE). */
+export const APERTURE = 0.3;
+
 /**
  * The blur's radius (world units) at distance t along a ray (GLSL: the view's `cocAt`): Blur sets
- * the aperture (0.08 × Blur × Box size), zero at the focus distance F, capped at Max blur pixels
- * (`px` = a pixel's width in world units at t).
+ * the aperture (APERTURE × Blur × Box size), zero at the focus distance F, capped at Max blur pixels
+ * (`px` = a pixel's width in world units at t). At the default Blur the ends of the box blur by
+ * several pixels (the old 0.08 aperture blurred them by one or two: switching Focus on barely showed).
  */
 export function blurRadius(t: number, focusDist: number, blur: number, size: number, maxBlurPx: number, px: number): number {
-  const ap = Math.max(blur, 0) * 0.08 * size;
+  const ap = Math.max(blur, 0) * APERTURE * size;
   return Math.min(ap * Math.abs(t - focusDist) / Math.max(focusDist, 1e-3), maxBlurPx * px);
+}
+
+/**
+ * How many reads the blur takes (GLSL tcBlurTaps) for a blur `rpx` pixels across: enough to cover
+ * its disc evenly (Smooth up to 32, Fast up to 8), times `share`, how much the read can still show
+ * (a thin stretch of the box needs only one, at a point on the disc turned per pixel and per stretch:
+ * many thin stretches add up to the blur). One read in focus.
+ */
+export function blurTaps(rpx: number, smooth: boolean, share: number): number {
+  if (rpx < 0.5) return 1;
+  const n = smooth ? clamp(0.6 * rpx * rpx, 6, 32) : clamp(0.25 * rpx * rpx, 4, 8);
+  return Math.max(Math.ceil(n * clamp(share * 8, 0, 1)), 1);
 }
 
 /** Per-frame treatments (GLSL tcFx): hue turned along time, posterized to `levels`, older frames greyed. */
