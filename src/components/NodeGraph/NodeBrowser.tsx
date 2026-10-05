@@ -30,6 +30,8 @@ const HIDDEN_NODES = new Set([
   'grid',
   // Made by the compiler at the end of a Pass's program (compiler/passGraph.ts).
   'passOutput',
+  // Made by Bake… (lib/bake): a node's frozen render, never added by hand.
+  'baked',
   // An Agents group's anchors (made with the group) and its update shader's end (compiler/agentGraph.ts).
   'agentInputs', 'agentOutput', 'agentStepOut', 'trailStepOut',
 ]);

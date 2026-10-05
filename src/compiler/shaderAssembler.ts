@@ -913,7 +913,8 @@ export class ShaderAssembler {
             this.audioUniforms[audioUniformName(nodeSlug, i)] = node.id;
           }
         }
-        if (node.type === 'videoInput') {
+        // Baked nodes (docs/bake.md) read their video the same way, bound by lib/bakedVideos.ts.
+        if (node.type === 'videoInput' || node.type === 'baked') {
           this.videoUniforms[`u_vid_${nodeSlug}`] = node.id;
         }
         if (node.type === 'midiInput') {
@@ -1416,6 +1417,7 @@ export class ShaderAssembler {
               // image slots — named the way their generateGLSL emits them (by the sub node's slugged id)
               // and bound from the original node's textures, exactly as at the top level.
               if (subNode.type === 'textureInput') this.textureUniforms[`u_tex_${subNode.id}`] = originalId;
+              if (subNode.type === 'baked') this.videoUniforms[`u_vid_${subNode.id}`] = originalId;
               subDef.textureSlots?.forEach(slot => { this.textureUniforms[`u_tex_${subNode.id}_${slot}`] = `${originalId}::${slot}`; });
               const { patchedNode: patchedSub, uniforms: subUniforms, bindings: subBindings } = patchNodeParamsForUniforms(effectiveSubNode, subDef, fn => this.functions.add(fn), originalId);
               Object.assign(this.paramUniforms, subUniforms);

@@ -30,6 +30,7 @@ import { EXAMPLE_INDEX } from '../../store/exampleIndex';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { formatSize } from '../../utils/library';
 import { browserKV, describeVideoUses, videoUses, type VideoUse } from '../../lib/videoUsage';
+import { bakedVideoIds } from '../../lib/bake/graphOps';
 import {
   IMAGE_FOLDER_SCOPE, PALETTE_FOLDER_SCOPE, addVideoFile, freePaletteName, ensureSoundWave, getImage, getVideo, isAudioType, importImageFile, moveImage, movePalette, paletteCss, renameImage, renamePalette, renameVideo, savePalette, videoExt,
   type BackgroundImageMeta, type LibraryVideoMeta, type Palette,
@@ -135,7 +136,10 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
   const openLayers = useNodeGraphStore(s => s.play.layers);
   const openEngine = useNodeGraphStore(s => s.play.audioEngine);
   const openSounds = useMemo(() => (openEngine?.racks ?? []).flatMap(r => (r.instrument?.zones ?? []).map(z => z.sampleId)), [openEngine]);
-  const uses = useMemo(() => (tab === 'videos' || tab === 'sounds' ? videoUses(media.map(v => v.id), browserKV, { name: openName, layers: openLayers, sounds: openSounds }) : null), [tab, media, openName, openLayers, openSounds]);
+  // Baked nodes in the open graph play their videos too (docs/bake.md).
+  const openNodes = useNodeGraphStore(s => s.nodes);
+  const openBaked = useMemo(() => bakedVideoIds(openNodes), [openNodes]);
+  const uses = useMemo(() => (tab === 'videos' || tab === 'sounds' ? videoUses(media.map(v => v.id), browserKV, { name: openName, layers: openLayers, sounds: openSounds, baked: openBaked }) : null), [tab, media, openName, openLayers, openSounds, openBaked]);
   const unusedVideos = useMemo(() => (uses ? media.filter(v => !uses.get(v.id)?.length) : []), [uses, media]);
   const sound = tab === 'sounds';
   const kindWord = sound ? 'sound' : 'video';

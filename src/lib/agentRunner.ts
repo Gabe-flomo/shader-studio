@@ -332,6 +332,8 @@ export class AgentRunner {
   get current(): AgentsSpec { return this.spec; }
   /** Something runs while the clock does: the preview keeps drawing. */
   get active(): boolean { return this.spec.groups.some(g => g.live); }
+  /** Every update and trail program compiled (or failed). */
+  get settled(): boolean { return this.steps.every(e => e.ready || e.failed) && this.trailSteps.every(e => e.ready || e.failed); }
 
   /** The uniforms the runner adds to the shared table. */
   private ensureUniforms(): void {

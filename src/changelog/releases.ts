@@ -39,6 +39,24 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.25',
+    date: '2026-10-04',
+    title: 'Bake: render and replace',
+    highlights: [
+      { area: 'Studio', text: 'Bake… renders a node or the whole picture to a video and puts it back as a Baked node, so heavy 3D and agents play back for almost nothing.', link: { kind: 'doc', path: 'docs/bake.md' } },
+      { area: 'Studio', text: 'Unbake brings back the live nodes exactly; Re-bake renders again; baked videos live in the Library and work in Play and on web pages.' },
+    ],
+  },
+  {
+    id: '2026.10.24',
+    date: '2026-10-04',
+    title: 'Switch a node in place',
+    highlights: [
+      { area: 'Studio', text: 'Switch on a node card (or right-click → Switch to…) turns it into a similar node, keeping its wires: Union to Intersect, Sphere to Cone, sin to cos.' },
+      { area: 'Studio', text: 'Settings carry over by name and meaning, and Play controls, keyframes and comments stay with the node; one undo step.' },
+    ],
+  },
+  {
     id: '2026.10.23',
     date: '2026-10-04',
     title: 'Displacement Map, passes in groups',

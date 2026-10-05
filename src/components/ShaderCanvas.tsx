@@ -20,6 +20,7 @@ import { playOverlay } from '../play/overlay';
 import { CompareHandle } from './play/finish/CompareHandle';
 import { playBackground, planFrame, planGraphs, planShowsThis } from '../play/background';
 import { playVideoLayers } from '../play/videoLayers';
+import { bakedVideos } from '../lib/bakedVideos';
 import { playDrumPads } from '../play/drumPads';
 import { compiledQueueGraph, onQueueGraphsChange } from '../play/queueGraphs';
 import type { BackgroundItem } from '../types/play';
@@ -91,6 +92,12 @@ export interface OfflineRenderHandle {
    * Same contract as setRenderScale: returns what the GPU allocated.
    */
   setRenderSize: (size: { width: number; height: number } | null) => { width: number; height: number };
+  /**
+   * Is the program the store compiled last (`fragmentShader`, its passes and
+   * agents) the one drawing, every part of it compiled? A bake (lib/bake/runner.ts)
+   * swaps the graph and waits for this before its first frame.
+   */
+  programReady: (fragmentShader: string) => boolean;
 }
 
 // Font texture: 16×16 grid of ASCII chars (codes 0-255), 64×64 px per cell.
@@ -327,6 +334,14 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   const canvasRef = useRef<HTMLDivElement>(null);
   // Video layers run (and sound) while a preview is here to keep them on its clock.
   useEffect(() => playVideoLayers.claim(), []);
+  // Baked nodes (docs/bake.md): their videos come in through the store's video textures, like a Video Input's.
+  useEffect(() => {
+    bakedVideos.setHost({ setTexture: (id, tex) => useNodeGraphStore.getState().setVideoTexture(id, tex) });
+    const collect = (s: { nodes: import('../types/nodeGraph').GraphNode[]; bakeGraph: import('../types/nodeGraph').GraphNode[] | null }) => bakedVideos.sync(s.bakeGraph ? [...s.nodes, ...s.bakeGraph] : s.nodes);
+    collect(useNodeGraphStore.getState());
+    const off = useNodeGraphStore.subscribe((s, prev) => { if (s.nodes !== prev.nodes || s.bakeGraph !== prev.bakeGraph) collect(s); });
+    return () => { off(); bakedVideos.setHost(null); };
+  }, []);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
   // Installed by the boot effect: compiles (vs, fs) off to the side and swaps it in. Resolves false if superseded.
@@ -627,10 +642,14 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // Only a compile with `passes` makes a runner; for every other graph it stays
     // null and the frame below takes exactly the path it always has.
     let passRunner: PassRunner | null = null;
+    // The pass and agent programs last handed to the runners (programReady compares them with the store's).
+    let appliedPasses: unknown = null;
+    let appliedAgents: unknown = null;
     let passSourcesBound = false;                      // Data / Particles nodes were last bound with pass programs' sources
     let passTargets: PassTargets | null = null;        // the live preview's textures
     let offlinePassTargets: PassTargets | null = null; // renderAtTime's own (never the preview's Previous buffers)
     setPassesRef.current = (passes, vsSrc) => {
+      appliedPasses = passes ?? null;
       motionUseRef.current.passes = !!passes?.some(pp => readsMotionMap(pp.fragmentShader));
       // Probes, scopes and the eye read a node only a Pass draws from that pass's program (phase 3).
       const nextProbePasses = passes ?? [];
@@ -685,6 +704,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       return (m.final || m.passes || m.agents) && (motionTextureHasData() || playOverlay.motionGrid() !== null);
     };
     setAgentsRef.current = (agents, vsSrc) => {
+      appliedAgents = agents ?? null;
       motionUseRef.current.agents = !!agents && (agents.groups.some(g => readsMotionMap(g.fragmentShader)) || agents.trails.some(t => readsMotionMap(t.stepShader)));
       if (!agents || agents.groups.length + agents.trails.length + agents.draws.length === 0) {
         if (!agentRunner) return;
@@ -1032,6 +1052,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           drawBgGraph(m, time, exportReadbackRT, exportRT, ditherSeed(Math.floor(time * 100.0)));
           handle.readPixels(out, exportW, exportH);
           return true;
+        },
+        programReady: (fragmentShader: string) => {
+          const st = useNodeGraphStore.getState();
+          if (material.fragmentShader !== fragmentShader) return false;
+          if (appliedPasses !== (st.passes ?? null) || appliedAgents !== (st.agents ?? null)) return false;
+          return (!passRunner || passRunner.settled) && (!agentRunner || agentRunner.settled);
         },
         readPixels: (out: Uint8Array, width: number, height: number) => {
           if (!exportReadbackRT) return;
@@ -1481,7 +1507,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       const videoActive = videoIdsRef.current.some(id => videoEngine.isPlaying(id));
       const shaderMoving = playing && (
         usesTimeRef.current || hasTimeNodeRef.current || gpuParticlesActive() ||
-        audioAmps.size > 0 || liveValues.size > 0 || videoActive || isStatefulRef.current || echoRef.current !== null ||
+        audioAmps.size > 0 || liveValues.size > 0 || videoActive || bakedVideos.active() || isStatefulRef.current || echoRef.current !== null ||
         scopeIdsRef.current.size > 0 || previewNodeIdRef.current !== null
         || midiEngine.hasFile() || (passRunner !== null && passRunner.hasPrevious)
         || (agentRunner !== null && agentRunner.active)
@@ -1496,6 +1522,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (!queue && background) playBackground.follow(elapsed, playing);
       // Video layers keep to the clock too (their own start, speed and loop).
       playVideoLayers.follow(elapsed, playing);
+      // Baked nodes: each video on frame (t − start) × fps (lib/bakedVideos.ts).
+      bakedVideos.follow(elapsed, playing);
       // Drum pads: the clock their hits are stamped with, and mapped numbers on sounding pads.
       playDrumPads.follow(elapsed, playing);
       const plan = planFrame({
@@ -2512,6 +2540,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         mat.uniforms[uniformName].value = tex;
       } else {
         mat.uniforms[uniformName] = { value: tex };
+      }
+      // A Baked node's texel size (its texture output's `_px`, an alpha bake's seam).
+      const v = tex?.image as HTMLVideoElement | undefined;
+      if (v && v.videoWidth > 0) {
+        const px = new THREE.Vector2(1 / v.videoWidth, 1 / v.videoHeight);
+        if (mat.uniforms[`${uniformName}_px`]) mat.uniforms[`${uniformName}_px`].value = px;
+        else mat.uniforms[`${uniformName}_px`] = { value: px };
       }
     }
   }, [videoUniforms, videoTextures]);

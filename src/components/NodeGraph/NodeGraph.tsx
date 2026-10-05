@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import { openSwitchPicker, showsSwitchPill } from './switchPickerModel';
 import { createPortal } from 'react-dom';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { getNodeDefinition, getNodeDefinitionFor } from '../../nodes/definitions';
@@ -37,8 +38,12 @@ import { GraphOutline } from './GraphOutline';
 import { portalGuard } from '../ui/portalGuard';
 import { removeFromPlay } from '../../play/playDriven';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
+import { useBakeDialog } from '../bake/bakeDialogStore';
+import { bakeableOutput, pictureTarget } from '../../lib/bake/graphOps';
+import { unbakeNode } from '../../lib/bake/runner';
 import type { OptimizeModal as OptimizeModalT } from './OptimizeModal';
 const OptimizeModal = lazyWithSuspense<PropsOf<typeof OptimizeModalT>>(() => import('./OptimizeModal').then(m => ({ default: m.OptimizeModal })));
+const BakeDialogHost = lazyWithSuspense<Record<string, never>>(() => import('../bake/BakeDialog').then(m => ({ default: m.BakeDialogHost })));
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 const NODE_WIDTH = 360;
@@ -101,6 +106,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   const lockedRef = useRef(locked);
   useEffect(() => { lockedRef.current = locked; }, [locked]);
   const [showOptimize, setShowOptimize] = useState(false);
+  const bakeRequest = useBakeDialog(s => s.request);
   const tc = useCtp();
   const tk = useTokens();
   const ctxBtnStyle = ctxBtnStyleFor(tc);
@@ -1350,9 +1356,11 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           compact={compactToolbar}
           readOnly={locked}
           onOptimize={() => setShowOptimize(true)}
+          onBake={() => useBakeDialog.getState().open({ kind: 'picture' })}
         />
       )}
       {showOptimize && <OptimizeModal onClose={() => setShowOptimize(false)} />}
+      {bakeRequest && <BakeDialogHost />}
       {redesignToolbar && !locked && <SelectionBar top={previewNodeId ? 108 : 66} />}
       {redesignToolbar && showOutline && <GraphOutline nodes={displayNodes} top={previewNodeId ? 132 : 66} onClose={() => setShowOutline(false)} />}
 
@@ -1827,8 +1835,41 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     </button>
                   </>
                 )}
+                {/* Bake (docs/bake.md): render this part once to a video and play that instead. Top level only. */}
+                {clickedNode && activeGroupPath.length === 0 && (() => {
+                  const open = (r: Parameters<ReturnType<typeof useBakeDialog.getState>['open']>[0]) => { useBakeDialog.getState().open(r); setContextMenu(null); };
+                  if (clickedNode.type === 'baked') return (
+                    <>
+                      <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                      <button style={ctxBtnStyle} title="Put the live nodes and their wires back" onClick={() => { unbakeNode(clickedNode.id); setContextMenu(null); }}>Unbake</button>
+                      <button style={ctxBtnStyle} title="Render the live nodes again with the same settings" onClick={() => open({ kind: 'rebake', nodeId: clickedNode.id })}>Re-bake</button>
+                    </>
+                  );
+                  if (clickedNode.type === 'output' || clickedNode.type === 'vec4Output') return pictureTarget(displayNodes) ? (
+                    <>
+                      <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                      <button style={ctxBtnStyle} title="Render the whole picture once to a video and play that instead" onClick={() => open({ kind: 'picture' })}>Bake the picture…</button>
+                    </>
+                  ) : null;
+                  return bakeableOutput(clickedNode) ? (
+                    <>
+                      <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                      <button style={ctxBtnStyle} title="Render this node's output once to a video and play that in its place" onClick={() => open({ kind: 'node', nodeId: clickedNode.id })}>Bake…</button>
+                    </>
+                  ) : null;
+                })()}
                 {clickedNode && !isGroup && !isSceneGroup && !isSpaceWarpGroup && !isMarchLoopGroup && (
                   <>
+                    {showsSwitchPill(clickedNode) && (
+                      <button style={ctxBtnStyle} title="Turn it into a similar node, wires and settings kept" onClick={() => {
+                        const id = clickedNode.id;
+                        setContextMenu(null);
+                        // The card's own Switch list opens (after this menu has gone, so it takes the focus).
+                        requestAnimationFrame(() => { if (!openSwitchPicker(id)) useNodeGraphStore.getState().setSwapTargetNodeId(id); });
+                      }}>
+                        Switch to… <span style={{ color: tc.surface2, fontSize: '10px' }}>⇧-click title</span>
+                      </button>
+                    )}
                     <button style={ctxBtnStyle} onClick={() => {
                       duplicateNode(clickedNode.id);
                       setContextMenu(null);
