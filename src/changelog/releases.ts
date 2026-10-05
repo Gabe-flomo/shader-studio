@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.27',
+    date: '2026-10-04',
+    title: 'Lighter Displacement Map',
+    highlights: [
+      { area: 'Play', text: 'Displacement Map has a Map quality setting (Full, Half, Quarter); the Ripple example now runs several times faster in the desktop app.' },
+      { area: 'Studio', text: 'Octaves on FBM and Domain Warp are live sliders now, so dragging them no longer recompiles.' },
+    ],
+  },
+  {
     id: '2026.10.26',
     date: '2026-10-04',
     title: 'Time cube',
