@@ -38,6 +38,11 @@ export const DM_CHANNEL_LABELS = { red: 'Red', green: 'Green', blue: 'Blue', alp
 /** How the map meets the picture. */
 export const DM_BEHAVIOURS = ['center', 'stretch', 'tile'];
 export const DM_BEHAVIOUR_LABELS = { center: 'Center map', stretch: 'Stretch map to fit', tile: 'Tile map' };
+/** How sharp a layer's map is read: its full size, or drawn at half or a quarter of it first (cheaper; smooth maps look the same). */
+export const DM_QUALITIES = ['full', 'half', 'quarter'];
+export const DM_QUALITY_LABELS = { full: 'Full', half: 'Half', quarter: 'Quarter' };
+/** The map's size for a quality: 1, 0.5 or 0.25 of the picture's. */
+export function dmQualityScale(q) { return q === 'half' ? 0.5 : q === 'quarter' ? 0.25 : 1; }
 /** Max displacement is in pixels of a picture this tall. */
 export const DM_REF_HEIGHT = 1080;
 /** The defaults (After Effects starts on Red and Green). */
@@ -52,6 +57,7 @@ export const DM_HINTS = {
   maxV: 'The furthest a pixel moves up or down, in pixels of a 1080-pixel-tall picture: where the channel is 1 it moves this far up, where it is 0 this far down. Negative turns it round.',
   behaviour: 'Center reads the map where it lies on the picture. Stretch scales the map’s visible part to cover the whole picture. Tile repeats the map’s visible part across the picture. A full-picture map (the picture, a shader) looks the same in all three.',
   wrap: 'On: pixels pushed off one edge come back in from the other side (good with tiling maps). Off: what comes from past the edge is empty.',
+  quality: 'How sharp the map is read. Half and Quarter draw it smaller first, which costs a fraction of the time on large pictures (most of all in Safari and the desktop app); a smooth map (waves, noise, a blurred shape) looks the same. Keep Full for a map with fine, sharp edges.',
   channels: 'Red, Green, Blue and Alpha read that channel. Luminance is how bright it looks; Hue is the colour round the wheel (red 0, green ⅓, blue ⅔); Lightness is halfway between the brightest and darkest of R, G, B; Saturation is how colourful it is.',
 };
 
@@ -215,35 +221,75 @@ in vec2 aPos;
 out vec2 vUv;
 void main() { vUv = aPos * 0.5 + 0.5; gl_Position = vec4(aPos, 0.0, 1.0); }`;
 
+// The source and the map arrive one of two ways (dmCreate's upload modes): a canvas uploaded
+// flipped (the source premultiplied, the map straight), or a canvas's bytes (getImageData:
+// straight, rows top down). A straight source is premultiplied texel by texel before it is
+// filtered, so both ways read the same picture.
 const DM_FRAG = `#version 300 es
 precision highp float;
 in vec2 vUv;
 out vec4 o;
 uniform sampler2D uSrc, uMap;
-uniform float uHasMap, uH, uV, uBehaviour, uWrap, uAspect;
+uniform float uHasMap, uH, uV, uBehaviour, uWrap, uAspect, uSrcBytes, uMapBytes;
 uniform vec2 uMax;
 uniform vec4 uBox;
 ${DM_GLSL}
+vec4 dmPm(vec4 c) { return vec4(c.rgb * c.a, c.a); }
+vec4 dmSrcAt(vec2 q) {
+  if (uSrcBytes < 0.5) return texture(uSrc, q);
+  ivec2 n = textureSize(uSrc, 0), hi = n - 1;
+  vec2 p = vec2(q.x, 1.0 - q.y) * vec2(n) - 0.5, f = p - floor(p);
+  ivec2 i = ivec2(floor(p));
+  vec4 a = dmPm(texelFetch(uSrc, clamp(i, ivec2(0), hi), 0));
+  vec4 b = dmPm(texelFetch(uSrc, clamp(i + ivec2(1, 0), ivec2(0), hi), 0));
+  vec4 c = dmPm(texelFetch(uSrc, clamp(i + ivec2(0, 1), ivec2(0), hi), 0));
+  vec4 d = dmPm(texelFetch(uSrc, clamp(i + ivec2(1, 1), ivec2(0), hi), 0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
 void main() {
   // No map (it is missing, or loops back here): mid-grey everywhere, nothing moves.
-  vec4 m = uHasMap > 0.5 ? texture(uMap, dmMapUv(vUv, uBox, uBehaviour)) : vec4(0.5);
+  vec2 mq = dmMapUv(vUv, uBox, uBehaviour);
+  if (uMapBytes > 0.5) mq.y = 1.0 - mq.y;
+  vec4 m = uHasMap > 0.5 ? texture(uMap, mq) : vec4(0.5);
   vec2 d = dmOffset(dmChan(m, uH), dmChan(m, uV), uMax, uAspect);
   vec2 q = vUv - d;
   if (uWrap > 0.5) q = fract(q);
   else if (q.x < 0.0 || q.x > 1.0 || q.y < 0.0 || q.y > 1.0) { o = vec4(0.0); return; }
-  o = texture(uSrc, q);
+  o = dmSrcAt(q);
 }`;
 
 /**
+ * How a 2D canvas reaches the GPU in this browser (see dmCreate): 'pixels' (its
+ * bytes, getImageData) in WebKit (Safari, the desktop app's web view, every
+ * iOS browser), where texImage2D(canvas) reads the canvas back and converts it
+ * on the CPU; 'canvas' elsewhere, where that upload is a copy on the GPU and a
+ * getImageData would stall it.
+ */
+export function dmUploadModeFor(userAgent) {
+  const ua = typeof userAgent === 'string' ? userAgent : '';
+  return /AppleWebKit\//.test(ua) && !/(Chrome|Chromium)\//.test(ua) ? 'pixels' : 'canvas';
+}
+
+/**
  * A GPU displacer with a WebGL2 canvas of its own (made on first use). Each
- * `apply` draws `src` (a canvas, premultiplied on upload) moved by `map` (a
- * canvas or null: nothing moves) at W × H and returns the GL canvas to draw
- * from at once, or null without WebGL2 (the layer then draws unmoved).
+ * `apply` draws `src` (a canvas) moved by `map` (a canvas or null: nothing
+ * moves) at W × H and returns the GL canvas to draw from at once, or null
+ * without WebGL2 (the layer then draws unmoved).
  * opts: { h, v, behaviour, wrap, maxH, maxV, box }.
+ *
+ * Getting a 2D canvas into a texture is most of the cost, and browsers differ:
+ * texImage2D(canvas) is a GPU copy in Chrome, but WebKit (Safari, the desktop
+ * app) reads the canvas back and converts it on the CPU (about 6 ms for a
+ * 1500 × 1300 layer, twice a frame: the layer and its map). There, its
+ * getImageData and an upload of the bytes take about a third of that, so the
+ * mode follows the browser (dmUploadModeFor). Timing both on the first frames
+ * was tried: those frames are too noisy (shader compiles, fonts) to choose by.
  */
 export function dmCreate() {
   let canvas = null, gl = null, prog = null, failed = false;
   let srcTex = null, mapTex = null, buf = null;
+  let mode = dmUploadModeFor(typeof navigator !== 'undefined' ? navigator.userAgent : '');
+  let scratch = null; // a 2D canvas a non-2D map (the picture's WebGL canvas) is copied into, in 'pixels' mode
   const locs = {};
   function init() {
     if (gl || failed) return !!gl;
@@ -260,7 +306,7 @@ export function dmCreate() {
     gl.bindAttribLocation(prog, 0, 'aPos');
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { failed = true; gl = null; return false; }
-    for (const n of ['uSrc', 'uMap', 'uHasMap', 'uH', 'uV', 'uBehaviour', 'uWrap', 'uAspect', 'uMax', 'uBox']) locs[n] = gl.getUniformLocation(prog, n);
+    for (const n of ['uSrc', 'uMap', 'uHasMap', 'uH', 'uV', 'uBehaviour', 'uWrap', 'uAspect', 'uMax', 'uBox', 'uSrcBytes', 'uMapBytes']) locs[n] = gl.getUniformLocation(prog, n);
     buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
@@ -276,6 +322,7 @@ export function dmCreate() {
     srcTex = tex(); mapTex = tex();
     return true;
   }
+  // 'canvas' mode: the canvas itself, flipped (and the source premultiplied) as it is uploaded.
   function upload(tex, img, premultiply) {
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
@@ -284,6 +331,24 @@ export function dmCreate() {
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
   }
+  // 'pixels' mode: the canvas's bytes (straight, rows top down), as they are. A canvas without a
+  // 2D context (the picture's WebGL canvas, an image) is copied into a 2D canvas of our own first.
+  function uploadBytes(tex, img) {
+    let x = null;
+    try { x = typeof img.getContext === 'function' ? img.getContext('2d') : null; } catch (e) { x = null; }
+    const w = img.width, h = img.height;
+    if (!x) {
+      if (!scratch) scratch = typeof OffscreenCanvas !== 'undefined' && typeof document === 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
+      if (scratch.width !== w || scratch.height !== h) { scratch.width = w; scratch.height = h; }
+      x = scratch.getContext('2d');
+      x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = 1; x.globalCompositeOperation = 'copy';
+      x.drawImage(img, 0, 0);
+      x.globalCompositeOperation = 'source-over';
+    }
+    const data = x.getImageData(0, 0, w, h).data;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+  }
   return {
     apply(src, map, opts, W, H) {
       if (!init()) return null;
@@ -291,10 +356,15 @@ export function dmCreate() {
       if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
       gl.viewport(0, 0, W, H);
       gl.useProgram(prog);
-      gl.activeTexture(gl.TEXTURE0); upload(srcTex, src, true);
+      const m = mode;
+      gl.activeTexture(gl.TEXTURE0);
+      if (m === 'pixels') uploadBytes(srcTex, src); else upload(srcTex, src, true);
       gl.activeTexture(gl.TEXTURE1);
-      if (map) upload(mapTex, map, false); else gl.bindTexture(gl.TEXTURE_2D, mapTex);
+      if (!map) gl.bindTexture(gl.TEXTURE_2D, mapTex);
+      else if (m === 'pixels') uploadBytes(mapTex, map); else upload(mapTex, map, false);
       gl.uniform1i(locs.uSrc, 0); gl.uniform1i(locs.uMap, 1);
+      gl.uniform1f(locs.uSrcBytes, m === 'pixels' ? 1 : 0);
+      gl.uniform1f(locs.uMapBytes, m === 'pixels' && map ? 1 : 0);
       gl.uniform1f(locs.uHasMap, map ? 1 : 0);
       gl.uniform1f(locs.uH, dmChannelIndex(s.h)); gl.uniform1f(locs.uV, dmChannelIndex(s.v));
       gl.uniform1f(locs.uBehaviour, DM_BEHAVIOURS.indexOf(s.behaviour));
@@ -311,9 +381,13 @@ export function dmCreate() {
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       return canvas;
     },
+    /** The upload mode in use: 'canvas' or 'pixels'. */
+    get mode() { return mode; },
+    /** Use one upload mode from now on (a parity check); anything else goes back to the browser's. */
+    setMode(next) { mode = next === 'canvas' || next === 'pixels' ? next : dmUploadModeFor(typeof navigator !== 'undefined' ? navigator.userAgent : ''); },
     dispose() {
       if (gl) { const ext = gl.getExtension('WEBGL_lose_context'); if (ext) ext.loseContext(); }
-      gl = null; canvas = null; failed = false;
+      gl = null; canvas = null; failed = false; scratch = null;
     },
   };
 }

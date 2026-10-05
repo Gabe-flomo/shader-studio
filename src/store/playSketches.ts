@@ -726,14 +726,17 @@ const params = {
 
 function draw(s) {
   const { ctx, width, height, time, params } = s;
-  ctx.clearRect(0, 0, width, height);
-  const band = 1; // one row of pixels at a time, so the waves are smooth
-  for (let y = 0; y < height; y += band) {
+  // Every row is one colour, so the rows are one vertical gradient with a stop
+  // per row, filled once: the same picture as a fillRect per row, without the
+  // hundreds of fills a frame.
+  const g = ctx.createLinearGradient(0, 0, 0, height);
+  for (let y = 0; y < height; y++) {
     const v = y / height;
     const red = 0.5 + 0.5 * Math.sin((v * params.waves + time * params.speed) * Math.PI * 2);
     const alpha = 0.5 + 0.45 * Math.sin((v * params.waves * 0.5 - time * params.speed * 0.7) * Math.PI * 2);
-    ctx.fillStyle = 'rgba(' + Math.round(red * 255) + ', 128, 128, ' + alpha.toFixed(3) + ')';
-    ctx.fillRect(0, y, width, band);
+    g.addColorStop((y + 0.5) / height, 'rgba(' + Math.round(red * 255) + ', 128, 128, ' + alpha.toFixed(3) + ')');
   }
-}
-`;
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, width, height);
+}`;

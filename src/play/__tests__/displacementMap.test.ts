@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  DM_CHANNELS, DM_GLSL, dmApplyAt, dmBoxOf, dmChannel, dmChannelGlsl, dmChannelIndex, dmMapUv, dmOffset, dmSettings, dmSourceUv,
+  DM_CHANNELS, DM_GLSL, dmApplyAt, dmUploadModeFor, dmQualityScale, dmBoxOf, dmChannel, dmChannelGlsl, dmChannelIndex, dmMapUv, dmOffset, dmSettings, dmSourceUv,
 } from '../kit/displace.js';
 import { fnBuildFinal, fnDefaultEffect, fnDisplaceChannels, fnMapKeys, type FnEffect } from '../kit/finish.js';
 import { newFinishEffect, parseFinishEffect } from '../../types/playFinish';
@@ -247,5 +247,27 @@ describe('the Studio node', () => {
   it('the example compiles', () => {
     const ex = buildDisplacementExamples().displaceNoiseMap;
     expect(compileGraph({ nodes: ex.nodes }).success).toBe(true);
+  });
+});
+
+describe('the kit pass: how a canvas reaches the GPU', () => {
+  // texImage2D(canvas) is a GPU copy in Chrome but a CPU readback and conversion in WebKit (Safari,
+  // the desktop app, iOS browsers): there the kit uploads the canvas's bytes instead.
+  it('WebKit uploads bytes; Chrome, Edge and Firefox upload the canvas', () => {
+    expect(dmUploadModeFor('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15')).toBe('pixels');
+    expect(dmUploadModeFor('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)')).toBe('pixels'); // WKWebView (the desktop app)
+    expect(dmUploadModeFor('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/130.0 Mobile/15E148 Safari/604.1')).toBe('pixels');
+    expect(dmUploadModeFor('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36')).toBe('canvas');
+    expect(dmUploadModeFor('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0')).toBe('canvas');
+    expect(dmUploadModeFor('Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:140.0) Gecko/20100101 Firefox/140.0')).toBe('canvas');
+    expect(dmUploadModeFor('')).toBe('canvas');
+  });
+  it('map quality: full, half, quarter of the picture (anything else full)', () => {
+    expect([dmQualityScale('full'), dmQualityScale('half'), dmQualityScale('quarter'), dmQualityScale(undefined as unknown as string)]).toEqual([1, 0.5, 0.25, 1]);
+  });
+  it('a layer keeps Half or Quarter; Full stays off the record', () => {
+    expect(parseDisplace({ map: 'picture', quality: 'quarter' }, 'a')?.quality).toBe('quarter');
+    expect(parseDisplace({ map: 'picture', quality: 'full' }, 'a')).not.toHaveProperty('quality');
+    expect(parseDisplace({ map: 'picture', quality: 'nonsense' }, 'a')).not.toHaveProperty('quality');
   });
 });

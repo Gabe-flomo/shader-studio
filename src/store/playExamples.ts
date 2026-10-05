@@ -2701,7 +2701,7 @@ Holding **M** turns Datamosh's **Mosh** on: nothing heals while it's held.
   ex('displaceText', fbmGraph({ scale: 1.6, timeScale: 0.03, preset: '3' }), play({
     layers: [
       displaced(layer('text', 'title', 'Title', { text: 'RIPPLE', size: 0.26, weight: 800, color: [1, 0.97, 0.9], toShader: false }),
-        { map: 'layer', layerId: 'waves', h: 'red', v: 'alpha', behaviour: 'center', wrap: false }, 60, 30),
+        { map: 'layer', layerId: 'waves', h: 'red', v: 'alpha', behaviour: 'center', wrap: false, quality: 'quarter' }, 60, 30),
       { ...scriptLayer('waves', 'Waves (map)', SKETCH_DISPLACE_WAVES, { toShader: false }), visible: false } as PlayLayer,
     ],
     controls: [
@@ -2713,8 +2713,8 @@ Holding **M** turns Datamosh's **Mosh** on: nothing heals while it's held.
     notes: `**What it shows.** After Effects' **Displacement Map** on one layer. The Title's own pixels are moved by a map before they meet the picture; the shader under it isn't touched.
 
 **How it's built.**
-• **Title** (a Text layer): its **Displace** section (the Displace button under its name) reads the **Waves (map)** layer. **Horizontal: Red**, **Vertical: Alpha**, **Max horizontal** 60 and **Max vertical** 30 (pixels of a 1080-tall picture). Mid-grey leaves a pixel where it is; brighter pushes it right (or up), darker left (or down).
-• **Waves (map)** (a Script layer, hidden): rows of red and of alpha that rise and fall in waves and drift down the picture. It is hidden, but it still runs, because the Title reads it (like a matte). Its row in the list says *Displaces Title*.
+• **Title** (a Text layer): its **Displace** section (the Displace button under its name) reads the **Waves (map)** layer. **Horizontal: Red**, **Vertical: Alpha**, **Max horizontal** 60 and **Max vertical** 30 (pixels of a 1080-tall picture). Mid-grey leaves a pixel where it is; brighter pushes it right (or up), darker left (or down). **Map quality: Quarter** reads the map at a quarter of the picture's size: the waves are smooth, so it looks the same and costs far less on a big picture.
+• **Waves (map)** (a Script layer, hidden): rows of red and of alpha that rise and fall in waves and drift down the picture. Every row is one colour, so it fills the picture once with a top-to-bottom gradient that has a stop per row (a fillRect per row would cost much more). It is hidden, but it still runs, because the Title reads it (like a matte). Its row in the list says *Displaces Title*.
 • The shader: a slow FBM landscape, only there to sit behind the Title.
 • An LFO breathes **Max horizontal** between 15 and 90 (Max is a layer number, so any control or mapping can drive it).
 

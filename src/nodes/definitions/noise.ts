@@ -3,6 +3,12 @@ import { f, p, pv3 } from './helpers';
 
 // ─── FBM — Fractal Brownian Motion ───────────────────────────────────────────
 
+/** An octave count as a GLSL int: a literal when baked, `int(u + 0.5)` when the slider is a uniform (moving it never recompiles). */
+function octavesGlsl(v: unknown, fallback: number): string {
+  if (typeof v === 'string') return `int(${v} + 0.5)`;
+  return String(Math.round(typeof v === 'number' ? v : fallback));
+}
+
 // noiseHash1/noiseHash2/valueNoise are in the shader preamble — no need to re-emit.
 const FBM_GLSL = `
 float fbm(vec2 p, int octaves, float lacunarity, float gain) {
@@ -36,7 +42,7 @@ export const FBMNode: NodeDefinition = {
   glslFunction: FBM_GLSL,
   defaultParams: { octaves: 4, lacunarity: 2.0, gain: 0.5, scale: 1.0, time_scale: 0.0 },
   paramDefs: {
-    octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 8,   step: 1, compileTime: true, hint: 'Layers of detail. 1 is smooth blobs, 6+ adds fine grain; each costs GPU time. Recompiles when changed.' },
+    octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 8,   step: 1, hint: 'Layers of detail. 1 is smooth blobs, 6+ adds fine grain; each costs GPU time.' },
     lacunarity: { label: 'Lacunarity', type: 'float', min: 1.0, max: 4.0, step: 0.01, hint: 'Frequency jump between layers. 2 is standard; higher = finer detail sooner.' },
     gain:       { label: 'Gain',       type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: 'How much each finer layer contributes. 0.5 is natural; higher = rougher.' },
     scale:      { label: 'Frequency',      type: 'float', min: 0.1, max: 10.0,step: 0.1, hint: 'Bigger means smaller, busier features.'  },
@@ -48,7 +54,8 @@ export const FBMNode: NodeDefinition = {
     const timeVar    = inputVars.time       ?? '0.0';
     const scale      = inputVars.scale      ?? p(node.params.scale, 1.0);
     const timeScale  = inputVars.time_scale ?? p(node.params.time_scale, 0.0);
-    const octaves    = Math.round(typeof node.params.octaves    === 'number' ? node.params.octaves    : 4);
+    // A live uniform: fbm() loops to 8 and breaks at octaves, so the count needn't be a literal.
+    const octaves    = octavesGlsl(node.params.octaves, 4);
     const lacunarity = p(node.params.lacunarity, 2.0);
     const gain       = p(node.params.gain, 0.5);
     const outVar     = `${id}_value`;
@@ -169,7 +176,7 @@ export const DomainWarpNode: NodeDefinition = {
   paramDefs: {
     strength:   { label: 'Strength',   type: 'float', min: 0.0, max: 3.0, step: 0.01, hint: 'How far the noise pushes UV. 0.5 is marbled, 2+ is soup.' },
     scale:      { label: 'Scale',      type: 'float', min: 0.1, max: 5.0, step: 0.1, hint: 'Frequency of the warp noise. Higher = smaller swirls.' },
-    octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 4,   step: 1, compileTime: true, hint: 'Noise layers in the warp. More = more detailed distortion. Recompiles when changed.' },
+    octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 4,   step: 1, hint: 'Noise layers in the warp. More = more detailed distortion.' },
     lacunarity: { label: 'Lacunarity', type: 'float', min: 1.0, max: 4.0, step: 0.01, hint: 'Frequency jump between layers. 2 is standard.' },
     gain:       { label: 'Gain',       type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: 'Contribution of each finer layer. 0.5 is natural.' },
     time_scale: { label: 'Speed', type: 'float', min: 0.0, max: 2.0, step: 0.01, hint: 'How fast the warp drifts. Needs Time wired.' },
@@ -181,7 +188,7 @@ export const DomainWarpNode: NodeDefinition = {
     const strength  = inputVars.strength   ?? p(node.params.strength, 0.5);
     const scale     = inputVars.scale      ?? p(node.params.scale, 1.0);
     const timeScale = inputVars.time_scale ?? p(node.params.time_scale, 0.0);
-    const octaves   = Math.round(typeof node.params.octaves    === 'number' ? node.params.octaves    : 3);
+    const octaves   = octavesGlsl(node.params.octaves, 3);
     const lacunarity= p(node.params.lacunarity, 2.0);
     const gain      = p(node.params.gain, 0.5);
     const warpedVar  = `${id}_uv`;
