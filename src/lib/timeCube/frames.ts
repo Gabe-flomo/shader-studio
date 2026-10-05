@@ -159,6 +159,41 @@ function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number,
   g.closePath();
 }
 
+// ── Reading frames one at a time (Frames from, Frame order) ─────────────────
+
+/** Draws the frame at a video time into a box. */
+export interface FrameReader {
+  draw(t: number, g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, signal: AbortSignal): Promise<void>;
+  close(): void;
+}
+
+/** The test clip, painted at any time. */
+export function demoReader(): FrameReader {
+  return { draw: async (t, g, x, y, w, h) => paintDemoFrame(g, t, x, y, w, h), close: () => {} };
+}
+
+/** A video, seeked frame by frame (as decodeVideoFrames). */
+export async function openVideoReader(blob: Blob): Promise<FrameReader> {
+  const url = URL.createObjectURL(blob);
+  const el = videoElement(url);
+  if (!(await waitFor(el, 'loadeddata', 20_000))) { release(el, url); throw new Error('This video could not be opened here.'); }
+  return {
+    async draw(time, g, x, y, w, h, signal) {
+      if (signal.aborted) throw new TimeCubeCancelled();
+      const t = Math.min(time, Math.max(0, (Number.isFinite(el.duration) ? el.duration : time) - 1e-3));
+      if (Math.abs(el.currentTime - t) > 1e-4 || el.readyState < 2) {
+        const seeked = waitFor(el, 'seeked', 5000);
+        el.currentTime = t;
+        await seeked;
+        if (el.readyState < 2) await waitFor(el, 'loadeddata', 2000);
+      }
+      if (signal.aborted) throw new TimeCubeCancelled();
+      g.drawImage(el, x, y, w, h);
+    },
+    close: () => release(el, url),
+  };
+}
+
 /** Paint every planned frame of the test clip into the atlas. Yields to the page now and then. */
 export async function paintDemoFrames(plan: StackPlan, ctx: CanvasRenderingContext2D, onFrame: (done: number) => void, signal: AbortSignal): Promise<void> {
   for (let i = 0; i < plan.frames; i++) {

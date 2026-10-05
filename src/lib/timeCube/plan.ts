@@ -236,7 +236,9 @@ export interface VoxelLook {
  */
 export function voxelOpacity(c: readonly number[], f: number, L: VoxelLook): number {
   let op = f < 0 ? L.before : L.after;
-  op *= 1 - L.darkClear + L.darkClear * smoothstep(0.02, 0.4, luma(c));
+  // Dark is clear above 0; below 0, light is clear (footage on white).
+  const dc = clamp(L.darkClear, -1, 1), a = Math.abs(dc);
+  op *= 1 - a + a * (dc >= 0 ? smoothstep(0.02, 0.4, luma(c)) : 1 - smoothstep(0.6, 0.98, luma(c)));
   if (L.key.mode !== 'off') {
     const m = keyMatch(c, L.key);
     op = op * L.othersOpacity * (1 - m) + L.keyOpacity * m;
@@ -272,7 +274,7 @@ export function boxHalf(axis: StackAxis, aspect: number, depth: number, size: nu
 }
 
 /**
- * Volume coordinate (u, v, t) of a box point q in 0–1³ for a stack axis (the view's GLSL `uvtOf`).
+ * Volume coordinate (u, v, t) of a box point q in 0–1³ for a stack axis (the view's GLSL `tcUvt`).
  * Time starts at the +z face (+x, +y for the other axes). The app's cameras put screen right at
  * −x when looking down −z, so u runs toward −x and a frame reads the right way round from there.
  */
