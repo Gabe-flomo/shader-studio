@@ -75,6 +75,7 @@ import { videoEngine } from '../../lib/videoEngine';
 import { errorMessage } from '../../utils/fileIO';
 import type { FileResult } from '../../utils/fileIO';
 import { isParamVisible } from '../../compiler/uniformPatcher';
+import { summarizeSection, switchOnPatch } from '../../lib/sectionSummary';
 import { typesCompatible } from '../../lib/typesCompatible';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { Menu } from '../ui/Menu';
@@ -3219,8 +3220,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     const keys = sectionKeys.get(pd.section) ?? [];
     const folded = sectionFolded(pd.section);
     if (keys[0] !== key) return folded ? null : render();
-    const changed = keys.filter(k => JSON.stringify(node.params[k]) !== JSON.stringify(def?.defaultParams?.[k])).length;
+    // Counts only what opening the section shows (showWhen respected); see lib/sectionSummary.
+    const summary = summarizeSection(keys, paramDefs, node.params, def?.defaultParams);
+    if (summary.controls === 0) return null;
     const name = pd.section;
+    const offFeature = summary.on === false;
     return (
       <React.Fragment key={`sec:${name}`}>
         <button
@@ -3232,13 +3236,15 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             display: 'flex', alignItems: 'center', gap: 4, width: '100%', padding: '8px 12px 4px 12px', border: 0, background: 'none',
             cursor: 'pointer', textAlign: 'left', color: tk.text.secondary, font: `600 12px ${fontFamily.ui}`, letterSpacing: 0.2,
           }}
-          title={`Click to ${folded ? 'show' : 'fold'} ${name.toLowerCase()} settings (they keep working while folded)`}
+          title={offFeature
+            ? `${name} is off. Click to ${folded ? 'show' : 'fold'} its switch: turn it on to use it`
+            : `Click to ${folded ? 'show' : 'fold'} ${name.toLowerCase()} settings (they keep working while folded)`}
         >
           <Icon name={folded ? 'chevR' : 'chevD'} size={13} style={{ color: tk.text.faint, flexShrink: 0 }} />
           <span>{name}</span>
           {folded && (
             <span style={{ marginLeft: 'auto', font: `500 11px ${fontFamily.ui}`, color: tk.text.muted }}>
-              {changed ? `${changed} changed` : `${keys.length} settings`}
+              {summary.text}
             </span>
           )}
         </button>
@@ -4383,14 +4389,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             if (/^color\d+$/.test(key)) return null;
           }
           // showWhen — conditionally hide params based on another param's value
-          if (paramDef.showWhen) {
-            // A gate param an older save never had reads as its default (same rule as isParamVisible)
-            const watchedVal = (node.params[paramDef.showWhen.param] ?? def?.defaultParams?.[paramDef.showWhen.param]) as string;
-            const allowed = Array.isArray(paramDef.showWhen.value)
-              ? paramDef.showWhen.value
-              : [paramDef.showWhen.value];
-            if (!allowed.includes(watchedVal)) return null;
-          }
+          // isParamVisible compares as strings, so a bool gate (showWhen value 'true') works too.
+          if (!isParamVisible(paramDef, node.params, def?.defaultParams)) return null;
           // The second half of a `pair` group (e.g. Remap's inMax/outMax) is rendered by its
           // owner below, in one row.
           if (pairSecondaryKeys.has(key)) return null;
@@ -4564,7 +4564,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 <ParamLabel>{paramDef.label}</ParamLabel>
                 <Toggle checked={val} onChange={v => key === 'volumetric' && VOLUMETRIC_LOOP_TYPES.has(node.type)
                   ? useNodeGraphStore.getState().setLoopVolumetric(node.id, v)
-                  : updateNodeParams(node.id, { [key]: v })} />
+                  // Switching a feature on also gives its still-default controls their starting values (whenOn).
+                  : updateNodeParams(node.id, v ? switchOnPatch(key, paramDef, node.params, def?.defaultParams) : { [key]: v })} />
               </div>
             );
           }
