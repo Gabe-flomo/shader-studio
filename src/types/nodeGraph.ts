@@ -142,6 +142,12 @@ export interface ParamDef {
    * from a "?" beside the setting's name on the card. `hint` stays the one-line tooltip.
    */
   help?: string;
+  /**
+   * For a bool that switches a feature on (a section's switch, lib/sectionSummary.ts): starting
+   * values for the controls it reveals, so switching it on visibly does something. Applied when the
+   * switch is turned on, only to controls still at their default (anything you set is kept).
+   */
+  whenOn?: Record<string, unknown>;
 }
 
 // Node definition (blueprint)

@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.30',
+    date: '2026-10-04',
+    title: 'Clearer node sections',
+    highlights: [
+      { area: 'Studio', text: 'Folded sections now read "4 controls · 1 changed", or Off / On for sections with a switch, counting only what you will see.' },
+      { area: 'Studio', text: 'Fixed: switching on Highlights, Frame motion or Frame effects now shows their sliders, and Passthrough shows again on Ray March nodes.' },
+    ],
+  },
+  {
     id: '2026.10.29',
     date: '2026-10-04',
     title: 'Softer time cubes',

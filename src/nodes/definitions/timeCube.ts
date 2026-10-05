@@ -369,7 +369,7 @@ const VIEW_PARAMS: Record<string, ParamDef> = {
   hlOthers:     { section: 'Highlights', label: 'Others', type: 'float', showWhen: { param: 'highlights', value: 'true' }, min: 0, max: 1, step: 0.01, hint: 'Opacity of the frames that are not highlighted, times Before / After: lower makes the highlights stand alone.' },
   sendThrough:  { section: 'Highlights', label: 'Send through', type: 'float', showWhen: { param: 'highlights', value: 'true' }, min: 0, max: 1, step: 0.01, hint: 'Sends the first highlighted frame\'s picture through the whole box: at 1 every frame is that one (a slit-scan of a single frame).' },
 
-  motion:       { section: 'Frame motion', label: 'Move frames', type: 'bool', hint: 'Turns frame motion on (one recompile; the sliders below are then live).' },
+  motion:       { section: 'Frame motion', label: 'Move frames', type: 'bool', whenOn: { liftUp: 0.3, frameScale: 0.25 }, hint: 'Turns frame motion on (one recompile; the sliders below are then live). Starts with a gentle lift and grow, so you can see it.' },
   motionAt:     { section: 'Frame motion', label: 'Moves frames near', type: 'select', showWhen: { param: 'motion', value: 'true' }, options: [{ value: 'slice', label: 'The slice' }, { value: 'highlights', label: 'The highlighted frames' }, { value: 'both', label: 'Both' }], hint: 'Where the wave that moves frames sits. It travels with Offset.' },
   motionWidth:  { section: 'Frame motion', label: 'Falloff (frames)', type: 'float', showWhen: { param: 'motion', value: 'true' }, min: 0.5, max: 128, step: 0.5, hint: 'How many frames either side the wave reaches, easing off.' },
   liftUp:       { section: 'Frame motion', label: 'Lift', type: 'float', showWhen: { param: 'motion', value: 'true' }, min: -1, max: 1, step: 0.01, hint: 'Lifts the frames in the wave up (frame heights).' },
@@ -378,7 +378,7 @@ const VIEW_PARAMS: Record<string, ParamDef> = {
   frameTurn:    { section: 'Frame motion', label: 'Turn°', type: 'float', showWhen: { param: 'motion', value: 'true' }, min: -180, max: 180, step: 0.5, hint: 'Turns them in their own plane.' },
   frameFade:    { section: 'Frame motion', label: 'Fade', type: 'float', showWhen: { param: 'motion', value: 'true' }, min: 0, max: 1, step: 0.01, hint: 'Fades them out: 1 makes the frame at the top of the wave clear.' },
 
-  effects:      { section: 'Frame effects', label: 'Frame effects', type: 'bool', hint: 'Turns the per-frame effects on (one recompile; the sliders below are then live).' },
+  effects:      { section: 'Frame effects', label: 'Frame effects', type: 'bool', whenOn: { fxHue: 0.5, fxAgeGrey: 0.5 }, hint: 'Turns the per-frame effects on (one recompile; the sliders below are then live). Starts with some hue across time and grey with age, so you can see it.' },
   fxHue:        { section: 'Frame effects', label: 'Hue across time', type: 'float', showWhen: { param: 'effects', value: 'true' }, min: -2, max: 2, step: 0.01, hint: 'Turns each frame\'s hue by its time: 1 goes once round the colour wheel from first frame to last.' },
   fxPosterize:  { section: 'Frame effects', label: 'Posterize', type: 'float', showWhen: { param: 'effects', value: 'true' }, min: 0, max: 16, step: 1, hint: 'Levels per colour channel: 2 to 16. 0 (or 1) is off.' },
   fxAgeGrey:    { section: 'Frame effects', label: 'Grey with age', type: 'float', showWhen: { param: 'effects', value: 'true' }, min: 0, max: 1, step: 0.01, hint: 'Drains the colour from frames older than the slice, more the older they are.' },
