@@ -11,6 +11,7 @@ import { knobParamDefs, withInputExpressions } from '../../glsl/inputExpr';
 import { VideoInputNode } from './sources';
 export { VideoInputNode };
 import { BakedNode } from './baked';
+import { TimeCubeNode, TimeCubeViewNode, TimeSliceNode } from './timeCube';
 export { BakedNode };
 import { MidiInputNode } from './midi';
 export { MidiInputNode };
@@ -298,6 +299,10 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   audioInput: AudioInputNode,
   videoInput: VideoInputNode,
   baked: BakedNode,
+  // Time cube (docs/time-cube.md): a video as a box of time
+  timeCube: TimeCubeNode,
+  timeSlice: TimeSliceNode,
+  timeCubeView: TimeCubeViewNode,
   midiInput: MidiInputNode,
   data: DataNode,
   playLayers: PlayLayersNode,

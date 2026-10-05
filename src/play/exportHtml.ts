@@ -174,6 +174,8 @@ export interface PlayMediaFile {
   bytes: number;
   /** An image scaled down to fit the page: its new longest side. */
   scaledTo?: number | null;
+  /** An image read without mipmaps: a Time Cube's frame atlas (docs/time-cube.md), whose tiles must not bleed into each other. */
+  flat?: boolean;
 }
 
 /** A Baked node's video (docs/bake.md): the page shows frame (t − start) × fps, looped or held, as the app does. */
@@ -416,7 +418,8 @@ function runtimeMedia(m: PlayMedia) {
   const file = (f: PlayMediaFile) => ({ src: f.src });
   const map = <T extends PlayMediaFile, R>(r: Record<string, T> | undefined, fn: (f: T) => R) => Object.fromEntries(Object.entries(r ?? {}).map(([k, v]) => [k, fn(v)]));
   return {
-    textures: map(m.textures, file),
+    // A Time Cube's frame atlas is read without mipmaps (`flat`, docs/time-cube.md).
+    textures: map(m.textures, t => (t.flat ? { ...file(t), flat: true } : file(t))),
     videos: map(m.videos, v => ({ src: v.src, loop: v.loop, speed: v.speed })),
     audio: (m.audio ?? []).map(a => ({ id: a.id, src: a.src, uniforms: a.uniforms, bands: a.bands, range: a.range, mode: a.mode })),
   };

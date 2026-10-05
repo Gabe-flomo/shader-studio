@@ -59,6 +59,7 @@ const TYPE_COLOR: Record<DataType, string> = {
   agents:      '#9be564',
   emitter:     '#ffd166',
   deposit:     '#c792ea',
+  volume:      '#f5a97f',
 };
 
 // ─── Styles ───────────────────────────────────────────────────────────────────

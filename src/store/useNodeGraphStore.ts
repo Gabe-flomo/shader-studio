@@ -10,6 +10,7 @@ import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyL
 import { askText } from '../components/ui/dialogStore';
 import { toast } from '../components/ui/toastStore';
 import { LIGHTING_CATEGORY, MARCH_GROUP_TYPES, planSceneGroupAdd, planSmart3DAdd } from '../nodes/smart3d';
+import { TIME_CUBE_AUTO_TYPES, planTimeCubeAdd } from '../lib/timeCube/autoWire';
 import { addToScene, buildSceneSubgraphFor, camerasToWiden, rigSettingsFor, sceneRole, targetScene } from '../nodes/scene3dShapes';
 import { VOLUMETRIC_LOOP_TYPES, volumetricOff, volumetricOn } from '../nodes/volumetricAuto';
 import { askChoice } from '../components/ui/dialogStore';
@@ -1648,7 +1649,9 @@ function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTe
     const [id, slot] = key.split('::');
     const label = slot ? `${labelOf(id, 'a node')} (${slot})` : labelOf(id, 'Texture Input');
     const enc = imageDataUrl(st.nodeTextures[key]?.image);
-    textures[uniform] = { label, name: '', src: enc?.dataUrl ?? null, bytes: enc?.dataUrl.length ?? 0, scaledTo: enc?.scaledTo ?? null };
+    // A Time Cube's atlas of frames (docs/time-cube.md) is read without mipmaps, as in the app.
+    const flat = byId.get(id)?.type === 'timeCube';
+    textures[uniform] = { label, name: '', src: enc?.dataUrl ?? null, bytes: enc?.dataUrl.length ?? 0, scaledTo: enc?.scaledTo ?? null, ...(flat ? { flat: true } : {}) };
   }
   const videos: NonNullable<PlayMedia['videos']> = {};
   for (const [uniform, id] of Object.entries(st.videoUniforms)) {
@@ -3417,6 +3420,19 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           message: `${what}${output ? ' and wired to the Output' : '. Add an Output node and wire the last node into it to see it'}. Every node has a note on what it does; double-click the Agents group to open the rule.`,
         });
         return added.find(n => n.type === 'agentsGroup')?.id;
+      }
+    }
+    // ── Time cube (docs/time-cube.md) ────────────────────────────────────────
+    // A Time Cube View or Time Slice on the top level gets a Time Cube to read (the nearest, or a
+    // new one), and a View joins a ray-marched scene that's already there (lib/timeCube/autoWire.ts).
+    if (TIME_CUBE_AUTO_TYPES.has(type) && get().activeGroupPath.length === 0 && !overrideParams) {
+      const plan = planTimeCubeAdd(type, get().nodes, position, () => idGenerator.next());
+      if (plan) {
+        undoManager.push(get().nodes, { label: `Added ${getNodeDefinition(type)?.label ?? type}` });
+        set({ nodes: plan.nodes });
+        get().compile();
+        toast.info(`${getNodeDefinition(type)?.label ?? type} added`, { message: plan.message });
+        return plan.id;
       }
     }
     // ── 3D scene companion spawning ──────────────────────────────────────────

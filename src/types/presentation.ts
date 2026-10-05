@@ -292,6 +292,7 @@ function parseFile(v: unknown, kind: 'image' | 'video' | 'audio'): PlayMediaFile
   const src = typeof v.src === 'string' && new RegExp(`^data:${kind}/[\\w.+-]+;base64,[A-Za-z0-9+/=]+$`).test(v.src) ? v.src : null;
   const f: PlayMediaFile = { label: str(v.label, 200) ?? '', name: str(v.name, 200) ?? '', src, bytes: Math.max(0, num(v.bytes) ?? 0) };
   if ('scaledTo' in v) f.scaledTo = num(v.scaledTo);
+  if (v.flat === true) f.flat = true;
   return f;
 }
 
