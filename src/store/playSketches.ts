@@ -725,28 +725,18 @@ const params = {
 };
 
 function draw(s) {
-  const { ctx, width, height, time, params, state } = s;
-  // Every row is one colour, so one column of pixels is worked out (straight
-  // into its bytes) and stretched across the picture: the same rows as
-  // filling each one, without a fillRect per row.
-  if (!state.column || state.column.height !== height) {
-    state.column = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, height) : Object.assign(document.createElement('canvas'), { width: 1, height });
-    state.pixels = state.column.getContext('2d').createImageData(1, height);
-  }
-  const px = state.pixels.data;
+  const { ctx, width, height, time, params } = s;
+  // Every row is one colour, so the rows are one vertical gradient with a stop
+  // per row, filled once: the same picture as a fillRect per row, without the
+  // hundreds of fills a frame.
+  const g = ctx.createLinearGradient(0, 0, 0, height);
   for (let y = 0; y < height; y++) {
     const v = y / height;
     const red = 0.5 + 0.5 * Math.sin((v * params.waves + time * params.speed) * Math.PI * 2);
     const alpha = 0.5 + 0.45 * Math.sin((v * params.waves * 0.5 - time * params.speed * 0.7) * Math.PI * 2);
-    px[y * 4] = Math.round(red * 255);
-    px[y * 4 + 1] = 128;
-    px[y * 4 + 2] = 128;
-    px[y * 4 + 3] = Math.round(alpha * 255);
+    g.addColorStop((y + 0.5) / height, 'rgba(' + Math.round(red * 255) + ', 128, 128, ' + alpha.toFixed(3) + ')');
   }
-  state.column.getContext('2d').putImageData(state.pixels, 0, 0);
   ctx.clearRect(0, 0, width, height);
-  ctx.imageSmoothingEnabled = false; // keep the rows sharp: each is exactly its colour
-  ctx.drawImage(state.column, 0, 0, width, height);
-  ctx.imageSmoothingEnabled = true;
-}
-`;
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, width, height);
+}`;

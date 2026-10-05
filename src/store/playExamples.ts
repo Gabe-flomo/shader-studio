@@ -2714,7 +2714,7 @@ Holding **M** turns Datamosh's **Mosh** on: nothing heals while it's held.
 
 **How it's built.**
 • **Title** (a Text layer): its **Displace** section (the Displace button under its name) reads the **Waves (map)** layer. **Horizontal: Red**, **Vertical: Alpha**, **Max horizontal** 60 and **Max vertical** 30 (pixels of a 1080-tall picture). Mid-grey leaves a pixel where it is; brighter pushes it right (or up), darker left (or down). **Map quality: Quarter** reads the map at a quarter of the picture's size: the waves are smooth, so it looks the same and costs far less on a big picture.
-• **Waves (map)** (a Script layer, hidden): rows of red and of alpha that rise and fall in waves and drift down the picture. Every row is one colour, so it works out one column of pixels and stretches it across (one fillRect per row would cost much more). It is hidden, but it still runs, because the Title reads it (like a matte). Its row in the list says *Displaces Title*.
+• **Waves (map)** (a Script layer, hidden): rows of red and of alpha that rise and fall in waves and drift down the picture. Every row is one colour, so it fills the picture once with a top-to-bottom gradient that has a stop per row (a fillRect per row would cost much more). It is hidden, but it still runs, because the Title reads it (like a matte). Its row in the list says *Displaces Title*.
 • The shader: a slow FBM landscape, only there to sit behind the Title.
 • An LFO breathes **Max horizontal** between 15 and 90 (Max is a layer number, so any control or mapping can drive it).
 
