@@ -6,7 +6,9 @@ export type DataType = "float" | "vec2" | "vec3" | "vec4" | "mat2" | "mat3" | "s
    * The Agents family (docs/agents-plan.md), carried only between its own nodes:
    * a group's state (agents), an Emit's births (emitter), Deposits on their way into a Trail (deposit).
    */
-  | "agents" | "emitter" | "deposit";
+  | "agents" | "emitter" | "deposit"
+  /** A Time Cube's stacked frames (docs/time-cube.md): the name of its atlas sampler, wired only into Time Cube View and Time Slice. */
+  | "volume";
 
 // Socket (connection point on a node)
 export interface Socket {

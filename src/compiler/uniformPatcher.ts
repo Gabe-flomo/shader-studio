@@ -24,6 +24,9 @@ export const SKIP_UNIFORM_TYPES = new Set([
   // scope: min/max are read by ShaderCanvas (JS) to scale the waveform probe; the
   // node emits no GLSL of its own, so a uniform would be declared and never read.
   'scope',
+  // timeCube: its settings (frames, size, start / end) are read in JS to build its volume and
+  // its layout defines; nothing of it is a live uniform.
+  'timeCube',
 ]);
 
 /**

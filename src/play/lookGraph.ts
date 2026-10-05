@@ -71,6 +71,7 @@ const NO_TYPES: Partial<Record<DataType, string>> = {
   scene3d: 'it takes a 3D scene',
   spacewarp3d: 'it takes a 3D space warp',
   texture: 'it samples a Pass node’s texture',
+  volume: 'it reads a Time Cube’s frames',
 };
 /** Categories that need something a Finish pass hasn't got. */
 const NO_CATEGORIES: Array<[RegExp, string]> = [

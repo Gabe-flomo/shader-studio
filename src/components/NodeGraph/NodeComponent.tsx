@@ -115,6 +115,7 @@ import { PlayDriveChip } from './PlayDriveChip';
 import { MAX_GROUP_ITERATIONS } from '../../nodes/definitions/group';
 import { programTintColour, programTintsCached } from '../../lib/programTints';
 import { BakedCardBody } from '../bake/BakedCardBody';
+import { TimeCubeCardBody } from '../timeCube/TimeCubeCardBody';
 import { bakedSourceName } from '../../nodes/definitions/baked';
 import { VOLUMETRIC_LOOP_TYPES } from '../../nodes/volumetricAuto';
 import { SwitchNodePicker } from './SwitchNodePicker';
@@ -184,7 +185,7 @@ function hzToSlider(hz: number): number {
   return Math.round(Math.pow(Math.max(0, ratio), 1 / 0.6) * 1000);
 }
 
-const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput', 'baked', 'midiInput', 'data']);
+const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput', 'baked', 'midiInput', 'data', 'timeCube']);
 let zCounter = 10; // incremented each time a node is brought to front
 const LFO_TYPES    = new Set(['lfo']);
 // Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
@@ -4575,6 +4576,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {!collapsed && (node.type === 'palette' || node.type === 'stopPalette') && <PaletteTools node={node} />}
         {/* ── Data: the dataset, its size and the way into the editor ── */}
         {!collapsed && node.type === 'data' && <DataCardBody node={node} touch={isTouchDevice} onOpen={() => setShowDataEditor(true)} />}
+        {!collapsed && node.type === 'timeCube' && <TimeCubeCardBody node={node} touch={isTouchDevice} />}
 
         {/* ── CustomFn / ExprNode slider params (hidden when collapsed) ── */}
         {!collapsed && (node.type === 'customFn' || node.type === 'exprNode') && (() => {

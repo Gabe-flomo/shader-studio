@@ -21,6 +21,7 @@ import { compileGraph } from '../graphCompiler';
 import { getNodeDefinition, resolveNodeAliases } from '../../nodes/definitions';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
 import { PASS_EXAMPLE_KEYS } from '../../store/passExamples';
+import { TIME_CUBE_EXAMPLE_KEYS } from '../../store/timeCubeExamples';
 import { parsePlayRecord } from '../../types/play';
 import { webInputFrom } from '../../play/webInput';
 import { playBundle } from '../../play/exportHtml';
@@ -54,7 +55,9 @@ const hasPass = (nodes: Nodes): boolean => nodes.some(nd => MULTI_PROGRAM.has(nd
  * passP7.test.ts and examples.test.ts cover them.
  */
 const PASS_FOLDER = new Set(PASS_EXAMPLE_KEYS);
-const keys = Object.keys(EXAMPLE_GRAPHS).filter(k => !hasPass(EXAMPLE_GRAPHS[k].nodes) && !PASS_FOLDER.has(k)).sort();
+/** The Time cube examples (docs/time-cube.md) are new graphs: timeCube.test.ts covers them. The guarantee here is for graphs without its nodes. */
+const TIME_CUBE_FOLDER = new Set(TIME_CUBE_EXAMPLE_KEYS);
+const keys = Object.keys(EXAMPLE_GRAPHS).filter(k => !hasPass(EXAMPLE_GRAPHS[k].nodes) && !PASS_FOLDER.has(k) && !TIME_CUBE_FOLDER.has(k)).sort();
 
 describe('golden shaders: every example compiles as it did', () => {
   it('has the examples', () => expect(keys.length).toBeGreaterThan(100));
