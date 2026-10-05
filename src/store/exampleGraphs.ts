@@ -3585,6 +3585,9 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           stepScale: 1,
           volumetric: true,
           passthrough: 0.1,
+          jitter: 1,
+          jitterNoise: 'even',
+          __comment: 'Jitter starts each pixel\'s ray a little way along, by a different amount (up to one Passthrough step). Without it neighbouring rays take their steps at the same depths, and the glow shows rings that follow the shape (banding). With it the rings become a fine grain that the screen\'s dither hides.',
           bg: [0, 0, 0],
           albedo: [0.3, 0.5, 1],
           subgraph: {
@@ -3833,6 +3836,9 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           stepScale: 1,
           volumetric: true,
           passthrough: 0.12,
+          jitter: 1,
+          jitterNoise: 'even',
+          __comment: 'Jitter starts each pixel\'s ray a little way along, by a different amount (up to one Passthrough step). Without it neighbouring rays take their steps at the same depths, and the glow shows rings that follow the shape (banding). With it the rings become a fine grain that the screen\'s dither hides.',
           bg: [0, 0, 0],
           albedo: [0.5, 0.5, 0.5],
           subgraph: {
@@ -8133,9 +8139,11 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           stepScale: 1,
           volumetric: true,
           passthrough: 0.1,
-          jitter: 0,
+          jitter: 1,
+          jitterNoise: 'even',
           bg: [0, 0, 0],
           albedo: [0.6, 0.7, 0.9],
+          __comment: 'Jitter starts each pixel\'s ray a little way along, by a different amount (up to one Passthrough step). Without it every ray samples the sphere at the same depths, and the glow shows rings. With it the rings become a fine grain the screen dither hides.',
           subgraph: {
             nodes: [
               {
@@ -8168,7 +8176,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 560, y: 160 },
                 inputs: { dist: { type: 'float', label: 'Distance', connection: { nodeId: 'msd', outputKey: 'rawDist' } } },
                 outputs: { glow: { type: 'float', label: 'Glow' } },
-                params: { density: 0.03, falloff: 10, shell: 0.15 },
+                params: { density: 0.03, falloff: 10, shell: 0.15, perDistance: true, __comment: 'Per distance: each step adds glow for the length of ray it covers, not once per step. Out in the open the ray takes long steps, inside the shape short ones; counted per step, the glow piles up in rings that follow the shape. Density then counts per 0.1 of ray, so inside the shape (where the ray moves by Passthrough, 0.1) it glows as before.' },
                 assignOp: '+=',
               },
             ],
@@ -10855,6 +10863,9 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           stepScale: 1,
           volumetric: true,
           passthrough: 0,
+          jitter: 1,
+          jitterNoise: 'even',
+          __comment: 'Jitter starts each pixel\'s ray a little way along, by a different amount (up to one average step, Max Dist ÷ Max Steps). This loop adds 1 / distance at every step, so where neighbouring rays take their steps at the same depths the glow shows thin contour lines that follow the shapes (banding). Jitter turns them into a fine grain the screen\'s dither hides, as the original shader did with its own random start.',
           bg: [0, 0, 0],
           subgraph: {
             nodes: [

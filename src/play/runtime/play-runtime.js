@@ -677,7 +677,8 @@ void main() {
     let program, blitProgram = null;
     try {
       program = link(VS, bgOnly ? BG_ONLY_FRAG : B.fragmentShader);
-      if (stateful || echoCfg) blitProgram = link(VS, BLIT_FRAG);
+      // Always: the picture goes through a half-float target and this dithering blit, as in the app.
+      blitProgram = link(VS, BLIT_FRAG);
     } catch (e) { stage.append(el('div', 'ssp-error', 'The shader did not compile here: ' + e.message)); return { destroy() {} }; }
     gl.useProgram(program);
     const quad = gl.createBuffer();
@@ -898,12 +899,12 @@ void main() {
     };
     liveFeeds();
 
-    // Render targets for feedback and echo: half float where the GPU can draw into it (as the app), else 8 bit.
+    // Render targets for the picture, feedback and echo: half float where the GPU can draw into it (as the app), else 8 bit.
+    // The picture always goes through one and the dithering blit, so smooth gradients (a volumetric glow, a sky)
+    // reach the 8-bit screen without banding, as in the app's ShaderCanvas.
     let rtFormat = gl.RGBA, rtType = gl.UNSIGNED_BYTE, rtFilter = gl.LINEAR;
-    if (stateful || echoCfg) {
-      if (gl2 && gl.getExtension('EXT_color_buffer_float')) { rtFormat = gl.RGBA16F; rtType = gl.HALF_FLOAT; }
-      else if (!gl2) { const h = gl.getExtension('OES_texture_half_float'); if (h && gl.getExtension('EXT_color_buffer_half_float')) { rtType = h.HALF_FLOAT_OES; if (!gl.getExtension('OES_texture_half_float_linear')) rtFilter = gl.NEAREST; } }
-    }
+    if (gl2 && gl.getExtension('EXT_color_buffer_float')) { rtFormat = gl.RGBA16F; rtType = gl.HALF_FLOAT; }
+    else if (!gl2) { const h = gl.getExtension('OES_texture_half_float'); if (h && gl.getExtension('EXT_color_buffer_half_float')) { rtType = h.HALF_FLOAT_OES; if (!gl.getExtension('OES_texture_half_float_linear')) rtFilter = gl.NEAREST; } }
     const makeTarget = (w, h) => {
       const tex = texture(rtType === gl.UNSIGNED_BYTE ? gl.LINEAR : rtFilter);
       gl.texImage2D(gl.TEXTURE_2D, 0, rtFormat, w, h, 0, gl.RGBA, rtType, null);
@@ -2830,7 +2831,8 @@ void main() {
         }
       }
       let target = null;
-      if (stateful || echoCfg) {
+      // Without feedback or echo the target is only there for the dither: an 8-bit one (no half float here) would add nothing.
+      if (stateful || echoCfg || rtType !== gl.UNSIGNED_BYTE) {
         if (stateful && !pingPong) pingPong = [makeTarget(W, H), makeTarget(W, H)];
         if (!stateful && !sceneTarget) sceneTarget = makeTarget(W, H);
         if (echoCfg && echoRing.length !== echoCfg.copies) { echoRing.forEach(dropTarget); echoRing = []; for (let i = 0; i < echoCfg.copies; i++) echoRing.push(makeTarget(W, H)); }

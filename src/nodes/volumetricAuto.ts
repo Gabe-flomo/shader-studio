@@ -95,7 +95,7 @@ export function volumetricOn(nextId: () => string, scope: GraphNode[], loopId: s
     glow = {
       ...make(nextId, 'volumeGlow', { x: 880, y }, {
         density: 0.06, falloff: 10, shell: 0,
-        __comment: 'Added by the Volumetric switch. Turns that distance into a little light at every step: bright near and inside the shapes, fading with distance. Its header is set to += so the steps add up into one total, which leaves the loop as its Glow output. Raise Shell (0.1–0.2) to make only a skin glow, like a soap bubble. Raise Density for a brighter glow, lower Falloff for a wider one.',
+        __comment: 'Added by the Volumetric switch. Turns that distance into a little light at every step: bright near and inside the shapes, fading with distance. Its header is set to += so the steps add up into one total, which leaves the loop as its Glow output. Raise Shell (0.1–0.2) to make only a skin glow, like a soap bubble. Raise Density for a brighter glow, lower Falloff for a wider one. Per distance (on) adds glow for the length of ray each step covers, so the glow has no rings.',
       }),
       assignOp: '+=',
     };

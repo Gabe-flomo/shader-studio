@@ -20,6 +20,7 @@
  */
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { p, pv3, vec3Str } from './helpers';
+import { MARCH_STEP_REF_KEY, stepWeightGlsl } from '../../compiler/marchJitter';
 
 // ─── Loop colours ─────────────────────────────────────────────────────────────
 // The March Loop and GI Lit March Loop used to keep Background and Albedo as
@@ -43,6 +44,15 @@ export function foldLoopColours(params: Record<string, unknown>, albedoFallback:
     }
     for (const k of legacy) delete params[k];
   }
+  return params;
+}
+
+/**
+ * Saved-graph migration (v3): a loop saved before the even jitter keeps the
+ * random pattern it compiled with (its Jitter amount is saved with it).
+ */
+export function keepOldJitter(params: Record<string, unknown>): Record<string, unknown> {
+  if (!('jitterNoise' in params)) params.jitterNoise = 'random';
   return params;
 }
 
@@ -419,20 +429,25 @@ export const VolumeGlowNode: NodeDefinition = {
     dist: { type: 'float', label: 'Distance', hint: 'Wire Scene Distance (raw distance) from this step.' },
   },
   outputs: { glow: { type: 'float', label: 'Glow' } },
-  defaultParams: { density: 0.02, falloff: 8.0, shell: 0.0 },
+  // perDistance: on for new nodes; saved graphs without it keep counting per step.
+  defaultParams: { density: 0.02, falloff: 8.0, shell: 0.0, perDistance: true },
   paramDefs: {
     density: { label: 'Density', type: 'float', min: 0.001, max: 1.0,  step: 0.001, hint: 'Brightness added per step inside or near the shape.' },
     falloff: { label: 'Falloff', type: 'float', min: 0.1,   max: 60.0, step: 0.1,   hint: 'How quickly the glow dies off with distance from the surface.' },
     shell:   { label: 'Shell',   type: 'float', min: 0.0,   max: 1.0,  step: 0.005, hint: '0 glows the whole interior; above 0 only a skin this thick glows.' },
+    perDistance: { label: 'Per distance', type: 'bool', hint: 'Adds glow for the length of ray each step covers, not once per step. The ray takes long steps in open space and short ones inside a shape; counting steps makes rings that follow the shapes (banding). On, the glow is smooth, and Density is per 0.1 of ray: at the default Passthrough (0.1) the inside of a shape glows as before, and changing Passthrough changes how smooth the glow is, not how bright. Only in a volumetric loop.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id;
     const d = inputVars.dist ?? '0.0';
     const density = p(node.params.density, 0.02), falloff = p(node.params.falloff, 8.0), shell = p(node.params.shell, 0.0);
+    // Set by the March Loop compiler only for a Per distance node in a volumetric loop body.
+    const stepRef = inputVars[MARCH_STEP_REF_KEY];
+    const weight = stepRef ? ` * ${stepWeightGlsl(d, stepRef, falloff)}` : '';
     return {
       code: [
         `    float ${id}_sd = ${shell} > 0.0 ? abs(${d}) - ${shell} : ${d};\n`,
-        `    float ${id}_glow = ${density} / (1.0 + ${falloff} * max(${id}_sd, 0.0));\n`,
+        `    float ${id}_glow = ${density} / (1.0 + ${falloff} * max(${id}_sd, 0.0))${weight};\n`,
       ].join(''),
       outputVars: { glow: `${id}_glow` },
     };
@@ -479,11 +494,12 @@ export const MarchLoopGroupNode: NodeDefinition = {
     hit:       { type: 'float', label: 'Hit',        hint: '1 where the ray touched a surface, 0 where it missed. Use it as a mask.' },
     pos:       { type: 'vec3',  label: 'Hit Pos',    hint: 'The 3D point where the ray stopped. Feed it to lighting and texture nodes.' },
   },
-  version: 2,
-  migrateParams: params => foldLoopColours(params, [0.6, 0.7, 0.9]),
+  version: 3,
+  migrateParams: params => keepOldJitter(foldLoopColours(params, [0.6, 0.7, 0.9])),
   defaultParams: {
     maxSteps: 80, maxDist: 20.0, stepScale: 1.0,
-    volumetric: false, passthrough: 0.1, jitter: 0.0,
+    // Jitter on (even pattern) for new loops; saved graphs keep their own jitter and the old pattern.
+    volumetric: false, passthrough: 0.1, jitter: 1.0, jitterNoise: 'even', animateJitter: false,
     bg: [0.0, 0.0, 0.0],
     albedo: [0.6, 0.7, 0.9],
   },
@@ -493,7 +509,12 @@ export const MarchLoopGroupNode: NodeDefinition = {
     stepScale:   { label: 'Step Scale',  type: 'float' as const,   min: 0.3,  max: 1.0,   step: 0.05, hint: 'Fraction of the SDF distance to step each iteration. Lower = safer for thin features but slower. Not used in volumetric mode.' },
     volumetric:  { label: 'Volumetric',  type: 'bool'  as const,                                       hint: 'When on, the ray passes through the scene accumulating color at every step. No hit detection. Use with marchSceneDist + accumulator nodes in the body.' },
     passthrough: { label: 'Passthrough', type: 'float' as const,   min: 0.001, max: 0.5,  step: 0.005, showWhen: { param: 'volumetric', value: 'true' }, hint: 'Minimum step size in volumetric mode. Prevents the ray from stalling at zero-distance surfaces. Also caps 1/vol to avoid blowout.' },
-    jitter:      { label: 'Jitter',      type: 'float' as const,   min: 0.0,  max: 1.0,   step: 0.01,  hint: 'Randomise the first ray step by up to one step-width. Eliminates banding rings in volumetric mode. 0 = off.' },
+    jitter:      { label: 'Jitter',      type: 'float' as const,   min: 0.0,  max: 1.0,   step: 0.01,  hint: 'Starts each pixel\'s ray a little way along, by a different amount, so the steps of neighbouring rays don\'t line up into rings (banding). 1 = spread over one step, 0 = off.' },
+    jitterNoise: { label: 'Jitter pattern', type: 'select' as const, options: [
+      { value: 'even',   label: 'Even (fine, smooth grain)' },
+      { value: 'random', label: 'Random (older loops)' },
+    ], hint: 'Even spreads the start offsets evenly over every few pixels, so what is left is a fine grain the screen dither hides. Random is what loops made before it used.' },
+    animateJitter: { label: 'Animate jitter', type: 'bool' as const, hint: 'A new pattern every frame. In motion or a recording the grain averages out; on a still frame it shimmers.' },
     bg:          { label: 'Background',  type: 'vec3color' as const, hint: 'Colour shown where a ray misses everything. Wire a vec3 into the Background socket to drive it instead.' },
     albedo:      { label: 'Albedo',      type: 'vec3color' as const, hint: 'Surface colour used by the built-in shading (the Color output). Wire a vec3 into the Albedo socket to drive it instead.' },
   },
@@ -538,11 +559,12 @@ export const GILitMarchGroupNode: NodeDefinition = {
     diffuse:   { type: 'vec3',  label: 'Diffuse' },
     refl:      { type: 'vec3',  label: 'Reflection' },
   },
-  version: 2,
-  migrateParams: params => foldLoopColours(params, [0.7, 0.7, 0.7]),
+  version: 3,
+  migrateParams: params => keepOldJitter(foldLoopColours(params, [0.7, 0.7, 0.7])),
   defaultParams: {
     maxSteps: 80, maxDist: 20.0, stepScale: 1.0,
-    volumetric: false, passthrough: 0.1, jitter: 0.0,
+    // Jitter on (even pattern) for new loops; saved graphs keep their own jitter and the old pattern.
+    volumetric: false, passthrough: 0.1, jitter: 1.0, jitterNoise: 'even', animateJitter: false,
     bg: [0.0, 0.0, 0.0],
     albedo: [0.7, 0.7, 0.7],
     metallic: 0.0,
@@ -565,7 +587,12 @@ export const GILitMarchGroupNode: NodeDefinition = {
     stepScale:   { label: 'Step Scale',   type: 'float' as const, min: 0.3,  max: 1.0,  step: 0.05, hint: 'Fraction of SDF distance to step. Lower = safer, slower.' },
     volumetric:  { label: 'Volumetric',   type: 'bool'  as const,                                   hint: 'Accumulate density along the ray. GI/specular are disabled in this mode.' },
     passthrough: { label: 'Passthrough',  type: 'float' as const, min: 0.001, max: 0.5, step: 0.005, showWhen: { param: 'volumetric', value: 'true' }, hint: 'Minimum step in volumetric mode.' },
-    jitter:      { label: 'Jitter',       type: 'float' as const, min: 0.0,  max: 1.0,  step: 0.01, hint: 'Randomise first step to remove banding. Pairs well with GI dither.' },
+    jitter:      { label: 'Jitter',      type: 'float' as const,   min: 0.0,  max: 1.0,   step: 0.01,  hint: 'Starts each pixel\'s ray a little way along, by a different amount, so the steps of neighbouring rays don\'t line up into rings (banding). 1 = spread over one step, 0 = off.' },
+    jitterNoise: { label: 'Jitter pattern', type: 'select' as const, options: [
+      { value: 'even',   label: 'Even (fine, smooth grain)' },
+      { value: 'random', label: 'Random (older loops)' },
+    ], hint: 'Even spreads the start offsets evenly over every few pixels, so what is left is a fine grain the screen dither hides. Random is what loops made before it used.' },
+    animateJitter: { label: 'Animate jitter', type: 'bool' as const, hint: 'A new pattern every frame. In motion or a recording the grain averages out; on a still frame it shimmers.' },
     bg:          { label: 'Background',   type: 'vec3color' as const, hint: 'Colour shown where a ray misses everything. Wire a vec3 into the Background socket to drive it instead.' },
     albedo:      { label: 'Albedo',       type: 'vec3color' as const, hint: 'Base surface colour. Wire a vec3 into the Albedo socket to drive it instead.' },
     metallic:    { label: 'Metallic',      type: 'float' as const, min: 0.0,  max: 1.0,  step: 0.01, hint: 'Tints specular toward albedo. 0 = dielectric, 1 = metal.' },

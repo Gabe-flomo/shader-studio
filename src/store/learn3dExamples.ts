@@ -213,12 +213,12 @@ lesson('learn3dOrbit', [
 const volumeBody = sub([
   n('marchLoopInputs', 'vol_in', 0, 180, { _groupOriginal: true }),
   n('marchSceneDist', 'sd', 440, 180, { ...note('How far March Pos, the ray\'s point at this step, is from the sphere. Raw Distance is the true value: negative inside.') }, { pos: ['vol_in', 'marchPos'] }),
-  n('volumeGlow', 'vg', 880, 180, { density: 0.03, falloff: 10, shell: 0.15, ...note('Set to += in its header: every step adds its glow to a running total instead of replacing it. The total leaves the loop as its Glow output.') }, { dist: ['sd', 'rawDist'] }, { assignOp: '+=' } as Partial<GraphNode>),
+  n('volumeGlow', 'vg', 880, 180, { density: 0.03, falloff: 10, shell: 0.15, ...note('Set to += in its header: every step adds its glow to a running total instead of replacing it. The total leaves the loop as its Glow output. Per distance is on: each step adds glow for the length of ray it covers, so the long steps out in the open and the short ones inside the sphere add up evenly, without rings.') }, { dist: ['sd', 'rawDist'] }, { assignOp: '+=' } as Partial<GraphNode>),
   n('marchLoopOutput', 'vol_out', 440, 520, { _groupOriginal: true }, { pos: ['vol_in', 'marchPos'] }),
 ]);
 const volumeLoop = loop('marchLoopGroup', 'vol', 340, 520, {
   volumetric: true, maxSteps: 96, maxDist: 8, bg: [0, 0, 0],
-  ...note('Volumetric on: the ray never stops at the surface. It walks all the way through the scene (never slower than Passthrough per step) and the body runs at every step.'),
+  ...note('Volumetric on: the ray never stops at the surface. It walks all the way through the scene (never slower than Passthrough per step) and the body runs at every step. Jitter starts each pixel\'s ray a little way along, by a different amount, so neighbouring rays don\'t take their steps at the same depths; without it the glow can show rings.'),
 }, volumeBody);
 volumeLoop.outputs = { ...volumeLoop.outputs, acc0: { type: 'float', label: 'Glow' } };
 
