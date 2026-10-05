@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.33',
+    date: '2026-10-05',
+    title: 'Time cube feather and camera',
+    highlights: [
+      { area: 'Studio', text: 'Time Cube View: Feather fades the frames around the slice over a span, with side and curve. Opacity sliders now respond evenly from 0 to 1.', link: { kind: 'doc', path: 'docs/time-cube.md' } },
+      { area: 'Play', text: 'Camera Translate X / Y / Z fly the time cube camera through space; all camera sliders map on Play. New fly-through example.' },
+      { area: 'Studio', text: 'Removed from Time Cube View: Swing, Lightning, Focus and Frame effects. Saved graphs still open.' },
+    ],
+  },
+  {
     id: '2026.10.32',
     date: '2026-10-04',
     title: 'Cleaner time cubes',
