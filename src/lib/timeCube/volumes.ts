@@ -18,8 +18,12 @@
 import * as THREE from 'three';
 import type { GraphNode, SubgraphData } from '../../types/nodeGraph';
 import { getVideo } from '../backgroundLibrary';
-import { planFrameStack, stackSettingsOf, type StackPlan, type VideoMeta } from './plan';
-import { DEMO_META, TimeCubeCancelled, decodeVideoFrames, paintDemoFrames, probeVideo } from './frames';
+import { planFrameStack, stackSettingsOf, tileOrigin, type StackPlan, type VideoMeta } from './plan';
+import { DEMO_META, TimeCubeCancelled, decodeVideoFrames, demoReader, openVideoReader, paintDemoFrames, probeVideo, type FrameReader } from './frames';
+import {
+  combineFrames, combineKey, combineSettingsOf, frameMotion, frameOrder, frameStat, orderKey, orderSettingsOf, subFrameTimes,
+  type CombineSettings, type FrameStat, type OrderSettings,
+} from './order';
 
 export const TIME_CUBE_TYPE = 'timeCube';
 
@@ -53,12 +57,25 @@ export function timeCubePlan(node: GraphNode): StackPlan | null {
   return meta ? planFrameStack(meta, stackSettingsOf(node.params)) : null;
 }
 
-/** What a volume holds: two nodes with the same key share one build. */
-export function volumeKey(node: GraphNode): string | null {
+/** What a volume's frames are before any reordering (Frames from included): volumes with the same base share their decoding. */
+export function baseVolumeKey(node: GraphNode): string | null {
   const src = timeCubeSource(node), plan = timeCubePlan(node);
   if (!src || !plan) return null;
   const who = src.kind === 'demo' ? 'demo' : `vid:${src.videoId}`;
-  return `${who}|${plan.tileW}x${plan.tileH}|${plan.cols}x${plan.rows}|${plan.frames}|${plan.start.toFixed(4)}-${plan.end.toFixed(4)}`;
+  return `${who}|${plan.tileW}x${plan.tileH}|${plan.cols}x${plan.rows}|${plan.frames}|${plan.start.toFixed(4)}-${plan.end.toFixed(4)}${combineKey(combineSettingsOf(node.params))}`;
+}
+
+/** What a volume holds: two nodes with the same key share one build. The defaults (Pick, in time order) keep the old keys. */
+export function volumeKey(node: GraphNode): string | null {
+  const base = baseVolumeKey(node);
+  return base === null ? null : base + orderKey(orderSettingsOf(node.params));
+}
+
+/** A volume's frames: each one's numbers (in time order) and which of them each tile shows. */
+export interface TimeCubeFrameStats {
+  stats: FrameStat[];
+  /** Tile i shows time-ordered frame order[i]. */
+  order: number[];
 }
 
 /** Every Time Cube node in a node list, inside groups too. */
@@ -73,8 +90,14 @@ export function timeCubeNodesIn(nodes: readonly GraphNode[], out: GraphNode[] = 
 
 interface Volume {
   key: string;
+  baseKey: string;
   plan: StackPlan;
   canvas: HTMLCanvasElement | null;
+  /** The frames in time order (the same canvas as `canvas` when they are in time order). */
+  base: HTMLCanvasElement | null;
+  /** Per-frame numbers, worked out when first needed (sorting, frameStats). */
+  stats: FrameStat[] | null;
+  order: number[] | null;
   tex: THREE.CanvasTexture | null;
   status: TimeCubeStatus;
   abort: AbortController | null;
@@ -118,6 +141,19 @@ class TimeCubes {
     if (p) return this.volumes.get(p.key)?.status ?? { state: 'waiting', done: 0, total: 0 };
     const key = this.nodeKey.get(nodeId);
     return key ? this.volumes.get(key)?.status ?? null : null;
+  }
+
+  /**
+   * A node's frames' numbers (brightness, hue, saturation, motion, key) and their order: worked out
+   * once from the built frames and kept with the volume. Null until it is built.
+   */
+  frameStats(nodeId: string): TimeCubeFrameStats | null {
+    const key = this.nodeKey.get(nodeId);
+    const v = key ? this.volumes.get(key) : undefined;
+    const node = this.nodes.get(nodeId);
+    if (!v || v.status.state !== 'ready' || !(v.base ?? v.canvas)) return null;
+    if (!v.stats) v.stats = computeStats(v.base ?? v.canvas!, v.plan, orderSettingsOf(node?.params ?? {}));
+    return { stats: v.stats, order: v.order ?? Array.from({ length: v.plan.frames }, (_, i) => i) };
   }
 
   /** The atlas canvas a node shows (the card's strip of frames). */
@@ -189,33 +225,64 @@ class TimeCubes {
   private drop(v: Volume): void {
     v.abort?.abort();
     v.tex?.dispose();
-    if (v.canvas) { v.canvas.width = 0; v.canvas.height = 0; }
     this.volumes.delete(v.key);
+    // A reordered volume shares its time-ordered frames with others of the same base: free a canvas only when nothing else holds it.
+    const held = new Set<HTMLCanvasElement>();
+    for (const o of this.volumes.values()) { if (o.canvas) held.add(o.canvas); if (o.base) held.add(o.base); }
+    for (const c of new Set([v.canvas, v.base])) if (c && !held.has(c)) { c.width = 0; c.height = 0; }
   }
 
   private start(key: string, node: GraphNode): Volume {
     const plan = timeCubePlan(node)!;
-    const v: Volume = { key, plan, canvas: null, tex: null, status: { state: 'building', done: 0, total: plan.frames }, abort: new AbortController(), done: Promise.resolve(), freedAt: 0 };
+    const comb = combineSettingsOf(node.params), ord = orderSettingsOf(node.params);
+    const total = plan.frames * comb.sub;
+    const v: Volume = { key, baseKey: baseVolumeKey(node) ?? key, plan, canvas: null, base: null, stats: null, order: null, tex: null, status: { state: 'building', done: 0, total }, abort: new AbortController(), done: Promise.resolve(), freedAt: 0 };
     this.volumes.set(key, v);
     const src = timeCubeSource(node)!;
     const signal = v.abort!.signal;
     v.done = (async () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = plan.atlasW; canvas.height = plan.atlasH;
-      const ctx = canvas.getContext('2d', { willReadFrequently: false });
-      if (!ctx) throw new Error('No 2D canvas here.');
-      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
       let last = 0;
       const progress = (done: number) => {
         v.status = { ...v.status, done };
         const now = performance.now();
-        if (now - last > 80 || done === plan.frames) { last = now; this.changed(); }
+        if (now - last > 80 || done === total) { last = now; this.changed(); }
       };
-      if (src.kind === 'demo') await paintDemoFrames(plan, ctx, progress, signal);
+      // The frames in time order: from a volume already built with the same frames (a reorder decodes nothing), or built now.
+      const donor = [...this.volumes.values()].find(o => o !== v && o.baseKey === v.baseKey && o.status.state === 'ready' && (o.base ?? o.canvas));
+      let base: HTMLCanvasElement;
+      if (donor) { base = (donor.base ?? donor.canvas)!; v.stats = donor.stats; }
       else {
-        const got = await getVideo(src.videoId).catch(() => null);
-        if (!got) { v.status = { state: 'missing', done: 0, total: plan.frames, message: 'This video is not in this browser\'s Library. Choose it again.' }; return; }
-        await decodeVideoFrames(got.blob, plan, ctx, progress, signal);
+        base = document.createElement('canvas');
+        base.width = plan.atlasW; base.height = plan.atlasH;
+        const ctx = base.getContext('2d', { willReadFrequently: false });
+        if (!ctx) throw new Error('No 2D canvas here.');
+        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, base.width, base.height);
+        if (comb.combine === 'pick') {
+          if (src.kind === 'demo') await paintDemoFrames(plan, ctx, progress, signal);
+          else {
+            const got = await getVideo(src.videoId).catch(() => null);
+            if (!got) { v.status = { state: 'missing', done: 0, total, message: 'This video is not in this browser\'s Library. Choose it again.' }; return; }
+            await decodeVideoFrames(got.blob, plan, ctx, progress, signal);
+          }
+        } else {
+          let reader: FrameReader;
+          if (src.kind === 'demo') reader = demoReader();
+          else {
+            const got = await getVideo(src.videoId).catch(() => null);
+            if (!got) { v.status = { state: 'missing', done: 0, total, message: 'This video is not in this browser\'s Library. Choose it again.' }; return; }
+            reader = await openVideoReader(got.blob);
+          }
+          try { await combineInto(reader, plan, comb, timeCubeMeta(node)?.duration ?? 0, ctx, progress, signal); }
+          finally { reader.close(); }
+        }
+      }
+      v.base = base;
+      // Frame order: rewrite the tiles from the time-ordered frames (the atlas's layout stays the same).
+      let canvas = base;
+      if (ord.order !== 'time') {
+        if (ord.order === 'sort' && !v.stats) v.stats = computeStats(base, plan, ord);
+        v.order = frameOrder(plan.frames, ord, v.stats ?? undefined);
+        canvas = reorderAtlas(base, plan, v.order);
       }
       const tex = new THREE.CanvasTexture(canvas);
       // Read with plain bilinear: no mipmaps (the shader steps through tiles, and mip levels would bleed one frame into the next).
@@ -223,7 +290,7 @@ class TimeCubes {
       tex.wrapS = THREE.ClampToEdgeWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
       tex.needsUpdate = true;
       v.canvas = canvas; v.tex = tex;
-      v.status = { state: 'ready', done: plan.frames, total: plan.frames };
+      v.status = { state: 'ready', done: total, total };
       v.abort = null;
       if (this.volumes.get(key) !== v) { tex.dispose(); return; }
       for (const id of this.users(key)) this.host?.setTexture(id, tex);
@@ -288,3 +355,52 @@ class TimeCubes {
 }
 
 export const timeCubes = new TimeCubes();
+
+/** Fill a time-ordered atlas with tiles combined from `comb.sub` sub-frames each (Frames from). */
+async function combineInto(reader: FrameReader, plan: StackPlan, comb: CombineSettings, duration: number, ctx: CanvasRenderingContext2D, progress: (done: number) => void, signal: AbortSignal): Promise<void> {
+  const scratch = document.createElement('canvas');
+  scratch.width = plan.tileW; scratch.height = plan.tileH;
+  const sg = scratch.getContext('2d', { willReadFrequently: true });
+  if (!sg) throw new Error('No 2D canvas here.');
+  let done = 0;
+  for (let i = 0; i < plan.frames; i++) {
+    const frames: Uint8ClampedArray[] = [];
+    for (const t of subFrameTimes(plan.times[i], plan.every, comb.sub, duration)) {
+      if (signal.aborted) throw new TimeCubeCancelled();
+      await reader.draw(t, sg, 0, 0, plan.tileW, plan.tileH, signal);
+      frames.push(sg.getImageData(0, 0, plan.tileW, plan.tileH).data);
+      progress(++done);
+    }
+    const { x, y } = tileOrigin(plan, i);
+    const img = sg.createImageData(plan.tileW, plan.tileH);
+    img.data.set(combineFrames(frames, comb.combine));
+    ctx.putImageData(img, x, y);
+    if (i % 8 === 7) await new Promise(r => setTimeout(r, 0));
+  }
+}
+
+/** Each frame's numbers, read from a time-ordered atlas. */
+function computeStats(atlas: HTMLCanvasElement, plan: StackPlan, ord: OrderSettings): FrameStat[] {
+  const g = atlas.getContext('2d');
+  if (!g) return [];
+  const rows = Array.from({ length: plan.frames }, (_, i) => {
+    const { x, y } = tileOrigin(plan, i);
+    return frameStat(g.getImageData(x, y, plan.tileW, plan.tileH).data, { color: ord.keyColor, tolerance: ord.keyTolerance }, 5);
+  });
+  const motion = frameMotion(rows.map(r => r.luma));
+  return rows.map((r, i) => ({ ...r.stat, motion: motion[i] }));
+}
+
+/** A new atlas whose tile i is tile order[i] of `base`. */
+function reorderAtlas(base: HTMLCanvasElement, plan: StackPlan, order: readonly number[]): HTMLCanvasElement {
+  const out = document.createElement('canvas');
+  out.width = base.width; out.height = base.height;
+  const g = out.getContext('2d');
+  if (!g) return base;
+  g.fillStyle = '#000'; g.fillRect(0, 0, out.width, out.height);
+  for (let i = 0; i < plan.frames; i++) {
+    const s = tileOrigin(plan, order[i]), d = tileOrigin(plan, i);
+    g.drawImage(base, s.x, s.y, plan.tileW, plan.tileH, d.x, d.y, plan.tileW, plan.tileH);
+  }
+  return out;
+}

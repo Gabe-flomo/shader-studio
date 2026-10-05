@@ -12,6 +12,7 @@ import { addVideoFile, isAudioType, listVideos, type LibraryVideoMeta } from '..
 import { timeCubes, timeCubePlan, timeCubeSource } from '../../lib/timeCube/volumes';
 import { capText, formatBytes } from '../../lib/timeCube/plan';
 import { DEMO_LABEL, probeVideo } from '../../lib/timeCube/frames';
+import { buildEstimate, combineSettingsOf } from '../../lib/timeCube/order';
 
 function useStatus(nodeId: string) {
   const sub = useMemo(() => (fn: () => void) => timeCubes.onChange(fn), []);
@@ -30,6 +31,7 @@ export function TimeCubeCardBody({ node, touch = false }: { node: GraphNode; tou
   const status = useStatus(node.id);
   const plan = timeCubePlan(node);
   const src = timeCubeSource(node);
+  const comb = combineSettingsOf(node.params);
   const [picking, setPicking] = useState(false);
   const [videos, setVideos] = useState<LibraryVideoMeta[] | null>(null);
   const [busy, setBusy] = useState('');
@@ -106,6 +108,10 @@ export function TimeCubeCardBody({ node, touch = false }: { node: GraphNode; tou
       </div>
 
       {plan?.capped && <span style={{ ...small, color: tk.status.warningText }}>{capText(plan)}</span>}
+      {plan && comb.combine !== 'pick' && (() => {
+        const est = buildEstimate(plan.frames, comb.sub, src?.kind !== 'library');
+        return <span style={small}>{`Reads ${est.decoded} frames (${comb.sub} for each)${src?.kind === 'library' ? `: about ${est.seconds < 90 ? `${Math.max(1, Math.round(est.seconds))} s` : `${Math.round(est.seconds / 60)} min`} to build` : ''}.`}</span>;
+      })()}
 
       {picking && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: 6, borderRadius: radius.md, background: tk.bg.subtle, maxHeight: 220, overflowY: 'auto' }}>
