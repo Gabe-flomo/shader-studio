@@ -25,8 +25,9 @@ void main() {
   vec2 gp    = uv / cell;
   vec2 cid   = floor(gp);
   vec2 cuv   = fract(gp) - 0.5;
-  vec2 h     = sin(cid * vec2(127.1, 311.7) + cid.yx * vec2(269.5, 183.3));
-  vec2 disp  = (fract(h * 43758.5453) - 0.5) * 0.38;
+  vec3 p3    = fract(vec3(cid.xyx) * vec3(0.1031, 0.1030, 0.0973));
+  p3        += dot(p3, p3.yzx + 33.33);
+  vec2 disp  = (fract((p3.xx + p3.yz) * p3.zy) - 0.5) * 0.38;
   vec2 sh    = cuv - disp;
   float md   = 999.0;
   for (int dy = -1; dy <= 1; dy++)

@@ -139,7 +139,7 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   giSphereGround: { label: "GI: Sphere & Ground" },
   giBoxFrame: { label: "GI: Box Frame" },
   gridMetaballs: { label: "Grid: Metaballs" },
-  gridBreathing: { label: "Grid: Breathing", description: "Animated Cell Center moves each cell's dot on its own phase (seeded by Cell ID); Circle SDF takes that as its centre and SDF Fill paints it." },
+  gridBreathing: { label: "Grid: Breathing", description: "A centred dot in every cell that wobbles and breathes. Animated Cell Center (Grid Size 1) gives each dot's centre in cells, Circle SDF measures it from Grid Pos, Wave Radius ripples the radius out from the middle." },
   gridDensityWave: { label: "Grid: Density Wave" },
   gridLavaLamp: { label: "Lava Lamp", description: "Metaballs from the Field family: two Gaussian Fields (one follows the mouse, one sits off-centre) are summed and Metaball Threshold turns the sum into a blob mask with a soft edge; Mask picks the two colours. Grid Size sets how big a blob is.", play: true },
   gridNeighborDisplaced: { label: "Grid: Attract", description: "Cell Displace pulls each cell's UV toward the mouse (strongly nearby, barely far away); its Attract Amount colours the dots through Palette." },

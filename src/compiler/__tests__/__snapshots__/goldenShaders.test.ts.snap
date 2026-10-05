@@ -58,35 +58,35 @@ exports[`golden shaders: every Play example exports the same bundle > comboArray
 
 exports[`golden shaders: every Play example exports the same bundle > comboGridGroupFlower 1`] = `
 {
-  "bundle": "10d87d9043c2d71e2710aeba9a79:19042",
+  "bundle": "11600c72bb639e09ee6e6ebbd135:19304",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > comboGridPaintGlow 1`] = `
 {
-  "bundle": "1e1bd1aa9f1b170026b40cfc148a:8488",
+  "bundle": "126c6af15c75a814b86b0d24a156:8750",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > comboGridPaintPictures 1`] = `
 {
-  "bundle": "08c0f82ce2925d1eddd34ed7b1c3:8861",
+  "bundle": "1b71bacf603d84197a7be41b556c:9123",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > comboGridPaintShapes 1`] = `
 {
-  "bundle": "0e31108510adab181fd8a7f0b166:9962",
+  "bundle": "0c37a63a7c53191d3df7dbe91b12:10224",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > comboGridShapeByWire 1`] = `
 {
-  "bundle": "1314d923f008b20c0d07a895f103:10869",
+  "bundle": "1def705cde74750fb62d35fa4411:11151",
   "missing": [],
 }
 `;
@@ -303,14 +303,14 @@ exports[`golden shaders: every Play example exports the same bundle > gridTourAr
 
 exports[`golden shaders: every Play example exports the same bundle > gridTourArrayInCells 1`] = `
 {
-  "bundle": "078f3eddc954d519131f09f949f0:16370",
+  "bundle": "138ce58a8fa45f129b38d719aafe:16632",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > gridTourBuiltIn 1`] = `
 {
-  "bundle": "104f28da388d610b015a0b95b175:8578",
+  "bundle": "1394662226eb0208a88a8e2c50d7:8840",
   "missing": [],
 }
 `;
@@ -324,28 +324,28 @@ exports[`golden shaders: every Play example exports the same bundle > gridTourBy
 
 exports[`golden shaders: every Play example exports the same bundle > gridTourMorph 1`] = `
 {
-  "bundle": "1ff3266a24cb5410bf3ae8fd6231:14056",
+  "bundle": "124abb61f33e771be193c6b2c2ce:14318",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > gridTourMouseMorph 1`] = `
 {
-  "bundle": "1e222cfbc4a138093815f7727140:10644",
+  "bundle": "12793976408ec0056db7243804e3:10906",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > gridTourOverflow 1`] = `
 {
-  "bundle": "0328757031232e068d88b59006b4:11542",
+  "bundle": "0d72629d7e338c1a9e547b97f6db:11824",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > gridTourRipple 1`] = `
 {
-  "bundle": "164f7d9172b64f0cc5375f39e47b:10957",
+  "bundle": "11daa53e44b8320f09f190a6ea57:11219",
   "missing": [],
 }
 `;
@@ -541,14 +541,14 @@ exports[`golden shaders: every Play example exports the same bundle > learnGrid 
 
 exports[`golden shaders: every Play example exports the same bundle > learnGridPattern 1`] = `
 {
-  "bundle": "0e2c1b43bd54270a1d609eecc82c:6310",
+  "bundle": "00193c8a658d9503dbfa8136956e:6572",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > learnGridSpread 1`] = `
 {
-  "bundle": "12e70c2fe543f31c106b5fc75bbd:8848",
+  "bundle": "0f1f830c04cef00f4a603d053f0a:9121",
   "missing": [],
 }
 `;
@@ -562,7 +562,7 @@ exports[`golden shaders: every Play example exports the same bundle > learnHSB 1
 
 exports[`golden shaders: every Play example exports the same bundle > learnLoop 1`] = `
 {
-  "bundle": "088a310849120a06809f10dfe115:4469",
+  "bundle": "0c4e93a454be611963402d04813e:4567",
   "missing": [],
 }
 `;
@@ -709,14 +709,14 @@ exports[`golden shaders: every Play example exports the same bundle > learnStep 
 
 exports[`golden shaders: every Play example exports the same bundle > learnTileRotate 1`] = `
 {
-  "bundle": "073481006c53fa0fe3d39dcb7108:4375",
+  "bundle": "168869d536b52c1acbbbda791460:4435",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > learnTiling 1`] = `
 {
-  "bundle": "1ca0c1ac776cc60d423be63f2670:3103",
+  "bundle": "09c7b96d2f76581d2183ce6b36c5:3163",
   "missing": [],
 }
 `;
@@ -814,7 +814,7 @@ exports[`golden shaders: every Play example exports the same bundle > maskReveal
 
 exports[`golden shaders: every Play example exports the same bundle > matrixAnyBasis 1`] = `
 {
-  "bundle": "0afb53f5a5645503528fd196dfd6:10938",
+  "bundle": "173cc2704ea3cc002a63efa71dba:11200",
   "missing": [],
 }
 `;
@@ -835,7 +835,7 @@ exports[`golden shaders: every Play example exports the same bundle > matrixComb
 
 exports[`golden shaders: every Play example exports the same bundle > matrixCornerPin 1`] = `
 {
-  "bundle": "02a7f52332016c02f51b206cfaa3:9359",
+  "bundle": "06c362893285601c2ec977efc871:9621",
   "missing": [],
 }
 `;
@@ -849,7 +849,7 @@ exports[`golden shaders: every Play example exports the same bundle > matrixFold
 
 exports[`golden shaders: every Play example exports the same bundle > matrixLattices 1`] = `
 {
-  "bundle": "0bc22033e69ee51242a580c23abf:10108",
+  "bundle": "0e38b6a8249c6806af6c6a168e85:10370",
   "missing": [],
 }
 `;
@@ -863,7 +863,7 @@ exports[`golden shaders: every Play example exports the same bundle > matrixNois
 
 exports[`golden shaders: every Play example exports the same bundle > matrixWhatItDoes 1`] = `
 {
-  "bundle": "067ec6fe429ec0161e67c5d0f7b6:6984",
+  "bundle": "10953d4a7e73620d527d102a6231:7246",
   "missing": [],
 }
 `;
@@ -2049,7 +2049,7 @@ exports[`golden shaders: every example compiles as it did > comboGridGroupFlower
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "15d39c38926be80f30c4d7c1cc79:15320",
+  "fragmentShader": "1527fdde04a6aa0e5115918d3e09:15568",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "17e0a0d53804b913e283a7dd3aa6:310",
@@ -2107,7 +2107,7 @@ exports[`golden shaders: every example compiles as it did > comboGridPaintGlow 1
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "172bd8a37816a71a958d6c63bbef:6319",
+  "fragmentShader": "05bbb0df9ae0ed0c24cdb57789b0:6567",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "01daa27001372a0f397ef610c2dc:152",
@@ -2148,7 +2148,7 @@ exports[`golden shaders: every example compiles as it did > comboGridPaintPictur
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "162ad642d9d4e10c62bbc7a99b20:6506",
+  "fragmentShader": "0d3235be5dbc5d0220fa75dc5bfb:6754",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "14b5f6e4a5521604d9d2bf96a318:147",
@@ -2193,7 +2193,7 @@ exports[`golden shaders: every example compiles as it did > comboGridPaintShapes
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1f2f06867218d319a3980722b344:7286",
+  "fragmentShader": "034825dc02c9160d0a7557285f81:7534",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "06468aac9dc69d0c161077bdb791:189",
@@ -2244,7 +2244,7 @@ exports[`golden shaders: every example compiles as it did > comboGridShapeByWire
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "07c395959a55ba1dd3df8de11e70:8791",
+  "fragmentShader": "14bbb7bb1d744c15f0092ca1b670:9059",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "06570ea021f78f1f9e316ec352f8:145",
@@ -4168,11 +4168,11 @@ exports[`golden shaders: every example compiles as it did > gridBreathing 1`] = 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0d55721dec8c35179d9182fb1b8d:3437",
+  "fragmentShader": "1e85180617e313178e71aad3ba56:5028",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "07887859461392185c59509719e7:114",
-  "paramBindings": "0811c8e83d257609ba011132e3fd:330",
+  "nodeSlugs": "07ea01bd984f951edf77ad949946:138",
+  "paramBindings": "1c49feb4e2dbf40d7903ceb1389e:486",
   "paramUniforms": [
     "u_p_animatedcex0_amplitude",
     "u_p_animatedcex0_gridSize",
@@ -4182,8 +4182,12 @@ exports[`golden shaders: every example compiles as it did > gridBreathing 1`] = 
     "u_p_circx0_radius",
     "u_p_fillx0_strokeWidth",
     "u_p_gridlayoutx0_columns",
+    "u_p_waveradiusx0_amp",
+    "u_p_waveradiusx0_base",
+    "u_p_waveradiusx0_freq",
+    "u_p_waveradiusx0_speed",
   ],
-  "paramValues": "0491753b6bd4fb1c1d54c2a37679:230",
+  "paramValues": "149e2e471760820fa6342b4b9a25:353",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -4375,7 +4379,7 @@ exports[`golden shaders: every example compiles as it did > gridTourArrayInCells
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1b9464521387ee164fc85f011bd4:13168",
+  "fragmentShader": "0758309072ae720ab48c87f91043:13416",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "01ec7e47c3f97e00d2511f29dcbc:204",
@@ -4433,7 +4437,7 @@ exports[`golden shaders: every example compiles as it did > gridTourBuiltIn 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1b9fa976a30eb410fd03826b4fe2:6850",
+  "fragmentShader": "1097204ba3ca411754555744e121:7098",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "058fab1c9c364700fce966f7be8f:73",
@@ -4502,7 +4506,7 @@ exports[`golden shaders: every example compiles as it did > gridTourMorph 1`] = 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1563f2f0d9d92e013a434cb0ac80:10932",
+  "fragmentShader": "0f3a1766828f5f1e8a6c3c96855d:11180",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "11bd824ac346410842c2d704dc61:272",
@@ -4559,7 +4563,7 @@ exports[`golden shaders: every example compiles as it did > gridTourMouseMorph 1
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "081054ad15b3ac02af3cec2376a0:8404",
+  "fragmentShader": "0c716e1db9607a14b0cec870da49:8652",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "03b3076ed6ffd21fb657acabde27:163",
@@ -4601,7 +4605,7 @@ exports[`golden shaders: every example compiles as it did > gridTourOverflow 1`]
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "06c98158fe52bd12cb0d186a6db2:9134",
+  "fragmentShader": "1549904d00e9dd13ea6fb1af059f:9402",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1866a19951b56d1166443c9d456a:163",
@@ -4644,7 +4648,7 @@ exports[`golden shaders: every example compiles as it did > gridTourRipple 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0b86071a20aecc03f09b6b066d9c:8328",
+  "fragmentShader": "1514e305eaacc8109084d394c45b:8576",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1c1a400f35c67e09330bc7735500:199",
@@ -4749,7 +4753,7 @@ exports[`golden shaders: every example compiles as it did > groupCarryRings 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "036f969d5fc62a0807fefa0b5ed6:4104",
+  "fragmentShader": "1ddc81a9b8ee4c0f521b2bb287b4:4227",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1f95449cae82851a158276a4c4fc:610",
@@ -5900,7 +5904,7 @@ exports[`golden shaders: every example compiles as it did > learnGridPattern 1`]
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "111d79b8d467fe0330e198cd8281:4891",
+  "fragmentShader": "0354bd033164ad175d9620e45b5e:5139",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "058fab1c9c364700fce966f7be8f:73",
@@ -5931,7 +5935,7 @@ exports[`golden shaders: every example compiles as it did > learnGridSpread 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "069f171263c67b0e76fc2de19895:6691",
+  "fragmentShader": "1d853b942575c00529926eb5ee41:6950",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "146381bebe335214ca5668478a9b:132",
@@ -5998,7 +6002,7 @@ exports[`golden shaders: every example compiles as it did > learnLoop 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "101b411e7e93b308ddf79d7b933b:3416",
+  "fragmentShader": "1a96eee51b49b61f7548c1fafd35:3513",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0f5ab55faeca161414c44ff18118:289",
@@ -6716,7 +6720,7 @@ exports[`golden shaders: every example compiles as it did > learnTileRotate 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0d9e03e90fa5d10d288e953a5926:3104",
+  "fragmentShader": "1e326cc1c82e42163366dc720845:3163",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0a95421eec394400ef30928e2a0c:200",
@@ -6748,7 +6752,7 @@ exports[`golden shaders: every example compiles as it did > learnTiling 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "100d424836de181ee65335b50ce2:2368",
+  "fragmentShader": "0e181bddab2a841d55742c8812ad:2427",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "00b7a3c4923337145d13d0bb3246:86",
@@ -7317,7 +7321,7 @@ exports[`golden shaders: every example compiles as it did > matrixAnyBasis 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0923f7c094c308031c40bb700ac7:8305",
+  "fragmentShader": "17f32e920351321d4a1911c4589e:8553",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1b72555ef0099d061d8b7c5384b9:270",
@@ -7445,7 +7449,7 @@ exports[`golden shaders: every example compiles as it did > matrixCornerPin 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "17060eb88245db1fe1a7d5bc523c:6817",
+  "fragmentShader": "1cf5fa53e623160d8a8e3b4bdd08:7065",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0a517d1d67925413792865dd47cd:115",
@@ -7521,7 +7525,7 @@ exports[`golden shaders: every example compiles as it did > matrixLattices 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1c3fa76ce321cc1c9bf4420a68c4:8029",
+  "fragmentShader": "056056a686224b013f2b23896bc6:8277",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "09b60492ce3e76137cc246dd84d5:145",
@@ -7613,7 +7617,7 @@ exports[`golden shaders: every example compiles as it did > matrixWhatItDoes 1`]
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "18d12a2dba2f8d0ac4f50328f47b:5265",
+  "fragmentShader": "0e90449c1f745705abbf02362cfb:5513",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0c606dc8813d0d17507cb7db9dd3:97",
@@ -10786,7 +10790,7 @@ exports[`golden shaders: every example compiles as it did > publishAndKeyframes 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "07cf84666c98d201776fa7f9c452:4519",
+  "fragmentShader": "1767bcabaff0cf18949db074206a:4629",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0a3c4db59050120fb67ab99501ff:251",

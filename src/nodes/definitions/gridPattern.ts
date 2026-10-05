@@ -2,6 +2,7 @@ import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { p, pv3, fieldFn } from './helpers';
 import { GLSL_MAT2_INV } from './matrixOps';
 import { columnsExpr, gridColumnsMigration } from './gridColumns';
+import { GRID_HASH_GLSL } from './gridHash';
 
 /**
  * Lattices: the cell centres as a basis matrix (columns are the two steps
@@ -108,7 +109,7 @@ export const GridPatternNode: NodeDefinition = {
       { value: 'none',       label: 'Clip at the cell edge' },
       { value: 'neighbours', label: 'Neighbours (3×3)' },
       { value: 'far',        label: 'Far (5×5)' },
-    ], hint: 'Draws the shapes of the neighbouring cells too, so a shape that is pulled, pushed, grown or jittered past its cell edge carries on into the next cell instead of being cut off. Pull and Push can then move a shape a whole cell. Costs 9× (Neighbours) or 25× (Far) shape evaluations.' },
+    ], hint: 'Draws the shapes of the neighbouring cells too, so a shape that is pulled, pushed, grown or jittered past its cell edge carries on into the next cell instead of being cut off. Pull and Push can then move a shape up to 1 cell (Neighbours) or 2 cells (Far); on Clip they stop at 0.45 of a cell. A shape is drawn whole while its offset plus its size stays under 1.5 cells (Neighbours) or 2.5 cells (Far). Costs 9× (Neighbours) or 25× (Far) shape evaluations.' },
     rotation: { label: 'Rotation', type: 'float', min: -3.1416, max: 3.1416, step: 0.01, hint: 'Turns every shape (radians).' },
     jitter:   { label: 'Jitter', type: 'float', min: 0, max: 0.5, step: 0.01, hint: 'Random offset per cell, so the grid stops looking like a grid.' },
     pattern:  { label: 'Pattern', type: 'select', options: [
@@ -128,10 +129,10 @@ export const GridPatternNode: NodeDefinition = {
       { value: 'push',   label: 'Push away from the point' },
       { value: 'hide',   label: 'Hide near the point' },
       { value: 'spin',   label: 'Spin near the point' },
-    ], hint: 'What the Affect Pos point does to the shapes inside its radius.' },
+    ], hint: 'What the Affect Pos point does to the shapes inside its radius. Pull and Push move a shape by Influence cells, capped at 1 cell with Overflow on Neighbours and 2 cells on Far. With Overflow on Clip the move drops to 0.45 × Influence, capped at 0.45, so the shape stays inside its own cell.' },
     affectRadius:   { label: 'Affect Radius',   type: 'float', min: 0.05, max: 3.0, step: 0.01, hint: 'Reach of the point, in UV units (the screen is 2 tall).' },
     affectSoftness: { label: 'Affect Softness', type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: '0 = a hard edge at the radius, 1 = fades all the way from the point.' },
-    affectAmount:   { label: 'Affect Amount',   type: 'float', min: 0.0, max: 2.0, step: 0.01, hint: 'Strength at the point itself.' },
+    affectAmount:   { label: 'Affect Amount',   type: 'float', min: 0.0, max: 2.0, step: 0.01, hint: 'Strength at the point itself. For Pull and Push it is the move in cells, up to the cap Overflow allows (0.45 on Clip, 1 on Neighbours, 2 on Far).' },
     antialias: { label: 'Edge', type: 'float', min: 0.002, max: 0.2, step: 0.002, hint: 'Softness of the shape edge, in cell units.' },
     color:      { label: 'Colour',     type: 'vec3color' },
     background: { label: 'Background', type: 'vec3color' },
@@ -148,8 +149,10 @@ vec2 gpNearest(vec2 gp, mat2 B, mat2 Bi) {
     }
     return best;
 }`],
-  glslFunction: `float gpHash(vec2 c) { return fract(sin(dot(c, vec2(127.1, 311.7))) * 43758.5453123); }
-vec2 gpHash2(vec2 c) { return vec2(gpHash(c), gpHash(c + vec2(19.19, 7.07))); }
+  // Sine-free hashes (see gridHash.ts), so far cells and fine grids stay random.
+  glslFunction: `${GRID_HASH_GLSL}
+float gpHash(vec2 c) { return gridHash12(c); }
+vec2 gpHash2(vec2 c) { return gridHash22(c); }
 float gpShape(vec2 q, float shape, float s) {
     if (shape < 0.5) return length(q) - s;
     if (shape < 1.5) return sdBox(q, vec2(s));
@@ -194,8 +197,11 @@ float gpPlaced(vec2 id, float pattern, float density) {
     const reach = overflow === 'far' ? 2 : overflow === 'neighbours' ? 1 : 0;
     const shapeLit = `${shapeIdx < 0 ? 0 : shapeIdx}.0`;
     const patternLit = `${patternIdx < 0 ? 0 : patternIdx}.0`;
-    // Pull/push stop at the cell edge unless the neighbours are drawn too.
+    // Pull/push move a shape by Influence × pushK cells, at most pushMax:
+    // inside its own cell when clipped, and no further than the Overflow
+    // window can see (a shape k cells over is only drawn when k ≤ reach).
     const pushK = reach > 0 ? '1.0' : '0.45';
+    const pushMax = reach === 2 ? '2.0' : reach === 1 ? '1.0' : '0.45';
     // Lattice: square keeps the plain floor/fract grid; the others work in a basis.
     const latticeParam = String(node.params.lattice ?? 'square');
     const lattice = latticeParam === 'custom' || LATTICE_BASIS[latticeParam] ? latticeParam : 'square';
@@ -218,7 +224,7 @@ float gpPlaced(vec2 id, float pattern, float density) {
       if (affect === 'pull' || affect === 'push') {
         const sgn = affect === 'pull' ? '' : '-';
         out.push(`${ind}vec2 ${v}dir = ${ap} - ${v}cc; ${v}dir = length(${v}dir) > 1e-4 ? normalize(${v}dir) : vec2(0.0);`);
-        out.push(`${ind}${v}q -= ${sgn}${v}dir * ${v}inf * ${pushK};`);
+        out.push(`${ind}${v}q -= ${sgn}${v}dir * min(${v}inf * ${pushK}, ${pushMax});`);
       }
       if (affect === 'hide') out.push(`${ind}${v}on *= 1.0 - min(1.0, ${v}inf);`);
       if (affect === 'spin') out.push(`${ind}${v}ang += ${v}inf * 3.14159;`);
