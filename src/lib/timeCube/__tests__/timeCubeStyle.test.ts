@@ -192,7 +192,7 @@ describe('key pulse and lightning', () => {
 describe('depth of field and per-frame effects', () => {
   it('the blur is zero at the focus, grows away from it, and stops at Max blur', () => {
     expect(blurRadius(3, 3, 1, 1, 16, 0.002)).toBe(0);
-    expect(blurRadius(4, 3, 1, 1, 16, 0.002)).toBeGreaterThan(blurRadius(3.5, 3, 1, 1, 16, 0.002));
+    expect(blurRadius(3.4, 3, 1, 1, 64, 0.002)).toBeGreaterThan(blurRadius(3.2, 3, 1, 1, 64, 0.002));
     near(blurRadius(30, 3, 1, 1, 16, 0.002), 0.032);
     expect(blurRadius(4, 3, 0, 1, 16, 0.002)).toBe(0);
   });
@@ -297,7 +297,7 @@ describe('the view compiles', () => {
     ];
     const slice = compileGraph({ nodes: nodes({ highlights: true, motion: true, effects: true, dof: 'distance' }) });
     for (const k of LIVE) expect(slice.paramBindings[`v::${k}`], k).toBeTruthy();
-    const flow = compileGraph({ nodes: nodes({ timeMode: 'flow', keyMode: 'hue', highlights: true }) });
+    const flow = compileGraph({ nodes: nodes({ timeMode: 'flow', keyMode: 'hue', keyAnimate: true, highlights: true }) });
     for (const k of ['framePos', 'flowSpeed', 'flowTime', 'keyColor', 'keyTolerance', 'keyHueShift', 'keyHueDrift', 'pulse', 'pulseSpeed', 'pulsePhase',
       'pulseCount', 'pulseWidth', 'pulseSoftness', 'lightning', 'lightningRate', 'lightningWidth', 'lightningSeed', 'hlStart']) {
       expect(flow.paramBindings[`v::${k}`], k).toBeTruthy();

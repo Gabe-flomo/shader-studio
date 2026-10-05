@@ -126,8 +126,18 @@ export function subFrameTimes(t: number, every: number, sub: number, duration: n
  * Difference keeps, per channel, the largest change between neighbouring sub-frames.
  */
 export function combineFrames(frames: readonly Uint8ClampedArray[], mode: Combine): Uint8ClampedArray {
+  const f = combineFramesFloat(frames, mode), out = new Uint8ClampedArray(f.length);
+  for (let i = 0; i < f.length; i++) out[i] = Math.round(f[i]);
+  return out;
+}
+
+/**
+ * combineFrames before rounding to bytes (0–255, fractions kept): what a 16-bit atlas holds. An
+ * average of six frames lands between the 8-bit steps; rounding it there bands smooth gradients.
+ */
+export function combineFramesFloat(frames: readonly Uint8ClampedArray[], mode: Combine): Float32Array {
   const k = frames.length, len = frames[0]?.length ?? 0;
-  const out = new Uint8ClampedArray(len);
+  const out = new Float32Array(len);
   if (!k) return out;
   if (mode === 'pick' || k === 1) { out.set(frames[Math.floor((k - 1) / 2)]); return out; }
   const vals = new Float64Array(k);
@@ -148,7 +158,7 @@ export function combineFrames(frames: readonly Uint8ClampedArray[], mode: Combin
         }
         default: v = frames[0][i];
       }
-      out[i] = Math.round(v);
+      out[i] = v;
     }
     out[p + 3] = 255;
   }

@@ -158,7 +158,7 @@ export function buildTimeCubeExamples(): Record<string, ExampleGraph> {
   };
 
   const pulseMappings: PlayMapping[] = [
-    { id: 'm1', controlId: 'hue', source: { kind: 'lfo', shape: 'sine', rate: 0.03, phase: 0 }, outMin: -0.08, outMax: 0.08, curve: 'linear', smoothMs: 0, enabled: true },
+    { id: 'm1', controlId: 'hue', source: { kind: 'lfo', shape: 'sine', rate: 0.03, phase: 0 }, outMin: -0.03, outMax: 0.03, curve: 'linear', smoothMs: 0, enabled: true },
   ];
   const pulsePlay: PlayRecord = {
     version: 1,
@@ -175,7 +175,7 @@ export function buildTimeCubeExamples(): Record<string, ExampleGraph> {
     layers: [],
     notes: `**What it shows.** A Time Cube View keyed on one colour, on black: only the keyed colour shows, and only in **pulses** travelling through the box of time, with **lightning** flashes on top. The crisp frame is the slice.
 
-**Try.** **Key hue shift** turns the key colour round the colour wheel: a slow LFO already rocks it a little either side of red, so the car's red flickers in and out of the key. Drag it further (or map a MIDI knob to it) to key the ball's blue or the hills' green instead. **Key hue drift** keeps it turning on its own. **Hue range** widens what counts as the colour. **Pulse speed** and **Pulse width** shape the travelling bands; **Lightning** brings in short random flashes. Every one is a live uniform, so mapping them to LFOs or MIDI costs nothing.`,
+**Try.** **Key hue shift** turns the key colour round the colour wheel: a slow LFO already rocks it a little either side of red, inside the hue range, so the car stays keyed while its shade shifts. Drag it further (or map a MIDI knob to it) to key the ball's blue or the hills' green instead. **Key hue drift** keeps it turning on its own. **Hue range** widens what counts as the colour. **Pulse speed** and **Pulse width** shape the travelling bands; **Lightning** brings in short random flashes. Every one is a live uniform, so mapping them to LFOs or MIDI costs nothing.`,
   };
 
   const pulse: ExampleGraph = {
@@ -184,12 +184,12 @@ export function buildTimeCubeExamples(): Record<string, ExampleGraph> {
     nodes: [
       n('timeCube', 'tuSource', 80, 160, { ...note(CUBE_NOTE) }),
       n('timeCubeView', 'tuView', 440, 160, {
-        slice: 0.82, before: 0.6, after: 0.7, sliceOpacity: 1, depth: 3, quality: 'best',
-        keyMode: 'hue', keyColor: [0.85, 0.1, 0.1], keyTolerance: 0.07, keySoftness: 0.05, keyOpacity: 1, othersOpacity: 0, othersGrey: 1,
-        pulse: 1, pulseDir: 'forward', pulseSpeed: 0.35, pulseCount: 4, pulseWidth: 0.3, pulseSoftness: 0.6,
+        slice: 0.82, before: 0.6, after: 0.7, sliceOpacity: 1, depth: 2.2, quality: 'best',
+        keyMode: 'hue', keyColor: [0.85, 0.1, 0.1], keyTolerance: 0.1, keySoftness: 0.05, keyOpacity: 1, othersOpacity: 0, othersGrey: 1,
+        keyAnimate: true, pulse: 1, pulseDir: 'forward', pulseSpeed: 0.35, pulseCount: 4, pulseWidth: 0.3, pulseSoftness: 0.6,
         lightning: 0.45, lightningRate: 2.5, lightningWidth: 0.12, lightningSeed: 7,
         background: [0, 0, 0], rimStrength: 0.18, rimWidth: 0.03, rimColor: [0.35, 0.45, 0.7], roundness: 0.15, feather: 0.06,
-        camAngle: 1.2, camElevation: 0.18, camDist: 4.2, rotSpeed: 0, swing: 0.35,
+        camAngle: 0.95, camElevation: 0.5, camDist: 4.6, rotSpeed: 0.5, swing: 0.25,
         ...note([
           'Time Cube View keyed on red (Key: a hue), on black. Others 0 hides everything that isn\'t red, so only the car shows, and the slice frame (Offset 0.82) stays vivid.',
           'Pulse 1: the red shows only in four bands (Pulse count) that travel from the first frame to the last (Pulse speed 0.35 bands a second, width 0.3, soft edges).',

@@ -100,7 +100,7 @@ export function TimeCubeCardBody({ node, touch = false }: { node: GraphNode; tou
         <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
           <b style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={name}>{name}</b>
           <span style={small}>
-            {plan ? `${plan.frames} frames · ${plan.tileW}×${plan.tileH} · ${formatBytes(plan.bytes)}` : 'Reading the video\'s size…'}
+            {plan ? `${plan.frames} frames · ${plan.tileW}×${plan.tileH} · ${formatBytes(plan.bytes)}${plan.bytes > plan.atlasW * plan.atlasH * 4 ? ' (16-bit)' : ''}` : 'Reading the video\'s size…'}
             {plan && plan.every > 0 ? ` · one every ${plan.every < 1 ? `${Math.round(plan.every * 1000)} ms` : `${plan.every.toFixed(2)} s`}` : ''}
           </span>
         </span>

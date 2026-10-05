@@ -20,8 +20,9 @@ import type { GraphNode, SubgraphData } from '../../types/nodeGraph';
 import { getVideo } from '../backgroundLibrary';
 import { planFrameStack, stackSettingsOf, tileOrigin, type StackPlan, type VideoMeta } from './plan';
 import { DEMO_META, TimeCubeCancelled, decodeVideoFrames, demoReader, openVideoReader, paintDemoFrames, probeVideo, type FrameReader } from './frames';
+import { deepTexture, reorderDeep } from './deep';
 import {
-  combineFrames, combineKey, combineSettingsOf, frameMotion, frameOrder, frameStat, orderKey, orderSettingsOf, subFrameTimes,
+  combineFramesFloat, combineKey, combineSettingsOf, frameMotion, frameOrder, frameStat, orderKey, orderSettingsOf, subFrameTimes,
   type CombineSettings, type FrameStat, type OrderSettings,
 } from './order';
 
@@ -62,7 +63,7 @@ export function baseVolumeKey(node: GraphNode): string | null {
   const src = timeCubeSource(node), plan = timeCubePlan(node);
   if (!src || !plan) return null;
   const who = src.kind === 'demo' ? 'demo' : `vid:${src.videoId}`;
-  return `${who}|${plan.tileW}x${plan.tileH}|${plan.cols}x${plan.rows}|${plan.frames}|${plan.start.toFixed(4)}-${plan.end.toFixed(4)}${combineKey(combineSettingsOf(node.params))}`;
+  return `${who}|${plan.tileW}x${plan.tileH}|${plan.cols}x${plan.rows}|${plan.frames}|${plan.start.toFixed(4)}-${plan.end.toFixed(4)}${combineKey(combineSettingsOf(node.params))}${stackSettingsOf(node.params).deep ? '|16' : ''}`;
 }
 
 /** What a volume holds: two nodes with the same key share one build. The defaults (Pick, in time order) keep the old keys. */
@@ -98,7 +99,9 @@ interface Volume {
   /** Per-frame numbers, worked out when first needed (sorting, frameStats). */
   stats: FrameStat[] | null;
   order: number[] | null;
-  tex: THREE.CanvasTexture | null;
+  /** A 16-bit volume's frames in time order, unrounded (RGBA, 0–255): `base`'s pixels before they were rounded to bytes. */
+  deep: Float32Array | null;
+  tex: THREE.Texture | null;
   status: TimeCubeStatus;
   abort: AbortController | null;
   done: Promise<void>;
@@ -236,7 +239,7 @@ class TimeCubes {
     const plan = timeCubePlan(node)!;
     const comb = combineSettingsOf(node.params), ord = orderSettingsOf(node.params);
     const total = plan.frames * comb.sub;
-    const v: Volume = { key, baseKey: baseVolumeKey(node) ?? key, plan, canvas: null, base: null, stats: null, order: null, tex: null, status: { state: 'building', done: 0, total }, abort: new AbortController(), done: Promise.resolve(), freedAt: 0 };
+    const v: Volume = { key, baseKey: baseVolumeKey(node) ?? key, plan, canvas: null, base: null, stats: null, order: null, deep: null, tex: null, status: { state: 'building', done: 0, total }, abort: new AbortController(), done: Promise.resolve(), freedAt: 0 };
     this.volumes.set(key, v);
     const src = timeCubeSource(node)!;
     const signal = v.abort!.signal;
@@ -250,7 +253,7 @@ class TimeCubes {
       // The frames in time order: from a volume already built with the same frames (a reorder decodes nothing), or built now.
       const donor = [...this.volumes.values()].find(o => o !== v && o.baseKey === v.baseKey && o.status.state === 'ready' && (o.base ?? o.canvas));
       let base: HTMLCanvasElement;
-      if (donor) { base = (donor.base ?? donor.canvas)!; v.stats = donor.stats; }
+      if (donor) { base = (donor.base ?? donor.canvas)!; v.stats = donor.stats; v.deep = donor.deep; }
       else {
         base = document.createElement('canvas');
         base.width = plan.atlasW; base.height = plan.atlasH;
@@ -272,7 +275,8 @@ class TimeCubes {
             if (!got) { v.status = { state: 'missing', done: 0, total, message: 'This video is not in this browser\'s Library. Choose it again.' }; return; }
             reader = await openVideoReader(got.blob);
           }
-          try { await combineInto(reader, plan, comb, timeCubeMeta(node)?.duration ?? 0, ctx, progress, signal); }
+          if (plan.bytes > plan.atlasW * plan.atlasH * 4) v.deep = new Float32Array(plan.atlasW * plan.atlasH * 4);
+          try { await combineInto(reader, plan, comb, timeCubeMeta(node)?.duration ?? 0, ctx, progress, signal, v.deep); }
           finally { reader.close(); }
         }
       }
@@ -284,7 +288,9 @@ class TimeCubes {
         v.order = frameOrder(plan.frames, ord, v.stats ?? undefined);
         canvas = reorderAtlas(base, plan, v.order);
       }
-      const tex = new THREE.CanvasTexture(canvas);
+      // Precision 16-bit: a half-float texture of the unrounded frames (the 8-bit canvas stays for the card, stats and web exports).
+      const deep = v.deep ? (v.order ? reorderDeep(v.deep, plan, v.order) : v.deep) : null;
+      const tex: THREE.Texture = deep ? deepTexture(deep, plan.atlasW, plan.atlasH, canvas) : new THREE.CanvasTexture(canvas);
       // Read with plain bilinear: no mipmaps (the shader steps through tiles, and mip levels would bleed one frame into the next).
       tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter; tex.generateMipmaps = false;
       tex.wrapS = THREE.ClampToEdgeWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
@@ -357,7 +363,7 @@ class TimeCubes {
 export const timeCubes = new TimeCubes();
 
 /** Fill a time-ordered atlas with tiles combined from `comb.sub` sub-frames each (Frames from). */
-async function combineInto(reader: FrameReader, plan: StackPlan, comb: CombineSettings, duration: number, ctx: CanvasRenderingContext2D, progress: (done: number) => void, signal: AbortSignal): Promise<void> {
+async function combineInto(reader: FrameReader, plan: StackPlan, comb: CombineSettings, duration: number, ctx: CanvasRenderingContext2D, progress: (done: number) => void, signal: AbortSignal, deep: Float32Array | null = null): Promise<void> {
   const scratch = document.createElement('canvas');
   scratch.width = plan.tileW; scratch.height = plan.tileH;
   const sg = scratch.getContext('2d', { willReadFrequently: true });
@@ -373,8 +379,11 @@ async function combineInto(reader: FrameReader, plan: StackPlan, comb: CombineSe
     }
     const { x, y } = tileOrigin(plan, i);
     const img = sg.createImageData(plan.tileW, plan.tileH);
-    img.data.set(combineFrames(frames, comb.combine));
+    const f = combineFramesFloat(frames, comb.combine);
+    for (let p = 0; p < f.length; p++) img.data[p] = Math.round(f[p]);
     ctx.putImageData(img, x, y);
+    // 16-bit: the tile unrounded, into the float atlas (rows top down, as on the canvas).
+    if (deep) for (let r = 0; r < plan.tileH; r++) deep.set(f.subarray(r * plan.tileW * 4, (r + 1) * plan.tileW * 4), ((y + r) * plan.atlasW + x) * 4);
     if (i % 8 === 7) await new Promise(r => setTimeout(r, 0));
   }
 }

@@ -45,6 +45,11 @@ export interface StackSettings {
   /** 'count': spread `frames` frames over start…end. 'step': one frame every `step` seconds. */
   spacing: 'count' | 'step';
   step: number;
+  /**
+   * A 16-bit (half-float) atlas: Precision 16-bit while Frames from combines frames, whose averages
+   * and medians hold more than 8 bits. Twice the memory of 8-bit (8 bytes a pixel).
+   */
+  deep?: boolean;
 }
 
 export type StackCap = 'frames' | 'atlas' | 'memory' | 'duration' | null;
@@ -86,6 +91,7 @@ export function stackSettingsOf(params: Record<string, unknown>): StackSettings 
     end: finite(params.end, 0),
     spacing: params.spacing === 'step' ? 'step' : 'count',
     step: Math.max(1 / MAX_FPS, finite(params.step, 1 / 30)),
+    deep: params.precision === '16' && typeof params.combine === 'string' && params.combine !== 'pick',
   };
 }
 
@@ -113,7 +119,8 @@ export function planFrameStack(meta: VideoMeta, s: StackSettings, o: { maxSide?:
   cap(Math.max(MIN_FRAMES, Math.ceil(span * MAX_FPS)), 'duration');
   const maxCols = Math.max(1, Math.floor(maxSide / tileW)), maxRows = Math.max(1, Math.floor(maxSide / tileH));
   cap(maxCols * maxRows, 'atlas');
-  cap(Math.max(MIN_FRAMES, Math.floor(maxBytes / (tileW * tileH * 4))), 'memory');
+  const bpp = s.deep ? 8 : 4;
+  cap(Math.max(MIN_FRAMES, Math.floor(maxBytes / (tileW * tileH * bpp))), 'memory');
   frames = Math.max(MIN_FRAMES, frames);
 
   // Near square: as many columns as make the grid's width about its height.
@@ -123,7 +130,7 @@ export function planFrameStack(meta: VideoMeta, s: StackSettings, o: { maxSide?:
   const atlasW = cols * tileW, atlasH = rows * tileH;
   const every = span / frames;
   const times = Array.from({ length: frames }, (_, i) => start + (i + 0.5) * every);
-  return { tileW, tileH, aspect, frames, requested, capped, cols, rows, atlasW, atlasH, bytes: atlasW * atlasH * 4, start, end, every, times };
+  return { tileW, tileH, aspect, frames, requested, capped, cols, rows, atlasW, atlasH, bytes: atlasW * atlasH * bpp, start, end, every, times };
 }
 
 /** Where frame `i` sits on the atlas canvas (pixels, top-left origin). */

@@ -45,6 +45,7 @@ Once it is built, the card shows:
 | Frame size | Each frame's width: 128, 192, 256 (the default), 384 or 512 px. The height follows the video's shape, rounded to a multiple of 8. |
 | Start / End | The part of the video to stack, in seconds. End 0 means the end of the video. |
 | Frames from | **Pick one frame** (the default) for each stacked frame, or read **Sub-frames** frames (2 to 16) spread over its slot of time and combine them: **Average** (a long exposure, motion blur), **Brightest** (light trails), **Darkest**, **Motion** (only what changed from one sub-frame to the next) or **Median** (what stayed put; moving things vanish). The card says how many frames that reads and, for a video, about how long it takes. |
+| Precision | When combining: **8-bit** (the default, the video's own depth) or **16-bit float**. An Average or Median lands between the 8-bit steps; 16-bit keeps those shades (smooth gradients, no banding) as a half-float (RGBA16F) texture, at twice the memory (the card shows it, marked 16-bit). WebGL2 filters half-float textures everywhere, Safari and the desktop app included; web exports still carry the 8-bit atlas. |
 | Frame order | **Time** (the default), **Reverse**, **Shuffle** (a seed; the same seed always gives the same order) or **Sort** by **brightness**, **hue**, **saturation**, **motion** (the change from the frames either side) or **amount of a colour** (Colour, Colour tolerance), lowest first; **Invert** puts the highest first. Equal values keep their time order. |
 
 Changing Frame order rearranges the frames already read: nothing is decoded
@@ -124,20 +125,23 @@ outline. The settings are grouped into sections, and each section folds:
 | Look | Brightness, Contrast | Applied to every frame. |
 | | Dark is clear | Above 0 makes dark pixels see-through (footage on black). Below 0 makes light pixels see-through (footage on white, or a light background). |
 | | Background | The colour behind the box. |
-| Colour key | Key | **Off**, **A colour** (RGB distance), **A hue (any brightness)**, or **A brightness range**. |
-| | Key colour, Tolerance, Softness | What counts as a match. A hue also needs some saturation: greys never match. |
-| | Key hue shift, Key hue drift | Turn the key colour round the colour wheel: by hand (1 = once round) or on its own (turns a second). Both are Play-mappable, so an LFO or a MIDI knob sweeps which colour is kept. |
+| Colour key | Keep | **Off**, **A colour** (RGB distance), **A hue (any shade of it)**, or **A brightness range**. Under the settings the card says how much it keeps (*Keeps about 4% of the video (9% of the slice frame)*, or that it keeps nothing) and shows the slice frame's main colours: click one to keep it (turning the key on if it is off). |
+| | Colour, How close, Soft edge | What counts as a match. A hue also needs some saturation: greys never match. How close defaults to 0.12. |
 | | Brightness range | For a brightness key: from how dark to how bright. |
-| | Key opacity | How solid the matching colour is, before and after the slice alike. At 1 it leaves a solid trail through time. |
-| | Pulse, Pulse direction, speed, phase, count, width, softness | Shows the keyed colour only in bands that travel through the box: Count bands, each Width of the space between them, Forward, Backward, Back and forth, or Out from the slice. Pulse 0 shows all of it. |
-| | Lightning, Flashes a second, Flash width, Flash seed | Short, sharp flashes of the keyed colour through random stretches of time. Up to 0.5 they come in on top; from 0.5 to 1 the rest of the key fades, so at 1 only the flashes show it. The same seed gives the same flashes. |
-| | Others | The opacity of everything else, multiplied by Before / After. Lower makes the rest ghostly. |
-| | Others grey | Drains the colour from everything that doesn't match. |
+| | Kept opacity | How solid what is kept is, before and after the slice alike. At 1 it leaves a solid trail through time. |
+| | Shift the colour | Turns the colour round the wheel by hand (1 = once round). Play-mappable. |
+| Key: everything else | Opacity | The opacity of everything not kept, times Before / After. 0 hides it, low makes it a ghost. |
+| | Drain colour | Turns everything not kept grey. |
+| Key: animate | Animate the key | Switches the animation on (one recompile; starts with Pulse 1 and Lightning 0.4 so you can see it). Older saves with a pulse, lightning or drift set count as on. |
+| | Colour drift | Turns the colour round the wheel on its own, in turns a second. |
+| | Pulse, Pulse direction, speed, position, Bands, Band width, Band softness | Shows what is kept only in bands that travel through the box: Bands of them, each Band width of the space between them, Forward, Backward, Back and forth, or Out from the slice. Pulse 0 shows all of it. |
+| | Lightning, Flashes a second, Flash length, Flash pattern | Flashes through random stretches of time: what is kept flares toward white and the rest of the stretch lights up, for about a fifth of a second. Up to 0.5 they come in on top; from 0.5 to 1 the rest of the key fades, so at 1 only the flashes show it. The same pattern number gives the same flashes. |
 | Outline | Outline | **Off** (the default), **Silhouette** (a line round the soft shape) or **Box edges** (all twelve edges, the back ones behind the frames). |
 | | Line width, Line opacity, Line colour | The lines in pixels: thin, anti-aliased, the same width wherever they are, so they don't flicker as the camera turns. |
 | | Slice outline | A line round the slice frame. |
 | Focus | Depth of field | **Off**, **Focus at a distance**, or **Focus on the slice** (follows the scan). The same controls as Frame Stack's. Choosing it recompiles once. |
-| | Focus, Blur, Max blur | Where it is sharp (a share of the distance to the box's middle, or to the slice), how fast things soften away from it, and the most they blur (pixels). |
+| | Focus, Blur, Max blur | Where it is sharp (a share of the distance to the box's middle; on the slice, each ray is sharp exactly where it crosses the slice plane), how fast things soften away from it (the default Blur visibly blurs the ends of the box), and the most they blur (pixels). |
+| | Blur quality | **Smooth** (the default) reads the picture up to 32 times on a golden-angle disc where it is most blurred, turned per pixel, so the blur is soft and even (fine grain, never copies of the picture); **Fast** at most 8 times. Thin stretches of the box take one read each, turned a little further every stretch. |
 | Camera | Cam Distance, Angle, Elevation, Orbit speed, Zoom | The built-in camera. With a March Camera wired, set Zoom to that camera's FOV so lines stay the width you set. Adding the View to a scene does this for you. |
 | | Swing | Above 0 the camera swings back and forth by this much (radians) instead of going all the way round. |
 | | Flatten (isometric) | From perspective (0) to orthographic (1). With Elevation 0.62 and Angle 0.79 it is the isometric view. |
@@ -232,8 +236,12 @@ Each node in them has a note.
 - **Time cube: pulsing key** (a Play example)
   - On black, only the car's red shows, in four bands pulsing through time,
     with lightning flashes. The slice frame stays vivid.
-  - Play panel: Key colour, Key hue shift (a slow LFO rocks it), Key hue
-    drift, Hue range, Pulse speed and width, Lightning.
+  - Play panel: Key colour, Key hue shift (a slow LFO rocks it, inside the
+    hue range so the car stays keyed), Key hue drift, Hue range, Pulse speed
+    and width, Lightning. The camera looks across the car's path, so its red
+    ribbon through time shows; it used to look along it, edge-on, and with the
+    LFO turning the colour further than the hue range the key matched almost
+    nothing: pulses and lightning had nothing to show.
 - **Time cube: depth of field**
   - A close camera focused on the slice: as the slice sweeps, the focus
     follows it and the frames in front and behind go soft.
@@ -332,10 +340,25 @@ alpha     += (1 − alpha) · alpha_step
   - the key: matching voxels take Key opacity, the rest Others × their side's
     opacity.
 - **The slice plane** is linear along the ray, so the point where the ray
-  crosses it is solved exactly. The slice frame is composited there, in order.
-- **Jitter:** each pixel samples at its own point within each step
-  (interleaved gradient noise). The fixed-step banding becomes a fine, still
-  grain.
+  crosses it is solved exactly. The march **stops on it**: the stretch in front
+  of the plane, then the slice frame, then the stretch behind it, so nothing
+  about the slice depends on where the steps fall (a step that straddled the
+  plane used to draw the solid side behind the frame's soft border a random
+  part of a step deep: jagged, zig-zag borders).
+- **Highlighted frames** are planes too: the march finds the next one along
+  the ray (`tcCombNext`) and stops on it as well, drawing the frame there as a
+  sheet. They used to be drawn a bit in every step that overlapped the frame's
+  thickness, each at a different point, which hatched their bottoms ("||||")
+  and dotted their outlines.
+- **Sheet borders** (the slice frame, highlighted frames, their outlines) are a
+  pixel soft on screen, not in the sheet's own plane: the ramp is stretched by
+  how far the sheet is turned from the camera (`tcFootprint`, from the shape's
+  gradient), worked out only near the border.
+- **Where in a stretch to read:** each pixel reads at its own point
+  (interleaved gradient noise), as a free flight through the stretch
+  (`tcFreeFlight`): anywhere in a thin stretch, right at the start of a nearly
+  solid one, so a solid face shows its surface, not a pixel or two inside it.
+  The fixed-step banding becomes a fine, still grain.
 - **Early out:** the march stops when alpha reaches 0.995.
 - **Jitter** leaves a fine grain on hard keyed surfaces seen at a slant (the
   red ribbon): its surface is found to within a step.
@@ -345,23 +368,28 @@ distance (`tcShape`; `lib/timeCube/style.ts shapeDistance`). The rounding is
 Corner roundness × the smallest half size. Bulge adds to each face's half size
 in proportion to (1 − u²)(1 − v²) across it.
 
-- **Entry and exit by sphere tracing.** From the search box (the shape plus
-  room for its glow, outline and blur) the ray steps in by the distance, which
-  is exact for a rounded box, so a few steps land on the surface; a second
-  trace comes back from the far side. The march runs between the two, so the
-  rounded surface is exact, not a step's guess. With a bulge the distance
-  overestimates, so the steps are shortened by 1 / (1 + 2 × bulge).
+- **Entry and exit, exactly.** A rounded box seen from outside its bounds is
+  met analytically (`tcRayRoundBoxIn`, after Inigo Quilez's rounded-box
+  intersection: the bounding box, then a face, an edge cylinder or a corner
+  sphere); the exit is the same test from beyond the box looking back. The
+  march runs between the two. Sphere tracing used to find them, and ran out
+  of its 32 steps on rays that skim a face: wedges and flat bevels cut out of
+  the box, and a curved sheet across the tops of lifted frames. A bulging box
+  (or a camera inside the bounds) is still sphere traced, 64 steps, shortened
+  by 1 / (1 + 2 × bulge) because the distance overestimates.
 - **md**, the least distance to the shape along the ray (minus how deep, when
   it goes in), drives the soft edge, the rim glow and the silhouette line. A
-  miss reads it off the trace, which slows down as it passes the shape; a ray
-  that goes in only shallowly (near the silhouette) refines it by
-  golden-section search between entry and exit. A deep ray needs no more.
+  miss finds it by golden-section search over the search box (the distance
+  along a line to a convex shape has one minimum); a ray that goes in only
+  shallowly (near the silhouette) refines it the same way between entry and
+  exit. A deep ray needs no more.
 - **Edge softness is coverage.** A ray that only grazes the shape covers
   little of its pixel: the march's result is scaled by
   smoothstep(−½ px, max(feather, px), −md). Near the silhouette that fades the
   box out over Edge softness; a pixel wide at 0, so the edge is anti-aliased.
   The slice frame's border fades over the same width, so the picture melts
-  into the sides.
+  into the sides; the frame keeps at least its own coverage, so a box edge
+  seen end-on no longer shaves its rounded corner flat.
 - **Rim glow** mixes the rim colour in by strength × exp(−|md| / width):
   brightest on the silhouette, the same either side of it.
 - **Lines** are a set number of pixels wide wherever they are: the silhouette
@@ -412,7 +440,10 @@ the slice, for the other directions) and the phase Pulse phase + speed ×
 seconds (a triangle for Back and forth). Lightning is two bursts at a time, one
 for the current slot of a clock at Flashes a second and one for the slot
 before: each strikes (four slots in five) at a hashed moment and place, with a
-hashed width, and dies away as e^(−8 × age in slots), flickering. They are
+hashed width, and dies away as e^(−10 × age in seconds) (about a fifth of a
+second, whatever the rate; it used to die in an eighth of a slot, 50 ms at 2.5
+a second), flickering. A flash raises what is kept toward white and lights the
+rest of its stretch (its opacity at least the flash's). They are
 worked out once a pixel, before the march. The key colour is turned round the
 grey axis by Key hue shift + drift × seconds before matching.
 
@@ -471,8 +502,25 @@ What costs what:
   off (they are switched out of the code). On, highlights add a comb test each
   step and a crisp read where a step crosses one; motion adds a warp and a
   shape test each step, and a bigger box to march (Best quality, which thin
-  lifted frames want, doubles that); depth of field reads the volume four
-  times a step.
+  lifted frames want, doubles that); depth of field reads the volume once a
+  thin stretch and up to 32 times (8 with Fast) where it is nearly solid.
+
+Artifact fixes (exact entry and exit, stopping on the slice and highlight
+planes, free-flight reads, the smooth blur), measured the same way but by wall
+clock over 60 offline frames at 1920 × 1080 (best of five, in turns with
+main's build, in one session; headless WebKit, then headless Chrome), ms:
+
+| Example | WebKit main | WebKit this | Chrome main | Chrome this |
+|---|---|---|---|---|
+| Time cube: a video as a box of time | 1.05 | 1.13 | 0.67 | 0.75 |
+| Soft pill | 1.37 | 0.85 | 0.57 | 0.63 |
+| Highlighted frames loop | 4.02 | 3.90 | 3.93 | 3.84 |
+| Flow | 2.37 | 2.70 | 1.84 | 2.17 |
+| Pulsing key (its camera and box changed too) | 3.15 | 2.92 | 3.09 | 2.94 |
+| Depth of field (Smooth; the blur now shows) | 3.43 | 4.02 | 3.39 | 3.91 |
+| Long exposure | 0.87 | 0.90 | 0.83 | 0.89 |
+| Isolate a colour | 2.63 | 2.43 | 2.61 | 2.38 |
+| Slit-scan | 0.50 | 0.50 | 0.48 | 0.46 |
 
 Building a volume:
 
@@ -548,12 +596,25 @@ Building a volume:
 | Adding a View or Slice | `src/lib/timeCube/autoWire.ts` |
 | The nodes and their GLSL | `src/nodes/definitions/timeCube.ts` |
 | The card | `src/components/timeCube/TimeCubeCardBody.tsx` |
+| The march's exact parts: ray and rounded box, the next highlighted frame, where in a stretch to read | `src/lib/timeCube/march.ts` |
+| The key's card line and swatches | `src/lib/timeCube/keyInfo.ts`, `src/components/timeCube/TimeCubeViewKeyInfo.tsx` |
+| 16-bit atlases | `src/lib/timeCube/deep.ts` |
 | Examples | `src/store/timeCubeExamples.ts` (**Time Cube** folder) |
 | Sampler registration | `compiler/shaderAssembler.ts` (as Texture Input's) |
 | Web export: no mipmaps | `play/exportHtml.ts`, `play/runtime/play-runtime.js` (`flat`) |
 
-The tests are in `src/lib/timeCube/__tests__/timeCube.test.ts` and
-`timeCubeStyle.test.ts`. They cover:
+The tests are in `src/lib/timeCube/__tests__/timeCube.test.ts`,
+`timeCubeStyle.test.ts`, `timeCubeMarch.test.ts` and `timeCubeKeyDeep.test.ts`.
+They cover:
+
+- the exact ray–rounded-box test against a fine walk along random rays
+  (grazing ones too), enter and exit, the next highlighted frame (fixed and
+  looping, none skipped), the free-flight read, the default blur's size, the
+  blur's reads, a lightning flash lasting several frames, and the view
+  stopping on the slice and highlight planes;
+- the key's share of pixels and main colours, the Animate switch (off leaves
+  its code out; old saves that animate count as on), and 16-bit atlases
+  (unrounded averages, twice the memory, the half-float rows, reordering);
 
 - frame-stack planning: counts, spacing, caps and memory, tile rounding, and
   the tile ↔ atlas mapping;
