@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.34',
+    date: '2026-10-05',
+    title: 'Fewer nodes',
+    highlights: [
+      { area: 'Studio', text: 'Removed ten rarely used nodes: Glow Falloff, the 3D Fractals, Chladni 3D and its particles, the orbital nodes, and Print Float / Text.' },
+      { area: 'Studio', text: 'Graphs that used them still open, with a removed card that says what to use instead.' },
+    ],
+  },
+  {
     id: '2026.10.33',
     date: '2026-10-05',
     title: 'Time cube feather and camera',
