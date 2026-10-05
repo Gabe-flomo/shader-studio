@@ -4511,98 +4511,6 @@ export function NeighborDistViz({ node: _node }: { node: GraphNode }) {
   );
 }
 
-// ─── Viz — Print Float (printFloat) ──────────────────────────────────────────
-
-export function PrintFloatViz({ node }: { node: GraphNode }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const decimals  = typeof node.params.decimals === 'number' ? Math.round(node.params.decimals) : 2;
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const viz = setupViz(canvas);
-    if (!viz) return;
-    const { ctx, W, H } = viz;
-
-    ctx.fillStyle = pal.crust;
-    ctx.fillRect(0, 0, W, H);
-
-    const placeholder = decimals > 0 ? '0.' + '0'.repeat(Math.min(decimals, 4)) : '0';
-    ctx.font = `bold 22px ${MONO}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = pal.text;
-    ctx.fillText(placeholder, W / 2, H / 2);
-
-    ctx.font = `8px ${MONO}`;
-    ctx.fillStyle = pal.surface2;
-    ctx.fillText(`float · ${decimals} dec`, W / 2, H - 6);
-  }, [decimals]);
-
-  return (
-    <div style={vizContainer()}>
-      <canvas ref={canvasRef} width={160} height={60}
-        style={{ display: 'block', width: '100%', height: '60px' }} />
-    </div>
-  );
-}
-
-// ─── Viz — Print Text (printText) ────────────────────────────────────────────
-
-export function PrintTextViz({ node }: { node: GraphNode }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const text      = typeof node.params.text === 'string' && node.params.text.length > 0 ? node.params.text : 'hello';
-  const decimals  = typeof node.params.decimals === 'number' ? Math.round(node.params.decimals) : 2;
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const viz = setupViz(canvas);
-    if (!viz) return;
-    const { ctx, W, H } = viz;
-
-    ctx.fillStyle = pal.crust;
-    ctx.fillRect(0, 0, W, H);
-
-    // Build display: text + placeholder number
-    const numPlaceholder = decimals > 0 ? ' 0.' + '0'.repeat(Math.min(decimals, 4)) : ' 0';
-    const display = text + numPlaceholder;
-
-    // Shrink font until it fits
-    let fontSize = 18;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    do {
-      ctx.font = `bold ${fontSize}px monospace`;
-      fontSize -= 1;
-    } while (ctx.measureText(display).width > W - 12 && fontSize > 8);
-
-    // Draw text portion in light color, number in accent
-    const textPx   = ctx.measureText(text).width;
-    const numPx    = ctx.measureText(numPlaceholder).width;
-    const totalPx  = textPx + numPx;
-    const startX   = (W - totalPx) / 2;
-
-    ctx.textAlign = 'left';
-    ctx.fillStyle = pal.text;
-    ctx.fillText(text, startX, H / 2 - 4);
-    ctx.fillStyle = pal.green;
-    ctx.fillText(numPlaceholder, startX + textPx, H / 2 - 4);
-
-    ctx.font = `8px ${MONO}`;
-    ctx.textAlign = 'center';
-    ctx.fillStyle = pal.surface2;
-    ctx.fillText(`"${text.slice(0, 12)}"  +  float`, W / 2, H - 6);
-  }, [text, decimals]);
-
-  return (
-    <div style={vizContainer()}>
-      <canvas ref={canvasRef} width={160} height={60}
-        style={{ display: 'block', width: '100%', height: '60px' }} />
-    </div>
-  );
-}
-
 // ─── Chladni-family field vizzes (waveTerm, chladniField, chladniSuperposition) ───
 // Renders the same n/m interference math generateGLSL emits for each of
 // these node types (see physics.ts) as a live per-pixel field preview — a
@@ -5103,8 +5011,6 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'grid':           return <GridViz                node={node} />;
     case 'gridLayout':     return <GridLayoutViz          node={node} />;
     case 'neighborDist':   return <NeighborDistViz        node={node} />;
-    case 'printFloat':     return <PrintFloatViz          node={node} />;
-    case 'printText':      return <PrintTextViz           node={node} />;
     case 'waveTexture':    return <WaveTextureViz         node={node} />;
     case 'smoothstep':     return <SmoothstepViz          node={node} />;
     case 'clamp':          return <ClampViz               node={node} />;
@@ -5327,9 +5233,6 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
 
     // ── 3D SDF missing ────────────────────────────────────────────────────────
     case 'sdCross3D':
-    case 'mengerSponge':
-    case 'mandelboxDE':
-    case 'kifsTetra':
     case 'mandelbulb':       return <SDF3DParamViz           node={node} />;
 
     // ── 3D transforms missing ─────────────────────────────────────────────────
@@ -5356,9 +5259,7 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'truchet':
     case 'metaballs':
     case 'lissajous':
-    case 'chladni':
-    case 'chladni3d':
-    case 'chladni3dParticles': return <SDF3DParamViz         node={node} />;
+    case 'chladni':          return <SDF3DParamViz           node={node} />;
     case 'waveTerm':           return <WaveTermViz           node={node} />;
     case 'chladniField':       return <ChladniFieldViz       node={node} />;
     case 'chladniSuperposition': return <ChladniSuperpositionViz node={node} />;
@@ -5384,7 +5285,6 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'fakeSSS':
     case 'volumeClouds':
     case 'volumetricFog':
-    case 'orbitalVolume3d':
     case 'radianceCascadesApprox': return <SDF3DParamViz     node={node} />;
 
     // ── Particle fields ───────────────────────────────────────────────────────
@@ -5415,7 +5315,7 @@ export const INLINE_VIZ_TYPES = new Set<string>([
   // Glass
   'toneMap', 'palette', 'gradient',
   'posterize', 'grain', 'hueRange', 'audioInput',
-  'colorRamp', 'blackbody', 'brightnessContrast', 'grid', 'gridLayout', 'neighborDist', 'printFloat', 'printText', 'waveTexture',
+  'colorRamp', 'blackbody', 'brightnessContrast', 'grid', 'gridLayout', 'neighborDist', 'waveTexture',
   'smoothstep', 'clamp', 'mix', 'addColor',
   'expEase', 'doubleExpSeat', 'doubleExpSigmoid', 'logisticSigmoid',
   'circularEaseIn', 'circularEaseOut', 'doubleCircleSeat', 'doubleCircleSigmoid',
@@ -5473,21 +5373,21 @@ export const INLINE_VIZ_TYPES = new Set<string>([
   // 2D SDF missing
   'simpleSDF',
   // 3D SDF missing
-  'sdCross3D', 'mengerSponge', 'mandelboxDE', 'kifsTetra', 'mandelbulb',
+  'sdCross3D', 'mandelbulb',
   // 3D transforms missing
   'mirroredRepeat3D', 'spiralWarp3D',
   // Lighting
   'light', 'light2d', 'multiLight', 'fresnel3d', 'sdfAo', 'softShadow',
   // 2D Fractals / Patterns / Physics
   'lissajous',
-  'chladni', 'chladni3d', 'chladni3dParticles',
+  'chladni',
   'waveTerm', 'chladniField', 'chladniSuperposition', 'chladniModeFreq',
   'vec2Swizzle', 'vec3Swizzle', 'quantize', 'modSelect', 'pixelate',
   // Loop / Effect nodes
   'fractalLoop', 'rotatingLinesLoop', 'accumulateLoop', 'forLoop',
   'loopCarry', 'loopDomainFold',
   // Volumetrics / complex effects
-  'fakeSSS', 'volumeClouds', 'volumetricFog', 'glass3d', 'glassScene', 'orbitalVolume3d', 'radianceCascadesApprox',
+  'fakeSSS', 'volumeClouds', 'volumetricFog', 'glass3d', 'glassScene', 'radianceCascadesApprox',
   // Particle fields
   'vectorField', 'gravityField', 'spiralField',
   // 3D Scene nodes

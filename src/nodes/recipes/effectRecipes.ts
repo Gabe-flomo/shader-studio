@@ -1,7 +1,7 @@
 /**
  * effectRecipes.ts — starter recipes for nodes that work on a picture or over time: Previous
- * Frame (feedback), Pass, Particles, Audio Input, LFO, Print Text and the picture effects
- * (Bloom, Vignette, Grain…).
+ * Frame (feedback), Pass, Particles, Audio Input, LFO and the picture effects (Bloom, Vignette,
+ * Grain…).
  */
 import type { GraphNode } from '../../types/nodeGraph';
 import type { RecipeContext, StarterRecipe, Wire } from './types';
@@ -198,24 +198,6 @@ export const LFO_RECIPES: StarterRecipe[] = [
         n('sdfFill', 'paint', col(3), 0, { antialias: 0.006, ...note('SDF Fill: paints the circle.') }, { d: ['dot', 'distance'], fillColor: ['fillCol', 'rgb'] }),
       ],
       show: ['paint', 'result'],
-    }),
-  },
-];
-
-export const TEXT_RECIPES: StarterRecipe[] = [
-  {
-    id: 'text-title',
-    label: 'Coloured title',
-    description: 'Colorize paints the text\'s mask in a colour over a dark background.',
-    build: () => ({
-      params: { posX: -0.6, posY: -0.06, charSize: 0.14 },
-      nodes: [
-        n('colorize', 'paint', col(1), 0, { color: [1, 0.75, 0.35], background: [0.05, 0.05, 0.08], gain: 1, ...note(
-          'Colorize: the mask (1 on the letters, 0 elsewhere) in a colour over a background.',
-          'Why: the text node only gives a mask; this makes it a picture. Pick Color and Background on the card.',
-        ) }, { field: [SELF, 'mask'] }),
-      ],
-      show: ['paint', 'color'],
     }),
   },
 ];

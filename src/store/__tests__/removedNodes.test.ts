@@ -1,7 +1,9 @@
 /**
  * The old particle systems (Particle Emitter, the P: chain, Particle System)
- * were removed for the Particles node. A saved graph that still holds one
- * must open without crashing and say what happened, not "Unknown node type".
+ * were removed for the Particles node; later Glow Falloff, the 3D fractal DE
+ * nodes, Chladni 3D, the orbital nodes and Print Float / Print Text went too.
+ * A saved graph that still holds one must open without crashing and say what
+ * happened, not "Unknown node type".
  */
 import { describe, expect, it, vi } from 'vitest';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -36,9 +38,12 @@ describe('removed node types', () => {
   it('are gone from the registry, each with a message naming its replacement', () => {
     for (const type of Object.keys(REMOVED_NODE_TYPES)) {
       expect(getNodeDefinition(type), type).toBeUndefined();
-      expect(removedNodeMessage(type)).toMatch(/was removed — use the Particles node$/);
+      expect(removedNodeMessage(type)).toMatch(/^.+ was removed( — use the .+ node)?$/);
     }
     expect(removedNodeMessage('particleEmitter')).toBe('Particle Emitter was removed — use the Particles node');
+    expect(removedNodeMessage('glowFalloff')).toBe('Glow Falloff was removed — use the Distance Falloff node');
+    expect(removedNodeMessage('mengerSponge')).toBe('Menger Sponge was removed');
+    expect(removedNodeMessage('mandelbulb')).toBeNull();
     expect(removedNodeMessage('gpuParticles')).toBeNull();
     expect(removedNodeMessage('toString')).toBeNull();
   });
@@ -60,5 +65,26 @@ describe('removed node types', () => {
     ] });
     expect(r.success).toBe(false);
     expect(r.errors).toEqual(['P: Init was removed — use the Particles node', 'P: Render was removed — use the Particles node']);
+  });
+
+  it('the 2026-10 removals: each one is gone, and an old graph with them still loads', () => {
+    const gone = ['glowFalloff', 'mandelboxDE', 'kifsTetra', 'mengerSponge', 'chladni3d', 'chladni3dParticles', 'electronOrbital', 'orbitalVolume3d', 'printFloat', 'printText'];
+    for (const type of gone) {
+      expect(getNodeDefinition(type), type).toBeUndefined();
+      expect(removedNodeMessage(type), type).not.toBeNull();
+    }
+    const save = JSON.stringify({ nodes: [
+      node('uv', 'uv', {}, { uv: { type: 'vec2', label: 'UV' } }),
+      node('txt', 'printText', { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv', outputKey: 'uv' } } }, { mask: { type: 'float', label: 'Text Mask' } }, { text: 'hi' }),
+      node('glow', 'glowFalloff', { distance: { type: 'float', label: 'Distance', connection: { nodeId: 'txt', outputKey: 'mask' } } }, { glow: { type: 'float', label: 'Glow' } }),
+      node('out', 'output', { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'glow', outputKey: 'glow' } } }, {}),
+    ] });
+    const r = useNodeGraphStore.getState().importGraph(save);
+    expect(r.ok).toBe(true);
+    const st = useNodeGraphStore.getState();
+    expect(st.nodes.map(n => n.type)).toEqual(expect.arrayContaining(['printText', 'glowFalloff']));
+    expect(st.compilationErrors).toContain('Print Text was removed');
+    expect(st.compilationErrors).toContain('Glow Falloff was removed — use the Distance Falloff node');
+    expect(st.compilationErrors.join('\n')).not.toMatch(/Unknown node type/);
   });
 });

@@ -22,7 +22,7 @@
 
 import type { GraphNode, NodeDefinition } from '../types/nodeGraph';
 
-export const SCENE_SPACE_CATEGORIES = new Set(['3D Primitives', '3D Transforms', '3D Boolean Ops', '3D Fractals']);
+export const SCENE_SPACE_CATEGORIES = new Set(['3D Primitives', '3D Transforms', '3D Boolean Ops']);
 export const LIGHTING_CATEGORY = '3D Lighting';
 export const MARCH_GROUP_TYPES = new Set(['marchLoopGroup', 'giLitMarchGroup']);
 

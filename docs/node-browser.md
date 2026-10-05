@@ -7,13 +7,13 @@ The node browser (opened via the **+** button or by double-clicking empty canvas
 ## Categories
 
 ```
-2D Primitives    3D Boolean Ops   3D Fractals      3D Lighting
-3D Primitives    3D Scene         3D Transforms    Animation
-Color            Color Grading    Combiners         Conditionals
-Effects          Fractals         Halftone          Math
-Matrix           Noise            Particles         Particles & Fields
-Post Processing  Science          Shapers           Sources
-Spaces           Transforms       Utility           Output
+2D Primitives       3D Boolean Ops      3D Lighting         3D Primitives
+3D Scene            3D Transforms       Animation           Color
+Color Grading       Combiners           Conditionals        Effects
+Fractals            Halftone            Math                Matrix
+Noise               Particles           Particles & Fields  Post Processing
+Science             Shapers             Sources             Spaces
+Transforms          Utility             Output
 ```
 
 ---
