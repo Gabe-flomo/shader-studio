@@ -52,6 +52,8 @@ const CONNECTION_GATED = new Set([
   // their other settings, until a Time Cube's Volume is wired
   ...Object.keys(NODE_REGISTRY.timeCubeView.paramDefs ?? {}).filter(k => k !== 'background').map(k => `timeCubeView.${k}`),
   ...Object.keys(NODE_REGISTRY.timeSlice.paramDefs ?? {}).map(k => `timeSlice.${k}`),
+  // Frame Stack (docs/frame-stack.md) likewise draws only its background until a Volume is wired
+  ...Object.keys(NODE_REGISTRY.frameStack.paramDefs ?? {}).filter(k => k !== 'background').map(k => `frameStack.${k}`),
 ]);
 
 function makeNode(id: string, type: string, def: NodeDefinition, x = 0): GraphNode {

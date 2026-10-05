@@ -12,6 +12,7 @@ import { VideoInputNode } from './sources';
 export { VideoInputNode };
 import { BakedNode } from './baked';
 import { TimeCubeNode, TimeCubeViewNode, TimeSliceNode } from './timeCube';
+import { FrameStackNode } from './frameStack';
 export { BakedNode };
 import { MidiInputNode } from './midi';
 export { MidiInputNode };
@@ -303,6 +304,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   timeCube: TimeCubeNode,
   timeSlice: TimeSliceNode,
   timeCubeView: TimeCubeViewNode,
+  // Frame Stack (docs/frame-stack.md): a Time Cube's frames as cards to arrange
+  frameStack: FrameStackNode,
   midiInput: MidiInputNode,
   data: DataNode,
   playLayers: PlayLayersNode,
