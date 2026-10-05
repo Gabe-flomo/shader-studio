@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.29',
+    date: '2026-10-04',
+    title: 'Softer time cubes',
+    highlights: [
+      { area: 'Studio', text: 'Time Cube View: rounded soft edges, rim glow, side tints and shadow; outline off by default. Isometric camera and depth of field.', link: { kind: 'doc', path: 'docs/time-cube.md' } },
+      { area: 'Studio', text: 'Highlighted frames that loop with the scan, frames that lift and scale as it passes, and Flow mode where the clip streams through the box.' },
+      { area: 'Play', text: 'Animate the key colour, pulse it through the cube in bands, or flash it like lightning, all mappable on the Play page.' },
+      { area: 'Studio', text: 'Time Cube source: long exposure, brightest, darkest, motion and median frames; reorder by shuffle, brightness, hue or motion.' },
+    ],
+  },
+  {
     id: '2026.10.28',
     date: '2026-10-04',
     title: 'Frame Stack',
