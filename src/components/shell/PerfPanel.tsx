@@ -8,9 +8,7 @@ import { getPerfSnapshot, getPlayPerfSnapshot, subscribePerf, getShaderCostMeasu
 import { SG_DEPTH } from '../../play/kit/signals.js';
 import { shaderShape } from '../../lib/shaderShape';
 import { measureNodeCosts, type NodeCostReport } from '../../lib/nodeCost';
-import { SKIP_UNIFORM_TYPES } from '../../compiler/uniformPatcher';
-import { getNodeDefinitionFor } from '../../nodes/definitions';
-import type { GraphNode } from '../../types/nodeGraph';
+import { recompileTriggers } from '../../lib/recompileTriggers';
 import type { PassProgram } from '../../compiler/types';
 import { programTintColour } from '../../lib/programTints';
 
@@ -150,21 +148,6 @@ function Bar({ label, value, max, unit, color, sub }: { label: string; value: nu
   );
 }
 
-function recompileTriggers(nodes: GraphNode[]): string[] {
-  const out = new Map<string, number>();
-  const visit = (list: GraphNode[]) => {
-    for (const n of list) {
-      const def = getNodeDefinitionFor(n);
-      const forces = SKIP_UNIFORM_TYPES.has(n.type) || Object.values(def?.paramDefs ?? {}).some(pd => pd.compileTime);
-      if (forces && def) out.set(def.label, (out.get(def.label) ?? 0) + 1);
-      const sg = n.params?.subgraph as { nodes?: GraphNode[] } | undefined;
-      if (sg?.nodes) visit(sg.nodes);
-    }
-  };
-  visit(nodes);
-  return [...out.entries()].map(([l, c]) => (c > 1 ? `${l} ×${c}` : l));
-}
-
 export function PerfPanel({ onClose }: { onClose: () => void }) {
   const tk = useTokens();
   const snap = usePerfSnapshot();
@@ -272,7 +255,7 @@ export function PerfPanel({ onClose }: { onClose: () => void }) {
           <div><div style={{ font: `600 13px ${fontFamily.mono}`, color: snap.compilesPerMinute > 10 ? tk.status.warning : tk.text.primary }}>{snap.compilesPerMinute}</div><div style={note}>in the last minute</div></div>
         </div>
         {triggers.length > 0 && (
-          <div style={note}>Sliders on {triggers.join(', ')} rebuild the shader on every change instead of updating a uniform.</div>
+          <div style={note}>These sliders shape the shader's code (a loop's count, a mode), so moving one rebuilds it instead of updating a uniform: {triggers.join('; ')}. Every other slider is a uniform.</div>
         )}
       </div>
 

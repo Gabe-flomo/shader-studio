@@ -15,7 +15,7 @@ import { fontFamily, radius } from '../../../theme/tokens';
 import { layerNumericProps, type LayerMask, type MaskOp, type PlayLayer, type PlayRecord } from '../../../types/play';
 import { canBeMatte, canHaveMatte, maskKey, maskLabel, matteCandidates, MASKS_MAX, type LayerDisplace, type MaskProp } from '../../../types/playLayers';
 import { addDisplace, addMask, addMatteMotion, addMatteShape, matteSummary, moveMask, patchDisplace, patchMask, patchTrackMatte, removeDisplace, removeMask, setTrackMatte } from '../../../play/mattes';
-import { DM_BEHAVIOURS, DM_BEHAVIOUR_LABELS, DM_CHANNELS, DM_CHANNEL_LABELS, DM_HINTS } from '../../../play/kit/displace.js';
+import { DM_BEHAVIOURS, DM_BEHAVIOUR_LABELS, DM_CHANNELS, DM_CHANNEL_LABELS, DM_HINTS, DM_QUALITIES, DM_QUALITY_LABELS } from '../../../play/kit/displace.js';
 import { playOverlay } from '../../../play/overlay';
 import { Button, IconButton } from '../../ui/Button';
 import { Segmented, Toggle } from '../../ui/Choice';
@@ -141,6 +141,7 @@ export function MatteMaskBar({ f, play, changePlay, drawing, onSelect }: {
 
 const CHANNEL_OPTIONS = DM_CHANNELS.map(c => ({ value: c, label: DM_CHANNEL_LABELS[c] }));
 const BEHAVIOUR_OPTIONS = DM_BEHAVIOURS.map(b => ({ value: b, label: DM_BEHAVIOUR_LABELS[b] }));
+const QUALITY_OPTIONS = DM_QUALITIES.map(q => ({ value: q, label: DM_QUALITY_LABELS[q] }));
 
 /** The layer's Displacement Map: its map, channels, maxima (mappable), behaviour and edges. Folded to one line by default. */
 function DisplacePanel({ f, play, changePlay }: { f: FieldKit; play: PlayRecord; changePlay: (fn: (p: PlayRecord) => PlayRecord) => void }) {
@@ -190,6 +191,7 @@ function DisplacePanel({ f, play, changePlay }: { f: FieldKit; play: PlayRecord;
           {f.prop('disp_maxV', 'Max vert.')}
           {f.row('Behaviour', <Select ariaLabel="Displacement map behaviour" height={26} value={d.behaviour} options={BEHAVIOUR_OPTIONS} onChange={v => patch({ behaviour: v as LayerDisplace['behaviour'] })} />, DM_HINTS.behaviour)}
           {f.row('Edges', <Toggle checked={d.wrap} onChange={wrap => patch({ wrap })} label="Wrap pixels around" />, DM_HINTS.wrap)}
+          {f.row('Map quality', <Select ariaLabel="Displacement map quality" height={26} value={d.quality ?? 'full'} options={QUALITY_OPTIONS} onChange={v => patch({ quality: v === 'full' ? undefined : v as LayerDisplace['quality'] })} />, DM_HINTS.quality)}
           {mapLayer && f.row('Show', <Toggle checked={mapLayer.visible} onChange={visible => changePlay(p => ({ ...p, layers: p.layers.map(x => (x.id === mapLayer.id ? { ...x, visible } : x)) }))} label="Show it on the picture too" />, 'The map layer works while hidden; show it to see what is pushing.')}
           {mapLayer && <div style={{ marginTop: 6 }}><Button size="sm" onClick={() => reveal(mapLayer.id)}>Go to {mapLayer.label}</Button></div>}
           {f.note('Mid-grey in the map leaves pixels where they are; brighter pushes right and up by up to Max, darker left and down. Max is in pixels of a 1080-pixel-tall picture.')}

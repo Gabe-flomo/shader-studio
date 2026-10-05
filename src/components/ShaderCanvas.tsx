@@ -174,17 +174,21 @@ const ditherSeed = (n: number): number => (n % 4096) + 0.5;
 // has finished compiling — which defeats KHR_parallel_shader_compile. So the
 // wrapper only records the shader, and the per-frame flush polls
 // COMPLETION_STATUS_KHR and reads the log once the compile is actually done.
-function captureGlslErrors(gl: WebGLRenderingContext | WebGL2RenderingContext): { flush: () => string[]; failedSource: () => string | null } {
+function captureGlslErrors(gl: WebGLRenderingContext | WebGL2RenderingContext): { flush: () => string[]; failedSource: () => string | null; quietly: <T>(fn: () => T) => T } {
   const errors: string[] = [];
   // Source of the last shader that failed: error line numbers point into it
   let lastFailedSource: string | null = null;
   const pending: WebGLShader[] = [];
   const parallel = gl.getExtension('KHR_parallel_shader_compile') as { COMPLETION_STATUS_KHR: number } | null;
   const origCompile = gl.compileShader.bind(gl);
+  // Shaders compiled inside quietly() (the Performance panel's cost-by-node variants, which may not
+  // compile at all) are never reported: their errors aren't the graph's.
+  let quiet = 0;
   (gl as unknown as Record<string, unknown>).compileShader = (shader: WebGLShader) => {
     origCompile(shader);
-    pending.push(shader);
+    if (!quiet) pending.push(shader);
   };
+  const quietly = <T,>(fn: () => T): T => { quiet++; try { return fn(); } finally { quiet--; } };
   const flush = () => {
     for (let i = pending.length - 1; i >= 0; i--) {
       const sh = pending[i];
@@ -204,7 +208,7 @@ function captureGlslErrors(gl: WebGLRenderingContext | WebGL2RenderingContext): 
     errors.length = 0;
     return copy;
   };
-  return { flush, failedSource: () => lastFailedSource };
+  return { flush, failedSource: () => lastFailedSource, quietly };
 }
 const NO_ERRORS: string[] = [];
 
@@ -472,7 +476,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // Enable parallel shader compilation — keeps previous frame rendering while new shader compiles
     const gl = renderer.getContext();
     gl.getExtension('KHR_parallel_shader_compile');
-    const { flush: flushGlErrors, failedSource: glFailedSource } = captureGlslErrors(gl);
+    const { flush: flushGlErrors, failedSource: glFailedSource, quietly: compileQuietly } = captureGlslErrors(gl);
 
     // ── Performance counters (see lib/perfStats.ts) ─────────────────────────
     // GPU pass times come from timer queries; 'cost' queries belong to the
@@ -736,8 +740,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       };
       for (const m of [...passMats.map(pm => pm.mat), mat]) {
         costMesh.material = m;
-        try { await renderer.compileAsync(costScene, camera); } catch { done(); return null; }
-        if (!linked(m) || signal?.aborted) { flushGlErrors(); done(); return null; }
+        // compileAsync compiles its shaders before it first awaits, so they are all quiet; a frame drawn
+        // while it waits used to pick up a variant's error and put it on the graph's cards.
+        try { await compileQuietly(() => renderer.compileAsync(costScene, camera)); } catch { done(); return null; }
+        if (!linked(m) || signal?.aborted) { done(); return null; }
       }
       costMesh.material = mat;
       if (!costRt || costRt.width !== floatRt.width || costRt.height !== floatRt.height) {

@@ -1369,8 +1369,8 @@ export class ShaderAssembler {
                 const bypassOutVars: Record<string, string> = {};
                 let bypassCode = '';
                 if (bypassInputEntries.length > 0) {
-                  const [, passthroughVar] = bypassInputEntries[0];
-                  const srcType = (Object.values(subDef.inputs)[0]?.type ?? 'float');
+                  const [firstKey, passthroughVar] = bypassInputEntries[0];
+                  const srcType = subDef.inputs[firstKey]?.type ?? 'float';
                   const outputDefs = Object.entries(subDef.outputs);
                   for (const [outKey, outSocket] of outputDefs) {
                     const varName = `${subNode.id}_${outKey}`;
@@ -3839,14 +3839,18 @@ export class ShaderAssembler {
           let bypassCode = '';
 
           if (inputEntries.length > 0) {
-            const [, passthroughVar] = inputEntries[0];
+            const [firstKey, passthroughVar] = inputEntries[0];
             const outputEntries = Object.entries(def.outputs);
+            const typeOf = (key: string) => def.inputs[key]?.type ?? 'float';
             for (const [outKey, outSocket] of outputEntries) {
               const varName = `${nodeSlug}_${outKey}`;
-              const srcType = (Object.values(def.inputs)[0]?.type ?? 'float');
+              const srcType = typeOf(firstKey);
               let coerced = coerceLossy(passthroughVar, srcType, outSocket.type);
+              // The first input isn't the output's type: pass through an input that is (a colour node's
+              // colour, not its UV), else the first one converted. Never one of another type: a Palette's
+              // Angle offset (a float) set straight into its vec3 colour didn't compile.
               if (srcType !== outSocket.type) {
-                const matchingInput = inputEntries.find(([, v]) => v !== passthroughVar);
+                const matchingInput = inputEntries.find(([k]) => typeOf(k) === outSocket.type);
                 if (matchingInput) coerced = matchingInput[1];
               }
               bypassCode += `    ${outSocket.type} ${varName} = ${coerced};\n`;

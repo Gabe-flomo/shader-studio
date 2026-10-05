@@ -17,7 +17,7 @@
 import { LINKED_PREFIX, LINKED_REF_MAX, isLinkedRef } from '../files/linkedRefs';
 import { DP_CHOKES, DP_INDEX_MODES, DP_PADS, DP_PARAMS, DP_SYNTHS, dpKey, type DpIndexMode, type DpMode, type DpSynth } from '../play/kit/drumPads.js';
 import { AG_GROUPS, AG_MAX, AG_RULES, AG_RULE_TYPES, AG_TARGETS, AG_CHANNELS, agPresetLayer } from '../play/kit/agents.js';
-import { DM_BEHAVIOURS, DM_CHANNELS, DM_DEFAULTS, DM_HINTS, type DmBehaviour, type DmChannel } from '../play/kit/displace.js';
+import { DM_BEHAVIOURS, DM_CHANNELS, DM_DEFAULTS, DM_HINTS, type DmBehaviour, type DmChannel, type DmQuality } from '../play/kit/displace.js';
 import { WL_PARAMS } from '../play/kit/waterLayer.js';
 
 export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken' | 'difference' | 'exclusion' | 'add';
@@ -86,6 +86,8 @@ export interface LayerDisplace {
   behaviour: DmBehaviour;
   /** Wrap pixels around: what is pushed off one edge comes in at the other. */
   wrap: boolean;
+  /** How sharp the map is read (absent: full): half or a quarter of the picture's size, much cheaper. */
+  quality?: DmQuality;
 }
 
 interface LayerBase {
@@ -1885,6 +1887,7 @@ export function parseDisplace(v: unknown, selfId: string): LayerDisplace | null 
     v: (DM_CHANNELS as readonly string[]).includes(r.v as string) ? r.v as DmChannel : DM_DEFAULTS.v as DmChannel,
     behaviour: (DM_BEHAVIOURS as readonly string[]).includes(r.behaviour as string) ? r.behaviour as DmBehaviour : DM_DEFAULTS.behaviour as DmBehaviour,
     wrap: r.wrap === true,
+    ...(r.quality === 'half' || r.quality === 'quarter' ? { quality: r.quality as DmQuality } : {}),
   };
 }
 

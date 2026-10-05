@@ -256,6 +256,7 @@ export function patchDisplace(p: PlayRecord, layerId: string, patch: Partial<Lay
     const d = { ...l.displace, ...patch };
     if (d.layerId === layerId) d.layerId = '';
     if (d.map === 'layer' && !d.layerId) d.map = 'picture';
+    if (d.quality !== 'half' && d.quality !== 'quarter') delete d.quality; // Full is the default: kept off the record
     return { ...l, displace: d };
   });
 }

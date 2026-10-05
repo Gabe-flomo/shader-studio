@@ -63,7 +63,7 @@ import { agCreate, agStep, agDraw, agReset, agScatter, agElements, agElement, AG
 import { hdDraw } from './hands.js';
 import { fcDraw } from './face.js';
 import { psDraw } from './pose.js';
-import { dmCreate, dmBoxOf } from './displace.js';
+import { dmCreate, dmBoxOf, dmQualityScale } from './displace.js';
 import { kmApplyBackgroundMatte, kmApplyMasks, kmApplyTrack, kmMatteSources, kmTrackOf } from './mattes.js';
 import { bqState, bqAct, bqPlan, bqCompose } from './queue.js';
 import { mtCreate, mtStep, mtSampleSize, mtLook, mtHeat, mtMaskAlpha, MT_READS } from './motion.js';
@@ -1237,8 +1237,26 @@ export function createLayerKit() {
     for (const l of layers) if (l.kind === 'glyphs' && l.readFrom === 'layer' && l.sourceId && l.sourceId !== l.id && isVisible(l)) glyphSources.add(l.sourceId);
     const ownCanvas = l => glyphSources.has(l.id) || matteSources.has(l.id) || relPicSources.has(l.id) || !!kmTrackOf(l, byId) || !!(l.masks && l.masks.length) || dispOn(l);
     const rendered = new Map();
+    // The Performance panel's per-layer times (env.layerTime). A layer rendered inside another's draw (a
+    // matte, a displacement map, a glyph source) is timed on its own and left out of the other's, so each
+    // row is that layer's own cost. Summed over the frame and reported once per layer after the draw.
+    const timing = env.layerTime ? new Map() : null;
+    let timingDepth = 0, nestedMs = 0;
+    function timeInto(id, fn) {
+      const n0 = nestedMs, t0 = performance.now();
+      timingDepth++;
+      let r;
+      try { r = fn(); } finally { timingDepth--; }
+      const total = performance.now() - t0;
+      timing.set(id, (timing.get(id) || 0) + total - (nestedMs - n0));
+      nestedMs = n0 + total;
+      return r;
+    }
     function renderLayer(l) {
       if (rendered.has(l.id)) return rendered.get(l.id);
+      return timing && timingDepth > 0 ? timeInto(l.id, () => renderLayerNow(l)) : renderLayerNow(l);
+    }
+    function renderLayerNow(l) {
       rendered.set(l.id, null); // a loop (a matte of a matte of itself) finds nothing and draws unmatted
       const off = klCanvas(pool, 'lay:' + l.id, W, H), o = off.getContext('2d');
       o.setTransform(1, 0, 0, 1, 0, 0); o.globalAlpha = 1; o.globalCompositeOperation = 'source-over';
@@ -1272,6 +1290,17 @@ export function createLayerKit() {
       let box = null;
       // Stretch and Tile work on the map's visible part: its box, found on a 128 × 72 grid.
       if (map && d.map === 'layer' && d.behaviour !== 'center') { const g = sampleInto('dmbox', map, 128, 72, false); box = g ? dmBoxOf(g, 128, 72) : null; }
+      // Half or Quarter: the map drawn smaller first (halving steps, so it averages), a fraction of the upload.
+      const q = dmQualityScale(d.quality);
+      if (map && q < 1) {
+        const mw = Math.max(1, Math.round(W * q)), mh = Math.max(1, Math.round(H * q));
+        const small = klCanvas(pool, 'dmMap:' + l.id, mw, mh);
+        const sx = small.getContext('2d');
+        sx.setTransform(1, 0, 0, 1, 0, 0); sx.globalAlpha = 1; sx.globalCompositeOperation = 'copy'; sx.imageSmoothingQuality = 'medium';
+        sx.drawImage(map, 0, 0, mw, mh);
+        sx.globalCompositeOperation = 'source-over';
+        map = small;
+      }
       if (!displacer) displacer = dmCreate();
       const out = displacer.apply(off, map, { h: d.h, v: d.v, behaviour: d.behaviour, wrap: d.wrap, maxH: env.value(l, 'disp_maxH'), maxV: env.value(l, 'disp_maxV'), box }, W, H);
       if (!out) return;
@@ -1315,9 +1344,8 @@ export function createLayerKit() {
       c.drawImage(off, 0, 0);
       c.globalCompositeOperation = 'source-over';
     };
-    // env.layerTime(id, ms): the host's Performance panel is open and wants each layer's cost.
-    const layerTime = env.layerTime;
-    const drawLayer = layerTime ? (c, l) => { const t0 = performance.now(); drawLayerNow(c, l); layerTime(l.id, performance.now() - t0); } : drawLayerNow;
+    // env.layerTime(id, ms): the host's Performance panel is open and wants each layer's cost (timeInto above).
+    const drawLayer = timing ? (c, l) => timeInto(l.id, () => drawLayerNow(c, l)) : drawLayerNow;
     const drawn = l => isVisible(l);
     const tap = env.shaderTap;
     if (tap) {
@@ -1332,6 +1360,7 @@ export function createLayerKit() {
     } else for (const l of layers) if (drawn(l)) drawLayer(ctx, l);
     // Water layers always run (their readings and Waves matte): a hidden one is stepped here, drawing nothing.
     for (const l of layers) if (l.kind === 'water') { const st = waters.get(l.id); if (!st || st.frame !== frameNo) stepWater(l, null); }
+    if (timing) for (const [id, ms] of timing) env.layerTime(id, ms);
 
     // While editing: a particles layer's field and forces, on top (never into the Layers node).
     if (env.editing) for (const l of layers) {

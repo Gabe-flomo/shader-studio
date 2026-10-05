@@ -96,7 +96,7 @@ export const NODE_ALIASES: Record<string, NodeAlias> = {
                    params: o => ({ ...o, r: num(o.x, 0), g: num(o.y, 0), b: num(o.z, 0), x: undefined, y: undefined, z: undefined }) },
   sdBox:         { to: 'boxSDF', inputs: { p: 'position', b: 'dimensions' },
                    params: o => ({ ...o, width: num(o.bx, 0.3), height: num(o.by, 0.3), posX: 0.0, posY: 0.0, bx: undefined, by: undefined }) },
-  palettePreset: { to: 'palette', params: o => ({ ...o, preset: typeof o.preset === 'string' ? o.preset : '1' }) },
+  palettePreset: { to: 'palette', inputs: { t: 'value' }, params: o => ({ ...o, preset: typeof o.preset === 'string' ? o.preset : '1' }) },
   sineLFO:       { to: 'lfo', params: o => ({ ...o, waveform: 'sine' }) },
   squareLFO:     { to: 'lfo', params: o => ({ ...o, waveform: 'square' }) },
   sawtoothLFO:   { to: 'lfo', params: o => ({ ...o, waveform: 'sawtooth' }) },
