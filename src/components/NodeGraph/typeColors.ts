@@ -14,4 +14,5 @@ export const TYPE_COLORS: Record<string, string> = {
   agents:      '#9be564',  // the Agents family (docs/agents-plan.md): a group's walkers
   emitter:     '#ffd166',  //   an Emit's births
   deposit:     '#c792ea',  //   Deposits on their way into a Trail
+  volume:      '#f5a97f',  // A Time Cube's stacked frames (docs/time-cube.md)
 };

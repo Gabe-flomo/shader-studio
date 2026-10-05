@@ -25,6 +25,7 @@ import { AGENT_EXAMPLE_INDEX, AGENT_EXAMPLE_KEYS, AGENT_RULE_INDEX } from './age
 import { AGENT_SHADER_EXAMPLE_INDEX, AGENT_SHADER_EXAMPLE_KEYS } from './agentShaderExamples';
 import { CONVERT_EXAMPLE_INDEX, CONVERT_EXAMPLE_KEYS } from './convertExampleIndex';
 import { BAKE_EXAMPLE_INDEX } from './bakeExamples';
+import { TIME_CUBE_EXAMPLE_INDEX, TIME_CUBE_EXAMPLE_KEYS } from './timeCubeExamples';
 
 export type ExampleGraph = {
   label: string; nodes: GraphNode[]; counter: number;
@@ -215,6 +216,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...CONVERT_EXAMPLE_INDEX,
   // Bake (bakeExamples.ts, docs/bake.md): a heavy scene to freeze into a video, live effects on top.
   ...BAKE_EXAMPLE_INDEX,
+  // Time cube (timeCubeExamples.ts, docs/time-cube.md): a video as a box of time, a colour key, slit-scan.
+  ...TIME_CUBE_EXAMPLE_INDEX,
 };
 
 // The default graph to load on startup
@@ -258,6 +261,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "3D Lighting",       color: '#f9c468', keys: ['fresnelSchlickRim','refractDirFakeGlass','glassPhysical','glassMetaballs','litStillLife'] },
   { label: "GI Lighting",       color: ctp.green, keys: ['giSphereGround','giBoxFrame'] },
   { label: "Volumetric",        color: '#f5a97f', keys: ['glowMarcher','volAnimatedRepeat','volumeGlowDemo'] },
+  { label: "Time Cube",         color: '#f5a97f', keys: TIME_CUBE_EXAMPLE_KEYS },
   { label: "From the Internet",    color: ctp.yellow, keys: ['fcTrippyNoise','fcSolar','fcPillars','fcGradient4','fcGrainGradient','fcTiling','fcTheScreen','fcShield','fcMainFrame','fcAtlantic','fcOrb','fcBitshift'] },
   { label: "Convert",            color: ctp.yellow, keys: CONVERT_EXAMPLE_KEYS },
   { label: "Node Combos",        color: ctp.flamingo, keys: ['comboChaosStars','comboRepeatCellHash','comboTurbulenceGlow','comboBloomDots','comboDomeRepeat','comboVoxelSpheres','comboGridPaintShapes','comboGridPaintPictures','comboGridPaintGlow','comboGridShapeByWire','comboArrayStars','comboGridGroupFlower','comboArrayGroupMoons'] },

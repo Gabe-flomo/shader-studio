@@ -16,6 +16,7 @@ import { buildDataExamples } from './dataExamples';
 import { buildGridExamples } from './gridExamples';
 import { buildPassExamples } from './passExamples';
 import { buildBakeExamples } from './bakeExamples';
+import { buildTimeCubeExamples } from './timeCubeExamples';
 import { buildAgentExamples } from './agentExamples';
 import { buildAgentShaderExamples } from './agentShaderExamples';
 import { buildAgentSketchExamples } from './agentSketchExamples';
@@ -12606,7 +12607,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
 };
 
 // The Learn folder is built from the node definitions at load; its last lesson reuses a graph above.
-Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildLearn3dExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildConvertExamples(), buildPassExamples(), buildAgentExamples(), buildAgentShaderExamples(), buildAgentSketchExamples(), buildBakeExamples(EXAMPLE_GRAPHS));
+Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildLearn3dExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildConvertExamples(), buildPassExamples(), buildAgentExamples(), buildAgentShaderExamples(), buildAgentSketchExamples(), buildBakeExamples(EXAMPLE_GRAPHS), buildTimeCubeExamples());
 
 // Every example's Play setup is in the rules shape (implementation guide, phase 9): authored with actions,
 // a signal's When and links where that reads easiest, opened as the rules they play as.

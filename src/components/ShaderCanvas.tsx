@@ -20,6 +20,7 @@ import { playOverlay } from '../play/overlay';
 import { CompareHandle } from './play/finish/CompareHandle';
 import { playBackground, planFrame, planGraphs, planShowsThis } from '../play/background';
 import { playVideoLayers } from '../play/videoLayers';
+import { timeCubes } from '../lib/timeCube/volumes';
 import { bakedVideos } from '../lib/bakedVideos';
 import { playDrumPads } from '../play/drumPads';
 import { compiledQueueGraph, onQueueGraphsChange } from '../play/queueGraphs';
@@ -337,6 +338,16 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     collect(useNodeGraphStore.getState());
     const off = useNodeGraphStore.subscribe((s, prev) => { if (s.nodes !== prev.nodes || s.bakeGraph !== prev.bakeGraph) collect(s); });
     return () => { off(); bakedVideos.setHost(null); };
+  }, []);
+  // Time Cube nodes (docs/time-cube.md): their stacked frames come in through the store's node textures, like a Texture Input's.
+  useEffect(() => {
+    timeCubes.setHost({
+      setTexture: (id, tex) => useNodeGraphStore.getState().setNodeTexture(id, tex),
+      setMeta: (id, meta) => useNodeGraphStore.getState().updateNodeParams(id, { _meta: meta }),
+    });
+    timeCubes.sync(useNodeGraphStore.getState().nodes);
+    const off = useNodeGraphStore.subscribe((s, prev) => { if (s.nodes !== prev.nodes) timeCubes.sync(s.nodes); });
+    return () => { off(); timeCubes.setHost(null); };
   }, []);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);

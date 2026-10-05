@@ -48,6 +48,10 @@ const CONNECTION_GATED = new Set([
   'agentChladni.shake', 'agentChladni.level', 'agentChladni.beat',
   // Flow and Collide do nothing, and read none of their settings, until a field is wired into Field ƒ / Shape ƒ
   'agentFlow.strength', 'agentFlow.step', 'agentCollide.margin', 'agentCollide.cushion', 'agentCollide.bounce', 'agentCollide.friction',
+  // Time Cube View and Time Slice (docs/time-cube.md) draw only their background / black, and read none of
+  // their other settings, until a Time Cube's Volume is wired
+  ...Object.keys(NODE_REGISTRY.timeCubeView.paramDefs ?? {}).filter(k => k !== 'background').map(k => `timeCubeView.${k}`),
+  ...Object.keys(NODE_REGISTRY.timeSlice.paramDefs ?? {}).map(k => `timeSlice.${k}`),
 ]);
 
 function makeNode(id: string, type: string, def: NodeDefinition, x = 0): GraphNode {

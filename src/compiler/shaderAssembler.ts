@@ -898,7 +898,8 @@ export class ShaderAssembler {
         this.applyFieldSockets(node, node.id, def, inputVars, k => node.inputs[k]?.connection);
 
         // Register sampler uniforms using slug so GLSL name matches what generateGLSL emits
-        if (node.type === 'textureInput') {
+        // A Time Cube's volume is an atlas texture bound the same way (lib/timeCube/volumes.ts).
+        if (node.type === 'textureInput' || node.type === 'timeCube') {
           this.textureUniforms[`u_tex_${nodeSlug}`] = node.id;
         }
         // Nodes with their own image slots (published user nodes): one
@@ -1416,7 +1417,7 @@ export class ShaderAssembler {
               // Sampler uniforms for nodes inside the group — Texture Input and published nodes with
               // image slots — named the way their generateGLSL emits them (by the sub node's slugged id)
               // and bound from the original node's textures, exactly as at the top level.
-              if (subNode.type === 'textureInput') this.textureUniforms[`u_tex_${subNode.id}`] = originalId;
+              if (subNode.type === 'textureInput' || subNode.type === 'timeCube') this.textureUniforms[`u_tex_${subNode.id}`] = originalId;
               if (subNode.type === 'baked') this.videoUniforms[`u_vid_${subNode.id}`] = originalId;
               subDef.textureSlots?.forEach(slot => { this.textureUniforms[`u_tex_${subNode.id}_${slot}`] = `${originalId}::${slot}`; });
               const { patchedNode: patchedSub, uniforms: subUniforms, bindings: subBindings } = patchNodeParamsForUniforms(effectiveSubNode, subDef, fn => this.functions.add(fn), originalId);

@@ -955,7 +955,8 @@ void main() {
       im.onload = () => {
         const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight;
         c.getContext('2d').drawImage(im, 0, 0);
-        upload(t, c, gl2 || (isPow2(c.width) && isPow2(c.height)));
+        // A Time Cube's frame atlas is read without mipmaps (its tiles must not bleed into each other).
+        upload(t, c, !m.flat && (gl2 || (isPow2(c.width) && isPow2(c.height))));
         imageAspect.set(name, c.width / Math.max(1, c.height));
         needsDraw = true;
       };
