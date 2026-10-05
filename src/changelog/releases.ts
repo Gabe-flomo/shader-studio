@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.26',
+    date: '2026-10-04',
+    title: 'Time cube',
+    highlights: [
+      { area: 'Studio', text: 'Time Cube stacks a video\'s frames into a box of time; Time Cube View draws it in 3D with a sliding see-through offset.', link: { kind: 'doc', path: 'docs/time-cube.md' } },
+      { area: 'Studio', text: 'Key a colour to leave a solid trail through time, or use Time Slice for 2D slit-scan cuts. Three examples included.' },
+    ],
+  },
+  {
     id: '2026.10.25',
     date: '2026-10-04',
     title: 'Bake: render and replace',
