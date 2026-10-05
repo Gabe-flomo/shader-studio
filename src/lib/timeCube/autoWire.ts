@@ -18,7 +18,8 @@ import { getNodeDefinition } from '../../nodes/definitions';
 import { graphOutput, instantiateNode } from '../../nodes/scene3dDefaults';
 import { MARCH_GROUP_TYPES } from '../../nodes/smart3d';
 
-export const TIME_CUBE_AUTO_TYPES = new Set(['timeCubeView', 'timeSlice']);
+/** Frame Stack (docs/frame-stack.md) reads a Time Cube and joins a scene the way a View does. */
+export const TIME_CUBE_AUTO_TYPES = new Set(['timeCubeView', 'timeSlice', 'frameStack']);
 
 const near = (nodes: GraphNode[], at: { x: number; y: number }) =>
   nodes.reduce<GraphNode | null>((best, n) => (!best || (n.position.x - at.x) ** 2 + (n.position.y - at.y) ** 2 < (best.position.x - at.x) ** 2 + (best.position.y - at.y) ** 2 ? n : best), null);
@@ -52,7 +53,7 @@ export function planTimeCubeAdd(type: string, nodes: GraphNode[], position: { x:
   const output = graphOutput(out);
   const fed = output?.inputs.color?.connection ?? null;
   let toOutput = !!output && !fed;
-  if (type === 'timeCubeView') {
+  if (type === 'timeCubeView' || type === 'frameStack') {
     const loop = near(out.filter(n => MARCH_GROUP_TYPES.has(n.type)), position);
     const camId = loop?.inputs.ro?.connection?.nodeId ?? loop?.inputs.rd?.connection?.nodeId;
     const cam = camId ? out.find(n => n.id === camId && n.type === 'marchCamera') : undefined;
