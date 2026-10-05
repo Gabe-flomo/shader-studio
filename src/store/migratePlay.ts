@@ -53,7 +53,7 @@ export function migratePlayRecord(
     if (!def?.migrateParamValue || from >= (def.version ?? 1)) continue;
     const key = parts[parts.length - 1];
     const convert: Convert = v => { const r = def.migrateParamValue!(key, v, from); return typeof r === 'number' ? r : v; };
-    if (convert(1) === 1) continue; // this param's meaning didn't change
+    if (convert(1) === 1 && convert(0.5) === 0.5) continue; // this param's meaning didn't change
     converters.set(c.id, convert);
   }
   if (converters.size === 0) return play;
@@ -61,7 +61,10 @@ export function migratePlayRecord(
   const controls = play.controls.map(c => {
     const convert = converters.get(c.id);
     if (!convert) return c;
-    return { ...c, min: convert(c.min), max: convert(c.max), ...(c.step !== undefined ? { step: convert(c.step) } : {}) };
+    // A step scales with a change of units (Columns doubled); a curved conversion (Time Cube View's
+    // opacities) has no single new step, so the control keeps its own.
+    const linear = convert(0) === 0 && Math.abs(2 * convert(0.5) - convert(1)) < 1e-9;
+    return { ...c, min: convert(c.min), max: convert(c.max), ...(c.step !== undefined && linear ? { step: convert(c.step) } : {}) };
   });
   const mappings = play.mappings.map(m => {
     const convert = converters.get(m.controlId);

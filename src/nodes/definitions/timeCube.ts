@@ -2,7 +2,7 @@ import type { GraphNode, NodeDefinition, ParamDef } from '../../types/nodeGraph'
 import { p, pv3 } from './helpers';
 import { planFrameStack, stackSettingsOf, FRAME_WIDTHS, MAX_FRAMES, MIN_FRAMES } from '../../lib/timeCube/plan';
 import { DEMO_META } from '../../lib/timeCube/frames';
-import { APERTURE } from '../../lib/timeCube/style';
+import { KNEE_EASE, migrateOpacity, OD_SOLID, OPACITY_KNEE, OPACITY_REF } from '../../lib/timeCube/plan';
 
 /**
  * Time cube (docs/time-cube.md): a video as a box of time.
@@ -83,12 +83,38 @@ const TC_FRAMES = `float tcFrames(sampler2D tex, vec4 lay, vec2 inset, vec3 q, o
     return f - f0;
 }`;
 
-/** Optical depth across the box's length in time for an opacity (plan.ts opticalDepth): 1 is a hard surface. */
+/**
+ * Optical depth across the box's length in time for an opacity (plan.ts opticalDepth): up to the
+ * knee the opacity is what a slab OPACITY_REF of the box thick hides, so the sliders are even; above
+ * it the frames firm up evenly into the hard surface at 1.
+ */
 const TC_DEPTH = `float tcDepth(float o) {
     o = clamp(o, 0.0, 1.0);
-    if (o <= 0.95) return -log(1.0 - o);
-    float k = (o - 0.95) / 0.05;
-    return 2.9957323 + (1000.0 - 2.9957323) * k * k;
+    if (o >= 1.0) return ${fx(OD_SOLID)};
+    if (o <= ${fx(OPACITY_KNEE)}) return -log(1.0 - o) * ${fx(1 / OPACITY_REF)};
+    return ${fx(-Math.log(1 - OPACITY_KNEE) / OPACITY_REF)} * pow(${fx(OD_SOLID / (-Math.log(1 - OPACITY_KNEE) / OPACITY_REF))}, pow((o - ${fx(OPACITY_KNEE)}) / ${fx(1 - OPACITY_KNEE)}, ${fx(KNEE_EASE)}));
+}`;
+
+/**
+ * The temporal feather (style.ts featherEase, featherOpacity): Before / After opacity ramping over
+ * fe.x of box time instead of stepping at the slice s. fe = (width, side −1 before / 0 centred / 1
+ * after, curve, wrap). gm (the step's middle) picks the side as the hard step does; g (the step's
+ * jittered point) reads the ramp.
+ */
+const TC_FEATHER = `float tcEase(float x, float c) {
+    x = clamp(x, 0.0, 1.0);
+    c = clamp(c, -1.0, 1.0);
+    float s = x * x * (3.0 - 2.0 * x);
+    return c < 0.0 ? mix(s, x * x, -c) : mix(s, 1.0 - (1.0 - x) * (1.0 - x), c);
+}
+float tcFeather(float gm, float g, float s, vec4 fe, float bo, float ao) {
+    float base = gm < s ? bo : ao;
+    if (fe.x <= 0.0) return base;
+    float w = min(fe.x, 1.0);
+    float d = g - s + 0.5 * w * (1.0 - clamp(fe.y, -1.0, 1.0));
+    if (fe.w > 0.5) d = fract(d);
+    if (d < 0.0 || d >= w) return base;
+    return mix(bo, ao, tcEase(d / w, fe.z));
 }`;
 
 const TC_HUESAT = `vec2 tcHueSat(vec3 c) {
@@ -187,76 +213,24 @@ float tcShapeAt(vec3 p, vec3 B, vec2 rb, vec4 st, vec4 hl, vec4 mw, vec4 mv, flo
     return tcShape((tcBoxQ(w, st.w) * 2.0 - 1.0) * B, B, rb);
 }`;
 
-/** Per-frame treatments (style.ts frameFx): fx = (hue turns along time, posterize levels, grey with age). */
-const TC_FX = `vec3 tcHueTurn(vec3 c, float turns) {
+/** Turns a colour round the grey axis by `turns` of the colour wheel (the key colour's shift and drift). */
+const TC_HUETURN = `vec3 tcHueTurn(vec3 c, float turns) {
     float a = 6.2831853 * turns;
     vec3 k = vec3(0.57735027);
     float cs = cos(a);
     return c * cs + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - cs);
-}
-vec3 tcFx(vec3 c, float t, float age, vec3 fx) {
-    if (fx.x != 0.0) c = tcHueTurn(c, fx.x * t);
-    if (fx.y >= 2.0) c = floor(c * (fx.y - 1.0) + 0.5) / (fx.y - 1.0);
-    if (fx.z > 0.0) c = mix(c, vec3(dot(c, ${'vec3(0.299, 0.587, 0.114)'})), clamp(fx.z * age * 2.0, 0.0, 1.0));
-    return clamp(c, 0.0, 1.0);
 }`;
 
-/**
- * Key pulse and lightning (style.ts pulseBand, lightningBurst). pp = (count, width, softness, phase):
- * bands of visibility along time. A burst: slot k of a clock running at ll.x a second (ll = rate,
- * seed, width, time); (centre, width, strength).
- */
+/** Key pulse (style.ts pulseBand). pp = (count, width, softness, phase): bands of visibility along time. */
 const TC_PULSE = `float tcPulse(float x, vec4 pp) {
     float d = abs(fract(x * max(pp.x, 0.0) - pp.w) - 0.5) * 2.0;
     float w = clamp(pp.y, 0.001, 1.0);
     return 1.0 - smoothstep(w * (1.0 - clamp(pp.z, 0.0, 1.0)), w + 1e-4, d);
-}
-float tcHash(float n) { return fract(sin(n * 12.9898 + 4.1414) * 43758.5453); }
-vec4 tcBurstAt(float k, vec4 ll) {
-    float s = ll.w * max(ll.x, 0.01);
-    float h0 = tcHash(k + ll.y * 17.17);
-    float h1 = tcHash(k * 1.31 + ll.y * 3.7 + 11.0);
-    float h2 = tcHash(k * 2.17 + ll.y * 5.3 + 23.0);
-    float age = s - k - h0 * 0.5;
-    float fire = step(h2, 0.8) * step(0.0, age);
-    float flick = 0.7 + 0.3 * step(0.35, tcHash(floor(ll.w * 24.0) + k * 7.0));
-    return vec4(h1, max(ll.z, 0.002) * (0.4 + 0.75 * h2), fire * exp(-max(age, 0.0) / max(ll.x, 0.01) * 10.0) * flick, 0.0);
-}
-float tcBurst(float x, vec4 b) { return b.z * (1.0 - smoothstep(b.y * 0.35, b.y, abs(x - b.x))); }`;
-
-/**
- * Depth of field on the frames (lib/timeCube/style.ts blurTaps): `n` reads spread evenly over a disc
- * `r` across (frame units) on a golden-angle spiral, turned by `rot` (a per-pixel angle), so what
- * is left over is fine grain, not copies of the picture; one read when in focus. Both frames either
- * side of the time are read at each point, as tcSample does.
- */
-const TC_BLUR = `vec3 tcSampleBlur(sampler2D tex, vec4 lay, vec2 inset, vec3 q, vec2 r, float rot, float n) {
-    if (r.x + r.y < 2e-4) return tcSample(tex, lay, inset, q);
-    float f = clamp(q.z, 0.0, 1.0) * (lay.z - 1.0);
-    float f0 = floor(f);
-    float f1 = min(f0 + 1.0, lay.z - 1.0);
-    vec3 c = vec3(0.0);
-    // Each read turns by the golden angle (a rotation, not a cos and sin per read).
-    vec2 d = vec2(cos(rot), sin(rot));
-    mat2 G = mat2(-0.7373688, 0.6754903, -0.6754903, -0.7373688);
-    float inv = 1.0 / n;
-    for (int i = 0; i < 32; i++) {
-        if (float(i) >= n) break;
-        vec2 uv = clamp(q.xy + d * sqrt((float(i) + 0.5) * inv) * r, inset, 1.0 - inset);
-        c += mix(texture2D(tex, tcTile(lay, f0, uv)).rgb, texture2D(tex, tcTile(lay, f1, uv)).rgb, f - f0);
-        d = G * d;
-    }
-    return c * inv;
-}
-float tcBlurTaps(float rpx, float fine, float share) {
-    float n = fine > 0.5 ? clamp(0.6 * rpx * rpx, 6.0, 32.0) : clamp(0.25 * rpx * rpx, 4.0, 8.0);
-    return rpx < 0.5 ? 1.0 : max(ceil(n * clamp(share * 8.0, 0.0, 1.0)), 1.0);
 }`;
 
 /** Closest approach of a ray to a segment: (distance, distance along the ray). */
-const TC_RAYSEG = `float tcLine(float d, float px, float coc, float ew) {
-    float hw = max(0.5 * ew, coc / max(px, 1e-7));
-    return clamp(hw + 0.5 - d / max(px, 1e-7), 0.0, 1.0) * min(ew, 1.0) * (0.5 * ew + 0.5) / (hw + 0.5);
+const TC_RAYSEG = `float tcLine(float d, float px, float ew) {
+    return clamp(0.5 * ew + 0.5 - d / max(px, 1e-7), 0.0, 1.0) * min(ew, 1.0);
 }
 vec2 tcRaySeg(vec3 ro, vec3 rd, vec3 a, vec3 b) {
     vec3 ba = b - a, w = ro - a;
@@ -405,22 +379,20 @@ export const TimeCubeNode: NodeDefinition = {
 
 /** The view's defaults. The GLSL reads a missing setting (an older save) as its default. */
 const VIEW_DEFAULTS = {
-  timeMode: 'slice', slice: 0.5, framePos: 0.5, flowSpeed: 0.05, flowTime: 0, before: 0.45, after: 1, sliceOpacity: 1, tiltX: 0, tiltY: 0,
+  timeMode: 'slice', slice: 0.5, framePos: 0.5, flowSpeed: 0.05, flowTime: 0, before: 0.25, after: 1, sliceOpacity: 1, tiltX: 0, tiltY: 0,
+  timeFeather: 0, featherSide: -1, featherCurve: 0,
   roundness: 0.4, feather: 0.18, bulge: 0,
   rimStrength: 0.35, rimWidth: 0.08, rimColor: [0.78, 0.6, 1], tintAmount: 0, tintFrom: [1, 0.8, 0.55], tintTo: [0.7, 0.93, 0.75], tintAlong: 'diagonal',
   shadow: 0, shadowSoftness: 0.3, shadowGap: 0.06,
-  highlights: false, motion: false, effects: false, dof: 'off',
+  highlights: false, motion: false,
   hlCount: 3, hlMode: 'loop', hlStart: 0, hlSpacing: 16, hlThickness: 1, hlOpacity: 0.9, hlTint: 0.25, hlColor: [1, 0.75, 0.35], hlEdge: 0.6, hlOthers: 1, sendThrough: 0,
   motionAt: 'slice', motionWidth: 10, liftUp: 0, liftSide: 0, frameScale: 0, frameTurn: 0, frameFade: 0,
-  fxHue: 0, fxPosterize: 0, fxAgeGrey: 0,
   axis: 'z', depth: 1.6, size: 1, quality: 'good',
   brightness: 0, contrast: 1, darkClear: 0, background: [0.05, 0.05, 0.07],
   keyMode: 'off', keyColor: [0.85, 0.12, 0.12], keyTolerance: 0.12, lumaLo: 0.6, lumaHi: 1, keySoftness: 0.06, keyOpacity: 1, othersOpacity: 0.2, othersGrey: 0.5,
   keyAnimate: false, keyHueShift: 0, keyHueDrift: 0, pulse: 0, pulseDir: 'forward', pulseSpeed: 0.25, pulsePhase: 0, pulseCount: 3, pulseWidth: 0.15, pulseSoftness: 0.5,
-  lightning: 0, lightningRate: 2, lightningWidth: 0.15, lightningSeed: 1,
-  blur: 0.5, focus: 1, maxBlur: 16, blurQuality: 'smooth',
   outline: 'off', edgeWidth: 1, edgeOpacity: 0.6, sliceEdge: 0, edgeColor: [0.92, 0.93, 0.96],
-  camDist: 3.8, camAngle: 0.6, camElevation: 0.4, rotSpeed: 0, swing: 0, ortho: 0, fov: 1.8,
+  camDist: 3.8, camAngle: 0.6, camElevation: 0.4, rotSpeed: 0, ortho: 0, fov: 1.8, camX: 0, camY: 0, camZ: 0,
 };
 
 const VIEW_PARAMS: Record<string, ParamDef> = {
@@ -429,9 +401,12 @@ const VIEW_PARAMS: Record<string, ParamDef> = {
   framePos:     { section: 'Slice', label: 'Frame position', type: 'float', min: 0, max: 1, step: 0.001, showWhen: { param: 'timeMode', value: 'flow' }, hint: 'Flow: where the crisp frame sits in the box, 0 the front (where time starts) to 1 the back.' },
   flowSpeed:    { section: 'Slice', label: 'Flow speed', type: 'float', min: -1, max: 1, step: 0.005, showWhen: { param: 'timeMode', value: 'flow' }, hint: 'Flow: how fast the video moves through the box, in clip lengths a second (0.05 plays the whole clip at the frame every 20 s). Negative runs it backwards.' },
   flowTime:     { section: 'Slice', label: 'Flow time', type: 'float', min: 0, max: 1, step: 0.001, showWhen: { param: 'timeMode', value: 'flow' }, hint: 'Flow: an offset added to the flow, in clip lengths. Wire Time, an LFO or a Play control into it to drive the flow yourself (set Flow speed 0).' },
-  before:       { section: 'Slice', label: 'Before opacity', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How solid the frames before the slice are, looking through all of them: 0.2 lets most of what is behind show through.' },
-  after:        { section: 'Slice', label: 'After opacity', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How solid the frames after the slice are. 1 is a solid block whose sides show each frame\'s edge pixels through time.' },
-  sliceOpacity: { section: 'Slice', label: 'Slice face', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How solid the frame at the slice is: 1 shows that frame crisply.' },
+  before:       { section: 'Slice', label: 'Before opacity', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How solid the frames before the slice are: what half the box\'s length of them hides, looking straight through. 0.5 lets half of what is behind through; 0.25 is a light haze.' },
+  after:        { section: 'Slice', label: 'After opacity', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How solid the frames after the slice are, measured the same way. 1 is a solid block whose sides show each frame\'s edge pixels through time.' },
+  timeFeather:  { section: 'Slice', label: 'Feather (frames)', type: 'float', min: 0, max: 64, step: 0.5, hint: 'Softens the line between Before and After: the opacity fades from one to the other over this many frames, instead of changing at once at the slice. 0 is the hard line; 12 fades over about a tenth of a 128-frame box.' },
+  featherSide:  { section: 'Slice', label: 'Feather side', type: 'float', min: -1, max: 1, step: 0.05, hint: 'Where the fade sits: −1 before the slice (the frames leading up to it fade in), 0 centred on it, 1 after it.' },
+  featherCurve: { section: 'Slice', label: 'Feather curve', type: 'float', min: -1, max: 1, step: 0.05, hint: 'The fade\'s shape: 0 smooth at both ends, −1 eases in (stays see-through longer, then firms up near the end), 1 eases out (firms up early).' },
+  sliceOpacity: { section: 'Slice', label: 'Slice face', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How solid the frame at the slice is: 1 shows that frame crisply. Lower it with a Feather for an entirely soft look.' },
   tiltX:        { section: 'Slice', label: 'Tilt X°', type: 'float', min: -75, max: 75, step: 0.5, hint: 'Tilts the slice so time runs across the frame from left to right: the slit-scan look.' },
   tiltY:        { section: 'Slice', label: 'Tilt Y°', type: 'float', min: -75, max: 75, step: 0.5, hint: 'Tilts the slice so time runs from bottom to top.' },
 
@@ -472,10 +447,6 @@ const VIEW_PARAMS: Record<string, ParamDef> = {
   frameTurn:    { section: 'Frame motion', label: 'Turn°', type: 'float', showWhen: { param: 'motion', value: 'true' }, min: -180, max: 180, step: 0.5, hint: 'Turns them in their own plane.' },
   frameFade:    { section: 'Frame motion', label: 'Fade', type: 'float', showWhen: { param: 'motion', value: 'true' }, min: 0, max: 1, step: 0.01, hint: 'Fades them out: 1 makes the frame at the top of the wave clear.' },
 
-  effects:      { section: 'Frame effects', label: 'Frame effects', type: 'bool', whenOn: { fxHue: 0.5, fxAgeGrey: 0.5 }, hint: 'Turns the per-frame effects on (one recompile; the sliders below are then live). Starts with some hue across time and grey with age, so you can see it.' },
-  fxHue:        { section: 'Frame effects', label: 'Hue across time', type: 'float', showWhen: { param: 'effects', value: 'true' }, min: -2, max: 2, step: 0.01, hint: 'Turns each frame\'s hue by its time: 1 goes once round the colour wheel from first frame to last.' },
-  fxPosterize:  { section: 'Frame effects', label: 'Posterize', type: 'float', showWhen: { param: 'effects', value: 'true' }, min: 0, max: 16, step: 1, hint: 'Levels per colour channel: 2 to 16. 0 (or 1) is off.' },
-  fxAgeGrey:    { section: 'Frame effects', label: 'Grey with age', type: 'float', showWhen: { param: 'effects', value: 'true' }, min: 0, max: 1, step: 0.01, hint: 'Drains the colour from frames older than the slice, more the older they are.' },
 
   axis:         { section: 'Box', label: 'Stack along', type: 'select', options: [{ value: 'z', label: 'Depth (frames one behind another)' }, { value: 'x', label: 'Width (frames side by side)' }, { value: 'y', label: 'Height (frames stacked up)' }], hint: 'Which way time runs through the box.' },
   depth:        { section: 'Box', label: 'Time stretch', type: 'float', min: 0.1, max: 6, step: 0.01, hint: 'How long the box is in time, against the frame\'s height of 1.' },
@@ -500,7 +471,7 @@ const VIEW_PARAMS: Record<string, ParamDef> = {
   othersOpacity:{ section: 'Key: everything else', label: 'Opacity', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'How solid everything that is not kept is, times Before / After: 0 hides it, low makes it a ghost.' },
   othersGrey:   { section: 'Key: everything else', label: 'Drain colour', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyMode', value: ['color', 'hue', 'luma'] }, hint: 'Turns everything that is not kept grey: 1 fully.' },
 
-  keyAnimate:   { section: 'Key: animate', label: 'Animate the key', type: 'bool', whenOn: { pulse: 1, lightning: 0.4 }, hint: 'Makes what is kept pulse through the box, flash like lightning, or drift round the colour wheel (needs Keep set above). Starts with pulses and some lightning, so you can see it.' },
+  keyAnimate:   { section: 'Key: animate', label: 'Animate the key', type: 'bool', whenOn: { pulse: 1 }, hint: 'Makes what is kept pulse through the box or drift round the colour wheel (needs Keep set above). Starts with pulses, so you can see it.' },
   keyHueDrift:  { section: 'Key: animate', label: 'Colour drift', type: 'float', min: -1, max: 1, step: 0.005, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'Turns the colour to keep round the wheel on its own, in turns a second (a colour or hue key).' },
   pulse:        { section: 'Key: animate', label: 'Pulse', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'Shows what is kept only in bands that travel through time: 1 fully, 0 no pulse (all of it shows).' },
   pulseDir:     { section: 'Key: animate', label: 'Pulse direction', type: 'select', options: [{ value: 'forward', label: 'Forward (first to last frame)' }, { value: 'backward', label: 'Backward' }, { value: 'bounce', label: 'Back and forth' }, { value: 'outward', label: 'Out from the slice' }], showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'Which way the bands travel.' },
@@ -509,10 +480,6 @@ const VIEW_PARAMS: Record<string, ParamDef> = {
   pulseCount:   { section: 'Key: animate', label: 'Bands', type: 'float', min: 1, max: 16, step: 1, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'How many bands at once along the box.' },
   pulseWidth:   { section: 'Key: animate', label: 'Band width', type: 'float', min: 0.01, max: 1, step: 0.01, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'How much of the space between bands each band fills.' },
   pulseSoftness:{ section: 'Key: animate', label: 'Band softness', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'Soft (1) or hard (0) band edges.' },
-  lightning:    { section: 'Key: animate', label: 'Lightning', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'Short flashes through random stretches of time: what is kept flares toward white and the rest of the stretch lights up. Up to 0.5 they come in on top of the pulse; from 0.5 to 1 the rest fades, so at 1 only the flashes show what is kept. 0: none.' },
-  lightningRate:{ section: 'Key: animate', label: 'Flashes a second', type: 'float', min: 0.1, max: 20, step: 0.1, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'How often a flash can strike.' },
-  lightningWidth:{ section: 'Key: animate', label: 'Flash length', type: 'float', min: 0.01, max: 1, step: 0.01, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'How much of the box (in time) a flash lights.' },
-  lightningSeed:{ section: 'Key: animate', label: 'Flash pattern', type: 'float', min: 0, max: 100, step: 1, showWhen: { param: 'keyAnimate', value: 'true' }, hint: 'A different number, a different pattern of flashes (the same number always gives the same one).' },
 
   outline:      { section: 'Outline', label: 'Outline', type: 'select', options: [{ value: 'off', label: 'Off' }, { value: 'silhouette', label: 'Silhouette (follows the soft shape)' }, { value: 'edges', label: 'Box edges (wireframe)' }], hint: 'A thin line round the box: its outer silhouette, or all twelve edges (the back ones behind the frames).' },
   edgeWidth:    { section: 'Outline', label: 'Line width', type: 'float', min: 0, max: 6, step: 0.1, hint: 'Thickness of the lines in pixels (the outline, the slice outline and the highlight outlines). 0 hides them.' },
@@ -520,30 +487,70 @@ const VIEW_PARAMS: Record<string, ParamDef> = {
   sliceEdge:    { section: 'Outline', label: 'Slice outline', type: 'float', min: 0, max: 1, step: 0.01, hint: 'A line round the slice frame.' },
   edgeColor:    { section: 'Outline', label: 'Line colour', type: 'vec3color', hint: 'Colour of the outline and the slice outline.' },
 
-  dof:          { section: 'Focus', label: 'Depth of field', type: 'select', options: [{ value: 'off', label: 'Off' }, { value: 'distance', label: 'Focus at a distance' }, { value: 'slice', label: 'Focus on the slice (follows the scan)' }], hint: 'Blurs frames nearer and further than the focus, like a camera lens (as Frame Stack\'s). Choosing it recompiles once; the sliders are then live.' },
-  blur:         { section: 'Focus', label: 'Blur', type: 'float', showWhen: { param: 'dof', value: ['distance', 'slice'] }, min: 0, max: 2, step: 0.01, hint: 'Depth of field: frames and edges away from Focus go soft. 0 turns it off.' },
-  focus:        { section: 'Focus', label: 'Focus', type: 'float', showWhen: { param: 'dof', value: ['distance', 'slice'] }, min: 0.05, max: 3, step: 0.01, hint: 'Where the picture is sharp, as a share of the distance to the box\'s middle (or to the slice): 1 right on it, 0.8 nearer the camera, 1.2 beyond.' },
-  maxBlur:      { section: 'Focus', label: 'Max blur', type: 'float', showWhen: { param: 'dof', value: ['distance', 'slice'] }, min: 1, max: 48, step: 0.5, hint: 'The most anything blurs, in pixels.' },
-  blurQuality:  { section: 'Focus', label: 'Blur quality', type: 'select', showWhen: { param: 'dof', value: ['distance', 'slice'] }, options: [{ value: 'smooth', label: 'Smooth' }, { value: 'fast', label: 'Fast' }], hint: 'Smooth reads the picture up to 32 times where it is most blurred, so the blur is soft and even; Fast reads it at most 8 times (grainier, quicker).' },
 
   camDist:      { section: 'Camera', label: 'Cam Distance', type: 'float', min: 0.5, max: 20, step: 0.05, hint: 'How far the built-in camera is from the box (when Ray Origin / Ray Dir are not wired).' },
   camAngle:     { section: 'Camera', label: 'Angle', type: 'float', min: -6.28, max: 6.28, step: 0.01, hint: 'Orbit angle round the box, in radians.' },
   camElevation: { section: 'Camera', label: 'Elevation', type: 'float', min: -1.5, max: 1.5, step: 0.01, hint: 'Height of the camera: 0 level, up to 1.5 looking straight down. 0.62 is the isometric angle.' },
-  rotSpeed:     { section: 'Camera', label: 'Orbit speed', type: 'float', min: -2, max: 2, step: 0.01, hint: 'Turns the camera round the box over time (radians a second); with Swing, how fast it swings.' },
-  swing:        { section: 'Camera', label: 'Swing', type: 'float', min: 0, max: 3.14, step: 0.01, hint: 'Above 0 the camera swings back and forth by this much (radians) instead of going all the way round.' },
+  rotSpeed:     { section: 'Camera', label: 'Orbit speed', type: 'float', min: -2, max: 2, step: 0.01, hint: 'Turns the camera round the box over time (radians a second).' },
+  camX:         { section: 'Camera', label: 'Translate X', type: 'float', min: -5, max: 5, step: 0.01, hint: 'Moves the camera, and the point it looks at, sideways (world units: the frame is 1 high). Angle, Elevation and Orbit still turn round the moved point. Map it on Play to fly past the box.' },
+  camY:         { section: 'Camera', label: 'Translate Y', type: 'float', min: -5, max: 5, step: 0.01, hint: 'Moves the camera and the point it looks at up or down.' },
+  camZ:         { section: 'Camera', label: 'Translate Z', type: 'float', min: -5, max: 5, step: 0.01, hint: 'Moves the camera and the point it looks at along the box\'s depth (time, when frames stack in depth): fly through the box.' },
   ortho:        { section: 'Camera', label: 'Flatten (isometric)', type: 'float', min: 0, max: 1, step: 0.01, hint: 'From perspective (0) to orthographic (1): parallel edges stay parallel, like an isometric drawing.' },
   fov:          { section: 'Camera', label: 'Zoom', type: 'float', min: 0.5, max: 5, step: 0.01, hint: 'Lens length: higher is zoomed in, with less perspective. With a March Camera wired, set it to that camera\'s FOV so lines stay the same width.' },
 };
 
 /**
- * Is the key's animation (pulse, lightning, colour drift) on? Its switch; a save from before the
- * switch counts as on when it animates (a pulse, lightning or drift set).
+ * Is the key's animation (pulse, colour drift) on? Its switch; a save from before the switch
+ * counts as on when it animates (a pulse or drift set).
  */
 export function keyAnimOn(P: Record<string, unknown>): boolean {
   if (P.keyAnimate !== undefined) return P.keyAnimate === true;
   const num = (v: unknown) => (typeof v === 'number' ? v : 0);
-  return num(P.pulse) > 0 || num(P.lightning) > 0 || num(P.keyHueDrift) !== 0;
+  return num(P.pulse) > 0 || num(P.keyHueDrift) !== 0;
 }
+
+/**
+ * Settings Time Cube View no longer has (schema 2): the camera's Swing, the key's Lightning, the Focus
+ * (depth of field) and Frame effects sections. A graph saved with them loads without them (and
+ * their keyframes); a swinging camera becomes the nearest plain one (swingToOrbit).
+ */
+export const REMOVED_VIEW_PARAMS = [
+  'swing', 'lightning', 'lightningRate', 'lightningWidth', 'lightningSeed',
+  'dof', 'blur', 'focus', 'maxBlur', 'blurQuality', 'effects', 'fxHue', 'fxPosterize', 'fxAgeGrey',
+];
+
+/**
+ * The plain camera nearest a swinging one. Swing rocked the angle by ± Swing radians round Angle,
+ * Orbit speed setting how fast (angle = Angle + Swing × sin(Orbit speed × t)). A small swing stays
+ * near Angle: a still camera there. A wide one (more than about a quarter turn each way) went most
+ * of the way round: an orbit at its average speed, 2 / π × Swing × Orbit speed radians a second.
+ */
+export function swingToOrbit(swing: number, rotSpeed: number): number {
+  if (!(swing > 0) || rotSpeed === 0) return rotSpeed;
+  return swing < 1.5 ? 0 : (2 / Math.PI) * swing * rotSpeed;
+}
+
+function dropRemovedViewParams(params: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...params };
+  if (typeof out.swing === 'number' && out.swing > 0) {
+    out.rotSpeed = swingToOrbit(out.swing, typeof out.rotSpeed === 'number' ? out.rotSpeed : 0);
+  }
+  for (const k of REMOVED_VIEW_PARAMS) { delete out[k]; delete out[`__keyframes_${k}`]; }
+  // The settings added with schema 2, at values that change nothing, so they are live uniforms (and
+  // on Play's list) straight away: a setting missing from a node is baked in, not a uniform.
+  for (const [k, v] of Object.entries(ADDED_VIEW_PARAMS)) if (typeof out[k] !== 'number') out[k] = v;
+  return out;
+}
+const ADDED_VIEW_PARAMS = { camX: 0, camY: 0, camZ: 0, timeFeather: 0, featherSide: -1, featherCurve: 0 };
+
+/**
+ * Time Cube View's schema. 2: the opacity sliders (Before, After, Kept) are what half the box's
+ * length hides (plan.ts OPACITY_REF), even from 0 to 1; before, they were what the whole box hid and
+ * jumped to solid above 0.95. Loading an older graph converts them (plan.ts migrateOpacity), and
+ * drops the settings the view no longer has (REMOVED_VIEW_PARAMS).
+ */
+export const TIME_CUBE_VIEW_VERSION = 2;
+const OPACITY_PARAMS = new Set(['before', 'after', 'keyOpacity']);
 
 /** The axes across a frame (not time), per stack axis: the march's box grows along them for moved frames. */
 const PERP: Record<string, string> = { z: 'vec3(1.0, 1.0, 0.0)', x: 'vec3(0.0, 1.0, 1.0)', y: 'vec3(1.0, 0.0, 1.0)' };
@@ -559,6 +566,7 @@ export const TimeCubeViewNode: NodeDefinition = {
     start: [
       'Wire a Time Cube\'s Volume in and the Color out to the Output.',
       'Drag Offset, or wire an LFO (amplitude 0.5, offset 0.5) into it to sweep through time.',
+      'Before / After opacity: 0.5 is half see-through, 1 solid. Feather (frames) fades the line at the slice into a gradient over that many frames.',
       'Shape: Corner roundness and Edge softness. Glow: a rim, a pastel side tint, a shadow; set Background light for the soft-pill look.',
       'Highlights: Count above 0 picks out frames Spacing apart; they travel with Offset and loop round. Frame motion: Lift moves frames up as the slice passes.',
       'To place it in a raymarched scene: wire a March Camera\'s Ray Origin and Ray Dir in, the March Loop\'s Color into Background and its Distance into Scene distance.',
@@ -577,10 +585,30 @@ export const TimeCubeViewNode: NodeDefinition = {
     color: { type: 'vec3', label: 'Color', hint: 'The box over the background.' },
     alpha: { type: 'float', label: 'Alpha', hint: 'How much of this pixel the box covers, with its glow, outline and shadow.' },
   },
-  defaultParams: { ...VIEW_DEFAULTS },
+  // Schema 2: Before / After / Kept opacity are measured over half the box (plan.ts OPACITY_REF), so
+  // the sliders are even; graphs saved before are converted on load to look as they did.
+  defaultParams: { ...VIEW_DEFAULTS, _schemaVersion: TIME_CUBE_VIEW_VERSION },
+  version: TIME_CUBE_VIEW_VERSION,
+  migrateParamValue: (key, value, fromVersion) =>
+    fromVersion < TIME_CUBE_VIEW_VERSION && OPACITY_PARAMS.has(key) && typeof value === 'number' ? migrateOpacity(value) : value,
+  migrateParams: (params, fromVersion) => {
+    if (fromVersion >= TIME_CUBE_VIEW_VERSION) return params;
+    const out = dropRemovedViewParams(params);
+    for (const k of OPACITY_PARAMS) {
+      // A node saved without the setting drew the old default.
+      const v = typeof out[k] === 'number' ? out[k] as number : (k === 'before' ? 0.45 : 1);
+      out[k] = migrateOpacity(v);
+      const kf = out[`__keyframes_${k}`];
+      if (Array.isArray(kf)) {
+        out[`__keyframes_${k}`] = kf.map(e => (e && typeof e === 'object' && typeof (e as { v?: unknown }).v === 'number'
+          ? { ...e, v: migrateOpacity((e as { v: number }).v) } : e));
+      }
+    }
+    return out;
+  },
   paramDefs: VIEW_PARAMS,
   assignable: false,
-  glslFunctions: [TC_TILE, TC_SAMPLE, TC_FRAMES, TC_DEPTH, TC_HUESAT, TC_KEY, TC_UVT, TC_SHAPE, TC_MOTION, TC_FX, TC_PULSE, TC_BLUR, TC_RAYSEG, TC_MARCH],
+  glslFunctions: [TC_TILE, TC_SAMPLE, TC_FRAMES, TC_DEPTH, TC_FEATHER, TC_HUESAT, TC_KEY, TC_UVT, TC_SHAPE, TC_MOTION, TC_HUETURN, TC_PULSE, TC_RAYSEG, TC_MARCH],
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id, P = node.params;
     const D = VIEW_DEFAULTS as Record<string, unknown>;
@@ -604,8 +632,7 @@ export const TimeCubeViewNode: NodeDefinition = {
     // Optional features are switched on by a toggle (one recompile); their sliders are then live. Off,
     // their code is left out of the march, which keeps the plain view as fast as it was.
     const ANIM = keyAnimOn(P);
-    const HL = P.highlights === true, MOT = P.motion === true, FX = P.effects === true, DOF = P.dof === 'distance' || P.dof === 'slice';
-    const smoothBlur = P.blurQuality !== 'fast';
+    const HL = P.highlights === true, MOT = P.motion === true;
     const lay = volLayout(V), inset = volPx(V);
     const slice = inputVars.slice ?? f('slice');
     const wired = !!(inputVars.ro && inputVars.rd);
@@ -619,24 +646,10 @@ export const TimeCubeViewNode: NodeDefinition = {
     const pixAt = (t: string) => `($_pix * (${t} * (1.0 - $_or) + $_cd * $_or))`;
     /** The clip time read at box time z: z itself, or in Flow the video moved through the box (style.ts flowTime). */
     const tmap = (z: string) => (flow ? `fract(${z} + $_fsh)` : z);
-    /** Depth of field: the blur's radius (world units) at distance t along the ray, capped at Max blur. */
-    const cocAt = (t: string) => (DOF ? `min($_ap * abs(${t} - $_F) / max($_F, 1e-3), $_mxb * ${pixAt(t)})` : '0.0');
-    /**
-     * The volume at `q` blurred by the depth of field at distance t along the ray: as many reads as
-     * the blur's size in pixels calls for (style.ts blurTaps: Smooth up to 32, Fast up to 8), times
-     * `share`, how much this read can still show (a thin stretch behind others needs few). Each stretch
-     * turns the disc a little further, so thin ones add up to a smooth blur too.
-     */
-    const blurAt = (q: string, t: string, share: string) =>
-      `tcSampleBlur(${V}, ${lay}, ${inset}, ${q}, ${cocAt(t)} * $_ruv, $_brot, tcBlurTaps(${cocAt(t)} / ${pixAt(t)}, ${smoothBlur ? '1.0' : '0.0'}, ${share}))`;
     /** The time to read at box time z: mapped (Flow), then sent through (the first highlighted frame's picture). */
     const timeAt = (z: string) => (HL ? `mix(${tmap(z)}, $_sendT, $_send)` : tmap(z));
-    /** The volume at a frame point `w`, blurred by the depth of field at distance t along the ray. */
-    const sampleAt = (w: string, t: string) => (DOF
-      ? blurAt(`vec3(${w}.xy, ${timeAt(`${w}.z`)})`, t, '1.0')
-      : `tcSample(${V}, ${lay}, ${inset}, vec3(${w}.xy, ${timeAt(`${w}.z`)}))`);
-    /** Per-frame effects on a colour, when on. */
-    const fxOn = (c: string, t: string, age: string) => (FX ? `tcFx(${c}, ${t}, ${age}, $_fx)` : c);
+    /** The volume at a frame point `w`. */
+    const sampleAt = (w: string) => `tcSample(${V}, ${lay}, ${inset}, vec3(${w}.xy, ${timeAt(`${w}.z`)}))`;
     /** Frame motion's fade, when on. */
     const fadeBy = (b: string) => (MOT ? ` * (1.0 - $_fade * ${b})` : '');
     /**
@@ -722,9 +735,8 @@ export const TimeCubeViewNode: NodeDefinition = {
         '    float $_cd = 0.0;\n',
       ]
       : [
-        // The March Camera's orbit, aimed at the box's centre; Swing turns the orbit into a back-and-forth.
-        `    float $_sw = max(${f('swing')}, 0.0);\n`,
-        `    float $_ang = ${f('camAngle')} + ($_sw > 0.0 ? $_sw * sin(u_time * ${f('rotSpeed')}) : u_time * ${f('rotSpeed')});\n`,
+        // The March Camera's orbit, aimed at the box's centre (moved by Translate X / Y / Z, below).
+        `    float $_ang = ${f('camAngle')} + u_time * ${f('rotSpeed')};\n`,
         `    float $_elev = ${f('camElevation')};\n`,
         '    vec3 $_hz = vec3(sin($_ang), 0.0, cos($_ang));\n',
         `    float $_cd = ${f('camDist')};\n`,
@@ -737,6 +749,8 @@ export const TimeCubeViewNode: NodeDefinition = {
         `    float $_or = clamp(${f('ortho')}, 0.0, 1.0);\n`,
         `    $_ro += $_or * $_cd / max(${f('fov')}, 0.05) * $_lat;\n`,
         `    vec3 $_rd = normalize(max(${f('fov')}, 0.05) * $_fw + (1.0 - $_or) * $_lat);\n`,
+        // Translate: the camera and the point it looks at move together, so the orbit turns round the moved point.
+        `    $_ro += vec3(${f('camX')}, ${f('camY')}, ${f('camZ')});\n`,
       ];
     const keyOf = (c: string) => keyMode === 'color' ? `tcKeyColor(${c}, $_kc, ${f('keyTolerance')}, ${f('keySoftness')})`
       : keyMode === 'hue' ? `tcKeyHue(${c}, $_kc, ${f('keyTolerance')}, ${f('keySoftness')})`
@@ -744,16 +758,10 @@ export const TimeCubeViewNode: NodeDefinition = {
     const keyLines = keyMode === 'off' ? '' : [
       // Each frame keyed on its own, the matches blended (tcFrames).
       `            float $_k = mix(${keyOf('$_c0')}, ${keyOf('$_c1')}, $_fwt);\n`,
-      // Pulse: the keyed colour shows in bands travelling through time; lightning: in short flashes.
+      // Pulse: the keyed colour shows in bands travelling through time.
       `            float $_kv = mix(1.0, tcPulse(${pulseDir === 'backward' ? '1.0 - $_gv' : pulseDir === 'outward' ? 'abs($_gv - $_sl0)' : '$_gv'}, $_pp), $_pls);\n`,
-      '            float $_flash = $_lt > 0.0 ? min(2.0 * $_lt, 1.0) * max(tcBurst($_gv, $_lb0), tcBurst($_gv, $_lb1)) : 0.0;\n',
-      '            if ($_lt > 0.0) $_kv = max($_kv * (1.0 - clamp(2.0 * $_lt - 1.0, 0.0, 1.0)), $_flash);\n',
       `            $_op = $_op * ${f('othersOpacity')} * (1.0 - $_k) + ${f('keyOpacity')} * $_kv * $_k;\n`,
-      // A flash lights its stretch of time: the keyed colour flares toward white and the rest of the stretch lights up.
-      '            $_op = max($_op, $_flash * (1.0 - $_k));\n',
       `            $_c = mix($_c, vec3(dot($_c, ${LUMA})), ${f('othersGrey')} * (1.0 - $_k));\n`,
-      '            vec3 $_flashC = mix($_c, vec3(1.0), 0.6);\n',
-      '            $_flash *= 0.6;\n',
     ].join('');
     const tintCoord = tintAlong === 'time' ? '$_wv.z' : tintAlong === 'height' ? '$_qv.y' : 'clamp(0.5 * ($_qv.y + $_wv.z), 0.0, 1.0)';
     /**
@@ -784,10 +792,10 @@ export const TimeCubeViewNode: NodeDefinition = {
       '            vec3 $_ps = $_ro + $_rd * $_ls;\n',
       '            vec3 $_ws; float $_bs;\n',
       `            float $_ds = ${shapeAt('$_ps', '$_ws', '$_bs')};\n`,
-      `            vec3 $_sc = ${fxOn(look(sampleAt('$_ws', '$_ls')), tmap('$_ws.z'), '0.0')};\n`,
+      `            vec3 $_sc = ${look(sampleAt('$_ws'))};\n`,
       footprint('$_ps', '$_ds', pixAt('$_ls'), '$_spx'),
-      // Inside the shape, its border feathered by the Edge softness (or the depth of field's blur): the frame fades into the sides.
-      `            float $_sin = 1.0 - smoothstep(-max(max($_fe, ${cocAt('$_ls')}), $_spx), 0.5 * $_spx, $_ds);\n`,
+      // Inside the shape, its border feathered by the Edge softness: the frame fades into the sides.
+      `            float $_sin = 1.0 - smoothstep(-max($_fe, $_spx), 0.5 * $_spx, $_ds);\n`,
       `            float $_so = $_ew > 0.0 ? clamp(${f('sliceEdge')}, 0.0, 1.0) * (1.0 - smoothstep(0.5 * $_ew * $_spx, (0.5 * $_ew + 1.0) * $_spx, abs($_ds))) : 0.0;\n`,
       `            float $_sa = max(clamp(${f('sliceOpacity')}, 0.0, 1.0) * $_sin${fadeBy('$_bs')}, $_so) * ${coverAt('$_ps')};\n`,
       `            $_sf = vec4(mix($_sc, ${edgeCol}, $_so / max($_sa, 1e-4)) * $_sa, $_sa);\n`,
@@ -812,7 +820,7 @@ export const TimeCubeViewNode: NodeDefinition = {
       '                vec3 $_pc = $_ro + $_rd * $_th;\n',
       '                vec3 $_wc; float $_bc;\n',
       `                float $_dc = ${shapeAt('$_pc', '$_wc', '$_bc')};\n`,
-      `                vec3 $_hc = mix(${fxOn(look(`tcSample(${V}, ${lay}, ${inset}, vec3($_wc.xy, ${timeAt('$_wc.z')}))`), tmap('$_wc.z'), 'max($_sl0 - $_gH, 0.0)')}, ${c3('hlColor')}, clamp(${f('hlTint')}, 0.0, 1.0));\n`,
+      `                vec3 $_hc = mix(${look(sampleAt('$_wc'))}, ${c3('hlColor')}, clamp(${f('hlTint')}, 0.0, 1.0));\n`,
       footprint('$_pc', '$_dc', pixAt('$_th'), '$_cpx').replace(/^ {12}/gm, '                '),
       '                float $_hin = 1.0 - smoothstep(-0.5 * $_cpx, 0.5 * $_cpx, $_dc);\n',
       `                float $_hol = $_ew > 0.0 ? clamp(${f('hlEdge')}, 0.0, 1.0) * (1.0 - smoothstep(0.5 * $_ew * $_cpx, (0.5 * $_ew + 1.0) * $_cpx, abs($_dc))) : 0.0;\n`,
@@ -839,7 +847,7 @@ export const TimeCubeViewNode: NodeDefinition = {
       '            else if ($_k < 8) { $_e0 = vec3($_s1 * $_EX.x, -$_EL.y, $_s2 * $_EX.z); $_e1 = vec3($_s1 * $_EX.x, $_EL.y, $_s2 * $_EX.z); }\n',
       '            else { $_e0 = vec3($_s1 * $_EX.x, $_s2 * $_EX.y, -$_EL.z); $_e1 = vec3($_s1 * $_EX.x, $_s2 * $_EX.y, $_EL.z); }\n',
       '            vec2 $_sg = tcRaySeg($_ro, $_rd, $_e0, $_e1);\n',
-      `            float $_lc = $_sg.y > $_scn ? 0.0 : tcLine($_sg.x, ${pixAt('$_sg.y')}, ${cocAt('$_sg.y')}, $_ew);\n`,
+      `            float $_lc = $_sg.y > $_scn ? 0.0 : tcLine($_sg.x, ${pixAt('$_sg.y')}, $_ew);\n`,
       '            if ($_md >= 0.0 || $_sg.y < $_tmid) $_eF = max($_eF, $_lc); else $_eB = max($_eB, $_lc);\n',
       '        }\n',
       '    }\n',
@@ -866,6 +874,8 @@ export const TimeCubeViewNode: NodeDefinition = {
       `    float $_kx = tan(radians(clamp(${f('tiltX')}, -85.0, 85.0)));\n`,
       `    float $_ky = tan(radians(clamp(${f('tiltY')}, -85.0, 85.0)));\n`,
       `    vec4 $_st = vec4($_sl0, $_kx, $_ky, ${AX});\n`,
+      // Temporal feather (style.ts featherOpacity): its width in box time, side, curve; in Flow it wraps round.
+      `    vec4 $_tf = vec4(max(${f('timeFeather')}, 0.0) / max(${lay}.z - 1.0, 1.0), ${f('featherSide')}, ${f('featherCurve')}, ${flow ? '1.0' : '0.0'});\n`,
       // Highlights: a comb of frames in time (style.ts highlightComb).
       `    float $_fs = 1.0 / max(${lay}.z - 1.0, 1.0);\n`,
       ...(HL ? [`    float $_hlOn = step(1.0, ${f('hlCount')});\n`] : ['    float $_hlOn = 0.0;\n']),
@@ -898,38 +908,22 @@ export const TimeCubeViewNode: NodeDefinition = {
         '    vec4 $_mw = vec4(0.0);\n',
         '    vec3 $_Bx = $_B;\n',
       ]),
-      ...(FX ? [`    vec3 $_fx = vec3(${f('fxHue')}, ${f('fxPosterize')}, ${f('fxAgeGrey')});\n`] : []),
       `    float $_ew = max(${f('edgeWidth')}, 0.0);\n`,
       `    float $_rimS = max(${f('rimStrength')}, 0.0);\n`,
       `    float $_rw = max(${f('rimWidth')}, 1e-3) * $_sz;\n`,
       `    float $_scn = ${inputVars.sceneDist ? `max(${inputVars.sceneDist}, 0.0)` : '1e9'};\n`,
-      // Key colour turned round the wheel (by hand, or drifting); pulse and lightning.
+      // Key colour turned round the wheel (by hand, or drifting); the pulse.
       ...(keyMode === 'color' || keyMode === 'hue' ? [`    vec3 $_kc = clamp(tcHueTurn(${c3('keyColor')}, ${f('keyHueShift')}${ANIM ? ` + u_time * ${f('keyHueDrift')}` : ''}), 0.0, 1.0);\n`] : []),
       ...(keyMode === 'off' ? [] : [
         `    float $_pls = ${ANIM ? `clamp(${f('pulse')}, 0.0, 1.0)` : '0.0'};\n`,
         `    float $_pph = ${f('pulsePhase')} + u_time * ${f('pulseSpeed')};\n`,
         ...(pulseDir === 'bounce' ? [`    $_pph = (1.0 - abs(1.0 - mod($_pph, 2.0))) * max(${f('pulseCount')}, 1.0);\n`] : []),
         `    vec4 $_pp = vec4(max(floor(${f('pulseCount')} + 0.5), 1.0), ${f('pulseWidth')}, ${f('pulseSoftness')}, $_pph);\n`,
-        `    float $_lt = ${ANIM ? `clamp(${f('lightning')}, 0.0, 1.0)` : '0.0'};\n`,
-        `    vec4 $_ll = vec4(${f('lightningRate')}, ${f('lightningSeed')}, ${f('lightningWidth')}, u_time);\n`,
-        '    float $_lk = floor($_ll.w * max($_ll.x, 0.01));\n',
-        '    vec4 $_lb0 = $_lt > 0.0 ? tcBurstAt($_lk, $_ll) : vec4(0.0);\n',
-        '    vec4 $_lb1 = $_lt > 0.0 ? tcBurstAt($_lk - 1.0, $_ll) : vec4(0.0);\n',
       ]),
-      // Depth of field: the aperture, the focus distance along each ray, the blur cap.
-      ...(DOF ? [
-        `    float $_ap = max(${f('blur')}, 0.0) * ${APERTURE} * $_sz;\n`,
-        // The disc's turn, per pixel (interleaved gradient noise, offset from the march's own).
-        '    float $_brot = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy + vec2(17.0, 59.0), vec2(0.06711056, 0.00583715))));\n',
-        `    vec3 $_fp = ${P.dof === 'slice' ? '(tcBoxQ(vec3(0.5, 0.5, $_sl0), ' + AX + ') * 2.0 - 1.0) * $_B' : 'vec3(0.0)'};\n`,
-        `    float $_F = max(${f('focus')}, 0.01) * max(dot($_fp - $_ro, $_rd), 0.05);\n`,
-        `    float $_mxb = max(${f('maxBlur')}, 0.0);\n`,
-        '    vec2 $_ruv = vec2(1.0 / ($_sz * $_asp), 1.0 / $_sz);\n',
-      ] : []),
       '    vec4 $_acc = vec4(0.0);\n',
       '    float $_eF = 0.0, $_eB = 0.0;\n',
-      // The search box: the shape's reach plus room (mg) for its soft edge, glow, outline and blur.
-      `    float $_mg = max(max($_fe, $_rimS > 0.0 ? 4.0 * $_rw : 0.0), ($_ew + 2.0${DOF ? ' + ($_ap > 0.0 ? $_mxb : 0.0)' : ''}) * ${pixAt('length($_ro)')});\n`,
+      // The search box: the shape's reach plus room (mg) for its soft edge, glow and outline.
+      `    float $_mg = max(max($_fe, $_rimS > 0.0 ? 4.0 * $_rw : 0.0), ($_ew + 2.0) * ${pixAt('length($_ro)')});\n`,
       '    vec3 $_Bs = $_Bx + $_rb.y + $_mg;\n',
       // Sphere-tracing step: the distance is exact for a rounded box; a bulge makes it overshoot, so step shorter.
       '    float $_ks = 1.0 / (1.0 + 2.0 * $_rb.y / $_mnB);\n',
@@ -957,7 +951,7 @@ export const TimeCubeViewNode: NodeDefinition = {
       `    float $_pxS = ${pixAt('$_tS')};\n`,
       // Edge softness: a ray that only grazes the box covers little of its pixel (style.ts coverage).
       // With frames moved, only what is still inside the box is softened, step by step.
-      `    float $_cov = smoothstep(-0.5 * $_pxS, max(${DOF ? `max($_fe, ${cocAt('$_tS')})` : '$_fe'}, $_pxS), -$_md);\n`,
+      `    float $_cov = smoothstep(-0.5 * $_pxS, max($_fe, $_pxS), -$_md);\n`,
       ...(MOT ? ['    float $_cvEnd = $_mw.w > 0.5 ? 1.0 : $_cov;\n', '    float $_cvIn = $_mw.w > 0.5 ? $_cov : 1.0;\n'] : ['    float $_cvEnd = $_cov;\n']),
       '    float $_cvF = 0.0;\n',
       '    if ($_ex > $_en && $_far > $_en) {\n',
@@ -970,8 +964,6 @@ export const TimeCubeViewNode: NodeDefinition = {
       '        float $_gS = ($_gB - $_gA) / max($_len, 1e-6);\n',
       '        float $_f0 = $_gA - $_sl0, $_f1 = $_gB - $_sl0;\n',
       '        float $_ls = $_f0 * $_f1 < 0.0 ? $_en + $_len * $_f0 / ($_f0 - $_f1) : -1.0;\n',
-      // Focus on the slice: sharp exactly where this ray crosses the slice plane.
-      ...(P.dof === 'slice' ? [`        if ($_ls >= 0.0) $_F = max(${f('focus')}, 0.01) * $_ls;\n`] : []),
       sliceFacePre,
       `        float $_dl = length(2.0 * $_Bx) / ${steps}.0;\n`,
       // Where in each stretch to read, per pixel (interleaved gradient noise): fine grain instead of the bands a fixed step draws.
@@ -1007,9 +999,11 @@ export const TimeCubeViewNode: NodeDefinition = {
         // even when rounding puts its plane a hair behind the slice's: else pixels flip between the two.
         '            if ($_th <= $_tb + 1e-4) { $_tb = max($_th, $_ta); $_ev = 2; $_gH = $_cn; $_hNeed = $_hOn; }\n',
       ] : []),
-      // The stretch [ta, tb] lies on one side of the slice: its opacity before the picture is read.
+      // The stretch [ta, tb] lies on one side of the slice: its opacity before the picture is read. With a
+      // feather, the ramp is read at the stretch's jittered point, so it shows as fine grain, not bands.
       '            float $_gmid = $_gA + $_gS * (0.5 * ($_ta + $_tb) - $_en);\n',
-      `            float $_ob = $_gmid < $_sl0 ? ${f('before')} : ${f('after')};\n`,
+      '            float $_gj = $_gA + $_gS * ($_ta + $_j * ($_tb - $_ta) - $_en);\n',
+      `            float $_ob = tcFeather($_gmid, $_gj, $_sl0, $_tf, ${f('before')}, ${f('after')});\n`,
       hlDim,
       // Read where a ray through this stuff would most likely stop: at the start of a nearly solid stretch (its surface), anywhere in a thin one.
       '            float $_tm = $_ta + tcFreeFlight($_j, tcDepth($_ob) / $_tl, $_tb - $_ta);\n',
@@ -1025,7 +1019,7 @@ export const TimeCubeViewNode: NodeDefinition = {
       '            float $_gv = $_gA + $_gS * ($_tm - $_en);\n',
       `            vec3 $_sq = vec3($_wv.xy, ${timeAt('$_wv.z')});\n`,
       ...(keyMode === 'off'
-        ? [DOF ? `            vec3 $_c = ${blurAt('$_sq', '$_tm', '(1.0 - $_acc.a) * (1.0 - exp(-tcDepth($_ob) * ($_tb - $_ta) / $_tl))')};\n` : `            vec3 $_c = tcSample(${V}, ${lay}, ${inset}, $_sq);\n`]
+        ? [`            vec3 $_c = tcSample(${V}, ${lay}, ${inset}, $_sq);\n`]
         : [
           '            vec3 $_c0, $_c1;\n',
           `            float $_fwt = tcFrames(${V}, ${lay}, ${inset}, $_sq, $_c0, $_c1);\n`,
@@ -1039,22 +1033,20 @@ export const TimeCubeViewNode: NodeDefinition = {
       keyLines,
       ...(MOT ? ['            $_op *= $_mk * (1.0 - $_fade * $_bv);\n'] : []),
       `            float $_al = (1.0 - exp(-tcDepth($_op) * ($_tb - $_ta) / $_tl))${MOT ? ` * ${coverAt('$_pm')}` : ''};\n`,
-      `            vec3 $_col = ${fxOn(look('$_c'), '$_sq.z', 'max($_sl0 - $_gv, 0.0)')};\n`,
+      `            vec3 $_col = ${look('$_c')};\n`,
       `            $_col = mix($_col, mix(${c3('tintFrom')}, ${c3('tintTo')}, smoothstep(0.0, 1.0, ${tintCoord})), clamp(${f('tintAmount')}, 0.0, 1.0));\n`,
-      ...(keyMode === 'off' ? [] : ['            $_col = mix($_col, $_flashC, $_flash);\n']),
       '            $_acc.rgb += (1.0 - $_acc.a) * $_al * $_col;\n',
       '            $_acc.a += (1.0 - $_acc.a) * $_al;\n',
       '            if ($_ev == 1) { $_cvF = (1.0 - $_acc.a) * $_sf.a; $_acc.rgb += (1.0 - $_acc.a) * $_sf.rgb; $_acc.a += $_cvF; $_sDone = true; }\n',
       hlSheet,
       '            $_ta = $_tb;\n',
-      ...(DOF ? ['            $_brot += 2.3999632;\n'] : []),
       '        }\n',
       '    }\n',
       // The edge softness fades the box near its silhouette, but not the slice frame: it has its own rounded, feathered border.
       '    $_cvEnd = max($_cvEnd, $_cvF);\n',
       edgesBlock,
       outline === 'silhouette'
-        ? `    $_eF = $_tS > $_scn ? 0.0 : tcLine(abs($_md), $_pxS, ${cocAt('$_tS')}, $_ew);\n`
+        ? `    $_eF = $_tS > $_scn ? 0.0 : tcLine(abs($_md), $_pxS, $_ew);\n`
         : '',
       // Back edges, behind the frames.
       `    float $_eo = clamp(${f('edgeOpacity')}, 0.0, 1.0);\n`,

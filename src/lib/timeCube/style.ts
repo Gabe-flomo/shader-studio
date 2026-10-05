@@ -193,7 +193,7 @@ export function flowPlace(t: number, framePos: number, tau: number): number {
   return fract(t - tau + framePos);
 }
 
-// ── Key pulse and lightning ─────────────────────────────────────────────────
+// ── Key pulse ───────────────────────────────────────────────────────────────
 
 export type PulseDir = 'forward' | 'backward' | 'bounce' | 'outward';
 
@@ -216,75 +216,57 @@ export function pulseBand(g: number, count: number, width: number, softness: num
   return 1 - smoothstep(w * (1 - clamp(softness, 0, 1)), w + 1e-4, d);
 }
 
-/** GLSL tcHash: a float hash of n, 0–1. */
-export const hash = (n: number) => fract(Math.sin(n * 12.9898 + 4.1414) * 43758.5453);
+/** A colour turned round the grey axis by `turns` of the colour wheel, clamped (GLSL tcHueTurn: the key colour's shift). */
+export function hueTurn(c: V3, turns: number): [number, number, number] {
+  const a = 2 * Math.PI * turns, k = 1 / Math.sqrt(3), cs = Math.cos(a), sn = Math.sin(a);
+  const [r, g, b] = [c[0], c[1], c[2]];
+  const d = k * (r + g + b) * (1 - cs);
+  const cx = k * (b - g), cy = k * (r - b), cz = k * (g - r); // cross((k,k,k), c)
+  return [clamp(r * cs + cx * sn + d, 0, 1), clamp(g * cs + cy * sn + d, 0, 1), clamp(b * cs + cz * sn + d, 0, 1)];
+}
+
+/** How visible the keyed colour is at a band value (GLSL: the view's `_kv`): Pulse 0 shows it all, 1 only in the bands. */
+export function keyVisibility(band: number, pulse: number): number {
+  return 1 + (band - 1) * clamp(pulse, 0, 1);
+}
+
+// ── Temporal feather ─────────────────────────────────────────────────────────
 
 /**
- * A lightning burst (GLSL tcBurstAt): slot k of a clock at `rate` a second. It strikes (4 slots in
- * 5) at a random moment in the first half of its slot, at a random place in time, flickers, and dies
- * away over about a fifth of a second (whatever the rate: at 2.5 a second a flash used to last only
- * 50 ms, a frame or two, and was easy to miss). Returns [centre, width, strength now].
+ * The feather's curve (GLSL tcEase), x 0–1 across it: 0 smooth (eases in and out), toward −1 it
+ * eases in (stays near Before longer, then firms up), toward 1 it eases out (firms up early).
  */
-export function lightningBurst(k: number, rate: number, seed: number, width: number, seconds: number): [number, number, number] {
-  const s = seconds * Math.max(rate, 0.01);
-  const h0 = hash(k + seed * 17.17), h1 = hash(k * 1.31 + seed * 3.7 + 11), h2 = hash(k * 2.17 + seed * 5.3 + 23);
-  const age = s - k - h0 * 0.5;
-  const fire = (h2 <= 0.8 ? 1 : 0) * (age >= 0 ? 1 : 0);
-  const flick = 0.7 + 0.3 * (hash(Math.floor(seconds * 24) + k * 7) >= 0.35 ? 1 : 0);
-  return [h1, Math.max(width, 0.002) * (0.4 + 0.75 * h2), fire * Math.exp(-Math.max(age, 0) / Math.max(rate, 0.01) * 10) * flick];
+export function featherEase(x: number, curve: number): number {
+  const t = clamp(x, 0, 1), c = clamp(curve, -1, 1);
+  const s = t * t * (3 - 2 * t);
+  return c < 0 ? s + (t * t - s) * -c : s + (1 - (1 - t) * (1 - t) - s) * c;
+}
+
+export interface TimeFeather {
+  /** How long the ramp is, in box time (0–1): Feather frames / (frames − 1). 0 is the hard step. */
+  width: number;
+  /** Where it sits: −1 before the slice (leading up to it), 0 centred on it, 1 after it. */
+  side: number;
+  /** featherEase's curve. */
+  curve: number;
+  /** Flow: the ramp wraps round the box's ends, as the clip does. */
+  wrap: boolean;
 }
 
 /**
- * How visible the keyed colour is at box time g (GLSL: the view's `_kv`): the pulse bands (Pulse 0
- * shows it all), then lightning: up to 0.5 the flashes come in on top, from 0.5 to 1 the rest fades.
+ * Before / After opacity with a temporal feather (GLSL tcFeather): instead of the hard step at the
+ * slice `s`, the opacity ramps from Before to After over `width` of box time. `gStep` is the march
+ * step's middle, which decides the side as before (so width 0 is exactly the old step); `g` is where
+ * in the step the ramp is read (the step's jittered point, so the ramp shows as fine grain, never
+ * as bands one step wide). Opacities are mixed as they look (the sliders are even), not as depths.
  */
-export function keyVisibility(band: number, pulse: number, lightning: number, flash: number): number {
-  const kv = 1 + (band - 1) * clamp(pulse, 0, 1);
-  if (lightning <= 0) return kv;
-  return Math.max(kv * (1 - clamp(2 * lightning - 1, 0, 1)), Math.min(2 * lightning, 1) * flash);
-}
-
-// ── Depth of field ───────────────────────────────────────────────────────────
-
-/** The lens's aperture per unit of Blur, in box sizes (GLSL: the view's APERTURE). */
-export const APERTURE = 0.3;
-
-/**
- * The blur's radius (world units) at distance t along a ray (GLSL: the view's `cocAt`): Blur sets
- * the aperture (APERTURE × Blur × Box size), zero at the focus distance F, capped at Max blur pixels
- * (`px` = a pixel's width in world units at t). At the default Blur the ends of the box blur by
- * several pixels (the old 0.08 aperture blurred them by one or two: switching Focus on barely showed).
- */
-export function blurRadius(t: number, focusDist: number, blur: number, size: number, maxBlurPx: number, px: number): number {
-  const ap = Math.max(blur, 0) * APERTURE * size;
-  return Math.min(ap * Math.abs(t - focusDist) / Math.max(focusDist, 1e-3), maxBlurPx * px);
-}
-
-/**
- * How many reads the blur takes (GLSL tcBlurTaps) for a blur `rpx` pixels across: enough to cover
- * its disc evenly (Smooth up to 32, Fast up to 8), times `share`, how much the read can still show
- * (a thin stretch of the box needs only one, at a point on the disc turned per pixel and per stretch:
- * many thin stretches add up to the blur). One read in focus.
- */
-export function blurTaps(rpx: number, smooth: boolean, share: number): number {
-  if (rpx < 0.5) return 1;
-  const n = smooth ? clamp(0.6 * rpx * rpx, 6, 32) : clamp(0.25 * rpx * rpx, 4, 8);
-  return Math.max(Math.ceil(n * clamp(share * 8, 0, 1)), 1);
-}
-
-/** Per-frame treatments (GLSL tcFx): hue turned along time, posterized to `levels`, older frames greyed. */
-export function frameFx(c: V3, t: number, age: number, hue: number, levels: number, ageGrey: number): [number, number, number] {
-  let r = c[0], g = c[1], b = c[2];
-  if (hue !== 0) {
-    const a = 2 * Math.PI * hue * t, k = 1 / Math.sqrt(3), cs = Math.cos(a), sn = Math.sin(a);
-    const d = k * (r + g + b) * (1 - cs);
-    const cx = k * (b - g), cy = k * (r - b), cz = k * (g - r); // cross((k,k,k), c)
-    [r, g, b] = [r * cs + cx * sn + d, g * cs + cy * sn + d, b * cs + cz * sn + d];
-  }
-  if (levels >= 2) { const L = levels - 1; [r, g, b] = [r, g, b].map(x => Math.floor(x * L + 0.5) / L); }
-  if (ageGrey > 0) {
-    const l = 0.299 * r + 0.587 * g + 0.114 * b, w = clamp(ageGrey * age * 2, 0, 1);
-    [r, g, b] = [r + (l - r) * w, g + (l - g) * w, b + (l - b) * w];
-  }
-  return [clamp(r, 0, 1), clamp(g, 0, 1), clamp(b, 0, 1)];
+export function featherOpacity(gStep: number, g: number, s: number, before: number, after: number, f: TimeFeather): number {
+  const base = gStep < s ? before : after;
+  if (!(f.width > 0)) return base;
+  const w = Math.min(f.width, 1);
+  const side = clamp(f.side, -1, 1);
+  let d = g - s + 0.5 * w * (1 - side);
+  if (f.wrap) d = fract(d);
+  if (d < 0 || d >= w) return base;
+  return before + (after - before) * featherEase(d / w, f.curve);
 }

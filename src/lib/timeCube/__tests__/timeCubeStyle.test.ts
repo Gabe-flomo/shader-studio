@@ -9,8 +9,8 @@ import { describe, expect, it, vi } from 'vitest';
 vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {}, key: () => null, length: 0, clear: () => {} });
 
 import {
-  blurRadius, bump, combDistance, cornerRadius, coverage, flowPlace, flowTime, frameFx, highlightComb, highlightTimes, keyVisibility,
-  lightningBurst, motionReach, moveUv, pulseBand, pulsePhase, rimGlow, roundBox, shapeDistance, stepInHighlight, warpUv,
+  bump, combDistance, cornerRadius, coverage, flowPlace, flowTime, highlightComb, highlightTimes, hueTurn, keyVisibility,
+  motionReach, moveUv, pulseBand, pulsePhase, rimGlow, roundBox, shapeDistance, stepInHighlight, warpUv,
 } from '../style';
 import {
   buildEstimate, combineFrames, combineKey, combineSettingsOf, frameMotion, frameOrder, frameStat, orderKey, orderSettingsOf, seededRandom,
@@ -150,7 +150,7 @@ describe('flow', () => {
   });
 });
 
-describe('key pulse and lightning', () => {
+describe('key pulse', () => {
   it('pulse bands: Count of them along the box, each Width of their spacing, moving with the phase', () => {
     const at = (phase: number) => Array.from({ length: 400 }, (_, i) => pulseBand((i + 0.5) / 400, 4, 0.25, 0, phase));
     const lit = at(0).filter(v => v > 0.5).length / 400;
@@ -168,43 +168,16 @@ describe('key pulse and lightning', () => {
     near(pulsePhase('bounce', 0, 1, 1.5, 1), 0.5);
     near(pulsePhase('forward', 0.2, 0.5, 2, 3), 1.2);
   });
-  it('visibility: Pulse 0 shows all of the key; lightning adds flashes up to 0.5, then takes over', () => {
-    expect(keyVisibility(0, 0, 0, 0)).toBe(1);
-    expect(keyVisibility(0, 1, 0, 0)).toBe(0);
-    expect(keyVisibility(0.3, 1, 0.5, 0.9)).toBe(0.9);
-    expect(keyVisibility(1, 1, 0.5, 0)).toBe(1);
-    expect(keyVisibility(1, 1, 1, 0)).toBe(0);
-    expect(keyVisibility(1, 1, 1, 0.7)).toBe(0.7);
+  it('visibility: Pulse 0 shows all of the key, Pulse 1 only the bands', () => {
+    expect(keyVisibility(0, 0)).toBe(1);
+    expect(keyVisibility(0, 1)).toBe(0);
+    expect(keyVisibility(0.3, 0.5)).toBeCloseTo(0.65, 12);
   });
-  it('lightning is the same for the same seed and time, different for another seed, and dies away fast', () => {
-    expect(lightningBurst(5, 2, 7, 0.1, 2.6)).toEqual(lightningBurst(5, 2, 7, 0.1, 2.6));
-    expect(lightningBurst(5, 2, 8, 0.1, 2.6)).not.toEqual(lightningBurst(5, 2, 7, 0.1, 2.6));
-    // Find a slot that strikes, then watch it fade.
-    let k = 0;
-    while (lightningBurst(k, 2, 7, 0.1, (k + 0.999) / 2)[2] === 0 && k < 50) k++;
-    const [, , late] = lightningBurst(k, 2, 7, 0.1, (k + 0.999) / 2);
-    const early = Math.max(...Array.from({ length: 20 }, (_, i) => lightningBurst(k, 2, 7, 0.1, (k + i / 20) / 2)[2]));
-    expect(early).toBeGreaterThan(late);
-    expect(late).toBeLessThan(0.1);
-  });
-});
-
-describe('depth of field and per-frame effects', () => {
-  it('the blur is zero at the focus, grows away from it, and stops at Max blur', () => {
-    expect(blurRadius(3, 3, 1, 1, 16, 0.002)).toBe(0);
-    expect(blurRadius(3.4, 3, 1, 1, 64, 0.002)).toBeGreaterThan(blurRadius(3.2, 3, 1, 1, 64, 0.002));
-    near(blurRadius(30, 3, 1, 1, 16, 0.002), 0.032);
-    expect(blurRadius(4, 3, 0, 1, 16, 0.002)).toBe(0);
-  });
-  it('hue across time turns colours by time, posterize quantises, grey with age drains older frames', () => {
+  it('the key colour turns round the wheel: a whole turn is the same colour, half a turn its opposite hue', () => {
     const c = [0.8, 0.2, 0.1];
-    expect(frameFx(c, 0.5, 0, 0, 0, 0)).toEqual([0.8, 0.2, 0.1]);
-    const turned = frameFx(c, 1, 0, 1, 0, 0);
-    for (let i = 0; i < 3; i++) near(turned[i], c[i], 1e-9);
-    expect(frameFx(c, 0.5, 0, 1, 0, 0)[2]).toBeGreaterThan(0.3);
-    expect(frameFx([0.4, 0.6, 0.1], 0, 0, 0, 2, 0)).toEqual([0, 1, 0]);
-    const grey = frameFx(c, 0, 0.5, 0, 0, 1);
-    near(grey[0], grey[1]);
+    const whole = hueTurn(c, 1);
+    for (let i = 0; i < 3; i++) near(whole[i], c[i], 1e-9);
+    expect(hueTurn(c, 0.5)[2]).toBeGreaterThan(0.3);
   });
 });
 
@@ -275,12 +248,12 @@ describe('the view compiles', () => {
   const ex = buildTimeCubeExamples();
   const LIVE = ['slice', 'before', 'after', 'sliceOpacity', 'tiltX', 'tiltY', 'roundness', 'feather', 'bulge', 'rimStrength', 'rimWidth', 'rimColor',
     'tintAmount', 'tintFrom', 'tintTo', 'shadow', 'shadowSoftness', 'shadowGap', 'hlCount', 'hlStart', 'hlSpacing', 'hlThickness', 'hlOpacity', 'hlTint',
-    'hlColor', 'hlEdge', 'hlOthers', 'sendThrough', 'motionWidth', 'liftUp', 'liftSide', 'frameScale', 'frameTurn', 'frameFade', 'fxHue', 'fxPosterize',
-    'fxAgeGrey', 'depth', 'size', 'brightness', 'contrast', 'darkClear', 'background', 'edgeWidth', 'edgeOpacity', 'sliceEdge', 'edgeColor',
-    'blur', 'focus', 'maxBlur', 'camDist', 'camAngle', 'camElevation', 'rotSpeed', 'swing', 'ortho', 'fov'];
+    'hlColor', 'hlEdge', 'hlOthers', 'sendThrough', 'motionWidth', 'liftUp', 'liftSide', 'frameScale', 'frameTurn', 'frameFade',
+    'timeFeather', 'featherSide', 'featherCurve', 'depth', 'size', 'brightness', 'contrast', 'darkClear', 'background', 'edgeWidth', 'edgeOpacity', 'sliceEdge', 'edgeColor',
+    'camDist', 'camAngle', 'camElevation', 'rotSpeed', 'ortho', 'fov', 'camX', 'camY', 'camZ'];
 
   it('every new example compiles, has a note on every node, and is listed', () => {
-    for (const k of ['timeCubeSoftPill', 'timeCubeHighlights', 'timeCubeFlow', 'timeCubePulse', 'timeCubeFocus', 'timeCubeLongExposure']) {
+    for (const k of ['timeCubeSoftPill', 'timeCubeHighlights', 'timeCubeFlow', 'timeCubePulse', 'timeCubeFlyThrough', 'timeCubeLongExposure']) {
       expect(TIME_CUBE_EXAMPLE_INDEX[k], k).toBeTruthy();
       const r = compileGraph({ nodes: ex[k].nodes });
       expect(r.errors ?? [], k).toEqual([]);
@@ -295,11 +268,11 @@ describe('the view compiles', () => {
       n('timeCubeView', 'v', 300, 0, params, { volume: ['src', 'volume'] }),
       n('output', 'out', 600, 0, {}, { color: ['v', 'color'] }),
     ];
-    const slice = compileGraph({ nodes: nodes({ highlights: true, motion: true, effects: true, dof: 'distance' }) });
+    const slice = compileGraph({ nodes: nodes({ highlights: true, motion: true }) });
     for (const k of LIVE) expect(slice.paramBindings[`v::${k}`], k).toBeTruthy();
     const flow = compileGraph({ nodes: nodes({ timeMode: 'flow', keyMode: 'hue', keyAnimate: true, highlights: true }) });
     for (const k of ['framePos', 'flowSpeed', 'flowTime', 'keyColor', 'keyTolerance', 'keyHueShift', 'keyHueDrift', 'pulse', 'pulseSpeed', 'pulsePhase',
-      'pulseCount', 'pulseWidth', 'pulseSoftness', 'lightning', 'lightningRate', 'lightningWidth', 'lightningSeed', 'hlStart']) {
+      'pulseCount', 'pulseWidth', 'pulseSoftness', 'hlStart', 'camX', 'camY', 'camZ']) {
       expect(flow.paramBindings[`v::${k}`], k).toBeTruthy();
     }
     expect(flow.fragmentShader).toContain('tcPulse(');
@@ -312,14 +285,10 @@ describe('the view compiles', () => {
     ] });
     const off = code({});
     expect(off.fragmentShader).not.toMatch(/tcComb\(\w+_gm/);
-    expect(off.fragmentShader).not.toMatch(/tcSampleBlur\(u_/);
-    expect(off.fragmentShader).not.toMatch(/= tcFx\(/);
     expect(off.fragmentShader).not.toMatch(/tcShapeAt\(\w+_pm/);
-    for (const k of ['hlCount', 'liftUp', 'fxHue', 'blur']) expect(off.paramBindings[`v::${k}`], k).toBeUndefined();
-    const on = code({ highlights: true, motion: true, effects: true, dof: 'distance' });
+    for (const k of ['hlCount', 'liftUp']) expect(off.paramBindings[`v::${k}`], k).toBeUndefined();
+    const on = code({ highlights: true, motion: true });
     expect(on.fragmentShader).toMatch(/tcComb\(\w+_gm/);
-    expect(on.fragmentShader).toMatch(/tcSampleBlur\(u_/);
-    expect(on.fragmentShader).toMatch(/tcFx\(/);
     expect(on.fragmentShader).toMatch(/tcShapeAt\(\w+_pm/);
   });
 
@@ -334,7 +303,7 @@ describe('the view compiles', () => {
     expect(r.fragmentShader).toMatch(/_tau = lfo_\d+_value \+ u_time \*/);
   });
 
-  it('choices change the code: the outline, the highlights\' anchor, the pulse direction, the focus', () => {
+  it('choices change the code: the outline, the highlights\' anchor, the pulse direction', () => {
     const code = (params: Record<string, unknown>) => compileGraph({ nodes: [
       n('timeCube', 'src', 0, 0), n('timeCubeView', 'v', 300, 0, params, { volume: ['src', 'volume'] }), n('output', 'out', 600, 0, {}, { color: ['v', 'color'] }),
     ] }).fragmentShader;
@@ -344,7 +313,6 @@ describe('the view compiles', () => {
     expect(code({ outline: 'silhouette' })).toMatch(/_eF = .*tcLine\(abs\(/);
     expect(code({ highlights: true, hlMode: 'fixed' })).toMatch(/_h0 = 0\.0 \+/);
     expect(code({ keyMode: 'luma', pulseDir: 'outward' })).toMatch(/tcPulse\(abs\(\w+_gv - \w+_sl0\)/);
-    expect(code({ dof: 'slice' })).toMatch(/_fp = \(tcBoxQ\(vec3\(0\.5, 0\.5, \w+_sl0\)/);
   });
 
   it('the pulsing key\'s Play panel drives the key colour, its hue and the pulse, with an LFO on the hue', () => {

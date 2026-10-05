@@ -4,7 +4,7 @@
  * bytes (a scaled-down copy of the atlas), no GL, so the card can say "keeps about 4%" for any video.
  */
 import { keyMatch, type KeyMode, type KeySettings } from './plan';
-import { frameFx } from './style';
+import { hueTurn } from './style';
 
 /** The key the view's settings describe, its colour turned by Shift the colour (GLSL: the view's `_kc`). */
 export function keySettingsOf(params: Record<string, unknown>): KeySettings {
@@ -12,7 +12,7 @@ export function keySettingsOf(params: Record<string, unknown>): KeySettings {
   const mode = (['color', 'hue', 'luma'] as const).includes(params.keyMode as never) ? params.keyMode as KeyMode : 'off';
   const raw = Array.isArray(params.keyColor) && params.keyColor.length >= 3 ? (params.keyColor as number[]) : [0.85, 0.12, 0.12];
   const shift = num(params.keyHueShift, 0);
-  const color = shift !== 0 ? frameFx(raw, 1, 0, shift, 0, 0) : [raw[0], raw[1], raw[2]];
+  const color = shift !== 0 ? hueTurn(raw, shift) : [raw[0], raw[1], raw[2]];
   return {
     mode, color, tolerance: num(params.keyTolerance, 0.12), softness: num(params.keySoftness, 0.06),
     lumaLo: num(params.lumaLo, 0.6), lumaHi: num(params.lumaHi, 1),

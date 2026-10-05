@@ -11,6 +11,7 @@ vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeIt
 import {
   ATLAS_MAX_SIDE, MAX_FRAMES, VOLUME_MAX_BYTES, atlasUv, boxHalf, boxToVolume, capText, keyMatch, opticalDepth, planFrameStack, rayBox,
   sliceSide, sliceTime, stackSettingsOf, stepAlpha, tileOrigin, voxelOpacity, type KeySettings, type StackSettings, type VoxelLook,
+  OPACITY_KNEE, OPACITY_REF, legacyOpticalDepth, migrateOpacity, opacityForDepth, slabOpacity,
 } from '../plan';
 import { DEMO_META } from '../frames';
 import { timeCubeMeta, timeCubePlan, volumeKey } from '../volumes';
@@ -112,20 +113,52 @@ describe('frame-stack planning', () => {
 });
 
 describe('transfer function', () => {
-  it('opacity is what the region hides looking through its whole length in time', () => {
+  it('opacity is what a slab half the box long in time hides, whatever the steps', () => {
+    expect(OPACITY_REF).toBe(0.5);
     expect(opticalDepth(0)).toBe(0);
-    for (const o of [0.05, 0.3, 0.5, 0.9]) expect(stepAlpha(o, 2, 2)).toBeCloseTo(o, 9);
-    // Split into steps, it adds up to the same.
+    for (const o of [0.05, 0.3, 0.5, 0.85]) expect(stepAlpha(o, 1, 2)).toBeCloseTo(o, 9);
+    // Split into steps, it adds up to the same: 1 − (1 − v)^(step / reference).
     const a = stepAlpha(0.3, 0.1, 2);
-    expect(1 - (1 - a) ** 20).toBeCloseTo(0.3, 9);
+    expect(a).toBeCloseTo(1 - 0.7 ** (0.1 / 1), 12);
+    expect(1 - (1 - a) ** 10).toBeCloseTo(0.3, 9);
+    for (const steps of [8, 64, 500]) expect(slabOpacity(0.6, OPACITY_REF, steps)).toBeCloseTo(0.6, 9);
   });
 
-  it('rises steadily and is a hard surface at 1', () => {
+  it('the sliders are even: through a slab, 0, 0.25, 0.5, 0.75 and 1 look evenly spaced (the old ones did not)', () => {
+    const vs = [0, 0.25, 0.5, 0.75, 1];
+    const seen = vs.map(v => slabOpacity(v, OPACITY_REF));
+    for (let i = 1; i < vs.length; i++) {
+      expect(seen[i]).toBeGreaterThan(seen[i - 1]);
+      // Each quarter of the slider is about a quarter of the way from clear to solid.
+      expect(seen[i] - seen[i - 1]).toBeGreaterThan(0.2);
+      expect(seen[i] - seen[i - 1]).toBeLessThan(0.3);
+    }
+    vs.forEach((v, i) => expect(seen[i]).toBeCloseTo(v, 2));
+    // Before the change, through the same slab: 0.75 hid only half, and 0.75 → 1 went from half to solid.
+    const old = (v: number) => { let a = 0; const one = 1 - Math.exp(-legacyOpticalDepth(v) * OPACITY_REF / 64); for (let i = 0; i < 64; i++) a += (1 - a) * one; return a; };
+    expect(old(0.75)).toBeLessThan(0.51);
+    expect(old(1) - old(0.75)).toBeGreaterThan(0.49);
+  });
+
+  it('rises steadily, firms up evenly above the knee, and is a hard surface at 1', () => {
     let last = -1;
-    for (let o = 0; o <= 1.0001; o += 0.01) { const d = opticalDepth(o); expect(d).toBeGreaterThanOrEqual(last); last = d; }
-    expect(opticalDepth(0.95 + 1e-9)).toBeCloseTo(opticalDepth(0.95), 5);
+    for (let o = 0; o <= 1.0001; o += 0.005) { const d = opticalDepth(o); expect(d).toBeGreaterThanOrEqual(last); last = d; }
+    // Continuous at the knee and at 1: no snap on the last tick.
+    expect(opticalDepth(OPACITY_KNEE + 1e-9)).toBeCloseTo(opticalDepth(OPACITY_KNEE), 5);
+    expect(opticalDepth(1 - 1e-9) / opticalDepth(1)).toBeGreaterThan(0.999);
+    // Each 0.01 of the top stretch changes the depth by a bounded factor (the old curve went 3 → 1000 over 0.95–1).
+    for (let o = OPACITY_KNEE; o < 0.995; o += 0.01) expect(opticalDepth(o + 0.01) / opticalDepth(o)).toBeLessThan(1.8);
     expect(stepAlpha(1, 0.01, 1.6)).toBeGreaterThan(0.99);
     expect(opticalDepth(2)).toBe(opticalDepth(1));
+    for (const o of [0, 0.1, 0.5, 0.85, 0.9, 0.97, 1]) expect(opacityForDepth(opticalDepth(o))).toBeCloseTo(o, 9);
+  });
+
+  it('old graphs: their opacities convert to the same depth (they look as they did)', () => {
+    for (const o of [0, 0.2, 0.45, 0.6, 0.8, 0.95, 0.97, 0.99, 1]) {
+      expect(opticalDepth(migrateOpacity(o)) / Math.max(legacyOpticalDepth(o), 1e-9)).toBeCloseTo(o === 0 ? 0 : 1, 2);
+    }
+    expect(migrateOpacity(0.45)).toBeCloseTo(0.2584, 4);
+    expect(migrateOpacity(1)).toBe(1);
   });
 
   const key = (o: Partial<KeySettings> = {}): KeySettings => ({ mode: 'off', color: [0.85, 0.12, 0.12], tolerance: 0.08, softness: 0.06, lumaLo: 0.6, lumaHi: 1, ...o });

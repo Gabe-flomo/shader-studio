@@ -43,7 +43,7 @@ describe('what the key keeps', () => {
 });
 
 describe('the key\'s Animate switch', () => {
-  it('off leaves the pulse, lightning and drift out of the shader; old saves that animate count as on', () => {
+  it('off leaves the pulse and drift out of the shader; old saves that animate count as on', () => {
     expect(keyAnimOn({ keyAnimate: false, pulse: 1 })).toBe(false);
     expect(keyAnimOn({ keyAnimate: true })).toBe(true);
     expect(keyAnimOn({ pulse: 1 })).toBe(true);
@@ -56,7 +56,7 @@ describe('the key\'s Animate switch', () => {
     expect(off.paramBindings['v::pulse']).toBeUndefined();
     const on = code({ keyAnimate: true });
     expect(on.paramBindings['v::pulse']).toBeTruthy();
-    expect(on.paramBindings['v::lightning']).toBeTruthy();
+    expect(on.paramBindings['v::lightning']).toBeUndefined();
   });
 });
 
