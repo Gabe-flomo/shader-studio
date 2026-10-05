@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.28',
+    date: '2026-10-04',
+    title: 'Frame Stack',
+    highlights: [
+      { area: 'Studio', text: 'Frame Stack turns a Time Cube\'s frames into cards: stack, fan, ring, torus, helix or grid, and morph between them.', link: { kind: 'doc', path: 'docs/frame-stack.md' } },
+      { area: 'Studio', text: 'Scatter and drift cards apart and back, pop out the scan card, loop highlighted frames, shuffle, and add depth of field.' },
+    ],
+  },
+  {
     id: '2026.10.27',
     date: '2026-10-04',
     title: 'Lighter Displacement Map',
