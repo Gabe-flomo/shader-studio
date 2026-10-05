@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.31',
+    date: '2026-10-04',
+    title: 'No more march banding',
+    highlights: [
+      { area: 'Studio', text: 'New March Loops start rays at an even, jittered depth, so volumetric glows lose their contour rings. Animate jitter is optional.' },
+      { area: 'Studio', text: 'Volume Glow and SDF Glow have Per distance: Passthrough now changes smoothness, not brightness. Saved scenes are unchanged.' },
+      { area: 'Play', text: 'Play, Present, the Output window and web exports now render in high precision with dither, so gradients stop banding.' },
+    ],
+  },
+  {
     id: '2026.10.30',
     date: '2026-10-04',
     title: 'Clearer node sections',
