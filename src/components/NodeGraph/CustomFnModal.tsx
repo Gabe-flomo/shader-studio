@@ -22,6 +22,9 @@ import { buildCompletions } from '../code/glslReference';
 import { insertSnippet } from '../code/useCompletion';
 import { HowUsedButton } from '../codeExplorer/HowUsedButton';
 import { useCustomFnJump } from '../codeExplorer/useCodeJumpFocus';
+import { StatementsExplain } from '../explain/StatementsExplain';
+import { useExplainDialogs } from '../explain/useExplainDialogs';
+import { customFnContext, customFnUseHere } from '../explain/hosts';
 
 const TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
 
@@ -63,6 +66,9 @@ export function CustomFnModal({ node, onClose }: Props) {
   const labelParam   = typeof node.params.label === 'string' ? node.params.label : 'Custom Function';
 
   const rawInputs = node.params.inputs;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the inputs, body and wiring are what it reads
+  const explainCtx = useMemo(() => customFnContext(node), [node.params.inputs, node.params.body, node.inputs]);
+  const explainDialogs = useExplainDialogs({ onJumped: onClose });
   const completions = useMemo(
     () => buildCompletions((rawInputs as Array<{ name: string; type: DataType }> | undefined) ?? []),
     [rawInputs],
@@ -319,6 +325,13 @@ export function CustomFnModal({ node, onClose }: Props) {
             <ProbePicker node={node} />
             <LinePreviewPanel node={node} />
           </div>
+
+          {/* Explain each statement (lib/glslPatterns); a part can become a node, called from here */}
+          <div style={{ flexShrink: 0 }}>
+            <StatementsExplain code={body} ctx={explainCtx} onFindUses={explainDialogs.findUses}
+              onMakeNode={span => explainDialogs.makeNode({ source: body, span, ctx: explainCtx, useHere: customFnUseHere(node.id, span) })} />
+          </div>
+          {explainDialogs.dialogs}
 
           <div style={{ borderTop: `1px solid ${tk.border.subtle}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button

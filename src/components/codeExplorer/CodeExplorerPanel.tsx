@@ -187,12 +187,14 @@ function PatternCardView({ card, buckets, rank, startOpen }: { card: PatternCard
   return (
     <div ref={ref} data-testid="pattern-card" style={{ border: `1px solid ${startOpen ? tk.accent.base : tk.border.default}`, borderRadius: radius.lg, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6, background: tk.bg.panel }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ font: `600 13px ${fontFamily.ui}`, flex: 1, minWidth: 0 }}>{info?.name ?? <span style={{ color: tk.text.muted, fontWeight: 500 }}>Unnamed pattern</span>}</span>
+        {info?.name
+          ? <span style={{ font: `600 13px ${fontFamily.ui}`, flex: 1, minWidth: 0 }}>{info.name}</span>
+          : <code style={{ font: `600 12.5px ${fontFamily.mono}`, flex: 1, minWidth: 0, overflowWrap: 'anywhere' }} title="No idiom in the pattern library matches this shape">{card.l2}</code>}
         <span style={{ font: `650 14px ${fontFamily.ui}` }}>{card.count}</span>
         <Sparkline values={card.spark} labels={buckets} />
         <span style={{ fontSize: 11, color: tk.text.faint, whiteSpace: 'nowrap' }}>{card.docs} {card.docs === 1 ? 'place' : 'places'}</span>
       </div>
-      <code style={{ font: `500 12px ${fontFamily.mono}`, color: tk.text.secondary, overflowWrap: 'anywhere' }}>{card.l2}</code>
+      {info?.name && <code style={{ font: `500 12px ${fontFamily.mono}`, color: tk.text.secondary, overflowWrap: 'anywhere' }}>{card.l2}</code>}
       {info?.phrase && <span style={{ fontSize: 12, color: tk.text.muted }}>{info.phrase}</span>}
       {(spread || card.flipped > 0) && (
         <span style={{ fontSize: 11.5, color: tk.text.muted }}>
@@ -289,7 +291,7 @@ function Hits({ hits, query, onOpen }: { hits: SearchHit[]; query: string; onOpe
     <>
       <Note>Patterns that match “{query}” (with synonyms), best first.</Note>
       {hits.map(h => {
-        const info = explainPattern({ callee: h.callee, l2: h.l2, l1: h.sample.l1, sample: h.sample.text });
+        const info = explainPattern({ callee: h.callee, l2: h.l2, l1: h.sample.l1, sample: h.sample.text.slice(h.sample.hs, h.sample.he) });
         return (
           <button key={`${h.callee}|${h.l2}`} type="button" data-testid="search-hit" onClick={() => onOpen(h)}
             style={{ textAlign: 'left', border: `1px solid ${tk.border.default}`, borderRadius: radius.lg, background: tk.bg.panel, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 5, cursor: 'pointer', color: tk.text.primary }}>

@@ -11,7 +11,8 @@
  */
 import { CodeIndex } from './codeIndex';
 import { docVersion, extractDoc } from './extract';
-import { functionReport, searchPatterns, suggestFunctions, summarise, type FunctionReport, type IndexSummary, type QueryScope, type SearchHit, type Count } from './queries';
+import { findIndexedUses, functionReport, searchPatterns, suggestFunctions, summarise, type FunctionReport, type IndexSummary, type Instance, type QueryScope, type SearchHit, type Count } from './queries';
+import type { UseQuery } from '../lib/glslPatterns';
 import type { IndexStore } from './store';
 import { INDEX_SCHEMA, type DocInput, type DocRecord } from './types';
 
@@ -22,12 +23,14 @@ export type Query =
   | { q: 'function'; fn: string; scope?: QueryScope; withFn?: string }
   | { q: 'search'; text: string; scope?: QueryScope; limit?: number }
   | { q: 'summary'; scope?: QueryScope }
-  | { q: 'suggest'; prefix: string };
+  | { q: 'suggest'; prefix: string }
+  | { q: 'uses'; query: UseQuery; scope?: QueryScope; limit?: number };
 
 export type QueryResult<Q extends Query> =
   Q extends { q: 'function' } ? FunctionReport :
   Q extends { q: 'search' } ? SearchHit[] :
   Q extends { q: 'summary' } ? IndexSummary :
+  Q extends { q: 'uses' } ? Instance[] :
   Count[];
 
 export interface SyncResult {
@@ -127,6 +130,7 @@ export function createHost(deps: HostDeps) {
       case 'search': return searchPatterns(index, q.text, q.scope, q.limit);
       case 'summary': return summarise(index, q.scope);
       case 'suggest': return suggestFunctions(index, q.prefix);
+      case 'uses': return findIndexedUses(index, q.query, q.scope, q.limit);
     }
   }
 

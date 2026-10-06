@@ -14,11 +14,12 @@ import { bundledExampleDocs } from '../exampleCorpus';
 import { exprBlockSource, fileDoc, graphDoc } from '../corpus';
 import { extractDoc } from '../extract';
 import { CodeIndex } from '../codeIndex';
-import { functionReport, searchPatterns, summarise } from '../queries';
+import { findIndexedUses, functionReport, searchPatterns, summarise } from '../queries';
 import { createHost, type InitResult, type SyncResult, type PrebuiltIndex } from '../host';
 import { idbStore, memoryStore } from '../store';
 import { collectUserDocs } from '../userCorpus';
 import { exprFieldLabel, offsetOf, planJump } from '../jump';
+import { explainPattern } from '../explain';
 import { INDEX_SCHEMA, type DocInput, type DocRecord } from '../types';
 
 const call = (src: string) => shapes(parseExpression(src));
@@ -230,8 +231,25 @@ describe('free-text search with synonyms', () => {
     const hits = searchPatterns(ix, 'random');
     expect(hits.slice(0, 3).some(h => h.callee === 'fract' && h.l2 === 'fract(sin(…) * #)')).toBe(true);
   });
-  it('“repeat tile” finds fract', () => {
-    expect(searchPatterns(ix, 'repeat tile').slice(0, 3).some(h => h.callee === 'fract')).toBe(true);
+  it('“repeat tile” finds repetition (fract, floor, mod)', () => {
+    expect(searchPatterns(ix, 'repeat tile').slice(0, 4).every(h => /fract|floor|mod/.test(h.l2))).toBe(true);
+  });
+  it('names a pattern by the library’s idiom when it matches the whole call', () => {
+    const r = functionReport(ix, 'smoothstep');
+    const card = r.patterns.find(p => p.l2 === 'smoothstep(#, #, length(…))')!;
+    const info = explainPattern({ callee: 'smoothstep', l2: card.l2, sample: card.sample });
+    expect(info?.name).toBe('Soft circle');
+    expect(info?.phrase).toMatch(/circle/i);
+  });
+});
+
+describe('find uses through the index', () => {
+  it('finds a library idiom in saved code, with provenance and the matched span', () => {
+    const ix = indexOf([extractDoc(doc('saved:mine', [['float d', 'length(uv)']], 'smoothstep(0.3, 0.35, length(uv))'))]);
+    const hits = findIndexedUses(ix, { idiomId: 'soft-circle' });
+    expect(hits).toHaveLength(1);
+    expect(hits[0].prov).toMatchObject({ docId: 'saved:mine', field: 'result', nodeId: 'n1' });
+    expect(hits[0].text.slice(hits[0].hs, hits[0].he)).toBe('smoothstep(0.3, 0.35, length(uv))');
   });
 });
 

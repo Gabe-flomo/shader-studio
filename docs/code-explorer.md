@@ -17,7 +17,7 @@ Everything runs on your computer. No AI is involved: every result is a count, a 
 
 - **A header**, for example *55 calls in 30 places · written*.
 - **Pattern cards**, the ways the function is used, most common first. Each card shows:
-  - a name and a sentence saying what the pattern does, when the pattern is a known one (*"soft disc edge"*)
+  - a name from the pattern library when the shape is a known idiom (*Soft circle*, *Sine hash*), otherwise the shape itself, and a plain-words sentence about a real example of it (*"A soft-edged circle of radius 0.22."*), both from the Expression explainer (docs/expression-explainer.md)
   - the pattern's shape, where `#` is a number, `_` is a name and `…` is the inside of another call: `smoothstep(#, #, length(…))`
   - how many times it appears, and a small bar chart of where (which example folder, saved graphs, presets…)
   - the usual values of its number arguments (*arg 1: median 0.22 (0.1 → 0.7)*) and how often it is flipped with `1.0 − …`
@@ -57,6 +57,10 @@ The **Everything / Mine / Examples** switch limits where it looks.
 | Present | GLSL you typed into code blocks |
 
 Code the compiler generates from nodes isn't searched yet. That comes in phase 2.
+
+## Where else is this used?
+
+The Expression explainer's **Where else is this used?** dialog also asks the Code Explorer's index, so it lists matches in your saved graphs, presets, shaders, linked files and presentations, each with **Open**.
 
 ## Keeping it current
 

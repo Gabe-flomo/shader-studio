@@ -553,7 +553,14 @@ What landed on `claude/code-explorer-p1`, against §11's v1 list. The code is in
   - **Graph:** load it, asking first when the open graph has unsaved changes. Enter the groups (two deep, not sealed). Focus or reveal the node. A small `jumpStore` request makes the node card open its editor. The Expression Block editor focuses `Line N expression` / `Return expression` and selects and flashes the call. The Custom Function editor uses `CodeField`'s existing `flash`, opening Helper functions if needed. Input expressions open the input's expression popover.
   - **Shaders and linked files:** open on the GLSL page with the range selected.
   - **Convert, Present, presets, Builder:** go to their page.
-- **Explainer integration.** At merge time the shared library (`src/lib/glslPatterns/`, branch `claude/expr-explainer`) wasn't on main. `explain.ts` defines the adapter (`PatternExplainer`: `explain(query) → {id, name, phrase}`, optional `makeNode`) with `registerPatternExplainer()`. Until the library registers, a small built-in label table (≈30 rows, from §9's phrases) names the commonest shapes. To wire the library in, register it from a module imported by both `indexer.worker.ts` (search ranks on names) and the app (cards). Nothing in the Explorer duplicates the idiom library.
+- **Explainer integration.** The shared library (`src/lib/glslPatterns/`, #558) is used directly. `explain.ts` runs `explainExpression` on a real instance of each card.
+  - An idiom that matches the whole call names the card ("Soft circle", "Sine hash", "Distance between points").
+  - The explainer's sentence is the card's phrase ("A soft-edged circle of radius 0.22.").
+  - The idioms' vocabulary (`idiomVocabulary`: name, function name, keywords) goes into the free-text search documents.
+  - There is no built-in label table: names come only from the library's idioms. A card no idiom matches is titled by its shape.
+  - `registerPatternExplainer()` remains as a hook for user-named patterns.
+  - **Find uses:** the explainer's "Where else is this used?" dialog keeps its in-memory scan of this graph and the examples. It adds a section fed by the index (`findIndexedUses`: the library's `matchesInLine` over each distinct indexed line) for saved graphs, presets, shaders, linked files and presentations, with jump to source.
+  - "Make a node from this" stays in the explainer's dialogs; wiring it to pattern cards is phase 2.
 
 ### Measured (vitest on an M-series Mac; examples as of 2026.10.48)
 
@@ -562,7 +569,8 @@ What landed on `claude/code-explorer-p1`, against §11's v1 list. The code is in
 | Collect the examples' written code | ≈7 ms |
 | Extract (Tier A + shapes + flow) for every example doc | ≈25–35 ms for ≈1,200 call sites |
 | Function report (`smoothstep`) | ≈1–3 ms |
-| Free-text search (first call builds the pattern documents) | ≈5–15 ms, then ≈1–2 ms |
+| Free-text search (the first call builds the pattern documents, explaining one instance per pattern with the library) | ≈65 ms, then <1 ms |
+| In the app (dev server, headless Chrome): index ready from IndexedDB / prebuilt | ≈0.25 s; incremental user sync ≈2 ms; function report ≈1–5 ms |
 
 Counts against §9 (with the converter corpus included, as the plan's scan did) are tested with tolerances: `smoothstep` ≈55 calls in ≈30 examples, top L2 `smoothstep(#, #, _)` then `smoothstep(#, #, length(…))`, `mix › smoothstep` among the chains, `length` first on the same line, and `step` the most-called function.
 
@@ -572,7 +580,7 @@ Counts against §9 (with the converter corpus included, as the plan's scan did) 
 - **Storage layout.** Postings aren't stored as their own object stores with IndexedDB indexes. Each doc is stored whole (with its sites) and the postings are rebuilt in memory when the worker starts (≈1k–10k sites, a few ms). This is simpler, and incremental per doc.
 - **Hashes.** Shapes are keyed by their text rather than by a hash; at this corpus size it makes no difference.
 - **Holes are untyped** (Tier B is phase 2–3).
-- **Make a node from this** waits for the explainer's module (`patternMaker()` is the hook).
+- **Make a node from this** is on the explainer's Explain views, not yet on pattern cards.
 - **Jump to source limits.** It can't open an editor for nodes deeper than two groups or inside sealed groups (the group is shown). Presets jump to the Files page rather than the preset's own page. Convert examples open on the Convert page without a line selected.
 - **Workspace `.glsl` files** (the shared workspace folder) aren't read yet; linked folders are.
 - The open graph is told apart from an unchanged example by a fingerprint of its code. An example opened before the Explorer first starts may count twice until the examples sync has run (a second or so).

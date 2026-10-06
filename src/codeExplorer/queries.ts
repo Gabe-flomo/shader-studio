@@ -13,6 +13,7 @@
 import type { CodeIndex, SiteRef } from './codeIndex';
 import { mergeVariants, type MergedPattern } from './antiUnify';
 import { explainPattern } from './explain';
+import { matchesInLine, typesFromCode, type UseQuery } from '../lib/glslPatterns';
 import { expandQuery } from './synonyms';
 import { proseWords, splitIdentifier } from './words';
 import type { DocRecord, Origin, Provenance, Site, SourceKind } from './types';
@@ -224,11 +225,16 @@ function patternDocs(index: CodeIndex, scope: QueryScope) {
     for (const r of refs) { let l = byL2.get(r.site.l2); if (!l) byL2.set(r.site.l2, l = []); l.push(r); }
     for (const [l2, rs] of byL2) {
       const tf = new Map<string, number>();
-      const info = explainPattern({ callee, l2, l1: rs[0].site.l1, sample: rs[0].site.text });
+      const s0 = rs[0].site;
+      const info = explainPattern({ callee, l2, l1: s0.l1, sample: s0.text.slice(s0.hs, s0.he) });
       // The pattern itself counts most: its name, its phrase, the functions in its shape.
       addTerms(tf, splitIdentifier(callee), 3);
       for (const m of l2.matchAll(/[A-Za-z_]\w*/g)) addTerms(tf, splitIdentifier(m[0]), 2);
-      if (info) { addTerms(tf, proseWords(info.name), 4); addTerms(tf, proseWords(info.phrase ?? ''), 1); }
+      if (info) {
+        addTerms(tf, proseWords(info.name ?? ''), 4);
+        addTerms(tf, (info.words ?? []).flatMap(w => proseWords(w)), 2);
+        addTerms(tf, proseWords(info.phrase ?? ''), 0.5);
+      }
       // The words around its instances (capped, so a pattern used everywhere doesn't win on volume alone).
       for (const r of rs.slice(0, 40)) {
         addTerms(tf, r.site.ids, 0.25);
@@ -277,6 +283,35 @@ export function searchPatterns(index: CodeIndex, text: string, scope: QueryScope
     hits.push({ callee: d.callee, l2: d.l2, count: d.refs.length, docs: new Set(d.refs.map(r => r.doc.docId)).size, score, name: d.name, phrase: d.phrase, matched, sample: instanceOf(d.refs[0]) });
   }
   return hits.sort((a, b2) => b2.score - a.score || b2.count - a.count).slice(0, limit);
+}
+
+// ── Find uses (the explainer's "Where else is this used?") ──────────────────
+
+/**
+ * The library's idiom or pattern match, run over the indexed statements (each distinct line
+ * once), so "Where else is this used?" reaches saved graphs, presets, shaders, linked files
+ * and presentations. The match's span is the instance's highlight.
+ */
+export function findIndexedUses(index: CodeIndex, query: UseQuery, scope: QueryScope = {}, limit = 200): Instance[] {
+  const out: Instance[] = [];
+  for (const d of index.all()) {
+    const seen = new Set<string>();
+    for (const s of d.sites) {
+      if (!inScope(d, s, scope)) continue;
+      const key = `${s.src}\u0000${s.field}\u0000${s.line}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      let matches;
+      try { matches = matchesInLine(s.text, query, typesFromCode(s.text)); } catch { continue; }
+      for (const m of matches) {
+        const inst = instanceOf({ doc: d, site: s });
+        inst.hs = m.start; inst.he = m.end;
+        out.push(inst);
+        if (out.length >= limit) return out;
+      }
+    }
+  }
+  return out;
 }
 
 // ── Summary ────────────────────────────────────────────────────────────────
