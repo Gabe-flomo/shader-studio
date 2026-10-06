@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.52',
+    date: '2026-10-06',
+    title: 'Grid Rules',
+    highlights: [
+      { area: 'Studio', text: 'Grid Rules: one node and an editor for cellular simulations: Count (Life and friends), Stages, Smooth (heat, waves, reaction-diffusion).', link: { kind: 'doc', path: 'docs/grid-rules.md' } },
+      { area: 'Studio', text: 'Patterns (3×3 stencils, first match wins) and Blocks (2×2 before → after pictures that keep every count) for Wireworld, sand and gas.' },
+      { area: 'Studio', text: 'The grid examples rebuilt as 2-node Grid Rules versions; Open as nodes shows the wired version. Brush painting now works in the Studio too.' },
+    ],
+  },
+  {
     id: '2026.10.51',
     date: '2026-10-06',
     title: 'Suggestions and the Do bar',
