@@ -235,11 +235,14 @@ export class PassRunner {
     }
     const res = u.u_resolution?.value as THREE.Vector2 | undefined;
     const rx = res?.x ?? w, ry = res?.y ?? h;
+    // A pass whose input pass is still compiling waits for it (a board seeded from a start picture
+    // would otherwise take the picture's empty texture as its start, and keep it).
+    const compiling = new Set(this.entries.filter(x => !x.ready && !x.failed).map(x => x.spec.slug));
     // With agents (lib/agentRunner.ts) the frame draws passes in two stages: before the agents step, and after it.
     for (const d of ppStaged(drawn, stage, part)) {
       const t = targets.get(d.slug)!;
       const e = d.entry;
-      if (!e.ready || e.failed) { u[passUniform(d.slug)].value = null; continue; }
+      if (!e.ready || e.failed || (compiling.size > 0 && d.reads.some(r => compiling.has(r)))) { u[passUniform(d.slug)].value = null; continue; }
       res?.set(t.w, t.h);
       this.mesh.material = e.material;
       const timed = timer?.begin(`pass:${d.slug}`) ?? false;

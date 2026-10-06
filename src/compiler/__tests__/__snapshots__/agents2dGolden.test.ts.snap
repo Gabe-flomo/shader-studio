@@ -504,6 +504,20 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentsHandBea
 }
 `;
 
+exports[`2D agents and pass graphs compile as they did before 3D > gridRulesWire 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "04949b621329c10cb50f2609f8dd:4471",
+  "paramBindings": "1e4eb7d7d22b3409c0847f71bf71:1198",
+  "paramUniforms": "1c823db687b778034480f507b8f4:1013",
+  "passes": "06dac97bd2f9461adc90b5cd3720:13647",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
 exports[`2D agents and pass graphs compile as they did before 3D > passBlurGroup 1`] = `
 {
   "agents": "1fe1f0024152e81521f99e5e13c1:4",
