@@ -18,6 +18,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { extendRangePatch } from '../../nodes/sliderRange';
 import { PARAM_LIST_TYPES } from '../../lib/nodePreview/previewPlan';
 import { agentGroups } from '../../lib/agentReadings';
+import { AgentRulesCardButtons, AgentRulesCardLink } from './AgentRulesCard';
 
 // ─── Shared container ─────────────────────────────────────────────────────────
 
@@ -3830,9 +3831,11 @@ function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?
         </button>
       )}
       <div style={{ display: 'flex', gap: 6 }}>
-        <button type="button" style={button} title="Open the rule one walker follows every step (or double-click the card's title)" onClick={() => onEnterGroup?.(node.id)}>Open rule ↗</button>
+        {/* Agent Rules (docs/agent-rules.md): Edit rules / Open as nodes in rules mode, else Open rule */}
+        <AgentRulesCardButtons node={node} button={button} onEnterGroup={onEnterGroup} />
         <button type="button" style={button} title="Start the simulation over: everyone is born again at step 0" onClick={() => { restartAgents(node.id); window.dispatchEvent(new Event('agents-restart')); }}>↺ Start over</button>
       </div>
+      <AgentRulesCardLink node={node} />
       {pinned.length > 0 && (
         <div style={{ marginTop: 8 }}>
           <div style={{ fontSize: '9px', letterSpacing: '0.08em', textTransform: 'uppercase', color: pal.overlay0, marginBottom: 2 }}>Pinned</div>
