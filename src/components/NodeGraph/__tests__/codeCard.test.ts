@@ -121,11 +121,12 @@ describe('signature', () => {
 });
 
 describe('pages', () => {
-  it('an empty block shows only the signature (and description)', () => {
+  it('an empty block shows only the signature; the definition\'s help is never a page', () => {
     const fresh = expr('e', { inputs: [{ name: 'a', type: 'float' }], lines: [], result: 'a', outputType: 'float' });
     expect(isEmptyCodeNode(fresh)).toBe(true);
     expect(cardPages(fresh)).toEqual(['signature']);
-    expect(cardPages(fresh, 'What it does')).toEqual(['signature', 'description']);
+    expect(cardPages({ ...fresh, params: { ...fresh.params, __description: '  ' } } as GraphNode)).toEqual(['signature']);
+    expect(cardPages({ ...fresh, params: { ...fresh.params, __description: 'Doubles a' } } as GraphNode)).toEqual(['signature', 'description']);
   });
 
   it('lines, a result of its own, a note, a credit and a description each add their page', () => {

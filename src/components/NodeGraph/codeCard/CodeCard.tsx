@@ -32,8 +32,6 @@ const fmt = (v: number) => (Number.isInteger(v) ? v.toFixed(1) : String(+v.toFix
 
 interface Props {
   node: GraphNode;
-  /** The definition's description, shown when the block has none of its own. */
-  defDescription?: string;
   touch?: boolean;
   /** Open the full editor (Expression Block / Custom Function modal). Without it there is no Edit button. */
   onEdit?: () => void;
@@ -43,7 +41,7 @@ interface Props {
   compact?: boolean;
 }
 
-export const CodeCard = React.memo(function CodeCard({ node, defDescription, touch = false, onEdit, onEditNote, compact = false }: Props) {
+export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEdit, onEditNote, compact = false }: Props) {
   const tk = useTokens();
   const dark = useThemeMode() === 'dark';
   const isFn = node.type === 'customFn';
@@ -52,7 +50,7 @@ export const CodeCard = React.memo(function CodeCard({ node, defDescription, tou
   const sourcesKey = useNodeGraphStore(s => sourceLabelsKey(sourceLabelsFor(node, s.nodes, labelOf)));
   const sig = useMemo(() => signatureFor(node, parseSourceLabelsKey(sourcesKey)), [node, sourcesKey]);
 
-  const pages = useMemo(() => cardPages(node, defDescription), [node, defDescription]);
+  const pages = useMemo(() => cardPages(node), [node]);
   const remembered = useCardPages(s => s.pages[node.id]);
   const setPage = useCardPages(s => s.setPage);
   const page = resolvePage(pages, remembered);
@@ -61,12 +59,23 @@ export const CodeCard = React.memo(function CodeCard({ node, defDescription, tou
 
   // Without a comment editor of the host's own, the note is written right here
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
-  const editNote = onEditNote ?? (() => setNoteDraft(noteOf(node)));
+  const editNote = onEditNote ?? (() => { setDescDraft(null); setNoteDraft(noteOf(node)); });
   const saveNote = () => {
     if (noteDraft === null) return;
     useNodeGraphStore.getState().updateNodeParams(node.id, { __comment: noteDraft.trim() ? noteDraft : undefined });
     if (noteDraft.trim()) go('note');
     setNoteDraft(null);
+  };
+
+  // The description is only ever the block's own, written here
+  const [descDraft, setDescDraft] = useState<string | null>(null);
+  const editDescription = () => { setNoteDraft(null); setDescDraft(userDescriptionOf(node)); };
+  const saveDescription = () => {
+    if (descDraft === null) return;
+    const v = descDraft.trim();
+    useNodeGraphStore.getState().updateNodeParams(node.id, { __description: v || undefined });
+    if (v) go('description');
+    setDescDraft(null);
   };
 
   const code = useMemo(() => codeLinesFor(node).join('\n'), [node]);
@@ -212,7 +221,7 @@ export const CodeCard = React.memo(function CodeCard({ node, defDescription, tou
         </div>
       );
     }
-    return <DescriptionPage node={node} fallback={defDescription ?? ''} />;
+    return <DescriptionPage node={node} onEdit={editDescription} />;
   })();
 
   return (
@@ -254,10 +263,13 @@ export const CodeCard = React.memo(function CodeCard({ node, defDescription, tou
           </div>
         )}
         {!noteOf(node) && pill({ label: 'Note', icon: 'plus', title: 'Add a note to this block', onClick: editNote, data: 'add-note' })}
+        {!userDescriptionOf(node) && pill({ label: 'Description', icon: 'plus', title: 'Add a description of this block', onClick: editDescription, data: 'add-description' })}
         {onEdit && pill({ label: 'Edit', icon: isFn ? 'fn' : 'expr', title: isFn ? 'Open the Custom Function editor (or double-click the card)' : 'Open the Expression Block editor: lines, on/off, order, inputs (or double-click the card)', onClick: onEdit, data: 'edit' })}
       </div>
       {noteDraft !== null ? (
         <TextDraft label="Note" value={noteDraft} placeholder="What this block does, why, where it comes from" onChange={setNoteDraft} onSave={saveNote} onCancel={() => setNoteDraft(null)} />
+      ) : descDraft !== null ? (
+        <TextDraft label="Description" value={descDraft} placeholder="What this block does, in a sentence or two" onChange={setDescDraft} onSave={saveDescription} onCancel={() => setDescDraft(null)} />
       ) : body}
     </div>
   );
@@ -275,26 +287,17 @@ function PagerArrow({ dir, touch, onClick }: { dir: 1 | -1; touch: boolean; onCl
   );
 }
 
-/** The description: the block's own (editable here), else the definition's, shown muted. */
-function DescriptionPage({ node, fallback }: { node: GraphNode; fallback: string }) {
+/** The description: the block's own (the page only exists when one is written). */
+function DescriptionPage({ node, onEdit }: { node: GraphNode; onEdit: () => void }) {
   const tk = useTokens();
-  const own = userDescriptionOf(node);
-  const [draft, setDraft] = useState<string | null>(null);
-  const save = () => {
-    if (draft === null) return;
-    const v = draft.trim();
-    useNodeGraphStore.getState().updateNodeParams(node.id, { __description: v || undefined });
-    setDraft(null);
-  };
-  if (draft !== null) return <TextDraft label="Description" value={draft} placeholder="What this block does, in a sentence or two" onChange={setDraft} onSave={save} onCancel={() => setDraft(null)} />;
   return (
-    <div data-card-description="" style={{ font: `500 12.5px/1.5 ${fontFamily.ui}`, color: own ? tk.text.secondary : tk.text.muted, padding: '6px 10px', background: tk.bg.subtle, borderRadius: radius.md, userSelect: 'text' }}>
-      <div style={{ whiteSpace: 'pre-wrap', maxHeight: 180, overflowY: 'auto' }}>{own || fallback}</div>
+    <div data-card-description="" style={{ font: `500 12.5px/1.5 ${fontFamily.ui}`, color: tk.text.secondary, padding: '6px 10px', background: tk.bg.subtle, borderRadius: radius.md, userSelect: 'text' }}>
+      <div style={{ whiteSpace: 'pre-wrap', maxHeight: 180, overflowY: 'auto' }}>{userDescriptionOf(node)}</div>
       <button type="button" data-card-action="edit-description"
         onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}
-        onClick={e => { e.stopPropagation(); setDraft(own); }}
+        onClick={e => { e.stopPropagation(); onEdit(); }}
         style={{ marginTop: 4, padding: 0, border: 0, background: 'none', color: tk.accent.text, cursor: 'pointer', font: `500 11px ${fontFamily.ui}` }}>
-        {own ? 'Edit description' : 'Write your own description'}
+        Edit description
       </button>
     </div>
   );

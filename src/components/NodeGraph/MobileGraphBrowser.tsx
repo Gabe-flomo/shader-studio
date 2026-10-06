@@ -2862,7 +2862,7 @@ export function MobileGraphBrowser() {
           {node.type === 'textureInput' && renderTextureUploadBanner(node)}
           {node.type === 'data' && <DataEditorLauncher node={node} />}
           {/* Custom Function: the same read-only card face as desktop (code, signature, note, description) */}
-          {node.type === 'customFn' && <CodeCard node={node} defDescription={def?.description} touch compact />}
+          {node.type === 'customFn' && <CodeCard node={node} touch compact />}
 
           {(hasInputs || node.type === 'group') && (hasOutputs || node.type === 'group') && (
             <div style={tabGroupStyle(tc)}>
@@ -3462,7 +3462,7 @@ export function MobileGraphBrowser() {
 
         {/* The desktop card face, read-only; Edit jumps to the lines below */}
         <div style={{ flexShrink: 0, padding: '0 2px' }}>
-          <CodeCard node={node} defDescription={getNodeDefinitionFor(node)?.description} touch compact onEdit={() => setExprMode('output')} />
+          <CodeCard node={node} touch compact onEdit={() => setExprMode('output')} />
         </div>
 
         <div style={{ display: 'flex', gap: '6px', padding: '8px 12px', borderBottom: `1px solid ${tc.surface0}`, flexShrink: 0 }}>

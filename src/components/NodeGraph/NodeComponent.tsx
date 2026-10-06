@@ -3994,7 +3994,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
         {/* ── Expression Block / Custom Function card face: read-only code, signature, note, description (codeCard/) ── */}
         {!collapsed && (node.type === 'exprNode' || node.type === 'customFn') && (
-          <CodeCard node={node} defDescription={def.description} touch={isTouchDevice} onEdit={openCodeEditor} onEditNote={openNoteEditor} />
+          <CodeCard node={node} touch={isTouchDevice} onEdit={openCodeEditor} onEditNote={openNoteEditor} />
         )}
 
         {/* ── Transform Vec inline editor ── */}

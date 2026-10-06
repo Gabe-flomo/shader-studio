@@ -6,7 +6,7 @@
  *   code        the block's lines as they compile (read-only on the card), or the function body
  *   signature   an abstract signature from the inputs, their types and their wiring
  *   note        the node's comment (params.__comment) and its credit
- *   description the block's own description (params.__description), else the definition's
+ *   description the block's own description (params.__description), only when one is written
  */
 import type { GraphNode } from '../../../types/nodeGraph';
 
@@ -187,12 +187,12 @@ export function userDescriptionOf(node: GraphNode): string {
 }
 
 /** Which pages the card has, in order. Empty pages are left out; the signature is always there. */
-export function cardPages(node: GraphNode, defDescription?: string): CardPageId[] {
+export function cardPages(node: GraphNode): CardPageId[] {
   const pages: CardPageId[] = [];
   if (!isEmptyCodeNode(node)) pages.push('code');
   pages.push('signature');
   if (noteOf(node) || node.params.__credit) pages.push('note');
-  if (userDescriptionOf(node) || (defDescription ?? '').trim()) pages.push('description');
+  if (userDescriptionOf(node)) pages.push('description');
   return pages;
 }
 
