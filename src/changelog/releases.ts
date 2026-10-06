@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.51',
+    date: '2026-10-06',
+    title: 'Suggestions and the Do bar',
+    highlights: [
+      { area: 'Studio', text: 'Suggestions: select a node for its likely next moves (Glow, Rings, Warp, Tone map…), ranked mostly by your own graphs and by what the preview shows.', link: { kind: 'doc', path: 'docs/suggestions.md' } },
+      { area: 'Studio', text: 'The Do… bar (⌘K): type "circle in the middle with a glow, falloff 8" or "repeat 6 times around" and it builds the nodes.' },
+      { area: 'Studio', text: 'Ask "is this typical?" about a wire, teach the Do… bar your own phrases from a selection, and insert snippets in code editors.' },
+    ],
+  },
+  {
     id: '2026.10.50',
     date: '2026-10-06',
     title: 'Code Explorer',
