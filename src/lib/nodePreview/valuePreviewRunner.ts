@@ -16,6 +16,7 @@ import { buildDisplayShader, buildValueShader, MODE_CODE } from './previewGlsl';
 import { displayStats, fieldStats, isColourType, niceStep, type FieldType, type ValueField } from './valueField';
 import type { PreviewStats } from '../previewExplain';
 import { previewBus, previewPerf } from './previewBus';
+import { probedNode } from './lineProbe';
 import { detailFor, gridDensity, pickPreviewOutput, prefOf, primaryInput, showAsFor, type Detail, type ShowAsMode } from './showAs';
 
 export interface PreviewTarget {
@@ -52,7 +53,8 @@ export function resolvePreviewTarget(
   fs: string,
   declares: (fs: string, v: string) => boolean,
 ): PreviewTarget | null {
-  const node = findNodeDeep(nodes, previewId);
+  // A line preview's probe: the copy the preview compiled (its only output is the probed variable)
+  const node = probedNode(findNodeDeep(nodes, previewId));
   if (!node) return null;
   const picked = pickPreviewOutput(node, prefOf(node).output);
   if (!picked) return null;

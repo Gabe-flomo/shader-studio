@@ -21,6 +21,7 @@ import { Select } from '../ui/Select';
 import { toast } from '../ui/toastStore';
 import { CodeInput } from '../code/CodeField';
 import { ReferencePanel } from '../code/ReferencePanel';
+import { LinePreviewPanel, ProbeButton } from '../code/LinePreview';
 import type { EditorPanel } from '../code/editorPanelPrefs';
 import { CollapseInputsButton, FunctionsToggle, InputsRail, SidePanel, useEditorSidePanels } from '../code/SidePanels';
 import { buildCompletions } from '../code/glslReference';
@@ -347,7 +348,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
           <Note>Each input is a local variable in the lines. Float inputs can show a slider on the node.</Note>
           {customInputs.map((inp, idx) => (
             <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 104px 32px', gap: 8, alignItems: 'center' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 104px 26px 32px', gap: 8, alignItems: 'center' }}>
                 <Field
                   mono
                   leading={<span style={{ width: 9, height: 9, borderRadius: '50%', background: TYPE_COLORS[inp.type] ?? tk.text.faint, flexShrink: 0 }} />}
@@ -358,6 +359,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
                   aria-label={`Input ${idx + 1} name`}
                 />
                 <TypeSelect value={inp.type} options={TYPE_OPTIONS} onChange={t => updateInputType(idx, t as DataType)} ariaLabel={`Input ${idx + 1} type`} />
+                <ProbeButton node={node} target={{ kind: 'input', name: inp.name }} label={`Preview input ${inp.name}`} />
                 <IconButton icon="close" label="Remove input" tone="danger" onClick={() => removeInput(idx)} />
               </div>
               {(inp.type === 'float' || showCarry(inp)) && (
@@ -417,7 +419,8 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
                   placeholder="expression…"
                   {...exprProps(line.rhs, v => updateLine(i, 'rhs', v), v => ({ lines: lines.map((l, j) => j === i ? { ...l, rhs: v } : l), result }))}
                 />
-                <span style={{ display: 'flex' }}>
+                <span style={{ display: 'flex', alignItems: 'center' }}>
+                  <ProbeButton node={node} target={{ kind: 'line', index: i }} label={`Preview line ${i + 1}`} />
                   <IconButton icon="chevU" label="Move up" size="sm" tooltip={false} disabled={i === 0} onClick={() => moveLine(i, i - 1)} />
                   <IconButton icon="chevD" label="Move down" size="sm" tooltip={false} disabled={i === lines.length - 1} onClick={() => moveLine(i, i + 1)} />
                   <IconButton icon="close" label="Remove line" size="sm" tone="danger" tooltip={false} onClick={() => removeLine(i)} />
@@ -426,6 +429,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
             ))}
             {lines.length === 0 && <Note>No lines yet. Each line assigns to a variable, top to bottom.</Note>}
             <AddRow onClick={addLine}>Add line</AddRow>
+            <LinePreviewPanel node={node} />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -438,6 +442,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
                 style={{ flex: 1 }}
                 {...exprProps(result, updateResult, v => ({ lines, result: v }))}
               />
+              <ProbeButton node={node} target={{ kind: 'return' }} label="Preview the return value" />
             </div>
             <Note>The final expression of type {outputType} that the block outputs.</Note>
           </div>

@@ -4,6 +4,7 @@
  * outputs, which output to show. The choice is remembered per node (lib/nodePreview/showAs.ts).
  */
 import type { GraphNode } from '../../types/nodeGraph';
+import { probedNode, useLineProbe } from '../../lib/nodePreview/lineProbe';
 import { Segmented } from '../ui/Choice';
 import { Select } from '../ui/Select';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -24,8 +25,11 @@ export interface ShowAsState {
 }
 
 /** The node's preview output, its mode and slice line, following the remembered choices. */
-export function useShowAs(node: GraphNode | null): ShowAsState | null {
+export function useShowAs(nodeIn: GraphNode | null): ShowAsState | null {
   const prefs = useNodePreviewPrefs(s => s.prefs);
+  // While a line preview probes this block, the preview shows the probed variable (lineProbe.ts)
+  const probe = useLineProbe(s => s.probe);
+  const node = probedNode(nodeIn, probe);
   if (!node) return null;
   const pref = prefOf(node, prefs);
   const picked = pickPreviewOutput(node, pref.output);
@@ -52,7 +56,9 @@ export function setShowAs(node: GraphNode, type: ValueType, mode: ShowAsMode) {
 }
 
 export function ShowAsControls({ node, state, compact = false }: { node: GraphNode; state: ShowAsState; compact?: boolean }) {
-  const outputs = previewableOutputs(node);
+  // A line preview's probe offers only its variable (no output picker)
+  const probe = useLineProbe(s => s.probe);
+  const outputs = previewableOutputs(probedNode(node, probe));
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }} onMouseDown={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
       {outputs.length > 1 && (
