@@ -191,6 +191,33 @@ on a chunky board, fast, green on black"). The phrase must be only the name, slo
 other word sends it to the normal reading, and a name that is also an action ("ripples") needs a
 grid word. Empty graph: wired to the Output; else beside the selection. See docs/grid-rules.md.
 
+### Commands: sentences that edit the graph (`suggestions/doCommands.ts`)
+
+The Do… bar also reads a small command language, documented verb by verb in
+[do-bar-commands.md](do-bar-commands.md) (generated from `src/lang/commands.ts`; the **ⓘ** in the
+bar, Keys → Do… bar commands, and More tools open the same reference in the app).
+
+- **Clauses**: a sentence splits at commas, "then", "after that" and "and" before a verb. Each
+  clause is a verb with its slots, or a build phrase as above; "it" is what the clause before made,
+  so "create a ring with falloff 0.3, colour it with a palette by the length of the space, multiply
+  it by the circle, then output it" builds in four steps.
+- **Edit verbs**: create, connect, disconnect, reconnect, insert (between / after / before),
+  multiply / add / subtract / divide / mix / screen / overlay / union / intersect / cut, output,
+  switch (the card's Switch to, `nodes/switchNode.ts`), delete, rename, duplicate, set, make
+  bigger / smaller / brighter… (increase, double, halve), group, select, colour … by ….
+- **References** (`suggestions/doRefs.ts`): "it", "this", "these", a quoted label, a type ("the
+  circle", "the noise"), a role ("the current output", "what feeds the output"), a position ("the
+  node before the output", "the second circle", "circle 2"), "all circles". When a name fits
+  several nodes the selected one (or "it") wins; else the preview lists them, points at them on the
+  canvas, and waits for a pick.
+- **Preview**: every clause runs on a copy of the graph, so the bar lists numbered steps with the
+  exact nodes, wires and values (a diff). A clause it can't read, a reference that fits nothing, or
+  a wire whose types don't fit (`lib/typesCompatible.ts`) is marked with why and "did you mean" /
+  fixes you can click; the rest still previews, and Enter waits until all of it reads.
+- **Running**: the store's `runCommand` runs it again with real ids as one undo step (a final
+  "group …" inside the same step).
+- A sentence of build phrases only still goes to the phrase language whole, as before.
+
 ### Shared with the 3D Scene Builder
 
 `src/lang/vocabulary.ts` folds in the Scene Builder's shapes and aliases (`sceneBuilder/spec.ts`),
@@ -295,6 +322,8 @@ searchable by name and phrase with the panel's filter:
 | Shared vocabulary | `src/lang/vocabulary.ts` |
 | Do… bar language, plans | `src/suggestions/doBar.ts`; the store's `runDoPlan` (one undo step) |
 | Do… bar UI | `src/components/NodeGraph/DoBar.tsx`, `src/suggestions/doBarStore.ts` |
+| Command language | `src/suggestions/doCommands.ts` (clauses, verbs, diffs), `src/suggestions/doRefs.ts` (lexer, references); the store's `runCommand` |
+| Command registry, reference, docs | `src/lang/commands.ts`; `src/components/NodeGraph/DoCommandsReference.tsx`; `docs/do-bar-commands.md` (`npm run docs:do-bar`); scratch graphs `src/suggestions/doScratch.ts` |
 | Connection check | `src/suggestions/connectionCheck.ts` |
 | Taught phrases | `src/suggestions/taught.ts` |
 | Idioms as blocks | `src/suggestions/idiomBlocks.ts` |
@@ -312,6 +341,8 @@ searchable by name and phrase with the panel's filter:
 - Linked folders that aren't mirrored into this browser's storage are not learned from.
 - Moves apply inside groups too, but nothing is put on an Output there.
 - The Do… bar builds 2D; 3D shapes are recognised and sent to the Scene Builder.
-- A phrase is one sentence of steps on one subject at a time; "these" means the first two selected.
+- A build phrase works on one subject at a time; "these" means the first two selected. Sentences
+  of clauses (the command language) chain subjects through "it".
+- Commands work on the level being edited; "group" goes last; see do-bar-commands.md → Limits.
 - A taught move keeps one way in and one way out; other wires from outside the selection are dropped.
 - Idiom blocks use the idiom's first spelling with 1.0 for unnamed number holes.

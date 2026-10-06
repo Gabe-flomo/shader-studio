@@ -20,4 +20,28 @@ export function openDoBar(o: DoBarOpen = {}): void {
 
 export function closeDoBar(): void {
   useDoBar.setState({ open: null });
+  setDoBarHighlight(null);
+}
+
+/**
+ * Nodes the Do… bar points at on the canvas (the candidates of a pick, the nodes a step makes),
+ * or null. The canvas dims the rest while it is set.
+ */
+export const useDoBarHighlight = create<{ ids: string[] | null }>(() => ({ ids: null }));
+
+export function setDoBarHighlight(ids: string[] | null): void {
+  const cur = useDoBarHighlight.getState().ids;
+  if (cur === ids || (cur && ids && cur.length === ids.length && cur.every((x, i) => x === ids[i]))) return;
+  useDoBarHighlight.setState({ ids: ids && ids.length ? ids : null });
+}
+
+/** The Commands reference (docs/do-bar-commands.md): open, and what to search for. */
+export const useCommandsRef = create<{ open: boolean; query: string }>(() => ({ open: false, query: '' }));
+
+export function openCommandsRef(query = ''): void {
+  useCommandsRef.setState({ open: true, query });
+}
+
+export function closeCommandsRef(): void {
+  useCommandsRef.setState({ open: false });
 }
