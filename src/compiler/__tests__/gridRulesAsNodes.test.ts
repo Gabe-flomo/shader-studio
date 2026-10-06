@@ -12,6 +12,7 @@ vi.hoisted(() => {
 import { n } from '../../store/graphBuilder';
 import { gridAsNodesProblem, gridRulesAsNodes } from '../../store/gridRulesAsNodes';
 import { COUNT_PRESETS, GRID_DEFAULTS, SMOOTH_PRESETS, STAGES_PRESETS, gridShape, gridSignature } from '../../gridRules/spec';
+import { BLOCK_PRESETS, PATTERN_PRESETS } from '../../gridRules/stencils';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { gridCellsId } from '../gridRulesExpand';
 import { boardFrom, compileNodes, gridOf, randomGrid, rounded, stepperFor } from './gridHarness';
@@ -38,10 +39,18 @@ const CASES: Array<[string, Record<string, unknown>]> = [
   ['Heat', { ruleType: 'smooth', ...SMOOTH_PRESETS.heat.params }],
   ['Ripples, walls', { ruleType: 'smooth', ...SMOOTH_PRESETS.ripples.params, edges: 'walls' }],
   ['Mitosis', { ruleType: 'smooth', ...SMOOTH_PRESETS.mitosis.params }],
+  ['Wireworld, walls', { ruleType: 'patterns', edges: 'walls', ...PATTERN_PRESETS.wireworld.params }],
+  ['Patterns with turns, mirrors and a count', { ruleType: 'patterns', states: 3, patterns: [
+    { cells: [1, -1, -1, -1, 0, -1, -1, -1, 2], becomes: 2, symmetry: 'all' },
+    { cells: [-1, -2, -1, -1, 1, -1, -1, -1, -1], becomes: 0, symmetry: 'rotate', count: { state: 2, min: 2, max: 8 } },
+    { cells: [-1, -1, -1, -1, 2, -1, -1, -1, -1], becomes: 1, symmetry: 'none' },
+  ] }],
+  ['Falling sand (dice), walls', { ruleType: 'blocks', edges: 'walls', ...BLOCK_PRESETS.sand.params }],
+  ['Gas, wrap', { ruleType: 'blocks', ...BLOCK_PRESETS.gas.params }],
   ['Custom', { ruleType: 'smooth', template: 'custom', customU: 'u + 0.2 * lap_u + a * (n - s) * 0.1', customV: 'v * 0.9 + avg_u * 0.1', knobA: 0.7 }],
 ];
 
-describe('Open as nodes', () => {
+describe('Open as nodes', { timeout: 60000 }, () => {
   it('builds registered nodes, wired to real sockets, each with a note', () => {
     for (const [name, params] of CASES) {
       const { opened } = build(params);
@@ -84,13 +93,14 @@ describe('Open as nodes', () => {
       const W = 9, H = 8;
       const compact = stepperFor(r, gridCellsId(G), W, H);
       const graph = stepperFor(r, opened.boardId, W, H);
-      const states = shape.type === 'stages' ? Number((params as { states?: number }).states ?? 3) - 1 : 1;
+      const states = shape.type === 'count' ? 1 : Number((params as { states?: number }).states ?? 3) - 1;
       const start = randomGrid(W, H, 13, 0.4, states);
       const second = discrete ? null : randomGrid(W, H, 17, 0.3);
       const wrap = shape.wrap ? 'repeat' : 'clamp';
       let a = boardFrom(start, gridSignature(shape), wrap, second);
       let b = boardFrom(start, gridSignature(shape), wrap, second);
       for (let k = 1; k <= 6; k++) {
+        compact.uniforms.u_time = graph.uniforms.u_time = 1 + k / 60;
         a = compact.step(a);
         b = graph.step(b);
         if (discrete) expect(rounded(gridOf(b)), `${name}, step ${k}`).toEqual(rounded(gridOf(a)));

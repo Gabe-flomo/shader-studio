@@ -11,6 +11,7 @@
  * Only GLSL ES 1.00 that the test evaluator also runs (compiler/__tests__/glslRun.ts): declarations,
  * if / else, for loops with constant bounds, ?:, and the built-ins.
  */
+import { ANY, NOT_EMPTY, SAME, blockCorner, blockVariants, patternVariants, stencilOffset } from './stencils';
 import {
   MOORE_OFFSETS, VON_NEUMANN_OFFSETS, gridSignature, floatLiterals, isDiscrete,
   type GridShape,
@@ -67,7 +68,7 @@ export function gridStepGLSL(s: GridShape, N: GridNames, prev: string, image?: s
     `vec2 ${v('m')} = u_mouse * ${f(s.scale)};`,
     `float ${v('in')} = (length(${v('cell')} + 0.5 - ${v('m')}) < ${P('brushRadius')} ? 1.0 : 0.0) * max(step(0.5, u_mousebtn), step(0.5, ${P('paint')}));`,
   );
-  if (isDiscrete(s.type)) L.push(...discreteStep(s, N, read, image, sig));
+  if (isDiscrete(s.type)) L.push(...discreteStep(s, N, read, image, sig, prev));
   else L.push(...smoothStep(s, N, read, image));
   return L.map(l => `    ${l}\n`).join('');
 }
@@ -78,7 +79,8 @@ function discreteSeed(s: GridShape, N: GridNames, image?: string): string {
   const noise = `(${id}_h < ${P('density')} ? 1.0 : 0.0)`;
   if (s.start === 'empty') return '0.0';
   if (s.start === 'centre') return `(length(${id}_cell + 0.5 - ${id}_res * 0.5) < min(${id}_res.x, ${id}_res.y) * 0.15 ? ${noise} : 0.0)`;
-  if (s.start === 'image' && image) return `(dot(texture2D(${image}, (${id}_cell + 0.5) / ${id}_res).rgb, vec3(0.2126, 0.7152, 0.0722)) > 0.5 ? 1.0 : 0.0)`;
+  // An image: its brightness picks the state (0 dark … the last state white), so a picture can lay out several.
+  if (s.start === 'image' && image) return `floor(clamp(dot(texture2D(${image}, (${id}_cell + 0.5) / ${id}_res).rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0) * ${id}_top + 0.5)`;
   return noise;
 }
 
@@ -106,13 +108,18 @@ function countLines(s: GridShape, N: GridNames, read: (d: string) => string): st
   return L;
 }
 
-function discreteStep(s: GridShape, N: GridNames, read: (d: string) => string, image: string | undefined, sig: number): string[] {
+function discreteStep(s: GridShape, N: GridNames, read: (d: string) => string, image: string | undefined, sig: number, prev: string): string[] {
   const { id, P } = N;
   const v = (name: string) => `${id}_${name}`;
   const L: string[] = [`float ${v('s')} = floor(${v('me')}.r + 0.5);`, `float ${v('g')} = ${v('me')}.g;`];
-  L.push(...countLines(s, N, read));
+  const multi = s.type === 'patterns' || s.type === 'blocks';
+  if (multi) {
+    L.push(`float ${v('top')} = max(floor(${P('states')} + 0.5), 2.0) - 1.0;`);
+    L.push(...(s.type === 'patterns' ? patternLines(s, N, read) : blockLines(s, N, prev)));
+  }
+  if (!multi) L.push(...countLines(s, N, read));
   // Born / survive: bit `count` of the masks (Moore, von Neumann), or a range (radius).
-  if (s.neighbourhood === 'radius') {
+  if (multi) { /* the next state is worked out above */ } else if (s.neighbourhood === 'radius') {
     L.push(
       `float ${v('born')} = step(${P('bornLo')} - 0.5, ${v('cnt')}) * step(${v('cnt')}, ${P('bornHi')} + 0.5);`,
       `float ${v('surv')} = step(${P('surviveLo')} - 0.5, ${v('cnt')}) * step(${v('cnt')}, ${P('surviveHi')} + 0.5);`,
@@ -123,7 +130,7 @@ function discreteStep(s: GridShape, N: GridNames, read: (d: string) => string, i
       `float ${v('surv')} = mod(floor((${P('surviveMask')} + 0.5) / exp2(${v('cnt')})), 2.0);`,
     );
   }
-  if (s.type === 'stages') {
+  if (multi) { /* done */ } else if (s.type === 'stages') {
     L.push(
       `float ${v('N')} = max(floor(${P('states')} + 0.5), 2.0);`,
       `float ${v('top')} = ${v('N')} - 1.0;`,
@@ -136,16 +143,28 @@ function discreteStep(s: GridShape, N: GridNames, read: (d: string) => string, i
     );
   }
   // G: a live cell's age climbs from 0; a cell that just switched off glows (Afterglow), fading each step.
-  L.push(
-    `float ${v('ng')} = 0.0;`,
+  // Patterns and Blocks: any state that stays ages; a cell that changes starts again (empty: glowing).
+  L.push(`float ${v('ng')} = 0.0;`);
+  if (multi) {
+    L.push(
+      `if (abs(${v('next')} - ${v('s')}) < 0.5) ${v('ng')} = ${v('next')} > 0.5 ? min(1.0, ${v('g')} + ${P('ageRate')}) : ${v('g')} * ${P('afterglow')};`,
+      `else ${v('ng')} = ${v('next')} < 0.5 ? ${P('afterglow')} : 0.0;`,
+    );
+  } else L.push(
     `if (${v('next')} > 0.5 && ${v('next')} < 1.5) ${v('ng')} = (${v('s')} > 0.5 && ${v('s')} < 1.5) ? min(1.0, ${v('g')} + ${P('ageRate')}) : 0.0;`,
     `else if (${v('next')} < 0.5) ${v('ng')} = ${v('s')} > 0.5 ? ${P('afterglow')} : ${v('g')} * ${P('afterglow')};`,
+  );
+  L.push(
     `if (${v('tick')} < 0.5) { ${v('next')} = ${v('s')}; ${v('ng')} = ${v('g')}; }`,
     `if (${v('fresh')} > 0.5) { ${v('next')} = ${discreteSeed(s, N, image)}; ${v('ng')} = 0.0; }`,
     `float ${v('roll')} = grHash(vec3(${v('cell')} + 0.5, ${FRAME} + 7919.0));`,
     `if (${v('in')} > 0.5 && ${v('roll')} < ${P('brushFill')}) { ${v('next')} = clamp(floor(${P('brushState')} + 0.5), 0.0, ${v('top')}); ${v('ng')} = 0.0; }`,
   );
-  if (!s.wrap) {
+  if (s.type === 'blocks') {
+    // An odd last row or column has no block: it is kept empty (it would hold whatever landed there for ever).
+    L.push(`${v('next')} = ${v('next')} * ${v('live')};`, `${v('ng')} = ${v('ng')} * ${v('live')};`);
+  }
+  if (!s.wrap && s.type !== 'blocks') {
     // Walls: the outer ring of cells stays empty, so a read past the edge (which sees the edge) reads an empty cell.
     L.push(
       `float ${v('inside')} = step(0.5, ${v('cell')}.x) * step(0.5, ${v('cell')}.y) * step(${v('cell')}.x, ${v('res')}.x - 1.5) * step(${v('cell')}.y, ${v('res')}.y - 1.5);`,
@@ -153,7 +172,94 @@ function discreteStep(s: GridShape, N: GridNames, read: (d: string) => string, i
       `${v('ng')} = ${v('ng')} * ${v('inside')};`,
     );
   }
-  L.push(`vec3 ${v('out')} = vec3(${v('next')}, ${v('ng')}, ${v('phase')});`, `float ${v('outA')} = ${f(sig)};`);
+  // Blocks: blue also keeps the step's parity (2 + phase on odd steps), which shifts the blocks.
+  const blue = s.type === 'blocks' ? `${v('phase')} + 2.0 * (${v('tick')} > 0.5 ? 1.0 - ${v('par')} : ${v('par')})` : v('phase');
+  L.push(`vec3 ${v('out')} = vec3(${v('next')}, ${v('ng')}, ${blue});`, `float ${v('outA')} = ${f(sig)};`);
+  return L;
+}
+
+/** A state test: a spec (any, not empty, a state) on a value. */
+function specTest(spec: number, x: string): string | null {
+  if (spec === ANY) return null;
+  if (spec === NOT_EMPTY) return `abs(${x}) > 0.5`;
+  return `abs(${x} - ${f(spec)}) < 0.5`;
+}
+
+/** Patterns: the 3×3 block read once, then the rules in order (first match wins; none: stay). */
+function patternLines(s: GridShape, N: GridNames, read: (d: string) => string): string[] {
+  const { id } = N;
+  const v = (name: string) => `${id}_${name}`;
+  const L: string[] = [];
+  for (let i = 0; i < 9; i++) {
+    if (i === 4) { L.push(`float ${v('c4')} = ${v('s')};`); continue; }
+    const [dx, dy] = stencilOffset(i);
+    L.push(`float ${v('c' + i)} = floor(${read(off(dx, dy))}.r + 0.5);`);
+  }
+  const rules = s.patterns.filter(r => !r.off);
+  const counted = [...new Set(rules.flatMap(r => (r.count ? [r.count.state] : [])))];
+  for (const k of counted) {
+    L.push(`float ${v('k' + k)} = ${[0, 1, 2, 3, 5, 6, 7, 8].map(i => `(abs(${v('c' + i)} - ${f(k)}) < 0.5 ? 1.0 : 0.0)`).join(' + ')};`);
+  }
+  L.push(`float ${v('next')} = ${v('s')};`);
+  rules.forEach((r, j) => {
+    const variants = patternVariants(r).map(cells => cells.map((spec, i) => specTest(spec, v('c' + i))).filter((t): t is string => !!t));
+    const any = variants.some(t => t.length === 0) ? 'true' : variants.map(t => `(${t.join(' && ')})`).join(' || ');
+    const count = r.count ? ` && ${v('k' + r.count.state)} > ${f(r.count.min - 0.5)} && ${v('k' + r.count.state)} < ${f(r.count.max + 0.5)}` : '';
+    L.push(`${j ? 'else ' : ''}if ((${any})${count}) ${v('next')} = ${f(r.becomes)};`);
+  });
+  L.push(`${v('next')} = min(${v('next')}, ${v('top')});`);
+  return L;
+}
+
+/**
+ * Blocks (Margolus): this cell's 2×2 block (its grid shifted one cell diagonally on odd steps), its
+ * four cells read, the rules tried in order; within a rule the variants are tried starting from one
+ * rolled per block. Every cell of the block makes the same choice, so a rearranging rule conserves.
+ * Wrap: the board's even part wraps (an odd last row or column sits out); walls: outside reads −1.
+ */
+function blockLines(s: GridShape, N: GridNames, prev: string): string[] {
+  const { id } = N;
+  const v = (name: string) => `${id}_${name}`;
+  const L: string[] = [
+    `float ${v('par')} = step(1.5, ${v('me')}.b);`,
+    `vec2 ${v('W')} = floor(${v('res')} * 0.5) * 2.0;`,
+    `vec2 ${v('org')} = floor((${v('cell')} - ${v('par')}) * 0.5) * 2.0 + ${v('par')};`,
+    `vec2 ${v('q')} = ${v('cell')} - ${v('org')};`,
+    `float ${v('qi')} = ${v('q')}.x + (1.0 - ${v('q')}.y) * 2.0;`,
+    `float ${v('live')} = step(${v('cell')}.x, ${v('W')}.x - 0.5) * step(${v('cell')}.y, ${v('W')}.y - 0.5);`,
+    // The block's dice are keyed by its corner, wrapped: a block across the seam has one corner, not two.
+    `vec2 ${v('key')} = mod(${v('org')}, ${v('W')});`,
+  ];
+  for (let q = 0; q < 4; q++) {
+    const [cx, cy] = blockCorner(q);
+    const c = `${v('org')} + ${off(cx, cy)}`;
+    if (s.wrap) L.push(`float ${v('b' + q)} = floor(texture2D(${prev}, (mod(${c}, ${v('W')}) + 0.5) / ${v('res')}).r + 0.5);`);
+    else {
+      L.push(`vec2 ${v('p' + q)} = ${c};`);
+      L.push(`float ${v('b' + q)} = (${v('p' + q)}.x < 0.0 || ${v('p' + q)}.y < 0.0 || ${v('p' + q)}.x > ${v('W')}.x - 0.5 || ${v('p' + q)}.y > ${v('W')}.y - 0.5) ? -1.0 : floor(texture2D(${prev}, (${v('p' + q)} + 0.5) / ${v('res')}).r + 0.5);`);
+    }
+  }
+  L.push(`float ${v('next')} = ${v('s')};`, `float ${v('done')} = 0.0;`);
+  s.blocks.filter(r => !r.off).forEach((r, j) => {
+    const vars = blockVariants(r);
+    const n = vars.length;
+    // The variant tried first, and the chance, rolled once per block and step.
+    L.push(`float ${v(`o${j}`)} = floor(grHash(vec3(${v('key')}, ${FRAME} + ${f(31 + j * 2)})) * ${f(n)});`);
+    const dice = r.chance < 1 ? ` * step(grHash(vec3(${v('key')}, ${FRAME} + ${f(32 + j * 2)})), ${f(r.chance)})` : '';
+    L.push(`float ${v(`best${j}`)} = 0.0;`, `float ${v(`pick${j}`)} = -1.0;`);
+    vars.forEach(({ before }, k) => {
+      const tests = before.map((spec, q) => specTest(spec, v('b' + q))).filter((t): t is string => !!t);
+      L.push(`float ${v(`m${j}_${k}`)} = (${tests.length ? tests.join(' && ') : 'true'}) ? ${f(n)} - mod(${f(k)} - ${v(`o${j}`)} + ${f(n)}, ${f(n)}) : 0.0;`);
+      L.push(`if (${v(`m${j}_${k}`)} > ${v(`best${j}`)}) { ${v(`best${j}`)} = ${v(`m${j}_${k}`)}; ${v(`pick${j}`)} = ${f(k)}; }`);
+    });
+    const pickAfter = (q: number) => vars.reduceRight((acc, { after }, k) => {
+      const val = after[q] === SAME ? v('s') : f(after[q]);
+      return k === vars.length - 1 ? val : `(${v(`pick${j}`)} < ${f(k + 0.5)} ? ${val} : ${acc})`;
+    }, '');
+    const byPos = `(${v('qi')} < 0.5 ? ${pickAfter(0)} : (${v('qi')} < 1.5 ? ${pickAfter(1)} : (${v('qi')} < 2.5 ? ${pickAfter(2)} : ${pickAfter(3)})))`;
+    L.push(`if (${v('done')} < 0.5 && ${v(`best${j}`)}${dice} > 0.5) { ${v('next')} = ${byPos}; ${v('done')} = 1.0; }`);
+  });
+  L.push(`${v('next')} = clamp(${v('next')}, 0.0, ${v('top')});`);
   return L;
 }
 

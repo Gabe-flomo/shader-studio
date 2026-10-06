@@ -6,6 +6,7 @@
 import { compileGraph } from '../graphCompiler';
 import type { CompilationResult, PassProgram } from '../types';
 import type { GraphNode } from '../../types/nodeGraph';
+import { SAME, blockVariants, patternVariants, specMatches, type BlockRule, type PatternRule } from '../../gridRules/stencils';
 import { compileFragment, drawPass, makeBoard, setTexel, texel, type Board, type Env, type Program } from './glslRun';
 
 export interface Stepper {
@@ -13,6 +14,8 @@ export interface Stepper {
   program: Program;
   /** The uniforms (the compile's param values, the clock and the pointer), changeable per test. */
   uniforms: Env;
+  /** Other textures the program reads (a start image's pass), by sampler name. */
+  samplers: Record<string, Board>;
   /** One frame: the board's program drawn over the board as it was (its Previous); `times` frames. */
   step: (b: Board, times?: number) => Board;
 }
@@ -33,10 +36,10 @@ export function stepperFor(r: CompilationResult, passNodeId: string, w: number, 
   };
   const prevName = `u_passprev_${pass.slug}`;
   const s: Stepper = {
-    pass, program, uniforms,
+    pass, program, uniforms, samplers: {},
     step: (b, times = 1) => {
       let cur = b;
-      for (let k = 0; k < times; k++) cur = drawPass(program, w, h, pass.wrap === 'repeat' ? 'repeat' : 'clamp', { [prevName]: cur }, s.uniforms);
+      for (let k = 0; k < times; k++) cur = drawPass(program, w, h, pass.wrap === 'repeat' ? 'repeat' : 'clamp', { ...s.samplers, [prevName]: cur }, s.uniforms);
       return cur;
     },
   };
@@ -109,3 +112,55 @@ export function generationsRef(grid: Grid, born: (c: number) => boolean, survive
 }
 
 export const inMask = (mask: number) => (c: number) => ((mask >> c) & 1) === 1;
+
+// ── Patterns and Blocks references ───────────────────────────────────────────────────────────────
+
+/** One Patterns step: the first rule whose stencil (any variant) and count match says what the cell becomes. */
+export function patternsRef(grid: Grid, rules: PatternRule[], wrap = true): Grid {
+  const h = grid.length, w = grid[0].length;
+  const at = (r: number, x: number) => {
+    if (wrap) return grid[(r + h) % h][(x + w) % w];
+    return r < 0 || x < 0 || r >= h || x >= w ? grid[Math.min(h - 1, Math.max(0, r))][Math.min(w - 1, Math.max(0, x))] : grid[r][x];
+  };
+  const next = grid.map((row, r) => row.map((v, x) => {
+    // Stencil cell i: row i / 3 from the top, column i % 3 from the left.
+    const c = Array.from({ length: 9 }, (_, i) => at(r - 1 + Math.floor(i / 3), x - 1 + (i % 3)));
+    for (const rule of rules) {
+      const hit = patternVariants(rule).some(vr => vr.every((spec, i) => specMatches(spec, c[i])));
+      const n = rule.count ? c.filter((q, i) => i !== 4 && q === rule.count!.state).length : 0;
+      if (hit && (!rule.count || (n >= rule.count.min && n <= rule.count.max))) return rule.becomes;
+    }
+    return v;
+  }));
+  return wrap ? next : next.map((row, r) => row.map((v, x) => (r === 0 || x === 0 || r === h - 1 || x === w - 1 ? 0 : v)));
+}
+
+/**
+ * One Margolus step for rules where at most one variant of a rule can match a block and every
+ * chance is 1 (so no dice): blocks offset by `par` (0 or 1) on both axes, the board's even part
+ * wrapping, or (walls) outside reading −1.
+ */
+export function margolusRef(grid: Grid, rules: BlockRule[], par: number, wrap = true): Grid {
+  const h = grid.length, w = grid[0].length, W = Math.floor(w / 2) * 2, H = Math.floor(h / 2) * 2;
+  const out = grid.map(r => [...r]);
+  // Board coordinates y up: row = h − 1 − y.
+  const get = (x: number, y: number) => {
+    if (wrap) { x = ((x % W) + W) % W; y = ((y % H) + H) % H; } else if (x < 0 || y < 0 || x >= W || y >= H) return -1;
+    return grid[h - 1 - y][x];
+  };
+  for (let oy = par; oy < H + par; oy += 2) for (let ox = par; ox < W + par; ox += 2) {
+    const pos: Array<[number, number]> = [[ox, oy + 1], [ox + 1, oy + 1], [ox, oy], [ox + 1, oy]];
+    const b = pos.map(([x, y]) => get(x, y));
+    for (const rule of rules) {
+      const v = blockVariants(rule).find(vr => vr.before.every((spec, q) => specMatches(spec, b[q])));
+      if (!v) continue;
+      pos.forEach(([x, y], q) => {
+        if (v.after[q] === SAME || b[q] < 0) return;
+        const xx = wrap ? ((x % W) + W) % W : x, yy = wrap ? ((y % H) + H) % H : y;
+        out[h - 1 - yy][xx] = v.after[q];
+      });
+      break;
+    }
+  }
+  return out;
+}
