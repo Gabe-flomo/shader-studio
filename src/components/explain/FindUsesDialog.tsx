@@ -12,6 +12,11 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { askConfirm } from '../ui/dialogStore';
+import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
+import type { IndexedUses as IndexedUsesT } from '../codeExplorer/IndexedUses';
+
+// Saved graphs, presets, shaders, linked files and presentations: through the Code Explorer's index.
+const IndexedUses = lazyWithSuspense<PropsOf<typeof IndexedUsesT>>(() => import('../codeExplorer/IndexedUses').then(m => ({ default: m.IndexedUses })));
 
 export function FindUsesDialog({ query, title, onClose, onJumped }: { query: UseQuery; title: string; onClose: () => void; onJumped?: () => void }) {
   const tk = useTokens();
@@ -65,7 +70,8 @@ export function FindUsesDialog({ query, title, onClose, onJumped }: { query: Use
         {examples === null
           ? <span style={{ fontSize: 12, color: tk.text.muted }}>Looking through the examples…</span>
           : <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>{examples.map(row)}</ul>}
-        <span style={{ fontSize: 11.5, color: tk.text.faint }}>Looks at Expression Block lines and Custom Function statements, in this graph and the bundled examples. Matches are by shape: the same structure with any inputs.</span>
+        <IndexedUses query={query} />
+        <span style={{ fontSize: 11.5, color: tk.text.faint }}>Looks at Expression Block lines and Custom Function statements in this graph and the bundled examples, and, through the Code Explorer’s index, your saved graphs, presets, shaders, linked files and presentations. Matches are by shape: the same structure with any inputs.</span>
       </div>
     </Modal>
   );
