@@ -24,6 +24,7 @@ import { PASS_EXAMPLE_INDEX, PASS_EXAMPLE_KEYS } from './passExamples';
 import { AGENT_EXAMPLE_INDEX, AGENT_EXAMPLE_KEYS, AGENT_RULE_INDEX } from './agentExamples';
 import { AGENT_SHADER_EXAMPLE_INDEX, AGENT_SHADER_EXAMPLE_KEYS } from './agentShaderExamples';
 import { AGENT_3D_EXAMPLE_INDEX, AGENT_3D_EXAMPLE_KEYS } from './agentExamples3d';
+import { SIM_AGENT_EXAMPLE_INDEX, SIM_AGENT_EXAMPLE_KEYS } from './agentExamplesSim';
 import { CONVERT_EXAMPLE_INDEX, CONVERT_EXAMPLE_KEYS } from './convertExampleIndex';
 import { BAKE_EXAMPLE_INDEX } from './bakeExamples';
 import { TIME_CUBE_EXAMPLE_INDEX, TIME_CUBE_EXAMPLE_KEYS } from './timeCubeExamples';
@@ -216,6 +217,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...AGENT_SHADER_EXAMPLE_INDEX,
   // Agents in 3D: Space 3D, the camera, a volume trail, Collide (3D scene) (agentExamples3d.ts).
   ...AGENT_3D_EXAMPLE_INDEX,
+  // Simulations: agents: classic agent-based models as custom rules from ordinary nodes (agentExamplesSim.ts).
+  ...SIM_AGENT_EXAMPLE_INDEX,
   // The Slime mold rule as a Script layer, with a Play setup (agentSketchExamples.ts).
   ...Object.fromEntries(Object.entries(AGENT_RULE_INDEX).map(([k, v]) => [k, { ...v, play: true }])),
   // The Convert folder (convertExampleIndex.ts, graphs in convertExamples.ts): what the Convert page makes of its Soft circle, as written and optimised.
@@ -257,6 +260,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Simulations: grids", color: ctp.green, keys: SIM_GRID_EXAMPLE_KEYS },
   { label: "Agents with shaders", color: ctp.green, keys: AGENT_SHADER_EXAMPLE_KEYS },
   { label: "Agents in 3D",      color: ctp.green, keys: AGENT_3D_EXAMPLE_KEYS },
+  { label: "Simulations: agents", color: ctp.green, keys: SIM_AGENT_EXAMPLE_KEYS },
   { label: "Effects & Lens",    color: ctp.mauve, keys: ['echoTrails','feedbackSmear','crtTv','lensBarrel'] },
   { label: "Space & Texture",   color: ctp.flamingo, keys: ['waveTextureDemo','waveInterference','magicTextureDemo','neonFloorGrid','spaceAtlas'] },
   { label: "Grid",              color: ctp.sky, keys: [...GRID_EXAMPLE_KEYS, ...LEARN_GRID_KEYS, 'gridNeighborDisplaced','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','beatGrid'] },
