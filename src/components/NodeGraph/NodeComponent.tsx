@@ -32,7 +32,6 @@ import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 import type { ExprModal as ExprModalT } from './ExprModal';
 import type { CustomFnModal as CustomFnModalT } from './CustomFnModal';
 import type { ExprBlockModal as ExprBlockModalT } from './ExprBlockModal';
-import { toggleLineOff } from '../../lib/exprLines';
 import { inputHintOf, inputLabelOf, inputTexts } from '../../lib/inputNames';
 import { InputNamesModal } from './InputNamesModal';
 import type { ConstantsModal as ConstantsModalT } from './ConstantsModal';
@@ -74,7 +73,7 @@ import { AGENT_INPUT_OUTPUTS, AGENT_INPUT_STATE_OUTPUTS, agentWalkerDefault, DRA
 import { VECTORIZABLE_NODES, VEC4_CAPABLE_NODES } from '../../nodes/definitions/math';
 import { registerSocket, getView } from './socketRegistry';
 import { startNodeMouseDrag, startNodeTouchDrag } from './nodeDrag';
-import { moveItem } from '../../lib/reorder';
+import { CodeCard } from './codeCard/CodeCard';
 import { scopeCanvasRegistry, scopeBufferRegistry, vectorValueRegistry, floatValueRegistry } from '../../lib/scopeRegistry';
 import { audioEngine } from '../../lib/audioEngine';
 import { videoEngine } from '../../lib/videoEngine';
@@ -642,6 +641,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     >{text}</button>
   );
   const [showCommentEditor, setShowCommentEditor] = useState(false);
+  // The code card's Edit / double-click and its Note button (stable, so the memoised card stays put)
+  const nodeType = node.type;
+  const openCodeEditor = useCallback(() => { if (nodeType === 'customFn') setShowCustomFnModal(true); else setShowExprBlockModal(true); }, [nodeType]);
+  const openNoteEditor = useCallback(() => setShowCommentEditor(true), []);
   const [zIndex, setZIndex] = useState(1);
   // Info tooltip: close on any click outside the tooltip itself or the info
   // button that opened it (button is excluded so its own onClick toggle isn't
@@ -4015,124 +4018,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           );
         })}
 
-        {/* ── ExprBlock per-line warp editor (exprNode only) ── */}
-        {!collapsed && node.type === 'exprNode' && (() => {
-          const lines = (node.params.lines as Array<{ lhs: string; op: string; rhs: string; off?: boolean }> | undefined) ?? [];
-          const result = (node.params.result as string | undefined) ?? 'p';
-          const OPS = ['=', '+=', '-=', '*=', '/='];
-          const inputBg = tc.crust;
-          const inputBorder = `1px solid ${tc.surface1}`;
-          const inputStyle: React.CSSProperties = {
-            background: inputBg, border: inputBorder, color: tc.text,
-            padding: '2px 5px', borderRadius: '3px', fontSize: '10px',
-            fontFamily: 'monospace', outline: 'none',
-          };
-          return (
-            <div
-              style={{ padding: '4px 10px 6px', display: 'flex', flexDirection: 'column', gap: '4px' }}
-              onMouseDown={e => e.stopPropagation()}
-            >
-              <span style={{ fontSize: '10px', color: tc.overlay0, marginBottom: '1px' }}>Warp Lines</span>
-
-              {lines.map((line, i) => (
-                <div key={i} data-line-off={line.off ? '' : undefined}
-                  onKeyDownCapture={e => { if ((e.metaKey || e.ctrlKey) && e.key === '/') { e.preventDefault(); e.stopPropagation(); updateNodeParams(node.id, { lines: toggleLineOff(lines, i) }); } }}
-                  style={{ display: 'flex', gap: '3px', alignItems: 'center', opacity: line.off ? 0.45 : 1 }}>
-                  {/* On / off: an off line is kept but skipped (a comment in the shader) */}
-                  <button
-                    onMouseDown={e => e.stopPropagation()}
-                    onClick={() => updateNodeParams(node.id, { lines: toggleLineOff(lines, i) })}
-                    aria-pressed={!!line.off}
-                    title={line.off ? 'Off: skipped. Click (or ⌘/ in the line) to switch it back on' : 'Switch this line off without deleting it (⌘/ in the line)'}
-                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '9px', fontFamily: 'monospace', lineHeight: 1, flexShrink: 0, width: 12, color: line.off ? tc.yellow : tc.surface2, fontWeight: 700 }}
-                  >//</button>
-                  {/* Reorder */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', flexShrink: 0 }}>
-                    <button
-                      onMouseDown={e => e.stopPropagation()}
-                      onClick={() => updateNodeParams(node.id, { lines: moveItem(lines, i, i - 1) })}
-                      disabled={i === 0}
-                      style={{ background: 'none', border: 'none', color: i === 0 ? tc.surface0 : tc.overlay0, cursor: i === 0 ? 'default' : 'pointer', padding: 0, fontSize: '8px', lineHeight: 1 }}
-                      title="Move up"
-                    >▲</button>
-                    <button
-                      onMouseDown={e => e.stopPropagation()}
-                      onClick={() => updateNodeParams(node.id, { lines: moveItem(lines, i, i + 1) })}
-                      disabled={i === lines.length - 1}
-                      style={{ background: 'none', border: 'none', color: i === lines.length - 1 ? tc.surface0 : tc.overlay0, cursor: i === lines.length - 1 ? 'default' : 'pointer', padding: 0, fontSize: '8px', lineHeight: 1 }}
-                      title="Move down"
-                    >▼</button>
-                  </div>
-                  {/* LHS */}
-                  <input
-                    type="text"
-                    value={line.lhs}
-                    onDoubleClick={selectTokenOnDoubleClick}
-                    onKeyDown={wrapOnKeyDown(v => updateNodeParams(node.id, { lines: lines.map((l, j) => j === i ? { ...l, lhs: v } : l) }))}
-                    onChange={e => {
-                      const next = lines.map((l, j) => j === i ? { ...l, lhs: e.target.value } : l);
-                      updateNodeParams(node.id, { lines: next });
-                    }}
-                    placeholder="p.xy"
-                    style={{ ...inputStyle, width: '52px' }}
-                  />
-                  {/* Operator */}
-                  <select
-                    value={line.op}
-                    onChange={e => {
-                      const next = lines.map((l, j) => j === i ? { ...l, op: e.target.value } : l);
-                      updateNodeParams(node.id, { lines: next });
-                    }}
-                    style={{ background: inputBg, border: inputBorder, color: tc.blue, fontSize: '10px', padding: '2px 2px', borderRadius: '3px', cursor: 'pointer', outline: 'none' }}
-                  >
-                    {OPS.map(op => <option key={op} value={op}>{op}</option>)}
-                  </select>
-                  {/* RHS expression */}
-                  <input
-                    type="text"
-                    value={line.rhs}
-                    onDoubleClick={selectTokenOnDoubleClick}
-                    onKeyDown={wrapOnKeyDown(v => updateNodeParams(node.id, { lines: lines.map((l, j) => j === i ? { ...l, rhs: v } : l) }))}
-                    onChange={e => {
-                      const next = lines.map((l, j) => j === i ? { ...l, rhs: e.target.value } : l);
-                      updateNodeParams(node.id, { lines: next });
-                    }}
-                    placeholder="expression…"
-                    style={{ ...inputStyle, flex: 1, color: tc.green }}
-                  />
-                  {/* Remove row */}
-                  <button
-                    onMouseDown={e => e.stopPropagation()}
-                    onClick={() => updateNodeParams(node.id, { lines: lines.filter((_, j) => j !== i) })}
-                    style={{ background: 'none', border: 'none', color: tc.red, cursor: 'pointer', padding: '0 2px', fontSize: '13px', lineHeight: 1, flexShrink: 0 }}
-                    title="Remove line"
-                  >×</button>
-                </div>
-              ))}
-
-              {/* Add line */}
-              <button
-                onMouseDown={e => e.stopPropagation()}
-                onClick={() => updateNodeParams(node.id, { lines: [...lines, { lhs: 'p', op: '=', rhs: '' }] })}
-                style={{ alignSelf: 'flex-start', background: tc.surface0, border: 'none', color: tc.subtext0, cursor: 'pointer', fontSize: '10px', padding: '2px 7px', borderRadius: '3px', marginTop: '1px' }}
-              >+ line</button>
-
-              {/* Return expression */}
-              <div style={{ display: 'flex', gap: '5px', alignItems: 'center', marginTop: '2px' }}>
-                <span style={{ fontSize: '10px', color: tc.overlay0, whiteSpace: 'nowrap', fontFamily: 'monospace' }}>return</span>
-                <input
-                  type="text"
-                  value={result}
-                  onDoubleClick={selectTokenOnDoubleClick}
-                  onKeyDown={wrapOnKeyDown(v => updateNodeParams(node.id, { result: v }))}
-                  onChange={e => updateNodeParams(node.id, { result: e.target.value })}
-                  placeholder="p"
-                  style={{ ...inputStyle, flex: 1, color: tc.blue, border: `1px solid ${tc.surface1}` }}
-                />
-              </div>
-            </div>
-          );
-        })()}
+        {/* ── Expression Block / Custom Function card face: read-only code, signature, note, description (codeCard/) ── */}
+        {!collapsed && (node.type === 'exprNode' || node.type === 'customFn') && (
+          <CodeCard node={node} touch={isTouchDevice} onEdit={openCodeEditor} onEditNote={openNoteEditor} />
+        )}
 
         {/* ── Transform Vec inline editor ── */}
         {!collapsed && node.type === 'transformVec' && (() => {
