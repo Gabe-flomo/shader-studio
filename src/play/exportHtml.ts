@@ -158,7 +158,7 @@ export interface WebAgents {
     readAs?: string;
   }>;
   deposits: Array<Omit<AgentDepositProgram, 'nodeId'>>;
-  trails: Array<Omit<AgentTrailProgram, 'nodeId' | 'stepNodeIds' | 'readsPasses'> & { u: { tex: string; src: string; step: string } }>;
+  trails: Array<Omit<AgentTrailProgram, 'nodeId' | 'stepNodeIds' | 'readsPasses'> & { u: { tex: string; src: string; step: string; vol?: string } }>;
   draws: Array<Omit<AgentDrawProgram, 'nodeId'> & { u: { tex: string } }>;
   /** The round Chladni plate's Bessel table sampler. */
   bessel: string;

@@ -1058,6 +1058,8 @@ export const gpCurlAt = (p, scale, time) => `${p} * 2.4 * ${scale} + vec3(0.0, 0
 export const gpCurlOctave2 = q => `gpNoised(${q} * 2.03 + vec3(17.1, 5.3, 31.4))`;
 /** Curl in the picture's plane from two octaves a and b (with a little depth in z). */
 export const gpCurlPlane = (a, b) => `vec3(${a}.z, -${a}.y, ${a}.w * 0.4) + 0.5 * vec3(${b}.z, -${b}.y, ${b}.w * 0.4)`;
+/** Curl in 3D from two octaves a and b: the cross product of two gradients is divergence-free (plus a little planar swirl). */
+export const gpCurl3D = (a, b) => `cross(${a}.yzw, ${b}.yzw) * 1.6 + 0.35 * vec3(${a}.z, -${a}.y, 0.0)`;
 /** The wind's gusts from the first octave: 0.15…1.35 round 0.75. */
 export const gpGust = a => `0.75 + 0.6 * ${a}.x`;
 /** Swirl round a point: s · the perpendicular of d, strongest at radius √r2 (d from the centre, r its length). */
@@ -1375,7 +1377,7 @@ void main() {
     if (u_deep == 1) {
       // Curl noise in 3D: the cross product of two gradients is divergence-free, so streams fold into
       // sheets and threads instead of bunching up.
-      c = cross(a.yzw, b.yzw) * 1.6 + 0.35 * vec3(a.z, -a.y, 0.0);
+      c = ${gpCurl3D('a', 'b')};
     } else {
       // In the picture's plane (with a little depth, so it isn't flat).
       c = ${gpCurlPlane('a', 'b')};

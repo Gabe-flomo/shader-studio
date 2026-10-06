@@ -1,6 +1,6 @@
 # The Agents group: slime mold and particles built from nodes
 
-Hundreds of thousands of tiny walkers on the GPU (up to four million). Each one sniffs the trail ahead of it, turns toward the strongest smell, takes a step and leaves a little more trail. The trail spreads and fades. Veins, networks and rivers grow by themselves.
+Hundreds of thousands of tiny walkers on the GPU (up to four million). Each one sniffs the trail ahead of it, turns toward the strongest smell, takes a step and leaves a little more trail. The trail spreads and fades. Veins, networks and rivers grow by themselves. In 2D on the picture, or in 3D in a box seen through a camera (see **3D** below).
 
 Or as many particles: forces push them (gravity, wind, curl noise, the mouse, a vortex, a field, the sound), Integrate moves them, and they live, fade and are born again. The Particles node's look, built from nodes you can open and rewire.
 
@@ -97,11 +97,27 @@ On a plate (Chladni) every beat does two things: it shakes the sand much harder 
 
 The group has a **Sound from** of its own (its Sound section): **Each node's own** (the default) leaves every listening node to its own card; any other choice (Level and Beat, Mic, Audio engine, Engine track 1–8) is shared by every Sound kick and Chladni inside, with the group's **Level** and **Beat**. One switch on the group card makes the whole rule hear the engine's kick track.
 
+## 3D
+
+Set the group's **Space** (its Agents section) to **3D** and the walkers live in a box: the picture across and up (x ±aspect, y ±1) and 2 deep (z from −1 to 1). Changing Space starts the simulation over.
+
+- **Inside**, every position, velocity, force and heading has a z. The wires turn teal (vec3) by themselves; a heading is a direction (a vec3), not an angle. Unwired sockets still read "this walker".
+- **Sense** reads a cone round the heading. **Sensors (3D)**: *Turning plane* (the default, 3 reads) puts the left and right sensors in a plane through the heading that turns at random every step, so over a few steps they sweep the whole cone and **Steer** turns in that plane; *Ring of 4* (5 reads) senses four directions round the cone every step and Steer turns toward the stronger pair. Its new **Channels here** output is the trail's four channels where the walker stands (for flocking on a velocity trail).
+- **Move** and **Integrate** keep the walkers in the box (Wrap, Bounce, Slide and Die work on z too). **Emit** gains **Z** and two 3D shapes, **Sphere** (its shell) and **Ball**; Box is a cube, Whole picture the whole box, Picture and Field are born where bright at any depth.
+- **Forces in 3D**: Gravity (Angle in the picture's plane, or any Direction wired), Wind (its gusts drift through the box), **Curl noise** (the Particles node's 3D curl: streams fold into sheets and threads), **Attract / Repel** (toward a point in space: **Z**), **Vortex** (**Axis**: Depth swirls in the picture's plane as in 2D, **Up** round the vertical like a whirlpool or a galaxy, Across round the horizontal), **Sound kick** (its rings are spheres), **Chladni** (the plate lies flat, across and in depth, at height Y, as the Particles node's does in 3D; **Z** moves it), Integrate and Age / Life as they are.
+- **Flat in 3D** (each card says so): shapes and fields wired into **Field ƒ**, **Obstacle ƒ**, **Shape ƒ** (Collide), **Flow** and **Where ƒ** are read at the walker's x and y, so a shape is the same all through the depth (a prism) and Flow pushes in the picture's plane. Sense's 5-tap cross and Deposit's Size are 2D only (one cell in 3D). For 3D shapes, see Collide (3D scene) below.
+- **The trail is a volume.** A Trail field filled by a 3D group keeps a volume over the box: **Volume** rows and as many slices deep (64, 96 (the default), 128 or 160; columns follow the picture's shape, so 96 at 16:9 is 171 × 96 × 96, about 1.6 million cells, 25 MB with its copy). Each step it spreads to each cell's 6 neighbours (Spread 3×3) or the softer 27-cell blur (5×5) and fades. Sense inside the group reads it in 3D. **Amount**, **Channels** and **Image** are the volume seen from the front, summed through its depth (the card's thumbnail too): a 3D trail's picture is a front view; Draw agents is how you see 3D walkers through a camera. A Trail's **Add** and **Block** don't work on a volume yet (the card says so).
+- **Distances are in picture units in 3D too**, but a volume's cells are coarser than a 2D trail's pixels (96 rows: a cell is 0.02 across, against 0.002 for a 1024-row trail), so a 3D slime wants its sensors and its speed about ten times further than a 2D one: Sense Distance 0.1–0.2, Move Speed 1–1.5. With 2D settings the walkers can't escape their own trail and gather into balls.
+
+**Draw agents in 3D** sees the walkers through a camera, the same camera as Time Cube View and Frame Stack: **Distance**, **Angle** (degrees here), **Elevation** (degrees), **Orbit speed** (degrees a second), **Zoom**, **Flatten** (perspective to isometric), **Translate X / Y / Z** (move the camera and the point it looks at together). It turns the March Camera's way round, so the same numbers give the same view. On top, the Particles node's **Drift** (a slow turn, a bob and breathing) and depth of field: **Focus** (where it is sharp, as a share of Distance), **Blur** and **Max blur** (out of focus a walker spreads into a soft disc that keeps its light; wider than Max blur, walkers are thinned at random and each survivor is heavier, so blur costs no fill rate). Streaks draw their sharp share as lines and the blurred share as discs. Lights orbit in 3D and their halos land where the camera sees them.
+
+**Inside a ray-marched scene.** In 3D, Draw agents has three more sockets: wire a March Camera's **Ray Origin** into **Camera from** and its **Ray Dir** into **Camera ray**, and the walkers are seen through that camera, so they stand in the scene (the camera is rebuilt on the GPU from four of its rays each frame: no lag). Wire the March Loop's **Distance** into **Depth** and walkers behind the scene's surfaces are hidden. Focus is then a share of the distance to the world's centre; the lights' halos aren't drawn with a scene's camera.
+
 ## From the Particles node: Open as nodes
 
 Every Particles node has **Open as nodes ↗** under its presets. It builds the same particles as an Agents group under the node, with every setting it can carry: the emitter as Emit, Gravity, Wind, Turbulence, Swirl, Attract, the hands, Flow and the sound's Wave, Vibrate, Shockwave and Crunch as force nodes chained through their "+ Another force" inputs, Drag in Integrate, Obstacle as Collide, Pattern as Chladni, the look and the lights in Draw agents. What was wired into the node comes along (Over, the Emitter position, a wired Turbulence or hand, the Obstacle and Flow shapes, through ports on the group). The copy is wired where the Particles node was; the node itself is left as it was, so compare them and delete it when you like. Undo takes it all back.
 
-Every node it adds has a note saying which of the Particles node's settings it carries. Anything it can't carry yet is listed (in the message, and at the end of the group's note): 3D (the camera, its drift and depth of field), the Image emitter holding its picture (the copy is born on the picture's bright parts but doesn't hold it), Gust and Jet, the Burst emit mode, UV.
+Every node it adds has a note saying which of the Particles node's settings it carries. **In 3D** the copy is 3D too: the group's Space is 3D (its forces are the Particles engine's 3D ones), Sphere and Ball are born as such, and Draw agents carries the camera (Camera angle as Angle, Camera tilt as Elevation, Camera distance as Distance, its lens as Zoom, its Drift, Focus and Blur, and its way round, so the copy's picture matches the node's), or the scene's camera and Depth when they are wired. Anything it can't carry yet is listed (in the message, and at the end of the group's note): a Scene to collide with, the Image emitter holding its picture (the copy is born on the picture's bright parts but doesn't hold it), Gust and Jet, the Burst emit mode, UV.
 
 ## Play: controls, pins, hands, the Motion layer
 
@@ -150,12 +166,21 @@ The P6 presets at their first sizes, 1080p: Galaxy (1M) 6.9 ms a frame, Mycelium
 
 One million particles (the Particles preset), 2 steps a frame at 1080p: about **7 ms a frame**, of which the steps are 1.6 ms and the glowing draw the rest; Streaks (two vertices a particle) about 10 ms.
 
+**In 3D** (M3 Pro, headless Chrome on ANGLE Metal, 1920 × 1080, each frame finished on the GPU; update = the steps, draw = Draw agents):
+
+| | 64k | 256k | 1M |
+|---|---|---|---|
+| 3D slime in a 96-row volume, 2 steps a frame (glow through the camera, Blur 0.3) | 1.8 + 0.8 ms | 3.5 + 1.2 ms | 12.5 + 3.9 ms |
+| Ink in water opened as nodes (3D curl, 1 step a frame, ink streaks with depth of field) | 0.5 + 1.3 ms | 0.7 + 2.3 ms | 1.0 + 9.2 ms |
+
+A 3D slime step costs about a third more than a 2D one at the same count: Deposit into the volume and its spread (6 neighbours) are most of it, and both grow with Volume (64 rows: the 1M slime's steps take 8 ms, not 12.5). Depth of field costs no fill rate (wide discs are thinned), but streaks at a million, half lines and half discs, are the heaviest draw.
+
 Steps per frame also sets the pace: one step is 1/60 s of simulated time, so 2 steps a frame runs the particles twice as fast as the Particles node does. Set it to 1 for the Particles node's own pace. Lifetimes, Drag and forces are in simulated seconds; Beat, Evolve and the lights follow the clock.
 
 ## Limits for now
 
 - Up to 4 Agents groups and 4 Trail fields per graph; 4 species; 16 textures per program (each group counts its two state textures).
-- Not yet: 3D (the Particles node's camera and depth of field, a 3D Collide). See docs/agents-plan.md for the phases.
+- 3D: fields and shapes wired in are flat (read at x and y); a volume Trail has no Add / Block yet; Deposit's Size and Sense's 5-tap cross are 2D only; the eye preview of a node in a 3D group shows it as 2D (an agent standing on the picture's plane); a volume is at most 4096 cells across in its texture (160 rows at up to 25:9).
 
 ## On web pages
 
@@ -168,3 +193,4 @@ Exported pages (Export → web page or embed, and Present) run Agents groups as 
 - **Readings** (Alive, Centre, Spread…) work on the page as in the app: the page sums only the groups its Play reads.
 - Pages with agents draw at one device pixel per CSS pixel (as the app does), and need WebGL2 with float render targets; without them the page draws the picture without the agents and says so in the browser console.
 - A million walkers run at 60 fps on an M3 Pro in Chrome (the engine about 10–13 ms a frame at 1080p, as in the app).
+- **3D** runs on pages as in the app: volume Trails, the camera, depth of field, and a ray-marched scene's camera and Depth (the page draws the same small probe programs). The page's simulation state is the app's bit for bit (checked to 240 steps), and its picture within the app's dither. Readings work in 3D (Speed counts the depth; Centre and Spread are across and up).

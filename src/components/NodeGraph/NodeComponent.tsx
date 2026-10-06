@@ -66,7 +66,7 @@ import { GroupParamPicker } from './GroupParamPicker';
 import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
 import { ValuePreview } from './ValuePreview';
 import { useShowAs } from './ShowAsControls';
-import { AGENT_INPUT_OUTPUTS, AGENT_INPUT_STATE_OUTPUTS, agentWalkerDefault } from '../../nodes/definitions/agents';
+import { AGENT_INPUT_OUTPUTS, AGENT_INPUT_STATE_OUTPUTS, agentWalkerDefault, DRAW_3D_INPUTS } from '../../nodes/definitions/agents';
 import { VECTORIZABLE_NODES, VEC4_CAPABLE_NODES } from '../../nodes/definitions/math';
 import { registerSocket, getView } from './socketRegistry';
 import { startNodeMouseDrag, startNodeTouchDrag } from './nodeDrag';
@@ -3782,7 +3782,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
       <div style={{ padding: '6px 0' }}>
         {/* ── Inputs (always visible) ── */}
-        {Object.entries(node.inputs).filter(([key]) => (Object.keys(def.inputs).length === 0 || key in def.inputs || node.type === 'agentsGroup') && socketVisible(node, def, key)).map(([key, input]) => {
+        {Object.entries(node.inputs).filter(([key]) => (Object.keys(def.inputs).length === 0 || key in def.inputs || node.type === 'agentsGroup' || (node.type === 'drawAgents' && key in DRAW_3D_INPUTS)) && socketVisible(node, def, key)).map(([key, input]) => {
           const isConnected = !!input.connection;
           const isExternal = externalInputKeys?.has(key) ?? false;
 

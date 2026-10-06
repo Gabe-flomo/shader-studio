@@ -22,7 +22,7 @@ import { addAgentPieceTo, agentStarter, freshIds, placeInFreeSpace, startRuleIn,
 import { particlesAsNodes } from './particlesAsNodes';
 import { applyRecipe, recipesFor } from '../nodes/recipes';
 import { closeRecipeOffer, noteNodeAdded } from './recipeOfferStore';
-import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES, AGENT_PRESET_TYPES } from '../nodes/definitions/agents';
+import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES, AGENT_PRESET_TYPES, syncAgentSpaces } from '../nodes/definitions/agents';
 import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
 import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, usesHands, type PlayRecord, type PlayControl } from '../types/play';
@@ -4925,6 +4925,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // without this the timer fires later and runs an identical second compile.
     compilationService.cancelPending();
     const force = opts?.force === true;
+    // Agents in 3D: the inside of a 3D group (and its Emit, Draw agents and Trails) carry the group's space on
+    // their cards (vec3 sockets, the camera): kept in step with the groups' Space before every compile.
+    {
+      const synced = syncAgentSpaces(get().nodes, getNodeDefinition);
+      if (synced !== get().nodes) set({ nodes: synced });
+    }
     if (force) {
       // From scratch: nothing the compiler reads is taken from an earlier compile.
       clearNodeDefinitionCache();

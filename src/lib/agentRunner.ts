@@ -30,15 +30,16 @@
  */
 import * as THREE from 'three';
 import type { AgentDrawProgram, AgentGroupProgram, AgentParam, AgentsSpec, AgentTrailProgram } from '../compiler/types';
-import { agentDrawUniform, agentStateUniform, agentStepUniform, agentWindowUniform, trailStepUniforms, trailUniform } from '../nodes/definitions/agents';
+import { agentDrawUniform, agentStateUniform, agentStepUniform, agentWindowUniform, trailStepUniforms, trailUniform, trailVolUniform } from '../nodes/definitions/agents';
 import { AG_BESSEL_UNIFORM, listenUniforms } from '../nodes/definitions/agentForces';
 import {
-  AG_MAX_STEPS, AG_OFFLINE_CHUNK, AG_STEP_HZ, agDrawLook, agGovern, agGovernorState, agGroupState, agGroupSteps, agHear, agKeep, agLights, agLiveState,
-  agListenState, agReadDecode, agReadPlan, agRestartGroup, agStepTime, agStepWindow, agTrailSize, type AgGroupState, type AgListenState,
+  AG_MAX_STEPS, AG_OFFLINE_CHUNK, AG_PROBE_POINTS, AG_STEP_HZ, agCamera3, agDrawLook, agGovern, agGovernorState, agGroupState, agGroupSteps, agHear, agKeep, agLights, agLiveState,
+  agListenState, agProject3, agReadDecode, agReadPlan, agRestartGroup, agStepTime, agStepWindow, agTrailSize, agVolLayout, agVolUniform, type AgGroupState, type AgListenState, type AgVolLayout,
 } from '../play/kit/agentPlan.js';
 import { GP_BESSEL_N, GP_BESSEL_W, GP_LEVELS, gpBesselTable, gpReadback, type GpReadback, type GpSoundInput } from '../play/kit/gpuParticles.js';
 import {
-  AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_READ_FRAG, AG_SUM_FRAG, AG_THUMB_DOTS_FRAG, AG_THUMB_DOTS_VERT, AG_TRAIL_FRAG,
+  AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT3_VERT, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW3_VERT, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_PROJ3_FRAG, AG_READ_FRAG, AG_SUM_FRAG,
+  AG_THUMB_DOTS_FRAG, AG_THUMB_DOTS_VERT, AG_TRAIL3_FRAG, AG_TRAIL_FRAG,
 } from '../play/kit/agentShaders.js';
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
 import { agentReadingsWanted, publishAgentReadings, setAgentGroups } from './agentReadings';
@@ -74,8 +75,10 @@ interface ListenState extends AgListenState { levelTex: THREE.DataTexture }
 interface GroupState extends AgGroupState<ListenState> {
   key: string; side: number; rt: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget]; cur: 0 | 1;
 }
-interface TrailState { key: string; w: number; h: number; rt: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget]; cur: 0 | 1 }
-interface DrawState { key: string; w: number; h: number; acc: THREE.WebGLRenderTarget; glow: THREE.WebGLRenderTarget[]; out: THREE.WebGLRenderTarget }
+/** A Trail's textures; a volume (3D) also has its layout and its front view (`proj`, what the picture samples). */
+interface TrailState { key: string; w: number; h: number; rt: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget]; cur: 0 | 1; vol?: AgVolLayout; proj?: THREE.WebGLRenderTarget }
+/** A Draw agents' targets; in 3D with a scene's camera also its probe (4 × 1: the camera) and the scene's depth (half size). */
+interface DrawState { key: string; w: number; h: number; acc: THREE.WebGLRenderTarget; glow: THREE.WebGLRenderTarget[]; out: THREE.WebGLRenderTarget; cam?: THREE.WebGLRenderTarget; depth?: THREE.WebGLRenderTarget }
 
 const STATE_OPTS = { type: THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, stencilBuffer: false, count: 2 } as const;
 
@@ -100,7 +103,8 @@ export class AgentTargets {
 
   /** A group's state (made, all dead, when its count or its per-walker state changes). */
   group(g: AgentGroupProgram): GroupState {
-    const key = `${g.side}${g.stateC ? ':C' : ''}`;
+    // A new Space (2D ↔ 3D) means new state too: the same texels mean different things.
+    const key = `${g.side}${g.stateC ? ':C' : ''}${g.space3d ? ':3D' : ''}`;
     let s = this.groups.get(g.slug);
     if (s && s.key === key) return s;
     if (s) { s.rt[0].dispose(); s.rt[1].dispose(); this.dropListen(s); }
@@ -141,11 +145,12 @@ export class AgentTargets {
 
   /** A Trail's textures at the size it wants for a picture of w × h (made, empty, when that changes). */
   trail(t: AgentTrailProgram, w: number, h: number): TrailState {
+    if (t.volume) return this.volume(t, w, h);
     const [tw, th] = agTrailSize(w, h, t);
     const key = `${tw}x${th}:${t.edges}`;
     let s = this.trails.get(t.slug);
     if (s && s.key === key) return s;
-    if (s) { s.rt[0].dispose(); s.rt[1].dispose(); }
+    if (s) this.disposeTrail(s);
     const wrap = t.edges === 'wrap' ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
     const make = () => new THREE.WebGLRenderTarget(tw, th, {
       type: this.halfFloat ? THREE.HalfFloatType : THREE.UnsignedByteType, format: THREE.RGBAFormat,
@@ -158,7 +163,34 @@ export class AgentTargets {
     return s;
   }
 
-  clearTrail(s: TrailState): void { this.clear(s.rt[0]); this.clear(s.rt[1]); this.renderer.setRenderTarget(null); }
+  /**
+   * A volume Trail (3D): its slices side by side in one half-float texture (kit/agentPlan.js
+   * agVolLayout), ping-pong, and its front view (each column summed through the depth) at
+   * columns × rows, which the picture samples as it samples a 2D trail.
+   */
+  private volume(t: AgentTrailProgram, w: number, h: number): TrailState {
+    const L = agVolLayout(t.volume!, w, h);
+    const key = `vol${L.nx}x${L.ny}x${L.nz}:${t.edges}`;
+    let s = this.trails.get(t.slug);
+    if (s && s.key === key) return s;
+    if (s) this.disposeTrail(s);
+    const type = this.halfFloat ? THREE.HalfFloatType : THREE.UnsignedByteType;
+    const make = () => new THREE.WebGLRenderTarget(L.w, L.h, {
+      type, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+      wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping, depthBuffer: false, stencilBuffer: false,
+    });
+    const wrap = t.edges === 'wrap' ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
+    const proj = new THREE.WebGLRenderTarget(L.nx, L.ny, { type, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, wrapS: wrap, wrapT: wrap, depthBuffer: false, stencilBuffer: false });
+    s = { key, w: L.w, h: L.h, rt: [make(), make()], cur: 0, vol: L, proj };
+    this.clear(s.rt[0]); this.clear(s.rt[1]); this.clear(proj);
+    this.renderer.setRenderTarget(null);
+    this.trails.set(t.slug, s);
+    return s;
+  }
+
+  private disposeTrail(s: TrailState): void { s.rt[0].dispose(); s.rt[1].dispose(); s.proj?.dispose(); }
+
+  clearTrail(s: TrailState): void { this.clear(s.rt[0]); this.clear(s.rt[1]); if (s.proj) this.clear(s.proj); this.renderer.setRenderTarget(null); }
 
   /** A Draw agents node's targets for a picture of w × h. */
   draw(d: AgentDrawProgram, w: number, h: number): DrawState {
@@ -182,7 +214,17 @@ export class AgentTargets {
     return s;
   }
 
-  private disposeDraw(s: DrawState): void { s.acc.dispose(); for (const g of s.glow) g.dispose(); if (s.out !== s.acc) s.out.dispose(); }
+  private disposeDraw(s: DrawState): void { s.acc.dispose(); for (const g of s.glow) g.dispose(); if (s.out !== s.acc) s.out.dispose(); s.cam?.dispose(); s.depth?.dispose(); }
+
+  /** A 3D Draw agents' scene probe targets: the camera (4 × 1, full float) and the scene's depth at half the picture's size. */
+  probeTargets(s: DrawState, depth: boolean): void {
+    if (!s.cam) s.cam = new THREE.WebGLRenderTarget(4, 1, { type: THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, stencilBuffer: false });
+    if (depth && !s.depth) {
+      s.depth = new THREE.WebGLRenderTarget(Math.max(1, Math.ceil(s.w / 2)), Math.max(1, Math.ceil(s.h / 2)), {
+        type: this.halfFloat ? THREE.HalfFloatType : THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, stencilBuffer: false,
+      });
+    }
+  }
 
   /** Start everything over: every group dead at step 0, every trail empty. */
   resetAll(): void {
@@ -194,13 +236,13 @@ export class AgentTargets {
   prune(spec: AgentsSpec): void {
     const gs = new Set(spec.groups.map(g => g.slug)), ts = new Set(spec.trails.map(t => t.slug)), ds = new Set(spec.draws.map(d => d.slug));
     for (const [k, s] of this.groups) if (!gs.has(k)) { s.rt[0].dispose(); s.rt[1].dispose(); this.dropListen(s); this.groups.delete(k); }
-    for (const [k, s] of this.trails) if (!ts.has(k)) { s.rt[0].dispose(); s.rt[1].dispose(); this.trails.delete(k); }
+    for (const [k, s] of this.trails) if (!ts.has(k)) { this.disposeTrail(s); this.trails.delete(k); }
     for (const [k, s] of this.draws) if (!ds.has(k)) { this.disposeDraw(s); this.draws.delete(k); }
   }
 
   dispose(): void {
     for (const s of this.groups.values()) { s.rt[0].dispose(); s.rt[1].dispose(); this.dropListen(s); }
-    for (const s of this.trails.values()) { s.rt[0].dispose(); s.rt[1].dispose(); }
+    for (const s of this.trails.values()) this.disposeTrail(s);
     for (const s of this.draws.values()) this.disposeDraw(s);
     this.groups.clear(); this.trails.clear(); this.draws.clear();
   }
@@ -221,7 +263,7 @@ export interface AgentRunnerHost {
 }
 
 interface StepEntry { spec: AgentGroupProgram; material: THREE.ShaderMaterial; ready: boolean; failed: boolean; dropped?: boolean }
-/** A Trail's own step program (Add / Block wired), compiled like an update shader. */
+/** A Trail's own step program (Add / Block wired), or a 3D Draw agents' scene probe (its camera or depth), compiled like an update shader. */
 interface TrailEntry { slug: string; source: string; material: THREE.ShaderMaterial; ready: boolean; failed: boolean; dropped?: boolean }
 
 type Timer = { begin(name: string): boolean; end(): void };
@@ -257,6 +299,27 @@ export class AgentRunner {
   }, true);
   private trailMat = raw(AG_FULL_VERT, AG_TRAIL_FRAG, { u_src: { value: null }, u_diffuse: { value: 1 }, u_keep: { value: 0.9 }, u_wrap: { value: 1 }, u_k5: { value: 0 }, u_signed: { value: 0 } }, false);
   private trailSteps: TrailEntry[] = [];
+  // 3D: a volume's deposit, step and front view; Draw agents through a camera; the scene probes (by `<slug>:camera` / `:depth`).
+  private deposit3Mat = raw(AG_DEPOSIT3_VERT, AG_DEPOSIT_FRAG, {
+    u_a: { value: null }, u_b: { value: null }, u_d: { value: null }, u_side: { value: 1 }, u_species: { value: 1 }, u_stateC: { value: 0 }, u_what: { value: 0 },
+    u_aspect: { value: 1 }, u_amount: { value: 1 }, u_vol: { value: new THREE.Vector4(1, 1, 1, 1) }, u_atlas: { value: new THREE.Vector2(1, 1) },
+  }, true);
+  private trail3Mat = raw(AG_FULL_VERT, AG_TRAIL3_FRAG, { u_src: { value: null }, u_diffuse: { value: 1 }, u_keep: { value: 0.9 }, u_wrap: { value: 1 }, u_k5: { value: 0 }, u_signed: { value: 0 }, u_vol: { value: new THREE.Vector4(1, 1, 1, 1) } }, false);
+  private proj3Mat = raw(AG_FULL_VERT, AG_PROJ3_FRAG, { u_src: { value: null }, u_vol: { value: new THREE.Vector4(1, 1, 1, 1) } }, false);
+  private draw3Mat = raw(AG_DRAW3_VERT, AG_DRAW_FRAG, {
+    u_a: { value: null }, u_b: { value: null }, u_c: { value: null }, u_cam: { value: null }, u_stateC: { value: 0 }, u_side: { value: 1 }, u_species: { value: 1 }, u_colorBy: { value: 0 },
+    u_aspect: { value: 1 }, u_size: { value: 1.5 }, u_bright: { value: 0.5 }, u_speedRef: { value: 0.5 },
+    u_colA: { value: new THREE.Vector3(1, 1, 1) }, u_colB: { value: new THREE.Vector3(1, 1, 1) },
+    u_prim: { value: 0 }, u_depth: { value: 0 }, u_field: { value: null }, u_viewSize: { value: new THREE.Vector2(1, 1) },
+    u_ink: { value: 0 }, u_fade: { value: 1 }, u_usePal: { value: 0 }, u_rainbow: { value: 0 }, u_thread: { value: 0 },
+    u_pal: { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] },
+    u_lights: { value: 0 }, u_lightZ: { value: new THREE.Vector4() },
+    u_light: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
+    u_lightCol: { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] },
+    u_camSrc: { value: 0 }, u_eye: { value: new THREE.Vector3() }, u_fwd: { value: new THREE.Vector3(0, 0, -1) }, u_right: { value: new THREE.Vector3(1, 0, 0) }, u_up: { value: new THREE.Vector3(0, 1, 0) },
+    u_lens: { value: 1.8 }, u_ortho: { value: 0 }, u_camDist: { value: 3 }, u_focus: { value: 3 }, u_coc: { value: 0 }, u_cap: { value: 7 },
+  }, true);
+  private probes: TrailEntry[] = [];
   private drawMat = raw(AG_DRAW_VERT, AG_DRAW_FRAG, {
     u_a: { value: null }, u_b: { value: null }, u_c: { value: null }, u_stateC: { value: 0 }, u_side: { value: 1 }, u_species: { value: 1 }, u_colorBy: { value: 0 },
     u_aspect: { value: 1 }, u_size: { value: 1.5 }, u_bright: { value: 0.5 }, u_speedRef: { value: 0.5 },
@@ -304,7 +367,7 @@ export class AgentRunner {
   private aspect = 16 / 9;
   // Readings for Play (P6): the live state summed on the GPU into 2 × 1 texels, read back without a stall.
   private readMat = raw(AG_FULL_VERT, AG_READ_FRAG, {
-    u_a: { value: null }, u_b: { value: null }, u_c: { value: null }, u_side: { value: 1 }, u_species: { value: 1 }, u_stateC: { value: 0 }, u_w: { value: 1 },
+    u_a: { value: null }, u_b: { value: null }, u_c: { value: null }, u_side: { value: 1 }, u_species: { value: 1 }, u_stateC: { value: 0 }, u_w: { value: 1 }, u_deep: { value: 0 },
   }, false);
   private sumMat = raw(AG_FULL_VERT, AG_SUM_FRAG, { u_src: { value: null }, u_inW: { value: 1 }, u_inH: { value: 1 }, u_w: { value: 1 } }, false);
   private reads = new Map<string, { side: number; rts: THREE.WebGLRenderTarget[]; reader: GpReadback; busy: boolean; last: Float32Array | null; count: number; aspect: number }>();
@@ -333,7 +396,7 @@ export class AgentRunner {
   /** Something runs while the clock does: the preview keeps drawing. */
   get active(): boolean { return this.spec.groups.some(g => g.live); }
   /** Every update and trail program compiled (or failed). */
-  get settled(): boolean { return this.steps.every(e => e.ready || e.failed) && this.trailSteps.every(e => e.ready || e.failed); }
+  get settled(): boolean { return this.steps.every(e => e.ready || e.failed) && this.trailSteps.every(e => e.ready || e.failed) && this.probes.every(e => e.ready || e.failed); }
 
   /** The uniforms the runner adds to the shared table. */
   private ensureUniforms(): void {
@@ -361,6 +424,7 @@ export class AgentRunner {
       }
     }
     for (const t of this.spec.trails) {
+      if (t.volume && !(u[trailVolUniform(t.slug)]?.value instanceof THREE.Vector4)) u[trailVolUniform(t.slug)] = { value: new THREE.Vector4(1, 1, 1, 1) };
       if (!u[trailUniform(t.slug)]) u[trailUniform(t.slug)] = { value: null };
       if (!(u[`${trailUniform(t.slug)}_px`]?.value instanceof THREE.Vector2)) u[`${trailUniform(t.slug)}_px`] = { value: new THREE.Vector2(1, 1) };
       if (t.stepShader) {
@@ -370,12 +434,14 @@ export class AgentRunner {
       }
     }
     for (const d of this.spec.draws) {
+      if (d.probe && !(u[d.probe.uniform]?.value instanceof THREE.Vector4)) u[d.probe.uniform] = { value: new THREE.Vector4() };
       if (!u[agentDrawUniform(d.slug)]) u[agentDrawUniform(d.slug)] = { value: null };
       if (!(u[`${agentDrawUniform(d.slug)}_px`]?.value instanceof THREE.Vector2)) u[`${agentDrawUniform(d.slug)}_px`] = { value: new THREE.Vector2(1, 1) };
     }
     if (this.boundTo !== u) {
       for (const e of this.steps) e.material.uniforms = u;
       for (const e of this.trailSteps) e.material.uniforms = u;
+      for (const e of this.probes) e.material.uniforms = u;
       this.boundTo = u;
     }
   }
@@ -408,10 +474,20 @@ export class AgentRunner {
       return { slug: t.slug, source: t.stepShader!, material, ready: false, failed: false };
     });
     for (const e of oldTrails.values()) this.drop(e);
+    // 3D Draw agents' scene probes (a ray-marched scene's camera and depth), kept while their source is unchanged.
+    const oldProbes = new Map(this.probes.map(e => [e.slug, e]));
+    this.probes = spec.draws.flatMap(d => (d.probe ? [[`${d.slug}:camera`, d.probe.camera], ...(d.probe.depth ? [[`${d.slug}:depth`, d.probe.depth]] : [])] : [])).map(([slug, source]) => {
+      const prev = oldProbes.get(slug);
+      if (prev && !vsChanged && prev.source === source) { oldProbes.delete(slug); return prev; }
+      const material = new THREE.ShaderMaterial({ vertexShader, fragmentShader: source, uniforms: u, depthTest: false, depthWrite: false });
+      return { slug, source, material, ready: false, failed: false };
+    });
+    for (const e of oldProbes.values()) this.drop(e);
     this.boundTo = null;
     this.ensureUniforms();
     for (const e of this.steps) if (!e.ready && !e.failed) this.compile(e);
     for (const e of this.trailSteps) if (!e.ready && !e.failed) this.compile(e);
+    for (const e of this.probes) if (!e.ready && !e.failed) this.compile(e);
   }
 
   private drop(e: StepEntry | TrailEntry): void {
@@ -439,8 +515,10 @@ export class AgentRunner {
     const spec = this.spec, vs = this.vertexShader;
     for (const e of this.steps) this.drop(e);
     for (const e of this.trailSteps) this.drop(e);
+    for (const e of this.probes) this.drop(e);
     this.steps = [];
     this.trailSteps = [];
+    this.probes = [];
     this.vertexShader = '';
     this.update(spec, vs);
   }
@@ -506,6 +584,18 @@ export class AgentRunner {
       if (this.spec.deposits.some(d => d.trail === t.slug && restarted.has(d.group))) targets.clearTrail(ts);
     }
     const bindTrails = () => { for (const [slug, ts] of trailState) u[trailUniform(slug)].value = ts.rt[ts.cur].texture; };
+    // A volume (3D) as the picture sees it: summed through its depth into its front view.
+    const project = () => {
+      for (const [slug, ts] of trailState) {
+        if (!ts.vol || !ts.proj) continue;
+        const pu = this.proj3Mat.uniforms;
+        pu.u_src.value = ts.rt[ts.cur].texture;
+        (pu.u_vol.value as THREE.Vector4).fromArray(agVolUniform(ts.vol));
+        this.pass(this.proj3Mat, ts.proj);
+        u[trailUniform(slug)].value = ts.proj.texture;
+      }
+    };
+    for (const [slug, ts] of trailState) if (ts.vol) (u[trailVolUniform(slug)].value as THREE.Vector4).fromArray(agVolUniform(ts.vol));
     // A picture pixel in 0–1 texture units, for the sampling nodes' offsets (as a Pass's `_px`).
     for (const t of this.spec.trails) (u[`${trailUniform(t.slug)}_px`].value as THREE.Vector2).set(1 / w, 1 / h);
     for (const d of this.spec.draws) (u[`${agentDrawUniform(d.slug)}_px`].value as THREE.Vector2).set(1 / w, 1 / h);
@@ -552,7 +642,9 @@ export class AgentRunner {
           const g = this.spec.groups.find(x => x.slug === d.group);
           if (!ts || !gs || !g) continue;
           fed.add(d.trail);
-          const du = this.depositMat.uniforms;
+          // Into a volume (a 3D group's trail): one cell a walker; a group in 3D into a flat trail lands at its x and y.
+          const mat = ts.vol ? this.deposit3Mat : this.depositMat;
+          const du = mat.uniforms;
           du.u_a.value = gs.rt[gs.cur].textures[0];
           du.u_b.value = gs.rt[gs.cur].textures[1];
           du.u_d.value = g.stateC ? gs.rt[gs.cur].textures[3] : null;
@@ -560,9 +652,12 @@ export class AgentRunner {
           du.u_what.value = d.what === 'velocity' ? 1 : 0;
           du.u_side.value = g.side; du.u_species.value = g.species; du.u_aspect.value = aspect;
           du.u_amount.value = this.read(d.params.amount, 1);
-          du.u_size.value = Math.max(1, Math.min(4, Math.round(this.read(d.params.size, 1))));
-          this.depositMat.uniformsNeedUpdate = true;
-          this.points.material = this.depositMat;
+          if (ts.vol) {
+            (du.u_vol.value as THREE.Vector4).fromArray(agVolUniform(ts.vol));
+            (du.u_atlas.value as THREE.Vector2).set(ts.w, ts.h);
+          } else du.u_size.value = Math.max(1, Math.min(4, Math.round(this.read(d.params.size, 1))));
+          mat.uniformsNeedUpdate = true;
+          this.points.material = mat;
           this.pointGeometry.setDrawRange(0, g.side * g.side);
           const timed = k === 0 && (o.timer?.begin(`agents:${g.label} deposit`) ?? false);
           renderer.setRenderTarget(ts.rt[ts.cur]);
@@ -586,13 +681,15 @@ export class AgentRunner {
             own.material.uniformsNeedUpdate = true;
             this.quad.material = own.material;
           } else {
-            const tu = this.trailMat.uniforms;
+            const mat = ts.vol ? this.trail3Mat : this.trailMat;
+            const tu = mat.uniforms;
             tu.u_src.value = ts.rt[ts.cur].texture;
             tu.u_diffuse.value = diffuse;
             tu.u_keep.value = keep;
             tu.u_wrap.value = wrap; tu.u_k5.value = k5; tu.u_signed.value = signed;
-            this.trailMat.uniformsNeedUpdate = true;
-            this.quad.material = this.trailMat;
+            if (ts.vol) (tu.u_vol.value as THREE.Vector4).fromArray(agVolUniform(ts.vol));
+            mat.uniformsNeedUpdate = true;
+            this.quad.material = mat;
           }
           const timed = k === 0 && (o.timer?.begin(`agents:${t.label} trail`) ?? false);
           renderer.setRenderTarget(ts.rt[1 - ts.cur]);
@@ -605,6 +702,10 @@ export class AgentRunner {
       }
       for (const p of plan) this.bindState(p.e.spec, p.s);
       bindTrails();
+      project();
+      // The frame's own clock from here on: a scene probe reads it as the picture will (an offline render sets the
+      // picture's time only after this, so the uniform may still hold the last frame's).
+      if (timeUniform) timeUniform.value = o.time;
       // 4. Draw agents.
       for (const d of this.spec.draws) {
         if (!d.live) continue;
@@ -612,7 +713,9 @@ export class AgentRunner {
         const g = this.spec.groups.find(x => x.slug === d.group);
         if (!gs || !g) { u[agentDrawUniform(d.slug)].value = null; continue; }
         const timed = o.timer?.begin(`agents:${g.label} draw`) ?? false;
-        u[agentDrawUniform(d.slug)].value = this.draw(targets.draw(d, w, h), d, g, gs, aspect, o.time).texture;
+        const ds = targets.draw(d, w, h);
+        const seen = d.space3d && d.probe ? this.probe(targets, ds, d) : null;
+        u[agentDrawUniform(d.slug)].value = (d.space3d ? this.draw3(ds, d, g, gs, aspect, o.time, seen) : this.draw(ds, d, g, gs, aspect, o.time)).texture;
         if (timed) o.timer!.end();
       }
       // 5. Readings for Play, for the groups something reads (live only: a render has no Play to read them).
@@ -659,7 +762,7 @@ export class AgentRunner {
       const ru = this.readMat.uniforms;
       const tex = gs.rt[gs.cur].textures;
       ru.u_a.value = tex[0]; ru.u_b.value = tex[1]; ru.u_c.value = g.stateC ? tex[2] : null;
-      ru.u_side.value = g.side; ru.u_species.value = g.species; ru.u_stateC.value = g.stateC ? 1 : 0; ru.u_w.value = plan[0][0];
+      ru.u_side.value = g.side; ru.u_species.value = g.species; ru.u_stateC.value = g.stateC ? 1 : 0; ru.u_w.value = plan[0][0]; ru.u_deep.value = g.space3d ? 1 : 0;
       this.pass(this.readMat, r.rts[0]);
       for (let k = 1; k < plan.length; k++) {
         const su = this.sumMat.uniforms;
@@ -800,6 +903,133 @@ export class AgentRunner {
     return s.out;
   }
 
+  /**
+   * A 3D Draw agents' look at a ray-marched scene (Camera from and Camera ray wired): the camera
+   * probe read at the four points (its origin, and its rays at the centre, half a picture right and
+   * half up) into a 4 × 1 texture the draw shader rebuilds the camera from (no read-back, no lag),
+   * and the Depth wired at half the picture's size. Null until its programs have compiled.
+   */
+  private probe(targets: AgentTargets, s: DrawState, d: AgentDrawProgram): { cam: THREE.Texture; depth: THREE.Texture | null } | null {
+    const cam = this.probes.find(e => e.slug === `${d.slug}:camera` && e.ready && !e.failed);
+    if (!cam || !d.probe) return null;
+    const depth = d.probe.depth ? this.probes.find(e => e.slug === `${d.slug}:depth` && e.ready && !e.failed) : undefined;
+    targets.probeTargets(s, !!depth);
+    const { renderer } = this.host;
+    const pu = this.host.uniforms()[d.probe.uniform].value as THREE.Vector4;
+    AG_PROBE_POINTS.forEach(([x, y, k], i) => {
+      pu.set(x, y, k, 0);
+      cam.material.uniformsNeedUpdate = true;
+      s.cam!.viewport.set(i, 0, 1, 1);
+      this.quad.material = cam.material;
+      renderer.setRenderTarget(s.cam!);
+      renderer.render(this.quadScene, this.host.camera);
+    });
+    s.cam!.viewport.set(0, 0, 4, 1);
+    if (depth && s.depth) {
+      depth.material.uniformsNeedUpdate = true;
+      this.quad.material = depth.material;
+      renderer.setRenderTarget(s.depth);
+      renderer.render(this.quadScene, this.host.camera);
+    }
+    return { cam: s.cam!.texture, depth: depth && s.depth ? s.depth.texture : null };
+  }
+
+  /**
+   * Draw agents in 3D (kit/agentShaders.js AG_DRAW3_VERT): the same look as in 2D, through the
+   * built-in camera (kit/agentPlan.js agCamera3) or a scene's (`seen`), with depth of field; then
+   * the same glow and compose, the lights' halos where they land through the camera.
+   */
+  private draw3(s: DrawState, d: AgentDrawProgram, g: AgentGroupProgram, gs: GroupState, aspect: number, time: number, seen: { cam: THREE.Texture; depth: THREE.Texture | null } | null): THREE.WebGLRenderTarget {
+    const { renderer } = this.host;
+    const prevColor = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
+    renderer.setClearColor(0x000000, 0);
+    renderer.setRenderTarget(s.acc);
+    renderer.clear(true, false, false);
+    renderer.setClearColor(prevColor, prevAlpha);
+    const n = g.side * g.side;
+    const look = agDrawLook(d, n, s.h, this.reader, this.colourReader);
+    const cam = agCamera3(d, this.reader, time, s.h);
+    const du = this.draw3Mat.uniforms;
+    du.u_a.value = gs.rt[gs.cur].textures[0];
+    du.u_b.value = gs.rt[gs.cur].textures[1];
+    du.u_c.value = g.stateC ? gs.rt[gs.cur].textures[2] : null;
+    du.u_stateC.value = g.stateC ? 1 : 0;
+    du.u_side.value = g.side; du.u_species.value = g.species; du.u_aspect.value = aspect;
+    du.u_colorBy.value = look.colorBy; du.u_size.value = look.size; du.u_bright.value = look.bright; du.u_speedRef.value = look.speedRef;
+    du.u_thread.value = look.thread; du.u_ink.value = look.ink ? 1 : 0; du.u_fade.value = look.fade ? 1 : 0;
+    du.u_usePal.value = look.usePal ? 1 : 0; du.u_rainbow.value = look.rainbow ? 1 : 0;
+    if (look.pal) (du.u_pal.value as THREE.Vector3[]).forEach((v, i) => v.fromArray(look.pal![i]));
+    (du.u_colA.value as THREE.Vector3).fromArray(look.colA);
+    (du.u_colB.value as THREE.Vector3).fromArray(look.colB);
+    (du.u_viewSize.value as THREE.Vector2).set(s.w, s.h);
+    (du.u_eye.value as THREE.Vector3).fromArray(cam.eye); (du.u_fwd.value as THREE.Vector3).fromArray(cam.fwd);
+    (du.u_right.value as THREE.Vector3).fromArray(cam.right); (du.u_up.value as THREE.Vector3).fromArray(cam.up);
+    du.u_lens.value = cam.lens; du.u_ortho.value = seen ? 0 : cam.ortho; du.u_camDist.value = cam.dist;
+    du.u_focus.value = seen ? cam.focusShare : cam.focus; du.u_coc.value = cam.coc; du.u_cap.value = cam.cap;
+    du.u_camSrc.value = seen ? 1 : 0; du.u_cam.value = seen?.cam ?? null;
+    du.u_depth.value = seen?.depth ? 1 : 0; du.u_field.value = seen?.depth ?? null;
+    const lights = agLights(d, this.reader, this.colourReader, time, aspect);
+    du.u_lights.value = lights.length;
+    (du.u_light.value as THREE.Vector4[]).forEach((v, i) => { const l = lights[i]; if (l) v.set(l.x, l.y, l.reach, l.power); else v.set(0, 0, 1, 0); });
+    (du.u_lightZ.value as THREE.Vector4).set(lights[0]?.z ?? 0, lights[1]?.z ?? 0, lights[2]?.z ?? 0, lights[3]?.z ?? 0);
+    (du.u_lightCol.value as THREE.Vector3[]).forEach((v, i) => { const l = lights[i]; if (l) v.fromArray(l.colour); else v.set(0, 0, 0); });
+    renderer.setRenderTarget(s.acc);
+    const pass = (prim: 0 | 1) => {
+      du.u_prim.value = prim;
+      this.draw3Mat.uniformsNeedUpdate = true;
+      if (prim === 1) {
+        this.lines.material = this.draw3Mat;
+        this.pointGeometry.setDrawRange(0, 2 * n);
+        renderer.render(this.lineScene, this.host.camera);
+        this.lines.material = this.drawMat;
+      } else {
+        this.points.material = this.draw3Mat;
+        this.pointGeometry.setDrawRange(0, n);
+        renderer.render(this.pointScene, this.host.camera);
+      }
+    };
+    // Streaks: the blurred share as points, the sharp share as lines (the Particles node's 3D threads).
+    pass(0);
+    if (look.lines) pass(1);
+    if (d.style === 'points') return s.acc;
+    // The lights' halos where they land through the camera (a scene's camera is only on the GPU: no halos then).
+    const halos = seen ? [] : lights.map(l => {
+      const q = agProject3(cam, [l.x, l.y, l.z]);
+      return q.depth <= 0.05 ? { ...l, power: 0 } : { ...l, x: q.x, y: q.y, reach: l.reach * cam.dist / q.depth };
+    });
+    return this.glowCompose(s, look, halos, aspect);
+  }
+
+  /** The Particles node's glow, unchanged, and the compose with the lights' halos (shared by the 2D and 3D draws). */
+  private glowCompose(s: DrawState, look: { glow: number; halo: number; ink: boolean }, lights: Array<{ x: number; y: number; reach: number; power: number; colour: number[] }>, aspect: number): THREE.WebGLRenderTarget {
+    const [d1, b1, d2, b2] = s.glow;
+    const down = (src: THREE.WebGLRenderTarget, into: THREE.WebGLRenderTarget) => {
+      this.downMat.uniforms.u_src.value = src.texture;
+      (this.downMat.uniforms.u_texel.value as THREE.Vector2).set(1 / src.width, 1 / src.height);
+      this.pass(this.downMat, into);
+    };
+    const blur = (a: THREE.WebGLRenderTarget, scratch: THREE.WebGLRenderTarget) => {
+      const bu = this.blurMat.uniforms;
+      (bu.u_size.value as THREE.Vector2).set(a.width, a.height);
+      bu.u_src.value = a.texture; (bu.u_dir.value as THREE.Vector2).set(1, 0); this.pass(this.blurMat, scratch);
+      bu.u_src.value = scratch.texture; (bu.u_dir.value as THREE.Vector2).set(0, 1); this.pass(this.blurMat, a);
+    };
+    down(s.acc, d1); blur(d1, b1);
+    down(d1, d2); blur(d2, b2);
+    const cu = this.composeMat.uniforms;
+    cu.u_acc.value = s.acc.texture; cu.u_g1.value = d1.texture; cu.u_g2.value = d2.texture;
+    (cu.u_size.value as THREE.Vector2).set(s.w, s.h);
+    cu.u_aspect.value = aspect;
+    cu.u_glow.value = look.glow;
+    cu.u_halo.value = look.halo;
+    cu.u_ink.value = look.ink ? 1 : 0;
+    cu.u_lights.value = lights.length;
+    (cu.u_light.value as THREE.Vector4[]).forEach((v, i) => { const l = lights[i]; if (l) v.set(l.x, l.y, l.reach, l.power); else v.set(0, 0, 1, 0); });
+    (cu.u_lightCol.value as THREE.Vector3[]).forEach((v, i) => { const l = lights[i]; if (l) v.fromArray(l.colour); else v.set(0, 0, 0); });
+    this.pass(this.composeMat, s.out);
+    return s.out;
+  }
+
   /** Thumbnails for the Trail and Agents group cards that are showing (the live runner, every few frames). */
   drawThumbnails(targets: AgentTargets): void {
     this.drawGroupDots(targets);
@@ -808,7 +1038,7 @@ export class AgentRunner {
       const canvas = trailThumbRegistry.get(t.nodeId);
       if (!canvas) continue;
       const ts = targets.trails.get(t.slug);
-      const W = 128, H = Math.max(8, Math.round(128 * (ts ? ts.h / ts.w : 9 / 16)));
+      const W = 128, H = Math.max(8, Math.round(128 * (ts ? (ts.vol ? ts.vol.ny / ts.vol.nx : ts.h / ts.w) : 9 / 16)));
       if (!this.thumbRt || this.thumbRt.height !== H) {
         this.thumbRt?.dispose();
         this.thumbRt = new THREE.WebGLRenderTarget(W, H, { type: THREE.UnsignedByteType, depthBuffer: false });
@@ -818,7 +1048,7 @@ export class AgentRunner {
       const ctx = canvas.getContext('2d');
       if (!ctx) continue;
       if (!ts) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); continue; }
-      this.thumbMat.uniforms.t.value = ts.rt[ts.cur].texture;
+      this.thumbMat.uniforms.t.value = (ts.proj ?? ts.rt[ts.cur]).texture;
       this.thumbMat.uniforms.g.value = this.read(t.params.gain, 0.15);
       this.thumbMat.uniformsNeedUpdate = true;
       renderer.setRenderTarget(this.thumbRt);
@@ -828,7 +1058,7 @@ export class AgentRunner {
       const img = ctx.createImageData(W, H);
       for (let y = 0; y < H; y++) img.data.set(this.thumbBuf!.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
       ctx.putImageData(img, 0, 0);
-      canvas.dataset.size = `${ts.w}×${ts.h}`;
+      canvas.dataset.size = ts.vol ? `${ts.vol.nx}×${ts.vol.ny}×${ts.vol.nz}` : `${ts.w}×${ts.h}`;
     }
   }
 
@@ -925,7 +1155,9 @@ export class AgentRunner {
   dispose(): void {
     for (const e of this.steps) this.drop(e);
     for (const e of this.trailSteps) this.drop(e);
+    for (const e of this.probes) this.drop(e);
     this.trailSteps = [];
+    this.probes = [];
     const u = this.boundTo;
     if (u) {
       for (const g of this.spec.groups) for (const n of [agentStateUniform(g.slug, 'A'), agentStateUniform(g.slug, 'B'), agentStateUniform(g.slug, 'C'), agentStateUniform(g.slug, 'D')]) if (u[n]) u[n].value = null;
@@ -937,7 +1169,7 @@ export class AgentRunner {
       for (const d of this.spec.draws) if (u[agentDrawUniform(d.slug)]) u[agentDrawUniform(d.slug)].value = null;
     }
     this.steps = [];
-    for (const m of [this.depositMat, this.trailMat, this.drawMat, this.downMat, this.blurMat, this.composeMat, this.thumbMat, this.dotsMat, this.readMat, this.sumMat, this.placeholder]) m.dispose();
+    for (const m of [this.depositMat, this.trailMat, this.drawMat, this.downMat, this.blurMat, this.composeMat, this.thumbMat, this.dotsMat, this.readMat, this.sumMat, this.placeholder, this.deposit3Mat, this.trail3Mat, this.proj3Mat, this.draw3Mat]) m.dispose();
     for (const r of this.reads.values()) { for (const rt of r.rts) rt.dispose(); r.reader.dispose(); }
     this.reads.clear();
     for (const id of [...this.dotReads.keys()]) this.dropDots(id);

@@ -17,9 +17,9 @@
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { fieldFn, p } from './helpers';
-import { agHandParams, agHandPlace, hashId } from './agents';
+import { AG_BOX3, agHandParams, agHandPlace, hashId, isAgent3d } from './agents';
 import {
-  GP_SHADERS, gpAttractPull, gpBesselGlsl, gpCrunch, gpCurlAt, gpCurlOctave2, gpCurlPlane, gpFade, gpFlowPush, gpGust,
+  GP_SHADERS, gpAttractPull, gpBesselGlsl, gpCrunch, gpCurl3D, gpCurlAt, gpCurlOctave2, gpCurlPlane, gpFade, gpFlowPush, gpGust,
   gpHandFall, gpHandPush, gpLevelGlsl, gpPlateGlsl, gpPlateStep, gpShockPush, gpShockRing, gpSwirl, gpVibrate, gpWavePhase, gpWavePush,
 } from '../../play/kit/gpuParticles.js';
 
@@ -31,6 +31,10 @@ const sel = (v: unknown, allowed: string[], fallback: string) => (typeof v === '
 const plus = (also: string | undefined) => (also ? ` + ${also}` : '');
 /** The pointer in picture coordinates (the Mouse node's formula). */
 const MOUSE = '((u_mouse / u_resolution.y - vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5) * 2.0)';
+/** In 3D: a param only a 3D group shows (its card hides it in 2D, and it never becomes a uniform there). */
+const in3d = { showWhen: { param: 'agentSpace', value: '3d' } };
+/** A 2D vector `e` (a field's slope, a swirl in the picture's plane) as a 3D force, flat in z. */
+const flat3 = (e: string) => `vec3(${e}, 0.0)`;
 /** The Particles engine's hash and gradient noise (gpHash, gpRnd, gpUnit; gpNoised), as they are. */
 const GP_HASH_NOISE = [GP_SHADERS.GP_HASH, GP_SHADERS.GP_NOISE];
 /** A random-number state for this node: this walker, this step, this node. */
@@ -80,11 +84,16 @@ export const AgentGravityNode: NodeDefinition = {
   defaultParams: { strength: 0.5, angle: -90 },
   paramDefs: {
     strength: { label: 'Strength', type: 'float', min: -4, max: 4, step: 0.01, hint: 'How hard it pulls (picture units/s²). Negative pulls the other way.' },
-    angle: { label: 'Angle', type: 'float', min: -180, max: 180, step: 1, hint: 'Which way, in degrees: −90 is down, 90 up, 0 right.' },
+    angle: { label: 'Angle', type: 'float', min: -180, max: 180, step: 1, hint: 'Which way, in degrees: −90 is down, 90 up, 0 right. In 3D, in the picture\'s plane (wire a Direction for any other way).' },
   },
   assignable: false,
   generateGLSL: (node: GraphNode, v) => {
     const id = node.id;
+    if (isAgent3d(node)) {
+      const ang = `radians(${p(node.params.angle, -90)})`;
+      const dir = v.direction ? `(length(${v.direction}) > 1e-6 ? normalize(${v.direction}) : vec3(0.0))` : `vec3(cos(${ang}), sin(${ang}), 0.0)`;
+      return { code: `    vec3 ${id}_f = ${dir} * ${v.strength ?? p(node.params.strength, 0.5)}${plus(v.also)};\n`, outputVars: { force: `${id}_f` } };
+    }
     const dir = v.direction ? `(length(${v.direction}) > 1e-6 ? normalize(${v.direction}) : vec2(0.0))` : `vec2(cos(radians(${p(node.params.angle, -90)})), sin(radians(${p(node.params.angle, -90)})))`;
     return {
       code: `    vec2 ${id}_f = ${dir} * ${v.strength ?? p(node.params.strength, 0.5)}${plus(v.also)};\n`,
@@ -119,6 +128,17 @@ export const AgentWindNode: NodeDefinition = {
     const id = node.id;
     const pos = v.position ?? 'a_pos';
     const ang = `radians(${p(node.params.angle, 0)})`;
+    if (isAgent3d(node)) {
+      // The gusts drift through the box (noise read in 3D); the wind blows in the picture's plane.
+      return {
+        code: [
+          `    vec4 ${id}_n = gpNoised(${gpCurlAt(pos, p(node.params.size, 1), `u_time * ${p(node.params.evolve, 0.15)}`)});\n`,
+          `    float ${id}_g = mix(1.0, ${gpGust(`${id}_n`)}, ${p(node.params.gust, 1)});\n`,
+          `    vec3 ${id}_f = vec3(cos(${ang}), sin(${ang}), 0.0) * (${v.strength ?? p(node.params.strength, 0.3)} * ${id}_g)${plus(v.also)};\n`,
+        ].join(''),
+        outputVars: { force: `${id}_f` },
+      };
+    }
     return {
       code: [
         `    vec4 ${id}_n = gpNoised(${gpCurlAt(`vec3(${pos}, 0.0)`, p(node.params.size, 1), `u_time * ${p(node.params.evolve, 0.15)}`)});\n`,
@@ -156,6 +176,17 @@ export const AgentCurlNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, v) => {
     const id = node.id;
     const pos = v.position ?? 'a_pos';
+    if (isAgent3d(node)) {
+      // The Particles node's curl in 3D: the cross product of two gradients, so streams fold into sheets and threads.
+      return {
+        code: [
+          `    vec3 ${id}_q = ${gpCurlAt(pos, p(node.params.size, 1), `u_time * ${p(node.params.evolve, 0.15)}`)};\n`,
+          `    vec4 ${id}_a = gpNoised(${id}_q), ${id}_b = ${gpCurlOctave2(`${id}_q`)};\n`,
+          `    vec3 ${id}_f = (${gpCurl3D(`${id}_a`, `${id}_b`)}) * ${v.strength ?? p(node.params.strength, 0.4)}${plus(v.also)};\n`,
+        ].join(''),
+        outputVars: { force: `${id}_f`, noise: `${id}_a.x` },
+      };
+    }
     return {
       code: [
         `    vec3 ${id}_q = ${gpCurlAt(`vec3(${pos}, 0.0)`, p(node.params.size, 1), `u_time * ${p(node.params.evolve, 0.15)}`)};\n`,
@@ -188,6 +219,7 @@ export const AgentAttractNode: NodeDefinition = {
     x: { label: 'X', type: 'float', min: -2, max: 2, step: 0.01, hint: 'The point, across (picture units).', showWhen: { param: 'target', value: 'point' } },
     y: { label: 'Y', type: 'float', min: -1, max: 1, step: 0.01, hint: 'The point, up.', showWhen: { param: 'target', value: 'point' } },
     ...agHandParams('target', 'hand', 'The point'),
+    z: { label: 'Z', type: 'float', min: -2, max: 2, step: 0.01, hint: '3D: the point\'s depth (the mouse and a hand are at 0 plus this).', ...in3d },
     strength: { label: 'Strength', type: 'float', min: -8, max: 8, step: 0.01, hint: 'How hard it pulls; negative pushes away.' },
     reach: { label: 'Reach', type: 'float', min: 0.02, max: 4, step: 0.01, hint: 'How far it reaches (picture units).' },
     swirl: { label: 'Swirl', type: 'float', min: -8, max: 8, step: 0.01, hint: 'Stirs them round the point (negative: the other way).' },
@@ -203,6 +235,27 @@ export const AgentAttractNode: NodeDefinition = {
     const target = v.target ?? (at === 'mouse' ? MOUSE : at === 'hand' ? agHandPlace(p(node.params.handX, 0.5), p(node.params.handY, 0.5)) : `vec2(${p(node.params.x, 0)}, ${p(node.params.y, 0)})`);
     const strength = v.strength ?? p(node.params.strength, 0.8);
     const reach = p(node.params.reach, 0.35), swirl = p(node.params.swirl, 0);
+    if (isAgent3d(node)) {
+      // In 3D the pull is toward the point in space; Swirl stirs round the depth axis through it.
+      const t3 = v.target ?? `vec3(${target}, ${p(node.params.z, 0)})`;
+      const far = sel(node.params.falloff, ['reach', 'far'], 'reach') === 'far';
+      return {
+        code: [
+          `    vec3 ${id}_t = ${t3};\n`,
+          ...(far ? [
+            `    vec3 ${id}_g = ${id}_t - ${pos};\n`,
+            `    float ${id}_r = length(${id}_g) + 1e-4;\n`,
+            `    vec3 ${id}_f = ${gpAttractPull(strength, `${id}_g`, `${id}_r`)} + ${flat3(gpSwirl(swirl, `(-${id}_g)`, `${id}_r`, `(${reach} * ${reach})`))}${plus(v.also)};\n`,
+          ] : [
+            `    vec3 ${id}_hd = ${id}_t - ${pos};\n`,
+            `    float ${id}_hr = length(${id}_hd) + 1e-4;\n`,
+            `    float ${id}_fall = ${gpHandFall(`${id}_hr`, reach)};\n`,
+            `    vec3 ${id}_f = (${gpHandPush(strength, swirl, `${id}_hd`, `${id}_hr`, reach, `${id}_fall`)})${plus(v.also)};\n`,
+          ]),
+        ].join(''),
+        outputVars: { force: `${id}_f` },
+      };
+    }
     const lines = [`    vec2 ${id}_t = ${target};\n`];
     if (sel(node.params.falloff, ['reach', 'far'], 'reach') === 'far') {
       lines.push(
@@ -243,6 +296,10 @@ export const AgentVortexNode: NodeDefinition = {
     x: { label: 'X', type: 'float', min: -2, max: 2, step: 0.01, hint: 'The centre, across.', showWhen: { param: 'at', value: 'point' } },
     y: { label: 'Y', type: 'float', min: -1, max: 1, step: 0.01, hint: 'The centre, up.', showWhen: { param: 'at', value: 'point' } },
     ...agHandParams('at', 'hand', 'The centre'),
+    z: { label: 'Z', type: 'float', min: -2, max: 2, step: 0.01, hint: '3D: the centre\'s depth.', ...in3d },
+    axis: { label: 'Axis', type: 'select', hint: '3D: what it swirls round.', help: '3D: Depth swirls in the picture\'s plane, as in 2D (round the axis pointing at you). Up swirls round the vertical, like a whirlpool or a galaxy seen from the side. Across swirls round the horizontal.', options: [
+      { value: 'z', label: 'Depth (in the picture\'s plane)' }, { value: 'y', label: 'Up (a whirlpool)' }, { value: 'x', label: 'Across' },
+    ], ...in3d },
     strength: { label: 'Strength', type: 'float', min: -8, max: 8, step: 0.01, hint: 'How hard it swirls; negative turns the other way.' },
     reach: { label: 'Reach', type: 'float', min: 0.02, max: 4, step: 0.01, hint: 'The radius where it swirls hardest (0.5: the Particles node\'s).' },
   },
@@ -252,6 +309,21 @@ export const AgentVortexNode: NodeDefinition = {
     const at = sel(node.params.at, ['point', 'mouse', 'hand'], 'point');
     const c = v.centre ?? (at === 'mouse' ? MOUSE : at === 'hand' ? agHandPlace(p(node.params.handX, 0.5), p(node.params.handY, 0.5)) : `vec2(${p(node.params.x, 0)}, ${p(node.params.y, 0)})`);
     const reach = p(node.params.reach, 0.5);
+    if (isAgent3d(node)) {
+      // Swirl in the plane across its Axis, round the centre: the 2D swirl on those two coordinates.
+      const axis = sel(node.params.axis, ['z', 'y', 'x'], 'z');
+      const plane = axis === 'y' ? 'xz' : axis === 'x' ? 'yz' : 'xy';
+      const back = (e: string) => (axis === 'y' ? `vec3((${e}).x, 0.0, (${e}).y)` : axis === 'x' ? `vec3(0.0, (${e}).x, (${e}).y)` : flat3(e));
+      return {
+        code: [
+          `    vec3 ${id}_d3 = ${v.position ?? 'a_pos'} - ${v.centre ?? `vec3(${c}, ${p(node.params.z, 0)})`};\n`,
+          `    vec2 ${id}_d = ${id}_d3.${plane};\n`,
+          `    float ${id}_r = length(${id}_d) + 1e-4;\n`,
+          `    vec3 ${id}_f = ${back(gpSwirl(v.strength ?? p(node.params.strength, 0.3), `${id}_d`, `${id}_r`, `(${reach} * ${reach})`))}${plus(v.also)};\n`,
+        ].join(''),
+        outputVars: { force: `${id}_f` },
+      };
+    }
     return {
       code: [
         `    vec2 ${id}_d = ${v.position ?? 'a_pos'} - ${c};\n`,
@@ -300,9 +372,24 @@ export const AgentFlowNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, v) => {
     const id = node.id;
     const fn = fieldFn(v.field);
-    if (!fn) return { code: `    vec2 ${id}_f = vec2(0.0)${plus(v.also)};\n`, outputVars: { force: `${id}_f`, value: v.field ?? '0.0' } };
-    const pos = `${id}_p`;
+    const d3 = isAgent3d(node);
+    if (!fn) return { code: `    ${d3 ? 'vec3' : 'vec2'} ${id}_f = ${d3 ? 'vec3' : 'vec2'}(0.0)${plus(v.also)};\n`, outputVars: { force: `${id}_f`, value: v.field ?? '0.0' } };
     const around = sel(node.params.mode, ['slope', 'around'], 'slope') === 'around';
+    if (d3) {
+      // In 3D the field is the picture's, the same through the depth: it pushes in the picture's plane.
+      return {
+        code: [
+          `    vec3 ${id}_p3 = ${v.position ?? 'a_pos'};\n`,
+          `    vec2 ${id}_p = ${id}_p3.xy;\n`,
+          ...gradientLines(id, fn, `${id}_p`, `max(${p(node.params.step, 0.01)}, 1e-4)`),
+          `    float ${id}_gl = length(${id}_gr);\n`,
+          `    vec2 ${id}_dir = ${around ? `vec2(-${id}_gr.y, ${id}_gr.x)` : `${id}_gr`};\n`,
+          `    vec3 ${id}_f = (${id}_gl > 1e-5 ? ${flat3(gpFlowPush(`${id}_dir`, `${id}_gl`, v.strength ?? p(node.params.strength, 1)))} : vec3(0.0))${plus(v.also)};\n`,
+        ].join(''),
+        outputVars: { force: `${id}_f`, value: `${fn}(${id}_p, vec2(0.0), 1.0, 0.0)` },
+      };
+    }
+    const pos = `${id}_p`;
     return {
       code: [
         `    vec2 ${pos} = ${v.position ?? 'a_pos'};\n`,
@@ -368,6 +455,7 @@ export const AgentSoundKickNode: NodeDefinition = {
     const pos = v.position ?? 'a_pos';
     const strength = v.strength ?? p(node.params.strength, 1);
     const speed = `max(${p(node.params.speed, 1.4)}, 0.01)`;
+    if (isAgent3d(node)) return soundKick3d(node, v);
     const centre = v.centre ?? `vec2(${p(node.params.x, 0)}, ${p(node.params.y, 0)})`;
     const lines = [`    vec2 ${id}_f = vec2(0.0);\n`];
     if (mode === 'shock') {
@@ -403,6 +491,45 @@ export const AgentSoundKickNode: NodeDefinition = {
     return { code: lines.join(''), outputVars: { force: `${id}_f`, level: `${u.sound}.x`, onset: `${u.sound}.w` } };
   },
 };
+
+/** Sound kick in 3D: the rings are spheres travelling out from the centre (at depth 0 unless wired). */
+function soundKick3d(node: GraphNode, v: Record<string, string>): { code: string; outputVars: Record<string, string> } {
+  const id = node.id;
+  const u = listenUniforms(id);
+  const mode = sel(node.params.mode, ['shock', 'wave', 'vibrate', 'shake'], 'shock');
+  const pos = v.position ?? 'a_pos';
+  const strength = v.strength ?? p(node.params.strength, 1);
+  const speed = `max(${p(node.params.speed, 1.4)}, 0.01)`;
+  const centre = v.centre ?? `vec3(${p(node.params.x, 0)}, ${p(node.params.y, 0)}, 0.0)`;
+  const lines = [`    vec3 ${id}_f = vec3(0.0);\n`];
+  if (mode === 'shock') {
+    lines.push(
+      `    for (int ${id}_j = 0; ${id}_j < 4; ${id}_j++) {\n`,
+      `        vec4 ${id}_k = ${u.shocks}[${id}_j];\n`,
+      `        float ${id}_age = u_time - ${id}_k.z;\n`,
+      `        if (${id}_k.w <= 0.0 || ${id}_age < 0.0 || ${id}_age > 3.0) continue;\n`,
+      `        vec3 ${id}_kd = ${pos} - ${v.centre ?? `vec3(${id}_k.xy, 0.0)`};\n`,
+      `        float ${id}_kr = length(${id}_kd) + 1e-4;\n`,
+      `        float ${id}_ring = ${gpShockRing(`${id}_kr`, `${id}_age`, speed)};\n`,
+      `        ${id}_f += ${gpShockPush(`${id}_kd`, `${id}_kr`, `(${id}_k.w * ${strength})`, `${id}_ring`, `${id}_age`)};\n`,
+      `    }\n`,
+    );
+  } else if (mode === 'shake') {
+    lines.push(`    uint ${id}_s = ${rngState(id)};\n`, `    ${id}_f = ${gpCrunch(`${id}_s`, `(${strength} * (0.5 * ${u.sound}.x + 0.7 * ${u.sound}.z))`)};\n`);
+  } else {
+    lines.push(
+      `    vec3 ${id}_sd = ${pos} - ${centre};\n`,
+      `    float ${id}_sr = length(${id}_sd) + 1e-4;\n`,
+      `    vec3 ${id}_dir = ${id}_sd / ${id}_sr;\n`,
+      `    float ${id}_lv = agLevel(${u.levels}, ${id}_sr / ${speed});\n`,
+      `    float ${id}_ph = ${gpWavePhase(`${id}_sr`, 'u_time', speed)};\n`,
+    );
+    if (mode === 'wave') lines.push(`    ${id}_f = ${gpWavePush(`${id}_dir`, strength, `${id}_lv`, `${id}_ph`)};\n`);
+    else lines.push(`    uint ${id}_s = ${rngState(id)};\n`, `    ${id}_f = ${gpVibrate(`${id}_dir`, `${id}_s`, strength, `${id}_lv`, `${id}_ph`)};\n`);
+  }
+  if (v.also) lines.push(`    ${id}_f += ${v.also};\n`);
+  return { code: lines.join(''), outputVars: { force: `${id}_f`, level: `${u.sound}.x`, onset: `${u.sound}.w` } };
+}
 
 // ── Moving: Integrate, then the nodes that move the walker directly ───────────
 
@@ -440,6 +567,7 @@ export const AgentIntegrateNode: NodeDefinition = {
   },
   assignable: false,
   generateGLSL: (node: GraphNode, v) => {
+    if (isAgent3d(node)) return integrate3d(node, v);
     const id = node.id;
     const edges = sel(node.params.edges, ['free', 'wrap', 'bounce', 'slide', 'kill'], 'free');
     const max = p(node.params.maxSpeed, 4);
@@ -474,6 +602,31 @@ export const AgentIntegrateNode: NodeDefinition = {
     };
   },
 };
+
+/** Integrate in 3D: the same Euler step on vec3s, the edges of the box (x ±aspect, y ±1, z ±1). */
+function integrate3d(node: GraphNode, v: Record<string, string>): { code: string; outputVars: Record<string, string> } {
+  const id = node.id;
+  const edges = sel(node.params.edges, ['free', 'wrap', 'bounce', 'slide', 'kill'], 'free');
+  const max = p(node.params.maxSpeed, 4);
+  const lines = [
+    `    vec3 ${id}_v = ${v.velocity ?? 'a_vel'} + ${v.force ?? 'vec3(0.0)'} / max(${p(node.params.mass, 1)}, 1e-3) * a_dt;\n`,
+    `    ${id}_v *= exp(-${v.drag ?? p(node.params.drag, 1)} * a_dt);\n`,
+    `    float ${id}_sp = length(${id}_v);\n`,
+    `    if (${max} > 0.0 && ${id}_sp > ${max}) ${id}_v *= ${max} / ${id}_sp;\n`,
+    `    vec3 ${id}_p = ${v.position ?? 'a_pos'} + ${id}_v * a_dt;\n`,
+    `    vec3 ${id}_b = ${AG_BOX3};\n`,
+    `    float ${id}_hit = any(greaterThan(abs(${id}_p), ${id}_b)) ? 1.0 : 0.0;\n`,
+    `    float ${id}_alive = 1.0;\n`,
+  ];
+  if (edges === 'wrap') lines.push(`    ${id}_p = mod(${id}_p + ${id}_b, 2.0 * ${id}_b) - ${id}_b;\n`);
+  else if (edges === 'bounce') for (const c of ['x', 'y', 'z']) lines.push(`    if (abs(${id}_p.${c}) > ${id}_b.${c}) { ${id}_p.${c} = sign(${id}_p.${c}) * (2.0 * ${id}_b.${c} - abs(${id}_p.${c})); ${id}_v.${c} = -${id}_v.${c}; }\n`);
+  else if (edges === 'slide') {
+    for (const c of ['x', 'y', 'z']) lines.push(`    if (abs(${id}_p.${c}) > ${id}_b.${c}) ${id}_v.${c} = 0.0;\n`);
+    lines.push(`    ${id}_p = clamp(${id}_p, -${id}_b, ${id}_b);\n`);
+  } else if (edges === 'kill') lines.push(`    ${id}_alive = 1.0 - ${id}_hit;\n`);
+  lines.push(`    vec3 ${id}_h = length(${id}_v) > 1e-6 ? normalize(${id}_v) : a_dir;\n`);
+  return { code: lines.join(''), outputVars: { position: `${id}_p`, velocity: `${id}_v`, heading: `${id}_h`, speed: `length(${id}_v)`, alive: `${id}_alive`, hit: `${id}_hit` } };
+}
 
 export const AgentAgeNode: NodeDefinition = {
   type: 'agentAge',
@@ -545,6 +698,21 @@ export const AgentCollideNode: NodeDefinition = {
     const fn = fieldFn(v.shape);
     if (!fn) return { code: '', outputVars: { position: pos, velocity: vel, hit: '0.0', distance: v.shape ?? '1.0e3' } };
     const margin = p(node.params.margin, 0.012), cushion = p(node.params.cushion, 0.08);
+    if (isAgent3d(node)) {
+      // In 3D the shape is the picture's, the same through the depth (a prism): its normal lies in the picture's plane.
+      return {
+        code: [
+          `    vec3 ${id}_p = ${pos};\n`,
+          `    vec3 ${id}_v = ${vel};\n`,
+          `    float ${id}_dd = ${fn}(${id}_p.xy, vec2(0.0), 1.0, 0.0);\n`,
+          ...gradientLines(id, fn, `${id}_p.xy`, '0.002'),
+          `    float ${id}_gl = length(${id}_gr);\n`,
+          `    vec3 ${id}_n = ${id}_gl > 1e-6 ? vec3(${id}_gr / ${id}_gl, 0.0) : vec3(0.0);\n`,
+          ...collideLines(id, margin, cushion, p(node.params.bounce, 0), p(node.params.friction, 0.03)),
+        ].join(''),
+        outputVars: { position: `${id}_p`, velocity: `${id}_v`, hit: `${id}_hit`, distance: `${id}_dd` },
+      };
+    }
     return {
       code: [
         `    vec2 ${id}_p = ${pos};\n`,
@@ -570,6 +738,22 @@ export const AgentCollideNode: NodeDefinition = {
     };
   },
 };
+
+/** Collide's response once `_p`, `_v`, `_dd` (distance), `_gl` (slope) and `_n` (normal) are set: the 2D node's, in any dimension. */
+export function collideLines(id: string, margin: string, cushion: string, bounce: string, friction: string): string[] {
+  return [
+    `    float ${id}_hit = 0.0;\n`,
+    `    if (${id}_dd < ${margin} && ${id}_gl > 1e-6) {\n`,
+    `        ${id}_p += ${id}_n * (${margin} - ${id}_dd);\n`,
+    `        float ${id}_vn = dot(${id}_v, ${id}_n);\n`,
+    `        if (${id}_vn < 0.0) ${id}_v -= (1.0 + ${bounce}) * ${id}_vn * ${id}_n;\n`,
+    `        ${id}_v *= 1.0 - ${friction};\n`,
+    `        ${id}_hit = 1.0;\n`,
+    `    } else if (${id}_dd < ${cushion} && ${id}_gl > 1e-6) {\n`,
+    `        ${id}_v += ${id}_n * (${cushion} - ${id}_dd) * 6.0 * a_dt;\n`,
+    `    }\n`,
+  ];
+}
 
 /** The plate function for a shape and symmetry (shared by every Chladni node of that kind). */
 const plateFn = (round: boolean, plus: boolean) => `agPlate${round ? 'Round' : 'Square'}${plus ? 'Plus' : 'Minus'}`;
@@ -604,6 +788,7 @@ export const AgentChladniNode: NodeDefinition = {
     y: { label: 'Y', type: 'float', min: -1, max: 1, step: 0.01, hint: 'The plate\'s centre, up.' },
     settle: { label: 'Settle', type: 'float', min: 0, max: 10, step: 0.01, hint: 'How fast sand slides to the lines.' },
     shake: { label: 'Shake', type: 'float', min: 0, max: 10, step: 0.01, hint: 'How hard the plate shakes the sand (harder with the sound).' },
+    z: { label: 'Z', type: 'float', min: -1, max: 1, step: 0.01, hint: '3D: the plate lies flat (across and in depth) at height Y; this is its centre\'s depth.', ...in3d },
     ...SOUND_PARAMS,
   },
   assignable: false,
@@ -633,6 +818,27 @@ export const AgentChladniNode: NodeDefinition = {
       half: `max(${p(node.params.size, 0.9)}, 0.02)`, plate: plateFn(round, plus), settle: p(node.params.settle, 1),
       shake: u.plateShake, dt: 'a_dt', shape: round ? '2' : '1', s: `${id}_s`, args: `, ${u.plateCount}, ${u.plateModes}`,
     });
+    if (isAgent3d(node)) {
+      // In 3D the plate lies flat (x and z) at height Y, as the Particles node's: sand settles onto it and to its lines.
+      const cz = p(node.params.z, 0), cy = p(node.params.y, 0), cx = p(node.params.x, 0);
+      return {
+        code: [
+          `    vec3 ${id}_p = ${v.position ?? 'a_pos'};\n`,
+          `    vec3 ${id}_v = ${v.velocity ?? 'a_vel'};\n`,
+          `    float ${id}_u = 0.0;\n`,
+          `    {\n`,
+          `        uint ${id}_s = ${rngState(id)};\n`,
+          `        vec2 c = vec2(${id}_p.x - ${cx}, ${id}_p.z - ${cz});\n`,
+          `${step}\n`,
+          `        ${id}_u = a0;\n`,
+          `        ${id}_p.x = ${cx} + c.x; ${id}_p.z = ${cz} + c.y;\n`,
+          `        ${id}_p.y += (${cy} - ${id}_p.y) * (1.0 - exp(-8.0 * a_dt));\n`,
+          `    }\n`,
+          `    ${id}_v *= exp(-6.0 * a_dt);\n`,
+        ].join(''),
+        outputVars: { position: `${id}_p`, velocity: `${id}_v`, plate: `${id}_u` },
+      };
+    }
     return {
       code: [
         `    vec2 ${id}_p = ${v.position ?? 'a_pos'};\n`,
