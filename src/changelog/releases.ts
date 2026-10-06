@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.42',
+    date: '2026-10-06',
+    title: 'Code on the card',
+    highlights: [
+      { area: 'Studio', text: 'Expression Blocks and Custom Functions show pages on the card: the code (read-only, coloured), a function signature from the wiring, your note and description.' },
+      { area: 'Studio', text: 'Flip pages with the dots or arrows; double-click or Edit opens the full editor, where line editing now lives.' },
+    ],
+  },
+  {
     id: '2026.10.41',
     date: '2026-10-05',
     title: 'A preview for every node',
