@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.59',
+    date: '2026-10-06',
+    title: 'Function cards',
+    highlights: [
+      { area: 'Studio', text: 'Function cards: click a function in read-only code (or ⌥-click / hover in editors, long-press on touch) for its signature, plain meaning and plot.', link: { kind: 'doc', path: 'docs/expression-explainer.md' } },
+      { area: 'Studio', text: 'Each card explains that exact call ("here: 0 to 1 as d goes from 0.3 to 0.32") with How is this used? and snippets; F1 opens it at the caret.' },
+    ],
+  },
+  {
     id: '2026.10.58',
     date: '2026-10-06',
     title: 'Builders up front',
