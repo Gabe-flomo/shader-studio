@@ -20,7 +20,7 @@
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { p } from './helpers';
 import { passPxUniform } from './passes';
-import { BL_BLOOM_W_GLSL, BL_GLSL2, BL_SIGMA_PER_RADIUS } from '../../play/kit/blur.js';
+import { BL_BASE_GLSL, BL_BLOOM_W_GLSL, BL_GLSL2, BL_SIGMA_PER_RADIUS } from '../../play/kit/blur.js';
 
 /** The shared blur functions, GLSL ES 1.00 style: one string, so a program that has it twice declares it once. */
 export const BL_GLSL_GRAPH = BL_GLSL2;
@@ -50,7 +50,7 @@ export const BlurStageNode: NodeDefinition = {
     knee: { label: 'Knee', type: 'float', min: 0, max: 1, step: 0.01 },
   },
   assignable: false,
-  glslFunctions: [BL_GLSL_GRAPH, BL_BLOOM_W_GLSL],
+  glslFunctions: [BL_BASE_GLSL, BL_GLSL_GRAPH, BL_BLOOM_W_GLSL],
   declarationsFor: (node: GraphNode) => {
     const P = node.params;
     return [P.__src, P.__low, P.__cur].filter((s): s is string => typeof s === 'string' && !!s).flatMap(samplerDecl);

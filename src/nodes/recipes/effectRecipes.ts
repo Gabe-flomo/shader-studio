@@ -85,7 +85,7 @@ export const PASS_RECIPES: StarterRecipe[] = [
         nodes: [
           ...pic.nodes,
           n('glowTexture', 'glow', col(1), 0, { threshold: 0.8, radius: 18, intensity: 0.5, ...note(
-            'Glow (texture): keeps what is brighter than Threshold and blurs it by Radius pixels.',
+            'Glow (texture): keeps what is brighter than Threshold and spreads it by Radius pixels (the Bloom chain: a soft core with a long tail).',
             'Why: the glow itself. Radius for a wider halo, Intensity for a brighter one.',
           ) }, { texture: [SELF, 'texture'] }),
           n('addColor', 'over', col(2), 0, note('Add Colors: the picture plus its glow.', 'Why: lays the halo over the original.'), { a: [SELF, 'color'], b: ['glow', 'glow'] }),
@@ -105,7 +105,7 @@ export const PASS_RECIPES: StarterRecipe[] = [
         params: note('Pass: draws the picture into a texture first.', 'Why: a blur reads the pixels around each one, which only works on a texture.'),
         nodes: [
           ...pic.nodes,
-          n('blurTexture', 'blur', col(1), 0, { radius: 10, ...note('Blur (texture): averages the pixels in a disc Radius pixels wide.', 'Why: the blur. Raise Radius for softer.') }, { texture: [SELF, 'texture'] }),
+          n('blurTexture', 'blur', col(1), 0, { radius: 10, ...note('Blur (texture): a smooth Gaussian Radius pixels wide.', 'Why: the blur. Raise Radius for softer.') }, { texture: [SELF, 'texture'] }),
         ],
         wire: pic.wire,
         show: ['blur', 'color'],

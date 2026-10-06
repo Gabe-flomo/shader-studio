@@ -15,7 +15,7 @@
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { fieldFn, p, pv3, withNewOutputs } from './helpers';
-import { BL_BLOOM_W_GLSL, BL_GLSL2 as BL_GLSL_GRAPH } from '../../play/kit/blur.js';
+import { BL_BASE_GLSL, BL_BLOOM_W_GLSL, BL_GLSL2 as BL_GLSL_GRAPH } from '../../play/kit/blur.js';
 import { blurMethod } from '../../compiler/blurPasses';
 import { DM_CHANNELS, DM_CHANNEL_LABELS, DM_GLSL, DM_HINTS, dmChannelGlsl } from '../../play/kit/displace.js';
 
@@ -151,7 +151,85 @@ const QUALITY = { label: 'Quality', type: 'select' as const, showWhen: { param: 
 ] };
 const tapsOf = (v: unknown) => (v === '12' || v === '48' ? Number(v) : 24);
 
-const METHOD_HELP = 'Smooth: a true Gaussian, across then down (two hidden passes that read between texels, so no pixel is skipped), on a smaller copy first when Radius is wide. Bloom chain (Glow): the picture halved again and again, then built back up, each size adding its own glow: a soft core with a long, wide tail, like a lens. Fast: one pass of a few reads turned at random per pixel: cheap, and when Radius is wide it shows fine grain rather than copies. Graphs made before this setting use Smooth (Bloom chain for Glow). Hidden passes don\'t count towards the 8 Pass nodes; Performance lists them under this node.';
+export const SampleTextureNode: NodeDefinition = {
+  type: 'sampleTexture',
+  label: 'Sample (texture)',
+  category: 'Passes',
+  aliases: ['Read texture', 'Texture lookup', 'Offset', 'texture2D'],
+  description: 'Reads a Pass\'s texture at this pixel, shifted by Offset (in picture pixels), or wherever UV says. The building block for displacement and feedback: warp the UV, or read a Pass\'s Previous output.',
+  inputs: {
+    texture: { type: 'texture', label: 'Texture', hint: TEX_HINT },
+    uv: { type: 'vec2', label: 'UV', hint: UV_HINT },
+  },
+  outputs: {
+    color: { type: 'vec3', label: 'Color' },
+    alpha: { type: 'float', label: 'Alpha' },
+  },
+  defaultParams: { offsetX: 0, offsetY: 0 },
+  paramDefs: {
+    offsetX: { label: 'Offset X', type: 'float', min: -50, max: 50, step: 0.5, hint: 'Shift the read sideways, in picture pixels.' },
+    offsetY: { label: 'Offset Y', type: 'float', min: -50, max: 50, step: 0.5, hint: 'Shift the read up or down, in picture pixels.' },
+  },
+  assignable: false,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const tex = inputVars.texture;
+    const code = tex
+      ? `    vec4 ${id}_s = texture2D(${tex}, ${texUv(inputVars.uv ?? 'g_uv')} + vec2(${p(node.params.offsetX, 0)}, ${p(node.params.offsetY, 0)}) * ${passPxUniform(tex)});\n`
+      : `    vec4 ${id}_s = vec4(0.0);\n`;
+    return { code, outputVars: { color: `${id}_s.rgb`, alpha: `${id}_s.a` } };
+  },
+};
+
+export const EdgesTextureNode: NodeDefinition = {
+  type: 'edgesTexture',
+  label: 'Edges (texture)',
+  category: 'Passes',
+  aliases: ['Sobel (texture)', 'Edge detect', 'Outline', 'Find edges', 'Contours'],
+  description: 'Finds the edges in a Pass\'s texture: a 3×3 Sobel filter on its brightness, reading the pixels around this one. Edges is how strong the edge is here (0–1), Direction which way the brightness rises, Color the picture\'s own colour on its edges. Feed it into another Pass to blur or glow the outlines.',
+  inputs: {
+    texture: { type: 'texture', label: 'Texture', hint: TEX_HINT },
+    uv: { type: 'vec2', label: 'UV', hint: UV_HINT },
+  },
+  outputs: {
+    edges: { type: 'float', label: 'Edges', hint: 'Edge strength, 0–1.' },
+    direction: { type: 'vec2', label: 'Direction', hint: 'Which way the brightness rises (unit length on an edge, zero on flat areas).' },
+    color: { type: 'vec3', label: 'Color', hint: 'The texture\'s colour, kept only on its edges.' },
+  },
+  defaultParams: { strength: 2, width: 1 },
+  paramDefs: {
+    strength: { label: 'Strength', type: 'float', min: 0, max: 10, step: 0.05, hint: 'Gain on the edge strength. Raise it for faint edges.' },
+    width: { label: 'Width', type: 'float', min: 0.5, max: 8, step: 0.25, hint: 'How far apart the 3×3 reads are, in picture pixels: wider finds bolder, softer edges.' },
+  },
+  assignable: false,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const tex = inputVars.texture;
+    if (!tex) {
+      return {
+        code: `    float ${id}_edges = 0.0;\n    vec2 ${id}_dir = vec2(0.0);\n    vec3 ${id}_color = vec3(0.0);\n`,
+        outputVars: { edges: `${id}_edges`, direction: `${id}_dir`, color: `${id}_color` },
+      };
+    }
+    const at = (i: number, j: number) => `dot(texture2D(${tex}, ${id}_uv + vec2(${i}.0, ${j}.0) * ${id}_d).rgb, ${LUMA})`;
+    const code = [
+      `    vec2 ${id}_uv = ${texUv(inputVars.uv ?? 'g_uv')};\n`,
+      `    vec2 ${id}_d = ${passPxUniform(tex)} * ${p(node.params.width, 1)};\n`,
+      `    float ${id}_tl = ${at(-1, 1)}; float ${id}_t = ${at(0, 1)}; float ${id}_tr = ${at(1, 1)};\n`,
+      `    float ${id}_l = ${at(-1, 0)}; float ${id}_r = ${at(1, 0)};\n`,
+      `    float ${id}_bl = ${at(-1, -1)}; float ${id}_b = ${at(0, -1)}; float ${id}_br = ${at(1, -1)};\n`,
+      `    vec2 ${id}_g = vec2(${id}_tr + 2.0 * ${id}_r + ${id}_br - ${id}_tl - 2.0 * ${id}_l - ${id}_bl,\n`,
+      `                        ${id}_tl + 2.0 * ${id}_t + ${id}_tr - ${id}_bl - 2.0 * ${id}_b - ${id}_br);\n`,
+      `    float ${id}_glen = length(${id}_g);\n`,
+      `    float ${id}_edges = clamp(${id}_glen * ${p(node.params.strength, 2)}, 0.0, 1.0);\n`,
+      `    vec2 ${id}_dir = ${id}_glen > 1e-5 ? ${id}_g / ${id}_glen : vec2(0.0);\n`,
+      `    vec3 ${id}_color = texture2D(${tex}, ${id}_uv).rgb * ${id}_edges;\n`,
+    ].join('');
+    return { code, outputVars: { edges: `${id}_edges`, direction: `${id}_dir`, color: `${id}_color` } };
+  },
+};
+
+const METHOD_HELP = 'Smooth: a true Gaussian, across then down (two hidden passes that read between texels, so no pixel is skipped), on a smaller copy first when Radius is wide. Bloom chain (Glow): the picture halved again and again, then built back up, each size adding its own glow: a soft core with a long, wide tail, like a lens. Fast: one pass of a few reads turned at random per pixel: cheap, and when Radius is wide it shows fine grain rather than copies. Graphs made before this setting use Smooth, with the same Radius, so they keep their look without the copies; a Glow added now starts as a Bloom chain. Hidden passes don\'t count towards the 8 Pass nodes; Performance lists them under this node.';
 
 /** The hidden pass a node reads (compiler/blurPasses.ts sets __blurSrc on the copy it compiles), or null: draw it in this program. */
 function blurSource(node: GraphNode): { sampler: string; scale: number; cubic: boolean; levels: number } | null {
@@ -196,7 +274,7 @@ export const BlurTextureNode: NodeDefinition = {
     radius: { label: 'Radius', type: 'float', min: 0, max: 64, step: 0.5, hint: 'How far the blur reaches, in picture pixels (σ is 0.45 × Radius). Smooth stays smooth at any Radius.' },
     quality: QUALITY,
   },
-  glslFunctions: [BL_GLSL_GRAPH],
+  glslFunctions: [BL_BASE_GLSL, BL_GLSL_GRAPH],
   declarationsFor: hiddenDecl,
   assignable: false,
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -209,9 +287,10 @@ export const BlurTextureNode: NodeDefinition = {
     if (hidden) code += `    vec4 ${id}_acc = ${readHidden(hidden, uv)};\n`;
     else {
       // Fast, or Smooth where hidden passes can't go (a group without a Pass, an Agents program,
-      // a repeated Pass reading itself): one pass turned per pixel, with Smooth's most reads.
-      const n = blurMethod(node) === 'fast' ? tapsOf(node.params.quality) : 48;
-      code += `    vec4 ${id}_acc = blDisc(${tex}, ${uv}, ${passPxUniform(tex)}, ${p(node.params.radius, 8)}, ${fl(n)}, gl_FragCoord.xy);\n`;
+      // a repeated Pass reading itself): one pass, an exact 2D Gaussian while it is small, else a disc turned per pixel.
+      code += blurMethod(node) === 'fast'
+        ? `    vec4 ${id}_acc = blDisc(${tex}, ${uv}, ${passPxUniform(tex)}, ${p(node.params.radius, 8)}, ${fl(tapsOf(node.params.quality))}, gl_FragCoord.xy);\n`
+        : `    vec4 ${id}_acc = blSoft(${tex}, ${uv}, ${passPxUniform(tex)}, ${p(node.params.radius, 8)}, gl_FragCoord.xy);\n`;
     }
     return { code, outputVars: { color: `${id}_acc.rgb`, alpha: `${id}_acc.a` } };
   },
@@ -242,7 +321,7 @@ export const GlowTextureNode: NodeDefinition = {
     tint: { label: 'Tint', type: 'vec3color', hint: 'Colour the glow is multiplied by (white keeps the picture\'s own colours).' },
     quality: QUALITY,
   },
-  glslFunctions: [BL_GLSL_GRAPH, BL_BLOOM_W_GLSL],
+  glslFunctions: [BL_BASE_GLSL, BL_GLSL_GRAPH, BL_BLOOM_W_GLSL],
   declarationsFor: hiddenDecl,
   assignable: false,
   generateGLSL: (node: GraphNode, inputVars) => {

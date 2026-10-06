@@ -185,8 +185,16 @@ describe('texture-sampling nodes', () => {
   it('compiles the edge-glow chain into two passes and a final program', () => {
     const r = compileGraph({ nodes: edgeGlow() });
     expect(r.errors).toBeUndefined();
-    expect(r.passes!.map(p => p.slug)).toEqual(['pass_4', 'pass_6']);
-    const [a, b] = r.passes!;
+    // Blur (texture) is Smooth: two hidden passes (across, then down) after Pass B, before the picture.
+    expect(r.passes!.map(p => p.slug)).toEqual(['pass_4', 'pass_6', 'tblur_7Blh', 'tblur_7Blv']);
+    expect(r.passes!.map(p => !!p.hidden)).toEqual([false, false, true, true]);
+    const [a, b, h, v] = r.passes!;
+    expect(h.reads).toEqual(['pass_6']);
+    expect(h.fragmentShader).toContain('blGauss(u_pass_pass_6, vUv,');
+    expect(v.reads).toEqual(['tblur_7Blh']);
+    expect(v.fragmentShader).toContain('blGauss(u_pass_tblur_7Blh, vUv,');
+    // Both stages read the card's Radius uniform.
+    for (const st of [h, v]) expect(st.fragmentShader).toContain('u_p_tblurx7_radius');
     expect(a.nodeIds.sort()).toEqual(['node_1', 'node_2', 'node_3']);
     // Pass B runs Edges over Pass A's texture, in picture pixels.
     expect(b.reads).toEqual(['pass_4']);
@@ -194,7 +202,7 @@ describe('texture-sampling nodes', () => {
     expect(b.fragmentShader).toContain('u_pass_pass_4_px');
     expect(b.fragmentShader).not.toContain('circ_2');
     // The final program blurs Pass B and adds the circle, computed again here.
-    expect(r.fragmentShader).toContain('texture2D(u_pass_pass_6,');
+    expect(r.fragmentShader).toContain('blCubic(u_pass_tblur_7Blv,');
     expect(r.fragmentShader).toContain('circ_2');
     expect(r.fragmentShader).not.toContain('u_pass_pass_4;');
     // Sliders stay uniforms with one name everywhere.
@@ -278,7 +286,11 @@ describe('feedback, glow and displace (phase 4)', () => {
     const r = compileGraph({ nodes });
     expect(r.errors).toBeUndefined();
     expect(r.fragmentShader).toContain('texture2D(u_pass_pass_7, tdisp_8_uv).rg');
-    expect(r.fragmentShader).toMatch(/smoothstep\(u_p_tglowx11_threshold/);
+    // Glow is a Bloom chain: its first downsample keeps what is over Threshold.
+    const d1 = r.passes!.find(p => p.slug === 'tglow_11Bld1')!;
+    expect(d1.hidden).toBe(true);
+    expect(d1.fragmentShader).toMatch(/blDown13Keep\(u_pass_pass_4, vUv, .*u_p_tglowx11_threshold/);
+    expect(r.fragmentShader).toContain('blCubic(u_pass_tglow_11Blu1,');
     expect(Object.keys(r.paramBindings)).toEqual(expect.arrayContaining(['node_8::amount', 'node_11::threshold', 'node_11::radius', 'node_11::intensity']));
   });
 });

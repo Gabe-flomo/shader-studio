@@ -352,11 +352,16 @@ export const TextureFlowNode: NodeDefinition = {
 /** Sizes of the neighbourhood: reads across (a disc inside that square). */
 export const NEIGHBOUR_SIZES = ['3', '5', '7', '9'] as const;
 const sizeOf = (v: unknown) => (NEIGHBOUR_SIZES as readonly string[]).includes(String(v)) ? Number(v) : 3;
-/** How many texture reads a Neighbours size makes per pixel (the disc inside the square). */
-export function neighbourTaps(size: number): number {
+/**
+ * How many texture reads a Neighbours size makes per pixel (the disc inside the square). Average
+ * and Difference (`between`) read between texels: (size − 1)² places, half a step off the grid.
+ */
+export function neighbourTaps(size: number, between = false): number {
   const R = (size - 1) / 2;
+  const across = between ? size - 1 : size;
+  const half = (across - 1) / 2;
   let n = 0;
-  for (let y = -R; y <= R; y++) for (let x = -R; x <= R; x++) if (x * x + y * y <= R * R + R) n++;
+  for (let j = 0; j < across; j++) for (let i = 0; i < across; i++) { const x = i - half, y = j - half; if (x * x + y * y <= R * R + R) n++; }
   return n;
 }
 
@@ -381,7 +386,7 @@ export const TextureNeighboursNode: NodeDefinition = {
       { value: 'average', label: 'Average around' }, { value: 'difference', label: 'Difference from average' },
       { value: 'max', label: 'Max around (grow)' }, { value: 'min', label: 'Min around (shrink)' }, { value: 'range', label: 'Range (max − min)' },
     ] },
-    size: { label: 'Size', type: 'select', compileTime: true, hint: 'Reads across (a disc in that square): 3 is 9 reads, 5 is 21, 7 is 37, 9 is 69 per pixel. For a wider reach raise Spacing, or set the Pass upstream to ½.', options: [
+    size: { label: 'Size', type: 'select', compileTime: true, hint: 'Reads across (a disc in that square): 3 is 9 reads, 5 is 21, 7 is 37, 9 is 69 per pixel (Average and Difference read between pixels: 4, 16, 32, 60). For a wider reach raise Spacing, or set the Pass upstream to ½.', options: [
       { value: '3', label: '3 × 3' }, { value: '5', label: '5 × 5' }, { value: '7', label: '7 × 7' }, { value: '9', label: '9 × 9' },
     ] },
     spacing: { label: 'Spacing', type: 'float', min: 0.5, max: 16, step: 0.25, hint: 'Picture pixels between reads: wider grows or shrinks further for the same cost, with gaps on fine detail.' },
@@ -398,8 +403,15 @@ export const TextureNeighboursNode: NodeDefinition = {
     }
     const size = sizeOf(P.size);
     const R = (size - 1) / 2;
-    const taps = size * size;
-    const f1 = (n: number) => `${n}.0`;
+    // Average and Difference read between texels (Xor, "Blur Philosophy 2"): one bilinear read
+    // half a step off-grid is the mean of the 2×2 pixels round it, so (size − 1)² reads cover the
+    // size × size disc, every pixel in it counted (3 × 3 in 4 reads). Max / Min / Range need each
+    // pixel on its own (a blend would soften the max), so they keep the grid.
+    const between = mode === 'average' || mode === 'difference';
+    const across = between ? size - 1 : size;
+    const half = (across - 1) / 2;
+    const taps = across * across;
+    const f1 = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
     const lines = [
       `    vec2 ${id}_st = ${texUv(inputVars.uv ?? 'g_uv')};\n`,
       `    vec2 ${id}_d = ${passPxUniform(tex)} * ${p(P.spacing, 1)};\n`,
@@ -410,7 +422,7 @@ export const TextureNeighboursNode: NodeDefinition = {
       `    float ${id}_n = 0.0;\n`,
       // One loop with a literal bound (the Performance panel reports it): the square, minus its corners.
       `    for (int ${id}_k = 0; ${id}_k < ${taps}; ${id}_k++) {\n`,
-      `        vec2 ${id}_o = vec2(mod(float(${id}_k), ${f1(size)}), floor(float(${id}_k) / ${f1(size)})) - ${f1(R)};\n`,
+      `        vec2 ${id}_o = vec2(mod(float(${id}_k), ${f1(across)}), floor(float(${id}_k) / ${f1(across)})) - ${f1(half)};\n`,
       `        if (dot(${id}_o, ${id}_o) > ${f1(R * R + R)}) continue;\n`,
       `        vec4 ${id}_s = texture2D(${tex}, ${id}_st + ${id}_o * ${id}_d);\n`,
       `        ${id}_sum += ${id}_s; ${id}_hi = max(${id}_hi, ${id}_s); ${id}_lo = min(${id}_lo, ${id}_s); ${id}_n += 1.0;\n`,

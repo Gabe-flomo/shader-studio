@@ -42,6 +42,11 @@ export interface PassProgram {
    * its Previous (the first, the frame before's last). Only present when above 1.
    */
   repeat?: number;
+  /**
+   * A hidden pass of a Blur or Glow (texture) node (compiler/hiddenBlurs.ts): `nodeId` is that
+   * node. Not a Pass node: it doesn't count towards MAX_PASSES and has no card. Only present when true.
+   */
+  hidden?: boolean;
 }
 
 /**

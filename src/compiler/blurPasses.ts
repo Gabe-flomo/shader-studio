@@ -23,12 +23,16 @@ export const MAX_HIDDEN_PASSES = 48;
 
 export type BlurMethod = 'smooth' | 'bloom' | 'fast';
 
-/** A Blur / Glow (texture) node's method. Graphs saved before Method get the new default (Smooth; Bloom for Glow). */
+/**
+ * A Blur / Glow (texture) node's method. A node saved before Method (no `method`) is Smooth: a
+ * true Gaussian with the same Radius units, so an old graph keeps its look without the copies and
+ * rings. A Glow added now starts as a Bloom chain (its defaultParams); Bloom on Blur reads as Smooth.
+ */
 export function blurMethod(node: Pick<GraphNode, 'type' | 'params'>): BlurMethod {
   const m = node.params?.method;
   if (m === 'fast' || m === 'smooth') return m;
   if (m === 'bloom' && node.type === 'glowTexture') return 'bloom';
-  return node.type === 'glowTexture' ? 'bloom' : 'smooth';
+  return 'smooth';
 }
 
 /** One hidden pass. `reads`: 'source' (the node's own Texture wire) or the keys of earlier stages. */
@@ -115,3 +119,8 @@ export function planBlur(method: BlurMethod, radius: number, srcScale: number, g
 
 /** A hidden stage's slug: the node's slug and the stage key (no double underscores: GLSL reserves them). */
 export const hiddenSlug = (nodeSlug: string, key: string) => `${nodeSlug.replace(/_+$/, '')}Bl${key}`;
+
+/** Does the graph have a Smooth or Bloom-chain Blur / Glow (texture) with a Texture wired (top level)? Then it compiles as a pass graph. */
+export function hasHiddenBlur(nodes: readonly GraphNode[]): boolean {
+  return nodes.some(n => BLUR_NODE_TYPES.has(n.type) && !!n.inputs.texture?.connection && blurMethod(n) !== 'fast');
+}

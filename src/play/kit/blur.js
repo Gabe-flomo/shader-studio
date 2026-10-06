@@ -117,7 +117,7 @@ export function blBloomPlan(radius, srcScale = 1) {
 
 /** How many levels a bloom of Radius reaches, as a number (log2 of Radius in level-1 texels). */
 export function blBloomReach(radius, srcScale = 1) {
-  return Math.log2(Math.max(1, Number(radius) || 0) * srcScale / 2);
+  return Math.log2(Math.max(1, Number(radius) || 0) * srcScale / 4);
 }
 
 /** Level k's weight (1-based) for a Radius: the levels inside its reach count fully, the next fades in. Level 1 always counts. */
@@ -131,20 +131,39 @@ export function blChainSizes(w, h, scales) {
   return scales.map(s => blSize(w, h, s));
 }
 
-const LUMA = 'vec3(0.299, 0.587, 0.114)';
+const BL_LUMA = 'vec3(0.299, 0.587, 0.114)';
 
 /**
- * The shared GLSL functions. `T` is the texture read: 'texture2D' for the
- * graph (GLSL ES 1.00 style), 'texture' for GLSL ES 3.00 (the Finish pass).
- * Every offset argument is in the texture's 0–1 coordinates.
+ * Helpers every variant needs and none of them samples: interleaved gradient
+ * noise (Jimenez 2014), the soft threshold and the Karis weight. One string,
+ * listed before the sampling functions, so a program declares it once.
  */
-export function blGlsl(T = 'texture2D') {
-  return `
+export const BL_BASE_GLSL = `
 float blIGN(vec2 p) { return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
-vec3 blKeep(vec3 c, float thr, float knee) { return c * smoothstep(thr, thr + max(knee, 1e-4), dot(c, ${LUMA})); }
+vec3 blKeep(vec3 c, float thr, float knee) { return c * smoothstep(thr, thr + max(knee, 1e-4), dot(c, ${BL_LUMA})); }
 vec4 blKeep4(vec4 c, float thr, float knee) { return vec4(blKeep(c.rgb, thr, knee), c.a); }
-vec4 blGauss(sampler2D s, vec2 uv, vec2 texel, float sigma) {
-  vec4 acc = ${T}(s, uv);
+float blKarisW(vec4 c) { return 1.0 / (1.0 + dot(c.rgb, ${BL_LUMA})); }`;
+
+/**
+ * The shared sampling functions. By default each takes the texture as its
+ * first argument and reads it with `T` ('texture2D' for the graph, GLSL ES
+ * 1.00 style; 'texture' for GLSL ES 3.00, the Finish pass). With `read`, they
+ * take no sampler and read through it instead (`read(q)` → an expression of
+ * a vec4 at q), named with `suffix`: the Studio's effect nodes read the frame
+ * before as `texture2D(u_prevFrame, …)` written out, which the Look stack
+ * rewrites to read the picture (play/lookGraph.ts). Every offset argument is
+ * in the texture's 0–1 coordinates. Needs BL_BASE_GLSL before it.
+ */
+export function blGlsl(T = 'texture2D', read, suffix = '') {
+  const sp = read ? '' : 'sampler2D s, ';
+  const R = q => (read ? read(q) : `${T}(s, ${q})`);
+  const K = q => `blKeep4(${R(q)}, thr, knee)`;
+  const N = name => `${name}${suffix}`;
+  const sa = read ? '' : 's, ';
+  // One 1D Gaussian with linear sampling; `tap` wraps each read (the Glow's threshold).
+  const gauss = (name, tap, extra) => `
+vec4 ${N(name)}(${sp}vec2 uv, vec2 texel, float sigma${extra}) {
+  vec4 acc = ${tap('uv')};
   if (sigma < 0.2) return acc;
   float k = -0.5 / (sigma * sigma);
   float reach = ceil(3.0 * sigma);
@@ -157,57 +176,107 @@ vec4 blGauss(sampler2D s, vec2 uv, vec2 texel, float sigma) {
     float w1 = exp(k * i * i), w2 = exp(k * i2 * i2);
     float W = w1 + w2;
     float o = (i * w1 + i2 * w2) / W;
-    acc += (${T}(s, uv + texel * o) + ${T}(s, uv - texel * o)) * (W * stride);
+    acc += (${tap('uv + texel * o')} + ${tap('uv - texel * o')}) * (W * stride);
     wsum += 2.0 * W * stride;
   }
   return acc / wsum;
-}
-vec4 blGaussKeep(sampler2D s, vec2 uv, vec2 texel, float sigma, float thr, float knee) {
-  vec4 acc = blKeep4(${T}(s, uv), thr, knee);
-  if (sigma < 0.2) return acc;
+}`;
+  const disc = (name, tap, extra) => `
+vec4 ${N(name)}(${sp}vec2 uv, vec2 px, float radius, float n, vec2 frag${extra}) {
+  float sigma = max(radius, 1e-4) * ${BL_SIGMA_PER_RADIUS.toFixed(2)};
+  float k = -0.5 / (sigma * sigma);
+  // Each pixel turns its spiral by up to one golden-angle step and slides its taps out by up to one
+  // ring: copies break up into fine grain, and neighbouring pixels still read nearby texels (the
+  // texture cache; a full random turn per pixel is several times slower at a wide Radius).
+  float rot = (blIGN(frag) - 0.5) * 2.39996323;
+  float jit = blIGN(frag + vec2(37.0, 17.0));
+  vec4 acc = vec4(0.0);
+  float wsum = 0.0;
+  for (int i = 0; i < 64; i++) {
+    if (float(i) >= n) break;
+    float r = sqrt((float(i) + jit) / n) * radius * 1.3;
+    float a = float(i) * 2.39996323 + rot;
+    float w = exp(k * r * r);
+    acc += ${tap('uv + vec2(cos(a), sin(a)) * r * px')} * w;
+    wsum += w;
+  }
+  return acc / max(wsum, 1e-5);
+}`;
+  const tapIn = (name) => {
+    // Jimenez's 13 taps round uv, `t` one source texel.
+    const at = [[-2, 2], [0, 2], [2, 2], [-2, 0], [0, 0], [2, 0], [-2, -2], [0, -2], [2, -2], [-1, 1], [1, 1], [-1, -1], [1, -1]];
+    const v = (x, y) => (x === 0 && y === 0 ? 'uv' : `uv + t * vec2(${x.toFixed(1)}, ${y.toFixed(1)})`);
+    return 'abcdefghijklm'.split('').map((c, i) => `  vec4 ${c} = ${name(v(at[i][0], at[i][1]))};\n`).join('');
+  };
+  return `
+${gauss('blGauss', R, '')}
+${gauss('blGaussKeep', K, ', float thr, float knee')}
+vec4 ${N('blGauss2D')}(${sp}vec2 uv, vec2 texel, float sigma) {
+  // Both directions in one pass: the linear-sampling pairs on a grid ((2n+1)² reads, n ≤ 4), for small σ.
+  if (sigma < 0.2) return ${R('uv')};
   float k = -0.5 / (sigma * sigma);
   float reach = ceil(3.0 * sigma);
-  float stride = max(1.0, ceil(reach / ${(2 * BL_MAX_PAIRS).toFixed(1)}));
-  float wsum = 1.0;
-  for (int j = 0; j < ${BL_MAX_PAIRS}; j++) {
-    float i = (2.0 * float(j) + 1.0) * stride;
-    if (i > reach) break;
-    float i2 = i + stride;
-    float w1 = exp(k * i * i), w2 = exp(k * i2 * i2);
-    float W = w1 + w2;
-    float o = (i * w1 + i2 * w2) / W;
-    acc += (blKeep4(${T}(s, uv + texel * o), thr, knee) + blKeep4(${T}(s, uv - texel * o), thr, knee)) * (W * stride);
-    wsum += 2.0 * W * stride;
+  float stride = max(1.0, ceil(reach / 8.0));
+  vec4 acc = vec4(0.0);
+  float wsum = 0.0;
+  for (int jy = -4; jy <= 4; jy++) {
+    float oy = 0.0, wy = 1.0;
+    if (jy != 0) {
+      float a = (abs(float(jy)) * 2.0 - 1.0) * stride, b = a + stride;
+      if (a > reach) continue;
+      float w1 = exp(k * a * a), w2 = exp(k * b * b);
+      wy = (w1 + w2) * stride; oy = sign(float(jy)) * (a * w1 + b * w2) / (w1 + w2);
+    }
+    for (int jx = -4; jx <= 4; jx++) {
+      float ox = 0.0, wx = 1.0;
+      if (jx != 0) {
+        float a = (abs(float(jx)) * 2.0 - 1.0) * stride, b = a + stride;
+        if (a > reach) continue;
+        float w1 = exp(k * a * a), w2 = exp(k * b * b);
+        wx = (w1 + w2) * stride; ox = sign(float(jx)) * (a * w1 + b * w2) / (w1 + w2);
+      }
+      acc += ${R('uv + texel * vec2(ox, oy)')} * (wx * wy);
+      wsum += wx * wy;
+    }
   }
   return acc / wsum;
 }
-vec4 blDown13(sampler2D s, vec2 uv, vec2 t) {
-  vec4 a = ${T}(s, uv + t * vec2(-2.0, 2.0)), b = ${T}(s, uv + t * vec2(0.0, 2.0)), c = ${T}(s, uv + t * vec2(2.0, 2.0));
-  vec4 d = ${T}(s, uv + t * vec2(-2.0, 0.0)), e = ${T}(s, uv), f = ${T}(s, uv + t * vec2(2.0, 0.0));
-  vec4 g = ${T}(s, uv + t * vec2(-2.0, -2.0)), h = ${T}(s, uv + t * vec2(0.0, -2.0)), i = ${T}(s, uv + t * vec2(2.0, -2.0));
-  vec4 j = ${T}(s, uv + t * vec2(-1.0, 1.0)), k = ${T}(s, uv + t * vec2(1.0, 1.0));
-  vec4 l = ${T}(s, uv + t * vec2(-1.0, -1.0)), m = ${T}(s, uv + t * vec2(1.0, -1.0));
-  return e * 0.125 + (a + c + g + i) * 0.03125 + (b + d + f + h) * 0.0625 + (j + k + l + m) * 0.125;
+vec4 ${N('blDown13')}(${sp}vec2 uv, vec2 t) {
+${tapIn(R)}  return e * 0.125 + (a + c + g + i) * 0.03125 + (b + d + f + h) * 0.0625 + (j + k + l + m) * 0.125;
 }
-float blKarisW(vec4 c) { return 1.0 / (1.0 + dot(c.rgb, ${LUMA})); }
-vec4 blDown13Keep(sampler2D s, vec2 uv, vec2 t, float thr, float knee) {
-  vec4 a = blKeep4(${T}(s, uv + t * vec2(-2.0, 2.0)), thr, knee), b = blKeep4(${T}(s, uv + t * vec2(0.0, 2.0)), thr, knee), c = blKeep4(${T}(s, uv + t * vec2(2.0, 2.0)), thr, knee);
-  vec4 d = blKeep4(${T}(s, uv + t * vec2(-2.0, 0.0)), thr, knee), e = blKeep4(${T}(s, uv), thr, knee), f = blKeep4(${T}(s, uv + t * vec2(2.0, 0.0)), thr, knee);
-  vec4 g = blKeep4(${T}(s, uv + t * vec2(-2.0, -2.0)), thr, knee), h = blKeep4(${T}(s, uv + t * vec2(0.0, -2.0)), thr, knee), i = blKeep4(${T}(s, uv + t * vec2(2.0, -2.0)), thr, knee);
-  vec4 j = blKeep4(${T}(s, uv + t * vec2(-1.0, 1.0)), thr, knee), k = blKeep4(${T}(s, uv + t * vec2(1.0, 1.0)), thr, knee);
-  vec4 l = blKeep4(${T}(s, uv + t * vec2(-1.0, -1.0)), thr, knee), m = blKeep4(${T}(s, uv + t * vec2(1.0, -1.0)), thr, knee);
-  // Karis average (Jimenez 2014): each of the five 2×2 boxes weighed by 1 / (1 + luma), so one blazing texel can't flicker.
+vec4 ${N('blDown13Keep')}(${sp}vec2 uv, vec2 t, float thr, float knee) {
+${tapIn(K)}  // Karis average (Jimenez 2014): each of the five 2×2 boxes weighed by 1 / (1 + luma), so one blazing texel can't flicker.
   vec4 b0 = (j + k + l + m) * 0.25, b1 = (a + b + d + e) * 0.25, b2 = (b + c + e + f) * 0.25, b3 = (d + e + g + h) * 0.25, b4 = (e + f + h + i) * 0.25;
   float w0 = 0.5 * blKarisW(b0), w1 = 0.125 * blKarisW(b1), w2 = 0.125 * blKarisW(b2), w3 = 0.125 * blKarisW(b3), w4 = 0.125 * blKarisW(b4);
   return (b0 * w0 + b1 * w1 + b2 * w2 + b3 * w3 + b4 * w4) / (w0 + w1 + w2 + w3 + w4);
 }
-vec4 blTent(sampler2D s, vec2 uv, vec2 t) {
-  vec4 r = ${T}(s, uv) * 4.0;
-  r += (${T}(s, uv + vec2(t.x, 0.0)) + ${T}(s, uv - vec2(t.x, 0.0)) + ${T}(s, uv + vec2(0.0, t.y)) + ${T}(s, uv - vec2(0.0, t.y))) * 2.0;
-  r += ${T}(s, uv + t) + ${T}(s, uv - t) + ${T}(s, uv + vec2(t.x, -t.y)) + ${T}(s, uv + vec2(-t.x, t.y));
+vec4 ${N('blTent')}(${sp}vec2 uv, vec2 t) {
+  vec4 r = ${R('uv')} * 4.0;
+  r += (${R('uv + vec2(t.x, 0.0)')} + ${R('uv - vec2(t.x, 0.0)')} + ${R('uv + vec2(0.0, t.y)')} + ${R('uv - vec2(0.0, t.y)')}) * 2.0;
+  r += ${R('uv + t')} + ${R('uv - t')} + ${R('uv + vec2(t.x, -t.y)')} + ${R('uv + vec2(-t.x, t.y)')};
   return r / 16.0;
 }
-vec4 blCubic(sampler2D s, vec2 uv, vec2 size) {
+${blCubicGlsl(T, N('blCubic'), read)}
+${disc('blDisc', R, '')}
+${disc('blDiscKeep', K, ', float thr, float knee')}
+vec4 ${N('blSoft')}(${sp}vec2 uv, vec2 px, float radius, vec2 frag) {
+  // Smooth in one pass, where hidden passes can't go: an exact Gaussian while σ ≤ 3 pixels, a fine-grained disc past it.
+  float sigma = radius * ${BL_SIGMA_PER_RADIUS.toFixed(2)};
+  if (sigma <= 3.0) return ${N('blGauss2D')}(${sa}uv, px, sigma);
+  return ${N('blDisc')}(${sa}uv, px, radius, 48.0, frag);
+}
+`;
+}
+
+/**
+ * A cubic B-spline read in 4 bilinear reads (Sigg & Hadwiger, GPU Gems 2 ch. 20): a small texture
+ * read back at a larger size with no bilinear diamonds. `size` is the texture's size in texels.
+ * On its own (no blGlsl) for hosts that only read a chain back, such as the Look's glow levels.
+ */
+export function blCubicGlsl(T = 'texture2D', name = 'blCubic', read) {
+  const sp = read ? '' : 'sampler2D s, ';
+  const R = q => (read ? read(q) : `${T}(s, ${q})`);
+  return `vec4 ${name}(${sp}vec2 uv, vec2 size) {
   vec2 p = uv * size - 0.5;
   vec2 f = fract(p);
   p -= f;
@@ -218,51 +287,16 @@ vec4 blCubic(sampler2D s, vec2 uv, vec2 size) {
   vec2 w3 = f3 / 6.0;
   vec2 s0 = w0 + w1, s1 = w2 + w3;
   vec2 q0 = (p - 0.5 + w1 / s0) / size, q1 = (p + 1.5 + w3 / s1) / size;
-  return (${T}(s, vec2(q0.x, q0.y)) * s0.x + ${T}(s, vec2(q1.x, q0.y)) * s1.x) * s0.y
-       + (${T}(s, vec2(q0.x, q1.y)) * s0.x + ${T}(s, vec2(q1.x, q1.y)) * s1.x) * s1.y;
-}
-vec4 blDisc(sampler2D s, vec2 uv, vec2 px, float radius, float n, vec2 frag) {
-  float sigma = max(radius, 1e-4) * ${BL_SIGMA_PER_RADIUS.toFixed(2)};
-  float k = -0.5 / (sigma * sigma);
-  float rot = blIGN(frag) * 6.2831853;
-  float jit = blIGN(frag + vec2(37.0, 17.0));
-  vec4 acc = vec4(0.0);
-  float wsum = 0.0;
-  for (int i = 0; i < 64; i++) {
-    if (float(i) >= n) break;
-    float r = sqrt((float(i) + jit) / n) * radius * 1.3;
-    float a = float(i) * 2.39996323 + rot;
-    float w = exp(k * r * r);
-    acc += ${T}(s, uv + vec2(cos(a), sin(a)) * r * px) * w;
-    wsum += w;
-  }
-  return acc / max(wsum, 1e-5);
-}
-vec4 blDiscKeep(sampler2D s, vec2 uv, vec2 px, float radius, float n, vec2 frag, float thr, float knee) {
-  float sigma = max(radius, 1e-4) * ${BL_SIGMA_PER_RADIUS.toFixed(2)};
-  float k = -0.5 / (sigma * sigma);
-  float rot = blIGN(frag) * 6.2831853;
-  float jit = blIGN(frag + vec2(37.0, 17.0));
-  vec4 acc = vec4(0.0);
-  float wsum = 0.0;
-  for (int i = 0; i < 64; i++) {
-    if (float(i) >= n) break;
-    float r = sqrt((float(i) + jit) / n) * radius * 1.3;
-    float a = float(i) * 2.39996323 + rot;
-    float w = exp(k * r * r);
-    acc += blKeep4(${T}(s, uv + vec2(cos(a), sin(a)) * r * px), thr, knee) * w;
-    wsum += w;
-  }
-  return acc / max(wsum, 1e-5);
-}
-`;
+  return (${R('vec2(q0.x, q0.y)')} * s0.x + ${R('vec2(q1.x, q0.y)')} * s1.x) * s0.y
+       + (${R('vec2(q0.x, q1.y)')} * s0.x + ${R('vec2(q1.x, q1.y)')} * s1.x) * s1.y;
+}`;
 }
 
 /** The bloom chain's level weights in GLSL: blBloomW(radius, srcScale, k), as blBloomWeight. */
 export const BL_BLOOM_W_GLSL = `
 float blBloomW(float radius, float srcScale, float k) {
   if (k <= 1.0) return 1.0;
-  return clamp(log2(max(radius, 1.0) * srcScale / 2.0) - k + 2.0, 0.0, 1.0);
+  return clamp(log2(max(radius, 1.0) * srcScale / 4.0) - k + 2.0, 0.0, 1.0);
 }
 float blBloomSum(float radius, float srcScale, float levels) {
   float s = 0.0;
@@ -272,3 +306,8 @@ float blBloomSum(float radius, float srcScale, float levels) {
 
 /** blGlsl for the graph (GLSL ES 1.00 style): one string, so a program with several blur nodes declares it once. */
 export const BL_GLSL2 = blGlsl('texture2D');
+/**
+ * blGlsl reading the frame before (u_prevFrame), for the Studio's effect nodes (Gaussian Blur,
+ * Bloom, Tilt-Shift, Lens Blur): every function named …Prev, the read written out (clamped).
+ */
+export const BL_PREV_GLSL = blGlsl('texture2D', q => `texture2D(u_prevFrame, clamp(${q}, 0.0, 1.0))`, 'Prev');

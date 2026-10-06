@@ -31,6 +31,7 @@
  * outside the GPU.
  */
 import { FN_TONE_GLSL, FN_TONE_FUNCTIONS, FN_CRT_MASK_GLSL } from './finishGlsl.js';
+import { BL_BASE_GLSL, blGlsl, blCubicGlsl } from './blur.js';
 import { gyAtlas } from './glyphs.js';
 import { DM_GLSL, DM_HINTS, DM_CHANNELS, DM_BEHAVIOURS, dmChannelGlsl, dmBoxOf } from './displace.js';
 
@@ -2081,7 +2082,7 @@ export function fnBuildFinal(effects, opts = {}) {
   return s <= 0.0 ? step(uWipe.y, t) : smoothstep(uWipe.y - s, uWipe.y + s, t);
 }
 `;
-  if (glow) src += `uniform sampler2D uQ0, uQ1, uE0, uE1, uG0, uG1;\nuniform float uGlowFloat;\nvec3 glowDec(vec3 v) { return uGlowFloat > 0.5 ? v : v / max(vec3(1e-4), 1.0 - v); }\n`;
+  if (glow) src += `uniform sampler2D uQ0, uQ1, uE0, uE1, uG0, uG1;\nuniform float uGlowFloat;\nvec3 glowDec(vec3 v) { return uGlowFloat > 0.5 ? v : v / max(vec3(1e-4), 1.0 - v); }\n${blCubicGlsl('texture', 'blCubicT')}\nvec3 glowAt(sampler2D s, vec2 q) { return glowDec(blCubicT(s, q, vec2(textureSize(s, 0))).rgb); }\n`;
   if (has('halation')) src += 'uniform sampler2D uHM;\n';
   if (has('grade')) src += (opts.tone && opts.tone !== 'none' ? FN_TONE_GLSL + '\n' : '') + FN_GRADE(opts.tone || 'none', !!opts.hueCurves, opts.curves !== false || !!opts.hueCurves);
   if (has('crt')) src += FN_CRT_MASK_GLSL + '\n';
@@ -2299,11 +2300,11 @@ vec4 fetch(vec2 q) {
     vec3 m = crtMaskFn(gPx, max(cell, 1.0), 0.6 + 0.4 * crt_mask, crt_stagger, crt_scanlines);
     c *= mix(vec3(1.0), m, crt_mask);
     c *= 1.0 + crt_pulse * cos(gPx.x / (60.0 * uRes.y / 1080.0) + uTime * 20.0);
-    vec3 g = glowDec(texture(uE0, p).rgb) * 0.6 + glowDec(texture(uQ0, p).rgb) * 0.4;
+    vec3 g = glowAt(uE0, p) * 0.6 + glowAt(uQ0, p) * 0.4;
     c = toSrgb(toLin(c) + g * crt_glow * 0.8);
   }`);
     if (k === 'bloom') op(e, `{
-    vec3 bq = glowDec(texture(uQ0, p).rgb), be = glowDec(texture(uE0, p).rgb), bg = glowDec(texture(uG0, p).rgb);
+    vec3 bq = glowAt(uQ0, p), be = glowAt(uE0, p), bg = glowAt(uG0, p);
     vec3 b = (bloom_radius < 0.5 ? mix(bq, be, bloom_radius * 2.0) : mix(be, bg, bloom_radius * 2.0 - 1.0)) * vec3(bloom_tintR, bloom_tintG, bloom_tintB);
     vec3 x = toLin(c);
     c = toSrgb(x + (1.0 - x) * (1.0 - exp(-b * bloom_amount * 1.5)));
@@ -2311,7 +2312,7 @@ vec4 fetch(vec2 q) {
     if (k === 'halation') op(e, `{
     // The tight bleed (a max-spread of the red source, half size) plus the Reach tail (a blur: the eighth level, widening to the sixteenth); fnHalPixel does the same.
     vec3 hm = glowDec(texture(uHM, p).rgb);
-    float tail = mix(glowDec(texture(uE1, p).rgb).r, glowDec(texture(uG1, p).rgb).r, clamp(halation_reach * 2.0 - 1.0, 0.0, 1.0)) * min(1.0, halation_reach * 2.0);
+    float tail = mix(glowAt(uE1, p).r, glowAt(uG1, p).r, clamp(halation_reach * 2.0 - 1.0, 0.0, 1.0)) * min(1.0, halation_reach * 2.0);
     vec3 x = toLin(c);
     float bleed = halation_amount * (${fnGl(FN_HAL.gain)} * hm.r + ${fnGl(FN_HAL.tail)} * tail);
     float dR = max(bleed, 0.0) * (1.0 - smoothstep(${fnGl(FN_HAL.recv[0])}, ${fnGl(FN_HAL.recv[1])}, x.r));
@@ -2367,10 +2368,13 @@ vec4 fetch(vec2 q) {
     vec3 ec = vec3(edges_colorR, edges_colorG, edges_colorB);
     // Rainbow: the line's colour by its direction, turning slowly.
     if (edges_rainbow > 0.0) ec = mix(ec, fnHueC(fract(atan(gy, gx) / 6.2831853 + uTime * 0.05 + 1.0)), edges_rainbow);
-    // Glow: a soft halo, from brightness differences across four directions at four times the width.
+    // Glow: a soft halo, from brightness differences across four directions out to four times the width.
+    // Each pixel turns the directions and picks its own distances (interleaved gradient noise, as
+    // play/kit/blur.js), so the halo is a soft band rather than copies of the line 4 widths out.
     float halo = 0.0;
     if (edges_glow > 0.0) {
-      for (int i = 0; i < 4; i++) { float an = float(i) * 0.7853982; vec2 d = vec2(cos(an), sin(an)) * o * 4.0; halo += abs(fnPicLuma(q + d) - fnPicLuma(q - d)); }
+      float rn = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+      for (int i = 0; i < 4; i++) { float an = (float(i) + rn) * 0.7853982; vec2 d = vec2(cos(an), sin(an)) * o * mix(1.5, 4.0, fract(rn * 7.0 + float(i) * 0.618034)); halo += abs(fnPicLuma(q + d) - fnPicLuma(q - d)); }
       halo = smoothstep(0.02, 0.8, halo * 0.5) * edges_glow * 0.6;
     }
     c = mix(mix(c, vec3(0.0), edges_only), ec, ed * edges_amount);
@@ -2553,6 +2557,26 @@ void main() {
   vec2 p = gl_FragCoord.xy / uRes, d1 = uDir * 1.3846153846, d2 = uDir * 3.2307692308;
   o0 = texture(uA, p) * 0.2270270270 + (texture(uA, p + d1) + texture(uA, p - d1)) * 0.3162162162 + (texture(uA, p + d2) + texture(uA, p - d2)) * 0.0702702703;
   o1 = texture(uB, p) * 0.2270270270 + (texture(uB, p + d1) + texture(uB, p - d1)) * 0.3162162162 + (texture(uB, p + d2) + texture(uB, p - d2)) * 0.0702702703;
+}
+`;
+
+/**
+ * Jimenez's 13-tap 2× downsample (play/kit/blur.js), both attachments at once: the ⅛ and 1/16
+ * glow levels start from it, then blur across and down one texel apart. (They used to blur and
+ * shrink in one step, 2 and 1.5 texels apart, which skipped texels and rippled round bright points.)
+ */
+const FN_DOWN = `#version 300 es
+precision highp float;
+uniform sampler2D uA, uB;
+uniform vec2 uRes, uDir;
+layout(location = 0) out vec4 o0;
+layout(location = 1) out vec4 o1;
+${BL_BASE_GLSL}
+${blGlsl('texture')}
+void main() {
+  vec2 p = gl_FragCoord.xy / uRes;
+  o0 = blDown13(uA, p, uDir);
+  o1 = blDown13(uB, p, uDir);
 }
 `;
 
@@ -3083,7 +3107,7 @@ export function fnCreate(canvasIn) {
   }
   const dropTarget = t => { if (!t) return; gl.deleteFramebuffer(t.fb); for (const x of t.texs) gl.deleteTexture(x); };
   // The glow levels: a quarter (q), an eighth (e) and a sixteenth (g) of the frame, each blurred across (…t) then down (…b).
-  const GLOW_LEVELS = ['q', 'qt', 'qb', 'et', 'eb', 'gt', 'gb'];
+  const GLOW_LEVELS = ['q', 'qt', 'qb', 'ed', 'et', 'eb', 'gd', 'gt', 'gb'];
   let glowT = null;
   // Halation's half-size levels: its source (pre), the max-spread across (t) and then down (m).
   const HAL_LEVELS = ['pre', 't', 'm'];
@@ -3141,7 +3165,7 @@ export function fnCreate(canvasIn) {
     if (!glowT || glowT.key !== key) {
       if (glowT) for (const k of GLOW_LEVELS) dropTarget(glowT[k]);
       const t = (w, h) => target(w, h, 2, floatGlow);
-      glowT = { key, q: t(qw, qh), qt: t(qw, qh), qb: t(qw, qh), et: t(ew, eh), eb: t(ew, eh), gt: t(gw, gh), gb: t(gw, gh) };
+      glowT = { key, q: t(qw, qh), qt: t(qw, qh), qb: t(qw, qh), ed: t(ew, eh), et: t(ew, eh), eb: t(ew, eh), gd: t(gw, gh), gt: t(gw, gh), gb: t(gw, gh) };
     }
     const pk = `pre:${!!bloom}:${!!hal}:${!!crt}`;
     const pre = compile(pk, FN_PREFILTER(!!bloom, !!hal, !!crt && !bloom));
@@ -3166,8 +3190,19 @@ export function fnCreate(canvasIn) {
     };
     const T = glowT;
     pass(T.q, T.qt, 1, 0); pass(T.qt, T.qb, 0, 1);
-    pass(T.qb, T.et, 2, 0); pass(T.et, T.eb, 0, 1.5);
-    pass(T.eb, T.gt, 2, 0); pass(T.gt, T.gb, 0, 1.5);
+    // Each smaller level: a 13-tap downsample, then the same Gaussian across and down, one texel apart.
+    const down = compile('down', FN_DOWN);
+    if (!down) return false;
+    const shrink = (from, to) => {
+      gl.useProgram(down.prog);
+      gl.uniform2f(loc(down, 'uRes'), to.w, to.h);
+      gl.uniform2f(loc(down, 'uDir'), 1 / from.w, 1 / from.h);
+      bindTex(down, 'uA', 0, from.texs[0]); bindTex(down, 'uB', 1, from.texs[1]);
+      draw(to.fb, to.w, to.h);
+      gl.useProgram(blur.prog);
+    };
+    shrink(T.qb, T.ed); pass(T.ed, T.et, 1, 0); pass(T.et, T.eb, 0, 1);
+    shrink(T.eb, T.gd); pass(T.gd, T.gt, 1, 0); pass(T.gt, T.gb, 0, 1);
     if (hal) return halPasses(input, W, H, pixelsMode, hv);
     return true;
   }

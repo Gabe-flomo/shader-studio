@@ -38,6 +38,7 @@ import {
 } from './agentGraph';
 import { agentPlacementProblems, agentProgramProblems } from './agentRules';
 import { expandPassGroups } from './passGroups';
+import { FINAL, planHiddenBlurs } from './hiddenBlurs';
 
 export const PASS_TYPE = 'pass';
 /** Most Pass nodes in one graph. */
@@ -379,6 +380,13 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
       for (const [k, v] of r.mlgDynamicOutputs) merged.mlgDynamicOutputs.set(k, v);
       if (r.echo && (!merged.echo || r.echo.copies > merged.echo.copies)) merged.echo = { copies: r.echo.copies, delay: merged.echo?.delay ?? r.echo.delay };
     };
+    // 3b. Blur and Glow (texture), Smooth and Bloom chain: their hidden passes (compiler/blurPasses.ts),
+    // drawn just before the first program that has the node. Without such a node nothing here runs.
+    const hidden = planHiddenBlurs({
+      nodes, byId, slugs, order, passLists, finalList, agents, afterAgents, beforeParticles, live, compileList, absorb,
+      collect: starts => collect(starts, byId, null, undefined, agents),
+    });
+    errors.push(...hidden.errors);
     for (const id of order) {
       const pass = byId.get(id)!;
       const c = passLists.get(id)!;
@@ -389,15 +397,16 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
           alpha: { type: 'float', label: 'Alpha', ...(pass.inputs.alpha?.connection ? { connection: pass.inputs.alpha.connection } : { defaultValue: 1 }) },
         },
       };
-      const r = compileList([...c.nodes.values(), sink], PASS_SCALES[String(pass.params.scale ?? '1')] ?? 1);
+      const r = compileList(hidden.annotate([...c.nodes.values(), sink], id), PASS_SCALES[String(pass.params.scale ?? '1')] ?? 1);
       absorb(r);
       for (const [nid, vars] of r.nodeOutputVars) if (nid !== sink.id && !passVars.has(nid)) passVars.set(nid, vars);
       const slug = slugs.get(id)!;
       const label = typeof pass.params.label === 'string' && pass.params.label.trim() ? pass.params.label.trim() : 'Pass';
       if (countSamplers(r.fragmentShader) > MAX_SAMPLERS) errors.push(`Node ${id}: ${label} samples more than ${MAX_SAMPLERS} textures (images, videos, passes, feedback) in one program`);
+      passes.push(...(hidden.before.get(id) ?? []));
       passes.push({
         nodeId: id, slug, label, fragmentShader: r.fragmentShader,
-        reads: [...c.reads].map(r2 => slugs.get(r2)!), readsPrevious: [...c.readsPrevious].map(r2 => slugs.get(r2)!),
+        reads: [...[...c.reads].map(r2 => slugs.get(r2)!), ...(hidden.reads.get(id) ?? [])], readsPrevious: [...c.readsPrevious].map(r2 => slugs.get(r2)!),
         scale: PASS_SCALES[String(pass.params.scale ?? '1')] ?? 1,
         format: sel(pass.params.format, ['half', 'byte'] as const, 'half'),
         filter: sel(pass.params.filter, ['linear', 'nearest'] as const, 'linear'),
@@ -530,8 +539,9 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
       }
       agentsSpec = { groups, deposits, trails, draws };
     }
+    passes.push(...(hidden.before.get(FINAL) ?? []));
     const finalNodes = [...finalList.nodes.values()];
-    const fin = compileList(finalNodes);
+    const fin = compileList(hidden.annotate(finalNodes, FINAL));
     absorb(fin);
     if (countSamplers(fin.fragmentShader) > MAX_SAMPLERS) errors.push(`The final picture samples more than ${MAX_SAMPLERS} textures (images, videos, passes, feedback) in one program`);
     if (errors.length) return failure(errors);

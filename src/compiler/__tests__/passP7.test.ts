@@ -50,13 +50,14 @@ describe('a Pass inside a plain group', () => {
     const r = compileGraph({ nodes });
     expect(r.errors).toBeUndefined();
     expect(r.success).toBe(true);
-    expect(r.passes).toHaveLength(1);
+    // The Pass, then the Blur's two hidden passes (Smooth: across, then down).
+    expect(r.passes!.map(q => !!q.hidden)).toEqual([false, true, true]);
     const [p] = r.passes!;
     expect(p).toMatchObject({ nodeId: 'g1_pass', scale: 0.5, live: true });
     // The pass program draws what flows into the group; the picture blurs its texture.
     expect(p.nodeIds).toEqual(expect.arrayContaining(['node_1', 'node_2', 'node_3']));
     expect(r.fragmentShader).toContain(`uniform sampler2D u_pass_${p.slug};`);
-    expect(r.fragmentShader).toMatch(new RegExp(`texture2D\\(u_pass_${p.slug},`));
+    expect(r.passes![1].fragmentShader).toMatch(new RegExp(`blGauss\\(u_pass_${p.slug}, vUv,`));
     // The group's card reads its output from the node behind it; Show passes counts it in the picture.
     expect(r.nodeOutputVars.get('g1')?.o).toBe(r.nodeOutputVars.get('g1_blur')?.color);
     expect(r.finalNodeIds).toContain('g1');
@@ -73,10 +74,12 @@ describe('a Pass inside a plain group', () => {
     ];
     const r = compileGraph({ nodes });
     expect(r.errors).toBeUndefined();
-    expect(r.passes!.map(p => p.nodeId)).toEqual(['g1_pass', 'g2_pass']);
-    expect(new Set(r.passes!.map(p => p.slug)).size).toBe(2);
-    // The second group's pass draws the first group's blur of the first pass.
-    expect(r.passes![1].reads).toEqual([r.passes![0].slug]);
+    const own = r.passes!.filter(p => !p.hidden);
+    expect(own.map(p => p.nodeId)).toEqual(['g1_pass', 'g2_pass']);
+    expect(new Set(r.passes!.map(p => p.slug)).size).toBe(6);
+    // The second group's pass draws the first group's blur of the first pass: it reads the blur's last hidden pass.
+    expect(own[1].reads).toEqual([own[0].slug, r.passes![2].slug]);
+    expect(r.passes![1].reads).toEqual([own[0].slug]);
   });
 
   it('copies with the same inner ids still get passes of their own', () => {
@@ -86,7 +89,7 @@ describe('a Pass inside a plain group', () => {
     const nodes = [...picture(), a, b, n('output', 'node_9', 0, 0, {}, { color: ['g2', 'o'] })];
     const r = compileGraph({ nodes });
     expect(r.errors).toBeUndefined();
-    expect(r.passes!.map(p => p.nodeId)).toEqual(['g1_pass', 'g2__g1_pass']);
+    expect(r.passes!.filter(p => !p.hidden).map(p => p.nodeId)).toEqual(['g1_pass', 'g2__g1_pass']);
   });
 
   it('applies the group\'s overrides and wired param sockets to its nodes', () => {
@@ -95,9 +98,9 @@ describe('a Pass inside a plain group', () => {
     const nodes = [...picture(), g, n('output', 'node_9', 0, 0, {}, { color: ['g1', 'o'] })];
     const r = compileGraph({ nodes });
     expect(r.errors).toBeUndefined();
-    // The wire drives the radius (no slider uniform for it), read in the picture where the blur runs.
+    // The wire drives the radius (no slider uniform for it), worked out in each hidden pass where the blur runs.
     expect(r.paramBindings['g1_blur::radius']).toBeUndefined();
-    expect(r.fragmentShader).toMatch(/\* circ_\w+ \*/);
+    for (const h of r.passes!.filter(q => q.hidden && /Bl[hv]$/.test(q.slug))) expect(h.fragmentShader).toMatch(/circ_\w+ \* 0\.45/);
     const g2 = blurGroup('g1', ['node_3', 'rgb'], {}, { 'g1_blur::radius': 30 });
     const r2 = compileGraph({ nodes: [...picture(), g2, n('output', 'node_9', 0, 0, {}, { color: ['g1', 'o'] })] });
     expect(r2.paramUniforms[r2.paramBindings['g1_blur::radius']]).toBe(30);
@@ -178,7 +181,7 @@ describe('texture ports through a plain group', () => {
     expect(r.errors).toBeUndefined();
     const held = r.passes!.find(p => p.nodeId === 'gq_pass')!;
     expect(held.live).toBe(true);
-    expect(r.fragmentShader).toContain(`texture2D(u_pass_${held.slug}, `);
+    expect(r.passes!.find(p => p.hidden)!.fragmentShader).toContain(`blGauss(u_pass_${held.slug}, vUv,`);
 
     // No Pass at all: a Texture Input inside a group, its Texture out through a port, into Edges outside.
     const inner2 = [n('textureInput', 'gt_img', 0, 0)];
@@ -296,7 +299,9 @@ describe('Texture Input and Video as a texture source', () => {
     const r = compileGraph({ nodes });
     expect(r.errors).toBeUndefined();
     const sampler = Object.keys(r.videoUniforms)[0];
-    expect(r.passes![0].fragmentShader).toContain(`#define ${sampler}_px (vec2(0.5) / u_resolution)`);
+    expect(r.passes!.find(q => q.nodeId === 'p')!.fragmentShader).toContain(`#define ${sampler}_px (vec2(0.5) / u_resolution)`);
+    // The Blur's hidden passes read the video at the picture's size.
+    expect(r.passes!.find(q => q.hidden)!.fragmentShader).toContain(`#define ${sampler}_px (vec2(1.0) / u_resolution)`);
   });
 
   it('Particles\' Emit from takes a Texture Input directly', () => {
@@ -334,10 +339,11 @@ describe('the phase 7 examples (Passes 7 to 9)', () => {
     expect(r.passes![0].fragmentShader).toContain(`u_passiter_${r.passes![0].slug}.x`);
   });
 
-  it('Passes 8 · Edges straight from a picture: one program, no Pass, the picture loaded with it', () => {
+  it('Passes 8 · Edges straight from a picture: no Pass, the picture loaded with it', () => {
     const r = compileExample('passEdgesFromPicture');
     expect(r.errors).toBeUndefined();
-    expect(r.passes).toBeUndefined();
+    // No Pass node: only the Smooth blur's own hidden passes.
+    expect(r.passes!.every(p => p.hidden)).toBe(true);
     expect(r.fragmentShader).toMatch(/#define u_tex_\w+_px/);
     expect(Object.keys(EXAMPLE_GRAPHS.passEdgesFromPicture.images ?? {})).toEqual(['epImage']);
   });
@@ -345,7 +351,7 @@ describe('the phase 7 examples (Passes 7 to 9)', () => {
   it('Passes 9 · A reusable blur group: two plain groups, a Pass each', () => {
     const r = compileExample('passBlurGroup');
     expect(r.errors).toBeUndefined();
-    expect(r.passes!.map(p => [p.nodeId, p.scale])).toEqual([['bgTightPass', 0.5], ['bgWidePass', 0.125]]);
+    expect(r.passes!.filter(p => !p.hidden).map(p => [p.nodeId, p.scale])).toEqual([['bgTightPass', 0.5], ['bgWidePass', 0.125]]);
     expect(r.nodeOutputVars.get('bgTight')?.o).toBeTruthy();
     expect(r.nodeOutputVars.get('bgWide')?.o).toBeTruthy();
   });
