@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.53',
+    date: '2026-10-06',
+    title: 'Grid fixes',
+    highlights: [
+      { area: 'Studio', text: 'Grid fixes: the Breathing example\'s dots now stay centred in every cell; Neighbor Dist can check 3×3 or 5×5; Tile has a Cell ID output.' },
+      { area: 'Studio', text: 'Grid Pattern pushes are capped at what Overflow can draw, and grid hashes no longer break down at very large cell numbers.' },
+    ],
+  },
+  {
     id: '2026.10.52',
     date: '2026-10-06',
     title: 'Grid Rules',
