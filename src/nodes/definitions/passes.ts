@@ -64,8 +64,8 @@ export const PassNode: NodeDefinition = {
   outputs: {
     color: { type: 'vec3', label: 'Color', hint: 'The texture at this pixel.' },
     alpha: { type: 'float', label: 'Alpha', hint: 'The texture\'s alpha at this pixel.' },
-    texture: { type: 'texture', label: 'Texture', hint: 'The picture as a texture: wire it into Sample, Edges, Blur or Glow (texture).' },
-    previous: { type: 'texture', label: 'Previous', hint: 'This Pass\'s own picture from the frame before (feedback). Sample it, warp it and mix it back into this Pass\'s input for trails, smoke and reaction-diffusion. With Repeat above 1, inside the pass it is the step before.' },
+    texture: { type: 'texture', label: 'Texture', hint: 'The picture as a texture: wire it into Sample, Edges, Blur or Glow (texture), or a Texture tool (Mask, Levels, Flow, Neighbours, Change).' },
+    previous: { type: 'texture', label: 'Previous', hint: 'This Pass\'s own picture from the frame before (feedback). Sample it, warp it (Read) and mix it back into this Pass\'s input for trails (Fade), smoke and reaction-diffusion; with Texture into Change, it finds what moved. With Repeat above 1, inside the pass it is the step before.' },
     ...PASS_STEP_OUTPUTS,
   },
   defaultParams: { scale: '1', format: 'half', filter: 'linear', wrap: 'clamp', repeat: 1 },
@@ -142,7 +142,7 @@ const TEX_HINT = 'A Pass\'s Texture (or Previous) output. Unwired, this reads bl
 const UV_HINT = 'Where to read, in picture coordinates. Leave empty for this pixel; wire a warp to bend the read.';
 
 /** `uv` (centred picture coordinates) → 0–1 texture coordinates. */
-const texUv = (uv: string) => `(${uv} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5)`;
+export const texUv = (uv: string) => `(${uv} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5)`;
 
 /** A blur's Vogel-disc taps, Gaussian-weighted: `${id}_acc` ends up the blurred texel. */
 function vogelBlur(id: string, tex: string, uv: string, radius: string, taps: number, sample: (s: string) => string = s => s): string {

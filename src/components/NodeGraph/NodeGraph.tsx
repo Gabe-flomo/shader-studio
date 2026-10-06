@@ -927,7 +927,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     const origin = displayNodes.find(n => n.id === smartConnect.nodeId);
     const sock = smartConnect.dir === 'out' ? origin?.outputs[smartConnect.key] : origin?.inputs[smartConnect.key];
     if (!sock) return [];
-    return suggestQuickAdds({ type: sock.type, dir: smartConnect.dir, label: sock.label, key: smartConnect.key });
+    return suggestQuickAdds({ type: sock.type, dir: smartConnect.dir, label: sock.label, key: smartConnect.key, nodeType: origin?.type });
   }, [smartConnect, displayNodes]);
   const closeSmartConnect = useCallback(() => { setSmartConnect(null); setGhostSuggestion(null); }, []);
   const pickQuickAdd = useCallback((q: QuickAdd) => {

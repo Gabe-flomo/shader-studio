@@ -61,7 +61,7 @@ export const BakedNode: NodeDefinition = {
     alpha: { type: 'float', label: 'Alpha', hint: 'Its alpha (1 unless the bake kept alpha).' },
     rgba: { type: 'vec4', label: 'RGBA', hint: 'Colour and alpha together.' },
     value: { type: 'float', label: 'Value', hint: 'The picture as one number (its brightness): what a baked value or mask was.' },
-    texture: { type: 'texture', label: 'Texture', hint: 'The video as a texture: for Sample, Blur, Edges, Particles (Emit from) and the Agents family.' },
+    texture: { type: 'texture', label: 'Texture', hint: 'The video as a texture: for Sample, Blur, Edges, the Texture tools (Mask, Levels, Flow…), Particles (Emit from) and the Agents family.' },
   },
   defaultParams: { videoId: '', fileName: '' },
   assignable: false,

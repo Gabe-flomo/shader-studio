@@ -560,6 +560,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const activeFs = rawFs ?? fs;
     const initialUniforms: Record<string, { value: unknown }> = {
       u_time:        { value: 0 },
+      // The frame's length in seconds (Fade (feedback): tails in seconds at any frame rate; 0 reads as 1/60).
+      u_frameDt:     { value: 0 },
       u_resolution:  { value: new THREE.Vector2(1, 1) },
       u_mouse:       { value: new THREE.Vector2(0, 0) },
       u_prevFrame:   { value: null },
@@ -997,6 +999,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         renderAtTime: (time: number, opts?: { dt?: number; first?: boolean }) => {
           ensureRT();
           const u = material.uniforms;
+          if (u.u_frameDt) u.u_frameDt.value = opts?.dt ?? 1 / 60;
           // Passes a Particles node reads (Emit from): drawn at this frame's time before the particles step,
           // into the render's own textures (the rest draw after, below). A graph without them skips this.
           const keepTime = u.u_time.value;
@@ -1477,6 +1480,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         audioEngineHost.setScale(rec.arrangement?.scale);
       }
       material.uniforms.u_time.value = elapsed;
+      material.uniforms.u_frameDt.value = timePlayingRef.current ? dt : 0;
       // Clock followers (time readouts, keyframe playheads) get every frame: a listener call is
       // cheap, and throttling it made the readout visibly choppy once frames were throttled.
       // Always emitted: it also records the clock for clockNow() (freezing a keyframed slider).

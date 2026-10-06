@@ -3342,7 +3342,7 @@ export function MobileGraphBrowser() {
             setPending(null);
           };
           // New nodes to add and wire in one tap (see quickAdds.ts)
-          const quickAdds = socket ? suggestQuickAdds({ type: socket.type, dir: pending.dir === 'input' ? 'in' : 'out', label: socket.label, key: pending.key }) : [];
+          const quickAdds = socket ? suggestQuickAdds({ type: socket.type, dir: pending.dir === 'input' ? 'in' : 'out', label: socket.label, key: pending.key, nodeType: node.type }) : [];
           const quickAdd = (q: (typeof quickAdds)[number]) => {
             const pos = { x: node.position.x + (pending.dir === 'input' ? -420 : 420), y: node.position.y };
             const newId = useNodeGraphStore.getState().addNode(q.type, pos);
