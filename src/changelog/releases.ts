@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.58',
+    date: '2026-10-06',
+    title: 'Builders up front',
+    highlights: [
+      { area: 'Studio', text: 'A Builders section tops the node browser (3D Scene Builder, Grid Rules, Agent Rules), also on right-click and in the Do… bar ("new 3d scene").' },
+      { area: 'Studio', text: 'Built cards show their recipe or rule as a chip with Copy and Open, and say "edited since build" when you have changed the nodes.' },
+      { area: 'Studio', text: 'The Recipe tab colours every word and shows one row per clause, with combined shapes indented like a tree. Edit as text still works.', link: { kind: 'doc', path: 'docs/scene-builder.md' } },
+    ],
+  },
+  {
     id: '2026.10.57',
     date: '2026-10-06',
     title: 'Clearer explanations',
