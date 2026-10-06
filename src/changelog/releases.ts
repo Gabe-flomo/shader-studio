@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.55',
+    date: '2026-10-06',
+    title: 'Do bar commands',
+    highlights: [
+      { area: 'Studio', text: 'Do… bar commands: chain steps ("create a ring, colour it by the length of the space, then output it") and edit graphs you already have.', link: { kind: 'doc', path: 'docs/do-bar-commands.md' } },
+      { area: 'Studio', text: 'Connect, disconnect, insert between, multiply/add with, output, switch, set, make bigger: one undo each, with a picker when a name fits several nodes.' },
+      { area: 'Studio', text: 'A Commands reference (ⓘ in the bar) lists every verb with examples to Try and Show me how. Grid Rules presets work as phrases ("game of life").' },
+      { area: 'Studio', text: 'Fixed: made-node descriptions say "radius 0.3 (adjustable)". Termites now pile up, fireflies flash together, and forest fires sweep.' },
+    ],
+  },
+  {
     id: '2026.10.54',
     date: '2026-10-06',
     title: 'Builders that help',
