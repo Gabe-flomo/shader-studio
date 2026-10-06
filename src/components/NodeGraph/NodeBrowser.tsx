@@ -32,6 +32,8 @@ const HIDDEN_NODES = new Set([
   'passOutput',
   // A hidden pass of Blur / Glow (texture) (compiler/hiddenBlurs.ts).
   'blurStage',
+  // One step of a Grid Rules board (compiler/gridRulesExpand.ts).
+  'gridRulesStep',
   // Made by Bake… (lib/bake): a node's frozen render, never added by hand.
   'baked',
   // An Agents group's anchors (made with the group) and its update shader's end (compiler/agentGraph.ts).

@@ -57,6 +57,8 @@ const CONNECTION_GATED = new Set([
   ...Object.keys(NODE_REGISTRY.timeSlice.paramDefs ?? {}).map(k => `timeSlice.${k}`),
   // Frame Stack (docs/frame-stack.md) likewise draws only its background until a Volume is wired
   ...Object.keys(NODE_REGISTRY.frameStack.paramDefs ?? {}).filter(k => k !== 'background').map(k => `frameStack.${k}`),
+  // A Grid Rules step (made by the compiler, compiler/gridRulesExpand.ts) reads nothing until its board is wired
+  ...Object.keys(NODE_REGISTRY.gridRulesStep.paramDefs ?? {}).map(k => `gridRulesStep.${k}`),
 ]);
 
 function makeNode(id: string, type: string, def: NodeDefinition, x = 0): GraphNode {
@@ -112,7 +114,8 @@ describe('node registry', () => {
     for (const { type, def } of compilable) {
       const outKey = pickOutput(def)!;
       const r = compileGraph({ nodes: [makeNode('n1', type, def), outputNode('n1', outKey)] });
-      const body = stripDeclarations(r.fragmentShader);
+      // Every program the node compiles into (a Grid Rules node's rule runs in its board's pass).
+      const body = [r.fragmentShader, ...(r.passes ?? []).map(p => p.fragmentShader)].map(stripDeclarations).join('\n');
       for (const uniform of Object.keys(r.paramUniforms)) {
         if (!new RegExp(`\\b${uniform}\\b`).test(body)) {
           const param = uniform.split('_').slice(3).join('_');

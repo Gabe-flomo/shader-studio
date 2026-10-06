@@ -368,6 +368,86 @@ exports[`golden outputs: examples > gridLavaLamp 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > gridRulesBrain 1`] = `
+{
+  "afterglow": "- x120",
+  "brush": "- x120",
+  "density": "- x120",
+  "glow": "- x120",
+  "on": "- x120",
+  "paint": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesCave 1`] = `
+{
+  "brush": "- x120",
+  "density": "- x120",
+  "floor": "- x120",
+  "reset": "- x120",
+  "rock": "- x120",
+  "seed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesFire 1`] = `
+{
+  "growth": "- x120",
+  "lightning": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+  "spread": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesHeat 1`] = `
+{
+  "brush": "- x120",
+  "cool": "- x120",
+  "flares": "- x120",
+  "paint": "- x120",
+  "reset": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesLife 1`] = `
+{
+  "afterglow": "- x120",
+  "brush": "- x120",
+  "density": "- x120",
+  "glow": "- x120",
+  "live": "- x120",
+  "paint": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesLifeLike 1`] = `
+{
+  "afterglow": "- x120",
+  "born": "- x120",
+  "brush": "- x120",
+  "density": "- x120",
+  "paint": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+  "survive": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesWater 1`] = `
+{
+  "brush": "- x120",
+  "damping": "- x120",
+  "paint": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > gridTourArrayBlobs 1`] = `
 {
   "melt": "0.0237, 0.0240, 0.0242, 0.0245, 0.0248, 0.0250, 0.0253, 0.0256, 0.0259, 0.0262, 0.0265, 0.0268, 0.0271, 0.0275, 0.0278, 0.0281, 0.0285, 0.0288, 0.0292, 0.0295, 0.0299, 0.0303, 0.0307, 0.0311, 0.0315, 0.0319, 0.0323, 0.0327, 0.0331, 0.0336, 0.0340, 0.0344, 0.0349, 0.0353, 0.0358, 0.0362, 0.0367, 0.0372, 0.0376, 0.0381, 0.0386, 0.0391, 0.0396, 0.0401, 0.0406, 0.0411, 0.0416, 0.0422, 0.0427, 0.0432, 0.0437, 0.0443, 0.0448, 0.0454, 0.0459, 0.0465, 0.0470, 0.0476, 0.0481, 0.0487, 0.0493, 0.0499, 0.0504, 0.0510, 0.0516, 0.0522, 0.0528, 0.0534, 0.0540, 0.0545, 0.0551, 0.0557, 0.0564, 0.0570, 0.0576, 0.0582, 0.0588, 0.0594, 0.0600, 0.0606, 0.0612, 0.0619, 0.0625, 0.0631, 0.0637, 0.0644, 0.0650, 0.0656, 0.0662, 0.0669, 0.0675, 0.0681, 0.0687, 0.0694, 0.0700, 0.0706, 0.0713, 0.0719, 0.0725, 0.0731, 0.0738, 0.0744, 0.0750, 0.0756, 0.0763, 0.0769, 0.0775, 0.0781, 0.0788, 0.0794, 0.0800, 0.0806, 0.0812, 0.0818, 0.0824, 0.0830, 0.0836, 0.0843, 0.0849, 0.0855",

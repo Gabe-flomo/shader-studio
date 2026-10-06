@@ -569,6 +569,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       u_frameDt:     { value: 0 },
       u_resolution:  { value: new THREE.Vector2(1, 1) },
       u_mouse:       { value: new THREE.Vector2(0, 0) },
+      // The pointer's button over the picture (Mouse button node, Grid Rules' brush): 1 while down.
+      u_mousebtn:    { value: 0 },
       u_prevFrame:   { value: null },
       // Echo snapshot ring (see nodes/definitions/echo.ts); the shader declares only the ones it uses.
       ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])),
@@ -866,7 +868,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         e?.material.dispose();
         const shared = material.uniforms;
         const uniforms: Record<string, THREE.IUniform> = {
-          u_time: { value: 0 }, u_resolution: shared.u_resolution, u_mouse: shared.u_mouse, u_prevFrame: { value: null },
+          u_time: { value: 0 }, u_resolution: shared.u_resolution, u_mouse: shared.u_mouse, u_mousebtn: shared.u_mousebtn, u_prevFrame: { value: null },
           ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])),
           u_fontTexture: { value: FONT_TEXTURE }, ...layersUniforms, ...padGridUniforms, ...motionUniforms,
         };
@@ -2298,6 +2300,36 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     };
     renderer.domElement.addEventListener('mousemove', handleMouseMove);
     renderer.domElement.addEventListener('mouseleave', handleMouseLeave);
+    // The button (u_mousebtn), on the window so a layer drawn over the picture (Play) doesn't hide it: a press
+    // inside the picture that isn't on a control counts; while held, the pointer moves u_mouse wherever it goes.
+    let buttonHeld = false;
+    const insidePicture = (e: PointerEvent) => {
+      const r = renderer.domElement.getBoundingClientRect();
+      return e.clientX >= r.left && e.clientX < r.right && e.clientY >= r.top && e.clientY < r.bottom;
+    };
+    const handleButtonDown = (e: PointerEvent) => {
+      if (e.button !== 0 || !insidePicture(e)) return;
+      const t = e.target as Element | null;
+      if (t !== renderer.domElement && t?.closest?.('button, input, select, textarea, a, [role="slider"], [role="button"], [contenteditable="true"]')) return;
+      buttonHeld = true;
+      handleMouseMove(e);
+      material.uniforms.u_mousebtn.value = 1;
+      playEngine.setPreviewButton(true);
+      requestRender();
+    };
+    const handleButtonMove = (e: PointerEvent) => { if (buttonHeld && e.target !== renderer.domElement) handleMouseMove(e); };
+    const handleButtonUp = () => {
+      if (!buttonHeld) return;
+      buttonHeld = false;
+      material.uniforms.u_mousebtn.value = 0;
+      playEngine.setPreviewButton(false);
+      requestRender();
+    };
+    window.addEventListener('pointerdown', handleButtonDown, true);
+    window.addEventListener('pointermove', handleButtonMove, true);
+    window.addEventListener('pointerup', handleButtonUp, true);
+    window.addEventListener('pointercancel', handleButtonUp, true);
+    window.addEventListener('blur', handleButtonUp);
 
     // Reset time to 0 when 'reset-time' is fired (e.g. from Time node button)
     const handleResetTime = () => {
@@ -2357,6 +2389,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (glContextLost) useNodeGraphStore.getState().setGlContextLost(false);
       renderer.domElement.removeEventListener('mousemove', handleMouseMove);
       renderer.domElement.removeEventListener('mouseleave', handleMouseLeave);
+      window.removeEventListener('pointerdown', handleButtonDown, true);
+      window.removeEventListener('pointermove', handleButtonMove, true);
+      window.removeEventListener('pointerup', handleButtonUp, true);
+      window.removeEventListener('pointercancel', handleButtonUp, true);
+      window.removeEventListener('blur', handleButtonUp);
       window.removeEventListener('reset-time', handleResetTime);
       window.removeEventListener('agents-restart', handleAgentsRestart);
       window.removeEventListener('seek-time', handleSeekTime);

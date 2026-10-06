@@ -45,7 +45,7 @@ export function passRepeat(v: unknown): number {
 
 
 /** Settings of a Pass that the engine reads (they never change the shader). */
-export const PASS_SCALES: Record<string, number> = { '1': 1, '0.5': 0.5, '0.25': 0.25, '0.125': 0.125 };
+export const PASS_SCALES: Record<string, number> = { '1': 1, '0.5': 0.5, '0.25': 0.25, '0.125': 0.125, '0.0625': 0.0625, '0.03125': 0.03125 };
 
 const PASS_STEP_OUTPUTS: GraphNode['outputs'] = {
   step: { type: 'float', label: 'Step', hint: 'With Repeat above 1: which repeat is drawing, 0 on the first, Repeat − 1 on the last (0 when Repeat is 1). Use it to start a jump flood from the shape on step 0, or to halve a reach each step.' },
@@ -76,6 +76,7 @@ export const PassNode: NodeDefinition = {
     repeat: { label: 'Repeat', type: 'float', min: 1, max: MAX_PASS_REPEAT, step: 1, hard: true, compileTime: true, hint: 'Draw this pass several times each frame, each time reading its own last result through Previous: a wide blur in small steps, a jump-flood distance field, a simulation stepped faster. Costs Repeat × the pass\'s time.' },
     scale: { label: 'Scale', type: 'select', hint: 'Size of the texture relative to the picture. ½ or ¼ makes wide blurs and glows cheap (and softer).', options: [
       { value: '1', label: '1 (full size)' }, { value: '0.5', label: '½' }, { value: '0.25', label: '¼' }, { value: '0.125', label: '⅛' },
+      { value: '0.0625', label: '1/16' }, { value: '0.03125', label: '1/32' },
     ] },
     format: { label: 'Format', type: 'select', hint: 'Half float keeps brightness above 1, so glows don\'t clip. 8-bit uses half the memory.', options: [
       { value: 'half', label: 'Half float' }, { value: 'byte', label: '8-bit' },

@@ -39,6 +39,7 @@ import {
 import { agentPlacementProblems, agentProgramProblems } from './agentRules';
 import { expandPassGroups } from './passGroups';
 import { FINAL, planHiddenBlurs } from './hiddenBlurs';
+import { GRID_TYPE, expandGridRules } from './gridRulesExpand';
 
 export const PASS_TYPE = 'pass';
 /** Most Pass nodes in one graph. */
@@ -51,7 +52,8 @@ type Sub = { nodes?: GraphNode[] } | undefined;
 /** Does the graph have a Pass node (at the top level or inside a group)? */
 export function hasPassNode(nodes: GraphNode[]): boolean {
   for (const n of nodes) {
-    if (n.type === PASS_TYPE) return true;
+    // A Grid Rules node is opened into a board Pass (compiler/gridRulesExpand.ts).
+    if (n.type === PASS_TYPE || n.type === GRID_TYPE) return true;
     const sg = n.params?.subgraph as Sub;
     if (sg?.nodes && hasPassNode(sg.nodes)) return true;
   }
@@ -180,14 +182,16 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     // (compiler/passGroups.ts). Inside any other kind of group, an error saying why.
     const opened = expandPassGroups(graph.nodes);
     if ('errors' in opened) return failure(opened.errors);
+    // Grid Rules nodes: each opened into its board Pass and step (compiler/gridRulesExpand.ts); without one, unchanged.
+    const grid = expandGridRules(opened.nodes);
     // With agents: every node of (or wired into) a 3D group marked for its space (a 2D graph is left as it is).
-    const nodes = agents ? syncAgentSpaces(opened.nodes, getNodeDefinition) : opened.nodes;
+    const nodes = agents ? syncAgentSpaces(grid.nodes, getNodeDefinition) : grid.nodes;
 
     const validation = validateGraph(nodes);
     if (!validation.valid) return failure(validation.errors ?? ['Invalid graph']);
 
     const passNodes = nodes.filter(n => n.type === PASS_TYPE);
-    if (passNodes.length > MAX_PASSES) return failure([`A graph can have up to ${MAX_PASSES} Pass nodes (this one has ${passNodes.length})`]);
+    if (passNodes.length > MAX_PASSES) return failure([`A graph can have up to ${MAX_PASSES} Pass nodes (this one has ${passNodes.length}${grid.bindAs.size ? ', counting each Grid Rules board, and its picture when its Texture is wired' : ''})`]);
     const byId = new Map(nodes.map(n => [n.id, n]));
 
     // 1. Slugs, once for the whole graph, in the usual sort order (Previous wires left out, so feedback isn't a cycle;
@@ -206,6 +210,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     const used = new Set<string>();
     const slugs = new Map<string, string>();
     for (const n of sortedAll) slugs.set(n.id, computeNodeSlug(n, used));
+    // A Grid Rules node's step (and picture copy) compile under its slug: its params are one set of uniforms.
+    for (const [id, as] of grid.bindAs) { const sl = slugs.get(as); if (sl) slugs.set(id, sl); }
     const groupNodes = agents ? sortedAll.filter(n => n.type === 'agentsGroup').map(n => byId.get(n.id)!) : [];
     if (agents) {
       if (groupNodes.length > MAX_AGENT_GROUPS) return failure([`A graph can have up to ${MAX_AGENT_GROUPS} Agents groups (this one has ${groupNodes.length})`]);
@@ -550,6 +556,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     // (slugs are shared, so a node's variables have the same names in every program it lands in).
     const nodeOutputVars = new Map([...passVars, ...fin.nodeOutputVars]);
     let finalNodeIds = finalNodes.filter(n => n.type !== PASS_TYPE && !(agents && isAgentSource(n))).map(n => n.id);
+    // Show passes: a Grid Rules node runs in its board's program too.
+    if (grid.bindAs.size) for (const p of passes) for (const [id, as] of grid.bindAs) if (p.nodeIds.includes(id) && !p.nodeIds.includes(as)) p.nodeIds = [...p.nodeIds, as];
     // An opened group (a Pass inside it): its card reads its outputs from the nodes behind them, and
     // Show passes tints it as the programs its nodes run in.
     for (const [gid, g] of opened.groups) {

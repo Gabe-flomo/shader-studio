@@ -3947,7 +3947,12 @@ export class ShaderAssembler {
         for (const [k, v] of Object.entries(inputVars)) {
           if (k.startsWith('__param_') && v) sluggedNode = { ...sluggedNode, params: { ...sluggedNode.params, [k.slice('__param_'.length)]: v } };
         }
-        const { patchedNode, uniforms: nodeUniforms, bindings: nodeBindings } = patchNodeParamsForUniforms(sluggedNode, def, fn => this.functions.add(fn), node.id);
+        // The Mouse node in a pass program (a Pass at ½, ¼…): u_mouse is in picture pixels, u_resolution the pass's size.
+        // Only when its UV, X or Y is read (Pixels stays the picture's): a graph that reads Pixels compiles as before.
+        if (node.type === 'mouse' && this.pictureScale !== 1 && this.allNodes.some(o => Object.values(o.inputs ?? {}).some(i => i.connection?.nodeId === node.id && i.connection.outputKey !== 'px'))) sluggedNode = { ...sluggedNode, params: { ...sluggedNode.params, __pictureScale: this.pictureScale } };
+        // A node the compiler made for another (a Grid Rules step, compiler/gridRulesExpand.ts) binds its sliders to that node's id.
+        const bindId = typeof node.params.__bindAs === 'string' && node.params.__bindAs ? node.params.__bindAs : node.id;
+        const { patchedNode, uniforms: nodeUniforms, bindings: nodeBindings } = patchNodeParamsForUniforms(sluggedNode, def, fn => this.functions.add(fn), bindId);
         Object.assign(this.paramUniforms, nodeUniforms);
         Object.assign(this.paramBindings, nodeBindings);
         def.declarationsFor?.(patchedNode).forEach(d => this.declarations.add(d));

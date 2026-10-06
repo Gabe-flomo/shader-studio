@@ -271,6 +271,7 @@ import {
 import { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGBToCMYKNode, CMYKHalftoneNode } from './halftone';
 import { GpuParticlesNode } from './gpuParticles';
 import { BlurStageNode } from './blurStage';
+import { GridRulesNode, GridRulesStepNode, MouseButtonNode } from './gridRules';
 import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 import { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, TrailStepOutNode, AgentProbeOutNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode, MultiSlimePresetNode, AntsPresetNode, BoidsPresetNode, StrandsPresetNode, GrowPicturePresetNode, GalaxyPresetNode, MyceliumPresetNode, SandPlatePresetNode } from './agents';
@@ -478,6 +479,10 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   pass: PassNode,
   passOutput: PassOutputNode,
   blurStage: BlurStageNode,
+  // Grid Rules (docs/grid-rules.md): a cellular simulation in one node, and the step the compiler makes of it
+  gridRules: GridRulesNode,
+  gridRulesStep: GridRulesStepNode,
+  mouseButton: MouseButtonNode,
   sampleTexture: SampleTextureNode,
   edgesTexture: EdgesTextureNode,
   blurTexture: BlurTextureNode,

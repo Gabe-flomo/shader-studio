@@ -2896,7 +2896,10 @@ void main() {
       setUniform('u_time', time);
       setUniform('u_frameDt', frameDt);
       setUniform('u_resolution', [W, H]);
-      setUniform('u_mouse', [mouse.x * W, mouse.y * H]);
+      // In the picture's pixels in every program, as in the app (a pass program's W × H is the pass's size).
+      setUniform('u_mouse', [mouse.x * glCanvas.width, mouse.y * glCanvas.height]);
+      // The Mouse button node and Grid Rules' brush.
+      setUniform('u_mousebtn', mouse.down ? 1 : 0);
       for (const k in uniformValues) setUniform(k, uniformValues[k]);
       if (padTex) {
         // The Pad Grid node: the cells' levels (kit/midi.js kmGridFill), the grid's size and the last pad.
