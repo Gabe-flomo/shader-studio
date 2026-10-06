@@ -40,6 +40,7 @@
  * Part of the layer kit: exportHtml.ts inlines it into web exports, so every
  * top-level name keeps the `gp`/`GP_` prefix.
  */
+import { blCubicGlsl } from './blur.js';
 
 /** Particle counts: the state texture's side for each. */
 export const GP_TIERS = { '64k': 256, '256k': 512, '1m': 1024, '4m': 2048 };
@@ -1688,19 +1689,22 @@ uniform int u_lights, u_ink;
 uniform vec4 u_light[4];
 uniform vec3 u_lightCol[4];
 out vec4 o;
+// The glow levels (¼ and 1/16 size) read back through a cubic B-spline (play/kit/blur.js): no bilinear diamonds round a lone particle.
+${blCubicGlsl('texture', 'gpCubic')}
+vec4 gpGlow(sampler2D s, vec2 uv) { return gpCubic(s, uv, vec2(textureSize(s, 0))); }
 void main() {
   vec2 uv = gl_FragCoord.xy / u_size;
   vec4 acc = texture(u_acc, uv);
   if (u_ink == 1) {
     // Ink: the absorbance (and the bleed round it) dims the paper as e^-Σ, and what shows is the ink's
     // own colour, weighted by how much of each lies here. Premultiplied: (ink · cover, cover).
-    vec4 a = acc + u_glow * (0.35 * texture(u_g1, uv) + 0.5 * texture(u_g2, uv));
+    vec4 a = acc + u_glow * (0.35 * gpGlow(u_g1, uv) + 0.5 * gpGlow(u_g2, uv));
     float cover = 1.0 - exp(-max(a.a, 0.0));
     vec3 ink = a.rgb / max(a.a, 1e-5);
     o = vec4(ink * cover, cover);
     return;
   }
-  vec3 c = acc.rgb + u_glow * (0.6 * texture(u_g1, uv).rgb + 1.1 * texture(u_g2, uv).rgb);
+  vec3 c = acc.rgb + u_glow * (0.6 * gpGlow(u_g1, uv).rgb + 1.1 * gpGlow(u_g2, uv).rgb);
   vec2 q = (uv * 2.0 - 1.0) * vec2(u_aspect, 1.0);
   for (int j = 0; j < 4; j++) {
     if (j >= u_lights) break;

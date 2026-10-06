@@ -23,6 +23,7 @@ export function programTints(passes: PassProgram[] | null, agents: AgentsSpec | 
     out.set(id, list);
   };
   (passes ?? []).forEach((p, i) => {
+    if (p.hidden) return; // a Blur / Glow's own passes: the node is tinted by the program it sits in
     add(p.nodeId, { kind: 'pass', label: p.label, index: i });
     for (const id of p.nodeIds) add(id, { kind: 'pass', label: p.label, index: i });
   });

@@ -22,6 +22,7 @@ import { validateGraph } from './validate';
 import { generateFragmentShader } from './shaderAssembler';
 import { compilePassGraph, hasPassNode } from './passGraph';
 import { hasAgentsNode } from './agentGraph';
+import { hasHiddenBlur } from './blurPasses';
 
 const EMPTY_OUTPUT_VARS = new Map<string, Record<string, string>>();
 
@@ -29,7 +30,8 @@ export function compileGraph(graph: NodeGraph): CompilationResult {
   // Pass nodes (render to texture) and the Agents family (docs/agents-plan.md) cut the graph into
   // several programs. Only graphs that have one take this branch; everything below is the
   // single-program compile, unchanged.
-  if (hasPassNode(graph.nodes) || hasAgentsNode(graph.nodes)) return compilePassGraph(graph);
+  // A Smooth / Bloom-chain Blur or Glow (texture) adds hidden passes of its own (compiler/hiddenBlurs.ts).
+  if (hasPassNode(graph.nodes) || hasAgentsNode(graph.nodes) || hasHiddenBlur(graph.nodes)) return compilePassGraph(graph);
   try {
     const { nodes } = graph;
 

@@ -798,8 +798,8 @@ export function shaderFeedbackNodes(x = 0, y = 0): GraphNode[] {
     ]),
   }, { texture: ['fbTrail', 'texture'] });
   const blur = n('blurTexture', 'fbBlur', X(1680), Y(620), {
-    radius: 18, quality: '24',
-    ...note(['Blur (texture): the trail blurred by 18 pixels: a soft mask that is high wherever the slime has been, for Reveal.']),
+    method: 'smooth', radius: 18,
+    ...note(['Blur (texture): the trail blurred by 18 pixels (a smooth Gaussian): a soft mask that is high wherever the slime has been, for Reveal.']),
   }, { texture: ['fbTrail', 'texture'] });
   const warp = expr('fbWarp', X(2100), Y(300), {
     label: 'Bend the UV',

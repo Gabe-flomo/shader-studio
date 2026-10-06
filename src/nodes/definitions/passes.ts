@@ -14,7 +14,9 @@
  * its texture. Its own program ends in a Pass output (passOutput) instead.
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
-import { fieldFn, p, withNewOutputs } from './helpers';
+import { fieldFn, p, pv3, withNewOutputs } from './helpers';
+import { BL_BASE_GLSL, BL_BLOOM_W_GLSL, BL_GLSL2 as BL_GLSL_GRAPH } from '../../play/kit/blur.js';
+import { blurMethod } from '../../compiler/blurPasses';
 import { DM_CHANNELS, DM_CHANNEL_LABELS, DM_GLSL, DM_HINTS, dmChannelGlsl } from '../../play/kit/displace.js';
 
 /** The sampler a Pass's picture is bound to, named by its slug (as its uniforms are). */
@@ -144,24 +146,7 @@ const UV_HINT = 'Where to read, in picture coordinates. Leave empty for this pix
 /** `uv` (centred picture coordinates) → 0–1 texture coordinates. */
 export const texUv = (uv: string) => `(${uv} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5)`;
 
-/** A blur's Vogel-disc taps, Gaussian-weighted: `${id}_acc` ends up the blurred texel. */
-function vogelBlur(id: string, tex: string, uv: string, radius: string, taps: number, sample: (s: string) => string = s => s): string {
-  return [
-    `    vec4 ${id}_acc = vec4(0.0);\n`,
-    `    float ${id}_wsum = 0.0;\n`,
-    `    for (int ${id}_i = 0; ${id}_i < ${taps}; ${id}_i++) {\n`,
-    `        float ${id}_r = sqrt((float(${id}_i) + 0.5) / ${taps}.0);\n`,
-    `        float ${id}_a = float(${id}_i) * 2.39996323;\n`,
-    `        float ${id}_w = exp(-2.5 * ${id}_r * ${id}_r);\n`,
-    `        vec4 ${id}_t = texture2D(${tex}, ${uv} + vec2(cos(${id}_a), sin(${id}_a)) * ${id}_r * ${radius} * ${passPxUniform(tex)});\n`,
-    `        ${id}_acc += ${sample(`${id}_t`)} * ${id}_w;\n`,
-    `        ${id}_wsum += ${id}_w;\n`,
-    `    }\n`,
-    `    ${id}_acc /= ${id}_wsum;\n`,
-  ].join('');
-}
-
-const QUALITY = { label: 'Quality', type: 'select' as const, hint: 'Taps per pixel: more is smoother and slower. For wide blurs, set the Pass upstream to ½ instead.', options: [
+const QUALITY = { label: 'Quality', type: 'select' as const, showWhen: { param: 'method', value: 'fast' }, hint: 'Fast only: reads per pixel. More is finer grain and slower.', options: [
   { value: '12', label: 'Draft (12)' }, { value: '24', label: 'Good (24)' }, { value: '48', label: 'Best (48)' },
 ] };
 const tapsOf = (v: unknown) => (v === '12' || v === '48' ? Number(v) : 24);
@@ -244,12 +229,35 @@ export const EdgesTextureNode: NodeDefinition = {
   },
 };
 
+const METHOD_HELP = 'Smooth: a true Gaussian, across then down (two hidden passes that read between texels, so no pixel is skipped), on a smaller copy first when Radius is wide. Bloom chain (Glow): the picture halved again and again, then built back up, each size adding its own glow: a soft core with a long, wide tail, like a lens. Fast: one pass of a few reads turned at random per pixel: cheap, and when Radius is wide it shows fine grain rather than copies. Graphs made before this setting use Smooth, with the same Radius, so they keep their look without the copies; a Glow added now starts as a Bloom chain. Hidden passes don\'t count towards the 8 Pass nodes; Performance lists them under this node.';
+
+/** The hidden pass a node reads (compiler/blurPasses.ts sets __blurSrc on the copy it compiles), or null: draw it in this program. */
+function blurSource(node: GraphNode): { sampler: string; scale: number; cubic: boolean; levels: number } | null {
+  const P = node.params;
+  if (typeof P.__blurSrc !== 'string' || !P.__blurSrc) return null;
+  const scale = typeof P.__blurScale === 'number' ? P.__blurScale : 1;
+  return { sampler: P.__blurSrc, scale, cubic: P.__blurCubic === true, levels: typeof P.__blurLevels === 'number' ? P.__blurLevels : 0 };
+}
+
+const fl = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
+
+/** Reads a hidden pass's result at `uv`: through the 4-tap cubic when it is smaller than the picture (no bilinear diamonds). */
+function readHidden(src: { sampler: string; scale: number; cubic: boolean }, uv: string): string {
+  if (!src.cubic) return `texture2D(${src.sampler}, ${uv})`;
+  return `blCubic(${src.sampler}, ${uv}, ${fl(src.scale)} / ${passPxUniform(src.sampler)})`;
+}
+
+const hiddenDecl = (node: GraphNode) => {
+  const s = blurSource(node);
+  return s ? [`uniform sampler2D ${s.sampler};`, `uniform vec2 ${passPxUniform(s.sampler)};`] : [];
+};
+
 export const BlurTextureNode: NodeDefinition = {
   type: 'blurTexture',
   label: 'Blur (texture)',
   category: 'Passes',
   aliases: ['Gaussian blur (texture)', 'Soften', 'Defocus', 'Blur this frame'],
-  description: 'Blurs a Pass\'s texture in the same frame (the older Gaussian Blur reads last frame\'s picture). Radius is in picture pixels. For wide blurs, set the Pass feeding it to ½ or ¼: it is cheaper and softer.',
+  description: 'Blurs a Pass\'s texture (or any texture) in the same frame (the older Gaussian Blur reads last frame\'s picture). Radius is in picture pixels. Smooth (the default) is a true Gaussian at any Radius: it adds two hidden passes, and works on a smaller copy when Radius is wide, so it stays fast. Fast is one cheap pass.',
   inputs: {
     texture: { type: 'texture', label: 'Texture', hint: TEX_HINT },
     uv: { type: 'vec2', label: 'UV', hint: UV_HINT },
@@ -258,17 +266,32 @@ export const BlurTextureNode: NodeDefinition = {
     color: { type: 'vec3', label: 'Color' },
     alpha: { type: 'float', label: 'Alpha' },
   },
-  defaultParams: { radius: 8, quality: '24' },
+  defaultParams: { method: 'smooth', radius: 8, quality: '24' },
   paramDefs: {
-    radius: { label: 'Radius', type: 'float', min: 0, max: 64, step: 0.5, hint: 'How far the blur reaches, in picture pixels. Past about 12, set the Pass upstream to ½ for speed.' },
+    method: { label: 'Method', type: 'select', hint: 'Smooth: a true Gaussian (hidden passes). Fast: one pass, grainy when wide.', help: METHOD_HELP, options: [
+      { value: 'smooth', label: 'Smooth' }, { value: 'fast', label: 'Fast (one pass)' },
+    ] },
+    radius: { label: 'Radius', type: 'float', min: 0, max: 64, step: 0.5, hint: 'How far the blur reaches, in picture pixels (σ is 0.45 × Radius). Smooth stays smooth at any Radius.' },
     quality: QUALITY,
   },
+  glslFunctions: [BL_BASE_GLSL, BL_GLSL_GRAPH],
+  declarationsFor: hiddenDecl,
   assignable: false,
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id;
     const tex = inputVars.texture;
     if (!tex) return { code: `    vec4 ${id}_acc = vec4(0.0);\n`, outputVars: { color: `${id}_acc.rgb`, alpha: `${id}_acc.a` } };
-    const code = `    vec2 ${id}_uv = ${texUv(inputVars.uv ?? 'g_uv')};\n` + vogelBlur(id, tex, `${id}_uv`, p(node.params.radius, 8), tapsOf(node.params.quality));
+    const uv = `${id}_uv`;
+    const hidden = blurSource(node);
+    let code = `    vec2 ${uv} = ${texUv(inputVars.uv ?? 'g_uv')};\n`;
+    if (hidden) code += `    vec4 ${id}_acc = ${readHidden(hidden, uv)};\n`;
+    else {
+      // Fast, or Smooth where hidden passes can't go (a group without a Pass, an Agents program,
+      // a repeated Pass reading itself): one pass, an exact 2D Gaussian while it is small, else a disc turned per pixel.
+      code += blurMethod(node) === 'fast'
+        ? `    vec4 ${id}_acc = blDisc(${tex}, ${uv}, ${passPxUniform(tex)}, ${p(node.params.radius, 8)}, ${fl(tapsOf(node.params.quality))}, gl_FragCoord.xy);\n`
+        : `    vec4 ${id}_acc = blSoft(${tex}, ${uv}, ${passPxUniform(tex)}, ${p(node.params.radius, 8)}, gl_FragCoord.xy);\n`;
+    }
     return { code, outputVars: { color: `${id}_acc.rgb`, alpha: `${id}_acc.a` } };
   },
 };
@@ -277,8 +300,8 @@ export const GlowTextureNode: NodeDefinition = {
   type: 'glowTexture',
   label: 'Glow (texture)',
   category: 'Passes',
-  aliases: ['Bloom (texture)', 'Halo', 'Light bleed', 'Glow this frame'],
-  description: 'A glow from a Pass\'s texture, in the same frame: only the parts brighter than Threshold are kept, blurred by Radius (picture pixels) and scaled by Intensity. Add the result over your picture (Add Colors, Blend Modes: Add or Screen). The older Bloom reads last frame\'s picture.',
+  aliases: ['Bloom (texture)', 'Halo', 'Light bleed', 'Glow this frame', 'Neon glow', 'Bloom chain'],
+  description: 'A glow from a Pass\'s texture (or any texture), in the same frame: only the parts brighter than Threshold are kept, spread by Radius (picture pixels), scaled by Intensity and tinted. Add the result over your picture (Add Colors, Blend Modes: Add or Screen). Bloom chain (the default) is a soft core with a long, wide tail, made in a few small hidden passes; Smooth is one Gaussian; Fast is one cheap pass. The older Bloom reads last frame\'s picture.',
   inputs: {
     texture: { type: 'texture', label: 'Texture', hint: TEX_HINT },
     uv: { type: 'vec2', label: 'UV', hint: UV_HINT },
@@ -286,24 +309,41 @@ export const GlowTextureNode: NodeDefinition = {
   outputs: {
     glow: { type: 'vec3', label: 'Glow', hint: 'The light to add over the picture.' },
   },
-  defaultParams: { threshold: 0.5, radius: 12, intensity: 1.5, quality: '24' },
+  defaultParams: { method: 'bloom', threshold: 0.5, knee: 0.1, radius: 12, intensity: 1.5, tint: [1, 1, 1], quality: '24' },
   paramDefs: {
+    method: { label: 'Method', type: 'select', hint: 'Bloom chain: soft core, long tail. Smooth: one Gaussian. Fast: one pass, grainy when wide.', help: METHOD_HELP, options: [
+      { value: 'bloom', label: 'Bloom chain' }, { value: 'smooth', label: 'Smooth (Gaussian)' }, { value: 'fast', label: 'Fast (one pass)' },
+    ] },
     threshold: { label: 'Threshold', type: 'float', min: 0, max: 2, step: 0.01, hint: 'Brightness a part needs to glow. 0 makes everything glow; above 1 only what is brighter than white (needs a half-float Pass).' },
-    radius: { label: 'Radius', type: 'float', min: 0, max: 64, step: 0.5, hint: 'How far the glow spreads, in picture pixels. Past about 12, set the Pass upstream to ½ for speed.' },
+    knee: { label: 'Knee', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How softly the glow fades in above Threshold: 0 is a hard cut, 0.1 a gentle ramp.' },
+    radius: { label: 'Radius', type: 'float', min: 0, max: 64, step: 0.5, hint: 'How far the glow spreads, in picture pixels. The Bloom chain\'s tail reaches a few times further.' },
     intensity: { label: 'Intensity', type: 'float', min: 0, max: 8, step: 0.05, hint: 'How bright the glow is.' },
+    tint: { label: 'Tint', type: 'vec3color', hint: 'Colour the glow is multiplied by (white keeps the picture\'s own colours).' },
     quality: QUALITY,
   },
+  glslFunctions: [BL_BASE_GLSL, BL_GLSL_GRAPH, BL_BLOOM_W_GLSL],
+  declarationsFor: hiddenDecl,
   assignable: false,
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id;
     const tex = inputVars.texture;
     if (!tex) return { code: `    vec3 ${id}_glow = vec3(0.0);\n`, outputVars: { glow: `${id}_glow` } };
-    const thr = p(node.params.threshold, 0.5);
-    // Each tap keeps only what is over the threshold (a soft knee 0.1 wide, so the cut doesn't ring).
-    const keep = (s: string) => `vec4(${s}.rgb * smoothstep(${thr}, ${thr} + 0.1, dot(${s}.rgb, ${LUMA})), ${s}.a)`;
-    const code = `    vec2 ${id}_uv = ${texUv(inputVars.uv ?? 'g_uv')};\n`
-      + vogelBlur(id, tex, `${id}_uv`, p(node.params.radius, 12), tapsOf(node.params.quality), keep)
-      + `    vec3 ${id}_glow = ${id}_acc.rgb * ${p(node.params.intensity, 1.5)};\n`;
+    const radius = p(node.params.radius, 12);
+    const uv = `${id}_uv`;
+    const hidden = blurSource(node);
+    let code = `    vec2 ${uv} = ${texUv(inputVars.uv ?? 'g_uv')};\n`;
+    if (hidden && hidden.levels > 0) {
+      // Bloom chain: level 1 holds every level's share added up; divide by their total weight (energy kept).
+      const s0 = typeof node.params.__blurSrcScale === 'number' ? fl(node.params.__blurSrcScale) : '1.0';
+      code += `    vec3 ${id}_acc = ${readHidden(hidden, uv)}.rgb / max(blBloomSum(${radius}, ${s0}, ${fl(hidden.levels)}), 1e-4);\n`;
+    } else if (hidden) {
+      code += `    vec3 ${id}_acc = ${readHidden(hidden, uv)}.rgb;\n`;
+    } else {
+      const n = blurMethod(node) === 'fast' ? tapsOf(node.params.quality) : 48;
+      code += `    vec3 ${id}_acc = blDiscKeep(${tex}, ${uv}, ${passPxUniform(tex)}, ${radius}, ${fl(n)}, gl_FragCoord.xy, ${p(node.params.threshold, 0.5)}, ${p(node.params.knee, 0.1)}).rgb;\n`;
+    }
+    // ±½ of an 8-bit step of noise: a wide, faint glow over black doesn't band on screen.
+    code += `    vec3 ${id}_glow = max(${id}_acc * ${p(node.params.intensity, 1.5)} * ${pv3(node.params.tint, [1, 1, 1])} + (blIGN(gl_FragCoord.xy + 0.5) - 0.5) / 255.0, 0.0);\n`;
     return { code, outputVars: { glow: `${id}_glow` } };
   },
 };
