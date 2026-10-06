@@ -5,6 +5,13 @@ steps it; its editor window writes the rule; the compiler turns it into the same
 rule GLSL the wired [grid examples](simulations-grids.md) are built from; **Open as nodes** builds
 that wired graph, every node with a note, for learning.
 
+**Opening it:** the node browser's **Builders** section (first, on the desktop and on a phone) →
+**Grid Rules** adds a Grid Rules node (on the Output when the graph is empty) and opens its editor;
+so do the empty canvas's right-click → **Builders** → **Grid Rules…** and the Do… bar's "new grid
+rules". "open grid rules" or "edit the rules" opens the selected (or only) one's editor; the card's
+⊞ button and its rule line do too. The card's **Rule** chip shows the rule as text ("Life B3/S23 ·
+240×135 · wrap") with **Copy** and **Open editor**.
+
 Code:
 
 | What | Where |

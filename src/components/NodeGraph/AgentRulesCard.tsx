@@ -4,36 +4,26 @@
  * Open rule ↗ as before, and a small link to Back to rules (a group that has rules) or Write as
  * rules (one that doesn't: its inside is replaced, undoably).
  */
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
-import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
-import type { AgentRulesModal as AgentRulesModalT } from './AgentRulesModal';
 import { pal, MONO } from './vizKit';
 import { isRulesGroup } from '../../agentRules/apply';
 import { groupBackToRules, openAgentRulesEditor, openGroupAsNodes } from '../../agentRules/storeActions';
 import { askChoice } from '../ui/dialogStore';
 
-const AgentRulesModal = lazyWithSuspense<PropsOf<typeof AgentRulesModalT>>(() => import('./AgentRulesModal').then(m => ({ default: m.AgentRulesModal })));
-
 export function AgentRulesCardButtons({ node, button, onEnterGroup }: { node: GraphNode; button: React.CSSProperties; onEnterGroup?: (groupId: string) => void }) {
-  const [open, setOpen] = useState(false);
   const rules = isRulesGroup(node);
-  useEffect(() => {
-    const on = (e: Event) => { if ((e as CustomEvent<string>).detail === node.id) setOpen(true); };
-    window.addEventListener('agent-rules-open', on);
-    return () => window.removeEventListener('agent-rules-open', on);
-  }, [node.id]);
+  // The rules editor is drawn by BuilderWindowsHost (builders/windows.ts), so the Builders section and the Do… bar open it too.
   return (
     <>
       {rules ? (
         <>
-          <button type="button" style={button} title="Edit the rules this group's walkers follow, as When … Do … lines (or double-click the card's title)" onClick={() => setOpen(true)}>Edit rules ↗</button>
+          <button type="button" style={button} title="Edit the rules this group's walkers follow, as When … Do … lines (or double-click the card's title)" onClick={() => openAgentRulesEditor(node.id)}>Edit rules ↗</button>
           <button type="button" style={button} title="Open as nodes: the nodes the rules make (Start, a block per rule, Finish, Move), every one with a note, to edit as nodes" onClick={() => openGroupAsNodes(node.id)}>Open as nodes</button>
         </>
       ) : (
         <button type="button" style={button} title="Open the rule one walker follows every step (or double-click the card's title)" onClick={() => onEnterGroup?.(node.id)}>Open rule ↗</button>
       )}
-      {open && rules && <AgentRulesModal node={node} onClose={() => setOpen(false)} />}
     </>
   );
 }

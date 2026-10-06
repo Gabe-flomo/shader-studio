@@ -19,14 +19,29 @@ volumetric · smooth-union(sphere r=1, cone h=2 rot=(30,0,0)) k=0.3 · twist 0.5
 
 ## Opening it
 
+- **Node browser, Builders (first section):** **3D Scene Builder** opens it on a
+  new scene, on the desktop and on a phone. Searching "builder" or "scene" shows it too.
 - **Node browser / add menu:** "New 3D scene…" in the 3D Scene category. Search
   "scene builder", "recipe" or "describe 3D" to find it.
-- **Empty canvas:** right-click → **Scene Builder…** (at the top level).
+- **Empty canvas:** right-click → **Builders** → **3D Scene Builder…** (at the top level).
+- **Do… bar (⌘K):** "open the scene builder" or "new 3d scene"; "edit this scene"
+  with a built Scene Group (or any node of it) selected.
 - **A scene the builder made:** right-click any of its nodes → **Edit in Scene
-  Builder**.
+  Builder**, or **Open in Scene Builder** in the Recipe chip on its Scene Group.
 - **Any 3D graph:** right-click its Scene Group, March Loop or camera →
   **Describe in Scene Builder**, or right-click the empty canvas → **Describe
   this graph**. The builder's header also has **Describe graph**.
+
+### The Recipe chip
+
+A Scene Group the builder made shows its recipe on the card (and on the phone's node page): one or
+two lines, cut short. A click shows the whole recipe, one clause a line, its words coloured (modes,
+combines, shapes, warps, settings, numbers), with **Copy** and **Open in Scene Builder**. When the
+scene's nodes were changed by hand since the build (a setting, a wire, a node added inside or
+deleted; moving cards doesn't count), the chip says **edited since build**: the same check a
+rebuild makes (`checkEdits`), so Open in Scene Builder will tell you what a rebuild keeps. A
+hand-made Scene Group has no chip. The Do… bar's "show the recipe" opens it; "copy the recipe"
+copies it. Code: `src/builders/recipe.ts`, `src/components/builders/RecipeChip.tsx`.
 
 The window has the Expression Block editor's layout:
 
@@ -315,6 +330,38 @@ Each clause is one of these:
 
 Printing writes only what differs from the defaults.
 
+**The pretty form.** Inside a combine's brackets, a new line that is indented (or starts with the
+closing `)`) goes on with the clause, so a combine can put each item on its own line:
+
+```
+smooth-union(
+  sphere r=0.55 at=(0,0.05,0) color=(0.85,0.45,0.3) shine=0.4 name=Body,
+  capsule h=0.5 r=0.12 at=(0.1,-0.3,0.55) rot=(0,0,60)
+) k=0.35 name=Sculpture
+```
+
+`formatRecipe` / `printRecipe(spec, { pretty: true })` write this form (nested combines one
+indent deeper); the one-line form and any spacing read back to the same scene. A new line that is
+not indented still ends a clause, so a bracket left open while typing doesn't swallow the lines
+under it.
+
+### The Recipe tab
+
+The tab shows the recipe as **rows**, one numbered row per clause, like an Expression Block's
+lines: a combine's items each on their own indented line, its `k=` on the closing line; long
+settings wrap with a hanging indent under the shape's name. Words are coloured in the code
+editor's colours (light and dark): modes, shapes, combines, warps, settings, keys, numbers,
+vectors, names and colours, with a small swatch before a colour (`color=(r,g,b)`, a hex, a colour
+name). Click a row to change it (Enter keeps it, Shift+Enter adds a line, Esc leaves it; the
+suggestions and the settings line work there too); a row that doesn't read stays open with its
+mistake. Drag a row to move it (▲▼ on a touch screen); × deletes it; **+ Add a clause** adds one.
+**Edit as text** switches to the whole recipe in a code editor (line numbers, the same colours,
+mistakes underlined, a colour's swatch as a bar under it), remembered in this browser. **Copy**
+copies the pretty form. The same colouring is in the Scene Group card's Recipe chip, in **Show
+the words**, and in the Do… bar where a recipe shows (a 3D output's clause, "show the recipe").
+Code: `src/sceneBuilder/highlight.ts` (tokens, clauses, the clause tree), `recipeRows.ts`,
+`src/components/sceneBuilder/RecipeRows.tsx`, `RecipeCode.tsx`, `recipeColours.ts`.
+
 ### Values
 
 | Value | Written |
@@ -510,7 +557,8 @@ Right-click any node → Edit in Scene Builder to change it.
 | File | What |
 |---|---|
 | `src/sceneBuilder/spec.ts` | The spec, the shape and warp catalogues, step hints |
-| `src/sceneBuilder/recipe.ts` | Recipe parser and printer |
+| `src/sceneBuilder/recipe.ts` | Recipe parser and printer (one line, multiline, pretty) |
+| `src/sceneBuilder/highlight.ts`, `recipeRows.ts` | The recipe's coloured tokens, its clauses and rows, row edits |
 | `src/sceneBuilder/build.ts` | Spec → nodes, with notes and roles |
 | `src/sceneBuilder/recognize.ts` | Graph → spec (Describe) |
 | `src/sceneBuilder/apply.ts` | Build into a graph; rebuild, keeping edits |

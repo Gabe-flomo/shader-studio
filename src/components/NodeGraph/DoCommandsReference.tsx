@@ -51,7 +51,7 @@ export function CommandsReferenceBody({ initialQuery = '', onTry }: { initialQue
         {(['all', ...kinds] as Kind[]).map(k => (
           <button key={k} type="button" onClick={() => setKind(k)}
             style={{ height: 24, padding: '0 9px', borderRadius: 12, border: `1px solid ${k === kind ? tk.accent.base : tk.border.subtle}`, background: k === kind ? alpha(tk.accent.base, 0.12) : 'transparent', color: k === kind ? tk.accent.base : tk.text.secondary, font: `500 11.5px ${fontFamily.ui}`, cursor: 'pointer' }}>
-            {k === 'all' ? `All (${all.length})` : k === 'verb' ? 'Edit verbs' : k === 'action' ? 'Build actions' : REFERENCE_SECTIONS[k]}
+            {k === 'all' ? `All (${all.length})` : k === 'verb' ? 'Edit verbs' : k === 'action' ? 'Build actions' : k === 'builder' ? 'Builders' : REFERENCE_SECTIONS[k]}
           </button>
         ))}
       </div>
@@ -107,12 +107,13 @@ function Entry({ e, onTry }: { e: ReferenceEntry; onTry: (text: string) => void 
           {e.slots.map(s => <span key={s.name} style={{ fontSize: 11.5, color: tk.text.muted }}><b style={{ color: tk.text.secondary }}>{s.name}</b> — {s.what}</span>)}
         </div>
       )}
-      {e.examples.map(x => <Example key={x.text + x.on} x={x} onTry={onTry} />)}
+      {e.examples.map(x => <Example key={x.text + x.on} x={x} onTry={onTry} how={e.kind !== 'builder'} />)}
     </div>
   );
 }
 
-function Example({ x, onTry }: { x: CommandExample; onTry: (text: string) => void }) {
+/** `how`: offer Show me how (not for builder phrases: they open a window, they don't change a graph). */
+function Example({ x, onTry, how: canShow = true }: { x: CommandExample; onTry: (text: string) => void; how?: boolean }) {
   const tk = useTokens();
   const [how, setHow] = useState(false);
   return (
@@ -120,7 +121,7 @@ function Example({ x, onTry }: { x: CommandExample; onTry: (text: string) => voi
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <code style={{ flex: '1 1 260px', minWidth: 0, font: `12px ${fontFamily.mono}`, color: tk.accent.base, overflowWrap: 'anywhere' }}>{x.text}</code>
         <Button size="sm" variant="ghost" onClick={() => onTry(x.text)} title="Open it in the Do… bar on this graph (the preview shows what it would do)">Try</Button>
-        <Button size="sm" variant="ghost" onClick={() => setHow(h => !h)} data-show-how>{how ? 'Hide' : 'Show me how'}</Button>
+        {canShow && <Button size="sm" variant="ghost" onClick={() => setHow(h => !h)} data-show-how>{how ? 'Hide' : 'Show me how'}</Button>}
       </div>
       {x.note && <span style={{ fontSize: 11.5, color: tk.text.muted }}>{x.note}</span>}
       {how && <ShowHow x={x} />}

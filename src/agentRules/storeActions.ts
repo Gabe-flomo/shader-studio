@@ -8,9 +8,10 @@ import { toast } from '../components/ui/toastStore';
 import { applyRulesToGroup, backToRules, ensureBirthEmit, openRulesAsNodes, rulesNeedRegenerating } from './apply';
 import type { AgentRuleSet } from './spec';
 import { setAgentsView, type AgentsView } from './outputs';
+import { openAgentRulesWindow } from '../builders/windows';
 
-/** Ask a rules group's card to open its editor (the card's title double-click; Write as rules). */
-export const openAgentRulesEditor = (groupId: string) => window.dispatchEvent(new CustomEvent('agent-rules-open', { detail: groupId }));
+/** Open a rules group's rules editor (the card's Edit rules, its title double-click, Write as rules, the Builders section). */
+export const openAgentRulesEditor = (groupId: string) => openAgentRulesWindow(groupId);
 
 let last = { id: '', at: 0 };
 

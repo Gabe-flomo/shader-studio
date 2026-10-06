@@ -38,6 +38,11 @@ import {
 import type { GraphNode } from '../../types/nodeGraph';
 import { doBarAssist } from '../../lang/complete';
 import { AssistList, SignatureLine, useTypeAhead } from '../builders/TypeAhead';
+import { planBuilderCommand, readBuilderCommand, type BuilderPlan } from '../../builders/doBuilders';
+import { runBuilderAction } from '../../builders/open';
+import { builderRecipeOf } from '../../builders/recipe';
+import { outputClause } from '../../sceneBuilder/output';
+import { RecipeCode } from '../sceneBuilder/RecipeCode';
 
 const WIDTH = 560;
 
@@ -110,13 +115,28 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
     return () => window.removeEventListener('keydown', onKey, true);
   }, []);
 
-  const plan: DoPlan = useMemo(() => (text.trim() ? parseDo(text, scope) : { steps: [], reading: [], unknown: [] }), [text, scope]);
+  // A builder phrase ("new 3d scene", "edit the rules", "show the recipe") is the whole sentence, read first (builders/doBuilders.ts).
+  const rootNodes = useNodeGraphStore(s => s.nodes);
+  const builder: BuilderPlan | null = useMemo(() => {
+    const c = readBuilderCommand(text);
+    return c ? planBuilderCommand(c, { nodes: rootNodes, selected: scope.selected }) : null;
+  }, [text, rootNodes, scope.selected]);
+  // A builder phrase about a built scene's recipe ("show the recipe"): the recipe, coloured.
+  const builderRecipe = useMemo(() => {
+    const a = builder?.action;
+    if (!a || (a.kind !== 'show-recipe' && a.kind !== 'copy-recipe' && a.kind !== 'edit-scene')) return null;
+    const id = a.kind === 'edit-scene' ? a.sceneId : a.nodeId;
+    const nd = rootNodes.find(x => x.id === id);
+    const r = nd ? builderRecipeOf(nd, []) : null;
+    return r?.kind === 'scene' ? r.text : null;
+  }, [builder, rootNodes]);
+  const plan: DoPlan = useMemo(() => (text.trim() && !builder ? parseDo(text, scope) : { steps: [], reading: [], unknown: [] }), [text, scope, builder]);
   // The command language (doCommands.ts): every clause, previewed on a copy of the graph.
   const [picks, setPicks] = useState<Record<string, string>>({});
   const cmd: CommandPlan | null = useMemo(() => {
-    if (!text.trim() || plan.intent) return null;
+    if (!text.trim() || plan.intent || builder) return null;
     try { return execCommand(text, scope.nodes, { selected: scope.selected, picks, topLevel: scope.topLevel }); } catch { return null; }
-  }, [text, scope, picks, plan.intent]);
+  }, [text, scope, picks, plan.intent, builder]);
   const editing = !!cmd && !cmd.phrase;
   const pickClause = cmd?.clauses.find(c => c.pick);
   const [hoverPick, setHoverPick] = useState<string | null>(null);
@@ -142,7 +162,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   }, [plan.intent, text]);
 
   const fallback: Fallback[] = useMemo(() => {
-    if (!text.trim() || plan.intent) return [];
+    if (!text.trim() || plan.intent || builder) return [];
     // An output phrase or a type refusal with its fixes is an answer, not a miss.
     if (plan.steps.some(st => st.kind === 'scene-output') || plan.fixes?.length) return [];
     // A phrase read only by guessing at typos ("sine" ≈ "shine") gives way to an idiom of that name.
@@ -156,13 +176,19 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
       .map(x => ({ kind: 'node' as const, type: x.d.type, label: x.d.label, detail: x.d.category }));
     const idioms = (idiomFirst.length ? idiomFirst : matchIdioms(text, 3)).map(spec => ({ kind: 'idiom' as const, spec }));
     return idiomFirst.length ? idioms : [...nodes, ...idioms];
-  }, [text, plan, editing]);
+  }, [text, plan, editing, builder]);
   useEffect(() => setActive(0), [fallback.length]);
   // Fallback results with a plan: the plan was only a guess at a typo, and an idiom has that name.
   const idiomWins = !editing && plan.steps.length > 0 && fallback.length > 0;
   const showCommand = !!cmd && !idiomWins && cmd.clauses.length > 0 && (editing || cmd.steps.length > 0 || cmd.clauses.some(c => c.status !== 'ok' && fallback.length === 0));
 
   const run = () => {
+    if (builder) {
+      if (!builder.action) return;
+      closeDoBar();
+      runBuilderAction(builder.action);
+      return;
+    }
     if (plan.intent === 'teach') { teach(); return; }
     if (cmd?.ok && !idiomWins) {
       const ran = useNodeGraphStore.getState().runCommand(text.trim(), picks);
@@ -233,10 +259,31 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
       {ta.items.length > 0 && <div style={{ padding: '0 8px 6px' }}><AssistList items={ta.items} active={ta.active} onPick={ta.pick} onHover={ta.setActive} /></div>}
       {ta.signature && text.trim() && !plan.steps.some(st => st.kind === 'scene-output') && <div style={{ padding: '0 8px 6px' }}><SignatureLine sig={ta.signature} /></div>}
       <div style={{ overflowY: 'auto', minHeight: 0 }}>
+        {/* A builder phrase: what Enter opens */}
+        {builder && section(builder.action ? 'Enter opens' : 'Can’t open yet', (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }} data-do-builder={builder.id}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+              <Icon name={/scene/.test(builder.id) ? 'cube' : /grid/.test(builder.id) ? 'grid' : /agent/.test(builder.id) ? 'swarm' : 'book'} size={14} style={{ color: tk.accent.base }} />
+              <b style={{ fontWeight: 600 }}>{builder.label}</b>
+            </span>
+            {builder.problem && <span style={{ fontSize: 12, color: tk.status.warningText }}>{builder.problem}</span>}
+            {builderRecipe && (
+              <code data-do-recipe style={{ font: `11.5px/1.5 ${fontFamily.mono}`, padding: '4px 8px', borderRadius: radius.control, background: tk.bg.subtle, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflowWrap: 'anywhere' }}>
+                <RecipeCode text={builderRecipe} errors={[]} />
+              </code>
+            )}
+          </div>
+        ))}
         {/* The plan: what runs on Enter, clause by clause */}
         {showCommand && cmd && section(cmd.ok ? `Enter runs · ${cmd.steps.length} step${cmd.steps.length === 1 ? '' : 's'} · one undo` : pickClause ? 'Pick one, then Enter' : 'Can’t run yet', (
           <CommandPreview cmd={cmd} onPick={(key, id) => setPicks(p => ({ ...p, [key]: id }))} onHoverPick={setHoverPick}
             onSuggest={(clause, s2) => { setText(cmd.clauses.length === 1 ? s2 : cmd.clauses.map(c => (c.index === clause.index ? s2 : c.text)).join(', ')); inputRef.current?.focus(); }} />
+        ))}
+        {/* A 3D output phrase: the recipe clause it writes into the scene */}
+        {plan.steps.filter((st): st is Extract<typeof st, { kind: 'scene-output' }> => st.kind === 'scene-output').map((st, i) => (
+          <div key={`so${i}`} data-do-recipe style={{ padding: '0 12px 8px', display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 11.5, color: tk.text.muted }}>
+            Recipe <code style={{ font: `11.5px ${fontFamily.mono}` }}><RecipeCode text={outputClause(st.output)} errors={[]} /></code>
+          </div>
         ))}
         {plan.problem && !idiomWins && !showCommand && <div style={{ padding: '6px 12px 8px', fontSize: 12, color: tk.status.warningText }} data-do-problem>{plan.problem}</div>}
         {plan.fixes && plan.fixes.length > 0 && !idiomWins && !editing && (
@@ -303,7 +350,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
         ))}
         {!text.trim() && !check && panel === 'none' && (
           <div style={{ padding: '4px 12px 10px', ...muted }}>
-            Shapes, actions and values: “heart at the top left with rings”, “twist the space 0.5”, “glow falloff 4 red”. Edits too: “connect the noise to the output”, “switch the noise to voronoi”, “make the circle bigger”. Chain clauses with “then”: each builds on “it”. The ⓘ lists every command.
+            Shapes, actions and values: “heart at the top left with rings”, “twist the space 0.5”, “glow falloff 4 red”. Edits too: “connect the noise to the output”, “switch the noise to voronoi”, “make the circle bigger”. Chain clauses with “then”: each builds on “it”. Builders: “new 3d scene”, “new grid rules”, “edit the rules”, “show the recipe”. The ⓘ lists every command.
           </div>
         )}
       </div>

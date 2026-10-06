@@ -19,6 +19,8 @@ modifier  := param number | number param | colour | place | "by" number | "much"
 
 In the app: the **?** in the Do… bar, or Keys → Do… bar commands. Every example can be tried in the bar or shown step by step.
 
+The **builders** (the 3D Scene Builder, Grid Rules, Agent Rules) open from whole phrases: "new 3d scene", "new grid rules", "edit the rules", "show the recipe" (see Builders below). They are also the first section of the node browser and the empty-canvas right-click menu's Builders.
+
 ## Verbs: editing what is there
 
 ### create
@@ -824,6 +826,118 @@ Examples:
 
 - `remap` — on UV → Fractal Noise → Palette → Output (one node selected)
 - `normalize it` — on UV → Fractal Noise → Palette → Output (one node selected)
+
+## Builders: opening a builder
+
+### open the scene builder
+
+Opens the 3D Scene Builder on a new scene (its Templates tab). Build adds the scene to the graph.
+
+Words: `open the scene builder`, `open the 3d scene builder`, `scene builder`, `3d scene builder`, `open the builder`
+
+Examples:
+
+- `open the scene builder`
+- `scene builder`
+
+### new 3d scene
+
+The same: the 3D Scene Builder on a new scene.
+
+Words: `new 3d scene`, `new scene`, `make a 3d scene`, `build a 3d scene`, `create a 3d scene`, `start a 3d scene`
+
+Examples:
+
+- `new 3d scene`
+- `build a 3d scene`
+
+### edit this scene
+
+Opens the 3D Scene Builder on a scene it built (as the Scene Group's right-click Edit in Scene Builder does). Works on the selected node's built scene, else the only built scene in the graph.
+
+Words: `edit this scene`, `edit the scene`, `edit it in the scene builder`, `edit in the scene builder`, `open this scene`, `open it in the scene builder`, `rebuild this scene`
+
+Examples:
+
+- `edit this scene` — With a built Scene Group (or any node of it) selected
+- `edit it in the scene builder` — With a built Scene Group selected
+
+### open grid rules
+
+Opens the Grid Rules editor of the selected Grid Rules node (else the only one); with none in the graph, adds one first. Works on the selected Grid Rules node, else the only one.
+
+Words: `open grid rules`, `open the grid rules editor`, `grid rules editor`, `open the grid editor`
+
+Examples:
+
+- `open grid rules`
+- `open the grid rules editor`
+
+### new grid rules
+
+Adds a Grid Rules node (on the Output when the graph is empty) and opens its editor.
+
+Words: `new grid rules`, `add grid rules`, `new grid rules node`, `add a grid rules node`, `new cellular automaton`, `new automaton`
+
+Examples:
+
+- `new grid rules`
+- `new cellular automaton`
+
+### edit the rules
+
+Opens the rules of the selected Grid Rules node (its editor) or rules Agents group (its rules editor); else of the only one in the graph. Works on the selected Grid Rules node or rules Agents group, else the only one.
+
+Words: `edit the rules`, `edit rules`, `edit its rules`, `edit the rule`, `open the rules`, `open its rules`
+
+Examples:
+
+- `edit the rules` — With a Grid Rules node or a rules Agents group selected
+- `edit its rules` — With a rules Agents group selected
+
+### open agent rules
+
+Opens the rules editor of the selected rules Agents group (else the only one); with none in the graph, adds one first. Works on the selected rules Agents group, else the only one.
+
+Words: `open agent rules`, `open the agent rules editor`, `agent rules editor`, `open the agents rules`
+
+Examples:
+
+- `open agent rules`
+- `open the agent rules editor`
+
+### new agent rules
+
+Adds an Agents group in rules mode (Emit → Agents → Deposit → Trail field → palette, on the Output) and opens its rules.
+
+Words: `new agent rules`, `add agent rules`, `new agents with rules`, `new rules agents`, `add an agents group with rules`
+
+Examples:
+
+- `new agent rules`
+- `new agents with rules`
+
+### show the recipe
+
+Shows the recipe chip of a builder-made node expanded: a built scene's recipe, a Grid Rules node's rule, a rules group's rules. Works on the selected builder-made node, else the only one.
+
+Words: `show the recipe`, `show recipe`, `show its recipe`, `what is the recipe`, `show the rule`, `show me the recipe`
+
+Examples:
+
+- `show the recipe` — With a built Scene Group selected
+- `show the rule` — With a Grid Rules node selected
+
+### copy the recipe
+
+Copies the recipe (or the rule, or the rules as sentences) of a builder-made node to the clipboard. Works on the selected builder-made node, else the only one.
+
+Words: `copy the recipe`, `copy recipe`, `copy its recipe`, `copy the rule`
+
+Examples:
+
+- `copy the recipe` — With a built Scene Group selected
+- `copy the rule` — With a Grid Rules node selected
 
 ## Objects
 

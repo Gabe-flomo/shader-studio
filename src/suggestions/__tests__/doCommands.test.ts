@@ -18,7 +18,8 @@ import { classify, clausesOf, didYouMean, execCommand, type CommandPlan } from '
 import { lex, readRef } from '../doRefs';
 import { scratchGraph } from '../doScratch';
 import { ACTIONS } from '../../lang/vocabulary';
-import { COMMAND_VERBS, RECIPES, actionExamples, commandReference, commandsMarkdown, searchReference } from '../../lang/commands';
+import { BUILDER_COMMANDS, COMMAND_VERBS, RECIPES, actionExamples, commandReference, commandsMarkdown, searchReference } from '../../lang/commands';
+import { readBuilderCommand } from '../../builders/doBuilders';
 import { CORPUS } from './doCommandsCorpus';
 import shippedDoc from '../../../docs/do-bar-commands.md?raw';
 
@@ -331,9 +332,17 @@ describe('the reference library', () => {
       expect(entries.some(x => x.id === `action:${a.id}`), a.id).toBe(true);
       expect(actionExamples(a.id).length, a.id).toBeGreaterThanOrEqual(2);
     }
-    for (const k of ['object', 'modifier', 'reference', 'connector', 'recipe'] as const) expect(entries.some(e => e.kind === k), k).toBe(true);
+    for (const k of ['builder', 'object', 'modifier', 'reference', 'connector', 'recipe'] as const) expect(entries.some(e => e.kind === k), k).toBe(true);
   });
-  for (const e of entries) {
+  it('covers every builder command, with 2+ examples that read as that command (and as nothing else)', () => {
+    for (const b of BUILDER_COMMANDS) {
+      expect(entries.some(x => x.id === `builder:${b.id}`), b.id).toBe(true);
+      expect(b.examples.length, b.id).toBeGreaterThanOrEqual(2);
+      for (const x of b.examples) expect(readBuilderCommand(x.text)?.id, x.text).toBe(b.id);
+    }
+  });
+  // Builder phrases open a window rather than change a graph: builders/__tests__ runs them.
+  for (const e of entries.filter(x => x.kind !== 'builder')) {
     for (const x of e.examples) {
       it(`${e.id}: “${x.text}” runs on its scratch graph`, () => {
         const p = run(x.text, scratchGraph(x.on), x.selected);
@@ -364,5 +373,6 @@ describe('docs/do-bar-commands.md', () => {
     if (write) return;
     expect(shippedDoc).toBe(commandsMarkdown());
     for (const v of COMMAND_VERBS) expect(shippedDoc).toContain(`### ${v.words[0]}`);
+    for (const b of BUILDER_COMMANDS) expect(shippedDoc).toContain(`### ${b.words[0]}`);
   });
 });

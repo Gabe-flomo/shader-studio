@@ -15,6 +15,8 @@ import { fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { nodeDragProps, nodeDragStyle, type DropPayload } from './nodeDrop';
+import { BuildersSection } from '../builders/BuildersSection';
+import { matchBuilders } from '../../builders/registry';
 
 // ── Nodes hidden from browser ─────────────────────────────────────────────────
 const HIDDEN_NODES = new Set([
@@ -441,12 +443,14 @@ interface NodeBrowserProps {
   searchQuery: string;
   context?: 'studio' | 'glsl';
   onGlslInsert?: (code: string) => void;
+  /** After a builder in the Builders section opened, e.g. to close a drawer. */
+  onBuilderOpened?: () => void;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 export function NodeBrowser({
   onAdd, onDragAdd, onDragDone, swapTargetNodeId, favorites, onToggleFavorite, nodeButtonRefs, searchQuery,
-  context, onGlslInsert,
+  context, onGlslInsert, onBuilderOpened,
 }: NodeBrowserProps) {
   const tk = useTokens();
   const [path, setPath] = useState<string[]>([]);
@@ -456,6 +460,8 @@ export function NodeBrowser({
   const containerRef = useRef<HTMLDivElement>(null);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isGlsl = context === 'glsl';
+  // The Builders section (docs/node-browser.md): not in the GLSL page's browser, nor while picking a node to switch to.
+  const showBuilders = !isGlsl && !swapTargetNodeId;
 
   const isSearching = searchQuery.trim().length > 0;
 
@@ -562,14 +568,21 @@ export function NodeBrowser({
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score || a.def.label.localeCompare(b.def.label))
       .map(({ def }) => def);
-    innerContent = results.length === 0
-      ? <div style={{ color: tk.text.faint, fontSize: 12, padding: '4px 2px' }}>No matches</div>
-      : <div>{renderPills(results)}</div>;
+    const builderHits = showBuilders ? matchBuilders(trimmed).length : 0;
+    innerContent = (
+      <>
+        {builderHits > 0 && <BuildersSection query={trimmed} onOpened={onBuilderOpened} />}
+        {results.length === 0
+          ? (builderHits ? null : <div style={{ color: tk.text.faint, fontSize: 12, padding: '4px 2px' }}>No matches</div>)
+          : <div>{renderPills(results)}</div>}
+      </>
+    );
 
   } else if (path.length === 0) {
     const favCount = favorites.filter(t => getNodeDefinition(t) && !HIDDEN_NODES.has(t)).length;
     innerContent = (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {showBuilders && <BuildersSection onOpened={onBuilderOpened} />}
         {favCount > 0 && (
           <CategoryRow
             key="__favorites__"

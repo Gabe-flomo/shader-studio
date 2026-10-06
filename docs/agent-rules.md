@@ -11,11 +11,12 @@ For the Agents group itself (Emit, Deposit, Trail field, Draw agents) see docs/a
 
 ## Start here
 
+- **Builders** (the node browser's first section, on the desktop and on a phone) → **Agent Rules**, the empty canvas's right-click → **Builders** → **Agent Rules…**, or the Do… bar's "new agent rules": the setup below, with its rules editor already open. "open agent rules" or "edit the rules" opens the selected (or only) rules group's editor.
 - **Add an Agents group** (node browser → Simulation → Agents) and pick **Rules (When … Do …)**. You get Emit → Agents → Deposit → Trail field → palette, wired to the Output, with one rule that already moves: *always → turn toward its own trail, wander, leave trail* (slime mold).
 - Or open an example: **Examples → Agents: rules** (eight templates, below).
 - Or, on any Agents group in node mode, **Write as rules…** under its buttons (it replaces the inside; undo brings it back).
 
-A rules group's card shows **Edit rules ↗** and **Open as nodes** instead of Open rule. Double-clicking its title opens the editor.
+A rules group's card shows **Edit rules ↗** and **Open as nodes** instead of Open rule. Double-clicking its title opens the editor. Its **Rules** chip sums the rules up ("4 rules · 2 states"); a click shows every rule as a sentence, with **Copy** and **Open rules**.
 
 ## The editor
 

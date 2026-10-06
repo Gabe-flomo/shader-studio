@@ -30,6 +30,7 @@ import { Icon } from '../ui/Icon';
 import { InlineVizFrame, GenericPreviewViz, SKIP_INLINE_PREVIEW } from './MobileGraphBrowser';
 import { INLINE_VIZ_TYPES } from './NodeInlineViz';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
+import { BuildersSection } from '../builders/BuildersSection';
 
 function labelFor(n: GraphNode): string {
   return (typeof n.params.label === 'string' && n.params.label) || getNodeDefinitionFor(n)?.label || n.type;
@@ -289,6 +290,8 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
   // ── Category accordion ─────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {/* The builders first: the 3D Scene Builder, Grid Rules, Agent Rules (docs/node-browser.md) */}
+      <BuildersSection touch onOpened={onClose} />
       {CATEGORIES.map(cat => {
         const isOpen = openCategory === cat.name;
         const flat = cat.subgroups.length === 1 && cat.subgroups[0].name === null;

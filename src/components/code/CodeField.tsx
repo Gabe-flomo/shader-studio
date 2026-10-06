@@ -51,6 +51,7 @@ function esc(s: string) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').
 export function CodeField({
   value, onChange, completions, title = 'GLSL', actions, textareaRef, onKeyDown, onBlur, onFocus, onSelect, placeholder,
   ariaLabel, grow = false, minHeight = 120, maxHeight, invalid = false, style, tokenize = tokenizeLine, members, autoIndent = false, flash,
+  highlight, keyFirst,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -79,6 +80,10 @@ export function CodeField({
   autoIndent?: boolean;
   /** Lines to flash and scroll into view (runs of [first, last] line indexes); a new `key` flashes again. */
   flash?: { lines: ReadonlyArray<[number, number]>; key: number } | null;
+  /** The whole text as highlighted HTML (escaped), instead of `tokenize` line by line: for a language whose runs cross lines (the Scene Builder's recipe). */
+  highlight?: (value: string, pal: typeof C) => string;
+  /** Keys for a caller's own suggestions, before the field's: true when it used the key. */
+  keyFirst?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => boolean;
 }) {
   const tk = useTokens();
   const pal = useThemeMode() === 'dark' ? C : C_LIGHT;
@@ -115,7 +120,7 @@ export function CodeField({
   }, [flashKey]);
 
   const lines = value.split('\n');
-  const html = lines.map(l => tokenize(l, pal).map(t => `<span style="color:${t.color}">${esc(t.text)}</span>`).join('')).join('\n') + '\n';
+  const html = (highlight ? highlight(value, pal) : lines.map(l => tokenize(l, pal).map(t => `<span style="color:${t.color}">${esc(t.text)}</span>`).join('')).join('\n')) + '\n';
 
   // Popup position: under the start of the word being completed (set when the text changes)
   const [anchorXY, setAnchorXY] = useState<{ x: number; y: number } | null>(null);
@@ -186,6 +191,7 @@ export function CodeField({
             onChange={e => { onChange(e.target.value); placePopup(e.target.value, ac.update(e.target)); }}
             onDoubleClick={selectTokenOnDoubleClick}
             onKeyDown={e => {
+              if (keyFirst?.(e)) return;
               if (ac.handleKey(e)) return;
               const w = wrapSelection(e.key, value, e.currentTarget.selectionStart, e.currentTarget.selectionEnd);
               if (w) { e.preventDefault(); const ta = e.currentTarget; onChange(w.text); requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(w.start, w.end); }); return; }
