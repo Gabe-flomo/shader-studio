@@ -44,15 +44,20 @@ export function ValuePreview({ node, diagram, diagramOnly = false }: {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const keyRef = useRef<HTMLSpanElement>(null);
   const [dragY, setDragY] = useState<number | null>(null);
-  const showDiagram = useNodePreviewPrefs(s => diagramOnly || !!(diagram && prefOf(node, s.prefs).diagram));
+  // The caption's frame stats (from the same readback): also say when the output is one flat colour
+  const stats = useNodeGraphStore(s => (s.previewNodeId === node.id ? s.previewStats : null));
+  // Diagram: the node's pick, else on its own while the output is the same everywhere (a Palette or a
+  // Tone Map with nothing wired yet says more as its diagram than as a flat square)
+  const pickedDiagram = useNodePreviewPrefs(s => prefOf(node, s.prefs).diagram);
+  const autoDiagram = !!diagram && pickedDiagram === undefined && !!stats?.flat;
+  const showDiagram = diagramOnly || (!!diagram && (pickedDiagram ?? autoDiagram));
   const mode = sa?.mode ?? 'raw';
   const sliceY = dragY ?? sa?.sliceY ?? 0.5;
   const outputKey = sa?.outputKey;
   const valueType = sa?.valueType ?? null;
   const fieldType = sa?.type ?? null;
   const detail = sa?.detail ?? DEFAULT_DETAIL;
-  // The caption's notes (clipping, black, flat): from the same readback, for Raw and colours
-  const stats = useNodeGraphStore(s => (s.previewNodeId === node.id ? s.previewStats : null));
+  // The caption's notes (clipping, black, flat): for Raw and colours
   const explained = !showDiagram && (mode === 'raw' || (fieldType && isColourType(fieldType)))
     ? explainPreview(node, getNodeDefinitionFor(node), stats) : null;
   // Only the notes that ask for something (clipping, black, flat); "all within 0–1" goes without saying
@@ -144,7 +149,16 @@ export function ValuePreview({ node, diagram, diagramOnly = false }: {
           <span aria-label="How to read this preview" style={{ display: 'inline-flex', color: tk.text.faint, cursor: 'help' }}><Icon name="info" size={14} /></span>
         </Tooltip>
       </div>
-      {showDiagram ? diagram : noFrame ? (
+      {showDiagram ? (
+        <>
+          {diagram}
+          {autoDiagram && (
+            <div style={{ padding: '2px 10px 6px', fontSize: 11, lineHeight: 1.4, color: tk.text.faint }}>
+              Its output is the same everywhere until something is wired, so this shows its diagram.
+            </div>
+          )}
+        </>
+      ) : noFrame ? (
         <div style={{ padding: '6px 10px 8px', fontSize: 11.5, lineHeight: 1.4, color: tk.text.faint }}>
           This output isn’t part of the picture’s program (only a Pass draws it), so it can’t be read here. Preview the Pass after it instead.
         </div>

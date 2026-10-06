@@ -45,7 +45,7 @@ export const NO_EYE_TYPES: ReadonlySet<string> = new Set(['uv', 'time', 'mouse',
  * repeat it: the eye stays (isolating them is useful) but adds no box.
  */
 export const SELF_VIZ_TYPES: ReadonlySet<string> = new Set([
-  'textureInput', 'videoInput', 'baked', 'midiInput', 'data', 'timeCube', 'audioInput', 'scope', 'lfo', 'bpmSync', 'transformVec',
+  'textureInput', 'videoInput', 'baked', 'midiInput', 'data', 'timeCube', 'audioInput', 'scope', 'lfo',
   // A Pass's card shows its texture live (lib/passRunner.ts draws it): the texture the next nodes read
   'pass',
 ]);
