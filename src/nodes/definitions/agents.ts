@@ -1240,6 +1240,10 @@ export const TrailFieldNode: NodeDefinition = {
     amount: { type: 'float', label: 'Amount', hint: 'The trail here, softly scaled to 0–1 by Gain: wire into a Palette.' },
     raw: { type: 'float', label: 'Raw', hint: 'The first channel\'s amount here, unscaled.' },
     channels: { type: 'vec4', label: 'Channels', hint: 'All four channels here, unscaled (one per species).' },
+    ch1: { type: 'float', label: 'Channel 1', hint: 'Trail channel 1 here (species 1, or what the rules name it), scaled to 0–1 by Gain like Amount: wire into a Palette to see one channel alone.' },
+    ch2: { type: 'float', label: 'Channel 2', hint: 'Trail channel 2 here, scaled to 0–1 by Gain.' },
+    ch3: { type: 'float', label: 'Channel 3', hint: 'Trail channel 3 here, scaled to 0–1 by Gain.' },
+    ch4: { type: 'float', label: 'Channel 4', hint: 'Trail channel 4 here (a rules group\'s birth marks), scaled to 0–1 by Gain.' },
     texture: { type: 'texture', label: 'Image', hint: 'The whole trail as an image (a texture): back into the Agents group for Sense (through an input you add on Agent Inputs), or into Glow, Blur or Sample (texture), or a Texture tool: Flow for a direction along the trail, Mask or Levels to shape it.' },
   },
   defaultParams: { resolution: '0.5', diffuse: 1, halfLife: 0.12, edges: 'wrap', gain: 0.15, kernel: '3', volume: '96' },
@@ -1273,6 +1277,7 @@ export const TrailFieldNode: NodeDefinition = {
       code: `    vec4 ${id}_t = texture2D(${tex}, agUv(g_uv));\n`,
       outputVars: {
         amount: `(1.0 - exp(-max(${id}_t.r, 0.0) * ${p(node.params.gain, 0.15)}))`,
+        ...Object.fromEntries(['r', 'g', 'b', 'a'].map((c, i) => [`ch${i + 1}`, `(1.0 - exp(-max(${id}_t.${c}, 0.0) * ${p(node.params.gain, 0.15)}))`])),
         raw: `${id}_t.r`,
         channels: `${id}_t`,
         texture: tex,

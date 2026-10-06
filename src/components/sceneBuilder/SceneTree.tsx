@@ -13,7 +13,8 @@ import { fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { Menu } from '../ui/Menu';
-import { BuilderLabel, BuilderNote } from '../builders/BuilderWindow';
+import { BuilderLabel, EmptyHelp } from '../builders/BuilderWindow';
+import { parseRecipe } from '../../sceneBuilder/recipe';
 import { rgbCss } from './controls';
 
 type Where = 'before' | 'after' | 'into';
@@ -109,7 +110,7 @@ export function SceneTree() {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '16px 12px' }}>
-      <BuilderLabel meta="drag to reorder or nest">Scene</BuilderLabel>
+      <BuilderLabel meta="drag to reorder or nest" hint="Every shape and combine group, top to bottom. Click to edit; drag onto another row to reorder or nest.">Scene</BuilderLabel>
       <div style={{ display: 'flex', gap: 6 }}>
         <Button size="sm" icon="plus" onClick={e => setMenu({ x: e.clientX, y: e.clientY })}>Shape</Button>
         <Button size="sm" icon="layers" title="A combine group: around the selected item, or a new empty one"
@@ -118,7 +119,7 @@ export function SceneTree() {
       <div role="tree" aria-label="Scene tree" style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         <TreeRow spec={spec} item={spec.root} depth={0} drag={drag} setDrag={setDrag} />
       </div>
-      {spec.root.children.length === 0 && <BuilderNote>Add a shape, pick a template, or type a recipe.</BuilderNote>}
+      {spec.root.children.length === 0 && <EmptyHelp id="tree" onExample={ex => { if ('recipe' in ex.insert) { const r = parseRecipe(ex.insert.recipe); edit(d => { d.root.children.push(...r.spec.root.children); }); } }} />}
       {menu && (
         <Menu x={menu.x} y={menu.y} onClose={() => setMenu(null)} title="Add a shape" items={SHAPES.map(s => ({
           label: s.label, hint: s.blurb,

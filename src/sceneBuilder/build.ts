@@ -24,6 +24,7 @@ import {
   type GroupSpec, type SceneItem, type SceneSpec, type ShapeSpec, type Vec3, type WarpSpec,
 } from './spec';
 import { fmt } from './recipe';
+import { OUTPUT_BY_SHOW, PALETTE_BY_KEY, isPicture, outputClause, outputProblem, type OutputSpec } from './output';
 
 export const ROLE_KEY = '_sbRole';
 /** On the Scene Group: the spec it was built from (and, once applied, fingerprints of what was built). */
@@ -88,14 +89,16 @@ function vecMath(ctx: Ctx, type: 'mix' | 'add', role: string, a: Ref, b: Ref, t:
   return n;
 }
 
-/** An Expression Block with typed inputs (wired, or a float slider) and a vec3 result. */
-function exprBlock(ctx: Ctx, role: string, label: string, inputs: Array<{ name: string; type: 'float' | 'vec3'; from?: Ref; slider?: { value: number; min: number; max: number } }>, result: string, note: string, list = ctx.nodes): GraphNode {
+type ExprInput = { name: string; type: 'float' | 'vec3'; from?: Ref; slider?: { value: number; min: number; max: number } };
+
+/** An Expression Block with typed inputs (wired, or a float slider) and a vec3 (or float) result. */
+function exprBlock(ctx: Ctx, role: string, label: string, inputs: ExprInput[], result: string, note: string, list = ctx.nodes, outputType: 'vec3' | 'float' = 'vec3'): GraphNode {
   const node: GraphNode = {
     id: ctx.idFor(role), type: 'exprNode', position: { x: 0, y: 0 },
     inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type, label: i.name, ...(i.from ? { connection: { ...i.from } } : {}) }])),
-    outputs: { result: { type: 'vec3', label: 'Result' } },
+    outputs: { result: { type: outputType, label: 'Result' } },
     params: {
-      label, outputType: 'vec3', lines: [], result, expr: result,
+      label, outputType, lines: [], result, expr: result,
       inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: i.slider ? { min: i.slider.min, max: i.slider.max } : null })),
       ...Object.fromEntries(inputs.filter(i => i.slider).map(i => [i.name, i.slider!.value])),
       __comment: note, [ROLE_KEY]: role,
@@ -361,6 +364,74 @@ function tidy(nodes: GraphNode[], x0: number, y0: number) {
   for (const n of nodes) n.position = at.get(n.id) ?? n.position;
 }
 
+// ── Outputs (output.ts): a measurement of the march instead of the picture ─
+
+/** What the march loop hands out, for an output to read. */
+export interface MarchRefs {
+  kind: 'march' | 'gi';
+  loop: GraphNode;
+  scene: Ref;
+  sun: Ref | null;
+  maxDist: number;
+  camDist: number;
+}
+
+/**
+ * The nodes that show `o` (not the picture) from a march loop's outputs: an Expression Block that
+ * turns the measurement into something to look at (grey, a colour, or a 0–1 shade), then a
+ * Palette or Color Ramp when it colours the space. Returns what to wire into the Output.
+ * Exported for the Do… bar, which shows a hand-made loop's outputs the same way.
+ */
+export function emitOutput(base: { idFor: (role: string) => string; nodes: GraphNode[]; spec?: SceneSpec; warnings?: string[] }, o: OutputSpec, m: MarchRefs): Ref {
+  const c: Ctx = { spec: base.spec as SceneSpec, idFor: base.idFor, nodes: base.nodes, warnings: base.warnings ?? [] };
+  const def = OUTPUT_BY_SHOW[o.show];
+  const L = m.loop;
+  const pal = o.palette ? PALETTE_BY_KEY[o.palette] : undefined;
+  const range = (value: number) => ({ value, min: 0.1, max: Math.max(20, value * 2) });
+  const existing = (role: string) => c.nodes.find(n => n.params[ROLE_KEY] === role);
+  let inputs: ExprInput[] = [];
+  let shade = '';   // a 0–1 number (through the palette, or grey)
+  let colour = '';  // a vec3 shown as it is (normal, position without a palette)
+  let why = '';
+  switch (o.show) {
+    case 'depth': inputs = [{ name: 'depth', type: 'float', from: ref(L, 'depth') }]; shade = 'clamp(depth, 0.0, 1.0)'; why = `Depth is 0 at the camera and 1 at Max Dist (${fmt(m.maxDist)}) and on the background.`; break;
+    case 'distance': inputs = [{ name: 'dist', type: 'float', from: ref(L, 'dist') }, { name: 'range', type: 'float', slider: range(Math.round(m.camDist * 200) / 100) }]; shade = 'clamp(dist / range, 0.0, 1.0)'; why = 'Distance is how far the ray went, in scene units; Range is the distance shown as white.'; break;
+    case 'height': inputs = [{ name: 'pos', type: 'vec3', from: ref(L, 'pos') }, { name: 'hit', type: 'float', from: ref(L, 'hit') }, { name: 'range', type: 'float', slider: range(1) }]; shade = 'clamp(pos.y / range * 0.5 + 0.5, 0.0, 1.0) * hit'; why = 'Height is the hit point\'s Y: -Range is 0, +Range is 1; the background is 0.'; break;
+    case 'normal': inputs = [{ name: 'n', type: 'vec3', from: ref(L, 'normal') }]; colour = 'n * 0.5 + 0.5'; shade = 'n.y * 0.5 + 0.5'; why = pal ? 'Through the palette by how much each surface faces up (n.y): 0 facing down, 1 facing up.' : 'The normal (-1…1 per axis) moved to 0…1 so it shows as a colour: X red, Y green, Z blue.'; break;
+    case 'hit': inputs = [{ name: 'hit', type: 'float', from: ref(L, 'hit') }]; shade = 'hit'; why = 'Hit is 1 where a ray touched a surface, 0 where it missed.'; break;
+    case 'position': inputs = [{ name: 'pos', type: 'vec3', from: ref(L, 'pos') }, { name: 'hit', type: 'float', from: ref(L, 'hit') }, { name: 'range', type: 'float', slider: range(2) }]; colour = 'clamp(pos / range * 0.5 + 0.5, 0.0, 1.0) * hit'; shade = 'clamp(length(pos) / range, 0.0, 1.0) * hit'; why = pal ? 'Through the palette by how far each hit point is from the centre (Range is 1).' : 'The hit point as a colour: -Range…+Range on each axis is 0…1 (X red, Y green, Z blue).'; break;
+    case 'steps': inputs = [{ name: 'iter', type: 'float', from: ref(L, 'iter') }]; shade = 'iter'; why = 'Steps taken as 0–1 of Max Steps: high along edges and in crevices, where the march works hardest.'; break;
+    case 'ao': {
+      const src: Ref = m.kind === 'gi' ? ref(L, 'ao') : ref(existing('ao') ?? mk(c, 'sdfAo', 'out:ao', { stepDist: 0.06 }, { scene: m.scene, pos: ref(L, 'pos'), normal: ref(L, 'normal'), hit: ref(L, 'hit') },
+        'Ambient occlusion for the AO output: steps out along the normal and darkens where other surfaces are close.'), 'ao');
+      inputs = [{ name: 'ao', type: 'float', from: src }]; shade = 'ao'; why = 'AO is 1 in the open and darker in creases and corners.'; break;
+    }
+    case 'shadow': {
+      const src: Ref = m.kind === 'gi' ? ref(L, 'shadow') : ref(existing('shadow') ?? mk(c, 'softShadow', 'out:shadow', { k: 16, tmax: m.maxDist }, { scene: m.scene, pos: ref(L, 'pos'), normal: ref(L, 'normal'), hit: ref(L, 'hit'), lightDir: m.sun },
+        'Soft shadow for the Shadow output: marches from each hit point toward the sun.'), 'shadow');
+      inputs = [{ name: 'shadow', type: 'float', from: src }]; shade = 'shadow'; why = 'Shadow is 1 in sunlight and 0 in full shadow.'; break;
+    }
+    default: break;
+  }
+  const clause = outputClause(o);
+  const tail = `(Recipe: ${clause}.) The lit picture is still built beside it: wire Tone Map back into the Output to see it.`;
+  if (pal) {
+    const v = exprBlock(c, 'out:value', `${def.label} shade`, inputs, shade, `Output: ${def.label}. ${def.blurb} ${why} This block makes it a 0–1 shade for the ${pal.kind === 'palette' ? 'Palette' : 'Color Ramp'} after it. ${tail}`, c.nodes, 'float');
+    v.params._sbOutput = { ...o };
+    if (pal.kind === 'palette') {
+      const p = mk(c, 'palette', 'out:palette', { preset: String(pal.preset ?? 0) }, { value: ref(v, 'result') }, `Colours the space: the ${def.label.toLowerCase()} shade through the ${pal.label} palette (a cosine palette). Pick another Preset here, or under Output in the Scene Builder.`);
+      return ref(p, 'color');
+    }
+    const stops = pal.stops ?? [[0, 0, 0], [1, 1, 1]];
+    const r = mk(c, 'colorRamp', 'out:ramp', { stops: String(stops.length), ...Object.fromEntries(stops.map((col, i) => [`color${i}`, [...col]])) }, { t: ref(v, 'result') },
+      `Colours the space: the ${def.label.toLowerCase()} shade through the ${pal.label} ramp (${stops.length} stops, evenly spaced). Change the stops here, or pick another under Output in the Scene Builder.`);
+    return ref(r, 'color');
+  }
+  const v = exprBlock(c, 'out:value', `Show ${def.label.toLowerCase()}`, inputs, colour || `vec3(${shade})`, `Output: ${def.label}. ${def.blurb} ${why} Shown ${colour ? 'as a colour' : 'as grey'}, without tone mapping: these are the raw numbers. ${tail}`);
+  v.params._sbOutput = { ...o };
+  return ref(v, 'result');
+}
+
 // ── The whole graph ─────────────────────────────────────────────────────────
 
 const toneNote = (mode: string) => `Squeezes the bright, linear light into colours a screen can show (${mode.toUpperCase()}), without clipping highlights.`;
@@ -416,6 +487,7 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
   const loopParams = { maxSteps: Q.steps, maxDist: Q.maxDist, stepScale: step, jitter: Q.jitter, bg: [...L.bg] };
 
   let final: Ref;
+  let march: MarchRefs | null = null;
   if (L.mode === 'volumetric') {
     const inner: GraphNode[] = [];
     const gi = mk(ctx, 'marchLoopInputs', 'march:in', { _groupOriginal: true }, {}, 'The ray\'s current point (March Pos) at this step.', inner);
@@ -428,6 +500,7 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     const loop = mk(ctx, 'marchLoopGroup', 'march', { ...loopParams, volumetric: true, passthrough: 0.1, subgraph: { nodes: inner, inputPorts: [], outputPorts: [] } },
       { ro: ref(cam, 'ro'), rd: ref(cam, 'rd'), scene: ref(scene, 'scene') }, loopNote(', but in volumetric mode it never stops at a surface: it walks right through, and Volume Glow inside adds light at every step'));
     loop.outputs = { ...loop.outputs, acc0: { type: 'float', label: 'Glow' } };
+    march = { kind: 'march', loop, scene: ref(scene, 'scene'), sun: null, maxDist: Q.maxDist, camDist: C.dist };
     const colour = mk(ctx, 'glowToColor', 'glowColor', { exposure: L.glow.exposure, tint: [...L.glow.tint] }, { glow: ref(loop, 'acc0') },
       `Turns the glow the ray gathered into colour: Tint × tanh(glow × Exposure ${fmt(L.glow.exposure)}), so bright cores don't blow out.`);
     const add = vecMath(ctx, 'add', 'compose', background(), ref(colour, 'color'), null, 'The glow added over the background (glow is light: it only adds).');
@@ -455,6 +528,7 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     }, { ro: ref(cam, 'ro'), rd: ref(cam, 'rd'), scene: ref(scene, 'scene'), lightDir: sun ? ref(sun, 'rgb') : null },
     loopNote(', then lights the hit with soft shadows, ambient occlusion, a sky dome, one bounce of light off nearby surfaces and a reflection'));
     final = ref(loop, 'color');
+    march = { kind: 'gi', loop, scene: ref(scene, 'scene'), sun: sun ? ref(sun, 'rgb') : null, maxDist: Q.maxDist, camDist: C.dist };
     if (L.bg2) final = ref(vecMath(ctx, 'mix', 'compose', background(), final, ref(loop, 'hit'), 'The lit surface where a ray hit (Hit = 1), the background gradient where it missed.'), 'result');
     if (L.fog > 0) {
       const fogC = L.fogColor ?? L.bg;
@@ -466,6 +540,7 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     const loop = mk(ctx, 'marchLoopGroup', 'march', { ...loopParams, albedo: [...(shapes[0]?.color ?? [0.8, 0.8, 0.8])], subgraph: passBody('march') },
       { ro: ref(cam, 'ro'), rd: ref(cam, 'rd'), scene: ref(scene, 'scene') }, loopNote(' until it lands on a surface. Its outputs (Hit Pos, Normal, Hit, Depth) feed the lighting after it'));
     const hit = ref(loop, 'hit'), pos = ref(loop, 'pos'), normal = ref(loop, 'normal');
+    march = { kind: 'march', loop, scene: ref(scene, 'scene'), sun: sun ? ref(sun, 'rgb') : null, maxDist: Q.maxDist, camDist: C.dist };
     const ao = L.ao > 0 ? mk(ctx, 'sdfAo', 'ao', { stepDist: L.ao }, { scene: ref(scene, 'scene'), pos, normal, hit },
       'Ambient occlusion: steps out along the surface\'s normal and darkens creases and corners where other surfaces are close.') : null;
     const shadow = L.shadows > 0 ? mk(ctx, 'softShadow', 'shadow', { k: L.shadows, tmax: Q.maxDist }, { scene: ref(scene, 'scene'), pos, normal, hit, lightDir: sun ? ref(sun, 'rgb') : null },
@@ -506,6 +581,12 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     final = ref(compose, 'result');
   }
   if (L.tone !== 'none') final = ref(mk(ctx, 'toneMap', 'tone', { mode: L.tone }, { color: final }, toneNote(L.tone)), 'color');
+  // Another output: the measurement instead of the picture (the picture's nodes stay, unwired).
+  if (!isPicture(spec.output)) {
+    const problem = outputProblem(L.mode, spec.output);
+    if (problem) ctx.warnings.push(problem);
+    else if (march) final = emitOutput(ctx, spec.output!, march);
+  }
   tidy(ctx.nodes, 0, 0);
   return { nodes: ctx.nodes, final, sceneId: scene.id, warnings: ctx.warnings };
 }

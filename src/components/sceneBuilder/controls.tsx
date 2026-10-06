@@ -9,6 +9,7 @@ import { ColorSwatch } from '../ui/ColorPicker';
 import { Icon } from '../ui/Icon';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
+import { HintLabel } from '../builders/BuilderHelp';
 import type { Vec3 } from '../../sceneBuilder/spec';
 
 const LABEL_W = 116;
@@ -17,7 +18,7 @@ export function Row({ label, hint, children }: { label: ReactNode; hint?: string
   const tk = useTokens();
   return (
     <div style={{ display: 'grid', gridTemplateColumns: `${LABEL_W}px minmax(0, 1fr)`, alignItems: 'center', gap: 10, minHeight: 32 }}>
-      <span title={hint} style={{ fontSize: 12.5, color: tk.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: hint ? 'help' : undefined }}>{label}</span>
+      <span style={{ fontSize: 12.5, color: tk.text.secondary, minWidth: 0, display: 'flex' }}><HintLabel hint={hint}>{label}</HintLabel></span>
       <div style={{ minWidth: 0 }}>{children}</div>
     </div>
   );
