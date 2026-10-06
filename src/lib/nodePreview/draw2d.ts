@@ -12,6 +12,41 @@ export interface Rect { x: number; y: number; w: number; h: number }
 
 const css = (c: [number, number, number], a = 1) => `rgba(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(c[2] * 255)}, ${a})`;
 
+/** Most of the window's height a preview picture may take (cards, the Preview page, line previews). */
+export const PREVIEW_MAX_HEIGHT_FRACTION = 0.4;
+
+/** The tallest a preview picture may be: ~40% of the window, and no more than 1.2× the panel's width (a card stays card-sized). */
+export function previewMaxHeight(availW: number, windowH: number): number {
+  return Math.max(110, Math.min(windowH * PREVIEW_MAX_HEIGHT_FRACTION, availW * 1.2));
+}
+
+/**
+ * The picture's box, "contain"-fitted: the picture's own aspect (width / height) inside
+ * `availW` × `maxH`, as large as fits, never cropped or stretched. The caller centres it, so
+ * whatever is left over is letterbox. Drawn at exactly this aspect, the field's cover mapping
+ * (coverMap, paintField) is the whole picture, so overlays line up with it.
+ */
+export function fitContain(aspect: number, availW: number, maxH: number): { w: number; h: number } {
+  const a = Number.isFinite(aspect) && aspect > 0 ? aspect : 16 / 9;
+  const W = Math.max(1, availW), H = Math.max(1, maxH);
+  let w = W, h = W / a;
+  if (h > H) { h = H; w = H * a; }
+  return { w: Math.max(1, Math.round(w)), h: Math.max(1, Math.round(h)) };
+}
+
+/**
+ * The preview canvas's layout: as wide as the panel, the picture (`box`, from fitContain) centred
+ * at the top, letterboxed at the sides when narrower, and in Slice mode a full-width plot strip
+ * under it, so the plot can be wide without covering or cropping the picture.
+ */
+export function previewLayout(availW: number, box: { w: number; h: number }, slice: boolean): { w: number; h: number; picture: Rect; plot: Rect | null } {
+  const w = Math.max(box.w, Math.round(availW));
+  const picture: Rect = { x: Math.round((w - box.w) / 2), y: 0, w: box.w, h: box.h };
+  if (!slice) return { w, h: box.h, picture, plot: null };
+  const ph = Math.round(Math.max(90, Math.min(150, w * 0.28)));
+  return { w, h: box.h + 6 + ph, picture, plot: { x: 6, y: box.h + 6, w: w - 12, h: ph } };
+}
+
 /** The "cover" mapping from field UV (0…1, y up) to the drawing rect, as valueField.resample. */
 export function coverMap(field: { w: number; h: number }, r: Rect): { toX: (u: number) => number; toY: (v: number) => number; fromY: (y: number) => number; scale: number } {
   const s = Math.max(r.w / field.w, r.h / field.h);
