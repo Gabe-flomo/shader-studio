@@ -16,6 +16,8 @@ import { agentPinnedRows } from '../../nodes/agentPins';
 import { RulerSlider } from '../ui/RulerSlider';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { extendRangePatch } from '../../nodes/sliderRange';
+import { PARAM_LIST_TYPES } from '../../lib/nodePreview/previewPlan';
+import { agentGroups } from '../../lib/agentReadings';
 
 // ─── Shared container ─────────────────────────────────────────────────────────
 
@@ -3742,8 +3744,15 @@ function PassThumbViz({ node }: { node: GraphNode }) {
 
 function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?: (groupId: string) => void }) {
   const [stats, setStats] = useState<AgentStats | undefined>(() => agentStatsFor(node.id));
+  // GPU time of one step (the `agents:<label> step` timer, as in the Performance panel)
+  const [stepMs, setStepMs] = useState<number | null>(null);
   useEffect(() => {
-    const t = setInterval(() => setStats(agentStatsFor(node.id)), 500);
+    const t = setInterval(() => {
+      setStats(agentStatsFor(node.id));
+      const label = agentGroups().find(g => g.nodeId === node.id)?.label;
+      const ms = label ? getPerfSnapshot().passes.find(p => p.name === `agents:${label} step`)?.avg : undefined;
+      setStepMs(ms == null ? null : Math.round(ms * 100) / 100);
+    }, 500);
     return () => clearInterval(t);
   }, [node.id]);
   // The live dots (P4): the runner draws where the walkers are into this canvas every few frames.
@@ -3805,7 +3814,7 @@ function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?
           style={{ display: 'block', width: '100%', maxHeight: 140, objectFit: 'contain', margin: '0 auto 6px', background: '#000', borderRadius: 3 }} />
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '10px', color: pal.overlay0, fontFamily: MONO, marginBottom: 6 }}>
-        <span style={{ flex: 1 }}>{count.toLocaleString('en-US')} agents · {spf} step{spf === 1 ? '' : 's'} a frame{behind}</span>
+        <span style={{ flex: 1 }}>{count.toLocaleString('en-US')} agents · {spf} step{spf === 1 ? '' : 's'} a frame{stepMs != null ? ` · ${stepMs.toFixed(2)} ms a step` : ''}{behind}</span>
         <button type="button" onClick={() => setCardFlag('__dots', !dotsOn)}
           title={dotsOn
             ? 'Hide the live view of where the walkers are. It costs little (about 0.1 ms a frame on an M3 Pro: a sample of at most 65,536 walkers drawn every tenth frame, read back without waiting) and pauses by itself while the card is off screen.'
@@ -5303,6 +5312,15 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
 
     default:                 return null;
   }
+}
+
+/**
+ * A real diagram for this type: NodeInlineViz draws one, and it isn't just the parameters listed
+ * (SDF3DParamViz), which the card's sliders already show. GenericViz is checked first, so its
+ * types keep their diagram. (lib/nodePreview/previewPlan.ts decides the card's preview with it.)
+ */
+export function hasRealDiagram(type: string): boolean {
+  return INLINE_VIZ_TYPES.has(type) && (GENERIC_VIZ_TYPES.has(type) || !PARAM_LIST_TYPES.has(type));
 }
 
 // Nodes whose inline viz fully replaces the shader thumbnail

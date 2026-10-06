@@ -106,9 +106,10 @@ export function buildDisplayShader(fs: string, varName: string, type: 'float' | 
  * The value program: the node's raw value into R (float) or RG (vec2); a float node's primary
  * input into G when given (the slice plot's grey "before" line).
  */
-export function buildValueShader(fs: string, varName: string, type: 'float' | 'vec2', inputVar?: string | null): string | null {
-  const packed = type === 'vec2'
-    ? `vec4(${varName}, 0.0, 1.0)`
+export function buildValueShader(fs: string, varName: string, type: 'float' | 'vec2' | 'vec3' | 'vec4', inputVar?: string | null): string | null {
+  const packed = type === 'vec2' ? `vec4(${varName}, 0.0, 1.0)`
+    : type === 'vec3' ? `vec4(${varName}, 1.0)`
+    : type === 'vec4' ? `vec4((${varName}).rgb, 1.0)`
     : `vec4(${varName}, ${inputVar ? `float(${inputVar})` : '0.0'}, 0.0, 1.0)`;
   return inject(fs, '', `  gl_FragColor = ${packed};`);
 }
