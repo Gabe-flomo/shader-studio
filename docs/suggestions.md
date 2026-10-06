@@ -183,6 +183,14 @@ The explainer's idiom library (`lib/glslPatterns`, `idiomVocabulary()`) is in th
 Expression Block computing its first spelling, each `$hole` an input. A phrase read only by
 guessing at typos ("sine" ≈ "shine") gives way to an idiom with that name.
 
+### Grid Rules presets (`suggestions/doBarGridRules.ts`)
+
+A Grid Rules preset's name ("game of life", "brian's brain", "falling sand", "reaction diffusion"…)
+adds a Grid Rules node with that preset, with optional board size, speed and colours ("game of life
+on a chunky board, fast, green on black"). The phrase must be only the name, slots and glue: any
+other word sends it to the normal reading, and a name that is also an action ("ripples") needs a
+grid word. Empty graph: wired to the Output; else beside the selection. See docs/grid-rules.md.
+
 ### Shared with the 3D Scene Builder
 
 `src/lang/vocabulary.ts` folds in the Scene Builder's shapes and aliases (`sceneBuilder/spec.ts`),

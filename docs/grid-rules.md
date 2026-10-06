@@ -31,6 +31,15 @@ the right a live preview (the rule run on the CPU on a 96 × 64 board) above the
 **Start and run**, **Brush** and **Colours**, folded with a summary until opened (each remembered
 for the session).
 
+From the **Do… bar** (⌘K), type a preset's name: "game of life", "highlife", "seeds", "day and
+night", "brian's brain", "caves", "heat", "water ripples", "reaction diffusion", "falling sand",
+"wireworld", "gas" (every preset's label works too). Optional: a board size ("chunky board",
+"big cells", "120 cells across"), a speed ("slow", "fast", "speed 0.3"; above 1 is Steps a frame)
+and colours (the first is the live cells, Smooth's high end; "… on black" or "black background" is
+the empty cells). On an empty graph its Color goes to the Output; otherwise it is placed beside the
+selection, unwired. A name that is also a Do… bar action or shape ("ripples", "swirl", "diamonds")
+needs a grid word: "ripples grid". The phrases live in `src/suggestions/doBarGridRules.ts`.
+
 Every setting is a param of the node. The numbers (switches, sliders, colours) are live uniforms:
 clicking a switch, dragging a slider or a Play control never recompiles. The selects (rule type,
 neighbourhood, radius, template, start, board size, edges) and Steps a frame shape the GLSL, so
@@ -48,7 +57,7 @@ alive; a live cell with a count in **Survive on** stays alive; every other cell 
 - **Neighbourhood**: Moore (8), von Neumann (4), or **Radius N** (Larger than Life, 1–7, a box or a
   circle). A radius rule uses ranges: Born from…to, Survive from…to.
 - **Presets**: Life, HighLife, Seeds, Day & Night, Maze, Coral, Anneal, Diamoeba, Replicator,
-  Life without Death, Diamonds (von Neumann), Bosco (radius 5), Majority (radius 4).
+  Life without Death, Caves, Diamonds (von Neumann), Bosco (radius 5), Majority (radius 4).
 
 ### Stages (Generations)
 
