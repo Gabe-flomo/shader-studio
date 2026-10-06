@@ -190,6 +190,34 @@ so "donut", "pill" or "box frame" name the same node in both languages (`sceneKi
 Scene Builder's own kind), and `ACTION_TO_SCENE_WARP` maps the space actions onto its warps
 (twist → twist, repeat around → polar-repeat, warp → noise…). A test keeps both in step.
 
+### Outputs of a 3D scene (`suggestions/doOutputs.ts`)
+
+"output the depth", "show the normals", "colour it by distance with a palette", "colour by
+height palette fire", "show the picture". The phrase names one of the Scene Builder's outputs
+(`sceneBuilder/output.ts`: depth, distance, height, normal, hit, position, steps, ao, shadow) and
+optionally a palette; "colour … by" without one uses sunset. On a scene the Scene Builder made,
+the scene is rebuilt with that output in its spec (so the builder, its recipe and Describe show
+it); on a hand-made March Loop or GI Lit March the same nodes the builder makes
+(`emitOutput`) are added beside it and wired into the Output. Volumetric and Glass scenes say why
+they keep the picture; with no 3D scene the bar says to build one.
+
+### Type checks
+
+A move is refused up front when the value can't be wired into it: the graph's own rule decides
+(`lib/typesCompatible.ts`, through `lang/typeCheck.ts`), and the message says why and how to fix
+it. "remap it" on a Palette: "Can't wire that: Palette · Color is three numbers (vec3), Remap
+takes a number (float). Fix: use its brightness (Luminance), or take .x." Each fix is a button that
+runs a ready plan: a Luminance node (or an Expression Block taking .x / the length), then the
+move on it. Make a node refuses "Use it here" when an input is retyped so the value it stands for
+can't feed it (a vec3 into a float), with **Keep it vec3**.
+
+### Type-ahead
+
+The bar completes the word at the caret from the vocabulary (`lang/complete.ts`): "circ" offers
+*circle → Circle SDF* first, then *cylinder*; each line has its one-line description and how it
+is written. After an action, its settings show below ("glow falloff 10 colour"). Tab takes a
+suggestion; Enter still runs the phrase.
+
 ### Is this typical? (`suggestions/connectionCheck.ts`)
 
 On demand: type "is this typical?" (or "how common", "check this") with a wired node or a few
@@ -263,6 +291,9 @@ searchable by name and phrase with the panel's filter:
 | Taught phrases | `src/suggestions/taught.ts` |
 | Idioms as blocks | `src/suggestions/idiomBlocks.ts` |
 | Snippets | `src/suggestions/snippets.ts`; `components/code/ReferencePanel.tsx` (`onSnippet`) |
+| Output phrases, type fixes | `src/suggestions/doOutputs.ts` |
+| Type-ahead | `src/lang/complete.ts`; `components/builders/TypeAhead.tsx` |
+| Type checks | `src/lang/typeCheck.ts` (wires through `lib/typesCompatible.ts`) |
 
 ## Limits
 

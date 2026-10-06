@@ -339,14 +339,37 @@ function smoothStep(s: GridShape, N: GridNames, read: (d: string) => string, ima
 
 export interface GridView { code: string; outputVars: Record<string, string> }
 
+/** What the Color output shows (the `view` param): the coloured board, or one of its numbers as grey. */
+export type GridViewMode = 'colour' | 'state' | 'age' | 'neighbours';
+export const GRID_VIEWS: Array<{ value: GridViewMode; label: string; hint: string }> = [
+  { value: 'colour', label: 'Colours', hint: 'The board coloured by state, afterglow and age (the default).' },
+  { value: 'state', label: 'State', hint: 'Each cell\'s state as grey: 0 black, the top state white (Smooth: its value).' },
+  { value: 'age', label: 'Age', hint: 'A live cell\'s age, or a dead cell\'s afterglow, as grey (Smooth: the second value).' },
+  { value: 'neighbours', label: 'Neighbours', hint: 'How many of the 8 cells round each cell are on, as grey (Smooth: their average value).' },
+];
+export const gridViewMode = (v: unknown): GridViewMode => (GRID_VIEWS.some(x => x.value === v) ? v as GridViewMode : 'colour');
+
+/**
+ * The live-neighbour count round this pixel's cell (Smooth: the neighbours' average u), as one
+ * expression: it costs its texture reads only where something reads it. Counted over the 8 (von
+ * Neumann: 4) cells; a Radius rule's neighbours are shown as the 8 round it.
+ */
+export function gridNeighboursExpr(s: GridShape, board: string): string {
+  const res = `floor(u_resolution * ${f(s.scale)})`;
+  const at = (dx: number, dy: number) => `texture2D(${board}, (floor(vUv * ${res}) + ${off(dx, dy)} + 0.5) / ${res}).r`;
+  const offs = s.neighbourhood === 'vonNeumann' ? VON_NEUMANN_OFFSETS : MOORE_OFFSETS;
+  if (!isDiscrete(s.type)) return `((${offs.map(([dx, dy]) => at(dx, dy)).join(' + ')}) / ${f(offs.length)})`;
+  return `(${offs.map(([dx, dy]) => `(1.0 - step(0.5, abs(${at(dx, dy)} - 1.0)))`).join(' + ')})`;
+}
+
 /** The board at this pixel, coloured. `board` is the board's sampler (this frame's), `pic` the coloured picture's. */
-export function gridViewGLSL(s: GridShape, N: GridNames, board: string | undefined, pic?: string): GridView {
+export function gridViewGLSL(s: GridShape, N: GridNames, board: string | undefined, pic?: string, view: GridViewMode = 'colour'): GridView {
   const { id, P, C } = N;
   const v = (name: string) => `${id}_${name}`;
   if (!board) {
     return {
       code: `    vec3 ${v('col')} = vec3(0.0);\n    float ${v('st')} = 0.0;\n`,
-      outputVars: { color: v('col'), state: v('st'), alive: v('st'), age: v('st'), value: v('st') },
+      outputVars: { color: v('col'), state: v('st'), alive: v('st'), age: v('st'), value: v('st'), neighbours: v('st') },
     };
   }
   const L: string[] = [`vec4 ${v('b')} = texture2D(${board}, vUv);`];
@@ -380,10 +403,22 @@ export function gridViewGLSL(s: GridShape, N: GridNames, board: string | undefin
       `float ${v('alive')} = clamp(${v('st')}, 0.0, 1.0);`,
     );
   }
+  const neighbours = gridNeighboursExpr(s, board);
+  // Another view: one of the board's numbers as grey instead of the colours (code only then).
+  let color = v('col');
+  if (view !== 'colour') {
+    const top = s.type === 'count' ? '1.0' : s.type === 'smooth' ? '1.0' : `max(${P('states')} - 1.0, 1.0)`;
+    const maxN = s.neighbourhood === 'vonNeumann' ? 4 : 8;
+    const g = view === 'state' ? (isDiscrete(s.type) ? `clamp(${v('st')} / ${top}, 0.0, 1.0)` : `clamp(${v('st')}, 0.0, 1.0)`)
+      : view === 'age' ? `clamp(${v('age')}, 0.0, 1.0)`
+      : isDiscrete(s.type) ? `${neighbours} / ${f(maxN)}` : `clamp(${neighbours}, 0.0, 1.0)`;
+    L.push(`vec3 ${v('view')} = vec3(${g});`);
+    color = v('view');
+  }
   return {
     code: L.map(l => `    ${l}\n`).join(''),
     outputVars: {
-      color: v('col'), state: v('st'), alive: v('alive'), age: v('age'), value: v('val'),
+      color, state: v('st'), alive: v('alive'), age: v('age'), value: v('val'), neighbours,
       texture: pic ?? board, board,
     },
   };

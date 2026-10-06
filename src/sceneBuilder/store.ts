@@ -8,7 +8,9 @@ import { create } from 'zustand';
 import { starterSpec, type SceneSpec } from './spec';
 import type { DescribeResult } from './recognize';
 
-export type BuilderTab = 'shapes' | 'combine' | 'warps' | 'look' | 'camera' | 'quality' | 'recipe' | 'templates' | 'describe';
+export type BuilderTab = 'shapes' | 'combine' | 'warps' | 'look' | 'camera' | 'quality' | 'output' | 'recipe' | 'templates' | 'describe';
+/** Every tab, in order (the help registry has an entry for each: components/builders/helpContent.ts). */
+export const BUILDER_TABS: BuilderTab[] = ['shapes', 'combine', 'warps', 'look', 'camera', 'quality', 'output', 'recipe', 'templates', 'describe'];
 
 interface SceneBuilderState {
   open: boolean;
