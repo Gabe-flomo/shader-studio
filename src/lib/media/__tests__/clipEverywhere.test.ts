@@ -100,14 +100,14 @@ describe('following a <video> (cpFollow)', () => {
 
 describe('the editor’s conveniences', () => {
   it('reads the filmstrip in view first, outwards, skipping what is kept', async () => {
-    const { thumbOrder } = await import('../../../components/media/ClipEditor');
+    const { thumbOrder } = await import('../../../components/media/clipEditorParts');
     expect(thumbOrder(8, 0, 1, new Set())).toEqual([3, 4, 2, 5, 1, 6, 0, 7]);
     expect(thumbOrder(8, 0.5, 0.75, new Set([4]))).toEqual([5, 3, 6, 2, 7, 1, 0]);
   });
   it('remembers Source / Result per host', async () => {
     const store = new Map<string, string>();
     vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); }, removeItem: () => {}, key: () => null, length: 0, clear: () => {} });
-    const { rememberedMode } = await import('../../../components/media/ClipEditor');
+    const { rememberedMode } = await import('../../../components/media/clipEditorParts');
     expect(rememberedMode('timeCube')).toBe('source');
     store.set('shader-studio:clip-editor:preview:timeCube', 'result');
     expect(rememberedMode('timeCube')).toBe('result');

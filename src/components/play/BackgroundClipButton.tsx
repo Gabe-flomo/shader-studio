@@ -9,13 +9,7 @@ import { useState } from 'react';
 import { Button } from '../ui/Button';
 import { parseSavedClip, type SavedClip } from '../../lib/media/clip';
 import { LazyClipEditorModal } from '../media/lazyClipEditor';
-
-/** The file behind a playing <video> (its data: or blob: URL), or null. */
-export async function blobOfElement(el: HTMLVideoElement | null): Promise<Blob | null> {
-  const url = el?.currentSrc || el?.src || '';
-  if (!url) return null;
-  try { return await (await fetch(url)).blob(); } catch { return null; }
-}
+import { blobOfElement } from '../media/clipEditorParts';
 
 const RATE_MIN = 0.1, RATE_MAX = 4;
 

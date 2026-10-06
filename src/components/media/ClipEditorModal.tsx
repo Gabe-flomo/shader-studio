@@ -10,7 +10,7 @@
  * Cancel or Esc changes nothing. Without `onApply` it is a viewer: Close, and
  * any `actions` the host offers ("Use in…").
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { useTokens } from '../../theme/themeStore';
@@ -46,7 +46,9 @@ export function ClipEditorModal({ host, title = "Edit clip", subtitle, load, sav
   note?: ReactNode;
 }) {
   const tk = useTokens();
-  const [state, setState] = useState<'loading' | 'missing' | 'error' | { blob: Blob; meta: ClipMeta }>('loading');
+  const [state, setState] = useState<'loading' | 'missing' | 'error' | { source: ClipFrameSource; meta: ClipMeta }>('loading');
+  const [draft, setDraft] = useState<ClipSettings | null>(null);
+  // Opened once: the file, its size and length, and the draft from the host's clip.
   useEffect(() => {
     let live = true;
     (async () => {
@@ -55,15 +57,15 @@ export function ClipEditorModal({ host, title = "Edit clip", subtitle, load, sav
       if (!blob) { setState('missing'); return; }
       const meta = await probeVideo(blob).catch(() => null);
       if (!live) return;
-      setState(meta && meta.duration > 0 ? { blob, meta } : 'error');
+      if (!meta || !(meta.duration > 0)) { setState('error'); return; }
+      setDraft(settingsFromSaved(saved ?? null, meta.duration, speed, loop));
+      setState({ source: { kind: 'video', blob }, meta });
     })();
     return () => { live = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ready = typeof state === 'object' ? state : null;
-  const source = useMemo<ClipFrameSource | null>(() => (ready ? { kind: 'video', blob: ready.blob } : null), [ready?.blob]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [draft, setDraft] = useState<ClipSettings | null>(null);
-  useEffect(() => { if (ready && !draft) setDraft(settingsFromSaved(saved ?? null, ready.meta.duration, speed, loop)); }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  const source = ready?.source ?? null;
 
   const editable = !!onApply && CLIP_CAPS[host].edit;
   const apply = () => {

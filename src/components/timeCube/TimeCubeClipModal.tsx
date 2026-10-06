@@ -18,7 +18,8 @@ import { MAX_FRAMES, MIN_FRAMES, capText, formatBytes, planFrameStack, stackSett
 import { DEMO_LABEL, paintDemoFrame } from '../../lib/timeCube/frames';
 import { timeCubeMeta, timeCubeSource, timeCubes } from '../../lib/timeCube/volumes';
 import { buildEstimate, combineSettingsOf, frameOrder, orderSettingsOf } from '../../lib/timeCube/order';
-import { ClipEditor, explicitSegments, type ClipFrameSource } from '../media/ClipEditor';
+import { ClipEditor, type ClipFrameSource } from '../media/ClipEditor';
+import { explicitSegments } from '../media/clipEditorParts';
 
 const PAINTED: ClipFrameSource = { kind: 'painted', paint: paintDemoFrame };
 

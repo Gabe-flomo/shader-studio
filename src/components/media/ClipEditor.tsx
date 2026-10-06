@@ -34,6 +34,7 @@ import {
 } from '../../lib/media/clip';
 import { cpAt, cpFollow, cpLength } from '../../play/kit/clipPlay.js';
 import { openVideoReader, type FrameReader } from '../../lib/timeCube/frames';
+import { STRIP_H, STRIP_THUMBS, rememberMode, rememberedMode, stripFor, thumbOrder, type ClipPreviewMode } from './clipEditorParts';
 
 /** Where the editor's frames come from: a video file, or a picture painted at any time (a built-in clip). */
 export type ClipFrameSource =
@@ -45,11 +46,9 @@ export interface ClipMeta { width: number; height: number; duration: number }
 /** The frames the host would sample from the current value: drawn as ticks on the strip. */
 export interface ClipPreviewPlan { times: number[]; segments: PlannedSegment[]; frames: number; every: number }
 
-export type ClipPreviewMode = 'source' | 'result';
 
 const YELLOW = '#ffc53d';
-const STRIP_THUMBS = 28;
-const TICK_H = 16, STRIP_H = 58, JUMP_H = 26;
+const TICK_H = 16, JUMP_H = 26;
 const TL_H = TICK_H + STRIP_H + JUMP_H;
 const HANDLE_W = 12;
 const SPEEDS = [0.25, 0.5, 1, 1.5, 2];
@@ -59,53 +58,8 @@ const CUBE_RATES = [12, 24, 30, 0];
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const fmt = (t: number) => `${t.toFixed(2)} s`;
 
-/** Segments with explicit outs (an out at or before its in: the end of the video). */
-export function explicitSegments(segs: readonly ClipSegment[], duration: number): ClipSegment[] {
-  const out = segs.map(s => {
-    const a = clamp(s.in, 0, Math.max(0, duration - 0.05));
-    const b = s.out > a ? Math.min(s.out, duration) : duration;
-    return { in: a, out: Math.max(b, Math.min(duration, a + 0.05)), ...(s.reverse ? { reverse: true } : {}) };
-  });
-  return out.length ? out : [{ in: 0, out: duration }];
-}
 
-// ── Remembered choices (per viewer: a convenience, so storage may fail) ──────
 
-const MODE_KEY = (host: ClipHost) => `shader-studio:clip-editor:preview:${host}`;
-export function rememberedMode(host: ClipHost): ClipPreviewMode {
-  try { return localStorage.getItem(MODE_KEY(host)) === 'result' ? 'result' : 'source'; } catch { return 'source'; }
-}
-function rememberMode(host: ClipHost, m: ClipPreviewMode) {
-  try { localStorage.setItem(MODE_KEY(host), m); } catch { /* private window */ }
-}
-
-// ── Filmstrip thumbnails: made once per video, kept for the session ──────────
-
-interface StripCache { canvas: HTMLCanvasElement; done: Set<number> }
-const strips = new WeakMap<object, Map<string, StripCache>>();
-/** The kept strip for a source (a Blob, or a painted clip's paint function) at this aspect. */
-export function stripFor(key: object, aspect: number): StripCache {
-  let byAspect = strips.get(key);
-  if (!byAspect) { byAspect = new Map(); strips.set(key, byAspect); }
-  const k = aspect.toFixed(4);
-  let s = byAspect.get(k);
-  if (!s) {
-    const c = document.createElement('canvas');
-    c.height = STRIP_H * 2; c.width = Math.round(STRIP_THUMBS * c.height * aspect);
-    const g = c.getContext('2d');
-    if (g) { g.fillStyle = '#111'; g.fillRect(0, 0, c.width, c.height); }
-    s = { canvas: c, done: new Set() };
-    byAspect.set(k, s);
-  }
-  return s;
-}
-/** Which thumbnails to read, the ones in view first (then outwards). */
-export function thumbOrder(n: number, from: number, to: number, done: ReadonlySet<number>): number[] {
-  const mid = (from + to) / 2;
-  const inView = (i: number) => (i + 1) / n > from && i / n < to;
-  return Array.from({ length: n }, (_, i) => i).filter(i => !done.has(i))
-    .sort((a, b) => Number(inView(b)) - Number(inView(a)) || Math.abs((a + 0.5) / n - mid) - Math.abs((b + 0.5) / n - mid));
-}
 
 function paintedReader(paint: Extract<ClipFrameSource, { kind: 'painted' }>['paint'], meta: ClipMeta): FrameReader {
   const scratch = document.createElement('canvas');
