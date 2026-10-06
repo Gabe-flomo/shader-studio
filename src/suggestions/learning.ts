@@ -300,3 +300,24 @@ export function learningSummary(): { saved: number; imported: number; live: numb
   const g = Object.values(s.graphs);
   return { saved: g.filter(x => x.src === 'saved').length, imported: g.filter(x => x.src === 'imported').length, live: s.live.length };
 }
+
+/**
+ * Where a set of pairs was seen together (one pair, or the wires of a chain): how many of your
+ * saved graphs and of the imported ones hold every pair, how many times you wired them live
+ * (one pair only), and the examples' weight (the smallest of the pairs': an upper bound for a chain).
+ */
+export function pairSources(pairs: string[], prior: PriorTable = priorJson as PriorTable): { saved: number; imported: number; live: number; examples: number } {
+  const s = load();
+  const idx = new Map(s.dict.map((p, i) => [p, i]));
+  const want = pairs.map(p => idx.get(p));
+  let saved = 0, imported = 0, live = 0;
+  if (pairs.length && want.every(i => i !== undefined)) {
+    for (const g of Object.values(s.graphs)) {
+      const has = new Set(g.p);
+      if (want.every(i => has.has(i!))) { if (g.src === 'saved') saved++; else imported++; }
+    }
+    if (want.length === 1) live = s.live.filter(([i]) => i === want[0]).length;
+  }
+  const examples = pairs.length ? Math.min(...pairs.map(p => prior.pairs[p] ?? 0)) : 0;
+  return { saved, imported, live, examples: Math.round(examples * 10) / 10 };
+}

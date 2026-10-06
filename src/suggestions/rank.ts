@@ -15,7 +15,7 @@
 import type { GraphNode } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
 import { outputKinds, spaceInputs, type ValueKind } from './kinds';
-import { MOVES, MOVES_BY_ID, labelOf, movesFor, quickAddMoves, type Move } from './moves';
+import { MOVES, moveById, labelOf, movesFor, quickAddMoves, type Move } from './moves';
 
 const MOVE_ORDER = new Map(MOVES.map((m, i) => [m.id, i]));
 import { moveContext } from './applyMove';
@@ -107,7 +107,7 @@ export function rankMoves(node: GraphNode, scope: GraphNode[], t: RankTables, op
   for (const s of spaceInputs(node)) for (const m of movesFor('space', 'in')) offer(m, s.key, 'in', 'space', isSpace ? 0.5 : 0.8);
 
   for (const f of outputSuggestions(node, opts.measurement ?? null)) {
-    const m = MOVES_BY_ID.get(f.moveId);
+    const m = moveById(f.moveId);
     const kind = outs.find(o => o.key === f.key)?.kind ?? 'scalar';
     if (m) offer(m, f.key, 'out', kind, 0, { output: f.severity, why: f.why, args: f.args });
   }

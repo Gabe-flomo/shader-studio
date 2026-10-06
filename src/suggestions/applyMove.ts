@@ -21,7 +21,7 @@ import { n } from '../store/graphBuilder';
 import { graphOutput } from '../nodes/scene3dDefaults';
 import { applyRecipe, placeNear, recipesFor } from '../nodes/recipes';
 import { typesCompatible } from '../lib/typesCompatible';
-import { IN, PICTURE, SELF, labelOf, type Move, type MoveContext, type Wire } from './moves';
+import { IN, OTHER, PICTURE, SELF, labelOf, type Move, type MoveContext, type Wire } from './moves';
 import { socketKind } from './kinds';
 
 export interface MoveTarget {
@@ -118,6 +118,7 @@ export function applyMove(nodes: GraphNode[], target: MoveTarget, move: Move, ar
     if (w[0] === IN) return inWire && inWire[0] === UV_IN ? [idOf(UV_IN), 'uv'] : inWire!;
     if (w[0] === SELF) return [self.id, w[1]];
     if (w[0] === PICTURE) return shownConn ? [shownConn.nodeId, shownConn.outputKey] : inWire!;
+    if (w[0] === OTHER) return [String(args.other), String(args.otherKey)];
     return w;
   };
   let added = fresh.map(nd => ({

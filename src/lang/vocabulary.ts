@@ -1,0 +1,228 @@
+/**
+ * vocabulary.ts — the shared words of the no-AI phrase languages: the Do… bar
+ * (suggestions/doBar.ts) and the 3D Scene Builder's recipe language.
+ *
+ * One fixed vocabulary: shapes (2D and 3D node types), actions (with synonyms), targets
+ * ("it", "these", "the space"), parameter names, colours, number words and places. Matching is
+ * deterministic: exact word or synonym first, then a small edit distance for longer words, so
+ * "glwo" still means glow but "ring" never becomes "rings" by accident (plural folding is
+ * explicit). Nothing here knows about the graph; callers map ids to moves or nodes.
+ *
+ * Adding words: put them on the entry they mean. Both languages pick them up.
+ */
+
+export type RGB = [number, number, number];
+
+export interface ShapeWord {
+  id: string;
+  words: string[];
+  /** The 2D node (and its settings) the shape is. */
+  node2d?: { type: string; params?: Record<string, unknown>; size?: string };
+  /** The 3D node. */
+  node3d?: { type: string; params?: Record<string, unknown>; size?: string };
+}
+
+/** Shapes: the first word is the name shown. */
+export const SHAPES: readonly ShapeWord[] = [
+  { id: 'circle', words: ['circle', 'disc', 'disk', 'dot', 'blob', 'round shape'], node2d: { type: 'circleSDF', size: 'radius' }, node3d: { type: 'sphereSDF3D', size: 'radius' } },
+  { id: 'sphere', words: ['sphere', 'ball', 'orb'], node2d: { type: 'circleSDF', size: 'radius' }, node3d: { type: 'sphereSDF3D', size: 'radius' } },
+  { id: 'box', words: ['box', 'square', 'rectangle', 'rect', 'block'], node2d: { type: 'boxSDF', size: 'width' }, node3d: { type: 'boxSDF3D' } },
+  { id: 'cube', words: ['cube'], node2d: { type: 'boxSDF', size: 'width' }, node3d: { type: 'boxSDF3D' } },
+  { id: 'ring', words: ['ring', 'hoop', 'annulus'], node2d: { type: 'ringSDF', size: 'radius' }, node3d: { type: 'torusSDF3D' } },
+  { id: 'torus', words: ['torus', 'donut', 'doughnut'], node2d: { type: 'ringSDF', size: 'radius' }, node3d: { type: 'torusSDF3D' } },
+  { id: 'heart', words: ['heart'], node2d: { type: 'shapeSDF', params: { shape: 'heart' }, size: 'r' } },
+  { id: 'triangle', words: ['triangle', 'tri'], node2d: { type: 'shapeSDF', params: { shape: 'triangle' }, size: 'r' }, node3d: { type: 'triPrismSDF3D' } },
+  { id: 'hexagon', words: ['hexagon', 'hex'], node2d: { type: 'shapeSDF', params: { shape: 'hexagon' }, size: 'r' }, node3d: { type: 'hexPrismSDF3D' } },
+  { id: 'pentagon', words: ['pentagon'], node2d: { type: 'shapeSDF', params: { shape: 'pentagon' }, size: 'r' } },
+  { id: 'octagon', words: ['octagon'], node2d: { type: 'shapeSDF', params: { shape: 'octagon' }, size: 'r' } },
+  { id: 'star', words: ['star', 'pentagram'], node2d: { type: 'shapeSDF', params: { shape: 'pentagram' }, size: 'r' } },
+  { id: 'cross', words: ['cross', 'plus sign'], node2d: { type: 'shapeSDF', params: { shape: 'cross' }, size: 'r' }, node3d: { type: 'sdCross3D' } },
+  { id: 'moon', words: ['moon', 'crescent'], node2d: { type: 'shapeSDF', params: { shape: 'moon' }, size: 'r' } },
+  { id: 'diamond', words: ['diamond', 'rhombus'], node2d: { type: 'shapeSDF', params: { shape: 'rhombus' }, size: 'r' }, node3d: { type: 'octahedronSDF3D' } },
+  { id: 'ellipse', words: ['ellipse', 'oval', 'egg'], node2d: { type: 'shapeSDF', params: { shape: 'ellipse' }, size: 'r' }, node3d: { type: 'ellipsoidSDF3D' } },
+  { id: 'line', words: ['line', 'segment', 'stroke'], node2d: { type: 'shapeSDF', params: { shape: 'segment' } }, node3d: { type: 'capsuleSDF3D' } },
+  { id: 'capsule', words: ['capsule', 'pill'], node3d: { type: 'capsuleSDF3D' } },
+  { id: 'cylinder', words: ['cylinder', 'tube', 'pillar', 'column'], node3d: { type: 'cylinderSDF3D' } },
+  { id: 'cone', words: ['cone'], node3d: { type: 'coneSDF3D' } },
+  { id: 'pyramid', words: ['pyramid'], node3d: { type: 'pyramidSDF3D' } },
+  { id: 'octahedron', words: ['octahedron'], node3d: { type: 'octahedronSDF3D' } },
+  { id: 'plane', words: ['plane', 'floor', 'ground'], node3d: { type: 'planeSDF3D' } },
+];
+
+export interface ActionWord {
+  id: string;
+  words: string[];
+  /** Words that, with this action, pick a variant ("repeat … around" → repeat-around). */
+  variants?: Array<{ words: string[]; id: string }>;
+}
+
+/**
+ * Actions: what to do to a target. Ids are the suggestion moves' ids where one move covers it
+ * (suggestions/moves.ts); a few ids are kind-dependent and resolved by the caller (glow on a
+ * distance is SDF Glow, on a colour Bloom, on a texture Glow (texture)), and a few work on two
+ * selected nodes (mix, blend).
+ */
+export const ACTIONS: readonly ActionWord[] = [
+  { id: 'glow', words: ['glow', 'glowing', 'halo', 'neon', 'light up', 'shine', 'bloom'] },
+  { id: 'rings', words: ['rings', 'ripples', 'contours', 'iso lines', 'isolines', 'concentric'] },
+  { id: 'outline', words: ['outline', 'outlined', 'border', 'edge line', 'stroke it', 'edges'] },
+  { id: 'onion', words: ['onion', 'hollow', 'shell'] },
+  { id: 'round', words: ['round', 'rounded', 'grow', 'bigger', 'fatten', 'inflate', 'thicken'] },
+  { id: 'blend', words: ['blend', 'melt', 'merge', 'smooth union', 'smoothly blend', 'smooth min', 'smin', 'combine', 'join'] },
+  { id: 'mask-from', words: ['mask', 'cutout', 'stencil'] },
+  { id: 'warp', words: ['warp', 'distort', 'wobble', 'noise', 'noisy', 'organic', 'marble', 'domain warp'] },
+  { id: 'swirl', words: ['swirl', 'vortex', 'whirl', 'spin'] },
+  { id: 'twist', words: ['twist', 'twisted', 'spiral'] },
+  { id: 'polar', words: ['polar', 'radial', 'wrap around'] },
+  { id: 'mirror', words: ['mirror', 'mirrored', 'symmetric', 'symmetry', 'reflect', 'flip'] },
+  { id: 'repeat', words: ['repeat', 'tile', 'tiles', 'tiled', 'grid of', 'copies', 'duplicate', 'pattern'], variants: [{ words: ['around', 'circle', 'radially', 'round', 'ring', 'petals', 'kaleidoscope'], id: 'repeat-around' }] },
+  { id: 'zoom-rotate', words: ['zoom', 'scale', 'rotate', 'turn', 'tilt', 'magnify'] },
+  { id: 'code-here', words: ['custom code', 'code', 'expression', 'my own'] },
+  { id: 'mix-with', words: ['mix', 'mixed', 'tint', 'mix with', 'crossfade'] },
+  { id: 'palette', words: ['palette', 'colour it', 'color it', 'colorize', 'colourise', 'colourize', 'rainbow', 'recolour', 'recolor', 'gradient map'] },
+  { id: 'tone-map', words: ['tone map', 'tonemap', 'tone-map', 'tone mapping', 'aces', 'unclip', 'stop clipping', 'compress highlights'] },
+  { id: 'grade', words: ['grade', 'colour grade', 'color grade', 'lift gamma gain', 'look'] },
+  { id: 'brighten', words: ['brighter', 'brighten', 'lighten', 'lift', 'exposure'] },
+  { id: 'grain', words: ['grain', 'film grain', 'dither', 'noise grain', 'grainy'] },
+  { id: 'blend-with', words: ['blend mode', 'screen', 'overlay', 'layer'] },
+  { id: 'soft-edge', words: ['soften', 'soft edge', 'soft', 'feather', 'smooth edge', 'antialias', 'anti alias', 'blur the edge'] },
+  { id: 'invert', words: ['invert', 'inverse', 'negate', 'flip inside'] },
+  { id: 'grow-mask', words: ['grow the mask', 'shrink', 'erode', 'dilate'] },
+  { id: 'mix-two', words: ['mix two pictures', 'two pictures', 'cut between'] },
+  { id: 'blur-texture', words: ['blur', 'blurry', 'soft focus', 'defocus'] },
+  { id: 'trails', words: ['trails', 'trail', 'feedback', 'echo', 'smear', 'motion trails'] },
+  { id: 'flow', words: ['flow', 'stream', 'smudge'] },
+  { id: 'remap', words: ['remap', 'normalize', 'normalise', 'rescale', 'fit range'] },
+];
+
+/** Targets: what an action applies to. */
+export const TARGETS: Readonly<Record<string, string[]>> = {
+  selection: ['it', 'this', 'that', 'the selection', 'selected', 'the shape', 'the node'],
+  pair: ['these', 'them', 'both', 'the two', 'these colours', 'these colors', 'these shapes', 'the edges'],
+  space: ['the space', 'space', 'the uv', 'uv', 'uvs', 'coordinates', 'the coordinates', 'the domain'],
+  picture: ['the picture', 'the image', 'everything', 'the output', 'the whole thing', 'the result'],
+};
+
+/** Parameter names and the words that mean them. Each slot is a move argument name (moves.ts). */
+export const PARAMS: Readonly<Record<string, string[]>> = {
+  falloff: ['falloff', 'fall off', 'fall-off', 'tightness'],
+  count: ['times', 'count', 'copies', 'tiles', 'rings', 'petals', 'repeats', 'x'],
+  amount: ['amount', 'strength', 'by', 'intensity', 'power'],
+  thickness: ['thickness', 'thick', 'width', 'wide'],
+  smoothness: ['smoothness', 'smooth', 'k', 'softness'],
+  radius: ['radius', 'size', 'big', 'r'],
+  speed: ['speed', 'fast'],
+  angle: ['angle', 'degrees', 'deg', 'rad', 'radians'],
+  zoom: ['zoom'],
+};
+
+/** Colour words. */
+export const COLOURS: Readonly<Record<string, RGB>> = {
+  red: [1, 0.15, 0.12], orange: [1, 0.55, 0.1], yellow: [1, 0.9, 0.15], gold: [1, 0.78, 0.3], green: [0.2, 0.85, 0.35], lime: [0.6, 1, 0.2],
+  teal: [0.1, 0.75, 0.7], cyan: [0.2, 0.9, 1], blue: [0.15, 0.4, 1], navy: [0.05, 0.1, 0.4], purple: [0.6, 0.25, 0.95], violet: [0.55, 0.3, 1],
+  magenta: [1, 0.2, 0.85], pink: [1, 0.45, 0.7], white: [1, 1, 1], black: [0, 0, 0], grey: [0.5, 0.5, 0.5], gray: [0.5, 0.5, 0.5],
+  warm: [1, 0.6, 0.3], cool: [0.35, 0.6, 1], neon: [1, 0.3, 0.9], fire: [1, 0.45, 0.1], ice: [0.6, 0.85, 1],
+};
+
+/** Number words. */
+export const NUMBER_WORDS: Readonly<Record<string, number>> = {
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+  sixteen: 16, twenty: 20, half: 0.5, quarter: 0.25, twice: 2, double: 2, once: 1, thrice: 3, dozen: 12, a: 1, an: 1,
+};
+
+/** Places on the picture (UV, the picture is about −0.9…0.9 wide, −0.5…0.5 tall). */
+export const PLACES: Readonly<Record<string, [number, number]>> = {
+  middle: [0, 0], center: [0, 0], centre: [0, 0], 'the middle': [0, 0], 'the center': [0, 0], 'the centre': [0, 0],
+  top: [0, 0.3], bottom: [0, -0.3], left: [-0.45, 0], right: [0.45, 0],
+  'top left': [-0.45, 0.3], 'top right': [0.45, 0.3], 'bottom left': [-0.45, -0.3], 'bottom right': [0.45, -0.3],
+};
+
+/** Words that only glue a phrase together. */
+export const FILLER = new Set(['a', 'an', 'the', 'with', 'and', 'then', 'to', 'of', 'in', 'on', 'at', 'some', 'add', 'make', 'put', 'give', 'please', 'it', 'its', 'me', 'please', 'into', 'by', 'for', 'is', 'be', 'more', 'little', 'bit', 'slightly', 'very', 'lots']);
+
+// ── Matching ────────────────────────────────────────────────────────────────
+
+/** Lower-case words, numbers kept whole ("0.5", "-2", "#ff8800", "6x" → "6", "x"). */
+export function tokenize(text: string): string[] {
+  return text.toLowerCase()
+    .replace(/(\d)x\b/g, '$1 x')
+    .replace(/[“”"']/g, '')
+    .split(/[^a-z0-9.#\-]+/)
+    .map(w => w.replace(/^[.-]+(?=[a-z])/, '').replace(/[.]+$/, ''))
+    .filter(Boolean);
+}
+
+/** Edit distance (insert, delete, substitute, swap of neighbours), stopping past `max`. */
+export function editDistance(a: string, b: string, max = 2): number {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i, ...new Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    let rowMin = Infinity;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      rowMin = Math.min(rowMin, d[i][j]);
+    }
+    if (rowMin > max) return max + 1;
+  }
+  return d[a.length][b.length];
+}
+
+/** How far a typed word may be from a vocabulary word: none under 4 letters, 1 under 7, else 2. */
+export const fuzzBudget = (word: string) => (word.length < 4 ? 0 : word.length < 7 ? 1 : 2);
+
+/**
+ * Find a phrase (one or more words) of `entries` at position `i` of `tokens`: the longest exact
+ * match wins, then a fuzzy single word. Returns the entry, how many tokens it used and whether
+ * it was fuzzy.
+ */
+export function matchAt<T extends { words: readonly string[] }>(tokens: string[], i: number, entries: readonly T[]): { entry: T; length: number; fuzzy: boolean; word: string } | null {
+  let best: { entry: T; length: number; fuzzy: boolean; word: string } | null = null;
+  for (const entry of entries) {
+    for (const w of entry.words) {
+      const parts = w.split(' ');
+      if (parts.length > tokens.length - i) continue;
+      if (parts.every((p, k) => tokens[i + k] === p || (k === parts.length - 1 && plural(tokens[i + k]) === p))) {
+        if (!best || parts.length > best.length || (best.fuzzy && parts.length === best.length)) best = { entry, length: parts.length, fuzzy: false, word: w };
+      }
+    }
+  }
+  if (best) return best;
+  const t = tokens[i];
+  const budget = fuzzBudget(t);
+  if (!budget) return null;
+  let bestD = budget + 1;
+  for (const entry of entries) {
+    for (const w of entry.words) {
+      if (w.includes(' ') || fuzzBudget(w) === 0) continue;
+      const d = editDistance(t, w, budget);
+      if (d < bestD) { bestD = d; best = { entry, length: 1, fuzzy: true, word: w }; }
+    }
+  }
+  return best;
+}
+
+/** A plural folded to its singular ("circles" → "circle", "boxes" → "box"); else the word. */
+export function plural(word: string): string {
+  if (word.length > 4 && word.endsWith('es') && /(x|s|sh|ch)es$/.test(word)) return word.slice(0, -2);
+  if (word.length > 3 && word.endsWith('s') && !word.endsWith('ss')) return word.slice(0, -1);
+  return word;
+}
+
+/** A number token ("0.5", "-2", "six", "half"), or null. */
+export function numberOf(token: string): number | null {
+  if (/^-?\d*\.?\d+$/.test(token)) return Number(token);
+  if (token in NUMBER_WORDS && token !== 'a' && token !== 'an') return NUMBER_WORDS[token];
+  return null;
+}
+
+/** A colour token: a colour word or #rrggbb / #rgb. */
+export function colourOf(token: string): RGB | null {
+  if (COLOURS[token]) return COLOURS[token];
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/.exec(token);
+  if (!m) return null;
+  const h = m[1].length === 3 ? m[1].split('').map(c => c + c).join('') : m[1];
+  return [0, 2, 4].map(k => Math.round(parseInt(h.slice(k, k + 2), 16) / 255 * 1000) / 1000) as RGB;
+}

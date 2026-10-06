@@ -35,6 +35,8 @@ export const IN = '$in';
 export const SELF = '$self';
 /** What the Output shows now (resolved by applyMove; moves that need one ask `picture()`). */
 export const PICTURE = '$picture';
+/** A second node the move works with (args.other / args.otherKey: the Do… bar's "these"). */
+export const OTHER = '$other';
 
 export type MoveShape = 'transform' | 'branch' | 'param';
 export type ShowMode = 'layer' | 'replace' | 'ifEmpty' | 'none';
@@ -93,6 +95,8 @@ export interface Move {
   when?: (ctx: MoveContext) => boolean;
   /** A starter recipe of the node itself that does this when the socket feeds nothing yet. */
   recipe?: string;
+  /** Not offered in the strip (the Do… bar's two-node moves). */
+  hidden?: boolean;
   build: (ctx: MoveContext) => MoveBuild;
 }
 
@@ -778,14 +782,56 @@ const FIXES: Move[] = [
   },
 ];
 
-export const MOVES: readonly Move[] = [...DISTANCE, ...SPACE, ...COLOUR, ...MASK, ...TEXTURE, ...SCALAR, ...FIXES];
+// ── Two nodes (the Do… bar: "blend these", "mix these colours") ─────────────
+
+const hasOther = (ctx: MoveContext) => typeof ctx.args.other === 'string' && typeof ctx.args.otherKey === 'string' && ctx.args.other !== ctx.self.id;
+
+const PAIR: Move[] = [
+  {
+    id: 'blend-pair', label: 'Smooth blend', kinds: ['distance'], shape: 'transform', sides: ['out'], hidden: true,
+    anchor: { type: 'sdfUnion', key: 'a', out: 'dist' },
+    why: 'two distances melted into one',
+    args: [{ name: 'smoothness', label: 'Smoothness', kind: 'number', default: 0.15, words: ['smoothness', 'smooth', 'k'] }],
+    when: hasOther,
+    build: ctx => ({
+      nodes: [n('sdfUnion', 'melt', C(1), 0, { k: num(ctx, 'smoothness', 0.15), ...note(
+        'Union with K: the two shapes as one, melted together over K.',
+        'Why: "blend these": what read the first shape now reads both.',
+      ) }, { a: [IN, ''], b: [OTHER, ''] })],
+      result: ['melt', 'dist'],
+    }),
+  },
+  {
+    id: 'mix-pair', label: 'Mix', kinds: ['colour'], shape: 'transform', sides: ['out'], hidden: true,
+    anchor: { type: 'oklabMix', key: 'a', out: 'result' },
+    why: 'two colours mixed',
+    args: [{ name: 'amount', label: 'Amount', kind: 'number', default: 0.5, words: ['amount', 'by'] }],
+    when: hasOther,
+    build: ctx => ({
+      nodes: [n('oklabMix', 'mixed', C(1), 0, { t: num(ctx, 'amount', 0.5), ...note(
+        'OkLab Mix: A toward B by T, through a perceptual colour space.',
+        'Why: "mix these": what read the first colour now reads the mix.',
+      ) }, { a: [IN, ''], b: [OTHER, ''] })],
+      result: ['mixed', 'result'],
+    }),
+  },
+];
+
+export const MOVES: readonly Move[] = [...DISTANCE, ...SPACE, ...COLOUR, ...MASK, ...TEXTURE, ...SCALAR, ...FIXES, ...PAIR];
 export const MOVES_BY_ID: ReadonlyMap<string, Move> = new Map(MOVES.map(m => [m.id, m]));
+
+/** Moves made elsewhere (taught.ts: moves you taught the Do… bar), offered with the built-in ones. */
+let extraMoves: () => readonly Move[] = () => [];
+export function setExtraMoves(fn: () => readonly Move[]): void { extraMoves = fn; }
+export function allMoves(): readonly Move[] { return [...MOVES, ...extraMoves()]; }
+/** A move by id: built-in or taught. */
+export function moveById(id: string): Move | undefined { return MOVES_BY_ID.get(id) ?? extraMoves().find(m => m.id === id); }
 /** Moves only the output rules offer (they say "clips 6%", not "you often…"). */
 export const FIX_IDS = new Set(FIXES.map(m => m.id));
 
 /** The moves for a kind on one side of a socket (the fixes excluded: outputRules picks those). */
 export function movesFor(kind: ValueKind, side: 'in' | 'out'): Move[] {
-  return MOVES.filter(m => !FIX_IDS.has(m.id) && m.kinds.includes(kind) && m.sides.includes(side));
+  return allMoves().filter(m => !FIX_IDS.has(m.id) && !m.hidden && m.kinds.includes(kind) && m.sides.includes(side));
 }
 
 /**

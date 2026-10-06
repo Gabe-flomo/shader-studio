@@ -5,12 +5,14 @@
 import type { GraphNode } from '../types/nodeGraph';
 import { learnedTable, personalTable, priorTable, reconcileSavedGraphs } from './learning';
 import { rankMoves, type RankTables, type RankedMove, type RankOptions } from './rank';
+// Taught moves register themselves with the moves library (offered and ranked with the rest).
+import './taught';
 
 export type { ValueKind } from './kinds';
 export type { Move, MoveArg } from './moves';
 export type { RankedMove, RankTables } from './rank';
 export type { OutputMeasurement } from './outputRules';
-export { MOVES, MOVES_BY_ID, movesFor } from './moves';
+export { MOVES, MOVES_BY_ID, movesFor, moveById, allMoves } from './moves';
 export { applyMove, type AppliedMove, type MoveTarget } from './applyMove';
 export { rankMoves, learnedNext, affinity } from './rank';
 export { measureField, outputSuggestions } from './outputRules';

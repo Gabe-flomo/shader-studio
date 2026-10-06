@@ -22,7 +22,7 @@ import { agentPreset } from './agentExamples';
 import { addAgentPieceTo, agentStarter, freshIds, placeInFreeSpace, startRuleIn, type AgentPiece, type AgentRuleStart } from './agentSetup';
 import { particlesAsNodes } from './particlesAsNodes';
 import { applyRecipe, recipesFor } from '../nodes/recipes';
-import { applyMove, MOVES_BY_ID, learnGraph, learnSaved, recordWireBetween, textSignature } from '../suggestions';
+import { applyMove, moveById, learnGraph, learnSaved, recordWireBetween, textSignature } from '../suggestions';
 import { closeRecipeOffer, noteNodeAdded } from './recipeOfferStore';
 import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES, AGENT_PRESET_TYPES, syncAgentSpaces } from '../nodes/definitions/agents';
 import { randomizedParams } from '../nodes/randomizeParams';
@@ -3347,7 +3347,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   applySuggestion: (nodeId, key, side, moveId, args = {}) => {
     const st = get();
-    const move = MOVES_BY_ID.get(moveId);
+    const move = moveById(moveId);
     const path = st.activeGroupPath;
     const scope = path.length ? getActiveNodes(st.nodes, path) : st.nodes;
     const self = scope?.find(nd => nd.id === nodeId);
