@@ -22,6 +22,7 @@ import { buildTextureToolExamples } from './textureToolExamples';
 import { buildAgentExamples } from './agentExamples';
 import { buildAgentShaderExamples } from './agentShaderExamples';
 import { buildAgent3dExamples } from './agentExamples3d';
+import { buildSimAgentExamples } from './agentExamplesSim';
 import { buildAgentSketchExamples } from './agentSketchExamples';
 import { buildConvertExamples } from './convertExamples';
 import { PLAY_EXAMPLE_INDEX } from './playExampleIndex';
@@ -12621,7 +12622,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
 };
 
 // The Learn folder is built from the node definitions at load; its last lesson reuses a graph above.
-Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildLearn3dExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildConvertExamples(), buildPassExamples(), buildAgentExamples(), buildAgentShaderExamples(), buildAgent3dExamples(), buildAgentSketchExamples(), buildBakeExamples(EXAMPLE_GRAPHS), buildTimeCubeExamples(), buildFrameStackExamples(), buildTextureToolExamples());
+Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildLearn3dExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildConvertExamples(), buildPassExamples(), buildAgentExamples(), buildAgentShaderExamples(), buildAgent3dExamples(), buildSimAgentExamples(), buildAgentSketchExamples(), buildBakeExamples(EXAMPLE_GRAPHS), buildTimeCubeExamples(), buildFrameStackExamples(), buildTextureToolExamples());
 
 // Every example's Play setup is in the rules shape (implementation guide, phase 9): authored with actions,
 // a signal's When and links where that reads easiest, opened as the rules they play as.
