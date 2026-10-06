@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.35',
+    date: '2026-10-05',
+    title: 'Texture tools',
+    highlights: [
+      { area: 'Studio', text: 'Texture tools: Mask, Levels, Flow, Neighbours, Change, Outline, Fade and Read turn any texture into masks, directions and glows.', link: { kind: 'doc', path: 'docs/texture-tools.md' } },
+      { area: 'Studio', text: 'They work on Passes, images, video, Baked and agent trails; Mask and Levels also shape plain numbers. Seven new examples.' },
+    ],
+  },
+  {
     id: '2026.10.34',
     date: '2026-10-05',
     title: 'Fewer nodes',
