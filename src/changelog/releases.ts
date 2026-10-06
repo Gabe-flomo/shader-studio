@@ -39,6 +39,34 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.44',
+    date: '2026-10-06',
+    title: 'Grid simulations and one clip editor',
+    highlights: [
+      { area: 'Studio', text: 'Simulations: grids: Game of Life, Life-like rules, Brian\'s Brain, caves, water ripples, heat, forest fire, falling sand and Wireworld, all from existing nodes.', link: { kind: 'doc', path: 'docs/simulations-grids.md' } },
+      { area: 'Studio', text: 'The clip editor now opens for Video Input, Video layers, Baked clips, background videos and the Library, with trim, segments, speed, loop and crop.', link: { kind: 'doc', path: 'docs/clip-editor.md' } },
+      { area: 'Studio', text: 'Source / Result playback shows exactly the frames or playlist you will get. Video Input files now survive a reload.' },
+    ],
+  },
+  {
+    id: '2026.10.43',
+    date: '2026-10-06',
+    title: 'Roomier code editors',
+    highlights: [
+      { area: 'Studio', text: 'Expression and Custom Function cards: airier code lines, and a Preview page (Range, Grid, colour…) in place of the signature.' },
+      { area: 'Studio', text: 'Their editors fold the Functions panel (closed by default, \u0192 Functions or \u2318]) and the Inputs panel (\u2318[) so the code gets the room.' },
+    ],
+  },
+  {
+    id: '2026.10.42',
+    date: '2026-10-06',
+    title: 'Code on the card',
+    highlights: [
+      { area: 'Studio', text: 'Expression Blocks and Custom Functions show pages on the card: the code (read-only, coloured), a function signature from the wiring, your note and description.' },
+      { area: 'Studio', text: 'Flip pages with the dots or arrows; double-click or Edit opens the full editor, where line editing now lives.' },
+    ],
+  },
+  {
     id: '2026.10.41',
     date: '2026-10-05',
     title: 'A preview for every node',

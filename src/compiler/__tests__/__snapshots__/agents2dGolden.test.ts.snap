@@ -504,6 +504,132 @@ exports[`2D agents and pass graphs compile as they did before 3D > passSlimeEdge
 }
 `;
 
+exports[`2D agents and pass graphs compile as they did before 3D > simGridBrain 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "1b2608ae19223409b3d85f315697:5748",
+  "paramBindings": "1f6aa2739a6747047bcc629cbf4d:2390",
+  "paramUniforms": "111c2f1b200248083b95be302741:1652",
+  "passes": "02adca2d9a112c1621fc9c0fda27:34916",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > simGridCave 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "064912e08f55da018f80da93f73d:6570",
+  "paramBindings": "08e256c9e54ebd08f478d5115617:2551",
+  "paramUniforms": "1e040e265924c1058ba713f8a0d0:1786",
+  "passes": "1458cf9cf3ab030d2d1ada0d38fb:20609",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > simGridFire 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "154722794295ea04b42f5b82feb5:7573",
+  "paramBindings": "1c6cf79b56fe9e19f960cb46a4fe:3044",
+  "paramUniforms": "0bf3e73a62ccdd0fa1328fdbd098:2115",
+  "passes": "14d35f63e1fafb1c176e9dbc1f91:35410",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > simGridHeat 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "1b2204ade60a361808f8cdd8f904:4930",
+  "paramBindings": "052649d608b68c081c169880b534:1649",
+  "paramUniforms": "12e1ca5f5448e40b02bd4a671b50:1159",
+  "passes": "1ca28518446e61061b9d5b33483b:8591",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > simGridLife 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "1ee79a540d4cfe0b5a56422db6bf:4571",
+  "paramBindings": "0dbf82a79b82f609ae08c903e06d:2567",
+  "paramUniforms": "1c85c3be2577d71e7bb6267766c5:1768",
+  "passes": "0b1264041853e3185a7fe546b909:16227",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > simGridLifeLike 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "08399260e797b812c4bb362c9b15:4571",
+  "paramBindings": "077d0238f0b94f1925eff98d17bc:3002",
+  "paramUniforms": "0fd58b126d6bd90bacc17efb0470:2042",
+  "passes": "0d20cd1c76cfde193d89eb1f03a3:19662",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > simGridSand 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "12d056e29c95001d56332e8727b7:4851",
+  "paramBindings": "1cef11e5224de404bbe059968a1b:3047",
+  "paramUniforms": "0d2e77dbe8a38d1e73103076bcd6:2113",
+  "passes": "075d9da186e7bb16bb39f687d6c9:18541",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > simGridWater 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "0793dfe2321ac60022695a5cbd40:4957",
+  "paramBindings": "160763e3441aa905c6918052d069:2049",
+  "paramUniforms": "00e4b949d2253e1d3b05dfbafca5:1384",
+  "passes": "0d5121402a4d460c12306873d841:11446",
+  "success": true,
+  "textureUniforms": "1ac162cf532085189531de606cf2:24",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > simGridWire 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "09d0f461a610f9075cb09c5f6702:6006",
+  "paramBindings": "0680794b70e87114454a4c55584d:2535",
+  "paramUniforms": "0ad8970489444c0aaec383f21153:1764",
+  "passes": "1ea54d15bf3b9403f67db4876e17:37003",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
 exports[`2D agents and pass graphs compile as they did before 3D > slimeMold 1`] = `
 {
   "agents": "008912e60cf1db14335d228d5a44:13543",

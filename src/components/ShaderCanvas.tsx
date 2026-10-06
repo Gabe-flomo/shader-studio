@@ -346,6 +346,14 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const off = useNodeGraphStore.subscribe((s, prev) => { if (s.nodes !== prev.nodes || s.bakeGraph !== prev.bakeGraph) collect(s); });
     return () => { off(); bakedVideos.setHost(null); };
   }, []);
+  // Video Input nodes: a kept file opens again after a reload, and clip settings follow the clock (lib/videoEngine.ts).
+  useEffect(() => {
+    videoEngine.setHost({ setTexture: (id, tex) => useNodeGraphStore.getState().setVideoTexture(id, tex) });
+    const collect = (nodes: import('../types/nodeGraph').GraphNode[]) => videoEngine.sync(nodes);
+    collect(useNodeGraphStore.getState().nodes);
+    const off = useNodeGraphStore.subscribe((s, prev) => { if (s.nodes !== prev.nodes) collect(s.nodes); });
+    return () => { off(); videoEngine.setHost(null); };
+  }, []);
   // Time Cube nodes (docs/time-cube.md): their stacked frames come in through the store's node textures, like a Texture Input's.
   useEffect(() => {
     timeCubes.setHost({
@@ -1536,7 +1544,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       // continues from where it stopped. Takes and offline renders drive their own time (stepLayers)
       // and never go through this draw() call, so they're unaffected.
       const layerDt = playing ? dt : 0;
-      const videoActive = videoIdsRef.current.some(id => videoEngine.isPlaying(id));
+      const videoActive = videoIdsRef.current.some(id => videoEngine.active(id));
       const shaderMoving = playing && (
         usesTimeRef.current || hasTimeNodeRef.current || gpuParticlesActive() ||
         audioAmps.size > 0 || liveValues.size > 0 || videoActive || bakedVideos.active() || isStatefulRef.current || echoRef.current !== null ||
@@ -1556,6 +1564,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       playVideoLayers.follow(elapsed, playing);
       // Baked nodes: each video on frame (t − start) × fps (lib/bakedVideos.ts).
       bakedVideos.follow(elapsed, playing);
+      // Video Input nodes with clip settings: on their playlist for the clock (docs/clip-editor.md).
+      videoEngine.follow(elapsed, playing);
       // Drum pads: the clock their hits are stamped with, and mapped numbers on sounding pads.
       playDrumPads.follow(elapsed, playing);
       const plan = planFrame({

@@ -21,6 +21,7 @@
  * stays what it was: the picture is covered by the backdrop colour but still
  * runs, so Reveal mattes and particles with Mask show it inside themselves.
  */
+import { BackgroundClipButton } from './BackgroundClipButton';
 import { useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Menu } from '../ui/Menu';
 import { Popover } from '../ui/Popover';
@@ -137,7 +138,7 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
     if (v === 'image' && d.image) { startLayer({ id: newSourceId(), kind: 'image', name: baseName(d.image.name), src: d.image.src }); return; }
     if (v === 'video' && d.video && (d.video.src || playBackground.hasSessionVideo(d.video.name, d.video.bytes) || isLinkedRef(d.video.libraryId))) {
       const vd = d.video;
-      startLayer({ id: newSourceId(), kind: 'video', name: vd.name, src: vd.src, bytes: vd.bytes, loop: vd.loop, muted: vd.muted, rate: vd.rate, ...(vd.libraryId ? { libraryId: vd.libraryId } : {}) });
+      startLayer({ id: newSourceId(), kind: 'video', name: vd.name, src: vd.src, bytes: vd.bytes, loop: vd.loop, muted: vd.muted, rate: vd.rate, ...(vd.libraryId ? { libraryId: vd.libraryId } : {}), ...(vd.clip ? { clip: vd.clip } : {}) });
       return;
     }
     legacyPick.current = false;
@@ -390,6 +391,8 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
           <Toggle checked={video.loop} onChange={loop => setDisplay({ video: { ...video, loop } })} label="Loop" />
           <Toggle checked={!video.muted} onChange={on => setDisplay({ video: { ...video, muted: !on } })} label="Sound" />
           <Select ariaLabel="Speed" height={26} value={String(video.rate)} options={BACKGROUND_RATES.map(r => ({ value: String(r), label: `${r}×` }))} onChange={v => setDisplay({ video: { ...video, rate: Number(v) } })} style={{ fontSize: 12 }} />
+          <BackgroundClipButton name={video.name} element={() => playBackground.videoElement()} clip={video.clip} rate={video.rate} loop={video.loop}
+            onApply={a => setDisplay({ video: { ...video, clip: a.clip, rate: a.rate, loop: a.loop } })} />
           <span title={video.name} style={{ flex: '1 1 80px', minWidth: 0, color: tk.text.faint, font: `11px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{video.name} · {sizeText(video.bytes)}</span>
         </div>
       )}

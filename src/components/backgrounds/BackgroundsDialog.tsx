@@ -10,6 +10,7 @@
  * Import an image sit at the top. Opened with `pick`, choosing an item
  * answers the caller instead (openBackgrounds in backgroundsUi.ts).
  */
+import { LazyClipEditorModal } from '../media/lazyClipEditor';
 import { exportPlayfile } from '../../playfile/app';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
@@ -125,6 +126,8 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
   const withLinked = linkedOk && (linked || !pick);
   const tabs = [...(pick === 'image' ? ['images'] : pick === 'palette' ? ['palettes'] : pick ? ['images', 'palettes'] : ['images', 'palettes', 'videos', 'sounds']), ...(withLinked ? ['linked'] : [])];
   const { videos, error: videoError } = useLibraryVideos();
+  // A video opened in the clip editor as a viewer (docs/clip-editor.md).
+  const [viewing, setViewing] = useState<LibraryVideoMeta | null>(null);
   // Drum pad samples are kept with the videos; each has its own tab.
   const vids = useMemo(() => (videos ?? []).filter(v => !isAudioType(v.type)), [videos]);
   const snds = useMemo(() => (videos ?? []).filter(v => isAudioType(v.type)), [videos]);
@@ -211,6 +214,7 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
     await deleteVideosWithUndo(list);
   };
   const videoMenu = (v: LibraryVideoMeta): MenuItem[] => [
+    ...(isAudioType(v.type) ? [] : [{ label: 'Open', icon: 'play', hint: 'Play it in the video viewer', onSelect: () => setViewing(v) } as MenuItem]),
     { label: 'Rename…', icon: 'edit', onSelect: async () => { const t = (await askText(isAudioType(v.type) ? 'Rename sound' : 'Rename video', { label: 'Name', initial: v.name, confirmLabel: 'Rename' }))?.trim(); if (t && t !== v.name) await renameVideo(v.id, t); } },
     { label: 'Download', icon: 'export', hint: `The ${isAudioType(v.type) ? 'sound' : 'video'} file, ${formatSize(v.bytes)}`, onSelect: async () => {
       const got = await getVideo(v.id);
@@ -226,7 +230,12 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
   const videoRow = (v: LibraryVideoMeta) => (
     <Row key={v.id} compact={compact} picking={false} title={v.name} detail={videoDetail(v, uses?.get(v.id))}
       lead={<Thumb src={v.thumb || undefined} icon={isAudioType(v.type) ? 'wave' : 'play'} w={compact ? 64 : 80} h={compact ? 36 : 45} />}
-      onPick={() => {}} onMenu={el => openMenu(el, videoMenu(v))} />
+      onPick={() => setViewing(v)} onMenu={el => openMenu(el, videoMenu(v))} />
+  );
+  const viewer = viewing && (
+    <LazyClipEditorModal host="viewer" title={viewing.name} subtitle={videoDetail(viewing, uses?.get(viewing.id))}
+      load={async () => (await getVideo(viewing.id))?.blob ?? null} onClose={() => setViewing(null)}
+      note="A viewer: to trim or crop it, open it from where it is used (a Video layer, a Video Input, a Baked node, the Background)." />
   );
   const soundRow = (v: LibraryVideoMeta) => (
     <SampleRow key={v.id} title={v.name} detail={videoDetail(v, uses?.get(v.id))} thumb={v.thumb || undefined} w={compact ? 64 : 80} h={compact ? 36 : 45}
@@ -394,7 +403,7 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
   if (compact) {
     return (
       <Sheet title={heading} onClose={() => onDone(null)} maxHeight="90dvh">
-        {toolbar}{content}<div style={{ padding: '6px 2px 4px' }}>{note}</div>{popup}{editor}
+        {toolbar}{content}<div style={{ padding: '6px 2px 4px' }}>{note}</div>{popup}{editor}{viewer}
       </Sheet>
     );
   }
@@ -402,7 +411,7 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
     <Modal title={heading} subtitle={images ? `${plural(images.length, 'image')} · ${plural(mine.length, 'palette')} of yours${vids.length && !picking ? ` · ${plural(vids.length, 'video')}` : ''}${snds.length && !picking ? ` · ${plural(snds.length, 'sound')}` : ''}` : undefined} icon="overlay" onClose={() => onDone(null)} width={600} footer={note}>
       {toolbar}
       <div style={{ maxHeight: 'min(58vh, 540px)', overflowY: 'auto' }}>{content}</div>
-      {popup}{editor}
+      {popup}{editor}{viewer}
     </Modal>
   );
 }

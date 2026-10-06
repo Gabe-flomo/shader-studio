@@ -8,6 +8,8 @@
  * Tick things anywhere (a whole section or folder too) to download or remove
  * them together.
  */
+import { LazyClipEditorModal } from '../media/lazyClipEditor';
+import { getVideo } from '../../lib/backgroundLibrary';
 import { exportEverythingPlayfile } from '../playfile/exportMenus';
 import { openPlayfileBytes } from '../../playfile/app';
 import { CONTAINER_ACCEPT } from '../../playfile/format';
@@ -68,6 +70,9 @@ import { exportPlayfile } from '../../playfile/app';
 import { reportFileResult } from '../shell/reportFileResult';
 import { OPEN_APP_SETTINGS, takeAppSettingsRequest } from '../../files/recovery';
 
+/** Files' ids for the library's videos (files/videosSource.ts through inventory's external sources). */
+const VIDEO_PREFIX = 'ext:videos:';
+
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 /** A saved drum kit (Presets → Drum kits): it can leave as a .playfile with its samples. */
 const isDrumKit = (n: FileNode) => n.kind === 'preset' && n.id.startsWith('dkit:');
@@ -92,6 +97,8 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   const [nodeType, setNodeType] = useState<string | null>(null);
   /** On a phone, an item's page opens in a sheet over where you are. */
   const [sheetId, setSheetId] = useState<string | null>(null);
+  // A library video (Backgrounds → Videos) opens in the video viewer (docs/clip-editor.md).
+  const [viewing, setViewing] = useState<{ id: string; label: string; detail?: string } | null>(null);
   // A storage-limit refusal's "Open Files → Clean up" asks for the Clean up view.
   useEffect(() => {
     const go = () => { takeCleanupRequest(); setView('cleanup'); };
@@ -121,6 +128,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
 
   const open = useCallback((id: string | null) => {
     const n = id && inv ? inv.byId.get(id) : null;
+    if (n && n.id.startsWith(VIDEO_PREFIX)) { setViewing({ id: n.id.slice(VIDEO_PREFIX.length), label: n.label, detail: n.detail }); return; }
     if (compact && n && ITEM_KINDS.has(n.kind)) { setSheetId(id); return; }
     setSheetId(null);
     setView(id ? 'browse' : 'home');
@@ -403,6 +411,11 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   );
 
   const dialogs = <>
+    {viewing && (
+      <LazyClipEditorModal host="viewer" title={viewing.label} subtitle={viewing.detail} onClose={() => setViewing(null)}
+        load={async () => (await getVideo(viewing.id))?.blob ?? null}
+        note="A viewer: to trim or crop it, open it from where it is used (a Video layer, a Video Input, a Baked node, the Background)." />
+    )}
     {compact && sheetNode && <Sheet title={sheetNode.label} onClose={() => setSheetId(null)} maxHeight="88dvh">{itemPage(sheetNode)}</Sheet>}
     {menu && <Menu x={menu.x} y={menu.y} minWidth={240} onClose={() => setMenu(null)} items={menuItems(menu.node)} />}
     {confirm && <RemoveDialog c={confirm.c} onDone={ok => { confirm.resolve(ok); setConfirm(null); }} />}

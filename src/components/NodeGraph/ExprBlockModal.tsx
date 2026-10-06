@@ -21,6 +21,8 @@ import { Select } from '../ui/Select';
 import { toast } from '../ui/toastStore';
 import { CodeInput } from '../code/CodeField';
 import { ReferencePanel } from '../code/ReferencePanel';
+import type { EditorPanel } from '../code/editorPanelPrefs';
+import { CollapseInputsButton, FunctionsToggle, InputsRail, SidePanel, useEditorSidePanels } from '../code/SidePanels';
 import { buildCompletions } from '../code/glslReference';
 import { insertSnippet } from '../code/useCompletion';
 
@@ -86,10 +88,14 @@ interface InsertTarget {
   snap: (v: string) => Snapshot;
 }
 
+const PANELS: readonly EditorPanel[] = ['inputs', 'functions'];
+
 export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   const updateNodeParams  = useNodeGraphStore(s => s.updateNodeParams);
   const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
   const tk = useTokens();
+  // Side panels: Inputs (folds to a rail) and the function palette (closed by default); ⌘[ / ⌘]
+  const { narrow, open: panels, set: setPanel, toggle: togglePanel } = useEditorSidePanels(PANELS);
 
   // Read current params
   const customInputs: InputDef[] = (node.params.inputs as InputDef[] | undefined) ?? [];
@@ -286,6 +292,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
       onClose={onClose}
       headerActions={
         <>
+          <FunctionsToggle open={panels.functions} onToggle={() => togglePanel('functions')} />
           {canOpenInBuilder && (
             <Button size="sm" variant="ghost" icon="fn" style={{ marginRight: 4 }}
               title={hasFnBuilderFns ? 'Re-open in the Function Builder' : 'Open these lines as functions in the Function Builder'}
@@ -331,10 +338,12 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
         )
       }
     >
-      <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
-        {/* ── Inputs ── */}
-        <div style={{ width: 340, flexShrink: 0, overflowY: 'auto', padding: '18px 20px', borderRight: `1px solid ${tk.border.subtle}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <SectionLabel>Inputs</SectionLabel>
+      <div style={{ display: 'flex', height: '100%', minHeight: 0, position: 'relative' }}>
+        {/* ── Inputs: a panel, folded to a rail of chips, or a drawer on a narrow window ── */}
+        {(!panels.inputs || narrow) && <InputsRail inputs={customInputs} onExpand={() => setPanel('inputs', true)} />}
+        <SidePanel side="left" label="Inputs" open={panels.inputs} narrow={narrow} width={340} onClose={() => setPanel('inputs', false)}>
+        <div data-panel="inputs" style={{ width: 340, maxWidth: '100%', flexShrink: 0, overflowY: 'auto', padding: '18px 20px', borderRight: `1px solid ${tk.border.subtle}`, display: 'flex', flexDirection: 'column', gap: 10, boxSizing: 'border-box' }}>
+          <span style={{ display: 'flex', alignItems: 'center' }}><SectionLabel>Inputs</SectionLabel><CollapseInputsButton onCollapse={() => setPanel('inputs', false)} /></span>
           <Note>Each input is a local variable in the lines. Float inputs can show a slider on the node.</Note>
           {customInputs.map((inp, idx) => (
             <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -377,6 +386,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
           ))}
           <AddRow onClick={addInput}>Add input</AddRow>
         </div>
+        </SidePanel>
 
         {/* ── Lines + return ── */}
         <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -444,7 +454,9 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
           </div>
         </div>
 
-        <ReferencePanel variables={customInputs} onInsert={insertFromReference} wrapAll={autoWrap} onWrapAllChange={setAutoWrap} />
+        <SidePanel side="right" label="Functions" open={panels.functions} narrow={narrow} width={300} onClose={() => setPanel('functions', false)}>
+          <ReferencePanel variables={customInputs} onInsert={insertFromReference} wrapAll={autoWrap} onWrapAllChange={setAutoWrap} />
+        </SidePanel>
       </div>
     </Modal>
   );

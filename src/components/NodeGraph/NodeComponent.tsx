@@ -32,7 +32,6 @@ import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 import type { ExprModal as ExprModalT } from './ExprModal';
 import type { CustomFnModal as CustomFnModalT } from './CustomFnModal';
 import type { ExprBlockModal as ExprBlockModalT } from './ExprBlockModal';
-import { toggleLineOff } from '../../lib/exprLines';
 import { inputHintOf, inputLabelOf, inputTexts } from '../../lib/inputNames';
 import { InputNamesModal } from './InputNamesModal';
 import type { ConstantsModal as ConstantsModalT } from './ConstantsModal';
@@ -59,6 +58,11 @@ import type { PublishNodeModal as PublishNodeModalT } from './PublishNodeModal';
 const PublishNodeModal    = lazyWithSuspense<PropsOf<typeof PublishNodeModalT>>(() => import('./PublishNodeModal').then(m => ({ default: m.PublishNodeModal })));
 import { AudioInputModal } from './AudioInputModal';
 import { VideoInputModal } from './VideoInputModal';
+import { VideoInputClipModal } from './VideoInputClipModal';
+import { addVideoFile } from '../../lib/backgroundLibrary';
+
+/** The Video Input card's thumbnail follows the engine (a file reopened after a reload). */
+const subscribeVideoEngine = (fn: () => void) => videoEngine.onChange(fn);
 import { MidiInputCard } from './MidiInputCard';
 import { GroupParamPicker } from './GroupParamPicker';
 import { NodeInlineViz, AudioFreqRangeViz, hasRealDiagram } from './NodeInlineViz';
@@ -69,7 +73,7 @@ import { AGENT_INPUT_OUTPUTS, AGENT_INPUT_STATE_OUTPUTS, agentWalkerDefault, DRA
 import { VECTORIZABLE_NODES, VEC4_CAPABLE_NODES } from '../../nodes/definitions/math';
 import { registerSocket, getView } from './socketRegistry';
 import { startNodeMouseDrag, startNodeTouchDrag } from './nodeDrag';
-import { moveItem } from '../../lib/reorder';
+import { CodeCard } from './codeCard/CodeCard';
 import { scopeCanvasRegistry, scopeBufferRegistry, vectorValueRegistry, floatValueRegistry } from '../../lib/scopeRegistry';
 import { audioEngine } from '../../lib/audioEngine';
 import { videoEngine } from '../../lib/videoEngine';
@@ -600,6 +604,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const [showCustomFnModal, setShowCustomFnModal] = useState(false);
   const [showAudioInputModal, setShowAudioInputModal] = useState(false);
   const [showVideoInputModal, setShowVideoInputModal] = useState(false);
+  const [showVideoClip, setShowVideoClip] = useState(false);
   const [showDataEditor, setShowDataEditor] = useState(false);
   const [kfMenu, setKfMenu] = useState<{ x: number; y: number; key: string } | null>(null);
   const [kfModalKey, setKfModalKey] = useState<string | null>(null);
@@ -636,6 +641,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     >{text}</button>
   );
   const [showCommentEditor, setShowCommentEditor] = useState(false);
+  // The code card's Edit / double-click and its Note button (stable, so the memoised card stays put)
+  const nodeType = node.type;
+  const openCodeEditor = useCallback(() => { if (nodeType === 'customFn') setShowCustomFnModal(true); else setShowExprBlockModal(true); }, [nodeType]);
+  const openNoteEditor = useCallback(() => setShowCommentEditor(true), []);
   const [zIndex, setZIndex] = useState(1);
   // Info tooltip: close on any click outside the tooltip itself or the info
   // button that opened it (button is excluded so its own onClick toggle isn't
@@ -1284,7 +1293,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
   // ── Video Input node special card ────────────────────────────────────────────
   if (node.type === 'videoInput') {
-    const thumbnailUrl = node.params._thumbnailUrl as string | undefined;
+    // The engine's own URL first: a file reopened from the library after a reload has a new one.
+    React.useSyncExternalStore(subscribeVideoEngine, () => videoEngine.url(node.id));
+    const thumbnailUrl = videoEngine.url(node.id) ?? (node.params._thumbnailUrl as string | undefined);
+    const clipped = !!node.params.clip;
     const hasFile      = !!(node.params._hasFile);
     const isPlaying    = !!(node.params._isPlaying);
     const fileName     = (node.params._fileName as string) || '';
@@ -1308,10 +1320,16 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       setVideoTexture(node.id, tex);
       videoEngine.play(node.id);
       const thumbUrl = URL.createObjectURL(file);
+      // A new file starts with no clip settings (the old ones were for another video).
       updateNodeParams(node.id, {
         _fileName: file.name, _hasFile: true, _isPlaying: true,
-        _thumbnailUrl: thumbUrl,
+        _thumbnailUrl: thumbUrl, clip: undefined,
       }, { immediate: true });
+      // Kept in the video library so it opens again after a reload (with its clip settings).
+      void addVideoFile(file).then(m => {
+        videoEngine.setLibraryId(node.id, m.id);
+        updateNodeParams(node.id, { videoId: m.id }, { immediate: true });
+      }, () => { /* no IndexedDB: this session only, as before */ });
       return { ok: true };
     };
 
@@ -1375,6 +1393,14 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <button
                 onMouseDown={e => e.stopPropagation()}
+                onClick={() => setShowVideoClip(true)}
+                disabled={!thumbnailUrl}
+                title={thumbnailUrl ? 'Open the video: trim, segments, speed, loop, crop (the clip editor)' : 'Load a video first'}
+                aria-label="Edit clip"
+                style={{ background: 'none', border: 'none', color: clipped ? tc.yellow : thumbnailUrl ? tc.surface2 : tc.surface0, cursor: thumbnailUrl ? 'pointer' : 'default', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
+              >⤢</button>
+              <button
+                onMouseDown={e => e.stopPropagation()}
                 onClick={() => setShowVideoInputModal(v => !v)}
                 title="Open video settings"
                 style={{ background: 'none', border: 'none', color: showVideoInputModal ? tc.mauve : tc.surface2, cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
@@ -1398,6 +1424,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
             onMouseDown={e => e.stopPropagation()}
             onClick={() => videoFileInputRef.current?.click()}
+            onDoubleClick={e => { if (thumbnailUrl) { e.preventDefault(); e.stopPropagation(); setShowVideoClip(true); } }}
+            title={thumbnailUrl ? 'Click: another file · double-click: open the clip editor' : undefined}
             style={{
               margin: '6px 8px',
               border: `1px dashed ${tc.surface1}`,
@@ -1472,8 +1500,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           </div>
         </div>
         {showVideoInputModal && (
-          <VideoInputModal node={node} onClose={() => setShowVideoInputModal(false)} />
+          <VideoInputModal node={node} onClose={() => setShowVideoInputModal(false)} onEditClip={thumbnailUrl ? () => { setShowVideoInputModal(false); setShowVideoClip(true); } : undefined} />
         )}
+        {showVideoClip && <VideoInputClipModal node={node} onClose={() => setShowVideoClip(false)} />}
       </>
     );
   }
@@ -3668,7 +3697,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       {/* Semantic inline viz: replaces shader thumbnail for supported types */}
       {/* The node's value or colour while the eye is on it, with every preview control in its row;
           the diagram stays a click away (docs/node-previews.md) */}
-      {isPreviewActive && plan.body === 'field' && (
+      {isPreviewActive && plan.body === 'field' && node.type !== 'exprNode' && node.type !== 'customFn' && (
         <ValuePreview node={node} diagram={plan.diagram ? <NodeInlineViz node={node} /> : undefined} />
       )}
       {isPreviewActive && plan.body === 'diagram' && (
@@ -3989,124 +4018,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           );
         })}
 
-        {/* ── ExprBlock per-line warp editor (exprNode only) ── */}
-        {!collapsed && node.type === 'exprNode' && (() => {
-          const lines = (node.params.lines as Array<{ lhs: string; op: string; rhs: string; off?: boolean }> | undefined) ?? [];
-          const result = (node.params.result as string | undefined) ?? 'p';
-          const OPS = ['=', '+=', '-=', '*=', '/='];
-          const inputBg = tc.crust;
-          const inputBorder = `1px solid ${tc.surface1}`;
-          const inputStyle: React.CSSProperties = {
-            background: inputBg, border: inputBorder, color: tc.text,
-            padding: '2px 5px', borderRadius: '3px', fontSize: '10px',
-            fontFamily: 'monospace', outline: 'none',
-          };
-          return (
-            <div
-              style={{ padding: '4px 10px 6px', display: 'flex', flexDirection: 'column', gap: '4px' }}
-              onMouseDown={e => e.stopPropagation()}
-            >
-              <span style={{ fontSize: '10px', color: tc.overlay0, marginBottom: '1px' }}>Warp Lines</span>
-
-              {lines.map((line, i) => (
-                <div key={i} data-line-off={line.off ? '' : undefined}
-                  onKeyDownCapture={e => { if ((e.metaKey || e.ctrlKey) && e.key === '/') { e.preventDefault(); e.stopPropagation(); updateNodeParams(node.id, { lines: toggleLineOff(lines, i) }); } }}
-                  style={{ display: 'flex', gap: '3px', alignItems: 'center', opacity: line.off ? 0.45 : 1 }}>
-                  {/* On / off: an off line is kept but skipped (a comment in the shader) */}
-                  <button
-                    onMouseDown={e => e.stopPropagation()}
-                    onClick={() => updateNodeParams(node.id, { lines: toggleLineOff(lines, i) })}
-                    aria-pressed={!!line.off}
-                    title={line.off ? 'Off: skipped. Click (or ⌘/ in the line) to switch it back on' : 'Switch this line off without deleting it (⌘/ in the line)'}
-                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '9px', fontFamily: 'monospace', lineHeight: 1, flexShrink: 0, width: 12, color: line.off ? tc.yellow : tc.surface2, fontWeight: 700 }}
-                  >//</button>
-                  {/* Reorder */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', flexShrink: 0 }}>
-                    <button
-                      onMouseDown={e => e.stopPropagation()}
-                      onClick={() => updateNodeParams(node.id, { lines: moveItem(lines, i, i - 1) })}
-                      disabled={i === 0}
-                      style={{ background: 'none', border: 'none', color: i === 0 ? tc.surface0 : tc.overlay0, cursor: i === 0 ? 'default' : 'pointer', padding: 0, fontSize: '8px', lineHeight: 1 }}
-                      title="Move up"
-                    >▲</button>
-                    <button
-                      onMouseDown={e => e.stopPropagation()}
-                      onClick={() => updateNodeParams(node.id, { lines: moveItem(lines, i, i + 1) })}
-                      disabled={i === lines.length - 1}
-                      style={{ background: 'none', border: 'none', color: i === lines.length - 1 ? tc.surface0 : tc.overlay0, cursor: i === lines.length - 1 ? 'default' : 'pointer', padding: 0, fontSize: '8px', lineHeight: 1 }}
-                      title="Move down"
-                    >▼</button>
-                  </div>
-                  {/* LHS */}
-                  <input
-                    type="text"
-                    value={line.lhs}
-                    onDoubleClick={selectTokenOnDoubleClick}
-                    onKeyDown={wrapOnKeyDown(v => updateNodeParams(node.id, { lines: lines.map((l, j) => j === i ? { ...l, lhs: v } : l) }))}
-                    onChange={e => {
-                      const next = lines.map((l, j) => j === i ? { ...l, lhs: e.target.value } : l);
-                      updateNodeParams(node.id, { lines: next });
-                    }}
-                    placeholder="p.xy"
-                    style={{ ...inputStyle, width: '52px' }}
-                  />
-                  {/* Operator */}
-                  <select
-                    value={line.op}
-                    onChange={e => {
-                      const next = lines.map((l, j) => j === i ? { ...l, op: e.target.value } : l);
-                      updateNodeParams(node.id, { lines: next });
-                    }}
-                    style={{ background: inputBg, border: inputBorder, color: tc.blue, fontSize: '10px', padding: '2px 2px', borderRadius: '3px', cursor: 'pointer', outline: 'none' }}
-                  >
-                    {OPS.map(op => <option key={op} value={op}>{op}</option>)}
-                  </select>
-                  {/* RHS expression */}
-                  <input
-                    type="text"
-                    value={line.rhs}
-                    onDoubleClick={selectTokenOnDoubleClick}
-                    onKeyDown={wrapOnKeyDown(v => updateNodeParams(node.id, { lines: lines.map((l, j) => j === i ? { ...l, rhs: v } : l) }))}
-                    onChange={e => {
-                      const next = lines.map((l, j) => j === i ? { ...l, rhs: e.target.value } : l);
-                      updateNodeParams(node.id, { lines: next });
-                    }}
-                    placeholder="expression…"
-                    style={{ ...inputStyle, flex: 1, color: tc.green }}
-                  />
-                  {/* Remove row */}
-                  <button
-                    onMouseDown={e => e.stopPropagation()}
-                    onClick={() => updateNodeParams(node.id, { lines: lines.filter((_, j) => j !== i) })}
-                    style={{ background: 'none', border: 'none', color: tc.red, cursor: 'pointer', padding: '0 2px', fontSize: '13px', lineHeight: 1, flexShrink: 0 }}
-                    title="Remove line"
-                  >×</button>
-                </div>
-              ))}
-
-              {/* Add line */}
-              <button
-                onMouseDown={e => e.stopPropagation()}
-                onClick={() => updateNodeParams(node.id, { lines: [...lines, { lhs: 'p', op: '=', rhs: '' }] })}
-                style={{ alignSelf: 'flex-start', background: tc.surface0, border: 'none', color: tc.subtext0, cursor: 'pointer', fontSize: '10px', padding: '2px 7px', borderRadius: '3px', marginTop: '1px' }}
-              >+ line</button>
-
-              {/* Return expression */}
-              <div style={{ display: 'flex', gap: '5px', alignItems: 'center', marginTop: '2px' }}>
-                <span style={{ fontSize: '10px', color: tc.overlay0, whiteSpace: 'nowrap', fontFamily: 'monospace' }}>return</span>
-                <input
-                  type="text"
-                  value={result}
-                  onDoubleClick={selectTokenOnDoubleClick}
-                  onKeyDown={wrapOnKeyDown(v => updateNodeParams(node.id, { result: v }))}
-                  onChange={e => updateNodeParams(node.id, { result: e.target.value })}
-                  placeholder="p"
-                  style={{ ...inputStyle, flex: 1, color: tc.blue, border: `1px solid ${tc.surface1}` }}
-                />
-              </div>
-            </div>
-          );
-        })()}
+        {/* ── Expression Block / Custom Function card face: read-only code, signature, note, description (codeCard/) ── */}
+        {!collapsed && (node.type === 'exprNode' || node.type === 'customFn') && (
+          <CodeCard node={node} touch={isTouchDevice} onEdit={openCodeEditor} onEditNote={openNoteEditor} />
+        )}
 
         {/* ── Transform Vec inline editor ── */}
         {!collapsed && node.type === 'transformVec' && (() => {

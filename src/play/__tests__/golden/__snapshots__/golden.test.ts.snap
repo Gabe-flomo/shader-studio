@@ -1495,6 +1495,129 @@ exports[`golden outputs: examples > scriptPicture 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > simGridBrain 1`] = `
+{
+  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
+  "density": "- x120",
+  "dyingColour": "- x120",
+  "glow": "- x120",
+  "onColour": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simGridCave 1`] = `
+{
+  "atLeast": "- x120",
+  "density": "- x120",
+  "relief": "- x120",
+  "seed": "- x120",
+  "soft": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simGridFire 1`] = `
+{
+  "ashFade": "- x120",
+  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
+  "glow": "- x120",
+  "growth": "- x120",
+  "lightning": "- x120",
+  "reset": "- x120",
+  "spread": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simGridHeat 1`] = `
+{
+  "brush": "- x120",
+  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
+  "cooling": "- x120",
+  "heating": "- x120",
+  "spotLevel": "- x120",
+  "spread": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simGridLife 1`] = `
+{
+  "afterglow": "- x120",
+  "aliveColour": "- x120",
+  "born": "- x120",
+  "brush": "- x120",
+  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
+  "density": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+  "stayA": "- x120",
+  "stayB": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simGridLifeLike 1`] = `
+{
+  "afterglow": "- x120",
+  "b0": "- x120",
+  "b1": "- x120",
+  "b2": "- x120",
+  "b3": "- x120",
+  "b4": "- x120",
+  "b5": "- x120",
+  "b6": "- x120",
+  "b7": "- x120",
+  "b8": "- x120",
+  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
+  "density": "- x120",
+  "reset": "- x120",
+  "s0": "- x120",
+  "s1": "- x120",
+  "s2": "- x120",
+  "s3": "- x120",
+  "s4": "- x120",
+  "s5": "- x120",
+  "s6": "- x120",
+  "s7": "- x120",
+  "s8": "- x120",
+  "speed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simGridSand 1`] = `
+{
+  "brush": "- x120",
+  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
+  "clear": "- x120",
+  "flow": "- x120",
+  "swing": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simGridWater 1`] = `
+{
+  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
+  "damping": "- x120",
+  "depth": "- x120",
+  "dropSize": "- x120",
+  "finger": "- x120",
+  "rain": "- x120",
+  "refraction": "- x120",
+  "speed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simGridWire 1`] = `
+{
+  "bridges": "- x120",
+  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
+  "drawWire": "- x120",
+  "glow": "- x120",
+  "pen": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > timeCubeFlyThrough 1`] = `
 {
   "ang": "- x120",

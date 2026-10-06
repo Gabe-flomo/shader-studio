@@ -93,13 +93,17 @@ before segments had **Start / End**: they load as one segment from Start
 to End, with the same frames as before. Choosing another video resets the
 clip to the whole video.
 
-The editor is `components/media/ClipEditor.tsx`, a controlled component
-(a video Blob or a painted source, the value, `onChange`, and optional sample
-times for the ticks); its maths is `lib/media/clip.ts`. Only the Time Cube
-uses it so far. Video Input, the Video layer and Bake could adopt it: they
-would map the segments onto their own playback (a play list of In / Out
-stretches, reversed ones played backwards) and the crop / rotate onto their
-draw (`drawClipFrame`), passing no ticks.
+- **Source / Result** (beside Play): Result steps through exactly the
+  frames the cube takes, in cube order (segments joined, reversed ones
+  backwards, the ramp, Frame order's shuffle or sort, the crop / rotate /
+  flip) at 12, 24 or 30 fps or **Match**; the frame showing is lit on the
+  tick row ("frame 17 / 48 · source 1.43 s"). Loop selection in Source still
+  plays every segment forwards.
+
+The editor is `components/media/ClipEditor.tsx`, the app's one video viewer
+and editor: Video Input, Video layers, Baked nodes, the Background and the
+Library / Files viewers use it too, each with its own capabilities. See
+docs/clip-editor.md.
 
 Changing Frame order rearranges the frames already read: nothing is decoded
 again. The atlas keeps its layout; only which picture sits in which tile

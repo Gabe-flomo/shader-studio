@@ -14,9 +14,11 @@ const SECTION_LABELFor = (tc: CtpPalette): React.CSSProperties => ({
 interface Props {
   node: GraphNode;
   onClose: () => void;
+  /** Open the clip editor (absent while no video is loaded). */
+  onEditClip?: () => void;
 }
 
-export function VideoInputModal({ node, onClose }: Props) {
+export function VideoInputModal({ node, onClose, onEditClip }: Props) {
   const tc = useCtp();
   const tk = useTokens();
   const SECTION_LABEL = SECTION_LABELFor(tc);
@@ -121,6 +123,18 @@ export function VideoInputModal({ node, onClose }: Props) {
               ))}
             </div>
           </div>
+        </div>
+
+        {/* Clip: the shared editor (docs/clip-editor.md) */}
+        <p style={SECTION_LABEL}>Clip</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+          <button
+            onMouseDown={e => e.stopPropagation()}
+            onClick={onEditClip}
+            disabled={!onEditClip}
+            style={{ background: 'none', border: `1px solid ${tc.surface1}`, color: onEditClip ? tc.text : tc.surface1, borderRadius: '4px', padding: '4px 12px', fontSize: '11px', cursor: onEditClip ? 'pointer' : 'default' }}
+          >Edit clip…</button>
+          <span style={{ fontSize: '11px', color: tc.subtext0 }}>{node.params.clip ? 'Trimmed: follows the clock through its segments' : 'The whole video, running free'}</span>
         </div>
 
         {/* Outputs */}
