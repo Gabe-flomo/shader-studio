@@ -15,6 +15,7 @@ import { Modal } from '../ui/Modal';
 import { toast } from '../ui/toastStore';
 import { CodeField } from '../code/CodeField';
 import { ReferencePanel } from '../code/ReferencePanel';
+import { LinePreviewPanel, ProbePicker } from '../code/LinePreview';
 import type { EditorPanel } from '../code/editorPanelPrefs';
 import { FunctionsToggle, SidePanel, useEditorSidePanels } from '../code/SidePanels';
 import { buildCompletions } from '../code/glslReference';
@@ -307,6 +308,12 @@ export function CustomFnModal({ node, onClose }: Props) {
             />
             <Note>Use your input names directly. Write a single expression, or a block that ends with <code>return</code>.</Note>
           </Section>
+
+          {/* Preview a variable: the inputs, the body's named locals, Return (code/LinePreview.tsx) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0 }}>
+            <ProbePicker node={node} />
+            <LinePreviewPanel node={node} />
+          </div>
 
           <div style={{ borderTop: `1px solid ${tk.border.subtle}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button

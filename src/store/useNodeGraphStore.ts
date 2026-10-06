@@ -160,6 +160,7 @@ import { PresetManager } from './managers/PresetManager';
 import { CompilationService } from './managers/CompilationService';
 import { GRAPH_LINK_FIELD, graphDeleted, linkedPresentationsOf } from '../present/links';
 import { pickPreviewOutput, prefOf } from '../lib/nodePreview/showAs';
+import { probedNode } from '../lib/nodePreview/lineProbe';
 
 // ── Legacy ExprNode → ExprBlockNode migration ─────────────────────────────────
 // ExprNode (type: 'expr') is removed from the registry.  Any saved graph that
@@ -1075,7 +1076,8 @@ function buildGroupPreviewGraph(nodes: GraphNode[], groupId: string, innerNodeId
   const subgraph = groupNode.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
   if (!subgraph) return nodes;
 
-  const innerNode = subgraph.nodes.find(n => n.id === innerNodeId);
+  // A line preview's probe (lib/nodePreview/lineProbe.ts) swaps in a copy of the block, for this compile only
+  const innerNode = probedNode(subgraph.nodes.find(n => n.id === innerNodeId) ?? null);
   if (!innerNode) return nodes;
 
   // The output to preview: the one picked in "Show as" (docs/node-previews.md), else vec3, vec4, vec2, float, any
@@ -1095,6 +1097,7 @@ function buildGroupPreviewGraph(nodes: GraphNode[], groupId: string, innerNodeId
       ...groupNode.params,
       subgraph: {
         ...subgraph,
+        nodes: subgraph.nodes.map(n => (n.id === innerNodeId ? innerNode : n)),
         outputPorts: [
           ...subgraph.outputPorts,
           {
@@ -1119,7 +1122,9 @@ function buildGroupPreviewGraph(nodes: GraphNode[], groupId: string, innerNodeId
 // Builds a minimal graph containing the target node + all its transitive
 // input dependencies, plus a synthetic output node wired to the first
 // vec3/vec4 output of the target.
-function buildPreviewGraph(nodes: GraphNode[], targetId: string): GraphNode[] {
+function buildPreviewGraph(graph: GraphNode[], targetId: string): GraphNode[] {
+  // A line preview's probe (lib/nodePreview/lineProbe.ts) swaps in a copy of the block, for this compile only
+  const nodes = graph.map(n => (n.id === targetId ? probedNode(n) : n));
   // BFS: collect all transitive dependencies of targetId
   const included = new Set<string>();
   const queue = [targetId];
