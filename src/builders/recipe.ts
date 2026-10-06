@@ -12,7 +12,8 @@
 import type { GraphNode } from '../types/nodeGraph';
 import { metaOf } from '../sceneBuilder/build';
 import { checkEdits } from '../sceneBuilder/apply';
-import { printRecipe, RECIPE_WORDS } from '../sceneBuilder/recipe';
+import { printRecipe } from '../sceneBuilder/recipe';
+import { recipeRuns, recipeTokens } from '../sceneBuilder/highlight';
 import { BLOCK_PRESETS, PATTERN_PRESETS } from '../gridRules/stencils';
 import { COUNT_PRESETS, GRID_DEFAULTS, SMOOTH_PRESETS, STAGES_PRESETS, gridShape, matchingPreset, ruleSummary, type GridPreset } from '../gridRules/spec';
 import { groupRules, isRulesGroup } from '../agentRules/apply';
@@ -77,7 +78,7 @@ export function builderRecipeOf(node: GraphNode, graph: GraphNode[]): BuilderRec
   if (node.type === 'sceneGroup') {
     const meta = metaOf(node);
     if (!meta) return null;
-    return { kind: 'scene', nodeId: node.id, text: printRecipe(meta.spec), lines: printRecipe(meta.spec, { multiline: true }), edited: sceneEditedSinceBuild(graph, node.id) };
+    return { kind: 'scene', nodeId: node.id, text: printRecipe(meta.spec), lines: printRecipe(meta.spec, { pretty: true }), edited: sceneEditedSinceBuild(graph, node.id) };
   }
   if (node.type === 'gridRules') {
     const text = gridRecipeText(node.params);
@@ -94,37 +95,23 @@ export function builderRecipeOf(node: GraphNode, graph: GraphNode[]): BuilderRec
 
 export type RecipeTokenKind = 'mode' | 'op' | 'shape' | 'warp' | 'setting' | 'colour' | 'key' | 'number' | 'name' | 'punct' | 'plain';
 
-const TOKEN_RE = /("[^"]*"|\s+|·|[(),=@:/→×]|-?\d*\.?\d+(?:e-?\d+)?|[A-Za-z_][\w-]*|.)/g;
+const PLAIN_RE = /("[^"]*"|\s+|·|[(),=@:/→×]|-?\d*\.?\d+(?:e-?\d+)?|[A-Za-z_][\w-]*|.)/g;
 
 /**
- * A recipe split into coloured runs: modes, combines, shapes, warps, settings, colours, keys,
- * numbers. `words: false` (a Grid Rules rule, agent rules) colours only numbers, names and marks.
+ * A recipe split into coloured runs, by the Scene Builder's own tokenizer (sceneBuilder/highlight.ts):
+ * modes, combines, shapes, warps, settings, colours, keys, numbers. `words: false` (a Grid Rules
+ * rule, agent rules) colours only numbers, names and marks.
  */
 export function highlightRecipe(text: string, opts: { words?: boolean } = {}): Array<{ text: string; kind: RecipeTokenKind }> {
-  const words = opts.words !== false;
+  if (opts.words !== false) {
+    return recipeRuns(text, recipeTokens(text, [])).map(r => ({ text: r.text, kind: r.kind === 'vector' ? 'punct' : r.kind === 'comment' ? 'plain' : r.kind }));
+  }
   const out: Array<{ text: string; kind: RecipeTokenKind }> = [];
-  const toks = text.match(TOKEN_RE) ?? [];
-  const settings = new Set(RECIPE_WORDS.settings);
-  toks.forEach((t, i) => {
-    const w = t.toLowerCase();
-    let kind: RecipeTokenKind = 'plain';
-    if (/^\s+$/.test(t)) kind = 'plain';
-    else if (t.startsWith('"')) kind = 'name';
-    else if (/^-?\d*\.?\d+/.test(t)) kind = 'number';
-    else if (/^[(),=@:/→×·]$/.test(t)) kind = 'punct';
-    else if (!words) kind = 'plain';
-    // A value after "=" is a value (name=Ring is a name, not the ring shape), unless it is a colour.
-    else if (toks[i - 1] === '=') kind = w in RECIPE_WORDS.colours ? 'colour' : 'name';
-    else if (toks[i + 1] === '=') kind = 'key';
-    else if (w in RECIPE_WORDS.modes) kind = 'mode';
-    else if (w in RECIPE_WORDS.ops) kind = 'op';
-    else if (w in RECIPE_WORDS.shapes) kind = 'shape';
-    else if (w in RECIPE_WORDS.warps) kind = 'warp';
-    else if (settings.has(w)) kind = 'setting';
-    else if (w in RECIPE_WORDS.colours) kind = 'colour';
+  for (const t of text.match(PLAIN_RE) ?? []) {
+    const kind: RecipeTokenKind = t.startsWith('"') ? 'name' : /^-?\d*\.?\d+/.test(t) ? 'number' : /^[(),=@:/→×·]$/.test(t) ? 'punct' : 'plain';
     const last = out[out.length - 1];
     if (last && last.kind === kind && kind === 'plain') last.text += t;
     else out.push({ text: t, kind });
-  });
+  }
   return out;
 }

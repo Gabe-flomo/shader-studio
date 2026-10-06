@@ -19,6 +19,11 @@ import { BuilderHelp, BuilderLabel, BuilderNote, EmptyHelp } from '../builders/B
 import type { HelpExample } from '../builders/helpContent';
 import { AssistList, SignatureLine, useTypeAhead } from '../builders/TypeAhead';
 import { recipeAssist } from '../../lang/complete';
+import { CodeField } from '../code/CodeField';
+import type { Completion } from '../code/glslReference';
+import { RecipeCode } from './RecipeCode';
+import { recipeHtml } from './recipeColours';
+import { RecipeRows } from './RecipeRows';
 import { OUTPUTS, OUTPUT_BY_SHOW, PALETTES, DEFAULT_PALETTE, outputClause, outputProblem, type OutputShow } from '../../sceneBuilder/output';
 import { Button, IconButton } from '../ui/Button';
 import { Field } from '../ui/Field';
@@ -523,58 +528,73 @@ export function OutputTab() {
 
 // ── Recipe ──────────────────────────────────────────────────────────────────
 
+/** Rows or text, remembered in this browser. */
+const AS_TEXT_KEY = 'sceneBuilder.recipeAsText';
+const readAsText = () => { try { return localStorage.getItem(AS_TEXT_KEY) === '1'; } catch { return false; } };
+
 export function RecipeTab() {
   const spec = useSceneBuilder(s => s.spec);
   const edit = useSceneBuilder(s => s.edit);
   const replace = useSceneBuilder(s => s.replace);
   const tk = useTokens();
-  const printed = useMemo(() => printRecipe(spec, { multiline: true }), [spec]);
+  // The pretty form (formatRecipe): each item of a combine on its own line. The parser reads it, the one-line form and any spacing alike.
+  const printed = useMemo(() => printRecipe(spec, { pretty: true }), [spec]);
+  const [asText, setAsTextState] = useState(readAsText);
+  const setAsText = (v: boolean) => { setAsTextState(v); try { localStorage.setItem(AS_TEXT_KEY, v ? '1' : '0'); } catch { /* per session */ } };
   const [text, setText] = useState(printed);
   const [focused, setFocused] = useState(false);
   const [errors, setErrors] = useState<RecipeError[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [showRef, setShowRef] = useState(false);
   const [caret, setCaret] = useState<number | null>(null);
-  const area = useRef<HTMLTextAreaElement>(null);
+  const area = useRef<HTMLTextAreaElement | null>(null);
   const insert = useInsertExample();
   // While you aren't typing, the text follows the form.
   useEffect(() => { if (!focused && !errors.length) setText(printed); }, [printed, focused]); // eslint-disable-line react-hooks/exhaustive-deps
-  const onChange = (v: string) => {
+  /** Read the recipe; when it reads cleanly the form follows. Returns the mistakes. */
+  const onChange = (v: string): RecipeError[] => {
     setText(v);
     const r = parseRecipe(v);
     setErrors(r.errors);
     setWarnings(r.warnings);
     // The spec is replaced as a whole: a clause taken out (an output, a fog) goes too.
     if (!r.errors.length) edit(d => { if (!r.spec.output) delete d.output; Object.assign(d, r.spec); }, 'recipe');
+    return r.errors;
   };
   const ta = useTypeAhead(text, focused ? caret : null, recipeAssist, (next, at) => {
     onChange(next);
     requestAnimationFrame(() => { area.current?.focus(); area.current?.setSelectionRange(at, at); setCaret(at); });
   });
-  const track = () => setCaret(area.current?.selectionStart ?? null);
-  const jump = (e: RecipeError) => { area.current?.focus(); area.current?.setSelectionRange(e.from, e.to); };
+  const jump = (e: RecipeError) => { if (!asText) setAsText(true); requestAnimationFrame(() => { area.current?.focus(); area.current?.setSelectionRange(e.from, e.to); }); };
+  const danger = tk.status.danger;
   return (
     <Pane>
-      <BuilderLabel meta="type or paste; the form follows">Recipe</BuilderLabel>
+      <BuilderLabel meta={asText ? 'type or paste; the form follows' : 'one row per clause; click one to change it'}>Recipe</BuilderLabel>
       <BuilderHelp id="recipe" onExample={insert} />
       <BuilderNote><code>@twist(2)</code> after a shape bends only that shape. Suggestions appear as you type; the line under the box shows the settings the clause takes.</BuilderNote>
-      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-        <textarea ref={area} data-recipe value={text} spellCheck={false} aria-label="Recipe" aria-autocomplete="list"
-          onFocus={() => { setFocused(true); track(); }} onBlur={() => { setFocused(false); setCaret(null); }}
-          onChange={e => { onChange(e.target.value); setCaret(e.target.selectionStart); }}
-          onKeyDown={e => { ta.onKeyDown(e); }} onKeyUp={e => { if (!['ArrowUp', 'ArrowDown', 'Tab', 'Enter', 'Escape'].includes(e.key) || !ta.items.length) track(); }} onClick={track}
-          style={{ minHeight: 220, resize: 'vertical', padding: 12, borderRadius: radius.control, border: `1px solid ${errors.length ? tk.status.danger : tk.border.default}`, background: tk.bg.field, color: tk.text.primary, font: `12.5px/1.6 ${fontFamily.mono}`, outline: 'none' }} />
-      </div>
-      {focused && ta.signature && <SignatureLine sig={ta.signature} />}
-      {ta.items.length > 0 && <AssistList items={ta.items} active={ta.active} onPick={ta.pick} onHover={ta.setActive} />}
+      {asText ? (
+        <CodeField value={text} onChange={v => { onChange(v); }} completions={NO_COMPLETIONS} ariaLabel="Recipe" title="Recipe"
+          textareaRef={el => { area.current = el; if (el) el.dataset.recipe = ''; }}
+          highlight={(v, pal) => recipeHtml(v, pal, danger, errors)}
+          keyFirst={e => ta.onKeyDown(e)}
+          onFocus={el => { setFocused(true); setCaret(el.selectionStart); }} onBlur={() => { setFocused(false); setCaret(null); }}
+          onSelect={el => { setCaret(el.selectionStart); }}
+          invalid={errors.length > 0} minHeight={240} maxHeight={460} />
+      ) : (
+        <RecipeRows text={errors.length ? text : printed} onChange={onChange} />
+      )}
+      {asText && focused && ta.signature && <SignatureLine sig={ta.signature} />}
+      {asText && ta.items.length > 0 && <AssistList items={ta.items} active={ta.active} onPick={ta.pick} onHover={ta.setActive} />}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <Button size="sm" icon="copy" onClick={() => { void navigator.clipboard?.writeText(text).then(() => toast.success('Recipe copied')).catch(() => {}); }}>Copy</Button>
+        <Button size="sm" icon="copy" onClick={() => { void navigator.clipboard?.writeText(errors.length ? text : printed).then(() => toast.success('Recipe copied')).catch(() => {}); }}>Copy</Button>
+        <Button size="sm" variant="ghost" icon={asText ? 'layout' : 'text'} aria-pressed={asText} data-recipe-as-text onClick={() => setAsText(!asText)}
+          title={asText ? 'Show the recipe as rows, one per clause' : 'Edit the whole recipe as text'}>{asText ? 'Show as rows' : 'Edit as text'}</Button>
         <Button size="sm" variant="ghost" icon="book" onClick={() => setShowRef(v => !v)}>{showRef ? 'Hide' : 'Show'} the words</Button>
-        {errors.length > 0 && <Button size="sm" variant="ghost" onClick={() => { const r = parseRecipe(text); replace(r.spec); }} title="Use everything that read cleanly, leaving out the clauses with mistakes">Apply what reads</Button>}
+        {errors.length > 0 && <Button size="sm" variant="ghost" onClick={() => { const r = parseRecipe(text); replace(r.spec); setErrors([]); }} title="Use everything that read cleanly, leaving out the clauses with mistakes">Apply what reads</Button>}
         <span style={{ flex: 1 }} />
         <BuilderNote>{errors.length ? `${errors.length} mistake${errors.length === 1 ? '' : 's'}: the form keeps the last clean recipe` : 'Reads cleanly'}</BuilderNote>
       </div>
-      {errors.map((e, i) => (
+      {asText && errors.map((e, i) => (
         <button key={i} type="button" onClick={() => jump(e)} data-recipe-error
           style={{ textAlign: 'left', border: 0, borderRadius: radius.md, padding: '6px 10px', background: tk.bg.field, color: tk.text.primary, cursor: 'pointer', font: `12px ${fontFamily.ui}` }}>
           <b style={{ color: tk.status.danger, font: `600 11px ${fontFamily.mono}` }}>{e.line}:{e.col}</b>&nbsp; {e.message}
@@ -583,19 +603,21 @@ export function RecipeTab() {
       {warnings.map((w, i) => <BuilderNote key={i}>Note: {w}</BuilderNote>)}
       {showRef && (
         <div data-recipe-reference style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 12, borderRadius: radius.control, background: tk.bg.subtle, font: `12px/1.6 ${fontFamily.mono}`, color: tk.text.secondary }}>
-          <span><b>modes</b> {RECIPE_VOCABULARY.modes.join(' · ')}</span>
-          <span><b>combines</b> {RECIPE_VOCABULARY.combines.join(' · ')} (k= blend radius, name=)</span>
-          <span><b>shapes</b> {RECIPE_VOCABULARY.shapes.map(s => `${s.kind} ${s.keys.join(' ')}`).join(' · ')}</span>
-          <span><b>any shape</b> at=(x,y,z) rot=(x,y,z)° color=#rrggbb|(r,g,b)|name shine=0…1 glass name=…</span>
-          <span><b>warps</b> {RECIPE_VOCABULARY.warps.map(w => `${w.kind} ${w.keys.join(' ')}`).join(' · ')}</span>
-          <span><b>settings</b> {RECIPE_VOCABULARY.settings.join(' · ')}</span>
-          <span><b>colours</b> {RECIPE_VOCABULARY.colours.join(' ')}</span>
-          <span><b>output</b> output {RECIPE_VOCABULARY.outputs.join('|')} · colour by … palette {RECIPE_VOCABULARY.palettes.join('|')}</span>
+          <span><b>modes</b> <RecipeCode text={RECIPE_VOCABULARY.modes.join(' · ')} errors={[]} /></span>
+          <span><b>combines</b> <RecipeCode text={RECIPE_VOCABULARY.combines.join(' · ')} errors={[]} /> (k= blend radius, name=)</span>
+          <span><b>shapes</b> <RecipeCode text={RECIPE_VOCABULARY.shapes.map(sh => `${sh.kind} ${sh.keys.map(k => `${k}=`).join(' ')}`).join(' · ')} errors={[]} /></span>
+          <span><b>any shape</b> <RecipeCode text="at=(x,y,z) rot=(x,y,z) color=#ff8844|(0.9,0.5,0.3)|gold shine=0.4 glass name=Body" errors={[]} /></span>
+          <span><b>warps</b> <RecipeCode text={RECIPE_VOCABULARY.warps.map(w => `${w.kind} ${w.keys.map(k => `${k}=`).join(' ')}`).join(' · ')} errors={[]} /></span>
+          <span><b>settings</b> <RecipeCode text={RECIPE_VOCABULARY.settings.join(' · ')} errors={[]} /></span>
+          <span><b>colours</b> <RecipeCode text={RECIPE_VOCABULARY.colours.join(' ')} errors={[]} /></span>
+          <span><b>output</b> <RecipeCode text={`output ${RECIPE_VOCABULARY.outputs.join('|')} · colour by … palette ${RECIPE_VOCABULARY.palettes.join('|')}`} errors={[]} /></span>
         </div>
       )}
     </Pane>
   );
 }
+
+const NO_COMPLETIONS: Completion[] = [];
 
 // ── Templates ───────────────────────────────────────────────────────────────
 

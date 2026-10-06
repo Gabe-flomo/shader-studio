@@ -103,7 +103,7 @@ describe('RecipeChip', () => {
     expect(host.querySelector('[data-recipe-edited]')).toBeNull();
     expect(host.querySelector('[data-recipe-full]')).toBeNull();
     click(chip.querySelector('button'));
-    expect(host.querySelector('[data-recipe-full]')?.textContent).toBe(printRecipe(templateSpec('twisted'), { multiline: true }));
+    expect(host.querySelector('[data-recipe-full]')?.textContent).toBe(printRecipe(templateSpec('twisted'), { pretty: true }));
     expect(host.querySelector('[data-recipe-token="shape"]')).toBeTruthy();
     expect(host.querySelector('[data-recipe-copy]')).toBeTruthy();
     click(host.querySelector('[data-recipe-open]'));

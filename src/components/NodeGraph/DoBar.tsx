@@ -40,6 +40,9 @@ import { doBarAssist } from '../../lang/complete';
 import { AssistList, SignatureLine, useTypeAhead } from '../builders/TypeAhead';
 import { planBuilderCommand, readBuilderCommand, type BuilderPlan } from '../../builders/doBuilders';
 import { runBuilderAction } from '../../builders/open';
+import { builderRecipeOf } from '../../builders/recipe';
+import { outputClause } from '../../sceneBuilder/output';
+import { RecipeCode } from '../sceneBuilder/RecipeCode';
 
 const WIDTH = 560;
 
@@ -118,6 +121,15 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
     const c = readBuilderCommand(text);
     return c ? planBuilderCommand(c, { nodes: rootNodes, selected: scope.selected }) : null;
   }, [text, rootNodes, scope.selected]);
+  // A builder phrase about a built scene's recipe ("show the recipe"): the recipe, coloured.
+  const builderRecipe = useMemo(() => {
+    const a = builder?.action;
+    if (!a || (a.kind !== 'show-recipe' && a.kind !== 'copy-recipe' && a.kind !== 'edit-scene')) return null;
+    const id = a.kind === 'edit-scene' ? a.sceneId : a.nodeId;
+    const nd = rootNodes.find(x => x.id === id);
+    const r = nd ? builderRecipeOf(nd, []) : null;
+    return r?.kind === 'scene' ? r.text : null;
+  }, [builder, rootNodes]);
   const plan: DoPlan = useMemo(() => (text.trim() && !builder ? parseDo(text, scope) : { steps: [], reading: [], unknown: [] }), [text, scope, builder]);
   // The command language (doCommands.ts): every clause, previewed on a copy of the graph.
   const [picks, setPicks] = useState<Record<string, string>>({});
@@ -255,12 +267,23 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
               <b style={{ fontWeight: 600 }}>{builder.label}</b>
             </span>
             {builder.problem && <span style={{ fontSize: 12, color: tk.status.warningText }}>{builder.problem}</span>}
+            {builderRecipe && (
+              <code data-do-recipe style={{ font: `11.5px/1.5 ${fontFamily.mono}`, padding: '4px 8px', borderRadius: radius.control, background: tk.bg.subtle, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflowWrap: 'anywhere' }}>
+                <RecipeCode text={builderRecipe} errors={[]} />
+              </code>
+            )}
           </div>
         ))}
         {/* The plan: what runs on Enter, clause by clause */}
         {showCommand && cmd && section(cmd.ok ? `Enter runs · ${cmd.steps.length} step${cmd.steps.length === 1 ? '' : 's'} · one undo` : pickClause ? 'Pick one, then Enter' : 'Can’t run yet', (
           <CommandPreview cmd={cmd} onPick={(key, id) => setPicks(p => ({ ...p, [key]: id }))} onHoverPick={setHoverPick}
             onSuggest={(clause, s2) => { setText(cmd.clauses.length === 1 ? s2 : cmd.clauses.map(c => (c.index === clause.index ? s2 : c.text)).join(', ')); inputRef.current?.focus(); }} />
+        ))}
+        {/* A 3D output phrase: the recipe clause it writes into the scene */}
+        {plan.steps.filter((st): st is Extract<typeof st, { kind: 'scene-output' }> => st.kind === 'scene-output').map((st, i) => (
+          <div key={`so${i}`} data-do-recipe style={{ padding: '0 12px 8px', display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 11.5, color: tk.text.muted }}>
+            Recipe <code style={{ font: `11.5px ${fontFamily.mono}` }}><RecipeCode text={outputClause(st.output)} errors={[]} /></code>
+          </div>
         ))}
         {plan.problem && !idiomWins && !showCommand && <div style={{ padding: '6px 12px 8px', fontSize: 12, color: tk.status.warningText }} data-do-problem>{plan.problem}</div>}
         {plan.fixes && plan.fixes.length > 0 && !idiomWins && !editing && (

@@ -51,15 +51,29 @@ type Tok =
   | { t: '(' | ')' | ',' | '=' | '@'; at: number; end: number }
   | { t: 'eof'; at: number; end: number };
 
+/** Does the line starting at `at` go on with the clause above: indented, or starting with a closing bracket? */
+export function continuesClause(src: string, at: number): boolean {
+  const m = /^([ \t]*)(\S?)/.exec(src.slice(at));
+  return !!m && (m[1].length > 0 || m[2] === ')') && m[2] !== '';
+}
+
 function tokenize(src: string, errors: RecipeError[], pos: (from: number, to: number, message: string) => RecipeError): Tok[] {
   const out: Tok[] = [];
   let i = 0;
+  let depth = 0;
   while (i < src.length) {
     const c = src[i];
     if (c === '/' && src[i + 1] === '/') { while (i < src.length && src[i] !== '\n') i++; continue; }
-    if (c === '\n' || c === '·' || c === '•' || c === '|' || c === ';') { out.push({ t: 'sep', at: i, end: i + 1 }); i++; continue; }
+    // Inside brackets, a new line that is indented (or closes the bracket) goes on with the clause:
+    // the pretty form puts each shape of a combine on its own line (formatRecipe).
+    if (c === '\n' && depth > 0 && continuesClause(src, i + 1)) { i++; continue; }
+    if (c === '\n' || c === '·' || c === '•' || c === '|' || c === ';') { out.push({ t: 'sep', at: i, end: i + 1 }); depth = 0; i++; continue; }
     if (/\s/.test(c)) { i++; continue; }
-    if ('(),=@'.includes(c)) { out.push({ t: c as '(' | ')' | ',' | '=' | '@', at: i, end: i + 1 }); i++; continue; }
+    if ('(),=@'.includes(c)) {
+      if (c === '(') depth++;
+      else if (c === ')') depth = Math.max(0, depth - 1);
+      out.push({ t: c as '(' | ')' | ',' | '=' | '@', at: i, end: i + 1 }); i++; continue;
+    }
     if (c === '"' || c === '\'' || c === '“' || c === '‘') {
       const close = c === '“' ? '”' : c === '‘' ? '’' : c;
       const j = src.indexOf(close, i + 1);
@@ -707,10 +721,14 @@ function printWarp(w: WarpSpec, top: boolean): string {
   return top ? [w.kind, ...parts].join(' ') : `@${w.kind}(${parts.join(' ')})`;
 }
 
-function printItem(it: SceneItem): string {
+/** An item as recipe text. `indent` (the pretty form): a combine's items each on their own line, indented under it. */
+function printItem(it: SceneItem, indent: string | null = null): string {
   const warps = it.warps.map(w => printWarp(w, false));
   if (it.type === 'group') {
-    const head = `${it.k > 0 ? 'smooth-' : ''}${it.op}(${it.children.map(printItem).join(', ')})`;
+    const inner = indent === null
+      ? it.children.map(c => printItem(c)).join(', ')
+      : `\n${it.children.map(c => `${indent}  ${printItem(c, `${indent}  `)}`).join(',\n')}\n${indent}`;
+    const head = `${it.k > 0 ? 'smooth-' : ''}${it.op}(${inner})`;
     const extra: string[] = [];
     if (it.k > 0 && round(it.k) !== DEFAULT_SMOOTH_K) extra.push(`k=${fmt(it.k)}`);
     if (it.name) extra.push(`name=${fmtName(it.name)}`);
@@ -733,8 +751,13 @@ function printItem(it: SceneItem): string {
   return [...parts, ...warps].join(' ');
 }
 
-/** The shortest recipe that parses back to `spec`. `multiline` puts each clause on its own line. */
-export function printRecipe(spec: SceneSpec, opts: { multiline?: boolean } = {}): string {
+/**
+ * The shortest recipe that parses back to `spec`. `multiline` puts each clause on its own line;
+ * `pretty` also puts each item of a combine on its own indented line, the combine's `k=` on its
+ * closing line (formatRecipe). Both parse back to the same spec as the one-line form.
+ */
+export function printRecipe(spec: SceneSpec, opts: { multiline?: boolean; pretty?: boolean } = {}): string {
+  const ind = opts.pretty ? '' : null;
   const L = spec.look, D = DEFAULT_LOOK;
   const clauses: string[] = [];
   // Mode, with its own settings.
@@ -759,8 +782,8 @@ export function printRecipe(spec: SceneSpec, opts: { multiline?: boolean } = {})
   clauses.push(mode.join(' '));
   // The tree: a plain union root is its items; anything else is one combine clause.
   const root = spec.root;
-  if (root.op === 'union' && root.k === 0 && (!root.name || root.name === 'Scene')) clauses.push(...root.children.map(printItem));
-  else clauses.push(printItem({ ...root, warps: [], name: root.name === 'Scene' ? '' : root.name }));
+  if (root.op === 'union' && root.k === 0 && (!root.name || root.name === 'Scene')) clauses.push(...root.children.map(c => printItem(c, ind)));
+  else clauses.push(printItem({ ...root, warps: [], name: root.name === 'Scene' ? '' : root.name }, ind));
   clauses.push(...root.warps.map(w => printWarp(w, true)));
   // Lights and air.
   if (!same(L.sunDir, D.sunDir) || !same(L.sunColor, D.sunColor)) {
@@ -789,7 +812,13 @@ export function printRecipe(spec: SceneSpec, opts: { multiline?: boolean } = {})
   if (q.length) clauses.push(['quality', ...q].join(' '));
   const out = outputClause(spec.output);
   if (out) clauses.push(out);
-  return clauses.join(opts.multiline ? '\n' : ' · ');
+  return clauses.join(opts.multiline || opts.pretty ? '\n' : ' · ');
+}
+
+/** A recipe in the pretty form (printRecipe `pretty`), or the text as it is when it doesn't read cleanly. */
+export function formatRecipe(src: string): string {
+  const r = parseRecipe(src);
+  return r.errors.length ? src : printRecipe(r.spec, { pretty: true });
 }
 
 /** The words a recipe understands, for the Recipe tab's reference. */

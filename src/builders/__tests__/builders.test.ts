@@ -89,7 +89,7 @@ describe('the Recipe chip', () => {
     const r = builderRecipeOf(scene, graph);
     expect(r?.kind).toBe('scene');
     expect(r!.text).toBe(printRecipe(templateSpec('twisted')));
-    expect(r!.lines).toBe(printRecipe(templateSpec('twisted'), { multiline: true }));
+    expect(r!.lines).toBe(printRecipe(templateSpec('twisted'), { pretty: true }));
     // It reads back to the same scene.
     expect(parseRecipe(r!.text).errors).toEqual([]);
   });
