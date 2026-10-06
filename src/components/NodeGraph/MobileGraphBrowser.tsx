@@ -61,6 +61,7 @@ import { playDrivenMap } from '../../play/playDriven';
 import { driverOf } from '../../play/paramDrivers';
 import { PlayDriveChip } from './PlayDriveChip';
 import { InputExprPopover } from './InputExprPopover';
+import { CodeCard } from './codeCard/CodeCard';
 import { canHaveInputExpr, getInputExpr } from '../../glsl/inputExpr';
 import { VOLUMETRIC_LOOP_TYPES } from '../../nodes/volumetricAuto';
 
@@ -2860,6 +2861,8 @@ export function MobileGraphBrowser() {
           {GROUP_TYPES.has(node.type) && renderGroupBanner(node)}
           {node.type === 'textureInput' && renderTextureUploadBanner(node)}
           {node.type === 'data' && <DataEditorLauncher node={node} />}
+          {/* Custom Function: the same read-only card face as desktop (code, signature, note, description) */}
+          {node.type === 'customFn' && <CodeCard node={node} defDescription={def?.description} touch compact />}
 
           {(hasInputs || node.type === 'group') && (hasOutputs || node.type === 'group') && (
             <div style={tabGroupStyle(tc)}>
@@ -3456,6 +3459,11 @@ export function MobileGraphBrowser() {
     return (
       <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         {renderNodeHeader(node)}
+
+        {/* The desktop card face, read-only; Edit jumps to the lines below */}
+        <div style={{ flexShrink: 0, padding: '0 2px' }}>
+          <CodeCard node={node} defDescription={getNodeDefinitionFor(node)?.description} touch compact onEdit={() => setExprMode('output')} />
+        </div>
 
         <div style={{ display: 'flex', gap: '6px', padding: '8px 12px', borderBottom: `1px solid ${tc.surface0}`, flexShrink: 0 }}>
           {(['inputs', 'output'] as const).map(mode => (
