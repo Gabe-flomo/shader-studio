@@ -631,10 +631,15 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
         ...note('Neighbours (texture), Max around: the largest value in the 3×3 block round this cell (one cell apart: 4 picture pixels). Its Alpha is 1 if any of them is burning. Max reads each cell exactly, so it works on a Nearest board.') },
       { texture: ['forest', 'previous'] }),
       n('noiseFloat', 'growRoll', 340, 700, { mode: 'hash', scale: 41.7, speed: 1.37, ...note('Noise Float, Hash: a die for every cell, rolled again every frame (Time wired in). Decides where trees grow.') }, { uv: ['uv', 'uv'], time: ['time', 'time'] }),
-      n('constant', 'growth', 640, 760, { value: 0.004, label: 'Growth (p)', ...note('Growth p: the chance each frame that empty ground grows a tree. A constant so Play can drive it.') }),
-      ...timedSpot('strike', 340, 2000, { rate: 0.7, radius: 0.012, soft: 0, what: 'strikes' }),
-      n('compare', 'grows', 940, 700, { operator: '<', ...note('Compare (<): 1 where the growth die came up (roll under p).') }, { a: ['growRoll', 'value'], b: ['growth', 'value'] }),
-      n('constant', 'spreadChance', 640, 560, { value: 0.6, label: 'Spread chance', ...note('Spread chance: how likely a tree next to a fire is to catch each step. At 1 fire fronts are perfect squares (the 3×3 block grows one ring a step); below 1 they turn ragged and round, and some trees survive.') }),
+      n('constant', 'growth', 640, 760, { value: 0.0007, label: 'Growth (p)', ...note('Growth p: the chance each frame that empty ground grows a tree. Small (a forest takes about 25 s to grow back), so fires sweep through old forest instead of burning out in young regrowth. A constant so Play can drive it.') }),
+      n('noiseFloat', 'growRoll2', 340, 900, { mode: 'hash', scale: 23.9, speed: 2.71, ...note('Noise Float, Hash (another Scale and Speed, so another die): a second growth roll. A hash die comes in steps of about 1/256, too coarse for a chance as small as p, so a tree grows only when both dice come up: the first under p × 16, the second under 1/16.') }, { uv: ['uv', 'uv'], time: ['time', 'time'] }),
+      n('multiply', 'growScaled', 940, 860, { b: 16, ...note('Multiply: p × 16 (B), what the first die must roll under.') }, { a: ['growth', 'value'] }),
+      n('constant', 'growGate', 640, 960, { value: 0.0625, label: 'Second die (1/16)', ...note('Second die: 1/16. With the first die under p × 16, both together come up with chance p.') }),
+      n('compare', 'grows2', 940, 1000, { operator: '<', ...note('Compare (<): 1 where the second growth die came up (roll under 1/16).') }, { a: ['growRoll2', 'value'], b: ['growGate', 'value'] }),
+      n('multiply', 'growsBoth', 1240, 860, note('Multiply: both growth dice came up: chance p.'), { a: ['grows', 'mask'], b: ['grows2', 'mask'] }),
+      ...timedSpot('strike', 340, 2000, { rate: 0.3, radius: 0.012, soft: 0, what: 'strikes' }),
+      n('compare', 'grows', 940, 700, { operator: '<', ...note('Compare (<): 1 where the first growth die came up (roll under p × 16).') }, { a: ['growRoll', 'value'], b: ['growScaled', 'result'] }),
+      n('constant', 'spreadChance', 640, 560, { value: 0.85, label: 'Spread chance', ...note('Spread chance: how likely a tree next to a fire is to catch each step (0.85: ragged fronts that still sweep through a grown forest; much lower and fires burn out on their own). At 1 fire fronts are perfect squares (the 3×3 block grows one ring a step); below 1 they turn ragged and round, and some trees survive.') }),
       n('compare', 'spreads', 940, 560, { operator: '<', ...note('Compare (<): the catch die. It reuses the growth die: growth only matters on empty ground and catching only on trees, so one roll serves both without the two ever meeting.') }, { a: ['growRoll', 'value'], b: ['spreadChance', 'value'] }),
       n('multiply', 'nearCatch', 1240, 380, note('Multiply: fire next door, and the catch die came up.'), { a: ['nearFire', 'alpha'], b: ['spreads', 'mask'] }),
       n('max', 'ignite', 1240, 560, note('Max: something lights this cell: a burning neighbour that spread, or a strike.'), { a: ['nearCatch', 'result'], b: ['strikeSpot', 'mask'] }),
@@ -642,7 +647,7 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       n('subtract', 'standing', 2140, 160, note('Subtract: the trees still standing: the tree minus one that just caught fire (or was lit).'), { a: ['selfParts', 'x'], b: ['fire', 'result'] }),
       n('add', 'occupied', 940, 1100, note('Add: tree plus fire. 0 only on empty ground.'), { a: ['selfParts', 'x'], b: ['self', 'alpha'] }),
       n('compare', 'empty', 1240, 1100, { operator: '≈', smoothing: 0.5, ...note('Compare (≈ 0, B left empty): 1 on empty ground (no tree, no fire). A burning cell is empty next step: fire lasts one step, then it is ash.') }, { a: ['occupied', 'result'] }),
-      n('multiply', 'sprout', 1540, 900, note('Multiply: a tree grows on empty ground where the growth die came up.'), { a: ['empty', 'mask'], b: ['grows', 'mask'] }),
+      n('multiply', 'sprout', 1540, 900, note('Multiply: a tree grows on empty ground where the growth die came up.'), { a: ['empty', 'mask'], b: ['growsBoth', 'result'] }),
       n('add', 'trees', 2440, 160, note('Add: next step\'s trees: the ones standing plus the new ones.'), { a: ['standing', 'result'], b: ['sprout', 'result'] }),
       n('multiply', 'ashFade', 1540, 1300, { b: 0.95, ...note('Multiply: last step\'s ash glow times Ash fade (B, 0.95), so embers cool over a second or so.') }, { a: ['selfParts', 'y'] }),
       n('max', 'ash', 1840, 1300, note('Max: a cell that was burning becomes fresh, fully glowing ash.'), { a: ['ashFade', 'result'], b: ['self', 'alpha'] }),
@@ -657,7 +662,7 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       n('constant', 'reset', 1840, 1150, { value: 0, label: 'Reset', ...note('Reset: while 1 the forest is planted again. Flip it on and off (a switch in Play).') }),
       n('max', 'restart', 2140, 1050, note('Max: start over on the first frame or while Reset is on.'), { a: ['fresh', 'mask'], b: ['reset', 'value'] }),
       n('compare', 'planted', 2140, 800, { operator: '<', ...note('Compare (<): the starting forest: trees wherever the growth die is under Starting forest.') }, { a: ['growRoll', 'value'], b: ['half', 'value'] }),
-      n('constant', 'half', 1840, 820, { value: 0.55, label: 'Starting forest', ...note('Starting forest: the share of ground that starts as trees.') }),
+      n('constant', 'half', 1840, 820, { value: 0.7, label: 'Starting forest', ...note('Starting forest: the share of ground that starts as trees.') }),
       n('mix', 'treesOut', 2740, 160, note('Mix: the planted forest when starting over, else the trees.'), { a: ['trees', 'result'], b: ['planted', 'mask'], t: ['restart', 'result'] }),
       n('round', 'treesRound', 2740, 300, note('Round: trees exactly 0 or 1, for the same reason.'), { input: ['treesOut', 'result'] }),
       n('compare', 'keep', 2440, 1050, { operator: '≈', smoothing: 0.5, ...note('Compare (≈ 0, B left empty): 1 unless starting over.') }, { a: ['restart', 'result'] }),
@@ -688,7 +693,7 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       n('output', 'out', 5740, 700, note('Output: the forest. The Forest and Forest picture Passes draw first each frame.'), { color: ['lit', 'result'] }),
     ],
     play: playRecord([
-      ctl('growth', 'growth::value', 'Tree growth (p)', 0, 0.05, 0.0005),
+      ctl('growth', 'growth::value', 'Tree growth (p)', 0, 0.005, 0.0001),
       ctl('spread', 'spreadChance::value', 'Spread chance', 0, 1, 0.01),
       ctl('lightning', 'strikeClock::b', 'Lightning (strikes per second)', 0, 10, 0.05),
       ctl('ashFade', 'ashFade::b', 'Ash fade', 0.5, 0.995, 0.005),
@@ -699,7 +704,7 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
 
 **How it is built.** The Forest Pass (¼ size, Nearest) keeps fire in Alpha, trees in red and the ash glow in green. Neighbours (texture) on Max reads the 3×3 block and its Alpha says "fire next door". A hashed Noise Float die with Time wired in rolls growth for every cell every frame. Lightning is rarer than a per-cell die can roll (the hash's numbers come in steps of about 1/256), so instead it strikes one random place, Lightning times a second: the strike's number (Time × rate, rounded down) is hashed into a position. Compare, Max, Multiply, Add and Subtract write the rules. A second Pass holds the coloured picture so Glow (texture) lights the fires.
 
-**Try.** Click (hold the mouse button) on a forest to start a fire. Raise Lightning for many small fires; set it to 0 and Tree growth to 0.03 for a dense forest, then light it. Ash fade 0.99 leaves long burn scars.`,
+**Try.** Click (hold the mouse button) on a forest to start a fire. Raise Lightning for many small fires; set it to 0 and Tree growth to 0.003 for a dense forest, then light it. Ash fade 0.99 leaves long burn scars.`,
     [mapTo('mouseLight', 'brushOn', mouseDown)]),
   };
 

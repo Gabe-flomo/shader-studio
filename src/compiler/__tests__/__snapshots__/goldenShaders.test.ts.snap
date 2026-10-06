@@ -317,7 +317,7 @@ exports[`golden shaders: every Play example exports the same bundle > gridRulesC
 
 exports[`golden shaders: every Play example exports the same bundle > gridRulesFire 1`] = `
 {
-  "bundle": "0f4d359c166d100448bb1246385b:14681",
+  "bundle": "17f926e3201d461261edabc2cd86:15341",
   "missing": [],
 }
 `;
@@ -5754,7 +5754,7 @@ exports[`golden shaders: every example compiles as it did > gridRulesFire 1`] = 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "07ac79e989f75d11d40babf021b6:3768",
+  "fragmentShader": "0f352d9a5063530871bd3b2bac45:4016",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "063e1b0bd5d56c09dd1982dbe0a5:114",
@@ -5785,7 +5785,7 @@ exports[`golden shaders: every example compiles as it did > gridRulesFire 1`] = 
     "u_p_firexrulesx0xc2_spread",
     "u_p_firexrulesx0xc2_waveSpeed",
   ],
-  "paramValues": "14c992f95e63640f18b96ae74a47:884",
+  "paramValues": "0277ba4431e0dc1a0c407fcedcea:882",
   "passes": [
     {
       "filter": "nearest",
@@ -5862,7 +5862,7 @@ float grHash(vec3 p) {
 void main() {
     vec2 g_uv = (vUv - 0.5) * 2.0;
     g_uv.x *= u_resolution.x / u_resolution.y;
-    // Grid Rules, Smooth, Custom: the Drossel–Schwabl forest fire as one line. u is 0 (ground), 1 (a tree) or 2 (fire): fire burns out; a tree catches from fire beside it (with chance a) or from lightning (d); ground grows a tree with chance b × 0.02. v keeps a fading ember glow.
+    // Grid Rules, Smooth, Custom: the Drossel–Schwabl forest fire as one line. u is 0 (ground), 1 (a tree) or 2 (fire): fire burns out; a tree catches from fire beside it (with chance a); lightning strikes one random spot, d × 10 times a second (the spot comes from t, not rnd: a per-cell chance that small is below what the dice can roll); ground grows a tree with chance b × 0.02 during one frame-window in six (about b × 0.0033 a step), so a forest takes some 25 s to grow back and fires sweep through grown forest in fronts.
     // The ramp colours u: ground dark, trees green, fire orange. The brush sets 2: click to light the forest.
     vec2 fire_rules_0_c2_res = u_resolution;
     vec2 fire_rules_0_c2_cell = floor(gl_FragCoord.xy);
@@ -5900,7 +5900,7 @@ void main() {
         float x = (fire_rules_0_c2_cell.x + 0.5) / fire_rules_0_c2_res.x; float y = (fire_rules_0_c2_cell.y + 0.5) / fire_rules_0_c2_res.y;
         float t = u_time; float rnd = fire_rules_0_c2_h;
         float a = u_p_firexrulesx0xc2_knobA; float b = u_p_firexrulesx0xc2_knobB; float c = u_p_firexrulesx0xc2_knobC; float d = u_p_firexrulesx0xc2_knobD;
-        fire_rules_0_c2_nu = clamp(u > 1.5 ? 0.0 : (u > 0.5 ? ((max(max(n, s), max(e, w)) > 1.5 && rnd < a) || rnd < d * 0.00001 ? 2.0 : 1.0) : (rnd < b * 0.02 ? 1.0 : 0.0)), -1000.0, 1000.0);
+        fire_rules_0_c2_nu = clamp(u > 1.5 ? 0.0 : (u > 0.5 ? (((max(max(n, s), max(e, w)) > 1.5 && rnd < a) || (abs(x - fract(sin(floor(t * d * 10.0) * 12.9898) * 43758.5453)) < 0.003 && abs(y - fract(sin(floor(t * d * 10.0) * 78.233) * 43758.5453)) < 0.005)) ? 2.0 : 1.0) : (rnd < b * 0.02 && mod(floor(t * 6.0), 6.0) < 0.5 ? 1.0 : 0.0)), -1000.0, 1000.0);
         fire_rules_0_c2_nv = clamp(u > 1.5 ? 1.0 : v * 0.9, -1000.0, 1000.0);
     }
     if (fire_rules_0_c2_tick < 0.5) { fire_rules_0_c2_nu = fire_rules_0_c2_u; fire_rules_0_c2_nv = fire_rules_0_c2_v; }

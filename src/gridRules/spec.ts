@@ -135,6 +135,7 @@ export const COUNT_PRESETS: Record<string, GridPreset> = {
   replicator: { label: 'Replicator', hint: 'B1357/S1357: every pattern copies itself.', params: { neighbourhood: 'moore', ...bs([1, 3, 5, 7], [1, 3, 5, 7]) } },
   lifeWithoutDeath: { label: 'Life without Death', hint: 'B3/S012345678: cells are born as in Life and never die: ladders and crystals.', params: { neighbourhood: 'moore', ...bs([3], [0, 1, 2, 3, 4, 5, 6, 7, 8]) } },
   diamonds: { label: 'Diamonds (von Neumann)', hint: 'B1/S1234 on the 4 neighbours: grows diamond rings.', params: { neighbourhood: 'vonNeumann', bornMask: maskOf([1]), surviveMask: maskOf([1, 2, 3, 4]) } },
+  caves: { label: 'Caves', hint: 'B5678/S45678 from a 45% fill: noise settles into smooth cave walls in a few steps (the roguelike cave generator).', params: { neighbourhood: 'moore', ...bs([5, 6, 7, 8], [4, 5, 6, 7, 8]) }, look: { density: 0.45 } },
   bosco: { label: 'Bosco (radius 5)', hint: 'Larger than Life, radius 5: born on 34–45, survive on 33–57 (Evans\'s Bosco\'s rule): moving blobs.', params: { neighbourhood: 'radius', radius: 5, shape: 'box', bornLo: 34, bornHi: 45, surviveLo: 33, surviveHi: 57 } },
   majority: { label: 'Majority (radius 4)', hint: 'Larger than Life, radius 4: a cell takes the side most of its 9×9 block is on. Noise melts into smooth islands.', params: { neighbourhood: 'radius', radius: 4, shape: 'box', bornLo: 41, bornHi: 80, surviveLo: 40, surviveHi: 80 } },
 };

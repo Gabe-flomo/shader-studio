@@ -35,6 +35,7 @@ import { applyMove } from './applyMove';
 import { outputKinds, spaceInputs, type ValueKind } from './kinds';
 import { matchTaught, phraseLabel, taughtMoves, type TaughtMove } from './taught';
 import { freshIds } from '../store/agentSetup';
+import { addGridRules, gridRulesLabel, gridRulesParams, readGridRules } from './doBarGridRules';
 import { moveTypeCheck, planOutput, runConvertStep, runOutputStep, type ConvertStep, type OutputStep } from './doOutputs';
 
 // ── Plans ───────────────────────────────────────────────────────────────────
@@ -46,6 +47,8 @@ export type DoStep =
   | { kind: 'shape'; shape: string; type: string; params: Record<string, unknown>; place?: [number, number]; label: string }
   | { kind: 'chain'; taughtId: string; args: Record<string, unknown>; label: string }
   | { kind: 'move'; moveId: string; node: NodeRef; key: string; side: 'in' | 'out'; args: Record<string, unknown>; label: string }
+  /** A Grid Rules node with a preset (doBarGridRules.ts): "game of life", "falling sand, fast". */
+  | { kind: 'gridRules'; preset: string; params: Record<string, unknown>; label: string; /** The node to sit beside (the selection), when the graph isn't empty. */ beside?: string }
   | OutputStep
   | ConvertStep;
 
@@ -303,6 +306,8 @@ export function parseDo(text: string, ctx: DoContext): DoPlan {
   if (out) return { steps: out.steps, reading: out.reading, unknown: [], ...(out.problem ? { problem: out.problem } : {}) };
   const taught = matchTaught(text);
   if (taught) return taughtPlan(taught.move, taught.args, ctx);
+  const grid = readGridRules(text);
+  if (grid) return { steps: [{ kind: 'gridRules', preset: grid.phrase.id, params: gridRulesParams(grid), label: gridRulesLabel(grid), beside: ctx.selected[0] }], reading: grid.reading, unknown: [] };
   const tokens = tokenize(text);
   const { items, unknown } = read(tokens);
   const reading: DoPlan['reading'] = items.map(it => ({
@@ -503,6 +508,14 @@ export function runDoPlan(nodes: GraphNode[], plan: DoPlan, nextId: () => string
   return { nodes: cur, added, select, ran, made: Object.fromEntries(made) };
 
   function runStep(step: DoStep, k: number) {
+    if (step.kind === 'gridRules') {
+      const r = addGridRules(cur, step.params, step.beside ? [step.beside] : [], nextId, { topLevel: opts.topLevel, heightOf });
+      cur = r.nodes;
+      added.push(...r.added);
+      select = r.id;
+      ran.push(step.label);
+      return;
+    }
     if (step.kind === 'shape') {
       // A row below the graph, left-aligned with it; free space found by placeNear.
       const xs = cur.map(nd => nd.position.x), ys = cur.map(nd => nd.position.y + heightOf(nd));
