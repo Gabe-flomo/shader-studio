@@ -15,6 +15,8 @@ import { Modal } from '../ui/Modal';
 import { toast } from '../ui/toastStore';
 import { CodeField } from '../code/CodeField';
 import { ReferencePanel } from '../code/ReferencePanel';
+import type { EditorPanel } from '../code/editorPanelPrefs';
+import { FunctionsToggle, SidePanel, useEditorSidePanels } from '../code/SidePanels';
 import { buildCompletions } from '../code/glslReference';
 import { insertSnippet } from '../code/useCompletion';
 
@@ -27,7 +29,12 @@ interface Props {
   onClose: () => void;
 }
 
+const PANELS: readonly EditorPanel[] = ['functions'];
+
 export function CustomFnModal({ node, onClose }: Props) {
+  // The function palette: closed by default (⌘] or the header's Functions); a drawer on a narrow window
+  const { narrow, open: panels, set: setPanel, toggle: togglePanel } = useEditorSidePanels(PANELS);
+  const functionsOpen = panels.functions;
   const updateNodeParams  = useNodeGraphStore(s => s.updateNodeParams);
   const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
   const tk = useTokens();
@@ -208,6 +215,7 @@ export function CustomFnModal({ node, onClose }: Props) {
       width={980}
       height={800}
       onClose={onClose}
+      headerActions={<FunctionsToggle open={functionsOpen} onToggle={() => togglePanel('functions')} />}
       footer={
         <>
           <Button icon="export" onClick={handleSavePreset}>Save as preset</Button>
@@ -218,7 +226,7 @@ export function CustomFnModal({ node, onClose }: Props) {
         </>
       }
     >
-      <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
+      <div style={{ display: 'flex', height: '100%', minHeight: 0, position: 'relative' }}>
         <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
           <Section label="Name">
             <Field value={labelParam} onChange={e => updateNodeParams(node.id, { label: e.target.value })} placeholder="Node name" aria-label="Node name" spellCheck={false} />
@@ -331,12 +339,14 @@ export function CustomFnModal({ node, onClose }: Props) {
           </div>
         </div>
 
-        <ReferencePanel
-          variables={customInputs}
-          onInsert={insertFromReference}
-          wrapAll={autoWrap}
-          onWrapAllChange={setAutoWrap}
-        />
+        <SidePanel side="right" label="Functions" open={functionsOpen} narrow={narrow} width={300} onClose={() => setPanel('functions', false)}>
+          <ReferencePanel
+            variables={customInputs}
+            onInsert={insertFromReference}
+            wrapAll={autoWrap}
+            onWrapAllChange={setAutoWrap}
+          />
+        </SidePanel>
       </div>
     </Modal>
   );
