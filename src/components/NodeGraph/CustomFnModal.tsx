@@ -27,6 +27,7 @@ import { useCustomFnJump } from '../codeExplorer/useCodeJumpFocus';
 import { StatementsExplain } from '../explain/StatementsExplain';
 import { useExplainDialogs } from '../explain/useExplainDialogs';
 import { customFnContext, customFnUseHere } from '../explain/hosts';
+import { useFnCardScope } from '../explain/functionCard/fnCardStore';
 
 const TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
 
@@ -154,6 +155,8 @@ export function CustomFnModal({ node, onClose }: Props) {
     lastField.current = 'body';
     insertFromReference(r.call);
   };
+  // Function cards in this editor: its parameters' types, the helpers' functions, Insert snippet as for the Functions panel
+  const fnScope = useFnCardScope({ types: explainCtx.types, source: glslFns, onSnippet: insertSnippetFn });
 
   const insertFromReference = (text: string) => {
     const isBody = lastField.current === 'body';
@@ -247,7 +250,7 @@ export function CustomFnModal({ node, onClose }: Props) {
         </>
       }
     >
-      <div style={{ display: 'flex', height: '100%', minHeight: 0, position: 'relative' }}>
+      <div {...fnScope} style={{ display: 'flex', height: '100%', minHeight: 0, position: 'relative' }}>
         <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
           <Section label="Name">
             <Field value={labelParam} onChange={e => updateNodeParams(node.id, { label: e.target.value })} placeholder="Node name" aria-label="Node name" spellCheck={false} />

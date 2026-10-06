@@ -39,3 +39,9 @@ import { IDIOMS } from './idioms';
 export function idiomVocabulary(): Array<{ id: string; name: string; category: string; words: string[] }> {
   return IDIOMS.map(i => ({ id: i.id, name: i.name, category: i.category, words: [i.name.toLowerCase(), i.fnName, ...(i.keywords ?? [])] }));
 }
+export {
+  FUNCTION_REGISTRY, BUILTIN_FUNCTION_NAMES, GENERIC_TYPES, functionInfo, signatureText, genericTypesIn,
+  type FnInfo, type FnKind, type FnOverload, type FnParam, type FnCategory, type FnPlot,
+} from './functions';
+export { functionAt, functionsIn, declaredFunctions, commentSpans, type FunctionHit, type FunctionAtOptions, type DeclaredFunction } from './fnAt';
+export { functionCard, functionCardFor, plotForCall, explainCall, snippetFor, type FunctionCardModel, type FunctionCardContext } from './fnCard';

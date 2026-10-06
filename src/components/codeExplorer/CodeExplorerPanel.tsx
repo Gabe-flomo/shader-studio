@@ -264,7 +264,7 @@ export function HighlightedLine({ text, hs, he }: { text: string; hs: number; he
       parts.push(<span key={`${i}-${c}`} style={{ color: t.color, background: marked ? alpha(tk.accent.base, 0.18) : undefined }}>{text.slice(a, b)}</span>);
     }
   });
-  return <code style={{ font: `500 12px ${fontFamily.mono}`, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{parts}</code>;
+  return <code data-fn-code="" style={{ font: `500 12px ${fontFamily.mono}`, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{parts}</code>;
 }
 
 function Sparkline({ values, labels }: { values: number[]; labels: string[] }) {
