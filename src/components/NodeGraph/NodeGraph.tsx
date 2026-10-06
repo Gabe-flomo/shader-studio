@@ -42,8 +42,11 @@ import { bakeableOutput, pictureTarget } from '../../lib/bake/graphOps';
 import { unbakeNode } from '../../lib/bake/runner';
 import type { OptimizeModal as OptimizeModalT } from './OptimizeModal';
 import { previewBanner } from '../../lib/nodePreview/previewPlan';
+import { openNewSceneBuilder, useSceneBuilder } from '../../sceneBuilder/store';
+import { builderSceneOf, describeIntoBuilder, editSceneInBuilder } from '../../sceneBuilder/actions';
 const OptimizeModal = lazyWithSuspense<PropsOf<typeof OptimizeModalT>>(() => import('./OptimizeModal').then(m => ({ default: m.OptimizeModal })));
 const BakeDialogHost = lazyWithSuspense<Record<string, never>>(() => import('../bake/BakeDialog').then(m => ({ default: m.BakeDialogHost })));
+const SceneBuilderModal = lazyWithSuspense<Record<string, never>>(() => import('../sceneBuilder/SceneBuilderModal').then(m => ({ default: m.SceneBuilderModal })));
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 const NODE_WIDTH = 360;
@@ -107,6 +110,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   useEffect(() => { lockedRef.current = locked; }, [locked]);
   const [showOptimize, setShowOptimize] = useState(false);
   const bakeRequest = useBakeDialog(s => s.request);
+  const sceneBuilderOpen = useSceneBuilder(s => s.open);
   const tc = useCtp();
   const tk = useTokens();
   const ctxBtnStyle = ctxBtnStyleFor(tc);
@@ -1028,7 +1032,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
     const nodeId = nodeEl?.dataset.nodeId ?? null;
     // On empty canvas the menu only has "Group selection" — with fewer than two nodes
     // selected there is nothing to show, so don't open an empty strip.
-    if (!nodeId && useNodeGraphStore.getState().selectedNodeIds.length < 2) { setContextMenu(null); return; }
+    // At the top level it offers the 3D Scene Builder.
+    if (!nodeId && useNodeGraphStore.getState().selectedNodeIds.length < 2 && useNodeGraphStore.getState().activeGroupPath.length > 0) { setContextMenu(null); return; }
     // On a slider or colour row, the menu starts with making it a Play control.
     const paramKey = nodeId ? (target.closest('[data-param-key]') as HTMLElement | null)?.dataset.paramKey : undefined;
     setContextMenu({ x: e.clientX, y: e.clientY, nodeId, paramKey });
@@ -1358,6 +1363,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       )}
       {showOptimize && <OptimizeModal onClose={() => setShowOptimize(false)} />}
       {bakeRequest && <BakeDialogHost />}
+      {sceneBuilderOpen && <SceneBuilderModal />}
       {redesignToolbar && !locked && <SelectionBar top={previewNodeId ? 108 : 66} />}
       {redesignToolbar && showOutline && <GraphOutline nodes={displayNodes} top={previewNodeId ? 132 : 66} onClose={() => setShowOutline(false)} />}
 
@@ -1740,6 +1746,35 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       setContextMenu(null);
                     }}>
                       Duplicate Selection
+                    </button>
+                    <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                  </>
+                )}
+                {/* The 3D Scene Builder (docs/scene-builder.md): on the empty canvas, and on any node of a scene it built. */}
+                {!clickedNode && activeGroupPath.length === 0 && (
+                  <>
+                    <button style={ctxBtnStyle} onClick={() => { openNewSceneBuilder(); setContextMenu(null); }}>
+                      Scene Builder… <span style={{ color: tc.surface2, fontSize: '10px' }}>new 3D scene</span>
+                    </button>
+                    {displayNodes.some(n => n.type === 'marchLoopGroup' || n.type === 'giLitMarchGroup' || n.type === 'glassScene') && (
+                      <button style={ctxBtnStyle} onClick={() => { describeIntoBuilder(); setContextMenu(null); }}>
+                        Describe this graph
+                      </button>
+                    )}
+                  </>
+                )}
+                {clickedNode && activeGroupPath.length === 0 && builderSceneOf(clickedNode.id) && (
+                  <>
+                    <button style={ctxBtnStyle} onClick={() => { editSceneInBuilder(clickedNode.id); setContextMenu(null); }}>
+                      Edit in Scene Builder
+                    </button>
+                    <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                  </>
+                )}
+                {clickedNode && activeGroupPath.length === 0 && !builderSceneOf(clickedNode.id) && ['sceneGroup', 'marchLoopGroup', 'giLitMarchGroup', 'glassScene', 'marchCamera'].includes(clickedNode.type) && (
+                  <>
+                    <button style={ctxBtnStyle} onClick={() => { describeIntoBuilder(); setContextMenu(null); }}>
+                      Describe in Scene Builder
                     </button>
                     <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
                   </>
