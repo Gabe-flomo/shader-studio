@@ -90,7 +90,7 @@ describe('frame-stack planning', () => {
   });
 
   it('reads a node\'s settings defensively', () => {
-    expect(stackSettingsOf({})).toEqual({ frames: 128, width: 256, start: 0, end: 0, spacing: 'count', step: 1 / 30, deep: false });
+    expect(stackSettingsOf({})).toMatchObject({ frames: 128, width: 256, start: 0, end: 0, spacing: 'count', step: 1 / 30, deep: false });
     expect(stackSettingsOf({ precision: '16', combine: 'average' }).deep).toBe(true);
     expect(stackSettingsOf({ precision: '16', combine: 'pick' }).deep).toBe(false);
     expect(stackSettingsOf({ frames: 9999, frameWidth: '384', start: -4, spacing: 'step', step: 0 })).toMatchObject({ frames: 256, width: 384, start: 0, spacing: 'step' });

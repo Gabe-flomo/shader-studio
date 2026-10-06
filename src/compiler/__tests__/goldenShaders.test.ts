@@ -23,6 +23,7 @@ import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
 import { PASS_EXAMPLE_KEYS } from '../../store/passExamples';
 import { TIME_CUBE_EXAMPLE_KEYS } from '../../store/timeCubeExamples';
 import { FRAME_STACK_EXAMPLE_KEYS } from '../../store/frameStackExamples';
+import { TEXTURE_TOOL_EXAMPLE_KEYS } from '../../store/textureToolExamples';
 import { parsePlayRecord } from '../../types/play';
 import { webInputFrom } from '../../play/webInput';
 import { playBundle } from '../../play/exportHtml';
@@ -58,7 +59,8 @@ const hasPass = (nodes: Nodes): boolean => nodes.some(nd => MULTI_PROGRAM.has(nd
 const PASS_FOLDER = new Set(PASS_EXAMPLE_KEYS);
 /** The Time cube examples (docs/time-cube.md) are new graphs: timeCube.test.ts covers them. The guarantee here is for graphs without its nodes. */
 /** The Frame Stack examples (docs/frame-stack.md) are new graphs too: frameStack.test.ts covers them. */
-const TIME_CUBE_FOLDER = new Set([...TIME_CUBE_EXAMPLE_KEYS, ...FRAME_STACK_EXAMPLE_KEYS]);
+/** The Texture tools examples (docs/texture-tools.md) are new graphs too: textureTools.test.ts covers them. */
+const TIME_CUBE_FOLDER = new Set([...TIME_CUBE_EXAMPLE_KEYS, ...FRAME_STACK_EXAMPLE_KEYS, ...TEXTURE_TOOL_EXAMPLE_KEYS]);
 const keys = Object.keys(EXAMPLE_GRAPHS).filter(k => !hasPass(EXAMPLE_GRAPHS[k].nodes) && !PASS_FOLDER.has(k) && !TIME_CUBE_FOLDER.has(k)).sort();
 
 describe('golden shaders: every example compiles as it did', () => {

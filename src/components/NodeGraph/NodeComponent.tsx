@@ -64,6 +64,8 @@ import { VideoInputModal } from './VideoInputModal';
 import { MidiInputCard } from './MidiInputCard';
 import { GroupParamPicker } from './GroupParamPicker';
 import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
+import { ValuePreview } from './ValuePreview';
+import { useShowAs } from './ShowAsControls';
 import { AGENT_INPUT_OUTPUTS, AGENT_INPUT_STATE_OUTPUTS, agentWalkerDefault, DRAW_3D_INPUTS } from '../../nodes/definitions/agents';
 import { VECTORIZABLE_NODES, VEC4_CAPABLE_NODES } from '../../nodes/definitions/math';
 import { registerSocket, getView } from './socketRegistry';
@@ -194,6 +196,8 @@ const LFO_TYPES    = new Set(['lfo']);
 const ALWAYS_VIZ_TYPES = new Set([...LFO_TYPES, 'remap', 'audioInput', 'pass']);
 // Float-output nodes that should render a grayscale shader thumbnail instead of the scope waveform
 const GRAYSCALE_PREVIEW_TYPES = new Set(['fbm', 'voronoi', 'noiseFloat', 'sdSegment', 'mask', 'luminance', 'sobel', 'compare', 'select']);
+// Nodes with their own always-on picture keep it instead of the "Show as" value preview
+const NO_VALUE_PREVIEW = new Set([...LFO_TYPES, 'audioInput', 'pass']);
 
 
 const inputStyleFor = (tc: CtpPalette): React.CSSProperties => ({
@@ -549,6 +553,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const setNodePreview  = useNodeGraphStore(s => s.setNodePreview);
   const previewDataUrl  = useNodeGraphStore(s => s.nodePreviews[node.id] ?? null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  // A float / vec2 output previews as its value, in a "Show as" mode (docs/node-previews.md),
+  // painted from ShaderCanvas's readback rather than a thumbnail render.
+  const previewShowAs = useShowAs(isPreviewActive ? node : null);
+  const valuePreview = isPreviewActive && !SKIP_PREVIEW.has(node.type) && !NO_VALUE_PREVIEW.has(node.type) && !!previewShowAs?.valueType;
 
   // The thumbnail follows the node's own sliders: params are baked into the preview shader, so a
   // change is a new shader. Debounced so a slider drag doesn't compile on every tick.
@@ -562,7 +570,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
   // Render a 200×200 preview whenever preview mode is activated for this node
   useEffect(() => {
-    if (!isPreviewActive || SKIP_PREVIEW.has(node.type)) return;
+    if (!isPreviewActive || SKIP_PREVIEW.has(node.type) || valuePreview) return;
     let cancelled = false;
     // When inside a group, build a merged node list so the BFS in
     // compileNodePreviewShader can resolve anchor nodes (UV, time, etc.)
@@ -588,7 +596,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       .catch(() => { if (!cancelled) setPreviewLoading(false); });
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPreviewActive, node.id, node.type, previewParamsKey]);
+  }, [isPreviewActive, node.id, node.type, previewParamsKey, valuePreview]);
 
   // Comment preview — brief hover delay (not the old 1200ms tooltip delay,
   // just enough to avoid flicker while panning/passing over the card).
@@ -3731,11 +3739,15 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
       {/* ── In-card preview (visible when 👁 is active) ── */}
       {/* Semantic inline viz: replaces shader thumbnail for supported types */}
-      {isPreviewActive && !SKIP_PREVIEW.has(node.type) && INLINE_VIZ_TYPES.has(node.type) && (
+      {/* A float / vec2 output: its value, shown as the node's "Show as" mode; the diagram stays a click away */}
+      {valuePreview && (
+        <ValuePreview node={node} diagram={INLINE_VIZ_TYPES.has(node.type) ? <NodeInlineViz node={node} /> : undefined} />
+      )}
+      {!valuePreview && isPreviewActive && !SKIP_PREVIEW.has(node.type) && INLINE_VIZ_TYPES.has(node.type) && (
         <NodeInlineViz node={node} />
       )}
       {/* Default: shader thumbnail for float-output scope or vec3 render */}
-      {isPreviewActive && !SKIP_PREVIEW.has(node.type) && !ALWAYS_VIZ_TYPES.has(node.type) && !INLINE_VIZ_TYPES.has(node.type) && (
+      {!valuePreview && isPreviewActive && !SKIP_PREVIEW.has(node.type) && !ALWAYS_VIZ_TYPES.has(node.type) && !INLINE_VIZ_TYPES.has(node.type) && (
         <div style={{ width: '100%', borderBottom: `1px solid ${tc.surface0}` }}>
           {primaryOutputIsFloat && !GRAYSCALE_PREVIEW_TYPES.has(node.type) ? (
             /* Float output → live waveform scope */

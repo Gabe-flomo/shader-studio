@@ -40,13 +40,66 @@ Once it is built, the card shows:
 
 | Setting | What it does |
 |---|---|
-| Frames | How many frames, spread evenly from Start to End (2 to 256, 128 by default). |
+| Frames | How many frames, spread through the clip's kept segments (2 to 256, 128 by default). |
 | Spacing | Spread a number of frames, or take one every so many seconds (**Every**). |
 | Frame size | Each frame's width: 128, 192, 256 (the default), 384 or 512 px. The height follows the video's shape, rounded to a multiple of 8. |
-| Start / End | The part of the video to stack, in seconds. End 0 means the end of the video. |
 | Frames from | **Pick one frame** (the default) for each stacked frame, or read **Sub-frames** frames (2 to 16) spread over its slot of time and combine them: **Average** (a long exposure, motion blur), **Brightest** (light trails), **Darkest**, **Motion** (only what changed from one sub-frame to the next) or **Median** (what stayed put; moving things vanish). The card says how many frames that reads and, for a video, about how long it takes. |
 | Precision | When combining: **8-bit** (the default, the video's own depth) or **16-bit float**. An Average or Median lands between the 8-bit steps; 16-bit keeps those shades (smooth gradients, no banding) as a half-float (RGBA16F) texture, at twice the memory (the card shows it, marked 16-bit). WebGL2 filters half-float textures everywhere, Safari and the desktop app included; web exports still carry the 8-bit atlas. |
 | Frame order | **Time** (the default), **Reverse**, **Shuffle** (a seed; the same seed always gives the same order) or **Sort** by **brightness**, **hue**, **saturation**, **motion** (the change from the frames either side) or **amount of a colour** (Colour, Colour tolerance), lowest first; **Invert** puts the highest first. Equal values keep their time order. |
+
+### Editing the clip
+
+**Edit clip…** on the card (or a double-click on its strip of frames) opens
+the clip editor, a large window like the Expression Block's. It edits a
+draft; **Apply** writes it to the node and the cube rebuilds (the card's
+progress bar and Cancel, as for any change), **Cancel** or Esc leaves the
+node as it was. The footer shows the frame count, tile size, GPU memory and
+how many frames the build reads before you apply.
+
+- **Preview:** play / pause (space, or click the picture), step a frame
+  (← →, shift for ten), **Loop selection** (plays only the kept segments, in
+  their order, round and round), and the time and frame number.
+- **Trimmer** (Photos-style, along the bottom): a filmstrip of the whole
+  video; the active segment has yellow In / Out handles, and what no segment
+  keeps is dimmed. Drag a handle to trim (the preview shows that frame), drag
+  the middle to slide the segment, click elsewhere to scrub. Pinch,
+  ctrl / ⌘ + scroll or the − / + buttons zoom; scroll pans; **Fit segment**
+  zooms to the active segment. I / O set its In / Out at the playhead.
+- **Ticks** above the strip mark exactly the frames that will be sampled and
+  move as you trim; the readout says e.g. "128 frames · one every 0.040 s".
+- **Segments:** **+ Add segment** keeps another stretch (at the playhead),
+  played after the active one. The list reorders (↑ ↓), reverses (⇄: that
+  stretch plays backwards) and removes them. The frames are shared between
+  segments by length (**By length**, the same spacing everywhere) or
+  **Equal** (the same count each, so a short stretch is sampled densely).
+  Arrows under the strip show the jumps from where one segment stops to
+  where the next starts.
+- **Speed ramp:** **Even**, **Ease in** (frames bunch up at the start of each
+  segment: it starts slow) or **Ease out** (bunched at its end). Applied per
+  segment, in playing order.
+- **Frame:** **Crop** (drag the rectangle and its corners on the preview),
+  rotate 90° steps clockwise, flip left–right and top–bottom, **Reset**. They
+  are applied as each frame is drawn into the atlas, so the tile takes the
+  cropped, turned shape (a 90° turn of a 16:9 video gives tall tiles).
+- **Result:** the first, middle and last sampled frames, cropped and turned.
+- **Frames:** the frame budget (with Spacing "One frame every…", the
+  editor says the step instead).
+
+The node saves `segments: [{ in, out, reverse? }]` (seconds; an out at or
+before its in runs to the end of the video) and `clip: { distribute, ramp,
+crop: { x, y, w, h }, rotate, flipX, flipY }`. Saved graphs keep them; web
+exports and offline renders use the atlas built from them. Graphs saved
+before segments had **Start / End**: they load as one segment from Start
+to End, with the same frames as before. Choosing another video resets the
+clip to the whole video.
+
+The editor is `components/media/ClipEditor.tsx`, a controlled component
+(a video Blob or a painted source, the value, `onChange`, and optional sample
+times for the ticks); its maths is `lib/media/clip.ts`. Only the Time Cube
+uses it so far. Video Input, the Video layer and Bake could adopt it: they
+would map the segments onto their own playback (a play list of In / Out
+stretches, reversed ones played backwards) and the crop / rotate onto their
+draw (`drawClipFrame`), passing no ticks.
 
 Changing Frame order rearranges the frames already read: nothing is decoded
 again. The atlas keeps its layout; only which picture sits in which tile
@@ -635,6 +688,16 @@ Building a volume:
 - **Not done:** an arbitrary shader graph per frame (each frame through its own
   chain) is future work; so is animating the frame order on the GPU (Frame
   Stack's Shuffle does that for cards).
+- **Clip editor:**
+  - Frame stepping and the frame number assume 30 frames a second (a
+    browser does not tell a video's frame rate).
+  - The filmstrip is 28 thumbnails of the whole video; zoomed in, they
+    stretch rather than fill in with more frames.
+  - Loop selection plays reversed segments forwards (the cube has them
+    backwards).
+  - Frames are decoded in playing order, so a reversed segment seeks
+    backwards, which is slower in some browsers.
+  - The speed ramp is a fixed quadratic, per segment.
 - **A key matches colours, not objects.** The red car's dark windows and
   wheels don't match red, so its ribbon has holes where you see through them.
 
@@ -650,6 +713,7 @@ Building a volume:
 | Adding a View or Slice | `src/lib/timeCube/autoWire.ts` |
 | The nodes and their GLSL | `src/nodes/definitions/timeCube.ts` |
 | The card | `src/components/timeCube/TimeCubeCardBody.tsx` |
+| The clip editor (window, reusable component, maths) | `src/components/timeCube/TimeCubeClipModal.tsx`, `src/components/media/ClipEditor.tsx`, `src/lib/media/clip.ts` |
 | The march's exact parts: ray and rounded box, the next highlighted frame, where in a stretch to read | `src/lib/timeCube/march.ts` |
 | The key's card line and swatches | `src/lib/timeCube/keyInfo.ts`, `src/components/timeCube/TimeCubeViewKeyInfo.tsx` |
 | 16-bit atlases | `src/lib/timeCube/deep.ts` |
@@ -659,8 +723,15 @@ Building a volume:
 
 The tests are in `src/lib/timeCube/__tests__/timeCube.test.ts`,
 `timeCubeStyle.test.ts`, `timeCubeMarch.test.ts`, `timeCubeKeyDeep.test.ts`,
-`timeCubeFeather.test.ts` and `timeCubeCamera.test.ts`.
+`timeCubeFeather.test.ts`, `timeCubeCamera.test.ts` and `timeCubeClip.test.ts`.
 They cover:
+
+- the clip (`timeCubeClip.test.ts`): sharing frames between segments by
+  length and equally (rounding, one each), sample times with segments,
+  reverse, order and the speed ramp, boundaries (end of video, clamping,
+  empty segments), the Start / End migration giving the same frames, crop /
+  rotate / flip maths and the canvas transform, and the volume key changing
+  with every clip setting (and not for the default clip);
 
 - the exact ray–rounded-box test against a fine walk along random rays
   (grazing ones too), enter and exit, the next highlighted frame (fixed and

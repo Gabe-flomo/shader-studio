@@ -5,7 +5,7 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { PREVIEW_ASPECTS, fitAspect } from '../utils/graphImportPlan';
-import { drawScopeCanvas, vectorValueRegistry, floatValueRegistry } from '../lib/scopeRegistry';
+import { drawScopeCanvas, vectorValueRegistry, floatValueRegistry, scopeCanvasRegistry } from '../lib/scopeRegistry';
 import { audioEngine } from '../lib/audioEngine';
 import { audioSpectrumRegistry, drawSpectrumCanvas } from '../lib/audioSpectrumRegistry';
 import { inputBus } from '../lib/inputBus';
@@ -49,6 +49,9 @@ import { viewportSnapshot } from '../lib/viewport';
 import { onRebuild } from '../lib/rebuild';
 import { buildPreviewUniforms } from './previewUniforms';
 import { DataTextureBinder } from '../data/dataTextures';
+import { ValuePreviewRunner, resolvePreviewTarget, type PreviewTarget } from '../lib/nodePreview/valuePreviewRunner';
+import { useNodePreviewPrefs } from '../lib/nodePreview/showAs';
+import { PreviewValueOverlay } from './PreviewValueOverlay';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './shell/rebuildAction';
 
 export type CanvasHandle = { canvas: HTMLCanvasElement };
@@ -557,6 +560,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const activeFs = rawFs ?? fs;
     const initialUniforms: Record<string, { value: unknown }> = {
       u_time:        { value: 0 },
+      // The frame's length in seconds (Fade (feedback): tails in seconds at any frame rate; 0 reads as 1/60).
+      u_frameDt:     { value: 0 },
       u_resolution:  { value: new THREE.Vector2(1, 1) },
       u_mouse:       { value: new THREE.Vector2(0, 0) },
       u_prevFrame:   { value: null },
@@ -994,6 +999,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         renderAtTime: (time: number, opts?: { dt?: number; first?: boolean }) => {
           ensureRT();
           const u = material.uniforms;
+          if (u.u_frameDt) u.u_frameDt.value = opts?.dt ?? 1 / 60;
           // Passes a Particles node reads (Emit from): drawn at this frame's time before the particles step,
           // into the render's own textures (the rest draw after, below). A graph without them skips this.
           const keepTime = u.u_time.value;
@@ -1139,6 +1145,23 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const disposeProbeMat = (m: THREE.ShaderMaterial) => {
       if (compilingProbeMats.has(m) && !readyProbeMats.has(m)) disposeWhenReady.add(m);
       else m.dispose();
+    };
+
+    // ── "Show as" previews (docs/node-previews.md): the eye preview of a float / vec2 node drawn as
+    // a range, slice, grid, arrows… from its real value, read back asynchronously from a small target.
+    const pvRunner = new ValuePreviewRunner(renderer, camera, compileQuietly, () => requestRender());
+    let pvTarget: PreviewTarget | null = null;
+    const pvKeys: unknown[] = [];
+    /** The previewed node's value target, recomputed only when something it depends on changed. */
+    const previewTarget = (): PreviewTarget | null => {
+      const id = previewNodeIdRef.current;
+      const fs = fragmentShaderRef.current;
+      const st = useNodeGraphStore.getState();
+      const keys = [id, fs, st.nodes, st.nodeOutputVarMap, useNodePreviewPrefs.getState().prefs, probePassVer];
+      if (keys.every((k, i) => k === pvKeys[i])) return pvTarget;
+      keys.forEach((k, i) => { pvKeys[i] = k; });
+      pvTarget = id && fs ? resolvePreviewTarget(id, st.nodes, st.nodeOutputVarMap, fs, fsDeclares) : null;
+      return pvTarget;
     };
     let lastProbedNodeId: string | null = null;
     let lastProbeFs: string | null = null;   // invalidate cache when shader recompiles
@@ -1457,6 +1480,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         audioEngineHost.setScale(rec.arrangement?.scale);
       }
       material.uniforms.u_time.value = elapsed;
+      material.uniforms.u_frameDt.value = timePlayingRef.current ? dt : 0;
       // Clock followers (time readouts, keyframe playheads) get every frame: a listener call is
       // cheap, and throttling it made the readout visibly choppy once frames were throttled.
       // Always emitted: it also records the clock for clockNow() (freezing a keyframed slider).
@@ -1611,10 +1635,23 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           renderer.render(blitScene, camera);
           gpuTimer.end();
           pingPongIdx.current = pingPongIdx.current === 0 ? 1 : 0;
+          // A feedback graph's history must stay the picture's: the "Show as" display draws over the screen after it.
+          const pvMat = previewNodeIdRef.current ? pvRunner.display(previewTarget(), fragmentShaderRef.current, vertexShaderRef.current, material) : null;
+          if (pvMat) {
+            mesh.material = pvMat;
+            renderer.setRenderTarget(null);
+            renderer.render(scene, camera);
+            mesh.material = material;
+          }
         } else {
           gpuTimer.begin('main');
           renderer.setRenderTarget(floatRt);
+          // The eye preview of a float / vec2 in a "Show as" mode draws with its display program
+          // (the same graph ending in the mode's colour map): no extra pass.
+          const pvMat = previewNodeIdRef.current ? pvRunner.display(previewTarget(), fragmentShaderRef.current, vertexShaderRef.current, material) : null;
+          if (pvMat) mesh.material = pvMat;
           renderer.render(scene, camera);
+          if (pvMat) mesh.material = material;
           if (echoRef.current) captureEcho(floatRt.texture);
           blitMat.uniforms.tInput.value = floatRt.texture;
           blitMat.uniforms.u_seed.value = ditherSeed(frameCount);
@@ -1886,6 +1923,14 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           }
         }
 
+        // ── "Show as" value readback (throttled inside; asynchronous, one in flight) ──
+        if (previewNodeIdRef.current || pvTarget) {
+          const t = previewNodeIdRef.current ? previewTarget() : null;
+          pvRunner.sample(t, fragmentShaderRef.current, vertexShaderRef.current, material,
+            renderer.domElement.width || 1, renderer.domElement.height || 1, !dynamic, () => { if (!dynamic) requestRender(); });
+          if (!t) pvTarget = null;
+        }
+
         // ── Preview scope: waveform + upstream probes when 👁 is active (throttled like scopes) ──
         const previewId = previewNodeIdRef.current;
         if (previewId && (frameCount % PROBE_SAMPLE_EVERY === 0 || !dynamic)) {
@@ -1909,7 +1954,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                 const outputVars = nodeOutputVarMapRef.current.get(previewId);
                 const varName    = outputVars?.[floatOutputKey];
                 const src = varName ? probeSrc(previewId, varName, curFs) : null;
-                if (varName && src) {
+                // The card's waveform canvas: only while one is showing (a float node previewed in a
+                // "Show as" mode draws from the value readback instead; docs/node-previews.md).
+                if (varName && src && scopeCanvasRegistry.has(`__preview__${previewId}`)) {
                   const cacheKey = `${src.tag}${varName}::-1::1`;
                   let pm = previewScopeMatCache.get(cacheKey);
                   if (!pm) {
@@ -1929,6 +1976,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                   renderer.setRenderTarget(null);
                   renderer.readRenderTargetPixels(probeRT, 0, 0, 1, 1, probeBuf);
                   drawScopeCanvas(`__preview__${previewId}`, probeBuf[0] / 255, -1, 1);
+                }
+                if (varName && src) {
 
                   const hpCacheKey = `hp::${src.tag}${varName}`;
                   let hpm = previewScopeMatCache.get(hpCacheKey);
@@ -2170,6 +2219,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       disposeEchoRing();
       for (const target of [rt, floatRt, statsRT, histRt, probeRT]) target.dispose();
       costRt?.dispose(); costRt = null;
+      pvRunner.reset();
       reset.push('render targets');
       if (isStatefulRef.current) reset.push('feedback history');
       if (echoRef.current) reset.push('echo history');
@@ -2333,6 +2383,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       probeMatCache.forEach(disposeProbeMat);
       scopeMatCache.forEach(disposeProbeMat);
       previewScopeMatCache.forEach(disposeProbeMat);
+      pvRunner.dispose();
       pingPongA.current?.dispose();
       pingPongB.current?.dispose();
       sceneRef.current = null;
@@ -2625,6 +2676,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         <HandsPill />
         {/* The Finish stack's before/after divider (Play's Finish tab). */}
         <CompareHandle />
+        {/* The eye preview's "Show as" key, arrows and slice plot (docs/node-previews.md). */}
+        <PreviewValueOverlay />
       </div>
     </div>
   );

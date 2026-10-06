@@ -60,6 +60,10 @@ if (import.meta.env.DEV) {
     compileGraph, nodePreviewRenderer, loadExampleGraphs, resolveNodeAliases, getNodeDefinition, useTakes, takeApplier, playOverlay, playBackground, handFeed, playEngine,
     /** MIDI without a controller: `midiEngine.handleBytes(0xb0, 21, 64, 'Launch Control')` is a knob on channel 1 of that device. */
     midiEngine, padGrid,
+    /** "Show as" previews (docs/node-previews.md): per-node choices, and the readback/paint timings. */
+    nodePreviewPrefs: () => import('./lib/nodePreview/showAs').then(m => m.useNodePreviewPrefs),
+    previewPerf: () => import('./lib/nodePreview/previewBus').then(m => m.previewPerf),
+    perfSnapshot: () => import('./lib/perfStats').then(m => m.getPerfSnapshot()),
     /** The MIDI monitor's log (`midiMonitor.text()`), and the rack keyboard (`rackKeyboard.active()`). */
     midiMonitor, rackKeyboard,
     /** Linked folders without a folder picker: `(await linked()).devLinkOpfs('Samples', { 'kick.wav': blob })` links a folder in the browser's private file system. */

@@ -158,6 +158,7 @@ import { describePlayChange } from './playHistory';
 import { PresetManager } from './managers/PresetManager';
 import { CompilationService } from './managers/CompilationService';
 import { GRAPH_LINK_FIELD, graphDeleted, linkedPresentationsOf } from '../present/links';
+import { pickPreviewOutput, prefOf } from '../lib/nodePreview/showAs';
 
 // ── Legacy ExprNode → ExprBlockNode migration ─────────────────────────────────
 // ExprNode (type: 'expr') is removed from the registry.  Any saved graph that
@@ -1076,17 +1077,12 @@ function buildGroupPreviewGraph(nodes: GraphNode[], groupId: string, innerNodeId
   const innerNode = subgraph.nodes.find(n => n.id === innerNodeId);
   if (!innerNode) return nodes;
 
-  // Pick the best output to preview — prefer vec3, then vec4, then vec2, then float, then any
-  const outputEntries = Object.entries(innerNode.outputs);
-  const vec3Entry  = outputEntries.find(([, s]) => s.type === 'vec3');
-  const vec4Entry  = outputEntries.find(([, s]) => s.type === 'vec4');
-  const vec2Entry  = outputEntries.find(([, s]) => s.type === 'vec2');
-  const floatEntry = outputEntries.find(([, s]) => s.type === 'float');
-  const chosen = vec3Entry ?? vec4Entry ?? vec2Entry ?? floatEntry ?? outputEntries[0];
+  // The output to preview: the one picked in "Show as" (docs/node-previews.md), else vec3, vec4, vec2, float, any
+  const chosen = pickPreviewOutput(innerNode, prefOf(innerNode).output);
   if (!chosen) return nodes;
 
-  const [chosenKey, chosenSocket] = chosen;
-  const outType = (chosenSocket as { type: string }).type as import('../types/nodeGraph').DataType;
+  const [chosenKey, chosenType] = chosen;
+  const outType = chosenType as import('../types/nodeGraph').DataType;
   const previewPortKey = 'xpreviewport';
 
   // Patch the group: add a synthetic output port routing the inner node's chosen output.
@@ -1141,17 +1137,11 @@ function buildPreviewGraph(nodes: GraphNode[], targetId: string): GraphNode[] {
   const targetNode = nodes.find(n => n.id === targetId);
   if (!targetNode) return nodes; // fallback: don't break if node vanished
 
-  // Pick the best output to preview — prefer vec3, then vec4, then vec2, then float, then any
-  const outputEntries = Object.entries(targetNode.outputs);
-  const vec3Entry  = outputEntries.find(([, s]) => s.type === 'vec3');
-  const vec4Entry  = outputEntries.find(([, s]) => s.type === 'vec4');
-  const vec2Entry  = outputEntries.find(([, s]) => s.type === 'vec2');
-  const floatEntry = outputEntries.find(([, s]) => s.type === 'float');
-  const chosen = vec3Entry ?? vec4Entry ?? vec2Entry ?? floatEntry ?? outputEntries[0];
+  // The output to preview: the one picked in "Show as" (docs/node-previews.md), else vec3, vec4, vec2, float, any
+  const chosen = pickPreviewOutput(targetNode, prefOf(targetNode).output);
   if (!chosen) return nodes; // no outputs to preview
 
-  const [chosenKey, chosenSocket] = chosen;
-  const outType = (chosenSocket as { type: string }).type;
+  const [chosenKey, outType] = chosen;
 
   if (outType === 'vec4') {
     const syntheticOutput: GraphNode = {

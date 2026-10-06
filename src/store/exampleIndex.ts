@@ -28,6 +28,7 @@ import { CONVERT_EXAMPLE_INDEX, CONVERT_EXAMPLE_KEYS } from './convertExampleInd
 import { BAKE_EXAMPLE_INDEX } from './bakeExamples';
 import { TIME_CUBE_EXAMPLE_INDEX, TIME_CUBE_EXAMPLE_KEYS } from './timeCubeExamples';
 import { FRAME_STACK_EXAMPLE_INDEX, FRAME_STACK_EXAMPLE_KEYS } from './frameStackExamples';
+import { TEXTURE_TOOL_EXAMPLE_INDEX, TEXTURE_TOOL_EXAMPLE_KEYS } from './textureToolExamples';
 
 export type ExampleGraph = {
   label: string; nodes: GraphNode[]; counter: number;
@@ -224,6 +225,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...TIME_CUBE_EXAMPLE_INDEX,
   // Frame stack (frameStackExamples.ts, docs/frame-stack.md): a video's frames as cards to arrange.
   ...FRAME_STACK_EXAMPLE_INDEX,
+  // Texture tools (textureToolExamples.ts, docs/texture-tools.md): Mask, Levels, Flow, Neighbours, Change, Outline, Fade, Read.
+  ...TEXTURE_TOOL_EXAMPLE_INDEX,
 };
 
 // The default graph to load on startup
@@ -246,6 +249,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Curves & Shapes",   color: ctp.lavender, keys: LEARN_CURVES_KEYS },
   { label: "Color & Lighting",  color: ctp.peach, keys: [...LEARN_COLOR_KEYS, 'neonGlow','colorStopsCycle'] },
   { label: "Passes",            color: ctp.maroon, keys: PASS_EXAMPLE_KEYS },
+  { label: "Texture tools",     color: ctp.flamingo, keys: TEXTURE_TOOL_EXAMPLE_KEYS },
   { label: "Simulation",        color: ctp.green, keys: AGENT_EXAMPLE_KEYS },
   { label: "Agents with shaders", color: ctp.green, keys: AGENT_SHADER_EXAMPLE_KEYS },
   { label: "Agents in 3D",      color: ctp.green, keys: AGENT_3D_EXAMPLE_KEYS },
