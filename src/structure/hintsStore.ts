@@ -94,7 +94,7 @@ export function reloadStructurePrefs(): void {
 export const graphKey = (name: string | null | undefined) => name || '(unsaved)';
 
 // App settings' Reset (or another tab) removes or changes a key: follow it.
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   window.addEventListener('storage', e => {
     if (e.key === null || e.key.startsWith('playfield:structure:')) reloadStructurePrefs();
   });
