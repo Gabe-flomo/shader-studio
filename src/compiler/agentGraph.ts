@@ -156,7 +156,7 @@ export function agentStepNodes(group: GraphNode, volumeOf?: (nodeId: string) => 
   }
   if (group.inputs.emit?.connection) sinkInputs.emit = { type: 'emitter', label: 'Emit', connection: group.inputs.emit.connection };
   const stateC = needsStateC(group, nodes, out);
-  const sink: GraphNode = { id: `${group.id}__step`, type: 'agentStepOut', position: { x: 0, y: 0 }, params: { ...(stateC ? { stateC: true } : {}), ...(d3 ? { agentSpace: '3d' } : {}) }, outputs: {}, inputs: sinkInputs };
+  const sink: GraphNode = { id: `${group.id}__step`, type: 'agentStepOut', position: { x: 0, y: 0 }, params: { ...(stateC ? { stateC: true } : {}), ...(d3 ? { agentSpace: '3d' } : {}), ...(outputNode?.params.quietBirth === true ? { quietBirth: true } : {}) }, outputs: {}, inputs: sinkInputs };
   if (!outputNode) problems.push(`Node ${group.id}: ${labelOf(group)} has no Agent Output inside; open it and Start over, or add the preset again.`);
   return { inner, sink, starts, problems, stateC, space3d: d3, grids };
 }
@@ -259,7 +259,8 @@ export function drawSpec(n: GraphNode, slug: string, groupSlug: string, params: 
     ...(isAgent3d(n) ? { space3d: true, ...(n.params.camMirror === true ? { mirror: true } : {}) } : {}),
     nodeId: n.id, slug, group: groupSlug,
     style: choice(n.params.style, DRAW_STYLES, 'points'),
-    colorBy: choice(n.params.colorBy, DRAW_COLOR_BY, 'heading'),
+    // State (Agent Rules, docs/agent-rules.md) is the walker's own Colour: the rules set it to its state's colour.
+    colorBy: n.params.colorBy === 'state' ? 'agent' : choice(n.params.colorBy, DRAW_COLOR_BY, 'heading'),
     palette: choice(n.params.palette, ['ab', ...GP_PALETTE_NAMES], 'ab'),
     lights: Math.max(0, Math.min(4, Math.round(Number(n.params.lights ?? 0)) || 0)),
     lightMotion: choice(n.params.lightMotion, ['orbit', 'still'] as const, 'orbit'),

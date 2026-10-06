@@ -31,6 +31,7 @@ import { TIME_CUBE_EXAMPLE_INDEX, TIME_CUBE_EXAMPLE_KEYS } from './timeCubeExamp
 import { FRAME_STACK_EXAMPLE_INDEX, FRAME_STACK_EXAMPLE_KEYS } from './frameStackExamples';
 import { TEXTURE_TOOL_EXAMPLE_INDEX, TEXTURE_TOOL_EXAMPLE_KEYS } from './textureToolExamples';
 import { SIM_GRID_EXAMPLE_INDEX, SIM_GRID_EXAMPLE_KEYS } from './simGridExamples';
+import { AGENT_RULE_EXAMPLE_INDEX, AGENT_RULE_EXAMPLE_KEYS } from './agentRuleExamples';
 import { SCENE_BUILDER_EXAMPLE_INDEX, SCENE_BUILDER_EXAMPLE_KEYS } from './sceneBuilderExampleIndex';
 
 export type ExampleGraph = {
@@ -236,6 +237,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...SCENE_BUILDER_EXAMPLE_INDEX,
   // Simulations: grids (simGridExamples.ts, docs/simulations-grids.md): cellular automata from a Pass and its Previous.
   ...SIM_GRID_EXAMPLE_INDEX,
+  // Agents: rules (agentRuleExamples.ts, docs/agent-rules.md): the Agent Rules templates, behaviour as When … Do … lines.
+  ...AGENT_RULE_EXAMPLE_INDEX,
 };
 
 // The default graph to load on startup
@@ -261,6 +264,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Texture tools",     color: ctp.flamingo, keys: TEXTURE_TOOL_EXAMPLE_KEYS },
   { label: "Simulation",        color: ctp.green, keys: AGENT_EXAMPLE_KEYS },
   { label: "Simulations: grids", color: ctp.green, keys: SIM_GRID_EXAMPLE_KEYS },
+  { label: "Agents: rules",     color: ctp.green, keys: AGENT_RULE_EXAMPLE_KEYS },
   { label: "Agents with shaders", color: ctp.green, keys: AGENT_SHADER_EXAMPLE_KEYS },
   { label: "Agents in 3D",      color: ctp.green, keys: AGENT_3D_EXAMPLE_KEYS },
   { label: "Simulations: agents", color: ctp.green, keys: SIM_AGENT_EXAMPLE_KEYS },
