@@ -63,7 +63,7 @@ export function baseVolumeKey(node: GraphNode): string | null {
   const src = timeCubeSource(node), plan = timeCubePlan(node);
   if (!src || !plan) return null;
   const who = src.kind === 'demo' ? 'demo' : `vid:${src.videoId}`;
-  return `${who}|${plan.tileW}x${plan.tileH}|${plan.cols}x${plan.rows}|${plan.frames}|${plan.start.toFixed(4)}-${plan.end.toFixed(4)}${combineKey(combineSettingsOf(node.params))}${stackSettingsOf(node.params).deep ? '|16' : ''}`;
+  return `${who}|${plan.tileW}x${plan.tileH}|${plan.cols}x${plan.rows}|${plan.frames}|${plan.clipKey}${combineKey(combineSettingsOf(node.params))}${stackSettingsOf(node.params).deep ? '|16' : ''}`;
 }
 
 /** What a volume holds: two nodes with the same key share one build. The defaults (Pick, in time order) keep the old keys. */
@@ -371,9 +371,9 @@ async function combineInto(reader: FrameReader, plan: StackPlan, comb: CombineSe
   let done = 0;
   for (let i = 0; i < plan.frames; i++) {
     const frames: Uint8ClampedArray[] = [];
-    for (const t of subFrameTimes(plan.times[i], plan.every, comb.sub, duration)) {
+    for (const t of subFrameTimes(plan.times[i], plan.slots[i] ?? plan.every, comb.sub, duration)) {
       if (signal.aborted) throw new TimeCubeCancelled();
-      await reader.draw(t, sg, 0, 0, plan.tileW, plan.tileH, signal);
+      await reader.draw(t, sg, 0, 0, plan.tileW, plan.tileH, signal, plan.xf);
       frames.push(sg.getImageData(0, 0, plan.tileW, plan.tileH).data);
       progress(++done);
     }

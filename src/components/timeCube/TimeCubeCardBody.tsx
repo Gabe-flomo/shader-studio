@@ -10,9 +10,15 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { GraphNode } from '../../types/nodeGraph';
 import { addVideoFile, isAudioType, listVideos, type LibraryVideoMeta } from '../../lib/backgroundLibrary';
 import { timeCubes, timeCubePlan, timeCubeSource } from '../../lib/timeCube/volumes';
-import { capText, formatBytes } from '../../lib/timeCube/plan';
+import { capText, formatBytes, stackSettingsOf } from '../../lib/timeCube/plan';
 import { DEMO_LABEL, probeVideo } from '../../lib/timeCube/frames';
 import { buildEstimate, combineSettingsOf } from '../../lib/timeCube/order';
+import { clipParams, defaultClip, isIdentity } from '../../lib/media/clip';
+import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
+import type { TimeCubeClipModal as TimeCubeClipModalT } from './TimeCubeClipModal';
+
+// The clip editor loads on demand, in its own chunk.
+const TimeCubeClipModal = lazyWithSuspense<PropsOf<typeof TimeCubeClipModalT>>(() => import('./TimeCubeClipModal').then(m => ({ default: m.TimeCubeClipModal })));
 
 function useStatus(nodeId: string) {
   const sub = useMemo(() => (fn: () => void) => timeCubes.onChange(fn), []);
@@ -35,6 +41,7 @@ export function TimeCubeCardBody({ node, touch = false }: { node: GraphNode; tou
   const [picking, setPicking] = useState(false);
   const [videos, setVideos] = useState<LibraryVideoMeta[] | null>(null);
   const [busy, setBusy] = useState('');
+  const [editing, setEditing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const stripRef = useRef<HTMLCanvasElement>(null);
 
@@ -71,7 +78,8 @@ export function TimeCubeCardBody({ node, touch = false }: { node: GraphNode; tou
         meta = blob ? await probeVideo(blob) : null;
       }
       if (!meta) { setBusy('That video could not be read here.'); return; }
-      updateNodeParams(node.id, { source: 'library', videoId: v.id, fileName: v.name, _meta: meta, start: 0, end: 0 });
+      // A new video starts with the whole clip (the old one's trims and crop would not fit it).
+      updateNodeParams(node.id, { source: 'library', videoId: v.id, fileName: v.name, _meta: meta, ...clipParams(defaultClip()) });
       setPicking(false); setBusy('');
     } catch (e) { setBusy(e instanceof Error ? e.message : String(e)); }
   };
@@ -92,6 +100,17 @@ export function TimeCubeCardBody({ node, touch = false }: { node: GraphNode; tou
   } as const;
   const name = src?.kind === 'library' ? (typeof node.params.fileName === 'string' && node.params.fileName) || 'A Library video' : DEMO_LABEL;
   const building = status?.state === 'building' || status?.state === 'waiting';
+  // What the clip keeps, in a line.
+  const clipSummary = (() => {
+    if (!plan) return '';
+    const segs = plan.segments, xf = plan.xf, extras: string[] = [];
+    if (segs.some(s => s.reverse)) extras.push('reversed');
+    const ramp = stackSettingsOf(node.params).clip?.ramp;
+    if (ramp && ramp !== 'none') extras.push(ramp === 'easeIn' ? 'ease in' : 'ease out');
+    if (!isIdentity(xf)) extras.push([xf.crop.w < 1 || xf.crop.h < 1 ? 'cropped' : '', xf.rotate ? `${xf.rotate}°` : '', xf.flipX || xf.flipY ? 'flipped' : ''].filter(Boolean).join(', '));
+    const range = segs.length === 1 ? `${segs[0].in.toFixed(1)}–${segs[0].out.toFixed(1)} s` : `${segs.length} segments`;
+    return `Clip: ${range}${extras.length ? ` · ${extras.join(' · ')}` : ''}`;
+  })();
 
   return (
     <div style={{ padding: '4px 12px 8px 16px', display: 'flex', flexDirection: 'column', gap: 6 }} onMouseDown={e => e.stopPropagation()}>
@@ -106,6 +125,11 @@ export function TimeCubeCardBody({ node, touch = false }: { node: GraphNode; tou
         </span>
         <button type="button" style={btn} onClick={() => setPicking(v => !v)} title="Use a video from the Library or a file">{picking ? 'Close' : 'Choose video'}</button>
       </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ ...small, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={clipSummary}>{clipSummary}</span>
+        <button type="button" style={btn} onClick={() => setEditing(true)} disabled={!plan} title="Trim the video, keep several segments, ramp the speed, crop and turn the frames (double-click the strip too)">Edit clip…</button>
+      </div>
+      {editing && <TimeCubeClipModal node={node} onClose={() => setEditing(false)} />}
 
       {plan?.capped && <span style={{ ...small, color: tk.status.warningText }}>{capText(plan)}</span>}
       {plan && comb.combine !== 'pick' && (() => {
@@ -149,7 +173,8 @@ export function TimeCubeCardBody({ node, touch = false }: { node: GraphNode; tou
           <button type="button" style={btn} onClick={() => timeCubes.rebuild(node.id)}>Build</button>
         </div>
       )}
-      {ready && <canvas ref={stripRef} width={320} height={plan ? Math.round(320 / Math.min(8, plan.frames) / plan.aspect) : 22} style={{ width: '100%', borderRadius: 4, imageRendering: 'auto' }} title="Eight of the stacked frames, first to last" />}
+      {ready && <canvas ref={stripRef} width={320} height={plan ? Math.round(320 / Math.min(8, plan.frames) / plan.aspect) : 22} style={{ width: '100%', borderRadius: 4, imageRendering: 'auto', cursor: 'pointer' }}
+        onDoubleClick={e => { e.stopPropagation(); setEditing(true); }} title="Eight of the stacked frames, first to last. Double-click to edit the clip." />}
     </div>
   );
 }

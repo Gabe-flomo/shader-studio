@@ -11,6 +11,11 @@
  * them, so the two are kept in step by hand.
  */
 
+import {
+  clipOutputSize, clipSettingsOf, planSampleTimes, resolveSegments, transformKey,
+  type ClipSettings, type ClipTransform, type PlannedSegment,
+} from '../media/clip';
+
 const MB = 1024 * 1024;
 
 /** The longest side of the atlas. WebGL2 promises 2048, every desktop and phone GPU in use has 4096 or more. */
@@ -50,6 +55,11 @@ export interface StackSettings {
    * and medians hold more than 8 bits. Twice the memory of 8-bit (8 bytes a pixel).
    */
   deep?: boolean;
+  /**
+   * The clip editor's settings (lib/media/clip.ts): kept segments, how frames are shared between
+   * them, a speed ramp, crop / rotate / flip. Absent: Start…End, as before segments.
+   */
+  clip?: ClipSettings;
 }
 
 export type StackCap = 'frames' | 'atlas' | 'memory' | 'duration' | null;
@@ -74,8 +84,16 @@ export interface StackPlan {
   end: number;
   /** Seconds between frames. */
   every: number;
-  /** The video time of each frame (the middle of its slot). */
+  /** The video time of each frame (the middle of its slot), in stacking order. */
   times: number[];
+  /** Seconds of video each frame stands for (Frames from spreads its sub-frames over it). */
+  slots: number[];
+  /** The kept segments, with each one's share of the frames. */
+  segments: PlannedSegment[];
+  /** Crop, rotation and flips, applied as each frame is drawn into its tile. */
+  xf: ClipTransform;
+  /** The clip's part of the volume key: changes whenever a frame's time or its drawing does. */
+  clipKey: string;
 }
 
 const finite = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
@@ -92,6 +110,7 @@ export function stackSettingsOf(params: Record<string, unknown>): StackSettings 
     spacing: params.spacing === 'step' ? 'step' : 'count',
     step: Math.max(1 / MAX_FPS, finite(params.step, 1 / 30)),
     deep: params.precision === '16' && typeof params.combine === 'string' && params.combine !== 'pick',
+    clip: clipSettingsOf(params),
   };
 }
 
@@ -103,14 +122,17 @@ export function stackSettingsOf(params: Record<string, unknown>): StackSettings 
 export function planFrameStack(meta: VideoMeta, s: StackSettings, o: { maxSide?: number; maxBytes?: number } = {}): StackPlan {
   const maxSide = o.maxSide ?? ATLAS_MAX_SIDE;
   const maxBytes = o.maxBytes ?? VOLUME_MAX_BYTES;
-  const vw = Math.max(1, finite(meta.width, 16)), vh = Math.max(1, finite(meta.height, 9));
-  const aspect = vw / vh;
+  const clip: ClipSettings = s.clip ?? { segments: [{ in: s.start, out: s.end }], distribute: 'proportional', ramp: 'none', xf: { crop: { x: 0, y: 0, w: 1, h: 1 }, rotate: 0, flipX: false, flipY: false } };
+  const [ow, oh] = clipOutputSize(Math.max(1, finite(meta.width, 16)), Math.max(1, finite(meta.height, 9)), clip.xf);
+  const aspect = ow / oh;
   const tileW = Math.min(round8(s.width), Math.floor(maxSide / 8) * 8);
   const tileH = Math.min(round8(tileW / aspect), Math.floor(maxSide / 8) * 8);
   const duration = Math.max(0, finite(meta.duration, 0));
-  const start = clamp(s.start, 0, Math.max(0, duration - 1e-3));
-  const end = s.end > start ? Math.min(s.end, duration || s.end) : duration;
-  const span = Math.max(0, end - start);
+  // Without a length (an unprobed video), an End set by hand still reads.
+  const found = resolveSegments(clip.segments, duration || Math.max(0, ...clip.segments.map(g => g.out)));
+  // Nothing to read (a video of unknown length): every frame at the first In.
+  const segs = found.length ? found : [{ in: Math.max(0, clip.segments[0]?.in ?? 0), out: Math.max(0, clip.segments[0]?.in ?? 0), reverse: false }];
+  const span = segs.reduce((a, g) => a + g.out - g.in, 0);
   const requested = s.spacing === 'step' ? Math.max(MIN_FRAMES, Math.floor(span / s.step + 1e-6)) : s.frames;
 
   let frames = requested, capped: StackCap = null;
@@ -129,8 +151,16 @@ export function planFrameStack(meta: VideoMeta, s: StackSettings, o: { maxSide?:
   while (rows > maxRows && cols < maxCols) { cols++; rows = Math.ceil(frames / cols); }
   const atlasW = cols * tileW, atlasH = rows * tileH;
   const every = span / frames;
-  const times = Array.from({ length: frames }, (_, i) => start + (i + 0.5) * every);
-  return { tileW, tileH, aspect, frames, requested, capped, cols, rows, atlasW, atlasH, bytes: atlasW * atlasH * bpp, start, end, every, times };
+  const sp = planSampleTimes(segs, frames, clip.distribute, clip.ramp);
+  const start = segs.length ? Math.min(...segs.map(g => g.in)) : 0;
+  const end = segs.length ? Math.max(...segs.map(g => g.out)) : start;
+  // One plain segment keeps the key it always had (start-end); anything else spells the clip out.
+  const plain = segs.length === 1 && !segs[0].reverse && clip.ramp === 'none';
+  const clipKey = (plain ? `${start.toFixed(4)}-${end.toFixed(4)}` : `${segs.map(g => `${g.in.toFixed(4)}-${g.out.toFixed(4)}${g.reverse ? 'r' : ''}`).join(',')}|${clip.distribute}|${clip.ramp}`) + transformKey(clip.xf);
+  return {
+    tileW, tileH, aspect, frames, requested, capped, cols, rows, atlasW, atlasH, bytes: atlasW * atlasH * bpp, start, end, every,
+    times: sp.times, slots: sp.slots, segments: sp.segments, xf: clip.xf, clipKey,
+  };
 }
 
 /** Where frame `i` sits on the atlas canvas (pixels, top-left origin). */
