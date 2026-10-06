@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.41',
+    date: '2026-10-05',
+    title: 'A preview for every node',
+    highlights: [
+      { area: 'Studio', text: 'Preview controls live on the node card; the top banner just says what is previewed, with Exit.' },
+      { area: 'Studio', text: 'No more empty or "no preview" boxes: texture and colour nodes show their real output, agent nodes show live trails, diagrams or stats.' },
+    ],
+  },
+  {
     id: '2026.10.40',
     date: '2026-10-05',
     title: 'Smooth blurs and glows',
