@@ -7,8 +7,15 @@
 Turn on the eye on a node. If what it outputs is a number (float) or a pair of numbers (vec2), the banner above the graph and the node card both get a **Show as** picker. Both use the same choice, and the choice is remembered for that node.
 
 **vec2 modes**
-- **Grid**: a checker with thin lines, looked up at the vec2 as if it were UV. You see how the node stretches, twists, folds and repeats space. The red line is where y = 0 and the green line is where x = 0. The checker is tinted by position inside each unit square (more red to the right, more blue upward), so mirroring and rotation show too. This is the default for 2D Space and UV-like outputs.
-- **Arrows**: an arrow per cell of a coarse grid, pointing along the vec2. Arrow length is the vector's length compared with the longest one in view. The key shows a reference arrow and its value, e.g. `= 0.84 (longest)`. Each cell shows its strongest vector, so a sparse field (Edges' Direction, zero away from edges) still gets an arrow wherever it has one. This is the default for directions, flows, gradients and forces: outputs named or labelled dir / direction / flow / force / velocity / gradient / curl / normal / wind / heading, and the Angle → Vec2, Normalize, Vector / Gravity / Spiral Field and Edges (texture) Direction outputs.
+- **Grid**: a checker with thin lines, looked up at the vec2 as if it were UV. You see how the node stretches, twists, folds and repeats space. The red line is where y = 0 and the green line is where x = 0. The checker is tinted by position inside each unit square (more red to the right, more blue upward), so mirroring and rotation show too. **Detail** sets how fine the checker and lines are (see below). This is the default for 2D Space and UV-like outputs.
+- **Arrows**: an arrow per cell of a grid, pointing exactly along the vec2.
+  - **Length shows strength.** An arrow's strength is its vector's length divided by the **largest length anywhere in view**: one maximum for the whole picture, never per cell, and never unit length. The strongest vector gets a full arrow (90% of its cell), and one half as strong gets half the length.
+  - Arrows below 3% of the maximum draw as a small dot, so very weak spots don't vanish.
+  - Brightness follows the same strength.
+  - The key shows a full-length reference arrow and what it stands for, e.g. `full arrow = 2.4 (strongest)`.
+  - Each cell shows its strongest vector, so a sparse field (Edges' Direction, zero away from edges) still gets an arrow wherever it has one. A field that is unit length everywhere (Edges' Direction on an edge) correctly draws every arrow full length.
+  - **Detail** sets how many arrows there are.
+  - This is the default for directions, flows, gradients and forces: outputs named or labelled dir / direction / flow / force / velocity / gradient / curl / normal / wind / heading, and the Angle → Vec2, Normalize, Vector / Gravity / Spiral Field and Edges (texture) Direction outputs.
 - **Wheel**: colour is the direction (hue around the wheel; +x is red) and brightness is the length, scaled to the longest in view. Black means zero.
 - **Raw**: what it always was: red is x and green is y, clipped to 0–1.
 
@@ -17,6 +24,17 @@ Turn on the eye on a node. If what it outputs is a number (float) or a pair of n
 - **Slice**: a line graph of the value along a horizontal line (dashed; it starts through the middle at y = 0.5). Drag on the picture to move it. Single-input transforms (Multiply, Add, Sin, Smoothstep, Pow, Remap, the Shapers, Abs, Fract…, and any node with exactly one float input wired) also draw their **input in grey** on the same axes, so you see before and after. The axis is labelled with its ends and 0.
 - **Contours**: the Range picture with thin lines at regular values (1, 2 or 5 × 10ⁿ, about ten across the range). The key says how far apart they are.
 - **Raw**: grey clipped to 0–1, as before.
+
+**Detail** (on the Show as row, for Grid and Arrows): Coarse, Medium (the default), Fine or Very fine. It is remembered per node, like the mode. It only changes a uniform (Grid) or the overlay drawing (Arrows), so it never recompiles.
+
+| Detail | Grid: checker squares / lines per unit | Arrow cell, eye / card (CSS px) |
+|---|---|---|
+| Coarse | 4 / 1 | 48 / 32 |
+| Medium (default) | 10 / 2 | 30 / 20 |
+| Fine | 16 / 4 | 22 / 15 |
+| Very fine | 24 / 4 | 16 / 11 |
+
+The first version was 8 squares and 2 lines per unit, with 36 / 22 px arrow cells. Medium is a little finer. Lines always fall on square edges.
 
 **Which output.** A node with several outputs gets an output picker next to Show as (Edges (texture): Edges, Direction, Color). Without a pick, a colour output wins as before. Otherwise the node's **first** float or vec2 output in its own order is used, skipping a pass-through (FBM previews its noise, not its "UV (pass-through)"). Picking another output recompiles the eye preview.
 
@@ -27,7 +45,7 @@ Turn on the eye on a node. If what it outputs is a number (float) or a pair of n
 | Mode | Reading |
 |---|---|
 | Grid | The checker is looked up at the vec2 as if it were UV. Red line: y = 0. Green line: x = 0. |
-| Arrows | An arrow points along the vec2. The longest is the largest length in view (see the key). |
+| Arrows | An arrow points along the vec2. Length and brightness show strength: the strongest vector in view fills its cell, weaker ones are shorter, and a dot means under 3%. The key gives the full-arrow value. |
 | Wheel | Hue is the direction and brightness is the length. Black is zero. |
 | Range | Dark is the lowest value and bright is the highest. With negatives: blue below 0, grey at 0, warm above. |
 | Slice | A graph along the dashed line. Grey is the node's input: before and after. |
@@ -40,13 +58,13 @@ The previews never port a node's maths. They read the value the GPU computes, so
 
 - **Programs** (`lib/nodePreview/previewGlsl.ts`). Both are the graph's own fragment shader with the last statement of `main()` replaced. This is how the probes read a variable.
   - The **value program** writes the node's raw value into a float target: R for a float (and G for its primary input), RG for a vec2.
-  - The **display program** ends in `pvz_showF(value)` / `pvz_showV(value)`: the chosen mode's colour map, driven by uniforms (`u_pvMode`, `u_pvMin`, `u_pvMax`, `u_pvStep`, `u_pvMag`, `u_pvFlat`).
+  - The **display program** ends in `pvz_showF(value)` / `pvz_showV(value)`: the chosen mode's colour map, driven by uniforms (`u_pvMode`, `u_pvMin`, `u_pvMax`, `u_pvStep`, `u_pvMag`, `u_pvFlat`, and `u_pvGrid` = Detail's squares and lines per unit).
   - There is one display program per (shader, node, type), so **switching mode is a uniform change, not a compile**.
   - Both compile off-thread (`compileAsync`). Errors are captured quietly, so a program that fails never shows as the graph's error. A node whose variable only exists inside a block, for example, just stays Raw.
 - **Drawing the eye preview** (`lib/nodePreview/valuePreviewRunner.ts`, run by `ShaderCanvas`).
   - While the eye is on a float or vec2 node in a mode other than Raw, the picture's mesh draws with the display program for that frame. **There is no extra pass**: it replaces the preview graph's own draw.
   - A feedback graph (u_prevFrame) keeps its history: there the display draws over the screen after the frame.
-  - Arrows, the slice plot and the key are drawn on a 2D canvas over the picture (`components/PreviewValueOverlay.tsx`), from the readback.
+  - Arrows, the slice plot and the key are drawn on a 2D canvas over the picture (`components/PreviewValueOverlay.tsx`), from the readback. Arrow strength is `valueField.arrowStrength` (magnitude / the global max); `showAs.gridDensity` and `showAs.arrowCellPx` map Detail.
 - **Readback** (asynchronous, a frame or two late).
   - The value program draws into a small RGBA32F target. It has about 36.9k texels (256 × 144 at 16:9) and follows the picture's aspect.
   - The target is read with `readRenderTargetPixelsAsync` (PIXEL_PACK_BUFFER + fence: no stall). There is one readback in flight at a time, and at most one every 150 ms while the picture animates. A still picture samples each frame it draws, and redraws once more if the range moved.
@@ -58,7 +76,7 @@ The previews never port a node's maths. They read the value the GPU computes, so
   - Painting is capped at about 90k pixels per readback. Nothing extra renders on the GPU for the card.
   - The old 200 × 200 thumbnail render (a second WebGL context) is skipped for these nodes.
 - **Choices** (`lib/nodePreview/showAs.ts`).
-  - `useNodePreviewPrefs` keeps `{ output, vec2, float, sliceY, diagram }` per node, keyed `nodeId|type`. Ids restart in every graph, and a different node type under a reused id starts from its own default.
+  - `useNodePreviewPrefs` keeps `{ output, vec2, float, sliceY, diagram, detail }` per node, keyed `nodeId|type`. Ids restart in every graph, and a different node type under a reused id starts from its own default.
   - Choices are stored in localStorage (`playfield.nodePreviewPrefs.v1`, the newest 400), not in the graph. Picking a mode never recompiles, never lands on the undo stack, and never marks the graph dirty.
   - `pickPreviewOutput` is shared by the store's `buildPreviewGraph`, `compileNodePreviewShader`, the runner and the UI, so they agree on the output.
 - **Removed from the eye's per-frame work.** The card's float waveform scope (a synchronous 1-pixel `readPixels` every third frame) now runs only while that waveform canvas is actually shown.

@@ -11,7 +11,7 @@ import { useTokens } from '../../theme/themeStore';
 import { Tooltip } from '../ui/Tooltip';
 import { Icon } from '../ui/Icon';
 import { previewBus, previewPerf } from '../../lib/nodePreview/previewBus';
-import { modeHint, prefOf, useNodePreviewPrefs } from '../../lib/nodePreview/showAs';
+import { DEFAULT_DETAIL, DETAIL_LEVELS, gridDensity, modeHint, prefOf, useNodePreviewPrefs } from '../../lib/nodePreview/showAs';
 import { paintField, valueKey, niceStep, formatValue } from '../../lib/nodePreview/valueField';
 import { coverMap } from '../../lib/nodePreview/draw2d';
 import { drawValueOverlay } from '../PreviewValueOverlay';
@@ -32,6 +32,7 @@ export function ValuePreview({ node, diagram }: { node: GraphNode; /** The node'
   const sliceY = dragY ?? sa?.sliceY ?? 0.5;
   const outputKey = sa?.outputKey;
   const valueType = sa?.valueType ?? null;
+  const detail = sa?.detail ?? DEFAULT_DETAIL;
 
   useEffect(() => {
     if (showDiagram) return;
@@ -57,16 +58,16 @@ export function ValuePreview({ node, diagram }: { node: GraphNode; /** The node'
       }
       const t0 = performance.now();
       // The picture: repainted only for a new readback or a new mode (the slice drag reuses it)
-      const sig = frame.seq * 8 + ['grid', 'arrows', 'wheel', 'raw', 'auto', 'slice', 'contours'].indexOf(mode);
+      const sig = (frame.seq * 8 + ['grid', 'arrows', 'wheel', 'raw', 'auto', 'slice', 'contours'].indexOf(mode)) * 4 + DETAIL_LEVELS.findIndex(l => l.value === detail);
       if (painted !== sig || !img) {
         img = img ?? ctx.createImageData(dw, dh);
-        paintField(img.data, dw, dh, frame.field, { mode, stats: frame.stats });
+        paintField(img.data, dw, dh, frame.field, { mode, stats: frame.stats, grid: gridDensity(detail) });
         painted = sig;
       }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.putImageData(img, 0, 0);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      if (mode !== 'raw') drawValueOverlay(ctx, frame, mode, { x: 0, y: 0, w: cw, h: ch }, sliceY, { keyAt: 'none', big: false });
+      if (mode !== 'raw') drawValueOverlay(ctx, frame, mode, { x: 0, y: 0, w: cw, h: ch }, sliceY, { keyAt: 'none', big: false, detail });
       previewPerf.cardPaintMs = performance.now() - t0;
       if (keyRef.current) {
         let text = valueKey(frame.stats, frame.field.type, mode);
@@ -80,7 +81,7 @@ export function ValuePreview({ node, diagram }: { node: GraphNode; /** The node'
     const ro = new ResizeObserver(ask);
     ro.observe(canvas);
     return () => { unsub(); ro.disconnect(); if (raf) cancelAnimationFrame(raf); };
-  }, [node.id, outputKey, valueType, mode, sliceY, showDiagram]);
+  }, [node.id, outputKey, valueType, mode, sliceY, showDiagram, detail]);
 
   if (!sa) return null;
   const sliceDrag = mode === 'slice' && valueType === 'float';

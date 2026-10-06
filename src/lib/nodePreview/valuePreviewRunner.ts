@@ -15,7 +15,7 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { buildDisplayShader, buildValueShader, MODE_CODE } from './previewGlsl';
 import { fieldStats, niceStep, type ValueField } from './valueField';
 import { previewBus, previewPerf } from './previewBus';
-import { pickPreviewOutput, prefOf, primaryInput, showAsFor, type ShowAsMode } from './showAs';
+import { detailFor, gridDensity, pickPreviewOutput, prefOf, primaryInput, showAsFor, type Detail, type ShowAsMode } from './showAs';
 
 export interface PreviewTarget {
   nodeId: string;
@@ -25,6 +25,8 @@ export interface PreviewTarget {
   /** The primary input's variable (float nodes), drawn grey under the slice plot. */
   inputVar: string | null;
   mode: ShowAsMode;
+  /** Grid / Arrows density (a uniform: never a recompile). */
+  detail: Detail;
 }
 
 /** Find a node at the top level or inside any group (the eye can preview a node inside a group). */
@@ -63,7 +65,7 @@ export function resolvePreviewTarget(
     const v = pi ? varMap.get(pi.nodeId)?.[pi.outputKey] : undefined;
     if (v && v !== varName && declares(fs, v)) inputVar = v;
   }
-  return { nodeId: previewId, outputKey, type: t, varName, inputVar, mode: showAsFor(node, t, outputKey) };
+  return { nodeId: previewId, outputKey, type: t, varName, inputVar, mode: showAsFor(node, t, outputKey), detail: detailFor(node) };
 }
 
 /** Texels in the value target (256 × 144 at 16:9); its shape follows the picture's aspect. */
@@ -101,6 +103,7 @@ export class ValuePreviewRunner {
   readonly pv: Uniforms = {
     u_pvMode: { value: 0 }, u_pvMin: { value: 0 }, u_pvMax: { value: 1 },
     u_pvStep: { value: 0.1 }, u_pvMag: { value: 1 }, u_pvFlat: { value: 0 },
+    u_pvGrid: { value: new THREE.Vector2(10, 2) },
   };
 
   // Programs compile off-thread (compileAsync), quietly: one that fails (a variable the shader
@@ -191,6 +194,8 @@ export class ValuePreviewRunner {
     }
     if (!this.isReady(m)) return null;
     this.pv.u_pvMode.value = MODE_CODE[t.mode] ?? 0;
+    const g = gridDensity(t.detail);
+    (this.pv.u_pvGrid.value as THREE.Vector2).set(g.checks, g.lines);
     return m;
   }
 
