@@ -483,9 +483,10 @@ export const AgentStepOutNode: NodeDefinition = {
     const em = v.emit;
     // Per-walker state (state C, D): the compiler sets params.stateC when the group has it.
     const stateC = node.params.stateC === true;
-    // Born: its species from the Emit (by index when it doesn't say), no memory, white, its own channel.
+    // Born: its species from the Emit (by index when it doesn't say), no memory, white, its own channel
+    // (quietBirth, an Agent Rules group's: no trail on the step it is born; the rules decide every deposit).
     const bornC = stateC
-      ? `        float ${id}_bs = ${em ? `${em}_sp >= 0.0 ? ${em}_sp : ` : ''}mod(a_index, a_speciesCount);\n        o_c = vec4(${id}_bs, 0.0, 0.0, 16777215.0); o_d = agOneHot(${id}_bs);\n`
+      ? `        float ${id}_bs = ${em ? `${em}_sp >= 0.0 ? ${em}_sp : ` : ''}mod(a_index, a_speciesCount);\n        o_c = vec4(${id}_bs, 0.0, 0.0, 16777215.0); o_d = ${node.params.quietBirth === true ? 'vec4(0.0)' : `agOneHot(${id}_bs)`};\n`
       : '';
     const birth = (em
       ? `        o_a = ${em}_a; o_b = ${em}_b;\n`
@@ -538,7 +539,7 @@ function stepOut3d(node: GraphNode, v: Record<string, string>): { code: string; 
   } else if (v.speed) lines.push(`    vec3 ${id}_v = a_dir * max(${v.speed}, 1e-5);\n`);
   else lines.push(`    vec3 ${id}_v = a_vel;\n`);
   const bornC = stateC
-    ? `        float ${id}_bs = ${em ? `${em}_sp >= 0.0 ? ${em}_sp : ` : ''}mod(a_index, a_speciesCount);\n        o_c = vec4(${id}_bs, 0.0, 0.0, 16777215.0); o_d = agOneHot(${id}_bs);\n`
+    ? `        float ${id}_bs = ${em ? `${em}_sp >= 0.0 ? ${em}_sp : ` : ''}mod(a_index, a_speciesCount);\n        o_c = vec4(${id}_bs, 0.0, 0.0, 16777215.0); o_d = ${node.params.quietBirth === true ? 'vec4(0.0)' : `agOneHot(${id}_bs)`};\n`
     : '';
   const birth = (em
     ? `        o_a = ${em}_a; o_b = ${em}_b;\n`
@@ -1415,6 +1416,7 @@ export const DrawAgentsNode: NodeDefinition = {
     colorBy: { label: 'Colour by', type: 'select', section: 'Colour', hint: 'What picks each walker\'s colour along the palette (or between Colour A and B).', options: [
       { value: 'single', label: 'One colour (A / the palette\'s start)' }, { value: 'species', label: 'Species' }, { value: 'speed', label: 'Speed' }, { value: 'heading', label: 'Heading' }, { value: 'age', label: 'Age (share of its life)' },
       { value: 'agent', label: 'Agent (its own Colour, set inside the group)' },
+      { value: 'state', label: 'State (a rules group\'s state colours)' },
       { value: 'speedFast', label: 'Speed, fast first (the Particles node\'s)' }, { value: 'headingRound', label: 'Heading, once round (the Particles node\'s)' },
     ] },
     palette: { label: 'Palette', type: 'select', section: 'Colour', hint: 'Colour A → B, or one of the Particles node\'s palettes.', options: AG_PALETTE_OPTIONS },

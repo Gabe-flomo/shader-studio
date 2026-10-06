@@ -195,8 +195,12 @@ class Parser {
 }
 
 /** Run GLSL statements in `env` (variables and functions); returns env with what they declared. */
+const lexed = new Map<string, Tok[]>();
 export function runGlsl(code: string, env: Env): Env {
-  const p = new Parser(lex(code), env);
+  // The same code run many times (a simulation's steps) is lexed once.
+  let toks = lexed.get(code);
+  if (!toks) { toks = lex(code); if (lexed.size > 200) lexed.clear(); lexed.set(code, toks); }
+  const p = new Parser(toks, env);
   while (p.peek()) p.stmt(true);
   return env;
 }

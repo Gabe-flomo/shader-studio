@@ -39,6 +39,27 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.49',
+    date: '2026-10-06',
+    title: 'Explain and make a node',
+    highlights: [
+      { area: 'Studio', text: 'Explain: each Expression Block line gets a plain reading ("a soft-edged circle of radius 0.3"), step by step, from 62 shader idioms.', link: { kind: 'doc', path: 'docs/expression-explainer.md' } },
+      { area: 'Studio', text: 'Make a node from this: turn an idiom or part of a line into a node or preset, numbers as sliders. Where else is this used? finds matches.' },
+      { area: 'Studio', text: 'Explain also on the card\'s code page, per statement in Custom Functions, and for a selection on the GLSL page.' },
+    ],
+  },
+  {
+    id: '2026.10.48',
+    date: '2026-10-06',
+    title: 'Scene Builder and Agent Rules',
+    highlights: [
+      { area: 'Studio', text: '3D Scene Builder: describe shapes, how they combine, space warps, look and camera in a form; Build makes a real, readable node graph.', link: { kind: 'doc', path: 'docs/scene-builder.md' } },
+      { area: 'Studio', text: 'Scenes round-trip as recipe text, e.g. "volumetric · smooth-union(sphere, cone) k=0.3 · twist 0.5"; Describe reads hand-made 3D graphs.' },
+      { area: 'Studio', text: 'Agent Rules: write agent behaviour as When … Do … lines with named states; Open as nodes shows the same rule as ordinary nodes.', link: { kind: 'doc', path: 'docs/agent-rules.md' } },
+      { area: 'Studio', text: 'New folders: 3D: Scene Builder (six scenes) and Agents: rules (slime, ants, boids, predators, infection, termites, fireflies, coral).' },
+    ],
+  },
+  {
     id: '2026.10.47',
     date: '2026-10-06',
     title: 'Whole-picture previews',

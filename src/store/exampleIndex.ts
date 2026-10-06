@@ -31,6 +31,8 @@ import { TIME_CUBE_EXAMPLE_INDEX, TIME_CUBE_EXAMPLE_KEYS } from './timeCubeExamp
 import { FRAME_STACK_EXAMPLE_INDEX, FRAME_STACK_EXAMPLE_KEYS } from './frameStackExamples';
 import { TEXTURE_TOOL_EXAMPLE_INDEX, TEXTURE_TOOL_EXAMPLE_KEYS } from './textureToolExamples';
 import { SIM_GRID_EXAMPLE_INDEX, SIM_GRID_EXAMPLE_KEYS } from './simGridExamples';
+import { AGENT_RULE_EXAMPLE_INDEX, AGENT_RULE_EXAMPLE_KEYS } from './agentRuleExamples';
+import { SCENE_BUILDER_EXAMPLE_INDEX, SCENE_BUILDER_EXAMPLE_KEYS } from './sceneBuilderExampleIndex';
 
 export type ExampleGraph = {
   label: string; nodes: GraphNode[]; counter: number;
@@ -231,8 +233,12 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...FRAME_STACK_EXAMPLE_INDEX,
   // Texture tools (textureToolExamples.ts, docs/texture-tools.md): Mask, Levels, Flow, Neighbours, Change, Outline, Fade, Read.
   ...TEXTURE_TOOL_EXAMPLE_INDEX,
+  // The 3D: Scene Builder folder (sceneBuilderExamples.ts): graphs the 3D Scene Builder made from its templates.
+  ...SCENE_BUILDER_EXAMPLE_INDEX,
   // Simulations: grids (simGridExamples.ts, docs/simulations-grids.md): cellular automata from a Pass and its Previous.
   ...SIM_GRID_EXAMPLE_INDEX,
+  // Agents: rules (agentRuleExamples.ts, docs/agent-rules.md): the Agent Rules templates, behaviour as When … Do … lines.
+  ...AGENT_RULE_EXAMPLE_INDEX,
 };
 
 // The default graph to load on startup
@@ -258,6 +264,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Texture tools",     color: ctp.flamingo, keys: TEXTURE_TOOL_EXAMPLE_KEYS },
   { label: "Simulation",        color: ctp.green, keys: AGENT_EXAMPLE_KEYS },
   { label: "Simulations: grids", color: ctp.green, keys: SIM_GRID_EXAMPLE_KEYS },
+  { label: "Agents: rules",     color: ctp.green, keys: AGENT_RULE_EXAMPLE_KEYS },
   { label: "Agents with shaders", color: ctp.green, keys: AGENT_SHADER_EXAMPLE_KEYS },
   { label: "Agents in 3D",      color: ctp.green, keys: AGENT_3D_EXAMPLE_KEYS },
   { label: "Simulations: agents", color: ctp.green, keys: SIM_AGENT_EXAMPLE_KEYS },
@@ -279,6 +286,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "3D SDF",            color: ctp.sky, keys: ['sdfPolarRepeat','sdfBend3D','sdCrossScene3D','infinitePillars3D','spiralWorld3D','gyroidWarped','bakeHeavyScene','mlgWiggleTunnel','voxelTerrain'] },
   { label: "3D Lighting",       color: '#f9c468', keys: ['fresnelSchlickRim','refractDirFakeGlass','glassPhysical','glassMetaballs','litStillLife'] },
   { label: "GI Lighting",       color: ctp.green, keys: ['giSphereGround','giBoxFrame'] },
+  { label: "3D: Scene Builder", color: ctp.sky, keys: SCENE_BUILDER_EXAMPLE_KEYS },
   { label: "Volumetric",        color: '#f5a97f', keys: ['glowMarcher','volAnimatedRepeat','volumeGlowDemo'] },
   { label: "Time Cube",         color: '#f5a97f', keys: TIME_CUBE_EXAMPLE_KEYS },
   { label: "Frame Stack",       color: '#f5a97f', keys: FRAME_STACK_EXAMPLE_KEYS },

@@ -25,6 +25,12 @@ import { DiscoverFunctionsModal } from './code/DiscoverFunctionsModal';
 import { PageCanvas } from './shell/PageCanvas';
 import { usePageCanvas } from './shell/pageCanvasStore';
 import { usePhoneLayout } from '../hooks/useBreakpoint';
+import { lazyWithSuspense, type PropsOf } from './lazyWithSuspense';
+import { pickExplainSpan } from '../lib/glslPatterns/parse';
+import type { GlslExplainPanel as GlslExplainPanelT } from './explain/GlslExplainPanel';
+
+// The explainer loads when Explain is first pressed
+const GlslExplainPanel = lazyWithSuspense<PropsOf<typeof GlslExplainPanelT>>(() => import('./explain/GlslExplainPanel').then(m => ({ default: m.GlslExplainPanel })));
 
 // ── Boilerplate ───────────────────────────────────────────────────────────────
 
@@ -182,6 +188,13 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
   const [noteVal, setNoteVal] = useState('');
   const [filter, setFilter] = useState('');
   const [discoverOpen, setDiscoverOpen] = useState(false);
+  // Explain: the selection (or the statement at the caret), under the editor
+  const [explainSpan, setExplainSpan] = useState<{ start: number; end: number; text: string } | null>(null);
+  const explainSelection = () => {
+    const sel = editorRef.current?.getSelection() ?? { start: 0, end: 0 };
+    const span = pickExplainSpan(code, sel);
+    setExplainSpan(span ? { ...span, text: code.slice(span.start, span.end) } : { start: sel.start, end: sel.start, text: '' });
+  };
   const [openId, setOpenId] = useState<string | null>(() => { try { return localStorage.getItem(OPEN_KEY); } catch { return null; } });
   const setOpen = (id: string | null) => { setOpenId(id); try { if (id) localStorage.setItem(OPEN_KEY, id); else localStorage.removeItem(OPEN_KEY); } catch { /* preference only */ } };
   const openShader = openId ? shaders.find(s => s.id === openId) ?? null : null;
@@ -397,6 +410,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
           {onConvert && <Button size="sm" variant="ghost" icon="nodes" onClick={() => onConvert(code)} title="Open this shader on the Convert page and see the nodes it would become">Convert<ProBadgeFor feature="convert" /></Button>}
           <IconButton icon="copy" label="Copy the whole shader" size="sm" onClick={() => { navigator.clipboard?.writeText(code).then(() => toast.success('Copied'), () => toast.error('Couldn’t copy')); }} />
           <IconButton icon="search" label="Discover functions: extract from this file, or search the saved shaders" size="sm" onClick={() => setDiscoverOpen(true)} />
+          <IconButton icon="info" label="Explain the selection, or the statement at the caret, in plain words" size="sm" active={!!explainSpan} data-glsl-action="explain" onMouseDown={e => e.preventDefault()} onClick={explainSelection} />
           <IconButton icon="export" label="Download every saved shader: one .playfile, or .glsl files in a ZIP (notes as a comment at the top), easy to share or to send for help" size="sm" onClick={e => offerSetExport(e.currentTarget, 'glsl')} />
           <IconButton icon="graphs" label="Load the node graph's compiled shader into the editor" size="sm" onClick={() => {
             // A graph built with a sealed node pack keeps that code hidden here too.
@@ -411,6 +425,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
 
         {/* Code area */}
         <GlslEditor ref={editorRef} value={code} onChange={setCode} ariaLabel="Fragment shader source" errorLines={errorLines} />
+        {explainSpan && <GlslExplainPanel code={code} span={explainSpan} setCode={setCode} onClose={() => setExplainSpan(null)} />}
 
         {/* Compile errors */}
         {glslErrors.length > 0 && (
