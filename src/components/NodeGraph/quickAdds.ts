@@ -13,7 +13,10 @@ import { getNodeDefinition } from '../../nodes/definitions';
  *   - a vec2 output is a UV looking for a shape or a noise;
  *   - a vec3 output is a colour looking for a grade or a blend.
  * The socket's label refines the pick (a "Time" input offers BPM Sync, a "Center" input
- * offers the mouse). Each rule wires exactly one socket on the new node; the rest keep
+ * offers the mouse), and so does the node it is on: a Texture tools number goes to colour
+ * (Palette, Color Ramp, Mix), a Jump flood distance to Outline (distance), a glow or an
+ * outline's light to the layering nodes (Add Colors, Blend Modes), and a texture output to the
+ * Texture tools (docs/texture-tools.md). Each rule wires exactly one socket on the new node; the rest keep
  * their defaults so the new node does something visible immediately.
  */
 export interface QuickAdd {
@@ -45,6 +48,8 @@ function feedRules(type: string, text: string): Rule[] {
     case 'vec2':
       if (has(text, 'center', 'centre', 'offset', 'translate', 'shift')) return [['mouse', 'uv', 'follow the pointer'], ['vec2Const', 'val', 'a fixed point'], ['uv', 'uv', 'per-pixel']];
       return [['uv', 'uv', 'the screen'], ['pixelUV', 'uv', 'pixel-square screen'], ['mouse', 'uv', 'follow the pointer']];
+    case 'texture':
+      return [['pass', 'texture', 'draw a picture into a texture'], ['textureInput', 'texture', 'an image'], ['videoInput', 'texture', 'a video or the camera']];
     case 'vec3':
     case 'vec4':
       if (has(text, 'pos', 'normal', 'dir')) return [];
@@ -54,9 +59,19 @@ function feedRules(type: string, text: string): Rule[] {
   }
 }
 
+/** Texture tools whose number outputs are masks or shaped values: colour them first. */
+const SHAPED_NUMBER_NODES = new Set(['textureMask', 'textureLevels', 'textureNeighbours', 'textureChange', 'distanceShape']);
+/** Nodes whose colour output is light to lay over a picture. */
+const LIGHT_NODES = new Set(['distanceShape', 'glowTexture']);
+
 /** Rules for using the clicked output. */
-function consumeRules(type: string, text: string): Rule[] {
+function consumeRules(type: string, text: string, nodeType?: string): Rule[] {
+  if (type === 'float' && nodeType === 'jumpFloodTexture') return [['distanceShape', 'distance', 'outline, glow or rings'], ['palette', 'value', 'as a colour'], ['textureLevels', 'value', 'shape the distance']];
+  if (type === 'float' && nodeType && SHAPED_NUMBER_NODES.has(nodeType)) return [['palette', 'value', 'as a colour'], ['colorRamp', 't', 'through a gradient'], ['mix', 't', 'blend two things by it']];
+  if (type === 'vec3' && nodeType && LIGHT_NODES.has(nodeType)) return [['addColor', 'b', 'add it over a picture'], ['blendModes', 'blend', 'screen it over a picture'], ['brightnessContrast', 'color', 'grade it']];
   switch (type) {
+    case 'texture':
+      return [['textureMask', 'texture', 'a mask from it'], ['textureLevels', 'texture', 'shape its values'], ['textureFlow', 'texture', 'a flow from its slopes']];
     case 'float':
       if (has(text, 'dist', 'sdf', 'field', 'shape')) return [['sdfFill', 'd', 'fill and stroke'], ['glowLayer', 'd', 'glow around the edge'], ['sdfColorize', 'd', 'inside / outside colours']];
       return [['floatToVec3', 'input', 'as a grey'], ['palette', 'value', 'as a colour'], ['colorRamp', 't', 'through a gradient']];
@@ -77,9 +92,11 @@ export function suggestQuickAdds(opts: {
   /** Socket label and key, used to refine the pick */
   label?: string;
   key?: string;
+  /** The type of the node the socket is on, which refines the pick too */
+  nodeType?: string;
 }): QuickAdd[] {
   const text = `${opts.label ?? ''} ${opts.key ?? ''}`.toLowerCase();
-  const rules = opts.dir === 'in' ? feedRules(opts.type, text) : consumeRules(opts.type, text);
+  const rules = opts.dir === 'in' ? feedRules(opts.type, text) : consumeRules(opts.type, text, opts.nodeType);
   const out: QuickAdd[] = [];
   for (const [type, key, note] of rules) {
     const def = getNodeDefinition(type);

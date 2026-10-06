@@ -9,6 +9,7 @@
  * at that time. Each frame is drawn straight into its tile, scaled.
  */
 import { tileOrigin, type StackPlan, type VideoMeta } from './plan';
+import { drawClipFrame, isIdentity, type ClipTransform } from '../media/clip';
 
 export class TimeCubeCancelled extends Error {
   constructor() { super('Cancelled'); this.name = 'TimeCubeCancelled'; }
@@ -70,7 +71,7 @@ export async function decodeVideoFrames(blob: Blob, plan: StackPlan, ctx: Canvas
       }
       if (signal.aborted) throw new TimeCubeCancelled();
       const { x, y } = tileOrigin(plan, i);
-      ctx.drawImage(el, x, y, plan.tileW, plan.tileH);
+      drawClipFrame(ctx, el, el.videoWidth, el.videoHeight, plan.xf, x, y, plan.tileW, plan.tileH);
       onFrame(i + 1);
     }
   } finally { release(el, url); }
@@ -161,15 +162,33 @@ function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number,
 
 // ── Reading frames one at a time (Frames from, Frame order) ─────────────────
 
-/** Draws the frame at a video time into a box. */
+/** Draws the frame at a video time into a box, cropped / rotated / flipped by `xf` when given. */
 export interface FrameReader {
-  draw(t: number, g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, signal: AbortSignal): Promise<void>;
+  draw(t: number, g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, signal: AbortSignal, xf?: ClipTransform): Promise<void>;
   close(): void;
+}
+
+/**
+ * The test clip at time t, with a clip transform: painted whole on a scratch canvas (sharp enough
+ * for the crop to fill the tile), then drawn through the transform.
+ */
+export function paintDemoFrameXf(g: CanvasRenderingContext2D, t: number, xf: ClipTransform | undefined, x: number, y: number, w: number, h: number, scratch?: { c?: HTMLCanvasElement }): void {
+  if (!xf || isIdentity(xf)) { paintDemoFrame(g, t, x, y, w, h); return; }
+  const k = Math.min(4, Math.max(1, Math.max(w, h) / Math.min(xf.crop.w * DEMO_META.width, xf.crop.h * DEMO_META.height)));
+  const sw = Math.round(DEMO_META.width * k), sh = Math.round(DEMO_META.height * k);
+  const c = scratch?.c ?? document.createElement('canvas');
+  if (scratch) scratch.c = c;
+  if (c.width !== sw || c.height !== sh) { c.width = sw; c.height = sh; }
+  const sg = c.getContext('2d');
+  if (!sg) return;
+  paintDemoFrame(sg, t, 0, 0, sw, sh);
+  drawClipFrame(g, c, sw, sh, xf, x, y, w, h);
 }
 
 /** The test clip, painted at any time. */
 export function demoReader(): FrameReader {
-  return { draw: async (t, g, x, y, w, h) => paintDemoFrame(g, t, x, y, w, h), close: () => {} };
+  const scratch: { c?: HTMLCanvasElement } = {};
+  return { draw: async (t, g, x, y, w, h, _signal, xf) => paintDemoFrameXf(g, t, xf, x, y, w, h, scratch), close: () => {} };
 }
 
 /** A video, seeked frame by frame (as decodeVideoFrames). */
@@ -178,7 +197,7 @@ export async function openVideoReader(blob: Blob): Promise<FrameReader> {
   const el = videoElement(url);
   if (!(await waitFor(el, 'loadeddata', 20_000))) { release(el, url); throw new Error('This video could not be opened here.'); }
   return {
-    async draw(time, g, x, y, w, h, signal) {
+    async draw(time, g, x, y, w, h, signal, xf) {
       if (signal.aborted) throw new TimeCubeCancelled();
       const t = Math.min(time, Math.max(0, (Number.isFinite(el.duration) ? el.duration : time) - 1e-3));
       if (Math.abs(el.currentTime - t) > 1e-4 || el.readyState < 2) {
@@ -188,7 +207,8 @@ export async function openVideoReader(blob: Blob): Promise<FrameReader> {
         if (el.readyState < 2) await waitFor(el, 'loadeddata', 2000);
       }
       if (signal.aborted) throw new TimeCubeCancelled();
-      g.drawImage(el, x, y, w, h);
+      if (xf) drawClipFrame(g, el, el.videoWidth, el.videoHeight, xf, x, y, w, h);
+      else g.drawImage(el, x, y, w, h);
     },
     close: () => release(el, url),
   };
@@ -196,10 +216,11 @@ export async function openVideoReader(blob: Blob): Promise<FrameReader> {
 
 /** Paint every planned frame of the test clip into the atlas. Yields to the page now and then. */
 export async function paintDemoFrames(plan: StackPlan, ctx: CanvasRenderingContext2D, onFrame: (done: number) => void, signal: AbortSignal): Promise<void> {
+  const scratch: { c?: HTMLCanvasElement } = {};
   for (let i = 0; i < plan.frames; i++) {
     if (signal.aborted) throw new TimeCubeCancelled();
     const { x, y } = tileOrigin(plan, i);
-    paintDemoFrame(ctx, plan.times[i], x, y, plan.tileW, plan.tileH);
+    paintDemoFrameXf(ctx, plan.times[i], plan.xf, x, y, plan.tileW, plan.tileH, scratch);
     onFrame(i + 1);
     if (i % 16 === 15) await new Promise(r => setTimeout(r, 0));
   }

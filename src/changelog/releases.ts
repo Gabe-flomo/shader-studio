@@ -39,6 +39,41 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.38',
+    date: '2026-10-05',
+    title: 'Edit the clip',
+    highlights: [
+      { area: 'Studio', text: 'Time Cube: Edit clip… opens a trimmer with a filmstrip, In/Out handles and ticks showing exactly which frames are sampled.', link: { kind: 'doc', path: 'docs/time-cube.md' } },
+      { area: 'Studio', text: 'Keep several segments (reorder, reverse), share frames by length or equally, add a speed ramp, crop, rotate and flip.' },
+    ],
+  },
+  {
+    id: '2026.10.37',
+    date: '2026-10-05',
+    title: 'Preview detail',
+    highlights: [
+      { area: 'Studio', text: 'Preview arrows now scale with strength: the strongest is a full arrow, weak ones are short or a dot. A Detail setting makes Grid and Arrows finer.' },
+    ],
+  },
+  {
+    id: '2026.10.36',
+    date: '2026-10-05',
+    title: 'Previews that explain',
+    highlights: [
+      { area: 'Studio', text: 'Node previews have Show as: vec2 values as a warped Grid, Arrows or a colour Wheel, so you can see how space moves.', link: { kind: 'doc', path: 'docs/node-previews.md' } },
+      { area: 'Studio', text: 'Numbers auto-range with a key (no more white squares), a Slice plot shows input vs output, and constants read "= 3.0 everywhere".' },
+    ],
+  },
+  {
+    id: '2026.10.35',
+    date: '2026-10-05',
+    title: 'Texture tools',
+    highlights: [
+      { area: 'Studio', text: 'Texture tools: Mask, Levels, Flow, Neighbours, Change, Outline, Fade and Read turn any texture into masks, directions and glows.', link: { kind: 'doc', path: 'docs/texture-tools.md' } },
+      { area: 'Studio', text: 'They work on Passes, images, video, Baked and agent trails; Mask and Levels also shape plain numbers. Seven new examples.' },
+    ],
+  },
+  {
     id: '2026.10.34',
     date: '2026-10-05',
     title: 'Fewer nodes',
