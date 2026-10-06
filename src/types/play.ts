@@ -835,6 +835,7 @@ export { LAYER_KINDS, LAYER_NUMERIC_PROPS, layerNumericProps, defaultLayer, pars
 import { parseTakeDataFeeds, type TakeDataFeed } from '../data/streams/takeDataTypes';
 import { canBeMatte, keepLibraryId, parseLayer, repairMattes, BACKGROUND_IMAGE_MAX, BACKGROUND_VIDEO_MAX, DATA_IMAGE, DATA_VIDEO, type BackgroundLayer, type PlayLayer } from './playLayers';
 import { isLinkedRef, LINKED_REF_MAX } from '../files/linkedRefs';
+import { cpIsPlain, cpParse, type CpSaved } from '../play/kit/clipPlay.js';
 import { parseLayerKinds, syncLayerKinds, type LayerKindDef } from './layerKinds';
 import { parseSourceCredit, type SourceCredit } from './credit';
 import { parseProjection, type ProjectionRecord } from './projection';
@@ -1159,6 +1160,8 @@ export interface BackgroundVideo {
   rate: number;
   /** A video from a linked folder (docs/linked-folders.md): `linked:<folder>/<path>`, played from disk. */
   libraryId?: string;
+  /** Clip settings from the clip editor (docs/clip-editor.md): kept segments, played on the clock. */
+  clip?: CpSaved;
 }
 
 /**
@@ -1500,6 +1503,8 @@ export function parseDisplay(raw: unknown): PlayDisplay | undefined {
     const rate = typeof vi.rate === 'number' && Number.isFinite(vi.rate) ? Math.max(0.1, Math.min(4, vi.rate)) : 1;
     out.video = { name: vi.name.slice(0, 120), src, bytes, loop: vi.loop !== false, muted: vi.muted !== false, rate };
     if (isLinkedRef(vi.libraryId) && vi.libraryId.length <= LINKED_REF_MAX) out.video.libraryId = vi.libraryId;
+    const clip = cpParse(vi.clip);
+    if (clip && !cpIsPlain(clip)) out.video.clip = clip;
   }
   if (d.fit === 'contain' || d.fit === 'stretch') out.fit = d.fit;
   if (d.source === 'image' || d.source === 'video' || d.source === 'colour') out.source = d.source;

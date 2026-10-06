@@ -6,6 +6,10 @@
  * The file goes into the backgrounds library (IndexedDB) when picked; the
  * layer keeps its id, name and size. Its sound, when on, is what audio
  * readers can listen to ("Video · <layer>").
+ *
+ * Edit clip… (or a double-click on the file row) opens the shared clip editor
+ * (docs/clip-editor.md): trim, segments, reverse, speed, loop, crop / rotate /
+ * flip, kept on the layer as `clip`.
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { VideoLayer } from '../../../types/play';
@@ -36,6 +40,9 @@ import { VideoTracking } from '../TrackingChips';
 import { TRACKER_NAMES } from '../../../types/playTracking';
 import { trackerSettingsOf } from '../trackBakeJobs';
 import type { PlayRecord } from '../../../types/play';
+import { getVideo } from '../../../lib/backgroundLibrary';
+import { parseSavedClip } from '../../../lib/media/clip';
+import { LazyClipEditorModal } from '../../media/lazyClipEditor';
 
 /** "Hands, Face" when those track this layer; "Off" when none does. */
 function trackingSummary(play: PlayRecord, layerId: string): string {
@@ -69,6 +76,7 @@ export function VideoEditor({ f, ctx, pictureHidden }: { f: FieldKit; ctx: Edito
   const tk = f.tk;
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [clipOpen, setClipOpen] = useState(false);
   const [status, durText] = useFileStatus(l.id).split('|');
   const duration = Number(durText) || 0;
 
@@ -117,6 +125,7 @@ export function VideoEditor({ f, ctx, pictureHidden }: { f: FieldKit; ctx: Edito
         ) : f.row('File', (
           <>
             <Button size="sm" icon="import" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? 'Opening…' : status === 'missing' ? 'Pick it again' : 'Replace'}</Button>
+            <Button size="sm" icon="play" disabled={status !== 'ready'} onClick={() => setClipOpen(true)} title="Open the video: trim, segments, speed, loop, crop (the clip editor)">Edit clip…</Button>
             {status === 'missing' ? <LinkedRelinkButton id={l.videoId} filter="video" onRelinked={ref => takeLinked(ref, ref.split('/').pop() ?? l.fileName, l.bytes)} /> : <LinkedPickButton filter="video" label="Linked…" disabled={busy} onPick={(ref, e) => takeLinked(ref, e.name, e.size)} />}
             <span title={l.fileName} style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>
               {l.fileName}{l.bytes ? ` · ${sizeText(l.bytes)}` : ''}{duration ? ` · ${clock(duration)}` : ''}
@@ -124,6 +133,20 @@ export function VideoEditor({ f, ctx, pictureHidden }: { f: FieldKit; ctx: Edito
           </>
         ))}
         {fileNote && hint(fileNote)}
+        {l.clip && hint(`Clip: ${l.clip.segments.length > 1 ? `${l.clip.segments.length} segments` : 'trimmed'}${l.clip.crop.w < 1 || l.clip.crop.h < 1 || l.clip.rotate || l.clip.flipX || l.clip.flipY ? ', cropped / turned' : ''}. It follows the clock through them (Start at is not used).`)}
+        {clipOpen && (
+          <LazyClipEditorModal
+            host="videoLayer"
+            subtitle={`Video layer · ${l.label}`}
+            load={async () => playVideoLayers.file(l.id)?.blob ?? (await getVideo(l.videoId))?.blob ?? null}
+            saved={parseSavedClip(l.clip)}
+            speed={l.speed}
+            loop={l.loop}
+            note="Apply sets how the layer plays: the kept segments on the clock, at its speed. Takes, renders and web pages show the same frames."
+            onApply={a => f.set({ clip: a.clip ?? undefined, speed: a.speed, loop: a.loop })}
+            onClose={() => setClipOpen(false)}
+          />
+        )}
       </Section>
       <Section id="video-playback" kind="video" title="Playback" summary={`${l.playing ? 'Playing' : 'Paused'} · ${l.speed}×${l.loop ? ' · loop' : ''}`}>
         {f.row('Play', (

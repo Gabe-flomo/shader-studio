@@ -13,11 +13,11 @@ import { fontFamily } from '../../theme/tokens';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import type { GraphNode } from '../../types/nodeGraph';
 import { getVideo } from '../../lib/backgroundLibrary';
-import { clipParams, clipSettingsOf, type ClipSettings } from '../../lib/media/clip';
+import { clipParams, clipSettingsOf, cubeSequence, type ClipSettings } from '../../lib/media/clip';
 import { MAX_FRAMES, MIN_FRAMES, capText, formatBytes, planFrameStack, stackSettingsOf } from '../../lib/timeCube/plan';
 import { DEMO_LABEL, paintDemoFrame } from '../../lib/timeCube/frames';
-import { timeCubeMeta, timeCubeSource } from '../../lib/timeCube/volumes';
-import { buildEstimate, combineSettingsOf } from '../../lib/timeCube/order';
+import { timeCubeMeta, timeCubeSource, timeCubes } from '../../lib/timeCube/volumes';
+import { buildEstimate, combineSettingsOf, frameOrder, orderSettingsOf } from '../../lib/timeCube/order';
 import { ClipEditor, explicitSegments, type ClipFrameSource } from '../media/ClipEditor';
 
 const PAINTED: ClipFrameSource = { kind: 'painted', paint: paintDemoFrame };
@@ -43,6 +43,14 @@ export function TimeCubeClipModal({ node, onClose }: { node: GraphNode; onClose:
   const [frames, setFrames] = useState(settings.frames);
   const plan = useMemo(() => (meta ? planFrameStack(meta, { ...settings, frames, clip: draft }) : null), [meta?.width, meta?.height, meta?.duration, frames, draft, settings.width, settings.spacing, settings.step, settings.deep]); // eslint-disable-line react-hooks/exhaustive-deps
   const comb = combineSettingsOf(node.params);
+  // Result plays the frames in cube order: Frame order applied (sorting needs the built frames' numbers;
+  // until the cube is built with this clip it plays them in time order).
+  const sequence = useMemo(() => {
+    if (!plan) return null;
+    const ord = orderSettingsOf(node.params);
+    const stats = timeCubes.frameStats(node.id)?.stats;
+    return cubeSequence(plan.times, frameOrder(plan.frames, ord, stats && stats.length === plan.frames ? stats : undefined));
+  }, [plan, node.params, node.id]);
   const clipMeta = useMemo(() => (meta ? { width: meta.width, height: meta.height, duration: meta.duration } : null), [meta?.width, meta?.height, meta?.duration]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const apply = () => {
@@ -94,6 +102,9 @@ export function TimeCubeClipModal({ node, onClose }: { node: GraphNode; onClose:
             onChange={setDraft}
             plan={plan ? { times: plan.times, segments: plan.segments, frames: plan.frames, every: plan.every } : null}
             side={side}
+            host="timeCube"
+            sequence={sequence}
+            cubeRate={plan && plan.every > 0 ? 1 / plan.every : undefined}
           />
         )}
     </Modal>

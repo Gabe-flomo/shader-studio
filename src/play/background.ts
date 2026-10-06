@@ -27,6 +27,7 @@
  * a session copy (`setSessionVideo`); the record keeps its name and size so
  * the page can ask for it again after a reload.
  */
+import { cpAt, cpFollow, cpPlaylist, type CpSaved } from './kit/clipPlay.js';
 import { activeFill, backgroundLayerOf, backgroundSource, pictureHidden, replacesShader, videoTimeAt, type BackgroundItem, type BackgroundLayer, type PlayDisplay, type PlayRecord } from '../types/play';
 import type { KitBackground } from './kit/layers.js';
 import type { BqPlan } from './kit/queue.js';
@@ -59,7 +60,16 @@ export function planGraphs(plan: BqPlan | null): BackgroundItem[] {
 }
 
 type Listener = () => void;
-interface VideoOpts { rate: number; loop: boolean; muted: boolean }
+interface VideoOpts { rate: number; loop: boolean; muted: boolean; clip?: CpSaved }
+
+/** Where a clipped background video is at clock `time` (docs/clip-editor.md), or null without a clip. */
+function clipAt(opts: VideoOpts, time: number, duration: number) {
+  if (!opts.clip || !(duration > 0) || !Number.isFinite(duration)) return null;
+  const pl = cpPlaylist(opts.clip, duration, opts.rate, opts.loop);
+  if (!pl.segs.length) return null;
+  const at = cpAt(pl.segs, time, pl.speed, pl.loop);
+  return { at, seg: pl.segs[at.k], speed: pl.speed };
+}
 const sessionKey = (name: string, bytes: number) => `${name}|${bytes}`;
 
 class PlayBackground {
@@ -260,6 +270,15 @@ class PlayBackground {
 
   private followVideo(v: HTMLVideoElement, opts: VideoOpts, time: number, playing: boolean): void {
     if (v.readyState < 1) return;
+    // Clip settings: the kept segments on the clock (play/kit/clipPlay.js, as the web page plays them).
+    const c = clipAt(opts, time, v.duration);
+    if (c) {
+      if (v.loop) v.loop = false;
+      const muted = opts.muted || this.soundBlocked || c.at.reverse;
+      if (v.muted !== muted) v.muted = muted;
+      cpFollow(v, c.at, c.seg, c.speed, playing);
+      return;
+    }
     if (v.playbackRate !== opts.rate) v.playbackRate = opts.rate;
     if (v.loop !== opts.loop) v.loop = opts.loop;
     const muted = opts.muted || this.soundBlocked;
@@ -384,7 +403,7 @@ class PlayBackground {
 }
 
 function videoOpts(item: BackgroundItem): VideoOpts {
-  return { rate: item.rate ?? 1, loop: item.loop !== false, muted: item.muted !== false };
+  return { rate: item.rate ?? 1, loop: item.loop !== false, muted: item.muted !== false, ...(item.clip ? { clip: item.clip } : {}) };
 }
 
 function dropVideo(v: HTMLVideoElement): void { v.pause(); v.removeAttribute('src'); v.load(); }
@@ -392,7 +411,7 @@ function dropVideo(v: HTMLVideoElement): void { v.pause(); v.removeAttribute('sr
 async function seekVideo(v: HTMLVideoElement, opts: VideoOpts, time: number): Promise<void> {
   if (v.readyState < 1) await waitFor(v, 'loadedmetadata', 4000);
   if (!v.paused) v.pause();
-  const target = Number.isFinite(v.duration) ? videoTimeAt(time, v.duration, opts.rate, opts.loop) : Math.max(0, time) * opts.rate;
+  const target = clipAt(opts, time, v.duration)?.at.time ?? (Number.isFinite(v.duration) ? videoTimeAt(time, v.duration, opts.rate, opts.loop) : Math.max(0, time) * opts.rate);
   if (Math.abs(v.currentTime - target) < 0.0005 && v.readyState >= 2) return;
   const done = waitFor(v, 'seeked', 3000);
   v.currentTime = target;
