@@ -296,7 +296,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
               <button key={f.kind === 'node' ? f.type : f.spec.idiom.id} type="button" onClick={() => pick(f)} onMouseEnter={() => setActive(i)} data-do-fallback
                 style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '4px 6px', border: 0, borderRadius: radius.control, cursor: 'pointer', textAlign: 'left', background: i === active ? tk.bg.hover : 'transparent', color: tk.text.primary, font: `12.5px ${fontFamily.ui}` }}>
                 <b style={{ fontWeight: 600 }}>{f.kind === 'node' ? f.label : f.spec.idiom.name}</b>
-                <span style={{ fontSize: 11, color: tk.text.muted }}>{f.kind === 'node' ? f.detail : `idiom · an Expression Block (${f.spec.result})`}</span>
+                <span style={{ fontSize: 11, color: tk.text.muted }}>{f.kind === 'node' ? f.detail : `idiom${f.spec.idiom.use ? ` · ${f.spec.idiom.use}` : ''} · an Expression Block (${f.spec.result})`}</span>
               </button>
             ))}
           </div>

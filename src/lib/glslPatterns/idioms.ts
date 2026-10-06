@@ -15,6 +15,7 @@
  */
 import type { GlslType } from './ast';
 import type { Role } from './roles';
+import { MEANINGS } from './meanings';
 
 export interface IdiomText {
   /** The phrase for a hole: its explanation's noun phrase, or its code when that's short. */
@@ -60,6 +61,13 @@ export interface Idiom {
   short?: string;
   /** Extra search words (for the node browser and Find uses). */
   keywords?: string[];
+  /**
+   * The plain meaning, read first (meanings.ts): what the values are, what it looks like, what
+   * it is for. A noun phrase that follows "x is …".
+   */
+  meaning?: (c: IdiomText) => string;
+  /** The common job it does ("a hard on/off mask"), shown as a tag. */
+  use?: string;
 }
 
 const V2: GlslType[] = ['vec2'];
@@ -586,6 +594,9 @@ export const IDIOMS: Idiom[] = [
     keywords: ['invert', 'flip', 'one minus'],
   },
 ];
+
+// Each built-in idiom's plain meaning lives in meanings.ts (kept apart: it is long prose)
+for (const i of IDIOMS) { const m = MEANINGS[i.id]; if (m) { i.meaning ??= m.meaning; i.use ??= m.use; } }
 
 export function idiomById(id: string): Idiom | undefined {
   return IDIOMS.find(i => i.id === id);

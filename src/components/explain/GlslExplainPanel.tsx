@@ -34,7 +34,7 @@ export function GlslExplainPanel({ code, span, setCode, onClose }: {
         <IconButton icon="close" label="Close the explanation" size="sm" onClick={onClose} />
       </div>
       {ex.ok ? (
-        <ExplainView ex={ex} sentence={ex.lineSentence} editable={stale ? { start: 0, end: 0 } : { start: ex.line.exprStart, end: span.text.length }}
+        <ExplainView ex={ex} editable={stale ? { start: 0, end: 0 } : { start: ex.line.exprStart, end: span.text.length }}
           onFindUses={dialogs.findUses}
           onMakeNode={rel => {
             const abs = { start: span.start + rel.start, end: span.start + rel.end };

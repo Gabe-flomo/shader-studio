@@ -25,6 +25,7 @@ import { ValuePreview } from '../ValuePreview';
 import { prefOf, useNodePreviewPrefs } from '../../../lib/nodePreview/showAs';
 import { highlightGlsl } from './highlight';
 import { useHoverExplain } from '../../explain/useHoverExplain';
+import { ExplainText } from '../../explain/ExplainText';
 import { useCardPages } from './cardPageStore';
 import {
   CARD_PAGE_LABEL, cardPages, codeLinesFor, isEmptyCodeNode, noteOf, previewOptionsFor, resolvePage,
@@ -181,7 +182,7 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
             style={{ position: 'absolute', left: 4, right: 4, bottom: 4, padding: '5px 8px', borderRadius: radius.sm, pointerEvents: 'none',
               background: tk.bg.panel, boxShadow: `0 0 0 1px ${tk.border.default}, 0 4px 14px rgba(0,0,0,0.18)`,
               font: `500 11.5px/1.4 ${fontFamily.ui}`, color: tk.text.secondary }}>
-            {hoverText}
+            <ExplainText segs={hoverText} />
           </div>
         )}
         </div>

@@ -21,7 +21,7 @@ import { Select } from '../ui/Select';
 import { toast } from '../ui/toastStore';
 import { CodeInput } from '../code/CodeField';
 import { ReferencePanel } from '../code/ReferencePanel';
-import { LinePreviewPanel, ProbeButton } from '../code/LinePreview';
+import { LinePreviewPanel, ProbeButton, startLineProbe } from '../code/LinePreview';
 import type { EditorPanel } from '../code/editorPanelPrefs';
 import { CollapseInputsButton, FunctionsToggle, InputsRail, SidePanel, useEditorSidePanels } from '../code/SidePanels';
 import { buildCompletions } from '../code/glslReference';
@@ -509,6 +509,7 @@ function LineExplain({ node, index, line, ctx, dialogs }: {
   return (
     <ExplainRow text={text} exprStart={head.length} ctx={ctx} indent={index === 'return' ? 0 : 28}
       onFindUses={dialogs.findUses}
+      onShowPicture={() => startLineProbe(node, index === 'return' ? { kind: 'return' } : { kind: 'line', index })}
       onMakeNode={span => {
         const rel = { start: span.start - head.length, end: span.end - head.length };
         dialogs.makeNode({ source: line.rhs, span: rel, ctx, useHere: exprBlockUseHere(node.id, index, rel) });

@@ -19,6 +19,7 @@ import { compilePattern } from './match';
 import { parseExpr } from './parse';
 import { inferTypes, GLOBAL_TYPES, type TypeEnv } from './types';
 import { inferRoles, roleFromName, type Role } from './roles';
+import { stripMarks } from './segments';
 import { explainTree, fmt, type ExplainContext, type Explanation, type IdiomHit } from './explain';
 import { rangeForValue } from '../rangeMath';
 import type { Idiom } from './idioms';
@@ -237,7 +238,7 @@ export function generalise(root: Expr, src: string, ctx: GeneraliseContext = {})
     nodes[inputs.length - 1] = [lit.id];
   }
   const rootDesc = ex.descs.get(root.id);
-  const short = rootDesc && !rootDesc.leaf ? rootDesc.short.replace(/^the /, '') : 'expression';
+  const short = rootDesc && !rootDesc.leaf ? stripMarks(rootDesc.short).replace(/^the /, '') : 'expression';
   const label = short.replace(/^./, ch => ch.toUpperCase());
   return {
     fnName: uniqueName(short, new Set()), label, description: ex.sentence,
@@ -294,7 +295,8 @@ export function descriptionFor(g: Generalised, choices: GenChoices = {}): string
     .replace(new RegExp(`\\b(?:(?:the|an?) )?([\\w-]+) ${NAME}`, 'g'), (m, said: string, name: string) => (same(said, name) ? `the given ${said}` : m))
     // "⟨steps⟩ steps" → "the given steps"
     .replace(new RegExp(`${NAME} ([\\w-]+)`, 'g'), (m, name: string, said: string) => (same(said, name) ? `the given ${said}` : m))
-    .replace(new RegExp(NAME, 'g'), '$1');
+    // A name left over is the made node's input: in backticks, so it never reads as a word
+    .replace(new RegExp(NAME, 'g'), '`$1`');
   return `${resolved[0].toUpperCase()}${resolved.slice(1)}.`;
 }
 

@@ -16,9 +16,12 @@ export { inferRoles, roleFromName, roleFromType, roleOfSourceNode, type Role, ty
 export { matchPattern, compilePattern, normalize, canonicalKey, constValue, closeEnough, NAMED_CONSTANTS, type Bindings, type Binding } from './match';
 export { IDIOMS, idiomById, registerIdiom, type Idiom, type IdiomText, type HoleSpec, type IdiomCategory } from './idioms';
 export {
-  explainExpression, explainLine, explainTree, breakdownText, fmt,
+  explainExpression, explainLine, explainTree, breakdownText, breakdownSegs, fmt,
   type ExplainContext, type Explanation, type ExplainResult, type LineExplanation, type Step, type Desc, type IdiomHit,
 } from './explain';
+export { parseSegs, toPlainText, stripMarks, segsToMarked, varsIn, spokenToken, mark, type Seg, type SegKind } from './segments';
+export { MEANINGS, type Meaning } from './meanings';
+export { transferPlot, singleInput, needsPicture, edgesOf, plotRange, type TransferPlot } from './plot';
 export {
   generalise, generaliseText, buildFunction, descriptionFor, toIdentifier, patternIsUsable,
   type Generalised, type GenInput, type GenChoices, type BuiltFunction, type GeneraliseContext,
