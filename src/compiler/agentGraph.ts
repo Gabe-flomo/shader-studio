@@ -97,7 +97,7 @@ export const groupSpecies = (g: GraphNode) => Math.max(1, Math.min(4, Math.round
  *  - the outer nodes upstream of the group's ports and Emit (gathered by the caller's `collect`).
  * `innerIds` are the inside nodes, for the placement and purity rules.
  */
-export function agentStepNodes(group: GraphNode, volumeOf?: (nodeId: string) => string | null): { inner: GraphNode[]; sink: GraphNode; starts: Array<{ nodeId: string; outputKey: string }>; problems: string[]; stateC: boolean; space3d: boolean } {
+export function agentStepNodes(group: GraphNode, volumeOf?: (nodeId: string) => string | null): { inner: GraphNode[]; sink: GraphNode; starts: Array<{ nodeId: string; outputKey: string }>; problems: string[]; stateC: boolean; space3d: boolean; grids: Array<{ nodeId: string; from: { nodeId: string; outputKey: string } }> } {
   const d3 = groupIs3d(group);
   const sg = group.params.subgraph as SubgraphData | undefined;
   const nodes = sg?.nodes ?? [];
@@ -105,8 +105,10 @@ export function agentStepNodes(group: GraphNode, volumeOf?: (nodeId: string) => 
   const inputsNode = nodes.find(n => n.type === 'agentInputs');
   const outputNode = nodes.find(n => n.type === 'agentOutput');
   const extras = new Set(((inputsNode?.params.extraInputs ?? []) as Array<{ key: string }>).map(e => e.key));
+  // A Scene port (Collide (3D scene)) is read through its grid program, never compiled into the update shader.
+  const scenePorts = new Set(((inputsNode?.params.extraInputs ?? []) as Array<{ key: string; type: string }>).filter(e => e.type === 'scene3d').map(e => e.key));
   const starts: Array<{ nodeId: string; outputKey: string }> = [];
-  for (const [key, inp] of Object.entries(group.inputs)) if (inp.connection && (key === 'emit' || extras.has(key))) starts.push(inp.connection);
+  for (const [key, inp] of Object.entries(group.inputs)) if (inp.connection && (key === 'emit' || (extras.has(key) && !scenePorts.has(key) && inp.type !== 'scene3d'))) starts.push(inp.connection);
   const rewire = (n: GraphNode): GraphNode => {
     if (!inputsNode) return n;
     let changed = false;
@@ -129,7 +131,18 @@ export function agentStepNodes(group: GraphNode, volumeOf?: (nodeId: string) => 
     const vol = src && volumeOf ? volumeOf(src) : null;
     return vol ? { ...n, params: { ...n.params, __vol: true, __volOf: vol } } : n;
   };
-  const inner = nodes.filter(n => n.type !== 'agentOutput').map(rewire).map(spaced).map(volumes);
+  // Collide (3D scene): its Scene (rewired to what is wired outside) goes to the engine as a grid program; the copy here has no wire.
+  const grids: Array<{ nodeId: string; from: { nodeId: string; outputKey: string } }> = [];
+  const gridded = (n: GraphNode) => {
+    if (n.type !== 'agentCollideScene') return n;
+    if (!d3) problems.push(`Node ${n.id}: Collide (3D scene) works in a 3D group: set ${labelOf(group)}'s Space to 3D.`);
+    const c = n.inputs.scene?.connection;
+    if (c && d3 && c.nodeId !== inputsNode?.id) grids.push({ nodeId: n.id, from: c });
+    if (!c) return n;
+    const { connection: _drop, ...rest } = n.inputs.scene;
+    return { ...n, inputs: { ...n.inputs, scene: rest } };
+  };
+  const inner = nodes.filter(n => n.type !== 'agentOutput').map(rewire).map(gridded).map(spaced).map(volumes);
   const out = outputNode ? spaced(rewire(outputNode)) : null;
   const sinkInputs: GraphNode['inputs'] = {};
   const v2 = d3 ? 'vec3' : 'vec2';
@@ -145,7 +158,12 @@ export function agentStepNodes(group: GraphNode, volumeOf?: (nodeId: string) => 
   const stateC = needsStateC(group, nodes, out);
   const sink: GraphNode = { id: `${group.id}__step`, type: 'agentStepOut', position: { x: 0, y: 0 }, params: { ...(stateC ? { stateC: true } : {}), ...(d3 ? { agentSpace: '3d' } : {}) }, outputs: {}, inputs: sinkInputs };
   if (!outputNode) problems.push(`Node ${group.id}: ${labelOf(group)} has no Agent Output inside; open it and Start over, or add the preset again.`);
-  return { inner, sink, starts, problems, stateC, space3d: d3 };
+  return { inner, sink, starts, problems, stateC, space3d: d3, grids };
+}
+
+/** The end of a Collide (3D scene)'s grid program (AgentGridOutNode), wired to the Scene outside. */
+export function gridSink(nodeId: string, slug: string, from: { nodeId: string; outputKey: string }): GraphNode {
+  return { id: `${nodeId}__grid`, type: 'agentGridOut', position: { x: 0, y: 0 }, params: { slug }, outputs: {}, inputs: { scene: { type: 'scene3d', label: 'Scene', connection: from } } };
 }
 
 /** Is an Agents group's Space 3D? */

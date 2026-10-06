@@ -60,6 +60,8 @@ export const AGENT_INSIDE_TYPES = new Set([
   // Particles (P2): forces, Integrate, Age / Life, and the nodes that move a walker directly.
   'agentGravity', 'agentWind', 'agentCurl', 'agentAttract', 'agentVortex', 'agentFlow', 'agentSoundKick',
   'agentIntegrate', 'agentAge', 'agentCollide', 'agentChladni',
+  // 3D: colliding with a ray-marched scene through its coarse grid.
+  'agentCollideScene',
 ]);
 /** The starters in the Simulation category: each builds a whole working setup (store/agentExamples.ts). */
 export const AGENT_PRESET_TYPES = new Set([
@@ -146,6 +148,7 @@ export const AGENT_3D_SOCKETS: Record<string, { in?: string[]; out?: string[] }>
   agentIntegrate: { in: ['force', 'velocity', 'position'], out: ['position', 'velocity', 'heading'] },
   agentCollide: { in: ['position', 'velocity'], out: ['position', 'velocity'] },
   agentChladni: { in: ['position', 'velocity'], out: ['position', 'velocity'] },
+  agentCollideScene: { in: ['position', 'velocity'], out: ['position', 'velocity'] },
   agentEmit: { in: ['position'] },
 };
 /** Draw agents' sockets in 3D only: a ray-marched scene's camera and depth (docs/agents-group.md "3D"). */
@@ -298,7 +301,7 @@ const WALKER_SOCKETS: Record<string, string[]> = {
   agentSense: ['position', 'heading'], agentSteer: ['heading', 'random'], agentMove: ['position', 'heading'],
   agentWind: ['position'], agentCurl: ['position'], agentAttract: ['position'], agentVortex: ['position'], agentFlow: ['position'],
   agentSoundKick: ['position'], agentIntegrate: ['position', 'velocity'], agentCollide: ['position', 'velocity'],
-  agentChladni: ['position', 'velocity'], agentAge: ['age', 'life'],
+  agentChladni: ['position', 'velocity'], agentAge: ['age', 'life'], agentCollideScene: ['position', 'velocity'],
 };
 const OUTPUT_KEEPS: Record<string, string> = {
   position: 'unchanged', velocity: 'unchanged', heading: 'unchanged', speed: 'unchanged', memory: 'unchanged', colour: 'unchanged',

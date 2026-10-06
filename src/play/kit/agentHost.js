@@ -18,7 +18,7 @@
 // Top-level names start with `ah` (the kit's one-scope rule).
 import { AG_OFFLINE_CHUNK, AG_PROBE_POINTS, AG_STEP_HZ, agCamera3, agDrawLook, agGovern, agGovernorState, agGroupState, agGroupSteps, agHear, agKeep, agLights, agListenState, agLiveState, agProject3, agReadDecode, agReadPlan, agRestartGroup, agStepTime, agStepWindow, agTrailSize, agVolLayout, agVolUniform } from './agentPlan.js';
 import { AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT3_VERT, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW3_VERT, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_PROJ3_FRAG, AG_READ_FRAG, AG_SUM_FRAG, AG_TRAIL3_FRAG, AG_TRAIL_FRAG } from './agentShaders.js';
-import { GP_BESSEL_N, GP_BESSEL_W, GP_LEVELS, gpBesselTable, gpReadback } from './gpuParticles.js';
+import { GP_BESSEL_N, GP_BESSEL_W, GP_LEVELS, GP_VOL, GP_VOL_TILES, gpBesselTable, gpReadback } from './gpuParticles.js';
 
 /** Why a page can't run agents here, or null. */
 export function ahUnsupported(gl) {
@@ -75,6 +75,7 @@ export function ahCreate(gl, spec, env) {
   const vec4s = new Map();
   for (const t of trails) if (t.volume && t.u.vol) vec4s.set(t.u.vol, [1, 1, 1, 1]);
   for (const d of draws) if (d.probe) vec4s.set(d.probe.uniform, [0, 0, 0, 0]);
+  for (const g of groups) for (const gr of g.grids || []) { env.textures.set(gr.u.grid, null); vec4s.set(gr.u.at, [0, 0, 0, 2]); }
   for (const d of draws) { env.textures.set(d.u.tex, null); env.vec2s.set(d.u.tex + '_px', [1, 1]); }
   if (unsupported) {
     if (typeof console !== 'undefined') console.warn('[Playfield] ' + unsupported + ' The picture draws without them.');
@@ -132,6 +133,12 @@ export function ahCreate(gl, spec, env) {
     const one = (src, what) => { try { const p = env.link(src); return { p, u: ahUniforms(gl, p) }; } catch (e) { warn('The scene ' + what + ' of "' + d.slug + '"', e); return null; } };
     probes.set(d.slug, { camera: one(d.probe.camera, 'camera'), depth: d.probe.depth ? one(d.probe.depth, 'depth') : null });
   }
+  // Collide (3D scene)'s grid programs (the Scene's distance on its 48³ grid), linked as the picture is.
+  const gridProgs = new Map();
+  for (const g of groups) for (const gr of g.grids || []) {
+    try { const p = env.link(gr.shader); gridProgs.set(gr.slug, { p, u: ahUniforms(gl, p) }); } catch (e) { warn('The scene grid of "' + (g.label || g.slug) + '"', e); }
+  }
+  const gridTex = new Map();
   /** Set the 3D uniforms (vec4s) in a program the runtime links (env.use binds the rest). */
   const setVec4s = (prog) => { if (prog && prog.u) for (const [n, v] of vec4s) ahSet(gl, prog.u, n, v); };
 
@@ -556,6 +563,22 @@ export function ahCreate(gl, spec, env) {
           const time = agStepTime(s.step, p.spf, p.preroll);
           const heard = g.listeners.length ? hear(s, g, time) : [];
           if (stepTime === null) stepTime = time;
+          // Collide (3D scene): the Scene's grid at this step's clock, before the rule (as the app does).
+          for (const gr of g.grids || []) {
+            vec4s.set(gr.u.at, [read(gr.at[0], 0), read(gr.at[1], 0), read(gr.at[2], 0), Math.max(1e-3, read(gr.at[3], 2))]);
+            let gt = gridTex.get(gr.slug);
+            if (!gt) { gt = look(GP_VOL * GP_VOL_TILES[0], GP_VOL * GP_VOL_TILES[1], gl.LINEAR, gl.CLAMP_TO_EDGE); gridTex.set(gr.slug, gt); }
+            const gp = gridProgs.get(gr.slug);
+            if (gp) {
+              gl.bindFramebuffer(gl.FRAMEBUFFER, gt.fb); gl.viewport(0, 0, gt.w, gt.h);
+              env.use(gp.p, w, h);
+              setVec4s(gp);
+              ahSet(gl, gp.u, 'u_time', time);
+              env.quad();
+              env.done();
+            }
+            env.textures.set(gr.u.grid, gt.t);
+          }
           bindState(g, s);
           gl.bindFramebuffer(gl.FRAMEBUFFER, s.fb[1 - s.cur]);
           gl.viewport(0, 0, g.side, g.side);
@@ -647,8 +670,8 @@ export function ahCreate(gl, spec, env) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.activeTexture(gl.TEXTURE0);
     },
-    /** The simulation as it stands (scripted checks): per group its state textures, framebuffers and step; per trail and drawing its targets. */
-    state() { return { groups: G, trails: T, draws: D }; },
+    /** The simulation as it stands (scripted checks): per group its state textures, framebuffers and step; per trail and drawing its targets; each Collide (3D scene)'s grid. */
+    state() { return { groups: G, trails: T, draws: D, grids: gridTex }; },
     /** The latest readings of the groups the page's setup reads: [sensor layer (`ag:<id>`), { alive, centroidX… }]. */
     readings() { return [...readOut]; },
     /** Start everything over: every group dead at step 0, every trail empty (a new render). */
@@ -668,6 +691,8 @@ export function ahCreate(gl, spec, env) {
       for (const e of steps) if (e.p) gl.deleteProgram(e.p);
       for (const e of trailSteps.values()) if (e.p) gl.deleteProgram(e.p);
       for (const e of probes.values()) for (const x of [e.camera, e.depth]) if (x) gl.deleteProgram(x.p);
+      for (const e of gridProgs.values()) gl.deleteProgram(e.p);
+      for (const t of gridTex.values()) dropLook(t);
       for (const k in fixed) gl.deleteProgram(fixed[k].p);
       if (bessel) gl.deleteTexture(bessel);
       gl.deleteTexture(blank);

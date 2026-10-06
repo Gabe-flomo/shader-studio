@@ -745,7 +745,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       }
       agentRunner.update(agents, vsSrc || FALLBACK_VERTEX);
       // Dev-only, like window.__shaderStudio: scripted checks time and step the live simulation through it.
-      if (import.meta.env.DEV) (window as unknown as { __shaderStudioAgents?: unknown }).__shaderStudioAgents = { runner: agentRunner, targets: agentTargets, renderer };
+      if (import.meta.env.DEV) (window as unknown as { __shaderStudioAgents?: unknown }).__shaderStudioAgents = { runner: agentRunner, targets: agentTargets, renderer, offline: () => offlineAgentTargets };
       requestRender();
     };
 

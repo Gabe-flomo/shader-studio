@@ -1085,6 +1085,23 @@ export const gpCrunch = (s, amount) => `gpUnit(${s}) * (${amount} * 26.0)`;
 export const gpShockRing = (r, age, speed) => `(${r} - ${age} * ${speed}) / 0.07`;
 /** The shock's pressure pulse: out as the front arrives, back behind it, fading with age. */
 export const gpShockPush = (d, r, strength, ring, age) => `${d} / ${r} * (${strength} * 16.0 * ${ring} * exp(-${ring} * ${ring}) * exp(-${age} * 1.5))`;
+/**
+ * A scene's distance at q (in grid cells, 0…GP_VOL on each axis) from its GP_VOL³ grid (slices side by side,
+ * GP_VOL_TILES across and down), trilinear: bilinear in a slice, then between two. `args` adds leading parameters
+ * (the grid as a sampler). The Particles node's Scene socket and the Agents' Collide (3D scene) both read it.
+ */
+export const gpVolAtGlsl = (fn, vol, args = '') => `float ${fn}(${args}vec3 q) {
+  const float N = ${GP_VOL}.0;
+  vec3 g = clamp(q, vec3(0.5), vec3(N - 0.5));
+  float z = g.z - 0.5, z0 = floor(z);
+  int t0 = int(z0), t1 = min(t0 + 1, ${GP_VOL - 1});
+  vec2 size = vec2(${GP_VOL * GP_VOL_TILES[0]}.0, ${GP_VOL * GP_VOL_TILES[1]}.0);
+  vec2 a = (vec2(float(t0 % ${GP_VOL_TILES[0]}), float(t0 / ${GP_VOL_TILES[0]})) * N + g.xy) / size;
+  vec2 b = (vec2(float(t1 % ${GP_VOL_TILES[0]}), float(t1 / ${GP_VOL_TILES[0]})) * N + g.xy) / size;
+  return mix(texture(${vol}, a).r, texture(${vol}, b).r, z - z0);
+}`;
+/** The grid cell (x, y, slice) a grid texel at `q` (an ivec2) holds: the Particles node's probe's mapping (gpVolPoint in JS). */
+export const gpVolCellGlsl = q => `vec3(float(${q}.x % ${GP_VOL}), float(${q}.y % ${GP_VOL}), float((${q}.y / ${GP_VOL}) * ${GP_VOL_TILES[0]} + ${q}.x / ${GP_VOL}))`;
 /** The sound heard `ago` seconds back, from a GP_LEVELS × 1 history (60 a second, newest first). `args` adds leading parameters (the history as a sampler). */
 export const gpLevelGlsl = (fn, levels, args = '') => `float ${fn}(${args}float ago) {
   float x = clamp(ago * 60.0, 0.0, ${GP_LEVELS - 2}.0);
@@ -1313,16 +1330,7 @@ ${GP_HASH}
 ${GP_NOISE}
 vec3 gpHomeAt(vec2 uv) { return vec3(u_emitAt + (uv * 2.0 - 1.0) * u_imgHalf, 0.0); }
 // The scene's distance at a point in grid cells (trilinear: bilinear in a slice, then between two).
-float gpVolAt(vec3 q) {
-  const float N = ${GP_VOL}.0;
-  vec3 g = clamp(q, vec3(0.5), vec3(N - 0.5));
-  float z = g.z - 0.5, z0 = floor(z);
-  int t0 = int(z0), t1 = min(t0 + 1, ${GP_VOL - 1});
-  vec2 size = vec2(${GP_VOL * GP_VOL_TILES[0]}.0, ${GP_VOL * GP_VOL_TILES[1]}.0);
-  vec2 a = (vec2(float(t0 % ${GP_VOL_TILES[0]}), float(t0 / ${GP_VOL_TILES[0]})) * N + g.xy) / size;
-  vec2 b = (vec2(float(t1 % ${GP_VOL_TILES[0]}), float(t1 / ${GP_VOL_TILES[0]})) * N + g.xy) / size;
-  return mix(texture(u_vol, a).r, texture(u_vol, b).r, z - z0);
-}
+${gpVolAtGlsl('gpVolAt', 'u_vol')}
 // The sound heard 'ago' seconds back (the history is 60 a second, newest first).
 ${gpLevelGlsl('gpLevel', 'u_levels')}
 // J_n(x) from the table (row n, x over 0…${GP_BESSEL_X}), linear between samples.

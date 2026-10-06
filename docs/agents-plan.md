@@ -1,6 +1,6 @@
 # Agents group: slime mold and particles built from nodes (plan, 2026-10-03)
 
-**Status:** P0, P1 (Slime), P2 (Particles), P3 (Species, food and obstacles), P4 (Play), P5 (Websites) and P6 without 3D (Open as nodes, readings into Play, three presets) shipped 2026-10-03/04. 3D (the part deferred from P6) is built in two PRs, 2026-10-05: the 3D state, forces and drawing first, then Collide (3D scene) and the 3D examples; see "What shipped (3D)" below. User guide: docs/agents-group.md.
+**Status:** P0, P1 (Slime), P2 (Particles), P3 (Species, food and obstacles), P4 (Play), P5 (Websites) and P6 without 3D (Open as nodes, readings into Play, three presets) shipped 2026-10-03/04. **3D shipped 2026-10-05** (the part deferred from P6), in two PRs: the 3D state, forces and drawing, then Collide (3D scene) and the 3D examples; see "What shipped (3D)" below. User guide: docs/agents-group.md.
 
 ## In plain words
 
@@ -196,6 +196,16 @@ The user decided 3D waits: everything in P6 except 3D (z in state, the Particles
 **Determinism** (browser, M3 Pro): a 3D slime (256k, volume 96) offline twice and live at 30, 60, 120 Hz and 60 Hz with a 150 ms stall reach bit-identical state A, B and the volume at 240 steps. The exported page's simulation state equals the app's bit for bit (240 steps), its picture within 2 levels of 255 (the app's dither), with a turning camera too.
 
 **Measured** (1920 × 1080, GPU-synced; update + draw a frame): 3D slime, 2 steps, volume 96: 64k 1.8 + 0.8 ms, 256k 3.5 + 1.2 ms, 1M 12.5 + 3.9 ms (volume 64: 1M steps 8 ms). Ink in water as nodes, 1 step, ink streaks with depth of field: 64k 0.5 + 1.3, 256k 0.7 + 2.3, 1M 1.0 + 9.2 ms. A 3D slime step is about a third dearer than a 2D one (Deposit into the volume and its spread); defaults stay at 256k.
+
+**Part 2: Collide (3D scene) and the examples.**
+
+- **Collide (3D scene)** (`agentCollideScene`, inside a 3D group, after Integrate) reads a Scene Group through the Particles node's coarse GP_VOL³ grid (48 cells across, slices side by side). Its sampler is the engine's own: `gpVolAtGlsl` is now a shared generator (GP_SIM's `gpVolAt` is written with it, its text unchanged: gpEngineShaders snapshot untouched), and the grid's cell mapping is `gpVolCellGlsl` (gpVolPoint in JS). The Scene comes in through a port on the group of the new kind **Scene** (Agent Inputs' + Add an input from outside offers it); the compiler takes that wire out of the update shader (a Scene never enters the rule, §15 Q11 stands) and compiles the Scene outside into a small grid program of the picture's kind (`agentGridOut`, a texel per cell: `scene(centre + cell · reach)`). Both hosts fill the grid every step at the step's clock, before the rule (a moving scene moves the same live, offline and on a page), and a group waits for its grid program to compile before it steps. The response is the Particles node's (margin 0.015, cushion 0.15, friction 0.03) with Bounce. In a 2D group the compile says it needs Space 3D. Open as nodes carries a 3D Particles node's Scene socket as Collide (3D scene) with its Scene size.
+- **Examples** (*Agents in 3D*, `store/agentExamples3d.ts`; every node, inside the group, the Scene and the March Loop too, with a plain-language note, Expression Blocks explaining each named line): **3D slime mold** (Sense on the turning plane, Crowding, a 96-row volume; sensors 0.15 and speed 1.2, about ten times the 2D slime's, because a volume's cells are ten times a 2D trail's pixels), **3D flock** (64k; velocity volume, Gradient and Channels here into a Flock block, curl breeze, streaks, orbiting camera), **Swarm round a torus** (a smoke-ring flow round the tube, Collide (3D scene), drawn through the March Camera, Depth hiding it behind the torus), **Galaxy in 3D** (the 2D Galaxy's exact orbits in a thin disc, Memory = radius and height), **Fireflies in the dark** (Rate births, a camera among them, Focus 0.75, Blur 2, Max blur 24).
+- **A fix found on the way**: a scene probe in an offline render read the last frame's clock (the render sets the picture's time after the agents run), so a March Camera turning with Time drew the walkers from a slightly different angle than the scene. The runner now sets the frame's clock before Draw agents.
+
+**Parity** (browser, M3 Pro): for all five examples, the exported page's state (A and B) equals the app's bit for bit at 2 s (with their pre-rolls: up to 600 steps), and its picture is within 2 levels of 255 of the app's offline render. Readings on a page in 3D: a 3D flock's Alive, Speed and Centre from the page's host agree with a read-back of its state (Speed 0.2471 against 0.2475 a frame later). Determinism: the torus (its grid filled every step) reaches bit-identical state offline twice and live at 30, 60, 120 Hz and with a stall.
+
+**Measured** (1920 × 1080, GPU-synced; update + draw): Swarm round a torus 64k 0.6 + 1.2 ms, 256k 0.8 + 1.5, 1M 3.0 + 4.7 (the grid is about 0.1 ms a step); Galaxy in 3D 0.5 + 1.0, 0.9 + 1.3, 2.3 + 3.9; 3D flock 1.8 + 0.9, 3.5 + 2.4, 11.4 + 10.6.
 
 ---
 
@@ -397,7 +407,7 @@ The inside runs **once per agent**, not once per pixel. That decides it:
 |---|---|
 | Everything in `FIELD_IMPURE` except `playLayers`: Echo, Previous Frame, the u_prevFrame blurs, Bloom… | They read the previous **picture** at this pixel, and an agent's texel isn't a pixel. |
 | Pass, another Agents group, Trail, Deposit, Emit, Draw agents, the Particles node, Output | Programs or engines of their own. They go outside. |
-| Scene Group, March Loop, GI March, Space Warp | A ray march per agent: too costly in v1. Later, a 3D Collide reads a Scene through GP's 48³ grid. |
+| Scene Group, March Loop, GI March, Space Warp | A ray march per agent: too costly in v1. Collide (3D scene) (3D, shipped) reads a Scene through GP's 48³ grid instead, outside the rule. |
 | Any node whose emitted GLSL uses `dFdx`, `dFdy`, `fwidth` or `gl_FragCoord` (SDF Fill's pixel AA, some effects) | Neighbouring texels are unrelated agents, so derivatives are noise. Detected by scanning the node's emitted code, not with a hand-kept list, so new nodes are covered. |
 
 The rule lives in `compiler/agentRules.ts`, next to `fieldSockets.ts`. Its messages read like field sockets' ("Echo can't go inside an Agents group: it reads the previous frame").
@@ -551,7 +561,7 @@ More in P6: Sand on a plate (Chladni), Sound field (Sound kick), Food from a pic
   - Parity test and browser sweep.
 - **P6 More.** *(Built without 3D: see What shipped (P6, no 3D).)*
   - More presets, "Open as nodes" on the Particles card, readings back into Play.
-  - 3D (z in state, GP's camera and DoF in Draw, 3D Collide through the scene grid).
+  - 3D (z in state, GP's camera and DoF in Draw, 3D Collide through the scene grid). *(Shipped: What shipped (3D).)*
   - A Play layer hosting the same engine.
 
 ## 14. Tests

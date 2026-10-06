@@ -53,7 +53,9 @@ function digest(r: ReturnType<typeof compileGraph>) {
   };
 }
 
-const keys = Object.keys(EXAMPLE_GRAPHS).filter(k => multi(EXAMPLE_GRAPHS[k].nodes)).sort();
+/** A graph with a 3D Agents group (agents3d.test.ts and the examples test cover those: this file is about 2D). */
+const has3d = (nodes: Nodes): boolean => nodes.some(nd => (nd.type === 'agentsGroup' && nd.params?.space === '3d') || has3d(((nd.params?.subgraph as { nodes?: Nodes } | undefined)?.nodes) ?? []));
+const keys = Object.keys(EXAMPLE_GRAPHS).filter(k => multi(EXAMPLE_GRAPHS[k].nodes) && !has3d(EXAMPLE_GRAPHS[k].nodes)).sort();
 
 describe('2D agents and pass graphs compile as they did before 3D', () => {
   it('has the examples', () => expect(keys.length).toBeGreaterThan(20));

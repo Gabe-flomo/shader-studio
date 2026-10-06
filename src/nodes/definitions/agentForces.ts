@@ -19,7 +19,7 @@ import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { fieldFn, p } from './helpers';
 import { AG_BOX3, agHandParams, agHandPlace, hashId, isAgent3d } from './agents';
 import {
-  GP_SHADERS, gpAttractPull, gpBesselGlsl, gpCrunch, gpCurl3D, gpCurlAt, gpCurlOctave2, gpCurlPlane, gpFade, gpFlowPush, gpGust,
+  GP_SHADERS, GP_VOL, gpAttractPull, gpBesselGlsl, gpCrunch, gpCurl3D, gpCurlAt, gpCurlOctave2, gpCurlPlane, gpVolAtGlsl, gpVolCellGlsl, gpFade, gpFlowPush, gpGust,
   gpHandFall, gpHandPush, gpLevelGlsl, gpPlateGlsl, gpPlateStep, gpShockPush, gpShockRing, gpSwirl, gpVibrate, gpWavePhase, gpWavePush,
 } from '../../play/kit/gpuParticles.js';
 
@@ -754,6 +754,113 @@ export function collideLines(id: string, margin: string, cushion: string, bounce
     `    }\n`,
   ];
 }
+
+/**
+ * Collide (3D scene)'s grid: the Scene's distance on the Particles node's coarse GP_VOL³ grid (slices side by side), and
+ * where it is (centre xyz, reaching ±w), by the node's slug. The engine fills the grid every step from a small program of
+ * the picture's kind (AgentGridOutNode), so the update shader never ray-marches or even evaluates the scene.
+ */
+export const sceneGridUniforms = (slug: string) => ({ grid: `u_agVol_${slug}`, at: `u_agVolC_${slug}` });
+
+export const AgentCollideSceneNode: NodeDefinition = {
+  type: 'agentCollideScene',
+  label: 'Collide (3D scene)',
+  category: 'Simulation',
+  aliases: ['Scene collide', 'Collide 3D', 'Bounce off a scene', 'SDF scene collision', 'Ray-marched obstacle'],
+  description: 'In a 3D group: keeps walkers out of a ray-marched scene\'s shapes. Wire a Scene Group\'s Scene into the group (+ Add an input from outside, Scene) and that port into Scene. The scene\'s distance is sampled on a coarse 48³ grid round the centre (the Particles node\'s, filled every step), so walkers bounce off or slide along its surfaces at almost no cost. Goes after Integrate (Position and Velocity).',
+  inputs: {
+    scene: { type: 'scene3d', label: 'Scene', hint: 'A Scene Group\'s Scene, through a port added to the group (Agent Inputs → + Add an input from outside → Scene). The same Scene the March Loop draws.' },
+    position: { type: 'vec3', label: 'Position', hint: 'Integrate\'s Position. ' + THIS_AGENT },
+    velocity: { type: 'vec3', label: 'Velocity', hint: 'Integrate\'s Velocity. ' + THIS_AGENT },
+  },
+  outputs: {
+    position: { type: 'vec3', label: 'Position' },
+    velocity: { type: 'vec3', label: 'Velocity' },
+    hit: { type: 'float', label: 'Hit', hint: '1 when it touched a surface this step.' },
+    distance: { type: 'float', label: 'Distance', hint: 'How far from the scene\'s surfaces it is (from the grid; 1000 outside it).' },
+  },
+  defaultParams: { reach: 2, x: 0, y: 0, z: 0, margin: 0.015, cushion: 0.15, bounce: 0, friction: 0.03 },
+  paramDefs: {
+    reach: { label: 'Scene size', type: 'float', min: 0.2, max: 20, step: 0.05, hint: 'How far from the centre the scene is felt (scene units): the grid spans twice this, 48 cells across.', help: 'The scene is sampled on a 48-cell grid across twice this, round X, Y, Z. Keep it just big enough to hold the shapes the walkers meet: smaller is more precise (a cell is Scene size ÷ 24 across). Outside the grid there is nothing to collide with.' },
+    x: { label: 'X', type: 'float', min: -10, max: 10, step: 0.01, hint: 'The grid\'s centre, across (scene units).' },
+    y: { label: 'Y', type: 'float', min: -10, max: 10, step: 0.01, hint: 'The grid\'s centre, up.' },
+    z: { label: 'Z', type: 'float', min: -10, max: 10, step: 0.01, hint: 'The grid\'s centre, in depth.' },
+    margin: { label: 'Margin', type: 'float', min: 0, max: 0.5, step: 0.001, hint: 'How close to a surface walkers may come (0.015: the Particles node\'s).' },
+    cushion: { label: 'Cushion', type: 'float', min: 0, max: 1, step: 0.001, hint: 'How far out a stream starts to part before it touches (0: none).' },
+    bounce: { label: 'Bounce', type: 'float', min: 0, max: 1, step: 0.01, hint: '0 slides along the surface; 1 bounces off as fast as it came.' },
+    friction: { label: 'Friction', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Speed lost on each touch (0.03: the Particles node\'s).' },
+  },
+  assignable: false,
+  // Its grid: the sampler and where it is (both by its slug; the engine fills them).
+  declarationsFor: (node: GraphNode) => {
+    const u = sceneGridUniforms(node.id);
+    return [`uniform highp sampler2D ${u.grid};`, `uniform vec4 ${u.at};`];
+  },
+  glslFunctions: [gpVolAtGlsl('agSceneAt', 's', 'highp sampler2D s, ')],
+  generateGLSL: (node: GraphNode, v) => {
+    const id = node.id;
+    const pos = v.position ?? 'a_pos', vel = v.velocity ?? 'a_vel';
+    // In a 2D group it does nothing (the compiler says so on the card).
+    if (!isAgent3d(node)) return { code: '', outputVars: { position: pos, velocity: vel, hit: '0.0', distance: '1.0e3' } };
+    const u = sceneGridUniforms(id);
+    const at = (q: string) => `agSceneAt(${u.grid}, ${q})`;
+    const margin = p(node.params.margin, 0.015), cushion = p(node.params.cushion, 0.15);
+    return {
+      code: [
+        `    vec3 ${id}_p = ${pos};\n`,
+        `    vec3 ${id}_v = ${vel};\n`,
+        // Where it is on the grid, in cells (0…48 on each axis).
+        `    vec3 ${id}_q = ((${id}_p - ${u.at}.xyz) / max(${u.at}.w, 1e-3) * 0.5 + 0.5) * ${GP_VOL}.0;\n`,
+        `    bool ${id}_in = all(greaterThan(${id}_q, vec3(0.0))) && all(lessThan(${id}_q, vec3(${GP_VOL}.0)));\n`,
+        `    float ${id}_dd = ${id}_in ? ${at(`${id}_q`)} : 1.0e3;\n`,
+        `    float ${id}_hit = 0.0;\n`,
+        // Near a surface: its normal from the grid's slope (a cell either side), then the Particles node's response.
+        `    if (${id}_dd < max(${cushion}, ${margin})) {\n`,
+        `        vec3 ${id}_gr = vec3(${at(`${id}_q + vec3(1.0, 0.0, 0.0)`)} - ${at(`${id}_q - vec3(1.0, 0.0, 0.0)`)}, ${at(`${id}_q + vec3(0.0, 1.0, 0.0)`)} - ${at(`${id}_q - vec3(0.0, 1.0, 0.0)`)}, ${at(`${id}_q + vec3(0.0, 0.0, 1.0)`)} - ${at(`${id}_q - vec3(0.0, 0.0, 1.0)`)});\n`,
+        `        float ${id}_gl = length(${id}_gr);\n`,
+        `        if (${id}_gl > 1e-6) {\n`,
+        `            vec3 ${id}_n = ${id}_gr / ${id}_gl;\n`,
+        `            if (${id}_dd < ${margin}) {\n`,
+        `                ${id}_p += ${id}_n * (${margin} - ${id}_dd);\n`,
+        `                float ${id}_vn = dot(${id}_v, ${id}_n);\n`,
+        `                if (${id}_vn < 0.0) ${id}_v -= (1.0 + ${p(node.params.bounce, 0)}) * ${id}_vn * ${id}_n;\n`,
+        `                ${id}_v *= 1.0 - ${p(node.params.friction, 0.03)};\n`,
+        `                ${id}_hit = 1.0;\n`,
+        `            } else ${id}_v += ${id}_n * (${cushion} - ${id}_dd) * 5.0 * a_dt;\n`,
+        `        }\n`,
+        `    }\n`,
+      ].join(''),
+      outputVars: { position: `${id}_p`, velocity: `${id}_v`, hit: `${id}_hit`, distance: `${id}_dd` },
+    };
+  },
+};
+
+/**
+ * The end of a Collide (3D scene)'s grid program (made by the compiler; never in a graph): each texel of the
+ * 48³ grid (slices side by side) writes the Scene's distance at its cell's centre, the Particles node's mapping.
+ */
+export const AgentGridOutNode: NodeDefinition = {
+  type: 'agentGridOut',
+  label: 'Scene grid output',
+  category: 'Output',
+  description: 'Internal: a Collide (3D scene)\'s grid of the scene\'s distance.',
+  inputs: { scene: { type: 'scene3d', label: 'Scene' } },
+  outputs: {},
+  defaultParams: { slug: '' },
+  declarationsFor: (node: GraphNode) => [`uniform vec4 ${sceneGridUniforms(String(node.params.slug)).at};`],
+  generateGLSL: (node: GraphNode, v) => {
+    const at = sceneGridUniforms(String(node.params.slug)).at;
+    const fn = v.scene && !/MISSING/.test(v.scene) ? v.scene : null;
+    return {
+      code: [
+        `    ivec2 agGridQ = ivec2(gl_FragCoord.xy);\n`,
+        `    vec3 agGridP = ${at}.xyz + ((${gpVolCellGlsl('agGridQ')} + 0.5) / ${GP_VOL}.0 * 2.0 - 1.0) * ${at}.w;\n`,
+        `    gl_FragColor = vec4(${fn ? `${fn}(agGridP)` : '1.0e3'}, 0.0, 0.0, 1.0);\n`,
+      ].join(''),
+      outputVars: {},
+    };
+  },
+};
 
 /** The plate function for a shape and symmetry (shared by every Chladni node of that kind). */
 const plateFn = (round: boolean, plus: boolean) => `agPlate${round ? 'Round' : 'Square'}${plus ? 'Plus' : 'Minus'}`;
