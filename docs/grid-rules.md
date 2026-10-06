@@ -12,6 +12,7 @@ Code:
 | The rule set: params, presets, signature, the custom update's names | `src/gridRules/spec.ts` |
 | GLSL from the rule set: one step, and the coloured view | `src/gridRules/glsl.ts` |
 | The node, its internal step, Mouse button | `src/nodes/definitions/gridRules.ts` |
+| Patterns and Blocks: rules, symmetries, presets | `src/gridRules/stencils.ts` |
 | Opening the node into the Pass machinery | `src/compiler/gridRulesExpand.ts` (called from `passGraph.ts`) |
 | Open as nodes | `src/store/gridRulesAsNodes.ts` |
 | Editor window, card, CPU preview | `src/components/gridRules/`, `src/gridRules/cpu.ts` |
@@ -78,9 +79,39 @@ steps of 1/2048 and Feed's f(1 − A) would round away (the Passes 4 example doe
 Presets: Heat, Ripples, Mitosis, Coral growth, Worms, Spots, Labyrinth. A preset brings its colours
 (and reaction–diffusion 8 steps a frame).
 
-### Patterns and Blocks
+### Patterns (3×3 stencils)
 
-Rule types of their own (3×3 stencils, Margolus 2×2 blocks), in a later part of this work.
+An ordered list of rules (`params.patterns`, `gridRules/stencils.ts`). Each is a 3×3 picture: click a
+cell to cycle it through **any** (·), each state, and **not empty** (≠0); the blue-ringed middle is
+"this cell is"; the cell after the arrow is what it **becomes**. A rule can also ask for a **count**
+("1 to 2 neighbours in state 1"). **Orientations**: as drawn, turns (four), or turns + mirrors
+(eight). The first rule that matches wins; none matching, the cell stays. **States** 2–8.
+
+Presets: **Wireworld** (head → tail → copper; copper → head with 1 or 2 heads round it: three
+rules, the last with a count), **Falling dots**, **Crystal** (frost: an empty cell with exactly one
+on neighbour freezes).
+
+### Blocks (Margolus 2×2)
+
+The board in 2×2 blocks whose grid shifts one cell diagonally every step (the parity is kept in the
+board's blue as 2 + the phase on odd steps). A rule (`params.blocks`) is a **before** picture and an
+**after** picture: before cells are any / a state / not empty (the board's edge counts as not empty);
+after cells are **=** (unchanged) or a state. Orientations: as drawn, mirrored, or turns. **Chance**
+fires the rule on a share of the matching blocks. The editor marks each rule **keeps every count**
+when its after only rearranges its before (`blockConserves`).
+
+All four cells of a block make the same choice: the variant tried first and the chance are rolled
+once per block (a hash of the block's corner, wrapped, and the frame), so a rearranging rule never
+loses or doubles a cell, at the seam of a wrapping board too. An odd last row or column has no
+block and is kept empty.
+
+Presets: **Falling sand** (0 air, 1 sand, 2 wall: grains fall, slide off heaps with chance 0.8, rest
+on walls), **Gas (HPP)** (particles fly diagonally and scatter at right angles, Toffoli and
+Margolus).
+
+**Image start** for every whole-number rule: the picture's brightness picks the state, 0 for black
+up to the last state for white (two states: bright parts start on). Wireworld's example draws its
+starter circuit that way.
 
 ## Shared settings
 
@@ -183,11 +214,23 @@ Every node has a note; every Expression Block's note explains each named line. R
 isn't built ((2N + 1)² − 1 Sample cards); the button says so. Seeding uses Noise Float's hash, so a
 new board is a different (as random) deal.
 
+Patterns open as eight Sample reads and one **The patterns** Expression Block (each rule a named
+line); Blocks as **This cell's block** (the corner and parity), four UVs and four Sample reads of
+the block's cells, and **The blocks** Expression Block (each orientation's priority, the per-block
+dice, each rule's answer), plus **Clock and parity** for blue.
+
 **Equivalence** (`gridRulesAsNodes.test.ts`): the compact node's board program and the opened
 graph's are both run on the CPU from the same board for six steps, for Life, HighLife with walls,
 Diamonds (von Neumann), Larger than Life radius 2 (box, and circle with walls), Brian's Brain, Star
-Wars at 3 steps a frame, Heat, Ripples with walls, Mitosis and a custom update: the same states
-(red) and age (green) every step.
+Wars at 3 steps a frame, Heat, Ripples with walls, Mitosis, Wireworld with walls, patterns with
+turns, mirrors and a count, falling sand with its dice and walls, the gas on a torus, and a custom
+update: the same states (red) and age (green) every step.
+
+`gridRulesStencils.test.ts`: the variants each symmetry stands for, spec → GLSL, pattern matching
+with rotations and counts against a CPU reference, an electron running along a Wireworld wire,
+the gas against a Margolus reference (wrapping and walled), **conservation** (sand and gas, wrapping
+and walled, even and odd boards, dice on), sand piling on the floor, every preset, and the image
+start's brightness → state.
 
 ## Examples (Simulations: grids)
 
@@ -202,8 +245,12 @@ Each Grid Rules version sits beside the wired version it rebuilds, now named "�
 | 5 · Water ripples | Smooth, Waves, ½, walls, centre drop | 2 / 41 |
 | 6 · Heat diffusion | Smooth, Custom (diffusion + flares) | 2 / 25 |
 | 7 · Forest fire | Smooth, Custom (0 ground, 1 tree, 2 fire) | 2 / 66 |
+| 8 · Falling sand | Blocks, sand, ¼, walls | 2 / 52 |
+| 9 · Wireworld | Patterns, a starter circuit drawn into a Pass as the Image start | 6 / 62 |
 
-Falling sand and Wireworld need Blocks and Patterns: their Grid Rules versions come with them.
+New ones, for the two editors: **10 · Pattern rules: frost** (one stencil with a count, Age fade
+colours by when a cell froze; 2 nodes) and **11 · Block rules: gas** (the HPP gas from a ball in the
+middle; 2 nodes).
 
 ## Performance
 
@@ -220,6 +267,10 @@ of 75 frames):
 | Water ripples | 1.3 (3) | 1.4 (2) |
 | Heat diffusion | 1.4 (5) | 1.4 (5) |
 | Forest fire | 0.9 (2) | 1.4 (8) |
+| Falling sand | 0.8 (2) | 0.8 (2) |
+| Wireworld | 0.8 (3: the starter Pass) | 1.1 (8) |
+| Frost (new) | 0.8 (2) | |
+| Gas (new) | 0.9 (2) | |
 
 A board is small (⅛ is 32 400 cells at 1080p); the cost is the picture, and Repeat multiplies the
 board's. A radius-7 Larger than Life rule reads 224 neighbours a cell.
@@ -228,7 +279,10 @@ board's. A radius-7 Larger than Life rule reads 224 neighbours a cell.
 
 - **Half floats**: the board is a half-float texture. A device without half-float render targets
   falls back to 8-bit, where states above 1 and Smooth's values don't survive.
-- **Patterns and Blocks** aren't in this part yet.
+- **Blocks** on a board with an odd number of rows or columns: the last one has no block and stays
+  empty (so a wrapping board wraps its even part).
+- **Patterns and Blocks** hold up to 8 states; their rules are baked into the GLSL, so an edit
+  recompiles.
 - **The CPU preview** in the editor doesn't run a custom Smooth update (it shows diffusion), and
   previews an Image start as noise.
 - **Open as nodes** builds radius 1 and 2 only; it seeds with a different hash.

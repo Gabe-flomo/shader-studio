@@ -8,10 +8,11 @@ import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { GraphNode } from '../../types/nodeGraph';
 import { Icon } from '../ui/Icon';
-import { BOARD_SIZES, COUNT_PRESETS, GRID_DEFAULTS, SMOOTH_PRESETS, STAGES_PRESETS, gridShape, matchingPreset, presetPatch, ruleSummary } from '../../gridRules/spec';
+import { BOARD_SIZES, COUNT_PRESETS, GRID_DEFAULTS, SMOOTH_PRESETS, STAGES_PRESETS, gridShape, matchingPreset, presetPatch, ruleSummary, type GridPreset } from '../../gridRules/spec';
+import { BLOCK_PRESETS, PATTERN_PRESETS } from '../../gridRules/stencils';
 import { gridAsNodesProblem } from '../../store/gridRulesAsNodes';
 
-const QUICK: Record<string, string[]> = { count: ['life', 'highLife', 'dayNight', 'maze'], stages: ['briansBrain', 'starWars', 'sticks'], smooth: ['heat', 'ripples', 'mitosis'] };
+const QUICK: Record<string, string[]> = { count: ['life', 'highLife', 'dayNight', 'maze'], stages: ['briansBrain', 'starWars', 'sticks'], smooth: ['heat', 'ripples', 'mitosis'], patterns: ['wireworld', 'fallingDots', 'crystal'], blocks: ['sand', 'gas'] };
 
 export function GridRulesCardBody({ node, onOpen, touch = false }: { node: GraphNode; onOpen: () => void; touch?: boolean }) {
   const tk = useTokens();
@@ -19,7 +20,7 @@ export function GridRulesCardBody({ node, onOpen, touch = false }: { node: Graph
   const openAsNodes = useNodeGraphStore(s => s.openGridRulesAsNodes);
   const P = { ...GRID_DEFAULTS, ...node.params };
   const s = gridShape(P);
-  const table = s.type === 'stages' ? STAGES_PRESETS : s.type === 'smooth' ? SMOOTH_PRESETS : COUNT_PRESETS;
+  const table: Record<string, GridPreset> = s.type === 'stages' ? STAGES_PRESETS : s.type === 'smooth' ? SMOOTH_PRESETS : s.type === 'patterns' ? PATTERN_PRESETS : s.type === 'blocks' ? BLOCK_PRESETS : COUNT_PRESETS;
   const current = matchingPreset(P);
   const board = BOARD_SIZES.find(b => b.scale === s.scale)?.label.split(' (')[0] ?? '';
   const problem = gridAsNodesProblem(node);

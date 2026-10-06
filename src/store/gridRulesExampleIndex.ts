@@ -34,6 +34,22 @@ export const GRID_RULES_EXAMPLE_INDEX: Record<string, { label: string; descripti
     label: 'Grid sims 7 · Forest fire (Grid Rules)', play: true,
     description: 'The Drossel–Schwabl forest fire in one custom Smooth update: 0 is ground, 1 a tree, 2 fire. Trees grow, lightning (knob D) strikes, fire spreads to the trees beside it and burns out. Click to light trees.',
   },
+  gridRulesSand: {
+    label: 'Grid sims 8 · Falling sand (Grid Rules)', play: true,
+    description: 'A Blocks rule (Margolus 2×2 blocks, the grid shifting every step): grains fall, slide off each other and rest on walls, and none is ever lost or made. Draw sand, or switch the brush to walls.',
+  },
+  gridRulesWire: {
+    label: 'Grid sims 9 · Wireworld (Grid Rules)', play: true,
+    description: 'A Patterns rule: three stencils (head → tail, tail → copper, copper → head with 1 or 2 heads round it). A small Expression Block draws the starter circuit into a Pass; its brightness picks each cell\'s state as the board starts.',
+  },
+  gridRulesCrystal: {
+    label: 'Grid sims 10 · Pattern rules: frost (Grid Rules)', play: true,
+    description: 'One pattern rule with a count: an empty cell with exactly one frozen cell round it freezes. Arms branch from a few seeds in the middle; Age fade colours them by when they froze. Shows the Patterns editor.',
+  },
+  gridRulesGas: {
+    label: 'Grid sims 11 · Block rules: gas (Grid Rules)', play: true,
+    description: 'Toffoli and Margolus\'s HPP gas as four block rules turned four ways: particles fly diagonally and bounce off each other at right angles. A ball of gas in the middle spreads into a diamond. Shows the Blocks editor.',
+  },
 };
 
 export const GRID_RULES_EXAMPLE_KEYS = Object.keys(GRID_RULES_EXAMPLE_INDEX);

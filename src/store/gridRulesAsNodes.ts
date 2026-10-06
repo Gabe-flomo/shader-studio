@@ -21,6 +21,7 @@ import {
   type GridShape,
 } from '../gridRules/spec';
 import { gridLabel } from '../compiler/gridRulesExpand';
+import { ANY, NOT_EMPTY, SAME, blockVariants, patternVariants, stencilOffset } from '../gridRules/stencils';
 import { GR_HASH_GLSL } from '../gridRules/glsl';
 import { estimateNodeHeight, groupNodesByRank } from './graphLayout';
 
@@ -193,7 +194,7 @@ export function gridRulesAsNodes(src: GraphNode, nextId: () => string, at: { x: 
   else ({ state, age } = smoothCore(b, s, P, cellPx));
 
   // ── Store and display ──
-  b.add('makeVec3', 'pack', 9, 2, {}, `Make Vec3: what the board keeps: red ${discrete ? 'the state' : 'u'}, green ${discrete ? 'the age / afterglow' : 'v'}, blue the step clock's phase.`, { r: { ext: state }, g: { ext: age }, b: ['tick', 'y'] });
+  b.add('makeVec3', 'pack', 9, 2, {}, `Make Vec3: what the board keeps: red ${discrete ? 'the state' : 'u'}, green ${discrete ? 'the age / afterglow' : 'v'}, blue the step clock's phase${s.type === 'blocks' ? ' and the blocks\' parity' : ''}.`, { r: { ext: state }, g: { ext: age }, b: s.type === 'blocks' ? ['blue', 'result'] : ['tick', 'y'] });
   b.add('pass', 'board', 10, 2, { label: `${label} cells (nodes)`, scale: String(s.scale), filter: 'nearest', wrap: s.wrap ? 'repeat' : 'clamp', format: 'half', repeat: s.steps }, [
     `Pass, the board: one pixel per cell at ${s.scale} of the picture's size. ${summary}.`,
     s.wrap ? 'Nearest keeps every read exactly one cell; Edges Repeat wraps the board round (a torus).' : 'Nearest keeps every read exactly one cell; Edges Clamp: a read past the edge sees the edge, which the walls keep empty.',
@@ -249,6 +250,42 @@ const ON_FN = 'float grIsOn(float s) { return step(0.5, s) - step(1.5, s); }';
 const HIT_FN = 'float grHit(float c, float k) { return 1.0 - step(0.5, abs(c - k)); }';
 
 function discreteCore(b: Builder, s: GridShape, P: Record<string, unknown>, cellPx: number): { state: Wire; age: Wire } {
+  const multi = s.type === 'patterns' || s.type === 'blocks';
+  if (multi) {
+    b.add('constant', 'states', 4, 13, { value: num(P, 'states'), label: 'States' }, 'States: how many states the rules use (0 is empty). A constant so Play can drive it.');
+    if (s.type === 'patterns') patternsCore(b, s, cellPx); else blocksCore(b, s);
+  } else countCore(b, s, P, cellPx);
+  const stages = s.type !== 'count';
+  b.card('look', 5, 13, 'Afterglow and age', [['afterglow', 'Afterglow', num(P, 'afterglow'), 0.99], ['ageRate', 'Ageing', num(P, 'ageRate'), 0.2]],
+    'Constants: Afterglow (how much of a dead cell\'s glow is kept each step) and Ageing (how much a live cell ages each step). Live entries.');
+  if (multi) {
+    b.expr('ageNext', 6, 12, {
+      label: 'Age and afterglow', outputType: 'float',
+      inputs: [['s', 'float', ['selfParts', 'x']], ['next', 'float', ['rule', 'result']], ['g', 'float', ['selfParts', 'y']], ['afterglow', 'float', ['look', 'afterglow']], ['ageRate', 'float', ['look', 'ageRate']]],
+      lines: [['float same', 'step(abs(next - floor(s + 0.5)), 0.5)']],
+      result: 'same > 0.5 ? (next > 0.5 ? min(1.0, g + ageRate) : g * afterglow) : (next < 0.5 ? afterglow : 0.0)',
+      note: [
+        'Age and afterglow (green): a cell whose state stays ages a little each step (an empty one keeps fading); a cell that changes starts again, glowing (Afterglow) if it has just emptied.',
+        'same: 1 if the rule leaves the state as it was.',
+        'result: same → older (or fainter); changed → the afterglow when emptied, else 0.',
+      ],
+    });
+  } else b.expr('ageNext', 6, 12, {
+    label: 'Age and afterglow', outputType: 'float',
+    inputs: [['s', 'float', ['selfParts', 'x']], ['next', 'float', ['rule', 'result']], ['g', 'float', ['selfParts', 'y']], ['afterglow', 'float', ['look', 'afterglow']], ['ageRate', 'float', ['look', 'ageRate']]],
+    lines: [['float wasOn', 'step(0.5, s) - step(1.5, s)'], ['float isOn', 'step(0.5, next) - step(1.5, next)']],
+    result: 'isOn > 0.5 ? (wasOn > 0.5 ? min(1.0, g + ageRate) : 0.0) : (next < 0.5 ? (s > 0.5 ? afterglow : g * afterglow) : 0.0)',
+    note: [
+      'Age and afterglow (green): a cell that stays on ages a little each step; a new one starts at 0. A cell that has just switched off starts to glow (Afterglow), and the glow fades by the same share each step.',
+      'wasOn: 1 if the cell was on (state 1).',
+      'isOn: 1 if the rule turns it on.',
+      'result: on → its age climbs (or 0 when new); off → the afterglow, or the fading glow; dying stages → 0.',
+    ],
+  });
+  return discreteTail(b, s, P, stages);
+}
+
+function countCore(b: Builder, s: GridShape, P: Record<string, unknown>, cellPx: number): void {
   const offsets = s.neighbourhood === 'moore' ? MOORE_OFFSETS : s.neighbourhood === 'vonNeumann' ? VON_NEUMANN_OFFSETS : neighbourOffsets('radius', s.radius, s.shape);
   // The neighbours: one Sample (texture) each, one cell away (Offset is in picture pixels).
   offsets.forEach(([dx, dy], i) => {
@@ -322,22 +359,11 @@ function discreteCore(b: Builder, s: GridShape, P: Record<string, unknown>, cell
       'result: s is 1 ? Survives? : Born?.',
     ],
   });
-  b.card('look', 5, 13, 'Afterglow and age', [['afterglow', 'Afterglow', num(P, 'afterglow'), 0.99], ['ageRate', 'Ageing', num(P, 'ageRate'), 0.2]],
-    'Constants: Afterglow (how much of a dead cell\'s glow is kept each step) and Ageing (how much a live cell ages each step). Live entries.');
-  b.expr('ageNext', 6, 12, {
-    label: 'Age and afterglow', outputType: 'float',
-    inputs: [['s', 'float', ['selfParts', 'x']], ['next', 'float', ['rule', 'result']], ['g', 'float', ['selfParts', 'y']], ['afterglow', 'float', ['look', 'afterglow']], ['ageRate', 'float', ['look', 'ageRate']]],
-    lines: [['float wasOn', 'step(0.5, s) - step(1.5, s)'], ['float isOn', 'step(0.5, next) - step(1.5, next)']],
-    result: 'isOn > 0.5 ? (wasOn > 0.5 ? min(1.0, g + ageRate) : 0.0) : (next < 0.5 ? (s > 0.5 ? afterglow : g * afterglow) : 0.0)',
-    note: [
-      'Age and afterglow (green): a cell that stays on ages a little each step; a new one starts at 0. A cell that has just switched off starts to glow (Afterglow), and the glow fades by the same share each step.',
-      'wasOn: 1 if the cell was on (state 1).',
-      'isOn: 1 if the rule turns it on.',
-      'result: on → its age climbs (or 0 when new); off → the afterglow, or the fading glow; dying stages → 0.',
-    ],
-  });
+}
+
+function discreteTail(b: Builder, s: GridShape, P: Record<string, unknown>, stages: boolean): { state: Wire; age: Wire } {
   // The start: noise, empty, a centre seed or a picture.
-  const seed = startDiscrete(b, s, P);
+  const seed = startDiscrete(b, s, P, stages);
   // The brush's state, and whether it paints this cell this frame (Brush fill).
   b.add('noiseFloat', 'brushRoll', 3, 6, { mode: 'hash', scale: 51.7, speed: 3 }, 'Noise Float, Hash: another per-cell roll, new every moment, for Brush fill.', { uv: ['uv', 'uv'], time: ['time', 'time'] });
   b.add('constant', 'fill', 3, 7, { value: num(P, 'brushFill'), label: 'Brush fill' }, 'Brush fill: the share of cells under the brush it paints each frame (Life likes a sprinkle, not a solid block).');
@@ -363,7 +389,19 @@ function discreteCore(b: Builder, s: GridShape, P: Record<string, unknown>, cell
   });
   let state: Wire = { nodeId: b.id('stateRound'), outputKey: 'output' };
   let age: Wire = { nodeId: b.id('ageHeld'), outputKey: 'result' };
-  if (!s.wrap) {
+  if (s.type === 'blocks') {
+    b.expr('inside', 8, 11, {
+      label: 'In a block', outputType: 'float', inputs: [['cell', 'vec2', ['cell', 'coord']]],
+      lines: [['vec2 W', 'floor(u_resolution * 0.5) * 2.0']],
+      result: 'step(floor(cell.x), W.x - 0.5) * step(floor(cell.y), W.y - 0.5)',
+      note: ['In a block: 0 for a cell in an odd last row or column, which has no block; it is kept empty.', 'W: the board\'s even part.', 'result: 1 inside the even part.'],
+    });
+    b.add('multiply', 'stateIn', 9, 10, {}, 'Multiply: the state, emptied outside the blocks.', { a: { ext: state }, b: ['inside', 'result'] });
+    b.add('multiply', 'ageIn', 9, 11, {}, 'Multiply: the age, emptied outside the blocks.', { a: { ext: age }, b: ['inside', 'result'] });
+    state = { nodeId: b.id('stateIn'), outputKey: 'result' };
+    age = { nodeId: b.id('ageIn'), outputKey: 'result' };
+  }
+  if (!s.wrap && s.type !== 'blocks') {
     b.expr('inside', 8, 11, {
       label: 'Inside the walls', outputType: 'float', inputs: [['cell', 'vec2', ['cell', 'coord']]],
       lines: [['vec2 c', 'floor(cell)']],
@@ -378,7 +416,7 @@ function discreteCore(b: Builder, s: GridShape, P: Record<string, unknown>, cell
   return { state, age };
 }
 
-function startDiscrete(b: Builder, s: GridShape, P: Record<string, unknown>): Wire {
+function startDiscrete(b: Builder, s: GridShape, P: Record<string, unknown>, stages: boolean): Wire {
   if (s.start === 'empty') {
     b.add('constant', 'seedValue', 5, 3, { value: 0, label: 'Start empty' }, 'Start: empty. A new board starts with every cell at 0: paint on it.');
     return { nodeId: b.id('seedValue'), outputKey: 'value' };
@@ -395,8 +433,14 @@ function startDiscrete(b: Builder, s: GridShape, P: Record<string, unknown>): Wi
   if (s.start === 'image') {
     b.add('sampleTexture', 'startPic', 4, 4, {}, 'Sample (texture): the start picture (what was wired into the Grid Rules node\'s Start image) at this cell.', b.image ? { texture: { ext: b.image } } : {});
     b.add('luminance', 'startLum', 5, 4, {}, 'Luminance: the picture\'s brightness here.', { color: ['startPic', 'color'] });
-    b.add('compare', 'seedValue', 5, 3, { operator: '>', b: 0.5 }, 'Compare (> 0.5): bright parts of the picture start on.', { a: ['startLum', 'result'] });
-    return { nodeId: b.id('seedValue'), outputKey: 'mask' };
+    b.expr('seedValue', 5, 3, {
+      label: 'Start state', outputType: 'float',
+      inputs: [['lum', 'float', ['startLum', 'result']], ...(stages ? [['states', 'float', ['states', 'value']] as [string, 'float', LWire]] : [])],
+      lines: [['float top', stages ? 'max(floor(states + 0.5), 2.0) - 1.0' : '1.0']],
+      result: 'floor(clamp(lum, 0.0, 1.0) * top + 0.5)',
+      note: ['Start state: the picture\'s brightness picks the state, 0 for black up to the last state for white (two states: bright parts start on).', 'top: the last state.', 'result: the brightness scaled to 0…top, rounded.'],
+    });
+    return { nodeId: b.id('seedValue'), outputKey: 'result' };
   }
   return { nodeId: b.id('seedOn'), outputKey: 'mask' };
 }
@@ -408,6 +452,29 @@ function discreteLook(b: Builder, s: GridShape, P: Record<string, unknown>): Wir
   b.add('colorPicker', 'glow', 11, 6, { color: vec(P, 'glowColor') }, 'Color: the afterglow of a cell that has just switched off.');
   b.add('colorPicker', 'old', 11, 7, { color: vec(P, 'oldColor') }, 'Color: what live cells age towards (Age fade).');
   b.add('constant', 'ageFade', 11, 8, { value: num(P, 'ageFade'), label: 'Age fade' }, 'Age fade: how far a live cell\'s colour moves towards Old cells as it ages (0 to 1).');
+  const multi = s.type === 'patterns' || s.type === 'blocks';
+  const extra = multi ? Math.max(0, Math.min(8, Math.round(num(P, 'states'))) - 2) : 0;
+  for (let k = 2; k < 2 + extra; k++) b.add('colorPicker', `c${k}`, 11, 7 + k, { color: vec(P, `color${k}`) }, `Color: cells in state ${k}${k === 7 ? ' (and any above)' : ''}.`);
+  if (multi) {
+    const ladder = Array.from({ length: extra }, (_, i) => i + 2).reduceRight((acc, k) => (k === 1 + extra ? `c${k}` : `(s < ${f(k + 0.5)} ? c${k} : ${acc})`), '');
+    b.expr('cellsLook', 12, 4, {
+      label: 'Colour by state', outputType: 'vec3',
+      inputs: [
+        ['st', 'float', ['show', 'x']], ['g', 'float', ['show', 'y']], ['empty', 'vec3', ['c0', 'rgb']], ['on', 'vec3', ['c1', 'rgb']],
+        ['glow', 'vec3', ['glow', 'rgb']], ['old', 'vec3', ['old', 'rgb']], ['fade', 'float', ['ageFade', 'value']],
+        ...Array.from({ length: extra }, (_, i) => [`c${i + 2}`, 'vec3', [`c${i + 2}`, 'rgb']] as [string, 'vec3', LWire]),
+      ],
+      lines: [['float s', 'floor(st + 0.5)'], ['float age', 'clamp(g, 0.0, 1.0)'], ['vec3 dead', 'mix(empty, glow, age)'], ['vec3 live', 'mix(on, old, clamp(fade * age, 0.0, 1.0))']],
+      result: `s < 0.5 ? dead : (s < 1.5 ? live${extra ? ` : ${ladder})` : ' : live)'}`,
+      note: [
+        'Colour by state: a colour for each state of the cell under this pixel.',
+        's: the state, as a whole number.', 'age: green, the age of the cell or the glow of an emptied one.',
+        'dead: empty cells, tinted by their afterglow.', 'live: state 1, moving towards Old cells as it ages (Age fade).',
+        'result: state 0 → dead, 1 → live, 2 and up → their own colours.',
+      ],
+    });
+    return { nodeId: b.id('cellsLook'), outputKey: 'result' };
+  }
   if (stages) {
     b.add('colorPicker', 'c2', 11, 9, { color: vec(P, 'color2') }, 'Color: the first dying stage.');
     b.add('colorPicker', 'c3', 11, 10, { color: vec(P, 'color3') }, 'Color: the last dying stage (the stages between blend from the first).');
@@ -595,4 +662,128 @@ export function openGridRulesInGraph(nodeId: string, nodes: GraphNode[], nextId:
     return changed ? { ...nd, inputs } : nd;
   });
   return { nodes: [...rewired, ...made.nodes], boardId: made.boardId, kept };
+}
+
+// ── Patterns and Blocks ─────────────────────────────────────────────────────────────────────────
+
+const specTest = (spec: number, x: string) => (spec === ANY ? null : spec === NOT_EMPTY ? `abs(${x}) > 0.5` : `abs(${x} - ${f(spec)}) < 0.5`);
+const specWord = (spec: number) => (spec === ANY ? 'any' : spec === NOT_EMPTY ? 'not empty' : `${spec}`);
+
+function patternsCore(b: Builder, s: GridShape, cellPx: number): void {
+  const names = ['nw', 'n', 'ne', 'w', 'me', 'e', 'sw', 's', 'se'];
+  names.forEach((nm, i) => {
+    if (i === 4) return;
+    const [dx, dy] = stencilOffset(i);
+    b.add('sampleTexture', `nb_${nm}`, 1, 11 + i, { offsetX: dx * cellPx, offsetY: dy * cellPx },
+      `Sample (texture): the cell ${where(dx, dy)}, a step ago (the board's Previous). Red is its state.`, { texture: ['board', 'previous'] });
+  });
+  const rules = s.patterns.filter(r => !r.off);
+  const counted = [...new Set(rules.flatMap(r => (r.count ? [r.count.state] : [])))];
+  const lines: Array<[string, string]> = [...names.map((nm, i) => [`float c${i}`, i === 4 ? 'floor(me + 0.5)' : `floor(${nm}.r + 0.5)`] as [string, string])];
+  const notes = names.map((nm, i) => `c${i}: the state ${i === 4 ? 'of this cell' : `of the cell ${WORD[nm]}`} (the stencil's ${['top left', 'top', 'top right', 'left', 'middle', 'right', 'bottom left', 'bottom', 'bottom right'][i]}).`);
+  for (const k of counted) {
+    lines.push([`float k${k}`, [0, 1, 2, 3, 5, 6, 7, 8].map(i => `step(abs(c${i} - ${f(k)}), 0.5)`).join(' + ')]);
+    notes.push(`k${k}: how many of the 8 neighbours are in state ${k}.`);
+  }
+  rules.forEach((r, j) => {
+    const variants = patternVariants(r).map(cells => cells.map((spec, i) => specTest(spec, `c${i}`)).filter((t): t is string => !!t));
+    const any = variants.some(t => t.length === 0) ? 'true' : variants.map(t => `(${t.join(' && ')})`).join(' || ');
+    const count = r.count ? ` && k${r.count.state} > ${f(r.count.min - 0.5)} && k${r.count.state} < ${f(r.count.max + 0.5)}` : '';
+    lines.push([`float r${j}`, `((${any})${count}) ? 1.0 : 0.0`]);
+    notes.push(`r${j}: 1 when rule ${j + 1} matches: this cell ${specWord(r.cells[4])}, ${r.cells.filter((c, i) => i !== 4 && c !== ANY).length} neighbour test(s)${r.symmetry === 'none' ? '' : r.symmetry === 'rotate' ? ' in any of four turns' : ' turned or mirrored'}${r.count ? `, and ${r.count.min} to ${r.count.max} neighbours in state ${r.count.state}` : ''}. It becomes ${r.becomes}.`);
+  });
+  const chain = rules.reduceRight((acc, r, j) => `(r${j} > 0.5 ? ${f(r.becomes)} : ${acc})`, 'c4');
+  b.expr('rule', 3, 11, {
+    label: 'The patterns', outputType: 'float',
+    inputs: [['me', 'float', ['selfParts', 'x']], ...names.filter((_, i) => i !== 4).map(nm => [nm, 'vec3', [`nb_${nm}`, 'color']] as [string, 'vec3', LWire]), ['states', 'float', ['states', 'value']]],
+    lines, result: `min(${chain}, max(floor(states + 0.5), 2.0) - 1.0)`,
+    note: [
+      'The patterns: the rules, tried in order: the first whose stencil matches says what this cell becomes; none matching, it stays.',
+      'Why an Expression Block: each rule is a handful of yes/no tests on nine cells; as nodes they would sprawl.',
+      ...notes,
+      'result: the first matching rule\'s state (else this cell\'s own), no higher than the last state.',
+    ],
+  });
+}
+
+function blocksCore(b: Builder, s: GridShape): void {
+  const W = 'floor(u_resolution * 0.5) * 2.0';
+  b.expr('blockCorner', 2, 11, {
+    label: 'This cell\'s block', outputType: 'vec3',
+    inputs: [['cell', 'vec2', ['cell', 'coord']], ['phase', 'float', ['selfParts', 'z']]],
+    lines: [['float par', 'step(1.5, phase)'], ['vec2 c', 'floor(cell)'], ['vec2 org', 'floor((c - par) * 0.5) * 2.0 + par']],
+    result: 'vec3(org, par)',
+    note: [
+      'This cell\'s block: the Margolus grid of 2×2 blocks, shifted one cell diagonally on odd steps.',
+      'par: the step\'s parity, kept in blue as 2 + the phase on odd steps.',
+      'c: this cell, counted from 0.',
+      'org: the bottom-left corner of its block.',
+      'result: the corner (x, y) and the parity (z).',
+    ],
+  });
+  const corners = [[0, 1], [1, 1], [0, 0], [1, 0]];
+  const word = ['top left', 'top right', 'bottom left', 'bottom right'];
+  corners.forEach(([cx, cy], q) => {
+    b.expr(`at${q}`, 3, 11 + q * 2, {
+      label: `Block ${word[q]}`, outputType: 'vec2', inputs: [['blk', 'vec3', ['blockCorner', 'result']]],
+      lines: [['vec2 W', W], ['vec2 p', s.wrap ? `mod(blk.xy + vec2(${f(cx)}, ${f(cy)}), W)` : `blk.xy + vec2(${f(cx)}, ${f(cy)})`]],
+      result: '((p + 0.5) / u_resolution * 2.0 - 1.0) * vec2(u_resolution.x / u_resolution.y, 1.0)',
+      note: [`Block ${word[q]}: where the block's ${word[q]} cell is, as a UV for Sample (texture).`, `W: the board's even part (an odd last row or column sits out).`, `p: the cell${s.wrap ? ', wrapped round the even part' : ''}.`, 'result: its middle in picture coordinates.'],
+    });
+    b.add('sampleTexture', `blk${q}`, 4, 11 + q * 2, {}, `Sample (texture): the block's ${word[q]} cell, a step ago (the board's Previous), read at the UV on the left.`, { texture: ['board', 'previous'], uv: [`at${q}`, 'result'] });
+  });
+  const lines: Array<[string, string]> = [['vec2 W', W], ['vec2 key', 'mod(blk.xy, W)'], ['float frame', 'mod(floor(t * 60.0), 997.0)']];
+  const notes = ['W: the board\'s even part.', 'key: the block\'s corner, wrapped, so a block across the seam rolls one set of dice.', 'frame: the frame number, for the dice.'];
+  corners.forEach(([cx, cy], q) => {
+    const raw = `floor(b${q}.r + 0.5)`;
+    lines.push([`float v${q}`, s.wrap ? raw : `(blk.x + ${f(cx)} < 0.0 || blk.y + ${f(cy)} < 0.0 || blk.x + ${f(cx)} > W.x - 0.5 || blk.y + ${f(cy)} > W.y - 0.5) ? -1.0 : ${raw}`]);
+    notes.push(`v${q}: the ${word[q]} cell's state${s.wrap ? '' : ' (−1 past the walls: not empty, never a state)'}.`);
+  });
+  lines.push(['vec2 q', 'floor(cell) - blk.xy'], ['float qi', 'q.x + (1.0 - q.y) * 2.0'], ['float s', 'floor(me + 0.5)']);
+  notes.push('q: this cell within its block (0 or 1 across and up).', 'qi: which of the four it is (top left 0, top right 1, bottom left 2, bottom right 3).', 's: this cell\'s state.');
+  const rules = s.blocks.filter(r => !r.off);
+  rules.forEach((r, j) => {
+    const vars = blockVariants(r);
+    const n = vars.length;
+    lines.push([`float o${j}`, `floor(grHash(vec3(key, frame + ${f(31 + j * 2)})) * ${f(n)})`]);
+    notes.push(`o${j}: which of rule ${j + 1}'s ${n} orientation(s) is tried first, rolled once per block.`);
+    vars.forEach(({ before }, k) => {
+      const tests = before.map((spec, q) => specTest(spec, `v${q}`)).filter((t): t is string => !!t);
+      lines.push([`float m${j}_${k}`, `(${tests.length ? tests.join(' && ') : 'true'}) ? ${f(n)} - mod(${f(k)} - o${j} + ${f(n)}, ${f(n)}) : 0.0`]);
+      notes.push(`m${j}_${k}: rule ${j + 1}, orientation ${k + 1}: its priority when the block matches its before picture, else 0.`);
+    });
+    const best = vars.map((_, k) => `m${j}_${k}`).reduce((a, x) => `max(${a}, ${x})`);
+    lines.push([`float hit${j}`, `(${best} > 0.5${r.chance < 1 ? ` && grHash(vec3(key, frame + ${f(32 + j * 2)})) < ${f(r.chance)}` : ''}) ? 1.0 : 0.0`]);
+    notes.push(`hit${j}: rule ${j + 1} fires on this block${r.chance < 1 ? ` (with chance ${r.chance}, rolled per block)` : ''}.`);
+    // The chosen orientation's after, at this cell's place.
+    const afterAt = (q: number) => vars.reduceRight((acc, { after }, k) => {
+      const val = after[q] === SAME ? 's' : f(after[q]);
+      const chosen = vars.map((__, kk) => (kk === k ? null : `m${j}_${k} >= m${j}_${kk}`)).filter(Boolean).join(' && ');
+      return k === vars.length - 1 ? val : `((${chosen || 'true'}) ? ${val} : ${acc})`;
+    }, '');
+    lines.push([`float a${j}`, `qi < 0.5 ? ${afterAt(0)} : (qi < 1.5 ? ${afterAt(1)} : (qi < 2.5 ? ${afterAt(2)} : ${afterAt(3)}))`]);
+    notes.push(`a${j}: what this cell becomes under rule ${j + 1}'s chosen orientation (= keeps it).`);
+  });
+  const chain = rules.reduceRight((acc, _r, j) => `(hit${j} > 0.5 ? a${j} : ${acc})`, 's');
+  b.expr('rule', 5, 11, {
+    label: 'The blocks', outputType: 'float',
+    inputs: [
+      ['blk', 'vec3', ['blockCorner', 'result']], ['cell', 'vec2', ['cell', 'coord']], ['me', 'float', ['selfParts', 'x']], ['states', 'float', ['states', 'value']],
+      ...corners.map((_, q) => [`b${q}`, 'vec3', [`blk${q}`, 'color']] as [string, 'vec3', LWire]),
+    ],
+    lines, functions: GR_HASH_GLSL,
+    result: `clamp(${chain}, 0.0, max(floor(states + 0.5), 2.0) - 1.0)`,
+    note: [
+      'The blocks: the rules tried in order on this cell\'s 2×2 block; the first that fires rewrites all four cells at once (each cell works out its own part of the same answer, so the four agree and nothing is lost or made).',
+      'Why an Expression Block: picking a rule and an orientation is a page of yes/no tests; as nodes it would sprawl.',
+      ...notes,
+      'result: the first firing rule\'s state for this cell (else unchanged), within the states.',
+    ],
+  });
+  b.expr('blue', 8, 3, {
+    label: 'Clock and parity', outputType: 'float',
+    inputs: [['phase', 'float', ['tick', 'y']], ['tick', 'float', ['tick', 'x']], ['blk', 'vec3', ['blockCorner', 'result']]],
+    result: 'phase + 2.0 * (tick > 0.5 ? 1.0 - blk.z : blk.z)',
+    note: ['Clock and parity: blue keeps the clock\'s phase plus 2 on odd steps; a step flips the parity, which shifts the blocks.', 'result: phase + 2 × the new parity.'],
+  });
 }

@@ -17,6 +17,8 @@
  *       Pass reads 0, or 1) is new, and is seeded. Changing the rule type or the start reseeds too.
  */
 
+import { BLOCK_PRESETS, DEFAULT_BLOCKS, DEFAULT_PATTERNS, PATTERN_PRESETS, readBlocks, readPatterns, type BlockRule, type PatternRule } from './stencils';
+
 export type GridRuleType = 'count' | 'stages' | 'patterns' | 'blocks' | 'smooth';
 export type Neighbourhood = 'moore' | 'vonNeumann' | 'radius';
 export type RadiusShape = 'box' | 'circle';
@@ -225,6 +227,7 @@ export const GRID_DEFAULTS: Record<string, unknown> = {
   color0: [0.02, 0.025, 0.05], color1: [0.85, 1.0, 0.92], color2: [0.95, 0.45, 0.2], color3: [0.25, 0.06, 0.2],
   color4: [0.3, 0.6, 1.0], color5: [1.0, 0.85, 0.3], color6: [0.7, 0.3, 0.9], color7: [0.4, 0.9, 0.5],
   glowColor: [0.55, 0.12, 0.35], oldColor: [0.3, 0.75, 1.0],
+  patterns: DEFAULT_PATTERNS, blocks: DEFAULT_BLOCKS,
 };
 
 /** The baked part of the rule, read from a node's params (what decides the GLSL's shape). */
@@ -240,6 +243,10 @@ export interface GridShape {
   wrap: boolean;
   scale: number;
   steps: number;
+  /** Patterns: the stencil rules (stencils.ts). */
+  patterns: PatternRule[];
+  /** Blocks: the before → after rules. */
+  blocks: BlockRule[];
 }
 
 const pick = <T extends string>(v: unknown, allowed: readonly T[], d: T): T => (typeof v === 'string' && (allowed as readonly string[]).includes(v) ? v as T : d);
@@ -258,6 +265,8 @@ export function gridShape(params: Record<string, unknown>): GridShape {
     wrap: P.edges !== 'walls',
     scale: boardScale(P.board),
     steps: Math.max(1, Math.min(MAX_STEPS, Math.round(typeof P.steps === 'number' && isFinite(P.steps) ? P.steps : 1))),
+    patterns: readPatterns(P.patterns),
+    blocks: readBlocks(P.blocks),
   };
 }
 
@@ -292,17 +301,18 @@ export function ruleSummary(params: Record<string, unknown>): string {
   if (s.type === 'count') return `Count ${counts}${nbWord}`;
   if (s.type === 'stages') return `Stages ${counts}/C${Math.round(Number(P.states))}${nbWord}`;
   if (s.type === 'smooth') return `Smooth · ${s.template === 'reaction' ? 'reaction–diffusion' : s.template}`;
-  if (s.type === 'patterns') return 'Patterns';
-  return 'Blocks';
+  const n = s.type === 'patterns' ? s.patterns.filter(r => !r.off).length : s.blocks.filter(r => !r.off).length;
+  return `${s.type === 'patterns' ? 'Patterns' : 'Blocks'} · ${n} rule${n === 1 ? '' : 's'} · ${Math.round(Number(P.states))} states`;
 }
 
 /** The preset whose numbers this node has now (its key), or null. */
 export function matchingPreset(params: Record<string, unknown>): string | null {
   const P = { ...GRID_DEFAULTS, ...params };
   const s = gridShape(P);
-  const table = s.type === 'count' ? COUNT_PRESETS : s.type === 'stages' ? STAGES_PRESETS : s.type === 'smooth' ? SMOOTH_PRESETS : {};
+  const table: Record<string, { params: Record<string, unknown> }> = s.type === 'count' ? COUNT_PRESETS : s.type === 'stages' ? STAGES_PRESETS : s.type === 'smooth' ? SMOOTH_PRESETS
+    : s.type === 'patterns' ? PATTERN_PRESETS : BLOCK_PRESETS;
   for (const [key, pr] of Object.entries(table)) {
-    if (Object.entries(pr.params).every(([k, v]) => (typeof v === 'number' ? Math.abs(Number(P[k]) - v) < 1e-6 : P[k] === v))) return key;
+    if (Object.entries(pr.params).every(([k, v]) => (typeof v === 'number' ? Math.abs(Number(P[k]) - v) < 1e-6 : Array.isArray(v) ? JSON.stringify(v) === JSON.stringify(P[k]) : P[k] === v))) return key;
   }
   return null;
 }

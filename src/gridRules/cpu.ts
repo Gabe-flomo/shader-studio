@@ -5,8 +5,9 @@
  * Boards wrap or have walls as the node's do. Two channels per cell: a (state, or u) and b (age, or v).
  */
 import { GRID_DEFAULTS, gridShape, neighbourOffsets, type GridShape } from './spec';
+import { SAME, blockVariants, patternVariants, specMatches, stencilOffset } from './stencils';
 
-export interface CpuBoard { w: number; h: number; a: Float32Array; b: Float32Array }
+export interface CpuBoard { w: number; h: number; a: Float32Array; b: Float32Array; /** Blocks: the step's parity. */ par?: number }
 
 export function cpuBoard(w: number, h: number): CpuBoard {
   return { w, h, a: new Float32Array(w * h), b: new Float32Array(w * h) };
@@ -51,12 +52,80 @@ export function cpuSeed(params: Record<string, unknown>, w: number, h: number, r
 export function cpuStep(params: Record<string, unknown>, B: CpuBoard): CpuBoard {
   const P = { ...GRID_DEFAULTS, ...params };
   const s = gridShape(P);
+  if (s.type === 'patterns') return patterns(s, P, B);
+  if (s.type === 'blocks') return blocks(s, P, B);
   return s.type === 'smooth' ? smooth(s, P, B) : discrete(s, P, B);
 }
 
 function at(B: CpuBoard, ch: 'a' | 'b', x: number, y: number, wrap: boolean): number {
   if (wrap) { x = (x + B.w) % B.w; y = (y + B.h) % B.h; } else { x = Math.max(0, Math.min(B.w - 1, x)); y = Math.max(0, Math.min(B.h - 1, y)); }
   return B[ch][y * B.w + x];
+}
+
+/** The age / afterglow of Patterns and Blocks: a state that stays ages, a change starts again. */
+function ageOf(P: Record<string, unknown>, st: number, next: number, g: number): number {
+  if (next === st) return next > 0 ? Math.min(1, g + Number(P.ageRate)) : g * Number(P.afterglow);
+  return next === 0 ? Number(P.afterglow) : 0;
+}
+
+function patterns(s: GridShape, P: Record<string, unknown>, B: CpuBoard): CpuBoard {
+  const out = cpuBoard(B.w, B.h);
+  const top = Math.max(2, Math.round(Number(P.states))) - 1;
+  const rules = s.patterns.filter(r => !r.off).map(r => ({ r, variants: patternVariants(r) }));
+  for (let y = 0; y < B.h; y++) for (let x = 0; x < B.w; x++) {
+    const i = y * B.w + x;
+    const st = Math.round(B.a[i]);
+    const c = Array.from({ length: 9 }, (_, k) => { const [dx, dy] = stencilOffset(k); return k === 4 ? st : Math.round(at(B, 'a', x + dx, y + dy, s.wrap)); });
+    let next = st;
+    for (const { r, variants } of rules) {
+      const hit = variants.some(v => v.every((spec, k) => specMatches(spec, c[k])));
+      const n = r.count ? c.filter((v, k) => k !== 4 && v === r.count!.state).length : 0;
+      if (hit && (!r.count || (n >= r.count.min && n <= r.count.max))) { next = r.becomes; break; }
+    }
+    next = Math.min(next, top);
+    const inside = s.wrap || (x > 0 && y > 0 && x < B.w - 1 && y < B.h - 1);
+    out.a[i] = inside ? next : 0;
+    out.b[i] = inside ? ageOf(P, st, next, B.b[i]) : 0;
+  }
+  return out;
+}
+
+function blocks(s: GridShape, P: Record<string, unknown>, B: CpuBoard): CpuBoard {
+  const out = cpuBoard(B.w, B.h);
+  const par = B.par ?? 0;
+  out.par = 1 - par;
+  const W = Math.floor(B.w / 2) * 2, H = Math.floor(B.h / 2) * 2;
+  const top = Math.max(2, Math.round(Number(P.states))) - 1;
+  out.a.set(B.a); out.b.set(B.b);
+  // An odd last row or column has no block: kept empty.
+  for (let y = 0; y < B.h; y++) for (let x = 0; x < B.w; x++) if (x >= W || y >= H) { out.a[y * B.w + x] = 0; out.b[y * B.w + x] = 0; }
+  const rules = s.blocks.filter(r => !r.off).map(r => ({ r, variants: blockVariants(r) }));
+  const val = (x: number, y: number) => {
+    if (s.wrap) { x = ((x % W) + W) % W; y = ((y % H) + H) % H; } else if (x < 0 || y < 0 || x >= W || y >= H) return -1;
+    return Math.round(B.a[y * B.w + x]);
+  };
+  for (let oy = par; oy < H + par; oy += 2) for (let ox = par; ox < W + par; ox += 2) {
+    // Corners: TL, TR, BL, BR (y up).
+    const pos: Array<[number, number]> = [[ox, oy + 1], [ox + 1, oy + 1], [ox, oy], [ox + 1, oy]];
+    const b = pos.map(([x, y]) => val(x, y));
+    for (const { r, variants } of rules) {
+      const n = variants.length, o = Math.floor(Math.random() * n);
+      let pick = -1;
+      for (let k = 0; k < n && pick < 0; k++) { const v = (o + k) % n; if (variants[v].before.every((spec, q) => specMatches(spec, b[q]))) pick = v; }
+      if (pick < 0 || Math.random() >= r.chance) continue;
+      pos.forEach(([x, y], q) => {
+        const a = variants[pick].after[q];
+        if (a === SAME || b[q] < 0) return;
+        const xx = s.wrap ? ((x % W) + W) % W : x, yy = s.wrap ? ((y % H) + H) % H : y;
+        const i = yy * B.w + xx;
+        const next = Math.min(a, top);
+        out.a[i] = next;
+        out.b[i] = ageOf(P, b[q], next, B.b[i]);
+      });
+      break;
+    }
+  }
+  return out;
 }
 
 function discrete(s: GridShape, P: Record<string, unknown>, B: CpuBoard): CpuBoard {

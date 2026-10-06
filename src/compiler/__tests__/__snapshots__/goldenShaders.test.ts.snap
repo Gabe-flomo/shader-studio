@@ -308,9 +308,23 @@ exports[`golden shaders: every Play example exports the same bundle > gridRulesC
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > gridRulesCrystal 1`] = `
+{
+  "bundle": "1a7ef40f4473cc083613c99700bd:14863",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > gridRulesFire 1`] = `
 {
   "bundle": "0f4d359c166d100448bb1246385b:14681",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > gridRulesGas 1`] = `
+{
+  "bundle": "183a0f92bef438119ad1c6307153:22333",
   "missing": [],
 }
 `;
@@ -332,6 +346,13 @@ exports[`golden shaders: every Play example exports the same bundle > gridRulesL
 exports[`golden shaders: every Play example exports the same bundle > gridRulesLifeLike 1`] = `
 {
   "bundle": "18b8b2d97a2b410e18c48bd23786:14273",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > gridRulesSand 1`] = `
+{
+  "bundle": "19a79e01b70f5b12ebc279210d89:19047",
   "missing": [],
 }
 `;
@@ -5552,6 +5573,178 @@ void main() {
 }
 `;
 
+exports[`golden shaders: every example compiles as it did > gridRulesCrystal 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "01da2a354b31c009fa0e6af8e727:4130",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "087ded821133030e0d2f13ffdb5d:119",
+  "paramBindings": "087f518c5eeef91081a59c27e722:1091",
+  "paramUniforms": [
+    "u_p_frostxrulesx0xc2_afterglow",
+    "u_p_frostxrulesx0xc2_ageFade",
+    "u_p_frostxrulesx0xc2_ageRate",
+    "u_p_frostxrulesx0xc2_brushFill",
+    "u_p_frostxrulesx0xc2_brushRadius",
+    "u_p_frostxrulesx0xc2_brushState",
+    "u_p_frostxrulesx0xc2_color0",
+    "u_p_frostxrulesx0xc2_color1",
+    "u_p_frostxrulesx0xc2_color2",
+    "u_p_frostxrulesx0xc2_color3",
+    "u_p_frostxrulesx0xc2_color4",
+    "u_p_frostxrulesx0xc2_color5",
+    "u_p_frostxrulesx0xc2_color6",
+    "u_p_frostxrulesx0xc2_color7",
+    "u_p_frostxrulesx0xc2_density",
+    "u_p_frostxrulesx0xc2_glowColor",
+    "u_p_frostxrulesx0xc2_oldColor",
+    "u_p_frostxrulesx0xc2_paint",
+    "u_p_frostxrulesx0xc2_rate",
+    "u_p_frostxrulesx0xc2_reset",
+    "u_p_frostxrulesx0xc2_seed",
+    "u_p_frostxrulesx0xc2_states",
+  ],
+  "paramValues": "18e78d16efdba11d832439deab91:904",
+  "passes": [
+    {
+      "filter": "nearest",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_frostxrulesx0xc2_states;
+uniform float u_p_frostxrulesx0xc2_rate;
+uniform float u_p_frostxrulesx0xc2_reset;
+uniform float u_p_frostxrulesx0xc2_density;
+uniform float u_p_frostxrulesx0xc2_seed;
+uniform float u_p_frostxrulesx0xc2_paint;
+uniform float u_p_frostxrulesx0xc2_brushRadius;
+uniform float u_p_frostxrulesx0xc2_brushState;
+uniform float u_p_frostxrulesx0xc2_brushFill;
+uniform float u_p_frostxrulesx0xc2_afterglow;
+uniform float u_p_frostxrulesx0xc2_ageRate;
+uniform float u_p_frostxrulesx0xc2_ageFade;
+uniform vec3 u_p_frostxrulesx0xc2_color0;
+uniform vec3 u_p_frostxrulesx0xc2_color1;
+uniform vec3 u_p_frostxrulesx0xc2_color2;
+uniform vec3 u_p_frostxrulesx0xc2_color3;
+uniform vec3 u_p_frostxrulesx0xc2_color4;
+uniform vec3 u_p_frostxrulesx0xc2_color5;
+uniform vec3 u_p_frostxrulesx0xc2_color6;
+uniform vec3 u_p_frostxrulesx0xc2_color7;
+uniform vec3 u_p_frostxrulesx0xc2_glowColor;
+uniform vec3 u_p_frostxrulesx0xc2_oldColor;
+uniform sampler2D u_pass_frost_rules_cell_0;
+uniform vec2 u_pass_frost_rules_cell_0_px;
+uniform sampler2D u_passprev_frost_rules_cell_0;
+uniform vec2 u_passprev_frost_rules_cell_0_px;
+uniform float u_mousebtn;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+float grHash(vec3 p) {
+    vec3 p3 = fract(p * 0.1031);
+    p3 = p3 + dot(p3, vec3(p3.z, p3.y, p3.x) + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Grid Rules, Patterns: one rule. This cell empty (the stencil's middle), any neighbours, and exactly one of the 8 round it frozen (the rule's count): it freezes. Frozen cells stay frozen (no rule changes them).
+    // It starts from a sprinkle of seeds in the middle (Centre seed, Density 0.01). Age fade turns old frost blue, so the colour shows when each arm grew.
+    vec2 frost_rules_0_c2_res = u_resolution;
+    vec2 frost_rules_0_c2_cell = floor(gl_FragCoord.xy);
+    vec4 frost_rules_0_c2_me = texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(0.0) + 0.5) / frost_rules_0_c2_res);
+    float frost_rules_0_c2_fresh = (abs(frost_rules_0_c2_me.a - 29.0) > 0.5 || u_p_frostxrulesx0xc2_reset > 0.5) ? 1.0 : 0.0;
+    float frost_rules_0_c2_clk = (frost_rules_0_c2_fresh > 0.5 ? 0.0 : fract(frost_rules_0_c2_me.b)) + clamp(u_p_frostxrulesx0xc2_rate, 0.0, 1.0);
+    float frost_rules_0_c2_tick = step(1.0, frost_rules_0_c2_clk);
+    float frost_rules_0_c2_phase = frost_rules_0_c2_clk - frost_rules_0_c2_tick;
+    float frost_rules_0_c2_h = grHash(vec3(frost_rules_0_c2_cell, mod(floor(u_time * 60.0), 997.0) + u_p_frostxrulesx0xc2_seed * 1013.0 + 1.0));
+    vec2 frost_rules_0_c2_m = u_mouse * 0.25;
+    float frost_rules_0_c2_in = (length(frost_rules_0_c2_cell + 0.5 - frost_rules_0_c2_m) < u_p_frostxrulesx0xc2_brushRadius ? 1.0 : 0.0) * max(step(0.5, u_mousebtn), step(0.5, u_p_frostxrulesx0xc2_paint));
+    float frost_rules_0_c2_s = floor(frost_rules_0_c2_me.r + 0.5);
+    float frost_rules_0_c2_g = frost_rules_0_c2_me.g;
+    float frost_rules_0_c2_top = max(floor(u_p_frostxrulesx0xc2_states + 0.5), 2.0) - 1.0;
+    float frost_rules_0_c2_c0 = floor(texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(-1.0, 1.0) + 0.5) / frost_rules_0_c2_res).r + 0.5);
+    float frost_rules_0_c2_c1 = floor(texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(0.0, 1.0) + 0.5) / frost_rules_0_c2_res).r + 0.5);
+    float frost_rules_0_c2_c2 = floor(texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(1.0, 1.0) + 0.5) / frost_rules_0_c2_res).r + 0.5);
+    float frost_rules_0_c2_c3 = floor(texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(-1.0, 0.0) + 0.5) / frost_rules_0_c2_res).r + 0.5);
+    float frost_rules_0_c2_c4 = frost_rules_0_c2_s;
+    float frost_rules_0_c2_c5 = floor(texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(1.0, 0.0) + 0.5) / frost_rules_0_c2_res).r + 0.5);
+    float frost_rules_0_c2_c6 = floor(texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(-1.0, -1.0) + 0.5) / frost_rules_0_c2_res).r + 0.5);
+    float frost_rules_0_c2_c7 = floor(texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(0.0, -1.0) + 0.5) / frost_rules_0_c2_res).r + 0.5);
+    float frost_rules_0_c2_c8 = floor(texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(1.0, -1.0) + 0.5) / frost_rules_0_c2_res).r + 0.5);
+    float frost_rules_0_c2_k1 = (abs(frost_rules_0_c2_c0 - 1.0) < 0.5 ? 1.0 : 0.0) + (abs(frost_rules_0_c2_c1 - 1.0) < 0.5 ? 1.0 : 0.0) + (abs(frost_rules_0_c2_c2 - 1.0) < 0.5 ? 1.0 : 0.0) + (abs(frost_rules_0_c2_c3 - 1.0) < 0.5 ? 1.0 : 0.0) + (abs(frost_rules_0_c2_c5 - 1.0) < 0.5 ? 1.0 : 0.0) + (abs(frost_rules_0_c2_c6 - 1.0) < 0.5 ? 1.0 : 0.0) + (abs(frost_rules_0_c2_c7 - 1.0) < 0.5 ? 1.0 : 0.0) + (abs(frost_rules_0_c2_c8 - 1.0) < 0.5 ? 1.0 : 0.0);
+    float frost_rules_0_c2_next = frost_rules_0_c2_s;
+    if (((abs(frost_rules_0_c2_c4 - 0.0) < 0.5)) && frost_rules_0_c2_k1 > 0.5 && frost_rules_0_c2_k1 < 1.5) frost_rules_0_c2_next = 1.0;
+    frost_rules_0_c2_next = min(frost_rules_0_c2_next, frost_rules_0_c2_top);
+    float frost_rules_0_c2_ng = 0.0;
+    if (abs(frost_rules_0_c2_next - frost_rules_0_c2_s) < 0.5) frost_rules_0_c2_ng = frost_rules_0_c2_next > 0.5 ? min(1.0, frost_rules_0_c2_g + u_p_frostxrulesx0xc2_ageRate) : frost_rules_0_c2_g * u_p_frostxrulesx0xc2_afterglow;
+    else frost_rules_0_c2_ng = frost_rules_0_c2_next < 0.5 ? u_p_frostxrulesx0xc2_afterglow : 0.0;
+    if (frost_rules_0_c2_tick < 0.5) { frost_rules_0_c2_next = frost_rules_0_c2_s; frost_rules_0_c2_ng = frost_rules_0_c2_g; }
+    if (frost_rules_0_c2_fresh > 0.5) { frost_rules_0_c2_next = (length(frost_rules_0_c2_cell + 0.5 - frost_rules_0_c2_res * 0.5) < min(frost_rules_0_c2_res.x, frost_rules_0_c2_res.y) * 0.15 ? (frost_rules_0_c2_h < u_p_frostxrulesx0xc2_density ? 1.0 : 0.0) : 0.0); frost_rules_0_c2_ng = 0.0; }
+    float frost_rules_0_c2_roll = grHash(vec3(frost_rules_0_c2_cell + 0.5, mod(floor(u_time * 60.0), 997.0) + 7919.0));
+    if (frost_rules_0_c2_in > 0.5 && frost_rules_0_c2_roll < u_p_frostxrulesx0xc2_brushFill) { frost_rules_0_c2_next = clamp(floor(u_p_frostxrulesx0xc2_brushState + 0.5), 0.0, frost_rules_0_c2_top); frost_rules_0_c2_ng = 0.0; }
+    vec3 frost_rules_0_c2_out = vec3(frost_rules_0_c2_next, frost_rules_0_c2_ng, frost_rules_0_c2_phase);
+    float frost_rules_0_c2_outA = 29.0;
+    gl_FragColor = vec4(frost_rules_0_c2_out, frost_rules_0_c2_outA);
+}",
+      "label": "Frost rules cells",
+      "live": true,
+      "nodeId": "frost__cells",
+      "nodeIds": [
+        "frost__step",
+        "frost",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "frost_rules_cell_0",
+      ],
+      "scale": 0.25,
+      "slug": "frost_rules_cell_0",
+      "wrap": "repeat",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
 exports[`golden shaders: every example compiles as it did > gridRulesFire 1`] = `
 {
   "audioUniforms": {},
@@ -5727,6 +5920,225 @@ void main() {
       ],
       "scale": 0.25,
       "slug": "fire_rules_cells_0",
+      "wrap": "repeat",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > gridRulesGas 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "12c34b52e14a5b1325f761af8a7c:3995",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "09b40a2f8acd8f012ddc023a6095:108",
+  "paramBindings": "090bfab4ffd0610083d2766df3c0:1003",
+  "paramUniforms": [
+    "u_p_gasxrulesx0xc2_afterglow",
+    "u_p_gasxrulesx0xc2_ageFade",
+    "u_p_gasxrulesx0xc2_ageRate",
+    "u_p_gasxrulesx0xc2_brushFill",
+    "u_p_gasxrulesx0xc2_brushRadius",
+    "u_p_gasxrulesx0xc2_brushState",
+    "u_p_gasxrulesx0xc2_color0",
+    "u_p_gasxrulesx0xc2_color1",
+    "u_p_gasxrulesx0xc2_color2",
+    "u_p_gasxrulesx0xc2_color3",
+    "u_p_gasxrulesx0xc2_color4",
+    "u_p_gasxrulesx0xc2_color5",
+    "u_p_gasxrulesx0xc2_color6",
+    "u_p_gasxrulesx0xc2_color7",
+    "u_p_gasxrulesx0xc2_density",
+    "u_p_gasxrulesx0xc2_glowColor",
+    "u_p_gasxrulesx0xc2_oldColor",
+    "u_p_gasxrulesx0xc2_paint",
+    "u_p_gasxrulesx0xc2_rate",
+    "u_p_gasxrulesx0xc2_reset",
+    "u_p_gasxrulesx0xc2_seed",
+    "u_p_gasxrulesx0xc2_states",
+  ],
+  "paramValues": "0ef1bfe19a4bb500729a50f44e3c:855",
+  "passes": [
+    {
+      "filter": "nearest",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_gasxrulesx0xc2_states;
+uniform float u_p_gasxrulesx0xc2_rate;
+uniform float u_p_gasxrulesx0xc2_reset;
+uniform float u_p_gasxrulesx0xc2_density;
+uniform float u_p_gasxrulesx0xc2_seed;
+uniform float u_p_gasxrulesx0xc2_paint;
+uniform float u_p_gasxrulesx0xc2_brushRadius;
+uniform float u_p_gasxrulesx0xc2_brushState;
+uniform float u_p_gasxrulesx0xc2_brushFill;
+uniform float u_p_gasxrulesx0xc2_afterglow;
+uniform float u_p_gasxrulesx0xc2_ageRate;
+uniform float u_p_gasxrulesx0xc2_ageFade;
+uniform vec3 u_p_gasxrulesx0xc2_color0;
+uniform vec3 u_p_gasxrulesx0xc2_color1;
+uniform vec3 u_p_gasxrulesx0xc2_color2;
+uniform vec3 u_p_gasxrulesx0xc2_color3;
+uniform vec3 u_p_gasxrulesx0xc2_color4;
+uniform vec3 u_p_gasxrulesx0xc2_color5;
+uniform vec3 u_p_gasxrulesx0xc2_color6;
+uniform vec3 u_p_gasxrulesx0xc2_color7;
+uniform vec3 u_p_gasxrulesx0xc2_glowColor;
+uniform vec3 u_p_gasxrulesx0xc2_oldColor;
+uniform sampler2D u_pass_gas_rules_cells_0;
+uniform vec2 u_pass_gas_rules_cells_0_px;
+uniform sampler2D u_passprev_gas_rules_cells_0;
+uniform vec2 u_passprev_gas_rules_cells_0_px;
+uniform float u_mousebtn;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+float grHash(vec3 p) {
+    vec3 p3 = fract(p * 0.1031);
+    p3 = p3 + dot(p3, vec3(p3.z, p3.y, p3.x) + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Grid Rules, Blocks: the HPP lattice gas (Toffoli and Margolus). In each 2×2 block every particle moves to the opposite corner, except two meeting head-on, which leave at right angles. Four rules, each turned four ways.
+    // A ball of gas starts in the middle and spreads; Afterglow leaves faint trails. The board wraps, and no particle is ever lost.
+    vec2 gas_rules_0_c2_res = u_resolution;
+    vec2 gas_rules_0_c2_cell = floor(gl_FragCoord.xy);
+    vec4 gas_rules_0_c2_me = texture2D(u_passprev_gas_rules_cells_0, (gas_rules_0_c2_cell + vec2(0.0) + 0.5) / gas_rules_0_c2_res);
+    float gas_rules_0_c2_fresh = (abs(gas_rules_0_c2_me.a - 41.0) > 0.5 || u_p_gasxrulesx0xc2_reset > 0.5) ? 1.0 : 0.0;
+    float gas_rules_0_c2_clk = (gas_rules_0_c2_fresh > 0.5 ? 0.0 : fract(gas_rules_0_c2_me.b)) + clamp(u_p_gasxrulesx0xc2_rate, 0.0, 1.0);
+    float gas_rules_0_c2_tick = step(1.0, gas_rules_0_c2_clk);
+    float gas_rules_0_c2_phase = gas_rules_0_c2_clk - gas_rules_0_c2_tick;
+    float gas_rules_0_c2_h = grHash(vec3(gas_rules_0_c2_cell, mod(floor(u_time * 60.0), 997.0) + u_p_gasxrulesx0xc2_seed * 1013.0 + 1.0));
+    vec2 gas_rules_0_c2_m = u_mouse * 0.25;
+    float gas_rules_0_c2_in = (length(gas_rules_0_c2_cell + 0.5 - gas_rules_0_c2_m) < u_p_gasxrulesx0xc2_brushRadius ? 1.0 : 0.0) * max(step(0.5, u_mousebtn), step(0.5, u_p_gasxrulesx0xc2_paint));
+    float gas_rules_0_c2_s = floor(gas_rules_0_c2_me.r + 0.5);
+    float gas_rules_0_c2_g = gas_rules_0_c2_me.g;
+    float gas_rules_0_c2_top = max(floor(u_p_gasxrulesx0xc2_states + 0.5), 2.0) - 1.0;
+    float gas_rules_0_c2_par = step(1.5, gas_rules_0_c2_me.b);
+    vec2 gas_rules_0_c2_W = floor(gas_rules_0_c2_res * 0.5) * 2.0;
+    vec2 gas_rules_0_c2_org = floor((gas_rules_0_c2_cell - gas_rules_0_c2_par) * 0.5) * 2.0 + gas_rules_0_c2_par;
+    vec2 gas_rules_0_c2_q = gas_rules_0_c2_cell - gas_rules_0_c2_org;
+    float gas_rules_0_c2_qi = gas_rules_0_c2_q.x + (1.0 - gas_rules_0_c2_q.y) * 2.0;
+    float gas_rules_0_c2_live = step(gas_rules_0_c2_cell.x, gas_rules_0_c2_W.x - 0.5) * step(gas_rules_0_c2_cell.y, gas_rules_0_c2_W.y - 0.5);
+    vec2 gas_rules_0_c2_key = mod(gas_rules_0_c2_org, gas_rules_0_c2_W);
+    float gas_rules_0_c2_b0 = floor(texture2D(u_passprev_gas_rules_cells_0, (mod(gas_rules_0_c2_org + vec2(0.0, 1.0), gas_rules_0_c2_W) + 0.5) / gas_rules_0_c2_res).r + 0.5);
+    float gas_rules_0_c2_b1 = floor(texture2D(u_passprev_gas_rules_cells_0, (mod(gas_rules_0_c2_org + vec2(1.0, 1.0), gas_rules_0_c2_W) + 0.5) / gas_rules_0_c2_res).r + 0.5);
+    float gas_rules_0_c2_b2 = floor(texture2D(u_passprev_gas_rules_cells_0, (mod(gas_rules_0_c2_org + vec2(0.0, 0.0), gas_rules_0_c2_W) + 0.5) / gas_rules_0_c2_res).r + 0.5);
+    float gas_rules_0_c2_b3 = floor(texture2D(u_passprev_gas_rules_cells_0, (mod(gas_rules_0_c2_org + vec2(1.0, 0.0), gas_rules_0_c2_W) + 0.5) / gas_rules_0_c2_res).r + 0.5);
+    float gas_rules_0_c2_next = gas_rules_0_c2_s;
+    float gas_rules_0_c2_done = 0.0;
+    float gas_rules_0_c2_o0 = floor(grHash(vec3(gas_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 31.0)) * 4.0);
+    float gas_rules_0_c2_best0 = 0.0;
+    float gas_rules_0_c2_pick0 = -1.0;
+    float gas_rules_0_c2_m0_0 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 0.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 4.0 - mod(0.0 - gas_rules_0_c2_o0 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m0_0 > gas_rules_0_c2_best0) { gas_rules_0_c2_best0 = gas_rules_0_c2_m0_0; gas_rules_0_c2_pick0 = 0.0; }
+    float gas_rules_0_c2_m0_1 = (abs(gas_rules_0_c2_b0 - 0.0) < 0.5 && abs(gas_rules_0_c2_b1 - 1.0) < 0.5 && abs(gas_rules_0_c2_b2 - 0.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 4.0 - mod(1.0 - gas_rules_0_c2_o0 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m0_1 > gas_rules_0_c2_best0) { gas_rules_0_c2_best0 = gas_rules_0_c2_m0_1; gas_rules_0_c2_pick0 = 1.0; }
+    float gas_rules_0_c2_m0_2 = (abs(gas_rules_0_c2_b0 - 0.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 0.0) < 0.5 && abs(gas_rules_0_c2_b3 - 1.0) < 0.5) ? 4.0 - mod(2.0 - gas_rules_0_c2_o0 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m0_2 > gas_rules_0_c2_best0) { gas_rules_0_c2_best0 = gas_rules_0_c2_m0_2; gas_rules_0_c2_pick0 = 2.0; }
+    float gas_rules_0_c2_m0_3 = (abs(gas_rules_0_c2_b0 - 0.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 4.0 - mod(3.0 - gas_rules_0_c2_o0 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m0_3 > gas_rules_0_c2_best0) { gas_rules_0_c2_best0 = gas_rules_0_c2_m0_3; gas_rules_0_c2_pick0 = 3.0; }
+    if (gas_rules_0_c2_done < 0.5 && gas_rules_0_c2_best0 > 0.5) { gas_rules_0_c2_next = (gas_rules_0_c2_qi < 0.5 ? (gas_rules_0_c2_pick0 < 0.5 ? 0.0 : (gas_rules_0_c2_pick0 < 1.5 ? 0.0 : (gas_rules_0_c2_pick0 < 2.5 ? 1.0 : 0.0))) : (gas_rules_0_c2_qi < 1.5 ? (gas_rules_0_c2_pick0 < 0.5 ? 0.0 : (gas_rules_0_c2_pick0 < 1.5 ? 0.0 : (gas_rules_0_c2_pick0 < 2.5 ? 0.0 : 1.0))) : (gas_rules_0_c2_qi < 2.5 ? (gas_rules_0_c2_pick0 < 0.5 ? 0.0 : (gas_rules_0_c2_pick0 < 1.5 ? 1.0 : (gas_rules_0_c2_pick0 < 2.5 ? 0.0 : 0.0))) : (gas_rules_0_c2_pick0 < 0.5 ? 1.0 : (gas_rules_0_c2_pick0 < 1.5 ? 0.0 : (gas_rules_0_c2_pick0 < 2.5 ? 0.0 : 0.0)))))); gas_rules_0_c2_done = 1.0; }
+    float gas_rules_0_c2_o1 = floor(grHash(vec3(gas_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 33.0)) * 2.0);
+    float gas_rules_0_c2_best1 = 0.0;
+    float gas_rules_0_c2_pick1 = -1.0;
+    float gas_rules_0_c2_m1_0 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 0.0) < 0.5 && abs(gas_rules_0_c2_b3 - 1.0) < 0.5) ? 2.0 - mod(0.0 - gas_rules_0_c2_o1 + 2.0, 2.0) : 0.0;
+    if (gas_rules_0_c2_m1_0 > gas_rules_0_c2_best1) { gas_rules_0_c2_best1 = gas_rules_0_c2_m1_0; gas_rules_0_c2_pick1 = 0.0; }
+    float gas_rules_0_c2_m1_1 = (abs(gas_rules_0_c2_b0 - 0.0) < 0.5 && abs(gas_rules_0_c2_b1 - 1.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 2.0 - mod(1.0 - gas_rules_0_c2_o1 + 2.0, 2.0) : 0.0;
+    if (gas_rules_0_c2_m1_1 > gas_rules_0_c2_best1) { gas_rules_0_c2_best1 = gas_rules_0_c2_m1_1; gas_rules_0_c2_pick1 = 1.0; }
+    if (gas_rules_0_c2_done < 0.5 && gas_rules_0_c2_best1 > 0.5) { gas_rules_0_c2_next = (gas_rules_0_c2_qi < 0.5 ? (gas_rules_0_c2_pick1 < 0.5 ? 0.0 : 1.0) : (gas_rules_0_c2_qi < 1.5 ? (gas_rules_0_c2_pick1 < 0.5 ? 1.0 : 0.0) : (gas_rules_0_c2_qi < 2.5 ? (gas_rules_0_c2_pick1 < 0.5 ? 1.0 : 0.0) : (gas_rules_0_c2_pick1 < 0.5 ? 0.0 : 1.0)))); gas_rules_0_c2_done = 1.0; }
+    float gas_rules_0_c2_o2 = floor(grHash(vec3(gas_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 35.0)) * 4.0);
+    float gas_rules_0_c2_best2 = 0.0;
+    float gas_rules_0_c2_pick2 = -1.0;
+    float gas_rules_0_c2_m2_0 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 1.0) < 0.5 && abs(gas_rules_0_c2_b2 - 0.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 4.0 - mod(0.0 - gas_rules_0_c2_o2 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m2_0 > gas_rules_0_c2_best2) { gas_rules_0_c2_best2 = gas_rules_0_c2_m2_0; gas_rules_0_c2_pick2 = 0.0; }
+    float gas_rules_0_c2_m2_1 = (abs(gas_rules_0_c2_b0 - 0.0) < 0.5 && abs(gas_rules_0_c2_b1 - 1.0) < 0.5 && abs(gas_rules_0_c2_b2 - 0.0) < 0.5 && abs(gas_rules_0_c2_b3 - 1.0) < 0.5) ? 4.0 - mod(1.0 - gas_rules_0_c2_o2 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m2_1 > gas_rules_0_c2_best2) { gas_rules_0_c2_best2 = gas_rules_0_c2_m2_1; gas_rules_0_c2_pick2 = 1.0; }
+    float gas_rules_0_c2_m2_2 = (abs(gas_rules_0_c2_b0 - 0.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 1.0) < 0.5) ? 4.0 - mod(2.0 - gas_rules_0_c2_o2 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m2_2 > gas_rules_0_c2_best2) { gas_rules_0_c2_best2 = gas_rules_0_c2_m2_2; gas_rules_0_c2_pick2 = 2.0; }
+    float gas_rules_0_c2_m2_3 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 4.0 - mod(3.0 - gas_rules_0_c2_o2 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m2_3 > gas_rules_0_c2_best2) { gas_rules_0_c2_best2 = gas_rules_0_c2_m2_3; gas_rules_0_c2_pick2 = 3.0; }
+    if (gas_rules_0_c2_done < 0.5 && gas_rules_0_c2_best2 > 0.5) { gas_rules_0_c2_next = (gas_rules_0_c2_qi < 0.5 ? (gas_rules_0_c2_pick2 < 0.5 ? 0.0 : (gas_rules_0_c2_pick2 < 1.5 ? 1.0 : (gas_rules_0_c2_pick2 < 2.5 ? 1.0 : 0.0))) : (gas_rules_0_c2_qi < 1.5 ? (gas_rules_0_c2_pick2 < 0.5 ? 0.0 : (gas_rules_0_c2_pick2 < 1.5 ? 0.0 : (gas_rules_0_c2_pick2 < 2.5 ? 1.0 : 1.0))) : (gas_rules_0_c2_qi < 2.5 ? (gas_rules_0_c2_pick2 < 0.5 ? 1.0 : (gas_rules_0_c2_pick2 < 1.5 ? 1.0 : (gas_rules_0_c2_pick2 < 2.5 ? 0.0 : 0.0))) : (gas_rules_0_c2_pick2 < 0.5 ? 1.0 : (gas_rules_0_c2_pick2 < 1.5 ? 0.0 : (gas_rules_0_c2_pick2 < 2.5 ? 0.0 : 1.0)))))); gas_rules_0_c2_done = 1.0; }
+    float gas_rules_0_c2_o3 = floor(grHash(vec3(gas_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 37.0)) * 4.0);
+    float gas_rules_0_c2_best3 = 0.0;
+    float gas_rules_0_c2_pick3 = -1.0;
+    float gas_rules_0_c2_m3_0 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 1.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 4.0 - mod(0.0 - gas_rules_0_c2_o3 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m3_0 > gas_rules_0_c2_best3) { gas_rules_0_c2_best3 = gas_rules_0_c2_m3_0; gas_rules_0_c2_pick3 = 0.0; }
+    float gas_rules_0_c2_m3_1 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 1.0) < 0.5 && abs(gas_rules_0_c2_b2 - 0.0) < 0.5 && abs(gas_rules_0_c2_b3 - 1.0) < 0.5) ? 4.0 - mod(1.0 - gas_rules_0_c2_o3 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m3_1 > gas_rules_0_c2_best3) { gas_rules_0_c2_best3 = gas_rules_0_c2_m3_1; gas_rules_0_c2_pick3 = 1.0; }
+    float gas_rules_0_c2_m3_2 = (abs(gas_rules_0_c2_b0 - 0.0) < 0.5 && abs(gas_rules_0_c2_b1 - 1.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 1.0) < 0.5) ? 4.0 - mod(2.0 - gas_rules_0_c2_o3 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m3_2 > gas_rules_0_c2_best3) { gas_rules_0_c2_best3 = gas_rules_0_c2_m3_2; gas_rules_0_c2_pick3 = 2.0; }
+    float gas_rules_0_c2_m3_3 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 1.0) < 0.5) ? 4.0 - mod(3.0 - gas_rules_0_c2_o3 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m3_3 > gas_rules_0_c2_best3) { gas_rules_0_c2_best3 = gas_rules_0_c2_m3_3; gas_rules_0_c2_pick3 = 3.0; }
+    if (gas_rules_0_c2_done < 0.5 && gas_rules_0_c2_best3 > 0.5) { gas_rules_0_c2_next = (gas_rules_0_c2_qi < 0.5 ? (gas_rules_0_c2_pick3 < 0.5 ? 0.0 : (gas_rules_0_c2_pick3 < 1.5 ? 1.0 : (gas_rules_0_c2_pick3 < 2.5 ? 1.0 : 1.0))) : (gas_rules_0_c2_qi < 1.5 ? (gas_rules_0_c2_pick3 < 0.5 ? 1.0 : (gas_rules_0_c2_pick3 < 1.5 ? 0.0 : (gas_rules_0_c2_pick3 < 2.5 ? 1.0 : 1.0))) : (gas_rules_0_c2_qi < 2.5 ? (gas_rules_0_c2_pick3 < 0.5 ? 1.0 : (gas_rules_0_c2_pick3 < 1.5 ? 1.0 : (gas_rules_0_c2_pick3 < 2.5 ? 1.0 : 0.0))) : (gas_rules_0_c2_pick3 < 0.5 ? 1.0 : (gas_rules_0_c2_pick3 < 1.5 ? 1.0 : (gas_rules_0_c2_pick3 < 2.5 ? 0.0 : 1.0)))))); gas_rules_0_c2_done = 1.0; }
+    gas_rules_0_c2_next = clamp(gas_rules_0_c2_next, 0.0, gas_rules_0_c2_top);
+    float gas_rules_0_c2_ng = 0.0;
+    if (abs(gas_rules_0_c2_next - gas_rules_0_c2_s) < 0.5) gas_rules_0_c2_ng = gas_rules_0_c2_next > 0.5 ? min(1.0, gas_rules_0_c2_g + u_p_gasxrulesx0xc2_ageRate) : gas_rules_0_c2_g * u_p_gasxrulesx0xc2_afterglow;
+    else gas_rules_0_c2_ng = gas_rules_0_c2_next < 0.5 ? u_p_gasxrulesx0xc2_afterglow : 0.0;
+    if (gas_rules_0_c2_tick < 0.5) { gas_rules_0_c2_next = gas_rules_0_c2_s; gas_rules_0_c2_ng = gas_rules_0_c2_g; }
+    if (gas_rules_0_c2_fresh > 0.5) { gas_rules_0_c2_next = (length(gas_rules_0_c2_cell + 0.5 - gas_rules_0_c2_res * 0.5) < min(gas_rules_0_c2_res.x, gas_rules_0_c2_res.y) * 0.15 ? (gas_rules_0_c2_h < u_p_gasxrulesx0xc2_density ? 1.0 : 0.0) : 0.0); gas_rules_0_c2_ng = 0.0; }
+    float gas_rules_0_c2_roll = grHash(vec3(gas_rules_0_c2_cell + 0.5, mod(floor(u_time * 60.0), 997.0) + 7919.0));
+    if (gas_rules_0_c2_in > 0.5 && gas_rules_0_c2_roll < u_p_gasxrulesx0xc2_brushFill) { gas_rules_0_c2_next = clamp(floor(u_p_gasxrulesx0xc2_brushState + 0.5), 0.0, gas_rules_0_c2_top); gas_rules_0_c2_ng = 0.0; }
+    gas_rules_0_c2_next = gas_rules_0_c2_next * gas_rules_0_c2_live;
+    gas_rules_0_c2_ng = gas_rules_0_c2_ng * gas_rules_0_c2_live;
+    vec3 gas_rules_0_c2_out = vec3(gas_rules_0_c2_next, gas_rules_0_c2_ng, gas_rules_0_c2_phase + 2.0 * (gas_rules_0_c2_tick > 0.5 ? 1.0 - gas_rules_0_c2_par : gas_rules_0_c2_par));
+    float gas_rules_0_c2_outA = 41.0;
+    gl_FragColor = vec4(gas_rules_0_c2_out, gas_rules_0_c2_outA);
+}",
+      "label": "Gas rules cells",
+      "live": true,
+      "nodeId": "gas__cells",
+      "nodeIds": [
+        "gas__step",
+        "gas",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "gas_rules_cells_0",
+      ],
+      "scale": 0.25,
+      "slug": "gas_rules_cells_0",
       "wrap": "repeat",
     },
   ],
@@ -6254,6 +6666,208 @@ void main() {
       "scale": 0.125,
       "slug": "day_and_night_ce_0",
       "wrap": "repeat",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > gridRulesSand 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "02a316222bb7821fc43b621df8be:4234",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "092b32cbabf2910cf2429357e1d3:114",
+  "paramBindings": "0ba9eaa23b4a8c0b9ca3eaabacb3:1047",
+  "paramUniforms": [
+    "u_p_sandxrulesx0xc2_afterglow",
+    "u_p_sandxrulesx0xc2_ageFade",
+    "u_p_sandxrulesx0xc2_ageRate",
+    "u_p_sandxrulesx0xc2_brushFill",
+    "u_p_sandxrulesx0xc2_brushRadius",
+    "u_p_sandxrulesx0xc2_brushState",
+    "u_p_sandxrulesx0xc2_color0",
+    "u_p_sandxrulesx0xc2_color1",
+    "u_p_sandxrulesx0xc2_color2",
+    "u_p_sandxrulesx0xc2_color3",
+    "u_p_sandxrulesx0xc2_color4",
+    "u_p_sandxrulesx0xc2_color5",
+    "u_p_sandxrulesx0xc2_color6",
+    "u_p_sandxrulesx0xc2_color7",
+    "u_p_sandxrulesx0xc2_density",
+    "u_p_sandxrulesx0xc2_glowColor",
+    "u_p_sandxrulesx0xc2_oldColor",
+    "u_p_sandxrulesx0xc2_paint",
+    "u_p_sandxrulesx0xc2_rate",
+    "u_p_sandxrulesx0xc2_reset",
+    "u_p_sandxrulesx0xc2_seed",
+    "u_p_sandxrulesx0xc2_states",
+  ],
+  "paramValues": "0b18e0bf11ad17006e8acfdca0aa:880",
+  "passes": [
+    {
+      "filter": "nearest",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_sandxrulesx0xc2_states;
+uniform float u_p_sandxrulesx0xc2_rate;
+uniform float u_p_sandxrulesx0xc2_reset;
+uniform float u_p_sandxrulesx0xc2_density;
+uniform float u_p_sandxrulesx0xc2_seed;
+uniform float u_p_sandxrulesx0xc2_paint;
+uniform float u_p_sandxrulesx0xc2_brushRadius;
+uniform float u_p_sandxrulesx0xc2_brushState;
+uniform float u_p_sandxrulesx0xc2_brushFill;
+uniform float u_p_sandxrulesx0xc2_afterglow;
+uniform float u_p_sandxrulesx0xc2_ageRate;
+uniform float u_p_sandxrulesx0xc2_ageFade;
+uniform vec3 u_p_sandxrulesx0xc2_color0;
+uniform vec3 u_p_sandxrulesx0xc2_color1;
+uniform vec3 u_p_sandxrulesx0xc2_color2;
+uniform vec3 u_p_sandxrulesx0xc2_color3;
+uniform vec3 u_p_sandxrulesx0xc2_color4;
+uniform vec3 u_p_sandxrulesx0xc2_color5;
+uniform vec3 u_p_sandxrulesx0xc2_color6;
+uniform vec3 u_p_sandxrulesx0xc2_color7;
+uniform vec3 u_p_sandxrulesx0xc2_glowColor;
+uniform vec3 u_p_sandxrulesx0xc2_oldColor;
+uniform sampler2D u_pass_sand_rules_cells_0;
+uniform vec2 u_pass_sand_rules_cells_0_px;
+uniform sampler2D u_passprev_sand_rules_cells_0;
+uniform vec2 u_passprev_sand_rules_cells_0_px;
+uniform float u_mousebtn;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+float grHash(vec3 p) {
+    vec3 p3 = fract(p * 0.1031);
+    p3 = p3 + dot(p3, vec3(p3.z, p3.y, p3.x) + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Grid Rules, Blocks: Margolus falling sand on a ¼-size board with walls. 0 is air, 1 sand, 2 wall.
+    // Each step the board is cut into 2×2 blocks (the cut shifting one cell diagonally every other step); a block whose picture matches a rule becomes its after picture: a grain over air falls, a grain on a heap slides down to the side (with chance 0.8, rolled per block). The rules only rearrange, so the count of grains never changes.
+    // Hold the mouse button to pour sand; set Brush paints to 2 to draw walls, 0 to erase.
+    vec2 sand_rules_0_c2_res = u_resolution;
+    vec2 sand_rules_0_c2_cell = floor(gl_FragCoord.xy);
+    vec4 sand_rules_0_c2_me = texture2D(u_passprev_sand_rules_cells_0, (sand_rules_0_c2_cell + vec2(0.0) + 0.5) / sand_rules_0_c2_res);
+    float sand_rules_0_c2_fresh = (abs(sand_rules_0_c2_me.a - 38.0) > 0.5 || u_p_sandxrulesx0xc2_reset > 0.5) ? 1.0 : 0.0;
+    float sand_rules_0_c2_clk = (sand_rules_0_c2_fresh > 0.5 ? 0.0 : fract(sand_rules_0_c2_me.b)) + clamp(u_p_sandxrulesx0xc2_rate, 0.0, 1.0);
+    float sand_rules_0_c2_tick = step(1.0, sand_rules_0_c2_clk);
+    float sand_rules_0_c2_phase = sand_rules_0_c2_clk - sand_rules_0_c2_tick;
+    float sand_rules_0_c2_h = grHash(vec3(sand_rules_0_c2_cell, mod(floor(u_time * 60.0), 997.0) + u_p_sandxrulesx0xc2_seed * 1013.0 + 1.0));
+    vec2 sand_rules_0_c2_m = u_mouse * 0.25;
+    float sand_rules_0_c2_in = (length(sand_rules_0_c2_cell + 0.5 - sand_rules_0_c2_m) < u_p_sandxrulesx0xc2_brushRadius ? 1.0 : 0.0) * max(step(0.5, u_mousebtn), step(0.5, u_p_sandxrulesx0xc2_paint));
+    float sand_rules_0_c2_s = floor(sand_rules_0_c2_me.r + 0.5);
+    float sand_rules_0_c2_g = sand_rules_0_c2_me.g;
+    float sand_rules_0_c2_top = max(floor(u_p_sandxrulesx0xc2_states + 0.5), 2.0) - 1.0;
+    float sand_rules_0_c2_par = step(1.5, sand_rules_0_c2_me.b);
+    vec2 sand_rules_0_c2_W = floor(sand_rules_0_c2_res * 0.5) * 2.0;
+    vec2 sand_rules_0_c2_org = floor((sand_rules_0_c2_cell - sand_rules_0_c2_par) * 0.5) * 2.0 + sand_rules_0_c2_par;
+    vec2 sand_rules_0_c2_q = sand_rules_0_c2_cell - sand_rules_0_c2_org;
+    float sand_rules_0_c2_qi = sand_rules_0_c2_q.x + (1.0 - sand_rules_0_c2_q.y) * 2.0;
+    float sand_rules_0_c2_live = step(sand_rules_0_c2_cell.x, sand_rules_0_c2_W.x - 0.5) * step(sand_rules_0_c2_cell.y, sand_rules_0_c2_W.y - 0.5);
+    vec2 sand_rules_0_c2_key = mod(sand_rules_0_c2_org, sand_rules_0_c2_W);
+    vec2 sand_rules_0_c2_p0 = sand_rules_0_c2_org + vec2(0.0, 1.0);
+    float sand_rules_0_c2_b0 = (sand_rules_0_c2_p0.x < 0.0 || sand_rules_0_c2_p0.y < 0.0 || sand_rules_0_c2_p0.x > sand_rules_0_c2_W.x - 0.5 || sand_rules_0_c2_p0.y > sand_rules_0_c2_W.y - 0.5) ? -1.0 : floor(texture2D(u_passprev_sand_rules_cells_0, (sand_rules_0_c2_p0 + 0.5) / sand_rules_0_c2_res).r + 0.5);
+    vec2 sand_rules_0_c2_p1 = sand_rules_0_c2_org + vec2(1.0, 1.0);
+    float sand_rules_0_c2_b1 = (sand_rules_0_c2_p1.x < 0.0 || sand_rules_0_c2_p1.y < 0.0 || sand_rules_0_c2_p1.x > sand_rules_0_c2_W.x - 0.5 || sand_rules_0_c2_p1.y > sand_rules_0_c2_W.y - 0.5) ? -1.0 : floor(texture2D(u_passprev_sand_rules_cells_0, (sand_rules_0_c2_p1 + 0.5) / sand_rules_0_c2_res).r + 0.5);
+    vec2 sand_rules_0_c2_p2 = sand_rules_0_c2_org + vec2(0.0, 0.0);
+    float sand_rules_0_c2_b2 = (sand_rules_0_c2_p2.x < 0.0 || sand_rules_0_c2_p2.y < 0.0 || sand_rules_0_c2_p2.x > sand_rules_0_c2_W.x - 0.5 || sand_rules_0_c2_p2.y > sand_rules_0_c2_W.y - 0.5) ? -1.0 : floor(texture2D(u_passprev_sand_rules_cells_0, (sand_rules_0_c2_p2 + 0.5) / sand_rules_0_c2_res).r + 0.5);
+    vec2 sand_rules_0_c2_p3 = sand_rules_0_c2_org + vec2(1.0, 0.0);
+    float sand_rules_0_c2_b3 = (sand_rules_0_c2_p3.x < 0.0 || sand_rules_0_c2_p3.y < 0.0 || sand_rules_0_c2_p3.x > sand_rules_0_c2_W.x - 0.5 || sand_rules_0_c2_p3.y > sand_rules_0_c2_W.y - 0.5) ? -1.0 : floor(texture2D(u_passprev_sand_rules_cells_0, (sand_rules_0_c2_p3 + 0.5) / sand_rules_0_c2_res).r + 0.5);
+    float sand_rules_0_c2_next = sand_rules_0_c2_s;
+    float sand_rules_0_c2_done = 0.0;
+    float sand_rules_0_c2_o0 = floor(grHash(vec3(sand_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 31.0)) * 1.0);
+    float sand_rules_0_c2_best0 = 0.0;
+    float sand_rules_0_c2_pick0 = -1.0;
+    float sand_rules_0_c2_m0_0 = (abs(sand_rules_0_c2_b0 - 1.0) < 0.5 && abs(sand_rules_0_c2_b1 - 1.0) < 0.5 && abs(sand_rules_0_c2_b2 - 0.0) < 0.5 && abs(sand_rules_0_c2_b3 - 0.0) < 0.5) ? 1.0 - mod(0.0 - sand_rules_0_c2_o0 + 1.0, 1.0) : 0.0;
+    if (sand_rules_0_c2_m0_0 > sand_rules_0_c2_best0) { sand_rules_0_c2_best0 = sand_rules_0_c2_m0_0; sand_rules_0_c2_pick0 = 0.0; }
+    if (sand_rules_0_c2_done < 0.5 && sand_rules_0_c2_best0 > 0.5) { sand_rules_0_c2_next = (sand_rules_0_c2_qi < 0.5 ? 0.0 : (sand_rules_0_c2_qi < 1.5 ? 0.0 : (sand_rules_0_c2_qi < 2.5 ? 1.0 : 1.0))); sand_rules_0_c2_done = 1.0; }
+    float sand_rules_0_c2_o1 = floor(grHash(vec3(sand_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 33.0)) * 2.0);
+    float sand_rules_0_c2_best1 = 0.0;
+    float sand_rules_0_c2_pick1 = -1.0;
+    float sand_rules_0_c2_m1_0 = (abs(sand_rules_0_c2_b0 - 1.0) < 0.5 && abs(sand_rules_0_c2_b2 - 0.0) < 0.5) ? 2.0 - mod(0.0 - sand_rules_0_c2_o1 + 2.0, 2.0) : 0.0;
+    if (sand_rules_0_c2_m1_0 > sand_rules_0_c2_best1) { sand_rules_0_c2_best1 = sand_rules_0_c2_m1_0; sand_rules_0_c2_pick1 = 0.0; }
+    float sand_rules_0_c2_m1_1 = (abs(sand_rules_0_c2_b1 - 1.0) < 0.5 && abs(sand_rules_0_c2_b3 - 0.0) < 0.5) ? 2.0 - mod(1.0 - sand_rules_0_c2_o1 + 2.0, 2.0) : 0.0;
+    if (sand_rules_0_c2_m1_1 > sand_rules_0_c2_best1) { sand_rules_0_c2_best1 = sand_rules_0_c2_m1_1; sand_rules_0_c2_pick1 = 1.0; }
+    if (sand_rules_0_c2_done < 0.5 && sand_rules_0_c2_best1 > 0.5) { sand_rules_0_c2_next = (sand_rules_0_c2_qi < 0.5 ? (sand_rules_0_c2_pick1 < 0.5 ? 0.0 : sand_rules_0_c2_s) : (sand_rules_0_c2_qi < 1.5 ? (sand_rules_0_c2_pick1 < 0.5 ? sand_rules_0_c2_s : 0.0) : (sand_rules_0_c2_qi < 2.5 ? (sand_rules_0_c2_pick1 < 0.5 ? 1.0 : sand_rules_0_c2_s) : (sand_rules_0_c2_pick1 < 0.5 ? sand_rules_0_c2_s : 1.0)))); sand_rules_0_c2_done = 1.0; }
+    float sand_rules_0_c2_o2 = floor(grHash(vec3(sand_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 35.0)) * 2.0);
+    float sand_rules_0_c2_best2 = 0.0;
+    float sand_rules_0_c2_pick2 = -1.0;
+    float sand_rules_0_c2_m2_0 = (abs(sand_rules_0_c2_b0 - 1.0) < 0.5 && abs(sand_rules_0_c2_b1 - 0.0) < 0.5 && abs(sand_rules_0_c2_b2) > 0.5 && abs(sand_rules_0_c2_b3 - 0.0) < 0.5) ? 2.0 - mod(0.0 - sand_rules_0_c2_o2 + 2.0, 2.0) : 0.0;
+    if (sand_rules_0_c2_m2_0 > sand_rules_0_c2_best2) { sand_rules_0_c2_best2 = sand_rules_0_c2_m2_0; sand_rules_0_c2_pick2 = 0.0; }
+    float sand_rules_0_c2_m2_1 = (abs(sand_rules_0_c2_b0 - 0.0) < 0.5 && abs(sand_rules_0_c2_b1 - 1.0) < 0.5 && abs(sand_rules_0_c2_b2 - 0.0) < 0.5 && abs(sand_rules_0_c2_b3) > 0.5) ? 2.0 - mod(1.0 - sand_rules_0_c2_o2 + 2.0, 2.0) : 0.0;
+    if (sand_rules_0_c2_m2_1 > sand_rules_0_c2_best2) { sand_rules_0_c2_best2 = sand_rules_0_c2_m2_1; sand_rules_0_c2_pick2 = 1.0; }
+    if (sand_rules_0_c2_done < 0.5 && sand_rules_0_c2_best2 * step(grHash(vec3(sand_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 36.0)), 0.8) > 0.5) { sand_rules_0_c2_next = (sand_rules_0_c2_qi < 0.5 ? (sand_rules_0_c2_pick2 < 0.5 ? 0.0 : 0.0) : (sand_rules_0_c2_qi < 1.5 ? (sand_rules_0_c2_pick2 < 0.5 ? 0.0 : 0.0) : (sand_rules_0_c2_qi < 2.5 ? (sand_rules_0_c2_pick2 < 0.5 ? sand_rules_0_c2_s : 1.0) : (sand_rules_0_c2_pick2 < 0.5 ? 1.0 : sand_rules_0_c2_s)))); sand_rules_0_c2_done = 1.0; }
+    sand_rules_0_c2_next = clamp(sand_rules_0_c2_next, 0.0, sand_rules_0_c2_top);
+    float sand_rules_0_c2_ng = 0.0;
+    if (abs(sand_rules_0_c2_next - sand_rules_0_c2_s) < 0.5) sand_rules_0_c2_ng = sand_rules_0_c2_next > 0.5 ? min(1.0, sand_rules_0_c2_g + u_p_sandxrulesx0xc2_ageRate) : sand_rules_0_c2_g * u_p_sandxrulesx0xc2_afterglow;
+    else sand_rules_0_c2_ng = sand_rules_0_c2_next < 0.5 ? u_p_sandxrulesx0xc2_afterglow : 0.0;
+    if (sand_rules_0_c2_tick < 0.5) { sand_rules_0_c2_next = sand_rules_0_c2_s; sand_rules_0_c2_ng = sand_rules_0_c2_g; }
+    if (sand_rules_0_c2_fresh > 0.5) { sand_rules_0_c2_next = (sand_rules_0_c2_h < u_p_sandxrulesx0xc2_density ? 1.0 : 0.0); sand_rules_0_c2_ng = 0.0; }
+    float sand_rules_0_c2_roll = grHash(vec3(sand_rules_0_c2_cell + 0.5, mod(floor(u_time * 60.0), 997.0) + 7919.0));
+    if (sand_rules_0_c2_in > 0.5 && sand_rules_0_c2_roll < u_p_sandxrulesx0xc2_brushFill) { sand_rules_0_c2_next = clamp(floor(u_p_sandxrulesx0xc2_brushState + 0.5), 0.0, sand_rules_0_c2_top); sand_rules_0_c2_ng = 0.0; }
+    sand_rules_0_c2_next = sand_rules_0_c2_next * sand_rules_0_c2_live;
+    sand_rules_0_c2_ng = sand_rules_0_c2_ng * sand_rules_0_c2_live;
+    vec3 sand_rules_0_c2_out = vec3(sand_rules_0_c2_next, sand_rules_0_c2_ng, sand_rules_0_c2_phase + 2.0 * (sand_rules_0_c2_tick > 0.5 ? 1.0 - sand_rules_0_c2_par : sand_rules_0_c2_par));
+    float sand_rules_0_c2_outA = 38.0;
+    gl_FragColor = vec4(sand_rules_0_c2_out, sand_rules_0_c2_outA);
+}",
+      "label": "Sand rules cells",
+      "live": true,
+      "nodeId": "sand__cells",
+      "nodeIds": [
+        "sand__step",
+        "sand",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "sand_rules_cells_0",
+      ],
+      "scale": 0.25,
+      "slug": "sand_rules_cells_0",
+      "wrap": "clamp",
     },
   ],
   "success": true,

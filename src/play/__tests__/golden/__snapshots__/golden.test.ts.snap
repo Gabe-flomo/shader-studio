@@ -392,6 +392,15 @@ exports[`golden outputs: examples > gridRulesCave 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > gridRulesCrystal 1`] = `
+{
+  "ageing": "- x120",
+  "brush": "- x120",
+  "density": "- x120",
+  "reset": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > gridRulesFire 1`] = `
 {
   "growth": "- x120",
@@ -399,6 +408,15 @@ exports[`golden outputs: examples > gridRulesFire 1`] = `
   "reset": "- x120",
   "speed": "- x120",
   "spread": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesGas 1`] = `
+{
+  "afterglow": "- x120",
+  "brush": "- x120",
+  "density": "- x120",
+  "reset": "- x120",
 }
 `;
 
@@ -438,11 +456,32 @@ exports[`golden outputs: examples > gridRulesLifeLike 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > gridRulesSand 1`] = `
+{
+  "brush": "- x120",
+  "fill": "- x120",
+  "grain": "- x120",
+  "paint": "- x120",
+  "paints": "- x120",
+  "reset": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > gridRulesWater 1`] = `
 {
   "brush": "- x120",
   "damping": "- x120",
   "paint": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesWire 1`] = `
+{
+  "bridges": "- x120",
+  "head": "- x120",
+  "paints": "- x120",
   "reset": "- x120",
   "speed": "- x120",
 }

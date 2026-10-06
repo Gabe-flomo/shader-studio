@@ -23,6 +23,8 @@ import { Select } from '../ui/Select';
 import { ColorSwatch } from '../ui/ColorPicker';
 import { useFoldState } from '../NodeGraph/foldState';
 import { RulePreview } from './RulePreview';
+import { BlocksForm, PatternsForm } from './StencilForms';
+import { BLOCK_PRESETS, PATTERN_PRESETS } from '../../gridRules/stencils';
 import {
   BOARD_SIZES, COUNT_PRESETS, GRID_DEFAULTS, MAX_RADIUS, MAX_STATES, MAX_STEPS, RULE_TYPES, SMOOTH_NAMES, SMOOTH_PRESETS, STAGES_PRESETS,
   LOOKS, countsOf, customUpdateProblem, gridShape, matchingPreset, maxCount, parseRuleString, presetPatch, ruleString, ruleSummary,
@@ -31,7 +33,7 @@ import {
 import { gridAsNodesProblem } from '../../store/gridRulesAsNodes';
 
 /** The rule types this editor offers (Patterns and Blocks have their own forms). */
-const EDITOR_RULE_TYPES: GridRuleType[] = ['count', 'stages', 'smooth'];
+const EDITOR_RULE_TYPES: GridRuleType[] = ['count', 'stages', 'patterns', 'blocks', 'smooth'];
 
 type P = Record<string, unknown>;
 type Setter = (patch: P, immediate?: boolean) => void;
@@ -79,7 +81,10 @@ export function GridRulesEditor({ nodeId, onClose }: { nodeId: string; onClose: 
       </>}
     >
       <div style={{ flex: 1, padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 18, font: `12.5px ${fontFamily.ui}`, color: tk.text.primary }} data-testid="grid-rule-form">
-        {shape.type === 'smooth' ? <SmoothForm p={params} set={set} /> : <CountForm p={params} set={set} stages={shape.type === 'stages'} />}
+        {shape.type === 'smooth' ? <SmoothForm p={params} set={set} />
+          : shape.type === 'patterns' ? <PatternsForm p={params} set={set} />
+          : shape.type === 'blocks' ? <BlocksForm p={params} set={set} />
+          : <CountForm p={params} set={set} stages={shape.type === 'stages'} />}
       </div>
     </BuilderWindow>
   );
@@ -89,6 +94,8 @@ export function GridRulesEditor({ nodeId, onClose }: { nodeId: string; onClose: 
 function typeDefaults(t: GridRuleType): P {
   if (t === 'stages') return { ruleType: t, ...presetPatch(STAGES_PRESETS.briansBrain) };
   if (t === 'smooth') return { ruleType: t, ...presetPatch(SMOOTH_PRESETS.heat) };
+  if (t === 'patterns') return { ruleType: t, ...presetPatch(PATTERN_PRESETS.wireworld) };
+  if (t === 'blocks') return { ruleType: t, ...presetPatch(BLOCK_PRESETS.sand) };
   return { ruleType: t, ...presetPatch(COUNT_PRESETS.life), ...LOOKS.count, brushState: 1 };
 }
 
@@ -429,6 +436,8 @@ function ColourRows({ p, set }: { p: P; set: Setter }) {
   const s = gridShape(p);
   const rows: Array<[string, string]> = s.type === 'smooth'
     ? [['color0', 'Low'], ['color1', 'Second'], ['color2', 'Third'], ['color3', 'High']]
+    : s.type === 'patterns' || s.type === 'blocks'
+      ? [...Array.from({ length: Math.max(2, Math.min(8, Math.round(Number(p.states)))) }, (_, k) => [`color${k}`, k === 0 ? 'State 0 (empty)' : `State ${k}`] as [string, string]), ['glowColor', 'Afterglow'], ['oldColor', 'Old cells']]
     : [['color0', 'Empty'], ['color1', 'On'], ...(s.type === 'stages' ? [['color2', 'First dying'], ['color3', 'Last dying']] as Array<[string, string]> : []), ['glowColor', 'Afterglow'], ['oldColor', 'Old cells']];
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
