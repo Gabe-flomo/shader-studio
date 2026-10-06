@@ -61,6 +61,11 @@ const KNOWN: Record<string, SettingInfo> = {
   'nodepalette_favorites': S('Favourite nodes', 'studio'),
   'shader-studio:settings:starterRecipesOff': S('Starter recipes turned off', 'studio', { hint: 'Every node with starter recipes offers them again when added' }),
   'playfield:suggestions:strip': S('Suggestions under the selected node', 'studio', { hint: 'Shows the suggestions again' }),
+  'playfield:structure:strip': S('Flow strip above the graph', 'studio', { hint: 'Shows the flow strip again' }),
+  'playfield:structure:tags': S('Stage tags on cards', 'studio'),
+  'playfield:structure:notices': S('Order notices', 'studio', { hint: 'Order notices come back on' }),
+  'playfield:structure:dismissed': S('Order notices marked as intended', 'studio', { hint: 'Every graph shows its order notices again' }),
+  'playfield:structure:builderStripFolded': S('Builder windows: flow strip folded', 'windows'),
   'playfield:suggestions:learning': S('Suggestions: what they learned from your graphs', 'studio', { hint: 'Reset learning: suggestions forget your graphs and wiring and start again from the examples. Graphs saved before now are not read again; it stays on this device.' }),
   // Play
   'shader-studio:play:split': S('Split view', 'play'),

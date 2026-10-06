@@ -8,6 +8,8 @@
  *  - Usage: how strongly the move's node follows this one in the learned table (learning.ts:
  *    your graphs first, the examples as a fading prior), socket to socket, else node to node.
  *  - Output: a confident finding from the node's preview (outputRules.ts) puts its fix first.
+ *  - Stage: a move whose node is in the stage the flow strip hints next gets +0.35
+ *    (structure/boost.ts): a tie-breaker, not a lead.
  *
  * Each move comes with a one-line why: the finding ("clips 6%"), your habit ("you often add Rings
  * after Circle SDF"), the examples ("common after Circle SDF in the examples"), or the kind.
@@ -21,6 +23,8 @@ const MOVE_ORDER = new Map(MOVES.map((m, i) => [m.id, i]));
 import { moveContext } from './applyMove';
 import { normaliseEnd, strength, WILDCARD_TYPES, type CoTable } from './usage';
 import { outputSuggestions, type OutputMeasurement } from './outputRules';
+import { inTargetStage, STAGE_BOOST } from '../structure/boost';
+import type { StageTarget } from '../structure/hintsStore';
 
 export interface RankedMove {
   move: Move;
@@ -76,6 +80,8 @@ export interface RankOptions {
   limit?: number;
   /** Include the quick-add rules as moves (default true). */
   quickAdds?: boolean;
+  /** The stage the flow strip hints next (docs/structure-hints.md): its moves get a small boost. */
+  stageTarget?: StageTarget | null;
 }
 
 /** The moves for a node in `scope`, ranked. */
@@ -89,7 +95,8 @@ export function rankMoves(node: GraphNode, scope: GraphNode[], t: RankTables, op
     const use = usageOf(node, key, side, move, t);
     const why = extra ? { why: extra.why, reason: 'output' as const } : whyFor(node, side, move, use);
     // The generic "custom code" move is always possible, so it only leads on your usage.
-    const score = (move.id === 'code-here' ? fit * 0.4 : fit) + 3 * use.u + 4 * (extra?.output ?? 0);
+    const score = (move.id === 'code-here' ? fit * 0.4 : fit) + 3 * use.u + 4 * (extra?.output ?? 0)
+      + (inTargetStage(move.anchor?.type, opts.stageTarget) ? STAGE_BOOST : 0);
     const prev = best.get(move.id);
     if (!prev || prev.score < score) best.set(move.id, { move, key, side, kind, score, ...why, ...(extra?.args ? { args: extra.args } : {}) });
   };

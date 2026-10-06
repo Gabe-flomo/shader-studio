@@ -13,6 +13,7 @@
  * builder only has to add its entries to helpContent.ts.
  */
 import { createContext, useContext, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { NextStageLine } from '../structure/BuilderFlowStrip';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
@@ -146,7 +147,13 @@ export function EmptyHelp({ id, onExample, builder }: { id: string; onExample?: 
   const tips = useTips(builder);
   const entry = helpFor(tips.builder, id);
   if (!entry) return null;
-  return <Card entry={entry} id={`empty:${id}`} onExample={onExample} compact={!tips.on || tips.dismissed.includes(id)} />;
+  return (
+    <>
+      <Card entry={entry} id={`empty:${id}`} onExample={onExample} compact={!tips.on || tips.dismissed.includes(id)} />
+      {/* Which stage of the builder's flow comes next (docs/structure-hints.md). */}
+      <NextStageLine builder={tips.builder} section={id} />
+    </>
+  );
 }
 
 /** The header's Tips switch. */

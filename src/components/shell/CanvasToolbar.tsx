@@ -7,6 +7,7 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { IconButton } from '../ui/Button';
 import { SuggestionsToggle } from '../NodeGraph/SuggestionStrip';
 import { DoBarButton } from '../NodeGraph/DoBar';
+import { ArrangeMenu, FlowStripToggle } from '../structure/stageUi';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Popover } from '../ui/Popover';
@@ -19,7 +20,7 @@ import { PerfBadge, PerfPanel } from './PerfPanel';
  * current context (opens graph stats), zoom, fit, auto layout, minimap, clear.
  */
 export function CanvasToolbar({
-  nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, showMinimap, onToggleMinimap, showOutline, onToggleOutline, onClear, onClearMinimal, compact = false, readOnly = false, onOptimize, onBake,
+  nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, onArrangeByStage, showMinimap, onToggleMinimap, showOutline, onToggleOutline, onClear, onClearMinimal, compact = false, readOnly = false, onOptimize, onBake,
 }: {
   nodes: readonly GraphNode[];
   topLevel: boolean;
@@ -29,6 +30,8 @@ export function CanvasToolbar({
   onResetZoom: () => void;
   onFit: () => void;
   onAutoLayout: () => void;
+  /** Auto layout by stage (structure/arrange.ts): offered from a menu beside Auto layout. */
+  onArrangeByStage?: () => void;
   showMinimap: boolean;
   onToggleMinimap: () => void;
   /** The outline panel: a list of the nodes in evaluation order, with step-through. */
@@ -115,16 +118,19 @@ export function CanvasToolbar({
         <>
           <IconButton icon="fit" label="Fit all nodes in view" shortcut="f" size="sm" onClick={onFit} />
           {!readOnly && <IconButton icon="layout" label="Arrange left-to-right by data flow" size="sm" onClick={onAutoLayout} />}
+          {!readOnly && onArrangeByStage && <ArrangeMenu onFlow={onAutoLayout} onStage={onArrangeByStage} />}
         </>
       ) : (
         <>
           <Tooltip label="Fit all nodes in view" shortcut="f"><ToolButton icon="fit" onClick={onFit}>Fit</ToolButton></Tooltip>
           {!readOnly && <Tooltip label="Arrange left-to-right by data flow"><ToolButton icon="layout" onClick={onAutoLayout}>Auto layout</ToolButton></Tooltip>}
+          {!readOnly && onArrangeByStage && <ArrangeMenu onFlow={onAutoLayout} onStage={onArrangeByStage} />}
         </>
       )}
       <Sep />
       <IconButton icon="minimap" label={showMinimap ? 'Hide minimap' : 'Show minimap'} size="sm" active={showMinimap} onClick={onToggleMinimap} />
       {!readOnly && <SuggestionsToggle />}
+      {!readOnly && <FlowStripToggle />}
       {!readOnly && <DoBarButton />}
       {multiProgram && (
         <IconButton icon="layers" label={showPasses ? 'Hide passes' : 'Show passes: tint each node by the program it runs in (a Pass, an Agents group, the picture)'} size="sm" active={showPasses} onClick={() => setShowPasses(!showPasses)} />

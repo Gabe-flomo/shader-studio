@@ -13,6 +13,8 @@ import { useUserNodesVersion } from '../../nodes/userNodes/useUserNodes';
 import type { NodeDefinition } from '../../types/nodeGraph';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { affinity, rankTables } from '../../suggestions';
+import { inTargetStage, STAGE_SEARCH_POINTS } from '../../structure/boost';
+import { currentStageTarget } from '../../structure/hintsStore';
 import { CATEGORY_COLORS, HIDDEN_TYPES } from './nodeCategoryMeta';
 import { ctp } from '../../theme/palette';
 import { spawnPoint } from './spawnPoint';
@@ -128,6 +130,9 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
     };
   }, [open, boostFrom]);
 
+  // The flow strip's next stage: a small lean within a match tier (structure/boost.ts).
+  const stageTarget = useMemo(() => (open ? currentStageTarget() : null), [open]);
+
   // Filtered + ranked results
   const results = useMemo<SearchEntry[]>(() => {
     const base = (filterOutputType || filterInputType)
@@ -142,10 +147,10 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
       .map(e => ({ entry: e, score: scoreEntry(e, query) }))
       .filter(({ score }) => score > 0)
       // Usage nudges within a tier (worth under one tier: 15 of the 20 between tiers).
-      .map(x => ({ ...x, score: x.score + Math.min(1, boost(x.entry.type) * 3) * 15 }))
+      .map(x => ({ ...x, score: x.score + Math.min(1, boost(x.entry.type) * 3) * 15 + (inTargetStage(x.entry.type, stageTarget) ? STAGE_SEARCH_POINTS : 0) }))
       .sort((a, b) => b.score - a.score || a.entry.def.label.localeCompare(b.entry.def.label))
       .map(({ entry }) => entry);
-  }, [ALL_ENTRIES, query, filterOutputType, filterInputType, boost]);
+  }, [ALL_ENTRIES, query, filterOutputType, filterInputType, boost, stageTarget]);
 
   // Browsing: what usually goes with the node you came from leads, as its own group.
   const picks = useMemo<SearchEntry[]>(() => {

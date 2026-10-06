@@ -31,6 +31,9 @@ import { InlineVizFrame, GenericPreviewViz, SKIP_INLINE_PREVIEW } from './Mobile
 import { INLINE_VIZ_TYPES } from './NodeInlineViz';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { BuildersSection } from '../builders/BuildersSection';
+import { useStructureHints } from '../../structure/hintsStore';
+import { typesForStage } from '../../structure/browse';
+import { STAGES } from '../../structure/stages';
 
 function labelFor(n: GraphNode): string {
   return (typeof n.params.label === 'string' && n.params.label) || getNodeDefinitionFor(n)?.label || n.type;
@@ -130,6 +133,8 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
   const activeGroupPath = useNodeGraphStore(s => s.activeGroupPath);
   const scopedNodes = activeGroupPath.length > 0 ? (getActiveNodes(allNodes, activeGroupPath) ?? allNodes) : allNodes;
 
+  const stageBrowse = useStructureHints(st => st.browse);
+  const setStageBrowse = useStructureHints(st => st.setBrowse);
   const openDetail = (type: string) => { setConnectTargetId(null); setSelectedType(type); };
   const closeDetail = () => { setConnectTargetId(null); setSelectedType(null); };
 
@@ -290,7 +295,27 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
   // ── Category accordion ─────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {/* The builders first: the 3D Scene Builder, Grid Rules, Agent Rules (docs/node-browser.md) */}
+      {/* A stage picked on the flow strip's chip (docs/structure-hints.md): its nodes first. */}
+      {stageBrowse && (() => {
+        const list = typesForStage(stageBrowse.flow, stageBrowse.stage, HIDDEN_TYPES);
+        return (
+          <div data-stage-browse={stageBrowse.stage} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '6px 0 8px', marginBottom: 6, borderBottom: `1px solid ${tc.surface0}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', minHeight: 36 }}>
+              <span style={{ flex: 1, font: `650 13.5px ${fontFamily.ui}`, color: tc.text }}>Stage: {STAGES[stageBrowse.stage].label} <span style={{ fontWeight: 500, color: tc.overlay0 }}>· {list.length}</span></span>
+              <button onClick={() => setStageBrowse(null)} style={backBtnStyleFor(tc)}>Show all</button>
+            </div>
+            <div style={{ fontSize: 12.5, color: tc.subtext0, padding: '0 12px 4px', lineHeight: 1.45 }}>{STAGES[stageBrowse.stage].line}</div>
+            {list.map(x => (
+              <button key={x.type} onClick={() => openDetail(x.type)} style={{ ...rowBtnStyleFor(tc), height: 40, borderRadius: 10 }}>
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.label}</span>
+                <span style={{ fontSize: 11.5, color: tc.overlay0 }}>{x.category}</span>
+                <Icon name="chevR" size={14} style={{ color: tc.surface2, flexShrink: 0 }} />
+              </button>
+            ))}
+          </div>
+        );
+      })()}
+      {/* Then the builders: the 3D Scene Builder, Grid Rules, Agent Rules (docs/node-browser.md) */}
       <BuildersSection touch onOpened={onClose} />
       {CATEGORIES.map(cat => {
         const isOpen = openCategory === cat.name;
