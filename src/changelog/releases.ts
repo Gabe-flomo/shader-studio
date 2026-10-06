@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.43',
+    date: '2026-10-06',
+    title: 'Roomier code editors',
+    highlights: [
+      { area: 'Studio', text: 'Expression and Custom Function cards: airier code lines, and a Preview page (Range, Grid, colour…) in place of the signature.' },
+      { area: 'Studio', text: 'Their editors fold the Functions panel (closed by default, \u0192 Functions or \u2318]) and the Inputs panel (\u2318[) so the code gets the room.' },
+    ],
+  },
+  {
     id: '2026.10.42',
     date: '2026-10-06',
     title: 'Code on the card',
