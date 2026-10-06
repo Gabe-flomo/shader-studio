@@ -135,6 +135,114 @@ float texels) is measured at most once a second:
 Nothing is offered when fewer than 95% of the texels are finite, or for nodes that are meant to be
 flat, stepped or clipped (Posterize, Floor, Step, Compare, Color, Constant, Time, Halftone…).
 
+## The Do… bar
+
+**⌘K**, or the ✎ button in the canvas toolbar. Type what to do; a live preview lists the steps that
+will run with their values, and how each word was read. Enter runs them all as **one undo step**.
+
+```
+circle in the middle with a glow, falloff 8     → Add Circle SDF at 0, 0 · Glow, falloff 8
+add rings                                        → Rings on the selected shape
+mix these colours                                → OkLab Mix of the two selected colours
+smoothly blend the edges                         → Union with K of the two selected shapes
+make it repeat 6 times around                    → Repeat around (Angular Repeat, 6) in front of its UV
+twist the space 0.5                              → Twist (0.5) in front of its UV
+tone map it                                      → Tone map on the colour it ends up as
+```
+
+### How a phrase is read (`suggestions/doBar.ts`)
+
+One left-to-right pass over a fixed vocabulary (`src/lang/vocabulary.ts`):
+
+| Words | Examples |
+|---|---|
+| Shapes (2D and 3D) | circle / disc / dot, box / square, ring, heart, triangle, hexagon, star, cross, moon, diamond, ellipse, line; and every Scene Builder shape and alias (sphere / ball, torus / donut, capsule / pill, cylinder / pillar…) |
+| Actions (≈30, with synonyms) | glow / halo / neon, rings / ripples, outline / border, onion / hollow, round / grow, blend / melt / smooth union, warp / distort / noise, swirl, twist / spiral, polar, mirror, repeat / tile (… around → repeat around), zoom / rotate, mix / tint, palette / colorize, tone map / aces, grade, brighter, grain / dither, soften / feather, invert, blur, trails / feedback, flow, remap |
+| Targets | it / this (the selection), these / both (the two selected), the space / uv (the UV input), the picture (what the Output shows) |
+| Parameters | falloff, count (times, x, copies), amount (strength, by), thickness / width, smoothness / k, radius / size, speed, angle (degrees or radians), zoom |
+| Values | numbers (0.5, six, half), counts ("6 times", "8 rings"), colours (red … ice, #ff8800), places (middle, top left …) |
+
+- A **shape** starts a new subject; a place and a bare size right after it go on the shape.
+- An **action** is a step on the current subject: the last shape named, else what a target word
+  says, else the selection, else the Output's picture.
+- A parameter word with a number fills that slot; a colour fills the colour slot; a bare number
+  fills the first number slot ("twist the space 0.5" → amount 0.5).
+- The action is resolved by what the subject carries: **glow** on a distance is SDF Glow, on a
+  colour Bloom, on a texture (a Pass) Glow (texture); a colour move on a shape goes to the colour
+  it ends up as; a space move goes in front of the shape's UV.
+- **Typos**: an exact word wins; otherwise one letter off for words of 4–6 letters, two for longer
+  ones ("circel with a glwo"). Words under 4 letters must be exact. A colour word beats a typo of
+  something else ("blue" isn't "blur"). Plurals fold ("circles").
+- A phrase it can't run says why ("Blur works on a texture: select a Pass"); one it can't read
+  falls back to **node search** (your made nodes included) and the explainer's **idioms**.
+
+### Idioms (`suggestions/idiomBlocks.ts`)
+
+The explainer's idiom library (`lib/glslPatterns`, `idiomVocabulary()`) is in the Do… bar:
+"sine hash", "centre uv", "soft circle", "cosine palette"… offer the idiom; picking it adds an
+Expression Block computing its first spelling, each `$hole` an input. A phrase read only by
+guessing at typos ("sine" ≈ "shine") gives way to an idiom with that name.
+
+### Shared with the 3D Scene Builder
+
+`src/lang/vocabulary.ts` folds in the Scene Builder's shapes and aliases (`sceneBuilder/spec.ts`),
+so "donut", "pill" or "box frame" name the same node in both languages (`sceneKind` gives the
+Scene Builder's own kind), and `ACTION_TO_SCENE_WARP` maps the space actions onto its warps
+(twist → twist, repeat around → polar-repeat, warp → noise…). A test keeps both in step.
+
+### Is this typical? (`suggestions/connectionCheck.ts`)
+
+On demand: type "is this typical?" (or "how common", "check this") with a wired node or a few
+wired nodes selected, or **right-click a wire's + badge**. It answers from the same weighted usage
+table as the ranking:
+
+- "Seen in 4 of your graphs, 1 imported graph, about 12 in the examples. Usually followed by
+  Palette." (A chain counts the graphs that hold every wire of it.)
+- Rare: says so, with the nearest common alternatives ("Circle SDF → SDF Glow · Distance",
+  "Abs · Output → Hue Rotate").
+- A chain in 3 or more of your graphs offers **Teach this?**.
+
+It is not shown in the background (on demand only).
+
+### Teaching it a phrase (`suggestions/taught.ts`)
+
+Select some wired nodes (or one node with the settings you like), type "teach …" in the Do… bar
+and give a phrase with optional slots: `neon edge {colour} {width}`.
+
+- **What is saved**: the selection, with the wires between them.
+- **Where the value comes in**: the first wire from outside.
+- **Where the result goes out**: the first output read from outside, else the last node's main output.
+- **Slots**: each slot is matched to a setting by key, label or vocabulary synonym ({colour} → Tint, {falloff} → Falloff).
+
+Then:
+
+- typing the phrase builds that chain with the slots filled ("neon edge pink 0.02", or "width 0.02");
+- the suggestions strip offers it, ranked with the rest, on the same kind of value;
+- a chain with no input ("cloudy colours") is added on its own.
+
+The ☆ list in the Do… bar renames, deletes, exports and imports them. They are stored in this
+browser (localStorage `playfield:suggestions:taught`).
+
+## The snippet library (`suggestions/snippets.ts`)
+
+The Functions panel of the Expression Block and Custom Function editors has a **Snippets** section,
+searchable by name and phrase with the panel's filter:
+
+- smooth min / max
+- SDF round, onion and repeat
+- IQ cosine palette
+- hash, value noise
+- rotate 2D, to polar
+- remap, gain, bias
+
+- **Expression Block**: Insert appends the snippet's lines, wired to the block's variables. The
+  first float it reads takes the block's first float, and so on; temporaries are renamed past any
+  name already taken. When the block still returns a bare input of the same type, the result
+  switches to the snippet's value.
+- **Custom Function**: Insert adds the helper function once (to Helper functions) and a call at the
+  caret, with the function's own inputs as arguments. Helper names avoid the built-in nodes' own
+  functions (smin, opRepeat, valueNoise), which would clash in a graph using those nodes.
+
 ## Files
 
 | Piece | Where |
@@ -148,6 +256,13 @@ flat, stepped or clipped (Posterize, Floor, Step, Compare, Color, Constant, Time
 | Output rules | `src/suggestions/outputRules.ts` |
 | Ranking | `src/suggestions/rank.ts` |
 | Strip and toolbar toggle | `src/components/NodeGraph/SuggestionStrip.tsx`, `src/suggestions/settings.ts` |
+| Shared vocabulary | `src/lang/vocabulary.ts` |
+| Do… bar language, plans | `src/suggestions/doBar.ts`; the store's `runDoPlan` (one undo step) |
+| Do… bar UI | `src/components/NodeGraph/DoBar.tsx`, `src/suggestions/doBarStore.ts` |
+| Connection check | `src/suggestions/connectionCheck.ts` |
+| Taught phrases | `src/suggestions/taught.ts` |
+| Idioms as blocks | `src/suggestions/idiomBlocks.ts` |
+| Snippets | `src/suggestions/snippets.ts`; `components/code/ReferencePanel.tsx` (`onSnippet`) |
 
 ## Limits
 
@@ -157,3 +272,7 @@ flat, stepped or clipped (Posterize, Floor, Step, Compare, Color, Constant, Time
 - 3D nodes get no moves yet (the 3D Scene Builder owns that); their kind is recognised.
 - Linked folders that aren't mirrored into this browser's storage are not learned from.
 - Moves apply inside groups too, but nothing is put on an Output there.
+- The Do… bar builds 2D; 3D shapes are recognised and sent to the Scene Builder.
+- A phrase is one sentence of steps on one subject at a time; "these" means the first two selected.
+- A taught move keeps one way in and one way out; other wires from outside the selection are dropped.
+- Idiom blocks use the idiom's first spelling with 1.0 for unnamed number holes.

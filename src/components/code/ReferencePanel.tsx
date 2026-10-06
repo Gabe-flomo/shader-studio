@@ -6,6 +6,7 @@ import { Toggle } from '../ui/Choice';
 import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
 import { GLSL_REFERENCE, REFERENCE_GROUPS } from './glslReference';
+import { searchSnippets, type Snippet } from '../../suggestions/snippets';
 import { openCodeExplorer } from '../codeExplorer/explorerStore';
 
 const OPERATORS = ['+', '-', '*', '/', '()', '.', ','];
@@ -16,8 +17,10 @@ const OPERATORS = ['+', '-', '*', '/', '()', '.', ','];
  * wraps the whole expression instead. Chips never take focus, so the caret stays put.
  */
 export function ReferencePanel({
-  variables, onInsert, wrapAll, onWrapAllChange, showOperators = true, width = 300,
+  variables, onInsert, wrapAll, onWrapAllChange, showOperators = true, width = 300, onSnippet,
 }: {
+  /** The snippet library (suggestions/snippets.ts): inserted whole, wired to the editor's variables. */
+  onSnippet?: (s: Snippet) => void;
   variables: ReadonlyArray<{ name: string; type: string }>;
   onInsert: (text: string) => void;
   wrapAll: boolean;
@@ -73,6 +76,10 @@ export function ReferencePanel({
         </div>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {onSnippet && (() => {
+          const found = searchSnippets(filter);
+          return found.length > 0 && section('Snippets', found.map(sn => chip(`s-${sn.id}`, sn.label, () => onSnippet(sn), `${sn.label}: ${sn.doc}\nAlso: ${sn.phrases.join(', ')}`)));
+        })()}
         {vars.length > 0 && section('Variables', vars.map(v => chip(`v-${v.name}`, v.name, () => onInsert(v.name), `${v.name} (${v.type})`, TYPE_COLORS[v.type] ?? tk.text.faint)))}
         {showOperators && !q && section('Operators', OPERATORS.map(op => chip(`o-${op}`, op, () => onInsert(op === '()' || op === '.' || op === ',' ? op : ` ${op} `))))}
         {REFERENCE_GROUPS.map(group => {
@@ -87,7 +94,7 @@ export function ReferencePanel({
             () => openCodeExplorer(r.name),
           )));
         })}
-        {q && vars.length === 0 && GLSL_REFERENCE.every(r => !r.name.toLowerCase().includes(q)) && (
+        {q && vars.length === 0 && GLSL_REFERENCE.every(r => !r.name.toLowerCase().includes(q)) && !(onSnippet && searchSnippets(filter).length) && (
           <span style={{ fontSize: 12, color: tk.text.muted, padding: '8px 0' }}>Nothing matches “{filter}”.</span>
         )}
       </div>

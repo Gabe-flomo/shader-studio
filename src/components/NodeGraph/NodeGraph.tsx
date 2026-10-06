@@ -17,6 +17,8 @@ import { suggestConnections, type Suggestion } from './smartConnect';
 import { suggestQuickAdds, type QuickAdd } from './quickAdds';
 import { SmartConnectMenu } from './SmartConnectMenu';
 import { SuggestionStrip } from './SuggestionStrip';
+import { DoBar } from './DoBar';
+import { openDoBar } from '../../suggestions/doBarStore';
 import { learnedNext, rankTables } from '../../suggestions';
 import { RecipeOffer } from './RecipeOffer';
 import { useRecipeOffer } from '../../store/recipeOfferStore';
@@ -2207,6 +2209,16 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             setHoveredWire(null);
           }}
           onClick={() => setWireInsertOpen(true)}
+          // Right-click: is this wire typical? (the Do… bar's connection check)
+          onContextMenu={e => {
+            e.preventDefault();
+            e.stopPropagation();
+            const w = hoveredWire;
+            const from = displayNodes.find(n => n.id === w.fromNodeId), to = displayNodes.find(n => n.id === w.toNodeId);
+            if (from && to) openDoBar({ text: 'is this typical?', check: [{ fromType: from.type, outKey: w.fromOutputKey, toType: to.type, inKey: w.toInputKey }] });
+            setHoveredWire(null);
+          }}
+          title="Insert a node · right-click: is this wire typical?"
         >
           +
         </div>
@@ -2245,6 +2257,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       <RecipeOffer nodes={displayNodes} canvasRef={canvasRef} pan={pan} zoom={zoom} />
       {/* The selected node's next moves (suggestions/): under its card, never over a socket */}
       <SuggestionStrip nodes={displayNodes} canvasRef={canvasRef} pan={pan} zoom={zoom} readOnly={locked} />
+      {/* The Do… bar (⌘K): typed phrases → moves (suggestions/doBar.ts) */}
+      {!locked && <DoBar />}
 
       {/* Feature 1: Alt-click socket filtered palette */}
       {smartConnect && (() => {

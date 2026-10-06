@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { snippetForFunction, type Snippet } from '../../suggestions/snippets';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { setInputSlider } from '../../nodes/sliderFreeze';
 import { nowParamValue } from '../../lib/nowValue';
@@ -145,6 +146,14 @@ export function CustomFnModal({ node, onClose }: Props) {
 
   // Insert a reference snippet into the last-focused field — wraps the selection, or the
   // whole body when "Wrap all" is on.
+  // A snippet (suggestions/snippets.ts): its helper function added once, a call at the caret in the body.
+  const insertSnippetFn = (sn: Snippet) => {
+    const r = snippetForFunction(sn, customInputs, glslFns);
+    if (r.helpers !== glslFns) { updateNodeParams(node.id, { glslFunctions: r.helpers }); setShowHelpers(true); }
+    lastField.current = 'body';
+    insertFromReference(r.call);
+  };
+
   const insertFromReference = (text: string) => {
     const isBody = lastField.current === 'body';
     const ta = isBody ? bodyRef.current : fnRef.current;
@@ -371,6 +380,7 @@ export function CustomFnModal({ node, onClose }: Props) {
             onInsert={insertFromReference}
             wrapAll={autoWrap}
             onWrapAllChange={setAutoWrap}
+            onSnippet={insertSnippetFn}
           />
         </SidePanel>
       </div>

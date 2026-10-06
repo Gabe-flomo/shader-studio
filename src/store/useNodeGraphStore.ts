@@ -23,8 +23,9 @@ import { addAgentPieceTo, agentStarter, freshIds, placeInFreeSpace, startRuleIn,
 import { rulesStarter } from '../agentRules/starter';
 import { particlesAsNodes } from './particlesAsNodes';
 import { openNewSceneBuilder } from '../sceneBuilder/store';
-import { applyRecipe, recipesFor } from '../nodes/recipes';
-import { applyMove, MOVES_BY_ID, learnGraph, learnSaved, recordWireBetween, textSignature } from '../suggestions';
+import { applyRecipe, placeNear, recipesFor } from '../nodes/recipes';
+import { runDoPlan as runDoPlanPure, type DoPlan } from '../suggestions/doBar';
+import { applyMove, moveById, learnGraph, learnSaved, recordWireBetween, textSignature } from '../suggestions';
 import { closeRecipeOffer, noteNodeAdded } from './recipeOfferStore';
 import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES, AGENT_PRESET_TYPES, syncAgentSpaces } from '../nodes/definitions/agents';
 import { randomizedParams } from '../nodes/randomizeParams';
@@ -867,6 +868,10 @@ interface NodeGraphState {
    * Returns the ids added, or null when it can't go there.
    */
   applySuggestion: (nodeId: string, key: string, side: 'in' | 'out', moveId: string, args?: Record<string, unknown>) => string[] | null;
+  /** Run a Do… bar plan (suggestions/doBar.ts) in the level being edited: one undo step, a compile. Returns the step labels that ran. */
+  runDoPlan: (plan: DoPlan, label: string) => string[];
+  /** Add a node already built (an idiom's Expression Block from the Do… bar) to the level being edited, near the view: one undo step. */
+  addBuiltNode: (node: GraphNode, label: string) => string | null;
   /**
    * Spawn a pre-wired subgraph from a descriptor.
    * `origin` is the top-left anchor in canvas space.
@@ -3349,7 +3354,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   applySuggestion: (nodeId, key, side, moveId, args = {}) => {
     const st = get();
-    const move = MOVES_BY_ID.get(moveId);
+    const move = moveById(moveId);
     const path = st.activeGroupPath;
     const scope = path.length ? getActiveNodes(st.nodes, path) : st.nodes;
     const self = scope?.find(nd => nd.id === nodeId);
@@ -3370,6 +3375,35 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const what = move.shape === 'param' ? 'Changed its settings.' : `Added ${r.added.length} node${r.added.length === 1 ? '' : 's'}, each with a note${r.rewired ? ', in place' : ''}.`;
     toast.info(`${move.label} · ${label}`, { message: `${what}${r.shown ? ' It is on the Output now.' : ''} Undo takes it back.` });
     return r.added;
+  },
+
+  runDoPlan: (plan, label) => {
+    const st = get();
+    const path = st.activeGroupPath;
+    const scope = path.length ? getActiveNodes(st.nodes, path) : st.nodes;
+    if (!scope || !plan.steps.length) return [];
+    const r = runDoPlanPure(scope, plan, () => idGenerator.next(), { topLevel: path.length === 0 });
+    if (!r.ran.length) return [];
+    undoManager.push(st.nodes, { label: `Do: ${label}` });
+    const nodes = path.length ? (setActiveNodes(st.nodes, path, r.nodes) ?? st.nodes) : r.nodes;
+    set({ nodes, ...(r.select ? { selectedNodeId: r.select, selectedNodeIds: [r.select] } : {}) });
+    get().compile();
+    return r.ran;
+  },
+
+  addBuiltNode: (node, label) => {
+    const st = get();
+    const path = st.activeGroupPath;
+    const scope = path.length ? getActiveNodes(st.nodes, path) : st.nodes;
+    if (!scope) return null;
+    const id = idGenerator.next();
+    const placed = placeNear(scope, [{ ...node, id }]);
+    undoManager.push(st.nodes, { label: `Added ${label}` });
+    const list = [...scope, ...placed];
+    const nodes = path.length ? (setActiveNodes(st.nodes, path, list) ?? st.nodes) : list;
+    set({ nodes, selectedNodeId: id, selectedNodeIds: [id] });
+    get().compile();
+    return id;
   },
 
   addNode: (type, position, overrideParams?) => {
