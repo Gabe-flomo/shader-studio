@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.37',
+    date: '2026-10-05',
+    title: 'Preview detail',
+    highlights: [
+      { area: 'Studio', text: 'Preview arrows now scale with strength: the strongest is a full arrow, weak ones are short or a dot. A Detail setting makes Grid and Arrows finer.' },
+    ],
+  },
+  {
     id: '2026.10.36',
     date: '2026-10-05',
     title: 'Previews that explain',
