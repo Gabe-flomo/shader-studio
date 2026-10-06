@@ -1495,6 +1495,96 @@ exports[`golden outputs: examples > scriptPicture 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > simAgentCrowd 1`] = `
+{
+  "again": "- x120",
+  "avoid": "- x120",
+  "follow": "- x120",
+  "jam": "- x120",
+  "pace": "- x120",
+  "side": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simAgentDla 1`] = `
+{
+  "again": "- x120",
+  "at": "- x120",
+  "pull": "- x120",
+  "stick": "- x120",
+  "walk": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simAgentFireflies 1`] = `
+{
+  "again": "- x120",
+  "coupling": "- x120",
+  "deaf": "- x120",
+  "period": "- x120",
+  "spread": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simAgentInfection 1`] = `
+{
+  "again": "- x120",
+  "beta": "- x120",
+  "immune": "- x120",
+  "imported": "- x120",
+  "sick": "- x120",
+  "walk": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simAgentPainters 1`] = `
+{
+  "again": "- x120",
+  "answer": "- x120",
+  "curl": "- x120",
+  "fade": "- x120",
+  "hue": "- x120",
+  "pens": "- x120",
+  "rhythm": "- x120",
+  "speed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simAgentPredatorPrey 1`] = `
+{
+  "again": "- x120",
+  "fear": "- x120",
+  "hunger": "- x120",
+  "kill": "- x120",
+  "predBirth": "- x120",
+  "preyBirth": "- x120",
+  "turn": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simAgentSandDrift 1`] = `
+{
+  "again": "- x120",
+  "bare": "- x120",
+  "gust": "- x120",
+  "lift": "- x120",
+  "repose": "- x120",
+  "sand": "- x120",
+  "shadow": "- x120",
+  "wind": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simAgentTermites 1`] = `
+{
+  "again": "- x120",
+  "pick": "- x120",
+  "rest": "- x120",
+  "scatter": "- x120",
+  "wiggle": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > simGridBrain 1`] = `
 {
   "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",

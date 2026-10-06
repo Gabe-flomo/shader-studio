@@ -4,7 +4,14 @@
  * types: Agent Inputs / Agent Output, Sense used only as a reader (what the trail holds here and
  * around), plain math, Compare and Expression Blocks, and Move where a walker just walks.
  *
- *  - Diffusion-limited aggregation: walkers wander until they touch the cluster, then freeze.
+ *  - Predators and prey (Lotka–Volterra): slots alive or unborn in Memory, energy, Alive and Emit;
+ *  - Diffusion-limited aggregation (Witten & Sander): walkers wander until they touch, then freeze;
+ *  - Sand drift (Werner): gusts lift, carry, drop and slump slabs of a Trail that never fades;
+ *  - Crowd: two-way pedestrian traffic sorting itself into lanes (Helbing), slowing as it packs;
+ *  - Painter bots: turtles with a turning rhythm and a colour in Memory, answering each other's paint;
+ *  - Termites (Resnick): chips on a grid, picked up and dropped by an exact one-step handshake;
+ *  - Fireflies (Mirollo & Strogatz): pulse-coupled clocks in Memory falling into step;
+ *  - Infection (Kermack & McKendrick, SIRS): state and time in state in Memory.
  *
  * Every node, inside the group too, carries a plain-language note, and every Expression Block
  * explains each named line ("name: …"), which examples.test.ts checks. Each example loads with a
@@ -36,29 +43,14 @@ const inner = (id: string, group: string, node: string, param: string, label: st
   ctl(id, `${group}::${node}::${param}`, label, min, max, step);
 
 export const SIM_AGENT_EXAMPLE_INDEX: Record<string, { label: string; description: string; play: true }> = {
-  simAgentDla: {
-    label: 'Diffusion-limited aggregation',
-    description: 'Coral and lightning from a random walk: walkers wander at random until they touch the cluster, then stick there for good and become part of it. Tips reach further out and catch more walkers than the hollows behind them, so the cluster grows into branching fingers from one seed in the middle (Witten and Sander, 1981). The whole rule is one Compare and one Expression Block.',
-    play: true,
-  },
-  simAgentTermites: {
-    label: 'Termites and wood chips',
-    description: 'Mitchel Resnick\'s termites: each one wanders, picks up a wood chip when it finds one, and puts it down next to the next chip it bumps into. Nobody plans a pile, yet the scattered chips gather into fewer, bigger piles. The chips are a Trail that never fades; each termite remembers in Memory whether it carries one.',
-    play: true,
-  },
-  simAgentFireflies: {
-    label: 'Fireflies flashing in time',
-    description: 'Pulse-coupled clocks: every firefly flashes when its own clock runs out, and a flash it sees nudges its clock forward. At first the meadow twinkles at random; then patches fall into step, spread as waves and merge until the whole meadow flashes together (Mirollo and Strogatz). Each clock lives in Memory.',
-    play: true,
-  },
-  simAgentInfection: {
-    label: 'Infection spread (SIR)',
-    description: 'An epidemic in a crowd that only meets its neighbours: each person is susceptible, infected or recovered (Memory), the infected breathe infection into a Trail and the susceptible catch it with a chance that grows with what is in the air. Rings of infection spread out; when immunity wears off they break into turning spirals (Kermack and McKendrick\'s SIR, with waning immunity).',
-    play: true,
-  },
   simAgentPredatorPrey: {
     label: 'Predators and prey',
     description: 'Lotka and Volterra as animals that move: prey graze and multiply, predators hunt them by scent, eat, multiply and starve. Every walker is a slot that is alive or waiting to be born (Memory), with its energy; the eaten and the starved die (Alive) and Emit gives their slots back. Herds and packs chase each other across the pasture in waves.',
+    play: true,
+  },
+  simAgentDla: {
+    label: 'Diffusion-limited aggregation',
+    description: 'Coral and lightning from a random walk: walkers wander at random until they touch the cluster, then stick there for good and become part of it. Tips reach further out and catch more walkers than the hollows behind them, so the cluster grows into branching fingers from one seed in the middle (Witten and Sander, 1981). The whole rule is one Compare and one Expression Block.',
     play: true,
   },
   simAgentSandDrift: {
@@ -74,6 +66,21 @@ export const SIM_AGENT_EXAMPLE_INDEX: Record<string, { label: string; descriptio
   simAgentPainters: {
     label: 'Painter bots',
     description: 'Generative art from turtles: each bot keeps a turning rhythm (Memory.x) that swings it through waves, loops and petals, and a colour (Memory.y) it paints with. When it wanders onto paint it answers the stroke: it flips the way it curls and shifts its colour. The canvas is the Trail\'s colour channels.',
+    play: true,
+  },
+  simAgentTermites: {
+    label: 'Termites and wood chips',
+    description: 'Mitchel Resnick\'s termites: each one wanders, picks up a wood chip when it finds one, and puts it down next to the next chip it bumps into. Nobody plans a pile, yet the scattered chips gather into fewer, bigger piles. The chips are a Trail that never fades; each termite remembers in Memory whether it carries one.',
+    play: true,
+  },
+  simAgentFireflies: {
+    label: 'Fireflies flashing in time',
+    description: 'Pulse-coupled clocks: every firefly flashes when its own clock runs out, and a flash it sees nudges its clock forward. At first the meadow twinkles at random; then patches fall into step, spread as waves and merge until the whole meadow flashes together (Mirollo and Strogatz). Each clock lives in Memory.',
+    play: true,
+  },
+  simAgentInfection: {
+    label: 'Infection spread (SIR)',
+    description: 'An epidemic in a crowd that only meets its neighbours: each person is susceptible, infected or recovered (Memory), the infected breathe infection into a Trail and the susceptible catch it with a chance that grows with what is in the air. Rings of infection spread out; when immunity wears off they break into turning spirals (Kermack and McKendrick\'s SIR, with waning immunity).',
     play: true,
   },
 };
@@ -119,7 +126,7 @@ export function dlaNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       { name: 'age', type: 'float' }, { name: 'stickiness', type: 'float', slider: { min: 0, max: 1 } }, { name: 'walk', type: 'float', slider: { min: 0, max: 1 } },
       { name: 'pull', type: 'float', slider: { min: 0, max: 0.5 } },
     ],
-    values: { stickiness: 1, walk: 0.1, pull: 0.003 },
+    values: { stickiness: 1, walk: 0.2, pull: 0.0015 },
     lines: [
       ['float wasStuck', 'step(0.5, mem.x)'],
       ['float sticks', 'touching * (1.0 - step(stickiness, fract(rnd * 4096.0))) * step(0.5, age)'],
@@ -171,11 +178,12 @@ export function dlaNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ]),
   });
   let group = agentsGroup('dla', X(420), Y(0), 'dlaEmit', [inputs, smell, stickAt, touch, rule, move, output], {
-    label: 'Aggregation', tier: '64k', stepsPerFrame: 8, preroll: 0,
+    label: 'Aggregation', tier: '64k', stepsPerFrame: 4, preroll: 0,
     ...note([
-      'Agents: 262,144 walkers (256k), 6 steps a frame. Inside (double-click): Sense reads the cluster\'s smell here, Compare decides "touching", the Stick or wander block keeps or changes the walker\'s Memory, Move walks it.',
+      'Agents: 65,536 walkers (64k), 4 steps a frame. Inside (double-click): Sense reads the cluster\'s smell here, Compare decides "touching", the Stick or wander block keeps or changes the walker\'s Memory, Move walks it.',
       'Each walker remembers in Memory whether it has stuck; that one number is what turns a random walk into a growing cluster.',
-      'Try: Start over with a new Seed for a new coral; Count 1M for a denser forest.',
+      'Why 64k: DLA wants walkers few and far between (one to every 28 trail pixels here); a crowd of them fills the hollows and the coral grows into a solid blob.',
+      'Try: Start over with a new Seed for a new coral; Count 256k for a denser, bushier one.',
     ]),
   });
   group = groupInput(group, 'trail', 'texture', 'Cluster', ['dlaTrail', 'texture']);
@@ -198,9 +206,9 @@ export function dlaNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ...note(['Deposit: every walker leaves its rule\'s deposit each step: 1 in channel 1 once stuck, nothing while free.']),
   }, { agents: ['dla', 'agents'] });
   const trail = n('trailField', 'dlaTrail', X(1260), Y(0), {
-    resolution: '2048', diffuse: 1, halfLife: 0.05, edges: 'wrap', gain: 0.6, kernel: '3',
+    resolution: '1024', diffuse: 1, halfLife: 0.05, edges: 'wrap', gain: 0.6, kernel: '3',
     ...note([
-      'Trail field: the cluster\'s smell, 512 rows. It spreads a pixel or two (Diffuse 1) and fades fast (half-life 0.03 s), so it is a thin halo round the stuck walkers, refreshed every step because they never stop laying it.',
+      'Trail field: the cluster\'s smell, 1024 rows. It spreads a pixel or two (Diffuse 1) and fades fast (half-life 0.05 s), so it is a thin halo round the stuck walkers, refreshed every step because they never stop laying it.',
       'Add: the Seed. Its Image goes back into the group (Cluster); its Amount glows under the picture.',
     ]),
   }, { deposit: ['dlaDeposit', 'deposit'], add: ['dlaSeed', 'result'] });
@@ -229,12 +237,12 @@ export function dlaNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
 }
 
 const dlaPlay = play([
-  inner('stick', 'dla', 'dlaRule', 'stickiness', 'Stickiness', 0, 1),
-  inner('walk', 'dla', 'dlaRule', 'walk', 'Walk speed', 0, 1),
-  inner('pull', 'dla', 'dlaRule', 'pull', 'Pull to the middle', 0, 0.5),
+  inner('stick', 'dla', 'dlaRuleStickiness', 'value', 'Stickiness', 0, 1),
+  inner('walk', 'dla', 'dlaRuleWalk', 'value', 'Walk speed', 0, 1),
+  inner('pull', 'dla', 'dlaRulePull', 'value', 'Pull to the middle', 0, 0.5),
   inner('at', 'dla', 'dlaStickAt', 'value', 'Stick at', 0.01, 0.5),
   ctl('again', 'dla::restart', 'Start over', 0, 1),
-], `**What it shows.** Diffusion-limited aggregation (Witten and Sander, 1981): a quarter of a million walkers take random steps, and any walker that touches the cluster stops there for good. The tips of the cluster stick out into the crowd and catch walkers before they can reach the hollows behind, so tips grow faster and split: coral, frost and lightning all grow this way.
+], `**What it shows.** Diffusion-limited aggregation (Witten and Sander, 1981): sixty-five thousand walkers take random steps, and any walker that touches the cluster stops there for good. The tips of the cluster stick out into the crowd and catch walkers before they can reach the hollows behind, so tips grow faster and split: coral, frost and lightning all grow this way.
 
 **How it's built.** Inside the Agents group, Sense reads the cluster's smell where the walker stands, a Compare node asks "is it above Stick at?", and one Expression Block (Stick or wander) keeps the answer in Memory.x for good, sets Speed to 0 and makes the stuck walker lay the smell itself. A Seed dot painted into the Trail's Add starts it off.
 
@@ -400,10 +408,10 @@ export function termitesNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
 }
 
 const termitesPlay = play([
-  inner('wiggle', 'termites', 'tmRule', 'wiggle', 'Wiggle', 0, 180),
-  inner('pick', 'termites', 'tmRule', 'pickChance', 'Pick chance', 0, 1),
-  inner('rest', 'termites', 'tmRule', 'rest', 'Rest after acting', 0, 2),
-  inner('scatter', 'termites', 'tmRule', 'scatter', 'Starting chips', 0, 0.2),
+  inner('wiggle', 'termites', 'tmRuleWiggle', 'value', 'Wiggle', 0, 180),
+  inner('pick', 'termites', 'tmRulePickChance', 'value', 'Pick chance', 0, 1),
+  inner('rest', 'termites', 'tmRuleRest', 'value', 'Rest after acting', 0, 2),
+  inner('scatter', 'termites', 'tmRuleScatter', 'value', 'Starting chips', 0, 0.2),
   ctl('again', 'termites::restart', 'Start over', 0, 1),
 ], `**What it shows.** Mitchel Resnick's termites: wood chips lie scattered on the ground. Each termite wanders; when it finds a chip empty-handed it picks it up, and when it bumps into another chip while carrying one it puts its chip down next to it. No termite plans anything, yet the chips gather into fewer and bigger piles.
 
@@ -532,10 +540,10 @@ export function firefliesNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
 }
 
 const firefliesPlay = play([
-  inner('coupling', 'fireflies', 'ffClock', 'coupling', 'Coupling', 0, 2),
-  inner('period', 'fireflies', 'ffClock', 'period', 'Period (s)', 0.2, 4),
-  inner('spread', 'fireflies', 'ffClock', 'spread', 'Spread of paces', 0, 0.5),
-  inner('deaf', 'fireflies', 'ffClock', 'deaf', 'Deaf after a flash', 0, 0.9),
+  inner('coupling', 'fireflies', 'ffClockCoupling', 'value', 'Coupling', 0, 2),
+  inner('period', 'fireflies', 'ffClockPeriod', 'value', 'Period (s)', 0.2, 4),
+  inner('spread', 'fireflies', 'ffClockSpread', 'value', 'Spread of paces', 0, 0.5),
+  inner('deaf', 'fireflies', 'ffClockDeaf', 'value', 'Deaf after a flash', 0, 0.9),
   ctl('again', 'fireflies::restart', 'Start over', 0, 1),
 ], `**What it shows.** Fireflies that teach themselves to flash together. Each has its own clock and flashes when it runs out; a firefly that sees a flash nearby jumps its clock a little forward. At first the meadow twinkles at random, then patches flash together, the patches spread as waves and merge, and the whole meadow beats as one (Mirollo and Strogatz, 1990).
 
@@ -672,7 +680,7 @@ export function infectionNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ],
   });
   const draw = n('drawAgents', 'irDraw', X(2100), Y(0), {
-    style: 'points', colorBy: 'agent', size: 1.5, brightness: 0.7, scaleBy: 'walker', fade: 'off', lights: '0',
+    style: 'points', colorBy: 'agent', size: 1.5, brightness: 1, scaleBy: 'walker', fade: 'off', lights: '0',
     ...note(['Draw agents: everyone as a dot in their own Colour: blue susceptible, orange infected, green immune (fading back to blue).']),
   }, { agents: ['epidemic', 'agents'], over: ['irBack', 'result'] });
   const nodes = [emit, group, deposit, trail, uv, back, draw];
@@ -681,9 +689,10 @@ export function infectionNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
 }
 
 const infectionPlay = play([
-  inner('beta', 'epidemic', 'irRule', 'infectivity', 'Infectivity', 0, 20),
-  inner('sick', 'epidemic', 'irRule', 'sickDays', 'Sick for (s)', 0.1, 10),
-  inner('immune', 'epidemic', 'irRule', 'immuneDays', 'Immune for (s, 0 = for good)', 0, 60),
+  inner('beta', 'epidemic', 'irRuleInfectivity', 'value', 'Infectivity', 0, 20),
+  inner('sick', 'epidemic', 'irRuleSickDays', 'value', 'Sick for (s)', 0.1, 10),
+  inner('immune', 'epidemic', 'irRuleImmuneDays', 'value', 'Immune for (s, 0 = for good)', 0, 60),
+  inner('imported', 'epidemic', 'irRuleImported', 'value', 'Imported cases', 0, 0.001),
   inner('walk', 'epidemic', 'irMove', 'speed', 'Walking speed', 0, 0.5),
   ctl('again', 'epidemic::restart', 'Start over', 0, 1),
 ], `**What it shows.** An epidemic in a crowd that only meets its neighbours. A few people start infected; infection spreads outward as rings, the infected recover and are immune for a while, and when immunity wears off the next wave can come back through: rings break into spirals that turn for ever (the SIRS model, after Kermack and McKendrick).
@@ -921,11 +930,12 @@ export function predatorPreyNodes(x = 0, y = 0, withOutput = true): GraphNode[] 
 }
 
 const predatorPreyPlay = play([
-  inner('preyBirth', 'predprey', 'ppLife', 'preyBirth', 'Prey birth', 0, 5),
-  inner('predBirth', 'predprey', 'ppLife', 'predatorBirth', 'Predator birth', 0, 5),
-  inner('kill', 'predprey', 'ppLife', 'kill', 'Kill rate', 0, 20),
-  inner('hunger', 'predprey', 'ppLife', 'hunger', 'Predator hunger', 0, 2),
-  inner('fear', 'predprey', 'ppChans', 'fear', 'Prey fear', 0, 4),
+  inner('preyBirth', 'predprey', 'ppLifePreyBirth', 'value', 'Prey birth', 0, 5),
+  inner('predBirth', 'predprey', 'ppLifePredatorBirth', 'value', 'Predator birth', 0, 5),
+  inner('kill', 'predprey', 'ppLifeKill', 'value', 'Kill rate', 0, 20),
+  inner('hunger', 'predprey', 'ppLifeHunger', 'value', 'Predator hunger', 0, 2),
+  inner('fear', 'predprey', 'ppChansFear', 'value', 'Prey fear', 0, 4),
+  inner('turn', 'predprey', 'ppWayTurn', 'value', 'Turn (°)', 0, 90),
   ctl('again', 'predprey::restart', 'Start over', 0, 1),
 ], `**What it shows.** Predators and prey on a pasture, as Lotka and Volterra described them, but as animals that move. Prey graze and multiply; predators find them by scent, eat, multiply and starve when the prey are gone. Herds and hunting packs chase each other across the land in waves: wherever prey boom, predators follow and wipe them out, then die back, and the grass and the prey return.
 
@@ -1027,7 +1037,7 @@ export function sandDriftNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'job: what the gust is doing (Memory.x: 0 seeding, 1 empty, 2 carrying on the wind, 3 sliding a slab downhill, 4 setting it down). aloft: how long it has carried its slab (Memory.y). slab: how much sand one gust moves. roll: this step\'s random number.',
       'seeding: its first half second, when every gust sprinkles a little sand where it blows (0.25 a step): a flat, slightly rough bed to start from.',
       'upwind: the sand depth a little way upwind. shadow: 1 when upwind is higher than here by more than Shadow drop: the lee of a crest, where the wind can\'t reach. slope: how steep the sand is here, in depth per trail pixel (from Sense\'s Gradient).',
-      'empty, carrying: what it is doing now. picks: empty, on at least two slabs\' depth, out of the shadow, and the dice say yes (Lift, a chance a step): it lifts a slab into the wind. slumps: empty, not lifting, on a slope steeper than Repose and at least three slabs deep: one time in ten it takes a slab to slide it downhill (an avalanche, one slab at a time). Why three slabs, and why only one time in ten: several gusts in one pixel taking slabs in the same step must never take more than lies there, since a trail can only add up what they do. This also passes sand sideways between neighbouring streaks, so the sand gathers into ridges across the wind.',
+      'empty: it blows empty-handed now. carrying: it carries a slab on the wind now. picks: empty, on at least two slabs\' depth, out of the shadow, and the dice say yes (Lift, a chance a step): it lifts a slab into the wind. slumps: empty, not lifting, on a slope steeper than Repose and at least three slabs deep: one time in ten it takes a slab to slide it downhill (an avalanche, one slab at a time). Why three slabs, and why only one time in ten: several gusts in one pixel taking slabs in the same step must never take more than lies there, since a trail can only add up what they do. This also passes sand sideways between neighbouring streaks, so the sand gathers into ridges across the wind.',
       'landChance: the chance a step that a carried slab comes down: always in a shadow, Stick on sand on sand (sand catches sand: that is what makes ripples grow), Stick on bare on bare ground. lands: it has been aloft at least 0.05 s and comes down. settles: the slid slab is set down.',
       'nextJob: 0 → 1 after seeding; 1 → 2 when it lifts, 1 → 3 when it slumps; 2 → 1 when it lands; 3 → 4 → 1 as it slides and sets down. nextAloft: counting up while it carries, from 0.',
       'downhill: the way the sand falls away here. sliding: it is moving a slumped slab this step. heading: downhill while sliding, else downwind with a little wobble.',
@@ -1103,13 +1113,13 @@ export function sandDriftNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
 }
 
 const sandDriftPlay = play([
-  inner('wind', 'sandDrift', 'sdWindDir', 'angle', 'Wind direction (°)', -180, 180),
-  inner('lift', 'sandDrift', 'sdRule', 'lift', 'Lift', 0, 0.5),
-  inner('sand', 'sandDrift', 'sdRule', 'stickSand', 'Stick on sand', 0, 1),
-  inner('bare', 'sandDrift', 'sdRule', 'stickBare', 'Stick on bare ground', 0, 1),
-  inner('gust', 'sandDrift', 'sdRule', 'gust', 'Wind speed', 0, 2),
-  inner('shadow', 'sandDrift', 'sdRule', 'shadowDrop', 'Shadow drop', 0, 5),
-  inner('repose', 'sandDrift', 'sdRule', 'repose', 'Steepest slope', 0.2, 5),
+  inner('wind', 'sandDrift', 'sdWindDirAngle', 'value', 'Wind direction (°)', -180, 180),
+  inner('lift', 'sandDrift', 'sdRuleLift', 'value', 'Lift', 0, 0.5),
+  inner('sand', 'sandDrift', 'sdRuleStickSand', 'value', 'Stick on sand', 0, 1),
+  inner('bare', 'sandDrift', 'sdRuleStickBare', 'value', 'Stick on bare ground', 0, 1),
+  inner('gust', 'sandDrift', 'sdRuleGust', 'value', 'Wind speed', 0, 2),
+  inner('shadow', 'sandDrift', 'sdRuleShadowDrop', 'value', 'Shadow drop', 0, 5),
+  inner('repose', 'sandDrift', 'sdRuleRepose', 'value', 'Steepest slope', 0.2, 5),
   ctl('again', 'sandDrift::restart', 'Start over', 0, 1),
 ], `**What it shows.** Wind building dunes out of a flat bed of sand. Each walker is a gust: it lifts a slab of sand, carries it downwind and drops it, more readily where sand already lies, and always in the wind shadow behind a crest. Ripples appear, grow, merge into dunes and march downwind (after Werner's 1995 dune model).
 
@@ -1242,7 +1252,7 @@ export function crowdNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     wires: { uv: ['cwUv', 'uv'] },
     note: [
       'Corridor (an Expression Block): how far a point is from the nearest wall or pillar (below 0 inside one).',
-      'walls: the corridor\'s top and bottom walls, 0.8 from the middle. pillarA, pillarB, pillarC: three round pillars in the way.',
+      'walls: the corridor\'s top and bottom walls, 0.8 from the middle. pillarA: a pillar up and to the left. pillarB: a bigger one just below the middle. pillarC: a small one up and to the right.',
       'Wired into the group\'s Walls it is read at each walker; wired into the picture, at each pixel, so the drawing and the rule agree. Try: move a pillar, or add a fourth.',
     ],
   });
@@ -1301,11 +1311,11 @@ export function crowdNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
 }
 
 const crowdPlay = play([
-  inner('avoid', 'crowd', 'cwWho', 'avoid', 'Avoid oncoming', 0, 4),
-  inner('follow', 'crowd', 'cwWho', 'follow', 'Follow own kind', -1, 2),
-  inner('side', 'crowd', 'cwWay', 'sidestep', 'Sidestep (°)', 0, 90),
-  inner('pace', 'crowd', 'cwWay', 'pace', 'Walking pace', 0, 1),
-  inner('jam', 'crowd', 'cwWay', 'jam', 'Jam density', 1, 60),
+  inner('avoid', 'crowd', 'cwWhoAvoid', 'value', 'Avoid oncoming', 0, 4),
+  inner('follow', 'crowd', 'cwWhoFollow', 'value', 'Follow own kind', -1, 2),
+  inner('side', 'crowd', 'cwWaySidestep', 'value', 'Sidestep (°)', 0, 90),
+  inner('pace', 'crowd', 'cwWayPace', 'value', 'Walking pace', 0, 1),
+  inner('jam', 'crowd', 'cwWayJam', 'value', 'Jam density', 1, 60),
   ctl('again', 'crowd::restart', 'Start over', 0, 1),
 ], `**What it shows.** Two crowds walking through a corridor in opposite directions. Nobody is told to keep right or left, yet within seconds people sort themselves into lanes going each way, and jams build up and clear round the pillars (Helbing's lane formation; Greenshields' rule that traffic slows as it thickens).
 
@@ -1328,50 +1338,58 @@ export function painterNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     'Agent Inputs: this bot as the step begins. Memory is what it carried over: x is where it is in its turning rhythm (0–1, round and round), y its paint colour (a hue, 0–1).',
     'Canvas is an input added to the group: the Trail field from outside, as it was one step ago: red, green and blue paint, and in the fourth channel how much paint lies there in all.',
   ]);
+  const layer = expr('pbLayer', 0, 600, {
+    label: 'Paint layer',
+    inputs: [],
+    lines: [],
+    result: 'vec4(0.0, 0.0, 0.0, 1.0)',
+    outputType: 'vec4',
+    note: ['Paint layer (an Expression Block): picks the canvas\'s fourth channel, how much paint lies there whatever its colour, for Sense\'s Channels.'],
+  });
   const look = n('agentSense', 'pbLook', 420, 100, {
-    angle: 45, distance: 0.01, weight: 1, width: '1',
+    angle: 30, distance: 0.012, weight: 1, width: '1',
     ...note([
-      'Sense, used only as a reader: Channels here is the paint under the bot (all four channels). Its sensors and Steer are not used: the bot steers by its own rhythm, not by the paint.',
+      'Sense, used only as a reader: its middle Reading (the y of Readings) is how much paint lies 0.012 ahead of the bot: ahead, so it never trips over the stroke it is laying itself. Its side sensors and Steer are not used: the bot steers by its own rhythm.',
     ]),
-  }, { texture: ['pbIn', 'canvas'] });
+  }, { texture: ['pbIn', 'canvas'], channels: ['pbLayer', 'result'] });
   const brush = expr('pbBrush', 840, 100, {
     label: 'Brush',
     inputs: [
-      { name: 'mem', type: 'vec2' }, { name: 'paint', type: 'vec4' }, { name: 'h', type: 'float' }, { name: 'index', type: 'float' },
+      { name: 'mem', type: 'vec2' }, { name: 'paint', type: 'vec3' }, { name: 'h', type: 'float' }, { name: 'index', type: 'float' },
       { name: 'age', type: 'float' }, { name: 'rnd', type: 'float' },
       { name: 'curl', type: 'float', slider: { min: 0, max: 12 } }, { name: 'rhythm', type: 'float', slider: { min: 0, max: 2 } },
       { name: 'answer', type: 'float', slider: { min: 0, max: 1 } }, { name: 'hueStep', type: 'float', slider: { min: 0, max: 0.3 } },
       { name: 'pens', type: 'float', slider: { min: 0, max: 1 } },
     ],
-    values: { curl: 5, rhythm: 0.35, answer: 0.25, hueStep: 0.07, pens: 0.04 },
+    values: { curl: 1.6, rhythm: 0.12, answer: 0.25, hueStep: 0.05, pens: 0.004 },
     lines: [
       ['float own', 'fract(index * 0.6180339887)'],
       ['float family', 'floor(own * 5.0)'],
-      ['float phase', 'age < 0.02 ? fract(index * 0.7548776662) : mem.x'],
+      ['float phase', 'age < 0.02 ? family * 0.2 : mem.x'],
       ['float hue', 'age < 0.02 ? family / 5.0 : mem.y'],
       ['float penDown', '1.0 - step(pens, fract(own * 97.0))'],
-      ['float onPaint', 'step(0.3, paint.a)'],
+      ['float onPaint', 'step(0.6, paint.y)'],
       ['float answers', 'onPaint * (1.0 - step(answer, fract(rnd * 4096.0)))'],
-      ['float bend', 'curl * (0.25 + 0.15 * family) * sin(6.2831853 * phase) + 0.6 * (family - 2.0)'],
+      ['float bend', 'curl * (0.6 + 0.3 * family) * sin(6.2831853 * phase) + 0.25 * (family - 2.0)'],
       ['float heading', 'h + bend / 60.0'],
       ['float nextPhase', 'fract(phase + rhythm * (0.6 + 0.2 * family) / 60.0 + answers * 0.5)'],
       ['float nextHue', 'fract(hue + answers * hueStep)'],
-      ['vec3 ink', '0.5 + 0.5 * cos(6.2831853 * (hue * vec3(1.0, 0.7, 0.4) + vec3(0.0, 0.15, 0.2)))'],
+      ['vec3 ink', '0.5 + 0.5 * cos(6.2831853 * (hue + vec3(0.0, 0.33, 0.67)))'],
       ['vec4 deposit', 'vec4(ink, 1.0) * penDown'],
       ['vec3 colour', 'ink * penDown'],
     ],
     result: 'vec2(nextPhase, nextHue)',
     outputType: 'vec2',
     exposed: [{ name: 'heading', type: 'float' }, { name: 'deposit', type: 'vec4' }, { name: 'colour', type: 'vec3' }],
-    wires: { mem: ['pbIn', 'memory'], paint: ['pbLook', 'sample'], h: ['pbIn', 'heading'], index: ['pbIn', 'index'], age: ['pbIn', 'age'], rnd: ['pbIn', 'random'] },
+    wires: { mem: ['pbIn', 'memory'], paint: ['pbLook', 'readings'], h: ['pbIn', 'heading'], index: ['pbIn', 'index'], age: ['pbIn', 'age'], rnd: ['pbIn', 'random'] },
     note: [
       'Brush (an Expression Block): the painting rule. Its Result is the new Memory (rhythm, hue); heading, deposit and colour are extra outputs. Curl, Rhythm, Answer, Hue step and Pens are Play controls.',
       'own: a number 0–1 of its own (from its Index), the same every step. family: which of five families it belongs to (0–4): each family turns a little differently, so the canvas has five kinds of stroke.',
-      'phase: where it is in its turning rhythm (Memory.x); on its first step a starting point of its own. hue: its paint colour (Memory.y); on its first step its family\'s colour.',
-      'penDown: 1 for the bots that paint: a share Pens of them (4%: 2,600 brushes; the rest wander with their pens up, or the canvas would be mud). onPaint: 1 when there is already paint under it (more than a third of a layer). answers: on paint, and the dice say yes (Answer, a chance a step): it answers the stroke it found.',
+      'phase: where it is in its turning rhythm (Memory.x); on its first step its family\'s starting point, so a whole family swings in step and draws the same figure side by side, until answers set them apart. hue: its paint colour (Memory.y); on its first step its family\'s colour.',
+      'penDown: 1 for the bots that paint: a share Pens of them (0.4%: about 260 brushes; the rest wander with their pens up, or the canvas would be mud). onPaint: 1 when it is heading into paint (more than half a layer just ahead). answers: on paint, and the dice say yes (Answer, a chance a step): it answers the stroke it found.',
       'bend: how hard it turns this step, in radians a second: a swing back and forth (Curl × sin of the phase, so it draws waves and loops), plus a steady lean by family (so some families spiral one way and some the other). heading: its heading turned by that much.',
       'nextPhase: the rhythm moves on (Rhythm, each family at its own pace); an answer jumps it half a turn, which flips the way it curls. nextHue: an answer also shifts its colour by Hue step, so colours drift where strokes cross.',
-      'ink: its hue as a colour (a cosine palette from deep red through gold and teal to blue). deposit: that colour in the first three channels and one layer of paint in the fourth, if its pen is down. colour: its ink if its pen is down, else black (Draw agents adds nothing for it).',
+      'ink: its hue as a colour (a cosine rainbow). deposit: that colour in the first three channels and one layer of paint in the fourth, if its pen is down. colour: its ink if its pen is down, else black (Draw agents adds nothing for it).',
     ],
   });
   const move = n('agentMove', 'pbMove', 1260, 100, {
@@ -1386,7 +1404,7 @@ export function painterNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     mode: 'fill', shape: 'screen', heading: 'random',
     ...note(['Emit: every bot starts at a random place on the canvas, facing anywhere, all at once (Fill).']),
   });
-  let group = agentsGroup('painters', X(420), Y(0), 'pbEmit', [inputs, look, brush, move, output], {
+  let group = agentsGroup('painters', X(420), Y(0), 'pbEmit', [inputs, layer, look, brush, move, output], {
     label: 'Painter bots', tier: '64k', stepsPerFrame: 2, preroll: 0,
     ...note([
       'Agents: 65,536 bots (64k), 2 steps a frame. Inside (double-click): Sense reads the paint under the bot, the Brush turns it, colours it and decides when it answers another stroke, Move walks it.',
@@ -1395,8 +1413,8 @@ export function painterNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   });
   group = groupInput(group, 'canvas', 'texture', 'Canvas', ['pbTrail', 'texture']);
   const deposit = n('agentDeposit', 'pbDeposit', X(840), Y(0), {
-    amount: 0.5, size: 1, what: 'trail',
-    ...note(['Deposit: every bot lays half a layer of its colour each step: the canvas\'s red, green and blue, and one more half layer in the fourth channel.']),
+    amount: 1, size: 1, what: 'trail',
+    ...note(['Deposit: every painting bot lays one layer of its colour each step: the canvas\'s red, green and blue, and one layer in the fourth channel.']),
   }, { agents: ['painters', 'agents'] });
   const trail = n('trailField', 'pbTrail', X(1260), Y(0), {
     resolution: '1024', diffuse: 0.05, halfLife: 8, edges: 'wrap', gain: 1, kernel: '3',
@@ -1411,15 +1429,15 @@ export function painterNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     lines: [
       ['float layers', 'max(paint.a, 0.0)'],
       ['vec3 hue', 'paint.rgb / max(layers, 1e-3)'],
-      ['float cover', '1.0 - exp(-layers * 0.5)'],
+      ['float cover', '1.0 - exp(-layers * 2.5)'],
     ],
-    result: 'mix(vec3(0.94, 0.92, 0.87), hue * 0.85, cover)',
+    result: 'mix(vec3(0.035, 0.03, 0.045), hue * 1.1, cover)',
     outputType: 'vec3',
     wires: { paint: ['pbTrail', 'channels'] },
     note: [
-      'Paint on paper (an Expression Block): turns the canvas into a picture.',
+      'Paint on paper (an Expression Block): turns the canvas into a picture: luminous inks on black.',
       'layers: how much paint lies here (the fourth channel). hue: the paint\'s average colour (the colour channels over the layers). cover: how well the paper is covered, 0–1.',
-      'Result: warm white paper, covered by the paint\'s colour where there is paint.',
+      'Result: near-black paper, covered by the paint\'s colour where there is paint.',
     ],
   });
   const draw = n('drawAgents', 'pbDraw', X(2100), Y(0), {
@@ -1432,31 +1450,116 @@ export function painterNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
 }
 
 const painterPlay = play([
-  inner('curl', 'painters', 'pbBrush', 'curl', 'Curl', 0, 12),
-  inner('rhythm', 'painters', 'pbBrush', 'rhythm', 'Rhythm', 0, 2),
-  inner('answer', 'painters', 'pbBrush', 'answer', 'Answer strokes', 0, 1),
-  inner('hue', 'painters', 'pbBrush', 'hueStep', 'Colour shift', 0, 0.3),
-  inner('pens', 'painters', 'pbBrush', 'pens', 'Share of bots painting', 0, 1),
+  inner('curl', 'painters', 'pbBrushCurl', 'value', 'Curl', 0, 12),
+  inner('rhythm', 'painters', 'pbBrushRhythm', 'value', 'Rhythm', 0, 2),
+  inner('answer', 'painters', 'pbBrushAnswer', 'value', 'Answer strokes', 0, 1),
+  inner('hue', 'painters', 'pbBrushHueStep', 'value', 'Colour shift', 0, 0.3),
+  inner('pens', 'painters', 'pbBrushPens', 'value', 'Share of bots painting', 0, 1),
   inner('speed', 'painters', 'pbMove', 'speed', 'Brush speed', 0, 0.6),
   ctl('fade', 'pbTrail::halfLife', 'Paint lasts (s)', 0.5, 10),
   ctl('again', 'painters::restart', 'Start over', 0, 1),
-], `**What it shows.** A few thousand painting robots (one bot in twenty-five has its pen down). Each one follows its own turning rhythm, swinging from one curve to the other, so it draws waves, loops and petals; it paints in a colour it remembers; and when it wanders onto someone else's paint it answers: it flips the way it curls and shifts its colour. A painting grows that nobody designed, and keeps changing as old strokes fade.
+], `**What it shows.** A few hundred painting robots (one bot in 250 has its pen down). Each one follows its own turning rhythm, swinging from one curve to the other, so it draws waves, loops and petals; it paints in a colour it remembers; and when it wanders onto someone else's paint it answers: it flips the way it curls and shifts its colour. A painting grows that nobody designed, and keeps changing as old strokes fade.
 
 **How it's built.** The canvas is a Trail field: each bot deposits its colour into the red, green and blue channels and one layer into the fourth. Inside the group, Sense reads the paint under the bot, and one Expression Block (Brush) keeps the bot's rhythm in Memory.x and its hue in Memory.y, turns it, and decides when to answer. Paint on paper divides the colour by the layers to get the average colour.
 
 **Try.** **Curl** is how hard the bots swing: 0 draws straight lines. **Rhythm** is how fast they swing (slow: big loops; fast: tight waves). **Answer strokes** is how often they react to paint: 0 and each bot paints alone. **Colour shift** is how far a colour moves at each answer. **Share of bots painting** puts more pens down (all of them make mud). **Paint lasts** sets how long strokes stay.`);
 
+/**
+ * What each rule number does, for the note on its knob (the Constant that feeds it: see knobify).
+ */
+const KNOB_WHY: Record<string, string> = {
+  stickiness: 'the chance that a walker touching the cluster sticks this step. Below 1, walkers creep further into the hollows before they stick, so the coral grows denser and bushier.',
+  walk: 'how fast a free walker stumbles about (picture units a second). Faster walkers arrive sooner but may hop over a thin branch.',
+  pull: 'a gentle pull toward the middle that keeps walkers arriving. 0 is pure DLA (slow, most branched); more grows a fast, thick tree.',
+  wiggle: 'how much a termite wanders, in degrees at most each step. 0 sends termites in straight lines (and wrapping round the picture); 180 makes them dither on the spot.',
+  pickChance: 'the chance a step that an empty-handed termite on a chip reaches for it. Lower makes the termites hesitate, so the piles form more slowly.',
+  rest: 'seconds a termite walks on after picking up or putting down a chip before it may act again, so it carries a chip away from the pile it found it in.',
+  scatter: 'the chance a step, during their first half second, that a termite drops an extra starting chip: how many chips there are (Start over to apply).',
+  period: 'the seconds between a firefly\'s flashes when nobody nudges it.',
+  spread: 'how much the fireflies\' own paces differ (0.1: some run 10% fast, some 10% slow). The bigger it is, the harder it is for them to agree.',
+  coupling: 'how far a flash it sees jumps a firefly\'s clock forward. 0 and they never fall into step; high and patches lock together in seconds.',
+  deaf: 'the share of its cycle just after a flash during which a firefly ignores light, so it doesn\'t answer the echo of its own flash.',
+  infectivity: 'how catching the infection is: the rate at which the air\'s infection infects a susceptible person. Too low and the first cases fizzle out.',
+  sickDays: 'how long (simulated seconds, "days") an infected person stays infectious.',
+  immuneDays: 'how long a recovered person stays immune. 0: immune for good (plain SIR, one wave and done); short: the next wave comes sooner.',
+  firstCases: 'the share of people infected at the start (Start over to apply).',
+  imported: 'a tiny chance a second that a susceptible person catches it from outside, so the epidemic never dies out for good.',
+  preyBirth: 'how fast unborn prey slots come alive near living prey on grass: the prey\'s birth rate.',
+  predatorBirth: 'how fast unborn predator slots come alive where predators are feeding: the predators\' birth rate.',
+  kill: 'how deadly the predators are: the rate at which a prey among them is caught.',
+  hunger: 'how fast a predator burns its energy. Low and predators outlive their prey and wipe them out; high and they starve before they find any.',
+  fear: 'how hard prey turn away from the predators\' scent.',
+  turn: 'the most a walker turns in one step, toward the side it likes better, in degrees.',
+  angle: 'which way the wind blows, in degrees: 0 blows to the right, 90 up. The dunes turn to face it.',
+  gust: 'how fast the wind blows the gusts (picture units a second).',
+  lift: 'the chance a step that an empty gust lifts a slab of sand (out of the wind shadow): how easily the wind erodes.',
+  stickSand: 'the chance a step that a carried slab comes down on sand. Higher than on bare ground: sand catches sand, which is what makes ripples grow.',
+  stickBare: 'the chance a step that a carried slab comes down on bare ground. The lower it is against the sand\'s, the more the sand gathers into separate dunes.',
+  shadowDrop: 'how much higher the sand upwind must be for this spot to lie in the wind shadow, where the wind drops everything and lifts nothing.',
+  repose: 'the steepest slope (sand depth per trail pixel) the sand holds before it slumps downhill, a slab at a time: the angle of repose.',
+  follow: 'how much walkers going the same way count for the sidestep: below 0 they keep a little distance; above 0 they fall in behind each other in single file.',
+  avoid: 'how much walkers coming the other way count against a side: the urge to step out of their way that makes lanes form.',
+  sidestep: 'the most a walker swerves from its way, in degrees, toward the better side.',
+  pace: 'how fast people walk when nothing is in their way (picture units a second).',
+  jam: 'how packed it must be ahead for a walker to stop (Greenshields\' jam density). Low and people stop early, so jams spread back like traffic waves.',
+  curl: 'how hard the bots swing from one curve to the other. 0 draws straight lines; high draws tight loops.',
+  rhythm: 'how fast the bots swing (slow: long waves and big loops; fast: tight wiggles).',
+  answer: 'the chance a step that a bot heading into paint answers it, flipping its curl and shifting its colour. 0 and every bot paints alone.',
+  hueStep: 'how far a bot\'s colour moves each time it answers a stroke.',
+  pens: 'the share of bots with their pens down. All of them at once paints the canvas into mud.',
+};
+
+/**
+ * Every slider input of an Expression Block inside an Agents group becomes a Constant wired into it:
+ * a knob of its own, with a note, that Play (and MIDI, LFOs, mappings) can drive. The block keeps
+ * the rule; the knobs, placed above it, are the numbers you tune.
+ */
+function knobify(nodes: GraphNode[], controls: PlayControl[]): GraphNode[] {
+  const labelOf = new Map(controls.map(c => [c.target.split('::').slice(-2)[0], c.label]));
+  return nodes.map(g => {
+    if (g.type !== 'agentsGroup') return g;
+    const sub = g.params.subgraph as { nodes: GraphNode[]; inputPorts: unknown[]; outputPorts: unknown[] };
+    const knobs: GraphNode[] = [];
+    const inside = sub.nodes.map(e => {
+      const ins = e.params.inputs as Array<{ name: string; type: string; slider: unknown }> | undefined;
+      if (e.type !== 'exprNode' || !ins?.some(i => i.slider)) return e;
+      const params: Record<string, unknown> = { ...e.params };
+      const inputs = { ...e.inputs };
+      let k = 0;
+      for (const i of ins) {
+        if (!i.slider) continue;
+        const id = `${e.id}${i.name[0].toUpperCase()}${i.name.slice(1)}`;
+        const label = labelOf.get(id) ?? i.name;
+        const what = KNOB_WHY[i.name] ?? `the ${i.name} number of ${String(e.params.label)}.`;
+        knobs.push(n('constant', id, e.position.x + 200 * k++, e.position.y - 260, {
+          value: params[i.name], label,
+          ...note([`${label} (a Constant, wired into ${String(e.params.label)}'s ${i.name}): ${what}`, 'Turn it here, or on Play, where it is a control: it is a uniform, so changing it never recompiles.']),
+        }));
+        delete params[i.name];
+        inputs[i.name] = { ...inputs[i.name], connection: { nodeId: id, outputKey: 'value' } };
+      }
+      params.inputs = ins.map(i => ({ ...i, slider: null }));
+      params.__comment = String(params.__comment)
+        .replace(/ are Play controls/g, ' come in from Constants above it, its knobs (Play controls)')
+        .replace(/ is a Play control/g, ' comes in from a Constant above it, its knob (a Play control)')
+        .replace(/A Play control\./g, 'Its knob, a Constant above it, is a Play control.');
+      return { ...e, params, inputs };
+    });
+    return { ...g, params: { ...g.params, subgraph: { ...sub, nodes: [...inside, ...knobs] } } };
+  });
+}
+
 export const SIM_AGENT_EXAMPLE_KEYS = Object.keys(SIM_AGENT_EXAMPLE_INDEX);
 
 export function buildSimAgentExamples(): Record<string, ExampleGraph> {
   return {
-    simAgentDla: { ...SIM_AGENT_EXAMPLE_INDEX.simAgentDla, counter: 40, nodes: dlaNodes(0, 200), play: dlaPlay },
-    simAgentTermites: { ...SIM_AGENT_EXAMPLE_INDEX.simAgentTermites, counter: 40, nodes: termitesNodes(0, 200), play: termitesPlay },
-    simAgentFireflies: { ...SIM_AGENT_EXAMPLE_INDEX.simAgentFireflies, counter: 40, nodes: firefliesNodes(0, 200), play: firefliesPlay },
-    simAgentInfection: { ...SIM_AGENT_EXAMPLE_INDEX.simAgentInfection, counter: 40, nodes: infectionNodes(0, 200), play: infectionPlay },
-    simAgentPredatorPrey: { ...SIM_AGENT_EXAMPLE_INDEX.simAgentPredatorPrey, counter: 40, nodes: predatorPreyNodes(0, 200), play: predatorPreyPlay },
-    simAgentSandDrift: { ...SIM_AGENT_EXAMPLE_INDEX.simAgentSandDrift, counter: 40, nodes: sandDriftNodes(0, 200), play: sandDriftPlay },
-    simAgentCrowd: { ...SIM_AGENT_EXAMPLE_INDEX.simAgentCrowd, counter: 40, nodes: crowdNodes(0, 200), play: crowdPlay },
-    simAgentPainters: { ...SIM_AGENT_EXAMPLE_INDEX.simAgentPainters, counter: 40, nodes: painterNodes(0, 200), play: painterPlay },
+    simAgentPredatorPrey: { ...SIM_AGENT_EXAMPLE_INDEX.simAgentPredatorPrey, counter: 40, nodes: knobify(predatorPreyNodes(0, 200), predatorPreyPlay.controls), play: predatorPreyPlay },
+    simAgentDla: { ...SIM_AGENT_EXAMPLE_INDEX.simAgentDla, counter: 40, nodes: knobify(dlaNodes(0, 200), dlaPlay.controls), play: dlaPlay },
+    simAgentSandDrift: { ...SIM_AGENT_EXAMPLE_INDEX.simAgentSandDrift, counter: 40, nodes: knobify(sandDriftNodes(0, 200), sandDriftPlay.controls), play: sandDriftPlay },
+    simAgentCrowd: { ...SIM_AGENT_EXAMPLE_INDEX.simAgentCrowd, counter: 40, nodes: knobify(crowdNodes(0, 200), crowdPlay.controls), play: crowdPlay },
+    simAgentPainters: { ...SIM_AGENT_EXAMPLE_INDEX.simAgentPainters, counter: 40, nodes: knobify(painterNodes(0, 200), painterPlay.controls), play: painterPlay },
+    simAgentTermites: { ...SIM_AGENT_EXAMPLE_INDEX.simAgentTermites, counter: 40, nodes: knobify(termitesNodes(0, 200), termitesPlay.controls), play: termitesPlay },
+    simAgentFireflies: { ...SIM_AGENT_EXAMPLE_INDEX.simAgentFireflies, counter: 40, nodes: knobify(firefliesNodes(0, 200), firefliesPlay.controls), play: firefliesPlay },
+    simAgentInfection: { ...SIM_AGENT_EXAMPLE_INDEX.simAgentInfection, counter: 40, nodes: knobify(infectionNodes(0, 200), infectionPlay.controls), play: infectionPlay },
   };
 }
