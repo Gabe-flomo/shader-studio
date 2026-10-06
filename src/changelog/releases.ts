@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.38',
+    date: '2026-10-05',
+    title: 'Edit the clip',
+    highlights: [
+      { area: 'Studio', text: 'Time Cube: Edit clip… opens a trimmer with a filmstrip, In/Out handles and ticks showing exactly which frames are sampled.', link: { kind: 'doc', path: 'docs/time-cube.md' } },
+      { area: 'Studio', text: 'Keep several segments (reorder, reverse), share frames by length or equally, add a speed ramp, crop, rotate and flip.' },
+    ],
+  },
+  {
     id: '2026.10.37',
     date: '2026-10-05',
     title: 'Preview detail',
