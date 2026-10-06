@@ -179,7 +179,8 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
 
   const [code, setCode]         = useState<string>(() => localStorage.getItem(EDITOR_KEY) ?? BOILERPLATE);
   const [shaders, setShaders]   = useState<SavedShader[]>(loadShaders);
-  const [showPanel, setShowPanel]   = useState(true);
+  // On a phone the saved-shaders panel would leave the editor a sliver: it starts closed there.
+  const [showPanel, setShowPanel]   = useState(() => !phone);
   const [showFnPanel, setShowFnPanel] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameVal, setRenameVal]   = useState('');
@@ -358,6 +359,8 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
   }, [paletteWidth]);
 
   const sideOpen = showPanel || showFnPanel;
+  // A phone: the Code Explorer and the saved shaders cover the editor (each has its own close)
+  const phoneSheet = { position: 'absolute', inset: 0, width: 'auto', zIndex: 6 } as const;
   const panelHead = { height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px 0 12px', borderBottom: `1px solid ${tk.border.subtle}` } as const;
   const caps = { fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: tk.text.faint, margin: '10px 0 6px' };
 
@@ -385,7 +388,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
     {phone && full && <div style={{ height: '42vh', flexShrink: 0, position: 'relative' }}><PageCanvas page="glsl" phone resizable={false} tools={smallButton} /></div>}
-    <div style={{ display: 'flex', flex: 1, minWidth: 0, minHeight: 0, background: tk.bg.panel, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flex: 1, minWidth: 0, minHeight: 0, background: tk.bg.panel, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', position: 'relative' }}>
 
       {/* ── Node palette sidebar ──────────────────────────────────────── */}
       {paletteCollapsed ? (
@@ -407,7 +410,8 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
 
       {/* ── Editor pane ───────────────────────────────────────────────── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${tk.border.default}`, minWidth: 0 }}>
-        <div style={{ ...panelHead, padding: '0 12px 0 16px' }}>
+        {/* A phone can't fit the toolbar: it scrolls sideways (the Code Explorer and Explain are at its end) */}
+        <div style={{ ...panelHead, padding: '0 12px 0 16px', ...(phone ? { overflowX: 'auto', scrollbarWidth: 'none' } : null) }}>
           <span title={openShader ? `${openShader.name}${openEdited ? ' · edited since it was saved' : ' · saved'}` : 'An unsaved shader: Save gives it a name'} style={{ fontWeight: 650, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{openShader ? openShader.name : 'Fragment shader'}</span>
             {openEdited && <span aria-label="Edited since it was saved" style={{ width: 7, height: 7, borderRadius: '50%', background: tk.status.warning, flexShrink: 0 }} />}
@@ -469,7 +473,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
       </div>
 
       {explorerOpen && (
-        <div style={{ width: phone ? '100%' : 360, flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${tk.border.default}`, position: 'relative', zIndex: 1, background: tk.bg.panel }}>
+        <div style={{ width: 360, flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${tk.border.default}`, position: 'relative', zIndex: 1, background: tk.bg.panel, ...(phone ? phoneSheet : null) }}>
           <div style={{ ...panelHead, padding: '0 8px 0 14px' }}>
             <span style={{ fontWeight: 650, fontSize: 13.5, flex: 1 }}>Code Explorer</span>
             <IconButton icon="close" label="Close the Code Explorer" size="sm" onClick={toggleExplorer} />
@@ -510,7 +514,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
       })()}
       {/* The Code Explorer takes the side panel's place while it is open. */}
       {sideOpen && !explorerOpen && (
-        <div style={{ width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', background: tk.bg.subtle, borderRight: `1px solid ${tk.border.default}` }}>
+        <div style={{ ...(phone ? phoneSheet : null), width: phone ? 'auto' : 240, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', background: tk.bg.subtle, borderRight: `1px solid ${tk.border.default}` }}>
           {newGroupFor && (
             <div style={{ padding: '8px 10px', borderBottom: `1px solid ${tk.border.subtle}`, display: 'flex', gap: 6, alignItems: 'center' }}>
               <Field autoFocus value={newGroupName} placeholder="Folder name" height={28} onChange={e => setNewGroupName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newGroupName.trim()) moveToGroup(newGroupFor, newGroupName.trim()); if (e.key === 'Escape') setNewGroupFor(null); }} style={{ flex: 1 }} aria-label="New folder name" />

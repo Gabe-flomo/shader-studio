@@ -100,6 +100,9 @@ function TreeRow({ spec, item, depth, drag, setDrag }: {
   );
 }
 
+/** A touch screen with no mouse: HTML drag and drop (the tree's reorder) isn't available there. */
+const NO_DRAG = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none) and (pointer: coarse)').matches;
+
 export function SceneTree() {
   const spec = useSceneBuilder(s => s.spec);
   const selectedId = useSceneBuilder(s => s.selectedId);
@@ -110,7 +113,8 @@ export function SceneTree() {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '16px 12px' }}>
-      <BuilderLabel meta="drag to reorder or nest" hint="Every shape and combine group, top to bottom. Click to edit; drag onto another row to reorder or nest.">Scene</BuilderLabel>
+      {/* Reordering is a drag and drop, which phones and most tablets don't do: say so instead of a hint that won't work */}
+      <BuilderLabel meta={NO_DRAG ? 'reorder and nest on a larger screen' : 'drag to reorder or nest'} hint="Every shape and combine group, top to bottom. Click to edit; drag onto another row to reorder or nest.">Scene</BuilderLabel>
       <div style={{ display: 'flex', gap: 6 }}>
         <Button size="sm" icon="plus" onClick={e => setMenu({ x: e.clientX, y: e.clientY })}>Shape</Button>
         <Button size="sm" icon="layers" title="A combine group: around the selected item, or a new empty one"

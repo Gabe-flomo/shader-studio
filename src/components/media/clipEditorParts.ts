@@ -65,3 +65,17 @@ export async function blobOfElement(el: HTMLVideoElement | null): Promise<Blob |
   if (!url) return null;
   try { return await (await fetch(url)).blob(); } catch { return null; }
 }
+
+/**
+ * How far from a trim handle a press still grabs it, in CSS px: `grabIn` into the segment from
+ * its edge, `outside` past the edge, and `slackY` above and below the strip. A finger gets more
+ * room than a mouse (Apple's 44 pt guidance, halved either side of the edge).
+ */
+export function trimHandleGrab(touch: boolean, handleW: number): { grabIn: number; outside: number; slackY: number } {
+  return touch ? { grabIn: Math.max(handleW + 2, 22), outside: 18, slackY: 14 } : { grabIn: handleW + 2, outside: 4, slackY: 4 };
+}
+
+/** A touch screen as the main pointer (the hint under the trimmer talks about fingers there). */
+export function coarsePointer(): boolean {
+  return typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
+}

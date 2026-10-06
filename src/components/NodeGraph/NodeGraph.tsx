@@ -20,6 +20,7 @@ import { SuggestionStrip } from './SuggestionStrip';
 import { DoBar } from './DoBar';
 import { CommandsReference } from './DoCommandsReference';
 import { openDoBar, useDoBarHighlight } from '../../suggestions/doBarStore';
+import { useLongPress } from '../../lib/longPress';
 import { learnedNext, rankTables } from '../../suggestions';
 import { RecipeOffer } from './RecipeOffer';
 import { useRecipeOffer } from '../../store/recipeOfferStore';
@@ -871,6 +872,16 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   const handleEdgeLeave = useCallback(() => {
     wireLeaveTimerRef.current = setTimeout(() => setHoveredWire(null), 120);
   }, []);
+  // The wire badge's "is this typical?" (the Do… bar's connection check): a right-click with a
+  // mouse, a long press on a touch screen.
+  const checkHoveredWire = () => {
+    const w = hoveredWire;
+    if (!w) return;
+    const from = displayNodes.find(n => n.id === w.fromNodeId), to = displayNodes.find(n => n.id === w.toNodeId);
+    if (from && to) openDoBar({ text: 'is this typical?', check: [{ fromType: from.type, outKey: w.fromOutputKey, toType: to.type, inKey: w.toInputKey }] });
+    setHoveredWire(null);
+  };
+  const wireBadgeHold = useLongPress(() => checkHoveredWire());
 
   const handleMinimapPanTo = useCallback((worldX: number, worldY: number) => {
     const c = canvasRef.current;
@@ -1035,8 +1046,16 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     // Ctrl+click on Mac triggers contextmenu — suppress the menu, only handle right-click
-    if (e.ctrlKey || lockedRef.current) return;
-    const target = e.target as HTMLElement;
+    if (e.ctrlKey) return;
+    openContextMenuAt(e.target as HTMLElement, e.clientX, e.clientY);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // A touch screen has no right-click: holding a finger still on the canvas or a card opens the same menu.
+  const canvasHold = useLongPress((x, y) => {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    if (el && canvasRef.current?.contains(el)) openContextMenuAt(el, x, y);
+  });
+  const openContextMenuAt = (target: HTMLElement, clientX: number, clientY: number) => {
+    if (lockedRef.current) return;
     const nodeEl = target.closest('[data-node-id]') as HTMLElement | null;
     const nodeId = nodeEl?.dataset.nodeId ?? null;
     // On empty canvas the menu only has "Group selection" — with fewer than two nodes
@@ -1045,8 +1064,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
     if (!nodeId && useNodeGraphStore.getState().selectedNodeIds.length < 2 && useNodeGraphStore.getState().activeGroupPath.length > 0) { setContextMenu(null); return; }
     // On a slider or colour row, the menu starts with making it a Play control.
     const paramKey = nodeId ? (target.closest('[data-param-key]') as HTMLElement | null)?.dataset.paramKey : undefined;
-    setContextMenu({ x: e.clientX, y: e.clientY, nodeId, paramKey });
-  }, []);
+    setContextMenu({ x: clientX, y: clientY, nodeId, paramKey });
+  };
 
   // ── Feature 1: Alt-click socket handler ─────────────────────────────────────
   const handleAltClickSocket = useCallback((
@@ -1260,7 +1279,11 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       onMouseDown={handleCanvasMouseDown}
       onWheel={handleWheel}
       onContextMenu={handleContextMenu}
-      onClick={() => setContextMenu(null)}
+      onClick={() => { if (!canvasHold.consumeClick()) setContextMenu(null); }}
+      onPointerDown={canvasHold.onPointerDown}
+      onPointerMove={canvasHold.onPointerMove}
+      onPointerUp={canvasHold.onPointerUp}
+      onPointerCancel={canvasHold.onPointerCancel}
       onTouchStart={handleCanvasTouchStart}
       onTouchEnd={handleCanvasTouchEnd}
       onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
@@ -1279,6 +1302,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         backgroundColor: transparent ? 'transparent' : tc.crust,
         overflow: 'hidden',
         cursor: 'default',
+        WebkitTouchCallout: 'none',
         userSelect: 'none',
         backgroundImage: transparent
           ? 'none'
@@ -2212,17 +2236,14 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             e.currentTarget.style.transform = 'scale(1)';
             setHoveredWire(null);
           }}
-          onClick={() => setWireInsertOpen(true)}
-          // Right-click: is this wire typical? (the Do… bar's connection check)
-          onContextMenu={e => {
-            e.preventDefault();
-            e.stopPropagation();
-            const w = hoveredWire;
-            const from = displayNodes.find(n => n.id === w.fromNodeId), to = displayNodes.find(n => n.id === w.toNodeId);
-            if (from && to) openDoBar({ text: 'is this typical?', check: [{ fromType: from.type, outKey: w.fromOutputKey, toType: to.type, inKey: w.toInputKey }] });
-            setHoveredWire(null);
-          }}
-          title="Insert a node · right-click: is this wire typical?"
+          onClick={() => { if (!wireBadgeHold.consumeClick()) setWireInsertOpen(true); }}
+          // Right-click (or a long press): is this wire typical? (the Do… bar's connection check)
+          onContextMenu={e => { e.preventDefault(); e.stopPropagation(); checkHoveredWire(); }}
+          onPointerDown={e => { e.stopPropagation(); wireBadgeHold.onPointerDown(e); }}
+          onPointerMove={wireBadgeHold.onPointerMove}
+          onPointerUp={wireBadgeHold.onPointerUp}
+          onPointerCancel={wireBadgeHold.onPointerCancel}
+          title={isTouchDevice.current ? 'Insert a node · hold: is this wire typical?' : 'Insert a node · right-click: is this wire typical?'}
         >
           +
         </div>

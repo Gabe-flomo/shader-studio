@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphNode, SubgraphData } from '../../types/nodeGraph';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { ConnectionLine } from './ConnectionLine';
@@ -179,21 +179,37 @@ export const WireLayer = React.memo(function WireLayer({
   // One listener pair on the <svg> instead of a closure per wire. mouseover /
   // mouseout bubble (mouseenter / mouseleave don't), and the hit path is a
   // single element, so they fire exactly on entering and leaving a wire.
+  const lastPointer = useRef('mouse');
   const edgeFromEvent = (e: React.MouseEvent) => (e.target as Element).getAttribute?.('data-edge');
   const handleOver = (e: React.MouseEvent) => {
+    // A tap sends a mouseover too: touch shows the badge from the click instead (handleTap below)
+    if (lastPointer.current !== 'mouse') return;
     const k = edgeFromEvent(e);
     if (!k) return;
     const hit = edges.get(k);
     if (hit) onEdgeEnter(hit.info, hit.mid);
   };
   const handleOut = (e: React.MouseEvent) => {
+    if (lastPointer.current !== 'mouse') return;
     if (edgeFromEvent(e)) onEdgeLeave();
+  };
+
+  // A touch screen has no hover: a tap on a wire shows its + badge (tap it: insert a node; hold it: is
+  // this typical?). On the click, not the pointer up, so the badge appearing under the finger
+  // doesn't take that same tap.
+  const handleTap = (e: React.MouseEvent) => {
+    if (lastPointer.current === 'mouse') return;
+    const k = (e.target as Element).getAttribute?.('data-edge');
+    const hit = k ? edges.get(k) : undefined;
+    if (hit) onEdgeEnter(hit.info, hit.mid);
   };
 
   return (
     <svg
       onMouseOver={handleOver}
       onMouseOut={handleOut}
+      onPointerDown={e => { lastPointer.current = e.pointerType; }}
+      onClick={handleTap}
       style={{
         position: 'absolute',
         top: 0,

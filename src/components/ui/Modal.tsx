@@ -8,6 +8,8 @@ import type { IconName } from './iconPaths';
 import { portalGuard } from './portalGuard';
 import { usePhoneDialog } from './phoneDialog';
 
+const ellipsis = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as const;
+
 /** Open modals, oldest first: Esc closes only the one on top (a dialog opened from an editor). */
 const openModals: number[] = [];
 let nextModalId = 1;
@@ -96,11 +98,14 @@ export function Modal({
               <Icon name={icon} />
             </span>
           )}
-          <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
-            <b style={{ fontSize: 15, fontWeight: 650, letterSpacing: '-0.01em' }}>{title}</b>
-            {subtitle && <span style={{ fontSize: 12, color: tk.text.muted }}>{subtitle}</span>}
+          {/* On a phone the title keeps one line (ellipsis) and the actions scroll sideways if they don't fit */}
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: phone ? 96 : 0, marginRight: 'auto', ...(phone ? { flex: '1 1 0' } : null) }}>
+            <b style={{ fontSize: 15, fontWeight: 650, letterSpacing: '-0.01em', ...(phone ? ellipsis : null) }}>{title}</b>
+            {subtitle && <span style={{ fontSize: 12, color: tk.text.muted, ...(phone ? ellipsis : null) }}>{subtitle}</span>}
           </span>
-          {headerActions}
+          {phone && headerActions
+            ? <span style={{ display: 'flex', alignItems: 'center', minWidth: 0, flexShrink: 1, overflowX: 'auto', scrollbarWidth: 'none' }}>{headerActions}</span>
+            : headerActions}
           <IconButton icon="close" label="Close" shortcut="esc" onClick={onClose} style={phone ? { width: 40, height: 40 } : undefined} />
         </div>
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain' }}>{children}</div>

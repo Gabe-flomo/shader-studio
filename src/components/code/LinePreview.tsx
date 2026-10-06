@@ -3,7 +3,8 @@
  * line and Return opens a panel under the lines with that variable's value over the whole picture,
  * computed on the GPU with the block's real inputs. It is the eye preview pointed at a temporary
  * probe (lib/nodePreview/lineProbe.ts): the same value path, async readback, Show as and Detail.
- * ↑ / ↓ walk the inputs, the lines and Return while the panel is open.
+ * ↑ / ↓ (or the panel's ⌃ ⌄ buttons, for touch) walk the inputs, the lines and Return while the
+ * panel is open.
  */
 import { useEffect, useRef } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -74,6 +75,16 @@ export function LinePreviewPanel({ node }: { node: GraphNode }) {
   // Closing the editor ends the probe
   useEffect(() => () => { if (useLineProbe.getState().probe?.nodeId === node.id) stopLineProbe(); }, [node.id]);
 
+  // Step to the next (1) or previous (-1) input, line or Return
+  const step = (dir: 1 | -1) => {
+    const cur = useLineProbe.getState().probe;
+    if (cur?.nodeId !== node.id) return;
+    const next = stepProbe(node, cur.target, dir);
+    if (!sameTarget(next, cur.target)) startLineProbe(node, next);
+  };
+  const stepRef = useRef(step);
+  stepRef.current = step;
+
   // ↑ / ↓ step through the inputs, lines and Return (not while typing in a field)
   useEffect(() => {
     if (!probe) return;
@@ -84,10 +95,7 @@ export function LinePreviewPanel({ node }: { node: GraphNode }) {
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable || el.getAttribute('role') === 'listbox')) return;
       e.preventDefault();
       e.stopPropagation();
-      const cur = useLineProbe.getState().probe;
-      if (cur?.nodeId !== node.id) return;
-      const next = stepProbe(node, cur.target, e.key === 'ArrowDown' ? 1 : -1);
-      if (!sameTarget(next, cur.target)) startLineProbe(node, next);
+      stepRef.current(e.key === 'ArrowDown' ? 1 : -1);
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
@@ -118,7 +126,16 @@ export function LinePreviewPanel({ node }: { node: GraphNode }) {
           {'error' in resolved ? 'Preview' : resolved.label}
           <span ref={rangeRef} style={{ color: tk.text.muted }} />
         </span>
-        <span style={{ font: `500 11px ${fontFamily.ui}`, color: tk.text.faint, whiteSpace: 'nowrap' }}>↑ ↓ step</span>
+        {/* ↑ / ↓ as buttons too: a touch screen has no arrow keys (and they keep the code's focus) */}
+        {(['up', 'down'] as const).map(dir => (
+          <button key={dir} type="button" data-probe-step={dir} aria-label={dir === 'up' ? 'Preview the line above (↑)' : 'Preview the line below (↓)'}
+            title={dir === 'up' ? 'Previous: the line above (↑)' : 'Next: the line below (↓)'}
+            onMouseDown={e => e.preventDefault()}
+            onClick={() => step(dir === 'down' ? 1 : -1)}
+            style={{ width: 26, height: 26, border: 0, borderRadius: radius.sm, background: 'none', color: tk.text.muted, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name={dir === 'up' ? 'chevU' : 'chevD'} size={14} />
+          </button>
+        ))}
         <button type="button" aria-label="Close the line preview" title="Close (the eye goes back to what it showed)" onClick={stopLineProbe}
           style={{ width: 26, height: 26, border: 0, borderRadius: radius.sm, background: 'none', color: tk.text.faint, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="close" size={13} />

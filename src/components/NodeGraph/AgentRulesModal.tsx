@@ -151,7 +151,7 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
       prefsKey="agent-rules"
       title="Agent Rules"
       subtitle={`${label} · ${set.species.length} ${set.species.length === 1 ? 'species' : 'species'} · ${d3 ? '3D' : '2D'} · When … Do …`}
-      icon="expr" iconColor={tk.kind.expr} width={1240} height={780} onClose={close}
+      icon="expr" iconColor={tk.kind.expr} width={1240} height={780} mainLabel="Rules" onClose={close}
       left={{ label: 'Species', icon: 'swarm', width: 330, content: speciesPanel }}
       headerActions={
         <Select ariaLabel="Start from a template" value="" height={30}

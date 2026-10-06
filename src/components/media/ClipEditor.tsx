@@ -34,7 +34,7 @@ import {
 } from '../../lib/media/clip';
 import { cpAt, cpFollow, cpLength } from '../../play/kit/clipPlay.js';
 import { openVideoReader, type FrameReader } from '../../lib/timeCube/frames';
-import { STRIP_H, STRIP_THUMBS, rememberMode, rememberedMode, stripFor, thumbOrder, type ClipPreviewMode } from './clipEditorParts';
+import { STRIP_H, STRIP_THUMBS, coarsePointer, rememberMode, rememberedMode, stripFor, thumbOrder, trimHandleGrab, type ClipPreviewMode } from './clipEditorParts';
 
 /** Where the editor's frames come from: a video file, or a picture painted at any time (a built-in clip). */
 export type ClipFrameSource =
@@ -509,18 +509,20 @@ export function ClipEditor({ source, meta, value, onChange, plan, side, fps = 30
   const drag = useRef<Drag | null>(null);
   const pointers = useRef(new Map<number, number>());
   const pinch = useRef<{ d: number } | null>(null);
-  const hitTimeline = (clientX: number, clientY: number): Drag => {
+  const hitTimeline = (clientX: number, clientY: number, touch = false): Drag => {
     const r = tl.ref.current!.getBoundingClientRect();
     const x = clientX - r.left, y = clientY - r.top, W = r.width;
     const X = (time: number) => ((time - view.t0) / vd) * W;
     const time = tlTime(clientX);
-    if (caps.trim && y >= TICK_H - 4 && y <= TICK_H + STRIP_H + 4) {
+    // A finger is wider than a cursor: the handles take a wider grab, and the whole strip's height counts.
+    const { grabIn, outside, slackY } = trimHandleGrab(touch, HANDLE_W);
+    if (caps.trim && y >= TICK_H - slackY && y <= TICK_H + STRIP_H + slackY) {
       const order = [act, ...segs.map((_, i) => i).filter(i => i !== act)];
       for (const i of order) {
         const s = segs[i], x0 = X(s.in), x1 = X(s.out);
-        const grab = i === act ? HANDLE_W + 2 : 6;
-        if (x >= x0 - 4 && x <= x0 + grab) return { kind: 'in', seg: i, t0: time, a: s.in, b: s.out };
-        if (x >= x1 - grab && x <= x1 + 4) return { kind: 'out', seg: i, t0: time, a: s.in, b: s.out };
+        const grab = i === act ? grabIn : Math.min(grabIn, touch ? 12 : 6);
+        if (x >= x0 - outside && x <= x0 + grab) return { kind: 'in', seg: i, t0: time, a: s.in, b: s.out };
+        if (x >= x1 - grab && x <= x1 + outside) return { kind: 'out', seg: i, t0: time, a: s.in, b: s.out };
       }
       for (const i of order) {
         const s = segs[i];
@@ -538,7 +540,7 @@ export function ClipEditor({ source, meta, value, onChange, plan, side, fps = 30
       const [a, b] = [...pointers.current.values()];
       pinch.current = { d: Math.max(10, Math.abs(a - b)) }; drag.current = null; return;
     }
-    const d = hitTimeline(e.clientX, e.clientY);
+    const d = hitTimeline(e.clientX, e.clientY, e.pointerType !== 'mouse');
     drag.current = d;
     if (d.kind !== 'scrub' && d.kind !== 'crop') setActive(d.seg);
     // Scrubbing shows the source: Result picks up from its start again.
@@ -656,14 +658,16 @@ export function ClipEditor({ source, meta, value, onChange, plan, side, fps = 30
   };
 
   // ── Keys: space plays, ← → step a frame (shift: ten), I / O set the active segment's ends ──
+  const setInAtPlayhead = () => { const s = segs[act]; patchSeg(act, { in: clamp(tRef.current, 0, s.out - minLen) }); };
+  const setOutAtPlayhead = () => { const s = segs[act]; patchSeg(act, { out: clamp(tRef.current, s.in + minLen, dur) }); };
   const onKey = (e: React.KeyboardEvent) => {
     const tag = (e.target as HTMLElement).tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
     if ([' ', 'ArrowLeft', 'ArrowRight', 'i', 'I', 'o', 'O'].includes(e.key)) e.stopPropagation();
     if (e.key === ' ') { e.preventDefault(); togglePlay(); }
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); step((e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 1)); }
-    else if ((e.key === 'i' || e.key === 'I') && caps.trim) { const s = segs[act]; patchSeg(act, { in: clamp(tRef.current, 0, s.out - minLen) }); }
-    else if ((e.key === 'o' || e.key === 'O') && caps.trim) { const s = segs[act]; patchSeg(act, { out: clamp(tRef.current, s.in + minLen, dur) }); }
+    else if ((e.key === 'i' || e.key === 'I') && caps.trim) setInAtPlayhead();
+    else if ((e.key === 'o' || e.key === 'O') && caps.trim) setOutAtPlayhead();
   };
 
   // ── Layout ──
@@ -835,7 +839,10 @@ export function ClipEditor({ source, meta, value, onChange, plan, side, fps = 30
               : playback ? `${fmt(outLen)} at ${speed}×` : ''}
           </b>
           <span style={small}>{caps.trim ? `kept ${kept.toFixed(2)} s of ${dur.toFixed(2)} s${segs.length > 1 ? ` · ${segs.length} segments, ${segs.length - 1} jump${segs.length > 2 ? 's' : ''}` : ''}` : `${dur.toFixed(2)} s · ${meta.width}×${meta.height}`}</span>
-          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+            {/* I / O as buttons, for a touch screen (and anyone who'd rather click) */}
+            {caps.trim && <button type="button" style={mini} onClick={setInAtPlayhead} title="Start the active segment at the playhead (I)">Set In</button>}
+            {caps.trim && <button type="button" style={{ ...mini, marginRight: 6 }} onClick={setOutAtPlayhead} title="End the active segment at the playhead (O)">Set Out</button>}
             <span style={small}>Zoom {view.z < 10 ? view.z.toFixed(1) : Math.round(view.z)}×</span>
             <button type="button" style={mini} onClick={() => zoomAt(1 / 1.6, view.t0 + vd / 2)} title="Zoom out (pinch, or ctrl + scroll)" aria-label="Zoom out">−</button>
             <button type="button" style={mini} onClick={() => zoomAt(1.6, clamp(t, view.t0, view.t0 + vd))} title="Zoom in round the playhead (pinch, or ctrl + scroll)" aria-label="Zoom in">+</button>
@@ -849,7 +856,9 @@ export function ClipEditor({ source, meta, value, onChange, plan, side, fps = 30
           aria-label={caps.trim ? 'Timeline: drag the yellow handles to trim, the middle to slide; ctrl + scroll or pinch to zoom' : 'Timeline: click or drag to scrub; ctrl + scroll or pinch to zoom'} />
         <span style={{ ...small, fontSize: 10.5, color: tk.text.faint }}>
           {caps.frameSamples ? 'Ticks: the frames that will be sampled. Arrows: the jumps between segments. ' : caps.segments ? 'Arrows: the jumps between segments. ' : ''}
-          {`Space plays, ← → step a frame (shift: ten)${caps.trim ? `, I / O set the active segment's In / Out` : ''}.`}
+          {coarsePointer()
+            ? `Drag the yellow handles to trim, the middle to slide, two fingers to zoom${caps.trim ? '; Set In / Set Out trim to the playhead' : ''}.`
+            : `Space plays, ← → step a frame (shift: ten)${caps.trim ? `, I / O set the active segment's In / Out` : ''}.`}
         </span>
       </div>
     </div>

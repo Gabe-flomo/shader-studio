@@ -94,6 +94,7 @@ const MobileNodeBrowser      = lazyWithSuspense<PropsOf<typeof MobileNodeBrowser
 const HistoryPanel           = lazyWithSuspense<PropsOf<typeof HistoryPanelT>>(() => import('./components/history/HistoryPanel').then(m => ({ default: m.HistoryPanel })));
 const HistoryWindow          = lazyWithSuspense<Record<string, never>>(() => import('./components/history/HistoryWindow').then(m => ({ default: m.HistoryWindowHost })));
 const CodeExplorerDialog     = lazyWithSuspense<Record<string, never>>(() => import('./components/codeExplorer/CodeExplorerDialog').then(m => ({ default: m.CodeExplorerDialog })));
+const PhoneOverlays          = lazyWithSuspense<Record<string, never>>(() => import('./components/shell/PhoneOverlays').then(m => ({ default: m.PhoneOverlays })));
 
 // ── Responsive sizing helpers ─────────────────────────────────────────────────
 function getDefaultPreviewWidth(bp: ReturnType<typeof useBreakpoint>) {
@@ -949,6 +950,9 @@ function App() {
       <div style={{ width: '100vw', height: APP_HEIGHT, position: 'relative', overflow: 'hidden', background: tc.crust, touchAction: 'none', display: 'flex', flexDirection: 'column' }}>
 
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} onClear={() => setShowMobileResetConfirm(true)} />
+        {/* What the desktop graph mounts beside the canvas: the Code Explorer, the Do… bar, the Scene Builder */}
+        {codeExplorerOpen && <CodeExplorerDialog />}
+        <PhoneOverlays />
 
         {/* Split content: canvas pane + drill-down graph browser — stacked upright, side by side sideways */}
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: landscape ? 'row' : 'column' }}>
@@ -1173,6 +1177,9 @@ function App() {
     return (
       <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
+        {/* What the desktop graph mounts beside the canvas: the Code Explorer, the Do… bar, the Scene Builder */}
+        {codeExplorerOpen && <CodeExplorerDialog />}
+        <PhoneOverlays />
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: landscape ? 'row' : 'column' }}>
           <ThemeOverrideContext.Provider value="dark">
             <div style={{
@@ -1203,6 +1210,9 @@ function App() {
     return (
       <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
+        {/* What the desktop graph mounts beside the canvas: the Code Explorer, the Do… bar, the Scene Builder */}
+        {codeExplorerOpen && <CodeExplorerDialog />}
+        <PhoneOverlays />
         <ShortcutsPage />
       </div>
     );
@@ -1212,6 +1222,9 @@ function App() {
     return (
       <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
+        {/* What the desktop graph mounts beside the canvas: the Code Explorer, the Do… bar, the Scene Builder */}
+        {codeExplorerOpen && <CodeExplorerDialog />}
+        <PhoneOverlays />
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><FilesPage compact onNavigate={setPage} /></div>
       </div>
     );
@@ -1221,6 +1234,9 @@ function App() {
     return (
       <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
+        {/* What the desktop graph mounts beside the canvas: the Code Explorer, the Do… bar, the Scene Builder */}
+        {codeExplorerOpen && <CodeExplorerDialog />}
+        <PhoneOverlays />
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><PresentPage compact onNavigate={setPage} /></div>
       </div>
     );
@@ -1230,6 +1246,9 @@ function App() {
     return (
       <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
+        {/* What the desktop graph mounts beside the canvas: the Code Explorer, the Do… bar, the Scene Builder */}
+        {codeExplorerOpen && <CodeExplorerDialog />}
+        <PhoneOverlays />
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}><ConvertPage compact onMaterialized={openStudioFitted} /></div>
       </div>
     );
@@ -1239,6 +1258,9 @@ function App() {
     return (
       <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
+        {/* What the desktop graph mounts beside the canvas: the Code Explorer, the Do… bar, the Scene Builder */}
+        {codeExplorerOpen && <CodeExplorerDialog />}
+        <PhoneOverlays />
         {/* Bounded, so the page's own panes scroll instead of the whole screen growing */}
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><GLSLPage onConvert={openConvertWith} /></div>
       </div>
@@ -1253,6 +1275,8 @@ function App() {
     return (
       <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <DesktopTopNav compact page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
+        {/* Opened from Files' Explore code and the code editors (the desktop layout mounts it at the end) */}
+        {codeExplorerOpen && <CodeExplorerDialog />}
 
         {page === 'shortcuts' && <ShortcutsPage />}
         {page === 'files' && <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><FilesPage onNavigate={setPage} /></div>}

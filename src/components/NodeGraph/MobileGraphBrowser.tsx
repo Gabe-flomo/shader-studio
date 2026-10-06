@@ -62,6 +62,11 @@ import { driverOf } from '../../play/paramDrivers';
 import { PlayDriveChip } from './PlayDriveChip';
 import { InputExprPopover } from './InputExprPopover';
 import { CodeCard } from './codeCard/CodeCard';
+import { LinePreviewPanel, ProbeButton } from '../code/LinePreview';
+import { MobileNodeExtras } from './MobileNodeExtras';
+import { mobileHidesParam } from './mobileNodeParams';
+import { openDoBar } from '../../suggestions/doBarStore';
+import { useCodeJump } from '../../codeExplorer/jumpStore';
 import { canHaveInputExpr, getInputExpr } from '../../glsl/inputExpr';
 import { VOLUMETRIC_LOOP_TYPES } from '../../nodes/volumetricAuto';
 
@@ -1287,7 +1292,9 @@ function GlslExprInput({ value, onChange, placeholder, style, variables = [] }: 
 // neighboring row's midpoint, that row swaps position in the array (and the
 // drag continues from there) — the row you're holding is translateY'd to
 // visually track the pointer between swaps.
-function ExprLinesList({ lines, onReorder, onUpdateLine, onRemoveLine, variables }: {
+function ExprLinesList({ lines, onReorder, onUpdateLine, onRemoveLine, variables, node }: {
+  /** The block: each line gets a ▶ line preview (docs/node-previews.md). */
+  node?: GraphNode;
   lines: ExprLine[];
   onReorder: (next: ExprLine[]) => void;
   onUpdateLine: (idx: number, field: keyof ExprLine, value: string) => void;
@@ -1361,6 +1368,7 @@ function ExprLinesList({ lines, onReorder, onUpdateLine, onRemoveLine, variables
                 title={line.off ? 'Off: skipped. Tap to switch it back on' : 'Tap to switch this line off without deleting it'}
                 style={{ background: 'none', border: 'none', padding: '4px 0', flex: 1, textAlign: 'left', cursor: 'pointer', fontSize: '10px', color: line.off ? tc.yellow : tc.surface2, touchAction: 'manipulation' }}
               >Line {i + 1}{line.off ? ' · off (tap to switch on)' : ''}</button>
+              {node && <ProbeButton node={node} target={{ kind: 'line', index: i }} label={`Preview line ${i + 1}`} />}
               <button
                 onClick={() => onRemoveLine(i)}
                 style={{ background: 'none', border: 'none', color: tc.red, fontSize: '16px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}
@@ -1550,6 +1558,8 @@ export function MobileGraphBrowser() {
   // desktop's own slider config panel uses (NodeComponent.tsx), so a range
   // customized on one platform carries over to the other.
   const [openSliderConfig, setOpenSliderConfig] = useState<string | null>(null);
+  // A setting's fuller explanation (ParamDef.help), which desktop shows on hovering its "?"
+  const [openHelpKey, setOpenHelpKey] = useState<string | null>(null);
   // Native `dblclick` is unreliable on iOS Safari for range inputs — the
   // second tap's synthetic dblclick often just doesn't fire — so "double-
   // tap to reset" silently did nothing on a real phone. This tracks tap
@@ -1760,6 +1770,18 @@ export function MobileGraphBrowser() {
     if (target && GROUP_TYPES.has(target.type) && !target.sealed) { enterGroup(id); return; }
     setFocusStack(stack => [...stack, id]); setForwardStack([]);
   };
+  // Jump to source (Code Explorer's Open): desktop's card opens its editor; here the node's page opens
+  // (its lines are on it), since the phone has no card.
+  const jumpNodeId = useCodeJump(s => s.node?.nodeId ?? null);
+  const jumpN = useCodeJump(s => s.node?.n ?? 0);
+  const jumpHandled = useRef(0);
+  useEffect(() => {
+    // The graph may still be loading when the jump is asked for: wait for the node to be here.
+    if (!jumpNodeId || jumpHandled.current === jumpN || !nodes.some(n => n.id === jumpNodeId)) return;
+    jumpHandled.current = jumpN;
+    setFocusStack(stack => (stack[stack.length - 1] === jumpNodeId ? stack : [...stack, jumpNodeId]));
+    setForwardStack([]);
+  }, [jumpN, jumpNodeId, nodes]);
   const viewGroupPorts = (id: string) => { setFocusStack(stack => [...stack, id]); setForwardStack([]); };
   // ── Long-press gesture (Home chips) ──────────────────────────────────────
   const LONG_PRESS_MS = 500;
@@ -2278,7 +2300,7 @@ export function MobileGraphBrowser() {
     // (subject to paramVisible) unconditionally, so this matches that rather
     // than guessing which ones matter.
     const paramOnlyEntries: Array<[string, GraphNode['inputs'][string]]> = Object.entries(def?.paramDefs ?? {})
-      .filter(([key, pd]) => !(key in node.inputs) && (pd.type === 'float' || pd.type === 'int' || pd.type === 'select') && paramVisible(node, pd))
+      .filter(([key, pd]) => !(key in node.inputs) && (pd.type === 'float' || pd.type === 'int' || pd.type === 'select') && paramVisible(node, pd) && !mobileHidesParam(node.type, key))
       .map(([key, pd]) => [key, { type: 'float', label: pd.label } as GraphNode['inputs'][string]]);
     // A vec3 paramDef's own r/g/b sockets (Palette's offset_r/g/b, ...) get
     // their own full row inside that param's card below (renderExtraParamCard)
@@ -2308,7 +2330,7 @@ export function MobileGraphBrowser() {
         // A colour whose same-named socket is unwired (a March Loop's Background / Albedo,
         // Glow to Color's Tint) still needs its picker; a wire there wins, so then it hides.
         const colourWithFreeSocket = pd.type === 'vec3color' && key in node.inputs && !node.inputs[key]?.connection;
-        return (colourWithFreeSocket || !(key in node.inputs)) && (pd.type === 'vec3' || pd.type === 'vec3color' || pd.type === 'bool') && paramVisible(node, pd);
+        return (colourWithFreeSocket || !(key in node.inputs)) && (pd.type === 'vec3' || pd.type === 'vec3color' || pd.type === 'bool') && paramVisible(node, pd) && !mobileHidesParam(node.type, key);
       });
     const outputEntries = Object.entries(node.outputs);
     const hasInputs = inputEntries.length > 0 || extraParamEntries.length > 0;
@@ -2436,6 +2458,17 @@ export function MobileGraphBrowser() {
                   {disconnectBtn}
                 </div>
               )}
+              {/* The desktop wire badge's right-click: does this wire look like what people usually do? */}
+              {upstream && (
+                <button
+                  onClick={() => openDoBar({ text: 'is this typical?', check: [{ fromType: upstream.type, outKey: inp.connection!.outputKey, toType: node.type, inKey: key }] })}
+                  style={{
+                    alignSelf: 'flex-start', height: 34, padding: '0 12px', border: 0, borderRadius: 10, cursor: 'pointer', touchAction: 'manipulation',
+                    display: 'flex', alignItems: 'center', gap: 6, background: 'none', color: tk.accent.text, boxShadow: `0 0 0 1px ${tk.border.default}`,
+                    font: `500 13px ${fontFamily.ui}`,
+                  }}
+                ><Icon name="search" size={13} />Is this typical?</button>
+              )}
               {/* Sourced from this group's own boundary port rather than another internal node — not
                   navigable (there's nothing to drill into), but still freely disconnectable. */}
               {isPortSourced && (
@@ -2540,6 +2573,8 @@ export function MobileGraphBrowser() {
         background: on ? `${tint}29` : tk.bg.field, color: on ? tint : tk.text.faint,
       });
       const isConfigOpen = openSliderConfig === key;
+      const helpText = getNodeDefinitionFor(node)?.paramDefs?.[key]?.help;
+      const helpOpen = !!helpText && openHelpKey === key;
       const cfgRow = (label: string, control: React.ReactNode) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ flex: 1, color: tk.text.secondary, fontSize: 13 }}>{label}</span>
@@ -2555,6 +2590,14 @@ export function MobileGraphBrowser() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <TypeIcon type={inp.type} />
             <div style={{ flex: 1, minWidth: 0, font: `500 13.5px ${fontFamily.ui}`, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inp.label}</div>
+            {helpText && (
+              <button
+                onClick={() => setOpenHelpKey(o => o === key ? null : key)}
+                aria-label={helpOpen ? 'Hide what this does' : 'What this does'}
+                aria-expanded={helpOpen}
+                style={{ ...squareBtn(helpOpen, tk.accent.base), font: `650 13px ${fontFamily.ui}` }}
+              >?</button>
+            )}
             {pd && playDriven.get(`${node.id}::${key}`) && <PlayDriveChip drive={playDriven.get(`${node.id}::${key}`)!} />}
             {kfEligible && (
               <button
@@ -2572,6 +2615,9 @@ export function MobileGraphBrowser() {
               ><Icon name={isConfigOpen ? 'chevU' : 'chevD'} size={14} /></button>
             )}
           </div>
+          {helpOpen && (
+            <div role="note" style={{ fontSize: 12.5, lineHeight: 1.5, color: tk.text.secondary, background: tk.bg.subtle, borderRadius: 9, padding: '8px 10px' }}>{helpText}</div>
+          )}
           {isExternallyDriven && (
             <div style={{ fontSize: 12, color: tk.text.muted }}>Set from outside the group.</div>
           )}
@@ -2863,6 +2909,8 @@ export function MobileGraphBrowser() {
           {node.type === 'data' && <DataEditorLauncher node={node} />}
           {/* Custom Function: the same read-only card face as desktop (code, signature, note, description) */}
           {node.type === 'customFn' && <CodeCard node={node} touch compact />}
+          {/* The card's own body (Time Cube, Grid Rules…) and, with the eye on, Show as / Detail */}
+          <MobileNodeExtras node={node} nodes={nodes} />
 
           {(hasInputs || node.type === 'group') && (hasOutputs || node.type === 'group') && (
             <div style={tabGroupStyle(tc)}>
@@ -3552,7 +3600,7 @@ export function MobileGraphBrowser() {
                 {lines.length === 0 && (
                   <div style={{ fontSize: '11px', color: tc.surface1, fontFamily: 'monospace', marginBottom: '8px' }}>No lines yet.</div>
                 )}
-                <ExprLinesList lines={lines} onReorder={setLines} onUpdateLine={updateLine} onRemoveLine={removeLine} variables={customInputs.map(i => i.name)} />
+                <ExprLinesList node={node} lines={lines} onReorder={setLines} onUpdateLine={updateLine} onRemoveLine={removeLine} variables={customInputs.map(i => i.name)} />
                 <button
                   onClick={addLine}
                   style={{ marginTop: '8px', background: `${tc.green}11`, border: `1px solid ${tc.green}33`, color: tc.green, borderRadius: '6px', padding: '8px 12px', fontSize: '12px', cursor: 'pointer', touchAction: 'manipulation' }}
@@ -3566,8 +3614,12 @@ export function MobileGraphBrowser() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '11px', color: tc.overlay0, fontFamily: 'monospace' }}>return</span>
                   <GlslExprInput value={result} onChange={updateResult} placeholder="p" style={{ ...exprTextInputStyleFor(tc), flex: 1, color: tc.blue }} variables={customInputs.map(i => i.name)} />
+                  <ProbeButton node={node} target={{ kind: 'return' }} label="Preview the return value" />
                 </div>
               </div>
+
+              {/* The ▶ line preview: the value over the picture, with ⌃ ⌄ to step lines (no arrow keys here) */}
+              <LinePreviewPanel node={node} />
 
               <div style={{ borderTop: `1px solid ${tc.surface0}`, paddingTop: '10px' }}>
                 <div style={{ fontSize: '11px', fontWeight: 700, color: tc.surface2, letterSpacing: '0.05em', marginBottom: '6px' }}>OUTPUT</div>
@@ -3979,6 +4031,11 @@ export function MobileGraphBrowser() {
               title="Cluster visually only — no wiring, no compile effect" style={{ height: 40 }}>
               Folder
             </Button>
+            {/* The selection in the Do… bar: teach it as a phrase, or check whether the chain is typical */}
+            <Button icon="edit" disabled={selectedIds.length < 1} onClick={() => { useNodeGraphStore.getState().selectNodes(selectedIds); openDoBar(); }}
+              title="Do… with these nodes: teach them as a phrase, or ask whether the chain is typical" style={{ height: 40 }}>
+              Do…
+            </Button>
           </div>
         )}
         {!selectMode && renderAddNodeFab()}
@@ -4169,11 +4226,26 @@ export function MobileGraphBrowser() {
             since there's no canvas here to drag-select on. Only makes sense
             on the rank-grid list itself, not the graph diagram or a
             focused node's detail. */}
+        {/* Do…: type what to do. Desktop opens it with ⌘K; a phone has no keyboard shortcut, so it's a button. */}
+        {!focusedNode && !homeGraphView && !selectMode && (
+          <button
+            onClick={() => openDoBar()}
+            style={{
+              marginLeft: 'auto', flexShrink: 0, height: 30, padding: '0 10px', border: 0, borderRadius: 8, cursor: 'pointer',
+              touchAction: 'manipulation', display: 'flex', alignItems: 'center', gap: 5,
+              background: tk.bg.hover, color: tk.text.secondary, font: `500 12.5px ${fontFamily.ui}`,
+            }}
+            title="Do…: type what to do (circle with a glow, repeat 6 times around, tone map it)"
+            aria-label="Do…: type what to do"
+          >
+            <Icon name="edit" size={13} />Do…
+          </button>
+        )}
         {!focusedNode && !homeGraphView && (
           <button
             onClick={() => { setSelectMode(v => !v); setSelectedIds([]); }}
             style={{
-              marginLeft: 'auto', flexShrink: 0, height: 30, padding: '0 10px', border: 0, borderRadius: 8, cursor: 'pointer',
+              marginLeft: selectMode ? 'auto' : 0, flexShrink: 0, height: 30, padding: '0 10px', border: 0, borderRadius: 8, cursor: 'pointer',
               touchAction: 'manipulation', display: 'flex', alignItems: 'center', gap: 5,
               background: selectMode ? tk.bg.selected : tk.bg.hover, color: selectMode ? tk.accent.text : tk.text.secondary,
               font: `500 12.5px ${fontFamily.ui}`,
