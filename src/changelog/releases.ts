@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.54',
+    date: '2026-10-06',
+    title: 'Builders that help',
+    highlights: [
+      { area: 'Studio', text: 'Builders explain themselves: How this works cards with clickable examples, ? hints on every control, and a Tips switch to hide or show them.' },
+      { area: 'Studio', text: 'Type-ahead in recipes, the Do… bar and rule pickers, plus type checks that refuse bad wires and offer a fix (use its brightness, take .x).' },
+      { area: 'Studio', text: 'Scene Builder Output: depth, normal, distance, hit, steps, AO, or colour by depth/height/normal through a palette ("output depth").', link: { kind: 'doc', path: 'docs/scene-builder.md' } },
+    ],
+  },
+  {
     id: '2026.10.53',
     date: '2026-10-06',
     title: 'Grid fixes',
