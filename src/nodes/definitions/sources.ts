@@ -1,6 +1,7 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { audioUniformName } from '../../compiler/audioUniformNames';
 import { p, withNewOutputs } from './helpers';
+import { clipGlsl } from '../../lib/media/clip';
 
 /**
  * Loop Index — outputs the current iteration counter `i` when placed inside
@@ -329,6 +330,21 @@ export const VideoInputNode: NodeDefinition = {
     const id = node.id;
     const uvVar = inputVars.uv ?? 'g_uv';
     const samplerUV = `(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5)`;
+    // Clip settings' crop / rotate / flip (docs/clip-editor.md): only with a clip that turns or crops,
+    // so every graph without one compiles exactly as before.
+    const xf = clipGlsl(id, `${id}_vst`, node.params.clip);
+    if (xf.code) {
+      return {
+        code: [
+          `    vec2 ${id}_vst = clamp(${samplerUV}, 0.0, 1.0);\n`,
+          xf.code,
+          `    vec4 ${id}_sample = texture2D(u_vid_${id}, ${xf.st});\n`,
+          `    vec3 ${id}_color = ${id}_sample.rgb;\n`,
+          `    float ${id}_alpha = ${id}_sample.a;\n`,
+        ].join(''),
+        outputVars: { color: `${id}_color`, alpha: `${id}_alpha`, uv: uvVar, texture: `u_vid_${id}` },
+      };
+    }
     return {
       code: [
         `    vec4 ${id}_sample = texture2D(u_vid_${id}, clamp(${samplerUV}, 0.0, 1.0));\n`,

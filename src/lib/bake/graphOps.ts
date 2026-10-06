@@ -312,6 +312,8 @@ export function bakedVideoIds(nodes: readonly GraphNode[], out: string[] = []): 
     if (n.type === BAKED_TYPE && typeof n.params.videoId === 'string' && n.params.videoId) out.push(n.params.videoId);
     // A Time Cube's video (docs/time-cube.md) is a use too, so Clean up keeps it.
     if (n.type === 'timeCube' && n.params.source === 'library' && typeof n.params.videoId === 'string' && n.params.videoId) out.push(n.params.videoId);
+    // So is a Video Input's kept file (lib/videoEngine.ts).
+    if (n.type === 'videoInput' && typeof n.params.videoId === 'string' && n.params.videoId) out.push(n.params.videoId);
     const sg = n.params?.subgraph as { nodes?: GraphNode[] } | undefined;
     if (Array.isArray(sg?.nodes)) bakedVideoIds(sg.nodes, out);
     const st = stashOf(n);

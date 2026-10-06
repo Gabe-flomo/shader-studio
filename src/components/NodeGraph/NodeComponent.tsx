@@ -58,6 +58,11 @@ import type { PublishNodeModal as PublishNodeModalT } from './PublishNodeModal';
 const PublishNodeModal    = lazyWithSuspense<PropsOf<typeof PublishNodeModalT>>(() => import('./PublishNodeModal').then(m => ({ default: m.PublishNodeModal })));
 import { AudioInputModal } from './AudioInputModal';
 import { VideoInputModal } from './VideoInputModal';
+import { VideoInputClipModal } from './VideoInputClipModal';
+import { addVideoFile } from '../../lib/backgroundLibrary';
+
+/** The Video Input card's thumbnail follows the engine (a file reopened after a reload). */
+const subscribeVideoEngine = (fn: () => void) => videoEngine.onChange(fn);
 import { MidiInputCard } from './MidiInputCard';
 import { GroupParamPicker } from './GroupParamPicker';
 import { NodeInlineViz, AudioFreqRangeViz, hasRealDiagram } from './NodeInlineViz';
@@ -599,6 +604,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const [showCustomFnModal, setShowCustomFnModal] = useState(false);
   const [showAudioInputModal, setShowAudioInputModal] = useState(false);
   const [showVideoInputModal, setShowVideoInputModal] = useState(false);
+  const [showVideoClip, setShowVideoClip] = useState(false);
   const [showDataEditor, setShowDataEditor] = useState(false);
   const [kfMenu, setKfMenu] = useState<{ x: number; y: number; key: string } | null>(null);
   const [kfModalKey, setKfModalKey] = useState<string | null>(null);
@@ -1287,7 +1293,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
   // ── Video Input node special card ────────────────────────────────────────────
   if (node.type === 'videoInput') {
-    const thumbnailUrl = node.params._thumbnailUrl as string | undefined;
+    // The engine's own URL first: a file reopened from the library after a reload has a new one.
+    React.useSyncExternalStore(subscribeVideoEngine, () => videoEngine.url(node.id));
+    const thumbnailUrl = videoEngine.url(node.id) ?? (node.params._thumbnailUrl as string | undefined);
+    const clipped = !!node.params.clip;
     const hasFile      = !!(node.params._hasFile);
     const isPlaying    = !!(node.params._isPlaying);
     const fileName     = (node.params._fileName as string) || '';
@@ -1311,10 +1320,16 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       setVideoTexture(node.id, tex);
       videoEngine.play(node.id);
       const thumbUrl = URL.createObjectURL(file);
+      // A new file starts with no clip settings (the old ones were for another video).
       updateNodeParams(node.id, {
         _fileName: file.name, _hasFile: true, _isPlaying: true,
-        _thumbnailUrl: thumbUrl,
+        _thumbnailUrl: thumbUrl, clip: undefined,
       }, { immediate: true });
+      // Kept in the video library so it opens again after a reload (with its clip settings).
+      void addVideoFile(file).then(m => {
+        videoEngine.setLibraryId(node.id, m.id);
+        updateNodeParams(node.id, { videoId: m.id }, { immediate: true });
+      }, () => { /* no IndexedDB: this session only, as before */ });
       return { ok: true };
     };
 
@@ -1378,6 +1393,14 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <button
                 onMouseDown={e => e.stopPropagation()}
+                onClick={() => setShowVideoClip(true)}
+                disabled={!thumbnailUrl}
+                title={thumbnailUrl ? 'Open the video: trim, segments, speed, loop, crop (the clip editor)' : 'Load a video first'}
+                aria-label="Edit clip"
+                style={{ background: 'none', border: 'none', color: clipped ? tc.yellow : thumbnailUrl ? tc.surface2 : tc.surface0, cursor: thumbnailUrl ? 'pointer' : 'default', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
+              >⤢</button>
+              <button
+                onMouseDown={e => e.stopPropagation()}
                 onClick={() => setShowVideoInputModal(v => !v)}
                 title="Open video settings"
                 style={{ background: 'none', border: 'none', color: showVideoInputModal ? tc.mauve : tc.surface2, cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
@@ -1401,6 +1424,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
             onMouseDown={e => e.stopPropagation()}
             onClick={() => videoFileInputRef.current?.click()}
+            onDoubleClick={e => { if (thumbnailUrl) { e.preventDefault(); e.stopPropagation(); setShowVideoClip(true); } }}
+            title={thumbnailUrl ? 'Click: another file · double-click: open the clip editor' : undefined}
             style={{
               margin: '6px 8px',
               border: `1px dashed ${tc.surface1}`,
@@ -1475,8 +1500,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           </div>
         </div>
         {showVideoInputModal && (
-          <VideoInputModal node={node} onClose={() => setShowVideoInputModal(false)} />
+          <VideoInputModal node={node} onClose={() => setShowVideoInputModal(false)} onEditClip={thumbnailUrl ? () => { setShowVideoInputModal(false); setShowVideoClip(true); } : undefined} />
         )}
+        {showVideoClip && <VideoInputClipModal node={node} onClose={() => setShowVideoClip(false)} />}
       </>
     );
   }

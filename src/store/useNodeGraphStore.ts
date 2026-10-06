@@ -36,6 +36,7 @@ import { clearLegacyColumnsWire } from '../nodes/definitions/gridColumns';
 import { playEngine } from '../lib/playEngine';
 import { bakeControlValues, bakeLayerValues } from '../play/playControls';
 import { TRACK_LIMIT, buildPlayHtml, type EmbedOptions, type PlayHtmlInput, type PlayMedia, type PlayMediaFile } from '../play/exportHtml';
+import type { CpSaved } from '../play/kit/clipPlay.js';
 import { bakeFor } from '../types/playTracking';
 import { bakeBase64 } from '../lib/trackBakes';
 import { loadThreeSource, playUses3D } from '../play/threeSource';
@@ -1660,6 +1661,8 @@ function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTe
       label: bake ? `Baked: ${bake.source}` : labelOf(id, 'Video Input'), name: m?.name ?? (typeof p.fileName === 'string' ? p.fileName : ''), src: m?.dataUrl ?? null, bytes: m?.dataUrl?.length ?? (m?.tooBig ? m.bytes : bake?.bytes ?? 0),
       loop: bake ? bake.loop === 'seamless' : p._loop !== false, speed: typeof p._speed === 'number' && p._speed > 0 ? p._speed : 1,
       ...(bake ? { clock: { start: bake.start, duration: bake.duration, fps: bake.fps, loop: bake.loop } } : {}),
+      // Clip settings (docs/clip-editor.md): the page plays the kept segments as the app does.
+      ...(p.clip && typeof p.clip === 'object' ? { clip: p.clip as CpSaved } : {}),
     };
   }
   // Every Audio Input node, wired into the shader or not: Play mappings can read its bands either way.

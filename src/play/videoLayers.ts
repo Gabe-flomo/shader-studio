@@ -10,6 +10,9 @@
  *              clock, frame t shows start + t × speed, so pausing the preview
  *              pauses it, ↺ starts it over, and an offline render seeks it
  *              frame by frame (`seek`). Running free, it just plays.
+ *   Clip       with clip settings (docs/clip-editor.md) the clock plays the kept
+ *              segments as a playlist (play/kit/clipPlay.js), always on the
+ *              clock; the kit draws the crop / rotate / flip.
  *   Sound      Off: muted. Listen / Play: the element goes through one
  *              MediaElementSource (browsers allow one per element, ever) into an
  *              analyser in the shared audio context, and on to the speakers at
@@ -33,6 +36,16 @@ import { videoSound, type VideoSoundState } from '../lib/videoSound';
 import { playEngine } from '../lib/playEngine';
 import { isLinkedRef } from '../files/linkedRefs';
 import { onLinkedChange } from '../files/linkedFolders';
+import { cpAt, cpCleanTransform, cpFollow, cpOutputSize, cpPlaylist } from './kit/clipPlay.js';
+
+/** Where a clipped layer's video is at clock `time`: its playlist (null without a clip or a length). */
+export function videoLayerClipAt(l: VideoLayer, time: number, duration: number) {
+  if (!l.clip || !(duration > 0) || !Number.isFinite(duration)) return null;
+  const pl = cpPlaylist(l.clip, duration, l.speed, l.loop);
+  if (!pl.segs.length) return null;
+  const at = cpAt(pl.segs, l.playing ? time : 0, pl.speed, pl.loop);
+  return { at, seg: pl.segs[at.k], speed: pl.speed };
+}
 
 /** What the layer card shows about a layer's file. */
 export type VideoFileStatus = 'none' | 'loading' | 'ready' | 'missing' | 'error';
@@ -201,7 +214,14 @@ class PlayVideoLayers {
   duration(layerId: string): number { const d = this.element(layerId)?.duration ?? 0; return Number.isFinite(d) && d > 0 ? d : 0; }
   position(layerId: string): number { return this.element(layerId)?.currentTime ?? 0; }
   /** Width / height of the frame, 0 while unknown. */
-  aspect(layerId: string): number { const v = this.element(layerId); return v && v.videoWidth ? v.videoWidth / Math.max(1, v.videoHeight) : 0; }
+  aspect(layerId: string): number {
+    const v = this.element(layerId);
+    if (!v || !v.videoWidth) return 0;
+    // A clip's crop and turn change the frame's shape (the kit draws it that way).
+    const clip = this.layers.find(x => x.id === layerId)?.clip;
+    const [w, h] = clip ? cpOutputSize(v.videoWidth, v.videoHeight, cpCleanTransform(clip)) : [v.videoWidth, v.videoHeight];
+    return w / Math.max(1, h);
+  }
 
   // ── The clock ──────────────────────────────────────────────────────────────
 
@@ -221,6 +241,13 @@ class PlayVideoLayers {
       if (e.gain) {
         const vol = l.sound === 'play' ? Math.max(0, Math.min(1, playEngine.layerValue(l.id, 'volume', l.volume))) : 0;
         if (Math.abs(e.gain.gain.value - vol) > 1e-3) e.gain.gain.value = vol;
+      }
+      // Clip settings: the kept segments, on the clock (a clipped layer always follows it).
+      const c = videoLayerClipAt(l, time, v.duration);
+      if (c) {
+        if (v.loop) v.loop = false;
+        cpFollow(v, c.at, c.seg, c.speed, clockPlaying && l.playing);
+        continue;
       }
       if (!l.follow) {
         if (v.loop !== l.loop) v.loop = l.loop;
@@ -271,7 +298,7 @@ class PlayVideoLayers {
       if (!v || !(l.visible || runsWhileHidden(this.all, l.id))) continue;
       if (v.readyState < 1) await waitFor(v, 'loadedmetadata', 4000);
       if (!v.paused) v.pause();
-      const target = videoLayerTimeAt(l.playing ? time : 0, v.duration, l.speed, l.loop, l.start);
+      const target = videoLayerClipAt(l, time, v.duration)?.at.time ?? videoLayerTimeAt(l.playing ? time : 0, v.duration, l.speed, l.loop, l.start);
       if (Math.abs(v.currentTime - target) < 0.0005 && v.readyState >= 2) continue;
       const done = waitFor(v, 'seeked', 3000);
       v.currentTime = target;

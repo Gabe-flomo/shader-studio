@@ -68,6 +68,7 @@ import { kmApplyBackgroundMatte, kmApplyMasks, kmApplyTrack, kmMatteSources, kmT
 import { bqState, bqAct, bqPlan, bqCompose } from './queue.js';
 import { mtCreate, mtStep, mtSampleSize, mtLook, mtHeat, mtMaskAlpha, MT_READS } from './motion.js';
 import { fnCreate } from './finish.js';
+import { cpCleanTransform, cpIsIdentity, cpFrameOf } from './clipPlay.js';
 import { WL_FIELD_ROWS, WL_READS, wlRegion, wlEffect, wlValue, wlToLocal, wlEdgeAlpha, wlReadings, wlMatteAlpha } from './waterLayer.js';
 import { kdState, kdAct, kdPlan, kdTextItems, kdFrame, kdDrawTable, kdColumn, kdText, kdChunkText, kdWrapText, kdScriptView } from './data.js';
 
@@ -297,10 +298,20 @@ export function createLayerKit() {
     return r && r.count ? { x: r.centroidX, y: r.centroidY } : null;
   }
 
-  /** A Video layer's frame now: its element once it has a picture, else null. */
+  /**
+   * A Video layer's frame now: its element once it has a picture, else null. With clip settings
+   * that crop or turn it (clipPlay.js), a canvas of the frame through them, redrawn as it moves.
+   */
+  const clipFrames = new Map();
   function videoOf(env, l) {
     const v = env.layerVideo ? env.layerVideo(l) : null;
-    return v && v.readyState >= 2 && v.videoWidth > 0 ? v : null;
+    if (!(v && v.readyState >= 2 && v.videoWidth > 0)) return null;
+    if (!l.clip) return v;
+    const xf = cpCleanTransform(l.clip);
+    if (cpIsIdentity(xf)) return v;
+    let cache = clipFrames.get(l.id);
+    if (!cache) { cache = {}; clipFrames.set(l.id, cache); }
+    return cpFrameOf(v, xf, cache);
   }
 
   /** A text or image layer's shape as a small alpha mask → distance field (for 'layer' shapes). */

@@ -4,11 +4,17 @@
  * how a frame budget is shared between them, a speed ramp, and a crop /
  * rotate / flip applied to every frame. Pure maths plus one canvas helper.
  *
- * Used by the Time Cube today (lib/timeCube/plan.ts). Video Input, the Video
- * layer and Bake could take the same settings later: their sample times come
- * from planSampleTimes, and drawClipFrame draws a frame the way the editor
- * previews it.
+ * The editor is the app's one video viewer and editor (docs/clip-editor.md).
+ * The Time Cube samples frames from a clip (planSampleTimes); the playback
+ * hosts (Video Input, Video layers, Baked nodes, the Background) play it as a
+ * playlist. The playlist and crop maths live in play/kit/clipPlay.js, shared
+ * with web exports, and are re-exported here; CLIP_CAPS says which controls
+ * each host shows.
  */
+import {
+  CP_MIN_CROP, cpCleanCrop, cpCleanTransform, cpDrawFrame, cpDrawParams, cpFrames, cpIsIdentity, cpIsPlain,
+  cpOutputSize, cpOutputToSource, cpParse, cpResolve, cpSourceToOutput, cpTextureAffine, type CpSaved,
+} from '../../play/kit/clipPlay.js';
 
 export interface ClipSegment {
   /** Seconds into the video. */
@@ -42,6 +48,10 @@ export interface ClipSettings {
   distribute: ClipDistribute;
   ramp: ClipRamp;
   xf: ClipTransform;
+  /** Playback hosts: the playback rate (1 = as recorded). */
+  speed?: number;
+  /** Playback hosts: play the segments round and round. */
+  loop?: boolean;
 }
 
 /** A segment as planned: its seconds, its share of the frames and where they start. */
@@ -70,7 +80,7 @@ export const MIN_SEGMENT = 1e-4;
 export const FULL_CROP: ClipCrop = { x: 0, y: 0, w: 1, h: 1 };
 export const IDENTITY_XF: ClipTransform = { crop: FULL_CROP, rotate: 0, flipX: false, flipY: false };
 /** The smallest crop side, a share of the frame. */
-export const MIN_CROP = 0.05;
+export const MIN_CROP = CP_MIN_CROP;
 
 const finite = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -78,21 +88,9 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 export const defaultClip = (): ClipSettings => ({ segments: [{ in: 0, out: 0 }], distribute: 'proportional', ramp: 'none', xf: { ...IDENTITY_XF, crop: { ...FULL_CROP } } });
 
 /** A crop, cleaned: inside the frame, no side under MIN_CROP. */
-export function cleanCrop(c: unknown): ClipCrop {
-  const o = (c && typeof c === 'object' ? c : {}) as Partial<ClipCrop>;
-  const w = clamp(finite(o.w, 1), MIN_CROP, 1), h = clamp(finite(o.h, 1), MIN_CROP, 1);
-  return { x: clamp(finite(o.x, 0), 0, 1 - w), y: clamp(finite(o.y, 0), 0, 1 - h), w, h };
-}
-
-export function cleanTransform(v: unknown): ClipTransform {
-  const o = (v && typeof v === 'object' ? v : {}) as Partial<ClipTransform>;
-  const r = Math.round(finite(o.rotate, 0) / 90) * 90;
-  const rotate = (((r % 360) + 360) % 360) as ClipRotate;
-  return { crop: cleanCrop(o.crop), rotate, flipX: o.flipX === true, flipY: o.flipY === true };
-}
-
-export const isIdentity = (xf: ClipTransform) =>
-  xf.rotate === 0 && !xf.flipX && !xf.flipY && xf.crop.x === 0 && xf.crop.y === 0 && xf.crop.w === 1 && xf.crop.h === 1;
+export const cleanCrop = (c: unknown): ClipCrop => cpCleanCrop(c);
+export const cleanTransform = (v: unknown): ClipTransform => cpCleanTransform(v);
+export const isIdentity = (xf: ClipTransform) => cpIsIdentity(xf);
 
 /** Raw segments (a saved graph, hand-edited, anything) as a clean list; at most MAX_SEGMENTS. */
 export function cleanSegments(raw: unknown): ClipSegment[] {
@@ -140,15 +138,7 @@ export function segmentsFromStartEnd(start: unknown, end: unknown): ClipSegment[
  * With the length unknown (0), an out at or before in leaves the segment empty.
  */
 export function resolveSegments(segs: readonly ClipSegment[], duration: number): { in: number; out: number; reverse: boolean }[] {
-  const d = Math.max(0, finite(duration, 0));
-  const out: { in: number; out: number; reverse: boolean }[] = [];
-  for (const s of segs) {
-    const a = d > 0 ? clamp(s.in, 0, Math.max(0, d - 1e-3)) : Math.max(0, s.in);
-    let b = s.out > a ? s.out : d;
-    if (d > 0) b = Math.min(b, d);
-    if (b - a >= MIN_SEGMENT) out.push({ in: a, out: b, reverse: !!s.reverse });
-  }
-  return out.length || d <= 0 ? out : [{ in: 0, out: d, reverse: false }];
+  return cpResolve(segs, duration);
 }
 
 /**
@@ -204,73 +194,22 @@ export function planSampleTimes(segs: readonly { in: number; out: number; revers
 
 // ── Crop, rotate, flip ───────────────────────────────────────────────────────
 
+// The maths is play/kit/clipPlay.js's, so web exports draw exactly the same.
+
 /** The size of a w × h frame after the crop and rotation. */
-export function clipOutputSize(w: number, h: number, xf: ClipTransform): [number, number] {
-  const cw = w * xf.crop.w, ch = h * xf.crop.h;
-  return xf.rotate === 90 || xf.rotate === 270 ? [ch, cw] : [cw, ch];
-}
-
-/**
- * Forward map as an affine: a point (a, b) of the cropped picture (0–1, top-left origin) to the
- * output (u, v) = (p0 + p1 a + p2 b, q0 + q1 a + q2 b). Rotation is clockwise, then the flips.
- */
-function forward(xf: ClipTransform): { p: [number, number, number]; q: [number, number, number] } {
-  let p: [number, number, number], q: [number, number, number];
-  switch (xf.rotate) {
-    case 90: p = [1, 0, -1]; q = [0, 1, 0]; break;   // (a, b) → (1 − b, a)
-    case 180: p = [1, -1, 0]; q = [1, 0, -1]; break; // → (1 − a, 1 − b)
-    case 270: p = [0, 0, 1]; q = [1, -1, 0]; break;  // → (b, 1 − a)
-    default: p = [0, 1, 0]; q = [0, 0, 1];
-  }
-  if (xf.flipX) p = [1 - p[0], -p[1], -p[2]];
-  if (xf.flipY) q = [1 - q[0], -q[1], -q[2]];
-  return { p, q };
-}
-
+export const clipOutputSize = (w: number, h: number, xf: ClipTransform): [number, number] => cpOutputSize(w, h, xf);
 /** Where output point (u, v) (0–1, top-left origin) reads the source frame (0–1). */
-export function outputToSource(xf: ClipTransform, u: number, v: number): [number, number] {
-  let x = xf.flipX ? 1 - u : u, y = xf.flipY ? 1 - v : v;
-  let a: number, b: number;
-  switch (xf.rotate) {
-    case 90: a = y; b = 1 - x; break;
-    case 180: a = 1 - x; b = 1 - y; break;
-    case 270: a = 1 - y; b = x; break;
-    default: a = x; b = y;
-  }
-  [x, y] = [xf.crop.x + a * xf.crop.w, xf.crop.y + b * xf.crop.h];
-  return [x, y];
-}
-
+export const outputToSource = (xf: ClipTransform, u: number, v: number): [number, number] => cpOutputToSource(xf, u, v);
 /** Where source point (x, y) (0–1) lands in the output (0–1): the inverse of outputToSource. */
-export function sourceToOutput(xf: ClipTransform, x: number, y: number): [number, number] {
-  const a = (x - xf.crop.x) / xf.crop.w, b = (y - xf.crop.y) / xf.crop.h;
-  const { p, q } = forward(xf);
-  return [p[0] + p[1] * a + p[2] * b, q[0] + q[1] * a + q[2] * b];
-}
-
+export const sourceToOutput = (xf: ClipTransform, x: number, y: number): [number, number] => cpSourceToOutput(xf, x, y);
 /**
  * How to draw a frame (sw × sh pixels) cropped, rotated and flipped into the box (x, y, w, h): the
  * source rectangle, a destination size, and the canvas transform to draw it under.
  */
-export function clipDrawParams(xf: ClipTransform, sw: number, sh: number, x: number, y: number, w: number, h: number) {
-  const rot = xf.rotate === 90 || xf.rotate === 270;
-  const dw = rot ? h : w, dh = rot ? w : h;
-  const { p, q } = forward(xf);
-  return {
-    src: [xf.crop.x * sw, xf.crop.y * sh, xf.crop.w * sw, xf.crop.h * sh] as [number, number, number, number],
-    dw, dh,
-    matrix: [(w * p[1]) / dw, (h * q[1]) / dw, (w * p[2]) / dh, (h * q[2]) / dh, x + w * p[0], y + h * q[0]] as [number, number, number, number, number, number],
-  };
-}
-
+export const clipDrawParams = (xf: ClipTransform, sw: number, sh: number, x: number, y: number, w: number, h: number) => cpDrawParams(xf, sw, sh, x, y, w, h);
 /** Draw `src` (sw × sh) into the box with the clip's crop, rotation and flips. */
 export function drawClipFrame(g: CanvasRenderingContext2D, src: CanvasImageSource, sw: number, sh: number, xf: ClipTransform, x: number, y: number, w: number, h: number): void {
-  if (isIdentity(xf)) { g.drawImage(src, x, y, w, h); return; }
-  const d = clipDrawParams(xf, sw, sh, x, y, w, h);
-  g.save();
-  g.transform(...d.matrix);
-  g.drawImage(src, d.src[0], d.src[1], d.src[2], d.src[3], 0, 0, d.dw, d.dh);
-  g.restore();
+  cpDrawFrame(g, src, sw, sh, xf, x, y, w, h);
 }
 
 /** A short key of a clip transform for caches ('' when it changes nothing). */
@@ -278,4 +217,130 @@ export function transformKey(xf: ClipTransform): string {
   if (isIdentity(xf)) return '';
   const c = xf.crop;
   return `|xf${xf.rotate}${xf.flipX ? 'h' : ''}${xf.flipY ? 'v' : ''}:${[c.x, c.y, c.w, c.h].map(v => v.toFixed(4)).join(',')}`;
+}
+
+// ── Hosts, and what the editor shows each ────────────────────────────────────
+
+/** Who opened the editor: each host gets the controls that mean something to it. */
+export type ClipHost = 'timeCube' | 'videoInput' | 'videoLayer' | 'baked' | 'background' | 'viewer';
+
+export interface ClipCaps {
+  /** In / Out handles on the strip. */
+  trim: boolean;
+  /** Several segments, reordered. */
+  segments: boolean;
+  /** A segment played backwards. */
+  reverse: boolean;
+  /** Share a frame budget by length or equally (frame sampling only). */
+  distribute: boolean;
+  ramp: boolean;
+  /** Ticks at the sampled frames, and the host's frame budget (the Time Cube). */
+  frameSamples: boolean;
+  crop: boolean;
+  rotate: boolean;
+  flip: boolean;
+  /** Playback speed: the host plays the clip as a playlist. */
+  speed: boolean;
+  loop: boolean;
+  /** False: a viewer (nothing to apply; the strip only scrubs). */
+  edit: boolean;
+}
+
+const NO_CAPS: ClipCaps = { trim: false, segments: false, reverse: false, distribute: false, ramp: false, frameSamples: false, crop: false, rotate: false, flip: false, speed: false, loop: false, edit: false };
+const PLAYBACK_CAPS: ClipCaps = { ...NO_CAPS, trim: true, segments: true, reverse: true, crop: true, rotate: true, flip: true, speed: true, loop: true, edit: true };
+
+/** Which controls each host shows (docs/clip-editor.md has the table). */
+export const CLIP_CAPS: Readonly<Record<ClipHost, ClipCaps>> = {
+  timeCube: { ...NO_CAPS, trim: true, segments: true, reverse: true, distribute: true, ramp: true, frameSamples: true, crop: true, rotate: true, flip: true, edit: true },
+  videoInput: PLAYBACK_CAPS,
+  videoLayer: PLAYBACK_CAPS,
+  // A bake is one take of the clock: trim it, loop it, change its speed, crop it.
+  baked: { ...NO_CAPS, trim: true, crop: true, speed: true, loop: true, edit: true },
+  // A background's Placement already crops and turns it: timing only.
+  background: { ...NO_CAPS, trim: true, segments: true, reverse: true, speed: true, loop: true, edit: true },
+  viewer: NO_CAPS,
+};
+
+/** Does the host play the clip as a playlist (rather than sample frames from it, or only show it)? */
+export const isPlaybackHost = (h: ClipHost) => h !== 'timeCube' && h !== 'viewer';
+
+/** Hosts that keep speed and loop in their own fields (a Video Input's, a layer's), not in the clip. */
+export const HOST_OWN_SPEED: Readonly<Record<ClipHost, boolean>> = { timeCube: false, videoInput: true, videoLayer: true, baked: false, background: true, viewer: false };
+
+export type SavedClip = CpSaved;
+
+/** A saved clip from anything (a node's or a layer's `clip`), or null when it has none. */
+export const parseSavedClip = (raw: unknown): SavedClip | null => cpParse(raw);
+/** Does a saved clip change nothing? Then the host plays exactly as without one. */
+export const isPlainClip = (c: SavedClip | null | undefined) => cpIsPlain(c);
+
+/**
+ * The editor's value for a playback host: the saved clip (or the whole video) with explicit
+ * outs, and the speed and loop it plays at (the host's own when the clip has none).
+ */
+export function settingsFromSaved(saved: SavedClip | null, duration: number, speed: number, loop: boolean): ClipSettings {
+  const d = Math.max(0.05, duration);
+  const segs = (saved?.segments ?? [{ in: 0, out: 0 }]).map(s => {
+    const a = clamp(s.in, 0, Math.max(0, d - 0.05));
+    const b = s.out > a ? Math.min(s.out, d) : d;
+    return { in: a, out: Math.max(b, Math.min(d, a + 0.05)), ...(s.reverse ? { reverse: true } : {}) };
+  });
+  return {
+    segments: segs.length ? segs : [{ in: 0, out: d }],
+    distribute: 'proportional',
+    ramp: 'none',
+    xf: saved ? cleanTransform(saved) : { ...IDENTITY_XF, crop: { ...FULL_CROP } },
+    speed: saved?.speed ?? (speed > 0 ? speed : 1),
+    loop: saved?.loop ?? loop,
+  };
+}
+
+/**
+ * What a playback host saves from the editor's value: the segments (an out at the end of the
+ * video saved as 0, "to the end"), the crop / rotate / flip the host shows, and speed and loop
+ * when the host keeps them in the clip and they differ from `defaults`. Null when it changes
+ * nothing: the host then plays exactly as before it had a clip.
+ */
+export function savedFromSettings(c: ClipSettings, duration: number, host: ClipHost, defaults: { speed: number; loop: boolean } = { speed: 1, loop: true }): SavedClip | null {
+  const caps = CLIP_CAPS[host];
+  const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
+  const segs = (caps.segments ? c.segments : c.segments.slice(0, 1)).map(s => ({
+    in: s.in <= 1e-3 ? 0 : r4(s.in),
+    out: duration > 0 && s.out >= duration - 1e-3 ? 0 : r4(s.out),
+    ...(s.reverse && caps.reverse ? { reverse: true } : {}),
+  }));
+  const xf = cleanTransform({
+    crop: caps.crop ? c.xf.crop : FULL_CROP,
+    rotate: caps.rotate ? c.xf.rotate : 0,
+    flipX: caps.flip && c.xf.flipX, flipY: caps.flip && c.xf.flipY,
+  });
+  const out: SavedClip = { segments: segs, crop: { ...xf.crop }, rotate: xf.rotate, flipX: xf.flipX, flipY: xf.flipY };
+  if (!HOST_OWN_SPEED[host]) {
+    if (caps.speed && c.speed !== undefined && Math.abs(c.speed - defaults.speed) > 1e-9) out.speed = c.speed;
+    if (caps.loop && c.loop !== undefined && c.loop !== defaults.loop) out.loop = c.loop;
+  }
+  return isPlainClip(out) ? null : out;
+}
+
+/** The frames a playback host shows once through at `fps` (source times): what Result steps through. */
+export function playbackFrames(c: ClipSettings, duration: number, fps: number): number[] {
+  return cpFrames(cpResolve(c.segments, duration), c.speed ?? 1, c.loop !== false, fps);
+}
+
+/** The Time Cube's frames in cube order (tile i shows time-ordered frame order[i]): what Result steps through. */
+export function cubeSequence(times: readonly number[], order: readonly number[] | null | undefined): number[] {
+  return order && order.length === times.length ? order.map(i => times[i]) : [...times];
+}
+
+/**
+ * GLSL that reads a video texture through a clip's crop / rotate / flip: `st` (0–1 over the
+ * frame, as the shader samples it) becomes `<id>_cst`. No code when the clip changes nothing,
+ * so a graph without one compiles exactly as before.
+ */
+export function clipGlsl(id: string, st: string, raw: unknown): { code: string; st: string } {
+  const c = parseSavedClip(raw);
+  const xf = c ? cleanTransform(c) : null;
+  if (!xf || isIdentity(xf)) return { code: '', st };
+  const a = cpTextureAffine(xf).map(v => (Math.abs(v) < 1e-9 ? 0 : v).toFixed(6));
+  return { code: `    vec2 ${id}_cst = vec2(${a[0]} + ${a[1]} * ${st}.x + ${a[2]} * ${st}.y, ${a[3]} + ${a[4]} * ${st}.x + ${a[5]} * ${st}.y);\n`, st: `${id}_cst` };
 }
