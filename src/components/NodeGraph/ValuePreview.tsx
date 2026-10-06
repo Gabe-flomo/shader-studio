@@ -20,15 +20,16 @@ import { Icon } from '../ui/Icon';
 import { previewBus, previewPerf } from '../../lib/nodePreview/previewBus';
 import { DEFAULT_DETAIL, DETAIL_LEVELS, gridDensity, modeHint, prefOf, useNodePreviewPrefs } from '../../lib/nodePreview/showAs';
 import { isColourType, paintField, valueKey, niceStep, formatValue } from '../../lib/nodePreview/valueField';
-import { coverMap } from '../../lib/nodePreview/draw2d';
+import { coverMap, drawSlice, fitContain, previewLayout, previewMaxHeight } from '../../lib/nodePreview/draw2d';
 import { drawValueOverlay } from '../PreviewValueOverlay';
 import { ShowAsControls, useShowAs } from './ShowAsControls';
 
-const HEIGHT = 150;
 /** How long the card waits for the first readback before saying why there is none. */
 const NO_FRAME_MS = 2500;
 const COLOUR_HINT = 'Its colour as the picture draws it, clipped to 0–1. A note under it says when parts clip to white or are black.';
 const DIAGRAM_HINT = 'The node’s own diagram of what it does, from its settings.';
+/** Behind a picture narrower than the panel (and the slice plot's strip). */
+const LETTERBOX = '#0b0c10';
 /** Most canvas pixels the card paints per readback. */
 const MAX_PAINT_PX = 90_000;
 
@@ -65,6 +66,33 @@ export function ValuePreview({ node, diagram, diagramOnly = false }: {
   // No readback after a while: the output isn't in the picture's program (only a Pass draws it)
   const [noFrame, setNoFrame] = useState(false);
 
+  // The picture at its real aspect (the readback follows the main picture's), "contain"-fitted:
+  // the full width of the panel, or less when that would be taller than ~40% of the window (or,
+  // on a narrow card, 1.2× its width).
+  // Drawn at exactly that aspect the cover mapping is the whole picture: nothing cropped or stretched.
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [availW, setAvailW] = useState(300);
+  const [winH, setWinH] = useState(() => (typeof window !== 'undefined' ? window.innerHeight : 800));
+  const [aspect, setAspect] = useState(16 / 9);
+  const aspectRef = useRef(aspect);
+  aspectRef.current = aspect;
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const measure = () => { if (el.clientWidth > 0) setAvailW(el.clientWidth); };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    const onWin = () => setWinH(window.innerHeight);
+    window.addEventListener('resize', onWin);
+    return () => { ro.disconnect(); window.removeEventListener('resize', onWin); };
+  }, [showDiagram, noFrame]);
+  const box = fitContain(aspect, availW, previewMaxHeight(availW, winH));
+  const sliceOn = mode === 'slice' && valueType === 'float' && !showDiagram;
+  const layout = previewLayout(availW, box, sliceOn);
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
+
   useEffect(() => {
     if (showDiagram) return;
     const canvas = canvasRef.current;
@@ -76,30 +104,39 @@ export function ValuePreview({ node, diagram, diagramOnly = false }: {
     const draw = () => {
       raf = 0;
       const frame = previewBus.get();
-      const cw = canvas.clientWidth || 300, ch = HEIGHT;
-      // Painted on the CPU at each readback: capped at ~90k pixels (about 1.4× on a 2× screen) to keep it a few ms
-      const dpr = Math.min(window.devicePixelRatio || 1, Math.sqrt(MAX_PAINT_PX / (cw * ch)));
+      const L = layoutRef.current;
+      const cw = L.w, ch = L.h, pic = L.picture;
+      // Painted on the CPU at each readback: the picture capped at ~90k pixels (about 1.4× on a 2× screen) to keep it a few ms
+      const dpr = Math.min(window.devicePixelRatio || 1, Math.sqrt(MAX_PAINT_PX / (pic.w * pic.h)));
       const dw = Math.round(cw * dpr), dh = Math.round(ch * dpr);
-      if (canvas.width !== dw || canvas.height !== dh) { canvas.width = dw; canvas.height = dh; img = null; painted = -1; }
+      const pw = Math.max(1, Math.round(pic.w * dpr)), ph = Math.max(1, Math.round(pic.h * dpr));
+      if (canvas.width !== dw || canvas.height !== dh) { canvas.width = dw; canvas.height = dh; }
+      if (img && (img.width !== pw || img.height !== ph)) { img = null; painted = -1; }
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = LETTERBOX; ctx.fillRect(0, 0, dw, dh);
       if (!frame || frame.nodeId !== node.id || frame.outputKey !== outputKey || frame.field.type !== fieldType) {
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.fillStyle = '#111217'; ctx.fillRect(0, 0, dw, dh);
+        ctx.fillStyle = '#111217'; ctx.fillRect(Math.round(pic.x * dpr), 0, pw, ph);
         if (keyRef.current) keyRef.current.textContent = 'starting…';
         return;
       }
       setNoFrame(false);
+      // Follow the picture's aspect (a resized or re-shaped main picture)
+      const fa = frame.field.w / Math.max(1, frame.field.h);
+      if (Math.abs(fa - aspectRef.current) > 0.01 * fa) setAspect(fa);
       const t0 = performance.now();
       // The picture: repainted only for a new readback or a new mode (the slice drag reuses it)
       const sig = (frame.seq * 8 + ['grid', 'arrows', 'wheel', 'raw', 'auto', 'slice', 'contours'].indexOf(mode)) * 4 + DETAIL_LEVELS.findIndex(l => l.value === detail);
       if (painted !== sig || !img) {
-        img = img ?? ctx.createImageData(dw, dh);
-        paintField(img.data, dw, dh, frame.field, { mode, stats: frame.stats, grid: gridDensity(detail) });
+        img = img ?? ctx.createImageData(pw, ph);
+        // The field drawn into a box of its own aspect: the whole picture, nothing cropped
+        paintField(img.data, pw, ph, frame.field, { mode, stats: frame.stats, grid: gridDensity(detail) });
         painted = sig;
       }
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.putImageData(img, 0, 0);
+      ctx.putImageData(img, Math.round(pic.x * dpr), 0);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      if (mode !== 'raw') drawValueOverlay(ctx, frame, mode, { x: 0, y: 0, w: cw, h: ch }, sliceY, { keyAt: 'none', big: false, detail });
+      // Overlays use the picture's rect, so arrows and the slice line sit on the fitted image
+      if (L.plot && frame.field.type === 'float' && !frame.stats.constant && frame.stats.finite > 0) drawSlice(ctx, frame.field, pic, L.plot, sliceY);
+      else if (mode !== 'raw') drawValueOverlay(ctx, frame, mode, pic, sliceY, { keyAt: 'none', big: false, detail });
       previewPerf.cardPaintMs = performance.now() - t0;
       if (keyRef.current) {
         let text = valueKey(frame.stats, frame.field.type, mode);
@@ -117,7 +154,7 @@ export function ValuePreview({ node, diagram, diagramOnly = false }: {
       if (!f || f.nodeId !== node.id || f.outputKey !== outputKey) setNoFrame(true);
     }, NO_FRAME_MS);
     return () => { unsub(); ro.disconnect(); clearTimeout(timer); if (raf) cancelAnimationFrame(raf); };
-  }, [node.id, outputKey, fieldType, mode, sliceY, showDiagram, detail]);
+  }, [node.id, outputKey, fieldType, mode, sliceY, showDiagram, detail, layout.w, layout.h]);
 
   if (!sa) return null;
   const sliceDrag = mode === 'slice' && valueType === 'float';
@@ -128,7 +165,7 @@ export function ValuePreview({ node, diagram, diagramOnly = false }: {
     const b = canvas.getBoundingClientRect();
     // The card is scaled with the graph's zoom: work in its own CSS pixels
     const k = canvas.clientHeight / Math.max(1, b.height);
-    const m = coverMap(frame.field, { x: 0, y: 0, w: canvas.clientWidth, h: canvas.clientHeight });
+    const m = coverMap(frame.field, layoutRef.current.picture);
     return Math.max(0, Math.min(1, m.fromY((e.clientY - b.top) * k)));
   };
   const hint = showDiagram ? DIAGRAM_HINT : valueType ? modeHint(valueType, mode) : COLOUR_HINT;
@@ -164,14 +201,16 @@ export function ValuePreview({ node, diagram, diagramOnly = false }: {
         </div>
       ) : (
         <>
+          <div ref={boxRef} data-preview-box="" style={{ width: '100%' }}>
           <canvas
             ref={canvasRef}
             data-testid="value-preview"
-            style={{ display: 'block', width: '100%', height: HEIGHT, cursor: sliceDrag ? 'ns-resize' : undefined, touchAction: sliceDrag ? 'none' : undefined }}
+            style={{ display: 'block', width: layout.w, height: layout.h, cursor: sliceDrag ? 'ns-resize' : undefined, touchAction: sliceDrag ? 'none' : undefined }}
             onPointerDown={sliceDrag ? e => { e.stopPropagation(); (e.target as HTMLElement).setPointerCapture(e.pointerId); const y = yAt(e); if (y !== null) setDragY(y); } : undefined}
             onPointerMove={sliceDrag ? e => { if (dragY === null) return; const y = yAt(e); if (y !== null) setDragY(y); } : undefined}
             onPointerUp={sliceDrag ? () => { if (dragY !== null) useNodePreviewPrefs.getState().set(node, { sliceY: dragY }); setDragY(null); } : undefined}
           />
+          </div>
           <div style={{ padding: '4px 10px 5px', fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: tk.text.secondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             <span ref={keyRef} data-testid="value-preview-key" />
           </div>

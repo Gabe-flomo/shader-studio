@@ -42,6 +42,8 @@ The first version was 8 squares and 2 lines per unit, with 36 / 22 px arrow cell
 
 **On the card.** The preview's row holds the output picker (when there is a choice), Show as and Detail (for a float or vec2) and, on nodes with a hand-drawn diagram (Multiply, Sin, the shapers, 2D Space nodes…), a **Diagram** toggle. The ⓘ tooltip says how to read the current view. The key sits under the picture, with any note under it.
 
+**The whole picture, at its shape.** The card's picture (and the Expression card's Preview page, and line previews) is drawn at the main picture's real aspect, fitted inside the panel: as wide as the panel, or narrower and centred with dark bars when that would be taller than about 40% of the window (1.2× the width on a narrow card). It is never cropped or stretched, and arrows, the grid and the slice line sit on it. In Slice mode the plot gets its own full-width strip under the picture instead of covering it. (`draw2d.fitContain` / `previewLayout`.)
+
 A colour output (vec3, vec4) is drawn as the picture draws it. The key gives its range (for example `0 … 20.1 (brightest channel)`, so an HDR colour shows how far past 1 it goes), and the notes say when it clips or is black.
 
 ## Every node: what its card shows
