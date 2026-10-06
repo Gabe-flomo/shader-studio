@@ -5673,8 +5673,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Grid: Breathing ──
   gridBreathing: {
     label: 'Grid: Breathing',
-    description: 'Animated Cell Center moves each cell\'s dot on its own phase (seeded by Cell ID); Circle SDF takes that as its centre and SDF Fill paints it.',
-    counter: 6,
+    description: 'A dot in every cell that wobbles round its centre and breathes. Animated Cell Center gives each cell\'s dot centre in Grid Pos units (cells), so Circle SDF measures from Grid Pos; Wave Radius swells the radius in a ripple from the middle; SDF Fill paints it.',
+    counter: 7,
     nodes: [
       {
         id: 'uv',
@@ -5701,7 +5701,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           cell_size: { type: 'float', label: 'Cell Size' },
           aspect_ratio: { type: 'float', label: 'Aspect Ratio' },
         },
-        params: { columns: 16, _schemaVersion: 2 },
+        params: {
+          __comment: 'Cuts the picture into 16 columns. Grid Pos is the position measured in cells (cell 3 runs from 3 to 4), so a point in Grid Pos units says which cell it is in and where inside it. Cell ID seeds each dot\'s phase; Dist to Center (how many cells from the middle) sets when each cell breathes.',
+          columns: 16, _schemaVersion: 2,
+        },
       },
       {
         id: 'acc',
@@ -5709,19 +5712,36 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 900, y: 360 },
         inputs: { cellID: { type: 'vec2', label: 'Cell ID', connection: { nodeId: 'grid', outputKey: 'cellID' } } },
         outputs: { center: { type: 'vec2', label: 'Center' } },
-        params: { gridSize: 8, speed: 0.4, amplitude: 0.6 },
+        params: {
+          __comment: 'Center = (Cell ID + 0.5 + a small wobble) ÷ Grid Size. Grid Size is 1 here, so Center is in cells: the middle of this pixel\'s own cell, moved by up to Amplitude cells, the same units as Grid Pos. (Grid Size = Columns would give 0–1 across the grid instead, which only lines up with a 0–1 UV.) Amplitude 0.12 plus the largest radius stays under half a cell, so no dot is cut by its cell edge.',
+          gridSize: 1, speed: 0.6, amplitude: 0.12,
+        },
+      },
+      {
+        id: 'wave',
+        type: 'waveRadius',
+        position: { x: 900, y: 40 },
+        inputs: { distance: { type: 'float', label: 'Distance', connection: { nodeId: 'grid', outputKey: 'dist_to_center' } } },
+        outputs: { wave_radius: { type: 'float', label: 'Wave Radius' } },
+        params: {
+          __comment: 'The breath: the radius swings between 0.14 and 0.30 cells. Distance is Dist to Center, so cells further from the middle breathe a little later and the swell ripples outward.',
+          speed: 1.2, freq: 0.6, amp: 0.08, base: 0.22,
+        },
       },
       {
         id: 'circ',
         type: 'circleSDF',
         position: { x: 1320, y: 200 },
         inputs: {
-          position: { type: 'vec2', label: 'UV', connection: { nodeId: 'grid', outputKey: 'cellUV' } },
-          radius: { type: 'float', label: 'Radius' },
+          position: { type: 'vec2', label: 'UV', connection: { nodeId: 'grid', outputKey: 'grid_pos' } },
+          radius: { type: 'float', label: 'Radius', connection: { nodeId: 'wave', outputKey: 'wave_radius' } },
           offset: { type: 'vec2', label: 'Center', connection: { nodeId: 'acc', outputKey: 'center' } },
         },
         outputs: { distance: { type: 'float', label: 'Distance' } },
-        params: { radius: 0.3, posX: 0, posY: 0 },
+        params: {
+          __comment: 'Distance from Grid Pos to the dot\'s centre, minus the radius, all in cells. Position and Center must be in the same units: Grid Pos with Center in cells. (Cell UV runs −0.5…0.5 inside every cell, so it would need a centre near 0, not the cell\'s position.)',
+          radius: 0.3, posX: 0, posY: 0,
+        },
       },
       {
         id: 'fill',
@@ -5736,7 +5756,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           antialias: { type: 'float', label: 'Softness' },
         },
         outputs: { result: { type: 'vec3', label: 'Color' }, alpha: { type: 'float', label: 'Alpha' } },
-        params: { strokeWidth: 0, antialias: 0.01, strokeAlign: 'center' },
+        params: {
+          __comment: 'Paints inside the circle (distance below 0). The edge is smoothed over one screen pixel, so it stays crisp whatever units the distance is in.',
+          strokeWidth: 0, antialias: 0.01, strokeAlign: 'center',
+        },
       },
       {
         id: 'out',

@@ -183,12 +183,75 @@ The explainer's idiom library (`lib/glslPatterns`, `idiomVocabulary()`) is in th
 Expression Block computing its first spelling, each `$hole` an input. A phrase read only by
 guessing at typos ("sine" ≈ "shine") gives way to an idiom with that name.
 
+### Grid Rules presets (`suggestions/doBarGridRules.ts`)
+
+A Grid Rules preset's name ("game of life", "brian's brain", "falling sand", "reaction diffusion"…)
+adds a Grid Rules node with that preset, with optional board size, speed and colours ("game of life
+on a chunky board, fast, green on black"). The phrase must be only the name, slots and glue: any
+other word sends it to the normal reading, and a name that is also an action ("ripples") needs a
+grid word. Empty graph: wired to the Output; else beside the selection. See docs/grid-rules.md.
+
+### Commands: sentences that edit the graph (`suggestions/doCommands.ts`)
+
+The Do… bar also reads a small command language, documented verb by verb in
+[do-bar-commands.md](do-bar-commands.md) (generated from `src/lang/commands.ts`; the **ⓘ** in the
+bar, Keys → Do… bar commands, and More tools open the same reference in the app).
+
+- **Clauses**: a sentence splits at commas, "then", "after that" and "and" before a verb. Each
+  clause is a verb with its slots, or a build phrase as above; "it" is what the clause before made,
+  so "create a ring with falloff 0.3, colour it with a palette by the length of the space, multiply
+  it by the circle, then output it" builds in four steps.
+- **Edit verbs**: create, connect, disconnect, reconnect, insert (between / after / before),
+  multiply / add / subtract / divide / mix / screen / overlay / union / intersect / cut, output,
+  switch (the card's Switch to, `nodes/switchNode.ts`), delete, rename, duplicate, set, make
+  bigger / smaller / brighter… (increase, double, halve), group, select, colour … by ….
+- **References** (`suggestions/doRefs.ts`): "it", "this", "these", a quoted label, a type ("the
+  circle", "the noise"), a role ("the current output", "what feeds the output"), a position ("the
+  node before the output", "the second circle", "circle 2"), "all circles". When a name fits
+  several nodes the selected one (or "it") wins; else the preview lists them, points at them on the
+  canvas, and waits for a pick.
+- **Preview**: every clause runs on a copy of the graph, so the bar lists numbered steps with the
+  exact nodes, wires and values (a diff). A clause it can't read, a reference that fits nothing, or
+  a wire whose types don't fit (`lib/typesCompatible.ts`) is marked with why and "did you mean" /
+  fixes you can click; the rest still previews, and Enter waits until all of it reads.
+- **Running**: the store's `runCommand` runs it again with real ids as one undo step (a final
+  "group …" inside the same step).
+- A sentence of build phrases only still goes to the phrase language whole, as before.
+
 ### Shared with the 3D Scene Builder
 
 `src/lang/vocabulary.ts` folds in the Scene Builder's shapes and aliases (`sceneBuilder/spec.ts`),
 so "donut", "pill" or "box frame" name the same node in both languages (`sceneKind` gives the
 Scene Builder's own kind), and `ACTION_TO_SCENE_WARP` maps the space actions onto its warps
 (twist → twist, repeat around → polar-repeat, warp → noise…). A test keeps both in step.
+
+### Outputs of a 3D scene (`suggestions/doOutputs.ts`)
+
+"output the depth", "show the normals", "colour it by distance with a palette", "colour by
+height palette fire", "show the picture". The phrase names one of the Scene Builder's outputs
+(`sceneBuilder/output.ts`: depth, distance, height, normal, hit, position, steps, ao, shadow) and
+optionally a palette; "colour … by" without one uses sunset. On a scene the Scene Builder made,
+the scene is rebuilt with that output in its spec (so the builder, its recipe and Describe show
+it); on a hand-made March Loop or GI Lit March the same nodes the builder makes
+(`emitOutput`) are added beside it and wired into the Output. Volumetric and Glass scenes say why
+they keep the picture; with no 3D scene the bar says to build one.
+
+### Type checks
+
+A move is refused up front when the value can't be wired into it: the graph's own rule decides
+(`lib/typesCompatible.ts`, through `lang/typeCheck.ts`), and the message says why and how to fix
+it. "remap it" on a Palette: "Can't wire that: Palette · Color is three numbers (vec3), Remap
+takes a number (float). Fix: use its brightness (Luminance), or take .x." Each fix is a button that
+runs a ready plan: a Luminance node (or an Expression Block taking .x / the length), then the
+move on it. Make a node refuses "Use it here" when an input is retyped so the value it stands for
+can't feed it (a vec3 into a float), with **Keep it vec3**.
+
+### Type-ahead
+
+The bar completes the word at the caret from the vocabulary (`lang/complete.ts`): "circ" offers
+*circle → Circle SDF* first, then *cylinder*; each line has its one-line description and how it
+is written. After an action, its settings show below ("glow falloff 10 colour"). Tab takes a
+suggestion; Enter still runs the phrase.
 
 ### Is this typical? (`suggestions/connectionCheck.ts`)
 
@@ -259,10 +322,15 @@ searchable by name and phrase with the panel's filter:
 | Shared vocabulary | `src/lang/vocabulary.ts` |
 | Do… bar language, plans | `src/suggestions/doBar.ts`; the store's `runDoPlan` (one undo step) |
 | Do… bar UI | `src/components/NodeGraph/DoBar.tsx`, `src/suggestions/doBarStore.ts` |
+| Command language | `src/suggestions/doCommands.ts` (clauses, verbs, diffs), `src/suggestions/doRefs.ts` (lexer, references); the store's `runCommand` |
+| Command registry, reference, docs | `src/lang/commands.ts`; `src/components/NodeGraph/DoCommandsReference.tsx`; `docs/do-bar-commands.md` (`npm run docs:do-bar`); scratch graphs `src/suggestions/doScratch.ts` |
 | Connection check | `src/suggestions/connectionCheck.ts` |
 | Taught phrases | `src/suggestions/taught.ts` |
 | Idioms as blocks | `src/suggestions/idiomBlocks.ts` |
 | Snippets | `src/suggestions/snippets.ts`; `components/code/ReferencePanel.tsx` (`onSnippet`) |
+| Output phrases, type fixes | `src/suggestions/doOutputs.ts` |
+| Type-ahead | `src/lang/complete.ts`; `components/builders/TypeAhead.tsx` |
+| Type checks | `src/lang/typeCheck.ts` (wires through `lib/typesCompatible.ts`) |
 
 ## Limits
 
@@ -273,6 +341,8 @@ searchable by name and phrase with the panel's filter:
 - Linked folders that aren't mirrored into this browser's storage are not learned from.
 - Moves apply inside groups too, but nothing is put on an Output there.
 - The Do… bar builds 2D; 3D shapes are recognised and sent to the Scene Builder.
-- A phrase is one sentence of steps on one subject at a time; "these" means the first two selected.
+- A build phrase works on one subject at a time; "these" means the first two selected. Sentences
+  of clauses (the command language) chain subjects through "it".
+- Commands work on the level being edited; "group" goes last; see do-bar-commands.md → Limits.
 - A taught move keeps one way in and one way out; other wires from outside the selection are dropped.
 - Idiom blocks use the idiom's first spelling with 1.0 for unnamed number holes.

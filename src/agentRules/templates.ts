@@ -8,7 +8,7 @@ import type { GraphNode } from '../types/nodeGraph';
 import { n } from '../store/graphBuilder';
 import { applyRulesToGroup } from './apply';
 import { rulesGroupNote } from './generate';
-import type { AgentRuleSet, AgentSpeciesRules } from './spec';
+import type { AgentRuleSet, AgentSpeciesRules, RuleCondition } from './spec';
 
 type Wire = [string, string];
 type RGB = [number, number, number];
@@ -113,35 +113,67 @@ const sir = (): AgentRuleSet => base({
   }],
 });
 
-const termites = (): AgentRuleSet => base({
-  channels: ['wood chips', '', '', ''],
-  sensor: { distance: 0.006, angle: 40 },
-  species: [{
-    name: 'Termites', speed: 0.15,
-    states: [{ name: 'empty', colour: [0.75, 0.75, 0.8] }, { name: 'carrying', colour: [1, 0.6, 0.2] }],
-    rules: [
-      { when: [{ kind: 'age', cmp: '<', seconds: 0.02 }], do: [{ kind: 'trail', channel: 0, amount: 1 }] },
-      { when: [{ kind: 'always' }], do: [{ kind: 'memory', mode: 'perSecond', value: 1 }, { kind: 'wander', degrees: 40 }, { kind: 'speed', mode: 'set', value: 0.15 }] },
-      { when: [{ kind: 'state', state: 0 }, { kind: 'sense', channel: 0, where: 'here', cmp: '>', value: 0.5 }, { kind: 'memory', cmp: '>', value: 1 }], do: [{ kind: 'trail', channel: 0, amount: -1 }, { kind: 'state', state: 1 }, { kind: 'stop' }, { kind: 'bounce' }, { kind: 'memory', mode: 'set', value: 0 }], stop: true },
-      { when: [{ kind: 'state', state: 1 }, { kind: 'sense', channel: 0, where: 'ahead', cmp: '>', value: 0.5 }, { kind: 'memory', cmp: '>', value: 1 }], do: [{ kind: 'trail', channel: 0, amount: 1 }, { kind: 'state', state: 0 }, { kind: 'stop' }, { kind: 'bounce' }, { kind: 'memory', mode: 'set', value: 0 }], stop: true },
-    ],
-  }],
-});
+/**
+ * Termites, tuned (2026-10): one termite in eight lives and each lays 8 chips, so termites are
+ * sparse (two seldom share a pixel) and chips plentiful. The rules only ever take a chip from a
+ * pixel that surely holds one and lay one where there surely is none, because the trail can't go
+ * below 0 (a −1 on an empty pixel would be lost, making a chip from nothing): the trail is read
+ * blended over the 4 nearest pixels, and a walker's own pixel weighs at least a quarter of it, so
+ * "here > 0.76" means its pixel has a chip and "here < 0.24" means it has none (with no pixel above
+ * 1). Acting on a dice roll while waiting in place makes two termites in one pixel seldom act in
+ * the same step. Empty termites steer toward chips and slow down near them.
+ */
+const termites = (): AgentRuleSet => {
+  const age0: RuleCondition = { kind: 'age', cmp: '<', seconds: 0.02 };
+  const ready: RuleCondition = { kind: 'memory', cmp: '>', value: 0.3 };
+  const here = (cmp: '>' | '<', value: number): RuleCondition => ({ kind: 'sense', channel: 0, where: 'here', cmp, value });
+  const st = (state: number): RuleCondition => ({ kind: 'state', state });
+  const onChip = [st(1), here('>', 0.76), ready];
+  const besidePile: RuleCondition[] = [st(2), { kind: 'sense', channel: 0, where: 'any', cmp: '>', value: 0.5 }, here('<', 0.24), ready];
+  const dice: RuleCondition = { kind: 'chance', perSecond: 0.9 };
+  return base({
+    channels: ['wood chips', '', '', ''],
+    sensor: { distance: 0.008, angle: 45 },
+    species: [{
+      name: 'Termites', speed: 0.25,
+      states: [{ name: 'new', colour: [0.75, 0.75, 0.8] }, { name: 'empty', colour: [0.75, 0.75, 0.8] }, { name: 'carrying', colour: [1, 0.6, 0.2] }],
+      rules: [
+        { when: [age0], do: [{ kind: 'memory', mode: 'random', value: 8 }] },
+        { when: [age0, { kind: 'memory', cmp: '>', value: 1 }], do: [{ kind: 'die' }], stop: true },
+        // New: lay a chip on each empty spot it stands on, counting in Memory (it starts at 0–1), 8 in all.
+        { when: [st(0), here('<', 0.24)], do: [{ kind: 'trail', channel: 0, amount: 1 }, { kind: 'memory', mode: 'add', value: 1 }, { kind: 'stop' }], stop: true },
+        { when: [st(0), { kind: 'memory', cmp: '>', value: 8.3 }], do: [{ kind: 'state', state: 1 }, { kind: 'memory', mode: 'set', value: 0 }] },
+        { when: [{ kind: 'always' }], do: [{ kind: 'memory', mode: 'perSecond', value: 1 }, { kind: 'wander', degrees: 30 }, { kind: 'speed', mode: 'set', value: 0.25 }] },
+        { when: [st(1), ready], do: [{ kind: 'turn', toward: 'trail', channel: 0, degrees: 40 }] },
+        { when: [st(1), ready, here('>', 0.3)], do: [{ kind: 'speed', mode: 'set', value: 0.08 }] },
+        { when: onChip, do: [{ kind: 'stop' }] },
+        { when: besidePile, do: [{ kind: 'stop' }] },
+        { when: [...onChip, dice], do: [{ kind: 'trail', channel: 0, amount: -1 }, { kind: 'state', state: 2 }, { kind: 'stop' }, { kind: 'bounce' }, { kind: 'memory', mode: 'set', value: 0 }], stop: true },
+        { when: [...besidePile, dice], do: [{ kind: 'trail', channel: 0, amount: 1 }, { kind: 'state', state: 1 }, { kind: 'stop' }, { kind: 'bounce' }, { kind: 'memory', mode: 'set', value: 0 }], stop: true },
+      ],
+    }],
+  });
+};
 
+/**
+ * Fireflies, tuned (2026-10) for one swarm-wide flash: sensors far out (0.5 ahead, ±90°), so a
+ * flash is seen across a big neighbourhood and the light sweeps the picture in a few steps; a
+ * refractory first 60% of the cycle; a 1.5 s cycle and a short 0.12 s flash.
+ */
 const fireflies = (): AgentRuleSet => base({
   channels: ['light', '', '', ''],
-  sensor: { distance: 0.03, angle: 60 },
+  sensor: { distance: 0.5, angle: 90 },
   species: [{
     name: 'Fireflies', speed: 0.05,
     states: [{ name: 'dark', colour: [0.12, 0.25, 0.1] }, { name: 'flash', colour: [1, 0.95, 0.4] }],
     rules: [
       { when: [{ kind: 'age', cmp: '<', seconds: 0.02 }], do: [{ kind: 'memory', mode: 'random', value: 10 }] },
       { when: [{ kind: 'age', cmp: '<', seconds: 0.02 }, { kind: 'memory', cmp: '>', value: 1 }], do: [{ kind: 'die' }], stop: true },
-      { when: [{ kind: 'always' }], do: [{ kind: 'memory', mode: 'perSecond', value: 1 }, { kind: 'wander', degrees: 25 }] },
-      { when: [{ kind: 'state', state: 0 }, { kind: 'sense', channel: 0, where: 'any', cmp: '>', value: 0.5 }, { kind: 'memory', cmp: '>', value: 0.4 }], do: [{ kind: 'state', state: 1 }, { kind: 'memory', mode: 'set', value: 0 }] },
+      { when: [{ kind: 'always' }], do: [{ kind: 'memory', mode: 'perSecond', value: 0.667 }, { kind: 'wander', degrees: 25 }] },
+      { when: [{ kind: 'state', state: 0 }, { kind: 'sense', channel: 0, where: 'any', cmp: '>', value: 0.5 }, { kind: 'memory', cmp: '>', value: 0.6 }], do: [{ kind: 'state', state: 1 }, { kind: 'memory', mode: 'set', value: 0 }] },
       { when: [{ kind: 'state', state: 0 }, { kind: 'memory', cmp: '>', value: 1 }], do: [{ kind: 'state', state: 1 }, { kind: 'memory', mode: 'set', value: 0 }] },
       { when: [{ kind: 'state', state: 1 }], do: [{ kind: 'trail', channel: 0, amount: 1 }] },
-      { when: [{ kind: 'state', state: 1 }, { kind: 'memory', cmp: '>', value: 0.15 }], do: [{ kind: 'state', state: 0 }] },
+      { when: [{ kind: 'state', state: 1 }, { kind: 'memory', cmp: '>', value: 0.08 }], do: [{ kind: 'state', state: 0 }] },
     ],
   }],
 });
@@ -168,8 +200,8 @@ export const RULES_TEMPLATES: RulesTemplate[] = [
   { key: 'boids', label: 'Boids-like (via trail)', blurb: 'Birds align with the crowd\'s flow (a velocity trail), drift toward where the birds are and away where they are packed: flocks gather and wheel.', set: boids },
   { key: 'predatorPrey', label: 'Predator & prey', blurb: 'Prey graze along their own trail and flee the predators\' smell; predators chase the prey\'s; prey caught die and are born again.', set: predatorPrey },
   { key: 'sir', label: 'Infection (SIR)', blurb: 'Healthy, sick, recovered: the sick leave germs, the healthy who walk through them may fall sick, the sick recover, immunity wanes.', set: sir },
-  { key: 'termites', label: 'Termites', blurb: 'Termites pick up wood chips and drop them on other chips: scattered chips gather into piles.', set: termites },
-  { key: 'fireflies', label: 'Fireflies', blurb: 'Each firefly flashes on its own clock; one past the middle of its cycle that sees a neighbour\'s flash flashes at once, so light runs through the swarm in waves.', set: fireflies },
+  { key: 'termites', label: 'Termites', blurb: 'Termites pick up wood chips and drop them beside other chips: within half a minute the scattered chips gather into piles.', set: termites },
+  { key: 'fireflies', label: 'Fireflies', blurb: 'Each firefly flashes on its own clock; one past 60% of its cycle that sees a flash (its sensors look far out) flashes at once, so within seconds the whole swarm flashes together.', set: fireflies },
   { key: 'dla', label: 'DLA growth', blurb: 'Random walkers stick when they touch the crystal (or the seed) and become part of it: branching frost.', set: dla },
 ];
 
@@ -324,22 +356,30 @@ export function rulesTemplateNodes(key: string, p: string, x = 0, y = 0, withOut
       draw: { style: 'glow', colorBy: 'state', palette: 'ab', size: 1.5, brightness: 0.5, glow: 0.5, scaleBy: 'walker', fade: 'off', lights: '0', ...note(['Draw agents, Colour by State: healthy blue, sick red, recovered green.']) },
     }, withOutput);
     case 'termites': return setup(x, y, {
-      p, set: termites(), label: 'Termites (rules)', tier: '64k', steps: 4, preroll: 60, nodeVersion: 'Simulations: agents → Termites and wood chips (chips exactly conserved)',
-      groupWhy: ['States: empty and carrying. Each termite drops one chip where it is born (age below 0.02 s), so chips start scattered. An empty termite that walks onto a chip picks it up (leaves −1); a carrying one that finds a chip just ahead drops its own where it stands, beside it (+1). The Memory number waits a second between the two, so it doesn\'t pick up what it just dropped; it stops for the step it picks up or drops, so the chip is taken from (or laid on) the pixel it stands on (a walker\'s trail goes where it ends the step). Chips gather into fewer, bigger piles. Pre-roll 60: a minute of it is simulated before the first frame; Start over to watch it from scattered chips.'],
+      p, set: termites(), label: 'Termites (rules)', tier: '64k', steps: 8, preroll: 0, nodeVersion: 'Simulations: agents → Termites and wood chips (chips exactly conserved)',
+      groupWhy: [
+        'States: new, empty and carrying. One termite in eight lives (the rest die at birth: Memory is set to a random 0–8 and those above 1 die), and each new one lays 8 chips on empty spots before it starts work (Memory counts them), so termites are sparse and chips plentiful.',
+        'Empty termites steer toward chips and slow down near them; on a chip they wait and, on a dice roll, pick it up (leave −1). Carrying termites that sense a chip nearby while standing on bare ground wait and, on a dice roll, drop theirs there (+1). Both stop for that step and turn round, and the Memory number keeps them from acting again for 0.3 s. Chips gather into piles within about 20 s.',
+        'Why the odd thresholds: the trail never goes below 0, so taking a chip from an empty pixel would make one from nothing. Sensing reads the trail blended over the 4 nearest pixels, and the termite\'s own pixel weighs at least a quarter: "here above 0.76" means its own pixel holds a chip, "here below 0.24" that it holds none. The dice make two termites in one pixel seldom act in the same step. Chips are kept to within about 1% over half a minute; only the node version (a per-cell handshake) keeps them exactly.',
+      ],
       emits: [{ mode: 'fill', shape: 'screen', heading: 'random', life: 0, ...note(['Emit: termites everywhere at once.']) }],
       depositAmount: 1, depositWhy: 'Deposit: chips laid and taken (the rules\' leave trail +1 and −1).',
       trail: { resolution: '512', diffuse: 0, halfLife: 10000000, edges: 'wrap', gain: 0.8 },
-      trailWhy: ['Trail field: the wood chips, one per pixel at 512 rows. Diffuse 0 and a half-life of 10,000,000 s: chips stay where they lie (a shorter half-life loses a half-float step every step, docs/simulations-agents.md).', 'Two termites taking the same chip in the same step both get one: chips are only roughly conserved here (the node version shakes hands to keep them exact).'],
+      trailWhy: ['Trail field: the wood chips, one per pixel at 512 rows. Diffuse 0 and a half-life of 10,000,000 s: chips stay where they lie (a shorter half-life loses a half-float step every step, docs/simulations-agents.md).', 'Two termites taking the same chip in the same step would make a chip from nothing; the rules\' waiting and dice make that rare (about 1% over 30 s). The node version shakes hands to keep chips exact.'],
       picture: t => ({ nodes: [palette(`${p}Colour`, X(1680), Y(0), t, [[0.05, 0.04, 0.03], [0.45, 0.3, 0.15], [0.85, 0.65, 0.4]], ['Stops Palette: chips as light wood on dark ground.'])], out: [`${p}Colour`, 'color'] }),
       draw: { style: 'points', colorBy: 'state', palette: 'ab', size: 1, brightness: 0.4, scaleBy: 'walker', fade: 'off', lights: '0', ...note(['Draw agents, Colour by State: empty termites grey, carrying ones orange.']) },
     }, withOutput);
     case 'fireflies': return setup(x, y, {
-      p, set: fireflies(), label: 'Fireflies (rules)', tier: '64k', steps: 2, preroll: 20, nodeVersion: 'Simulations: agents → Fireflies flashing in time',
-      groupWhy: ['States: dark and flash. The Memory number is each firefly\'s clock. At birth it is set at random from 0 to 10 and nine in ten die at once (those above 1): a sparse swarm whose clocks start anywhere from 0 to 1. At 1 a firefly flashes for 0.15 s and starts again. A dark firefly past the middle of its cycle (clock above 0.4) that sees a neighbour\'s light (its sensors look 0.03 ahead, ahead and 60° to each side) flashes at once: flashes set each other off, so light runs through the swarm in waves and neighbours fall into step (an excitable medium, like a heart\'s cells).', 'Try: the 0.4 in rule 4 at 0.8 for gentler waves; 0.1 for a swarm that flashes almost all the time.'],
+      p, set: fireflies(), label: 'Fireflies (rules)', tier: '64k', steps: 2, preroll: 0, nodeVersion: 'Simulations: agents → Fireflies flashing in time',
+      groupWhy: [
+        'States: dark and flash. The Memory number is each firefly\'s clock. At birth it is set at random from 0 to 10 and nine in ten die at once (those above 1): a sparse swarm whose clocks start anywhere from 0 to 1. The clock runs at 0.667 a second (a 1.5 s cycle); at 1 a firefly flashes for 0.12 s and starts again.',
+        'A dark firefly past 60% of its cycle that sees light (its sensors look 0.5 ahead and 90° to each side, so it sees flashes across a wide patch of the swarm) flashes at once. A flash sets off everyone near the end of their cycle, and theirs the next ring out, so the light sweeps the picture in a few steps; those still early in their cycle (the refractory 60%) ignore it and flash on their own, setting the others off next time. Within a few cycles the whole swarm flashes together (pulse-coupled clocks, Mirollo and Strogatz).',
+        'Try: sensors 0.12 ahead for local coupling: light then runs through the swarm in waves instead of flashing all at once.',
+      ],
       emits: [{ mode: 'fill', shape: 'screen', heading: 'random', life: 0, ...note(['Emit: fireflies everywhere at once.']) }],
       depositAmount: 1, depositSize: 4, depositWhy: 'Deposit, Size 4: a flashing firefly lights a square 4 trail pixels across round it (channel 1).',
       trail: { resolution: '512', diffuse: 0.5, halfLife: 0.05, edges: 'wrap', gain: 0.5 },
-      trailWhy: ['Trail field: the light of the flashes. It spreads a little and is gone in a few steps, so a firefly sees a flash only while it happens.', 'Pre-roll 20: they have had 20 s to fall into step before the first frame; Start over to watch it happen.'],
+      trailWhy: ['Trail field: the light of the flashes. It spreads a little and is gone in a few steps, so a firefly sees a flash only while it happens.', 'Pre-roll 0: they start out of step; watch them fall into step in the first few seconds (Start over to see it again).'],
       picture: t => ({ nodes: [palette(`${p}Colour`, X(1680), Y(0), t, [[0.0, 0.01, 0.02], [0.1, 0.18, 0.05], [0.6, 0.65, 0.2], [1, 1, 0.7]], ['Stops Palette: the flashes\' light on a night sky.'])], out: [`${p}Colour`, 'color'] }),
       draw: { style: 'glow', colorBy: 'state', palette: 'ab', size: 2, brightness: 0.8, glow: 0.8, scaleBy: 'walker', fade: 'off', lights: '0', ...note(['Draw agents, Colour by State: dim green while dark, bright yellow while flashing.']) },
     }, withOutput);

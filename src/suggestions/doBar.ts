@@ -35,6 +35,8 @@ import { applyMove } from './applyMove';
 import { outputKinds, spaceInputs, type ValueKind } from './kinds';
 import { matchTaught, phraseLabel, taughtMoves, type TaughtMove } from './taught';
 import { freshIds } from '../store/agentSetup';
+import { addGridRules, gridRulesLabel, gridRulesParams, readGridRules } from './doBarGridRules';
+import { moveTypeCheck, planOutput, runConvertStep, runOutputStep, type ConvertStep, type OutputStep } from './doOutputs';
 
 // ── Plans ───────────────────────────────────────────────────────────────────
 
@@ -44,7 +46,11 @@ export type NodeRef = string;
 export type DoStep =
   | { kind: 'shape'; shape: string; type: string; params: Record<string, unknown>; place?: [number, number]; label: string }
   | { kind: 'chain'; taughtId: string; args: Record<string, unknown>; label: string }
-  | { kind: 'move'; moveId: string; node: NodeRef; key: string; side: 'in' | 'out'; args: Record<string, unknown>; label: string };
+  | { kind: 'move'; moveId: string; node: NodeRef; key: string; side: 'in' | 'out'; args: Record<string, unknown>; label: string }
+  /** A Grid Rules node with a preset (doBarGridRules.ts): "game of life", "falling sand, fast". */
+  | { kind: 'gridRules'; preset: string; params: Record<string, unknown>; label: string; /** The node to sit beside (the selection), when the graph isn't empty. */ beside?: string }
+  | OutputStep
+  | ConvertStep;
 
 export interface DoPlan {
   steps: DoStep[];
@@ -56,6 +62,8 @@ export interface DoPlan {
   problem?: string;
   /** Not a build: "is this typical?" (the connection check) or "teach …" (teach the selection). */
   intent?: 'check' | 'teach';
+  /** When it is refused for a type: ready plans that fix it ("use its brightness (Luminance)"). */
+  fixes?: Array<{ label: string; plan: DoPlan }>;
 }
 
 const CHECK_RE = /^(is (this|that|it) (typical|normal|common|usual)|how (common|typical|usual|often)|typical\??$|check (this|that|it|the wire|these)|is this (a )?common)/;
@@ -285,7 +293,7 @@ const describeArgs = (move: Move, args: Record<string, unknown>) => (move.args ?
   .filter(a => a.name in args)
   .map(a => {
     const v = args[a.name];
-    return `${a.label.toLowerCase()} ${Array.isArray(v) ? `rgb(${v.map(x => Math.round(Number(x) * 255)).join(', ')})` : String(Math.round(Number(v) * 1000) / 1000)}`;
+    return `${a.label.toLowerCase()} ${Array.isArray(v) ? `rgb(${v.map(x => Math.round(Number(x) * 255)).join(', ')})` : typeof v === 'string' ? v : String(Math.round(Number(v) * 1000) / 1000)}`;
   }).join(', ');
 
 /** Read a phrase into a plan. */
@@ -293,8 +301,13 @@ export function parseDo(text: string, ctx: DoContext): DoPlan {
   const lower = text.trim().toLowerCase();
   if (CHECK_RE.test(lower)) return { steps: [], reading: [{ text: lower, as: 'check: is this typical?' }], unknown: [], intent: 'check' };
   if (TEACH_RE.test(lower)) return { steps: [], reading: [{ text: lower, as: 'teach the selection' }], unknown: [], intent: 'teach' };
+  // "output the depth", "colour it by distance with a palette": a 3D scene's output (doOutputs.ts).
+  const out = planOutput(text, ctx.nodes);
+  if (out) return { steps: out.steps, reading: out.reading, unknown: [], ...(out.problem ? { problem: out.problem } : {}) };
   const taught = matchTaught(text);
   if (taught) return taughtPlan(taught.move, taught.args, ctx);
+  const grid = readGridRules(text);
+  if (grid) return { steps: [{ kind: 'gridRules', preset: grid.phrase.id, params: gridRulesParams(grid), label: gridRulesLabel(grid), beside: ctx.selected[0] }], reading: grid.reading, unknown: [] };
   const tokens = tokenize(text);
   const { items, unknown } = read(tokens);
   const reading: DoPlan['reading'] = items.map(it => ({
@@ -411,6 +424,18 @@ export function parseDo(text: string, ctx: DoContext): DoPlan {
       const fit = outs.find(o => move.kinds.includes(o.kind)) ?? outs[0];
       if (!fit) { plan.problem = `${subjectNode ? labelOf(subjectNode) : 'That'} has no output to ${g.head.text}.`; continue; }
       key = fit.key;
+      // Refused up front when the types can't meet (a colour into a number), with the fixes as plans.
+      const refused = subjectNode && !move.kinds.includes(fit.kind) ? moveTypeCheck(subjectNode, key, move.kinds, move.label, labelOf(subjectNode)) : null;
+      if (refused) {
+        plan.problem = refused.message;
+        const at = steps.length;
+        plan.fixes = refused.fixes.map(f => ({
+          label: `${f.label[0].toUpperCase()}${f.label.slice(1)}, then ${move.label}`,
+          plan: { steps: [...steps, { kind: 'convert', node, key, via: f.id as ConvertStep['via'], label: f.id === 'luminance' ? `Luminance of ${labelOf(subjectNode!)}` : f.id === 'length' ? 'Its length' : 'Take .x' },
+            { kind: 'move', moveId: move.id, node: `$${at}`, key: 'result', side: 'out', args, label: move.label }], reading, unknown },
+        }));
+        continue;
+      }
     }
     const where = node === target ? '' : ` on ${labelOf(byId.get(node)!)}`;
     const detail = describeArgs(move, args);
@@ -448,10 +473,23 @@ export interface DoResult {
   select: string | null;
   /** Labels of the steps that ran. */
   ran: string[];
+  /** The real id of each shape a step made (`$k` → id). */
+  made: Record<string, string>;
+}
+
+export interface RunDoOptions {
+  topLevel?: boolean;
+  heightOf?: (nd: GraphNode) => number;
+  /** Show a move's result on the Output as the strip does (default true; false when a later clause outputs something). */
+  show?: boolean;
+  /** Paint a new shape nothing uses on an empty Output (default: as `show`; the command language only does it in the last clause). */
+  paintShapes?: boolean;
+  /** Called after each step with the level before and after it (the command preview's diffs). */
+  onStep?: (k: number, label: string, before: GraphNode[], after: GraphNode[]) => void;
 }
 
 /** Apply a plan to the level `nodes` (pure). */
-export function runDoPlan(nodes: GraphNode[], plan: DoPlan, nextId: () => string, opts: { topLevel?: boolean; heightOf?: (nd: GraphNode) => number } = {}): DoResult {
+export function runDoPlan(nodes: GraphNode[], plan: DoPlan, nextId: () => string, opts: RunDoOptions = {}): DoResult {
   const heightOf = opts.heightOf ?? cardHeight;
   let cur = nodes;
   const added: string[] = [];
@@ -459,7 +497,25 @@ export function runDoPlan(nodes: GraphNode[], plan: DoPlan, nextId: () => string
   const made = new Map<string, string>();
   let select: string | null = null;
   const real = (ref: NodeRef) => (ref.startsWith('$') ? made.get(ref) : ref);
+  const show = opts.show !== false;
+  const paint = opts.paintShapes ?? show;
   plan.steps.forEach((step, k) => {
+    const before = cur;
+    const ranBefore = ran.length;
+    runStep(step, k);
+    if (opts.onStep && ran.length > ranBefore) opts.onStep(k, step.label, before, cur);
+  });
+  return { nodes: cur, added, select, ran, made: Object.fromEntries(made) };
+
+  function runStep(step: DoStep, k: number) {
+    if (step.kind === 'gridRules') {
+      const r = addGridRules(cur, step.params, step.beside ? [step.beside] : [], nextId, { topLevel: opts.topLevel, heightOf });
+      cur = r.nodes;
+      added.push(...r.added);
+      select = r.id;
+      ran.push(step.label);
+      return;
+    }
     if (step.kind === 'shape') {
       // A row below the graph, left-aligned with it; free space found by placeNear.
       const xs = cur.map(nd => nd.position.x), ys = cur.map(nd => nd.position.y + heightOf(nd));
@@ -491,7 +547,7 @@ export function runDoPlan(nodes: GraphNode[], plan: DoPlan, nextId: () => string
       // Shown only when nothing later in the plan works on it and the Output is empty.
       const usedLater = plan.steps.slice(k + 1).some(s => s.kind === 'move' && s.node === `$${k}`);
       const out = graphOutput(cur);
-      if (!usedLater && (!out || !out.inputs.color?.connection)) {
+      if (paint && !usedLater && (!out || !out.inputs.color?.connection)) {
         const paint = n('sdfFill', nextId(), x0 + 1260, y0, { antialias: 0.006, __comment: 'SDF Fill: paints the shape.\nWhy: the Output showed nothing, so the Do… bar shows the new shape.' }, { d: [shapeId, 'distance'] });
         const placedPaint = placeNear(cur, [paint], heightOf);
         cur = [...cur, ...placedPaint];
@@ -503,6 +559,16 @@ export function runDoPlan(nodes: GraphNode[], plan: DoPlan, nextId: () => string
           added.push(o.id);
         }
       }
+      return;
+    }
+    if (step.kind === 'scene-output') {
+      const r = runOutputStep(cur, step, nextId, heightOf);
+      cur = r.nodes; added.push(...r.added); select = r.select ?? select; ran.push(step.label);
+      return;
+    }
+    if (step.kind === 'convert') {
+      const r = runConvertStep(cur, { ...step, node: real(step.node) ?? step.node }, nextId, heightOf);
+      cur = r.nodes; added.push(r.id); made.set(`$${k}`, r.id); select = r.id; ran.push(step.label);
       return;
     }
     if (step.kind === 'chain') {
@@ -531,7 +597,7 @@ export function runDoPlan(nodes: GraphNode[], plan: DoPlan, nextId: () => string
     const id = real(step.node);
     const move = moveById(step.moveId);
     if (!id || !move) return;
-    const r = applyMove(cur, { nodeId: id, key: step.key, side: step.side }, move, step.args, nextId, { topLevel: opts.topLevel, heightOf });
+    const r = applyMove(cur, { nodeId: id, key: step.key, side: step.side }, move, step.args, nextId, { topLevel: opts.topLevel, heightOf, show });
     if (!r) return;
     cur = r.nodes;
     added.push(...r.added);
@@ -539,6 +605,5 @@ export function runDoPlan(nodes: GraphNode[], plan: DoPlan, nextId: () => string
     ran.push(step.label);
     // What follows works on the result.
     if (r.resultNodeId) for (const [ref, rid] of made) if (rid === id) made.set(ref, id);
-  });
-  return { nodes: cur, added, select, ran };
+  }
 }

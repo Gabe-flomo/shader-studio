@@ -172,12 +172,12 @@ export function buildGridRulesExamples(): Record<string, ExampleGraph> {
     nodes: [
       grid('fire', 'Fire rules', {
         ruleType: 'smooth', template: 'custom',
-        customU: 'u > 1.5 ? 0.0 : (u > 0.5 ? ((max(max(n, s), max(e, w)) > 1.5 && rnd < a) || rnd < d * 0.00001 ? 2.0 : 1.0) : (rnd < b * 0.02 ? 1.0 : 0.0))',
+        customU: 'u > 1.5 ? 0.0 : (u > 0.5 ? (((max(max(n, s), max(e, w)) > 1.5 && rnd < a) || (abs(x - fract(sin(floor(t * d * 10.0) * 12.9898) * 43758.5453)) < 0.003 && abs(y - fract(sin(floor(t * d * 10.0) * 78.233) * 43758.5453)) < 0.005)) ? 2.0 : 1.0) : (rnd < b * 0.02 && mod(floor(t * 6.0), 6.0) < 0.5 ? 1.0 : 0.0))',
         customV: 'u > 1.5 ? 1.0 : v * 0.9',
-        knobA: 0.95, knobB: 0.15, knobD: 0.002, board: '0.25', start: 'noise', density: 0.75, rate: 1, brushRadius: 3, brushState: 2, gain: 0.5,
+        knobA: 0.95, knobB: 0.2, knobD: 0.03, board: '0.25', start: 'noise', density: 0.75, rate: 1, brushRadius: 3, brushState: 2, gain: 0.5,
         color0: [0.06, 0.04, 0.03], color1: [0.08, 0.3, 0.1], color2: [0.12, 0.42, 0.14], color3: [1.0, 0.55, 0.12],
       }, [
-        'Grid Rules, Smooth, Custom: the Drossel–Schwabl forest fire as one line. u is 0 (ground), 1 (a tree) or 2 (fire): fire burns out; a tree catches from fire beside it (with chance a) or from lightning (d); ground grows a tree with chance b × 0.02. v keeps a fading ember glow.',
+        'Grid Rules, Smooth, Custom: the Drossel–Schwabl forest fire as one line. u is 0 (ground), 1 (a tree) or 2 (fire): fire burns out; a tree catches from fire beside it (with chance a); lightning strikes one random spot, d × 10 times a second (the spot comes from t, not rnd: a per-cell chance that small is below what the dice can roll); ground grows a tree with chance b × 0.02 during one frame-window in six (about b × 0.0033 a step), so a forest takes some 25 s to grow back and fires sweep through grown forest in fronts.',
         'The ramp colours u: ground dark, trees green, fire orange. The brush sets 2: click to light the forest.',
       ]),
       out(['fire', 'color']),

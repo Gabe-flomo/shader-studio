@@ -169,6 +169,61 @@ Each template is a recipe, so reading one is a good way to learn the language.
 a small WebGL2 canvas of its own. It doesn't touch the main canvas. Below the
 preview: build warnings, and the list of nodes it will make.
 
+### Output
+
+What the built scene shows. **Picture** is the default; the others are the march loop's own
+measurements (the March Loop / GI Lit March already hand them out as sockets):
+
+| Output | Recipe word | From | Shown as |
+|---|---|---|---|
+| Picture | `picture` | the lit chain | the picture (tone mapped) |
+| Depth | `depth` | Depth (0 at the camera … 1 at Max Dist) | grey |
+| Distance | `distance` | Distance (scene units ÷ Range) | grey |
+| Height | `height` | Hit Pos's Y (−Range … +Range) | grey |
+| Normal | `normal` | Normal × 0.5 + 0.5 | a colour (X red, Y green, Z blue) |
+| Hit mask | `hit` | Hit | white where a ray hit |
+| Position | `position` | Hit Pos (÷ Range, × Hit) | a colour |
+| Steps | `steps` | Iter (0–1 of Max Steps) | grey |
+| AO | `ao` | SDF Ambient Occlusion (Surface) / the loop's AO (GI) | grey |
+| Shadow | `shadow` | Soft Shadow (Surface) / the loop's Shadow (GI) | grey |
+
+**Colour the space** sends the number through a palette instead of grey: a cosine **Palette**
+preset (sunset, rainbow, fire, forest, teal, warm, haze, psychedelic) or a **Color Ramp** stop set
+(mono, heat, ice, terrain). Normal through a palette is by how much a surface faces up (n.y);
+Position by distance from the centre. Presets in the tab: Depth map, Sunset depth, Height map,
+Normals, Heat steps, Clay (AO), Ice distance.
+
+What Build makes: an Expression Block (role `out:value`, with a note saying what it shows and
+how it is scaled, and Range as a slider where there is one) wired from the loop's socket, then a
+Palette (`out:palette`) or Color Ramp (`out:ramp`) when it colours the space; that goes to the
+Output, untone-mapped. The lit picture's nodes are still built beside it, so wiring Tone Map back
+into the Output shows the picture again. Volumetric glow has no surface (only Steps applies) and
+Glass Scene hands out only its colour: there the builder warns and keeps the picture.
+
+## Built-in guidance
+
+Every builder window (`components/builders/BuilderWindow.tsx`) carries the same help, with its
+words in `components/builders/helpContent.ts`:
+
+- **How this works.** Each section opens with a short card: what it is, what it does, "you can do
+  X to get Y", and one or more **worked examples** (click to insert). **Got it** hides a card;
+  **Tips** in the header turns them all off, and turning it back on brings back every card you
+  dismissed. Both are remembered per builder.
+- **Empty states** (no shapes, no rules) always show their guidance; with tips off it folds to one
+  line and its examples.
+- **Field hints.** Every control has a plain-language hint on a **?** beside its label (hover or
+  focus shows it).
+- **Type-ahead.** Text fields complete as you type: ↑ ↓ to choose, Tab (or Enter, outside the Do…
+  bar) to take one, Esc to close (`lang/complete.ts`).
+
+A new builder adds its block to `BUILDER_HELP` and gets all of this by using `BuilderWindow`
+(`<BuilderHelp id>`, `<EmptyHelp id>`, `<HintMark text>`, `<HintLabel hint>`). A test checks
+that every registered section has help.
+
+In the Scene Builder each tab (Shapes, Combine, Bend space, Look, Camera, Quality, Output,
+Recipe, Templates, Describe) and the empty scene tree has its card; an example adds its recipe
+clause to the scene (one undo step).
+
 ## Build and Rebuild
 
 **Build** adds the graph beside what is on the canvas, wires it to the Output
@@ -201,6 +256,12 @@ When you reopen the scene with **Edit in Scene Builder** and press
 **Build as a new copy** in the footer always builds beside the old scene.
 
 ## Scene → words
+
+Describe reads the output too: a builder scene's `out:value` block carries the output it shows,
+and in a hand-made graph the Output (or a Palette before it) wired straight to one of the loop's
+sockets (Depth, Normal, Hit…) reads as that output. The lights and look are then read from the
+picture chain beside it.
+
 
 **Builder-made scenes** read back exactly. The recogniser rebuilds the spec from
 the graph itself, using the roles and names the build left on the nodes. Every
@@ -354,6 +415,8 @@ positional (in the order below) or `key=value`.
 | `tone` | aces agx hable reinhard2 tanh oklab none |
 | `camera` (cam) | dist 4 · angle 35 · elev 17 · orbit 0 (°/s) · zoom 1.5 · flatten 0 · x y z |
 | `quality` | steps 96 · dist 20 · step auto (or a number) · jitter 1 |
+| `output` (show) | picture depth distance height normal hit position steps ao shadow, then optionally `palette …` |
+| `colour by` (color by) | an output, then `palette …` (default sunset): `colour by depth palette sunset` |
 
 ### Errors
 
@@ -367,7 +430,24 @@ line and column and, where it can guess, a "did you mean":
 
 The rest of the recipe still applies.
 
+**Type checks.** A value of the wrong type is refused with its fix: `sphere r=(1,2,3)` → "r is a
+number (a float); (1, 2, 3) is three numbers (a vec3). Take .x: r=1, or its brightness
+(Luminance): r=1.86"; `shine=red` → "use its brightness (Luminance): shine=0.307".
+
+**Type-ahead.** In the Recipe tab, suggestions appear as you type: at the start of a clause every
+shape, combine, warp, mode, setting and output (each with a one-line description and its
+signature, e.g. `sphere r=0.5 at=(x,y,z)`); after `@` the warps; inside a combine's brackets the
+shapes; after a keyword its settings; after `color=` the colour names; after `palette` the
+palettes. Below the box, the clause's signature with the setting being typed (or the next one to
+fill) marked, and its hint. Matching: the name first (exact, then prefix), then an alias, a word
+inside the name (`union` → smooth-union), letters in order, then a near typo ("circ" offers
+cylinder).
+
 ### Examples
+
+    scene: sphere · sphere at=(1,0,0) · output depth
+    sphere · box at=(1,0,0) · colour by depth palette sunset
+    gi · torus · output normal
 
 ```
 surface

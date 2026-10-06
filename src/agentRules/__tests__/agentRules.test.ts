@@ -353,7 +353,7 @@ describe('templates, examples and the starter', () => {
     for (const t of RULES_TEMPLATES) {
       const set = t.set();
       set.species.forEach((sp, s) => sp.rules.forEach(r => expect(describeRule(set, s, r)).toMatch(/^When .+ → .+/)));
-      expect(set.species.reduce((k, sp) => k + sp.rules.length, 0), t.key).toBeLessThanOrEqual(8);
+      expect(set.species.reduce((k, sp) => k + sp.rules.length, 0), t.key).toBeLessThanOrEqual(t.key === 'termites' ? 11 : 8);
       const r = compileGraph({ nodes: rulesTemplateNodes(t.key, 'tp') });
       expect(r.errors, t.key).toBeUndefined();
       expect(r.success, t.key).toBe(true);

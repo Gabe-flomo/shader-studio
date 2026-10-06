@@ -27,7 +27,8 @@ import { scoreNodeDef } from '../../nodes/searchNodes';
 import { HIDDEN_TYPES } from './nodeCategoryMeta';
 import { spawnPoint } from './spawnPoint';
 import { parseDo, type DoPlan } from '../../suggestions/doBar';
-import { closeDoBar, openDoBar, useDoBar } from '../../suggestions/doBarStore';
+import { closeDoBar, openCommandsRef, openDoBar, setDoBarHighlight, useDoBar } from '../../suggestions/doBarStore';
+import { execCommand, type CommandPlan, type CmdClause, type CmdStep } from '../../suggestions/doCommands';
 import { checkConnection, wiresAmong, type ConnectionReport, type Wire4 } from '../../suggestions/connectionCheck';
 import { rankTables } from '../../suggestions';
 import { idiomBlock, matchIdioms, type IdiomBlockSpec } from '../../suggestions/idiomBlocks';
@@ -35,6 +36,8 @@ import {
   deleteTaught, exportTaught, importTaught, phraseLabel, renameTaught, subscribeTaught, taughtMoves, taughtVersion, teachFromSelection,
 } from '../../suggestions/taught';
 import type { GraphNode } from '../../types/nodeGraph';
+import { doBarAssist } from '../../lang/complete';
+import { AssistList, SignatureLine, useTypeAhead } from '../builders/TypeAhead';
 
 const WIDTH = 560;
 
@@ -50,7 +53,7 @@ export function DoBarButton() {
   return <IconButton icon="edit" size="sm" label="Do…: type what to do (circle with a glow, repeat 6 times around, tone map it)" shortcut="⌘K" onClick={() => openDoBar()} />;
 }
 
-function useScope(): { nodes: GraphNode[]; selected: string[] } {
+function useScope(): { nodes: GraphNode[]; selected: string[]; topLevel: boolean } {
   const nodes = useNodeGraphStore(s => s.nodes);
   const path = useNodeGraphStore(s => s.activeGroupPath);
   const selectedIds = useNodeGraphStore(s => s.selectedNodeIds);
@@ -59,7 +62,7 @@ function useScope(): { nodes: GraphNode[]; selected: string[] } {
     const scope = (path.length ? getActiveNodes(nodes, path) : nodes) ?? [];
     // A single click selects through selectedNodeId; the list is for multi-selection.
     const selected = selectedIds.length > 1 ? selectedIds : selectedId ? [selectedId] : selectedIds;
-    return { nodes: scope, selected: selected.filter(id => scope.some(n => n.id === id)) };
+    return { nodes: scope, selected: selected.filter(id => scope.some(n => n.id === id)), topLevel: path.length === 0 };
   }, [nodes, path, selectedIds, selectedId]);
 }
 
@@ -91,7 +94,13 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   const [teachPhrase, setTeachPhrase] = useState(initial.replace(/^teach( the do bar)?\s*/i, ''));
   const [teachError, setTeachError] = useState<string | null>(null);
   const [active, setActive] = useState(0);
+  const [caret, setCaret] = useState<number | null>(initial.length);
   const scope = useScope();
+  // Type-ahead: the word at the caret from the vocabulary, and the named action's settings.
+  const ta = useTypeAhead(text, caret, doBarAssist, (next, at) => {
+    setText(next); setCaret(at);
+    requestAnimationFrame(() => { inputRef.current?.focus(); inputRef.current?.setSelectionRange(at, at); });
+  });
   useSyncExternalStore(subscribeTaught, taughtVersion, taughtVersion);
 
   useEffect(() => { setTimeout(() => inputRef.current?.focus(), 0); }, []);
@@ -102,6 +111,24 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   }, []);
 
   const plan: DoPlan = useMemo(() => (text.trim() ? parseDo(text, scope) : { steps: [], reading: [], unknown: [] }), [text, scope]);
+  // The command language (doCommands.ts): every clause, previewed on a copy of the graph.
+  const [picks, setPicks] = useState<Record<string, string>>({});
+  const cmd: CommandPlan | null = useMemo(() => {
+    if (!text.trim() || plan.intent) return null;
+    try { return execCommand(text, scope.nodes, { selected: scope.selected, picks, topLevel: scope.topLevel }); } catch { return null; }
+  }, [text, scope, picks, plan.intent]);
+  const editing = !!cmd && !cmd.phrase;
+  const pickClause = cmd?.clauses.find(c => c.pick);
+  const [hoverPick, setHoverPick] = useState<string | null>(null);
+  // Point at nodes on the canvas: a pick's candidates (or the hovered one), else what the steps change.
+  useEffect(() => {
+    const live = new Set(scope.nodes.map(nd => nd.id));
+    const ids = hoverPick ? [hoverPick]
+      : pickClause?.pick ? pickClause.pick.options.map(o => o.id)
+        : editing ? [...new Set(cmd!.steps.flatMap(st => st.touched))].filter(id => live.has(id)) : [];
+    setDoBarHighlight(ids.length ? ids : null);
+  }, [cmd, editing, pickClause, hoverPick, scope.nodes]);
+  useEffect(() => () => setDoBarHighlight(null), []);
   const reports: ConnectionReport[] = useMemo(() => {
     const wires = check ? [check] : plan.intent === 'check' ? selectionWires(scope.nodes, scope.selected) : [];
     if (!wires.length) return [];
@@ -116,30 +143,35 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
 
   const fallback: Fallback[] = useMemo(() => {
     if (!text.trim() || plan.intent) return [];
+    // An output phrase or a type refusal with its fixes is an answer, not a miss.
+    if (plan.steps.some(st => st.kind === 'scene-output') || plan.fixes?.length) return [];
     // A phrase read only by guessing at typos ("sine" ≈ "shine") gives way to an idiom of that name.
     const heads = plan.reading.filter(r => /^(do|shape):/.test(r.as));
     const guessed = heads.length > 0 && heads.every(r => r.as.endsWith('(guessed)'));
     const idiomFirst = guessed ? matchIdioms(text, 3) : [];
-    if (heads.length && !idiomFirst.length) return [];
+    if ((heads.length || editing) && !idiomFirst.length) return [];
     const q = text.trim().toLowerCase().replace(/^(add|make|put|a|an)\s+/, '');
     const nodes = getOfferedDefinitions().filter(d => !HIDDEN_TYPES.has(d.type))
       .map(d => ({ d, s: scoreNodeDef(d, q) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 5)
       .map(x => ({ kind: 'node' as const, type: x.d.type, label: x.d.label, detail: x.d.category }));
     const idioms = (idiomFirst.length ? idiomFirst : matchIdioms(text, 3)).map(spec => ({ kind: 'idiom' as const, spec }));
     return idiomFirst.length ? idioms : [...nodes, ...idioms];
-  }, [text, plan]);
+  }, [text, plan, editing]);
   useEffect(() => setActive(0), [fallback.length]);
   // Fallback results with a plan: the plan was only a guess at a typo, and an idiom has that name.
-  const idiomWins = plan.steps.length > 0 && fallback.length > 0;
+  const idiomWins = !editing && plan.steps.length > 0 && fallback.length > 0;
+  const showCommand = !!cmd && !idiomWins && cmd.clauses.length > 0 && (editing || cmd.steps.length > 0 || cmd.clauses.some(c => c.status !== 'ok' && fallback.length === 0));
 
   const run = () => {
     if (plan.intent === 'teach') { teach(); return; }
-    if (plan.steps.length && !plan.problem && !idiomWins) {
-      const ran = useNodeGraphStore.getState().runDoPlan(plan, text.trim());
-      if (ran.length) toast.info(`Do: ${text.trim()}`, { message: `${ran.join(' → ')}. Undo takes it all back.` });
+    if (cmd?.ok && !idiomWins) {
+      const ran = useNodeGraphStore.getState().runCommand(text.trim(), picks);
+      if (ran.ok) toast.info(`Do: ${text.trim()}`, { message: `${ran.steps.map(st => st.label).join(' → ')}. Undo takes it all back.` });
+      else toast.info('Didn’t run', { message: ran.clauses.find(c => c.status !== 'ok')?.message ?? 'The graph changed: try again.' });
       closeDoBar();
       return;
     }
+    if (cmd && editing) return;
     const f = fallback[active];
     if (f) pick(f);
   };
@@ -179,8 +211,11 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
         <input
           ref={inputRef}
           value={text}
-          onChange={e => setText(e.target.value)}
+          onChange={e => { setText(e.target.value); setCaret(e.target.selectionStart); }}
+          onSelect={e => setCaret((e.target as HTMLInputElement).selectionStart)}
           onKeyDown={e => {
+            // Tab takes a suggestion, Enter still runs the phrase.
+            if (e.key !== 'Enter' && ta.onKeyDown(e)) return;
             if (e.key === 'Enter') { e.preventDefault(); run(); }
             if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => Math.min(a + 1, Math.max(0, fallback.length - 1))); }
             if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => Math.max(0, a - 1)); }
@@ -190,24 +225,32 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
           data-do-input
           style={{ flex: 1, minWidth: 0, border: 0, outline: 'none', background: 'transparent', color: tk.text.primary, font: `14px ${fontFamily.ui}` }}
         />
+        <IconButton icon="info" size="sm" label="Commands: every verb, with examples to try" onClick={() => { closeDoBar(); openCommandsRef(); }} data-do-help />
         <IconButton icon="star" size="sm" active={panel === 'taught'} label="Your taught phrases" onClick={() => setPanel(p => (p === 'taught' ? 'none' : 'taught'))} />
         <IconButton icon="close" size="sm" label="Close" shortcut="esc" onClick={closeDoBar} />
       </div>
 
+      {ta.items.length > 0 && <div style={{ padding: '0 8px 6px' }}><AssistList items={ta.items} active={ta.active} onPick={ta.pick} onHover={ta.setActive} /></div>}
+      {ta.signature && text.trim() && !plan.steps.some(st => st.kind === 'scene-output') && <div style={{ padding: '0 8px 6px' }}><SignatureLine sig={ta.signature} /></div>}
       <div style={{ overflowY: 'auto', minHeight: 0 }}>
-        {/* The plan: what runs on Enter */}
-        {plan.steps.length > 0 && !idiomWins && section(plan.problem ? 'Can’t do that yet' : 'Enter runs', (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }} data-do-plan>
-            {plan.steps.map((s, i) => (
-              <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 18, height: 18, borderRadius: 9, background: alpha(tk.accent.base, 0.14), color: tk.accent.base, fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
-                <span data-do-step>{s.label}</span>
-              </span>
+        {/* The plan: what runs on Enter, clause by clause */}
+        {showCommand && cmd && section(cmd.ok ? `Enter runs · ${cmd.steps.length} step${cmd.steps.length === 1 ? '' : 's'} · one undo` : pickClause ? 'Pick one, then Enter' : 'Can’t run yet', (
+          <CommandPreview cmd={cmd} onPick={(key, id) => setPicks(p => ({ ...p, [key]: id }))} onHoverPick={setHoverPick}
+            onSuggest={(clause, s2) => { setText(cmd.clauses.length === 1 ? s2 : cmd.clauses.map(c => (c.index === clause.index ? s2 : c.text)).join(', ')); inputRef.current?.focus(); }} />
+        ))}
+        {plan.problem && !idiomWins && !showCommand && <div style={{ padding: '6px 12px 8px', fontSize: 12, color: tk.status.warningText }} data-do-problem>{plan.problem}</div>}
+        {plan.fixes && plan.fixes.length > 0 && !idiomWins && !editing && (
+          <div style={{ padding: '0 12px 8px', display: 'flex', flexWrap: 'wrap', gap: 6 }} data-do-fixes>
+            {plan.fixes.map(f => (
+              <Button key={f.label} size="sm" variant="secondary" icon="check" data-do-fix={f.label} onClick={() => {
+                const ran = useNodeGraphStore.getState().runDoPlan(f.plan, `${text.trim()} (fixed)`);
+                if (ran.length) toast.info(`Do: ${text.trim()}`, { message: `${ran.join(' → ')}. Undo takes it all back.` });
+                closeDoBar();
+              }}>{f.label}</Button>
             ))}
           </div>
-        ))}
-        {plan.problem && !idiomWins && <div style={{ padding: '6px 12px 8px', fontSize: 12, color: tk.status.warningText }} data-do-problem>{plan.problem}</div>}
-        {(plan.reading.length > 0 || plan.unknown.length > 0) && !plan.intent && (
+        )}
+        {(plan.reading.length > 0 || plan.unknown.length > 0) && !plan.intent && !editing && (
           <div style={{ padding: '0 12px 8px', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             {plan.reading.map((r, i) => <span key={i} title={r.as} style={{ fontSize: 11, padding: '1px 6px', borderRadius: 6, background: tk.bg.hover, color: tk.text.secondary }}>{r.text} <span style={{ color: tk.text.faint }}>· {r.as}</span></span>)}
             {plan.unknown.map((w, i) => <span key={`u${i}`} title="Not a word the Do… bar knows" style={{ fontSize: 11, padding: '1px 6px', borderRadius: 6, color: tk.text.faint, textDecoration: 'line-through' }}>{w}</span>)}
@@ -260,7 +303,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
         ))}
         {!text.trim() && !check && panel === 'none' && (
           <div style={{ padding: '4px 12px 10px', ...muted }}>
-            Shapes, actions and values: “heart at the top left with rings”, “twist the space 0.5”, “mix these colours”, “glow falloff 4 red”. Works on the selection (“it”, “these”), else on what the Output shows.
+            Shapes, actions and values: “heart at the top left with rings”, “twist the space 0.5”, “glow falloff 4 red”. Edits too: “connect the noise to the output”, “switch the noise to voronoi”, “make the circle bigger”. Chain clauses with “then”: each builds on “it”. The ⓘ lists every command.
           </div>
         )}
       </div>
@@ -314,6 +357,67 @@ function TaughtList() {
         <Button size="sm" variant="ghost" icon="export" onClick={download} disabled={!list.length}>Export</Button>
         <Button size="sm" variant="ghost" icon="import" onClick={upload}>Import</Button>
       </div>
+    </div>
+  );
+}
+
+/** The steps of a command, numbered across clauses, with the exact nodes, wires and values; a clause it can't read is marked, with "did you mean". */
+function CommandPreview({ cmd, onPick, onHoverPick, onSuggest }: {
+  cmd: CommandPlan; onPick: (key: string, id: string) => void; onHoverPick: (id: string | null) => void; onSuggest: (clause: CmdClause, text: string) => void;
+}) {
+  const tk = useTokens();
+  let num = 0;
+  const many = cmd.clauses.length > 1;
+  const detail = (s: CmdStep) => [
+    ...(s.adds.length ? [`adds ${s.adds.join(', ')}`] : []),
+    ...s.wires.map(w => `+ ${w}`),
+    ...s.unwires.map(w => `− ${w}`),
+    ...s.params,
+    ...s.removes.map(r => `removes ${r}`),
+    ...s.notes,
+  ];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} data-do-plan>
+      {cmd.clauses.map(c => (
+        <div key={c.index} data-do-clause={c.status} style={{
+          display: 'flex', flexDirection: 'column', gap: 3,
+          ...(c.status !== 'ok' ? { padding: '6px 8px', borderRadius: radius.control, background: alpha(c.status === 'pick' ? tk.accent.base : tk.status.warningText, 0.1) } : {}),
+        }}>
+          {many && <span style={{ fontSize: 11, color: c.status === 'ok' ? tk.text.faint : tk.status.warningText, fontStyle: 'italic' }}>“{c.text}”</span>}
+          {c.steps.map((s, i) => {
+            num++;
+            return (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ width: 18, height: 18, borderRadius: 9, background: alpha(tk.accent.base, 0.14), color: tk.accent.base, fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{num}</span>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                  <span data-do-step>{s.label}</span>
+                  {detail(s).map((d, k) => <span key={k} style={{ font: `11px ${fontFamily.mono}`, color: d.startsWith('−') ? tk.text.faint : tk.text.muted, overflowWrap: 'anywhere' }}>{d}</span>)}
+                </span>
+              </div>
+            );
+          })}
+          {c.status !== 'ok' && <span style={{ fontSize: 12, color: c.status === 'pick' ? tk.text.primary : tk.status.warningText }} data-do-problem>{c.message}</span>}
+          {c.pick && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }} data-do-pick>
+              {c.pick.options.map((o, k) => (
+                <button key={o.id} type="button" onClick={() => { onHoverPick(null); onPick(c.pick!.key, o.id); }} onMouseEnter={() => onHoverPick(o.id)} onMouseLeave={() => onHoverPick(null)}
+                  style={{ display: 'flex', gap: 8, padding: '3px 6px', border: 0, borderRadius: radius.control, background: 'transparent', color: tk.text.primary, cursor: 'pointer', textAlign: 'left', font: `12px ${fontFamily.ui}` }}>
+                  <b style={{ color: tk.accent.base }}>{k + 1}</b>{o.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {c.suggestions && c.suggestions.length > 0 && (
+            <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }} data-do-suggest>
+              <span style={{ fontSize: 11.5, color: tk.text.muted }}>Did you mean</span>
+              {c.suggestions.map(sg => (
+                <button key={sg} type="button" onClick={() => onSuggest(c, sg)}
+                  style={{ padding: '1px 7px', borderRadius: 6, border: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, color: tk.text.primary, cursor: 'pointer', font: `11.5px ${fontFamily.mono}` }}>{sg}</button>
+              ))}
+            </span>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

@@ -67,6 +67,8 @@ export interface ApplyOptions {
   heightOf?: (nd: GraphNode) => number;
   /** On the top level an Output is added when the graph has none (inside a group there is none to add). */
   topLevel?: boolean;
+  /** Show a branch's result on the Output (default true; the Do… bar's sentences pass false mid-sentence). */
+  show?: boolean;
 }
 
 export function applyMove(nodes: GraphNode[], target: MoveTarget, move: Move, args: Record<string, unknown>, nextId: () => string, opts: ApplyOptions = {}): AppliedMove | null {
@@ -169,7 +171,7 @@ export function applyMove(nodes: GraphNode[], target: MoveTarget, move: Move, ar
 
   // Showing the result.
   let shown = false;
-  const show = move.shape === 'branch' ? (build.show ?? 'none') : (move.shape === 'transform' && rewired === 0 ? 'ifEmpty' : 'none');
+  const show = opts.show === false ? 'none' : move.shape === 'branch' ? (build.show ?? 'none') : (move.shape === 'transform' && rewired === 0 ? 'ifEmpty' : 'none');
   let output = graphOutput(next);
   let newOutput: string | null = null;
   if (!output && topLevel && result && show !== 'none') {

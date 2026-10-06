@@ -142,8 +142,8 @@ describe('field sockets', () => {
     expect(main).not.toContain(`${fn.name}(gridpatter_0_rq,`);
     expect(main).not.toContain('continue;');
     expect(main).toMatch(/gridpatter_0_d {4}= min\(gridpatter_0_d, gridpatter_0_nd\);/);
-    // Pull may move a shape a whole cell once the neighbours are drawn.
-    expect(main).toMatch(/gridpatter_0_q -= gridpatter_0_dir \* gridpatter_0_inf \* 1\.0;/);
+    // Pull may move a shape a whole cell once the neighbours are drawn, and no further (3×3 only sees 1 cell over).
+    expect(main).toMatch(/gridpatter_0_q -= gridpatter_0_dir \* min\(gridpatter_0_inf \* 1\.0, 1\.0\);/);
 
     const far = mainOf(compileGraph({ nodes: circleIntoGrid({ overflow: 'far' }) }).fragmentShader);
     expect(far).toMatch(/for \(int gridpatter_0_j = -2; gridpatter_0_j <= 2; gridpatter_0_j\+\+\)/);

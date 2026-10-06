@@ -12,6 +12,9 @@ import {
 import { useTokens } from '../theme/themeStore';
 import { alpha, fontFamily, radius } from '../theme/tokens';
 import { Button } from './ui/Button';
+import { CommandsReferenceBody } from './NodeGraph/DoCommandsReference';
+import { openDoBar } from '../suggestions/doBarStore';
+import { requestPage } from './page';
 
 export function ShortcutsPage() {
   const tk = useTokens();
@@ -113,6 +116,7 @@ export function ShortcutsPage() {
         </div>
 
         <div style={{ color: tk.text.faint, fontSize: 12 }}>Shortcuts are stored locally in your browser. They survive page refreshes.</div>
+        <DoBarCommandsSection />
       </div>
     </div>
   );
@@ -159,5 +163,23 @@ function ShortcutRow({ label, description, combo, binding, conflict, saved, onCl
         </span>
       )}
     </button>
+  );
+}
+
+/** Keys → Do… bar commands: the command reference (docs/do-bar-commands.md), folded until opened. */
+function DoBarCommandsSection() {
+  const tk = useTokens();
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ background: tk.bg.panel, borderRadius: radius.card, boxShadow: tk.shadow.card }} data-keys-commands>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 15, fontWeight: 650 }}>Do… bar commands</div>
+          <div style={{ color: tk.text.muted, marginTop: 4 }}>⌘K opens the Do… bar: build and edit the graph in words (“connect the noise to the output”, “make the circle bigger”). Every verb, with examples to try.</div>
+        </div>
+        <Button size="sm" icon={open ? 'chevU' : 'chevD'} onClick={() => setOpen(o => !o)}>{open ? 'Hide' : 'Show commands'}</Button>
+      </div>
+      {open && <CommandsReferenceBody onTry={text => { requestPage('studio'); setTimeout(() => openDoBar({ text }), 50); }} />}
+    </div>
   );
 }

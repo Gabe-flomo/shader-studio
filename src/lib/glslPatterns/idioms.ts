@@ -200,7 +200,7 @@ export const IDIOMS: Idiom[] = [
     patterns: ['mat2(cos($a), -sin($a), sin($a), cos($a))', 'mat2(cos($a), sin($a), -sin($a), cos($a))'],
     holes: { a: { input: 'angle' } },
     noun: c => `a rotation by ${c.h('a')}`,
-    how: c => `builds a 2×2 rotation matrix for an angle of ${c.h('a')} radians: multiply a point by it to turn it around the origin`,
+    how: c => `builds a 2×2 rotation matrix for an angle of ${c.h('a')} (in radians): multiply a point by it to turn it around the origin`,
     keywords: ['rotate', 'rotation', 'mat2'],
   },
   {

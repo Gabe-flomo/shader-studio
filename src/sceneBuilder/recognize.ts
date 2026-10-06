@@ -20,6 +20,7 @@ import {
 } from './spec';
 import { round, printRecipe } from './recipe';
 import { META_KEY, ROLE_KEY, type SceneBuilderMeta } from './build';
+import { DEFAULT_PALETTE, OUTPUT_BY_SHOW, PALETTES, type OutputShow, type OutputSpec } from './output';
 
 export interface DescribeResult {
   spec: SceneSpec;
@@ -306,6 +307,37 @@ const colourOf = (n: GraphNode | undefined): Vec3 | null => {
   return null;
 };
 
+const SOCKET_OUTPUT: Record<string, OutputShow> = { depth: 'depth', dist: 'distance', normal: 'normal', hit: 'hit', pos: 'position', iter: 'steps', ao: 'ao', shadow: 'shadow' };
+
+/** The output the graph's Output shows, when it isn't the picture: its spec and the nodes it reads. */
+function readOutput(r: Reader, output: GraphNode | undefined, renderer: GraphNode): { output: OutputSpec; read: string[] } | null {
+  const first = output ? r.src(output, 'color') : undefined;
+  if (!first) return null;
+  // The builder's own chain: Palette / Color Ramp ← Expression Block carrying the output it shows.
+  const chain = [first, ...(first.type === 'palette' ? [r.src(first, 'value')] : first.type === 'colorRamp' ? [r.src(first, 't')] : [])].filter((n): n is GraphNode => !!n);
+  const block = chain.find(n => roleOf(n) === 'out:value' && n.params._sbOutput);
+  if (block) {
+    const o = block.params._sbOutput as OutputSpec;
+    const read = chain.map(n => n.id);
+    for (const k of Object.keys(block.inputs)) { const s = r.src(block, k); if (s && /^out:/.test(roleOf(s))) read.push(s.id); }
+    return OUTPUT_BY_SHOW[o.show] ? { output: { ...o }, read } : null;
+  }
+  // By hand: the Output (or a Palette before it) wired straight to one of the loop's sockets.
+  const direct = (n: GraphNode, key: string) => {
+    const c = n.inputs[key]?.connection;
+    return c && c.nodeId === renderer.id ? SOCKET_OUTPUT[c.outputKey] ?? null : null;
+  };
+  const show = output ? direct(output, 'color') : null;
+  if (show) return { output: { show }, read: [] };
+  if (first.type === 'palette') {
+    const viaPalette = direct(first, 'value');
+    const preset = Number(first.params.preset);
+    const pal = PALETTES.find(p => p.kind === 'palette' && p.preset === preset);
+    if (viaPalette) return { output: { show: viaPalette, palette: pal?.key ?? DEFAULT_PALETTE }, read: [first.id] };
+  }
+  return null;
+}
+
 /** What `nodes` (a graph's top level) draws in 3D, as a spec, or null when it has no march loop or glass scene. */
 export function describeGraph(nodes: GraphNode[]): DescribeResult | null {
   const r = new Reader(nodes);
@@ -315,6 +347,15 @@ export function describeGraph(nodes: GraphNode[]): DescribeResult | null {
   const renderer = renderers.find(n => feeding.has(n.id)) ?? renderers[0];
   if (!renderer) return null;
   const spec = emptySpec();
+  // What the Output shows: a builder output chain, or one of the loop's own sockets (maybe through a Palette).
+  const shown = readOutput(r, output, renderer);
+  if (shown) {
+    spec.output = shown.output;
+    for (const id of shown.read) r.read.add(id);
+    // The picture's chain still sits beside it: read the lights and the look from there.
+    const pictureEnd = nodes.find(n => roleOf(n) === 'tone') ?? nodes.find(n => roleOf(n) === 'compose');
+    if (pictureEnd) for (const id of upstream(r, pictureEnd)) feeding.add(id);
+  }
   const L = spec.look;
   const recognized: string[] = [];
   const mode = renderer.type === 'glassScene' ? 'glass' : renderer.type === 'giLitMarchGroup' ? 'gi' : renderer.params.volumetric ? 'volumetric' : 'surface';

@@ -7,6 +7,10 @@
  * a scrolling main area, and a footer with secondary actions on the left and
  * Done on the right. On a phone it fills the screen and the panels become tabs
  * (builderLayout.ts).
+ *
+ * Built-in guidance comes with it (BuilderHelp.tsx, words in helpContent.ts): a Tips switch in
+ * the header, and <BuilderHelp> / <EmptyHelp> / <HintMark> for the builder's sections, which find
+ * their text by the window's `prefsKey`.
  */
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Modal } from '../ui/Modal';
@@ -18,6 +22,9 @@ import { fontFamily, radius } from '../../theme/tokens';
 import { Segmented } from '../ui/Choice';
 import { usePhoneDialog } from '../ui/phoneDialog';
 import { builderTabs, type BuilderTab } from './builderLayout';
+import { BuilderHelpContext, HintLabel, TipsToggle } from './BuilderHelp';
+
+export { BuilderHelp, EmptyHelp, HintLabel, HintMark, TipsToggle, useTips } from './BuilderHelp';
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
@@ -121,8 +128,10 @@ export function BuilderWindow({
   );
 
   return (
+    <BuilderHelpContext.Provider value={prefsKey}>
     <Modal title={title} subtitle={subtitle} icon={icon} iconColor={iconColor} width={width} height={height} onClose={onClose} closeOnScrim={false}
-      headerActions={phone ? headerActions : <>
+      headerActions={phone ? <><TipsToggle builder={prefsKey} />{headerActions}</> : <>
+        <TipsToggle builder={prefsKey} />
         {left && <PanelToggle panel={left} open={open.left} onToggle={() => toggle.current('left')} shortcut={sc('[')} />}
         {right && <PanelToggle panel={right} open={open.right} onToggle={() => toggle.current('right')} shortcut={sc(']')} />}
         {headerActions}
@@ -157,15 +166,16 @@ export function BuilderWindow({
       </div>
       )}
     </Modal>
+    </BuilderHelpContext.Provider>
   );
 }
 
 /** Small caps section label, as in the Expression Block editor. */
-export function BuilderLabel({ children, meta }: { children: ReactNode; meta?: ReactNode }) {
+export function BuilderLabel({ children, meta, hint }: { children: ReactNode; meta?: ReactNode; hint?: string }) {
   const tk = useTokens();
   return (
     <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint, textTransform: 'uppercase' }}>
-      <span style={{ flex: 1 }}>{children}</span>
+      <span style={{ flex: 1 }}>{hint ? <HintLabel hint={hint}>{children}</HintLabel> : children}</span>
       {meta && <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, fontSize: 12 }}>{meta}</span>}
     </span>
   );

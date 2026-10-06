@@ -19,7 +19,7 @@ import { compilePattern } from './match';
 import { parseExpr } from './parse';
 import { inferTypes, GLOBAL_TYPES, type TypeEnv } from './types';
 import { inferRoles, roleFromName, type Role } from './roles';
-import { explainTree, type ExplainContext, type Explanation, type IdiomHit } from './explain';
+import { explainTree, fmt, type ExplainContext, type Explanation, type IdiomHit } from './explain';
 import { rangeForValue } from '../rangeMath';
 import type { Idiom } from './idioms';
 
@@ -246,8 +246,13 @@ export function generalise(root: Expr, src: string, ctx: GeneraliseContext = {})
 }
 
 /**
- * The node's description: an idiom's own words with its holes named by the inputs (or the
- * constants kept), so it reads right on the made node; else the explanation's sentence.
+ * The node's description: an idiom's own words, read the way the made node works.
+ *  - A hole kept as a constant reads as its value ("of radius 0.3").
+ *  - A hole that became an input with a default reads as the default, marked adjustable
+ *    ("of radius 0.3 (adjustable)"), not as the input's name, which would give "radius radius".
+ *  - An input with no default (it stands for an expression, like `p`) reads as its name, except
+ *    where the template's own word already says it: "of radius radius" becomes "of the given radius".
+ * Else (no idiom) the explanation's sentence, which only ever quotes the original code.
  */
 export function descriptionFor(g: Generalised, choices: GenChoices = {}): string {
   if (g.plan.kind !== 'idiom' || !g.idiom) return g.description;
@@ -259,13 +264,38 @@ export function descriptionFor(g: Generalised, choices: GenChoices = {}): string
     const constant = inp.canBeConstant ? (choices.constant?.[idx] ?? inp.constant) : false;
     return { inp, constant, name: (choices.names?.[idx] ?? inp.name).trim() };
   };
-  const text = (hole: string) => { const a = at(hole); return !a ? '' : a.constant ? (a.inp.default !== undefined ? formatNumber(a.inp.default) : a.inp.source) : a.name; };
+  // Names without a default go in as markers, resolved once the sentence is written.
+  const OPEN = '\u0001', CLOSE = '\u0002';
+  // "(adjustable)" goes on a hole's first mention only: "a 4 (adjustable) × 4 grid".
+  const marked = new Set<string>();
+  const adjustable = (hole: string, value: string) => (marked.has(hole) ? value : (marked.add(hole), `${value} (adjustable)`));
+  const text = (hole: string) => {
+    const a = at(hole);
+    if (!a) return '';
+    if (a.constant) return a.inp.default !== undefined ? fmt(a.inp.default) : a.inp.source;
+    if (a.inp.default !== undefined) return adjustable(hole, fmt(a.inp.default));
+    if (a.inp.defaultVec) return adjustable(hole, a.inp.source);
+    return `${OPEN}${a.name}${CLOSE}`;
+  };
   const how = g.idiom.how({
-    h: text, n: text, code: text,
-    v: hole => { const a = at(hole); return a?.constant ? a.inp.default : undefined; },
+    h: text, n: text,
+    // What the code would say: tested by templates (`c.code('w') ? …`), not worded, so it marks nothing
+    code: hole => { const a = at(hole); return !a ? '' : a.inp.default !== undefined ? fmt(a.inp.default) : a.constant || a.inp.defaultVec ? a.inp.source : a.name; },
+    v: hole => at(hole)?.inp.default,
     role: hole => at(hole)?.inp.role ?? 'unknown', type: hole => at(hole)?.inp.type ?? 'unknown',
   });
-  return `${how[0].toUpperCase()}${how.slice(1)}.`;
+  const words = (name: string) => name.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+  const same = (said: string, name: string) => said.toLowerCase().replace(/-/g, ' ') === words(name) || said.toLowerCase() === name.toLowerCase();
+  const NAME = `${OPEN}([^${CLOSE}]+)${CLOSE}`;
+  const resolved = how
+    // "an angle of ⟨angle⟩" → "the given angle"
+    .replace(new RegExp(`\\b(an?|the) ([\\w-]+) of ${NAME}`, 'g'), (m, _art: string, said: string, name: string) => (same(said, name) ? `the given ${words(name)}` : m))
+    // "(the) radius ⟨radius⟩" → "the given radius"
+    .replace(new RegExp(`\\b(?:(?:the|an?) )?([\\w-]+) ${NAME}`, 'g'), (m, said: string, name: string) => (same(said, name) ? `the given ${said}` : m))
+    // "⟨steps⟩ steps" → "the given steps"
+    .replace(new RegExp(`${NAME} ([\\w-]+)`, 'g'), (m, name: string, said: string) => (same(said, name) ? `the given ${said}` : m))
+    .replace(new RegExp(NAME, 'g'), '$1');
+  return `${resolved[0].toUpperCase()}${resolved.slice(1)}.`;
 }
 
 /** What the person chose in the dialog. Keyed by input index. */
