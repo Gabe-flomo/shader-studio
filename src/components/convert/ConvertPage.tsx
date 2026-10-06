@@ -21,6 +21,7 @@
  * Functions library from here. A helper already in the library converts to
  * that saved node (its arguments wired in) instead of a region of code.
  */
+import { learnGraph, textSignature } from '../../suggestions/learning';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { glslToGraph, normaliseHostShader, type ConversionResult } from '../../glslToGraph';
@@ -273,8 +274,12 @@ function GlslConvert({ onMaterialized, compact = false }: { onMaterialized: () =
 
   const materialize = () => {
     if (blocked) return;
-    const count = useNodeGraphStore.getState().nodes.length;
+    const placed = useNodeGraphStore.getState().nodes;
+    const count = placed.length;
     endScratch(true);
+    // Converted GLSL teaches the suggestions as an import (half the weight of a graph you saved).
+    const sig = textSignature(code);
+    learnGraph(`convert:${sig}`, 'imported', placed, sig);
     toast.success(`${count} nodes placed`, { message: report.blocks.length + report.regions.length ? 'Code the converter kept is marked FROM CODE on its cards.' : 'Every part became a node.' });
     onMaterialized();
   };

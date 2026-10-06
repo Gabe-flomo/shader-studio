@@ -11,7 +11,8 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { getOfferedDefinitions, getNodeDefinition } from '../../nodes/definitions';
 import { useUserNodesVersion } from '../../nodes/userNodes/useUserNodes';
 import type { NodeDefinition } from '../../types/nodeGraph';
-import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
+import { affinity, rankTables } from '../../suggestions';
 import { CATEGORY_COLORS, HIDDEN_TYPES } from './nodeCategoryMeta';
 import { ctp } from '../../theme/palette';
 import { spawnPoint } from './spawnPoint';
@@ -43,6 +44,9 @@ function scoreEntry(entry: SearchEntry, query: string): number {
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
+
+/** The browsing group of learned picks (suggestions). */
+const USUALLY_NEXT = 'Usually next';
 
 // ── Type compatibility helpers ─────────────────────────────────────────────────
 // float can feed into any type; anything can feed into float (promotion)
@@ -88,9 +92,14 @@ interface Props {
   filterInputType?: string;
   /** Called after addNode with the new node's ID */
   onNodePlaced?: (nodeId: string) => void;
+  /**
+   * Results that usually go with this node type rank higher (suggestions: your graphs, then the
+   * examples). Defaults to the selected node's type.
+   */
+  boostFrom?: string;
 }
 
-export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputType, filterInputType, onNodePlaced }: Props) {
+export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputType, filterInputType, onNodePlaced, boostFrom }: Props) {
   const addNode = useNodeGraphStore(s => s.addNode);
   const groupPresets = useNodeGraphStore(s => s.groupPresets);
   const instantiateGroupPreset = useNodeGraphStore(s => s.instantiateGroupPreset);
@@ -103,6 +112,21 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
 
   const userNodesVersion = useUserNodesVersion();
   const ALL_ENTRIES = useMemo(() => buildEntries(userNodesVersion), [userNodesVersion]);
+
+  // What usually goes with the node you came from (or the selected one): a nudge within a match tier.
+  const boost = useMemo(() => {
+    if (!open) return () => 0;
+    const st = useNodeGraphStore.getState();
+    const from = boostFrom ?? (st.selectedNodeId ? (st.nodes.find(n => n.id === st.selectedNodeId) ?? getActiveNodes(st.nodes, st.activeGroupPath)?.find(n => n.id === st.selectedNodeId))?.type : undefined);
+    if (!from) return () => 0;
+    const tables = rankTables();
+    const cache = new Map<string, number>();
+    return (type: string) => {
+      let v = cache.get(type);
+      if (v === undefined) { v = affinity(from, type, tables); cache.set(type, v); }
+      return v;
+    };
+  }, [open, boostFrom]);
 
   // Filtered + ranked results
   const results = useMemo<SearchEntry[]>(() => {
@@ -117,23 +141,34 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
     return base
       .map(e => ({ entry: e, score: scoreEntry(e, query) }))
       .filter(({ score }) => score > 0)
+      // Usage nudges within a tier (worth under one tier: 15 of the 20 between tiers).
+      .map(x => ({ ...x, score: x.score + Math.min(1, boost(x.entry.type) * 3) * 15 }))
       .sort((a, b) => b.score - a.score || a.entry.def.label.localeCompare(b.entry.def.label))
       .map(({ entry }) => entry);
-  }, [ALL_ENTRIES, query, filterOutputType, filterInputType]);
+  }, [ALL_ENTRIES, query, filterOutputType, filterInputType, boost]);
+
+  // Browsing: what usually goes with the node you came from leads, as its own group.
+  const picks = useMemo<SearchEntry[]>(() => {
+    if (query) return [];
+    const base = (filterOutputType || filterInputType) ? results : ALL_ENTRIES;
+    return base.map(e => ({ e, b: boost(e.type) })).filter(x => x.b > 0.02).sort((a, b) => b.b - a.b).slice(0, 5).map(x => x.e);
+  }, [query, results, ALL_ENTRIES, filterOutputType, filterInputType, boost]);
 
   // Group results by category
   const grouped = useMemo(() => {
     const map = new Map<string, SearchEntry[]>();
+    if (picks.length) map.set(USUALLY_NEXT, picks);
     for (const e of results) {
+      if (picks.includes(e)) continue;
       const arr = map.get(e.def.category) ?? [];
       arr.push(e);
       map.set(e.def.category, arr);
     }
     return map;
-  }, [results]);
+  }, [results, picks]);
 
   // Flat list for keyboard navigation (same order as rendered)
-  const flatList = useMemo(() => results, [results]);
+  const flatList = useMemo(() => (query ? results : [...grouped.values()].flat()), [query, results, grouped]);
 
   // Reset on open
   useEffect(() => {
