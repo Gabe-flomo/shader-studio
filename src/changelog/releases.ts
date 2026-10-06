@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.36',
+    date: '2026-10-05',
+    title: 'Previews that explain',
+    highlights: [
+      { area: 'Studio', text: 'Node previews have Show as: vec2 values as a warped Grid, Arrows or a colour Wheel, so you can see how space moves.', link: { kind: 'doc', path: 'docs/node-previews.md' } },
+      { area: 'Studio', text: 'Numbers auto-range with a key (no more white squares), a Slice plot shows input vs output, and constants read "= 3.0 everywhere".' },
+    ],
+  },
+  {
     id: '2026.10.35',
     date: '2026-10-05',
     title: 'Texture tools',
