@@ -1,6 +1,6 @@
 # Code Explorer — plan
 
-*Status: plan only, nothing implemented. Branch `claude/code-explorer-plan`.*
+*Status: **phase 1 (v1, written code) shipped** on `claude/code-explorer-p1`; see “Phase 1 shipped” at the end. Phases 2–3 are still plans. User doc: [code-explorer.md](code-explorer.md).*
 
 ## In one paragraph
 
@@ -522,3 +522,57 @@ Everything is local. Indexing runs in a worker on the device, and the index live
 - Topic models on code: Panichella et al., *How to Effectively Use Topic Models for Software Engineering Tasks?* (ICSE'13): [PDF](https://www.cs.wm.edu/~denys/pubs/ICSE'13-LDA-CRC.pdf) · Chen et al. survey: [PDF](https://petertsehsun.github.io/papers/peter_emse_survey2015.pdf) · *Topic modeling of public repositories at scale using names in source code*: [arXiv](https://arxiv.org/html/1704.00135v1)
 - Grootendorst, *BERTopic: Neural topic modeling with a class-based TF-IDF procedure*: [arXiv](https://arxiv.org/pdf/2203.05794)
 - In-browser embeddings: [Hugging Face: sentence embeddings in the browser](https://observablehq.com/@huggingface/sentence-embeddings-and-dimension-reduction-in-the-browse) · [philna.sh: vector embeddings in Node.js](https://philna.sh/blog/2024/09/25/how-to-create-vector-embeddings-in-node-js/)
+
+---
+
+## Phase 1 shipped
+
+What landed on `claude/code-explorer-p1`, against §11's v1 list. The code is in `src/codeExplorer/` (core) and `src/components/codeExplorer/` (UI).
+
+### Built as planned
+
+- **Tier A parsing.** `tokenizer.ts` blanks comments with discover.ts's `blankComments`, so offsets don't move, and skips directives. `parser.ts` is a Pratt expression parser plus a tolerant statement walker: declarations, assignments, return, the headers of if/for/while, functions and structs. Junk is skipped up to the next `;`. Function definitions come from `discoverInSource` (`extract.ts`). Shadertoy names are read through dialects.ts's `SHADERTOY_RENAMES`, so `iTime` shapes as `u_time` without rewriting the text (provenance offsets stay true). Tier B (shaderfrog) isn't needed in phase 1 and isn't loaded.
+- **Shapes.** `shape.ts` produces L1 (literals → `#`, signs kept as `-#`, constant arithmetic folded, locals → `_a, _b…` with repeats sharing a letter, built-ins kept) and L2 (names → `_`, nested calls → `name(…)`). `antiUnify.ts` produces L3: anti-unification of the L1 variants of one L2 group, with at most 2 holes. A merge must keep at least 70% of each variant's tree, so a hole can't swallow a whole call.
+- **Extraction.** Each call site records: callee, L1, L2, field, line, column, the statement line with the call's span, enclosing chain (constructors skipped), statement kind, producer → call → consumer, the other callees in the same statement, its literal arguments, whether it is flipped (`1.0 - f(…)`), and split identifier words. Constructors are indexed but flagged, and kept out of chains, co-occurrence and the top-functions list.
+- **Provenance** follows §3.2. An Expression Block line is its own field (`lines[i].rhs`, `result`), with `line` = the block's line number and `column` inside the rhs. Bare Custom Function bodies are read as `return …;`, with the column corrected back. A node inside a group carries its `nodePath`.
+- **Corpus (written).** Covers bundled examples (`example:`), Convert examples (`example-convert:`), saved graphs (`saved:`), the open graph as edited (`open:`; left out when it is an unchanged saved graph or example), Custom Function, Expression and group presets and Function Builder functions (`preset:`, `builder:`), saved shaders (`shader:`), the Convert page's current shader (`convert:current`), GLSL typed into Present code blocks (`present:`), and linked-folder `.glsl/.frag/.vert…` files (`file:`; bounded to 300 folders, 400 files and 256 KB a file).
+- **Worker + IndexedDB.** `indexer.worker.ts` runs `host.ts`. The protocol is `init`, `sync {prefixes, docs}`, `rebuild` and `query`. The IndexedDB database `code-explorer` has stores `docs` and `meta` (schema version, the prebuilt hash applied). Sync is incremental: a doc is re-extracted only when its content hash changes, and docs under the synced prefixes that disappeared are removed. The in-memory postings and the L1/L2 counts change by exactly the doc's delta (this is tested). Where module workers are unavailable, the client runs the same host in place.
+- **Triggers.** Sync runs on first use, on `saved-graphs-changed`, on activity events (shader and preset saves), on `customfn-changed`, `presentations-changed` and `storage`, when a graph is opened, and on edits to the open graph (debounced 2 s). Rebuild is a button in the panel.
+- **Prebuilt examples index.** `src/codeExplorer/prebuilt/examples.json` (≈0.5 MB, ≈77 KB gzipped) is fetched by the worker as a separate asset. At runtime the app re-checks the examples' content hashes and re-indexes only the ones that changed since the file was built. Regenerate it with `CODE_EXPLORER_WRITE=1 npx vitest run src/codeExplorer/__tests__/prebuilt.test.ts`. The test warns when the file is stale and fails only when more than 25% of examples are stale or the schema is old.
+- **Queries** (`queries.ts`):
+  - **Function report:** L2 cards with L1 variants, L3 merges, instances (up to 60 per variant), a sparkline per doc group (example folder, Saved graphs, Presets…), literal spread and the flipped count, plus chains, flow, producers, consumers, statement kinds, same-statement co-occurrence (click to narrow) and same-node/function co-occurrence with lift.
+  - **Free-text search:** BM25 over one document per (function, L2), built from the pattern name and phrase, the functions in the shape, and the words around its instances. Uses the §5.4 synonym table (`synonyms.ts`) at half weight, with a gentle log-count prior.
+  - **Summary and suggestions.**
+- **UI.**
+  - The **Code Explorer panel**: a column on the GLSL page (the `</>` button next to Discover functions), and a dialog opened from anywhere.
+  - An **Explore code** card on the Files home.
+  - **How is this used?** in the Expression Block and Custom Function editor headers. It reads the identifier at the caret, and the button doesn't take focus.
+  - **Right-click → How is this used?** on function chips in the Functions panel (`ReferencePanel`).
+  - Chains, flow and co-occurrence start folded, with one-line summaries, and remember their state.
+- **Jump to source** (`jump.ts` plans the jump, which is pure and tested; `jumpRun.ts` carries it out):
+  - **Graph:** load it, asking first when the open graph has unsaved changes. Enter the groups (two deep, not sealed). Focus or reveal the node. A small `jumpStore` request makes the node card open its editor. The Expression Block editor focuses `Line N expression` / `Return expression` and selects and flashes the call. The Custom Function editor uses `CodeField`'s existing `flash`, opening Helper functions if needed. Input expressions open the input's expression popover.
+  - **Shaders and linked files:** open on the GLSL page with the range selected.
+  - **Convert, Present, presets, Builder:** go to their page.
+- **Explainer integration.** At merge time the shared library (`src/lib/glslPatterns/`, branch `claude/expr-explainer`) wasn't on main. `explain.ts` defines the adapter (`PatternExplainer`: `explain(query) → {id, name, phrase}`, optional `makeNode`) with `registerPatternExplainer()`. Until the library registers, a small built-in label table (≈30 rows, from §9's phrases) names the commonest shapes. To wire the library in, register it from a module imported by both `indexer.worker.ts` (search ranks on names) and the app (cards). Nothing in the Explorer duplicates the idiom library.
+
+### Measured (vitest on an M-series Mac; examples as of 2026.10.48)
+
+| | |
+|---|---|
+| Collect the examples' written code | ≈7 ms |
+| Extract (Tier A + shapes + flow) for every example doc | ≈25–35 ms for ≈1,200 call sites |
+| Function report (`smoothstep`) | ≈1–3 ms |
+| Free-text search (first call builds the pattern documents) | ≈5–15 ms, then ≈1–2 ms |
+
+Counts against §9 (with the converter corpus included, as the plan's scan did) are tested with tolerances: `smoothstep` ≈55 calls in ≈30 examples, top L2 `smoothstep(#, #, _)` then `smoothstep(#, #, length(…))`, `mix › smoothstep` among the chains, `length` first on the same line, and `step` the most-called function.
+
+### Left for later, or different from the plan
+
+- **Generated code**, the Written/Generated switch, statement windows, DECKARD near misses, topics, structural `$X` search and regex mode are phase 2, as planned. Present quotes of generated code aren't indexed in phase 1.
+- **Storage layout.** Postings aren't stored as their own object stores with IndexedDB indexes. Each doc is stored whole (with its sites) and the postings are rebuilt in memory when the worker starts (≈1k–10k sites, a few ms). This is simpler, and incremental per doc.
+- **Hashes.** Shapes are keyed by their text rather than by a hash; at this corpus size it makes no difference.
+- **Holes are untyped** (Tier B is phase 2–3).
+- **Make a node from this** waits for the explainer's module (`patternMaker()` is the hook).
+- **Jump to source limits.** It can't open an editor for nodes deeper than two groups or inside sealed groups (the group is shown). Presets jump to the Files page rather than the preset's own page. Convert examples open on the Convert page without a line selected.
+- **Workspace `.glsl` files** (the shared workspace folder) aren't read yet; linked folders are.
+- The open graph is told apart from an unchanged example by a fingerprint of its code. An example opened before the Explorer first starts may count twice until the examples sync has run (a second or so).
