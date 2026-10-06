@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Playfield",
-  "version": "2026.10.49",
+  "version": "2026.10.50",
   "identifier": "com.shaderstudio.app",
   "build": {
     "frontendDist": "../dist",
