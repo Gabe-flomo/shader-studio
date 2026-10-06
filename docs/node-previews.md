@@ -69,6 +69,30 @@ Each node type gets one of these, decided in `lib/nodePreview/previewPlan.ts`. A
 
 Before this, the eye banner carried Show as and the caption. Cards of colour-output nodes had a separately rendered thumbnail (often blank for texture nodes) or a list of their parameters. Several Agents cards showed an empty "no preview" box.
 
+## Line previews (Expression Block, Custom Function)
+
+In the **Expression Block editor**, every input, every line and Return has a small **▶**. Click one and a panel opens under the lines. It shows that variable's value over the whole picture, computed on the GPU with the block's real inputs: `Line 3 · float h = fract(dot(p, …)) · range −0.2 … 1.0`.
+
+- **Show as** follows the variable's type, with the same options as a node preview:
+  - float: Range / Slice / Contours / Raw
+  - vec2: Grid / Arrows / Wheel / Raw, plus Detail
+  - vec3 / vec4: colour, with its range key
+- **Stepping.** Clicking another ▶ switches the panel. While it is open, **↑ / ↓** walk the inputs, the lines and Return in order (not while you're typing in a field), so you can follow the computation from top to bottom.
+- **The value is the one right after that line.** A variable that later lines change (`h *= 2.0`) shows the value at the line you picked.
+- **Mid-typing.** A line that isn't finished, or code that doesn't compile yet, gets a note in the panel, and the picture stays the last one that worked.
+- **Closing.** The × (or closing the editor) ends it, and the eye goes back to what it showed before.
+- **Custom Function.** Its body is free-form GLSL, so instead of a ▶ per line there is a **Preview a variable** picker under the body. It lists the inputs, every named float / vec2 / vec3 / vec4 local the body declares (`float l = …`), and Return. ↑ / ↓ step through the same list.
+
+**How it works.** A line preview is the eye preview pointed at a temporary probe (`lib/nodePreview/lineProbe.ts`).
+
+- **The probe copy.** While a probe is set, the preview compile uses a *copy* of the block whose only output is the probed variable, as if it were an "Also outputs" socket:
+  - Expression Block: the lines up to the probed one, with the variable exposed. Inputs keep no lines, and Return uses the block's own result.
+  - Custom Function: `pv_probe = <name>;` is inserted after the statement that declares the variable, plus one extra out output.
+- **Who uses the copy.** `probedNode()` hands the copy to `buildPreviewGraph`, the value runner's target and the Show as UI, so they all agree.
+- **The saved graph is never touched:** no param change, no undo step, no dirty mark.
+- **Cost.** It is the existing value path: one probe at a time (the eye shows one node), the same throttled async readback, and the runner's program cache. It recompiles when the probed line or the code changes, not when a slider moves.
+- **The main picture.** While a probe is on, the eye is on the block, so the main picture also shows the probed variable.
+
 ## How to read the preview (the tooltip text)
 
 | Mode | Reading |
@@ -141,3 +165,4 @@ These numbers come from headless Chrome (Metal), on a 608 × 860 picture with an
 - vec3 colours are unchanged. HDR auto-range for colours isn't built.
 - The mobile graph browser's static thumbnails are unchanged.
 - Choices live in this browser's storage, not in the saved graph. They don't travel with a shared file.
+- Line previews read a variable at the block's top level. A Custom Function local declared inside a loop or an `if` is assigned inside it, so pixels that don't reach it show zero. A local declared after an early `return` shows zero where that return ran. int, bool and matrix variables can't be drawn.
