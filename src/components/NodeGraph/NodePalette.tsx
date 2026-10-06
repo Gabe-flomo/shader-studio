@@ -14,6 +14,7 @@ import type { CustomFnPreset } from '../../types/customFnPreset';
 import { FnThumbnail } from '../code/FnThumbnail';
 import type { GraphNode } from '../../types/nodeGraph';
 import type { ExprPreset } from '../../types/exprPreset';
+import { exprPresetParams } from '../../lib/glslPatterns/saveFlows';
 import type { GroupPreset } from '../../types/groupPreset';
 import { useUserNodes } from '../../nodes/userNodes/useUserNodes';
 import { graphToSubgraph } from '../../nodes/userNodes/graphToSubgraph';
@@ -703,13 +704,13 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                     onCommit={() => { renameExprPreset(p.id, renameExprValue); setRenamingExprId(null); refreshExprPresets(); }}
                     onCancel={() => setRenamingExprId(null)} />
                 : <ItemRow label={p.label} icon="expr" color={tabColor('expressions')}
-                    drag={{ label: p.label, type: 'exprNode', place: pos => addNode('exprNode', pos, { label: p.label, inputs: p.inputs, outputType: p.outputType, lines: p.lines, result: p.result, ...(p.comment ? { __comment: p.comment } : {}) }) }} onDragDone={onNodeAdded}
+                    drag={{ label: p.label, type: 'exprNode', place: pos => addNode('exprNode', pos, exprPresetParams(p)) }} onDragDone={onNodeAdded}
                     selected={selectedSaved === p.id} onClick={() => toggleSaved(p.id)}
-                    onDoubleClick={() => { addNode('exprNode', placeAt(), { label: p.label, inputs: p.inputs, outputType: p.outputType, lines: p.lines, result: p.result, ...(p.comment ? { __comment: p.comment } : {}) }); onNodeAdded?.(); }}
+                    onDoubleClick={() => { addNode('exprNode', placeAt(), exprPresetParams(p)); onNodeAdded?.(); }}
                     preview={<SavedItemPreview name={p.label} kind="Expression Block"
                       signature={`${signatureOf(p.label, p.outputType, p.inputs)} = ${p.result}`}
                       comment={p.comment}
-                      onAdd={() => { addNode('exprNode', placeAt(), { label: p.label, inputs: p.inputs, outputType: p.outputType, lines: p.lines, result: p.result, ...(p.comment ? { __comment: p.comment } : {}) }); onNodeAdded?.(); }} />}
+                      onAdd={() => { addNode('exprNode', placeAt(), exprPresetParams(p)); onNodeAdded?.(); }} />}
                     onDelete={() => { deleteExprPreset(p.id); refreshExprPresets(); }}
                     onRename={() => { setRenameExprValue(p.label); setRenamingExprId(p.id); }} />;
             }}

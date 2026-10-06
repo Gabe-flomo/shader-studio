@@ -20,6 +20,8 @@ export interface GlslEditorHandle {
   focus: () => void;
   /** Select a span of the file and scroll it into view (Show in file). */
   selectRange: (start: number, end: number) => void;
+  /** The current selection (start === end for a caret). */
+  getSelection: () => { start: number; end: number };
 }
 
 // Shared font/padding so the overlay lines up with the textarea exactly.
@@ -139,6 +141,7 @@ export function GlslEditor({ value, onChange, ref, ariaLabel = 'GLSL source', pl
       ta.scrollTop = Math.max(0, (line - 3) * lh);
       ta.dispatchEvent(new Event('scroll')); // keeps the highlight and line-number layers in step
     },
+    getSelection: () => { const ta = textareaRef.current; return ta ? { start: ta.selectionStart, end: ta.selectionEnd } : { start: 0, end: 0 }; },
   }), [insertAtCursor, onChange]);
 
   // ── Keyboard handler ──────────────────────────────────────────────────────

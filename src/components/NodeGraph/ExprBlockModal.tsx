@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { Fragment, useState, useEffect, useMemo, useRef } from 'react';
 import { toggleLineOff } from '../../lib/exprLines';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { setInputSlider } from '../../nodes/sliderFreeze';
@@ -26,6 +26,10 @@ import type { EditorPanel } from '../code/editorPanelPrefs';
 import { CollapseInputsButton, FunctionsToggle, InputsRail, SidePanel, useEditorSidePanels } from '../code/SidePanels';
 import { buildCompletions } from '../code/glslReference';
 import { insertSnippet } from '../code/useCompletion';
+import { ExplainRow } from '../explain/ExplainRow';
+import { useExplainDialogs } from '../explain/useExplainDialogs';
+import { exprBlockContext, exprBlockUseHere } from '../explain/hosts';
+import type { GeneraliseContext } from '../../lib/glslPatterns';
 
 // ── Convert ExprBlock warp lines → FnDef array (one fn per line, f1/f2/f3…) ──
 // Names are always sequential (f1, f2, …). The return type is inferred from a
@@ -125,6 +129,10 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
 
   const rawInputs = node.params.inputs;
   const completions = useMemo(() => buildCompletions((rawInputs as InputDef[] | undefined) ?? []), [rawInputs]);
+  // The explainer: types and roles of the block's names (inputs, typed lines, what feeds them)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the inputs, lines and wiring are what it reads
+  const explainCtx = useMemo(() => exprBlockContext(node), [node.params.inputs, node.params.lines, node.params.outputType, node.inputs]);
+  const explainDialogs = useExplainDialogs({ onJumped: onClose });
 
   // ── Undo / Redo ──────────────────────────────────────────────────────────────
   const history      = useRef<Snapshot[]>([{ lines, result }]);
@@ -395,7 +403,8 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <SectionLabel meta="run top to bottom">Lines</SectionLabel>
             {lines.map((line, i) => (
-              <div key={i} data-line-off={line.off ? '' : undefined}
+              <Fragment key={i}>
+              <div data-line-off={line.off ? '' : undefined}
                 onKeyDownCapture={e => { if ((e.metaKey || e.ctrlKey) && e.key === '/') { e.preventDefault(); e.stopPropagation(); updateNodeParams(node.id, { lines: toggleLineOff(lines, i) }); } }}
                 style={{ display: 'grid', gridTemplateColumns: '22px 110px 64px minmax(0, 1fr) auto', gap: 6, alignItems: 'center', opacity: line.off ? 0.45 : 1 }}>
                 <button type="button" aria-pressed={!!line.off} title={line.off ? 'Off: skipped (kept as a comment). Click or ⌘/ to switch it back on' : `Line ${i + 1}: click or ⌘/ to switch it off without deleting it`}
@@ -426,6 +435,8 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
                   <IconButton icon="close" label="Remove line" size="sm" tone="danger" tooltip={false} onClick={() => removeLine(i)} />
                 </span>
               </div>
+              {line.rhs.trim() && !line.off && <LineExplain node={node} index={i} line={line} ctx={explainCtx} dialogs={explainDialogs} />}
+              </Fragment>
             ))}
             {lines.length === 0 && <Note>No lines yet. Each line assigns to a variable, top to bottom.</Note>}
             <AddRow onClick={addLine}>Add line</AddRow>
@@ -444,6 +455,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
               />
               <ProbeButton node={node} target={{ kind: 'return' }} label="Preview the return value" />
             </div>
+            {result.trim() ? <LineExplain node={node} index="return" line={{ lhs: '', op: '', rhs: result }} ctx={explainCtx} dialogs={explainDialogs} /> : null}
             <Note>The final expression of type {outputType} that the block outputs.</Note>
           </div>
 
@@ -462,8 +474,28 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
         <SidePanel side="right" label="Functions" open={panels.functions} narrow={narrow} width={300} onClose={() => setPanel('functions', false)}>
           <ReferencePanel variables={customInputs} onInsert={insertFromReference} wrapAll={autoWrap} onWrapAllChange={setAutoWrap} />
         </SidePanel>
+        {explainDialogs.dialogs}
       </div>
     </Modal>
+  );
+}
+
+/**
+ * The Explain row under a line (or Return): the line as it compiles, explained; a part of its
+ * expression can be made into a node and, if wanted, used here in its place.
+ */
+function LineExplain({ node, index, line, ctx, dialogs }: {
+  node: GraphNode; index: number | 'return'; line: WarpLine; ctx: GeneraliseContext; dialogs: ReturnType<typeof useExplainDialogs>;
+}) {
+  const head = index === 'return' ? 'return ' : `${line.lhs} ${line.op || '='} `;
+  const text = head + line.rhs;
+  return (
+    <ExplainRow text={text} exprStart={head.length} ctx={ctx} indent={index === 'return' ? 0 : 28}
+      onFindUses={dialogs.findUses}
+      onMakeNode={span => {
+        const rel = { start: span.start - head.length, end: span.end - head.length };
+        dialogs.makeNode({ source: line.rhs, span: rel, ctx, useHere: exprBlockUseHere(node.id, index, rel) });
+      }} />
   );
 }
 

@@ -24,6 +24,7 @@ import { parseSourceCredit } from '../../../types/credit';
 import { ValuePreview } from '../ValuePreview';
 import { prefOf, useNodePreviewPrefs } from '../../../lib/nodePreview/showAs';
 import { highlightGlsl } from './highlight';
+import { useHoverExplain } from '../../explain/useHoverExplain';
 import { useCardPages } from './cardPageStore';
 import {
   CARD_PAGE_LABEL, cardPages, codeLinesFor, isEmptyCodeNode, noteOf, previewOptionsFor, resolvePage,
@@ -86,6 +87,9 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
   };
 
   const code = useMemo(() => codeLinesFor(node).join('\n'), [node]);
+  // Hover-explain: pointing at a line of the Code page shows it in plain words (not on touch)
+  const [hoverRow, setHoverRow] = useState<number | null>(null);
+  const hoverText = useHoverExplain(node, !touch && page === 'code' && hoverRow !== null ? (code.split('\n')[hoverRow] ?? null) : null);
   const empty = useMemo(() => isEmptyCodeNode(node), [node]);
 
   // ── Gestures ───────────────────────────────────────────────────────────────
@@ -158,10 +162,12 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
       const rows = highlightGlsl(code, dark);
       const width = String(rows.length).length;
       return (
+        <div style={{ position: 'relative' }} onMouseLeave={() => setHoverRow(null)}>
         <div ref={codeRef} data-card-code="" aria-label={isFn ? 'Function body (read-only)' : 'Lines (read-only)'}
           style={{ maxHeight: compact ? 160 : touch ? 250 : 224, overflowY: 'auto', overflowX: 'hidden', padding: '7px 0', font: mono, background: tk.bg.subtle, borderRadius: radius.md, userSelect: 'text', cursor: 'text', display: 'flex', flexDirection: 'column', gap: 3 }}>
           {rows.map((toks, i) => (
-            <div key={i} data-code-row={i + 1} style={{ display: 'flex' }}>
+            <div key={i} data-code-row={i + 1} onMouseEnter={() => setHoverRow(i)}
+              style={{ display: 'flex', background: hoverText && hoverRow === i ? alpha(tk.accent.base, 0.07) : undefined }}>
               <span style={{ width: width * 7 + 16, flexShrink: 0, textAlign: 'right', paddingRight: 9, color: tk.text.disabled, userSelect: 'none' }}>{i + 1}</span>
               {/* Hanging indent: a wrapped line's continuation sits further in, so it never reads as a new line */}
               <span style={{ minWidth: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', paddingRight: 10, paddingLeft: '2ch', textIndent: '-2ch' }}>
@@ -169,6 +175,15 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
               </span>
             </div>
           ))}
+        </div>
+        {hoverText && (
+          <div data-card-explain="" role="status"
+            style={{ position: 'absolute', left: 4, right: 4, bottom: 4, padding: '5px 8px', borderRadius: radius.sm, pointerEvents: 'none',
+              background: tk.bg.panel, boxShadow: `0 0 0 1px ${tk.border.default}, 0 4px 14px rgba(0,0,0,0.18)`,
+              font: `500 11.5px/1.4 ${fontFamily.ui}`, color: tk.text.secondary }}>
+            {hoverText}
+          </div>
+        )}
         </div>
       );
     }

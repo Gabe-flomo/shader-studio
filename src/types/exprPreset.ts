@@ -20,6 +20,10 @@ export interface ExprPreset {
   result: string;
   /** The node's comment when it was saved; restored on the node when placed */
   comment?: string;
+  /** Slider inputs' starting values, by input name (presets made with "Make a node from this") */
+  values?: Record<string, number>;
+  /** The shape it was made from, with its inputs as `$holes`: "Where else is this used?" looks for it */
+  pattern?: string;
   /** Unix timestamp (ms) when saved */
   savedAt: number;
 }
