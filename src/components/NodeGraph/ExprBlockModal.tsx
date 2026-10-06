@@ -26,6 +26,8 @@ import type { EditorPanel } from '../code/editorPanelPrefs';
 import { CollapseInputsButton, FunctionsToggle, InputsRail, SidePanel, useEditorSidePanels } from '../code/SidePanels';
 import { buildCompletions } from '../code/glslReference';
 import { insertSnippet } from '../code/useCompletion';
+import { HowUsedButton } from '../codeExplorer/HowUsedButton';
+import { useExprBlockJump } from '../codeExplorer/useCodeJumpFocus';
 import { ExplainRow } from '../explain/ExplainRow';
 import { useExplainDialogs } from '../explain/useExplainDialogs';
 import { exprBlockContext, exprBlockUseHere } from '../explain/hosts';
@@ -102,6 +104,8 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   const tk = useTokens();
   // Side panels: Inputs (folds to a rail) and the function palette (closed by default); ⌘[ / ⌘]
   const { narrow, open: panels, set: setPanel, toggle: togglePanel } = useEditorSidePanels(PANELS);
+  // Opened by the Code Explorer's jump to source: show that line.
+  useExprBlockJump(node.id);
 
   // Read current params
   const customInputs: InputDef[] = (node.params.inputs as InputDef[] | undefined) ?? [];
@@ -313,6 +317,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
       onClose={onClose}
       headerActions={
         <>
+          <HowUsedButton />
           <FunctionsToggle open={panels.functions} onToggle={() => togglePanel('functions')} />
           {canOpenInBuilder && (
             <Button size="sm" variant="ghost" icon="fn" style={{ marginRight: 4 }}

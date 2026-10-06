@@ -7,6 +7,7 @@ import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
 import { GLSL_REFERENCE, REFERENCE_GROUPS } from './glslReference';
 import { searchSnippets, type Snippet } from '../../suggestions/snippets';
+import { openCodeExplorer } from '../codeExplorer/explorerStore';
 
 const OPERATORS = ['+', '-', '*', '/', '()', '.', ','];
 
@@ -31,13 +32,14 @@ export function ReferencePanel({
   const [filter, setFilter] = useState('');
   const q = filter.trim().toLowerCase();
 
-  const chip = (key: string, label: React.ReactNode, onClick: () => void, title?: string, dot?: string) => (
+  const chip = (key: string, label: React.ReactNode, onClick: () => void, title?: string, dot?: string, onContextMenu?: () => void) => (
     <button
       key={key}
       type="button"
       title={title}
       onMouseDown={e => e.preventDefault()}
       onClick={onClick}
+      onContextMenu={onContextMenu ? e => { e.preventDefault(); onContextMenu(); } : undefined}
       style={{
         height: 26, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 8px', border: 0, borderRadius: 7, cursor: 'pointer',
         background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, color: tk.text.primary,
@@ -87,7 +89,9 @@ export function ReferencePanel({
             r.name,
             r.sig ? <>{r.name}<span style={{ color: tk.text.faint }}>{r.sig.replace(/\b(float|vec2|vec3|vec4) (\w+)/g, '$2')}</span></> : r.name,
             () => onInsert(r.insert),
-            `${r.name}${r.sig ?? ''}${r.returns ? ` → ${r.returns}` : ''}\n${r.doc}`,
+            `${r.name}${r.sig ?? ''}${r.returns ? ` → ${r.returns}` : ''}\n${r.doc}\nRight-click: how is this used?`,
+            undefined,
+            () => openCodeExplorer(r.name),
           )));
         })}
         {q && vars.length === 0 && GLSL_REFERENCE.every(r => !r.name.toLowerCase().includes(q)) && !(onSnippet && searchSnippets(filter).length) && (

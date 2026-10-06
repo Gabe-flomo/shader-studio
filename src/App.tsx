@@ -68,6 +68,7 @@ import type { MobileGraphBrowser as MobileGraphBrowserT, MobileNodeGraphOverlay 
 import type { MobileNodeBrowser as MobileNodeBrowserT } from './components/NodeGraph/MobileNodeBrowser';
 import type { HistoryPanel as HistoryPanelT } from './components/history/HistoryPanel';
 import { useHistoryWindow } from './components/history/historyWindowStore';
+import { useCodeExplorer } from './components/codeExplorer/explorerStore';
 import { useUnseenActivity } from './components/ui/activityStore';
 
 // ── Code splitting ───────────────────────────────────────────────────────────
@@ -92,6 +93,7 @@ const MobileNodeGraphOverlay = lazyWithSuspense<PropsOf<typeof MobileNodeGraphOv
 const MobileNodeBrowser      = lazyWithSuspense<PropsOf<typeof MobileNodeBrowserT>>(() => import('./components/NodeGraph/MobileNodeBrowser').then(m => ({ default: m.MobileNodeBrowser })));
 const HistoryPanel           = lazyWithSuspense<PropsOf<typeof HistoryPanelT>>(() => import('./components/history/HistoryPanel').then(m => ({ default: m.HistoryPanel })));
 const HistoryWindow          = lazyWithSuspense<Record<string, never>>(() => import('./components/history/HistoryWindow').then(m => ({ default: m.HistoryWindowHost })));
+const CodeExplorerDialog     = lazyWithSuspense<Record<string, never>>(() => import('./components/codeExplorer/CodeExplorerDialog').then(m => ({ default: m.CodeExplorerDialog })));
 
 // ── Responsive sizing helpers ─────────────────────────────────────────────────
 function getDefaultPreviewWidth(bp: ReturnType<typeof useBreakpoint>) {
@@ -644,6 +646,7 @@ function App() {
   // Keyboard shortcuts modal
   const [showShortcuts, setShowShortcuts]     = useState(false);
   const historyPopped = useHistoryWindow(s => s.open);
+  const codeExplorerOpen = useCodeExplorer(s => s.open);
   // Node search palette
   // showSearchPalette is now in the store (searchPaletteOpen / setSearchPaletteOpen)
   // The preview's canvas and offline renderer register with lib/previewHost: Record and Snapshot take the
@@ -1507,6 +1510,7 @@ function App() {
       )}
       {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
       {historyPopped && <HistoryWindow />}
+      {codeExplorerOpen && <CodeExplorerDialog />}
       <NodeSearchPalette open={searchPaletteOpen} onClose={() => setSearchPaletteOpen(false)} onNodePlaced={id => useNodeGraphStore.getState().requestSmartConnect(id)} />
     </div>
   );

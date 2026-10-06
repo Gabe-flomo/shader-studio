@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.50',
+    date: '2026-10-06',
+    title: 'Code Explorer',
+    highlights: [
+      { area: 'Studio', text: 'Code Explorer: search how a function is used across examples, your graphs, presets and linked GLSL: patterns ranked by count, with real code.', link: { kind: 'doc', path: 'docs/code-explorer.md' } },
+      { area: 'Studio', text: 'Plain-words search ("soft circle edge"), what feeds a function and what it feeds, Open to jump to the node and line, and How is this used? in the editors.' },
+    ],
+  },
+  {
     id: '2026.10.49',
     date: '2026-10-06',
     title: 'Explain and make a node',
