@@ -235,6 +235,19 @@ export function particlesAsNodes(src: GraphNode, nextId: () => string, at: { x: 
     col += 420;
     pos = [c.id, 'position']; vel = [c.id, 'velocity'];
   }
+  // 3D with a Scene wired: Collide (3D scene) on the same 48³ grid round the centre, Scene size its reach.
+  if (deep && wire('scene')) {
+    const sc = n('agentCollideScene', id('scene'), col, 80, {
+      reach: num('sceneReach'), x: 0, y: 0, z: 0, margin: 0.015, cushion: 0.15, bounce: 0, friction: 0.03,
+      ...note([`Collide (3D scene): the Particles node's Scene socket (through the Scene port): particles slide off its surfaces, read on the same 48-cell grid across ±${fmt(num('sceneReach'))} (its Scene size) round the centre, with its margin, cushion and friction.`]),
+    });
+    wireIn(sc, 'scene', port('scene', 'scene3d', 'Scene', wire('scene')!));
+    wireIn(sc, 'position', pos);
+    wireIn(sc, 'velocity', vel);
+    inside.push(sc);
+    col += 420;
+    pos = [sc.id, 'position']; vel = [sc.id, 'velocity'];
+  }
   const pattern = str('pattern');
   if (pattern === 'square' || pattern === 'circle') {
     listening = true;
@@ -383,7 +396,6 @@ export function particlesAsNodes(src: GraphNode, nextId: () => string, at: { x: 
 
   // 3D.
   if (!deep && (wire('camOrigin') || wire('camRay') || wire('depth') || wire('scene'))) missing.push('A scene\'s camera, Depth or Scene: 3D only (the Particles node is set to 2D).');
-  if (deep && wire('scene')) missing.push('Scene (colliding with a ray-marched scene): not carried yet.');
   if (deep && (wire('camOrigin') || wire('camRay')) && !(wire('camOrigin') && wire('camRay'))) missing.push('Camera from or Camera ray wired alone: a scene\'s camera needs both; the copy uses the Particles node\'s own camera.');
   for (const k of ['camAngle', 'camDistance', 'focus', 'blur']) if (wire(k)) missing.push(deep ? `${LABELS[k]} wired: Draw agents' ${LABELS[k]} is a slider (the value it had is set on it).` : `${LABELS[k]} wired: 3D only.`);
   for (const k of GP_SOCKET_FLOATS) if (wire(k) && !LABELS[k]) missing.push(`${k} wired.`);

@@ -1769,7 +1769,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         </div>
       );
     };
-    const TYPE_WORDS: Record<string, string> = { float: 'number', vec2: 'pair (x, y)', vec3: 'colour / 3 numbers', vec4: '4 numbers', texture: 'image' };
+    const TYPE_WORDS: Record<string, string> = { float: 'number', vec2: 'pair (x, y)', vec3: 'colour / 3 numbers', vec4: '4 numbers', texture: 'image', scene3d: 'a 3D scene' };
     return (
       <div
         data-node-id={node.id}
@@ -1853,8 +1853,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               />
               <Segmented
                 fill size="sm" ariaLabel="What it carries"
-                value={addingMarchInput.type as 'float' | 'vec2' | 'vec3' | 'vec4' | 'texture'}
-                options={([['float', 'Number'], ['vec2', 'x, y'], ['vec3', 'Colour'], ['vec4', '4'], ['texture', 'Image']] as const).map(([value, label]) => ({ value, label }))}
+                value={addingMarchInput.type as 'float' | 'vec2' | 'vec3' | 'vec4' | 'texture' | 'scene3d'}
+                options={([['float', 'Number'], ['vec2', 'x, y'], ['vec3', 'Colour'], ['vec4', '4'], ['texture', 'Image'], ['scene3d', 'Scene']] as const).map(([value, label]) => ({ value, label }))}
                 onChange={t => setAddingMarchInput(prev => prev ? { ...prev, type: t } : prev)}
               />
               <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>

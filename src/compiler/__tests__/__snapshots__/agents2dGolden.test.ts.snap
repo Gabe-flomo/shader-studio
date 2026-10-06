@@ -517,3 +517,73 @@ exports[`2D agents and pass graphs compile as they did before 3D > slimeMold 1`]
   "web": "17470339304ef10cd3dfd10f62ea:13630",
 }
 `;
+
+exports[`2D agents and pass graphs compile as they did before 3D > ttDistanceRings 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "1bec6e6e38e63705d215a15de4ec:6693",
+  "paramBindings": "1d095e88be1f4612a9756372b43b:1026",
+  "paramUniforms": "199fe2e7bc4ae8037c0393faeb98:723",
+  "passes": "03657bdfb93389025c8378dda6d6:5368",
+  "success": true,
+  "textureUniforms": "13e7e6607c90511335d3837c8f00:27",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > ttMotionTrails 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "1945d70cb39206088f299eb5cced:2882",
+  "paramBindings": "0223faecf415eb0ace8008d22b16:1342",
+  "paramUniforms": "1b55bc2bfaf8b4096d3d6e779ac3:948",
+  "passes": "159c5888d063e31f77ffa2218951:9662",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > ttReactionLevels 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "0c3b09a5bc5b1c0814d985e335e5:4817",
+  "paramBindings": "132bba8f195dab171fb196eea8f4:958",
+  "paramUniforms": "17d9e9160473820a0719bfc617db:714",
+  "passes": "0d05c699f6d92a06a6f13aeb7fe4:6274",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > ttTrailFlow 1`] = `
+{
+  "agents": "008912e60cf1db14335d228d5a44:13543",
+  "errors": null,
+  "fragmentShader": "13ff507583cb161be1dde346e225:6290",
+  "paramBindings": "18a339b2c1459c19727b95d5ff22:1854",
+  "paramUniforms": "1cb46518dbfa55089d44fbf0dd9a:1245",
+  "passes": "167d269bbddad80189e9f9473b28:2",
+  "success": true,
+  "textureUniforms": "0ebb7caf76c92312b0fce3ab16e3:27",
+  "web": "17470339304ef10cd3dfd10f62ea:13630",
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > ttVideoOutline 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "1efd4b600d6ea303fcc705602b74:4990",
+  "paramBindings": "1d9c7de80043e415910a6c4359c9:787",
+  "paramUniforms": "076bf9416a5a590c9670b3cd21f4:545",
+  "passes": "168ae2db3844071ce9f49d812cda:6616",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;

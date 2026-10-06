@@ -66,6 +66,12 @@ export interface AgentGroupProgram {
   stateC?: boolean;
   /** Space 3D: A = (pos.xyz, age), B = (vel.xyz, life); its Deposits fill volumes, its Draws use a camera. */
   space3d?: boolean;
+  /**
+   * Collide (3D scene) nodes: each one's Scene on the Particles node's 48³ grid, filled every step (before the rule, at the
+   * step's clock) by `shader` (a program of the picture's kind) into the sampler sceneGridUniforms(slug).grid; `at` is
+   * its centre and reach (x, y, z, Scene size: numbers or the uniforms their sliders write), set in .at.
+   */
+  grids?: Array<{ nodeId: string; slug: string; shader: string; at: AgentParam[] }>;
   /** stepsPerFrame, seed, preroll. */
   params: Record<string, AgentParam>;
   /**

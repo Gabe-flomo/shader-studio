@@ -23,7 +23,7 @@
  * every program it lands in: one uniform table drives them all.
  */
 import type { GraphNode, NodeGraph } from '../types/nodeGraph';
-import type { AgentDepositProgram, AgentDrawProgram, AgentGroupProgram, AgentTrailProgram, CompilationResult, PassProgram } from './types';
+import type { AgentDepositProgram, AgentDrawProgram, AgentGroupProgram, AgentParam, AgentTrailProgram, CompilationResult, PassProgram } from './types';
 import { VERTEX_SHADER } from './types';
 import { topologicalSort } from './topoSort';
 import { validateGraph } from './validate';
@@ -33,7 +33,7 @@ import { PASS_SCALES, passRepeat } from '../nodes/definitions/passes';
 import { getNodeDefinition, getNodeDefinitionFor } from '../nodes/definitions';
 import { isAgent3d, syncAgentSpaces, trailUniform, withAgentSpace } from '../nodes/definitions/agents';
 import {
-  agentStepNodes, asAgentSource, checkProgramWires, depositSpec, depositTargets, drawProbeSink, drawSeesScene, drawSpec, emitMode, engineParams, groupSide, groupSpecies, toProbeCamera,
+  agentStepNodes, asAgentSource, checkProgramWires, depositSpec, depositTargets, drawProbeSink, drawSeesScene, drawSpec, emitMode, engineParams, gridSink, groupSide, groupSpecies, toProbeCamera,
   groupSound, hasAgentsNode, insideSlugs, isAgentEngineOnly, isAgentLoopWire, isAgentSource, listenersOf, MAX_AGENT_GROUPS, MAX_TRAILS, trailHasStepProgram, trailSpec, trailStepSink,
 } from './agentGraph';
 import { agentPlacementProblems, agentProgramProblems } from './agentRules';
@@ -219,17 +219,17 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     const output = nodes.find(n => n.type === 'output' || n.type === 'vec4Output')!;
     const outputAncestors = collect(wiresOf(output), byId, null, undefined, agents);
     // Each group's update shader: its inside plus the outer nodes wired into its ports and Emit.
-    const agentLists = new Map<string, { inside: GraphNode[]; sink: GraphNode; outer: Collected; problems: string[]; stateC: boolean; space3d: boolean }>();
+    const agentLists = new Map<string, { inside: GraphNode[]; sink: GraphNode; outer: Collected; problems: string[]; stateC: boolean; space3d: boolean; grids: Array<{ nodeId: string; from: { nodeId: string; outputKey: string } }> }>();
     // A Trail filled by a 3D group is a volume: a 3D group's Sense reads it by its layout uniform.
     const volumeOf = (id: string) => { const t = byId.get(id); return t?.type === 'trailField' && isAgent3d(t) ? trailUniform(slugs.get(id) ?? id) : null; };
     for (const g of groupNodes) {
-      const { inner, sink, starts, problems, stateC, space3d } = agentStepNodes(g, volumeOf);
+      const { inner, sink, starts, problems, stateC, space3d, grids } = agentStepNodes(g, volumeOf);
       const outer = collectOuter(starts, byId);
       // With per-walker state the Emits also say which species they give birth to (a copy, marked for this program).
       if (stateC) for (const [id, n] of outer.nodes) if (n.type === 'agentEmit') outer.nodes.set(id, { ...n, params: { ...n.params, __stateC: true } });
       // The Emits give birth in this group's space (a copy, for this program).
       for (const [id, n] of outer.nodes) if (n.type === 'agentEmit' && isAgent3d(n) !== space3d) outer.nodes.set(id, withAgentSpace(n, space3d, getNodeDefinition));
-      agentLists.set(g.id, { inside: inner, sink, outer, problems, stateC, space3d });
+      agentLists.set(g.id, { inside: inner, sink, outer, problems, stateC, space3d, grids });
     }
     // Trails with Add / Block wired: their step program's nodes (the ancestors of those inputs).
     const trailLists = new Map<string, Collected>();
@@ -447,7 +447,22 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         });
         absorb(r);
         if (countSamplers(r.fragmentShader) > MAX_SAMPLERS) errors.push(`Node ${g.id}: ${label} samples more than ${MAX_SAMPLERS} textures (its state, trails, passes, images) in one program`);
+        // Collide (3D scene): each one's grid program (the Scene outside, compiled as a picture-kind program).
+        const grids: NonNullable<AgentGroupProgram['grids']> = [];
+        for (const gr of a.grids) {
+          const node = a.inside.find(x => x.id === gr.nodeId)!;
+          const slug = slugOf(gr.nodeId);
+          const c = collect([gr.from], byId, null, undefined, true);
+          const list = [...c.nodes.values(), gridSink(gr.nodeId, slug, gr.from)];
+          const wires = checkProgramWires(list);
+          if (wires.length) { errors.push(...wires); continue; }
+          const gp = compileList(list);
+          absorb(gp);
+          const P = engine(node) as Record<string, AgentParam>;
+          grids.push({ nodeId: gr.nodeId, slug, shader: gp.fragmentShader, at: [P.x ?? 0, P.y ?? 0, P.z ?? 0, P.reach ?? 2] });
+        }
         groups.push({
+          ...(grids.length ? { grids } : {}),
           nodeId: g.id, slug: slugOf(g.id), label, fragmentShader: r.fragmentShader,
           side: groupSide(g), species: groupSpecies(g),
           ...(a.stateC ? { stateC: true } : {}),

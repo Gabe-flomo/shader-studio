@@ -31,12 +31,12 @@
 import * as THREE from 'three';
 import type { AgentDrawProgram, AgentGroupProgram, AgentParam, AgentsSpec, AgentTrailProgram } from '../compiler/types';
 import { agentDrawUniform, agentStateUniform, agentStepUniform, agentWindowUniform, trailStepUniforms, trailUniform, trailVolUniform } from '../nodes/definitions/agents';
-import { AG_BESSEL_UNIFORM, listenUniforms } from '../nodes/definitions/agentForces';
+import { AG_BESSEL_UNIFORM, listenUniforms, sceneGridUniforms } from '../nodes/definitions/agentForces';
 import {
   AG_MAX_STEPS, AG_OFFLINE_CHUNK, AG_PROBE_POINTS, AG_STEP_HZ, agCamera3, agDrawLook, agGovern, agGovernorState, agGroupState, agGroupSteps, agHear, agKeep, agLights, agLiveState,
   agListenState, agProject3, agReadDecode, agReadPlan, agRestartGroup, agStepTime, agStepWindow, agTrailSize, agVolLayout, agVolUniform, type AgGroupState, type AgListenState, type AgVolLayout,
 } from '../play/kit/agentPlan.js';
-import { GP_BESSEL_N, GP_BESSEL_W, GP_LEVELS, gpBesselTable, gpReadback, type GpReadback, type GpSoundInput } from '../play/kit/gpuParticles.js';
+import { GP_BESSEL_N, GP_BESSEL_W, GP_LEVELS, GP_VOL, GP_VOL_TILES, gpBesselTable, gpReadback, type GpReadback, type GpSoundInput } from '../play/kit/gpuParticles.js';
 import {
   AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT3_VERT, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW3_VERT, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_PROJ3_FRAG, AG_READ_FRAG, AG_SUM_FRAG,
   AG_THUMB_DOTS_FRAG, AG_THUMB_DOTS_VERT, AG_TRAIL3_FRAG, AG_TRAIL_FRAG,
@@ -87,6 +87,8 @@ export class AgentTargets {
   readonly groups = new Map<string, GroupState>();
   readonly trails = new Map<string, TrailState>();
   readonly draws = new Map<string, DrawState>();
+  /** Collide (3D scene) grids by node slug: the Scene's distance on 48³ cells, slices side by side (half float). */
+  readonly grids = new Map<string, THREE.WebGLRenderTarget>();
   private renderer: THREE.WebGLRenderer;
   private halfFloat: boolean;
 
@@ -226,6 +228,18 @@ export class AgentTargets {
     }
   }
 
+  /** A Collide (3D scene)'s grid target (made once). */
+  grid(slug: string): THREE.WebGLRenderTarget {
+    let rt = this.grids.get(slug);
+    if (!rt) {
+      rt = new THREE.WebGLRenderTarget(GP_VOL * GP_VOL_TILES[0], GP_VOL * GP_VOL_TILES[1], {
+        type: this.halfFloat ? THREE.HalfFloatType : THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, stencilBuffer: false,
+      });
+      this.grids.set(slug, rt);
+    }
+    return rt;
+  }
+
   /** Start everything over: every group dead at step 0, every trail empty. */
   resetAll(): void {
     for (const g of this.groups.values()) { this.restartGroup(g); g.live = agLiveState(); }
@@ -238,13 +252,16 @@ export class AgentTargets {
     for (const [k, s] of this.groups) if (!gs.has(k)) { s.rt[0].dispose(); s.rt[1].dispose(); this.dropListen(s); this.groups.delete(k); }
     for (const [k, s] of this.trails) if (!ts.has(k)) { this.disposeTrail(s); this.trails.delete(k); }
     for (const [k, s] of this.draws) if (!ds.has(k)) { this.disposeDraw(s); this.draws.delete(k); }
+    const gr = new Set(spec.groups.flatMap(g => (g.grids ?? []).map(x => x.slug)));
+    for (const [k, rt] of this.grids) if (!gr.has(k)) { rt.dispose(); this.grids.delete(k); }
   }
 
   dispose(): void {
     for (const s of this.groups.values()) { s.rt[0].dispose(); s.rt[1].dispose(); this.dropListen(s); }
     for (const s of this.trails.values()) this.disposeTrail(s);
     for (const s of this.draws.values()) this.disposeDraw(s);
-    this.groups.clear(); this.trails.clear(); this.draws.clear();
+    for (const rt of this.grids.values()) rt.dispose();
+    this.groups.clear(); this.trails.clear(); this.draws.clear(); this.grids.clear();
   }
 }
 
@@ -320,6 +337,8 @@ export class AgentRunner {
     u_lens: { value: 1.8 }, u_ortho: { value: 0 }, u_camDist: { value: 3 }, u_focus: { value: 3 }, u_coc: { value: 0 }, u_cap: { value: 7 },
   }, true);
   private probes: TrailEntry[] = [];
+  /** Collide (3D scene)'s grid programs (by node slug): the Scene's distance on its grid, filled every step. */
+  private gridPrograms: TrailEntry[] = [];
   private drawMat = raw(AG_DRAW_VERT, AG_DRAW_FRAG, {
     u_a: { value: null }, u_b: { value: null }, u_c: { value: null }, u_stateC: { value: 0 }, u_side: { value: 1 }, u_species: { value: 1 }, u_colorBy: { value: 0 },
     u_aspect: { value: 1 }, u_size: { value: 1.5 }, u_bright: { value: 0.5 }, u_speedRef: { value: 0.5 },
@@ -396,7 +415,7 @@ export class AgentRunner {
   /** Something runs while the clock does: the preview keeps drawing. */
   get active(): boolean { return this.spec.groups.some(g => g.live); }
   /** Every update and trail program compiled (or failed). */
-  get settled(): boolean { return this.steps.every(e => e.ready || e.failed) && this.trailSteps.every(e => e.ready || e.failed) && this.probes.every(e => e.ready || e.failed); }
+  get settled(): boolean { return [...this.steps, ...this.trailSteps, ...this.probes, ...this.gridPrograms].every(e => e.ready || e.failed); }
 
   /** The uniforms the runner adds to the shared table. */
   private ensureUniforms(): void {
@@ -405,6 +424,11 @@ export class AgentRunner {
       for (const n of [agentStateUniform(g.slug, 'A'), agentStateUniform(g.slug, 'B'), ...(g.stateC ? [agentStateUniform(g.slug, 'C'), agentStateUniform(g.slug, 'D')] : [])]) if (!u[n]) u[n] = { value: null };
       if (!u[agentStepUniform(g.slug)]) u[agentStepUniform(g.slug)] = { value: 0 };
       if (!(u[agentWindowUniform(g.slug)]?.value instanceof THREE.Vector4)) u[agentWindowUniform(g.slug)] = { value: new THREE.Vector4(0, 0, 0, 0) };
+      for (const gr of g.grids ?? []) {
+        const n = sceneGridUniforms(gr.slug);
+        if (!u[n.grid]) u[n.grid] = { value: null };
+        if (!(u[n.at]?.value instanceof THREE.Vector4)) u[n.at] = { value: new THREE.Vector4(0, 0, 0, 2) };
+      }
       for (const l of g.listeners) {
         const n = listenUniforms(l.slug);
         if (!(u[n.sound]?.value instanceof THREE.Vector4)) u[n.sound] = { value: new THREE.Vector4() };
@@ -442,6 +466,7 @@ export class AgentRunner {
       for (const e of this.steps) e.material.uniforms = u;
       for (const e of this.trailSteps) e.material.uniforms = u;
       for (const e of this.probes) e.material.uniforms = u;
+      for (const e of this.gridPrograms) e.material.uniforms = u;
       this.boundTo = u;
     }
   }
@@ -483,11 +508,21 @@ export class AgentRunner {
       return { slug, source, material, ready: false, failed: false };
     });
     for (const e of oldProbes.values()) this.drop(e);
+    // Collide (3D scene)'s grid programs, kept while their source is unchanged.
+    const oldGrids = new Map(this.gridPrograms.map(e => [e.slug, e]));
+    this.gridPrograms = spec.groups.flatMap(g => g.grids ?? []).map(gr => {
+      const prev = oldGrids.get(gr.slug);
+      if (prev && !vsChanged && prev.source === gr.shader) { oldGrids.delete(gr.slug); return prev; }
+      const material = new THREE.ShaderMaterial({ vertexShader, fragmentShader: gr.shader, uniforms: u, depthTest: false, depthWrite: false });
+      return { slug: gr.slug, source: gr.shader, material, ready: false, failed: false };
+    });
+    for (const e of oldGrids.values()) this.drop(e);
     this.boundTo = null;
     this.ensureUniforms();
     for (const e of this.steps) if (!e.ready && !e.failed) this.compile(e);
     for (const e of this.trailSteps) if (!e.ready && !e.failed) this.compile(e);
     for (const e of this.probes) if (!e.ready && !e.failed) this.compile(e);
+    for (const e of this.gridPrograms) if (!e.ready && !e.failed) this.compile(e);
   }
 
   private drop(e: StepEntry | TrailEntry): void {
@@ -516,9 +551,11 @@ export class AgentRunner {
     for (const e of this.steps) this.drop(e);
     for (const e of this.trailSteps) this.drop(e);
     for (const e of this.probes) this.drop(e);
+    for (const e of this.gridPrograms) this.drop(e);
     this.steps = [];
     this.trailSteps = [];
     this.probes = [];
+    this.gridPrograms = [];
     this.vertexShader = '';
     this.update(spec, vs);
   }
@@ -557,7 +594,9 @@ export class AgentRunner {
     const w = Math.max(1, o.width), h = Math.max(1, o.height);
     const aspect = w / h;
     if (o.live) this.aspect = aspect;
-    const ready = this.steps.filter(e => e.spec.live && e.ready && !e.failed);
+    // A group steps once its rule is compiled, and its Collide (3D scene) grids too (else its first steps would collide with nothing).
+    const gridDone = (g: AgentGroupProgram) => (g.grids ?? []).every(gr => this.gridPrograms.some(x => x.slug === gr.slug && (x.ready || x.failed)));
+    const ready = this.steps.filter(e => e.spec.live && e.ready && !e.failed && gridDone(e.spec));
     const cap = o.live ? agGovern(this.gov, o.frameMs ?? 0, 1000 / 60) : Infinity;
 
     // How many steps each group runs this frame.
@@ -622,6 +661,8 @@ export class AgentRunner {
           this.bindState(g, s);
           if (timeUniform) timeUniform.value = agStepTime(s.step, p.spf, p.preroll);
           if (stepTime === null) stepTime = agStepTime(s.step, p.spf, p.preroll);
+          // Collide (3D scene): the Scene's grid at this step's clock (a moving scene moves the same live and offline).
+          for (const gr of g.grids ?? []) this.fillGrid(targets, gr);
           p.e.material.uniformsNeedUpdate = true;
           this.quad.material = p.e.material;
           const timed = k === 0 && (o.timer?.begin(`agents:${g.label} step`) ?? false);
@@ -777,6 +818,22 @@ export class AgentRunner {
     }
     // Groups nobody reads any more (or gone): their targets go.
     for (const [id, r] of this.reads) if (!live.has(id)) { for (const rt of r.rts) rt.dispose(); r.reader.dispose(); this.reads.delete(id); }
+  }
+
+  /** A Collide (3D scene)'s grid: where it is (its sliders), then the Scene's distance at every cell. */
+  private fillGrid(targets: AgentTargets, gr: NonNullable<AgentGroupProgram['grids']>[number]): void {
+    const u = this.host.uniforms();
+    const n = sceneGridUniforms(gr.slug);
+    (u[n.at].value as THREE.Vector4).set(this.read(gr.at[0], 0), this.read(gr.at[1], 0), this.read(gr.at[2], 0), Math.max(1e-3, this.read(gr.at[3], 2)));
+    const e = this.gridPrograms.find(x => x.slug === gr.slug && x.ready && !x.failed);
+    const rt = targets.grid(gr.slug);
+    if (e) {
+      e.material.uniformsNeedUpdate = true;
+      this.quad.material = e.material;
+      this.host.renderer.setRenderTarget(rt);
+      this.host.renderer.render(this.quadScene, this.host.camera);
+    }
+    u[n.grid].value = rt.texture;
   }
 
   /** A group's state textures as its update shader (and anything else) reads them now. */
@@ -1156,8 +1213,10 @@ export class AgentRunner {
     for (const e of this.steps) this.drop(e);
     for (const e of this.trailSteps) this.drop(e);
     for (const e of this.probes) this.drop(e);
+    for (const e of this.gridPrograms) this.drop(e);
     this.trailSteps = [];
     this.probes = [];
+    this.gridPrograms = [];
     const u = this.boundTo;
     if (u) {
       for (const g of this.spec.groups) for (const n of [agentStateUniform(g.slug, 'A'), agentStateUniform(g.slug, 'B'), agentStateUniform(g.slug, 'C'), agentStateUniform(g.slug, 'D')]) if (u[n]) u[n].value = null;
