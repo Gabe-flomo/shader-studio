@@ -20,6 +20,8 @@ import type { EditorPanel } from '../code/editorPanelPrefs';
 import { FunctionsToggle, SidePanel, useEditorSidePanels } from '../code/SidePanels';
 import { buildCompletions } from '../code/glslReference';
 import { insertSnippet } from '../code/useCompletion';
+import { HowUsedButton } from '../codeExplorer/HowUsedButton';
+import { useCustomFnJump } from '../codeExplorer/useCodeJumpFocus';
 
 const TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
 
@@ -45,6 +47,8 @@ export function CustomFnModal({ node, onClose }: Props) {
   const lastField = useRef<'body' | 'fns'>('body');
   const [autoWrap, setAutoWrap] = useState(false);
   const [showHelpers, setShowHelpers] = useState(() => typeof node.params.glslFunctions === 'string' && node.params.glslFunctions.trim() !== '');
+  // Opened by the Code Explorer's jump to source: show that line.
+  const jump = useCustomFnJump(node.id, f => { if (f === 'glslFunctions') setShowHelpers(true); });
 
   // Read current params
   const customInputs = (node.params.inputs as Array<{ name: string; type: DataType; slider?: { min: number; max: number } | null }>) || [];
@@ -216,7 +220,7 @@ export function CustomFnModal({ node, onClose }: Props) {
       width={980}
       height={800}
       onClose={onClose}
-      headerActions={<FunctionsToggle open={functionsOpen} onToggle={() => togglePanel('functions')} />}
+      headerActions={<><HowUsedButton /><FunctionsToggle open={functionsOpen} onToggle={() => togglePanel('functions')} /></>}
       footer={
         <>
           <Button icon="export" onClick={handleSavePreset}>Save as preset</Button>
@@ -292,6 +296,7 @@ export function CustomFnModal({ node, onClose }: Props) {
               grow
               minHeight={180}
               ariaLabel="Function body"
+              flash={jump.field === 'body' ? jump.flash : null}
               value={body}
               onChange={v => updateNodeParams(node.id, { body: v })}
               completions={completions}
@@ -335,6 +340,7 @@ export function CustomFnModal({ node, onClose }: Props) {
                 minHeight={140}
                 maxHeight={320}
                 ariaLabel="Helper functions"
+                flash={jump.field === 'glslFunctions' ? jump.flash : null}
                 value={glslFns}
                 onChange={v => updateNodeParams(node.id, { glslFunctions: v })}
                 completions={completions}

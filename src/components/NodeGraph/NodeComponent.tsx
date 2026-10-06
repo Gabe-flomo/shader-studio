@@ -26,6 +26,7 @@ import { extendRangePatch, hasCustomRange, paramSliderRange, resetRangePatch } f
 import { frozenValueOf } from '../../nodes/sliderFreeze';
 import { isAssignable, legacyAssignOp } from '../../nodes/assignable';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { nodeJumpSignal, takeNodeJump, useCodeJump } from '../../codeExplorer/jumpStore';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 // Editors that only open on demand load in their own chunks (type-only imports
 // carry the props; they're erased at build time).
@@ -645,6 +646,15 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const nodeType = node.type;
   const openCodeEditor = useCallback(() => { if (nodeType === 'customFn') setShowCustomFnModal(true); else setShowExprBlockModal(true); }, [nodeType]);
   const openNoteEditor = useCallback(() => setShowCommentEditor(true), []);
+  // The Code Explorer's jump to source asks for this node: open the editor that shows the code (it takes the request).
+  const codeJump = useCodeJump(nodeJumpSignal(node.id));
+  useEffect(() => {
+    if (!codeJump) return;
+    const field = useCodeJump.getState().node?.field ?? '';
+    if (field.startsWith('__inExpr_')) { takeNodeJump(node.id); setExprEditKey(field.slice('__inExpr_'.length)); }
+    else if (nodeType === 'exprNode' || nodeType === 'customFn') openCodeEditor();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- once per request
+  }, [codeJump]);
   const [zIndex, setZIndex] = useState(1);
   // Info tooltip: close on any click outside the tooltip itself or the info
   // button that opened it (button is excluded so its own onClick toggle isn't
