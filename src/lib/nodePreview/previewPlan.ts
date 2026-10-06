@@ -61,7 +61,7 @@ export const OWN_CARD_TYPES: ReadonlySet<string> = new Set(['agentsGroup']);
  * Groups whose inside runs as a 3D distance function at every ray step: a node in there has no
  * per-pixel value of its own to read back, so it shows its diagram (if it has one) or nothing.
  */
-export const THREE_D_GROUP_TYPES: ReadonlySet<string> = new Set(['sceneGroup', 'spaceWarpGroup', 'marchLoopGroup', 'giLitMarchGroup', 'volumetricScene']);
+export const THREE_D_GROUP_TYPES: ReadonlySet<string> = new Set(['sceneGroup', 'spaceWarpGroup', 'marchLoopGroup', 'giLitMarchGroup', 'volumetricScene', 'sceneBuilder']);
 
 /**
  * The plan for a node. `hasDiagram(type)` says whether NodeInlineViz draws a real diagram for it

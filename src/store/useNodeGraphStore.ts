@@ -20,7 +20,9 @@ import { hasPassNode } from '../compiler/passGraph';
 import { hasHiddenBlur } from '../compiler/blurPasses';
 import { agentPreset } from './agentExamples';
 import { addAgentPieceTo, agentStarter, freshIds, placeInFreeSpace, startRuleIn, type AgentPiece, type AgentRuleStart } from './agentSetup';
+import { rulesStarter } from '../agentRules/starter';
 import { particlesAsNodes } from './particlesAsNodes';
+import { openNewSceneBuilder } from '../sceneBuilder/store';
 import { applyRecipe, recipesFor } from '../nodes/recipes';
 import { closeRecipeOffer, noteNodeAdded } from './recipeOfferStore';
 import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES, AGENT_PRESET_TYPES, syncAgentSpaces } from '../nodes/definitions/agents';
@@ -3339,6 +3341,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   addNode: (type, position, overrideParams?) => {
+    // "New 3D scene…" is a palette entry that opens the 3D Scene Builder (docs/scene-builder.md).
+    if (type === 'sceneBuilder') { openNewSceneBuilder(position); return undefined; }
     // ── The Agents family (docs/agents-plan.md) ──────────────────────────────
     // Sense, Steer, Move… run once per walker, so they only go inside an Agents
     // group; the group, Emit, Deposit, Trail and Draw are engines of their own
@@ -3362,6 +3366,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         void askChoice('Add an Agents group', [
           { id: 'empty', label: 'Empty group' },
           { id: 'slime', label: 'Slime (with a Trail)' },
+          { id: 'rules', label: 'Rules (When … Do …)' },
           { id: 'particles', label: 'Particles', variant: 'primary' },
         ], { message: 'Agents need a place to be born (Emit) and a way to be seen (Draw agents, or a Trail they leave). Start with a working setup round the group, wired to the Output and over what it shows now, or with the empty group to build it yourself. Every node it adds has a note.' })
           .then(choice => {
@@ -3371,21 +3376,22 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
               try { get().addNode(type, position); } finally { skipAgentsAsk = false; }
               return;
             }
-            const kind = choice as 'particles' | 'slime';
+            const kind = choice as 'particles' | 'slime' | 'rules';
             const before = get().nodes;
             const output = graphOutput(before);
-            const starter = agentStarter(kind, output?.inputs.color?.connection ?? null);
+            // Rules: the Slime setup with its group in rules mode (docs/agent-rules.md).
+            const starter = kind === 'rules' ? rulesStarter(output?.inputs.color?.connection ?? null) : agentStarter(kind, output?.inputs.color?.connection ?? null);
             const { nodes: fresh, idOf } = freshIds(starter.nodes, () => idGenerator.next());
             const placed = placeInFreeSpace(before, fresh, position);
-            undoManager.push(before, { label: `Added an Agents group (${kind === 'particles' ? 'Particles' : 'Slime'})` });
+            undoManager.push(before, { label: `Added an Agents group (${kind === 'particles' ? 'Particles' : kind === 'rules' ? 'Rules' : 'Slime'})` });
             let nodes = [...before, ...placed];
             const out = { nodeId: idOf(starter.out.nodeId), outputKey: starter.out.outputKey };
             if (output) nodes = nodes.map(n => n.id === output.id ? { ...n, inputs: { ...n.inputs, color: { ...n.inputs.color, connection: out } } } : n);
             set({ nodes });
             get().compile();
             get().focusNode(idOf(starter.groupId));
-            toast.info(kind === 'particles' ? 'Particles added' : 'Slime added', {
-              message: `${kind === 'particles' ? 'Emit → Agents (Curl noise → Integrate inside) → Draw agents' : 'Emit → Agents (Sense → Steer → Move inside) → Deposit → Trail field → palette'}${output ? ', wired to the Output over what it showed' : ''}. Double-click the group to open its rule; every node has a note.`,
+            toast.info(kind === 'particles' ? 'Particles added' : kind === 'rules' ? 'Agent rules added' : 'Slime added', {
+              message: `${kind === 'particles' ? 'Emit → Agents (Curl noise → Integrate inside) → Draw agents' : kind === 'rules' ? 'Emit → Agents (rules: turn toward the trail, wander, leave trail; press Edit rules) → Deposit → Trail field → palette' : 'Emit → Agents (Sense → Steer → Move inside) → Deposit → Trail field → palette'}${output ? ', wired to the Output over what it showed' : ''}. Double-click the group to open its rule; every node has a note.`,
             });
           });
         return undefined;

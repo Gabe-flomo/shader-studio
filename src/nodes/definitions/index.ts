@@ -235,7 +235,7 @@ import {
   GyroidFieldNode, SchwarzPFieldNode,
   MirrorFold3DNode, DomainWarp3DNode, Turbulence3DNode,
 } from './sdf3d';
-import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode, MarchSceneDistNode, GILitMarchGroupNode, VolumeGlowNode, VolumetricSceneNode } from './scene3d';
+import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode, MarchSceneDistNode, GILitMarchGroupNode, VolumeGlowNode, VolumetricSceneNode, SceneBuilderNode } from './scene3d';
 import { PaletteNode, GradientNode, HSVNode, PosterizeNode, InvertNode, HueRangeNode,
   ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode,
   LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode, OklabMixNode, ColorPickerNode, ColorizeNode, StopPaletteNode } from './color';
@@ -634,6 +634,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   marchSceneDist: MarchSceneDistNode,
   giLitMarchGroup: GILitMarchGroupNode,
   volumetricScene: VolumetricSceneNode,
+  sceneBuilder: SceneBuilderNode,
   // Color
   palette: PaletteNode,
   gradient: GradientNode,

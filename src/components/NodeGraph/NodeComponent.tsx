@@ -33,6 +33,7 @@ import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 import type { ExprModal as ExprModalT } from './ExprModal';
 import type { CustomFnModal as CustomFnModalT } from './CustomFnModal';
 import type { ExprBlockModal as ExprBlockModalT } from './ExprBlockModal';
+import { openAgentRulesEditor } from '../../agentRules/storeActions';
 import { inputHintOf, inputLabelOf, inputTexts } from '../../lib/inputNames';
 import { InputNamesModal } from './InputNamesModal';
 import type { ConstantsModal as ConstantsModalT } from './ConstantsModal';
@@ -3411,7 +3412,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         onTouchStart={handleHeaderTouchStart}
         onDoubleClick={e => {
           e.stopPropagation();
-          if ((node.type === 'sceneGroup' || node.type === 'agentsGroup') && !savingMode) onEnterGroup?.(node.id);
+          // A rules group (docs/agent-rules.md) opens its rules editor; Open as nodes enters it.
+          if (node.type === 'agentsGroup' && node.params.ruleMode === 'rules' && !savingMode) openAgentRulesEditor(node.id);
+          else if ((node.type === 'sceneGroup' || node.type === 'agentsGroup') && !savingMode) onEnterGroup?.(node.id);
           else setCollapsed(v => !v);
         }}
         style={{
