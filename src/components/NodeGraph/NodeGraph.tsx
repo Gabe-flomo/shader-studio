@@ -15,8 +15,11 @@ import { registerDropTarget, edgeInfoFromKey } from './nodeDrop';
 import { buildNodeErrors } from '../../compiler/nodeErrors';
 import { suggestConnections, type Suggestion } from './smartConnect';
 import { suggestQuickAdds, type QuickAdd } from './quickAdds';
-import { explainPreview, previewLegend } from '../../lib/previewExplain';
 import { SmartConnectMenu } from './SmartConnectMenu';
+import { SuggestionStrip } from './SuggestionStrip';
+import { DoBar } from './DoBar';
+import { openDoBar } from '../../suggestions/doBarStore';
+import { learnedNext, rankTables } from '../../suggestions';
 import { RecipeOffer } from './RecipeOffer';
 import { useRecipeOffer } from '../../store/recipeOfferStore';
 import { askConfirm, askText } from '../ui/dialogStore';
@@ -42,8 +45,12 @@ import { useBakeDialog } from '../bake/bakeDialogStore';
 import { bakeableOutput, pictureTarget } from '../../lib/bake/graphOps';
 import { unbakeNode } from '../../lib/bake/runner';
 import type { OptimizeModal as OptimizeModalT } from './OptimizeModal';
+import { previewBanner } from '../../lib/nodePreview/previewPlan';
+import { openNewSceneBuilder, useSceneBuilder } from '../../sceneBuilder/store';
+import { builderSceneOf, describeIntoBuilder, editSceneInBuilder } from '../../sceneBuilder/actions';
 const OptimizeModal = lazyWithSuspense<PropsOf<typeof OptimizeModalT>>(() => import('./OptimizeModal').then(m => ({ default: m.OptimizeModal })));
 const BakeDialogHost = lazyWithSuspense<Record<string, never>>(() => import('../bake/BakeDialog').then(m => ({ default: m.BakeDialogHost })));
+const SceneBuilderModal = lazyWithSuspense<Record<string, never>>(() => import('../sceneBuilder/SceneBuilderModal').then(m => ({ default: m.SceneBuilderModal })));
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 const NODE_WIDTH = 360;
@@ -107,6 +114,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   useEffect(() => { lockedRef.current = locked; }, [locked]);
   const [showOptimize, setShowOptimize] = useState(false);
   const bakeRequest = useBakeDialog(s => s.request);
+  const sceneBuilderOpen = useSceneBuilder(s => s.open);
   const tc = useCtp();
   const tk = useTokens();
   const ctxBtnStyle = ctxBtnStyleFor(tc);
@@ -198,13 +206,12 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   // When inside a group, previewNodeId may refer to a subgraph node not in top-level `nodes`
   const previewNode  = previewNodeId ? (nodes.find(n => n.id === previewNodeId) ?? displayNodes.find(n => n.id === previewNodeId)) : null;
   const previewDef   = previewNode ? getNodeDefinitionFor(previewNode) : null;
-  const previewStats = useNodeGraphStore(s => s.previewStats);
-  const previewCaption = previewNode ? (explainPreview(previewNode, previewDef ?? undefined, previewStats) ?? previewLegend(previewNode, previewDef ?? undefined)) : null;
   const previewLabel = previewDef
     ? (previewNode?.type === 'customFn' && typeof previewNode.params.label === 'string'
         ? (previewNode.params.label as string) || previewDef.label
         : previewDef.label)
     : null;
+  const banner = previewBanner(previewLabel ?? '');
 
   // When inside a group, build a map of nodeId → Set<inputKey> for sockets
   // that are driven by external (group-level) input ports. These are locked/immutable.
@@ -920,7 +927,10 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     const origin = displayNodes.find(n => n.id === smartConnect.nodeId);
     const sock = smartConnect.dir === 'out' ? origin?.outputs[smartConnect.key] : origin?.inputs[smartConnect.key];
     if (!sock) return [];
-    return suggestQuickAdds({ type: sock.type, dir: smartConnect.dir, label: sock.label, key: smartConnect.key });
+    // Learned picks first (suggestions: your graphs, then the examples), then the hand-written rules.
+    const learned = origin ? learnedNext(origin.type, smartConnect.key, smartConnect.dir, rankTables(), 2)
+      .map(l => ({ type: l.type, key: l.key, note: l.you ? 'you often use it here' : 'usually goes here' })) : [];
+    return suggestQuickAdds({ type: sock.type, dir: smartConnect.dir, label: sock.label, key: smartConnect.key, nodeType: origin?.type, learned });
   }, [smartConnect, displayNodes]);
   const closeSmartConnect = useCallback(() => { setSmartConnect(null); setGhostSuggestion(null); }, []);
   const pickQuickAdd = useCallback((q: QuickAdd) => {
@@ -1029,7 +1039,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
     const nodeId = nodeEl?.dataset.nodeId ?? null;
     // On empty canvas the menu only has "Group selection" — with fewer than two nodes
     // selected there is nothing to show, so don't open an empty strip.
-    if (!nodeId && useNodeGraphStore.getState().selectedNodeIds.length < 2) { setContextMenu(null); return; }
+    // At the top level it offers the 3D Scene Builder.
+    if (!nodeId && useNodeGraphStore.getState().selectedNodeIds.length < 2 && useNodeGraphStore.getState().activeGroupPath.length > 0) { setContextMenu(null); return; }
     // On a slider or colour row, the menu starts with making it a Play control.
     const paramKey = nodeId ? (target.closest('[data-param-key]') as HTMLElement | null)?.dataset.paramKey : undefined;
     setContextMenu({ x: e.clientX, y: e.clientY, nodeId, paramKey });
@@ -1277,16 +1288,14 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         <div
           style={{
             position: 'absolute', top: redesignToolbar ? 66 : 10, left: '50%', transform: 'translateX(-50%)', zIndex: 20,
-            minHeight: 34, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 4px 4px 12px', borderRadius: 10, maxWidth: 560,
+            minHeight: 34, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 4px 4px 12px', borderRadius: 10, maxWidth: 420,
             background: tk.bg.panel, boxShadow: `${tk.shadow.float}, inset 0 0 0 1px ${alpha(tk.status.success, 0.35)}`,
             color: tk.text.secondary, fontSize: 12.5, userSelect: 'none',
           }}
         >
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: tk.status.success, flexShrink: 0 }} />
-          <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-            <span style={{ whiteSpace: 'nowrap' }}>Previewing <strong style={{ color: tk.text.primary, fontWeight: 600 }}>{previewLabel}</strong></span>
-            {previewCaption && <span style={{ fontSize: 11.5, color: tk.text.muted, lineHeight: 1.35 }}>{previewCaption}</span>}
-          </span>
+          {/* Minimal on purpose: the output picker, Show as, Detail and the notes live in the node's card */}
+          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{banner.lead} <strong style={{ color: tk.text.primary, fontWeight: 600 }}>{banner.name}</strong></span>
           <Button size="sm" variant="ghost" style={{ height: 26, flexShrink: 0 }} onClick={() => setPreviewNodeId(null)}>Exit</Button>
         </div>
       )}
@@ -1361,6 +1370,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       )}
       {showOptimize && <OptimizeModal onClose={() => setShowOptimize(false)} />}
       {bakeRequest && <BakeDialogHost />}
+      {sceneBuilderOpen && <SceneBuilderModal />}
       {redesignToolbar && !locked && <SelectionBar top={previewNodeId ? 108 : 66} />}
       {redesignToolbar && showOutline && <GraphOutline nodes={displayNodes} top={previewNodeId ? 132 : 66} onClose={() => setShowOutline(false)} />}
 
@@ -1743,6 +1753,35 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       setContextMenu(null);
                     }}>
                       Duplicate Selection
+                    </button>
+                    <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                  </>
+                )}
+                {/* The 3D Scene Builder (docs/scene-builder.md): on the empty canvas, and on any node of a scene it built. */}
+                {!clickedNode && activeGroupPath.length === 0 && (
+                  <>
+                    <button style={ctxBtnStyle} onClick={() => { openNewSceneBuilder(); setContextMenu(null); }}>
+                      Scene Builder… <span style={{ color: tc.surface2, fontSize: '10px' }}>new 3D scene</span>
+                    </button>
+                    {displayNodes.some(n => n.type === 'marchLoopGroup' || n.type === 'giLitMarchGroup' || n.type === 'glassScene') && (
+                      <button style={ctxBtnStyle} onClick={() => { describeIntoBuilder(); setContextMenu(null); }}>
+                        Describe this graph
+                      </button>
+                    )}
+                  </>
+                )}
+                {clickedNode && activeGroupPath.length === 0 && builderSceneOf(clickedNode.id) && (
+                  <>
+                    <button style={ctxBtnStyle} onClick={() => { editSceneInBuilder(clickedNode.id); setContextMenu(null); }}>
+                      Edit in Scene Builder
+                    </button>
+                    <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                  </>
+                )}
+                {clickedNode && activeGroupPath.length === 0 && !builderSceneOf(clickedNode.id) && ['sceneGroup', 'marchLoopGroup', 'giLitMarchGroup', 'glassScene', 'marchCamera'].includes(clickedNode.type) && (
+                  <>
+                    <button style={ctxBtnStyle} onClick={() => { describeIntoBuilder(); setContextMenu(null); }}>
+                      Describe in Scene Builder
                     </button>
                     <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
                   </>
@@ -2170,6 +2209,16 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             setHoveredWire(null);
           }}
           onClick={() => setWireInsertOpen(true)}
+          // Right-click: is this wire typical? (the Do… bar's connection check)
+          onContextMenu={e => {
+            e.preventDefault();
+            e.stopPropagation();
+            const w = hoveredWire;
+            const from = displayNodes.find(n => n.id === w.fromNodeId), to = displayNodes.find(n => n.id === w.toNodeId);
+            if (from && to) openDoBar({ text: 'is this typical?', check: [{ fromType: from.type, outKey: w.fromOutputKey, toType: to.type, inKey: w.toInputKey }] });
+            setHoveredWire(null);
+          }}
+          title="Insert a node · right-click: is this wire typical?"
         >
           +
         </div>
@@ -2206,6 +2255,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
 
       {/* Starter recipes for a node just added (nodes/recipes): a small offer beside it */}
       <RecipeOffer nodes={displayNodes} canvasRef={canvasRef} pan={pan} zoom={zoom} />
+      {/* The selected node's next moves (suggestions/): under its card, never over a socket */}
+      <SuggestionStrip nodes={displayNodes} canvasRef={canvasRef} pan={pan} zoom={zoom} readOnly={locked} />
+      {/* The Do… bar (⌘K): typed phrases → moves (suggestions/doBar.ts) */}
+      {!locked && <DoBar />}
 
       {/* Feature 1: Alt-click socket filtered palette */}
       {smartConnect && (() => {
@@ -2244,6 +2297,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             spawnPosition={spawnPos}
             filterOutputType={ps.dir === 'in'  ? ps.type : undefined}
             filterInputType={ps.dir === 'out' ? ps.type : undefined}
+            boostFrom={displayNodes.find(n => n.id === ps.nodeId)?.type}
             onNodePlaced={handleAltSocketNodePlaced}
           />
         );

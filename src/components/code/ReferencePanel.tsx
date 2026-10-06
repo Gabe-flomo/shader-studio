@@ -6,6 +6,8 @@ import { Toggle } from '../ui/Choice';
 import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
 import { GLSL_REFERENCE, REFERENCE_GROUPS } from './glslReference';
+import { searchSnippets, type Snippet } from '../../suggestions/snippets';
+import { openCodeExplorer } from '../codeExplorer/explorerStore';
 
 const OPERATORS = ['+', '-', '*', '/', '()', '.', ','];
 
@@ -15,8 +17,10 @@ const OPERATORS = ['+', '-', '*', '/', '()', '.', ','];
  * wraps the whole expression instead. Chips never take focus, so the caret stays put.
  */
 export function ReferencePanel({
-  variables, onInsert, wrapAll, onWrapAllChange, showOperators = true, width = 300,
+  variables, onInsert, wrapAll, onWrapAllChange, showOperators = true, width = 300, onSnippet,
 }: {
+  /** The snippet library (suggestions/snippets.ts): inserted whole, wired to the editor's variables. */
+  onSnippet?: (s: Snippet) => void;
   variables: ReadonlyArray<{ name: string; type: string }>;
   onInsert: (text: string) => void;
   wrapAll: boolean;
@@ -28,13 +32,14 @@ export function ReferencePanel({
   const [filter, setFilter] = useState('');
   const q = filter.trim().toLowerCase();
 
-  const chip = (key: string, label: React.ReactNode, onClick: () => void, title?: string, dot?: string) => (
+  const chip = (key: string, label: React.ReactNode, onClick: () => void, title?: string, dot?: string, onContextMenu?: () => void) => (
     <button
       key={key}
       type="button"
       title={title}
       onMouseDown={e => e.preventDefault()}
       onClick={onClick}
+      onContextMenu={onContextMenu ? e => { e.preventDefault(); onContextMenu(); } : undefined}
       style={{
         height: 26, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 8px', border: 0, borderRadius: 7, cursor: 'pointer',
         background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, color: tk.text.primary,
@@ -71,6 +76,10 @@ export function ReferencePanel({
         </div>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {onSnippet && (() => {
+          const found = searchSnippets(filter);
+          return found.length > 0 && section('Snippets', found.map(sn => chip(`s-${sn.id}`, sn.label, () => onSnippet(sn), `${sn.label}: ${sn.doc}\nAlso: ${sn.phrases.join(', ')}`)));
+        })()}
         {vars.length > 0 && section('Variables', vars.map(v => chip(`v-${v.name}`, v.name, () => onInsert(v.name), `${v.name} (${v.type})`, TYPE_COLORS[v.type] ?? tk.text.faint)))}
         {showOperators && !q && section('Operators', OPERATORS.map(op => chip(`o-${op}`, op, () => onInsert(op === '()' || op === '.' || op === ',' ? op : ` ${op} `))))}
         {REFERENCE_GROUPS.map(group => {
@@ -80,10 +89,12 @@ export function ReferencePanel({
             r.name,
             r.sig ? <>{r.name}<span style={{ color: tk.text.faint }}>{r.sig.replace(/\b(float|vec2|vec3|vec4) (\w+)/g, '$2')}</span></> : r.name,
             () => onInsert(r.insert),
-            `${r.name}${r.sig ?? ''}${r.returns ? ` → ${r.returns}` : ''}\n${r.doc}`,
+            `${r.name}${r.sig ?? ''}${r.returns ? ` → ${r.returns}` : ''}\n${r.doc}\nRight-click: how is this used?`,
+            undefined,
+            () => openCodeExplorer(r.name),
           )));
         })}
-        {q && vars.length === 0 && GLSL_REFERENCE.every(r => !r.name.toLowerCase().includes(q)) && (
+        {q && vars.length === 0 && GLSL_REFERENCE.every(r => !r.name.toLowerCase().includes(q)) && !(onSnippet && searchSnippets(filter).length) && (
           <span style={{ fontSize: 12, color: tk.text.muted, padding: '8px 0' }}>Nothing matches “{filter}”.</span>
         )}
       </div>

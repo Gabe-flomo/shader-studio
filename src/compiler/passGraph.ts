@@ -23,20 +23,23 @@
  * every program it lands in: one uniform table drives them all.
  */
 import type { GraphNode, NodeGraph } from '../types/nodeGraph';
-import type { AgentDepositProgram, AgentDrawProgram, AgentGroupProgram, AgentTrailProgram, CompilationResult, PassProgram } from './types';
+import type { AgentDepositProgram, AgentDrawProgram, AgentGroupProgram, AgentParam, AgentTrailProgram, CompilationResult, PassProgram } from './types';
 import { VERTEX_SHADER } from './types';
 import { topologicalSort } from './topoSort';
 import { validateGraph } from './validate';
 import { generateFragmentShader } from './shaderAssembler';
 import { computeNodeSlug } from './nodeSlug';
 import { PASS_SCALES, passRepeat } from '../nodes/definitions/passes';
-import { getNodeDefinitionFor } from '../nodes/definitions';
+import { getNodeDefinition, getNodeDefinitionFor } from '../nodes/definitions';
+import { isAgent3d, syncAgentSpaces, trailUniform, withAgentSpace } from '../nodes/definitions/agents';
 import {
-  agentStepNodes, asAgentSource, checkProgramWires, depositSpec, depositTargets, drawSpec, emitMode, engineParams, groupSide, groupSpecies,
+  agentStepNodes, asAgentSource, checkProgramWires, depositSpec, depositTargets, drawProbeSink, drawSeesScene, drawSpec, emitMode, engineParams, gridSink, groupSide, groupSpecies, toProbeCamera,
   groupSound, hasAgentsNode, insideSlugs, isAgentEngineOnly, isAgentLoopWire, isAgentSource, listenersOf, MAX_AGENT_GROUPS, MAX_TRAILS, trailHasStepProgram, trailSpec, trailStepSink,
 } from './agentGraph';
 import { agentPlacementProblems, agentProgramProblems } from './agentRules';
 import { expandPassGroups } from './passGroups';
+import { FINAL, planHiddenBlurs } from './hiddenBlurs';
+import { GRID_TYPE, expandGridRules } from './gridRulesExpand';
 
 export const PASS_TYPE = 'pass';
 /** Most Pass nodes in one graph. */
@@ -49,7 +52,8 @@ type Sub = { nodes?: GraphNode[] } | undefined;
 /** Does the graph have a Pass node (at the top level or inside a group)? */
 export function hasPassNode(nodes: GraphNode[]): boolean {
   for (const n of nodes) {
-    if (n.type === PASS_TYPE) return true;
+    // A Grid Rules node is opened into a board Pass (compiler/gridRulesExpand.ts).
+    if (n.type === PASS_TYPE || n.type === GRID_TYPE) return true;
     const sg = n.params?.subgraph as Sub;
     if (sg?.nodes && hasPassNode(sg.nodes)) return true;
   }
@@ -178,13 +182,16 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     // (compiler/passGroups.ts). Inside any other kind of group, an error saying why.
     const opened = expandPassGroups(graph.nodes);
     if ('errors' in opened) return failure(opened.errors);
-    const nodes = opened.nodes;
+    // Grid Rules nodes: each opened into its board Pass and step (compiler/gridRulesExpand.ts); without one, unchanged.
+    const grid = expandGridRules(opened.nodes);
+    // With agents: every node of (or wired into) a 3D group marked for its space (a 2D graph is left as it is).
+    const nodes = agents ? syncAgentSpaces(grid.nodes, getNodeDefinition) : grid.nodes;
 
     const validation = validateGraph(nodes);
     if (!validation.valid) return failure(validation.errors ?? ['Invalid graph']);
 
     const passNodes = nodes.filter(n => n.type === PASS_TYPE);
-    if (passNodes.length > MAX_PASSES) return failure([`A graph can have up to ${MAX_PASSES} Pass nodes (this one has ${passNodes.length})`]);
+    if (passNodes.length > MAX_PASSES) return failure([`A graph can have up to ${MAX_PASSES} Pass nodes (this one has ${passNodes.length}${grid.bindAs.size ? ', counting each Grid Rules board, and its picture when its Texture is wired' : ''})`]);
     const byId = new Map(nodes.map(n => [n.id, n]));
 
     // 1. Slugs, once for the whole graph, in the usual sort order (Previous wires left out, so feedback isn't a cycle;
@@ -203,6 +210,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     const used = new Set<string>();
     const slugs = new Map<string, string>();
     for (const n of sortedAll) slugs.set(n.id, computeNodeSlug(n, used));
+    // A Grid Rules node's step (and picture copy) compile under its slug: its params are one set of uniforms.
+    for (const [id, as] of grid.bindAs) { const sl = slugs.get(as); if (sl) slugs.set(id, sl); }
     const groupNodes = agents ? sortedAll.filter(n => n.type === 'agentsGroup').map(n => byId.get(n.id)!) : [];
     if (agents) {
       if (groupNodes.length > MAX_AGENT_GROUPS) return failure([`A graph can have up to ${MAX_AGENT_GROUPS} Agents groups (this one has ${groupNodes.length})`]);
@@ -217,13 +226,17 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     const output = nodes.find(n => n.type === 'output' || n.type === 'vec4Output')!;
     const outputAncestors = collect(wiresOf(output), byId, null, undefined, agents);
     // Each group's update shader: its inside plus the outer nodes wired into its ports and Emit.
-    const agentLists = new Map<string, { inside: GraphNode[]; sink: GraphNode; outer: Collected; problems: string[]; stateC: boolean }>();
+    const agentLists = new Map<string, { inside: GraphNode[]; sink: GraphNode; outer: Collected; problems: string[]; stateC: boolean; space3d: boolean; grids: Array<{ nodeId: string; from: { nodeId: string; outputKey: string } }> }>();
+    // A Trail filled by a 3D group is a volume: a 3D group's Sense reads it by its layout uniform.
+    const volumeOf = (id: string) => { const t = byId.get(id); return t?.type === 'trailField' && isAgent3d(t) ? trailUniform(slugs.get(id) ?? id) : null; };
     for (const g of groupNodes) {
-      const { inner, sink, starts, problems, stateC } = agentStepNodes(g);
+      const { inner, sink, starts, problems, stateC, space3d, grids } = agentStepNodes(g, volumeOf);
       const outer = collectOuter(starts, byId);
       // With per-walker state the Emits also say which species they give birth to (a copy, marked for this program).
       if (stateC) for (const [id, n] of outer.nodes) if (n.type === 'agentEmit') outer.nodes.set(id, { ...n, params: { ...n.params, __stateC: true } });
-      agentLists.set(g.id, { inside: inner, sink, outer, problems, stateC });
+      // The Emits give birth in this group's space (a copy, for this program).
+      for (const [id, n] of outer.nodes) if (n.type === 'agentEmit' && isAgent3d(n) !== space3d) outer.nodes.set(id, withAgentSpace(n, space3d, getNodeDefinition));
+      agentLists.set(g.id, { inside: inner, sink, outer, problems, stateC, space3d, grids });
     }
     // Trails with Add / Block wired: their step program's nodes (the ancestors of those inputs).
     const trailLists = new Map<string, Collected>();
@@ -373,6 +386,13 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
       for (const [k, v] of r.mlgDynamicOutputs) merged.mlgDynamicOutputs.set(k, v);
       if (r.echo && (!merged.echo || r.echo.copies > merged.echo.copies)) merged.echo = { copies: r.echo.copies, delay: merged.echo?.delay ?? r.echo.delay };
     };
+    // 3b. Blur and Glow (texture), Smooth and Bloom chain: their hidden passes (compiler/blurPasses.ts),
+    // drawn just before the first program that has the node. Without such a node nothing here runs.
+    const hidden = planHiddenBlurs({
+      nodes, byId, slugs, order, passLists, finalList, agents, afterAgents, beforeParticles, live, compileList, absorb,
+      collect: starts => collect(starts, byId, null, undefined, agents),
+    });
+    errors.push(...hidden.errors);
     for (const id of order) {
       const pass = byId.get(id)!;
       const c = passLists.get(id)!;
@@ -383,15 +403,16 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
           alpha: { type: 'float', label: 'Alpha', ...(pass.inputs.alpha?.connection ? { connection: pass.inputs.alpha.connection } : { defaultValue: 1 }) },
         },
       };
-      const r = compileList([...c.nodes.values(), sink], PASS_SCALES[String(pass.params.scale ?? '1')] ?? 1);
+      const r = compileList(hidden.annotate([...c.nodes.values(), sink], id), PASS_SCALES[String(pass.params.scale ?? '1')] ?? 1);
       absorb(r);
       for (const [nid, vars] of r.nodeOutputVars) if (nid !== sink.id && !passVars.has(nid)) passVars.set(nid, vars);
       const slug = slugs.get(id)!;
       const label = typeof pass.params.label === 'string' && pass.params.label.trim() ? pass.params.label.trim() : 'Pass';
       if (countSamplers(r.fragmentShader) > MAX_SAMPLERS) errors.push(`Node ${id}: ${label} samples more than ${MAX_SAMPLERS} textures (images, videos, passes, feedback) in one program`);
+      passes.push(...(hidden.before.get(id) ?? []));
       passes.push({
         nodeId: id, slug, label, fragmentShader: r.fragmentShader,
-        reads: [...c.reads].map(r2 => slugs.get(r2)!), readsPrevious: [...c.readsPrevious].map(r2 => slugs.get(r2)!),
+        reads: [...[...c.reads].map(r2 => slugs.get(r2)!), ...(hidden.reads.get(id) ?? [])], readsPrevious: [...c.readsPrevious].map(r2 => slugs.get(r2)!),
         scale: PASS_SCALES[String(pass.params.scale ?? '1')] ?? 1,
         format: sel(pass.params.format, ['half', 'byte'] as const, 'half'),
         filter: sel(pass.params.filter, ['linear', 'nearest'] as const, 'linear'),
@@ -436,14 +457,31 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
             declarations: typeof seed === 'string' ? [`uniform float ${seed};`] : [],
             respawn: emit.mode === 'respawn',
             ...(a.stateC ? { stateC: true } : {}),
+            ...(a.space3d ? { space3d: true } : {}),
           },
         });
         absorb(r);
         if (countSamplers(r.fragmentShader) > MAX_SAMPLERS) errors.push(`Node ${g.id}: ${label} samples more than ${MAX_SAMPLERS} textures (its state, trails, passes, images) in one program`);
+        // Collide (3D scene): each one's grid program (the Scene outside, compiled as a picture-kind program).
+        const grids: NonNullable<AgentGroupProgram['grids']> = [];
+        for (const gr of a.grids) {
+          const node = a.inside.find(x => x.id === gr.nodeId)!;
+          const slug = slugOf(gr.nodeId);
+          const c = collect([gr.from], byId, null, undefined, true);
+          const list = [...c.nodes.values(), gridSink(gr.nodeId, slug, gr.from)];
+          const wires = checkProgramWires(list);
+          if (wires.length) { errors.push(...wires); continue; }
+          const gp = compileList(list);
+          absorb(gp);
+          const P = engine(node) as Record<string, AgentParam>;
+          grids.push({ nodeId: gr.nodeId, slug, shader: gp.fragmentShader, at: [P.x ?? 0, P.y ?? 0, P.z ?? 0, P.reach ?? 2] });
+        }
         groups.push({
+          ...(grids.length ? { grids } : {}),
           nodeId: g.id, slug: slugOf(g.id), label, fragmentShader: r.fragmentShader,
           side: groupSide(g), species: groupSpecies(g),
           ...(a.stateC ? { stateC: true } : {}),
+          ...(a.space3d ? { space3d: true } : {}),
           params: { stepsPerFrame: params.stepsPerFrame as number | string, seed: params.seed as number | string, preroll: params.preroll as number | string, ...(params.restart !== undefined ? { restart: params.restart as number | string } : {}) },
           emit,
           listeners: listenersOf(a.inside, slugOf, engine, groupSound(g, params)),
@@ -467,6 +505,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         // A trail that velocities go into keeps its negative values.
         if (deposits.some(d => d.trail === spec.slug && d.what === 'velocity')) spec.signed = true;
         const c = trailLists.get(n.id);
+        if (c && spec.volume) { errors.push(`Node ${n.id}: ${spec.label}: Add and Block don't work on a 3D trail (a volume) yet; unwire them, or set the group's Space to 2D`); continue; }
         if (c) {
           const list = [...c.nodes.values(), trailStepSink(n, spec.slug)];
           const problems = checkProgramWires(list);
@@ -485,12 +524,30 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         const g = d.inputs.agents?.connection?.nodeId;
         const params = engine(d);
         if (!g || !groupIds.has(g)) continue;
-        draws.push({ ...drawSpec(d, slugOf(d.id), slugOf(g), params), live: liveAgents.has(d.id) });
+        const spec: AgentDrawProgram = { ...drawSpec(d, slugOf(d.id), slugOf(g), params), live: liveAgents.has(d.id) };
+        if (drawSeesScene(d)) {
+          // A ray-marched scene's camera (and its depth): small programs of the picture's kind, compiled from what is wired in.
+          const probeOf = (mode: 'camera' | 'depth') => {
+            const sink = drawProbeSink(d, spec.slug, mode);
+            const c = collect(Object.values(sink.inputs).flatMap(i => (i.connection ? [i.connection] : [])), byId, null, undefined, true);
+            const list = [...c.nodes.values(), sink];
+            const problems = checkProgramWires(list);
+            if (problems.length) { errors.push(...problems); return null; }
+            const r = compileList(list);
+            absorb(r);
+            return mode === 'camera' ? toProbeCamera(r.fragmentShader, sink.params.uniform as string) : r.fragmentShader;
+          };
+          const camera = probeOf('camera');
+          const depth = d.inputs.depth?.connection ? probeOf('depth') : null;
+          if (camera) spec.probe = { uniform: drawProbeSink(d, spec.slug, 'camera').params.uniform as string, camera, ...(depth ? { depth } : {}) };
+        }
+        draws.push(spec);
       }
       agentsSpec = { groups, deposits, trails, draws };
     }
+    passes.push(...(hidden.before.get(FINAL) ?? []));
     const finalNodes = [...finalList.nodes.values()];
-    const fin = compileList(finalNodes);
+    const fin = compileList(hidden.annotate(finalNodes, FINAL));
     absorb(fin);
     if (countSamplers(fin.fragmentShader) > MAX_SAMPLERS) errors.push(`The final picture samples more than ${MAX_SAMPLERS} textures (images, videos, passes, feedback) in one program`);
     if (errors.length) return failure(errors);
@@ -499,6 +556,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     // (slugs are shared, so a node's variables have the same names in every program it lands in).
     const nodeOutputVars = new Map([...passVars, ...fin.nodeOutputVars]);
     let finalNodeIds = finalNodes.filter(n => n.type !== PASS_TYPE && !(agents && isAgentSource(n))).map(n => n.id);
+    // Show passes: a Grid Rules node runs in its board's program too.
+    if (grid.bindAs.size) for (const p of passes) for (const [id, as] of grid.bindAs) if (p.nodeIds.includes(id) && !p.nodeIds.includes(as)) p.nodeIds = [...p.nodeIds, as];
     // An opened group (a Pass inside it): its card reads its outputs from the nodes behind them, and
     // Show passes tints it as the programs its nodes run in.
     for (const [gid, g] of opened.groups) {

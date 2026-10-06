@@ -23,10 +23,17 @@ import { GRID_EXAMPLE_INDEX, GRID_EXAMPLE_KEYS } from './gridExamples';
 import { PASS_EXAMPLE_INDEX, PASS_EXAMPLE_KEYS } from './passExamples';
 import { AGENT_EXAMPLE_INDEX, AGENT_EXAMPLE_KEYS, AGENT_RULE_INDEX } from './agentExamples';
 import { AGENT_SHADER_EXAMPLE_INDEX, AGENT_SHADER_EXAMPLE_KEYS } from './agentShaderExamples';
+import { AGENT_3D_EXAMPLE_INDEX, AGENT_3D_EXAMPLE_KEYS } from './agentExamples3d';
+import { SIM_AGENT_EXAMPLE_INDEX, SIM_AGENT_EXAMPLE_KEYS } from './agentExamplesSim';
 import { CONVERT_EXAMPLE_INDEX, CONVERT_EXAMPLE_KEYS } from './convertExampleIndex';
 import { BAKE_EXAMPLE_INDEX } from './bakeExamples';
 import { TIME_CUBE_EXAMPLE_INDEX, TIME_CUBE_EXAMPLE_KEYS } from './timeCubeExamples';
 import { FRAME_STACK_EXAMPLE_INDEX, FRAME_STACK_EXAMPLE_KEYS } from './frameStackExamples';
+import { TEXTURE_TOOL_EXAMPLE_INDEX, TEXTURE_TOOL_EXAMPLE_KEYS } from './textureToolExamples';
+import { SIM_GRID_EXAMPLE_INDEX } from './simGridExamples';
+import { GRID_RULES_EXAMPLE_INDEX, simGridsFolderKeys } from './gridRulesExampleIndex';
+import { AGENT_RULE_EXAMPLE_INDEX, AGENT_RULE_EXAMPLE_KEYS } from './agentRuleExamples';
+import { SCENE_BUILDER_EXAMPLE_INDEX, SCENE_BUILDER_EXAMPLE_KEYS } from './sceneBuilderExampleIndex';
 
 export type ExampleGraph = {
   label: string; nodes: GraphNode[]; counter: number;
@@ -211,6 +218,10 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...AGENT_EXAMPLE_INDEX,
   // Agents with shaders: the Agents group plugged into ordinary nodes and your own shaders (agentShaderExamples.ts).
   ...AGENT_SHADER_EXAMPLE_INDEX,
+  // Agents in 3D: Space 3D, the camera, a volume trail, Collide (3D scene) (agentExamples3d.ts).
+  ...AGENT_3D_EXAMPLE_INDEX,
+  // Simulations: agents: classic agent-based models as custom rules from ordinary nodes (agentExamplesSim.ts).
+  ...SIM_AGENT_EXAMPLE_INDEX,
   // The Slime mold rule as a Script layer, with a Play setup (agentSketchExamples.ts).
   ...Object.fromEntries(Object.entries(AGENT_RULE_INDEX).map(([k, v]) => [k, { ...v, play: true }])),
   // The Convert folder (convertExampleIndex.ts, graphs in convertExamples.ts): what the Convert page makes of its Soft circle, as written and optimised.
@@ -221,6 +232,16 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...TIME_CUBE_EXAMPLE_INDEX,
   // Frame stack (frameStackExamples.ts, docs/frame-stack.md): a video's frames as cards to arrange.
   ...FRAME_STACK_EXAMPLE_INDEX,
+  // Texture tools (textureToolExamples.ts, docs/texture-tools.md): Mask, Levels, Flow, Neighbours, Change, Outline, Fade, Read.
+  ...TEXTURE_TOOL_EXAMPLE_INDEX,
+  // The 3D: Scene Builder folder (sceneBuilderExamples.ts): graphs the 3D Scene Builder made from its templates.
+  ...SCENE_BUILDER_EXAMPLE_INDEX,
+  // Simulations: grids (simGridExamples.ts, docs/simulations-grids.md): cellular automata from a Pass and its Previous.
+  ...SIM_GRID_EXAMPLE_INDEX,
+  // Grid Rules (gridRulesExamples.ts, docs/grid-rules.md): the same simulations as one node each.
+  ...GRID_RULES_EXAMPLE_INDEX,
+  // Agents: rules (agentRuleExamples.ts, docs/agent-rules.md): the Agent Rules templates, behaviour as When … Do … lines.
+  ...AGENT_RULE_EXAMPLE_INDEX,
 };
 
 // The default graph to load on startup
@@ -243,8 +264,13 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Curves & Shapes",   color: ctp.lavender, keys: LEARN_CURVES_KEYS },
   { label: "Color & Lighting",  color: ctp.peach, keys: [...LEARN_COLOR_KEYS, 'neonGlow','colorStopsCycle'] },
   { label: "Passes",            color: ctp.maroon, keys: PASS_EXAMPLE_KEYS },
+  { label: "Texture tools",     color: ctp.flamingo, keys: TEXTURE_TOOL_EXAMPLE_KEYS },
   { label: "Simulation",        color: ctp.green, keys: AGENT_EXAMPLE_KEYS },
+  { label: "Simulations: grids", color: ctp.green, keys: simGridsFolderKeys() },
+  { label: "Agents: rules",     color: ctp.green, keys: AGENT_RULE_EXAMPLE_KEYS },
   { label: "Agents with shaders", color: ctp.green, keys: AGENT_SHADER_EXAMPLE_KEYS },
+  { label: "Agents in 3D",      color: ctp.green, keys: AGENT_3D_EXAMPLE_KEYS },
+  { label: "Simulations: agents", color: ctp.green, keys: SIM_AGENT_EXAMPLE_KEYS },
   { label: "Effects & Lens",    color: ctp.mauve, keys: ['echoTrails','feedbackSmear','crtTv','lensBarrel'] },
   { label: "Space & Texture",   color: ctp.flamingo, keys: ['waveTextureDemo','waveInterference','magicTextureDemo','neonFloorGrid','spaceAtlas'] },
   { label: "Grid",              color: ctp.sky, keys: [...GRID_EXAMPLE_KEYS, ...LEARN_GRID_KEYS, 'gridNeighborDisplaced','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','beatGrid'] },
@@ -263,6 +289,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "3D SDF",            color: ctp.sky, keys: ['sdfPolarRepeat','sdfBend3D','sdCrossScene3D','infinitePillars3D','spiralWorld3D','gyroidWarped','bakeHeavyScene','mlgWiggleTunnel','voxelTerrain'] },
   { label: "3D Lighting",       color: '#f9c468', keys: ['fresnelSchlickRim','refractDirFakeGlass','glassPhysical','glassMetaballs','litStillLife'] },
   { label: "GI Lighting",       color: ctp.green, keys: ['giSphereGround','giBoxFrame'] },
+  { label: "3D: Scene Builder", color: ctp.sky, keys: SCENE_BUILDER_EXAMPLE_KEYS },
   { label: "Volumetric",        color: '#f5a97f', keys: ['glowMarcher','volAnimatedRepeat','volumeGlowDemo'] },
   { label: "Time Cube",         color: '#f5a97f', keys: TIME_CUBE_EXAMPLE_KEYS },
   { label: "Frame Stack",       color: '#f5a97f', keys: FRAME_STACK_EXAMPLE_KEYS },

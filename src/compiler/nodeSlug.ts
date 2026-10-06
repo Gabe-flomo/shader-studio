@@ -50,7 +50,7 @@ const TYPE_ABBREV: Record<string, string> = {
   // Domain Repetition (IQ article)
   mirroredRepeat2D: 'mrep2', limitedRepeat2D: 'lrep2', angularRepeat2D: 'arep2',
   mirroredRepeat3D: 'mrep3',
-  sdCross3D: 'xcross', mengerSponge: 'menger',
+  sdCross3D: 'xcross',
   // Groups / loops
   group: 'grp',
   marchLoopInputs: 'mli', marchLoopOutput: 'mlo', marchSceneDist: 'msd',
@@ -61,6 +61,9 @@ const TYPE_ABBREV: Record<string, string> = {
   // Passes (render to texture)
   pass: 'pass', passOutput: 'pout', sampleTexture: 'smp', edgesTexture: 'edges', blurTexture: 'tblur',
   glowTexture: 'tglow', displaceTexture: 'tdisp', displacementMap: 'dmap',
+  // Texture tools
+  textureMask: 'tmask', textureLevels: 'tlevels', textureFlow: 'tflow', textureNeighbours: 'tnbr', textureChange: 'tchange',
+  distanceShape: 'dshape', textureFade: 'tfade', readTexture: 'tread',
   // Misc
   expr: 'expr', customFn: 'cfn', scope: 'scope',
   sineLFO: 'lfo', squareLFO: 'slfo', sawtoothLFO: 'sawlfo',

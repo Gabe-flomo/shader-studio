@@ -26,9 +26,9 @@ const BY_ACCENT: Record<string, Accent> = {
   Sources: 'blue', Transforms: 'green', Math: 'lavender', Color: 'peach', Noise: 'sapphire', Effects: 'red',
   'Post Processing': 'red', Loops: 'sky', '2D Primitives': 'yellow', Combiners: 'mauve', Spaces: 'flamingo', Grid: 'sky',
   Field: 'sapphire', Shapers: 'yellow', Science: 'teal', Fractals: 'mauve', Output: 'overlay0', '3D Primitives': 'pink',
-  '3D Transforms': 'pink', '3D Boolean Ops': 'sky', '3D Fractals': 'pink', Animation: 'lavender', Conditionals: 'flamingo',
+  '3D Transforms': 'pink', '3D Boolean Ops': 'sky', Animation: 'lavender', Conditionals: 'flamingo',
   Utility: 'overlay0', Particles: 'yellow', 'Particles & Fields': 'yellow', SDF: 'pink', 'Group Presets': 'yellow', Simulation: 'green',
-  Functions: 'sky',
+  Functions: 'sky', 'Texture tools': 'flamingo',
 };
 
 export function categoryColor(category: string, mode: ThemeMode): string {

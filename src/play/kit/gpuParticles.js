@@ -40,6 +40,7 @@
  * Part of the layer kit: exportHtml.ts inlines it into web exports, so every
  * top-level name keeps the `gp`/`GP_` prefix.
  */
+import { blCubicGlsl } from './blur.js';
 
 /** Particle counts: the state texture's side for each. */
 export const GP_TIERS = { '64k': 256, '256k': 512, '1m': 1024, '4m': 2048 };
@@ -1058,6 +1059,8 @@ export const gpCurlAt = (p, scale, time) => `${p} * 2.4 * ${scale} + vec3(0.0, 0
 export const gpCurlOctave2 = q => `gpNoised(${q} * 2.03 + vec3(17.1, 5.3, 31.4))`;
 /** Curl in the picture's plane from two octaves a and b (with a little depth in z). */
 export const gpCurlPlane = (a, b) => `vec3(${a}.z, -${a}.y, ${a}.w * 0.4) + 0.5 * vec3(${b}.z, -${b}.y, ${b}.w * 0.4)`;
+/** Curl in 3D from two octaves a and b: the cross product of two gradients is divergence-free (plus a little planar swirl). */
+export const gpCurl3D = (a, b) => `cross(${a}.yzw, ${b}.yzw) * 1.6 + 0.35 * vec3(${a}.z, -${a}.y, 0.0)`;
 /** The wind's gusts from the first octave: 0.15…1.35 round 0.75. */
 export const gpGust = a => `0.75 + 0.6 * ${a}.x`;
 /** Swirl round a point: s · the perpendicular of d, strongest at radius √r2 (d from the centre, r its length). */
@@ -1083,6 +1086,23 @@ export const gpCrunch = (s, amount) => `gpUnit(${s}) * (${amount} * 26.0)`;
 export const gpShockRing = (r, age, speed) => `(${r} - ${age} * ${speed}) / 0.07`;
 /** The shock's pressure pulse: out as the front arrives, back behind it, fading with age. */
 export const gpShockPush = (d, r, strength, ring, age) => `${d} / ${r} * (${strength} * 16.0 * ${ring} * exp(-${ring} * ${ring}) * exp(-${age} * 1.5))`;
+/**
+ * A scene's distance at q (in grid cells, 0…GP_VOL on each axis) from its GP_VOL³ grid (slices side by side,
+ * GP_VOL_TILES across and down), trilinear: bilinear in a slice, then between two. `args` adds leading parameters
+ * (the grid as a sampler). The Particles node's Scene socket and the Agents' Collide (3D scene) both read it.
+ */
+export const gpVolAtGlsl = (fn, vol, args = '') => `float ${fn}(${args}vec3 q) {
+  const float N = ${GP_VOL}.0;
+  vec3 g = clamp(q, vec3(0.5), vec3(N - 0.5));
+  float z = g.z - 0.5, z0 = floor(z);
+  int t0 = int(z0), t1 = min(t0 + 1, ${GP_VOL - 1});
+  vec2 size = vec2(${GP_VOL * GP_VOL_TILES[0]}.0, ${GP_VOL * GP_VOL_TILES[1]}.0);
+  vec2 a = (vec2(float(t0 % ${GP_VOL_TILES[0]}), float(t0 / ${GP_VOL_TILES[0]})) * N + g.xy) / size;
+  vec2 b = (vec2(float(t1 % ${GP_VOL_TILES[0]}), float(t1 / ${GP_VOL_TILES[0]})) * N + g.xy) / size;
+  return mix(texture(${vol}, a).r, texture(${vol}, b).r, z - z0);
+}`;
+/** The grid cell (x, y, slice) a grid texel at `q` (an ivec2) holds: the Particles node's probe's mapping (gpVolPoint in JS). */
+export const gpVolCellGlsl = q => `vec3(float(${q}.x % ${GP_VOL}), float(${q}.y % ${GP_VOL}), float((${q}.y / ${GP_VOL}) * ${GP_VOL_TILES[0]} + ${q}.x / ${GP_VOL}))`;
 /** The sound heard `ago` seconds back, from a GP_LEVELS × 1 history (60 a second, newest first). `args` adds leading parameters (the history as a sampler). */
 export const gpLevelGlsl = (fn, levels, args = '') => `float ${fn}(${args}float ago) {
   float x = clamp(ago * 60.0, 0.0, ${GP_LEVELS - 2}.0);
@@ -1311,16 +1331,7 @@ ${GP_HASH}
 ${GP_NOISE}
 vec3 gpHomeAt(vec2 uv) { return vec3(u_emitAt + (uv * 2.0 - 1.0) * u_imgHalf, 0.0); }
 // The scene's distance at a point in grid cells (trilinear: bilinear in a slice, then between two).
-float gpVolAt(vec3 q) {
-  const float N = ${GP_VOL}.0;
-  vec3 g = clamp(q, vec3(0.5), vec3(N - 0.5));
-  float z = g.z - 0.5, z0 = floor(z);
-  int t0 = int(z0), t1 = min(t0 + 1, ${GP_VOL - 1});
-  vec2 size = vec2(${GP_VOL * GP_VOL_TILES[0]}.0, ${GP_VOL * GP_VOL_TILES[1]}.0);
-  vec2 a = (vec2(float(t0 % ${GP_VOL_TILES[0]}), float(t0 / ${GP_VOL_TILES[0]})) * N + g.xy) / size;
-  vec2 b = (vec2(float(t1 % ${GP_VOL_TILES[0]}), float(t1 / ${GP_VOL_TILES[0]})) * N + g.xy) / size;
-  return mix(texture(u_vol, a).r, texture(u_vol, b).r, z - z0);
-}
+${gpVolAtGlsl('gpVolAt', 'u_vol')}
 // The sound heard 'ago' seconds back (the history is 60 a second, newest first).
 ${gpLevelGlsl('gpLevel', 'u_levels')}
 // J_n(x) from the table (row n, x over 0…${GP_BESSEL_X}), linear between samples.
@@ -1375,7 +1386,7 @@ void main() {
     if (u_deep == 1) {
       // Curl noise in 3D: the cross product of two gradients is divergence-free, so streams fold into
       // sheets and threads instead of bunching up.
-      c = cross(a.yzw, b.yzw) * 1.6 + 0.35 * vec3(a.z, -a.y, 0.0);
+      c = ${gpCurl3D('a', 'b')};
     } else {
       // In the picture's plane (with a little depth, so it isn't flat).
       c = ${gpCurlPlane('a', 'b')};
@@ -1678,19 +1689,22 @@ uniform int u_lights, u_ink;
 uniform vec4 u_light[4];
 uniform vec3 u_lightCol[4];
 out vec4 o;
+// The glow levels (¼ and 1/16 size) read back through a cubic B-spline (play/kit/blur.js): no bilinear diamonds round a lone particle.
+${blCubicGlsl('texture', 'gpCubic')}
+vec4 gpGlow(sampler2D s, vec2 uv) { return gpCubic(s, uv, vec2(textureSize(s, 0))); }
 void main() {
   vec2 uv = gl_FragCoord.xy / u_size;
   vec4 acc = texture(u_acc, uv);
   if (u_ink == 1) {
     // Ink: the absorbance (and the bleed round it) dims the paper as e^-Σ, and what shows is the ink's
     // own colour, weighted by how much of each lies here. Premultiplied: (ink · cover, cover).
-    vec4 a = acc + u_glow * (0.35 * texture(u_g1, uv) + 0.5 * texture(u_g2, uv));
+    vec4 a = acc + u_glow * (0.35 * gpGlow(u_g1, uv) + 0.5 * gpGlow(u_g2, uv));
     float cover = 1.0 - exp(-max(a.a, 0.0));
     vec3 ink = a.rgb / max(a.a, 1e-5);
     o = vec4(ink * cover, cover);
     return;
   }
-  vec3 c = acc.rgb + u_glow * (0.6 * texture(u_g1, uv).rgb + 1.1 * texture(u_g2, uv).rgb);
+  vec3 c = acc.rgb + u_glow * (0.6 * gpGlow(u_g1, uv).rgb + 1.1 * gpGlow(u_g2, uv).rgb);
   vec2 q = (uv * 2.0 - 1.0) * vec2(u_aspect, 1.0);
   for (int j = 0; j < 4; j++) {
     if (j >= u_lights) break;

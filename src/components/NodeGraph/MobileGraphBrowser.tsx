@@ -61,6 +61,7 @@ import { playDrivenMap } from '../../play/playDriven';
 import { driverOf } from '../../play/paramDrivers';
 import { PlayDriveChip } from './PlayDriveChip';
 import { InputExprPopover } from './InputExprPopover';
+import { CodeCard } from './codeCard/CodeCard';
 import { canHaveInputExpr, getInputExpr } from '../../glsl/inputExpr';
 import { VOLUMETRIC_LOOP_TYPES } from '../../nodes/volumetricAuto';
 
@@ -2270,7 +2271,7 @@ export function MobileGraphBrowser() {
     // sockets, so they're already in node.inputs. Some paramDefs never do —
     // a group's own Iterations (a group's `inputs` is built entirely from
     // its ports/ps_ sockets, never its own type's paramDefs), and select-type
-    // params generally (a dropdown like Menger Sponge's Iterations or Mirror
+    // params generally (a dropdown like Raymarch 3D's Shape or Mirror
     // Fold's Symmetry isn't a wireable socket on any node type, so it's
     // never declared in def.inputs either) — so they'd otherwise never get a
     // row here at all. Desktop renders every float/int/select paramDef
@@ -2860,6 +2861,8 @@ export function MobileGraphBrowser() {
           {GROUP_TYPES.has(node.type) && renderGroupBanner(node)}
           {node.type === 'textureInput' && renderTextureUploadBanner(node)}
           {node.type === 'data' && <DataEditorLauncher node={node} />}
+          {/* Custom Function: the same read-only card face as desktop (code, signature, note, description) */}
+          {node.type === 'customFn' && <CodeCard node={node} touch compact />}
 
           {(hasInputs || node.type === 'group') && (hasOutputs || node.type === 'group') && (
             <div style={tabGroupStyle(tc)}>
@@ -3342,7 +3345,7 @@ export function MobileGraphBrowser() {
             setPending(null);
           };
           // New nodes to add and wire in one tap (see quickAdds.ts)
-          const quickAdds = socket ? suggestQuickAdds({ type: socket.type, dir: pending.dir === 'input' ? 'in' : 'out', label: socket.label, key: pending.key }) : [];
+          const quickAdds = socket ? suggestQuickAdds({ type: socket.type, dir: pending.dir === 'input' ? 'in' : 'out', label: socket.label, key: pending.key, nodeType: node.type }) : [];
           const quickAdd = (q: (typeof quickAdds)[number]) => {
             const pos = { x: node.position.x + (pending.dir === 'input' ? -420 : 420), y: node.position.y };
             const newId = useNodeGraphStore.getState().addNode(q.type, pos);
@@ -3456,6 +3459,11 @@ export function MobileGraphBrowser() {
     return (
       <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         {renderNodeHeader(node)}
+
+        {/* The desktop card face, read-only; Edit jumps to the lines below */}
+        <div style={{ flexShrink: 0, padding: '0 2px' }}>
+          <CodeCard node={node} touch compact onEdit={() => setExprMode('output')} />
+        </div>
 
         <div style={{ display: 'flex', gap: '6px', padding: '8px 12px', borderBottom: `1px solid ${tc.surface0}`, flexShrink: 0 }}>
           {(['inputs', 'output'] as const).map(mode => (

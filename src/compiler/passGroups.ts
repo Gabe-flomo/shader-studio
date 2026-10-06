@@ -26,7 +26,8 @@ type Wire = { nodeId: string; outputKey: string };
 
 function hasPass(nodes: GraphNode[]): boolean {
   for (const n of nodes) {
-    if (n.type === PASS_TYPE) return true;
+    // A Grid Rules node is a Pass too, once compiled (compiler/gridRulesExpand.ts).
+    if (n.type === PASS_TYPE || n.type === 'gridRules') return true;
     const sg = n.params?.subgraph as { nodes?: GraphNode[] } | undefined;
     if (sg?.nodes && hasPass(sg.nodes)) return true;
   }

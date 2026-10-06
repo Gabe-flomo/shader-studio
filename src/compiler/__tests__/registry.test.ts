@@ -30,13 +30,14 @@ const SKIP = new Set(['output', 'vec4Output']);
 const CONNECTION_GATED = new Set([
   'neighborDist.dispScale',   // only in the hash-displacement path (cellID wired, displacement not)
   'glassScene.diffuseness',   // the node emits no code at all until its scene inputs are wired
-  'printText.decimals',       // only formats the number printed when Value is wired
   // GI Lit March Group: the PBR lighting block is only emitted once a scene is wired
   'giLitMarchGroup.metallic', 'giLitMarchGroup.roughness', 'giLitMarchGroup.lightStrength',
   'giLitMarchGroup.giStrength', 'giLitMarchGroup.specStrength',
   // Texture-sampling nodes (Passes) read black, and none of their settings, until a Pass is wired
   'sampleTexture.offsetX', 'sampleTexture.offsetY', 'edgesTexture.strength', 'edgesTexture.width', 'blurTexture.radius', 'jumpFloodTexture.reach',
-  'glowTexture.threshold', 'glowTexture.radius', 'glowTexture.intensity', 'displaceTexture.amount',
+  'glowTexture.threshold', 'glowTexture.knee', 'glowTexture.tint', 'glowTexture.radius', 'glowTexture.intensity', 'displaceTexture.amount',
+  // Texture tools (docs/texture-tools.md) likewise read nothing until a texture is wired; Read's Flow amount needs Flow
+  'textureFlow.reach', 'textureNeighbours.spacing', 'textureChange.amount', 'textureChange.level', 'textureChange.width', 'readTexture.flowAmount',
   // The Agents engine reads these from the uniform table (lib/agentRunner.ts), not the picture's shader
   'trailField.diffuse', 'trailField.halfLife',
   'drawAgents.size', 'drawAgents.brightness', 'drawAgents.glow', 'drawAgents.colorA', 'drawAgents.colorB',
@@ -48,12 +49,16 @@ const CONNECTION_GATED = new Set([
   'agentChladni.shake', 'agentChladni.level', 'agentChladni.beat',
   // Flow and Collide do nothing, and read none of their settings, until a field is wired into Field ƒ / Shape ƒ
   'agentFlow.strength', 'agentFlow.step', 'agentCollide.margin', 'agentCollide.cushion', 'agentCollide.bounce', 'agentCollide.friction',
+  // Collide (3D scene) works only in a 3D group (alone it passes the walker through); the engine reads its place (x, y, z, reach)
+  ...Object.keys(NODE_REGISTRY.agentCollideScene.paramDefs ?? {}).map(k => `agentCollideScene.${k}`),
   // Time Cube View and Time Slice (docs/time-cube.md) draw only their background / black, and read none of
   // their other settings, until a Time Cube's Volume is wired
   ...Object.keys(NODE_REGISTRY.timeCubeView.paramDefs ?? {}).filter(k => k !== 'background').map(k => `timeCubeView.${k}`),
   ...Object.keys(NODE_REGISTRY.timeSlice.paramDefs ?? {}).map(k => `timeSlice.${k}`),
   // Frame Stack (docs/frame-stack.md) likewise draws only its background until a Volume is wired
   ...Object.keys(NODE_REGISTRY.frameStack.paramDefs ?? {}).filter(k => k !== 'background').map(k => `frameStack.${k}`),
+  // A Grid Rules step (made by the compiler, compiler/gridRulesExpand.ts) reads nothing until its board is wired
+  ...Object.keys(NODE_REGISTRY.gridRulesStep.paramDefs ?? {}).map(k => `gridRulesStep.${k}`),
 ]);
 
 function makeNode(id: string, type: string, def: NodeDefinition, x = 0): GraphNode {
@@ -109,7 +114,8 @@ describe('node registry', () => {
     for (const { type, def } of compilable) {
       const outKey = pickOutput(def)!;
       const r = compileGraph({ nodes: [makeNode('n1', type, def), outputNode('n1', outKey)] });
-      const body = stripDeclarations(r.fragmentShader);
+      // Every program the node compiles into (a Grid Rules node's rule runs in its board's pass).
+      const body = [r.fragmentShader, ...(r.passes ?? []).map(p => p.fragmentShader)].map(stripDeclarations).join('\n');
       for (const uniform of Object.keys(r.paramUniforms)) {
         if (!new RegExp(`\\b${uniform}\\b`).test(body)) {
           const param = uniform.split('_').slice(3).join('_');

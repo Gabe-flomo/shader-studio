@@ -96,8 +96,8 @@ export function buildPassExamples(): Record<string, ExampleGraph> {
       n('pass', 'passEdges', 1600, 220, { label: 'Pass B · edges', scale: '0.5',
         ...note('Pass B holds the edges in a second texture so the blur after it can read around them too. Scale ½: a quarter of the pixels, so the wide blur below costs a quarter as much and comes out softer. Half float keeps the glow from clipping.') },
         { color: ['edges', 'color'] }),
-      n('blurTexture', 'blur', 1860, 220, { radius: 14, quality: '24',
-        ...note('Blur (texture) spreads Pass B\'s edges into a soft halo: 24 reads in a disc 14 picture pixels wide. This is the glow. Unlike the older Gaussian Blur, it blurs this frame, not the last one.') },
+      n('blurTexture', 'blur', 1860, 220, { method: 'smooth', radius: 14,
+        ...note('Blur (texture) spreads Pass B\'s edges into a soft halo 14 picture pixels wide. This is the glow. Method Smooth is a true Gaussian: two hidden passes (across, then down) that read between pixels, so the halo has no copies or rings at any Radius. Unlike the older Gaussian Blur, it blurs this frame, not the last one.') },
         { texture: ['passEdges', 'texture'] }),
       n('sampleTexture', 'sharpEdges', 1860, 460, {
         ...note('Sample (texture) reads Pass B at this pixel, unblurred: the sharp outline, added back on top of the glow so the edges keep a bright core.') },

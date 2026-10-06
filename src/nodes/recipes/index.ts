@@ -9,7 +9,8 @@ import type { StarterRecipe } from './types';
 import { GRID_PATTERN_RECIPES, GRID_RECIPES } from './gridRecipes';
 import { NOISE_RECIPES, PALETTE_RECIPES, VORONOI_RECIPES } from './noiseRecipes';
 import { KALEIDO_RECIPES, POLAR_RECIPES, REPEAT_RECIPES, SDF_COMBINE_RECIPES, SDF_SHAPE_RECIPES, TILE_RECIPES } from './shapeRecipes';
-import { AUDIO_RECIPES, FEEDBACK_RECIPES, LFO_RECIPES, PARTICLE_RECIPES, PASS_RECIPES, PICTURE_EFFECT_RECIPES, TEXT_RECIPES } from './effectRecipes';
+import { AUDIO_RECIPES, FEEDBACK_RECIPES, LFO_RECIPES, PARTICLE_RECIPES, PASS_RECIPES, PICTURE_EFFECT_RECIPES } from './effectRecipes';
+import { CHANGE_RECIPES, FADE_RECIPES, JUMP_FLOOD_RECIPES } from './textureRecipes';
 
 export type { StarterRecipe, RecipeBuild, RecipeContext } from './types';
 export { applyRecipe, placeNear } from './apply';
@@ -32,10 +33,13 @@ export const STARTER_RECIPES: Readonly<Record<string, StarterRecipe[]>> = {
   polarSpace: POLAR_RECIPES,
   prevFrame: FEEDBACK_RECIPES,
   pass: PASS_RECIPES,
+  // Texture tools (docs/texture-tools.md): the Pass and flood setups they need.
+  jumpFloodTexture: JUMP_FLOOD_RECIPES,
+  textureChange: CHANGE_RECIPES,
+  textureFade: FADE_RECIPES,
   gpuParticles: PARTICLE_RECIPES,
   audioInput: AUDIO_RECIPES,
   lfo: LFO_RECIPES,
-  printText: TEXT_RECIPES,
   ...each(['bloom', 'vignette', 'grain', 'toneMap', 'chromaShift', 'colorSaturation', 'hueRotate', 'posterize', 'scanlines', 'brightnessContrast', 'toneCurve', 'invert', 'cmykHalftone'], PICTURE_EFFECT_RECIPES),
 };
 

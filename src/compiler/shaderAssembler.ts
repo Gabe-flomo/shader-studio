@@ -27,7 +27,7 @@ import { audioUniformName } from './audioUniformNames';
 import { coerce, coerceLossy } from '../lib/typesCompatible';
 import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { loopColour } from '../nodes/definitions/scene3d';
-import { AG_HASH_GLSL, AG_STATE_C_GLSL, AGENT_GLOBALS, AGENT_STATE_C_GLOBALS, agentStateUniform, agentStepUniform, agentWindowUniform } from '../nodes/definitions/agents';
+import { AG_3D_GLSL, AG_HASH_GLSL, AG_STATE_C_GLSL, AGENT_GLOBALS, AGENT_GLOBALS_3D, AGENT_STATE_C_GLOBALS, agentStateUniform, agentStepUniform, agentWindowUniform } from '../nodes/definitions/agents';
 import { frozenValueOf } from '../nodes/sliderFreeze';
 import { marchJitterDecl, MARCH_STEP_REF_KEY } from './marchJitter';
 import {
@@ -648,6 +648,11 @@ export interface AgentProgramOptions {
    * D = its deposit. The species is then read from C (set at birth by the Emit), not the index.
    */
   stateC?: boolean;
+  /**
+   * Space 3D (docs/agents-plan.md "3D"): A = (pos.xyz, age), B = (vel.xyz, life); the globals are
+   * vec3 (a_dir the heading, a_across this step's random direction across it) and g_uv is a_pos.xy.
+   */
+  space3d?: boolean;
 }
 
 /** The fixed part of an agent program: outputs, state samplers, the agent globals and the hash. */
@@ -668,10 +673,11 @@ function agentHeader(o: AgentProgramOptions): string {
     `const float a_speciesCount = ${o.species}.0;`,
     // One step is 1/60 s of simulated time, whatever the frame rate (determinism: docs/agents-plan.md §8).
     'const float a_dt = 1.0 / 60.0;',
-    ...AGENT_GLOBALS.map(([t, name]) => `${t} ${name};`),
+    ...(o.space3d ? AGENT_GLOBALS_3D : AGENT_GLOBALS).map(([t, name]) => `${t} ${name};`),
     ...(o.stateC ? AGENT_STATE_C_GLOBALS.map(([t, name]) => `${t} ${name};`) : []),
     'vec4 a_ownChannels;',
     AG_HASH_GLSL,
+    ...(o.space3d ? [AG_3D_GLSL] : []),
     ...(o.stateC ? [AG_STATE_C_GLSL] : []),
     '',
   ].join('\n');
@@ -694,14 +700,24 @@ function agentPrelude(o: AgentProgramOptions): string {
     `    a_seed = agHash(uint(a_tex.y * a_side + a_tex.x) * 0x9E3779B1u ^ agHash(${agentStepUniform(o.slug)} ^ (uint(max(${o.seed}, 0.0)) * 0x85EBCA6Bu)));`,
     '    a_random = float(a_seed >> 8) / 16777216.0;',
     `    a_step = ${agentStepUniform(o.slug)};`,
-    '    a_pos = a_sA.xy; a_heading = a_sA.z; a_age = a_sA.w + a_dt;',
-    '    a_vel = a_sB.xy; a_speed = a_sB.z; a_life = a_sB.w;',
+    ...(o.space3d ? [
+      // 3D: the heading is the velocity's direction; a walker that never moved faces a direction of its own (its index's).
+      '    a_pos = a_sA.xyz; a_age = a_sA.w + a_dt;',
+      '    a_vel = a_sB.xyz; a_speed = length(a_vel); a_life = a_sB.w;',
+      '    { uint a_r = agHash(uint(a_index) ^ 0x5BD1E995u); a_dir = a_speed > 1e-12 ? a_vel / a_speed : agUnit3(a_r); }',
+      '    a_heading = atan(a_dir.y, a_dir.x);',
+      // This step's side direction: the plane Sense and Steer turn in (random, repeatable: the step and the seed).
+      '    a_across = agAcross(a_dir, float(agHash(a_seed ^ 0x27D4EB2Du) >> 8) / 16777216.0 * 6.2831853);',
+    ] : [
+      '    a_pos = a_sA.xy; a_heading = a_sA.z; a_age = a_sA.w + a_dt;',
+      '    a_vel = a_sB.xy; a_speed = a_sB.z; a_life = a_sB.w;',
+    ]),
     // With per-walker state the species is the one its Emit gave it (state C); else its index's.
     o.stateC ? '    a_species = a_sC.x; a_mem = a_sC.yz; a_colour = agUnpackColour(a_sC.w);' : '    a_species = mod(a_index, a_speciesCount);',
     o.species > 1
       ? '    a_ownChannels = (vec4(equal(vec4(a_species), vec4(0.0, 1.0, 2.0, 3.0))) * 1.5 - 0.5) * vec4(lessThan(vec4(0.0, 1.0, 2.0, 3.0), vec4(a_speciesCount)));'
       : '    a_ownChannels = vec4(1.0, 0.0, 0.0, 0.0);',
-    '    vec2 g_uv = a_pos;',
+    o.space3d ? '    vec2 g_uv = a_pos.xy;' : '    vec2 g_uv = a_pos;',
     '',
   ].join('\n');
 }
@@ -3931,7 +3947,12 @@ export class ShaderAssembler {
         for (const [k, v] of Object.entries(inputVars)) {
           if (k.startsWith('__param_') && v) sluggedNode = { ...sluggedNode, params: { ...sluggedNode.params, [k.slice('__param_'.length)]: v } };
         }
-        const { patchedNode, uniforms: nodeUniforms, bindings: nodeBindings } = patchNodeParamsForUniforms(sluggedNode, def, fn => this.functions.add(fn), node.id);
+        // The Mouse node in a pass program (a Pass at ½, ¼…): u_mouse is in picture pixels, u_resolution the pass's size.
+        // Only when its UV, X or Y is read (Pixels stays the picture's): a graph that reads Pixels compiles as before.
+        if (node.type === 'mouse' && this.pictureScale !== 1 && this.allNodes.some(o => Object.values(o.inputs ?? {}).some(i => i.connection?.nodeId === node.id && i.connection.outputKey !== 'px'))) sluggedNode = { ...sluggedNode, params: { ...sluggedNode.params, __pictureScale: this.pictureScale } };
+        // A node the compiler made for another (a Grid Rules step, compiler/gridRulesExpand.ts) binds its sliders to that node's id.
+        const bindId = typeof node.params.__bindAs === 'string' && node.params.__bindAs ? node.params.__bindAs : node.id;
+        const { patchedNode, uniforms: nodeUniforms, bindings: nodeBindings } = patchNodeParamsForUniforms(sluggedNode, def, fn => this.functions.add(fn), bindId);
         Object.assign(this.paramUniforms, nodeUniforms);
         Object.assign(this.paramBindings, nodeBindings);
         def.declarationsFor?.(patchedNode).forEach(d => this.declarations.add(d));
@@ -4083,7 +4104,8 @@ function toAgentProgram(fs: string, o: AgentProgramOptions): string {
   if (!/\bvUv\b/.test(out.replace('\nvarying vec2 vUv;\n', '\n'))) return out;
   const [head, ...rest] = out.split('\nvarying vec2 vUv;\n');
   return `${head}\nvarying vec2 vUv;\nvec2 a_vUv;\n${rest.join('\nvarying vec2 vUv;\n').replace(/\bvUv\b/g, 'a_vUv')
-    .replace('    vec2 g_uv = a_pos;\n', '    vec2 g_uv = a_pos;\n    a_vUv = a_pos / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5;\n')}`;
+    .replace('    vec2 g_uv = a_pos;\n', '    vec2 g_uv = a_pos;\n    a_vUv = a_pos / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5;\n')
+    .replace('    vec2 g_uv = a_pos.xy;\n', '    vec2 g_uv = a_pos.xy;\n    a_vUv = a_pos.xy / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5;\n')}`;
 }
 
 /**

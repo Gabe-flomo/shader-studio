@@ -46,6 +46,8 @@ interface Props {
   onPublished?: (id: string) => void;
   /** Editing an existing node type (re-publish updates it in place). Group sources may also carry `params.__userNodeId`. */
   existingId?: string;
+  /** A description to start from ("Make a node from this" passes the explanation). */
+  initialDescription?: string;
   /** The group isn't on the canvas (it's from a saved graph or a preset): publish it as given. */
   detached?: boolean;
 }
@@ -105,7 +107,7 @@ export function PublishNodeModal(props: Props) {
   return allowed ? <PublishNodeModalInner {...props} /> : null;
 }
 
-function PublishNodeModalInner({ source: initialSource, onClose, onPublished, existingId, detached }: Props) {
+function PublishNodeModalInner({ source: initialSource, onClose, onPublished, existingId, detached, initialDescription }: Props) {
   const tk = useTokens();
   // Phones: one column, preview under the fields, full-height dialog
   const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
@@ -136,7 +138,7 @@ function PublishNodeModalInner({ source: initialSource, onClose, onPublished, ex
 
   const [label, setLabel] = useState(existing?.label ?? (isCode ? (existing ? sourceLabel : 'My Node') : sourceLabel) ?? 'My Node');
   const [category, setCategory] = useState(existing?.category ?? USER_NODE_DEFAULT_CATEGORY);
-  const [description, setDescription] = useState(existing?.description ?? '');
+  const [description, setDescription] = useState(existing?.description ?? initialDescription ?? '');
   const [shareSource, setShareSource] = useState(!existing?.sourceHidden);
   const [replace, setReplace] = useState(!!existing);
   const [error, setError] = useState<string | null>(null);

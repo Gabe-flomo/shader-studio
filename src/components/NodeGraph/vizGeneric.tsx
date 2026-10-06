@@ -16,6 +16,7 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { pal, MONO, vizContainer, setupViz, imageSize, blitImage } from './vizKit';
 import { evalStops } from '../../lib/palette';
+import { LEVELS_DEFAULTS, ttDistanceShape, ttFadeStep, ttLevels, ttMaskThreshold } from '../../nodes/definitions/textureTools';
 
 const num = (node: GraphNode, key: string, fallback: number): number => {
   const v = node.params[key];
@@ -47,6 +48,12 @@ type SpaceMap = (p: Vec2, n: GraphNode) => Vec2;
 const rot = ([x, y]: Vec2, a: number): Vec2 => { const c = Math.cos(a), s = Math.sin(a); return [x * c - y * s, x * s + y * c]; };
 
 const SPACE_MAPS: Record<string, SpaceMap> = {
+  // Read (texture): where each pixel reads, zoomed and turned round the pivot, moved (picture pixels of a 720-tall picture).
+  readTexture: ([x, y], n) => {
+    const px = num(n, 'pivotX', 0), py = num(n, 'pivotY', 0), z = num(n, 'zoom', 1) || 1e-4, a = num(n, 'turn', 0) * Math.PI / 180;
+    const ux = (x - px) / z, uy = (y - py) / z, c = Math.cos(a), sn = Math.sin(a);
+    return [px + c * ux + sn * uy - num(n, 'moveX', 0) * 2 / 720, py - sn * ux + c * uy - num(n, 'moveY', 0) * 2 / 720];
+  },
   rotate2d: (p, n) => rot(p, num(n, 'angle', 0)),
   uvTransform2d: ([x, y], n) => {
     const px = num(n, 'pivotX', 0), py = num(n, 'pivotY', 0), sx = num(n, 'sx', 1), sy = num(n, 'sy', 1), a = num(n, 'angle', 0);
@@ -334,6 +341,30 @@ interface Curve {
 }
 
 const CURVES: Record<string, Curve> = {
+  // Texture tools (nodes/definitions/textureTools.ts): the same maths the GLSL runs. (The card's picture thumbnail
+  // can't read a texture, as for the Passes nodes, so the shaping nodes show their curve instead.)
+  textureMask: { x: [0, 1], y: [0, 1], xLabel: 'source value', marker: n => (str(n, 'threshold', 'soft') === 'off' ? null : num(n, 'level', 0.5)), series: [
+    { label: 'mask', color: p => p.green, fn: (v, n) => ttMaskThreshold(v, str(n, 'threshold', 'soft'), num(n, 'level', 0.5), num(n, 'width', 0.1), n.params.invert === true) },
+  ] },
+  textureLevels: { x: [0, 1], identity: true, xLabel: 'value in', series: [{ label: 'value out', color: p => p.peach, fn: (v, n) => ttLevels(v, {
+    gain: num(n, 'gain', 1), offset: num(n, 'offset', 0), inBlack: num(n, 'inBlack', 0), inWhite: num(n, 'inWhite', 1), gamma: num(n, 'gamma', 1),
+    rollOff: num(n, 'rollOff', 0), outBlack: num(n, 'outBlack', 0), outWhite: num(n, 'outWhite', 1), clamp: n.params.clamp === true,
+    signed: (['none', 'unpack', 'pack'].includes(str(n, 'signed', 'none')) ? str(n, 'signed', 'none') : LEVELS_DEFAULTS.signed) as 'none' | 'unpack' | 'pack',
+  }) }] },
+  distanceShape: { x: [-0.1, 0.6], y: [0, 1], xLabel: 'distance', marker: n => num(n, 'offset', 0.02), series: [{ label: 'mask', color: p => p.yellow, fn: (d, n) => ttDistanceShape(d, str(n, 'mode', 'outline'), {
+    offset: num(n, 'offset', 0.02), width: num(n, 'width', 0.01), softness: num(n, 'softness', 0.005), reach: num(n, 'reach', 0.15),
+    spacing: num(n, 'spacing', 0.08), thickness: num(n, 'thickness', 0.01), fade: num(n, 'fade', 3), speed: num(n, 'speed', 0.5),
+  }) }] },
+  textureFade: { x: [0, 3], y: [0, 1], xLabel: 'seconds after painting (at 60 fps)', series: [0, 1, 2].map(ch => ({
+    label: ['red', 'green', 'blue'][ch], color: (p: typeof pal) => [p.red, p.green, p.blue][ch],
+    fn: (t: number, n: GraphNode) => {
+      const tint = Array.isArray(n.params.tint) ? Number(n.params.tint[ch]) : 1;
+      const tail = num(n, 'tail', 1.5) * (Number.isFinite(tint) ? tint : 1), clean = num(n, 'clean', 0.2);
+      let v = 1;
+      for (let f = 0; f < Math.round(t * 60); f++) v = ttFadeStep(v, 1 / 60, tail, clean);
+      return v;
+    },
+  })) },
   sdfOffset:  { x: [-1, 1], y: [-1, 1], identity: true, xLabel: 'distance in', series: [{ label: 'distance out', color: p => p.green, fn: (x, n) => x + num(n, 'amount', 0) }], marker: n => -num(n, 'amount', 0) },
   sdfSharpen: { x: [-1, 1], y: [-1, 1], identity: true, xLabel: 'distance in', series: [{ label: 'distance out', color: p => p.green, fn: (x, n) => x * num(n, 'sharpness', 1) }] },
   sdfOnion:   { x: [-1, 1], y: [-1, 1], identity: true, xLabel: 'distance in', series: [{ label: 'shell distance', color: p => p.green, fn: (x, n) => Math.abs(x) - num(n, 'r', 0.1) }] },
@@ -346,7 +377,6 @@ const CURVES: Record<string, Curve> = {
       default:         return 1 / (1 + Math.pow(Math.max(d, 0), pw) * k);
     }
   } }] },
-  glowFalloff: { x: [0, 2], xLabel: 'distance', series: [{ label: 'glow', color: p => p.yellow, fn: (d, n) => num(n, 'brightness', 0.5) / (1 + Math.pow(Math.max(d, 0), num(n, 'power', 2)) * num(n, 'k', 8)) }] },
   metaballThreshold: { x: [0, 2], y: [0, 1], xLabel: 'field', marker: n => num(n, 'threshold', 0.8), series: [
     { label: 'blob', color: p => p.blue, fn: (f, n) => smoothstep(num(n, 'threshold', 0.8) - num(n, 'softness', 0.05), num(n, 'threshold', 0.8) + num(n, 'softness', 0.05), f) },
     { label: 'edge', color: p => p.peach, fn: (f, n) => 1 - smoothstep(0, num(n, 'softness', 0.05) * 2, Math.abs(f - num(n, 'threshold', 0.8))) },

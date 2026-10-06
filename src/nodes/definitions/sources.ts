@@ -1,6 +1,7 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { audioUniformName } from '../../compiler/audioUniformNames';
 import { p, withNewOutputs } from './helpers';
+import { clipGlsl } from '../../lib/media/clip';
 
 /**
  * Loop Index — outputs the current iteration counter `i` when placed inside
@@ -102,9 +103,14 @@ export const MouseNode: NodeDefinition = {
     const id = node.id;
     // u_mouse is in pixel coords (0=bottom-left, same as gl_FragCoord).
     // Convert to the same centered + aspect-corrected space as the UV node.
+    // In a smaller Pass's program u_resolution is the pass's size, u_mouse still the picture's
+    // pixels: the compiler hands the pass's scale (__pictureScale) so UV lands where the pointer is.
+    // Pixels stays in picture pixels, as before.
+    const sc = typeof node.params.__pictureScale === 'number' && node.params.__pictureScale !== 1 ? node.params.__pictureScale : null;
+    const m = sc ? `(u_mouse * ${Number.isInteger(sc) ? `${sc}.0` : sc})` : 'u_mouse';
     return {
       code: [
-        `    vec2 ${id}_uv = (u_mouse / u_resolution.y - vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5) * 2.0;\n`,
+        `    vec2 ${id}_uv = (${m} / u_resolution.y - vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5) * 2.0;\n`,
         `    float ${id}_x = ${id}_uv.x;\n`,
         `    float ${id}_y = ${id}_uv.y;\n`,
         `    vec2 ${id}_px = u_mouse;\n`,
@@ -187,10 +193,10 @@ export const PrevFrameNode: NodeDefinition = {
 
 /** Phase 7 (docs/pass-node-plan.md): the image or video itself as a texture, straight into the sampling nodes. */
 const TEXTURE_INPUT_TEXTURE: GraphNode['outputs'] = {
-  texture: { type: 'texture', label: 'Texture', hint: 'The image itself as a texture: wire it into Sample, Edges, Blur, Glow or Displace (texture), or Particles\' Emit from, with no copy Pass in between. It covers the picture as Stretch does (Fit doesn\'t apply).' },
+  texture: { type: 'texture', label: 'Texture', hint: 'The image itself as a texture: wire it into Sample, Edges, Blur, Glow or Displace (texture), a Texture tool (Mask, Levels, Flow, Neighbours), or Particles\' Emit from, with no copy Pass in between. It covers the picture as Stretch does (Fit doesn\'t apply).' },
 };
 const VIDEO_INPUT_TEXTURE: GraphNode['outputs'] = {
-  texture: { type: 'texture', label: 'Texture', hint: 'The video itself as a texture: wire it into Sample, Edges, Blur, Glow or Displace (texture), or Particles\' Emit from, with no copy Pass in between.' },
+  texture: { type: 'texture', label: 'Texture', hint: 'The video itself as a texture: wire it into Sample, Edges, Blur, Glow or Displace (texture), a Texture tool (Mask for a colour key, Levels, Neighbours), or Particles\' Emit from, with no copy Pass in between. For Change (what moved), draw it into a Pass first.' },
 };
 
 export const TextureInputNode: NodeDefinition = {
@@ -329,6 +335,21 @@ export const VideoInputNode: NodeDefinition = {
     const id = node.id;
     const uvVar = inputVars.uv ?? 'g_uv';
     const samplerUV = `(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5)`;
+    // Clip settings' crop / rotate / flip (docs/clip-editor.md): only with a clip that turns or crops,
+    // so every graph without one compiles exactly as before.
+    const xf = clipGlsl(id, `${id}_vst`, node.params.clip);
+    if (xf.code) {
+      return {
+        code: [
+          `    vec2 ${id}_vst = clamp(${samplerUV}, 0.0, 1.0);\n`,
+          xf.code,
+          `    vec4 ${id}_sample = texture2D(u_vid_${id}, ${xf.st});\n`,
+          `    vec3 ${id}_color = ${id}_sample.rgb;\n`,
+          `    float ${id}_alpha = ${id}_sample.a;\n`,
+        ].join(''),
+        outputVars: { color: `${id}_color`, alpha: `${id}_alpha`, uv: uvVar, texture: `u_vid_${id}` },
+      };
+    }
     return {
       code: [
         `    vec4 ${id}_sample = texture2D(u_vid_${id}, clamp(${samplerUV}, 0.0, 1.0));\n`,

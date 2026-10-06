@@ -11,12 +11,17 @@
  *
  * Pure: the store adds the nodes, rewires what read the Particles node to Draw agents and
  * leaves the original as it was. Anything the group can't express yet is listed in
- * `missing` (the 3D camera, depth of field, Gust, Jet…) rather than dropped silently.
+ * `missing` (Gust, Jet, the Image emitter's homes…) rather than dropped silently.
+ *
+ * 3D (Space 3D): the group's Space is 3D (the forces are the Particles engine's 3D ones), Sphere
+ * and Ball are born as such, and Draw agents carries the camera (Camera angle, tilt and distance,
+ * Drift, Focus, Blur, its lens and its way round) or a scene's camera and Depth when they are wired.
  */
 import type { DataType, GraphNode } from '../types/nodeGraph';
 import { n } from './graphBuilder';
 import { agentsGroup, expr, note, withOutputs } from './agentExampleKit';
-import { GP_DEFAULTS, GP_SOCKET_FLOATS } from '../play/kit/gpuParticles.js';
+import { GP_BLUR_CAP, GP_DEFAULTS, GP_FOV, GP_SOCKET_FLOATS } from '../play/kit/gpuParticles.js';
+import { DRAW_3D_INPUTS } from '../nodes/definitions/agents';
 
 export interface ParticlesAsNodes {
   /** The new top-level nodes (the group's inside is in its subgraph). */
@@ -56,6 +61,7 @@ export function particlesAsNodes(src: GraphNode, nextId: () => string, at: { x: 
     return Array.isArray(v) && v.length >= 3 && v.every(x => typeof x === 'number') ? (v as number[]).slice(0, 3) : [...((GP_DEFAULTS as unknown as Record<string, unknown>)[k] as number[])];
   };
   const wire = (k: string) => src.inputs[k]?.connection ?? null;
+  const deep = str('space') === '3d';
   const ids = new Map<string, string>();
   const id = (local: string) => { let v = ids.get(local); if (!v) { v = nextId(); ids.set(local, v); } return v; };
   const missing: string[] = [];
@@ -229,6 +235,19 @@ export function particlesAsNodes(src: GraphNode, nextId: () => string, at: { x: 
     col += 420;
     pos = [c.id, 'position']; vel = [c.id, 'velocity'];
   }
+  // 3D with a Scene wired: Collide (3D scene) on the same 48³ grid round the centre, Scene size its reach.
+  if (deep && wire('scene')) {
+    const sc = n('agentCollideScene', id('scene'), col, 80, {
+      reach: num('sceneReach'), x: 0, y: 0, z: 0, margin: 0.015, cushion: 0.15, bounce: 0, friction: 0.03,
+      ...note([`Collide (3D scene): the Particles node's Scene socket (through the Scene port): particles slide off its surfaces, read on the same 48-cell grid across ±${fmt(num('sceneReach'))} (its Scene size) round the centre, with its margin, cushion and friction.`]),
+    });
+    wireIn(sc, 'scene', port('scene', 'scene3d', 'Scene', wire('scene')!));
+    wireIn(sc, 'position', pos);
+    wireIn(sc, 'velocity', vel);
+    inside.push(sc);
+    col += 420;
+    pos = [sc.id, 'position']; vel = [sc.id, 'velocity'];
+  }
   const pattern = str('pattern');
   if (pattern === 'square' || pattern === 'circle') {
     listening = true;
@@ -272,11 +291,13 @@ export function particlesAsNodes(src: GraphNode, nextId: () => string, at: { x: 
   inside.unshift(inputs);
 
   // ── Outside: Emit, the group, Draw agents ──
-  const shapeOf: Record<string, string> = { point: 'point', line: 'line', ring: 'ring', disk: 'disc', sphere: 'disc', ball: 'disc', box: 'box', image: 'field' };
+  // In 3D, Sphere and Ball are born as such; in 2D (a flat picture) as a Disc.
+  const shapeOf: Record<string, string> = { point: 'point', line: 'line', ring: 'ring', disk: 'disc', sphere: deep ? 'sphere' : 'disc', ball: deep ? 'ball' : 'disc', box: 'box', image: 'field' };
   const gpShape = str('emitter');
   const shape = shapeOf[gpShape] ?? 'ring';
   const facing = gpShape === 'point' || gpShape === 'line' ? 'up' : gpShape === 'box' || gpShape === 'image' ? 'random' : 'outward';
-  if (gpShape === 'sphere' || gpShape === 'ball') missing.push(`Emitter ${gpShape === 'sphere' ? 'Sphere' : 'Ball'}: a 3D shape; the copy is born in a flat Disc of the same size.`);
+  if (!deep && (gpShape === 'sphere' || gpShape === 'ball')) missing.push(`Emitter ${gpShape === 'sphere' ? 'Sphere' : 'Ball'}: a 3D shape; the copy is born in a flat Disc of the same size.`);
+  if (deep && pattern !== 'off' && (gpShape === 'disk' || gpShape === 'line')) missing.push('A Pattern in 3D: the Particles node lays its Disc or Line emitter flat on the plate; the copy\'s stands upright (the sand still falls onto the plate).');
   if (str('emit') === 'burst') missing.push('Emit Burst (all born together, again every Life): the copy keeps the stream full (Keep full); route a beat to Emit\'s Burst for a burst on cue.');
   const image = gpShape === 'image';
   const ink = str('look') === 'ink';
@@ -317,9 +338,11 @@ export function particlesAsNodes(src: GraphNode, nextId: () => string, at: { x: 
   const tier = ['64k', '256k', '1m', '4m'].includes(str('count')) ? str('count') : '256k';
   let group = agentsGroup(id('group'), X(420), Y(0), id('emit'), inside, {
     label: `${typeof P.label === 'string' && P.label.trim() ? P.label.trim() : 'Particles'} (nodes)`, tier, stepsPerFrame: 1, seed: 1, preroll,
+    ...(deep ? { space: '3d' } : {}),
     ...(listening ? { soundFrom: str('soundFrom'), level: num('sound'), beat: 0 } : {}),
     ...note([
       `Agents: the Particles node's ${tier === '1m' ? 'million' : tier === '4m' ? 'four million' : tier === '64k' ? '65,536' : '262,144'} particles, built from nodes you can open and rewire (double-click). Inside: its forces added up through their Also inputs, then Integrate${wire('obstacle') ? ', Collide' : ''}${pattern !== 'off' ? ', Chladni' : ''} and Age / Life.`,
+      ...(deep ? ['Space 3D: the particles fill a box as deep as the picture is tall, and every force inside works in 3D, as the Particles node\'s do in 3D; Draw agents sees them through its camera.'] : []),
       'Steps per frame 1: the Particles node\'s own pace (one step is 1/60 s). 2 runs twice as lively.',
       `Pre-roll ${fmt(preroll)}: simulated before the first frame, as the Particles node does, so the stream is already flowing when it appears.`,
       ...(listening ? [`Sound from: the Particles node's (${str('soundFrom')}), with its Sound level (${fmt(num('sound'))}) as Level.`] : []),
@@ -342,12 +365,29 @@ export function particlesAsNodes(src: GraphNode, nextId: () => string, at: { x: 
     glow: num('glow'), streak: thread, fade: 'on',
     lights, lightColor: colour('lightColor'), lightPower: num('lightPower'), lightReach: num('lightReach'), halo: num('halo'),
     lightMotion: str('lightMotion') === 'still' ? 'still' : 'orbit', lightOrbit: Math.round(orbit * 1000) / 1000, lightX: cx, lightY: cy,
+    // 3D: the Particles node's camera (its lens, its way round) and depth of field.
+    ...(deep ? {
+      agentSpace: '3d', camMirror: true, camAngle: num('camAngle'), camElevation: num('camTilt'), camDist: num('camDistance'), rotSpeed: 0, ortho: 0,
+      fov: Math.round(1000 / Math.tan(GP_FOV / 2)) / 1000, camX: 0, camY: 0, camZ: 0, drift: num('drift'), focus: num('focus'), blur: num('blur'), maxBlur: GP_BLUR_CAP,
+    } : {}),
     ...note([
       `Draw agents: the Particles node's ${ink ? 'Ink look: dark ink on Paper' : 'Light look'}${style === 'streaks' ? ', drawn as streaks along the motion (its Thread)' : ink && thread > 0 ? ', in streaks (its Thread)' : ', soft dots with its glow'}, Size ${fmt(num('size'))}, Glow ${fmt(num('glow'))}${ink ? '' : `, the ${str('palette')} palette by ${({ age: 'age', speedFast: 'speed (fast ones first)', headingRound: 'heading' } as Record<string, string>)[colorBy]}`}.`,
       `Brightness of The crowd: the Particles node's rule, so the cloud looks as bright at any count. Brightness ${fmt(num('brightness'))} × 0.7: here every particle is alive at once, where the Particles node keeps about two in three.`,
       ...(lights !== '0' ? [`Lights: its ${lights} light${lights === '1' ? '' : 's'}, ${str('lightMotion') === 'still' ? 'standing' : 'orbiting'} round the emitter, power ${fmt(num('lightPower'))}, reach ${fmt(num('lightReach'))}, halo ${fmt(num('halo'))}.`] : []),
+      ...(deep ? [
+        wire('camOrigin') && wire('camRay')
+          ? 'Camera: the scene\'s camera wired into the Particles node (Camera from, Camera ray), so the particles stand in that scene' + (wire('depth') ? ', hidden behind its surfaces (Depth)' : '') + `; Focus ${fmt(num('focus'))} and Blur ${fmt(num('blur'))} as it had them.`
+          : `Camera: the Particles node's: Angle ${fmt(num('camAngle'))}°, Elevation ${fmt(num('camTilt'))}° (its tilt), Distance ${fmt(num('camDistance'))}, its lens (Zoom ${fmt(Math.round(1000 / Math.tan(GP_FOV / 2)) / 1000)}), Drift ${fmt(num('drift'))}, Focus ${fmt(num('focus'))}, Blur ${fmt(num('blur'))}.`,
+        'Try: Orbit speed 10 to circle the cloud, or Flatten 1 for an isometric look.',
+      ] : []),
     ]),
   });
+  if (deep) {
+    // The scene's camera and depth come along onto Draw agents' 3D sockets.
+    for (const [k, from] of [['camOrigin', 'camOrigin'], ['camRay', 'camRay'], ['depth', 'depth']] as const) {
+      draw.inputs[k] = { ...DRAW_3D_INPUTS[k], ...(wire(from) && wire('camOrigin') && wire('camRay') ? { connection: wire(from)! } : {}) };
+    }
+  }
   draw.inputs.agents = { ...draw.inputs.agents, connection: { nodeId: id('group'), outputKey: 'agents' } };
   if (wire('over')) draw.inputs.over = { ...draw.inputs.over, connection: wire('over')! };
   if (centre && lights !== '0') missing.push('A moving emitter with Lights: the lights circle the centre (Draw agents\' Centre X / Y).');
@@ -355,9 +395,9 @@ export function particlesAsNodes(src: GraphNode, nextId: () => string, at: { x: 
   if (wire('uv')) missing.push('UV (reading the particles through a warp): Draw agents draws them where they are.');
 
   // 3D.
-  if (str('space') === '3d') missing.push('3D: the camera, its drift and depth of field (Space, Camera angle, tilt, distance, Drift, Focus, Blur): the copy is flat, in the picture\'s plane.');
-  if (wire('camOrigin') || wire('camRay') || wire('depth') || wire('scene')) missing.push('A scene\'s camera, Depth or Scene: the 3D sockets aren\'t carried (the copy is 2D).');
-  for (const k of ['camAngle', 'camDistance', 'focus', 'blur']) if (wire(k) && str('space') !== '3d') missing.push(`${LABELS[k]} wired: 3D only.`);
+  if (!deep && (wire('camOrigin') || wire('camRay') || wire('depth') || wire('scene'))) missing.push('A scene\'s camera, Depth or Scene: 3D only (the Particles node is set to 2D).');
+  if (deep && (wire('camOrigin') || wire('camRay')) && !(wire('camOrigin') && wire('camRay'))) missing.push('Camera from or Camera ray wired alone: a scene\'s camera needs both; the copy uses the Particles node\'s own camera.');
+  for (const k of ['camAngle', 'camDistance', 'focus', 'blur']) if (wire(k)) missing.push(deep ? `${LABELS[k]} wired: Draw agents' ${LABELS[k]} is a slider (the value it had is set on it).` : `${LABELS[k]} wired: 3D only.`);
   for (const k of GP_SOCKET_FLOATS) if (wire(k) && !LABELS[k]) missing.push(`${k} wired.`);
 
   const left = [...new Set(missing)];

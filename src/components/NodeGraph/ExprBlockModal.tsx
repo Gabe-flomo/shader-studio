@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { Fragment, useState, useEffect, useMemo, useRef } from 'react';
 import { toggleLineOff } from '../../lib/exprLines';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { setInputSlider } from '../../nodes/sliderFreeze';
@@ -21,8 +21,18 @@ import { Select } from '../ui/Select';
 import { toast } from '../ui/toastStore';
 import { CodeInput } from '../code/CodeField';
 import { ReferencePanel } from '../code/ReferencePanel';
+import { LinePreviewPanel, ProbeButton } from '../code/LinePreview';
+import type { EditorPanel } from '../code/editorPanelPrefs';
+import { CollapseInputsButton, FunctionsToggle, InputsRail, SidePanel, useEditorSidePanels } from '../code/SidePanels';
 import { buildCompletions } from '../code/glslReference';
 import { insertSnippet } from '../code/useCompletion';
+import { HowUsedButton } from '../codeExplorer/HowUsedButton';
+import { useExprBlockJump } from '../codeExplorer/useCodeJumpFocus';
+import { ExplainRow } from '../explain/ExplainRow';
+import { useExplainDialogs } from '../explain/useExplainDialogs';
+import { exprBlockContext, exprBlockUseHere } from '../explain/hosts';
+import type { GeneraliseContext } from '../../lib/glslPatterns';
+import { snippetLines, type Snippet } from '../../suggestions/snippets';
 
 // ── Convert ExprBlock warp lines → FnDef array (one fn per line, f1/f2/f3…) ──
 // Names are always sequential (f1, f2, …). The return type is inferred from a
@@ -86,10 +96,16 @@ interface InsertTarget {
   snap: (v: string) => Snapshot;
 }
 
+const PANELS: readonly EditorPanel[] = ['inputs', 'functions'];
+
 export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   const updateNodeParams  = useNodeGraphStore(s => s.updateNodeParams);
   const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
   const tk = useTokens();
+  // Side panels: Inputs (folds to a rail) and the function palette (closed by default); ⌘[ / ⌘]
+  const { narrow, open: panels, set: setPanel, toggle: togglePanel } = useEditorSidePanels(PANELS);
+  // Opened by the Code Explorer's jump to source: show that line.
+  useExprBlockJump(node.id);
 
   // Read current params
   const customInputs: InputDef[] = (node.params.inputs as InputDef[] | undefined) ?? [];
@@ -118,6 +134,10 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
 
   const rawInputs = node.params.inputs;
   const completions = useMemo(() => buildCompletions((rawInputs as InputDef[] | undefined) ?? []), [rawInputs]);
+  // The explainer: types and roles of the block's names (inputs, typed lines, what feeds them)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the inputs, lines and wiring are what it reads
+  const explainCtx = useMemo(() => exprBlockContext(node), [node.params.inputs, node.params.lines, node.params.outputType, node.inputs]);
+  const explainDialogs = useExplainDialogs({ onJumped: onClose });
 
   // ── Undo / Redo ──────────────────────────────────────────────────────────────
   const history      = useRef<Snapshot[]>([{ lines, result }]);
@@ -194,6 +214,17 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   const updateLine = (idx: number, field: keyof WarpLine, value: string) =>
     updateNodeParams(node.id, { lines: lines.map((l, i) => i === idx ? { ...l, [field]: value } : l) });
   const updateResult = (val: string) => updateNodeParams(node.id, { result: val });
+  // A snippet (suggestions/snippets.ts): its lines appended, wired to this block's variables. The
+  // result switches to it when the block still returns a bare input of the same type.
+  const insertSnippetLines = (sn: Snippet) => {
+    const r = snippetLines(sn, customInputs, lines);
+    const nextLines = [...lines, ...r.lines];
+    const bare = customInputs.find(i => i.name === result.trim());
+    const nextResult = bare && r.resultType === outputType ? r.result : result;
+    updateNodeParams(node.id, { lines: nextLines, result: nextResult });
+    pushHistory({ lines: nextLines, result: nextResult });
+    toast.success(`${sn.label}: ${r.lines.length} line${r.lines.length === 1 ? '' : 's'} added`, { message: nextResult === r.result ? `The block now returns ${r.result}.` : `Its value is ${r.result} (${r.resultType}): use it in Return or a later line.` });
+  };
 
   const handleSavePreset = (name: string) => {
     const presetLabel = name.trim() || label;
@@ -286,6 +317,8 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
       onClose={onClose}
       headerActions={
         <>
+          <HowUsedButton />
+          <FunctionsToggle open={panels.functions} onToggle={() => togglePanel('functions')} />
           {canOpenInBuilder && (
             <Button size="sm" variant="ghost" icon="fn" style={{ marginRight: 4 }}
               title={hasFnBuilderFns ? 'Re-open in the Function Builder' : 'Open these lines as functions in the Function Builder'}
@@ -331,14 +364,16 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
         )
       }
     >
-      <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
-        {/* ── Inputs ── */}
-        <div style={{ width: 340, flexShrink: 0, overflowY: 'auto', padding: '18px 20px', borderRight: `1px solid ${tk.border.subtle}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <SectionLabel>Inputs</SectionLabel>
+      <div style={{ display: 'flex', height: '100%', minHeight: 0, position: 'relative' }}>
+        {/* ── Inputs: a panel, folded to a rail of chips, or a drawer on a narrow window ── */}
+        {(!panels.inputs || narrow) && <InputsRail inputs={customInputs} onExpand={() => setPanel('inputs', true)} />}
+        <SidePanel side="left" label="Inputs" open={panels.inputs} narrow={narrow} width={340} onClose={() => setPanel('inputs', false)}>
+        <div data-panel="inputs" style={{ width: 340, maxWidth: '100%', flexShrink: 0, overflowY: 'auto', padding: '18px 20px', borderRight: `1px solid ${tk.border.subtle}`, display: 'flex', flexDirection: 'column', gap: 10, boxSizing: 'border-box' }}>
+          <span style={{ display: 'flex', alignItems: 'center' }}><SectionLabel>Inputs</SectionLabel><CollapseInputsButton onCollapse={() => setPanel('inputs', false)} /></span>
           <Note>Each input is a local variable in the lines. Float inputs can show a slider on the node.</Note>
           {customInputs.map((inp, idx) => (
             <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 104px 32px', gap: 8, alignItems: 'center' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 104px 26px 32px', gap: 8, alignItems: 'center' }}>
                 <Field
                   mono
                   leading={<span style={{ width: 9, height: 9, borderRadius: '50%', background: TYPE_COLORS[inp.type] ?? tk.text.faint, flexShrink: 0 }} />}
@@ -349,6 +384,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
                   aria-label={`Input ${idx + 1} name`}
                 />
                 <TypeSelect value={inp.type} options={TYPE_OPTIONS} onChange={t => updateInputType(idx, t as DataType)} ariaLabel={`Input ${idx + 1} type`} />
+                <ProbeButton node={node} target={{ kind: 'input', name: inp.name }} label={`Preview input ${inp.name}`} />
                 <IconButton icon="close" label="Remove input" tone="danger" onClick={() => removeInput(idx)} />
               </div>
               {(inp.type === 'float' || showCarry(inp)) && (
@@ -377,13 +413,15 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
           ))}
           <AddRow onClick={addInput}>Add input</AddRow>
         </div>
+        </SidePanel>
 
         {/* ── Lines + return ── */}
         <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <SectionLabel meta="run top to bottom">Lines</SectionLabel>
             {lines.map((line, i) => (
-              <div key={i} data-line-off={line.off ? '' : undefined}
+              <Fragment key={i}>
+              <div data-line-off={line.off ? '' : undefined}
                 onKeyDownCapture={e => { if ((e.metaKey || e.ctrlKey) && e.key === '/') { e.preventDefault(); e.stopPropagation(); updateNodeParams(node.id, { lines: toggleLineOff(lines, i) }); } }}
                 style={{ display: 'grid', gridTemplateColumns: '22px 110px 64px minmax(0, 1fr) auto', gap: 6, alignItems: 'center', opacity: line.off ? 0.45 : 1 }}>
                 <button type="button" aria-pressed={!!line.off} title={line.off ? 'Off: skipped (kept as a comment). Click or ⌘/ to switch it back on' : `Line ${i + 1}: click or ⌘/ to switch it off without deleting it`}
@@ -407,15 +445,19 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
                   placeholder="expression…"
                   {...exprProps(line.rhs, v => updateLine(i, 'rhs', v), v => ({ lines: lines.map((l, j) => j === i ? { ...l, rhs: v } : l), result }))}
                 />
-                <span style={{ display: 'flex' }}>
+                <span style={{ display: 'flex', alignItems: 'center' }}>
+                  <ProbeButton node={node} target={{ kind: 'line', index: i }} label={`Preview line ${i + 1}`} />
                   <IconButton icon="chevU" label="Move up" size="sm" tooltip={false} disabled={i === 0} onClick={() => moveLine(i, i - 1)} />
                   <IconButton icon="chevD" label="Move down" size="sm" tooltip={false} disabled={i === lines.length - 1} onClick={() => moveLine(i, i + 1)} />
                   <IconButton icon="close" label="Remove line" size="sm" tone="danger" tooltip={false} onClick={() => removeLine(i)} />
                 </span>
               </div>
+              {line.rhs.trim() && !line.off && <LineExplain node={node} index={i} line={line} ctx={explainCtx} dialogs={explainDialogs} />}
+              </Fragment>
             ))}
             {lines.length === 0 && <Note>No lines yet. Each line assigns to a variable, top to bottom.</Note>}
             <AddRow onClick={addLine}>Add line</AddRow>
+            <LinePreviewPanel node={node} />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -428,7 +470,9 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
                 style={{ flex: 1 }}
                 {...exprProps(result, updateResult, v => ({ lines, result: v }))}
               />
+              <ProbeButton node={node} target={{ kind: 'return' }} label="Preview the return value" />
             </div>
+            {result.trim() ? <LineExplain node={node} index="return" line={{ lhs: '', op: '', rhs: result }} ctx={explainCtx} dialogs={explainDialogs} /> : null}
             <Note>The final expression of type {outputType} that the block outputs.</Note>
           </div>
 
@@ -444,9 +488,31 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
           </div>
         </div>
 
-        <ReferencePanel variables={customInputs} onInsert={insertFromReference} wrapAll={autoWrap} onWrapAllChange={setAutoWrap} />
+        <SidePanel side="right" label="Functions" open={panels.functions} narrow={narrow} width={300} onClose={() => setPanel('functions', false)}>
+          <ReferencePanel variables={customInputs} onInsert={insertFromReference} wrapAll={autoWrap} onWrapAllChange={setAutoWrap} onSnippet={insertSnippetLines} />
+        </SidePanel>
+        {explainDialogs.dialogs}
       </div>
     </Modal>
+  );
+}
+
+/**
+ * The Explain row under a line (or Return): the line as it compiles, explained; a part of its
+ * expression can be made into a node and, if wanted, used here in its place.
+ */
+function LineExplain({ node, index, line, ctx, dialogs }: {
+  node: GraphNode; index: number | 'return'; line: WarpLine; ctx: GeneraliseContext; dialogs: ReturnType<typeof useExplainDialogs>;
+}) {
+  const head = index === 'return' ? 'return ' : `${line.lhs} ${line.op || '='} `;
+  const text = head + line.rhs;
+  return (
+    <ExplainRow text={text} exprStart={head.length} ctx={ctx} indent={index === 'return' ? 0 : 28}
+      onFindUses={dialogs.findUses}
+      onMakeNode={span => {
+        const rel = { start: span.start - head.length, end: span.end - head.length };
+        dialogs.makeNode({ source: line.rhs, span: rel, ctx, useHere: exprBlockUseHere(node.id, index, rel) });
+      }} />
   );
 }
 

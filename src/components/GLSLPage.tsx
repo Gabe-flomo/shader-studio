@@ -25,6 +25,18 @@ import { DiscoverFunctionsModal } from './code/DiscoverFunctionsModal';
 import { PageCanvas } from './shell/PageCanvas';
 import { usePageCanvas } from './shell/pageCanvasStore';
 import { usePhoneLayout } from '../hooks/useBreakpoint';
+import { lazyWithSuspense, type PropsOf } from './lazyWithSuspense';
+import type { CodeExplorerPanel as CodeExplorerPanelT } from './codeExplorer/CodeExplorerPanel';
+import { takeTextJump, useCodeJump } from '../codeExplorer/jumpStore';
+import { offsetOf } from '../codeExplorer/jump';
+
+const CodeExplorerPanel = lazyWithSuspense<PropsOf<typeof CodeExplorerPanelT>>(() => import('./codeExplorer/CodeExplorerPanel').then(m => ({ default: m.CodeExplorerPanel })));
+const EXPLORER_KEY = 'glsl-editor:code-explorer';
+import { pickExplainSpan } from '../lib/glslPatterns/parse';
+import type { GlslExplainPanel as GlslExplainPanelT } from './explain/GlslExplainPanel';
+
+// The explainer loads when Explain is first pressed
+const GlslExplainPanel = lazyWithSuspense<PropsOf<typeof GlslExplainPanelT>>(() => import('./explain/GlslExplainPanel').then(m => ({ default: m.GlslExplainPanel })));
 
 // ── Boilerplate ───────────────────────────────────────────────────────────────
 
@@ -182,6 +194,15 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
   const [noteVal, setNoteVal] = useState('');
   const [filter, setFilter] = useState('');
   const [discoverOpen, setDiscoverOpen] = useState(false);
+  const [explorerOpen, setExplorerOpen] = useState(() => { try { return localStorage.getItem(EXPLORER_KEY) === '1'; } catch { return false; } });
+  const toggleExplorer = () => setExplorerOpen(o => { try { localStorage.setItem(EXPLORER_KEY, o ? '0' : '1'); } catch { /* preference only */ } return !o; });
+  // Explain: the selection (or the statement at the caret), under the editor
+  const [explainSpan, setExplainSpan] = useState<{ start: number; end: number; text: string } | null>(null);
+  const explainSelection = () => {
+    const sel = editorRef.current?.getSelection() ?? { start: 0, end: 0 };
+    const span = pickExplainSpan(code, sel);
+    setExplainSpan(span ? { ...span, text: code.slice(span.start, span.end) } : { start: sel.start, end: sel.start, text: '' });
+  };
   const [openId, setOpenId] = useState<string | null>(() => { try { return localStorage.getItem(OPEN_KEY); } catch { return null; } });
   const setOpen = (id: string | null) => { setOpenId(id); try { if (id) localStorage.setItem(OPEN_KEY, id); else localStorage.removeItem(OPEN_KEY); } catch { /* preference only */ } };
   const openShader = openId ? shaders.find(s => s.id === openId) ?? null : null;
@@ -275,6 +296,28 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
     setDiscoverOpen(false);
     requestAnimationFrame(() => requestAnimationFrame(() => editorRef.current?.selectRange(range.start, range.end)));
   };
+  // Code Explorer's jump to source: a saved shader or a linked file, opened at the line.
+  const textJump = useCodeJump(s => s.text?.n ?? 0);
+  useEffect(() => {
+    if (!textJump) return;
+    const j = takeTextJump();
+    if (!j) return;
+    let text: string;
+    if (j.kind === 'shader') {
+      const s = shaders.find(x => x.id === j.id);
+      if (!s) { toast.error('That shader isn’t saved any more'); return; }
+      if (openId !== s.id || code !== s.code) loadShader(s);
+      text = s.code;
+    } else {
+      text = j.text ?? '';
+      editorRef.current?.replaceAll(text);
+      setOpen(null);
+      toast.info(`Opened ${j.label ?? 'the file'} from its linked folder`, { message: 'Save it to keep a copy here.' });
+    }
+    const at = offsetOf(text, j.line, j.column);
+    requestAnimationFrame(() => requestAnimationFrame(() => editorRef.current?.selectRange(at, at + j.length)));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- once per request
+  }, [textJump]);
   /** The source id of what the editor shows: the open saved shader when its text is unchanged, else the editor itself. */
   const currentSourceId = code.trim() ? (openShader && openShader.code === code ? openShader.id : '__editor') : undefined;
 
@@ -397,6 +440,8 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
           {onConvert && <Button size="sm" variant="ghost" icon="nodes" onClick={() => onConvert(code)} title="Open this shader on the Convert page and see the nodes it would become">Convert<ProBadgeFor feature="convert" /></Button>}
           <IconButton icon="copy" label="Copy the whole shader" size="sm" onClick={() => { navigator.clipboard?.writeText(code).then(() => toast.success('Copied'), () => toast.error('Couldn’t copy')); }} />
           <IconButton icon="search" label="Discover functions: extract from this file, or search the saved shaders" size="sm" onClick={() => setDiscoverOpen(true)} />
+          <IconButton icon="code" label="Code Explorer: how written code uses a function, across your code and the examples" size="sm" active={explorerOpen} onClick={toggleExplorer} />
+          <IconButton icon="info" label="Explain the selection, or the statement at the caret, in plain words" size="sm" active={!!explainSpan} data-glsl-action="explain" onMouseDown={e => e.preventDefault()} onClick={explainSelection} />
           <IconButton icon="export" label="Download every saved shader: one .playfile, or .glsl files in a ZIP (notes as a comment at the top), easy to share or to send for help" size="sm" onClick={e => offerSetExport(e.currentTarget, 'glsl')} />
           <IconButton icon="graphs" label="Load the node graph's compiled shader into the editor" size="sm" onClick={() => {
             // A graph built with a sealed node pack keeps that code hidden here too.
@@ -406,11 +451,12 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
           <IconButton icon="reset" label="Reset to the blank template" size="sm" onClick={() => { setCode(BOILERPLATE); setOpen(null); }} />
           <IconButton icon="trash" label="Clear the editor" size="sm" onClick={() => { setCode(''); setOpen(null); }} />
           {!full && <IconButton icon="layoutCanvas" label="Full canvas: the preview here, wide, with its toolbar (shape, full screen, Record, time)" size="sm" onClick={() => toggleLayout('glsl')} />}
-          {!sideOpen && <IconButton icon="popout" label="Show saved shaders and functions" size="sm" onClick={() => setShowPanel(true)} />}
+          {(!sideOpen || explorerOpen) && <IconButton icon="popout" label="Show saved shaders and functions" size="sm" onClick={() => { if (explorerOpen) toggleExplorer(); setShowPanel(true); }} />}
         </div>
 
         {/* Code area */}
         <GlslEditor ref={editorRef} value={code} onChange={setCode} ariaLabel="Fragment shader source" errorLines={errorLines} />
+        {explainSpan && <GlslExplainPanel code={code} span={explainSpan} setCode={setCode} onClose={() => setExplainSpan(null)} />}
 
         {/* Compile errors */}
         {glslErrors.length > 0 && (
@@ -421,6 +467,16 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
           </div>
         )}
       </div>
+
+      {explorerOpen && (
+        <div style={{ width: phone ? '100%' : 360, flexShrink: 0, minHeight: 0, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${tk.border.default}`, position: 'relative', zIndex: 1, background: tk.bg.panel }}>
+          <div style={{ ...panelHead, padding: '0 8px 0 14px' }}>
+            <span style={{ fontWeight: 650, fontSize: 13.5, flex: 1 }}>Code Explorer</span>
+            <IconButton icon="close" label="Close the Code Explorer" size="sm" onClick={toggleExplorer} />
+          </div>
+          <div style={{ flex: 1, minHeight: 0 }}><CodeExplorerPanel compact /></div>
+        </div>
+      )}
 
       {/* ── Side panel: saved shaders / functions reference ─────────── */}
       {discoverOpen && <DiscoverFunctionsModal sources={discoverSources()} currentId={currentSourceId} onClose={() => setDiscoverOpen(false)} onShowInFile={showInFile} />}
@@ -452,7 +508,8 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
           />
         );
       })()}
-      {sideOpen && (
+      {/* The Code Explorer takes the side panel's place while it is open. */}
+      {sideOpen && !explorerOpen && (
         <div style={{ width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', background: tk.bg.subtle, borderRight: `1px solid ${tk.border.default}` }}>
           {newGroupFor && (
             <div style={{ padding: '8px 10px', borderBottom: `1px solid ${tk.border.subtle}`, display: 'flex', gap: 6, alignItems: 'center' }}>

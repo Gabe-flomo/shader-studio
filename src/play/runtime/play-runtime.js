@@ -18,7 +18,7 @@
  *   datasets: { [id]: { name, result, stream? } }  each dataset's frozen result; `stream`
  *             ({ transport: 'poll' | 'websocket' | 'sse', address, interval, mode, window, format?,
  *             normalize }) makes the page reconnect to a live feed and add its rows (needs the network)
- *   media:  { textures: { uniform: { src } }, videos: { uniform: { src, loop, speed } },
+ *   media:  { textures: { uniform: { src } }, videos: { uniform: { src, loop, speed, clip? } },
  *             audio: [{ id, src, uniforms, bands, range, mode }] }   (src: a data URL, or null)
  *   play.display.source 'image' | 'video' | 'colour': that background (display.image,
  *             display.video, display.backdrop) in place of the shader, which then never
@@ -963,22 +963,26 @@ void main() {
       };
       im.src = m.src;
     }
+    // Clip settings (docs/clip-editor.md, kit/clipPlay.js): a video with them plays its kept
+    // segments on the page's clock, exactly as the app plays them.
+    const CK = typeof SSKit !== 'undefined' && SSKit.clip ? SSKit.clip : null;
     // Videos: muted, looping, inline; uploaded whenever a new frame shows.
     const videos = [];
     for (const name in media.videos || {}) {
       const m = media.videos[name];
       // A Baked node's video (docs/bake.md) carries its clock: it shows frame (t − start) × fps, as in the app.
       const clock = m && m.clock && m.clock.fps > 0 ? m.clock : null;
-      const v = { name, tex: texture(gl.LINEAR, [0, 0, 0, 0]), el: null, shown: -1, clock };
+      const clip = CK && m && m.clip ? CK.parse(m.clip) : null;
+      const v = { name, tex: texture(gl.LINEAR, [0, 0, 0, 0]), el: null, shown: -1, clock, clip, speed: m && m.speed > 0 ? m.speed : 1, loop: !m || m.loop !== false };
       videos.push(v);
       if (!m || !m.src) continue;
       const e = document.createElement('video');
-      e.muted = true; e.loop = clock ? clock.loop === 'seamless' : m.loop !== false; e.playsInline = true; e.preload = 'auto';
+      e.muted = true; e.loop = clip ? false : clock ? clock.loop === 'seamless' : m.loop !== false; e.playsInline = true; e.preload = 'auto';
       e.setAttribute('playsinline', ''); e.setAttribute('muted', '');
       const url = dataToBlobUrl(m.src); if (url !== m.src) blobUrls.push(url);
       e.src = url;
       e.addEventListener('loadedmetadata', () => {
-        if (!clock) e.playbackRate = m.speed > 0 ? m.speed : 1;
+        if (!clock && !clip) e.playbackRate = m.speed > 0 ? m.speed : 1;
         // Its texel size, for nodes that read it as a texture (Blur, Edges…) and an alpha bake's seam.
         if (e.videoWidth > 0) uniformValues[name + '_px'] = [1 / e.videoWidth, 1 / e.videoHeight];
       });
@@ -993,10 +997,23 @@ void main() {
       return c.loop === 'seamless' ? ((f % n) + n) % n : Math.min(n - 1, Math.max(0, f));
     };
     const bakeTarget = c => (bakeFrameAt(time, c) + 0.5) / c.fps;
+    /** A clipped video's playlist at clock time `t` (a Baked one from its start: lib/bakedVideos.ts, lib/videoEngine.ts). */
+    const clipAt = (v, e, t) => {
+      const c = v.clock, d = isFinite(e.duration) && e.duration > 0 ? e.duration : c ? c.duration : 0;
+      const pl = CK.playlist(v.clip, d, c ? 1 : v.speed, c ? c.loop === 'seamless' : v.loop);
+      if (!pl.segs.length) return null;
+      const at = CK.at(pl.segs, t - (c ? c.start : 0), pl.speed, pl.loop);
+      return { at, seg: pl.segs[at.k], speed: pl.speed };
+    };
     // Live: on the clock's frame, nudging the speed rather than jumping (lib/bakedVideos.ts follow).
     const followBaked = run => {
       for (const v of videos) {
         const e = v.el, c = v.clock;
+        if (v.clip && e && e.readyState >= 1) {
+          const r = clipAt(v, e, time);
+          if (r) CK.follow(e, r.at, r.seg, r.speed, run && (!c || time >= c.start));
+          continue;
+        }
         if (!c || !e || e.readyState < 1) continue;
         const target = bakeTarget(c), d = isFinite(e.duration) && e.duration > 0 ? e.duration : c.duration;
         let diff = target - e.currentTime;
@@ -1031,10 +1048,20 @@ void main() {
     // A colour background can be a gradient or a palette's bands (types/play.ts activeFill); the kit paints it.
     const bgFill = bgSource === 'colour' && (bgDisp.colourMode === 'gradient' || bgDisp.colourMode === 'palette') && bgDisp.fill && Array.isArray(bgDisp.fill.stops) && bgDisp.fill.stops.length ? bgDisp.fill : null;
     const background = bgOnly && !queueLayer ? { el: bgEl, fit: bgDisp.fit === 'contain' || bgDisp.fit === 'stretch' ? bgDisp.fit : 'cover', colour: bgDisp.backdrop || [0, 0, 0], fill: bgFill } : null;
-    const followBackground = run => { if (bgVideo) followVideo(bgVideo, bgVid.rate, bgVid.loop !== false, run); };
+    const followBackground = run => { if (bgVideo) followVideo(bgVideo, bgVid.rate, bgVid.loop !== false, run, bgVid.clip); };
+    /** Where a clipped background video is at clock `t` (play/background.ts clipAt), or null. */
+    const bgClipAt = (v, rate, loop, clip, t) => {
+      if (!CK || !clip || !(v.duration > 0) || !isFinite(v.duration)) return null;
+      const pl = CK.playlist(CK.parse(clip), v.duration, rate > 0 ? rate : 1, loop);
+      if (!pl.segs.length) return null;
+      const at = CK.at(pl.segs, t, pl.speed, pl.loop);
+      return { at, seg: pl.segs[at.k], speed: pl.speed };
+    };
     // Keep a video on the page's clock (as the app's play/background.ts).
-    const followVideo = (v, rateIn, loop, run) => {
+    const followVideo = (v, rateIn, loop, run, clip) => {
       if (!v || v.readyState < 1) return;
+      const c = bgClipAt(v, rateIn, loop, clip, time);
+      if (c) { v.loop = false; CK.follow(v, c.at, c.seg, c.speed, run); return; }
       const rate = rateIn > 0 ? rateIn : 1;
       if (v.playbackRate !== rate) v.playbackRate = rate;
       const target = videoTimeAt(time, v.duration, rate, loop), d = v.duration, diff = Math.abs(v.currentTime - target);
@@ -1077,7 +1104,7 @@ void main() {
         // Sound only after the visitor has clicked (browsers block it before).
         const muted = item.muted !== false || !qSound;
         if (v.muted !== muted) v.muted = muted;
-        followVideo(v, item.rate, item.loop !== false, run);
+        followVideo(v, item.rate, item.loop !== false, run, item.clip);
       }
     };
     // Video layers: their files ride in the page as `src` (exportHtml.ts playBundle), each in a <video>
@@ -1109,6 +1136,13 @@ void main() {
       const x = Math.max(0, start) + Math.max(0, t) * (speed > 0 ? speed : 1);
       return loop ? x % duration : Math.min(x, Math.max(0, duration - 0.001));
     }
+    const layerClipAt = (l, e, t) => {
+      if (!CK || !l.clip || !(e.duration > 0) || !isFinite(e.duration)) return null;
+      const pl = CK.playlist(CK.parse(l.clip), e.duration, l.speed, !!l.loop);
+      if (!pl.segs.length) return null;
+      const at = CK.at(pl.segs, l.playing ? t : 0, pl.speed, pl.loop);
+      return { at, seg: pl.segs[at.k], speed: pl.speed };
+    };
     const followLayerVideos = run => {
       for (const l of play.layers) {
         const v = lVideos.get(l.id);
@@ -1116,6 +1150,9 @@ void main() {
         const e = v.el, rate = l.speed > 0 ? l.speed : 1;
         if (e.playbackRate !== rate) e.playbackRate = rate;
         if (v.gain) v.gain.gain.value = l.sound === 'play' ? Math.max(0, Math.min(1, value(l, 'volume'))) : 0;
+        // Clip settings: the kept segments on the clock (play/videoLayers.ts videoLayerClipAt).
+        const lc = layerClipAt(l, e, time);
+        if (lc) { e.loop = false; CK.follow(e, lc.at, lc.seg, lc.speed, run && l.playing); continue; }
         if (!l.follow) {
           e.loop = !!l.loop;
           if (!v.started) { v.started = true; if (l.start > 0) e.currentTime = l.start; }
@@ -1570,6 +1607,8 @@ void main() {
     const base = new Map(), live = new Map(), layerLive = new Map(), trig = new Map(), actLevel = new Map();
     const mouse = { x: 0.5, y: 0.5, down: 0, over: false };
     let time = typeof opts.startTime === 'number' && isFinite(opts.startTime) ? Math.max(0, opts.startTime) : 0, playing = !opts.paused, lastNow = 0, frame = 0;
+    // The frame's length in seconds (u_frameDt: Fade (feedback) keeps its tail in seconds with it; 0 reads as 1/60).
+    let frameDt = 0;
     // A noise source with New each play takes a fresh path each time the page opens.
     const playSeed = Math.floor(Math.random() * 100000);
     const bindings = B.paramBindings || {};
@@ -2795,7 +2834,7 @@ void main() {
     const runVideos = run => {
       if (run === videosRunning) return;
       videosRunning = run;
-      for (const v of videos) if (v.el && !v.clock) { if (run) { const p = v.el.play(); if (p && p.catch) p.catch(() => {}); } else v.el.pause(); }
+      for (const v of videos) if (v.el && !v.clock && !v.clip) { if (run) { const p = v.el.play(); if (p && p.catch) p.catch(() => {}); } else v.el.pause(); }
     };
     // The graph's picture: straight to the screen, or (feedback, echo) into a half-float target, then dithered to the screen as ShaderCanvas does.
     function drawPicture() {
@@ -2855,8 +2894,12 @@ void main() {
     /** The graph's inputs on the current program (the picture's, or the Particles probe's): uniforms and samplers. */
     function bindPictureInputs(W, H) {
       setUniform('u_time', time);
+      setUniform('u_frameDt', frameDt);
       setUniform('u_resolution', [W, H]);
-      setUniform('u_mouse', [mouse.x * W, mouse.y * H]);
+      // In the picture's pixels in every program, as in the app (a pass program's W × H is the pass's size).
+      setUniform('u_mouse', [mouse.x * glCanvas.width, mouse.y * glCanvas.height]);
+      // The Mouse button node and Grid Rules' brush.
+      setUniform('u_mousebtn', mouse.down ? 1 : 0);
       for (const k in uniformValues) setUniform(k, uniformValues[k]);
       if (padTex) {
         // The Pad Grid node: the cells' levels (kit/midi.js kmGridFill), the grid's size and the last pad.
@@ -2934,6 +2977,7 @@ void main() {
     // The picture and the layers at `time` (the mappings already ticked).
     function paint(dt, running) {
       needsDraw = false;
+      frameDt = dt;
       // A Background layer: what shows now (its actions carried out), before anything is drawn.
       const qPlan = queueLayer && K ? K.background(play, { time, value, allowDirect: true }) : null;
       if (qPlan) followQueue(qPlan, running);
@@ -3155,16 +3199,19 @@ void main() {
             if (e.readyState < 1) await wait(e, 'loadedmetadata', 4000);
             // Its length still being worked out (see above): wait for it, or the clock can't place it.
             if (e.duration === Infinity) await wait(e, 'durationchange', 3000);
-            await seekTo(e, videoLayerTimeAt(l.playing ? at : 0, e.duration, l.speed, !!l.loop, l.start || 0));
+            const lc = layerClipAt(l, e, at);
+            await seekTo(e, lc ? lc.at.time : videoLayerTimeAt(l.playing ? at : 0, e.duration, l.speed, !!l.loop, l.start || 0));
           })());
         }
         // Baked videos: the frame for this moment (the clock is set to it before the capture draws).
         for (const v of videos) {
           const e = v.el, c = v.clock;
-          if (!c || !e) continue;
+          if (!e || (!c && !v.clip)) continue;
           jobs.push((async () => {
             if (e.readyState < 1) await wait(e, 'loadedmetadata', 4000);
-            await seekTo(e, (bakeFrameAt(at, c) + 0.5) / c.fps);
+            const r = v.clip ? clipAt(v, e, at) : null;
+            // A clipped bake lands on the middle of its frame, as a plain one does.
+            await seekTo(e, r ? (c ? (Math.min(Math.round(c.duration * c.fps) - 1, Math.floor(r.at.time * c.fps + 1e-6)) + 0.5) / c.fps : r.at.time) : (bakeFrameAt(at, c) + 0.5) / c.fps);
             v.shown = -1;
           })());
         }
@@ -3172,7 +3219,8 @@ void main() {
           const e = bgVideo;
           jobs.push((async () => {
             if (e.readyState < 1) await wait(e, 'loadedmetadata', 4000);
-            await seekTo(e, videoTimeAt(at, e.duration, bgVid.rate, bgVid.loop !== false));
+            const c = bgClipAt(e, bgVid.rate, bgVid.loop !== false, bgVid.clip, at);
+            await seekTo(e, c ? c.at.time : videoTimeAt(at, e.duration, bgVid.rate, bgVid.loop !== false));
           })());
         }
         return Promise.all(jobs).then(() => { needsDraw = true; });

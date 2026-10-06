@@ -16,6 +16,9 @@ import { agentPinnedRows } from '../../nodes/agentPins';
 import { RulerSlider } from '../ui/RulerSlider';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { extendRangePatch } from '../../nodes/sliderRange';
+import { PARAM_LIST_TYPES } from '../../lib/nodePreview/previewPlan';
+import { agentGroups } from '../../lib/agentReadings';
+import { AgentRulesCardButtons, AgentRulesCardLink } from './AgentRulesCard';
 
 // ─── Shared container ─────────────────────────────────────────────────────────
 
@@ -3714,7 +3717,7 @@ function PassThumbViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const read = () => {
       const st = useNodeGraphStore.getState();
-      const p = (st.programMap?.passes ?? st.passes)?.find(q => q.nodeId === node.id);
+      const p = (st.programMap?.passes ?? st.passes)?.find(q => q.nodeId === node.id && !q.hidden);
       const ms = p ? getPerfSnapshot().passes.find(r => r.name === `pass:${p.slug}`)?.avg : undefined;
       const size = ref.current?.dataset.size;
       // Repeat: the timer covers every draw, so the card says it is N × one draw's time.
@@ -3742,8 +3745,15 @@ function PassThumbViz({ node }: { node: GraphNode }) {
 
 function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?: (groupId: string) => void }) {
   const [stats, setStats] = useState<AgentStats | undefined>(() => agentStatsFor(node.id));
+  // GPU time of one step (the `agents:<label> step` timer, as in the Performance panel)
+  const [stepMs, setStepMs] = useState<number | null>(null);
   useEffect(() => {
-    const t = setInterval(() => setStats(agentStatsFor(node.id)), 500);
+    const t = setInterval(() => {
+      setStats(agentStatsFor(node.id));
+      const label = agentGroups().find(g => g.nodeId === node.id)?.label;
+      const ms = label ? getPerfSnapshot().passes.find(p => p.name === `agents:${label} step`)?.avg : undefined;
+      setStepMs(ms == null ? null : Math.round(ms * 100) / 100);
+    }, 500);
     return () => clearInterval(t);
   }, [node.id]);
   // The live dots (P4): the runner draws where the walkers are into this canvas every few frames.
@@ -3805,7 +3815,7 @@ function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?
           style={{ display: 'block', width: '100%', maxHeight: 140, objectFit: 'contain', margin: '0 auto 6px', background: '#000', borderRadius: 3 }} />
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '10px', color: pal.overlay0, fontFamily: MONO, marginBottom: 6 }}>
-        <span style={{ flex: 1 }}>{count.toLocaleString('en-US')} agents · {spf} step{spf === 1 ? '' : 's'} a frame{behind}</span>
+        <span style={{ flex: 1 }}>{count.toLocaleString('en-US')} agents · {spf} step{spf === 1 ? '' : 's'} a frame{stepMs != null ? ` · ${stepMs.toFixed(2)} ms a step` : ''}{behind}</span>
         <button type="button" onClick={() => setCardFlag('__dots', !dotsOn)}
           title={dotsOn
             ? 'Hide the live view of where the walkers are. It costs little (about 0.1 ms a frame on an M3 Pro: a sample of at most 65,536 walkers drawn every tenth frame, read back without waiting) and pauses by itself while the card is off screen.'
@@ -3821,9 +3831,11 @@ function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?
         </button>
       )}
       <div style={{ display: 'flex', gap: 6 }}>
-        <button type="button" style={button} title="Open the rule one walker follows every step (or double-click the card's title)" onClick={() => onEnterGroup?.(node.id)}>Open rule ↗</button>
+        {/* Agent Rules (docs/agent-rules.md): Edit rules / Open as nodes in rules mode, else Open rule */}
+        <AgentRulesCardButtons node={node} button={button} onEnterGroup={onEnterGroup} />
         <button type="button" style={button} title="Start the simulation over: everyone is born again at step 0" onClick={() => { restartAgents(node.id); window.dispatchEvent(new Event('agents-restart')); }}>↺ Start over</button>
       </div>
+      <AgentRulesCardLink node={node} />
       {pinned.length > 0 && (
         <div style={{ marginTop: 8 }}>
           <div style={{ fontSize: '9px', letterSpacing: '0.08em', textTransform: 'uppercase', color: pal.overlay0, marginBottom: 2 }}>Pinned</div>
@@ -4513,98 +4525,6 @@ export function NeighborDistViz({ node }: { node: GraphNode }) {
   );
 }
 
-// ─── Viz — Print Float (printFloat) ──────────────────────────────────────────
-
-export function PrintFloatViz({ node }: { node: GraphNode }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const decimals  = typeof node.params.decimals === 'number' ? Math.round(node.params.decimals) : 2;
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const viz = setupViz(canvas);
-    if (!viz) return;
-    const { ctx, W, H } = viz;
-
-    ctx.fillStyle = pal.crust;
-    ctx.fillRect(0, 0, W, H);
-
-    const placeholder = decimals > 0 ? '0.' + '0'.repeat(Math.min(decimals, 4)) : '0';
-    ctx.font = `bold 22px ${MONO}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = pal.text;
-    ctx.fillText(placeholder, W / 2, H / 2);
-
-    ctx.font = `8px ${MONO}`;
-    ctx.fillStyle = pal.surface2;
-    ctx.fillText(`float · ${decimals} dec`, W / 2, H - 6);
-  }, [decimals]);
-
-  return (
-    <div style={vizContainer()}>
-      <canvas ref={canvasRef} width={160} height={60}
-        style={{ display: 'block', width: '100%', height: '60px' }} />
-    </div>
-  );
-}
-
-// ─── Viz — Print Text (printText) ────────────────────────────────────────────
-
-export function PrintTextViz({ node }: { node: GraphNode }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const text      = typeof node.params.text === 'string' && node.params.text.length > 0 ? node.params.text : 'hello';
-  const decimals  = typeof node.params.decimals === 'number' ? Math.round(node.params.decimals) : 2;
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const viz = setupViz(canvas);
-    if (!viz) return;
-    const { ctx, W, H } = viz;
-
-    ctx.fillStyle = pal.crust;
-    ctx.fillRect(0, 0, W, H);
-
-    // Build display: text + placeholder number
-    const numPlaceholder = decimals > 0 ? ' 0.' + '0'.repeat(Math.min(decimals, 4)) : ' 0';
-    const display = text + numPlaceholder;
-
-    // Shrink font until it fits
-    let fontSize = 18;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    do {
-      ctx.font = `bold ${fontSize}px monospace`;
-      fontSize -= 1;
-    } while (ctx.measureText(display).width > W - 12 && fontSize > 8);
-
-    // Draw text portion in light color, number in accent
-    const textPx   = ctx.measureText(text).width;
-    const numPx    = ctx.measureText(numPlaceholder).width;
-    const totalPx  = textPx + numPx;
-    const startX   = (W - totalPx) / 2;
-
-    ctx.textAlign = 'left';
-    ctx.fillStyle = pal.text;
-    ctx.fillText(text, startX, H / 2 - 4);
-    ctx.fillStyle = pal.green;
-    ctx.fillText(numPlaceholder, startX + textPx, H / 2 - 4);
-
-    ctx.font = `8px ${MONO}`;
-    ctx.textAlign = 'center';
-    ctx.fillStyle = pal.surface2;
-    ctx.fillText(`"${text.slice(0, 12)}"  +  float`, W / 2, H - 6);
-  }, [text, decimals]);
-
-  return (
-    <div style={vizContainer()}>
-      <canvas ref={canvasRef} width={160} height={60}
-        style={{ display: 'block', width: '100%', height: '60px' }} />
-    </div>
-  );
-}
-
 // ─── Chladni-family field vizzes (waveTerm, chladniField, chladniSuperposition) ───
 // Renders the same n/m interference math generateGLSL emits for each of
 // these node types (see physics.ts) as a live per-pixel field preview — a
@@ -5105,8 +5025,6 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'grid':           return <GridViz                node={node} />;
     case 'gridLayout':     return <GridLayoutViz          node={node} />;
     case 'neighborDist':   return <NeighborDistViz        node={node} />;
-    case 'printFloat':     return <PrintFloatViz          node={node} />;
-    case 'printText':      return <PrintTextViz           node={node} />;
     case 'waveTexture':    return <WaveTextureViz         node={node} />;
     case 'smoothstep':     return <SmoothstepViz          node={node} />;
     case 'clamp':          return <ClampViz               node={node} />;
@@ -5329,9 +5247,6 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
 
     // ── 3D SDF missing ────────────────────────────────────────────────────────
     case 'sdCross3D':
-    case 'mengerSponge':
-    case 'mandelboxDE':
-    case 'kifsTetra':
     case 'mandelbulb':       return <SDF3DParamViz           node={node} />;
 
     // ── 3D transforms missing ─────────────────────────────────────────────────
@@ -5358,9 +5273,7 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'truchet':
     case 'metaballs':
     case 'lissajous':
-    case 'chladni':
-    case 'chladni3d':
-    case 'chladni3dParticles': return <SDF3DParamViz         node={node} />;
+    case 'chladni':          return <SDF3DParamViz           node={node} />;
     case 'waveTerm':           return <WaveTermViz           node={node} />;
     case 'chladniField':       return <ChladniFieldViz       node={node} />;
     case 'chladniSuperposition': return <ChladniSuperpositionViz node={node} />;
@@ -5386,7 +5299,6 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'fakeSSS':
     case 'volumeClouds':
     case 'volumetricFog':
-    case 'orbitalVolume3d':
     case 'radianceCascadesApprox': return <SDF3DParamViz     node={node} />;
 
     // ── Particle fields ───────────────────────────────────────────────────────
@@ -5407,6 +5319,15 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
   }
 }
 
+/**
+ * A real diagram for this type: NodeInlineViz draws one, and it isn't just the parameters listed
+ * (SDF3DParamViz), which the card's sliders already show. GenericViz is checked first, so its
+ * types keep their diagram. (lib/nodePreview/previewPlan.ts decides the card's preview with it.)
+ */
+export function hasRealDiagram(type: string): boolean {
+  return INLINE_VIZ_TYPES.has(type) && (GENERIC_VIZ_TYPES.has(type) || !PARAM_LIST_TYPES.has(type));
+}
+
 // Nodes whose inline viz fully replaces the shader thumbnail
 export const INLINE_VIZ_TYPES = new Set<string>([
   ...GENERIC_VIZ_TYPES,
@@ -5417,7 +5338,7 @@ export const INLINE_VIZ_TYPES = new Set<string>([
   // Glass
   'toneMap', 'palette', 'gradient',
   'posterize', 'grain', 'hueRange', 'audioInput',
-  'colorRamp', 'blackbody', 'brightnessContrast', 'grid', 'gridLayout', 'neighborDist', 'printFloat', 'printText', 'waveTexture',
+  'colorRamp', 'blackbody', 'brightnessContrast', 'grid', 'gridLayout', 'neighborDist', 'waveTexture',
   'smoothstep', 'clamp', 'mix', 'addColor',
   'expEase', 'doubleExpSeat', 'doubleExpSigmoid', 'logisticSigmoid',
   'circularEaseIn', 'circularEaseOut', 'doubleCircleSeat', 'doubleCircleSigmoid',
@@ -5475,21 +5396,21 @@ export const INLINE_VIZ_TYPES = new Set<string>([
   // 2D SDF missing
   'simpleSDF',
   // 3D SDF missing
-  'sdCross3D', 'mengerSponge', 'mandelboxDE', 'kifsTetra', 'mandelbulb',
+  'sdCross3D', 'mandelbulb',
   // 3D transforms missing
   'mirroredRepeat3D', 'spiralWarp3D',
   // Lighting
   'light', 'light2d', 'multiLight', 'fresnel3d', 'sdfAo', 'softShadow',
   // 2D Fractals / Patterns / Physics
   'lissajous',
-  'chladni', 'chladni3d', 'chladni3dParticles',
+  'chladni',
   'waveTerm', 'chladniField', 'chladniSuperposition', 'chladniModeFreq',
   'vec2Swizzle', 'vec3Swizzle', 'quantize', 'modSelect', 'pixelate',
   // Loop / Effect nodes
   'fractalLoop', 'rotatingLinesLoop', 'accumulateLoop', 'forLoop',
   'loopCarry', 'loopDomainFold',
   // Volumetrics / complex effects
-  'fakeSSS', 'volumeClouds', 'volumetricFog', 'glass3d', 'glassScene', 'orbitalVolume3d', 'radianceCascadesApprox',
+  'fakeSSS', 'volumeClouds', 'volumetricFog', 'glass3d', 'glassScene', 'radianceCascadesApprox',
   // Particle fields
   'vectorField', 'gravityField', 'spiralField',
   // 3D Scene nodes

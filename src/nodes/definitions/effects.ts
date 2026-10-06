@@ -4,6 +4,7 @@ import { PALETTE_GLSL_FN } from './color';
 import { MARCH_STEP_REF_KEY, stepWeightGlsl } from '../../compiler/marchJitter';
 // Shared with the Play page's Finish stack (play/kit/finish.js), so both tone-map and mask the same way.
 import { FN_CRT_MASK_GLSL, FN_TONE_FUNCTIONS, FN_TONE_GLSL } from '../../play/kit/finishGlsl.js';
+import { BL_BASE_GLSL, BL_PREV_GLSL } from '../../play/kit/blur.js';
 
 
 export const AbsNode: NodeDefinition = {
@@ -1384,10 +1385,10 @@ export const GaussianBlurNode: NodeDefinition = {
       { value: 'kawase',   label: 'Kawase (4 taps)' },
     ]},
   },
-  glslFunction: `
-float gaussBlurWeight(float x, float y, float sigma) {
-  return exp(-0.5 * (x*x + y*y) / (sigma*sigma));
-}`,
+  // The shared blur (play/kit/blur.js, docs/blur-and-glow.md) reading the frame before: Both is a
+  // 2D Gaussian (exact while small, a disc turned per pixel past that), Horizontal / Vertical a 1D
+  // Gaussian read between pixels, so no pixel in reach is skipped and Radius never shows copies.
+  glslFunctions: [BL_BASE_GLSL, BL_PREV_GLSL],
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;
     const col     = inputVars.color || 'vec3(0.0)';
@@ -1395,7 +1396,6 @@ float gaussBlurWeight(float x, float y, float sigma) {
     const radius  = p(node.params.radius, 4.0);
     const quality = (node.params.quality as string) ?? 'standard';
     const half_n  = quality === 'fast' ? 1 : quality === 'high' ? 3 : 2;
-    const sigma   = half_n === 1 ? '1.0' : half_n === 3 ? '2.0' : '1.5';
     const dir     = (node.params.direction as string) ?? 'both';
     if (quality === 'kawase') {
       // Kawase (GDC 2003): four taps on the half-pixel diagonals at distance radius, averaged with the centre.
@@ -1415,28 +1415,27 @@ float gaussBlurWeight(float x, float y, float sigma) {
       };
     }
 
+    // σ in pixels: the old grid's σ (1, 1.5 or 2 taps) times Radius (its tap spacing), so a saved
+    // graph spreads as far as before. This pixel's own colour (sharp, this frame) keeps the weight
+    // the kernel's centre has, as before.
+    const sg = half_n === 1 ? 1 : half_n === 3 ? 2 : 1.5;
     const lines: string[] = [
       `    vec2  ${id}_uv01 = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`,
       `    vec2  ${id}_px   = 1.0 / u_resolution;\n`,
-      `    vec3  ${id}_acc  = ${col};\n`,
-      `    float ${id}_wsum = 1.0;\n`,
+      `    float ${id}_sg   = ${f(sg)} * max(${radius}, 0.0);\n`,
     ];
-
-    for (let gx = -half_n; gx <= half_n; gx++) {
-      for (let gy = -half_n; gy <= half_n; gy++) {
-        if (gx === 0 && gy === 0) continue;
-        if (dir === 'horizontal' && gy !== 0) continue;
-        if (dir === 'vertical'   && gx !== 0) continue;
-        const w = `gaussBlurWeight(${f(gx)}, ${f(gy)}, ${sigma})`;
-        lines.push(
-          `    { float ${id}_w = ${w}; ` +
-          `${id}_acc += texture2D(u_prevFrame, clamp(${id}_uv01 + vec2(${f(gx)}, ${f(gy)}) * ${id}_px * ${radius}, 0.0, 1.0)).rgb * ${id}_w; ` +
-          `${id}_wsum += ${id}_w; }\n`,
-        );
-      }
+    if (dir === 'horizontal' || dir === 'vertical') {
+      const axis = dir === 'horizontal' ? `vec2(${id}_px.x, 0.0)` : `vec2(0.0, ${id}_px.y)`;
+      lines.push(
+        `    vec3  ${id}_blur = blGaussPrev(${id}_uv01, ${axis}, ${id}_sg).rgb;\n`,
+        `    vec3  ${id}_result = mix(${id}_blur, ${col}, 1.0 / (1.0 + 2.5066 * ${f(sg)}));\n`,
+      );
+    } else {
+      lines.push(
+        `    vec3  ${id}_blur = blSoftPrev(${id}_uv01, ${id}_px, ${id}_sg / 0.45, gl_FragCoord.xy).rgb;\n`,
+        `    vec3  ${id}_result = mix(${id}_blur, ${col}, 1.0 / (1.0 + 6.2832 * ${f(sg * sg)}));\n`,
+      );
     }
-    lines.push(`    vec3 ${id}_result = ${id}_acc / ${id}_wsum;\n`);
-
     return { code: lines.join(''), outputVars: { result: `${id}_result` } };
   },
 };
@@ -1485,7 +1484,9 @@ export const BloomNode: NodeDefinition = {
     intensity: { label: 'Intensity', type: 'float', min: 0.0, max: 5.0,   step: 0.05 },
     radius:    { label: 'Radius (px)', type: 'float', min: 1.0, max: 400.0, step: 1.0, hint: 'Full reach of the falloff, in pixels — most of the weight is still near the source (inverse-square), so raising this mainly extends how far the soft tail bleeds rather than uniformly brightening everything inside it.' },
   },
-  glslFunction: `
+  // blIGN (play/kit/blur.js): each pixel turns and stretches its own taps, so too few of them show
+  // as fine grain instead of rings and copies.
+  glslFunctions: [BL_BASE_GLSL, `
 vec3 bloomBright(vec3 tap, float threshold, float softness, float lumaMode) {
   float effThreshold = max(threshold, 0.05);
   vec3 clipped = max(tap - vec3(effThreshold), 0.0);
@@ -1496,12 +1497,15 @@ vec3 bloomBright(vec3 tap, float threshold, float softness, float lumaMode) {
 vec3 bloomLayered(vec2 uv01, vec2 px, float radius, float threshold, float softness, float lumaMode) {
   vec3 acc = vec3(0.0);
   float wsum = 0.0;
+  float rot = blIGN(gl_FragCoord.xy) * 6.2831853;
+  mat2 turn = mat2(cos(rot), sin(rot), -sin(rot), cos(rot));
+  float jit = 0.5 + blIGN(gl_FragCoord.xy + vec2(37.0, 17.0));
   for (int L = 1; L <= 4; L++) {
     float stepPx = radius * float(L) * 0.25;
     float lw = 1.0 / float(L);
     for (int x = -1; x <= 1; x++) {
       for (int y = -1; y <= 1; y++) {
-        vec2 offset = vec2(float(x), float(y)) * stepPx * px;
+        vec2 offset = turn * vec2(float(x), float(y)) * stepPx * jit * px;
         vec3 tap = min(texture2D(u_prevFrame, clamp(uv01 + offset, 0.0, 1.0)).rgb, vec3(4.0));
         acc += bloomBright(tap, threshold, softness, lumaMode) * lw;
         wsum += lw;
@@ -1522,7 +1526,7 @@ vec3 bloomKernel(vec2 uv01, vec2 px, float radius, float threshold, float softne
     // Uniform-density disk sampling (radius ~ sqrt(i)) with a golden-angle
     // angular step — far better distributed than a few concentric rings, so
     // it doesn't band even at large radii with a modest sample count.
-    float t = (float(i) + 0.5) / 28.0;
+    float t = (float(i) + blIGN(gl_FragCoord.xy + vec2(37.0, 17.0))) / 28.0;
     float r = sqrt(t) * radius;
     float angle = float(i) * 2.39996323 + jitter;
     vec2 offset = vec2(cos(angle), sin(angle)) * r * px;
@@ -1542,7 +1546,7 @@ vec3 bloomKernel(vec2 uv01, vec2 px, float radius, float threshold, float softne
     wsum += w;
   }
   return acc / max(wsum, 0.0001);
-}`,
+}`],
   generateGLSL: (node: GraphNode, inputVars) => {
     const id        = node.id;
     const col       = inputVars.color     || 'vec3(0.0)';
@@ -1578,6 +1582,7 @@ vec3 bloomKernel(vec2 uv01, vec2 px, float radius, float threshold, float softne
 
 export const RadialBlurNode: NodeDefinition = {
   type: 'radialBlur',
+  glslFunctions: [BL_BASE_GLSL],
   label: 'Radial Blur',
   category: 'Effects',
   description: 'Zoom/spin blur radiating outward from a center point. Wire Mouse UV to center for interactive control.',
@@ -1619,10 +1624,11 @@ export const RadialBlurNode: NodeDefinition = {
       `    float ${id}_ns    = ${f(nSamples)};\n`,
     ];
 
+    // Each pixel starts its reads at its own fraction of a step (blIGN): steps show as grain, not stairs.
+    lines.push(`    float ${id}_jit = blIGN(gl_FragCoord.xy) - 0.5;\n`);
     for (let i = 1; i <= nSamples; i++) {
-      const t = f(i / nSamples);
       lines.push(
-        `    ${id}_acc += texture2D(u_prevFrame, clamp(${id}_uv01 - ${id}_step * ${t}, 0.0, 1.0)).rgb;\n`,
+        `    ${id}_acc += texture2D(u_prevFrame, clamp(${id}_uv01 - ${id}_step * ((${f(i)} + ${id}_jit) / ${f(nSamples)}), 0.0, 1.0)).rgb;\n`,
       );
     }
     lines.push(`    vec3 ${id}_result = ${id}_acc / (${id}_ns + 1.0);\n`);
@@ -1637,6 +1643,7 @@ export const RadialBlurNode: NodeDefinition = {
 
 export const TiltShiftBlurNode: NodeDefinition = {
   type: 'tiltShiftBlur',
+  glslFunctions: [BL_BASE_GLSL, BL_PREV_GLSL],
   label: 'Tilt-Shift Blur',
   category: 'Effects',
   description: 'Miniature / tilt-shift effect. A focus band stays sharp; blur increases away from it. Tilt the band angle for creative looks.',
@@ -1698,16 +1705,14 @@ export const TiltShiftBlurNode: NodeDefinition = {
       `    float ${id}_wsum  = 1.0;\n`,
     ];
 
-    // 9-tap 1D Gaussian along blur direction, variable radius
-    const offsets = [-4, -3, -2, -1, 1, 2, 3, 4];
-    for (const o of offsets) {
-      const w = `exp(-0.5 * ${f(o * o)} / (${id}_br * ${id}_br + 0.0001))`;
-      lines.push(
-        `    { float ${id}_w${o < 0 ? 'n' + Math.abs(o) : o} = ${w}; ` +
-        `${id}_acc += texture2D(u_prevFrame, clamp(${id}_uv01 + ${id}_bd * ${f(o)} * ${id}_px * ${id}_br, 0.0, 1.0)).rgb * ${id}_w${o < 0 ? 'n' + Math.abs(o) : o}; ` +
-        `${id}_wsum += ${id}_w${o < 0 ? 'n' + Math.abs(o) : o}; }\n`,
-      );
-    }
+    // A 1D Gaussian along the blur direction, read between pixels (play/kit/blur.js): σ grows to
+    // 2 × Max Blur away from the band, reaching about as far as the old 9 taps Max Blur apart, with no copies.
+    lines.push(
+      `    float ${id}_sg = ${id}_br * 2.0;\n`,
+      `    vec3 ${id}_blur = blGaussPrev(${id}_uv01, ${id}_bd * ${id}_px, ${id}_sg).rgb;\n`,
+      `    ${id}_acc = mix(${id}_blur, ${id}_acc, 1.0 / (1.0 + 2.5066 * ${id}_sg));\n`,
+      `    ${id}_wsum = 1.0;\n`,
+    );
     lines.push(`    vec3 ${id}_result = ${id}_acc / ${id}_wsum;\n`);
 
     return {
@@ -1725,10 +1730,12 @@ const LENS_BLUR_GLSL = `
 vec3 lensBlurDisc(sampler2D tex, vec2 uv01, vec2 px, float coc, vec3 center) {
   vec3 acc = center;
   float wsum = 1.0;
-  // 12-tap golden-angle spiral disc
+  // 12-tap golden-angle spiral disc, turned and stretched per pixel (blIGN): grain, not copies
+  float rot = blIGN(gl_FragCoord.xy) * 6.2831853;
+  float jit = blIGN(gl_FragCoord.xy + vec2(37.0, 17.0));
   for (int i = 1; i <= 12; i++) {
-    float t = float(i) / 12.0;
-    float angle = t * 2.3999632 * 12.0;
+    float t = (float(i) - jit) / 12.0;
+    float angle = float(i) * 2.3999632 + rot;
     float r = sqrt(t);
     vec2 off = vec2(cos(angle), sin(angle)) * r * coc * px;
     acc += texture2D(tex, clamp(uv01 + off, 0.0, 1.0)).rgb;
@@ -1742,7 +1749,8 @@ vec3 lensBlurHex(sampler2D tex, vec2 uv01, vec2 px, float coc, vec3 center) {
   // 6 vertices + 6 edge midpoints
   for (int i = 0; i < 12; i++) {
     float a = float(i) * 0.5235988; // pi/6
-    float r = (mod(float(i), 2.0) < 0.5) ? 1.0 : 0.866;
+    // Each read at its own depth into the hexagon (per pixel): the shape fills in instead of ringing.
+    float r = ((mod(float(i), 2.0) < 0.5) ? 1.0 : 0.866) * sqrt(fract(blIGN(gl_FragCoord.xy) + float(i) * 0.618034));
     vec2 off = vec2(cos(a), sin(a)) * r * coc * px;
     acc += texture2D(tex, clamp(uv01 + off, 0.0, 1.0)).rgb;
     wsum += 1.0;
@@ -1755,7 +1763,7 @@ vec3 lensBlurOct(sampler2D tex, vec2 uv01, vec2 px, float coc, vec3 center) {
   // 8 vertices + 8 edge midpoints
   for (int i = 0; i < 16; i++) {
     float a = float(i) * 0.3926991; // pi/8
-    float r = (mod(float(i), 2.0) < 0.5) ? 1.0 : 0.9239;
+    float r = ((mod(float(i), 2.0) < 0.5) ? 1.0 : 0.9239) * sqrt(fract(blIGN(gl_FragCoord.xy) + float(i) * 0.618034));
     vec2 off = vec2(cos(a), sin(a)) * r * coc * px;
     acc += texture2D(tex, clamp(uv01 + off, 0.0, 1.0)).rgb;
     wsum += 1.0;
@@ -1809,7 +1817,7 @@ export const LensBlurNode: NodeDefinition = {
     ]},
     boost: { label: 'Boost', type: 'float', min: 0.1, max: 4.0, step: 0.05 },
   },
-  glslFunction: LENS_BLUR_GLSL,
+  glslFunctions: [BL_BASE_GLSL, LENS_BLUR_GLSL],
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
     const col   = inputVars.color       || 'vec3(0.0)';
@@ -1885,7 +1893,7 @@ export const DepthOfFieldNode: NodeDefinition = {
       { value: 'oct',  label: 'Oct (8-blade)'   },
     ]},
   },
-  glslFunction: LENS_BLUR_GLSL,
+  glslFunctions: [BL_BASE_GLSL, LENS_BLUR_GLSL],
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
     const col   = inputVars.color || 'vec3(0.0)';

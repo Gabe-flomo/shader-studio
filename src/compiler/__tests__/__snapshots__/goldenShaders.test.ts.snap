@@ -294,6 +294,76 @@ exports[`golden shaders: every Play example exports the same bundle > gridLavaLa
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > gridRulesBrain 1`] = `
+{
+  "bundle": "092a4201d9cda4064133aed4ca74:44822",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > gridRulesCave 1`] = `
+{
+  "bundle": "00a8080f8342930749b48a72fa56:13946",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > gridRulesCrystal 1`] = `
+{
+  "bundle": "1a7ef40f4473cc083613c99700bd:14863",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > gridRulesFire 1`] = `
+{
+  "bundle": "0f4d359c166d100448bb1246385b:14681",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > gridRulesGas 1`] = `
+{
+  "bundle": "183a0f92bef438119ad1c6307153:22333",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > gridRulesHeat 1`] = `
+{
+  "bundle": "0811ebf2d16a6b1f5c58a76cce2a:14277",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > gridRulesLife 1`] = `
+{
+  "bundle": "008be77c79a35103892933c6bc3e:13672",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > gridRulesLifeLike 1`] = `
+{
+  "bundle": "18b8b2d97a2b410e18c48bd23786:14273",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > gridRulesSand 1`] = `
+{
+  "bundle": "19a79e01b70f5b12ebc279210d89:19047",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > gridRulesWater 1`] = `
+{
+  "bundle": "0441f6dfbe974f14f8694632f4cd:14033",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > gridTourArrayBlobs 1`] = `
 {
   "bundle": "1714a29f408a5d00f43291fe5ea1:9607",
@@ -1913,7 +1983,7 @@ exports[`golden shaders: every example compiles as it did > comboBloomDots 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "09c0a6c6eddd0f17ee61fe5226ed:5429",
+  "fragmentShader": "0f0422bbe65ba303ba7821cc9b88:5718",
   "isStateful": true,
   "liveUniforms": {},
   "nodeSlugs": "10356e373e59d812d60321ab424d:225",
@@ -2824,7 +2894,7 @@ exports[`golden shaders: every example compiles as it did > dofDepthBlur 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0354a13fcc26f7156499e42708c1:9731",
+  "fragmentShader": "083bf3cf31479e065cd0c18c7c71:10013",
   "isStateful": true,
   "liveUniforms": {},
   "nodeSlugs": "1d6fcc5ffd0e24082aaa9325d241:491",
@@ -3347,7 +3417,7 @@ exports[`golden shaders: every example compiles as it did > fcTrippyNoise 1`] = 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1c000742a4292f1580c05c882c96:9270",
+  "fragmentShader": "0549ca0ec8699a1ae36ea98cf097:9410",
   "isStateful": true,
   "liveUniforms": {},
   "nodeSlugs": "179b3d8fa6075c1578c5f953f07c:677",
@@ -4318,6 +4388,2669 @@ exports[`golden shaders: every example compiles as it did > gridNeighborDisplace
   ],
   "paramValues": "10e044fb9e18c30cd1bc6455b8df:422",
   "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > gridRulesBrain 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "19402170cb65bd045d7089e614ce:5933",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "03a9cbb9146c3e1d334cbbc3569c:233",
+  "paramBindings": "02bf96753e19ae0dba00cf8b1523:1241",
+  "paramUniforms": [
+    "u_p_addcolorx0_scale",
+    "u_p_brainxrulesx0xc3_afterglow",
+    "u_p_brainxrulesx0xc3_ageFade",
+    "u_p_brainxrulesx0xc3_ageRate",
+    "u_p_brainxrulesx0xc3_bornMask",
+    "u_p_brainxrulesx0xc3_brushFill",
+    "u_p_brainxrulesx0xc3_brushRadius",
+    "u_p_brainxrulesx0xc3_brushState",
+    "u_p_brainxrulesx0xc3_color0",
+    "u_p_brainxrulesx0xc3_color1",
+    "u_p_brainxrulesx0xc3_color2",
+    "u_p_brainxrulesx0xc3_color3",
+    "u_p_brainxrulesx0xc3_density",
+    "u_p_brainxrulesx0xc3_glowColor",
+    "u_p_brainxrulesx0xc3_oldColor",
+    "u_p_brainxrulesx0xc3_paint",
+    "u_p_brainxrulesx0xc3_rate",
+    "u_p_brainxrulesx0xc3_reset",
+    "u_p_brainxrulesx0xc3_seed",
+    "u_p_brainxrulesx0xc3_states",
+    "u_p_brainxrulesx0xc3_surviveMask",
+    "u_p_tglowx0_intensity",
+    "u_p_tglowx0_knee",
+    "u_p_tglowx0_radius",
+    "u_p_tglowx0_threshold",
+    "u_p_tglowx0_tint",
+  ],
+  "paramValues": "064de89dc55d0e19c606f1e47def:958",
+  "passes": [
+    {
+      "filter": "nearest",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_brainxrulesx0xc3_bornMask;
+uniform float u_p_brainxrulesx0xc3_surviveMask;
+uniform float u_p_brainxrulesx0xc3_states;
+uniform float u_p_brainxrulesx0xc3_rate;
+uniform float u_p_brainxrulesx0xc3_reset;
+uniform float u_p_brainxrulesx0xc3_density;
+uniform float u_p_brainxrulesx0xc3_seed;
+uniform float u_p_brainxrulesx0xc3_paint;
+uniform float u_p_brainxrulesx0xc3_brushRadius;
+uniform float u_p_brainxrulesx0xc3_brushState;
+uniform float u_p_brainxrulesx0xc3_brushFill;
+uniform float u_p_brainxrulesx0xc3_afterglow;
+uniform float u_p_brainxrulesx0xc3_ageRate;
+uniform float u_p_brainxrulesx0xc3_ageFade;
+uniform vec3 u_p_brainxrulesx0xc3_color0;
+uniform vec3 u_p_brainxrulesx0xc3_color1;
+uniform vec3 u_p_brainxrulesx0xc3_color2;
+uniform vec3 u_p_brainxrulesx0xc3_color3;
+uniform vec3 u_p_brainxrulesx0xc3_glowColor;
+uniform vec3 u_p_brainxrulesx0xc3_oldColor;
+uniform sampler2D u_pass_brain_rules_cell_0;
+uniform vec2 u_pass_brain_rules_cell_0_px;
+uniform sampler2D u_passprev_brain_rules_cell_0;
+uniform vec2 u_passprev_brain_rules_cell_0_px;
+uniform float u_mousebtn;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+float grHash(vec3 p) {
+    vec3 p3 = fract(p * 0.1031);
+    p3 = p3 + dot(p3, vec3(p3.z, p3.y, p3.x) + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Grid Rules, Stages: Brian's Brain (Generations /2/3) on a ¼-size board (480 × 270 cells), one step a frame.
+    // On cells are pale blue, the dying stage deep blue. Its Texture output (the coloured board as a texture: one more small pass) feeds the Glow.
+    vec2 brain_rules_0_c3_res = u_resolution;
+    vec2 brain_rules_0_c3_cell = floor(gl_FragCoord.xy);
+    vec4 brain_rules_0_c3_me = texture2D(u_passprev_brain_rules_cell_0, (brain_rules_0_c3_cell + vec2(0.0) + 0.5) / brain_rules_0_c3_res);
+    float brain_rules_0_c3_fresh = (abs(brain_rules_0_c3_me.a - 14.0) > 0.5 || u_p_brainxrulesx0xc3_reset > 0.5) ? 1.0 : 0.0;
+    float brain_rules_0_c3_clk = (brain_rules_0_c3_fresh > 0.5 ? 0.0 : fract(brain_rules_0_c3_me.b)) + clamp(u_p_brainxrulesx0xc3_rate, 0.0, 1.0);
+    float brain_rules_0_c3_tick = step(1.0, brain_rules_0_c3_clk);
+    float brain_rules_0_c3_phase = brain_rules_0_c3_clk - brain_rules_0_c3_tick;
+    float brain_rules_0_c3_h = grHash(vec3(brain_rules_0_c3_cell, mod(floor(u_time * 60.0), 997.0) + u_p_brainxrulesx0xc3_seed * 1013.0 + 1.0));
+    vec2 brain_rules_0_c3_m = u_mouse * 0.25;
+    float brain_rules_0_c3_in = (length(brain_rules_0_c3_cell + 0.5 - brain_rules_0_c3_m) < u_p_brainxrulesx0xc3_brushRadius ? 1.0 : 0.0) * max(step(0.5, u_mousebtn), step(0.5, u_p_brainxrulesx0xc3_paint));
+    float brain_rules_0_c3_s = floor(brain_rules_0_c3_me.r + 0.5);
+    float brain_rules_0_c3_g = brain_rules_0_c3_me.g;
+    float brain_rules_0_c3_cnt = 0.0;
+    float brain_rules_0_c3_q = 0.0;
+    brain_rules_0_c3_q = texture2D(u_passprev_brain_rules_cell_0, (brain_rules_0_c3_cell + vec2(0.0, 1.0) + 0.5) / brain_rules_0_c3_res).r;
+    brain_rules_0_c3_cnt += (step(0.5, brain_rules_0_c3_q) - step(1.5, brain_rules_0_c3_q));
+    brain_rules_0_c3_q = texture2D(u_passprev_brain_rules_cell_0, (brain_rules_0_c3_cell + vec2(1.0, 1.0) + 0.5) / brain_rules_0_c3_res).r;
+    brain_rules_0_c3_cnt += (step(0.5, brain_rules_0_c3_q) - step(1.5, brain_rules_0_c3_q));
+    brain_rules_0_c3_q = texture2D(u_passprev_brain_rules_cell_0, (brain_rules_0_c3_cell + vec2(1.0, 0.0) + 0.5) / brain_rules_0_c3_res).r;
+    brain_rules_0_c3_cnt += (step(0.5, brain_rules_0_c3_q) - step(1.5, brain_rules_0_c3_q));
+    brain_rules_0_c3_q = texture2D(u_passprev_brain_rules_cell_0, (brain_rules_0_c3_cell + vec2(1.0, -1.0) + 0.5) / brain_rules_0_c3_res).r;
+    brain_rules_0_c3_cnt += (step(0.5, brain_rules_0_c3_q) - step(1.5, brain_rules_0_c3_q));
+    brain_rules_0_c3_q = texture2D(u_passprev_brain_rules_cell_0, (brain_rules_0_c3_cell + vec2(0.0, -1.0) + 0.5) / brain_rules_0_c3_res).r;
+    brain_rules_0_c3_cnt += (step(0.5, brain_rules_0_c3_q) - step(1.5, brain_rules_0_c3_q));
+    brain_rules_0_c3_q = texture2D(u_passprev_brain_rules_cell_0, (brain_rules_0_c3_cell + vec2(-1.0, -1.0) + 0.5) / brain_rules_0_c3_res).r;
+    brain_rules_0_c3_cnt += (step(0.5, brain_rules_0_c3_q) - step(1.5, brain_rules_0_c3_q));
+    brain_rules_0_c3_q = texture2D(u_passprev_brain_rules_cell_0, (brain_rules_0_c3_cell + vec2(-1.0, 0.0) + 0.5) / brain_rules_0_c3_res).r;
+    brain_rules_0_c3_cnt += (step(0.5, brain_rules_0_c3_q) - step(1.5, brain_rules_0_c3_q));
+    brain_rules_0_c3_q = texture2D(u_passprev_brain_rules_cell_0, (brain_rules_0_c3_cell + vec2(-1.0, 1.0) + 0.5) / brain_rules_0_c3_res).r;
+    brain_rules_0_c3_cnt += (step(0.5, brain_rules_0_c3_q) - step(1.5, brain_rules_0_c3_q));
+    float brain_rules_0_c3_born = mod(floor((u_p_brainxrulesx0xc3_bornMask + 0.5) / exp2(brain_rules_0_c3_cnt)), 2.0);
+    float brain_rules_0_c3_surv = mod(floor((u_p_brainxrulesx0xc3_surviveMask + 0.5) / exp2(brain_rules_0_c3_cnt)), 2.0);
+    float brain_rules_0_c3_N = max(floor(u_p_brainxrulesx0xc3_states + 0.5), 2.0);
+    float brain_rules_0_c3_top = brain_rules_0_c3_N - 1.0;
+    float brain_rules_0_c3_next = brain_rules_0_c3_s < 0.5 ? brain_rules_0_c3_born : (brain_rules_0_c3_s < 1.5 ? (brain_rules_0_c3_surv > 0.5 ? 1.0 : (brain_rules_0_c3_N > 2.5 ? 2.0 : 0.0)) : (brain_rules_0_c3_s + 1.0 > brain_rules_0_c3_N - 0.5 ? 0.0 : brain_rules_0_c3_s + 1.0));
+    float brain_rules_0_c3_ng = 0.0;
+    if (brain_rules_0_c3_next > 0.5 && brain_rules_0_c3_next < 1.5) brain_rules_0_c3_ng = (brain_rules_0_c3_s > 0.5 && brain_rules_0_c3_s < 1.5) ? min(1.0, brain_rules_0_c3_g + u_p_brainxrulesx0xc3_ageRate) : 0.0;
+    else if (brain_rules_0_c3_next < 0.5) brain_rules_0_c3_ng = brain_rules_0_c3_s > 0.5 ? u_p_brainxrulesx0xc3_afterglow : brain_rules_0_c3_g * u_p_brainxrulesx0xc3_afterglow;
+    if (brain_rules_0_c3_tick < 0.5) { brain_rules_0_c3_next = brain_rules_0_c3_s; brain_rules_0_c3_ng = brain_rules_0_c3_g; }
+    if (brain_rules_0_c3_fresh > 0.5) { brain_rules_0_c3_next = (brain_rules_0_c3_h < u_p_brainxrulesx0xc3_density ? 1.0 : 0.0); brain_rules_0_c3_ng = 0.0; }
+    float brain_rules_0_c3_roll = grHash(vec3(brain_rules_0_c3_cell + 0.5, mod(floor(u_time * 60.0), 997.0) + 7919.0));
+    if (brain_rules_0_c3_in > 0.5 && brain_rules_0_c3_roll < u_p_brainxrulesx0xc3_brushFill) { brain_rules_0_c3_next = clamp(floor(u_p_brainxrulesx0xc3_brushState + 0.5), 0.0, brain_rules_0_c3_top); brain_rules_0_c3_ng = 0.0; }
+    vec3 brain_rules_0_c3_out = vec3(brain_rules_0_c3_next, brain_rules_0_c3_ng, brain_rules_0_c3_phase);
+    float brain_rules_0_c3_outA = 14.0;
+    gl_FragColor = vec4(brain_rules_0_c3_out, brain_rules_0_c3_outA);
+}",
+      "label": "Brain rules cells",
+      "live": true,
+      "nodeId": "brain__cells",
+      "nodeIds": [
+        "brain__step",
+        "brain",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "brain_rules_cell_0",
+      ],
+      "scale": 0.25,
+      "slug": "brain_rules_cell_0",
+      "wrap": "repeat",
+    },
+    {
+      "filter": "nearest",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_brainxrulesx0xc3_bornMask;
+uniform float u_p_brainxrulesx0xc3_surviveMask;
+uniform float u_p_brainxrulesx0xc3_states;
+uniform float u_p_brainxrulesx0xc3_rate;
+uniform float u_p_brainxrulesx0xc3_reset;
+uniform float u_p_brainxrulesx0xc3_density;
+uniform float u_p_brainxrulesx0xc3_seed;
+uniform float u_p_brainxrulesx0xc3_paint;
+uniform float u_p_brainxrulesx0xc3_brushRadius;
+uniform float u_p_brainxrulesx0xc3_brushState;
+uniform float u_p_brainxrulesx0xc3_brushFill;
+uniform float u_p_brainxrulesx0xc3_afterglow;
+uniform float u_p_brainxrulesx0xc3_ageRate;
+uniform float u_p_brainxrulesx0xc3_ageFade;
+uniform vec3 u_p_brainxrulesx0xc3_color0;
+uniform vec3 u_p_brainxrulesx0xc3_color1;
+uniform vec3 u_p_brainxrulesx0xc3_color2;
+uniform vec3 u_p_brainxrulesx0xc3_color3;
+uniform vec3 u_p_brainxrulesx0xc3_glowColor;
+uniform vec3 u_p_brainxrulesx0xc3_oldColor;
+uniform sampler2D u_pass_brain_rules_cell_0;
+uniform vec2 u_pass_brain_rules_cell_0_px;
+uniform sampler2D u_passprev_brain_rules_cell_0;
+uniform vec2 u_passprev_brain_rules_cell_0_px;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Grid Rules, Stages: Brian's Brain (Generations /2/3) on a ¼-size board (480 × 270 cells), one step a frame.
+    // On cells are pale blue, the dying stage deep blue. Its Texture output (the coloured board as a texture: one more small pass) feeds the Glow.
+    vec4 brain_rules_0_c3_b = texture2D(u_pass_brain_rules_cell_0, vUv);
+    float brain_rules_0_c3_st = floor(brain_rules_0_c3_b.r + 0.5);
+    float brain_rules_0_c3_age = clamp(brain_rules_0_c3_b.g, 0.0, 1.0);
+    float brain_rules_0_c3_N = max(floor(u_p_brainxrulesx0xc3_states + 0.5), 2.0);
+    vec3 brain_rules_0_c3_col = brain_rules_0_c3_st < 0.5 ? mix(u_p_brainxrulesx0xc3_color0, u_p_brainxrulesx0xc3_glowColor, brain_rules_0_c3_age) : (brain_rules_0_c3_st < 1.5 ? mix(u_p_brainxrulesx0xc3_color1, u_p_brainxrulesx0xc3_oldColor, clamp(u_p_brainxrulesx0xc3_ageFade * brain_rules_0_c3_age, 0.0, 1.0)) : mix(u_p_brainxrulesx0xc3_color2, u_p_brainxrulesx0xc3_color3, clamp((brain_rules_0_c3_st - 2.0) / max(brain_rules_0_c3_N - 3.0, 1.0), 0.0, 1.0)));
+    float brain_rules_0_c3_val = brain_rules_0_c3_st / max(brain_rules_0_c3_N - 1.0, 1.0);
+    float brain_rules_0_c3_alive = step(0.5, brain_rules_0_c3_st) - step(1.5, brain_rules_0_c3_st);
+    gl_FragColor = vec4(brain_rules_0_c3_col, 1.0);
+}",
+      "label": "Brain rules picture",
+      "live": true,
+      "nodeId": "brain__pic",
+      "nodeIds": [
+        "brain__picview",
+        "brain",
+      ],
+      "previous": false,
+      "reads": [
+        "brain_rules_cell_0",
+      ],
+      "readsPrevious": [],
+      "scale": 0.25,
+      "slug": "brain_rules_pict_0",
+      "wrap": "clamp",
+    },
+    {
+      "filter": "linear",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_brainxrulesx0xc3_bornMask;
+uniform float u_p_brainxrulesx0xc3_surviveMask;
+uniform float u_p_brainxrulesx0xc3_states;
+uniform float u_p_brainxrulesx0xc3_rate;
+uniform float u_p_brainxrulesx0xc3_reset;
+uniform float u_p_brainxrulesx0xc3_density;
+uniform float u_p_brainxrulesx0xc3_seed;
+uniform float u_p_brainxrulesx0xc3_paint;
+uniform float u_p_brainxrulesx0xc3_brushRadius;
+uniform float u_p_brainxrulesx0xc3_brushState;
+uniform float u_p_brainxrulesx0xc3_brushFill;
+uniform float u_p_brainxrulesx0xc3_afterglow;
+uniform float u_p_brainxrulesx0xc3_ageRate;
+uniform float u_p_brainxrulesx0xc3_ageFade;
+uniform vec3 u_p_brainxrulesx0xc3_color0;
+uniform vec3 u_p_brainxrulesx0xc3_color1;
+uniform vec3 u_p_brainxrulesx0xc3_color2;
+uniform vec3 u_p_brainxrulesx0xc3_color3;
+uniform vec3 u_p_brainxrulesx0xc3_glowColor;
+uniform vec3 u_p_brainxrulesx0xc3_oldColor;
+uniform float u_p_tglowx0_radius;
+uniform float u_p_tglowx0_threshold;
+uniform float u_p_tglowx0_knee;
+uniform sampler2D u_pass_brain_rules_pict_0;
+uniform vec2 u_pass_brain_rules_pict_0_px;
+uniform sampler2D u_passprev_brain_rules_pict_0;
+uniform vec2 u_passprev_brain_rules_pict_0_px;
+uniform sampler2D u_pass_brain_rules_cell_0;
+uniform vec2 u_pass_brain_rules_cell_0_px;
+uniform sampler2D u_passprev_brain_rules_cell_0;
+uniform vec2 u_passprev_brain_rules_cell_0_px;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+
+
+vec3 blKeep(vec3 c, float thr, float knee) { return c * smoothstep(thr, thr + max(knee, 1e-4), dot(c, vec3(0.299, 0.587, 0.114))); }
+
+
+vec4 blKeep4(vec4 c, float thr, float knee) { return vec4(blKeep(c.rgb, thr, knee), c.a); }
+
+
+float blKarisW(vec4 c) { return 1.0 / (1.0 + dot(c.rgb, vec3(0.299, 0.587, 0.114))); }
+
+
+
+
+
+
+
+
+vec4 blDown13Keep(sampler2D s, vec2 uv, vec2 t, float thr, float knee) {
+  vec4 a = blKeep4(texture2D(s, uv + t * vec2(-2.0, 2.0)), thr, knee);
+  vec4 b = blKeep4(texture2D(s, uv + t * vec2(0.0, 2.0)), thr, knee);
+  vec4 c = blKeep4(texture2D(s, uv + t * vec2(2.0, 2.0)), thr, knee);
+  vec4 d = blKeep4(texture2D(s, uv + t * vec2(-2.0, 0.0)), thr, knee);
+  vec4 e = blKeep4(texture2D(s, uv), thr, knee);
+  vec4 f = blKeep4(texture2D(s, uv + t * vec2(2.0, 0.0)), thr, knee);
+  vec4 g = blKeep4(texture2D(s, uv + t * vec2(-2.0, -2.0)), thr, knee);
+  vec4 h = blKeep4(texture2D(s, uv + t * vec2(0.0, -2.0)), thr, knee);
+  vec4 i = blKeep4(texture2D(s, uv + t * vec2(2.0, -2.0)), thr, knee);
+  vec4 j = blKeep4(texture2D(s, uv + t * vec2(-1.0, 1.0)), thr, knee);
+  vec4 k = blKeep4(texture2D(s, uv + t * vec2(1.0, 1.0)), thr, knee);
+  vec4 l = blKeep4(texture2D(s, uv + t * vec2(-1.0, -1.0)), thr, knee);
+  vec4 m = blKeep4(texture2D(s, uv + t * vec2(1.0, -1.0)), thr, knee);
+  // Karis average (Jimenez 2014): each of the five 2×2 boxes weighed by 1 / (1 + luma), so one blazing texel can't flicker.
+  vec4 b0 = (j + k + l + m) * 0.25, b1 = (a + b + d + e) * 0.25, b2 = (b + c + e + f) * 0.25, b3 = (d + e + g + h) * 0.25, b4 = (e + f + h + i) * 0.25;
+  float w0 = 0.5 * blKarisW(b0), w1 = 0.125 * blKarisW(b1), w2 = 0.125 * blKarisW(b2), w3 = 0.125 * blKarisW(b3), w4 = 0.125 * blKarisW(b4);
+  return (b0 * w0 + b1 * w1 + b2 * w2 + b3 * w3 + b4 * w4) / (w0 + w1 + w2 + w3 + w4);
+}
+
+
+
+
+
+
+
+
+
+
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Grid Rules, Stages: Brian's Brain (Generations /2/3) on a ¼-size board (480 × 270 cells), one step a frame.
+    // On cells are pale blue, the dying stage deep blue. Its Texture output (the coloured board as a texture: one more small pass) feeds the Glow.
+    vec4 brain_rules_0_c3_b = texture2D(u_pass_brain_rules_cell_0, vUv);
+    float brain_rules_0_c3_st = floor(brain_rules_0_c3_b.r + 0.5);
+    float brain_rules_0_c3_age = clamp(brain_rules_0_c3_b.g, 0.0, 1.0);
+    float brain_rules_0_c3_N = max(floor(u_p_brainxrulesx0xc3_states + 0.5), 2.0);
+    vec3 brain_rules_0_c3_col = brain_rules_0_c3_st < 0.5 ? mix(u_p_brainxrulesx0xc3_color0, u_p_brainxrulesx0xc3_glowColor, brain_rules_0_c3_age) : (brain_rules_0_c3_st < 1.5 ? mix(u_p_brainxrulesx0xc3_color1, u_p_brainxrulesx0xc3_oldColor, clamp(u_p_brainxrulesx0xc3_ageFade * brain_rules_0_c3_age, 0.0, 1.0)) : mix(u_p_brainxrulesx0xc3_color2, u_p_brainxrulesx0xc3_color3, clamp((brain_rules_0_c3_st - 2.0) / max(brain_rules_0_c3_N - 3.0, 1.0), 0.0, 1.0)));
+    float brain_rules_0_c3_val = brain_rules_0_c3_st / max(brain_rules_0_c3_N - 1.0, 1.0);
+    float brain_rules_0_c3_alive = step(0.5, brain_rules_0_c3_st) - step(1.5, brain_rules_0_c3_st);
+    // Glow (texture): the bright on cells, spread into a soft light (a bloom chain on the board's Texture).
+    vec4 tglow_0_o = blDown13Keep(u_pass_brain_rules_pict_0, vUv, (u_pass_brain_rules_pict_0_px / 1.0), u_p_tglowx0_threshold, u_p_tglowx0_knee);
+    gl_FragColor = vec4(tglow_0_o.rgb, tglow_0_o.a);
+}",
+      "hidden": true,
+      "label": "Glow (texture) · down ½",
+      "live": true,
+      "nodeId": "glow",
+      "nodeIds": [],
+      "previous": false,
+      "reads": [
+        "brain_rules_pict_0",
+        "brain_rules_cell_0",
+      ],
+      "readsPrevious": [],
+      "scale": 0.5,
+      "slug": "tglow_0Bld1",
+      "wrap": "clamp",
+    },
+    {
+      "filter": "linear",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_tglowx0_radius;
+uniform float u_p_tglowx0_threshold;
+uniform float u_p_tglowx0_knee;
+uniform sampler2D u_pass_tglow_0Bld1;
+uniform vec2 u_pass_tglow_0Bld1_px;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+vec4 blDown13(sampler2D s, vec2 uv, vec2 t) {
+  vec4 a = texture2D(s, uv + t * vec2(-2.0, 2.0));
+  vec4 b = texture2D(s, uv + t * vec2(0.0, 2.0));
+  vec4 c = texture2D(s, uv + t * vec2(2.0, 2.0));
+  vec4 d = texture2D(s, uv + t * vec2(-2.0, 0.0));
+  vec4 e = texture2D(s, uv);
+  vec4 f = texture2D(s, uv + t * vec2(2.0, 0.0));
+  vec4 g = texture2D(s, uv + t * vec2(-2.0, -2.0));
+  vec4 h = texture2D(s, uv + t * vec2(0.0, -2.0));
+  vec4 i = texture2D(s, uv + t * vec2(2.0, -2.0));
+  vec4 j = texture2D(s, uv + t * vec2(-1.0, 1.0));
+  vec4 k = texture2D(s, uv + t * vec2(1.0, 1.0));
+  vec4 l = texture2D(s, uv + t * vec2(-1.0, -1.0));
+  vec4 m = texture2D(s, uv + t * vec2(1.0, -1.0));
+  return e * 0.125 + (a + c + g + i) * 0.03125 + (b + d + f + h) * 0.0625 + (j + k + l + m) * 0.125;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Glow (texture): the bright on cells, spread into a soft light (a bloom chain on the board's Texture).
+    vec4 tglow_0_o = blDown13(u_pass_tglow_0Bld1, vUv, (u_pass_tglow_0Bld1_px / 0.5));
+    gl_FragColor = vec4(tglow_0_o.rgb, tglow_0_o.a);
+}",
+      "hidden": true,
+      "label": "Glow (texture) · down ¼",
+      "live": true,
+      "nodeId": "glow",
+      "nodeIds": [],
+      "previous": false,
+      "reads": [
+        "tglow_0Bld1",
+      ],
+      "readsPrevious": [],
+      "scale": 0.25,
+      "slug": "tglow_0Bld2",
+      "wrap": "clamp",
+    },
+    {
+      "filter": "linear",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_tglowx0_radius;
+uniform float u_p_tglowx0_threshold;
+uniform float u_p_tglowx0_knee;
+uniform sampler2D u_pass_tglow_0Bld2;
+uniform vec2 u_pass_tglow_0Bld2_px;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+vec4 blDown13(sampler2D s, vec2 uv, vec2 t) {
+  vec4 a = texture2D(s, uv + t * vec2(-2.0, 2.0));
+  vec4 b = texture2D(s, uv + t * vec2(0.0, 2.0));
+  vec4 c = texture2D(s, uv + t * vec2(2.0, 2.0));
+  vec4 d = texture2D(s, uv + t * vec2(-2.0, 0.0));
+  vec4 e = texture2D(s, uv);
+  vec4 f = texture2D(s, uv + t * vec2(2.0, 0.0));
+  vec4 g = texture2D(s, uv + t * vec2(-2.0, -2.0));
+  vec4 h = texture2D(s, uv + t * vec2(0.0, -2.0));
+  vec4 i = texture2D(s, uv + t * vec2(2.0, -2.0));
+  vec4 j = texture2D(s, uv + t * vec2(-1.0, 1.0));
+  vec4 k = texture2D(s, uv + t * vec2(1.0, 1.0));
+  vec4 l = texture2D(s, uv + t * vec2(-1.0, -1.0));
+  vec4 m = texture2D(s, uv + t * vec2(1.0, -1.0));
+  return e * 0.125 + (a + c + g + i) * 0.03125 + (b + d + f + h) * 0.0625 + (j + k + l + m) * 0.125;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Glow (texture): the bright on cells, spread into a soft light (a bloom chain on the board's Texture).
+    vec4 tglow_0_o = blDown13(u_pass_tglow_0Bld2, vUv, (u_pass_tglow_0Bld2_px / 0.25));
+    gl_FragColor = vec4(tglow_0_o.rgb, tglow_0_o.a);
+}",
+      "hidden": true,
+      "label": "Glow (texture) · down ⅛",
+      "live": true,
+      "nodeId": "glow",
+      "nodeIds": [],
+      "previous": false,
+      "reads": [
+        "tglow_0Bld2",
+      ],
+      "readsPrevious": [],
+      "scale": 0.125,
+      "slug": "tglow_0Bld3",
+      "wrap": "clamp",
+    },
+    {
+      "filter": "linear",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_tglowx0_radius;
+uniform float u_p_tglowx0_threshold;
+uniform float u_p_tglowx0_knee;
+uniform sampler2D u_pass_tglow_0Bld3;
+uniform vec2 u_pass_tglow_0Bld3_px;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+vec4 blDown13(sampler2D s, vec2 uv, vec2 t) {
+  vec4 a = texture2D(s, uv + t * vec2(-2.0, 2.0));
+  vec4 b = texture2D(s, uv + t * vec2(0.0, 2.0));
+  vec4 c = texture2D(s, uv + t * vec2(2.0, 2.0));
+  vec4 d = texture2D(s, uv + t * vec2(-2.0, 0.0));
+  vec4 e = texture2D(s, uv);
+  vec4 f = texture2D(s, uv + t * vec2(2.0, 0.0));
+  vec4 g = texture2D(s, uv + t * vec2(-2.0, -2.0));
+  vec4 h = texture2D(s, uv + t * vec2(0.0, -2.0));
+  vec4 i = texture2D(s, uv + t * vec2(2.0, -2.0));
+  vec4 j = texture2D(s, uv + t * vec2(-1.0, 1.0));
+  vec4 k = texture2D(s, uv + t * vec2(1.0, 1.0));
+  vec4 l = texture2D(s, uv + t * vec2(-1.0, -1.0));
+  vec4 m = texture2D(s, uv + t * vec2(1.0, -1.0));
+  return e * 0.125 + (a + c + g + i) * 0.03125 + (b + d + f + h) * 0.0625 + (j + k + l + m) * 0.125;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Glow (texture): the bright on cells, spread into a soft light (a bloom chain on the board's Texture).
+    vec4 tglow_0_o = blDown13(u_pass_tglow_0Bld3, vUv, (u_pass_tglow_0Bld3_px / 0.125));
+    gl_FragColor = vec4(tglow_0_o.rgb, tglow_0_o.a);
+}",
+      "hidden": true,
+      "label": "Glow (texture) · down 1/16",
+      "live": true,
+      "nodeId": "glow",
+      "nodeIds": [],
+      "previous": false,
+      "reads": [
+        "tglow_0Bld3",
+      ],
+      "readsPrevious": [],
+      "scale": 0.0625,
+      "slug": "tglow_0Bld4",
+      "wrap": "clamp",
+    },
+    {
+      "filter": "linear",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_tglowx0_radius;
+uniform float u_p_tglowx0_threshold;
+uniform float u_p_tglowx0_knee;
+uniform sampler2D u_pass_tglow_0Bld3;
+uniform vec2 u_pass_tglow_0Bld3_px;
+uniform sampler2D u_pass_tglow_0Bld4;
+uniform vec2 u_pass_tglow_0Bld4_px;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+
+
+
+
+vec4 blTent(sampler2D s, vec2 uv, vec2 t) {
+  vec4 r = texture2D(s, uv) * 4.0;
+  r += (texture2D(s, uv + vec2(t.x, 0.0)) + texture2D(s, uv - vec2(t.x, 0.0)) + texture2D(s, uv + vec2(0.0, t.y)) + texture2D(s, uv - vec2(0.0, t.y))) * 2.0;
+  r += texture2D(s, uv + t) + texture2D(s, uv - t) + texture2D(s, uv + vec2(t.x, -t.y)) + texture2D(s, uv + vec2(-t.x, t.y));
+  return r / 16.0;
+}
+
+
+
+
+
+
+
+
+float blBloomW(float radius, float srcScale, float k) {
+  if (k <= 1.0) return 1.0;
+  return clamp(log2(max(radius, 1.0) * srcScale / 4.0) - k + 2.0, 0.0, 1.0);
+}
+
+
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Glow (texture): the bright on cells, spread into a soft light (a bloom chain on the board's Texture).
+    vec4 tglow_0_o = texture2D(u_pass_tglow_0Bld3, vUv) * blBloomW(u_p_tglowx0_radius, 1.0, 3.0) + blTent(u_pass_tglow_0Bld4, vUv, (u_pass_tglow_0Bld4_px / 0.0625)) * blBloomW(u_p_tglowx0_radius, 1.0, 4.0);
+    gl_FragColor = vec4(tglow_0_o.rgb, tglow_0_o.a);
+}",
+      "hidden": true,
+      "label": "Glow (texture) · up ⅛",
+      "live": true,
+      "nodeId": "glow",
+      "nodeIds": [],
+      "previous": false,
+      "reads": [
+        "tglow_0Bld3",
+        "tglow_0Bld4",
+      ],
+      "readsPrevious": [],
+      "scale": 0.125,
+      "slug": "tglow_0Blu3",
+      "wrap": "clamp",
+    },
+    {
+      "filter": "linear",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_tglowx0_radius;
+uniform float u_p_tglowx0_threshold;
+uniform float u_p_tglowx0_knee;
+uniform sampler2D u_pass_tglow_0Bld2;
+uniform vec2 u_pass_tglow_0Bld2_px;
+uniform sampler2D u_pass_tglow_0Blu3;
+uniform vec2 u_pass_tglow_0Blu3_px;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+
+
+
+
+vec4 blTent(sampler2D s, vec2 uv, vec2 t) {
+  vec4 r = texture2D(s, uv) * 4.0;
+  r += (texture2D(s, uv + vec2(t.x, 0.0)) + texture2D(s, uv - vec2(t.x, 0.0)) + texture2D(s, uv + vec2(0.0, t.y)) + texture2D(s, uv - vec2(0.0, t.y))) * 2.0;
+  r += texture2D(s, uv + t) + texture2D(s, uv - t) + texture2D(s, uv + vec2(t.x, -t.y)) + texture2D(s, uv + vec2(-t.x, t.y));
+  return r / 16.0;
+}
+
+
+
+
+
+
+
+
+float blBloomW(float radius, float srcScale, float k) {
+  if (k <= 1.0) return 1.0;
+  return clamp(log2(max(radius, 1.0) * srcScale / 4.0) - k + 2.0, 0.0, 1.0);
+}
+
+
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Glow (texture): the bright on cells, spread into a soft light (a bloom chain on the board's Texture).
+    vec4 tglow_0_o = texture2D(u_pass_tglow_0Bld2, vUv) * blBloomW(u_p_tglowx0_radius, 1.0, 2.0) + blTent(u_pass_tglow_0Blu3, vUv, (u_pass_tglow_0Blu3_px / 0.125));
+    gl_FragColor = vec4(tglow_0_o.rgb, tglow_0_o.a);
+}",
+      "hidden": true,
+      "label": "Glow (texture) · up ¼",
+      "live": true,
+      "nodeId": "glow",
+      "nodeIds": [],
+      "previous": false,
+      "reads": [
+        "tglow_0Bld2",
+        "tglow_0Blu3",
+      ],
+      "readsPrevious": [],
+      "scale": 0.25,
+      "slug": "tglow_0Blu2",
+      "wrap": "clamp",
+    },
+    {
+      "filter": "linear",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_tglowx0_radius;
+uniform float u_p_tglowx0_threshold;
+uniform float u_p_tglowx0_knee;
+uniform sampler2D u_pass_tglow_0Bld1;
+uniform vec2 u_pass_tglow_0Bld1_px;
+uniform sampler2D u_pass_tglow_0Blu2;
+uniform vec2 u_pass_tglow_0Blu2_px;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+
+
+
+
+vec4 blTent(sampler2D s, vec2 uv, vec2 t) {
+  vec4 r = texture2D(s, uv) * 4.0;
+  r += (texture2D(s, uv + vec2(t.x, 0.0)) + texture2D(s, uv - vec2(t.x, 0.0)) + texture2D(s, uv + vec2(0.0, t.y)) + texture2D(s, uv - vec2(0.0, t.y))) * 2.0;
+  r += texture2D(s, uv + t) + texture2D(s, uv - t) + texture2D(s, uv + vec2(t.x, -t.y)) + texture2D(s, uv + vec2(-t.x, t.y));
+  return r / 16.0;
+}
+
+
+
+
+
+
+
+
+float blBloomW(float radius, float srcScale, float k) {
+  if (k <= 1.0) return 1.0;
+  return clamp(log2(max(radius, 1.0) * srcScale / 4.0) - k + 2.0, 0.0, 1.0);
+}
+
+
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Glow (texture): the bright on cells, spread into a soft light (a bloom chain on the board's Texture).
+    vec4 tglow_0_o = texture2D(u_pass_tglow_0Bld1, vUv) * blBloomW(u_p_tglowx0_radius, 1.0, 1.0) + blTent(u_pass_tglow_0Blu2, vUv, (u_pass_tglow_0Blu2_px / 0.25));
+    gl_FragColor = vec4(tglow_0_o.rgb, tglow_0_o.a);
+}",
+      "hidden": true,
+      "label": "Glow (texture) · up ½",
+      "live": true,
+      "nodeId": "glow",
+      "nodeIds": [],
+      "previous": false,
+      "reads": [
+        "tglow_0Bld1",
+        "tglow_0Blu2",
+      ],
+      "readsPrevious": [],
+      "scale": 0.5,
+      "slug": "tglow_0Blu1",
+      "wrap": "clamp",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > gridRulesCave 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0dc6bb07a4c21b0b3f35e6235122:3490",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "17fbd2f5facb2b19bd7cd7b5e80d:114",
+  "paramBindings": "07a37e0358a498183914348be9b1:831",
+  "paramUniforms": [
+    "u_p_cavexrulesx0xc2_afterglow",
+    "u_p_cavexrulesx0xc2_ageFade",
+    "u_p_cavexrulesx0xc2_ageRate",
+    "u_p_cavexrulesx0xc2_bornMask",
+    "u_p_cavexrulesx0xc2_brushFill",
+    "u_p_cavexrulesx0xc2_brushRadius",
+    "u_p_cavexrulesx0xc2_brushState",
+    "u_p_cavexrulesx0xc2_color0",
+    "u_p_cavexrulesx0xc2_color1",
+    "u_p_cavexrulesx0xc2_density",
+    "u_p_cavexrulesx0xc2_glowColor",
+    "u_p_cavexrulesx0xc2_oldColor",
+    "u_p_cavexrulesx0xc2_paint",
+    "u_p_cavexrulesx0xc2_rate",
+    "u_p_cavexrulesx0xc2_reset",
+    "u_p_cavexrulesx0xc2_seed",
+    "u_p_cavexrulesx0xc2_surviveMask",
+  ],
+  "paramValues": "09c5ebf4d00ada01d019a7daced2:651",
+  "passes": [
+    {
+      "filter": "nearest",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_cavexrulesx0xc2_bornMask;
+uniform float u_p_cavexrulesx0xc2_surviveMask;
+uniform float u_p_cavexrulesx0xc2_rate;
+uniform float u_p_cavexrulesx0xc2_reset;
+uniform float u_p_cavexrulesx0xc2_density;
+uniform float u_p_cavexrulesx0xc2_seed;
+uniform float u_p_cavexrulesx0xc2_paint;
+uniform float u_p_cavexrulesx0xc2_brushRadius;
+uniform float u_p_cavexrulesx0xc2_brushState;
+uniform float u_p_cavexrulesx0xc2_brushFill;
+uniform float u_p_cavexrulesx0xc2_afterglow;
+uniform float u_p_cavexrulesx0xc2_ageRate;
+uniform float u_p_cavexrulesx0xc2_ageFade;
+uniform vec3 u_p_cavexrulesx0xc2_color0;
+uniform vec3 u_p_cavexrulesx0xc2_color1;
+uniform vec3 u_p_cavexrulesx0xc2_glowColor;
+uniform vec3 u_p_cavexrulesx0xc2_oldColor;
+uniform sampler2D u_pass_cave_rules_cells_0;
+uniform vec2 u_pass_cave_rules_cells_0_px;
+uniform sampler2D u_passprev_cave_rules_cells_0;
+uniform vec2 u_passprev_cave_rules_cells_0_px;
+uniform vec2 u_passiter_cave_rules_cells_0;
+uniform float u_mousebtn;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+float grHash(vec3 p) {
+    vec3 p3 = fract(p * 0.1031);
+    p3 = p3 + dot(p3, vec3(p3.z, p3.y, p3.x) + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Grid Rules, Count: the 4-5 rule. A cell is rock when 5 or more of its 3 × 3 block (itself too) are rock: as a Life-like rule that is born with 5–8 rock neighbours and survives with 4–8.
+    // Steps a frame 8 (the board Pass's Repeat): a new map is smoothed within a frame, then holds. Walls keep the edge open. Afterglow shades where rock was just dug away.
+    // The brush paints 0: dig tunnels.
+    vec2 cave_rules_0_c2_res = u_resolution;
+    vec2 cave_rules_0_c2_cell = floor(gl_FragCoord.xy);
+    vec4 cave_rules_0_c2_me = texture2D(u_passprev_cave_rules_cells_0, (cave_rules_0_c2_cell + vec2(0.0) + 0.5) / cave_rules_0_c2_res);
+    float cave_rules_0_c2_fresh = (abs(cave_rules_0_c2_me.a - 2.0) > 0.5 || u_p_cavexrulesx0xc2_reset > 0.5) ? 1.0 : 0.0;
+    float cave_rules_0_c2_tick = 1.0;
+    float cave_rules_0_c2_phase = 0.0;
+    float cave_rules_0_c2_h = grHash(vec3(cave_rules_0_c2_cell, mod(floor(u_time * 60.0), 997.0) + u_p_cavexrulesx0xc2_seed * 1013.0 + 1.0));
+    vec2 cave_rules_0_c2_m = u_mouse * 0.125;
+    float cave_rules_0_c2_in = (length(cave_rules_0_c2_cell + 0.5 - cave_rules_0_c2_m) < u_p_cavexrulesx0xc2_brushRadius ? 1.0 : 0.0) * max(step(0.5, u_mousebtn), step(0.5, u_p_cavexrulesx0xc2_paint));
+    float cave_rules_0_c2_s = floor(cave_rules_0_c2_me.r + 0.5);
+    float cave_rules_0_c2_g = cave_rules_0_c2_me.g;
+    float cave_rules_0_c2_cnt = 0.0;
+    float cave_rules_0_c2_q = 0.0;
+    cave_rules_0_c2_q = texture2D(u_passprev_cave_rules_cells_0, (cave_rules_0_c2_cell + vec2(0.0, 1.0) + 0.5) / cave_rules_0_c2_res).r;
+    cave_rules_0_c2_cnt += (step(0.5, cave_rules_0_c2_q) - step(1.5, cave_rules_0_c2_q));
+    cave_rules_0_c2_q = texture2D(u_passprev_cave_rules_cells_0, (cave_rules_0_c2_cell + vec2(1.0, 1.0) + 0.5) / cave_rules_0_c2_res).r;
+    cave_rules_0_c2_cnt += (step(0.5, cave_rules_0_c2_q) - step(1.5, cave_rules_0_c2_q));
+    cave_rules_0_c2_q = texture2D(u_passprev_cave_rules_cells_0, (cave_rules_0_c2_cell + vec2(1.0, 0.0) + 0.5) / cave_rules_0_c2_res).r;
+    cave_rules_0_c2_cnt += (step(0.5, cave_rules_0_c2_q) - step(1.5, cave_rules_0_c2_q));
+    cave_rules_0_c2_q = texture2D(u_passprev_cave_rules_cells_0, (cave_rules_0_c2_cell + vec2(1.0, -1.0) + 0.5) / cave_rules_0_c2_res).r;
+    cave_rules_0_c2_cnt += (step(0.5, cave_rules_0_c2_q) - step(1.5, cave_rules_0_c2_q));
+    cave_rules_0_c2_q = texture2D(u_passprev_cave_rules_cells_0, (cave_rules_0_c2_cell + vec2(0.0, -1.0) + 0.5) / cave_rules_0_c2_res).r;
+    cave_rules_0_c2_cnt += (step(0.5, cave_rules_0_c2_q) - step(1.5, cave_rules_0_c2_q));
+    cave_rules_0_c2_q = texture2D(u_passprev_cave_rules_cells_0, (cave_rules_0_c2_cell + vec2(-1.0, -1.0) + 0.5) / cave_rules_0_c2_res).r;
+    cave_rules_0_c2_cnt += (step(0.5, cave_rules_0_c2_q) - step(1.5, cave_rules_0_c2_q));
+    cave_rules_0_c2_q = texture2D(u_passprev_cave_rules_cells_0, (cave_rules_0_c2_cell + vec2(-1.0, 0.0) + 0.5) / cave_rules_0_c2_res).r;
+    cave_rules_0_c2_cnt += (step(0.5, cave_rules_0_c2_q) - step(1.5, cave_rules_0_c2_q));
+    cave_rules_0_c2_q = texture2D(u_passprev_cave_rules_cells_0, (cave_rules_0_c2_cell + vec2(-1.0, 1.0) + 0.5) / cave_rules_0_c2_res).r;
+    cave_rules_0_c2_cnt += (step(0.5, cave_rules_0_c2_q) - step(1.5, cave_rules_0_c2_q));
+    float cave_rules_0_c2_born = mod(floor((u_p_cavexrulesx0xc2_bornMask + 0.5) / exp2(cave_rules_0_c2_cnt)), 2.0);
+    float cave_rules_0_c2_surv = mod(floor((u_p_cavexrulesx0xc2_surviveMask + 0.5) / exp2(cave_rules_0_c2_cnt)), 2.0);
+    float cave_rules_0_c2_top = 1.0;
+    float cave_rules_0_c2_next = (cave_rules_0_c2_s > 0.5 && cave_rules_0_c2_s < 1.5) ? cave_rules_0_c2_surv : cave_rules_0_c2_born;
+    float cave_rules_0_c2_ng = 0.0;
+    if (cave_rules_0_c2_next > 0.5 && cave_rules_0_c2_next < 1.5) cave_rules_0_c2_ng = (cave_rules_0_c2_s > 0.5 && cave_rules_0_c2_s < 1.5) ? min(1.0, cave_rules_0_c2_g + u_p_cavexrulesx0xc2_ageRate) : 0.0;
+    else if (cave_rules_0_c2_next < 0.5) cave_rules_0_c2_ng = cave_rules_0_c2_s > 0.5 ? u_p_cavexrulesx0xc2_afterglow : cave_rules_0_c2_g * u_p_cavexrulesx0xc2_afterglow;
+    if (cave_rules_0_c2_tick < 0.5) { cave_rules_0_c2_next = cave_rules_0_c2_s; cave_rules_0_c2_ng = cave_rules_0_c2_g; }
+    if (cave_rules_0_c2_fresh > 0.5) { cave_rules_0_c2_next = (cave_rules_0_c2_h < u_p_cavexrulesx0xc2_density ? 1.0 : 0.0); cave_rules_0_c2_ng = 0.0; }
+    float cave_rules_0_c2_roll = grHash(vec3(cave_rules_0_c2_cell + 0.5, mod(floor(u_time * 60.0), 997.0) + 7919.0));
+    if (cave_rules_0_c2_in > 0.5 && cave_rules_0_c2_roll < u_p_cavexrulesx0xc2_brushFill) { cave_rules_0_c2_next = clamp(floor(u_p_cavexrulesx0xc2_brushState + 0.5), 0.0, cave_rules_0_c2_top); cave_rules_0_c2_ng = 0.0; }
+    float cave_rules_0_c2_inside = step(0.5, cave_rules_0_c2_cell.x) * step(0.5, cave_rules_0_c2_cell.y) * step(cave_rules_0_c2_cell.x, cave_rules_0_c2_res.x - 1.5) * step(cave_rules_0_c2_cell.y, cave_rules_0_c2_res.y - 1.5);
+    cave_rules_0_c2_next = cave_rules_0_c2_next * cave_rules_0_c2_inside;
+    cave_rules_0_c2_ng = cave_rules_0_c2_ng * cave_rules_0_c2_inside;
+    vec3 cave_rules_0_c2_out = vec3(cave_rules_0_c2_next, cave_rules_0_c2_ng, cave_rules_0_c2_phase);
+    float cave_rules_0_c2_outA = 2.0;
+    gl_FragColor = vec4(cave_rules_0_c2_out, cave_rules_0_c2_outA);
+}",
+      "label": "Cave rules cells",
+      "live": true,
+      "nodeId": "cave__cells",
+      "nodeIds": [
+        "cave__step",
+        "cave",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "cave_rules_cells_0",
+      ],
+      "repeat": 8,
+      "scale": 0.125,
+      "slug": "cave_rules_cells_0",
+      "wrap": "clamp",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > gridRulesCrystal 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "01da2a354b31c009fa0e6af8e727:4130",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "087ded821133030e0d2f13ffdb5d:119",
+  "paramBindings": "087f518c5eeef91081a59c27e722:1091",
+  "paramUniforms": [
+    "u_p_frostxrulesx0xc2_afterglow",
+    "u_p_frostxrulesx0xc2_ageFade",
+    "u_p_frostxrulesx0xc2_ageRate",
+    "u_p_frostxrulesx0xc2_brushFill",
+    "u_p_frostxrulesx0xc2_brushRadius",
+    "u_p_frostxrulesx0xc2_brushState",
+    "u_p_frostxrulesx0xc2_color0",
+    "u_p_frostxrulesx0xc2_color1",
+    "u_p_frostxrulesx0xc2_color2",
+    "u_p_frostxrulesx0xc2_color3",
+    "u_p_frostxrulesx0xc2_color4",
+    "u_p_frostxrulesx0xc2_color5",
+    "u_p_frostxrulesx0xc2_color6",
+    "u_p_frostxrulesx0xc2_color7",
+    "u_p_frostxrulesx0xc2_density",
+    "u_p_frostxrulesx0xc2_glowColor",
+    "u_p_frostxrulesx0xc2_oldColor",
+    "u_p_frostxrulesx0xc2_paint",
+    "u_p_frostxrulesx0xc2_rate",
+    "u_p_frostxrulesx0xc2_reset",
+    "u_p_frostxrulesx0xc2_seed",
+    "u_p_frostxrulesx0xc2_states",
+  ],
+  "paramValues": "18e78d16efdba11d832439deab91:904",
+  "passes": [
+    {
+      "filter": "nearest",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_frostxrulesx0xc2_states;
+uniform float u_p_frostxrulesx0xc2_rate;
+uniform float u_p_frostxrulesx0xc2_reset;
+uniform float u_p_frostxrulesx0xc2_density;
+uniform float u_p_frostxrulesx0xc2_seed;
+uniform float u_p_frostxrulesx0xc2_paint;
+uniform float u_p_frostxrulesx0xc2_brushRadius;
+uniform float u_p_frostxrulesx0xc2_brushState;
+uniform float u_p_frostxrulesx0xc2_brushFill;
+uniform float u_p_frostxrulesx0xc2_afterglow;
+uniform float u_p_frostxrulesx0xc2_ageRate;
+uniform float u_p_frostxrulesx0xc2_ageFade;
+uniform vec3 u_p_frostxrulesx0xc2_color0;
+uniform vec3 u_p_frostxrulesx0xc2_color1;
+uniform vec3 u_p_frostxrulesx0xc2_color2;
+uniform vec3 u_p_frostxrulesx0xc2_color3;
+uniform vec3 u_p_frostxrulesx0xc2_color4;
+uniform vec3 u_p_frostxrulesx0xc2_color5;
+uniform vec3 u_p_frostxrulesx0xc2_color6;
+uniform vec3 u_p_frostxrulesx0xc2_color7;
+uniform vec3 u_p_frostxrulesx0xc2_glowColor;
+uniform vec3 u_p_frostxrulesx0xc2_oldColor;
+uniform sampler2D u_pass_frost_rules_cell_0;
+uniform vec2 u_pass_frost_rules_cell_0_px;
+uniform sampler2D u_passprev_frost_rules_cell_0;
+uniform vec2 u_passprev_frost_rules_cell_0_px;
+uniform float u_mousebtn;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+float grHash(vec3 p) {
+    vec3 p3 = fract(p * 0.1031);
+    p3 = p3 + dot(p3, vec3(p3.z, p3.y, p3.x) + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Grid Rules, Patterns: one rule. This cell empty (the stencil's middle), any neighbours, and exactly one of the 8 round it frozen (the rule's count): it freezes. Frozen cells stay frozen (no rule changes them).
+    // It starts from a sprinkle of seeds in the middle (Centre seed, Density 0.01). Age fade turns old frost blue, so the colour shows when each arm grew.
+    vec2 frost_rules_0_c2_res = u_resolution;
+    vec2 frost_rules_0_c2_cell = floor(gl_FragCoord.xy);
+    vec4 frost_rules_0_c2_me = texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(0.0) + 0.5) / frost_rules_0_c2_res);
+    float frost_rules_0_c2_fresh = (abs(frost_rules_0_c2_me.a - 29.0) > 0.5 || u_p_frostxrulesx0xc2_reset > 0.5) ? 1.0 : 0.0;
+    float frost_rules_0_c2_clk = (frost_rules_0_c2_fresh > 0.5 ? 0.0 : fract(frost_rules_0_c2_me.b)) + clamp(u_p_frostxrulesx0xc2_rate, 0.0, 1.0);
+    float frost_rules_0_c2_tick = step(1.0, frost_rules_0_c2_clk);
+    float frost_rules_0_c2_phase = frost_rules_0_c2_clk - frost_rules_0_c2_tick;
+    float frost_rules_0_c2_h = grHash(vec3(frost_rules_0_c2_cell, mod(floor(u_time * 60.0), 997.0) + u_p_frostxrulesx0xc2_seed * 1013.0 + 1.0));
+    vec2 frost_rules_0_c2_m = u_mouse * 0.25;
+    float frost_rules_0_c2_in = (length(frost_rules_0_c2_cell + 0.5 - frost_rules_0_c2_m) < u_p_frostxrulesx0xc2_brushRadius ? 1.0 : 0.0) * max(step(0.5, u_mousebtn), step(0.5, u_p_frostxrulesx0xc2_paint));
+    float frost_rules_0_c2_s = floor(frost_rules_0_c2_me.r + 0.5);
+    float frost_rules_0_c2_g = frost_rules_0_c2_me.g;
+    float frost_rules_0_c2_top = max(floor(u_p_frostxrulesx0xc2_states + 0.5), 2.0) - 1.0;
+    float frost_rules_0_c2_c0 = floor(texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(-1.0, 1.0) + 0.5) / frost_rules_0_c2_res).r + 0.5);
+    float frost_rules_0_c2_c1 = floor(texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(0.0, 1.0) + 0.5) / frost_rules_0_c2_res).r + 0.5);
+    float frost_rules_0_c2_c2 = floor(texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(1.0, 1.0) + 0.5) / frost_rules_0_c2_res).r + 0.5);
+    float frost_rules_0_c2_c3 = floor(texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(-1.0, 0.0) + 0.5) / frost_rules_0_c2_res).r + 0.5);
+    float frost_rules_0_c2_c4 = frost_rules_0_c2_s;
+    float frost_rules_0_c2_c5 = floor(texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(1.0, 0.0) + 0.5) / frost_rules_0_c2_res).r + 0.5);
+    float frost_rules_0_c2_c6 = floor(texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(-1.0, -1.0) + 0.5) / frost_rules_0_c2_res).r + 0.5);
+    float frost_rules_0_c2_c7 = floor(texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(0.0, -1.0) + 0.5) / frost_rules_0_c2_res).r + 0.5);
+    float frost_rules_0_c2_c8 = floor(texture2D(u_passprev_frost_rules_cell_0, (frost_rules_0_c2_cell + vec2(1.0, -1.0) + 0.5) / frost_rules_0_c2_res).r + 0.5);
+    float frost_rules_0_c2_k1 = (abs(frost_rules_0_c2_c0 - 1.0) < 0.5 ? 1.0 : 0.0) + (abs(frost_rules_0_c2_c1 - 1.0) < 0.5 ? 1.0 : 0.0) + (abs(frost_rules_0_c2_c2 - 1.0) < 0.5 ? 1.0 : 0.0) + (abs(frost_rules_0_c2_c3 - 1.0) < 0.5 ? 1.0 : 0.0) + (abs(frost_rules_0_c2_c5 - 1.0) < 0.5 ? 1.0 : 0.0) + (abs(frost_rules_0_c2_c6 - 1.0) < 0.5 ? 1.0 : 0.0) + (abs(frost_rules_0_c2_c7 - 1.0) < 0.5 ? 1.0 : 0.0) + (abs(frost_rules_0_c2_c8 - 1.0) < 0.5 ? 1.0 : 0.0);
+    float frost_rules_0_c2_next = frost_rules_0_c2_s;
+    if (((abs(frost_rules_0_c2_c4 - 0.0) < 0.5)) && frost_rules_0_c2_k1 > 0.5 && frost_rules_0_c2_k1 < 1.5) frost_rules_0_c2_next = 1.0;
+    frost_rules_0_c2_next = min(frost_rules_0_c2_next, frost_rules_0_c2_top);
+    float frost_rules_0_c2_ng = 0.0;
+    if (abs(frost_rules_0_c2_next - frost_rules_0_c2_s) < 0.5) frost_rules_0_c2_ng = frost_rules_0_c2_next > 0.5 ? min(1.0, frost_rules_0_c2_g + u_p_frostxrulesx0xc2_ageRate) : frost_rules_0_c2_g * u_p_frostxrulesx0xc2_afterglow;
+    else frost_rules_0_c2_ng = frost_rules_0_c2_next < 0.5 ? u_p_frostxrulesx0xc2_afterglow : 0.0;
+    if (frost_rules_0_c2_tick < 0.5) { frost_rules_0_c2_next = frost_rules_0_c2_s; frost_rules_0_c2_ng = frost_rules_0_c2_g; }
+    if (frost_rules_0_c2_fresh > 0.5) { frost_rules_0_c2_next = (length(frost_rules_0_c2_cell + 0.5 - frost_rules_0_c2_res * 0.5) < min(frost_rules_0_c2_res.x, frost_rules_0_c2_res.y) * 0.15 ? (frost_rules_0_c2_h < u_p_frostxrulesx0xc2_density ? 1.0 : 0.0) : 0.0); frost_rules_0_c2_ng = 0.0; }
+    float frost_rules_0_c2_roll = grHash(vec3(frost_rules_0_c2_cell + 0.5, mod(floor(u_time * 60.0), 997.0) + 7919.0));
+    if (frost_rules_0_c2_in > 0.5 && frost_rules_0_c2_roll < u_p_frostxrulesx0xc2_brushFill) { frost_rules_0_c2_next = clamp(floor(u_p_frostxrulesx0xc2_brushState + 0.5), 0.0, frost_rules_0_c2_top); frost_rules_0_c2_ng = 0.0; }
+    vec3 frost_rules_0_c2_out = vec3(frost_rules_0_c2_next, frost_rules_0_c2_ng, frost_rules_0_c2_phase);
+    float frost_rules_0_c2_outA = 29.0;
+    gl_FragColor = vec4(frost_rules_0_c2_out, frost_rules_0_c2_outA);
+}",
+      "label": "Frost rules cells",
+      "live": true,
+      "nodeId": "frost__cells",
+      "nodeIds": [
+        "frost__step",
+        "frost",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "frost_rules_cell_0",
+      ],
+      "scale": 0.25,
+      "slug": "frost_rules_cell_0",
+      "wrap": "repeat",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > gridRulesFire 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "07ac79e989f75d11d40babf021b6:3768",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "063e1b0bd5d56c09dd1982dbe0a5:114",
+  "paramBindings": "0c3512bd39ad1701a33aa8409b4a:1095",
+  "paramUniforms": [
+    "u_p_firexrulesx0xc2_brushRadius",
+    "u_p_firexrulesx0xc2_brushState",
+    "u_p_firexrulesx0xc2_color0",
+    "u_p_firexrulesx0xc2_color1",
+    "u_p_firexrulesx0xc2_color2",
+    "u_p_firexrulesx0xc2_color3",
+    "u_p_firexrulesx0xc2_damping",
+    "u_p_firexrulesx0xc2_decay",
+    "u_p_firexrulesx0xc2_density",
+    "u_p_firexrulesx0xc2_diffA",
+    "u_p_firexrulesx0xc2_diffB",
+    "u_p_firexrulesx0xc2_feed",
+    "u_p_firexrulesx0xc2_gain",
+    "u_p_firexrulesx0xc2_kill",
+    "u_p_firexrulesx0xc2_knobA",
+    "u_p_firexrulesx0xc2_knobB",
+    "u_p_firexrulesx0xc2_knobC",
+    "u_p_firexrulesx0xc2_knobD",
+    "u_p_firexrulesx0xc2_paint",
+    "u_p_firexrulesx0xc2_rate",
+    "u_p_firexrulesx0xc2_reset",
+    "u_p_firexrulesx0xc2_seed",
+    "u_p_firexrulesx0xc2_spread",
+    "u_p_firexrulesx0xc2_waveSpeed",
+  ],
+  "paramValues": "14c992f95e63640f18b96ae74a47:884",
+  "passes": [
+    {
+      "filter": "nearest",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_firexrulesx0xc2_spread;
+uniform float u_p_firexrulesx0xc2_decay;
+uniform float u_p_firexrulesx0xc2_waveSpeed;
+uniform float u_p_firexrulesx0xc2_damping;
+uniform float u_p_firexrulesx0xc2_feed;
+uniform float u_p_firexrulesx0xc2_kill;
+uniform float u_p_firexrulesx0xc2_diffA;
+uniform float u_p_firexrulesx0xc2_diffB;
+uniform float u_p_firexrulesx0xc2_knobA;
+uniform float u_p_firexrulesx0xc2_knobB;
+uniform float u_p_firexrulesx0xc2_knobC;
+uniform float u_p_firexrulesx0xc2_knobD;
+uniform float u_p_firexrulesx0xc2_rate;
+uniform float u_p_firexrulesx0xc2_reset;
+uniform float u_p_firexrulesx0xc2_density;
+uniform float u_p_firexrulesx0xc2_seed;
+uniform float u_p_firexrulesx0xc2_paint;
+uniform float u_p_firexrulesx0xc2_brushRadius;
+uniform float u_p_firexrulesx0xc2_brushState;
+uniform float u_p_firexrulesx0xc2_gain;
+uniform vec3 u_p_firexrulesx0xc2_color0;
+uniform vec3 u_p_firexrulesx0xc2_color1;
+uniform vec3 u_p_firexrulesx0xc2_color2;
+uniform vec3 u_p_firexrulesx0xc2_color3;
+uniform sampler2D u_pass_fire_rules_cells_0;
+uniform vec2 u_pass_fire_rules_cells_0_px;
+uniform sampler2D u_passprev_fire_rules_cells_0;
+uniform vec2 u_passprev_fire_rules_cells_0_px;
+uniform float u_mousebtn;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+float grHash(vec3 p) {
+    vec3 p3 = fract(p * 0.1031);
+    p3 = p3 + dot(p3, vec3(p3.z, p3.y, p3.x) + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Grid Rules, Smooth, Custom: the Drossel–Schwabl forest fire as one line. u is 0 (ground), 1 (a tree) or 2 (fire): fire burns out; a tree catches from fire beside it (with chance a) or from lightning (d); ground grows a tree with chance b × 0.02. v keeps a fading ember glow.
+    // The ramp colours u: ground dark, trees green, fire orange. The brush sets 2: click to light the forest.
+    vec2 fire_rules_0_c2_res = u_resolution;
+    vec2 fire_rules_0_c2_cell = floor(gl_FragCoord.xy);
+    vec4 fire_rules_0_c2_me = texture2D(u_passprev_fire_rules_cells_0, (fire_rules_0_c2_cell + vec2(0.0) + 0.5) / fire_rules_0_c2_res);
+    float fire_rules_0_c2_fresh = (abs(fire_rules_0_c2_me.a - 86.0) > 0.5 || u_p_firexrulesx0xc2_reset > 0.5) ? 1.0 : 0.0;
+    float fire_rules_0_c2_clk = (fire_rules_0_c2_fresh > 0.5 ? 0.0 : fract(fire_rules_0_c2_me.b)) + clamp(u_p_firexrulesx0xc2_rate, 0.0, 1.0);
+    float fire_rules_0_c2_tick = step(1.0, fire_rules_0_c2_clk);
+    float fire_rules_0_c2_phase = fire_rules_0_c2_clk - fire_rules_0_c2_tick;
+    float fire_rules_0_c2_h = grHash(vec3(fire_rules_0_c2_cell, mod(floor(u_time * 60.0), 997.0) + u_p_firexrulesx0xc2_seed * 1013.0 + 1.0));
+    vec2 fire_rules_0_c2_m = u_mouse * 0.25;
+    float fire_rules_0_c2_in = (length(fire_rules_0_c2_cell + 0.5 - fire_rules_0_c2_m) < u_p_firexrulesx0xc2_brushRadius ? 1.0 : 0.0) * max(step(0.5, u_mousebtn), step(0.5, u_p_firexrulesx0xc2_paint));
+    float fire_rules_0_c2_u = fire_rules_0_c2_me.r;
+    float fire_rules_0_c2_v = fire_rules_0_c2_me.g;
+    vec4 fire_rules_0_c2_rN = texture2D(u_passprev_fire_rules_cells_0, (fire_rules_0_c2_cell + vec2(0.0, 1.0) + 0.5) / fire_rules_0_c2_res);
+    vec4 fire_rules_0_c2_rNE = texture2D(u_passprev_fire_rules_cells_0, (fire_rules_0_c2_cell + vec2(1.0, 1.0) + 0.5) / fire_rules_0_c2_res);
+    vec4 fire_rules_0_c2_rE = texture2D(u_passprev_fire_rules_cells_0, (fire_rules_0_c2_cell + vec2(1.0, 0.0) + 0.5) / fire_rules_0_c2_res);
+    vec4 fire_rules_0_c2_rSE = texture2D(u_passprev_fire_rules_cells_0, (fire_rules_0_c2_cell + vec2(1.0, -1.0) + 0.5) / fire_rules_0_c2_res);
+    vec4 fire_rules_0_c2_rS = texture2D(u_passprev_fire_rules_cells_0, (fire_rules_0_c2_cell + vec2(0.0, -1.0) + 0.5) / fire_rules_0_c2_res);
+    vec4 fire_rules_0_c2_rSW = texture2D(u_passprev_fire_rules_cells_0, (fire_rules_0_c2_cell + vec2(-1.0, -1.0) + 0.5) / fire_rules_0_c2_res);
+    vec4 fire_rules_0_c2_rW = texture2D(u_passprev_fire_rules_cells_0, (fire_rules_0_c2_cell + vec2(-1.0, 0.0) + 0.5) / fire_rules_0_c2_res);
+    vec4 fire_rules_0_c2_rNW = texture2D(u_passprev_fire_rules_cells_0, (fire_rules_0_c2_cell + vec2(-1.0, 1.0) + 0.5) / fire_rules_0_c2_res);
+    float fire_rules_0_c2_edgeU = fire_rules_0_c2_rN.r + fire_rules_0_c2_rE.r + fire_rules_0_c2_rS.r + fire_rules_0_c2_rW.r;
+    float fire_rules_0_c2_edgeV = fire_rules_0_c2_rN.g + fire_rules_0_c2_rE.g + fire_rules_0_c2_rS.g + fire_rules_0_c2_rW.g;
+    float fire_rules_0_c2_cornU = fire_rules_0_c2_rNE.r + fire_rules_0_c2_rSE.r + fire_rules_0_c2_rSW.r + fire_rules_0_c2_rNW.r;
+    float fire_rules_0_c2_cornV = fire_rules_0_c2_rNE.g + fire_rules_0_c2_rSE.g + fire_rules_0_c2_rSW.g + fire_rules_0_c2_rNW.g;
+    float fire_rules_0_c2_lapU = 0.2 * fire_rules_0_c2_edgeU + 0.05 * fire_rules_0_c2_cornU - fire_rules_0_c2_u;
+    float fire_rules_0_c2_lapV = 0.2 * fire_rules_0_c2_edgeV + 0.05 * fire_rules_0_c2_cornV - fire_rules_0_c2_v;
+    float fire_rules_0_c2_nu = fire_rules_0_c2_u;
+    float fire_rules_0_c2_nv = fire_rules_0_c2_v;
+    {
+        float u = fire_rules_0_c2_u; float v = fire_rules_0_c2_v;
+        float avg_u = (fire_rules_0_c2_edgeU + fire_rules_0_c2_cornU) * 0.125; float avg_v = (fire_rules_0_c2_edgeV + fire_rules_0_c2_cornV) * 0.125;
+        float lap_u = fire_rules_0_c2_lapU; float lap_v = fire_rules_0_c2_lapV;
+        float n = fire_rules_0_c2_rN.r; float s = fire_rules_0_c2_rS.r; float e = fire_rules_0_c2_rE.r; float w = fire_rules_0_c2_rW.r;
+        float x = (fire_rules_0_c2_cell.x + 0.5) / fire_rules_0_c2_res.x; float y = (fire_rules_0_c2_cell.y + 0.5) / fire_rules_0_c2_res.y;
+        float t = u_time; float rnd = fire_rules_0_c2_h;
+        float a = u_p_firexrulesx0xc2_knobA; float b = u_p_firexrulesx0xc2_knobB; float c = u_p_firexrulesx0xc2_knobC; float d = u_p_firexrulesx0xc2_knobD;
+        fire_rules_0_c2_nu = clamp(u > 1.5 ? 0.0 : (u > 0.5 ? ((max(max(n, s), max(e, w)) > 1.5 && rnd < a) || rnd < d * 0.00001 ? 2.0 : 1.0) : (rnd < b * 0.02 ? 1.0 : 0.0)), -1000.0, 1000.0);
+        fire_rules_0_c2_nv = clamp(u > 1.5 ? 1.0 : v * 0.9, -1000.0, 1000.0);
+    }
+    if (fire_rules_0_c2_tick < 0.5) { fire_rules_0_c2_nu = fire_rules_0_c2_u; fire_rules_0_c2_nv = fire_rules_0_c2_v; }
+    if (fire_rules_0_c2_fresh > 0.5) { fire_rules_0_c2_nu = (fire_rules_0_c2_h < u_p_firexrulesx0xc2_density ? 1.0 : 0.0); fire_rules_0_c2_nv = 0.0; }
+    if (fire_rules_0_c2_in > 0.5) fire_rules_0_c2_nu = u_p_firexrulesx0xc2_brushState;
+    vec3 fire_rules_0_c2_out = vec3(fire_rules_0_c2_nu, fire_rules_0_c2_nv, fire_rules_0_c2_phase);
+    float fire_rules_0_c2_outA = 86.0;
+    gl_FragColor = vec4(fire_rules_0_c2_out, fire_rules_0_c2_outA);
+}",
+      "label": "Fire rules cells",
+      "live": true,
+      "nodeId": "fire__cells",
+      "nodeIds": [
+        "fire__step",
+        "fire",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "fire_rules_cells_0",
+      ],
+      "scale": 0.25,
+      "slug": "fire_rules_cells_0",
+      "wrap": "repeat",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > gridRulesGas 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "12c34b52e14a5b1325f761af8a7c:3995",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "09b40a2f8acd8f012ddc023a6095:108",
+  "paramBindings": "090bfab4ffd0610083d2766df3c0:1003",
+  "paramUniforms": [
+    "u_p_gasxrulesx0xc2_afterglow",
+    "u_p_gasxrulesx0xc2_ageFade",
+    "u_p_gasxrulesx0xc2_ageRate",
+    "u_p_gasxrulesx0xc2_brushFill",
+    "u_p_gasxrulesx0xc2_brushRadius",
+    "u_p_gasxrulesx0xc2_brushState",
+    "u_p_gasxrulesx0xc2_color0",
+    "u_p_gasxrulesx0xc2_color1",
+    "u_p_gasxrulesx0xc2_color2",
+    "u_p_gasxrulesx0xc2_color3",
+    "u_p_gasxrulesx0xc2_color4",
+    "u_p_gasxrulesx0xc2_color5",
+    "u_p_gasxrulesx0xc2_color6",
+    "u_p_gasxrulesx0xc2_color7",
+    "u_p_gasxrulesx0xc2_density",
+    "u_p_gasxrulesx0xc2_glowColor",
+    "u_p_gasxrulesx0xc2_oldColor",
+    "u_p_gasxrulesx0xc2_paint",
+    "u_p_gasxrulesx0xc2_rate",
+    "u_p_gasxrulesx0xc2_reset",
+    "u_p_gasxrulesx0xc2_seed",
+    "u_p_gasxrulesx0xc2_states",
+  ],
+  "paramValues": "0ef1bfe19a4bb500729a50f44e3c:855",
+  "passes": [
+    {
+      "filter": "nearest",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_gasxrulesx0xc2_states;
+uniform float u_p_gasxrulesx0xc2_rate;
+uniform float u_p_gasxrulesx0xc2_reset;
+uniform float u_p_gasxrulesx0xc2_density;
+uniform float u_p_gasxrulesx0xc2_seed;
+uniform float u_p_gasxrulesx0xc2_paint;
+uniform float u_p_gasxrulesx0xc2_brushRadius;
+uniform float u_p_gasxrulesx0xc2_brushState;
+uniform float u_p_gasxrulesx0xc2_brushFill;
+uniform float u_p_gasxrulesx0xc2_afterglow;
+uniform float u_p_gasxrulesx0xc2_ageRate;
+uniform float u_p_gasxrulesx0xc2_ageFade;
+uniform vec3 u_p_gasxrulesx0xc2_color0;
+uniform vec3 u_p_gasxrulesx0xc2_color1;
+uniform vec3 u_p_gasxrulesx0xc2_color2;
+uniform vec3 u_p_gasxrulesx0xc2_color3;
+uniform vec3 u_p_gasxrulesx0xc2_color4;
+uniform vec3 u_p_gasxrulesx0xc2_color5;
+uniform vec3 u_p_gasxrulesx0xc2_color6;
+uniform vec3 u_p_gasxrulesx0xc2_color7;
+uniform vec3 u_p_gasxrulesx0xc2_glowColor;
+uniform vec3 u_p_gasxrulesx0xc2_oldColor;
+uniform sampler2D u_pass_gas_rules_cells_0;
+uniform vec2 u_pass_gas_rules_cells_0_px;
+uniform sampler2D u_passprev_gas_rules_cells_0;
+uniform vec2 u_passprev_gas_rules_cells_0_px;
+uniform float u_mousebtn;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+float grHash(vec3 p) {
+    vec3 p3 = fract(p * 0.1031);
+    p3 = p3 + dot(p3, vec3(p3.z, p3.y, p3.x) + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Grid Rules, Blocks: the HPP lattice gas (Toffoli and Margolus). In each 2×2 block every particle moves to the opposite corner, except two meeting head-on, which leave at right angles. Four rules, each turned four ways.
+    // A ball of gas starts in the middle and spreads; Afterglow leaves faint trails. The board wraps, and no particle is ever lost.
+    vec2 gas_rules_0_c2_res = u_resolution;
+    vec2 gas_rules_0_c2_cell = floor(gl_FragCoord.xy);
+    vec4 gas_rules_0_c2_me = texture2D(u_passprev_gas_rules_cells_0, (gas_rules_0_c2_cell + vec2(0.0) + 0.5) / gas_rules_0_c2_res);
+    float gas_rules_0_c2_fresh = (abs(gas_rules_0_c2_me.a - 41.0) > 0.5 || u_p_gasxrulesx0xc2_reset > 0.5) ? 1.0 : 0.0;
+    float gas_rules_0_c2_clk = (gas_rules_0_c2_fresh > 0.5 ? 0.0 : fract(gas_rules_0_c2_me.b)) + clamp(u_p_gasxrulesx0xc2_rate, 0.0, 1.0);
+    float gas_rules_0_c2_tick = step(1.0, gas_rules_0_c2_clk);
+    float gas_rules_0_c2_phase = gas_rules_0_c2_clk - gas_rules_0_c2_tick;
+    float gas_rules_0_c2_h = grHash(vec3(gas_rules_0_c2_cell, mod(floor(u_time * 60.0), 997.0) + u_p_gasxrulesx0xc2_seed * 1013.0 + 1.0));
+    vec2 gas_rules_0_c2_m = u_mouse * 0.25;
+    float gas_rules_0_c2_in = (length(gas_rules_0_c2_cell + 0.5 - gas_rules_0_c2_m) < u_p_gasxrulesx0xc2_brushRadius ? 1.0 : 0.0) * max(step(0.5, u_mousebtn), step(0.5, u_p_gasxrulesx0xc2_paint));
+    float gas_rules_0_c2_s = floor(gas_rules_0_c2_me.r + 0.5);
+    float gas_rules_0_c2_g = gas_rules_0_c2_me.g;
+    float gas_rules_0_c2_top = max(floor(u_p_gasxrulesx0xc2_states + 0.5), 2.0) - 1.0;
+    float gas_rules_0_c2_par = step(1.5, gas_rules_0_c2_me.b);
+    vec2 gas_rules_0_c2_W = floor(gas_rules_0_c2_res * 0.5) * 2.0;
+    vec2 gas_rules_0_c2_org = floor((gas_rules_0_c2_cell - gas_rules_0_c2_par) * 0.5) * 2.0 + gas_rules_0_c2_par;
+    vec2 gas_rules_0_c2_q = gas_rules_0_c2_cell - gas_rules_0_c2_org;
+    float gas_rules_0_c2_qi = gas_rules_0_c2_q.x + (1.0 - gas_rules_0_c2_q.y) * 2.0;
+    float gas_rules_0_c2_live = step(gas_rules_0_c2_cell.x, gas_rules_0_c2_W.x - 0.5) * step(gas_rules_0_c2_cell.y, gas_rules_0_c2_W.y - 0.5);
+    vec2 gas_rules_0_c2_key = mod(gas_rules_0_c2_org, gas_rules_0_c2_W);
+    float gas_rules_0_c2_b0 = floor(texture2D(u_passprev_gas_rules_cells_0, (mod(gas_rules_0_c2_org + vec2(0.0, 1.0), gas_rules_0_c2_W) + 0.5) / gas_rules_0_c2_res).r + 0.5);
+    float gas_rules_0_c2_b1 = floor(texture2D(u_passprev_gas_rules_cells_0, (mod(gas_rules_0_c2_org + vec2(1.0, 1.0), gas_rules_0_c2_W) + 0.5) / gas_rules_0_c2_res).r + 0.5);
+    float gas_rules_0_c2_b2 = floor(texture2D(u_passprev_gas_rules_cells_0, (mod(gas_rules_0_c2_org + vec2(0.0, 0.0), gas_rules_0_c2_W) + 0.5) / gas_rules_0_c2_res).r + 0.5);
+    float gas_rules_0_c2_b3 = floor(texture2D(u_passprev_gas_rules_cells_0, (mod(gas_rules_0_c2_org + vec2(1.0, 0.0), gas_rules_0_c2_W) + 0.5) / gas_rules_0_c2_res).r + 0.5);
+    float gas_rules_0_c2_next = gas_rules_0_c2_s;
+    float gas_rules_0_c2_done = 0.0;
+    float gas_rules_0_c2_o0 = floor(grHash(vec3(gas_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 31.0)) * 4.0);
+    float gas_rules_0_c2_best0 = 0.0;
+    float gas_rules_0_c2_pick0 = -1.0;
+    float gas_rules_0_c2_m0_0 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 0.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 4.0 - mod(0.0 - gas_rules_0_c2_o0 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m0_0 > gas_rules_0_c2_best0) { gas_rules_0_c2_best0 = gas_rules_0_c2_m0_0; gas_rules_0_c2_pick0 = 0.0; }
+    float gas_rules_0_c2_m0_1 = (abs(gas_rules_0_c2_b0 - 0.0) < 0.5 && abs(gas_rules_0_c2_b1 - 1.0) < 0.5 && abs(gas_rules_0_c2_b2 - 0.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 4.0 - mod(1.0 - gas_rules_0_c2_o0 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m0_1 > gas_rules_0_c2_best0) { gas_rules_0_c2_best0 = gas_rules_0_c2_m0_1; gas_rules_0_c2_pick0 = 1.0; }
+    float gas_rules_0_c2_m0_2 = (abs(gas_rules_0_c2_b0 - 0.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 0.0) < 0.5 && abs(gas_rules_0_c2_b3 - 1.0) < 0.5) ? 4.0 - mod(2.0 - gas_rules_0_c2_o0 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m0_2 > gas_rules_0_c2_best0) { gas_rules_0_c2_best0 = gas_rules_0_c2_m0_2; gas_rules_0_c2_pick0 = 2.0; }
+    float gas_rules_0_c2_m0_3 = (abs(gas_rules_0_c2_b0 - 0.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 4.0 - mod(3.0 - gas_rules_0_c2_o0 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m0_3 > gas_rules_0_c2_best0) { gas_rules_0_c2_best0 = gas_rules_0_c2_m0_3; gas_rules_0_c2_pick0 = 3.0; }
+    if (gas_rules_0_c2_done < 0.5 && gas_rules_0_c2_best0 > 0.5) { gas_rules_0_c2_next = (gas_rules_0_c2_qi < 0.5 ? (gas_rules_0_c2_pick0 < 0.5 ? 0.0 : (gas_rules_0_c2_pick0 < 1.5 ? 0.0 : (gas_rules_0_c2_pick0 < 2.5 ? 1.0 : 0.0))) : (gas_rules_0_c2_qi < 1.5 ? (gas_rules_0_c2_pick0 < 0.5 ? 0.0 : (gas_rules_0_c2_pick0 < 1.5 ? 0.0 : (gas_rules_0_c2_pick0 < 2.5 ? 0.0 : 1.0))) : (gas_rules_0_c2_qi < 2.5 ? (gas_rules_0_c2_pick0 < 0.5 ? 0.0 : (gas_rules_0_c2_pick0 < 1.5 ? 1.0 : (gas_rules_0_c2_pick0 < 2.5 ? 0.0 : 0.0))) : (gas_rules_0_c2_pick0 < 0.5 ? 1.0 : (gas_rules_0_c2_pick0 < 1.5 ? 0.0 : (gas_rules_0_c2_pick0 < 2.5 ? 0.0 : 0.0)))))); gas_rules_0_c2_done = 1.0; }
+    float gas_rules_0_c2_o1 = floor(grHash(vec3(gas_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 33.0)) * 2.0);
+    float gas_rules_0_c2_best1 = 0.0;
+    float gas_rules_0_c2_pick1 = -1.0;
+    float gas_rules_0_c2_m1_0 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 0.0) < 0.5 && abs(gas_rules_0_c2_b3 - 1.0) < 0.5) ? 2.0 - mod(0.0 - gas_rules_0_c2_o1 + 2.0, 2.0) : 0.0;
+    if (gas_rules_0_c2_m1_0 > gas_rules_0_c2_best1) { gas_rules_0_c2_best1 = gas_rules_0_c2_m1_0; gas_rules_0_c2_pick1 = 0.0; }
+    float gas_rules_0_c2_m1_1 = (abs(gas_rules_0_c2_b0 - 0.0) < 0.5 && abs(gas_rules_0_c2_b1 - 1.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 2.0 - mod(1.0 - gas_rules_0_c2_o1 + 2.0, 2.0) : 0.0;
+    if (gas_rules_0_c2_m1_1 > gas_rules_0_c2_best1) { gas_rules_0_c2_best1 = gas_rules_0_c2_m1_1; gas_rules_0_c2_pick1 = 1.0; }
+    if (gas_rules_0_c2_done < 0.5 && gas_rules_0_c2_best1 > 0.5) { gas_rules_0_c2_next = (gas_rules_0_c2_qi < 0.5 ? (gas_rules_0_c2_pick1 < 0.5 ? 0.0 : 1.0) : (gas_rules_0_c2_qi < 1.5 ? (gas_rules_0_c2_pick1 < 0.5 ? 1.0 : 0.0) : (gas_rules_0_c2_qi < 2.5 ? (gas_rules_0_c2_pick1 < 0.5 ? 1.0 : 0.0) : (gas_rules_0_c2_pick1 < 0.5 ? 0.0 : 1.0)))); gas_rules_0_c2_done = 1.0; }
+    float gas_rules_0_c2_o2 = floor(grHash(vec3(gas_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 35.0)) * 4.0);
+    float gas_rules_0_c2_best2 = 0.0;
+    float gas_rules_0_c2_pick2 = -1.0;
+    float gas_rules_0_c2_m2_0 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 1.0) < 0.5 && abs(gas_rules_0_c2_b2 - 0.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 4.0 - mod(0.0 - gas_rules_0_c2_o2 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m2_0 > gas_rules_0_c2_best2) { gas_rules_0_c2_best2 = gas_rules_0_c2_m2_0; gas_rules_0_c2_pick2 = 0.0; }
+    float gas_rules_0_c2_m2_1 = (abs(gas_rules_0_c2_b0 - 0.0) < 0.5 && abs(gas_rules_0_c2_b1 - 1.0) < 0.5 && abs(gas_rules_0_c2_b2 - 0.0) < 0.5 && abs(gas_rules_0_c2_b3 - 1.0) < 0.5) ? 4.0 - mod(1.0 - gas_rules_0_c2_o2 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m2_1 > gas_rules_0_c2_best2) { gas_rules_0_c2_best2 = gas_rules_0_c2_m2_1; gas_rules_0_c2_pick2 = 1.0; }
+    float gas_rules_0_c2_m2_2 = (abs(gas_rules_0_c2_b0 - 0.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 1.0) < 0.5) ? 4.0 - mod(2.0 - gas_rules_0_c2_o2 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m2_2 > gas_rules_0_c2_best2) { gas_rules_0_c2_best2 = gas_rules_0_c2_m2_2; gas_rules_0_c2_pick2 = 2.0; }
+    float gas_rules_0_c2_m2_3 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 4.0 - mod(3.0 - gas_rules_0_c2_o2 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m2_3 > gas_rules_0_c2_best2) { gas_rules_0_c2_best2 = gas_rules_0_c2_m2_3; gas_rules_0_c2_pick2 = 3.0; }
+    if (gas_rules_0_c2_done < 0.5 && gas_rules_0_c2_best2 > 0.5) { gas_rules_0_c2_next = (gas_rules_0_c2_qi < 0.5 ? (gas_rules_0_c2_pick2 < 0.5 ? 0.0 : (gas_rules_0_c2_pick2 < 1.5 ? 1.0 : (gas_rules_0_c2_pick2 < 2.5 ? 1.0 : 0.0))) : (gas_rules_0_c2_qi < 1.5 ? (gas_rules_0_c2_pick2 < 0.5 ? 0.0 : (gas_rules_0_c2_pick2 < 1.5 ? 0.0 : (gas_rules_0_c2_pick2 < 2.5 ? 1.0 : 1.0))) : (gas_rules_0_c2_qi < 2.5 ? (gas_rules_0_c2_pick2 < 0.5 ? 1.0 : (gas_rules_0_c2_pick2 < 1.5 ? 1.0 : (gas_rules_0_c2_pick2 < 2.5 ? 0.0 : 0.0))) : (gas_rules_0_c2_pick2 < 0.5 ? 1.0 : (gas_rules_0_c2_pick2 < 1.5 ? 0.0 : (gas_rules_0_c2_pick2 < 2.5 ? 0.0 : 1.0)))))); gas_rules_0_c2_done = 1.0; }
+    float gas_rules_0_c2_o3 = floor(grHash(vec3(gas_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 37.0)) * 4.0);
+    float gas_rules_0_c2_best3 = 0.0;
+    float gas_rules_0_c2_pick3 = -1.0;
+    float gas_rules_0_c2_m3_0 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 1.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 4.0 - mod(0.0 - gas_rules_0_c2_o3 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m3_0 > gas_rules_0_c2_best3) { gas_rules_0_c2_best3 = gas_rules_0_c2_m3_0; gas_rules_0_c2_pick3 = 0.0; }
+    float gas_rules_0_c2_m3_1 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 1.0) < 0.5 && abs(gas_rules_0_c2_b2 - 0.0) < 0.5 && abs(gas_rules_0_c2_b3 - 1.0) < 0.5) ? 4.0 - mod(1.0 - gas_rules_0_c2_o3 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m3_1 > gas_rules_0_c2_best3) { gas_rules_0_c2_best3 = gas_rules_0_c2_m3_1; gas_rules_0_c2_pick3 = 1.0; }
+    float gas_rules_0_c2_m3_2 = (abs(gas_rules_0_c2_b0 - 0.0) < 0.5 && abs(gas_rules_0_c2_b1 - 1.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 1.0) < 0.5) ? 4.0 - mod(2.0 - gas_rules_0_c2_o3 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m3_2 > gas_rules_0_c2_best3) { gas_rules_0_c2_best3 = gas_rules_0_c2_m3_2; gas_rules_0_c2_pick3 = 2.0; }
+    float gas_rules_0_c2_m3_3 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 1.0) < 0.5) ? 4.0 - mod(3.0 - gas_rules_0_c2_o3 + 4.0, 4.0) : 0.0;
+    if (gas_rules_0_c2_m3_3 > gas_rules_0_c2_best3) { gas_rules_0_c2_best3 = gas_rules_0_c2_m3_3; gas_rules_0_c2_pick3 = 3.0; }
+    if (gas_rules_0_c2_done < 0.5 && gas_rules_0_c2_best3 > 0.5) { gas_rules_0_c2_next = (gas_rules_0_c2_qi < 0.5 ? (gas_rules_0_c2_pick3 < 0.5 ? 0.0 : (gas_rules_0_c2_pick3 < 1.5 ? 1.0 : (gas_rules_0_c2_pick3 < 2.5 ? 1.0 : 1.0))) : (gas_rules_0_c2_qi < 1.5 ? (gas_rules_0_c2_pick3 < 0.5 ? 1.0 : (gas_rules_0_c2_pick3 < 1.5 ? 0.0 : (gas_rules_0_c2_pick3 < 2.5 ? 1.0 : 1.0))) : (gas_rules_0_c2_qi < 2.5 ? (gas_rules_0_c2_pick3 < 0.5 ? 1.0 : (gas_rules_0_c2_pick3 < 1.5 ? 1.0 : (gas_rules_0_c2_pick3 < 2.5 ? 1.0 : 0.0))) : (gas_rules_0_c2_pick3 < 0.5 ? 1.0 : (gas_rules_0_c2_pick3 < 1.5 ? 1.0 : (gas_rules_0_c2_pick3 < 2.5 ? 0.0 : 1.0)))))); gas_rules_0_c2_done = 1.0; }
+    gas_rules_0_c2_next = clamp(gas_rules_0_c2_next, 0.0, gas_rules_0_c2_top);
+    float gas_rules_0_c2_ng = 0.0;
+    if (abs(gas_rules_0_c2_next - gas_rules_0_c2_s) < 0.5) gas_rules_0_c2_ng = gas_rules_0_c2_next > 0.5 ? min(1.0, gas_rules_0_c2_g + u_p_gasxrulesx0xc2_ageRate) : gas_rules_0_c2_g * u_p_gasxrulesx0xc2_afterglow;
+    else gas_rules_0_c2_ng = gas_rules_0_c2_next < 0.5 ? u_p_gasxrulesx0xc2_afterglow : 0.0;
+    if (gas_rules_0_c2_tick < 0.5) { gas_rules_0_c2_next = gas_rules_0_c2_s; gas_rules_0_c2_ng = gas_rules_0_c2_g; }
+    if (gas_rules_0_c2_fresh > 0.5) { gas_rules_0_c2_next = (length(gas_rules_0_c2_cell + 0.5 - gas_rules_0_c2_res * 0.5) < min(gas_rules_0_c2_res.x, gas_rules_0_c2_res.y) * 0.15 ? (gas_rules_0_c2_h < u_p_gasxrulesx0xc2_density ? 1.0 : 0.0) : 0.0); gas_rules_0_c2_ng = 0.0; }
+    float gas_rules_0_c2_roll = grHash(vec3(gas_rules_0_c2_cell + 0.5, mod(floor(u_time * 60.0), 997.0) + 7919.0));
+    if (gas_rules_0_c2_in > 0.5 && gas_rules_0_c2_roll < u_p_gasxrulesx0xc2_brushFill) { gas_rules_0_c2_next = clamp(floor(u_p_gasxrulesx0xc2_brushState + 0.5), 0.0, gas_rules_0_c2_top); gas_rules_0_c2_ng = 0.0; }
+    gas_rules_0_c2_next = gas_rules_0_c2_next * gas_rules_0_c2_live;
+    gas_rules_0_c2_ng = gas_rules_0_c2_ng * gas_rules_0_c2_live;
+    vec3 gas_rules_0_c2_out = vec3(gas_rules_0_c2_next, gas_rules_0_c2_ng, gas_rules_0_c2_phase + 2.0 * (gas_rules_0_c2_tick > 0.5 ? 1.0 - gas_rules_0_c2_par : gas_rules_0_c2_par));
+    float gas_rules_0_c2_outA = 41.0;
+    gl_FragColor = vec4(gas_rules_0_c2_out, gas_rules_0_c2_outA);
+}",
+      "label": "Gas rules cells",
+      "live": true,
+      "nodeId": "gas__cells",
+      "nodeIds": [
+        "gas__step",
+        "gas",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "gas_rules_cells_0",
+      ],
+      "scale": 0.25,
+      "slug": "gas_rules_cells_0",
+      "wrap": "repeat",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > gridRulesHeat 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1e11d80ec3c2400d28ac93a4d206:3699",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0b27c88ef9d1311be139b49b1324:114",
+  "paramBindings": "014461fbb7333c0a1d6b7c0ae883:1095",
+  "paramUniforms": [
+    "u_p_heatxrulesx0xc2_brushRadius",
+    "u_p_heatxrulesx0xc2_brushState",
+    "u_p_heatxrulesx0xc2_color0",
+    "u_p_heatxrulesx0xc2_color1",
+    "u_p_heatxrulesx0xc2_color2",
+    "u_p_heatxrulesx0xc2_color3",
+    "u_p_heatxrulesx0xc2_damping",
+    "u_p_heatxrulesx0xc2_decay",
+    "u_p_heatxrulesx0xc2_density",
+    "u_p_heatxrulesx0xc2_diffA",
+    "u_p_heatxrulesx0xc2_diffB",
+    "u_p_heatxrulesx0xc2_feed",
+    "u_p_heatxrulesx0xc2_gain",
+    "u_p_heatxrulesx0xc2_kill",
+    "u_p_heatxrulesx0xc2_knobA",
+    "u_p_heatxrulesx0xc2_knobB",
+    "u_p_heatxrulesx0xc2_knobC",
+    "u_p_heatxrulesx0xc2_knobD",
+    "u_p_heatxrulesx0xc2_paint",
+    "u_p_heatxrulesx0xc2_rate",
+    "u_p_heatxrulesx0xc2_reset",
+    "u_p_heatxrulesx0xc2_seed",
+    "u_p_heatxrulesx0xc2_spread",
+    "u_p_heatxrulesx0xc2_waveSpeed",
+  ],
+  "paramValues": "05c1c4b2937ac30bd11ea4beccaa:876",
+  "passes": [
+    {
+      "filter": "nearest",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_heatxrulesx0xc2_spread;
+uniform float u_p_heatxrulesx0xc2_decay;
+uniform float u_p_heatxrulesx0xc2_waveSpeed;
+uniform float u_p_heatxrulesx0xc2_damping;
+uniform float u_p_heatxrulesx0xc2_feed;
+uniform float u_p_heatxrulesx0xc2_kill;
+uniform float u_p_heatxrulesx0xc2_diffA;
+uniform float u_p_heatxrulesx0xc2_diffB;
+uniform float u_p_heatxrulesx0xc2_knobA;
+uniform float u_p_heatxrulesx0xc2_knobB;
+uniform float u_p_heatxrulesx0xc2_knobC;
+uniform float u_p_heatxrulesx0xc2_knobD;
+uniform float u_p_heatxrulesx0xc2_rate;
+uniform float u_p_heatxrulesx0xc2_reset;
+uniform float u_p_heatxrulesx0xc2_density;
+uniform float u_p_heatxrulesx0xc2_seed;
+uniform float u_p_heatxrulesx0xc2_paint;
+uniform float u_p_heatxrulesx0xc2_brushRadius;
+uniform float u_p_heatxrulesx0xc2_brushState;
+uniform float u_p_heatxrulesx0xc2_gain;
+uniform vec3 u_p_heatxrulesx0xc2_color0;
+uniform vec3 u_p_heatxrulesx0xc2_color1;
+uniform vec3 u_p_heatxrulesx0xc2_color2;
+uniform vec3 u_p_heatxrulesx0xc2_color3;
+uniform sampler2D u_pass_heat_rules_cells_0;
+uniform vec2 u_pass_heat_rules_cells_0_px;
+uniform sampler2D u_passprev_heat_rules_cells_0;
+uniform vec2 u_passprev_heat_rules_cells_0_px;
+uniform vec2 u_passiter_heat_rules_cells_0;
+uniform float u_mousebtn;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+float grHash(vec3 p) {
+    vec3 p3 = fract(p * 0.1031);
+    p3 = p3 + dot(p3, vec3(p3.z, p3.y, p3.x) + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Grid Rules, Smooth, Custom: the update is one line. Each cell moves 0.9 of the way to its four neighbours' average (diffusion), loses a share (knob a: cooling) and, now and then (knob b), flares to 3.
+    // Four steps a frame on a ¼-size board. Paint heat with the mouse.
+    vec2 heat_rules_0_c2_res = u_resolution;
+    vec2 heat_rules_0_c2_cell = floor(gl_FragCoord.xy);
+    vec4 heat_rules_0_c2_me = texture2D(u_passprev_heat_rules_cells_0, (heat_rules_0_c2_cell + vec2(0.0) + 0.5) / heat_rules_0_c2_res);
+    float heat_rules_0_c2_fresh = (abs(heat_rules_0_c2_me.a - 87.0) > 0.5 || u_p_heatxrulesx0xc2_reset > 0.5) ? 1.0 : 0.0;
+    float heat_rules_0_c2_tick = 1.0;
+    float heat_rules_0_c2_phase = 0.0;
+    float heat_rules_0_c2_h = grHash(vec3(heat_rules_0_c2_cell, mod(floor(u_time * 60.0), 997.0) + u_p_heatxrulesx0xc2_seed * 1013.0 + 1.0));
+    vec2 heat_rules_0_c2_m = u_mouse * 0.25;
+    float heat_rules_0_c2_in = (length(heat_rules_0_c2_cell + 0.5 - heat_rules_0_c2_m) < u_p_heatxrulesx0xc2_brushRadius ? 1.0 : 0.0) * max(step(0.5, u_mousebtn), step(0.5, u_p_heatxrulesx0xc2_paint));
+    float heat_rules_0_c2_u = heat_rules_0_c2_me.r;
+    float heat_rules_0_c2_v = heat_rules_0_c2_me.g;
+    vec4 heat_rules_0_c2_rN = texture2D(u_passprev_heat_rules_cells_0, (heat_rules_0_c2_cell + vec2(0.0, 1.0) + 0.5) / heat_rules_0_c2_res);
+    vec4 heat_rules_0_c2_rNE = texture2D(u_passprev_heat_rules_cells_0, (heat_rules_0_c2_cell + vec2(1.0, 1.0) + 0.5) / heat_rules_0_c2_res);
+    vec4 heat_rules_0_c2_rE = texture2D(u_passprev_heat_rules_cells_0, (heat_rules_0_c2_cell + vec2(1.0, 0.0) + 0.5) / heat_rules_0_c2_res);
+    vec4 heat_rules_0_c2_rSE = texture2D(u_passprev_heat_rules_cells_0, (heat_rules_0_c2_cell + vec2(1.0, -1.0) + 0.5) / heat_rules_0_c2_res);
+    vec4 heat_rules_0_c2_rS = texture2D(u_passprev_heat_rules_cells_0, (heat_rules_0_c2_cell + vec2(0.0, -1.0) + 0.5) / heat_rules_0_c2_res);
+    vec4 heat_rules_0_c2_rSW = texture2D(u_passprev_heat_rules_cells_0, (heat_rules_0_c2_cell + vec2(-1.0, -1.0) + 0.5) / heat_rules_0_c2_res);
+    vec4 heat_rules_0_c2_rW = texture2D(u_passprev_heat_rules_cells_0, (heat_rules_0_c2_cell + vec2(-1.0, 0.0) + 0.5) / heat_rules_0_c2_res);
+    vec4 heat_rules_0_c2_rNW = texture2D(u_passprev_heat_rules_cells_0, (heat_rules_0_c2_cell + vec2(-1.0, 1.0) + 0.5) / heat_rules_0_c2_res);
+    float heat_rules_0_c2_edgeU = heat_rules_0_c2_rN.r + heat_rules_0_c2_rE.r + heat_rules_0_c2_rS.r + heat_rules_0_c2_rW.r;
+    float heat_rules_0_c2_edgeV = heat_rules_0_c2_rN.g + heat_rules_0_c2_rE.g + heat_rules_0_c2_rS.g + heat_rules_0_c2_rW.g;
+    float heat_rules_0_c2_cornU = heat_rules_0_c2_rNE.r + heat_rules_0_c2_rSE.r + heat_rules_0_c2_rSW.r + heat_rules_0_c2_rNW.r;
+    float heat_rules_0_c2_cornV = heat_rules_0_c2_rNE.g + heat_rules_0_c2_rSE.g + heat_rules_0_c2_rSW.g + heat_rules_0_c2_rNW.g;
+    float heat_rules_0_c2_lapU = 0.2 * heat_rules_0_c2_edgeU + 0.05 * heat_rules_0_c2_cornU - heat_rules_0_c2_u;
+    float heat_rules_0_c2_lapV = 0.2 * heat_rules_0_c2_edgeV + 0.05 * heat_rules_0_c2_cornV - heat_rules_0_c2_v;
+    float heat_rules_0_c2_nu = heat_rules_0_c2_u;
+    float heat_rules_0_c2_nv = heat_rules_0_c2_v;
+    {
+        float u = heat_rules_0_c2_u; float v = heat_rules_0_c2_v;
+        float avg_u = (heat_rules_0_c2_edgeU + heat_rules_0_c2_cornU) * 0.125; float avg_v = (heat_rules_0_c2_edgeV + heat_rules_0_c2_cornV) * 0.125;
+        float lap_u = heat_rules_0_c2_lapU; float lap_v = heat_rules_0_c2_lapV;
+        float n = heat_rules_0_c2_rN.r; float s = heat_rules_0_c2_rS.r; float e = heat_rules_0_c2_rE.r; float w = heat_rules_0_c2_rW.r;
+        float x = (heat_rules_0_c2_cell.x + 0.5) / heat_rules_0_c2_res.x; float y = (heat_rules_0_c2_cell.y + 0.5) / heat_rules_0_c2_res.y;
+        float t = u_time; float rnd = heat_rules_0_c2_h;
+        float a = u_p_heatxrulesx0xc2_knobA; float b = u_p_heatxrulesx0xc2_knobB; float c = u_p_heatxrulesx0xc2_knobC; float d = u_p_heatxrulesx0xc2_knobD;
+        heat_rules_0_c2_nu = clamp(mix(u, (n + s + e + w) * 0.25, 0.9) * (1.0 - a * 0.01) + step(1.0 - b * 0.001, rnd) * 3.0, -1000.0, 1000.0);
+        heat_rules_0_c2_nv = clamp(v, -1000.0, 1000.0);
+    }
+    if (heat_rules_0_c2_tick < 0.5) { heat_rules_0_c2_nu = heat_rules_0_c2_u; heat_rules_0_c2_nv = heat_rules_0_c2_v; }
+    if (heat_rules_0_c2_fresh > 0.5) { heat_rules_0_c2_nu = 0.0; heat_rules_0_c2_nv = 0.0; }
+    if (heat_rules_0_c2_in > 0.5) heat_rules_0_c2_nu = u_p_heatxrulesx0xc2_brushState;
+    vec3 heat_rules_0_c2_out = vec3(heat_rules_0_c2_nu, heat_rules_0_c2_nv, heat_rules_0_c2_phase);
+    float heat_rules_0_c2_outA = 87.0;
+    gl_FragColor = vec4(heat_rules_0_c2_out, heat_rules_0_c2_outA);
+}",
+      "label": "Heat rules cells",
+      "live": true,
+      "nodeId": "heat__cells",
+      "nodeIds": [
+        "heat__step",
+        "heat",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "heat_rules_cells_0",
+      ],
+      "repeat": 4,
+      "scale": 0.25,
+      "slug": "heat_rules_cells_0",
+      "wrap": "clamp",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > gridRulesLife 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0299973540ee0b16839b90da88c5:3329",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1dd8148e8692560ef02bcb63593e:114",
+  "paramBindings": "1484df1e07d89912f39b6e8baf74:831",
+  "paramUniforms": [
+    "u_p_lifexrulesx0xc2_afterglow",
+    "u_p_lifexrulesx0xc2_ageFade",
+    "u_p_lifexrulesx0xc2_ageRate",
+    "u_p_lifexrulesx0xc2_bornMask",
+    "u_p_lifexrulesx0xc2_brushFill",
+    "u_p_lifexrulesx0xc2_brushRadius",
+    "u_p_lifexrulesx0xc2_brushState",
+    "u_p_lifexrulesx0xc2_color0",
+    "u_p_lifexrulesx0xc2_color1",
+    "u_p_lifexrulesx0xc2_density",
+    "u_p_lifexrulesx0xc2_glowColor",
+    "u_p_lifexrulesx0xc2_oldColor",
+    "u_p_lifexrulesx0xc2_paint",
+    "u_p_lifexrulesx0xc2_rate",
+    "u_p_lifexrulesx0xc2_reset",
+    "u_p_lifexrulesx0xc2_seed",
+    "u_p_lifexrulesx0xc2_surviveMask",
+  ],
+  "paramValues": "1d1b8d3bd376d81522ebfc0c2fb7:652",
+  "passes": [
+    {
+      "filter": "nearest",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_lifexrulesx0xc2_bornMask;
+uniform float u_p_lifexrulesx0xc2_surviveMask;
+uniform float u_p_lifexrulesx0xc2_rate;
+uniform float u_p_lifexrulesx0xc2_reset;
+uniform float u_p_lifexrulesx0xc2_density;
+uniform float u_p_lifexrulesx0xc2_seed;
+uniform float u_p_lifexrulesx0xc2_paint;
+uniform float u_p_lifexrulesx0xc2_brushRadius;
+uniform float u_p_lifexrulesx0xc2_brushState;
+uniform float u_p_lifexrulesx0xc2_brushFill;
+uniform float u_p_lifexrulesx0xc2_afterglow;
+uniform float u_p_lifexrulesx0xc2_ageRate;
+uniform float u_p_lifexrulesx0xc2_ageFade;
+uniform vec3 u_p_lifexrulesx0xc2_color0;
+uniform vec3 u_p_lifexrulesx0xc2_color1;
+uniform vec3 u_p_lifexrulesx0xc2_glowColor;
+uniform vec3 u_p_lifexrulesx0xc2_oldColor;
+uniform sampler2D u_pass_life_rules_cells_0;
+uniform vec2 u_pass_life_rules_cells_0_px;
+uniform sampler2D u_passprev_life_rules_cells_0;
+uniform vec2 u_passprev_life_rules_cells_0_px;
+uniform float u_mousebtn;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+float grHash(vec3 p) {
+    vec3 p3 = fract(p * 0.1031);
+    p3 = p3 + dot(p3, vec3(p3.z, p3.y, p3.x) + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Grid Rules: Conway's Game of Life (B3/S23) on a ⅛-size board (240 × 135 cells at 1080p) that wraps round.
+    // Speed 0.5 steps every other frame; a cell that dies glows warm (Afterglow) and fades. The brush sprinkles half the cells under it (a solid block would die of crowding).
+    vec2 life_rules_0_c2_res = u_resolution;
+    vec2 life_rules_0_c2_cell = floor(gl_FragCoord.xy);
+    vec4 life_rules_0_c2_me = texture2D(u_passprev_life_rules_cells_0, (life_rules_0_c2_cell + vec2(0.0) + 0.5) / life_rules_0_c2_res);
+    float life_rules_0_c2_fresh = (abs(life_rules_0_c2_me.a - 2.0) > 0.5 || u_p_lifexrulesx0xc2_reset > 0.5) ? 1.0 : 0.0;
+    float life_rules_0_c2_clk = (life_rules_0_c2_fresh > 0.5 ? 0.0 : fract(life_rules_0_c2_me.b)) + clamp(u_p_lifexrulesx0xc2_rate, 0.0, 1.0);
+    float life_rules_0_c2_tick = step(1.0, life_rules_0_c2_clk);
+    float life_rules_0_c2_phase = life_rules_0_c2_clk - life_rules_0_c2_tick;
+    float life_rules_0_c2_h = grHash(vec3(life_rules_0_c2_cell, mod(floor(u_time * 60.0), 997.0) + u_p_lifexrulesx0xc2_seed * 1013.0 + 1.0));
+    vec2 life_rules_0_c2_m = u_mouse * 0.125;
+    float life_rules_0_c2_in = (length(life_rules_0_c2_cell + 0.5 - life_rules_0_c2_m) < u_p_lifexrulesx0xc2_brushRadius ? 1.0 : 0.0) * max(step(0.5, u_mousebtn), step(0.5, u_p_lifexrulesx0xc2_paint));
+    float life_rules_0_c2_s = floor(life_rules_0_c2_me.r + 0.5);
+    float life_rules_0_c2_g = life_rules_0_c2_me.g;
+    float life_rules_0_c2_cnt = 0.0;
+    float life_rules_0_c2_q = 0.0;
+    life_rules_0_c2_q = texture2D(u_passprev_life_rules_cells_0, (life_rules_0_c2_cell + vec2(0.0, 1.0) + 0.5) / life_rules_0_c2_res).r;
+    life_rules_0_c2_cnt += (step(0.5, life_rules_0_c2_q) - step(1.5, life_rules_0_c2_q));
+    life_rules_0_c2_q = texture2D(u_passprev_life_rules_cells_0, (life_rules_0_c2_cell + vec2(1.0, 1.0) + 0.5) / life_rules_0_c2_res).r;
+    life_rules_0_c2_cnt += (step(0.5, life_rules_0_c2_q) - step(1.5, life_rules_0_c2_q));
+    life_rules_0_c2_q = texture2D(u_passprev_life_rules_cells_0, (life_rules_0_c2_cell + vec2(1.0, 0.0) + 0.5) / life_rules_0_c2_res).r;
+    life_rules_0_c2_cnt += (step(0.5, life_rules_0_c2_q) - step(1.5, life_rules_0_c2_q));
+    life_rules_0_c2_q = texture2D(u_passprev_life_rules_cells_0, (life_rules_0_c2_cell + vec2(1.0, -1.0) + 0.5) / life_rules_0_c2_res).r;
+    life_rules_0_c2_cnt += (step(0.5, life_rules_0_c2_q) - step(1.5, life_rules_0_c2_q));
+    life_rules_0_c2_q = texture2D(u_passprev_life_rules_cells_0, (life_rules_0_c2_cell + vec2(0.0, -1.0) + 0.5) / life_rules_0_c2_res).r;
+    life_rules_0_c2_cnt += (step(0.5, life_rules_0_c2_q) - step(1.5, life_rules_0_c2_q));
+    life_rules_0_c2_q = texture2D(u_passprev_life_rules_cells_0, (life_rules_0_c2_cell + vec2(-1.0, -1.0) + 0.5) / life_rules_0_c2_res).r;
+    life_rules_0_c2_cnt += (step(0.5, life_rules_0_c2_q) - step(1.5, life_rules_0_c2_q));
+    life_rules_0_c2_q = texture2D(u_passprev_life_rules_cells_0, (life_rules_0_c2_cell + vec2(-1.0, 0.0) + 0.5) / life_rules_0_c2_res).r;
+    life_rules_0_c2_cnt += (step(0.5, life_rules_0_c2_q) - step(1.5, life_rules_0_c2_q));
+    life_rules_0_c2_q = texture2D(u_passprev_life_rules_cells_0, (life_rules_0_c2_cell + vec2(-1.0, 1.0) + 0.5) / life_rules_0_c2_res).r;
+    life_rules_0_c2_cnt += (step(0.5, life_rules_0_c2_q) - step(1.5, life_rules_0_c2_q));
+    float life_rules_0_c2_born = mod(floor((u_p_lifexrulesx0xc2_bornMask + 0.5) / exp2(life_rules_0_c2_cnt)), 2.0);
+    float life_rules_0_c2_surv = mod(floor((u_p_lifexrulesx0xc2_surviveMask + 0.5) / exp2(life_rules_0_c2_cnt)), 2.0);
+    float life_rules_0_c2_top = 1.0;
+    float life_rules_0_c2_next = (life_rules_0_c2_s > 0.5 && life_rules_0_c2_s < 1.5) ? life_rules_0_c2_surv : life_rules_0_c2_born;
+    float life_rules_0_c2_ng = 0.0;
+    if (life_rules_0_c2_next > 0.5 && life_rules_0_c2_next < 1.5) life_rules_0_c2_ng = (life_rules_0_c2_s > 0.5 && life_rules_0_c2_s < 1.5) ? min(1.0, life_rules_0_c2_g + u_p_lifexrulesx0xc2_ageRate) : 0.0;
+    else if (life_rules_0_c2_next < 0.5) life_rules_0_c2_ng = life_rules_0_c2_s > 0.5 ? u_p_lifexrulesx0xc2_afterglow : life_rules_0_c2_g * u_p_lifexrulesx0xc2_afterglow;
+    if (life_rules_0_c2_tick < 0.5) { life_rules_0_c2_next = life_rules_0_c2_s; life_rules_0_c2_ng = life_rules_0_c2_g; }
+    if (life_rules_0_c2_fresh > 0.5) { life_rules_0_c2_next = (life_rules_0_c2_h < u_p_lifexrulesx0xc2_density ? 1.0 : 0.0); life_rules_0_c2_ng = 0.0; }
+    float life_rules_0_c2_roll = grHash(vec3(life_rules_0_c2_cell + 0.5, mod(floor(u_time * 60.0), 997.0) + 7919.0));
+    if (life_rules_0_c2_in > 0.5 && life_rules_0_c2_roll < u_p_lifexrulesx0xc2_brushFill) { life_rules_0_c2_next = clamp(floor(u_p_lifexrulesx0xc2_brushState + 0.5), 0.0, life_rules_0_c2_top); life_rules_0_c2_ng = 0.0; }
+    vec3 life_rules_0_c2_out = vec3(life_rules_0_c2_next, life_rules_0_c2_ng, life_rules_0_c2_phase);
+    float life_rules_0_c2_outA = 2.0;
+    gl_FragColor = vec4(life_rules_0_c2_out, life_rules_0_c2_outA);
+}",
+      "label": "Life rules cells",
+      "live": true,
+      "nodeId": "life__cells",
+      "nodeIds": [
+        "life__step",
+        "life",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "life_rules_cells_0",
+      ],
+      "scale": 0.125,
+      "slug": "life_rules_cells_0",
+      "wrap": "repeat",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > gridRulesLifeLike 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "16ed3b35ce99cc1828b4b3e3fc0b:3374",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1beda71f187b0d1ca13e32e9d16d:123",
+  "paramBindings": "0406485bc25ce703da01923e63ee:899",
+  "paramUniforms": [
+    "u_p_dayxandxnightx0xc2_afterglow",
+    "u_p_dayxandxnightx0xc2_ageFade",
+    "u_p_dayxandxnightx0xc2_ageRate",
+    "u_p_dayxandxnightx0xc2_bornMask",
+    "u_p_dayxandxnightx0xc2_brushFill",
+    "u_p_dayxandxnightx0xc2_brushRadius",
+    "u_p_dayxandxnightx0xc2_brushState",
+    "u_p_dayxandxnightx0xc2_color0",
+    "u_p_dayxandxnightx0xc2_color1",
+    "u_p_dayxandxnightx0xc2_density",
+    "u_p_dayxandxnightx0xc2_glowColor",
+    "u_p_dayxandxnightx0xc2_oldColor",
+    "u_p_dayxandxnightx0xc2_paint",
+    "u_p_dayxandxnightx0xc2_rate",
+    "u_p_dayxandxnightx0xc2_reset",
+    "u_p_dayxandxnightx0xc2_seed",
+    "u_p_dayxandxnightx0xc2_surviveMask",
+  ],
+  "paramValues": "11dd35b8e8223c1f13dd3c8b5570:703",
+  "passes": [
+    {
+      "filter": "nearest",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_dayxandxnightx0xc2_bornMask;
+uniform float u_p_dayxandxnightx0xc2_surviveMask;
+uniform float u_p_dayxandxnightx0xc2_rate;
+uniform float u_p_dayxandxnightx0xc2_reset;
+uniform float u_p_dayxandxnightx0xc2_density;
+uniform float u_p_dayxandxnightx0xc2_seed;
+uniform float u_p_dayxandxnightx0xc2_paint;
+uniform float u_p_dayxandxnightx0xc2_brushRadius;
+uniform float u_p_dayxandxnightx0xc2_brushState;
+uniform float u_p_dayxandxnightx0xc2_brushFill;
+uniform float u_p_dayxandxnightx0xc2_afterglow;
+uniform float u_p_dayxandxnightx0xc2_ageRate;
+uniform float u_p_dayxandxnightx0xc2_ageFade;
+uniform vec3 u_p_dayxandxnightx0xc2_color0;
+uniform vec3 u_p_dayxandxnightx0xc2_color1;
+uniform vec3 u_p_dayxandxnightx0xc2_glowColor;
+uniform vec3 u_p_dayxandxnightx0xc2_oldColor;
+uniform sampler2D u_pass_day_and_night_ce_0;
+uniform vec2 u_pass_day_and_night_ce_0_px;
+uniform sampler2D u_passprev_day_and_night_ce_0;
+uniform vec2 u_passprev_day_and_night_ce_0_px;
+uniform float u_mousebtn;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+float grHash(vec3 p) {
+    vec3 p3 = fract(p * 0.1031);
+    p3 = p3 + dot(p3, vec3(p3.z, p3.y, p3.x) + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Grid Rules: Day & Night (B3678/S34678), a rule that treats live and dead alike: islands of each grow in the other.
+    // Open the editor to switch the Born on and Survive on numbers, or type a rule such as B36/S23.
+    vec2 day_and_night_0_c2_res = u_resolution;
+    vec2 day_and_night_0_c2_cell = floor(gl_FragCoord.xy);
+    vec4 day_and_night_0_c2_me = texture2D(u_passprev_day_and_night_ce_0, (day_and_night_0_c2_cell + vec2(0.0) + 0.5) / day_and_night_0_c2_res);
+    float day_and_night_0_c2_fresh = (abs(day_and_night_0_c2_me.a - 2.0) > 0.5 || u_p_dayxandxnightx0xc2_reset > 0.5) ? 1.0 : 0.0;
+    float day_and_night_0_c2_clk = (day_and_night_0_c2_fresh > 0.5 ? 0.0 : fract(day_and_night_0_c2_me.b)) + clamp(u_p_dayxandxnightx0xc2_rate, 0.0, 1.0);
+    float day_and_night_0_c2_tick = step(1.0, day_and_night_0_c2_clk);
+    float day_and_night_0_c2_phase = day_and_night_0_c2_clk - day_and_night_0_c2_tick;
+    float day_and_night_0_c2_h = grHash(vec3(day_and_night_0_c2_cell, mod(floor(u_time * 60.0), 997.0) + u_p_dayxandxnightx0xc2_seed * 1013.0 + 1.0));
+    vec2 day_and_night_0_c2_m = u_mouse * 0.125;
+    float day_and_night_0_c2_in = (length(day_and_night_0_c2_cell + 0.5 - day_and_night_0_c2_m) < u_p_dayxandxnightx0xc2_brushRadius ? 1.0 : 0.0) * max(step(0.5, u_mousebtn), step(0.5, u_p_dayxandxnightx0xc2_paint));
+    float day_and_night_0_c2_s = floor(day_and_night_0_c2_me.r + 0.5);
+    float day_and_night_0_c2_g = day_and_night_0_c2_me.g;
+    float day_and_night_0_c2_cnt = 0.0;
+    float day_and_night_0_c2_q = 0.0;
+    day_and_night_0_c2_q = texture2D(u_passprev_day_and_night_ce_0, (day_and_night_0_c2_cell + vec2(0.0, 1.0) + 0.5) / day_and_night_0_c2_res).r;
+    day_and_night_0_c2_cnt += (step(0.5, day_and_night_0_c2_q) - step(1.5, day_and_night_0_c2_q));
+    day_and_night_0_c2_q = texture2D(u_passprev_day_and_night_ce_0, (day_and_night_0_c2_cell + vec2(1.0, 1.0) + 0.5) / day_and_night_0_c2_res).r;
+    day_and_night_0_c2_cnt += (step(0.5, day_and_night_0_c2_q) - step(1.5, day_and_night_0_c2_q));
+    day_and_night_0_c2_q = texture2D(u_passprev_day_and_night_ce_0, (day_and_night_0_c2_cell + vec2(1.0, 0.0) + 0.5) / day_and_night_0_c2_res).r;
+    day_and_night_0_c2_cnt += (step(0.5, day_and_night_0_c2_q) - step(1.5, day_and_night_0_c2_q));
+    day_and_night_0_c2_q = texture2D(u_passprev_day_and_night_ce_0, (day_and_night_0_c2_cell + vec2(1.0, -1.0) + 0.5) / day_and_night_0_c2_res).r;
+    day_and_night_0_c2_cnt += (step(0.5, day_and_night_0_c2_q) - step(1.5, day_and_night_0_c2_q));
+    day_and_night_0_c2_q = texture2D(u_passprev_day_and_night_ce_0, (day_and_night_0_c2_cell + vec2(0.0, -1.0) + 0.5) / day_and_night_0_c2_res).r;
+    day_and_night_0_c2_cnt += (step(0.5, day_and_night_0_c2_q) - step(1.5, day_and_night_0_c2_q));
+    day_and_night_0_c2_q = texture2D(u_passprev_day_and_night_ce_0, (day_and_night_0_c2_cell + vec2(-1.0, -1.0) + 0.5) / day_and_night_0_c2_res).r;
+    day_and_night_0_c2_cnt += (step(0.5, day_and_night_0_c2_q) - step(1.5, day_and_night_0_c2_q));
+    day_and_night_0_c2_q = texture2D(u_passprev_day_and_night_ce_0, (day_and_night_0_c2_cell + vec2(-1.0, 0.0) + 0.5) / day_and_night_0_c2_res).r;
+    day_and_night_0_c2_cnt += (step(0.5, day_and_night_0_c2_q) - step(1.5, day_and_night_0_c2_q));
+    day_and_night_0_c2_q = texture2D(u_passprev_day_and_night_ce_0, (day_and_night_0_c2_cell + vec2(-1.0, 1.0) + 0.5) / day_and_night_0_c2_res).r;
+    day_and_night_0_c2_cnt += (step(0.5, day_and_night_0_c2_q) - step(1.5, day_and_night_0_c2_q));
+    float day_and_night_0_c2_born = mod(floor((u_p_dayxandxnightx0xc2_bornMask + 0.5) / exp2(day_and_night_0_c2_cnt)), 2.0);
+    float day_and_night_0_c2_surv = mod(floor((u_p_dayxandxnightx0xc2_surviveMask + 0.5) / exp2(day_and_night_0_c2_cnt)), 2.0);
+    float day_and_night_0_c2_top = 1.0;
+    float day_and_night_0_c2_next = (day_and_night_0_c2_s > 0.5 && day_and_night_0_c2_s < 1.5) ? day_and_night_0_c2_surv : day_and_night_0_c2_born;
+    float day_and_night_0_c2_ng = 0.0;
+    if (day_and_night_0_c2_next > 0.5 && day_and_night_0_c2_next < 1.5) day_and_night_0_c2_ng = (day_and_night_0_c2_s > 0.5 && day_and_night_0_c2_s < 1.5) ? min(1.0, day_and_night_0_c2_g + u_p_dayxandxnightx0xc2_ageRate) : 0.0;
+    else if (day_and_night_0_c2_next < 0.5) day_and_night_0_c2_ng = day_and_night_0_c2_s > 0.5 ? u_p_dayxandxnightx0xc2_afterglow : day_and_night_0_c2_g * u_p_dayxandxnightx0xc2_afterglow;
+    if (day_and_night_0_c2_tick < 0.5) { day_and_night_0_c2_next = day_and_night_0_c2_s; day_and_night_0_c2_ng = day_and_night_0_c2_g; }
+    if (day_and_night_0_c2_fresh > 0.5) { day_and_night_0_c2_next = (day_and_night_0_c2_h < u_p_dayxandxnightx0xc2_density ? 1.0 : 0.0); day_and_night_0_c2_ng = 0.0; }
+    float day_and_night_0_c2_roll = grHash(vec3(day_and_night_0_c2_cell + 0.5, mod(floor(u_time * 60.0), 997.0) + 7919.0));
+    if (day_and_night_0_c2_in > 0.5 && day_and_night_0_c2_roll < u_p_dayxandxnightx0xc2_brushFill) { day_and_night_0_c2_next = clamp(floor(u_p_dayxandxnightx0xc2_brushState + 0.5), 0.0, day_and_night_0_c2_top); day_and_night_0_c2_ng = 0.0; }
+    vec3 day_and_night_0_c2_out = vec3(day_and_night_0_c2_next, day_and_night_0_c2_ng, day_and_night_0_c2_phase);
+    float day_and_night_0_c2_outA = 2.0;
+    gl_FragColor = vec4(day_and_night_0_c2_out, day_and_night_0_c2_outA);
+}",
+      "label": "Day and Night cells",
+      "live": true,
+      "nodeId": "rules__cells",
+      "nodeIds": [
+        "rules__step",
+        "rules",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "day_and_night_ce_0",
+      ],
+      "scale": 0.125,
+      "slug": "day_and_night_ce_0",
+      "wrap": "repeat",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > gridRulesSand 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "02a316222bb7821fc43b621df8be:4234",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "092b32cbabf2910cf2429357e1d3:114",
+  "paramBindings": "0ba9eaa23b4a8c0b9ca3eaabacb3:1047",
+  "paramUniforms": [
+    "u_p_sandxrulesx0xc2_afterglow",
+    "u_p_sandxrulesx0xc2_ageFade",
+    "u_p_sandxrulesx0xc2_ageRate",
+    "u_p_sandxrulesx0xc2_brushFill",
+    "u_p_sandxrulesx0xc2_brushRadius",
+    "u_p_sandxrulesx0xc2_brushState",
+    "u_p_sandxrulesx0xc2_color0",
+    "u_p_sandxrulesx0xc2_color1",
+    "u_p_sandxrulesx0xc2_color2",
+    "u_p_sandxrulesx0xc2_color3",
+    "u_p_sandxrulesx0xc2_color4",
+    "u_p_sandxrulesx0xc2_color5",
+    "u_p_sandxrulesx0xc2_color6",
+    "u_p_sandxrulesx0xc2_color7",
+    "u_p_sandxrulesx0xc2_density",
+    "u_p_sandxrulesx0xc2_glowColor",
+    "u_p_sandxrulesx0xc2_oldColor",
+    "u_p_sandxrulesx0xc2_paint",
+    "u_p_sandxrulesx0xc2_rate",
+    "u_p_sandxrulesx0xc2_reset",
+    "u_p_sandxrulesx0xc2_seed",
+    "u_p_sandxrulesx0xc2_states",
+  ],
+  "paramValues": "0b18e0bf11ad17006e8acfdca0aa:880",
+  "passes": [
+    {
+      "filter": "nearest",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_sandxrulesx0xc2_states;
+uniform float u_p_sandxrulesx0xc2_rate;
+uniform float u_p_sandxrulesx0xc2_reset;
+uniform float u_p_sandxrulesx0xc2_density;
+uniform float u_p_sandxrulesx0xc2_seed;
+uniform float u_p_sandxrulesx0xc2_paint;
+uniform float u_p_sandxrulesx0xc2_brushRadius;
+uniform float u_p_sandxrulesx0xc2_brushState;
+uniform float u_p_sandxrulesx0xc2_brushFill;
+uniform float u_p_sandxrulesx0xc2_afterglow;
+uniform float u_p_sandxrulesx0xc2_ageRate;
+uniform float u_p_sandxrulesx0xc2_ageFade;
+uniform vec3 u_p_sandxrulesx0xc2_color0;
+uniform vec3 u_p_sandxrulesx0xc2_color1;
+uniform vec3 u_p_sandxrulesx0xc2_color2;
+uniform vec3 u_p_sandxrulesx0xc2_color3;
+uniform vec3 u_p_sandxrulesx0xc2_color4;
+uniform vec3 u_p_sandxrulesx0xc2_color5;
+uniform vec3 u_p_sandxrulesx0xc2_color6;
+uniform vec3 u_p_sandxrulesx0xc2_color7;
+uniform vec3 u_p_sandxrulesx0xc2_glowColor;
+uniform vec3 u_p_sandxrulesx0xc2_oldColor;
+uniform sampler2D u_pass_sand_rules_cells_0;
+uniform vec2 u_pass_sand_rules_cells_0_px;
+uniform sampler2D u_passprev_sand_rules_cells_0;
+uniform vec2 u_passprev_sand_rules_cells_0_px;
+uniform float u_mousebtn;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+float grHash(vec3 p) {
+    vec3 p3 = fract(p * 0.1031);
+    p3 = p3 + dot(p3, vec3(p3.z, p3.y, p3.x) + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Grid Rules, Blocks: Margolus falling sand on a ¼-size board with walls. 0 is air, 1 sand, 2 wall.
+    // Each step the board is cut into 2×2 blocks (the cut shifting one cell diagonally every other step); a block whose picture matches a rule becomes its after picture: a grain over air falls, a grain on a heap slides down to the side (with chance 0.8, rolled per block). The rules only rearrange, so the count of grains never changes.
+    // Hold the mouse button to pour sand; set Brush paints to 2 to draw walls, 0 to erase.
+    vec2 sand_rules_0_c2_res = u_resolution;
+    vec2 sand_rules_0_c2_cell = floor(gl_FragCoord.xy);
+    vec4 sand_rules_0_c2_me = texture2D(u_passprev_sand_rules_cells_0, (sand_rules_0_c2_cell + vec2(0.0) + 0.5) / sand_rules_0_c2_res);
+    float sand_rules_0_c2_fresh = (abs(sand_rules_0_c2_me.a - 38.0) > 0.5 || u_p_sandxrulesx0xc2_reset > 0.5) ? 1.0 : 0.0;
+    float sand_rules_0_c2_clk = (sand_rules_0_c2_fresh > 0.5 ? 0.0 : fract(sand_rules_0_c2_me.b)) + clamp(u_p_sandxrulesx0xc2_rate, 0.0, 1.0);
+    float sand_rules_0_c2_tick = step(1.0, sand_rules_0_c2_clk);
+    float sand_rules_0_c2_phase = sand_rules_0_c2_clk - sand_rules_0_c2_tick;
+    float sand_rules_0_c2_h = grHash(vec3(sand_rules_0_c2_cell, mod(floor(u_time * 60.0), 997.0) + u_p_sandxrulesx0xc2_seed * 1013.0 + 1.0));
+    vec2 sand_rules_0_c2_m = u_mouse * 0.25;
+    float sand_rules_0_c2_in = (length(sand_rules_0_c2_cell + 0.5 - sand_rules_0_c2_m) < u_p_sandxrulesx0xc2_brushRadius ? 1.0 : 0.0) * max(step(0.5, u_mousebtn), step(0.5, u_p_sandxrulesx0xc2_paint));
+    float sand_rules_0_c2_s = floor(sand_rules_0_c2_me.r + 0.5);
+    float sand_rules_0_c2_g = sand_rules_0_c2_me.g;
+    float sand_rules_0_c2_top = max(floor(u_p_sandxrulesx0xc2_states + 0.5), 2.0) - 1.0;
+    float sand_rules_0_c2_par = step(1.5, sand_rules_0_c2_me.b);
+    vec2 sand_rules_0_c2_W = floor(sand_rules_0_c2_res * 0.5) * 2.0;
+    vec2 sand_rules_0_c2_org = floor((sand_rules_0_c2_cell - sand_rules_0_c2_par) * 0.5) * 2.0 + sand_rules_0_c2_par;
+    vec2 sand_rules_0_c2_q = sand_rules_0_c2_cell - sand_rules_0_c2_org;
+    float sand_rules_0_c2_qi = sand_rules_0_c2_q.x + (1.0 - sand_rules_0_c2_q.y) * 2.0;
+    float sand_rules_0_c2_live = step(sand_rules_0_c2_cell.x, sand_rules_0_c2_W.x - 0.5) * step(sand_rules_0_c2_cell.y, sand_rules_0_c2_W.y - 0.5);
+    vec2 sand_rules_0_c2_key = mod(sand_rules_0_c2_org, sand_rules_0_c2_W);
+    vec2 sand_rules_0_c2_p0 = sand_rules_0_c2_org + vec2(0.0, 1.0);
+    float sand_rules_0_c2_b0 = (sand_rules_0_c2_p0.x < 0.0 || sand_rules_0_c2_p0.y < 0.0 || sand_rules_0_c2_p0.x > sand_rules_0_c2_W.x - 0.5 || sand_rules_0_c2_p0.y > sand_rules_0_c2_W.y - 0.5) ? -1.0 : floor(texture2D(u_passprev_sand_rules_cells_0, (sand_rules_0_c2_p0 + 0.5) / sand_rules_0_c2_res).r + 0.5);
+    vec2 sand_rules_0_c2_p1 = sand_rules_0_c2_org + vec2(1.0, 1.0);
+    float sand_rules_0_c2_b1 = (sand_rules_0_c2_p1.x < 0.0 || sand_rules_0_c2_p1.y < 0.0 || sand_rules_0_c2_p1.x > sand_rules_0_c2_W.x - 0.5 || sand_rules_0_c2_p1.y > sand_rules_0_c2_W.y - 0.5) ? -1.0 : floor(texture2D(u_passprev_sand_rules_cells_0, (sand_rules_0_c2_p1 + 0.5) / sand_rules_0_c2_res).r + 0.5);
+    vec2 sand_rules_0_c2_p2 = sand_rules_0_c2_org + vec2(0.0, 0.0);
+    float sand_rules_0_c2_b2 = (sand_rules_0_c2_p2.x < 0.0 || sand_rules_0_c2_p2.y < 0.0 || sand_rules_0_c2_p2.x > sand_rules_0_c2_W.x - 0.5 || sand_rules_0_c2_p2.y > sand_rules_0_c2_W.y - 0.5) ? -1.0 : floor(texture2D(u_passprev_sand_rules_cells_0, (sand_rules_0_c2_p2 + 0.5) / sand_rules_0_c2_res).r + 0.5);
+    vec2 sand_rules_0_c2_p3 = sand_rules_0_c2_org + vec2(1.0, 0.0);
+    float sand_rules_0_c2_b3 = (sand_rules_0_c2_p3.x < 0.0 || sand_rules_0_c2_p3.y < 0.0 || sand_rules_0_c2_p3.x > sand_rules_0_c2_W.x - 0.5 || sand_rules_0_c2_p3.y > sand_rules_0_c2_W.y - 0.5) ? -1.0 : floor(texture2D(u_passprev_sand_rules_cells_0, (sand_rules_0_c2_p3 + 0.5) / sand_rules_0_c2_res).r + 0.5);
+    float sand_rules_0_c2_next = sand_rules_0_c2_s;
+    float sand_rules_0_c2_done = 0.0;
+    float sand_rules_0_c2_o0 = floor(grHash(vec3(sand_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 31.0)) * 1.0);
+    float sand_rules_0_c2_best0 = 0.0;
+    float sand_rules_0_c2_pick0 = -1.0;
+    float sand_rules_0_c2_m0_0 = (abs(sand_rules_0_c2_b0 - 1.0) < 0.5 && abs(sand_rules_0_c2_b1 - 1.0) < 0.5 && abs(sand_rules_0_c2_b2 - 0.0) < 0.5 && abs(sand_rules_0_c2_b3 - 0.0) < 0.5) ? 1.0 - mod(0.0 - sand_rules_0_c2_o0 + 1.0, 1.0) : 0.0;
+    if (sand_rules_0_c2_m0_0 > sand_rules_0_c2_best0) { sand_rules_0_c2_best0 = sand_rules_0_c2_m0_0; sand_rules_0_c2_pick0 = 0.0; }
+    if (sand_rules_0_c2_done < 0.5 && sand_rules_0_c2_best0 > 0.5) { sand_rules_0_c2_next = (sand_rules_0_c2_qi < 0.5 ? 0.0 : (sand_rules_0_c2_qi < 1.5 ? 0.0 : (sand_rules_0_c2_qi < 2.5 ? 1.0 : 1.0))); sand_rules_0_c2_done = 1.0; }
+    float sand_rules_0_c2_o1 = floor(grHash(vec3(sand_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 33.0)) * 2.0);
+    float sand_rules_0_c2_best1 = 0.0;
+    float sand_rules_0_c2_pick1 = -1.0;
+    float sand_rules_0_c2_m1_0 = (abs(sand_rules_0_c2_b0 - 1.0) < 0.5 && abs(sand_rules_0_c2_b2 - 0.0) < 0.5) ? 2.0 - mod(0.0 - sand_rules_0_c2_o1 + 2.0, 2.0) : 0.0;
+    if (sand_rules_0_c2_m1_0 > sand_rules_0_c2_best1) { sand_rules_0_c2_best1 = sand_rules_0_c2_m1_0; sand_rules_0_c2_pick1 = 0.0; }
+    float sand_rules_0_c2_m1_1 = (abs(sand_rules_0_c2_b1 - 1.0) < 0.5 && abs(sand_rules_0_c2_b3 - 0.0) < 0.5) ? 2.0 - mod(1.0 - sand_rules_0_c2_o1 + 2.0, 2.0) : 0.0;
+    if (sand_rules_0_c2_m1_1 > sand_rules_0_c2_best1) { sand_rules_0_c2_best1 = sand_rules_0_c2_m1_1; sand_rules_0_c2_pick1 = 1.0; }
+    if (sand_rules_0_c2_done < 0.5 && sand_rules_0_c2_best1 > 0.5) { sand_rules_0_c2_next = (sand_rules_0_c2_qi < 0.5 ? (sand_rules_0_c2_pick1 < 0.5 ? 0.0 : sand_rules_0_c2_s) : (sand_rules_0_c2_qi < 1.5 ? (sand_rules_0_c2_pick1 < 0.5 ? sand_rules_0_c2_s : 0.0) : (sand_rules_0_c2_qi < 2.5 ? (sand_rules_0_c2_pick1 < 0.5 ? 1.0 : sand_rules_0_c2_s) : (sand_rules_0_c2_pick1 < 0.5 ? sand_rules_0_c2_s : 1.0)))); sand_rules_0_c2_done = 1.0; }
+    float sand_rules_0_c2_o2 = floor(grHash(vec3(sand_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 35.0)) * 2.0);
+    float sand_rules_0_c2_best2 = 0.0;
+    float sand_rules_0_c2_pick2 = -1.0;
+    float sand_rules_0_c2_m2_0 = (abs(sand_rules_0_c2_b0 - 1.0) < 0.5 && abs(sand_rules_0_c2_b1 - 0.0) < 0.5 && abs(sand_rules_0_c2_b2) > 0.5 && abs(sand_rules_0_c2_b3 - 0.0) < 0.5) ? 2.0 - mod(0.0 - sand_rules_0_c2_o2 + 2.0, 2.0) : 0.0;
+    if (sand_rules_0_c2_m2_0 > sand_rules_0_c2_best2) { sand_rules_0_c2_best2 = sand_rules_0_c2_m2_0; sand_rules_0_c2_pick2 = 0.0; }
+    float sand_rules_0_c2_m2_1 = (abs(sand_rules_0_c2_b0 - 0.0) < 0.5 && abs(sand_rules_0_c2_b1 - 1.0) < 0.5 && abs(sand_rules_0_c2_b2 - 0.0) < 0.5 && abs(sand_rules_0_c2_b3) > 0.5) ? 2.0 - mod(1.0 - sand_rules_0_c2_o2 + 2.0, 2.0) : 0.0;
+    if (sand_rules_0_c2_m2_1 > sand_rules_0_c2_best2) { sand_rules_0_c2_best2 = sand_rules_0_c2_m2_1; sand_rules_0_c2_pick2 = 1.0; }
+    if (sand_rules_0_c2_done < 0.5 && sand_rules_0_c2_best2 * step(grHash(vec3(sand_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 36.0)), 0.8) > 0.5) { sand_rules_0_c2_next = (sand_rules_0_c2_qi < 0.5 ? (sand_rules_0_c2_pick2 < 0.5 ? 0.0 : 0.0) : (sand_rules_0_c2_qi < 1.5 ? (sand_rules_0_c2_pick2 < 0.5 ? 0.0 : 0.0) : (sand_rules_0_c2_qi < 2.5 ? (sand_rules_0_c2_pick2 < 0.5 ? sand_rules_0_c2_s : 1.0) : (sand_rules_0_c2_pick2 < 0.5 ? 1.0 : sand_rules_0_c2_s)))); sand_rules_0_c2_done = 1.0; }
+    sand_rules_0_c2_next = clamp(sand_rules_0_c2_next, 0.0, sand_rules_0_c2_top);
+    float sand_rules_0_c2_ng = 0.0;
+    if (abs(sand_rules_0_c2_next - sand_rules_0_c2_s) < 0.5) sand_rules_0_c2_ng = sand_rules_0_c2_next > 0.5 ? min(1.0, sand_rules_0_c2_g + u_p_sandxrulesx0xc2_ageRate) : sand_rules_0_c2_g * u_p_sandxrulesx0xc2_afterglow;
+    else sand_rules_0_c2_ng = sand_rules_0_c2_next < 0.5 ? u_p_sandxrulesx0xc2_afterglow : 0.0;
+    if (sand_rules_0_c2_tick < 0.5) { sand_rules_0_c2_next = sand_rules_0_c2_s; sand_rules_0_c2_ng = sand_rules_0_c2_g; }
+    if (sand_rules_0_c2_fresh > 0.5) { sand_rules_0_c2_next = (sand_rules_0_c2_h < u_p_sandxrulesx0xc2_density ? 1.0 : 0.0); sand_rules_0_c2_ng = 0.0; }
+    float sand_rules_0_c2_roll = grHash(vec3(sand_rules_0_c2_cell + 0.5, mod(floor(u_time * 60.0), 997.0) + 7919.0));
+    if (sand_rules_0_c2_in > 0.5 && sand_rules_0_c2_roll < u_p_sandxrulesx0xc2_brushFill) { sand_rules_0_c2_next = clamp(floor(u_p_sandxrulesx0xc2_brushState + 0.5), 0.0, sand_rules_0_c2_top); sand_rules_0_c2_ng = 0.0; }
+    sand_rules_0_c2_next = sand_rules_0_c2_next * sand_rules_0_c2_live;
+    sand_rules_0_c2_ng = sand_rules_0_c2_ng * sand_rules_0_c2_live;
+    vec3 sand_rules_0_c2_out = vec3(sand_rules_0_c2_next, sand_rules_0_c2_ng, sand_rules_0_c2_phase + 2.0 * (sand_rules_0_c2_tick > 0.5 ? 1.0 - sand_rules_0_c2_par : sand_rules_0_c2_par));
+    float sand_rules_0_c2_outA = 38.0;
+    gl_FragColor = vec4(sand_rules_0_c2_out, sand_rules_0_c2_outA);
+}",
+      "label": "Sand rules cells",
+      "live": true,
+      "nodeId": "sand__cells",
+      "nodeIds": [
+        "sand__step",
+        "sand",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "sand_rules_cells_0",
+      ],
+      "scale": 0.25,
+      "slug": "sand_rules_cells_0",
+      "wrap": "clamp",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > gridRulesWater 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "02db6a97e79ba61415d8e2200026:3751",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "153216889f5bf60e86cefb0b95f5:119",
+  "paramBindings": "00d28e1e0ecb881b29c3b0b48419:1143",
+  "paramUniforms": [
+    "u_p_waterxrulesx0xc2_brushRadius",
+    "u_p_waterxrulesx0xc2_brushState",
+    "u_p_waterxrulesx0xc2_color0",
+    "u_p_waterxrulesx0xc2_color1",
+    "u_p_waterxrulesx0xc2_color2",
+    "u_p_waterxrulesx0xc2_color3",
+    "u_p_waterxrulesx0xc2_damping",
+    "u_p_waterxrulesx0xc2_decay",
+    "u_p_waterxrulesx0xc2_density",
+    "u_p_waterxrulesx0xc2_diffA",
+    "u_p_waterxrulesx0xc2_diffB",
+    "u_p_waterxrulesx0xc2_feed",
+    "u_p_waterxrulesx0xc2_gain",
+    "u_p_waterxrulesx0xc2_kill",
+    "u_p_waterxrulesx0xc2_knobA",
+    "u_p_waterxrulesx0xc2_knobB",
+    "u_p_waterxrulesx0xc2_knobC",
+    "u_p_waterxrulesx0xc2_knobD",
+    "u_p_waterxrulesx0xc2_paint",
+    "u_p_waterxrulesx0xc2_rate",
+    "u_p_waterxrulesx0xc2_reset",
+    "u_p_waterxrulesx0xc2_seed",
+    "u_p_waterxrulesx0xc2_spread",
+    "u_p_waterxrulesx0xc2_waveSpeed",
+  ],
+  "paramValues": "182508696253ad00a2216df5caed:897",
+  "passes": [
+    {
+      "filter": "nearest",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_waterxrulesx0xc2_spread;
+uniform float u_p_waterxrulesx0xc2_decay;
+uniform float u_p_waterxrulesx0xc2_waveSpeed;
+uniform float u_p_waterxrulesx0xc2_damping;
+uniform float u_p_waterxrulesx0xc2_feed;
+uniform float u_p_waterxrulesx0xc2_kill;
+uniform float u_p_waterxrulesx0xc2_diffA;
+uniform float u_p_waterxrulesx0xc2_diffB;
+uniform float u_p_waterxrulesx0xc2_knobA;
+uniform float u_p_waterxrulesx0xc2_knobB;
+uniform float u_p_waterxrulesx0xc2_knobC;
+uniform float u_p_waterxrulesx0xc2_knobD;
+uniform float u_p_waterxrulesx0xc2_rate;
+uniform float u_p_waterxrulesx0xc2_reset;
+uniform float u_p_waterxrulesx0xc2_density;
+uniform float u_p_waterxrulesx0xc2_seed;
+uniform float u_p_waterxrulesx0xc2_paint;
+uniform float u_p_waterxrulesx0xc2_brushRadius;
+uniform float u_p_waterxrulesx0xc2_brushState;
+uniform float u_p_waterxrulesx0xc2_gain;
+uniform vec3 u_p_waterxrulesx0xc2_color0;
+uniform vec3 u_p_waterxrulesx0xc2_color1;
+uniform vec3 u_p_waterxrulesx0xc2_color2;
+uniform vec3 u_p_waterxrulesx0xc2_color3;
+uniform sampler2D u_pass_water_rules_cell_0;
+uniform vec2 u_pass_water_rules_cell_0_px;
+uniform sampler2D u_passprev_water_rules_cell_0;
+uniform vec2 u_passprev_water_rules_cell_0_px;
+uniform vec2 u_passiter_water_rules_cell_0;
+uniform float u_mousebtn;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+float grHash(vec3 p) {
+    vec3 p3 = fract(p * 0.1031);
+    p3 = p3 + dot(p3, vec3(p3.z, p3.y, p3.x) + 31.32);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Grid Rules, Smooth, Waves: Hugo Elias's two-buffer water on a ½-size board, two steps a frame. Red is the height now, green the height a step before.
+    // Walls reflect the ripples. It starts with one drop in the middle; hold the mouse button to push the surface.
+    vec2 water_rules_0_c2_res = u_resolution;
+    vec2 water_rules_0_c2_cell = floor(gl_FragCoord.xy);
+    vec4 water_rules_0_c2_me = texture2D(u_passprev_water_rules_cell_0, (water_rules_0_c2_cell + vec2(0.0) + 0.5) / water_rules_0_c2_res);
+    float water_rules_0_c2_fresh = (abs(water_rules_0_c2_me.a - 65.0) > 0.5 || u_p_waterxrulesx0xc2_reset > 0.5) ? 1.0 : 0.0;
+    float water_rules_0_c2_tick = 1.0;
+    float water_rules_0_c2_phase = 0.0;
+    float water_rules_0_c2_h = grHash(vec3(water_rules_0_c2_cell, mod(floor(u_time * 60.0), 997.0) + u_p_waterxrulesx0xc2_seed * 1013.0 + 1.0));
+    vec2 water_rules_0_c2_m = u_mouse * 0.5;
+    float water_rules_0_c2_in = (length(water_rules_0_c2_cell + 0.5 - water_rules_0_c2_m) < u_p_waterxrulesx0xc2_brushRadius ? 1.0 : 0.0) * max(step(0.5, u_mousebtn), step(0.5, u_p_waterxrulesx0xc2_paint));
+    float water_rules_0_c2_u = water_rules_0_c2_me.r;
+    float water_rules_0_c2_v = water_rules_0_c2_me.g;
+    vec4 water_rules_0_c2_rN = texture2D(u_passprev_water_rules_cell_0, (water_rules_0_c2_cell + vec2(0.0, 1.0) + 0.5) / water_rules_0_c2_res);
+    vec4 water_rules_0_c2_rNE = texture2D(u_passprev_water_rules_cell_0, (water_rules_0_c2_cell + vec2(1.0, 1.0) + 0.5) / water_rules_0_c2_res);
+    vec4 water_rules_0_c2_rE = texture2D(u_passprev_water_rules_cell_0, (water_rules_0_c2_cell + vec2(1.0, 0.0) + 0.5) / water_rules_0_c2_res);
+    vec4 water_rules_0_c2_rSE = texture2D(u_passprev_water_rules_cell_0, (water_rules_0_c2_cell + vec2(1.0, -1.0) + 0.5) / water_rules_0_c2_res);
+    vec4 water_rules_0_c2_rS = texture2D(u_passprev_water_rules_cell_0, (water_rules_0_c2_cell + vec2(0.0, -1.0) + 0.5) / water_rules_0_c2_res);
+    vec4 water_rules_0_c2_rSW = texture2D(u_passprev_water_rules_cell_0, (water_rules_0_c2_cell + vec2(-1.0, -1.0) + 0.5) / water_rules_0_c2_res);
+    vec4 water_rules_0_c2_rW = texture2D(u_passprev_water_rules_cell_0, (water_rules_0_c2_cell + vec2(-1.0, 0.0) + 0.5) / water_rules_0_c2_res);
+    vec4 water_rules_0_c2_rNW = texture2D(u_passprev_water_rules_cell_0, (water_rules_0_c2_cell + vec2(-1.0, 1.0) + 0.5) / water_rules_0_c2_res);
+    float water_rules_0_c2_edgeU = water_rules_0_c2_rN.r + water_rules_0_c2_rE.r + water_rules_0_c2_rS.r + water_rules_0_c2_rW.r;
+    float water_rules_0_c2_edgeV = water_rules_0_c2_rN.g + water_rules_0_c2_rE.g + water_rules_0_c2_rS.g + water_rules_0_c2_rW.g;
+    float water_rules_0_c2_cornU = water_rules_0_c2_rNE.r + water_rules_0_c2_rSE.r + water_rules_0_c2_rSW.r + water_rules_0_c2_rNW.r;
+    float water_rules_0_c2_cornV = water_rules_0_c2_rNE.g + water_rules_0_c2_rSE.g + water_rules_0_c2_rSW.g + water_rules_0_c2_rNW.g;
+    float water_rules_0_c2_lapU = 0.2 * water_rules_0_c2_edgeU + 0.05 * water_rules_0_c2_cornU - water_rules_0_c2_u;
+    float water_rules_0_c2_lapV = 0.2 * water_rules_0_c2_edgeV + 0.05 * water_rules_0_c2_cornV - water_rules_0_c2_v;
+    float water_rules_0_c2_nu = water_rules_0_c2_u;
+    float water_rules_0_c2_nv = water_rules_0_c2_v;
+    water_rules_0_c2_nu = (2.0 * water_rules_0_c2_u - water_rules_0_c2_v + u_p_waterxrulesx0xc2_waveSpeed * 0.5 * (water_rules_0_c2_edgeU - 4.0 * water_rules_0_c2_u)) * u_p_waterxrulesx0xc2_damping;
+    water_rules_0_c2_nv = water_rules_0_c2_u;
+    if (water_rules_0_c2_tick < 0.5) { water_rules_0_c2_nu = water_rules_0_c2_u; water_rules_0_c2_nv = water_rules_0_c2_v; }
+    if (water_rules_0_c2_fresh > 0.5) { water_rules_0_c2_nu = (length(water_rules_0_c2_cell + 0.5 - water_rules_0_c2_res * 0.5) < min(water_rules_0_c2_res.x, water_rules_0_c2_res.y) * 0.08 ? 1.0 : 0.0); water_rules_0_c2_nv = (length(water_rules_0_c2_cell + 0.5 - water_rules_0_c2_res * 0.5) < min(water_rules_0_c2_res.x, water_rules_0_c2_res.y) * 0.08 ? 1.0 : 0.0); }
+    if (water_rules_0_c2_in > 0.5) water_rules_0_c2_nu = u_p_waterxrulesx0xc2_brushState;
+    vec3 water_rules_0_c2_out = vec3(water_rules_0_c2_nu, water_rules_0_c2_nv, water_rules_0_c2_phase);
+    float water_rules_0_c2_outA = 65.0;
+    gl_FragColor = vec4(water_rules_0_c2_out, water_rules_0_c2_outA);
+}",
+      "label": "Water rules cells",
+      "live": true,
+      "nodeId": "water__cells",
+      "nodeIds": [
+        "water__step",
+        "water",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "water_rules_cell_0",
+      ],
+      "repeat": 2,
+      "scale": 0.5,
+      "slug": "water_rules_cell_0",
+      "wrap": "clamp",
+    },
+  ],
   "success": true,
   "textureUniforms": {},
   "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
@@ -11537,7 +14270,7 @@ exports[`golden shaders: every example compiles as it did > tiltShiftScene 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0f933268db780a1d071e7c566be5:6516",
+  "fragmentShader": "1cc94c3d018eb5063395c6af244a:5178",
   "isStateful": true,
   "liveUniforms": {},
   "nodeSlugs": "1d9bc148b2118a087c7932e32629:142",

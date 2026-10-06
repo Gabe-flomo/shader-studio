@@ -20,13 +20,13 @@
  */
 import type { GraphNode, NodeDefinition, SubgraphData } from '../types/nodeGraph';
 import type { AgentDepositProgram, AgentDrawProgram, AgentListener, AgentParam, AgentTrailProgram } from './types';
-import { getNodeDefinitionFor } from '../nodes/definitions';
+import { getNodeDefinition, getNodeDefinitionFor } from '../nodes/definitions';
 import { patchNodeParamsForUniforms } from './uniformPatcher';
 import { typesCompatible } from '../lib/typesCompatible';
 import { fieldChainProblems, fieldInputKeys } from './fieldSockets';
 import { topologicalSort } from './topoSort';
 import { computeNodeSlug } from './nodeSlug';
-import { AGENT_TIERS, AGENTS_GROUP_TYPE, DRAW_COLOR_BY, DRAW_STYLES, GP_PALETTE_NAMES, TRAIL_RESOLUTIONS } from '../nodes/definitions/agents';
+import { AGENT_TIERS, AGENTS_GROUP_TYPE, DRAW_COLOR_BY, DRAW_STYLES, GP_PALETTE_NAMES, isAgent3d, TRAIL_RESOLUTIONS, TRAIL_VOLUMES, withAgentSpace } from '../nodes/definitions/agents';
 
 /** Node types that send a graph down this path (at any depth). */
 export const AGENTS_FAMILY = new Set([AGENTS_GROUP_TYPE, 'trailField', 'drawAgents', 'agentDeposit', 'agentEmit']);
@@ -72,7 +72,10 @@ export function engineParams(n: GraphNode, slug: string): { params: Record<strin
   if (!def) return { params: {}, uniforms: {}, bindings: {} };
   const { patchedNode, uniforms, bindings } = patchNodeParamsForUniforms({ ...n, id: slug }, def, undefined, n.id);
   const params: Record<string, AgentParam | number[]> = {};
-  for (const key of Object.keys(def.paramDefs ?? {})) {
+  const d3 = n.params.agentSpace === '3d';
+  for (const [key, pd] of Object.entries(def.paramDefs ?? {})) {
+    // Settings only a 3D group has (the camera, a volume's size) are left out in 2D: its spec is as it always was.
+    if (pd.showWhen?.param === 'agentSpace' && !d3) continue;
     const v = patchedNode.params[key] ?? def.defaultParams?.[key];
     if (typeof v === 'number' || typeof v === 'string' || (Array.isArray(v) && v.every(x => typeof x === 'number'))) params[key] = v as AgentParam | number[];
   }
@@ -94,15 +97,18 @@ export const groupSpecies = (g: GraphNode) => Math.max(1, Math.min(4, Math.round
  *  - the outer nodes upstream of the group's ports and Emit (gathered by the caller's `collect`).
  * `innerIds` are the inside nodes, for the placement and purity rules.
  */
-export function agentStepNodes(group: GraphNode): { inner: GraphNode[]; sink: GraphNode; starts: Array<{ nodeId: string; outputKey: string }>; problems: string[]; stateC: boolean } {
+export function agentStepNodes(group: GraphNode, volumeOf?: (nodeId: string) => string | null): { inner: GraphNode[]; sink: GraphNode; starts: Array<{ nodeId: string; outputKey: string }>; problems: string[]; stateC: boolean; space3d: boolean; grids: Array<{ nodeId: string; from: { nodeId: string; outputKey: string } }> } {
+  const d3 = groupIs3d(group);
   const sg = group.params.subgraph as SubgraphData | undefined;
   const nodes = sg?.nodes ?? [];
   const problems: string[] = [];
   const inputsNode = nodes.find(n => n.type === 'agentInputs');
   const outputNode = nodes.find(n => n.type === 'agentOutput');
   const extras = new Set(((inputsNode?.params.extraInputs ?? []) as Array<{ key: string }>).map(e => e.key));
+  // A Scene port (Collide (3D scene)) is read through its grid program, never compiled into the update shader.
+  const scenePorts = new Set(((inputsNode?.params.extraInputs ?? []) as Array<{ key: string; type: string }>).filter(e => e.type === 'scene3d').map(e => e.key));
   const starts: Array<{ nodeId: string; outputKey: string }> = [];
-  for (const [key, inp] of Object.entries(group.inputs)) if (inp.connection && (key === 'emit' || extras.has(key))) starts.push(inp.connection);
+  for (const [key, inp] of Object.entries(group.inputs)) if (inp.connection && (key === 'emit' || (extras.has(key) && !scenePorts.has(key) && inp.type !== 'scene3d'))) starts.push(inp.connection);
   const rewire = (n: GraphNode): GraphNode => {
     if (!inputsNode) return n;
     let changed = false;
@@ -117,11 +123,31 @@ export function agentStepNodes(group: GraphNode): { inner: GraphNode[]; sink: Gr
     }));
     return changed ? { ...n, inputs } : n;
   };
-  const inner = nodes.filter(n => n.type !== 'agentOutput').map(rewire);
-  const out = outputNode ? rewire(outputNode) : null;
+  // The group's space: in 3D every inside node is marked and its space sockets are vec3 (a 2D group's nodes are left as they are).
+  const spaced = (n: GraphNode) => (d3 || isAgent3d(n) ? withAgentSpace(n, d3, getNodeDefinition) : n);
+  // In 3D a Sense whose Trail image is a volume Trail reads it in 3D (its layout uniform by the trail's name).
+  const volumes = (n: GraphNode) => {
+    const src = n.type === 'agentSense' && d3 ? n.inputs.texture?.connection?.nodeId : undefined;
+    const vol = src && volumeOf ? volumeOf(src) : null;
+    return vol ? { ...n, params: { ...n.params, __vol: true, __volOf: vol } } : n;
+  };
+  // Collide (3D scene): its Scene (rewired to what is wired outside) goes to the engine as a grid program; the copy here has no wire.
+  const grids: Array<{ nodeId: string; from: { nodeId: string; outputKey: string } }> = [];
+  const gridded = (n: GraphNode) => {
+    if (n.type !== 'agentCollideScene') return n;
+    if (!d3) problems.push(`Node ${n.id}: Collide (3D scene) works in a 3D group: set ${labelOf(group)}'s Space to 3D.`);
+    const c = n.inputs.scene?.connection;
+    if (c && d3 && c.nodeId !== inputsNode?.id) grids.push({ nodeId: n.id, from: c });
+    if (!c) return n;
+    const { connection: _drop, ...rest } = n.inputs.scene;
+    return { ...n, inputs: { ...n.inputs, scene: rest } };
+  };
+  const inner = nodes.filter(n => n.type !== 'agentOutput').map(rewire).map(gridded).map(spaced).map(volumes);
+  const out = outputNode ? spaced(rewire(outputNode)) : null;
   const sinkInputs: GraphNode['inputs'] = {};
+  const v2 = d3 ? 'vec3' : 'vec2';
   const SINK_TYPES: Record<string, 'vec2' | 'float' | 'vec3' | 'vec4'> = {
-    position: 'vec2', velocity: 'vec2', heading: 'float', speed: 'float', alive: 'float', memory: 'vec2', deposit: 'vec4', colour: 'vec3',
+    position: v2, velocity: v2, heading: d3 ? 'vec3' : 'float', speed: 'float', alive: 'float', memory: 'vec2', deposit: 'vec4', colour: 'vec3',
   };
   for (const [key, type] of Object.entries(SINK_TYPES)) {
     const inp = out?.inputs[key];
@@ -130,10 +156,18 @@ export function agentStepNodes(group: GraphNode): { inner: GraphNode[]; sink: Gr
   }
   if (group.inputs.emit?.connection) sinkInputs.emit = { type: 'emitter', label: 'Emit', connection: group.inputs.emit.connection };
   const stateC = needsStateC(group, nodes, out);
-  const sink: GraphNode = { id: `${group.id}__step`, type: 'agentStepOut', position: { x: 0, y: 0 }, params: stateC ? { stateC: true } : {}, outputs: {}, inputs: sinkInputs };
+  const sink: GraphNode = { id: `${group.id}__step`, type: 'agentStepOut', position: { x: 0, y: 0 }, params: { ...(stateC ? { stateC: true } : {}), ...(d3 ? { agentSpace: '3d' } : {}), ...(outputNode?.params.quietBirth === true ? { quietBirth: true } : {}) }, outputs: {}, inputs: sinkInputs };
   if (!outputNode) problems.push(`Node ${group.id}: ${labelOf(group)} has no Agent Output inside; open it and Start over, or add the preset again.`);
-  return { inner, sink, starts, problems, stateC };
+  return { inner, sink, starts, problems, stateC, space3d: d3, grids };
 }
+
+/** The end of a Collide (3D scene)'s grid program (AgentGridOutNode), wired to the Scene outside. */
+export function gridSink(nodeId: string, slug: string, from: { nodeId: string; outputKey: string }): GraphNode {
+  return { id: `${nodeId}__grid`, type: 'agentGridOut', position: { x: 0, y: 0 }, params: { slug }, outputs: {}, inputs: { scene: { type: 'scene3d', label: 'Scene', connection: from } } };
+}
+
+/** Is an Agents group's Space 3D? */
+export const groupIs3d = (g: GraphNode) => g.params.space === '3d';
 
 /**
  * Does a group need per-walker state (state C and D, docs/agents-plan.md §3.3)? When it has more
@@ -206,7 +240,10 @@ export function depositTargets(nodes: GraphNode[]): Map<string, string> {
 /** The engine's view of a Trail field. */
 export function trailSpec(n: GraphNode, slug: string, params: Record<string, AgentParam | number[]>): Omit<AgentTrailProgram, 'live'> {
   const res = TRAIL_RESOLUTIONS[String(n.params.resolution ?? '0.5')] ?? TRAIL_RESOLUTIONS['0.5'];
+  // Filled by a 3D group: a volume (its rows and slices; the store and the compiler mark it).
+  const volume = isAgent3d(n) ? Number(choice(String(n.params.volume ?? '96'), TRAIL_VOLUMES, '96')) : 0;
   return {
+    ...(volume ? { volume } : {}),
     nodeId: n.id, slug, label: labelOf(n, getNodeDefinitionFor(n)),
     scale: res.scale ?? null, rows: res.rows ?? null,
     edges: choice(n.params.edges, ['wrap', 'clamp'] as const, 'wrap'),
@@ -219,9 +256,11 @@ export function trailSpec(n: GraphNode, slug: string, params: Record<string, Age
 /** The engine's view of a Draw agents node. */
 export function drawSpec(n: GraphNode, slug: string, groupSlug: string, params: Record<string, AgentParam | number[]>): Omit<AgentDrawProgram, 'live'> {
   return {
+    ...(isAgent3d(n) ? { space3d: true, ...(n.params.camMirror === true ? { mirror: true } : {}) } : {}),
     nodeId: n.id, slug, group: groupSlug,
     style: choice(n.params.style, DRAW_STYLES, 'points'),
-    colorBy: choice(n.params.colorBy, DRAW_COLOR_BY, 'heading'),
+    // State (Agent Rules, docs/agent-rules.md) is the walker's own Colour: the rules set it to its state's colour.
+    colorBy: n.params.colorBy === 'state' ? 'agent' : choice(n.params.colorBy, DRAW_COLOR_BY, 'heading'),
     palette: choice(n.params.palette, ['ab', ...GP_PALETTE_NAMES], 'ab'),
     lights: Math.max(0, Math.min(4, Math.round(Number(n.params.lights ?? 0)) || 0)),
     lightMotion: choice(n.params.lightMotion, ['orbit', 'still'] as const, 'orbit'),
@@ -233,6 +272,28 @@ export function drawSpec(n: GraphNode, slug: string, groupSlug: string, params: 
 
 export function depositSpec(n: GraphNode, slug: string, groupSlug: string, trailSlug: string, params: Record<string, AgentParam | number[]>): AgentDepositProgram {
   return { nodeId: n.id, slug, group: groupSlug, trail: trailSlug, what: choice(n.params.what, ['trail', 'velocity'] as const, 'trail'), params: params as Record<string, AgentParam> };
+}
+
+/** A 3D Draw agents' scene probe uniform: (g_uv.x, g_uv.y, 0 origin / 1 ray, 0). */
+export const drawProbeUniform = (slug: string) => `u_agPr_${slug}`;
+/** Does a 3D Draw agents look through a ray-marched scene's camera (Camera from and Camera ray wired)? */
+export const drawSeesScene = (n: GraphNode) => isAgent3d(n) && !!n.inputs.camOrigin?.connection && !!n.inputs.camRay?.connection;
+
+/** The end of a Draw agents' scene probe (AgentProbeOutNode): its camera, or its depth. */
+export function drawProbeSink(n: GraphNode, slug: string, mode: 'camera' | 'depth'): GraphNode {
+  const inputs: GraphNode['inputs'] = {};
+  for (const [k, from, type] of [['ro', 'camOrigin', 'vec3'], ['rd', 'camRay', 'vec3'], ['depth', 'depth', 'float']] as const) {
+    const c = n.inputs[from]?.connection;
+    if (c && (mode === 'camera' ? k !== 'depth' : k === 'depth')) inputs[k] = { type, label: k, connection: c };
+  }
+  return { id: `${n.id}__probe_${mode}`, type: 'agentProbeOut', position: { x: 0, y: 0 }, params: { mode, uniform: drawProbeUniform(slug) }, outputs: {}, inputs };
+}
+
+/** The camera probe's text: g_uv is the probe uniform's point, not the pixel's (one chain read at four chosen points). */
+export function toProbeCamera(fs: string, uniform: string): string {
+  const pixelPrelude = '    vec2 g_uv = (vUv - 0.5) * 2.0;\n    g_uv.x *= u_resolution.x / u_resolution.y;\n';
+  if (!fs.includes(pixelPrelude)) throw new Error('Agents: the scene camera probe could not be assembled');
+  return fs.replace(pixelPrelude, `    vec2 g_uv = ${uniform}.xy;\n`);
 }
 
 /** A Trail with Add or Block wired gets a step program of its own (its spread and fade, plus those). */
@@ -329,7 +390,9 @@ export function agentEyeNodes(nodes: GraphNode[], groupId: string, innerId: stri
       const { connection: _drop, ...restInp } = inp;
       return [k, restInp];
     }));
-    return { ...n, inputs, params: { ...n.params, __agentEye: true } };
+    // A 3D group's nodes are previewed as 2D: an agent standing at this pixel, on the picture's plane.
+    const flat = isAgent3d(n) ? withAgentSpace(n, false, getNodeDefinition) : n;
+    return { ...flat, inputs: isAgent3d(n) ? Object.fromEntries(Object.entries(inputs).map(([k, inp]) => [k, { ...inp, type: flat.inputs[k]?.type ?? inp.type }])) : inputs, params: { ...flat.params, __agentEye: true } };
   });
   return { copies, rest: nodes.filter(n => n.type !== 'output' && n.type !== 'vec4Output') };
 }

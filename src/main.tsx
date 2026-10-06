@@ -60,12 +60,20 @@ if (import.meta.env.DEV) {
     compileGraph, nodePreviewRenderer, loadExampleGraphs, resolveNodeAliases, getNodeDefinition, useTakes, takeApplier, playOverlay, playBackground, handFeed, playEngine,
     /** MIDI without a controller: `midiEngine.handleBytes(0xb0, 21, 64, 'Launch Control')` is a knob on channel 1 of that device. */
     midiEngine, padGrid,
+    /** "Show as" previews (docs/node-previews.md): per-node choices, and the readback/paint timings. */
+    nodePreviewPrefs: () => import('./lib/nodePreview/showAs').then(m => m.useNodePreviewPrefs),
+    previewPerf: () => import('./lib/nodePreview/previewBus').then(m => m.previewPerf),
+    perfSnapshot: () => import('./lib/perfStats').then(m => m.getPerfSnapshot()),
+    /** Every registered node type, for registry-wide checks (the node-preview audit). */
+    nodeTypes: () => import('./nodes/definitions').then(m => Object.values(m.NODE_REGISTRY).filter(d => !d.deprecated).map(d => ({ type: d.type, label: d.label, category: d.category, outputs: Object.fromEntries(Object.entries(d.outputs).map(([k, o]) => [k, o.type])) }))),
     /** The MIDI monitor's log (`midiMonitor.text()`), and the rack keyboard (`rackKeyboard.active()`). */
     midiMonitor, rackKeyboard,
     /** Linked folders without a folder picker: `(await linked()).devLinkOpfs('Samples', { 'kick.wav': blob })` links a folder in the browser's private file system. */
     linked: () => import('./files/linkedFolders'),
     /** The Layers node's distance field (docs/layers-node.md): `(await layersField()).layersFieldMode()` is 'gpu' | 'cpu' | 'off'; `.setLayersFieldForceCpu(true)` compares with the old CPU field. */
     layersField: () => import('./play/layersTexture'),
+    /** The 3D Scene Builder (docs/scene-builder.md): `(await sceneBuilder()).useSceneBuilder.getState().openWith(…)`, recipes, templates, describe. */
+    sceneBuilder: async () => ({ ...(await import('./sceneBuilder/store')), ...(await import('./sceneBuilder/recipe')), ...(await import('./sceneBuilder/templates')), ...(await import('./sceneBuilder/actions')), ...(await import('./sceneBuilder/recognize')) }),
     /** Narrow-width layout check (dev/overflowCheck.ts): `(await overflow()).sweepOverflow('[data-column=sources]', [280, 320])` lists what runs past its card. */
     overflow: () => import('./dev/overflowCheck'),
     /** The Audio engine's tape (docs/arrangement.md): `tape.record()`, `tape.play()`, `useTape.getState()`; `audioEngine.setMasterVolume(0)` for silent checks. */

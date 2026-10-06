@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { snippetForFunction, type Snippet } from '../../suggestions/snippets';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { setInputSlider } from '../../nodes/sliderFreeze';
 import { nowParamValue } from '../../lib/nowValue';
@@ -15,8 +16,16 @@ import { Modal } from '../ui/Modal';
 import { toast } from '../ui/toastStore';
 import { CodeField } from '../code/CodeField';
 import { ReferencePanel } from '../code/ReferencePanel';
+import { LinePreviewPanel, ProbePicker } from '../code/LinePreview';
+import type { EditorPanel } from '../code/editorPanelPrefs';
+import { FunctionsToggle, SidePanel, useEditorSidePanels } from '../code/SidePanels';
 import { buildCompletions } from '../code/glslReference';
 import { insertSnippet } from '../code/useCompletion';
+import { HowUsedButton } from '../codeExplorer/HowUsedButton';
+import { useCustomFnJump } from '../codeExplorer/useCodeJumpFocus';
+import { StatementsExplain } from '../explain/StatementsExplain';
+import { useExplainDialogs } from '../explain/useExplainDialogs';
+import { customFnContext, customFnUseHere } from '../explain/hosts';
 
 const TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
 
@@ -27,7 +36,12 @@ interface Props {
   onClose: () => void;
 }
 
+const PANELS: readonly EditorPanel[] = ['functions'];
+
 export function CustomFnModal({ node, onClose }: Props) {
+  // The function palette: closed by default (⌘] or the header's Functions); a drawer on a narrow window
+  const { narrow, open: panels, set: setPanel, toggle: togglePanel } = useEditorSidePanels(PANELS);
+  const functionsOpen = panels.functions;
   const updateNodeParams  = useNodeGraphStore(s => s.updateNodeParams);
   const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
   const tk = useTokens();
@@ -37,6 +51,8 @@ export function CustomFnModal({ node, onClose }: Props) {
   const lastField = useRef<'body' | 'fns'>('body');
   const [autoWrap, setAutoWrap] = useState(false);
   const [showHelpers, setShowHelpers] = useState(() => typeof node.params.glslFunctions === 'string' && node.params.glslFunctions.trim() !== '');
+  // Opened by the Code Explorer's jump to source: show that line.
+  const jump = useCustomFnJump(node.id, f => { if (f === 'glslFunctions') setShowHelpers(true); });
 
   // Read current params
   const customInputs = (node.params.inputs as Array<{ name: string; type: DataType; slider?: { min: number; max: number } | null }>) || [];
@@ -51,6 +67,9 @@ export function CustomFnModal({ node, onClose }: Props) {
   const labelParam   = typeof node.params.label === 'string' ? node.params.label : 'Custom Function';
 
   const rawInputs = node.params.inputs;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the inputs, body and wiring are what it reads
+  const explainCtx = useMemo(() => customFnContext(node), [node.params.inputs, node.params.body, node.inputs]);
+  const explainDialogs = useExplainDialogs({ onJumped: onClose });
   const completions = useMemo(
     () => buildCompletions((rawInputs as Array<{ name: string; type: DataType }> | undefined) ?? []),
     [rawInputs],
@@ -127,6 +146,14 @@ export function CustomFnModal({ node, onClose }: Props) {
 
   // Insert a reference snippet into the last-focused field — wraps the selection, or the
   // whole body when "Wrap all" is on.
+  // A snippet (suggestions/snippets.ts): its helper function added once, a call at the caret in the body.
+  const insertSnippetFn = (sn: Snippet) => {
+    const r = snippetForFunction(sn, customInputs, glslFns);
+    if (r.helpers !== glslFns) { updateNodeParams(node.id, { glslFunctions: r.helpers }); setShowHelpers(true); }
+    lastField.current = 'body';
+    insertFromReference(r.call);
+  };
+
   const insertFromReference = (text: string) => {
     const isBody = lastField.current === 'body';
     const ta = isBody ? bodyRef.current : fnRef.current;
@@ -208,6 +235,7 @@ export function CustomFnModal({ node, onClose }: Props) {
       width={980}
       height={800}
       onClose={onClose}
+      headerActions={<><HowUsedButton /><FunctionsToggle open={functionsOpen} onToggle={() => togglePanel('functions')} /></>}
       footer={
         <>
           <Button icon="export" onClick={handleSavePreset}>Save as preset</Button>
@@ -218,7 +246,7 @@ export function CustomFnModal({ node, onClose }: Props) {
         </>
       }
     >
-      <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
+      <div style={{ display: 'flex', height: '100%', minHeight: 0, position: 'relative' }}>
         <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
           <Section label="Name">
             <Field value={labelParam} onChange={e => updateNodeParams(node.id, { label: e.target.value })} placeholder="Node name" aria-label="Node name" spellCheck={false} />
@@ -283,6 +311,7 @@ export function CustomFnModal({ node, onClose }: Props) {
               grow
               minHeight={180}
               ariaLabel="Function body"
+              flash={jump.field === 'body' ? jump.flash : null}
               value={body}
               onChange={v => updateNodeParams(node.id, { body: v })}
               completions={completions}
@@ -299,6 +328,19 @@ export function CustomFnModal({ node, onClose }: Props) {
             />
             <Note>Use your input names directly. Write a single expression, or a block that ends with <code>return</code>.</Note>
           </Section>
+
+          {/* Preview a variable: the inputs, the body's named locals, Return (code/LinePreview.tsx) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0 }}>
+            <ProbePicker node={node} />
+            <LinePreviewPanel node={node} />
+          </div>
+
+          {/* Explain each statement (lib/glslPatterns); a part can become a node, called from here */}
+          <div style={{ flexShrink: 0 }}>
+            <StatementsExplain code={body} ctx={explainCtx} onFindUses={explainDialogs.findUses}
+              onMakeNode={span => explainDialogs.makeNode({ source: body, span, ctx: explainCtx, useHere: customFnUseHere(node.id, span) })} />
+          </div>
+          {explainDialogs.dialogs}
 
           <div style={{ borderTop: `1px solid ${tk.border.subtle}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button
@@ -320,6 +362,7 @@ export function CustomFnModal({ node, onClose }: Props) {
                 minHeight={140}
                 maxHeight={320}
                 ariaLabel="Helper functions"
+                flash={jump.field === 'glslFunctions' ? jump.flash : null}
                 value={glslFns}
                 onChange={v => updateNodeParams(node.id, { glslFunctions: v })}
                 completions={completions}
@@ -331,12 +374,15 @@ export function CustomFnModal({ node, onClose }: Props) {
           </div>
         </div>
 
-        <ReferencePanel
-          variables={customInputs}
-          onInsert={insertFromReference}
-          wrapAll={autoWrap}
-          onWrapAllChange={setAutoWrap}
-        />
+        <SidePanel side="right" label="Functions" open={functionsOpen} narrow={narrow} width={300} onClose={() => setPanel('functions', false)}>
+          <ReferencePanel
+            variables={customInputs}
+            onInsert={insertFromReference}
+            wrapAll={autoWrap}
+            onWrapAllChange={setAutoWrap}
+            onSnippet={insertSnippetFn}
+          />
+        </SidePanel>
       </div>
     </Modal>
   );

@@ -14,7 +14,8 @@
 import { parsePlayRecord, type PlayRecord } from './play';
 import { parseSourceCredit, type SourceCredit } from './credit';
 import { PREVIEW_ASPECTS, type PreviewAspect } from '../utils/graphImportPlan';
-import type { PlayHtmlInput, PlayMedia, PlayMediaFile, PlayPasses } from '../play/exportHtml';
+import type { BakedVideoClock, PlayHtmlInput, PlayMedia, PlayMediaFile, PlayPasses } from '../play/exportHtml';
+import { cpParse } from '../play/kit/clipPlay.js';
 import type { WebDatasets } from '../play/dataExport';
 import { parseDatasetResult } from '../data/types';
 import { parseBackground, parseFontFaces, parseImages, parseStyle, usedImages, neededFonts, type EmbeddedFontFace, type PresentBackground, type PresentImage, type PresentStyle } from './presentationStyle';
@@ -307,7 +308,13 @@ function parseMedia(v: unknown): PlayMedia | undefined {
     out.videos = {};
     for (const [k, x] of Object.entries(v.videos)) {
       const f = parseFile(x, 'video');
-      if (f && isObj(x)) out.videos[k] = { ...f, loop: x.loop !== false, speed: Math.max(0.05, Math.min(8, num(x.speed) ?? 1)) };
+      if (f && isObj(x)) {
+        out.videos[k] = { ...f, loop: x.loop !== false, speed: Math.max(0.05, Math.min(8, num(x.speed) ?? 1)) };
+        // A Baked video's clock and clip settings travel too (docs/bake.md, docs/clip-editor.md).
+        if (isObj(x.clock)) out.videos[k].clock = x.clock as unknown as BakedVideoClock;
+        const clip = cpParse(x.clip);
+        if (clip) out.videos[k].clip = clip;
+      }
     }
   }
   if (Array.isArray(v.audio)) {

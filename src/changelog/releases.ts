@@ -39,6 +39,182 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.52',
+    date: '2026-10-06',
+    title: 'Grid Rules',
+    highlights: [
+      { area: 'Studio', text: 'Grid Rules: one node and an editor for cellular simulations: Count (Life and friends), Stages, Smooth (heat, waves, reaction-diffusion).', link: { kind: 'doc', path: 'docs/grid-rules.md' } },
+      { area: 'Studio', text: 'Patterns (3×3 stencils, first match wins) and Blocks (2×2 before → after pictures that keep every count) for Wireworld, sand and gas.' },
+      { area: 'Studio', text: 'The grid examples rebuilt as 2-node Grid Rules versions; Open as nodes shows the wired version. Brush painting now works in the Studio too.' },
+    ],
+  },
+  {
+    id: '2026.10.51',
+    date: '2026-10-06',
+    title: 'Suggestions and the Do bar',
+    highlights: [
+      { area: 'Studio', text: 'Suggestions: select a node for its likely next moves (Glow, Rings, Warp, Tone map…), ranked mostly by your own graphs and by what the preview shows.', link: { kind: 'doc', path: 'docs/suggestions.md' } },
+      { area: 'Studio', text: 'The Do… bar (⌘K): type "circle in the middle with a glow, falloff 8" or "repeat 6 times around" and it builds the nodes.' },
+      { area: 'Studio', text: 'Ask "is this typical?" about a wire, teach the Do… bar your own phrases from a selection, and insert snippets in code editors.' },
+    ],
+  },
+  {
+    id: '2026.10.50',
+    date: '2026-10-06',
+    title: 'Code Explorer',
+    highlights: [
+      { area: 'Studio', text: 'Code Explorer: search how a function is used across examples, your graphs, presets and linked GLSL: patterns ranked by count, with real code.', link: { kind: 'doc', path: 'docs/code-explorer.md' } },
+      { area: 'Studio', text: 'Plain-words search ("soft circle edge"), what feeds a function and what it feeds, Open to jump to the node and line, and How is this used? in the editors.' },
+    ],
+  },
+  {
+    id: '2026.10.49',
+    date: '2026-10-06',
+    title: 'Explain and make a node',
+    highlights: [
+      { area: 'Studio', text: 'Explain: each Expression Block line gets a plain reading ("a soft-edged circle of radius 0.3"), step by step, from 62 shader idioms.', link: { kind: 'doc', path: 'docs/expression-explainer.md' } },
+      { area: 'Studio', text: 'Make a node from this: turn an idiom or part of a line into a node or preset, numbers as sliders. Where else is this used? finds matches.' },
+      { area: 'Studio', text: 'Explain also on the card\'s code page, per statement in Custom Functions, and for a selection on the GLSL page.' },
+    ],
+  },
+  {
+    id: '2026.10.48',
+    date: '2026-10-06',
+    title: 'Scene Builder and Agent Rules',
+    highlights: [
+      { area: 'Studio', text: '3D Scene Builder: describe shapes, how they combine, space warps, look and camera in a form; Build makes a real, readable node graph.', link: { kind: 'doc', path: 'docs/scene-builder.md' } },
+      { area: 'Studio', text: 'Scenes round-trip as recipe text, e.g. "volumetric · smooth-union(sphere, cone) k=0.3 · twist 0.5"; Describe reads hand-made 3D graphs.' },
+      { area: 'Studio', text: 'Agent Rules: write agent behaviour as When … Do … lines with named states; Open as nodes shows the same rule as ordinary nodes.', link: { kind: 'doc', path: 'docs/agent-rules.md' } },
+      { area: 'Studio', text: 'New folders: 3D: Scene Builder (six scenes) and Agents: rules (slime, ants, boids, predators, infection, termites, fireflies, coral).' },
+    ],
+  },
+  {
+    id: '2026.10.47',
+    date: '2026-10-06',
+    title: 'Whole-picture previews',
+    highlights: [
+      { area: 'Studio', text: 'Previews now keep the picture\'s real shape and fit it in the panel, so nothing is cropped or stretched; Slice gets its own strip below.' },
+    ],
+  },
+  {
+    id: '2026.10.46',
+    date: '2026-10-06',
+    title: 'Agent simulations',
+    highlights: [
+      { area: 'Studio', text: 'Simulations: agents: predators and prey, coral growth, sand dunes, crowd lanes, painter bots, termites, fireflies and infection, each a hand-written rule.', link: { kind: 'doc', path: 'docs/simulations-agents.md' } },
+      { area: 'Studio', text: 'Every rule is built from Agent Inputs, Compare and Expression Blocks with a note on each node, so you can copy the pattern for your own.' },
+    ],
+  },
+  {
+    id: '2026.10.45',
+    date: '2026-10-06',
+    title: 'See each line',
+    highlights: [
+      { area: 'Studio', text: 'Expression Block editor: \u25b6 on any input, line or Return previews that value (Range, Slice, Grid, Arrows, colour); \u2191\u2193 step through the lines.', link: { kind: 'doc', path: 'docs/node-previews.md' } },
+      { area: 'Studio', text: 'Custom Functions can preview any local variable from a dropdown. Previews never change the saved graph.' },
+    ],
+  },
+  {
+    id: '2026.10.44',
+    date: '2026-10-06',
+    title: 'Grid simulations and one clip editor',
+    highlights: [
+      { area: 'Studio', text: 'Simulations: grids: Game of Life, Life-like rules, Brian\'s Brain, caves, water ripples, heat, forest fire, falling sand and Wireworld, all from existing nodes.', link: { kind: 'doc', path: 'docs/simulations-grids.md' } },
+      { area: 'Studio', text: 'The clip editor now opens for Video Input, Video layers, Baked clips, background videos and the Library, with trim, segments, speed, loop and crop.', link: { kind: 'doc', path: 'docs/clip-editor.md' } },
+      { area: 'Studio', text: 'Source / Result playback shows exactly the frames or playlist you will get. Video Input files now survive a reload.' },
+    ],
+  },
+  {
+    id: '2026.10.43',
+    date: '2026-10-06',
+    title: 'Roomier code editors',
+    highlights: [
+      { area: 'Studio', text: 'Expression and Custom Function cards: airier code lines, and a Preview page (Range, Grid, colour…) in place of the signature.' },
+      { area: 'Studio', text: 'Their editors fold the Functions panel (closed by default, \u0192 Functions or \u2318]) and the Inputs panel (\u2318[) so the code gets the room.' },
+    ],
+  },
+  {
+    id: '2026.10.42',
+    date: '2026-10-06',
+    title: 'Code on the card',
+    highlights: [
+      { area: 'Studio', text: 'Expression Blocks and Custom Functions show pages on the card: the code (read-only, coloured), a function signature from the wiring, your note and description.' },
+      { area: 'Studio', text: 'Flip pages with the dots or arrows; double-click or Edit opens the full editor, where line editing now lives.' },
+    ],
+  },
+  {
+    id: '2026.10.41',
+    date: '2026-10-05',
+    title: 'A preview for every node',
+    highlights: [
+      { area: 'Studio', text: 'Preview controls live on the node card; the top banner just says what is previewed, with Exit.' },
+      { area: 'Studio', text: 'No more empty or "no preview" boxes: texture and colour nodes show their real output, agent nodes show live trails, diagrams or stats.' },
+    ],
+  },
+  {
+    id: '2026.10.40',
+    date: '2026-10-05',
+    title: 'Smooth blurs and glows',
+    highlights: [
+      { area: 'Studio', text: 'Blur and Glow (texture) no longer show ghost copies or rings: new Smooth (true Gaussian) and Bloom chain methods, with Fast kept for cheap previews.', link: { kind: 'doc', path: 'docs/blur-and-glow.md' } },
+      { area: 'Play', text: 'Look bloom, halation, CRT and edge glow, particle glows, and layers sent into the shader now use the same smooth blur.' },
+    ],
+  },
+  {
+    id: '2026.10.39',
+    date: '2026-10-05',
+    title: 'Agents in 3D',
+    highlights: [
+      { area: 'Studio', text: 'Agents groups can run in 3D: Space 3D gives walkers depth, a volume trail to sense, and forces with z.', link: { kind: 'doc', path: 'docs/agents-group.md' } },
+      { area: 'Studio', text: 'Draw agents gets an orbit camera with the same controls as Time Cube and Frame Stack, plus drift and depth of field, or a 3D scene\'s camera.' },
+      { area: 'Studio', text: 'Collide (3D scene) lets walkers bounce off ray-marched shapes. Five 3D examples: slime, flock, torus swarm, galaxy, fireflies.' },
+    ],
+  },
+  {
+    id: '2026.10.38',
+    date: '2026-10-05',
+    title: 'Edit the clip',
+    highlights: [
+      { area: 'Studio', text: 'Time Cube: Edit clip… opens a trimmer with a filmstrip, In/Out handles and ticks showing exactly which frames are sampled.', link: { kind: 'doc', path: 'docs/time-cube.md' } },
+      { area: 'Studio', text: 'Keep several segments (reorder, reverse), share frames by length or equally, add a speed ramp, crop, rotate and flip.' },
+    ],
+  },
+  {
+    id: '2026.10.37',
+    date: '2026-10-05',
+    title: 'Preview detail',
+    highlights: [
+      { area: 'Studio', text: 'Preview arrows now scale with strength: the strongest is a full arrow, weak ones are short or a dot. A Detail setting makes Grid and Arrows finer.' },
+    ],
+  },
+  {
+    id: '2026.10.36',
+    date: '2026-10-05',
+    title: 'Previews that explain',
+    highlights: [
+      { area: 'Studio', text: 'Node previews have Show as: vec2 values as a warped Grid, Arrows or a colour Wheel, so you can see how space moves.', link: { kind: 'doc', path: 'docs/node-previews.md' } },
+      { area: 'Studio', text: 'Numbers auto-range with a key (no more white squares), a Slice plot shows input vs output, and constants read "= 3.0 everywhere".' },
+    ],
+  },
+  {
+    id: '2026.10.35',
+    date: '2026-10-05',
+    title: 'Texture tools',
+    highlights: [
+      { area: 'Studio', text: 'Texture tools: Mask, Levels, Flow, Neighbours, Change, Outline, Fade and Read turn any texture into masks, directions and glows.', link: { kind: 'doc', path: 'docs/texture-tools.md' } },
+      { area: 'Studio', text: 'They work on Passes, images, video, Baked and agent trails; Mask and Levels also shape plain numbers. Seven new examples.' },
+    ],
+  },
+  {
+    id: '2026.10.34',
+    date: '2026-10-05',
+    title: 'Fewer nodes',
+    highlights: [
+      { area: 'Studio', text: 'Removed ten rarely used nodes: Glow Falloff, the 3D Fractals, Chladni 3D and its particles, the orbital nodes, and Print Float / Text.' },
+      { area: 'Studio', text: 'Graphs that used them still open, with a removed card that says what to use instead.' },
+    ],
+  },
+  {
     id: '2026.10.33',
     date: '2026-10-05',
     title: 'Time cube feather and camera',

@@ -57,9 +57,9 @@ beforeEach(() => {
 });
 
 describe('a 3D node on the top level of a graph with no scene', () => {
-  it('covers every 3D primitive, transform and fractal', () => {
+  it('covers every 3D primitive, transform and boolean op', () => {
     expect(SCENE_TYPES.length).toBeGreaterThan(40);
-    for (const t of ['sphereSDF3D', 'repeat3D', 'displace3D', 'scale3d', 'kifsTetra', 'mandelboxDE', 'gyroidField', 'voxelize', 'planeSDF3D']) expect(SCENE_TYPES).toContain(t);
+    for (const t of ['sphereSDF3D', 'repeat3D', 'displace3D', 'scale3d', 'gyroidField', 'voxelize', 'planeSDF3D']) expect(SCENE_TYPES).toContain(t);
   });
 
   it.each(SCENE_TYPES)('%s: a new Scene Group draws it, with a camera and loop on the Output', type => {

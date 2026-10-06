@@ -97,8 +97,6 @@ const NO_NODE_TYPES: Record<string, string> = {
   loopIndex: 'it only means something inside a loop',
   fieldCell: 'it only means something inside a grid’s shape',
   constants: 'its settings are made per card in the Studio',
-  printFloat: 'it draws with the Studio’s font texture',
-  printText: 'it draws with the Studio’s font texture',
   scope: 'it only shows a probe in the Studio',
 };
 

@@ -2,6 +2,7 @@ import type { GraphNode, NodeDefinition, ParamDef } from '../../types/nodeGraph'
 import { p, pv3 } from './helpers';
 import { planFrameStack, stackSettingsOf, FRAME_WIDTHS, MAX_FRAMES, MIN_FRAMES } from '../../lib/timeCube/plan';
 import { DEMO_META } from '../../lib/timeCube/frames';
+import { segmentsFromStartEnd } from '../../lib/media/clip';
 import { KNEE_EASE, migrateOpacity, OD_SOLID, OPACITY_KNEE, OPACITY_REF } from '../../lib/timeCube/plan';
 
 /**
@@ -318,6 +319,18 @@ const STEPS: Record<string, number> = { draft: 96, good: 160, best: 288 };
 
 // ── Time Cube (the source) ───────────────────────────────────────────────────
 
+/** The source's schema. 2: Start / End (seconds; End 0 the end of the video) are `segments`, set in the clip editor. */
+export const TIME_CUBE_SOURCE_VERSION = 2;
+
+/** An older Time Cube's Start / End as one segment (lib/media/clip.ts); a node that has segments keeps them. */
+export function migrateTimeCubeSource(params: Record<string, unknown>, fromVersion: number): Record<string, unknown> {
+  if (fromVersion >= TIME_CUBE_SOURCE_VERSION) return params;
+  const out = { ...params };
+  if (!Array.isArray(out.segments)) out.segments = segmentsFromStartEnd(out.start, out.end);
+  delete out.start; delete out.end;
+  return out;
+}
+
 export const TimeCubeNode: NodeDefinition = {
   type: TIME_CUBE_SOURCE_TYPE,
   label: 'Time Cube',
@@ -329,16 +342,17 @@ export const TimeCubeNode: NodeDefinition = {
     volume: { type: 'volume', label: 'Volume', hint: 'The stacked frames. Wire into Time Cube View or Time Slice.' },
   },
   defaultParams: {
-    source: 'demo', videoId: '', fileName: '', frames: 128, frameWidth: '256', start: 0, end: 0, spacing: 'count', step: 0.1,
+    source: 'demo', videoId: '', fileName: '', frames: 128, frameWidth: '256', spacing: 'count', step: 0.1,
+    // The clip editor's settings (lib/media/clip.ts). An out at or before its in runs to the end of the video.
+    segments: [{ in: 0, out: 0 }], clip: { distribute: 'proportional', ramp: 'none', crop: { x: 0, y: 0, w: 1, h: 1 }, rotate: 0, flipX: false, flipY: false },
+    _schemaVersion: TIME_CUBE_SOURCE_VERSION,
     combine: 'pick', subFrames: 4, precision: '8', order: 'time', sortBy: 'brightness', invert: false, seed: 1, keyColor: [0.85, 0.12, 0.12], keyTolerance: 0.25,
   },
   paramDefs: {
-    frames: { section: 'Stack', label: 'Frames', type: 'float', min: MIN_FRAMES, max: MAX_FRAMES, step: 1, hard: true, showWhen: { param: 'spacing', value: 'count' }, hint: 'How many frames to stack, spread evenly from Start to End.', help: 'How many frames to stack, spread evenly from Start to End. More frames make a smoother box but take longer to build and more memory (the card shows how much). Up to 256.' },
+    frames: { section: 'Stack', label: 'Frames', type: 'float', min: MIN_FRAMES, max: MAX_FRAMES, step: 1, hard: true, showWhen: { param: 'spacing', value: 'count' }, hint: 'How many frames to stack, spread through the clip (Edit clip… on the card).', help: 'How many frames to stack, spread through the clip\'s kept segments (Edit clip… on the card trims the video and adds segments). More frames make a smoother box but take longer to build and more memory (the card shows how much). Up to 256.' },
     spacing: { section: 'Stack', label: 'Spacing', type: 'select', options: [{ value: 'count', label: 'Spread a number of frames' }, { value: 'step', label: 'One frame every…' }], hint: 'Pick frames by count, or one every so many seconds.' },
     step: { section: 'Stack', label: 'Every (s)', type: 'float', min: 0.02, max: 2, step: 0.01, showWhen: { param: 'spacing', value: 'step' }, hint: 'Seconds between stacked frames.' },
     frameWidth: { section: 'Stack', label: 'Frame size', type: 'select', options: FRAME_WIDTHS.map(w => ({ value: String(w), label: `${w} px wide` })), hint: 'How wide each stacked frame is (the height follows the video\'s shape). Bigger is sharper and heavier.' },
-    start: { section: 'Stack', label: 'Start (s)', type: 'float', min: 0, max: 60, step: 0.1, hint: 'Where in the video the stack begins.' },
-    end: { section: 'Stack', label: 'End (s)', type: 'float', min: 0, max: 60, step: 0.1, hint: 'Where it ends. 0 = the end of the video.' },
     combine: { section: 'Frames from', label: 'Frames from', type: 'select', options: [
       { value: 'pick', label: 'Pick one frame' },
       { value: 'average', label: 'Average (long exposure)' },
@@ -370,6 +384,9 @@ export const TimeCubeNode: NodeDefinition = {
     keyColor: { section: 'Order', label: 'Colour', type: 'vec3color', showWhen: { param: 'order', value: 'sort' }, hint: 'Sort by amount of a colour: the colour.' },
     keyTolerance: { section: 'Order', label: 'Colour tolerance', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'order', value: 'sort' }, hint: 'Sort by amount of a colour: how close counts.' },
   },
+  // Schema 2: Start / End became the clip editor's segments (one segment from Start to End).
+  version: TIME_CUBE_SOURCE_VERSION,
+  migrateParams: migrateTimeCubeSource,
   assignable: false,
   declarationsFor: timeCubeDeclarations,
   generateGLSL: (node: GraphNode) => ({ code: '', outputVars: { volume: `u_tex_${node.id}` } }),

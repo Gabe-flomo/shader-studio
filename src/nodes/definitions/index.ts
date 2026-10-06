@@ -34,7 +34,7 @@ export { FieldCellNode } from './fieldCell';
 export { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
 
 // Grid Field
-export { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, DistanceFalloffNode, GlowFalloffNode, NoisyGridSDFNode } from './gridField';
+export { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, DistanceFalloffNode, NoisyGridSDFNode } from './gridField';
 
 // Transforms
 export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
@@ -83,19 +83,17 @@ export { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, No
 export { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode, SphericalFoldFractalNode } from './fractals';
 
 // Physics
-export { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode, WaveTermNode, ChladniFieldNode, ChladniSuperpositionNode, ChladniModeFreqNode } from './physics';
+export { ChladniNode, WaveTermNode, ChladniFieldNode, ChladniSuperpositionNode, ChladniModeFreqNode } from './physics';
 
 // Vector fields
 export { VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './vectorFields';
 
 // 3D / Volumetric
-export { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode } from './threed';
+export { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, MandelbulbNode } from './threed';
 
 // 3D Lighting
 export { SdfAoNode, SoftShadowNode, MultiLightNode, Fresnel3DNode, FakeSSSNode, VolumetricFogNode, MaterialSelectNode, GlassNode, PhaseHGNode, FresnelSchlickNode, SpectralDispersionNode, BlinnPhongNode, GlassSceneNode } from './threed';
 
-// 3D Fractals (additional)
-export { MandelboxDENode, KIFSTetrahedronDENode } from './threed';
 
 // Patterns
 export { TruchetNode, MetaballsNode, LissajousNode } from './patterns';
@@ -112,7 +110,7 @@ export {
   SDFUnionNode, SDFSubtractNode, SDFIntersectNode,
   SDFOnionNode,
   Bend3DNode, LimitedRepeat3DNode, PolarRepeat3DNode, Displace3DNode,
-  MirroredRepeat3DNode, VoxelizeNode, SdCrossNode, MengerSpongeNode,
+  MirroredRepeat3DNode, VoxelizeNode, SdCrossNode,
   SphereInvert3DNode, Shear3DNode, Kaleidoscope3DNode,
   MobiusWarp3DNode, LogPolarWarp3DNode, HelixWarp3DNode,
   GyroidFieldNode, SchwarzPFieldNode,
@@ -132,7 +130,6 @@ export { OutputNode, Vec4OutputNode } from './output';
 
 // Utility
 export { ScopeNode } from './utility';
-export { PrintFloatNode, PrintTextNode } from './text';
 
 // Animation
 export { LFONode, BPMSyncNode } from './animations';
@@ -143,7 +140,8 @@ export { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGB
 // GPU Particles (the engine in play/kit/gpuParticles.js)
 export { GpuParticlesNode } from './gpuParticles';
 export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
-export { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, TrailStepOutNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode, MultiSlimePresetNode, AntsPresetNode, BoidsPresetNode, StrandsPresetNode, GrowPicturePresetNode, GalaxyPresetNode, MyceliumPresetNode, SandPlatePresetNode } from './agents';
+export { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
+export { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, TrailStepOutNode, AgentProbeOutNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode, MultiSlimePresetNode, AntsPresetNode, BoidsPresetNode, StrandsPresetNode, GrowPicturePresetNode, GalaxyPresetNode, MyceliumPresetNode, SandPlatePresetNode } from './agents';
 export { AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode } from './agentForces';
 
 // Math
@@ -186,7 +184,7 @@ import { GridPaintNode } from './gridPaint';
 import { ArrayFieldNode } from './arrayField';
 import { FieldCellNode } from './fieldCell';
 import { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
-import { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, DistanceFalloffNode, GlowFalloffNode, NoisyGridSDFNode } from './gridField';
+import { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, DistanceFalloffNode, NoisyGridSDFNode } from './gridField';
 import { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
 import {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
@@ -213,11 +211,11 @@ import { LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAc
 import { LoopCarryNode } from './loop';
 import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode, ScatterNode } from './noise';
 import { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode, SphericalFoldFractalNode } from './fractals';
-import { ChladniNode, ElectronOrbitalNode, Chladni3DNode, Chladni3DParticlesNode, WaveTermNode, ChladniFieldNode, ChladniSuperpositionNode, ChladniModeFreqNode } from './physics';
+import { ChladniNode, WaveTermNode, ChladniFieldNode, ChladniSuperpositionNode, ChladniModeFreqNode } from './physics';
 import { VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './vectorFields';
-import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, OrbitalVolume3DNode, MandelbulbNode,
+import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, MandelbulbNode,
   SdfAoNode, SoftShadowNode, MultiLightNode, Fresnel3DNode, FakeSSSNode, VolumetricFogNode, MaterialSelectNode, GlassNode,
-  MandelboxDENode, KIFSTetrahedronDENode, PhaseHGNode, FresnelSchlickNode, SpectralDispersionNode, BlinnPhongNode, GlassSceneNode,
+  PhaseHGNode, FresnelSchlickNode, SpectralDispersionNode, BlinnPhongNode, GlassSceneNode,
 } from './threed';
 import { TruchetNode, MetaballsNode, LissajousNode } from './patterns';
 import {
@@ -231,20 +229,19 @@ import {
   SDFUnionNode, SDFSubtractNode, SDFIntersectNode,
   SDFOnionNode,
   Bend3DNode, LimitedRepeat3DNode, PolarRepeat3DNode, Displace3DNode,
-  MirroredRepeat3DNode, VoxelizeNode, SdCrossNode, MengerSpongeNode,
+  MirroredRepeat3DNode, VoxelizeNode, SdCrossNode,
   SphereInvert3DNode, Shear3DNode, Kaleidoscope3DNode,
   MobiusWarp3DNode, LogPolarWarp3DNode, HelixWarp3DNode,
   GyroidFieldNode, SchwarzPFieldNode,
   MirrorFold3DNode, DomainWarp3DNode, Turbulence3DNode,
 } from './sdf3d';
-import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode, MarchSceneDistNode, GILitMarchGroupNode, VolumeGlowNode, VolumetricSceneNode } from './scene3d';
+import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode, MarchSceneDistNode, GILitMarchGroupNode, VolumeGlowNode, VolumetricSceneNode, SceneBuilderNode } from './scene3d';
 import { PaletteNode, GradientNode, HSVNode, PosterizeNode, InvertNode, HueRangeNode,
   ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode,
   LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode, OklabMixNode, ColorPickerNode, ColorizeNode, StopPaletteNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
 import { ScopeNode } from './utility';
-import { PrintFloatNode, PrintTextNode } from './text';
 import { Vec2ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode, RotationMatrixNode } from './matrix';
 import { Mat2MulNode, Mat3MulNode, Mat2InverseNode, Mat3InverseNode, Mat2MixNode, Mat3MixNode, ScaleMatrixNode, ShearMatrixNode, StretchMatrixNode, Mat3MulPointNode, CornerPinNode, ColorMatrixNode } from './matrixOps';
 import { LFONode, BPMSyncNode } from './animations';
@@ -273,13 +270,16 @@ import {
 } from './shapers';
 import { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGBToCMYKNode, CMYKHalftoneNode } from './halftone';
 import { GpuParticlesNode } from './gpuParticles';
+import { BlurStageNode } from './blurStage';
+import { GridRulesNode, GridRulesStepNode, MouseButtonNode } from './gridRules';
 import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
-import { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, TrailStepOutNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode, MultiSlimePresetNode, AntsPresetNode, BoidsPresetNode, StrandsPresetNode, GrowPicturePresetNode, GalaxyPresetNode, MyceliumPresetNode, SandPlatePresetNode } from './agents';
-import { AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode } from './agentForces';
+import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
+import { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, TrailStepOutNode, AgentProbeOutNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode, MultiSlimePresetNode, AntsPresetNode, BoidsPresetNode, StrandsPresetNode, GrowPicturePresetNode, GalaxyPresetNode, MyceliumPresetNode, SandPlatePresetNode } from './agents';
+import { AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode, AgentCollideSceneNode, AgentGridOutNode } from './agentForces';
 
 // Every setting of the Agents family has a "?" on its card: its hint, unless it has a fuller help of its own.
 for (const d of [AgentsGroupNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, DrawAgentsNode,
-  AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode]) {
+  AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode, AgentCollideSceneNode]) {
   for (const pd of Object.values(d.paramDefs ?? {})) if (pd.hint && !pd.help) pd.help = pd.hint;
 }
 
@@ -363,7 +363,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   metaballThreshold: MetaballThresholdNode,
   fieldToLines: FieldToLinesNode,
   distanceFalloff: DistanceFalloffNode,
-  glowFalloff: GlowFalloffNode,
   noisyGridSDF: NoisyGridSDFNode,
   shear: ShearNode,
   perspective2d: Perspective2DNode,
@@ -466,9 +465,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   sphericalFoldFractal: SphericalFoldFractalNode,
   // Physics
   chladni: ChladniNode,
-  chladni3d: Chladni3DNode,
-  chladni3dParticles: Chladni3DParticlesNode,
-  electronOrbital: ElectronOrbitalNode,
   waveTerm: WaveTermNode,
   chladniField: ChladniFieldNode,
   chladniSuperposition: ChladniSuperpositionNode,
@@ -482,6 +478,11 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Passes (render to texture): docs/pass-node-plan.md
   pass: PassNode,
   passOutput: PassOutputNode,
+  blurStage: BlurStageNode,
+  // Grid Rules (docs/grid-rules.md): a cellular simulation in one node, and the step the compiler makes of it
+  gridRules: GridRulesNode,
+  gridRulesStep: GridRulesStepNode,
+  mouseButton: MouseButtonNode,
   sampleTexture: SampleTextureNode,
   edgesTexture: EdgesTextureNode,
   blurTexture: BlurTextureNode,
@@ -489,6 +490,15 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   displaceTexture: DisplaceTextureNode,
   displacementMap: DisplacementMapNode,
   jumpFloodTexture: JumpFloodTextureNode,
+  // Texture tools (docs/texture-tools.md): shaping what a texture read gives
+  textureMask: TextureMaskNode,
+  textureLevels: TextureLevelsNode,
+  textureFlow: TextureFlowNode,
+  textureNeighbours: TextureNeighboursNode,
+  textureChange: TextureChangeNode,
+  distanceShape: DistanceShapeNode,
+  textureFade: TextureFadeNode,
+  readTexture: ReadTextureNode,
   // Agents (slime mold and walkers built from nodes): docs/agents-plan.md
   agentsGroup: AgentsGroupNode,
   agentInputs: AgentInputsNode,
@@ -503,6 +513,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   trailField: TrailFieldNode,
   drawAgents: DrawAgentsNode,
   trailStepOut: TrailStepOutNode,
+  agentProbeOut: AgentProbeOutNode,
+  agentCollideScene: AgentCollideSceneNode,
+  agentGridOut: AgentGridOutNode,
   multiSlimePreset: MultiSlimePresetNode,
   antsPreset: AntsPresetNode,
   boidsPreset: BoidsPresetNode,
@@ -532,7 +545,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   volumeClouds: VolumeCloudsNode,
   chromaticAberration: ChromaticAberrationNode,
   combineRGB: CombineRGBNode,
-  orbitalVolume3d: OrbitalVolume3DNode,
   mandelbulb: MandelbulbNode,
   // 3D Lighting
   sdfAo: SdfAoNode,
@@ -597,7 +609,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   mirroredRepeat3D: MirroredRepeat3DNode,
   voxelize: VoxelizeNode,
   sdCross3D: SdCrossNode,
-  mengerSponge: MengerSpongeNode,
   sphereInvert3D: SphereInvert3DNode,
   shear3D: Shear3DNode,
   kaleidoscope3D: Kaleidoscope3DNode,
@@ -610,9 +621,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   mirrorFold3D:  MirrorFold3DNode,
   domainWarp3D:  DomainWarp3DNode,
   turbulence3D:  Turbulence3DNode,
-  // 3D Fractals (DE nodes)
-  mandelboxDE: MandelboxDENode,
-  kifsTetra: KIFSTetrahedronDENode,
   // 3D Scene (composable)
   scenePos: ScenePosNode,
   sceneOutput: SceneOutputNode,
@@ -631,6 +639,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   marchSceneDist: MarchSceneDistNode,
   giLitMarchGroup: GILitMarchGroupNode,
   volumetricScene: VolumetricSceneNode,
+  sceneBuilder: SceneBuilderNode,
   // Color
   palette: PaletteNode,
   gradient: GradientNode,
@@ -653,8 +662,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Utility
   group: GroupNode,
   scope: ScopeNode,
-  printFloat: PrintFloatNode,
-  printText: PrintTextNode,
   // Math
   add: AddNode,
   subtract: SubtractNode,

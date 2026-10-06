@@ -178,6 +178,9 @@ export interface VideoTrack {
 /** A video layer's sound as a track, when it's heard (Sound: Play) and its file is open here. */
 export function videoTrackOf(l: VideoLayer, file: { blob: Blob; duration: number } | null): RecordingTrack | null {
   if (l.sound !== 'play' || !file) return null;
+  // A layer with clip settings (docs/clip-editor.md) jumps between segments and plays some backwards:
+  // the offline mix has no plan for that yet, so it leaves the sound out rather than mix it at the wrong place.
+  if (l.clip) return null;
   return {
     key: `vlayer:${l.id}`, label: l.fileName || l.label, clock: true, chain: layerChainId(l.id),
     video: { layerId: l.id, file: file.blob, duration: file.duration, playing: l.playing, loop: l.loop, speed: l.speed, start: l.start, volume: Math.max(0, Math.min(1, l.volume)) },

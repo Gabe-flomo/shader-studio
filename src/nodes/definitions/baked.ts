@@ -1,4 +1,5 @@
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
+import { clipGlsl } from '../../lib/media/clip';
 
 /**
  * Baked (docs/bake.md): a part of the graph rendered once to a video and
@@ -61,7 +62,7 @@ export const BakedNode: NodeDefinition = {
     alpha: { type: 'float', label: 'Alpha', hint: 'Its alpha (1 unless the bake kept alpha).' },
     rgba: { type: 'vec4', label: 'RGBA', hint: 'Colour and alpha together.' },
     value: { type: 'float', label: 'Value', hint: 'The picture as one number (its brightness): what a baked value or mask was.' },
-    texture: { type: 'texture', label: 'Texture', hint: 'The video as a texture: for Sample, Blur, Edges, Particles (Emit from) and the Agents family.' },
+    texture: { type: 'texture', label: 'Texture', hint: 'The video as a texture: for Sample, Blur, Edges, the Texture tools (Mask, Levels, Flow…), Particles (Emit from) and the Agents family.' },
   },
   defaultParams: { videoId: '', fileName: '' },
   assignable: false,
@@ -73,6 +74,9 @@ export const BakedNode: NodeDefinition = {
     const alpha = !!bakedInfo(node)?.alpha;
     // Centred picture coordinates back to 0–1 over the frame (as Texture Input reads).
     const lines = [`    vec2 ${id}_st = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`];
+    // A clip's crop (docs/clip-editor.md) reads a part of the frame: only when there is one, so other bakes compile as before.
+    const xf = clipGlsl(id, `${id}_st`, node.params.clip);
+    if (xf.code) lines.push(xf.code, `    ${id}_st = ${xf.st};\n`);
     if (alpha) {
       // Colour fills the top half of the frame (v 0.5–1 with the video's flipY), alpha the bottom; half a texel in from the seam.
       lines.push(

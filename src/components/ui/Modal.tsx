@@ -8,6 +8,10 @@ import type { IconName } from './iconPaths';
 import { portalGuard } from './portalGuard';
 import { usePhoneDialog } from './phoneDialog';
 
+/** Open modals, oldest first: Esc closes only the one on top (a dialog opened from an editor). */
+const openModals: number[] = [];
+let nextModalId = 1;
+
 /**
  * Modal shell: scrim over the live app, 16px panel, 60px header (tinted icon tile, title,
  * subtitle naming what's being edited, actions, close) and an optional 64px footer
@@ -39,13 +43,18 @@ export function Modal({
 
   // Captured during the first render, before any child's autoFocus moves focus into the panel.
   const [opener] = useState(() => (typeof document !== 'undefined' ? document.activeElement as HTMLElement | null : null));
+  const [modalId] = useState(() => nextModalId++);
+  useEffect(() => {
+    openModals.push(modalId);
+    return () => { const i = openModals.indexOf(modalId); if (i >= 0) openModals.splice(i, 1); };
+  }, [modalId]);
 
   useEffect(() => {
     // A child that asked for focus (a text field's autoFocus) keeps it; otherwise the panel takes it.
     if (!panelRef.current?.contains(document.activeElement)) panelRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       // A field with its own open popup (autocomplete) handles Esc itself
-      if (e.key === 'Escape' && !(e.target as HTMLElement | null)?.closest?.('[data-captures-escape]')) {
+      if (e.key === 'Escape' && openModals[openModals.length - 1] === modalId && !(e.target as HTMLElement | null)?.closest?.('[data-captures-escape]')) {
         e.stopPropagation();
         onCloseRef.current();
       }
@@ -55,7 +64,7 @@ export function Modal({
       window.removeEventListener('keydown', onKey, true);
       opener?.focus?.();
     };
-  }, [opener]);
+  }, [opener, modalId]);
 
   const tile = iconColor ?? tk.accent.base;
   const phone = usePhoneDialog();

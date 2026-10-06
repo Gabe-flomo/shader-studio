@@ -5,6 +5,8 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { categoryColor } from '../../theme/categories';
 import type { GraphNode } from '../../types/nodeGraph';
 import { IconButton } from '../ui/Button';
+import { SuggestionsToggle } from '../NodeGraph/SuggestionStrip';
+import { DoBarButton } from '../NodeGraph/DoBar';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Popover } from '../ui/Popover';
@@ -52,7 +54,7 @@ export function CanvasToolbar({
   const perfRef = useRef<HTMLSpanElement>(null);
   const [perfOpen, setPerfOpen] = useState(false);
   // Show passes: only offered when the graph compiles into more than one program (Pass nodes, Agents).
-  const multiProgram = useNodeGraphStore(s => !!(s.programMap?.passes?.length || s.programMap?.agents));
+  const multiProgram = useNodeGraphStore(s => !!(s.programMap?.passes?.some(p => !p.hidden) || s.programMap?.agents));
   const showPasses = useNodeGraphStore(s => s.showPasses);
   const setShowPasses = useNodeGraphStore(s => s.setShowPasses);
 
@@ -122,6 +124,8 @@ export function CanvasToolbar({
       )}
       <Sep />
       <IconButton icon="minimap" label={showMinimap ? 'Hide minimap' : 'Show minimap'} size="sm" active={showMinimap} onClick={onToggleMinimap} />
+      {!readOnly && <SuggestionsToggle />}
+      {!readOnly && <DoBarButton />}
       {multiProgram && (
         <IconButton icon="layers" label={showPasses ? 'Hide passes' : 'Show passes: tint each node by the program it runs in (a Pass, an Agents group, the picture)'} size="sm" active={showPasses} onClick={() => setShowPasses(!showPasses)} />
       )}

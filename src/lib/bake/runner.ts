@@ -20,6 +20,8 @@ import { playId } from '../../play/playControls';
 import { requireFeature } from '../plan';
 import { addVideoFile } from '../backgroundLibrary';
 import { bakedVideos } from '../bakedVideos';
+import { cpIsPlain, cpParse } from '../../play/kit/clipPlay.js';
+import { videoEngine } from '../videoEngine';
 import { timeCubes } from '../timeCube/volumes';
 import { usePreviewHost } from '../previewHost';
 import { usePreviewQuality } from '../previewQuality';
@@ -123,7 +125,7 @@ export async function renderBake(graph: GraphNode[], plan: BakePlan, handle: Bak
     for (let j = 0; j < steps.length; j++) {
       if (handle.cancelled) throw new Error('cancelled');
       const step = steps[j];
-      await Promise.all([bakedVideos.seek(step.time), timeCubes.settled()]);
+      await Promise.all([bakedVideos.seek(step.time), videoEngine.seek(step.time), timeCubes.settled()]);
       offline.renderAtTime(step.time, { dt: 1 / plan.fps, first: j === 0 });
       offline.readPixels(pixels, w, h);
       if (step.preIndex !== null) { pre[step.preIndex] = pixels.slice(); }
@@ -283,6 +285,14 @@ export function addBakeAsVideoLayer(bakedId: string): string | null {
     ...(defaultLayer('video', playId('layer'), `Baked ${info.source}`) as VideoLayer),
     videoId, fileName: String(node.params.fileName || ''), bytes: info.bytes, fit: 'cover', loop: info.loop === 'seamless',
   };
+  // The bake's clip settings go with it (docs/clip-editor.md): a layer keeps speed and loop of its own.
+  const clip = cpParse(node.params.clip);
+  if (clip) {
+    const { speed, loop, ...rest } = clip;
+    if (speed) layer.speed = speed;
+    if (loop !== undefined) layer.loop = loop;
+    if (!cpIsPlain(rest)) layer.clip = rest;
+  }
   st.setPlay(p => ({ ...p, layers: [...p.layers, layer] }));
   return layer.id;
 }

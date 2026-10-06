@@ -60,6 +60,8 @@ const KNOWN: Record<string, SettingInfo> = {
   'codePanel_height': S('Code panel height', 'studio'),
   'nodepalette_favorites': S('Favourite nodes', 'studio'),
   'shader-studio:settings:starterRecipesOff': S('Starter recipes turned off', 'studio', { hint: 'Every node with starter recipes offers them again when added' }),
+  'playfield:suggestions:strip': S('Suggestions under the selected node', 'studio', { hint: 'Shows the suggestions again' }),
+  'playfield:suggestions:learning': S('Suggestions: what they learned from your graphs', 'studio', { hint: 'Reset learning: suggestions forget your graphs and wiring and start again from the examples. Graphs saved before now are not read again; it stays on this device.' }),
   // Play
   'shader-studio:play:split': S('Split view', 'play'),
   'shader-studio:play:panel': S('Open panel', 'play'),

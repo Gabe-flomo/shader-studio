@@ -17,12 +17,18 @@ import { askChoice } from '../components/ui/dialogStore';
 import { buildAgentsSubgraph, buildMarchRig, buildMarchSubgraph, buildSceneSubgraph, buildVolumetricRig, graphOutput, instantiateNode, twoDNodesBefore3D } from '../nodes/scene3dDefaults';
 import { agentEyeNodes, hasAgentsNode } from '../compiler/agentGraph';
 import { hasPassNode } from '../compiler/passGraph';
+import { hasHiddenBlur } from '../compiler/blurPasses';
 import { agentPreset } from './agentExamples';
 import { addAgentPieceTo, agentStarter, freshIds, placeInFreeSpace, startRuleIn, type AgentPiece, type AgentRuleStart } from './agentSetup';
+import { rulesStarter } from '../agentRules/starter';
 import { particlesAsNodes } from './particlesAsNodes';
-import { applyRecipe, recipesFor } from '../nodes/recipes';
+import { openGridRulesInGraph } from './gridRulesAsNodes';
+import { openNewSceneBuilder } from '../sceneBuilder/store';
+import { applyRecipe, placeNear, recipesFor } from '../nodes/recipes';
+import { runDoPlan as runDoPlanPure, type DoPlan } from '../suggestions/doBar';
+import { applyMove, moveById, learnGraph, learnSaved, recordWireBetween, textSignature } from '../suggestions';
 import { closeRecipeOffer, noteNodeAdded } from './recipeOfferStore';
-import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES, AGENT_PRESET_TYPES } from '../nodes/definitions/agents';
+import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES, AGENT_PRESET_TYPES, syncAgentSpaces } from '../nodes/definitions/agents';
 import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
 import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, usesHands, type PlayRecord, type PlayControl } from '../types/play';
@@ -35,6 +41,7 @@ import { clearLegacyColumnsWire } from '../nodes/definitions/gridColumns';
 import { playEngine } from '../lib/playEngine';
 import { bakeControlValues, bakeLayerValues } from '../play/playControls';
 import { TRACK_LIMIT, buildPlayHtml, type EmbedOptions, type PlayHtmlInput, type PlayMedia, type PlayMediaFile } from '../play/exportHtml';
+import type { CpSaved } from '../play/kit/clipPlay.js';
 import { bakeFor } from '../types/playTracking';
 import { bakeBase64 } from '../lib/trackBakes';
 import { loadThreeSource, playUses3D } from '../play/threeSource';
@@ -158,6 +165,8 @@ import { describePlayChange } from './playHistory';
 import { PresetManager } from './managers/PresetManager';
 import { CompilationService } from './managers/CompilationService';
 import { GRAPH_LINK_FIELD, graphDeleted, linkedPresentationsOf } from '../present/links';
+import { pickPreviewOutput, prefOf } from '../lib/nodePreview/showAs';
+import { probedNode } from '../lib/nodePreview/lineProbe';
 
 // ── Legacy ExprNode → ExprBlockNode migration ─────────────────────────────────
 // ExprNode (type: 'expr') is removed from the registry.  Any saved graph that
@@ -724,6 +733,8 @@ interface NodeGraphState {
    * instead. The original is left as it was. Returns the new group's id (null if it can't).
    */
   openParticlesAsNodes: (nodeId: string) => string | null;
+  /** Open as nodes (Grid Rules, docs/grid-rules.md): the same simulation from ordinary nodes, under it (store/gridRulesAsNodes.ts). Returns the new board Pass's id. */
+  openGridRulesAsNodes: (nodeId: string) => string | null;
 
   // Texture inputs — maps nodeId → loaded THREE.Texture (or null if not yet loaded)
   // Populated by NodeComponent file picker; consumed by ShaderCanvas to bind sampler2D uniforms.
@@ -854,6 +865,16 @@ interface NodeGraphState {
    * One undo step. Returns the ids added, or null when the node or recipe is gone.
    */
   applyStarterRecipe: (nodeId: string, recipeId: string) => string[] | null;
+  /**
+   * Apply suggestion move `moveId` (suggestions/moves.ts) on socket `key` of node `nodeId`, in the
+   * level being edited: one undo step, a compile, a toast. Selects the move's result node.
+   * Returns the ids added, or null when it can't go there.
+   */
+  applySuggestion: (nodeId: string, key: string, side: 'in' | 'out', moveId: string, args?: Record<string, unknown>) => string[] | null;
+  /** Run a Do… bar plan (suggestions/doBar.ts) in the level being edited: one undo step, a compile. Returns the step labels that ran. */
+  runDoPlan: (plan: DoPlan, label: string) => string[];
+  /** Add a node already built (an idiom's Expression Block from the Do… bar) to the level being edited, near the view: one undo step. */
+  addBuiltNode: (node: GraphNode, label: string) => string | null;
   /**
    * Spawn a pre-wired subgraph from a descriptor.
    * `origin` is the top-left anchor in canvas space.
@@ -1073,20 +1094,16 @@ function buildGroupPreviewGraph(nodes: GraphNode[], groupId: string, innerNodeId
   const subgraph = groupNode.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
   if (!subgraph) return nodes;
 
-  const innerNode = subgraph.nodes.find(n => n.id === innerNodeId);
+  // A line preview's probe (lib/nodePreview/lineProbe.ts) swaps in a copy of the block, for this compile only
+  const innerNode = probedNode(subgraph.nodes.find(n => n.id === innerNodeId) ?? null);
   if (!innerNode) return nodes;
 
-  // Pick the best output to preview — prefer vec3, then vec4, then vec2, then float, then any
-  const outputEntries = Object.entries(innerNode.outputs);
-  const vec3Entry  = outputEntries.find(([, s]) => s.type === 'vec3');
-  const vec4Entry  = outputEntries.find(([, s]) => s.type === 'vec4');
-  const vec2Entry  = outputEntries.find(([, s]) => s.type === 'vec2');
-  const floatEntry = outputEntries.find(([, s]) => s.type === 'float');
-  const chosen = vec3Entry ?? vec4Entry ?? vec2Entry ?? floatEntry ?? outputEntries[0];
+  // The output to preview: the one picked in "Show as" (docs/node-previews.md), else vec3, vec4, vec2, float, any
+  const chosen = pickPreviewOutput(innerNode, prefOf(innerNode).output);
   if (!chosen) return nodes;
 
-  const [chosenKey, chosenSocket] = chosen;
-  const outType = (chosenSocket as { type: string }).type as import('../types/nodeGraph').DataType;
+  const [chosenKey, chosenType] = chosen;
+  const outType = chosenType as import('../types/nodeGraph').DataType;
   const previewPortKey = 'xpreviewport';
 
   // Patch the group: add a synthetic output port routing the inner node's chosen output.
@@ -1098,6 +1115,7 @@ function buildGroupPreviewGraph(nodes: GraphNode[], groupId: string, innerNodeId
       ...groupNode.params,
       subgraph: {
         ...subgraph,
+        nodes: subgraph.nodes.map(n => (n.id === innerNodeId ? innerNode : n)),
         outputPorts: [
           ...subgraph.outputPorts,
           {
@@ -1122,7 +1140,9 @@ function buildGroupPreviewGraph(nodes: GraphNode[], groupId: string, innerNodeId
 // Builds a minimal graph containing the target node + all its transitive
 // input dependencies, plus a synthetic output node wired to the first
 // vec3/vec4 output of the target.
-function buildPreviewGraph(nodes: GraphNode[], targetId: string): GraphNode[] {
+function buildPreviewGraph(graph: GraphNode[], targetId: string): GraphNode[] {
+  // A line preview's probe (lib/nodePreview/lineProbe.ts) swaps in a copy of the block, for this compile only
+  const nodes = graph.map(n => (n.id === targetId ? probedNode(n) : n));
   // BFS: collect all transitive dependencies of targetId
   const included = new Set<string>();
   const queue = [targetId];
@@ -1141,17 +1161,11 @@ function buildPreviewGraph(nodes: GraphNode[], targetId: string): GraphNode[] {
   const targetNode = nodes.find(n => n.id === targetId);
   if (!targetNode) return nodes; // fallback: don't break if node vanished
 
-  // Pick the best output to preview — prefer vec3, then vec4, then vec2, then float, then any
-  const outputEntries = Object.entries(targetNode.outputs);
-  const vec3Entry  = outputEntries.find(([, s]) => s.type === 'vec3');
-  const vec4Entry  = outputEntries.find(([, s]) => s.type === 'vec4');
-  const vec2Entry  = outputEntries.find(([, s]) => s.type === 'vec2');
-  const floatEntry = outputEntries.find(([, s]) => s.type === 'float');
-  const chosen = vec3Entry ?? vec4Entry ?? vec2Entry ?? floatEntry ?? outputEntries[0];
+  // The output to preview: the one picked in "Show as" (docs/node-previews.md), else vec3, vec4, vec2, float, any
+  const chosen = pickPreviewOutput(targetNode, prefOf(targetNode).output);
   if (!chosen) return nodes; // no outputs to preview
 
-  const [chosenKey, chosenSocket] = chosen;
-  const outType = (chosenSocket as { type: string }).type;
+  const [chosenKey, outType] = chosen;
 
   if (outType === 'vec4') {
     const syntheticOutput: GraphNode = {
@@ -1664,6 +1678,8 @@ function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTe
       label: bake ? `Baked: ${bake.source}` : labelOf(id, 'Video Input'), name: m?.name ?? (typeof p.fileName === 'string' ? p.fileName : ''), src: m?.dataUrl ?? null, bytes: m?.dataUrl?.length ?? (m?.tooBig ? m.bytes : bake?.bytes ?? 0),
       loop: bake ? bake.loop === 'seamless' : p._loop !== false, speed: typeof p._speed === 'number' && p._speed > 0 ? p._speed : 1,
       ...(bake ? { clock: { start: bake.start, duration: bake.duration, fps: bake.fps, loop: bake.loop } } : {}),
+      // Clip settings (docs/clip-editor.md): the page plays the kept segments as the app does.
+      ...(p.clip && typeof p.clip === 'object' ? { clip: p.clip as CpSaved } : {}),
     };
   }
   // Every Audio Input node, wired into the shader or not: Play mappings can read its bands either way.
@@ -2497,6 +2513,18 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     if (r.summary) toast.info(on ? 'Volumetric on' : 'Volumetric off', { message: r.summary });
   },
 
+  openGridRulesAsNodes: (nodeId) => {
+    const st = get();
+    const made = openGridRulesInGraph(nodeId, st.nodes, () => idGenerator.next());
+    if ('problem' in made) { toast.info('Can\'t open these rules as nodes', { message: made.problem }); return null; }
+    undoManager.push(st.nodes, { label: 'Opened Grid Rules as nodes' });
+    set({ nodes: made.nodes });
+    get().compile();
+    toast.info('Grid Rules opened as nodes', {
+      message: `The same simulation, built from ordinary nodes, is below it${made.kept ? '' : ', wired where the Grid Rules node was'}; the Grid Rules node is left as it was: delete it when you like. Every node has a note.`,
+    });
+    return made.boardId;
+  },
   openParticlesAsNodes: (nodeId) => {
     const st = get();
     const src = st.nodes.find(nd => nd.id === nodeId);
@@ -3339,7 +3367,63 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     return r.added;
   },
 
+  applySuggestion: (nodeId, key, side, moveId, args = {}) => {
+    const st = get();
+    const move = moveById(moveId);
+    const path = st.activeGroupPath;
+    const scope = path.length ? getActiveNodes(st.nodes, path) : st.nodes;
+    const self = scope?.find(nd => nd.id === nodeId);
+    if (!move || !scope || !self) return null;
+    const r = applyMove(scope, { nodeId, key, side }, move, args, () => idGenerator.next(), { topLevel: path.length === 0 });
+    if (!r) return null;
+    const label = nodeName(self);
+    undoManager.push(st.nodes, { label: `${move.label} on ${label}`, nodeIds: [nodeId] });
+    const nodes = path.length ? (setActiveNodes(st.nodes, path, r.nodes) ?? st.nodes) : r.nodes;
+    const select = r.resultNodeId && r.nodes.some(nd => nd.id === r.resultNodeId) ? r.resultNodeId : nodeId;
+    set({ nodes, selectedNodeId: select, selectedNodeIds: [select] });
+    get().compile();
+    // Picking a move is a wiring choice too: it teaches the ranking (recency-weighted).
+    if (move.anchor) {
+      if (side === 'out') recordWireBetween(self.type, key, move.anchor.type, move.anchor.key);
+      else recordWireBetween(move.anchor.type, move.anchor.out, self.type, key);
+    }
+    const what = move.shape === 'param' ? 'Changed its settings.' : `Added ${r.added.length} node${r.added.length === 1 ? '' : 's'}, each with a note${r.rewired ? ', in place' : ''}.`;
+    toast.info(`${move.label} · ${label}`, { message: `${what}${r.shown ? ' It is on the Output now.' : ''} Undo takes it back.` });
+    return r.added;
+  },
+
+  runDoPlan: (plan, label) => {
+    const st = get();
+    const path = st.activeGroupPath;
+    const scope = path.length ? getActiveNodes(st.nodes, path) : st.nodes;
+    if (!scope || !plan.steps.length) return [];
+    const r = runDoPlanPure(scope, plan, () => idGenerator.next(), { topLevel: path.length === 0 });
+    if (!r.ran.length) return [];
+    undoManager.push(st.nodes, { label: `Do: ${label}` });
+    const nodes = path.length ? (setActiveNodes(st.nodes, path, r.nodes) ?? st.nodes) : r.nodes;
+    set({ nodes, ...(r.select ? { selectedNodeId: r.select, selectedNodeIds: [r.select] } : {}) });
+    get().compile();
+    return r.ran;
+  },
+
+  addBuiltNode: (node, label) => {
+    const st = get();
+    const path = st.activeGroupPath;
+    const scope = path.length ? getActiveNodes(st.nodes, path) : st.nodes;
+    if (!scope) return null;
+    const id = idGenerator.next();
+    const placed = placeNear(scope, [{ ...node, id }]);
+    undoManager.push(st.nodes, { label: `Added ${label}` });
+    const list = [...scope, ...placed];
+    const nodes = path.length ? (setActiveNodes(st.nodes, path, list) ?? st.nodes) : list;
+    set({ nodes, selectedNodeId: id, selectedNodeIds: [id] });
+    get().compile();
+    return id;
+  },
+
   addNode: (type, position, overrideParams?) => {
+    // "New 3D scene…" is a palette entry that opens the 3D Scene Builder (docs/scene-builder.md).
+    if (type === 'sceneBuilder') { openNewSceneBuilder(position); return undefined; }
     // ── The Agents family (docs/agents-plan.md) ──────────────────────────────
     // Sense, Steer, Move… run once per walker, so they only go inside an Agents
     // group; the group, Emit, Deposit, Trail and Draw are engines of their own
@@ -3363,6 +3447,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         void askChoice('Add an Agents group', [
           { id: 'empty', label: 'Empty group' },
           { id: 'slime', label: 'Slime (with a Trail)' },
+          { id: 'rules', label: 'Rules (When … Do …)' },
           { id: 'particles', label: 'Particles', variant: 'primary' },
         ], { message: 'Agents need a place to be born (Emit) and a way to be seen (Draw agents, or a Trail they leave). Start with a working setup round the group, wired to the Output and over what it shows now, or with the empty group to build it yourself. Every node it adds has a note.' })
           .then(choice => {
@@ -3372,21 +3457,22 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
               try { get().addNode(type, position); } finally { skipAgentsAsk = false; }
               return;
             }
-            const kind = choice as 'particles' | 'slime';
+            const kind = choice as 'particles' | 'slime' | 'rules';
             const before = get().nodes;
             const output = graphOutput(before);
-            const starter = agentStarter(kind, output?.inputs.color?.connection ?? null);
+            // Rules: the Slime setup with its group in rules mode (docs/agent-rules.md).
+            const starter = kind === 'rules' ? rulesStarter(output?.inputs.color?.connection ?? null) : agentStarter(kind, output?.inputs.color?.connection ?? null);
             const { nodes: fresh, idOf } = freshIds(starter.nodes, () => idGenerator.next());
             const placed = placeInFreeSpace(before, fresh, position);
-            undoManager.push(before, { label: `Added an Agents group (${kind === 'particles' ? 'Particles' : 'Slime'})` });
+            undoManager.push(before, { label: `Added an Agents group (${kind === 'particles' ? 'Particles' : kind === 'rules' ? 'Rules' : 'Slime'})` });
             let nodes = [...before, ...placed];
             const out = { nodeId: idOf(starter.out.nodeId), outputKey: starter.out.outputKey };
             if (output) nodes = nodes.map(n => n.id === output.id ? { ...n, inputs: { ...n.inputs, color: { ...n.inputs.color, connection: out } } } : n);
             set({ nodes });
             get().compile();
             get().focusNode(idOf(starter.groupId));
-            toast.info(kind === 'particles' ? 'Particles added' : 'Slime added', {
-              message: `${kind === 'particles' ? 'Emit → Agents (Curl noise → Integrate inside) → Draw agents' : 'Emit → Agents (Sense → Steer → Move inside) → Deposit → Trail field → palette'}${output ? ', wired to the Output over what it showed' : ''}. Double-click the group to open its rule; every node has a note.`,
+            toast.info(kind === 'particles' ? 'Particles added' : kind === 'rules' ? 'Agent rules added' : 'Slime added', {
+              message: `${kind === 'particles' ? 'Emit → Agents (Curl noise → Integrate inside) → Draw agents' : kind === 'rules' ? 'Emit → Agents (rules: turn toward the trail, wander, leave trail; press Edit rules) → Deposit → Trail field → palette' : 'Emit → Agents (Sense → Steer → Move inside) → Deposit → Trail field → palette'}${output ? ', wired to the Output over what it showed' : ''}. Double-click the group to open its rule; every node has a note.`,
             });
           });
         return undefined;
@@ -4158,6 +4244,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   connectNodes: (sourceNodeId, sourceOutputKey, targetNodeId, targetInputKey) => {
+    {
+      // A wire you make teaches the suggestions (suggestions/learning.ts, recency-weighted).
+      const a = nodeInScope(get(), sourceNodeId), b = nodeInScope(get(), targetNodeId);
+      if (a && b) recordWireBetween(a.type, sourceOutputKey, b.type, targetInputKey);
+    }
     undoManager.push(get().nodes, { label: `Connected ${nodeName(nodeInScope(get(), sourceNodeId))} → ${nodeName(nodeInScope(get(), targetNodeId))}`, nodeIds: [sourceNodeId, targetNodeId] });
     {
       // Replacing a wire: keep the old one so the node's menu can offer it back.
@@ -4935,6 +5026,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // without this the timer fires later and runs an identical second compile.
     compilationService.cancelPending();
     const force = opts?.force === true;
+    // Agents in 3D: the inside of a 3D group (and its Emit, Draw agents and Trails) carry the group's space on
+    // their cards (vec3 sockets, the camera): kept in step with the groups' Space before every compile.
+    {
+      const synced = syncAgentSpaces(get().nodes, getNodeDefinition);
+      if (synced !== get().nodes) set({ nodes: synced });
+    }
     if (force) {
       // From scratch: nothing the compiler reads is taken from an earlier compile.
       clearNodeDefinitionCache();
@@ -5034,7 +5131,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // Show passes: the whole graph's programs, even while the eye previews part of it.
     let whole: typeof result | null = result;
     if (bakeGraph) whole = null;
-    else if (previewNodeId && (hasPassNode(nodes) || hasAgentsNode(nodes))) {
+    else if (previewNodeId && (hasPassNode(nodes) || hasAgentsNode(nodes) || hasHiddenBlur(nodes))) {
       const full = compileGraph({ nodes });
       whole = full.success ? full : null;
     }
@@ -5398,6 +5495,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const stored = safeSetItem(`shader-studio:${name}`, payload, `graph "${name}"`);
     if (!stored.ok) return stored;
     set({ currentGraph: { name, version, latest: true }, graphDirty: false });
+    learnSaved(name, nodes, payload);
     recordActivity('save', name);
     window.dispatchEvent(new Event(SAVED_GRAPHS_CHANGED));
     const dir = getGraphDir();
@@ -5534,7 +5632,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set({ currentGraph: null, graphDirty: false });
     // A play file already opens on Play; a plain graph that happens to carry a setup just says so.
     if (!isPlayFile) announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
-    if (!opts?.recovered) recordActivity('import', 'Graph file');
+    if (!opts?.recovered) {
+      recordActivity('import', 'Graph file');
+      // An imported graph teaches the suggestions at half the weight of one you saved.
+      const sig = textSignature(json);
+      learnGraph(`import:${sig}`, 'imported', nodes, sig);
+    }
     return { ok: true };
   },
 

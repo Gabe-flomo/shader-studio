@@ -5,7 +5,7 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { PREVIEW_ASPECTS, fitAspect } from '../utils/graphImportPlan';
-import { drawScopeCanvas, vectorValueRegistry, floatValueRegistry } from '../lib/scopeRegistry';
+import { drawScopeCanvas, vectorValueRegistry, floatValueRegistry, scopeCanvasRegistry } from '../lib/scopeRegistry';
 import { audioEngine } from '../lib/audioEngine';
 import { audioSpectrumRegistry, drawSpectrumCanvas } from '../lib/audioSpectrumRegistry';
 import { inputBus } from '../lib/inputBus';
@@ -49,6 +49,9 @@ import { viewportSnapshot } from '../lib/viewport';
 import { onRebuild } from '../lib/rebuild';
 import { buildPreviewUniforms } from './previewUniforms';
 import { DataTextureBinder } from '../data/dataTextures';
+import { ValuePreviewRunner, resolvePreviewTarget, type PreviewTarget } from '../lib/nodePreview/valuePreviewRunner';
+import { useNodePreviewPrefs } from '../lib/nodePreview/showAs';
+import { PreviewValueOverlay } from './PreviewValueOverlay';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './shell/rebuildAction';
 
 export type CanvasHandle = { canvas: HTMLCanvasElement };
@@ -343,6 +346,14 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const off = useNodeGraphStore.subscribe((s, prev) => { if (s.nodes !== prev.nodes || s.bakeGraph !== prev.bakeGraph) collect(s); });
     return () => { off(); bakedVideos.setHost(null); };
   }, []);
+  // Video Input nodes: a kept file opens again after a reload, and clip settings follow the clock (lib/videoEngine.ts).
+  useEffect(() => {
+    videoEngine.setHost({ setTexture: (id, tex) => useNodeGraphStore.getState().setVideoTexture(id, tex) });
+    const collect = (nodes: import('../types/nodeGraph').GraphNode[]) => videoEngine.sync(nodes);
+    collect(useNodeGraphStore.getState().nodes);
+    const off = useNodeGraphStore.subscribe((s, prev) => { if (s.nodes !== prev.nodes) collect(s.nodes); });
+    return () => { off(); videoEngine.setHost(null); };
+  }, []);
   // Time Cube nodes (docs/time-cube.md): their stacked frames come in through the store's node textures, like a Texture Input's.
   useEffect(() => {
     timeCubes.setHost({
@@ -527,10 +538,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const supportsHalfFloat = renderer.capabilities.isWebGL2 ||
       (!!gl.getExtension('OES_texture_half_float') && !!gl.getExtension('EXT_color_buffer_half_float'));
     const RT_TYPE = supportsHalfFloat ? THREE.HalfFloatType : THREE.UnsignedByteType;
-    // Tiny 8-bit copy of the frame for the preview caption's stats (see lib/previewExplain.ts)
-    const statsRT = new THREE.WebGLRenderTarget(32, 18, { depthBuffer: false, stencilBuffer: false });
-    const statsBuf = new Uint8Array(32 * 18 * 4);
-    let statsWasOn = false;
+    let statsWasOn = false; // the preview caption's frame stats are set (from the "Show as" readback)
 
     // Blit scene: renders a float RT to screen with triangular dithering
     const blitScene = new THREE.Scene();
@@ -557,8 +565,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const activeFs = rawFs ?? fs;
     const initialUniforms: Record<string, { value: unknown }> = {
       u_time:        { value: 0 },
+      // The frame's length in seconds (Fade (feedback): tails in seconds at any frame rate; 0 reads as 1/60).
+      u_frameDt:     { value: 0 },
       u_resolution:  { value: new THREE.Vector2(1, 1) },
       u_mouse:       { value: new THREE.Vector2(0, 0) },
+      // The pointer's button over the picture (Mouse button node, Grid Rules' brush): 1 while down.
+      u_mousebtn:    { value: 0 },
       u_prevFrame:   { value: null },
       // Echo snapshot ring (see nodes/definitions/echo.ts); the shader declares only the ones it uses.
       ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])),
@@ -745,7 +757,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       }
       agentRunner.update(agents, vsSrc || FALLBACK_VERTEX);
       // Dev-only, like window.__shaderStudio: scripted checks time and step the live simulation through it.
-      if (import.meta.env.DEV) (window as unknown as { __shaderStudioAgents?: unknown }).__shaderStudioAgents = { runner: agentRunner, targets: agentTargets, renderer };
+      if (import.meta.env.DEV) (window as unknown as { __shaderStudioAgents?: unknown }).__shaderStudioAgents = { runner: agentRunner, targets: agentTargets, renderer, offline: () => offlineAgentTargets };
       requestRender();
     };
 
@@ -856,7 +868,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         e?.material.dispose();
         const shared = material.uniforms;
         const uniforms: Record<string, THREE.IUniform> = {
-          u_time: { value: 0 }, u_resolution: shared.u_resolution, u_mouse: shared.u_mouse, u_prevFrame: { value: null },
+          u_time: { value: 0 }, u_resolution: shared.u_resolution, u_mouse: shared.u_mouse, u_mousebtn: shared.u_mousebtn, u_prevFrame: { value: null },
           ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])),
           u_fontTexture: { value: FONT_TEXTURE }, ...layersUniforms, ...padGridUniforms, ...motionUniforms,
         };
@@ -994,6 +1006,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         renderAtTime: (time: number, opts?: { dt?: number; first?: boolean }) => {
           ensureRT();
           const u = material.uniforms;
+          if (u.u_frameDt) u.u_frameDt.value = opts?.dt ?? 1 / 60;
           // Passes a Particles node reads (Emit from): drawn at this frame's time before the particles step,
           // into the render's own textures (the rest draw after, below). A graph without them skips this.
           const keepTime = u.u_time.value;
@@ -1139,6 +1152,23 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const disposeProbeMat = (m: THREE.ShaderMaterial) => {
       if (compilingProbeMats.has(m) && !readyProbeMats.has(m)) disposeWhenReady.add(m);
       else m.dispose();
+    };
+
+    // ── "Show as" previews (docs/node-previews.md): the eye preview of a float / vec2 node drawn as
+    // a range, slice, grid, arrows… from its real value, read back asynchronously from a small target.
+    const pvRunner = new ValuePreviewRunner(renderer, camera, compileQuietly, () => requestRender());
+    let pvTarget: PreviewTarget | null = null;
+    const pvKeys: unknown[] = [];
+    /** The previewed node's value target, recomputed only when something it depends on changed. */
+    const previewTarget = (): PreviewTarget | null => {
+      const id = previewNodeIdRef.current;
+      const fs = fragmentShaderRef.current;
+      const st = useNodeGraphStore.getState();
+      const keys = [id, fs, st.nodes, st.nodeOutputVarMap, useNodePreviewPrefs.getState().prefs, probePassVer];
+      if (keys.every((k, i) => k === pvKeys[i])) return pvTarget;
+      keys.forEach((k, i) => { pvKeys[i] = k; });
+      pvTarget = id && fs ? resolvePreviewTarget(id, st.nodes, st.nodeOutputVarMap, fs, fsDeclares) : null;
+      return pvTarget;
     };
     let lastProbedNodeId: string | null = null;
     let lastProbeFs: string | null = null;   // invalidate cache when shader recompiles
@@ -1457,6 +1487,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         audioEngineHost.setScale(rec.arrangement?.scale);
       }
       material.uniforms.u_time.value = elapsed;
+      material.uniforms.u_frameDt.value = timePlayingRef.current ? dt : 0;
       // Clock followers (time readouts, keyframe playheads) get every frame: a listener call is
       // cheap, and throttling it made the readout visibly choppy once frames were throttled.
       // Always emitted: it also records the clock for clockNow() (freezing a keyframed slider).
@@ -1515,7 +1546,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       // continues from where it stopped. Takes and offline renders drive their own time (stepLayers)
       // and never go through this draw() call, so they're unaffected.
       const layerDt = playing ? dt : 0;
-      const videoActive = videoIdsRef.current.some(id => videoEngine.isPlaying(id));
+      const videoActive = videoIdsRef.current.some(id => videoEngine.active(id));
       const shaderMoving = playing && (
         usesTimeRef.current || hasTimeNodeRef.current || gpuParticlesActive() ||
         audioAmps.size > 0 || liveValues.size > 0 || videoActive || bakedVideos.active() || isStatefulRef.current || echoRef.current !== null ||
@@ -1535,6 +1566,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       playVideoLayers.follow(elapsed, playing);
       // Baked nodes: each video on frame (t − start) × fps (lib/bakedVideos.ts).
       bakedVideos.follow(elapsed, playing);
+      // Video Input nodes with clip settings: on their playlist for the clock (docs/clip-editor.md).
+      videoEngine.follow(elapsed, playing);
       // Drum pads: the clock their hits are stamped with, and mapped numbers on sounding pads.
       playDrumPads.follow(elapsed, playing);
       const plan = planFrame({
@@ -1611,10 +1644,23 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           renderer.render(blitScene, camera);
           gpuTimer.end();
           pingPongIdx.current = pingPongIdx.current === 0 ? 1 : 0;
+          // A feedback graph's history must stay the picture's: the "Show as" display draws over the screen after it.
+          const pvMat = previewNodeIdRef.current ? pvRunner.display(previewTarget(), fragmentShaderRef.current, vertexShaderRef.current, material) : null;
+          if (pvMat) {
+            mesh.material = pvMat;
+            renderer.setRenderTarget(null);
+            renderer.render(scene, camera);
+            mesh.material = material;
+          }
         } else {
           gpuTimer.begin('main');
           renderer.setRenderTarget(floatRt);
+          // The eye preview of a float / vec2 in a "Show as" mode draws with its display program
+          // (the same graph ending in the mode's colour map): no extra pass.
+          const pvMat = previewNodeIdRef.current ? pvRunner.display(previewTarget(), fragmentShaderRef.current, vertexShaderRef.current, material) : null;
+          if (pvMat) mesh.material = pvMat;
           renderer.render(scene, camera);
+          if (pvMat) mesh.material = material;
           if (echoRef.current) captureEcho(floatRt.texture);
           blitMat.uniforms.tInput.value = floatRt.texture;
           blitMat.uniforms.u_seed.value = ditherSeed(frameCount);
@@ -1656,26 +1702,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           if (hasTimeNodeRef.current) {
             setCurrentTime(material.uniforms.u_time.value);
           }
-          // ── Preview caption stats: how much of the isolated node's frame clips, is black, or is flat ──
-          if (previewNodeIdRef.current) {
-            renderer.setRenderTarget(statsRT);
-            renderer.render(scene, camera);
-            renderer.setRenderTarget(null);
-            renderer.readRenderTargetPixels(statsRT, 0, 0, 32, 18, statsBuf);
-            let clipped = 0, black = 0, sum = 0, flat = true;
-            const r0 = statsBuf[0], g0 = statsBuf[1], b0 = statsBuf[2];
-            for (let i = 0; i < statsBuf.length; i += 4) {
-              const r = statsBuf[i], g = statsBuf[i + 1], b = statsBuf[i + 2];
-              const mx = Math.max(r, g, b);
-              if (mx >= 254) clipped++;
-              if (mx <= 2) black++;
-              sum += (r + g + b) / 765;
-              if (flat && (Math.abs(r - r0) > 6 || Math.abs(g - g0) > 6 || Math.abs(b - b0) > 6)) flat = false;
-            }
-            const n = 32 * 18;
-            setPreviewStats({ clipped: clipped / n, black: black / n, flat, mean: sum / n });
-            statsWasOn = true;
-          } else if (statsWasOn) {
+          // The preview caption's frame stats (clipping, black, flat) come from the "Show as" readback
+          // below (valuePreviewRunner onStats): asynchronous, no extra render or synchronous read.
+          if (!previewNodeIdRef.current && statsWasOn) {
             statsWasOn = false;
             setPreviewStats(null);
           }
@@ -1886,6 +1915,15 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           }
         }
 
+        // ── "Show as" value readback (throttled inside; asynchronous, one in flight) ──
+        if (previewNodeIdRef.current || pvTarget) {
+          const t = previewNodeIdRef.current ? previewTarget() : null;
+          pvRunner.sample(t, fragmentShaderRef.current, vertexShaderRef.current, material,
+            renderer.domElement.width || 1, renderer.domElement.height || 1, !dynamic, () => { if (!dynamic) requestRender(); },
+            st => { statsWasOn = st !== null; setPreviewStats(st); });
+          if (!t) pvTarget = null;
+        }
+
         // ── Preview scope: waveform + upstream probes when 👁 is active (throttled like scopes) ──
         const previewId = previewNodeIdRef.current;
         if (previewId && (frameCount % PROBE_SAMPLE_EVERY === 0 || !dynamic)) {
@@ -1909,7 +1947,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                 const outputVars = nodeOutputVarMapRef.current.get(previewId);
                 const varName    = outputVars?.[floatOutputKey];
                 const src = varName ? probeSrc(previewId, varName, curFs) : null;
-                if (varName && src) {
+                // The card's waveform canvas: only while one is showing (a float node previewed in a
+                // "Show as" mode draws from the value readback instead; docs/node-previews.md).
+                if (varName && src && scopeCanvasRegistry.has(`__preview__${previewId}`)) {
                   const cacheKey = `${src.tag}${varName}::-1::1`;
                   let pm = previewScopeMatCache.get(cacheKey);
                   if (!pm) {
@@ -1929,6 +1969,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                   renderer.setRenderTarget(null);
                   renderer.readRenderTargetPixels(probeRT, 0, 0, 1, 1, probeBuf);
                   drawScopeCanvas(`__preview__${previewId}`, probeBuf[0] / 255, -1, 1);
+                }
+                if (varName && src) {
 
                   const hpCacheKey = `hp::${src.tag}${varName}`;
                   let hpm = previewScopeMatCache.get(hpCacheKey);
@@ -2168,8 +2210,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (pingPongB.current) { pingPongB.current.dispose(); pingPongB.current = null; }
       pingPongIdx.current = 0;
       disposeEchoRing();
-      for (const target of [rt, floatRt, statsRT, histRt, probeRT]) target.dispose();
+      for (const target of [rt, floatRt, histRt, probeRT]) target.dispose();
       costRt?.dispose(); costRt = null;
+      pvRunner.reset();
       reset.push('render targets');
       if (isStatefulRef.current) reset.push('feedback history');
       if (echoRef.current) reset.push('echo history');
@@ -2257,6 +2300,36 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     };
     renderer.domElement.addEventListener('mousemove', handleMouseMove);
     renderer.domElement.addEventListener('mouseleave', handleMouseLeave);
+    // The button (u_mousebtn), on the window so a layer drawn over the picture (Play) doesn't hide it: a press
+    // inside the picture that isn't on a control counts; while held, the pointer moves u_mouse wherever it goes.
+    let buttonHeld = false;
+    const insidePicture = (e: PointerEvent) => {
+      const r = renderer.domElement.getBoundingClientRect();
+      return e.clientX >= r.left && e.clientX < r.right && e.clientY >= r.top && e.clientY < r.bottom;
+    };
+    const handleButtonDown = (e: PointerEvent) => {
+      if (e.button !== 0 || !insidePicture(e)) return;
+      const t = e.target as Element | null;
+      if (t !== renderer.domElement && t?.closest?.('button, input, select, textarea, a, [role="slider"], [role="button"], [contenteditable="true"]')) return;
+      buttonHeld = true;
+      handleMouseMove(e);
+      material.uniforms.u_mousebtn.value = 1;
+      playEngine.setPreviewButton(true);
+      requestRender();
+    };
+    const handleButtonMove = (e: PointerEvent) => { if (buttonHeld && e.target !== renderer.domElement) handleMouseMove(e); };
+    const handleButtonUp = () => {
+      if (!buttonHeld) return;
+      buttonHeld = false;
+      material.uniforms.u_mousebtn.value = 0;
+      playEngine.setPreviewButton(false);
+      requestRender();
+    };
+    window.addEventListener('pointerdown', handleButtonDown, true);
+    window.addEventListener('pointermove', handleButtonMove, true);
+    window.addEventListener('pointerup', handleButtonUp, true);
+    window.addEventListener('pointercancel', handleButtonUp, true);
+    window.addEventListener('blur', handleButtonUp);
 
     // Reset time to 0 when 'reset-time' is fired (e.g. from Time node button)
     const handleResetTime = () => {
@@ -2316,6 +2389,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (glContextLost) useNodeGraphStore.getState().setGlContextLost(false);
       renderer.domElement.removeEventListener('mousemove', handleMouseMove);
       renderer.domElement.removeEventListener('mouseleave', handleMouseLeave);
+      window.removeEventListener('pointerdown', handleButtonDown, true);
+      window.removeEventListener('pointermove', handleButtonMove, true);
+      window.removeEventListener('pointerup', handleButtonUp, true);
+      window.removeEventListener('pointercancel', handleButtonUp, true);
+      window.removeEventListener('blur', handleButtonUp);
       window.removeEventListener('reset-time', handleResetTime);
       window.removeEventListener('agents-restart', handleAgentsRestart);
       window.removeEventListener('seek-time', handleSeekTime);
@@ -2333,6 +2411,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       probeMatCache.forEach(disposeProbeMat);
       scopeMatCache.forEach(disposeProbeMat);
       previewScopeMatCache.forEach(disposeProbeMat);
+      pvRunner.dispose();
       pingPongA.current?.dispose();
       pingPongB.current?.dispose();
       sceneRef.current = null;
@@ -2341,7 +2420,6 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       const loseCtx = renderer.getContext().getExtension('WEBGL_lose_context');
       loseCtx?.loseContext();
       gpuTimer.dispose();
-      statsRT.dispose();
       costRt?.dispose();
       registerShaderCostMeasurer(null);
       passRunner?.dispose(); passTargets?.dispose(); offlinePassTargets?.dispose();
@@ -2625,6 +2703,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         <HandsPill />
         {/* The Finish stack's before/after divider (Play's Finish tab). */}
         <CompareHandle />
+        {/* The eye preview's "Show as" key, arrows and slice plot (docs/node-previews.md). */}
+        <PreviewValueOverlay />
       </div>
     </div>
   );

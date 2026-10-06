@@ -21,6 +21,7 @@ import { SpaceMeter } from './SpaceMeter';
 import type { StorageEstimate } from './useFilesInventory';
 import type { StorageUsage } from '../../files/storageLimit';
 import { useItemPosters } from './useItemPosters';
+import { ExploreCodeHome } from '../codeExplorer/ExploreCodeHome';
 import { Carousel, Chip, DayEvents, HomeSection, MonthCalendar, PosterCard, StatTile } from './homeUi';
 import { cardStyle, capsLabel, tintFor } from './fileUiShared';
 
@@ -140,6 +141,10 @@ export function HomeView({ inv, compact, estimate, usage, entries, browse, onOpe
           <Card label="Layer kinds">{chips(used.layerKinds, undefined, 'cube')}</Card>
           <Card label="Play sources">{chips(used.sources, undefined, 'live')}</Card>
         </div>
+      </HomeSection>
+
+      <HomeSection title="Explore code" note="how written GLSL uses a function, across your graphs, shaders and the examples">
+        <ExploreCodeHome compact={compact} />
       </HomeSection>
 
       {/* Where else to go */}

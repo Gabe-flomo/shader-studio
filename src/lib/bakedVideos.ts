@@ -11,6 +11,11 @@
  * - `seek(time)`: before every offline frame (exports, bakes of bakes): each
  *   video on exactly that frame, decoded, before the shader draws.
  *
+ * Clip settings (`params.clip`, docs/clip-editor.md: a trim, speed, loop and
+ * crop from the clip editor) change the clock's map: clock time t − start
+ * plays through the playlist (play/kit/clipPlay.js cpAt), as the web page
+ * plays it. Without one, nothing here changes.
+ *
  * Textures go through the store's `videoTextures` (keyed by node id), the
  * same path a Video Input node's take, so the ShaderCanvas binding, Pass
  * programs and the web export (mediaSources) all treat them alike.
@@ -21,6 +26,7 @@ import { getVideo } from './backgroundLibrary';
 import { forgetMedia, rememberMedia } from './mediaSources';
 import { bakeFrameAt, bakeVideoTime, type BakeClock } from './bake/plan';
 import { bakedInfo } from '../nodes/definitions/baked';
+import { cpAt, cpFollow, cpParse, cpPlaylist, type CpSaved } from '../play/kit/clipPlay.js';
 
 export type BakedStatus = 'loading' | 'ready' | 'missing' | 'error';
 
@@ -28,6 +34,8 @@ interface Entry {
   nodeId: string;
   videoId: string;
   clock: BakeClock;
+  /** Clip settings from the editor, or null (plays frame (t − start) × fps). */
+  clip: CpSaved | null;
   status: BakedStatus;
   el: HTMLVideoElement | null;
   tex: THREE.VideoTexture | null;
@@ -96,14 +104,16 @@ class BakedVideos {
       const clock = clockOf(n);
       const videoId = String(n.params.videoId || '');
       const had = this.entries.get(id);
-      if (had) { if (clock) had.clock = clock; continue; }
+      if (had) { if (clock) had.clock = clock; had.clip = cpParse(n.params.clip); continue; }
       if (!clock || !videoId) continue;
       this.open(id, videoId, clock);
+      const e = this.entries.get(id);
+      if (e) e.clip = cpParse(n.params.clip);
     }
   }
 
   private open(nodeId: string, videoId: string, clock: BakeClock): void {
-    const e: Entry = { nodeId, videoId, clock, status: 'loading', el: null, tex: null, url: null, shown: -1, ready: Promise.resolve() };
+    const e: Entry = { nodeId, videoId, clock, clip: null, status: 'loading', el: null, tex: null, url: null, shown: -1, ready: Promise.resolve() };
     this.entries.set(nodeId, e);
     this.changed();
     e.ready = (async () => {
@@ -157,6 +167,13 @@ class BakedVideos {
       const el = e.el;
       if (e.status !== 'ready' || !el || !e.tex) continue;
       const { fps, duration, loop } = e.clock;
+      if (e.clip) {
+        // The clip's playlist from the bake's start (before it: its first frame, held).
+        const c = clipClock(e, time);
+        if (c) cpFollow(el, c.at, c.seg, c.speed, playing && time >= e.clock.start);
+        if (el.currentTime !== e.shown && el.readyState >= 2) { e.shown = el.currentTime; e.tex.needsUpdate = true; }
+        continue;
+      }
       const target = bakeVideoTime(bakeFrameAt(time, e.clock), fps);
       const d = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : duration;
       const raw = target - el.currentTime;
@@ -188,7 +205,10 @@ class BakedVideos {
         const el = e.el;
         if (e.status !== 'ready' || !el || !e.tex) return;
         if (!el.paused) el.pause();
-        const target = bakeVideoTime(bakeFrameAt(time, e.clock), e.clock.fps);
+        const c = e.clip ? clipClock(e, time) : null;
+        // A clip lands on the middle of the bake's frame, as a plain bake does.
+        const target = c ? bakeVideoTime(Math.min(Math.round(e.clock.duration * e.clock.fps) - 1, Math.floor(c.at.time * e.clock.fps + 1e-6)), e.clock.fps)
+          : bakeVideoTime(bakeFrameAt(time, e.clock), e.clock.fps);
         if (Math.abs(el.currentTime - target) > 1e-4 || el.readyState < 2) {
           const seeked = waitFor(el, 'seeked', 4000);
           el.currentTime = target;
@@ -204,6 +224,16 @@ class BakedVideos {
 
   /** Wait until every open video has loaded (or failed): a bake of a bake reads them. */
   async whenLoaded(): Promise<void> { await Promise.all([...this.entries.values()].map(e => e.ready)); }
+}
+
+/** Where a clipped bake is at clock `time`: its playlist from the bake's start (loop: the clip's, else a seamless bake's). */
+function clipClock(e: Entry, time: number) {
+  if (!e.clip) return null;
+  const d = e.el && Number.isFinite(e.el.duration) && e.el.duration > 0 ? e.el.duration : e.clock.duration;
+  const pl = cpPlaylist(e.clip, d, 1, e.clock.loop === 'seamless');
+  if (!pl.segs.length) return null;
+  const at = cpAt(pl.segs, time - e.clock.start, pl.speed, pl.loop);
+  return { at, seg: pl.segs[at.k], speed: pl.speed };
 }
 
 export const bakedVideos = new BakedVideos();

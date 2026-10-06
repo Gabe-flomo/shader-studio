@@ -368,6 +368,125 @@ exports[`golden outputs: examples > gridLavaLamp 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > gridRulesBrain 1`] = `
+{
+  "afterglow": "- x120",
+  "brush": "- x120",
+  "density": "- x120",
+  "glow": "- x120",
+  "on": "- x120",
+  "paint": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesCave 1`] = `
+{
+  "brush": "- x120",
+  "density": "- x120",
+  "floor": "- x120",
+  "reset": "- x120",
+  "rock": "- x120",
+  "seed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesCrystal 1`] = `
+{
+  "ageing": "- x120",
+  "brush": "- x120",
+  "density": "- x120",
+  "reset": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesFire 1`] = `
+{
+  "growth": "- x120",
+  "lightning": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+  "spread": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesGas 1`] = `
+{
+  "afterglow": "- x120",
+  "brush": "- x120",
+  "density": "- x120",
+  "reset": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesHeat 1`] = `
+{
+  "brush": "- x120",
+  "cool": "- x120",
+  "flares": "- x120",
+  "paint": "- x120",
+  "reset": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesLife 1`] = `
+{
+  "afterglow": "- x120",
+  "brush": "- x120",
+  "density": "- x120",
+  "glow": "- x120",
+  "live": "- x120",
+  "paint": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesLifeLike 1`] = `
+{
+  "afterglow": "- x120",
+  "born": "- x120",
+  "brush": "- x120",
+  "density": "- x120",
+  "paint": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+  "survive": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesSand 1`] = `
+{
+  "brush": "- x120",
+  "fill": "- x120",
+  "grain": "- x120",
+  "paint": "- x120",
+  "paints": "- x120",
+  "reset": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesWater 1`] = `
+{
+  "brush": "- x120",
+  "damping": "- x120",
+  "paint": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > gridRulesWire 1`] = `
+{
+  "bridges": "- x120",
+  "head": "- x120",
+  "paints": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > gridTourArrayBlobs 1`] = `
 {
   "melt": "0.0237, 0.0240, 0.0242, 0.0245, 0.0248, 0.0250, 0.0253, 0.0256, 0.0259, 0.0262, 0.0265, 0.0268, 0.0271, 0.0275, 0.0278, 0.0281, 0.0285, 0.0288, 0.0292, 0.0295, 0.0299, 0.0303, 0.0307, 0.0311, 0.0315, 0.0319, 0.0323, 0.0327, 0.0331, 0.0336, 0.0340, 0.0344, 0.0349, 0.0353, 0.0358, 0.0362, 0.0367, 0.0372, 0.0376, 0.0381, 0.0386, 0.0391, 0.0396, 0.0401, 0.0406, 0.0411, 0.0416, 0.0422, 0.0427, 0.0432, 0.0437, 0.0443, 0.0448, 0.0454, 0.0459, 0.0465, 0.0470, 0.0476, 0.0481, 0.0487, 0.0493, 0.0499, 0.0504, 0.0510, 0.0516, 0.0522, 0.0528, 0.0534, 0.0540, 0.0545, 0.0551, 0.0557, 0.0564, 0.0570, 0.0576, 0.0582, 0.0588, 0.0594, 0.0600, 0.0606, 0.0612, 0.0619, 0.0625, 0.0631, 0.0637, 0.0644, 0.0650, 0.0656, 0.0662, 0.0669, 0.0675, 0.0681, 0.0687, 0.0694, 0.0700, 0.0706, 0.0713, 0.0719, 0.0725, 0.0731, 0.0738, 0.0744, 0.0750, 0.0756, 0.0763, 0.0769, 0.0775, 0.0781, 0.0788, 0.0794, 0.0800, 0.0806, 0.0812, 0.0818, 0.0824, 0.0830, 0.0836, 0.0843, 0.0849, 0.0855",
@@ -1495,6 +1614,219 @@ exports[`golden outputs: examples > scriptPicture 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > simAgentCrowd 1`] = `
+{
+  "again": "- x120",
+  "avoid": "- x120",
+  "follow": "- x120",
+  "jam": "- x120",
+  "pace": "- x120",
+  "side": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simAgentDla 1`] = `
+{
+  "again": "- x120",
+  "at": "- x120",
+  "pull": "- x120",
+  "stick": "- x120",
+  "walk": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simAgentFireflies 1`] = `
+{
+  "again": "- x120",
+  "coupling": "- x120",
+  "deaf": "- x120",
+  "period": "- x120",
+  "spread": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simAgentInfection 1`] = `
+{
+  "again": "- x120",
+  "beta": "- x120",
+  "immune": "- x120",
+  "imported": "- x120",
+  "sick": "- x120",
+  "walk": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simAgentPainters 1`] = `
+{
+  "again": "- x120",
+  "answer": "- x120",
+  "curl": "- x120",
+  "fade": "- x120",
+  "hue": "- x120",
+  "pens": "- x120",
+  "rhythm": "- x120",
+  "speed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simAgentPredatorPrey 1`] = `
+{
+  "again": "- x120",
+  "fear": "- x120",
+  "hunger": "- x120",
+  "kill": "- x120",
+  "predBirth": "- x120",
+  "preyBirth": "- x120",
+  "turn": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simAgentSandDrift 1`] = `
+{
+  "again": "- x120",
+  "bare": "- x120",
+  "gust": "- x120",
+  "lift": "- x120",
+  "repose": "- x120",
+  "sand": "- x120",
+  "shadow": "- x120",
+  "wind": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simAgentTermites 1`] = `
+{
+  "again": "- x120",
+  "pick": "- x120",
+  "rest": "- x120",
+  "scatter": "- x120",
+  "wiggle": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simGridBrain 1`] = `
+{
+  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
+  "density": "- x120",
+  "dyingColour": "- x120",
+  "glow": "- x120",
+  "onColour": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simGridCave 1`] = `
+{
+  "atLeast": "- x120",
+  "density": "- x120",
+  "relief": "- x120",
+  "seed": "- x120",
+  "soft": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simGridFire 1`] = `
+{
+  "ashFade": "- x120",
+  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
+  "glow": "- x120",
+  "growth": "- x120",
+  "lightning": "- x120",
+  "reset": "- x120",
+  "spread": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simGridHeat 1`] = `
+{
+  "brush": "- x120",
+  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
+  "cooling": "- x120",
+  "heating": "- x120",
+  "spotLevel": "- x120",
+  "spread": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simGridLife 1`] = `
+{
+  "afterglow": "- x120",
+  "aliveColour": "- x120",
+  "born": "- x120",
+  "brush": "- x120",
+  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
+  "density": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+  "stayA": "- x120",
+  "stayB": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simGridLifeLike 1`] = `
+{
+  "afterglow": "- x120",
+  "b0": "- x120",
+  "b1": "- x120",
+  "b2": "- x120",
+  "b3": "- x120",
+  "b4": "- x120",
+  "b5": "- x120",
+  "b6": "- x120",
+  "b7": "- x120",
+  "b8": "- x120",
+  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
+  "density": "- x120",
+  "reset": "- x120",
+  "s0": "- x120",
+  "s1": "- x120",
+  "s2": "- x120",
+  "s3": "- x120",
+  "s4": "- x120",
+  "s5": "- x120",
+  "s6": "- x120",
+  "s7": "- x120",
+  "s8": "- x120",
+  "speed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simGridSand 1`] = `
+{
+  "brush": "- x120",
+  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
+  "clear": "- x120",
+  "flow": "- x120",
+  "swing": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simGridWater 1`] = `
+{
+  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
+  "damping": "- x120",
+  "depth": "- x120",
+  "dropSize": "- x120",
+  "finger": "- x120",
+  "rain": "- x120",
+  "refraction": "- x120",
+  "speed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > simGridWire 1`] = `
+{
+  "bridges": "- x120",
+  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
+  "drawWire": "- x120",
+  "glow": "- x120",
+  "pen": "- x120",
+  "reset": "- x120",
+  "speed": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > timeCubeFlyThrough 1`] = `
 {
   "ang": "- x120",
@@ -1518,6 +1850,66 @@ exports[`golden outputs: examples > timeCubePulse 1`] = `
   "pspeed": "- x120",
   "pwidth": "- x120",
   "tol": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttColourKey 1`] = `
+{
+  "keyColour": "- x120",
+  "soft": "- x120",
+  "tol": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttDistanceRings 1`] = `
+{
+  "level": "- x120",
+  "offset": "- x120",
+  "spacing": "- x120",
+  "speed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttGrowShrink 1`] = `
+{
+  "grow": "- x120",
+  "level": "- x120",
+  "levelCore": "- x120",
+  "shrink": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttMotionTrails 1`] = `
+{
+  "amount": "- x120",
+  "tail": "- x120",
+  "turn": "- x120",
+  "zoom": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttReactionLevels 1`] = `
+{
+  "feed": "- x120",
+  "gamma": "- x120",
+  "kill": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttTrailFlow 1`] = `
+{
+  "reach": "- x120",
+  "strength": "- x120",
+  "veins": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttVideoOutline 1`] = `
+{
+  "glow": "- x120",
+  "level": "- x120",
+  "spacing": "- x120",
+  "tint": "- x120",
 }
 `;
 

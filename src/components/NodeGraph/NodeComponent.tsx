@@ -21,20 +21,19 @@ if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
 import { toast } from '../ui/toastStore';
 import type { GraphNode, DataType, NodeDefinition, ParamDef } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
-import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
-import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { extendRangePatch, hasCustomRange, paramSliderRange, resetRangePatch } from '../../nodes/sliderRange';
 import { frozenValueOf } from '../../nodes/sliderFreeze';
 import { isAssignable, legacyAssignOp } from '../../nodes/assignable';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { nodeJumpSignal, takeNodeJump, useCodeJump } from '../../codeExplorer/jumpStore';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 // Editors that only open on demand load in their own chunks (type-only imports
 // carry the props; they're erased at build time).
 import type { ExprModal as ExprModalT } from './ExprModal';
 import type { CustomFnModal as CustomFnModalT } from './CustomFnModal';
 import type { ExprBlockModal as ExprBlockModalT } from './ExprBlockModal';
-import { toggleLineOff } from '../../lib/exprLines';
+import { openAgentRulesEditor } from '../../agentRules/storeActions';
 import { inputHintOf, inputLabelOf, inputTexts } from '../../lib/inputNames';
 import { InputNamesModal } from './InputNamesModal';
 import type { ConstantsModal as ConstantsModalT } from './ConstantsModal';
@@ -56,19 +55,31 @@ const AssignInitModal     = lazyWithSuspense<PropsOf<typeof AssignInitModalT>>((
 const KeyframeEditorModal = lazyWithSuspense<PropsOf<typeof KeyframeEditorModalT>>(() => import('./KeyframeEditorModal').then(m => ({ default: m.KeyframeEditorModal })));
 import type { DataEditor as DataEditorT } from '../data/DataEditor';
 const DataEditor          = lazyWithSuspense<PropsOf<typeof DataEditorT>>(() => import('../data/DataEditor').then(m => ({ default: m.DataEditor })));
+import type { GridRulesEditor as GridRulesEditorT } from '../gridRules/GridRulesEditor';
+const GridRulesEditor     = lazyWithSuspense<PropsOf<typeof GridRulesEditorT>>(() => import('../gridRules/GridRulesEditor').then(m => ({ default: m.GridRulesEditor })));
+import { GridRulesCardBody } from '../gridRules/GridRulesCardBody';
+import { GRID_CARD_KEYS } from '../../nodes/definitions/gridRules';
 import { DataCardBody } from '../data/DataCardBody';
 import type { PublishNodeModal as PublishNodeModalT } from './PublishNodeModal';
 const PublishNodeModal    = lazyWithSuspense<PropsOf<typeof PublishNodeModalT>>(() => import('./PublishNodeModal').then(m => ({ default: m.PublishNodeModal })));
 import { AudioInputModal } from './AudioInputModal';
 import { VideoInputModal } from './VideoInputModal';
+import { VideoInputClipModal } from './VideoInputClipModal';
+import { addVideoFile } from '../../lib/backgroundLibrary';
+
+/** The Video Input card's thumbnail follows the engine (a file reopened after a reload). */
+const subscribeVideoEngine = (fn: () => void) => videoEngine.onChange(fn);
 import { MidiInputCard } from './MidiInputCard';
 import { GroupParamPicker } from './GroupParamPicker';
-import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
-import { AGENT_INPUT_OUTPUTS, AGENT_INPUT_STATE_OUTPUTS, agentWalkerDefault } from '../../nodes/definitions/agents';
+import { NodeInlineViz, AudioFreqRangeViz, hasRealDiagram } from './NodeInlineViz';
+import { ValuePreview } from './ValuePreview';
+import { AgentPreviewPanel } from './AgentPreviewPanels';
+import { previewPlan } from '../../lib/nodePreview/previewPlan';
+import { AGENT_INPUT_OUTPUTS, AGENT_INPUT_STATE_OUTPUTS, agentWalkerDefault, DRAW_3D_INPUTS } from '../../nodes/definitions/agents';
 import { VECTORIZABLE_NODES, VEC4_CAPABLE_NODES } from '../../nodes/definitions/math';
 import { registerSocket, getView } from './socketRegistry';
 import { startNodeMouseDrag, startNodeTouchDrag } from './nodeDrag';
-import { moveItem } from '../../lib/reorder';
+import { CodeCard } from './codeCard/CodeCard';
 import { scopeCanvasRegistry, scopeBufferRegistry, vectorValueRegistry, floatValueRegistry } from '../../lib/scopeRegistry';
 import { audioEngine } from '../../lib/audioEngine';
 import { videoEngine } from '../../lib/videoEngine';
@@ -187,13 +198,8 @@ function hzToSlider(hz: number): number {
   return Math.round(Math.pow(Math.max(0, ratio), 1 / 0.6) * 1000);
 }
 
-const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput', 'baked', 'midiInput', 'data', 'timeCube']);
 let zCounter = 10; // incremented each time a node is brought to front
 const LFO_TYPES    = new Set(['lfo']);
-// Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
-const ALWAYS_VIZ_TYPES = new Set([...LFO_TYPES, 'remap', 'audioInput', 'pass']);
-// Float-output nodes that should render a grayscale shader thumbnail instead of the scope waveform
-const GRAYSCALE_PREVIEW_TYPES = new Set(['fbm', 'voronoi', 'noiseFloat', 'sdSegment', 'mask', 'luminance', 'sobel', 'compare', 'select']);
 
 
 const inputStyleFor = (tc: CtpPalette): React.CSSProperties => ({
@@ -545,50 +551,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   // Video input
   const setVideoTexture    = useNodeGraphStore(s => s.setVideoTexture);
 
-  // Node preview thumbnail — rendered at 200×200 when the 👁 preview mode is active
-  const setNodePreview  = useNodeGraphStore(s => s.setNodePreview);
-  const previewDataUrl  = useNodeGraphStore(s => s.nodePreviews[node.id] ?? null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-
-  // The thumbnail follows the node's own sliders: params are baked into the preview shader, so a
-  // change is a new shader. Debounced so a slider drag doesn't compile on every tick.
-  const paramsKey = JSON.stringify(node.params);
-  const [previewParamsKey, setPreviewParamsKey] = useState(paramsKey);
-  useEffect(() => {
-    if (!isPreviewActive) return;
-    const t = setTimeout(() => setPreviewParamsKey(paramsKey), 300);
-    return () => clearTimeout(t);
-  }, [paramsKey, isPreviewActive]);
-
-  // Render a 200×200 preview whenever preview mode is activated for this node
-  useEffect(() => {
-    if (!isPreviewActive || SKIP_PREVIEW.has(node.type)) return;
-    let cancelled = false;
-    // When inside a group, build a merged node list so the BFS in
-    // compileNodePreviewShader can resolve anchor nodes (UV, time, etc.)
-    // that live at the top level even though the target node is in the subgraph.
-    const state = useNodeGraphStore.getState();
-    const activeGroupId = state.activeGroupId;
-    let currentNodes = state.nodes;
-    if (activeGroupId) {
-      const groupNode = state.nodes.find(n => n.id === activeGroupId);
-      const sg = groupNode?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
-      if (sg) {
-        // Subgraph nodes take priority (same ID wins for sg); top-level nodes fill in
-        // any anchor node dependencies (UV, time, etc.) not defined inside the group.
-        const sgIds = new Set(sg.nodes.map((n: { id: string }) => n.id));
-        currentNodes = [...sg.nodes, ...state.nodes.filter(n => !sgIds.has(n.id))];
-      }
-    }
-    const fs = compileNodePreviewShader(node.id, currentNodes);
-    if (!fs) return;
-    setPreviewLoading(true);
-    nodePreviewRenderer.renderNodePreview(node.id, fs, { u_time: { value: useNodeGraphStore.getState().currentTime ?? 0 } }, 200)
-      .then(url => { if (!cancelled) { setNodePreview(node.id, url); setPreviewLoading(false); } })
-      .catch(() => { if (!cancelled) setPreviewLoading(false); });
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPreviewActive, node.id, node.type, previewParamsKey]);
+  // What the card and the eye button offer as a preview (lib/nodePreview/previewPlan.ts): the
+  // node's value or colour read back from the eye preview, its diagram, a live readout, or nothing.
+  const plan = useMemo(() => previewPlan(node, hasRealDiagram, activeGroupNode?.type ?? null), [node, activeGroupNode?.type]);
 
   // Comment preview — brief hover delay (not the old 1200ms tooltip delay,
   // just enough to avoid flicker while panning/passing over the card).
@@ -645,7 +610,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const [showCustomFnModal, setShowCustomFnModal] = useState(false);
   const [showAudioInputModal, setShowAudioInputModal] = useState(false);
   const [showVideoInputModal, setShowVideoInputModal] = useState(false);
+  const [showVideoClip, setShowVideoClip] = useState(false);
   const [showDataEditor, setShowDataEditor] = useState(false);
+  const [showGridEditor, setShowGridEditor] = useState(false);
   const [kfMenu, setKfMenu] = useState<{ x: number; y: number; key: string } | null>(null);
   const [kfModalKey, setKfModalKey] = useState<string | null>(null);
   // Input expressions: which input's editor is open, the row marks it anchors to, and the hovered row (shows the ƒ mark).
@@ -681,6 +648,19 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     >{text}</button>
   );
   const [showCommentEditor, setShowCommentEditor] = useState(false);
+  // The code card's Edit / double-click and its Note button (stable, so the memoised card stays put)
+  const nodeType = node.type;
+  const openCodeEditor = useCallback(() => { if (nodeType === 'customFn') setShowCustomFnModal(true); else setShowExprBlockModal(true); }, [nodeType]);
+  const openNoteEditor = useCallback(() => setShowCommentEditor(true), []);
+  // The Code Explorer's jump to source asks for this node: open the editor that shows the code (it takes the request).
+  const codeJump = useCodeJump(nodeJumpSignal(node.id));
+  useEffect(() => {
+    if (!codeJump) return;
+    const field = useCodeJump.getState().node?.field ?? '';
+    if (field.startsWith('__inExpr_')) { takeNodeJump(node.id); setExprEditKey(field.slice('__inExpr_'.length)); }
+    else if (nodeType === 'exprNode' || nodeType === 'customFn') openCodeEditor();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- once per request
+  }, [codeJump]);
   const [zIndex, setZIndex] = useState(1);
   // Info tooltip: close on any click outside the tooltip itself or the info
   // button that opened it (button is excluded so its own onClick toggle isn't
@@ -713,7 +693,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
   // Scope node: canvas ref + global registry (drawing happens in ShaderCanvas animation loop)
   const scopeCanvasRef        = useRef<HTMLCanvasElement>(null);
-  const previewScopeCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Register / unregister this canvas in the global scope registry so ShaderCanvas
   // can draw directly without going through React state (eliminates setState→re-render lag).
@@ -738,25 +717,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.type, node.id]);
-
-  // Show scope canvas only when the node's dominant output is float — i.e. it has a float
-  // output but NO vec3/vec4 output that would be better shown as a shader thumbnail.
-  const primaryOutputIsFloat = !!def
-    && Object.values(def.outputs).some(s => s.type === 'float')
-    && !Object.values(def.outputs).some(s => s.type === 'vec3' || s.type === 'vec4');
-
-  // Register preview scope canvas when 👁 is active and output is float
-  React.useEffect(() => {
-    if (!isPreviewActive || !primaryOutputIsFloat) return;
-    const canvas = previewScopeCanvasRef.current;
-    const key = `__preview__${node.id}`;
-    if (canvas) scopeCanvasRegistry.register(key, canvas);
-    return () => {
-      scopeCanvasRegistry.unregister(key);
-      scopeBufferRegistry.delete(key);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPreviewActive, primaryOutputIsFloat, node.id]);
 
   // ── Audio Input: sync freq params to engine each time they change ────────────
   React.useEffect(() => {
@@ -1349,7 +1309,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
   // ── Video Input node special card ────────────────────────────────────────────
   if (node.type === 'videoInput') {
-    const thumbnailUrl = node.params._thumbnailUrl as string | undefined;
+    // The engine's own URL first: a file reopened from the library after a reload has a new one.
+    React.useSyncExternalStore(subscribeVideoEngine, () => videoEngine.url(node.id));
+    const thumbnailUrl = videoEngine.url(node.id) ?? (node.params._thumbnailUrl as string | undefined);
+    const clipped = !!node.params.clip;
     const hasFile      = !!(node.params._hasFile);
     const isPlaying    = !!(node.params._isPlaying);
     const fileName     = (node.params._fileName as string) || '';
@@ -1373,10 +1336,16 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       setVideoTexture(node.id, tex);
       videoEngine.play(node.id);
       const thumbUrl = URL.createObjectURL(file);
+      // A new file starts with no clip settings (the old ones were for another video).
       updateNodeParams(node.id, {
         _fileName: file.name, _hasFile: true, _isPlaying: true,
-        _thumbnailUrl: thumbUrl,
+        _thumbnailUrl: thumbUrl, clip: undefined,
       }, { immediate: true });
+      // Kept in the video library so it opens again after a reload (with its clip settings).
+      void addVideoFile(file).then(m => {
+        videoEngine.setLibraryId(node.id, m.id);
+        updateNodeParams(node.id, { videoId: m.id }, { immediate: true });
+      }, () => { /* no IndexedDB: this session only, as before */ });
       return { ok: true };
     };
 
@@ -1440,6 +1409,14 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <button
                 onMouseDown={e => e.stopPropagation()}
+                onClick={() => setShowVideoClip(true)}
+                disabled={!thumbnailUrl}
+                title={thumbnailUrl ? 'Open the video: trim, segments, speed, loop, crop (the clip editor)' : 'Load a video first'}
+                aria-label="Edit clip"
+                style={{ background: 'none', border: 'none', color: clipped ? tc.yellow : thumbnailUrl ? tc.surface2 : tc.surface0, cursor: thumbnailUrl ? 'pointer' : 'default', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
+              >⤢</button>
+              <button
+                onMouseDown={e => e.stopPropagation()}
                 onClick={() => setShowVideoInputModal(v => !v)}
                 title="Open video settings"
                 style={{ background: 'none', border: 'none', color: showVideoInputModal ? tc.mauve : tc.surface2, cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
@@ -1463,6 +1440,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
             onMouseDown={e => e.stopPropagation()}
             onClick={() => videoFileInputRef.current?.click()}
+            onDoubleClick={e => { if (thumbnailUrl) { e.preventDefault(); e.stopPropagation(); setShowVideoClip(true); } }}
+            title={thumbnailUrl ? 'Click: another file · double-click: open the clip editor' : undefined}
             style={{
               margin: '6px 8px',
               border: `1px dashed ${tc.surface1}`,
@@ -1537,8 +1516,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           </div>
         </div>
         {showVideoInputModal && (
-          <VideoInputModal node={node} onClose={() => setShowVideoInputModal(false)} />
+          <VideoInputModal node={node} onClose={() => setShowVideoInputModal(false)} onEditClip={thumbnailUrl ? () => { setShowVideoInputModal(false); setShowVideoClip(true); } : undefined} />
         )}
+        {showVideoClip && <VideoInputClipModal node={node} onClose={() => setShowVideoClip(false)} />}
       </>
     );
   }
@@ -1761,7 +1741,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         </div>
       );
     };
-    const TYPE_WORDS: Record<string, string> = { float: 'number', vec2: 'pair (x, y)', vec3: 'colour / 3 numbers', vec4: '4 numbers', texture: 'image' };
+    const TYPE_WORDS: Record<string, string> = { float: 'number', vec2: 'pair (x, y)', vec3: 'colour / 3 numbers', vec4: '4 numbers', texture: 'image', scene3d: 'a 3D scene' };
     return (
       <div
         data-node-id={node.id}
@@ -1845,8 +1825,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               />
               <Segmented
                 fill size="sm" ariaLabel="What it carries"
-                value={addingMarchInput.type as 'float' | 'vec2' | 'vec3' | 'vec4' | 'texture'}
-                options={([['float', 'Number'], ['vec2', 'x, y'], ['vec3', 'Colour'], ['vec4', '4'], ['texture', 'Image']] as const).map(([value, label]) => ({ value, label }))}
+                value={addingMarchInput.type as 'float' | 'vec2' | 'vec3' | 'vec4' | 'texture' | 'scene3d'}
+                options={([['float', 'Number'], ['vec2', 'x, y'], ['vec3', 'Colour'], ['vec4', '4'], ['texture', 'Image'], ['scene3d', 'Scene']] as const).map(([value, label]) => ({ value, label }))}
                 onChange={t => setAddingMarchInput(prev => prev ? { ...prev, type: t } : prev)}
               />
               <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
@@ -3206,7 +3186,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   };
 
   // An expression's knobs are drawn under their input row (renderKnobRow), not with the sliders.
-  const paramDefs = Object.fromEntries(Object.entries(def.paramDefs ?? {}).filter(([k]) => !isKnobParamKey(node, k)));
+  // A Grid Rules card shows a few of its settings; its editor window has the rest.
+  const paramDefs = Object.fromEntries(Object.entries(def.paramDefs ?? {}).filter(([k]) => !isKnobParamKey(node, k) && (node.type !== 'gridRules' || GRID_CARD_KEYS.has(k))));
   // Param keys consumed as the second half of a `ParamDef.pair` group (e.g. Remap's inMax/outMax):
   // rendered together with their pair's owner, so they're skipped when the loop reaches them directly.
   const pairSecondaryKeys = new Set(Object.values(paramDefs).map(pd => pd.pair?.with).filter((v): v is string => !!v));
@@ -3437,7 +3418,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         onTouchStart={handleHeaderTouchStart}
         onDoubleClick={e => {
           e.stopPropagation();
-          if ((node.type === 'sceneGroup' || node.type === 'agentsGroup') && !savingMode) onEnterGroup?.(node.id);
+          // A rules group (docs/agent-rules.md) opens its rules editor; Open as nodes enters it.
+          if (node.type === 'agentsGroup' && node.params.ruleMode === 'rules' && !savingMode) openAgentRulesEditor(node.id);
+          else if ((node.type === 'sceneGroup' || node.type === 'agentsGroup') && !savingMode) onEnterGroup?.(node.id);
           else setCollapsed(v => !v);
         }}
         style={{
@@ -3510,7 +3493,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {typeof node.params.__importWarning === 'string' && <span title={`From imported GLSL, not quite the same: ${node.params.__importWarning}`}><CardBadge>≈</CardBadge></span>}
         {showNodeTooltip && <div ref={nodeTooltipRef}><NodeTooltip def={def} node={node} allNodes={nodes} /></div>}
         <div style={{ display: 'flex', gap: 1, alignItems: 'center', flexShrink: 0 }} onDoubleClick={e => e.stopPropagation()}>
-          {!['output', 'vec4Output', 'uv', 'time', 'mouse', 'constant'].includes(node.type) && (
+          {plan.eye && (
             <CardButton icon="eye" tint="success" on={isPreviewActive}
               label={isPreviewActive ? 'Stop previewing (show the full graph)' : 'Preview this node in isolation'}
               onClick={() => setPreviewNodeId(isPreviewActive ? null : node.id)} />
@@ -3538,6 +3521,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           )}
           {node.type === 'data' && (
             <CardButton icon="grid" on={showDataEditor} label="Open the data editor: import, notebook, outputs" onClick={() => setShowDataEditor(v => !v)} />
+          )}
+          {node.type === 'gridRules' && (
+            <CardButton icon="grid" on={showGridEditor} label="Open the Grid Rules editor: the rule, the start, the brush, the colours" onClick={() => setShowGridEditor(v => !v)} />
           )}
           {node.type === 'customFn' && (
             <CardButton icon="spark" tint="fn" label="Publish as a node type (this function becomes a reusable node)" onClick={() => {
@@ -3731,46 +3717,20 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
       {/* ── In-card preview (visible when 👁 is active) ── */}
       {/* Semantic inline viz: replaces shader thumbnail for supported types */}
-      {isPreviewActive && !SKIP_PREVIEW.has(node.type) && INLINE_VIZ_TYPES.has(node.type) && (
-        <NodeInlineViz node={node} />
+      {/* The node's value or colour while the eye is on it, with every preview control in its row;
+          the diagram stays a click away (docs/node-previews.md) */}
+      {isPreviewActive && plan.body === 'field' && node.type !== 'exprNode' && node.type !== 'customFn' && (
+        <ValuePreview node={node} diagram={plan.diagram ? <NodeInlineViz node={node} /> : undefined} />
       )}
-      {/* Default: shader thumbnail for float-output scope or vec3 render */}
-      {isPreviewActive && !SKIP_PREVIEW.has(node.type) && !ALWAYS_VIZ_TYPES.has(node.type) && !INLINE_VIZ_TYPES.has(node.type) && (
-        <div style={{ width: '100%', borderBottom: `1px solid ${tc.surface0}` }}>
-          {primaryOutputIsFloat && !GRAYSCALE_PREVIEW_TYPES.has(node.type) ? (
-            /* Float output → live waveform scope */
-            <canvas
-              ref={previewScopeCanvasRef}
-              width={240}
-              height={80}
-              style={{ display: 'block', width: '100%', height: '80px' }}
-            />
-          ) : (
-            /* Vec3/vec4 output → rendered shader thumbnail */
-            <div style={{ width: '100%', height: 160, background: tc.crust, overflow: 'hidden', position: 'relative' }}>
-              {previewLoading && !previewDataUrl ? (
-                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tc.surface2, fontSize: '12px' }}>
-                  rendering…
-                </div>
-              ) : previewDataUrl ? (
-                <img
-                  src={previewDataUrl}
-                  alt="node preview"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                />
-              ) : (
-                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tc.surface2, fontSize: '11px' }}>
-                  no preview
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+      {isPreviewActive && plan.body === 'diagram' && (
+        <ValuePreview node={node} diagramOnly diagram={<NodeInlineViz node={node} />} />
       )}
+      {/* Always on: a live readout (Sense, Steer, Move, Emit) or a mini picture (Deposit's trail) */}
+      {(plan.body === 'stats' || plan.body === 'mirror') && <AgentPreviewPanel node={node} />}
 
       <div style={{ padding: '6px 0' }}>
         {/* ── Inputs (always visible) ── */}
-        {Object.entries(node.inputs).filter(([key]) => (Object.keys(def.inputs).length === 0 || key in def.inputs || node.type === 'agentsGroup') && socketVisible(node, def, key)).map(([key, input]) => {
+        {Object.entries(node.inputs).filter(([key]) => (Object.keys(def.inputs).length === 0 || key in def.inputs || node.type === 'agentsGroup' || (node.type === 'drawAgents' && key in DRAW_3D_INPUTS)) && socketVisible(node, def, key)).map(([key, input]) => {
           const isConnected = !!input.connection;
           const isExternal = externalInputKeys?.has(key) ?? false;
 
@@ -4080,124 +4040,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           );
         })}
 
-        {/* ── ExprBlock per-line warp editor (exprNode only) ── */}
-        {!collapsed && node.type === 'exprNode' && (() => {
-          const lines = (node.params.lines as Array<{ lhs: string; op: string; rhs: string; off?: boolean }> | undefined) ?? [];
-          const result = (node.params.result as string | undefined) ?? 'p';
-          const OPS = ['=', '+=', '-=', '*=', '/='];
-          const inputBg = tc.crust;
-          const inputBorder = `1px solid ${tc.surface1}`;
-          const inputStyle: React.CSSProperties = {
-            background: inputBg, border: inputBorder, color: tc.text,
-            padding: '2px 5px', borderRadius: '3px', fontSize: '10px',
-            fontFamily: 'monospace', outline: 'none',
-          };
-          return (
-            <div
-              style={{ padding: '4px 10px 6px', display: 'flex', flexDirection: 'column', gap: '4px' }}
-              onMouseDown={e => e.stopPropagation()}
-            >
-              <span style={{ fontSize: '10px', color: tc.overlay0, marginBottom: '1px' }}>Warp Lines</span>
-
-              {lines.map((line, i) => (
-                <div key={i} data-line-off={line.off ? '' : undefined}
-                  onKeyDownCapture={e => { if ((e.metaKey || e.ctrlKey) && e.key === '/') { e.preventDefault(); e.stopPropagation(); updateNodeParams(node.id, { lines: toggleLineOff(lines, i) }); } }}
-                  style={{ display: 'flex', gap: '3px', alignItems: 'center', opacity: line.off ? 0.45 : 1 }}>
-                  {/* On / off: an off line is kept but skipped (a comment in the shader) */}
-                  <button
-                    onMouseDown={e => e.stopPropagation()}
-                    onClick={() => updateNodeParams(node.id, { lines: toggleLineOff(lines, i) })}
-                    aria-pressed={!!line.off}
-                    title={line.off ? 'Off: skipped. Click (or ⌘/ in the line) to switch it back on' : 'Switch this line off without deleting it (⌘/ in the line)'}
-                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '9px', fontFamily: 'monospace', lineHeight: 1, flexShrink: 0, width: 12, color: line.off ? tc.yellow : tc.surface2, fontWeight: 700 }}
-                  >//</button>
-                  {/* Reorder */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', flexShrink: 0 }}>
-                    <button
-                      onMouseDown={e => e.stopPropagation()}
-                      onClick={() => updateNodeParams(node.id, { lines: moveItem(lines, i, i - 1) })}
-                      disabled={i === 0}
-                      style={{ background: 'none', border: 'none', color: i === 0 ? tc.surface0 : tc.overlay0, cursor: i === 0 ? 'default' : 'pointer', padding: 0, fontSize: '8px', lineHeight: 1 }}
-                      title="Move up"
-                    >▲</button>
-                    <button
-                      onMouseDown={e => e.stopPropagation()}
-                      onClick={() => updateNodeParams(node.id, { lines: moveItem(lines, i, i + 1) })}
-                      disabled={i === lines.length - 1}
-                      style={{ background: 'none', border: 'none', color: i === lines.length - 1 ? tc.surface0 : tc.overlay0, cursor: i === lines.length - 1 ? 'default' : 'pointer', padding: 0, fontSize: '8px', lineHeight: 1 }}
-                      title="Move down"
-                    >▼</button>
-                  </div>
-                  {/* LHS */}
-                  <input
-                    type="text"
-                    value={line.lhs}
-                    onDoubleClick={selectTokenOnDoubleClick}
-                    onKeyDown={wrapOnKeyDown(v => updateNodeParams(node.id, { lines: lines.map((l, j) => j === i ? { ...l, lhs: v } : l) }))}
-                    onChange={e => {
-                      const next = lines.map((l, j) => j === i ? { ...l, lhs: e.target.value } : l);
-                      updateNodeParams(node.id, { lines: next });
-                    }}
-                    placeholder="p.xy"
-                    style={{ ...inputStyle, width: '52px' }}
-                  />
-                  {/* Operator */}
-                  <select
-                    value={line.op}
-                    onChange={e => {
-                      const next = lines.map((l, j) => j === i ? { ...l, op: e.target.value } : l);
-                      updateNodeParams(node.id, { lines: next });
-                    }}
-                    style={{ background: inputBg, border: inputBorder, color: tc.blue, fontSize: '10px', padding: '2px 2px', borderRadius: '3px', cursor: 'pointer', outline: 'none' }}
-                  >
-                    {OPS.map(op => <option key={op} value={op}>{op}</option>)}
-                  </select>
-                  {/* RHS expression */}
-                  <input
-                    type="text"
-                    value={line.rhs}
-                    onDoubleClick={selectTokenOnDoubleClick}
-                    onKeyDown={wrapOnKeyDown(v => updateNodeParams(node.id, { lines: lines.map((l, j) => j === i ? { ...l, rhs: v } : l) }))}
-                    onChange={e => {
-                      const next = lines.map((l, j) => j === i ? { ...l, rhs: e.target.value } : l);
-                      updateNodeParams(node.id, { lines: next });
-                    }}
-                    placeholder="expression…"
-                    style={{ ...inputStyle, flex: 1, color: tc.green }}
-                  />
-                  {/* Remove row */}
-                  <button
-                    onMouseDown={e => e.stopPropagation()}
-                    onClick={() => updateNodeParams(node.id, { lines: lines.filter((_, j) => j !== i) })}
-                    style={{ background: 'none', border: 'none', color: tc.red, cursor: 'pointer', padding: '0 2px', fontSize: '13px', lineHeight: 1, flexShrink: 0 }}
-                    title="Remove line"
-                  >×</button>
-                </div>
-              ))}
-
-              {/* Add line */}
-              <button
-                onMouseDown={e => e.stopPropagation()}
-                onClick={() => updateNodeParams(node.id, { lines: [...lines, { lhs: 'p', op: '=', rhs: '' }] })}
-                style={{ alignSelf: 'flex-start', background: tc.surface0, border: 'none', color: tc.subtext0, cursor: 'pointer', fontSize: '10px', padding: '2px 7px', borderRadius: '3px', marginTop: '1px' }}
-              >+ line</button>
-
-              {/* Return expression */}
-              <div style={{ display: 'flex', gap: '5px', alignItems: 'center', marginTop: '2px' }}>
-                <span style={{ fontSize: '10px', color: tc.overlay0, whiteSpace: 'nowrap', fontFamily: 'monospace' }}>return</span>
-                <input
-                  type="text"
-                  value={result}
-                  onDoubleClick={selectTokenOnDoubleClick}
-                  onKeyDown={wrapOnKeyDown(v => updateNodeParams(node.id, { result: v }))}
-                  onChange={e => updateNodeParams(node.id, { result: e.target.value })}
-                  placeholder="p"
-                  style={{ ...inputStyle, flex: 1, color: tc.blue, border: `1px solid ${tc.surface1}` }}
-                />
-              </div>
-            </div>
-          );
-        })()}
+        {/* ── Expression Block / Custom Function card face: read-only code, signature, note, description (codeCard/) ── */}
+        {!collapsed && (node.type === 'exprNode' || node.type === 'customFn') && (
+          <CodeCard node={node} touch={isTouchDevice} onEdit={openCodeEditor} onEditNote={openNoteEditor} />
+        )}
 
         {/* ── Transform Vec inline editor ── */}
         {!collapsed && node.type === 'transformVec' && (() => {
@@ -4578,6 +4424,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {!collapsed && (node.type === 'palette' || node.type === 'stopPalette') && <PaletteTools node={node} />}
         {/* ── Data: the dataset, its size and the way into the editor ── */}
         {!collapsed && node.type === 'data' && <DataCardBody node={node} touch={isTouchDevice} onOpen={() => setShowDataEditor(true)} />}
+        {!collapsed && node.type === 'gridRules' && <GridRulesCardBody node={node} touch={isTouchDevice} onOpen={() => setShowGridEditor(true)} />}
         {!collapsed && node.type === 'timeCube' && <TimeCubeCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'timeCubeView' && <TimeCubeViewKeyInfo node={node} touch={isTouchDevice} />}
 
@@ -4780,6 +4627,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
       {/* ── Data editor ── */}
       {showDataEditor && node.type === 'data' && <DataEditor node={node} onClose={() => setShowDataEditor(false)} />}
+      {showGridEditor && node.type === 'gridRules' && <GridRulesEditor nodeId={node.id} onClose={() => setShowGridEditor(false)} />}
 
       {/* ── CustomFn modal ── */}
       {showCustomFnModal && node.type === 'customFn' && (
