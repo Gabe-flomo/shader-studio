@@ -7,6 +7,7 @@
 
 import type { GraphNode } from '../types/nodeGraph';
 import { compileGraph } from '../compiler/graphCompiler';
+import { pickPreviewOutput, prefOf } from './nodePreview/showAs';
 
 const SKIP_TYPES = new Set(['output', 'vec4Output', 'scope']);
 
@@ -140,17 +141,11 @@ export function compileNodePreviewShader(
 
   const subgraph = nodes.filter(n => included.has(n.id));
 
-  // Pick the best output to preview — prefer vec3, then vec4, then vec2, then float
-  const outputEntries = Object.entries(targetNode.outputs);
-  const vec3Entry  = outputEntries.find(([, s]) => s.type === 'vec3');
-  const vec4Entry  = outputEntries.find(([, s]) => s.type === 'vec4');
-  const vec2Entry  = outputEntries.find(([, s]) => s.type === 'vec2');
-  const floatEntry = outputEntries.find(([, s]) => s.type === 'float');
-  const chosen = vec3Entry ?? vec4Entry ?? vec2Entry ?? floatEntry;
-  if (!chosen) return null; // mat2/mat3/scene3d etc. — no meaningful pixel preview
+  // The output to preview: the one picked in "Show as" (docs/node-previews.md), else vec3, vec4, vec2, float
+  const chosen = pickPreviewOutput(targetNode, prefOf(targetNode).output);
+  if (!chosen || !['vec3', 'vec4', 'vec2', 'float'].includes(chosen[1])) return null; // mat2/mat3/scene3d etc. — no meaningful pixel preview
 
-  const [chosenKey, chosenSocket] = chosen;
-  const outType = chosenSocket.type;
+  const [chosenKey, outType] = chosen;
 
   const extraNodes: GraphNode[] = [];
   let outputSourceNodeId = nodeId;

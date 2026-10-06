@@ -42,6 +42,8 @@ import { useBakeDialog } from '../bake/bakeDialogStore';
 import { bakeableOutput, pictureTarget } from '../../lib/bake/graphOps';
 import { unbakeNode } from '../../lib/bake/runner';
 import type { OptimizeModal as OptimizeModalT } from './OptimizeModal';
+import { ShowAsControls, useShowAs } from './ShowAsControls';
+import { modeHint, previewableOutputs } from '../../lib/nodePreview/showAs';
 const OptimizeModal = lazyWithSuspense<PropsOf<typeof OptimizeModalT>>(() => import('./OptimizeModal').then(m => ({ default: m.OptimizeModal })));
 const BakeDialogHost = lazyWithSuspense<Record<string, never>>(() => import('../bake/BakeDialog').then(m => ({ default: m.BakeDialogHost })));
 
@@ -199,7 +201,12 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   const previewNode  = previewNodeId ? (nodes.find(n => n.id === previewNodeId) ?? displayNodes.find(n => n.id === previewNodeId)) : null;
   const previewDef   = previewNode ? getNodeDefinitionFor(previewNode) : null;
   const previewStats = useNodeGraphStore(s => s.previewStats);
-  const previewCaption = previewNode ? (explainPreview(previewNode, previewDef ?? undefined, previewStats) ?? previewLegend(previewNode, previewDef ?? undefined)) : null;
+  // "Show as" (docs/node-previews.md): a float / vec2 in a mode other than Raw explains the mode
+  // instead (the clipping hints are about Raw's grey).
+  const previewShowAs = useShowAs(previewNode ?? null);
+  const showAsCaption = previewShowAs?.valueType && previewShowAs.mode && previewShowAs.mode !== 'raw' ? modeHint(previewShowAs.valueType, previewShowAs.mode) : null;
+  const previewCaption = previewNode ? (showAsCaption ?? explainPreview(previewNode, previewDef ?? undefined, previewStats) ?? previewLegend(previewNode, previewDef ?? undefined)) : null;
+  const previewPicker = !!previewNode && !!previewShowAs && (!!previewShowAs.valueType || previewableOutputs(previewNode).length > 1);
   const previewLabel = previewDef
     ? (previewNode?.type === 'customFn' && typeof previewNode.params.label === 'string'
         ? (previewNode.params.label as string) || previewDef.label
@@ -1277,14 +1284,22 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         <div
           style={{
             position: 'absolute', top: redesignToolbar ? 66 : 10, left: '50%', transform: 'translateX(-50%)', zIndex: 20,
-            minHeight: 34, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 4px 4px 12px', borderRadius: 10, maxWidth: 560,
+            minHeight: 34, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 4px 4px 12px', borderRadius: 10, maxWidth: previewPicker ? 600 : 560,
             background: tk.bg.panel, boxShadow: `${tk.shadow.float}, inset 0 0 0 1px ${alpha(tk.status.success, 0.35)}`,
             color: tk.text.secondary, fontSize: 12.5, userSelect: 'none',
           }}
         >
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: tk.status.success, flexShrink: 0 }} />
-          <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-            <span style={{ whiteSpace: 'nowrap' }}>Previewing <strong style={{ color: tk.text.primary, fontWeight: 600 }}>{previewLabel}</strong></span>
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ whiteSpace: 'nowrap' }}>Previewing <strong style={{ color: tk.text.primary, fontWeight: 600 }}>{previewLabel}</strong></span>
+              {previewPicker && previewNode && previewShowAs && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 11, color: tk.text.faint, whiteSpace: 'nowrap' }}>Show as</span>
+                  <ShowAsControls node={previewNode} state={previewShowAs} />
+                </span>
+              )}
+            </span>
             {previewCaption && <span style={{ fontSize: 11.5, color: tk.text.muted, lineHeight: 1.35 }}>{previewCaption}</span>}
           </span>
           <Button size="sm" variant="ghost" style={{ height: 26, flexShrink: 0 }} onClick={() => setPreviewNodeId(null)}>Exit</Button>
