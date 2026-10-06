@@ -703,8 +703,9 @@ export class AgentRunner {
       for (const p of plan) this.bindState(p.e.spec, p.s);
       bindTrails();
       project();
-      // The picture's own clock from here on (a scene probe reads it as the picture does).
-      if (timeUniform) timeUniform.value = keepTime;
+      // The frame's own clock from here on: a scene probe reads it as the picture will (an offline render sets the
+      // picture's time only after this, so the uniform may still hold the last frame's).
+      if (timeUniform) timeUniform.value = o.time;
       // 4. Draw agents.
       for (const d of this.spec.draws) {
         if (!d.live) continue;
