@@ -26,6 +26,7 @@ import { openGridRulesInGraph } from './gridRulesAsNodes';
 import { openNewSceneBuilder } from '../sceneBuilder/store';
 import { applyRecipe, placeNear, recipesFor } from '../nodes/recipes';
 import { runDoPlan as runDoPlanPure, type DoPlan } from '../suggestions/doBar';
+import { execCommand, type CommandPlan } from '../suggestions/doCommands';
 import { applyMove, moveById, learnGraph, learnSaved, recordWireBetween, textSignature } from '../suggestions';
 import { closeRecipeOffer, noteNodeAdded } from './recipeOfferStore';
 import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES, AGENT_PRESET_TYPES, syncAgentSpaces } from '../nodes/definitions/agents';
@@ -873,6 +874,12 @@ interface NodeGraphState {
   applySuggestion: (nodeId: string, key: string, side: 'in' | 'out', moveId: string, args?: Record<string, unknown>) => string[] | null;
   /** Run a Do… bar plan (suggestions/doBar.ts) in the level being edited: one undo step, a compile. Returns the step labels that ran. */
   runDoPlan: (plan: DoPlan, label: string) => string[];
+  /**
+   * Run a Do… bar command sentence (suggestions/doCommands.ts) on the level being edited: every
+   * clause, as one undo step (a "group …" at the end included). Refused (nothing changes) when a
+   * clause can't be read, needs a pick, or fails its type check. Returns the plan that ran.
+   */
+  runCommand: (text: string, picks?: Record<string, string>) => CommandPlan;
   /** Add a node already built (an idiom's Expression Block from the Do… bar) to the level being edited, near the view: one undo step. */
   addBuiltNode: (node: GraphNode, label: string) => string | null;
   /**
@@ -3404,6 +3411,26 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set({ nodes, ...(r.select ? { selectedNodeId: r.select, selectedNodeIds: [r.select] } : {}) });
     get().compile();
     return r.ran;
+  },
+
+  runCommand: (text, picks) => {
+    const st = get();
+    const path = st.activeGroupPath;
+    const scope = (path.length ? getActiveNodes(st.nodes, path) : st.nodes) ?? [];
+    const selected = (st.selectedNodeIds.length > 1 ? st.selectedNodeIds : st.selectedNodeId ? [st.selectedNodeId] : st.selectedNodeIds).filter(id => scope.some(n => n.id === id));
+    const plan = execCommand(text, scope, { selected, picks, nextId: () => idGenerator.next(), topLevel: path.length === 0 });
+    if (!plan.ok) return plan;
+    const graphChanged = plan.nodes !== scope;
+    if (graphChanged || plan.group) {
+      undoManager.batch(st.nodes, () => {
+        const nodes = path.length ? (setActiveNodes(st.nodes, path, plan.nodes) ?? st.nodes) : plan.nodes;
+        set({ nodes });
+        if (plan.group) get().groupNodes(plan.group.ids, plan.group.label);
+      }, { label: `Do: ${text.trim()}` });
+    }
+    if (!plan.group && plan.select.length) set({ selectedNodeId: plan.select[0], selectedNodeIds: plan.select });
+    if (graphChanged || plan.group) get().compile();
+    return plan;
   },
 
   addBuiltNode: (node, label) => {

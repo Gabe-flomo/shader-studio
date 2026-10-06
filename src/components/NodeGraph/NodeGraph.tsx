@@ -18,7 +18,8 @@ import { suggestQuickAdds, type QuickAdd } from './quickAdds';
 import { SmartConnectMenu } from './SmartConnectMenu';
 import { SuggestionStrip } from './SuggestionStrip';
 import { DoBar } from './DoBar';
-import { openDoBar } from '../../suggestions/doBarStore';
+import { CommandsReference } from './DoCommandsReference';
+import { openDoBar, useDoBarHighlight } from '../../suggestions/doBarStore';
 import { learnedNext, rankTables } from '../../suggestions';
 import { RecipeOffer } from './RecipeOffer';
 import { useRecipeOffer } from '../../store/recipeOfferStore';
@@ -148,6 +149,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   const setPreviewNodeId      = useNodeGraphStore(s => s.setPreviewNodeId);
   const previewNodeId         = useNodeGraphStore(s => s.previewNodeId);
   const nodeHighlightFilter   = useNodeGraphStore(s => s.nodeHighlightFilter);
+  const doBarHighlight        = useDoBarHighlight(s => s.ids);
   const registerFitView       = useNodeGraphStore(s => s.registerFitView);
   const registerViewportCenterGetter = useNodeGraphStore(s => s.registerViewportCenterGetter);
   const registerSetView = useNodeGraphStore(s => s.registerSetView);
@@ -1188,6 +1190,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       }
       return lit;
     }
+    // The Do… bar pointing at nodes (a pick's candidates, what a step makes).
+    if (doBarHighlight) return new Set(doBarHighlight);
     if (!nodeHighlightFilter) return null;
     const matching = new Set<string>();
     for (const node of displayNodes) {
@@ -1202,7 +1206,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       }
     }
     return matching;
-  }, [nodeHighlightFilter, nodes, spotlightOn, spotSocket, displayNodes]);
+  }, [nodeHighlightFilter, nodes, spotlightOn, spotSocket, displayNodes, doBarHighlight]);
 
   // ── Viewport culling ─────────────────────────────────────────────────────
   // Cards fully outside the visible world rect (plus a margin) aren't mounted.
@@ -2259,6 +2263,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       <SuggestionStrip nodes={displayNodes} canvasRef={canvasRef} pan={pan} zoom={zoom} readOnly={locked} />
       {/* The Do… bar (⌘K): typed phrases → moves (suggestions/doBar.ts) */}
       {!locked && <DoBar />}
+      <CommandsReference />
 
       {/* Feature 1: Alt-click socket filtered palette */}
       {smartConnect && (() => {

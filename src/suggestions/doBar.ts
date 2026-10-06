@@ -285,7 +285,7 @@ const describeArgs = (move: Move, args: Record<string, unknown>) => (move.args ?
   .filter(a => a.name in args)
   .map(a => {
     const v = args[a.name];
-    return `${a.label.toLowerCase()} ${Array.isArray(v) ? `rgb(${v.map(x => Math.round(Number(x) * 255)).join(', ')})` : String(Math.round(Number(v) * 1000) / 1000)}`;
+    return `${a.label.toLowerCase()} ${Array.isArray(v) ? `rgb(${v.map(x => Math.round(Number(x) * 255)).join(', ')})` : typeof v === 'string' ? v : String(Math.round(Number(v) * 1000) / 1000)}`;
   }).join(', ');
 
 /** Read a phrase into a plan. */
@@ -448,10 +448,23 @@ export interface DoResult {
   select: string | null;
   /** Labels of the steps that ran. */
   ran: string[];
+  /** The real id of each shape a step made (`$k` → id). */
+  made: Record<string, string>;
+}
+
+export interface RunDoOptions {
+  topLevel?: boolean;
+  heightOf?: (nd: GraphNode) => number;
+  /** Show a move's result on the Output as the strip does (default true; false when a later clause outputs something). */
+  show?: boolean;
+  /** Paint a new shape nothing uses on an empty Output (default: as `show`; the command language only does it in the last clause). */
+  paintShapes?: boolean;
+  /** Called after each step with the level before and after it (the command preview's diffs). */
+  onStep?: (k: number, label: string, before: GraphNode[], after: GraphNode[]) => void;
 }
 
 /** Apply a plan to the level `nodes` (pure). */
-export function runDoPlan(nodes: GraphNode[], plan: DoPlan, nextId: () => string, opts: { topLevel?: boolean; heightOf?: (nd: GraphNode) => number } = {}): DoResult {
+export function runDoPlan(nodes: GraphNode[], plan: DoPlan, nextId: () => string, opts: RunDoOptions = {}): DoResult {
   const heightOf = opts.heightOf ?? cardHeight;
   let cur = nodes;
   const added: string[] = [];
@@ -459,7 +472,17 @@ export function runDoPlan(nodes: GraphNode[], plan: DoPlan, nextId: () => string
   const made = new Map<string, string>();
   let select: string | null = null;
   const real = (ref: NodeRef) => (ref.startsWith('$') ? made.get(ref) : ref);
+  const show = opts.show !== false;
+  const paint = opts.paintShapes ?? show;
   plan.steps.forEach((step, k) => {
+    const before = cur;
+    const ranBefore = ran.length;
+    runStep(step, k);
+    if (opts.onStep && ran.length > ranBefore) opts.onStep(k, step.label, before, cur);
+  });
+  return { nodes: cur, added, select, ran, made: Object.fromEntries(made) };
+
+  function runStep(step: DoStep, k: number) {
     if (step.kind === 'shape') {
       // A row below the graph, left-aligned with it; free space found by placeNear.
       const xs = cur.map(nd => nd.position.x), ys = cur.map(nd => nd.position.y + heightOf(nd));
@@ -491,7 +514,7 @@ export function runDoPlan(nodes: GraphNode[], plan: DoPlan, nextId: () => string
       // Shown only when nothing later in the plan works on it and the Output is empty.
       const usedLater = plan.steps.slice(k + 1).some(s => s.kind === 'move' && s.node === `$${k}`);
       const out = graphOutput(cur);
-      if (!usedLater && (!out || !out.inputs.color?.connection)) {
+      if (paint && !usedLater && (!out || !out.inputs.color?.connection)) {
         const paint = n('sdfFill', nextId(), x0 + 1260, y0, { antialias: 0.006, __comment: 'SDF Fill: paints the shape.\nWhy: the Output showed nothing, so the Do… bar shows the new shape.' }, { d: [shapeId, 'distance'] });
         const placedPaint = placeNear(cur, [paint], heightOf);
         cur = [...cur, ...placedPaint];
@@ -531,7 +554,7 @@ export function runDoPlan(nodes: GraphNode[], plan: DoPlan, nextId: () => string
     const id = real(step.node);
     const move = moveById(step.moveId);
     if (!id || !move) return;
-    const r = applyMove(cur, { nodeId: id, key: step.key, side: step.side }, move, step.args, nextId, { topLevel: opts.topLevel, heightOf });
+    const r = applyMove(cur, { nodeId: id, key: step.key, side: step.side }, move, step.args, nextId, { topLevel: opts.topLevel, heightOf, show });
     if (!r) return;
     cur = r.nodes;
     added.push(...r.added);
@@ -539,6 +562,5 @@ export function runDoPlan(nodes: GraphNode[], plan: DoPlan, nextId: () => string
     ran.push(step.label);
     // What follows works on the result.
     if (r.resultNodeId) for (const [ref, rid] of made) if (rid === id) made.set(ref, id);
-  });
-  return { nodes: cur, added, select, ran };
+  }
 }

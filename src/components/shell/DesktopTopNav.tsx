@@ -9,7 +9,8 @@ import { useThemeStore, useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius, type ThemeMode } from '../../theme/tokens';
 import { isPlayRecordEmpty } from '../../types/play';
 import { loadShortcutMap } from '../../hooks/useShortcuts';
-import type { Page } from '../page';
+import { requestPage, type Page } from '../page';
+import { openCommandsRef } from '../../suggestions/doBarStore';
 import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
@@ -234,6 +235,7 @@ function OverflowMenu({ mode, toggleTheme, rebuildShortcut }: { mode: ThemeMode;
             <HandsLive />
             <OverflowRow icon="rebuild" label={`${REBUILD_TOOLTIP}${rebuildShortcut ? ` (${rebuildShortcut})` : ''}`}
               onClick={() => { void rebuildWithToast(); setOpen(false); }} />
+            <OverflowRow icon="book" label="Do… bar commands" onClick={() => { requestPage('studio'); openCommandsRef(); setOpen(false); }} />
             <OverflowRow icon={mode === 'light' ? 'moon' : 'sun'} label={mode === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
               onClick={() => { toggleTheme(); setOpen(false); }} />
           </div>
