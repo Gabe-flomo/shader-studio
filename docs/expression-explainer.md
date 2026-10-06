@@ -45,7 +45,7 @@ Every step of an explanation has a **+ Node** button, and the whole expression h
 - **Rename** inputs and the function. Bad names (GLSL words, repeats, two underscores in a row) are flagged before saving.
 - **Save as** either:
   - **an Expression Block preset**, which goes in the sidebar's Expressions with its slider defaults, or
-  - **a node in the palette**: the existing publish dialog opens with everything filled in, and the description is taken from the explanation. The node then appears in the node browser and search like any published node. Publishing is Pro, as before.
+  - **a node in the palette**: the existing publish dialog opens with everything filled in, and the description is taken from the explanation. In a recognised idiom's description, a number that became an input reads as its default, marked adjustable ("a soft-edged circle of radius 0.3 (adjustable) around p"), never as the input's name; an input with no default that the words already name reads "the given …" ("a circle of the given radius"). The node then appears in the node browser and search like any published node. Publishing is Pro, as before.
 - **Use it here too** replaces the original part with the new thing:
   - Custom Function: the function goes into Helper functions and the part becomes a call to it.
   - GLSL page: the function goes above the function the selection is in, and the selection becomes a call.

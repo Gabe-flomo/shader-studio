@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { parser } from '@shaderfrog/glsl-parser';
 import {
   buildFunction, evaluate, evaluateFunction, findUses, generaliseText, inferTypes, insertFunction, parseExpr, callInCustomFn,
-  toExprPreset, toPublishNode, exprPresetParams, matchesInLine, provenance, descriptionFor, type Value, type GeneraliseContext,
+  toExprPreset, toPublishNode, exprPresetParams, matchesInLine, provenance, descriptionFor, IDIOMS, fmt, type Value, type GeneraliseContext,
 } from '..';
 import { nodeToSubgraph, buildUserNodeDefinition } from '../../../nodes/userNodes/publishUserNode';
 import type { GraphNode } from '../../../types/nodeGraph';
@@ -52,7 +52,7 @@ describe('generalising an idiom', () => {
     expect(b.code).toBe('float softCircle(float radius, float width, vec2 p) {\n    return smoothstep(radius, radius + width, length(p));\n}');
     expect(b.call).toBe('softCircle(0.3, 0.05, uv)');
     expect(b.pattern).toBe('smoothstep($radius, $radius + $width, length($p))');
-    expect(g.description).toBe('Makes a soft-edged circle of radius radius around the origin of p: 0 inside, rising to 1 over width outside it.');
+    expect(g.description).toBe('Makes a soft-edged circle of radius 0.3 (adjustable) around the origin of p: 0 inside, rising to 1 over 0.05 (adjustable) outside it.');
   });
   it('keeps the idiom’s own numbers, and vector constants start constant', () => {
     const { g, b } = sameValues('vec3(0.5) + vec3(0.5) * cos(6.28318 * (vec3(1.0) * t + vec3(0.0, 0.33, 0.67)))');
@@ -201,4 +201,74 @@ describe('find uses', () => {
     expect(hits.map(h => h.nodeId)).toEqual(['b', 'f']);
     expect(hits[0].exampleKey).toBe('ex');
   });
+});
+
+describe('made-node descriptions', () => {
+  /** "radius radius", "the the": the same word twice in a row. */
+  const repeated = (text: string) => /(?<![’'\w])(\w+)\s+\1\b/.exec(text)?.[0];
+
+  it('a hole that became an input reads as its default, marked adjustable', () => {
+    const g = gen('smoothstep(0.3, 0.35, length(uv))');
+    expect(g.description).toMatch(/of radius 0\.3 \(adjustable\) around/);
+    // Kept constant: just the value
+    expect(descriptionFor(g, { constant: { 0: true, 1: true } })).toMatch(/of radius 0\.3 around .* over 0\.05 outside/);
+    // Renaming the input doesn't put the new name in the sentence
+    expect(descriptionFor(g, { names: { 0: 'size' } })).toMatch(/of radius 0\.3 \(adjustable\)/);
+  });
+
+  it('with no default, the template’s own word reads "the given …"', () => {
+    expect(gen('smoothstep(r, r + 0.05, length(uv))').description).toMatch(/^Makes a soft-edged circle of the given radius around the origin of p/);
+    expect(gen('mat2(cos(t), -sin(t), sin(t), cos(t))').description).toMatch(/for the given angle \(in radians\)/);
+    expect(gen('length(p) - r').description).toMatch(/circle of the given radius/);
+  });
+
+  it('a grid count is marked adjustable once', () => {
+    expect(gen('fract(uv * 4.0)').description).toBe('Tiles p into a 4 (adjustable) × 4 grid of repeating cells, 0…1 inside each.');
+  });
+
+  // Every idiom, every spelling: numbers for the #holes (their defaults must show), and for the
+  // $holes names chosen to be the input's own name, the worst case for "radius radius".
+  const NUMS = [0.37, 43758.5453, 1.7];
+  const VAR_LIKE = new Set(['p', 'x', 'uv', 'col', 'd', 'a', 'b', 'v', 'q', 't', 'h', 'from', 'to', 'cell']);
+  const holesOf = (pat: string) => [...new Set([...pat.matchAll(/[$#]\w+/g)].map(m => m[0]))];
+  let checked = 0;
+  for (const idiom of IDIOMS) {
+    for (const pattern of idiom.patterns) {
+      it(`${idiom.id}: ${pattern}`, () => {
+        let made: Exclude<ReturnType<typeof generaliseText>, { error: string }> | undefined;
+        for (const k of NUMS) {
+          const types: Record<string, string> = {};
+          const roles: Record<string, string> = {};
+          let src = pattern;
+          for (const h of holesOf(pattern)) {
+            const spec = idiom.holes?.[h.slice(1)];
+            if (h[0] === '#') { src = src.split(h).join(k.toFixed(4)); continue; }
+            const want = spec?.input ?? h.slice(1);
+            const id = VAR_LIKE.has(want) ? `${want}In` : want;
+            types[id] = spec?.types?.[0] === 'int' ? 'float' : (spec?.types?.[0] ?? 'float');
+            if (spec?.roles?.[0]) roles[id] = spec.roles[0];
+            src = src.split(h).join(id);
+          }
+          const g = generaliseText(src, { types, roles } as GeneraliseContext);
+          if ('error' in g || g.idiom?.id !== idiom.id) continue;
+          made = g;
+          break;
+        }
+        if (!made) return; // a more specific idiom claims this spelling first
+        checked++;
+        const allConst = descriptionFor(made, { constant: Object.fromEntries(made.inputs.map((_, i) => [i, true])) });
+        for (const text of [made.description, allConst]) {
+          expect(repeated(text), text).toBeUndefined();
+          expect(text).not.toMatch(/[\u0001\u0002]/);
+          expect(text).not.toMatch(/\bthe given the\b/);
+        }
+        // A number that became an input shows as its default, marked adjustable, wherever the words mention it
+        for (const inp of made.inputs) {
+          if (inp.default === undefined || inp.constant) continue;
+          if (allConst.includes(fmt(inp.default))) expect(made.description, made.description).toContain(`${fmt(inp.default)} (adjustable)`);
+        }
+      });
+    }
+  }
+  it('the sweep above checked most idioms', () => expect(checked).toBeGreaterThan(IDIOMS.length / 2));
 });
