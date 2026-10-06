@@ -90,10 +90,12 @@ describe('grammar: clauses and connectors', () => {
     ]);
   });
   it('the rest previews when one clause can’t be read, with did you mean', () => {
-    const p = run('create a noise, frobnicate it, then output it', scratchGraph('empty'));
+    const p = run('create a noise, frobnicate it, then output the noise', scratchGraph('empty'));
     expect(reads(p)).toBe('create build!error output');
     expect(p.ok).toBe(false);
     expect(p.steps.map(s => s.label)).toEqual(['Add Fractal Noise (FBM)', 'Output Fractal Noise (FBM) · Value']);
+    // "It" after a clause that can't run is unknown, not a guess.
+    expect(run('create a noise, frobnicate it, then output it', scratchGraph('empty')).clauses[2].message).toMatch(/clause before/);
     expect(run('conect the glow to the output', scratchGraph('mixed')).clauses[0].suggestions).toContain('connect the glow to the output');
     expect(run('create a nosie', scratchGraph('empty')).clauses[0].suggestions?.join(' ')).toMatch(/noise/);
     expect(didYouMean('dleete')).toContain('delete');

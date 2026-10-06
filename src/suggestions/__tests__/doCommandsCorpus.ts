@@ -156,7 +156,8 @@ export const CORPUS: Array<[text: string, on: ScratchId, selected: string[] | un
   ['connect the uv to the circle', 'twoShapes', undefined, 'connect!error'],
   // Did-you-mean and partial reads
   ['conect the glow to the output', 'mixed', undefined, 'build!error'],
-  ['create a noise, frobnicate it, then output it', 'empty', undefined, 'create build!error output'],
+  ['create a noise, frobnicate it, then output it', 'empty', undefined, 'create build!error output!error'],
+  ['create a noise, frobnicate it, then output the noise', 'empty', undefined, 'create build!error output'],
   ['create a nosie', 'empty', undefined, 'create!error'],
   ['delete the sphere', 'circle', undefined, 'delete'],
   ['delete the torch', 'circle', undefined, 'delete!error'],

@@ -405,6 +405,8 @@ export function didYouMean(word: string): string[] {
     if (d <= (word.length > 5 ? 2 : 1)) out.push({ w, d });
   };
   for (const v of COMMAND_VERBS) v.words.forEach(consider);
+  // A verb that fits wins over shapes and actions ("conect" is connect, not cone).
+  if (out.length) return [...new Set(out.sort((a, b) => a.d - b.d).map(x => x.w))].slice(0, 3);
   for (const a of ACTIONS) a.words.forEach(consider);
   for (const s of SHAPES) s.words.forEach(consider);
   for (const ws of Object.values(PARAMS)) ws.forEach(consider);
@@ -542,12 +544,14 @@ interface Run {
   picks: Record<string, string>;
   /** The initial selection (for "this", "these"). */
   initial: string[];
+  /** The last clause couldn't run ("it" is unknown). */
+  broken?: boolean;
 }
 
 interface ClauseCtx { run: Run; index: number; last: boolean; steps: CmdStep[]; text: string; /** A later clause wires something to the Output itself. */ outputLater?: boolean }
 
 function env(r: Run): RefEnv {
-  return { nodes: r.nodes, selected: r.selected, subject: r.subject };
+  return { nodes: r.nodes, selected: r.selected, subject: r.subject, broken: r.broken };
 }
 
 /** readRef with this clause's pick applied (no throw). */
@@ -1416,9 +1420,11 @@ export function execCommand(text: string, nodes: GraphNode[], opts: CommandOptio
       const saved = { nodes: run.nodes, subject: run.subject, selected: run.selected, select: run.select, group: run.group };
       try {
         clause.verb = execClause(c, ts);
+        run.broken = false;
       } catch (e) {
         if (!(e instanceof ClauseError)) throw e;
         Object.assign(run, saved);
+        run.broken = true;
         c.steps.length = 0;
         Object.assign(clause, { status: e.pick ? 'pick' : 'error', message: e.message, suggestions: e.suggestions.filter((s, i, a) => s && a.indexOf(s) === i).slice(0, 4), pick: e.pick });
       }

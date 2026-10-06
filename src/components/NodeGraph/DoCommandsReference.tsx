@@ -51,7 +51,7 @@ export function CommandsReferenceBody({ initialQuery = '', onTry }: { initialQue
         {(['all', ...kinds] as Kind[]).map(k => (
           <button key={k} type="button" onClick={() => setKind(k)}
             style={{ height: 24, padding: '0 9px', borderRadius: 12, border: `1px solid ${k === kind ? tk.accent.base : tk.border.subtle}`, background: k === kind ? alpha(tk.accent.base, 0.12) : 'transparent', color: k === kind ? tk.accent.base : tk.text.secondary, font: `500 11.5px ${fontFamily.ui}`, cursor: 'pointer' }}>
-            {k === 'all' ? `All (${all.length})` : REFERENCE_SECTIONS[k].replace(/^Verbs: /, '')}
+            {k === 'all' ? `All (${all.length})` : k === 'verb' ? 'Edit verbs' : k === 'action' ? 'Build actions' : REFERENCE_SECTIONS[k]}
           </button>
         ))}
       </div>

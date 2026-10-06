@@ -173,6 +173,8 @@ export interface RefEnv {
   selected: string[];
   /** The last clause's result ("it"). */
   subject: Wired | null;
+  /** The clause before couldn't run, so "it" is unknown. */
+  broken?: boolean;
 }
 
 export type RefResult =
@@ -244,6 +246,7 @@ export function readRef(toks: Tok[], i: number, env: RefEnv): RefResult {
   // Pronouns and roles.
   const res = longest(toks, i, PRONOUN_RESULT);
   if (res) {
+    if (env.broken) return fail(res, '“It” is what the clause before makes, and that clause can’t run yet.');
     const s = env.subject ?? (sel.length ? { id: sel[0] } : shownNode(env.nodes));
     if (!s) return fail(res, '“It” is nothing yet: select a node, or name one.');
     return { ok: true, ids: [s.id], key: s.key, used: res, text: text(i + res) };
