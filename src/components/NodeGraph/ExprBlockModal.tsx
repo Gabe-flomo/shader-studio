@@ -26,10 +26,13 @@ import type { EditorPanel } from '../code/editorPanelPrefs';
 import { CollapseInputsButton, FunctionsToggle, InputsRail, SidePanel, useEditorSidePanels } from '../code/SidePanels';
 import { buildCompletions } from '../code/glslReference';
 import { insertSnippet } from '../code/useCompletion';
+import { HowUsedButton } from '../codeExplorer/HowUsedButton';
+import { useExprBlockJump } from '../codeExplorer/useCodeJumpFocus';
 import { ExplainRow } from '../explain/ExplainRow';
 import { useExplainDialogs } from '../explain/useExplainDialogs';
 import { exprBlockContext, exprBlockUseHere } from '../explain/hosts';
 import type { GeneraliseContext } from '../../lib/glslPatterns';
+import { snippetLines, type Snippet } from '../../suggestions/snippets';
 
 // ── Convert ExprBlock warp lines → FnDef array (one fn per line, f1/f2/f3…) ──
 // Names are always sequential (f1, f2, …). The return type is inferred from a
@@ -101,6 +104,8 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   const tk = useTokens();
   // Side panels: Inputs (folds to a rail) and the function palette (closed by default); ⌘[ / ⌘]
   const { narrow, open: panels, set: setPanel, toggle: togglePanel } = useEditorSidePanels(PANELS);
+  // Opened by the Code Explorer's jump to source: show that line.
+  useExprBlockJump(node.id);
 
   // Read current params
   const customInputs: InputDef[] = (node.params.inputs as InputDef[] | undefined) ?? [];
@@ -209,6 +214,17 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   const updateLine = (idx: number, field: keyof WarpLine, value: string) =>
     updateNodeParams(node.id, { lines: lines.map((l, i) => i === idx ? { ...l, [field]: value } : l) });
   const updateResult = (val: string) => updateNodeParams(node.id, { result: val });
+  // A snippet (suggestions/snippets.ts): its lines appended, wired to this block's variables. The
+  // result switches to it when the block still returns a bare input of the same type.
+  const insertSnippetLines = (sn: Snippet) => {
+    const r = snippetLines(sn, customInputs, lines);
+    const nextLines = [...lines, ...r.lines];
+    const bare = customInputs.find(i => i.name === result.trim());
+    const nextResult = bare && r.resultType === outputType ? r.result : result;
+    updateNodeParams(node.id, { lines: nextLines, result: nextResult });
+    pushHistory({ lines: nextLines, result: nextResult });
+    toast.success(`${sn.label}: ${r.lines.length} line${r.lines.length === 1 ? '' : 's'} added`, { message: nextResult === r.result ? `The block now returns ${r.result}.` : `Its value is ${r.result} (${r.resultType}): use it in Return or a later line.` });
+  };
 
   const handleSavePreset = (name: string) => {
     const presetLabel = name.trim() || label;
@@ -301,6 +317,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
       onClose={onClose}
       headerActions={
         <>
+          <HowUsedButton />
           <FunctionsToggle open={panels.functions} onToggle={() => togglePanel('functions')} />
           {canOpenInBuilder && (
             <Button size="sm" variant="ghost" icon="fn" style={{ marginRight: 4 }}
@@ -472,7 +489,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
         </div>
 
         <SidePanel side="right" label="Functions" open={panels.functions} narrow={narrow} width={300} onClose={() => setPanel('functions', false)}>
-          <ReferencePanel variables={customInputs} onInsert={insertFromReference} wrapAll={autoWrap} onWrapAllChange={setAutoWrap} />
+          <ReferencePanel variables={customInputs} onInsert={insertFromReference} wrapAll={autoWrap} onWrapAllChange={setAutoWrap} onSnippet={insertSnippetLines} />
         </SidePanel>
         {explainDialogs.dialogs}
       </div>

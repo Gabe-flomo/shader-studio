@@ -94,9 +94,16 @@ export function suggestQuickAdds(opts: {
   key?: string;
   /** The type of the node the socket is on, which refines the pick too */
   nodeType?: string;
+  /**
+   * Learned picks for this socket (suggestions/rank.ts learnedNext: your graphs, then the
+   * examples), best first. Up to two go before the hand-written rules.
+   */
+  learned?: Array<{ type: string; key: string; note: string }>;
 }): QuickAdd[] {
   const text = `${opts.label ?? ''} ${opts.key ?? ''}`.toLowerCase();
-  const rules = opts.dir === 'in' ? feedRules(opts.type, text) : consumeRules(opts.type, text, opts.nodeType);
+  const hand = opts.dir === 'in' ? feedRules(opts.type, text) : consumeRules(opts.type, text, opts.nodeType);
+  const learned: Rule[] = (opts.learned ?? []).slice(0, 2).map(l => [l.type, l.key, l.note]);
+  const rules = [...learned, ...hand.filter(([t]) => !learned.some(([lt]) => lt === t))];
   const out: QuickAdd[] = [];
   for (const [type, key, note] of rules) {
     const def = getNodeDefinition(type);

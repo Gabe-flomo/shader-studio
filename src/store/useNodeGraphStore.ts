@@ -24,7 +24,9 @@ import { rulesStarter } from '../agentRules/starter';
 import { particlesAsNodes } from './particlesAsNodes';
 import { openGridRulesInGraph } from './gridRulesAsNodes';
 import { openNewSceneBuilder } from '../sceneBuilder/store';
-import { applyRecipe, recipesFor } from '../nodes/recipes';
+import { applyRecipe, placeNear, recipesFor } from '../nodes/recipes';
+import { runDoPlan as runDoPlanPure, type DoPlan } from '../suggestions/doBar';
+import { applyMove, moveById, learnGraph, learnSaved, recordWireBetween, textSignature } from '../suggestions';
 import { closeRecipeOffer, noteNodeAdded } from './recipeOfferStore';
 import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES, AGENT_PRESET_TYPES, syncAgentSpaces } from '../nodes/definitions/agents';
 import { randomizedParams } from '../nodes/randomizeParams';
@@ -863,6 +865,16 @@ interface NodeGraphState {
    * One undo step. Returns the ids added, or null when the node or recipe is gone.
    */
   applyStarterRecipe: (nodeId: string, recipeId: string) => string[] | null;
+  /**
+   * Apply suggestion move `moveId` (suggestions/moves.ts) on socket `key` of node `nodeId`, in the
+   * level being edited: one undo step, a compile, a toast. Selects the move's result node.
+   * Returns the ids added, or null when it can't go there.
+   */
+  applySuggestion: (nodeId: string, key: string, side: 'in' | 'out', moveId: string, args?: Record<string, unknown>) => string[] | null;
+  /** Run a Do… bar plan (suggestions/doBar.ts) in the level being edited: one undo step, a compile. Returns the step labels that ran. */
+  runDoPlan: (plan: DoPlan, label: string) => string[];
+  /** Add a node already built (an idiom's Expression Block from the Do… bar) to the level being edited, near the view: one undo step. */
+  addBuiltNode: (node: GraphNode, label: string) => string | null;
   /**
    * Spawn a pre-wired subgraph from a descriptor.
    * `origin` is the top-left anchor in canvas space.
@@ -3355,6 +3367,60 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     return r.added;
   },
 
+  applySuggestion: (nodeId, key, side, moveId, args = {}) => {
+    const st = get();
+    const move = moveById(moveId);
+    const path = st.activeGroupPath;
+    const scope = path.length ? getActiveNodes(st.nodes, path) : st.nodes;
+    const self = scope?.find(nd => nd.id === nodeId);
+    if (!move || !scope || !self) return null;
+    const r = applyMove(scope, { nodeId, key, side }, move, args, () => idGenerator.next(), { topLevel: path.length === 0 });
+    if (!r) return null;
+    const label = nodeName(self);
+    undoManager.push(st.nodes, { label: `${move.label} on ${label}`, nodeIds: [nodeId] });
+    const nodes = path.length ? (setActiveNodes(st.nodes, path, r.nodes) ?? st.nodes) : r.nodes;
+    const select = r.resultNodeId && r.nodes.some(nd => nd.id === r.resultNodeId) ? r.resultNodeId : nodeId;
+    set({ nodes, selectedNodeId: select, selectedNodeIds: [select] });
+    get().compile();
+    // Picking a move is a wiring choice too: it teaches the ranking (recency-weighted).
+    if (move.anchor) {
+      if (side === 'out') recordWireBetween(self.type, key, move.anchor.type, move.anchor.key);
+      else recordWireBetween(move.anchor.type, move.anchor.out, self.type, key);
+    }
+    const what = move.shape === 'param' ? 'Changed its settings.' : `Added ${r.added.length} node${r.added.length === 1 ? '' : 's'}, each with a note${r.rewired ? ', in place' : ''}.`;
+    toast.info(`${move.label} · ${label}`, { message: `${what}${r.shown ? ' It is on the Output now.' : ''} Undo takes it back.` });
+    return r.added;
+  },
+
+  runDoPlan: (plan, label) => {
+    const st = get();
+    const path = st.activeGroupPath;
+    const scope = path.length ? getActiveNodes(st.nodes, path) : st.nodes;
+    if (!scope || !plan.steps.length) return [];
+    const r = runDoPlanPure(scope, plan, () => idGenerator.next(), { topLevel: path.length === 0 });
+    if (!r.ran.length) return [];
+    undoManager.push(st.nodes, { label: `Do: ${label}` });
+    const nodes = path.length ? (setActiveNodes(st.nodes, path, r.nodes) ?? st.nodes) : r.nodes;
+    set({ nodes, ...(r.select ? { selectedNodeId: r.select, selectedNodeIds: [r.select] } : {}) });
+    get().compile();
+    return r.ran;
+  },
+
+  addBuiltNode: (node, label) => {
+    const st = get();
+    const path = st.activeGroupPath;
+    const scope = path.length ? getActiveNodes(st.nodes, path) : st.nodes;
+    if (!scope) return null;
+    const id = idGenerator.next();
+    const placed = placeNear(scope, [{ ...node, id }]);
+    undoManager.push(st.nodes, { label: `Added ${label}` });
+    const list = [...scope, ...placed];
+    const nodes = path.length ? (setActiveNodes(st.nodes, path, list) ?? st.nodes) : list;
+    set({ nodes, selectedNodeId: id, selectedNodeIds: [id] });
+    get().compile();
+    return id;
+  },
+
   addNode: (type, position, overrideParams?) => {
     // "New 3D scene…" is a palette entry that opens the 3D Scene Builder (docs/scene-builder.md).
     if (type === 'sceneBuilder') { openNewSceneBuilder(position); return undefined; }
@@ -4178,6 +4244,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   connectNodes: (sourceNodeId, sourceOutputKey, targetNodeId, targetInputKey) => {
+    {
+      // A wire you make teaches the suggestions (suggestions/learning.ts, recency-weighted).
+      const a = nodeInScope(get(), sourceNodeId), b = nodeInScope(get(), targetNodeId);
+      if (a && b) recordWireBetween(a.type, sourceOutputKey, b.type, targetInputKey);
+    }
     undoManager.push(get().nodes, { label: `Connected ${nodeName(nodeInScope(get(), sourceNodeId))} → ${nodeName(nodeInScope(get(), targetNodeId))}`, nodeIds: [sourceNodeId, targetNodeId] });
     {
       // Replacing a wire: keep the old one so the node's menu can offer it back.
@@ -5424,6 +5495,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const stored = safeSetItem(`shader-studio:${name}`, payload, `graph "${name}"`);
     if (!stored.ok) return stored;
     set({ currentGraph: { name, version, latest: true }, graphDirty: false });
+    learnSaved(name, nodes, payload);
     recordActivity('save', name);
     window.dispatchEvent(new Event(SAVED_GRAPHS_CHANGED));
     const dir = getGraphDir();
@@ -5560,7 +5632,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set({ currentGraph: null, graphDirty: false });
     // A play file already opens on Play; a plain graph that happens to carry a setup just says so.
     if (!isPlayFile) announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
-    if (!opts?.recovered) recordActivity('import', 'Graph file');
+    if (!opts?.recovered) {
+      recordActivity('import', 'Graph file');
+      // An imported graph teaches the suggestions at half the weight of one you saved.
+      const sig = textSignature(json);
+      learnGraph(`import:${sig}`, 'imported', nodes, sig);
+    }
     return { ok: true };
   },
 

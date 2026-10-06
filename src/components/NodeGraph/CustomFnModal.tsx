@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { snippetForFunction, type Snippet } from '../../suggestions/snippets';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { setInputSlider } from '../../nodes/sliderFreeze';
 import { nowParamValue } from '../../lib/nowValue';
@@ -20,6 +21,8 @@ import type { EditorPanel } from '../code/editorPanelPrefs';
 import { FunctionsToggle, SidePanel, useEditorSidePanels } from '../code/SidePanels';
 import { buildCompletions } from '../code/glslReference';
 import { insertSnippet } from '../code/useCompletion';
+import { HowUsedButton } from '../codeExplorer/HowUsedButton';
+import { useCustomFnJump } from '../codeExplorer/useCodeJumpFocus';
 import { StatementsExplain } from '../explain/StatementsExplain';
 import { useExplainDialogs } from '../explain/useExplainDialogs';
 import { customFnContext, customFnUseHere } from '../explain/hosts';
@@ -48,6 +51,8 @@ export function CustomFnModal({ node, onClose }: Props) {
   const lastField = useRef<'body' | 'fns'>('body');
   const [autoWrap, setAutoWrap] = useState(false);
   const [showHelpers, setShowHelpers] = useState(() => typeof node.params.glslFunctions === 'string' && node.params.glslFunctions.trim() !== '');
+  // Opened by the Code Explorer's jump to source: show that line.
+  const jump = useCustomFnJump(node.id, f => { if (f === 'glslFunctions') setShowHelpers(true); });
 
   // Read current params
   const customInputs = (node.params.inputs as Array<{ name: string; type: DataType; slider?: { min: number; max: number } | null }>) || [];
@@ -141,6 +146,14 @@ export function CustomFnModal({ node, onClose }: Props) {
 
   // Insert a reference snippet into the last-focused field — wraps the selection, or the
   // whole body when "Wrap all" is on.
+  // A snippet (suggestions/snippets.ts): its helper function added once, a call at the caret in the body.
+  const insertSnippetFn = (sn: Snippet) => {
+    const r = snippetForFunction(sn, customInputs, glslFns);
+    if (r.helpers !== glslFns) { updateNodeParams(node.id, { glslFunctions: r.helpers }); setShowHelpers(true); }
+    lastField.current = 'body';
+    insertFromReference(r.call);
+  };
+
   const insertFromReference = (text: string) => {
     const isBody = lastField.current === 'body';
     const ta = isBody ? bodyRef.current : fnRef.current;
@@ -222,7 +235,7 @@ export function CustomFnModal({ node, onClose }: Props) {
       width={980}
       height={800}
       onClose={onClose}
-      headerActions={<FunctionsToggle open={functionsOpen} onToggle={() => togglePanel('functions')} />}
+      headerActions={<><HowUsedButton /><FunctionsToggle open={functionsOpen} onToggle={() => togglePanel('functions')} /></>}
       footer={
         <>
           <Button icon="export" onClick={handleSavePreset}>Save as preset</Button>
@@ -298,6 +311,7 @@ export function CustomFnModal({ node, onClose }: Props) {
               grow
               minHeight={180}
               ariaLabel="Function body"
+              flash={jump.field === 'body' ? jump.flash : null}
               value={body}
               onChange={v => updateNodeParams(node.id, { body: v })}
               completions={completions}
@@ -348,6 +362,7 @@ export function CustomFnModal({ node, onClose }: Props) {
                 minHeight={140}
                 maxHeight={320}
                 ariaLabel="Helper functions"
+                flash={jump.field === 'glslFunctions' ? jump.flash : null}
                 value={glslFns}
                 onChange={v => updateNodeParams(node.id, { glslFunctions: v })}
                 completions={completions}
@@ -365,6 +380,7 @@ export function CustomFnModal({ node, onClose }: Props) {
             onInsert={insertFromReference}
             wrapAll={autoWrap}
             onWrapAllChange={setAutoWrap}
+            onSnippet={insertSnippetFn}
           />
         </SidePanel>
       </div>

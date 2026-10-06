@@ -192,5 +192,5 @@ Then add a positive and a negative case to `src/lib/glslPatterns/__tests__/match
 - Ranges ("now −2…2") are tracked only through sin / cos / fract / smoothstep / step / clamp, scaling and shifting by numbers.
 - The CPU evaluator is for tests and quick checks: no textures, no ints, no `mat3` / `mat4`.
 - "Use it here too" in an Expression Block needs every part it reads to be a wired block input (see above). An idiom hole that matched a computed part (`sin(t)` in `sin(t)*0.5+0.5`) counts as computed.
-- Find uses scans Expression Block lines and Custom Function statements of the current graph and the bundled examples only, in memory, up to 200 / 300 hits. Saved graphs, imported shaders and linked folders wait for the Code Explorer's index.
+- Find uses scans Expression Block lines and Custom Function statements of the current graph and the bundled examples in memory, up to 200 / 300 hits. Saved graphs, presets, shaders, linked files and presentations come from the Code Explorer's index (`findIndexedUses` in `src/codeExplorer/queries.ts`, shown by `IndexedUses` in the dialog), matched one indexed line at a time.
 - The suggestions vocabulary isn't on main yet; `idiomVocabulary()` is ready for it.
