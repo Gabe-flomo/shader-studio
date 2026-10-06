@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.45',
+    date: '2026-10-06',
+    title: 'See each line',
+    highlights: [
+      { area: 'Studio', text: 'Expression Block editor: \u25b6 on any input, line or Return previews that value (Range, Slice, Grid, Arrows, colour); \u2191\u2193 step through the lines.', link: { kind: 'doc', path: 'docs/node-previews.md' } },
+      { area: 'Studio', text: 'Custom Functions can preview any local variable from a dropdown. Previews never change the saved graph.' },
+    ],
+  },
+  {
     id: '2026.10.44',
     date: '2026-10-06',
     title: 'Grid simulations and one clip editor',
