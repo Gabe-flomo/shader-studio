@@ -13,14 +13,15 @@
 import * as THREE from 'three';
 import type { GraphNode } from '../../types/nodeGraph';
 import { buildDisplayShader, buildValueShader, MODE_CODE } from './previewGlsl';
-import { fieldStats, niceStep, type ValueField } from './valueField';
+import { displayStats, fieldStats, isColourType, niceStep, type FieldType, type ValueField } from './valueField';
+import type { PreviewStats } from '../previewExplain';
 import { previewBus, previewPerf } from './previewBus';
 import { detailFor, gridDensity, pickPreviewOutput, prefOf, primaryInput, showAsFor, type Detail, type ShowAsMode } from './showAs';
 
 export interface PreviewTarget {
   nodeId: string;
   outputKey: string;
-  type: 'float' | 'vec2';
+  type: FieldType;
   varName: string;
   /** The primary input's variable (float nodes), drawn grey under the slice plot. */
   inputVar: string | null;
@@ -56,7 +57,7 @@ export function resolvePreviewTarget(
   const picked = pickPreviewOutput(node, prefOf(node).output);
   if (!picked) return null;
   const [outputKey, t] = picked;
-  if (t !== 'float' && t !== 'vec2') return null;
+  if (t !== 'float' && t !== 'vec2' && t !== 'vec3' && t !== 'vec4') return null;
   const varName = varMap.get(previewId)?.[outputKey];
   if (!varName || !declares(fs, varName)) return null;
   let inputVar: string | null = null;
@@ -65,7 +66,9 @@ export function resolvePreviewTarget(
     const v = pi ? varMap.get(pi.nodeId)?.[pi.outputKey] : undefined;
     if (v && v !== varName && declares(fs, v)) inputVar = v;
   }
-  return { nodeId: previewId, outputKey, type: t, varName, inputVar, mode: showAsFor(node, t, outputKey), detail: detailFor(node) };
+  // A colour has no "Show as" map: Raw (as the picture draws it); the card reads it back too.
+  const mode = t === 'float' || t === 'vec2' ? showAsFor(node, t, outputKey) : 'raw';
+  return { nodeId: previewId, outputKey, type: t, varName, inputVar, mode, detail: detailFor(node) };
 }
 
 /** Texels in the value target (256 × 144 at 16:9); its shape follows the picture's aspect. */
@@ -180,14 +183,14 @@ export class ValuePreviewRunner {
    * (Raw, nothing to show, or the program still compiling: it shows the next frame it's ready).
    */
   display(t: PreviewTarget | null, fs: string, vs: string, main: THREE.ShaderMaterial): THREE.ShaderMaterial | null {
-    if (!t || t.mode === 'raw') return null;
+    if (!t || t.mode === 'raw' || isColourType(t.type)) return null;
     this.sync(fs);
     this.ensureUniforms(main.uniforms);
     const key = `${t.varName}:${t.type}`;
     let m = this.display_.get(key);
     if (m && m.uniforms !== main.uniforms) { this.disposeMat(m); this.display_.delete(key); m = undefined; }
     if (!m) {
-      const src = buildDisplayShader(fs, t.varName, t.type);
+      const src = buildDisplayShader(fs, t.varName, t.type as 'float' | 'vec2');
       if (!src) return null;
       m = new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: src, uniforms: main.uniforms });
       this.display_.set(key, m);
@@ -204,9 +207,9 @@ export class ValuePreviewRunner {
    * animating (`force`: a frame drawn on demand always samples), one readback in flight.
    * `onChange` runs when a readback moved the range, so a still picture redraws with it.
    */
-  sample(t: PreviewTarget | null, fs: string, vs: string, main: THREE.ShaderMaterial, canvasW: number, canvasH: number, force: boolean, onChange: () => void) {
+  sample(t: PreviewTarget | null, fs: string, vs: string, main: THREE.ShaderMaterial, canvasW: number, canvasH: number, force: boolean, onChange: () => void, onStats?: (s: PreviewStats | null) => void) {
     if (!t) {
-      if (this.lastKey) { this.lastKey = ''; this.gen++; previewBus.clear(); }
+      if (this.lastKey) { this.lastKey = ''; this.gen++; previewBus.clear(); onStats?.(null); }
       return;
     }
     const key = `${t.nodeId}:${t.outputKey}:${t.varName}:${t.inputVar ?? ''}`;
@@ -271,6 +274,8 @@ export class ValuePreviewRunner {
       }
       this.pv.u_pvFlat.value = stats.constant ? 1 : 0;
       previewBus.publish({ nodeId: t.nodeId, outputKey: t.outputKey, field, stats });
+      // The caption's frame stats (clipping, black, flat), from the same readback: no extra read
+      onStats?.(displayStats(field));
       const after = [this.pv.u_pvMin.value, this.pv.u_pvMax.value, this.pv.u_pvMag.value, this.pv.u_pvFlat.value];
       if (before.some((v, i) => v !== after[i])) onChange();
     }, () => { this.pending = false; });

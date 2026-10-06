@@ -21,8 +21,6 @@ if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
 import { toast } from '../ui/toastStore';
 import type { GraphNode, DataType, NodeDefinition, ParamDef } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
-import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
-import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { extendRangePatch, hasCustomRange, paramSliderRange, resetRangePatch } from '../../nodes/sliderRange';
 import { frozenValueOf } from '../../nodes/sliderFreeze';
@@ -63,9 +61,10 @@ import { AudioInputModal } from './AudioInputModal';
 import { VideoInputModal } from './VideoInputModal';
 import { MidiInputCard } from './MidiInputCard';
 import { GroupParamPicker } from './GroupParamPicker';
-import { NodeInlineViz, INLINE_VIZ_TYPES, AudioFreqRangeViz } from './NodeInlineViz';
+import { NodeInlineViz, AudioFreqRangeViz, hasRealDiagram } from './NodeInlineViz';
 import { ValuePreview } from './ValuePreview';
-import { useShowAs } from './ShowAsControls';
+import { AgentPreviewPanel } from './AgentPreviewPanels';
+import { previewPlan } from '../../lib/nodePreview/previewPlan';
 import { AGENT_INPUT_OUTPUTS, AGENT_INPUT_STATE_OUTPUTS, agentWalkerDefault, DRAW_3D_INPUTS } from '../../nodes/definitions/agents';
 import { VECTORIZABLE_NODES, VEC4_CAPABLE_NODES } from '../../nodes/definitions/math';
 import { registerSocket, getView } from './socketRegistry';
@@ -189,15 +188,8 @@ function hzToSlider(hz: number): number {
   return Math.round(Math.pow(Math.max(0, ratio), 1 / 0.6) * 1000);
 }
 
-const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput', 'baked', 'midiInput', 'data', 'timeCube']);
 let zCounter = 10; // incremented each time a node is brought to front
 const LFO_TYPES    = new Set(['lfo']);
-// Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
-const ALWAYS_VIZ_TYPES = new Set([...LFO_TYPES, 'remap', 'audioInput', 'pass']);
-// Float-output nodes that should render a grayscale shader thumbnail instead of the scope waveform
-const GRAYSCALE_PREVIEW_TYPES = new Set(['fbm', 'voronoi', 'noiseFloat', 'sdSegment', 'mask', 'luminance', 'sobel', 'compare', 'select']);
-// Nodes with their own always-on picture keep it instead of the "Show as" value preview
-const NO_VALUE_PREVIEW = new Set([...LFO_TYPES, 'audioInput', 'pass']);
 
 
 const inputStyleFor = (tc: CtpPalette): React.CSSProperties => ({
@@ -549,54 +541,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   // Video input
   const setVideoTexture    = useNodeGraphStore(s => s.setVideoTexture);
 
-  // Node preview thumbnail — rendered at 200×200 when the 👁 preview mode is active
-  const setNodePreview  = useNodeGraphStore(s => s.setNodePreview);
-  const previewDataUrl  = useNodeGraphStore(s => s.nodePreviews[node.id] ?? null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  // A float / vec2 output previews as its value, in a "Show as" mode (docs/node-previews.md),
-  // painted from ShaderCanvas's readback rather than a thumbnail render.
-  const previewShowAs = useShowAs(isPreviewActive ? node : null);
-  const valuePreview = isPreviewActive && !SKIP_PREVIEW.has(node.type) && !NO_VALUE_PREVIEW.has(node.type) && !!previewShowAs?.valueType;
-
-  // The thumbnail follows the node's own sliders: params are baked into the preview shader, so a
-  // change is a new shader. Debounced so a slider drag doesn't compile on every tick.
-  const paramsKey = JSON.stringify(node.params);
-  const [previewParamsKey, setPreviewParamsKey] = useState(paramsKey);
-  useEffect(() => {
-    if (!isPreviewActive) return;
-    const t = setTimeout(() => setPreviewParamsKey(paramsKey), 300);
-    return () => clearTimeout(t);
-  }, [paramsKey, isPreviewActive]);
-
-  // Render a 200×200 preview whenever preview mode is activated for this node
-  useEffect(() => {
-    if (!isPreviewActive || SKIP_PREVIEW.has(node.type) || valuePreview) return;
-    let cancelled = false;
-    // When inside a group, build a merged node list so the BFS in
-    // compileNodePreviewShader can resolve anchor nodes (UV, time, etc.)
-    // that live at the top level even though the target node is in the subgraph.
-    const state = useNodeGraphStore.getState();
-    const activeGroupId = state.activeGroupId;
-    let currentNodes = state.nodes;
-    if (activeGroupId) {
-      const groupNode = state.nodes.find(n => n.id === activeGroupId);
-      const sg = groupNode?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
-      if (sg) {
-        // Subgraph nodes take priority (same ID wins for sg); top-level nodes fill in
-        // any anchor node dependencies (UV, time, etc.) not defined inside the group.
-        const sgIds = new Set(sg.nodes.map((n: { id: string }) => n.id));
-        currentNodes = [...sg.nodes, ...state.nodes.filter(n => !sgIds.has(n.id))];
-      }
-    }
-    const fs = compileNodePreviewShader(node.id, currentNodes);
-    if (!fs) return;
-    setPreviewLoading(true);
-    nodePreviewRenderer.renderNodePreview(node.id, fs, { u_time: { value: useNodeGraphStore.getState().currentTime ?? 0 } }, 200)
-      .then(url => { if (!cancelled) { setNodePreview(node.id, url); setPreviewLoading(false); } })
-      .catch(() => { if (!cancelled) setPreviewLoading(false); });
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPreviewActive, node.id, node.type, previewParamsKey, valuePreview]);
+  // What the card and the eye button offer as a preview (lib/nodePreview/previewPlan.ts): the
+  // node's value or colour read back from the eye preview, its diagram, a live readout, or nothing.
+  const plan = useMemo(() => previewPlan(node, hasRealDiagram, activeGroupNode?.type ?? null), [node, activeGroupNode?.type]);
 
   // Comment preview — brief hover delay (not the old 1200ms tooltip delay,
   // just enough to avoid flicker while panning/passing over the card).
@@ -721,7 +668,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
   // Scope node: canvas ref + global registry (drawing happens in ShaderCanvas animation loop)
   const scopeCanvasRef        = useRef<HTMLCanvasElement>(null);
-  const previewScopeCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Register / unregister this canvas in the global scope registry so ShaderCanvas
   // can draw directly without going through React state (eliminates setState→re-render lag).
@@ -746,25 +692,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.type, node.id]);
-
-  // Show scope canvas only when the node's dominant output is float — i.e. it has a float
-  // output but NO vec3/vec4 output that would be better shown as a shader thumbnail.
-  const primaryOutputIsFloat = !!def
-    && Object.values(def.outputs).some(s => s.type === 'float')
-    && !Object.values(def.outputs).some(s => s.type === 'vec3' || s.type === 'vec4');
-
-  // Register preview scope canvas when 👁 is active and output is float
-  React.useEffect(() => {
-    if (!isPreviewActive || !primaryOutputIsFloat) return;
-    const canvas = previewScopeCanvasRef.current;
-    const key = `__preview__${node.id}`;
-    if (canvas) scopeCanvasRegistry.register(key, canvas);
-    return () => {
-      scopeCanvasRegistry.unregister(key);
-      scopeBufferRegistry.delete(key);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPreviewActive, primaryOutputIsFloat, node.id]);
 
   // ── Audio Input: sync freq params to engine each time they change ────────────
   React.useEffect(() => {
@@ -3518,7 +3445,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {typeof node.params.__importWarning === 'string' && <span title={`From imported GLSL, not quite the same: ${node.params.__importWarning}`}><CardBadge>≈</CardBadge></span>}
         {showNodeTooltip && <div ref={nodeTooltipRef}><NodeTooltip def={def} node={node} allNodes={nodes} /></div>}
         <div style={{ display: 'flex', gap: 1, alignItems: 'center', flexShrink: 0 }} onDoubleClick={e => e.stopPropagation()}>
-          {!['output', 'vec4Output', 'uv', 'time', 'mouse', 'constant'].includes(node.type) && (
+          {plan.eye && (
             <CardButton icon="eye" tint="success" on={isPreviewActive}
               label={isPreviewActive ? 'Stop previewing (show the full graph)' : 'Preview this node in isolation'}
               onClick={() => setPreviewNodeId(isPreviewActive ? null : node.id)} />
@@ -3739,46 +3666,16 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
       {/* ── In-card preview (visible when 👁 is active) ── */}
       {/* Semantic inline viz: replaces shader thumbnail for supported types */}
-      {/* A float / vec2 output: its value, shown as the node's "Show as" mode; the diagram stays a click away */}
-      {valuePreview && (
-        <ValuePreview node={node} diagram={INLINE_VIZ_TYPES.has(node.type) ? <NodeInlineViz node={node} /> : undefined} />
+      {/* The node's value or colour while the eye is on it, with every preview control in its row;
+          the diagram stays a click away (docs/node-previews.md) */}
+      {isPreviewActive && plan.body === 'field' && (
+        <ValuePreview node={node} diagram={plan.diagram ? <NodeInlineViz node={node} /> : undefined} />
       )}
-      {!valuePreview && isPreviewActive && !SKIP_PREVIEW.has(node.type) && INLINE_VIZ_TYPES.has(node.type) && (
-        <NodeInlineViz node={node} />
+      {isPreviewActive && plan.body === 'diagram' && (
+        <ValuePreview node={node} diagramOnly diagram={<NodeInlineViz node={node} />} />
       )}
-      {/* Default: shader thumbnail for float-output scope or vec3 render */}
-      {!valuePreview && isPreviewActive && !SKIP_PREVIEW.has(node.type) && !ALWAYS_VIZ_TYPES.has(node.type) && !INLINE_VIZ_TYPES.has(node.type) && (
-        <div style={{ width: '100%', borderBottom: `1px solid ${tc.surface0}` }}>
-          {primaryOutputIsFloat && !GRAYSCALE_PREVIEW_TYPES.has(node.type) ? (
-            /* Float output → live waveform scope */
-            <canvas
-              ref={previewScopeCanvasRef}
-              width={240}
-              height={80}
-              style={{ display: 'block', width: '100%', height: '80px' }}
-            />
-          ) : (
-            /* Vec3/vec4 output → rendered shader thumbnail */
-            <div style={{ width: '100%', height: 160, background: tc.crust, overflow: 'hidden', position: 'relative' }}>
-              {previewLoading && !previewDataUrl ? (
-                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tc.surface2, fontSize: '12px' }}>
-                  rendering…
-                </div>
-              ) : previewDataUrl ? (
-                <img
-                  src={previewDataUrl}
-                  alt="node preview"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                />
-              ) : (
-                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: tc.surface2, fontSize: '11px' }}>
-                  no preview
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Always on: a live readout (Sense, Steer, Move, Emit) or a mini picture (Deposit's trail) */}
+      {(plan.body === 'stats' || plan.body === 'mirror') && <AgentPreviewPanel node={node} />}
 
       <div style={{ padding: '6px 0' }}>
         {/* ── Inputs (always visible) ── */}

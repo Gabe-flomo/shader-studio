@@ -64,6 +64,8 @@ if (import.meta.env.DEV) {
     nodePreviewPrefs: () => import('./lib/nodePreview/showAs').then(m => m.useNodePreviewPrefs),
     previewPerf: () => import('./lib/nodePreview/previewBus').then(m => m.previewPerf),
     perfSnapshot: () => import('./lib/perfStats').then(m => m.getPerfSnapshot()),
+    /** Every registered node type, for registry-wide checks (the node-preview audit). */
+    nodeTypes: () => import('./nodes/definitions').then(m => Object.values(m.NODE_REGISTRY).filter(d => !d.deprecated).map(d => ({ type: d.type, label: d.label, category: d.category, outputs: Object.fromEntries(Object.entries(d.outputs).map(([k, o]) => [k, o.type])) }))),
     /** The MIDI monitor's log (`midiMonitor.text()`), and the rack keyboard (`rackKeyboard.active()`). */
     midiMonitor, rackKeyboard,
     /** Linked folders without a folder picker: `(await linked()).devLinkOpfs('Samples', { 'kick.wav': blob })` links a folder in the browser's private file system. */

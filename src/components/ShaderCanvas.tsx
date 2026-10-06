@@ -530,10 +530,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const supportsHalfFloat = renderer.capabilities.isWebGL2 ||
       (!!gl.getExtension('OES_texture_half_float') && !!gl.getExtension('EXT_color_buffer_half_float'));
     const RT_TYPE = supportsHalfFloat ? THREE.HalfFloatType : THREE.UnsignedByteType;
-    // Tiny 8-bit copy of the frame for the preview caption's stats (see lib/previewExplain.ts)
-    const statsRT = new THREE.WebGLRenderTarget(32, 18, { depthBuffer: false, stencilBuffer: false });
-    const statsBuf = new Uint8Array(32 * 18 * 4);
-    let statsWasOn = false;
+    let statsWasOn = false; // the preview caption's frame stats are set (from the "Show as" readback)
 
     // Blit scene: renders a float RT to screen with triangular dithering
     const blitScene = new THREE.Scene();
@@ -1693,26 +1690,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           if (hasTimeNodeRef.current) {
             setCurrentTime(material.uniforms.u_time.value);
           }
-          // ── Preview caption stats: how much of the isolated node's frame clips, is black, or is flat ──
-          if (previewNodeIdRef.current) {
-            renderer.setRenderTarget(statsRT);
-            renderer.render(scene, camera);
-            renderer.setRenderTarget(null);
-            renderer.readRenderTargetPixels(statsRT, 0, 0, 32, 18, statsBuf);
-            let clipped = 0, black = 0, sum = 0, flat = true;
-            const r0 = statsBuf[0], g0 = statsBuf[1], b0 = statsBuf[2];
-            for (let i = 0; i < statsBuf.length; i += 4) {
-              const r = statsBuf[i], g = statsBuf[i + 1], b = statsBuf[i + 2];
-              const mx = Math.max(r, g, b);
-              if (mx >= 254) clipped++;
-              if (mx <= 2) black++;
-              sum += (r + g + b) / 765;
-              if (flat && (Math.abs(r - r0) > 6 || Math.abs(g - g0) > 6 || Math.abs(b - b0) > 6)) flat = false;
-            }
-            const n = 32 * 18;
-            setPreviewStats({ clipped: clipped / n, black: black / n, flat, mean: sum / n });
-            statsWasOn = true;
-          } else if (statsWasOn) {
+          // The preview caption's frame stats (clipping, black, flat) come from the "Show as" readback
+          // below (valuePreviewRunner onStats): asynchronous, no extra render or synchronous read.
+          if (!previewNodeIdRef.current && statsWasOn) {
             statsWasOn = false;
             setPreviewStats(null);
           }
@@ -1927,7 +1907,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         if (previewNodeIdRef.current || pvTarget) {
           const t = previewNodeIdRef.current ? previewTarget() : null;
           pvRunner.sample(t, fragmentShaderRef.current, vertexShaderRef.current, material,
-            renderer.domElement.width || 1, renderer.domElement.height || 1, !dynamic, () => { if (!dynamic) requestRender(); });
+            renderer.domElement.width || 1, renderer.domElement.height || 1, !dynamic, () => { if (!dynamic) requestRender(); },
+            st => { statsWasOn = st !== null; setPreviewStats(st); });
           if (!t) pvTarget = null;
         }
 
@@ -2217,7 +2198,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (pingPongB.current) { pingPongB.current.dispose(); pingPongB.current = null; }
       pingPongIdx.current = 0;
       disposeEchoRing();
-      for (const target of [rt, floatRt, statsRT, histRt, probeRT]) target.dispose();
+      for (const target of [rt, floatRt, histRt, probeRT]) target.dispose();
       costRt?.dispose(); costRt = null;
       pvRunner.reset();
       reset.push('render targets');
@@ -2392,7 +2373,6 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       const loseCtx = renderer.getContext().getExtension('WEBGL_lose_context');
       loseCtx?.loseContext();
       gpuTimer.dispose();
-      statsRT.dispose();
       costRt?.dispose();
       registerShaderCostMeasurer(null);
       passRunner?.dispose(); passTargets?.dispose(); offlinePassTargets?.dispose();

@@ -4,7 +4,9 @@
 
 ## In plain words
 
-Turn on the eye on a node. If what it outputs is a number (float) or a pair of numbers (vec2), the banner above the graph and the node card both get a **Show as** picker. Both use the same choice, and the choice is remembered for that node.
+Turn on the eye on a node. The picture panel shows that node alone. The node's card shows a preview of it, and **every preview control is on the card**: the output picker, **Show as**, **Detail**, the **Diagram** toggle, the ⓘ "how to read it", and notes such as "Some bright areas clip to white (6%); Tone Map would keep their detail". The banner over the graph only says what is previewed: "Previewing SDF Glow · Exit". The eye picture follows the card's choices, which are remembered per node.
+
+For a number (float) or a pair of numbers (vec2), Show as picks how it is drawn:
 
 **vec2 modes**
 - **Grid**: a checker with thin lines, looked up at the vec2 as if it were UV. You see how the node stretches, twists, folds and repeats space. The red line is where y = 0 and the green line is where x = 0. The checker is tinted by position inside each unit square (more red to the right, more blue upward), so mirroring and rotation show too. **Detail** sets how fine the checker and lines are (see below). This is the default for 2D Space and UV-like outputs.
@@ -38,7 +40,34 @@ The first version was 8 squares and 2 lines per unit, with 36 / 22 px arrow cell
 
 **Which output.** A node with several outputs gets an output picker next to Show as (Edges (texture): Edges, Direction, Color). Without a pick, a colour output wins as before. Otherwise the node's **first** float or vec2 output in its own order is used, skipping a pass-through (FBM previews its noise, not its "UV (pass-through)"). Picking another output recompiles the eye preview.
 
-**On the card.** The preview has a small header with Show as, the output picker (when there is a choice), and, on nodes that had a hand-drawn diagram (Multiply, Sin, the shapers, 2D Space nodes…), a **Diagram** toggle that brings that diagram back. The ⓘ tooltip says how to read the current mode. The key sits under the picture.
+**On the card.** The preview's row holds the output picker (when there is a choice), Show as and Detail (for a float or vec2) and, on nodes with a hand-drawn diagram (Multiply, Sin, the shapers, 2D Space nodes…), a **Diagram** toggle. The ⓘ tooltip says how to read the current view. The key sits under the picture, with any note under it.
+
+A colour output (vec3, vec4) is drawn as the picture draws it. The key gives its range (for example `0 … 20.1 (brightest channel)`, so an HDR colour shows how far past 1 it goes), and the notes say when it clips or is black.
+
+## Every node: what its card shows
+
+Each node type gets one of these, decided in `lib/nodePreview/previewPlan.ts`. A registry-wide test checks that no type ends up with an empty box or "no preview".
+
+- **Its value or colour** (most nodes, with any float, vec2, vec3 or vec4 output), while the eye is on.
+  - This is read back from the eye preview, so texture tools (Edges, Blur, Sample, Change, Levels, Fade, Read, Flow…) and anything after a Pass show their real picture.
+  - The old separate thumbnail renderer couldn't see Pass textures, which is why those cards were blank before.
+- **Its diagram**, while the eye is on. This is for nodes with no picture output but a real hand-drawn diagram, such as the 3D primitives inside a 3D group.
+  - A node whose old "diagram" only listed its parameters (SDF Glow, the warps, the 3D lighting nodes…) no longer offers it. The sliders already show those numbers.
+- **A live readout, always shown:**
+  - **Sense:** a little diagram of its three sensors (angle, distance), plus weight.
+  - **Steer:** the fan it can turn through in a step, and its wobble.
+  - **Move:** an arrow for its speed, the time to cross the picture, and its edges.
+  - **Emit:** births a second (or "all at once"), lifetime, and how many walkers the group has now.
+- **A live mini picture, always shown:** Deposit shows the trail it feeds.
+  - This is the Trail field's own picture, which the agents host already draws. When the Trail field's card is off screen, the host draws straight into the Deposit's canvas instead.
+  - It refreshes 4 times a second, with no extra GPU work.
+- **No preview area:**
+  - **The card already shows the node live:** the Agents group (walkers, count, steps a frame and now ms a step), Pass (its texture), Texture Input, Video, Audio, Scope, LFO, Data, Time Cube.
+  - **Sinks:** Output, Agent Output, the step outputs.
+  - **Nodes inside a 3D group without a diagram:** these run once per ray step, so they have no picture of their own.
+- **Eye button.** It is offered only where isolating the node shows something. It's hidden on sinks, on the Agents group, Emit and Deposit (their outputs aren't pictures; the eye would show the whole graph), and on 3D-group nodes without a diagram.
+
+Before this, the eye banner carried Show as and the caption. Cards of colour-output nodes had a separately rendered thumbnail (often blank for texture nodes) or a list of their parameters. Several Agents cards showed an empty "no preview" box.
 
 ## How to read the preview (the tooltip text)
 
@@ -79,6 +108,7 @@ The previews never port a node's maths. They read the value the GPU computes, so
   - `useNodePreviewPrefs` keeps `{ output, vec2, float, sliceY, diagram, detail }` per node, keyed `nodeId|type`. Ids restart in every graph, and a different node type under a reused id starts from its own default.
   - Choices are stored in localStorage (`playfield.nodePreviewPrefs.v1`, the newest 400), not in the graph. Picking a mode never recompiles, never lands on the undo stack, and never marks the graph dirty.
   - `pickPreviewOutput` is shared by the store's `buildPreviewGraph`, `compileNodePreviewShader`, the runner and the UI, so they agree on the output.
+- **The caption's frame stats** (share clipped, black, flat) are computed from the same readback (`valueField.displayStats`). The old synchronous 32 × 18 read of every previewed frame is gone.
 - **Removed from the eye's per-frame work.** The card's float waveform scope (a synchronous 1-pixel `readPixels` every third frame) now runs only while that waveform canvas is actually shown.
 
 ## Cost (measured)

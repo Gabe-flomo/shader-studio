@@ -6,13 +6,19 @@
  *
  * A field is RGBA float32, `w × h`, row 0 at the bottom (as WebGL reads it). For a vec2 node R, G
  * are x, y. For a float node R is the value and G its primary input (the slice plot's "before").
+ * For a colour (vec3, vec4) RGB is the colour (a vec4's alpha is dropped, as the picture does).
  */
+import type { PreviewStats } from '../previewExplain';
+
+/** The output types a node card's preview reads back. */
+export type FieldType = 'float' | 'vec2' | 'vec3' | 'vec4';
+export const isColourType = (t: string) => t === 'vec3' || t === 'vec4';
 
 export interface ValueField {
   data: Float32Array;
   w: number;
   h: number;
-  type: 'float' | 'vec2';
+  type: FieldType;
   /** G holds the primary input (float nodes with a wired input; see showAs.primaryInput). */
   hasInput: boolean;
 }
@@ -49,7 +55,12 @@ export function fieldStats(f: ValueField): FieldStats {
   for (let i = 0; i < n; i++) {
     const o = i * 4;
     const x = data[o], y = data[o + 1];
-    if (f.type === 'vec2') {
+    if (isColourType(f.type)) {
+      const m = Math.max(x, y, data[o + 2]);
+      if (!Number.isFinite(m)) continue;
+      finite++;
+      if (m < min) min = m; if (m > max) max = m;
+    } else if (f.type === 'vec2') {
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
       finite++;
       if (x < min) min = x; if (x > max) max = x;
@@ -67,6 +78,8 @@ export function fieldStats(f: ValueField): FieldStats {
     return { min: NaN, max: NaN, minX: NaN, maxX: NaN, minY: NaN, maxY: NaN, maxMag: 0, inMin: NaN, inMax: NaN, finite, total: n, constant: false, value: NaN };
   }
   if (inMin === Infinity) { inMin = NaN; inMax = NaN; }
+  // A colour is shown as itself: one flat colour is a picture, not a "= … everywhere" label
+  if (isColourType(f.type)) return { min, max, minX: min, maxX: max, minY: NaN, maxY: NaN, maxMag: 0, inMin, inMax, finite, total: n, constant: false, value: max };
   if (f.type === 'vec2') {
     const constant = nearlyEqual(min, max) && nearlyEqual(minY, maxY);
     return { min: Math.min(min, minY), max: Math.max(max, maxY), minX: min, maxX: max, minY, maxY, maxMag, inMin, inMax, finite, total: n, constant, value: [min, minY] };
@@ -113,8 +126,9 @@ export function constantLabel(value: number | [number, number]): string {
 }
 
 /** The key under a preview: the range, the constant, or why there's nothing to show. */
-export function valueKey(s: FieldStats, type: 'float' | 'vec2', mode: string): string {
+export function valueKey(s: FieldStats, type: FieldType, mode: string): string {
   if (s.finite === 0) return 'NaN or ∞ everywhere';
+  if (isColourType(type)) return `${rangeLabel(s.min, s.max)} (brightest channel)`;
   if (s.constant) return constantLabel(s.value);
   const bad = s.total - s.finite;
   const tail = bad > 0 ? ` · ${Math.round((bad / s.total) * 100) || '<1'}% NaN/∞` : '';
@@ -124,6 +138,33 @@ export function valueKey(s: FieldStats, type: 'float' | 'vec2', mode: string): s
     return `x ${rangeLabel(s.minX, s.maxX)}  y ${rangeLabel(s.minY, s.maxY)}${tail}`;
   }
   return rangeLabel(s.min, s.max) + tail;
+}
+
+/**
+ * How the picture shows this field without a "Show as" map (Raw, or a colour), as the frame stats
+ * the preview caption explains (lib/previewExplain.ts): share clipped to white, share black,
+ * whether it's one flat colour, mean brightness. Read from the field, so no extra readback.
+ */
+export function displayStats(f: ValueField): PreviewStats {
+  const { data, w, h } = f;
+  const n = w * h;
+  let clipped = 0, black = 0, sum = 0, flat = true;
+  const ch = (o: number): [number, number, number] => {
+    const r = data[o], g = data[o + 1], b = data[o + 2];
+    if (f.type === 'float') return [r, r, r];
+    if (f.type === 'vec2') return [r, g, 0];
+    return [r, g, b];
+  };
+  const c0 = ch(0).map(clamp01);
+  for (let i = 0; i < n; i++) {
+    const [r, g, b] = ch(i * 4).map(v => (Number.isFinite(v) ? clamp01(v) : 0));
+    const mx = Math.max(r, g, b);
+    if (mx >= 0.996) clipped++;
+    if (mx <= 0.008) black++;
+    sum += (r + g + b) / 3;
+    if (flat && (Math.abs(r - c0[0]) > 0.024 || Math.abs(g - c0[1]) > 0.024 || Math.abs(b - c0[2]) > 0.024)) flat = false;
+  }
+  return { clipped: clipped / n, black: black / n, flat, mean: sum / n };
 }
 
 // ── Colour maps (mirrored in previewGlsl.ts) ─────────────────────────────────
@@ -341,6 +382,8 @@ export function paintField(out: Uint8ClampedArray, dw: number, dh: number, f: Va
   const { mode, stats } = opts;
   // Grid keeps seams (a fract, a repeat) sharp; the colour maps blend across them like the GPU would.
   const vals = resample(f, dw, dh, mode === 'grid' ? 0.25 : Infinity);
+  // A colour's blue channel, resampled the same way
+  const colours = isColourType(f.type) ? resample({ ...f, data: shiftChannels(f.data) }, dw, dh).filter((_, i) => i % 2 === 0) : null;
   const step = opts.step ?? niceStep(stats.min, stats.max);
   const lo = stats.min, hi = stats.max;
   const at = (x: number, y: number, c: number) => vals[(Math.min(dh - 1, y) * dw + Math.min(dw - 1, x)) * 2 + c];
@@ -348,7 +391,10 @@ export function paintField(out: Uint8ClampedArray, dw: number, dh: number, f: Va
     for (let x = 0; x < dw; x++) {
       const vx = at(x, y, 0), vy = at(x, y, 1);
       let col: RGB;
-      if (f.type === 'vec2') {
+      if (isColourType(f.type)) {
+        const vz = colours![(Math.min(dh - 1, y) * dw + Math.min(dw - 1, x))];
+        col = Number.isFinite(vx) && Number.isFinite(vy) && Number.isFinite(vz) ? [clamp01(vx), clamp01(vy), clamp01(vz)] : [0.5, 0, 0.5];
+      } else if (f.type === 'vec2') {
         if (!Number.isFinite(vx) || !Number.isFinite(vy)) col = [0.5, 0, 0.5];
         else if (mode === 'grid') {
           const wx = Math.abs(at(x + 1, y, 0) - vx) + Math.abs(at(x, y + 1, 0) - vx);
@@ -379,6 +425,13 @@ export function paintField(out: Uint8ClampedArray, dw: number, dh: number, f: Va
       out[o] = col[0] * 255; out[o + 1] = col[1] * 255; out[o + 2] = col[2] * 255; out[o + 3] = 255;
     }
   }
+}
+
+/** The field with B moved into R (to resample a colour's third channel with the same code). */
+function shiftChannels(data: Float32Array): Float32Array {
+  const out = new Float32Array(data.length);
+  for (let i = 0; i < data.length; i += 4) out[i] = data[i + 2];
+  return out;
 }
 
 /** The field's R, G at each canvas pixel ("cover" fit, top row first). */
