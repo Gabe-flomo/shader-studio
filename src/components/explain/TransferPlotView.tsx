@@ -24,15 +24,19 @@ export function TransferPlotView({ plot, resultName }: { plot: TransferPlot; res
   const curve = typeColor('float', pal);
   const label = `${resultName ?? 'The result'} plotted against ${plot.input} from ${fmt(plot.from)} to ${fmt(plot.to)}${plot.edges.length ? `, with edges at ${plot.edges.map(fmt).join(', ')}` : ''}. ${big ? 'Click to shrink' : 'Click to enlarge'}.`;
   const small = `500 ${big ? 10.5 : 8.5}px ${fontFamily.mono}`;
+  const labelled: boolean[] = [];
+  let lastX = -Infinity;
+  for (const e of plot.edges) { const ok = x(e) - lastX >= (big ? 30 : 22); labelled.push(ok); if (ok) lastX = x(e); }
   return (
     <button type="button" data-transfer-plot={big ? 'big' : 'small'} onClick={() => setBig(b => !b)} aria-label={label} title={big ? 'Click to shrink' : `${resultName ?? 'Result'} against ${plot.input}: click to enlarge`}
       style={{ flexShrink: 0, padding: 0, border: 0, borderRadius: radius.sm, background: tk.bg.field, cursor: 'zoom-in', lineHeight: 0, alignSelf: 'flex-start' }}>
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden="true">
         {zeroY !== null && <line x1={padL} x2={W - padR} y1={zeroY} y2={zeroY} stroke={tk.border.default} strokeWidth={1} />}
-        {plot.edges.map(e => (
+        {plot.edges.map((e, i) => (
           <g key={e}>
             <line x1={x(e)} x2={x(e)} y1={padT} y2={H - padB} stroke={alpha(pal.number, 0.75)} strokeWidth={1} strokeDasharray="2 2" />
-            <text x={Math.min(Math.max(x(e), padL + 8), W - padR - 8)} y={H - (big ? 14 : 2)} textAnchor="middle" fill={pal.number} style={{ font: small }}>{fmt(e)}</text>
+            {/* Edges closer than a label's width: only the first is labelled (the rest are in the description) */}
+            {!labelled[i] ? null : <text x={Math.min(Math.max(x(e), padL + 8), W - padR - 8)} y={H - (big ? 14 : 2)} textAnchor="middle" fill={pal.number} style={{ font: small }}>{fmt(e)}</text>}
           </g>
         ))}
         <path d={d} fill="none" stroke={curve} strokeWidth={big ? 2 : 1.5} strokeLinejoin="round" />

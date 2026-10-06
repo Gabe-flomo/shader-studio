@@ -15,6 +15,8 @@ import { usePlan } from './lib/plan'
 import { BackgroundsHost } from './components/backgrounds/BackgroundsHost'
 import { LinkedPickerHost } from './components/linked/LinkedPickerHost'
 import { PerformanceBar } from './components/PerformanceBar'
+import { FunctionCardHost } from './components/explain/functionCard/FunctionCardHost'
+import { installFunctionCardTriggers } from './components/explain/functionCard/triggers'
 import { useNodeGraphStore } from './store/useNodeGraphStore'
 import { compileGraph } from './compiler/graphCompiler'
 import { nodePreviewRenderer } from './lib/nodePreviewRenderer'
@@ -44,6 +46,9 @@ installCameraKeeper()
 installTouchGuards()
 installStorageLimit()
 installViewportWatcher()
+// Function cards: click / hover / ⌥-click a function name in any code (docs/expression-explainer.md).
+// Installed before anything else listens for Esc, so Esc closes the card before a modal under it.
+installFunctionCardTriggers()
 // "Warm up trackers when the app opens" (App settings → Camera, MIDI, OSC and audio): loads a
 // tracker's model into Cache Storage now, without opening the camera, so Enable is instant later.
 void warmupTrackers()
@@ -102,7 +107,7 @@ if (import.meta.env.DEV) {
 // Dev-only component gallery for the redesign primitives: open the app with #ui.
 // import.meta.env.DEV is false in production builds, so the gallery isn't bundled.
 function startApp() {
-  root.render(<><App /><Toaster /><BackgroundsHost /><LinkedPickerHost /><DialogHost /><NodeDragGhost /><ProSheetHost /><PlayfileHost /><BuilderWindowHost /><PerformanceBar /></>)
+  root.render(<><App /><Toaster /><BackgroundsHost /><LinkedPickerHost /><DialogHost /><NodeDragGhost /><ProSheetHost /><PlayfileHost /><BuilderWindowHost /><PerformanceBar /><FunctionCardHost /></>)
   // Songs stop when the graph that owns them is closed or they're deleted.
   void import('./lib/audioSync').then(m => m.startAudioSync())
   // Text layers' fonts from linked folders (docs/linked-folders.md) are read from disk.

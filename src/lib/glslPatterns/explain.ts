@@ -398,6 +398,8 @@ function callWords(c: TC, callee: string): Words {
     case 'sdEllipse': return { noun: `the distance to an ellipse`, short: 'the ellipse', how: `measures the distance from ${c.s(0)} to an ellipse with radii ${c.s(1)}` };
     case 'opRepeat': return { noun: `${c.n(0)} repeated every ${c.n(1)}`, short: 'the repeated space', how: `repeats ${c.s(0)} every ${c.s(1)}, each copy centred` };
     case 'opRepeatPolar': return { noun: `${c.n(0)} repeated ${c.n(1)} times around`, short: 'the repeated space', how: `repeats ${c.s(0)} ${c.s(1)} times around the origin` };
+    case 'smin': return { noun: `${c.n(0)} and ${c.n(1)} melted together`, short: 'the melted shapes', how: `takes the smaller of ${c.s(0)} and ${c.s(1)}, melting them together over ${c.s(2)} (a smooth union)` };
+    case 'rot2D': return { noun: `a rotation by ${c.n(0)}`, short: 'the rotation', how: `builds the 2×2 matrix that turns a point by ${c.s(0)} radians` };
     case 'valueNoise': return { noun: `smooth noise at ${c.n(0)}`, short: 'the noise', how: `samples smooth value noise at ${c.s(0)}: 0…1, changing smoothly, one bump per unit`, range: [0, 1] };
     case 'noiseHash1': return { noun: `a random number for ${c.n(0)}`, short: 'the random number', how: `hashes ${c.s(0)} into a random number 0…1`, range: [0, 1] };
     case 'noiseHash2': return { noun: `a random 2D vector for ${c.n(0)}`, short: 'the random vector', how: `hashes ${c.s(0)} into a random vector, −1…1 per component`, range: [-1, 1] };

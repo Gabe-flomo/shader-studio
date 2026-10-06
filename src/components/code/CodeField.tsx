@@ -184,6 +184,8 @@ export function CodeField({
             aria-autocomplete="list"
             aria-expanded={ac.state.open}
             data-captures-escape={ac.state.open || undefined}
+            // Function cards: hover, ⌥/⌘-click or F1 / ⌘I on a function name (GLSL only)
+            data-fn-card={tokenize === tokenizeLine && !highlight ? 'edit' : undefined}
             value={value}
             spellCheck={false}
             autoCapitalize="off"
@@ -309,6 +311,7 @@ export function CodeInput({
         aria-autocomplete="list"
         aria-expanded={ac.state.open}
         data-captures-escape={ac.state.open || undefined}
+        data-fn-card="edit"
         value={value}
         spellCheck={false}
         autoCapitalize="off"

@@ -271,6 +271,8 @@ export function GlslEditor({ value, onChange, ref, ariaLabel = 'GLSL source', pl
         <textarea
           ref={textareaRef}
           aria-label={ariaLabel}
+          // Function cards: hover, ⌥/⌘-click or F1 / ⌘I on a function name
+          data-fn-card="edit"
           value={value}
           onChange={handleChange}
           onKeyDown={handleKeyDown}

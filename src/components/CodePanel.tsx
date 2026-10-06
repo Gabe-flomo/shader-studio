@@ -10,6 +10,7 @@ import { Icon } from './ui/Icon';
 import { loadShortcutMap } from '../hooks/useShortcuts';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { glslErrorLines } from '../compiler/nodeErrors';
+import { useFnCardScope } from './explain/functionCard/fnCardStore';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,8 @@ export function CodePanel({ code: compiled, onClose, highlightNodeId, nodeSlugMa
   const [copied, setCopied] = useState(false);
   const [shortcuts] = useState(loadShortcutMap);
   const firstMatchRef = useRef<HTMLDivElement | null>(null);
+  // Function cards: a click on a function name explains it; the shader's own functions come from the whole code
+  const fnScope = useFnCardScope({ source: code ?? '' });
 
   // Resizable height — persisted to localStorage
   const [height, setHeight] = useState<number>(() => {
@@ -164,7 +167,7 @@ export function CodePanel({ code: compiled, onClose, highlightNodeId, nodeSlugMa
       </CodeBarRow>
 
       {/* Code content */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '6px 0', font: `11.5px/1.62 ${fontFamily.mono}` }}>
+      <div {...fnScope} style={{ flex: 1, overflow: 'auto', padding: '6px 0', font: `11.5px/1.62 ${fontFamily.mono}` }}>
         {lines.map((line, i) => {
           const isMatch = !!(prefix && line.includes(prefix));
           const lineErrors = errorLines.get(i);
@@ -179,7 +182,7 @@ export function CodePanel({ code: compiled, onClose, highlightNodeId, nodeSlugMa
               style={{ display: 'flex', whiteSpace: 'pre', background: lineErrors ? alpha(tk.status.danger, 0.08) : isMatch ? tk.bg.selected : 'transparent', transition: 'background 0.15s' }}
             >
               <span style={{ width: gutter, flexShrink: 0, textAlign: 'right', paddingRight: 14, color: lineErrors ? tk.status.danger : isMatch ? tk.accent.base : tk.text.disabled, userSelect: 'none', fontWeight: lineErrors ? 700 : undefined }}>{i + 1}</span>
-              <span style={{ paddingRight: 16 }}>
+              <span data-fn-code="" style={{ paddingRight: 16 }}>
                 {tokens.map((tok, j) => (
                   // Dim lines outside the selected node, like an inactive editor.
                   <span key={j} style={{ color: tok.color, opacity: isMatch || !prefix || lineErrors ? 1 : 0.55 }}>{tok.text}</span>
