@@ -56,7 +56,7 @@ export function GridRulesEditor({ nodeId, onClose }: { nodeId: string; onClose: 
   return (
     <BuilderWindow
       prefsKey="grid-rules"
-      title="Grid Rules" subtitle={`${label} · ${ruleSummary(params)}`} icon="grid" width={1180} height={760} onClose={onClose}
+      title="Grid Rules" subtitle={`${label} · ${ruleSummary(params)}`} icon="grid" width={1180} height={760} mainLabel="Rule" onClose={onClose}
       left={{ label: 'Rule type', icon: 'grid', width: 230, content: <TypeRail value={shape.type} onChange={t => set(typeDefaults(t), true)} />, rail: expand => (
         <button type="button" onClick={expand} title="Show the rule types" aria-label="Show the rule types"
           style={{ width: 44, flexShrink: 0, border: 0, borderRight: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 14, color: tk.text.faint }}>

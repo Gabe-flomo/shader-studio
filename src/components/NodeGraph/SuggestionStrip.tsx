@@ -150,7 +150,36 @@ function Strip({ node, nodes, canvasRef, pan, zoom }: {
   );
 }
 
-function MoveRow({ move, onClick }: { move: RankedMove; onClick: () => void }) {
+/**
+ * The same moves in the phone's node page (there's no canvas card to sit under): a "Next" list
+ * with finger-sized rows. Follows the Suggestions setting like the strip.
+ */
+export function SuggestionList({ node, nodes }: { node: GraphNode; nodes: GraphNode[] }) {
+  const tk = useTokens();
+  const on = useSuggestionsShown();
+  const learned = useSyncExternalStore(subscribeLearning, learningVersion, learningVersion);
+  const measurement = useMeasurement(node.id);
+  const moves = useMemo<RankedMove[]>(() => {
+    void learned;
+    try { return suggestionsFor(node, nodes, { measurement, limit: LIMIT }); } catch { return []; }
+  }, [node, nodes, measurement, learned]);
+  // Folded to the top move at first, so the node's own settings stay near the top of the page
+  const [open, setOpen] = useState(false);
+  if (!on || !moves.length) return null;
+  return (
+    <div role="toolbar" aria-label="Suggestions" data-suggestion-list={node.id} style={{ display: 'flex', flexDirection: 'column', gap: 2, font: `13px ${fontFamily.ui}` }}>
+      <button type="button" aria-expanded={open} onClick={() => setOpen(o => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 2px 4px', border: 0, background: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: tk.text.faint, textTransform: 'uppercase', touchAction: 'manipulation' }}>
+        <Icon name={open ? 'chevD' : 'chevR'} size={12} />
+        <Icon name="bolt" size={12} style={{ color: tk.accent.base }} />Next
+        <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>· {moves.length} move{moves.length === 1 ? '' : 's'}, learned from your graphs</span>
+      </button>
+      {(open ? moves : moves.slice(0, 1)).map(m => <MoveRow key={`${m.move.id}:${m.key}`} move={m} touch onClick={() => useNodeGraphStore.getState().applySuggestion(node.id, m.key, m.side, m.move.id, m.args ?? {})} />)}
+    </div>
+  );
+}
+
+function MoveRow({ move, onClick, touch = false }: { move: RankedMove; onClick: () => void; touch?: boolean }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   const tone = move.reason === 'output' ? tk.status.warning : move.reason === 'you' ? tk.accent.base : tk.text.faint;
@@ -164,8 +193,8 @@ function MoveRow({ move, onClick }: { move: RankedMove; onClick: () => void }) {
       data-move={move.move.id}
       style={{
         display: 'flex', alignItems: 'baseline', gap: 7, width: '100%', boxSizing: 'border-box', minWidth: 0,
-        padding: '4px 7px', textAlign: 'left', cursor: 'pointer', borderRadius: radius.control, border: 0,
-        background: hover ? tk.bg.hover : 'transparent', font: `12px ${fontFamily.ui}`,
+        padding: touch ? '10px 10px' : '4px 7px', textAlign: 'left', cursor: 'pointer', borderRadius: radius.control, border: 0,
+        background: hover ? tk.bg.hover : touch ? tk.bg.field : 'transparent', font: `${touch ? 13 : 12}px ${fontFamily.ui}`, touchAction: 'manipulation',
       }}
     >
       <span style={{ width: 5, height: 5, borderRadius: 3, flexShrink: 0, alignSelf: 'center', background: move.reason === 'kind' ? alpha(tk.text.faint, 0.5) : tone }} />

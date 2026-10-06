@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLongPress } from '../../lib/longPress';
 import { TYPE_COLORS } from '../NodeGraph/typeColors';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
@@ -33,22 +34,7 @@ export function ReferencePanel({
   const q = filter.trim().toLowerCase();
 
   const chip = (key: string, label: React.ReactNode, onClick: () => void, title?: string, dot?: string, onContextMenu?: () => void) => (
-    <button
-      key={key}
-      type="button"
-      title={title}
-      onMouseDown={e => e.preventDefault()}
-      onClick={onClick}
-      onContextMenu={onContextMenu ? e => { e.preventDefault(); onContextMenu(); } : undefined}
-      style={{
-        height: 26, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 8px', border: 0, borderRadius: 7, cursor: 'pointer',
-        background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, color: tk.text.primary,
-        font: `500 11.5px ${fontFamily.mono}`, whiteSpace: 'nowrap',
-      }}
-    >
-      {dot && <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot }} />}
-      {label}
-    </button>
+    <RefChip key={key} label={label} onClick={onClick} title={title} dot={dot} onContextMenu={onContextMenu} />
   );
   const section = (label: string, children: React.ReactNode) => (
     <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -89,7 +75,7 @@ export function ReferencePanel({
             r.name,
             r.sig ? <>{r.name}<span style={{ color: tk.text.faint }}>{r.sig.replace(/\b(float|vec2|vec3|vec4) (\w+)/g, '$2')}</span></> : r.name,
             () => onInsert(r.insert),
-            `${r.name}${r.sig ?? ''}${r.returns ? ` → ${r.returns}` : ''}\n${r.doc}\nRight-click: how is this used?`,
+            `${r.name}${r.sig ?? ''}${r.returns ? ` → ${r.returns}` : ''}\n${r.doc}\n${HOLD_HINT}: how is this used?`,
             undefined,
             () => openCodeExplorer(r.name),
           )));
@@ -102,3 +88,30 @@ export function ReferencePanel({
   );
 }
 
+
+/** Right-click with a mouse, a long press on a touch screen (the hint names the one that applies). */
+const HOLD_HINT = typeof window !== 'undefined' && window.matchMedia?.('(hover: none)').matches ? 'Hold' : 'Right-click';
+
+/** A chip that inserts on a click; its menu action (how is this used?) is a right-click or a long press. */
+function RefChip({ label, onClick, title, dot, onContextMenu }: { label: React.ReactNode; onClick: () => void; title?: string; dot?: string; onContextMenu?: () => void }) {
+  const tk = useTokens();
+  const hold = useLongPress(() => onContextMenu?.());
+  return (
+    <button
+      type="button"
+      title={title}
+      onMouseDown={e => e.preventDefault()}
+      onClick={() => { if (!hold.consumeClick()) onClick(); }}
+      onContextMenu={onContextMenu ? e => { e.preventDefault(); onContextMenu(); } : undefined}
+      {...(onContextMenu ? { onPointerDown: hold.onPointerDown, onPointerMove: hold.onPointerMove, onPointerUp: hold.onPointerUp, onPointerCancel: hold.onPointerCancel } : null)}
+      style={{
+        height: 26, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 8px', border: 0, borderRadius: 7, cursor: 'pointer',
+        background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, color: tk.text.primary,
+        font: `500 11.5px ${fontFamily.mono}`, whiteSpace: 'nowrap', ...(onContextMenu ? hold.style : null),
+      }}
+    >
+      {dot && <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot }} />}
+      {label}
+    </button>
+  );
+}

@@ -9,7 +9,8 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
-import { Toggle } from '../ui/Choice';
+import { Segmented, Toggle } from '../ui/Choice';
+import { usePhoneDialog } from '../ui/phoneDialog';
 import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
 import { Modal } from '../ui/Modal';
@@ -36,6 +37,10 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
   const [set, setSet] = useState<AgentRuleSet>(() => groupRules(node));
   const [sp, setSp] = useState(0);
   const [showLines, setShowLines] = useState(false);
+  // A phone: the settings column and the rules are two tabs, each the full width (a 330 px column
+  // beside the rules leaves them no room there).
+  const phone = usePhoneDialog();
+  const [pane, setPane] = useState<'setup' | 'rules'>('rules');
   const pending = useRef<AgentRuleSet | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flush = () => {
@@ -94,9 +99,15 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
         <Button variant="primary" onClick={close}>Done</Button>
       </>}
     >
-      <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
+      <div style={{ display: 'flex', flexDirection: phone ? 'column' : 'row', height: '100%', minHeight: 0 }}>
+        {phone && (
+          <div style={{ flexShrink: 0, padding: '8px 12px', borderBottom: `1px solid ${tk.border.subtle}` }}>
+            <Segmented<'setup' | 'rules'> fill ariaLabel="Section" value={pane} onChange={setPane}
+              options={[{ value: 'setup', label: 'Species & states' }, { value: 'rules', label: 'Rules' }]} />
+          </div>
+        )}
         {/* ── Species, states and the rule set's settings ── */}
-        <div style={{ width: 330, flexShrink: 0, overflowY: 'auto', padding: '18px 20px', borderRight: `1px solid ${tk.border.subtle}`, display: 'flex', flexDirection: 'column', gap: 12, boxSizing: 'border-box' }}>
+        <div style={{ width: phone ? '100%' : 330, flex: phone ? 1 : undefined, minHeight: 0, display: phone && pane !== 'setup' ? 'none' : 'flex', flexShrink: 0, overflowY: 'auto', padding: phone ? '16px' : '18px 20px', borderRight: phone ? 'none' : `1px solid ${tk.border.subtle}`, flexDirection: 'column', gap: 12, boxSizing: 'border-box' }}>
           <SectionLabel>Species</SectionLabel>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {set.species.map((x, i) => (
@@ -153,7 +164,7 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
         </div>
 
         {/* ── The rules ── */}
-        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: 'auto', padding: phone ? '16px' : '18px 22px', display: phone && pane !== 'rules' ? 'none' : 'flex', flexDirection: 'column', gap: 12 }}>
           <SectionLabel meta="run top to bottom, every step">{`Rules · ${species.name || `Species ${s + 1}`}`}</SectionLabel>
           {species.rules.map((r, i) => (
             <RuleCard key={i} i={i} n={species.rules.length} rule={r} ctx={ctx} lines={lines.get(`${s}:${i}`)}

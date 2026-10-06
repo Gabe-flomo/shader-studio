@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { tapToggle } from '../../lib/longPress';
 import { getActiveNodes, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -68,18 +69,32 @@ export function CardBadge({ children, tone = 'warning' }: { children: ReactNode;
 
 /**
  * A "?" beside a setting's name: hovering it shows the setting's fuller explanation (ParamDef.help)
- * in a small panel, and in the status bar.
+ * in a small panel, and in the status bar. On a touch screen a tap opens and closes it (a tap
+ * anywhere else closes it too).
  */
 export function HelpDot({ text }: { text: string }) {
   const tk = useTokens();
   const [open, setOpen] = useState(false);
   const setHint = useNodeGraphStore(s => s.setHoveredParamHint);
+  const pointer = useRef<string | null>(null);
+  const self = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open || pointer.current === 'mouse') return;
+    const away = (e: PointerEvent) => { if (!self.current?.contains(e.target as Node)) setOpen(false); };
+    window.addEventListener('pointerdown', away, true);
+    return () => window.removeEventListener('pointerdown', away, true);
+  }, [open]);
   return (
     <span
+      ref={self}
+      role="button"
       aria-label="What this does"
-      onMouseEnter={() => { setOpen(true); setHint(text); }}
-      onMouseLeave={() => { setOpen(false); setHint(null); }}
+      aria-expanded={open}
+      onPointerEnter={e => { if (e.pointerType === 'mouse') { setOpen(true); setHint(text); } }}
+      onPointerLeave={e => { if (e.pointerType === 'mouse') { setOpen(false); setHint(null); } }}
+      onPointerDown={e => { pointer.current = e.pointerType; e.stopPropagation(); }}
       onMouseDown={e => e.stopPropagation()}
+      onClick={e => { e.stopPropagation(); setOpen(o => tapToggle(o, pointer.current)); }}
       style={{
         position: 'relative', flexShrink: 0, width: 14, height: 14, borderRadius: 7, marginLeft: -4,
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'help',
@@ -88,6 +103,8 @@ export function HelpDot({ text }: { text: string }) {
       }}
     >
       ?
+      {/* A finger-sized hit area around the small dot */}
+      <span aria-hidden style={{ position: 'absolute', inset: -8 }} />
       {open && (
         <span
           role="tooltip"

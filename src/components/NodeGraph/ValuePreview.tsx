@@ -183,7 +183,7 @@ export function ValuePreview({ node, diagram, diagramOnly = false }: {
         )}
         <span style={{ flex: 1 }} />
         <Tooltip label="How to read this preview" description={showDiagram ? 'The node’s own diagram of what it does, from its settings.' : hint} placement="top">
-          <span aria-label="How to read this preview" style={{ display: 'inline-flex', color: tk.text.faint, cursor: 'help' }}><Icon name="info" size={14} /></span>
+          <span aria-label="How to read this preview" tabIndex={0} role="img" style={{ display: 'inline-flex', color: tk.text.faint, cursor: 'help' }}><Icon name="info" size={14} /></span>
         </Tooltip>
       </div>
       {showDiagram ? (

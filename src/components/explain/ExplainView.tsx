@@ -28,6 +28,8 @@ export function ExplainView({ ex, sentence, onMakeNode, onFindUses, editable }: 
   const canMake = (s: { start: number; end: number }) => !!onMakeNode && (!editable || (s.start >= editable.start && s.end <= editable.end));
   const rootSpan = { start: ex.root.start, end: ex.root.end };
   const rootIdiom = ex.idioms.find(h => h.node === ex.root);
+  // A touch screen can't hover: a step's actions stay visible there (a tap still lights the step)
+  const noHover = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none)').matches;
   const small: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: 4, height: 24, padding: '0 8px', border: 0, borderRadius: radius.sm,
     background: 'none', color: tk.accent.text, cursor: 'pointer', font: `500 11.5px ${fontFamily.ui}`, flexShrink: 0,
@@ -52,7 +54,7 @@ export function ExplainView({ ex, sentence, onMakeNode, onFindUses, editable }: 
             const on = hover === s;
             return (
               <li key={s.label} data-explain-step={s.label} onMouseEnter={() => setHover(s)} onFocus={() => setHover(s)} tabIndex={0}
-                style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '4px 6px', borderRadius: radius.sm, background: on ? alpha(tk.accent.base, 0.08) : 'none', outline: 'none' }}>
+                style={{ display: 'flex', flexWrap: noHover ? 'wrap' : undefined, gap: 8, alignItems: 'flex-start', padding: '4px 6px', borderRadius: radius.sm, background: on ? alpha(tk.accent.base, 0.08) : 'none', outline: 'none' }}>
                 <span style={{ flexShrink: 0, minWidth: 18, height: 18, borderRadius: 5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: on ? tk.accent.base : tk.bg.field, color: on ? '#fff' : tk.text.muted, font: `650 10.5px ${fontFamily.mono}` }}>{s.label}</span>
                 <span style={{ flex: 1, minWidth: 0, font: `500 12.5px/1.45 ${fontFamily.ui}`, color: tk.text.secondary }}>
                   {lead && <span style={{ color: tk.text.faint }}>{lead}, </span>}
@@ -64,7 +66,7 @@ export function ExplainView({ ex, sentence, onMakeNode, onFindUses, editable }: 
                     </span>
                   )}
                 </span>
-                <span style={{ display: 'flex', gap: 2, opacity: on ? 1 : 0, transition: 'opacity 0.1s' }}>
+                <span style={{ display: 'flex', gap: 2, opacity: on || noHover ? 1 : 0, transition: 'opacity 0.1s', ...(noHover ? { flexBasis: '100%', paddingLeft: 20 } : null) }}>
                   {s.idiom && onFindUses && (
                     <button type="button" data-explain-action="find-uses" title={`Where else is “${s.idiom.name}” used?`} style={small}
                       onClick={() => onFindUses({ idiomId: s.idiom!.id }, s.idiom!.name)}>

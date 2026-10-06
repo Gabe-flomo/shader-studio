@@ -7,6 +7,7 @@ import { Toolbar } from './Toolbar';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
 import { Callout } from '../ui/Callout';
+import { usePhoneLayout } from '../../hooks/useBreakpoint';
 
 const DEBOUNCE_MS = 150;
 
@@ -235,6 +236,8 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
     panTouch.current    = null;
   }, []);
 
+  const { phone, landscape } = usePhoneLayout();
+  const stacked = phone && !landscape;
   const hasErrors = glslErrors.length > 0;
   const activeFn = functions.find(f => f.id === activeId) ?? functions[0];
   const isFloat = activeFn?.returnType === 'float';
@@ -244,10 +247,11 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
       display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden',
       background: tk.bg.panel, color: tk.text.primary, fontFamily: fontFamily.ui,
     }}>
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+      {/* A phone held upright: the functions over the plot (side by side leaves the plot a sliver) */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: stacked ? 'column' : 'row', overflow: 'hidden', minHeight: 0 }}>
         <div style={{
-          width: 360, flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-          background: tk.bg.panel, borderRight: `1px solid ${tk.border.default}`,
+          ...(stacked ? { maxHeight: '45%', borderBottom: `1px solid ${tk.border.default}` } : { width: 360, borderRight: `1px solid ${tk.border.default}` }),
+          flexShrink: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tk.bg.panel,
         }}>
           <FunctionList glslErrors={glslErrors} fnLines={fnLines} />
         </div>

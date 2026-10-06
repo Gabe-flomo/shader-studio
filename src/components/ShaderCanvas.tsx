@@ -2299,6 +2299,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       requestRender(); // clears the pixel readout
     };
     renderer.domElement.addEventListener('mousemove', handleMouseMove);
+    // A finger dragging on the picture paints (a grid's brush, the mouse nodes) instead of scrolling or zooming the page.
+    renderer.domElement.style.touchAction = 'none';
     renderer.domElement.addEventListener('mouseleave', handleMouseLeave);
     // The button (u_mousebtn), on the window so a layer drawn over the picture (Play) doesn't hide it: a press
     // inside the picture that isn't on a control counts; while held, the pointer moves u_mouse wherever it goes.
@@ -2317,7 +2319,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       playEngine.setPreviewButton(true);
       requestRender();
     };
-    const handleButtonMove = (e: PointerEvent) => { if (buttonHeld && e.target !== renderer.domElement) handleMouseMove(e); };
+    // A mouse over the picture already moves u_mouse (mousemove above); a finger or pen sends no
+    // mousemove while it drags, so its pointer moves count everywhere (the grid brush paints by touch).
+    const handleButtonMove = (e: PointerEvent) => { if (buttonHeld && (e.target !== renderer.domElement || e.pointerType !== 'mouse')) handleMouseMove(e); };
     const handleButtonUp = () => {
       if (!buttonHeld) return;
       buttonHeld = false;

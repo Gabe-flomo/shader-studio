@@ -5,7 +5,8 @@
  * subtitle, actions, close), collapsible side panels toggled from the header
  * (⌘[ / ⌘], remembered per builder) that become drawers on a narrow window,
  * a scrolling main area, and a footer with secondary actions on the left and
- * Done on the right.
+ * Done on the right. On a phone it fills the screen and the panels become tabs
+ * (builderLayout.ts).
  */
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Modal } from '../ui/Modal';
@@ -14,6 +15,9 @@ import type { IconName } from '../ui/iconPaths';
 import { SidePanel, useNarrowWindow } from '../code/SidePanels';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
+import { Segmented } from '../ui/Choice';
+import { usePhoneDialog } from '../ui/phoneDialog';
+import { builderTabs, type BuilderTab } from './builderLayout';
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
@@ -56,7 +60,7 @@ function PanelToggle({ panel, open, onToggle, shortcut }: { panel: BuilderPanel;
 }
 
 export function BuilderWindow({
-  prefsKey, title, subtitle, icon, iconColor, left, right, headerActions, footer, onClose, width = 1240, height = 780, children,
+  prefsKey, title, subtitle, icon, iconColor, left, right, headerActions, footer, onClose, width = 1240, height = 780, mainLabel = 'Edit', children,
 }: {
   /** Names the remembered panel choices (`scene-builder`). */
   prefsKey: string;
@@ -71,10 +75,15 @@ export function BuilderWindow({
   onClose: () => void;
   width?: number;
   height?: number;
+  /** The main area's name in the phone's tab row (the side panels go by their labels). */
+  mainLabel?: string;
   children: ReactNode;
 }) {
   const tk = useTokens();
   const narrow = useNarrowWindow();
+  // A phone (builderLayout.ts): the window is full screen and the panels are tabs, one at a time.
+  const phone = usePhoneDialog();
+  const [tab, setTab] = useState<BuilderTab>('main');
   const [wide, setWide] = useState(() => ({
     left: readPref(`builder:${prefsKey}:left`, left?.defaultOpen ?? true),
     right: readPref(`builder:${prefsKey}:right`, right?.defaultOpen ?? true),
@@ -113,12 +122,25 @@ export function BuilderWindow({
 
   return (
     <Modal title={title} subtitle={subtitle} icon={icon} iconColor={iconColor} width={width} height={height} onClose={onClose} closeOnScrim={false}
-      headerActions={<>
+      headerActions={phone ? headerActions : <>
         {left && <PanelToggle panel={left} open={open.left} onToggle={() => toggle.current('left')} shortcut={sc('[')} />}
         {right && <PanelToggle panel={right} open={open.right} onToggle={() => toggle.current('right')} shortcut={sc(']')} />}
         {headerActions}
       </>}
       footer={footer}>
+      {phone ? (
+        <div data-builder-tabs style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+          {(left || right) && (
+            <div style={{ flexShrink: 0, padding: '8px 12px', borderBottom: `1px solid ${tk.border.subtle}` }}>
+              <Segmented<BuilderTab> fill ariaLabel="Section" value={tab} onChange={setTab} options={builderTabs(left?.label, mainLabel, right?.label)} />
+            </div>
+          )}
+          {/* All three stay mounted (a preview keeps running, a half-typed field keeps its text); only one shows. */}
+          {left && <div data-builder-panel={left.label} style={{ display: tab === 'left' ? 'flex' : 'none', flex: 1, minHeight: 0, overflowY: 'auto', flexDirection: 'column', background: tk.bg.subtle }}>{left.content}</div>}
+          <div data-builder-main style={{ display: tab === 'main' ? 'flex' : 'none', flex: 1, minHeight: 0, overflowY: 'auto', flexDirection: 'column' }}>{children}</div>
+          {right && <div data-builder-panel={right.label} style={{ display: tab === 'right' ? 'flex' : 'none', flex: 1, minHeight: 0, overflowY: 'auto', flexDirection: 'column', background: tk.bg.subtle }}>{right.content}</div>}
+        </div>
+      ) : (
       <div style={{ display: 'flex', height: '100%', minHeight: 0, position: 'relative' }}>
         {left && (!open.left || narrow) && left.rail?.(() => set('left', true))}
         {left && (
@@ -133,6 +155,7 @@ export function BuilderWindow({
           </SidePanel>
         )}
       </div>
+      )}
     </Modal>
   );
 }

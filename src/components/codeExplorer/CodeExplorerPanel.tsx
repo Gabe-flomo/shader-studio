@@ -131,7 +131,7 @@ function Home({ summary, onPick }: { summary: IndexSummary; onPick: (fn: string)
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {summary.top.map(c => <ChipButton key={c.key} onClick={() => onPick(c.key)} label={c.key} count={c.count} />)}
       </div>
-      <Note>Try plain words too: <Code>soft circle edge</Code>, <Code>random</Code>, <Code>repeat tile</Code>. In the Expression Block and Custom Function editors, put the caret on a function and press <b>How is this used?</b>; in the Functions panel, right-click a function.</Note>
+      <Note>Try plain words too: <Code>soft circle edge</Code>, <Code>random</Code>, <Code>repeat tile</Code>. In the Expression Block and Custom Function editors, put the caret on a function and press <b>How is this used?</b>; in the Functions panel, right-click (or hold) a function.</Note>
       <span style={{ fontSize: 11, color: tk.text.faint }}>Phase 1 searches written code: Expression Blocks, Custom Functions, input expressions, presets, shaders, Convert sources, linked .glsl files and Present code blocks. Generated code comes later.</span>
     </>
   );
