@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.60',
+    date: '2026-10-06',
+    title: 'Structure hints',
+    highlights: [
+      { area: 'Studio', text: 'A flow strip above the canvas (Space → Shape → Shape it → Colour → Post, with 3D, pass and agent flows) lights your stages and suggests the next.', link: { kind: 'doc', path: 'docs/structure-hints.md' } },
+      { area: 'Studio', text: 'Stage colours on cards, gentle notices for odd orders (never blocking), and Auto layout → Arrange by stage. The builders show their flow too.' },
+    ],
+  },
+  {
     id: '2026.10.59',
     date: '2026-10-06',
     title: 'Function cards',
