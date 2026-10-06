@@ -6,7 +6,9 @@ changed node behaviour. The answer to "can we make Game of Life without new node
 (Sample, Neighbours, Compare, Mix, Max) write the rule.
 
 Code: `src/store/simGridExamples.ts` (the folder), `src/compiler/__tests__/simGridExamples.test.ts`.
-The folder is **Simulations: grids** in the Examples list.
+The folder is **Simulations: grids** in the Examples list. These are the wired versions, named
+"… (under the hood)"; beside each is its **Grid Rules** version, the same simulation as one node
+(see [grid-rules.md](grid-rules.md)), whose Open as nodes builds a graph like these.
 
 ## The building blocks
 
@@ -64,8 +66,9 @@ cells instead: Mouse **Pixels** × Scale (a vec2 Multiply) against **Pixel Coord
 inside the Pass counts cells), into a Circle SDF.
 
 The brush is gated by a Constant that Play maps to the **mouse button**. Mappings drive the
-Constant in the Studio too, where the mouse button is only read on the Play page, so the brush
-paints on the Play page and in exported web pages.
+Constant in the Studio too, and the mouse button source now reads the Studio preview's button as
+well (it used to listen only while performing), so the brush paints in the Studio, on the Play page
+and in exported web pages. A graph can also read the button directly with the **Mouse button** node.
 
 ## The examples
 
@@ -174,9 +177,8 @@ The board passes are tiny (⅛ is 32 400 pixels at 1080p); the cost is the pictu
 
 ## Limits
 
-- **Brush in the Studio.** The brush follows the mouse button through a Play mapping, which reads
-  the button on the Play page only (and in exported pages).
-- **Mouse UV in a scaled Pass** is off by the Pass's Scale (above); use Pixels × Scale.
+- **Mouse UV in a scaled Pass** was off by the Pass's Scale (above). The Mouse node's UV, X and Y
+  are now measured against the pass when read there; these examples keep Pixels × Scale.
 - **Neighbours Average is a tent, not a box,** so it can't count neighbours (above).
 - **Rare per-cell chances** below about 1/256 aren't honoured by the hash (above).
 - **Langton's ant** was left out: it needs the ant's heading carried with it, which is a gather of

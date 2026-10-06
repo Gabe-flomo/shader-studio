@@ -103,9 +103,14 @@ export const MouseNode: NodeDefinition = {
     const id = node.id;
     // u_mouse is in pixel coords (0=bottom-left, same as gl_FragCoord).
     // Convert to the same centered + aspect-corrected space as the UV node.
+    // In a smaller Pass's program u_resolution is the pass's size, u_mouse still the picture's
+    // pixels: the compiler hands the pass's scale (__pictureScale) so UV lands where the pointer is.
+    // Pixels stays in picture pixels, as before.
+    const sc = typeof node.params.__pictureScale === 'number' && node.params.__pictureScale !== 1 ? node.params.__pictureScale : null;
+    const m = sc ? `(u_mouse * ${Number.isInteger(sc) ? `${sc}.0` : sc})` : 'u_mouse';
     return {
       code: [
-        `    vec2 ${id}_uv = (u_mouse / u_resolution.y - vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5) * 2.0;\n`,
+        `    vec2 ${id}_uv = (${m} / u_resolution.y - vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5) * 2.0;\n`,
         `    float ${id}_x = ${id}_uv.x;\n`,
         `    float ${id}_y = ${id}_uv.y;\n`,
         `    vec2 ${id}_px = u_mouse;\n`,

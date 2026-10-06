@@ -22,6 +22,7 @@ import { agentPreset } from './agentExamples';
 import { addAgentPieceTo, agentStarter, freshIds, placeInFreeSpace, startRuleIn, type AgentPiece, type AgentRuleStart } from './agentSetup';
 import { rulesStarter } from '../agentRules/starter';
 import { particlesAsNodes } from './particlesAsNodes';
+import { openGridRulesInGraph } from './gridRulesAsNodes';
 import { openNewSceneBuilder } from '../sceneBuilder/store';
 import { applyRecipe, placeNear, recipesFor } from '../nodes/recipes';
 import { runDoPlan as runDoPlanPure, type DoPlan } from '../suggestions/doBar';
@@ -732,6 +733,8 @@ interface NodeGraphState {
    * instead. The original is left as it was. Returns the new group's id (null if it can't).
    */
   openParticlesAsNodes: (nodeId: string) => string | null;
+  /** Open as nodes (Grid Rules, docs/grid-rules.md): the same simulation from ordinary nodes, under it (store/gridRulesAsNodes.ts). Returns the new board Pass's id. */
+  openGridRulesAsNodes: (nodeId: string) => string | null;
 
   // Texture inputs — maps nodeId → loaded THREE.Texture (or null if not yet loaded)
   // Populated by NodeComponent file picker; consumed by ShaderCanvas to bind sampler2D uniforms.
@@ -2510,6 +2513,18 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     if (r.summary) toast.info(on ? 'Volumetric on' : 'Volumetric off', { message: r.summary });
   },
 
+  openGridRulesAsNodes: (nodeId) => {
+    const st = get();
+    const made = openGridRulesInGraph(nodeId, st.nodes, () => idGenerator.next());
+    if ('problem' in made) { toast.info('Can\'t open these rules as nodes', { message: made.problem }); return null; }
+    undoManager.push(st.nodes, { label: 'Opened Grid Rules as nodes' });
+    set({ nodes: made.nodes });
+    get().compile();
+    toast.info('Grid Rules opened as nodes', {
+      message: `The same simulation, built from ordinary nodes, is below it${made.kept ? '' : ', wired where the Grid Rules node was'}; the Grid Rules node is left as it was: delete it when you like. Every node has a note.`,
+    });
+    return made.boardId;
+  },
   openParticlesAsNodes: (nodeId) => {
     const st = get();
     const src = st.nodes.find(nd => nd.id === nodeId);

@@ -16,39 +16,39 @@ import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
 
 export const SIM_GRID_EXAMPLE_INDEX: Record<string, { label: string; description: string; play: true }> = {
   simGridLife: {
-    label: 'Grid sims 1 · Game of Life', play: true,
+    label: 'Grid sims 1 · Game of Life (under the hood)', play: true,
     description: 'Conway\'s Game of Life on a blocky board: a Pass at ⅛ size with Nearest sampling holds the cells, eight Sample (texture) reads of its Previous count the neighbours, and Compare nodes apply B3/S23. Noise seeds it, Reset starts again, the mouse paints live cells, and dead cells fade through an afterglow.',
   },
   simGridLifeLike: {
-    label: 'Grid sims 2 · Life-like rules', play: true,
+    label: 'Grid sims 2 · Life-like rules (under the hood)', play: true,
     description: 'The same board with the rule as switches: which neighbour counts give birth and which let a cell survive. Flip them for HighLife (B36/S23), Seeds (B2/S), Day & Night (B3678/S34678), Maze, Coral and more.',
   },
   simGridBrain: {
-    label: 'Grid sims 3 · Brian\'s Brain', play: true,
+    label: 'Grid sims 3 · Brian\'s Brain (under the hood)', play: true,
     description: 'A three-state automaton (on, dying, off) in two channels of a Pass: an off cell with exactly two on neighbours turns on, on cells start dying, dying cells switch off. The result is endless gliding sparks.',
   },
   simGridCave: {
-    label: 'Grid sims 4 · Cave generator', play: true,
+    label: 'Grid sims 4 · Cave generator (under the hood)', play: true,
     description: 'Noise smoothed into caves by the 4-5 rule (a cell is rock when 5 or more of its 3×3 block are rock), run 8 times a frame with the Pass\'s Repeat. A second Pass holds the blurred rock as height for a terrain palette and hill shading. Move Seed for a new map.',
   },
   simGridWater: {
-    label: 'Grid sims 5 · Water ripples', play: true,
+    label: 'Grid sims 5 · Water ripples (under the hood)', play: true,
     description: 'The two-buffer water of Hugo Elias: a Pass keeps this height and the last one, Neighbours (Difference from average) spreads them as waves, damping calms them. Raindrops and the mouse drop ripples; Flow (texture) bends a photo through the surface.',
   },
   simGridHeat: {
-    label: 'Grid sims 6 · Heat diffusion', play: true,
+    label: 'Grid sims 6 · Heat diffusion (under the hood)', play: true,
     description: 'Paint heat with the mouse and watch it spread and cool: each step blends every cell towards its Neighbours average (diffusion) and takes a little off (cooling). Drifting hot spots keep it going; a Stops Palette colours the temperature.',
   },
   simGridFire: {
-    label: 'Grid sims 7 · Forest fire', play: true,
+    label: 'Grid sims 7 · Forest fire (under the hood)', play: true,
     description: 'The Drossel–Schwabl forest fire: trees grow on empty ground, lightning now and then sets one alight, fire spreads to the trees round it (Neighbours, Max) and leaves glowing ash. Per-cell hashed noise with Time rolls the dice. Click to start a fire.',
   },
   simGridSand: {
-    label: 'Grid sims 8 · Falling sand', play: true,
+    label: 'Grid sims 8 · Falling sand (under the hood)', play: true,
     description: 'Falling sand made only from gathers: every cell decides from its 3×3 block whether a grain leaves it or arrives, so no grain is lost or doubled. Grains fall, then slide to one side, the side flipping every frame. Spouts pour sand; the mouse pours more.',
   },
   simGridWire: {
-    label: 'Grid sims 9 · Wireworld', play: true,
+    label: 'Grid sims 9 · Wireworld (under the hood)', play: true,
     description: 'Brian Silverman\'s Wireworld: copper wire, electron heads and tails. A head becomes a tail, a tail becomes copper, and copper becomes a head when one or two heads touch it. Loops on a grid of wires send electrons pulsing through it; click a wire to send one more.',
   },
 };

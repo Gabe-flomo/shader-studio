@@ -1867,6 +1867,16 @@ class PlayEngine implements InputSource {
   /** Is the Play page showing (keys play)? */
   isPerforming(): boolean { return this.performing; }
 
+  /**
+   * The Studio preview's mouse button (ShaderCanvas): the Mouse button source reads it there too,
+   * so a mapping onto it (a brush) works while editing. The Play page listens for itself.
+   */
+  setPreviewButton(down: boolean): void {
+    if (this.performing) return;
+    this.mouseDown = down ? 1 : 0;
+    if (this.mouseIsBound) inputBus.wake();
+  }
+
   /** The Play page is showing: listen to the pointer and the keyboard. */
   setPerforming(on: boolean): void {
     if (on === this.performing || typeof window === 'undefined') return;

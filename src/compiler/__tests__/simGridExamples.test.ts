@@ -23,7 +23,8 @@ const walk = (nodes: GraphNode[], visit: (nd: GraphNode) => void) => {
 
 describe('the Simulations: grids examples', () => {
   it('are a folder of their own and listed in the index', () => {
-    expect(EXAMPLE_FOLDERS.find(f => f.label === 'Simulations: grids')?.keys).toEqual(SIM_GRID_EXAMPLE_KEYS);
+    // With the Grid Rules versions (gridRulesExamples.ts) beside them.
+    expect(EXAMPLE_FOLDERS.find(f => f.label === 'Simulations: grids')?.keys).toEqual(expect.arrayContaining(SIM_GRID_EXAMPLE_KEYS));
     expect(SIM_GRID_EXAMPLE_KEYS.length).toBeGreaterThanOrEqual(7);
     for (const k of SIM_GRID_EXAMPLE_KEYS) {
       expect(EXAMPLE_INDEX[k]?.label, k).toBeTruthy();
