@@ -154,6 +154,8 @@ export const MarchCameraNode: NodeDefinition = {
     aperture:     { label: 'Aperture',   type: 'float' as const, min: 0.0,  max: 0.5,  step: 0.005, hint: 'Lens aperture radius. 0 = pinhole (no blur). Higher = more edge grain.' },
     focalDist:    { label: 'Focal Dist', type: 'float' as const, min: 0.1,  max: 50.0, step: 0.1,   hint: 'Distance from camera at which the scene is perfectly sharp.' },
     lensSpeed:    { label: 'Lens Speed', type: 'float' as const, min: 0.0,  max: 5.0,  step: 0.05,  hint: 'Speed at which the aperture grain drifts over time. 0 = frozen static.' },
+    // No default: a camera without it compiles exactly as before; the Scene Builder sets it when Flatten is above 0.
+    ortho:        { label: 'Flatten',    type: 'float' as const, min: 0.0,  max: 1.0,  step: 0.01,  hint: 'From perspective (0) to orthographic (1): parallel edges stay parallel, like an isometric drawing. The same Flatten as Time Cube View and Draw agents.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id           = node.id;
@@ -183,6 +185,13 @@ export const MarchCameraNode: NodeDefinition = {
       `    vec3  ${id}_up2   = cross(${id}_fwd, ${id}_rgt);\n`,
       // Pinhole ray direction
       `    vec3  ${id}_rd0   = normalize(${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2 + ${fov} * ${id}_fwd);\n`,
+      // Flatten (only when set): the rays' origins spread across the picture and their directions close up.
+      ...(node.params.ortho !== undefined ? [
+        `    float ${id}_or    = clamp(${p(node.params.ortho, 0.0)}, 0.0, 1.0);\n`,
+        `    vec3  ${id}_lat   = ${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2;\n`,
+        `    ${id}_ro0 += ${id}_or * ${camDist} / max(${fov}, 0.05) * ${id}_lat;\n`,
+        `    ${id}_rd0 = normalize(max(${fov}, 0.05) * ${id}_fwd + (1.0 - ${id}_or) * ${id}_lat);\n`,
+      ] : []),
       // Per-pixel hash for lens disk radius; angle drifts over time via lensSpeed
       `    float ${id}_h1    = fract(sin(dot(${uv}, vec2(127.1, 311.7))) * 43758.5453);\n`,
       `    float ${id}_h2    = fract(sin(dot(${uv}, vec2(269.5, 183.3))) * 43758.5453);\n`,
@@ -469,6 +478,23 @@ export const VolumetricSceneNode: NodeDefinition = {
   defaultParams: {},
   paramDefs: {},
   // Never compiled: the store replaces it with the nodes above when it is added.
+  generateGLSL: () => ({ code: '', outputVars: {} }),
+};
+
+/**
+ * New 3D scene… — a palette entry, never a node in a graph: adding it opens the
+ * 3D Scene Builder (docs/scene-builder.md), a form that describes a scene and
+ * builds the graph for it, every node with a note.
+ */
+export const SceneBuilderNode: NodeDefinition = {
+  type: 'sceneBuilder', label: 'New 3D scene…', category: '3D Scene',
+  aliases: ['Scene Builder', '3D Scene Builder', 'Build a 3D scene', 'Describe 3D', 'Recipe'],
+  description: 'Opens the 3D Scene Builder: describe a scene (shapes, how they combine, how space bends, the look, the camera) in a form or as a recipe like `smooth-union(sphere r=1, cone h=2) k=0.3 · twist 0.5`, and Build makes the graph for it: Scene Group, March Camera, March Loop, lighting and Tone Map, every node with a note. Edit the graph freely afterwards, or reopen it in the builder.',
+  inputs: {},
+  outputs: {},
+  defaultParams: {},
+  paramDefs: {},
+  // Never compiled: adding it opens the builder instead.
   generateGLSL: () => ({ code: '', outputVars: {} }),
 };
 
