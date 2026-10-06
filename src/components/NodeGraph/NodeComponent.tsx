@@ -3671,7 +3671,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       {/* Semantic inline viz: replaces shader thumbnail for supported types */}
       {/* The node's value or colour while the eye is on it, with every preview control in its row;
           the diagram stays a click away (docs/node-previews.md) */}
-      {isPreviewActive && plan.body === 'field' && (
+      {isPreviewActive && plan.body === 'field' && node.type !== 'exprNode' && node.type !== 'customFn' && (
         <ValuePreview node={node} diagram={plan.diagram ? <NodeInlineViz node={node} /> : undefined} />
       )}
       {isPreviewActive && plan.body === 'diagram' && (

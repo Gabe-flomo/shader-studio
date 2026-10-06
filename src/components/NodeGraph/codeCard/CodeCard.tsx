@@ -1,34 +1,34 @@
 /**
  * CodeCard — the card face of an Expression Block or a Custom Function: a carousel of read-only
- * pages (Code, Signature, Note, Description; empty ones left out), flipped with the dots, the
+ * pages (Code → Preview → Note → Description; empty ones left out), flipped with the dots, the
  * arrows, a sideways swipe or scroll, or ←/→ when the card has focus. The page is remembered per
- * node (cardPageStore). Editing happens in the full editor: double-click the card or press Edit.
+ * node (cardPageStore). Editing happens in the full editor: double-click the card or press Edit,
+ * whose tooltip is the block's signature.
  *
- * Kept off the clock: it re-renders when its node (or the labels of what feeds it) changes, and
- * the highlighted code is memoised per code string.
+ * The Preview page is the eye preview's own card preview (ValuePreview: Show as, Detail, the output
+ * picker, the range key), fed by the same GPU value path and throttled async readback. It is live
+ * while the eye is on this block (the eye picks one node at a time) and only while the page shows.
+ *
+ * Kept off the clock: it re-renders when its node changes, and the highlighted code is memoised
+ * per code string.
  */
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphNode } from '../../../types/nodeGraph';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
-import { getNodeDefinition } from '../../../nodes/definitions';
 import { useThemeMode, useTokens } from '../../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
 import { Icon } from '../../ui/Icon';
 import { LinkedText } from '../../ui/Links';
 import { CreditLink } from '../../ui/Credit';
 import { parseSourceCredit } from '../../../types/credit';
-import { TYPE_COLORS } from '../typeColors';
+import { ValuePreview } from '../ValuePreview';
+import { prefOf, useNodePreviewPrefs } from '../../../lib/nodePreview/showAs';
 import { highlightGlsl } from './highlight';
 import { useCardPages } from './cardPageStore';
 import {
-  CARD_PAGE_LABEL, cardPages, codeLinesFor, isEmptyCodeNode, noteOf, parseSourceLabelsKey, resolvePage,
-  signatureFor, signatureText, sourceLabelsFor, sourceLabelsKey, stepPage, userDescriptionOf, type CardPageId,
+  CARD_PAGE_LABEL, cardPages, codeLinesFor, isEmptyCodeNode, noteOf, previewOptionsFor, resolvePage,
+  signatureFor, signatureText, stepPage, userDescriptionOf, type CardPageId,
 } from './codeCardModel';
-
-const labelOf = (n: GraphNode) =>
-  (typeof n.params.label === 'string' && n.params.label.trim()) ? n.params.label.trim() : (getNodeDefinition(n.type)?.label ?? n.type);
-
-const fmt = (v: number) => (Number.isInteger(v) ? v.toFixed(1) : String(+v.toFixed(3)));
 
 interface Props {
   node: GraphNode;
@@ -46,9 +46,8 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
   const dark = useThemeMode() === 'dark';
   const isFn = node.type === 'customFn';
 
-  // What feeds the inputs, as a string so this only re-renders when a label or a wire changes.
-  const sourcesKey = useNodeGraphStore(s => sourceLabelsKey(sourceLabelsFor(node, s.nodes, labelOf)));
-  const sig = useMemo(() => signatureFor(node, parseSourceLabelsKey(sourcesKey)), [node, sourcesKey]);
+  // The signature lives in the Edit button's tooltip (and the empty state), not on a page
+  const sig = useMemo(() => signatureText(signatureFor(node)), [node]);
 
   const pages = useMemo(() => cardPages(node), [node]);
   const remembered = useCardPages(s => s.pages[node.id]);
@@ -56,6 +55,14 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
   const page = resolvePage(pages, remembered);
   const go = (p: CardPageId) => setPage(node.id, p);
   const flip = (step: number) => { if (pages.length > 1) go(stepPage(pages, page, step)); };
+
+  // Turning the eye on for this block brings its Preview page up: the eye's controls live there.
+  const previewActive = useNodeGraphStore(s => s.previewNodeId === node.id);
+  const wasActive = useRef(previewActive);
+  useEffect(() => {
+    if (previewActive && !wasActive.current) setPage(node.id, 'preview');
+    wasActive.current = previewActive;
+  }, [previewActive, node.id, setPage]);
 
   // Without a comment editor of the host's own, the note is written right here
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
@@ -133,7 +140,7 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
   };
 
   // ── Pages ──────────────────────────────────────────────────────────────────
-  const mono = `${touch ? 12.5 : 11.5}px/1.6 ${fontFamily.mono}`;
+  const mono = `${touch ? 12.5 : 11.5}px/1.65 ${fontFamily.mono}`;
   const pill = (props: { label: string; icon: React.ComponentProps<typeof Icon>['name']; onClick: () => void; title: string; data?: string }) => (
     <button type="button" title={props.title} aria-label={props.title} data-card-action={props.data}
       onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}
@@ -152,11 +159,12 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
       const width = String(rows.length).length;
       return (
         <div ref={codeRef} data-card-code="" aria-label={isFn ? 'Function body (read-only)' : 'Lines (read-only)'}
-          style={{ maxHeight: compact ? 150 : touch ? 240 : 210, overflowY: 'auto', overflowX: 'hidden', padding: '6px 0', font: mono, background: tk.bg.subtle, borderRadius: radius.md, userSelect: 'text', cursor: 'text' }}>
+          style={{ maxHeight: compact ? 160 : touch ? 250 : 224, overflowY: 'auto', overflowX: 'hidden', padding: '7px 0', font: mono, background: tk.bg.subtle, borderRadius: radius.md, userSelect: 'text', cursor: 'text', display: 'flex', flexDirection: 'column', gap: 3 }}>
           {rows.map((toks, i) => (
-            <div key={i} style={{ display: 'flex' }}>
+            <div key={i} data-code-row={i + 1} style={{ display: 'flex' }}>
               <span style={{ width: width * 7 + 16, flexShrink: 0, textAlign: 'right', paddingRight: 9, color: tk.text.disabled, userSelect: 'none' }}>{i + 1}</span>
-              <span style={{ minWidth: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', paddingRight: 10 }}>
+              {/* Hanging indent: a wrapped line's continuation sits further in, so it never reads as a new line */}
+              <span style={{ minWidth: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', paddingRight: 10, paddingLeft: '2ch', textIndent: '-2ch' }}>
                 {toks.length ? toks.map((t, j) => <span key={j} style={{ color: t.color }}>{t.text}</span>) : ' '}
               </span>
             </div>
@@ -164,45 +172,7 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
         </div>
       );
     }
-    if (page === 'signature') {
-      const annot = (text: string, color = tk.text.faint) => <span style={{ color, font: `500 10.5px ${fontFamily.ui}`, marginLeft: 8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{text}</span>;
-      const typed = (type: string) => <span style={{ color: TYPE_COLORS[type] ?? tk.text.secondary, fontWeight: 600 }}>{type}</span>;
-      return (
-        <div data-card-signature="" title={signatureText(sig)} style={{ font: mono, padding: '6px 10px', background: tk.bg.subtle, borderRadius: radius.md }}>
-          {empty && (
-            <div style={{ font: `650 14px ${fontFamily.ui}`, color: tk.text.primary, marginBottom: 2 }}>{isFn ? 'Custom function' : 'Expression'}</div>
-          )}
-          {empty && (
-            <div style={{ font: `500 11.5px/1.4 ${fontFamily.ui}`, color: tk.text.muted, marginBottom: 6 }}>
-              {isFn ? 'No body yet' : 'No lines yet'}{touch ? '' : `: double-click to write ${isFn ? 'it' : 'some'}`}.
-            </div>
-          )}
-          <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {typed(sig.returnType)} <span style={{ color: tk.accent.text, fontWeight: 600 }}>{sig.name}</span><span style={{ color: tk.text.faint }}>(</span>
-            {sig.params.length === 0 && sig.outs.length === 0 && <span style={{ color: tk.text.faint }}>)</span>}
-          </div>
-          {sig.params.map((p, i) => (
-            <div key={p.name} data-sig-param={p.name} data-sig-source={p.source} style={{ display: 'flex', alignItems: 'baseline', paddingLeft: 18, minWidth: 0 }}>
-              <span style={{ whiteSpace: 'nowrap', flexShrink: 0, opacity: p.source === 'unwired' ? 0.6 : 1 }}>
-                {typed(p.type)} <span style={{ color: tk.text.primary }}>{p.name}</span>
-                <span style={{ color: tk.text.faint }}>{i < sig.params.length - 1 || sig.outs.length ? ',' : ''}</span>
-              </span>
-              {p.source === 'wire' && annot(`← ${p.from ?? 'wired'}`, tk.text.muted)}
-              {p.source === 'slider' && annot(`slider · ${fmt(p.value ?? 0)}`)}
-              {p.source === 'carry' && annot('carried from the last pass')}
-              {p.source === 'unwired' && annot(`unwired · ${p.type === 'float' ? '0.0' : `${p.type}(0.0)`}`)}
-            </div>
-          ))}
-          {sig.outs.map((o, i) => (
-            <div key={`out-${o.name}`} style={{ paddingLeft: 18, whiteSpace: 'nowrap' }}>
-              <span style={{ color: dark ? '#cba6f7' : '#8839ef' }}>out</span> {typed(o.type)} <span style={{ color: tk.text.primary }}>{o.name}</span>
-              <span style={{ color: tk.text.faint }}>{i < sig.outs.length - 1 ? ',' : ''}</span>
-            </div>
-          ))}
-          {(sig.params.length > 0 || sig.outs.length > 0) && <div style={{ color: tk.text.faint }}>)</div>}
-        </div>
-      );
-    }
+    if (page === 'preview') return <PreviewPage node={node} empty={empty} isFn={isFn} sig={sig} touch={touch} />;
     if (page === 'note') {
       const credit = parseSourceCredit(node.params.__credit);
       const note = noteOf(node);
@@ -264,7 +234,7 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
         )}
         {!noteOf(node) && pill({ label: 'Note', icon: 'plus', title: 'Add a note to this block', onClick: editNote, data: 'add-note' })}
         {!userDescriptionOf(node) && pill({ label: 'Description', icon: 'plus', title: 'Add a description of this block', onClick: editDescription, data: 'add-description' })}
-        {onEdit && pill({ label: 'Edit', icon: isFn ? 'fn' : 'expr', title: isFn ? 'Open the Custom Function editor (or double-click the card)' : 'Open the Expression Block editor: lines, on/off, order, inputs (or double-click the card)', onClick: onEdit, data: 'edit' })}
+        {onEdit && pill({ label: 'Edit', icon: isFn ? 'fn' : 'expr', title: `${sig}\n${isFn ? 'Open the Custom Function editor' : 'Open the Expression Block editor: lines, on/off, order, inputs'} (or double-click the card)`, onClick: onEdit, data: 'edit' })}
       </div>
       {noteDraft !== null ? (
         <TextDraft label="Note" value={noteDraft} placeholder="What this block does, why, where it comes from" onChange={setNoteDraft} onSave={saveNote} onCancel={() => setNoteDraft(null)} />
@@ -284,6 +254,55 @@ function PagerArrow({ dir, touch, onClick }: { dir: 1 | -1; touch: boolean; onCl
       style={{ width: touch ? 28 : 18, height: touch ? 30 : 22, padding: 0, border: 0, background: 'none', color: tk.text.faint, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <Icon name={dir > 0 ? 'chevR' : 'chevL'} size={12} />
     </button>
+  );
+}
+
+/**
+ * The block's output, live: the eye preview's card preview (ValuePreview) while the eye is on it,
+ * else a button that turns the eye on. Show as follows the output type (float: Range / Slice /
+ * Contours / Raw; vec2: Grid / Arrows / Wheel / Raw + Detail; colours with their range key), the
+ * output picker shows for several outputs, and every choice is remembered per node by showAs.
+ */
+function PreviewPage({ node, empty, isFn, sig, touch }: { node: GraphNode; empty: boolean; isFn: boolean; sig: string; touch: boolean }) {
+  const tk = useTokens();
+  const active = useNodeGraphStore(s => s.previewNodeId === node.id);
+  const pickedOutput = useNodePreviewPrefs(s => prefOf(node, s.prefs).output);
+  const opts = useMemo(() => previewOptionsFor(node, pickedOutput), [node, pickedOutput]);
+  const head = empty && (
+    <div style={{ padding: '2px 2px 4px' }}>
+      <div style={{ font: `650 14px ${fontFamily.ui}`, color: tk.text.primary }}>{isFn ? 'Custom function' : 'Expression'}</div>
+      <div style={{ font: `500 11.5px/1.4 ${fontFamily.ui}`, color: tk.text.muted }}>
+        {isFn ? 'No body yet' : 'No lines yet'}{touch ? '' : `: double-click to write ${isFn ? 'it' : 'some'}`}.
+      </div>
+      <div data-card-signature="" title={sig} style={{ font: `500 11px/1.5 ${fontFamily.mono}`, color: tk.text.secondary, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sig}</div>
+    </div>
+  );
+  if (active) {
+    return (
+      <div data-card-preview="live">
+        {head}
+        <div style={{ borderRadius: radius.md, overflow: 'hidden', background: tk.bg.subtle }}><ValuePreview node={node} /></div>
+      </div>
+    );
+  }
+  const shows = !opts ? 'Nothing to show yet.'
+    : opts.modes ? `${opts.type}: ${opts.modes.join(' · ')}${opts.detail ? ', with Detail' : ''}`
+    : `${opts.type}: its colour, with its range`;
+  return (
+    <div data-card-preview="off">
+      {head}
+      <button type="button" data-card-action="preview"
+        onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}
+        onClick={e => { e.stopPropagation(); useNodeGraphStore.getState().setPreviewNodeId(node.id); }}
+        title="Preview this block: the picture shows it on its own, and its live preview shows here"
+        style={{
+          width: '100%', minHeight: touch ? 96 : 84, border: 0, borderRadius: radius.md, cursor: 'pointer', padding: '10px 12px',
+          background: '#111217', color: '#e6e7ee', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5,
+        }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, font: `600 12.5px ${fontFamily.ui}` }}><Icon name="eye" size={14} />Preview the output</span>
+        <span style={{ font: `500 11px/1.35 ${fontFamily.ui}`, color: '#9a9cab' }}>{shows}</span>
+      </button>
+    </div>
   );
 }
 

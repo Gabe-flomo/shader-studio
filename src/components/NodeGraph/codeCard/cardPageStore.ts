@@ -15,7 +15,10 @@ export function loadCardPages(): Record<string, CardPageId> {
     const parsed = raw ? JSON.parse(raw) : null;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
     const out: Record<string, CardPageId> = {};
-    for (const [k, v] of Object.entries(parsed)) if (v === 'code' || v === 'signature' || v === 'note' || v === 'description') out[k] = v;
+    for (const [k, v] of Object.entries(parsed)) {
+      if (v === 'code' || v === 'preview' || v === 'note' || v === 'description') out[k] = v;
+      else if (v === 'signature') out[k] = 'preview'; // the page the Preview replaced
+    }
     return out;
   } catch { return {}; }
 }
