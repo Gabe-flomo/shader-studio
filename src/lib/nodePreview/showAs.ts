@@ -19,7 +19,7 @@ export type ValueType = 'float' | 'vec2';
 
 export const VEC2_MODES: ReadonlyArray<{ value: Vec2Mode; label: string; hint: string }> = [
   { value: 'grid', label: 'Grid', hint: 'A checker and line grid looked up at the vec2, as if it were UV: see how space is stretched, twisted and repeated. The red line is where y = 0, the green line where x = 0.' },
-  { value: 'arrows', label: 'Arrows', hint: 'An arrow per cell pointing along the vec2; the longest arrow is the largest length in view (see the key).' },
+  { value: 'arrows', label: 'Arrows', hint: 'An arrow per cell pointing along the vec2. Length is strength: the strongest vector in view fills its cell, weaker ones are shorter (a dot below 3%), and brighter means stronger. The key gives the full-arrow value.' },
   { value: 'wheel', label: 'Wheel', hint: 'Colour is the direction (hue around the wheel), brightness the length; black is zero.' },
   { value: 'raw', label: 'Raw', hint: 'Red is x, green is y; negative parts show black, past 1 clips.' },
 ];
@@ -29,6 +29,43 @@ export const FLOAT_MODES: ReadonlyArray<{ value: FloatMode; label: string; hint:
   { value: 'contours', label: 'Contours', hint: 'The range picture with thin lines at regular values, like a height map.' },
   { value: 'raw', label: 'Raw', hint: 'Grey clipped to 0–1: black is 0 or below, white 1 or above.' },
 ];
+
+// ── Detail ───────────────────────────────────────────────────────────────────
+
+/** How fine the Grid checker / the Arrows grid is (Show as → Detail). Changes uniforms only, never a compile. */
+export type Detail = 'coarse' | 'medium' | 'fine' | 'veryfine';
+export const DETAIL_LEVELS: ReadonlyArray<{ value: Detail; label: string }> = [
+  { value: 'coarse', label: 'Coarse' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'fine', label: 'Fine' },
+  { value: 'veryfine', label: 'Very fine' },
+];
+export const DEFAULT_DETAIL: Detail = 'medium';
+/** The modes Detail applies to. */
+export const DETAIL_MODES: ReadonlySet<ShowAsMode> = new Set<ShowAsMode>(['grid', 'arrows']);
+
+/**
+ * Grid density at a Detail level: checker squares and grid lines per unit of the vec2. Medium is a
+ * little finer than the first version (8 squares, a line every ½); lines always fall on square edges.
+ */
+export function gridDensity(d: Detail): { checks: number; lines: number } {
+  switch (d) {
+    case 'coarse': return { checks: 4, lines: 1 };
+    case 'fine': return { checks: 16, lines: 4 };
+    case 'veryfine': return { checks: 24, lines: 4 };
+    default: return { checks: 10, lines: 2 };
+  }
+}
+
+/**
+ * Arrow cell size in CSS pixels at a Detail level, for the eye preview and the (smaller) node card.
+ * Medium is a little denser than the first version (36 / 22 px) and still readable on the card.
+ */
+export function arrowCellPx(d: Detail, where: 'eye' | 'card'): number {
+  const eye = { coarse: 48, medium: 30, fine: 22, veryfine: 16 }[d] ?? 30;
+  const card = { coarse: 32, medium: 20, fine: 15, veryfine: 11 }[d] ?? 20;
+  return where === 'eye' ? eye : card;
+}
 
 export function modesFor(type: ValueType): ReadonlyArray<{ value: ShowAsMode; label: string; hint: string }> {
   return type === 'vec2' ? VEC2_MODES : FLOAT_MODES;
@@ -138,6 +175,8 @@ export interface NodePreviewPref {
   sliceY?: number;
   /** The node card shows the node's own diagram instead (nodes that have one). */
   diagram?: boolean;
+  /** Grid / Arrows density. */
+  detail?: Detail;
 }
 
 const STORAGE_KEY = 'playfield.nodePreviewPrefs.v1';
@@ -185,6 +224,12 @@ export const useNodePreviewPrefs = create<{
 
 export function prefOf(node: Pick<GraphNode, 'id' | 'type'>, prefs = useNodePreviewPrefs.getState().prefs): NodePreviewPref {
   return prefs[prefKey(node)] ?? {};
+}
+
+/** The node's Detail: its remembered pick, else Medium. */
+export function detailFor(node: Pick<GraphNode, 'id' | 'type'>, prefs = useNodePreviewPrefs.getState().prefs): Detail {
+  const d = prefs[prefKey(node)]?.detail;
+  return d && DETAIL_LEVELS.some(l => l.value === d) ? d : DEFAULT_DETAIL;
 }
 
 /** The mode a node's preview of `type` uses: its remembered pick, else the default. */

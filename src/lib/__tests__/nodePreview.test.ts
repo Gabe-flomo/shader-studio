@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { GraphNode } from '../../types/nodeGraph';
 import {
+  arrowCellPx, DEFAULT_DETAIL, DETAIL_LEVELS, detailFor, gridDensity,
   defaultShowAs, MAX_PREFS, pickPreviewOutput, prefKey, prefOf, primaryInput, showAsFor, useNodePreviewPrefs, withPref,
 } from '../nodePreview/showAs';
 import {
+  ARROW_DOT_BELOW, ARROW_FILL, arrowKey, arrowStrength, gridColor,
   arrowGrid, arrowLength, arrowSamples, constantLabel, DIVERGING, divergingColor, fieldStats, formatValue, greyColor,
   isDiverging, niceStep, paintField, rangeColor, rangeLabel, sliceAxis, sliceRow, sliceRowIndex, valueKey, wheelColor,
   type ValueField,
@@ -199,8 +201,8 @@ describe('arrow grid', () => {
     expect(a.cols).toBe(2); expect(a.rows).toBe(2);
     expect(Array.from(a.vecs)).toEqual([0, 1, 0, 2, 0, 1, 0, 2]);
     expect(a.maxMag).toBe(2);
-    expect(arrowLength(2, 2, 40)).toBeCloseTo(34);
-    expect(arrowLength(1, 2, 40)).toBeCloseTo(17);
+    expect(arrowLength(2, 2, 40)).toBeCloseTo(36);
+    expect(arrowLength(1, 2, 40)).toBeCloseTo(18);
     expect(arrowLength(1, 0, 40)).toBe(0);
   });
   it('the value target keeps about the same texel count at any aspect', () => {
@@ -275,5 +277,69 @@ describe('per-node choice', () => {
     vi.resetModules();
     const again = await import('../nodePreview/showAs');
     expect(again.prefOf(n)).toEqual({ float: 'contours' });
+  });
+});
+
+describe('arrows: length is strength against the global max', () => {
+  it('strength is magnitude / the largest magnitude in view, capped at 1', () => {
+    expect(arrowStrength(2.4, 2.4)).toBe(1);
+    expect(arrowStrength(1.2, 2.4)).toBeCloseTo(0.5);
+    expect(arrowStrength(5, 2.4)).toBe(1);
+    expect(arrowStrength(1, 0)).toBe(0);
+    expect(arrowStrength(NaN, 1)).toBe(0);
+    expect(arrowLength(1.2, 2.4, 30)).toBeCloseTo(0.5 * 30 * ARROW_FILL);
+  });
+  it('normalises against the global max, not per cell and not to unit length', () => {
+    // Left cell holds short vectors (0.6), right cell long ones (2.4): one max for both
+    const f = field(8, 4, 'vec2', (x) => (x < 4 ? [0.6, 0] : [0, 2.4]));
+    const a = arrowSamples(f, 2);
+    expect(a.maxMag).toBeCloseTo(2.4);
+    const mags = [0, 1].map(i => Math.hypot(a.vecs[i * 2], a.vecs[i * 2 + 1]));
+    expect(arrowStrength(mags[0], a.maxMag)).toBeCloseTo(0.25);
+    expect(arrowStrength(mags[1], a.maxMag)).toBe(1);
+    // Direction is the vector's own: not rounded or normalised
+    expect(a.vecs[0]).toBeCloseTo(0.6); expect(a.vecs[1]).toBe(0);
+    expect(a.vecs[3]).toBeCloseTo(2.4);
+  });
+  it('very weak vectors draw as dots; the key names the full arrow', () => {
+    expect(ARROW_DOT_BELOW).toBeCloseTo(0.03);
+    expect(arrowStrength(0.05, 2.4) < ARROW_DOT_BELOW).toBe(true);
+    expect(arrowStrength(0.1, 2.4) < ARROW_DOT_BELOW).toBe(false);
+    expect(arrowKey(2.4)).toBe('full arrow = 2.4 (strongest)');
+    expect(valueKey(fieldStats(field(2, 1, 'vec2', (x) => [x * 2.4, 0])), 'vec2', 'arrows')).toBe('full arrow = 2.4 (strongest)');
+  });
+});
+
+describe('Detail', () => {
+  afterEach(() => { useNodePreviewPrefs.setState({ prefs: {} }); });
+  it('maps levels to grid density: finer each step, lines on square edges, Medium finer than before', () => {
+    const g = DETAIL_LEVELS.map(l => gridDensity(l.value));
+    for (let i = 1; i < g.length; i++) expect(g[i].checks).toBeGreaterThan(g[i - 1].checks);
+    for (const d of g) expect(d.checks % d.lines).toBe(0);
+    expect(DEFAULT_DETAIL).toBe('medium');
+    expect(gridDensity('medium').checks).toBeGreaterThan(8); // the first version's 8 squares a unit
+  });
+  it('maps levels to arrow cells: denser each step, Medium denser than before', () => {
+    for (const where of ['eye', 'card'] as const) {
+      const px = DETAIL_LEVELS.map(l => arrowCellPx(l.value, where));
+      for (let i = 1; i < px.length; i++) expect(px[i]).toBeLessThan(px[i - 1]);
+    }
+    expect(arrowCellPx('medium', 'eye')).toBeLessThan(36);
+    expect(arrowCellPx('medium', 'card')).toBeLessThan(22);
+    expect(arrowCellPx('veryfine', 'card')).toBeGreaterThanOrEqual(10); // still readable on the card
+  });
+  it('density changes the grid picture (the uniform the shader reads mirrors it)', () => {
+    const p = [0.13, 0.02] as const;
+    expect(gridColor(p[0], p[1], 0.001, 0.001, 4, 1)).not.toEqual(gridColor(p[0], p[1], 0.001, 0.001, 24, 4));
+    expect(buildDisplayShader('void main() {\n  vec2 v = vec2(0.0);\n}', 'v', 'vec2')).toContain('uniform vec2 u_pvGrid;');
+  });
+  it('is remembered per node, defaults to Medium, and is not a mode', () => {
+    const n = mk('swirlSpace', { output: { type: 'vec2', label: 'Swirled UV' } }, {}, 'd1');
+    expect(detailFor(n)).toBe('medium');
+    useNodePreviewPrefs.getState().set(n, { detail: 'veryfine' });
+    expect(detailFor(n)).toBe('veryfine');
+    expect(showAsFor(n, 'vec2', 'output')).toBe('grid');
+    expect(detailFor(mk('rotate2d', {}, {}, 'd1'))).toBe('medium');
+    expect(detailFor(n, { [prefKey(n)]: { detail: 'bogus' as never } })).toBe('medium');
   });
 });

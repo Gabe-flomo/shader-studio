@@ -101,6 +101,9 @@ export function rangeLabel(min: number, max: number): string {
   return `${f(min)} … ${f(max)}`;
 }
 
+/** The arrows key: what a full-length arrow stands for. */
+export const arrowKey = (maxMag: number) => `full arrow = ${formatValue(maxMag)} (strongest)`;
+
 /** "= 3.0 everywhere" / "= (0.50, 0.20) everywhere" */
 export function constantLabel(value: number | [number, number]): string {
   if (Array.isArray(value)) return `= (${formatValue(value[0])}, ${formatValue(value[1])}) everywhere`;
@@ -116,7 +119,8 @@ export function valueKey(s: FieldStats, type: 'float' | 'vec2', mode: string): s
   const bad = s.total - s.finite;
   const tail = bad > 0 ? ` · ${Math.round((bad / s.total) * 100) || '<1'}% NaN/∞` : '';
   if (type === 'vec2') {
-    if (mode === 'arrows' || mode === 'wheel') return `longest = ${formatValue(s.maxMag)}${tail}`;
+    if (mode === 'arrows') return `${arrowKey(s.maxMag)}${tail}`;
+    if (mode === 'wheel') return `longest = ${formatValue(s.maxMag)}${tail}`;
     return `x ${rangeLabel(s.minX, s.maxX)}  y ${rangeLabel(s.minY, s.maxY)}${tail}`;
   }
   return rangeLabel(s.min, s.max) + tail;
@@ -179,18 +183,21 @@ export function wheelColor(x: number, y: number, maxMag: number): RGB {
   return hsv(a < 0 ? a + 1 : a, 0.85, m);
 }
 
-/** Grid picture at a vec2 `p` with pixel footprint `wx, wy` (fwidth), as previewGlsl's pvz_grid. */
-export function gridColor(px: number, py: number, wx: number, wy: number): RGB {
+/**
+ * Grid picture at a vec2 `p` with pixel footprint `wx, wy` (fwidth), as previewGlsl's pvz_grid:
+ * `checks` checker squares and `lines` grid lines per unit (showAs.gridDensity).
+ */
+export function gridColor(px: number, py: number, wx: number, wy: number, checks = 10, lines = 2): RGB {
   wx = Math.max(wx, 1e-6); wy = Math.max(wy, 1e-6);
-  const chk = ((Math.floor(px * 8) + Math.floor(py * 8)) % 2 + 2) % 2;
+  const chk = ((Math.floor(px * checks) + Math.floor(py * checks)) % 2 + 2) % 2;
   // The checker fades to its average once its squares are smaller than a pixel (no moiré).
-  const fade = 1 - smooth(0.3, 1.0, Math.max(wx, wy) * 8);
+  const fade = 1 - smooth(0.3, 1.0, Math.max(wx, wy) * checks);
   const shade = 0.24 + (chk - 0.5) * 0.14 * fade;
   const fx = px - Math.floor(px), fy = py - Math.floor(py);
   let col: RGB = [shade + fx * 0.22, shade + 0.02, shade + fy * 0.26];
-  // Lines every half unit
-  const lx = Math.abs(((px * 2 + 0.5) % 1 + 1) % 1 - 0.5) / (wx * 2);
-  const ly = Math.abs(((py * 2 + 0.5) % 1 + 1) % 1 - 0.5) / (wy * 2);
+  // Lines every 1/lines of a unit
+  const lx = Math.abs(((px * lines + 0.5) % 1 + 1) % 1 - 0.5) / (wx * lines);
+  const ly = Math.abs(((py * lines + 0.5) % 1 + 1) % 1 - 0.5) / (wy * lines);
   col = mix3(col, [0.82, 0.84, 0.9], (1 - smooth(0.5, 1.5, Math.min(lx, ly))) * 0.55);
   // Axes: green where x = 0, red where y = 0
   col = mix3(col, [0.3, 0.95, 0.45], 1 - smooth(0.75, 2.0, Math.abs(px) / wx));
@@ -302,8 +309,17 @@ export function arrowSamples(f: ValueField, cols: number): ArrowSamples {
   return { ...g, vecs, maxMag };
 }
 
-/** An arrow's drawn length: proportional to its vec2's length, the longest filling 85% of a cell. */
-export const arrowLength = (mag: number, maxMag: number, cellPx: number) => (maxMag > 0 ? (Math.min(mag, maxMag) / maxMag) * cellPx * 0.85 : 0);
+/**
+ * An arrow's strength, 0…1: its vec2's length over the largest length in view (the global max over
+ * every cell, never per cell), so the strongest vector draws a full arrow and weaker ones shorter.
+ */
+export const arrowStrength = (mag: number, maxMag: number) => (maxMag > 0 && Number.isFinite(mag) ? Math.min(mag, maxMag) / maxMag : 0);
+/** Arrows below this strength draw as a small dot (still there, too short to point). */
+export const ARROW_DOT_BELOW = 0.03;
+/** Share of a cell a full-strength arrow spans (the rest keeps neighbours' heads apart). */
+export const ARROW_FILL = 0.9;
+/** An arrow's drawn length in pixels: strength × the full length. */
+export const arrowLength = (mag: number, maxMag: number, cellPx: number) => arrowStrength(mag, maxMag) * cellPx * ARROW_FILL;
 
 // ── CPU painter (node card thumbnails) ───────────────────────────────────────
 
@@ -312,6 +328,8 @@ export interface PaintOptions {
   stats: FieldStats;
   /** Contour spacing (auto when omitted). */
   step?: number;
+  /** Grid density (showAs.gridDensity; Medium when omitted). */
+  grid?: { checks: number; lines: number };
 }
 
 /**
@@ -335,7 +353,7 @@ export function paintField(out: Uint8ClampedArray, dw: number, dh: number, f: Va
         else if (mode === 'grid') {
           const wx = Math.abs(at(x + 1, y, 0) - vx) + Math.abs(at(x, y + 1, 0) - vx);
           const wy = Math.abs(at(x + 1, y, 1) - vy) + Math.abs(at(x, y + 1, 1) - vy);
-          col = gridColor(vx, vy, wx, wy);
+          col = gridColor(vx, vy, wx, wy, opts.grid?.checks, opts.grid?.lines);
         } else if (mode === 'wheel') col = wheelColor(vx, vy, stats.maxMag);
         else if (mode === 'arrows') { const c = wheelColor(vx, vy, stats.maxMag); col = [c[0] * 0.35, c[1] * 0.35, c[2] * 0.35]; }
         else col = [clamp01(vx), clamp01(vy), 0];
