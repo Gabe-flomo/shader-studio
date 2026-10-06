@@ -17,6 +17,8 @@ import { Field, TypeSelect } from '../ui/Field';
 import { Segmented, Toggle } from '../ui/Choice';
 import { toast } from '../ui/toastStore';
 import { TYPE_COLORS } from '../NodeGraph/typeColors';
+import { ExplainText } from './ExplainText';
+import { GlslCode } from './GlslCode';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 import type { PublishNodeModal as PublishNodeModalT } from '../NodeGraph/PublishNodeModal';
 import type { Made, UseHere } from './hosts';
@@ -125,8 +127,8 @@ export function MakeNodeDialog({ req, onClose, onFindUses }: { req: MakeNodeRequ
         </>
       )}>
       <div data-make-node="" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ font: `500 12px/1.5 ${fontFamily.mono}`, color: tk.text.secondary, background: tk.bg.subtle, borderRadius: radius.md, padding: '8px 10px', overflowWrap: 'anywhere' }}>{g.original}</div>
-        {explained.ok && <div style={{ font: `500 12.5px/1.45 ${fontFamily.ui}`, color: tk.text.secondary }}>{explained.sentence}</div>}
+        <div style={{ font: `500 12px/1.5 ${fontFamily.mono}`, background: tk.bg.subtle, borderRadius: radius.md, padding: '8px 10px', overflowWrap: 'anywhere' }}><GlslCode code={g.original} /></div>
+        {explained.ok && <div data-make-explained="" style={{ font: `500 12.5px/1.55 ${fontFamily.ui}`, color: tk.text.secondary }}><ExplainText segs={explained.meaningSegs ?? explained.sentenceSegs} /></div>}
         {idiomAvailable && (
           <Segmented<'idiom' | 'written'> size="sm" ariaLabel="Read it as" value={asWritten ? 'written' : 'idiom'} onChange={v => setAsWritten(v === 'written')}
             options={[{ value: 'idiom', label: 'As the idiom (named inputs)' }, { value: 'written', label: 'As written (every name and number)' }]} />

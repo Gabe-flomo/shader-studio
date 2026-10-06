@@ -20,6 +20,7 @@ import { explainPattern } from '../../codeExplorer/explain';
 import { jumpToSource } from '../../codeExplorer/jumpRun';
 import type { Count, FunctionReport, Instance, IndexSummary, PatternCard, SearchHit, QueryScope } from '../../codeExplorer/queries';
 import type { Origin, SourceKind } from '../../codeExplorer/types';
+import { ExplainText } from '../explain/ExplainText';
 
 type Scope = 'all' | 'mine' | 'examples';
 const SCOPES: Record<Scope, QueryScope> = {
@@ -195,7 +196,7 @@ function PatternCardView({ card, buckets, rank, startOpen }: { card: PatternCard
         <span style={{ fontSize: 11, color: tk.text.faint, whiteSpace: 'nowrap' }}>{card.docs} {card.docs === 1 ? 'place' : 'places'}</span>
       </div>
       {info?.name && <code style={{ font: `500 12px ${fontFamily.mono}`, color: tk.text.secondary, overflowWrap: 'anywhere' }}>{card.l2}</code>}
-      {info?.phrase && <span style={{ fontSize: 12, color: tk.text.muted }}>{info.phrase}</span>}
+      {info?.phrase && <span style={{ fontSize: 12, lineHeight: 1.55, color: tk.text.muted }}>{info.phraseSegs ? <ExplainText segs={info.phraseSegs} /> : info.phrase}</span>}
       {(spread || card.flipped > 0) && (
         <span style={{ fontSize: 11.5, color: tk.text.muted }}>
           {spread}{spread && card.flipped > 0 ? ' · ' : ''}{card.flipped > 0 ? `${card.flipped} of ${card.count} flipped (1.0 − …)` : ''}

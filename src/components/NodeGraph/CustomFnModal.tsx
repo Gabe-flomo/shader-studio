@@ -16,7 +16,8 @@ import { Modal } from '../ui/Modal';
 import { toast } from '../ui/toastStore';
 import { CodeField } from '../code/CodeField';
 import { ReferencePanel } from '../code/ReferencePanel';
-import { LinePreviewPanel, ProbePicker } from '../code/LinePreview';
+import { LinePreviewPanel, ProbePicker, startLineProbe } from '../code/LinePreview';
+import { probeSteps } from '../../lib/nodePreview/lineProbe';
 import type { EditorPanel } from '../code/editorPanelPrefs';
 import { FunctionsToggle, SidePanel, useEditorSidePanels } from '../code/SidePanels';
 import { buildCompletions } from '../code/glslReference';
@@ -338,6 +339,10 @@ export function CustomFnModal({ node, onClose }: Props) {
           {/* Explain each statement (lib/glslPatterns); a part can become a node, called from here */}
           <div style={{ flexShrink: 0 }}>
             <StatementsExplain code={body} ctx={explainCtx} onFindUses={explainDialogs.findUses}
+              onShowPicture={st => {
+                const t = st.isReturn ? { kind: 'return' as const } : probeSteps(node).find(p => p.kind === 'local' && p.name === st.target);
+                if (t) startLineProbe(node, t);
+              }}
               onMakeNode={span => explainDialogs.makeNode({ source: body, span, ctx: explainCtx, useHere: customFnUseHere(node.id, span) })} />
           </div>
           {explainDialogs.dialogs}

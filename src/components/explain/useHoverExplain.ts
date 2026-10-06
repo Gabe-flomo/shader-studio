@@ -4,12 +4,14 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
+import type { Seg } from '../../lib/glslPatterns/segments';
 
 type Lib = typeof import('../../lib/glslPatterns');
 let lib: Lib | null = null;
 let loading: Promise<Lib> | null = null;
 
-export function useHoverExplain(node: GraphNode, line: string | null): string | null {
+/** The line's lead sentence (its plain meaning, else its literal reading) as segments. */
+export function useHoverExplain(node: GraphNode, line: string | null): Seg[] | null {
   const [ready, setReady] = useState(!!lib);
   useEffect(() => {
     if (!line || lib) return;
@@ -23,6 +25,6 @@ export function useHoverExplain(node: GraphNode, line: string | null): string | 
     if (!text || !ready || !lib || text.startsWith('//')) return null;
     const types = node.type === 'customFn' ? lib.customFnEnv(node) : lib.exprBlockEnv(node);
     const r = lib.explainLine(text, { types });
-    return r.ok ? r.lineSentence : null;
+    return r.ok ? r.leadSegs : null;
   }, [line, ready, node]);
 }

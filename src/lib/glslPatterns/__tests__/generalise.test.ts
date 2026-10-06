@@ -52,7 +52,7 @@ describe('generalising an idiom', () => {
     expect(b.code).toBe('float softCircle(float radius, float width, vec2 p) {\n    return smoothstep(radius, radius + width, length(p));\n}');
     expect(b.call).toBe('softCircle(0.3, 0.05, uv)');
     expect(b.pattern).toBe('smoothstep($radius, $radius + $width, length($p))');
-    expect(g.description).toBe('Makes a soft-edged circle of radius 0.3 (adjustable) around the origin of p: 0 inside, rising to 1 over 0.05 (adjustable) outside it.');
+    expect(g.description).toBe('Makes a soft-edged circle of radius 0.3 (adjustable) around the origin of `p`: 0 inside, rising to 1 over 0.05 (adjustable) outside it.');
   });
   it('keeps the idiom’s own numbers, and vector constants start constant', () => {
     const { g, b } = sameValues('vec3(0.5) + vec3(0.5) * cos(6.28318 * (vec3(1.0) * t + vec3(0.0, 0.33, 0.67)))');
@@ -217,13 +217,13 @@ describe('made-node descriptions', () => {
   });
 
   it('with no default, the template’s own word reads "the given …"', () => {
-    expect(gen('smoothstep(r, r + 0.05, length(uv))').description).toMatch(/^Makes a soft-edged circle of the given radius around the origin of p/);
+    expect(gen('smoothstep(r, r + 0.05, length(uv))').description).toMatch(/^Makes a soft-edged circle of the given radius around the origin of `p`/);
     expect(gen('mat2(cos(t), -sin(t), sin(t), cos(t))').description).toMatch(/for the given angle \(in radians\)/);
     expect(gen('length(p) - r').description).toMatch(/circle of the given radius/);
   });
 
   it('a grid count is marked adjustable once', () => {
-    expect(gen('fract(uv * 4.0)').description).toBe('Tiles p into a 4 (adjustable) × 4 grid of repeating cells, 0…1 inside each.');
+    expect(gen('fract(uv * 4.0)').description).toBe('Tiles `p` into a 4 (adjustable) × 4 grid of repeating cells, 0…1 inside each.');
   });
 
   // Every idiom, every spelling: numbers for the #holes (their defaults must show), and for the

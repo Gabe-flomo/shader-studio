@@ -8,13 +8,16 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import { ExplainRow } from './ExplainRow';
+import { GlslCode } from './GlslCode';
 
-export function StatementsExplain({ code, ctx, onMakeNode, onFindUses }: {
+export function StatementsExplain({ code, ctx, onMakeNode, onFindUses, onShowPicture }: {
   code: string;
   ctx: ExplainContext;
   /** A span of `code` to make into a node. */
   onMakeNode?: (span: { start: number; end: number }) => void;
   onFindUses?: (q: UseQuery, title: string) => void;
+  /** Show a statement's picture (the ▶ line preview): the variable it declares, or Return. */
+  onShowPicture?: (stmt: { target?: string; isReturn: boolean }) => void;
 }) {
   const tk = useTokens();
   const [open, setOpen] = useState(false);
@@ -33,10 +36,11 @@ export function StatementsExplain({ code, ctx, onMakeNode, onFindUses }: {
         const exprStart = parsed.ok ? parsed.line.exprStart : 0;
         return (
           <div key={`${i}:${s.start}`} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <code style={{ font: `500 11.5px ${fontFamily.mono}`, color: tk.text.secondary, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-              <span style={{ color: tk.text.disabled, marginRight: 8 }}>{s.line}</span>{s.text}
-            </code>
+            <div style={{ font: `500 11.5px ${fontFamily.mono}` }}>
+              <span style={{ color: tk.text.disabled, marginRight: 8 }}>{s.line}</span><GlslCode code={s.text} />
+            </div>
             <ExplainRow text={s.text} exprStart={exprStart} ctx={ctx} onFindUses={onFindUses}
+              onShowPicture={onShowPicture && parsed.ok && (parsed.line.isReturn || parsed.line.declType) ? () => onShowPicture({ target: parsed.line.target, isReturn: parsed.line.isReturn }) : undefined}
               onMakeNode={onMakeNode ? span => onMakeNode({ start: s.start + span.start, end: s.start + span.end }) : undefined} />
           </div>
         );

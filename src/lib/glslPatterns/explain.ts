@@ -16,6 +16,7 @@ import { parseExpr, parseLine, type ParsedLine } from './parse';
 import { inferTypes, type TypeEnv } from './types';
 import { inferRoles, type Role, type RoleEnv, type RoleInfo } from './roles';
 import { IDIOMS, type Idiom, type IdiomText } from './idioms';
+import { mark, parseSegs, plainLength, segsToMarked, stripMarks, toPlainText, type Seg } from './segments';
 import { constValue, matchNormalized, compilePattern, normalize, type Bindings, type N } from './match';
 
 export interface ExplainContext {
@@ -51,6 +52,8 @@ export interface Desc {
   short: string;
   /** What this node does, as a verb phrase. */
   how: string;
+  /** An idiom's plain meaning ("1 while a stays under 0.02 …"), when it has one. */
+  meaning?: string;
   /** Known value range per component, when the rules can tell. */
   range?: [number, number];
   value?: number;
@@ -64,8 +67,10 @@ export interface Step {
   label: string;
   /** The node's code, with earlier steps' parts replaced by their labels: `sin(A)`. */
   code: string;
-  /** What it does. */
+  /** What it does, as plain text (names in backticks). */
   text: string;
+  /** What it does, with names, numbers and code as tokens. */
+  segs: Seg[];
   /** The span to highlight, in the explained text's coordinates. */
   start: number;
   end: number;
@@ -77,12 +82,25 @@ export interface Step {
 
 export interface Explanation {
   ok: true;
-  /** One short sentence for the whole thing. */
+  /** One short sentence for the whole thing: the literal reading, as plain text. */
   sentence: string;
+  sentenceSegs: Seg[];
+  /**
+   * The plain meaning, when the whole thing is a known idiom ("Gives 1 while a stays under …").
+   * Read first; the literal sentence and the steps go under it.
+   */
+  meaning?: string;
+  meaningSegs?: Seg[];
+  /** The idiom's common job ("a hard on/off mask"), when the whole thing is one. */
+  use?: string;
+  /** A composed expression's one-line summary from its parts ("In short: uv → … → the ramps, 0…1."). */
+  inShort?: string;
+  inShortSegs?: Seg[];
   /** Inside-out, the order GLSL computes them. */
   steps: Step[];
   /** The steps as prose: "First, … Then, … Finally, …". */
   breakdown: string;
+  breakdownSegs: Seg[];
   type: GlslType;
   role: Role;
   idioms: IdiomHit[];
@@ -109,7 +127,9 @@ export function fmt(v: number): string {
 }
 
 const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
-const rangeText = (r?: [number, number]) => (r ? `${fmt(r[0])}…${fmt(r[1])}` : '');
+const rangeText = (r?: [number, number]) => (r ? `${num(r[0])}…${num(r[1])}` : '');
+/** A number in prose, as a token. */
+const num = (v: number) => mark.n(fmt(v));
 
 // ── Templates ─────────────────────────────────────────────────────────────────
 
@@ -145,27 +165,27 @@ function scaleWords(c: TC, xi: number, k: number): Words {
       if (k === -1) return { noun: `${c.n(xi)} mirrored`, short: 'the mirrored space', how: `mirrors ${c.s(xi)} through the origin (turns it half a turn)`, range: r };
       const m = Math.abs(k);
       const mirror = k < 0 ? 'mirrors and ' : '';
-      if (m > 1) return { noun: `${c.n(xi)} zoomed out ${fmt(m)}×`, short: 'the zoomed space', how: `${mirror}zooms ${c.s(xi)} out ${fmt(m)}× (${fmt(m)}× as much fits; anything drawn in it gets ${fmt(m)}× smaller)`, range: r };
-      return { noun: `${c.n(xi)} zoomed in ${fmt(1 / m)}×`, short: 'the zoomed space', how: `${mirror}zooms ${c.s(xi)} in ${fmt(1 / m)}× (anything drawn in it gets ${fmt(1 / m)}× bigger)`, range: r };
+      if (m > 1) return { noun: `${c.n(xi)} zoomed out ${num(m)}×`, short: 'the zoomed space', how: `${mirror}zooms ${c.s(xi)} out ${num(m)}× (${num(m)}× as much fits; anything drawn in it gets ${num(m)}× smaller)`, range: r };
+      return { noun: `${c.n(xi)} zoomed in ${num(1 / m)}×`, short: 'the zoomed space', how: `${mirror}zooms ${c.s(xi)} in ${num(1 / m)}× (anything drawn in it gets ${num(1 / m)}× bigger)`, range: r };
     }
     case 'colour':
-      if (k > 1) return { noun: `${c.n(xi)}, ${fmt(k)}× brighter`, short: 'the brighter colour', how: `makes ${c.s(xi)} ${fmt(k)}× brighter`, range: r };
-      if (k > 0) return { noun: `${c.n(xi)}, darkened to ${fmt(k * 100)}%`, short: 'the darker colour', how: `darkens ${c.s(xi)} to ${fmt(k * 100)}% of its brightness`, range: r };
-      return { noun: `${c.n(xi)} times ${fmt(k)}`, short: 'the negated colour', how: `multiplies ${c.s(xi)} by ${fmt(k)}: negative channels draw as black`, range: r };
+      if (k > 1) return { noun: `${c.n(xi)}, ${num(k)}× brighter`, short: 'the brighter colour', how: `makes ${c.s(xi)} ${num(k)}× brighter`, range: r };
+      if (k > 0) return { noun: `${c.n(xi)}, darkened to ${num(k * 100)}%`, short: 'the darker colour', how: `darkens ${c.s(xi)} to ${num(k * 100)}% of its brightness`, range: r };
+      return { noun: `${c.n(xi)} times ${num(k)}`, short: 'the negated colour', how: `multiplies ${c.s(xi)} by ${num(k)}: negative channels draw as black`, range: r };
     case 'time':
-      if (k > 0) return { noun: `${c.n(xi)} ${k > 1 ? `${fmt(k)}× faster` : `${fmt(1 / k)}× slower`}`, short: 'the scaled time', how: k > 1 ? `runs ${c.s(xi)} ${fmt(k)}× faster` : `runs ${c.s(xi)} ${fmt(1 / k)}× slower`, range: r };
-      return { noun: `${c.n(xi)} running backwards`, short: 'the reversed time', how: `runs ${c.s(xi)} backwards${k !== -1 ? `, ${fmt(-k)}× as fast` : ''}`, range: r };
+      if (k > 0) return { noun: `${c.n(xi)} ${k > 1 ? `${num(k)}× faster` : `${num(1 / k)}× slower`}`, short: 'the scaled time', how: k > 1 ? `runs ${c.s(xi)} ${num(k)}× faster` : `runs ${c.s(xi)} ${num(1 / k)}× slower`, range: r };
+      return { noun: `${c.n(xi)} running backwards`, short: 'the reversed time', how: `runs ${c.s(xi)} backwards${k !== -1 ? `, ${num(-k)}× as fast` : ''}`, range: r };
     case 'angle':
-      return { noun: `${c.n(xi)} × ${fmt(k)}`, short: 'the angle', how: `multiplies the angle ${c.s(xi)} by ${fmt(k)}`, range: r };
+      return { noun: `${c.n(xi)} × ${num(k)}`, short: 'the angle', how: `multiplies the angle ${c.s(xi)} by ${num(k)}`, range: r };
     case 'distance':
-      return { noun: `${c.n(xi)} scaled ${fmt(k)}×`, short: 'the scaled distance', how: `scales the distance ${c.s(xi)} by ${fmt(k)}${k > 1 ? ', so it changes faster (sharper edges, smaller glows)' : ''}`, range: r };
+      return { noun: `${c.n(xi)} scaled ${num(k)}×`, short: 'the scaled distance', how: `scales the distance ${c.s(xi)} by ${num(k)}${k > 1 ? ', so it changes faster (sharper edges, smaller glows)' : ''}`, range: r };
     default: {
       if (Math.abs(Math.abs(k) - 2 * Math.PI) < 1e-3 && x.range && x.range[0] >= 0 && x.range[1] <= 1) {
         return { noun: `${c.n(xi)} as an angle`, short: 'the angle', how: `turns ${c.s(xi)} (0…1) into an angle: a full turn, 0…2π`, range: r };
       }
       const word = k === 2 ? 'doubles' : k === 0.5 ? 'halves' : k === -1 ? 'negates' : null;
       if (word) return { noun: `${c.n(xi)}, ${word === 'doubles' ? 'doubled' : word === 'halves' ? 'halved' : 'negated'}`, short: `the ${word === 'doubles' ? 'doubled' : word === 'halves' ? 'halved' : 'negated'} ${x.short.replace(/^the /, '')}`, how: `${word} ${c.s(xi)}${now}`, range: r };
-      return { noun: `${c.n(xi)} × ${fmt(k)}`, short: `the scaled ${x.short.replace(/^the /, '')}`, how: `scales ${c.s(xi)} by ${fmt(k)}${now}`, range: r };
+      return { noun: `${c.n(xi)} × ${num(k)}`, short: `the scaled ${x.short.replace(/^the /, '')}`, how: `scales ${c.s(xi)} by ${num(k)}${now}`, range: r };
     }
   }
 }
@@ -175,13 +195,13 @@ function shiftWords(c: TC, xi: number, k: number): Words {
   const x = c.a[xi];
   const r = shiftRange(x.range, k);
   const now = r && x.range ? ` (now ${rangeText(r)})` : '';
-  const by = fmt(Math.abs(k));
+  const by = num(Math.abs(k));
   switch (x.role) {
-    case 'space': return { noun: `${c.n(xi)} shifted by ${fmt(k)}`, short: 'the shifted space', how: `shifts ${c.s(xi)} by ${fmt(k)}, which moves whatever is drawn in it by ${fmt(-k)}`, range: r };
+    case 'space': return { noun: `${c.n(xi)} shifted by ${num(k)}`, short: 'the shifted space', how: `shifts ${c.s(xi)} by ${num(k)}, which moves whatever is drawn in it by ${num(-k)}`, range: r };
     case 'colour': return k > 0
       ? { noun: `${c.n(xi)} lifted by ${by}`, short: 'the lifted colour', how: `adds ${by} to every channel of ${c.s(xi)}: brighter and greyer`, range: r }
       : { noun: `${c.n(xi)} lowered by ${by}`, short: 'the lowered colour', how: `takes ${by} off every channel of ${c.s(xi)}: darker, more contrast in the darks`, range: r };
-    case 'time': return { noun: `time ${k > 0 ? 'plus' : 'minus'} ${by}`, short: 'the offset time', how: `offsets ${c.s(xi)} by ${fmt(k)} seconds`, range: r };
+    case 'time': return { noun: `time ${k > 0 ? 'plus' : 'minus'} ${by}`, short: 'the offset time', how: `offsets ${c.s(xi)} by ${num(k)} seconds`, range: r };
     case 'distance': return k < 0
       ? { noun: `${c.n(xi)} grown by ${by}`, short: 'the grown shape', how: `subtracts ${by} from the distance ${c.s(xi)}: the shape grows by ${by} (rounder corners)`, range: r }
       : { noun: `${c.n(xi)} shrunk by ${by}`, short: 'the shrunk shape', how: `adds ${by} to the distance ${c.s(xi)}: the shape shrinks by ${by}`, range: r };
@@ -217,9 +237,9 @@ function binaryWords(c: TC, op: string): Words {
     if (lb !== undefined && lb !== 0 && la === undefined) {
       const w = scaleWords(c, 0, 1 / lb);
       if (A.role === 'space' || A.role === 'colour' || A.role === 'time') return w;
-      return { ...w, how: `divides ${c.s(0)} by ${fmt(lb)}${w.range && A.range ? ` (now ${rangeText(w.range)})` : ''}` };
+      return { ...w, how: `divides ${c.s(0)} by ${num(lb)}${w.range && A.range ? ` (now ${rangeText(w.range)})` : ''}` };
     }
-    if (la !== undefined && lb === undefined) return { noun: `${fmt(la)} divided by ${c.n(1)}`, short: 'the inverse', how: `divides ${fmt(la)} by ${c.s(1)}: large where it is small, shooting up near 0` };
+    if (la !== undefined && lb === undefined) return { noun: `${num(la)} divided by ${c.n(1)}`, short: 'the inverse', how: `divides ${num(la)} by ${c.s(1)}: large where it is small, shooting up near 0` };
     if (A.role === 'space') return { noun: `${c.n(0)} divided by ${c.n(1)}`, short: 'the scaled space', how: `divides ${c.s(0)} by ${c.s(1)}: bigger values zoom in` };
     return { noun: `${c.n(0)} divided by ${c.n(1)}`, short: 'the ratio', how: `divides ${c.s(0)} by ${c.s(1)}` };
   }
@@ -234,7 +254,7 @@ function binaryWords(c: TC, op: string): Words {
   if (op === '-') {
     if (lb !== undefined && la === undefined) return shiftWords(c, 0, -lb);
     if (la !== undefined && lb === undefined) {
-      return { noun: `${fmt(la)} minus ${c.n(1)}`, short: `the flipped ${B.short.replace(/^the /, '')}`, how: `subtracts ${c.s(1)} from ${fmt(la)}${B.range ? ` (now ${rangeText([la - B.range[1], la - B.range[0]])})` : ''}`, range: B.range ? [la - B.range[1], la - B.range[0]] : undefined };
+      return { noun: `${num(la)} minus ${c.n(1)}`, short: `the flipped ${B.short.replace(/^the /, '')}`, how: `subtracts ${c.s(1)} from ${num(la)}${B.range ? ` (now ${rangeText([la - B.range[1], la - B.range[0]])})` : ''}`, range: B.range ? [la - B.range[1], la - B.range[0]] : undefined };
     }
     if (A.role === 'space' && B.type === A.type) return { noun: `${c.n(0)} relative to ${c.n(1)}`, short: 'the moved space', how: `measures ${c.s(0)} from ${c.s(1)}: ${c.s(1)} becomes the new origin` };
     if (A.role === 'distance' && B.type === 'float') return { noun: `${c.n(0)} grown by ${c.n(1)}`, short: 'the grown shape', how: `subtracts ${c.s(1)} from the distance ${c.s(0)}: the shape grows by that much` };
@@ -263,7 +283,7 @@ function memberWords(c: TC, field: string): Words {
   if (/^(xyz|rgb)$/.test(field)) return { noun: c.n(0), short: o.short, how: `takes all three components of ${c.s(0)}, unchanged` };
   if (/^(yx|gr)$/.test(field)) return { noun: `${c.n(0)} with x and y swapped`, short: 'the swapped point', how: `swaps the x and y of ${c.s(0)} (a mirror along the diagonal)` };
   if (/^(xy|rg|st)$/.test(field)) return { noun: `the first two components of ${c.n(0)}`, short: o.short, how: `takes the first two components of ${c.s(0)}` };
-  return { noun: `components .${field} of ${c.n(0)}`, short: `${c.s(0)}.${field}`, how: `picks components .${field} of ${c.s(0)}` };
+  return { noun: `components ${mark.c(`.${field}`)} of ${c.n(0)}`, short: o.leaf ? mark.v(`${o.code}.${field}`, o.node.kind === 'ident' ? o.node.name : o.code) : `${c.s(0)}.${field}`, how: `picks components ${mark.c(`.${field}`)} of ${c.s(0)}` };
 }
 
 const FN_RANGE: Record<string, [number, number]> = { sin: [-1, 1], cos: [-1, 1], fract: [0, 1], smoothstep: [0, 1], step: [0, 1], sign: [-1, 1] };
@@ -294,8 +314,8 @@ function callWords(c: TC, callee: string): Words {
       const e = k(1);
       if (e === 2) return { noun: `${c.n(0)} squared`, short: 'the square', how: `squares ${c.s(0)}: small values get smaller, a sharper falloff` };
       if (e === 0.5) return { noun: `the square root of ${c.n(0)}`, short: 'the root', how: `takes the square root of ${c.s(0)}` };
-      if (e !== undefined && e > 1) return { noun: `${c.n(0)} to the power ${fmt(e)}`, short: 'the sharpened value', how: `raises ${c.s(0)} to the power ${fmt(e)}: values under 1 drop, so the bright part sharpens` };
-      if (e !== undefined && e > 0) return { noun: `${c.n(0)} to the power ${fmt(e)}`, short: 'the softened value', how: `raises ${c.s(0)} to the power ${fmt(e)}: low values lift, so it softens` };
+      if (e !== undefined && e > 1) return { noun: `${c.n(0)} to the power ${num(e)}`, short: 'the sharpened value', how: `raises ${c.s(0)} to the power ${num(e)}: values under 1 drop, so the bright part sharpens` };
+      if (e !== undefined && e > 0) return { noun: `${c.n(0)} to the power ${num(e)}`, short: 'the softened value', how: `raises ${c.s(0)} to the power ${num(e)}: low values lift, so it softens` };
       return { noun: `${c.n(0)} to the power ${c.n(1)}`, short: 'the power', how: `raises ${c.s(0)} to the power ${c.s(1)}` };
     }
     case 'abs': {
@@ -312,7 +332,7 @@ function callWords(c: TC, callee: string): Words {
     }
     case 'fract': {
       const span = r0 ? r0[1] - r0[0] : undefined;
-      const extra = span !== undefined && span > 1.01 ? ` (its ${rangeText(r0)} range becomes ${fmt(Math.round(span * 100) / 100)} ramps)` : '';
+      const extra = span !== undefined && span > 1.01 ? ` (its ${rangeText(r0)} range becomes ${num(Math.round(span * 100) / 100)} ramps)` : '';
       if (isSpace) return { noun: `${c.n(0)} repeating every unit`, short: 'the tiles', how: `keeps the fractional part of each coordinate of ${c.s(0)}: a grid of 0…1 tiles, one per unit`, range: [0, 1] };
       return { noun: `repeating 0–1 ramps of ${c.n(0)}`, short: 'the ramps', how: `keeps the fractional part of ${c.s(0)}: repeating 0…1 ramps${extra}`, range: [0, 1] };
     }
@@ -325,8 +345,8 @@ function callWords(c: TC, callee: string): Words {
       const li = k(1) !== undefined ? 1 : k(0) !== undefined ? 0 : -1;
       if (li >= 0) {
         const o = 1 - li, v = k(li)!;
-        if (big) return { noun: `${c.n(o)}, at least ${fmt(v)}`, short: c.a[o].short, how: v === 0 ? `cuts the negative part of ${c.s(o)} to 0` : `keeps ${c.s(o)} from going below ${fmt(v)}` };
-        return { noun: `${c.n(o)}, at most ${fmt(v)}`, short: c.a[o].short, how: `caps ${c.s(o)} at ${fmt(v)}` };
+        if (big) return { noun: `${c.n(o)}, at least ${num(v)}`, short: c.a[o].short, how: v === 0 ? `cuts the negative part of ${c.s(o)} to 0` : `keeps ${c.s(o)} from going below ${num(v)}` };
+        return { noun: `${c.n(o)}, at most ${num(v)}`, short: c.a[o].short, how: `caps ${c.s(o)} at ${num(v)}` };
       }
       return { noun: `the ${big ? 'larger' : 'smaller'} of ${c.n(0)} and ${c.n(1)}`, short: `the ${big ? 'larger' : 'smaller'} one`, how: `takes the ${big ? 'larger' : 'smaller'} of ${c.s(0)} and ${c.s(1)}${c.a[0].type !== 'float' ? ', component by component' : ''}` };
     }
@@ -336,13 +356,13 @@ function callWords(c: TC, callee: string): Words {
     }
     case 'mix': {
       const t = k(2);
-      if (t !== undefined) return { noun: `${c.n(0)} with ${fmt(Math.round(t * 100))}% of ${c.n(1)}`, short: 'the blend', how: `mixes ${fmt(Math.round(t * 100))}% of ${c.s(1)} into ${c.s(0)}` };
+      if (t !== undefined) return { noun: `${c.n(0)} with ${num(Math.round(t * 100))}% of ${c.n(1)}`, short: 'the blend', how: `mixes ${num(Math.round(t * 100))}% of ${c.s(1)} into ${c.s(0)}` };
       return { noun: `a blend of ${c.n(0)} and ${c.n(1)}`, short: 'the blend', how: `blends from ${c.s(0)} (when ${c.s(2)} is 0) to ${c.s(1)} (when it is 1)` };
     }
     case 'step': return { noun: `where ${c.n(1)} reaches ${c.n(0)}`, short: 'the edge', how: `gives 0 where ${c.s(1)} is below ${c.s(0)} and 1 from there on: a hard edge`, range: [0, 1] };
     case 'smoothstep': {
       const e0 = k(0), e1 = k(1);
-      if (e0 !== undefined && e1 !== undefined && e0 > e1) return { noun: `a smooth fall of ${c.n(2)} from ${fmt(e1)} to ${fmt(e0)}`, short: 'the ramp', how: `goes smoothly from 1 down to 0 as ${c.s(2)} goes from ${fmt(e1)} to ${fmt(e0)}`, range: [0, 1] };
+      if (e0 !== undefined && e1 !== undefined && e0 > e1) return { noun: `a smooth fall of ${c.n(2)} from ${num(e1)} to ${num(e0)}`, short: 'the ramp', how: `goes smoothly from 1 down to 0 as ${c.s(2)} goes from ${num(e1)} to ${num(e0)}`, range: [0, 1] };
       return { noun: `a smooth ramp of ${c.n(2)}`, short: 'the ramp', how: `goes smoothly from 0 to 1 as ${c.s(2)} goes from ${c.s(0)} to ${c.s(1)} (an S-curve, flat at both ends)`, range: [0, 1] };
     }
     case 'length':
@@ -384,8 +404,8 @@ function callWords(c: TC, callee: string): Words {
     default: {
       // Not a rule we have: say literally what happens, never what it might mean
       const args = c.a.map((_, i) => c.s(i)).join(', ');
-      const literal = `${callee}(${c.a.map(a => a.leaf ? a.noun : '…').join(', ')})`;
-      return { noun: `the result of ${literal}`, short: `the result of ${callee}`, how: `calls ${callee}(${args}), a function this explainer doesn’t know` };
+      const literal = `${mark.f(callee)}(${c.a.map(a => a.leaf ? a.noun : '…').join(', ')})`;
+      return { noun: `the result of ${literal}`, short: `the result of ${mark.f(callee)}`, how: `calls ${mark.f(callee)}(${args}), a function this explainer doesn’t know` };
     }
   }
 }
@@ -432,13 +452,10 @@ function leafDesc(st: State, e: Expr): Desc {
   const v = constValue(e);
   const type = typeOf(st, e);
   const role = roleOf(st, e).role;
-  const d: Desc = { node: e, code: text, type, role, leaf: true, noun: text, short: text, how: '', value: v, range: v !== undefined ? [v, v] : undefined };
-  if (v !== undefined) { d.noun = fmt(v); d.short = fmt(v); }
-  if (e.kind === 'member' && e.object.kind === 'ident') {
-    const f = e.field;
-    if (f.length === 1) d.short = d.noun = `${e.object.name}.${f}`;
-  }
-  return d;
+  // A leaf reads as a token: a number, a name from the code (typed when known), or a snippet
+  const base = e.kind === 'ident' ? e.name : e.kind === 'member' && e.object.kind === 'ident' ? e.object.name : null;
+  const tok = v !== undefined ? mark.n(fmt(v)) : base ? mark.v(text, base, type) : mark.c(text);
+  return { node: e, code: text, type, role, leaf: true, noun: tok, short: tok, how: '', value: v, range: v !== undefined ? [v, v] : undefined };
 }
 
 function printShort(e: Expr): string {
@@ -460,7 +477,7 @@ function normOf(st: State, e: Expr): N {
 function holeText(st: State, b: Bindings, descOf: (name: string) => Desc | undefined): IdiomText {
   return {
     h: name => { const d = descOf(name); return !d ? '' : d.leaf ? d.noun : d.short; },
-    n: name => { const v = b[name]?.value; return v !== undefined ? fmt(v) : (descOf(name)?.short ?? ''); },
+    n: name => { const v = b[name]?.value; return v !== undefined ? mark.n(fmt(v)) : (descOf(name)?.short ?? ''); },
     v: name => b[name]?.value,
     code: name => { const x = b[name]; return x ? (st.src ? st.src.slice(x.expr.start, x.expr.end).trim() : printShort(x.expr)) : ''; },
     role: name => { const x = b[name]; return x ? roleOf(st, x.expr).role : 'unknown'; },
@@ -522,7 +539,7 @@ function labelledCode(st: State, e: Expr, parts: Desc[]): string {
 function pushStep(st: State, d: Desc, parts: Desc[]) {
   d.label = labelFor(st.steps.length);
   st.steps.push({
-    label: d.label, code: labelledCode(st, d.node, parts), text: d.how, start: d.node.start, end: d.node.end, node: d.node,
+    label: d.label, code: labelledCode(st, d.node, parts), text: toPlainText(d.how), segs: parseSegs(d.how), start: d.node.start, end: d.node.end, node: d.node,
     idiom: d.idiom ? { id: d.idiom.idiom.id, name: d.idiom.idiom.name } : undefined, type: d.type, role: d.role,
   });
 }
@@ -546,7 +563,7 @@ function walkNode(st: State, e: Expr): Desc {
     const short = hit.idiom.short ?? `the ${hit.idiom.name.replace(/\s*\(.*\)$/, '').replace(/^./, ch => ch.toLowerCase())}`;
     const d: Desc = {
       node: e, code: st.src.slice(e.start, e.end).trim(), type, role: hit.idiom.role ?? roleInfo.role, leaf: false,
-      noun, short, how: hit.idiom.how(ht), idiom: hit,
+      noun, short, how: hit.idiom.how(ht), idiom: hit, meaning: hit.idiom.meaning?.(ht),
       range: hit.idiom.role === 'mask' ? [0, 1] : undefined,
     };
     st.descs.set(e.id, d);
@@ -557,9 +574,9 @@ function walkNode(st: State, e: Expr): Desc {
   const kids = childrenOf(e).map(k => walkNode(st, k));
   const tc: TC = {
     node: e, a: kids, type, role: roleInfo.role,
-    n: i => { const d = kids[i]; if (!d) return ''; return d.leaf ? d.noun : d.noun.length <= 48 ? d.noun : d.short; },
+    n: i => { const d = kids[i]; if (!d) return ''; return d.leaf ? d.noun : plainLength(d.noun) <= 48 ? d.noun : d.short; },
     s: i => { const d = kids[i]; if (!d) return ''; return d.leaf ? d.noun : d.short; },
-    p: i => { const d = kids[i]; if (!d) return ''; return d.leaf ? d.noun : d.code.length <= 16 ? d.code : d.short; },
+    p: i => { const d = kids[i]; if (!d) return ''; return d.leaf ? d.noun : d.code.length <= 16 ? mark.c(d.code) : d.short; },
     lit: i => kids[i]?.value,
   };
   let w: Words;
@@ -595,15 +612,44 @@ function makeState(src: string, root: Expr, ctx: ExplainContext): State {
   return { src, types, roles, env, roleEnv: ctx.roles ?? {}, descs: new Map(), steps: [], hits: [], noIdioms: !!ctx.noIdioms, norm: new Map() };
 }
 
-/** "First, A = uv * 3.0: zooms… Then, … Finally, fract(C): …" */
-export function breakdownText(steps: Step[]): string {
-  if (steps.length === 0) return '';
-  if (steps.length === 1) return `It ${steps[0].text}.`;
-  return steps.map((s, i) => {
+/** "First, A = uv * 3.0: zooms… Then, … Finally, fract(C): …", with the code and names as tokens. */
+export function breakdownSegs(steps: Step[]): Seg[] {
+  if (steps.length === 0) return [];
+  if (steps.length === 1) return parseSegs(`It ${segsToMarked(steps[0].segs)}.`);
+  return parseSegs(steps.map((s, i) => {
     const lead = i === 0 ? 'First' : i === steps.length - 1 ? 'Finally' : 'Then';
     const name = i === steps.length - 1 ? s.code : `${s.label} = ${s.code}`;
-    return `${lead}, ${name}: ${s.text}.`;
-  }).join(' ');
+    return `${lead}, ${mark.c(name)}: ${segsToMarked(s.segs)}.`;
+  }).join(' '));
+}
+
+/** The breakdown as plain text. */
+export function breakdownText(steps: Step[]): string {
+  return toPlainText(breakdownSegs(steps));
+}
+
+/**
+ * "In short: uv → zoomed space → waves → doubled waves → ramps, 0…1." The names the expression
+ * reads, then each step's short name in the order GLSL computes them, then the result's range.
+ */
+function inShortOf(st: State, root: Expr, d: Desc): string | undefined {
+  if (d.leaf || d.idiom || st.steps.length < 2) return undefined;
+  const seen = new Set<string>();
+  const vars: string[] = [];
+  const visit = (n: Expr) => {
+    if (n.kind === 'ident' && !seen.has(n.name)) { seen.add(n.name); vars.push(mark.v(n.name, n.name, typeOf(st, n))); }
+    childrenOf(n).forEach(visit);
+  };
+  visit(root);
+  const chain: string[] = [];
+  for (const s of st.steps) {
+    const sd = st.descs.get(s.node.id);
+    const w = (sd?.short ?? '').replace(/^the /, '');
+    if (w && stripMarks(w) !== stripMarks(chain[chain.length - 1] ?? '')) chain.push(w);
+  }
+  const from = vars.length ? `${vars.slice(0, 3).join(', ')}${vars.length > 3 ? ', …' : ''} → ` : '';
+  const range = d.range ? `, ${rangeText(d.range)}${d.type !== 'float' && d.type !== 'unknown' ? ' per component' : ''}` : '';
+  return `In short: ${from}${chain.join(' → ')}${range}.`;
 }
 
 /** Explain an already-parsed expression whose spans refer to `src`. */
@@ -616,10 +662,16 @@ export function explainTree(root: Expr, src: string, ctx: ExplainContext = {}): 
   collect(root);
   const firstWord = /^[A-Za-z_]\w*/.exec(d.noun)?.[0];
   const sentence = d.leaf
-    ? (d.value !== undefined ? `The constant ${d.noun}.` : `Just ${d.code}${d.type !== 'unknown' ? ` (a ${d.type})` : ''}.`)
+    ? (d.value !== undefined ? `The constant ${d.noun}.` : `Just ${d.noun}${d.type !== 'unknown' ? ` (a ${d.type})` : ''}.`)
     : `${firstWord && names.has(firstWord) ? d.noun : cap(d.noun)}.`;
+  const meaning = d.meaning ? `Gives ${d.meaning}.` : undefined;
+  const inShort = inShortOf(st, root, d);
+  const bd = breakdownSegs(st.steps);
   return {
-    ok: true, sentence, steps: st.steps, breakdown: breakdownText(st.steps), type: d.type, role: d.role,
+    ok: true, sentence: toPlainText(sentence), sentenceSegs: parseSegs(sentence),
+    ...(meaning ? { meaning: toPlainText(meaning), meaningSegs: parseSegs(meaning), use: d.idiom?.idiom.use } : {}),
+    ...(inShort ? { inShort: toPlainText(inShort), inShortSegs: parseSegs(inShort) } : {}),
+    steps: st.steps, breakdown: toPlainText(bd), breakdownSegs: bd, type: d.type, role: d.role,
     idioms: st.hits, root, source: src, descs: st.descs,
   };
 }
@@ -632,7 +684,18 @@ export function explainExpression(src: string, ctx: ExplainContext = {}): Explai
 }
 
 /** An explained line: what it assigns, and the explanation of what it computes. */
-export interface LineExplanation extends Explanation { line: ParsedLine; /** The whole line's sentence ("d is …", "Returns …"). */ lineSentence: string }
+export interface LineExplanation extends Explanation {
+  line: ParsedLine;
+  /** The whole line's literal sentence ("d is …", "Returns …"), as plain text. */
+  lineSentence: string;
+  lineSentenceSegs: Seg[];
+  /** The line's plain meaning ("silent is 1 while a stays under 0.02 …"), when the expression is a known idiom. */
+  lineMeaning?: string;
+  lineMeaningSegs?: Seg[];
+  /** What to lead with: the plain meaning when there is one, else the literal sentence. */
+  leadSegs: Seg[];
+  lead: string;
+}
 
 /**
  * Explain one line: `float d = length(p) - 0.3;`, `p *= 2.0`, `return col;`, or a bare
@@ -654,11 +717,21 @@ export function explainLine(text: string, ctx: ExplainContext = {}): LineExplana
     }
   }
   const ex = explainTree(root, text, { ...ctx, types });
-  const body = ex.sentence.replace(/\.$/, '');
-  const lower = body ? body[0].toLowerCase() + body.slice(1) : body;
-  const lineSentence = line.isReturn ? `Returns ${lower}.`
-    : line.target && line.op && line.op !== '=' ? `${line.target} becomes ${lower}.`
-    : line.target ? `${line.target} is ${lower}.`
-    : ex.sentence;
-  return { ...ex, line, lineSentence };
+  const lowerFirst = (m: string) => (m ? m[0].toLowerCase() + m.slice(1) : m);
+  const body = lowerFirst(segsToMarked(ex.sentenceSegs).replace(/\.$/, ''));
+  const base = line.target ? line.target.split(/[.[]/)[0] : '';
+  const target = line.target ? mark.v(line.target, base, (types[base] ?? line.declType) as GlslType | undefined) : '';
+  const say = (what: string) => (line.isReturn ? `Returns ${what}.`
+    : line.target && line.op && line.op !== '=' ? `${target} becomes ${what}.`
+    : line.target ? `${target} is ${what}.`
+    : null);
+  const lineSentence = say(body) ?? segsToMarked(ex.sentenceSegs);
+  const m = ex.root && ex.descs.get(ex.root.id)?.meaning;
+  const lineMeaning = m ? say(m) ?? `Gives ${m}.` : undefined;
+  const lead = lineMeaning ?? lineSentence;
+  return {
+    ...ex, line, lineSentence: toPlainText(lineSentence), lineSentenceSegs: parseSegs(lineSentence),
+    ...(lineMeaning ? { lineMeaning: toPlainText(lineMeaning), lineMeaningSegs: parseSegs(lineMeaning) } : {}),
+    lead: toPlainText(lead), leadSegs: parseSegs(lead),
+  };
 }

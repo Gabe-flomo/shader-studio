@@ -30,6 +30,30 @@ Well-known shader idioms are recognised first and read as one idea:
 
 The same operation reads differently depending on what it acts on. `* 3.0` on space (a vec2, or a name like `uv` or `p`) is "zooms out 3×". On a colour (a vec3, `col`) it is "3× brighter". On time (`t`) it is "3× faster", and on a distance (`d`) "scales the distance by 3".
 
+### Plain meaning first, the literal reading under it
+
+A line that is a known idiom leads with its **plain meaning**: what the values are, what it looks like and what it is for. The literal reading and the steps fold under it (**Literal reading and steps**, collapsed by default and remembered for the session):
+
+> `float silent = 1.0 - step(0.02, a)`
+> **`silent` is 1 while `a` stays under 0.02 and 0 otherwise: a switch that is on only when `a` is almost 0.** ☆ a hard on/off mask
+> ▸ Literal reading and steps: `silent` is where `a` is below 0.02. It cuts `a` at 0.02: 1 below it, 0 at or above (a hard edge).
+
+Every idiom has a meaning and a **use** tag (`src/lib/glslPatterns/meanings.ts`). A composed expression (no idiom at its root) ends with a one-line summary built from its parts: **In short: `uv` → zoomed space → waves → doubled waves → ramps, 0…1 per component.**
+
+### Names, numbers and code as chips
+
+The explainer emits **segments** (`text`, `var`, `num`, `code`, `fn`), not plain strings, and one component draws them everywhere (`ExplainText`): a variable in its type's colour (the GLSL highlighter's float / vec2 / vec3 colours, which follow the socket hues), a number in the number colour, a function name in the function colour, and code highlighted with the same tokenizer and colours as the GLSL page and the code card, in light and dark. Each chip keeps its words for screen readers ("variable a"). The code at the top of an explanation and each step's code are highlighted too.
+
+Hovering a variable chip lights where the code reads it, and hovering a variable in the code lights its chips, the same way hovering a step lights its part of the code.
+
+Places that need a string (the code card's hover tooltip, Make-a-node descriptions saved into node notes, Code Explorer search, tests) use `toPlainText`, which wraps names and code in backticks: "`silent` is where `a` is below 0.02."
+
+### A picture of the line
+
+When a line is a function of one number (float → float: `1.0 - step(0.02, a)`, smoothstep, sin, fract, pow, a remap, a clamp), a **mini transfer plot** sits beside the sentence (about 120×60; click to enlarge, with the axes' numbers). x is the input over a range picked from the literals (0…0.1 around a 0.02 edge, the two ends of a smoothstep, a clamp's limits, 0…2π for a sine), y the result, and every edge is marked and labelled. It is sampled on the CPU with the explainer's own evaluator (`evaluate.ts`, ~160 points), so it costs no GPU work (`plot.ts`).
+
+A line that reads space (a vec2 / vec3 such as `uv`, `p`) or several inputs offers **Show picture** instead, in the Expression Block and Custom Function editors. It opens the per-line ▶ preview for that line on demand; nothing renders until it is pressed.
+
 Parts the explainer has no rule for get literal words. An unknown function reads as "calls foo(p, 2), a function this explainer doesn't know". It never guesses past its rules.
 
 ### Make a node from this
@@ -74,13 +98,16 @@ A shared module. The suggestions / Do… bar work and the Code Explorer should i
 | `roles.ts` | `inferRoles`: space, colour, value, mask, distance, angle, time, direction, cell. They are decided by the graph, then the name, then the type, then the operation. Also `roleOfSourceNode`. |
 | `match.ts` | Structural matching with holes; see below. |
 | `idioms.ts` | `IDIOMS`: 62 idioms, `registerIdiom`. |
-| `explain.ts` | `explainExpression`, `explainLine`, `explainTree`, `breakdownText`, `fmt`. |
+| `explain.ts` | `explainExpression`, `explainLine`, `explainTree`, `breakdownText` / `breakdownSegs`, `fmt`. |
+| `segments.ts` | `Seg`, `mark` (tokens inside template text), `parseSegs`, `toPlainText` (names in backticks), `stripMarks`, `spokenToken`. |
+| `meanings.ts` | Each idiom's plain `meaning` and `use`. |
+| `plot.ts` | `transferPlot` (a float → float expression sampled over a range from its literals, edges marked), `needsPicture`, `edgesOf`, `plotRange`. |
 | `generalise.ts` | `generalise`, `generaliseText`, `buildFunction`, `descriptionFor`. |
 | `evaluate.ts` | A tiny CPU evaluator (float, vec2–4, mat2, the common built-ins), used to prove a made function gives the same values. |
 | `findUses.ts` | `findUses`, `matchesInLine`, `codeLines`, `provenance`, `exprBlockEnv`, `customFnEnv`. |
 | `saveFlows.ts` | `toExprPreset`, `exprPresetParams`, `toPublishNode`, `insertFunction`, `callInCustomFn`. |
 
-The UI lives in `src/components/explain/`: `ExplainView`, `ExplainRow`, `StatementsExplain`, `GlslExplainPanel`, `MakeNodeDialog`, `FindUsesDialog`, `useExplainDialogs`, `useHoverExplain`, and `hosts.ts` (each editor's context and its "Use it here too").
+The UI lives in `src/components/explain/`: `ExplainText` (segments as chips), `GlslCode` (highlighted code with lit spans), `TransferPlotView`, `ExplainView`, `ExplainRow`, `StatementsExplain`, `GlslExplainPanel`, `MakeNodeDialog`, `FindUsesDialog`, `useExplainDialogs`, `useHoverExplain`, and `hosts.ts` (each editor's context and its "Use it here too").
 
 ### API
 
@@ -89,14 +116,19 @@ import { explainExpression, explainLine, generaliseText, buildFunction, findUses
 
 const ex = explainExpression('fract(sin(uv*3.0)*2.0)', { types: { uv: 'vec2' } });
 if (ex.ok) {
-  ex.sentence;   // 'Repeating 0–1 ramps of sine waves of uv zoomed out 3×, doubled.'
-  ex.steps;      // [{ label: 'A', code: 'uv*3.0', text: 'zooms uv out 3× …', start, end, idiom?, type, role }, …]
-  ex.breakdown;  // 'First, A = uv*3.0: … Then, … Finally, fract(C): …'
+  ex.sentence;      // 'Repeating 0–1 ramps of sine waves of `uv` zoomed out 3×, doubled.' (plain text)
+  ex.sentenceSegs;  // [{ kind: 'text', … }, { kind: 'var', text: 'uv', name: 'uv', type: 'vec2' }, { kind: 'num', text: '3' }, …]
+  ex.steps;         // [{ label: 'A', code: 'uv*3.0', text: 'zooms `uv` out 3× …', segs, start, end, idiom?, type, role }, …]
+  ex.breakdown;     // 'First, `A = uv*3.0`: … Then, … Finally, `fract(C)`: …' (and breakdownSegs)
+  ex.inShort;       // 'In short: `uv` → zoomed space → … → ramps, 0…1 per component.' (composed only)
+  ex.meaning;       // an idiom at the root: 'Gives …' (and meaningSegs, use)
   ex.idioms;     // [{ idiom, node, bindings, pattern }]
 }
 
 const line = explainLine('float d = length(p) - 0.3;', { types: { p: 'vec2' } });
-// line.lineSentence: 'd is the signed distance to a circle of radius 0.3.'
+// line.lineSentence: '`d` is the signed distance to a circle of radius 0.3.'   (the literal reading)
+// line.lead:         '`d` is how far `p` is from the edge of a circle of radius 0.3: …' (plain meaning when there is one)
+// transferPlot(line): null here (p is a vec2); for `1.0 - step(0.02, a)` → { input: 'a', from: 0, to: 0.1, edges: [0.02], points }
 
 const g = generaliseText('smoothstep(0.3, 0.35, length(uv))', { types: { uv: 'vec2' } });
 // g.inputs: radius (0.3, slider), width (0.05, slider), p (vec2, from the idiom's hole)
@@ -159,6 +191,7 @@ Add an entry to `IDIOMS` in `src/lib/glslPatterns/idioms.ts`, above anything mor
 - **`noun`**: a short noun phrase for the sentence.
 - **`how`**: a verb phrase for the step. `c.h('x')` is the hole's phrase (its code, or a later step's short name) and `c.n('k')` the number formatted for prose (π multiples as π).
 - **`short`**: what later steps call the result ("the disc").
+- **`meaning`** / **`use`** (in `meanings.ts`, keyed by id): the plain meaning, a noun phrase that reads after "x is …", and the common job ("a soft round mask"). Every built-in idiom needs both; a test checks.
 - **`fnName`**: the made function's name.
 - **`keywords`**: search words.
 
@@ -177,6 +210,8 @@ Then add a positive and a negative case to `src/lib/glslPatterns/__tests__/match
   - role-aware wording of the same `* 3.0`;
   - idioms inside compositions, and lines (declarations, compound assignment, return);
   - role inference by graph, name, type and operation.
+- **segments.test.ts**: segments for a set of idioms, `toPlainText` backticks, In short summaries, every idiom has a meaning and a use and its meaning reads without empty holes.
+- **plot.test.ts**: the 0.02 edge plots over 0…0.1, every edge is inside the range, ranges for shapers, no plot for space or several inputs.
 - **generalise.test.ts**:
   - inputs, names, types and defaults for idioms and as written;
   - every made function parses with `@shaderfrog/glsl-parser`, its body's type is the declared return type, and it gives the same values as the original on sample inputs (CPU evaluator);
@@ -186,6 +221,8 @@ Then add a positive and a negative case to `src/lib/glslPatterns/__tests__/match
   - find uses with provenance, inside groups, by idiom and by made pattern.
 
 ## Limits
+
+- The transfer plot is for the line as a whole; steps don't get their own. Show picture opens the editor's line preview rather than an inline thumbnail.
 
 - One expression at a time. A statement's control flow (`if`, `for`) is skipped and only the simple statements inside are explained. Ints, bools and matrices beyond `mat2` have types but few words.
 - Roles are heuristics with stated evidence. A float named `c`, used as a coordinate, may read as a colour channel. The graph's wiring wins when there is one.

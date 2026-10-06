@@ -10,7 +10,7 @@
  *
  * `registerPatternExplainer` lets another source (a user's named patterns) answer first.
  */
-import { explainExpression, idiomById, idiomVocabulary } from '../lib/glslPatterns';
+import { explainExpression, idiomById, idiomVocabulary, type Seg } from '../lib/glslPatterns';
 
 export interface PatternQuery {
   callee: string;
@@ -27,8 +27,10 @@ export interface PatternInfo {
   id?: string;
   /** The idiom's name ("soft circle"); absent when no idiom matches the whole call. */
   name?: string;
-  /** What the instance does, in plain words (the explainer's sentence). */
+  /** What the instance does, in plain words (the idiom's plain meaning, else the explainer's sentence); names in backticks. */
   phrase?: string;
+  /** The same with names and numbers as tokens, for ExplainText. */
+  phraseSegs?: Seg[];
   /** Search words: the idiom's name, function name and keywords. */
   words?: string[];
   from: 'library' | 'registered';
@@ -54,7 +56,7 @@ export const libraryExplainer: PatternExplainer = {
         // An idiom matching the whole call names the card; one inside it only lends search words.
         const root = ex.idioms.find(h => h.node.start <= ex.root.start && h.node.end >= ex.root.end);
         const words = ex.idioms.flatMap(h => VOCAB.get(h.idiom.id) ?? []);
-        info = { from: 'library', phrase: ex.sentence, words };
+        info = { from: 'library', phrase: ex.meaning ?? ex.sentence, phraseSegs: ex.meaningSegs ?? ex.sentenceSegs, words };
         if (root) { info.id = root.idiom.id; info.name = root.idiom.name; }
       }
     } catch { info = null; }
