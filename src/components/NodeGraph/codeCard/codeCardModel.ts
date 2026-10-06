@@ -1,18 +1,21 @@
 /**
  * The card face of an Expression Block (exprNode) or a Custom Function (customFn): what each
  * page of its carousel shows, worked out from the node alone (plus the labels of what feeds it).
- * Pure, so the card, the mobile browser and the tests share it.
+ * Pure, so the card, the mobile browser and the tests share it. The signature (an abstract
+ * function signature from the inputs, types and wiring) is no page of its own: it is the Edit
+ * button's tooltip.
  *
  *   code        the block's lines as they compile (read-only on the card), or the function body
- *   signature   an abstract signature from the inputs, their types and their wiring
+ *   preview     a live mini preview of the output, the eye preview's own (ValuePreview, Show as)
  *   note        the node's comment (params.__comment) and its credit
  *   description the block's own description (params.__description), only when one is written
  */
 import type { GraphNode } from '../../../types/nodeGraph';
+import { DETAIL_MODES, modesFor, pickPreviewOutput, previewableOutputs } from '../../../lib/nodePreview/showAs';
 
-export type CardPageId = 'code' | 'signature' | 'note' | 'description';
-export const CARD_PAGE_ORDER: readonly CardPageId[] = ['code', 'signature', 'note', 'description'];
-export const CARD_PAGE_LABEL: Record<CardPageId, string> = { code: 'Code', signature: 'Signature', note: 'Note', description: 'Description' };
+export type CardPageId = 'code' | 'preview' | 'note' | 'description';
+export const CARD_PAGE_ORDER: readonly CardPageId[] = ['code', 'preview', 'note', 'description'];
+export const CARD_PAGE_LABEL: Record<CardPageId, string> = { code: 'Code', preview: 'Preview', note: 'Note', description: 'Description' };
 
 export function isCodeCardNode(node: Pick<GraphNode, 'type'>): boolean {
   return node.type === 'exprNode' || node.type === 'customFn';
@@ -186,11 +189,11 @@ export function userDescriptionOf(node: GraphNode): string {
   return typeof node.params.__description === 'string' ? node.params.__description.trim() : '';
 }
 
-/** Which pages the card has, in order. Empty pages are left out; the signature is always there. */
+/** Which pages the card has, in order: Code → Preview → Note → Description. Empty ones are left out; the preview is always there. */
 export function cardPages(node: GraphNode): CardPageId[] {
   const pages: CardPageId[] = [];
   if (!isEmptyCodeNode(node)) pages.push('code');
-  pages.push('signature');
+  pages.push('preview');
   if (noteOf(node) || node.params.__credit) pages.push('note');
   if (userDescriptionOf(node)) pages.push('description');
   return pages;
@@ -205,4 +208,32 @@ export function resolvePage(pages: readonly CardPageId[], remembered: CardPageId
 export function stepPage(pages: readonly CardPageId[], current: CardPageId, step: number): CardPageId {
   const i = Math.max(0, pages.indexOf(current));
   return pages[(i + step + pages.length * 4) % pages.length];
+}
+
+// ── Preview ──────────────────────────────────────────────────────────────────
+
+export interface PreviewOptions {
+  /** The output the preview draws (the remembered pick, else the preview system's default). */
+  outputKey: string;
+  type: string;
+  /** Outputs to pick from; the picker shows when there are two or more. */
+  outputs: Array<{ key: string; label: string; type: string }>;
+  /** The Show as modes, for a float or a vec2; null for a colour (vec3 / vec4), drawn as colour with its range key. */
+  modes: string[] | null;
+  /** Show as offers Detail (vec2: Grid / Arrows). */
+  detail: boolean;
+}
+
+/** What the Preview page offers for this block, following its output type (the eye preview's own rules). */
+export function previewOptionsFor(node: GraphNode, preferredOutput?: string | null): PreviewOptions | null {
+  const picked = pickPreviewOutput(node, preferredOutput);
+  if (!picked) return null;
+  const [outputKey, type] = picked;
+  const modes = type === 'float' || type === 'vec2' ? modesFor(type) : null;
+  return {
+    outputKey, type,
+    outputs: previewableOutputs(node),
+    modes: modes ? modes.map(m => m.label) : null,
+    detail: !!modes && modes.some(m => DETAIL_MODES.has(m.value)),
+  };
 }

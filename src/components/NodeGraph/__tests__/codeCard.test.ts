@@ -17,11 +17,12 @@ const storage = vi.hoisted(() => {
 import type { GraphNode } from '../../../types/nodeGraph';
 import { ExprBlockNode, CustomFnNode } from '../../../nodes/definitions/effects';
 import {
-  cardPages, codeLinesFor, fnNameFrom, isEmptyCodeNode, parseSourceLabelsKey, resolvePage, signatureFor,
+  cardPages, codeLinesFor, fnNameFrom, previewOptionsFor, isEmptyCodeNode, parseSourceLabelsKey, resolvePage, signatureFor,
   signatureText, sourceLabelsFor, sourceLabelsKey, stepPage,
 } from '../codeCard/codeCardModel';
 import { CARD_PAGE_STORAGE_KEY, loadCardPages, useCardPages } from '../codeCard/cardPageStore';
 import { highlightGlsl, highlightCacheSize } from '../codeCard/highlight';
+import { useNodePreviewPrefs, prefOf } from '../../../lib/nodePreview/showAs';
 
 type Inp = { name: string; type: string; slider?: { min: number; max: number } | null; carry?: boolean };
 
@@ -121,44 +122,50 @@ describe('signature', () => {
 });
 
 describe('pages', () => {
-  it('an empty block shows only the signature; the definition\'s help is never a page', () => {
+  it('an empty block shows only the preview; the definition\'s help is never a page', () => {
     const fresh = expr('e', { inputs: [{ name: 'a', type: 'float' }], lines: [], result: 'a', outputType: 'float' });
     expect(isEmptyCodeNode(fresh)).toBe(true);
-    expect(cardPages(fresh)).toEqual(['signature']);
-    expect(cardPages({ ...fresh, params: { ...fresh.params, __description: '  ' } } as GraphNode)).toEqual(['signature']);
-    expect(cardPages({ ...fresh, params: { ...fresh.params, __description: 'Doubles a' } } as GraphNode)).toEqual(['signature', 'description']);
+    expect(cardPages(fresh)).toEqual(['preview']);
+    expect(cardPages({ ...fresh, params: { ...fresh.params, __description: '  ' } } as GraphNode)).toEqual(['preview']);
+    expect(cardPages({ ...fresh, params: { ...fresh.params, __description: 'Doubles a' } } as GraphNode)).toEqual(['preview', 'description']);
   });
 
   it('lines, a result of its own, a note, a credit and a description each add their page', () => {
     const withLines = expr('e', { inputs: [{ name: 'a', type: 'float' }], lines: [{ lhs: 'a', op: '*=', rhs: '2.0' }], result: 'a' });
-    expect(cardPages(withLines)).toEqual(['code', 'signature']);
+    expect(cardPages(withLines)).toEqual(['code', 'preview']);
     const resultOnly = expr('e', { inputs: [{ name: 'a', type: 'float' }], lines: [], result: 'a * 2.0' });
-    expect(cardPages(resultOnly)).toEqual(['code', 'signature']);
+    expect(cardPages(resultOnly)).toEqual(['code', 'preview']);
     const incomplete = expr('e', { inputs: [{ name: 'a', type: 'float' }], lines: [{ lhs: 'a', op: '=', rhs: '' }], result: 'a' });
     expect(isEmptyCodeNode(incomplete)).toBe(true);
     const noted = expr('e', { inputs: [], lines: [{ lhs: 'p', op: '=', rhs: 'vec3(1.0)' }], result: 'p', __comment: '  why  ', __description: 'what' });
-    expect(cardPages(noted)).toEqual(['code', 'signature', 'note', 'description']);
+    expect(cardPages(noted)).toEqual(['code', 'preview', 'note', 'description']);
     const blankNote = expr('e', { inputs: [], lines: [], result: '', __comment: '   ' });
-    expect(cardPages(blankNote)).toEqual(['signature']);
+    expect(cardPages(blankNote)).toEqual(['preview']);
     const credited = expr('e', { inputs: [], lines: [], result: '', __credit: { title: 'x' } });
     expect(cardPages(credited)).toContain('note');
   });
 
   it('a Custom Function with the default or an empty body has no code page', () => {
-    expect(cardPages(fn('f', { body: '0.0', inputs: [] }))).toEqual(['signature']);
-    expect(cardPages(fn('f', { body: '', inputs: [] }))).toEqual(['signature']);
-    expect(cardPages(fn('f', { body: 'return 0.0;', inputs: [] }))).toEqual(['signature']);
-    expect(cardPages(fn('f', { body: 'return uv.x;', inputs: [] }))).toEqual(['code', 'signature']);
+    expect(cardPages(fn('f', { body: '0.0', inputs: [] }))).toEqual(['preview']);
+    expect(cardPages(fn('f', { body: '', inputs: [] }))).toEqual(['preview']);
+    expect(cardPages(fn('f', { body: 'return 0.0;', inputs: [] }))).toEqual(['preview']);
+    expect(cardPages(fn('f', { body: 'return uv.x;', inputs: [] }))).toEqual(['code', 'preview']);
   });
 
   it('resolves and steps pages, wrapping and falling back when a page went away', () => {
-    const pages = ['code', 'signature', 'note'] as const;
+    const pages = ['code', 'preview', 'note'] as const;
     expect(resolvePage(pages, 'note')).toBe('note');
     expect(resolvePage(pages, 'description')).toBe('code');
     expect(resolvePage(pages, undefined)).toBe('code');
     expect(stepPage(pages, 'note', 1)).toBe('code');
     expect(stepPage(pages, 'code', -1)).toBe('note');
-    expect(stepPage(['signature'], 'signature', 1)).toBe('signature');
+    expect(stepPage(['preview'], 'preview', 1)).toBe('preview');
+  });
+
+  it('keeps the order Code → Preview → Note → Description, with no Signature page', () => {
+    const all = expr('e', { inputs: [{ name: 'a', type: 'float' }], lines: [{ lhs: 'a', op: '*=', rhs: '2.0' }], result: 'a', __comment: 'n', __description: 'd' });
+    expect(cardPages(all)).toEqual(['code', 'preview', 'note', 'description']);
+    expect(cardPages(all)).not.toContain('signature');
   });
 });
 
@@ -166,12 +173,17 @@ describe('remembered page', () => {
   beforeEach(() => { storage.clear(); useCardPages.getState().reload(); });
 
   it('remembers the page per node, in storage, across a reload', () => {
-    useCardPages.getState().setPage('n1', 'signature');
+    useCardPages.getState().setPage('n1', 'preview');
     useCardPages.getState().setPage('n2', 'note');
-    expect(JSON.parse(storage.get(CARD_PAGE_STORAGE_KEY)!)).toEqual({ n1: 'signature', n2: 'note' });
+    expect(JSON.parse(storage.get(CARD_PAGE_STORAGE_KEY)!)).toEqual({ n1: 'preview', n2: 'note' });
     useCardPages.setState({ pages: {} });
     useCardPages.getState().reload();
-    expect(useCardPages.getState().pages).toEqual({ n1: 'signature', n2: 'note' });
+    expect(useCardPages.getState().pages).toEqual({ n1: 'preview', n2: 'note' });
+  });
+
+  it('a remembered Signature page (it was replaced) comes back as the Preview page', () => {
+    storage.set(CARD_PAGE_STORAGE_KEY, JSON.stringify({ a: 'signature', b: 'note' }));
+    expect(loadCardPages()).toEqual({ a: 'preview', b: 'note' });
   });
 
   it('ignores junk in storage and survives storage that throws', () => {
@@ -185,6 +197,38 @@ describe('remembered page', () => {
       useCardPages.getState().setPage('n3', 'description');
       expect(useCardPages.getState().pages.n3).toBe('description');
     } finally { localStorage.setItem = setItem; }
+  });
+});
+
+describe('preview options follow the output type', () => {
+  it('float: Range / Slice / Contours / Raw, no Detail', () => {
+    const o = previewOptionsFor(expr('e', { outputType: 'float', inputs: [], lines: [], result: '1.0' }))!;
+    expect(o).toMatchObject({ outputKey: 'result', type: 'float', modes: ['Range', 'Slice', 'Contours', 'Raw'], detail: false });
+  });
+
+  it('vec2: Grid / Arrows / Wheel / Raw, with Detail', () => {
+    const o = previewOptionsFor(expr('e', { outputType: 'vec2', inputs: [], lines: [], result: 'vec2(1.0)' }))!;
+    expect(o).toMatchObject({ type: 'vec2', modes: ['Grid', 'Arrows', 'Wheel', 'Raw'], detail: true });
+  });
+
+  it('vec3 and vec4: colour (no Show as modes)', () => {
+    expect(previewOptionsFor(expr('e', { outputType: 'vec3', inputs: [], lines: [], result: 'vec3(1.0)' }))).toMatchObject({ type: 'vec3', modes: null, detail: false });
+    expect(previewOptionsFor(fn('f', { outputType: 'vec4', inputs: [], body: 'vec4(1.0)' }))).toMatchObject({ type: 'vec4', modes: null });
+  });
+
+  it('several outputs: all offered to the picker, and the remembered pick is the one drawn', () => {
+    const node = expr('e', { outputType: 'float', inputs: [], lines: [{ lhs: 'vec2 q', op: '=', rhs: 'vec2(1.0)' }], result: '1.0', outputs: ['q'] });
+    node.outputs.q = { type: 'vec2', label: 'q' } as GraphNode['outputs'][string];
+    const o = previewOptionsFor(node)!;
+    expect(o.outputs.map(x => x.key)).toEqual(['result', 'q']);
+    expect(o.outputKey).toBe('result');
+    useNodePreviewPrefs.getState().set(node, { output: 'q' });
+    const picked = previewOptionsFor(node, prefOf(node).output)!;
+    expect(picked).toMatchObject({ outputKey: 'q', type: 'vec2', detail: true });
+  });
+
+  it('a Custom Function gets the same options from its output type', () => {
+    expect(previewOptionsFor(fn('f', { outputType: 'float', inputs: [], body: 'return 1.0;' }))?.modes).toEqual(['Range', 'Slice', 'Contours', 'Raw']);
   });
 });
 
