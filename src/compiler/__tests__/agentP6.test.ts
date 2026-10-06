@@ -118,7 +118,8 @@ describe('Open as nodes (the Particles node)', () => {
       const out = n('output', 'out', 0, 0, {}, { color: [r.outputs.color!.nodeId, r.outputs.color!.outputKey] });
       const c = compileGraph({ nodes: [...r.nodes, out] });
       expect(c.errors, name).toBeUndefined();
-      if (name === 'ink' || name === 'dust') expect(r.missing.join(' '), name).toContain('3D');
+      // 3D presets come across as 3D (agents3d.test.ts checks the camera): the group's Space is 3D.
+      if (name === 'ink' || name === 'dust') expect(r.nodes.find(x => x.type === 'agentsGroup')!.params.space, name).toBe('3d');
       if (name === 'launch') expect(r.missing.join(' '), name).toMatch(/Jet.*|Gust/);
       if (name === 'dissolve') { expect(r.imageId, name).toBeDefined(); expect(r.missing.join(' ')).toContain('Image emitter'); }
       if (name === 'chladni' || name === 'singing' || name === 'cymatics') expect(typesInside(r.nodes), name).toContain('agentChladni');

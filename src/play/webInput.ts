@@ -12,7 +12,7 @@
 import { unsupportedFeatures, type GraphFeatures, type PlayHtmlInput, type PlayMedia, type WebAgents, type WebPass } from './exportHtml';
 import type { AgentsSpec, PassProgram } from '../compiler/types';
 import { passIterUniform, passPrevUniform, passUniform } from '../nodes/definitions/passes';
-import { agentDrawUniform, agentStateUniform, agentStepUniform, agentWindowUniform, trailStepUniforms, trailUniform } from '../nodes/definitions/agents';
+import { agentDrawUniform, agentStateUniform, agentStepUniform, agentWindowUniform, trailStepUniforms, trailUniform, trailVolUniform } from '../nodes/definitions/agents';
 import { AG_BESSEL_UNIFORM, listenUniforms } from '../nodes/definitions/agentForces';
 import { MOTION_MAP_UNIFORM } from '../nodes/definitions/motionMap';
 import { agentReadLayer } from '../lib/agentReadings';
@@ -76,7 +76,7 @@ export function webAgents(a: AgentsSpec, play?: PlayRecord): WebAgents {
       },
     })),
     deposits: a.deposits.map(({ nodeId: _n, ...d }) => d),
-    trails: a.trails.map(({ nodeId: _n, stepNodeIds: _s, readsPasses: _p, ...t }) => ({ ...t, u: { tex: trailUniform(t.slug), ...trailStepUniforms(t.slug) } })),
+    trails: a.trails.map(({ nodeId: _n, stepNodeIds: _s, readsPasses: _p, ...t }) => ({ ...t, u: { tex: trailUniform(t.slug), ...trailStepUniforms(t.slug), ...(t.volume ? { vol: trailVolUniform(t.slug) } : {}) } })),
     draws: a.draws.map(({ nodeId: _n, ...d }) => ({ ...d, u: { tex: agentDrawUniform(d.slug) } })),
     bessel: AG_BESSEL_UNIFORM,
   };
@@ -87,6 +87,7 @@ export function webShaders(c: CompiledForWeb): string[] {
   return [
     c.fragmentShader, ...(c.passes ?? []).map(p => p.fragmentShader),
     ...(c.agents?.groups ?? []).map(g => g.fragmentShader), ...(c.agents?.trails ?? []).flatMap(t => (t.stepShader ? [t.stepShader] : [])),
+    ...(c.agents?.draws ?? []).flatMap(d => (d.probe ? [d.probe.camera, ...(d.probe.depth ? [d.probe.depth] : [])] : [])),
   ];
 }
 

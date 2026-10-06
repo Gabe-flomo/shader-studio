@@ -297,18 +297,96 @@ export function agDrawLook(d, n, h, read, readColour) {
   };
 }
 
-/** Draw agents' lights at `time` (the Particles node's, gpPlace), round its centre: [{ x, y, reach, power, colour }]. */
+/**
+ * Draw agents' lights at `time` (the Particles node's, gpPlace), round its centre: [{ x, y, z, reach,
+ * power, colour }]. In 3D (d.space3d) orbiting lights also bob in depth, as the Particles node's do.
+ */
 export function agLights(d, read, readColour, time, aspect) {
   if (!d.lights) return [];
   const orbit = read(d.params.lightOrbit, 0.5);
   const P = {
-    follow: 'none', lights: String(d.lights), emitSize: (orbit - 0.2) / 0.7, lightMotion: d.lightMotion, space: '2d', hands: 'off',
+    follow: 'none', lights: String(d.lights), emitSize: (orbit - 0.2) / 0.7, lightMotion: d.lightMotion, space: d.space3d ? '3d' : '2d', hands: 'off',
     lightReach: read(d.params.lightReach, 0.3), lightPower: read(d.params.lightPower, 1.6),
     lightColor: readColour(d.params.lightColor, [1, 0.55, 0.25]),
   };
   const cx = read(d.params.lightX, 0), cy = read(d.params.lightY, 0);
-  return gpPlace(P, time, null, aspect).lights.map(l => ({ x: l.x + cx, y: l.y + cy, reach: l.reach, power: l.power, colour: l.colour }));
+  return gpPlace(P, time, null, aspect).lights.map(l => ({ x: l.x + cx, y: l.y + cy, z: l.z || 0, reach: l.reach, power: l.power, colour: l.colour }));
 }
+
+/*
+ * 3D (docs/agents-plan.md "3D"): a volume Trail's layout and Draw agents' camera, shared by both hosts.
+ */
+
+/** Widest a volume's texture is: its slices wrap onto more rows past this. */
+export const AG_VOL_MAX_W = 4096;
+
+/**
+ * A volume Trail of `rows` for a picture of w × h: columns follow the picture's shape (cubic cells
+ * over the box x ±aspect, y ±1, z ±1), as many slices as rows, the slices side by side (tx across,
+ * ty down) in one texture of w × h texels.
+ */
+export function agVolLayout(rows, w, h) {
+  const ny = Math.max(4, Math.round(rows) || 96), nz = ny;
+  const nx = Math.max(4, Math.round(ny * Math.max(1, w) / Math.max(1, h)));
+  const tx = Math.max(1, Math.min(nz, Math.floor(AG_VOL_MAX_W / nx)));
+  const ty = Math.ceil(nz / tx);
+  return { nx, ny, nz, tx, ty, w: tx * nx, h: ty * ny };
+}
+
+/** The volume's layout uniform: (columns, rows, slices, slices across). */
+export function agVolUniform(L) { return [L.nx, L.ny, L.nz, L.tx]; }
+
+const ag3Norm = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+const ag3Cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const ag3Dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+/**
+ * Draw agents' built-in camera at `time` (d.params; Angle, Elevation and Orbit speed in degrees):
+ * Time Cube View's and the March Camera's orbit (it stands Distance from the point Translate X / Y / Z
+ * moves, at Angle round it and Elevation above, its right the March Camera's cross(up, forward)), with the
+ * Particles node's Drift on top (a slow turn, a bob and breathing, its gpCamera's numbers). With d.mirror
+ * the right is the Particles node's own way round (Open as nodes). Zoom is the focal length in half
+ * picture heights; Focus a share of Distance; Blur and Max blur in pixels of a 720-high picture.
+ */
+export function agCamera3(d, read, time, h) {
+  const P = d.params;
+  const deg = Math.PI / 180;
+  const drift = read(P.drift, 0);
+  const yaw = read(P.camAngle, 0) * deg + time * (read(P.rotSpeed, 0) * deg + drift * 0.35);
+  const pitch = Math.max(-1.55, Math.min(1.55, read(P.camElevation, 15) * deg + 0.12 * Math.sin(time * drift * 0.23)));
+  const dist = Math.max(0.05, read(P.camDist, 3.2)) * (1 + 0.06 * Math.sin(time * drift * 0.17));
+  const T = [read(P.camX, 0), read(P.camY, 0), read(P.camZ, 0)];
+  const hz = [Math.sin(yaw), 0, Math.cos(yaw)];
+  const off = [dist * Math.cos(pitch) * hz[0], dist * Math.sin(pitch), dist * Math.cos(pitch) * hz[2]];
+  const eye = [T[0] + off[0], T[1] + off[1], T[2] + off[2]];
+  const fwd = [-off[0] / dist, -off[1] / dist, -off[2] / dist];
+  const cu = ag3Norm([-Math.sin(pitch) * hz[0], Math.cos(pitch), -Math.sin(pitch) * hz[2]]);
+  let right = ag3Norm(ag3Cross(cu, fwd));
+  const up = ag3Cross(fwd, right);
+  if (d.mirror) right = [-right[0], -right[1], -right[2]];
+  const px = Math.max(0.5, h / 720);
+  return {
+    eye, fwd, right, up, dist,
+    lens: Math.max(0.05, read(P.fov, 1.8)),
+    ortho: Math.max(0, Math.min(1, read(P.ortho, 0))),
+    focus: Math.max(0.05, read(P.focus, 1) * dist),
+    focusShare: Math.max(0.05, read(P.focus, 1)),
+    coc: Math.max(0, read(P.blur, 0)) * 52 * px,
+    cap: Math.max(1, read(P.maxBlur, 7)) * px,
+  };
+}
+
+/** Where a point lands through agCamera3's camera: picture units (x ±aspect, y ±1) and its depth (≤ 0: behind it). */
+export function agProject3(cam, xyz) {
+  const d = [xyz[0] - cam.eye[0], xyz[1] - cam.eye[1], xyz[2] - cam.eye[2]];
+  const z = ag3Dot(d, cam.fwd);
+  if (z < 0.06 && cam.ortho < 0.999) return { x: 0, y: 0, depth: -1 };
+  const w = z + (cam.dist - z) * cam.ortho;
+  return { x: ag3Dot(d, cam.right) * cam.lens / w, y: ag3Dot(d, cam.up) * cam.lens / w, depth: w };
+}
+
+/** The four points a scene camera probe reads its chain at (g_uv), and what each pixel holds (0 origin, 1 ray). */
+export const AG_PROBE_POINTS = [[0, 0, 0], [0, 0, 1], [0.5, 0, 1], [0, 0.5, 1]];
 
 /*
  * Readings (P6): what a group's walkers add up to, for Play (sensors on `ag:<group node id>`).

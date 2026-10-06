@@ -166,6 +166,7 @@ export function gpPlateUniforms(modes: GpPlateMode[], shape: string): { values: 
 export function gpCurlAt(p: string, scale: string, time: string): string;
 export function gpCurlOctave2(q: string): string;
 export function gpCurlPlane(a: string, b: string): string;
+export function gpCurl3D(a: string, b: string): string;
 export function gpGust(a: string): string;
 export function gpSwirl(s: string, d: string, r: string, r2: string): string;
 export function gpAttractPull(a: string, g: string, r: string): string;

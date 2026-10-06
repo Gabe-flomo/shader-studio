@@ -16,8 +16,8 @@
 // then Draw agents.
 //
 // Top-level names start with `ah` (the kit's one-scope rule).
-import { AG_OFFLINE_CHUNK, AG_STEP_HZ, agDrawLook, agGovern, agGovernorState, agGroupState, agGroupSteps, agHear, agKeep, agLights, agListenState, agLiveState, agReadDecode, agReadPlan, agRestartGroup, agStepTime, agStepWindow, agTrailSize } from './agentPlan.js';
-import { AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_READ_FRAG, AG_SUM_FRAG, AG_TRAIL_FRAG } from './agentShaders.js';
+import { AG_OFFLINE_CHUNK, AG_PROBE_POINTS, AG_STEP_HZ, agCamera3, agDrawLook, agGovern, agGovernorState, agGroupState, agGroupSteps, agHear, agKeep, agLights, agListenState, agLiveState, agProject3, agReadDecode, agReadPlan, agRestartGroup, agStepTime, agStepWindow, agTrailSize, agVolLayout, agVolUniform } from './agentPlan.js';
+import { AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT3_VERT, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW3_VERT, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_PROJ3_FRAG, AG_READ_FRAG, AG_SUM_FRAG, AG_TRAIL3_FRAG, AG_TRAIL_FRAG } from './agentShaders.js';
 import { GP_BESSEL_N, GP_BESSEL_W, GP_LEVELS, gpBesselTable, gpReadback } from './gpuParticles.js';
 
 /** Why a page can't run agents here, or null. */
@@ -71,6 +71,10 @@ export function ahCreate(gl, spec, env) {
   // Every sampler the agents fill starts blank (the app's empty texture), every `_px` at one pixel.
   for (const g of groups) for (const k of ['A', 'B', 'C', 'D']) env.textures.set(g.u[k], null);
   for (const t of trails) { env.textures.set(t.u.tex, null); env.vec2s.set(t.u.tex + '_px', [1, 1]); if (t.stepShader) env.textures.set(t.u.src, null); }
+  // 3D: a volume Trail's layout and a Draw agents' scene probe point are uniforms every program may read.
+  const vec4s = new Map();
+  for (const t of trails) if (t.volume && t.u.vol) vec4s.set(t.u.vol, [1, 1, 1, 1]);
+  for (const d of draws) if (d.probe) vec4s.set(d.probe.uniform, [0, 0, 0, 0]);
   for (const d of draws) { env.textures.set(d.u.tex, null); env.vec2s.set(d.u.tex + '_px', [1, 1]); }
   if (unsupported) {
     if (typeof console !== 'undefined') console.warn('[Playfield] ' + unsupported + ' The picture draws without them.');
@@ -100,6 +104,10 @@ export function ahCreate(gl, spec, env) {
       deposit: raw(AG_DEPOSIT_VERT, AG_DEPOSIT_FRAG), trail: raw(AG_FULL_VERT, AG_TRAIL_FRAG), draw: raw(AG_DRAW_VERT, AG_DRAW_FRAG),
       down: raw(AG_FULL_VERT, AG_DOWN_FRAG), blur: raw(AG_FULL_VERT, AG_BLUR_FRAG), compose: raw(AG_FULL_VERT, AG_COMPOSE_FRAG),
     };
+    // 3D (only when the page has a 3D group): a volume's deposit, step and front view, and the camera draw.
+    if (groups.some(g => g.space3d)) Object.assign(fixed, {
+      deposit3: raw(AG_DEPOSIT3_VERT, AG_DEPOSIT_FRAG), trail3: raw(AG_FULL_VERT, AG_TRAIL3_FRAG), proj3: raw(AG_FULL_VERT, AG_PROJ3_FRAG), draw3: raw(AG_DRAW3_VERT, AG_DRAW_FRAG),
+    });
   } catch (e) {
     warn('The agents engine', e);
     return { unsupported: String(e && e.message ? e.message : e), active: false, run() {}, reset() {}, dispose() {} };
@@ -117,6 +125,15 @@ export function ahCreate(gl, spec, env) {
     try { p = env.link(t.stepShader); } catch (e) { warn('The Trail field "' + (t.label || t.slug) + '"', e); }
     trailSteps.set(t.slug, { p, u: p ? ahUniforms(gl, p) : null });
   }
+  // 3D Draw agents' scene probes (a ray-marched scene's camera and its depth), linked as the picture is.
+  const probes = new Map();
+  for (const d of draws) {
+    if (!d.probe) continue;
+    const one = (src, what) => { try { const p = env.link(src); return { p, u: ahUniforms(gl, p) }; } catch (e) { warn('The scene ' + what + ' of "' + d.slug + '"', e); return null; } };
+    probes.set(d.slug, { camera: one(d.probe.camera, 'camera'), depth: d.probe.depth ? one(d.probe.depth, 'depth') : null });
+  }
+  /** Set the 3D uniforms (vec4s) in a program the runtime links (env.use binds the rest). */
+  const setVec4s = (prog) => { if (prog && prog.u) for (const [n, v] of vec4s) ahSet(gl, prog.u, n, v); };
 
   const emptyVao = gl.createVertexArray();
   const blank = gl.createTexture();
@@ -150,7 +167,7 @@ export function ahCreate(gl, spec, env) {
   const dropGroup = s => { for (const side of s.tex) for (const t of side) gl.deleteTexture(t); for (const fb of s.fb) gl.deleteFramebuffer(fb); dropListen(s); };
   const dropListen = s => { for (const l of s.listen.values()) if (l.levelTex) gl.deleteTexture(l.levelTex); s.listen.clear(); };
   const group = g => {
-    const key = g.side + (g.stateC ? ':C' : '');
+    const key = g.side + (g.stateC ? ':C' : '') + (g.space3d ? ':3D' : '');
     let s = G.get(g.slug);
     if (s && s.key === key) return s;
     if (s) dropGroup(s);
@@ -176,24 +193,44 @@ export function ahCreate(gl, spec, env) {
     return l;
   };
   let bessel = null;
+  const dropTrail = s => { s.rt.forEach(dropLook); if (s.proj) dropLook(s.proj); };
   const trail = (t, w, h) => {
+    if (t.volume) {
+      // A volume (a 3D group's trail): its slices side by side, ping-pong, and its front view for the picture.
+      const L = agVolLayout(t.volume, w, h);
+      const key = 'vol' + L.nx + 'x' + L.ny + 'x' + L.nz + ':' + t.edges;
+      let s = T.get(t.slug);
+      if (s && s.key === key) return s;
+      if (s) dropTrail(s);
+      const wrap = t.edges === 'wrap' ? gl.REPEAT : gl.CLAMP_TO_EDGE;
+      s = { key, w: L.w, h: L.h, vol: L, rt: [look(L.w, L.h, gl.LINEAR, gl.CLAMP_TO_EDGE), look(L.w, L.h, gl.LINEAR, gl.CLAMP_TO_EDGE)], proj: look(L.nx, L.ny, gl.LINEAR, wrap), cur: 0 };
+      for (const r of s.rt) clearFb(r.fb, L.w, L.h);
+      clearFb(s.proj.fb, L.nx, L.ny);
+      T.set(t.slug, s);
+      return s;
+    }
     const [tw, th] = agTrailSize(w, h, t);
     const key = tw + 'x' + th + ':' + t.edges;
     let s = T.get(t.slug);
     if (s && s.key === key) return s;
-    if (s) s.rt.forEach(dropLook);
+    if (s) dropTrail(s);
     const wrap = t.edges === 'wrap' ? gl.REPEAT : gl.CLAMP_TO_EDGE;
     s = { key, w: tw, h: th, rt: [look(tw, th, gl.LINEAR, wrap), look(tw, th, gl.LINEAR, wrap)], cur: 0 };
     for (const r of s.rt) clearFb(r.fb, tw, th);
     T.set(t.slug, s);
     return s;
   };
-  const clearTrail = s => { for (const r of s.rt) clearFb(r.fb, s.w, s.h); };
+  const clearTrail = s => { for (const r of s.rt) clearFb(r.fb, s.w, s.h); if (s.proj) clearFb(s.proj.fb, s.proj.w, s.proj.h); };
+  const dropDraw = s => {
+    dropLook(s.acc); s.glow.forEach(dropLook); if (s.out !== s.acc) dropLook(s.out);
+    if (s.cam) { gl.deleteFramebuffer(s.cam.fb); gl.deleteTexture(s.cam.t); }
+    if (s.depth) dropLook(s.depth);
+  };
   const drawTargets = (d, w, h) => {
     const key = w + 'x' + h + ':' + d.style;
     let s = D.get(d.slug);
     if (s && s.key === key) return s;
-    if (s) { dropLook(s.acc); s.glow.forEach(dropLook); if (s.out !== s.acc) dropLook(s.out); }
+    if (s) dropDraw(s);
     const acc = look(w, h, gl.LINEAR, gl.CLAMP_TO_EDGE);
     const glow = [];
     let out = acc;
@@ -255,7 +292,7 @@ export function ahCreate(gl, spec, env) {
       const P = readProgs.read;
       gl.useProgram(P.p);
       samplers(P, [['u_a', t[0]], ['u_b', t[1]], ['u_c', g.stateC ? t[2] : null]]);
-      ahSet(gl, P.u, 'u_side', g.side); ahSet(gl, P.u, 'u_species', g.species); ahSet(gl, P.u, 'u_stateC', g.stateC ? 1 : 0); ahSet(gl, P.u, 'u_w', r.levels[0].w);
+      ahSet(gl, P.u, 'u_side', g.side); ahSet(gl, P.u, 'u_species', g.species); ahSet(gl, P.u, 'u_stateC', g.stateC ? 1 : 0); ahSet(gl, P.u, 'u_w', r.levels[0].w); ahSet(gl, P.u, 'u_deep', g.space3d ? 1 : 0);
       quadInto(r.levels[0].fb, 2 * r.levels[0].w, r.levels[0].h);
       for (let k = 1; k < r.levels.length; k++) {
         const S = readProgs.sum, a = r.levels[k - 1], b = r.levels[k];
@@ -352,6 +389,111 @@ export function ahCreate(gl, spec, env) {
     return s.out.t;
   };
 
+  /** The Particles node's glow and compose over s.acc (shared by the 2D and 3D draws); `lights` in picture units. */
+  const glowCompose = (s, L, lights) => {
+    const lightVals = [], lightCols = [];
+    for (let i = 0; i < 4; i++) { const l = lights[i]; if (l) { lightVals.push(l.x, l.y, l.reach, l.power); lightCols.push(...l.colour); } else { lightVals.push(0, 0, 1, 0); lightCols.push(0, 0, 0); } }
+    const [d1, b1, d2, b2] = s.glow;
+    const down = (src, into) => {
+      gl.useProgram(fixed.down.p);
+      samplers(fixed.down, [['u_src', src.t]]);
+      ahSet(gl, fixed.down.u, 'u_texel', [1 / src.w, 1 / src.h]);
+      quadInto(into.fb, into.w, into.h);
+    };
+    const blur = (a, scratch) => {
+      gl.useProgram(fixed.blur.p);
+      ahSet(gl, fixed.blur.u, 'u_size', [a.w, a.h]);
+      samplers(fixed.blur, [['u_src', a.t]]); ahSet(gl, fixed.blur.u, 'u_dir', [1, 0]); quadInto(scratch.fb, scratch.w, scratch.h);
+      samplers(fixed.blur, [['u_src', scratch.t]]); ahSet(gl, fixed.blur.u, 'u_dir', [0, 1]); quadInto(a.fb, a.w, a.h);
+    };
+    down(s.acc, d1); blur(d1, b1);
+    down(d1, d2); blur(d2, b2);
+    const C = fixed.compose;
+    gl.useProgram(C.p);
+    samplers(C, [['u_acc', s.acc.t], ['u_g1', d1.t], ['u_g2', d2.t]]);
+    const cs = (k, v) => ahSet(gl, C.u, k, v);
+    cs('u_size', [s.w, s.h]); cs('u_aspect', s.w / s.h); cs('u_glow', L.glow); cs('u_halo', L.halo); cs('u_ink', L.ink ? 1 : 0);
+    cs('u_lights', lights.length); cs('u_light', lightVals); cs('u_lightCol', lightCols);
+    quadInto(s.out.fb, s.out.w, s.out.h);
+    return s.out.t;
+  };
+
+  /**
+   * A 3D Draw agents' look at a ray-marched scene: its camera probe read at four points into 4 × 1
+   * texels (the origin; the rays at the centre, half a picture right and half up), and its Depth at
+   * half the picture's size. As the app's runner does; null until linked.
+   */
+  const probeScene = (s, d, w, h) => {
+    const pr = probes.get(d.slug);
+    if (!pr || !pr.camera) return null;
+    if (!s.cam) {
+      const t = tex(gl.RGBA32F, gl.RGBA, gl.FLOAT, gl.NEAREST, gl.CLAMP_TO_EDGE, 4, 1);
+      s.cam = { t, fb: fbOf([t]), w: 4, h: 1 };
+    }
+    if (pr.depth && !s.depth) s.depth = look(Math.ceil(s.w / 2), Math.ceil(s.h / 2), gl.NEAREST, gl.CLAMP_TO_EDGE);
+    const P = pr.camera;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, s.cam.fb);
+    for (let i = 0; i < 4; i++) {
+      const [x, y, k] = AG_PROBE_POINTS[i];
+      vec4s.set(d.probe.uniform, [x, y, k, 0]);
+      gl.viewport(i, 0, 1, 1);
+      env.use(P.p, w, h);
+      setVec4s(P);
+      env.quad();
+      env.done();
+    }
+    if (pr.depth && s.depth) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, s.depth.fb); gl.viewport(0, 0, s.depth.w, s.depth.h);
+      env.use(pr.depth.p, w, h);
+      setVec4s(pr.depth);
+      env.quad();
+      env.done();
+    }
+    return { cam: s.cam.t, depth: pr.depth && s.depth ? s.depth.t : null };
+  };
+
+  /** Draw agents in 3D (AG_DRAW3_VERT): through the built-in camera (agCamera3) or a scene's, with depth of field. */
+  const drawAgents3 = (s, d, g, gs, aspect, time, w, h) => {
+    const n = g.side * g.side;
+    const L = agDrawLook(d, n, s.h, read, readColour);
+    const lights = agLights(d, read, readColour, time, aspect);
+    const cam = agCamera3(d, read, time, s.h);
+    const seen = d.probe ? probeScene(s, d, w, h) : null;
+    clearFb(s.acc.fb, s.w, s.h);
+    const P = fixed.draw3;
+    gl.useProgram(P.p);
+    const t = gs.tex[gs.cur];
+    samplers(P, [['u_a', t[0]], ['u_b', t[1]], ['u_c', g.stateC ? t[2] : null], ['u_field', seen && seen.depth], ['u_cam', seen && seen.cam]]);
+    const set = (k, v) => ahSet(gl, P.u, k, v);
+    set('u_stateC', g.stateC ? 1 : 0); set('u_side', g.side); set('u_species', g.species); set('u_aspect', aspect);
+    set('u_colorBy', L.colorBy); set('u_size', L.size); set('u_bright', L.bright); set('u_speedRef', L.speedRef);
+    set('u_thread', L.thread); set('u_ink', L.ink ? 1 : 0); set('u_fade', L.fade ? 1 : 0);
+    set('u_usePal', L.usePal ? 1 : 0); set('u_rainbow', L.rainbow ? 1 : 0);
+    set('u_pal', L.pal ? [].concat(...L.pal.slice(0, 4)) : new Array(12).fill(0));
+    set('u_colA', L.colA.slice(0, 3)); set('u_colB', L.colB.slice(0, 3)); set('u_viewSize', [s.w, s.h]);
+    set('u_eye', cam.eye); set('u_fwd', cam.fwd); set('u_right', cam.right); set('u_up', cam.up);
+    set('u_lens', cam.lens); set('u_ortho', seen ? 0 : cam.ortho); set('u_camDist', cam.dist);
+    set('u_focus', seen ? cam.focusShare : cam.focus); set('u_coc', cam.coc); set('u_cap', cam.cap);
+    set('u_camSrc', seen ? 1 : 0); set('u_depth', seen && seen.depth ? 1 : 0);
+    const lightVals = [], lightCols = [], lz = [];
+    for (let i = 0; i < 4; i++) { const l = lights[i]; if (l) { lightVals.push(l.x, l.y, l.reach, l.power); lightCols.push(...l.colour); lz.push(l.z); } else { lightVals.push(0, 0, 1, 0); lightCols.push(0, 0, 0); lz.push(0); } }
+    set('u_lights', lights.length); set('u_lightZ', lz); set('u_light', lightVals); set('u_lightCol', lightCols);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, s.acc.fb); gl.viewport(0, 0, s.w, s.h);
+    gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.ONE, gl.ONE);
+    gl.bindVertexArray(emptyVao);
+    // Streaks: the blurred share as points, the sharp share as lines (the Particles node's 3D threads).
+    set('u_prim', 0); gl.drawArrays(gl.POINTS, 0, n);
+    if (L.lines) { set('u_prim', 1); gl.drawArrays(gl.LINES, 0, 2 * n); }
+    gl.bindVertexArray(null);
+    gl.disable(gl.BLEND);
+    if (d.style === 'points') return s.acc.t;
+    const halos = seen ? [] : lights.map(l => {
+      const q = agProject3(cam, [l.x, l.y, l.z]);
+      return q.depth <= 0.05 ? Object.assign({}, l, { power: 0 }) : Object.assign({}, l, { x: q.x, y: q.y, reach: l.reach * cam.dist / q.depth });
+    });
+    return glowCompose(s, L, halos);
+  };
+
   return {
     unsupported: null,
     /** Something runs while the clock does. */
@@ -385,6 +527,19 @@ export function ahCreate(gl, spec, env) {
         if (deposits.some(d => d.trail === t.slug && restarted.has(d.group))) clearTrail(ts);
       }
       const bindTrails = () => { for (const [slug, ts] of trailState) env.textures.set(trails.find(t => t.slug === slug).u.tex, ts.rt[ts.cur].t); };
+      for (const [slug, ts] of trailState) if (ts.vol) vec4s.set(trails.find(t => t.slug === slug).u.vol, agVolUniform(ts.vol));
+      // A volume as the picture sees it: summed through its depth into its front view.
+      const project = () => {
+        for (const [slug, ts] of trailState) {
+          if (!ts.vol) continue;
+          const P = fixed.proj3;
+          gl.useProgram(P.p);
+          samplers(P, [['u_src', ts.rt[ts.cur].t]]);
+          ahSet(gl, P.u, 'u_vol', agVolUniform(ts.vol));
+          quadInto(ts.proj.fb, ts.proj.w, ts.proj.h);
+          env.textures.set(trails.find(t => t.slug === slug).u.tex, ts.proj.t);
+        }
+      };
       // A picture pixel in 0–1 texture units, for the sampling nodes' offsets (as a Pass's `_px`).
       for (const t of trails) env.vec2s.set(t.u.tex + '_px', [1 / w, 1 / h]);
       for (const d of draws) env.vec2s.set(d.u.tex + '_px', [1 / w, 1 / h]);
@@ -405,6 +560,7 @@ export function ahCreate(gl, spec, env) {
           gl.bindFramebuffer(gl.FRAMEBUFFER, s.fb[1 - s.cur]);
           gl.viewport(0, 0, g.side, g.side);
           env.use(p.e.p, w, h);
+          setVec4s(p.e);
           // The step's own clock (determinism), its number, its birth window and what its listeners heard.
           const set = (n, v) => ahSet(gl, p.e.u, n, v);
           set('u_time', time);
@@ -425,7 +581,7 @@ export function ahCreate(gl, spec, env) {
           const ts = trailState.get(d.trail), gs = G.get(d.group), g = groups.find(x => x.slug === d.group);
           if (!ts || !gs || !g) continue;
           fed.add(d.trail);
-          const P = fixed.deposit;
+          const P = ts.vol ? fixed.deposit3 : fixed.deposit;
           gl.useProgram(P.p);
           const t = gs.tex[gs.cur];
           samplers(P, [['u_a', t[0]], ['u_b', t[1]], ['u_d', g.stateC ? t[3] : null]]);
@@ -433,7 +589,8 @@ export function ahCreate(gl, spec, env) {
           set('u_stateC', g.stateC ? 1 : 0); set('u_what', d.what === 'velocity' ? 1 : 0);
           set('u_side', g.side); set('u_species', g.species); set('u_aspect', aspect);
           set('u_amount', read(d.params.amount, 1));
-          set('u_size', Math.max(1, Math.min(4, Math.round(read(d.params.size, 1)))));
+          if (ts.vol) { set('u_vol', agVolUniform(ts.vol)); set('u_atlas', [ts.w, ts.h]); }
+          else set('u_size', Math.max(1, Math.min(4, Math.round(read(d.params.size, 1)))));
           const into = ts.rt[ts.cur];
           gl.bindFramebuffer(gl.FRAMEBUFFER, into.fb); gl.viewport(0, 0, ts.w, ts.h);
           gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.ONE, gl.ONE);
@@ -462,11 +619,12 @@ export function ahCreate(gl, spec, env) {
             env.done();
             env.textures.set(t.u.src, null);
           } else {
-            const P = fixed.trail;
+            const P = ts.vol ? fixed.trail3 : fixed.trail;
             gl.useProgram(P.p);
             samplers(P, [['u_src', src.t]]);
             const set = (n, v) => ahSet(gl, P.u, n, v);
             set('u_diffuse', diffuse); set('u_keep', keepShare); set('u_wrap', wrap); set('u_k5', k5); set('u_signed', signed);
+            if (ts.vol) set('u_vol', agVolUniform(ts.vol));
             quadInto(into.fb, ts.w, ts.h);
           }
           ts.cur = 1 - ts.cur;
@@ -476,12 +634,13 @@ export function ahCreate(gl, spec, env) {
       }
       for (const p of plan) bindState(p.e.spec, p.s);
       bindTrails();
+      project();
       // 4. Draw agents.
       for (const d of draws) {
         if (!d.live) continue;
         const gs = G.get(d.group), g = groups.find(x => x.slug === d.group);
         if (!gs || !g) { env.textures.set(d.u.tex, null); continue; }
-        env.textures.set(d.u.tex, drawAgents(drawTargets(d, w, h), d, g, gs, aspect, o.time));
+        env.textures.set(d.u.tex, d.space3d && fixed.draw3 ? drawAgents3(drawTargets(d, w, h), d, g, gs, aspect, o.time, w, h) : drawAgents(drawTargets(d, w, h), d, g, gs, aspect, o.time));
       }
       // 5. Readings for the page's Play (live only).
       if (o.live) readings(aspect);
@@ -500,14 +659,15 @@ export function ahCreate(gl, spec, env) {
     },
     dispose() {
       for (const s of G.values()) dropGroup(s);
-      for (const s of T.values()) s.rt.forEach(dropLook);
-      for (const s of D.values()) { dropLook(s.acc); s.glow.forEach(dropLook); if (s.out !== s.acc) dropLook(s.out); }
+      for (const s of T.values()) dropTrail(s);
+      for (const s of D.values()) dropDraw(s);
       for (const r of R.values()) dropRead(r);
       R.clear(); readOut.clear();
       if (readProgs) { gl.deleteProgram(readProgs.read.p); gl.deleteProgram(readProgs.sum.p); }
       G.clear(); T.clear(); D.clear();
       for (const e of steps) if (e.p) gl.deleteProgram(e.p);
       for (const e of trailSteps.values()) if (e.p) gl.deleteProgram(e.p);
+      for (const e of probes.values()) for (const x of [e.camera, e.depth]) if (x) gl.deleteProgram(x.p);
       for (const k in fixed) gl.deleteProgram(fixed[k].p);
       if (bessel) gl.deleteTexture(bessel);
       gl.deleteTexture(blank);
