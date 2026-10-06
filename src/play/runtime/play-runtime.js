@@ -1570,6 +1570,8 @@ void main() {
     const base = new Map(), live = new Map(), layerLive = new Map(), trig = new Map(), actLevel = new Map();
     const mouse = { x: 0.5, y: 0.5, down: 0, over: false };
     let time = typeof opts.startTime === 'number' && isFinite(opts.startTime) ? Math.max(0, opts.startTime) : 0, playing = !opts.paused, lastNow = 0, frame = 0;
+    // The frame's length in seconds (u_frameDt: Fade (feedback) keeps its tail in seconds with it; 0 reads as 1/60).
+    let frameDt = 0;
     // A noise source with New each play takes a fresh path each time the page opens.
     const playSeed = Math.floor(Math.random() * 100000);
     const bindings = B.paramBindings || {};
@@ -2855,6 +2857,7 @@ void main() {
     /** The graph's inputs on the current program (the picture's, or the Particles probe's): uniforms and samplers. */
     function bindPictureInputs(W, H) {
       setUniform('u_time', time);
+      setUniform('u_frameDt', frameDt);
       setUniform('u_resolution', [W, H]);
       setUniform('u_mouse', [mouse.x * W, mouse.y * H]);
       for (const k in uniformValues) setUniform(k, uniformValues[k]);
@@ -2934,6 +2937,7 @@ void main() {
     // The picture and the layers at `time` (the mappings already ticked).
     function paint(dt, running) {
       needsDraw = false;
+      frameDt = dt;
       // A Background layer: what shows now (its actions carried out), before anything is drawn.
       const qPlan = queueLayer && K ? K.background(play, { time, value, allowDirect: true }) : null;
       if (qPlan) followQueue(qPlan, running);

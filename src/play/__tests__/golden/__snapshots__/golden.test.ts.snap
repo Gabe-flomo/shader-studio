@@ -1521,6 +1521,66 @@ exports[`golden outputs: examples > timeCubePulse 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > ttColourKey 1`] = `
+{
+  "keyColour": "- x120",
+  "soft": "- x120",
+  "tol": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttDistanceRings 1`] = `
+{
+  "level": "- x120",
+  "offset": "- x120",
+  "spacing": "- x120",
+  "speed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttGrowShrink 1`] = `
+{
+  "grow": "- x120",
+  "level": "- x120",
+  "levelCore": "- x120",
+  "shrink": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttMotionTrails 1`] = `
+{
+  "amount": "- x120",
+  "tail": "- x120",
+  "turn": "- x120",
+  "zoom": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttReactionLevels 1`] = `
+{
+  "feed": "- x120",
+  "gamma": "- x120",
+  "kill": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttTrailFlow 1`] = `
+{
+  "reach": "- x120",
+  "strength": "- x120",
+  "veins": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttVideoOutline 1`] = `
+{
+  "glow": "- x120",
+  "level": "- x120",
+  "spacing": "- x120",
+  "tint": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > waterLayer 1`] = `
 {
   "bend": "- x120",
