@@ -39,6 +39,23 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.47',
+    date: '2026-10-06',
+    title: 'Whole-picture previews',
+    highlights: [
+      { area: 'Studio', text: 'Previews now keep the picture\'s real shape and fit it in the panel, so nothing is cropped or stretched; Slice gets its own strip below.' },
+    ],
+  },
+  {
+    id: '2026.10.46',
+    date: '2026-10-06',
+    title: 'Agent simulations',
+    highlights: [
+      { area: 'Studio', text: 'Simulations: agents: predators and prey, coral growth, sand dunes, crowd lanes, painter bots, termites, fireflies and infection, each a hand-written rule.', link: { kind: 'doc', path: 'docs/simulations-agents.md' } },
+      { area: 'Studio', text: 'Every rule is built from Agent Inputs, Compare and Expression Blocks with a note on each node, so you can copy the pattern for your own.' },
+    ],
+  },
+  {
     id: '2026.10.45',
     date: '2026-10-06',
     title: 'See each line',

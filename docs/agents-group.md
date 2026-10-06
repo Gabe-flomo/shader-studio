@@ -53,6 +53,8 @@ One chain can go to several places at once: the same SDF can be food (Trail Add)
 
 What can't be read inside: a chain that reads the previous frame (Echo, Bloom, the old blurs) or screen derivatives. A Pass can: draw that chain into a Pass first and wire its Texture in.
 
+**More examples** (Examples → *Simulations: agents*, docs/simulations-agents.md): predators and prey, diffusion-limited aggregation, sand dunes, crowd lanes, painter bots, termites, fireflies and an epidemic, each a custom rule written from ordinary nodes (Memory as state, Sense as a reader, Deposit to change the world).
+
 ## The nodes
 
 **Outside** (the top level of the graph):
