@@ -65,7 +65,7 @@ vec2 swirlWarpOffset(vec2 uv, float cx, float cy, float twist, float falloff, fl
 export const FractNode: NodeDefinition = {
   type: 'fract',
   label: 'Tile', aliases: ['fract', 'repeat'],
-  description: 'Repeats the space: fract(uv * count) - 0.5, so each tile is centred on 0. For a plain scalar fract use Fract (scalar).',
+  description: 'Repeats the space: fract(uv * count) - 0.5, so each tile is centred on 0. Cell ID is floor(uv * count), the tile’s integer column and row: hash it for per-tile variation. For a plain scalar fract use Fract (scalar).',
   category: '2D Space', subcategory: 'Basic',
   inputs: {
     input: { type: 'vec2', label: 'Input' },
@@ -73,18 +73,26 @@ export const FractNode: NodeDefinition = {
   },
   outputs: {
     output: { type: 'vec2', label: 'Output' },
+    cellID: { type: 'vec2', label: 'Cell ID', hint: 'floor(uv × count): which tile this is, as an integer column and row. Hash it for per-tile variation.' },
   },
   defaultParams: { scale: 3.0 },
   paramDefs: {
     scale: { label: 'Tile count', type: 'float', min: 0.1, max: 20, step: 0.1, hint: 'How many times the space repeats.' },
   },
+  // Tiles saved before Cell ID existed get the new output on load (loading backfills inputs only).
+  syncSockets: (node) => node.outputs.cellID ? node : {
+    ...node,
+    outputs: { ...node.outputs, cellID: { type: 'vec2', label: 'Cell ID' } },
+  },
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_output`;
     const inVar = inputVars.input || 'vec2(0.0)';
     const scale = inputVars.scale || p(node.params.scale, 3.0);
+    const idVar = `${node.id}_cid`;
     return {
-      code: `    vec2 ${outVar} = fract(${inVar} * ${scale}) - 0.5;\n`,
-      outputVars: { output: outVar },
+      code: `    vec2 ${idVar} = floor(${inVar} * ${scale});\n` +
+            `    vec2 ${outVar} = fract(${inVar} * ${scale}) - 0.5;\n`,
+      outputVars: { output: outVar, cellID: idVar },
     };
   },
 };
