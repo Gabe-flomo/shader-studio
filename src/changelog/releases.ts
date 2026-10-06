@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.56',
+    date: '2026-10-06',
+    title: 'New features on phones',
+    highlights: [
+      { area: 'Studio', text: 'Phones and tablets: builders open full screen with tabs, the Do… bar has a button, previews get Show as, and ? help opens on tap.' },
+      { area: 'Studio', text: 'Touch: hold for "is this typical?" and function uses, the brush paints with a finger, and the clip trimmer has big handles and Set In / Set Out.' },
+      { area: 'Studio', text: 'Time Cube can choose and edit a video on phones, line previews have ▶ and ▲▼, and the Code Explorer opens on mobile.' },
+    ],
+  },
+  {
     id: '2026.10.55',
     date: '2026-10-06',
     title: 'Do bar commands',
