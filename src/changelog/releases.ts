@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.40',
+    date: '2026-10-05',
+    title: 'Smooth blurs and glows',
+    highlights: [
+      { area: 'Studio', text: 'Blur and Glow (texture) no longer show ghost copies or rings: new Smooth (true Gaussian) and Bloom chain methods, with Fast kept for cheap previews.', link: { kind: 'doc', path: 'docs/blur-and-glow.md' } },
+      { area: 'Play', text: 'Look bloom, halation, CRT and edge glow, particle glows, and layers sent into the shader now use the same smooth blur.' },
+    ],
+  },
+  {
     id: '2026.10.39',
     date: '2026-10-05',
     title: 'Agents in 3D',
