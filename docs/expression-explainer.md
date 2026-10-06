@@ -86,6 +86,55 @@ It lists each structural match with its provenance, for example *This graph → 
 
 It looks at Expression Block lines and Custom Function statements. It is simple and in memory: every search re-parses what it scans. The Code Explorer (docs/code-explorer-plan.md) will index everything, saved graphs, imported shaders and linked folders included. When it lands, `findUses` is the one place to swap that index in.
 
+### Function cards: click a function name
+
+Any function name in code can be explained in a small card: what it takes and returns, what it means, what it looks like, and what *this* call does.
+
+> **`smoothstep`** GLSL built-in · Common
+> | returns | parameters |
+> |---|---|
+> | genType | smoothstep(genType edge0, genType edge1, genType x) |
+> | genType | smoothstep(float edge0, float edge1, genType x) |
+>
+> genType: float, vec2, vec3 or vec4
+> **A soft ramp from 0 to 1 as x goes from edge0 to edge1 (an S-curve, flat at both ends).** ☆ soft edges, fades  [plot, with this call's numbers]
+> **Here:** goes smoothly from 0 to 1 as `d` goes from 0.3 to 0.35 …
+> How is this used? · Insert snippet · Docs
+
+**Where.** Everywhere code is shown:
+- **Editable code:** Expression Block lines and Return, the Custom Function editor (body and helper functions), the GLSL page (and the Convert page's editor).
+- **Read-only code:** the code card's Code page on the canvas, the Generated code panel (and the phone's code view), Code Explorer instances, and the explainer's own code (steps, chips, the card's signatures).
+
+**How to open it.** The rule: never steal the caret or the click from editing.
+
+| | Desktop | Touch |
+|---|---|---|
+| Editable code | Rest the pointer on a function name (0.6 s) for a peek. **⌥-click** or **⌘-click** (Ctrl-click off the Mac) for a card that stays. **F1** or **⌘I** (Ctrl+I) with the caret on a name *or anywhere in its arguments* opens the call around the caret. A plain click only places the caret, and none of these move it. | Long-press the name. |
+| Read-only code | A **plain click** on a function name, or a rest of the pointer. F1 / ⌘I with text selected in it. A drag that selects text never opens it, and inside a clickable row (a search hit) only hovering opens it. | A tap or a long press. |
+
+**Closing.** **Esc** closes it and gives focus back to where it was (the editor's caret is where it was). So does a click or tap outside, or the ✕. A card opened by hovering closes when the pointer leaves both the name and the card, or when you type. Using a peek (clicking in it, tabbing into it) keeps it open. Esc closes the card first, not the dialog under it.
+
+**Accessibility.** The card is a `role="dialog"` labelled "*name*: function card", focusable, and every link is a button you can reach with Tab. Opened from the keyboard or with a click in read-only code, it takes focus; opened by hovering or ⌥-click in an editor it doesn't, so typing carries on.
+
+**What it shows.**
+- **Name and kind:** GLSL built-in (with its group), type constructor, Playfield helper, your function, or unknown.
+- **Signature with types.** A built-in shows a table of its overloads (`genType` and friends are explained under it). A function the code declares (a Custom Function's helpers, a function on the GLSL page, the generated shader's own) shows the signature parsed from its source, with the comment just above it as its description. A Playfield helper that the code redeclares with a different signature reads as the user's.
+- **Plain meaning** from the registry (`functions.ts`), worded with the parameter names, and a **use** tag.
+- **A mini plot** for functions of one number (the explainer's `TransferPlotView`). The call's own literal arguments are plugged in: `smoothstep(0.3, 0.35, d)` plots `smoothstep(0.3, 0.35, x)` with its two edges; without literals it plots typical values (labelled so).
+- **Here:** this call, explained by the explainer: an idiom's plain meaning when the call is one, else the call's own step.
+- **Links:** **How is this used?** opens the Code Explorer on the name. **Insert snippet** puts the snippet library's version in, as the Functions panel does (lines in an Expression Block, a helper plus a call in a Custom Function), when the function has one and the card was opened from such an editor; elsewhere it's **Copy snippet**. **Docs** opens the Khronos reference page for a built-in, or Inigo Quilez's article for the SDF, smin and palette helpers.
+
+**Node cards.** The ⓘ in a canvas node's footer opens the same card for the node: its description, and a plain-meaning line from its main idiom when one applies. A node that is one GLSL function (Smoothstep, Sin, Mix…) uses that function's meaning. An Expression Block uses what it returns, followed back to the line that makes it, or else its last line that is an idiom or a known call. A Custom Function uses its `return`. **Sockets and wiring** opens the longer node info that the ⓘ used to show.
+
+**Coverage.** `FUNCTION_REGISTRY` has every GLSL ES 3.0 built-in the highlighter colours: angle and trig, exponential, common, packing, geometric, matrix, vector comparison, texture sampling (including the WebGL 1 names), derivatives, plus the ES 3.1 bit functions and the geometry-shader ones (marked as not in WebGL). It also has the type constructors and every function in the shader prelude (`noiseHash1/2`, `valueNoise`, `rotate`, `rot2D`, `smin`, `sdBox`, `sdSegment`, `sdEllipse`, `opRepeat`, `opRepeatPolar`) and `palette`. The tests check every highlighter built-in and every prelude function has an entry with a meaning.
+
+**For code views.** Mark the element and, when you know more, register a scope (`src/components/explain/functionCard/fnCardStore.ts`):
+- editable: `data-fn-card="edit"` on the textarea or input (CodeField does it for GLSL, CodeInput and GlslEditor always);
+- read-only: `data-fn-code` on an element whose text is the code (a line or a block; GlslCode does it);
+- `useFnCardScope({ types, source, onSnippet })` on any ancestor: the names' types (for "Here"), more source to find the user's functions in, and where Insert snippet goes. The nearest scope wins; types and source merge.
+
+The listeners are installed once at start-up (`triggers.ts`, from `main.tsx`), and the card is a lazy chunk (`FunctionCard.tsx`, mounted by `FunctionCardHost`).
+
 ## The pattern library: `src/lib/glslPatterns/`
 
 A shared module. The suggestions / Do… bar work and the Code Explorer should import it from `src/lib/glslPatterns` (the index), not from the files inside.
@@ -106,6 +155,9 @@ A shared module. The suggestions / Do… bar work and the Code Explorer should i
 | `evaluate.ts` | A tiny CPU evaluator (float, vec2–4, mat2, the common built-ins), used to prove a made function gives the same values. |
 | `findUses.ts` | `findUses`, `matchesInLine`, `codeLines`, `provenance`, `exprBlockEnv`, `customFnEnv`. |
 | `saveFlows.ts` | `toExprPreset`, `exprPresetParams`, `toPublishNode`, `insertFunction`, `callInCustomFn`. |
+| `functions.ts` | `FUNCTION_REGISTRY` (built-ins, constructors, helpers: overloads, meaning, use, plot, snippet, docs), `functionInfo`, `signatureText`, `GENERIC_TYPES`. |
+| `fnAt.ts` | `functionAt` (the function name at a caret or click, or with `enclosing` the call around it), `functionsIn`, `declaredFunctions` (user functions with their comments), `commentSpans`. |
+| `fnCard.ts` | `functionCard` / `functionCardFor` (the card's model), `plotForCall`, `explainCall`, `snippetFor`. |
 
 The UI lives in `src/components/explain/`: `ExplainText` (segments as chips), `GlslCode` (highlighted code with lit spans), `TransferPlotView`, `ExplainView`, `ExplainRow`, `StatementsExplain`, `GlslExplainPanel`, `MakeNodeDialog`, `FindUsesDialog`, `useExplainDialogs`, `useHoverExplain`, and `hosts.ts` (each editor's context and its "Use it here too").
 
@@ -212,6 +264,7 @@ Then add a positive and a negative case to `src/lib/glslPatterns/__tests__/match
   - role inference by graph, name, type and operation.
 - **segments.test.ts**: segments for a set of idioms, `toPlainText` backticks, In short summaries, every idiom has a meaning and a use and its meaning reads without empty holes.
 - **plot.test.ts**: the 0.02 edge plots over 0…0.1, every edge is inside the range, ranges for shapers, no plot for space or several inputs.
+- **functionCard.test.ts**: every highlighter built-in and every prelude helper has a meaning (one test per registry entry), helper signatures match their GLSL; function detection at a caret or click (in and right after a name, across lines and tokens, with `enclosing` in the arguments; not in comments, members, `#define`s, keywords); user function signatures and comments; overloads; the plot with a call's literals; per-call explanations; snippets.
 - **generalise.test.ts**:
   - inputs, names, types and defaults for idioms and as written;
   - every made function parses with `@shaderfrog/glsl-parser`, its body's type is the declared return type, and it gives the same values as the original on sample inputs (CPU evaluator);
@@ -219,6 +272,10 @@ Then add a positive and a negative case to `src/lib/glslPatterns/__tests__/match
   - the preset flow, and the user-node flow through `buildUserNodeDefinition`;
   - "Use it here too" in GLSL text and in a Custom Function;
   - find uses with provenance, inside groups, by idiom and by made pattern.
+
+`src/components/explain/functionCard/__tests__/`:
+- **functionCard.test.tsx** (jsdom): the shortcut and click rules, a point to a character in a field (lines, tabs, scrolling), placement; a plain click in read-only code opens a focused card and a click on a variable doesn't; not inside a button or after a selection; Esc closes and gives focus back, a click outside closes; ⌥-press opens without moving the caret and the click after it is swallowed; ⌘I / F1 in the arguments; one-line inputs; hover peek, leave and typing; long press and a moved finger; scopes; the card's dialog, table, meaning, plot, Here and links; Insert / Copy snippet; the node ⓘ toggle.
+- **nodeCard.test.ts**: a node that is one function, an Expression Block's returned idiom and its fallback to a line, a Custom Function's return, nothing when nothing applies.
 
 ## Limits
 
@@ -231,3 +288,4 @@ Then add a positive and a negative case to `src/lib/glslPatterns/__tests__/match
 - "Use it here too" in an Expression Block needs every part it reads to be a wired block input (see above). An idiom hole that matched a computed part (`sin(t)` in `sin(t)*0.5+0.5`) counts as computed.
 - Find uses scans Expression Block lines and Custom Function statements of the current graph and the bundled examples in memory, up to 200 / 300 hits. Saved graphs, presets, shaders, linked files and presentations come from the Code Explorer's index (`findIndexedUses` in `src/codeExplorer/queries.ts`, shown by `IndexedUses` in the dialog), matched one indexed line at a time.
 - The suggestions vocabulary isn't on main yet; `idiomVocabulary()` is ready for it.
+- Function cards: in the Generated code panel each line is its own piece of code, so a call whose arguments run onto the next line gets no "Here". Editors' pointer positions assume a monospace font without wrapping (true of every code field). The ⓘ opens the node card; a click on a node's title still selects and drags it.

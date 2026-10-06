@@ -31,6 +31,7 @@ import { useExprBlockJump } from '../codeExplorer/useCodeJumpFocus';
 import { ExplainRow } from '../explain/ExplainRow';
 import { useExplainDialogs } from '../explain/useExplainDialogs';
 import { exprBlockContext, exprBlockUseHere } from '../explain/hosts';
+import { useFnCardScope } from '../explain/functionCard/fnCardStore';
 import type { GeneraliseContext } from '../../lib/glslPatterns';
 import { snippetLines, type Snippet } from '../../suggestions/snippets';
 
@@ -225,6 +226,8 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
     pushHistory({ lines: nextLines, result: nextResult });
     toast.success(`${sn.label}: ${r.lines.length} line${r.lines.length === 1 ? '' : 's'} added`, { message: nextResult === r.result ? `The block now returns ${r.result}.` : `Its value is ${r.result} (${r.resultType}): use it in Return or a later line.` });
   };
+  // Function cards in this editor: the block's types, and Insert snippet goes in as lines
+  const fnScope = useFnCardScope({ types: explainCtx.types, onSnippet: insertSnippetLines });
 
   const handleSavePreset = (name: string) => {
     const presetLabel = name.trim() || label;
@@ -364,7 +367,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
         )
       }
     >
-      <div style={{ display: 'flex', height: '100%', minHeight: 0, position: 'relative' }}>
+      <div {...fnScope} style={{ display: 'flex', height: '100%', minHeight: 0, position: 'relative' }}>
         {/* ── Inputs: a panel, folded to a rail of chips, or a drawer on a narrow window ── */}
         {(!panels.inputs || narrow) && <InputsRail inputs={customInputs} onExpand={() => setPanel('inputs', true)} />}
         <SidePanel side="left" label="Inputs" open={panels.inputs} narrow={narrow} width={340} onClose={() => setPanel('inputs', false)}>

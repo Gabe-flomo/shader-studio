@@ -48,6 +48,11 @@ function call(name: string, a: Value[]): Value {
     case 'sqrt': return map1(x, Math.sqrt); case 'inversesqrt': return map1(x, v => 1 / Math.sqrt(v));
     case 'abs': return map1(x, Math.abs); case 'sign': return map1(x, Math.sign); case 'floor': return map1(x, Math.floor); case 'ceil': return map1(x, Math.ceil);
     case 'fract': return map1(x, fract); case 'round': return map1(x, Math.round); case 'trunc': return map1(x, Math.trunc);
+    case 'sinh': return map1(x, Math.sinh); case 'cosh': return map1(x, Math.cosh); case 'tanh': return map1(x, Math.tanh);
+    case 'asinh': return map1(x, Math.asinh); case 'acosh': return map1(x, Math.acosh); case 'atanh': return map1(x, Math.atanh);
+    case 'roundEven': return map1(x, v => { const r = Math.round(v); return Math.abs(v % 1) === 0.5 && r % 2 !== 0 ? r - 1 : r; });
+    // Playfield's polynomial smooth minimum (shaderAssembler GLSL_SMIN)
+    case 'smin': return map3(x, y, z, (p, q, k) => { const h = Math.max(k - Math.abs(p - q), 0) / k; return Math.min(p, q) - h * h * h * k / 6; });
     case 'mod': return map2(x, y, (p, q) => p - q * Math.floor(p / q));
     case 'min': return map2(x, y, Math.min); case 'max': return map2(x, y, Math.max);
     case 'clamp': return map3(x, y, z, (v, lo, hi) => Math.min(hi, Math.max(lo, v)));

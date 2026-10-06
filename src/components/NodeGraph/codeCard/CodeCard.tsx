@@ -27,6 +27,8 @@ import { highlightGlsl } from './highlight';
 import { useHoverExplain } from '../../explain/useHoverExplain';
 import { ExplainText } from '../../explain/ExplainText';
 import { useCardPages } from './cardPageStore';
+import { useFnCardScope } from '../../explain/functionCard/fnCardStore';
+import { customFnEnv, exprBlockEnv } from '../../../lib/glslPatterns/findUses';
 import {
   CARD_PAGE_LABEL, cardPages, codeLinesFor, isEmptyCodeNode, noteOf, previewOptionsFor, resolvePage,
   signatureFor, signatureText, stepPage, userDescriptionOf, type CardPageId,
@@ -52,6 +54,11 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
   const sig = useMemo(() => signatureText(signatureFor(node)), [node]);
 
   const pages = useMemo(() => cardPages(node), [node]);
+  // Function cards: a click on a function name in the Code page explains it, with this block's types and helpers
+  const fnScope = useFnCardScope(useMemo(() => ({
+    types: isFn ? customFnEnv(node) : exprBlockEnv(node),
+    source: typeof node.params.glslFunctions === 'string' ? node.params.glslFunctions : undefined,
+  }), [node, isFn]));
   const remembered = useCardPages(s => s.pages[node.id]);
   const setPage = useCardPages(s => s.setPage);
   const page = resolvePage(pages, remembered);
@@ -164,14 +171,14 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
       const width = String(rows.length).length;
       return (
         <div style={{ position: 'relative' }} onMouseLeave={() => setHoverRow(null)}>
-        <div ref={codeRef} data-card-code="" aria-label={isFn ? 'Function body (read-only)' : 'Lines (read-only)'}
+        <div {...fnScope} ref={el => { codeRef.current = el; fnScope.ref(el); }} data-card-code="" aria-label={isFn ? 'Function body (read-only)' : 'Lines (read-only)'}
           style={{ maxHeight: compact ? 160 : touch ? 250 : 224, overflowY: 'auto', overflowX: 'hidden', padding: '7px 0', font: mono, background: tk.bg.subtle, borderRadius: radius.md, userSelect: 'text', cursor: 'text', display: 'flex', flexDirection: 'column', gap: 3 }}>
           {rows.map((toks, i) => (
             <div key={i} data-code-row={i + 1} onMouseEnter={() => setHoverRow(i)}
               style={{ display: 'flex', background: hoverText && hoverRow === i ? alpha(tk.accent.base, 0.07) : undefined }}>
               <span style={{ width: width * 7 + 16, flexShrink: 0, textAlign: 'right', paddingRight: 9, color: tk.text.disabled, userSelect: 'none' }}>{i + 1}</span>
               {/* Hanging indent: a wrapped line's continuation sits further in, so it never reads as a new line */}
-              <span style={{ minWidth: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', paddingRight: 10, paddingLeft: '2ch', textIndent: '-2ch' }}>
+              <span data-fn-code="" style={{ minWidth: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', paddingRight: 10, paddingLeft: '2ch', textIndent: '-2ch' }}>
                 {toks.length ? toks.map((t, j) => <span key={j} style={{ color: t.color }}>{t.text}</span>) : ' '}
               </span>
             </div>

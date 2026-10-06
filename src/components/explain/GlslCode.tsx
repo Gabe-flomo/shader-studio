@@ -69,5 +69,6 @@ export function GlslCode({ code, spans = [], vars, onVarHover, style }: GlslCode
       </mark>,
     );
   }
-  return <code data-glsl-code="" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', ...style }}>{out.map((n, k) => <Fragment key={k}>{n}</Fragment>)}</code>;
+  // data-fn-code: a click on a function name opens its card (functionCard/triggers.ts)
+  return <code data-glsl-code="" data-fn-code="" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', ...style }}>{out.map((n, k) => <Fragment key={k}>{n}</Fragment>)}</code>;
 }

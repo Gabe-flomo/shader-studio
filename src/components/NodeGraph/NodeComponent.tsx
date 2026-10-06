@@ -130,6 +130,7 @@ import { StageTag } from '../structure/stageUi';
 import { BakedCardBody } from '../bake/BakedCardBody';
 import { TimeCubeCardBody } from '../timeCube/TimeCubeCardBody';
 import { TimeCubeViewKeyInfo } from '../timeCube/TimeCubeViewKeyInfo';
+import { toggleNodeCard } from '../explain/functionCard/fnCardStore';
 import { bakedSourceName } from '../../nodes/definitions/baked';
 import { VOLUMETRIC_LOOP_TYPES } from '../../nodes/volumetricAuto';
 import { SwitchNodePicker } from './SwitchNodePicker';
@@ -4748,7 +4749,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         style={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', padding: '5px 8px', borderTop: `1px solid ${tk.border.subtle}` }}
       >
         <span ref={infoButtonRef} style={{ display: 'inline-flex' }}>
-          <CardButton icon="info" on={showNodeTooltip} label={showNodeTooltip ? 'Hide node info' : 'Node info'} onClick={() => setShowNodeTooltip(v => !v)} />
+          <CardButton icon="info" on={showNodeTooltip} label={showNodeTooltip ? 'Hide node info' : 'Node info'}
+            onClick={() => (showNodeTooltip ? setShowNodeTooltip(false) : toggleNodeCard(infoButtonRef.current?.querySelector('button') ?? null, node.id, () => setShowNodeTooltip(true)))} />
         </span>
         <CardButton icon="comment" tint="success" on={showCommentEditor || !!nodeComment}
           label={nodeComment ? 'Edit comment' : 'Add a comment'}

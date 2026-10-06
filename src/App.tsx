@@ -71,6 +71,7 @@ import type { MobileNodeBrowser as MobileNodeBrowserT } from './components/NodeG
 import type { HistoryPanel as HistoryPanelT } from './components/history/HistoryPanel';
 import { useHistoryWindow } from './components/history/historyWindowStore';
 import { useCodeExplorer } from './components/codeExplorer/explorerStore';
+import { useFnCardScope } from './components/explain/functionCard/fnCardStore';
 import { useUnseenActivity } from './components/ui/activityStore';
 
 // ── Code splitting ───────────────────────────────────────────────────────────
@@ -185,6 +186,8 @@ function MobileCodeView({ code }: { code: string }) {
   const tc = useCtp();
   const [copied, setCopied] = useState(false);
   const lines = code ? code.split('\n') : ['// No shader compiled yet'];
+  // Function cards: tap a function name (or hold it) to explain it
+  const fnScope = useFnCardScope({ source: code });
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(code);
@@ -204,11 +207,11 @@ function MobileCodeView({ code }: { code: string }) {
           style={{ background: 'none', border: `1px solid ${tc.surface1}`, color: copied ? tc.green : tc.subtext0, borderRadius: '5px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer', touchAction: 'manipulation' }}
         >{copied ? 'Copied' : 'Copy'}</button>
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '8px 12px', fontFamily: 'monospace', fontSize: '11px', lineHeight: 1.6 }}>
+      <div {...fnScope} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '8px 12px', fontFamily: 'monospace', fontSize: '11px', lineHeight: 1.6 }}>
         {lines.map((line, i) => (
           <div key={i} style={{ whiteSpace: 'pre' }}>
             <span style={{ color: tc.surface1, userSelect: 'none', marginRight: '10px' }}>{String(i + 1).padStart(3, ' ')}</span>
-            {tokenizeLine(line).map((tok, j) => <span key={j} style={{ color: tok.color }}>{tok.text}</span>)}
+            <span data-fn-code="">{tokenizeLine(line).map((tok, j) => <span key={j} style={{ color: tok.color }}>{tok.text}</span>)}</span>
           </div>
         ))}
       </div>
