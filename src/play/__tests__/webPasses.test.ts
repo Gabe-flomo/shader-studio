@@ -49,7 +49,8 @@ function feedbackGraph(): GraphNode[] {
 describe('the web bundle', () => {
   it('carries a Pass graph’s programs with their sampler names, and no longer warns', () => {
     const r = edgeGlow();
-    expect(r.passes?.length).toBe(2);
+    // Pass A, Pass B and the Smooth blur's two hidden passes.
+    expect(r.passes?.length).toBe(4);
     const { input, missing } = webInputFrom(r, parsePlayRecord(EXAMPLE_GRAPHS.passEdgeGlow.play), { title: 'x', aspect: 'free' });
     expect(missing).toEqual([]);
     const b = playBundle(input) as { graphPasses?: Array<Record<string, unknown>> };
@@ -202,7 +203,7 @@ describe('the same schedule in the app and on a page (kit/passPlan.js)', () => {
   it('Passes 1 · Edge glow', async () => {
     const r = edgeGlow();
     const app = await appDraws(r.passes!, frames), page = pageDraws(r.passes!, frames);
-    expect(app.length).toBe(frames.length * 2);
+    expect(app.length).toBe(frames.length * 4);
     expect(page).toEqual(app);
     // Pass B is drawn at half size, with its own size as u_resolution.
     expect(page[1]).toMatchObject({ w: 480, h: 270, res: '480x270' });
@@ -220,7 +221,7 @@ describe('the same schedule in the app and on a page (kit/passPlan.js)', () => {
 
   it('with agents: the passes draw in two stages, pre and post', async () => {
     const r = edgeGlow();
-    const staged = r.passes!.map((p, i) => ({ ...p, afterAgents: i === 1 }));
+    const staged = r.passes!.filter(p => !p.hidden).map((p, i) => ({ ...p, afterAgents: i === 1 }));
     const f2 = [{ w: 960, h: 540, stage: 'pre' as const }, { w: 960, h: 540, stage: 'post' as const }];
     const app = await appDraws(staged, f2), page = pageDraws(staged, f2);
     expect(page).toEqual(app);
@@ -229,7 +230,7 @@ describe('the same schedule in the app and on a page (kit/passPlan.js)', () => {
 
   it('with Particles reading a pass: those draw first (part particles), the rest after', async () => {
     const r = edgeGlow();
-    const split = r.passes!.map((p, i) => ({ ...p, beforeParticles: i === 0 }));
+    const split = r.passes!.filter(p => !p.hidden).map((p, i) => ({ ...p, beforeParticles: i === 0 }));
     const f2 = [{ w: 960, h: 540, part: 'particles' as const }, { w: 960, h: 540, part: 'rest' as const }];
     const app = await appDraws(split, f2), page = pageDraws(split, f2);
     expect(page).toEqual(app);

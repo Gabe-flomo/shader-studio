@@ -17,6 +17,7 @@ import { askChoice } from '../components/ui/dialogStore';
 import { buildAgentsSubgraph, buildMarchRig, buildMarchSubgraph, buildSceneSubgraph, buildVolumetricRig, graphOutput, instantiateNode, twoDNodesBefore3D } from '../nodes/scene3dDefaults';
 import { agentEyeNodes, hasAgentsNode } from '../compiler/agentGraph';
 import { hasPassNode } from '../compiler/passGraph';
+import { hasHiddenBlur } from '../compiler/blurPasses';
 import { agentPreset } from './agentExamples';
 import { addAgentPieceTo, agentStarter, freshIds, placeInFreeSpace, startRuleIn, type AgentPiece, type AgentRuleStart } from './agentSetup';
 import { particlesAsNodes } from './particlesAsNodes';
@@ -5030,7 +5031,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // Show passes: the whole graph's programs, even while the eye previews part of it.
     let whole: typeof result | null = result;
     if (bakeGraph) whole = null;
-    else if (previewNodeId && (hasPassNode(nodes) || hasAgentsNode(nodes))) {
+    else if (previewNodeId && (hasPassNode(nodes) || hasAgentsNode(nodes) || hasHiddenBlur(nodes))) {
       const full = compileGraph({ nodes });
       whole = full.success ? full : null;
     }

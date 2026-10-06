@@ -62,6 +62,8 @@ describe('nodeCost', () => {
     await measureNodeCosts({ nodes, scopePath: [], measure, size: { width: 100, height: 50 } });
     // Every measurement (baselines and the variants) is handed the pass programs.
     expect(seen.length).toBe(variants.length + 2);
-    expect(seen.every(k => k === 1)).toBe(true);
+    // (The Pass, plus the Smooth blur's two hidden passes while the blur isn't bypassed.)
+    expect(seen.every(k => k === 1 || k === 3)).toBe(true);
+    expect(seen[0]).toBe(3);
   });
 });

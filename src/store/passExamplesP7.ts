@@ -65,7 +65,7 @@ const uvNode = (id: string, x: number, y: number, what: string) => n('uv', id, x
  * The blur group of Passes 9: a Pass (at `scale`) of what comes in, blurred by `radius` picture
  * pixels. `id` keeps each copy's inner ids its own (as copying a group does).
  */
-function softGlowGroup(id: string, x: number, y: number, o: { label: string; scale: string; radius: number; quality: '24' | '48'; from: [string, string]; why: string }): GraphNode {
+function softGlowGroup(id: string, x: number, y: number, o: { label: string; scale: string; radius: number; from: [string, string]; why: string }): GraphNode {
   const inner = [
     n('pass', `${id}Pass`, 260, 0, { label: 'Pass · held', scale: o.scale,
       ...note([
@@ -73,8 +73,8 @@ function softGlowGroup(id: string, x: number, y: number, o: { label: string; sca
         'A Pass can sit in a plain group (one run, Iterations 1): the group is opened for the cut, so its Pass draws like any other. Not in an iterated, sealed or 3D group.',
       ]) },
       { color: port('c') }),
-    n('blurTexture', `${id}Blur`, 560, 0, { radius: o.radius, quality: o.quality,
-      ...note(`Blur (texture): spreads the Pass's picture over ${o.radius} picture pixels (a Gaussian of ${o.quality} reads). A smaller Pass makes a wide blur cheap: a quarter or a sixteenth of the pixels to read.`) },
+    n('blurTexture', `${id}Blur`, 560, 0, { method: 'smooth', radius: o.radius,
+      ...note(`Blur (texture): spreads the Pass's picture over ${o.radius} picture pixels, a smooth Gaussian (Method Smooth: hidden passes across and down, on a smaller copy when the Radius is wide). A smaller Pass makes it cheaper still: a quarter or a sixty-fourth of the pixels.`) },
       { texture: [`${id}Pass`, 'texture'] }),
   ];
   const g = group(id, x, y, {
@@ -216,7 +216,7 @@ export function buildPassExamplesP7(): Record<string, ExampleGraph> {
       n('edgesTexture', 'epEdges', 600, 160, { strength: 3, width: 1.5,
         ...note('Edges (texture): reads the picture at the 8 pixels round this one (a 3×3 Sobel on brightness). Edges is 1 on outlines, Color the picture\'s own colour kept on them. Width is in picture pixels: raise it for bolder lines on a busy photo.') },
         { texture: ['epImage', 'texture'] }),
-      n('blurTexture', 'epSoft', 600, 460, { radius: 14, quality: '24',
+      n('blurTexture', 'epSoft', 600, 460, { method: 'smooth', radius: 14,
         ...note('Blur (texture): a soft copy of the picture, read straight from its texture too, as the dim backdrop under the lines.') },
         { texture: ['epImage', 'texture'] }),
       n('constant', 'epGain', 900, 620, { value: 1.6, label: 'Line glow',
@@ -280,8 +280,8 @@ export function buildPassExamplesP7(): Record<string, ExampleGraph> {
           'result: the tubes, brighter than white (1.6), so the glows have light to spread.',
         ],
       }),
-      softGlowGroup('bgTight', 640, 160, { label: 'Soft glow · tight', scale: '0.5', radius: 6, quality: '24', from: ['bgSign', 'result'], why: 'This copy holds the sign at ½ size and blurs it 6 pixels: the halo hugging the tubes.' }),
-      softGlowGroup('bgWide', 940, 560, { label: 'Soft glow · wide', scale: '0.125', radius: 48, quality: '48', from: ['bgTight', 'o'], why: 'The same group again, fed the tight halo (a blur of a blur is smoother), at ⅛ size, 48 pixels and 48 reads: the wide bloom round the whole sign.' }),
+      softGlowGroup('bgTight', 640, 160, { label: 'Soft glow · tight', scale: '0.5', radius: 6, from: ['bgSign', 'result'], why: 'This copy holds the sign at ½ size and blurs it 6 pixels: the halo hugging the tubes.' }),
+      softGlowGroup('bgWide', 940, 560, { label: 'Soft glow · wide', scale: '0.125', radius: 48, from: ['bgTight', 'o'], why: 'The same group again, fed the tight halo, at ⅛ size and 48 pixels: the wide bloom round the whole sign. (For one node that does both, try Glow (texture) with its Bloom chain.)' }),
       n('constant', 'bgGain', 1240, 620, { value: 6, label: 'Bloom',
         ...note('How strong the wide bloom is. A constant so Play can drive it: see the Bloom control.') }),
       expr('bgMix', 1240, 300, {

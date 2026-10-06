@@ -3714,7 +3714,7 @@ function PassThumbViz({ node }: { node: GraphNode }) {
   useEffect(() => {
     const read = () => {
       const st = useNodeGraphStore.getState();
-      const p = (st.programMap?.passes ?? st.passes)?.find(q => q.nodeId === node.id);
+      const p = (st.programMap?.passes ?? st.passes)?.find(q => q.nodeId === node.id && !q.hidden);
       const ms = p ? getPerfSnapshot().passes.find(r => r.name === `pass:${p.slug}`)?.avg : undefined;
       const size = ref.current?.dataset.size;
       // Repeat: the timer covers every draw, so the card says it is N × one draw's time.

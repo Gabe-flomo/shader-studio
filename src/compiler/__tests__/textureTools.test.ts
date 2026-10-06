@@ -160,12 +160,16 @@ describe('sampler budget', () => {
   });
 
   it('Neighbours\' loop has a literal bound the Performance panel reports, and a fixed number of reads', () => {
-    expect([3, 5, 7, 9].map(neighbourTaps)).toEqual([9, 21, 37, 69]);
+    expect([3, 5, 7, 9].map(s => neighbourTaps(s))).toEqual([9, 21, 37, 69]);
+    // Average and Difference read between texels: 3 × 3 in 4 reads, 5 × 5 in 16…
+    expect([3, 5, 7, 9].map(s => neighbourTaps(s, true))).toEqual([4, 16, 32, 60]);
     for (const size of ['3', '5', '7', '9']) {
-      const r = compileGraph({ nodes: graphWith('textureInput', 'textureNeighbours', { size }) });
-      const shape = shaderShape(r.fragmentShader);
-      expect(shape.loopBounds, size).toContain(Number(size) ** 2);
-      expect(shape.maxLoopDepth).toBe(1);
+      for (const mode of ['average', 'max']) {
+        const r = compileGraph({ nodes: graphWith('textureInput', 'textureNeighbours', { size, mode }) });
+        const shape = shaderShape(r.fragmentShader);
+        expect(shape.loopBounds, size).toContain((Number(size) - (mode === 'average' ? 1 : 0)) ** 2);
+        expect(shape.maxLoopDepth).toBe(1);
+      }
     }
     // Size is a compile-time choice (it is the loop's count); Spacing stays a live uniform.
     const def = getNodeDefinition('textureNeighbours')!;

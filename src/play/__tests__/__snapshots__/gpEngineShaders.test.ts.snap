@@ -2,7 +2,7 @@
 
 exports[`GP engine shaders are unchanged > GP_BLUR 1`] = `"15863386dcaef3099b0c929b4291:433"`;
 
-exports[`GP engine shaders are unchanged > GP_COMPOSE 1`] = `"1d81091840a2d015f7cb2e7556f3:1212"`;
+exports[`GP engine shaders are unchanged > GP_COMPOSE 1`] = `"1ef644520b1cd1106d3416d56f4a:2041"`;
 
 exports[`GP engine shaders are unchanged > GP_COVER 1`] = `"1676f7fcad732f1a2549b33ec820:387"`;
 

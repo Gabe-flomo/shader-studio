@@ -53,7 +53,7 @@ export const BAKED_OUTPUT_FOR: Record<BakeOutType, string> = { vec3: 'color', ve
 export const BAKED_TYPE = 'baked';
 
 /** Node types a bake never replaces (outputs draw the picture; a Baked node is already baked). */
-const NOT_BAKEABLE = new Set(['output', 'vec4Output', 'passOutput', 'scope', BAKED_TYPE]);
+const NOT_BAKEABLE = new Set(['output', 'vec4Output', 'passOutput', 'blurStage', 'scope', BAKED_TYPE]);
 
 /** The output a bake of `node` freezes: the one asked for, else the first colour, colour with alpha, or value. */
 export function bakeableOutput(node: GraphNode, prefer?: string): { key: string; type: BakeOutType } | null {
