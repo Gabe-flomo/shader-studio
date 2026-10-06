@@ -21,6 +21,7 @@ import { hasHiddenBlur } from '../compiler/blurPasses';
 import { agentPreset } from './agentExamples';
 import { addAgentPieceTo, agentStarter, freshIds, placeInFreeSpace, startRuleIn, type AgentPiece, type AgentRuleStart } from './agentSetup';
 import { particlesAsNodes } from './particlesAsNodes';
+import { openNewSceneBuilder } from '../sceneBuilder/store';
 import { applyRecipe, recipesFor } from '../nodes/recipes';
 import { closeRecipeOffer, noteNodeAdded } from './recipeOfferStore';
 import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES, AGENT_PRESET_TYPES, syncAgentSpaces } from '../nodes/definitions/agents';
@@ -3339,6 +3340,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   addNode: (type, position, overrideParams?) => {
+    // "New 3D scene…" is a palette entry that opens the 3D Scene Builder (docs/scene-builder.md).
+    if (type === 'sceneBuilder') { openNewSceneBuilder(position); return undefined; }
     // ── The Agents family (docs/agents-plan.md) ──────────────────────────────
     // Sense, Steer, Move… run once per walker, so they only go inside an Agents
     // group; the group, Emit, Deposit, Trail and Draw are engines of their own
