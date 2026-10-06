@@ -1,4 +1,5 @@
 import { offerGraphExport } from './components/playfile/exportMenus';
+import { openDoBar } from './suggestions/doBarStore';
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { lazyWithSuspense, preloadLazyComponents, type PropsOf } from './components/lazyWithSuspense';
 import ShaderCanvas, { type OfflineRenderHandle, type HistogramData } from './components/ShaderCanvas';
@@ -686,6 +687,7 @@ function App() {
     toggleRecord:   () => setShowExport(v => !v),
     rebuild:        () => { void rebuildWithToast(); },
     addNode:        unlessScratch(() => setSearchPaletteOpen(true)),
+    doBar:          unlessScratch(() => openDoBar()),
     groupSelected:  unlessScratch(() => {
       const ids = useNodeGraphStore.getState().selectedNodeIds;
       if (ids.length >= 2) { groupNodes(ids); deselectAll(); }

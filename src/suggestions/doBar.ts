@@ -71,8 +71,8 @@ export interface DoContext {
 // ── Reading the words ───────────────────────────────────────────────────────
 
 type Item =
-  | { t: 'shape'; shape: ShapeWord; text: string }
-  | { t: 'action'; action: ActionWord; id: string; text: string }
+  | { t: 'shape'; shape: ShapeWord; text: string; fuzzy?: boolean }
+  | { t: 'action'; action: ActionWord; id: string; text: string; fuzzy?: boolean }
   | { t: 'target'; target: string; text: string }
   | { t: 'place'; at: [number, number]; text: string }
   | { t: 'slot'; slot: string; value: number; text: string }
@@ -165,14 +165,14 @@ function read(tokens: string[]): { items: Item[]; unknown: string[] } {
       // A variant later in the phrase ("repeat … around").
       const rest = tokens.slice(i + action.length);
       const variant = action.entry.variants?.find(v => v.words.some(w => rest.includes(w)));
-      const a: ActionItem = { t: 'action', action: action.entry, id: variant?.id ?? action.entry.id, text: tokens.slice(i, i + action.length).join(' ') };
+      const a: ActionItem = { t: 'action', action: action.entry, id: variant?.id ?? action.entry.id, text: tokens.slice(i, i + action.length).join(' '), fuzzy: action.fuzzy };
       items.push(a); lastAction = a;
       i += action.length; lastActionEnd = i; continue;
     }
     if (pick === 'shape' && shape) {
       // "blend it with a box": the box is the blend's other shape.
       if (lastAction && SHAPE_ARG_ACTIONS.has(lastAction.action.id) && !items.slice(items.indexOf(lastAction) + 1).some(x => x.t === 'shape' || x.t === 'action')) { i += shape.length; continue; }
-      items.push({ t: 'shape', shape: shape.entry, text: tokens.slice(i, i + shape.length).join(' ') }); i += shape.length; continue;
+      items.push({ t: 'shape', shape: shape.entry, text: tokens.slice(i, i + shape.length).join(' '), fuzzy: shape.fuzzy }); i += shape.length; continue;
     }
     const rgb = colourOf(tok);
     if (rgb) { items.push({ t: 'colour', rgb, text: tok }); i++; continue; }
@@ -299,7 +299,7 @@ export function parseDo(text: string, ctx: DoContext): DoPlan {
   const { items, unknown } = read(tokens);
   const reading: DoPlan['reading'] = items.map(it => ({
     text: it.text,
-    as: it.t === 'shape' ? `shape: ${it.shape.id}` : it.t === 'action' ? `do: ${it.id}` : it.t === 'target' ? `on: ${it.target}` : it.t === 'place' ? `at ${it.at.join(', ')}`
+    as: it.t === 'shape' ? `shape: ${it.shape.id}${it.fuzzy ? ' (guessed)' : ''}` : it.t === 'action' ? `do: ${it.id}${it.fuzzy ? ' (guessed)' : ''}` : it.t === 'target' ? `on: ${it.target}` : it.t === 'place' ? `at ${it.at.join(', ')}`
       : it.t === 'slot' ? `${it.slot} = ${it.value}` : it.t === 'number' ? `number ${it.value}` : 'colour',
   }));
   const byId = new Map(ctx.nodes.map(nd => [nd.id, nd]));

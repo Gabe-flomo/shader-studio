@@ -50,6 +50,7 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
   { id: 'railEngine',        label: 'Go to Engine',          group: 'View',       defaultCombo: 'cmd+4',       description: 'On the Play page: open the split (if it’s closed) and show the Audio engine. Also ⌃4' },
   { id: 'railSignals',       label: 'Go to Rules',           group: 'View',       defaultCombo: 'cmd+5',       description: 'On the Play page: open the split (if it’s closed) and show Rules: when something happens, what to do. Also ⌃5' },
   // Node graph — add nodes
+  { id: 'doBar',             label: 'Do…',                   group: 'Add Nodes',  defaultCombo: 'cmd+k',       description: 'Type what to do: “circle with a glow”, “repeat 6 times around”, “tone map it”, “is this typical?”' },
   { id: 'addNode',           label: 'Open node palette',     group: 'Add Nodes',  defaultCombo: 'a',           description: 'Open the add-node palette' },
   { id: 'addUV',             label: 'Add UV node',           group: 'Add Nodes',  defaultCombo: 'u',           description: 'Instantly add a UV node' },
   { id: 'addTime',           label: 'Add Time node',         group: 'Add Nodes',  defaultCombo: 't',           description: 'Instantly add a Time node' },

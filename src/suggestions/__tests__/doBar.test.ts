@@ -13,7 +13,10 @@ import { n } from '../../store/graphBuilder';
 import { estimateNodeHeight } from '../../store/graphLayout';
 import type { GraphNode } from '../../types/nodeGraph';
 import { parseDo, runDoPlan, type DoContext, type DoPlan } from '../doBar';
-import { editDistance, matchAt, ACTIONS, tokenize, colourOf } from '../../lang/vocabulary';
+import { editDistance, matchAt, ACTIONS, tokenize, colourOf, SHAPES, ACTION_TO_SCENE_WARP, SCENE_WARP_KINDS } from '../../lang/vocabulary';
+import { SHAPES as SCENE_SHAPES } from '../../sceneBuilder/spec';
+import { idiomBlock, idiomSpecs, matchIdioms } from '../idiomBlocks';
+import { IDIOMS } from '../../lib/glslPatterns';
 
 const H = (nd: GraphNode) => estimateNodeHeight(nd);
 
@@ -153,4 +156,38 @@ describe('the shared vocabulary', () => {
     expect(parseDo('cylinder', CTX.empty).problem).toMatch(/3D Scene Builder/);
     expect(parseDo('flibbertigibbet', CTX.empty).unknown).toEqual(['flibbertigibbet']);
   });
+});
+
+describe('shared with the Scene Builder', () => {
+  it('every Scene Builder shape and alias is a word for the same node', () => {
+    for (const sc of SCENE_SHAPES) {
+      for (const word of [sc.kind, ...sc.aliases]) {
+        const m = matchAt(tokenize(word.replace(/-/g, ' ')), 0, SHAPES);
+        expect(m, word).not.toBeNull();
+        expect(m!.entry.node3d?.type ?? '', word).toBe(sc.type);
+      }
+    }
+  });
+  it('space actions map onto real Scene Builder warps', () => {
+    for (const w of Object.values(ACTION_TO_SCENE_WARP)) expect(SCENE_WARP_KINDS).toContain(w);
+  });
+});
+
+describe('idioms in the Do… bar', () => {
+  it('most idioms can be a block, and a phrase finds them', () => {
+    expect(idiomSpecs().length).toBeGreaterThan(IDIOMS.length * 0.7);
+    expect(matchIdioms('sine hash')[0]?.idiom.id).toBe('hash-sin-dot');
+    expect(matchIdioms('centre uv')[0]?.idiom.id).toBe('centre-uv');
+  });
+  for (const spec of idiomSpecs()) {
+    it(`${spec.idiom.id} compiles as a block`, () => {
+      const e = idiomBlock(spec, 'e', 0, 0);
+      const show = spec.outputType === 'vec3' ? [] : [n(spec.outputType === 'float' ? 'floatToVec3' : 'palette', 's', 400, 0)];
+      if (show[0]?.type === 'floatToVec3') show[0].inputs.input.connection = { nodeId: 'e', outputKey: 'result' };
+      const o = n('output', 'o', 800, 0, {}, { color: spec.outputType === 'vec3' ? ['e', 'result'] : ['s', spec.outputType === 'float' ? 'rgb' : 'color'] });
+      const res = compileGraph({ nodes: [e, ...show, o] });
+      expect(res.errors, JSON.stringify(res.errors)).toBeUndefined();
+      expect(() => parser.parse(preprocess('vec4 gl_FragColor;\nvec4 gl_FragCoord;\n' + res.fragmentShader!, { preserve: {} }), { quiet: true, failOnWarn: true })).not.toThrow();
+    });
+  }
 });

@@ -11,7 +11,12 @@
  * Adding words: put them on the entry they mean. Both languages pick them up.
  */
 
+import { SHAPES as SCENE_SHAPES, WARPS as SCENE_WARPS } from '../sceneBuilder/spec';
+
 export type RGB = [number, number, number];
+
+/** Every Scene Builder warp kind and alias (for checking the mapping below stays valid). */
+export const SCENE_WARP_KINDS: readonly string[] = SCENE_WARPS.map(w => w.kind);
 
 export interface ShapeWord {
   id: string;
@@ -23,7 +28,7 @@ export interface ShapeWord {
 }
 
 /** Shapes: the first word is the name shown. */
-export const SHAPES: readonly ShapeWord[] = [
+const BASE_SHAPES: ShapeWord[] = [
   { id: 'circle', words: ['circle', 'disc', 'disk', 'dot', 'blob', 'round shape'], node2d: { type: 'circleSDF', size: 'radius' }, node3d: { type: 'sphereSDF3D', size: 'radius' } },
   { id: 'sphere', words: ['sphere', 'ball', 'orb'], node2d: { type: 'circleSDF', size: 'radius' }, node3d: { type: 'sphereSDF3D', size: 'radius' } },
   { id: 'box', words: ['box', 'square', 'rectangle', 'rect', 'block'], node2d: { type: 'boxSDF', size: 'width' }, node3d: { type: 'boxSDF3D' } },
@@ -48,6 +53,36 @@ export const SHAPES: readonly ShapeWord[] = [
   { id: 'octahedron', words: ['octahedron'], node3d: { type: 'octahedronSDF3D' } },
   { id: 'plane', words: ['plane', 'floor', 'ground'], node3d: { type: 'planeSDF3D' } },
 ];
+
+/**
+ * The shapes, with the 3D Scene Builder's own (sceneBuilder/spec.ts): its kinds and aliases are
+ * folded in, so "donut", "pill" or "box-frame" mean the same node in both languages, and a 3D
+ * shape only the Scene Builder knows is still a word here (`sceneKind` names it there).
+ */
+export const SHAPES: readonly (ShapeWord & { sceneKind?: string })[] = (() => {
+  const out: (ShapeWord & { sceneKind?: string })[] = BASE_SHAPES.map(sh => ({ ...sh, words: [...sh.words] }));
+  for (const sc of SCENE_SHAPES) {
+    const names = [sc.kind, sc.kind.replace(/-/g, ' '), sc.label.toLowerCase(), ...sc.aliases.map(a => a.replace(/-/g, ' '))];
+    const same = out.find(sh => sh.node3d?.type === sc.type && names.some(nm => sh.words.includes(nm) || sh.id === nm));
+    if (same) {
+      same.sceneKind = sc.kind;
+      for (const nm of names) if (!out.some(o => o.words.includes(nm))) same.words.push(nm);
+    } else {
+      const words = names.filter((nm, i) => names.indexOf(nm) === i && !out.some(o => o.words.includes(nm)));
+      if (words.length) out.push({ id: sc.kind, words, node3d: { type: sc.type }, sceneKind: sc.kind });
+    }
+  }
+  return out;
+})();
+
+/**
+ * The Do… bar's space actions as the Scene Builder's warps (sceneBuilder/spec.ts WARPS), so a
+ * phrase like "twist 0.5" or "repeat 6 times around" means the same bend in 2D and in 3D.
+ */
+export const ACTION_TO_SCENE_WARP: Readonly<Record<string, string>> = {
+  twist: 'twist', repeat: 'repeat', 'repeat-around': 'polar-repeat', mirror: 'mirror', warp: 'noise', polar: 'polar-repeat',
+  'zoom-rotate': 'turn', swirl: 'twist',
+};
 
 export interface ActionWord {
   id: string;
