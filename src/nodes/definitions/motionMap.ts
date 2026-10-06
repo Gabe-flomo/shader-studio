@@ -42,7 +42,7 @@ export const MotionMapNode: NodeDefinition = {
   },
   outputs: {
     amount: { type: 'float', label: 'Amount', hint: 'How much moved here lately, 0 (still) to 1, times Gain.' },
-    texture: { type: 'texture', label: 'Texture', hint: 'The whole grid (0–1 in red): into an Agents group\'s port, Emit\'s Picture, Sample (texture), Glow or Blur.' },
+    texture: { type: 'texture', label: 'Texture', hint: 'The whole grid (0–1 in red): into an Agents group\'s port, Emit\'s Picture, Sample (texture), Glow, Blur or a Texture tool (Mask, Levels, Flow).' },
   },
   defaultParams: { gain: 1 },
   paramDefs: {

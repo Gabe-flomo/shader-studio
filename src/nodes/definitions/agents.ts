@@ -756,7 +756,7 @@ export const TrailFieldNode: NodeDefinition = {
     amount: { type: 'float', label: 'Amount', hint: 'The trail here, softly scaled to 0–1 by Gain: wire into a Palette.' },
     raw: { type: 'float', label: 'Raw', hint: 'The first channel\'s amount here, unscaled.' },
     channels: { type: 'vec4', label: 'Channels', hint: 'All four channels here, unscaled (one per species).' },
-    texture: { type: 'texture', label: 'Image', hint: 'The whole trail as an image (a texture): back into the Agents group for Sense (through an input you add on Agent Inputs), or into Glow, Blur or Sample (texture).' },
+    texture: { type: 'texture', label: 'Image', hint: 'The whole trail as an image (a texture): back into the Agents group for Sense (through an input you add on Agent Inputs), or into Glow, Blur or Sample (texture), or a Texture tool: Flow for a direction along the trail, Mask or Levels to shape it.' },
   },
   defaultParams: { resolution: '0.5', diffuse: 1, halfLife: 0.12, edges: 'wrap', gain: 0.15, kernel: '3' },
   paramDefs: {
@@ -855,7 +855,7 @@ export const DrawAgentsNode: NodeDefinition = {
   outputs: {
     color: { type: 'vec3', label: 'Color', hint: 'Over with the walkers drawn on it.' },
     density: { type: 'float', label: 'Density', hint: 'How much walker light (Ink: ink) is here.' },
-    texture: { type: 'texture', label: 'Image', hint: 'The drawn walkers alone, as an image (a texture): into Glow, Blur or another group.' },
+    texture: { type: 'texture', label: 'Image', hint: 'The drawn walkers alone, as an image (a texture): into Glow, Blur, another group, or a Texture tool (Mask, Neighbours, Fade).' },
   },
   defaultParams: {
     style: 'points', colorBy: 'heading', palette: 'ab', size: 1.5, brightness: 0.5, glow: 1, scaleBy: 'walker', streak: 0.25, fade: 'on', speedRef: 0.5,

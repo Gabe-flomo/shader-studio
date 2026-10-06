@@ -187,10 +187,10 @@ export const PrevFrameNode: NodeDefinition = {
 
 /** Phase 7 (docs/pass-node-plan.md): the image or video itself as a texture, straight into the sampling nodes. */
 const TEXTURE_INPUT_TEXTURE: GraphNode['outputs'] = {
-  texture: { type: 'texture', label: 'Texture', hint: 'The image itself as a texture: wire it into Sample, Edges, Blur, Glow or Displace (texture), or Particles\' Emit from, with no copy Pass in between. It covers the picture as Stretch does (Fit doesn\'t apply).' },
+  texture: { type: 'texture', label: 'Texture', hint: 'The image itself as a texture: wire it into Sample, Edges, Blur, Glow or Displace (texture), a Texture tool (Mask, Levels, Flow, Neighbours), or Particles\' Emit from, with no copy Pass in between. It covers the picture as Stretch does (Fit doesn\'t apply).' },
 };
 const VIDEO_INPUT_TEXTURE: GraphNode['outputs'] = {
-  texture: { type: 'texture', label: 'Texture', hint: 'The video itself as a texture: wire it into Sample, Edges, Blur, Glow or Displace (texture), or Particles\' Emit from, with no copy Pass in between.' },
+  texture: { type: 'texture', label: 'Texture', hint: 'The video itself as a texture: wire it into Sample, Edges, Blur, Glow or Displace (texture), a Texture tool (Mask for a colour key, Levels, Neighbours), or Particles\' Emit from, with no copy Pass in between. For Change (what moved), draw it into a Pass first.' },
 };
 
 export const TextureInputNode: NodeDefinition = {
