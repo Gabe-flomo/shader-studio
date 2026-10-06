@@ -1,6 +1,7 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { p, f } from './helpers';
 import { columnsExpr, gridColumnsMigration } from './gridColumns';
+import { GRID_HASH_GLSL } from './gridHash';
 
 // Grid — aspect-corrected UV-space grid. Takes a UV input and a column count,
 // exposes cell-local data needed for any grid-based pattern or effect.
@@ -102,7 +103,7 @@ export const NeighborDistNode: NodeDefinition = {
   type: 'neighborDist',
   label: 'Neighbor Dist',
   category: 'Grid',
-  description: 'Minimum distance to the nearest dot center across a 3×3 neighborhood. Connect cellID for per-cell hash displacement (fixes clipping on scattered dots). Connect displacement for a uniform shift. Use with Grid (Cell UV and Cell ID).',
+  description: 'Minimum distance to the nearest dot center across a 3×3 (or 5×5) neighborhood. Connect cellID for per-cell hash displacement (fixes clipping on scattered dots). Connect displacement for a uniform shift. Use with Grid (Cell UV and Cell ID).',
   inputs: {
     uv:           { type: 'vec2',  label: 'UV' },
     cellID:       { type: 'vec2',  label: 'Cell ID', hint: 'Wire Cell ID from Grid for per-cell random scatter.' },
@@ -112,10 +113,15 @@ export const NeighborDistNode: NodeDefinition = {
   outputs: {
     minDist: { type: 'float', label: 'Min Dist' },
   },
-  defaultParams: { neighborhood_size: 1, dispScale: 0.35 },
+  defaultParams: { neighborhood_size: '1', dispScale: 0.35 },
   paramDefs: {
+    neighborhood_size: { label: 'Neighbours', type: 'select', options: [
+      { value: '1', label: '3×3 (9 cells)' },
+      { value: '2', label: '5×5 (25 cells)' },
+    ], hint: 'How many cells around this one are searched for the nearest dot. 3×3 is right while a dot stays within about half a cell of its centre; 5×5 for dots that wander or reach further (a large Displacement), at about 3× the cost.' },
     dispScale: { label: 'Disp Scale', type: 'float', min: 0, max: 0.5, step: 0.005, hint: 'How far each dot may wander from its cell center. 0.35 scatters without gaps.' },
   },
+  glslFunction: GRID_HASH_GLSL,
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
     const cuv   = inputVars.uv           || 'vec2(0.0)';
@@ -123,9 +129,8 @@ export const NeighborDistNode: NodeDefinition = {
     const disp  = inputVars.displacement || 'vec2(0.0)';
     const init  = '9.0';
     const scale = inputVars.dispScale || p(node.params.dispScale, 0.35);
-    const n     = typeof node.params.neighborhood_size === 'number'
-      ? Math.round(node.params.neighborhood_size as number)
-      : 1;
+    // Saved as a number before the Neighbours control existed; the control stores '1' / '2'.
+    const n     = Math.round(Number(node.params.neighborhood_size)) === 2 ? 2 : 1;
     const fv = (v: number) => v >= 0 ? `${v}.0` : `-${Math.abs(v)}.0`;
 
     const useHash = cid && !inputVars.displacement;
@@ -138,8 +143,7 @@ export const NeighborDistNode: NodeDefinition = {
           const off = `vec2(${fv(dx)}, ${fv(dy)})`;
           lines.push(
             `    { vec2 ${id}_nc = ${cid} + ${off};` +
-            ` vec2 ${id}_nh = sin(vec2(dot(${id}_nc, vec2(127.1,311.7)), dot(${id}_nc, vec2(269.5,183.3)))) * 43758.5453;` +
-            ` vec2 ${id}_nd = (fract(${id}_nh) - 0.5) * ${scale};` +
+            ` vec2 ${id}_nd = (gridHash22(${id}_nc) - 0.5) * ${scale};` +
             ` ${id}_md = min(${id}_md, length(${cuv} - ${off} - ${id}_nd)); }\n`
           );
         }
@@ -346,7 +350,7 @@ export const AnimatedCellCenterNode: NodeDefinition = {
   type: 'animatedCellCenter',
   label: 'Animated Cell Center',
   category: 'Grid',
-  description: 'Returns an animated dot center position with per-cell sin oscillation. Phase is seeded by cellID for independent motion per cell. Use with Grid (Cell ID), feeding Center into Gaussian Field or Neighbor Dist.',
+  description: 'Returns an animated dot center position with per-cell sin oscillation. Phase is seeded by cellID for independent motion per cell. With Grid Size 1 the Center is in cells, the same units as Grid’s Grid Pos: wire Grid Pos into a Circle SDF’s UV and Center into its Center (not Cell UV, which restarts at every cell). Use with Grid (Cell ID and Grid Pos).',
   inputs: {
     cellID: { type: 'vec2', label: 'Cell ID', hint: 'Wire Cell ID from Grid; it seeds each cell\'s phase.' },
   },
@@ -355,7 +359,7 @@ export const AnimatedCellCenterNode: NodeDefinition = {
   },
   defaultParams: { gridSize: 8.0, speed: 0.3, amplitude: 0.7 },
   paramDefs: {
-    gridSize:  { label: 'Grid Size',  type: 'float', min: 1.0,  max: 24.0, step: 1.0, hint: 'Must match the Grid column count so centers land in their cells.' },
+    gridSize:  { label: 'Grid Size',  type: 'float', min: 1.0,  max: 24.0, step: 1.0, hint: 'Divides the centre: Center = (Cell ID + 0.5 + wobble) ÷ Grid Size. At 1, Center is in cells, the units of Grid Pos: measure a Circle SDF from Grid Pos to it. At the Grid’s Columns count it is 0–1 across the grid, which only lines up with a 0–1 UV.' },
     speed:     { label: 'Speed',      type: 'float', min: 0.0,  max: 1.0,  step: 0.01, hint: 'How fast each dot orbits its cell center.' },
     amplitude: { label: 'Amplitude',  type: 'float', min: 0.0,  max: 1.5,  step: 0.01, hint: 'How far each dot wanders, as a fraction of a cell. 0 pins dots to the center.' },
   },
