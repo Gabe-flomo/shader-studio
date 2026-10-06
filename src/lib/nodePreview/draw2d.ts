@@ -4,7 +4,7 @@
  * callers scale the context for the device pixel ratio.
  */
 import {
-  arrowLength, arrowSamples, formatValue, rangeColor, sliceAxis, sliceRow, wheelColor,
+  arrowLength, arrowSamples, arrowStrength, ARROW_DOT_BELOW, formatValue, rangeColor, sliceAxis, sliceRow, wheelColor,
   type FieldStats, type ValueField,
 } from './valueField';
 
@@ -41,8 +41,9 @@ export function drawArrow(ctx: CanvasRenderingContext2D, x0: number, y0: number,
 }
 
 /**
- * An arrow per grid cell, length by magnitude against the longest. Returns that longest length
- * and how long its arrow is drawn (the key's reference arrow).
+ * An arrow per grid cell (`cellCss` pixels: showAs.arrowCellPx). Length and brightness are the
+ * strength, magnitude / the largest magnitude in view; below ARROW_DOT_BELOW a dot. Returns that
+ * largest magnitude and how long a full arrow is drawn (the key's reference arrow).
  */
 export function drawArrows(ctx: CanvasRenderingContext2D, field: ValueField, r: Rect, cellCss = 34): { maxMag: number; fullLen: number } {
   const m = coverMap(field, r);
@@ -58,11 +59,12 @@ export function drawArrows(ctx: CanvasRenderingContext2D, field: ValueField, r: 
     const x = a.vecs[i * 2], y = a.vecs[i * 2 + 1];
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     const mag = Math.hypot(x, y);
+    const strength = arrowStrength(mag, a.maxMag);
     const len = arrowLength(mag, a.maxMag, cellPx);
     const cx = m.toX(u), cy = m.toY(v);
-    if (len < 1.5) {
-      ctx.fillStyle = 'rgba(255,255,255,0.35)';
-      ctx.fillRect(cx - 1, cy - 1, 2, 2);
+    if (strength < ARROW_DOT_BELOW || len < 1.5) {
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.beginPath(); ctx.arc(cx, cy, Math.max(1, Math.min(1.6, cellPx * 0.06)), 0, Math.PI * 2); ctx.fill();
       return;
     }
     const dx = (x / mag) * len, dy = -(y / mag) * len; // vec2 y is up, canvas y is down

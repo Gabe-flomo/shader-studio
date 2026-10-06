@@ -8,8 +8,8 @@ import { Segmented } from '../ui/Choice';
 import { Select } from '../ui/Select';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import {
-  modesFor, pickPreviewOutput, prefOf, previewableOutputs, showAsFor, useNodePreviewPrefs,
-  type ShowAsMode, type ValueType,
+  DETAIL_LEVELS, DETAIL_MODES, detailFor, modesFor, pickPreviewOutput, prefOf, previewableOutputs, showAsFor, useNodePreviewPrefs,
+  type Detail, type ShowAsMode, type ValueType,
 } from '../../lib/nodePreview/showAs';
 
 export interface ShowAsState {
@@ -19,6 +19,8 @@ export interface ShowAsState {
   valueType: ValueType | null;
   mode: ShowAsMode | null;
   sliceY: number;
+  /** Grid / Arrows density. */
+  detail: Detail;
 }
 
 /** The node's preview output, its mode and slice line, following the remembered choices. */
@@ -34,6 +36,7 @@ export function useShowAs(node: GraphNode | null): ShowAsState | null {
     outputKey, type, valueType,
     mode: valueType ? showAsFor(node, valueType, outputKey, prefs) : null,
     sliceY: typeof pref.sliceY === 'number' ? pref.sliceY : 0.5,
+    detail: detailFor(node, prefs),
   };
 }
 
@@ -69,6 +72,16 @@ export function ShowAsControls({ node, state, compact = false }: { node: GraphNo
           value={state.mode}
           onChange={m => setShowAs(node, state.valueType!, m)}
           options={modesFor(state.valueType).map(m => ({ value: m.value, label: m.label }))}
+        />
+      )}
+      {state.valueType && state.mode && DETAIL_MODES.has(state.mode) && (
+        <Select
+          ariaLabel="Detail"
+          value={state.detail}
+          height={compact ? 24 : 26}
+          style={{ maxWidth: compact ? 124 : 140, fontSize: 11.5 }}
+          options={DETAIL_LEVELS.map(l => ({ value: l.value, label: `Detail: ${l.label}` }))}
+          onChange={d => useNodePreviewPrefs.getState().set(node, { detail: d as Detail })}
         />
       )}
     </span>

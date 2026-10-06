@@ -8,9 +8,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { findNodeDeep } from '../lib/nodePreview/valuePreviewRunner';
 import { previewBus, previewPerf, type PreviewFrame } from '../lib/nodePreview/previewBus';
-import { useNodePreviewPrefs, type ShowAsMode } from '../lib/nodePreview/showAs';
+import { arrowCellPx, DEFAULT_DETAIL, useNodePreviewPrefs, type Detail, type ShowAsMode } from '../lib/nodePreview/showAs';
 import { coverMap, drawArrow, drawArrows, drawRangeBar, drawSlice, drawWheelKey, type Rect } from '../lib/nodePreview/draw2d';
-import { niceStep, valueKey, formatValue } from '../lib/nodePreview/valueField';
+import { arrowKey, niceStep, valueKey, formatValue } from '../lib/nodePreview/valueField';
 import { useShowAs } from './NodeGraph/ShowAsControls';
 import type { GraphNode } from '../types/nodeGraph';
 
@@ -18,7 +18,7 @@ const EMPTY: GraphNode[] = [];
 const FONT = '11.5px ui-monospace, SFMono-Regular, Menlo, monospace';
 
 /** Draw everything the overlay shows for one readback. Shared shape with the node card (ValuePreview). */
-export function drawValueOverlay(ctx: CanvasRenderingContext2D, frame: PreviewFrame, mode: ShowAsMode, r: Rect, sliceY: number, opts: { keyAt?: 'bottom' | 'none'; big?: boolean } = {}) {
+export function drawValueOverlay(ctx: CanvasRenderingContext2D, frame: PreviewFrame, mode: ShowAsMode, r: Rect, sliceY: number, opts: { keyAt?: 'bottom' | 'none'; big?: boolean; detail?: Detail } = {}) {
   const { field, stats } = frame;
   const type = field.type;
   if (stats.constant || stats.finite === 0) {
@@ -34,7 +34,7 @@ export function drawValueOverlay(ctx: CanvasRenderingContext2D, frame: PreviewFr
     ctx.fillText(text, px + 14, py + ph / 2 + 1);
     return;
   }
-  const arrows = type === 'vec2' && mode === 'arrows' ? drawArrows(ctx, field, r, opts.big === false ? 22 : 36) : null;
+  const arrows = type === 'vec2' && mode === 'arrows' ? drawArrows(ctx, field, r, arrowCellPx(opts.detail ?? DEFAULT_DETAIL, opts.big === false ? 'card' : 'eye')) : null;
   if (type === 'float' && mode === 'slice') {
     const ph = Math.max(70, Math.min(170, r.h * 0.42));
     drawSlice(ctx, field, r, { x: r.x + 8, y: r.y + r.h - ph - 8, w: r.w - 16, h: ph }, sliceY);
@@ -46,7 +46,7 @@ export function drawValueOverlay(ctx: CanvasRenderingContext2D, frame: PreviewFr
   let text = valueKey(stats, type, mode);
   if (type === 'float' && mode === 'contours') text += `  · lines every ${formatValue(niceStep(stats.min, stats.max))}`;
   // Arrows: a reference arrow as long as the longest one drawn, and its length
-  if (arrows) text = `= ${formatValue(arrows.maxMag)} (longest)`;
+  if (arrows) text = arrowKey(arrows.maxMag);
   const tw = ctx.measureText(text).width;
   const swatch = arrows ? Math.max(14, Math.min(48, arrows.fullLen)) : type === 'vec2' ? (mode === 'grid' ? 0 : 22) : 70;
   const h = 24, w = tw + 20 + (swatch ? swatch + 8 : 0);
@@ -80,6 +80,7 @@ export function PreviewValueOverlay() {
   const mode = sa?.mode ?? 'raw';
   const sliceY = dragY ?? sa?.sliceY ?? 0.5;
   const outputKey = sa?.outputKey;
+  const detail = sa?.detail ?? DEFAULT_DETAIL;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -100,7 +101,7 @@ export function PreviewValueOverlay() {
       if (!active || !frame || frame.nodeId !== previewId || frame.outputKey !== outputKey || frame.field.type !== sa?.valueType) return;
       const t0 = performance.now();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      drawValueOverlay(ctx, frame, mode, { x: 0, y: 0, w: cw, h: ch }, sliceY);
+      drawValueOverlay(ctx, frame, mode, { x: 0, y: 0, w: cw, h: ch }, sliceY, { detail });
       previewPerf.overlayMs = performance.now() - t0;
     };
     const ask = () => { if (!raf) raf = requestAnimationFrame(draw); };
@@ -109,7 +110,7 @@ export function PreviewValueOverlay() {
     const ro = new ResizeObserver(ask);
     ro.observe(canvas);
     return () => { unsub(); ro.disconnect(); if (raf) cancelAnimationFrame(raf); };
-  }, [active, mode, sliceY, previewId, outputKey, sa?.valueType]);
+  }, [active, mode, sliceY, previewId, outputKey, sa?.valueType, detail]);
 
   const sliceDrag = active && mode === 'slice' && sa?.valueType === 'float';
   const yAt = (e: React.PointerEvent) => {

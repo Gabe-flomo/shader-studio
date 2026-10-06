@@ -15,7 +15,7 @@ const v3 = (c: readonly number[]) => `vec3(${c.map(x => x.toFixed(3)).join(', ')
 /** Mode numbers the display program takes in u_pvMode. */
 export const MODE_CODE: Record<string, number> = { auto: 0, slice: 1, contours: 2, grid: 0, arrows: 1, wheel: 2 };
 
-export const DISPLAY_UNIFORMS = ['u_pvMode', 'u_pvMin', 'u_pvMax', 'u_pvStep', 'u_pvMag', 'u_pvFlat'] as const;
+export const DISPLAY_UNIFORMS = ['u_pvMode', 'u_pvMin', 'u_pvMax', 'u_pvStep', 'u_pvMag', 'u_pvFlat', 'u_pvGrid'] as const;
 
 const HELPERS = `
 uniform float u_pvMode;
@@ -24,6 +24,7 @@ uniform float u_pvMax;
 uniform float u_pvStep;
 uniform float u_pvMag;
 uniform float u_pvFlat;
+uniform vec2 u_pvGrid; // checker squares, grid lines per unit (Detail)
 vec3 pvz_div(float v) {
   float t;
   if (v < 0.0) {
@@ -49,13 +50,14 @@ vec3 pvz_wheel(vec2 p) {
 }
 vec3 pvz_grid(vec2 p, vec2 w) {
   w = max(w, vec2(1e-6));
-  vec2 c = floor(p * 8.0);
+  float checks = max(u_pvGrid.x, 1.0), lines = max(u_pvGrid.y, 1.0);
+  vec2 c = floor(p * checks);
   float chk = mod(c.x + c.y, 2.0);
-  float fade = 1.0 - smoothstep(0.3, 1.0, max(w.x, w.y) * 8.0);
+  float fade = 1.0 - smoothstep(0.3, 1.0, max(w.x, w.y) * checks);
   float shade = 0.24 + (chk - 0.5) * 0.14 * fade;
   vec2 f = fract(p);
   vec3 col = vec3(shade + f.x * 0.22, shade + 0.02, shade + f.y * 0.26);
-  vec2 l = abs(fract(p * 2.0 + 0.5) - 0.5) / (w * 2.0);
+  vec2 l = abs(fract(p * lines + 0.5) - 0.5) / (w * lines);
   col = mix(col, vec3(0.82, 0.84, 0.9), (1.0 - smoothstep(0.5, 1.5, min(l.x, l.y))) * 0.55);
   col = mix(col, vec3(0.3, 0.95, 0.45), 1.0 - smoothstep(0.75, 2.0, abs(p.x) / w.x));
   col = mix(col, vec3(1.0, 0.35, 0.35), 1.0 - smoothstep(0.75, 2.0, abs(p.y) / w.y));
