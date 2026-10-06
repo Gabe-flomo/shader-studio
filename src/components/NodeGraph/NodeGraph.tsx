@@ -16,6 +16,8 @@ import { buildNodeErrors } from '../../compiler/nodeErrors';
 import { suggestConnections, type Suggestion } from './smartConnect';
 import { suggestQuickAdds, type QuickAdd } from './quickAdds';
 import { SmartConnectMenu } from './SmartConnectMenu';
+import { SuggestionStrip } from './SuggestionStrip';
+import { learnedNext, rankTables } from '../../suggestions';
 import { RecipeOffer } from './RecipeOffer';
 import { useRecipeOffer } from '../../store/recipeOfferStore';
 import { askConfirm, askText } from '../ui/dialogStore';
@@ -919,7 +921,10 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     const origin = displayNodes.find(n => n.id === smartConnect.nodeId);
     const sock = smartConnect.dir === 'out' ? origin?.outputs[smartConnect.key] : origin?.inputs[smartConnect.key];
     if (!sock) return [];
-    return suggestQuickAdds({ type: sock.type, dir: smartConnect.dir, label: sock.label, key: smartConnect.key, nodeType: origin?.type });
+    // Learned picks first (suggestions: your graphs, then the examples), then the hand-written rules.
+    const learned = origin ? learnedNext(origin.type, smartConnect.key, smartConnect.dir, rankTables(), 2)
+      .map(l => ({ type: l.type, key: l.key, note: l.you ? 'you often use it here' : 'usually goes here' })) : [];
+    return suggestQuickAdds({ type: sock.type, dir: smartConnect.dir, label: sock.label, key: smartConnect.key, nodeType: origin?.type, learned });
   }, [smartConnect, displayNodes]);
   const closeSmartConnect = useCallback(() => { setSmartConnect(null); setGhostSuggestion(null); }, []);
   const pickQuickAdd = useCallback((q: QuickAdd) => {
@@ -2203,6 +2208,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
 
       {/* Starter recipes for a node just added (nodes/recipes): a small offer beside it */}
       <RecipeOffer nodes={displayNodes} canvasRef={canvasRef} pan={pan} zoom={zoom} />
+      {/* The selected node's next moves (suggestions/): under its card, never over a socket */}
+      <SuggestionStrip nodes={displayNodes} canvasRef={canvasRef} pan={pan} zoom={zoom} readOnly={locked} />
 
       {/* Feature 1: Alt-click socket filtered palette */}
       {smartConnect && (() => {
@@ -2241,6 +2248,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             spawnPosition={spawnPos}
             filterOutputType={ps.dir === 'in'  ? ps.type : undefined}
             filterInputType={ps.dir === 'out' ? ps.type : undefined}
+            boostFrom={displayNodes.find(n => n.id === ps.nodeId)?.type}
             onNodePlaced={handleAltSocketNodePlaced}
           />
         );

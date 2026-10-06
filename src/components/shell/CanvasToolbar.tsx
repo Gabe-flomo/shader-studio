@@ -5,6 +5,7 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { categoryColor } from '../../theme/categories';
 import type { GraphNode } from '../../types/nodeGraph';
 import { IconButton } from '../ui/Button';
+import { SuggestionsToggle } from '../NodeGraph/SuggestionStrip';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Popover } from '../ui/Popover';
@@ -122,6 +123,7 @@ export function CanvasToolbar({
       )}
       <Sep />
       <IconButton icon="minimap" label={showMinimap ? 'Hide minimap' : 'Show minimap'} size="sm" active={showMinimap} onClick={onToggleMinimap} />
+      {!readOnly && <SuggestionsToggle />}
       {multiProgram && (
         <IconButton icon="layers" label={showPasses ? 'Hide passes' : 'Show passes: tint each node by the program it runs in (a Pass, an Agents group, the picture)'} size="sm" active={showPasses} onClick={() => setShowPasses(!showPasses)} />
       )}
