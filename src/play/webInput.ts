@@ -12,8 +12,8 @@
 import { unsupportedFeatures, type GraphFeatures, type PlayHtmlInput, type PlayMedia, type WebAgents, type WebPass } from './exportHtml';
 import type { AgentsSpec, PassProgram } from '../compiler/types';
 import { passIterUniform, passPrevUniform, passUniform } from '../nodes/definitions/passes';
-import { agentDrawUniform, agentStateUniform, agentStepUniform, agentWindowUniform, trailStepUniforms, trailUniform } from '../nodes/definitions/agents';
-import { AG_BESSEL_UNIFORM, listenUniforms } from '../nodes/definitions/agentForces';
+import { agentDrawUniform, agentStateUniform, agentStepUniform, agentWindowUniform, trailStepUniforms, trailUniform, trailVolUniform } from '../nodes/definitions/agents';
+import { AG_BESSEL_UNIFORM, listenUniforms, sceneGridUniforms } from '../nodes/definitions/agentForces';
 import { MOTION_MAP_UNIFORM } from '../nodes/definitions/motionMap';
 import { agentReadLayer } from '../lib/agentReadings';
 import { bakeLayerValues } from './playControls';
@@ -66,17 +66,18 @@ export function webAgents(a: AgentsSpec, play?: PlayRecord): WebAgents {
   const setup = play ? JSON.stringify(play) : '';
   const reads = (id: string) => !!setup && (setup.includes(`"${agentReadLayer(id)}"`) || setup.includes(`read:${agentReadLayer(id)}::`));
   return {
-    groups: a.groups.map(({ nodeId, nodeIds: _ids, readsTrails: _t, readsPasses: _p, listeners, ...g }) => ({
+    groups: a.groups.map(({ nodeId, nodeIds: _ids, readsTrails: _t, readsPasses: _p, listeners, grids, ...g }) => ({
       ...g,
       ...(reads(nodeId) ? { readAs: agentReadLayer(nodeId) } : {}),
       listeners: listeners.map(({ nodeId: _l, ...l }) => ({ ...l, u: listenUniforms(l.slug) })),
+      ...(grids ? { grids: grids.map(({ nodeId: _g, ...gr }) => ({ ...gr, u: sceneGridUniforms(gr.slug) })) } : {}),
       u: {
         A: agentStateUniform(g.slug, 'A'), B: agentStateUniform(g.slug, 'B'), C: agentStateUniform(g.slug, 'C'), D: agentStateUniform(g.slug, 'D'),
         step: agentStepUniform(g.slug), win: agentWindowUniform(g.slug),
       },
     })),
     deposits: a.deposits.map(({ nodeId: _n, ...d }) => d),
-    trails: a.trails.map(({ nodeId: _n, stepNodeIds: _s, readsPasses: _p, ...t }) => ({ ...t, u: { tex: trailUniform(t.slug), ...trailStepUniforms(t.slug) } })),
+    trails: a.trails.map(({ nodeId: _n, stepNodeIds: _s, readsPasses: _p, ...t }) => ({ ...t, u: { tex: trailUniform(t.slug), ...trailStepUniforms(t.slug), ...(t.volume ? { vol: trailVolUniform(t.slug) } : {}) } })),
     draws: a.draws.map(({ nodeId: _n, ...d }) => ({ ...d, u: { tex: agentDrawUniform(d.slug) } })),
     bessel: AG_BESSEL_UNIFORM,
   };
@@ -87,6 +88,8 @@ export function webShaders(c: CompiledForWeb): string[] {
   return [
     c.fragmentShader, ...(c.passes ?? []).map(p => p.fragmentShader),
     ...(c.agents?.groups ?? []).map(g => g.fragmentShader), ...(c.agents?.trails ?? []).flatMap(t => (t.stepShader ? [t.stepShader] : [])),
+    ...(c.agents?.draws ?? []).flatMap(d => (d.probe ? [d.probe.camera, ...(d.probe.depth ? [d.probe.depth] : [])] : [])),
+    ...(c.agents?.groups ?? []).flatMap(g => (g.grids ?? []).map(gr => gr.shader)),
   ];
 }
 

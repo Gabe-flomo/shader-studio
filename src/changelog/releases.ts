@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.39',
+    date: '2026-10-05',
+    title: 'Agents in 3D',
+    highlights: [
+      { area: 'Studio', text: 'Agents groups can run in 3D: Space 3D gives walkers depth, a volume trail to sense, and forces with z.', link: { kind: 'doc', path: 'docs/agents-group.md' } },
+      { area: 'Studio', text: 'Draw agents gets an orbit camera with the same controls as Time Cube and Frame Stack, plus drift and depth of field, or a 3D scene\'s camera.' },
+      { area: 'Studio', text: 'Collide (3D scene) lets walkers bounce off ray-marched shapes. Five 3D examples: slime, flock, torus swarm, galaxy, fireflies.' },
+    ],
+  },
+  {
     id: '2026.10.38',
     date: '2026-10-05',
     title: 'Edit the clip',

@@ -150,7 +150,9 @@ export interface WebPass {
  * agentForces.ts), so the page never builds a uniform name of its own.
  */
 export interface WebAgents {
-  groups: Array<Omit<AgentGroupProgram, 'nodeId' | 'nodeIds' | 'readsTrails' | 'readsPasses' | 'listeners'> & {
+  groups: Array<Omit<AgentGroupProgram, 'nodeId' | 'nodeIds' | 'readsTrails' | 'readsPasses' | 'listeners' | 'grids'> & {
+    /** Collide (3D scene)'s grids: each one's program, where it is, and its sampler and place uniforms. */
+    grids?: Array<Omit<NonNullable<AgentGroupProgram['grids']>[number], 'nodeId'> & { u: { grid: string; at: string } }>;
     listeners: Array<Omit<AgentListener, 'nodeId'> & { u: { sound: string; shocks: string; levels: string; plateModes: string; plateCount: string; plateShake: string } }>;
     /** State samplers A–D, the step (uint) and the birth window (vec4). */
     u: { A: string; B: string; C: string; D: string; step: string; win: string };
@@ -158,7 +160,7 @@ export interface WebAgents {
     readAs?: string;
   }>;
   deposits: Array<Omit<AgentDepositProgram, 'nodeId'>>;
-  trails: Array<Omit<AgentTrailProgram, 'nodeId' | 'stepNodeIds' | 'readsPasses'> & { u: { tex: string; src: string; step: string } }>;
+  trails: Array<Omit<AgentTrailProgram, 'nodeId' | 'stepNodeIds' | 'readsPasses'> & { u: { tex: string; src: string; step: string; vol?: string } }>;
   draws: Array<Omit<AgentDrawProgram, 'nodeId'> & { u: { tex: string } }>;
   /** The round Chladni plate's Bessel table sampler. */
   bessel: string;

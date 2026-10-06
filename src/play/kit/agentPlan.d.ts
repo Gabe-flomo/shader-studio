@@ -49,7 +49,15 @@ export interface AgDrawLook {
   usePal: boolean; rainbow: boolean; pal: number[][] | null; colA: number[]; colB: number[]; glow: number; halo: number;
 }
 export function agDrawLook(d: { style: string; scaleBy: string; palette: string; colorBy: string; fade: boolean; params: Record<string, unknown> }, n: number, h: number, read: AgRead, readColour: AgReadColour): AgDrawLook;
-export function agLights(d: { lights: number; lightMotion: string; params: Record<string, unknown> }, read: AgRead, readColour: AgReadColour, time: number, aspect: number): Array<{ x: number; y: number; reach: number; power: number; colour: number[] }>;
+export function agLights(d: { lights: number; lightMotion: string; space3d?: boolean; params: Record<string, unknown> }, read: AgRead, readColour: AgReadColour, time: number, aspect: number): Array<{ x: number; y: number; z: number; reach: number; power: number; colour: number[] }>;
+export const AG_VOL_MAX_W: number;
+export interface AgVolLayout { nx: number; ny: number; nz: number; tx: number; ty: number; w: number; h: number }
+export function agVolLayout(rows: number, w: number, h: number): AgVolLayout;
+export function agVolUniform(L: AgVolLayout): [number, number, number, number];
+export interface AgCamera3 { eye: number[]; fwd: number[]; right: number[]; up: number[]; dist: number; lens: number; ortho: number; focus: number; focusShare: number; coc: number; cap: number }
+export function agCamera3(d: { mirror?: boolean; params: Record<string, unknown> }, read: AgRead, time: number, h: number): AgCamera3;
+export function agProject3(cam: AgCamera3, xyz: number[]): { x: number; y: number; depth: number };
+export const AG_PROBE_POINTS: number[][];
 export const AG_GROUP_READS: readonly ['alive', 'speed', 'spread', 'centroidX', 'centroidY', 'group1', 'group2', 'group3', 'group4'];
 export type AgGroupRead = typeof AG_GROUP_READS[number];
 export function agReadPlan(side: number): Array<[number, number]>;

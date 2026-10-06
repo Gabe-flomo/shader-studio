@@ -64,6 +64,14 @@ export interface AgentGroupProgram {
   species: number;
   /** Per-walker state (state C and D: species, memory, colour, its own deposit): four state textures, not two. */
   stateC?: boolean;
+  /** Space 3D: A = (pos.xyz, age), B = (vel.xyz, life); its Deposits fill volumes, its Draws use a camera. */
+  space3d?: boolean;
+  /**
+   * Collide (3D scene) nodes: each one's Scene on the Particles node's 48³ grid, filled every step (before the rule, at the
+   * step's clock) by `shader` (a program of the picture's kind) into the sampler sceneGridUniforms(slug).grid; `at` is
+   * its centre and reach (x, y, z, Scene size: numbers or the uniforms their sliders write), set in .at.
+   */
+  grids?: Array<{ nodeId: string; slug: string; shader: string; at: AgentParam[] }>;
   /** stepsPerFrame, seed, preroll. */
   params: Record<string, AgentParam>;
   /**
@@ -134,6 +142,12 @@ export interface AgentTrailProgram {
   readsPasses?: string[];
   /** Graph nodes compiled into its step program (Show passes). */
   stepNodeIds?: string[];
+  /**
+   * Filled by a 3D group: a volume of `volume` rows and slices (columns follow the picture), its
+   * slices side by side in one texture (kit/agentPlan.js agVolLayout). The picture reads it seen
+   * from the front, summed through its depth; Sense inside a 3D group reads it in 3D.
+   */
+  volume?: number;
   /** diffuse, halfLife. */
   params: Record<string, AgentParam>;
   live: boolean;
@@ -153,9 +167,20 @@ export interface AgentDrawProgram {
   lightMotion: 'orbit' | 'still';
   fade: boolean;
   scaleBy: 'walker' | 'crowd';
-  /** size, brightness, glow, streak, speedRef, colorA, colorB, light settings. */
+  /** size, brightness, glow, streak, speedRef, colorA, colorB, light settings (and in 3D the camera). */
   params: Record<string, AgentParam | number[]>;
   live: boolean;
+  /** Its group is 3D: drawn through a camera (the built-in orbit, or a scene's: `probe`), with depth of field. */
+  space3d?: boolean;
+  /** The camera's right is the Particles node's way round (Open as nodes), not the March Camera's. */
+  mirror?: boolean;
+  /**
+   * A ray-marched scene's camera (Camera from and Camera ray wired) and its Depth: small programs of
+   * the picture's kind. `camera` is evaluated at g_uv = probe.uniform.xy (it writes Camera from when
+   * .z is 0, else Camera ray) into 4 × 1 texels: the origin, then the rays at (0, 0), (0.5, 0) and
+   * (0, 0.5); `depth` (Depth wired) writes the scene's distance into .b over the picture at half size.
+   */
+  probe?: { uniform: string; camera: string; depth?: string };
 }
 
 /** Everything the agents engine runs for a graph (present only when it has an Agents-family node). */

@@ -49,6 +49,8 @@ const CONNECTION_GATED = new Set([
   'agentChladni.shake', 'agentChladni.level', 'agentChladni.beat',
   // Flow and Collide do nothing, and read none of their settings, until a field is wired into Field ƒ / Shape ƒ
   'agentFlow.strength', 'agentFlow.step', 'agentCollide.margin', 'agentCollide.cushion', 'agentCollide.bounce', 'agentCollide.friction',
+  // Collide (3D scene) works only in a 3D group (alone it passes the walker through); the engine reads its place (x, y, z, reach)
+  ...Object.keys(NODE_REGISTRY.agentCollideScene.paramDefs ?? {}).map(k => `agentCollideScene.${k}`),
   // Time Cube View and Time Slice (docs/time-cube.md) draw only their background / black, and read none of
   // their other settings, until a Time Cube's Volume is wired
   ...Object.keys(NODE_REGISTRY.timeCubeView.paramDefs ?? {}).filter(k => k !== 'background').map(k => `timeCubeView.${k}`),

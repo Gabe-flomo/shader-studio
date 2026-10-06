@@ -14,3 +14,8 @@ export const AG_THUMB_DOTS_FRAG: string;
 export const AG_READ_BLOCK: number;
 export const AG_READ_FRAG: string;
 export const AG_SUM_FRAG: string;
+export const AG_VOL_TEXEL_GLSL: string;
+export const AG_DEPOSIT3_VERT: string;
+export const AG_TRAIL3_FRAG: string;
+export const AG_PROJ3_FRAG: string;
+export const AG_DRAW3_VERT: string;
