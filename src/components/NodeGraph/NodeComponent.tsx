@@ -55,8 +55,8 @@ const AssignInitModal     = lazyWithSuspense<PropsOf<typeof AssignInitModalT>>((
 const KeyframeEditorModal = lazyWithSuspense<PropsOf<typeof KeyframeEditorModalT>>(() => import('./KeyframeEditorModal').then(m => ({ default: m.KeyframeEditorModal })));
 import type { DataEditor as DataEditorT } from '../data/DataEditor';
 const DataEditor          = lazyWithSuspense<PropsOf<typeof DataEditorT>>(() => import('../data/DataEditor').then(m => ({ default: m.DataEditor })));
-import type { GridRulesEditor as GridRulesEditorT } from '../gridRules/GridRulesEditor';
-const GridRulesEditor     = lazyWithSuspense<PropsOf<typeof GridRulesEditorT>>(() => import('../gridRules/GridRulesEditor').then(m => ({ default: m.GridRulesEditor })));
+import { openGridRulesEditor, toggleGridRulesEditor, useBuilderWindows } from '../../builders/windows';
+import { RecipeChip } from '../builders/RecipeChip';
 import { GridRulesCardBody } from '../gridRules/GridRulesCardBody';
 import { GRID_CARD_KEYS } from '../../nodes/definitions/gridRules';
 import { DataCardBody } from '../data/DataCardBody';
@@ -612,7 +612,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const [showVideoInputModal, setShowVideoInputModal] = useState(false);
   const [showVideoClip, setShowVideoClip] = useState(false);
   const [showDataEditor, setShowDataEditor] = useState(false);
-  const [showGridEditor, setShowGridEditor] = useState(false);
+  // The Grid Rules editor is drawn by BuilderWindowsHost, so the Builders section and the Do… bar can open it too.
+  const showGridEditor = useBuilderWindows(s => s.gridRules === node.id);
   const [kfMenu, setKfMenu] = useState<{ x: number; y: number; key: string } | null>(null);
   const [kfModalKey, setKfModalKey] = useState<string | null>(null);
   // Input expressions: which input's editor is open, the row marks it anchors to, and the hovered row (shows the ƒ mark).
@@ -2646,6 +2647,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           </div>
         </div>
 
+        {/* A scene the 3D Scene Builder built: its recipe (docs/scene-builder.md, "The Recipe chip") */}
+        {isSceneGroup && !collapsed && !!node.params.sceneBuilder && <RecipeChip node={node} touch={isTouchDevice} />}
+
         {/* Inner node exposed params */}
         {subgraph && subgraph.nodes.map(innerNode => {
           // ── Inner GROUP node — render surfaced params ──────────────────────────
@@ -3523,7 +3527,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             <CardButton icon="grid" on={showDataEditor} label="Open the data editor: import, notebook, outputs" onClick={() => setShowDataEditor(v => !v)} />
           )}
           {node.type === 'gridRules' && (
-            <CardButton icon="grid" on={showGridEditor} label="Open the Grid Rules editor: the rule, the start, the brush, the colours" onClick={() => setShowGridEditor(v => !v)} />
+            <CardButton icon="grid" on={showGridEditor} label="Open the Grid Rules editor: the rule, the start, the brush, the colours" onClick={() => toggleGridRulesEditor(node.id)} />
           )}
           {node.type === 'customFn' && (
             <CardButton icon="spark" tint="fn" label="Publish as a node type (this function becomes a reusable node)" onClick={() => {
@@ -4424,7 +4428,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {!collapsed && (node.type === 'palette' || node.type === 'stopPalette') && <PaletteTools node={node} />}
         {/* ── Data: the dataset, its size and the way into the editor ── */}
         {!collapsed && node.type === 'data' && <DataCardBody node={node} touch={isTouchDevice} onOpen={() => setShowDataEditor(true)} />}
-        {!collapsed && node.type === 'gridRules' && <GridRulesCardBody node={node} touch={isTouchDevice} onOpen={() => setShowGridEditor(true)} />}
+        {!collapsed && node.type === 'gridRules' && <GridRulesCardBody node={node} touch={isTouchDevice} onOpen={() => openGridRulesEditor(node.id)} />}
         {!collapsed && node.type === 'timeCube' && <TimeCubeCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'timeCubeView' && <TimeCubeViewKeyInfo node={node} touch={isTouchDevice} />}
 
@@ -4627,7 +4631,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
       {/* ── Data editor ── */}
       {showDataEditor && node.type === 'data' && <DataEditor node={node} onClose={() => setShowDataEditor(false)} />}
-      {showGridEditor && node.type === 'gridRules' && <GridRulesEditor nodeId={node.id} onClose={() => setShowGridEditor(false)} />}
 
       {/* ── CustomFn modal ── */}
       {showCustomFnModal && node.type === 'customFn' && (

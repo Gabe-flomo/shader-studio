@@ -883,6 +883,11 @@ interface NodeGraphState {
   /** Add a node already built (an idiom's Expression Block from the Do… bar) to the level being edited, near the view: one undo step. */
   addBuiltNode: (node: GraphNode, label: string) => string | null;
   /**
+   * Add an Agents starter setup at the top level (the Add Agents group choice): Emit → Agents → …,
+   * wired to the Output over what it showed, one undo step. Returns the Agents group's id.
+   */
+  addAgentsStarter: (kind: 'particles' | 'slime' | 'rules', position?: { x: number; y: number }) => string | null;
+  /**
    * Spawn a pre-wired subgraph from a descriptor.
    * `origin` is the top-left anchor in canvas space.
    * Each entry in `nodes` has `type`, `relPos` (offset from origin), optional `params`.
@@ -3433,6 +3438,27 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     return plan;
   },
 
+  addAgentsStarter: (kind, position) => {
+    if (get().activeGroupPath.length) get().exitToRoot();
+    const before = get().nodes;
+    const output = graphOutput(before);
+    // Rules: the Slime setup with its group in rules mode (docs/agent-rules.md).
+    const starter = kind === 'rules' ? rulesStarter(output?.inputs.color?.connection ?? null) : agentStarter(kind, output?.inputs.color?.connection ?? null);
+    const { nodes: fresh, idOf } = freshIds(starter.nodes, () => idGenerator.next());
+    const placed = placeInFreeSpace(before, fresh, position ?? get()._viewportCenterGetter?.() ?? { x: 0, y: 0 });
+    undoManager.push(before, { label: `Added an Agents group (${kind === 'particles' ? 'Particles' : kind === 'rules' ? 'Rules' : 'Slime'})` });
+    let nodes = [...before, ...placed];
+    const out = { nodeId: idOf(starter.out.nodeId), outputKey: starter.out.outputKey };
+    if (output) nodes = nodes.map(n => n.id === output.id ? { ...n, inputs: { ...n.inputs, color: { ...n.inputs.color, connection: out } } } : n);
+    set({ nodes });
+    get().compile();
+    get().focusNode(idOf(starter.groupId));
+    toast.info(kind === 'particles' ? 'Particles added' : kind === 'rules' ? 'Agent rules added' : 'Slime added', {
+      message: `${kind === 'particles' ? 'Emit → Agents (Curl noise → Integrate inside) → Draw agents' : kind === 'rules' ? 'Emit → Agents (rules: turn toward the trail, wander, leave trail; press Edit rules) → Deposit → Trail field → palette' : 'Emit → Agents (Sense → Steer → Move inside) → Deposit → Trail field → palette'}${output ? ', wired to the Output over what it showed' : ''}. Double-click the group to open its rule; every node has a note.`,
+    });
+    return idOf(starter.groupId);
+  },
+
   addBuiltNode: (node, label) => {
     const st = get();
     const path = st.activeGroupPath;
@@ -3484,23 +3510,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
               try { get().addNode(type, position); } finally { skipAgentsAsk = false; }
               return;
             }
-            const kind = choice as 'particles' | 'slime' | 'rules';
-            const before = get().nodes;
-            const output = graphOutput(before);
-            // Rules: the Slime setup with its group in rules mode (docs/agent-rules.md).
-            const starter = kind === 'rules' ? rulesStarter(output?.inputs.color?.connection ?? null) : agentStarter(kind, output?.inputs.color?.connection ?? null);
-            const { nodes: fresh, idOf } = freshIds(starter.nodes, () => idGenerator.next());
-            const placed = placeInFreeSpace(before, fresh, position);
-            undoManager.push(before, { label: `Added an Agents group (${kind === 'particles' ? 'Particles' : kind === 'rules' ? 'Rules' : 'Slime'})` });
-            let nodes = [...before, ...placed];
-            const out = { nodeId: idOf(starter.out.nodeId), outputKey: starter.out.outputKey };
-            if (output) nodes = nodes.map(n => n.id === output.id ? { ...n, inputs: { ...n.inputs, color: { ...n.inputs.color, connection: out } } } : n);
-            set({ nodes });
-            get().compile();
-            get().focusNode(idOf(starter.groupId));
-            toast.info(kind === 'particles' ? 'Particles added' : kind === 'rules' ? 'Agent rules added' : 'Slime added', {
-              message: `${kind === 'particles' ? 'Emit → Agents (Curl noise → Integrate inside) → Draw agents' : kind === 'rules' ? 'Emit → Agents (rules: turn toward the trail, wander, leave trail; press Edit rules) → Deposit → Trail field → palette' : 'Emit → Agents (Sense → Steer → Move inside) → Deposit → Trail field → palette'}${output ? ', wired to the Output over what it showed' : ''}. Double-click the group to open its rule; every node has a note.`,
-            });
+            get().addAgentsStarter(choice as 'particles' | 'slime' | 'rules', position);
           });
         return undefined;
       }

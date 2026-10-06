@@ -1,6 +1,6 @@
 /**
  * The Grid Rules card's own lines: the rule in one line (opens the editor), a few presets of the
- * rule's type, and Open as nodes. The card's sliders (Speed, Reset, the brush) are its usual
+ * rule's type, Open as nodes, and the Recipe chip (the rule as text, to copy). The card's sliders (Speed, Reset, the brush) are its usual
  * param rows; everything else is in the editor window (GridRulesEditor).
  */
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -11,6 +11,7 @@ import { Icon } from '../ui/Icon';
 import { BOARD_SIZES, COUNT_PRESETS, GRID_DEFAULTS, SMOOTH_PRESETS, STAGES_PRESETS, gridShape, matchingPreset, presetPatch, ruleSummary, type GridPreset } from '../../gridRules/spec';
 import { BLOCK_PRESETS, PATTERN_PRESETS } from '../../gridRules/stencils';
 import { gridAsNodesProblem } from '../../store/gridRulesAsNodes';
+import { RecipeChip } from '../builders/RecipeChip';
 
 const QUICK: Record<string, string[]> = { count: ['life', 'highLife', 'dayNight', 'maze'], stages: ['briansBrain', 'starWars', 'sticks'], smooth: ['heat', 'ripples', 'mitosis'], patterns: ['wireworld', 'fallingDots', 'crystal'], blocks: ['sand', 'gas'] };
 
@@ -61,6 +62,8 @@ export function GridRulesCardBody({ node, onOpen, touch = false }: { node: Graph
         }}>
         Open as nodes ↗
       </button>
+      {/* The rule as text, with Copy and Open editor (builders/recipe.ts) */}
+      <div style={{ margin: '0 -12px -8px -16px' }}><RecipeChip node={node} touch={touch} /></div>
     </div>
   );
 }

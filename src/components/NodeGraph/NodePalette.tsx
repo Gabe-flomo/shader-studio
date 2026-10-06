@@ -400,7 +400,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               leading={<Icon name="search" size={15} style={{ color: tk.text.faint }} />}
               style={{ flexShrink: 0, marginBottom: 6 }}
             />
-            <NodeBrowser onAdd={handleAdd} onDragAdd={(type, pos) => addNode(type, pos)} onDragDone={onNodeAdded} swapTargetNodeId={swapTargetNodeId} favorites={favorites} onToggleFavorite={onToggleFavorite} nodeButtonRefs={nodeButtonRefs} searchQuery={query} context={context} onGlslInsert={onGlslInsert} />
+            <NodeBrowser onAdd={handleAdd} onDragAdd={(type, pos) => addNode(type, pos)} onDragDone={onNodeAdded} swapTargetNodeId={swapTargetNodeId} favorites={favorites} onToggleFavorite={onToggleFavorite} nodeButtonRefs={nodeButtonRefs} searchQuery={query} context={context} onGlslInsert={onGlslInsert} onBuilderOpened={onNodeAdded} />
             {query.trim().length > 0 && (() => {
               // Examples that match the search too, under their own heading: "blur" finds the
               // Blur & Lens folder, "3D" the 3D examples, "midi" the MIDI one.
@@ -843,7 +843,7 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
     return (
       <div style={{ width: '100%', background: tk.bg.panel, color: tk.text.primary, padding: '4px 12px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minHeight: 0, boxSizing: 'border-box' }}>
         <Field placeholder="Search nodes…" value={drawerQuery} onChange={e => setDrawerQuery(e.target.value)} style={{ marginBottom: 6 }} />
-        <NodeBrowser onAdd={handleAdd} swapTargetNodeId={swapTargetNodeId} favorites={favorites} onToggleFavorite={toggleFavorite} nodeButtonRefs={nodeButtonRefs} searchQuery={drawerQuery} />
+        <NodeBrowser onAdd={handleAdd} swapTargetNodeId={swapTargetNodeId} favorites={favorites} onToggleFavorite={toggleFavorite} nodeButtonRefs={nodeButtonRefs} searchQuery={drawerQuery} onBuilderOpened={onNodeAdded} />
       </div>
     );
   }

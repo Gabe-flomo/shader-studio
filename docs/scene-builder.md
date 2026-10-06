@@ -19,14 +19,29 @@ volumetric · smooth-union(sphere r=1, cone h=2 rot=(30,0,0)) k=0.3 · twist 0.5
 
 ## Opening it
 
+- **Node browser, Builders (first section):** **3D Scene Builder** opens it on a
+  new scene, on the desktop and on a phone. Searching "builder" or "scene" shows it too.
 - **Node browser / add menu:** "New 3D scene…" in the 3D Scene category. Search
   "scene builder", "recipe" or "describe 3D" to find it.
-- **Empty canvas:** right-click → **Scene Builder…** (at the top level).
+- **Empty canvas:** right-click → **Builders** → **3D Scene Builder…** (at the top level).
+- **Do… bar (⌘K):** "open the scene builder" or "new 3d scene"; "edit this scene"
+  with a built Scene Group (or any node of it) selected.
 - **A scene the builder made:** right-click any of its nodes → **Edit in Scene
-  Builder**.
+  Builder**, or **Open in Scene Builder** in the Recipe chip on its Scene Group.
 - **Any 3D graph:** right-click its Scene Group, March Loop or camera →
   **Describe in Scene Builder**, or right-click the empty canvas → **Describe
   this graph**. The builder's header also has **Describe graph**.
+
+### The Recipe chip
+
+A Scene Group the builder made shows its recipe on the card (and on the phone's node page): one or
+two lines, cut short. A click shows the whole recipe, one clause a line, its words coloured (modes,
+combines, shapes, warps, settings, numbers), with **Copy** and **Open in Scene Builder**. When the
+scene's nodes were changed by hand since the build (a setting, a wire, a node added inside or
+deleted; moving cards doesn't count), the chip says **edited since build**: the same check a
+rebuild makes (`checkEdits`), so Open in Scene Builder will tell you what a rebuild keeps. A
+hand-made Scene Group has no chip. The Do… bar's "show the recipe" opens it; "copy the recipe"
+copies it. Code: `src/builders/recipe.ts`, `src/components/builders/RecipeChip.tsx`.
 
 The window has the Expression Block editor's layout:
 

@@ -19,6 +19,8 @@ import { extendRangePatch } from '../../nodes/sliderRange';
 import { PARAM_LIST_TYPES } from '../../lib/nodePreview/previewPlan';
 import { agentGroups } from '../../lib/agentReadings';
 import { AgentRulesCardButtons, AgentRulesCardLink } from './AgentRulesCard';
+import { RecipeChip } from '../builders/RecipeChip';
+import { isRulesGroup } from '../../agentRules/apply';
 
 // ─── Shared container ─────────────────────────────────────────────────────────
 
@@ -3830,6 +3832,8 @@ function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?
           Show next steps
         </button>
       )}
+      {/* A rules group's Recipe chip: "4 rules · 2 states", its rules as sentences (builders/recipe.ts) */}
+      {isRulesGroup(node) && <div style={{ margin: '0 -12px 2px' }}><RecipeChip node={node} /></div>}
       <div style={{ display: 'flex', gap: 6 }}>
         {/* Agent Rules (docs/agent-rules.md): Edit rules / Open as nodes in rules mode, else Open rule */}
         <AgentRulesCardButtons node={node} button={button} onEnterGroup={onEnterGroup} />

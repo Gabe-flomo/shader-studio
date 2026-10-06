@@ -48,7 +48,10 @@ import { bakeableOutput, pictureTarget } from '../../lib/bake/graphOps';
 import { unbakeNode } from '../../lib/bake/runner';
 import type { OptimizeModal as OptimizeModalT } from './OptimizeModal';
 import { previewBanner } from '../../lib/nodePreview/previewPlan';
-import { openNewSceneBuilder, useSceneBuilder } from '../../sceneBuilder/store';
+import { useSceneBuilder } from '../../sceneBuilder/store';
+import { BuilderWindowsHost } from '../builders/BuilderWindowsHost';
+import { BUILDERS } from '../../builders/registry';
+import { openBuilder } from '../../builders/open';
 import { builderSceneOf, describeIntoBuilder, editSceneInBuilder } from '../../sceneBuilder/actions';
 const OptimizeModal = lazyWithSuspense<PropsOf<typeof OptimizeModalT>>(() => import('./OptimizeModal').then(m => ({ default: m.OptimizeModal })));
 const BakeDialogHost = lazyWithSuspense<Record<string, never>>(() => import('../bake/BakeDialog').then(m => ({ default: m.BakeDialogHost })));
@@ -1399,6 +1402,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       {showOptimize && <OptimizeModal onClose={() => setShowOptimize(false)} />}
       {bakeRequest && <BakeDialogHost />}
       {sceneBuilderOpen && <SceneBuilderModal />}
+      {/* The Grid Rules and Agent Rules editors (builders/windows.ts) */}
+      {!locked && <BuilderWindowsHost />}
       {redesignToolbar && !locked && <SelectionBar top={previewNodeId ? 108 : 66} />}
       {redesignToolbar && showOutline && <GraphOutline nodes={displayNodes} top={previewNodeId ? 132 : 66} onClose={() => setShowOutline(false)} />}
 
@@ -1788,9 +1793,15 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                 {/* The 3D Scene Builder (docs/scene-builder.md): on the empty canvas, and on any node of a scene it built. */}
                 {!clickedNode && activeGroupPath.length === 0 && (
                   <>
-                    <button style={ctxBtnStyle} onClick={() => { openNewSceneBuilder(); setContextMenu(null); }}>
-                      Scene Builder… <span style={{ color: tc.surface2, fontSize: '10px' }}>new 3D scene</span>
-                    </button>
+                    {/* Builders (builders/registry.ts): the same three as the node browser's Builders section */}
+                    <div data-ctx-builders style={{ padding: '4px 10px 2px', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: tc.overlay0 }}>Builders</div>
+                    {BUILDERS.map(b => (
+                      <button key={b.id} style={ctxBtnStyle} data-ctx-builder={b.id} title={`${b.description}. ${b.action}.`}
+                        onClick={() => { openBuilder(b.id); setContextMenu(null); }}>
+                        {b.title}… <span style={{ color: tc.surface2, fontSize: '10px' }}>{b.makes}</span>
+                      </button>
+                    ))}
+                    <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
                     {displayNodes.some(n => n.type === 'marchLoopGroup' || n.type === 'giLitMarchGroup' || n.type === 'glassScene') && (
                       <button style={ctxBtnStyle} onClick={() => { describeIntoBuilder(); setContextMenu(null); }}>
                         Describe this graph

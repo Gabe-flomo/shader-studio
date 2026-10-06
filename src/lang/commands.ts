@@ -251,6 +251,87 @@ export const COMMAND_VERBS: readonly CommandVerb[] = [
   },
 ];
 
+/** What a builder command opens or does (builders/doBuilders.ts reads and plans it, builders/open.ts runs it). */
+export type BuilderCommandId =
+  | 'open-scene-builder' | 'new-3d-scene' | 'edit-scene'
+  | 'open-grid-rules' | 'new-grid-rules' | 'edit-rules'
+  | 'open-agent-rules' | 'new-agent-rules'
+  | 'show-recipe' | 'copy-recipe';
+
+export interface BuilderCommand {
+  id: BuilderCommandId;
+  /** The whole phrase (the first is the name shown). "the", "a" and "please" are ignored, so "open scene builder" is "open the scene builder". */
+  words: string[];
+  summary: string;
+  /** What it works on when it needs a node. */
+  target?: string;
+  examples: CommandExample[];
+}
+
+/**
+ * The builder commands: whole phrases that open a builder (docs/node-browser.md, "Builders"), not
+ * clauses. They are read before the rest of the language, so "show the recipe" never means
+ * "output the node called recipe".
+ */
+export const BUILDER_COMMANDS: readonly BuilderCommand[] = [
+  {
+    id: 'open-scene-builder', words: ['open the scene builder', 'open the 3d scene builder', 'scene builder', '3d scene builder', 'open the builder'],
+    summary: 'Opens the 3D Scene Builder on a new scene (its Templates tab). Build adds the scene to the graph.',
+    examples: [{ text: 'open the scene builder', on: 'empty' }, { text: 'scene builder', on: 'empty' }],
+  },
+  {
+    id: 'new-3d-scene', words: ['new 3d scene', 'new scene', 'make a 3d scene', 'build a 3d scene', 'create a 3d scene', 'start a 3d scene'],
+    summary: 'The same: the 3D Scene Builder on a new scene.',
+    examples: [{ text: 'new 3d scene', on: 'empty' }, { text: 'build a 3d scene', on: 'empty' }],
+  },
+  {
+    id: 'edit-scene', words: ['edit this scene', 'edit the scene', 'edit it in the scene builder', 'edit in the scene builder', 'open this scene', 'open it in the scene builder', 'rebuild this scene'],
+    summary: 'Opens the 3D Scene Builder on a scene it built (as the Scene Group\'s right-click Edit in Scene Builder does).',
+    target: 'the selected node\'s built scene, else the only built scene in the graph',
+    examples: [{ text: 'edit this scene', on: 'empty', note: 'With a built Scene Group (or any node of it) selected' }, { text: 'edit it in the scene builder', on: 'empty', note: 'With a built Scene Group selected' }],
+  },
+  {
+    id: 'open-grid-rules', words: ['open grid rules', 'open the grid rules editor', 'grid rules editor', 'open the grid editor'],
+    summary: 'Opens the Grid Rules editor of the selected Grid Rules node (else the only one); with none in the graph, adds one first.',
+    target: 'the selected Grid Rules node, else the only one',
+    examples: [{ text: 'open grid rules', on: 'empty' }, { text: 'open the grid rules editor', on: 'empty' }],
+  },
+  {
+    id: 'new-grid-rules', words: ['new grid rules', 'add grid rules', 'new grid rules node', 'add a grid rules node', 'new cellular automaton', 'new automaton'],
+    summary: 'Adds a Grid Rules node (on the Output when the graph is empty) and opens its editor.',
+    examples: [{ text: 'new grid rules', on: 'empty' }, { text: 'new cellular automaton', on: 'empty' }],
+  },
+  {
+    id: 'edit-rules', words: ['edit the rules', 'edit rules', 'edit its rules', 'edit the rule', 'open the rules', 'open its rules'],
+    summary: 'Opens the rules of the selected Grid Rules node (its editor) or rules Agents group (its rules editor); else of the only one in the graph.',
+    target: 'the selected Grid Rules node or rules Agents group, else the only one',
+    examples: [{ text: 'edit the rules', on: 'empty', note: 'With a Grid Rules node or a rules Agents group selected' }, { text: 'edit its rules', on: 'empty', note: 'With a rules Agents group selected' }],
+  },
+  {
+    id: 'open-agent-rules', words: ['open agent rules', 'open the agent rules editor', 'agent rules editor', 'open the agents rules'],
+    summary: 'Opens the rules editor of the selected rules Agents group (else the only one); with none in the graph, adds one first.',
+    target: 'the selected rules Agents group, else the only one',
+    examples: [{ text: 'open agent rules', on: 'empty' }, { text: 'open the agent rules editor', on: 'empty' }],
+  },
+  {
+    id: 'new-agent-rules', words: ['new agent rules', 'add agent rules', 'new agents with rules', 'new rules agents', 'add an agents group with rules'],
+    summary: 'Adds an Agents group in rules mode (Emit → Agents → Deposit → Trail field → palette, on the Output) and opens its rules.',
+    examples: [{ text: 'new agent rules', on: 'empty' }, { text: 'new agents with rules', on: 'empty' }],
+  },
+  {
+    id: 'show-recipe', words: ['show the recipe', 'show recipe', 'show its recipe', 'what is the recipe', 'show the rule', 'show me the recipe'],
+    summary: 'Shows the recipe chip of a builder-made node expanded: a built scene\'s recipe, a Grid Rules node\'s rule, a rules group\'s rules.',
+    target: 'the selected builder-made node, else the only one',
+    examples: [{ text: 'show the recipe', on: 'empty', note: 'With a built Scene Group selected' }, { text: 'show the rule', on: 'empty', note: 'With a Grid Rules node selected' }],
+  },
+  {
+    id: 'copy-recipe', words: ['copy the recipe', 'copy recipe', 'copy its recipe', 'copy the rule'],
+    summary: 'Copies the recipe (or the rule, or the rules as sentences) of a builder-made node to the clipboard.',
+    target: 'the selected builder-made node, else the only one',
+    examples: [{ text: 'copy the recipe', on: 'empty', note: 'With a built Scene Group selected' }, { text: 'copy the rule', on: 'empty', note: 'With a Grid Rules node selected' }],
+  },
+];
+
 /** Words that join clauses or name a verb's second slot. */
 export const CONNECTORS: ReadonlyArray<{ words: string[]; role: string; example: string }> = [
   { words: [',', ';', 'then', 'and then', 'after that', 'next', 'finally'], role: 'Starts a new clause. Each clause builds on what the last one made ("it").', example: 'create a circle, then output it' },
@@ -340,7 +421,7 @@ export const RECIPES: ReadonlyArray<{ id: string; name: string; text: string; on
 
 export interface ReferenceEntry {
   id: string;
-  kind: 'verb' | 'action' | 'object' | 'modifier' | 'reference' | 'connector' | 'recipe';
+  kind: 'verb' | 'action' | 'builder' | 'object' | 'modifier' | 'reference' | 'connector' | 'recipe';
   title: string;
   words: string[];
   summary: string;
@@ -392,7 +473,7 @@ export function actionExamples(id: string): CommandExample[] {
   return [{ text: `${w} it`, on: 'circle', selected: ['c'] }, { text: w, on: 'noise', selected: ['p'] }];
 }
 
-/** Everything the reference shows, in order: verbs, actions, objects, modifiers, references, connectors, recipes. */
+/** Everything the reference shows, in order: verbs, actions, builders, objects, modifiers, references, connectors, recipes. */
 export function commandReference(): ReferenceEntry[] {
   const out: ReferenceEntry[] = [];
   for (const v of COMMAND_VERBS) {
@@ -403,6 +484,12 @@ export function commandReference(): ReferenceEntry[] {
     out.push({
       id: `action:${a.id}`, kind: 'action', title: a.words[0], words: a.words, summary: actionSummary[a.id] ?? `The ${a.id} move.`,
       syntax: [`${a.words[0]} [it | the space | the picture | <ref>] [<param> <value>] [<colour>]`, ...variants], slots: [], examples: actionExamples(a.id), group: 'build',
+    });
+  }
+  for (const b of BUILDER_COMMANDS) {
+    out.push({
+      id: `builder:${b.id}`, kind: 'builder', title: b.words[0], words: b.words, summary: b.target ? `${b.summary} Works on ${b.target}.` : b.summary,
+      syntax: [], slots: [], examples: b.examples, group: 'builders',
     });
   }
   const shapes2d = SHAPES.filter(s => s.node2d);
@@ -472,7 +559,7 @@ export function searchReference(entries: ReferenceEntry[], query: string): Refer
 }
 
 const KIND_TITLES: Record<ReferenceEntry['kind'], string> = {
-  verb: 'Verbs: editing what is there', action: 'Verbs: build actions', object: 'Objects', modifier: 'Modifiers', reference: 'References', connector: 'Connectors', recipe: 'Recipes',
+  verb: 'Verbs: editing what is there', action: 'Verbs: build actions', builder: 'Builders: opening a builder', object: 'Objects', modifier: 'Modifiers', reference: 'References', connector: 'Connectors', recipe: 'Recipes',
 };
 export const REFERENCE_SECTIONS = KIND_TITLES;
 
@@ -502,6 +589,8 @@ export function commandsMarkdown(): string {
     '',
     'In the app: the **?** in the Do… bar, or Keys → Do… bar commands. Every example can be tried in the bar or shown step by step.',
     '',
+    'The **builders** (the 3D Scene Builder, Grid Rules, Agent Rules) open from whole phrases: "new 3d scene", "new grid rules", "edit the rules", "show the recipe" (see Builders below). They are also the first section of the node browser and the empty-canvas right-click menu\'s Builders.',
+    '',
   ];
   for (const kind of Object.keys(KIND_TITLES) as ReferenceEntry['kind'][]) {
     const list = entries.filter(e => e.kind === kind);
@@ -519,7 +608,7 @@ export function commandsMarkdown(): string {
       }
       if (e.examples.length && kind !== 'recipe') {
         lines.push('Examples:', '');
-        for (const x of e.examples) lines.push(`- \`${x.text}\` — on ${SCRATCH_LABELS[x.on]}${x.selected ? ` (${x.selected.length > 1 ? 'two nodes' : 'one node'} selected)` : ''}${x.note ? `. ${x.note}` : ''}`);
+        for (const x of e.examples) lines.push(kind === 'builder' ? `- \`${x.text}\`${x.note ? ` — ${x.note}` : ''}` : `- \`${x.text}\` — on ${SCRATCH_LABELS[x.on]}${x.selected ? ` (${x.selected.length > 1 ? 'two nodes' : 'one node'} selected)` : ''}${x.note ? `. ${x.note}` : ''}`);
         lines.push('');
       }
     }
