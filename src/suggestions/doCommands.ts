@@ -31,6 +31,7 @@ import { getNodeDefinition, getNodeDefinitionFor } from '../nodes/definitions';
 import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { planSwitch, applySwitchToList, switchOptions, type SwitchContext } from '../nodes/switchNode';
 import { typesCompatible } from '../lib/typesCompatible';
+import { checkWire } from '../lang/typeCheck';
 import { ACTIONS, COLOURS, PARAMS, SHAPES, TARGETS, PLACES, colourOf, editDistance, matchAt, numberOf, plural } from '../lang/vocabulary';
 import { COMMAND_VERBS, RELATIVE_STEP, RELATIVE_WORDS } from '../lang/commands';
 import { parseDo, runDoPlan } from './doBar';
@@ -618,14 +619,20 @@ function spot(nodes: GraphNode[], id?: string, dx = 420): { x: number; y: number
 /** Check a wire's types, failing with why and fixes (command text) when they don't fit. */
 function typeCheck(c: ClauseCtx, from: GraphNode, outKey: string, to: GraphNode, inKey: string) {
   const ft = from.outputs[outKey]?.type, tt = to.inputs[inKey]?.type;
-  if (!ft || !tt || typesCompatible(ft, tt)) return;
+  if (!ft || !tt) return;
+  // The shared check (lang/typeCheck.ts, on the graph's own typesCompatible) decides and names the fixes;
+  // here each fix becomes a sentence that runs.
+  const check = checkWire(ft, tt, { from: nodeName(from), to: nodeName(to) });
+  if (check.ok) return;
   const a = refText(from, c.run.nodes), b = refText(to, c.run.nodes);
   const fixes: string[] = [];
-  if (tt === 'float' && (ft === 'vec3' || ft === 'vec4')) fixes.push(`create a luminance, connect ${a} to it, then connect it to ${b}`);
-  if (tt === 'float' && ft === 'vec2') fixes.push(`create a length, connect ${a} to it, then connect it to ${b}`);
+  for (const f of check.fixes) {
+    if (f.id === 'luminance') fixes.push(`create a luminance, connect ${a} to it, then connect it to ${b}`);
+    if (f.id === 'length') fixes.push(`create a length, connect ${a} to it, then connect it to ${b}`);
+  }
   if (tt === 'texture') fixes.push(`create a pass, connect ${a} to it, then connect it to ${b}`);
-  if (tt === 'vec2' && ft === 'vec4') fixes.push(`switch ${a} to a node with a vec3 or vec2 output`);
-  fail(`Type check: ${nodeName(from)} · ${from.outputs[outKey].label} is ${typeWord(ft)}; ${nodeName(to)} · ${to.inputs[inKey].label} takes ${typeWord(tt)}.`, fixes);
+  const hints = check.fixes.filter(f => f.id !== 'luminance' && f.id !== 'length').map(f => f.label);
+  fail(`Type check: ${nodeName(from)} · ${from.outputs[outKey].label} is ${typeWord(ft)}; ${nodeName(to)} · ${to.inputs[inKey].label} takes ${typeWord(tt)}.${hints.length ? ` Try: ${hints.join('; ')}.` : ''}`, fixes);
 }
 
 function step(c: ClauseCtx, label: string, before: GraphNode[], notes: string[] = []) {

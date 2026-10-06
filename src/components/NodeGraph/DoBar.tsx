@@ -36,6 +36,8 @@ import {
   deleteTaught, exportTaught, importTaught, phraseLabel, renameTaught, subscribeTaught, taughtMoves, taughtVersion, teachFromSelection,
 } from '../../suggestions/taught';
 import type { GraphNode } from '../../types/nodeGraph';
+import { doBarAssist } from '../../lang/complete';
+import { AssistList, SignatureLine, useTypeAhead } from '../builders/TypeAhead';
 
 const WIDTH = 560;
 
@@ -92,7 +94,13 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   const [teachPhrase, setTeachPhrase] = useState(initial.replace(/^teach( the do bar)?\s*/i, ''));
   const [teachError, setTeachError] = useState<string | null>(null);
   const [active, setActive] = useState(0);
+  const [caret, setCaret] = useState<number | null>(initial.length);
   const scope = useScope();
+  // Type-ahead: the word at the caret from the vocabulary, and the named action's settings.
+  const ta = useTypeAhead(text, caret, doBarAssist, (next, at) => {
+    setText(next); setCaret(at);
+    requestAnimationFrame(() => { inputRef.current?.focus(); inputRef.current?.setSelectionRange(at, at); });
+  });
   useSyncExternalStore(subscribeTaught, taughtVersion, taughtVersion);
 
   useEffect(() => { setTimeout(() => inputRef.current?.focus(), 0); }, []);
@@ -135,6 +143,8 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
 
   const fallback: Fallback[] = useMemo(() => {
     if (!text.trim() || plan.intent) return [];
+    // An output phrase or a type refusal with its fixes is an answer, not a miss.
+    if (plan.steps.some(st => st.kind === 'scene-output') || plan.fixes?.length) return [];
     // A phrase read only by guessing at typos ("sine" ≈ "shine") gives way to an idiom of that name.
     const heads = plan.reading.filter(r => /^(do|shape):/.test(r.as));
     const guessed = heads.length > 0 && heads.every(r => r.as.endsWith('(guessed)'));
@@ -201,8 +211,11 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
         <input
           ref={inputRef}
           value={text}
-          onChange={e => setText(e.target.value)}
+          onChange={e => { setText(e.target.value); setCaret(e.target.selectionStart); }}
+          onSelect={e => setCaret((e.target as HTMLInputElement).selectionStart)}
           onKeyDown={e => {
+            // Tab takes a suggestion, Enter still runs the phrase.
+            if (e.key !== 'Enter' && ta.onKeyDown(e)) return;
             if (e.key === 'Enter') { e.preventDefault(); run(); }
             if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => Math.min(a + 1, Math.max(0, fallback.length - 1))); }
             if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => Math.max(0, a - 1)); }
@@ -217,12 +230,26 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
         <IconButton icon="close" size="sm" label="Close" shortcut="esc" onClick={closeDoBar} />
       </div>
 
+      {ta.items.length > 0 && <div style={{ padding: '0 8px 6px' }}><AssistList items={ta.items} active={ta.active} onPick={ta.pick} onHover={ta.setActive} /></div>}
+      {ta.signature && text.trim() && !plan.steps.some(st => st.kind === 'scene-output') && <div style={{ padding: '0 8px 6px' }}><SignatureLine sig={ta.signature} /></div>}
       <div style={{ overflowY: 'auto', minHeight: 0 }}>
         {/* The plan: what runs on Enter, clause by clause */}
         {showCommand && cmd && section(cmd.ok ? `Enter runs · ${cmd.steps.length} step${cmd.steps.length === 1 ? '' : 's'} · one undo` : pickClause ? 'Pick one, then Enter' : 'Can’t run yet', (
           <CommandPreview cmd={cmd} onPick={(key, id) => setPicks(p => ({ ...p, [key]: id }))} onHoverPick={setHoverPick}
             onSuggest={(clause, s2) => { setText(cmd.clauses.length === 1 ? s2 : cmd.clauses.map(c => (c.index === clause.index ? s2 : c.text)).join(', ')); inputRef.current?.focus(); }} />
         ))}
+        {plan.problem && !idiomWins && !showCommand && <div style={{ padding: '6px 12px 8px', fontSize: 12, color: tk.status.warningText }} data-do-problem>{plan.problem}</div>}
+        {plan.fixes && plan.fixes.length > 0 && !idiomWins && !editing && (
+          <div style={{ padding: '0 12px 8px', display: 'flex', flexWrap: 'wrap', gap: 6 }} data-do-fixes>
+            {plan.fixes.map(f => (
+              <Button key={f.label} size="sm" variant="secondary" icon="check" data-do-fix={f.label} onClick={() => {
+                const ran = useNodeGraphStore.getState().runDoPlan(f.plan, `${text.trim()} (fixed)`);
+                if (ran.length) toast.info(`Do: ${text.trim()}`, { message: `${ran.join(' → ')}. Undo takes it all back.` });
+                closeDoBar();
+              }}>{f.label}</Button>
+            ))}
+          </div>
+        )}
         {(plan.reading.length > 0 || plan.unknown.length > 0) && !plan.intent && !editing && (
           <div style={{ padding: '0 12px 8px', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             {plan.reading.map((r, i) => <span key={i} title={r.as} style={{ fontSize: 11, padding: '1px 6px', borderRadius: 6, background: tk.bg.hover, color: tk.text.secondary }}>{r.text} <span style={{ color: tk.text.faint }}>· {r.as}</span></span>)}

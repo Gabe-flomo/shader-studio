@@ -1,6 +1,6 @@
 /**
  * The Agent Rules editor (docs/agent-rules.md): an Agents group's behaviour as When … Do … lines,
- * in the Expression Block editor's window. Species and their states on the left; the selected
+ * in the builders' window (BuilderWindow: Tips, a collapsible side panel). Species and their states on the left; the selected
  * species' rules, top to bottom, in the middle. Every change applies live (the group's inside is
  * generated again and compiled); Open as nodes shows the nodes they make.
  */
@@ -12,7 +12,10 @@ import { Button, IconButton } from '../ui/Button';
 import { Toggle } from '../ui/Choice';
 import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
-import { Modal } from '../ui/Modal';
+import { BuilderHelp, BuilderWindow, EmptyHelp, HintLabel, HintMark } from '../builders/BuilderWindow';
+import { TypeAheadPicker } from '../builders/TypeAhead';
+import { ACTION_HELP, CONDITION_HELP, type HelpExample } from '../builders/helpContent';
+import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { Select } from '../ui/Select';
 import { NumberInput } from './NumberInput';
 import {
@@ -23,7 +26,8 @@ import {
 import { groupRules } from '../../agentRules/apply';
 import { generateRulesInside, ruleIds } from '../../agentRules/generate';
 import { RULES_TEMPLATES } from '../../agentRules/templates';
-import { applyGroupRules, openGroupAsNodes } from '../../agentRules/storeActions';
+import { applyGroupRules, openGroupAsNodes, setGroupView } from '../../agentRules/storeActions';
+import { AGENT_VIEWS, agentsViewOf, type AgentsView } from '../../agentRules/outputs';
 
 type Tk = ReturnType<typeof useTokens>;
 
@@ -75,12 +79,80 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
   const channelOptions = [{ value: 'own', label: 'its own trail' }, ...[0, 1, 2, 3].map(c => ({ value: String(c), label: set.channels[c]?.trim() ? `${set.channels[c].trim()} (${c + 1})` : `trail ${c + 1}` }))];
   const ctx: EditCtx = { set, s, tk, channelOptions };
   const notes3d = d3 ? notesFor3d(set) : [];
+  const view = useNodeGraphStore(st => agentsViewOf(st.nodes, node.id).current);
+  const addExample = (ex: HelpExample) => { if ('rule' in ex.insert) setRules([...species.rules, structuredClone(ex.insert.rule)]); };
+
+  const speciesPanel = (
+        <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 12, boxSizing: 'border-box' }}>
+          <SectionLabel hint="Up to four kinds of walker, each with its own rules, speed and states. Each lays its own trail channel by default.">Species</SectionLabel>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {set.species.map((x, i) => (
+              <button key={i} type="button" onClick={() => setSp(i)} aria-pressed={i === s}
+                style={{ height: 28, padding: '0 10px', borderRadius: radius.md, cursor: 'pointer', border: 0, font: `600 12px ${fontFamily.ui}`, background: i === s ? tk.bg.selected : tk.bg.field, color: tk.text.primary, boxShadow: i === s ? `inset 0 0 0 1.5px ${tk.accent.base}` : 'none' }}>
+                {i + 1} · {x.name || `Species ${i + 1}`}
+              </button>
+            ))}
+            {set.species.length < MAX_SPECIES && <IconButton icon="plus" label="Add a species (each lays its own trail channel)" size="sm" onClick={() => { update({ ...set, species: [...set.species, defaultSpecies(set.species.length)] }); setSp(set.species.length); }} />}
+          </div>
+          <Row label="Name" hint="The species' name, used in the sentences."><Field value={species.name} onChange={e => setSpecies({ name: e.target.value })} aria-label="Species name" height={30} /></Row>
+          <Row label="Speed" hint="Picture units a second: each walker starts at it (Set speed and Accelerate change it)."><Num value={species.speed} step={0.01} onCommit={v => setSpecies({ speed: v })} title="Picture units a second: each walker starts at it (Set speed and Accelerate change it)" /></Row>
+          {set.species.length > 1 && <Button size="sm" variant="ghost" onClick={() => { update({ ...set, species: set.species.filter((_, i) => i !== s) }); setSp(0); }}>Remove this species</Button>}
+
+          <SectionLabel meta="Memory x" hint="Each walker is in one state (born in the first). Rules check it (in state) and change it (become).">States</SectionLabel>
+          <Note>Each walker is in one state (born in the first). Draw agents' Colour by State shows its colour.</Note>
+          {species.states.map((st, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '30px 1fr 28px', gap: 6, alignItems: 'center' }}>
+              <input type="color" aria-label={`${st.name} colour`} value={hex(st.colour)} onChange={e => setSpecies({ states: species.states.map((x, j) => (j === i ? { ...x, colour: fromHex(e.target.value) } : x)) })}
+                style={{ width: 28, height: 28, padding: 0, border: 0, borderRadius: 6, background: 'none', cursor: 'pointer' }} />
+              <Field value={st.name} onChange={e => setSpecies({ states: species.states.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} aria-label={`State ${i + 1} name`} height={30} />
+              <IconButton icon="close" label="Remove state" size="sm" tone="danger" disabled={species.states.length === 1} onClick={() => setSpecies({ states: species.states.filter((_, j) => j !== i) })} />
+            </div>
+          ))}
+          {species.states.length < MAX_STATES && <AddRow onClick={() => setSpecies({ states: [...species.states, { name: `state ${species.states.length + 1}`, colour: DEFAULT_STATE_COLOURS[species.states.length % DEFAULT_STATE_COLOURS.length] }] })}>Add state</AddRow>}
+
+          <SectionLabel hint="Four trail channels, one per species by default. Name them (food, home) and the rules read as sentences.">Trail channels</SectionLabel>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {[0, 1, 2, 3].map(c => (
+              <Field key={c} value={set.channels[c] ?? ''} placeholder={`trail ${c + 1}${c === 3 && usesAction(set, 'spawn') ? ' (births)' : ''}`} aria-label={`Name of trail channel ${c + 1}`} height={30}
+                onChange={e => update({ ...set, channels: set.channels.map((x, j) => (j === c ? e.target.value : x)) })} />
+            ))}
+          </div>
+
+          <SectionLabel meta="inputs on the card" hint="Inputs on the group card: a texture (its brightness) or a number chain, read where the walker stands.">Masks</SectionLabel>
+          {set.masks.map((m, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 112px 28px', gap: 6, alignItems: 'center' }}>
+              <Field value={m.name} onChange={e => update({ ...set, masks: set.masks.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} aria-label={`Mask ${i + 1} name`} height={30} />
+              <Select ariaLabel={`Mask ${i + 1} kind`} value={m.kind} options={[{ value: 'number', label: 'A number' }, { value: 'texture', label: 'A texture' }]} onChange={v => update({ ...set, masks: set.masks.map((x, j) => (j === i ? { ...x, kind: v as 'number' | 'texture' } : x)) })} />
+              <IconButton icon="close" label="Remove mask" size="sm" tone="danger" onClick={() => update({ ...set, masks: set.masks.filter((_, j) => j !== i) })} />
+            </div>
+          ))}
+          {set.masks.length < MAX_MASKS && <AddRow onClick={() => update({ ...set, masks: [...set.masks, { name: set.masks.length ? 'Mask 2' : 'Mask', kind: 'number' }] })}>Add mask</AddRow>}
+
+          <SectionLabel hint="Edges and the sensors every trail reading uses.">Moving and sensing</SectionLabel>
+          <Row label="Edges" hint="What happens at the picture's edges: wrap round, bounce back or slide along."><Select ariaLabel="Edges" value={set.edges} options={[{ value: 'wrap', label: 'Wrap' }, { value: 'bounce', label: 'Bounce' }, { value: 'slide', label: 'Slide' }]} onChange={v => update({ ...set, edges: v as AgentRuleSet['edges'] })} /></Row>
+          <Row label="Sensors ahead" hint="How far ahead the sensors read the trail (picture units; ten times further in 3D)."><Num value={set.sensor.distance} step={0.005} onCommit={v => update({ ...set, sensor: { ...set.sensor, distance: v } })} title="How far ahead the sensors read the trail (picture units; ten times further in 3D)" /></Row>
+          <Row label="Sensor angle" hint="Degrees between the ahead sensor and the side ones."><Num value={set.sensor.angle} step={1} onCommit={v => update({ ...set, sensor: { ...set.sensor, angle: v } })} title="Degrees between the ahead sensor and the side ones" /></Row>
+          {usesAction(set, 'flow') && <>
+            <Row label="Flow size" hint="Follow a flow field: how big the swirls of the curl noise are."><Num value={set.flow.size} step={0.1} onCommit={v => update({ ...set, flow: { ...set.flow, size: v } })} /></Row>
+            <Row label="Flow evolve" hint="Follow a flow field: how fast the flow changes over time."><Num value={set.flow.evolve} step={0.01} onCommit={v => update({ ...set, flow: { ...set.flow, evolve: v } })} /></Row>
+          </>}
+          {notes3d.map(t => <Note key={t}>3D: {t}</Note>)}
+          <SectionLabel hint="What the group's picture shows: the trail, one trail channel, or where the walkers are. Each is also an output socket.">What the picture shows</SectionLabel>
+          <Select ariaLabel="What the picture shows" value={view ?? ''} height={30}
+            options={[...(view ? [] : [{ value: '', label: 'Not wired: nothing reads the trail' }]), ...AGENT_VIEWS.map(v => ({ value: v.value, label: v.label }))]}
+            onChange={v => { if (v) setGroupView(node.id, v as AgentsView); }} />
+          <Note>{AGENT_VIEWS.find(v => v.value === view)?.hint ?? 'Wire the Trail field\'s Amount into a Palette to see the trail.'}</Note>
+        </div>
+  );
 
   return (
-    <Modal
+    <BuilderWindow
+      prefsKey="agent-rules"
       title="Agent Rules"
       subtitle={`${label} · ${set.species.length} ${set.species.length === 1 ? 'species' : 'species'} · ${d3 ? '3D' : '2D'} · When … Do …`}
       icon="expr" iconColor={tk.kind.expr} width={1240} height={780} onClose={close}
+      left={{ label: 'Species', icon: 'swarm', width: 330, content: speciesPanel }}
       headerActions={
         <Select ariaLabel="Start from a template" value="" height={30}
           options={[{ value: '', label: 'Templates…' }, ...RULES_TEMPLATES.map(t => ({ value: t.key, label: t.label }))]}
@@ -94,67 +166,10 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
         <Button variant="primary" onClick={close}>Done</Button>
       </>}
     >
-      <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
-        {/* ── Species, states and the rule set's settings ── */}
-        <div style={{ width: 330, flexShrink: 0, overflowY: 'auto', padding: '18px 20px', borderRight: `1px solid ${tk.border.subtle}`, display: 'flex', flexDirection: 'column', gap: 12, boxSizing: 'border-box' }}>
-          <SectionLabel>Species</SectionLabel>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {set.species.map((x, i) => (
-              <button key={i} type="button" onClick={() => setSp(i)} aria-pressed={i === s}
-                style={{ height: 28, padding: '0 10px', borderRadius: radius.md, cursor: 'pointer', border: 0, font: `600 12px ${fontFamily.ui}`, background: i === s ? tk.bg.selected : tk.bg.field, color: tk.text.primary, boxShadow: i === s ? `inset 0 0 0 1.5px ${tk.accent.base}` : 'none' }}>
-                {i + 1} · {x.name || `Species ${i + 1}`}
-              </button>
-            ))}
-            {set.species.length < MAX_SPECIES && <IconButton icon="plus" label="Add a species (each lays its own trail channel)" size="sm" onClick={() => { update({ ...set, species: [...set.species, defaultSpecies(set.species.length)] }); setSp(set.species.length); }} />}
-          </div>
-          <Row label="Name"><Field value={species.name} onChange={e => setSpecies({ name: e.target.value })} aria-label="Species name" height={30} /></Row>
-          <Row label="Speed"><Num value={species.speed} step={0.01} onCommit={v => setSpecies({ speed: v })} title="Picture units a second: each walker starts at it (Set speed and Accelerate change it)" /></Row>
-          {set.species.length > 1 && <Button size="sm" variant="ghost" onClick={() => { update({ ...set, species: set.species.filter((_, i) => i !== s) }); setSp(0); }}>Remove this species</Button>}
-
-          <SectionLabel meta="Memory x">States</SectionLabel>
-          <Note>Each walker is in one state (born in the first). Draw agents' Colour by State shows its colour.</Note>
-          {species.states.map((st, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '30px 1fr 28px', gap: 6, alignItems: 'center' }}>
-              <input type="color" aria-label={`${st.name} colour`} value={hex(st.colour)} onChange={e => setSpecies({ states: species.states.map((x, j) => (j === i ? { ...x, colour: fromHex(e.target.value) } : x)) })}
-                style={{ width: 28, height: 28, padding: 0, border: 0, borderRadius: 6, background: 'none', cursor: 'pointer' }} />
-              <Field value={st.name} onChange={e => setSpecies({ states: species.states.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} aria-label={`State ${i + 1} name`} height={30} />
-              <IconButton icon="close" label="Remove state" size="sm" tone="danger" disabled={species.states.length === 1} onClick={() => setSpecies({ states: species.states.filter((_, j) => j !== i) })} />
-            </div>
-          ))}
-          {species.states.length < MAX_STATES && <AddRow onClick={() => setSpecies({ states: [...species.states, { name: `state ${species.states.length + 1}`, colour: DEFAULT_STATE_COLOURS[species.states.length % DEFAULT_STATE_COLOURS.length] }] })}>Add state</AddRow>}
-
-          <SectionLabel>Trail channels</SectionLabel>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            {[0, 1, 2, 3].map(c => (
-              <Field key={c} value={set.channels[c] ?? ''} placeholder={`trail ${c + 1}${c === 3 && usesAction(set, 'spawn') ? ' (births)' : ''}`} aria-label={`Name of trail channel ${c + 1}`} height={30}
-                onChange={e => update({ ...set, channels: set.channels.map((x, j) => (j === c ? e.target.value : x)) })} />
-            ))}
-          </div>
-
-          <SectionLabel meta="inputs on the card">Masks</SectionLabel>
-          {set.masks.map((m, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 112px 28px', gap: 6, alignItems: 'center' }}>
-              <Field value={m.name} onChange={e => update({ ...set, masks: set.masks.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} aria-label={`Mask ${i + 1} name`} height={30} />
-              <Select ariaLabel={`Mask ${i + 1} kind`} value={m.kind} options={[{ value: 'number', label: 'A number' }, { value: 'texture', label: 'A texture' }]} onChange={v => update({ ...set, masks: set.masks.map((x, j) => (j === i ? { ...x, kind: v as 'number' | 'texture' } : x)) })} />
-              <IconButton icon="close" label="Remove mask" size="sm" tone="danger" onClick={() => update({ ...set, masks: set.masks.filter((_, j) => j !== i) })} />
-            </div>
-          ))}
-          {set.masks.length < MAX_MASKS && <AddRow onClick={() => update({ ...set, masks: [...set.masks, { name: set.masks.length ? 'Mask 2' : 'Mask', kind: 'number' }] })}>Add mask</AddRow>}
-
-          <SectionLabel>Moving and sensing</SectionLabel>
-          <Row label="Edges"><Select ariaLabel="Edges" value={set.edges} options={[{ value: 'wrap', label: 'Wrap' }, { value: 'bounce', label: 'Bounce' }, { value: 'slide', label: 'Slide' }]} onChange={v => update({ ...set, edges: v as AgentRuleSet['edges'] })} /></Row>
-          <Row label="Sensors ahead"><Num value={set.sensor.distance} step={0.005} onCommit={v => update({ ...set, sensor: { ...set.sensor, distance: v } })} title="How far ahead the sensors read the trail (picture units; ten times further in 3D)" /></Row>
-          <Row label="Sensor angle"><Num value={set.sensor.angle} step={1} onCommit={v => update({ ...set, sensor: { ...set.sensor, angle: v } })} title="Degrees between the ahead sensor and the side ones" /></Row>
-          {usesAction(set, 'flow') && <>
-            <Row label="Flow size"><Num value={set.flow.size} step={0.1} onCommit={v => update({ ...set, flow: { ...set.flow, size: v } })} /></Row>
-            <Row label="Flow evolve"><Num value={set.flow.evolve} step={0.01} onCommit={v => update({ ...set, flow: { ...set.flow, evolve: v } })} /></Row>
-          </>}
-          {notes3d.map(t => <Note key={t}>3D: {t}</Note>)}
-        </div>
-
         {/* ── The rules ── */}
-        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <SectionLabel meta="run top to bottom, every step">{`Rules · ${species.name || `Species ${s + 1}`}`}</SectionLabel>
+        <div style={{ flex: 1, minWidth: 0, padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <SectionLabel meta="run top to bottom, every step" hint="Each rule is When … Do …: checked every step for each walker, top to bottom.">{`Rules · ${species.name || `Species ${s + 1}`}`}</SectionLabel>
+          {species.rules.length > 0 && <BuilderHelp id="rules" onExample={addExample} />}
           {species.rules.map((r, i) => (
             <RuleCard key={i} i={i} n={species.rules.length} rule={r} ctx={ctx} lines={lines.get(`${s}:${i}`)}
               onChange={x => setRule(i, x)}
@@ -162,13 +177,13 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
               onRemove={() => setRules(species.rules.filter((_, j) => j !== i))}
               onDuplicate={() => setRules([...species.rules.slice(0, i + 1), structuredClone(r), ...species.rules.slice(i + 1)])} />
           ))}
-          {species.rules.length === 0 && <Note>No rules: these walkers stand still. Add one (it starts as "always: turn toward its trail, wander, leave trail").</Note>}
+          {species.rules.length === 0 && <EmptyHelp id="empty-rules" onExample={addExample} />}
           <AddRow onClick={() => setRules([...species.rules, defaultRule()])}>Add rule</AddRow>
         </div>
-      </div>
-    </Modal>
+    </BuilderWindow>
   );
 }
+
 
 interface EditCtx { set: AgentRuleSet; s: number; tk: Tk; channelOptions: Array<{ value: string; label: string }> }
 
@@ -194,27 +209,28 @@ function RuleCard({ i, n, rule, ctx, lines, onChange, onMove, onRemove, onDuplic
         {when.map((c, j) => (
           <React.Fragment key={j}>
             {j > 0 && <span style={{ color: tk.text.faint, fontSize: 12 }}>and</span>}
-            <Piece onRemove={rule.when.length > 1 || c.kind !== 'always' ? () => setWhen(when.filter((_, k) => k !== j)) : undefined}>
+            <Piece hint={CONDITION_HELP[c.kind].hint} onRemove={rule.when.length > 1 || c.kind !== 'always' ? () => setWhen(when.filter((_, k) => k !== j)) : undefined}>
               <ConditionEditor c={c} ctx={ctx} onChange={x => setWhen(when.map((y, k) => (k === j ? x : y)))} />
             </Piece>
           </React.Fragment>
         ))}
-        <Select ariaLabel="Add a condition" value="" height={28}
-          options={[{ value: '', label: '+ and…' }, ...CONDITION_KINDS.filter(k => k.kind !== 'always').map(k => ({ value: k.kind, label: k.label }))]}
-          onChange={k => k && setWhen([...when.filter(x => x.kind !== 'always'), newCondition(k as RuleCondition['kind'])])} />
+        <TypeAheadPicker ariaLabel="Add a condition" placeholder="+ and… (type)" width={140}
+          items={CONDITION_KINDS.filter(k => k.kind !== 'always').map(k => ({ value: k.kind, label: k.label, hint: CONDITION_HELP[k.kind].hint, example: CONDITION_HELP[k.kind].example, words: [k.kind] }))}
+          onPick={k => setWhen([...when.filter(x => x.kind !== 'always'), newCondition(k as RuleCondition['kind'])])} />
       </Line>
       <Line word="Do">
         {rule.do.map((a, j) => (
-          <Piece key={j} onRemove={() => onChange({ ...rule, do: rule.do.filter((_, k) => k !== j) })}>
+          <Piece key={j} hint={ACTION_HELP[a.kind].hint} onRemove={() => onChange({ ...rule, do: rule.do.filter((_, k) => k !== j) })}>
             <ActionEditor a={a} ctx={ctx} onChange={x => onChange({ ...rule, do: rule.do.map((y, k) => (k === j ? x : y)) })} />
           </Piece>
         ))}
-        <Select ariaLabel="Add an action" value="" height={28}
-          options={[{ value: '', label: '+ do…' }, ...ACTION_KINDS.map(k => ({ value: k.kind, label: k.label }))]}
-          onChange={k => k && onChange({ ...rule, do: [...rule.do, newAction(k as RuleAction['kind'])] })} />
+        <TypeAheadPicker ariaLabel="Add an action" placeholder="+ do… (type)" width={130}
+          items={ACTION_KINDS.map(k => ({ value: k.kind, label: k.label, hint: ACTION_HELP[k.kind].hint, example: ACTION_HELP[k.kind].example, words: [k.kind] }))}
+          onPick={k => onChange({ ...rule, do: [...rule.do, newAction(k as RuleAction['kind'])] })} />
       </Line>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 28 }}>
         <Toggle checked={!!rule.stop} onChange={v => onChange({ ...rule, stop: v })} label="Stop after this rule" />
+        <HintMark text="When this rule applies, the rules below it are skipped for that walker this step." />
       </div>
       {lines !== undefined && (
         <pre style={{ margin: 0, padding: '8px 10px', borderRadius: radius.md, background: tk.bg.field, color: tk.text.secondary, font: `500 11px/1.5 ${fontFamily.mono}`, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{lines}</pre>
@@ -302,17 +318,18 @@ function Line({ word, children }: { word: string; children: React.ReactNode }) {
   const tk = useTokens();
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-      <span style={{ width: 36, flexShrink: 0, paddingTop: 6, font: `700 11px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', color: word === 'When' ? tk.kind.expr : tk.accent.base }}>{word}</span>
+      <span title={word === 'When' ? 'When: the condition checked every step for each walker. All must hold.' : 'Do: what the walker does when the condition holds, in order.'} style={{ width: 36, flexShrink: 0, paddingTop: 6, font: `700 11px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', color: word === 'When' ? tk.kind.expr : tk.accent.base, cursor: 'help' }}>{word}</span>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>{children}</div>
     </div>
   );
 }
 
-function Piece({ children, onRemove }: { children: React.ReactNode; onRemove?: () => void }) {
+function Piece({ children, onRemove, hint }: { children: React.ReactNode; onRemove?: () => void; hint?: string }) {
   const tk = useTokens();
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 4px 2px 8px', borderRadius: radius.md, background: tk.bg.field, minHeight: 30 }}>
       {children}
+      {hint && <HintMark text={hint} />}
       {onRemove && <button type="button" aria-label="Remove" title="Remove" onClick={onRemove} style={{ width: 20, height: 20, padding: 0, border: 0, background: 'none', color: tk.text.faint, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="close" size={12} /></button>}
     </span>
   );
@@ -333,21 +350,21 @@ function Num({ value, step, onCommit, title }: { value: number; step: number; on
     style={{ width: 58, height: 26, boxSizing: 'border-box', padding: '0 6px', border: 0, outline: 'none', borderRadius: radius.md, background: tk.bg.panel, color: tk.text.primary, font: `500 12px ${fontFamily.mono}`, textAlign: 'center', boxShadow: `inset 0 0 0 1px ${tk.border.default}` }} />;
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   const tk = useTokens();
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', alignItems: 'center', gap: 8 }}>
-      <span style={{ fontSize: 12, color: tk.text.muted }}>{label}</span>
+      <span style={{ fontSize: 12, color: tk.text.muted, minWidth: 0, display: 'flex' }}><HintLabel hint={hint}>{label}</HintLabel></span>
       <div style={{ minWidth: 0 }}>{children}</div>
     </div>
   );
 }
 
-function SectionLabel({ children, meta }: { children: React.ReactNode; meta?: string }) {
+function SectionLabel({ children, meta, hint }: { children: React.ReactNode; meta?: string; hint?: string }) {
   const tk = useTokens();
   return (
     <span style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint, textTransform: 'uppercase' }}>
-      <span style={{ flex: 1 }}>{children}</span>
+      <span style={{ flex: 1 }}>{hint ? <HintLabel hint={hint}>{children}</HintLabel> : children}</span>
       {meta && <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, fontSize: 12 }}>{meta}</span>}
     </span>
   );

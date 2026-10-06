@@ -7,6 +7,7 @@ import { useNodeGraphStore, undoManager } from '../store/useNodeGraphStore';
 import { toast } from '../components/ui/toastStore';
 import { applyRulesToGroup, backToRules, ensureBirthEmit, openRulesAsNodes, rulesNeedRegenerating } from './apply';
 import type { AgentRuleSet } from './spec';
+import { setAgentsView, type AgentsView } from './outputs';
 
 /** Ask a rules group's card to open its editor (the card's title double-click; Write as rules). */
 export const openAgentRulesEditor = (groupId: string) => window.dispatchEvent(new CustomEvent('agent-rules-open', { detail: groupId }));
@@ -48,6 +49,18 @@ export function openGroupAsNodes(groupId: string): void {
   useNodeGraphStore.getState().enterGroup(groupId);
   setTimeout(() => useNodeGraphStore.getState()._fitViewCallback?.(), 150);
   toast.info('Opened as nodes', { message: 'These are the nodes the rules made, every one with a note: Start, a block per rule, Finish, Move. Edit them freely; Back to rules on the card makes them from the rules again (replacing your edits).' });
+}
+
+/** Show another of the group's outputs (a trail channel, the walkers' density): one undo step. */
+export function setGroupView(groupId: string, view: AgentsView): boolean {
+  const st = useNodeGraphStore.getState();
+  const r = setAgentsView(st.nodes, groupId, view);
+  if ('error' in r) { toast.info('Can\'t show that', { message: r.error }); return false; }
+  undoManager.push(st.nodes, { label: 'Changed what the agents picture shows' });
+  last = { id: '', at: 0 };
+  useNodeGraphStore.setState({ nodes: r.nodes });
+  st.compile();
+  return true;
 }
 
 /** Back to rules (or, for a group that never had rules, Write as rules): the inside generated from rules again. */

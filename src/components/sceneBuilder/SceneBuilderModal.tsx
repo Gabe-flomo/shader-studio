@@ -2,7 +2,7 @@
  * SceneBuilderModal — the 3D Scene Builder window (docs/scene-builder.md).
  *
  * Left: the scene as a tree (drag to reorder and nest). Middle: the sections
- * (Shapes, Combine, Bend space, Look, Camera, Quality) plus the Recipe,
+ * (Shapes, Combine, Bend space, Look, Camera, Quality, Output) plus the Recipe,
  * Templates and Describe tabs. Right: a live preview of what Build will make.
  * Build puts the graph on the canvas (or rebuilds the scene it was opened
  * from, keeping the user's own edits where it can); Done closes.
@@ -21,7 +21,7 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { SceneTree } from './SceneTree';
 import { ScenePreview } from './ScenePreview';
-import { CameraTab, CombineTab, DescribeTab, LookTab, QualityTab, RecipeTab, ShapesTab, TemplatesTab, WarpsTab } from './tabs';
+import { CameraTab, CombineTab, DescribeTab, LookTab, OutputTab, QualityTab, RecipeTab, ShapesTab, TemplatesTab, WarpsTab } from './tabs';
 
 const TABS: Array<{ id: BuilderTab; label: string; icon: IconName }> = [
   { id: 'shapes', label: 'Shapes', icon: 'cube' },
@@ -30,6 +30,7 @@ const TABS: Array<{ id: BuilderTab; label: string; icon: IconName }> = [
   { id: 'look', label: 'Look', icon: 'sun' },
   { id: 'camera', label: 'Camera', icon: 'camera' },
   { id: 'quality', label: 'Quality', icon: 'sliders' },
+  { id: 'output', label: 'Output', icon: 'eye' },
   { id: 'recipe', label: 'Recipe', icon: 'text' },
   { id: 'templates', label: 'Templates', icon: 'presets' },
   { id: 'describe', label: 'Describe', icon: 'search' },
@@ -93,7 +94,7 @@ function PreviewPanel() {
       <BuilderNote>
         A Scene Group (Scene Pos → {allShapes(spec).length} shape{allShapes(spec).length === 1 ? '' : 's'}, combines and warps → Scene Output), a March Camera,{' '}
         {spec.look.mode === 'glass' ? 'a Glass Scene' : spec.look.mode === 'gi' ? 'a GI Lit March Group' : `a March Loop${spec.look.mode === 'volumetric' ? ' in volumetric mode with Volume Glow inside' : ''}`}
-        {spec.look.mode === 'surface' ? ', soft shadows, ambient occlusion and Multi-Light' : ''}{spec.look.tone !== 'none' ? ', Tone Map' : ''} and the Output. Every node gets a note. Step Scale {effectiveStepScale(spec)}.
+        {spec.look.mode === 'surface' ? ', soft shadows, ambient occlusion and Multi-Light' : ''}{spec.look.tone !== 'none' ? ', Tone Map' : ''} and the Output{spec.output && spec.output.show !== 'picture' ? `, which shows the ${spec.output.show}${spec.output.palette ? ` through the ${spec.output.palette} palette` : ''}` : ''}. Every node gets a note. Step Scale {effectiveStepScale(spec)}.
       </BuilderNote>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
         {[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => (
@@ -134,7 +135,7 @@ export function SceneBuilderModal() {
 
   const shapes = allShapes(spec).length;
   const body = {
-    shapes: <ShapesTab />, combine: <CombineTab />, warps: <WarpsTab />, look: <LookTab />, camera: <CameraTab />, quality: <QualityTab />,
+    shapes: <ShapesTab />, combine: <CombineTab />, warps: <WarpsTab />, look: <LookTab />, camera: <CameraTab />, quality: <QualityTab />, output: <OutputTab />,
     recipe: <RecipeTab />, templates: <TemplatesTab />, describe: <DescribeTab />,
   }[tab];
 

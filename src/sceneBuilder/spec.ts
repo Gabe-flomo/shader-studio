@@ -14,6 +14,8 @@
  * Pure data: no React, no store.
  */
 
+import type { OutputSpec } from './output';
+
 export type Vec3 = [number, number, number];
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
@@ -259,6 +261,8 @@ export interface SceneSpec {
   look: LookSpec;
   camera: CameraSpec;
   quality: QualitySpec;
+  /** What the built scene shows (output.ts); absent: the picture. */
+  output?: OutputSpec;
 }
 
 // ── Defaults ────────────────────────────────────────────────────────────────
@@ -417,6 +421,8 @@ export function effectiveStepScale(spec: SceneSpec): number {
 /** The spec with ids renumbered in tree order: two specs that say the same thing compare equal. */
 export function canonicalSpec(spec: SceneSpec): SceneSpec {
   const out = structuredClone(spec);
+  if (!out.output || out.output.show === 'picture') delete out.output;
+  else if (!out.output.palette) delete out.output.palette;
   if (out.look.fogColor && out.look.fogColor.every((v, i) => v === out.look.bg[i])) out.look.fogColor = null;
   let s = 0, g = 0, w = 0;
   walkItems(out.root, it => {
