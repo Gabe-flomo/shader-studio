@@ -1,4 +1,5 @@
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
+import { clipGlsl } from '../../lib/media/clip';
 
 /**
  * Baked (docs/bake.md): a part of the graph rendered once to a video and
@@ -73,6 +74,9 @@ export const BakedNode: NodeDefinition = {
     const alpha = !!bakedInfo(node)?.alpha;
     // Centred picture coordinates back to 0–1 over the frame (as Texture Input reads).
     const lines = [`    vec2 ${id}_st = clamp(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0);\n`];
+    // A clip's crop (docs/clip-editor.md) reads a part of the frame: only when there is one, so other bakes compile as before.
+    const xf = clipGlsl(id, `${id}_st`, node.params.clip);
+    if (xf.code) lines.push(xf.code, `    ${id}_st = ${xf.st};\n`);
     if (alpha) {
       // Colour fills the top half of the frame (v 0.5–1 with the video's flipY), alpha the bottom; half a texel in from the seam.
       lines.push(

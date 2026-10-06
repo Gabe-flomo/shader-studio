@@ -14,6 +14,7 @@
  * their proportions on any canvas shape.
  */
 
+import { cpIsPlain, cpParse, type CpSaved } from '../play/kit/clipPlay.js';
 import { LINKED_PREFIX, LINKED_REF_MAX, isLinkedRef } from '../files/linkedRefs';
 import { DP_CHOKES, DP_INDEX_MODES, DP_PADS, DP_PARAMS, DP_SYNTHS, dpKey, type DpIndexMode, type DpMode, type DpSynth } from '../play/kit/drumPads.js';
 import { AG_GROUPS, AG_MAX, AG_RULES, AG_RULE_TYPES, AG_TARGETS, AG_CHANNELS, agPresetLayer } from '../play/kit/agents.js';
@@ -842,6 +843,12 @@ export interface VideoLayer extends LayerBase {
   sound: VideoSound;
   /** 0..1, for `sound: 'play'`. */
   volume: number;
+  /**
+   * Clip settings from the clip editor (docs/clip-editor.md): kept segments played as a
+   * playlist at `speed` (looping with `loop`), and a crop / rotate / flip. Absent: plays as
+   * before (from `start`). With one, `start` is not used.
+   */
+  clip?: CpSaved;
 }
 
 /**
@@ -1247,6 +1254,8 @@ export interface BackgroundItem {
   loop?: boolean;
   muted?: boolean;
   rate?: number;
+  /** video: clip settings from the clip editor (docs/clip-editor.md): kept segments, played on the clock. */
+  clip?: CpSaved;
   /** colour: the colour. */
   colour?: RGB;
 }
@@ -1316,6 +1325,7 @@ function parseBackgroundItem(raw: unknown): BackgroundItem | null {
       out.bytes = typeof r.bytes === 'number' && Number.isFinite(r.bytes) && r.bytes > 0 ? Math.round(r.bytes) : 0;
       out.loop = r.loop !== false; out.muted = r.muted !== false;
       out.rate = typeof r.rate === 'number' && Number.isFinite(r.rate) ? Math.max(0.1, Math.min(4, r.rate)) : 1;
+      { const c = cpParse(r.clip); if (c && !cpIsPlain(c)) out.clip = c; }
       // A video from a linked folder (docs/linked-folders.md): played from disk, named by its reference.
       if (isLinkedRef(r.libraryId) && r.libraryId.length <= LINKED_REF_MAX) out.libraryId = r.libraryId;
       break;
@@ -1834,6 +1844,8 @@ export function parseLayer(raw: unknown): PlayLayer | null {
   // A script's slider values are dynamic keys: keep every finite `p_<key>` number.
   if (kind === 'script') for (const [k, v] of Object.entries(l)) if (k.startsWith('p_') && typeof v === 'number' && Number.isFinite(v)) out[k] = v;
   if (kind === 'script') parseScriptExtras(l, out);
+  // A Video layer's clip settings (docs/clip-editor.md): kept only when they change something.
+  if (kind === 'video') { const c = cpParse(l.clip); if (c && !cpIsPlain(c)) out.clip = c; }
   // An Agents layer's rule numbers are dynamic keys (`r3_weight`): each rule's, clamped to a sane range, else its default.
   if (kind === 'agents') for (const r of out.rules as AgentRule[]) for (const [k, dv] of agentRuleNumbers(r)) { const x = l[k]; out[k] = typeof x === 'number' && Number.isFinite(x) ? Math.max(-1e4, Math.min(1e4, x)) : dv; }
   // Made from a layer kind: the id (parsePlayRecord checks the file has it).

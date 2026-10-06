@@ -8,6 +8,7 @@
  * in the panel that opens under the one you pick. Only the showing source
  * runs; the panel says which one that is.
  */
+import { BackgroundClipButton } from '../BackgroundClipButton';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { BACKGROUND_RATES, BACKGROUND_VIDEO_KEEP, type BackgroundItem, type BackgroundLayer } from '../../../types/play';
 import { BACKGROUND_QUEUE_MAX, DEFAULT_SCRIPT_3D } from '../../../types/playLayers';
@@ -390,6 +391,8 @@ function SourceSettings({ it, tk, busy, onSet, onFile, onLinked, onLibrary, onGr
               <Toggle checked={it.loop !== false} onChange={loop => onSet({ loop })} label="Loop" />
               <Toggle checked={it.muted === false} onChange={on => onSet({ muted: !on })} label="Sound" />
               <Select ariaLabel="Speed" height={26} value={String(it.rate ?? 1)} options={BACKGROUND_RATES.map(r => ({ value: String(r), label: `${r}×` }))} onChange={v => onSet({ rate: Number(v) })} style={{ fontSize: 12 }} />
+              <BackgroundClipButton name={it.name} element={() => playBackground.queueVideo(it)} clip={it.clip} rate={it.rate ?? 1} loop={it.loop !== false}
+                onApply={a => onSet({ clip: a.clip, rate: a.rate, loop: a.loop })} />
             </>
           ))}
           {missing && linked && note(linkedProblem(it.libraryId!) ? linkedMissingText(it.libraryId!, it.name) : 'Reading it from its linked folder…', linkedProblem(it.libraryId!) ? 'warning' : 'faint')}
