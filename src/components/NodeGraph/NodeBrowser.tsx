@@ -17,6 +17,9 @@ import { Icon } from '../ui/Icon';
 import { nodeDragProps, nodeDragStyle, type DropPayload } from './nodeDrop';
 import { BuildersSection } from '../builders/BuildersSection';
 import { matchBuilders } from '../../builders/registry';
+import { useStructureHints } from '../../structure/hintsStore';
+import { typesForStage } from '../../structure/browse';
+import { FLOWS, STAGES } from '../../structure/stages';
 
 // ── Nodes hidden from browser ─────────────────────────────────────────────────
 const HIDDEN_NODES = new Set([
@@ -464,6 +467,9 @@ export function NodeBrowser({
   const showBuilders = !isGlsl && !swapTargetNodeId;
 
   const isSearching = searchQuery.trim().length > 0;
+  // A stage picked on the flow strip (structure/hintsStore.ts); Back clears it.
+  const stageBrowse = useStructureHints(st => st.browse);
+  const setStageBrowse = useStructureHints(st => st.setBrowse);
 
   useUserNodesVersion(); // re-render when a node type is published or deleted
   const allCats = getAllCategories();
@@ -560,7 +566,31 @@ export function NodeBrowser({
   // ── Compute content ────────────────────────────────────────────────────────
   let innerContent: React.ReactNode;
 
-  if (isSearching) {
+  if (stageBrowse && !isSearching && !isGlsl) {
+    // A stage clicked on the flow strip (docs/structure-hints.md): its nodes, by category.
+    const list = typesForStage(stageBrowse.flow, stageBrowse.stage, HIDDEN_NODES);
+    const cats = [...new Set(list.map(x => x.category))];
+    innerContent = (
+      <div data-stage-browse={stageBrowse.stage} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+          <IconButton icon="chevL" label="Back to categories" size="sm" onClick={() => { setStageBrowse(null); setPreviewType(null); }}
+            style={{ background: tk.bg.hover, color: tk.text.secondary }} />
+          <span style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 12.5, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            Stage: {STAGES[stageBrowse.stage].label} <span style={{ color: tk.text.faint, fontWeight: 500 }}>· {FLOWS[stageBrowse.flow].label}</span>
+          </span>
+          <Count n={list.length} />
+        </div>
+        <span style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.45 }}>{STAGES[stageBrowse.stage].line}</span>
+        {cats.map(cat => (
+          <div key={cat}>
+            <CapsLabel>{cat}</CapsLabel>
+            {renderPills(list.filter(x => x.category === cat).map(x => ({ type: x.type, label: x.label, description: getNodeDefinition(x.type)?.description })))}
+          </div>
+        ))}
+      </div>
+    );
+
+  } else if (isSearching) {
     const trimmed = searchQuery.trim().toLowerCase();
     const results = getOfferedDefinitions()
       .filter(def => !HIDDEN_NODES.has(def.type))

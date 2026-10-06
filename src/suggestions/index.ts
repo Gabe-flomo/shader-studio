@@ -5,6 +5,7 @@
 import type { GraphNode } from '../types/nodeGraph';
 import { learnedTable, personalTable, priorTable, reconcileSavedGraphs } from './learning';
 import { rankMoves, type RankTables, type RankedMove, type RankOptions } from './rank';
+import { currentStageTarget } from '../structure/hintsStore';
 // Taught moves register themselves with the moves library (offered and ranked with the rest).
 import './taught';
 
@@ -29,7 +30,7 @@ export function rankTables(): RankTables {
 /** The ranked moves for a node in `scope` (its graph level). */
 export function suggestionsFor(node: GraphNode, scope: GraphNode[], opts: RankOptions = {}): RankedMove[] {
   startLearning();
-  return rankMoves(node, scope, rankTables(), opts);
+  return rankMoves(node, scope, rankTables(), { stageTarget: currentStageTarget(), ...opts });
 }
 
 let started = false;

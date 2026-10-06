@@ -22,6 +22,8 @@ import { CommandsReference } from './DoCommandsReference';
 import { openDoBar, useDoBarHighlight } from '../../suggestions/doBarStore';
 import { useLongPress } from '../../lib/longPress';
 import { learnedNext, rankTables } from '../../suggestions';
+import { nudgeByStage } from '../../structure/boost';
+import { currentStageTarget } from '../../structure/hintsStore';
 import { RecipeOffer } from './RecipeOffer';
 import { useRecipeOffer } from '../../store/recipeOfferStore';
 import { askConfirm, askText } from '../ui/dialogStore';
@@ -946,7 +948,8 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     // Learned picks first (suggestions: your graphs, then the examples), then the hand-written rules.
     const learned = origin ? learnedNext(origin.type, smartConnect.key, smartConnect.dir, rankTables(), 2)
       .map(l => ({ type: l.type, key: l.key, note: l.you ? 'you often use it here' : 'usually goes here' })) : [];
-    return suggestQuickAdds({ type: sock.type, dir: smartConnect.dir, label: sock.label, key: smartConnect.key, nodeType: origin?.type, learned });
+    // The flow strip's next stage leans in a little (structure/boost.ts).
+    return nudgeByStage(suggestQuickAdds({ type: sock.type, dir: smartConnect.dir, label: sock.label, key: smartConnect.key, nodeType: origin?.type, learned }), q => q.type, currentStageTarget());
   }, [smartConnect, displayNodes]);
   const closeSmartConnect = useCallback(() => { setSmartConnect(null); setGhostSuggestion(null); }, []);
   const pickQuickAdd = useCallback((q: QuickAdd) => {
@@ -1386,7 +1389,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           onZoom={zoomAroundCentre}
           onResetZoom={() => applyView({ x: 0, y: 0 }, 1, 'now')}
           onFit={handleFitView}
-          onAutoLayout={autoLayout}
+          onAutoLayout={() => autoLayout()}
+          onArrangeByStage={() => autoLayout('stage')}
           showMinimap={showMinimap}
           onToggleMinimap={toggleMinimap}
           showOutline={showOutline}
@@ -1457,7 +1461,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
 
         {!isTouchDevice.current && !compactToolbar && (
           <button
-            onClick={autoLayout}
+            onClick={() => autoLayout()}
             title="Automatically arrange nodes left-to-right by data flow"
             style={toolbarBtnStyle}
             onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = tc.surface1)}

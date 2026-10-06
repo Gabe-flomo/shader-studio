@@ -4,6 +4,8 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { lazyWithSuspense, preloadLazyComponents, type PropsOf } from './components/lazyWithSuspense';
 import ShaderCanvas, { type OfflineRenderHandle, type HistogramData } from './components/ShaderCanvas';
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
+import { FlowStrip } from './components/structure/FlowStrip';
+import { BROWSE_STAGE_EVENT } from './structure/browse';
 import { NodePalette } from './components/NodeGraph/NodePalette';
 import { CodeBarRow, CodePanel } from './components/CodePanel';
 import { tokenizeLine } from './components/glslSyntax';
@@ -628,6 +630,17 @@ function App() {
     window.addEventListener(OPEN_WHATS_NEW, open);
     return () => window.removeEventListener(OPEN_WHATS_NEW, open);
   }, [setPage]);
+  // A stage clicked on the flow strip: the node browser opens on it (structure/browse.ts).
+  useEffect(() => {
+    const open = () => {
+      const b = breakpointRef.current;
+      if (isMobile(b)) { setMobileExamplesTab('nodes'); setShowMobileExamples(true); return; }
+      if (isTablet(b)) { setPaletteExpanded(true); return; }
+      setPaletteCollapsed(false);
+    };
+    window.addEventListener(BROWSE_STAGE_EVENT, open);
+    return () => window.removeEventListener(BROWSE_STAGE_EVENT, open);
+  }, []);
   // After an update: once, a small notice pointing at What's new.
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -998,8 +1011,10 @@ function App() {
           )}
 
           {showGraphPane && (
-            <div style={{ flex: 1, minHeight: 0, minWidth: 0, [landscape ? 'borderLeft' : 'borderTop']: showCanvasPane ? `1px solid ${tc.surface0}` : undefined }}>
-              <MobileGraphBrowser />
+            <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', [landscape ? 'borderLeft' : 'borderTop']: showCanvasPane ? `1px solid ${tc.surface0}` : undefined }}>
+              {/* On a phone the flow strip is one chip (docs/structure-hints.md). */}
+              <FlowStrip phone />
+              <div style={{ flex: 1, minHeight: 0, minWidth: 0 }}><MobileGraphBrowser /></div>
             </div>
           )}
 
@@ -1334,7 +1349,10 @@ function App() {
               {'{ } Code'}
             </button>
 
-            <NodeGraph redesignToolbar />
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
+              <FlowStrip />
+              <div style={{ flex: 1, minHeight: 0, position: 'relative' }}><NodeGraph redesignToolbar /></div>
+            </div>
             {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} nodeSlugMap={nodeSlugMap} />}
             {/* Time controls: floating dock on the node-graph side of the
                 divider, vertically centered — never overlapping the render
@@ -1433,6 +1451,8 @@ function App() {
           {page === 'play' && <PlayPage />}
           {page === 'studio' && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
+              {/* The flow strip: the usual order of steps, what this graph has, what comes next (docs/structure-hints.md). */}
+              <FlowStrip />
               <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
                 <NodeGraph redesignToolbar />
               </div>

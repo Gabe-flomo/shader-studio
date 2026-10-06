@@ -23,6 +23,7 @@ import { Segmented } from '../ui/Choice';
 import { usePhoneDialog } from '../ui/phoneDialog';
 import { builderTabs, type BuilderTab } from './builderLayout';
 import { BuilderHelpContext, HintLabel, TipsToggle } from './BuilderHelp';
+import { BuilderFlowStrip } from '../structure/BuilderFlowStrip';
 
 export { BuilderHelp, EmptyHelp, HintLabel, HintMark, TipsToggle, useTips } from './BuilderHelp';
 
@@ -139,6 +140,7 @@ export function BuilderWindow({
       footer={footer}>
       {phone ? (
         <div data-builder-tabs style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+          <BuilderFlowStrip builder={prefsKey} />
           {(left || right) && (
             <div style={{ flexShrink: 0, padding: '8px 12px', borderBottom: `1px solid ${tk.border.subtle}` }}>
               <Segmented<BuilderTab> fill ariaLabel="Section" value={tab} onChange={setTab} options={builderTabs(left?.label, mainLabel, right?.label)} />
@@ -150,7 +152,10 @@ export function BuilderWindow({
           {right && <div data-builder-panel={right.label} style={{ display: tab === 'right' ? 'flex' : 'none', flex: 1, minHeight: 0, overflowY: 'auto', flexDirection: 'column', background: tk.bg.subtle }}>{right.content}</div>}
         </div>
       ) : (
-      <div style={{ display: 'flex', height: '100%', minHeight: 0, position: 'relative' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+      {/* The builder's flow, a line per stage (docs/structure-hints.md). */}
+      <BuilderFlowStrip builder={prefsKey} />
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, position: 'relative' }}>
         {left && (!open.left || narrow) && left.rail?.(() => set('left', true))}
         {left && (
           <SidePanel side="left" label={left.label} open={open.left} narrow={narrow} width={left.width} onClose={() => set('left', false)}>
@@ -163,6 +168,7 @@ export function BuilderWindow({
             {panelBox(right, 'right')}
           </SidePanel>
         )}
+      </div>
       </div>
       )}
     </Modal>

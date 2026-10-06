@@ -27,6 +27,8 @@ import { scoreNodeDef } from '../../nodes/searchNodes';
 import { HIDDEN_TYPES } from './nodeCategoryMeta';
 import { spawnPoint } from './spawnPoint';
 import { parseDo, type DoPlan } from '../../suggestions/doBar';
+import { inTargetStage, STAGE_SEARCH_POINTS } from '../../structure/boost';
+import { currentStageTarget } from '../../structure/hintsStore';
 import { closeDoBar, openCommandsRef, openDoBar, setDoBarHighlight, useDoBar } from '../../suggestions/doBarStore';
 import { execCommand, type CommandPlan, type CmdClause, type CmdStep } from '../../suggestions/doCommands';
 import { checkConnection, wiresAmong, type ConnectionReport, type Wire4 } from '../../suggestions/connectionCheck';
@@ -171,8 +173,11 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
     const idiomFirst = guessed ? matchIdioms(text, 3) : [];
     if ((heads.length || editing) && !idiomFirst.length) return [];
     const q = text.trim().toLowerCase().replace(/^(add|make|put|a|an)\s+/, '');
+    // The flow strip's next stage leans in a little within a match tier (structure/boost.ts).
+    const target = currentStageTarget();
     const nodes = getOfferedDefinitions().filter(d => !HIDDEN_TYPES.has(d.type))
-      .map(d => ({ d, s: scoreNodeDef(d, q) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 5)
+      .map(d => ({ d, s: scoreNodeDef(d, q) })).filter(x => x.s > 0)
+      .map(x => ({ ...x, s: x.s + (inTargetStage(x.d.type, target) ? STAGE_SEARCH_POINTS : 0) })).sort((a, b) => b.s - a.s).slice(0, 5)
       .map(x => ({ kind: 'node' as const, type: x.d.type, label: x.d.label, detail: x.d.category }));
     const idioms = (idiomFirst.length ? idiomFirst : matchIdioms(text, 3)).map(spec => ({ kind: 'idiom' as const, spec }));
     return idiomFirst.length ? idioms : [...nodes, ...idioms];
