@@ -109,8 +109,8 @@ Set the group's Space to 3D and the inside is generated again for 3D (the headin
 | **Boids-like (via trail)** | a velocity trail (Deposit What: Velocity); packed (count here > 16) → turn away; else align with the crowd, drift toward the birds, wobble | Simulation → Boids |
 | **Predator & prey** | two species; prey in thick predator smell die; prey near predators flee (yellow) and speed up; else graze along their trail; predators follow the prey's smell | Simulations: agents → Predators and prey |
 | **Infection (SIR)** | healthy / sick / recovered; a few start sick; healthy in germs fall sick (60% a second); sick leave germs and recover after 5 s; immunity wanes after 20 s | Simulations: agents → Infection spread (SIR) |
-| **Termites** | empty / carrying; each drops a chip where it is born; picks up a chip it stands on, drops beside a chip ahead (stopping that step), waiting a second between | Simulations: agents → Termites and wood chips |
-| **Fireflies** | dark / flash; a sparse swarm (nine in ten die at birth); a clock in Memory; one past half its cycle that sees a flash flashes at once: waves of light | Simulations: agents → Fireflies flashing in time |
+| **Termites** | new / empty / carrying; one in eight lives and lays 8 chips on empty spots; empty termites steer to chips, slow near them, wait on one and pick it up on a dice roll (only where *here* > 0.76: their own pixel surely holds a chip); carrying ones wait beside a pile on bare ground (*here* < 0.24) and drop on a dice roll; 0.3 s rest between. Piles within about 20 s; chips kept to about 1% over 30 s | Simulations: agents → Termites and wood chips |
+| **Fireflies** | dark / flash; a sparse swarm (nine in ten die at birth); a 1.5 s clock in Memory; one past 60% of its cycle that sees light (sensors 0.5 ahead, ±90°) flashes at once: the swarm flashes together within a few seconds (synchrony χ ≈ 0.85–0.9) | Simulations: agents → Fireflies flashing in time |
 | **DLA growth** | free / stuck, mask Seed; touching the seed or the crystal → stick; stuck walkers lay crystal; free ones wander ±60° | Simulations: agents → Diffusion-limited aggregation |
 
 The node versions in *Simulations: agents* go further where rules can't (births near parents with energy, exactly conserved chips through a handshake, sand on a grid); each rules example's group note points to its node version.
@@ -123,6 +123,7 @@ The node versions in *Simulations: agents* go further where rules can't (births 
 - Spawn a child is births at marks, not a parent creating a child directly (see above).
 - Sensing is the trail and masks; walkers don't see each other directly (only through what they leave).
 - Two walkers changing the same trail pixel in the same step both act (taking one chip, both get one); the node-built termites show the handshake that avoids it.
+- A trail never goes below 0 (only a velocity Deposit's trail is signed), so leaving −1 on a pixel that holds nothing is lost, and whoever "took" it got something from nothing. Sensing reads the trail blended over the 4 nearest pixels (the walker's own pixel weighs at least a quarter), so a rule that takes something should test *here* > 0.76 (the pixel surely holds one) and one that lays something on bare ground *here* < 0.24. Exact conservation needs an engine feature the rules don't have: a signed trail option, or reads and moves snapped to the trail's cells (what the node-built termites do).
 
 ## Code
 
