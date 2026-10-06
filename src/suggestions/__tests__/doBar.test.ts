@@ -46,6 +46,7 @@ function summary(p: DoPlan): string {
     if (s.kind === 'shape') return `shape:${s.shape}${s.place ? `@${s.place.join(',')}` : ''}`;
     if (s.kind === 'chain') return `chain:${s.taughtId}`;
     if (s.kind === 'gridRules') return `grid:${s.preset}`;
+    if (s.kind !== 'move') return s.kind;
     const args = Object.entries(s.args).filter(([k]) => k !== 'other' && k !== 'otherKey').map(([k, v]) => `${k}=${Array.isArray(v) ? 'rgb' : v}`).join(',');
     return `move:${s.moveId}${s.side === 'in' ? `<${s.key}` : ''}${args ? `{${args}}` : ''}`;
   }).join(' ');

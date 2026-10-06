@@ -17,6 +17,7 @@
  *       Pass reads 0, or 1) is new, and is seeded. Changing the rule type or the start reseeds too.
  */
 
+import { checkExprType } from '../lang/typeCheck';
 import { BLOCK_PRESETS, DEFAULT_BLOCKS, DEFAULT_PATTERNS, PATTERN_PRESETS, readBlocks, readPatterns, type BlockRule, type PatternRule } from './stencils';
 
 export type GridRuleType = 'count' | 'stages' | 'patterns' | 'blocks' | 'smooth';
@@ -201,7 +202,8 @@ export function customUpdateProblem(expr: string): string | null {
     if (/^[xyzrgb]{1,3}$/.test(id) && e[m.index! - 1] === '.') continue;
     return `${id} isn't available here (use ${[...names].slice(0, 6).join(', ')}…)`;
   }
-  return null;
+  // The new value is one number: a vec2 / vec3 is refused, with the fix (lang/typeCheck.ts).
+  return checkExprType(e, 'float', {}, 'The update')?.message ?? null;
 }
 
 /** The update as GLSL: whole numbers get a point (GLSL ES 1.00 won't mix `u * 2`). */

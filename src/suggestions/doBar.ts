@@ -36,6 +36,7 @@ import { outputKinds, spaceInputs, type ValueKind } from './kinds';
 import { matchTaught, phraseLabel, taughtMoves, type TaughtMove } from './taught';
 import { freshIds } from '../store/agentSetup';
 import { addGridRules, gridRulesLabel, gridRulesParams, readGridRules } from './doBarGridRules';
+import { moveTypeCheck, planOutput, runConvertStep, runOutputStep, type ConvertStep, type OutputStep } from './doOutputs';
 
 // ── Plans ───────────────────────────────────────────────────────────────────
 
@@ -47,7 +48,9 @@ export type DoStep =
   | { kind: 'chain'; taughtId: string; args: Record<string, unknown>; label: string }
   | { kind: 'move'; moveId: string; node: NodeRef; key: string; side: 'in' | 'out'; args: Record<string, unknown>; label: string }
   /** A Grid Rules node with a preset (doBarGridRules.ts): "game of life", "falling sand, fast". */
-  | { kind: 'gridRules'; preset: string; params: Record<string, unknown>; label: string; /** The node to sit beside (the selection), when the graph isn't empty. */ beside?: string };
+  | { kind: 'gridRules'; preset: string; params: Record<string, unknown>; label: string; /** The node to sit beside (the selection), when the graph isn't empty. */ beside?: string }
+  | OutputStep
+  | ConvertStep;
 
 export interface DoPlan {
   steps: DoStep[];
@@ -59,6 +62,8 @@ export interface DoPlan {
   problem?: string;
   /** Not a build: "is this typical?" (the connection check) or "teach …" (teach the selection). */
   intent?: 'check' | 'teach';
+  /** When it is refused for a type: ready plans that fix it ("use its brightness (Luminance)"). */
+  fixes?: Array<{ label: string; plan: DoPlan }>;
 }
 
 const CHECK_RE = /^(is (this|that|it) (typical|normal|common|usual)|how (common|typical|usual|often)|typical\??$|check (this|that|it|the wire|these)|is this (a )?common)/;
@@ -296,6 +301,9 @@ export function parseDo(text: string, ctx: DoContext): DoPlan {
   const lower = text.trim().toLowerCase();
   if (CHECK_RE.test(lower)) return { steps: [], reading: [{ text: lower, as: 'check: is this typical?' }], unknown: [], intent: 'check' };
   if (TEACH_RE.test(lower)) return { steps: [], reading: [{ text: lower, as: 'teach the selection' }], unknown: [], intent: 'teach' };
+  // "output the depth", "colour it by distance with a palette": a 3D scene's output (doOutputs.ts).
+  const out = planOutput(text, ctx.nodes);
+  if (out) return { steps: out.steps, reading: out.reading, unknown: [], ...(out.problem ? { problem: out.problem } : {}) };
   const taught = matchTaught(text);
   if (taught) return taughtPlan(taught.move, taught.args, ctx);
   const grid = readGridRules(text);
@@ -416,6 +424,18 @@ export function parseDo(text: string, ctx: DoContext): DoPlan {
       const fit = outs.find(o => move.kinds.includes(o.kind)) ?? outs[0];
       if (!fit) { plan.problem = `${subjectNode ? labelOf(subjectNode) : 'That'} has no output to ${g.head.text}.`; continue; }
       key = fit.key;
+      // Refused up front when the types can't meet (a colour into a number), with the fixes as plans.
+      const refused = subjectNode && !move.kinds.includes(fit.kind) ? moveTypeCheck(subjectNode, key, move.kinds, move.label, labelOf(subjectNode)) : null;
+      if (refused) {
+        plan.problem = refused.message;
+        const at = steps.length;
+        plan.fixes = refused.fixes.map(f => ({
+          label: `${f.label[0].toUpperCase()}${f.label.slice(1)}, then ${move.label}`,
+          plan: { steps: [...steps, { kind: 'convert', node, key, via: f.id as ConvertStep['via'], label: f.id === 'luminance' ? `Luminance of ${labelOf(subjectNode!)}` : f.id === 'length' ? 'Its length' : 'Take .x' },
+            { kind: 'move', moveId: move.id, node: `$${at}`, key: 'result', side: 'out', args, label: move.label }], reading, unknown },
+        }));
+        continue;
+      }
     }
     const where = node === target ? '' : ` on ${labelOf(byId.get(node)!)}`;
     const detail = describeArgs(move, args);
@@ -516,6 +536,16 @@ export function runDoPlan(nodes: GraphNode[], plan: DoPlan, nextId: () => string
           added.push(o.id);
         }
       }
+      return;
+    }
+    if (step.kind === 'scene-output') {
+      const r = runOutputStep(cur, step, nextId, heightOf);
+      cur = r.nodes; added.push(...r.added); select = r.select ?? select; ran.push(step.label);
+      return;
+    }
+    if (step.kind === 'convert') {
+      const r = runConvertStep(cur, { ...step, node: real(step.node) ?? step.node }, nextId, heightOf);
+      cur = r.nodes; added.push(r.id); made.set(`$${k}`, r.id); select = r.id; ran.push(step.label);
       return;
     }
     if (step.kind === 'chain') {

@@ -29,6 +29,45 @@ A big window in the Expression Block editor's style:
 
 Every change applies live (a quarter of a second after you stop typing, one undo step per burst of edits).
 
+## Built-in guidance
+
+Every builder window (`components/builders/BuilderWindow.tsx`) carries the same help, with its
+words in `components/builders/helpContent.ts`:
+
+- **How this works.** Each section opens with a short card: what it is, what it does, "you can do
+  X to get Y", and one or more **worked examples** (click to insert). **Got it** hides a card;
+  **Tips** in the header turns them all off, and turning it back on brings back every card you
+  dismissed. Both are remembered per builder.
+- **Empty states** (no shapes, no rules) always show their guidance; with tips off it folds to one
+  line and its examples.
+- **Field hints.** Every control has a plain-language hint on a **?** beside its label (hover or
+  focus shows it).
+- **Type-ahead.** Text fields complete as you type: ↑ ↓ to choose, Tab (or Enter, outside the Do…
+  bar) to take one, Esc to close (`lang/complete.ts`).
+
+A new builder adds its block to `BUILDER_HELP` and gets all of this by using `BuilderWindow`
+(`<BuilderHelp id>`, `<EmptyHelp id>`, `<HintMark text>`, `<HintLabel hint>`). A test checks
+that every registered section has help.
+
+The editor uses the builders' window (`BuilderWindow`): species on a left panel that folds away
+(⌘[), Tips in the header. The rules list opens with:
+
+> **When** is the condition checked every step for each walker, e.g. *Food trail ahead > 0.3*.
+> **Do** is what it does if the condition is true, e.g. *turn toward it*.
+> Rules run top to bottom; "Stop after this rule" skips the rest.
+
+with an example rule to add; an empty list shows the slime-mold rule to start from. **+ and…** and
+**+ do…** are type-ahead pickers: type a few letters ("chan" → random chance) and each choice
+shows its plain-language hint and an example. Every condition and action in a rule has its **?**.
+
+### What the picture shows
+
+**What the picture shows** (left panel) rewires whatever reads the group's Trail field (usually
+its Palette): *Trail* (Amount, the usual), *Channel 1–4* (one trail channel alone: food only,
+home only) or *Walker density* (Draw agents' Density, when the group has a Draw agents). The
+Trail field has a **Channel 1–4** output each (scaled by Gain like Amount); they cost nothing
+unless wired. One undo step (`agentRules/outputs.ts`).
+
 ## Conditions (When)
 
 | Condition | Meaning | GLSL (in the rule's block) |

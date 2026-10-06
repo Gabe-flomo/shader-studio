@@ -15,7 +15,11 @@ import { RECIPE_VOCABULARY, parseRecipe, printRecipe, type RecipeError } from '.
 import { SCENE_TEMPLATES } from '../../sceneBuilder/templates';
 import { describeIntoBuilder } from '../../sceneBuilder/actions';
 import { Card, ColourRow, NumRow, Row, Vec3Row, rgbCss } from './controls';
-import { BuilderLabel, BuilderNote } from '../builders/BuilderWindow';
+import { BuilderHelp, BuilderLabel, BuilderNote, EmptyHelp } from '../builders/BuilderWindow';
+import type { HelpExample } from '../builders/helpContent';
+import { AssistList, SignatureLine, useTypeAhead } from '../builders/TypeAhead';
+import { recipeAssist } from '../../lang/complete';
+import { OUTPUTS, OUTPUT_BY_SHOW, PALETTES, DEFAULT_PALETTE, outputClause, outputProblem, type OutputShow } from '../../sceneBuilder/output';
 import { Button, IconButton } from '../ui/Button';
 import { Field } from '../ui/Field';
 import { Select } from '../ui/Select';
@@ -29,6 +33,19 @@ import { fontFamily, radius } from '../../theme/tokens';
 const Pane = ({ children }: { children: React.ReactNode }) => (
   <div style={{ padding: '16px 20px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
 );
+
+/** A help example's recipe clause added to the scene (one undo step). */
+function useInsertExample() {
+  const spec = useSceneBuilder(s => s.spec);
+  const replace = useSceneBuilder(s => s.replace);
+  return (ex: HelpExample) => {
+    if (!('recipe' in ex.insert)) return;
+    const r = parseRecipe(`${printRecipe(spec)} · ${ex.insert.recipe}`);
+    if (r.errors.length) { toast.warning('That example didn\'t fit', { message: r.errors[0].message }); return; }
+    replace(r.spec);
+    toast.success(`Added: ${ex.insert.recipe}`, { message: 'Undo takes it back.' });
+  };
+}
 
 const fmtN = (n: number) => String(Math.round(n * 1000) / 1000);
 const vecText = (v: Vec3) => `(${v.map(fmtN).join(', ')})`;
@@ -72,10 +89,11 @@ export function ShapesTab() {
   const shapes = allShapes(spec);
   const mode = spec.look.mode;
   const setShape = (id: string, fn: (s: ShapeSpec) => void, key?: string) => edit(d => { const it = findItem(d, id)?.item; if (it?.type === 'shape') fn(it); }, key);
+  const insert = useInsertExample();
   return (
     <Pane>
       <BuilderLabel meta={`${shapes.length} shape${shapes.length === 1 ? '' : 's'}`}>Shapes</BuilderLabel>
-      <BuilderNote>Each shape has a place, a turn, its size, and a colour and shine (its material). How shapes join is under Combine; how space bends, under Bend space.</BuilderNote>
+      {shapes.length === 0 ? <EmptyHelp id="shapes" onExample={insert} /> : <BuilderHelp id="shapes" onExample={insert} />}
       {shapes.map(sh => {
         const def = SHAPE_BY_KIND[sh.kind];
         return (
@@ -86,19 +104,19 @@ export function ShapesTab() {
               <IconButton icon="trash" size="sm" tone="danger" label="Remove" onClick={() => edit(d => removeItem(d, sh.id))} />
             </>}>
             {!def ? <BuilderNote>custom({sh.label}): a part of a described graph the builder can't build. Build leaves it out.</BuilderNote> : <>
-              <Row label="Name"><Field value={sh.name} placeholder={def.label} aria-label="Shape name" onChange={e => setShape(sh.id, s => { s.name = e.target.value; }, `name:${sh.id}`)} /></Row>
-              <Row label="Shape">
+              <Row label="Name" hint="Optional: what the notes, the tree and the recipe call it."><Field value={sh.name} placeholder={def.label} aria-label="Shape name" onChange={e => setShape(sh.id, s => { s.name = e.target.value; }, `name:${sh.id}`)} /></Row>
+              <Row label="Shape" hint="Its kind. Changing it resets the size settings to the new kind's.">
                 <Select ariaLabel="Shape kind" value={sh.kind} options={SHAPES.map(s => ({ value: s.kind, label: s.label }))}
                   onChange={k => setShape(sh.id, s => { s.kind = k; s.size = defaultSize(k); })} style={{ width: '100%' }} />
               </Row>
               <BuilderNote>{def.blurb}</BuilderNote>
               <ParamRows keyPrefix={sh.id} params={def.params} values={sh.size} onChange={(k, v) => setShape(sh.id, s => { s.size[k] = v; }, `size:${sh.id}:${k}`)} />
-              <Vec3Row label="Position" value={sh.at} min={-5} max={5} onChange={v => setShape(sh.id, s => { s.at = v; }, `at:${sh.id}`)} />
+              <Vec3Row label="Position" hint="Where its centre is: X right, Y up, Z toward the camera." value={sh.at} min={-5} max={5} onChange={v => setShape(sh.id, s => { s.at = v; }, `at:${sh.id}`)} />
               <Vec3Row label="Rotation" hint="Degrees about X, then Y, then Z." value={sh.rot} min={-180} max={180} step={0.5} onChange={v => setShape(sh.id, s => { s.rot = v; }, `rot:${sh.id}`)} />
               <ColourRow label="Colour" value={sh.color} hint={mode === 'surface' ? undefined : 'Colours show in Surface mode; GI uses the first shape\'s, Volumetric its glow tint.'} onChange={v => setShape(sh.id, s => { s.color = v; }, `color:${sh.id}`)} />
               <NumRow label="Shine" hint="How strong its highlight is: 0 matt, 1 glossy (Surface mode)." value={sh.shine} min={0} max={1} onChange={v => setShape(sh.id, s => { s.shine = v; }, `shine:${sh.id}`)} />
               {mode === 'glass' && <Row label="Glass" hint="In Glass mode: glass shapes refract the others."><Toggle checked={sh.glass} onChange={v => setShape(sh.id, s => { s.glass = v; })} label={sh.glass ? 'Made of glass' : 'Seen through the glass'} /></Row>}
-              <Row label="Bent by">
+              <Row label="Bent by" hint="The warps that bend only this shape, in order. Add them under Bend space.">
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <BuilderNote>{sh.warps.length ? sh.warps.map(w => WARP_BY_KIND[w.kind]?.label ?? w.label).join(' → ') : 'nothing'}</BuilderNote>
                   <Button size="sm" variant="ghost" icon="wave" onClick={() => { select(sh.id); setTab('warps'); }}>Bend space…</Button>
@@ -152,10 +170,12 @@ export function CombineTab() {
   const groups: Array<{ g: GroupSpec; depth: number }> = [];
   walkItems(spec.root, (it, _p, depth) => { if (it.type === 'group') groups.push({ g: it, depth }); });
   const setGroup = (id: string, fn: (g: GroupSpec) => void, key?: string) => edit(d => { const it = findItem(d, id)?.item; if (it?.type === 'group') fn(it); }, key);
+  const insert = useInsertExample();
   return (
     <Pane>
       <BuilderLabel>Combine</BuilderLabel>
-      <BuilderNote>Groups join what is inside them, in order: Union keeps the nearer surface, Subtract cuts every later item out of the first, Intersect keeps only the overlap. The smooth ones blend over a Blend radius (k). Drag items in the Scene tree to reorder or nest them.</BuilderNote>
+      <BuilderHelp id="combine" onExample={insert} />
+      <BuilderNote>Drag items in the Scene tree to reorder or nest them.</BuilderNote>
       <div data-combine-formula style={{ padding: '10px 12px', borderRadius: radius.control, background: tk.bg.subtle, boxShadow: `inset 0 0 0 1px ${tk.border.subtle}`, font: `12.5px ${fontFamily.mono}`, lineHeight: 2 }}>
         <Formula spec={spec} item={spec.root} />
       </div>
@@ -169,13 +189,13 @@ export function CombineTab() {
               <IconButton icon="trash" size="sm" tone="danger" label="Remove the group and what is in it" onClick={() => edit(d => removeItem(d, g.id))} />
             </>}>
             <div style={{ marginLeft: depth * 4 }} />
-            {!isRoot && <Row label="Name"><Field value={g.name} placeholder="Group" aria-label="Group name" onChange={e => setGroup(g.id, x => { x.name = e.target.value; }, `gname:${g.id}`)} /></Row>}
-            <Row label="Operator">
+            {!isRoot && <Row label="Name" hint="Optional: a name for the group in notes and the tree."><Field value={g.name} placeholder="Group" aria-label="Group name" onChange={e => setGroup(g.id, x => { x.name = e.target.value; }, `gname:${g.id}`)} /></Row>}
+            <Row label="Operator" hint="How the items join: union keeps the nearer, subtract cuts later ones out of the first, intersect keeps the overlap. Smooth ones blend.">
               <Select ariaLabel="Operator" value={`${g.k > 0 ? 'smooth-' : ''}${g.op}`} options={OP_OPTIONS} style={{ width: '100%' }}
                 onChange={v => setGroup(g.id, x => { const smooth = v.startsWith('smooth-'); x.op = v.replace('smooth-', '') as GroupSpec['op']; x.k = smooth ? (x.k > 0 ? x.k : 0.3) : 0; })} />
             </Row>
             {g.k > 0 && <NumRow label="Blend radius (k)" hint="How wide the blend is, in scene units." value={g.k} min={0.01} max={1} step={0.005} onChange={v => setGroup(g.id, x => { x.k = v; }, `k:${g.id}`)} />}
-            <BuilderLabel>Items, in order</BuilderLabel>
+            <BuilderLabel hint="Order matters for Subtract: the first item is the shape, the rest cut it.">Items, in order</BuilderLabel>
             {g.children.map((c, i) => (
               <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 4 }}>
                 <span style={{ width: 18, font: `600 11px ${fontFamily.mono}`, color: tk.text.faint }}>{i + 1}</span>
@@ -256,11 +276,12 @@ export function WarpsTab() {
   const options: Array<{ value: string; label: string }> = [];
   walkItems(spec.root, (it, _p, depth) => options.push({ value: it.id, label: `${'  '.repeat(depth)}${it.id === spec.root.id ? 'The whole scene' : `${itemName(spec, it)} (${it.type === 'group' ? opLabel(it) : SHAPE_BY_KIND[it.kind]?.label ?? 'custom'})`}` }));
   const hints = stepHints(spec);
+  const insert = useInsertExample();
   return (
     <Pane>
       <BuilderLabel>Bend space</BuilderLabel>
-      <BuilderNote>Warps change the space a shape lives in rather than the shape: repeat it forever, mirror it, twist or bend it. They stack top to bottom. On the whole scene they bend every shape; on a group, everything in it.</BuilderNote>
-      <Row label="Bend">
+      <BuilderHelp id="warps" onExample={insert} />
+      <Row label="Bend" hint="What the warps below bend: the whole scene, a group or one shape.">
         <Select ariaLabel="What to bend" value={target.id} options={options} onChange={id => select(id)} style={{ width: '100%' }} />
       </Row>
       {target.warps.map((w, i) => <WarpCard key={w.id} item={target} w={w} index={i} count={target.warps.length} />)}
@@ -297,9 +318,11 @@ export function LookTab() {
   const L = spec.look;
   const set = (fn: (l: SceneSpec['look']) => void, key?: string) => edit(d => fn(d.look), key);
   const lit = L.mode === 'surface' || L.mode === 'gi';
+  const insert = useInsertExample();
   return (
     <Pane>
-      <BuilderLabel>Look</BuilderLabel>
+      <BuilderLabel hint="The render mode: how the scene is drawn.">Look</BuilderLabel>
+      <BuilderHelp id="look" onExample={insert} />
       <Segmented fill ariaLabel="Render mode" value={L.mode} options={MODES.map(m => ({ value: m.value, label: m.label }))} onChange={v => set(l => { l.mode = v; })} />
       <BuilderNote>{MODES.find(m => m.value === L.mode)?.blurb}</BuilderNote>
       {L.mode === 'volumetric' && (
@@ -307,31 +330,31 @@ export function LookTab() {
           <NumRow label="Density" hint="Light added per bit of ray inside a shape." value={L.glow.density} min={0.001} max={0.3} step={0.001} onChange={v => set(l => { l.glow.density = v; }, 'glow:d')} />
           <NumRow label="Falloff" hint="How fast the glow fades outside a shape." value={L.glow.falloff} min={0.1} max={60} step={0.1} onChange={v => set(l => { l.glow.falloff = v; }, 'glow:f')} />
           <NumRow label="Shell" hint="Above 0 only a skin this thick glows: bubbles and rims." value={L.glow.shell} min={0} max={1} step={0.005} onChange={v => set(l => { l.glow.shell = v; }, 'glow:s')} />
-          <NumRow label="Exposure" value={L.glow.exposure} min={0.01} max={20} onChange={v => set(l => { l.glow.exposure = v; }, 'glow:e')} />
-          <ColourRow label="Tint" value={L.glow.tint} onChange={v => set(l => { l.glow.tint = v; }, 'glow:t')} />
+          <NumRow label="Exposure" hint="How bright the gathered glow is before it is squeezed into colour." value={L.glow.exposure} min={0.01} max={20} onChange={v => set(l => { l.glow.exposure = v; }, 'glow:e')} />
+          <ColourRow label="Tint" hint="The glow's colour." value={L.glow.tint} onChange={v => set(l => { l.glow.tint = v; }, 'glow:t')} />
         </Card>
       )}
       {L.mode === 'glass' && (
         <Card id="look:glass" title="Glass" summary={`IOR ${L.glass.ior}`} defaultOpen>
           <NumRow label="IOR" hint="How much the glass bends light: water 1.33, glass 1.5, diamond 2.4." value={L.glass.ior} min={1} max={3} step={0.01} onChange={v => set(l => { l.glass.ior = v; }, 'glass:ior')} />
           <NumRow label="Dispersion" hint="Splits the colours a little, like a prism." value={L.glass.dispersion} min={0} max={0.2} step={0.005} onChange={v => set(l => { l.glass.dispersion = v; }, 'glass:disp')} />
-          <ColourRow label="Tint" value={L.glass.tint} onChange={v => set(l => { l.glass.tint = v; }, 'glass:tint')} />
+          <ColourRow label="Tint" hint="Light passing through the glass takes this colour." value={L.glass.tint} onChange={v => set(l => { l.glass.tint = v; }, 'glass:tint')} />
           <BuilderNote>{allShapes(spec).filter(s => s.glass).length} of {allShapes(spec).length} shapes are glass{allShapes(spec).some(s => s.glass) ? '' : ' (none marked: all of them are)'}. Glass Scene has its own sky behind everything.</BuilderNote>
         </Card>
       )}
       {L.mode === 'gi' && (
         <Card id="look:gi" title="Global illumination" summary={`bounce ${L.gi.strength} · rough ${L.gi.rough}`} defaultOpen>
           <NumRow label="Bounce" hint="How much light bounces off nearby surfaces." value={L.gi.strength} min={0} max={1} onChange={v => set(l => { l.gi.strength = v; }, 'gi:s')} />
-          <NumRow label="Metallic" value={L.gi.metal} min={0} max={1} onChange={v => set(l => { l.gi.metal = v; }, 'gi:m')} />
-          <NumRow label="Roughness" value={L.gi.rough} min={0} max={1} onChange={v => set(l => { l.gi.rough = v; }, 'gi:r')} />
-          <NumRow label="Reflection" value={L.gi.spec} min={0} max={1} onChange={v => set(l => { l.gi.spec = v; }, 'gi:spec')} />
+          <NumRow label="Metallic" hint="0 plastic or stone, 1 metal (reflections take the surface colour)." value={L.gi.metal} min={0} max={1} onChange={v => set(l => { l.gi.metal = v; }, 'gi:m')} />
+          <NumRow label="Roughness" hint="0 a mirror, 1 a blurry, matt reflection." value={L.gi.rough} min={0} max={1} onChange={v => set(l => { l.gi.rough = v; }, 'gi:r')} />
+          <NumRow label="Reflection" hint="How strong the reflection is." value={L.gi.spec} min={0} max={1} onChange={v => set(l => { l.gi.spec = v; }, 'gi:spec')} />
         </Card>
       )}
       {L.mode !== 'volumetric' && (
         <Card id="look:lights" title="Lights" summary={`sun ${vecText(L.sunDir)}`} defaultOpen={L.mode === 'surface'}>
           <Vec3Row label="Sun direction" hint="Points toward the sun; only its direction matters." value={L.sunDir} min={-1} max={1} onChange={v => set(l => { l.sunDir = v; }, 'sun:dir')} />
           {L.mode !== 'glass' && <>
-            <ColourRow label="Sun colour" value={L.sunColor} onChange={v => set(l => { l.sunColor = v; }, 'sun:c')} />
+            <ColourRow label="Sun colour" hint="The sunlight's colour: warm for day, orange for sunset." value={L.sunColor} onChange={v => set(l => { l.sunColor = v; }, 'sun:c')} />
             <ColourRow label="Sky colour" hint="Light from above (the sky dome)." value={L.sky} onChange={v => set(l => { l.sky = v; }, 'sky')} />
             <ColourRow label="Bounce colour" hint="Light from below: the ground bouncing the sun back." value={L.bounce} onChange={v => set(l => { l.bounce = v; }, 'bounce')} />
           </>}
@@ -339,25 +362,25 @@ export function LookTab() {
       )}
       {L.mode === 'surface' && (
         <Card id="look:shadow" title="Shadows & occlusion" summary={`${L.shadows ? `shadows ${L.shadows}` : 'no shadows'} · ${L.ao ? 'AO' : 'no AO'}`}>
-          <Row label="Soft shadows"><Toggle checked={L.shadows > 0} onChange={v => set(l => { l.shadows = v ? DEFAULT_LOOK.shadows : 0; })} label={L.shadows > 0 ? 'On' : 'Off'} /></Row>
+          <Row label="Soft shadows" hint="Shadows from the sun, marched from each surface toward it."><Toggle checked={L.shadows > 0} onChange={v => set(l => { l.shadows = v ? DEFAULT_LOOK.shadows : 0; })} label={L.shadows > 0 ? 'On' : 'Off'} /></Row>
           {L.shadows > 0 && <NumRow label="Hardness" hint="8 soft … 32 hard." value={L.shadows} min={1} max={64} step={1} onChange={v => set(l => { l.shadows = v; }, 'shadows')} />}
-          <Row label="Ambient occl."><Toggle checked={L.ao > 0} onChange={v => set(l => { l.ao = v ? DEFAULT_LOOK.ao : 0; })} label={L.ao > 0 ? 'On' : 'Off'} /></Row>
+          <Row label="Ambient occl." hint="Ambient occlusion: darkens creases and corners."><Toggle checked={L.ao > 0} onChange={v => set(l => { l.ao = v ? DEFAULT_LOOK.ao : 0; })} label={L.ao > 0 ? 'On' : 'Off'} /></Row>
           {L.ao > 0 && <NumRow label="AO step" hint="Smaller: finer contact shadows; larger: broader." value={L.ao} min={0.005} max={0.2} step={0.005} onChange={v => set(l => { l.ao = v; }, 'ao')} />}
         </Card>
       )}
       {lit && (
         <Card id="look:fog" title="Fog" summary={L.fog > 0 ? `density ${L.fog}` : 'clear'}>
           <NumRow label="Density" hint="0 is clear. Distance fades into the fog colour." value={L.fog} min={0} max={5} step={0.01} onChange={v => set(l => { l.fog = v; }, 'fog')} />
-          <Row label="Colour"><Toggle checked={!L.fogColor} onChange={v => set(l => { l.fogColor = v ? null : [...l.bg] as Vec3; })} label="Same as the background" /></Row>
-          {L.fogColor && <ColourRow label="Fog colour" value={L.fogColor} onChange={v => set(l => { l.fogColor = v; }, 'fogc')} />}
+          <Row label="Colour" hint="Fog the colour of the background, or its own colour."><Toggle checked={!L.fogColor} onChange={v => set(l => { l.fogColor = v ? null : [...l.bg] as Vec3; })} label="Same as the background" /></Row>
+          {L.fogColor && <ColourRow label="Fog colour" hint="What distance fades into." value={L.fogColor} onChange={v => set(l => { l.fogColor = v; }, 'fogc')} />}
         </Card>
       )}
       {L.mode !== 'glass' && (
         <Card id="look:bg" title="Background" summary={L.bg2 ? 'gradient' : 'solid'}>
-          <Row label="Kind"><Segmented size="sm" ariaLabel="Background kind" value={L.bg2 ? 'gradient' : 'solid'} options={[{ value: 'solid', label: 'Solid' }, { value: 'gradient', label: 'Gradient' }]}
+          <Row label="Kind" hint="One colour, or a gradient from Top (looking up) to Bottom (looking down)."><Segmented size="sm" ariaLabel="Background kind" value={L.bg2 ? 'gradient' : 'solid'} options={[{ value: 'solid', label: 'Solid' }, { value: 'gradient', label: 'Gradient' }]}
             onChange={v => set(l => { l.bg2 = v === 'gradient' ? [Math.min(1, l.bg[0] * 0.4), Math.min(1, l.bg[1] * 0.4), Math.min(1, l.bg[2] * 0.4)] : null; })} /></Row>
-          <ColourRow label={L.bg2 ? 'Top' : 'Colour'} value={L.bg} onChange={v => set(l => { l.bg = v; }, 'bg')} />
-          {L.bg2 && <ColourRow label="Bottom" value={L.bg2} onChange={v => set(l => { l.bg2 = v; }, 'bg2')} />}
+          <ColourRow label={L.bg2 ? 'Top' : 'Colour'} hint="What rays that miss every shape see." value={L.bg} onChange={v => set(l => { l.bg = v; }, 'bg')} />
+          {L.bg2 && <ColourRow label="Bottom" hint="The bottom of the gradient (looking down)." value={L.bg2} onChange={v => set(l => { l.bg2 = v; }, 'bg2')} />}
         </Card>
       )}
       <Row label="Tone map" hint="Squeezes bright light into screen colours. None keeps colours as they are.">
@@ -373,10 +396,12 @@ export function CameraTab() {
   const C = useSceneBuilder(s => s.spec.camera);
   const edit = useSceneBuilder(s => s.edit);
   const set = (k: keyof SceneSpec['camera']) => (v: number) => edit(d => { d.camera[k] = v; }, `cam:${k}`);
+  const insert = useInsertExample();
   return (
     <Pane>
       <BuilderLabel>Camera</BuilderLabel>
-      <BuilderNote>The orbit camera, as in Time Cube View, Frame Stack and Draw agents: it circles the point it looks at. Angles in degrees.</BuilderNote>
+      <BuilderHelp id="camera" onExample={insert} />
+      <BuilderNote>The orbit camera, as in Time Cube View, Frame Stack and Draw agents. Angles in degrees.</BuilderNote>
       <NumRow label="Distance" hint="How far the camera is from the point it looks at." value={C.dist} min={0.3} max={20} onChange={set('dist')} />
       <NumRow label="Angle" unit="°" hint="Where it stands round the point (0: in front)." value={C.angle} min={-180} max={180} step={0.5} onChange={set('angle')} />
       <NumRow label="Elevation" unit="°" hint="How far above it looks from: 0 level, 89 straight down." value={C.elev} min={-89} max={89} step={0.5} onChange={set('elev')} />
@@ -384,8 +409,8 @@ export function CameraTab() {
       <NumRow label="Zoom" hint="Lens length: higher is zoomed in, with less perspective." value={C.zoom} min={0.5} max={5} onChange={set('zoom')} />
       <NumRow label="Flatten" hint="Perspective (0) to orthographic (1), like an isometric drawing." value={C.flatten} min={0} max={1} onChange={set('flatten')} />
       <NumRow label="Translate X" hint="Moves the camera and the point it looks at together." value={C.x} min={-5} max={5} onChange={set('x')} />
-      <NumRow label="Translate Y" value={C.y} min={-5} max={5} onChange={set('y')} />
-      <NumRow label="Translate Z" value={C.z} min={-5} max={5} onChange={set('z')} />
+      <NumRow label="Translate Y" hint="Moves the camera and its point up or down together." value={C.y} min={-5} max={5} onChange={set('y')} />
+      <NumRow label="Translate Z" hint="Moves the camera and its point toward or away together." value={C.z} min={-5} max={5} onChange={set('z')} />
     </Pane>
   );
 }
@@ -395,9 +420,11 @@ export function QualityTab() {
   const edit = useSceneBuilder(s => s.edit);
   const Q = spec.quality;
   const hints = stepHints(spec);
+  const insert = useInsertExample();
   return (
     <Pane>
       <BuilderLabel>Quality</BuilderLabel>
+      <BuilderHelp id="quality" onExample={insert} />
       <NumRow label="Steps" hint="Most march steps per pixel. More reach further into detail, and cost more." value={Q.steps} min={16} max={256} step={1} integer onChange={v => edit(d => { d.quality.steps = Math.round(v); }, 'q:steps')} />
       <NumRow label="Max distance" hint="How far a ray goes before it gives up (the background)." value={Q.maxDist} min={5} max={100} step={1} onChange={v => edit(d => { d.quality.maxDist = v; }, 'q:dist')} />
       <Row label="Step scale" hint="The part of each step the ray takes. Lower for warps that stretch space.">
@@ -406,6 +433,90 @@ export function QualityTab() {
       {Q.stepScale !== 'auto' && <NumRow label="" value={Q.stepScale} min={0.3} max={1} step={0.05} onChange={v => edit(d => { d.quality.stepScale = v; }, 'q:step')} />}
       {hints.length > 0 && <BuilderNote>Asking for smaller steps: {hints.map(h => `${h.why} (${h.value})`).join('; ')}.</BuilderNote>}
       <NumRow label="Jitter" hint="Starts each pixel's ray a little way along so steps don't line up into rings." value={Q.jitter} min={0} max={1} onChange={v => edit(d => { d.quality.jitter = v; }, 'q:jitter')} />
+    </Pane>
+  );
+}
+
+// ── Output ──────────────────────────────────────────────────────────────────
+
+const PRESET_LOOKS: Array<{ label: string; show: OutputShow; palette?: string }> = [
+  { label: 'Depth map', show: 'depth' },
+  { label: 'Sunset depth', show: 'depth', palette: 'sunset' },
+  { label: 'Height map', show: 'height', palette: 'terrain' },
+  { label: 'Normals', show: 'normal' },
+  { label: 'Heat steps', show: 'steps', palette: 'heat' },
+  { label: 'Clay (AO)', show: 'ao' },
+  { label: 'Ice distance', show: 'distance', palette: 'ice' },
+];
+
+/** A palette's colours across 0…1, for its swatch. */
+function paletteCss(key: string): string {
+  const p = PALETTES.find(x => x.key === key);
+  if (!p) return 'none';
+  if (p.kind === 'ramp') return `linear-gradient(90deg, ${(p.stops ?? []).map(c => rgbCss(c)).join(', ')})`;
+  return 'linear-gradient(90deg, #333, #999)';
+}
+
+export function OutputTab() {
+  const spec = useSceneBuilder(s => s.spec);
+  const edit = useSceneBuilder(s => s.edit);
+  const tk = useTokens();
+  const insert = useInsertExample();
+  const o = spec.output ?? { show: 'picture' as OutputShow };
+  const set = (next: { show: OutputShow; palette?: string }) => edit(d => {
+    if (next.show === 'picture') delete d.output;
+    else d.output = next.palette ? { show: next.show, palette: next.palette } : { show: next.show };
+  });
+  const problem = outputProblem(spec.look.mode, spec.output);
+  const def = OUTPUT_BY_SHOW[o.show];
+  return (
+    <Pane>
+      <BuilderLabel meta={def.label}>Output</BuilderLabel>
+      <BuilderHelp id="output" onExample={insert} />
+      <BuilderLabel hint="What the Output node shows. Every option comes from the march loop's own outputs (Depth, Normal, Hit, Hit Pos, Iter…); the lit picture is still built beside it.">Show</BuilderLabel>
+      <div role="radiogroup" aria-label="What the scene shows" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 6 }}>
+        {OUTPUTS.map(x => {
+          const on = x.show === o.show;
+          return (
+            <button key={x.show} type="button" role="radio" aria-checked={on} data-output={x.show} title={x.use}
+              onClick={() => set({ show: x.show, palette: x.show === 'picture' ? undefined : o.palette })}
+              style={{
+                textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 3, padding: '8px 10px', borderRadius: radius.md, cursor: 'pointer', border: 0,
+                background: on ? tk.bg.selected : tk.bg.panel, boxShadow: `inset 0 0 0 ${on ? 1.5 : 1}px ${on ? tk.accent.base : tk.border.default}`, color: tk.text.primary,
+              }}>
+              <b style={{ font: `600 12.5px ${fontFamily.ui}`, color: on ? tk.accent.text : tk.text.primary }}>{x.label}</b>
+              <span style={{ fontSize: 11.5, color: tk.text.muted, lineHeight: 1.35 }}>{x.blurb}</span>
+            </button>
+          );
+        })}
+      </div>
+      {o.show !== 'picture' && (
+        <Card id="output:colour" title="Colour the space" summary={o.palette ? PALETTES.find(p => p.key === o.palette)?.label : 'grey / as measured'} defaultOpen>
+          <BuilderNote>{def.value === 'vec3' ? `Without a palette ${def.label.toLowerCase()} shows as a colour (X red, Y green, Z blue). Through a palette: ${o.show === 'normal' ? 'by how much it faces up' : 'by distance from the centre'}.` : `Without a palette ${def.label.toLowerCase()} shows as grey (0 black, 1 white). Through a palette each shade gets a colour.`}</BuilderNote>
+          <Row label="Palette" hint="Palette: a cosine palette preset (the Palette node). Ramp: evenly spaced colour stops (the Color Ramp node). None: grey or the raw colour.">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <button type="button" aria-pressed={!o.palette} onClick={() => set({ show: o.show })} data-palette="none"
+                style={{ padding: '4px 10px', borderRadius: radius.md, border: 0, cursor: 'pointer', font: `500 12px ${fontFamily.ui}`, background: !o.palette ? tk.bg.selected : tk.bg.field, color: tk.text.primary, boxShadow: `inset 0 0 0 1px ${!o.palette ? tk.accent.base : tk.border.subtle}` }}>None</button>
+              {PALETTES.map(p => (
+                <button key={p.key} type="button" aria-pressed={o.palette === p.key} data-palette={p.key} title={`${p.label} (${p.kind === 'palette' ? 'Palette preset' : 'Color Ramp'})`}
+                  onClick={() => set({ show: o.show, palette: p.key })}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: radius.md, border: 0, cursor: 'pointer', font: `500 12px ${fontFamily.ui}`, background: o.palette === p.key ? tk.bg.selected : tk.bg.field, color: tk.text.primary, boxShadow: `inset 0 0 0 1px ${o.palette === p.key ? tk.accent.base : tk.border.subtle}` }}>
+                  {p.kind === 'ramp' && <span style={{ width: 22, height: 8, borderRadius: 3, background: paletteCss(p.key) }} />}{p.label}
+                </button>
+              ))}
+            </div>
+          </Row>
+        </Card>
+      )}
+      <BuilderLabel hint="Common outputs in one click.">Presets</BuilderLabel>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {PRESET_LOOKS.map(p => (
+          <Button key={p.label} size="sm" variant="secondary" onClick={() => set({ show: p.show, palette: p.palette })}>{p.label}</Button>
+        ))}
+        <Button size="sm" variant="ghost" onClick={() => set({ show: o.show === 'picture' ? 'depth' : o.show, palette: o.palette ?? DEFAULT_PALETTE })}>Colour by…</Button>
+      </div>
+      {problem && <Callout tone="warning" title="Not in this render mode">{problem}</Callout>}
+      <BuilderNote>Recipe: <code>{outputClause(spec.output) || 'output picture (the default: nothing to write)'}</code></BuilderNote>
     </Pane>
   );
 }
@@ -423,24 +534,39 @@ export function RecipeTab() {
   const [errors, setErrors] = useState<RecipeError[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [showRef, setShowRef] = useState(false);
+  const [caret, setCaret] = useState<number | null>(null);
   const area = useRef<HTMLTextAreaElement>(null);
+  const insert = useInsertExample();
   // While you aren't typing, the text follows the form.
-  useEffect(() => { if (!focused) setText(printed); }, [printed, focused]);
+  useEffect(() => { if (!focused && !errors.length) setText(printed); }, [printed, focused]); // eslint-disable-line react-hooks/exhaustive-deps
   const onChange = (v: string) => {
     setText(v);
     const r = parseRecipe(v);
     setErrors(r.errors);
     setWarnings(r.warnings);
-    if (!r.errors.length) edit(d => { Object.assign(d, r.spec); }, 'recipe');
+    // The spec is replaced as a whole: a clause taken out (an output, a fog) goes too.
+    if (!r.errors.length) edit(d => { if (!r.spec.output) delete d.output; Object.assign(d, r.spec); }, 'recipe');
   };
+  const ta = useTypeAhead(text, focused ? caret : null, recipeAssist, (next, at) => {
+    onChange(next);
+    requestAnimationFrame(() => { area.current?.focus(); area.current?.setSelectionRange(at, at); setCaret(at); });
+  });
+  const track = () => setCaret(area.current?.selectionStart ?? null);
   const jump = (e: RecipeError) => { area.current?.focus(); area.current?.setSelectionRange(e.from, e.to); };
   return (
     <Pane>
       <BuilderLabel meta="type or paste; the form follows">Recipe</BuilderLabel>
-      <BuilderNote>The whole scene in words. Clauses are separated by new lines or ·: a render mode, shapes and combines, warps for the whole scene, then settings. <code>@twist(2)</code> after a shape bends only that shape.</BuilderNote>
-      <textarea ref={area} data-recipe value={text} spellCheck={false} aria-label="Recipe"
-        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onChange={e => onChange(e.target.value)}
-        style={{ minHeight: 220, resize: 'vertical', padding: 12, borderRadius: radius.control, border: `1px solid ${errors.length ? tk.status.danger : tk.border.default}`, background: tk.bg.field, color: tk.text.primary, font: `12.5px/1.6 ${fontFamily.mono}`, outline: 'none' }} />
+      <BuilderHelp id="recipe" onExample={insert} />
+      <BuilderNote><code>@twist(2)</code> after a shape bends only that shape. Suggestions appear as you type; the line under the box shows the settings the clause takes.</BuilderNote>
+      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
+        <textarea ref={area} data-recipe value={text} spellCheck={false} aria-label="Recipe" aria-autocomplete="list"
+          onFocus={() => { setFocused(true); track(); }} onBlur={() => { setFocused(false); setCaret(null); }}
+          onChange={e => { onChange(e.target.value); setCaret(e.target.selectionStart); }}
+          onKeyDown={e => { ta.onKeyDown(e); }} onKeyUp={e => { if (!['ArrowUp', 'ArrowDown', 'Tab', 'Enter', 'Escape'].includes(e.key) || !ta.items.length) track(); }} onClick={track}
+          style={{ minHeight: 220, resize: 'vertical', padding: 12, borderRadius: radius.control, border: `1px solid ${errors.length ? tk.status.danger : tk.border.default}`, background: tk.bg.field, color: tk.text.primary, font: `12.5px/1.6 ${fontFamily.mono}`, outline: 'none' }} />
+      </div>
+      {focused && ta.signature && <SignatureLine sig={ta.signature} />}
+      {ta.items.length > 0 && <AssistList items={ta.items} active={ta.active} onPick={ta.pick} onHover={ta.setActive} />}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <Button size="sm" icon="copy" onClick={() => { void navigator.clipboard?.writeText(text).then(() => toast.success('Recipe copied')).catch(() => {}); }}>Copy</Button>
         <Button size="sm" variant="ghost" icon="book" onClick={() => setShowRef(v => !v)}>{showRef ? 'Hide' : 'Show'} the words</Button>
@@ -464,6 +590,7 @@ export function RecipeTab() {
           <span><b>warps</b> {RECIPE_VOCABULARY.warps.map(w => `${w.kind} ${w.keys.join(' ')}`).join(' · ')}</span>
           <span><b>settings</b> {RECIPE_VOCABULARY.settings.join(' · ')}</span>
           <span><b>colours</b> {RECIPE_VOCABULARY.colours.join(' ')}</span>
+          <span><b>output</b> output {RECIPE_VOCABULARY.outputs.join('|')} · colour by … palette {RECIPE_VOCABULARY.palettes.join('|')}</span>
         </div>
       )}
     </Pane>
@@ -480,6 +607,7 @@ export function TemplatesTab() {
   return (
     <Pane>
       <BuilderLabel>Start from</BuilderLabel>
+      <BuilderHelp id="templates" />
       <BuilderNote>A template fills the whole form (Undo brings back what was there). Each is a recipe you can read and change.</BuilderNote>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 10 }}>
         {SCENE_TEMPLATES.map(t => (
@@ -507,6 +635,7 @@ export function DescribeTab() {
   return (
     <Pane>
       <BuilderLabel>Describe this graph</BuilderLabel>
+      <BuilderHelp id="describe" />
       <BuilderNote>Reads the 3D scene on the canvas back into words: the shapes, combines and warps in its Scene Group, the render mode, lights, fog and camera. What the builder doesn't know is marked custom(…).</BuilderNote>
       <Button icon="search" onClick={() => describeIntoBuilder()} style={{ alignSelf: 'flex-start' }}>{d ? 'Describe again' : 'Describe the graph on the canvas'}</Button>
       {d && <>

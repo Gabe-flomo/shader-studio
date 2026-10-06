@@ -20,6 +20,7 @@ import {
   defaultSize, defaultWarpValues, emptySpec, newGroup, newShape, newWarp,
   type CameraSpec, type CombineOp, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type ToneMode, type Vec3, type WarpDef, type WarpSpec,
 } from './spec';
+import { DEFAULT_PALETTE, OUTPUTS, OUTPUT_WORDS, PALETTES, PALETTE_BY_KEY, outputClause, type OutputSpec } from './output';
 
 // ── Errors ──────────────────────────────────────────────────────────────────
 
@@ -122,7 +123,7 @@ export const DEFAULT_SMOOTH_K = 0.3;
 
 const SHAPE_WORDS: Record<string, string> = Object.fromEntries(SHAPES.flatMap(s => [[s.kind, s.kind], ...s.aliases.map(a => [a, s.kind])]));
 const WARP_WORDS: Record<string, string> = Object.fromEntries(WARPS.flatMap(w => [[w.kind, w.kind], ...w.aliases.map(a => [a, w.kind])]));
-const SETTING_WORDS = ['sun', 'sky', 'bounce', 'shadows', 'shadow', 'ao', 'occlusion', 'fog', 'background', 'bg', 'tone', 'camera', 'cam', 'quality', 'custom', 'custom-warp'];
+const SETTING_WORDS = ['sun', 'sky', 'bounce', 'shadows', 'shadow', 'ao', 'occlusion', 'fog', 'background', 'bg', 'tone', 'camera', 'cam', 'quality', 'custom', 'custom-warp', 'output', 'show', 'colour', 'color'];
 
 const COLOR_NAMES: Record<string, Vec3> = {
   white: [1, 1, 1], black: [0, 0, 0], grey: [0.5, 0.5, 0.5], gray: [0.5, 0.5, 0.5], silver: [0.75, 0.75, 0.78],
@@ -140,6 +141,8 @@ function editDistance(a: string, b: string): number {
   for (let j = 1; j <= b.length; j++) d[0][j] = j;
   for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
     d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    // Two letters swapped ("dpeth") is one slip.
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
   }
   return d[a.length][b.length];
 }
@@ -398,7 +401,7 @@ class Parser {
       if (v.kind === 'vec') return v.v;
       if (v.kind === 'num') return [v.v, v.v, v.v];
     } else if (v.kind === 'num') return conv(v.v, v.unit);
-    this.fail(a, `${p.key} is ${Array.isArray(p.def) ? 'a number or (x, y, z)' : 'a number'}.`);
+    this.fail(a, typeMismatch(p.key, Array.isArray(p.def) ? 'vec3' : 'float', v));
     return null;
   }
 
@@ -445,7 +448,7 @@ class Parser {
         continue;
       }
       if (key === 'color' || key === 'colour' || key === 'c') { const c = this.colour(a); if (c) sh.color = c; continue; }
-      if (key === 'shine' || key === 'gloss') { if (a.value.kind === 'num') sh.shine = Math.max(0, Math.min(1, a.value.v)); else this.fail(a, 'shine is a number from 0 to 1.'); continue; }
+      if (key === 'shine' || key === 'gloss') { if (a.value.kind === 'num') sh.shine = Math.max(0, Math.min(1, a.value.v)); else this.fail(a, typeMismatch('shine', 'float', a.value, 'a number from 0 to 1')); continue; }
       if (key === 'name') { if (a.value.kind === 'str' || a.value.kind === 'word') sh.name = a.value.v; continue; }
       if (key === 'glass') { sh.glass = !(a.value.kind === 'word' && /^(no|off|false)$/i.test(a.value.v)) && !(a.value.kind === 'num' && a.value.v === 0); continue; }
       // Size keys: exact first (torus R vs r), then any case.
@@ -607,10 +610,61 @@ class Parser {
         }
         return;
       }
+      case 'output': case 'show': case 'colour': case 'color': {
+        // "output depth", "show normals", "colour by depth palette sunset".
+        const rest = [...args];
+        const byPalette = w === 'colour' || w === 'color';
+        if (byPalette) {
+          const by = rest[0];
+          if (by && !by.key && by.value.kind === 'word' && by.value.v.toLowerCase() === 'by') rest.shift();
+          else { this.fail(by ?? t, `${w} by … colours the space: colour by depth palette sunset.`); return; }
+        }
+        const o: OutputSpec = { show: 'picture' };
+        let named = false, wantPalette = false;
+        for (const a of rest) {
+          const key = a.key?.toLowerCase();
+          const word = a.value.kind === 'word' || a.value.kind === 'str' ? a.value.v.toLowerCase() : '';
+          const paletteNext = wantPalette;
+          wantPalette = !key && (word === 'palette' || word === 'ramp');
+          if ((key === 'palette' || key === 'ramp') || (!key && paletteNext) || (!key && named && PALETTE_BY_KEY[word])) {
+            if (PALETTE_BY_KEY[word]) o.palette = word;
+            else { const s = suggest(word, PALETTES.map(p => p.key)); this.fail(a, `“${word}” isn't a palette: ${PALETTES.map(p => p.key).join(', ')}.${s ? ` Did you mean “${s}”?` : ''}`); }
+            continue;
+          }
+          if (!key && (word === 'palette' || word === 'ramp' || word === 'the' || word === 'through' || word === 'with' || word === 'a')) continue;
+          if (!key && !named && OUTPUT_WORDS[word]) { o.show = OUTPUT_WORDS[word]; named = true; continue; }
+          const s = word ? suggest(word, Object.keys(OUTPUT_WORDS)) : null;
+          this.fail(a, `${w} shows one of ${OUTPUTS.map(x => x.words[0]).join(', ')}${byPalette ? '' : ' (add palette sunset to colour it)'}.${s ? ` Did you mean “${s}”?` : ''}`);
+        }
+        if (!named) { if (!rest.length) this.fail(t, `${w} needs what to show: ${OUTPUTS.map(x => x.words[0]).join(', ')}.`); return; }
+        if (byPalette && !o.palette) o.palette = DEFAULT_PALETTE;
+        if (o.palette && o.show === 'picture') { this.warnings.push('The picture is already coloured: the palette is left out.'); delete o.palette; }
+        spec.output = o.show === 'picture' ? undefined : o;
+        if (!spec.output) delete spec.output;
+        return;
+      }
       case 'custom': case 'custom-warp':
         return;
     }
   }
+}
+
+/** A value of the wrong type for a setting, with the fix where there is one (docs/scene-builder.md, "Type checks"). */
+function typeMismatch(key: string, want: 'float' | 'vec3', v: Value, wantWords?: string): string {
+  const what = want === 'float' ? (wantWords ?? 'a number (a float)') : 'a number or (x, y, z)';
+  if (want === 'float' && v.kind === 'vec') {
+    const lum = Math.round((0.2126 * v.v[0] + 0.7152 * v.v[1] + 0.0722 * v.v[2]) * 1000) / 1000;
+    return `${key} is ${what}; (${v.v.map(fmt).join(', ')}) is three numbers (a vec3). Take .x: ${key}=${fmt(v.v[0])}, or its brightness (Luminance): ${key}=${lum}.`;
+  }
+  if (v.kind === 'word' && COLOR_NAMES[v.v.toLowerCase()]) {
+    const c = COLOR_NAMES[v.v.toLowerCase()];
+    const lum = Math.round((0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) * 1000) / 1000;
+    return want === 'float'
+      ? `${key} is ${what}; “${v.v}” is a colour (a vec3). Use its brightness (Luminance): ${key}=${lum}.`
+      : `${key} is ${what}; “${v.v}” is a colour, not a size. Write ${key}=(x, y, z).`;
+  }
+  if (v.kind === 'word' || v.kind === 'str') return `${key} is ${what}, not “${v.v}”.`;
+  return `${key} is ${what}.`;
 }
 
 export function parseRecipe(src: string): ParseResult {
@@ -733,6 +787,8 @@ export function printRecipe(spec: SceneSpec, opts: { multiline?: boolean } = {})
   if (Q.stepScale !== DQ.stepScale) q.push(`step=${Q.stepScale === 'auto' ? 'auto' : fmt(Q.stepScale)}`);
   if (!valueEq(Q.jitter, DQ.jitter)) q.push(`jitter=${fmt(Q.jitter)}`);
   if (q.length) clauses.push(['quality', ...q].join(' '));
+  const out = outputClause(spec.output);
+  if (out) clauses.push(out);
   return clauses.join(opts.multiline ? '\n' : ' · ');
 }
 
@@ -744,4 +800,11 @@ export const RECIPE_VOCABULARY = {
   warps: WARPS.map(w => ({ kind: w.kind, keys: [...(w.axes ? [w.axes.key] : []), ...w.params.map(p => p.key), ...(w.select ? [w.select.key] : [])] })),
   settings: ['sun dir=(x,y,z) color=…', 'sky (r,g,b)', 'bounce (r,g,b)', 'shadows 16 | off', 'ao 0.06 | off', 'fog 0.3 color=…', 'background (r,g,b) | top=… bottom=…', `tone ${TONE_MODES.join('|')}`, 'camera dist angle elev orbit zoom flatten x y z', 'quality steps dist step jitter'],
   colours: Object.keys(COLOR_NAMES),
+  outputs: OUTPUTS.map(o => o.words[0]),
+  palettes: PALETTES.map(p => p.key),
+};
+
+/** The words a recipe clause can start with, and the colour names (for type-ahead, lang/complete.ts). */
+export const RECIPE_WORDS = {
+  modes: MODE_WORDS, ops: OP_WORDS, shapes: SHAPE_WORDS, warps: WARP_WORDS, settings: SETTING_WORDS, colours: COLOR_NAMES,
 };

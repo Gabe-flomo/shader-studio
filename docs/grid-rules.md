@@ -150,7 +150,43 @@ starter circuit that way.
 | Age | Age or afterglow; Smooth: v |
 | Shade | The 0–1 shade the colours are read at |
 | Texture | The coloured board as a texture (one more small pass, only when wired): for Glow, Sample, Texture tools, an Agents group |
+| Neighbours | How many of the 8 (von Neumann 4) cells round this one are on; Smooth: their average u. Its texture reads are only made where something reads it |
 | Cells | The raw board texture (red state, green age, alpha signature) |
+
+**Show** (the editor's Show section, the `view` setting): what Color shows. *Colours* (the default:
+the same shader as before), or *State*, *Age* or *Neighbours* as grey, to see why a rule behaves
+as it does. Changing it recompiles.
+
+## Built-in guidance
+
+Every builder window (`components/builders/BuilderWindow.tsx`) carries the same help, with its
+words in `components/builders/helpContent.ts`:
+
+- **How this works.** Each section opens with a short card: what it is, what it does, "you can do
+  X to get Y", and one or more **worked examples** (click to insert). **Got it** hides a card;
+  **Tips** in the header turns them all off, and turning it back on brings back every card you
+  dismissed. Both are remembered per builder.
+- **Empty states** (no shapes, no rules) always show their guidance; with tips off it folds to one
+  line and its examples.
+- **Field hints.** Every control has a plain-language hint on a **?** beside its label (hover or
+  focus shows it).
+- **Type-ahead.** Text fields complete as you type: ↑ ↓ to choose, Tab (or Enter, outside the Do…
+  bar) to take one, Esc to close (`lang/complete.ts`).
+
+A new builder adds its block to `BUILDER_HELP` and gets all of this by using `BuilderWindow`
+(`<BuilderHelp id>`, `<EmptyHelp id>`, `<HintMark text>`, `<HintLabel hint>`). A test checks
+that every registered section has help.
+
+In Grid Rules each rule type has its card (Count, Stages, Patterns, Blocks, Smooth), and so do
+Presets, Neighbourhood, Born and survive, States, the stencil list, the block list and the shared
+sections (Start and run, Brush, Colours, Show). Examples set the rule (Life, HighLife, Brian's
+Brain, Heat, Show neighbour counts). Every slider's **?** reads the node's own parameter hint.
+
+**Type-ahead and type checks.** *As text* completes a preset's name into its B/S rule ("high" →
+B36/S23 HighLife). The Smooth custom update completes its names (u, lap_u, avg_v…) and functions,
+and refuses an update that isn't one number: `vec3(u, v, 0.0)` → "The update is a number (float),
+but this makes three numbers (vec3). Fix: take .x: (vec3(u, v, 0.0)).x" (`lang/typeCheck.ts`
+reads the expression's type).
 
 ## Under the hood
 

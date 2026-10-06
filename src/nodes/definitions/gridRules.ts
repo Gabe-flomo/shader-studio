@@ -12,7 +12,7 @@
 import type { GraphNode, NodeDefinition, ParamDef } from '../../types/nodeGraph';
 import { p, pv3 } from './helpers';
 import { BOARD_SIZES, GRID_DEFAULTS, MAX_RADIUS, MAX_STATES, MAX_STEPS, gridShape } from '../../gridRules/spec';
-import { GR_HASH_GLSL, gridStepGLSL, gridViewGLSL, type GridNames } from '../../gridRules/glsl';
+import { GRID_VIEWS, GR_HASH_GLSL, gridStepGLSL, gridViewGLSL, gridViewMode, type GridNames } from '../../gridRules/glsl';
 
 /** The pointer's button (1 while down over the picture). Declared only by the nodes that read it. */
 export const MOUSE_BUTTON_UNIFORM = 'u_mousebtn';
@@ -89,6 +89,7 @@ export const GRID_PARAM_DEFS: Record<string, ParamDef> = {
   color5: { ...colour('State 5', 'Patterns and Blocks: state 5.'), showWhen: MULTI },
   color6: { ...colour('State 6', 'Patterns and Blocks: state 6.'), showWhen: MULTI },
   color7: { ...colour('State 7', 'Patterns and Blocks: state 7 and up.'), showWhen: MULTI },
+  view: sel('Show', GRID_VIEWS.map(x => [x.value, x.label]), 'What Color shows: the coloured board, or the State, Age or Neighbour count as grey (the sockets always carry them).', 'Colours'),
   glowColor: { ...colour('Afterglow', 'The colour a cell glows as it switches off, fading to Empty.'), showWhen: DISCRETE },
   oldColor: { ...colour('Old cells', 'The colour live cells age towards (Age fade).'), showWhen: DISCRETE },
 };
@@ -123,13 +124,14 @@ export const GridRulesNode: NodeDefinition = {
     alive: { type: 'float', label: 'On', hint: '1 where the cell is on (state 1), else 0. Smooth: the value, 0–1.' },
     age: { type: 'float', label: 'Age', hint: 'A live cell\'s age (0–1), or a dead cell\'s afterglow. Smooth: the second value.' },
     value: { type: 'float', label: 'Shade', hint: 'The 0–1 shade the colours are picked by.' },
+    neighbours: { type: 'float', label: 'Neighbours', hint: 'How many of the cells round this one are on (0–8; von Neumann 0–4). Smooth: their average value.' },
     texture: { type: 'texture', label: 'Texture', hint: 'The coloured board as a texture (one more small pass): wire it into Glow, Sample, a Texture tool or an Agents group.' },
     board: { type: 'texture', label: 'Cells', hint: 'The raw board: red the state, green age, alpha the rule\'s signature. For Sample (texture) reads of the cells.' },
   },
   defaultParams: { ...GRID_DEFAULTS },
   paramDefs: GRID_PARAM_DEFS,
   assignable: false,
-  generateGLSL: (node, inputVars) => gridViewGLSL(gridShape(node.params), names(node), inputVars.__board, inputVars.__pic),
+  generateGLSL: (node, inputVars) => gridViewGLSL(gridShape(node.params), names(node), inputVars.__board, inputVars.__pic, gridViewMode(node.params.view)),
 };
 
 /** One step of a Grid Rules board: made by the compiler (compiler/gridRulesExpand.ts), never in a graph. */

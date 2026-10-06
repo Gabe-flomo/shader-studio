@@ -39,6 +39,25 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.54',
+    date: '2026-10-06',
+    title: 'Builders that help',
+    highlights: [
+      { area: 'Studio', text: 'Builders explain themselves: How this works cards with clickable examples, ? hints on every control, and a Tips switch to hide or show them.' },
+      { area: 'Studio', text: 'Type-ahead in recipes, the Do… bar and rule pickers, plus type checks that refuse bad wires and offer a fix (use its brightness, take .x).' },
+      { area: 'Studio', text: 'Scene Builder Output: depth, normal, distance, hit, steps, AO, or colour by depth/height/normal through a palette ("output depth").', link: { kind: 'doc', path: 'docs/scene-builder.md' } },
+    ],
+  },
+  {
+    id: '2026.10.53',
+    date: '2026-10-06',
+    title: 'Grid fixes',
+    highlights: [
+      { area: 'Studio', text: 'Grid fixes: the Breathing example\'s dots now stay centred in every cell; Neighbor Dist can check 3×3 or 5×5; Tile has a Cell ID output.' },
+      { area: 'Studio', text: 'Grid Pattern pushes are capped at what Overflow can draw, and grid hashes no longer break down at very large cell numbers.' },
+    ],
+  },
+  {
     id: '2026.10.52',
     date: '2026-10-06',
     title: 'Grid Rules',

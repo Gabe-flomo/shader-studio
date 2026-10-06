@@ -20,6 +20,7 @@ import { TYPE_COLORS } from '../NodeGraph/typeColors';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 import type { PublishNodeModal as PublishNodeModalT } from '../NodeGraph/PublishNodeModal';
 import type { Made, UseHere } from './hosts';
+import { checkWire } from '../../lang/typeCheck';
 
 const PublishNodeModal = lazyWithSuspense<PropsOf<typeof PublishNodeModalT>>(() => import('../NodeGraph/PublishNodeModal').then(m => ({ default: m.PublishNodeModal })));
 
@@ -64,7 +65,14 @@ export function MakeNodeDialog({ req, onClose, onFindUses }: { req: MakeNodeRequ
   const built = buildFunction(g, choices);
   const description = desc ?? descriptionFor(g, choices);
   const name = label ?? g.label;
-  const blocked = req.useHere ? req.useHere.blocked(built) : null;
+  // An input retyped so the value it stands for can't be wired into it (a vec3 into a float): refused, with the fix.
+  const typeIssues = g.inputs.flatMap((inp, i) => {
+    const chosen = types[i];
+    if (!chosen || chosen === inp.type || inp.typeGuessed) return [];
+    const r = checkWire(inp.type, chosen, { from: `${inp.source} (input ${i + 1})`, to: `a ${chosen} input` });
+    return r.ok ? [] : [{ i, from: inp.type, message: r.message }];
+  });
+  const blocked = typeIssues.length ? `Can't use it here: ${typeIssues[0].message}` : req.useHere ? req.useHere.blocked(built) : null;
   const explained = explainExpression(req.source.slice(req.span.start, req.span.end), req.ctx);
 
   const finishHere = (made: Made) => {
@@ -157,6 +165,12 @@ export function MakeNodeDialog({ req, onClose, onFindUses }: { req: MakeNodeRequ
             );
           })}
           {g.inputs.length === 0 && <span style={{ fontSize: 12, color: tk.text.muted }}>No inputs: it is the same everywhere.</span>}
+          {typeIssues.map(t => (
+            <div key={t.i} data-type-error style={{ display: 'flex', alignItems: 'center', gap: 8, font: `500 12px ${fontFamily.ui}`, color: tk.status.warningText, background: alpha(tk.status.danger, 0.06), borderRadius: radius.md, padding: '6px 10px' }}>
+              <span style={{ flex: 1 }}>{t.message}</span>
+              <Button size="sm" variant="secondary" onClick={() => setTypes(s => { const n = { ...s }; delete n[t.i]; return n; })}>Keep it {t.from}</Button>
+            </div>
+          ))}
         </div>
 
         {sectionLabel('Function', `returns ${built.outputType}${g.outputTypeGuessed ? ' (guessed)' : ''}`)}

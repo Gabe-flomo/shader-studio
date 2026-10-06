@@ -4460,8 +4460,10 @@ export function GridLayoutViz({ node }: { node: GraphNode }) {
 
 // ─── Viz — Neighbor Dist (neighborDist) ───────────────────────────────────────
 
-export function NeighborDistViz({ node: _node }: { node: GraphNode }) {
+export function NeighborDistViz({ node }: { node: GraphNode }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // The Neighbours control: 1 searches 3×3 cells, 2 searches 5×5.
+  const reach = Math.round(Number(node.params.neighborhood_size)) === 2 ? 2 : 1;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -4473,16 +4475,16 @@ export function NeighborDistViz({ node: _node }: { node: GraphNode }) {
     ctx.fillStyle = pal.crust;
     ctx.fillRect(0, 0, W, H);
 
-    // Draw a 3×3 neighborhood grid; center cell highlighted
-    const cols = 3, rows = 3;
+    // Draw the searched neighborhood (3×3 or 5×5); center cell highlighted
+    const cols = reach * 2 + 1, rows = cols;
     const pad  = 10;
     const cellW = (W - pad * 2) / cols;
     const cellH = (H - pad * 2) / rows;
-    const gap   = 3;
+    const gap   = reach === 2 ? 2 : 3;
 
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
-        const isCenter = col === 1 && row === 1;
+        const isCenter = col === reach && row === reach;
         const x = pad + col * cellW + gap / 2;
         const y = pad + row * cellH + gap / 2;
         const w = cellW - gap;
@@ -4493,8 +4495,8 @@ export function NeighborDistViz({ node: _node }: { node: GraphNode }) {
 
         // Distance line from neighbor to center
         if (!isCenter) {
-          const cx = pad + 1.5 * cellW;
-          const cy = pad + 1.5 * cellH;
+          const cx = pad + (reach + 0.5) * cellW;
+          const cy = pad + (reach + 0.5) * cellH;
           const nx = x + w / 2;
           const ny = y + h / 2;
           ctx.strokeStyle = 'rgba(137, 180, 250, 0.25)';
@@ -4512,8 +4514,8 @@ export function NeighborDistViz({ node: _node }: { node: GraphNode }) {
     // Label
     ctx.fillStyle = pal.overlay0;
     ctx.font = `8px ${MONO}`;
-    ctx.fillText('3×3 neighborhood', 3, H - 3);
-  }, []);
+    ctx.fillText(`${cols}×${rows} neighborhood`, 3, H - 3);
+  }, [reach]);
 
   return (
     <div style={vizContainer()}>
