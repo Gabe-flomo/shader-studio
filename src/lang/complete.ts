@@ -120,7 +120,7 @@ const SETTINGS: Record<string, { detail: string; params: SignatureParam[] }> = {
   camera: { detail: 'the orbit camera', params: ['dist', 'angle', 'elev', 'orbit', 'zoom', 'flatten', 'x', 'y', 'z'].map(k => ({ key: k, label: k, hint: k === 'dist' ? 'How far away.' : k === 'orbit' ? 'Degrees a second round the point.' : k === 'flatten' ? '0 perspective … 1 isometric.' : 'A number.', text: `${k}=…` })) },
   quality: { detail: 'the march\'s steps and limits', params: ['steps', 'dist', 'step', 'jitter'].map(k => ({ key: k, label: k, hint: k === 'step' ? 'Step scale, or auto.' : 'A number.', text: `${k}=…` })) },
   output: { detail: 'what the scene shows: depth, normal, hit…', params: [{ key: '', label: 'Show', hint: OUTPUTS.map(o => o.words[0]).join(', '), text: OUTPUTS.map(o => o.words[0]).join('|') }, { key: 'palette', label: 'Palette', hint: PALETTES.map(p => p.key).join(', '), text: 'palette …' }] },
-  colour: { detail: 'colour the space through a palette', params: [{ key: 'by', label: 'By', hint: 'by depth, height, normal, distance, position…', text: 'by depth' }, { key: 'palette', label: 'Palette', hint: PALETTES.map(p => p.key).join(', '), text: 'palette sunset' }] },
+  colour: { detail: 'colour the space through a palette', params: [{ key: 'by', label: 'By', hint: 'by depth, height, normal, distance, position…', text: 'by depth' }, { key: 'palette', label: 'Palette', hint: PALETTES.map(p => p.key).join(', '), text: 'palette=sunset' }] },
 };
 
 /** Every word a recipe clause can start with. */
@@ -128,7 +128,11 @@ export function recipeClauseWords(): Completion[] {
   const out: Completion[] = [];
   for (const s of SCENE_SHAPES) out.push({ label: s.kind, insert: s.kind, kind: 'shape', detail: `${s.label}: ${s.blurb}`, signature: `${s.kind} ${s.params.map(paramText).join(' ')} at=(x,y,z)`, words: s.aliases });
   for (const op of OPS) out.push({ label: op, insert: `${op}(`, kind: 'combine', detail: OP_DETAIL[op], signature: `${op}(shape, shape…)${op.startsWith('smooth') ? ' k=0.3' : ''}` });
-  for (const w of WARPS) out.push({ label: w.kind, insert: w.kind, kind: 'warp', detail: `${w.label}: ${w.blurb}`, signature: `${w.kind} ${[...(w.axes ? [w.axes.def] : []), ...w.params.map(paramText)].join(' ')}`, words: w.aliases });
+  for (const w of WARPS) {
+    // D8: the noise warp is written `warp`.
+    const word = w.kind === 'noise' ? 'warp' : w.kind;
+    out.push({ label: word, insert: word, kind: 'warp', detail: `${w.label}: ${w.blurb}`, signature: `${word} ${[...(w.axes ? [w.axes.def] : []), ...w.params.map(paramText)].join(' ')}`, words: [...w.aliases.filter(a => a !== word), ...(word !== w.kind ? [w.kind] : [])] });
+  }
   for (const m of Object.keys(MODE_DETAIL)) out.push({ label: m, insert: m, kind: 'mode', detail: `render mode: ${MODE_DETAIL[m]}` });
   for (const [k, s] of Object.entries(SETTINGS)) out.push({ label: k === 'colour' ? 'colour by' : k, insert: k === 'colour' ? 'colour by ' : k, kind: k === 'output' || k === 'colour' ? 'output' : 'setting', detail: s.detail, signature: `${k} ${s.params.map(p => p.text).join(' ')}` });
   return out;
@@ -149,7 +153,7 @@ export function signatureFor(head: string): Signature | null {
     if (d.axes) ps.push({ key: d.axes.key, label: d.axes.label, hint: d.axes.kind === 'flags' ? 'Letters from xyz, like xz.' : `One of ${d.axes.options.join(', ')}.`, text: `${d.axes.key}=${d.axes.def}` });
     ps.push(...d.params.map(p => ({ key: p.key, label: p.label, hint: p.hint ?? `${p.label}, ${p.min} to ${p.max}.`, text: paramText(p) })));
     if (d.select) ps.push({ key: d.select.key, label: d.select.label, hint: `One of ${d.select.options.join(', ')}.`, text: `${d.select.key}=${d.select.def}` });
-    return { head: d.kind, detail: `${d.label}: ${d.blurb}`, params: ps, active: -1 };
+    return { head: d.kind === 'noise' ? 'warp' : d.kind, detail: `${d.label}: ${d.blurb}`, params: ps, active: -1 };
   }
   if (RECIPE_WORDS.ops[w]) return { head: w, detail: OP_DETAIL[w] ?? 'a combine group', params: [{ key: '(', label: 'Items', hint: 'Shapes and combines, separated by commas.', text: '(shape, shape…)' }, { key: 'k', label: 'Blend radius', hint: 'How wide the smooth join is.', text: 'k=0.3' }, { key: 'name', label: 'Name', hint: 'A name for the group.', text: 'name=…' }], active: -1 };
   const setting = SETTINGS[w === 'color' ? 'colour' : w === 'show' ? 'output' : w === 'shadow' ? 'shadows' : w === 'bg' ? 'background' : w === 'cam' ? 'camera' : w];
@@ -197,11 +201,15 @@ export function recipeAssist(text: string, caret: number): Assist {
     sigHead = word || head;
   } else if (keyM) {
     const key = keyM[1].toLowerCase();
+    // Any setting can be drawn at random (lang/random.ts).
+    const randomItems = word && 'random'.startsWith(word.toLowerCase()) && word.toLowerCase() !== 'random'
+      ? [{ label: 'random', insert: 'random', kind: 'value' as const, detail: 'a value from its interesting range (random(0.2..2), random(red, teal) for your own)' }] : [];
     if (key === 'color' || key === 'colour' || key === 'tint' || key === 'top' || key === 'bottom') {
       items = rankCompletions(word, Object.entries(RECIPE_WORDS.colours).map(([nm, c]) => ({ label: nm, insert: nm, kind: 'colour' as const, detail: `(${c.join(', ')})` })), 8);
     } else if (key === 'palette' || key === 'ramp') {
       items = rankCompletions(word, PALETTES.map(p => ({ label: p.key, insert: p.key, kind: 'palette' as const, detail: `${p.label} (${p.kind === 'palette' ? 'Palette' : 'Color Ramp'})` })), 8);
     }
+    items = [...items, ...randomItems];
   } else {
     const h = (innerHead ?? head).toLowerCase();
     const lastWord = /([A-Za-z_]+)\s*$/.exec(tail)?.[1]?.toLowerCase();

@@ -21,6 +21,12 @@ import {
   type CameraSpec, type CombineOp, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type ToneMode, type Vec3, type WarpDef, type WarpSpec,
 } from './spec';
 import { COLOUR_TABLE, colourText } from '../lang/colours';
+import { Cursor } from '../lang/parse';
+import { continuesClause, lineCol, type Tok, type Unit } from '../lang/lex';
+import type { Value as LangValue } from '../lang/ast';
+import { printValue } from '../lang/print';
+import { drawFrom, freshSeed, makeRng, resolveRandom, type RandSpec, type Resolved, type Rng } from '../lang/random';
+import { SCENE_SETTING_RAND, sceneRand } from '../lang/sceneRand';
 import { suggest } from '../lang/fuzzy';
 import { DEFAULT_PALETTE, OUTPUTS, OUTPUT_WORDS, PALETTES, PALETTE_BY_KEY, outputClause, type OutputSpec } from './output';
 
@@ -40,82 +46,26 @@ export interface ParseResult {
   errors: RecipeError[];
   /** Clauses that parsed but have no effect in this render mode, and the like. */
   warnings: string[];
+  /** Old words that still work, with the canonical one (a one-click rewrite): `glow` as a mode, `noise` as a warp… */
+  hints?: RecipeHint[];
+  /** What `random` values became (`falloff=random → 3.7`), and the seed that drew them. */
+  resolved?: Resolved[];
+  seed?: number;
 }
+
+/** An old word, where it is, and what to write instead (`fix` replaces from…to). */
+export interface RecipeHint extends RecipeError { fix: string }
+
+/** Warp words that still work with a hint (D8: the 3D noise warp is written `warp`). */
+const WARP_HINTS: Record<string, [string, string]> = {
+  noise: ['“noise” as a 3D warp: write warp (noise is the 2D noise node).', 'warp'],
+};
 
 // ── Tokens ──────────────────────────────────────────────────────────────────
+// The one lexer (lang/lex.ts) and the shared reader (lang/parse.ts): every Playfield surface reads
+// values, settings and modifiers the same way.
 
-type Tok =
-  | { t: 'sep'; at: number; end: number }
-  | { t: 'num'; v: number; unit: 'deg' | 'rad' | null; at: number; end: number }
-  | { t: 'word'; v: string; at: number; end: number }
-  | { t: 'str'; v: string; at: number; end: number }
-  | { t: 'hex'; v: Vec3; at: number; end: number }
-  | { t: '(' | ')' | ',' | '=' | '@'; at: number; end: number }
-  | { t: 'eof'; at: number; end: number };
-
-/** Does the line starting at `at` go on with the clause above: indented, or starting with a closing bracket? */
-export function continuesClause(src: string, at: number): boolean {
-  const m = /^([ \t]*)(\S?)/.exec(src.slice(at));
-  return !!m && (m[1].length > 0 || m[2] === ')') && m[2] !== '';
-}
-
-function tokenize(src: string, errors: RecipeError[], pos: (from: number, to: number, message: string) => RecipeError): Tok[] {
-  const out: Tok[] = [];
-  let i = 0;
-  let depth = 0;
-  while (i < src.length) {
-    const c = src[i];
-    if (c === '/' && src[i + 1] === '/') { while (i < src.length && src[i] !== '\n') i++; continue; }
-    // Inside brackets, a new line that is indented (or closes the bracket) goes on with the clause:
-    // the pretty form puts each shape of a combine on its own line (formatRecipe).
-    if (c === '\n' && depth > 0 && continuesClause(src, i + 1)) { i++; continue; }
-    if (c === '\n' || c === '·' || c === '•' || c === '|' || c === ';') { out.push({ t: 'sep', at: i, end: i + 1 }); depth = 0; i++; continue; }
-    if (/\s/.test(c)) { i++; continue; }
-    if ('(),=@'.includes(c)) {
-      if (c === '(') depth++;
-      else if (c === ')') depth = Math.max(0, depth - 1);
-      out.push({ t: c as '(' | ')' | ',' | '=' | '@', at: i, end: i + 1 }); i++; continue;
-    }
-    if (c === '"' || c === '\'' || c === '“' || c === '‘') {
-      const close = c === '“' ? '”' : c === '‘' ? '’' : c;
-      const j = src.indexOf(close, i + 1);
-      const end = j < 0 ? src.length : j;
-      if (j < 0) errors.push(pos(i, end, 'This quote is never closed.'));
-      out.push({ t: 'str', v: src.slice(i + 1, end), at: i, end: Math.min(src.length, end + 1) });
-      i = end + 1;
-      continue;
-    }
-    if (c === '#') {
-      const m = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})(?![0-9a-zA-Z])/.exec(src.slice(i));
-      if (m) {
-        const h = m[1].length === 3 ? m[1].split('').map(x => x + x).join('') : m[1];
-        const rgb: Vec3 = [0, 2, 4].map(k => round(parseInt(h.slice(k, k + 2), 16) / 255)) as Vec3;
-        out.push({ t: 'hex', v: rgb, at: i, end: i + m[0].length });
-        i += m[0].length;
-        continue;
-      }
-    }
-    const nm = /^[-+−]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?[ \t]*(deg|°|rad)?/i.exec(src.slice(i));
-    if (nm && (/[\d.]/.test(c) || ((c === '-' || c === '+' || c === '−') && /[\d.]/.test(src[i + 1] ?? '')))) {
-      const v = parseFloat(nm[0].replace('−', '-'));
-      const u = nm[3]?.toLowerCase();
-      out.push({ t: 'num', v, unit: u === 'rad' ? 'rad' : u ? 'deg' : null, at: i, end: i + nm[0].length });
-      i += nm[0].length;
-      continue;
-    }
-    const wm = /^[A-Za-z_][A-Za-z0-9_-]*/.exec(src.slice(i));
-    if (wm) {
-      // A trailing '-' belongs to nothing ("box-" while typing): keep it in the word so the error points at it.
-      out.push({ t: 'word', v: wm[0], at: i, end: i + wm[0].length });
-      i += wm[0].length;
-      continue;
-    }
-    errors.push(pos(i, i + 1, `“${c}” isn't part of a recipe.`));
-    i++;
-  }
-  out.push({ t: 'eof', at: src.length, end: src.length });
-  return out;
-}
+export { continuesClause };
 
 // ── Words ───────────────────────────────────────────────────────────────────
 
@@ -150,82 +100,136 @@ export { suggest };
 
 // ── Values ──────────────────────────────────────────────────────────────────
 
-type Value = { kind: 'num'; v: number; unit: 'deg' | 'rad' | null } | { kind: 'vec'; v: Vec3 } | { kind: 'word'; v: string } | { kind: 'str'; v: string };
+type Value = { kind: 'num'; v: number; unit: Unit | null } | { kind: 'vec'; v: Vec3 } | { kind: 'word'; v: string } | { kind: 'str'; v: string }
+  /** `random…`, resolved when its setting is known (resolveArgs). */
+  | { kind: 'random'; r: Extract<LangValue, { k: 'random' }> };
 /** `comma`: a `,` followed it inside a warp's brackets (`@move(1, 2, 3)` is one vector). */
 type Arg = { key: string | null; value: Value; at: number; end: number; comma?: boolean };
 
 export const round = (n: number) => Math.round(n * 10000) / 10000;
 
+/** A shared value in the recipe's terms (null: not a value a recipe takes). */
+function recipeValue(v: LangValue): Value | null {
+  switch (v.k) {
+    case 'num': return { kind: 'num', v: v.v, unit: v.unit };
+    case 'colour': return { kind: 'vec', v: v.v };
+    case 'vec': {
+      const n = v.v;
+      return { kind: 'vec', v: (n.length === 1 ? [n[0], n[0], n[0]] : n.length === 2 ? [n[0], n[1], 0] : [n[0], n[1], n[2]]) as Vec3 };
+    }
+    case 'word': return { kind: 'word', v: v.v };
+    case 'str': return { kind: 'str', v: v.v };
+    case 'random': return { kind: 'random', r: v };
+    default: return null;
+  }
+}
+
+export interface ParseOptions {
+  /** The seed for `random` values when the text has no `seed=` (default: a fresh one). */
+  seed?: number;
+}
+
 class Parser {
-  i = 0;
   errors: RecipeError[] = [];
   warnings: string[] = [];
-  toks: Tok[];
+  hints: RecipeHint[] = [];
   ids = { s: 0, g: 0, w: 0 };
+  private c: Cursor;
   private src: string;
+  /** Randomness: a leading `random`, the seed, what was drawn. */
+  randomAll = false;
+  seed: number | null = null;
+  private seedOpt: number | undefined;
+  private rngCache: Rng | null = null;
+  resolved: Resolved[] = [];
 
-  constructor(src: string) {
+  constructor(src: string, opts: ParseOptions = {}) {
     this.src = src;
-    this.toks = tokenize(src, this.errors, (a, b, m) => this.err(a, b, m));
+    this.c = new Cursor(src);
+    this.seedOpt = opts.seed;
+    // A `seed=N` (or `seed N`) anywhere sets the seed before anything is drawn.
+    const m = /(?:^|[\s·•|;])seed\s*=?\s*(\d+)/i.exec(src);
+    if (m) this.seed = Number(m[1]);
+  }
+
+  get rng(): Rng {
+    if (!this.rngCache) {
+      if (this.seed === null) this.seed = this.seedOpt ?? freshSeed();
+      this.rngCache = makeRng(this.seed);
+    }
+    return this.rngCache;
   }
 
   err(from: number, to: number, message: string): RecipeError {
-    const before = this.src.slice(0, from);
-    const line = before.split('\n').length;
-    const col = from - before.lastIndexOf('\n');
+    const { line, col } = lineCol(this.src, from);
     return { message, from, to: Math.max(to, from + 1), line, col };
   }
   fail(tok: { at: number; end: number }, message: string) { this.errors.push(this.err(tok.at, tok.end, message)); }
+  hint(tok: { at: number; end: number }, message: string, fix: string) {
+    if (!this.hints.some(h => h.from === tok.at)) this.hints.push({ ...this.err(tok.at, tok.end, message), fix });
+  }
 
-  peek(o = 0): Tok { return this.toks[Math.min(this.i + o, this.toks.length - 1)]; }
-  next(): Tok { return this.toks[Math.min(this.i++, this.toks.length - 1)]; }
+  peek(o = 0): Tok { return this.c.peek(o); }
+  next(): Tok { return this.c.next(); }
+  get i() { return this.c.i; }
+  get toks() { return this.c.toks; }
   /** Skip to the end of this clause (after an error). */
-  skipClause() { while (this.peek().t !== 'sep' && this.peek().t !== 'eof') this.next(); }
-  atEnd(stop: ReadonlyArray<Tok['t']>) { return stop.includes(this.peek().t) || this.peek().t === 'sep' || this.peek().t === 'eof'; }
+  skipClause() { this.c.skipClause(); }
+  atEnd(stop: ReadonlyArray<Tok['t']>) { return this.c.atEnd(stop); }
+
+  /** The cursor's own mistakes (unclosed brackets, stray characters…), in the recipe's terms. */
+  private takeCursorErrors() {
+    for (const d of this.c.diagnostics.splice(0)) if (d.severity === 'error') this.errors.push(this.err(d.at, d.end, d.message));
+  }
 
   value(): Value | null {
-    const t = this.peek();
-    if (t.t === 'num') { this.next(); return { kind: 'num', v: t.v, unit: t.unit }; }
-    if (t.t === 'hex') { this.next(); return { kind: 'vec', v: t.v }; }
-    if (t.t === 'str') { this.next(); return { kind: 'str', v: t.v }; }
-    if (t.t === 'word') { this.next(); return { kind: 'word', v: t.v }; }
-    if (t.t === '(') {
-      // A vector: (x, y, z), or (v) / (x, y) filled out.
-      const open = this.next();
-      const nums: number[] = [];
-      while (this.peek().t !== ')' && this.peek().t !== 'eof' && this.peek().t !== 'sep') {
-        const n = this.next();
-        if (n.t === 'num') nums.push(n.unit === 'rad' ? n.v * 180 / Math.PI : n.v);
-        else if (n.t !== ',') { this.fail(n, 'A vector holds numbers: (x, y, z).'); }
-      }
-      if (this.peek().t === ')') this.next(); else this.fail(open, 'This ( is never closed.');
-      if (!nums.length) { this.fail(open, 'An empty vector: write (x, y, z).'); return null; }
-      const v: Vec3 = nums.length === 1 ? [nums[0], nums[0], nums[0]] : nums.length === 2 ? [nums[0], nums[1], 0] : [nums[0], nums[1], nums[2]];
-      if (nums.length > 3) this.fail(open, 'A vector has three numbers; the rest are left out.');
-      return { kind: 'vec', v };
-    }
-    return null;
+    const at = this.peek();
+    const v = this.c.value();
+    this.takeCursorErrors();
+    if (!v) return null;
+    const r = recipeValue(v);
+    if (!r) { this.fail(at, `“${this.src.slice(at.at, this.toks[this.i - 1].end)}” isn't a recipe value: a number, (x, y, z), a colour or a word.`); return null; }
+    return r;
   }
 
   /** Arguments up to the end of the clause, a `,`, `)` or `@`. `commas`: a `,` between arguments is allowed and marked on the one before it. */
   args(stop: ReadonlyArray<Tok['t']> = [',', ')', '@'], commas = false): Arg[] {
+    const raw = this.c.args(stop, commas);
+    this.takeCursorErrors();
     const out: Arg[] = [];
-    while (!this.atEnd(stop)) {
-      const t = this.peek();
-      if (commas && t.t === ',') { this.next(); if (out.length) out[out.length - 1].comma = true; continue; }
-      if (t.t === 'word' && this.peek(1).t === '=') {
-        this.next(); this.next();
-        const v = this.value();
-        if (!v) { this.fail(t, `${t.v}= needs a value.`); continue; }
-        out.push({ key: t.v, value: v, at: t.at, end: this.toks[this.i - 1].end });
-        continue;
-      }
-      if (t.t === '=') { this.next(); this.fail(t, 'An = with no name before it.'); continue; }
-      const v = this.value();
-      if (!v) { this.next(); this.fail(t, `Unexpected “${this.src.slice(t.at, t.end)}”.`); continue; }
-      out.push({ key: null, value: v, at: t.at, end: this.toks[this.i - 1].end });
+    for (const a of raw) {
+      const v = recipeValue(a.value);
+      if (!v) { this.fail(a, `“${this.src.slice(a.at, a.end)}” isn't a recipe value: a number, (x, y, z), a colour or a word.`); continue; }
+      if (a.op !== '=') { this.fail(a, `${a.key}${a.op} changes a value by a factor: in a recipe, write ${a.key}=… .`); continue; }
+      out.push({ key: a.key, value: v, at: a.at, end: a.end, ...(a.comma ? { comma: true } : {}) });
     }
     return out;
+  }
+
+  /**
+   * Random values resolved now that their settings are known: `spec(key, n)` gives the range for a
+   * named setting, or the n-th positional one. What was drawn is kept (`resolved`) for the preview.
+   */
+  resolveArgs(args: Arg[], what: string, spec: (key: string | null, n: number) => RandSpec | undefined): Arg[] {
+    let pos = 0;
+    return args.map(a => {
+      const n = a.key ? -1 : pos;
+      if (!a.key && !(a.value.kind === 'word' && /^glass$/i.test(a.value.v)) && a.value.kind !== 'str') pos++;
+      if (a.value.kind !== 'random') return a;
+      const sp = spec(a.key?.toLowerCase() ?? null, n);
+      const drawn = resolveRandom(a.value.r, sp, this.rng);
+      const v = drawn ? recipeValue(drawn) : null;
+      if (!v || v.kind === 'random') { this.fail(a, `There is nothing to draw ${a.key ?? 'that'} from: give it a range, random(0.2..2).`); return { ...a, value: { kind: 'word', v: '' } }; }
+      this.resolved.push({ key: `${what}${a.key ? `.${a.key}` : ''}`, from: this.src.slice(a.at, a.end).replace(/^[\w-]+=/, ''), to: printValue(drawn!), at: a.at, end: a.end });
+      return { ...a, value: v };
+    });
+  }
+
+  /** A value drawn for a setting the line left unset (a leading `random`). */
+  draw(spec: RandSpec, key: string, at: { at: number; end: number }): Value {
+    const v = drawFrom(spec, this.rng);
+    this.resolved.push({ key, from: 'random', to: printValue(v), at: at.at, end: at.end });
+    return recipeValue(v)!;
   }
 
   // ── Clauses ──
@@ -240,21 +244,44 @@ class Parser {
       const t = this.peek();
       if (t.t !== 'word') { this.fail(t, 'A clause starts with a word: a shape, a combine, a warp or a setting.'); this.skipClause(); continue; }
       const w = t.v.toLowerCase();
-      if (MODE_WORDS[w] && !(w === 'glass' && this.peek(1).t === '=')) {
+      // A leading `random`: every setting the line leaves unset is drawn (lang/random.ts).
+      if (w === 'random' && this.peek(1).t !== '(' && this.peek(1).t !== '=') {
         this.next();
+        this.randomAll = true;
+        if (this.peek().t === 'word' && (this.peek() as Extract<Tok, { t: 'word' }>).v.toLowerCase() === 'seed') continue;
+        continue;
+      }
+      // `seed=42` / `seed 42` (read up front, in the constructor).
+      if (w === 'seed') { this.next(); if (this.peek().t === '=') this.next(); if (this.peek().t === 'num') this.next(); else this.fail(t, 'seed takes a whole number: seed=42.'); }
+      else if (MODE_WORDS[w] && !(w === 'glass' && this.peek(1).t === '=')) {
+        this.next();
+        if (w === 'glow') this.hint(t, '“glow” as a render mode: write volumetric (glow is the glow step).', 'volumetric');
         if (mode && mode !== MODE_WORDS[w]) this.warnings.push(`Two render modes; ${MODE_WORDS[w]} wins.`);
         mode = MODE_WORDS[w];
-        this.modeArgs(spec, mode, this.args([]));
+        const margs = this.resolveArgs(this.args([]), mode, key => (key ? SCENE_SETTING_RAND[`${mode}.${key}`] : undefined));
+        this.modeArgs(spec, mode, margs);
+        if (this.randomAll) for (const k of ['glass.ior', 'volumetric.density', 'volumetric.falloff', 'gi.bounce', 'gi.rough']) {
+          const [m, key] = k.split('.');
+          if (m !== mode || margs.some(a => a.key?.toLowerCase() === key)) continue;
+          this.modeArgs(spec, mode, [{ key, value: this.draw(SCENE_SETTING_RAND[k], k, t), at: t.at, end: t.end }]);
+        }
       } else if (OP_WORDS[w] || SHAPE_WORDS[w] || w === 'custom') {
         const it = this.item();
         if (it) items.push(it);
       } else if (WARP_WORDS[w] || w === 'custom-warp') {
         this.next();
+        if (WARP_HINTS[w]) this.hint(t, WARP_HINTS[w][0], WARP_HINTS[w][1]);
         const wp = this.warpBody(WARP_WORDS[w] ?? 'custom', t, true);
         if (wp) sceneWarps.push(wp);
       } else if (SETTING_WORDS.includes(w)) {
         this.next();
-        this.setting(spec, w, t, this.args([]));
+        if (w === 'show') this.hint(t, '“show” in a recipe: write output.', 'output');
+        const key0 = w === 'shadow' ? 'shadows' : w === 'bg' ? 'background' : w === 'cam' ? 'camera' : w;
+        const PRIMARY: Record<string, string> = { fog: 'density', shadows: 'hardness', sky: 'color', bounce: 'color', background: 'top', tone: 'mode', camera: 'dist' };
+        const sargs = this.resolveArgs(this.args([]), key0, (key, n) => SCENE_SETTING_RAND[`${key0}.${key ?? (n === 0 ? PRIMARY[key0] : n === 1 && key0 === 'background' ? 'bottom' : '')}`]);
+        if (this.randomAll && key0 === 'camera') for (const k of ['dist', 'orbit', 'elev']) if (!sargs.some(a => a.key?.toLowerCase() === k || (!a.key && k === 'dist'))) sargs.push({ key: k, value: this.draw(SCENE_SETTING_RAND[`camera.${k}`], `camera.${k}`, t), at: t.at, end: t.end });
+        if (this.randomAll && key0 === 'fog' && !sargs.some(a => !a.key || a.key === 'density')) sargs.unshift({ key: null, value: this.draw(SCENE_SETTING_RAND['fog.density'], 'fog.density', t), at: t.at, end: t.end });
+        this.setting(spec, w, t, sargs);
       } else {
         const s = suggest(w, CLAUSE_WORDS);
         this.fail(t, `“${t.v}” isn't a shape, combine, warp or setting.${s ? ` Did you mean “${s}”?` : ''}`);
@@ -276,7 +303,10 @@ class Parser {
     }
     if (!spec.root.name) spec.root.name = 'Scene';
     this.renumber(spec);
-    return { spec, errors: this.errors, warnings: this.warnings };
+    const r: ParseResult = { spec, errors: this.errors, warnings: this.warnings };
+    if (this.hints.length) r.hints = this.hints;
+    if (this.resolved.length || this.randomAll) { r.resolved = this.resolved; r.seed = this.seed ?? undefined; }
+    return r;
   }
 
   gid() { return `g${++this.ids.g}`; }
@@ -302,6 +332,8 @@ class Parser {
       it = newShape('custom', this.sid(), { label: this.parenText(t) ?? 'custom' });
     } else if (OP_WORDS[w]) {
       const { op, smooth } = OP_WORDS[w];
+      if (w === 'group') this.hint(t, '“group( )” in a scene: write union( ) (group( ) groups nodes in an edit).', 'union');
+      if (w === 'both') this.hint(t, '“both( )”: write intersect( ) (both on its own means the two selected nodes).', 'intersect');
       const g = newGroup(this.gid(), { op, k: smooth ? DEFAULT_SMOOTH_K : 0 });
       if (this.peek().t !== '(') { this.fail(t, `${t.v} needs its shapes in brackets: ${w}(sphere, box).`); this.skipClause(); return null; }
       const open = this.next();
@@ -319,7 +351,9 @@ class Parser {
       }
       if (this.peek().t === ')') this.next(); else this.fail(open, 'This ( is never closed.');
       if (!g.children.length) this.warnings.push(`${w}( ) is empty.`);
-      for (const a of this.args([',', ')', '@'])) {
+      const gargs = this.resolveArgs(this.args([',', ')', '@']), w, key => (key === null || key === 'k' || key === 'blend' || key === 'smooth' ? SCENE_SETTING_RAND['combine.k'] : undefined));
+      if (this.randomAll && smooth && !gargs.some(a => a.value.kind === 'num')) g.k = Math.max(0, (this.draw(SCENE_SETTING_RAND['combine.k'], `${w}.k`, t) as { v: number }).v);
+      for (const a of gargs) {
         const key = a.key?.toLowerCase();
         if ((key === 'k' || key === 'blend' || key === 'smooth') && a.value.kind === 'num') g.k = Math.max(0, a.value.v);
         else if (key === 'name' && (a.value.kind === 'str' || a.value.kind === 'word')) g.name = a.value.v;
@@ -332,7 +366,23 @@ class Parser {
       const sh = newShape(kind, this.sid());
       if (w === 'rounded-box' || w === 'roundbox') sh.size.round = 0.1;
       if (w === 'rounded-cylinder') sh.size.round = 0.05;
-      this.shapeArgs(sh, this.args([',', ')', '@']));
+      const def = SHAPE_BY_KIND[kind];
+      const sargs = this.resolveArgs(this.args([',', ')', '@']), kind, (key, n) => {
+        const p = key ? def.params.find(q => q.key.toLowerCase() === key) ?? (key === 'radius' ? def.params.find(q => q.key === 'r') : undefined) : def.params[n];
+        if (p) return sceneRand(p);
+        const k = key === 'colour' || key === 'c' ? 'color' : key === 'pos' || key === 'position' ? 'at' : key;
+        return SCENE_SETTING_RAND[`shape.${k}`];
+      });
+      this.shapeArgs(sh, sargs);
+      if (this.randomAll) {
+        const given = new Set(sargs.map(a => a.key?.toLowerCase()).filter(Boolean));
+        def.params.forEach((p, n) => {
+          if (given.has(p.key.toLowerCase()) || sargs.filter(a => !a.key && a.value.kind !== 'str' && !(a.value.kind === 'word')).length > n) return;
+          const v = this.draw(sceneRand(p), `${kind}.${p.key}`, t);
+          sh.size[p.key] = v.kind === 'vec' ? v.v : (v as { v: number }).v;
+        });
+        if (!given.has('color') && !given.has('colour') && !given.has('c')) sh.color = this.colour({ key: 'color', value: this.draw({ kind: 'colour' }, `${kind}.color`, t), at: t.at, end: t.end }) ?? sh.color;
+      }
       it = sh;
     }
     while (this.peek().t === '@') {
@@ -341,6 +391,7 @@ class Parser {
       if (wt.t !== 'word') { this.fail(at, '@ is followed by a warp: @twist(2).'); continue; }
       this.next();
       const kind = WARP_WORDS[wt.v.toLowerCase()] ?? (wt.v.toLowerCase() === 'custom' ? 'custom' : null);
+      if (WARP_HINTS[wt.v.toLowerCase()]) this.hint(wt, WARP_HINTS[wt.v.toLowerCase()][0], WARP_HINTS[wt.v.toLowerCase()][1]);
       if (!kind) {
         const s = suggest(wt.v, Object.keys(WARP_WORDS));
         this.fail(wt, `“${wt.v}” isn't a warp.${s ? ` Did you mean “${s}”?` : ''}`);
@@ -373,7 +424,8 @@ class Parser {
   warpBody(kind: string, t: { at: number; end: number }, top: boolean): WarpSpec | null {
     if (kind === 'custom') return { id: this.wid(), kind: 'custom', values: {}, label: this.parenText(t) ?? (top ? this.args([]).map(a => this.src.slice(a.at, a.end)).join(' ') : 'custom') };
     let args: Arg[];
-    if (this.peek().t === '(') {
+    // `twist(2)` is a call; at the top level `repeat (2,100,2)` (a space before the bracket) is a vector value.
+    if (this.peek().t === '(' && (!top || this.peek().at === t.end)) {
       const open = this.next();
       args = this.args([')'], true);
       if (this.peek().t === ')') this.next(); else this.fail(open, 'This ( is never closed.');
@@ -383,7 +435,24 @@ class Parser {
     // `rotate y 30` (an axis and an angle) is the older Turn; `rotate (30, 0, 45)` turns about all three.
     if (kind === 'rotate' && args.some(a => (!a.key && a.value.kind === 'word' && /^[xyz]$/i.test(a.value.v)) || a.key?.toLowerCase() === 'axis')) kind = 'turn';
     const wp = newWarp(kind, this.wid());
-    this.warpArgs(wp, WARP_BY_KIND[kind], args);
+    const def = WARP_BY_KIND[kind];
+    args = this.resolveArgs(args, kind, (key, n) => {
+      const p = key ? def.params.find(q => q.key.toLowerCase() === key) : def.params[n];
+      if (p) return sceneRand(p);
+      if (key && def.axes && (key === def.axes.key || key === 'axis')) return { kind: 'choice', options: def.axes.kind === 'one' ? def.axes.options : ['x', 'y', 'z', 'xz', 'xy'] };
+      if (key && def.select && key === def.select.key) return { kind: 'choice', options: def.select.options };
+      return undefined;
+    });
+    this.warpArgs(wp, def, args);
+    if (this.randomAll) {
+      const given = new Set(args.map(a => a.key?.toLowerCase()).filter(Boolean));
+      const positional = args.filter(a => !a.key && a.value.kind !== 'word').length;
+      def.params.forEach((p, n) => {
+        if (given.has(p.key.toLowerCase()) || positional > n) return;
+        const v = this.draw(sceneRand(p), `${kind}.${p.key}`, t);
+        wp.values[p.key] = v.kind === 'vec' ? v.v : (v as { v: number }).v;
+      });
+    }
     return wp;
   }
 
@@ -391,7 +460,7 @@ class Parser {
 
   numberFor(p: ParamDef, a: Arg): number | Vec3 | null {
     const v = a.value;
-    const conv = (n: number, unit: 'deg' | 'rad' | null) => (p.deg && unit === 'rad' ? n * 180 / Math.PI : n);
+    const conv = (n: number, unit: Unit | null) => (p.deg && unit === 'rad' ? n * 180 / Math.PI : n);
     if (Array.isArray(p.def)) {
       if (v.kind === 'vec') return v.v;
       if (v.kind === 'num') return [v.v, v.v, v.v];
@@ -627,7 +696,7 @@ class Parser {
         if (byPalette) {
           const by = rest[0];
           if (by && !by.key && by.value.kind === 'word' && by.value.v.toLowerCase() === 'by') rest.shift();
-          else { this.fail(by ?? t, `${w} by … colours the space: colour by depth palette sunset.`); return; }
+          else { this.fail(by ?? t, `${w} by … colours the space: colour by depth palette=sunset.`); return; }
         }
         const o: OutputSpec = { show: 'picture' };
         let named = false, wantPalette = false;
@@ -644,7 +713,7 @@ class Parser {
           if (!key && (word === 'palette' || word === 'ramp' || word === 'the' || word === 'through' || word === 'with' || word === 'a')) continue;
           if (!key && !named && OUTPUT_WORDS[word]) { o.show = OUTPUT_WORDS[word]; named = true; continue; }
           const s = word ? suggest(word, Object.keys(OUTPUT_WORDS)) : null;
-          this.fail(a, `${w} shows one of ${OUTPUTS.map(x => x.words[0]).join(', ')}${byPalette ? '' : ' (add palette sunset to colour it)'}.${s ? ` Did you mean “${s}”?` : ''}`);
+          this.fail(a, `${w} shows one of ${OUTPUTS.map(x => x.words[0]).join(', ')}${byPalette ? '' : ' (add palette=sunset to colour it)'}.${s ? ` Did you mean “${s}”?` : ''}`);
         }
         if (!named) { if (!rest.length) this.fail(t, `${w} needs what to show: ${OUTPUTS.map(x => x.words[0]).join(', ')}.`); return; }
         if (byPalette && !o.palette) o.palette = DEFAULT_PALETTE;
@@ -677,8 +746,8 @@ function typeMismatch(key: string, want: 'float' | 'vec3', v: Value, wantWords?:
   return `${key} is ${what}.`;
 }
 
-export function parseRecipe(src: string): ParseResult {
-  return new Parser(src).recipe();
+export function parseRecipe(src: string, opts: ParseOptions = {}): ParseResult {
+  return new Parser(src, opts).recipe();
 }
 
 // ── Printing ────────────────────────────────────────────────────────────────
@@ -709,7 +778,9 @@ function printWarp(w: WarpSpec, top: boolean): string {
     else if (!valueEq(v, defaults[p.key])) parts.push(`${p.key}=${text}`);
   });
   if (def.select && !valueEq(w.values[def.select.key], defaults[def.select.key])) parts.push(`${def.select.key}=${w.values[def.select.key]}`);
-  return top ? [w.kind, ...parts].join(' ') : `@${w.kind}(${parts.join(' ')})`;
+  // D8: the noise warp is written `warp` (noise is the 2D node); `noise` still reads.
+  const word = w.kind === 'noise' ? 'warp' : w.kind;
+  return top ? [word, ...parts].join(' ') : `@${word}(${parts.join(' ')})`;
 }
 
 /** An item as recipe text. `indent` (the pretty form): a combine's items each on their own line, indented under it. */
@@ -817,7 +888,7 @@ export const RECIPE_VOCABULARY = {
   modes: ['surface', 'volumetric', 'glass', 'gi'],
   combines: ['union', 'smooth-union', 'subtract', 'smooth-subtract', 'intersect', 'smooth-intersect'],
   shapes: SHAPES.map(s => ({ kind: s.kind, keys: s.params.map(p => p.key) })),
-  warps: WARPS.map(w => ({ kind: w.kind, keys: [...(w.axes ? [w.axes.key] : []), ...w.params.map(p => p.key), ...(w.select ? [w.select.key] : [])] })),
+  warps: WARPS.map(w => ({ kind: w.kind === 'noise' ? 'warp' : w.kind, keys: [...(w.axes ? [w.axes.key] : []), ...w.params.map(p => p.key), ...(w.select ? [w.select.key] : [])] })),
   settings: ['sun dir=(x,y,z) color=…', 'sky (r,g,b)', 'bounce (r,g,b)', 'shadows 16 | off', 'ao 0.06 | off', 'fog 0.3 color=…', 'background (r,g,b) | top=… bottom=…', `tone ${TONE_MODES.join('|')}`, 'camera dist angle elev orbit zoom flatten x y z', 'quality steps dist step jitter'],
   colours: Object.keys(COLOR_NAMES),
   outputs: OUTPUTS.map(o => o.words[0]),
