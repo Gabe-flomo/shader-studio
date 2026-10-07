@@ -50,6 +50,17 @@ describe('Grid Rules Surprise me', () => {
     expect(new Set(Array.from({ length: 80 }, (_, i) => gridCandidate(makeRng(i + 1)).type))).toEqual(new Set(['count', 'stages', 'smooth', 'patterns', 'blocks']));
   }, SLOW);
 
+  it('sand surprises jitter enough not to band; the gas never jitters', () => {
+    const seen = new Set<string>();
+    for (let i = 1; i <= 40; i++) {
+      const c = gridCandidate(makeRng(i), 'blocks').patch;
+      const sand = c.edges === 'walls';
+      seen.add(sand ? 'sand' : 'gas');
+      if (sand) { expect(c.jitter).toBeGreaterThanOrEqual(0.6); expect(c.jitter).toBeLessThanOrEqual(1); } else expect(c.jitter).toBe(0);
+    }
+    expect(seen).toEqual(new Set(['sand', 'gas']));
+  });
+
   it('turns down candidates that die or fill, so the alive families win most of the time', () => {
     let firstTry = 0;
     for (const seed of SEEDS) if (surpriseGrid(seed, { type: 'count' }).tries === 1) firstTry++;

@@ -6,8 +6,15 @@
  */
 import { GRID_DEFAULTS, gridShape, neighbourOffsets, type GridShape } from './spec';
 import { SAME, blockVariants, patternVariants, specMatches, stencilOffset } from './stencils';
+import { blockStartsAt, diceFrame, grDice } from './dice';
 
-export interface CpuBoard { w: number; h: number; a: Float32Array; b: Float32Array; /** Blocks: the step's parity. */ par?: number }
+export interface CpuBoard {
+  w: number; h: number; a: Float32Array; b: Float32Array;
+  /** Blocks: the step's parity. */
+  par?: number;
+  /** Blocks: steps taken (the dice's frame number, as the GPU's is the frame's). */
+  step?: number;
+}
 
 export function cpuBoard(w: number, h: number): CpuBoard {
   return { w, h, a: new Float32Array(w * h), b: new Float32Array(w * h) };
@@ -94,38 +101,52 @@ function blocks(s: GridShape, P: Record<string, unknown>, B: CpuBoard): CpuBoard
   const out = cpuBoard(B.w, B.h);
   const par = B.par ?? 0;
   out.par = 1 - par;
+  const step = B.step ?? 0;
+  out.step = step + 1;
+  // The GPU's dice and block layout, in the same whole numbers (gridRules/dice.ts): the same board
+  // and the same frame number give the same next board.
+  const frame = diceFrame(step), seed = Number(P.seed) || 0;
+  const jitter = Math.max(0, Math.min(1, Number(P.jitter) || 0));
   const W = Math.floor(B.w / 2) * 2, H = Math.floor(B.h / 2) * 2;
   const top = Math.max(2, Math.round(Number(P.states))) - 1;
   out.a.set(B.a); out.b.set(B.b);
   // An odd last row or column has no block: kept empty.
   for (let y = 0; y < B.h; y++) for (let x = 0; x < B.w; x++) if (x >= W || y >= H) { out.a[y * B.w + x] = 0; out.b[y * B.w + x] = 0; }
   const rules = s.blocks.filter(r => !r.off).map(r => ({ r, variants: blockVariants(r) }));
+  const wrapX = (x: number) => ((x % W) + W) % W, wrapY = (y: number) => ((y % H) + H) % H;
   const val = (x: number, y: number) => {
-    if (s.wrap) { x = ((x % W) + W) % W; y = ((y % H) + H) % H; } else if (x < 0 || y < 0 || x >= W || y >= H) return -1;
+    if (s.wrap) { x = wrapX(x); y = wrapY(y); } else if (x < 0 || y < 0 || x >= W || y >= H) return -1;
     return Math.round(B.a[y * B.w + x]);
   };
-  // Odd steps shift the blocks by (1, 1). With walls the first block then starts at −1 (its outer half
-  // is outside), as the GLSL's does; wrapping, the block at W − 1 already covers column 0.
+  // Odd steps shift the columns by one. With walls the first column then starts at −1 (its outer half
+  // is outside), as the GLSL's does; wrapping, the column at W − 1 already covers column 0. Down each
+  // column a block starts where its segment's parity says (Jitter 0: every other row from par).
   const first = s.wrap ? par : -par;
-  for (let oy = first; oy < H + par; oy += 2) for (let ox = first; ox < W + par; ox += 2) {
-    // Corners: TL, TR, BL, BR (y up).
-    const pos: Array<[number, number]> = [[ox, oy + 1], [ox + 1, oy + 1], [ox, oy], [ox + 1, oy]];
-    const b = pos.map(([x, y]) => val(x, y));
-    for (const { r, variants } of rules) {
-      const n = variants.length, o = Math.floor(Math.random() * n);
-      let pick = -1;
-      for (let k = 0; k < n && pick < 0; k++) { const v = (o + k) % n; if (variants[v].before.every((spec, q) => specMatches(spec, b[q]))) pick = v; }
-      if (pick < 0 || Math.random() >= r.chance) continue;
-      pos.forEach(([x, y], q) => {
-        const a = variants[pick].after[q];
-        if (a === SAME || b[q] < 0) return;
-        const xx = s.wrap ? ((x % W) + W) % W : x, yy = s.wrap ? ((y % H) + H) % H : y;
-        const i = yy * B.w + xx;
-        const next = Math.min(a, top);
-        out.a[i] = next;
-        out.b[i] = ageOf(P, b[q], next, B.b[i]);
-      });
-      break;
+  for (let ox = first; ox < W + par; ox += 2) {
+    const strip = wrapX(ox);
+    for (let oy = s.wrap ? 0 : -1; oy < H; oy++) {
+      if (!blockStartsAt(strip, oy, par, jitter, frame, seed, s.wrap ? H : 0)) continue;
+      // Corners: TL, TR, BL, BR (y up).
+      const pos: Array<[number, number]> = [[ox, oy + 1], [ox + 1, oy + 1], [ox, oy], [ox + 1, oy]];
+      const b = pos.map(([x, y]) => val(x, y));
+      const ky = wrapY(oy);
+      for (let j = 0; j < rules.length; j++) {
+        const { r, variants } = rules[j];
+        const n = variants.length, o = Math.floor(grDice(strip, ky, frame, 31 + j * 2, seed) * n);
+        let pick = -1;
+        for (let k = 0; k < n && pick < 0; k++) { const v = (o + k) % n; if (variants[v].before.every((spec, q) => specMatches(spec, b[q]))) pick = v; }
+        if (pick < 0 || (r.chance < 1 && !(grDice(strip, ky, frame, 32 + j * 2, seed) < r.chance))) continue;
+        pos.forEach(([x, y], q) => {
+          const a = variants[pick].after[q];
+          if (a === SAME || b[q] < 0) return;
+          const xx = s.wrap ? wrapX(x) : x, yy = s.wrap ? wrapY(y) : y;
+          const i = yy * B.w + xx;
+          const next = Math.min(a, top);
+          out.a[i] = next;
+          out.b[i] = ageOf(P, b[q], next, B.b[i]);
+        });
+        break;
+      }
     }
   }
   return out;

@@ -20,11 +20,12 @@ Code:
 | GLSL from the rule set: one step, and the coloured view | `src/gridRules/glsl.ts` |
 | The node, its internal step, Mouse button | `src/nodes/definitions/gridRules.ts` |
 | Patterns and Blocks: rules, symmetries, presets | `src/gridRules/stencils.ts` |
+| Blocks: the dice and Jitter, as GLSL and as TypeScript (bit for bit the same) | `src/gridRules/dice.ts` |
 | Opening the node into the Pass machinery | `src/compiler/gridRulesExpand.ts` (called from `passGraph.ts`) |
 | Open as nodes | `src/store/gridRulesAsNodes.ts` |
 | Editor window, card, CPU preview | `src/components/gridRules/`, `src/gridRules/cpu.ts` |
 | Examples | `src/store/gridRulesExamples.ts`, `gridRulesExampleIndex.ts` |
-| Tests | `src/compiler/__tests__/gridRules*.test.ts`, `gridHarness.ts`, `glslRun.ts` |
+| Tests | `src/compiler/__tests__/gridRules*.test.ts`, `gridHarness.ts`, `glslRun.ts`, `src/gridRules/__tests__/` |
 
 ## Using it
 
@@ -137,13 +138,35 @@ fires the rule on a share of the matching blocks. The editor marks each rule **k
 when its after only rearranges its before (`blockConserves`).
 
 All four cells of a block make the same choice: the variant tried first and the chance are rolled
-once per block (a hash of the block's corner, wrapped, and the frame), so a rearranging rule never
-loses or doubles a cell, at the seam of a wrapping board too. An odd last row or column has no
-block and is kept empty.
+once per block (a hash of the block's corner, wrapped, the frame and the Seed), so a rearranging
+rule never loses or doubles a cell, at the seam of a wrapping board too. An odd last row or column
+has no block and is kept empty.
+
+**The dice** (`src/gridRules/dice.ts`) are a whole-number hash, `grDice`: each round adds an input,
+applies x(2x + 1) mod 2048 (a permutation of 0…2047) and rotates the 11 bits by 5. Every value is
+a whole number below 2²⁴ and every division is by a power of two, so float32 on the GPU holds each
+one exactly: the editor's CPU preview rolls the same numbers, and the same board, frame and Seed
+give the same next board on both (`gridRulesStencils.test.ts` checks it step by step). The GPU's
+frame number is `mod(floor(time × 60), 997)`; the CPU's is its step count.
+
+**Jitter** (`params.jitter`, 0–1, a live slider under the rules; a Play target). In plain Margolus
+every grain that falls in a step ends it in its block's bottom row, so every falling grain sits on
+the same row parity and a falling cloud shows as horizontal bands on every other row. Skipping
+moves at random doesn't fix it (a grain that waits is back in step a step later), so Jitter
+shuffles the grid instead: the board is cut into the step's two-cell columns, each column into
+segments of 4 rows, and each segment takes the step's row parity or, with chance Jitter ÷ 2, the
+other one. A block exists where its two rows agree; between two segments that disagree one row is
+in no block and sits the step out. Blocks never overlap, so each still changes all four cells at
+once and a rearranging rule keeps every count. Jitter 0 is the classic grid; at 1 each segment
+picks its parity at random. Measured on a falling cloud (`blocks.test.ts`), the share of grains on
+one parity beyond half goes 1.00 → 0.63 → 0.40 → 0.21 → 0.17 for Jitter 0, ¼, ½, ¾, 1. The cost:
+grains fall about half a cell a step (a grain whose segment keeps its parity waits a step), and
+slopes slide a little more loosely. Falling sand has Jitter 1 (and Speed 1 to keep its pace); the
+gas has 0, since the HPP gas needs the plain grid to fly straight (with Jitter it diffuses).
 
 Presets: **Falling sand** (0 air, 1 sand, 2 wall: grains fall, slide off heaps with chance 0.8, rest
-on walls), **Gas (HPP)** (particles fly diagonally and scatter at right angles, Toffoli and
-Margolus).
+on walls; Jitter 1), **Gas (HPP)** (particles fly diagonally and scatter at right angles, Toffoli
+and Margolus; Jitter 0). Surprise me gives sand a Jitter of 0.6–1 and the gas 0.
 
 **Image start** for every whole-number rule: the picture's brightness picks the state, 0 for black
 up to the last state for white (two states: bright parts start on). Wireworld's example draws its
@@ -341,9 +364,10 @@ isn't built ((2N + 1)² − 1 Sample cards); the button says so. Seeding uses No
 new board is a different (as random) deal.
 
 Patterns open as eight Sample reads and one **The patterns** Expression Block (each rule a named
-line); Blocks as **This cell's block** (the corner and parity), four UVs and four Sample reads of
-the block's cells, and **The blocks** Expression Block (each orientation's priority, the per-block
-dice, each rule's answer), plus **Clock and parity** for blue.
+line); Blocks as **Jitter** and **Seed** constants, **This cell's block** (the corner, from
+`grBlockOf`, and the parity), four UVs and four Sample reads of the block's cells, and **The
+blocks** Expression Block (whether the cell is in a block this step, each orientation's priority,
+the per-block dice, each rule's answer), plus **Clock and parity** for blue.
 
 **Equivalence** (`gridRulesAsNodes.test.ts`): the compact node's board program and the opened
 graph's are both run on the CPU from the same board for six steps, for Life, HighLife with walls,
@@ -355,8 +379,15 @@ update: the same states (red) and age (green) every step.
 `gridRulesStencils.test.ts`: the variants each symmetry stands for, spec → GLSL, pattern matching
 with rotations and counts against a CPU reference, an electron running along a Wireworld wire,
 the gas against a Margolus reference (wrapping and walled), **conservation** (sand and gas, wrapping
-and walled, even and odd boards, dice on), sand piling on the floor, every preset, and the image
-start's brightness → state.
+and walled, even and odd boards, dice on), sand piling on the floor, the **CPU preview against the
+GPU** board for twelve steps (sand at Jitter 1, 0.4 and 0, the gas at 0.7; walls and wrap; even and
+odd boards), every preset, and the image start's brightness → state.
+
+`blocks.test.ts` (the CPU preview): plain Margolus sand falls one cell a step and topples; with
+Jitter a grain still reaches the floor and stays, a falling cloud's banding drops below 0.25, every
+grain and wall is kept over 300 steps (Jitter 0.3 and 1, walls and wrap, odd boards; the gas too),
+the same board and Seed give the same run (another Seed another), and a falling cloud settles into
+a heap.
 
 ## Examples (Simulations: grids)
 

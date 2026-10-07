@@ -145,10 +145,14 @@ const WIRE_LOOK = { color0: [0.02, 0.02, 0.04], color1: [0.75, 0.9, 1.0], color2
 const DOTS_LOOK = { color0: [0.02, 0.03, 0.06], color1: [0.6, 0.85, 1.0], afterglow: 0.8, glowColor: [0.1, 0.25, 0.5], ageFade: 0, brushState: 1, brushFill: 0.3 };
 const CRYSTAL_LOOK = { color0: [0.02, 0.03, 0.07], color1: [0.85, 0.95, 1.0], oldColor: [0.25, 0.5, 0.9], ageRate: 0.01, ageFade: 1, afterglow: 0, brushState: 1, brushFill: 1, brushRadius: 1.5 };
 // Sand starts as a loose cloud of grains in the middle, on a finer board, so it falls and heaps up on
-// the floor. Not a board full of noise: in Margolus free fall every falling grain sits on the same row
-// parity (each step it lands in its block's bottom row), so a full board falls as one barred sheet.
-const SAND_LOOK = { color0: [0.04, 0.04, 0.07], color1: [0.95, 0.78, 0.45], color2: [0.42, 0.4, 0.45], afterglow: 0, ageFade: 0, brushState: 1, brushFill: 0.5, start: 'centre', density: 0.35, board: '0.25' };
-const GAS_LOOK = { color0: [0.02, 0.02, 0.05], color1: [1.0, 0.6, 0.3], afterglow: 0.85, glowColor: [0.5, 0.12, 0.25], ageFade: 0, brushState: 1, brushFill: 0.5 };
+// the floor. Not a board full of noise: a full board would fall as one sheet. Speed 1: with Jitter on,
+// grains fall about half a cell a step (a row out of step waits a step), so a step every frame.
+// Jitter 1: in plain Margolus every falling grain ends a step in its block's bottom row, so a falling
+// cloud shows in bands on every other row; Jitter shuffles the block rows (gridRules/dice.ts). A look
+// setting, not a rule one: tuning it keeps the preset.
+const SAND_LOOK = { jitter: 1, color0: [0.04, 0.04, 0.07], color1: [0.95, 0.78, 0.45], color2: [0.42, 0.4, 0.45], afterglow: 0, ageFade: 0, brushState: 1, brushFill: 0.5, start: 'centre', density: 0.35, board: '0.25', rate: 1 };
+// Jitter 0: the HPP gas needs the plain Margolus grid to fly straight (with Jitter it diffuses).
+const GAS_LOOK = { jitter: 0, color0: [0.02, 0.02, 0.05], color1: [1.0, 0.6, 0.3], afterglow: 0.85, glowColor: [0.5, 0.12, 0.25], ageFade: 0, brushState: 1, brushFill: 0.5 };
 
 export const PATTERN_PRESETS: Record<string, StencilPreset> = {
   wireworld: {
@@ -188,7 +192,7 @@ export const PATTERN_PRESETS: Record<string, StencilPreset> = {
 
 export const BLOCK_PRESETS: Record<string, StencilPreset> = {
   sand: {
-    label: 'Falling sand', hint: 'Grains (1) fall into empty cells (0), slide off each other down to the side, and rest on walls (2) and the floor. Nothing is lost or made.',
+    label: 'Falling sand', hint: 'Grains (1) fall into empty cells (0), slide off each other down to the side, and rest on walls (2) and the floor. Jitter 1 keeps a falling cloud from showing in bands. Nothing is lost or made.',
     params: {
       // Walls: sand needs a floor to pile on. On a wrapping board it falls out of the bottom and back in at the top for ever.
       states: 3, edges: 'walls',

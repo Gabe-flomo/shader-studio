@@ -23,6 +23,7 @@ import {
 import { gridLabel } from '../compiler/gridRulesExpand';
 import { ANY, NOT_EMPTY, SAME, blockVariants, patternVariants, stencilOffset } from '../gridRules/stencils';
 import { GR_HASH_GLSL } from '../gridRules/glsl';
+import { GR_DICE_GLSL } from '../gridRules/dice';
 import { estimateNodeHeight, groupNodesByRank } from './graphLayout';
 
 export type GridOutKey = 'color' | 'state' | 'alive' | 'age' | 'value' | 'texture' | 'board';
@@ -253,7 +254,7 @@ function discreteCore(b: Builder, s: GridShape, P: Record<string, unknown>, cell
   const multi = s.type === 'patterns' || s.type === 'blocks';
   if (multi) {
     b.add('constant', 'states', 4, 13, { value: num(P, 'states'), label: 'States' }, 'States: how many states the rules use (0 is empty). A constant so Play can drive it.');
-    if (s.type === 'patterns') patternsCore(b, s, cellPx); else blocksCore(b, s);
+    if (s.type === 'patterns') patternsCore(b, s, cellPx); else blocksCore(b, s, P);
   } else countCore(b, s, P, cellPx);
   const stages = s.type !== 'count';
   b.card('look', 5, 13, 'Afterglow and age', [['afterglow', 'Afterglow', num(P, 'afterglow'), 0.99], ['ageRate', 'Ageing', num(P, 'ageRate'), 0.2]],
@@ -706,18 +707,24 @@ function patternsCore(b: Builder, s: GridShape, cellPx: number): void {
   });
 }
 
-function blocksCore(b: Builder, s: GridShape): void {
+function blocksCore(b: Builder, s: GridShape, P: Record<string, unknown>): void {
   const W = 'floor(u_resolution * 0.5) * 2.0';
+  const wrap = s.wrap ? '1.0' : '0.0';
+  b.add('constant', 'jitter', 1, 11, { value: num(P, 'jitter'), label: 'Jitter' }, 'Jitter: how much the block grid is shuffled each step, 0 to 1. Each two-cell column is cut into 4-row segments, and a segment\'s blocks move up a row with chance Jitter ÷ 2, so falling grains stop lining up on every other row. 0 is the classic Margolus grid. A constant so Play can drive it.');
+  b.add('constant', 'diceSeed', 1, 12, { value: num(P, 'seed'), label: 'Seed' }, 'Seed: picks which dice the blocks roll (a different seed, a different run; the same seed, the same run).');
   b.expr('blockCorner', 2, 11, {
     label: 'This cell\'s block', outputType: 'vec3',
-    inputs: [['cell', 'vec2', ['cell', 'coord']], ['phase', 'float', ['selfParts', 'z']]],
-    lines: [['float par', 'step(1.5, phase)'], ['vec2 c', 'floor(cell)'], ['vec2 org', 'floor((c - par) * 0.5) * 2.0 + par']],
-    result: 'vec3(org, par)',
+    inputs: [['cell', 'vec2', ['cell', 'coord']], ['phase', 'float', ['selfParts', 'z']], ['jitter', 'float', ['jitter', 'value']], ['seed', 'float', ['diceSeed', 'value']]],
+    lines: [['float par', 'step(1.5, phase)'], ['vec2 W', W], ['float frame', 'mod(floor(t * 60.0), 997.0)'], ['vec3 blk', `grBlockOf(floor(cell), par, W, clamp(jitter, 0.0, 1.0), frame, seed, ${wrap})`]],
+    result: 'vec3(blk.xy, par)',
+    functions: GR_DICE_GLSL,
     note: [
-      'This cell\'s block: the Margolus grid of 2×2 blocks, shifted one cell diagonally on odd steps.',
+      'This cell\'s block: the Margolus grid of 2×2 blocks, shifted one cell diagonally on odd steps (and, with Jitter, a row up or down here and there).',
+      'Why an Expression Block: grBlockOf rolls whole-number dice for this cell\'s column segment and the one next to it, a page of arithmetic as nodes.',
       'par: the step\'s parity, kept in blue as 2 + the phase on odd steps.',
-      'c: this cell, counted from 0.',
-      'org: the bottom-left corner of its block.',
+      'W: the board\'s even part.',
+      'frame: the frame number, for the dice.',
+      'blk: the bottom-left corner of this cell\'s block (x, y), and whether the cell is in a block this step (z: a row between two segments that disagree sits out).',
       'result: the corner (x, y) and the parity (z).',
     ],
   });
@@ -741,11 +748,13 @@ function blocksCore(b: Builder, s: GridShape): void {
   });
   lines.push(['vec2 q', 'floor(cell) - blk.xy'], ['float qi', 'q.x + (1.0 - q.y) * 2.0'], ['float s', 'floor(me + 0.5)']);
   notes.push('q: this cell within its block (0 or 1 across and up).', 'qi: which of the four it is (top left 0, top right 1, bottom left 2, bottom right 3).', 's: this cell\'s state.');
+  lines.push(['float inBlk', `grBlockOf(floor(cell), blk.z, W, clamp(jitter, 0.0, 1.0), frame, seed, ${wrap}).z`]);
+  notes.push('inBlk: 1 if this cell is in a block this step (with Jitter a few rows sit out a step and stay as they are).');
   const rules = s.blocks.filter(r => !r.off);
   rules.forEach((r, j) => {
     const vars = blockVariants(r);
     const n = vars.length;
-    lines.push([`float o${j}`, `floor(grHash(vec3(key, frame + ${f(31 + j * 2)})) * ${f(n)})`]);
+    lines.push([`float o${j}`, `floor(grDice(key, frame, ${f(31 + j * 2)}, seed) * ${f(n)})`]);
     notes.push(`o${j}: which of rule ${j + 1}'s ${n} orientation(s) is tried first, rolled once per block.`);
     vars.forEach(({ before }, k) => {
       const tests = before.map((spec, q) => specTest(spec, `v${q}`)).filter((t): t is string => !!t);
@@ -753,7 +762,7 @@ function blocksCore(b: Builder, s: GridShape): void {
       notes.push(`m${j}_${k}: rule ${j + 1}, orientation ${k + 1}: its priority when the block matches its before picture, else 0.`);
     });
     const best = vars.map((_, k) => `m${j}_${k}`).reduce((a, x) => `max(${a}, ${x})`);
-    lines.push([`float hit${j}`, `(${best} > 0.5${r.chance < 1 ? ` && grHash(vec3(key, frame + ${f(32 + j * 2)})) < ${f(r.chance)}` : ''}) ? 1.0 : 0.0`]);
+    lines.push([`float hit${j}`, `(${best} > 0.5${r.chance < 1 ? ` && grDice(key, frame, ${f(32 + j * 2)}, seed) < ${f(r.chance)}` : ''}) ? 1.0 : 0.0`]);
     notes.push(`hit${j}: rule ${j + 1} fires on this block${r.chance < 1 ? ` (with chance ${r.chance}, rolled per block)` : ''}.`);
     // The chosen orientation's after, at this cell's place.
     const afterAt = (q: number) => vars.reduceRight((acc, { after }, k) => {
@@ -764,14 +773,14 @@ function blocksCore(b: Builder, s: GridShape): void {
     lines.push([`float a${j}`, `qi < 0.5 ? ${afterAt(0)} : (qi < 1.5 ? ${afterAt(1)} : (qi < 2.5 ? ${afterAt(2)} : ${afterAt(3)}))`]);
     notes.push(`a${j}: what this cell becomes under rule ${j + 1}'s chosen orientation (= keeps it).`);
   });
-  const chain = rules.reduceRight((acc, _r, j) => `(hit${j} > 0.5 ? a${j} : ${acc})`, 's');
+  const chain = `(inBlk > 0.5 ? ${rules.reduceRight((acc, _r, j) => `(hit${j} > 0.5 ? a${j} : ${acc})`, 's')} : s)`;
   b.expr('rule', 5, 11, {
     label: 'The blocks', outputType: 'float',
     inputs: [
-      ['blk', 'vec3', ['blockCorner', 'result']], ['cell', 'vec2', ['cell', 'coord']], ['me', 'float', ['selfParts', 'x']], ['states', 'float', ['states', 'value']],
+      ['blk', 'vec3', ['blockCorner', 'result']], ['cell', 'vec2', ['cell', 'coord']], ['me', 'float', ['selfParts', 'x']], ['states', 'float', ['states', 'value']], ['jitter', 'float', ['jitter', 'value']], ['seed', 'float', ['diceSeed', 'value']],
       ...corners.map((_, q) => [`b${q}`, 'vec3', [`blk${q}`, 'color']] as [string, 'vec3', LWire]),
     ],
-    lines, functions: GR_HASH_GLSL,
+    lines, functions: GR_DICE_GLSL,
     result: `clamp(${chain}, 0.0, max(floor(states + 0.5), 2.0) - 1.0)`,
     note: [
       'The blocks: the rules tried in order on this cell\'s 2×2 block; the first that fires rewrites all four cells at once (each cell works out its own part of the same answer, so the four agree and nothing is lost or made).',
