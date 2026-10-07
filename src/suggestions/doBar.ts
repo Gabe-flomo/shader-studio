@@ -433,8 +433,10 @@ export function parseDo(text: string, ctx: DoContext): DoPlan {
       if (isNewShape) { plan.problem = `Make it a picture first ("${subjectShape?.words[0] ?? 'shape'} with a glow"), then ${g.head.text}.`; continue; }
       const c = subjectNode && outputKinds(subjectNode).some(o => o.kind === 'colour') ? subjectNode : subjectNode ? colourFrom(ctx.nodes, subjectNode.id) : undefined;
       if (!c) { plan.problem = 'There is no colour to do that to yet.'; continue; }
+      const colourOut = outputKinds(c).find(o => o.kind === 'colour');
+      if (!colourOut) { plan.problem = `${labelOf(c)} has no colour output to ${g.head.text}.`; continue; }
       node = c.id;
-      key = outputKinds(c).find(o => o.kind === 'colour')!.key;
+      key = colourOut.key;
     } else if (isNewShape) {
       key = 'distance';
     } else {

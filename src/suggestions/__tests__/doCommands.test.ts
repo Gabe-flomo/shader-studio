@@ -11,6 +11,7 @@ vi.hoisted(() => {
 });
 
 import { compileGraph } from '../../compiler/graphCompiler';
+import { getNodeDefinition } from '../../nodes/definitions';
 import { estimateNodeHeight } from '../../store/graphLayout';
 import { n } from '../../store/graphBuilder';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -375,5 +376,23 @@ describe('docs/do-bar-commands.md', () => {
     expect(shippedDoc).toBe(fullCommandsMarkdown());
     for (const v of COMMAND_VERBS) expect(shippedDoc).toContain(`### ${v.words[0]}`);
     for (const b of BUILDER_COMMANDS) expect(shippedDoc).toContain(`### ${b.words[0]}`);
+  });
+});
+
+describe('colour steps on a node with no colour output', () => {
+  // Language pressure test, "The runner crash": the colour source parseDo found (here the Time node
+  // feeding the Output) had no colour output and the lookup threw, which blanked the app from the Do… bar.
+  const output = (): GraphNode => {
+    const def = getNodeDefinition('output')!;
+    const sockets = (m: Record<string, { type: string; label?: string }> | undefined) => Object.fromEntries(Object.entries(m ?? {}).map(([k, v]) => [k, { type: v.type, label: v.label }]));
+    return { id: 'out', type: 'output', position: { x: 0, y: 0 }, params: { ...(def.defaultParams ?? {}) }, inputs: sockets(def.inputs), outputs: sockets(def.outputs) } as GraphNode;
+  };
+  it.each(['create a crt screen'])('"%s" right after "create time" does not throw', (line) => {
+    let k = 0;
+    const nextId = () => `t${++k}`;
+    const made = execCommand('create time', [output()], { selected: [], nextId, topLevel: true });
+    expect(conn(made.nodes, 'out', 'color')).toBe('t1.time');
+    const p = execCommand(line, made.nodes, { selected: made.select, nextId, topLevel: true });
+    expect(p.clauses.length).toBeGreaterThan(0);
   });
 });

@@ -164,7 +164,12 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   const canonicalRun = line && readsCanonically(line) ? line : null;
   const runText = canonicalRun?.dialect === 'picture' ? canonicalRun.picture!.sentence! : text;
   const otherDialect = canonicalRun && canonicalRun.dialect !== 'picture' ? canonicalRun : null;
-  const plan: DoPlan = useMemo(() => (text.trim() && !builder && !otherDialect && !surprise ? parseDo(runText, scope) : { steps: [], reading: [], unknown: [] }), [runText, text, scope, builder, otherDialect, surprise]);
+  const plan: DoPlan = useMemo(() => {
+    const none: DoPlan = { steps: [], reading: [], unknown: [] };
+    if (!text.trim() || builder || otherDialect || surprise) return none;
+    // A throw here would unmount the whole app mid-typing; read it as nothing instead.
+    try { return parseDo(runText, scope); } catch { return none; }
+  }, [runText, text, scope, builder, otherDialect, surprise]);
   // The command language (doCommands.ts): every clause, previewed on a copy of the graph.
   const [picks, setPicks] = useState<Record<string, string>>({});
   const cmd: CommandPlan | null = useMemo(() => {
