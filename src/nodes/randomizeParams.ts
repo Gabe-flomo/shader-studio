@@ -3,14 +3,19 @@ import { getNodeDefinitionFor } from './definitions';
 import { hasCustomRange, paramSliderRange } from './sliderRange';
 import { isParamVisible } from '../compiler/uniformPatcher';
 import { isKeyframeBypassed, socketHasKeyframes } from '../compiler/keyframes';
+import { hslToRgb, interestingRange, makeRng, neverRandomise, type Interesting } from '../lib/surprise';
 
 /**
  * New random values for a node's sliders (the node card's 🎲 Randomize).
  *
- * - Every visible float/int slider not driven by a wire or by keyframes gets a value in the
- *   range the card shows: min → max, the typed max if there is one, and −max → max when the
- *   slider runs both ways. A slider with no declared range (Constant, matrix cells, …) uses −1 → 1.
- * - vec3 params: each unwired component in the param's range, or −1 → 1; colours 0 → 1.
+ * - Every visible float/int slider not driven by a wire or by keyframes gets a value in its
+ *   *interesting* range (lib/surprise/ranges.ts: the part of the legal range that looks good, by
+ *   the param's name, else a band round its default), always inside the range the card shows.
+ *   A range the user typed (a typed max, both ways) is theirs: the whole of it is used. A slider
+ *   with no declared range (Constant, matrix cells, …) uses −1 → 1. Bit masks and counters
+ *   (lib/surprise neverRandomise) are left alone.
+ * - vec3 params: each unwired component in the param's range, or −1 → 1; colours a pleasant
+ *   colour (saturation 0.45–0.9, lightness 0.35–0.7) rather than three random channels.
  * - Values snap to the slider's step (whole numbers stay whole).
  * - Keys listed in `node.params.__randExclude` (unticked in the die's right-click list) are left alone.
  * - Strength (`node.params.__randAmount`, 0.01–1, default 1): the new value is drawn from a
@@ -27,10 +32,13 @@ export function randomizedParams(node: GraphNode, def: NodeDefinition, rand: () 
 
   const excluded = new Set(randomizeExcluded(node));
   for (const [key, pd] of Object.entries(def.paramDefs ?? {})) {
-    if (!isParamVisible(pd, node.params, def.defaultParams) || wired(key) || keyframed(key) || excluded.has(key)) continue;
+    if (!isParamVisible(pd, node.params, def.defaultParams) || wired(key) || keyframed(key) || excluded.has(key) || neverRandomise(key)) continue;
     if (pd.type === 'float' || pd.type === 'int') {
       const [lo, hi] = floatRange(node, key, pd);
-      out[key] = between(lo, hi, pd, node.params[key]);
+      const nice = niceRange(node, key, pd, lo, hi, def.defaultParams?.[key]);
+      out[key] = pickIn(lo, hi, nice, node.params[key], amount, rand, pd);
+    } else if (pd.type === 'vec3color' && amount >= 1 && !['r', 'g', 'b'].some(c => wired(`${key}_${c}`))) {
+      out[key] = hslToRgb(rand(), 0.45 + rand() * 0.45, 0.35 + rand() * 0.35);
     } else if (pd.type === 'vec3' || pd.type === 'vec3color') {
       const cur = Array.isArray(node.params[key]) ? node.params[key] as number[] : [0, 0, 0];
       const [lo, hi] = pd.type === 'vec3color' ? [0, 1] : pd.min !== undefined || pd.max !== undefined ? [pd.min ?? -1, pd.max ?? 1] : [-1, 1];
@@ -38,6 +46,56 @@ export function randomizedParams(node: GraphNode, def: NodeDefinition, rand: () 
     }
   }
   return out;
+}
+
+/**
+ * The part of a slider's range Randomize lands in: the whole range the user typed, else the
+ * interesting range for its name (lib/surprise), cut to the card's range.
+ */
+function niceRange(node: GraphNode, key: string, pd: ParamDef, lo: number, hi: number, def: unknown): Interesting {
+  const custom = hasCustomRange(node.params, key) || node.params[`__scBidir_${key}`] === true || (pd.min === undefined && pd.max === undefined);
+  const r = custom ? null : interestingRange(key, { min: lo, max: hi, step: pd.step, def: typeof def === 'number' ? def : undefined, int: pd.type === 'int' }, node.type);
+  return r ?? { lo, hi, log: false, int: pd.type === 'int', source: 'legal' };
+}
+
+/** A value in the nice range (log-spread when it says so), or for a strength below 1 a window round the current value; inside [lo, hi]. */
+function pickIn(lo: number, hi: number, nice: Interesting, current: unknown, amount: number, rand: () => number, pd: ParamDef): number {
+  const nlo = Math.max(lo, Math.min(hi, nice.lo)), nhi = Math.max(nlo, Math.min(hi, nice.hi));
+  if (amount < 1) {
+    const width = (nhi - nlo) * amount;
+    const centre = typeof current === 'number' && Number.isFinite(current) ? current : (nlo + nhi) / 2;
+    const start = Math.min(hi - width, Math.max(lo, centre - width / 2));
+    return clampSnap(start + rand() * width, lo, hi, pd);
+  }
+  const u = rand();
+  const v = nice.log && nlo > 0 ? Math.exp(Math.log(nlo) + u * (Math.log(nhi) - Math.log(nlo))) : nlo + u * (nhi - nlo);
+  return clampSnap(v, lo, hi, pd);
+}
+
+function clampSnap(v: number, lo: number, hi: number, pd: ParamDef): number {
+  const s = snap(v, pd);
+  return Math.min(hi, Math.max(lo, s));
+}
+
+/**
+ * Randomise all settings in a graph level (the toolbar's dice): every node's free sliders, as its
+ * card's Randomize would, from one seed (each node its own stream, so adding a node elsewhere
+ * doesn't change the others). `nodes` is one level (top level, or a group's inside). Returns the
+ * new list and how many settings changed.
+ */
+export function randomizedGraph(nodes: GraphNode[], seed: number): { nodes: GraphNode[]; changed: number } {
+  const rng = makeRng(seed);
+  let changed = 0;
+  const out = nodes.map(n => {
+    const def = getNodeDefinitionFor(n);
+    if (!def) return n;
+    const patch = randomizedParams(n, def, rng.fork(n.id).next);
+    const keys = Object.keys(patch);
+    if (!keys.length) return n;
+    changed += keys.length;
+    return { ...n, params: { ...n.params, ...patch } };
+  });
+  return { nodes: out, changed };
 }
 
 /** Same effective range as the card's ruler (NodeComponent's float row) */
@@ -76,7 +134,7 @@ export function randomizableParams(node: GraphNode, def: NodeDefinition): Array<
 // nodes inside it. The rows mirror NodeComponent's group card: inner nodes' float sliders that
 // aren't hidden or wired, plus params surfaced from nested groups.
 
-interface GroupRow { key: string; label: string; lo: number; hi: number; pd: ParamDef; current: unknown }
+interface GroupRow { key: string; label: string; lo: number; hi: number; pd: ParamDef; current: unknown; nice?: Interesting }
 
 function groupRandomRows(group: GraphNode): GroupRow[] {
   const sg = group.params.subgraph as SubgraphData | undefined;
@@ -106,8 +164,10 @@ function groupRandomRows(group: GraphNode): GroupRow[] {
       if (inner.inputs[`__param_${key}`]?.connection) continue;
       if (Object.entries(inner.inputs).some(([k, inp]) => k.toLowerCase() === key.toLowerCase() && inp.connection)) continue;
       if (hidden.includes(`${inner.id}::${key}`) || group.inputs[`ps_${inner.id}_${key}`]?.connection) continue;
+      if (neverRandomise(key)) continue;
       const [lo, hi] = floatRange(inner, key, pd);
-      rows.push({ key: `${inner.id}::${key}`, label: `${sectionLabel(inner)} · ${pd.label}`, lo, hi, pd, current: inner.params[key] });
+      const nice = niceRange(inner, key, pd, lo, hi, def?.defaultParams?.[key]);
+      rows.push({ key: `${inner.id}::${key}`, label: `${sectionLabel(inner)} · ${pd.label}`, lo, hi, pd, current: inner.params[key], nice });
     }
   }
   return rows;
@@ -118,7 +178,7 @@ function randomizedGroupOverrides(group: GraphNode, rand: () => number): Record<
   const amount = randomizeAmount(group);
   const out: Record<string, unknown> = {};
   for (const r of groupRandomRows(group)) {
-    if (!excluded.has(r.key)) out[r.key] = pick(r.lo, r.hi, group.params[r.key] ?? r.current, amount, rand, r.pd);
+    if (!excluded.has(r.key)) out[r.key] = r.nice ? pickIn(r.lo, r.hi, r.nice, group.params[r.key] ?? r.current, amount, rand, r.pd) : pick(r.lo, r.hi, group.params[r.key] ?? r.current, amount, rand, r.pd);
   }
   return out;
 }

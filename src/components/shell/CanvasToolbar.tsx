@@ -1,3 +1,6 @@
+import { askText } from '../ui/dialogStore';
+import { seedFrom } from '../../lib/surprise';
+import { randomizeGraphAction, useSurpriseSeeds } from '../surprise/surpriseActions';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
@@ -141,6 +144,7 @@ export function CanvasToolbar({
       {!readOnly && onBake && topLevel && (
         <IconButton icon="record" label="Bake the picture: render it once to a video and play that instead (much lighter to run; Unbake brings it back)" size="sm" onClick={onBake} />
       )}
+      {!readOnly && <RandomizeGraphButton />}
       {!readOnly && onOptimize && (
         <IconButton icon="spark" label="Optimise graph: fold runs of math cards into Expression Blocks, sliders kept, picture unchanged" size="sm" onClick={onOptimize} />
       )}
@@ -150,6 +154,24 @@ export function CanvasToolbar({
         </span>
       )}
     </div>
+  );
+}
+
+/**
+ * Randomise all settings in this graph (docs/surprise.md): every free slider on the level on
+ * screen, in its interesting range, from a new seed, as one undo step. Right-click: type a seed.
+ */
+function RandomizeGraphButton() {
+  const ask = async () => {
+    const last = useSurpriseSeeds.getState().graph;
+    const text = await askText('Randomise all settings from a seed', { label: 'Seed (a number or a word)', initial: last === null ? '' : String(last), confirmLabel: 'Randomise' });
+    const seed = text === null ? null : seedFrom(text);
+    if (seed !== null) randomizeGraphAction(seed);
+  };
+  return (
+    <span onContextMenu={e => { e.preventDefault(); e.stopPropagation(); void ask(); }} style={{ display: 'inline-flex' }}>
+      <IconButton icon="dice" label="Randomise all settings in this graph: every free slider, in a range that looks good, from a new seed (one undo step) · right-click: type a seed" size="sm" onClick={() => randomizeGraphAction()} data-randomize-graph />
+    </span>
   );
 }
 

@@ -27,7 +27,9 @@ import { wordAssist, type Completion } from '../../lang/complete';
 import { GRID_PARAM_DEFS } from '../../nodes/definitions/gridRules';
 import { GRID_VIEWS, gridViewMode } from '../../gridRules/glsl';
 import { Button } from '../ui/Button';
-import { Segmented } from '../ui/Choice';
+import { Segmented, Toggle } from '../ui/Choice';
+import { SurpriseBar } from '../surprise/SurpriseBar';
+import { surpriseGridAction, useSurpriseSeeds } from '../surprise/surpriseActions';
 import { Field } from '../ui/Field';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
@@ -75,11 +77,18 @@ function GridRulesWindow({ node, tab, setTab, tabs, onClose }: {
   const problem = gridAsNodesProblem(node);
   const label = typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Grid Rules';
   const onExample = (ex: HelpExample) => { if ('patch' in ex.insert) set(ex.insert.patch, true); };
+  const surpriseSeed = useSurpriseSeeds(s => s.grid[node.id] ?? null);
+  const [keepType, setKeepType] = useState(false);
   return (
     <BuilderWindow
       prefsKey="grid-rules"
       title="Grid Rules" subtitle={`${label} · ${ruleSummary(params)}`} icon="grid" width={1180} height={780} onClose={onClose}
       tabs={{ items: tabs, value: tab, onChange: setTab, ariaLabel: 'Grid Rules sections' }}
+      headerActions={<>
+        <Toggle checked={keepType} onChange={setKeepType} label="Keep the type" />
+        <SurpriseBar seed={surpriseSeed} onSurprise={seed => surpriseGridAction(node.id, seed, keepType ? shape.type : undefined)}
+          title="A random rule that stays alive (tried on a test board first), with a random start and colours (one undo step)" />
+      </>}
       right={{ label: 'Preview', icon: 'eye', width: 320, content: (
         <div style={{ padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 12, font: `12.5px ${fontFamily.ui}`, color: tk.text.primary }}>
           <RulePreview params={params} />
