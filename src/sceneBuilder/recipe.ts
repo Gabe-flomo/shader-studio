@@ -174,7 +174,8 @@ export function suggest(word: string, among: string[]): string | null {
 // ── Values ──────────────────────────────────────────────────────────────────
 
 type Value = { kind: 'num'; v: number; unit: 'deg' | 'rad' | null } | { kind: 'vec'; v: Vec3 } | { kind: 'word'; v: string } | { kind: 'str'; v: string };
-type Arg = { key: string | null; value: Value; at: number; end: number };
+/** `comma`: a `,` followed it inside a warp's brackets (`@move(1, 2, 3)` is one vector). */
+type Arg = { key: string | null; value: Value; at: number; end: number; comma?: boolean };
 
 export const round = (n: number) => Math.round(n * 10000) / 10000;
 
@@ -229,11 +230,12 @@ class Parser {
     return null;
   }
 
-  /** Arguments up to the end of the clause, a `,`, `)` or `@`. */
-  args(stop: ReadonlyArray<Tok['t']> = [',', ')', '@']): Arg[] {
+  /** Arguments up to the end of the clause, a `,`, `)` or `@`. `commas`: a `,` between arguments is allowed and marked on the one before it. */
+  args(stop: ReadonlyArray<Tok['t']> = [',', ')', '@'], commas = false): Arg[] {
     const out: Arg[] = [];
     while (!this.atEnd(stop)) {
       const t = this.peek();
+      if (commas && t.t === ',') { this.next(); if (out.length) out[out.length - 1].comma = true; continue; }
       if (t.t === 'word' && this.peek(1).t === '=') {
         this.next(); this.next();
         const v = this.value();
@@ -396,11 +398,13 @@ class Parser {
     let args: Arg[];
     if (this.peek().t === '(') {
       const open = this.next();
-      args = this.args([')']);
+      args = this.args([')'], true);
       if (this.peek().t === ')') this.next(); else this.fail(open, 'This ( is never closed.');
     } else {
       args = this.args(top ? [] : [',', ')', '@']);
     }
+    // `rotate y 30` (an axis and an angle) is the older Turn; `rotate (30, 0, 45)` turns about all three.
+    if (kind === 'rotate' && args.some(a => (!a.key && a.value.kind === 'word' && /^[xyz]$/i.test(a.value.v)) || a.key?.toLowerCase() === 'axis')) kind = 'turn';
     const wp = newWarp(kind, this.wid());
     this.warpArgs(wp, WARP_BY_KIND[kind], args);
     return wp;
@@ -478,8 +482,23 @@ class Parser {
     }
   }
 
-  warpArgs(wp: WarpSpec, def: WarpDef, args: Arg[]) {
+  warpArgs(wp: WarpSpec, def: WarpDef, args0: Arg[]) {
     let positional = 0;
+    // Numbers joined by commas are one vector: @move(1, 0.5, 0) is by=(1, 0.5, 0).
+    const args: Arg[] = [];
+    for (let i = 0; i < args0.length; i++) {
+      const a = args0[i];
+      if (a.comma && a.value.kind === 'num') {
+        const nums = [a];
+        while (nums.length < 3 && nums[nums.length - 1].comma && args0[i + 1] && !args0[i + 1].key && args0[i + 1].value.kind === 'num') nums.push(args0[++i]);
+        if (nums.length > 1) {
+          const v = nums.map(n => (n.value as { v: number }).v);
+          args.push({ key: a.key, value: { kind: 'vec', v: [v[0], v[1], v[2] ?? 0] }, at: a.at, end: nums[nums.length - 1].end });
+          continue;
+        }
+      }
+      args.push(a);
+    }
     for (const a of args) {
       const key = a.key;
       const lower = key?.toLowerCase();
@@ -713,7 +732,8 @@ function printWarp(w: WarpSpec, top: boolean): string {
   def.params.forEach((p, i) => {
     const v = w.values[p.key] as number | Vec3 | undefined;
     if (v === undefined) return;
-    const text = Array.isArray(v) ? fmtVec(v) : fmt(v);
+    // On an item the first vector is bare numbers: @move(1,0.5,0).
+    const text = Array.isArray(v) ? (!top && i === 0 && !(v[0] === v[1] && v[1] === v[2]) ? v.map(fmt).join(',') : fmtVec(v)) : fmt(v);
     if (i === 0) parts.push(text);
     else if (!valueEq(v, defaults[p.key])) parts.push(`${p.key}=${text}`);
   });

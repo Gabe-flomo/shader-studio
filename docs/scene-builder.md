@@ -55,28 +55,71 @@ by the other builders (Grid Rules, Agent Rules).
 
 ## The sections
 
-**Scene tree (left panel).** The combine tree. Groups show their operator (∪
-union, − subtract, ∩ intersect; ~ when smooth) and hold shapes and other groups.
-Drag a row onto the top or bottom edge of another row to reorder it, or onto
-the middle of a group to nest it inside. A small tag shows how many warps bend
-an item.
+**Scene tree (left panel).** The combine tree. Every combine is a box: a badge
+with its operator (∪ union, − subtract, ∩ intersect, with `smooth` and its k
+for the smooth ones) over the shapes and groups inside it, indented with a
+guide line. So `smooth-union(a, b)`, then intersect with c, then subtract d
+reads top to bottom as three nested boxes. Shapes show their picture and their
+colour; any item's modifiers show as small chips under its name (click one to
+open it in the inspector).
 
-**Shapes.** One card per shape, folded to a summary until you open it. Each
-card has:
+- **Click** a row to select it and edit it in the inspector (the Shapes tab).
+- **⌘ / Shift-click** picks several rows. **Wrap in…** puts a new group
+  (union, smooth union, subtract, smooth subtract, intersect or smooth
+  intersect) around what is picked, at the first one's place; with nothing
+  selected it adds an empty group. An item inside another picked one goes with
+  it.
+- **Drag** (desktop) a row onto the top or bottom edge of another row to
+  reorder it, or onto the middle of a group (or an empty group's "drop here"
+  box) to nest it inside.
+- **Buttons** on the selected row: ▲ ▼ step it among its siblings, › moves it
+  into the group just above it, ‹ moves it out of its group. On a touch screen,
+  where there is no drag, these are always shown; with a mouse they show on
+  hover.
+- **+ Shape** opens the gallery as a pop-over.
 
-- name and shape type;
-- the shape's own sizes;
-- position;
-- rotation, in degrees about X, then Y, then Z;
-- colour and shine, its material;
-- in Glass mode, whether it is made of glass.
+The tree's operations are pure functions in `edit.ts` (`moveBy`,
+`moveIntoPrevious`, `moveOut`, `wrapItems`, `insertShape`), tested on their own.
 
-The shapes are every 3D primitive the app has: sphere, box (round > 0 makes it
-a Rounded Box), torus, cone, capped cone, cylinder (rounded with round > 0),
-capsule, plane, octahedron, pyramid, ellipsoid, hex prism, tri prism, chain
-link, box frame, capped torus, solid angle, cross, gyroid and Schwarz-P. A
-gyroid or Schwarz-P fills all of space, so it is cut to a ball (Ball radius; 0
-fills the scene).
+**Shapes.** Two parts:
+
+- **The shape gallery** ("Add a shape"): a grid of small pictures, one per
+  shape in the registry, plus Rounded box and Rounded cylinder. Click (or tap)
+  a tile to add the shape beside the selection, or into it when it is a group;
+  on a desktop, drag a tile onto a row of the Scene tree to put it before,
+  after or inside that row. The pictures are drawn once per session by a small
+  CPU ray marcher (`thumbnails.ts`: the SDF nodes' own formulas at the shape's
+  default size, one soft light, a clear background), a few per frame, at the
+  screen's pixel density. They have no background, so they read the same in
+  the light and dark themes. A test checks that every registry shape has a
+  tile and a picture.
+- **The inspector**: the selected item.
+  - A shape: name, shape type, its own sizes, position, rotation (degrees
+    about X, then Y, then Z), colour and shine (its material) and, in Glass
+    mode, whether it is made of glass, all with sliders.
+  - A group: name, the operator (six buttons), blend radius k for the smooth
+    ones, and its items in order with ▲ ▼.
+  - Both: Duplicate, Ungroup (a group), Remove, and its **modifiers**.
+
+**Modifiers.** Any shape or group has a stack of modifiers, shown as chips in
+the inspector (`1 Move 0.35,0,0`, `2 Rotate 0,30,0`, `3 Round 0.06`). Click a
+chip to edit it below (sliders), drag a chip onto another to reorder (or
+Earlier / Later on the open one), × to remove, **+ Modifier** to add one:
+move, rotate, scale, twist, bend, repeat, mirror, polar repeat, round, onion,
+and under "More warps" every other warp. The stack reads outside in, like the
+recipe: `box @move(1,0,0) @rotate(0,45,0)` is a turned box, moved. The build
+puts the point's modifiers (move, rotate, scale, twist…) before the item's
+distance (its SDF, or its group's combine) and the distance ones (round,
+onion, displace, and Scale's correction) after it, innermost first, each with
+a note. Whole-scene warps stay under Bend space.
+
+| Modifier | Builds | Notes |
+|---|---|---|
+| move | Translate 3D | |
+| rotate | Rotate 3D per axis (roles `w3:z`, `w3:y`, `w3:x`) | X, then Y, then Z, like a shape's own Rotation |
+| scale | Scale 3D on the point (Scale = 1 ÷ factor), and a second Scale 3D after the distance | keeps distances exact; keep the two Scales equal |
+| round | Offset (amount = −r) | grows the surface out, rounding its edges |
+| onion | Onion | a thin shell (cut it to see inside) |
 
 **Combine.** Shows the tree as a formula, then one card per group:
 
@@ -95,6 +138,8 @@ stack warps on it. Warps run top to bottom:
 |---|---|---|
 | move | shifts what follows | Translate 3D |
 | turn | turns what follows about one axis | Rotate 3D |
+| rotate | turns about X, then Y, then Z | Rotate 3D × up to 3 |
+| scale | grows or shrinks, distances kept exact | Scale 3D × 2 |
 | repeat | endless copies, one per cell | Repeat 3D |
 | mirror-repeat | endless copies, every other one flipped | Mirrored Repeat 3D |
 | limited-repeat | a few copies each way | Limited Repeat 3D |
@@ -107,6 +152,8 @@ stack warps on it. Warps run top to bottom:
 | sine | shifts one axis by a sine of another | Sin Warp 3D |
 | noise | pushes space about with smooth noise | 3D Domain Warp |
 | displace | bumps on the surface (changes the distance) | Displace 3D |
+| round | rounds edges, grows the surface (changes the distance) | Offset |
+| onion | a thin shell (changes the distance) | Onion |
 
 Each warp that stretches space shows a **Step Scale** hint. Such a warp makes
 the scene's distances too large, so a full step can jump through a surface.
@@ -424,14 +471,20 @@ A plain op with `k` above 0 is the smooth one. Combines nest:
 
 ### Warps
 
-On one item: `@kind(args)` right after the item, as in `box @twist(2)`. For
-the whole scene: a clause, `kind args`, as in `twist 2`. Arguments are
-positional (in the order below) or `key=value`.
+On one item: `@kind(args)` right after the item, as in `box @twist(2)`; any
+number of them, in order (the stack reads outside in). For the whole scene: a
+clause, `kind args`, as in `twist 2`. Arguments are positional (in the order
+below) or `key=value`. Inside an item's brackets, numbers joined by commas are
+one vector: `@move(1, 0.5, 0)` is `by=(1,0.5,0)`, and that is how it prints.
+`rotate` with an axis letter (`rotate y 30`, `@rotate(x 45)`) is the older
+`turn`.
 
 | Warp (aliases) | Arguments (default) |
 |---|---|
 | move (translate, offset) | by (0,0,0) |
-| turn (rotate) | axis x/y/z (y) · angle 0° |
+| turn | axis x/y/z (y) · angle 0° |
+| rotate (rotation) | by (0,0,0) degrees about X, then Y, then Z |
+| scale (resize, grow) | s 1.5 (the factor) |
 | repeat (tile, grid) | cell (2,2,2) |
 | mirror-repeat (mirrored-repeat) | cell (2,2,2) |
 | limited-repeat (repeat-n, array) | cell (1,1,1) · count (2,2,2) |
@@ -444,6 +497,12 @@ positional (in the order below) or `key=value`.
 | sine (wave, sin) | amp 0.1 · freq 2 · axis=y (shifted) · from=x |
 | noise (domain-warp, warp) | amt 0.3 · scale 1 · octaves 3 |
 | displace (bumps, ripple) | amp 0.05 · freq 8 |
+| round (inflate, soften) | r 0.05 |
+| onion (shell, hollow) | t 0.03 (thickness) |
+
+Nesting has no limit, and printing, parsing, Build and Describe round-trip any
+depth: `subtract(intersect(smooth-union(sphere @move(0.3,0,0), box @rotate(30,0,45) @round(0.05)) k=0.2 @twist(1.5), cylinder @onion(0.04)) @mirror(xz), sphere r=0.3) @move(0,0.2,0)`
+(the tests check this one and others, spec → recipe → spec → graph → spec).
 
 ### Modes and settings
 
@@ -542,8 +601,15 @@ Right-click any node → Edit in Scene Builder to change it.
   so shadows and AO see them too. A loop body's warps are still recognised when
   describing a graph.
 - **Recognising hand-made graphs is structural.**
-  - A distance node it doesn't know (an Expression Block, Scale 3D, Onion)
-    becomes `custom(…)`, and so does a warp it doesn't know.
+  - A distance node it doesn't know (an Expression Block, say) becomes
+    `custom(…)`, and so does a warp it doesn't know.
+  - Per-item transforms are read where they sit: Translate 3D, Rotate 3D and
+    Scale 3D on an item's point chain (a Scale 3D after its distance is the
+    scale's correction, paired with it), Offset (round), Onion and Displace 3D
+    after its distance. A Displace goes back after the warp whose point it
+    reads; Round and Onion, which don't depend on the point, go before the next
+    modifier that has a place, else last. For a builder graph the order in its
+    spec is kept.
   - Params driven by a wire are read at their slider value, and listed.
   - Colours are read from a single colour into Multi-Light, or from the loop's
     Albedo. Hand-made per-shape materials are not read.
@@ -562,10 +628,12 @@ Right-click any node → Edit in Scene Builder to change it.
 | `src/sceneBuilder/build.ts` | Spec → nodes, with notes and roles |
 | `src/sceneBuilder/recognize.ts` | Graph → spec (Describe) |
 | `src/sceneBuilder/apply.ts` | Build into a graph; rebuild, keeping edits |
-| `src/sceneBuilder/edit.ts` | Tree edits for the form |
+| `src/sceneBuilder/edit.ts` | Tree edits for the form: move, nest, wrap, gallery drops, modifier chips |
+| `src/sceneBuilder/thumbnails.ts` | The gallery's tiles and its CPU thumbnail renderer |
 | `src/sceneBuilder/templates.ts` | Templates, as recipes |
 | `src/sceneBuilder/store.ts`, `actions.ts` | The window's state, and the glue to the node graph |
-| `src/components/sceneBuilder/` | The window, its tabs, scene tree and live preview |
+| `src/components/sceneBuilder/` | The window, its tabs (the inspector and modifier chips are in `tabs.tsx`), scene tree, shape gallery and live preview |
 | `src/components/builders/BuilderWindow.tsx` | The shared builder shell |
 | `src/store/sceneBuilderExamples.ts` | The examples folder |
 | `src/sceneBuilder/__tests__/sceneBuilder.test.ts` | Tests |
+| `src/sceneBuilder/__tests__/nestingModifiers.test.ts` | Deep nesting round trips, modifiers in build and Describe, the gallery, the tree's moves |
