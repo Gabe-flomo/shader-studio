@@ -205,6 +205,8 @@ export function matchAt<T extends { words: readonly string[] }>(tokens: string[]
   }
   if (best) return best;
   const t = tokens[i];
+  // Past the end ("create" with nothing after it yet, as the bar sees it mid-typing): nothing to match.
+  if (t === undefined) return null;
   const budget = fuzzBudget(t);
   if (!budget) return null;
   let bestD = budget + 1;
