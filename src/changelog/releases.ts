@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.64',
+    date: '2026-10-07',
+    title: 'Surprise me',
+    highlights: [
+      { area: 'Studio', text: 'Surprise me in every builder: a random 3D scene, a Grid Rules rule that stays alive, or new Agent Rules walkers. Each shows its seed.', link: { kind: 'doc', path: 'docs/surprise.md' } },
+      { area: 'Studio', text: 'Surprises are one undo step, with Reroll and Undo in the toast. Type a seed back in to get the same result again.' },
+      { area: 'Studio', text: 'Blank, blown-out or dead results are skipped automatically, and Randomize now picks interesting values instead of any value.' },
+      { area: 'Studio', text: 'Scene Builder adds a Random shape button and a dice to randomise any item; the canvas toolbar has a dice for the whole level.' },
+    ],
+  },
+  {
     id: '2026.10.63',
     date: '2026-10-07',
     title: 'Walker kinds',
