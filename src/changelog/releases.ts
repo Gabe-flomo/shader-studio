@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.69',
+    date: '2026-10-07',
+    title: 'Show as commands',
+    highlights: [
+      { area: 'Studio', text: 'Show as commands: a new button in the Do bar header shows the current graph as Do-bar commands you can copy, with anything it cannot express marked.', link: { kind: 'doc', path: 'docs/playfield-language.md' } },
+    ],
+  },
+  {
     id: '2026.10.68',
     date: '2026-10-07',
     title: 'Sand jitter',
