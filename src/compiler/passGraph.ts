@@ -450,6 +450,9 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         const seed = params.seed;
         const emit = emitMode(g, byId, slugOf);
         const seedExpr = typeof seed === 'string' ? seed : `${Number(seed ?? 1).toFixed(1)}`;
+        // Neighbours: the grid the group builds every step for them (its largest Radius and Max neighbours).
+        const nbNodes = a.inside.filter(n => n.type === 'agentNeighbours');
+        const nbParams = nbNodes.map(n => engine(n) as Record<string, AgentParam>);
         const r = generateFragmentShader(topologicalSort(list), list, {
           slugs,
           agentProgram: {
@@ -458,6 +461,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
             respawn: emit.mode === 'respawn',
             ...(a.stateC ? { stateC: true } : {}),
             ...(a.space3d ? { space3d: true } : {}),
+            ...(nbNodes.length ? { neighbours: true } : {}),
           },
         });
         absorb(r);
@@ -478,6 +482,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         }
         groups.push({
           ...(grids.length ? { grids } : {}),
+          ...(nbNodes.length ? { neighbours: { radius: nbParams.map(P => P.radius ?? 0.05), max: nbParams.map(P => P.max ?? 36) } } : {}),
           nodeId: g.id, slug: slugOf(g.id), label, fragmentShader: r.fragmentShader,
           side: groupSide(g), species: groupSpecies(g),
           ...(a.stateC ? { stateC: true } : {}),

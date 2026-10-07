@@ -19,3 +19,6 @@ export const AG_DEPOSIT3_VERT: string;
 export const AG_TRAIL3_FRAG: string;
 export const AG_PROJ3_FRAG: string;
 export const AG_DRAW3_VERT: string;
+export const AG_NB_GLSL: string;
+export const AG_NB_BIN_VERT: string;
+export const AG_NB_BIN_FRAG: string;

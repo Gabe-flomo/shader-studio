@@ -632,15 +632,15 @@ exports[`2D agents and pass graphs compile as they did before 3D > passSlimeEdge
 
 exports[`2D agents and pass graphs compile as they did before 3D > simAgentCrowd 1`] = `
 {
-  "agents": "172b33530ed9ed0200c6a1dda31f:28473",
+  "agents": "12c6f066b76f0e0f6503766896f4:35630",
   "errors": null,
   "fragmentShader": "00b80f0b1b683e0cc0fb9fd15564:4332",
-  "paramBindings": "163365e766095718bcc929d02758:2362",
-  "paramUniforms": "1414ff0a9fc4a218941fbbb30e8d:1630",
+  "paramBindings": "0034d0f3e8faf815594f580fe0f8:2297",
+  "paramUniforms": "1331fde0578ecb18677bb884dc88:1588",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "05d12043320512131ca3f0ed12c8:28435",
+  "web": "0355c4ce9994ab18f64bb984b3c1:35689",
 }
 `;
 

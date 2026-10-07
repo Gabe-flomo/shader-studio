@@ -450,3 +450,66 @@ ${GP_LIGHTS}
   wt *= u_prim == 1 ? 1.0 : min(1.0, se * se);
   v_col = u_ink == 1 ? vec4(c * L * wt, wt * (L.r + L.g + L.b) / 3.0) : vec4(c * L * wt, wt);
 }`;
+
+/**
+ * Neighbours (kit/agentPlan.js agNbLayout): a point q in the box (2D: z 0) → its cell (floats:
+ * x, y, z), and a cell → its texel in one slot's tile (3D: the depth slices side by side, 8 across).
+ * G is the grid uniform (nx, ny, nz, aspect). Shared by the grid's passes and the update shaders'
+ * queries, so a walker is always looked for in the cell it was put in. Floats only (exact here:
+ * the cells are whole numbers far below 2^24).
+ */
+export const AG_NB_GLSL = `vec3 agNbCell(vec3 q, vec4 G) {
+  vec3 n = vec3(G.x, G.y, G.z);
+  return clamp(floor((q / vec3(G.w, 1.0, 1.0) * 0.5 + 0.5) * n), vec3(0.0), n - 1.0);
+}
+vec2 agNbTexel(vec3 c, vec4 G) { return vec2(c.x + mod(c.z, 8.0) * G.x, c.y + floor(c.z / 8.0) * G.y); }`;
+
+/**
+ * The grid's passes: one point per live walker, into its cell's texel. The count pass (u_pass.w 1)
+ * adds 1 into the count texture (additive blending). A slot pass writes (position, index + 1) into
+ * the slot's tile, with no blending: of the walkers drawn into one texel the last (the highest
+ * index: points are drawn in order) is what stays. Slot k keeps only walkers below the index slot
+ * k − 1 holds in the same cell (u_prev), so slots 0, 1, 2… hold a cell's walkers from the highest
+ * index down, the same on every run. u_pass = (this tile's first column, the previous slot's, 1 when
+ * there is a previous slot, 1 for the count). Floats for the index: exact below 2^24 walkers.
+ */
+export const AG_NB_BIN_VERT = `precision highp float;
+precision highp int;
+uniform highp sampler2D u_a;
+uniform highp sampler2D u_b;
+uniform highp sampler2D u_prev;
+uniform int u_side;
+uniform float u_d3;
+uniform vec4 u_grid;
+uniform vec4 u_pass;
+uniform vec2 u_target;
+out vec4 v_out;
+${AG_NB_GLSL}
+void main() {
+  float id = float(gl_VertexID);
+  float side = float(u_side);
+  vec2 t = vec2(mod(id, side), floor(id / side));
+  vec4 A = texelFetch(u_a, ivec2(t), 0);
+  vec4 B = texelFetch(u_b, ivec2(t), 0);
+  gl_PointSize = 1.0;
+  gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+  v_out = vec4(0.0);
+  if (B.w > 0.0) {
+    vec3 q = vec3(A.x, A.y, A.z * u_d3);
+    vec2 cell = agNbTexel(agNbCell(q, u_grid), u_grid);
+    float keep = 1.0;
+    if (u_pass.z > 0.5) {
+      float prev = texelFetch(u_prev, ivec2(cell + vec2(u_pass.y, 0.0)), 0).w;
+      if (id + 1.0 >= prev) keep = 0.0;
+    }
+    if (keep > 0.5) {
+      gl_Position = vec4((cell + vec2(u_pass.x, 0.0) + 0.5) / u_target * 2.0 - 1.0, 0.0, 1.0);
+      v_out = u_pass.w > 0.5 ? vec4(1.0) : vec4(q, id + 1.0);
+    }
+  }
+}`;
+
+export const AG_NB_BIN_FRAG = `precision highp float;
+in vec4 v_out;
+out vec4 o;
+void main() { o = v_out; }`;
