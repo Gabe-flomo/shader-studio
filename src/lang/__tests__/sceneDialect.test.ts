@@ -116,13 +116,13 @@ describe('scene dialect: randomness', () => {
 function randomSpec(rng: Rng): SceneSpec {
   const spec = emptySpec();
   let ids = 0;
-  const v3 = (lo: number, hi: number): Vec3 => [0, 1, 2].map(() => Math.round(rng.range(lo, hi) * 100) / 100 + 0) as Vec3;
+  const v3 = (lo: number, hi: number): Vec3 => [0, 1, 2].map(() => Math.round(rng.float(lo, hi) * 100) / 100 + 0) as Vec3;
   const shape = (): SceneItem => {
     const def = rng.pick(SHAPES.filter(s => s.kind !== 'custom'));
     const sh = newShape(def.kind, `s${++ids}`);
     for (const p of def.params) {
       const r = sceneRand(p);
-      if (r.kind === 'num') sh.size[p.key] = r.int ? Math.round(rng.range(r.lo, r.hi)) : Math.round(rng.range(r.lo, r.hi) * 100) / 100;
+      if (r.kind === 'num') sh.size[p.key] = r.int ? Math.round(rng.float(r.lo, r.hi)) : Math.round(rng.float(r.lo, r.hi) * 100) / 100;
       else if (r.kind === 'vec') sh.size[p.key] = v3(r.lo, r.hi);
     }
     if (rng.chance(0.5)) sh.at = v3(-1, 1);
@@ -138,13 +138,13 @@ function randomSpec(rng: Rng): SceneSpec {
     const w = newWarp(def.kind, `w${++ids}`);
     for (const p of def.params) {
       const r = sceneRand(p);
-      if (r.kind === 'num') w.values[p.key] = r.int ? Math.round(rng.range(r.lo, r.hi)) : Math.round(rng.range(r.lo, r.hi) * 100) / 100;
+      if (r.kind === 'num') w.values[p.key] = r.int ? Math.round(rng.float(r.lo, r.hi)) : Math.round(rng.float(r.lo, r.hi) * 100) / 100;
       else if (r.kind === 'vec') w.values[p.key] = v3(r.lo, r.hi);
     }
     return w;
   };
   const group = (depth: number): SceneItem => {
-    const g = newGroup(`g${++ids}`, { op: rng.pick(['union', 'subtract', 'intersect'] as const), k: rng.chance(0.5) ? Math.round(rng.range(0.1, 0.5) * 100) / 100 : 0 });
+    const g = newGroup(`g${++ids}`, { op: rng.pick(['union', 'subtract', 'intersect'] as const), k: rng.chance(0.5) ? Math.round(rng.float(0.1, 0.5) * 100) / 100 : 0 });
     const n = rng.int(2, 3);
     for (let i = 0; i < n; i++) g.children.push(depth < 3 && rng.chance(0.3) ? group(depth + 1) : shape());
     if (rng.chance(0.3)) g.warps.push(warp());

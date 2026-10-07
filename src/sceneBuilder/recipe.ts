@@ -25,7 +25,7 @@ import { Cursor } from '../lang/parse';
 import { continuesClause, lineCol, type Tok, type Unit } from '../lang/lex';
 import type { Value as LangValue } from '../lang/ast';
 import { printValue } from '../lang/print';
-import { drawFrom, freshSeed, makeRng, resolveRandom, type RandSpec, type Resolved, type Rng } from '../lang/random';
+import { drawFrom, freshSeed, makeRng, resolveRandom, seedOf, type RandSpec, type Resolved, type Rng } from '../lang/random';
 import { SCENE_SETTING_RAND, sceneRand } from '../lang/sceneRand';
 import { suggest } from '../lang/fuzzy';
 import { DEFAULT_PALETTE, OUTPUTS, OUTPUT_WORDS, PALETTES, PALETTE_BY_KEY, outputClause, type OutputSpec } from './output';
@@ -148,8 +148,8 @@ class Parser {
     this.c = new Cursor(src);
     this.seedOpt = opts.seed;
     // A `seed=N` (or `seed N`) anywhere sets the seed before anything is drawn.
-    const m = /(?:^|[\s·•|;])seed\s*=?\s*(\d+)/i.exec(src);
-    if (m) this.seed = Number(m[1]);
+    const m = /(?:^|[\s·•|;])seed\s*=?\s*([A-Za-z0-9_-]+)/i.exec(src);
+    if (m) this.seed = seedOf(m[1]);
   }
 
   get rng(): Rng {
@@ -252,7 +252,7 @@ class Parser {
         continue;
       }
       // `seed=42` / `seed 42` (read up front, in the constructor).
-      if (w === 'seed') { this.next(); if (this.peek().t === '=') this.next(); if (this.peek().t === 'num') this.next(); else this.fail(t, 'seed takes a whole number: seed=42.'); }
+      if (w === 'seed') { this.next(); if (this.peek().t === '=') this.next(); if (this.peek().t === 'num' || this.peek().t === 'word') this.next(); else this.fail(t, 'seed takes a number or a word: seed=42, seed=mossy.'); }
       else if (MODE_WORDS[w] && !(w === 'glass' && this.peek(1).t === '=')) {
         this.next();
         if (w === 'glow') this.hint(t, '“glow” as a render mode: write volumetric (glow is the glow step).', 'volumetric');

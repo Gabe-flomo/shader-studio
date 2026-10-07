@@ -119,7 +119,7 @@ describe('the Recipe chip', () => {
     expect(gridRecipeText(presetPatch(COUNT_PRESETS.life))).toBe('Life B3/S23 · 240×135 · wrap');
     expect(gridRecipeText({ ...presetPatch(COUNT_PRESETS.life), board: '0.0625', edges: 'walls' })).toBe('Life B3/S23 · 120×68 · walls');
     expect(gridRecipeText({ ruleType: 'smooth', ...presetPatch(SMOOTH_PRESETS.heat) })).toMatch(/^Heat · Smooth · /);
-    expect(builderRecipeOf(grid(presetPatch(COUNT_PRESETS.life)), [])).toMatchObject({ kind: 'grid', text: 'Life B3/S23 · 240×135 · wrap' });
+    expect(builderRecipeOf(grid(presetPatch(COUNT_PRESETS.life)), [])).toMatchObject({ kind: 'grid', text: 'grid life', summary: 'Life B3/S23 · 240×135 · wrap' });
   });
   it('a rules Agents group: "n rules · n states", its rules as sentences', () => {
     const s = rulesStarter(null);

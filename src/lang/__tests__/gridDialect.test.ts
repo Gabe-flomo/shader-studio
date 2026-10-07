@@ -63,7 +63,7 @@ describe('grid dialect: presets', () => {
         const key = rng.pick(['board', 'edges', 'rate', 'steps', 'density', 'seed', 'start', 'states', 'bornMask', 'surviveMask', 'neighbourhood', 'radius', 'bornLo', 'afterglow', 'ageFade', 'color0', 'color1', 'color5', 'glowColor', 'brushRadius', 'brushFill', 'brushState', 'feed', 'kill', 'template', 'customU', 'knobA', 'gain', 'shape']);
         if (key === 'board') params.board = rng.pick(BOARD_SIZES).value;
         else if (key === 'edges') params.edges = rng.pick(['wrap', 'walls']);
-        else if (key === 'rate') params.rate = Math.round(rng.range(0.05, 1) * 100) / 100;
+        else if (key === 'rate') params.rate = Math.round(rng.float(0.05, 1) * 100) / 100;
         else if (key === 'steps') params.steps = rng.int(1, 8);
         else if (key === 'start') params.start = rng.pick(['noise', 'empty', 'image', 'centre']);
         else if (key === 'states') params.states = rng.int(2, 12);
@@ -77,7 +77,7 @@ describe('grid dialect: presets', () => {
         else if (key === 'template') params.template = rng.pick(['diffusion', 'waves', 'reaction', 'custom']);
         else if (key === 'customU') params.customU = 'mix(u, avg_u, 0.9) * 0.996';
         else if (key === 'shape') params.shape = rng.pick(['box', 'circle']);
-        else params[key] = Math.round(rng.range(0, 1) * 1000) / 1000;
+        else params[key] = Math.round(rng.float(0, 1) * 1000) / 1000;
       }
       roundTrip(params);
     }

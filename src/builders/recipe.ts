@@ -17,11 +17,13 @@ import { recipeRuns, recipeTokens } from '../sceneBuilder/highlight';
 import { BLOCK_PRESETS, PATTERN_PRESETS } from '../gridRules/stencils';
 import { COUNT_PRESETS, GRID_DEFAULTS, SMOOTH_PRESETS, STAGES_PRESETS, gridShape, matchingPreset, ruleSummary, type GridPreset } from '../gridRules/spec';
 import { groupRules, isRulesGroup } from '../agentRules/apply';
+import { printGrid } from '../lang/dialects/grid';
 import { describeRule, type AgentRuleSet } from '../agentRules/spec';
 
 export type BuilderRecipe =
   | { kind: 'scene'; nodeId: string; text: string; lines: string; edited: boolean }
-  | { kind: 'grid'; nodeId: string; text: string; lines: string }
+  /** `text`: the rule in the Playfield language (one line, pastes into the Do… bar); `summary`: "Life B3/S23 · 240×135 · wrap". */
+  | { kind: 'grid'; nodeId: string; text: string; lines: string; summary: string }
   | { kind: 'agents'; nodeId: string; text: string; lines: string };
 
 /** Did the user change a built scene's nodes since the build (a setting, a wire, a node added or deleted)? */
@@ -81,8 +83,7 @@ export function builderRecipeOf(node: GraphNode, graph: GraphNode[]): BuilderRec
     return { kind: 'scene', nodeId: node.id, text: printRecipe(meta.spec), lines: printRecipe(meta.spec, { pretty: true }), edited: sceneEditedSinceBuild(graph, node.id) };
   }
   if (node.type === 'gridRules') {
-    const text = gridRecipeText(node.params);
-    return { kind: 'grid', nodeId: node.id, text, lines: text };
+    return { kind: 'grid', nodeId: node.id, text: printGrid(node.params, { header: 'always' }), lines: printGrid(node.params, { header: 'always', pretty: true }), summary: gridRecipeText(node.params) };
   }
   if (isRulesGroup(node)) {
     const set = groupRules(node);

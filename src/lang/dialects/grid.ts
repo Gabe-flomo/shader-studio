@@ -25,10 +25,10 @@
 import { Cursor } from '../parse';
 import type { Arg, Diagnostic, Value } from '../ast';
 import type { Tok } from '../lex';
-import { colourOf, colourText, type RGB } from '../colours';
+import { COLOUR_NAMES, colourOf, colourText, type RGB } from '../colours';
 import { fmtNum, printValue } from '../print';
 import { suggest } from '../fuzzy';
-import { drawFrom, freshSeed, makeRng, resolveRandom, type RandSpec, type Resolved, type Rng } from '../random';
+import { drawFrom, freshSeed, makeRng, resolveRandom, seedOf, type RandSpec, type Resolved, type Rng } from '../random';
 import { registerEntries, type Entry } from '../registry';
 import {
   BOARD_SIZES, COUNT_PRESETS, GRID_DEFAULTS, LOOKS, MAX_RADIUS, MAX_STATES, MAX_STEPS, SMOOTH_PRESETS, STAGES_PRESETS,
@@ -147,7 +147,7 @@ export function parseGrid(src: string, opts: { base?: P; seed?: number } = {}): 
   const c = new Cursor(masked);
   const P: P = { ...GRID_DEFAULTS, ...(opts.base ?? {}) };
   const resolved: Resolved[] = [];
-  let seed: number | null = (() => { const m = /(?:^|[\s·;|])seed\s*=?\s*(\d+)/i.exec(src); return m ? Number(m[1]) : null; })();
+  let seed: number | null = (() => { const m = /(?:^|[\s·;|])seed\s*=?\s*([A-Za-z0-9_-]+)/i.exec(src); return m ? seedOf(m[1]) : null; })();
   let rngCache: Rng | null = null;
   const rng = () => { if (!rngCache) { if (seed === null) seed = opts.seed ?? freshSeed(); rngCache = makeRng(seed); } return rngCache; };
   let randomAll = false;
@@ -194,7 +194,7 @@ export function parseGrid(src: string, opts: { base?: P; seed?: number } = {}): 
     if (v.k === 'word') {
       const rgb = colourOf(v.v);
       if (rgb) return rgb;
-      const s = suggest(v.v, Object.keys(COLOUR_KEYS).length ? ['red', 'green', 'blue', 'black', 'white', 'teal', 'cyan', 'gold', 'orange', 'purple', 'pink', 'navy'] : []);
+      const s = suggest(v.v, COLOUR_NAMES);
       c.error(a, `“${v.v}” isn't a colour.${s ? ` Did you mean “${s}”?` : ''}`);
       return null;
     }
@@ -220,10 +220,10 @@ export function parseGrid(src: string, opts: { base?: P; seed?: number } = {}): 
       else c.error(a, `${key} is a range: ${key}=34..45.`);
       return;
     }
-    if ((key === 'born' || key === 'survive') && a.value.k === 'word' && /^(wrap|walls)$/i.test(a.value.v)) {
+    if ((key === 'born' || key === 'survive') && a.value.k === 'word' && /^(wrap|walls|diffusion|waves|reaction|custom)$/i.test(a.value.v)) {
       // `survive= walls`: an empty list, then the flag.
       P[key === 'born' ? 'bornMask' : 'surviveMask'] = 0;
-      P.edges = a.value.v.toLowerCase();
+      setting({ ...a, key: null });
       return;
     }
     if (key === 'born' || key === 'survive') {
@@ -341,8 +341,7 @@ export function parseGrid(src: string, opts: { base?: P; seed?: number } = {}): 
       const w = t.v.toLowerCase();
       if (w === 'grid' && !(c.peek(1).t === '=')) { c.next(); continue; }
       if (w === 'random' && c.peek(1).t !== '(' && c.peek(1).t !== '=') { c.next(); randomAll = true; continue; }
-      if (w === 'seed' && c.peek(1).t !== '=') { c.next(); if (c.peek().t === 'num') c.next(); continue; }
-      if (w === 'seed' && c.peek(1).t === '=') { c.next(); c.next(); if (c.peek().t === 'num') c.next(); continue; }
+      if (w === 'seed') { c.next(); if (c.peek().t === '=') c.next(); if (c.peek().t === 'num' || c.peek().t === 'word') c.next(); continue; }
       const preset = presetBySlug(w);
       if ((RULE_TYPE_WORDS as readonly string[]).includes(w) || preset) {
         c.next();
@@ -516,6 +515,8 @@ export function printGrid(params: P, opts: { header?: 'always' | 'never' | 'clas
   if (hdr === 'always' || (hdr === 'clash' && gridNeedsHeader(head))) head1.push('grid');
   head1.push(head);
   const parts: string[] = [];
+  // A Smooth template word goes first, next to its type.
+  if (differs('template') && type === 'smooth') parts.push(String(P.template));
   const nb = String(P.neighbourhood);
   if (type === 'count' || type === 'stages') {
     if (differs('neighbourhood')) parts.push(`neighbours=${NB_TEXT[nb] ?? nb}`);
@@ -548,7 +549,7 @@ export function printGrid(params: P, opts: { header?: 'always' | 'never' | 'clas
     }
   }
   if (differs('states')) parts.push(`states=${P.states}`);
-  if (differs('template')) parts.push(type === 'smooth' ? String(P.template) : `template=${P.template}`);
+  if (differs('template') && type !== 'smooth') parts.push(`template=${P.template}`);
   const NUM_PRINT: Array<[string, string]> = [['spread', 'spread'], ['decay', 'cooling'], ['waveSpeed', 'wave-speed'], ['damping', 'damping'], ['feed', 'feed'], ['kill', 'kill'], ['diffA', 'spread-a'], ['diffB', 'spread-b'],
     ['knobA', 'a'], ['knobB', 'b'], ['knobC', 'c'], ['knobD', 'd'], ['gain', 'gain']];
   if (differs('customU')) parts.push(`u={${P.customU}}`);

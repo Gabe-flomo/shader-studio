@@ -18,7 +18,7 @@ import { OUTPUTS, PALETTES } from '../sceneBuilder/output';
 import { ACTIONS, SHAPES as WORD_SHAPES } from './vocabulary';
 import { COMMAND_VERBS } from './commands';
 import { moveById, type MoveArg } from '../suggestions/moves';
-import type { RandSpec } from './random';
+import { rangeFor, type RandSpec } from './random';
 import { COLOUR_NAMES } from './colours';
 
 export type Dialect = 'picture' | 'scene' | 'grid' | 'agents' | 'pass' | 'edit';
@@ -133,7 +133,7 @@ const argSpec = (moveId: string, a: MoveArg, primary: boolean): ParamSpec => ({
   label: a.label,
   def: a.default,
   ...(primary ? { primary } : {}),
-  rand: MOVE_RAND[`${moveId}.${a.name}`] ?? (a.kind === 'colour' ? { kind: 'colour' } : undefined),
+  rand: MOVE_RAND[`${moveId}.${a.name}`] ?? (a.kind === 'colour' ? { kind: 'colour' } : a.kind === 'number' || a.kind === 'count' ? rangeFor(a.name, { def: a.default as number, int: a.kind === 'count' }) ?? undefined : undefined),
 });
 
 function pictureSteps(): Entry[] {

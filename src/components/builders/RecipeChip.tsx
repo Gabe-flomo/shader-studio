@@ -22,6 +22,8 @@ import { openAgentRulesWindow, openGridRulesEditor, useBuilderWindows } from '..
 import { copyRecipeOf } from '../../builders/open';
 import { editSceneInBuilder } from '../../sceneBuilder/actions';
 import { RecipeCode } from '../sceneBuilder/RecipeCode';
+import { wordKindFor } from '../../lang/highlight';
+import type { Dialect } from '../../lang/registry';
 
 const tokenColour = (tk: Tokens, k: RecipeTokenKind): string | undefined => ({
   mode: tk.syntax.keyword, setting: tk.syntax.keyword, op: tk.syntax.fn, shape: tk.syntax.type, warp: tk.syntax.preproc,
@@ -30,9 +32,10 @@ const tokenColour = (tk: Tokens, k: RecipeTokenKind): string | undefined => ({
 
 /** The recipe with its words coloured. */
 /** `scene`: a Scene Builder recipe, in the recipe editor's colours with swatches (RecipeCode); else numbers and names only. */
-export function RecipeText({ text, scene = true, style }: { text: string; scene?: boolean; style?: CSSProperties }) {
+export function RecipeText({ text, scene = true, dialect, style }: { text: string; scene?: boolean; /** Another dialect of the language (grid, agents): coloured by its words. */ dialect?: Dialect; style?: CSSProperties }) {
   const tk = useTokens();
-  const runs = useMemo(() => (scene ? [] : highlightRecipe(text, { words: false })), [text, scene]);
+  const runs = useMemo(() => (scene || dialect ? [] : highlightRecipe(text, { words: false })), [text, scene, dialect]);
+  if (dialect) return <RecipeCode text={text} errors={[]} style={style} wordKind={wordKindFor(dialect)} />;
   if (scene) return <RecipeCode text={text} errors={[]} style={style} />;
   return (
     <span style={style}>
@@ -72,10 +75,10 @@ export function RecipeChip({ node, touch = false }: { node: GraphNode; touch?: b
           <Icon name={recipe.kind === 'scene' ? 'cube' : recipe.kind === 'grid' ? 'grid' : 'swarm'} size={12} />{title}
         </span>
         {!open ? (
-          <RecipeText text={recipe.text} scene={recipe.kind === 'scene'} style={{
+          <RecipeText text={recipe.text} scene={recipe.kind === 'scene'} dialect={recipe.kind === 'grid' ? 'grid' : undefined} style={{
             flex: 1, minWidth: 0, font: mono, color: tk.text.secondary, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflowWrap: 'anywhere',
           }} />
-        ) : <span style={{ flex: 1, font: `12px ${fontFamily.ui}`, color: tk.text.muted, paddingTop: 1 }}>{recipe.kind === 'agents' ? recipe.text : recipe.kind === 'scene' ? 'From the 3D Scene Builder' : 'Grid Rules'}</span>}
+        ) : <span style={{ flex: 1, font: `12px ${fontFamily.ui}`, color: tk.text.muted, paddingTop: 1 }}>{recipe.kind === 'agents' ? recipe.text : recipe.kind === 'scene' ? 'From the 3D Scene Builder' : recipe.summary}</span>}
         <Icon name={open ? 'chevU' : 'chevD'} size={13} style={{ color: tk.text.faint, flexShrink: 0, marginTop: 2 }} />
       </button>
       {recipe.kind === 'scene' && recipe.edited && (
@@ -87,7 +90,7 @@ export function RecipeChip({ node, touch = false }: { node: GraphNode; touch?: b
       {open && (
         <div style={{ borderTop: `1px solid ${tk.border.subtle}`, padding: touch ? 10 : 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <pre data-recipe-full style={{ margin: 0, maxHeight: 220, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', font: mono, color: tk.text.primary, userSelect: 'text', cursor: 'text' }}>
-            <RecipeText text={recipe.lines} scene={recipe.kind === 'scene'} />
+            <RecipeText text={recipe.lines} scene={recipe.kind === 'scene'} dialect={recipe.kind === 'grid' ? 'grid' : undefined} />
           </pre>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <Button size="sm" icon="copy" onClick={() => copyRecipeOf(node.id)} data-recipe-copy>Copy</Button>

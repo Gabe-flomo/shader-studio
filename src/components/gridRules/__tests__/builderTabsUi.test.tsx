@@ -90,6 +90,24 @@ describe('Grid Rules as tabs', () => {
     expect($('[data-rule-sentence]')?.textContent).toMatch(/^Cells are born with 3 or 6 neighbours/);
   });
 
+  it('Recipe: the rule as text in the Playfield language; typing and Apply change the node (one step)', () => {
+    localStorage.setItem('builder:grid-rules:tab', 'recipe');
+    mount(<GridRulesEditor nodeId="g1" onClose={() => {}} />);
+    const ta = $('textarea[data-language-text="grid"]') as HTMLTextAreaElement;
+    expect(ta.value).toBe('life');
+    const type = (v: string) => act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(ta, v);
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    type('highlife walls bord=480');
+    expect($$('[data-language-error]').map(e => e.textContent).join()).toMatch(/Did you mean “board”/);
+    expect(($('[data-language-apply]') as HTMLButtonElement).disabled).toBe(true);
+    type('highlife walls board=480');
+    click($('[data-language-apply]'));
+    expect(useNodeGraphStore.getState().nodes[0].params).toMatchObject({ bornMask: (1 << 3) | (1 << 6), edges: 'walls', board: '0.25' });
+    expect(ta.value).toBe('highlife board=480 walls');
+  });
+
   it('a tab the rule type does not have falls back to the rule\'s own tab', () => {
     localStorage.setItem('builder:grid-rules:tab', 'neighbourhood');
     useNodeGraphStore.setState({ nodes: [{ ...structuredClone(grid), params: { ...grid.params, ruleType: 'smooth' } }] });
