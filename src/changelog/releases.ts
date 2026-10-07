@@ -39,6 +39,18 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.67',
+    date: '2026-10-07',
+    title: 'One Playfield language',
+    highlights: [
+      { area: 'Studio', text: 'One Playfield language across the Do bar and the Scene, Grid Rules and Agent Rules recipes: same words, same colour names, same value syntax.', link: { kind: 'doc', path: 'docs/playfield-language.md' } },
+      { area: 'Studio', text: 'Randomness anywhere: falloff=random, random(0.2..2), a leading random, and seed=42. The Recipe tab shows what it picked, with Roll again.' },
+      { area: 'Studio', text: 'Do bar autocomplete after verbs: create lists what you can make, connect suggests wires from your graph with socket types.' },
+      { area: 'Studio', text: 'Surprise me in the Do bar (with a size, 2D or 3D), a history of what you typed, and Rebuild from recipe on builder-made nodes you edited.' },
+      { area: 'Studio', text: 'Every builder has a Recipe tab, and the Commands reference is generated from the language itself so it never goes stale.' },
+    ],
+  },
+  {
     id: '2026.10.66',
     date: '2026-10-07',
     title: 'Shadertoy alpha fix',
