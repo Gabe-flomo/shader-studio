@@ -46,7 +46,7 @@ export const AGENT_RULE_EXAMPLE_INDEX: Record<string, { label: string; descripti
   },
   agentRulesSwarm: {
     label: 'Agent rules 10 · Swarm: orbiters',
-    description: 'Kind: Swarm. Walkers circle the middle, keep apart from their neighbours and drift toward them; where more than 18 pack in they turn orange and speed out, so the ring breathes.',
+    description: 'Kind: Swarm. Walkers circle the middle, keep apart from their neighbours and drift toward them; where more than 250 pack in they turn orange and speed out, so the ring breathes.',
   },
   agentRulesCrowd: {
     label: 'Agent rules 11 · Crowd: two-way walkers',

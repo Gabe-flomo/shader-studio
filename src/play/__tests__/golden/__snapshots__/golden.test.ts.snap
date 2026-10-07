@@ -1620,6 +1620,7 @@ exports[`golden outputs: examples > simAgentCrowd 1`] = `
   "avoid": "- x120",
   "follow": "- x120",
   "jam": "- x120",
+  "look": "- x120",
   "pace": "- x120",
   "side": "- x120",
 }

@@ -72,9 +72,9 @@ const boids = (): AgentRuleSet => base({
     name: 'Birds', speed: 0.4, states: [{ name: 'flying', colour: [0.75, 0.9, 1] }],
     rules: [
       { when: [{ kind: 'always' }], do: [
-        { kind: 'separate', who: 'all', degrees: 9 },
-        { kind: 'match', who: 'all', degrees: 6 },
-        { kind: 'cohere', who: 'all', degrees: 2 },
+        { kind: 'separate', who: 'all', degrees: 12 },
+        { kind: 'match', who: 'all', degrees: 10 },
+        { kind: 'cohere', who: 'all', degrees: 2.5 },
         { kind: 'wander', degrees: 3 },
       ] },
     ],
@@ -114,8 +114,8 @@ const swarm = (): AgentRuleSet => base({
         { kind: 'cohere', who: 'all', degrees: 2 },
         { kind: 'wander', degrees: 6 },
       ] },
-      { when: [{ kind: 'neighbours', who: 'all', cmp: '>', count: 18 }], do: [{ kind: 'state', state: 1 }, { kind: 'speed', mode: 'set', value: 0.7 }] },
-      { when: [{ kind: 'neighbours', who: 'all', cmp: '<', count: 18 }], do: [{ kind: 'state', state: 0 }, { kind: 'speed', mode: 'set', value: 0.45 }] },
+      { when: [{ kind: 'neighbours', who: 'all', cmp: '>', count: 250 }], do: [{ kind: 'state', state: 1 }, { kind: 'speed', mode: 'set', value: 0.7 }] },
+      { when: [{ kind: 'neighbours', who: 'all', cmp: '<', count: 250 }], do: [{ kind: 'state', state: 0 }, { kind: 'speed', mode: 'set', value: 0.45 }] },
     ],
   }],
 });
@@ -125,9 +125,9 @@ const crowd = (): AgentRuleSet => {
   const walker = (name: string, x: number, colour: [number, number, number]): AgentSpeciesRules => ({
     name, speed: 0.22, states: [{ name: 'walking', colour }],
     rules: [{ when: [{ kind: 'always' }], do: [
-      { kind: 'turn', toward: 'point', x, y: 0, degrees: 4 },
-      { kind: 'separate', who: 'others', degrees: 22, radius: 0.045 },
-      { kind: 'separate', who: 'all', degrees: 8, radius: 0.015 },
+      { kind: 'turn', toward: 'point', x, y: 0, degrees: 10 },
+      { kind: 'separate', who: 'others', degrees: 12, radius: 0.045 },
+      { kind: 'separate', who: 'all', degrees: 6, radius: 0.015 },
       { kind: 'slow', who: 'all', jam: 30, radius: 0.045 },
       { kind: 'wander', degrees: 3 },
     ] }],
@@ -392,14 +392,14 @@ export function rulesTemplateNodes(key: string, p: string, x = 0, y = 0, withOut
       }, withOutput)];
     }
     case 'boids': return setup(x, y, {
-      p, set: boids(), label: 'Boids (rules)', tier: '256k', steps: 2, preroll: 6, nodeVersion: 'Simulation → Boids',
+      p, set: boids(), label: 'Boids (rules)', tier: '64k', steps: 2, preroll: 6, nodeVersion: 'Simulation → Boids',
       groupWhy: [
         'Kind: Flock. Boids in one rule, from the birds themselves: every bird finds the birds within 0.05 of it (one Neighbours node, made by the rules) and steers away from them (their Push: the closest count most), turns to match their heading and drifts toward their centre, with a little wobble. Reynolds\' three rules.',
         'Before Neighbours this template read a velocity trail (each bird left its velocity in a blurred trail, and the rules turned with its flow): the flocks were softer and drifted through each other. Now each bird sees its neighbours, so flocks keep their spacing and turn together.',
         'Try: Edit rules and raise the separation to 20° for loose, airy flocks, or the cohesion to 6° for tight balls; View radius (Neighbours) 0.1 for bigger, slower flocks.',
       ],
       emits: [{ mode: 'fill', shape: 'screen', heading: 'random', life: 0, ...note(['Emit: birds everywhere at once, facing anywhere. The flocks sort themselves out within seconds.']) }],
-      depositAmount: 1, depositWhy: 'Deposit: each bird leaves a little trail where it flies, only for the sky in the picture (the birds find each other with Neighbours, not through it).',
+      depositAmount: 0.4, depositWhy: 'Deposit: each bird leaves a little trail where it flies, only for the sky in the picture (the birds find each other with Neighbours, not through it).',
       trail: { resolution: '512', diffuse: 1, halfLife: 0.08, edges: 'wrap', gain: 0.04, kernel: '5' },
       trailWhy: ['Trail field: where the birds are, 512 rows, blurred wide (the soft 5×5) and gone in 0.08 s: a glow where the flocks fly, under the birds.'],
       picture: t => ({ nodes: [palette(`${p}Colour`, X(1680), Y(0), t, [[0.01, 0.02, 0.05], [0.03, 0.08, 0.2], [0.08, 0.3, 0.5], [0.4, 0.75, 0.9], [0.9, 0.98, 1]], ['Stops Palette: the trail as a deep-blue sky that brightens where the flocks fly.'])], out: [`${p}Colour`, 'color'] }),
@@ -422,7 +422,7 @@ export function rulesTemplateNodes(key: string, p: string, x = 0, y = 0, withOut
     case 'swarm': return setup(x, y, {
       p, set: swarm(), label: 'Swarm (rules)', tier: '64k', steps: 2, preroll: 6,
       groupWhy: [
-        'Kind: Swarm. Three rules. Always: orbit the centre at 0.55 (turning along the circle, and in or out toward it), steer away from the neighbours within 0.05, drift toward their centre, wobble. More than 18 neighbours: packed (orange) and faster, so a clump spills outward; fewer: circling again.',
+        'Kind: Swarm. Three rules. Always: orbit the centre at 0.55 (turning along the circle, and in or out toward it), steer away from the neighbours within 0.05, drift toward their centre, wobble. More than 250 neighbours: packed (orange) and faster, so a clump spills outward; fewer: circling again.',
         'The neighbours are the walkers themselves (one Neighbours node, made by the rules), not a trail.',
         'Try: orbit the mouse instead of the centre; separation 0 and the swarm collapses into a few dense knots.',
       ],
@@ -436,7 +436,7 @@ export function rulesTemplateNodes(key: string, p: string, x = 0, y = 0, withOut
     case 'crowd': return setup(x, y, {
       p, set: crowd(), label: 'Crowd (rules)', tier: '64k', steps: 2, preroll: 0, nodeVersion: 'Simulations: agents → Crowd: lanes in two-way traffic',
       groupWhy: [
-        'Kind: Crowd. Two species, one rule each. Always: turn toward its goal (far to the right, or far to the left), steer away from the walkers of the other kind within 0.045 (step out of their way) and from anyone within 0.015 (a little personal space), slow down as the walkers within 0.045 reach 30, and wobble.',
+        'Kind: Crowd. Two species, one rule each. Always: turn toward its goal (far to the right, or far to the left; 10° a step), steer away from the walkers of the other kind within 0.045 (step out of their way, 12°) and from anyone within 0.015 (a little personal space), slow down as the walkers within 0.045 reach 30, and wobble.',
         'Every neighbour reading is the walkers themselves (Neighbours nodes, made by the rules): nobody is told to keep to one side, yet lanes form.',
         'Try: the other kind\'s separation 0 and the crowds grind into each other; Jam 10 and people stop early, so jams spread back.',
       ],

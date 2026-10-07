@@ -240,15 +240,29 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentRulesAnt
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesBoids 1`] = `
 {
-  "agents": "093c83233d9d0608d81f76dccf02:21151",
+  "agents": "13760600cd954617c1d19886afef:19903",
   "errors": null,
-  "fragmentShader": "150810baaa982507a9ca57d3fad3:4196",
-  "paramBindings": "0bf7cb2260f3d61611ccdba9e8a0:2119",
-  "paramUniforms": "1c4c926937e8e609a214888adea5:1389",
+  "fragmentShader": "18f86b6eecec8f09665c57c0e590:4191",
+  "paramBindings": "153026613520740104ac2d1106da:1863",
+  "paramUniforms": "0cb0714953a8ce01b4cb6eaaf8ad:1262",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "0a7e8efbdbe85f034721d407d7de:21098",
+  "web": "14f5e342da4fc7183711d5c97471:20074",
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > agentRulesCrowd 1`] = `
+{
+  "agents": "153145bd4305a31c5f878a5f13e5:36510",
+  "errors": null,
+  "fragmentShader": "0c9004dbbefc4b1403dddbd00769:3080",
+  "paramBindings": "024855eb0416de16401f18f999d5:2104",
+  "paramUniforms": "1387cf7485ccf00317fef5bd2479:1338",
+  "passes": "167d269bbddad80189e9f9473b28:2",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": "1e5dca4a3e81f30596912e3c0bc3:36597",
 }
 `;
 
@@ -277,6 +291,20 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentRulesFir
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
   "web": "11f492ae3c50151027988f139160:22462",
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > agentRulesParticles 1`] = `
+{
+  "agents": "06dc9606af6bc904db33e6c1d68c:17774",
+  "errors": null,
+  "fragmentShader": "04af75c037f3d40f0db98cf47584:3881",
+  "paramBindings": "1ebb79549dfccb12f1127929943b:1841",
+  "paramUniforms": "15496e1e97b605080d017259c5ed:1263",
+  "passes": "167d269bbddad80189e9f9473b28:2",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": "013277853ba03306016f4e7644eb:17838",
 }
 `;
 
@@ -319,6 +347,20 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentRulesSli
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
   "web": "0ef9eeb3e8091e05127bac9524b4:15921",
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > agentRulesSwarm 1`] = `
+{
+  "agents": "08265593508519106a7bc6da6ff8:22362",
+  "errors": null,
+  "fragmentShader": "1f84acd33cef5f1e6f0676972917:3841",
+  "paramBindings": "1c27f86eba36210414eac80272cf:1814",
+  "paramUniforms": "15643d68956a260e2b6e23228b5b:1225",
+  "passes": "167d269bbddad80189e9f9473b28:2",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": "1b419b59479b7818136cfb33c6fe:22491",
 }
 `;
 
