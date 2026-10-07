@@ -210,3 +210,14 @@ describe('uniforms no node stands for', () => {
     expect(r.report.unsupported.join(' ')).toMatch(/read inside f\(\), which can’t reach a Play control/);
   });
 });
+
+describe('Shadertoy alpha', () => {
+  it('a mainImage that writes alpha 0 converts to an opaque output (Shadertoy ignores the alpha)', () => {
+    const src = '#define ITER 23\nvec4 tex(vec3 p){ vec4 o = vec4(p, 1.); for (int i=0 ; i++ < ITER;) o.xzyw = abs(o/dot(o,o) - vec4 (1.,.9,.1,.15)); return o; }\n'
+      + 'void mainImage(out vec4 fragColor, in vec2 fragCoord){ vec2 uv = fragCoord / iResolution.y; vec3 col = tex(vec3(uv, 1.)).xyz; fragColor = vec4(col, 0.0); }';
+    const { r } = ok(src);
+    expect(r.report.notes.join(' ')).toMatch(/alpha read as 1/);
+    // Whatever shape the output took, its alpha is a 1 now, not the 0 the paste wrote.
+    expect(r.nodes.some(n => n.type === 'makeVec4' && n.params.w === 1)).toBe(true);
+  });
+});

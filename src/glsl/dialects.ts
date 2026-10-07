@@ -135,6 +135,34 @@ function matchParen(s: string, open: number): number { let d = 0; for (let i = o
 function matchBrace(s: string, open: number): number { let d = 0; for (let i = open; i < s.length; i++) { if (s[i] === '{') d++; else if (s[i] === '}' && --d === 0) return i; } return -1; }
 function splitTop(s: string, sep: string): string[] { const out: string[] = []; let d = 0, cur = ''; for (const c of s) { if (c === '(' || c === '[') d++; else if (c === ')' || c === ']') d--; if (c === sep && d === 0) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out; }
 
+/**
+ * Is the alpha of mainImage's out colour visibly 1 at the end? True when it is written whole
+ * at least once, every whole write is `vec4(…, 1.0)` (a literal 1 last), and nothing else
+ * touches it: no compound write (`O *= …`), no swizzled write of a / w, no passing it to a
+ * function (which may write it through an `out` / `inout` parameter). Anything unsure is false.
+ */
+export function alphaAlwaysOne(body: string, name: string): boolean {
+  const src = body.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, ' ');
+  let wholeOpaque = 0;
+  for (const m of src.matchAll(new RegExp(`(?<![\\w.])${name}\\b(\\.[xyzwrgba]+)?\\s*([-+*/]?=(?!=))?`, 'g'))) {
+    const [, swizzle, op] = m;
+    const before = src.slice(0, m.index).trimEnd().slice(-1);
+    if (!op) { if (!swizzle && (before === '(' || before === ',')) return false; continue; }
+    if (swizzle) { if (/[aw]/.test(swizzle)) return false; continue; }
+    if (op !== '=') return false;
+    // The whole right-hand side, to its top-level `;`.
+    let i = m.index + m[0].length, d = 0; const from = i;
+    for (; i < src.length; i++) { const c = src[i]; if (c === '(' || c === '[') d++; else if (c === ')' || c === ']') d--; else if (c === ';' && d === 0) break; }
+    const rhs = src.slice(from, i).trim();
+    const call = /^vec4\s*\(([\s\S]*)\)$/.exec(rhs);
+    if (!call || matchParen(rhs, rhs.indexOf('(')) !== rhs.length - 1) return false;
+    const args = splitTop(call[1], ',').map(a => a.trim());
+    if (args.length < 2 || !/^(?:1|1\.0*|1\.0*e0)$/.test(args[args.length - 1])) return false;
+    wholeOpaque++;
+  }
+  return wholeOpaque > 0;
+}
+
 /** Shadertoy uniforms as Studio expressions, applied in order (the swizzled forms first): pattern, replacement, note. */
 export const SHADERTOY_RENAMES: ReadonlyArray<readonly [RegExp, string, string]> = [
   [/\biResolution\.xy\b/g, 'u_resolution', 'iResolution'],
@@ -196,8 +224,15 @@ export function translateToStudio(source: string, options: TranslateOptions = {}
       // parameter is a local, written to gl_FragColor at every exit. Only assigned: just rename it.
       const uses = [...body.matchAll(new RegExp(`(?<![\\w.])${outName}\\b(\\.[xyzwrgba]+)?\\s*(=(?!=)|)`, 'g'))];
       const onlyAssigned = uses.every(u => u[2] === '=') && !/\breturn\b/.test(body);
+      // Shadertoy shows the Image pass opaque: the alpha a shader writes (often 0, or never set) is
+      // ignored there. Ours honours it, so a `fragColor = vec4(col, 0.0)` would show nothing. Unless
+      // every write is visibly opaque, the colour reaches gl_FragColor with alpha 1.
+      const opaque = alphaAlwaysOne(body, outName);
+      const out = (v: string) => opaque ? v : `vec4(${/^\w+$/.test(v) ? v : `(${v})`}.rgb, 1.0)`;
+      if (!opaque) notes.push('alpha read as 1, as Shadertoy shows it');
       if (onlyAssigned) {
-        s = s.slice(0, bodyStart) + renameWord(body, outName, 'gl_FragColor') + s.slice(end);
+        // `body` stops short of main's closing `}`: the alpha goes last, on the same line.
+        s = s.slice(0, bodyStart) + renameWord(body, outName, 'gl_FragColor') + (opaque || bodyEnd <= 0 ? '' : ' gl_FragColor.a = 1.0; ') + s.slice(end);
       } else if (options.lowerReturns) {
         // Each `return;` becomes a snapshot (first one taken wins, without a branch: the snapshot only
         // moves while its flag is still 0), and the end of main picks the snapshot or the live colour.
@@ -206,11 +241,11 @@ export function translateToStudio(source: string, options: TranslateOptions = {}
         const decls = Array.from({ length: k }, (_, i) => ` vec4 earlyOut${i} = vec4(0.0); float earlyTook${i} = 0.0;`).join('');
         let pick = outName;
         for (let i = k - 1; i >= 0; i--) pick = `mix(${pick}, earlyOut${i}, earlyTook${i})`;
-        s = s.slice(0, bodyStart) + `{ vec4 ${outName} = vec4(0.0);${decls}` + flushed.slice(1) + (bodyEnd > 0 ? ` gl_FragColor = ${pick}; ` : '') + s.slice(end);
+        s = s.slice(0, bodyStart) + `{ vec4 ${outName} = vec4(0.0);${decls}` + flushed.slice(1) + (bodyEnd > 0 ? ` gl_FragColor = ${out(pick)}; ` : '') + s.slice(end);
         notes.push(`${outName} kept as a local (it is read back), written to gl_FragColor${k ? `; ${k} early return${k === 1 ? '' : 's'} lowered to a pick at the end` : ''}`);
       } else {
-        const flushed = body.replace(/\breturn\s*;/g, `{ gl_FragColor = ${outName}; return; }`);
-        s = s.slice(0, bodyStart) + `{ vec4 ${outName} = vec4(0.0);` + flushed.slice(1) + (bodyEnd > 0 ? ` gl_FragColor = ${outName}; ` : '') + s.slice(end);
+        const flushed = body.replace(/\breturn\s*;/g, `{ gl_FragColor = ${out(outName)}; return; }`);
+        s = s.slice(0, bodyStart) + `{ vec4 ${outName} = vec4(0.0);` + flushed.slice(1) + (bodyEnd > 0 ? ` gl_FragColor = ${out(outName)}; ` : '') + s.slice(end);
         notes.push(`${outName} kept as a local (it is read back), written to gl_FragColor`);
       }
       notes.push('mainImage() read as main()');
