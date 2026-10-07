@@ -116,10 +116,11 @@ describe('grid dialect: the plan\'s examples', () => {
     for (const [text, preset] of [
       ['grid patterns states=4 · stencil .../.1./... → 2 · stencil .../.2./... → 3 · stencil .../.3./... → 1 count=1:1..2', PATTERN_PRESETS.wireworld],
       ['grid blocks states=3 · block 11/00 → 00/11 · block 1./0. → 0=/1= @mirror · block 10/*0 → 00/=1 @mirror chance=0.8', BLOCK_PRESETS.sand],
-      ['grid blocks states=2 · block 10/00 → 00/01 @turns · block 10/01 → 01/10 @turns · block 11/00 → 00/11 @turns · block 11/10 → 01/11 @turns', BLOCK_PRESETS.gas],
+      ['grid blocks states=2 wrap · block 10/00 → 00/01 @turns · block 10/01 → 01/10 @turns · block 11/00 → 00/11 @turns · block 11/10 → 01/11 @turns', BLOCK_PRESETS.gas],
       ['grid patterns states=2 · stencil .../.0./... → 1 count=1:1', PATTERN_PRESETS.crystal],
     ] as const) {
-      const a = { ...GRID_DEFAULTS, ...read(text) }, b = { ...GRID_DEFAULTS, ...presetParams(a.ruleType as 'blocks', preset) };
+      // The same board and look; the rules (and states, edges) from the preset or from the text.
+      const a = { ...GRID_DEFAULTS, ...read(text) }, b = { ...a, ...preset.params };
       expect(a.patterns ?? null).toEqual(b.patterns ?? null);
       expect(a.blocks ?? null).toEqual(b.blocks ?? null);
       const rs = (seed: number) => { const r = makeRng(seed); return () => r.next(); };
