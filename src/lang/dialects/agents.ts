@@ -539,7 +539,7 @@ export function parseAgents(src: string, opts: { seed?: number } = {}): AgentsPa
         }
         case 'drag': { const v = numVal('drag'); return v === null ? null : { kind: 'drag', amount: v }; }
         case 'fade': { const v = numVal('seconds', u => u === null || u === 's'); return v === null ? null : { kind: 'fade', seconds: v }; }
-        default: unknown(x, 'an action', ['turn', 'wander', 'speed', 'accelerate', 'leave', 'become', 'memory', 'stop', 'stick', 'die', 'spawn', 'follow', 'against', 'align', 'separate', 'match', 'cohere', 'slow', 'avoid-edges', 'orbit', 'force', 'drag', 'fade']); return null;
+        default: unknown(x, 'an action', ['turn', 'wander', 'speed', 'accelerate', 'leave', 'become', 'memory', 'stop', 'stick', 'die', 'spawn', 'follow', 'against', 'align', 'separate', 'match', 'cohere', 'slow', 'avoid-edges', 'orbit', 'force', 'drag', 'fade']); while (!c.atClauseEnd() && c.peek().t !== ',' && c.peek().t !== '@') c.next(); return null;
       }
     };
     for (const at of d.ruleAt) {
