@@ -54,6 +54,7 @@ import { readSurpriseCommand, surpriseLine } from '../../lang/surprise';
 import { normaliseEnd, strength } from '../../suggestions/usage';
 import { historyAt, pushHistory, readHistory } from '../../suggestions/doBarHistory';
 import type { Assist } from '../../lang/complete';
+import { graphToScript } from '../../lang/fromGraph';
 
 const WIDTH = 560;
 
@@ -106,7 +107,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   const tk = useTokens();
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState(initial);
-  const [panel, setPanel] = useState<'none' | 'teach' | 'taught'>(/^teach\b/i.test(initial) ? 'teach' : 'none');
+  const [panel, setPanel] = useState<'none' | 'teach' | 'taught' | 'script'>(/^teach\b/i.test(initial) ? 'teach' : 'none');
   const [teachPhrase, setTeachPhrase] = useState(initial.replace(/^teach( the do bar)?\s*/i, ''));
   const [teachError, setTeachError] = useState<string | null>(null);
   const [active, setActive] = useState(0);
@@ -335,6 +336,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
         <IconButton icon="dice" size="sm" label="Surprise me: a random line to try (type “surprise me large 3d” for a size or a 3D scene)" data-do-surprise
           onClick={() => { const s = surpriseLine({ seed: freshSeed() }); setText(s.line); setCaret(s.line.length); requestAnimationFrame(() => inputRef.current?.focus()); }} />
         <IconButton icon="info" size="sm" label="Commands: every verb, with examples to try" onClick={() => { closeDoBar(); openCommandsRef(); }} data-do-help />
+        <IconButton icon="code" size="sm" active={panel === 'script'} label="Show as commands: this graph as Do… lines" data-do-script onClick={() => setPanel(p => (p === 'script' ? 'none' : 'script'))} />
         <IconButton icon="star" size="sm" active={panel === 'taught'} label="Your taught phrases" onClick={() => setPanel(p => (p === 'taught' ? 'none' : 'taught'))} />
         <IconButton icon="close" size="sm" label="Close" shortcut="esc" onClick={closeDoBar} />
       </div>
@@ -461,6 +463,9 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
           </div>
         ))}
 
+        {/* The graph as commands (lang/fromGraph.ts) */}
+        {panel === 'script' && section('This graph as commands', <ScriptPanel nodes={scope.nodes} topLevel={scope.topLevel} />)}
+
         {/* Taught phrases */}
         {panel === 'taught' && section(`Taught (${taughtMoves().length})`, <TaughtList />)}
 
@@ -484,6 +489,35 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
       </div>
     </div>,
     document.body,
+  );
+}
+
+/**
+ * The level being edited as Do… bar lines (lang/fromGraph.ts graphToScript): what you would type to
+ * build it on an empty graph, with `# cannot express` where the language has no words yet. Copy
+ * takes the lines; they run one at a time in the bar.
+ */
+function ScriptPanel({ nodes, topLevel }: { nodes: GraphNode[]; topLevel: boolean }) {
+  const tk = useTokens();
+  const [copied, setCopied] = useState(false);
+  const printed = useMemo(() => { try { return graphToScript(nodes); } catch (e) { return { error: (e as Error).message }; } }, [nodes]);
+  if ('error' in printed) return <span style={{ fontSize: 12, color: tk.status.warningText }}>Couldn’t print this graph: {printed.error}</span>;
+  const gaps = printed.lines.filter(l => l.form === 'comment').length;
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(printed.script); setCopied(true); setTimeout(() => setCopied(false), 1400); } catch { /* the text is still selectable */ }
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} data-do-script-panel>
+      <span style={{ fontSize: 11.5, color: tk.text.muted }}>
+        {printed.lines.length - gaps} line{printed.lines.length - gaps === 1 ? '' : 's'} build{printed.lines.length - gaps === 1 ? 's' : ''} {topLevel ? 'this graph' : 'this group’s level'} on an empty graph, one line at a time{gaps ? `; ${gaps} thing${gaps === 1 ? '' : 's'} the language can’t say yet (# lines)` : ''}.
+      </span>
+      <pre style={{ margin: 0, maxHeight: 260, overflow: 'auto', padding: '6px 8px', borderRadius: radius.control, background: tk.bg.subtle, font: `11.5px/1.5 ${fontFamily.mono}`, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+        {printed.lines.map((l, i) => <div key={i} style={{ color: l.form === 'comment' ? tk.text.faint : tk.text.primary }}>{l.text}</div>)}
+      </pre>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <Button size="sm" variant="secondary" onClick={copy} data-do-script-copy>{copied ? 'Copied' : 'Copy'}</Button>
+      </div>
+    </div>
   );
 }
 
