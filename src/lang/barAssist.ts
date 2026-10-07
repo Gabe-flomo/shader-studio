@@ -200,8 +200,9 @@ export function barAssist(text: string, caret: number, ctx: BarAssistCtx): Assis
     else if (['between', 'after', 'before', 'and'].includes(words[words.length - 1])) items = rankCompletions(word, nodeRefs(), 12);
     else if (words.length === 2 && !word) items = ['between', 'after', 'before'].map(w => ({ label: w, insert: `${w} `, kind: 'param' as const, detail: `insert … ${w} …` }));
     signature = verbSig('insert');
-  } else if (!words.length || (words.length === 0 && word)) {
-    items = rankCompletions(word, heads(ctx.nodes), 12);
+  } else if (!words.length) {
+    // Nothing typed yet: no list (the bar's own hint shows); a word: the heads it starts.
+    items = word ? rankCompletions(word, heads(ctx.nodes), 12) : [];
     const hit = word ? lookupHead(word, 'picture') : null;
     if (hit) signature = entrySig(hit.entry, '', word);
   } else {
