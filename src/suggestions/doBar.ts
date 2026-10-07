@@ -78,6 +78,7 @@ export interface DoContext {
 
 // ── Reading the words ───────────────────────────────────────────────────────
 
+export type PhraseItem = Item;
 type Item =
   | { t: 'shape'; shape: ShapeWord; text: string; fuzzy?: boolean }
   | { t: 'action'; action: ActionWord; id: string; text: string; fuzzy?: boolean }
@@ -97,6 +98,9 @@ const COUNT_WORDS = new Set(PARAMS.count);
 type ActionItem = Extract<Item, { t: 'action' }>;
 const SHAPE_ARG_ACTIONS = new Set(['blend']);
 const SLOT_WORDS = new Set(Object.values(PARAMS).flat());
+
+/** The phrase language's reading of tokens (the canonical printer reads it too: lang/dialects/picture.ts). */
+export function readPhrase(tokens: string[]): { items: Item[]; unknown: string[] } { return read(tokens); }
 
 function read(tokens: string[]): { items: Item[]; unknown: string[] } {
   const items: Item[] = [];

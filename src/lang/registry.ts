@@ -166,6 +166,7 @@ function pictureShapes(): Entry[] {
     id: `picture:shape:${s.id}`, kind: 'maker' as const, dialects: ['picture' as Dialect], words: [s.words[0], ...s.words.slice(1).filter(w => !w.includes(' '))],
     params: [
       ...(s.node2d!.size ? [{ key: 'r', aliases: ['radius', 'size'], type: 'number' as const, primary: true, def: 0.25, rand: SHAPE_SIZE_RAND, label: 'Size' }] : []),
+      { key: 'color', aliases: ['colour'], type: 'colour' as const, rand: { kind: 'colour' as const }, label: 'Colour' },
       { key: 'at', type: 'place' as const, def: 'middle', options: PLACE_WORDS, rand: { kind: 'choice' as const, options: ['middle', 'middle', 'top-left', 'top-right', 'bottom-left', 'bottom-right', 'left', 'right'] }, label: 'Where' },
     ],
     summary: `A ${s.words[0]} (a distance, with a UV in front).`, examples: [`${s.words[0]} · glow`], stage: 'shape' as const,
@@ -181,6 +182,11 @@ function pictureExtras(): Entry[] {
       ],
       summary: 'Colours it through a palette, by a driver: the length of the space, the angle, x, y, time, noise or a node.',
       examples: ['circle · glow · colour by length', 'noise · colour by it'], stage: 'colour',
+    },
+    {
+      id: 'picture:repeat-around', kind: 'step', dialects: ['picture'], words: ['polar-repeat', 'repeat-around', 'petals', 'kaleidoscope'],
+      params: [{ key: 'count', type: 'count', primary: true, def: 6, rand: MOVE_RAND['repeat-around.count'], label: 'Copies' }],
+      summary: 'Repeat around: copies round the centre, like a flower (Angular Repeat).', examples: ['star · glow · polar-repeat 6'], stage: 'space', move: 'repeat-around',
     },
     {
       id: 'picture:noise', kind: 'maker', dialects: ['picture'], words: ['noise', 'fbm', 'clouds'], params: [{ key: 'scale', type: 'number', rand: { kind: 'num', lo: 1.5, hi: 6 } }],

@@ -6,6 +6,7 @@
  * the same digest.
  */
 import type { GraphNode } from '../../types/nodeGraph';
+import { GRID_DEFAULTS } from '../../gridRules/spec';
 
 const SKIP = new Set(['__comment', 'subgraph']);
 
@@ -19,7 +20,9 @@ function norm(v: unknown): unknown {
 /** One line per node, sorted: `type {params} ← key:<feeder>.out …`, where a feeder is named by its own line (three rounds deep). */
 export function graphDigest(nodes: GraphNode[]): string[] {
   const byId = new Map(nodes.map(nd => [nd.id, nd]));
-  const own = new Map(nodes.map(nd => [nd.id, `${nd.type} ${JSON.stringify(norm(nd.params ?? {}))}`]));
+  // A Grid Rules node reads its params over GRID_DEFAULTS: the same rule whether a key is stored or defaulted.
+  const params = (nd: GraphNode) => (nd.type === 'gridRules' ? { ...GRID_DEFAULTS, ...nd.params } : nd.params ?? {});
+  const own = new Map(nodes.map(nd => [nd.id, `${nd.type} ${JSON.stringify(norm(params(nd)))}`]));
   let names = new Map(own);
   for (let round = 0; round < 3; round++) {
     const next = new Map<string, string>();
