@@ -17,8 +17,8 @@ export const AGENT_RULE_EXAMPLE_INDEX: Record<string, { label: string; descripti
     description: 'Ants in six rules with two states (searching, carrying) and two masks (Food, Nest): searching ants lay the home smell and follow the food smell, carrying ants the other way round; they turn at the food and at the nest. The node version: Simulation → Ants.',
   },
   agentRulesBoids: {
-    label: 'Agent rules 3 · Boids-like (via trail)',
-    description: 'Flocking from two rules over a velocity trail: too crowded → turn away from the birds; otherwise → align with the crowd\'s flow, turn a little toward the birds, wobble. The node version: Simulation → Boids.',
+    label: 'Agent rules 3 · Flock (boids)',
+    description: 'Kind: Flock. Boids in one rule, from the birds themselves (Neighbours): steer away from the birds near it, match their heading, drift to their centre, wobble. Flocks gather, keep their spacing and wheel together. (It used to read a blurred velocity trail.) The node version: Simulation → Boids.',
   },
   agentRulesPredatorPrey: {
     label: 'Agent rules 4 · Predator & prey',
@@ -40,6 +40,18 @@ export const AGENT_RULE_EXAMPLE_INDEX: Record<string, { label: string; descripti
     label: 'Agent rules 8 · DLA growth',
     description: 'Diffusion-limited aggregation: free walkers wander until they touch the seed or the crystal, then stick and become part of it. Branching frost grows from the middle. The node version: Simulations: agents → Diffusion-limited aggregation.',
   },
+  agentRulesParticles: {
+    label: 'Agent rules 9 · Particles: spark fountain',
+    description: 'Kind: Particles. No sensing: sparks shot up from a fountain, moved by forces (gravity, curl noise, drag), fading over three seconds and born again when they die. A switched-off rule pushes them away from the mouse: turn it on in Edit rules.',
+  },
+  agentRulesSwarm: {
+    label: 'Agent rules 10 · Swarm: orbiters',
+    description: 'Kind: Swarm. Walkers circle the middle, keep apart from their neighbours and drift toward them; where more than 18 pack in they turn orange and speed out, so the ring breathes.',
+  },
+  agentRulesCrowd: {
+    label: 'Agent rules 11 · Crowd: two-way walkers',
+    description: 'Kind: Crowd. Two crowds walk opposite ways; each walker steps out of the other kind\'s way, keeps a little apart and slows as the crowd round it thickens, all from Neighbours. Lanes form by themselves. The node version: Simulations: agents → Crowd: lanes in two-way traffic.',
+  },
 };
 
 /** The ordered keys, for the Agents: rules folder. */
@@ -48,6 +60,7 @@ export const AGENT_RULE_EXAMPLE_KEYS = Object.keys(AGENT_RULE_EXAMPLE_INDEX);
 const TEMPLATE_OF: Record<string, [string, string]> = {
   agentRulesSlime: ['slime', 'arSl'], agentRulesAnts: ['ants', 'arAn'], agentRulesBoids: ['boids', 'arBo'], agentRulesPredatorPrey: ['predatorPrey', 'arPp'],
   agentRulesSir: ['sir', 'arSir'], agentRulesTermites: ['termites', 'arTe'], agentRulesFireflies: ['fireflies', 'arFf'], agentRulesDla: ['dla', 'arDla'],
+  agentRulesParticles: ['particles', 'arPa'], agentRulesSwarm: ['swarm', 'arSw'], agentRulesCrowd: ['crowd', 'arCr'],
 };
 
 export function buildAgentRuleExamples(): Record<string, ExampleGraph> {

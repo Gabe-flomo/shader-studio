@@ -28,6 +28,7 @@ const base = (o: Partial<AgentRuleSet> & { species: AgentSpeciesRules[] }): Agen
 // ── The rule sets ────────────────────────────────────────────────────────────
 
 const slime = (): AgentRuleSet => base({
+  kind: 'trail',
   sensor: { distance: 0.035, angle: 22.5 },
   species: [{
     name: 'Slime', speed: 0.22, states: [{ name: 'walking', colour: [1, 0.85, 0.5] }],
@@ -40,6 +41,7 @@ const slime = (): AgentRuleSet => base({
 });
 
 const ants = (): AgentRuleSet => base({
+  kind: 'ants',
   channels: ['home', 'food', '', ''],
   masks: [{ name: 'Food', kind: 'number' }, { name: 'Nest', kind: 'number' }],
   edges: 'bounce',
@@ -58,23 +60,87 @@ const ants = (): AgentRuleSet => base({
   }],
 });
 
+/**
+ * Boids with real neighbours (one Neighbours node: everyone within 0.05): steer away from them (their
+ * Push, strongest from the closest), match their heading and drift to their centre (Reynolds' three
+ * rules). Until Neighbours this template read a blurred velocity trail instead; see docs/agent-rules.md.
+ */
 const boids = (): AgentRuleSet => base({
-  channels: ['flow x', 'flow y', 'birds', ''],
-  sensor: { distance: 0.06, angle: 30 },
+  kind: 'flock',
+  neighbours: { radius: 0.05, max: 36 },
   species: [{
     name: 'Birds', speed: 0.4, states: [{ name: 'flying', colour: [0.75, 0.9, 1] }],
     rules: [
-      { when: [{ kind: 'sense', channel: 2, where: 'here', cmp: '>', value: 16 }], do: [{ kind: 'turn', toward: 'trail', channel: 2, away: true, degrees: 15 }], stop: true },
       { when: [{ kind: 'always' }], do: [
-        { kind: 'align', degrees: 10 },
-        { kind: 'turn', toward: 'trail', channel: 2, degrees: 3 },
+        { kind: 'separate', who: 'all', degrees: 9 },
+        { kind: 'match', who: 'all', degrees: 6 },
+        { kind: 'cohere', who: 'all', degrees: 2 },
         { kind: 'wander', degrees: 3 },
       ] },
     ],
   }],
 });
 
+/** Sparks from a fountain: gravity, curl noise and drag move them; they fade over 3 s and die (Keep full brings them back). */
+const particles = (): AgentRuleSet => base({
+  kind: 'particles',
+  edges: 'bounce',
+  flow: { size: 1.2, evolve: 0.2 },
+  species: [{
+    name: 'Sparks', speed: 1.1, states: [{ name: 'glowing', colour: [1, 0.62, 0.25] }],
+    rules: [
+      { when: [{ kind: 'always' }], do: [
+        { kind: 'force', field: 'gravity', strength: 0.75, angle: -90 },
+        { kind: 'force', field: 'curl', strength: 0.6 },
+        { kind: 'drag', amount: 0.35 },
+        { kind: 'fade', seconds: 3.2 },
+      ] },
+      { when: [{ kind: 'always' }], do: [{ kind: 'force', field: 'mouse', strength: -1.2 }], off: true },
+      { when: [{ kind: 'age', cmp: '>', seconds: 3.2 }], do: [{ kind: 'die' }] },
+    ],
+  }],
+});
+
+/** A swarm circling the middle: orbit it, keep apart, drift together; packed spots speed up and spill out. */
+const swarm = (): AgentRuleSet => base({
+  kind: 'swarm',
+  neighbours: { radius: 0.05, max: 36 },
+  species: [{
+    name: 'Swarm', speed: 0.45, states: [{ name: 'circling', colour: [0.55, 0.85, 1] }, { name: 'packed', colour: [1, 0.55, 0.35] }],
+    rules: [
+      { when: [{ kind: 'always' }], do: [
+        { kind: 'orbit', target: 'centre', distance: 0.55, degrees: 4 },
+        { kind: 'separate', who: 'all', degrees: 10 },
+        { kind: 'cohere', who: 'all', degrees: 2 },
+        { kind: 'wander', degrees: 6 },
+      ] },
+      { when: [{ kind: 'neighbours', who: 'all', cmp: '>', count: 18 }], do: [{ kind: 'state', state: 1 }, { kind: 'speed', mode: 'set', value: 0.7 }] },
+      { when: [{ kind: 'neighbours', who: 'all', cmp: '<', count: 18 }], do: [{ kind: 'state', state: 0 }, { kind: 'speed', mode: 'set', value: 0.45 }] },
+    ],
+  }],
+});
+
+/** Two crowds walking opposite ways: step out of the other kind's way, keep a little apart, slow in a crowd. */
+const crowd = (): AgentRuleSet => {
+  const walker = (name: string, x: number, colour: [number, number, number]): AgentSpeciesRules => ({
+    name, speed: 0.22, states: [{ name: 'walking', colour }],
+    rules: [{ when: [{ kind: 'always' }], do: [
+      { kind: 'turn', toward: 'point', x, y: 0, degrees: 4 },
+      { kind: 'separate', who: 'others', degrees: 22, radius: 0.045 },
+      { kind: 'separate', who: 'all', degrees: 8, radius: 0.015 },
+      { kind: 'slow', who: 'all', jam: 30, radius: 0.045 },
+      { kind: 'wander', degrees: 3 },
+    ] }],
+  });
+  return base({
+    kind: 'crowd',
+    neighbours: { radius: 0.045, max: 36 },
+    species: [walker('Going right', 40, [1, 0.6, 0.2]), walker('Going left', -40, [0.25, 0.75, 1])],
+  });
+};
+
 const predatorPrey = (): AgentRuleSet => base({
+  kind: 'trail',
   channels: ['prey', 'predators', '', ''],
   sensor: { distance: 0.06, angle: 35 },
   species: [
@@ -96,6 +162,7 @@ const predatorPrey = (): AgentRuleSet => base({
 });
 
 const sir = (): AgentRuleSet => base({
+  kind: 'ants',
   channels: ['germs', '', '', ''],
   sensor: { distance: 0.02, angle: 40 },
   species: [{
@@ -132,6 +199,7 @@ const termites = (): AgentRuleSet => {
   const besidePile: RuleCondition[] = [st(2), { kind: 'sense', channel: 0, where: 'any', cmp: '>', value: 0.5 }, here('<', 0.24), ready];
   const dice: RuleCondition = { kind: 'chance', perSecond: 0.9 };
   return base({
+    kind: 'ants',
     channels: ['wood chips', '', '', ''],
     sensor: { distance: 0.008, angle: 45 },
     species: [{
@@ -161,6 +229,7 @@ const termites = (): AgentRuleSet => {
  * refractory first 60% of the cycle; a 1.5 s cycle and a short 0.12 s flash.
  */
 const fireflies = (): AgentRuleSet => base({
+  kind: 'ants',
   channels: ['light', '', '', ''],
   sensor: { distance: 0.5, angle: 90 },
   species: [{
@@ -179,6 +248,7 @@ const fireflies = (): AgentRuleSet => base({
 });
 
 const dla = (): AgentRuleSet => base({
+  kind: 'trail',
   channels: ['crystal', '', '', ''],
   masks: [{ name: 'Seed', kind: 'number' }],
   sensor: { distance: 0.006, angle: 60 },
@@ -197,7 +267,10 @@ const dla = (): AgentRuleSet => base({
 export const RULES_TEMPLATES: RulesTemplate[] = [
   { key: 'slime', label: 'Slime mold', blurb: 'Every walker turns toward the trail it smells, wobbles and leaves trail: veins and networks.', set: slime },
   { key: 'ants', label: 'Ants with food', blurb: 'Searching ants follow the food smell and lay the home smell; carrying ants the other way round; they turn at the food and the nest.', set: ants },
-  { key: 'boids', label: 'Boids-like (via trail)', blurb: 'Birds align with the crowd\'s flow (a velocity trail), drift toward where the birds are and away where they are packed: flocks gather and wheel.', set: boids },
+  { key: 'boids', label: 'Flock (boids)', blurb: 'Birds see the birds near them (Neighbours): steer away from the closest, match their heading, drift to their centre. Flocks gather, wheel and stream past each other.', set: boids },
+  { key: 'particles', label: 'Particles: spark fountain', blurb: 'Sparks shot up from a fountain: gravity, curl noise and drag move them, they fade over three seconds and are born again. No sensing at all.', set: particles },
+  { key: 'swarm', label: 'Swarm: orbiters', blurb: 'A swarm circling the middle: each orbits it, keeps apart from its neighbours and drifts toward them; where they pack in they turn orange and speed out.', set: swarm },
+  { key: 'crowd', label: 'Crowd: two-way walkers', blurb: 'Two crowds walking opposite ways: each walker steps out of the other kind\'s way, keeps a little apart and slows as the crowd round it thickens. Lanes form.', set: crowd },
   { key: 'predatorPrey', label: 'Predator & prey', blurb: 'Prey graze along their own trail and flee the predators\' smell; predators chase the prey\'s; prey caught die and are born again.', set: predatorPrey },
   { key: 'sir', label: 'Infection (SIR)', blurb: 'Healthy, sick, recovered: the sick leave germs, the healthy who walk through them may fall sick, the sick recover, immunity wanes.', set: sir },
   { key: 'termites', label: 'Termites', blurb: 'Termites pick up wood chips and drop them beside other chips: within half a minute the scattered chips gather into piles.', set: termites },
@@ -320,14 +393,65 @@ export function rulesTemplateNodes(key: string, p: string, x = 0, y = 0, withOut
     }
     case 'boids': return setup(x, y, {
       p, set: boids(), label: 'Boids (rules)', tier: '256k', steps: 2, preroll: 6, nodeVersion: 'Simulation → Boids',
-      groupWhy: ['Boids in two rules, through a velocity trail (the Deposit leaves each bird\'s velocity and a count): too crowded (more than 16 birds\' worth here) → turn away from the crowd (separation); otherwise → align with the way the crowd round it flies (alignment), turn a little toward where the birds are (cohesion) and wobble.', 'The trail\'s channels: 1 and 2 the crowd\'s flow (x, y), 3 the count of birds. The node version builds the same three forces from Sense, Sample and an Expression Block.'],
+      groupWhy: [
+        'Kind: Flock. Boids in one rule, from the birds themselves: every bird finds the birds within 0.05 of it (one Neighbours node, made by the rules) and steers away from them (their Push: the closest count most), turns to match their heading and drifts toward their centre, with a little wobble. Reynolds\' three rules.',
+        'Before Neighbours this template read a velocity trail (each bird left its velocity in a blurred trail, and the rules turned with its flow): the flocks were softer and drifted through each other. Now each bird sees its neighbours, so flocks keep their spacing and turn together.',
+        'Try: Edit rules and raise the separation to 20° for loose, airy flocks, or the cohesion to 6° for tight balls; View radius (Neighbours) 0.1 for bigger, slower flocks.',
+      ],
       emits: [{ mode: 'fill', shape: 'screen', heading: 'random', life: 0, ...note(['Emit: birds everywhere at once, facing anywhere. The flocks sort themselves out within seconds.']) }],
-      depositWhat: 'velocity',
-      depositAmount: 1, depositWhy: 'Deposit, What: Velocity: each bird leaves its velocity (channels 1 and 2) and a count (channel 3) instead of a smell: the crowd\'s flow, which the rules\' "align with the crowd" reads.',
+      depositAmount: 1, depositWhy: 'Deposit: each bird leaves a little trail where it flies, only for the sky in the picture (the birds find each other with Neighbours, not through it).',
       trail: { resolution: '512', diffuse: 1, halfLife: 0.08, edges: 'wrap', gain: 0.04, kernel: '5' },
-      trailWhy: ['Trail field: the flow of the flock, 512 rows, blurred wide (the soft 5×5) and gone in 0.08 s: where the birds are now, and which way they fly.'],
+      trailWhy: ['Trail field: where the birds are, 512 rows, blurred wide (the soft 5×5) and gone in 0.08 s: a glow where the flocks fly, under the birds.'],
       picture: t => ({ nodes: [palette(`${p}Colour`, X(1680), Y(0), t, [[0.01, 0.02, 0.05], [0.03, 0.08, 0.2], [0.08, 0.3, 0.5], [0.4, 0.75, 0.9], [0.9, 0.98, 1]], ['Stops Palette: the trail as a deep-blue sky that brightens where the flocks fly.'])], out: [`${p}Colour`, 'color'] }),
       draw: { style: 'streaks', colorBy: 'heading', palette: 'ab', colorA: [1, 0.8, 0.5], colorB: [0.5, 0.8, 1], size: 1, brightness: 0.1, glow: 0.4, streak: 0.5, scaleBy: 'walker', fade: 'off', lights: '0', ...note(['Draw agents: each bird as a short streak, warm or cool by which way it flies, so the flocks\' directions show.']) },
+    }, withOutput);
+    case 'particles': return setup(x, y, {
+      p, set: particles(), label: 'Spark fountain (rules)', tier: '64k', steps: 1, preroll: 4, nodeVersion: 'Simulation → Particles (the forces as nodes)',
+      groupWhy: [
+        'Kind: Particles. No sensing: three rules. Always: gravity pulls them down, curl noise stirs them, drag slows them, and they fade over 3.2 s. Older than 3.2 s: die (the Emit\'s Keep full brings each one straight back at the fountain). A third rule, off, pushes them away from the mouse: switch it on in Edit rules.',
+        'Forces change each spark\'s velocity (a second²), so its heading and speed follow; Edges Bounce keeps them in the picture.',
+        'Try: gravity at −60° for a slanting fountain, curl noise 1.5 for smoke, drag 0 for sparks that fly far.',
+      ],
+      emits: [{ mode: 'respawn', shape: 'disc', heading: 'up', x: 0, y: -0.85, size: 0.03, speed: 1.1, speedVar: 0.35, spread: 0.18, life: 0, ...note(['Emit: Keep full: every spark is born at the fountain (a small disc near the bottom), shot upward at 1.1 ± 35% with a little spread, and born again there the moment it dies. The rules\' "apply a force" take it from there.']) }],
+      depositAmount: 0.35, depositWhy: 'Deposit: each spark leaves a faint mark where it flies: the glowing trails under them.',
+      trail: { resolution: '512', diffuse: 0.6, halfLife: 0.12, edges: 'clamp', gain: 0.25 },
+      trailWhy: ['Trail field: the sparks\' paths, 512 rows, spreading a little and gone in a fraction of a second: short glowing tails.'],
+      picture: t => ({ nodes: [palette(`${p}Colour`, X(1680), Y(0), t, [[0.01, 0.01, 0.02], [0.18, 0.05, 0.02], [0.6, 0.22, 0.05], [1, 0.75, 0.35]], ['Stops Palette: the sparks\' trails as embers on a dark ground.'])], out: [`${p}Colour`, 'color'] }),
+      draw: { style: 'glow', colorBy: 'state', palette: 'ab', size: 1.5, brightness: 0.45, glow: 0.7, scaleBy: 'walker', fade: 'off', lights: '0', ...note(['Draw agents, Colour by State: each spark in its state\'s orange, dimmed by its age ("fade with age" in the rules), glowing.']) },
+    }, withOutput);
+    case 'swarm': return setup(x, y, {
+      p, set: swarm(), label: 'Swarm (rules)', tier: '64k', steps: 2, preroll: 6,
+      groupWhy: [
+        'Kind: Swarm. Three rules. Always: orbit the centre at 0.55 (turning along the circle, and in or out toward it), steer away from the neighbours within 0.05, drift toward their centre, wobble. More than 18 neighbours: packed (orange) and faster, so a clump spills outward; fewer: circling again.',
+        'The neighbours are the walkers themselves (one Neighbours node, made by the rules), not a trail.',
+        'Try: orbit the mouse instead of the centre; separation 0 and the swarm collapses into a few dense knots.',
+      ],
+      emits: [{ mode: 'fill', shape: 'ring', heading: 'random', x: 0, y: 0, size: 0.55, spread: 1, life: 0, ...note(['Emit: everyone at once on a ring of radius 0.55 round the middle, facing anywhere; the orbit sorts them out.']) }],
+      depositAmount: 0.5, depositWhy: 'Deposit: each walker leaves a faint mark where it flies, for the picture\'s glow.',
+      trail: { resolution: '512', diffuse: 1, halfLife: 0.15, edges: 'wrap', gain: 0.15 },
+      trailWhy: ['Trail field: where the swarm flies, blurred and fading fast: the ring of light under it.'],
+      picture: t => ({ nodes: [palette(`${p}Colour`, X(1680), Y(0), t, [[0.01, 0.015, 0.03], [0.04, 0.1, 0.2], [0.15, 0.4, 0.6], [0.7, 0.9, 1]], ['Stops Palette: the swarm\'s path as a blue glow.'])], out: [`${p}Colour`, 'color'] }),
+      draw: { style: 'streaks', colorBy: 'state', palette: 'ab', size: 1, brightness: 0.35, glow: 0.4, streak: 0.5, scaleBy: 'walker', fade: 'off', lights: '0', ...note(['Draw agents, Colour by State: short streaks, blue while circling, orange where packed.']) },
+    }, withOutput);
+    case 'crowd': return setup(x, y, {
+      p, set: crowd(), label: 'Crowd (rules)', tier: '64k', steps: 2, preroll: 0, nodeVersion: 'Simulations: agents → Crowd: lanes in two-way traffic',
+      groupWhy: [
+        'Kind: Crowd. Two species, one rule each. Always: turn toward its goal (far to the right, or far to the left), steer away from the walkers of the other kind within 0.045 (step out of their way) and from anyone within 0.015 (a little personal space), slow down as the walkers within 0.045 reach 30, and wobble.',
+        'Every neighbour reading is the walkers themselves (Neighbours nodes, made by the rules): nobody is told to keep to one side, yet lanes form.',
+        'Try: the other kind\'s separation 0 and the crowds grind into each other; Jam 10 and people stop early, so jams spread back.',
+      ],
+      emits: [
+        { mode: 'fill', shape: 'screen', heading: 'random', life: 0, species: '1', share: 1, ...note(['Emit (going right, species 1): half the crowd, anywhere.']) },
+        { mode: 'fill', shape: 'screen', heading: 'random', life: 0, species: '2', share: 1, ...note(['Emit (going left, species 2): the other half, anywhere, chained through "+ Another Emit".']) },
+      ],
+      depositAmount: 0.5, depositWhy: 'Deposit: each walker leaves a little of its own species\' channel (the rules leave no trail of their own), for the picture: orange and blue streaks where the lanes are.',
+      trail: { resolution: '512', diffuse: 1, halfLife: 0.4, edges: 'wrap', gain: 0.2 },
+      trailWhy: ['Trail field: the lanes, orange for walkers going right (channel 1) and blue for those going left (channel 2), fading in under a second.'],
+      picture: t => ({ nodes: [look(`${p}Floor`, X(1680), Y(0), 'Floor', [['ch', 'vec4', [t, 'channels']]], [
+        ['float right', '1.0 - exp(-max(ch.r, 0.0) * 0.4)', 'walkers going right (channel 1), 0–1.'],
+        ['float left', '1.0 - exp(-max(ch.g, 0.0) * 0.4)', 'walkers going left (channel 2), 0–1.'],
+      ], 'vec3(0.03, 0.035, 0.045) + vec3(0.6, 0.3, 0.08) * right + vec3(0.08, 0.3, 0.6) * left', 'vec3', 'Floor (an Expression Block): the two lanes as colour.', 'orange lanes going right, blue going left, on a dark floor.')], out: [`${p}Floor`, 'result'] }),
+      draw: { style: 'points', colorBy: 'state', palette: 'ab', size: 1.5, brightness: 0.6, scaleBy: 'walker', fade: 'off', lights: '0', ...note(['Draw agents, Colour by State: walkers going right orange, going left blue.']) },
     }, withOutput);
     case 'predatorPrey': return setup(x, y, {
       p, set: predatorPrey(), label: 'Predator & prey (rules)', tier: '256k', steps: 2, preroll: 3, nodeVersion: 'Simulations: agents → Predators and prey (with births, energy and grass)',

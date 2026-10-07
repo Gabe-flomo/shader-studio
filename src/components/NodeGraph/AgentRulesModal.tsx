@@ -19,9 +19,9 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { Select } from '../ui/Select';
 import { NumberInput } from './NumberInput';
 import {
-  ACTION_KINDS, CONDITION_KINDS, DEFAULT_STATE_COLOURS, MAX_MASKS, MAX_SPECIES, MAX_STATES,
-  type AgentRule, type AgentRuleSet, type ChannelRef, type RuleAction, type RuleCondition,
-  defaultRule, defaultSpecies, describeRule, newAction, newCondition, notesFor3d, usesAction,
+  DEFAULT_NEIGHBOURS, DEFAULT_STATE_COLOURS, MAX_MASKS, MAX_SPECIES, MAX_STATES, WALKER_KINDS, WALKER_KIND_KEYS,
+  type AgentRule, type AgentRuleSet, type ChannelRef, type NeighbourWho, type RuleAction, type RuleCondition, type WalkerKind,
+  actionKindsFor, conditionKindsFor, defaultRule, defaultSpecies, describeRule, kindOf, newAction, newCondition, notesFor3d, showsSection, usesAction, usesFlow,
 } from '../../agentRules/spec';
 import { groupRules } from '../../agentRules/apply';
 import { generateRulesInside, ruleIds } from '../../agentRules/generate';
@@ -77,7 +77,16 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
   }, [showLines, set, node.id, d3]);
 
   const channelOptions = [{ value: 'own', label: 'its own trail' }, ...[0, 1, 2, 3].map(c => ({ value: String(c), label: set.channels[c]?.trim() ? `${set.channels[c].trim()} (${c + 1})` : `trail ${c + 1}` }))];
-  const ctx: EditCtx = { set, s, tk, channelOptions };
+  const kind = kindOf(set);
+  const ctx: EditCtx = { set, s, tk, channelOptions, kind };
+  const shows = (section: Parameters<typeof showsSection>[1]) => showsSection(set, section);
+  // Templates: this kind's first, then the rest.
+  const ownTemplates = WALKER_KINDS[kind].templates;
+  const templateOptions = [
+    { value: '', label: 'Templates…' },
+    ...RULES_TEMPLATES.filter(t => ownTemplates.includes(t.key)).map(t => ({ value: t.key, label: t.label, group: WALKER_KINDS[kind].label })),
+    ...RULES_TEMPLATES.filter(t => !ownTemplates.includes(t.key)).map(t => ({ value: t.key, label: t.label, group: 'Other kinds' })),
+  ];
   const notes3d = d3 ? notesFor3d(set) : [];
   const view = useNodeGraphStore(st => agentsViewOf(st.nodes, node.id).current);
   const addExample = (ex: HelpExample) => { if ('rule' in ex.insert) setRules([...species.rules, structuredClone(ex.insert.rule)]); };
@@ -99,9 +108,11 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
           <Row label="Speed" hint="Picture units a second: each walker starts at it (Set speed and Accelerate change it)."><Num value={species.speed} step={0.01} onCommit={v => setSpecies({ speed: v })} title="Picture units a second: each walker starts at it (Set speed and Accelerate change it)" /></Row>
           {set.species.length > 1 && <Button size="sm" variant="ghost" onClick={() => { update({ ...set, species: set.species.filter((_, i) => i !== s) }); setSp(0); }}>Remove this species</Button>}
 
+          {shows('states') && <>
           <SectionLabel meta="Memory x" hint="Each walker is in one state (born in the first). Rules check it (in state) and change it (become).">States</SectionLabel>
           <Note>Each walker is in one state (born in the first). Draw agents' Colour by State shows its colour.</Note>
-          {species.states.map((st, i) => (
+          </>}
+          {shows('states') && species.states.map((st, i) => (
             <div key={i} style={{ display: 'grid', gridTemplateColumns: '30px 1fr 28px', gap: 6, alignItems: 'center' }}>
               <input type="color" aria-label={`${st.name} colour`} value={hex(st.colour)} onChange={e => setSpecies({ states: species.states.map((x, j) => (j === i ? { ...x, colour: fromHex(e.target.value) } : x)) })}
                 style={{ width: 28, height: 28, padding: 0, border: 0, borderRadius: 6, background: 'none', cursor: 'pointer' }} />
@@ -109,8 +120,9 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
               <IconButton icon="close" label="Remove state" size="sm" tone="danger" disabled={species.states.length === 1} onClick={() => setSpecies({ states: species.states.filter((_, j) => j !== i) })} />
             </div>
           ))}
-          {species.states.length < MAX_STATES && <AddRow onClick={() => setSpecies({ states: [...species.states, { name: `state ${species.states.length + 1}`, colour: DEFAULT_STATE_COLOURS[species.states.length % DEFAULT_STATE_COLOURS.length] }] })}>Add state</AddRow>}
+          {shows('states') && species.states.length < MAX_STATES && <AddRow onClick={() => setSpecies({ states: [...species.states, { name: `state ${species.states.length + 1}`, colour: DEFAULT_STATE_COLOURS[species.states.length % DEFAULT_STATE_COLOURS.length] }] })}>Add state</AddRow>}
 
+          {shows('channels') && <>
           <SectionLabel hint="Four trail channels, one per species by default. Name them (food, home) and the rules read as sentences.">Trail channels</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             {[0, 1, 2, 3].map(c => (
@@ -118,8 +130,15 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
                 onChange={e => update({ ...set, channels: set.channels.map((x, j) => (j === c ? e.target.value : x)) })} />
             ))}
           </div>
+          </>}
 
-          <SectionLabel meta="inputs on the card" hint="Inputs on the group card: a texture (its brightness) or a number chain, read where the walker stands.">Masks</SectionLabel>
+          {shows('neighbours') && <>
+          <SectionLabel meta="Neighbours" hint="How far a walker looks for the walkers round it (the neighbour conditions and actions that don't set their own radius), and how many it reads at most.">Neighbours</SectionLabel>
+          <Row label="View radius" hint="How far each walker looks for its neighbours, in picture units (the picture is 2 tall). The group's grid cells are at least this big."><Num value={set.neighbours?.radius ?? DEFAULT_NEIGHBOURS.radius} step={0.005} onCommit={v => update({ ...set, neighbours: { radius: Math.max(0.005, v), max: set.neighbours?.max ?? DEFAULT_NEIGHBOURS.max } })} title="How far each walker looks for its neighbours (picture units)" /></Row>
+          <Row label="Max neighbours" hint="How many walkers a reading reads at most (its cost). In a crowd denser than this, counts and averages are estimates from a fixed sample."><Num value={set.neighbours?.max ?? DEFAULT_NEIGHBOURS.max} step={1} onCommit={v => update({ ...set, neighbours: { radius: set.neighbours?.radius ?? DEFAULT_NEIGHBOURS.radius, max: Math.min(216, Math.max(1, Math.round(v))) } })} title="How many walkers a reading reads at most" /></Row>
+          </>}
+
+          {shows('masks') && <SectionLabel meta="inputs on the card" hint="Inputs on the group card: a texture (its brightness) or a number chain, read where the walker stands.">Masks</SectionLabel>}
           {set.masks.map((m, i) => (
             <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 112px 28px', gap: 6, alignItems: 'center' }}>
               <Field value={m.name} onChange={e => update({ ...set, masks: set.masks.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} aria-label={`Mask ${i + 1} name`} height={30} />
@@ -127,13 +146,15 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
               <IconButton icon="close" label="Remove mask" size="sm" tone="danger" onClick={() => update({ ...set, masks: set.masks.filter((_, j) => j !== i) })} />
             </div>
           ))}
-          {set.masks.length < MAX_MASKS && <AddRow onClick={() => update({ ...set, masks: [...set.masks, { name: set.masks.length ? 'Mask 2' : 'Mask', kind: 'number' }] })}>Add mask</AddRow>}
+          {shows('masks') && set.masks.length < MAX_MASKS && <AddRow onClick={() => update({ ...set, masks: [...set.masks, { name: set.masks.length ? 'Mask 2' : 'Mask', kind: 'number' }] })}>Add mask</AddRow>}
 
-          <SectionLabel hint="Edges and the sensors every trail reading uses.">Moving and sensing</SectionLabel>
+          <SectionLabel hint={shows('sensors') ? 'Edges and the sensors every trail reading uses.' : 'What happens at the edges.'}>{shows('sensors') ? 'Moving and sensing' : 'Moving'}</SectionLabel>
           <Row label="Edges" hint="What happens at the picture's edges: wrap round, bounce back or slide along."><Select ariaLabel="Edges" value={set.edges} options={[{ value: 'wrap', label: 'Wrap' }, { value: 'bounce', label: 'Bounce' }, { value: 'slide', label: 'Slide' }]} onChange={v => update({ ...set, edges: v as AgentRuleSet['edges'] })} /></Row>
+          {shows('sensors') && <>
           <Row label="Sensors ahead" hint="How far ahead the sensors read the trail (picture units; ten times further in 3D)."><Num value={set.sensor.distance} step={0.005} onCommit={v => update({ ...set, sensor: { ...set.sensor, distance: v } })} title="How far ahead the sensors read the trail (picture units; ten times further in 3D)" /></Row>
           <Row label="Sensor angle" hint="Degrees between the ahead sensor and the side ones."><Num value={set.sensor.angle} step={1} onCommit={v => update({ ...set, sensor: { ...set.sensor, angle: v } })} title="Degrees between the ahead sensor and the side ones" /></Row>
-          {usesAction(set, 'flow') && <>
+          </>}
+          {usesFlow(set) && <>
             <Row label="Flow size" hint="Follow a flow field: how big the swirls of the curl noise are."><Num value={set.flow.size} step={0.1} onCommit={v => update({ ...set, flow: { ...set.flow, size: v } })} /></Row>
             <Row label="Flow evolve" hint="Follow a flow field: how fast the flow changes over time."><Num value={set.flow.evolve} step={0.01} onCommit={v => update({ ...set, flow: { ...set.flow, evolve: v } })} /></Row>
           </>}
@@ -153,11 +174,19 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
       subtitle={`${label} · ${set.species.length} ${set.species.length === 1 ? 'species' : 'species'} · ${d3 ? '3D' : '2D'} · When … Do …`}
       icon="expr" iconColor={tk.kind.expr} width={1240} height={780} mainLabel="Rules" onClose={close}
       left={{ label: 'Species', icon: 'swarm', width: 330, content: speciesPanel }}
-      headerActions={
+      headerActions={<>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <HintLabel hint={`Kind: what kind of walkers these are. It picks which settings, conditions and actions the editor offers, and the templates shown first. ${WALKER_KINDS[kind].blurb}`}>
+            <span style={{ fontSize: 12, color: tk.text.muted }}>Kind</span>
+          </HintLabel>
+          <Select ariaLabel="Kind of walkers" value={kind} height={30}
+            options={WALKER_KIND_KEYS.map(k => ({ value: k, label: WALKER_KINDS[k].label }))}
+            onChange={k => update({ ...set, kind: k as WalkerKind })} />
+        </span>
         <Select ariaLabel="Start from a template" value="" height={30}
-          options={[{ value: '', label: 'Templates…' }, ...RULES_TEMPLATES.map(t => ({ value: t.key, label: t.label }))]}
+          options={templateOptions}
           onChange={k => { const t = RULES_TEMPLATES.find(x => x.key === k); if (t) { update(t.set()); setSp(0); } }} />
-      }
+      </>}
       footer={<>
         <Button icon="fn" title="Show the nodes these rules make (Start, a block per rule, Finish, Move), every one with a note, and edit them as nodes" onClick={() => { flush(); onClose(); openGroupAsNodes(node.id); }}>Open as nodes</Button>
         <Toggle checked={showLines} onChange={setShowLines} label="Show the lines" />
