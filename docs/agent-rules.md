@@ -13,7 +13,7 @@ For the Agents group itself (Emit, Deposit, Trail field, Draw agents) see docs/a
 
 - **Builders** (the node browser's first section, on the desktop and on a phone) → **Agent Rules**, the empty canvas's right-click → **Builders** → **Agent Rules…**, or the Do… bar's "new agent rules": the setup below, with its rules editor already open. "open agent rules" or "edit the rules" opens the selected (or only) rules group's editor.
 - **Add an Agents group** (node browser → Simulation → Agents) and pick **Rules (When … Do …)**. You get Emit → Agents → Deposit → Trail field → palette, wired to the Output, with one rule that already moves: *always → turn toward its own trail, wander, leave trail* (slime mold).
-- Or open an example: **Examples → Agents: rules** (eight templates, below).
+- Or open an example: **Examples → Agents: rules** (eleven templates, below).
 - Or, on any Agents group in node mode, **Write as rules…** under its buttons (it replaces the inside; undo brings it back).
 
 A rules group's card shows **Edit rules ↗** and **Open as nodes** instead of Open rule. Double-clicking its title opens the editor. Its **Rules** chip sums the rules up ("4 rules · 2 states"); a click shows every rule as a sentence, with **Copy** and **Open rules**.
@@ -33,6 +33,21 @@ Rules the first time, then on the tab last used. Rarely used settings are folded
 - **Open as nodes** (bottom left) closes the editor and enters the group.
 
 Every change applies live (a quarter of a second after you stop typing, one undo step per burst of edits).
+
+## Kinds
+
+The **Species** tab starts with **Kind**: what kind of walkers these are. It picks which settings show, which conditions the **+ and…** picker offers and which actions **+ do…** offers, and which templates the Templates menu lists first. It changes nothing the rules do, and a saved rule that uses something its kind doesn't offer keeps working and keeps its settings in view (a set saved before kinds is Trail followers).
+
+| Kind | Settings | Conditions | Actions | Templates |
+|---|---|---|---|---|
+| **Trail followers** (slime, the default) | states, trail channels, masks, sensors, flow | trail sensed, near another species' trail, chance, age, state, Memory, mask | turn, wander, leave trail, speed, flow, bounce, state, Memory, stop, stick, die, spawn, align (via trail) | Slime mold, DLA growth, Predator & prey |
+| **Particles** | masks, flow (no sensing) | chance, age, mask, Memory | apply a force, drag, fade with age, bounce, speed, wander, die, leave trail, Memory | Particles: spark fountain |
+| **Flock (boids)** | Neighbours (view radius, max), masks | neighbours within reach, chance, age, mask | steer away from neighbours, match neighbours' heading, move to their centre, avoid edges, wander, speed, turn, bounce, leave trail | Flock (boids) |
+| **Ants / carriers** | states, trail channels, masks, sensors, flow | state, Memory, trail sensed, near, mask, chance, age, neighbours | state, Memory, turn, leave trail, wander, speed, bounce, stop, stick, die, spawn, flow | Ants with food, Termites, Infection (SIR), Fireflies |
+| **Swarm / orbiters** | Neighbours, states, flow | neighbours, chance, age, state | orbit a point, steer away, move to their centre, match heading, apply a force, drag, wander, speed, state, leave trail | Swarm: orbiters |
+| **Crowd** | Neighbours, states, masks, flow | neighbours, mask, chance, age, state | turn (toward a goal), flow, slow down in a crowd, steer away, match heading, avoid edges, wander, speed, state, stop, leave trail | Crowd: two-way walkers |
+
+**Neighbours** (Flock, Swarm, Crowd): the **View radius** (how far a walker looks; each neighbour condition or action can set its own) and **Max neighbours** (how many a reading reads at most: the cost). The rules make one Neighbours node (docs/agents-group.md "Neighbours") for each pair of *which walkers* (everyone, its own kind, other kinds) and *radius* they use; every condition and action with that pair reads the same node.
 
 ## Built-in guidance
 
@@ -85,6 +100,7 @@ unless wired. One undo step (`agentRules/outputs.ts`).
 | in state | in (or not in) one of its species' states | `float(floor(mem.x + 0.01) == 1.0)` |
 | Memory number | its one number, `>`, `<` or `=` | `float(mem.y > 1.0)` |
 | inside a mask | a mask where it stands (a texture's brightness, or the number), `>` or `<` | `float(mask1 > 0.5)` |
+| neighbours within reach | more (or fewer) than N walkers (everyone, its own kind or other kinds) within the radius: a Neighbours node's Count | `float(nb1Count > 8.0)` |
 
 **Frame-rate independent chance.** A step is 1/60 s of simulated time whatever the frame rate (docs/agents-group.md), and a chance *p* a second is `1 − (1 − p)^dt` a step, so the chance over a second is *p* at any step length (tested at 30, 60, 120 and 240 steps a second, and by running the generated GLSL at 60 and 120). Each rule draws its own random number from the walker's seed (the step, its index and the group's Seed) hashed with a number of the rule's own: repeatable, independent of the other rules.
 
@@ -105,7 +121,18 @@ unless wired. One undo step (`agentRules/outputs.ts`).
 | spawn a child | lays a birth mark in trail channel 4; a **Births Emit** gives birth where there are marks (below) | flat (the Emit's Field is read at x and y) |
 | bounce | turns round | turns round |
 | follow a flow field | turns toward (or against) a curl-noise field (Size, Evolve) | the 3D curl |
-| align with the crowd | turns toward the way the crowd round it flies: a velocity trail's flow where it stands (set Deposit's What to Velocity) | a volume of (x, y, z, count) |
+| align with the crowd (via trail) | turns toward the way the crowd round it flies: a velocity trail's flow where it stands (set Deposit's What to Velocity) | a volume of (x, y, z, count) |
+| steer away from neighbours | separation: turns toward the walkers' Push (away from them, the closest counting most), at most the degrees | in 3D |
+| match neighbours' heading | alignment: turns toward their average velocity | in 3D |
+| move to their centre | cohesion: turns toward their Centre | in 3D |
+| slow down in a crowd | speed = the species' Speed × (1 − count ÷ Jam), at least 5% of it | same |
+| avoid edges | within the margin of an edge, turns back inward | the box's depth too |
+| orbit a point | turns along a circle of the distance round the point, the centre or the mouse (and in or out toward it), counter-clockwise or clockwise | round an axis square to the picture |
+| apply a force | gravity (along an angle), a gusty wind, curl noise, or a pull toward a point or the mouse (negative pushes away), units a second²: the velocity (heading × speed) changes by force × dt, and the heading and speed follow it. Exact for a constant force at any step length | the point is on the picture's plane |
+| drag | loses that share of its speed a second: × e^(−amount·dt) a step | same |
+| fade with age | its colour dims from full at birth to black at the seconds given (the rules carry a brightness; Finish multiplies the colour) | same |
+
+Particles keep the speed their Emit shot them out at (Speed ±) on their first step; other kinds start at their species' Speed.
 
 Rules run **top to bottom, every step**; a rule that applies with **Stop after this rule** skips the rest for that walker that step. A rule that doesn't apply changes nothing.
 
@@ -128,6 +155,7 @@ Anything more (a second timer, a remembered place) doesn't fit: use the trail to
 |---|---|
 | Agent Inputs | the walker as the step begins, with the ports the rules read (Trail, the masks) |
 | Channel weights → Sense | one Sense per trail channel the rules read, with the rule set's Sensors |
+| Neighbours | one per (which walkers, radius) the neighbour conditions and actions read, with the rule set's Max neighbours, wrapping across edges when Edges is Wrap |
 | Curl noise | when a rule follows a flow field |
 | Sample (texture) | a texture mask, read where the walker stands |
 | **Start** | an Expression Block: the values the rules carry: `spd` (its speed, or the species' Speed on its first step), `dep` (its deposit, 0), `alive` (1), `done` (0) |
@@ -150,7 +178,10 @@ Set the group's Space to 3D and the inside is generated again for 3D (the headin
 |---|---|---|
 | **Slime mold** | always → turn toward its own trail (45°), wander ±7°, leave trail | Simulation → Slime mold |
 | **Ants with food** | states searching / carrying, masks Food and Nest; count Memory up; at the food become carrying and turn round; at the nest the reverse; searching: lay home smell fading with Memory, follow the food smell; carrying: lay food smell, follow the home smell, lean toward the nest | Simulation → Ants |
-| **Boids-like (via trail)** | a velocity trail (Deposit What: Velocity); packed (count here > 16) → turn away; else align with the crowd, drift toward the birds, wobble | Simulation → Boids |
+| **Flock (boids)** | always → steer away from neighbours within 0.05 (12°), match their heading (10°), move to their centre (2.5°), wobble. 64k birds. It used to read a velocity trail (align with the crowd's blurred flow, turn away where the count was high): flocks drifted through each other as soft smears; now they keep their spacing and wheel as separate flocks | Simulation → Boids |
+| **Particles: spark fountain** | Keep full at a fountain, shot up; always → gravity 0.75, curl noise 0.6, drag 0.35, fade over 3.2 s; age > 3.2 s → die; (off) a push away from the mouse | Simulation → Particles |
+| **Swarm: orbiters** | always → orbit the centre at 0.55, steer away from neighbours, move to their centre, wobble; more than 250 neighbours → packed (orange), faster; fewer → circling | |
+| **Crowd: two-way walkers** | two species; always → turn toward the goal (far right / far left), steer away from the other kind within 0.045 and anyone within 0.015, slow down as neighbours within 0.045 reach 30, wobble | Simulations: agents → Crowd: lanes in two-way traffic |
 | **Predator & prey** | two species; prey in thick predator smell die; prey near predators flee (yellow) and speed up; else graze along their trail; predators follow the prey's smell | Simulations: agents → Predators and prey |
 | **Infection (SIR)** | healthy / sick / recovered; a few start sick; healthy in germs fall sick (60% a second); sick leave germs and recover after 5 s; immunity wanes after 20 s | Simulations: agents → Infection spread (SIR) |
 | **Termites** | new / empty / carrying; one in eight lives and lays 8 chips on empty spots; empty termites steer to chips, slow near them, wait on one and pick it up on a dice roll (only where *here* > 0.76: their own pixel surely holds a chip); carrying ones wait beside a pile on bare ground (*here* < 0.24) and drop on a dice roll; 0.3 s rest between. Piles within about 20 s; chips kept to about 1% over 30 s | Simulations: agents → Termites and wood chips |
@@ -165,10 +196,10 @@ The node versions in *Simulations: agents* go further where rules can't (births 
 - 4 species, 8 states a species, 2 masks, 4 trail channels (spawn uses channel 4).
 - Rule numbers are compiled into the shader: changing one recompiles the update shader (fast, but not a Play control). For a number to drive from Play, MIDI or an LFO, Open as nodes and wire a Constant (or the group's sliders: Count, Steps per frame, Seed, Pre-roll, Start over stay live).
 - Spawn a child is births at marks, not a parent creating a child directly (see above).
-- Sensing is the trail and masks; walkers don't see each other directly (only through what they leave).
+- Sensing is the trail, masks and Neighbours (the walkers of the same group within a radius; see docs/agents-group.md "Neighbours" for its grid, its cost and its limits: at most 8 walkers read a cell, estimates past that, one grid sized by the largest radius).
 - Two walkers changing the same trail pixel in the same step both act (taking one chip, both get one); the node-built termites show the handshake that avoids it.
 - A trail never goes below 0 (only a velocity Deposit's trail is signed), so leaving −1 on a pixel that holds nothing is lost, and whoever "took" it got something from nothing. Sensing reads the trail blended over the 4 nearest pixels (the walker's own pixel weighs at least a quarter), so a rule that takes something should test *here* > 0.76 (the pixel surely holds one) and one that lays something on bare ground *here* < 0.24. Exact conservation needs an engine feature the rules don't have: a signed trail option, or reads and moves snapped to the trail's cells (what the node-built termites do).
 
 ## Code
 
-`src/agentRules/`: `spec.ts` (the rule set's types, defaults and sentences), `generate.ts` (rule set → inside nodes), `apply.ts` (rules mode on a group, Open as nodes, Back to rules, the Births Emit), `templates.ts` (the eight templates and their setups), `starter.ts`, `storeActions.ts` (undo, compile, Space changes). The editor is `components/NodeGraph/AgentRulesModal.tsx`; the card buttons `AgentRulesCard.tsx`. Tests: `src/agentRules/__tests__/agentRules.test.ts` runs the generated GLSL on the CPU (`cpuSim.ts`, through `compiler/__tests__/glslEval.ts`) for every condition and action, state machines, the chance, determinism and Open as nodes.
+`src/agentRules/`: `spec.ts` (the rule set's types, defaults and sentences), `generate.ts` (rule set → inside nodes), `apply.ts` (rules mode on a group, Open as nodes, Back to rules, the Births Emit), `templates.ts` (the eleven templates and their setups), `starter.ts`, `storeActions.ts` (undo, compile, Space changes). The editor is `components/NodeGraph/AgentRulesModal.tsx`; the card buttons `AgentRulesCard.tsx`. Tests: `src/agentRules/__tests__/agentRules.test.ts` runs the generated GLSL on the CPU (`cpuSim.ts`, through `compiler/__tests__/glslEval.ts`) for every condition and action, state machines, the chance, determinism and Open as nodes; `agentKinds.test.ts` the kinds' filters, the neighbour conditions and actions (a brute force standing in for the Neighbours node), forces, drag, fade, orbit and Open as nodes with Neighbours.

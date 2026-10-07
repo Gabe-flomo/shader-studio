@@ -28,6 +28,7 @@ import { coerce, coerceLossy } from '../lib/typesCompatible';
 import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { loopColour } from '../nodes/definitions/scene3d';
 import { AG_3D_GLSL, AG_HASH_GLSL, AG_STATE_C_GLSL, AGENT_GLOBALS, AGENT_GLOBALS_3D, AGENT_STATE_C_GLOBALS, agentStateUniform, agentStepUniform, agentWindowUniform } from '../nodes/definitions/agents';
+import { agentNbHeader } from '../nodes/definitions/agentNeighbours';
 import { frozenValueOf } from '../nodes/sliderFreeze';
 import { marchJitterDecl, MARCH_STEP_REF_KEY } from './marchJitter';
 import {
@@ -653,6 +654,11 @@ export interface AgentProgramOptions {
    * vec3 (a_dir the heading, a_across this step's random direction across it) and g_uv is a_pos.xy.
    */
   space3d?: boolean;
+  /**
+   * A Neighbours node inside (docs/agents-group.md "Neighbours"): the group's grid samplers and the
+   * helpers the node calls (nodes/definitions/agentNeighbours.ts agentNbHeader).
+   */
+  neighbours?: boolean;
 }
 
 /** The fixed part of an agent program: outputs, state samplers, the agent globals and the hash. */
@@ -679,6 +685,7 @@ function agentHeader(o: AgentProgramOptions): string {
     AG_HASH_GLSL,
     ...(o.space3d ? [AG_3D_GLSL] : []),
     ...(o.stateC ? [AG_STATE_C_GLSL] : []),
+    ...(o.neighbours ? [agentNbHeader(o.slug, !!o.stateC, !!o.space3d)] : []),
     '',
   ].join('\n');
 }

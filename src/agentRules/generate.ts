@@ -21,9 +21,9 @@ import { n } from '../store/graphBuilder';
 import { withAgentSpace } from '../nodes/definitions/agents';
 import { getNodeDefinition } from '../nodes/definitions';
 import {
-  type AgentRule, type AgentRuleSet, type ChannelRef, type RuleAction, type RuleCondition,
-  channelName, describeAction, describeCondition, describeRule, rulePorts, sensedChannels,
-  usesAction, usesDeposit, usesStop,
+  type AgentRule, type AgentRuleSet, type ChannelRef, type NeighbourWho, type RuleAction, type RuleCondition,
+  DEFAULT_NEIGHBOURS, channelName, describeAction, kindOf, describeCondition, describeRule, neighbourReadOf, neighbourReads, rulePorts, sensedChannels,
+  usesAction, usesDeposit, usesFade, usesFlow, usesStop,
 } from './spec';
 
 type Wire = [string, string];
@@ -75,6 +75,7 @@ function block(id: string, x: number, y: number, o: {
 export const ruleIds = (gid: string) => ({
   inputs: `${gid}_ru_in`, start: `${gid}_ru_start`, finish: `${gid}_ru_finish`, move: `${gid}_ru_move`, output: `${gid}_ru_out`, flow: `${gid}_ru_flow`,
   channel: (k: string) => `${gid}_ru_ch_${k}`, sense: (k: string) => `${gid}_ru_sense_${k}`, mask: (m: number) => `${gid}_ru_mask${m + 1}`,
+  neighbours: (k: string) => `${gid}_ru_nb_${k}`,
   rule: (sp: number, i: number) => `${gid}_ru_r${sp + 1}_${i + 1}`,
 });
 
@@ -140,11 +141,11 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
   });
 
   // ── The flow field and texture masks ──
-  if (usesAction(set, 'flow')) {
+  if (usesFlow(set)) {
     nodes.push(space(n('agentCurl', id.flow, 840, 40 + senses.length * ROW, {
       strength: 1, size: set.flow.size, evolve: set.flow.evolve,
       __comment: [
-        `Curl noise: the flow field "follow a flow field" turns toward (Size ${set.flow.size}, Evolve ${set.flow.evolve}): swirling currents that never bunch up. Its Force is read as a direction, not added as a push.`,
+        `Curl noise: the flow field (Size ${set.flow.size}, Evolve ${set.flow.evolve}): swirling currents that never bunch up. "Follow a flow field" reads its Force as a direction to turn toward; "apply curl noise" adds it to the velocity as a force.`,
         d3 ? '3D: the curl noise is the Particles engine\'s 3D curl.' : '',
       ].filter(Boolean).join('\n'),
     })));
@@ -156,18 +157,34 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
     }, { texture: IN(`mask${i + 1}`) }));
   });
 
+  // ── Neighbours: one per (which walkers, radius) the rules read ──
+  const max = set.neighbours?.max ?? DEFAULT_NEIGHBOURS.max;
+  neighbourReads(set).forEach((r, i) => {
+    const who = r.who === 'all' ? 'every walker' : r.who === 'own' ? 'the walkers of its own kind' : 'the walkers of other kinds';
+    nodes.push(space(n('agentNeighbours', id.neighbours(r.key), 420, 40 + senses.length * ROW + 420 + i * 640, {
+      radius: r.radius, max, species: r.who, edges: set.edges === 'wrap' ? 'wrap' : 'stop',
+      __comment: [
+        `Neighbours: ${who} within ${r.radius} of this one, found through the group's grid (the walkers themselves, not a trail). Count is how many, Centre where their middle is, Heading which way they go on average, Push away from them (harder the closer).`,
+        `The rules' ${[...new Set(ruleUses(set, r.who, r.radius))].join(', ')} read it. Max neighbours ${max}: it reads at most that many (Max ÷ ${d3 ? 27 : 9} from each cell round it), so in a crowd denser than that its outputs are estimates from a fixed sample.`,
+        set.edges === 'wrap' ? 'Across edges: Wrap, as the rules\' Edges: a walker near one edge sees those near the other.' : 'Across edges: Stop: the edges are walls, as the rules\' Edges.',
+      ].join('\n'),
+    })));
+  });
+
   // ── Start: the values the rules carry ──
-  const dep = usesDeposit(set), die = usesAction(set, 'die'), stop = usesStop(set);
+  const dep = usesDeposit(set), die = usesAction(set, 'die'), stop = usesStop(set), fade = usesFade(set), particlesKind = kindOf(set) === 'particles';
   const speeds = set.species.map(s => glf(s.speed));
   const base = speeds.length === 1 ? speeds[0] : speeds.slice(0, -1).map((s, i) => `sp < ${glf(i + 0.5)} ? ${s} : `).join('') + speeds[speeds.length - 1];
   const startLines: Line[] = [
     { lhs: 'float base', op: '=', rhs: base },
-    { lhs: 'float spd', op: '=', rhs: 'age < 0.025 ? base : speed' },
+    // Particles keep the speed the Emit shot them out at (Speed ±); other kinds start at their species' Speed.
+    { lhs: 'float spd', op: '=', rhs: particlesKind ? 'age < 0.025 && speed < 1e-4 ? base : speed' : 'age < 0.025 ? base : speed' },
   ];
   const startExposed: Array<{ name: string; type: ExprType }> = [];
   if (dep) { startLines.push({ lhs: 'vec4 dep', op: '=', rhs: 'vec4(0.0)' }); startExposed.push({ name: 'dep', type: 'vec4' }); }
   if (die) { startLines.push({ lhs: 'float alive', op: '=', rhs: '1.0' }); startExposed.push({ name: 'alive', type: 'float' }); }
   if (stop) { startLines.push({ lhs: 'float done', op: '=', rhs: '0.0' }); startExposed.push({ name: 'done', type: 'float' }); }
+  if (fade) { startLines.push({ lhs: 'float bright', op: '=', rhs: '1.0' }); startExposed.push({ name: 'bright', type: 'float' }); }
   nodes.push(block(id.start, 1260, 200, {
     label: 'Start',
     inputs: [{ name: 'speed', type: 'float', from: IN('speed') }, { name: 'age', type: 'float', from: IN('age') }, ...(many ? [{ name: 'sp', type: 'float' as ExprType, from: IN('species') }] : [])],
@@ -176,10 +193,11 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
     note: [
       'Start (an Expression Block): the values the rules below pass from one to the next.',
       `base: the species' Speed (${set.species.map(s => `${s.name} ${s.speed}`).join(', ')}), picture units a second.`,
-      'spd: the speed it had last step, or base on its first step after birth (age below 0.025 s), so Set speed and Accelerate last from step to step.',
+      particlesKind ? 'spd: the speed it had last step, or on its first step the speed its Emit shot it out at (base, the species\' Speed, if the Emit gave none): forces change it from there.' : 'spd: the speed it had last step, or base on its first step after birth (age below 0.025 s), so Set speed and Accelerate last from step to step.',
       dep ? 'dep: how much trail it leaves in each of the four channels this step; the rules\' "leave trail" add to it (0 to start).' : '',
       die ? 'alive: 1; a rule\'s "die" makes it 0.' : '',
       stop ? 'done: 0; a rule with "stop after this rule" makes it 1 when it applies, and the rules below then skip this walker this step.' : '',
+      fade ? 'bright: 1; "fade with age" dims it, and Finish multiplies the colour by it.' : '',
       'result: spd.',
     ].filter(Boolean),
   }));
@@ -188,7 +206,8 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
   if (dep) src.dep = [id.start, 'dep'];
   if (die) src.alive = [id.start, 'alive'];
   if (stop) src.done = [id.start, 'done'];
-  const CHAIN: Record<string, ExprType> = { h: H, spd: 'float', mem: 'vec2', dep: 'vec4', alive: 'float', done: 'float' };
+  if (fade) src.bright = [id.start, 'bright'];
+  const CHAIN: Record<string, ExprType> = { h: H, spd: 'float', mem: 'vec2', dep: 'vec4', alive: 'float', done: 'float', bright: 'float' };
 
   // ── The rules, top to bottom (species by species) ──
   let x = 1680;
@@ -213,19 +232,23 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
   const colour = colours.length === 1 ? colours[0] : colours.slice(0, -1).map((c, i) => `sp < ${glf(i + 0.5)} ? (${c}) : `).join('') + `(${colours[colours.length - 1]})`;
   nodes.push(block(id.finish, x, 200, {
     label: 'Finish',
-    inputs: [{ name: 'mem', type: 'vec2', from: src.mem }, { name: 'spd', type: 'float', from: src.spd }, ...(many ? [{ name: 'sp', type: 'float' as ExprType, from: IN('species') }] : [])],
+    inputs: [
+      { name: 'mem', type: 'vec2', from: src.mem }, { name: 'spd', type: 'float', from: src.spd },
+      ...(many ? [{ name: 'sp', type: 'float' as ExprType, from: IN('species') }] : []),
+      ...(fade ? [{ name: 'bright', type: 'float' as ExprType, from: src.bright }] : []),
+    ],
     lines: [
       { lhs: 'float state', op: '=', rhs: 'floor(mem.x + 0.01)' },
       { lhs: 'float stuck', op: '=', rhs: 'step(0.25, fract(mem.x))' },
       { lhs: 'float speed', op: '=', rhs: 'max(spd, 0.0) * (1.0 - stuck)' },
     ],
-    result: colour, outputType: 'vec3', exposed: [{ name: 'speed', type: 'float' }],
+    result: fade ? `(${colour}) * bright` : colour, outputType: 'vec3', exposed: [{ name: 'speed', type: 'float' }],
     note: [
       'Finish (an Expression Block): what the rules decided, made ready for Move and Agent Output.',
       'state: the walker\'s state, Memory x without its stuck half.',
       'stuck: 1 once a rule made it stick (Memory x has a half added), else 0.',
       'speed: the speed the rules left (never below 0), and 0 while stuck.',
-      `result: its colour, its state's colour (${set.species.map(sp => sp.states.map(st => st.name).join(' / ')).join('; ')}), for Draw agents' Colour by Agent.`,
+      `result: its colour, its state's colour (${set.species.map(sp => sp.states.map(st => st.name).join(' / ')).join('; ')})${fade ? ', times bright (dimmed by "fade with age")' : ''}, for Draw agents' Colour by Agent.`,
     ],
   }));
   x += 460;
@@ -289,7 +312,7 @@ function ruleBlock(set: AgentRuleSet, rule: AgentRule, s: number, ri: number, c:
   rule.do.forEach((a, j) => actionLines(set, a, s, ri, j + 1, c, add, read));
   if (rule.stop) add('done', '=', `max(${read('done')}, go)`, 'done: 1 once this rule applied, so the rules below skip this walker this step (stop after this rule).', 'done');
 
-  const order = ['h', 'spd', 'mem', 'dep', 'alive', 'done'];
+  const order = ['h', 'spd', 'mem', 'dep', 'alive', 'done', 'bright'];
   const inputs: Array<{ name: string; type: ExprType; from?: Wire }> = [];
   for (const v of order) if (reads.has(v)) inputs.push({ name: v, type: c.chain[v], from: c.src[v] });
   const extra: Record<string, { type: ExprType; from: Wire }> = {
@@ -297,6 +320,13 @@ function ruleBlock(set: AgentRuleSet, rule: AgentRule, s: number, ri: number, c:
     flow: { type: c.P, from: [c.id.flow, 'force'] },
     crowd: { type: 'vec4', from: [c.id.sense('own'), 'sample'] },
   };
+  neighbourReads(set).forEach((r, i) => {
+    const nb = c.id.neighbours(r.key);
+    extra[`nb${i + 1}Count`] = { type: 'float', from: [nb, 'count'] };
+    extra[`nb${i + 1}Centre`] = { type: c.P, from: [nb, 'centre'] };
+    extra[`nb${i + 1}Heading`] = { type: c.P, from: [nb, 'heading'] };
+    extra[`nb${i + 1}Push`] = { type: c.P, from: [nb, 'push'] };
+  });
   for (const ch of ['own', '0', '1', '2', '3']) {
     extra[smellVar(ch)] = { type: 'vec3', from: [c.id.sense(ch), 'readings'] };
     extra[hereVar(ch)] = { type: 'float', from: [c.id.sense(ch), 'here'] };
@@ -306,7 +336,7 @@ function ruleBlock(set: AgentRuleSet, rule: AgentRule, s: number, ri: number, c:
 
   const exposed = order.filter(v => modified.has(v)).map(v => ({ name: v, type: c.chain[v] }));
   const sentence = describeRule(set, s, rule);
-  const readsNote = inputs.filter(i => !order.includes(i.name)).map(i => `${i.name} (${READS[i.name.replace(/\d$/, '#').replace(/^(smell|here)(Own|#)$/, '$1')] ?? i.name})`);
+  const readsNote = inputs.filter(i => !order.includes(i.name)).map(i => `${i.name} (${READS[i.name.replace(/\d$/, '#').replace(/^(smell|here)(Own|#)$/, '$1').replace(/^nb\d+/, 'nb')] ?? i.name})`);
   const node = block(c.id.rule(s, ri), c.x, 120, {
     label: `Rule ${ri + 1}${c.many ? ` · ${set.species[s].name}` : ''}`,
     inputs, lines, result: 'go', outputType: 'float', exposed,
@@ -324,7 +354,27 @@ const READS: Record<string, string> = {
   sp: 'its species, 0–3', age: 'seconds since it was born', pos: 'where it is', flow: 'the curl-noise flow at the walker',
   crowd: 'the trail\'s four channels where it stands (Sense\'s Channels here): with a velocity Deposit, the crowd\'s flow and count',
   smell: 'Sense\'s readings: x left, y ahead, z right', here: 'the trail where it stands', 'mask#': 'the mask where it stands',
+  nbCount: 'how many walkers are within reach (a Neighbours node\'s Count)', nbCentre: 'where their middle is (Neighbours\' Centre)',
+  nbHeading: 'which way they go on average (Neighbours\' Heading)', nbPush: 'away from them, harder the closer (Neighbours\' Push)',
 };
+
+/** The variable a rule block reads a neighbour output through (nb1Count, nb2Push…). */
+function nbVar(set: AgentRuleSet, who: NeighbourWho, radius: number | undefined, what: 'Count' | 'Centre' | 'Heading' | 'Push'): string {
+  const r = neighbourReadOf(set, who, radius);
+  return `nb${neighbourReads(set).findIndex(x => x.who === r.who && x.radius === r.radius) + 1}${what}`;
+}
+
+/** The phrases of the rules that read a neighbour reading, for its node's note. */
+function ruleUses(set: AgentRuleSet, who: NeighbourWho, radius: number): string[] {
+  const out: string[] = [];
+  const same = (w: NeighbourWho, r: number | undefined) => w === who && neighbourReadOf(set, w, r)?.radius === radius;
+  for (const s of set.species) for (const r of s.rules) {
+    if (r.off) continue;
+    for (const c of r.when) if (c.kind === 'neighbours' && same(c.who, c.radius)) out.push('"neighbours within reach"');
+    for (const a of r.do) if ((a.kind === 'separate' || a.kind === 'match' || a.kind === 'cohere' || a.kind === 'slow') && same(a.who, a.radius)) out.push(`"${({ separate: 'steer away from neighbours', match: 'match neighbours\' heading', cohere: 'move to their centre', slow: 'slow down in a crowd' } as const)[a.kind]}"`);
+  }
+  return out;
+}
 
 type Add = (lhs: string, op: string, rhs: string, text: string, mods?: string) => void;
 
@@ -358,6 +408,7 @@ function conditionTerm(set: AgentRuleSet, cond: RuleCondition, s: number, ri: nu
       const v = read(`mask${cond.mask + 1}`);
       return [`float(${m.kind === 'texture' ? `dot(${v}, vec3(0.299, 0.587, 0.114))` : v} ${cond.cmp} ${glf(cond.value)})`];
     }
+    case 'neighbours': return [`float(${read(nbVar(set, cond.who, cond.radius, 'Count'))} ${cond.cmp} ${glf(cond.count)})`];
   }
 }
 
@@ -458,6 +509,84 @@ function actionLines(set: AgentRuleSet, a: RuleAction, s: number, ri: number, j:
     case 'bounce':
       if (d3) add('h', '=', `mix(${read('h')}, -h, go)`, `h: the heading, turned round (${say}).`, 'h');
       else add('h', '+=', `go * ${PI}`, `h: the heading, turned round (${say}).`, 'h');
+      return;
+    // ── Neighbours (a Neighbours node per (which walkers, radius): the walkers themselves) ──
+    case 'separate':
+      toward(read(nbVar(set, a.who, a.radius, 'Push')), a.degrees, 'get away from the walkers within reach (their Push, harder the closer they are; 0 when there are none)');
+      return;
+    case 'match':
+      toward(read(nbVar(set, a.who, a.radius, 'Heading')), a.degrees, 'go the way the walkers within reach go (their average velocity; 0 when there are none)');
+      return;
+    case 'cohere':
+      toward(`${read(nbVar(set, a.who, a.radius, 'Centre'))} - ${read('pos')}`, a.degrees, 'the middle of the walkers within reach (their Centre less its position; 0 when there are none)');
+      return;
+    case 'slow': {
+      read('spd');
+      const count = read(nbVar(set, a.who, a.radius, 'Count'));
+      add(`float crowded${j}`, '=', `clamp(${count} / ${glf(Math.max(a.jam, 1e-3))}, 0.0, 0.95)`, `crowded${j}: how many walkers are within reach against Jam (${a.jam}), at most 0.95 so nobody stops for good.`);
+      add('spd', '=', `mix(spd, ${glf(set.species[s].speed)} * (1.0 - crowded${j}), go)`, `spd: the species' Speed (${set.species[s].speed}), slower the more crowded (${say}).`, 'spd');
+      return;
+    }
+    // ── Edges, orbits ──
+    case 'avoidEdges': {
+      const pos = read('pos');
+      const m = glf(Math.max(a.margin, 0));
+      const axis = (c: string, half: string) => `${pos}.${c} > ${half} - ${m} ? -1.0 : ${pos}.${c} < ${m} - ${half} ? 1.0 : 0.0`;
+      const aspect = '(u_resolution.x / u_resolution.y)';
+      toward(d3 ? `vec3(${axis('x', aspect)}, ${axis('y', '1.0')}, ${axis('z', '1.0')})` : `vec2(${axis('x', aspect)}, ${axis('y', '1.0')})`, a.degrees,
+        `get back inward: −1 or +1 on each axis within ${a.margin} of an edge (the picture is ±aspect across and ±1 up${d3 ? ', and ±1 deep' : ''}), 0 elsewhere`);
+      return;
+    }
+    case 'orbit': {
+      const pos = read('pos');
+      const target = a.target === 'mouse' ? MOUSE : a.target === 'centre' ? 'vec2(0.0)' : `vec2(${glf(a.x ?? 0)}, ${glf(a.y ?? 0)})`;
+      const R = glf(Math.max(a.distance, 1e-3));
+      const turnSign = a.cw ? '-1.0' : '1.0';
+      if (d3) {
+        add(`vec3 off${j}`, '=', `${pos} - vec3(${target}, 0.0)`, `off${j}: from the point it circles to the walker.`);
+        add(`float r${j}`, '=', `max(length(off${j}.xy), 1e-5)`, `r${j}: how far it is from the axis through the point (square to the picture).`);
+        toward(`vec3(-off${j}.y, off${j}.x, 0.0) * ${turnSign} / r${j} - vec3(off${j}.xy / r${j}, 0.0) * clamp((r${j} - ${R}) / ${R}, -1.0, 1.0) - vec3(0.0, 0.0, off${j}.z)`, a.degrees,
+          `go along the circle (${a.cw ? 'clockwise' : 'counter-clockwise'}), in toward it when further than ${a.distance} and out when nearer, and back toward the point's depth`);
+        return;
+      }
+      add(`vec2 off${j}`, '=', `${pos} - ${target}`, `off${j}: from the point it circles to the walker.`);
+      add(`float r${j}`, '=', `max(length(off${j}), 1e-5)`, `r${j}: how far it is from the point.`);
+      toward(`vec2(-off${j}.y, off${j}.x) * ${turnSign} / r${j} - off${j} / r${j} * clamp((r${j} - ${R}) / ${R}, -1.0, 1.0)`, a.degrees,
+        `go along the circle (${a.cw ? 'clockwise' : 'counter-clockwise'}), in toward the point when further than ${a.distance} and out when nearer`);
+      return;
+    }
+    // ── Forces: change the velocity, then the heading and speed follow ──
+    case 'force': {
+      read('h'); read('spd');
+      const P = d3 ? 'vec3' : 'vec2';
+      const lift = (v: string) => (d3 ? `vec3(${v}, 0.0)` : v);
+      const sv = glf(a.strength);
+      const dirOf = (deg: number) => lift(`vec2(${glf(Math.cos(deg * Math.PI / 180))}, ${glf(Math.sin(deg * Math.PI / 180))})`);
+      let force: string, why: string;
+      if (a.field === 'gravity') { force = `${sv} * ${dirOf(a.angle ?? -90)}`; why = `gravity: ${a.strength} a second², toward ${a.angle ?? -90}° (−90° is down)`; }
+      else if (a.field === 'wind') {
+        // Gusts: the wind rises and falls over time and across the picture (the step's clock: the same every run).
+        force = `${sv} * (1.0 + 0.6 * sin(u_time * 1.3 + ${read('pos')}.y * 2.0) * sin(u_time * 0.37)) * ${dirOf(a.angle ?? 0)}`;
+        why = `a gusty wind toward ${a.angle ?? 0}°: ${a.strength} a second², rising and falling over time and across the picture`;
+      } else if (a.field === 'curl') { force = `${sv} * ${read('flow')}`; why = `curl noise (the Curl noise node's flow) times ${a.strength}: swirling currents that never bunch up`; }
+      else {
+        const t = lift(a.field === 'mouse' ? MOUSE : `vec2(${glf(a.x ?? 0)}, ${glf(a.y ?? 0)})`);
+        add(`${P} pull${j}`, '=', `${t} - ${read('pos')}`, `pull${j}: from the walker to ${a.field === 'mouse' ? 'the mouse' : 'the point'}.`);
+        force = `${sv} * (length(pull${j}) > 1e-4 ? normalize(pull${j}) : ${P}(0.0))`;
+        why = `${a.strength < 0 ? 'a push away from' : 'a pull toward'} ${a.field === 'mouse' ? 'the mouse' : 'the point'}, ${Math.abs(a.strength)} a second² whatever the distance`;
+      }
+      add(`${P} vel${j}`, '=', `${d3 ? 'h' : 'vec2(cos(h), sin(h))'} * spd + go * ${force} * a_dt`, `vel${j}: its velocity (heading × speed) after ${why} for one step (a_dt, 1/60 s).`);
+      add('spd', '=', `length(vel${j})`, `spd: the speed, the velocity's length (${say}).`, 'spd');
+      add('h', '=', d3 ? `spd > 1e-6 ? vel${j} / spd : h` : `spd > 1e-6 ? atan(vel${j}.y, vel${j}.x) : h`, `h: the heading, the velocity's direction (kept when it stands still).`, 'h');
+      return;
+    }
+    case 'drag':
+      read('spd');
+      add('spd', '*=', `mix(1.0, exp(-${glf(Math.max(a.amount, 0))} * a_dt), go)`, `spd: the speed, losing ${a.amount} of itself a second (e^(−${a.amount}·dt) a step: the same at any frame rate) (${say}).`, 'spd');
+      return;
+    case 'fade':
+      read('bright');
+      add('bright', '*=', `mix(1.0, clamp(1.0 - ${read('age')} / ${glf(Math.max(a.seconds, 1e-3))}, 0.0, 1.0), go)`, `bright: its brightness, from 1 at birth to 0 at ${a.seconds} s old (${say}).`, 'bright');
       return;
   }
 }

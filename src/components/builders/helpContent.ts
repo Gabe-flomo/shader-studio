@@ -303,6 +303,7 @@ export const CONDITION_HELP: Record<RuleCondition['kind'], { hint: string; examp
   state: { hint: 'In (or not in) one of its species\' states.', example: 'in state carrying' },
   memory: { hint: 'The walker\'s one free number: a timer, a counter, an energy.', example: 'Memory number > 1' },
   mask: { hint: 'A mask (a texture\'s brightness or a number) where the walker stands.', example: 'Food mask > 0.5' },
+  neighbours: { hint: 'How many other walkers (everyone, its own kind or other kinds) are within the radius: the walkers themselves, found through the group\'s grid (a Neighbours node).', example: 'more than 8 neighbours within 0.05' },
 };
 
 /** A plain-language hint for each Agent Rules action (the + do… picker and its "?"). */
@@ -319,7 +320,16 @@ export const ACTION_HELP: Record<RuleAction['kind'], { hint: string; example: st
   spawn: { hint: 'Lay a birth mark (trail channel 4): a Births Emit gives birth there.', example: 'spawn a child' },
   bounce: { hint: 'Turn round.', example: 'bounce' },
   flow: { hint: 'Turn toward (or against) a curl-noise flow field.', example: 'follow the flow field (20°)' },
-  align: { hint: 'Turn toward the way the crowd round it flies (a velocity trail).', example: 'align with the crowd (10°)' },
+  align: { hint: 'Turn toward the way the crowd round it flies, read from a velocity trail (the older, blurrier way; match neighbours\' heading sees the walkers themselves).', example: 'align with the crowd (10°)' },
+  separate: { hint: 'Boids\' separation: turn away from the walkers within the radius, harder the closer they are (Neighbours\' Push).', example: 'steer away from neighbours within 0.02 (15°)' },
+  match: { hint: 'Boids\' alignment: turn toward the way the walkers within the radius are going (their average velocity).', example: 'match the heading of neighbours within 0.05 (6°)' },
+  cohere: { hint: 'Boids\' cohesion: turn toward the middle of the walkers within the radius.', example: 'move to the centre of neighbours within 0.05 (3°)' },
+  slow: { hint: 'Slow down in a crowd: the speed falls from the species\' Speed toward 0 as the walkers within the radius reach Jam.', example: 'slow down as neighbours within 0.04 reach 20' },
+  avoidEdges: { hint: 'Turn back inward when within the margin of an edge of the picture (or the 3D box).', example: 'avoid the edges (within 0.1, 12°)' },
+  orbit: { hint: 'Circle a point, the centre or the mouse at a distance: turn along the circle, and in or out toward it.', example: 'orbit the centre at 0.5 (8°)' },
+  force: { hint: 'A force that changes the velocity (so the heading and the speed follow): gravity, a gusty wind, curl noise, or a pull toward a point or the mouse (negative pushes away).', example: 'apply gravity 0.5 at −90°' },
+  drag: { hint: 'Lose this share of the speed every second, like moving through water.', example: 'drag 0.5 a second' },
+  fade: { hint: 'Dim to black over the seconds since it was born (its colour; Draw agents\' Colour by State shows it).', example: 'fade with age over 3 s' },
 };
 
 export function helpFor(builder: string, id: string): HelpEntry | null {

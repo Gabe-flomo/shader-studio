@@ -113,7 +113,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
   Simulation: [
     { label: 'Start here', types: ['slimeMoldPreset', 'multiSlimePreset', 'antsPreset', 'boidsPreset', 'strandsPreset', 'growPicturePreset', 'myceliumPreset', 'particlesPreset', 'curlSmokePreset', 'soundBurstPreset', 'galaxyPreset', 'sandPlatePreset', 'agentsGroup'] },
     { label: 'Outside the group', types: ['agentEmit', 'agentDeposit', 'trailField', 'drawAgents'] },
-    { label: 'Inside: walkers', types: ['agentSense', 'agentSteer', 'agentMove', 'agentBySpecies'] },
+    { label: 'Inside: walkers', types: ['agentSense', 'agentNeighbours', 'agentSteer', 'agentMove', 'agentBySpecies'] },
     { label: 'Inside: forces', types: ['agentGravity', 'agentWind', 'agentCurl', 'agentAttract', 'agentVortex', 'agentFlow', 'agentSoundKick'] },
     { label: 'Inside: moving', types: ['agentIntegrate', 'agentAge', 'agentCollide', 'agentChladni'] },
   ],

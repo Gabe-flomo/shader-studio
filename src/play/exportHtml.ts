@@ -157,8 +157,8 @@ export interface WebAgents {
     /** Collide (3D scene)'s grids: each one's program, where it is, and its sampler and place uniforms. */
     grids?: Array<Omit<NonNullable<AgentGroupProgram['grids']>[number], 'nodeId'> & { u: { grid: string; at: string } }>;
     listeners: Array<Omit<AgentListener, 'nodeId'> & { u: { sound: string; shocks: string; levels: string; plateModes: string; plateCount: string; plateShake: string } }>;
-    /** State samplers A–D, the step (uint) and the birth window (vec4). */
-    u: { A: string; B: string; C: string; D: string; step: string; win: string };
+    /** State samplers A–D, the step (uint) and the birth window (vec4); with Neighbours, its grid's samplers and layout (`nb`). */
+    u: { A: string; B: string; C: string; D: string; step: string; win: string; nb?: { a: string; b: string; n: string; g: string } };
     /** The sensor layer (`ag:<node id>`) the page's Play reads this group's readings as; absent when nothing does. */
     readAs?: string;
   }>;
