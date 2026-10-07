@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.63',
+    date: '2026-10-07',
+    title: 'Walker kinds',
+    highlights: [
+      { area: 'Studio', text: 'Agent Rules has a Kind choice in the Species tab: Trail followers, Particles, Flock (boids), Ants, Swarm or Crowd.', link: { kind: 'doc', path: 'docs/agent-rules.md' } },
+      { area: 'Studio', text: 'A real Neighbours node: walkers find each other through a shared grid, so flocks and crowds react to actual nearby walkers.' },
+      { area: 'Studio', text: 'The Boids and Crowd examples are rebuilt on real neighbours, running 64k walkers smoothly, plus new Particles and Swarm templates.' },
+    ],
+  },
+  {
     id: '2026.10.62',
     date: '2026-10-07',
     title: 'Builder tabs',
