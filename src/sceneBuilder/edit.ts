@@ -124,3 +124,103 @@ export function moveWarp(spec: SceneSpec, itemId: string, warpId: string, by: -1
   if (i < 0 || j < 0 || j >= it.warps.length) return;
   [it.warps[i], it.warps[j]] = [it.warps[j], it.warps[i]];
 }
+
+// ── The tree by buttons (touch screens have no drag) and the gallery's drops ─
+
+/** ▲ / ▼: step an item one place among its siblings. False at either end. */
+export function moveBy(spec: SceneSpec, id: string, by: -1 | 1): boolean {
+  const hit = findItem(spec, id);
+  if (!hit?.parent) return false;
+  const list = hit.parent.children;
+  const i = list.indexOf(hit.item);
+  const j = i + by;
+  if (j < 0 || j >= list.length) return false;
+  [list[i], list[j]] = [list[j], list[i]];
+  return true;
+}
+
+/** The group just above an item among its siblings, which Move into would put it in. */
+function groupAbove(spec: SceneSpec, id: string): GroupSpec | null {
+  const hit = findItem(spec, id);
+  if (!hit?.parent) return null;
+  const prev = hit.parent.children[hit.parent.children.indexOf(hit.item) - 1];
+  return prev?.type === 'group' ? prev : null;
+}
+
+export const canMoveInto = (spec: SceneSpec, id: string): boolean => !!groupAbove(spec, id);
+
+/** Move into: the item becomes the last child of the group just above it. */
+export function moveIntoPrevious(spec: SceneSpec, id: string): boolean {
+  const g = groupAbove(spec, id);
+  return !!g && moveItem(spec, id, g.id, 'into');
+}
+
+export const canMoveOut = (spec: SceneSpec, id: string): boolean => {
+  const hit = findItem(spec, id);
+  return !!hit?.parent && hit.parent.id !== spec.root.id;
+};
+
+/** Move out: the item leaves its group and goes right after it. */
+export function moveOut(spec: SceneSpec, id: string): boolean {
+  if (!canMoveOut(spec, id)) return false;
+  return moveItem(spec, id, findItem(spec, id)!.parent!.id, 'after');
+}
+
+/** The ids of `spec`'s items in tree order (the root first). */
+function treeOrder(spec: SceneSpec): string[] {
+  const out: string[] = [];
+  walkItems(spec.root, it => out.push(it.id));
+  return out;
+}
+
+/**
+ * Wrap in…: a new group (`op`, blend `k`) around the selected items, at the place of the first of
+ * them (in tree order), holding them in tree order. An item inside another selected one goes
+ * with it. Null when nothing can be wrapped (only the root).
+ */
+export function wrapItems(spec: SceneSpec, ids: string[], op: GroupSpec['op'], k = 0): GroupSpec | null {
+  const order = treeOrder(spec);
+  const chosen = [...new Set(ids)].filter(id => id !== spec.root.id && findItem(spec, id))
+    .filter((id, _i, all) => !all.some(o => o !== id && isWithin(spec, id, o)))
+    .sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  if (!chosen.length) return null;
+  const first = findItem(spec, chosen[0])!;
+  const g = newGroup(nextId(spec, 'g'), { op, k });
+  first.parent!.children.splice(first.parent!.children.indexOf(first.item), 0, g);
+  for (const id of chosen) {
+    const hit = findItem(spec, id)!;
+    hit.parent!.children.splice(hit.parent!.children.indexOf(hit.item), 1);
+    g.children.push(hit.item);
+  }
+  return g;
+}
+
+/** A shape from the gallery dropped on a row: before or after it, or into it (a group; the root takes it last). */
+export function insertShape(spec: SceneSpec, kind: string, targetId: string | null, where: 'before' | 'after' | 'into'): ShapeSpec {
+  const target = targetId ? findItem(spec, targetId) : null;
+  // Dropped onto the middle of a shape: beside it.
+  const at = where === 'into' && target?.item.type !== 'group' ? 'after' : where;
+  if (!target || at === 'into' || !target.parent) return addShape(spec, kind, target?.item.type === 'group' ? target.item.id : null);
+  const sh = addShape(spec, kind, target.parent.id);
+  moveItem(spec, sh.id, target.item.id, at);
+  return sh;
+}
+
+/** A modifier chip added at the end of an item's stack. Returns its id. */
+export function addModifier(spec: SceneSpec, itemId: string, kind: string): string {
+  const it = findItem(spec, itemId)?.item;
+  if (!it) return '';
+  const w = newWarp(kind, nextId(spec, 'w'));
+  it.warps.push(w);
+  return w.id;
+}
+
+/** A chip dragged to place `index` in its item's stack. */
+export function moveModifierTo(spec: SceneSpec, itemId: string, warpId: string, index: number): void {
+  const it = findItem(spec, itemId)?.item;
+  if (!it) return;
+  const i = it.warps.findIndex(w => w.id === warpId);
+  if (i < 0) return;
+  const [w] = it.warps.splice(i, 1);
+  it.warps.splice(Math.max(0, Math.min(it.warps.length, index)), 0, w);
+}

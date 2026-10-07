@@ -47,13 +47,20 @@ const subNodes = (n: GraphNode | undefined): GraphNode[] => ((n?.params?.subgrap
 const SHAPE_OF_TYPE = new Map<string, ShapeDef>();
 for (const s of SHAPES) { SHAPE_OF_TYPE.set(s.type, s); if (s.roundType) SHAPE_OF_TYPE.set(s.roundType, s); }
 SHAPE_OF_TYPE.set('verticalCapsuleSDF3D', SHAPES.find(s => s.kind === 'capsule')!);
-const WARP_OF_TYPE = new Map<string, WarpDef>(WARPS.map(w => [w.type, w]));
+/** Node type → the warp it is; the first in WARPS wins (Rotate 3D on its own is a Turn). */
+const WARP_OF_TYPE = new Map<string, WarpDef>();
+for (const w of WARPS) if (!WARP_OF_TYPE.has(w.type)) WARP_OF_TYPE.set(w.type, w);
+/** Node type → the modifier that changes a distance with it (Displace 3D, Offset, Onion; Scale 3D's correction). */
+const DIST_OF_TYPE = new Map<string, WarpDef>();
+for (const w of WARPS) if (w.distStep && !DIST_OF_TYPE.has(w.distStep.type)) DIST_OF_TYPE.set(w.distStep.type, w);
 const OP_OF_TYPE: Record<string, GroupSpec['op']> = { sdfUnion: 'union', sdfSubtract: 'subtract', sdfIntersect: 'intersect' };
 
 // ── Reading one node ────────────────────────────────────────────────────────
 
 class Reader {
   byId: Map<string, GraphNode>;
+  /** Item id → its warp ids in the builder's order (from the spec a builder scene carries). */
+  order?: Map<string, string[]>;
   read = new Set<string>();
   unknown: string[] = [];
   constructor(nodes: GraphNode[]) { this.byId = new Map(nodes.map(n => [n.id, n])); }
@@ -76,6 +83,8 @@ function warpValues(n: GraphNode, def: WarpDef): WarpSpec['values'] {
   else if (def.axes) out[def.axes.key] = String(n.params[def.axes.param] ?? def.axes.def);
   if (def.select) out[def.select.key] = String(n.params[def.select.param] ?? def.select.def);
   if (def.kind === 'kaleido') out.n = Math.round(Number(n.params.iterations ?? 3));
+  if (def.kind === 'scale') out.s = round(1 / Math.max(1e-6, num(n.params.scale, 1)));
+  if (def.kind === 'round') out.r = round(-num(n.params.amount, -0.05));
   return out;
 }
 
@@ -85,15 +94,20 @@ function toWarp(r: Reader, n: GraphNode): WarpSpec {
   const role = roleOf(n);
   const id = /^w\d+$/.test(role) ? role : `w_${n.id}`;
   if (!def) { r.unknown.push(`${label(n)} bends space in a way the builder doesn't know: custom.`); return { id, kind: 'custom', values: {}, label: label(n) }; }
-  r.wiredParams(n, Object.keys(n.inputs).filter(k => k !== def.posIn && k !== 'dist' && k !== 'time'), def.label);
+  r.wiredParams(n, Object.keys(n.inputs).filter(k => k !== def.posIn && k !== 'dist' && k !== 'time' && k !== def.distStep?.distIn && k !== def.distStep?.posIn), def.label);
   return { id, kind: def.kind, values: warpValues(n, def) };
 }
+
+/** A distance modifier read off the distance chain, or Scale's correction, and where on the point chain it sits. */
+type Mod =
+  | { kind: 'mod'; w: WarpSpec; /** the node whose point it reads (Displace) */ at: string | null }
+  | { kind: 'fix'; node: GraphNode; scale: number };
 
 // ── The scene tree ──────────────────────────────────────────────────────────
 
 type Raw =
-  | { kind: 'shape'; shape: ShapeSpec; chain: GraphNode[]; mods: WarpSpec[] }
-  | { kind: 'group'; group: GroupSpec; children: Raw[]; chain: GraphNode[]; mods: WarpSpec[] };
+  | { kind: 'shape'; shape: ShapeSpec; chain: GraphNode[]; mods: Mod[] }
+  | { kind: 'group'; group: GroupSpec; children: Raw[]; chain: GraphNode[]; mods: Mod[] };
 
 /** The position chain from Scene Pos out to `n`'s input (Scene Pos first). Unknown steps are kept as custom. */
 function posChain(r: Reader, n: GraphNode | undefined, key: string, guard = 0): GraphNode[] {
@@ -129,10 +143,19 @@ function readDist(r: Reader, from: GraphNode | undefined, guard = 0): Raw | null
   if (shapeDef) {
     return { kind: 'shape', shape: readShape(r, from, shapeDef), chain: posChain(r, from, shapeDef.posKey), mods: [] };
   }
-  if (from.type === 'displace3D') {
-    const inner = readDist(r, r.src(from, 'dist'), guard + 1);
-    const w = toWarp(r, from);
-    if (inner) inner.mods.push(w);
+  // A modifier on the distance (innermost first, as the builder applies them): kept on the item it changes.
+  const distDef = DIST_OF_TYPE.get(from.type);
+  if (distDef?.distStep && from.inputs[distDef.distStep.distIn]?.connection) {
+    const step = distDef.distStep;
+    const inner = readDist(r, r.src(from, step.distIn), guard + 1);
+    if (!inner) return inner;
+    if (distDef.modifier) {
+      const w = toWarp(r, from);
+      inner.mods.push({ kind: 'mod', w: { ...w, kind: distDef.kind, values: warpValues(from, distDef) }, at: step.posIn ? r.src(from, step.posIn)?.id ?? null : null });
+    } else {
+      r.read.add(from.id);
+      inner.mods.push({ kind: 'fix', node: from, scale: num(from.params.scale, 1) });
+    }
     return inner;
   }
   // A plain Min / Max of two distances is a hard union / intersect.
@@ -189,11 +212,83 @@ function commonPrefix(chains: GraphNode[][]): GraphNode[] {
   }
 }
 
+/**
+ * The point chain's own nodes as warps: a builder Rotate's turns (roles `w3:x`, `w3:y`…) are one
+ * Rotate again; everything else is one warp per node.
+ */
+function chainWarps(r: Reader, nodes: GraphNode[]): Array<{ w: WarpSpec; at: number }> {
+  const out: Array<{ w: WarpSpec; at: number }> = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    const m = n.type === 'rotate3D' && !n.inputs.angle?.connection ? /^(w\d+):([xyz])$/.exec(roleOf(n)) : null;
+    if (m) {
+      const by: Vec3 = [0, 0, 0];
+      const at = i;
+      for (; i < nodes.length; i++) {
+        const k = nodes[i].type === 'rotate3D' ? /^(w\d+):([xyz])$/.exec(roleOf(nodes[i])) : null;
+        if (!k || k[1] !== m[1]) break;
+        by['xyz'.indexOf(k[2])] = round(-deg(num(nodes[i].params.angle, 0)));
+        r.read.add(nodes[i].id);
+      }
+      i--;
+      out.push({ w: { id: m[1], kind: 'rotate', values: { by: by.map(v => (Object.is(v, -0) ? 0 : v)) as Vec3 } }, at });
+      continue;
+    }
+    out.push({ w: toWarp(r, n), at: i });
+  }
+  return out;
+}
+
+/**
+ * An item's stack: the point chain's warps with the distance modifiers put back where they sit.
+ * A Displace reads the point after a warp, so it goes right after it; Scale's correction pairs
+ * with its Scale on the point; Round and Onion go before the next modifier that has a place
+ * (they commute with the warps between), else last.
+ */
+function stack(r: Reader, own: GraphNode[], upTo: number, mods: Mod[]): WarpSpec[] {
+  const warps = chainWarps(r, own.slice(0, upTo)).map((x, i) => ({ w: x.w, key: x.at, order: i }));
+  // Read innermost first: the stack's order is the reverse.
+  const inOrder = [...mods].reverse();
+  const paired = new Set<string>();
+  const keyed: Array<{ w: WarpSpec | null; key: number | null }> = inOrder.map(m => {
+    if (m.kind === 'fix') {
+      const role = roleOf(m.node).replace(/:dist$/, '');
+      const i = own.slice(0, upTo).findIndex(n => n.type === 'scale3d' && !paired.has(n.id) && (role && roleOf(n) === role || Math.abs(num(n.params.scale, 1) - m.scale) < 1e-6));
+      if (i < 0) { r.unknown.push('A Scale 3D on the distance has no matching Scale 3D on the point: left out.'); return { w: null, key: null }; }
+      paired.add(own[i].id);
+      return { w: null, key: i - 0.5 };
+    }
+    if (!m.at) return { w: m.w, key: null };
+    const i = own.findIndex(n => n.id === m.at);
+    return { w: m.w, key: Math.min(i + 0.5, upTo) };
+  });
+  // A modifier with no place of its own goes before the next one that has one.
+  let next = upTo;
+  for (let i = keyed.length - 1; i >= 0; i--) {
+    if (keyed[i].key === null) keyed[i].key = next;
+    else next = keyed[i].key!;
+  }
+  const all = [
+    ...warps.map(x => ({ w: x.w, key: x.key, tie: 1, order: x.order })),
+    ...keyed.flatMap((x, i) => (x.w ? [{ w: x.w, key: x.key!, tie: 0, order: i }] : [])),
+  ];
+  all.sort((a, b) => a.key - b.key || a.tie - b.tie || a.order - b.order);
+  return all.map(x => x.w);
+}
+
+/** The builder's own order for an item's stack (from the spec it carries), when the graph holds the same warps. */
+function builderOrder(r: Reader, id: string, warps: WarpSpec[]): WarpSpec[] {
+  const want = r.order?.get(id);
+  if (!want || want.length !== warps.length) return warps;
+  const byId = new Map(warps.map(w => [w.id, w]));
+  return want.every(w => byId.has(w)) ? want.map(w => byId.get(w)!) : warps;
+}
+
 /** Assign each chain's own part (beyond what its parent took) as warps, moves and turns. */
 function finish(r: Reader, raw: Raw, taken: number): SceneItem {
   const own = raw.chain.slice(taken);
   if (raw.kind === 'group') {
-    raw.group.warps = [...own.map(n => toWarp(r, n)), ...raw.mods];
+    raw.group.warps = builderOrder(r, raw.group.id, stack(r, own, own.length, raw.mods));
     raw.group.children = raw.children.map(c => finish(r, c, raw.chain.length));
     return raw.group;
   }
@@ -202,7 +297,6 @@ function finish(r: Reader, raw: Raw, taken: number): SceneItem {
   let end = own.length;
   const rot: Vec3 = [0, 0, 0];
   const order = ['z', 'y', 'x'];
-  let next = 0;
   const tail: GraphNode[] = [];
   for (let i = own.length - 1; i >= 0; i--) {
     const n = own[i];
@@ -216,18 +310,17 @@ function finish(r: Reader, raw: Raw, taken: number): SceneItem {
   const axes = tail.map(n => String(n.params.axis ?? 'y'));
   const ok = axes.every((a, i) => order.indexOf(a) >= (i ? order.indexOf(axes[i - 1]) + 1 : 0));
   if (ok) {
-    for (const n of tail) { const i = 'xyz'.indexOf(String(n.params.axis ?? 'y')); rot[i] = round(-deg(num(n.params.angle, 0))); r.read.add(n.id); next++; }
+    for (const n of tail) { const i = 'xyz'.indexOf(String(n.params.axis ?? 'y')); rot[i] = round(-deg(num(n.params.angle, 0))); r.read.add(n.id); }
   } else end = own.length;
-  const beforeTurns = own.slice(0, end);
-  const last = beforeTurns[beforeTurns.length - 1];
+  const last = own[end - 1];
   const lastRole = roleOf(last);
   if (last?.type === 'translate3D' && !last.inputs.tx?.connection && !last.inputs.ty?.connection && !last.inputs.tz?.connection && (!lastRole || lastRole.endsWith(':at'))) {
     sh.at = [round(num(last.params.tx, 0)), round(num(last.params.ty, 0)), round(num(last.params.tz, 0))];
     r.read.add(last.id);
-    beforeTurns.pop();
+    end--;
   }
   sh.rot = rot.map(v => (Object.is(v, -0) ? 0 : v)) as Vec3;
-  sh.warps = [...beforeTurns.map(n => toWarp(r, n)), ...raw.mods];
+  sh.warps = builderOrder(r, sh.id, stack(r, own, end, raw.mods));
   return sh;
 }
 
@@ -235,6 +328,10 @@ function finish(r: Reader, raw: Raw, taken: number): SceneItem {
 function readScene(r: Reader, sceneGroup: GraphNode, meta: SceneBuilderMeta | null = null): GroupSpec {
   const inner = subNodes(sceneGroup);
   const ir = new Reader(inner);
+  if (meta) {
+    ir.order = new Map();
+    walkItems(meta.spec.root, it => ir.order!.set(it.id, it.warps.map(w => w.id)));
+  }
   const out = inner.find(n => n.type === 'sceneOutput');
   if (out) ir.read.add(out.id);
   // Older scenes have no Scene Output: the return is named on the subgraph, or is the last distance nobody reads.
@@ -245,7 +342,7 @@ function readScene(r: Reader, sceneGroup: GraphNode, meta: SceneBuilderMeta | nu
   const raw = ret ? readDist(ir, ret) : null;
   let root: GroupSpec;
   if (!raw) root = newGroup('g1');
-  else if (raw.kind === 'group' && !raw.mods.length) root = finish(ir, raw, 0) as GroupSpec;
+  else if (raw.kind === 'group') root = finish(ir, raw, 0) as GroupSpec;
   else {
     const item = finish(ir, raw, 0);
     root = newGroup('g1', { children: [item] });

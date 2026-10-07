@@ -114,8 +114,14 @@ export interface WarpDef {
   /** Position socket in and out (Sin Warp 3D's are `p`). */
   posIn: string;
   posOut: string;
-  /** A distance modifier (Displace 3D): it reshapes the distance rather than the space. */
+  /** A distance modifier (Displace 3D, Round, Onion): it reshapes the distance rather than the space. */
   modifier?: boolean;
+  /**
+   * The node that changes the distance: a modifier's only node, or Scale's second one (it
+   * corrects the distance of the space it shrank). Applied once the item's distance exists,
+   * innermost first, so a stack reads outside in like the recipe.
+   */
+  distStep?: { type: string; distIn: string; distOut: string; posIn?: string };
   params: ParamDef[];
   /** Axis-letter setting: `mirror xz` (bool params), `turn y` / `polar-repeat axis=y` (a select). */
   axes?: { key: string; label: string; kind: 'flags'; params: [string, string, string]; def: string } | { key: string; label: string; kind: 'one'; param: string; def: string; options: string[] };
@@ -132,9 +138,14 @@ const stretch = (amount: number) => Math.max(0.3, Math.min(1, Math.round(20 / (1
 export const WARPS: WarpDef[] = [
   { kind: 'move', label: 'Move', aliases: ['translate', 'offset'], type: 'translate3D', posIn: 'pos', posOut: 'pos', stepHint: exact,
     blurb: 'Shifts what follows.', params: [P('by', 'By', ['tx', 'ty', 'tz'], [0, 0, 0], -10, 10)] },
-  { kind: 'turn', label: 'Turn', aliases: ['rotate'], type: 'rotate3D', posIn: 'pos', posOut: 'pos', stepHint: exact,
+  { kind: 'turn', label: 'Turn', aliases: [], type: 'rotate3D', posIn: 'pos', posOut: 'pos', stepHint: exact,
     blurb: 'Turns what follows about one axis.', axes: { key: 'axis', label: 'Axis', kind: 'one', param: 'axis', def: 'y', options: ['x', 'y', 'z'] },
     params: [P('angle', 'Angle', 'angle', 0, -360, 360, 0.5, { deg: true })] },
+  { kind: 'rotate', label: 'Rotate', aliases: ['rotation'], type: 'rotate3D', posIn: 'pos', posOut: 'pos', stepHint: exact,
+    blurb: 'Turns what follows about X, then Y, then Z (degrees), like a shape\'s own Rotation.', params: [P('by', 'Degrees', '', [0, 0, 0], -180, 180, 0.5, { hint: 'About X, then Y, then Z.' })] },
+  { kind: 'scale', label: 'Scale', aliases: ['resize', 'grow'], type: 'scale3d', posIn: 'p', posOut: 'p', stepHint: exact,
+    distStep: { type: 'scale3d', distIn: 'dist', distOut: 'dist' },
+    blurb: 'Makes what follows bigger (above 1) or smaller, keeping distances exact.', params: [P('s', 'Factor', '', 1.5, 0.05, 10, 0.01)] },
   { kind: 'repeat', label: 'Repeat', aliases: ['tile', 'grid'], type: 'repeat3D', posIn: 'pos', posOut: 'pos', stepHint: exact,
     blurb: 'Endless copies, one per cell. Keep each copy inside its cell.', params: [P('cell', 'Cell size', ['cellX', 'cellY', 'cellZ'], [2, 2, 2], 0.1, 10)] },
   { kind: 'mirror-repeat', label: 'Mirrored repeat', aliases: ['mirrored-repeat', 'flip-repeat'], type: 'mirroredRepeat3D', posIn: 'pos', posOut: 'pos', stepHint: exact,
@@ -162,9 +173,19 @@ export const WARPS: WarpDef[] = [
     params: [P('amp', 'Amplitude', 'amplitude', 0.1, 0, 2), P('freq', 'Frequency', 'frequency', 2, 0.01, 20)] },
   { kind: 'noise', label: 'Noise warp', aliases: ['domain-warp', 'warp'], type: 'domainWarp3D', posIn: 'pos', posOut: 'pos', stepHint: w => stretch(num(w.values.amt, 0.3) * num(w.values.scale, 1) * 3),
     blurb: 'Pushes space about with smooth noise: lumpy, organic shapes.', params: [P('amt', 'Strength', 'strength', 0.3, 0, 2), P('scale', 'Scale', 'scale', 1, 0.1, 5), P('octaves', 'Octaves', 'octaves', 3, 1, 6, 1)] },
-  { kind: 'displace', label: 'Displace', aliases: ['bumps', 'ripple'], type: 'displace3D', posIn: 'pos', posOut: 'pos', modifier: true, stepHint: w => stretch(num(w.values.amp, 0.05) * num(w.values.freq, 8) * 1.7),
+  { kind: 'displace', label: 'Displace', aliases: ['bumps', 'ripple'], type: 'displace3D', posIn: 'pos', posOut: 'pos', modifier: true,
+    distStep: { type: 'displace3D', distIn: 'dist', distOut: 'dist', posIn: 'pos' }, stepHint: w => stretch(num(w.values.amp, 0.05) * num(w.values.freq, 8) * 1.7),
     blurb: 'Bumps on the surface: adds a 3D sine pattern to the distance.', params: [P('amp', 'Amplitude', 'amp', 0.05, 0, 0.5, 0.005), P('freq', 'Frequency', 'freq', 8, 0.1, 40, 0.1)] },
+  { kind: 'round', label: 'Round', aliases: ['inflate', 'soften'], type: 'sdfOffset', posIn: 'pos', posOut: 'pos', modifier: true, stepHint: exact,
+    distStep: { type: 'sdfOffset', distIn: 'sdf', distOut: 'result' },
+    blurb: 'Rounds every edge and corner by growing the surface outward this much.', params: [P('r', 'Radius', '', 0.05, 0, 0.5, 0.005)] },
+  { kind: 'onion', label: 'Onion', aliases: ['shell', 'hollow'], type: 'sdfOnion', posIn: 'pos', posOut: 'pos', modifier: true, stepHint: exact,
+    distStep: { type: 'sdfOnion', distIn: 'dist', distOut: 'dist' },
+    blurb: 'Hollows it into a thin shell of this thickness (cut it open to see inside).', params: [P('t', 'Thickness', 'r', 0.03, 0.001, 0.5, 0.005)] },
 ];
+
+/** The per-item modifiers the inspector offers first, in its order (the rest of WARPS follow under "More"). */
+export const MODIFIER_KINDS = ['move', 'rotate', 'scale', 'twist', 'bend', 'repeat', 'mirror', 'polar-repeat', 'round', 'onion'] as const;
 
 export const WARP_BY_KIND: Record<string, WarpDef> = Object.fromEntries(WARPS.map(w => [w.kind, w]));
 
@@ -381,6 +402,22 @@ export function itemName(spec: SceneSpec | null, it: SceneItem): string {
   if (!spec) return label;
   const same = allShapes(spec).filter(s => s.kind === it.kind);
   return same.length > 1 ? `${label} ${same.indexOf(it as ShapeSpec) + 1}` : label;
+}
+
+/** A modifier chip's words: its label and its main setting (`Move 1,0,0`, `Mirror xz`, `Twist 2`). */
+export function modifierSummary(w: WarpSpec): { label: string; value: string } {
+  const def = WARP_BY_KIND[w.kind];
+  if (!def) return { label: w.label ?? 'custom', value: '' };
+  const r = (n: number) => String(Math.round(n * 1000) / 1000);
+  const parts: string[] = [];
+  if (def.axes) parts.push(String(w.values[def.axes.key] ?? def.axes.def));
+  const first = def.params[0];
+  if (first) {
+    const v = w.values[first.key];
+    if (Array.isArray(v)) parts.push(v[0] === v[1] && v[1] === v[2] ? r(v[0]) : v.map(r).join(','));
+    else if (typeof v === 'number') parts.push(`${w.kind === 'scale' ? '×' : ''}${r(v)}${first.deg ? '°' : ''}`);
+  }
+  return { label: def.label, value: parts.join(' ') };
 }
 
 export function opLabel(g: Pick<GroupSpec, 'op' | 'k'>): string {
