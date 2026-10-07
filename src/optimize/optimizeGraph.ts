@@ -69,7 +69,7 @@ const NEVER = new Set(['output', 'vec4Output', 'group', 'sceneGroup', 'spaceWarp
   'agentsGroup', 'agentInputs', 'agentOutput', 'agentStepOut', 'agentSense', 'agentSteer', 'agentMove', 'agentBySpecies', 'agentEmit', 'agentDeposit', 'trailField', 'drawAgents', 'slimeMoldPreset',
   'agentGravity', 'agentWind', 'agentCurl', 'agentAttract', 'agentVortex', 'agentFlow', 'agentSoundKick', 'agentIntegrate', 'agentAge', 'agentCollide', 'agentChladni',
   'particlesPreset', 'curlSmokePreset', 'soundBurstPreset',
-  'trailStepOut', 'agentProbeOut', 'agentCollideScene', 'agentGridOut', 'multiSlimePreset', 'antsPreset', 'boidsPreset', 'strandsPreset', 'growPicturePreset',
+  'trailStepOut', 'agentProbeOut', 'agentCollideScene', 'agentGridOut', 'agentNeighbours', 'multiSlimePreset', 'antsPreset', 'boidsPreset', 'strandsPreset', 'growPicturePreset',
   'galaxyPreset', 'myceliumPreset', 'sandPlatePreset']);
 const DECL = /^\s*(float|vec[234]|mat[234]|int|bool)\s+([A-Za-z_]\w*)\s*=\s*(.+);\s*$/;
 /** Names a block input can't have: GLSL functions, types and keywords, and the app's own prefixes. */

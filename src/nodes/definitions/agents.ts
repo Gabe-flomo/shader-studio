@@ -44,6 +44,11 @@ export const trailUniform = (slug: string) => `u_trail_${slug}`;
 export const agentDrawUniform = (slug: string) => `u_agdraw_${slug}`;
 /** A Trail with Add / Block wired: its own step program reads the trail as it was (`Src`) and its settings (`Step`). */
 export const trailStepUniforms = (slug: string) => ({ src: `u_trSrc_${slug}`, step: `u_trStep_${slug}` });
+/**
+ * A group with a Neighbours node: its grid this step (kit/agentPlan.js agNbLayout), the two slot
+ * atlases (even and odd slots), the count per cell and the grid uniform (nx, ny, nz, aspect).
+ */
+export const agentNbUniforms = (slug: string) => ({ a: `u_agNbA_${slug}`, b: `u_agNbB_${slug}`, n: `u_agNbN_${slug}`, g: `u_agNbG_${slug}` });
 
 /** Agent counts: the state texture's side for each tier (as the Particles node's). */
 export const AGENT_TIERS: Record<string, number> = { '64k': 256, '256k': 512, '1m': 1024, '4m': 2048 };
@@ -62,6 +67,8 @@ export const AGENT_INSIDE_TYPES = new Set([
   'agentIntegrate', 'agentAge', 'agentCollide', 'agentChladni',
   // 3D: colliding with a ray-marched scene through its coarse grid.
   'agentCollideScene',
+  // The walkers near this one, through the group's grid (docs/agents-group.md "Neighbours").
+  'agentNeighbours',
 ]);
 /** The starters in the Simulation category: each builds a whole working setup (store/agentExamples.ts). */
 export const AGENT_PRESET_TYPES = new Set([
@@ -149,6 +156,7 @@ export const AGENT_3D_SOCKETS: Record<string, { in?: string[]; out?: string[] }>
   agentCollide: { in: ['position', 'velocity'], out: ['position', 'velocity'] },
   agentChladni: { in: ['position', 'velocity'], out: ['position', 'velocity'] },
   agentCollideScene: { in: ['position', 'velocity'], out: ['position', 'velocity'] },
+  agentNeighbours: { in: ['position'], out: ['centre', 'heading', 'push'] },
   agentEmit: { in: ['position'] },
 };
 /** Draw agents' sockets in 3D only: a ray-marched scene's camera and depth (docs/agents-group.md "3D"). */
@@ -302,6 +310,7 @@ const WALKER_SOCKETS: Record<string, string[]> = {
   agentWind: ['position'], agentCurl: ['position'], agentAttract: ['position'], agentVortex: ['position'], agentFlow: ['position'],
   agentSoundKick: ['position'], agentIntegrate: ['position', 'velocity'], agentCollide: ['position', 'velocity'],
   agentChladni: ['position', 'velocity'], agentAge: ['age', 'life'], agentCollideScene: ['position', 'velocity'],
+  agentNeighbours: ['position'],
 };
 const OUTPUT_KEEPS: Record<string, string> = {
   position: 'unchanged', velocity: 'unchanged', heading: 'unchanged', speed: 'unchanged', memory: 'unchanged', colour: 'unchanged',
