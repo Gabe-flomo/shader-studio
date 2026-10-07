@@ -3,7 +3,9 @@
  * becomes main(), and what a paste lacks (precision, uniforms) is added.
  */
 import { describe, expect, it } from 'vitest';
-import { detectDialect, translateToStudio } from '../dialects';
+import { parser } from '@shaderfrog/glsl-parser';
+import preprocess from '@shaderfrog/glsl-parser/preprocessor';
+import { alphaAlwaysOne, detectDialect, translateToStudio } from '../dialects';
 
 describe('GLSL dialects', () => {
   it('leaves a Playfield / Book of Shaders shader alone', () => {
@@ -116,5 +118,82 @@ describe('line map and tidy', () => {
     expect(t.notes).toContain('2 for loops put in ES 1.00 form (extra updates moved into the body)');
     expect(t.notes).toContain('1 integer % rewritten as mod()');
     expect(t.code.split('\n')).toHaveLength(6); // the added precision line, then the paste's five
+  });
+
+  describe('Shadertoy alpha (the Image pass is shown opaque there)', () => {
+    // "Layers" fractal by Benoit Marini (2020): writes alpha 0, loops with the increment in the condition,
+    // #defines a float with a trailing dot, `vec4 (` with a space, a swizzled write, tab indentation.
+    const LAYERS = [
+      '#define NUM_LAYERS 16.',
+      '#define ITER 23',
+      '',
+      'vec4 tex(vec3 p)',
+      '{',
+      '    float t = iTime+78.;',
+      '    vec4 o = vec4(p.xyz,3.*sin(t*.1));',
+      '    vec4 dec = vec4 (1.,.9,.1,.15) + vec4(.06*cos(t*.1),0,0,.14*cos(t*.23));',
+      '    for (int i=0 ; i++ < ITER;) o.xzyw = abs(o/dot(o,o)- dec);',
+      '    return o;',
+      '}',
+      '',
+      'void mainImage( out vec4 fragColor, in vec2 fragCoord )',
+      '{',
+      '    vec2 uv = (fragCoord-iResolution.xy*.5)/iResolution.y;',
+      '    vec3 col = vec3(0);',
+      '    float t= iTime* .3;',
+      '\tfor(float i=0.; i<=1.; i+=1./NUM_LAYERS)',
+      '    {',
+      '        float d = fract(i+t); // depth',
+      '        col+= tex(vec3(uv*mix(5.,.5,d),i*4.)).xyz*d * smoothstep(1.,.9,d);',
+      '    }',
+      '    col/=NUM_LAYERS;',
+      '   \tcol=pow(col,vec3(.5 ));',
+      '    fragColor = vec4(col,0.0);',
+      '}',
+    ].join('\n');
+    const parses = (code: string) => parser.parse(preprocess('vec4 gl_FragColor;\n' + code, { preserve: {} }), { quiet: true });
+
+    it('reads a shader that writes alpha 0 as opaque, and leaves the rest of it as written', () => {
+      const t = translateToStudio(LAYERS);
+      expect(t.code).toMatch(/gl_FragColor = vec4\(col,0\.0\);\n gl_FragColor\.a = 1\.0; \}$/);
+      expect(t.notes.join(' ')).toMatch(/alpha read as 1/);
+      // The loops, defines, spacing and swizzled write reach the compiler untouched.
+      expect(t.code).toContain('for (int i=0 ; i++ < ITER;) o.xzyw = abs(o/dot(o,o)- dec);');
+      expect(t.code).toContain('\tfor(float i=0.; i<=1.; i+=1./NUM_LAYERS)');
+      expect(t.code).toContain('#define NUM_LAYERS 16.');
+      expect(t.code).toContain('vec4 dec = vec4 (1.,.9,.1,.15)');
+      // Line numbers still point into the paste: only the three header lines were added.
+      expect(t.code.split('\n')).toHaveLength(LAYERS.split('\n').length + 3);
+      expect(() => parses(t.code)).not.toThrow();
+    });
+
+    it('adds nothing when every write is visibly opaque', () => {
+      const t = translateToStudio('void mainImage(out vec4 O, in vec2 U){ O = vec4(U / iResolution.xy, 0.5, 1.); }');
+      expect(t.code).not.toMatch(/\.a = 1\.0|\.rgb, 1\.0/);
+      expect(t.notes.join(' ')).not.toMatch(/alpha/);
+    });
+
+    it('a colour read back or returned early reaches gl_FragColor opaque at every exit', () => {
+      const src = 'void mainImage(out vec4 O, in vec2 U){ O = vec4(0.0); if (U.x < 1.0) return; O += vec4(1.0, 0.5, 0.2, 0.0); }';
+      const t = translateToStudio(src);
+      expect(t.code).toContain('{ gl_FragColor = vec4(O.rgb, 1.0); return; }');
+      expect(t.code).toMatch(/gl_FragColor = vec4\(O\.rgb, 1\.0\); \}\s*$/);
+      expect(() => parses(t.code)).not.toThrow();
+      const lowered = translateToStudio(src, { lowerReturns: true });
+      expect(lowered.code).toContain('gl_FragColor = vec4((mix(O, earlyOut0, earlyTook0)).rgb, 1.0);');
+      expect(() => parses(lowered.code)).not.toThrow();
+    });
+
+    it('alphaAlwaysOne: only a literal 1 in every whole write, and nothing else touching alpha', () => {
+      expect(alphaAlwaysOne('{ O = vec4(c, 1.0); }', 'O')).toBe(true);
+      expect(alphaAlwaysOne('{ O = vec4(c, 1); O.rgb *= 0.5; }', 'O')).toBe(true);
+      expect(alphaAlwaysOne('{ O = vec4(c, 0.0); }', 'O')).toBe(false);
+      expect(alphaAlwaysOne('{ O = vec4(c); }', 'O')).toBe(false);
+      expect(alphaAlwaysOne('{ O = vec4(c, 1.0) * k; }', 'O')).toBe(false);
+      expect(alphaAlwaysOne('{ O = vec4(c, 1.0); O *= 0.5; }', 'O')).toBe(false);
+      expect(alphaAlwaysOne('{ O = vec4(c, 1.0); O.a = f; }', 'O')).toBe(false);
+      expect(alphaAlwaysOne('{ O = vec4(c, 1.0); render(O, U); }', 'O')).toBe(false);
+      expect(alphaAlwaysOne('{ O.rgb = c; }', 'O')).toBe(false);
+    });
   });
 });
