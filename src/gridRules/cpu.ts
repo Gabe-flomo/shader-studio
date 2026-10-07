@@ -104,7 +104,10 @@ function blocks(s: GridShape, P: Record<string, unknown>, B: CpuBoard): CpuBoard
     if (s.wrap) { x = ((x % W) + W) % W; y = ((y % H) + H) % H; } else if (x < 0 || y < 0 || x >= W || y >= H) return -1;
     return Math.round(B.a[y * B.w + x]);
   };
-  for (let oy = par; oy < H + par; oy += 2) for (let ox = par; ox < W + par; ox += 2) {
+  // Odd steps shift the blocks by (1, 1). With walls the first block then starts at −1 (its outer half
+  // is outside), as the GLSL's does; wrapping, the block at W − 1 already covers column 0.
+  const first = s.wrap ? par : -par;
+  for (let oy = first; oy < H + par; oy += 2) for (let ox = first; ox < W + par; ox += 2) {
     // Corners: TL, TR, BL, BR (y up).
     const pos: Array<[number, number]> = [[ox, oy + 1], [ox + 1, oy + 1], [ox, oy], [ox + 1, oy]];
     const b = pos.map(([x, y]) => val(x, y));
