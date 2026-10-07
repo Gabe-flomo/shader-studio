@@ -10,6 +10,7 @@ import {
   DEFAULT_LOOK, MODIFIER_KINDS, SHAPES, SHAPE_BY_KIND, TONE_MODES, WARPS, WARP_BY_KIND, allShapes, autoStepScale, defaultSize, findItem, itemName, modifierSummary, opLabel, stepHints, walkItems,
   type GroupSpec, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type Vec3, type WarpSpec,
 } from '../../sceneBuilder/spec';
+import { randomShapeAction, randomiseThisAction } from './surpriseActions';
 import { addModifier, addShape, addWarp, duplicateItem, moveBy, moveItem, moveModifierTo, moveWarp, removeItem, removeWarp, ungroup } from '../../sceneBuilder/edit';
 import { GALLERY_SHAPES, type GalleryShape } from '../../sceneBuilder/thumbnails';
 import { ShapeGallery, ShapeThumb } from './ShapeGallery';
@@ -238,6 +239,7 @@ function Inspector({ item }: { item: SceneItem }) {
           <span style={{ fontSize: 11.5, color: tk.text.muted }}>{item.type === 'shape' ? SHAPE_BY_KIND[item.kind]?.label ?? 'custom' : `${opLabel(item)}${item.k > 0 ? ` · k ${item.k}` : ''} · ${item.children.length} item${item.children.length === 1 ? '' : 's'}`}</span>
         </span>
         {item.type === 'shape' && item.color && <span title="Its colour" style={{ width: 14, height: 14, borderRadius: 4, background: rgbCss(item.color), boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.18)' }} />}
+        <IconButton icon="dice" size="sm" label={isRoot ? 'Randomise this: a new look and camera (one undo step)' : 'Randomise this: new settings for it (one undo step)'} onClick={() => randomiseThisAction(item.id)} data-randomise-this />
         {!isRoot && <IconButton icon="copy" size="sm" label="Duplicate" onClick={() => { let id = ''; edit(d => { id = duplicateItem(d, item.id)?.id ?? ''; }); if (id) select(id); }} />}
         {!isRoot && item.type === 'group' && <IconButton icon="unlink" size="sm" label="Ungroup (its items take its place)" onClick={() => edit(d => ungroup(d, item.id))} />}
         {!isRoot && <IconButton icon="trash" size="sm" tone="danger" label="Remove" onClick={() => { edit(d => removeItem(d, item.id)); select(null); }} />}
@@ -271,6 +273,8 @@ export function ShapesTab() {
       <Card id="gallery" title="Add a shape" defaultOpen summary={`${GALLERY_SHAPES.length} shapes: click to add${NO_DRAG ? '' : ', or drag into the Scene tree'}`}>
         <BuilderNote>{NO_DRAG ? 'Tap a shape to add it beside the selection (into it, if it is a group).' : 'Click a shape to add it beside the selection (into it, if it is a group), or drag it onto a row of the Scene tree.'}</BuilderNote>
         <ShapeGallery onPick={add} />
+        <Button size="sm" icon="dice" style={{ alignSelf: 'flex-start' }} onClick={() => randomShapeAction()} data-random-shape
+          title="Add one random shape with a random size, place, turn and colour (one undo step)">Random shape</Button>
       </Card>
       {sel ? <Inspector item={sel} /> : shapes.length > 0 && <BuilderNote>Select a shape or a group in the Scene tree to edit it here.</BuilderNote>}
     </Pane>

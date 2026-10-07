@@ -7,6 +7,7 @@ import { useNodeGraphStore, undoManager } from '../store/useNodeGraphStore';
 import { toast } from '../components/ui/toastStore';
 import { applyRulesToGroup, backToRules, ensureBirthEmit, openRulesAsNodes, rulesNeedRegenerating } from './apply';
 import type { AgentRuleSet } from './spec';
+import type { AgentSurprise } from './surprise';
 import { setAgentsView, type AgentsView } from './outputs';
 import { openAgentRulesWindow } from '../builders/windows';
 
@@ -30,6 +31,40 @@ export function applyGroupRules(groupId: string, set: AgentRuleSet, label = 'Edi
   else if (birth.why) toast.info('Spawn a child needs a Trail', { message: birth.why });
   useNodeGraphStore.setState({ nodes });
   st.compile();
+}
+
+/**
+ * Surprise me (agentRules/surprise.ts): the group's rules, and the Trail field that feeds it
+ * (Half-life, Diffuse) and the Stops Palette that colours that trail, in one undo step.
+ */
+export function surpriseGroupRules(groupId: string, s: AgentSurprise, label = 'Surprise: agent rules'): boolean {
+  const st = useNodeGraphStore.getState();
+  const before = st.nodes;
+  const g = before.find(x => x.id === groupId);
+  if (!g) return false;
+  undoManager.push(before, { label });
+  last = { id: '', at: 0 };
+  // The Trail field the group's walkers deposit into (group → Deposit → Trail field), wired or not:
+  // a rule set that senses nothing has no Trail port, so the wire may be gone since an earlier surprise.
+  const reads = (x: { inputs: Record<string, { connection?: { nodeId: string } }> }, id: string) => Object.values(x.inputs).some(i => i.connection?.nodeId === id);
+  const deposits = before.filter(x => x.type === 'agentDeposit' && reads(x, groupId)).map(x => x.id);
+  const trailId = g.inputs.trail?.connection?.nodeId ?? before.find(x => x.type === 'trailField' && deposits.some(d => reads(x, d)))?.id;
+  const trail = trailId ? before.find(x => x.id === trailId && x.type === 'trailField') : undefined;
+  const paletteIds = new Set(trail ? before.filter(x => x.type === 'stopPalette' && reads(x, trail.id)).map(x => x.id) : []);
+  const nodes = before.map(x => {
+    if (x.id === groupId) {
+      const ng = applyRulesToGroup(x, s.set);
+      // The Trail port came back: wire it to the Trail field again.
+      if (trail && ng.inputs.trail && !ng.inputs.trail.connection) return { ...ng, inputs: { ...ng.inputs, trail: { ...ng.inputs.trail, connection: { nodeId: trail.id, outputKey: 'texture' } } } };
+      return ng;
+    }
+    if (trail && x.id === trail.id) return { ...x, params: { ...x.params, halfLife: s.trail.halfLife, diffuse: s.trail.diffuse } };
+    if (paletteIds.has(x.id)) return { ...x, params: { ...x.params, ...Object.fromEntries(s.palette.map((c, i) => [`color${i}`, c])) } };
+    return x;
+  });
+  useNodeGraphStore.setState({ nodes });
+  st.compile();
+  return true;
 }
 
 function replaceGroup(groupId: string, label: string, f: (g: Parameters<typeof backToRules>[0]) => Parameters<typeof backToRules>[0]): boolean {

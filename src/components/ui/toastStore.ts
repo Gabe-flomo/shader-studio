@@ -17,6 +17,8 @@ export interface Toast {
   /** Raw error text; the toast offers "Copy details". */
   details?: string;
   action?: ToastAction;
+  /** A second button beside the first (Surprise's Reroll · Undo). Not kept in the Activity log. */
+  secondary?: ToastAction;
   /** Stay until dismissed, like an error (for a notice that asks for something, like a reload). */
   sticky?: boolean;
   /** Its entry in the Activity log (History panel). */
@@ -44,7 +46,7 @@ export const useToastStore = create<ToastState>((set) => ({
   dismiss: (id) => set(s => ({ toasts: s.toasts.filter(t => t.id !== id) })),
 }));
 
-type ToastOptions = Pick<Toast, 'message' | 'details' | 'action' | 'sticky'>;
+type ToastOptions = Pick<Toast, 'message' | 'details' | 'action' | 'secondary' | 'sticky'>;
 
 /**
  * Transient notices for things that happen outside any open panel: an import that failed, a

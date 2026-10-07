@@ -59,11 +59,15 @@ function ToastCard({ toast }: { toast: Toast }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, color: tk.text.primary }}>{toast.title}</div>
         {toast.message && <div style={{ marginTop: 2 }}>{toast.message}</div>}
-        {(toast.action || toast.details) && (
+        {(toast.action || toast.secondary || toast.details) && (
           <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
             {toast.action && (
               <button type="button" style={{ ...btn, color: tk.accent.text }}
                 onClick={() => { toast.action?.onClick(); if (toast.logId) useActivityStore.getState().markActionUsed(toast.logId); dismiss(toast.id); }}>{toast.action.label}</button>
+            )}
+            {toast.secondary && (
+              <button type="button" style={{ ...btn, color: tk.text.secondary }}
+                onClick={() => { toast.secondary?.onClick(); dismiss(toast.id); }}>{toast.secondary.label}</button>
             )}
             {toast.details && (
               <button type="button" style={{ ...btn, color: tk.text.muted }}
