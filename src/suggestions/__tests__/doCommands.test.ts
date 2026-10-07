@@ -18,9 +18,10 @@ import { classify, clausesOf, didYouMean, execCommand, type CommandPlan } from '
 import { lex, readRef } from '../doRefs';
 import { scratchGraph } from '../doScratch';
 import { ACTIONS } from '../../lang/vocabulary';
-import { BUILDER_COMMANDS, COMMAND_VERBS, RECIPES, actionExamples, commandReference, commandsMarkdown, searchReference } from '../../lang/commands';
+import { BUILDER_COMMANDS, COMMAND_VERBS, RECIPES, actionExamples, commandReference, searchReference } from '../../lang/commands';
 import { readBuilderCommand } from '../../builders/doBuilders';
 import { CORPUS } from './doCommandsCorpus';
+import { fullCommandsMarkdown } from '../../lang/reference';
 import shippedDoc from '../../../docs/do-bar-commands.md?raw';
 
 const H = (nd: GraphNode) => estimateNodeHeight(nd);
@@ -367,11 +368,11 @@ describe('docs/do-bar-commands.md', () => {
   it('writes the doc when asked', async () => {
     if (!write) return;
     const fs = (await import(/* @vite-ignore */ `node:${'fs'}`)) as { writeFileSync: (f: URL, s: string) => void };
-    fs.writeFileSync(new URL('../../../docs/do-bar-commands.md', import.meta.url), commandsMarkdown());
+    fs.writeFileSync(new URL('../../../docs/do-bar-commands.md', import.meta.url), fullCommandsMarkdown());
   });
   it('is generated from the registry and up to date (npm run docs:do-bar)', () => {
     if (write) return;
-    expect(shippedDoc).toBe(commandsMarkdown());
+    expect(shippedDoc).toBe(fullCommandsMarkdown());
     for (const v of COMMAND_VERBS) expect(shippedDoc).toContain(`### ${v.words[0]}`);
     for (const b of BUILDER_COMMANDS) expect(shippedDoc).toContain(`### ${b.words[0]}`);
   });

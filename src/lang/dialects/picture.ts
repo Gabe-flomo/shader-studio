@@ -461,12 +461,12 @@ export function desugarPicture(clauses: PClause[]): string {
         out.push(`${!s.startsWith('create ') && clauses.slice(i + 1).some(x => x.t === 'ref' && (x.ref.r === 'type' || x.ref.r === 'label' || x.ref.r === 'picture')) ? 'create a ' : ''}${s}`);
         break;
       }
-      case 'step': out.push(sugarHead(cl, null)); break;
+      case 'step': out.push(...stepSugar(cl, null)); break;
       case 'ref': {
         const next = clauses[i + 1];
         const r = cl.ref;
         const target = r.r === 'picture' ? 'the picture' : r.r === 'these' ? 'these' : r.r === 'this' ? 'this' : r.r === 'it' ? 'it' : sugarRef(r);
-        if (next?.t === 'step') { out.push(sugarHead(next, target)); i++; break; }
+        if (next?.t === 'step') { out.push(...stepSugar(next, target)); i++; break; }
         if (next?.t === 'colour') { out.push(colourSugar(next, sugarRef(r))); i++; break; }
         out.push(`select ${sugarRef(r)}`);
         break;
@@ -520,6 +520,34 @@ export function desugarPicture(clauses: PClause[]): string {
     }
   }
   return out.join(', then ');
+}
+
+/** Steps whose settings the bar sets after the move: a Pass (§4.5) and fade's tail. */
+function stepSugar(cl: Extract<PClause, { t: 'step' }>, target: string | null): string[] {
+  if (cl.head === 'pass') {
+    const out = [`insert a pass after ${target ?? 'it'}`];
+    const PASS_KEY: Record<string, string> = { scale: 'scale', repeat: 'repeat', format: 'format', filter: 'filter', edges: 'edges', wrap: 'edges' };
+    for (const a of cl.args) {
+      if (!a.key) { if (a.value.k === 'str' || a.value.k === 'word') out.push(`rename it to "${a.value.v}"`); continue; }
+      const k = PASS_KEY[a.key.toLowerCase()];
+      if (!k) throw new Unsugarable(`pass has no setting ${a.key}`);
+      const v = a.value.k === 'num' ? fmtNum(a.value.v) : a.value.k === 'word' ? a.value.v.toLowerCase() : null;
+      if (v === null) throw new Unsugarable(`pass ${a.key}`);
+      out.push(`set the ${k === 'edges' ? 'edges' : k} of it to ${v}`);
+    }
+    return out;
+  }
+  if (cl.head === 'fade' && cl.args.length) {
+    const out = [`trails${target ? ` ${target}` : ''}`];
+    let pos = 0;
+    for (const a of cl.args) {
+      const key = a.key ? a.key.toLowerCase() : pos++ === 0 ? 'tail' : null;
+      if (!key || !['tail', 'clean'].includes(key) || a.value.k !== 'num') throw new Unsugarable('fade takes tail= (seconds) and clean=');
+      out.push(`set the ${key} of it to ${fmtNum(a.value.unit === 'ms' ? a.value.v / 1000 : a.value.v)}`);
+    }
+    return out;
+  }
+  return [sugarHead(cl, target)];
 }
 
 /** `colour by <driver> [palette=]` on a value. */

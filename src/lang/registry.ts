@@ -20,6 +20,7 @@ import { COMMAND_VERBS } from './commands';
 import { moveById, type MoveArg } from '../suggestions/moves';
 import { rangeFor, type RandSpec } from './random';
 import { COLOUR_NAMES } from './colours';
+import { ACTION_HEAD, EXPAND } from './expand';
 
 export type Dialect = 'picture' | 'scene' | 'grid' | 'agents' | 'pass' | 'edit';
 export type EntryKind = 'header' | 'maker' | 'step' | 'combine' | 'setting' | 'output' | 'verb' | 'condition' | 'action' | 'modifier';
@@ -65,14 +66,8 @@ export interface Entry {
 
 // ── Picture: shapes and steps ─────────────────────────────────────────────
 
-/** A picture step's canonical head for each Do… bar action (§6.2). */
-export const ACTION_HEAD: Readonly<Record<string, string>> = {
-  glow: 'glow', rings: 'rings', outline: 'outline', onion: 'onion', round: 'round', blend: 'smooth-union', 'mask-from': 'mask',
-  warp: 'warp', swirl: 'swirl', twist: 'twist', polar: 'polar', mirror: 'mirror', repeat: 'repeat', 'repeat-around': 'polar-repeat',
-  'zoom-rotate': 'zoom-rotate', 'code-here': 'custom', 'mix-with': 'mix', palette: 'palette', 'tone-map': 'tone-map', grade: 'grade',
-  brighten: 'brighten', grain: 'grain', 'blend-with': 'blend-mode', 'soft-edge': 'soft-edge', invert: 'invert', 'grow-mask': 'grow-mask',
-  'mix-two': 'mix-two', 'blur-texture': 'blur', trails: 'fade', flow: 'flow', remap: 'remap',
-};
+/** A picture step's canonical head for each Do… bar action (§6.2): lang/expand.ts, shared with the Code Explorer. */
+export { ACTION_HEAD };
 
 /** The moves an action can be, by what it lands on (doBar.ts resolveAction); the first is the usual one. */
 const ACTION_MOVES: Readonly<Record<string, string[]>> = {
@@ -149,7 +144,12 @@ function pictureSteps(): Entry[] {
     // Aliases: the bar's single words (phrases stay sugar), minus words that are other heads.
     const aliases = a.words.filter(w => !w.includes(' ') && w !== head && w !== 'noise');
     const words = [head, ...aliases];
-    if (a.id === 'trails') words.splice(1, 0, 'trails');
+    if (a.id === 'trails') {
+      words.splice(1, 0, 'trails');
+      // The Fade node's own settings (the move has none): how long a pixel takes to fade, and the clean-up.
+      params.push({ key: 'tail', type: 'time', primary: true, def: 1.5, label: 'Tail (s)', rand: { kind: 'num', lo: 0.3, hi: 4, log: true }, hint: 'seconds for a pixel left alone to fade to 1%' },
+        { key: 'clean', type: 'number', def: 0.2, label: 'Clean', rand: { kind: 'num', lo: 0, hi: 0.5 } });
+    }
     return {
       id: `picture:${a.id}`, kind: 'step', dialects: ['picture'], words: [...new Set(words)], params,
       summary: moves[0]?.label ?? a.id, hint: moves[0]?.why, examples: [], stage: STAGE_OF[a.id], move: moves[0]?.id,
@@ -187,6 +187,16 @@ function pictureExtras(): Entry[] {
       id: 'picture:repeat-around', kind: 'step', dialects: ['picture'], words: ['polar-repeat', 'repeat-around', 'petals', 'kaleidoscope'],
       params: [{ key: 'count', type: 'count', primary: true, def: 6, rand: MOVE_RAND['repeat-around.count'], label: 'Copies' }],
       summary: 'Repeat around: copies round the centre, like a flower (Angular Repeat).', examples: ['star · glow · polar-repeat 6'], stage: 'space', move: 'repeat-around',
+    },
+    {
+      id: 'pass:pass', kind: 'step', dialects: ['picture', 'pass'], words: ['pass', 'buffer'],
+      params: [
+        { key: 'scale', type: 'choice', options: ['1', '1/2', '1/4', '1/8', '1/16', '1/32'], hint: 'texture size: 1/2 and 1/4 make wide blurs cheap' },
+        { key: 'repeat', type: 'count', min: 1, max: 16, hint: 'draws a step several times a frame' },
+        { key: 'format', type: 'choice', options: ['half', 'byte'] }, { key: 'filter', type: 'choice', options: ['linear', 'nearest'] },
+        { key: 'edges', type: 'choice', options: ['clamp', 'repeat', 'mirror'] },
+      ],
+      summary: 'Draws it into a texture (a Pass) so the steps after it can read around: fade (trails), blur, glow, edges, flow.', examples: ['circle · glow · pass "trails" · fade 0.5s', 'noise · colour by it · pass scale=1/2 · blur 4'], stage: 'pass',
     },
     {
       id: 'picture:noise', kind: 'maker', dialects: ['picture'], words: ['noise', 'fbm', 'clouds'], params: [{ key: 'scale', type: 'number', rand: { kind: 'num', lo: 1.5, hi: 6 } }],
@@ -280,7 +290,11 @@ function sceneEntries(): Entry[] {
     ['camera', ['cam'], 'the orbit camera', ['dist', 'angle', 'elev', 'orbit', 'zoom', 'flatten', 'x', 'y', 'z'].map((k, i) => ({ key: k, type: 'number' as const, ...(i === 0 ? { primary: true } : {}), ...(k === 'dist' ? { rand: { kind: 'num' as const, lo: 3, hi: 6 } } : k === 'orbit' ? { rand: { kind: 'num' as const, lo: 0, hi: 15 } } : k === 'elev' ? { rand: { kind: 'num' as const, lo: 5, hi: 35 } } : {}) }))],
     ['quality', [], 'the march\'s steps and limits', ['steps', 'dist', 'step', 'jitter'].map(k => ({ key: k, type: 'number' as const }))],
   ];
-  for (const [w, aliases, summary, params] of settings) out.push({ id: `scene:${w}`, kind: 'setting', dialects: ['scene'], words: [w, ...aliases], params, summary, examples: [`sphere · ${w}`], stage: w === 'camera' ? 'camera' : 'lighting' });
+  const SETTING_EXAMPLES: Record<string, string> = {
+    sun: 'sphere · sun dir=(1,2,1)', sky: 'sphere · sky (0.5,0.6,0.9)', bounce: 'sphere · bounce (0.3,0.2,0.1)', shadows: 'sphere · shadows 16', ao: 'sphere · ao 0.06',
+    fog: 'sphere · fog 0.3', background: 'sphere · background navy', tone: 'sphere · tone agx', camera: 'sphere · camera dist=5 orbit=10', quality: 'sphere · quality steps=128',
+  };
+  for (const [w, aliases, summary, params] of settings) out.push({ id: `scene:${w}`, kind: 'setting', dialects: ['scene'], words: [w, ...aliases], params, summary, examples: [SETTING_EXAMPLES[w] ?? `sphere · ${w}`], stage: w === 'camera' ? 'camera' : 'lighting' });
   out.push({
     id: 'scene:output', kind: 'output', dialects: ['scene', 'edit'], words: ['output'], deprecated: { show: 'show in a recipe: write output.' },
     params: [{ key: 'show', type: 'choice', options: OUTPUTS.map(o => o.words[0]), primary: true }, { key: 'palette', type: 'choice', options: PALETTES.map(p => p.key) }],
@@ -367,6 +381,9 @@ function dedupe(entries: Entry[]): Entry[] {
   return out;
 }
 
+/** Each entry's GLSL words (lang/expand.ts): the Code Explorer finds its code by them. */
+const withExpand = (entries: Entry[]): Entry[] => entries.map(e => (EXPAND[e.words[0]] && !e.expand ? { ...e, expand: [...EXPAND[e.words[0]]] } : e));
+
 // ── The registry ──────────────────────────────────────────────────────────
 
 const extra: Entry[] = [];
@@ -382,7 +399,7 @@ let cacheLen = -1;
 /** Every entry. */
 export function registry(): Entry[] {
   if (!cache || cacheLen !== extra.length) {
-    cache = dedupe([...pictureShapes(), ...pictureExtras(), ...pictureSteps(), ...sceneEntries(), ...colourCombines(), ...editEntries(), ...extra]);
+    cache = withExpand(dedupe([...pictureShapes(), ...pictureExtras(), ...pictureSteps(), ...sceneEntries(), ...colourCombines(), ...editEntries(), ...extra]));
     cacheLen = extra.length;
   }
   return cache;

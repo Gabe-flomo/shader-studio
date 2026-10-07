@@ -1,6 +1,6 @@
 # Do… bar commands
 
-<!-- Generated from src/lang/commands.ts and src/lang/vocabulary.ts by `npm run docs:do-bar`. Don't edit by hand: a test fails when it is out of date. -->
+<!-- Generated from src/lang/commands.ts, src/lang/vocabulary.ts and src/lang/registry.ts (src/lang/reference.ts) by `npm run docs:do-bar`. Don't edit by hand: a test fails when it is out of date. -->
 
 The Do… bar (⌘K) reads a small command language: no AI, the same sentence always does the same thing.
 A sentence is one or more **clauses**; each starts with a **verb**, names **objects** and **references**, and takes **modifiers**.
@@ -25,11 +25,12 @@ The **builders** (the 3D Scene Builder, Grid Rules, Agent Rules) open from whole
 
 ### create
 
-Adds a shape (with its UV) or any node by name. Modifiers after it set its values; a value only a move has (falloff → Glow) adds that move. Leaves as "it": the new node (or the last move it made).
+Adds a shape (with its UV) or any node by name. Modifiers after it set its values; a value only a move has (falloff → Glow) adds that move. Leaves as "it": the new node (or the last move it made). Canonical: create <maker>.
 
 Words: `create`, `new`, `draw`, `make a`, `make an`, `add a`, `add an`, `place`
 
 ```
+create <maker>
 create <node> [with <param> <value>…] [at <place>]
 ```
 
@@ -46,11 +47,12 @@ Examples:
 
 ### connect
 
-Wires an output into an input. Without an input name it takes the first free input that fits; the type check runs first. Leaves as "it": the node that reads it.
+Wires an output into an input. Without an input name it takes the first free input that fits; the type check runs first. Leaves as "it": the node that reads it. Canonical: connect <ref> → <ref>[.<socket>].
 
 Words: `connect`, `wire`, `plug`, `link`, `feed`, `hook up`, `attach`
 
 ```
+connect <ref> → <ref>[.<socket>]
 connect <ref> to <ref> [<input>]
 connect <ref> to the <input> of <ref>
 plug <ref> into <ref>
@@ -70,11 +72,13 @@ Examples:
 
 ### disconnect
 
-Removes wires. "Disconnect X" removes the wires out of X (from the Output only, when X is the current output); "from Y" only those into Y; "the <input> of Y" clears one input. Leaves as "it": the node that was unplugged.
+Removes wires. "Disconnect X" removes the wires out of X (from the Output only, when X is the current output); "from Y" only those into Y; "the <input> of Y" clears one input. Leaves as "it": the node that was unplugged. Canonical: disconnect <ref> [from <ref>] · disconnect <ref>.<socket>.
 
 Words: `disconnect`, `unplug`, `unwire`, `unlink`, `detach`, `cut the wire from`
 
 ```
+disconnect <ref> [from <ref>]
+disconnect <ref>.<socket>
 disconnect <ref> [from <ref>]
 disconnect the <input> of <ref>
 ```
@@ -92,11 +96,12 @@ Examples:
 
 ### reconnect
 
-Moves a node's outgoing wires: unplugs everything it feeds, then connects it to the new node. Leaves as "it": the node that reads it.
+Moves a node's outgoing wires: unplugs everything it feeds, then connects it to the new node. Leaves as "it": the node that reads it. Canonical: reconnect <ref> → <ref>[.<socket>].
 
 Words: `reconnect`, `rewire`, `move the wire from`, `reroute`
 
 ```
+reconnect <ref> → <ref>[.<socket>]
 reconnect <ref> to <ref> [<input>]
 ```
 
@@ -112,11 +117,14 @@ Examples:
 
 ### insert
 
-Puts a new node on a wire: between two wired nodes, after a node (on every wire out of it) or before one (on its first wired input). Leaves as "it": the inserted node.
+Puts a new node on a wire: between two wired nodes, after a node (on every wire out of it) or before one (on its first wired input). Leaves as "it": the inserted node. Canonical: insert <maker> between <ref> and <ref> · insert <maker> after <ref> · insert <maker> before <ref>.
 
 Words: `insert`, `put`, `slot`, `splice`
 
 ```
+insert <maker> between <ref> and <ref>
+insert <maker> after <ref>
+insert <maker> before <ref>
 insert <node> between <ref> and <ref>
 insert <node> after <ref>
 insert <node> before <ref>
@@ -135,11 +143,17 @@ Examples:
 
 ### multiply
 
-Combines two values with a new node and puts the result where the first one (the base) went. "Add A to B" and "subtract A from B" use B as the base. Numbers work too ("multiply it by 2"). Leaves as "it": the new combining node.
+Combines two values with a new node and puts the result where the first one (the base) went. "Add A to B" and "subtract A from B" use B as the base. Numbers work too ("multiply it by 2"). Leaves as "it": the new combining node. Canonical: <ref> * <ref|number> · <ref> + <ref> · <ref> - <ref> · mix(<ref>, <ref>) by=<n> · screen(<ref>, <ref>) · union(<ref>, <ref>).
 
 Words: `multiply`, `times`, `add`, `subtract`, `divide`, `mix`, `blend`, `screen`, `overlay`, `union`, `merge`, `intersect`, `cut`
 
 ```
+<ref> * <ref|number>
+<ref> + <ref>
+<ref> - <ref>
+mix(<ref>, <ref>) by=<n>
+screen(<ref>, <ref>)
+union(<ref>, <ref>)
 multiply <ref> by <ref|number>
 add <ref> to <ref>
 subtract <ref> from <ref>
@@ -162,11 +176,12 @@ Examples:
 
 ### output
 
-Wires a node to the Output (adding an Output on the top level when there is none). Leaves as "it": the node shown.
+Wires a node to the Output (adding an Output on the top level when there is none). Leaves as "it": the node shown. Canonical: output [<ref>].
 
 Words: `output`, `show`, `display`, `send to the output`, `preview`
 
 ```
+output [<ref>]
 output <ref>
 show <ref>
 ```
@@ -182,11 +197,12 @@ Examples:
 
 ### replace
 
-Switches a node to another type in place, keeping its wires and settings (the card's Switch to). Refused when a wire would have nowhere to go, with the types that would work. Leaves as "it": the switched node.
+Switches a node to another type in place, keeping its wires and settings (the card's Switch to). Refused when a wire would have nowhere to go, with the types that would work. Leaves as "it": the switched node. Canonical: switch <ref> to <type> (the verb is switch).
 
 Words: `replace`, `switch`, `swap`, `turn`, `change`
 
 ```
+switch <ref> to <type>
 replace <ref> with <node>
 switch <ref> to <node>
 turn <ref> into <node>
@@ -206,11 +222,12 @@ Examples:
 
 ### delete
 
-Removes nodes and the wires into and out of them. Leaves as "it": nothing (the next "it" is the last thing before).
+Removes nodes and the wires into and out of them. Leaves as "it": nothing (the next "it" is the last thing before). Canonical: delete <ref>.
 
 Words: `delete`, `remove`, `erase`, `get rid of`, `drop`
 
 ```
+delete <ref>
 delete <ref>
 delete all <node>s
 ```
@@ -226,11 +243,12 @@ Examples:
 
 ### rename
 
-Gives a node a name of its own (its card label). Quote names with spaces. Leaves as "it": the renamed node.
+Gives a node a name of its own (its card label). Quote names with spaces. Leaves as "it": the renamed node. Canonical: rename <ref> "<name>".
 
 Words: `rename`, `call`, `name`, `label`
 
 ```
+rename <ref> "<name>"
 rename <ref> to "<name>"
 call <ref> "<name>"
 ```
@@ -247,11 +265,12 @@ Examples:
 
 ### duplicate
 
-Copies a node next to it, with the same settings and the same wires in (nothing reads the copy yet). Leaves as "it": the copy.
+Copies a node next to it, with the same settings and the same wires in (nothing reads the copy yet). Leaves as "it": the copy. Canonical: duplicate <ref>.
 
 Words: `duplicate`, `copy`, `clone`
 
 ```
+duplicate <ref>
 duplicate <ref>
 ```
 
@@ -266,11 +285,12 @@ Examples:
 
 ### set
 
-Sets a setting to a value: a number, a colour word, a choice by name, on or off. The setting is found by its name, its label or a vocabulary word (falloff, size, speed…). Leaves as "it": the node changed.
+Sets a setting to a value: a number, a colour word, a choice by name, on or off. The setting is found by its name, its label or a vocabulary word (falloff, size, speed…). Leaves as "it": the node changed. Canonical: set <ref> <key>=<value>….
 
 Words: `set`, `change`
 
 ```
+set <ref> <key>=<value>…
 set the <ref> <param> to <value>
 set <param> of <ref> to <value>
 set <ref>'s <param> to <value>
@@ -291,11 +311,13 @@ Examples:
 
 ### make
 
-Relative changes: bigger / smaller (its size), brighter / dimmer, faster / slower, softer / sharper; "increase X by 0.1"; double, halve. Leaves as "it": the node changed.
+Relative changes: bigger / smaller (its size), brighter / dimmer, faster / slower, softer / sharper; "increase X by 0.1"; double, halve. Leaves as "it": the node changed. Canonical: set <ref> <key>*=<factor> · set <ref> <key>+=<amount> (the verb is set).
 
 Words: `make`, `increase`, `raise`, `decrease`, `lower`, `reduce`, `double`, `halve`, `triple`
 
 ```
+set <ref> <key>*=<factor>
+set <ref> <key>+=<amount>
 make <ref> bigger|smaller|brighter|dimmer|faster|slower|softer|sharper
 increase <ref>'s <param> [by <number>]
 double the <param> of <ref>
@@ -314,11 +336,12 @@ Examples:
 
 ### group
 
-Puts nodes into a group (as Group selection does). Goes last in a sentence. Leaves as "it": the group.
+Puts nodes into a group (as Group selection does). Goes last in a sentence. Leaves as "it": the group. Canonical: group(<ref>, …) [name="<name>"].
 
 Words: `group`, `bundle`, `wrap up`
 
 ```
+group(<ref>, …) [name="<name>"]
 group <ref> [and <ref>…] [as "<name>"]
 ```
 
@@ -334,11 +357,12 @@ Examples:
 
 ### select
 
-Selects nodes (no change to the graph), so the next command, or the next "this", works on them. Leaves as "it": the selection.
+Selects nodes (no change to the graph), so the next command, or the next "this", works on them. Leaves as "it": the selection. Canonical: select <ref>.
 
 Words: `select`, `pick`, `find`, `highlight`
 
 ```
+select <ref>
 select <ref> [and <ref>…]
 select all <node>s
 ```
@@ -354,11 +378,12 @@ Examples:
 
 ### colour
 
-Colours a value with a palette. "By <driver>" picks what runs along the palette (the length of the space, the angle, time, noise, any node) and multiplies it by the value; without "by" the value itself drives it. Leaves as "it": the palette (or what multiplies it).
+Colours a value with a palette. "By <driver>" picks what runs along the palette (the length of the space, the angle, time, noise, any node) and multiplies it by the value; without "by" the value itself drives it. Leaves as "it": the palette (or what multiplies it). Canonical: colour by <driver> [palette=<name>].
 
 Words: `colour`, `color`, `paint`, `shade`
 
 ```
+colour by <driver> [palette=<name>]
 colour <ref> with a palette [by <driver>]
 colour <ref> by <driver>
 ```
@@ -1331,6 +1356,3378 @@ Edits an existing graph: the picture added to the noise, then shown.
 ```
 disconnect the current output, add it to the noise, and output the result
 ```
+
+## The language: every head word (canonical)
+
+### circle
+
+2D picture · maker. A circle (a distance, with a UV in front). Also: disc, disk, dot, blob.
+
+Words: `circle`, `disc`, `disk`, `dot`, `blob`
+
+```
+circle [r] color= at=
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Size · default 0.25 · random: 0.1–0.35 |
+| color | Colour · random: a harmonious colour |
+| at | Where · middle, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right · default middle · random: middle \| middle \| top-left \| top-right \| bottom-left \| bottom-right \| left \| right |
+
+Examples:
+
+- `circle · glow` — on an empty graph (just an Output)
+
+### sphere
+
+2D picture · maker. A sphere (a distance, with a UV in front). Also: ball, orb.
+
+Words: `sphere`, `ball`, `orb`
+
+```
+sphere [r] color= at=
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Size · default 0.25 · random: 0.1–0.35 |
+| color | Colour · random: a harmonious colour |
+| at | Where · middle, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right · default middle · random: middle \| middle \| top-left \| top-right \| bottom-left \| bottom-right \| left \| right |
+
+Examples:
+
+- `sphere · glow` — on an empty graph (just an Output)
+
+### box
+
+2D picture · maker. A box (a distance, with a UV in front). Also: square, rectangle, rect, block, roundbox.
+
+Words: `box`, `square`, `rectangle`, `rect`, `block`, `roundbox`
+
+```
+box [r] color= at=
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Size · default 0.25 · random: 0.1–0.35 |
+| color | Colour · random: a harmonious colour |
+| at | Where · middle, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right · default middle · random: middle \| middle \| top-left \| top-right \| bottom-left \| bottom-right \| left \| right |
+
+Examples:
+
+- `box · glow` — on an empty graph (just an Output)
+
+### cube
+
+2D picture · maker. A cube (a distance, with a UV in front).
+
+Words: `cube`
+
+```
+cube [r] color= at=
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Size · default 0.25 · random: 0.1–0.35 |
+| color | Colour · random: a harmonious colour |
+| at | Where · middle, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right · default middle · random: middle \| middle \| top-left \| top-right \| bottom-left \| bottom-right \| left \| right |
+
+Examples:
+
+- `cube · glow` — on an empty graph (just an Output)
+
+### ring
+
+2D picture · maker. A ring (a distance, with a UV in front). Also: hoop, annulus.
+
+Words: `ring`, `hoop`, `annulus`
+
+```
+ring [r] color= at=
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Size · default 0.25 · random: 0.1–0.35 |
+| color | Colour · random: a harmonious colour |
+| at | Where · middle, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right · default middle · random: middle \| middle \| top-left \| top-right \| bottom-left \| bottom-right \| left \| right |
+
+Examples:
+
+- `ring · glow` — on an empty graph (just an Output)
+
+### torus
+
+2D picture · maker. A torus (a distance, with a UV in front). Also: donut, doughnut.
+
+Words: `torus`, `donut`, `doughnut`
+
+```
+torus [r] color= at=
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Size · default 0.25 · random: 0.1–0.35 |
+| color | Colour · random: a harmonious colour |
+| at | Where · middle, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right · default middle · random: middle \| middle \| top-left \| top-right \| bottom-left \| bottom-right \| left \| right |
+
+Examples:
+
+- `torus · glow` — on an empty graph (just an Output)
+
+### heart
+
+2D picture · maker. A heart (a distance, with a UV in front).
+
+Words: `heart`
+
+```
+heart [r] color= at=
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Size · default 0.25 · random: 0.1–0.35 |
+| color | Colour · random: a harmonious colour |
+| at | Where · middle, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right · default middle · random: middle \| middle \| top-left \| top-right \| bottom-left \| bottom-right \| left \| right |
+
+Examples:
+
+- `heart · glow` — on an empty graph (just an Output)
+
+### triangle
+
+2D picture · maker. A triangle (a distance, with a UV in front). Also: tri, tri-prism.
+
+Words: `triangle`, `tri`, `tri-prism`
+
+```
+triangle [r] color= at=
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Size · default 0.25 · random: 0.1–0.35 |
+| color | Colour · random: a harmonious colour |
+| at | Where · middle, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right · default middle · random: middle \| middle \| top-left \| top-right \| bottom-left \| bottom-right \| left \| right |
+
+Examples:
+
+- `triangle · glow` — on an empty graph (just an Output)
+
+### hexagon
+
+2D picture · maker. A hexagon (a distance, with a UV in front). Also: hex, hex-prism.
+
+Words: `hexagon`, `hex`, `hex-prism`
+
+```
+hexagon [r] color= at=
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Size · default 0.25 · random: 0.1–0.35 |
+| color | Colour · random: a harmonious colour |
+| at | Where · middle, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right · default middle · random: middle \| middle \| top-left \| top-right \| bottom-left \| bottom-right \| left \| right |
+
+Examples:
+
+- `hexagon · glow` — on an empty graph (just an Output)
+
+### pentagon
+
+2D picture · maker. A pentagon (a distance, with a UV in front).
+
+Words: `pentagon`
+
+```
+pentagon [r] color= at=
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Size · default 0.25 · random: 0.1–0.35 |
+| color | Colour · random: a harmonious colour |
+| at | Where · middle, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right · default middle · random: middle \| middle \| top-left \| top-right \| bottom-left \| bottom-right \| left \| right |
+
+Examples:
+
+- `pentagon · glow` — on an empty graph (just an Output)
+
+### octagon
+
+2D picture · maker. A octagon (a distance, with a UV in front).
+
+Words: `octagon`
+
+```
+octagon [r] color= at=
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Size · default 0.25 · random: 0.1–0.35 |
+| color | Colour · random: a harmonious colour |
+| at | Where · middle, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right · default middle · random: middle \| middle \| top-left \| top-right \| bottom-left \| bottom-right \| left \| right |
+
+Examples:
+
+- `octagon · glow` — on an empty graph (just an Output)
+
+### star
+
+2D picture · maker. A star (a distance, with a UV in front). Also: pentagram.
+
+Words: `star`, `pentagram`
+
+```
+star [r] color= at=
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Size · default 0.25 · random: 0.1–0.35 |
+| color | Colour · random: a harmonious colour |
+| at | Where · middle, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right · default middle · random: middle \| middle \| top-left \| top-right \| bottom-left \| bottom-right \| left \| right |
+
+Examples:
+
+- `star · glow` — on an empty graph (just an Output)
+
+### cross
+
+2D picture · maker. A cross (a distance, with a UV in front). Also: plus.
+
+Words: `cross`, `plus`
+
+```
+cross [r] color= at=
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Size · default 0.25 · random: 0.1–0.35 |
+| color | Colour · random: a harmonious colour |
+| at | Where · middle, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right · default middle · random: middle \| middle \| top-left \| top-right \| bottom-left \| bottom-right \| left \| right |
+
+Examples:
+
+- `cross · glow` — on an empty graph (just an Output)
+
+### moon
+
+2D picture · maker. A moon (a distance, with a UV in front). Also: crescent.
+
+Words: `moon`, `crescent`
+
+```
+moon [r] color= at=
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Size · default 0.25 · random: 0.1–0.35 |
+| color | Colour · random: a harmonious colour |
+| at | Where · middle, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right · default middle · random: middle \| middle \| top-left \| top-right \| bottom-left \| bottom-right \| left \| right |
+
+Examples:
+
+- `moon · glow` — on an empty graph (just an Output)
+
+### diamond
+
+2D picture · maker. A diamond (a distance, with a UV in front). Also: rhombus.
+
+Words: `diamond`, `rhombus`
+
+```
+diamond [r] color= at=
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Size · default 0.25 · random: 0.1–0.35 |
+| color | Colour · random: a harmonious colour |
+| at | Where · middle, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right · default middle · random: middle \| middle \| top-left \| top-right \| bottom-left \| bottom-right \| left \| right |
+
+Examples:
+
+- `diamond · glow` — on an empty graph (just an Output)
+
+### ellipse
+
+2D picture · maker. A ellipse (a distance, with a UV in front). Also: oval, egg, ellipsoid.
+
+Words: `ellipse`, `oval`, `egg`, `ellipsoid`
+
+```
+ellipse [r] color= at=
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Size · default 0.25 · random: 0.1–0.35 |
+| color | Colour · random: a harmonious colour |
+| at | Where · middle, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right · default middle · random: middle \| middle \| top-left \| top-right \| bottom-left \| bottom-right \| left \| right |
+
+Examples:
+
+- `ellipse · glow` — on an empty graph (just an Output)
+
+### line
+
+2D picture · maker. A line (a distance, with a UV in front). Also: segment, stroke.
+
+Words: `line`, `segment`, `stroke`
+
+```
+line color= at=
+```
+
+| Slot | What |
+|---|---|
+| color | Colour · random: a harmonious colour |
+| at | Where · middle, top, bottom, left, right, top-left, top-right, bottom-left, bottom-right · default middle · random: middle \| middle \| top-left \| top-right \| bottom-left \| bottom-right \| left \| right |
+
+Examples:
+
+- `line · glow` — on an empty graph (just an Output)
+
+### colour
+
+2D picture · output. Colours it through a palette, by a driver: the length of the space, the angle, x, y, time, noise or a node. Also: color.
+
+Words: `colour`, `color`
+
+```
+colour [by] palette=
+```
+
+| Slot | What |
+|---|---|
+| by (bare) | length, angle, x, y, time, noise · random: length \| length \| angle \| x \| y \| time |
+| palette | sunset, rainbow, fire, forest, teal, warm, haze, psychedelic, mono, heat, ice, terrain · random: sunset \| rainbow \| fire \| forest \| teal \| warm \| haze \| psychedelic \| mono \| heat \| ice \| terrain |
+
+Examples:
+
+- `circle · glow · colour by length` — on an empty graph (just an Output)
+- `noise · colour by it` — on an empty graph (just an Output)
+
+### polar-repeat
+
+2D picture · step. Repeat around: copies round the centre, like a flower (Angular Repeat). Also: repeat-around, petals, kaleidoscope.
+
+Words: `polar-repeat`, `repeat-around`, `petals`, `kaleidoscope`
+
+```
+polar-repeat [count]
+```
+
+| Slot | What |
+|---|---|
+| count (bare) | Copies · default 6 · random: 3–12, whole |
+
+Examples:
+
+- `star · glow · polar-repeat 6` — on an empty graph (just an Output)
+
+### pass
+
+2D picture · step. Draws it into a texture (a Pass) so the steps after it can read around: fade (trails), blur, glow, edges, flow. Also: buffer.
+
+Words: `pass`, `buffer`
+
+```
+pass scale= repeat= format= filter= edges=
+```
+
+| Slot | What |
+|---|---|
+| scale | texture size: 1/2 and 1/4 make wide blurs cheap · 1, 1/2, 1/4, 1/8, 1/16, 1/32 |
+| repeat | draws a step several times a frame |
+| format | half, byte |
+| filter | linear, nearest |
+| edges | clamp, repeat, mirror |
+
+Examples:
+
+- `circle · glow · pass "trails" · fade 0.5s` — on an empty graph (just an Output)
+- `noise · colour by it · pass scale=1/2 · blur 4` — on an empty graph (just an Output)
+
+### noise
+
+2D picture · maker. Fractal noise (a number field). Also: fbm, clouds.
+
+Words: `noise`, `fbm`, `clouds`
+
+```
+noise scale=
+```
+
+| Slot | What |
+|---|---|
+| scale | random: 1.5–6 |
+
+Examples:
+
+- `noise · colour by it` — on an empty graph (just an Output)
+
+### voronoi
+
+2D picture · maker. Voronoi cells (a number field). Also: cells.
+
+Words: `voronoi`, `cells`
+
+```
+voronoi
+```
+
+Examples:
+
+- `voronoi · colour by it` — on an empty graph (just an Output)
+
+### glow
+
+2D picture · step. Glow Also: glowing, halo, neon, shine, bloom.
+
+Words: `glow`, `glowing`, `halo`, `neon`, `shine`, `bloom`
+
+```
+glow [falloff] color= amount=
+```
+
+| Slot | What |
+|---|---|
+| falloff (bare) | Falloff · default 10 · random: 4–20 (log) |
+| color | Colour · random: a harmonious colour |
+| amount | Intensity · default 1.2 · random: 0.6–2 |
+
+### rings
+
+2D picture · step. Rings Also: ripples, contours, isolines, concentric.
+
+Words: `rings`, `ripples`, `contours`, `isolines`, `concentric`
+
+```
+rings [count] speed= color=
+```
+
+| Slot | What |
+|---|---|
+| count (bare) | Rings · default 10 · random: 4–18, whole |
+| speed | Speed · default 0.4 · random: 0–0.8 |
+| color | Colour · random: a harmonious colour |
+
+### outline
+
+2D picture · step. Outline Also: outlined, border, edges.
+
+Words: `outline`, `outlined`, `border`, `edges`
+
+```
+outline [width] color=
+```
+
+| Slot | What |
+|---|---|
+| width (bare) | Width · default 0.02 · random: 0.004–0.03 (log) |
+| color | Colour · random: a harmonious colour |
+
+### onion
+
+2D picture · step. Onion Also: hollow, shell.
+
+Words: `onion`, `hollow`, `shell`
+
+```
+onion [thickness]
+```
+
+| Slot | What |
+|---|---|
+| thickness (bare) | Thickness · default 0.02 · random: 0.006–0.05 (log) |
+
+### round
+
+2D picture · step. Grow / round Also: rounded, grow, bigger, fatten, inflate, thicken.
+
+Words: `round`, `rounded`, `grow`, `bigger`, `fatten`, `inflate`, `thicken`
+
+```
+round [amount]
+```
+
+| Slot | What |
+|---|---|
+| amount (bare) | Amount · default 0.03 · random: 0.01–0.08 |
+
+### smooth-union
+
+2D picture · step. Smooth blend Also: blend, melt, merge, smin, combine, join.
+
+Words: `smooth-union`, `blend`, `melt`, `merge`, `smin`, `combine`, `join`
+
+```
+smooth-union [k] shape=
+```
+
+| Slot | What |
+|---|---|
+| k (bare) | Smoothness · default 0.15 · random: 0.05–0.3 |
+| shape | Other shape · default circle · random: circle \| box |
+
+### mask
+
+2D picture · step. Mask from it Also: cutout, stencil.
+
+Words: `mask`, `cutout`, `stencil`
+
+```
+mask [softness]
+```
+
+| Slot | What |
+|---|---|
+| softness (bare) | Softness · default 0.01 · random: 0.004–0.06 (log) |
+
+### warp
+
+2D picture · step. Warp (noise) Also: distort, wobble, noisy, organic, marble.
+
+Words: `warp`, `distort`, `wobble`, `noisy`, `organic`, `marble`
+
+```
+warp [amount]
+```
+
+| Slot | What |
+|---|---|
+| amount (bare) | Strength · default 0.4 · random: 0.2–1.2 |
+
+### swirl
+
+2D picture · step. Swirl Also: vortex, whirl, spin.
+
+Words: `swirl`, `vortex`, `whirl`, `spin`
+
+```
+swirl [amount]
+```
+
+| Slot | What |
+|---|---|
+| amount (bare) | Strength · default 2 · random: 0.8–4 |
+
+### twist
+
+2D picture · step. Twist Also: twisted, spiral.
+
+Words: `twist`, `twisted`, `spiral`
+
+```
+twist [amount]
+```
+
+| Slot | What |
+|---|---|
+| amount (bare) | Amount · default 3 · random: 0.5–5 |
+
+### polar
+
+2D picture · step. Polar Also: radial.
+
+Words: `polar`, `radial`
+
+```
+polar [twist]
+```
+
+| Slot | What |
+|---|---|
+| twist (bare) | Twist · default 0 · random: 0–2 |
+
+### mirror
+
+2D picture · step. Mirror Also: mirrored, symmetric, symmetry, reflect, flip.
+
+Words: `mirror`, `mirrored`, `symmetric`, `symmetry`, `reflect`, `flip`
+
+```
+mirror axis=
+```
+
+| Slot | What |
+|---|---|
+| axis | Axis · default x · random: x \| y \| both |
+
+### repeat
+
+2D picture · step. Repeat Also: tile, tiles, tiled, copies, pattern.
+
+Words: `repeat`, `tile`, `tiles`, `tiled`, `copies`, `pattern`
+
+```
+repeat [count]
+```
+
+| Slot | What |
+|---|---|
+| count (bare) | Tiles across · default 4 · random: 2–7, whole |
+
+### zoom-rotate
+
+2D picture · step. Zoom / rotate Also: zoom, scale, rotate, turn, tilt, magnify.
+
+Words: `zoom-rotate`, `zoom`, `scale`, `rotate`, `turn`, `tilt`, `magnify`
+
+```
+zoom-rotate [zoom] angle=
+```
+
+| Slot | What |
+|---|---|
+| zoom (bare) | Zoom · default 1.5 · random: 0.6–2.5 (log) |
+| angle | Angle (rad) · default 0.4 · random: -1.2–1.2 |
+
+### custom
+
+2D picture · step. Custom code here Also: code, expression.
+
+Words: `custom`, `code`, `expression`
+
+```
+custom
+```
+
+### mix
+
+2D picture · step. Mix with… Also: mixed, tint, crossfade.
+
+Words: `mix`, `mixed`, `tint`, `crossfade`
+
+```
+mix color= [amount]
+```
+
+| Slot | What |
+|---|---|
+| color | Colour · random: a harmonious colour |
+| amount (bare) | Amount · default 0.5 · random: 0.2–0.7 |
+
+### palette
+
+2D picture · step. Palette Also: colorize, colourise, colourize, rainbow, recolour, recolor.
+
+Words: `palette`, `colorize`, `colourise`, `colourize`, `rainbow`, `recolour`, `recolor`
+
+```
+palette
+```
+
+### tone-map
+
+2D picture · step. Tone map Also: tonemap, aces, unclip.
+
+Words: `tone-map`, `tonemap`, `aces`, `unclip`
+
+```
+tone-map
+```
+
+### grade
+
+2D picture · step. Grade Also: look.
+
+Words: `grade`, `look`
+
+```
+grade
+```
+
+### brighten
+
+2D picture · step. Brighter Also: brighter, lighten, lift, exposure.
+
+Words: `brighten`, `brighter`, `lighten`, `lift`, `exposure`
+
+```
+brighten [amount]
+```
+
+| Slot | What |
+|---|---|
+| amount (bare) | Brightness · default 0.15 · random: 0.05–0.35 |
+
+### grain
+
+2D picture · step. Grain Also: dither, grainy.
+
+Words: `grain`, `dither`, `grainy`
+
+```
+grain [amount]
+```
+
+| Slot | What |
+|---|---|
+| amount (bare) | Amount · default 0.05 · random: 0.02–0.12 |
+
+### blend-mode
+
+2D picture · step. Blend Also: screen, overlay, layer.
+
+Words: `blend-mode`, `screen`, `overlay`, `layer`
+
+```
+blend-mode mode=
+```
+
+| Slot | What |
+|---|---|
+| mode | Mode · default screen · random: screen \| overlay \| multiply \| add \| softlight |
+
+### soft-edge
+
+2D picture · step. Soft edge Also: soften, soft, feather, antialias.
+
+Words: `soft-edge`, `soften`, `soft`, `feather`, `antialias`
+
+```
+soft-edge [amount]
+```
+
+| Slot | What |
+|---|---|
+| amount (bare) | Softness · default 0.2 · random: 0.05–0.4 |
+
+### invert
+
+2D picture · step. Invert Also: inverse, negate.
+
+Words: `invert`, `inverse`, `negate`
+
+```
+invert
+```
+
+### grow-mask
+
+2D picture · step. Grow / shrink Also: shrink, erode, dilate.
+
+Words: `grow-mask`, `shrink`, `erode`, `dilate`
+
+```
+grow-mask [amount]
+```
+
+| Slot | What |
+|---|---|
+| amount (bare) | Grow by · default 0.2 · random: -0.3–0.3 |
+
+### mix-two
+
+2D picture · step. Mix two pictures
+
+Words: `mix-two`
+
+```
+mix-two
+```
+
+### blur
+
+2D picture · step. Blur Also: blurry, defocus.
+
+Words: `blur`, `blurry`, `defocus`
+
+```
+blur [amount]
+```
+
+| Slot | What |
+|---|---|
+| amount (bare) | Radius (px) · default 8 · random: 2–16 (log) |
+
+### fade
+
+2D picture · step. Trails Also: trails, trail, feedback, echo, smear.
+
+Words: `fade`, `trails`, `trail`, `feedback`, `echo`, `smear`
+
+```
+fade [tail] clean=
+```
+
+| Slot | What |
+|---|---|
+| tail (bare) | Tail (s) · seconds for a pixel left alone to fade to 1% · default 1.5 · random: 0.3–4 (log) |
+| clean | Clean · default 0.2 · random: 0–0.5 |
+
+### flow
+
+2D picture · step. Flow Also: stream, smudge.
+
+Words: `flow`, `stream`, `smudge`
+
+```
+flow
+```
+
+### remap
+
+2D picture · step. Remap Also: normalize, normalise, rescale.
+
+Words: `remap`, `normalize`, `normalise`, `rescale`
+
+```
+remap [inMin] inMax=
+```
+
+| Slot | What |
+|---|---|
+| inMin (bare) | From min · default 0 · random: -1–1 |
+| inMax | From max · default 1 · random: -1–1 |
+
+### surface
+
+3D scene · header. Render mode: lit surfaces with shadows. Also: lit, solid.
+
+Words: `surface`, `lit`, `solid`
+
+```
+surface
+```
+
+Examples:
+
+- `surface · sphere · plane y=-1` — on an empty graph (just an Output)
+
+### volumetric
+
+3D scene · header. Render mode: see-through glowing gas. Also: volume, glowing. Old words (still read, with a hint): glow.
+
+Words: `volumetric`, `volume`, `glowing`
+
+```
+volumetric density= falloff= shell= exposure= tint=
+```
+
+| Slot | What |
+|---|---|
+| density | number |
+| falloff | number |
+| shell | number |
+| exposure | number |
+| tint | colour |
+
+Examples:
+
+- `volumetric · torus` — on an empty graph (just an Output)
+
+### glass
+
+3D scene · header. Render mode: refracting glass. Also: glassy.
+
+Words: `glass`, `glassy`
+
+```
+glass ior= dispersion= tint=
+```
+
+| Slot | What |
+|---|---|
+| ior | random: 1.2–1.7 |
+| dispersion | number |
+| tint | colour |
+
+Examples:
+
+- `glass · sphere glass` — on an empty graph (just an Output)
+
+### gi
+
+3D scene · header. Render mode: one bounce of light. Also: gi-lit, global.
+
+Words: `gi`, `gi-lit`, `global`
+
+```
+gi bounce= metal= rough= spec=
+```
+
+| Slot | What |
+|---|---|
+| bounce | number |
+| metal | number |
+| rough | number |
+| spec | number |
+
+Examples:
+
+- `gi · torus` — on an empty graph (just an Output)
+
+### sphere
+
+3D scene · maker. Sphere: A ball. Also: ball, orb.
+
+Words: `sphere`, `ball`, `orb`
+
+```
+sphere [r] at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Radius · default 0.5 · random: 0.25–0.8 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `sphere` — on an empty graph (just an Output)
+
+### box
+
+3D scene · maker. Box: A box; Round softens its edges. Also: cube, rounded-box, roundbox.
+
+Words: `box`, `cube`, `rounded-box`, `roundbox`
+
+```
+box [size] round= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| size (bare) | Size (half) · Half its width, height and depth. · random: (0.25…0.8)×3 |
+| round | Round · Above 0 it becomes a Rounded Box with edges this round. · default 0 · random: 0–0.16666666666666666 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `box` — on an empty graph (just an Output)
+
+### torus
+
+3D scene · maker. Torus: A ring lying flat. Also: donut, ring.
+
+Words: `torus`, `donut`, `ring`
+
+```
+torus [R] r= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| R (bare) | Ring radius · default 0.5 · random: 0.25–0.8 |
+| r | Tube radius · default 0.2 · random: 0.1–0.32000000000000006 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `torus` — on an empty graph (just an Output)
+
+### cone
+
+3D scene · maker. Cone: A pointed cone, tip at the top.
+
+Words: `cone`
+
+```
+cone [angle] h= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| angle (bare) | Angle · default 22.92 · random: 11.46–36.672000000000004 |
+| h | Height · default 1 · random: 0.5–1.6 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `cone` — on an empty graph (just an Output)
+
+### capped-cone
+
+3D scene · maker. Capped cone: A cone with its tip cut off. Also: frustum.
+
+Words: `capped-cone`, `frustum`
+
+```
+capped-cone [h] r1= r2= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| h (bare) | Height · default 0.5 · random: 0.25–0.8 |
+| r1 | Bottom radius · default 0.4 · random: 0.2–0.6400000000000001 |
+| r2 | Top radius · default 0.1 · random: 0.05–0.16000000000000003 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `capped-cone` — on an empty graph (just an Output)
+
+### cylinder
+
+3D scene · maker. Cylinder: An upright cylinder; Round softens its rims. Also: pillar, column, rounded-cylinder.
+
+Words: `cylinder`, `pillar`, `column`, `rounded-cylinder`
+
+```
+cylinder [r] h= round= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Radius · default 0.3 · random: 0.15–0.48 |
+| h | Height (half) · default 0.5 · random: 0.25–0.8 |
+| round | Round · default 0 · random: 0–0.08333333333333333 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `cylinder` — on an empty graph (just an Output)
+
+### capsule
+
+3D scene · maker. Capsule: An upright pill. Also: pill.
+
+Words: `capsule`, `pill`
+
+```
+capsule [h] r= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| h (bare) | Height · default 0.6 · random: 0.3–0.96 |
+| r | Radius · default 0.2 · random: 0.1–0.32000000000000006 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `capsule` — on an empty graph (just an Output)
+
+### plane
+
+3D scene · maker. Plane: An endless floor. Also: floor, ground.
+
+Words: `plane`, `floor`, `ground`
+
+```
+plane [y] at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| y (bare) | Height · default -0.75 · random: -2.416666666666667–0.9166666666666667 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `plane` — on an empty graph (just an Output)
+
+### octahedron
+
+3D scene · maker. Octahedron: Two pyramids base to base. Also: diamond.
+
+Words: `octahedron`, `diamond`
+
+```
+octahedron [s] at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| s (bare) | Size · default 0.5 · random: 0.25–0.8 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `octahedron` — on an empty graph (just an Output)
+
+### pyramid
+
+3D scene · maker. Pyramid: A square pyramid.
+
+Words: `pyramid`
+
+```
+pyramid [h] at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| h (bare) | Height · default 0.8 · random: 0.4–1.2800000000000002 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `pyramid` — on an empty graph (just an Output)
+
+### ellipsoid
+
+3D scene · maker. Ellipsoid: A squashed ball. Also: egg.
+
+Words: `ellipsoid`, `egg`
+
+```
+ellipsoid [size] at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| size (bare) | Radii · random: (0.3…0.96)×3 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `ellipsoid` — on an empty graph (just an Output)
+
+### hex-prism
+
+3D scene · maker. Hex prism: A six-sided column. Also: hexagon.
+
+Words: `hex-prism`, `hexagon`
+
+```
+hex-prism [r] h= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Radius · default 0.4 · random: 0.2–0.6400000000000001 |
+| h | Height · default 0.2 · random: 0.1–0.32000000000000006 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `hex-prism` — on an empty graph (just an Output)
+
+### tri-prism
+
+3D scene · maker. Tri prism: A three-sided column. Also: triangle.
+
+Words: `tri-prism`, `triangle`
+
+```
+tri-prism [r] h= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Radius · default 0.4 · random: 0.2–0.6400000000000001 |
+| h | Height · default 0.2 · random: 0.1–0.32000000000000006 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `tri-prism` — on an empty graph (just an Output)
+
+### link
+
+3D scene · maker. Chain link: One link of a chain. Also: chain.
+
+Words: `link`, `chain`
+
+```
+link [len] R= r= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| len (bare) | Length · default 0.3 · random: 0.15–0.48 |
+| R | Loop radius · default 0.25 · random: 0.125–0.4 |
+| r | Wire radius · default 0.08 · random: 0.04–0.128 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `link` — on an empty graph (just an Output)
+
+### box-frame
+
+3D scene · maker. Box frame: The twelve edges of a box. Also: frame, wireframe.
+
+Words: `box-frame`, `frame`, `wireframe`
+
+```
+box-frame [size] t= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| size (bare) | Size (half) · random: (0.2…0.6400000000000001)×3 |
+| t | Thickness · default 0.05 · random: 0.025–0.08000000000000002 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `box-frame` — on an empty graph (just an Output)
+
+### capped-torus
+
+3D scene · maker. Capped torus: Part of a ring. Also: arc.
+
+Words: `capped-torus`, `arc`
+
+```
+capped-torus [R] r= angle= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| R (bare) | Ring radius · default 0.5 · random: 0.25–0.8 |
+| r | Tube radius · default 0.1 · random: 0.05–0.16000000000000003 |
+| angle | Opening · default 68.75 · random: 34.375–110 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `capped-torus` — on an empty graph (just an Output)
+
+### solid-angle
+
+3D scene · maker. Solid angle: A ball cut to a cone: an ice-cream scoop. Also: wedge.
+
+Words: `solid-angle`, `wedge`
+
+```
+solid-angle [r] angle= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Radius · default 0.6 · random: 0.3–0.96 |
+| angle | Angle · default 57.3 · random: 28.65–91.68 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `solid-angle` — on an empty graph (just an Output)
+
+### cross
+
+3D scene · maker. Cross: Three endless bars crossing: the Menger cutter. Also: plus.
+
+Words: `cross`, `plus`
+
+```
+cross [s] at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| s (bare) | Bar size · default 0.3 · random: 0.15–0.48 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `cross` — on an empty graph (just an Output)
+
+### gyroid
+
+3D scene · maker. Gyroid: A curving lattice that fills space, cut to a ball.
+
+Words: `gyroid`
+
+```
+gyroid [freq] t= ball= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| freq (bare) | Frequency · default 3.5 · random: 1.75–5.6000000000000005 |
+| t | Thickness · default 0.3 · random: 0.15–0.48 |
+| ball | Ball radius · The ball the lattice is cut to. 0 fills all of space. · default 1.1 · random: 0.55–1.7600000000000002 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `gyroid` — on an empty graph (just an Output)
+
+### schwarz-p
+
+3D scene · maker. Schwarz-P: A lattice of round chambers, cut to a ball. Also: schwarz.
+
+Words: `schwarz-p`, `schwarz`
+
+```
+schwarz-p [freq] t= ball= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| freq (bare) | Frequency · default 3.5 · random: 1.75–5.6000000000000005 |
+| t | Thickness · default 0.3 · random: 0.15–0.48 |
+| ball | Ball radius · default 1.1 · random: 0.55–1.7600000000000002 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `schwarz-p` — on an empty graph (just an Output)
+
+### union( )
+
+2D picture · combine. join: the nearer surface wins Also: add, combine. Old words (still read, with a hint): group.
+
+Words: `union`, `add`, `combine`
+
+```
+union(a, b) name=
+```
+
+| Slot | What |
+|---|---|
+| name | name |
+
+Examples:
+
+- `union(sphere, box)` — on an empty graph (just an Output)
+
+### smooth-union( )
+
+2D picture · combine. melt together over k Also: blend, merge, smooth.
+
+Words: `smooth-union`, `blend`, `merge`, `smooth`
+
+```
+smooth-union(a, b) [k] name=
+```
+
+| Slot | What |
+|---|---|
+| k (bare) | default 0.3 · random: 0.1–0.5 |
+| name | name |
+
+Examples:
+
+- `smooth-union(sphere, box)` — on an empty graph (just an Output)
+
+### subtract( )
+
+2D picture · combine. cut the rest out of the first Also: cut, difference, minus.
+
+Words: `subtract`, `cut`, `difference`, `minus`
+
+```
+subtract(a, b) name=
+```
+
+| Slot | What |
+|---|---|
+| name | name |
+
+Examples:
+
+- `subtract(sphere, box)` — on an empty graph (just an Output)
+
+### smooth-subtract( )
+
+2D picture · combine. a softened cut Also: smooth-cut.
+
+Words: `smooth-subtract`, `smooth-cut`
+
+```
+smooth-subtract(a, b) [k] name=
+```
+
+| Slot | What |
+|---|---|
+| k (bare) | default 0.3 · random: 0.1–0.5 |
+| name | name |
+
+Examples:
+
+- `smooth-subtract(sphere, box)` — on an empty graph (just an Output)
+
+### intersect( )
+
+2D picture · combine. only where all overlap Also: intersection, both.
+
+Words: `intersect`, `intersection`, `both`
+
+```
+intersect(a, b) name=
+```
+
+| Slot | What |
+|---|---|
+| name | name |
+
+Examples:
+
+- `intersect(sphere, box)` — on an empty graph (just an Output)
+
+### smooth-intersect( )
+
+2D picture · combine. a rounded overlap
+
+Words: `smooth-intersect`
+
+```
+smooth-intersect(a, b) [k] name=
+```
+
+| Slot | What |
+|---|---|
+| k (bare) | default 0.3 · random: 0.1–0.5 |
+| name | name |
+
+Examples:
+
+- `smooth-intersect(sphere, box)` — on an empty graph (just an Output)
+
+### move
+
+3D scene · step. Move: Shifts what follows. Also: translate, offset.
+
+Words: `move`, `translate`, `offset`
+
+```
+move [by]
+```
+
+| Slot | What |
+|---|---|
+| by (bare) | By · random: (-3.3333333333333335…3.3333333333333335)×3 |
+
+Examples:
+
+- `sphere · move` — on an empty graph (just an Output)
+
+### turn
+
+3D scene · step. Turn: Turns what follows about one axis.
+
+Words: `turn`
+
+```
+turn axis= [angle]
+```
+
+| Slot | What |
+|---|---|
+| axis | x, y, z |
+| angle (bare) | Angle · default 0 · random: -120–120 |
+
+Examples:
+
+- `sphere · turn` — on an empty graph (just an Output)
+
+### rotate
+
+3D scene · step. Rotate: Turns what follows about X, then Y, then Z (degrees), like a shape's own Rotation. Also: rotation.
+
+Words: `rotate`, `rotation`
+
+```
+rotate [by]
+```
+
+| Slot | What |
+|---|---|
+| by (bare) | Degrees · About X, then Y, then Z. · random: (-60…60)×3 |
+
+Examples:
+
+- `sphere · rotate` — on an empty graph (just an Output)
+
+### scale
+
+3D scene · step. Scale: Makes what follows bigger (above 1) or smaller, keeping distances exact. Also: resize, grow.
+
+Words: `scale`, `resize`, `grow`
+
+```
+scale [s]
+```
+
+| Slot | What |
+|---|---|
+| s (bare) | Factor · default 1.5 · random: 0.75–2.4000000000000004 |
+
+Examples:
+
+- `sphere · scale` — on an empty graph (just an Output)
+
+### repeat
+
+3D scene · step. Repeat: Endless copies, one per cell. Keep each copy inside its cell. Also: tile, grid.
+
+Words: `repeat`, `tile`, `grid`
+
+```
+repeat [cell]
+```
+
+| Slot | What |
+|---|---|
+| cell (bare) | Cell size · random: (1…3.2)×3 |
+
+Examples:
+
+- `sphere · repeat` — on an empty graph (just an Output)
+
+### mirror-repeat
+
+3D scene · step. Mirrored repeat: Endless copies, every other one flipped, so neighbours meet seamlessly. Also: mirrored-repeat, flip-repeat.
+
+Words: `mirror-repeat`, `mirrored-repeat`, `flip-repeat`
+
+```
+mirror-repeat [cell]
+```
+
+| Slot | What |
+|---|---|
+| cell (bare) | Cell size · random: (1…3.2)×3 |
+
+Examples:
+
+- `sphere · mirror-repeat` — on an empty graph (just an Output)
+
+### limited-repeat
+
+3D scene · step. Limited repeat: A few copies each way. Also: repeat-n, array.
+
+Words: `limited-repeat`, `repeat-n`, `array`
+
+```
+limited-repeat [cell] count=
+```
+
+| Slot | What |
+|---|---|
+| cell (bare) | Cell size · random: (0.5…1.6)×3 |
+| count | Copies each way · random: (1…3.2)×3 |
+
+Examples:
+
+- `sphere · limited-repeat` — on an empty graph (just an Output)
+
+### mirror
+
+3D scene · step. Mirror: One half of space mirrored onto the other, on the chosen axes. Also: symmetry, abs.
+
+Words: `mirror`, `symmetry`, `abs`
+
+```
+mirror axes=
+```
+
+| Slot | What |
+|---|---|
+| axes | x, y, z, xy, xz, yz, xyz |
+
+Examples:
+
+- `sphere · mirror` — on an empty graph (just an Output)
+
+### fold
+
+3D scene · step. Fold: Mirror with an offset: folds space along planes, the move fractals repeat. Also: mirror-fold.
+
+Words: `fold`, `mirror-fold`
+
+```
+fold axes= [offset]
+```
+
+| Slot | What |
+|---|---|
+| axes | x, y, z, xy, xz, yz, xyz |
+| offset (bare) | Offset · random: (-0.6666666666666666…0.6666666666666666)×3 |
+
+Examples:
+
+- `sphere · fold` — on an empty graph (just an Output)
+
+### polar-repeat
+
+3D scene · step. Polar repeat: Copies round an axis, like slices of a cake. Also: radial, around, polar.
+
+Words: `polar-repeat`, `radial`, `around`, `polar`
+
+```
+polar-repeat axis= [count]
+```
+
+| Slot | What |
+|---|---|
+| axis | y, x, z |
+| count (bare) | Copies · default 6 · random: 3–9.600000000000001 |
+
+Examples:
+
+- `sphere · polar-repeat` — on an empty graph (just an Output)
+
+### kaleido
+
+3D scene · step. Kaleidoscope: Repeated mirror folds with the symmetry of a solid. Also: kaleidoscope.
+
+Words: `kaleido`, `kaleidoscope`
+
+```
+kaleido [n] sym=
+```
+
+| Slot | What |
+|---|---|
+| n (bare) | Folds · default 3 · random: 1.5–4.800000000000001 |
+| sym | oct, tet, icos |
+
+Examples:
+
+- `sphere · kaleido` — on an empty graph (just an Output)
+
+### twist
+
+3D scene · step. Twist: Turns space round the up axis more the higher it goes.
+
+Words: `twist`
+
+```
+twist [k]
+```
+
+| Slot | What |
+|---|---|
+| k (bare) | Amount · default 2 · random: 1–3.2 |
+
+Examples:
+
+- `sphere · twist` — on an empty graph (just an Output)
+
+### bend
+
+3D scene · step. Bend: Curves space along X. Also: curve.
+
+Words: `bend`, `curve`
+
+```
+bend [k]
+```
+
+| Slot | What |
+|---|---|
+| k (bare) | Amount · default 0.5 · random: 0.25–0.8 |
+
+Examples:
+
+- `sphere · bend` — on an empty graph (just an Output)
+
+### sine
+
+3D scene · step. Sine warp: Shifts one axis by a sine of another. Also: wave, sin, sine-warp.
+
+Words: `sine`, `wave`, `sin`, `sine-warp`
+
+```
+sine axis= [amp] freq= from=
+```
+
+| Slot | What |
+|---|---|
+| axis | x, y, z |
+| amp (bare) | Amplitude · default 0.1 · random: 0.05–0.16000000000000003 |
+| freq | Frequency · default 2 · random: 1–3.2 |
+| from | x, y, z |
+
+Examples:
+
+- `sphere · sine` — on an empty graph (just an Output)
+
+### warp
+
+3D scene · step. Noise warp: Pushes space about with smooth noise: lumpy, organic shapes. Also: domain-warp. Old words (still read, with a hint): noise.
+
+Words: `warp`, `domain-warp`
+
+```
+warp [amt] scale= octaves=
+```
+
+| Slot | What |
+|---|---|
+| amt (bare) | Strength · default 0.3 · random: 0.15–0.48 |
+| scale | Scale · default 1 · random: 0.5–1.6 |
+| octaves | Octaves · default 3 · random: 1.5–4.800000000000001 |
+
+Examples:
+
+- `sphere · warp` — on an empty graph (just an Output)
+
+### displace
+
+3D scene · step. Displace: Bumps on the surface: adds a 3D sine pattern to the distance. Also: bumps, ripple.
+
+Words: `displace`, `bumps`, `ripple`
+
+```
+displace [amp] freq=
+```
+
+| Slot | What |
+|---|---|
+| amp (bare) | Amplitude · default 0.05 · random: 0.025–0.08000000000000002 |
+| freq | Frequency · default 8 · random: 4–12.8 |
+
+Examples:
+
+- `sphere · displace` — on an empty graph (just an Output)
+
+### round
+
+3D scene · step. Round: Rounds every edge and corner by growing the surface outward this much. Also: inflate, soften.
+
+Words: `round`, `inflate`, `soften`
+
+```
+round [r]
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Radius · default 0.05 · random: 0.025–0.08000000000000002 |
+
+Examples:
+
+- `sphere · round` — on an empty graph (just an Output)
+
+### onion
+
+3D scene · step. Onion: Hollows it into a thin shell of this thickness (cut it open to see inside). Also: shell, hollow.
+
+Words: `onion`, `shell`, `hollow`
+
+```
+onion [t]
+```
+
+| Slot | What |
+|---|---|
+| t (bare) | Thickness · default 0.03 · random: 0.015–0.048 |
+
+Examples:
+
+- `sphere · onion` — on an empty graph (just an Output)
+
+### sun
+
+3D scene · setting. the sun's direction and colour
+
+Words: `sun`
+
+```
+sun [dir] color=
+```
+
+| Slot | What |
+|---|---|
+| dir (bare) | vec3 |
+| color | colour |
+
+Examples:
+
+- `sphere · sun dir=(1,2,1)` — on an empty graph (just an Output)
+
+### sky
+
+3D scene · setting. light from above
+
+Words: `sky`
+
+```
+sky [color]
+```
+
+| Slot | What |
+|---|---|
+| color (bare) | random: a harmonious colour |
+
+Examples:
+
+- `sphere · sky (0.5,0.6,0.9)` — on an empty graph (just an Output)
+
+### bounce
+
+3D scene · setting. light from below
+
+Words: `bounce`
+
+```
+bounce [color]
+```
+
+| Slot | What |
+|---|---|
+| color (bare) | colour |
+
+Examples:
+
+- `sphere · bounce (0.3,0.2,0.1)` — on an empty graph (just an Output)
+
+### shadows
+
+3D scene · setting. soft shadows: hardness (8 soft … 32 hard) or off Also: shadow.
+
+Words: `shadows`, `shadow`
+
+```
+shadows [hardness]
+```
+
+| Slot | What |
+|---|---|
+| hardness (bare) | random: 6–32 |
+
+Examples:
+
+- `sphere · shadows 16` — on an empty graph (just an Output)
+
+### ao
+
+3D scene · setting. ambient occlusion: step or off Also: occlusion.
+
+Words: `ao`, `occlusion`
+
+```
+ao [step]
+```
+
+| Slot | What |
+|---|---|
+| step (bare) | number |
+
+Examples:
+
+- `sphere · ao 0.06` — on an empty graph (just an Output)
+
+### fog
+
+3D scene · setting. distance fades into fog
+
+Words: `fog`
+
+```
+fog [density] color=
+```
+
+| Slot | What |
+|---|---|
+| density (bare) | random: 0.05–0.5 |
+| color | colour |
+
+Examples:
+
+- `sphere · fog 0.3` — on an empty graph (just an Output)
+
+### background
+
+3D scene · setting. the background colour or gradient Also: bg.
+
+Words: `background`, `bg`
+
+```
+background [top] bottom=
+```
+
+| Slot | What |
+|---|---|
+| top (bare) | colour |
+| bottom | colour |
+
+Examples:
+
+- `sphere · background navy` — on an empty graph (just an Output)
+
+### tone
+
+3D scene · setting. tone map
+
+Words: `tone`
+
+```
+tone [mode]
+```
+
+| Slot | What |
+|---|---|
+| mode (bare) | aces, agx, hable, reinhard2, tanh, oklab, none |
+
+Examples:
+
+- `sphere · tone agx` — on an empty graph (just an Output)
+
+### camera
+
+3D scene · setting. the orbit camera Also: cam.
+
+Words: `camera`, `cam`
+
+```
+camera [dist] angle= elev= orbit= zoom= flatten= x= y= z=
+```
+
+| Slot | What |
+|---|---|
+| dist (bare) | random: 3–6 |
+| angle | number |
+| elev | random: 5–35 |
+| orbit | random: 0–15 |
+| zoom | number |
+| flatten | number |
+| x | number |
+| y | number |
+| z | number |
+
+Examples:
+
+- `sphere · camera dist=5 orbit=10` — on an empty graph (just an Output)
+
+### quality
+
+3D scene · setting. the march's steps and limits
+
+Words: `quality`
+
+```
+quality steps= dist= step= jitter=
+```
+
+| Slot | What |
+|---|---|
+| steps | number |
+| dist | number |
+| step | number |
+| jitter | number |
+
+Examples:
+
+- `sphere · quality steps=128` — on an empty graph (just an Output)
+
+### output
+
+Edits · output. What a 3D scene shows (depth, normal, hit…), or (in an edit) wires a node to the Output. Old words (still read, with a hint): show.
+
+Words: `output`
+
+```
+output [show] palette=
+```
+
+| Slot | What |
+|---|---|
+| show (bare) | picture, depth, distance, height, normal, hit, position, steps, ao, shadow |
+| palette | sunset, rainbow, fire, forest, teal, warm, haze, psychedelic, mono, heat, ice, terrain |
+
+Examples:
+
+- `sphere · output depth` — on an empty graph (just an Output)
+- `output glow` — on an empty graph (just an Output)
+
+### mix( )
+
+2D picture · combine. Mixes two colours (OkLab Mix). Also: blend-colours.
+
+Words: `mix`, `blend-colours`
+
+```
+mix(a, b) [by]
+```
+
+| Slot | What |
+|---|---|
+| by (bare) | default 0.5 · random: 0.2–0.8 |
+
+Examples:
+
+- `mix(palette, glow) by=0.3` — on an empty graph (just an Output)
+
+### screen( )
+
+2D picture · combine. Screen blend: the second over the first, only brightening.
+
+Words: `screen`
+
+```
+screen(a, b)
+```
+
+Examples:
+
+- `screen(palette, glow)` — on an empty graph (just an Output)
+
+### overlay( )
+
+2D picture · combine. Overlay blend.
+
+Words: `overlay`
+
+```
+overlay(a, b)
+```
+
+Examples:
+
+- `overlay(palette, glow)` — on an empty graph (just an Output)
+
+### group( )
+
+Edits · combine. Puts nodes into a group (as Group selection does). Goes last. Also: bundle.
+
+Words: `group`, `bundle`
+
+```
+group(a, b) [name]
+```
+
+| Slot | What |
+|---|---|
+| name (bare) | name |
+
+Examples:
+
+- `group(circle, glow) name="Neon"` — on an empty graph (just an Output)
+
+### create
+
+Edits · verb. Adds a shape (with its UV) or any node by name. Modifiers after it set its values; a value only a move has (falloff → Glow) adds that move.
+
+Words: `create`
+
+```
+create
+```
+
+### connect
+
+Edits · verb. Wires an output into an input. Without an input name it takes the first free input that fits; the type check runs first. Also: wire.
+
+Words: `connect`, `wire`
+
+```
+connect
+```
+
+### disconnect
+
+Edits · verb. Removes wires. "Disconnect X" removes the wires out of X (from the Output only, when X is the current output); "from Y" only those into Y; "the <input> of Y" clears one input. Also: unplug, unwire, unlink, detach.
+
+Words: `disconnect`, `unplug`, `unwire`, `unlink`, `detach`
+
+```
+disconnect
+```
+
+### reconnect
+
+Edits · verb. Moves a node's outgoing wires: unplugs everything it feeds, then connects it to the new node. Also: rewire, reroute.
+
+Words: `reconnect`, `rewire`, `reroute`
+
+```
+reconnect
+```
+
+### insert
+
+Edits · verb. Puts a new node on a wire: between two wired nodes, after a node (on every wire out of it) or before one (on its first wired input). Also: slot, splice.
+
+Words: `insert`, `slot`, `splice`
+
+```
+insert
+```
+
+### switch
+
+Edits · verb. Switches a node to another type in place, keeping its wires and settings (the card's Switch to). Refused when a wire would have nowhere to go, with the types that would work.
+
+Words: `switch`
+
+```
+switch
+```
+
+### delete
+
+Edits · verb. Removes nodes and the wires into and out of them. Also: remove, erase.
+
+Words: `delete`, `remove`, `erase`
+
+```
+delete
+```
+
+### rename
+
+Edits · verb. Gives a node a name of its own (its card label). Quote names with spaces.
+
+Words: `rename`
+
+```
+rename
+```
+
+### duplicate
+
+Edits · verb. Copies a node next to it, with the same settings and the same wires in (nothing reads the copy yet). Also: clone.
+
+Words: `duplicate`, `clone`
+
+```
+duplicate
+```
+
+### set
+
+Edits · verb. Sets a setting to a value: a number, a colour word, a choice by name, on or off. The setting is found by its name, its label or a vocabulary word (falloff, size, speed…).
+
+Words: `set`
+
+```
+set
+```
+
+### select
+
+Edits · verb. Selects nodes (no change to the graph), so the next command, or the next "this", works on them. Also: highlight.
+
+Words: `select`, `highlight`
+
+```
+select
+```
+
+### count
+
+Grid Rules · header. A count rule (the rule type), starting from its first preset.
+
+Words: `count`
+
+```
+count
+```
+
+Examples:
+
+- `grid count` — on an empty graph (just an Output)
+
+### stages
+
+Grid Rules · header. A stages rule (the rule type), starting from its first preset.
+
+Words: `stages`
+
+```
+stages
+```
+
+Examples:
+
+- `grid stages` — on an empty graph (just an Output)
+
+### smooth
+
+Grid Rules · header. A smooth rule (the rule type), starting from its first preset.
+
+Words: `smooth`
+
+```
+smooth
+```
+
+Examples:
+
+- `grid smooth` — on an empty graph (just an Output)
+
+### patterns
+
+Grid Rules · header. A patterns rule (the rule type), starting from its first preset.
+
+Words: `patterns`
+
+```
+patterns
+```
+
+Examples:
+
+- `grid patterns` — on an empty graph (just an Output)
+
+### blocks
+
+Grid Rules · header. A blocks rule (the rule type), starting from its first preset.
+
+Words: `blocks`
+
+```
+blocks
+```
+
+Examples:
+
+- `grid blocks` — on an empty graph (just an Output)
+
+### life
+
+Grid Rules · header. Life (count): B3/S23, Conway's Game of Life: gliders, blinkers, still lifes. Also: conway, game-of-life.
+
+Words: `life`, `conway`, `game-of-life`
+
+```
+life
+```
+
+Examples:
+
+- `grid life` — on an empty graph (just an Output)
+
+### highlife
+
+Grid Rules · header. HighLife (count): B36/S23: Life plus a replicator. Also: high-life.
+
+Words: `highlife`, `high-life`
+
+```
+highlife
+```
+
+Examples:
+
+- `grid highlife` — on an empty graph (just an Output)
+
+### seeds
+
+Grid Rules · header. Seeds (count): B2/S: every live cell dies at once; explodes into sparks.
+
+Words: `seeds`
+
+```
+seeds
+```
+
+Examples:
+
+- `grid seeds` — on an empty graph (just an Output)
+
+### day-and-night
+
+Grid Rules · header. Day & Night (count): B3678/S34678: live and dead behave the same way round.
+
+Words: `day-and-night`
+
+```
+day-and-night
+```
+
+Examples:
+
+- `grid day-and-night` — on an empty graph (just an Output)
+
+### maze
+
+Grid Rules · header. Maze (count): B3/S12345: grows corridors.
+
+Words: `maze`
+
+```
+maze
+```
+
+Examples:
+
+- `grid maze` — on an empty graph (just an Output)
+
+### coral
+
+Grid Rules · header. Coral (count): B3/S45678: slow coral growth.
+
+Words: `coral`
+
+```
+coral
+```
+
+Examples:
+
+- `grid coral` — on an empty graph (just an Output)
+
+### anneal
+
+Grid Rules · header. Anneal (count): B4678/S35678: blobs that smooth their edges (the "twisted majority").
+
+Words: `anneal`
+
+```
+anneal
+```
+
+Examples:
+
+- `grid anneal` — on an empty graph (just an Output)
+
+### diamoeba
+
+Grid Rules · header. Diamoeba (count): B35678/S5678: diamond-shaped amoebas.
+
+Words: `diamoeba`
+
+```
+diamoeba
+```
+
+Examples:
+
+- `grid diamoeba` — on an empty graph (just an Output)
+
+### replicator
+
+Grid Rules · header. Replicator (count): B1357/S1357: every pattern copies itself.
+
+Words: `replicator`
+
+```
+replicator
+```
+
+Examples:
+
+- `grid replicator` — on an empty graph (just an Output)
+
+### life-without-death
+
+Grid Rules · header. Life without Death (count): B3/S012345678: cells are born as in Life and never die: ladders and crystals.
+
+Words: `life-without-death`
+
+```
+life-without-death
+```
+
+Examples:
+
+- `grid life-without-death` — on an empty graph (just an Output)
+
+### diamonds
+
+Grid Rules · header. Diamonds (von Neumann) (count): B1/S1234 on the 4 neighbours: grows diamond rings.
+
+Words: `diamonds`
+
+```
+diamonds
+```
+
+Examples:
+
+- `grid diamonds` — on an empty graph (just an Output)
+
+### caves
+
+Grid Rules · header. Caves (count): B5678/S45678 from a 45% fill: noise settles into smooth cave walls in a few steps (the roguelike cave generator).
+
+Words: `caves`
+
+```
+caves
+```
+
+Examples:
+
+- `grid caves` — on an empty graph (just an Output)
+
+### bosco
+
+Grid Rules · header. Bosco (radius 5) (count): Larger than Life, radius 5: born on 34–45, survive on 33–57 (Evans's Bosco's rule): moving blobs.
+
+Words: `bosco`
+
+```
+bosco
+```
+
+Examples:
+
+- `grid bosco` — on an empty graph (just an Output)
+
+### majority
+
+Grid Rules · header. Majority (radius 4) (count): Larger than Life, radius 4: a cell takes the side most of its 9×9 block is on. Noise melts into smooth islands.
+
+Words: `majority`
+
+```
+majority
+```
+
+Examples:
+
+- `grid majority` — on an empty graph (just an Output)
+
+### brians-brain
+
+Grid Rules · header. Brian's Brain (stages): /2/3: off → on with exactly 2 on neighbours, on → dying, dying → off. Endless gliding sparks. Also: brian.
+
+Words: `brians-brain`, `brian`
+
+```
+brians-brain
+```
+
+Examples:
+
+- `grid brians-brain` — on an empty graph (just an Output)
+
+### star-wars
+
+Grid Rules · header. Star Wars (stages): 345/2/4: sparks that build stable walls.
+
+Words: `star-wars`
+
+```
+star-wars
+```
+
+Examples:
+
+- `grid star-wars` — on an empty graph (just an Output)
+
+### frogs
+
+Grid Rules · header. Frogs (stages): 12/34/3: hopping blobs.
+
+Words: `frogs`
+
+```
+frogs
+```
+
+Examples:
+
+- `grid frogs` — on an empty graph (just an Output)
+
+### sticks
+
+Grid Rules · header. Sticks (stages): 3456/2/6: crawling sticks.
+
+Words: `sticks`
+
+```
+sticks
+```
+
+Examples:
+
+- `grid sticks` — on an empty graph (just an Output)
+
+### spirals
+
+Grid Rules · header. Spirals (stages): 2/234/5: spiral waves.
+
+Words: `spirals`
+
+```
+spirals
+```
+
+Examples:
+
+- `grid spirals` — on an empty graph (just an Output)
+
+### swirl
+
+Grid Rules · header. Swirl (stages): 23/34/8: swirling fronts with long tails.
+
+Words: `swirl`
+
+```
+swirl
+```
+
+Examples:
+
+- `grid swirl` — on an empty graph (just an Output)
+
+### lava
+
+Grid Rules · header. Lava (stages): 12345/45678/8: flowing lava.
+
+Words: `lava`
+
+```
+lava
+```
+
+Examples:
+
+- `grid lava` — on an empty graph (just an Output)
+
+### bloomerang
+
+Grid Rules · header. Bloomerang (stages): 234/34678/24: blooms with very long tails.
+
+Words: `bloomerang`
+
+```
+bloomerang
+```
+
+Examples:
+
+- `grid bloomerang` — on an empty graph (just an Output)
+
+### heat
+
+Grid Rules · header. Heat (smooth): Diffusion: every cell drifts towards its neighbours' average and cools a little. Also: diffusion.
+
+Words: `heat`, `diffusion`
+
+```
+heat
+```
+
+Examples:
+
+- `grid heat` — on an empty graph (just an Output)
+
+### ripples
+
+Grid Rules · header. Ripples (smooth): The two-buffer wave: height and last height; the mouse drops ripples. Also: water, waves-preset.
+
+Words: `ripples`, `water`, `waves-preset`
+
+```
+ripples
+```
+
+Examples:
+
+- `grid ripples` — on an empty graph (just an Output)
+
+### mitosis
+
+Grid Rules · header. Mitosis (smooth): Gray–Scott reaction–diffusion, feed 0.0367 kill 0.0649: dividing cells. Also: reaction-diffusion, gray-scott.
+
+Words: `mitosis`, `reaction-diffusion`, `gray-scott`
+
+```
+mitosis
+```
+
+Examples:
+
+- `grid mitosis` — on an empty graph (just an Output)
+
+### coral-growth
+
+Grid Rules · header. Coral growth (smooth): Gray–Scott, feed 0.0545 kill 0.062: branching coral.
+
+Words: `coral-growth`
+
+```
+coral-growth
+```
+
+Examples:
+
+- `grid coral-growth` — on an empty graph (just an Output)
+
+### worms
+
+Grid Rules · header. Worms (smooth): Gray–Scott, feed 0.078 kill 0.061: wriggling worms.
+
+Words: `worms`
+
+```
+worms
+```
+
+Examples:
+
+- `grid worms` — on an empty graph (just an Output)
+
+### spots
+
+Grid Rules · header. Spots (smooth): Gray–Scott, feed 0.035 kill 0.065: spots that split.
+
+Words: `spots`
+
+```
+spots
+```
+
+Examples:
+
+- `grid spots` — on an empty graph (just an Output)
+
+### labyrinth
+
+Grid Rules · header. Labyrinth (smooth): Gray–Scott, feed 0.029 kill 0.057: a maze of stripes.
+
+Words: `labyrinth`
+
+```
+labyrinth
+```
+
+Examples:
+
+- `grid labyrinth` — on an empty graph (just an Output)
+
+### wireworld
+
+Grid Rules · header. Wireworld (patterns): Silverman's Wireworld: 1 head → 2 tail → 3 copper; copper → head with 1 or 2 heads round it. Also: wire-world.
+
+Words: `wireworld`, `wire-world`
+
+```
+wireworld
+```
+
+Examples:
+
+- `grid wireworld` — on an empty graph (just an Output)
+
+### falling-dots
+
+Grid Rules · header. Falling dots (patterns): An on cell with nothing below it moves down one cell: the empty cell below takes it, the cell itself empties.
+
+Words: `falling-dots`
+
+```
+falling-dots
+```
+
+Examples:
+
+- `grid falling-dots` — on an empty graph (just an Output)
+
+### crystal
+
+Grid Rules · header. Crystal (patterns): An empty cell with exactly one on cell round it turns on: arms that branch like frost.
+
+Words: `crystal`
+
+```
+crystal
+```
+
+Examples:
+
+- `grid crystal` — on an empty graph (just an Output)
+
+### falling-sand
+
+Grid Rules · header. Falling sand (blocks): Grains (1) fall into empty cells (0), slide off each other down to the side, and rest on walls (2) and the floor. Nothing is lost or made. Also: sand.
+
+Words: `falling-sand`, `sand`
+
+```
+falling-sand
+```
+
+Examples:
+
+- `grid falling-sand` — on an empty graph (just an Output)
+
+### gas
+
+Grid Rules · header. Gas (HPP) (blocks): Particles move diagonally, one cell a step; two meeting head-on bounce off at right angles (Toffoli and Margolus's HPP gas). Every particle is kept. Also: hpp.
+
+Words: `gas`, `hpp`
+
+```
+gas
+```
+
+Examples:
+
+- `grid gas` — on an empty graph (just an Output)
+
+### stencil
+
+Grid Rules · action. A Patterns rule: 3×3 cells (. any, * not empty, a state) → the state the middle becomes. @turns / @turns-mirrors for every orientation.
+
+Words: `stencil`
+
+```
+stencil count=
+```
+
+| Slot | What |
+|---|---|
+| count | state:min..max neighbours, like count=1:1..2 |
+
+Examples:
+
+- `stencil .../.1./... → 2` — on an empty graph (just an Output)
+- `stencil .../.3./... → 1 count=1:1..2` — on an empty graph (just an Output)
+
+### block
+
+Grid Rules · action. A Blocks rule: 2×2 before → after (= unchanged). @mirror / @turns; chance= per block.
+
+Words: `block`
+
+```
+block chance=
+```
+
+| Slot | What |
+|---|---|
+| chance | random: 0.3–1 |
+
+Examples:
+
+- `block 11/00 → 00/11` — on an empty graph (just an Output)
+- `block 10/*0 → 00/=1 @mirror chance=0.8` — on an empty graph (just an Output)
+
+### colours
+
+Grid Rules · setting. Colours of the states (empty=, on=, dying=, c0= … c7=), the afterglow (glow=) and old cells (old=). Also: colors.
+
+Words: `colours`, `colors`
+
+```
+colours empty= on= dying= glow= old= c0= c1= c2= c3= c4= c5= c6= c7=
+```
+
+| Slot | What |
+|---|---|
+| empty | random: a harmonious colour |
+| on | random: a harmonious colour |
+| dying | random: a harmonious colour |
+| glow | random: a harmonious colour |
+| old | random: a harmonious colour |
+| c0 | random: a harmonious colour |
+| c1 | random: a harmonious colour |
+| c2 | random: a harmonious colour |
+| c3 | random: a harmonious colour |
+| c4 | random: a harmonious colour |
+| c5 | random: a harmonious colour |
+| c6 | random: a harmonious colour |
+| c7 | random: a harmonious colour |
+
+Examples:
+
+- `grid life · colours on=green empty=black` — on an empty graph (just an Output)
+
+### brush
+
+Grid Rules · setting. The mouse brush: its size, the state it paints and how thickly.
+
+Words: `brush`
+
+```
+brush [size] state= fill=
+```
+
+| Slot | What |
+|---|---|
+| size (bare) | number |
+| state | count |
+| fill | number |
+
+Examples:
+
+- `grid life · brush size=5 fill=0.3` — on an empty graph (just an Output)
+
+### agents
+
+Agent Rules · header. The rule set: what kind of walkers, what the edges do, how far they see each other.
+
+Words: `agents`
+
+```
+agents kind= edges= view= view-max=
+```
+
+| Slot | What |
+|---|---|
+| kind | trail, particles, flock, ants, swarm, crowd |
+| edges | wrap, bounce, slide |
+| view | random: 0.02–0.08 |
+| view-max | count |
+
+Examples:
+
+- `agents kind=flock edges=bounce view=0.05` — on an empty graph (just an Output)
+
+### sensors
+
+Agent Rules · setting. The trail sensors: how far ahead and how wide.
+
+Words: `sensors`
+
+```
+sensors ahead= angle=
+```
+
+| Slot | What |
+|---|---|
+| ahead | random: 0.015–0.06 (log) |
+| angle | random: 15–60, whole |
+
+Examples:
+
+- `sensors ahead=0.035 angle=22.5deg` — on an empty graph (just an Output)
+
+### flow
+
+Agent Rules · setting. The flow field (curl noise) follow flow reads.
+
+Words: `flow`
+
+```
+flow size= evolve=
+```
+
+| Slot | What |
+|---|---|
+| size | random: 0.6–2 |
+| evolve | random: 0.05–0.4 |
+
+Examples:
+
+- `flow size=1.2 evolve=0.2` — on an empty graph (just an Output)
+
+### channels
+
+Agent Rules · setting. Names for the four trail channels (_ for a blank one).
+
+Words: `channels`
+
+```
+channels
+```
+
+Examples:
+
+- `channels home, food` — on an empty graph (just an Output)
+
+### masks
+
+Agent Rules · setting. Up to two masks (inputs on the group card); Name:texture for a texture.
+
+Words: `masks`
+
+```
+masks
+```
+
+Examples:
+
+- `masks Food, Nest` — on an empty graph (just an Output)
+
+### species
+
+Agent Rules · header. A species: its name, speed and states, then its rules (indented, or after a colon on one line).
+
+Words: `species`
+
+```
+species speed= states=
+```
+
+| Slot | What |
+|---|---|
+| speed | random: 0.1–1.2 (log) |
+| states | list |
+
+Examples:
+
+- `species Ants speed=0.3 states=searching,carrying` — on an empty graph (just an Output)
+- `species Slime: always do wander 7deg` — on an empty graph (just an Output)
+
+### state
+
+Agent Rules · setting. A state's colour, under its species.
+
+Words: `state`
+
+```
+state color=
+```
+
+| Slot | What |
+|---|---|
+| color | random: a harmonious colour |
+
+Examples:
+
+- `state carrying color=gold` — on an empty graph (just an Output)
+
+### when
+
+Agent Rules · header. A rule: when <condition> and … do <action>, …  (or always do …); @last stops after it, @off switches it off. Also: always.
+
+Words: `when`, `always`
+
+```
+when
+```
+
+Examples:
+
+- `when searching and food anywhere > 0.05 do turn toward food 20deg` — on an empty graph (just an Output)
+- `always do wander 7deg` — on an empty graph (just an Output)
+
+### near
+
+Agent Rules · condition. Condition: near another species' trail.
+
+Words: `near`
+
+```
+near
+```
+
+### chance
+
+Agent Rules · condition. Condition: random chance.
+
+Words: `chance`
+
+```
+chance
+```
+
+### age
+
+Agent Rules · condition. Condition: age.
+
+Words: `age`
+
+```
+age
+```
+
+### memory
+
+Agent Rules · condition. Condition: Memory number.
+
+Words: `memory`
+
+```
+memory
+```
+
+### mask
+
+Agent Rules · condition. Condition: inside a mask.
+
+Words: `mask`
+
+```
+mask
+```
+
+### neighbours
+
+Agent Rules · condition. Condition: neighbours within reach.
+
+Words: `neighbours`
+
+```
+neighbours
+```
+
+### turn
+
+Agent Rules · action. Action: turn toward / away.
+
+Words: `turn`
+
+```
+turn
+```
+
+Examples:
+
+- `turn toward food 20deg` — on an empty graph (just an Output)
+- `turn away mouse 30deg` — on an empty graph (just an Output)
+- `turn around` — on an empty graph (just an Output)
+
+### wander
+
+Agent Rules · action. Action: wander.
+
+Words: `wander`
+
+```
+wander
+```
+
+Examples:
+
+- `wander 7deg` — on an empty graph (just an Output)
+
+### speed
+
+Agent Rules · action. Action: set speed / accelerate.
+
+Words: `speed`
+
+```
+speed
+```
+
+Examples:
+
+- `speed 0.4` — on an empty graph (just an Output)
+
+### accelerate
+
+Agent Rules · action. Action: set speed / accelerate.
+
+Words: `accelerate`
+
+```
+accelerate
+```
+
+Examples:
+
+- `accelerate 0.1/s` — on an empty graph (just an Output)
+
+### leave
+
+Agent Rules · action. Action: leave trail.
+
+Words: `leave`
+
+```
+leave
+```
+
+Examples:
+
+- `leave food 1 fade=0.15` — on an empty graph (just an Output)
+
+### become
+
+Agent Rules · action. Action: change state.
+
+Words: `become`
+
+```
+become
+```
+
+Examples:
+
+- `become carrying` — on an empty graph (just an Output)
+
+### stop
+
+Agent Rules · action. Action: stop.
+
+Words: `stop`
+
+```
+stop
+```
+
+Examples:
+
+- `stop` — on an empty graph (just an Output)
+
+### stick
+
+Agent Rules · action. Action: stick.
+
+Words: `stick`
+
+```
+stick
+```
+
+Examples:
+
+- `stick` — on an empty graph (just an Output)
+
+### die
+
+Agent Rules · action. Action: die.
+
+Words: `die`
+
+```
+die
+```
+
+Examples:
+
+- `die` — on an empty graph (just an Output)
+
+### spawn
+
+Agent Rules · action. Action: spawn a child.
+
+Words: `spawn`
+
+```
+spawn
+```
+
+Examples:
+
+- `spawn 1` — on an empty graph (just an Output)
+
+### follow
+
+Agent Rules · action. Action: follow a flow field.
+
+Words: `follow`
+
+```
+follow
+```
+
+Examples:
+
+- `follow flow 10deg` — on an empty graph (just an Output)
+
+### against
+
+Agent Rules · action. Action: follow a flow field.
+
+Words: `against`
+
+```
+against
+```
+
+Examples:
+
+- `against flow 10deg` — on an empty graph (just an Output)
+
+### align
+
+Agent Rules · action. Action: align with the crowd (via trail).
+
+Words: `align`
+
+```
+align
+```
+
+Examples:
+
+- `align 10deg` — on an empty graph (just an Output)
+
+### separate
+
+Agent Rules · action. Action: steer away from neighbours.
+
+Words: `separate`
+
+```
+separate
+```
+
+Examples:
+
+- `separate 12deg who=others radius=0.045` — on an empty graph (just an Output)
+
+### match
+
+Agent Rules · action. Action: match neighbours' heading.
+
+Words: `match`
+
+```
+match
+```
+
+Examples:
+
+- `match 6deg` — on an empty graph (just an Output)
+
+### cohere
+
+Agent Rules · action. Action: move to their centre.
+
+Words: `cohere`
+
+```
+cohere
+```
+
+Examples:
+
+- `cohere 3deg` — on an empty graph (just an Output)
+
+### slow
+
+Agent Rules · action. Action: slow down in a crowd.
+
+Words: `slow`
+
+```
+slow
+```
+
+Examples:
+
+- `slow jam=20` — on an empty graph (just an Output)
+
+### avoid-edges
+
+Agent Rules · action. Action: avoid edges.
+
+Words: `avoid-edges`
+
+```
+avoid-edges
+```
+
+Examples:
+
+- `avoid-edges 12deg margin=0.1` — on an empty graph (just an Output)
+
+### orbit
+
+Agent Rules · action. Action: orbit a point.
+
+Words: `orbit`
+
+```
+orbit
+```
+
+Examples:
+
+- `orbit centre 8deg distance=0.5 cw` — on an empty graph (just an Output)
+
+### force
+
+Agent Rules · action. Action: apply a force.
+
+Words: `force`
+
+```
+force
+```
+
+Examples:
+
+- `force gravity 0.75 angle=-90deg` — on an empty graph (just an Output)
+- `force toward mouse 1` — on an empty graph (just an Output)
+
+### drag
+
+Agent Rules · action. Action: drag (slow down).
+
+Words: `drag`
+
+```
+drag
+```
+
+Examples:
+
+- `drag 0.35` — on an empty graph (just an Output)
+
+### fade
+
+Agent Rules · action. Action: fade with age.
+
+Words: `fade`
+
+```
+fade
+```
+
+Examples:
+
+- `fade 3s` — on an empty graph (just an Output)
 
 ## Limits
 
