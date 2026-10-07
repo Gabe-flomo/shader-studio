@@ -187,11 +187,11 @@ const DISTANCE: Move[] = [
     anchor: { type: 'distanceShape', key: 'distance', out: 'light' },
     why: 'a distance: a line along the edge',
     args: [
-      { name: 'width', label: 'Width', kind: 'number', default: 0.012, words: ['width', 'thickness', 'thick'] },
+      { name: 'width', label: 'Width', kind: 'number', default: 0.02, words: ['width', 'thickness', 'thick'] },
       { name: 'colour', label: 'Colour', kind: 'colour', default: [1, 0.85, 0.5] },
     ],
     build: ctx => ({
-      nodes: [n('distanceShape', 'line', C(1), 0, { mode: 'outline', offset: 0, width: num(ctx, 'width', 0.012), softness: 0.004, tint: rgb(ctx, 'colour', [1, 0.85, 0.5]), ...note(
+      nodes: [n('distanceShape', 'line', C(1), 0, { mode: 'outline', offset: 0, width: num(ctx, 'width', 0.02), softness: 0.004, tint: rgb(ctx, 'colour', [1, 0.85, 0.5]), ...note(
         'Outline (distance): a line Width wide along the edge (Offset moves it out).',
         'Why: the Outline suggestion. Its Light output is added over the picture.',
       ) }, { distance: [IN, ''] })],

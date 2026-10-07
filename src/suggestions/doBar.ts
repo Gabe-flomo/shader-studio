@@ -287,7 +287,7 @@ function fillArgs(move: Move, slots: Array<{ slot: string; value: number }>, num
   // Word args: "blend with a box", "mirror both ways", "screen" mode.
   for (const a of specs.filter(x => x.kind === 'word' && !(x.name in args))) {
     if (a.name === 'shape') { const sh = words.find(w => /box|square|circle/.test(w)); if (sh) args.shape = sh; }
-    if (a.name === 'axis') { if (words.includes('both')) args.axis = 'both'; else if (words.some(w => w === 'vertical' || w === 'vertically' || w === 'y')) args.axis = 'y'; }
+    if (a.name === 'axis') { if (words.includes('both') || words.includes('xy')) args.axis = 'both'; else if (words.some(w => w === 'vertical' || w === 'vertically' || w === 'y')) args.axis = 'y'; }
     if (a.name === 'mode') { const m = words.find(w => ['screen', 'multiply', 'overlay', 'add', 'difference', 'softlight'].includes(w)); if (m) args.mode = m; }
   }
   return args;
@@ -411,11 +411,25 @@ export function parseDo(text: string, ctx: DoContext): DoPlan {
       if (subjectKind === 'space') key = outputKinds(subjectNode!)[0].key;
       else if (isNewShape) { key = (subjectShape?.node2d?.type === 'shapeSDF' || subjectShape?.node2d?.type === 'simpleSDF') ? 'p' : 'position'; side = 'in'; }
       else {
-        const s = subjectNode ? spaceInputs(subjectNode)[0] : undefined;
-        if (!s) { plan.problem = `${subjectNode ? labelOf(subjectNode) : 'That'} has no space (UV) input to ${g.head.text}.`; continue; }
-        key = s.key; side = 'in';
+        // The space of what made it: a step after a glow or rings bends the shape's space (the nearest
+        // node upstream whose space input is wired), as "circle · glow · twist" reads.
+        let host = subjectNode;
+        let s = host ? spaceInputs(host).find(x => host!.inputs[x.key]?.connection) : undefined;
+        for (let guard = 0; !s && host && guard < 12; guard++) {
+          const up = Object.values(host.inputs).map(i => (i.connection ? byId.get(i.connection.nodeId) : undefined)).find(nd => !!nd);
+          host = up;
+          s = host ? spaceInputs(host).find(x => host!.inputs[x.key]?.connection) : undefined;
+        }
+        if (!s || !host) { host = subjectNode; s = subjectNode ? spaceInputs(subjectNode)[0] : undefined; }
+        if (!s || !host) { plan.problem = `${subjectNode ? labelOf(subjectNode) : 'That'} has no space (UV) input to ${g.head.text}.`; continue; }
+        node = host.id; key = s.key; side = 'in';
       }
     } else if (r.colourTarget) {
+      // After a step that drew the new shape (a glow, rings), a colour step works on the picture as it is then.
+      if (isNewShape && steps.some(st => st.kind === 'move' && st.node === target)) {
+        steps.push({ kind: 'move', moveId: move.id, node: '$picture', key: '', side: 'out', args, label: `${move.label} · on the picture${describeArgs(move, args) ? ` · ${describeArgs(move, args)}` : ''}` });
+        continue;
+      }
       if (isNewShape) { plan.problem = `Make it a picture first ("${subjectShape?.words[0] ?? 'shape'} with a glow"), then ${g.head.text}.`; continue; }
       const c = subjectNode && outputKinds(subjectNode).some(o => o.kind === 'colour') ? subjectNode : subjectNode ? colourFrom(ctx.nodes, subjectNode.id) : undefined;
       if (!c) { plan.problem = 'There is no colour to do that to yet.'; continue; }
@@ -598,10 +612,13 @@ export function runDoPlan(nodes: GraphNode[], plan: DoPlan, nextId: () => string
       }
       return;
     }
-    const id = real(step.node);
+    // "$picture": what the Output shows when the step runs (a colour step after a glow on a new shape).
+    const shownNow = step.node === '$picture' ? graphOutput(cur)?.inputs.color?.connection : undefined;
+    if (step.node === '$picture' && !shownNow) return;
+    const id = shownNow ? shownNow.nodeId : real(step.node);
     const move = moveById(step.moveId);
     if (!id || !move) return;
-    const r = applyMove(cur, { nodeId: id, key: step.key, side: step.side }, move, step.args, nextId, { topLevel: opts.topLevel, heightOf, show });
+    const r = applyMove(cur, { nodeId: id, key: shownNow ? shownNow.outputKey : step.key, side: step.side }, move, step.args, nextId, { topLevel: opts.topLevel, heightOf, show });
     if (!r) return;
     cur = r.nodes;
     added.push(...r.added);

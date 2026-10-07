@@ -7,7 +7,7 @@ import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { askChoice } from '../components/ui/dialogStore';
 import { toast } from '../components/ui/toastStore';
 import { spawnPoint } from '../components/NodeGraph/spawnPoint';
-import { META_KEY, type SceneBuilderMeta } from './build';
+import { META_KEY, metaOf, type SceneBuilderMeta } from './build';
 import { applyScene, checkEdits, sceneOfBuild } from './apply';
 import { describeGraph } from './recognize';
 import { useSceneBuilder } from './store';
@@ -39,6 +39,22 @@ export function describeIntoBuilder(): boolean {
   }
   if (sb.open) { sb.setDescribe(d); sb.setTab('describe'); }
   else sb.openWith(d.spec, { tab: 'describe', describe: d, targetSceneId: null });
+  return true;
+}
+
+/**
+ * Rebuild a built scene from its recipe (the spec stored on its Scene Group), dropping what was
+ * changed on its nodes by hand: the Recipe chip's "Rebuild from recipe" (§13 decision 4: editing a
+ * builder-made node edits the node and marks the scene edited; this puts the recipe back). One undo step.
+ */
+export function rebuildFromRecipe(sceneId: string): boolean {
+  const st = useNodeGraphStore.getState();
+  const nodes = st.nodes;
+  const meta = metaOf(nodes.find(n => n.id === sceneId));
+  if (!meta?.spec) return false;
+  const result = applyScene(nodes, meta.spec, { nextId: () => useNodeGraphStore.getState().newNodeId(), sceneId, restore: true });
+  useNodeGraphStore.getState().setNodesRewritten(result.nodes, 'Rebuilt the 3D scene from its recipe');
+  toast.success('Rebuilt from the recipe', { message: 'Changes made on its nodes by hand are gone. Undo brings them back.' });
   return true;
 }
 

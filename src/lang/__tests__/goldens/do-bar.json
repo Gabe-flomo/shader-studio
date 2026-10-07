@@ -13,7 +13,7 @@
    "uv"
   ],
   "removed": [],
-  "hash": "c5b34f03"
+  "hash": "4d488023"
  },
  "commands:mixed · disconnect the current output, add it to the noise, and output the result": {
   "reads": "disconnect combine output",
@@ -665,7 +665,7 @@
   "ok": true,
   "added": [],
   "removed": [],
-  "hash": "7f8fe5fe"
+  "hash": "467b996e"
  },
  "commands:noise · replace the palette with a stops palette": {
   "reads": "replace",
@@ -961,7 +961,7 @@
    "uv"
   ],
   "removed": [],
-  "hash": "99383516"
+  "hash": "4c500432"
  },
  "commands:mixed · colour the noise with a palette": {
   "reads": "colour",
@@ -981,7 +981,7 @@
    "time"
   ],
   "removed": [],
-  "hash": "612cf088"
+  "hash": "90353b9f"
  },
  "commands:circle · colour the circle by the angle": {
   "reads": "colour",
@@ -1015,7 +1015,7 @@
    "uv"
   ],
   "removed": [],
-  "hash": "d5ee3e65"
+  "hash": "033fb92f"
  },
  "commands:twoShapes · make the first circle bigger": {
   "reads": "adjust",
@@ -1328,7 +1328,7 @@
   "ok": true,
   "added": [],
   "removed": [],
-  "hash": "7f8fe5fe"
+  "hash": "467b996e"
  },
  "verb replace:noise · replace the palette with a stops palette": {
   "reads": "replace",
@@ -1469,7 +1469,7 @@
    "uv"
   ],
   "removed": [],
-  "hash": "99383516"
+  "hash": "4c500432"
  },
  "verb colour:mixed · colour the noise with a palette": {
   "reads": "colour",
@@ -1489,7 +1489,7 @@
    "time"
   ],
   "removed": [],
-  "hash": "612cf088"
+  "hash": "90353b9f"
  },
  "action glow:empty · circle with a glow, falloff 8": {
   "reads": "build",
@@ -1552,7 +1552,7 @@
    "uv"
   ],
   "removed": [],
-  "hash": "5c4e05c9"
+  "hash": "30e402fb"
  },
  "action onion:circle [c] · make it hollow": {
   "reads": "build",
@@ -1573,7 +1573,7 @@
    "uv"
   ],
   "removed": [],
-  "hash": "34a01d82"
+  "hash": "ebcd65f2"
  },
  "action round:circle [c] · rounder by 0.05": {
   "reads": "build",
@@ -1594,7 +1594,7 @@
    "uv"
   ],
   "removed": [],
-  "hash": "9512aacd"
+  "hash": "a189261d"
  },
  "action blend:circle [c] · blend it with a box": {
   "reads": "build",
@@ -1692,7 +1692,7 @@
    "uv"
   ],
   "removed": [],
-  "hash": "a4038989"
+  "hash": "4cc25f39"
  },
  "action polar:circle [c] · polar": {
   "reads": "build",
@@ -2103,7 +2103,7 @@
    "uv"
   ],
   "removed": [],
-  "hash": "c5b34f03"
+  "hash": "4d488023"
  },
  "recipe warped-noise:empty · create a noise, warp it 0.6, then colour it with a palette and output it": {
   "reads": "create build colour output",
@@ -2394,7 +2394,7 @@
    "uv"
   ],
   "removed": [],
-  "hash": "1b6052b7"
+  "hash": "2f31504d"
  },
  "phrase:empty · heart in the centre": {
   "reads": "build",
@@ -2439,7 +2439,7 @@
    "uv"
   ],
   "removed": [],
-  "hash": "3480ae8f"
+  "hash": "6547ca6f"
  },
  "phrase:empty · a square with an onion 0.03": {
   "reads": "build",
@@ -2451,7 +2451,7 @@
    "uv"
   ],
   "removed": [],
-  "hash": "34a01d82"
+  "hash": "ebcd65f2"
  },
  "phrase:empty · circles": {
   "reads": "build",

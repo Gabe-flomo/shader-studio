@@ -33,8 +33,9 @@ export interface ShapeWord {
 const BASE_SHAPES: ShapeWord[] = [
   { id: 'circle', words: ['circle', 'disc', 'disk', 'dot', 'blob', 'round shape'], node2d: { type: 'circleSDF', size: 'radius' }, node3d: { type: 'sphereSDF3D', size: 'radius' } },
   { id: 'sphere', words: ['sphere', 'ball', 'orb'], node2d: { type: 'circleSDF', size: 'radius' }, node3d: { type: 'sphereSDF3D', size: 'radius' } },
-  { id: 'box', words: ['box', 'square', 'rectangle', 'rect', 'block'], node2d: { type: 'boxSDF', size: 'width' }, node3d: { type: 'boxSDF3D' } },
-  { id: 'cube', words: ['cube'], node2d: { type: 'boxSDF', size: 'width' }, node3d: { type: 'boxSDF3D' } },
+  // A box the size of the circle (the node's own default, half-size 0.5, fills the picture and every tile of a repeat).
+  { id: 'box', words: ['box', 'square', 'rectangle', 'rect', 'block'], node2d: { type: 'boxSDF', params: { width: 0.25, height: 0.25 }, size: 'width' }, node3d: { type: 'boxSDF3D' } },
+  { id: 'cube', words: ['cube'], node2d: { type: 'boxSDF', params: { width: 0.25, height: 0.25 }, size: 'width' }, node3d: { type: 'boxSDF3D' } },
   { id: 'ring', words: ['ring', 'hoop', 'annulus'], node2d: { type: 'ringSDF', size: 'radius' }, node3d: { type: 'torusSDF3D' } },
   { id: 'torus', words: ['torus', 'donut', 'doughnut'], node2d: { type: 'ringSDF', size: 'radius' }, node3d: { type: 'torusSDF3D' } },
   { id: 'heart', words: ['heart'], node2d: { type: 'shapeSDF', params: { shape: 'heart' }, size: 'r' } },

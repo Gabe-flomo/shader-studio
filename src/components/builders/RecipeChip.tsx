@@ -20,7 +20,7 @@ import { Icon } from '../ui/Icon';
 import { builderRecipeOf, highlightRecipe, type RecipeTokenKind } from '../../builders/recipe';
 import { openAgentRulesWindow, openGridRulesEditor, useBuilderWindows } from '../../builders/windows';
 import { copyRecipeOf } from '../../builders/open';
-import { editSceneInBuilder } from '../../sceneBuilder/actions';
+import { editSceneInBuilder, rebuildFromRecipe } from '../../sceneBuilder/actions';
 import { RecipeCode } from '../sceneBuilder/RecipeCode';
 import { wordKindFor } from '../../lang/highlight';
 import type { Dialect } from '../../lang/registry';
@@ -85,6 +85,9 @@ export function RecipeChip({ node, touch = false }: { node: GraphNode; touch?: b
         <div data-recipe-edited title="Nodes of this scene were changed by hand after it was built. Open in Scene Builder keeps what a rebuild can keep, and says what it can't."
           style={{ display: 'flex', alignItems: 'center', gap: 5, padding: touch ? '0 10px 8px' : '0 8px 6px', font: `500 10.5px ${fontFamily.ui}`, color: tk.status.warningText }}>
           <Icon name="edit" size={11} />edited since build
+          <span style={{ flex: 1 }} />
+          <Button size="sm" variant="ghost" icon="rebuild" data-recipe-rebuild onClick={() => rebuildFromRecipe(node.id)}
+            title="Build it again from its recipe: the settings and wires changed on its nodes by hand go (Undo brings them back)">Rebuild from recipe</Button>
         </div>
       )}
       {open && (

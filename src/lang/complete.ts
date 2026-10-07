@@ -37,6 +37,8 @@ export interface Completion {
   words?: string[];
   /** Taking it replaces the whole field (a whole phrase), not just the word being typed. */
   replaceAll?: boolean;
+  /** A heading the list shows it under (create's node categories). */
+  group?: string;
 }
 
 // ── Ranking ─────────────────────────────────────────────────────────────────

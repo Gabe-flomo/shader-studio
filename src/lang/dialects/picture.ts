@@ -416,7 +416,8 @@ function sugarHead(cl: Extract<PClause, { t: 'maker' | 'step' }>, target: string
     if (p.type === 'colour') { const v = sugarValue(a.value); if (!v) throw new Unsugarable('colour'); extra.push(v); continue; }
     if (p.type === 'choice') {
       const v = a.value.k === 'word' ? a.value.v.toLowerCase() : '';
-      if (p.key === 'axis') extra.push(v === 'both' ? 'both' : v === 'y' ? 'vertically' : '');
+      // "xy", not "both": in a sentence "both" also means the two selected nodes.
+      if (p.key === 'axis') extra.push(v === 'both' ? 'xy' : v === 'y' ? 'vertically' : '');
       else if (p.key === 'shape') extra.push(v);
       else if (p.key === 'mode') extra.push(v);
       continue;
@@ -464,7 +465,7 @@ export function desugarPicture(clauses: PClause[]): string {
       case 'ref': {
         const next = clauses[i + 1];
         const r = cl.ref;
-        const target = r.r === 'picture' ? 'the picture' : r.r === 'these' ? 'these' : r.r === 'this' || r.r === 'it' ? 'it' : sugarRef(r);
+        const target = r.r === 'picture' ? 'the picture' : r.r === 'these' ? 'these' : r.r === 'this' ? 'this' : r.r === 'it' ? 'it' : sugarRef(r);
         if (next?.t === 'step') { out.push(sugarHead(next, target)); i++; break; }
         if (next?.t === 'colour') { out.push(colourSugar(next, sugarRef(r))); i++; break; }
         out.push(`select ${sugarRef(r)}`);

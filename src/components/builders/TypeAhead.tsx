@@ -7,7 +7,7 @@
  *  - <AssistList>: the list (label, one-line description, signature) and the signature help line.
  *  - <TypeAheadPicker>: a combobox over a fixed list, for "+ and…" / "+ do…".
  */
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { pickerAssist, type Assist, type Completion, type Signature } from '../../lang/complete';
@@ -61,7 +61,8 @@ export function AssistList({ items, active, onPick, onHover, footer }: { items: 
       display: 'flex', flexDirection: 'column', padding: 4, borderRadius: radius.md, background: tk.bg.panel, boxShadow: tk.shadow.popover,
       border: `1px solid ${tk.border.default}`, maxHeight: 260, overflowY: 'auto',
     }}>
-      {items.map((c, i) => (
+      {items.map((c, i) => (<Fragment key={`${c.kind}:${c.label}:${i}`}>
+        {c.group && c.group !== items[i - 1]?.group && <span data-assist-group={c.group} style={{ padding: '6px 8px 2px', font: `600 10.5px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', color: tk.text.faint }}>{c.group}</span>}
         <button key={`${c.kind}:${c.label}`} type="button" role="option" aria-selected={i === active} data-assist-item={c.label}
           onMouseDown={e => { e.preventDefault(); onPick(c); }} onMouseEnter={() => onHover?.(i)}
           style={{
@@ -74,7 +75,7 @@ export function AssistList({ items, active, onPick, onHover, footer }: { items: 
             {c.signature && <span style={{ font: `11px ${fontFamily.mono}`, color: tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.signature}</span>}
           </span>
         </button>
-      ))}
+      </Fragment>))}
       {footer}
       <span style={{ padding: '3px 8px 1px', font: `10.5px ${fontFamily.ui}`, color: tk.text.faint }}>↑ ↓ to choose · Tab or Enter to take · Esc to close</span>
     </div>
