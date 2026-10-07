@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.66',
+    date: '2026-10-07',
+    title: 'Shadertoy alpha fix',
+    highlights: [
+      { area: 'Studio', text: 'Shadertoy shaders that write alpha 0 now show up instead of rendering black, in the GLSL tab, Convert and GLSL import, as Shadertoy shows them.' },
+    ],
+  },
+  {
     id: '2026.10.65',
     date: '2026-10-07',
     title: 'Falling sand fix',
