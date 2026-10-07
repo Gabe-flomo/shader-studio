@@ -143,7 +143,7 @@ describe('Blocks (Margolus)', { timeout: 60000 }, () => {
   });
 
   it('sand falls and piles on the floor', () => {
-    const P = { ruleType: 'blocks', ...BLOCK_PRESETS.sand.params, edges: 'walls' };
+    const P = { ruleType: 'blocks', ...BLOCK_PRESETS.sand.params, jitter: 1, edges: 'walls' };
     const start: Grid = Array.from({ length: 8 }, (_, r) => Array.from({ length: 8 }, (_, x) => (r < 3 && x >= 2 && x <= 5 ? 1 : 0)));
     const st = stepper(P, 8, 8);
     let b = boardFrom(start, gridSignature(shapeOf(P)), 'clamp');
@@ -156,7 +156,7 @@ describe('Blocks (Margolus)', { timeout: 60000 }, () => {
 
   it('the CPU preview gives the same board as the GPU, step after step, Jitter and dice included', () => {
     const cases: Array<[string, Record<string, unknown>]> = [
-      ['sand, jitter 1', { ...BLOCK_PRESETS.sand.params }],
+      ['sand, jitter 1', { ...BLOCK_PRESETS.sand.params, jitter: 1 }],
       ['sand, jitter 0.4, seed 7', { ...BLOCK_PRESETS.sand.params, jitter: 0.4, seed: 7 }],
       ['sand, jitter 0', { ...BLOCK_PRESETS.sand.params, jitter: 0 }],
       ['gas, jitter 0.7', { ...BLOCK_PRESETS.gas.params, jitter: 0.7 }],

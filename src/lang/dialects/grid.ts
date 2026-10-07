@@ -92,6 +92,8 @@ const NUM_KEYS: Record<string, { param: string; min?: number; max?: number; int?
   density: { param: 'density', min: 0, max: 1 }, 'start-seed': { param: 'seed', int: true },
   steps: { param: 'steps', min: 1, max: MAX_STEPS, int: true },
   afterglow: { param: 'afterglow', min: 0, max: 1 }, 'age-rate': { param: 'ageRate' }, 'age-fade': { param: 'ageFade', min: 0, max: 1 },
+  // Blocks: how much the block grid is shuffled each step (gridRules/dice.ts).
+  jitter: { param: 'jitter', min: 0, max: 1 },
 };
 
 /** Colour keys of `colours …`: names per state, the glow and the old colour. */
@@ -108,6 +110,7 @@ export const GRID_RAND: Readonly<Record<string, RandSpec>> = {
   a: { kind: 'num', lo: 0, hi: 1 }, b: { kind: 'num', lo: 0, hi: 1 }, c: { kind: 'num', lo: 0, hi: 1 }, d: { kind: 'num', lo: 0, hi: 1 }, gain: { kind: 'num', lo: 0.8, hi: 3 },
   density: { kind: 'num', lo: 0.1, hi: 0.55 }, 'start-seed': { kind: 'num', lo: 1, hi: 999, int: true }, steps: { kind: 'num', lo: 1, hi: 4, int: true },
   afterglow: { kind: 'num', lo: 0, hi: 0.95 }, 'age-rate': { kind: 'num', lo: 0.005, hi: 0.05 }, 'age-fade': { kind: 'num', lo: 0, hi: 1 },
+  jitter: { kind: 'num', lo: 0.6, hi: 1 },
   speed: { kind: 'num', lo: 0.2, hi: 1 }, board: { kind: 'choice', options: ['480', '240', '120'] },
   neighbours: { kind: 'choice', options: ['moore', 'von-neumann'] }, start: { kind: 'choice', options: ['noise', 'centre'] },
   colour: { kind: 'colour' },
@@ -562,7 +565,7 @@ export function printGrid(params: P, opts: { header?: 'always' | 'never' | 'clas
   if (differs('edges')) parts.push(String(P.edges));
   if (differs('rate')) parts.push(`speed=${fmtNum(Number(P.rate))}`);
   if (differs('steps')) parts.push(`steps=${P.steps}`);
-  for (const [param, k] of [['afterglow', 'afterglow'], ['ageRate', 'age-rate'], ['ageFade', 'age-fade']] as const) if (differs(param)) parts.push(`${k}=${fmtNum(Number(P[param]))}`);
+  for (const [param, k] of [['afterglow', 'afterglow'], ['ageRate', 'age-rate'], ['ageFade', 'age-fade'], ['jitter', 'jitter']] as const) if (differs(param)) parts.push(`${k}=${fmtNum(Number(P[param]))}`);
   const clauses: string[] = [[...head1, ...parts].join(' ')];
   const brush: string[] = [];
   if (differs('brushRadius')) brush.push(`size=${fmtNum(Number(P.brushRadius))}`);
@@ -602,6 +605,7 @@ const gridEntries = (): Entry[] => [
       { key: 'damping', type: 'number', rand: GRID_RAND.damping }, { key: 'feed', type: 'number', rand: GRID_RAND.feed }, { key: 'kill', type: 'number', rand: GRID_RAND.kill },
       { key: 'spread-a', type: 'number' }, { key: 'spread-b', type: 'number' }, { key: 'u', type: 'code' }, { key: 'v', type: 'code' }, { key: 'gain', type: 'number', rand: GRID_RAND.gain },
       { key: 'afterglow', type: 'number', min: 0, max: 1, rand: GRID_RAND.afterglow }, { key: 'age-rate', type: 'number' }, { key: 'age-fade', type: 'number', min: 0, max: 1 },
+      { key: 'jitter', type: 'number', min: 0, max: 1, rand: GRID_RAND.jitter, hint: 'Blocks: shuffle the block rows a little each step, so falling grains don\'t band (0 classic, 1 most)' },
       { key: 'rule', type: 'name', hint: 'B/S notation: rule=B36/S23' },
     ],
     flags: ['wrap', 'walls', 'diffusion', 'waves', 'reaction', 'custom'],

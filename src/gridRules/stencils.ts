@@ -147,8 +147,12 @@ const CRYSTAL_LOOK = { color0: [0.02, 0.03, 0.07], color1: [0.85, 0.95, 1.0], ol
 // Sand starts as a loose cloud of grains in the middle, on a finer board, so it falls and heaps up on
 // the floor. Not a board full of noise: a full board would fall as one sheet. Speed 1: with Jitter on,
 // grains fall about half a cell a step (a row out of step waits a step), so a step every frame.
-const SAND_LOOK = { color0: [0.04, 0.04, 0.07], color1: [0.95, 0.78, 0.45], color2: [0.42, 0.4, 0.45], afterglow: 0, ageFade: 0, brushState: 1, brushFill: 0.5, start: 'centre', density: 0.35, board: '0.25', rate: 1 };
-const GAS_LOOK = { color0: [0.02, 0.02, 0.05], color1: [1.0, 0.6, 0.3], afterglow: 0.85, glowColor: [0.5, 0.12, 0.25], ageFade: 0, brushState: 1, brushFill: 0.5 };
+// Jitter 1: in plain Margolus every falling grain ends a step in its block's bottom row, so a falling
+// cloud shows in bands on every other row; Jitter shuffles the block rows (gridRules/dice.ts). A look
+// setting, not a rule one: tuning it keeps the preset.
+const SAND_LOOK = { jitter: 1, color0: [0.04, 0.04, 0.07], color1: [0.95, 0.78, 0.45], color2: [0.42, 0.4, 0.45], afterglow: 0, ageFade: 0, brushState: 1, brushFill: 0.5, start: 'centre', density: 0.35, board: '0.25', rate: 1 };
+// Jitter 0: the HPP gas needs the plain Margolus grid to fly straight (with Jitter it diffuses).
+const GAS_LOOK = { jitter: 0, color0: [0.02, 0.02, 0.05], color1: [1.0, 0.6, 0.3], afterglow: 0.85, glowColor: [0.5, 0.12, 0.25], ageFade: 0, brushState: 1, brushFill: 0.5 };
 
 export const PATTERN_PRESETS: Record<string, StencilPreset> = {
   wireworld: {
@@ -191,9 +195,7 @@ export const BLOCK_PRESETS: Record<string, StencilPreset> = {
     label: 'Falling sand', hint: 'Grains (1) fall into empty cells (0), slide off each other down to the side, and rest on walls (2) and the floor. Jitter 1 keeps a falling cloud from showing in bands. Nothing is lost or made.',
     params: {
       // Walls: sand needs a floor to pile on. On a wrapping board it falls out of the bottom and back in at the top for ever.
-      // Jitter: in plain Margolus every falling grain ends a step in its block's bottom row, so a falling
-      // cloud shows in bands on every other row. Jitter shuffles the block rows (gridRules/dice.ts).
-      states: 3, edges: 'walls', jitter: 1,
+      states: 3, edges: 'walls',
       blocks: [
         { before: [1, 1, 0, 0], after: [0, 0, 1, 1], symmetry: 'none', chance: 1 },
         { before: [1, _, 0, _], after: [0, SAME, 1, SAME], symmetry: 'mirror', chance: 1 },
@@ -206,8 +208,7 @@ export const BLOCK_PRESETS: Record<string, StencilPreset> = {
     label: 'Gas (HPP)', hint: 'Particles move diagonally, one cell a step; two meeting head-on bounce off at right angles (Toffoli and Margolus\'s HPP gas). Every particle is kept.',
     params: {
       // Wrap: the gas's rules have no wall cases, so particles would stick to a wall.
-      // Jitter 0: the HPP gas needs the plain Margolus grid to fly straight (with Jitter it diffuses).
-      states: 2, edges: 'wrap', jitter: 0,
+      states: 2, edges: 'wrap',
       blocks: [
         { before: [1, 0, 0, 0], after: [0, 0, 0, 1], symmetry: 'rotate', chance: 1 },
         { before: [1, 0, 0, 1], after: [0, 1, 1, 0], symmetry: 'rotate', chance: 1 },

@@ -2816,7 +2816,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "1e3a8296"
+  "hash": "c89561ce"
  },
  "grid count:life slots:empty · game of life on a chunky board, fast, green on black": {
   "reads": "build",
@@ -2825,7 +2825,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "c1f51dda"
+  "hash": "05dd4048"
  },
  "grid count:highLife:empty · highlife": {
   "reads": "build",
@@ -2834,7 +2834,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "eb1482a0"
+  "hash": "2976f866"
  },
  "grid count:highLife slots:empty · highlife on a chunky board, fast, green on black": {
   "reads": "build",
@@ -2843,7 +2843,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "c009fc62"
+  "hash": "850f7bca"
  },
  "grid count:seeds:empty · seeds": {
   "reads": "build",
@@ -2852,7 +2852,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "93586cd8"
+  "hash": "be7966aa"
  },
  "grid count:seeds slots:empty · seeds on a chunky board, fast, green on black": {
   "reads": "build",
@@ -2861,7 +2861,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "12347792"
+  "hash": "694bb786"
  },
  "grid count:dayNight:empty · day and night": {
   "reads": "build",
@@ -2870,7 +2870,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "f378d53c"
+  "hash": "bd34108a"
  },
  "grid count:dayNight slots:empty · day and night on a chunky board, fast, green on black": {
   "reads": "build",
@@ -2879,7 +2879,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "c20d8362"
+  "hash": "3ab60fa2"
  },
  "grid count:maze:empty · maze": {
   "reads": "build",
@@ -2888,7 +2888,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "62bc57b6"
+  "hash": "f363f8fc"
  },
  "grid count:maze slots:empty · maze on a chunky board, fast, green on black": {
   "reads": "build",
@@ -2897,7 +2897,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "8984da92"
+  "hash": "d64954c2"
  },
  "grid count:coral:empty · coral": {
   "reads": "build",
@@ -2906,7 +2906,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "d5c66f0a"
+  "hash": "fa15426a"
  },
  "grid count:coral slots:empty · coral on a chunky board, fast, green on black": {
   "reads": "build",
@@ -2915,7 +2915,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "11a40350"
+  "hash": "1690daee"
  },
  "grid count:anneal:empty · anneal": {
   "reads": "build",
@@ -2924,7 +2924,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "523117d4"
+  "hash": "a8848086"
  },
  "grid count:anneal slots:empty · anneal on a chunky board, fast, green on black": {
   "reads": "build",
@@ -2933,7 +2933,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "68b9df02"
+  "hash": "ca427ba2"
  },
  "grid count:diamoeba:empty · diamoeba": {
   "reads": "build",
@@ -2942,7 +2942,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "b95972e8"
+  "hash": "38d64cda"
  },
  "grid count:diamoeba slots:empty · diamoeba on a chunky board, fast, green on black": {
   "reads": "build",
@@ -2951,7 +2951,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "c6c84522"
+  "hash": "07150cbe"
  },
  "grid count:replicator:empty · replicator": {
   "reads": "build",
@@ -2960,7 +2960,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "42315650"
+  "hash": "dde99c5e"
  },
  "grid count:replicator slots:empty · replicator on a chunky board, fast, green on black": {
   "reads": "build",
@@ -2969,7 +2969,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "d5606d02"
+  "hash": "c47d6636"
  },
  "grid count:lifeWithoutDeath:empty · life without death": {
   "reads": "build",
@@ -2978,7 +2978,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "1c5f1182"
+  "hash": "f5195eea"
  },
  "grid count:lifeWithoutDeath slots:empty · life without death on a chunky board, fast, green on black": {
   "reads": "build",
@@ -2987,7 +2987,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "43142288"
+  "hash": "376e984e"
  },
  "grid count:diamonds:empty · diamonds": {
   "reads": "build",
@@ -3007,7 +3007,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "8ccc36e2"
+  "hash": "6e5b80e2"
  },
  "grid count:caves:empty · caves": {
   "reads": "build",
@@ -3016,7 +3016,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "3f8d58b2"
+  "hash": "53cdd6fa"
  },
  "grid count:caves slots:empty · caves on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3025,7 +3025,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "556ba7f2"
+  "hash": "296fc470"
  },
  "grid count:bosco:empty · bosco": {
   "reads": "build",
@@ -3034,7 +3034,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "40b523ec"
+  "hash": "766ac17a"
  },
  "grid count:bosco slots:empty · bosco on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3043,7 +3043,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "8c034232"
+  "hash": "31aa453a"
  },
  "grid count:majority:empty · majority": {
   "reads": "build",
@@ -3052,7 +3052,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "afea7438"
+  "hash": "b37d64d6"
  },
  "grid count:majority slots:empty · majority on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3061,7 +3061,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "569097ca"
+  "hash": "6fa27e3a"
  },
  "grid stages:briansBrain:empty · brians brain": {
   "reads": "build",
@@ -3070,7 +3070,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "08b4efba"
+  "hash": "941b4dd2"
  },
  "grid stages:briansBrain slots:empty · brians brain on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3079,7 +3079,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "7838ce12"
+  "hash": "0850cfa6"
  },
  "grid stages:starWars:empty · star wars": {
   "reads": "build",
@@ -3088,7 +3088,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "13a97b92"
+  "hash": "71a507fe"
  },
  "grid stages:starWars slots:empty · star wars on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3097,7 +3097,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "24848e72"
+  "hash": "2778c142"
  },
  "grid stages:frogs:empty · frogs": {
   "reads": "build",
@@ -3106,7 +3106,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "2f2bf902"
+  "hash": "5f921306"
  },
  "grid stages:frogs slots:empty · frogs on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3115,7 +3115,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "46f8bcb2"
+  "hash": "ed09739a"
  },
  "grid stages:sticks:empty · sticks": {
   "reads": "build",
@@ -3124,7 +3124,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "054ba842"
+  "hash": "0a1f060e"
  },
  "grid stages:sticks slots:empty · sticks on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3133,7 +3133,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "38c6fd4a"
+  "hash": "7ae7ca32"
  },
  "grid stages:spirals:empty · spirals": {
   "reads": "build!error",
@@ -3149,7 +3149,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "264baa42"
+  "hash": "7288e29a"
  },
  "grid stages:swirl:empty · swirl": {
   "reads": "build!error",
@@ -3165,7 +3165,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "54156a42"
+  "hash": "5706b9ba"
  },
  "grid stages:lava:empty · lava": {
   "reads": "build",
@@ -3174,7 +3174,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "db8d124e"
+  "hash": "7b0b7856"
  },
  "grid stages:lava slots:empty · lava on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3183,7 +3183,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "be9955ba"
+  "hash": "8f450f02"
  },
  "grid stages:bloomerang:empty · bloomerang": {
   "reads": "build",
@@ -3192,7 +3192,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "feab3354"
+  "hash": "047e2cfe"
  },
  "grid stages:bloomerang slots:empty · bloomerang on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3201,7 +3201,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "d27603d6"
+  "hash": "53418e0c"
  },
  "grid smooth:heat:empty · heat": {
   "reads": "build",
@@ -3210,7 +3210,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "d9f07a92"
+  "hash": "85706d52"
  },
  "grid smooth:heat slots:empty · heat on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3219,7 +3219,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "65d640e2"
+  "hash": "d3b93874"
  },
  "grid smooth:ripples:empty · water ripples": {
   "reads": "build",
@@ -3228,7 +3228,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "a2c9ff32"
+  "hash": "8e8bcc9a"
  },
  "grid smooth:ripples slots:empty · water ripples on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3237,7 +3237,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "1c881d62"
+  "hash": "812650f8"
  },
  "grid smooth:mitosis:empty · reaction diffusion": {
   "reads": "build",
@@ -3246,7 +3246,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "b1c7dc8e"
+  "hash": "b136f5d6"
  },
  "grid smooth:mitosis slots:empty · reaction diffusion on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3255,7 +3255,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "4ba514fc"
+  "hash": "8641f6c6"
  },
  "grid smooth:coralRd:empty · coral growth": {
   "reads": "build",
@@ -3264,7 +3264,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "e0be5cf0"
+  "hash": "a46119fa"
  },
  "grid smooth:coralRd slots:empty · coral growth on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3273,7 +3273,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "6f35c462"
+  "hash": "c3385942"
  },
  "grid smooth:worms:empty · worms": {
   "reads": "build",
@@ -3282,7 +3282,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "b67a9904"
+  "hash": "b84b640e"
  },
  "grid smooth:worms slots:empty · worms on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3291,7 +3291,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "27c05262"
+  "hash": "cc02e6d2"
  },
  "grid smooth:spots:empty · spots": {
   "reads": "build",
@@ -3300,7 +3300,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "ce4ff29a"
+  "hash": "22d2df22"
  },
  "grid smooth:spots slots:empty · spots on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3309,7 +3309,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "6d3e3394"
+  "hash": "bb9a607a"
  },
  "grid smooth:maze:empty · labyrinth": {
   "reads": "build",
@@ -3318,7 +3318,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "505618ea"
+  "hash": "2ce69be2"
  },
  "grid smooth:maze slots:empty · labyrinth on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3327,7 +3327,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "284d76fc"
+  "hash": "2e769556"
  },
  "grid patterns:wireworld:empty · wireworld": {
   "reads": "build",
@@ -3336,7 +3336,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "b16fd94c"
+  "hash": "15ed629e"
  },
  "grid patterns:wireworld slots:empty · wireworld on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3345,7 +3345,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "66ef6648"
+  "hash": "bb171396"
  },
  "grid patterns:fallingDots:empty · falling dots": {
   "reads": "build",
@@ -3354,7 +3354,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "58978f92"
+  "hash": "d40a9b22"
  },
  "grid patterns:fallingDots slots:empty · falling dots on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3363,7 +3363,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "12ba99d8"
+  "hash": "6e907ec6"
  },
  "grid patterns:crystal:empty · crystal": {
   "reads": "build",
@@ -3372,7 +3372,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "6d57c62e"
+  "hash": "b0109ab0"
  },
  "grid patterns:crystal slots:empty · crystal on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3381,7 +3381,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "1bd1aacc"
+  "hash": "0974e95e"
  },
  "grid blocks:sand:empty · falling sand": {
   "reads": "build",
@@ -3390,7 +3390,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "79a9b2f2"
+  "hash": "260d6aae"
  },
  "grid blocks:sand slots:empty · falling sand on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3399,7 +3399,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "ec5a6992"
+  "hash": "352d4398"
  },
  "grid blocks:gas:empty · gas": {
   "reads": "build",
@@ -3408,7 +3408,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "6d71402e"
+  "hash": "fdff892e"
  },
  "grid blocks:gas slots:empty · gas on a chunky board, fast, green on black": {
   "reads": "build",
@@ -3417,7 +3417,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "ebcd9694"
+  "hash": "c7fbd3c6"
  },
  "output:noise · output the depth": {
   "reads": "output!error",

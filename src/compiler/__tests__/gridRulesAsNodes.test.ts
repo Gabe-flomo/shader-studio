@@ -45,7 +45,7 @@ const CASES: Array<[string, Record<string, unknown>]> = [
     { cells: [-1, -2, -1, -1, 1, -1, -1, -1, -1], becomes: 0, symmetry: 'rotate', count: { state: 2, min: 2, max: 8 } },
     { cells: [-1, -1, -1, -1, 2, -1, -1, -1, -1], becomes: 1, symmetry: 'none' },
   ] }],
-  ['Falling sand (dice), walls', { ruleType: 'blocks', edges: 'walls', ...BLOCK_PRESETS.sand.params }],
+  ['Falling sand (dice, Jitter 1), walls', { ruleType: 'blocks', edges: 'walls', ...BLOCK_PRESETS.sand.params, jitter: 1 }],
   ['Gas, wrap', { ruleType: 'blocks', ...BLOCK_PRESETS.gas.params }],
   ['Custom', { ruleType: 'smooth', template: 'custom', customU: 'u + 0.2 * lap_u + a * (n - s) * 0.1', customV: 'v * 0.9 + avg_u * 0.1', knobA: 0.7 }],
 ];
