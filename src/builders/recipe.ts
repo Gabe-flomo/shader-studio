@@ -18,6 +18,7 @@ import { BLOCK_PRESETS, PATTERN_PRESETS } from '../gridRules/stencils';
 import { COUNT_PRESETS, GRID_DEFAULTS, SMOOTH_PRESETS, STAGES_PRESETS, gridShape, matchingPreset, ruleSummary, type GridPreset } from '../gridRules/spec';
 import { groupRules, isRulesGroup } from '../agentRules/apply';
 import { printGrid } from '../lang/dialects/grid';
+import { printAgents } from '../lang/dialects/agents';
 import { describeRule, type AgentRuleSet } from '../agentRules/spec';
 
 export type BuilderRecipe =
@@ -87,7 +88,8 @@ export function builderRecipeOf(node: GraphNode, graph: GraphNode[]): BuilderRec
   }
   if (isRulesGroup(node)) {
     const set = groupRules(node);
-    return { kind: 'agents', nodeId: node.id, text: agentRulesSummary(set), lines: agentRulesLines(set) };
+    // The rules in the Playfield language (lang/dialects/agents.ts): they paste into the Recipe tab.
+    return { kind: 'agents', nodeId: node.id, text: agentRulesSummary(set), lines: printAgents(set, { pretty: true }) };
   }
   return null;
 }

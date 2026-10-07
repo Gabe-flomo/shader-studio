@@ -61,7 +61,7 @@ export function copyRecipeOf(nodeId: string): boolean {
   const node = find(nodes);
   const r = node ? builderRecipeOf(node, nodes) : null;
   if (!r) return false;
-  const text = r.kind === 'agents' ? `${r.text}\n${r.lines}` : r.kind === 'scene' ? r.lines : r.text;
+  const text = r.kind === 'agents' || r.kind === 'scene' ? r.lines : r.text;
   const done = () => toast.success(r.kind === 'scene' ? 'Recipe copied' : r.kind === 'grid' ? 'Rule copied' : 'Rules copied', {
     message: r.kind === 'scene' ? 'Paste it into the Scene Builder\'s Recipe tab to build it again.' : undefined,
   });

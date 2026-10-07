@@ -90,7 +90,7 @@ export function RecipeChip({ node, touch = false }: { node: GraphNode; touch?: b
       {open && (
         <div style={{ borderTop: `1px solid ${tk.border.subtle}`, padding: touch ? 10 : 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <pre data-recipe-full style={{ margin: 0, maxHeight: 220, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', font: mono, color: tk.text.primary, userSelect: 'text', cursor: 'text' }}>
-            <RecipeText text={recipe.lines} scene={recipe.kind === 'scene'} dialect={recipe.kind === 'grid' ? 'grid' : undefined} />
+            <RecipeText text={recipe.lines} scene={recipe.kind === 'scene'} dialect={recipe.kind === 'grid' ? 'grid' : recipe.kind === 'agents' ? 'agents' : undefined} />
           </pre>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <Button size="sm" icon="copy" onClick={() => copyRecipeOf(node.id)} data-recipe-copy>Copy</Button>

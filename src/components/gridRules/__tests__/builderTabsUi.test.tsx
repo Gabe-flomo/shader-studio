@@ -124,7 +124,7 @@ describe('Agent Rules as tabs', () => {
     click($('[data-builder="agents"]'));
     const group = useNodeGraphStore.getState().nodes.find(n => n.type === 'agentsGroup')!;
     mount(<AgentRulesModal node={group} onClose={() => {}} />);
-    expect(tabs()).toEqual(['Species', 'Rules', 'Trails', 'Look']);
+    expect(tabs()).toEqual(['Species', 'Rules', 'Trails', 'Look', 'Recipe']);
     expect($('[data-agent-tab]')?.getAttribute('data-agent-tab')).toBe('rules');
     expect($('[data-fold="agentRules:open:masks"] button')?.getAttribute('aria-expanded')).toBe('false');
     click($('[data-builder-tab="trails"]'));
@@ -135,5 +135,28 @@ describe('Agent Rules as tabs', () => {
     click($('[data-builder-tab="species"]'));
     expect($('[aria-label="Species name"]')).toBeTruthy();
     expect(localStorage.getItem('builder:agent-rules:tab')).toBe('species');
+  });
+
+  it('Recipe: the rule set as text; Apply writes it into the group (one step)', () => {
+    vi.useFakeTimers();
+    useBuilderWindows.setState({ gridRules: null, agentRules: null, recipe: null });
+    mount(<BuildersSection />);
+    click($('[data-builder="agents"]'));
+    const group = useNodeGraphStore.getState().nodes.find(n => n.type === 'agentsGroup')!;
+    localStorage.setItem('builder:agent-rules:tab', 'recipe');
+    mount(<AgentRulesModal node={group} onClose={() => {}} />);
+    const ta = $('textarea[data-language-text="agents"]') as HTMLTextAreaElement;
+    expect(ta.value).toMatch(/^agents/);
+    expect(ta.value).toMatch(/always do /);
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(ta, 'agents kind=trail\nspecies Slime speed=0.22\n  always do turn toward trail 45deg, wander 7deg, leave trail 1');
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    click($('[data-language-apply]'));
+    act(() => { vi.runAllTimers(); });
+    vi.useRealTimers();
+    const rules = useNodeGraphStore.getState().nodes.find(n => n.id === group.id)!.params.agentRules as { species: Array<{ name: string; rules: unknown[] }> };
+    expect(rules.species.map(x => x.name)).toEqual(['Slime']);
+    expect(rules.species[0].rules).toHaveLength(1);
   });
 });
