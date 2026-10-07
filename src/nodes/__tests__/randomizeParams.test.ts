@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
-import { randomizableParams, randomizedParams } from '../randomizeParams';
+import { randomizableParams, randomizedGraph, randomizedParams } from '../randomizeParams';
 
 const def = {
   paramDefs: {
@@ -21,14 +21,26 @@ const node = (params: Record<string, unknown> = {}): GraphNode => ({
 });
 
 describe('randomizedParams', () => {
-  it('uses the slider range, −1…1 when none is declared, and skips wired / keyframed / select', () => {
+  it('uses the interesting range inside the slider range, −1…1 when none is declared, and skips wired / keyframed / select', () => {
     const lo = randomizedParams(node(), def, () => 0);
     const hi = randomizedParams(node(), def, () => 0.999999);
-    expect(lo.radius).toBe(0.01); expect(hi.radius).toBe(2);
+    // Radius 0.01–2 lands in 0.12–0.7 (lib/surprise ranges), Count 1–8 in 3–8.
+    expect(lo.radius).toBe(0.12); expect(hi.radius).toBe(0.7);
     expect(lo.free).toBe(-1); expect(hi.free).toBe(1);
-    expect(lo.count).toBe(1); expect(hi.count).toBe(8);
-    expect(lo.col).toEqual([0, 0, 0]);
+    expect(lo.count).toBe(3); expect(hi.count).toBe(8);
+    // A colour is a pleasant one, not three random channels.
+    const col = lo.col as number[];
+    expect(Math.max(...col) - Math.min(...col)).toBeGreaterThan(0.2);
     expect(Object.keys(lo).sort()).toEqual(['col', 'count', 'free', 'radius']);
+  });
+
+  it('stays inside the slider range for any draw, and never touches bit masks', () => {
+    const masks = { paramDefs: { ...def.paramDefs, bornMask: { label: 'Born', type: 'float', min: 0, max: 511 } } } as unknown as NodeDefinition;
+    for (let i = 0; i < 200; i++) {
+      const p = randomizedParams(node(), masks);
+      expect(p.radius as number).toBeGreaterThanOrEqual(0.01); expect(p.radius as number).toBeLessThanOrEqual(2);
+      expect('bornMask' in p).toBe(false);
+    }
   });
 
   it('follows a typed max and the both-ways setting', () => {
@@ -44,6 +56,14 @@ describe('randomizedParams', () => {
     const n = node({ __randExclude: ['radius', 'count'] });
     expect(Object.keys(randomizedParams(n, def)).sort()).toEqual(['col', 'free']);
     expect(randomizableParams(n, def).map(p => p.key).sort()).toEqual(['col', 'count', 'free', 'radius']);
+  });
+
+  it('randomizes a whole graph level from a seed, repeatably', () => {
+    const nodes: GraphNode[] = [{ id: 'a', type: 'fbm', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: {} }];
+    const a = randomizedGraph(nodes, 99), b = randomizedGraph(nodes, 99), c = randomizedGraph(nodes, 100);
+    expect(a).toEqual(b);
+    expect(a.changed).toBeGreaterThan(0);
+    expect(c.nodes).not.toEqual(a.nodes);
   });
 
   it('strength narrows the change to a window around the current value', () => {

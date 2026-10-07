@@ -21,6 +21,8 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
 import { SceneTree } from './SceneTree';
 import { ScenePreview } from './ScenePreview';
+import { SurpriseBar } from '../surprise/SurpriseBar';
+import { surpriseSceneAction, useSceneSurprise } from './surpriseActions';
 import { CameraTab, CombineTab, DescribeTab, LookTab, OutputTab, QualityTab, RecipeTab, ShapesTab, TemplatesTab, WarpsTab } from './tabs';
 
 /** The sections, as the builders' shared tab row (BuilderWindow `tabs`, components/builders/BuilderTabBar.tsx). */
@@ -94,6 +96,8 @@ export function SceneBuilderModal() {
   const targetSceneId = useSceneBuilder(s => s.targetSceneId);
   const targetExists = useNodeGraphStore(s => !!targetSceneId && s.nodes.some(n => n.id === targetSceneId));
   const editing = !!targetSceneId && targetExists;
+  const surpriseSeed = useSceneSurprise(s => s.seed);
+  const surpriseBusy = useSceneSurprise(s => s.busy);
 
   // ⌘Z / ⌘⇧Z undo the form, not the graph, while the builder is open (text fields keep their own).
   useEffect(() => {
@@ -133,6 +137,8 @@ export function SceneBuilderModal() {
       ) }}
       right={{ label: 'Preview', icon: 'eye', width: 360, content: <PreviewPanel /> }}
       headerActions={<>
+        <SurpriseBar seed={surpriseSeed} busy={surpriseBusy} onSurprise={seed => void surpriseSceneAction(seed)}
+          title="A whole random scene: 2–6 shapes, combines, sometimes modifiers, a look, colours and a camera (one undo step)" />
         <Button size="sm" variant="ghost" icon="search" style={{ marginRight: 4 }} title="Read the 3D graph on the canvas back into the builder" onClick={() => describeIntoBuilder()}>Describe graph</Button>
         <IconButton icon="undo" label="Undo" shortcut="cmd+z" disabled={!canUndo} onClick={undo} />
         <IconButton icon="redo" label="Redo" shortcut="cmd+shift+z" disabled={!canRedo} onClick={redo} />

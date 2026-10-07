@@ -30,6 +30,8 @@ import { groupRules } from '../../agentRules/apply';
 import { generateRulesInside, ruleIds } from '../../agentRules/generate';
 import { RULES_TEMPLATES } from '../../agentRules/templates';
 import { applyGroupRules, openGroupAsNodes, setGroupView } from '../../agentRules/storeActions';
+import { SurpriseBar } from '../surprise/SurpriseBar';
+import { surpriseAgentsAction, useSurpriseSeeds } from '../surprise/surpriseActions';
 import { AGENT_VIEWS, agentsViewOf, type AgentsView } from '../../agentRules/outputs';
 
 type Tk = ReturnType<typeof useTokens>;
@@ -58,6 +60,13 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
     timer.current = setTimeout(flush, 250);
   };
   const close = () => { flush(); onClose(); };
+  // Rules changed outside the editor (Surprise me, Undo): show them, unless an edit is on its way.
+  useEffect(() => useNodeGraphStore.subscribe((st, prev) => {
+    const now = st.nodes.find(x => x.id === node.id);
+    const was = prev.nodes.find(x => x.id === node.id);
+    if (now && now.params.agentRules !== was?.params.agentRules && !pending.current) setSet(groupRules(now));
+  }), [node.id]);
+  const surpriseSeed = useSurpriseSeeds(st => st.agents[node.id] ?? null);
 
   const species = set.species[Math.min(sp, set.species.length - 1)];
   const s = Math.min(sp, set.species.length - 1);
@@ -192,11 +201,13 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
       subtitle={`${label} · ${set.species.length} ${set.species.length === 1 ? 'species' : 'species'} · ${d3 ? '3D' : '2D'} · When … Do …`}
       icon="expr" iconColor={tk.kind.expr} width={1100} height={780} onClose={close}
       tabs={{ items: AGENT_RULES_TABS, value: tab, onChange: setTab, ariaLabel: 'Agent Rules sections' }}
-      headerActions={
+      headerActions={<>
+        <SurpriseBar seed={surpriseSeed} onSurprise={seed => { flush(); surpriseAgentsAction(node.id, seed); setSp(0); }}
+          title="A random rule set: a walker kind, its sensors, turn, speed, trail and colours, sometimes a second species (one undo step)" />
         <Select ariaLabel="Start from a template" value="" height={30}
           options={[{ value: '', label: 'Templates…' }, ...RULES_TEMPLATES.map(t => ({ value: t.key, label: t.label }))]}
           onChange={k => { const t = RULES_TEMPLATES.find(x => x.key === k); if (t) { update(t.set()); setSp(0); } }} />
-      }
+      </>}
       footer={<>
         <Button icon="fn" title="Show the nodes these rules make (Start, a block per rule, Finish, Move), every one with a note, and edit them as nodes" onClick={() => { flush(); onClose(); openGroupAsNodes(node.id); }}>Open as nodes</Button>
         <Toggle checked={showLines} onChange={setShowLines} label="Show the lines" />
