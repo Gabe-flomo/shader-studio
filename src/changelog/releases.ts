@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.62',
+    date: '2026-10-07',
+    title: 'Builder tabs',
+    highlights: [
+      { area: 'Studio', text: 'Builders use tabs: Grid Rules (Presets · Neighbourhood · Born & Survive · Start · Brush · Colours) and Agent Rules (Species · Rules · Trails · Look).' },
+      { area: 'Studio', text: 'Born & Survive explains itself: 3×3 pictures for each count (born, stays, lonely, crowded), a live sentence, and a mini-board with Glider and Blinker.', link: { kind: 'doc', path: 'docs/grid-rules.md' } },
+    ],
+  },
+  {
     id: '2026.10.61',
     date: '2026-10-07',
     title: 'A visual Scene Builder',
