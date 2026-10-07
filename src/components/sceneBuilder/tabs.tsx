@@ -7,10 +7,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSceneBuilder } from '../../sceneBuilder/store';
 import {
-  DEFAULT_LOOK, SHAPES, SHAPE_BY_KIND, TONE_MODES, WARPS, WARP_BY_KIND, allShapes, autoStepScale, defaultSize, findItem, itemName, opLabel, stepHints, walkItems,
+  DEFAULT_LOOK, MODIFIER_KINDS, SHAPES, SHAPE_BY_KIND, TONE_MODES, WARPS, WARP_BY_KIND, allShapes, autoStepScale, defaultSize, findItem, itemName, modifierSummary, opLabel, stepHints, walkItems,
   type GroupSpec, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type Vec3, type WarpSpec,
 } from '../../sceneBuilder/spec';
-import { addShape, addWarp, duplicateItem, moveItem, moveWarp, removeItem, removeWarp, ungroup } from '../../sceneBuilder/edit';
+import { addModifier, addShape, addWarp, duplicateItem, moveBy, moveItem, moveModifierTo, moveWarp, removeItem, removeWarp, ungroup } from '../../sceneBuilder/edit';
+import { GALLERY_SHAPES, type GalleryShape } from '../../sceneBuilder/thumbnails';
+import { ShapeGallery, ShapeThumb } from './ShapeGallery';
+import { NO_DRAG, OP_GLYPH } from './controls';
+import { Icon } from '../ui/Icon';
 import { RECIPE_VOCABULARY, parseRecipe, printRecipe, type RecipeError } from '../../sceneBuilder/recipe';
 import { SCENE_TEMPLATES } from '../../sceneBuilder/templates';
 import { describeIntoBuilder } from '../../sceneBuilder/actions';
@@ -74,14 +78,177 @@ function ParamRows({ params, values, onChange, keyPrefix }: {
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 
-function shapeSummary(sh: ShapeSpec): string {
+/** The six combines, as the inspector's operator buttons. */
+const OPS: Array<{ value: string; glyph: string; label: string }> = [
+  { value: 'union', glyph: '∪', label: 'Union' },
+  { value: 'smooth-union', glyph: '∪', label: 'Smooth union' },
+  { value: 'subtract', glyph: '−', label: 'Subtract' },
+  { value: 'smooth-subtract', glyph: '−', label: 'Smooth subtract' },
+  { value: 'intersect', glyph: '∩', label: 'Intersect' },
+  { value: 'smooth-intersect', glyph: '∩', label: 'Smooth intersect' },
+];
+
+/** The drag type a modifier chip carries (its warp id), for reordering. */
+const MOD_DRAG = 'application/x-scene-modifier';
+
+/**
+ * An item's modifiers as chips, in order (the first bends the most, outside in): click one to edit
+ * it below, drag to reorder (or Earlier / Later on the open one), × to remove, + to add.
+ */
+function ModifierStack({ item }: { item: SceneItem }) {
+  const tk = useTokens();
+  const edit = useSceneBuilder(s => s.edit);
+  const warpId = useSceneBuilder(s => s.warpId);
+  const selectWarp = useSceneBuilder(s => s.selectWarp);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [over, setOver] = useState<number | null>(null);
+  const open = item.warps.find(w => w.id === warpId) ?? null;
+  const add = (kind: string) => { let id = ''; edit(d => { id = addModifier(d, item.id, kind); }); selectWarp(item.id, id); };
+  const more = WARPS.filter(w => !(MODIFIER_KINDS as readonly string[]).includes(w.kind));
+  return (
+    <div data-modifier-stack style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <BuilderLabel meta={item.warps.length ? `${item.warps.length} · outside in` : undefined}
+        hint="Modifiers change only this item, in order: the first is applied last to the shape, like wrapping it (move, then rotate, then twist). Distance modifiers (Round, Onion, Displace) reshape its surface.">
+        Modifiers
+      </BuilderLabel>
+      <div role="list" aria-label="Modifiers" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+        {item.warps.map((w, i) => {
+          const sum = modifierSummary(w);
+          const on = w.id === warpId;
+          return (
+            <span role="listitem" key={w.id} data-modifier-chip={w.kind} draggable={!NO_DRAG}
+              onDragStart={e => { e.dataTransfer.setData(MOD_DRAG, w.id); e.dataTransfer.effectAllowed = 'move'; }}
+              onDragOver={e => { if (e.dataTransfer.types.includes(MOD_DRAG)) { e.preventDefault(); setOver(i); } }}
+              onDragLeave={() => setOver(o => (o === i ? null : o))}
+              onDrop={e => { e.preventDefault(); setOver(null); const id = e.dataTransfer.getData(MOD_DRAG); if (id && id !== w.id) edit(d => moveModifierTo(d, item.id, id, i)); }}
+              onClick={() => selectWarp(item.id, on ? null : w.id)}
+              title={WARP_BY_KIND[w.kind]?.blurb ?? 'A part of a described graph the builder can\'t build.'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 4px 0 9px', borderRadius: 14, cursor: NO_DRAG ? 'pointer' : 'grab', userSelect: 'none',
+                background: on ? tk.bg.selected : tk.bg.field, color: on ? tk.accent.text : tk.text.primary,
+                boxShadow: `inset 0 0 0 ${on || over === i ? 1.5 : 1}px ${on || over === i ? tk.accent.base : tk.border.default}`,
+                font: `600 11.5px ${fontFamily.ui}`,
+              }}>
+              <span style={{ font: `600 10px ${fontFamily.mono}`, color: tk.text.faint }}>{i + 1}</span>
+              {sum.label}
+              {sum.value && <span style={{ font: `500 11px ${fontFamily.mono}`, color: on ? tk.accent.text : tk.text.muted }}>{sum.value}</span>}
+              <button type="button" aria-label={`Remove ${sum.label}`} title="Remove"
+                onClick={e => { e.stopPropagation(); edit(d => removeWarp(d, item.id, w.id)); }}
+                style={{ width: 20, height: 20, border: 0, borderRadius: 10, background: 'none', color: tk.text.faint, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+                <Icon name="close" size={11} />
+              </button>
+            </span>
+          );
+        })}
+        <Button size="sm" variant="ghost" icon="plus" onClick={e => setMenu({ x: e.clientX, y: e.clientY })}>Modifier</Button>
+      </div>
+      {open && <WarpCard key={open.id} item={item} w={open} index={item.warps.indexOf(open)} count={item.warps.length} />}
+      {!item.warps.length && <BuilderNote>None yet: move, rotate, scale, twist, bend, repeat, mirror, round or hollow just this {item.type === 'group' ? 'group' : 'shape'}.</BuilderNote>}
+      {menu && <Menu x={menu.x} y={menu.y} onClose={() => setMenu(null)} title="Add a modifier" items={[
+        ...MODIFIER_KINDS.map(k => ({ label: WARP_BY_KIND[k].label, hint: WARP_BY_KIND[k].blurb, onSelect: () => add(k) })),
+        { heading: 'More warps' },
+        ...more.map(w => ({ label: w.label, hint: w.blurb, onSelect: () => add(w.kind) })),
+      ]} />}
+    </div>
+  );
+}
+
+function ShapeInspector({ sh }: { sh: ShapeSpec }) {
+  const spec = useSceneBuilder(s => s.spec);
+  const edit = useSceneBuilder(s => s.edit);
+  const mode = spec.look.mode;
   const def = SHAPE_BY_KIND[sh.kind];
-  if (!def) return sh.label ?? 'custom';
-  const first = def.params[0];
-  const v = sh.size[first.key];
-  const size = `${first.key} ${Array.isArray(v) ? vecText(v as Vec3) : fmtN(Number(v))}`;
-  const at = sh.at.some(x => x) ? ` · at ${vecText(sh.at)}` : '';
-  return `${def.label} · ${size}${at}${sh.warps.length ? ` · ${sh.warps.length} warp${sh.warps.length === 1 ? '' : 's'}` : ''}`;
+  const set = (fn: (s: ShapeSpec) => void, key?: string) => edit(d => { const it = findItem(d, sh.id)?.item; if (it?.type === 'shape') fn(it); }, key);
+  if (!def) return <BuilderNote>custom({sh.label}): a part of a described graph the builder can't build. Build leaves it out.</BuilderNote>;
+  return <>
+    <Row label="Name" hint="Optional: what the notes, the tree and the recipe call it."><Field value={sh.name} placeholder={def.label} aria-label="Shape name" onChange={e => set(s => { s.name = e.target.value; }, `name:${sh.id}`)} /></Row>
+    <Row label="Shape" hint="Its kind. Changing it resets the size settings to the new kind's.">
+      <Select ariaLabel="Shape kind" value={sh.kind} options={SHAPES.map(s => ({ value: s.kind, label: s.label }))}
+        onChange={k => set(s => { s.kind = k; s.size = defaultSize(k); })} style={{ width: '100%' }} />
+    </Row>
+    <BuilderNote>{def.blurb}</BuilderNote>
+    <ParamRows keyPrefix={sh.id} params={def.params} values={sh.size} onChange={(k, v) => set(s => { s.size[k] = v; }, `size:${sh.id}:${k}`)} />
+    <Vec3Row label="Position" hint="Where its centre is: X right, Y up, Z toward the camera." value={sh.at} min={-5} max={5} onChange={v => set(s => { s.at = v; }, `at:${sh.id}`)} />
+    <Vec3Row label="Rotation" hint="Degrees about X, then Y, then Z." value={sh.rot} min={-180} max={180} step={0.5} onChange={v => set(s => { s.rot = v; }, `rot:${sh.id}`)} />
+    <ColourRow label="Colour" value={sh.color} hint={mode === 'surface' ? 'Its surface colour (Surface mode picks one per shape).' : 'Colours show in Surface mode; GI uses the first shape\'s, Volumetric its glow tint.'} onChange={v => set(s => { s.color = v; }, `color:${sh.id}`)} />
+    <NumRow label="Shine" hint="How strong its highlight is: 0 matt, 1 glossy (Surface mode)." value={sh.shine} min={0} max={1} onChange={v => set(s => { s.shine = v; }, `shine:${sh.id}`)} />
+    {mode === 'glass' && <Row label="Glass" hint="In Glass mode: glass shapes refract the others."><Toggle checked={sh.glass} onChange={v => set(s => { s.glass = v; })} label={sh.glass ? 'Made of glass' : 'Seen through the glass'} /></Row>}
+  </>;
+}
+
+function GroupInspector({ g }: { g: GroupSpec }) {
+  const spec = useSceneBuilder(s => s.spec);
+  const edit = useSceneBuilder(s => s.edit);
+  const select = useSceneBuilder(s => s.select);
+  const tk = useTokens();
+  const isRoot = g.id === spec.root.id;
+  const set = (fn: (x: GroupSpec) => void, key?: string) => edit(d => { const it = findItem(d, g.id)?.item; if (it?.type === 'group') fn(it); }, key);
+  const value = `${g.k > 0 ? 'smooth-' : ''}${g.op}`;
+  return <>
+    {!isRoot && <Row label="Name" hint="Optional: a name for the group in notes and the tree."><Field value={g.name} placeholder={opLabel(g)} aria-label="Group name" onChange={e => set(x => { x.name = e.target.value; }, `gname:${g.id}`)} /></Row>}
+    <div role="radiogroup" aria-label="Operator" data-op-grid style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))', gap: 6 }}>
+      {OPS.map(o => {
+        const on = o.value === value;
+        return (
+          <button key={o.value} type="button" role="radio" aria-checked={on} data-op={o.value}
+            onClick={() => set(x => { const smooth = o.value.startsWith('smooth-'); x.op = o.value.replace('smooth-', '') as GroupSpec['op']; x.k = smooth ? (x.k > 0 ? x.k : 0.3) : 0; })}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8, height: 34, padding: '0 10px', border: 0, borderRadius: radius.md, cursor: 'pointer', textAlign: 'left',
+              background: on ? tk.bg.selected : tk.bg.panel, color: on ? tk.accent.text : tk.text.secondary,
+              boxShadow: `inset 0 0 0 ${on ? 1.5 : 1}px ${on ? tk.accent.base : tk.border.default}`, font: `${on ? 650 : 500} 12px ${fontFamily.ui}`,
+            }}>
+            <span style={{ font: `700 15px ${fontFamily.mono}`, width: 14, textAlign: 'center' }}>{o.glyph}</span>
+            {o.label}{o.value.startsWith('smooth') && <span style={{ marginLeft: 'auto', font: `600 10px ${fontFamily.mono}`, color: tk.text.faint }}>k</span>}
+          </button>
+        );
+      })}
+    </div>
+    {g.k > 0 && <NumRow label="Blend radius (k)" hint="How wide the blend is, in scene units." value={g.k} min={0.01} max={1} step={0.005} onChange={v => set(x => { x.k = v; }, `k:${g.id}`)} />}
+    <BuilderLabel hint="Order matters for Subtract: the first item is the shape, the rest cut it.">Items, in order</BuilderLabel>
+    {g.children.map((c, i) => (
+      <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 4 }}>
+        <span style={{ width: 18, font: `600 11px ${fontFamily.mono}`, color: tk.text.faint }}>{i + 1}</span>
+        {c.type === 'shape' ? <ShapeThumb kind={c.kind} size={20} /> : <span style={{ width: 20, textAlign: 'center', font: `700 13px ${fontFamily.mono}`, color: tk.text.secondary }}>{OP_GLYPH[c.op]}</span>}
+        <button type="button" onClick={() => select(c.id)} style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, fontSize: 12.5, color: tk.text.primary, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {itemName(spec, c)} <span style={{ color: tk.text.faint }}>{c.type === 'group' ? opLabel(c) : SHAPE_BY_KIND[c.kind]?.label}{g.op === 'subtract' ? (i === 0 ? ' · the shape' : ' · cuts') : ''}</span>
+        </button>
+        <IconButton icon="chevU" size="sm" tooltip={false} label="Move up" disabled={i === 0} onClick={() => edit(d => { moveBy(d, c.id, -1); })} />
+        <IconButton icon="chevD" size="sm" tooltip={false} label="Move down" disabled={i === g.children.length - 1} onClick={() => edit(d => { moveBy(d, c.id, 1); })} />
+      </div>
+    ))}
+    {g.children.length === 0 && <BuilderNote>Empty: add a shape from the gallery, or drag items onto it in the Scene tree.</BuilderNote>}
+  </>;
+}
+
+/** The selected item, to edit: its settings, then its modifiers. */
+function Inspector({ item }: { item: SceneItem }) {
+  const spec = useSceneBuilder(s => s.spec);
+  const edit = useSceneBuilder(s => s.edit);
+  const select = useSceneBuilder(s => s.select);
+  const tk = useTokens();
+  const isRoot = item.id === spec.root.id;
+  return (
+    <section data-inspector={item.id} aria-label="Inspector" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px 14px', borderRadius: radius.control, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 36 }}>
+        {item.type === 'shape'
+          ? <ShapeThumb kind={item.kind} size={36} />
+          : <span style={{ width: 36, height: 36, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', background: tk.bg.field, color: tk.text.secondary, font: `700 18px ${fontFamily.mono}` }}>{OP_GLYPH[item.op]}</span>}
+        <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontWeight: 650, fontSize: 14, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isRoot ? 'The whole scene' : itemName(spec, item)}</span>
+          <span style={{ fontSize: 11.5, color: tk.text.muted }}>{item.type === 'shape' ? SHAPE_BY_KIND[item.kind]?.label ?? 'custom' : `${opLabel(item)}${item.k > 0 ? ` · k ${item.k}` : ''} · ${item.children.length} item${item.children.length === 1 ? '' : 's'}`}</span>
+        </span>
+        {item.type === 'shape' && item.color && <span title="Its colour" style={{ width: 14, height: 14, borderRadius: 4, background: rgbCss(item.color), boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.18)' }} />}
+        {!isRoot && <IconButton icon="copy" size="sm" label="Duplicate" onClick={() => { let id = ''; edit(d => { id = duplicateItem(d, item.id)?.id ?? ''; }); if (id) select(id); }} />}
+        {!isRoot && item.type === 'group' && <IconButton icon="unlink" size="sm" label="Ungroup (its items take its place)" onClick={() => edit(d => ungroup(d, item.id))} />}
+        {!isRoot && <IconButton icon="trash" size="sm" tone="danger" label="Remove" onClick={() => { edit(d => removeItem(d, item.id)); select(null); }} />}
+      </div>
+      {item.type === 'shape' ? <ShapeInspector sh={item} /> : <GroupInspector g={item} />}
+      <div style={{ height: 1, background: tk.border.subtle, margin: '4px 0' }} />
+      {isRoot
+        ? <BuilderNote>The whole scene's warps are under Bend space.</BuilderNote>
+        : <ModifierStack key={item.id} item={item} />}
+    </section>
+  );
 }
 
 export function ShapesTab() {
@@ -89,52 +256,23 @@ export function ShapesTab() {
   const selectedId = useSceneBuilder(s => s.selectedId);
   const edit = useSceneBuilder(s => s.edit);
   const select = useSceneBuilder(s => s.select);
-  const setTab = useSceneBuilder(s => s.setTab);
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const shapes = allShapes(spec);
-  const mode = spec.look.mode;
-  const setShape = (id: string, fn: (s: ShapeSpec) => void, key?: string) => edit(d => { const it = findItem(d, id)?.item; if (it?.type === 'shape') fn(it); }, key);
   const insert = useInsertExample();
+  const sel = (selectedId && findItem(spec, selectedId)?.item) || null;
+  const add = (g: GalleryShape) => {
+    let id = '';
+    edit(d => { const sh = addShape(d, g.kind, selectedId); if (g.size) Object.assign(sh.size, structuredClone(g.size)); if (g.key !== g.kind) sh.name = ''; id = sh.id; });
+    select(id);
+  };
   return (
     <Pane>
       <BuilderLabel meta={`${shapes.length} shape${shapes.length === 1 ? '' : 's'}`}>Shapes</BuilderLabel>
       {shapes.length === 0 ? <EmptyHelp id="shapes" onExample={insert} /> : <BuilderHelp id="shapes" onExample={insert} />}
-      {shapes.map(sh => {
-        const def = SHAPE_BY_KIND[sh.kind];
-        return (
-          <Card key={sh.id} id={`shape:${sh.id}`} title={itemName(spec, sh)} summary={shapeSummary(sh)} accent={rgbCss(sh.color)}
-            defaultOpen={sh.id === selectedId || shapes.length === 1} selected={sh.id === selectedId} onHeaderClick={() => select(sh.id)}
-            actions={<>
-              <IconButton icon="copy" size="sm" label="Duplicate" onClick={() => { let id = ''; edit(d => { id = duplicateItem(d, sh.id)?.id ?? ''; }); if (id) select(id); }} />
-              <IconButton icon="trash" size="sm" tone="danger" label="Remove" onClick={() => edit(d => removeItem(d, sh.id))} />
-            </>}>
-            {!def ? <BuilderNote>custom({sh.label}): a part of a described graph the builder can't build. Build leaves it out.</BuilderNote> : <>
-              <Row label="Name" hint="Optional: what the notes, the tree and the recipe call it."><Field value={sh.name} placeholder={def.label} aria-label="Shape name" onChange={e => setShape(sh.id, s => { s.name = e.target.value; }, `name:${sh.id}`)} /></Row>
-              <Row label="Shape" hint="Its kind. Changing it resets the size settings to the new kind's.">
-                <Select ariaLabel="Shape kind" value={sh.kind} options={SHAPES.map(s => ({ value: s.kind, label: s.label }))}
-                  onChange={k => setShape(sh.id, s => { s.kind = k; s.size = defaultSize(k); })} style={{ width: '100%' }} />
-              </Row>
-              <BuilderNote>{def.blurb}</BuilderNote>
-              <ParamRows keyPrefix={sh.id} params={def.params} values={sh.size} onChange={(k, v) => setShape(sh.id, s => { s.size[k] = v; }, `size:${sh.id}:${k}`)} />
-              <Vec3Row label="Position" hint="Where its centre is: X right, Y up, Z toward the camera." value={sh.at} min={-5} max={5} onChange={v => setShape(sh.id, s => { s.at = v; }, `at:${sh.id}`)} />
-              <Vec3Row label="Rotation" hint="Degrees about X, then Y, then Z." value={sh.rot} min={-180} max={180} step={0.5} onChange={v => setShape(sh.id, s => { s.rot = v; }, `rot:${sh.id}`)} />
-              <ColourRow label="Colour" value={sh.color} hint={mode === 'surface' ? undefined : 'Colours show in Surface mode; GI uses the first shape\'s, Volumetric its glow tint.'} onChange={v => setShape(sh.id, s => { s.color = v; }, `color:${sh.id}`)} />
-              <NumRow label="Shine" hint="How strong its highlight is: 0 matt, 1 glossy (Surface mode)." value={sh.shine} min={0} max={1} onChange={v => setShape(sh.id, s => { s.shine = v; }, `shine:${sh.id}`)} />
-              {mode === 'glass' && <Row label="Glass" hint="In Glass mode: glass shapes refract the others."><Toggle checked={sh.glass} onChange={v => setShape(sh.id, s => { s.glass = v; })} label={sh.glass ? 'Made of glass' : 'Seen through the glass'} /></Row>}
-              <Row label="Bent by" hint="The warps that bend only this shape, in order. Add them under Bend space.">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <BuilderNote>{sh.warps.length ? sh.warps.map(w => WARP_BY_KIND[w.kind]?.label ?? w.label).join(' → ') : 'nothing'}</BuilderNote>
-                  <Button size="sm" variant="ghost" icon="wave" onClick={() => { select(sh.id); setTab('warps'); }}>Bend space…</Button>
-                </span>
-              </Row>
-            </>}
-          </Card>
-        );
-      })}
-      <Button icon="plus" onClick={e => setMenu({ x: e.clientX, y: e.clientY })} style={{ alignSelf: 'flex-start' }}>Add a shape</Button>
-      {menu && <Menu x={menu.x} y={menu.y} onClose={() => setMenu(null)} title="Add a shape" items={SHAPES.map(s => ({
-        label: s.label, hint: s.blurb, onSelect: () => { let id = ''; edit(d => { id = addShape(d, s.kind, selectedId).id; }); select(id); },
-      }))} />}
+      <Card id="gallery" title="Add a shape" defaultOpen summary={`${GALLERY_SHAPES.length} shapes: click to add${NO_DRAG ? '' : ', or drag into the Scene tree'}`}>
+        <BuilderNote>{NO_DRAG ? 'Tap a shape to add it beside the selection (into it, if it is a group).' : 'Click a shape to add it beside the selection (into it, if it is a group), or drag it onto a row of the Scene tree.'}</BuilderNote>
+        <ShapeGallery onPick={add} />
+      </Card>
+      {sel ? <Inspector item={sel} /> : shapes.length > 0 && <BuilderNote>Select a shape or a group in the Scene tree to edit it here.</BuilderNote>}
     </Pane>
   );
 }

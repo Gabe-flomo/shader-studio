@@ -23,6 +23,8 @@ interface SceneBuilderState {
   at: { x: number; y: number } | null;
   tab: BuilderTab;
   selectedId: string | null;
+  /** The modifier chip open in the inspector (one of the selected item's warps). */
+  warpId: string | null;
   /** What Describe this graph found, shown on the Describe tab. */
   describe: DescribeResult | null;
   /** The spec changed since the window opened or last built. */
@@ -37,6 +39,8 @@ interface SceneBuilderState {
   redo: () => void;
   setTab: (tab: BuilderTab) => void;
   select: (id: string | null) => void;
+  /** Select an item and open one of its modifier chips. */
+  selectWarp: (itemId: string, warpId: string | null) => void;
   setTarget: (id: string | null) => void;
   markBuilt: () => void;
   setDescribe: (d: DescribeResult | null) => void;
@@ -54,6 +58,7 @@ export const useSceneBuilder = create<SceneBuilderState>((set, get) => ({
   at: null,
   tab: 'shapes',
   selectedId: null,
+  warpId: null,
   describe: null,
   dirty: false,
 
@@ -75,7 +80,8 @@ export const useSceneBuilder = create<SceneBuilderState>((set, get) => ({
   undo: () => set(s => (s.past.length ? { spec: s.past[s.past.length - 1], past: s.past.slice(0, -1), future: [s.spec, ...s.future], dirty: true } : s)),
   redo: () => set(s => (s.future.length ? { spec: s.future[0], future: s.future.slice(1), past: [...s.past, s.spec], dirty: true } : s)),
   setTab: tab => set({ tab }),
-  select: id => set({ selectedId: id }),
+  select: id => set(s => (s.selectedId === id ? s : { selectedId: id, warpId: null })),
+  selectWarp: (itemId, warpId) => set({ selectedId: itemId, warpId }),
   setTarget: id => set({ targetSceneId: id }),
   markBuilt: () => set({ dirty: false }),
   setDescribe: d => set({ describe: d }),
