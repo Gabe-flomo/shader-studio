@@ -20,6 +20,7 @@ import { RECIPE_WORDS } from '../sceneBuilder/recipe';
 import { OUTPUTS, PALETTES } from '../sceneBuilder/output';
 import { ACTIONS, SHAPES as WORD_SHAPES, editDistance, fuzzBudget } from './vocabulary';
 import { moveById } from '../suggestions/moves';
+import { entriesFor, lookupHead, paramOf, type Dialect, type Entry } from './registry';
 
 export type CompletionKind = 'shape' | 'warp' | 'combine' | 'mode' | 'setting' | 'output' | 'palette' | 'colour' | 'param' | 'action' | 'condition' | 'value';
 
@@ -36,6 +37,8 @@ export interface Completion {
   words?: string[];
   /** Taking it replaces the whole field (a whole phrase), not just the word being typed. */
   replaceAll?: boolean;
+  /** A heading the list shows it under (create's node categories). */
+  group?: string;
 }
 
 // ── Ranking ─────────────────────────────────────────────────────────────────
@@ -120,7 +123,7 @@ const SETTINGS: Record<string, { detail: string; params: SignatureParam[] }> = {
   camera: { detail: 'the orbit camera', params: ['dist', 'angle', 'elev', 'orbit', 'zoom', 'flatten', 'x', 'y', 'z'].map(k => ({ key: k, label: k, hint: k === 'dist' ? 'How far away.' : k === 'orbit' ? 'Degrees a second round the point.' : k === 'flatten' ? '0 perspective … 1 isometric.' : 'A number.', text: `${k}=…` })) },
   quality: { detail: 'the march\'s steps and limits', params: ['steps', 'dist', 'step', 'jitter'].map(k => ({ key: k, label: k, hint: k === 'step' ? 'Step scale, or auto.' : 'A number.', text: `${k}=…` })) },
   output: { detail: 'what the scene shows: depth, normal, hit…', params: [{ key: '', label: 'Show', hint: OUTPUTS.map(o => o.words[0]).join(', '), text: OUTPUTS.map(o => o.words[0]).join('|') }, { key: 'palette', label: 'Palette', hint: PALETTES.map(p => p.key).join(', '), text: 'palette …' }] },
-  colour: { detail: 'colour the space through a palette', params: [{ key: 'by', label: 'By', hint: 'by depth, height, normal, distance, position…', text: 'by depth' }, { key: 'palette', label: 'Palette', hint: PALETTES.map(p => p.key).join(', '), text: 'palette sunset' }] },
+  colour: { detail: 'colour the space through a palette', params: [{ key: 'by', label: 'By', hint: 'by depth, height, normal, distance, position…', text: 'by depth' }, { key: 'palette', label: 'Palette', hint: PALETTES.map(p => p.key).join(', '), text: 'palette=sunset' }] },
 };
 
 /** Every word a recipe clause can start with. */
@@ -128,7 +131,11 @@ export function recipeClauseWords(): Completion[] {
   const out: Completion[] = [];
   for (const s of SCENE_SHAPES) out.push({ label: s.kind, insert: s.kind, kind: 'shape', detail: `${s.label}: ${s.blurb}`, signature: `${s.kind} ${s.params.map(paramText).join(' ')} at=(x,y,z)`, words: s.aliases });
   for (const op of OPS) out.push({ label: op, insert: `${op}(`, kind: 'combine', detail: OP_DETAIL[op], signature: `${op}(shape, shape…)${op.startsWith('smooth') ? ' k=0.3' : ''}` });
-  for (const w of WARPS) out.push({ label: w.kind, insert: w.kind, kind: 'warp', detail: `${w.label}: ${w.blurb}`, signature: `${w.kind} ${[...(w.axes ? [w.axes.def] : []), ...w.params.map(paramText)].join(' ')}`, words: w.aliases });
+  for (const w of WARPS) {
+    // D8: the noise warp is written `warp`.
+    const word = w.kind === 'noise' ? 'warp' : w.kind;
+    out.push({ label: word, insert: word, kind: 'warp', detail: `${w.label}: ${w.blurb}`, signature: `${word} ${[...(w.axes ? [w.axes.def] : []), ...w.params.map(paramText)].join(' ')}`, words: [...w.aliases.filter(a => a !== word), ...(word !== w.kind ? [w.kind] : [])] });
+  }
   for (const m of Object.keys(MODE_DETAIL)) out.push({ label: m, insert: m, kind: 'mode', detail: `render mode: ${MODE_DETAIL[m]}` });
   for (const [k, s] of Object.entries(SETTINGS)) out.push({ label: k === 'colour' ? 'colour by' : k, insert: k === 'colour' ? 'colour by ' : k, kind: k === 'output' || k === 'colour' ? 'output' : 'setting', detail: s.detail, signature: `${k} ${s.params.map(p => p.text).join(' ')}` });
   return out;
@@ -149,7 +156,7 @@ export function signatureFor(head: string): Signature | null {
     if (d.axes) ps.push({ key: d.axes.key, label: d.axes.label, hint: d.axes.kind === 'flags' ? 'Letters from xyz, like xz.' : `One of ${d.axes.options.join(', ')}.`, text: `${d.axes.key}=${d.axes.def}` });
     ps.push(...d.params.map(p => ({ key: p.key, label: p.label, hint: p.hint ?? `${p.label}, ${p.min} to ${p.max}.`, text: paramText(p) })));
     if (d.select) ps.push({ key: d.select.key, label: d.select.label, hint: `One of ${d.select.options.join(', ')}.`, text: `${d.select.key}=${d.select.def}` });
-    return { head: d.kind, detail: `${d.label}: ${d.blurb}`, params: ps, active: -1 };
+    return { head: d.kind === 'noise' ? 'warp' : d.kind, detail: `${d.label}: ${d.blurb}`, params: ps, active: -1 };
   }
   if (RECIPE_WORDS.ops[w]) return { head: w, detail: OP_DETAIL[w] ?? 'a combine group', params: [{ key: '(', label: 'Items', hint: 'Shapes and combines, separated by commas.', text: '(shape, shape…)' }, { key: 'k', label: 'Blend radius', hint: 'How wide the smooth join is.', text: 'k=0.3' }, { key: 'name', label: 'Name', hint: 'A name for the group.', text: 'name=…' }], active: -1 };
   const setting = SETTINGS[w === 'color' ? 'colour' : w === 'show' ? 'output' : w === 'shadow' ? 'shadows' : w === 'bg' ? 'background' : w === 'cam' ? 'camera' : w];
@@ -197,11 +204,15 @@ export function recipeAssist(text: string, caret: number): Assist {
     sigHead = word || head;
   } else if (keyM) {
     const key = keyM[1].toLowerCase();
+    // Any setting can be drawn at random (lang/random.ts).
+    const randomItems = word && 'random'.startsWith(word.toLowerCase()) && word.toLowerCase() !== 'random'
+      ? [{ label: 'random', insert: 'random', kind: 'value' as const, detail: 'a value from its interesting range (random(0.2..2), random(red, teal) for your own)' }] : [];
     if (key === 'color' || key === 'colour' || key === 'tint' || key === 'top' || key === 'bottom') {
       items = rankCompletions(word, Object.entries(RECIPE_WORDS.colours).map(([nm, c]) => ({ label: nm, insert: nm, kind: 'colour' as const, detail: `(${c.join(', ')})` })), 8);
     } else if (key === 'palette' || key === 'ramp') {
       items = rankCompletions(word, PALETTES.map(p => ({ label: p.key, insert: p.key, kind: 'palette' as const, detail: `${p.label} (${p.kind === 'palette' ? 'Palette' : 'Color Ramp'})` })), 8);
     }
+    items = [...items, ...randomItems];
   } else {
     const h = (innerHead ?? head).toLowerCase();
     const lastWord = /([A-Za-z_]+)\s*$/.exec(tail)?.[1]?.toLowerCase();
@@ -313,4 +324,67 @@ export function wordAssist(text: string, caret: number, words: readonly Completi
 /** Type-ahead over a fixed list (the Agent Rules pickers): label, words and hint. */
 export function pickerAssist<T extends { label: string; words?: string[] }>(query: string, items: readonly T[], limit = 12): T[] {
   return query.trim() ? rankCompletions(query.trim(), items, limit) : items.slice(0, limit);
+}
+
+// ── Any dialect, from the registry ──────────────────────────────────────────
+
+/**
+ * Type-ahead and signature help for a line of any dialect, from the registry (§8.7): at the
+ * start of a clause its head words; after a head its settings (`key=`) and flags; after `key=`
+ * the setting's choices, the colours (with their values) and `random`. A header with no settings
+ * of its own (a Grid Rules preset) takes the dialect's shared settings (`<dialect>:settings`).
+ */
+export function langAssist(text: string, caret: number, dialect: Dialect): Assist {
+  const before = text.slice(0, caret);
+  const wordM = /[A-Za-z_][A-Za-z0-9_-]*$/.exec(before);
+  const word = wordM ? wordM[0] : '';
+  const from = caret - word.length;
+  let to = caret;
+  while (to < text.length && /[A-Za-z0-9_-]/.test(text[to])) to++;
+  const clauseStart = Math.max(...['\n', '·', '•', '|', ';'].map(s => before.lastIndexOf(s))) + 1;
+  const clause = before.slice(clauseStart, from);
+  const words = clause.trim().split(/\s+/).filter(Boolean);
+  const entries = entriesFor(dialect);
+  const shared = entries.find(e => e.id === `${dialect}:settings`);
+  // The head: the first word of the clause that names an entry (after `grid`, `random`).
+  let head: Entry | null = null;
+  for (const w of words) {
+    const lw = w.toLowerCase().replace(/\(.*$/, '');
+    if (['grid', 'random', 'when', 'always', 'do'].includes(lw)) continue;
+    const hit = lookupHead(lw, dialect);
+    if (hit) { head = hit.entry; break; }
+  }
+  const paramsOf = (e: Entry) => (e.params.length || !shared || e.kind !== 'header' ? e.params : shared.params);
+  const flagsOf = (e: Entry) => (e.flags?.length ? e.flags : e.kind === 'header' && shared?.flags ? shared.flags : []);
+  const keyM = /([A-Za-z_][\w-]*)=\s*$/.exec(clause);
+  let items: Completion[] = [];
+  if (keyM && head) {
+    const p = paramOf({ ...head, params: paramsOf(head) }, keyM[1]);
+    const choices: Completion[] = [];
+    if (p?.options) for (const o of p.options) choices.push({ label: o, insert: o, kind: 'value', detail: `${p.key}: ${p.hint ?? p.label ?? 'a choice'}` });
+    if (p?.type === 'colour') for (const [nm, c] of Object.entries(RECIPE_WORDS.colours)) choices.push({ label: nm, insert: nm, kind: 'colour', detail: `(${(c as number[]).join(', ')})` });
+    if (p?.rand || p?.type === 'number' || p?.type === 'colour') choices.push({ label: 'random', insert: 'random', kind: 'value', detail: 'a value from its interesting range (random(0.2..2), random(red, teal) for your own)' });
+    items = rankCompletions(word, choices, 12);
+  } else if (!head || words.length === 0) {
+    items = rankCompletions(word, entries.filter(e => e.id !== `${dialect}:settings`).map(e => ({
+      label: e.words[0], insert: e.words[0], kind: (e.kind === 'header' ? 'mode' : e.kind === 'maker' ? 'shape' : e.kind === 'combine' ? 'combine' : e.kind === 'step' ? 'warp' : e.kind === 'output' ? 'output' : e.kind === 'action' || e.kind === 'condition' ? 'condition' : 'setting') as CompletionKind,
+      detail: e.summary, words: e.words.slice(1), signature: [e.words[0], ...paramsOf(e).slice(0, 4).map(p => `${p.key}=…`)].join(' '),
+    })), 12);
+  } else {
+    const given = new Set([...clause.matchAll(/([A-Za-z_][\w-]*)=/g)].map(m => m[1].toLowerCase()));
+    const keys: Completion[] = paramsOf(head).filter(p => !given.has(p.key)).map(p => ({ label: p.key, insert: `${p.key}=`, kind: 'param', detail: `${p.label ?? p.key}${p.hint ? `: ${p.hint}` : ''}`, words: p.aliases }));
+    const flags: Completion[] = flagsOf(head).map(f => ({ label: f, insert: f, kind: 'value', detail: 'a flag' }));
+    items = word ? rankCompletions(word, [...keys, ...flags], 10) : [...keys, ...flags].slice(0, 10);
+  }
+  if (items.length === 1 && items[0].label === word) items = [];
+  let signature: Signature | null = null;
+  if (head) {
+    const ps = paramsOf(head);
+    const given = new Set([...clause.matchAll(/([A-Za-z_][\w-]*)=/g)].map(m => m[1].toLowerCase()));
+    const typing = keyM ? keyM[1].toLowerCase() : word.toLowerCase();
+    let active = ps.findIndex(p => p.key === typing);
+    if (active < 0) active = ps.findIndex(p => !given.has(p.key));
+    signature = { head: head.words[0], detail: head.summary, params: ps.map(p => ({ key: p.key, label: p.label ?? p.key, hint: p.hint ?? (p.options ? p.options.join(', ') : p.type), text: `${p.key}=${p.def !== undefined && typeof p.def !== 'object' ? String(p.def) : '…'}` })), active };
+  }
+  return { items, from, to, signature };
 }

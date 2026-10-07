@@ -150,7 +150,7 @@ stack warps on it. Warps run top to bottom:
 | twist | turns space round Y more the higher it goes | Twist 3D |
 | bend | curves space along X | Bend 3D |
 | sine | shifts one axis by a sine of another | Sin Warp 3D |
-| noise | pushes space about with smooth noise | 3D Domain Warp |
+| warp | pushes space about with smooth noise | 3D Domain Warp |
 | displace | bumps on the surface (changes the distance) | Displace 3D |
 | round | rounds edges, grows the surface (changes the distance) | Offset |
 | onion | a thin shell (changes the distance) | Onion |
@@ -362,6 +362,10 @@ make no network calls.
 
 ## The recipe language
 
+The recipe is the scene dialect of the shared Playfield language (`docs/playfield-language-plan.md`):
+the Do… bar, Grid Rules and Agent Rules read the same values, settings, colours and
+`@modifiers` through the same lexer and reader (`src/lang/`).
+
 A recipe is **clauses** separated by `·`, `|`, `;` or new lines. `//` starts a
 comment. Case doesn't matter for words. Numbers can carry units: `30deg`, `30°`
 or `0.5rad` (angles are in degrees otherwise).
@@ -415,8 +419,23 @@ Code: `src/sceneBuilder/highlight.ts` (tokens, clauses, the clause tree), `recip
 |---|---|
 | number | `1`, `-0.5`, `.25`, `30deg`, `0.5rad` |
 | vector | `(x,y,z)`. One number fills all three: `size=0.5` is `(0.5,0.5,0.5)` |
-| colour | `#rrggbb`, `#rgb`, `(r,g,b)` in 0–1, or a name: white black grey silver red orange yellow gold green teal cyan blue navy purple violet pink magenta brown cream sky night |
+| colour | `#rrggbb`, `#rgb`, `(r,g,b)` in 0–1, or a name from the one colour table (`src/lang/colours.ts`): white black grey silver red orange yellow gold green lime teal cyan blue navy purple violet pink magenta brown cream sky night warm cool neon fire ice |
 | name | a word, or `"in quotes"` |
+| random | `random` (from the setting's interesting range), `random(0.2..2)`, `random(red, teal, gold)` |
+
+**Randomness.** `sphere r=random` draws the radius from a range that looks good, not merely one
+that is legal. A leading `random` draws every setting the line leaves unset:
+`random sphere · box · twist`. `seed=42` anywhere in the recipe gives the same result every time;
+without it the Recipe tab keeps one seed while you edit and **Roll again** draws a new one. The tab
+lists what each random value became (`r=random → 0.43`) and **Keep these** writes them into the
+recipe.
+
+**Old words.** A few words changed meaning when the languages were joined. They still read, with a
+hint and a **Use …** button that rewrites them: `glow` as a render mode (write `volumetric`;
+`glow` is the glow step), the `noise` warp (write `warp`; `noise` is the 2D noise node), `show`
+(write `output`), `group( )` (write `union( )`) and `both( )` (write `intersect( )`). Palettes
+print as `palette=sunset`; `palette sunset` still reads. `@move(0,1,0)` takes the vector without
+double brackets (`@move((0,1,0))` still reads).
 
 ### Shapes
 
@@ -495,7 +514,7 @@ one vector: `@move(1, 0.5, 0)` is `by=(1,0.5,0)`, and that is how it prints.
 | twist | k 2 |
 | bend (curve) | k 0.5 |
 | sine (wave, sin) | amp 0.1 · freq 2 · axis=y (shifted) · from=x |
-| noise (domain-warp, warp) | amt 0.3 · scale 1 · octaves 3 |
+| warp (domain-warp; `noise` with a hint) | amt 0.3 · scale 1 · octaves 3 |
 | displace (bumps, ripple) | amp 0.05 · freq 8 |
 | round (inflate, soften) | r 0.05 |
 | onion (shell, hollow) | t 0.03 (thickness) |
@@ -521,8 +540,8 @@ depth: `subtract(intersect(smooth-union(sphere @move(0.3,0,0), box @rotate(30,0,
 | `tone` | aces agx hable reinhard2 tanh oklab none |
 | `camera` (cam) | dist 4 · angle 35 · elev 17 · orbit 0 (°/s) · zoom 1.5 · flatten 0 · x y z |
 | `quality` | steps 96 · dist 20 · step auto (or a number) · jitter 1 |
-| `output` (show) | picture depth distance height normal hit position steps ao shadow, then optionally `palette …` |
-| `colour by` (color by) | an output, then `palette …` (default sunset): `colour by depth palette sunset` |
+| `output` (show) | picture depth distance height normal hit position steps ao shadow, then optionally `palette=…` |
+| `colour by` (color by) | an output, then `palette=…` (default sunset): `colour by depth palette=sunset` |
 
 ### Errors
 
@@ -552,7 +571,7 @@ cylinder).
 ### Examples
 
     scene: sphere · sphere at=(1,0,0) · output depth
-    sphere · box at=(1,0,0) · colour by depth palette sunset
+    sphere · box at=(1,0,0) · colour by depth palette=sunset
     gi · torus · output normal
 
 ```
@@ -564,7 +583,7 @@ camera dist=3.8 orbit=6
 ```
 
 ```
-surface · union(cylinder r=0.22 h=1.6, box size=(0.36,0.06,0.36) at=(0,1.55,0)) @repeat((2,100,2)) · plane y=-1 · fog 0.9
+surface · union(cylinder r=0.22 h=1.6, box size=(0.36,0.06,0.36) at=(0,1.55,0)) @repeat(2,100,2) · plane y=-1 · fog 0.9
 ```
 
 ```

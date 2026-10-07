@@ -1,0 +1,3450 @@
+{
+ "commands:circle · create a ring with falloff 0.3, colour it with a palette by the length of the space, multiply it by the circle, then output it": {
+  "reads": "create colour combine output",
+  "ok": true,
+  "added": [
+   "length",
+   "light",
+   "multiply",
+   "multiply",
+   "palette",
+   "ringSDF",
+   "uv",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "4d488023"
+ },
+ "commands:mixed · disconnect the current output, add it to the noise, and output the result": {
+  "reads": "disconnect combine output",
+  "ok": true,
+  "added": [
+   "add"
+  ],
+  "removed": [],
+  "hash": "0e2c1adc"
+ },
+ "commands:glow · set the glow falloff to 8": {
+  "reads": "set",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "cc701480"
+ },
+ "commands:circle · make the circle bigger": {
+  "reads": "adjust",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "9ba67d5b"
+ },
+ "commands:mixed · switch the noise to fbm": {
+  "reads": "replace!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "de1e54ce"
+ },
+ "commands:noise · switch the noise to voronoi": {
+  "reads": "replace",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "d75b6fa8"
+ },
+ "commands:empty · circle in the middle with a glow, falloff 8": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "circleSDF",
+   "light",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "00350e02"
+ },
+ "commands:circle [c] · add rings": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "addColor",
+   "distanceShape"
+  ],
+  "removed": [],
+  "hash": "75f176a7"
+ },
+ "commands:circle [c] · make it repeat 6 times around": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "angularRepeat2D"
+  ],
+  "removed": [],
+  "hash": "260488a8"
+ },
+ "commands:circle [c] · twist the space 0.5": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "exprNode"
+  ],
+  "removed": [],
+  "hash": "cd27a35a"
+ },
+ "commands:noise [p] · tone map it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "toneMap"
+  ],
+  "removed": [],
+  "hash": "ce42b9d1"
+ },
+ "commands:empty · heart at the top left with rings": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "distanceShape",
+   "exprNode",
+   "shapeSDF",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "a2a8731e"
+ },
+ "commands:circle [c] · circle with a glow then tone map it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "addColor",
+   "circleSDF",
+   "light",
+   "toneMap",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "75009799"
+ },
+ "commands:mixed [p,g] · mix these colours": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "oklabMix"
+  ],
+  "removed": [],
+  "hash": "bb21b99b"
+ },
+ "commands:circle [c] · blend it with a box": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "boxSDF",
+   "sdfUnion"
+  ],
+  "removed": [],
+  "hash": "f20192f2"
+ },
+ "commands:empty · circel with a glwo": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "circleSDF",
+   "light",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "ca9c85f8"
+ },
+ "commands:noise [p] · add grain 0.1": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "grain"
+  ],
+  "removed": [],
+  "hash": "c409ff9f"
+ },
+ "commands:noise [p] · screen blend": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "blendModes",
+   "fbm",
+   "palette",
+   "time"
+  ],
+  "removed": [],
+  "hash": "27290cb5"
+ },
+ "commands:circle [c] · duplicate 4 times": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "fract"
+  ],
+  "removed": [],
+  "hash": "f60f6e36"
+ },
+ "commands:noise [f] · colour it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "palette"
+  ],
+  "removed": [],
+  "hash": "4e520066"
+ },
+ "commands:circle [c] · turn 45 degrees": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "uvTransform2d"
+  ],
+  "removed": [],
+  "hash": "0ffac085"
+ },
+ "commands:empty · flibbertigibbet": {
+  "reads": "build!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "ceb23f98"
+ },
+ "commands:mixed · glow the circle": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "addColor",
+   "light"
+  ],
+  "removed": [],
+  "hash": "765d0664"
+ },
+ "commands:mixed · add rings to the circle": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "addColor",
+   "distanceShape"
+  ],
+  "removed": [],
+  "hash": "cd4d401e"
+ },
+ "commands:noise · polar the noise": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "polarSpace"
+  ],
+  "removed": [],
+  "hash": "83402974"
+ },
+ "commands:noise · tone map the palette": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "toneMap"
+  ],
+  "removed": [],
+  "hash": "ce42b9d1"
+ },
+ "commands:glow · outline the circle width 0.02": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "addColor",
+   "distanceShape"
+  ],
+  "removed": [],
+  "hash": "ddc34553"
+ },
+ "commands:empty · create a noise": {
+  "reads": "create",
+  "ok": true,
+  "added": [
+   "fbm",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "4a05a00b"
+ },
+ "commands:empty · create a voronoi": {
+  "reads": "create",
+  "ok": true,
+  "added": [
+   "uv",
+   "voronoi"
+  ],
+  "removed": [],
+  "hash": "b3918c42"
+ },
+ "commands:circle · add a star at the top left": {
+  "reads": "create",
+  "ok": true,
+  "added": [
+   "exprNode",
+   "shapeSDF",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "980af12b"
+ },
+ "commands:empty · create a ring with falloff 0.3": {
+  "reads": "create",
+  "ok": true,
+  "added": [
+   "light",
+   "ringSDF",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "98365f46"
+ },
+ "commands:empty · create a palette": {
+  "reads": "create",
+  "ok": true,
+  "added": [
+   "palette"
+  ],
+  "removed": [],
+  "hash": "7c41a0ec"
+ },
+ "commands:empty · create a time": {
+  "reads": "create",
+  "ok": true,
+  "added": [
+   "time"
+  ],
+  "removed": [],
+  "hash": "ebb912a0"
+ },
+ "commands:empty · make a heart with rings": {
+  "reads": "create",
+  "ok": true,
+  "added": [
+   "distanceShape",
+   "shapeSDF",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "af866327"
+ },
+ "commands:empty · create a flurble": {
+  "reads": "create!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "ceb23f98"
+ },
+ "commands:empty · create a noise, then output it": {
+  "reads": "create output",
+  "ok": true,
+  "added": [
+   "fbm",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "4a05a00b"
+ },
+ "commands:empty · create a circle, glow it falloff 4, then output it": {
+  "reads": "create build output",
+  "ok": true,
+  "added": [
+   "circleSDF",
+   "light",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "d10f3c8a"
+ },
+ "commands:mixed · connect the glow to the output": {
+  "reads": "connect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "babba189"
+ },
+ "commands:mixed · connect the noise to the tint of the glow": {
+  "reads": "connect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "26bf18e2"
+ },
+ "commands:mixed · connect the noise to the glow's tint": {
+  "reads": "connect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "26bf18e2"
+ },
+ "commands:twoShapes · plug the box into the fill": {
+  "reads": "connect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "889152e8"
+ },
+ "commands:glow · wire the circle into the output": {
+  "reads": "connect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "7e2b7e10"
+ },
+ "commands:mixed · connect the palette to the circle": {
+  "reads": "connect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "661d7d11"
+ },
+ "commands:glow · connect the glow to the glow": {
+  "reads": "connect!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "675bd078"
+ },
+ "commands:glow · connect the glow to the frobnicator of the output": {
+  "reads": "connect!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "675bd078"
+ },
+ "commands:noise · disconnect the current output": {
+  "reads": "disconnect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "f94f0006"
+ },
+ "commands:noise · disconnect the noise from the palette": {
+  "reads": "disconnect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "62c7513d"
+ },
+ "commands:circle · disconnect the position of the circle": {
+  "reads": "disconnect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "2bb67478"
+ },
+ "commands:circle · unplug the circle's position": {
+  "reads": "disconnect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "2bb67478"
+ },
+ "commands:noise · disconnect the output": {
+  "reads": "disconnect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "f94f0006"
+ },
+ "commands:mixed · disconnect the glow": {
+  "reads": "disconnect!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "de1e54ce"
+ },
+ "commands:glow · reconnect the circle to the output": {
+  "reads": "reconnect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "4b07ea38"
+ },
+ "commands:noise · rewire the noise to the output": {
+  "reads": "reconnect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "ab9a8b46"
+ },
+ "commands:noise · insert a tone map between the palette and the output": {
+  "reads": "insert",
+  "ok": true,
+  "added": [
+   "toneMap"
+  ],
+  "removed": [],
+  "hash": "ce42b9d1"
+ },
+ "commands:noise · insert a tone map between the output and the palette": {
+  "reads": "insert",
+  "ok": true,
+  "added": [
+   "toneMap"
+  ],
+  "removed": [],
+  "hash": "ce42b9d1"
+ },
+ "commands:circle · insert an abs after the circle": {
+  "reads": "insert",
+  "ok": true,
+  "added": [
+   "abs"
+  ],
+  "removed": [],
+  "hash": "9b548a79"
+ },
+ "commands:noise · put a smoothstep before the palette": {
+  "reads": "insert",
+  "ok": true,
+  "added": [
+   "smoothstep"
+  ],
+  "removed": [],
+  "hash": "00921828"
+ },
+ "commands:noise · insert a luminance between the palette and the output": {
+  "reads": "insert",
+  "ok": true,
+  "added": [
+   "luminance"
+  ],
+  "removed": [],
+  "hash": "3e974179"
+ },
+ "commands:noise · insert a tone map between the noise and the output": {
+  "reads": "insert!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "0744074b"
+ },
+ "commands:circle · insert a wibble after the circle": {
+  "reads": "insert!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "c393c843"
+ },
+ "commands:mixed · multiply the output with the noise": {
+  "reads": "combine",
+  "ok": true,
+  "added": [
+   "multiply"
+  ],
+  "removed": [],
+  "hash": "daa91524"
+ },
+ "commands:mixed · add the glow to the palette": {
+  "reads": "combine",
+  "ok": true,
+  "added": [
+   "add"
+  ],
+  "removed": [],
+  "hash": "b1de6a05"
+ },
+ "commands:mixed · mix the palette with the glow by 0.3": {
+  "reads": "combine",
+  "ok": true,
+  "added": [
+   "mix"
+  ],
+  "removed": [],
+  "hash": "e8e3e3a7"
+ },
+ "commands:noise [p] · multiply it by 2": {
+  "reads": "combine",
+  "ok": true,
+  "added": [
+   "exprNode"
+  ],
+  "removed": [],
+  "hash": "cb76084f"
+ },
+ "commands:noise · multiply the noise by red": {
+  "reads": "combine",
+  "ok": true,
+  "added": [
+   "exprNode"
+  ],
+  "removed": [],
+  "hash": "9a56f316"
+ },
+ "commands:mixed · subtract the circle from the noise": {
+  "reads": "combine",
+  "ok": true,
+  "added": [
+   "subtract"
+  ],
+  "removed": [],
+  "hash": "385ea051"
+ },
+ "commands:twoShapes · union the circle with the box": {
+  "reads": "combine",
+  "ok": true,
+  "added": [
+   "sdfUnion"
+  ],
+  "removed": [],
+  "hash": "f39a24c5"
+ },
+ "commands:twoShapes · blend the circle with the box": {
+  "reads": "combine",
+  "ok": true,
+  "added": [
+   "sdfUnion"
+  ],
+  "removed": [],
+  "hash": "f39a24c5"
+ },
+ "commands:twoShapes · cut the box from the circle": {
+  "reads": "combine",
+  "ok": true,
+  "added": [
+   "sdfSubtract"
+  ],
+  "removed": [],
+  "hash": "13b36c3e"
+ },
+ "commands:mixed · screen the glow over the palette": {
+  "reads": "combine",
+  "ok": true,
+  "added": [
+   "blendModes"
+  ],
+  "removed": [],
+  "hash": "731161dd"
+ },
+ "commands:mixed · union the palette with the circle": {
+  "reads": "combine!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "de1e54ce"
+ },
+ "commands:mixed · multiply the circle by the square": {
+  "reads": "combine!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "de1e54ce"
+ },
+ "commands:mixed · output the glow": {
+  "reads": "output",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "babba189"
+ },
+ "commands:noise · show the noise": {
+  "reads": "output",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "e7dca950"
+ },
+ "commands:noise · output the node before the output": {
+  "reads": "output",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "0744074b"
+ },
+ "commands:noise · output the output": {
+  "reads": "output!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "0744074b"
+ },
+ "commands:circle · turn the circle into a box": {
+  "reads": "replace",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "467b996e"
+ },
+ "commands:noise · replace the palette with a stops palette": {
+  "reads": "replace",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "07788381"
+ },
+ "commands:circle · swap the circle for a heart": {
+  "reads": "replace",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "bbe0d30f"
+ },
+ "commands:noise · change the noise to voronoi": {
+  "reads": "replace",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "d75b6fa8"
+ },
+ "commands:circle · switch the circle to a palette": {
+  "reads": "replace!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "c393c843"
+ },
+ "commands:mixed · delete the glow": {
+  "reads": "delete",
+  "ok": true,
+  "added": [],
+  "removed": [
+   "light"
+  ],
+  "hash": "d96bc6b7"
+ },
+ "commands:twoShapes · remove all circles": {
+  "reads": "delete",
+  "ok": true,
+  "added": [],
+  "removed": [
+   "circleSDF"
+  ],
+  "hash": "0161c95a"
+ },
+ "commands:twoShapes · delete the circle and the box": {
+  "reads": "delete",
+  "ok": true,
+  "added": [],
+  "removed": [
+   "boxSDF",
+   "circleSDF"
+  ],
+  "hash": "e04c6587"
+ },
+ "commands:twoShapes [a,b] · get rid of these": {
+  "reads": "delete",
+  "ok": true,
+  "added": [],
+  "removed": [
+   "boxSDF",
+   "circleSDF"
+  ],
+  "hash": "e04c6587"
+ },
+ "commands:glow · rename the glow to \"Halo\"": {
+  "reads": "rename",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "4a2bae4c"
+ },
+ "commands:noise · call the noise \"Clouds\"": {
+  "reads": "rename",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "06ed58c9"
+ },
+ "commands:noise · rename \"Clouds\" to \"Mist\"": {
+  "reads": "rename",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "44eb94ae"
+ },
+ "commands:noise · rename \"Mist\" to \"Fog\"": {
+  "reads": "rename!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "0744074b"
+ },
+ "commands:circle · duplicate the circle": {
+  "reads": "duplicate",
+  "ok": true,
+  "added": [
+   "circleSDF"
+  ],
+  "removed": [],
+  "hash": "1562b2d3"
+ },
+ "commands:glow · copy the glow, then set its falloff to 3": {
+  "reads": "duplicate set",
+  "ok": true,
+  "added": [
+   "light"
+  ],
+  "removed": [],
+  "hash": "38c78f15"
+ },
+ "commands:circle · set the radius of the circle to 0.4": {
+  "reads": "set",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "90fa825a"
+ },
+ "commands:circle · set the circle's radius to 0.2": {
+  "reads": "set",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "46522e2c"
+ },
+ "commands:glow · set the glow tint to cyan": {
+  "reads": "set",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "c71d1bbc"
+ },
+ "commands:circle [c] · set the radius to 0.1": {
+  "reads": "set",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "dc88a595"
+ },
+ "commands:glow · set the glow mode to haze": {
+  "reads": "set",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "43b90e7a"
+ },
+ "commands:glow · change the falloff of the glow to 4": {
+  "reads": "set",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "d0fac1c8"
+ },
+ "commands:circle · set the circle to 0.25": {
+  "reads": "set",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "057816e5"
+ },
+ "commands:glow · set the glow wobble to 3": {
+  "reads": "set!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "675bd078"
+ },
+ "commands:glow · set the glow falloff to purple": {
+  "reads": "set!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "675bd078"
+ },
+ "commands:glow · make the glow much wider": {
+  "reads": "adjust",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "af16a35c"
+ },
+ "commands:circle · make the circle a bit smaller": {
+  "reads": "adjust",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "653c042e"
+ },
+ "commands:circle · increase the radius of the circle by 0.1": {
+  "reads": "adjust",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "90fa825a"
+ },
+ "commands:glow · double the falloff of the glow": {
+  "reads": "adjust",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "6883dd4e"
+ },
+ "commands:circle · halve the radius of the circle": {
+  "reads": "adjust",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "2d7bb398"
+ },
+ "commands:noise · make the noise faster": {
+  "reads": "adjust",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "a1b47ade"
+ },
+ "commands:glow · lower the glow falloff": {
+  "reads": "adjust",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "cc701480"
+ },
+ "commands:circle [c] · make it bigger": {
+  "reads": "adjust",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "9ba67d5b"
+ },
+ "commands:glow · group the circle and the glow as \"Neon\"": {
+  "reads": "group",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "675bd078",
+  "group": 2
+ },
+ "commands:twoShapes [a,b] · group these": {
+  "reads": "group",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "b6237548",
+  "group": 2
+ },
+ "commands:glow · group the circle, then delete the glow": {
+  "reads": "group!error delete",
+  "ok": false,
+  "added": [],
+  "removed": [
+   "light"
+  ],
+  "hash": "6076325b"
+ },
+ "commands:glow · group the output": {
+  "reads": "group!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "675bd078"
+ },
+ "commands:twoShapes · select all circles": {
+  "reads": "select",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "b6237548"
+ },
+ "commands:noise · select the node before the output": {
+  "reads": "select",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "0744074b"
+ },
+ "commands:noise · select the node after the noise": {
+  "reads": "select",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "0744074b"
+ },
+ "commands:glow [g] · colour it with a palette by the length of the space": {
+  "reads": "colour",
+  "ok": true,
+  "added": [
+   "length",
+   "multiply",
+   "palette",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "4c500432"
+ },
+ "commands:mixed · colour the noise with a palette": {
+  "reads": "colour",
+  "ok": true,
+  "added": [
+   "palette"
+  ],
+  "removed": [],
+  "hash": "98987ee6"
+ },
+ "commands:glow · colour the glow by time": {
+  "reads": "colour",
+  "ok": true,
+  "added": [
+   "multiply",
+   "palette",
+   "time"
+  ],
+  "removed": [],
+  "hash": "90353b9f"
+ },
+ "commands:circle · colour the circle by the angle": {
+  "reads": "colour",
+  "ok": true,
+  "added": [
+   "exprNode",
+   "multiply",
+   "palette",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "e28aed78"
+ },
+ "commands:mixed · color the glow with a palette by the noise": {
+  "reads": "colour",
+  "ok": true,
+  "added": [
+   "multiply",
+   "palette"
+  ],
+  "removed": [],
+  "hash": "0d120d09"
+ },
+ "commands:glow · colour the glow by the x of the space": {
+  "reads": "colour",
+  "ok": true,
+  "added": [
+   "exprNode",
+   "multiply",
+   "palette",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "033fb92f"
+ },
+ "commands:twoShapes · make the first circle bigger": {
+  "reads": "adjust",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "d421d5a8"
+ },
+ "commands:twoShapes · delete circle 1": {
+  "reads": "delete",
+  "ok": true,
+  "added": [],
+  "removed": [
+   "circleSDF"
+  ],
+  "hash": "0161c95a"
+ },
+ "commands:twoShapes · make the last shape bigger": {
+  "reads": "adjust!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "b6237548"
+ },
+ "commands:mixed · output the glow, then rename it to \"Rim\"": {
+  "reads": "output rename",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "a45c7375"
+ },
+ "commands:circle · create a circle, then make the circle bigger": {
+  "reads": "create adjust",
+  "ok": true,
+  "added": [
+   "circleSDF",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "f6d853a4"
+ },
+ "commands:twoCircles · make the circle bigger": {
+  "reads": "adjust!pick",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "b50ce412"
+ },
+ "commands:twoCircles [b] · make the circle bigger": {
+  "reads": "adjust",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "bf3fec09"
+ },
+ "commands:twoCircles · make the second circle bigger": {
+  "reads": "adjust",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "bf3fec09"
+ },
+ "commands:twoCircles · delete all circles": {
+  "reads": "delete",
+  "ok": true,
+  "added": [],
+  "removed": [
+   "circleSDF",
+   "circleSDF"
+  ],
+  "hash": "e04c6587"
+ },
+ "commands:twoCircles · insert an abs between the circle and the fill": {
+  "reads": "insert!pick",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "b50ce412"
+ },
+ "commands:twoCircles [a,b] · output the circle, then group these": {
+  "reads": "output!pick group",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "b50ce412",
+  "group": 2
+ },
+ "commands:twoShapes · connect the uv to the circle": {
+  "reads": "connect!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "b6237548"
+ },
+ "commands:mixed · conect the glow to the output": {
+  "reads": "build!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "de1e54ce"
+ },
+ "commands:empty · create a noise, frobnicate it, then output it": {
+  "reads": "create build!error output!error",
+  "ok": false,
+  "added": [
+   "fbm",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "058f3cd9"
+ },
+ "commands:empty · create a noise, frobnicate it, then output the noise": {
+  "reads": "create build!error output",
+  "ok": false,
+  "added": [
+   "fbm",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "4a05a00b"
+ },
+ "commands:empty · create a nosie": {
+  "reads": "create!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "ceb23f98"
+ },
+ "commands:circle · delete the sphere": {
+  "reads": "delete",
+  "ok": true,
+  "added": [],
+  "removed": [
+   "circleSDF"
+  ],
+  "hash": "e04c6587"
+ },
+ "commands:circle · delete the torch": {
+  "reads": "delete!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "c393c843"
+ },
+ "verb create:empty · create a ring with falloff 0.3": {
+  "reads": "create",
+  "ok": true,
+  "added": [
+   "light",
+   "ringSDF",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "98365f46"
+ },
+ "verb create:empty · create a noise": {
+  "reads": "create",
+  "ok": true,
+  "added": [
+   "fbm",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "4a05a00b"
+ },
+ "verb create:circle · add a star at the top left": {
+  "reads": "create",
+  "ok": true,
+  "added": [
+   "exprNode",
+   "shapeSDF",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "980af12b"
+ },
+ "verb connect:mixed · connect the glow to the output": {
+  "reads": "connect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "babba189"
+ },
+ "verb connect:mixed · connect the noise to the tint of the glow": {
+  "reads": "connect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "26bf18e2"
+ },
+ "verb connect:twoShapes · plug the box into the fill": {
+  "reads": "connect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "889152e8"
+ },
+ "verb disconnect:noise · disconnect the current output": {
+  "reads": "disconnect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "f94f0006"
+ },
+ "verb disconnect:noise · disconnect the noise from the palette": {
+  "reads": "disconnect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "62c7513d"
+ },
+ "verb disconnect:circle · disconnect the position of the circle": {
+  "reads": "disconnect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "2bb67478"
+ },
+ "verb reconnect:glow · reconnect the circle to the output": {
+  "reads": "reconnect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "4b07ea38"
+ },
+ "verb reconnect:noise · rewire the noise to the output": {
+  "reads": "reconnect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "ab9a8b46"
+ },
+ "verb insert:noise · insert a tone map between the palette and the output": {
+  "reads": "insert",
+  "ok": true,
+  "added": [
+   "toneMap"
+  ],
+  "removed": [],
+  "hash": "ce42b9d1"
+ },
+ "verb insert:circle · insert an abs after the circle": {
+  "reads": "insert",
+  "ok": true,
+  "added": [
+   "abs"
+  ],
+  "removed": [],
+  "hash": "9b548a79"
+ },
+ "verb insert:noise · put a smoothstep before the palette": {
+  "reads": "insert",
+  "ok": true,
+  "added": [
+   "smoothstep"
+  ],
+  "removed": [],
+  "hash": "00921828"
+ },
+ "verb combine:mixed · multiply the output with the noise": {
+  "reads": "combine",
+  "ok": true,
+  "added": [
+   "multiply"
+  ],
+  "removed": [],
+  "hash": "daa91524"
+ },
+ "verb combine:mixed · add the glow to the palette": {
+  "reads": "combine",
+  "ok": true,
+  "added": [
+   "add"
+  ],
+  "removed": [],
+  "hash": "b1de6a05"
+ },
+ "verb combine:mixed · mix the palette with the glow by 0.3": {
+  "reads": "combine",
+  "ok": true,
+  "added": [
+   "mix"
+  ],
+  "removed": [],
+  "hash": "e8e3e3a7"
+ },
+ "verb output:mixed · output the glow": {
+  "reads": "output",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "babba189"
+ },
+ "verb output:noise · show the noise": {
+  "reads": "output",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "e7dca950"
+ },
+ "verb replace:noise · switch the noise to voronoi": {
+  "reads": "replace",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "d75b6fa8"
+ },
+ "verb replace:circle · turn the circle into a box": {
+  "reads": "replace",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "467b996e"
+ },
+ "verb replace:noise · replace the palette with a stops palette": {
+  "reads": "replace",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "07788381"
+ },
+ "verb delete:mixed · delete the glow": {
+  "reads": "delete",
+  "ok": true,
+  "added": [],
+  "removed": [
+   "light"
+  ],
+  "hash": "d96bc6b7"
+ },
+ "verb delete:twoShapes · remove all circles": {
+  "reads": "delete",
+  "ok": true,
+  "added": [],
+  "removed": [
+   "circleSDF"
+  ],
+  "hash": "0161c95a"
+ },
+ "verb rename:glow · rename the glow to \"Halo\"": {
+  "reads": "rename",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "4a2bae4c"
+ },
+ "verb rename:noise · call the noise \"Clouds\"": {
+  "reads": "rename",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "06ed58c9"
+ },
+ "verb duplicate:circle · duplicate the circle": {
+  "reads": "duplicate",
+  "ok": true,
+  "added": [
+   "circleSDF"
+  ],
+  "removed": [],
+  "hash": "1562b2d3"
+ },
+ "verb duplicate:glow · copy the glow, then set its falloff to 3": {
+  "reads": "duplicate set",
+  "ok": true,
+  "added": [
+   "light"
+  ],
+  "removed": [],
+  "hash": "38c78f15"
+ },
+ "verb set:glow · set the glow falloff to 8": {
+  "reads": "set",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "cc701480"
+ },
+ "verb set:circle · set the radius of the circle to 0.4": {
+  "reads": "set",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "90fa825a"
+ },
+ "verb set:glow · set the glow tint to cyan": {
+  "reads": "set",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "c71d1bbc"
+ },
+ "verb adjust:circle · make the circle bigger": {
+  "reads": "adjust",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "9ba67d5b"
+ },
+ "verb adjust:glow · make the glow much wider": {
+  "reads": "adjust",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "af16a35c"
+ },
+ "verb adjust:circle · increase the radius of the circle by 0.1": {
+  "reads": "adjust",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "90fa825a"
+ },
+ "verb group:glow · group the circle and the glow as \"Neon\"": {
+  "reads": "group",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "675bd078",
+  "group": 2
+ },
+ "verb group:twoShapes [a,b] · group these": {
+  "reads": "group",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "b6237548",
+  "group": 2
+ },
+ "verb select:twoShapes · select all circles": {
+  "reads": "select",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "b6237548"
+ },
+ "verb select:noise · select the node before the output": {
+  "reads": "select",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "0744074b"
+ },
+ "verb colour:glow [g] · colour it with a palette by the length of the space": {
+  "reads": "colour",
+  "ok": true,
+  "added": [
+   "length",
+   "multiply",
+   "palette",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "4c500432"
+ },
+ "verb colour:mixed · colour the noise with a palette": {
+  "reads": "colour",
+  "ok": true,
+  "added": [
+   "palette"
+  ],
+  "removed": [],
+  "hash": "98987ee6"
+ },
+ "verb colour:glow · colour the glow by time": {
+  "reads": "colour",
+  "ok": true,
+  "added": [
+   "multiply",
+   "palette",
+   "time"
+  ],
+  "removed": [],
+  "hash": "90353b9f"
+ },
+ "action glow:empty · circle with a glow, falloff 8": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "circleSDF",
+   "light",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "00350e02"
+ },
+ "action glow:circle [c] · glow it red": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "addColor",
+   "light"
+  ],
+  "removed": [],
+  "hash": "63264c11"
+ },
+ "action rings:circle [c] · add 8 rings": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "addColor",
+   "distanceShape"
+  ],
+  "removed": [],
+  "hash": "bfd5cc7c"
+ },
+ "action rings:empty · ring with 12 rings": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "distanceShape",
+   "ringSDF",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "de72720a"
+ },
+ "action outline:circle [c] · outline it width 0.02": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "addColor",
+   "distanceShape"
+  ],
+  "removed": [],
+  "hash": "ab1e60d9"
+ },
+ "action outline:empty · hexagon with an outline": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "distanceShape",
+   "shapeSDF",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "30e402fb"
+ },
+ "action onion:circle [c] · make it hollow": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "sdfOnion"
+  ],
+  "removed": [],
+  "hash": "1f5eb495"
+ },
+ "action onion:empty · a square with an onion 0.03": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "boxSDF",
+   "sdfFill",
+   "sdfOnion",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "ebcd65f2"
+ },
+ "action round:circle [c] · rounder by 0.05": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "sdfOffset"
+  ],
+  "removed": [],
+  "hash": "ee4c3cd6"
+ },
+ "action round:empty · box, then round it 0.04": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "boxSDF",
+   "sdfFill",
+   "sdfOffset",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "a189261d"
+ },
+ "action blend:circle [c] · blend it with a box": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "boxSDF",
+   "sdfUnion"
+  ],
+  "removed": [],
+  "hash": "f20192f2"
+ },
+ "action blend:twoShapes [a,b] · smoothly blend these": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "sdfUnion"
+  ],
+  "removed": [],
+  "hash": "1326a65d"
+ },
+ "action mask-from:circle [c] · mask": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "sdfMask"
+  ],
+  "removed": [],
+  "hash": "efd2d9a9"
+ },
+ "action mask-from:empty · heart, then mask it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "floatToVec3",
+   "sdfMask",
+   "shapeSDF",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "3ba68ccf"
+ },
+ "action warp:circle [c] · warp it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "domainWarp"
+  ],
+  "removed": [],
+  "hash": "db145711"
+ },
+ "action warp:noise [f] · warp the space 0.6": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "domainWarp"
+  ],
+  "removed": [],
+  "hash": "0d2eb42b"
+ },
+ "action swirl:circle [c] · swirl the space 3": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "swirlSpace"
+  ],
+  "removed": [],
+  "hash": "24e40a6c"
+ },
+ "action swirl:empty · star with a swirl": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "shapeSDF",
+   "swirlSpace",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "7b7e182a"
+ },
+ "action twist:circle [c] · twist the space 0.5": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "exprNode"
+  ],
+  "removed": [],
+  "hash": "cd27a35a"
+ },
+ "action twist:empty · box, then twist it 2": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "boxSDF",
+   "exprNode",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "4cc25f39"
+ },
+ "action polar:circle [c] · polar": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "polarSpace"
+  ],
+  "removed": [],
+  "hash": "f8c72cd4"
+ },
+ "action polar:noise · polar the noise": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "polarSpace"
+  ],
+  "removed": [],
+  "hash": "83402974"
+ },
+ "action mirror:circle [c] · mirror both ways": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "exprNode"
+  ],
+  "removed": [],
+  "hash": "8812f1ea"
+ },
+ "action mirror:noise [f] · mirror it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "exprNode"
+  ],
+  "removed": [],
+  "hash": "4f5c56c6"
+ },
+ "action repeat:circle [c] · repeat 5 times": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "fract"
+  ],
+  "removed": [],
+  "hash": "68953930"
+ },
+ "action repeat:circle [c] · make it repeat 6 times around": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "angularRepeat2D"
+  ],
+  "removed": [],
+  "hash": "260488a8"
+ },
+ "action zoom-rotate:circle [c] · rotate 45 degrees": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "uvTransform2d"
+  ],
+  "removed": [],
+  "hash": "0ffac085"
+ },
+ "action zoom-rotate:noise [f] · zoom 2": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "uvTransform2d"
+  ],
+  "removed": [],
+  "hash": "8076ad31"
+ },
+ "action code-here:circle [c] · custom code": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "exprNode"
+  ],
+  "removed": [],
+  "hash": "ca11bb9e"
+ },
+ "action code-here:noise · custom code on the noise": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "exprNode"
+  ],
+  "removed": [],
+  "hash": "8de7db36"
+ },
+ "action mix-with:noise [p] · mix with blue": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "colorPicker",
+   "oklabMix"
+  ],
+  "removed": [],
+  "hash": "2c58f1f9"
+ },
+ "action mix-with:mixed [p,g] · mix these colours": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "oklabMix"
+  ],
+  "removed": [],
+  "hash": "bb21b99b"
+ },
+ "action palette:noise [p] · palette": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "luminance",
+   "palette"
+  ],
+  "removed": [],
+  "hash": "c254552e"
+ },
+ "action palette:noise [f] · colour it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "palette"
+  ],
+  "removed": [],
+  "hash": "4e520066"
+ },
+ "action tone-map:noise [p] · tone map it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "toneMap"
+  ],
+  "removed": [],
+  "hash": "ce42b9d1"
+ },
+ "action tone-map:glow · tone map the picture": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "toneMap"
+  ],
+  "removed": [],
+  "hash": "d93cb56d"
+ },
+ "action grade:noise [p] · grade it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "liftGammaGain"
+  ],
+  "removed": [],
+  "hash": "af071637"
+ },
+ "action grade:glow · colour grade the picture": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "liftGammaGain"
+  ],
+  "removed": [],
+  "hash": "9f8fa64b"
+ },
+ "action brighten:noise [p] · brighter by 0.3": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "brightnessContrast"
+  ],
+  "removed": [],
+  "hash": "7ea8356b"
+ },
+ "action brighten:glow · brighten the picture": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "brightnessContrast"
+  ],
+  "removed": [],
+  "hash": "8ead1355"
+ },
+ "action grain:noise [p] · add grain 0.1": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "grain"
+  ],
+  "removed": [],
+  "hash": "c409ff9f"
+ },
+ "action grain:glow · grain the picture": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "grain"
+  ],
+  "removed": [],
+  "hash": "cebd3093"
+ },
+ "action blend-with:noise [p] · screen blend": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "blendModes",
+   "fbm",
+   "palette",
+   "time"
+  ],
+  "removed": [],
+  "hash": "27290cb5"
+ },
+ "action blend-with:noise [p] · overlay it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "blendModes",
+   "fbm",
+   "palette",
+   "time"
+  ],
+  "removed": [],
+  "hash": "dd3186e3"
+ },
+ "action soft-edge:mixed [m] · soften": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "smoothstep"
+  ],
+  "removed": [],
+  "hash": "76a7e1e1"
+ },
+ "action soft-edge:mixed [m] · feather it 0.3": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "smoothstep"
+  ],
+  "removed": [],
+  "hash": "806357c3"
+ },
+ "action invert:mixed [m] · invert": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "remap"
+  ],
+  "removed": [],
+  "hash": "8ab321bf"
+ },
+ "action invert:mixed [m] · invert it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "remap"
+  ],
+  "removed": [],
+  "hash": "8ab321bf"
+ },
+ "action grow-mask:mixed [m] · shrink": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "smoothstep"
+  ],
+  "removed": [],
+  "hash": "058573ac"
+ },
+ "action grow-mask:mixed [m] · erode it 0.1": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "smoothstep"
+  ],
+  "removed": [],
+  "hash": "4ee864b4"
+ },
+ "action mix-two:mixed [m] · mix two pictures": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "fbm",
+   "mask",
+   "palette",
+   "time"
+  ],
+  "removed": [],
+  "hash": "158c127d"
+ },
+ "action mix-two:mixed [m] · cut between two pictures": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "fbm",
+   "mask",
+   "palette",
+   "time"
+  ],
+  "removed": [],
+  "hash": "158c127d"
+ },
+ "action blur-texture:pass [pass] · blur it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "blurTexture"
+  ],
+  "removed": [],
+  "hash": "b1a219de"
+ },
+ "action blur-texture:pass [pass] · blur it by 4": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "blurTexture"
+  ],
+  "removed": [],
+  "hash": "b46b1210"
+ },
+ "action trails:glow [g] · trails": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "pass",
+   "textureFade",
+   "textureLevels"
+  ],
+  "removed": [],
+  "hash": "9ecf8930"
+ },
+ "action trails:empty · circle with a glow, then trails on the picture": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "circleSDF",
+   "light",
+   "pass",
+   "textureFade",
+   "textureLevels",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "7a3711ee"
+ },
+ "action flow:pass [pass] · flow": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "readTexture",
+   "textureFlow"
+  ],
+  "removed": [],
+  "hash": "427321e2"
+ },
+ "action flow:pass [pass] · stream it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "readTexture",
+   "textureFlow"
+  ],
+  "removed": [],
+  "hash": "427321e2"
+ },
+ "action remap:noise [f] · remap": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "remap"
+  ],
+  "removed": [],
+  "hash": "37c57fed"
+ },
+ "action remap:noise [f] · normalize it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "remap"
+  ],
+  "removed": [],
+  "hash": "37c57fed"
+ },
+ "recipe glowing-ring:empty · create a ring radius 0.3 with a glow falloff 6 cyan, then tone map the picture": {
+  "reads": "create build",
+  "ok": true,
+  "added": [
+   "light",
+   "ringSDF",
+   "toneMap",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "a509ec22"
+ },
+ "recipe palette-by-distance:circle · create a ring with falloff 0.3, colour it with a palette by the length of the space, multiply it by the circle, then output it": {
+  "reads": "create colour combine output",
+  "ok": true,
+  "added": [
+   "length",
+   "light",
+   "multiply",
+   "multiply",
+   "palette",
+   "ringSDF",
+   "uv",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "4d488023"
+ },
+ "recipe warped-noise:empty · create a noise, warp it 0.6, then colour it with a palette and output it": {
+  "reads": "create build colour output",
+  "ok": true,
+  "added": [
+   "domainWarp",
+   "fbm",
+   "palette",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "ccafe79f"
+ },
+ "recipe neon-outline:empty · create a hexagon with an outline width 0.01 pink, glow the hexagon falloff 12 pink, then tone map the picture": {
+  "reads": "create build build",
+  "ok": true,
+  "added": [
+   "addColor",
+   "distanceShape",
+   "light",
+   "shapeSDF",
+   "toneMap",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "d0701ff8"
+ },
+ "recipe feedback-trails:empty · circle at the top left with a glow, then trails on the picture": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "circleSDF",
+   "light",
+   "pass",
+   "textureFade",
+   "textureLevels",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "e13aebda"
+ },
+ "recipe kaleidoscope:empty · star with a glow falloff 4, then repeat it 6 times around": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "angularRepeat2D",
+   "light",
+   "shapeSDF",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "c028a84d"
+ },
+ "recipe swirled-rings:empty · circle with 12 rings, then swirl the space 2": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "circleSDF",
+   "distanceShape",
+   "swirlSpace",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "595733e1"
+ },
+ "recipe noise-on-shape:mixed · disconnect the current output, add it to the noise, and output the result": {
+  "reads": "disconnect combine output",
+  "ok": true,
+  "added": [
+   "add"
+  ],
+  "removed": [],
+  "hash": "0e2c1adc"
+ },
+ "connector:mixed · create a circle, then output it": {
+  "reads": "create output",
+  "ok": true,
+  "added": [
+   "circleSDF",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "ee01ca6a"
+ },
+ "connector:mixed · disconnect the current output and output the noise": {
+  "reads": "disconnect output",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "64ae3f35"
+ },
+ "connector:mixed · mix the palette with the glow": {
+  "reads": "combine",
+  "ok": true,
+  "added": [
+   "mix"
+  ],
+  "removed": [],
+  "hash": "fda43f03"
+ },
+ "connector:mixed · multiply it by 2": {
+  "reads": "combine",
+  "ok": true,
+  "added": [
+   "exprNode"
+  ],
+  "removed": [],
+  "hash": "ebe1d634"
+ },
+ "connector:mixed · connect the glow to the output": {
+  "reads": "connect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "babba189"
+ },
+ "connector:mixed · insert a tone map between the palette and the output": {
+  "reads": "insert",
+  "ok": true,
+  "added": [
+   "toneMap"
+  ],
+  "removed": [],
+  "hash": "c770b790"
+ },
+ "connector:mixed · subtract the circle from the noise": {
+  "reads": "combine",
+  "ok": true,
+  "added": [
+   "subtract"
+  ],
+  "removed": [],
+  "hash": "385ea051"
+ },
+ "connector:mixed · set the circle's radius to 0.2": {
+  "reads": "set",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "27e1a139"
+ },
+ "connector:twoShapes [a,b] · group these as \"Neon\"": {
+  "reads": "group",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "b6237548",
+  "group": 2
+ },
+ "reference:noise · create a noise, then output it": {
+  "reads": "create output",
+  "ok": true,
+  "added": [
+   "fbm",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "a0fdbfa9"
+ },
+ "reference:twoShapes [a,b] · group these": {
+  "reads": "group",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "b6237548",
+  "group": 2
+ },
+ "reference:glow · rename \"Halo\" to \"Rim\"": {
+  "reads": "rename",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "d53a8c04"
+ },
+ "reference:circle · make the circle bigger": {
+  "reads": "adjust",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "9ba67d5b"
+ },
+ "reference:noise · disconnect the current output": {
+  "reads": "disconnect",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "f94f0006"
+ },
+ "reference:noise · select the node before the output": {
+  "reads": "select",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "0744074b"
+ },
+ "reference:twoShapes · delete all circles": {
+  "reads": "delete",
+  "ok": true,
+  "added": [],
+  "removed": [
+   "circleSDF"
+  ],
+  "hash": "0161c95a"
+ },
+ "phrase:empty · circle in the middle with a glow, falloff 8": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "circleSDF",
+   "light",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "00350e02"
+ },
+ "phrase:circle [c] · add rings": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "addColor",
+   "distanceShape"
+  ],
+  "removed": [],
+  "hash": "75f176a7"
+ },
+ "phrase:twoColours [a,b] · mix these colours": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "oklabMix"
+  ],
+  "removed": [],
+  "hash": "4f38e9c1"
+ },
+ "phrase:twoShapes [a,b] · smoothly blend the edges": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "sdfUnion"
+  ],
+  "removed": [],
+  "hash": "f219a964"
+ },
+ "phrase:circle [c] · make it repeat 6 times around": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "angularRepeat2D"
+  ],
+  "removed": [],
+  "hash": "260488a8"
+ },
+ "phrase:circle [c] · twist the space 0.5": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "exprNode"
+  ],
+  "removed": [],
+  "hash": "cd27a35a"
+ },
+ "phrase:colour [p] · tone map it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "toneMap"
+  ],
+  "removed": [],
+  "hash": "ce42b9d1"
+ },
+ "phrase:empty · circle": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "circleSDF",
+   "sdfFill",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "d1797b3b"
+ },
+ "phrase:empty · a box at the top left": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "boxSDF",
+   "sdfFill",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "2f31504d"
+ },
+ "phrase:empty · heart in the centre": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "exprNode",
+   "sdfFill",
+   "shapeSDF",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "2fa3bf37"
+ },
+ "phrase:empty · star with a glow": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "light",
+   "shapeSDF",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "be75ecaa"
+ },
+ "phrase:empty · hexagon with rings": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "distanceShape",
+   "shapeSDF",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "9cc3d507"
+ },
+ "phrase:empty · circle radius 0.2 with an outline": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "circleSDF",
+   "distanceShape",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "6547ca6f"
+ },
+ "phrase:empty · a square with an onion 0.03": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "boxSDF",
+   "sdfFill",
+   "sdfOnion",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "ebcd65f2"
+ },
+ "phrase:empty · circles": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "circleSDF",
+   "sdfFill",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "d1797b3b"
+ },
+ "phrase:empty · ring with 12 rings": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "distanceShape",
+   "ringSDF",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "de72720a"
+ },
+ "phrase:circle [c] · glow": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "addColor",
+   "light"
+  ],
+  "removed": [],
+  "hash": "ec094a5d"
+ },
+ "phrase:circle [c] · glow falloff 4 red": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "addColor",
+   "light"
+  ],
+  "removed": [],
+  "hash": "b5bff382"
+ },
+ "phrase:circle [c] · outline width 0.02": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "addColor",
+   "distanceShape"
+  ],
+  "removed": [],
+  "hash": "ab1e60d9"
+ },
+ "phrase:circle [c] · make it hollow": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "sdfOnion"
+  ],
+  "removed": [],
+  "hash": "1f5eb495"
+ },
+ "phrase:circle [c] · rounder by 0.05": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "sdfOffset"
+  ],
+  "removed": [],
+  "hash": "ee4c3cd6"
+ },
+ "phrase:circle [c] · blend it with a box": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "boxSDF",
+   "sdfUnion"
+  ],
+  "removed": [],
+  "hash": "f20192f2"
+ },
+ "phrase:circle [c] · 8 rings": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "addColor",
+   "distanceShape"
+  ],
+  "removed": [],
+  "hash": "bfd5cc7c"
+ },
+ "phrase:circle [c] · mask": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "sdfMask"
+  ],
+  "removed": [],
+  "hash": "efd2d9a9"
+ },
+ "phrase:circle [c] · warp it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "domainWarp"
+  ],
+  "removed": [],
+  "hash": "db145711"
+ },
+ "phrase:circle [c] · swirl the space 3": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "swirlSpace"
+  ],
+  "removed": [],
+  "hash": "24e40a6c"
+ },
+ "phrase:circle [c] · polar": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "polarSpace"
+  ],
+  "removed": [],
+  "hash": "f8c72cd4"
+ },
+ "phrase:circle [c] · mirror it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "exprNode"
+  ],
+  "removed": [],
+  "hash": "ab77c55e"
+ },
+ "phrase:circle [c] · mirror both ways": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "exprNode"
+  ],
+  "removed": [],
+  "hash": "8812f1ea"
+ },
+ "phrase:circle [c] · repeat 5 times": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "fract"
+  ],
+  "removed": [],
+  "hash": "68953930"
+ },
+ "phrase:circle [c] · tile it 3x": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "fract"
+  ],
+  "removed": [],
+  "hash": "96682724"
+ },
+ "phrase:circle [c] · zoom 2": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "uvTransform2d"
+  ],
+  "removed": [],
+  "hash": "6f33d341"
+ },
+ "phrase:circle [c] · rotate 45 degrees": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "uvTransform2d"
+  ],
+  "removed": [],
+  "hash": "0ffac085"
+ },
+ "phrase:circle [c] · custom code": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "exprNode"
+  ],
+  "removed": [],
+  "hash": "ca11bb9e"
+ },
+ "phrase:colour [p] · tonemap": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "toneMap"
+  ],
+  "removed": [],
+  "hash": "ce42b9d1"
+ },
+ "phrase:colour [p] · add grain 0.1": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "grain"
+  ],
+  "removed": [],
+  "hash": "c409ff9f"
+ },
+ "phrase:colour [p] · grade it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "liftGammaGain"
+  ],
+  "removed": [],
+  "hash": "af071637"
+ },
+ "phrase:colour [p] · brighter by 0.3": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "brightnessContrast"
+  ],
+  "removed": [],
+  "hash": "7ea8356b"
+ },
+ "phrase:colour [p] · mix with blue": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "colorPicker",
+   "oklabMix"
+  ],
+  "removed": [],
+  "hash": "2c58f1f9"
+ },
+ "phrase:colour [p] · palette": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "luminance",
+   "palette"
+  ],
+  "removed": [],
+  "hash": "c254552e"
+ },
+ "phrase:colour [p] · glow": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "bloom"
+  ],
+  "removed": [],
+  "hash": "5ca00047"
+ },
+ "phrase:colour [p] · screen blend": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "blendModes",
+   "fbm",
+   "palette",
+   "time"
+  ],
+  "removed": [],
+  "hash": "27290cb5"
+ },
+ "phrase:nothingSelected · tone map the picture": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "toneMap"
+  ],
+  "removed": [],
+  "hash": "ce42b9d1"
+ },
+ "phrase:circle [c] · circle with a glow then tone map it": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "addColor",
+   "circleSDF",
+   "light",
+   "toneMap",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "75009799"
+ },
+ "phrase:mask [m] · soften": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "smoothstep"
+  ],
+  "removed": [],
+  "hash": "9db10335"
+ },
+ "phrase:mask [m] · invert": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "remap"
+  ],
+  "removed": [],
+  "hash": "5a2fede5"
+ },
+ "phrase:pass [pass] · blur": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "blurTexture"
+  ],
+  "removed": [],
+  "hash": "90929c72"
+ },
+ "phrase:pass [pass] · glow": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "addColor",
+   "glowTexture"
+  ],
+  "removed": [],
+  "hash": "bd3a548d"
+ },
+ "phrase:pass [pass] · trails": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "pass",
+   "textureFade",
+   "textureLevels"
+  ],
+  "removed": [],
+  "hash": "763f6c91"
+ },
+ "phrase:empty · circel with a glwo": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "circleSDF",
+   "light",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "ca9c85f8"
+ },
+ "phrase:circle [c] · repaet 4 times": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "fract"
+  ],
+  "removed": [],
+  "hash": "f60f6e36"
+ },
+ "grid count:life:empty · game of life": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "1e3a8296"
+ },
+ "grid count:life slots:empty · game of life on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "c1f51dda"
+ },
+ "grid count:highLife:empty · highlife": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "eb1482a0"
+ },
+ "grid count:highLife slots:empty · highlife on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "c009fc62"
+ },
+ "grid count:seeds:empty · seeds": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "93586cd8"
+ },
+ "grid count:seeds slots:empty · seeds on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "12347792"
+ },
+ "grid count:dayNight:empty · day and night": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "f378d53c"
+ },
+ "grid count:dayNight slots:empty · day and night on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "c20d8362"
+ },
+ "grid count:maze:empty · maze": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "62bc57b6"
+ },
+ "grid count:maze slots:empty · maze on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "8984da92"
+ },
+ "grid count:coral:empty · coral": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "d5c66f0a"
+ },
+ "grid count:coral slots:empty · coral on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "11a40350"
+ },
+ "grid count:anneal:empty · anneal": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "523117d4"
+ },
+ "grid count:anneal slots:empty · anneal on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "68b9df02"
+ },
+ "grid count:diamoeba:empty · diamoeba": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "b95972e8"
+ },
+ "grid count:diamoeba slots:empty · diamoeba on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "c6c84522"
+ },
+ "grid count:replicator:empty · replicator": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "42315650"
+ },
+ "grid count:replicator slots:empty · replicator on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "d5606d02"
+ },
+ "grid count:lifeWithoutDeath:empty · life without death": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "1c5f1182"
+ },
+ "grid count:lifeWithoutDeath slots:empty · life without death on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "43142288"
+ },
+ "grid count:diamonds:empty · diamonds": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "sdfFill",
+   "shapeSDF",
+   "uv"
+  ],
+  "removed": [],
+  "hash": "8ac0140a"
+ },
+ "grid count:diamonds slots:empty · diamonds on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "8ccc36e2"
+ },
+ "grid count:caves:empty · caves": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "3f8d58b2"
+ },
+ "grid count:caves slots:empty · caves on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "556ba7f2"
+ },
+ "grid count:bosco:empty · bosco": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "40b523ec"
+ },
+ "grid count:bosco slots:empty · bosco on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "8c034232"
+ },
+ "grid count:majority:empty · majority": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "afea7438"
+ },
+ "grid count:majority slots:empty · majority on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "569097ca"
+ },
+ "grid stages:briansBrain:empty · brians brain": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "08b4efba"
+ },
+ "grid stages:briansBrain slots:empty · brians brain on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "7838ce12"
+ },
+ "grid stages:starWars:empty · star wars": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "13a97b92"
+ },
+ "grid stages:starWars slots:empty · star wars on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "24848e72"
+ },
+ "grid stages:frogs:empty · frogs": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "2f2bf902"
+ },
+ "grid stages:frogs slots:empty · frogs on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "46f8bcb2"
+ },
+ "grid stages:sticks:empty · sticks": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "054ba842"
+ },
+ "grid stages:sticks slots:empty · sticks on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "38c6fd4a"
+ },
+ "grid stages:spirals:empty · spirals": {
+  "reads": "build!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "ceb23f98"
+ },
+ "grid stages:spirals slots:empty · spirals on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "264baa42"
+ },
+ "grid stages:swirl:empty · swirl": {
+  "reads": "build!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "ceb23f98"
+ },
+ "grid stages:swirl slots:empty · swirl on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "54156a42"
+ },
+ "grid stages:lava:empty · lava": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "db8d124e"
+ },
+ "grid stages:lava slots:empty · lava on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "be9955ba"
+ },
+ "grid stages:bloomerang:empty · bloomerang": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "feab3354"
+ },
+ "grid stages:bloomerang slots:empty · bloomerang on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "d27603d6"
+ },
+ "grid smooth:heat:empty · heat": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "d9f07a92"
+ },
+ "grid smooth:heat slots:empty · heat on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "65d640e2"
+ },
+ "grid smooth:ripples:empty · water ripples": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "a2c9ff32"
+ },
+ "grid smooth:ripples slots:empty · water ripples on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "1c881d62"
+ },
+ "grid smooth:mitosis:empty · reaction diffusion": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "b1c7dc8e"
+ },
+ "grid smooth:mitosis slots:empty · reaction diffusion on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "4ba514fc"
+ },
+ "grid smooth:coralRd:empty · coral growth": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "e0be5cf0"
+ },
+ "grid smooth:coralRd slots:empty · coral growth on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "6f35c462"
+ },
+ "grid smooth:worms:empty · worms": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "b67a9904"
+ },
+ "grid smooth:worms slots:empty · worms on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "27c05262"
+ },
+ "grid smooth:spots:empty · spots": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "ce4ff29a"
+ },
+ "grid smooth:spots slots:empty · spots on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "6d3e3394"
+ },
+ "grid smooth:maze:empty · labyrinth": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "505618ea"
+ },
+ "grid smooth:maze slots:empty · labyrinth on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "284d76fc"
+ },
+ "grid patterns:wireworld:empty · wireworld": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "b16fd94c"
+ },
+ "grid patterns:wireworld slots:empty · wireworld on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "66ef6648"
+ },
+ "grid patterns:fallingDots:empty · falling dots": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "58978f92"
+ },
+ "grid patterns:fallingDots slots:empty · falling dots on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "12ba99d8"
+ },
+ "grid patterns:crystal:empty · crystal": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "6d57c62e"
+ },
+ "grid patterns:crystal slots:empty · crystal on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "1bd1aacc"
+ },
+ "grid blocks:sand:empty · falling sand": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "79a9b2f2"
+ },
+ "grid blocks:sand slots:empty · falling sand on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "ec5a6992"
+ },
+ "grid blocks:gas:empty · gas": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "6d71402e"
+ },
+ "grid blocks:gas slots:empty · gas on a chunky board, fast, green on black": {
+  "reads": "build",
+  "ok": true,
+  "added": [
+   "gridRules"
+  ],
+  "removed": [],
+  "hash": "ebcd9694"
+ },
+ "output:noise · output the depth": {
+  "reads": "output!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "0744074b"
+ },
+ "output:noise · show the normals": {
+  "reads": "output!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "0744074b"
+ },
+ "output:noise · colour it by distance with a palette": {
+  "reads": "colour!error",
+  "ok": false,
+  "added": [],
+  "removed": [],
+  "hash": "0744074b"
+ },
+ "output:noise · show the picture": {
+  "reads": "output",
+  "ok": true,
+  "added": [],
+  "removed": [],
+  "hash": "0744074b"
+ }
+}

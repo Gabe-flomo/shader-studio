@@ -119,9 +119,9 @@ describe('the Recipe chip', () => {
     expect(gridRecipeText(presetPatch(COUNT_PRESETS.life))).toBe('Life B3/S23 · 240×135 · wrap');
     expect(gridRecipeText({ ...presetPatch(COUNT_PRESETS.life), board: '0.0625', edges: 'walls' })).toBe('Life B3/S23 · 120×68 · walls');
     expect(gridRecipeText({ ruleType: 'smooth', ...presetPatch(SMOOTH_PRESETS.heat) })).toMatch(/^Heat · Smooth · /);
-    expect(builderRecipeOf(grid(presetPatch(COUNT_PRESETS.life)), [])).toMatchObject({ kind: 'grid', text: 'Life B3/S23 · 240×135 · wrap' });
+    expect(builderRecipeOf(grid(presetPatch(COUNT_PRESETS.life)), [])).toMatchObject({ kind: 'grid', text: 'grid life', summary: 'Life B3/S23 · 240×135 · wrap' });
   });
-  it('a rules Agents group: "n rules · n states", its rules as sentences', () => {
+  it('a rules Agents group: "n rules · n states", its rules in the Playfield language', () => {
     const s = rulesStarter(null);
     const g = s.nodes.find(n => n.id === s.groupId)!;
     const set = groupRules(g);
@@ -129,7 +129,8 @@ describe('the Recipe chip', () => {
     expect(r.kind).toBe('agents');
     expect(r.text).toBe(agentRulesSummary(set));
     expect(r.text).toMatch(/^\d+ rules? · \d+ states?$/);
-    expect(r.lines).toMatch(/^When /);
+    expect(r.lines).toMatch(/^agents/);
+    expect(r.lines).toMatch(/\n  always do /);
     // Two species and two states.
     const two = { ...set, species: [set.species[0], { ...set.species[0], name: 'B', states: [...set.species[0].states, { name: 'sick', colour: [1, 0, 0] as [number, number, number] }] }] };
     expect(agentRulesSummary(two)).toMatch(/ · 3 states · 2 species$/);

@@ -1316,6 +1316,9 @@ function execColour(c: ClauseCtx, rest: Tok[]) {
     driverLabel = d.label;
     pal.inputs.value = { ...pal.inputs.value, connection: { nodeId: d.wire[0], outputKey: d.wire[1] } };
     pal.params.__comment = `Palette: colour along ${d.label}.\nWhy: the Do… bar (“${c.text}”).`;
+    // Good defaults: a glow reaches about 0.4 from its shape, so along the length the colours turn round 2.5 times in view.
+    if (d.label === 'the length of the space') pal.params.scale = 2.5;
+    else if (d.label.startsWith('the x') || d.label.startsWith('the y')) pal.params.scale = 1.5;
     added.push(pal);
     if (!typesCompatible(target.type, 'vec3')) fail(`Type check: ${nodeName(target.node)} gives ${typeWord(target.type)}; it multiplies a colour.`);
     const m = mathNode('multiply', c.run.nextId(), at.x + 420, at.y, 'vec3', { __comment: `Multiply: the palette × ${nodeName(target.node)}, so the colour shows where it is bright.\nWhy: the Do… bar (“${c.text}”).` });
@@ -1339,7 +1342,13 @@ function execColour(c: ClauseCtx, rest: Tok[]) {
     result = { id: pal.id, key: 'color', type: 'vec3' };
   }
   c.run.nodes = place(c, added);
-  const moved = takeOver(c, { id: target.node.id, key: target.key }, result);
+  // What read the value now reads the colour; when nothing read that output (a glow's Glow, while its
+  // Tinted is on the Output), the colour takes the place of the output that is used.
+  let moved = takeOver(c, { id: target.node.id, key: target.key }, result);
+  if (!moved) {
+    const used = c.run.nodes.flatMap(x => Object.values(x.inputs)).find(i => i.connection?.nodeId === target.node.id && i.connection.outputKey !== target.key)?.connection?.outputKey;
+    if (used) moved = takeOver(c, { id: target.node.id, key: used }, result);
+  }
   c.run.subject = { id: result.id, key: result.key };
   showIfEmpty(c, result);
   step(c, byAt >= 0 ? `Colour ${nodeName(target.node)} with a palette by ${driverLabel}` : `Colour ${driverLabel} with a palette`, before, moved ? [`What read ${nodeName(target.node)} now reads the colour.`] : []);

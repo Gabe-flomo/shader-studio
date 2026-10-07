@@ -16,7 +16,8 @@ import { GALLERY_SHAPES, type GalleryShape } from '../../sceneBuilder/thumbnails
 import { ShapeGallery, ShapeThumb } from './ShapeGallery';
 import { NO_DRAG, OP_GLYPH } from './controls';
 import { Icon } from '../ui/Icon';
-import { RECIPE_VOCABULARY, parseRecipe, printRecipe, type RecipeError } from '../../sceneBuilder/recipe';
+import { RECIPE_VOCABULARY, parseRecipe, printRecipe, type RecipeError, type RecipeHint } from '../../sceneBuilder/recipe';
+import { freshSeed, type Resolved } from '../../lang/random';
 import { SCENE_TEMPLATES } from '../../sceneBuilder/templates';
 import { describeIntoBuilder } from '../../sceneBuilder/actions';
 import { Card, ColourRow, NumRow, Row, Vec3Row, rgbCss } from './controls';
@@ -687,18 +688,25 @@ export function RecipeTab() {
   const [focused, setFocused] = useState(false);
   const [errors, setErrors] = useState<RecipeError[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
+  // Old words with their canonical ones, and what random values became (lang/random.ts).
+  const [hints, setHints] = useState<RecipeHint[]>([]);
+  const [resolved, setResolved] = useState<Resolved[]>([]);
+  // The seed for `random` while you edit (a line's own seed= wins); Roll again picks another.
+  const [seed, setSeed] = useState(freshSeed);
   const [showRef, setShowRef] = useState(false);
   const [caret, setCaret] = useState<number | null>(null);
   const area = useRef<HTMLTextAreaElement | null>(null);
   const insert = useInsertExample();
   // While you aren't typing, the text follows the form.
-  useEffect(() => { if (!focused && !errors.length) setText(printed); }, [printed, focused]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!focused && !errors.length && !resolved.length) setText(printed); }, [printed, focused]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Read the recipe; when it reads cleanly the form follows. Returns the mistakes. */
-  const onChange = (v: string): RecipeError[] => {
+  const onChange = (v: string, withSeed = seed): RecipeError[] => {
     setText(v);
-    const r = parseRecipe(v);
+    const r = parseRecipe(v, { seed: withSeed });
     setErrors(r.errors);
     setWarnings(r.warnings);
+    setHints(r.hints ?? []);
+    setResolved(r.resolved ?? []);
     // The spec is replaced as a whole: a clause taken out (an output, a fog) goes too.
     if (!r.errors.length) edit(d => { if (!r.spec.output) delete d.output; Object.assign(d, r.spec); }, 'recipe');
     return r.errors;
@@ -743,6 +751,24 @@ export function RecipeTab() {
         </button>
       ))}
       {warnings.map((w, i) => <BuilderNote key={i}>Note: {w}</BuilderNote>)}
+      {resolved.length > 0 && (
+        <div data-recipe-random style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', borderRadius: radius.md, background: tk.bg.field }}>
+          <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6, font: `11.5px ${fontFamily.mono}` }}>
+            {resolved.map((x, i) => <span key={i} title={x.key} style={{ padding: '1px 6px', borderRadius: 6, background: tk.bg.subtle }}>{x.key.split('.').pop()}={x.from} → <b>{x.to}</b></span>)}
+          </span>
+          <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Button size="sm" variant="secondary" icon="dice" data-recipe-reroll onClick={() => { const s2 = freshSeed(); setSeed(s2); onChange(text, s2); }}>Roll again</Button>
+            <Button size="sm" variant="ghost" icon="check" data-recipe-keep onClick={() => { setResolved([]); setText(printRecipe(useSceneBuilder.getState().spec, { pretty: true })); }} title="Write the drawn values into the recipe">Keep these</Button>
+            <BuilderNote>Random values{/seed\s*=?\s*\d/i.test(text) ? '' : ` (seed ${seed}: add seed=${seed} to repeat them)`}</BuilderNote>
+          </span>
+        </div>
+      )}
+      {asText && hints.map((h, i) => (
+        <span key={`h${i}`} data-recipe-hint style={{ display: 'flex', alignItems: 'center', gap: 8, font: `12px ${fontFamily.ui}`, color: tk.text.secondary }}>
+          <b style={{ font: `600 11px ${fontFamily.mono}`, color: tk.text.muted }}>{h.line}:{h.col}</b>{h.message}
+          <Button size="sm" variant="ghost" onClick={() => onChange(`${text.slice(0, h.from)}${h.fix}${text.slice(h.to)}`)}>Use {h.fix}</Button>
+        </span>
+      ))}
       {showRef && (
         <div data-recipe-reference style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 12, borderRadius: radius.control, background: tk.bg.subtle, font: `12px/1.6 ${fontFamily.mono}`, color: tk.text.secondary }}>
           <span><b>modes</b> <RecipeCode text={RECIPE_VOCABULARY.modes.join(' · ')} errors={[]} /></span>

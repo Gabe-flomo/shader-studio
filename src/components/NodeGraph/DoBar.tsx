@@ -45,6 +45,15 @@ import { runBuilderAction } from '../../builders/open';
 import { builderRecipeOf } from '../../builders/recipe';
 import { outputClause } from '../../sceneBuilder/output';
 import { RecipeCode } from '../sceneBuilder/RecipeCode';
+import { readLine, readsCanonically, gridPlan, sceneNodes, agentsNodes, type LineRead } from '../../lang/run';
+import { canonicalOf } from '../../lang/dialects/picture';
+import { barAssist } from '../../lang/barAssist';
+import { wordKindFor } from '../../lang/highlight';
+import { freshSeed } from '../../lang/random';
+import { readSurpriseCommand, surpriseLine } from '../../lang/surprise';
+import { normaliseEnd, strength } from '../../suggestions/usage';
+import { historyAt, pushHistory, readHistory } from '../../suggestions/doBarHistory';
+import type { Assist } from '../../lang/complete';
 
 const WIDTH = 560;
 
@@ -103,8 +112,23 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   const [active, setActive] = useState(0);
   const [caret, setCaret] = useState<number | null>(initial.length);
   const scope = useScope();
-  // Type-ahead: the word at the caret from the vocabulary, and the named action's settings.
-  const ta = useTypeAhead(text, caret, doBarAssist, (next, at) => {
+  // Type-ahead: the language's (graph-aware: create, connect, set…), else the plain-English vocabulary's.
+  const assist = useMemo(() => {
+    const t = rankTables();
+    const rank = (a: string, o: string, b: string, i: string) => {
+      const f = normaliseEnd(a, o, 'out'), g = normaliseEnd(b, i, 'in');
+      return strength(t.table.stat(f.type, f.key, g.type, g.key));
+    };
+    return (tx: string, c: number): Assist => {
+      const lang = barAssist(tx, c, { nodes: scope.nodes, rank });
+      if (lang.items.length || lang.signature) return lang;
+      return doBarAssist(tx, c);
+    };
+  }, [scope.nodes]);
+  // The seed for `random` while you type (a line's own seed= wins); a new one after each run.
+  const [seed, setSeed] = useState(freshSeed);
+  const [histIndex, setHistIndex] = useState<number | null>(null);
+  const ta = useTypeAhead(text, caret, assist, (next, at) => {
     setText(next); setCaret(at);
     requestAnimationFrame(() => { inputRef.current?.focus(); inputRef.current?.setSelectionRange(at, at); });
   });
@@ -132,13 +156,29 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
     const r = nd ? builderRecipeOf(nd, []) : null;
     return r?.kind === 'scene' ? r.text : null;
   }, [builder, rootNodes]);
-  const plan: DoPlan = useMemo(() => (text.trim() && !builder ? parseDo(text, scope) : { steps: [], reading: [], unknown: [] }), [text, scope, builder]);
+  // "surprise me [small|large] [2d|3d]": a random line, shown before it runs (lang/surprise.ts).
+  const surprise = useMemo(() => (builder ? null : readSurpriseCommand(text)), [text, builder]);
+  const surpriseMade = useMemo(() => (surprise ? surpriseLine({ ...surprise, seed: surprise.seed ?? seed }) : null), [surprise, seed]);
+  // The line in the shared language (lang/run.ts): canonical text runs through the same executors as plain English.
+  const line: LineRead | null = useMemo(() => (text.trim() && !builder && !surprise ? readLine(text, { seed }) : null), [text, builder, surprise, seed]);
+  const canonicalRun = line && readsCanonically(line) ? line : null;
+  const runText = canonicalRun?.dialect === 'picture' ? canonicalRun.picture!.sentence! : text;
+  const otherDialect = canonicalRun && canonicalRun.dialect !== 'picture' ? canonicalRun : null;
+  const plan: DoPlan = useMemo(() => (text.trim() && !builder && !otherDialect && !surprise ? parseDo(runText, scope) : { steps: [], reading: [], unknown: [] }), [runText, text, scope, builder, otherDialect, surprise]);
   // The command language (doCommands.ts): every clause, previewed on a copy of the graph.
   const [picks, setPicks] = useState<Record<string, string>>({});
   const cmd: CommandPlan | null = useMemo(() => {
-    if (!text.trim() || plan.intent || builder) return null;
-    try { return execCommand(text, scope.nodes, { selected: scope.selected, picks, topLevel: scope.topLevel }); } catch { return null; }
-  }, [text, scope, picks, plan.intent, builder]);
+    if (!text.trim() || plan.intent || builder || otherDialect || surprise) return null;
+    try { return execCommand(runText, scope.nodes, { selected: scope.selected, picks, topLevel: scope.topLevel }); } catch { return null; }
+  }, [runText, text, scope, picks, plan.intent, builder, otherDialect, surprise]);
+  // The canonical line under the bar: what was typed in the language's own words (or ✓ when it already is).
+  const canonical = useMemo(() => {
+    if (canonicalRun) return canonicalRun.canonical;
+    if (!cmd || !(cmd.ok || cmd.steps.length) || plan.intent) return null;
+    try { return canonicalOf(text, scope); } catch { return null; }
+  }, [canonicalRun, cmd, plan.intent, text, scope]);
+  // Mistakes in a line that is meant as canonical (it reads as nothing else).
+  const langErrors = line && line.errors.length && !(cmd && (cmd.ok || cmd.steps.length)) && (/[·=→@{]|->/.test(text) || line.dialect !== 'picture' || line.errors.some(e => /mixes a 3D scene/.test(e.message))) ? line.errors : [];
   const editing = !!cmd && !cmd.phrase;
   const pickClause = cmd?.clauses.find(c => c.pick);
   const [hoverPick, setHoverPick] = useState<string | null>(null);
@@ -164,7 +204,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   }, [plan.intent, text]);
 
   const fallback: Fallback[] = useMemo(() => {
-    if (!text.trim() || plan.intent || builder) return [];
+    if (!text.trim() || plan.intent || builder || otherDialect || surprise || langErrors.length) return [];
     // An output phrase or a type refusal with its fixes is an answer, not a miss.
     if (plan.steps.some(st => st.kind === 'scene-output') || plan.fixes?.length) return [];
     // A phrase read only by guessing at typos ("sine" ≈ "shine") gives way to an idiom of that name.
@@ -181,13 +221,40 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
       .map(x => ({ kind: 'node' as const, type: x.d.type, label: x.d.label, detail: x.d.category }));
     const idioms = (idiomFirst.length ? idiomFirst : matchIdioms(text, 3)).map(spec => ({ kind: 'idiom' as const, spec }));
     return idiomFirst.length ? idioms : [...nodes, ...idioms];
-  }, [text, plan, editing, builder]);
+  }, [text, plan, editing, builder, otherDialect, surprise, langErrors.length]);
   useEffect(() => setActive(0), [fallback.length]);
   // Fallback results with a plan: the plan was only a guess at a typo, and an idiom has that name.
   const idiomWins = !editing && plan.steps.length > 0 && fallback.length > 0;
   const showCommand = !!cmd && !idiomWins && cmd.clauses.length > 0 && (editing || cmd.steps.length > 0 || cmd.clauses.some(c => c.status !== 'ok' && fallback.length === 0));
 
+  const ranLine = () => { pushHistory(text); setSeed(freshSeed()); setHistIndex(null); };
+  const runOther = (r: LineRead) => {
+    const st = useNodeGraphStore.getState();
+    if (r.dialect === 'grid') {
+      const ran = st.runDoPlan(gridPlan(r.grid!, scope.selected[0]), text.trim());
+      if (ran.length) toast.info(`Do: ${text.trim()}`, { message: 'Grid Rules added. Undo takes it back.' });
+    } else {
+      if (st.activeGroupPath.length) st.exitToRoot();
+      const nodes = useNodeGraphStore.getState().nodes;
+      const nextId = () => useNodeGraphStore.getState().newNodeId();
+      if (r.dialect === 'scene') {
+        const made = sceneNodes(nodes, r.scene!, nextId, spawnPoint());
+        useNodeGraphStore.getState().setNodesRewritten(made.nodes, `Do: ${text.trim()}`);
+        useNodeGraphStore.getState().focusNode(made.focusId);
+        toast.success('3D scene built', { message: 'Right-click the Scene Group → Edit in Scene Builder to change it. Undo takes it back.' });
+      } else if (r.dialect === 'agents') {
+        const made = agentsNodes(nodes, r.agents!, nextId, spawnPoint());
+        useNodeGraphStore.getState().setNodesRewritten(made.nodes, `Do: ${text.trim()}`);
+        useNodeGraphStore.getState().focusNode(made.groupId);
+        toast.success('Agents added with these rules', { message: 'Double-click the group to open its rules. Undo takes it back.' });
+      }
+    }
+    ranLine();
+    closeDoBar();
+  };
   const run = () => {
+    if (surpriseMade) { setText(surpriseMade.line); setCaret(surpriseMade.line.length); return; }
+    if (otherDialect) { runOther(otherDialect); return; }
     if (builder) {
       if (!builder.action) return;
       closeDoBar();
@@ -196,8 +263,8 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
     }
     if (plan.intent === 'teach') { teach(); return; }
     if (cmd?.ok && !idiomWins) {
-      const ran = useNodeGraphStore.getState().runCommand(text.trim(), picks);
-      if (ran.ok) toast.info(`Do: ${text.trim()}`, { message: `${ran.steps.map(st => st.label).join(' → ')}. Undo takes it all back.` });
+      const ran = useNodeGraphStore.getState().runCommand(runText.trim(), picks);
+      if (ran.ok) { ranLine(); toast.info(`Do: ${text.trim()}`, { message: `${ran.steps.map(st => st.label).join(' → ')}. Undo takes it all back.` }); }
       else toast.info('Didn’t run', { message: ran.clauses.find(c => c.status !== 'ok')?.message ?? 'The graph changed: try again.' });
       closeDoBar();
       return;
@@ -248,6 +315,15 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
             // Tab takes a suggestion, Enter still runs the phrase.
             if (e.key !== 'Enter' && ta.onKeyDown(e)) return;
             if (e.key === 'Enter') { e.preventDefault(); run(); }
+            // ↑ / ↓ walk what you typed before (history keeps the words you typed) when no list is open.
+            if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !fallback.length) {
+              const list = readHistory();
+              const i = histIndex ?? list.length;
+              const next = e.key === 'ArrowUp' ? Math.max(0, i - 1) : Math.min(list.length, i + 1);
+              const h = historyAt(list, next);
+              if (h !== null || next === list.length) { e.preventDefault(); setHistIndex(next); const v = h ?? ''; setText(v); setCaret(v.length); }
+              return;
+            }
             if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => Math.min(a + 1, Math.max(0, fallback.length - 1))); }
             if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => Math.max(0, a - 1)); }
           }}
@@ -256,6 +332,8 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
           data-do-input
           style={{ flex: 1, minWidth: 0, border: 0, outline: 'none', background: 'transparent', color: tk.text.primary, font: `14px ${fontFamily.ui}` }}
         />
+        <IconButton icon="dice" size="sm" label="Surprise me: a random line to try (type “surprise me large 3d” for a size or a 3D scene)" data-do-surprise
+          onClick={() => { const s = surpriseLine({ seed: freshSeed() }); setText(s.line); setCaret(s.line.length); requestAnimationFrame(() => inputRef.current?.focus()); }} />
         <IconButton icon="info" size="sm" label="Commands: every verb, with examples to try" onClick={() => { closeDoBar(); openCommandsRef(); }} data-do-help />
         <IconButton icon="star" size="sm" active={panel === 'taught'} label="Your taught phrases" onClick={() => setPanel(p => (p === 'taught' ? 'none' : 'taught'))} />
         <IconButton icon="close" size="sm" label="Close" shortcut="esc" onClick={closeDoBar} />
@@ -264,6 +342,51 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
       {ta.items.length > 0 && <div style={{ padding: '0 8px 6px' }}><AssistList items={ta.items} active={ta.active} onPick={ta.pick} onHover={ta.setActive} /></div>}
       {ta.signature && text.trim() && !plan.steps.some(st => st.kind === 'scene-output') && <div style={{ padding: '0 8px 6px' }}><SignatureLine sig={ta.signature} /></div>}
       <div style={{ overflowY: 'auto', minHeight: 0 }}>
+        {/* The line in the language's own words: click to edit it (✓ when you typed it that way) */}
+        {canonical && !builder && (
+          <button type="button" data-do-canonical title={text.trim() === canonical ? 'You typed the canonical line' : 'The same, in the language\'s own words: click to edit it'}
+            onClick={() => { setText(canonical); setCaret(canonical.length); inputRef.current?.focus(); }}
+            style={{ display: 'flex', gap: 8, alignItems: 'baseline', width: '100%', padding: '0 12px 6px', border: 0, background: 'transparent', cursor: 'pointer', textAlign: 'left', color: tk.text.muted, font: `11.5px ${fontFamily.ui}` }}>
+            <span style={{ color: text.trim() === canonical ? tk.status.success : tk.text.faint, flexShrink: 0 }}>{text.trim() === canonical ? '✓' : '→'}</span>
+            <code style={{ font: `11.5px/1.5 ${fontFamily.mono}`, overflowWrap: 'anywhere' }}><RecipeCode text={canonical} errors={[]} wordKind={canonicalRun?.dialect === 'scene' ? undefined : wordKindFor(canonicalRun?.dialect === 'grid' ? 'grid' : canonicalRun?.dialect === 'agents' ? 'agents' : 'picture', 'edit')} /></code>
+          </button>
+        )}
+        {/* What random values became, with a new roll and Keep */}
+        {canonicalRun && canonicalRun.resolved.length > 0 && (
+          <div data-do-random style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', padding: '0 12px 8px' }}>
+            {canonicalRun.resolved.map((x, i) => <span key={i} style={{ font: `11px ${fontFamily.mono}`, padding: '1px 6px', borderRadius: 6, background: tk.bg.hover, color: tk.text.secondary }}>{x.key}={x.from} → <b>{x.to}</b></span>)}
+            <Button size="sm" variant="ghost" icon="dice" onClick={() => setSeed(freshSeed())} data-do-reroll>Roll again</Button>
+            <Button size="sm" variant="ghost" icon="check" onClick={() => { if (canonicalRun.canonical) { setText(canonicalRun.canonical); setCaret(canonicalRun.canonical.length); } }} title="Write the drawn values into the line">Keep these</Button>
+            {!/seed\s*=?\s*\w/i.test(text) && <span style={muted}>seed {canonicalRun.seed}</span>}
+          </div>
+        )}
+        {/* "surprise me": the line it made */}
+        {surpriseMade && section('Enter puts this line in the bar', (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} data-do-surprise-line>
+            <code style={{ font: `12px/1.5 ${fontFamily.mono}`, overflowWrap: 'anywhere' }}><RecipeCode text={surpriseMade.line} errors={[]} wordKind={surpriseMade.dialect === '3d' ? undefined : wordKindFor('picture', 'edit')} /></code>
+            <span style={muted}>A {surpriseMade.size} {surpriseMade.dialect === '3d' ? '3D scene' : '2D picture'} · seed {surpriseMade.seed}. Then Enter again runs it; edit it first if you like.</span>
+            <span style={{ display: 'flex', gap: 6 }}><Button size="sm" variant="secondary" icon="dice" onClick={() => setSeed(freshSeed())}>Another</Button></span>
+          </div>
+        ))}
+        {/* A line in another dialect: what Enter makes */}
+        {otherDialect && section(otherDialect.dialect === 'grid' ? 'Enter adds Grid Rules' : otherDialect.dialect === 'scene' ? 'Enter builds a 3D scene' : 'Enter adds an Agents group with these rules', (
+          <span style={muted} data-do-dialect={otherDialect.dialect}>
+            {otherDialect.dialect === 'grid' ? 'A Grid Rules node with this rule (beside the selection, or on the Output when the graph is empty). Its editor\'s Recipe tab shows the same line.'
+              : otherDialect.dialect === 'scene' ? 'A new Scene Group, march loop and camera, beside what is there, on the Output. Edit it later in the 3D Scene Builder.'
+                : 'Emit → Agents (these rules) → Deposit → Trail field → palette, on the Output. Its rules editor\'s Recipe tab shows the same text.'}
+          </span>
+        ))}
+        {/* Mistakes in a canonical line, at their line and column */}
+        {langErrors.length > 0 && section('Can’t read that line', (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }} data-do-lang-errors>
+            {langErrors.map((e, i) => (
+              <span key={i} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12, color: tk.status.warningText }}>
+                <b style={{ font: `600 11px ${fontFamily.mono}` }}>{e.col}</b>{e.message}
+                {e.fixes?.map(f => <Button key={f} size="sm" variant="ghost" onClick={() => { const v = `${text.slice(0, e.at)}${f}${text.slice(e.end)}`; setText(v); setCaret(v.length); }}>{f}</Button>)}
+              </span>
+            ))}
+          </div>
+        ))}
         {/* A builder phrase: what Enter opens */}
         {builder && section(builder.action ? 'Enter opens' : 'Can’t open yet', (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }} data-do-builder={builder.id}>

@@ -150,6 +150,51 @@ twist the space 0.5                              → Twist (0.5) in front of its
 tone map it                                      → Tone map on the colour it ends up as
 ```
 
+### The Playfield language in the bar (`src/lang/`)
+
+The bar reads the shared Playfield language (docs/playfield-language-plan.md). Plain English, as
+above, is its sugar.
+
+- **The canonical line.** Under the box, `→ circle · glow falloff=8` shows what was typed, in the
+  language's own words. Clicking it puts that line in the box. When what you typed already is
+  canonical, the row shows ✓.
+- **Canonical lines run through the same executors as plain English.** `picture.ts` turns a line
+  into the bar's sentence and runs it through `execCommand`. The tests check that every sentence in
+  the corpus gives the same graph both ways.
+- **Edit verbs leave "the" out.** For example: `set glow falloff=8`,
+  `connect noise → glow.tint`, `insert tone-map between palette and output`, `it * circle`,
+  `noise + it`, `mix(palette, glow) by=0.3`, `group(circle, glow) name="Neon"`.
+- **Other dialects.** A line can also be a 3D scene (`surface · sphere · box at=(1,0,0)`, or any
+  line with a 3D-only word), a Grid Rules line (`grid life walls`, or a preset name that is no
+  other word) or an agents line (`species Slime: always do wander 7deg`). Enter builds a scene,
+  adds Grid Rules or adds an Agents group with those rules. A line that mixes 3D-only and 2D-only
+  words is refused.
+- **Mistakes in a canonical line.** These are listed with their column and "did you mean". Each fix
+  is a button.
+- **Randomness.** Use `falloff=random`, `random(0.2..2)`, `random(red, teal)`, or a leading
+  `random` (`random circle · glow · colour by length`). The row under the canonical line shows what
+  was drawn, with **Roll again** and **Keep these**. `seed=42` repeats a result; without a seed,
+  each run differs.
+- **Surprise me.** The 🎲 button, or type `surprise me [small|medium|large] [2d|3d]`. It writes a
+  whole line from the flow's order (space → shape → shape it → colour → post, or the 3D flow) for
+  you to read, change and run (`src/lang/surprise.ts`).
+- **History.** ↑ and ↓ bring back what you typed before, as you typed it (kept in this browser).
+- **Type-ahead** comes from the language (`src/lang/barAssist.ts`):
+  - after `create`, everything you can make, grouped;
+  - after `connect`, the wires that fit on this graph (`uv → circle.position`), ranked by how often
+    people make them;
+  - after `set <node>`, its settings with their values;
+  - a signature line for every head.
+- **Good defaults.** A line with no numbers looks good. `circle · glow · colour by length` and a
+  sample of about 60 lines like it are rendered headless. `src/lang/__tests__/defaults.test.ts` checks
+  that none is blown out, invisible or flat (`tools/lang-defaults-render.mjs` records the frame
+  stats). To get there:
+  - a 2D box starts the size of the circle;
+  - an outline starts 0.02 wide;
+  - colour by length cycles its palette 2.5 times in view;
+  - a colour step after a glow on a new shape works on the picture;
+  - a bend after a glow bends the shape's space.
+
 ### How a phrase is read (`suggestions/doBar.ts`)
 
 One left-to-right pass over a fixed vocabulary (`src/lang/vocabulary.ts`):

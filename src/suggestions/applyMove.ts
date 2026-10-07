@@ -81,7 +81,8 @@ export function applyMove(nodes: GraphNode[], target: MoveTarget, move: Move, ar
   const { self } = ctx;
 
   // A starter recipe of the node does this already when the socket feeds nothing yet.
-  if (move.recipe && target.side === 'out' && consumersOf(nodes, self.id, target.key).length === 0) {
+  // (Not when the move was given its own values, "blur it 4": those go on the move's node.)
+  if (move.recipe && target.side === 'out' && consumersOf(nodes, self.id, target.key).length === 0 && !Object.keys(args).length) {
     const recipe = recipesFor(self.type).find(r => r.id === move.recipe);
     if (recipe) {
       const r = applyRecipe(nodes, self.id, recipe, nextId, heightOf);

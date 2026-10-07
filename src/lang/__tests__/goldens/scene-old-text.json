@@ -1,0 +1,9155 @@
+{
+ "LIT\nBall 0.4 at=(1,0,0) colour=gold\ndonut 1 0.1 rot=(0.5rad, 90deg, 0)\ncube 0.3 color=#08f": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       1,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.4
+      },
+      "color": [
+       1,
+       0.75,
+       0.3
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "torus",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       28.6479,
+       90,
+       0
+      ],
+      "size": {
+       "R": 1,
+       "r": 0.1
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s3",
+      "type": "shape",
+      "kind": "box",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        0.3,
+        0.3,
+        0.3
+       ],
+       "round": 0
+      },
+      "color": [
+       0,
+       0.5333,
+       1
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "box @move(1,0,0) @rotate(0,90,0) @scale(2) @round(0.1) @onion(0.02)": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "box",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        0.5,
+        0.5,
+        0.5
+       ],
+       "round": 0
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": [
+       {
+        "id": "w1",
+        "kind": "move",
+        "values": {
+         "by": [
+          1,
+          0,
+          0
+         ]
+        }
+       },
+       {
+        "id": "w2",
+        "kind": "rotate",
+        "values": {
+         "by": [
+          0,
+          90,
+          0
+         ]
+        }
+       },
+       {
+        "id": "w3",
+        "kind": "scale",
+        "values": {
+         "s": 2
+        }
+       },
+       {
+        "id": "w4",
+        "kind": "round",
+        "values": {
+         "r": 0.1
+        }
+       },
+       {
+        "id": "w5",
+        "kind": "onion",
+        "values": {
+         "t": 0.02
+        }
+       }
+      ]
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "box @rotate(x 45)": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "box",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        0.5,
+        0.5,
+        0.5
+       ],
+       "round": 0
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": [
+       {
+        "id": "w1",
+        "kind": "turn",
+        "values": {
+         "angle": 45,
+         "axis": "x"
+        }
+       }
+      ]
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "box · rotate y 30": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "box",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        0.5,
+        0.5,
+        0.5
+       ],
+       "round": 0
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": [
+     {
+      "id": "w1",
+      "kind": "turn",
+      "values": {
+       "angle": 30,
+       "axis": "y"
+      }
+     }
+    ]
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "camera dist=6 orbit=10": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 6,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 10,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "colour by depth palette sunset": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   },
+   "output": {
+    "show": "depth",
+    "palette": "sunset"
+   }
+  },
+  "errors": 0
+ },
+ "fog 0.2": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0.2,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "output depth": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   },
+   "output": {
+    "show": "depth"
+   }
+  },
+  "errors": 0
+ },
+ "output normal": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   },
+   "output": {
+    "show": "normal"
+   }
+  },
+  "errors": 0
+ },
+ "plane y=-0.8 color=grey": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "plane",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "y": -0.8
+      },
+      "color": [
+       0.5,
+       0.5,
+       0.5
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "polar-repeat 6": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [],
+    "warps": [
+     {
+      "id": "w1",
+      "kind": "polar-repeat",
+      "values": {
+       "count": 6,
+       "axis": "y"
+      }
+     }
+    ]
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "quality steps=160": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 160,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "smooth-union(sphere r=0.6, box size=0.4 at=(0.6,0,0)) k=0.3": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0.3,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.6
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "box",
+      "name": "",
+      "at": [
+       0.6,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        0.4,
+        0.4,
+        0.4
+       ],
+       "round": 0
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "smooth-union(sphere, box at=(0.8,0,0)) k=0.2 @move(0,1,0) @onion(0.03)": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0.2,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "box",
+      "name": "",
+      "at": [
+       0.8,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        0.5,
+        0.5,
+        0.5
+       ],
+       "round": 0
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": [
+     {
+      "id": "w1",
+      "kind": "move",
+      "values": {
+       "by": [
+        0,
+        1,
+        0
+       ]
+      }
+     },
+     {
+      "id": "w2",
+      "kind": "onion",
+      "values": {
+       "t": 0.03
+      }
+     }
+    ]
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "sphere": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "sphere @move(1, 0.5, -2) @rotate(30,0,45) @scale(2) @round(0.1) @onion(0.02) @polar-repeat(8)": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": [
+       {
+        "id": "w1",
+        "kind": "move",
+        "values": {
+         "by": [
+          1,
+          0.5,
+          -2
+         ]
+        }
+       },
+       {
+        "id": "w2",
+        "kind": "rotate",
+        "values": {
+         "by": [
+          30,
+          0,
+          45
+         ]
+        }
+       },
+       {
+        "id": "w3",
+        "kind": "scale",
+        "values": {
+         "s": 2
+        }
+       },
+       {
+        "id": "w4",
+        "kind": "round",
+        "values": {
+         "r": 0.1
+        }
+       },
+       {
+        "id": "w5",
+        "kind": "onion",
+        "values": {
+         "t": 0.02
+        }
+       },
+       {
+        "id": "w6",
+        "kind": "polar-repeat",
+        "values": {
+         "count": 8,
+         "axis": "y"
+        }
+       }
+      ]
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "sphere r=(1,2,3)": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 1
+ },
+ "sphere r=0.5 at=(1,0,0) color=teal": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       1,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.15,
+       0.65,
+       0.6
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "sphere r=0.8 color=orange": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.8
+      },
+      "color": [
+       1,
+       0.55,
+       0.15
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "sphere shine=red": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 1
+ },
+ "sphere · box · cylinder · capsule": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "box",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        0.5,
+        0.5,
+        0.5
+       ],
+       "round": 0
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s3",
+      "type": "shape",
+      "kind": "cylinder",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.3,
+       "h": 0.5,
+       "round": 0
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s4",
+      "type": "shape",
+      "kind": "capsule",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "h": 0.6,
+       "r": 0.2
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "sphere · color by distance": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   },
+   "output": {
+    "show": "distance",
+    "palette": "sunset"
+   }
+  },
+  "errors": 0
+ },
+ "sphere · colour by depth palette fire": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   },
+   "output": {
+    "show": "depth",
+    "palette": "fire"
+   }
+  },
+  "errors": 0
+ },
+ "sphere · colour by depth palette sunsett": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   },
+   "output": {
+    "show": "depth",
+    "palette": "sunset"
+   }
+  },
+  "errors": 1
+ },
+ "sphere · output dpeth": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 1
+ },
+ "sphere · output normal": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   },
+   "output": {
+    "show": "normal"
+   }
+  },
+  "errors": 0
+ },
+ "sphere · output picture": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "sphere · show normals": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   },
+   "output": {
+    "show": "normal"
+   }
+  },
+  "errors": 0
+ },
+ "sphere · sphere at=(1,0,0) · output depth": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       1,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   },
+   "output": {
+    "show": "depth"
+   }
+  },
+  "errors": 0
+ },
+ "sphere · union(box, torus) · cone · smooth-union(capsule, plane)": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "g2",
+      "type": "group",
+      "name": "",
+      "op": "union",
+      "k": 0,
+      "children": [
+       {
+        "id": "s2",
+        "type": "shape",
+        "kind": "box",
+        "name": "",
+        "at": [
+         0,
+         0,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "size": [
+          0.5,
+          0.5,
+          0.5
+         ],
+         "round": 0
+        },
+        "color": [
+         0.8,
+         0.8,
+         0.8
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s3",
+        "type": "shape",
+        "kind": "torus",
+        "name": "",
+        "at": [
+         0,
+         0,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "R": 0.5,
+         "r": 0.2
+        },
+        "color": [
+         0.8,
+         0.8,
+         0.8
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       }
+      ],
+      "warps": []
+     },
+     {
+      "id": "s4",
+      "type": "shape",
+      "kind": "cone",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "angle": 22.92,
+       "h": 1
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "g3",
+      "type": "group",
+      "name": "",
+      "op": "union",
+      "k": 0.3,
+      "children": [
+       {
+        "id": "s5",
+        "type": "shape",
+        "kind": "capsule",
+        "name": "",
+        "at": [
+         0,
+         0,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "h": 0.6,
+         "r": 0.2
+        },
+        "color": [
+         0.8,
+         0.8,
+         0.8
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s6",
+        "type": "shape",
+        "kind": "plane",
+        "name": "",
+        "at": [
+         0,
+         0,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "y": -0.75
+        },
+        "color": [
+         0.8,
+         0.8,
+         0.8
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       }
+      ],
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "surface": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "surface\nsphre r=1\nbox size=0.4 colr=red\ntorus R=1 Â· twist(\nfog 0.2": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "box",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        0.4,
+        0.4,
+        0.4
+       ],
+       "round": 0
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "torus",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "R": 1,
+       "r": 0.2
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": [
+     {
+      "id": "w1",
+      "kind": "twist",
+      "values": {
+       "k": 2
+      }
+     }
+    ]
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0.2,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 4
+ },
+ "twist 0.5": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [],
+    "warps": [
+     {
+      "id": "w1",
+      "kind": "twist",
+      "values": {
+       "k": 0.5
+      }
+     }
+    ]
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "union(sphere\nbox": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "g2",
+      "type": "group",
+      "name": "",
+      "op": "union",
+      "k": 0,
+      "children": [
+       {
+        "id": "s1",
+        "type": "shape",
+        "kind": "sphere",
+        "name": "",
+        "at": [
+         0,
+         0,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "r": 0.5
+        },
+        "color": [
+         0.8,
+         0.8,
+         0.8
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       }
+      ],
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "box",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        0.5,
+        0.5,
+        0.5
+       ],
+       "round": 0
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 1
+ },
+ "volumetric": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [],
+    "warps": []
+   },
+   "look": {
+    "mode": "volumetric",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "volumetric · sphere · output depth": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "volumetric",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   },
+   "output": {
+    "show": "depth"
+   }
+  },
+  "errors": 0
+ },
+ "volumetric · sphere · output steps": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.5
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "volumetric",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 35,
+    "elev": 17,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   },
+   "output": {
+    "show": "steps"
+   }
+  },
+  "errors": 0
+ },
+ "volumetric density=0.035 falloff=12 shell=0.12 exposure=1.4 tint=(0.35,0.75,1)\nsmooth-union(sphere r=0.6 name=Core, torus R=0.95 r=0.04 rot=(70,0,0) name=\"Ring A\", torus R=1.15 r=0.035 rot=(-40,30,0) name=\"Ring B\") k=0.15\nbackground night\ntone none\ncamera dist=3.6 elev=12 orbit=8\nquality steps=110 dist=8": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0.15,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "Core",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.6
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "torus",
+      "name": "Ring A",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       70,
+       0,
+       0
+      ],
+      "size": {
+       "R": 0.95,
+       "r": 0.04
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s3",
+      "type": "shape",
+      "kind": "torus",
+      "name": "Ring B",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       -40,
+       30,
+       0
+      ],
+      "size": {
+       "R": 1.15,
+       "r": 0.035
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "volumetric",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.03,
+     0.035,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "none",
+    "glow": {
+     "density": 0.035,
+     "falloff": 12,
+     "shell": 0.12,
+     "exposure": 1.4,
+     "tint": [
+      0.35,
+      0.75,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 3.6,
+    "angle": 35,
+    "elev": 12,
+    "orbit": 8,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 110,
+    "maxDist": 8,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "volumetric density=0.035 falloff=12 shell=0.12 exposure=1.4 tint=(0.35,0.75,1) · smooth-union(sphere r=0.6 name=Core, torus R=0.95 r=0.04 rot=(70,0,0) name=\"Ring A\", torus R=1.15 r=0.035 rot=(-40,30,0) name=\"Ring B\") k=0.15 · background night · tone none · camera dist=3.6 elev=12 orbit=8 · quality steps=110 dist=8": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0.15,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "Core",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.6
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "torus",
+      "name": "Ring A",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       70,
+       0,
+       0
+      ],
+      "size": {
+       "R": 0.95,
+       "r": 0.04
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s3",
+      "type": "shape",
+      "kind": "torus",
+      "name": "Ring B",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       -40,
+       30,
+       0
+      ],
+      "size": {
+       "R": 1.15,
+       "r": 0.035
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "volumetric",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.03,
+     0.035,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "none",
+    "glow": {
+     "density": 0.035,
+     "falloff": 12,
+     "shell": 0.12,
+     "exposure": 1.4,
+     "tint": [
+      0.35,
+      0.75,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 3.6,
+    "angle": 35,
+    "elev": 12,
+    "orbit": 8,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 110,
+    "maxDist": 8,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "volumetric density=0.035 falloff=12 shell=0.12 exposure=1.4 tint=(0.35,0.75,1)\nsmooth-union(\n  sphere r=0.6 name=Core,\n  torus R=0.95 r=0.04 rot=(70,0,0) name=\"Ring A\",\n  torus R=1.15 r=0.035 rot=(-40,30,0) name=\"Ring B\"\n) k=0.15\nbackground night\ntone none\ncamera dist=3.6 elev=12 orbit=8\nquality steps=110 dist=8": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0.15,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "Core",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.6
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "torus",
+      "name": "Ring A",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       70,
+       0,
+       0
+      ],
+      "size": {
+       "R": 0.95,
+       "r": 0.04
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s3",
+      "type": "shape",
+      "kind": "torus",
+      "name": "Ring B",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       -40,
+       30,
+       0
+      ],
+      "size": {
+       "R": 1.15,
+       "r": 0.035
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "volumetric",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.03,
+     0.035,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "none",
+    "glow": {
+     "density": 0.035,
+     "falloff": 12,
+     "shell": 0.12,
+     "exposure": 1.4,
+     "tint": [
+      0.35,
+      0.75,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 3.6,
+    "angle": 35,
+    "elev": 12,
+    "orbit": 8,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 110,
+    "maxDist": 8,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "surface\nsmooth-union(sphere r=0.55 at=(0,0.05,0) color=(0.85,0.45,0.3) shine=0.4 name=Body, sphere r=0.36 at=(0.55,0.5,0.1) color=(0.9,0.7,0.35) shine=0.4 name=Head, sphere r=0.28 at=(-0.5,0.45,-0.25) color=(0.55,0.3,0.6) shine=0.4, capsule h=0.5 r=0.12 at=(0.1,-0.3,0.55) rot=(0,0,60) color=(0.85,0.45,0.3)) k=0.35 name=Sculpture\nplane y=-0.6 color=(0.55,0.55,0.6)\nsun dir=(0.7,0.8,0.3)\nshadows 12\nbackground top=(0.45,0.6,0.85) bottom=(0.85,0.75,0.65)\ncamera dist=3.8 angle=30 elev=14 orbit=6": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "g2",
+      "type": "group",
+      "name": "Sculpture",
+      "op": "union",
+      "k": 0.35,
+      "children": [
+       {
+        "id": "s1",
+        "type": "shape",
+        "kind": "sphere",
+        "name": "Body",
+        "at": [
+         0,
+         0.05,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "r": 0.55
+        },
+        "color": [
+         0.85,
+         0.45,
+         0.3
+        ],
+        "shine": 0.4,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s2",
+        "type": "shape",
+        "kind": "sphere",
+        "name": "Head",
+        "at": [
+         0.55,
+         0.5,
+         0.1
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "r": 0.36
+        },
+        "color": [
+         0.9,
+         0.7,
+         0.35
+        ],
+        "shine": 0.4,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s3",
+        "type": "shape",
+        "kind": "sphere",
+        "name": "",
+        "at": [
+         -0.5,
+         0.45,
+         -0.25
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "r": 0.28
+        },
+        "color": [
+         0.55,
+         0.3,
+         0.6
+        ],
+        "shine": 0.4,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s4",
+        "type": "shape",
+        "kind": "capsule",
+        "name": "",
+        "at": [
+         0.1,
+         -0.3,
+         0.55
+        ],
+        "rot": [
+         0,
+         0,
+         60
+        ],
+        "size": {
+         "h": 0.5,
+         "r": 0.12
+        },
+        "color": [
+         0.85,
+         0.45,
+         0.3
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       }
+      ],
+      "warps": []
+     },
+     {
+      "id": "s5",
+      "type": "shape",
+      "kind": "plane",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "y": -0.6
+      },
+      "color": [
+       0.55,
+       0.55,
+       0.6
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.7,
+     0.8,
+     0.3
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 12,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.45,
+     0.6,
+     0.85
+    ],
+    "bg2": [
+     0.85,
+     0.75,
+     0.65
+    ],
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 3.8,
+    "angle": 30,
+    "elev": 14,
+    "orbit": 6,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "surface · smooth-union(sphere r=0.55 at=(0,0.05,0) color=(0.85,0.45,0.3) shine=0.4 name=Body, sphere r=0.36 at=(0.55,0.5,0.1) color=(0.9,0.7,0.35) shine=0.4 name=Head, sphere r=0.28 at=(-0.5,0.45,-0.25) color=(0.55,0.3,0.6) shine=0.4, capsule h=0.5 r=0.12 at=(0.1,-0.3,0.55) rot=(0,0,60) color=(0.85,0.45,0.3)) k=0.35 name=Sculpture · plane y=-0.6 color=(0.55,0.55,0.6) · sun dir=(0.7,0.8,0.3) · shadows 12 · background top=(0.45,0.6,0.85) bottom=(0.85,0.75,0.65) · camera dist=3.8 angle=30 elev=14 orbit=6": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "g2",
+      "type": "group",
+      "name": "Sculpture",
+      "op": "union",
+      "k": 0.35,
+      "children": [
+       {
+        "id": "s1",
+        "type": "shape",
+        "kind": "sphere",
+        "name": "Body",
+        "at": [
+         0,
+         0.05,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "r": 0.55
+        },
+        "color": [
+         0.85,
+         0.45,
+         0.3
+        ],
+        "shine": 0.4,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s2",
+        "type": "shape",
+        "kind": "sphere",
+        "name": "Head",
+        "at": [
+         0.55,
+         0.5,
+         0.1
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "r": 0.36
+        },
+        "color": [
+         0.9,
+         0.7,
+         0.35
+        ],
+        "shine": 0.4,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s3",
+        "type": "shape",
+        "kind": "sphere",
+        "name": "",
+        "at": [
+         -0.5,
+         0.45,
+         -0.25
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "r": 0.28
+        },
+        "color": [
+         0.55,
+         0.3,
+         0.6
+        ],
+        "shine": 0.4,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s4",
+        "type": "shape",
+        "kind": "capsule",
+        "name": "",
+        "at": [
+         0.1,
+         -0.3,
+         0.55
+        ],
+        "rot": [
+         0,
+         0,
+         60
+        ],
+        "size": {
+         "h": 0.5,
+         "r": 0.12
+        },
+        "color": [
+         0.85,
+         0.45,
+         0.3
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       }
+      ],
+      "warps": []
+     },
+     {
+      "id": "s5",
+      "type": "shape",
+      "kind": "plane",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "y": -0.6
+      },
+      "color": [
+       0.55,
+       0.55,
+       0.6
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.7,
+     0.8,
+     0.3
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 12,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.45,
+     0.6,
+     0.85
+    ],
+    "bg2": [
+     0.85,
+     0.75,
+     0.65
+    ],
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 3.8,
+    "angle": 30,
+    "elev": 14,
+    "orbit": 6,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "surface\nsmooth-union(\n  sphere r=0.55 at=(0,0.05,0) color=(0.85,0.45,0.3) shine=0.4 name=Body,\n  sphere r=0.36 at=(0.55,0.5,0.1) color=(0.9,0.7,0.35) shine=0.4 name=Head,\n  sphere r=0.28 at=(-0.5,0.45,-0.25) color=(0.55,0.3,0.6) shine=0.4,\n  capsule h=0.5 r=0.12 at=(0.1,-0.3,0.55) rot=(0,0,60) color=(0.85,0.45,0.3)\n) k=0.35 name=Sculpture\nplane y=-0.6 color=(0.55,0.55,0.6)\nsun dir=(0.7,0.8,0.3)\nshadows 12\nbackground top=(0.45,0.6,0.85) bottom=(0.85,0.75,0.65)\ncamera dist=3.8 angle=30 elev=14 orbit=6": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "g2",
+      "type": "group",
+      "name": "Sculpture",
+      "op": "union",
+      "k": 0.35,
+      "children": [
+       {
+        "id": "s1",
+        "type": "shape",
+        "kind": "sphere",
+        "name": "Body",
+        "at": [
+         0,
+         0.05,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "r": 0.55
+        },
+        "color": [
+         0.85,
+         0.45,
+         0.3
+        ],
+        "shine": 0.4,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s2",
+        "type": "shape",
+        "kind": "sphere",
+        "name": "Head",
+        "at": [
+         0.55,
+         0.5,
+         0.1
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "r": 0.36
+        },
+        "color": [
+         0.9,
+         0.7,
+         0.35
+        ],
+        "shine": 0.4,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s3",
+        "type": "shape",
+        "kind": "sphere",
+        "name": "",
+        "at": [
+         -0.5,
+         0.45,
+         -0.25
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "r": 0.28
+        },
+        "color": [
+         0.55,
+         0.3,
+         0.6
+        ],
+        "shine": 0.4,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s4",
+        "type": "shape",
+        "kind": "capsule",
+        "name": "",
+        "at": [
+         0.1,
+         -0.3,
+         0.55
+        ],
+        "rot": [
+         0,
+         0,
+         60
+        ],
+        "size": {
+         "h": 0.5,
+         "r": 0.12
+        },
+        "color": [
+         0.85,
+         0.45,
+         0.3
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       }
+      ],
+      "warps": []
+     },
+     {
+      "id": "s5",
+      "type": "shape",
+      "kind": "plane",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "y": -0.6
+      },
+      "color": [
+       0.55,
+       0.55,
+       0.6
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.7,
+     0.8,
+     0.3
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 12,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.45,
+     0.6,
+     0.85
+    ],
+    "bg2": [
+     0.85,
+     0.75,
+     0.65
+    ],
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 3.8,
+    "angle": 30,
+    "elev": 14,
+    "orbit": 6,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "surface\nunion(cylinder r=0.22 h=1.6 round=0.03 color=cream, box size=(0.36,0.06,0.36) round=0.02 at=(0,1.55,0) color=cream, box size=(0.36,0.06,0.36) round=0.02 at=(0,-0.95,0) color=cream) name=Pillar @repeat((2,100,2))\nplane y=-1 color=(0.5,0.45,0.4)\nsun dir=(0.4,0.8,-0.5) color=(1,0.85,0.65)\nfog 0.9\nbackground (0.75,0.7,0.65)\ncamera dist=4 angle=30 elev=8 orbit=3 x=1 y=0.3 z=1\nquality steps=140 dist=40 jitter=0": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "g2",
+      "type": "group",
+      "name": "Pillar",
+      "op": "union",
+      "k": 0,
+      "children": [
+       {
+        "id": "s1",
+        "type": "shape",
+        "kind": "cylinder",
+        "name": "",
+        "at": [
+         0,
+         0,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "r": 0.22,
+         "h": 1.6,
+         "round": 0.03
+        },
+        "color": [
+         0.95,
+         0.9,
+         0.8
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s2",
+        "type": "shape",
+        "kind": "box",
+        "name": "",
+        "at": [
+         0,
+         1.55,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "size": [
+          0.36,
+          0.06,
+          0.36
+         ],
+         "round": 0.02
+        },
+        "color": [
+         0.95,
+         0.9,
+         0.8
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s3",
+        "type": "shape",
+        "kind": "box",
+        "name": "",
+        "at": [
+         0,
+         -0.95,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "size": [
+          0.36,
+          0.06,
+          0.36
+         ],
+         "round": 0.02
+        },
+        "color": [
+         0.95,
+         0.9,
+         0.8
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       }
+      ],
+      "warps": [
+       {
+        "id": "w1",
+        "kind": "repeat",
+        "values": {
+         "cell": [
+          2,
+          100,
+          2
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "id": "s4",
+      "type": "shape",
+      "kind": "plane",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "y": -1
+      },
+      "color": [
+       0.5,
+       0.45,
+       0.4
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.4,
+     0.8,
+     -0.5
+    ],
+    "sunColor": [
+     1,
+     0.85,
+     0.65
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0.9,
+    "fogColor": null,
+    "bg": [
+     0.75,
+     0.7,
+     0.65
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 30,
+    "elev": 8,
+    "orbit": 3,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 1,
+    "y": 0.3,
+    "z": 1
+   },
+   "quality": {
+    "steps": 140,
+    "maxDist": 40,
+    "stepScale": "auto",
+    "jitter": 0
+   }
+  },
+  "errors": 0
+ },
+ "surface · union(cylinder r=0.22 h=1.6 round=0.03 color=cream, box size=(0.36,0.06,0.36) round=0.02 at=(0,1.55,0) color=cream, box size=(0.36,0.06,0.36) round=0.02 at=(0,-0.95,0) color=cream) name=Pillar @repeat(2,100,2) · plane y=-1 color=(0.5,0.45,0.4) · sun dir=(0.4,0.8,-0.5) color=(1,0.85,0.65) · fog 0.9 · background (0.75,0.7,0.65) · camera angle=30 elev=8 orbit=3 x=1 y=0.3 z=1 · quality steps=140 dist=40 jitter=0": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "g2",
+      "type": "group",
+      "name": "Pillar",
+      "op": "union",
+      "k": 0,
+      "children": [
+       {
+        "id": "s1",
+        "type": "shape",
+        "kind": "cylinder",
+        "name": "",
+        "at": [
+         0,
+         0,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "r": 0.22,
+         "h": 1.6,
+         "round": 0.03
+        },
+        "color": [
+         0.95,
+         0.9,
+         0.8
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s2",
+        "type": "shape",
+        "kind": "box",
+        "name": "",
+        "at": [
+         0,
+         1.55,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "size": [
+          0.36,
+          0.06,
+          0.36
+         ],
+         "round": 0.02
+        },
+        "color": [
+         0.95,
+         0.9,
+         0.8
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s3",
+        "type": "shape",
+        "kind": "box",
+        "name": "",
+        "at": [
+         0,
+         -0.95,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "size": [
+          0.36,
+          0.06,
+          0.36
+         ],
+         "round": 0.02
+        },
+        "color": [
+         0.95,
+         0.9,
+         0.8
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       }
+      ],
+      "warps": [
+       {
+        "id": "w1",
+        "kind": "repeat",
+        "values": {
+         "cell": [
+          2,
+          100,
+          2
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "id": "s4",
+      "type": "shape",
+      "kind": "plane",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "y": -1
+      },
+      "color": [
+       0.5,
+       0.45,
+       0.4
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.4,
+     0.8,
+     -0.5
+    ],
+    "sunColor": [
+     1,
+     0.85,
+     0.65
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0.9,
+    "fogColor": null,
+    "bg": [
+     0.75,
+     0.7,
+     0.65
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 30,
+    "elev": 8,
+    "orbit": 3,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 1,
+    "y": 0.3,
+    "z": 1
+   },
+   "quality": {
+    "steps": 140,
+    "maxDist": 40,
+    "stepScale": "auto",
+    "jitter": 0
+   }
+  },
+  "errors": 0
+ },
+ "surface\nunion(cylinder r=0.22 h=1.6 round=0.03 color=cream, box size=(0.36,0.06,0.36) round=0.02 at=(0,1.55,0) color=cream, box size=(0.36,0.06,0.36) round=0.02 at=(0,-0.95,0) color=cream) name=Pillar @repeat(2,100,2)\nplane y=-1 color=(0.5,0.45,0.4)\nsun dir=(0.4,0.8,-0.5) color=(1,0.85,0.65)\nfog 0.9\nbackground (0.75,0.7,0.65)\ncamera angle=30 elev=8 orbit=3 x=1 y=0.3 z=1\nquality steps=140 dist=40 jitter=0": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "g2",
+      "type": "group",
+      "name": "Pillar",
+      "op": "union",
+      "k": 0,
+      "children": [
+       {
+        "id": "s1",
+        "type": "shape",
+        "kind": "cylinder",
+        "name": "",
+        "at": [
+         0,
+         0,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "r": 0.22,
+         "h": 1.6,
+         "round": 0.03
+        },
+        "color": [
+         0.95,
+         0.9,
+         0.8
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s2",
+        "type": "shape",
+        "kind": "box",
+        "name": "",
+        "at": [
+         0,
+         1.55,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "size": [
+          0.36,
+          0.06,
+          0.36
+         ],
+         "round": 0.02
+        },
+        "color": [
+         0.95,
+         0.9,
+         0.8
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s3",
+        "type": "shape",
+        "kind": "box",
+        "name": "",
+        "at": [
+         0,
+         -0.95,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "size": [
+          0.36,
+          0.06,
+          0.36
+         ],
+         "round": 0.02
+        },
+        "color": [
+         0.95,
+         0.9,
+         0.8
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       }
+      ],
+      "warps": [
+       {
+        "id": "w1",
+        "kind": "repeat",
+        "values": {
+         "cell": [
+          2,
+          100,
+          2
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "id": "s4",
+      "type": "shape",
+      "kind": "plane",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "y": -1
+      },
+      "color": [
+       0.5,
+       0.45,
+       0.4
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.4,
+     0.8,
+     -0.5
+    ],
+    "sunColor": [
+     1,
+     0.85,
+     0.65
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0.9,
+    "fogColor": null,
+    "bg": [
+     0.75,
+     0.7,
+     0.65
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 30,
+    "elev": 8,
+    "orbit": 3,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 1,
+    "y": 0.3,
+    "z": 1
+   },
+   "quality": {
+    "steps": 140,
+    "maxDist": 40,
+    "stepScale": "auto",
+    "jitter": 0
+   }
+  },
+  "errors": 0
+ },
+ "surface\nunion(\n  cylinder r=0.22 h=1.6 round=0.03 color=cream,\n  box size=(0.36,0.06,0.36) round=0.02 at=(0,1.55,0) color=cream,\n  box size=(0.36,0.06,0.36) round=0.02 at=(0,-0.95,0) color=cream\n) name=Pillar @repeat(2,100,2)\nplane y=-1 color=(0.5,0.45,0.4)\nsun dir=(0.4,0.8,-0.5) color=(1,0.85,0.65)\nfog 0.9\nbackground (0.75,0.7,0.65)\ncamera angle=30 elev=8 orbit=3 x=1 y=0.3 z=1\nquality steps=140 dist=40 jitter=0": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "g2",
+      "type": "group",
+      "name": "Pillar",
+      "op": "union",
+      "k": 0,
+      "children": [
+       {
+        "id": "s1",
+        "type": "shape",
+        "kind": "cylinder",
+        "name": "",
+        "at": [
+         0,
+         0,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "r": 0.22,
+         "h": 1.6,
+         "round": 0.03
+        },
+        "color": [
+         0.95,
+         0.9,
+         0.8
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s2",
+        "type": "shape",
+        "kind": "box",
+        "name": "",
+        "at": [
+         0,
+         1.55,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "size": [
+          0.36,
+          0.06,
+          0.36
+         ],
+         "round": 0.02
+        },
+        "color": [
+         0.95,
+         0.9,
+         0.8
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       },
+       {
+        "id": "s3",
+        "type": "shape",
+        "kind": "box",
+        "name": "",
+        "at": [
+         0,
+         -0.95,
+         0
+        ],
+        "rot": [
+         0,
+         0,
+         0
+        ],
+        "size": {
+         "size": [
+          0.36,
+          0.06,
+          0.36
+         ],
+         "round": 0.02
+        },
+        "color": [
+         0.95,
+         0.9,
+         0.8
+        ],
+        "shine": 0,
+        "glass": false,
+        "warps": []
+       }
+      ],
+      "warps": [
+       {
+        "id": "w1",
+        "kind": "repeat",
+        "values": {
+         "cell": [
+          2,
+          100,
+          2
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "id": "s4",
+      "type": "shape",
+      "kind": "plane",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "y": -1
+      },
+      "color": [
+       0.5,
+       0.45,
+       0.4
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.4,
+     0.8,
+     -0.5
+    ],
+    "sunColor": [
+     1,
+     0.85,
+     0.65
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0.9,
+    "fogColor": null,
+    "bg": [
+     0.75,
+     0.7,
+     0.65
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 4,
+    "angle": 30,
+    "elev": 8,
+    "orbit": 3,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 1,
+    "y": 0.3,
+    "z": 1
+   },
+   "quality": {
+    "steps": 140,
+    "maxDist": 40,
+    "stepScale": "auto",
+    "jitter": 0
+   }
+  },
+  "errors": 0
+ },
+ "surface\ntorus R=0.7 r=0.24 rot=(90,0,0) color=gold shine=0.7 name=Ring @twist(1.4)\nplane y=-1.1 color=(0.2,0.22,0.28)\nsun dir=(0.5,0.9,0.6)\nbackground top=(0.08,0.1,0.16) bottom=(0.02,0.02,0.04)\ncamera dist=3.6 elev=10 orbit=10\nquality steps=128": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "torus",
+      "name": "Ring",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       90,
+       0,
+       0
+      ],
+      "size": {
+       "R": 0.7,
+       "r": 0.24
+      },
+      "color": [
+       1,
+       0.75,
+       0.3
+      ],
+      "shine": 0.7,
+      "glass": false,
+      "warps": [
+       {
+        "id": "w1",
+        "kind": "twist",
+        "values": {
+         "k": 1.4
+        }
+       }
+      ]
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "plane",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "y": -1.1
+      },
+      "color": [
+       0.2,
+       0.22,
+       0.28
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.5,
+     0.9,
+     0.6
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.08,
+     0.1,
+     0.16
+    ],
+    "bg2": [
+     0.02,
+     0.02,
+     0.04
+    ],
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 3.6,
+    "angle": 35,
+    "elev": 10,
+    "orbit": 10,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 128,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "surface · torus R=0.7 r=0.24 rot=(90,0,0) color=gold shine=0.7 name=Ring @twist(1.4) · plane y=-1.1 color=(0.2,0.22,0.28) · sun dir=(0.5,0.9,0.6) · background top=(0.08,0.1,0.16) bottom=(0.02,0.02,0.04) · camera dist=3.6 elev=10 orbit=10 · quality steps=128": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "torus",
+      "name": "Ring",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       90,
+       0,
+       0
+      ],
+      "size": {
+       "R": 0.7,
+       "r": 0.24
+      },
+      "color": [
+       1,
+       0.75,
+       0.3
+      ],
+      "shine": 0.7,
+      "glass": false,
+      "warps": [
+       {
+        "id": "w1",
+        "kind": "twist",
+        "values": {
+         "k": 1.4
+        }
+       }
+      ]
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "plane",
+      "name": "",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "y": -1.1
+      },
+      "color": [
+       0.2,
+       0.22,
+       0.28
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.5,
+     0.9,
+     0.6
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.08,
+     0.1,
+     0.16
+    ],
+    "bg2": [
+     0.02,
+     0.02,
+     0.04
+    ],
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 3.6,
+    "angle": 35,
+    "elev": 10,
+    "orbit": 10,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 128,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "glass ior=1.45 dispersion=0.05\nsphere r=0.45 at=(-0.65,-0.05,0.2) glass name=Ball\nbox size=0.32 round=0.06 at=(0.65,-0.18,0.1) rot=(0,30,0) glass name=Cube\ntorus R=0.4 r=0.1 at=(0,0.05,-0.75) rot=(90,0,0) glass name=Ring\nplane y=-0.5 color=(0.3,0.25,0.35) name=Floor\ncamera dist=3.4 angle=10 elev=18": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "Ball",
+      "at": [
+       -0.65,
+       -0.05,
+       0.2
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.45
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": true,
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "box",
+      "name": "Cube",
+      "at": [
+       0.65,
+       -0.18,
+       0.1
+      ],
+      "rot": [
+       0,
+       30,
+       0
+      ],
+      "size": {
+       "size": [
+        0.32,
+        0.32,
+        0.32
+       ],
+       "round": 0.06
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": true,
+      "warps": []
+     },
+     {
+      "id": "s3",
+      "type": "shape",
+      "kind": "torus",
+      "name": "Ring",
+      "at": [
+       0,
+       0.05,
+       -0.75
+      ],
+      "rot": [
+       90,
+       0,
+       0
+      ],
+      "size": {
+       "R": 0.4,
+       "r": 0.1
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": true,
+      "warps": []
+     },
+     {
+      "id": "s4",
+      "type": "shape",
+      "kind": "plane",
+      "name": "Floor",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "y": -0.5
+      },
+      "color": [
+       0.3,
+       0.25,
+       0.35
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "glass",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.45,
+     "dispersion": 0.05,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 3.4,
+    "angle": 10,
+    "elev": 18,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "glass ior=1.45 dispersion=0.05 · sphere r=0.45 at=(-0.65,-0.05,0.2) glass name=Ball · box size=0.32 round=0.06 at=(0.65,-0.18,0.1) rot=(0,30,0) glass name=Cube · torus R=0.4 r=0.1 at=(0,0.05,-0.75) rot=(90,0,0) glass name=Ring · plane y=-0.5 color=(0.3,0.25,0.35) name=Floor · camera dist=3.4 angle=10 elev=18": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "Ball",
+      "at": [
+       -0.65,
+       -0.05,
+       0.2
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.45
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": true,
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "box",
+      "name": "Cube",
+      "at": [
+       0.65,
+       -0.18,
+       0.1
+      ],
+      "rot": [
+       0,
+       30,
+       0
+      ],
+      "size": {
+       "size": [
+        0.32,
+        0.32,
+        0.32
+       ],
+       "round": 0.06
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": true,
+      "warps": []
+     },
+     {
+      "id": "s3",
+      "type": "shape",
+      "kind": "torus",
+      "name": "Ring",
+      "at": [
+       0,
+       0.05,
+       -0.75
+      ],
+      "rot": [
+       90,
+       0,
+       0
+      ],
+      "size": {
+       "R": 0.4,
+       "r": 0.1
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": true,
+      "warps": []
+     },
+     {
+      "id": "s4",
+      "type": "shape",
+      "kind": "plane",
+      "name": "Floor",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "y": -0.5
+      },
+      "color": [
+       0.3,
+       0.25,
+       0.35
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "glass",
+    "sunDir": [
+     0.6,
+     0.7,
+     0.4
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.04,
+     0.045,
+     0.07
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.45,
+     "dispersion": 0.05,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 3.4,
+    "angle": 10,
+    "elev": 18,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "surface\nsubtract(box size=1 color=(0.75,0.7,0.65) name=Cube, cross s=0.3333 name=\"Big holes\", cross s=0.1111 name=\"Middle holes\" @repeat(0.6667), cross s=0.037 name=\"Small holes\" @repeat(0.2222)) name=Sponge\nsun dir=(0.6,0.75,0.35)\nao 0.03\nbackground top=(0.12,0.12,0.16) bottom=(0.03,0.03,0.05)\ncamera dist=3.8 angle=38 elev=28 orbit=6\nquality steps=128": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Sponge",
+    "op": "subtract",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "box",
+      "name": "Cube",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        1,
+        1,
+        1
+       ],
+       "round": 0
+      },
+      "color": [
+       0.75,
+       0.7,
+       0.65
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "cross",
+      "name": "Big holes",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "s": 0.3333
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s3",
+      "type": "shape",
+      "kind": "cross",
+      "name": "Middle holes",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "s": 0.1111
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": [
+       {
+        "id": "w1",
+        "kind": "repeat",
+        "values": {
+         "cell": [
+          0.6667,
+          0.6667,
+          0.6667
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "id": "s4",
+      "type": "shape",
+      "kind": "cross",
+      "name": "Small holes",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "s": 0.037
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": [
+       {
+        "id": "w2",
+        "kind": "repeat",
+        "values": {
+         "cell": [
+          0.2222,
+          0.2222,
+          0.2222
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.75,
+     0.35
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.03,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.12,
+     0.12,
+     0.16
+    ],
+    "bg2": [
+     0.03,
+     0.03,
+     0.05
+    ],
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 3.8,
+    "angle": 38,
+    "elev": 28,
+    "orbit": 6,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 128,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "surface · subtract(box size=1 color=(0.75,0.7,0.65) name=Cube, cross s=0.3333 name=\"Big holes\", cross s=0.1111 name=\"Middle holes\" @repeat(0.6667), cross s=0.037 name=\"Small holes\" @repeat(0.2222)) name=Sponge · sun dir=(0.6,0.75,0.35) · ao 0.03 · background top=(0.12,0.12,0.16) bottom=(0.03,0.03,0.05) · camera dist=3.8 angle=38 elev=28 orbit=6 · quality steps=128": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Sponge",
+    "op": "subtract",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "box",
+      "name": "Cube",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        1,
+        1,
+        1
+       ],
+       "round": 0
+      },
+      "color": [
+       0.75,
+       0.7,
+       0.65
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "cross",
+      "name": "Big holes",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "s": 0.3333
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s3",
+      "type": "shape",
+      "kind": "cross",
+      "name": "Middle holes",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "s": 0.1111
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": [
+       {
+        "id": "w1",
+        "kind": "repeat",
+        "values": {
+         "cell": [
+          0.6667,
+          0.6667,
+          0.6667
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "id": "s4",
+      "type": "shape",
+      "kind": "cross",
+      "name": "Small holes",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "s": 0.037
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": [
+       {
+        "id": "w2",
+        "kind": "repeat",
+        "values": {
+         "cell": [
+          0.2222,
+          0.2222,
+          0.2222
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.75,
+     0.35
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.03,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.12,
+     0.12,
+     0.16
+    ],
+    "bg2": [
+     0.03,
+     0.03,
+     0.05
+    ],
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 3.8,
+    "angle": 38,
+    "elev": 28,
+    "orbit": 6,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 128,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "surface\nsubtract(\n  box size=1 color=(0.75,0.7,0.65) name=Cube,\n  cross s=0.3333 name=\"Big holes\",\n  cross s=0.1111 name=\"Middle holes\" @repeat(0.6667),\n  cross s=0.037 name=\"Small holes\" @repeat(0.2222)\n) name=Sponge\nsun dir=(0.6,0.75,0.35)\nao 0.03\nbackground top=(0.12,0.12,0.16) bottom=(0.03,0.03,0.05)\ncamera dist=3.8 angle=38 elev=28 orbit=6\nquality steps=128": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Sponge",
+    "op": "subtract",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "box",
+      "name": "Cube",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        1,
+        1,
+        1
+       ],
+       "round": 0
+      },
+      "color": [
+       0.75,
+       0.7,
+       0.65
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "cross",
+      "name": "Big holes",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "s": 0.3333
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s3",
+      "type": "shape",
+      "kind": "cross",
+      "name": "Middle holes",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "s": 0.1111
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": [
+       {
+        "id": "w1",
+        "kind": "repeat",
+        "values": {
+         "cell": [
+          0.6667,
+          0.6667,
+          0.6667
+         ]
+        }
+       }
+      ]
+     },
+     {
+      "id": "s4",
+      "type": "shape",
+      "kind": "cross",
+      "name": "Small holes",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "s": 0.037
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": [
+       {
+        "id": "w2",
+        "kind": "repeat",
+        "values": {
+         "cell": [
+          0.2222,
+          0.2222,
+          0.2222
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "surface",
+    "sunDir": [
+     0.6,
+     0.75,
+     0.35
+    ],
+    "sunColor": [
+     1,
+     0.9,
+     0.7
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.03,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.12,
+     0.12,
+     0.16
+    ],
+    "bg2": [
+     0.03,
+     0.03,
+     0.05
+    ],
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.4,
+     "metal": 0,
+     "rough": 0.5,
+     "spec": 0.5
+    }
+   },
+   "camera": {
+    "dist": 3.8,
+    "angle": 38,
+    "elev": 28,
+    "orbit": 6,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 128,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "gi bounce=0.6 rough=0.45 spec=0.3\nplane y=-1 name=Floor\nbox size=(2,1.5,0.05) at=(0,0.5,-1.6) name=\"Back wall\"\nbox size=(0.05,1.5,2) at=(-1.6,0.5,0) name=\"Side wall\"\nsphere r=0.45 at=(0.2,-0.55,-0.3) name=Ball\nbox size=(0.3,0.5,0.3) round=0.03 at=(-0.7,-0.5,-0.8) rot=(0,25,0) name=Block\nsun dir=(0.5,0.9,0.7) color=(1,0.92,0.8)\nbackground (0.6,0.7,0.85)\ncamera dist=4.2 angle=40 elev=20\nquality steps=96": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "plane",
+      "name": "Floor",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "y": -1
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "box",
+      "name": "Back wall",
+      "at": [
+       0,
+       0.5,
+       -1.6
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        2,
+        1.5,
+        0.05
+       ],
+       "round": 0
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s3",
+      "type": "shape",
+      "kind": "box",
+      "name": "Side wall",
+      "at": [
+       -1.6,
+       0.5,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        0.05,
+        1.5,
+        2
+       ],
+       "round": 0
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s4",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "Ball",
+      "at": [
+       0.2,
+       -0.55,
+       -0.3
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.45
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s5",
+      "type": "shape",
+      "kind": "box",
+      "name": "Block",
+      "at": [
+       -0.7,
+       -0.5,
+       -0.8
+      ],
+      "rot": [
+       0,
+       25,
+       0
+      ],
+      "size": {
+       "size": [
+        0.3,
+        0.5,
+        0.3
+       ],
+       "round": 0.03
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "gi",
+    "sunDir": [
+     0.5,
+     0.9,
+     0.7
+    ],
+    "sunColor": [
+     1,
+     0.92,
+     0.8
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.6,
+     0.7,
+     0.85
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.6,
+     "metal": 0,
+     "rough": 0.45,
+     "spec": 0.3
+    }
+   },
+   "camera": {
+    "dist": 4.2,
+    "angle": 40,
+    "elev": 20,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "gi bounce=0.6 rough=0.45 spec=0.3 · plane y=-1 name=Floor · box size=(2,1.5,0.05) at=(0,0.5,-1.6) name=\"Back wall\" · box size=(0.05,1.5,2) at=(-1.6,0.5,0) name=\"Side wall\" · sphere r=0.45 at=(0.2,-0.55,-0.3) name=Ball · box size=(0.3,0.5,0.3) round=0.03 at=(-0.7,-0.5,-0.8) rot=(0,25,0) name=Block · sun dir=(0.5,0.9,0.7) color=(1,0.92,0.8) · background (0.6,0.7,0.85) · camera dist=4.2 angle=40 elev=20": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "plane",
+      "name": "Floor",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "y": -1
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "box",
+      "name": "Back wall",
+      "at": [
+       0,
+       0.5,
+       -1.6
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        2,
+        1.5,
+        0.05
+       ],
+       "round": 0
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s3",
+      "type": "shape",
+      "kind": "box",
+      "name": "Side wall",
+      "at": [
+       -1.6,
+       0.5,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        0.05,
+        1.5,
+        2
+       ],
+       "round": 0
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s4",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "Ball",
+      "at": [
+       0.2,
+       -0.55,
+       -0.3
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.45
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s5",
+      "type": "shape",
+      "kind": "box",
+      "name": "Block",
+      "at": [
+       -0.7,
+       -0.5,
+       -0.8
+      ],
+      "rot": [
+       0,
+       25,
+       0
+      ],
+      "size": {
+       "size": [
+        0.3,
+        0.5,
+        0.3
+       ],
+       "round": 0.03
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "gi",
+    "sunDir": [
+     0.5,
+     0.9,
+     0.7
+    ],
+    "sunColor": [
+     1,
+     0.92,
+     0.8
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.6,
+     0.7,
+     0.85
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.6,
+     "metal": 0,
+     "rough": 0.45,
+     "spec": 0.3
+    }
+   },
+   "camera": {
+    "dist": 4.2,
+    "angle": 40,
+    "elev": 20,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ },
+ "gi bounce=0.6 rough=0.45 spec=0.3\nplane y=-1 name=Floor\nbox size=(2,1.5,0.05) at=(0,0.5,-1.6) name=\"Back wall\"\nbox size=(0.05,1.5,2) at=(-1.6,0.5,0) name=\"Side wall\"\nsphere r=0.45 at=(0.2,-0.55,-0.3) name=Ball\nbox size=(0.3,0.5,0.3) round=0.03 at=(-0.7,-0.5,-0.8) rot=(0,25,0) name=Block\nsun dir=(0.5,0.9,0.7) color=(1,0.92,0.8)\nbackground (0.6,0.7,0.85)\ncamera dist=4.2 angle=40 elev=20": {
+  "spec": {
+   "root": {
+    "id": "g1",
+    "type": "group",
+    "name": "Scene",
+    "op": "union",
+    "k": 0,
+    "children": [
+     {
+      "id": "s1",
+      "type": "shape",
+      "kind": "plane",
+      "name": "Floor",
+      "at": [
+       0,
+       0,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "y": -1
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s2",
+      "type": "shape",
+      "kind": "box",
+      "name": "Back wall",
+      "at": [
+       0,
+       0.5,
+       -1.6
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        2,
+        1.5,
+        0.05
+       ],
+       "round": 0
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s3",
+      "type": "shape",
+      "kind": "box",
+      "name": "Side wall",
+      "at": [
+       -1.6,
+       0.5,
+       0
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "size": [
+        0.05,
+        1.5,
+        2
+       ],
+       "round": 0
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s4",
+      "type": "shape",
+      "kind": "sphere",
+      "name": "Ball",
+      "at": [
+       0.2,
+       -0.55,
+       -0.3
+      ],
+      "rot": [
+       0,
+       0,
+       0
+      ],
+      "size": {
+       "r": 0.45
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     },
+     {
+      "id": "s5",
+      "type": "shape",
+      "kind": "box",
+      "name": "Block",
+      "at": [
+       -0.7,
+       -0.5,
+       -0.8
+      ],
+      "rot": [
+       0,
+       25,
+       0
+      ],
+      "size": {
+       "size": [
+        0.3,
+        0.5,
+        0.3
+       ],
+       "round": 0.03
+      },
+      "color": [
+       0.8,
+       0.8,
+       0.8
+      ],
+      "shine": 0,
+      "glass": false,
+      "warps": []
+     }
+    ],
+    "warps": []
+   },
+   "look": {
+    "mode": "gi",
+    "sunDir": [
+     0.5,
+     0.9,
+     0.7
+    ],
+    "sunColor": [
+     1,
+     0.92,
+     0.8
+    ],
+    "sky": [
+     0.3,
+     0.5,
+     0.7
+    ],
+    "bounce": [
+     0.1,
+     0.1,
+     0.08
+    ],
+    "shadows": 16,
+    "ao": 0.06,
+    "fog": 0,
+    "fogColor": null,
+    "bg": [
+     0.6,
+     0.7,
+     0.85
+    ],
+    "bg2": null,
+    "tone": "aces",
+    "glow": {
+     "density": 0.03,
+     "falloff": 10,
+     "shell": 0,
+     "exposure": 1.2,
+     "tint": [
+      0.3,
+      0.8,
+      1
+     ]
+    },
+    "glass": {
+     "ior": 1.5,
+     "dispersion": 0.06,
+     "tint": [
+      1,
+      1,
+      1
+     ]
+    },
+    "gi": {
+     "strength": 0.6,
+     "metal": 0,
+     "rough": 0.45,
+     "spec": 0.3
+    }
+   },
+   "camera": {
+    "dist": 4.2,
+    "angle": 40,
+    "elev": 20,
+    "orbit": 0,
+    "zoom": 1.5,
+    "flatten": 0,
+    "x": 0,
+    "y": 0,
+    "z": 0
+   },
+   "quality": {
+    "steps": 96,
+    "maxDist": 20,
+    "stepScale": "auto",
+    "jitter": 1
+   }
+  },
+  "errors": 0
+ }
+}

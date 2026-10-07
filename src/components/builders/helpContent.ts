@@ -108,7 +108,7 @@ export const BUILDER_HELP: Record<BuilderKey, Record<string, HelpEntry>> = {
       ],
       examples: [
         { label: 'Show the depth', insert: { recipe: 'output depth' } },
-        { label: 'Colour by depth (sunset)', insert: { recipe: 'colour by depth palette sunset' } },
+        { label: 'Colour by depth (sunset)', insert: { recipe: 'colour by depth palette=sunset' } },
         { label: 'Show the normals', insert: { recipe: 'output normal' } },
       ],
     },

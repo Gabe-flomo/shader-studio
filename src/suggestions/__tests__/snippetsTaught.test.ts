@@ -89,14 +89,14 @@ describe('taught moves', () => {
     // Typed later on another shape.
     const g = [n('boxSDF', 'b', 0, 0), n('output', 'o', 900, 0)];
     const m = matchTaught('neon edge pink 6');
-    expect(m?.args).toMatchObject({ colour: [1, 0.45, 0.7], falloff: 6 });
+    expect(m?.args).toMatchObject({ colour: [1, 0.5, 0.7], falloff: 6 });
     const plan = parseDo('neon edge pink falloff 6', { nodes: g, selected: ['b'] });
     expect(plan.steps).toHaveLength(1);
     let k = 0;
     const res = runDoPlan(g, plan, () => `t${k++}`, { heightOf: H });
     const light = res.nodes.find(nd => nd.type === 'light')!;
     expect(light.params.brightness).toBe(6);
-    expect(light.params.tint).toEqual([1, 0.45, 0.7]);
+    expect(light.params.tint).toEqual([1, 0.5, 0.7]);
     const abs = res.nodes.find(nd => nd.type === 'abs')!;
     expect(abs.inputs.input.connection?.nodeId).toBe('b');
     expect(String(light.params.__comment)).toMatch(/taught move/);

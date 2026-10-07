@@ -18,9 +18,10 @@ import { classify, clausesOf, didYouMean, execCommand, type CommandPlan } from '
 import { lex, readRef } from '../doRefs';
 import { scratchGraph } from '../doScratch';
 import { ACTIONS } from '../../lang/vocabulary';
-import { BUILDER_COMMANDS, COMMAND_VERBS, RECIPES, actionExamples, commandReference, commandsMarkdown, searchReference } from '../../lang/commands';
+import { BUILDER_COMMANDS, COMMAND_VERBS, RECIPES, actionExamples, commandReference, searchReference } from '../../lang/commands';
 import { readBuilderCommand } from '../../builders/doBuilders';
 import { CORPUS } from './doCommandsCorpus';
+import { fullCommandsMarkdown } from '../../lang/reference';
 import shippedDoc from '../../../docs/do-bar-commands.md?raw';
 
 const H = (nd: GraphNode) => estimateNodeHeight(nd);
@@ -231,7 +232,7 @@ describe('edit commands: exact diffs', () => {
     const set = run('set the glow falloff to 8', scratchGraph('glow'));
     expect(set.steps[0].params).toEqual(['SDF Glow · Falloff 10 → 8']);
     const tint = run('set the glow tint to cyan', scratchGraph('glow'));
-    expect(tint.nodes.find(nd => nd.id === 'g')!.params.tint).toEqual([0.2, 0.9, 1]);
+    expect(tint.nodes.find(nd => nd.id === 'g')!.params.tint).toEqual([0.2, 0.8, 0.95]);
 
     expect(run('make the circle bigger', scratchGraph('circle')).steps[0].params).toEqual(['Circle SDF · Radius 0.3 → 0.375']);
     expect(run('make the glow much wider', scratchGraph('glow')).steps[0].params).toEqual(['SDF Glow · Falloff 10 → 6.25']);
@@ -367,11 +368,11 @@ describe('docs/do-bar-commands.md', () => {
   it('writes the doc when asked', async () => {
     if (!write) return;
     const fs = (await import(/* @vite-ignore */ `node:${'fs'}`)) as { writeFileSync: (f: URL, s: string) => void };
-    fs.writeFileSync(new URL('../../../docs/do-bar-commands.md', import.meta.url), commandsMarkdown());
+    fs.writeFileSync(new URL('../../../docs/do-bar-commands.md', import.meta.url), fullCommandsMarkdown());
   });
   it('is generated from the registry and up to date (npm run docs:do-bar)', () => {
     if (write) return;
-    expect(shippedDoc).toBe(commandsMarkdown());
+    expect(shippedDoc).toBe(fullCommandsMarkdown());
     for (const v of COMMAND_VERBS) expect(shippedDoc).toContain(`### ${v.words[0]}`);
     for (const b of BUILDER_COMMANDS) expect(shippedDoc).toContain(`### ${b.words[0]}`);
   });

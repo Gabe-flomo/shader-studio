@@ -6,7 +6,9 @@
  * sensors and the flow field folded) and Look (what the picture shows). Every change applies live
  * (the group's inside is generated again and compiled); Open as nodes shows the nodes they make.
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LanguageTab, type LanguageRead } from '../builders/LanguageTab';
+import { parseAgents, printAgents } from '../../lang/dialects/agents';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
@@ -243,8 +245,27 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
         {tab === 'rules' && rulesTab}
         {tab === 'trails' && trailsTab}
         {tab === 'look' && lookTab}
+        {tab === 'recipe' && <TabPane wide><AgentsRecipe set={set} onApply={next => { update(next); flush(); setSp(0); }} /></TabPane>}
       </div>
     </BuilderWindow>
+  );
+}
+
+/** The whole rule set as text in the Playfield language (lang/dialects/agents.ts), both ways. */
+function AgentsRecipe({ set, onApply }: { set: AgentRuleSet; onApply: (next: AgentRuleSet) => void }) {
+  const printed = useMemo(() => printAgents(set, { pretty: true }), [set]);
+  const read = useCallback((text: string, seed: number): LanguageRead => {
+    const r = parseAgents(text, { seed });
+    return { errors: r.errors, hints: r.hints, resolved: r.resolved, apply: () => onApply(r.set), kept: printAgents(r.set, { pretty: true }) };
+  }, [onApply]);
+  return (
+    <LanguageTab dialect="agents" printed={printed} read={read}
+      note="Settings first (agents, sensors, channels, masks), then each species with its rules indented under it: when <condition> and … do <action>, …  or always do …. On one line a species takes its rules after a colon: species Slime: always do wander 7deg. A bare word in a condition is a state; a channel is followed by where it is read (ahead, left, right, anywhere, here); a mask follows mask."
+      examples={[
+        { label: 'Slime mold', text: 'agents kind=trail\nsensors ahead=0.035 angle=22.5deg\nspecies Slime speed=0.22\n  always do turn toward trail 45deg, wander 7deg, leave trail 1' },
+        { label: 'Boids', text: 'agents kind=flock view=0.05\nspecies Birds speed=0.4\n  always do separate 12deg, match 10deg, cohere 2.5deg, wander 3deg' },
+        { label: 'Random slime', text: 'random agents kind=trail\nspecies Slime\n  always do turn toward trail random, wander random, leave trail 1' },
+      ]} />
   );
 }
 
