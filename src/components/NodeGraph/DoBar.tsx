@@ -13,7 +13,7 @@
  *
  * ⌘K or the canvas toolbar's Do… button opens it.
  */
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { Component, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ErrorInfo, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -62,7 +62,55 @@ export function DoBar() {
   const open = useDoBar(s => s.open);
   const seq = useDoBar(s => s.seq);
   if (!open) return null;
-  return <Bar key={seq} initial={open.text ?? ''} check={open.check} />;
+  // A throw while the bar renders takes down the bar, never the app (DoBarBoundary).
+  return <DoBarBoundary key={seq}><Bar initial={open.text ?? ''} check={open.check} /></DoBarBoundary>;
+}
+
+/**
+ * Run one reading of the line as you type. The bar re-reads the line on every keystroke, so a
+ * throw here (a parser bug on a half-typed word) must not unmount the app: it is logged and the
+ * bar shows "couldn't read this line" instead.
+ */
+function readSafely<T>(what: string, text: string, fn: () => T, fallback: T): { value: T; error: string | null } {
+  try {
+    return { value: fn(), error: null };
+  } catch (e) {
+    console.error(`Do… bar: ${what} threw on “${text}”`, e);
+    return { value: fallback, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** The last guard: a render-time throw in the bar replaces the bar with a short note; the app stays up. */
+class DoBarBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error('Do… bar crashed while rendering; the bar was closed, the graph is untouched.', error, info.componentStack); }
+  render() { return this.state.error ? <DoBarCrashed message={this.state.error.message} /> : this.props.children; }
+}
+
+function DoBarCrashed({ message }: { message: string }) {
+  const tk = useTokens();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); closeDoBar(); } };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
+  return createPortal(
+    <div {...portalGuard} role="alert" aria-label="Do…" data-do-bar data-do-crashed onPointerDown={e => e.stopPropagation()}
+      style={{
+        position: 'fixed', top: 150, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, width: WIDTH, maxWidth: 'calc(100vw - 32px)',
+        background: tk.bg.panel, color: tk.text.primary, border: `1px solid ${tk.border.default}`, borderRadius: radius.lg, boxShadow: tk.shadow.popover,
+        font: `13px ${fontFamily.ui}`, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8,
+      }}>
+      <span style={{ fontSize: 12.5, color: tk.status.warningText }}>The Do… bar couldn’t read this line and stopped. Your graph is unchanged.</span>
+      <span style={{ fontSize: 11.5, color: tk.text.muted, overflowWrap: 'anywhere' }}>{message}</span>
+      <span style={{ display: 'flex', gap: 6 }}>
+        <Button size="sm" variant="secondary" icon="edit" onClick={() => openDoBar()}>Start a new line</Button>
+        <Button size="sm" variant="ghost" icon="close" onClick={closeDoBar}>Close</Button>
+      </span>
+    </div>,
+    document.body,
+  );
 }
 
 /** The canvas toolbar's Do… button. */
@@ -120,11 +168,12 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
       const f = normaliseEnd(a, o, 'out'), g = normaliseEnd(b, i, 'in');
       return strength(t.table.stat(f.type, f.key, g.type, g.key));
     };
-    return (tx: string, c: number): Assist => {
+    const none: Assist = { items: [], from: 0, to: 0, signature: null };
+    return (tx: string, c: number): Assist => readSafely('type-ahead', tx, () => {
       const lang = barAssist(tx, c, { nodes: scope.nodes, rank });
       if (lang.items.length || lang.signature) return lang;
       return doBarAssist(tx, c);
-    };
+    }, none).value;
   }, [scope.nodes]);
   // The seed for `random` while you type (a line's own seed= wins); a new one after each run.
   const [seed, setSeed] = useState(freshSeed);
@@ -144,34 +193,45 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
 
   // A builder phrase ("new 3d scene", "edit the rules", "show the recipe") is the whole sentence, read first (builders/doBuilders.ts).
   const rootNodes = useNodeGraphStore(s => s.nodes);
-  const builder: BuilderPlan | null = useMemo(() => {
+  const builderRead = useMemo(() => readSafely('the builder reading', text, () => {
     const c = readBuilderCommand(text);
     return c ? planBuilderCommand(c, { nodes: rootNodes, selected: scope.selected }) : null;
-  }, [text, rootNodes, scope.selected]);
+  }, null as BuilderPlan | null), [text, rootNodes, scope.selected]);
+  const builder = builderRead.value;
   // A builder phrase about a built scene's recipe ("show the recipe"): the recipe, coloured.
-  const builderRecipe = useMemo(() => {
+  const builderRecipe = useMemo(() => readSafely('the builder recipe', text, () => {
     const a = builder?.action;
     if (!a || (a.kind !== 'show-recipe' && a.kind !== 'copy-recipe' && a.kind !== 'edit-scene')) return null;
     const id = a.kind === 'edit-scene' ? a.sceneId : a.nodeId;
     const nd = rootNodes.find(x => x.id === id);
     const r = nd ? builderRecipeOf(nd, []) : null;
     return r?.kind === 'scene' ? r.text : null;
-  }, [builder, rootNodes]);
+  }, null as string | null).value, [builder, rootNodes, text]);
   // "surprise me [small|large] [2d|3d]": a random line, shown before it runs (lang/surprise.ts).
-  const surprise = useMemo(() => (builder ? null : readSurpriseCommand(text)), [text, builder]);
-  const surpriseMade = useMemo(() => (surprise ? surpriseLine({ ...surprise, seed: surprise.seed ?? seed }) : null), [surprise, seed]);
+  const surpriseRead = useMemo(() => readSafely('“surprise me”', text, () => {
+    const sp = builder ? null : readSurpriseCommand(text);
+    return { surprise: sp, made: sp ? surpriseLine({ ...sp, seed: sp.seed ?? seed }) : null };
+  }, { surprise: null, made: null }), [text, builder, seed]);
+  const surprise = surpriseRead.value.surprise;
+  const surpriseMade = surpriseRead.value.made;
   // The line in the shared language (lang/run.ts): canonical text runs through the same executors as plain English.
-  const line: LineRead | null = useMemo(() => (text.trim() && !builder && !surprise ? readLine(text, { seed }) : null), [text, builder, surprise, seed]);
+  const lineRead = useMemo(() => readSafely('the line reader', text, () => (text.trim() && !builder && !surprise ? readLine(text, { seed }) : null), null as LineRead | null), [text, builder, surprise, seed]);
+  const line = lineRead.value;
   const canonicalRun = line && readsCanonically(line) ? line : null;
   const runText = canonicalRun?.dialect === 'picture' ? canonicalRun.picture!.sentence! : text;
   const otherDialect = canonicalRun && canonicalRun.dialect !== 'picture' ? canonicalRun : null;
-  const plan: DoPlan = useMemo(() => (text.trim() && !builder && !otherDialect && !surprise ? parseDo(runText, scope) : { steps: [], reading: [], unknown: [] }), [runText, text, scope, builder, otherDialect, surprise]);
+  const planRead = useMemo(() => {
+    const empty: DoPlan = { steps: [], reading: [], unknown: [] };
+    return text.trim() && !builder && !otherDialect && !surprise ? readSafely('the phrase reader', runText, () => parseDo(runText, scope), empty) : { value: empty, error: null };
+  }, [runText, text, scope, builder, otherDialect, surprise]);
+  const plan = planRead.value;
   // The command language (doCommands.ts): every clause, previewed on a copy of the graph.
   const [picks, setPicks] = useState<Record<string, string>>({});
-  const cmd: CommandPlan | null = useMemo(() => {
-    if (!text.trim() || plan.intent || builder || otherDialect || surprise) return null;
-    try { return execCommand(runText, scope.nodes, { selected: scope.selected, picks, topLevel: scope.topLevel }); } catch { return null; }
+  const cmdRead = useMemo(() => {
+    if (!text.trim() || plan.intent || builder || otherDialect || surprise) return { value: null, error: null };
+    return readSafely('the command preview', runText, () => execCommand(runText, scope.nodes, { selected: scope.selected, picks, topLevel: scope.topLevel }), null as CommandPlan | null);
   }, [runText, text, scope, picks, plan.intent, builder, otherDialect, surprise]);
+  const cmd = cmdRead.value;
   // The canonical line under the bar: what was typed in the language's own words (or ✓ when it already is).
   const canonical = useMemo(() => {
     if (canonicalRun) return canonicalRun.canonical;
@@ -192,19 +252,19 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
     setDoBarHighlight(ids.length ? ids : null);
   }, [cmd, editing, pickClause, hoverPick, scope.nodes]);
   useEffect(() => () => setDoBarHighlight(null), []);
-  const reports: ConnectionReport[] = useMemo(() => {
+  const reports: ConnectionReport[] = useMemo(() => readSafely('the connection check', text, () => {
     const wires = check ? [check] : plan.intent === 'check' ? selectionWires(scope.nodes, scope.selected) : [];
     if (!wires.length) return [];
     const t = rankTables();
     return wires.map(w => checkConnection(w, t)).filter((r): r is ConnectionReport => !!r);
-  }, [check, plan.intent, scope]);
+  }, [] as ConnectionReport[]).value, [check, plan.intent, scope, text]);
   useEffect(() => {
     if (plan.intent !== 'teach') return;
     setPanel('teach');
     setTeachPhrase(text.trim().replace(/^teach( the do bar)?\s*/i, ''));
   }, [plan.intent, text]);
 
-  const fallback: Fallback[] = useMemo(() => {
+  const fallback: Fallback[] = useMemo(() => readSafely('node search', text, (): Fallback[] => {
     if (!text.trim() || plan.intent || builder || otherDialect || surprise || langErrors.length) return [];
     // An output phrase or a type refusal with its fixes is an answer, not a miss.
     if (plan.steps.some(st => st.kind === 'scene-output') || plan.fixes?.length) return [];
@@ -222,7 +282,9 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
       .map(x => ({ kind: 'node' as const, type: x.d.type, label: x.d.label, detail: x.d.category }));
     const idioms = (idiomFirst.length ? idiomFirst : matchIdioms(text, 3)).map(spec => ({ kind: 'idiom' as const, spec }));
     return idiomFirst.length ? idioms : [...nodes, ...idioms];
-  }, [text, plan, editing, builder, otherDialect, surprise, langErrors.length]);
+  }, [] as Fallback[]).value, [text, plan, editing, builder, otherDialect, surprise, langErrors.length]);
+  // A reading that threw (logged by readSafely): one line in the bar instead of a blank app.
+  const readError = builderRead.error ?? surpriseRead.error ?? lineRead.error ?? planRead.error ?? cmdRead.error;
   useEffect(() => setActive(0), [fallback.length]);
   // Fallback results with a plan: the plan was only a guess at a typo, and an idiom has that name.
   const idiomWins = !editing && plan.steps.length > 0 && fallback.length > 0;
@@ -415,6 +477,11 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
             Recipe <code style={{ font: `11.5px ${fontFamily.mono}` }}><RecipeCode text={outputClause(st.output)} errors={[]} /></code>
           </div>
         ))}
+        {readError && text.trim() && (
+          <div data-do-read-error style={{ padding: '6px 12px 8px', fontSize: 12, color: tk.status.warningText }}>
+            Couldn’t read this line. Keep typing, or try other words (the details are in the console).
+          </div>
+        )}
         {plan.problem && !idiomWins && !showCommand && <div style={{ padding: '6px 12px 8px', fontSize: 12, color: tk.status.warningText }} data-do-problem>{plan.problem}</div>}
         {plan.fixes && plan.fixes.length > 0 && !idiomWins && !editing && (
           <div style={{ padding: '0 12px 8px', display: 'flex', flexWrap: 'wrap', gap: 6 }} data-do-fixes>

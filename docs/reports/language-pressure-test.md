@@ -6,6 +6,13 @@ Measured on main at 2026.10.67 ("One Playfield language"), 398 examples, 2026-10
 Nothing in the language changed for this. The PR adds a printer, a harness, this report and a
 small **Show as commands** panel in the Do… bar.
 
+**Update (claude/fix-dobar-crash).** The runner crash (gap 2 in the first run) is fixed: `parseDo`
+no longer throws when a colour step's only candidate is a picture that isn't a colour, and the
+Do… bar catches any throw while it reads the line (inline "couldn't read this line", plus an error
+boundary). Re-run on the same 398 examples, the numbers below are the new ones: Full 166 → 184,
+Near 38 → 39, Partial 194 → 175; nodes 84% → 86%, wires 73% → 81%, same shader 170 → 184. The
+gap ranking is renumbered without the crash.
+
 - Printer: `src/lang/fromGraph.ts` (with `src/lang/graphFlat.ts`)
 - Harness: `src/lang/__tests__/languagePressure.test.ts`, `src/lang/__tests__/pressure/*`
 - Printer tests: `src/lang/__tests__/fromGraph.test.ts`
@@ -16,37 +23,39 @@ small **Show as commands** panel in the Do… bar.
 
 | Class | Examples | What it means |
 |---|---:|---|
-| **Full** | 166 (42%) | The rebuilt graph compiles to the same shader (comments aside) with the same uniform values |
-| **Near** | 38 (10%) | Every node and wire is there; settings, ports or the shader differ a little |
-| **Partial** | 194 (49%) | Some nodes or wires can't be said |
+| **Full** | 184 (46%) | The rebuilt graph compiles to the same shader (comments aside) with the same uniform values |
+| **Near** | 39 (10%) | Every node and wire is there; settings, ports or the shader differ a little |
+| **Partial** | 175 (44%) | Some nodes or wires can't be said |
 | **None** | 0 | Every example gets at least part of the way |
 
-- Nodes made: 3,500 of 4,181 (84%). Wires: 2,725 of 3,752 (73%). Settings that differed from a
-  new node's: 3,717 of 4,547 set (82%).
-- 170 of 360 examples that compile both ways compile to the same shader. (Of the 38 rebuilt
-  graphs that don't compile, 35 are Agents graphs whose group insides the bar can't reach.)
-- **27 of the 38 Near examples are Full in all but name.** Their only gap is a Palette's `anim`
+- Nodes made: 3,578 of 4,181 (86%). Wires: 3,023 of 3,752 (81%). Settings that differed from a
+  new node's: 3,770 of 4,615 set (82%).
+- 184 of 359 examples that compile both ways compile to the same shader. (Of the 39 rebuilt
+  graphs that don't compile, 36 are Agents graphs whose group insides the bar can't reach. One,
+  Wireworld under the hood, stopped compiling once its crashed lines ran: its Expression Block
+  can't be written, so a vec3 lands in a float input.)
+- **27 of the 39 Near examples are Full in all but name.** Their only gap is a Palette's `anim`
   input that keeps `defaultValue: 0` on the socket. The original inlines `0.0`, the rebuilt
   graph reads the same 0 from a uniform. Same picture, different text.
 - **Play setups are not carried at all.** 253 examples have one (controls, live params, MIDI and
-  mouse mappings, layers), 121 of them in Full. Full means the graph and its shader; the Play
+  mouse mappings, layers), 132 of them in Full. Full means the graph and its shader; the Play
   half of those examples is gone.
-- Every line the printer kept also ran on the real store: 6,927 lines, 0 failures (plus 2,089
+- Every line the printer kept also ran on the real store: 7,301 lines, 0 failures (plus 1,905
   `# cannot express` lines). In the browser the 8 examples tried ran line by line through the
   Do… bar with the same result as the runner.
-- A script averages 22.7 lines (2.0 lines per node made). The longest are the hand-built
-  cellular automata (Simulations: grids): 158 to 191 lines for 49 to 71 nodes.
+- A script averages 23.1 lines (2.0 lines per node made). The longest are the hand-built
+  cellular automata (Simulations: grids): 171 to 198 lines for 49 to 71 nodes.
 
 ### By folder
 
 | Folder | Examples | Full | Near | Partial |
 |---|---:|---:|---:|---:|
 | Play | 111 | 82 | 28 | 1 |
-| Learn | 42 | 6 | 0 | 36 |
+| Learn | 42 | 11 | 0 | 31 |
 | Simulations: grids | 20 | 10 | 0 | 10 |
-| Grid | 17 | 5 | 0 | 12 |
+| Grid | 17 | 10 | 2 | 5 |
 | Particles | 14 | 3 | 1 | 10 |
-| Node Combos | 13 | 3 | 0 | 10 |
+| Node Combos | 13 | 6 | 3 | 4 |
 | Simulation | 13 | 1 | 0 | 12 |
 | From the Internet | 12 | 0 | 0 | 12 |
 | Agents: rules | 11 | 7 | 0 | 4 |
@@ -54,11 +63,11 @@ small **Show as commands** panel in the Do… bar.
 | 3D SDF | 9 | 0 | 0 | 9 |
 | Learn 3D | 9 | 1 | 0 | 8 |
 | Time Cube | 9 | 9 | 0 | 0 |
-| Matrices | 8 | 3 | 0 | 5 |
+| Matrices | 8 | 4 | 0 | 4 |
 | Data | 8 | 4 | 0 | 4 |
 | Agents with shaders | 8 | 0 | 0 | 8 |
 | Simulations: agents | 8 | 0 | 0 | 8 |
-| Frame Stack | 7 | 3 | 4 | 0 |
+| Frame Stack | 7 | 7 | 0 | 0 |
 | Texture tools | 7 | 0 | 1 | 6 |
 | 3D: Scene Builder | 6 | 6 | 0 | 0 |
 | 3D Basics | 5 | 1 | 0 | 4 |
@@ -120,27 +129,27 @@ isn't made; a socket an unsettable setting would have made) are counted against 
 | # | Gap | Examples touched | Unlocks (cumulative) | Most often |
 |---:|---|---:|---:|---|
 | 1 | **Unwired input values** (`socket-default`) | 38 | 27 (27) | Palette · `anim` (38) |
-| 2 | **Runner crash** (`runner-crash`) | 91 | 21 (48) | create mix (60), Colorize (49), connect … → output (35), palette (22), tone-map (18), sample-texture (17) |
-| 3 | **Container insides** (`container-contents`) | 73 | 28 (76) | Agents group (36), Scene Group (38), March Loop Group (32) |
-| 4 | **Code** (`param-code`) | 80 | 32 (108) | Expression Block result / expr / inputs / lines (552 settings) |
-| 5 | **Unreachable setting names** (`param-name`) | 90 | 35 (143) | Constant · `value` (65), math `outputType` (Multiply 48, Divide 14, Add 12) |
-| 6 | **Socket words read as 3D** (`dialect-clash`) | 24 | 18 (161) | `.background` (Colorize, SDF Fill), `.ao`, `.shadow`, `grid.columns` |
-| 7 | **No create word** (`no-create-word`) | 25 | 18 (179) | Max (19), Subtract (11), Floor (9), Round (7), Step (5), Mask, Dot |
-| 8 | **Value doesn't land** (`param-set-failed`) | 16 | 12 (191) | Expression names, Palette `offset`=0 as colour, select values kept as strings |
-| 9 | **Structured values** (`param-structured`) | 14 | 7 (198) | Data outputs/columns, Constants items, Custom Function inputs |
-| 10 | **Feedback refused as a loop** (`wire-failed`) | 8 | 6 (204) | a Pass's `previous` read back into its own chain (6), Loop Carry `next` (2) |
-| 11 | **Media and attached files** (`param-media`, `media`) | 6 + 14 | 4 (208) | Data datasets, images, audio state |
-| 12 | Loop Index inside groups (`group-loop-index`) | 10 | 5 (213) | a group's own `i` wired inside |
-| 13 | Group ports (`group-ports`) | 8 | 6 (219) | `group(…)` adds a Loop Index; port keys `in0` vs `cin_uv` |
-| 14 | Input expressions on settings (`param-inline-expr`) | 5 | 5 (224) | `__inExpr_radius` |
-| 15 | Colours outside 0–1 (`param-colour-range`) | 3 | 3 (227) | Palette phase / offset vectors |
-| 16 | Output socket choice, plain English failed too (`output-socket`) | 45 | 2 (229) | follows from math `outputType` (44) |
-| 17 | Keyframes (`param-keyframes`) | 1 | 1 (230) | SDF Glow brightness track |
-| 18–19 | Type check, missing sockets (`wire-type`, `container-socket`) | 44, 83 | 1 + 1 (232) | nearly all follow from math `outputType` and Expression inputs |
+| 2 | **Container insides** (`container-contents`) | 73 | 27 (54) | Scene Group (38), Agents group (36), March Loop Group (32) |
+| 3 | **Code** (`param-code`) | 80 | 35 (89) | Expression Block result / expr / inputs / lines (552 settings) |
+| 4 | **Unreachable setting names** (`param-name`) | 91 | 38 (127) | Constant · `value` (65), math `outputType` (Multiply 48, Mix 26, Divide 14, Add 12) |
+| 5 | **Socket words read as 3D** (`dialect-clash`) | 25 | 19 (146) | `.background` (Colorize, SDF Fill), `.ao`, `.shadow`, `grid.columns`, CRT Screen `curvature` |
+| 6 | **No create word** (`no-create-word`) | 25 | 18 (164) | Max (19), Subtract (11), Floor (9), Round (7), Step (5), Mask, Dot |
+| 7 | **Structured values** (`param-structured`) | 14 | 6 (170) | Data outputs/columns, Constants items, Custom Function inputs |
+| 8 | **Feedback refused as a loop** (`wire-failed`) | 8 | 6 (176) | a Pass's `previous` read back into its own chain (6), Loop Carry `next` (2) |
+| 9 | Loop Index inside groups (`group-loop-index`) | 10 | 5 (181) | a group's own `i` wired inside |
+| 10 | Output socket choice, plain English failed too (`output-socket`) | 48 | 5 (186) | follows from math `outputType` (65 of 91) |
+| 11 | **Media and attached files** (`param-media`, `media`) | 6 + 14 | 6 (192) | Data datasets, images, audio state |
+| 12 | Input expressions on settings (`param-inline-expr`) | 7 | 5 (197) | `__inExpr_value` (Palette), `__inExpr_radius` |
+| 13 | Group ports (`group-ports`) | 6 | 6 (203) | `group(…)` adds a Loop Index; port keys `in0` vs `cin_uv` |
+| 14 | **Value doesn't land** (`param-set-failed`) | 5 | 5 (208) | select values kept as strings (Neighbours `size`, Gaussian Field `gridSize`), Palette `offset`=0 as colour |
+| 15 | Colours outside 0–1 (`param-colour-range`) | 3 | 3 (211) | Palette phase / offset vectors |
+| 16 | Keyframes (`param-keyframes`) | 1 | 1 (212) | SDF Glow brightness track |
+| 17–18 | Type check, missing sockets (`wire-type`, `container-socket`) | 50, 83 | 1 + 1 (214) | nearly all follow from math `outputType` and Expression inputs |
+| — | ~~Runner crash~~ (`runner-crash`) | 0 (was 91) | fixed | was 21 unlocks; see "Fixed: the runner crash" below |
 | — | Play setup (`play`) | 253 | not ranked | controls, live params, MIDI and mouse mappings, layers |
 | — | Notes, positions (`notes`, `layout`) | 193, 398 | not ranked | |
 
-With all 19 the count reaches 232, every non-Full example. That is an upper bound: past its first
+With all 18 the count reaches 214, every non-Full example. That is an upper bound: past its first
 blocker the printer's view of a graph is partial (a node that isn't made hides the gaps of its
 settings), so some examples will show new gaps once the first ones are fixed.
 
@@ -155,17 +164,22 @@ only the shader text differs. Cheapest fix is not in the language: drop `default
 socket in the examples (or have `create palette` make the same socket). If inputs should have
 values of their own, `set palette.anim=0` (socket in the key) is the natural form.
 
-**2. The runner crash.** Not a language gap but the largest single blocker, and dangerous:
+**Fixed: the runner crash.** (Gap 2 in the first run, 91 examples.) What it was:
 `parseDo` (`src/suggestions/doBar.ts`, the colour-target branch near line 410–437) does
 `outputKinds(c).find(o => o.kind === 'colour')!.key` and throws when the subject's colour
 source has no colour output. `execCommand` parses the *whole* sentence with `parseDo` first, so
 any line containing an action word (`mix`, `palette`, `tone-map`, `tint`, `glow`, `colour`…)
 can throw depending on what is selected, e.g. `create palette` right after `create time` on an
 empty graph. In the Do… bar the same throw happens inside a `useMemo` with no try, so **the
-whole app unmounts to a blank page** (seen in the browser, screenshots 09). Fix: guard the find
-and return a `plan.problem`; wrap the bar's `parseDo` like its `execCommand`. No syntax change.
+whole app unmounts to a blank page** (seen in the browser, screenshots 09). The cause was
+`colourFrom`: with nothing downstream of the subject that makes a colour, it fell back to whatever
+the Output shows, which can be a Time, a UV or a number. Now it falls back only to a colour, the
+find is guarded (the plan says "There is no colour to do that to yet."), and the bar reads the
+line inside a try with an error boundary around it. A second throw turned up while fuzzing:
+`matchAt` read past the last token (`create` with nothing after it yet, in `execCommand`). No
+syntax change.
 
-**3. Container insides.** The bar edits one level. Hand-built 3D (Scene Group, March Loop Group)
+**2. Container insides.** The bar edits one level. Hand-built 3D (Scene Group, March Loop Group)
 and hand-built agents (Agents group in node mode) keep most of their nodes inside. A minimal
 addition that fits the grammar is a block header for a level:
 
@@ -179,7 +193,7 @@ end
 or a path in references, `"Scene"/sphere-sdf3d`, usable by every verb. The block form also
 prints readably. Builder-made containers don't need it (they print as recipes).
 
-**4. Code.** 302 Expression Blocks across the examples; none can be written. `set` skips their
+**3. Code.** 302 Expression Blocks across the examples; none can be written. `set` skips their
 `expr`, `result`, `lines` and `inputs` on purpose (`SKIP_PARAMS`), and a line can't hold more
 than one line of GLSL. The plan already has a `{…}` code value (§3.3). Proposal:
 
@@ -191,31 +205,31 @@ set exprnode#2 line+={vec2 tile = floor(cell / 24.0)}       // one body line at 
 Inputs-as-keys make the sockets exist, which also removes 330 of the 377 `container-socket`
 gaps (wires into Expression inputs that don't exist on a new block).
 
-**5. Setting names the bar can't reach.** `value` is in `findParam`'s filler list, so
+**4. Setting names the bar can't reach.** `value` is in `findParam`'s filler list, so
 `set constant value=0.35` reads as "set constant to 0.35" with no setting (65 examples). `val`
 works by accident. And math nodes' width (`outputType`: float/vec2/vec3) is not a setting at all,
-so `create divide` can't become a vec2 divide; the wires then fail the type check (the 44
-`wire-type` and 44 `output-socket` gaps follow from this). Proposals: stop filtering `value`
+so `create divide` can't become a vec2 divide; the wires then fail the type check (62 of the 63
+`wire-type` and 65 of the 91 `output-socket` gaps follow from this). Proposals: stop filtering `value`
 when it is the key in canonical `key=value`; add `set divide type=vec2` (or
 `create divide:vec2`) that retypes the sockets the way the card's type switch does.
 
-**6. Socket words read as 3D.** `detectDialect` scans every word of the line, so a socket called
+**5. Socket words read as 3D.** `detectDialect` scans every word of the line, so a socket called
 `background`, `ao` or `shadow` in `connect … → colorize.background` makes the line a
 3D scene (and then an error, or "mixes a 3D scene and a 2D picture"). Proposal: a line whose
 first word is an edit verb is an edit, full stop; or skip words after `.`.
 
-**7. No create word.** Some types have no word that makes them: `create max` makes Intersect,
+**6. No create word.** Some types have no word that makes them: `create max` makes Intersect,
 `create subtract` makes SDF Subtract, `create round` makes Offset, `create step` makes Agents
 Move, `create mask` makes Smoothstep, `create dot` draws a circle, `create floor` reads as a
 3D plane. Type ids don't work either (`create maxraw`). Proposal: let `create` take the type
 id or a category path when a word is ambiguous: `create math.max`, `create node:max`. The
 type-ahead should offer only words that make what they say (see UI friction).
 
-**8. Values that don't land.** `set palette offset=0` (one number for a colour) is refused;
-select values that look like numbers are kept as strings (`size="2"` on Neighbours); Expression
-names. Smaller fixes in `valueFor`.
+**14. Values that don't land.** `set palette offset=0` (one number for a colour) is refused;
+select values that look like numbers are kept as strings (`size="2"` on Neighbours, `gridSize`
+on Gaussian Field). Smaller fixes in `valueFor`.
 
-**10. Feedback refused as a loop.** Simulations built from a Pass read the Pass's `previous`
+**8. Feedback refused as a loop.** Simulations built from a Pass read the Pass's `previous`
 frame back into the chain that feeds the same Pass. That is legal (the read is a frame late),
 but `connect` refuses it as a loop (`makesLoop` in `doCommands.ts` doesn't know Pass
 `previous` breaks the cycle). Six hand-built grid simulations stop there (Pass nodes themselves are fine: `create pass`, and
@@ -223,11 +237,11 @@ its `previous` output by the plain-English form); more would once other
 gaps are fixed (36 Pass nodes in the examples). Fix: treat a Pass's `previous` output (and Loop
 Carry) as a cycle break in the loop check. No syntax change.
 
-**9, 11. Structured values and media.** Data columns, Constants lists, Custom Function inputs,
+**7, 11. Structured values and media.** Data columns, Constants lists, Custom Function inputs,
 datasets, images. A JSON-ish value (`items=[0.2, 0.5]`, `columns=[x, y]`) would cover the
 lists; media needs a reference to an asset (`image="name.png"` from Files).
 
-**12–13. Groups.** `group(…)` works, but always adds a Loop Index (an extra node when the
+**9, 13. Groups.** `group(…)` works, but always adds a Loop Index (an extra node when the
 original had none) and names ports `in0`, `out1`, where hand-made iterated groups use `cin_uv`
 style keys, so their shaders differ. A group's own `i` is wired inside, so needs the same
 `inside "Group":` block as containers.
@@ -274,7 +288,7 @@ screenshot next to the original. Screenshots are in the scratchpad (`lang-pressu
 | Mouse moves a slider | 7 | 7 | same picture; the mouse mapping (Play) is gone |
 | Displacement Map | 15 | 15 | same picture |
 | Where am I? st | 10 | 10 | black: the Divide stays float, its two inputs unwired (as the runner predicted) |
-| CRT TV | 12 | 12 | no screen bow or vignette: CRT Screen can't be made (the crash) |
+| CRT TV | 12 | 12 | no screen bow or vignette: CRT Screen can't be made (the crash, since fixed) |
 | Game of Life (Grid Rules) | 2 | 2 | same node and rule (the original screenshot is at time 0, before it runs) |
 | Glowing Orb | 1 | 1 | same orb |
 | Slime mold (rules) | 4 | 4 | same picture |
@@ -284,7 +298,8 @@ Nothing worked in the runner and failed in the UI, or the other way round. Frict
 - **The crash blanks the app.** Typing `create crt-screen` (or `create palette`, `create mix`…)
   with a Time node selected unmounts the whole app (blank page, console:
   `Cannot read properties of undefined (reading 'key') at parseDo`). It happens while typing,
-  before Enter, because the bar re-reads the line on every keystroke.
+  before Enter, because the bar re-reads the line on every keystroke. **Fixed** (see the
+  update at the top): the same typing now keeps the bar up.
 - **Type-ahead offers words that make more than they say.** After `create`, the list suggests
   `circle-sdf`, `box-sdf`: those go down the shape path and add a UV, the shape and an SDF Fill.
   The word that makes just the node is `circlesdf`, which the list doesn't show.
@@ -377,21 +392,27 @@ connect makevec3 → output
 # cannot express: the Play setup (1 controls, 0 mappings, 0 layers): controls, live params and MIDI mappings have no words
 ```
 
-**Partial: CRT TV.** The crash takes out CRT Screen; everything else lands.
+**Partial: CRT TV.** Every node is made now (the crash took out CRT Screen in the first run); but the lines that set or wire it are read as 3D lines (gap 5), so its settings and two wires are missing.
 
 ```
 create time
-# cannot express: CRT Screen (create crt-screen: the runner threw: Cannot read properties of undefined (reading 'key'))
+create crt-screen
+# cannot express: CRT Screen · curvature=0.07 (“set” isn't a shape, combine, warp or setting.)
+# cannot express: CRT Screen · cellSize=5 (“set” isn't a shape, combine, warp or setting.)
 create fractal-noise
 delete before fbm
 set fbm scale=1.6 time_scale=0.2
 create palette
 set palette scale=1.3
 create crt-mask
+delete before crtmask
 set crtmask cellSize=5 pulse=0.04 scanlines=0.35
+# cannot express: CRT Screen · uv → Fractal Noise (FBM) · uv (“connect” isn't a shape, combine, warp or setting.)
 connect time → fbm.time
 connect fbm → palette.value
 connect palette → crtmask.color
+connect uv → crtmask.uv
+# cannot express: CRT Screen · vignette → CRT Mask · vignette (“connect” isn't a shape, combine, warp or setting.)
 connect crtmask → output
 ```
 
@@ -416,19 +437,19 @@ and the three most frequent gaps (Play setups listed as `play`).
 | 3D: Hello Sphere | 3D Basics | Partial | 10 | 60% | 18 | container-contents ×2 |
 | 3D: Normal to Color | 3D Basics | Partial | 11 | 64% | 18 | container-contents ×2 |
 | 3D: Shapes + Ground | 3D Basics | Partial | 16 | 38% | 18 | container-contents ×2 |
-| 3D: Soft Metaballs | 3D Basics | Partial | 22 | 36% | 29 | param-name ×5, wire-missing-node ×3, container-contents ×2 |
+| 3D: Soft Metaballs | 3D Basics | Partial | 22 | 41% | 32 | param-name ×6, container-contents ×2, output-socket ×2 |
 | Fresnel Schlick: Rim Glow | 3D Lighting | Partial | 15 | 73% | 31 | container-contents ×2, param-name, wire-type |
-| Glass 3D: Physical | 3D Lighting | Partial | 10 | 70% | 21 | wire-missing-node ×2, container-contents, runner-crash |
-| Glass Metaballs | 3D Lighting | Partial | 17 | 41% | 21 | wire-missing-node ×2, container-contents, runner-crash |
-| Lit Still Life | 3D Lighting | Partial | 21 | 48% | 36 | container-contents ×2, dialect-clash ×2, wire-missing-node ×2 |
-| Refract Dir: Fake Glass | 3D Lighting | Partial | 14 | 79% | 44 | param-name ×13, wire-missing-node ×2, container-contents |
-| 3D: Bend Deform | 3D SDF | Partial | 11 | 55% | 16 | container-contents ×2, param-set-failed |
+| Glass 3D: Physical | 3D Lighting | Partial | 10 | 80% | 22 | container-contents |
+| Glass Metaballs | 3D Lighting | Partial | 17 | 47% | 22 | container-contents |
+| Lit Still Life | 3D Lighting | Partial | 21 | 52% | 37 | container-contents ×2, dialect-clash ×2 |
+| Refract Dir: Fake Glass | 3D Lighting | Partial | 14 | 86% | 45 | param-name ×13, container-contents, socket-default |
+| 3D: Bend Deform | 3D SDF | Partial | 11 | 55% | 16 | container-contents ×2 |
 | 3D: Gyroid + Domain Warp | 3D SDF | Partial | 12 | 50% | 16 | container-contents ×2 |
 | 3D: Infinite Pillars | 3D SDF | Partial | 11 | 55% | 18 | container-contents ×2 |
 | 3D: Polar Repeat — Radial Symmetry | 3D SDF | Partial | 12 | 50% | 16 | container-contents ×2 |
 | 3D: SD Cross | 3D SDF | Partial | 12 | 50% | 17 | container-contents ×2 |
 | 3D: Spiral World | 3D SDF | Partial | 17 | 47% | 24 | container-contents ×2, socket-default |
-| 3D: Voxel Terrain | 3D SDF | Partial | 20 | 60% | 44 | wire-missing-node ×4, param-name ×3, param-code ×3 |
+| 3D: Voxel Terrain | 3D SDF | Partial | 20 | 65% | 48 | param-name ×4, param-code ×3, container-socket ×3 |
 | Bake: a heavy 3D scene, effects on top | 3D SDF | Partial | 17 | 65% | 32 | container-contents ×2 |
 | MLG: Wiggle Tunnel | 3D SDF | Partial | 19 | 58% | 30 | container-contents ×2, socket-default |
 | 3D: Scene Builder · Glass objects | 3D: Scene Builder | Full | 24 | 100% | 1 | — |
@@ -441,7 +462,7 @@ and the three most frequent gaps (Play setups listed as `play`).
 | 3D slime mold | Agents in 3D | Partial | 14 | 57% | 29 | param-code ×4, container-socket ×2, container-contents |
 | Fireflies in the dark | Agents in 3D | Partial | 12 | 50% | 22 | param-code ×4, container-contents, container-socket |
 | Galaxy in 3D | Agents in 3D | Partial | 12 | 58% | 26 | param-code ×4, container-contents, container-socket |
-| Swarm round a torus | Agents in 3D | Partial | 23 | 43% | 38 | container-socket ×4, container-contents ×3, wire-missing-node ×2 |
+| Swarm round a torus | Agents in 3D | Partial | 23 | 48% | 40 | container-socket ×4, container-contents ×3, param-name |
 | Born from your shader | Agents with shaders | Partial | 17 | 53% | 37 | param-code ×7, container-socket ×4, container-contents |
 | Ink along a noise field | Agents with shaders | Partial | 13 | 62% | 27 | param-code ×4, container-socket ×3, container-contents |
 | Rings that pulse to sound | Agents with shaders | Partial | 18 | 61% | 50 | param-code ×12, container-socket ×10, param-name ×3 |
@@ -464,8 +485,8 @@ and the three most frequent gaps (Play setups listed as `play`).
 | Combo: Wave Texture + Blur H/V | Blur & Lens | Full | 7 | 100% | 16 | — |
 | Motion Blur Trails | Blur & Lens | Full | 5 | 100% | 10 | — |
 | Tilt-Shift | Blur & Lens | Full | 7 | 100% | 19 | — |
-| Depth of Field: Post-Process Blur | Blur & Lens | Partial | 16 | 44% | 18 | wire-missing-node ×2, container-contents, runner-crash |
-| DoF: Orbit Orbs | Blur & Lens | Partial | 17 | 35% | 16 | wire-missing-node ×2, container-contents, runner-crash |
+| Depth of Field: Post-Process Blur | Blur & Lens | Partial | 16 | 50% | 20 | container-contents |
+| DoF: Orbit Orbs | Blur & Lens | Partial | 17 | 41% | 17 | container-contents |
 | Color: Stops Palette + Colorize | Color & Lighting | Full | 9 | 100% | 21 | — |
 | Cosine palettes | Color & Lighting | Full | 5 | 100% | 8 | play |
 | Neon Tube | Color & Lighting | Full | 7 | 100% | 13 | — |
@@ -478,53 +499,53 @@ and the three most frequent gaps (Play setups listed as `play`).
 | Data 4 · A route drawn on | Data | Full | 4 | 100% | 8 | play, media |
 | Data 5 · A poem, word by word | Data | Full | 4 | 100% | 8 | play, media |
 | Data 6 · A sketch reads s.data() | Data | Full | 4 | 100% | 8 | play, media |
-| Data 1 · A year of weather | Data | Partial | 14 | 100% | 43 | output-socket ×5, param-media, param-structured |
-| Data 2 · Every row a glowing point | Data | Partial | 12 | 92% | 34 | output-socket ×3, param-media ×2, param-structured ×2 |
-| Data 7 · A constellation, typed in | Data | Partial | 10 | 90% | 28 | output-socket ×3, param-media ×2, param-structured ×2 |
-| Data 8 · A live feed | Data | Partial | 9 | 89% | 25 | output-socket ×3, param-media ×2, param-structured ×2 |
+| Data 1 · A year of weather | Data | Partial | 14 | 100% | 43 | output-socket ×6, param-media, param-structured |
+| Data 2 · Every row a glowing point | Data | Partial | 12 | 100% | 37 | output-socket ×5, param-media ×2, param-structured ×2 |
+| Data 7 · A constellation, typed in | Data | Partial | 10 | 100% | 31 | output-socket ×5, param-media ×2, param-structured ×2 |
+| Data 8 · A live feed | Data | Partial | 9 | 100% | 28 | output-socket ×5, param-media ×2, param-structured ×2 |
 | Echo Trails | Effects & Lens | Full | 8 | 100% | 17 | — |
 | Lens Distortion | Effects & Lens | Full | 6 | 100% | 14 | — |
-| CRT TV | Effects & Lens | Partial | 7 | 86% | 13 | wire-missing-node ×3, runner-crash |
-| Feedback Smear | Effects & Lens | Partial | 9 | 89% | 21 | runner-crash ×3, wire-missing-node ×2, output-socket |
+| CRT TV | Effects & Lens | Partial | 7 | 100% | 19 | dialect-clash ×4 |
+| Feedback Smear | Effects & Lens | Partial | 9 | 100% | 22 | param-name, output-socket, wire-type |
 | Gravity Lens | Fractals | Full | 6 | 100% | 10 | — |
 | Newton z⁵−1 | Fractals | Full | 4 | 100% | 5 | — |
+| Frame stack: drift apart and back | Frame Stack | Full | 4 | 100% | 9 | — |
+| Frame stack: highlighted frames loop | Frame Stack | Full | 4 | 100% | 9 | — |
+| Frame stack: isometric cards | Frame Stack | Full | 4 | 100% | 9 | — |
 | Frame stack: ring in shallow focus | Frame Stack | Full | 4 | 100% | 9 | — |
 | Frame stack: ring of frames | Frame Stack | Full | 4 | 100% | 9 | — |
+| Frame stack: shuffle the contact sheet | Frame Stack | Full | 4 | 100% | 9 | — |
 | Frame stack: stack to ring | Frame Stack | Full | 4 | 100% | 9 | — |
-| Frame stack: drift apart and back | Frame Stack | Near | 4 | 100% | 10 | runner-crash |
-| Frame stack: highlighted frames loop | Frame Stack | Near | 4 | 100% | 10 | runner-crash |
-| Frame stack: isometric cards | Frame Stack | Near | 4 | 100% | 10 | runner-crash |
-| Frame stack: shuffle the contact sheet | Frame Stack | Near | 4 | 100% | 10 | runner-crash |
-| Web: Atlantic | From the Internet | Partial | 18 | 44% | 22 | container-contents ×2, wire-missing-node ×2, param-name |
+| Web: Atlantic | From the Internet | Partial | 18 | 50% | 24 | container-contents ×2, param-name, wire-type |
 | Web: Bitshift | From the Internet | Partial | 11 | 100% | 32 | param-code ×4, param-name ×2, container-socket ×2 |
 | Web: Gradient 4 | From the Internet | Partial | 7 | 100% | 25 | param-code ×6, container-socket ×3, param-colour-range ×2 |
-| Web: Grain Gradient | From the Internet | Partial | 31 | 81% | 88 | wire-missing-node ×19, runner-crash ×12, param-code ×11 |
-| Web: Main Frame | From the Internet | Partial | 19 | 95% | 82 | param-code ×22, container-socket ×12, param-set-failed ×3 |
-| Web: Orb | From the Internet | Partial | 20 | 35% | 21 | container-contents ×2, wire-missing-node ×2, param-name |
+| Web: Grain Gradient | From the Internet | Partial | 31 | 100% | 112 | param-code ×11, wire-type ×9, param-name ×8 |
+| Web: Main Frame | From the Internet | Partial | 19 | 100% | 84 | param-code ×22, container-socket ×12, param-name ×3 |
+| Web: Orb | From the Internet | Partial | 20 | 40% | 23 | container-contents ×2, param-name, output-socket |
 | Web: Pillars | From the Internet | Partial | 7 | 100% | 27 | param-code ×6, container-socket ×5, param-colour-range |
 | Web: Rotating Cross Tiles | From the Internet | Partial | 22 | 100% | 95 | param-code ×15, container-socket ×9, output-socket ×2 |
-| Web: Shield | From the Internet | Partial | 14 | 93% | 57 | param-code ×16, container-socket ×8, param-set-failed ×3 |
-| Web: Solar | From the Internet | Partial | 11 | 91% | 30 | param-code ×7, container-socket ×4, wire-missing-node ×2 |
-| Web: The Screen | From the Internet | Partial | 9 | 89% | 37 | param-code ×14, container-socket ×6, param-set-failed ×2 |
-| Web: Trippy Noise | From the Internet | Partial | 33 | 100% | 118 | param-code ×9, param-name ×9, container-socket ×5 |
-| Ring Glow | Functions | Partial | 4 | 100% | 11 | container-socket ×2, param-structured, param-code |
-| GI: Box Frame | GI Lighting | Partial | 13 | 46% | 16 | wire-missing-node ×2, container-contents, runner-crash |
-| GI: Sphere & Ground | GI Lighting | Partial | 11 | 55% | 16 | wire-missing-node ×2, container-contents, runner-crash |
+| Web: Shield | From the Internet | Partial | 14 | 100% | 59 | param-code ×16, container-socket ×8, param-name |
+| Web: Solar | From the Internet | Partial | 11 | 100% | 32 | param-code ×7, container-socket ×4, param-name |
+| Web: The Screen | From the Internet | Partial | 9 | 100% | 38 | param-code ×14, container-socket ×6, group-loop-index |
+| Web: Trippy Noise | From the Internet | Partial | 33 | 100% | 117 | param-code ×9, param-name ×9, container-socket ×5 |
+| Ring Glow | Functions | Partial | 4 | 100% | 10 | container-socket ×2, param-structured, param-code |
+| GI: Box Frame | GI Lighting | Partial | 13 | 54% | 17 | container-contents |
+| GI: Sphere & Ground | GI Lighting | Partial | 11 | 64% | 17 | container-contents |
+| Beat Grid | Grid | Full | 15 | 100% | 38 | play |
 | Grid 1 · Built-in shapes and patterns | Grid | Full | 4 | 100% | 6 | play |
+| Grid 2 · By hand: Grid node + SDF Fill | Grid | Full | 10 | 100% | 28 | play |
+| Grid 3 · One wire: shapes that morph and spin per cell | Grid | Full | 15 | 100% | 42 | play |
 | Grid 7 · An Array in every cell | Grid | Full | 11 | 100% | 34 | play |
+| Grid: Attract | Grid | Full | 8 | 100% | 21 | — |
 | Grid: Breathing | Grid | Full | 7 | 100% | 17 | — |
 | Grid: Cell ID and hash | Grid | Full | 8 | 100% | 22 | param-name, play |
+| Grid: Effects across the grid | Grid | Full | 7 | 100% | 20 | param-name ×2, play |
 | Grid: Grid Pattern and the mouse | Grid | Full | 4 | 100% | 6 | play |
-| Beat Grid | Grid | Partial | 15 | 93% | 35 | wire-missing-node ×2, runner-crash, play |
-| Grid 2 · By hand: Grid node + SDF Fill | Grid | Partial | 10 | 90% | 25 | wire-missing-node ×2, runner-crash, play |
-| Grid 3 · One wire: shapes that morph and spin per cell | Grid | Partial | 15 | 87% | 35 | wire-missing-node ×6, runner-crash ×2, play |
-| Grid 4 · Big patterns from per-cell numbers | Grid | Partial | 11 | 82% | 24 | wire-missing-node ×5, no-create-word, runner-crash |
-| Grid 5 · The mouse changes the shape | Grid | Partial | 9 | 78% | 15 | wire-missing-node ×6, runner-crash ×2, play |
+| Grid 5 · The mouse changes the shape | Grid | Near | 9 | 100% | 23 | param-inline-expr, play |
+| Grid 8 · Array as the grid: melting dots | Grid | Near | 10 | 100% | 28 | param-inline-expr, play |
+| Grid 4 · Big patterns from per-cell numbers | Grid | Partial | 11 | 91% | 27 | wire-missing-node ×3, no-create-word, play |
 | Grid 6 · Overflow: rings that cross their cells | Grid | Partial | 9 | 89% | 19 | wire-missing-node ×2, no-create-word, play |
-| Grid 8 · Array as the grid: melting dots | Grid | Partial | 10 | 90% | 24 | wire-missing-node ×2, runner-crash, play |
-| Grid: Attract | Grid | Partial | 8 | 88% | 18 | wire-missing-node ×2, runner-crash |
-| Grid: Density Wave | Grid | Partial | 7 | 100% | 25 | param-code ×4, container-socket ×3, runner-crash ×2 |
-| Grid: Effects across the grid | Grid | Partial | 7 | 86% | 17 | param-name ×2, wire-missing-node ×2, runner-crash |
+| Grid: Density Wave | Grid | Partial | 7 | 100% | 24 | param-code ×4, container-socket ×3, param-name |
 | Grid: Metaballs | Grid | Partial | 8 | 100% | 21 | socket-default, param-name, wire-type |
 | Lava Lamp | Grid | Partial | 11 | 91% | 27 | wire-missing-node ×4, param-set-failed ×2, no-create-word |
 | Webcam CMYK | Halftone | Full | 5 | 100% | 11 | — |
@@ -532,79 +553,79 @@ and the three most frequent gaps (Play setups listed as `play`).
 | MIDI: Keys to Glow | Inputs | Partial | 14 | 100% | 38 | param-name, output-socket |
 | Group: Domain Warp (Carry) | Iterated Groups | Near | 6 | 100% | 17 | socket-default, group-ports |
 | Group: FBM Octaves (Carry) | Iterated Groups | Partial | 10 | 100% | 29 | param-code ×3, param-name, socket-default |
-| Group: Fractal Rings (Carry) | Iterated Groups | Partial | 16 | 94% | 43 | param-code ×3, container-socket ×2, socket-default |
+| Group: Fractal Rings (Carry) | Iterated Groups | Partial | 16 | 100% | 44 | param-code ×3, container-socket ×2, socket-default |
 | Publish a Node + Keyframes | Iterated Groups | Partial | 9 | 100% | 22 | param-keyframes, group-loop-index |
 | 01 · Hello colour | Learn | Full | 2 | 100% | 2 | play |
+| 02 · Uniforms: time | Learn | Full | 5 | 100% | 11 | play |
 | 18 · Combining shapes | Learn | Full | 9 | 100% | 21 | play |
+| 20 · Rotate with a matrix | Learn | Full | 9 | 100% | 20 | play |
+| 21 · Scale with a matrix | Learn | Full | 10 | 100% | 24 | play |
 | 22 · Move, turn, scale in one node | Learn | Full | 7 | 100% | 15 | play |
 | 24 · Tiling | Learn | Full | 5 | 100% | 9 | play |
+| 25 · Transforms inside the tiles | Learn | Full | 10 | 100% | 24 | play |
+| 32 · 2D noise | Learn | Full | 5 | 100% | 9 | play |
 | 37 · Fractal noise (FBM) in 2D | Learn | Full | 5 | 100% | 9 | play |
 | 39 · Domain warp | Learn | Full | 6 | 100% | 13 | play |
-| 02 · Uniforms: time | Learn | Partial | 5 | 80% | 9 | wire-missing-node ×2, runner-crash, play |
 | 03 · Where am I? st | Learn | Partial | 6 | 100% | 14 | param-name, wire-type, output-socket |
-| 04 · Plot a function | Learn | Partial | 10 | 100% | 27 | runner-crash ×3, param-name, wire-type |
-| 05 · Pow and friends | Learn | Partial | 12 | 100% | 36 | runner-crash ×4, dialect-clash ×2, param-name |
-| 06 · Step and smoothstep | Learn | Partial | 12 | 92% | 34 | runner-crash ×4, wire-missing-node ×2, dialect-clash ×2 |
-| 07 · Sin and cos | Learn | Partial | 19 | 100% | 55 | runner-crash ×4, param-name ×3, dialect-clash ×2 |
-| 08 · Fract and floor | Learn | Partial | 15 | 93% | 41 | runner-crash ×4, param-name ×2, wire-missing-node ×2 |
-| 09 · Shaping functions by hand | Learn | Partial | 13 | 100% | 43 | runner-crash ×4, param-code ×3, param-name ×2 |
-| 10 · Mix and gradients | Learn | Partial | 20 | 85% | 52 | wire-missing-node ×12, runner-crash ×7, dialect-clash ×3 |
+| 04 · Plot a function | Learn | Partial | 10 | 100% | 26 | param-name, wire-type, output-socket |
+| 05 · Pow and friends | Learn | Partial | 12 | 100% | 35 | dialect-clash ×2, param-name, wire-type |
+| 06 · Step and smoothstep | Learn | Partial | 12 | 92% | 33 | wire-missing-node ×2, dialect-clash ×2, param-name |
+| 07 · Sin and cos | Learn | Partial | 19 | 100% | 54 | param-name ×3, dialect-clash ×2, wire-type |
+| 08 · Fract and floor | Learn | Partial | 15 | 93% | 40 | param-name ×2, wire-missing-node ×2, dialect-clash ×2 |
+| 09 · Shaping functions by hand | Learn | Partial | 13 | 100% | 42 | param-code ×3, param-name ×2, container-socket ×2 |
+| 10 · Mix and gradients | Learn | Partial | 20 | 100% | 63 | dialect-clash ×3, param-name, wire-type |
 | 11 · HSB colour | Learn | Partial | 8 | 100% | 20 | param-name, wire-type, output-socket |
-| 12 · Polar colour wheel | Learn | Partial | 10 | 100% | 25 | runner-crash, dialect-clash, play |
-| 13 · Rectangle from step | Learn | Partial | 14 | 93% | 39 | param-name ×5, wire-missing-node ×3, runner-crash ×2 |
-| 14 · Circle from distance | Learn | Partial | 7 | 100% | 17 | runner-crash ×3, param-name, dialect-clash |
-| 15 · Distance fields | Learn | Partial | 8 | 100% | 20 | runner-crash ×3, dialect-clash, play |
-| 16 · Polar shapes | Learn | Partial | 11 | 100% | 29 | runner-crash ×3, dialect-clash, play |
-| 17 · Polygons: polar + distance | Learn | Partial | 10 | 100% | 32 | param-code ×4, runner-crash ×3, param-name ×2 |
-| 19 · Translate: move the space | Learn | Partial | 10 | 90% | 23 | wire-missing-node ×3, runner-crash ×2, param-name |
-| 20 · Rotate with a matrix | Learn | Partial | 9 | 100% | 21 | runner-crash ×2, play |
-| 21 · Scale with a matrix | Learn | Partial | 10 | 100% | 25 | runner-crash ×2, play |
+| 12 · Polar colour wheel | Learn | Partial | 10 | 100% | 25 | dialect-clash, play |
+| 13 · Rectangle from step | Learn | Partial | 14 | 93% | 38 | param-name ×5, wire-missing-node ×3, no-create-word |
+| 14 · Circle from distance | Learn | Partial | 7 | 100% | 16 | param-name, dialect-clash, play |
+| 15 · Distance fields | Learn | Partial | 8 | 100% | 19 | dialect-clash, play |
+| 16 · Polar shapes | Learn | Partial | 11 | 100% | 28 | dialect-clash, play |
+| 17 · Polygons: polar + distance | Learn | Partial | 10 | 100% | 31 | param-code ×4, param-name ×2, container-socket ×2 |
+| 19 · Translate: move the space | Learn | Partial | 10 | 90% | 22 | wire-missing-node ×3, param-name, no-create-word |
 | 23 · YUV: a matrix on colour | Learn | Partial | 7 | 100% | 19 | param-name, wire-type, play |
-| 25 · Transforms inside the tiles | Learn | Partial | 10 | 100% | 25 | runner-crash ×2, play |
-| 26 · Offset patterns: bricks | Learn | Partial | 14 | 93% | 35 | wire-missing-node ×2, runner-crash ×2, no-create-word |
-| 27 · Truchet tiles | Learn | Partial | 14 | 93% | 35 | wire-missing-node ×3, param-name, no-create-word |
-| 28 · Random from a sine | Learn | Partial | 10 | 100% | 28 | runner-crash ×3, param-name, wire-type |
-| 29 · Random cells | Learn | Partial | 6 | 83% | 15 | wire-missing-node ×2, runner-crash ×2, param-name |
-| 30 · A random maze (10 PRINT) | Learn | Partial | 14 | 86% | 31 | wire-missing-node ×5, param-name ×2, no-create-word ×2 |
-| 31 · Smooth random: 1D noise | Learn | Partial | 21 | 86% | 52 | wire-missing-node ×10, runner-crash ×5, dialect-clash ×2 |
-| 32 · 2D noise | Learn | Partial | 5 | 100% | 10 | runner-crash ×2, play |
-| 33 · Noise at work: wood grain | Learn | Partial | 11 | 100% | 33 | runner-crash ×2, param-name, wire-type |
-| 34 · Distance to the nearest point | Learn | Partial | 17 | 94% | 47 | runner-crash ×3, wire-missing-node ×2, dialect-clash ×2 |
-| 35 · Cellular noise | Learn | Partial | 6 | 100% | 14 | runner-crash, dialect-clash, play |
-| 36 · Octaves: fractal noise | Learn | Partial | 11 | 100% | 31 | runner-crash ×3, param-name, wire-type |
-| 38 · Turbulence and ridges | Learn | Partial | 16 | 100% | 52 | runner-crash ×2, param-name, wire-type |
+| 26 · Offset patterns: bricks | Learn | Partial | 14 | 93% | 34 | wire-missing-node ×2, no-create-word, param-name |
+| 27 · Truchet tiles | Learn | Partial | 14 | 93% | 34 | wire-missing-node ×3, param-name, no-create-word |
+| 28 · Random from a sine | Learn | Partial | 10 | 100% | 27 | param-name, wire-type, output-socket |
+| 29 · Random cells | Learn | Partial | 6 | 83% | 14 | wire-missing-node ×2, param-name, no-create-word |
+| 30 · A random maze (10 PRINT) | Learn | Partial | 14 | 86% | 30 | wire-missing-node ×5, param-name ×2, no-create-word ×2 |
+| 31 · Smooth random: 1D noise | Learn | Partial | 21 | 95% | 59 | wire-missing-node ×3, dialect-clash ×2, param-name |
+| 33 · Noise at work: wood grain | Learn | Partial | 11 | 100% | 32 | param-name, wire-type, output-socket |
+| 34 · Distance to the nearest point | Learn | Partial | 17 | 94% | 46 | wire-missing-node ×2, dialect-clash ×2, no-create-word |
+| 35 · Cellular noise | Learn | Partial | 6 | 100% | 14 | dialect-clash, play |
+| 36 · Octaves: fractal noise | Learn | Partial | 11 | 100% | 30 | param-name, wire-type, output-socket |
+| 38 · Turbulence and ridges | Learn | Partial | 16 | 100% | 51 | param-name, wire-type, play |
 | 40 · Fractals: the Mandelbrot set | Learn | Partial | 6 | 100% | 16 | param-name ×2, wire-type, play |
 | 41 · A fractal by hand: Loop Carry | Learn | Partial | 11 | 100% | 27 | wire-failed, group-loop-index, play |
 | 42 · Extra: first ray march | Learn | Partial | 10 | 60% | 19 | container-contents ×2, play |
 | 3D 1 · The camera: one ray per pixel | Learn 3D | Full | 4 | 100% | 7 | play |
 | 3D 2 · A sphere is a distance | Learn 3D | Partial | 6 | 100% | 14 | param-code ×2, container-socket, play |
 | 3D 3 · The march: counting steps | Learn 3D | Partial | 10 | 50% | 15 | container-contents ×2, play |
-| 3D 4 · Hit, normal and light | Learn 3D | Partial | 12 | 50% | 20 | container-contents ×2, wire-missing-node ×2, runner-crash |
+| 3D 4 · Hit, normal and light | Learn 3D | Partial | 12 | 58% | 21 | container-contents ×2, play |
 | 3D 5 · Combining shapes | Learn 3D | Partial | 14 | 36% | 16 | container-contents ×2, param-name, container-socket |
 | 3D 6 · Moving the camera | Learn 3D | Partial | 13 | 46% | 17 | container-contents ×2, play |
-| 3D 7 · Glow: through the shape | Learn 3D | Partial | 20 | 50% | 28 | container-contents ×3, wire-missing-node ×2, runner-crash |
+| 3D 7 · Glow: through the shape | Learn 3D | Partial | 20 | 55% | 31 | container-contents ×3, output-socket, play |
 | 3D 8 · GI lighting vs the plain loop | Learn 3D | Partial | 19 | 53% | 29 | container-contents ×3, play |
-| 3D 9 · Glow from the Volumetric switch | Learn 3D | Partial | 12 | 33% | 15 | container-contents ×2, wire-missing-node ×2, param-structured |
+| 3D 9 · Glow from the Volumetric switch | Learn 3D | Partial | 12 | 42% | 17 | container-contents ×2, param-structured, output-socket |
 | Matrix 2 · Combine and undo: place a shape | Matrices | Full | 17 | 100% | 41 | play |
 | Matrix 3 · Lattices: hexagons, bricks, triangles | Matrices | Full | 8 | 100% | 19 | play |
 | Matrix 4 · A grid with any basis | Matrices | Full | 14 | 100% | 33 | play |
+| Matrix 8 · Colour matrices | Matrices | Full | 9 | 100% | 20 | play |
 | Matrix 1 · What a matrix does to space | Matrices | Partial | 5 | 100% | 11 | param-name, wire-type, play |
-| Matrix 5 · Fold, rotate, scale: a fractal from one matrix | Matrices | Partial | 15 | 80% | 35 | wire-missing-node ×4, runner-crash ×4, no-create-word ×2 |
+| Matrix 5 · Fold, rotate, scale: a fractal from one matrix | Matrices | Partial | 15 | 80% | 34 | wire-missing-node ×4, no-create-word ×2, param-name |
 | Matrix 6 · Corner pin: a picture on a tilted card | Matrices | Partial | 6 | 83% | 11 | wire-missing-node ×4, no-create-word, play |
 | Matrix 7 · Rotated noise octaves | Matrices | Partial | 23 | 100% | 72 | param-name, wire-type, play |
-| Matrix 8 · Colour matrices | Matrices | Partial | 9 | 89% | 16 | wire-missing-node ×3, runner-crash, play |
+| Combo: Chaos Layers + Glow to Color | Node Combos | Full | 6 | 100% | 11 | — |
 | Combo: Grid Pattern + FBM per cell | Node Combos | Full | 8 | 100% | 19 | play |
 | Combo: Grid Pattern + SDF Glow | Node Combos | Full | 8 | 100% | 19 | play |
+| Combo: Grid Pattern + Shape by wire | Node Combos | Full | 8 | 100% | 19 | play |
 | Combo: Grid Pattern + Shapes + Grid Paint | Node Combos | Full | 10 | 100% | 30 | play |
-| Combo: Array of grouped moons | Node Combos | Partial | 9 | 89% | 26 | wire-missing-node ×2, runner-crash, param-inline-expr |
-| Combo: Array of stars | Node Combos | Partial | 6 | 83% | 16 | param-inline-expr ×2, wire-missing-node ×2, runner-crash |
-| Combo: Chaos Layers + Glow to Color | Node Combos | Partial | 6 | 83% | 8 | wire-missing-node ×4, runner-crash ×2 |
+| Combo: Turbulence + SDF + Glow | Node Combos | Full | 7 | 100% | 17 | — |
+| Combo: Array of grouped moons | Node Combos | Near | 9 | 100% | 30 | param-inline-expr ×2, group-ports, play |
+| Combo: Array of stars | Node Combos | Near | 6 | 100% | 20 | param-inline-expr ×3, play |
+| Combo: Grid Pattern + grouped flower | Node Combos | Near | 11 | 100% | 34 | param-inline-expr, group-ports, play |
 | Combo: Dome + Repeat + Height | Node Combos | Partial | 12 | 100% | 40 | param-code ×3, param-name ×2, container-socket ×2 |
-| Combo: Grid + SDF Fill + Bloom | Node Combos | Partial | 11 | 91% | 30 | wire-missing-node ×3, runner-crash ×2, param-name |
-| Combo: Grid Pattern + grouped flower | Node Combos | Partial | 11 | 91% | 30 | wire-missing-node ×2, param-inline-expr, runner-crash |
-| Combo: Grid Pattern + Shape by wire | Node Combos | Partial | 8 | 88% | 16 | wire-missing-node ×2, runner-crash, play |
+| Combo: Grid + SDF Fill + Bloom | Node Combos | Partial | 11 | 100% | 33 | param-name, wire-type, dialect-clash |
 | Combo: Repeat + Cell ID + Hash | Node Combos | Partial | 9 | 100% | 23 | dialect-clash |
-| Combo: Turbulence + SDF + Glow | Node Combos | Partial | 7 | 86% | 13 | wire-missing-node ×3, runner-crash |
 | Combo: Voxelize + Sphere 3D + Hash | Node Combos | Partial | 21 | 57% | 43 | param-name ×3, param-code ×3, container-contents ×2 |
 | Ink in Water | Particles | Full | 2 | 100% | 3 | — |
 | Particle Galaxy | Particles | Full | 6 | 100% | 12 | — |
@@ -621,15 +642,15 @@ and the three most frequent gaps (Play setups listed as `play`).
 | Particles: Sound Field | Particles | Partial | 4 | 100% | 12 | param-code ×3, container-socket |
 | Particles: Star Outline | Particles | Partial | 5 | 100% | 13 | param-code ×4, container-socket |
 | Passes 10 · Displacement Map: a picture pushed by noise | Passes | Full | 6 | 100% | 16 | play |
-| Passes 1 · Edge glow | Passes | Partial | 13 | 100% | 44 | param-code ×4, container-socket ×4, param-set-failed ×2 |
+| Passes 1 · Edge glow | Passes | Partial | 13 | 100% | 44 | param-code ×4, container-socket ×4, param-name |
 | Passes 2 · Particles born on edges | Passes | Partial | 10 | 100% | 42 | param-code ×8, container-socket ×4, play |
 | Passes 3 · Feedback trails | Passes | Partial | 10 | 100% | 51 | param-code ×16, container-socket ×7, param-name ×2 |
 | Passes 4 · Reaction-diffusion | Passes | Partial | 10 | 100% | 47 | param-code ×12, container-socket ×7, param-name ×2 |
-| Passes 5 · Glow only the bright parts | Passes | Partial | 12 | 100% | 55 | param-code ×12, container-socket ×7, param-set-failed ×3 |
+| Passes 5 · Glow only the bright parts | Passes | Partial | 12 | 100% | 55 | param-code ×12, container-socket ×7, param-name |
 | Passes 6 · Slime along edges | Passes | Partial | 21 | 67% | 69 | param-code ×18, container-socket ×8, param-name ×2 |
-| Passes 7 · Jump-flood distance field | Passes | Partial | 11 | 100% | 58 | param-code ×17, container-socket ×11, param-set-failed |
+| Passes 7 · Jump-flood distance field | Passes | Partial | 11 | 100% | 58 | param-code ×17, container-socket ×11, play |
 | Passes 8 · Edges straight from a picture | Passes | Partial | 7 | 100% | 29 | container-socket ×5, param-code ×4, param-name |
-| Passes 9 · A reusable blur group | Passes | Partial | 9 | 100% | 44 | param-code ×7, container-socket ×5, param-set-failed ×3 |
+| Passes 9 · A reusable blur group | Passes | Partial | 9 | 100% | 44 | param-code ×7, container-socket ×5, group-ports ×2 |
 | Chladni Field (Quick) | Physics | Full | 4 | 100% | 6 | — |
 | Chladni Mode Frequency | Physics | Full | 7 | 100% | 15 | — |
 | 01 · Controls from the graph | Play | Full | 5 | 100% | 8 | play |
@@ -752,7 +773,7 @@ and the three most frequent gaps (Play setups listed as `play`).
 | Grow toward a picture | Simulation | Partial | 19 | 63% | 61 | param-code ×18, container-socket ×8, param-name ×2 |
 | Multi-species slime | Simulation | Partial | 15 | 53% | 32 | param-code ×4, container-socket ×2, container-contents |
 | Mycelium | Simulation | Partial | 15 | 60% | 32 | param-code ×2, container-socket ×2, container-contents |
-| Particles from nodes | Simulation | Partial | 13 | 46% | 22 | param-code ×4, container-contents, param-set-failed |
+| Particles from nodes | Simulation | Partial | 13 | 46% | 22 | param-code ×4, container-contents, container-socket |
 | Sand on a plate | Simulation | Partial | 9 | 67% | 22 | param-code ×4, container-contents, container-socket |
 | Slime mold | Simulation | Partial | 12 | 50% | 18 | container-contents, container-socket |
 | Sound burst | Simulation | Partial | 11 | 36% | 10 | container-contents |
@@ -775,16 +796,16 @@ and the three most frequent gaps (Play setups listed as `play`).
 | Grid sims 6 · Heat diffusion (Grid Rules) | Simulations: grids | Full | 2 | 100% | 3 | play |
 | Grid sims 7 · Forest fire (Grid Rules) | Simulations: grids | Full | 2 | 100% | 3 | play |
 | Grid sims 8 · Falling sand (Grid Rules) | Simulations: grids | Full | 2 | 100% | 3 | play |
-| Grid sims 1 · Game of Life (under the hood) | Simulations: grids | Partial | 50 | 82% | 150 | wire-missing-node ×21, param-name ×8, container-socket ×8 |
-| Grid sims 2 · Life-like rules (under the hood) | Simulations: grids | Partial | 49 | 84% | 187 | container-socket ×28, param-name ×23, wire-missing-node ×19 |
-| Grid sims 3 · Brian's Brain (under the hood) | Simulations: grids | Partial | 55 | 85% | 158 | wire-missing-node ×23, runner-crash ×18, container-socket ×8 |
-| Grid sims 4 · Cave generator (under the hood) | Simulations: grids | Partial | 35 | 91% | 121 | container-socket ×9, wire-missing-node ×8, param-name ×3 |
+| Grid sims 1 · Game of Life (under the hood) | Simulations: grids | Partial | 50 | 88% | 155 | wire-missing-node ×15, param-name ×9, container-socket ×8 |
+| Grid sims 2 · Life-like rules (under the hood) | Simulations: grids | Partial | 49 | 90% | 193 | container-socket ×28, param-name ×24, wire-missing-node ×12 |
+| Grid sims 3 · Brian's Brain (under the hood) | Simulations: grids | Partial | 55 | 93% | 171 | wire-missing-node ×11, param-name ×8, container-socket ×8 |
+| Grid sims 4 · Cave generator (under the hood) | Simulations: grids | Partial | 35 | 94% | 124 | container-socket ×9, wire-missing-node ×5, param-name ×3 |
 | Grid sims 5 · Water ripples (under the hood) | Simulations: grids | Partial | 41 | 95% | 115 | wire-missing-node ×5, param-name ×3, no-create-word ×2 |
-| Grid sims 6 · Heat diffusion (under the hood) | Simulations: grids | Partial | 25 | 92% | 65 | wire-missing-node ×8, param-name ×4, runner-crash |
-| Grid sims 7 · Forest fire (under the hood) | Simulations: grids | Partial | 71 | 86% | 191 | wire-missing-node ×28, runner-crash ×11, no-create-word ×8 |
-| Grid sims 8 · Falling sand (under the hood) | Simulations: grids | Partial | 52 | 96% | 176 | runner-crash ×15, container-socket ×15, wire-missing-node ×7 |
+| Grid sims 6 · Heat diffusion (under the hood) | Simulations: grids | Partial | 25 | 96% | 69 | param-name ×4, wire-missing-node ×4, no-create-word |
+| Grid sims 7 · Forest fire (under the hood) | Simulations: grids | Partial | 71 | 89% | 198 | wire-missing-node ×22, param-name ×10, no-create-word ×8 |
+| Grid sims 8 · Falling sand (under the hood) | Simulations: grids | Partial | 52 | 98% | 180 | container-socket ×15, param-name ×8, param-code ×4 |
 | Grid sims 9 · Wireworld (Grid Rules) | Simulations: grids | Partial | 6 | 100% | 21 | param-code ×4, container-socket ×2, param-name |
-| Grid sims 9 · Wireworld (under the hood) | Simulations: grids | Partial | 62 | 81% | 177 | wire-missing-node ×36, runner-crash ×11, container-socket ×10 |
+| Grid sims 9 · Wireworld (under the hood) | Simulations: grids | Partial | 62 | 89% | 196 | wire-missing-node ×20, param-name ×11, container-socket ×10 |
 | Magic Texture | Space & Texture | Full | 4 | 100% | 4 | — |
 | Neon Floor Grid | Space & Texture | Full | 7 | 100% | 17 | — |
 | Space Atlas | Space & Texture | Full | 7 | 100% | 18 | — |
@@ -809,4 +830,4 @@ and the three most frequent gaps (Play setups listed as `play`).
 | [ New ] | Unfiled | Full | 4 | 100% | 5 | — |
 | 3D: Glow Marcher | Volumetric | Partial | 16 | 69% | 31 | container-contents ×2, param-name ×2, output-socket ×2 |
 | Volumetric: Animated Repeat | Volumetric | Partial | 27 | 44% | 37 | container-contents ×2, socket-default, output-socket |
-| Volumetric: Volume Glow | Volumetric | Partial | 13 | 46% | 18 | wire-missing-node ×3, container-contents ×2, runner-crash ×2 |
+| Volumetric: Volume Glow | Volumetric | Partial | 13 | 62% | 21 | container-contents ×2, output-socket |

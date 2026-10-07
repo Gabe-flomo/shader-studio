@@ -217,8 +217,11 @@ function colourFrom(nodes: GraphNode[], id: string): GraphNode | undefined {
       if (Object.values(nd.inputs).some(i => i.connection?.nodeId === cur)) { seen.add(nd.id); queue.push(nd.id); }
     }
   }
+  // Else the picture on the Output, but only when it is a colour: the Output can show a number, a
+  // mask or a distance (a Time, a Compare, a Mix of numbers), and a colour step can't go there.
   const shown = graphOutput(nodes)?.inputs.color?.connection?.nodeId;
-  return shown ? byId.get(shown) : undefined;
+  const picture = shown ? byId.get(shown) : undefined;
+  return picture && outputKinds(picture).some(o => o.kind === 'colour') ? picture : undefined;
 }
 
 /** Which move an action is, for a subject of this kind, and where it goes. */
@@ -408,7 +411,7 @@ export function parseDo(text: string, ctx: DoContext): DoPlan {
     let node: string = target, key = '', side: 'in' | 'out' = 'out';
     if (r.spaceTarget || g.target === 'space') {
       const subjectKind = isNewShape ? 'distance' : kindOf(subjectNode);
-      if (subjectKind === 'space') key = outputKinds(subjectNode!)[0].key;
+      if (subjectKind === 'space' && subjectNode) key = outputKinds(subjectNode)[0].key;
       else if (isNewShape) { key = (subjectShape?.node2d?.type === 'shapeSDF' || subjectShape?.node2d?.type === 'simpleSDF') ? 'p' : 'position'; side = 'in'; }
       else {
         // The space of what made it: a step after a glow or rings bends the shape's space (the nearest
@@ -432,9 +435,10 @@ export function parseDo(text: string, ctx: DoContext): DoPlan {
       }
       if (isNewShape) { plan.problem = `Make it a picture first ("${subjectShape?.words[0] ?? 'shape'} with a glow"), then ${g.head.text}.`; continue; }
       const c = subjectNode && outputKinds(subjectNode).some(o => o.kind === 'colour') ? subjectNode : subjectNode ? colourFrom(ctx.nodes, subjectNode.id) : undefined;
-      if (!c) { plan.problem = 'There is no colour to do that to yet.'; continue; }
+      const colourOut = c ? outputKinds(c).find(o => o.kind === 'colour') : undefined;
+      if (!c || !colourOut) { plan.problem = 'There is no colour to do that to yet.'; continue; }
       node = c.id;
-      key = outputKinds(c).find(o => o.kind === 'colour')!.key;
+      key = colourOut.key;
     } else if (isNewShape) {
       key = 'distance';
     } else {
@@ -455,7 +459,8 @@ export function parseDo(text: string, ctx: DoContext): DoPlan {
         continue;
       }
     }
-    const where = node === target ? '' : ` on ${labelOf(byId.get(node)!)}`;
+    const whereNode = node === target ? undefined : byId.get(node);
+    const where = whereNode ? ` on ${labelOf(whereNode)}` : '';
     const detail = describeArgs(move, args);
     steps.push({ kind: 'move', moveId: move.id, node, key, side, args, label: `${move.label}${where}${pair ? ` with ${labelOf(pair)}` : ''}${detail ? ` · ${detail}` : ''}` });
     // A move's result becomes the subject for what follows ("… with a glow, then tone map it").
