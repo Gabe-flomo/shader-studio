@@ -20,10 +20,14 @@ A rules group's card shows **Edit rules ↗** and **Open as nodes** instead of O
 
 ## The editor
 
-A big window in the Expression Block editor's style:
+A big window in the Expression Block editor's style, in four tabs (**Species · Rules · Trails ·
+Look**), one section at a time, each with its one-line "How this works" at the top. It opens on
+Rules the first time, then on the tab last used. Rarely used settings are folded with a summary.
 
-- **Left: species and states.** Up to 4 species (each its own tab; each lays its own trail channel by default, and the group's Species follows), each with a **Speed** (picture units a second: every walker starts at it) and up to 8 **states** with a name and a colour. Below: names for the four **trail channels** (so the sentences read "food trail"), up to two **masks** (inputs on the group card: a texture, or any number chain read where the walker stands), **Edges** (wrap, bounce, slide) and the **Sensors** (how far ahead, how wide) every trail reading uses.
-- **Middle: the rules** of the selected species, top to bottom. Each rule is a card: its sentence, **When** (conditions joined by *and*), **Do** (actions, in order), **Stop after this rule**, On/off, move up/down, duplicate, remove. **+ and…** adds a condition, **+ do…** an action.
+- **Species**: up to 4 species (each lays its own trail channel by default, and the group's Species follows), each with a **Speed** (picture units a second: every walker starts at it) and up to 8 **states** with a name and a colour; **Edges** (wrap, bounce, slide) for every species.
+- **Rules**: the rules of the selected species (pick another above them), top to bottom. Each rule is a card: its sentence, **When** (conditions joined by *and*), **Do** (actions, in order), **Stop after this rule**, On/off, move up/down, duplicate, remove. **+ and…** adds a condition, **+ do…** an action. **Masks** (folded): up to two inputs on the group card, a texture or any number chain read where the walker stands.
+- **Trails**: names for the four **trail channels** (so the sentences read "food trail"); folded, the **Sensors** (how far ahead, how wide) every trail reading uses, and the **Flow field** when a rule follows one.
+- **Look**: what the picture shows (below).
 - **Templates…** (top right) replaces the rule set with a template's.
 - **Show the lines** shows, under each rule, the Expression Block lines it compiles to.
 - **Open as nodes** (bottom left) closes the editor and enters the group.
@@ -50,8 +54,8 @@ A new builder adds its block to `BUILDER_HELP` and gets all of this by using `Bu
 (`<BuilderHelp id>`, `<EmptyHelp id>`, `<HintMark text>`, `<HintLabel hint>`). A test checks
 that every registered section has help.
 
-The editor uses the builders' window (`BuilderWindow`): species on a left panel that folds away
-(⌘[), Tips in the header. The rules list opens with:
+The editor uses the builders' window (`BuilderWindow`): its tabs (the same tab row as the other
+builders; on a phone, the same row full screen), Tips in the header. The rules list opens with:
 
 > **When** is the condition checked every step for each walker, e.g. *Food trail ahead > 0.3*.
 > **Do** is what it does if the condition is true, e.g. *turn toward it*.
@@ -63,7 +67,7 @@ shows its plain-language hint and an example. Every condition and action in a ru
 
 ### What the picture shows
 
-**What the picture shows** (left panel) rewires whatever reads the group's Trail field (usually
+**What the picture shows** (the Look tab) rewires whatever reads the group's Trail field (usually
 its Palette): *Trail* (Amount, the usual), *Channel 1–4* (one trail channel alone: food only,
 home only) or *Walker density* (Draw agents' Density, when the group has a Draw agents). The
 Trail field has a **Channel 1–4** output each (scaled by Gain like Amount); they cost nothing

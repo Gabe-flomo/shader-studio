@@ -90,4 +90,10 @@ export function Card({ id, title, summary, accent, actions, defaultOpen = false,
   );
 }
 
+/** A touch screen with no mouse: HTML drag and drop isn't available there, so the tree and the chips use buttons. */
+export const NO_DRAG = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none) and (pointer: coarse)').matches;
+
+/** A combine's sign: ∪ union, − subtract, ∩ intersect. */
+export const OP_GLYPH: Record<string, string> = { union: '∪', subtract: '−', intersect: '∩' };
+
 export const rgbCss = (c: Vec3) => `rgb(${c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255)).join(',')})`;

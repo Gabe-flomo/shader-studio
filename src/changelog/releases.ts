@@ -39,6 +39,25 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.62',
+    date: '2026-10-07',
+    title: 'Builder tabs',
+    highlights: [
+      { area: 'Studio', text: 'Builders use tabs: Grid Rules (Presets · Neighbourhood · Born & Survive · Start · Brush · Colours) and Agent Rules (Species · Rules · Trails · Look).' },
+      { area: 'Studio', text: 'Born & Survive explains itself: 3×3 pictures for each count (born, stays, lonely, crowded), a live sentence, and a mini-board with Glider and Blinker.', link: { kind: 'doc', path: 'docs/grid-rules.md' } },
+    ],
+  },
+  {
+    id: '2026.10.61',
+    date: '2026-10-07',
+    title: 'A visual Scene Builder',
+    highlights: [
+      { area: 'Studio', text: 'Scene Builder: a shape gallery with real thumbnails; click or drag shapes in, then edit them in an inspector.', link: { kind: 'doc', path: 'docs/scene-builder.md' } },
+      { area: 'Studio', text: 'Combines nest any way you like: smooth-union two shapes, intersect that with a third, subtract a fourth. Wrap in… groups a selection.' },
+      { area: 'Studio', text: 'Any shape or group can carry modifiers (move, rotate, scale, twist, round, onion…) as chips; @move(1,0.5,0) now works in recipes.' },
+    ],
+  },
+  {
     id: '2026.10.60',
     date: '2026-10-06',
     title: 'Structure hints',

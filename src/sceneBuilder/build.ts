@@ -20,7 +20,7 @@ import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
 import { estimateNodeHeight, layoutByRank } from '../store/graphLayout';
 import {
-  SHAPE_BY_KIND, WARP_BY_KIND, allShapes, effectiveStepScale, filterTree, itemName, opLabel, stepHints,
+  SHAPE_BY_KIND, WARP_BY_KIND, allShapes, effectiveStepScale, filterTree, itemName, num, opLabel, stepHints,
   type GroupSpec, type SceneItem, type SceneSpec, type ShapeSpec, type Vec3, type WarpSpec,
 } from './spec';
 import { fmt } from './recipe';
@@ -115,6 +115,7 @@ export function warpParams(w: WarpSpec): Record<string, unknown> {
   const def = WARP_BY_KIND[w.kind];
   const out: Record<string, unknown> = {};
   for (const p of def.params) {
+    if (!p.param) continue;
     const v = w.values[p.key];
     if (Array.isArray(p.param)) {
       const arr = Array.isArray(v) ? v : [Number(v ?? 0), Number(v ?? 0), Number(v ?? 0)];
@@ -131,38 +132,74 @@ export function warpParams(w: WarpSpec): Record<string, unknown> {
     out[def.select.param] = v;
   }
   if (w.kind === 'kaleido') out.iterations = String(Math.round(Number(w.values.n ?? 3)));
+  // Scale 3D multiplies the point: growing by s is a point shrunk by 1/s (and the distance grown by s).
+  if (w.kind === 'scale') out.scale = scaleParam(w);
+  // Offset adds to the distance: rounding by r is an offset of -r.
+  if (w.kind === 'round') out.amount = -num(w.values.r, 0.05);
   return out;
 }
+
+export const scaleParam = (w: WarpSpec) => Math.round(1e6 / Math.max(0.001, num(w.values.s, 1.5))) / 1e6;
 
 function warpNote(ctx: Ctx, w: WarpSpec, on: string): string {
   const def = WARP_BY_KIND[w.kind];
   const hint = def.stepHint(w);
   const vals = def.params.map(p => {
     const v = w.values[p.key];
-    return `${p.label} ${Array.isArray(v) ? v3(v as Vec3) : fmt(Number(v))}${p.deg ? '°' : ''}`;
+    return `${p.label} ${Array.isArray(v) ? v3(v as Vec3) : fmt(Number(v))}${p.deg || w.kind === 'rotate' ? '°' : ''}`;
   });
   if (def.axes) vals.unshift(`${def.axes.label} ${w.values[def.axes.key]}`);
   const step = hint < 1 ? ` It stretches space, so the march takes smaller steps (it asks for Step Scale ${fmt(hint)}; the loop uses ${fmt(effectiveStepScale(ctx.spec))}).` : '';
-  return `${def.label} on ${on}: ${def.blurb}${vals.length ? ` ${vals.join(', ')}.` : ''}${step}`;
+  const how = w.kind === 'scale' ? ` Scale 3D multiplies the point by ${fmt(scaleParam(w))} (1 ÷ ${fmt(num(w.values.s, 1.5))}), which grows what it measures; a second Scale 3D after the distance multiplies it back so the march stays exact.`
+    : w.kind === 'round' ? ` An Offset of ${fmt(-num(w.values.r, 0.05))} on the distance: the surface moves out and its edges round off.`
+    : w.kind === 'onion' ? ' abs(distance) − thickness: only a skin is left.'
+    : '';
+  return `${def.label} on ${on}: ${def.blurb}${vals.length ? ` ${vals.join(', ')}.` : ''}${how}${step}`;
 }
 
-/** Warps in order from `pos`; distance modifiers are kept for after the distance exists. */
-function emitWarps(ctx: Ctx, warps: WarpSpec[], pos: Ref, on: string, list: GraphNode[]): { pos: Ref; modifiers: Array<{ w: WarpSpec; pos: Ref }> } {
-  const modifiers: Array<{ w: WarpSpec; pos: Ref }> = [];
+/** What happens to an item's distance once it exists (a modifier, or Scale's correction), with the point it reads. */
+type DistStep = { w: WarpSpec; pos: Ref };
+
+/**
+ * An item's stack from `pos`, in order: warps, moves and turns bend the point; modifiers (and
+ * Scale's correction) are kept for after the distance exists (emitModifiers).
+ */
+function emitWarps(ctx: Ctx, warps: WarpSpec[], pos: Ref, on: string, list: GraphNode[]): { pos: Ref; modifiers: DistStep[] } {
+  const modifiers: DistStep[] = [];
   for (const w of warps) {
     const def = WARP_BY_KIND[w.kind];
     if (!def) { ctx.warnings.push(`${on}: “${w.label ?? w.kind}” can't be built (it was a custom part); left out.`); continue; }
     if (def.modifier) { modifiers.push({ w, pos }); continue; }
+    if (w.kind === 'rotate') {
+      // Like a shape's Rotation: X, then Y, then Z, so the point turns the other way, Z first.
+      const by = (Array.isArray(w.values.by) ? w.values.by : [0, 0, 0]) as Vec3;
+      const nonzero = ([[2, 'z'], [1, 'y'], [0, 'x']] as const).filter(([i]) => by[i]);
+      const axes = nonzero.length ? nonzero : [[1, 'y'] as const];
+      axes.forEach(([i, axis], k) => {
+        const n = mk(ctx, 'rotate3D', `${w.id}:${axis}`, { axis, angle: -rad(by[i]) }, { pos },
+          `${k === 0 ? warpNote(ctx, w, on) : `Rotate on ${on}, continued.`} This node turns about ${axis.toUpperCase()} by ${fmt(by[i])}° (the point the other way, ${fmt(-rad(by[i]))} radians).`, list);
+        pos = ref(n, 'pos');
+      });
+      continue;
+    }
     const n = mk(ctx, def.type, `${w.id}`, warpParams(w), { [def.posIn]: pos }, warpNote(ctx, w, on), list);
     pos = ref(n, def.posOut);
+    if (def.distStep) modifiers.push({ w, pos });
   }
   return { pos, modifiers };
 }
 
-function emitModifiers(ctx: Ctx, mods: Array<{ w: WarpSpec; pos: Ref }>, dist: Ref, on: string, list: GraphNode[]): Ref {
-  for (const { w, pos } of mods) {
-    const n = mk(ctx, 'displace3D', w.id, warpParams(w), { pos, dist }, warpNote(ctx, w, on), list);
-    dist = ref(n, 'dist');
+/** The distance steps, innermost (the last in the stack) first: a stack reads outside in, like the recipe. */
+function emitModifiers(ctx: Ctx, mods: DistStep[], dist: Ref, on: string, list: GraphNode[]): Ref {
+  for (const { w, pos } of [...mods].reverse()) {
+    const def = WARP_BY_KIND[w.kind];
+    const step = def.distStep!;
+    const role = def.modifier ? w.id : `${w.id}:dist`;
+    const params = w.kind === 'scale' ? { scale: scaleParam(w) } : warpParams(w);
+    const note = def.modifier ? warpNote(ctx, w, on)
+      : `Scale on ${on}, the distance half: multiplies the distance by ${fmt(num(w.values.s, 1.5))} (dividing by its Scale ${fmt(scaleParam(w))}), so it is in the scene's units again. Keep its Scale equal to the first Scale 3D's.`;
+    const n = mk(ctx, step.type, role, params, { [step.distIn]: dist, ...(step.posIn ? { [step.posIn]: pos } : {}) }, note, list);
+    dist = ref(n, step.distOut);
   }
   return dist;
 }
