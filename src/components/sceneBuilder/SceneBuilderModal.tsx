@@ -18,12 +18,13 @@ import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { useTokens } from '../../theme/themeStore';
-import { fontFamily, radius } from '../../theme/tokens';
+import { fontFamily } from '../../theme/tokens';
 import { SceneTree } from './SceneTree';
 import { ScenePreview } from './ScenePreview';
 import { CameraTab, CombineTab, DescribeTab, LookTab, OutputTab, QualityTab, RecipeTab, ShapesTab, TemplatesTab, WarpsTab } from './tabs';
 
-const TABS: Array<{ id: BuilderTab; label: string; icon: IconName }> = [
+/** The sections, as the builders' shared tab row (BuilderWindow `tabs`, components/builders/BuilderTabBar.tsx). */
+const TABS: Array<{ id: BuilderTab; label: string; icon: IconName; gapBefore?: boolean }> = [
   { id: 'shapes', label: 'Shapes', icon: 'cube' },
   { id: 'combine', label: 'Combine', icon: 'layers' },
   { id: 'warps', label: 'Bend space', icon: 'wave' },
@@ -31,38 +32,12 @@ const TABS: Array<{ id: BuilderTab; label: string; icon: IconName }> = [
   { id: 'camera', label: 'Camera', icon: 'camera' },
   { id: 'quality', label: 'Quality', icon: 'sliders' },
   { id: 'output', label: 'Output', icon: 'eye' },
-  { id: 'recipe', label: 'Recipe', icon: 'text' },
+  { id: 'recipe', label: 'Recipe', icon: 'text', gapBefore: true },
   { id: 'templates', label: 'Templates', icon: 'presets' },
   { id: 'describe', label: 'Describe', icon: 'search' },
 ];
 
 const MODE_LABEL = { surface: 'Surface', volumetric: 'Volumetric glow', glass: 'Glass', gi: 'GI lit' } as const;
-
-function TabBar() {
-  const tab = useSceneBuilder(s => s.tab);
-  const setTab = useSceneBuilder(s => s.setTab);
-  const tk = useTokens();
-  return (
-    <div role="tablist" aria-label="Scene Builder sections" style={{
-      position: 'sticky', top: 0, zIndex: 2, display: 'flex', gap: 2, padding: '8px 14px', flexWrap: 'wrap',
-      background: tk.bg.panel, borderBottom: `1px solid ${tk.border.subtle}`,
-    }}>
-      {TABS.map(t => {
-        const on = t.id === tab;
-        return (
-          <button key={t.id} role="tab" aria-selected={on} type="button" data-sb-tab={t.id} onClick={() => setTab(t.id)}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, height: 30, padding: '0 10px', border: 0, borderRadius: radius.md, cursor: 'pointer',
-              background: on ? tk.bg.selected : 'none', color: on ? tk.accent.text : tk.text.secondary, font: `${on ? 650 : 500} 12.5px ${fontFamily.ui}`,
-              ...(t.id === 'recipe' ? { marginLeft: 10 } : {}),
-            }}>
-            <Icon name={t.icon} size={14} />{t.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 function PreviewPanel() {
   const spec = useSceneBuilder(s => s.spec);
@@ -108,6 +83,7 @@ function PreviewPanel() {
 export function SceneBuilderModal() {
   const tk = useTokens();
   const tab = useSceneBuilder(s => s.tab);
+  const setTab = useSceneBuilder(s => s.setTab);
   const spec = useSceneBuilder(s => s.spec);
   const close = useSceneBuilder(s => s.close);
   const undo = useSceneBuilder(s => s.undo);
@@ -147,6 +123,7 @@ export function SceneBuilderModal() {
       icon="cube"
       iconColor={tk.kind.fn}
       onClose={close}
+      tabs={{ items: TABS, value: tab, onChange: id => setTab(id as BuilderTab), ariaLabel: 'Scene Builder sections' }}
       left={{ label: 'Scene', icon: 'layers', width: 290, content: <SceneTree />, rail: expand => (
         <button type="button" onClick={expand} title="Show the scene tree" aria-label="Show the scene tree"
           style={{ width: 44, flexShrink: 0, border: 0, borderRight: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 14, color: tk.text.faint }}>
@@ -169,7 +146,6 @@ export function SceneBuilderModal() {
         <Button variant="primary" icon="rebuild" disabled={!shapes} onClick={() => void buildFromBuilder(false)}>{editing ? 'Rebuild' : 'Build'}</Button>
       </>}
     >
-      <TabBar />
       {body}
     </BuilderWindow>
   );

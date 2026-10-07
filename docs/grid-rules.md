@@ -33,10 +33,30 @@ Add **Grid Rules** (Simulation), wire **Color** into the Output. The card shows 
 Hold the mouse button over the picture to paint cells: in the Studio preview, on the Play page and
 on exported pages.
 
-The editor window has the rule types down the left, the chosen type's form in the middle, and on
-the right a live preview (the rule run on the CPU on a 96 × 64 board) above the shared settings:
-**Start and run**, **Brush** and **Colours**, folded with a summary until opened (each remembered
-for the session).
+The editor window is tabs, one section at a time, each with its one-line "How this works" at the
+top: **Presets** (the rule type and its presets) · **Neighbourhood** (Count and Stages: Moore,
+von Neumann or a radius, each pictured as the cells it counts) · the rule's own tab (**Born &
+Survive**, **Stages**, **Stencils**, **Blocks** or **Smooth**) · **Start** · **Brush** ·
+**Colours** (what Color shows, and the colours). On the right, a live preview (the rule run on the
+CPU on a 96 × 64 board). Rarely used settings (seed and speed, the brush's fill, afterglow and
+ageing, the rule as B/S text) are folded with a summary. The editor opens on Presets the first
+time, then on the tab last used. On a phone the same tabs fill the screen, with Preview as one
+more tab.
+
+**Born & Survive** explains itself:
+
+- every switch is a tiny 3×3 picture: that many live neighbours round the middle cell, which is
+  empty on the Born row and live on the Survive row. Hovering one says what it does: "empty + 3
+  neighbours → comes alive", "live + 4 → dies (too crowded)", "live + 1 → dies of loneliness" (a
+  count below every Survive count is loneliness, above them crowding).
+- one sentence above them sums the rule up and follows the switches: "Cells are born with exactly
+  3 neighbours and survive with 2 or 3; fewer and they die of loneliness, more and they die of
+  crowding."
+- a **mini-board** beside them (the same CPU run, 32 × 32) starts from a test pattern (**Glider**,
+  **Blinker**, **R-pentomino**, **Random blob**), to see what the rule does to it; pause and step it.
+
+Stages adds its **dying stages** pictured as cells fading from on to empty, in the rule's colours
+(`gridRules/explain.ts` has the words and pictures).
 
 From the **Do… bar** (⌘K), type a preset's name: "game of life", "highlife", "seeds", "day and
 night", "brian's brain", "caves", "heat", "water ripples", "reaction diffusion", "falling sand",
@@ -160,7 +180,7 @@ starter circuit that way.
 | Neighbours | How many of the 8 (von Neumann 4) cells round this one are on; Smooth: their average u. Its texture reads are only made where something reads it |
 | Cells | The raw board texture (red state, green age, alpha signature) |
 
-**Show** (the editor's Show section, the `view` setting): what Color shows. *Colours* (the default:
+**Show** (the editor's Colours tab, the `view` setting): what Color shows. *Colours* (the default:
 the same shader as before), or *State*, *Age* or *Neighbours* as grey, to see why a rule behaves
 as it does. Changing it recompiles.
 

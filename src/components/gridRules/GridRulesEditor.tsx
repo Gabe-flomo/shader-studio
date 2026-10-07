@@ -1,9 +1,13 @@
 /**
- * The Grid Rules editor (docs/grid-rules.md): a window with the rule types down the left, the
- * chosen type's own form in the middle (Count: born / survive switches; Stages: the same and the
- * number of states; Smooth: a template's sliders or your own update), and on the right a live
- * CPU preview with the shared settings (Start and run, Brush, Colours), folded with summaries
- * until opened.
+ * The Grid Rules editor (docs/grid-rules.md): a window of tabs, one section at a time, each with
+ * its one-line "How this works" (components/builders/builderLayout.ts gridRulesTabs):
+ *
+ *   Presets · Neighbourhood · Born & Survive (Stages / Stencils / Blocks / Smooth) · Start · Brush · Colours
+ *
+ * and on the right a live CPU preview. Born & Survive explains itself: each count switch is a 3×3
+ * picture of a cell with that many live neighbours, the rule reads back as one sentence, and a
+ * mini-board runs it on a Glider, a Blinker, an R-pentomino or a random blob (BornSurvive.tsx,
+ * gridRules/explain.ts). Rarely used settings are folded with summaries. The tab is remembered.
  *
  * Everything writes the node's params (one undoable edit per change). The switches, sliders and
  * colours are live uniforms on the picture (no recompile); a select (type, neighbourhood,
@@ -12,8 +16,9 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
-import { alpha, fontFamily, radius } from '../../theme/tokens';
-import { BuilderHelp, BuilderNote, BuilderWindow, HintLabel } from '../builders/BuilderWindow';
+import { fontFamily, radius } from '../../theme/tokens';
+import { BuilderFold, BuilderHelp, BuilderNote, BuilderWindow, HintLabel, useRememberedTab } from '../builders/BuilderWindow';
+import { gridRulesTabs } from '../builders/builderLayout';
 import type { HelpExample } from '../builders/helpContent';
 import { AssistList, useTypeAhead } from '../builders/TypeAhead';
 import { wordAssist, type Completion } from '../../lang/complete';
@@ -22,20 +27,21 @@ import { GRID_VIEWS, gridViewMode } from '../../gridRules/glsl';
 import { Button } from '../ui/Button';
 import { Segmented } from '../ui/Choice';
 import { Field } from '../ui/Field';
-import { Icon } from '../ui/Icon';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
 import { ColorSwatch } from '../ui/ColorPicker';
-import { useFoldState } from '../NodeGraph/foldState';
-import { RulePreview } from './RulePreview';
+import { MiniBoard, RulePreview } from './RulePreview';
+import { DyingStages, NeighbourhoodPictures, PictureSwitches, RuleSentence } from './BornSurvive';
 import { BlocksForm, PatternsForm } from './StencilForms';
 import { BLOCK_PRESETS, PATTERN_PRESETS } from '../../gridRules/stencils';
+import { rangeCounts } from '../../gridRules/explain';
 import {
   BOARD_SIZES, COUNT_PRESETS, GRID_DEFAULTS, MAX_RADIUS, MAX_STATES, MAX_STEPS, RULE_TYPES, SMOOTH_NAMES, SMOOTH_PRESETS, STAGES_PRESETS,
   LOOKS, SMOOTH_FUNCTIONS, countsOf, customUpdateProblem, gridShape, matchingPreset, maxCount, parseRuleString, presetPatch, ruleString, ruleSummary,
   type GridPreset, type GridRuleType,
 } from '../../gridRules/spec';
 import { gridAsNodesProblem } from '../../store/gridRulesAsNodes';
+import type { GraphNode } from '../../types/nodeGraph';
 
 /** The rule types this editor offers (Patterns and Blocks have their own forms). */
 const EDITOR_RULE_TYPES: GridRuleType[] = ['count', 'stages', 'patterns', 'blocks', 'smooth'];
@@ -47,32 +53,35 @@ const num = (p: P, k: string) => (typeof p[k] === 'number' ? p[k] as number : GR
 const rgb = (p: P, k: string) => (Array.isArray(p[k]) ? p[k] as number[] : GRID_DEFAULTS[k] as number[]) as [number, number, number];
 
 export function GridRulesEditor({ nodeId, onClose }: { nodeId: string; onClose: () => void }) {
-  const tk = useTokens();
   const node = useNodeGraphStore(s => s.nodes.find(nd => nd.id === nodeId));
+  const type = node ? gridShape({ ...GRID_DEFAULTS, ...node.params }).type : 'count';
+  const tabs = gridRulesTabs(type);
+  // The first time: Presets. A tab the rule type doesn't have (Neighbourhood on Smooth): the rule's own tab.
+  const [tab, setTab] = useRememberedTab('grid-rules', tabs, 'presets', 'rule');
+  if (!node) return null;
+  return <GridRulesWindow node={node} tab={tab} setTab={setTab} tabs={tabs} onClose={onClose} />;
+}
+
+function GridRulesWindow({ node, tab, setTab, tabs, onClose }: {
+  node: GraphNode; tab: string; setTab: (t: string) => void; tabs: ReturnType<typeof gridRulesTabs>; onClose: () => void;
+}) {
+  const tk = useTokens();
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const openAsNodes = useNodeGraphStore(s => s.openGridRulesAsNodes);
-  if (!node) return null;
   const params: P = { ...GRID_DEFAULTS, ...node.params };
   const shape = gridShape(params);
   const set: Setter = (patch, immediate = false) => updateNodeParams(node.id, patch, immediate ? { immediate: true } : undefined);
   const problem = gridAsNodesProblem(node);
   const label = typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Grid Rules';
-  const typeLabel = RULE_TYPES.find(t => t.value === shape.type)?.label ?? 'Rule';
+  const onExample = (ex: HelpExample) => { if ('patch' in ex.insert) set(ex.insert.patch, true); };
   return (
     <BuilderWindow
       prefsKey="grid-rules"
-      title="Grid Rules" subtitle={`${label} · ${ruleSummary(params)}`} icon="grid" width={1180} height={760} mainLabel="Rule" onClose={onClose}
-      left={{ label: 'Rule type', icon: 'grid', width: 230, content: <TypeRail value={shape.type} onChange={t => set(typeDefaults(t), true)} />, rail: expand => (
-        <button type="button" onClick={expand} title="Show the rule types" aria-label="Show the rule types"
-          style={{ width: 44, flexShrink: 0, border: 0, borderRight: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 14, color: tk.text.faint }}>
-          <Icon name="chevR" size={14} /><Icon name="grid" size={15} />
-          <span style={{ font: `650 10px ${fontFamily.ui}`, writingMode: 'vertical-rl', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{typeLabel}</span>
-        </button>
-      ) }}
-      right={{ label: 'Preview', icon: 'eye', width: 340, content: (
+      title="Grid Rules" subtitle={`${label} · ${ruleSummary(params)}`} icon="grid" width={1180} height={780} onClose={onClose}
+      tabs={{ items: tabs, value: tab, onChange: setTab, ariaLabel: 'Grid Rules sections' }}
+      right={{ label: 'Preview', icon: 'eye', width: 320, content: (
         <div style={{ padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 12, font: `12.5px ${fontFamily.ui}`, color: tk.text.primary }}>
           <RulePreview params={params} />
-          <SharedSettings p={params} set={set} />
         </div>
       ) }}
       footer={<>
@@ -85,14 +94,18 @@ export function GridRulesEditor({ nodeId, onClose }: { nodeId: string; onClose: 
         <Button variant="primary" onClick={onClose}>Done</Button>
       </>}
     >
-      <div style={{ flex: 1, padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 18, font: `12.5px ${fontFamily.ui}`, color: tk.text.primary }} data-testid="grid-rule-form">
-        <BuilderHelp id={shape.type} onExample={ex => { if ('patch' in ex.insert) set(ex.insert.patch, true); }} />
-        {shape.type === 'patterns' && <BuilderHelp id="stencils" />}
-        {shape.type === 'blocks' && <BuilderHelp id="block-rules" />}
-        {shape.type === 'smooth' ? <SmoothForm p={params} set={set} />
-          : shape.type === 'patterns' ? <PatternsForm p={params} set={set} />
-          : shape.type === 'blocks' ? <BlocksForm p={params} set={set} />
-          : <CountForm p={params} set={set} stages={shape.type === 'stages'} />}
+      <div style={{ flex: 1, padding: '16px 22px 22px', display: 'flex', flexDirection: 'column', gap: 18, font: `12.5px ${fontFamily.ui}`, color: tk.text.primary }} data-testid="grid-rule-form" data-grid-tab={tab}>
+        {tab === 'presets' && <PresetsTab p={params} set={set} onExample={onExample} />}
+        {tab === 'neighbourhood' && <NeighbourhoodTab p={params} set={set} />}
+        {tab === 'rule' && (
+          shape.type === 'smooth' ? <SmoothForm p={params} set={set} part="rules" />
+            : shape.type === 'patterns' ? <><BuilderHelp id="stencils" /><PatternsForm p={params} set={set} part="rules" /></>
+            : shape.type === 'blocks' ? <><BuilderHelp id="block-rules" /><BlocksForm p={params} set={set} part="rules" /></>
+            : <BornSurviveTab p={params} set={set} stages={shape.type === 'stages'} onExample={onExample} />
+        )}
+        {tab === 'start' && <StartTab p={params} set={set} />}
+        {tab === 'brush' && <BrushTab p={params} set={set} />}
+        {tab === 'colours' && <ColoursTab p={params} set={set} onExample={onExample} />}
       </div>
     </BuilderWindow>
   );
@@ -112,18 +125,17 @@ const SMOOTH_LOOKS: Record<string, P> = { diffusion: LOOKS.heat, waves: LOOKS.ri
 
 // ── Pieces ──────────────────────────────────────────────────────────────────────────────────────
 
-function TypeRail({ value, onChange }: { value: GridRuleType; onChange: (t: GridRuleType) => void }) {
+function TypePicker({ value, onChange }: { value: GridRuleType; onChange: (t: GridRuleType) => void }) {
   const tk = useTokens();
   return (
-    <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 4 }} role="radiogroup" aria-label="Rule type">
-      <Caps>Rule type</Caps>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 6 }} role="radiogroup" aria-label="Rule type">
       {RULE_TYPES.filter(t => EDITOR_RULE_TYPES.includes(t.value)).map(t => {
         const on = t.value === value;
         return (
-          <button key={t.value} type="button" role="radio" aria-checked={on} onClick={() => !on && onChange(t.value)}
+          <button key={t.value} type="button" role="radio" aria-checked={on} data-rule-type={t.value} onClick={() => !on && onChange(t.value)}
             style={{
               textAlign: 'left', border: 0, borderRadius: radius.md, padding: '9px 10px', cursor: 'pointer',
-              background: on ? tk.bg.selected : 'transparent', boxShadow: on ? `inset 0 0 0 1.5px ${tk.accent.base}` : 'none',
+              background: on ? tk.bg.selected : tk.bg.field, boxShadow: on ? `inset 0 0 0 1.5px ${tk.accent.base}` : `inset 0 0 0 1px ${tk.border.subtle}`,
               color: tk.text.primary, display: 'flex', flexDirection: 'column', gap: 3,
             }}>
             <b style={{ font: `600 13px ${fontFamily.ui}`, color: on ? tk.accent.text : tk.text.primary }}>{t.label}</b>
@@ -133,11 +145,6 @@ function TypeRail({ value, onChange }: { value: GridRuleType; onChange: (t: Grid
       })}
     </div>
   );
-}
-
-function Caps({ children }: { children: ReactNode }) {
-  const tk = useTokens();
-  return <span style={{ font: `600 10.5px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', color: tk.text.faint, padding: '2px 2px 4px' }}>{children}</span>;
 }
 
 function Block({ title, hint, help, onExample, children }: { title: string; hint?: string; help?: string; onExample?: (ex: HelpExample) => void; children: ReactNode }) {
@@ -194,117 +201,127 @@ function Slider({ p, set, k, label, min, max, step = 0.01, integer = false, hint
   );
 }
 
-/** A row of switches 0…max: on = the count is in the set. */
-function CountSwitches({ label, mask, max, onChange, colour }: { label: string; mask: number; max: number; onChange: (mask: number) => void; colour: string }) {
-  const tk = useTokens();
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <span style={{ width: 92, color: tk.text.secondary, fontSize: 12.5, flexShrink: 0 }}>{label}</span>
-      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }} role="group" aria-label={label}>
-        {Array.from({ length: max + 1 }, (_, k) => {
-          const on = ((Math.round(mask) >> k) & 1) === 1;
-          return (
-            <button key={k} type="button" role="checkbox" aria-checked={on} aria-label={`${label} with ${k}`} title={`${label} with ${k} live neighbour${k === 1 ? '' : 's'}`}
-              onClick={() => onChange(Math.round(mask) ^ (1 << k))}
-              style={{
-                width: 32, height: 32, border: 0, borderRadius: radius.md, cursor: 'pointer', font: `600 13px ${fontFamily.mono}`,
-                background: on ? colour : tk.bg.field, color: on ? '#fff' : tk.text.muted,
-                boxShadow: on ? 'none' : `inset 0 0 0 1px ${tk.border.default}`,
-              }}>
-              {k}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
-// ── Count and Stages ────────────────────────────────────────────────────────────────────────────
+// ── Presets ─────────────────────────────────────────────────────────────────────────────────────
 
-function CountForm({ p, set, stages }: { p: P; set: Setter; stages: boolean }) {
-  const tk = useTokens();
+function PresetsTab({ p, set, onExample }: { p: P; set: Setter; onExample: (ex: HelpExample) => void }) {
   const s = gridShape(p);
-  const max = maxCount(s.neighbourhood, s.radius, s.shape);
-  const radiusMode = s.neighbourhood === 'radius';
-  const [text, setText] = useState<string | null>(null);
-  const shown = text ?? ruleString(num(p, 'bornMask'), num(p, 'surviveMask'), max);
-  const bad = text !== null && !parseRuleString(text);
-  const bornColour = '#2f9e6a', surviveColour = tk.accent.base;
+  const stages = s.type === 'stages';
   return (
     <>
-      <Block title="Presets" help="presets" hint={stages ? 'Generations rules: a cell that stops surviving fades through dying stages before it is empty.' : 'Life-like rules: born on some neighbour counts, survive on others.'}>
-        <Presets table={stages ? STAGES_PRESETS : COUNT_PRESETS} p={p} set={set} />
+      <Block title="Rule type" hint="The kind of rule: switching starts the new kind from its first preset.">
+        <TypePicker value={s.type} onChange={t => set(typeDefaults(t), true)} />
       </Block>
-      <Block title="Neighbourhood" help="neighbourhood" hint="Which cells round a cell are counted.">
-        <Segmented<string> ariaLabel="Neighbourhood" value={s.neighbourhood} onChange={v => set(v === 'radius' ? { neighbourhood: v, bornLo: 34, bornHi: 45, surviveLo: 33, surviveHi: 57, radius: 5 } : { neighbourhood: v }, true)}
-          options={[{ value: 'moore', label: 'Moore · 8' }, { value: 'vonNeumann', label: 'von Neumann · 4' }, { value: 'radius', label: 'Radius N' }]} />
-        {radiusMode && (
-          <>
-            <Slider p={p} set={v => set(v, true)} k="radius" label="Radius" min={1} max={MAX_RADIUS} step={1} integer hint="How far the neighbourhood reaches, in cells." />
-            <Row label="Shape" hint="A square block of cells round each cell, or a round one.">
-              <Segmented<string> ariaLabel="Shape" size="sm" value={s.shape} onChange={v => set({ shape: v }, true)} options={[{ value: 'box', label: 'Box' }, { value: 'circle', label: 'Circle' }]} />
-            </Row>
-            <span style={{ color: tk.text.muted, fontSize: 12 }}>Counts up to {max} cells (itself not counted).</span>
-          </>
+      {s.type === 'smooth' ? <SmoothForm p={p} set={set} part="presets" />
+        : s.type === 'patterns' ? <PatternsForm p={p} set={set} part="presets" />
+        : s.type === 'blocks' ? <BlocksForm p={p} set={set} part="presets" />
+        : (
+          <Block title="Presets" hint={stages ? 'Generations rules: a cell that stops surviving fades through dying stages before it is empty.' : 'Life-like rules: born on some neighbour counts, survive on others. A preset lights up while the switches match it.'}>
+            <Presets table={stages ? STAGES_PRESETS : COUNT_PRESETS} p={p} set={set} />
+            <RuleSentence {...countSets(p)} stages={stages} states={num(p, 'states')} />
+          </Block>
         )}
-      </Block>
-      <Block title={stages ? 'Born and survive (state 1 counts)' : 'Born and survive'} help="born-survive" onExample={ex => { if ('patch' in ex.insert) set(ex.insert.patch, true); }} hint={radiusMode ? 'Larger than Life: ranges of live-neighbour counts.' : 'Click a number to switch it: an empty cell with that many live neighbours is born; a live one survives.'}>
-        {radiusMode ? (
-          <>
-            <Slider p={p} set={set} k="bornLo" label="Born from" min={0} max={max} step={1} integer />
-            <Slider p={p} set={set} k="bornHi" label="Born to" min={0} max={max} step={1} integer />
-            <Slider p={p} set={set} k="surviveLo" label="Survive from" min={0} max={max} step={1} integer />
-            <Slider p={p} set={set} k="surviveHi" label="Survive to" min={0} max={max} step={1} integer />
-          </>
-        ) : (
-          <>
-            <CountSwitches label="Born on" mask={num(p, 'bornMask')} max={max} colour={bornColour} onChange={m => set({ bornMask: m }, true)} />
-            <CountSwitches label="Survive on" mask={num(p, 'surviveMask')} max={max} colour={surviveColour} onChange={m => set({ surviveMask: m }, true)} />
-            <Row label="As text" hint="B/S notation: B3/S23 is Life (born on 3, survive on 2 or 3). Type a rule or a preset's name; press Enter to use it.">
-              <RuleTextField shown={shown} text={text} bad={bad} setText={setText} onUse={r => set({ bornMask: r.born, surviveMask: r.survive }, true)} />
-            </Row>
-          </>
-        )}
-      </Block>
-      {stages && (
-        <Block title="States" help="states" hint="Empty (0), on (1), then the dying stages. 3 is one dying stage (Brian's Brain).">
-          <Slider p={p} set={set} k="states" label="States" min={2} max={MAX_STATES} step={1} integer />
-          {!radiusMode && <span style={{ color: tk.text.muted, fontSize: 12 }}>
-            {`S${countsOf(num(p, 'surviveMask'), max).join('')}/B${countsOf(num(p, 'bornMask'), max).join('')}/C${Math.round(num(p, 'states'))}`} in Golly's notation.
-          </span>}
-        </Block>
-      )}
-      <Explainer stages={stages} p={p} />
+      <BuilderHelp id={s.type} onExample={onExample} />
     </>
   );
 }
 
-function Explainer({ stages, p }: { stages: boolean; p: P }) {
+/** The Born and Survive counts (switch masks, or a radius rule's ranges) and the largest count. */
+function countSets(p: P): { born: number[]; survive: number[]; max: number } {
+  const s = gridShape(p);
+  const max = maxCount(s.neighbourhood, s.radius, s.shape);
+  if (s.neighbourhood === 'radius') return { born: rangeCounts(num(p, 'bornLo'), num(p, 'bornHi')), survive: rangeCounts(num(p, 'surviveLo'), num(p, 'surviveHi')), max };
+  return { born: countsOf(num(p, 'bornMask'), max), survive: countsOf(num(p, 'surviveMask'), max), max };
+}
+
+// ── Neighbourhood ───────────────────────────────────────────────────────────────────────────────
+
+function NeighbourhoodTab({ p, set }: { p: P; set: Setter }) {
   const tk = useTokens();
   const s = gridShape(p);
   const max = maxCount(s.neighbourhood, s.radius, s.shape);
-  const born = s.neighbourhood === 'radius' ? `${num(p, 'bornLo')} to ${num(p, 'bornHi')}` : countsOf(num(p, 'bornMask'), max).join(', ') || 'no count';
-  const surv = s.neighbourhood === 'radius' ? `${num(p, 'surviveLo')} to ${num(p, 'surviveHi')}` : countsOf(num(p, 'surviveMask'), max).join(', ') || 'no count';
   return (
-    <div style={{ padding: '10px 12px', borderRadius: radius.md, background: alpha(tk.accent.base, 0.06), color: tk.text.secondary, lineHeight: 1.5, fontSize: 12.5 }}>
-      <Icon name="info" size={13} style={{ verticalAlign: '-2px', marginRight: 6, color: tk.accent.base }} />
-      Each step, every cell counts its live neighbours. An empty cell with {born} comes alive; a live cell with {surv} stays alive
-      {stages ? `, any other starts dying and takes ${Math.max(0, Math.round(num(p, 'states')) - 2)} more step(s) to clear.` : '; every other cell is empty next step.'}
-    </div>
+    <Block title="Neighbourhood" help="neighbourhood" hint="The highlighted cells are the ones counted round the ringed cell.">
+      <NeighbourhoodPictures value={s.neighbourhood} radius={s.radius} shape={s.shape}
+        onChange={v => set(v === 'radius' ? { neighbourhood: v, bornLo: 34, bornHi: 45, surviveLo: 33, surviveHi: 57, radius: 5 } : { neighbourhood: v }, true)} />
+      {s.neighbourhood === 'radius' && (
+        <>
+          <Slider p={p} set={v => set(v, true)} k="radius" label="Radius" min={1} max={MAX_RADIUS} step={1} integer hint="How far the neighbourhood reaches, in cells." />
+          <Row label="Shape" hint="A square block of cells round each cell, or a round one.">
+            <Segmented<string> ariaLabel="Shape" size="sm" value={s.shape} onChange={v => set({ shape: v }, true)} options={[{ value: 'box', label: 'Box' }, { value: 'circle', label: 'Circle' }]} />
+          </Row>
+        </>
+      )}
+      <span style={{ color: tk.text.muted, fontSize: 12 }}>Counts up to {max} cells (the cell itself is not counted).</span>
+    </Block>
+  );
+}
+
+// ── Born & Survive, Stages ──────────────────────────────────────────────────────────────────────
+
+function BornSurviveTab({ p, set, stages, onExample }: { p: P; set: Setter; stages: boolean; onExample: (ex: HelpExample) => void }) {
+  const tk = useTokens();
+  const s = gridShape(p);
+  const radiusMode = s.neighbourhood === 'radius';
+  const { born, survive, max } = countSets(p);
+  const [text, setText] = useState<string | null>(null);
+  const shown = text ?? ruleString(num(p, 'bornMask'), num(p, 'surviveMask'), max);
+  const bad = text !== null && !parseRuleString(text);
+  const bornColour = '#2f9e6a', surviveColour = tk.accent.base;
+  const nb = s.neighbourhood === 'vonNeumann' ? 'vonNeumann' : 'moore';
+  return (
+    <>
+      <BuilderHelp id="born-survive" onExample={onExample} />
+      <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div style={{ flex: '1 1 340px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <RuleSentence born={born} survive={survive} max={max} stages={stages} states={num(p, 'states')} />
+          {radiusMode ? (
+            <Block title={stages ? 'Born and survive (state 1 counts)' : 'Born and survive'} hint="Larger than Life: ranges of live-neighbour counts.">
+              <Slider p={p} set={set} k="bornLo" label="Born from" min={0} max={max} step={1} integer />
+              <Slider p={p} set={set} k="bornHi" label="Born to" min={0} max={max} step={1} integer />
+              <Slider p={p} set={set} k="surviveLo" label="Survive from" min={0} max={max} step={1} integer />
+              <Slider p={p} set={set} k="surviveHi" label="Survive to" min={0} max={max} step={1} integer />
+            </Block>
+          ) : (
+            <>
+              <PictureSwitches row="born" mask={num(p, 'bornMask')} max={max} nb={nb} colour={bornColour} born={born} survive={survive} stages={stages} onChange={m => set({ bornMask: m }, true)} />
+              <PictureSwitches row="survive" mask={num(p, 'surviveMask')} max={max} nb={nb} colour={surviveColour} born={born} survive={survive} stages={stages} onChange={m => set({ surviveMask: m }, true)} />
+            </>
+          )}
+        </div>
+        <MiniBoard params={p} />
+      </div>
+      {stages && (
+        <Block title="Dying stages" help="states" hint="A live cell that stops surviving doesn't vanish: it fades one stage a step, and dying cells don't count as live neighbours.">
+          <DyingStages states={num(p, 'states')} on={rgb(p, 'color1')} first={rgb(p, 'color2')} last={rgb(p, 'color3')} empty={rgb(p, 'color0')} />
+          <Slider p={p} set={set} k="states" label="States" min={2} max={MAX_STATES} step={1} integer hint="Empty (0), on (1), then the dying stages. 3 is one dying stage (Brian's Brain)." />
+        </Block>
+      )}
+      {!radiusMode && (
+        <Fold id="as-text" title="As text" summary={stages ? `${shown} · S${countsOf(num(p, 'surviveMask'), max).join('')}/B${countsOf(num(p, 'bornMask'), max).join('')}/C${Math.round(num(p, 'states'))}` : shown}>
+          <Row label="B/S notation" hint="B3/S23 is Life (born on 3, survive on 2 or 3). Type a rule or a preset's name; press Enter to use it.">
+            <RuleTextField shown={shown} text={text} bad={bad} setText={setText} onUse={r => set({ bornMask: r.born, surviveMask: r.survive }, true)} />
+          </Row>
+          {stages && <span style={{ color: tk.text.muted, fontSize: 12 }}>
+            {`S${countsOf(num(p, 'surviveMask'), max).join('')}/B${countsOf(num(p, 'bornMask'), max).join('')}/C${Math.round(num(p, 'states'))}`} in Golly's notation.
+          </span>}
+        </Fold>
+      )}
+    </>
   );
 }
 
 // ── Smooth ──────────────────────────────────────────────────────────────────────────────────────
 
-function SmoothForm({ p, set }: { p: P; set: Setter }) {
+/** Presets: the template and its presets. Rules: the chosen template's sliders (or your update). */
+function SmoothForm({ p, set, part }: { p: P; set: Setter; part: 'presets' | 'rules' }) {
   const tk = useTokens();
   const s = gridShape(p);
   const uProblem = s.template === 'custom' ? customUpdateProblem(String(p.customU ?? '')) : null;
   const vProblem = s.template === 'custom' ? customUpdateProblem(String(p.customV ?? '')) : null;
   const [draftU, setDraftU] = useState<string | null>(null);
   const [draftV, setDraftV] = useState<string | null>(null);
-  return (
+  if (part === 'presets') return (
     <>
       <Block title="Template" hint="Continuous values instead of states: every cell runs the same small update.">
         <Segmented<string> ariaLabel="Template" value={s.template} onChange={v => set({ template: v, ...SMOOTH_LOOKS[v] }, true)}
@@ -313,6 +330,10 @@ function SmoothForm({ p, set }: { p: P; set: Setter }) {
       <Block title="Presets">
         <Presets table={SMOOTH_PRESETS} p={p} set={set} />
       </Block>
+    </>
+  );
+  return (
+    <>
       {s.template === 'diffusion' && (
         <Block title="Diffusion" hint="Every cell moves towards the average of its four neighbours, and cools a little.">
           <Slider p={p} set={set} k="spread" label="Spread" min={0} max={1} />
@@ -329,8 +350,10 @@ function SmoothForm({ p, set }: { p: P; set: Setter }) {
         <Block title="Reaction–diffusion" hint="Gray–Scott: chemical B eats A to make more B; A is fed in, B is taken away. Feed and Kill choose the pattern. Runs best at 8 steps a frame.">
           <Slider p={p} set={set} k="feed" label="Feed" min={0} max={0.1} step={0.0005} />
           <Slider p={p} set={set} k="kill" label="Kill" min={0} max={0.1} step={0.0005} />
-          <Slider p={p} set={set} k="diffA" label="Spread A" min={0} max={1} />
-          <Slider p={p} set={set} k="diffB" label="Spread B" min={0} max={1} />
+          <Fold id="smooth-spread" title="Spread of A and B" summary={`A ${num(p, 'diffA')} · B ${num(p, 'diffB')}`}>
+            <Slider p={p} set={set} k="diffA" label="Spread A" min={0} max={1} />
+            <Slider p={p} set={set} k="diffB" label="Spread B" min={0} max={1} />
+          </Fold>
         </Block>
       )}
       {s.template === 'custom' && (
@@ -341,100 +364,103 @@ function SmoothForm({ p, set }: { p: P; set: Setter }) {
           <Slider p={p} set={set} k="knobB" label="b" min={0} max={1} step={0.001} />
           <Slider p={p} set={set} k="knobC" label="c" min={0} max={1} step={0.001} />
           <Slider p={p} set={set} k="knobD" label="d" min={0} max={1} step={0.001} />
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '3px 12px', fontSize: 12, color: tk.text.secondary }}>
-            {SMOOTH_NAMES.map(x => (
-              <span key={x.name} style={{ display: 'contents' }}>
-                <code style={{ font: `600 12px ${fontFamily.mono}`, color: tk.text.primary }}>{x.name}</code>
-                <span>{x.doc}</span>
-              </span>
-            ))}
-          </div>
+          <Fold id="smooth-names" title="Names you can use" summary={`${SMOOTH_NAMES.length} names`}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '3px 12px', fontSize: 12, color: tk.text.secondary }}>
+              {SMOOTH_NAMES.map(x => (
+                <span key={x.name} style={{ display: 'contents' }}>
+                  <code style={{ font: `600 12px ${fontFamily.mono}`, color: tk.text.primary }}>{x.name}</code>
+                  <span>{x.doc}</span>
+                </span>
+              ))}
+            </div>
+          </Fold>
         </Block>
       )}
     </>
   );
 }
 
-// ── The shared settings: start and run, brush, colours ──────────────────────────────────────────
+// ── Start, Brush, Colours ───────────────────────────────────────────────────────────────────────
 
-function Section({ id, title, summary, children }: { id: string; title: string; summary: string; children: ReactNode }) {
-  const tk = useTokens();
-  // Folded by default (remembered per section for the session): the fold store holds the ones opened.
-  const key = `gridRules:open:${id}`;
-  const open = useFoldState(s => !!s.folded[key]);
-  const toggle = useFoldState(s => s.toggle);
-  return (
-    <section style={{ borderTop: `1px solid ${tk.border.subtle}`, paddingTop: 8 }}>
-      <button type="button" aria-expanded={open} onClick={() => toggle(key)}
-        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, border: 0, background: 'transparent', padding: '4px 0', cursor: 'pointer', color: tk.text.primary, textAlign: 'left' }}>
-        <Icon name={open ? 'chevD' : 'chevR'} size={14} style={{ color: tk.text.faint }} />
-        <b style={{ font: `600 13px ${fontFamily.ui}` }}>{title}</b>
-        {!open && <span style={{ marginLeft: 'auto', color: tk.text.muted, fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 190 }}>{summary}</span>}
-      </button>
-      {open && <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 0 4px' }}>{children}</div>}
-    </section>
-  );
-}
+/** A folded group of rarely used settings, with a summary while folded (remembered for the session). */
+const Fold = ({ id, ...rest }: { id: string; title: string; summary: string; children: ReactNode }) => <BuilderFold foldKey={`gridRules:open:${id}`} {...rest} />;
 
-const START_WORD: Record<string, string> = { noise: 'Noise', empty: 'Empty', image: 'Image', centre: 'Centre seed' };
+/** Settings rows at a readable width (the tab is wide on a desktop). */
+const Narrow = ({ children }: { children: ReactNode }) => <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 560 }}>{children}</div>;
 
-function SharedSettings({ p, set }: { p: P; set: Setter }) {
+function StartTab({ p, set }: { p: P; set: Setter }) {
   const s = gridShape(p);
-  const discrete = s.type !== 'smooth';
-  const top = s.type === 'stages' ? Math.round(num(p, 'states')) - 1 : 1;
-  const boardLabel = BOARD_SIZES.find(b => b.scale === s.scale)?.label.split(' (')[0] ?? 'Coarse';
   const speed = s.steps > 1 ? `${s.steps} steps a frame` : `speed ${num(p, 'rate')}`;
   const deal = () => { set({ reset: 1 }, true); window.setTimeout(() => set({ reset: 0 }, true), 120); };
   return (
-    <>
-      <Section id="run" title="Start and run" summary={`${START_WORD[s.start]} · ${boardLabel} · ${speed} · ${s.wrap ? 'wrap' : 'walls'}`}>
-        <BuilderHelp id="run" />
-        <Row label="Start" hint="What a new board starts as: noise, empty, a picture's bright parts, or one seed in the centre.">
-          <Select ariaLabel="Start" value={s.start} onChange={v => set({ start: v }, true)}
-            options={[{ value: 'noise', label: 'Noise' }, { value: 'empty', label: 'Empty' }, { value: 'image', label: 'Image (wire Start image)' }, { value: 'centre', label: 'Centre seed' }]} />
-        </Row>
-        {(s.start === 'noise' || s.start === 'centre') && <Slider p={p} set={set} k="density" label="Density" min={0} max={1} />}
+    <Narrow>
+      <BuilderHelp id="run" />
+      <Row label="Start" hint="What a new board starts as: noise, empty, a picture's bright parts, or one seed in the centre.">
+        <Select ariaLabel="Start" value={s.start} onChange={v => set({ start: v }, true)}
+          options={[{ value: 'noise', label: 'Noise' }, { value: 'empty', label: 'Empty' }, { value: 'image', label: 'Image (wire Start image)' }, { value: 'centre', label: 'Centre seed' }]} />
+      </Row>
+      {(s.start === 'noise' || s.start === 'centre') && <Slider p={p} set={set} k="density" label="Density" min={0} max={1} />}
+      <Row label=""><Button size="sm" icon="dice" onClick={deal}>Deal a new board</Button></Row>
+      <Row label="Board size" hint="How many cells: each cell is a block of the picture's pixels.">
+        <Select ariaLabel="Board size" style={{ maxWidth: '100%' }} value={String(p.board ?? '0.125')} onChange={v => set({ board: v }, true)} options={BOARD_SIZES.map(b => ({ value: b.value, label: b.label.replace(' at 1080p', '') }))} />
+      </Row>
+      <Row label="Edges" hint="Wrap: what leaves one side comes back on the other. Walls: the edge is empty.">
+        <Segmented<string> ariaLabel="Edges" size="sm" value={s.wrap ? 'wrap' : 'walls'} onChange={v => set({ edges: v }, true)} options={[{ value: 'wrap', label: 'Wrap' }, { value: 'walls', label: 'Walls' }]} />
+      </Row>
+      <Fold id="run-more" title="Seed and speed" summary={`seed ${num(p, 'seed')} · ${speed}`}>
         <Slider p={p} set={set} k="seed" label="Seed" min={0} max={100} step={1} integer />
-        <Row label=""><Button size="sm" icon="dice" onClick={deal}>Deal a new board</Button></Row>
-        <Row label="Board size" hint="How many cells: each cell is a block of the picture's pixels.">
-          <Select ariaLabel="Board size" style={{ maxWidth: '100%' }} value={String(p.board ?? '0.125')} onChange={v => set({ board: v }, true)} options={BOARD_SIZES.map(b => ({ value: b.value, label: b.label.replace(' at 1080p', '') }))} />
-        </Row>
-        <Row label="Edges" hint="Wrap: what leaves one side comes back on the other. Walls: the edge is empty.">
-          <Segmented<string> ariaLabel="Edges" size="sm" value={s.wrap ? 'wrap' : 'walls'} onChange={v => set({ edges: v }, true)} options={[{ value: 'wrap', label: 'Wrap' }, { value: 'walls', label: 'Walls' }]} />
-        </Row>
         <Slider p={p} set={v => set(v, true)} k="steps" label="Steps a frame" min={1} max={MAX_STEPS} step={1} integer hint="The rule runs this many times each frame (the board Pass's Repeat)." />
         {s.steps === 1 && <Slider p={p} set={set} k="rate" label="Speed" min={0} max={1} hint="Below 1, the board steps on some frames only: 0.25 is every fourth." />}
-      </Section>
-      <Section id="brush" title="Brush" summary={`${discrete ? `paints ${Math.round(num(p, 'brushState'))}` : `sets ${num(p, 'brushState')}`} · ${num(p, 'brushRadius')} cells`}>
-        <BuilderHelp id="brush" />
-        <Slider p={p} set={set} k="brushRadius" label="Size (cells)" min={0.5} max={40} step={0.5} />
-        {discrete
-          ? <Slider p={p} set={set} k="brushState" label="Paints state" min={0} max={top} step={1} integer hint="0 erases." />
-          : <Slider p={p} set={set} k="brushState" label="Sets value" min={-1} max={1} />}
-        {discrete && <Slider p={p} set={set} k="brushFill" label="Fill" min={0} max={1} hint="The share of cells under the brush it paints each frame." />}
-        <span style={{ fontSize: 12, lineHeight: 1.4, opacity: 0.75 }}>Hold the mouse button over the picture to paint: in the Studio preview, on the Play page and on exported pages. Paint (on the card's Play controls) paints without the button.</span>
-      </Section>
-      <Section id="output" title="Show" summary={GRID_VIEWS.find(v => v.value === gridViewMode(p.view))?.label ?? 'Colours'}>
-        <BuilderHelp id="output" onExample={ex => { if ('patch' in ex.insert) set(ex.insert.patch, true); }} />
-        <Row label="Color shows" hint="What the node's Color output shows. The State, On, Age, Shade and Neighbours sockets always carry these numbers too.">
-          <Select ariaLabel="Color shows" value={gridViewMode(p.view)} onChange={v => set({ view: v }, true)} options={GRID_VIEWS.map(v => ({ value: v.value, label: v.label }))} />
-        </Row>
-        <span style={{ fontSize: 12, lineHeight: 1.4, opacity: 0.75 }}>{GRID_VIEWS.find(v => v.value === gridViewMode(p.view))?.hint}</span>
-      </Section>
-      <Section id="colours" title="Colours" summary={discrete ? `afterglow ${num(p, 'afterglow')}` : `contrast ${num(p, 'gain')}`}>
-        <BuilderHelp id="colours" />
-        <ColourRows p={p} set={set} />
-        {discrete ? (
-          <>
-            <Slider p={p} set={set} k="afterglow" label="Afterglow" min={0} max={0.99} />
-            <Slider p={p} set={set} k="ageRate" label="Ageing" min={0} max={0.2} step={0.001} />
-            <Slider p={p} set={set} k="ageFade" label="Age fade" min={0} max={1} />
-          </>
-        ) : <Slider p={p} set={set} k="gain" label="Contrast" min={0} max={8} />}
-      </Section>
-    </>
+      </Fold>
+    </Narrow>
   );
 }
+
+function BrushTab({ p, set }: { p: P; set: Setter }) {
+  const tk = useTokens();
+  const s = gridShape(p);
+  const discrete = s.type !== 'smooth';
+  const top = s.type === 'stages' ? Math.round(num(p, 'states')) - 1 : 1;
+  return (
+    <Narrow>
+      <BuilderHelp id="brush" />
+      <Slider p={p} set={set} k="brushRadius" label="Size (cells)" min={0.5} max={40} step={0.5} />
+      {discrete
+        ? <Slider p={p} set={set} k="brushState" label="Paints state" min={0} max={top} step={1} integer hint="0 erases." />
+        : <Slider p={p} set={set} k="brushState" label="Sets value" min={-1} max={1} />}
+      {discrete && <Fold id="brush-fill" title="Fill" summary={`${Math.round(num(p, 'brushFill') * 100)}% of the cells under it`}>
+        <Slider p={p} set={set} k="brushFill" label="Fill" min={0} max={1} hint="The share of cells under the brush it paints each frame." />
+      </Fold>}
+      <span style={{ fontSize: 12, lineHeight: 1.4, color: tk.text.muted }}>Hold the mouse button over the picture to paint: in the Studio preview, on the Play page and on exported pages. Paint (on the card's Play controls) paints without the button.</span>
+    </Narrow>
+  );
+}
+
+function ColoursTab({ p, set, onExample }: { p: P; set: Setter; onExample: (ex: HelpExample) => void }) {
+  const tk = useTokens();
+  const s = gridShape(p);
+  const discrete = s.type !== 'smooth';
+  return (
+    <Narrow>
+      <BuilderHelp id="output" onExample={onExample} />
+      <Row label="Color shows" hint="What the node's Color output shows. The State, On, Age, Shade and Neighbours sockets always carry these numbers too.">
+        <Select ariaLabel="Color shows" value={gridViewMode(p.view)} onChange={v => set({ view: v }, true)} options={GRID_VIEWS.map(v => ({ value: v.value, label: v.label }))} />
+      </Row>
+      <span style={{ fontSize: 12, lineHeight: 1.4, color: tk.text.muted }}>{GRID_VIEWS.find(v => v.value === gridViewMode(p.view))?.hint}</span>
+      <BuilderHelp id="colours" />
+      <ColourRows p={p} set={set} />
+      {discrete ? (
+        <Fold id="colours-age" title="Afterglow and ageing" summary={`afterglow ${num(p, 'afterglow')} · ageing ${num(p, 'ageRate')}`}>
+          <Slider p={p} set={set} k="afterglow" label="Afterglow" min={0} max={0.99} />
+          <Slider p={p} set={set} k="ageRate" label="Ageing" min={0} max={0.2} step={0.001} />
+          <Slider p={p} set={set} k="ageFade" label="Age fade" min={0} max={1} />
+        </Fold>
+      ) : <Slider p={p} set={set} k="gain" label="Contrast" min={0} max={8} />}
+    </Narrow>
+  );
+}
+
+// ── Colours and typed fields ────────────────────────────────────────────────────────────────────
 
 function ColourRows({ p, set }: { p: P; set: Setter }) {
   const s = gridShape(p);
