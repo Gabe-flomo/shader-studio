@@ -116,7 +116,7 @@ describe('Blocks (Margolus)', { timeout: 60000 }, () => {
   it('the gas against a reference, wrapping and walled', () => {
     const rules = BLOCK_PRESETS.gas.params.blocks as BlockRule[];
     for (const wrap of [true, false]) {
-      const P = { ruleType: 'blocks', edges: wrap ? 'wrap' : 'walls', ...BLOCK_PRESETS.gas.params };
+      const P = { ruleType: 'blocks', ...BLOCK_PRESETS.gas.params, edges: wrap ? 'wrap' : 'walls' };
       const start = randomGrid(10, 8, 7, 0.3);
       const st = stepper(P, 10, 8);
       let b = boardFrom(start, gridSignature(shapeOf(P)), wrap ? 'repeat' : 'clamp');
@@ -130,7 +130,7 @@ describe('Blocks (Margolus)', { timeout: 60000 }, () => {
 
   it('conserve: sand and gas keep every state\'s count, odd boards and dice included', () => {
     for (const [name, pr] of Object.entries(BLOCK_PRESETS)) for (const edges of ['wrap', 'walls']) for (const [w, h] of [[10, 8], [11, 9]]) {
-      const P = { ruleType: 'blocks', edges, ...pr.params };
+      const P = { ruleType: 'blocks', ...pr.params, edges };
       const states = Number(pr.params.states) - 1;
       // An odd last row or column has no block and is kept empty: start it empty.
       const start = randomGrid(w, h, 3 + w, 0.45, states).map((row, r) => row.map((v, x) => ((h % 2 && r === 0) || (w % 2 && x === w - 1) ? 0 : v)));
@@ -142,7 +142,7 @@ describe('Blocks (Margolus)', { timeout: 60000 }, () => {
   });
 
   it('sand falls and piles on the floor', () => {
-    const P = { ruleType: 'blocks', edges: 'walls', ...BLOCK_PRESETS.sand.params };
+    const P = { ruleType: 'blocks', ...BLOCK_PRESETS.sand.params, edges: 'walls' };
     const start: Grid = Array.from({ length: 8 }, (_, r) => Array.from({ length: 8 }, (_, x) => (r < 3 && x >= 2 && x <= 5 ? 1 : 0)));
     const st = stepper(P, 8, 8);
     let b = boardFrom(start, gridSignature(shapeOf(P)), 'clamp');

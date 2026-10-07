@@ -144,7 +144,10 @@ type StencilPreset = { label: string; hint: string; params: Record<string, unkno
 const WIRE_LOOK = { color0: [0.02, 0.02, 0.04], color1: [0.75, 0.9, 1.0], color2: [1.0, 0.45, 0.15], color3: [0.55, 0.3, 0.12], afterglow: 0, ageFade: 0, brushState: 3, brushFill: 1, brushRadius: 1 };
 const DOTS_LOOK = { color0: [0.02, 0.03, 0.06], color1: [0.6, 0.85, 1.0], afterglow: 0.8, glowColor: [0.1, 0.25, 0.5], ageFade: 0, brushState: 1, brushFill: 0.3 };
 const CRYSTAL_LOOK = { color0: [0.02, 0.03, 0.07], color1: [0.85, 0.95, 1.0], oldColor: [0.25, 0.5, 0.9], ageRate: 0.01, ageFade: 1, afterglow: 0, brushState: 1, brushFill: 1, brushRadius: 1.5 };
-const SAND_LOOK = { color0: [0.04, 0.04, 0.07], color1: [0.95, 0.78, 0.45], color2: [0.42, 0.4, 0.45], afterglow: 0, ageFade: 0, brushState: 1, brushFill: 0.5 };
+// Sand starts as a loose cloud of grains in the middle, on a finer board, so it falls and heaps up on
+// the floor. Not a board full of noise: in Margolus free fall every falling grain sits on the same row
+// parity (each step it lands in its block's bottom row), so a full board falls as one barred sheet.
+const SAND_LOOK = { color0: [0.04, 0.04, 0.07], color1: [0.95, 0.78, 0.45], color2: [0.42, 0.4, 0.45], afterglow: 0, ageFade: 0, brushState: 1, brushFill: 0.5, start: 'centre', density: 0.35, board: '0.25' };
 const GAS_LOOK = { color0: [0.02, 0.02, 0.05], color1: [1.0, 0.6, 0.3], afterglow: 0.85, glowColor: [0.5, 0.12, 0.25], ageFade: 0, brushState: 1, brushFill: 0.5 };
 
 export const PATTERN_PRESETS: Record<string, StencilPreset> = {
@@ -185,9 +188,10 @@ export const PATTERN_PRESETS: Record<string, StencilPreset> = {
 
 export const BLOCK_PRESETS: Record<string, StencilPreset> = {
   sand: {
-    label: 'Falling sand', hint: 'Grains (1) fall into empty cells (0), slide off each other down to the side, and rest on walls (2). Nothing is lost or made.',
+    label: 'Falling sand', hint: 'Grains (1) fall into empty cells (0), slide off each other down to the side, and rest on walls (2) and the floor. Nothing is lost or made.',
     params: {
-      states: 3,
+      // Walls: sand needs a floor to pile on. On a wrapping board it falls out of the bottom and back in at the top for ever.
+      states: 3, edges: 'walls',
       blocks: [
         { before: [1, 1, 0, 0], after: [0, 0, 1, 1], symmetry: 'none', chance: 1 },
         { before: [1, _, 0, _], after: [0, SAME, 1, SAME], symmetry: 'mirror', chance: 1 },
@@ -199,7 +203,8 @@ export const BLOCK_PRESETS: Record<string, StencilPreset> = {
   gas: {
     label: 'Gas (HPP)', hint: 'Particles move diagonally, one cell a step; two meeting head-on bounce off at right angles (Toffoli and Margolus\'s HPP gas). Every particle is kept.',
     params: {
-      states: 2,
+      // Wrap: the gas's rules have no wall cases, so particles would stick to a wall.
+      states: 2, edges: 'wrap',
       blocks: [
         { before: [1, 0, 0, 0], after: [0, 0, 0, 1], symmetry: 'rotate', chance: 1 },
         { before: [1, 0, 0, 1], after: [0, 1, 1, 0], symmetry: 'rotate', chance: 1 },
