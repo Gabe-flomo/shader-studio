@@ -53,7 +53,7 @@ beforeEach(() => {
 describe('Grid Rules as tabs', () => {
   it('opens on Presets; each tab shows its own section and "How this works"; the tab is remembered', () => {
     mount(<GridRulesEditor nodeId="g1" onClose={() => {}} />);
-    expect(tabs()).toEqual(['Presets', 'Neighbourhood', 'Born & Survive', 'Start', 'Brush', 'Colours']);
+    expect(tabs()).toEqual(['Presets', 'Neighbourhood', 'Born & Survive', 'Start', 'Brush', 'Colours', 'Recipe']);
     expect($('[data-grid-tab]')?.getAttribute('data-grid-tab')).toBe('presets');
     expect($('[data-builder-how]')?.textContent).toMatch(/How this works: Pick the kind of rule/);
     expect($('[role="radiogroup"][aria-label="Rule type"]')).toBeTruthy();
@@ -90,11 +90,29 @@ describe('Grid Rules as tabs', () => {
     expect($('[data-rule-sentence]')?.textContent).toMatch(/^Cells are born with 3 or 6 neighbours/);
   });
 
+  it('Recipe: the rule as text in the Playfield language; typing and Apply change the node (one step)', () => {
+    localStorage.setItem('builder:grid-rules:tab', 'recipe');
+    mount(<GridRulesEditor nodeId="g1" onClose={() => {}} />);
+    const ta = $('textarea[data-language-text="grid"]') as HTMLTextAreaElement;
+    expect(ta.value).toBe('life');
+    const type = (v: string) => act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(ta, v);
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    type('highlife walls bord=480');
+    expect($$('[data-language-error]').map(e => e.textContent).join()).toMatch(/Did you mean “board”/);
+    expect(($('[data-language-apply]') as HTMLButtonElement).disabled).toBe(true);
+    type('highlife walls board=480');
+    click($('[data-language-apply]'));
+    expect(useNodeGraphStore.getState().nodes[0].params).toMatchObject({ bornMask: (1 << 3) | (1 << 6), edges: 'walls', board: '0.25' });
+    expect(ta.value).toBe('highlife board=480 walls');
+  });
+
   it('a tab the rule type does not have falls back to the rule\'s own tab', () => {
     localStorage.setItem('builder:grid-rules:tab', 'neighbourhood');
     useNodeGraphStore.setState({ nodes: [{ ...structuredClone(grid), params: { ...grid.params, ruleType: 'smooth' } }] });
     mount(<GridRulesEditor nodeId="g1" onClose={() => {}} />);
-    expect(tabs()).toEqual(['Presets', 'Smooth', 'Start', 'Brush', 'Colours']);
+    expect(tabs()).toEqual(['Presets', 'Smooth', 'Start', 'Brush', 'Colours', 'Recipe']);
     expect($('[data-grid-tab]')?.getAttribute('data-grid-tab')).toBe('presets');
   });
 });
@@ -106,7 +124,7 @@ describe('Agent Rules as tabs', () => {
     click($('[data-builder="agents"]'));
     const group = useNodeGraphStore.getState().nodes.find(n => n.type === 'agentsGroup')!;
     mount(<AgentRulesModal node={group} onClose={() => {}} />);
-    expect(tabs()).toEqual(['Species', 'Rules', 'Trails', 'Look']);
+    expect(tabs()).toEqual(['Species', 'Rules', 'Trails', 'Look', 'Recipe']);
     expect($('[data-agent-tab]')?.getAttribute('data-agent-tab')).toBe('rules');
     expect($('[data-fold="agentRules:open:masks"] button')?.getAttribute('aria-expanded')).toBe('false');
     click($('[data-builder-tab="trails"]'));
@@ -117,5 +135,28 @@ describe('Agent Rules as tabs', () => {
     click($('[data-builder-tab="species"]'));
     expect($('[aria-label="Species name"]')).toBeTruthy();
     expect(localStorage.getItem('builder:agent-rules:tab')).toBe('species');
+  });
+
+  it('Recipe: the rule set as text; Apply writes it into the group (one step)', () => {
+    vi.useFakeTimers();
+    useBuilderWindows.setState({ gridRules: null, agentRules: null, recipe: null });
+    mount(<BuildersSection />);
+    click($('[data-builder="agents"]'));
+    const group = useNodeGraphStore.getState().nodes.find(n => n.type === 'agentsGroup')!;
+    localStorage.setItem('builder:agent-rules:tab', 'recipe');
+    mount(<AgentRulesModal node={group} onClose={() => {}} />);
+    const ta = $('textarea[data-language-text="agents"]') as HTMLTextAreaElement;
+    expect(ta.value).toMatch(/^agents/);
+    expect(ta.value).toMatch(/always do /);
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(ta, 'agents kind=trail\nspecies Slime speed=0.22\n  always do turn toward trail 45deg, wander 7deg, leave trail 1');
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    click($('[data-language-apply]'));
+    act(() => { vi.runAllTimers(); });
+    vi.useRealTimers();
+    const rules = useNodeGraphStore.getState().nodes.find(n => n.id === group.id)!.params.agentRules as { species: Array<{ name: string; rules: unknown[] }> };
+    expect(rules.species.map(x => x.name)).toEqual(['Slime']);
+    expect(rules.species[0].rules).toHaveLength(1);
   });
 });

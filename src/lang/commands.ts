@@ -421,7 +421,7 @@ export const RECIPES: ReadonlyArray<{ id: string; name: string; text: string; on
 
 export interface ReferenceEntry {
   id: string;
-  kind: 'verb' | 'action' | 'builder' | 'object' | 'modifier' | 'reference' | 'connector' | 'recipe';
+  kind: 'verb' | 'action' | 'builder' | 'object' | 'modifier' | 'reference' | 'connector' | 'recipe' | 'language';
   title: string;
   words: string[];
   summary: string;
@@ -560,17 +560,17 @@ export function searchReference(entries: ReferenceEntry[], query: string): Refer
 
 const KIND_TITLES: Record<ReferenceEntry['kind'], string> = {
   verb: 'Verbs: editing what is there', action: 'Verbs: build actions', builder: 'Builders: opening a builder', object: 'Objects', modifier: 'Modifiers', reference: 'References', connector: 'Connectors', recipe: 'Recipes',
+  language: 'The language: every head word (canonical)',
 };
 export const REFERENCE_SECTIONS = KIND_TITLES;
 
 /** docs/do-bar-commands.md, generated (a test keeps the file in step; WRITE_DOCS=1 rewrites it). */
-export function commandsMarkdown(): string {
-  const entries = commandReference();
+export function commandsMarkdown(entries: ReferenceEntry[] = commandReference()): string {
   const esc = (s: string) => s.replace(/\|/g, '\\|');
   const lines: string[] = [
     '# Do… bar commands',
     '',
-    '<!-- Generated from src/lang/commands.ts and src/lang/vocabulary.ts by `npm run docs:do-bar`. Don\'t edit by hand: a test fails when it is out of date. -->',
+    '<!-- Generated from src/lang/commands.ts, src/lang/vocabulary.ts and src/lang/registry.ts (src/lang/reference.ts) by `npm run docs:do-bar`. Don\'t edit by hand: a test fails when it is out of date. -->',
     '',
     'The Do… bar (⌘K) reads a small command language: no AI, the same sentence always does the same thing.',
     'A sentence is one or more **clauses**; each starts with a **verb**, names **objects** and **references**, and takes **modifiers**.',

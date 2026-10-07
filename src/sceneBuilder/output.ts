@@ -92,9 +92,9 @@ export function outputProblem(mode: RenderMode, o: OutputSpec | undefined): stri
   return null;
 }
 
-/** "output depth" / "colour by depth palette sunset": the recipe clause (empty for the picture). */
+/** "output depth" / "colour by depth palette=sunset": the recipe clause (empty for the picture). `palette sunset` still reads. */
 export function outputClause(o: OutputSpec | undefined): string {
   if (isPicture(o)) return '';
   const word = OUTPUT_BY_SHOW[o!.show].words[0];
-  return o!.palette ? `colour by ${word} palette ${o!.palette}` : `output ${word}`;
+  return o!.palette ? `colour by ${word} palette=${o!.palette}` : `output ${word}`;
 }

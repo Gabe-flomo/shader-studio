@@ -321,3 +321,12 @@ export function matchingPreset(params: Record<string, unknown>): string | null {
   }
   return null;
 }
+
+/** Switching type: the type's first preset, with its look (a working rule straight away). The editor's type picker and `grid <type>` text. */
+export function gridTypeDefaults(t: GridRuleType): Record<string, unknown> {
+  if (t === 'stages') return { ruleType: t, ...presetPatch(STAGES_PRESETS.briansBrain) };
+  if (t === 'smooth') return { ruleType: t, ...presetPatch(SMOOTH_PRESETS.heat) };
+  if (t === 'patterns') return { ruleType: t, ...presetPatch(PATTERN_PRESETS.wireworld) };
+  if (t === 'blocks') return { ruleType: t, ...presetPatch(BLOCK_PRESETS.sand) };
+  return { ruleType: t, ...presetPatch(COUNT_PRESETS.life), ...LOOKS.count, brushState: 1 };
+}

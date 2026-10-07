@@ -8,11 +8,14 @@
  */
 import type { GraphNode, NodeDefinition } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
+import { VALUE_NOUNS } from '../lang/nouns';
 
 export type ValueKind = 'distance' | 'mask' | 'colour' | 'space' | 'texture' | 'scene3d' | 'scalar';
 
+/** The nouns for the kinds: lang/nouns.ts, shared with the language's type checks and the explainer's roles (D16). */
+/** The nouns for the kinds: lang/nouns.ts, shared with the language's type checks and the explainer's roles (D16). */
 export const KIND_LABELS: Record<ValueKind, string> = {
-  distance: 'a distance', mask: 'a mask', colour: 'a colour', space: 'a space (UV)', texture: 'a texture', scene3d: '3D', scalar: 'a number',
+  distance: VALUE_NOUNS.distance, mask: VALUE_NOUNS.mask, colour: VALUE_NOUNS.colour, space: VALUE_NOUNS.space, texture: VALUE_NOUNS.texture, scene3d: VALUE_NOUNS.scene3d, scalar: VALUE_NOUNS.scalar,
 };
 
 const words = (key: string, label?: string) => `${key} ${label ?? ''}`.toLowerCase();

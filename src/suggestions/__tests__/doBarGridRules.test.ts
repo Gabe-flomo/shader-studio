@@ -97,9 +97,9 @@ describe('Grid Rules phrases', () => {
     expect(params('heat speed 0.7').rate).toBe(0.7);
     expect(params('game of life fast')).toMatchObject({ rate: 1 });
     expect(params('game of life speed 4')).toMatchObject({ rate: 1, steps: 4 });
-    expect(params('game of life in green on black')).toMatchObject({ color1: [0.2, 0.85, 0.35], color0: [0, 0, 0] });
-    expect(params('heat red')).toMatchObject({ color3: [1, 0.15, 0.12] });
-    expect(params('brians brain, navy background, chunky board, slow')).toMatchObject({ color0: [0.05, 0.1, 0.4], board: '0.0625', rate: 0.2 });
+    expect(params('game of life in green on black')).toMatchObject({ color1: [0.25, 0.75, 0.35], color0: [0, 0, 0] });
+    expect(params('heat red')).toMatchObject({ color3: [0.9, 0.15, 0.12] });
+    expect(params('brians brain, navy background, chunky board, slow')).toMatchObject({ color0: [0.05, 0.08, 0.25], board: '0.0625', rate: 0.2 });
     const plan = parseDo('game of life on a chunky board, fast, green', EMPTY);
     expect(plan.steps[0].label).toBe('Add Grid Rules (Life) · board chunky, speed 1, colours');
     expect(plan.reading.map(r => r.as)).toEqual(['do: grid rules (Life)', 'board 0.0625', 'speed 1', 'colour: live cells']);

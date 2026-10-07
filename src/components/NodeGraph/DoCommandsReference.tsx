@@ -15,7 +15,9 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { closeCommandsRef, openDoBar, useCommandsRef } from '../../suggestions/doBarStore';
-import { commandReference, searchReference, REFERENCE_SECTIONS, SCRATCH_LABELS, COMMAND_LIMITS, type CommandExample, type ReferenceEntry } from '../../lang/commands';
+import { fullReference } from '../../lang/reference';
+import { readLine, readsCanonically } from '../../lang/run';
+import { searchReference, REFERENCE_SECTIONS, SCRATCH_LABELS, COMMAND_LIMITS, type CommandExample, type ReferenceEntry } from '../../lang/commands';
 import { execCommand } from '../../suggestions/doCommands';
 import { scratchGraph } from '../../suggestions/doScratch';
 import { estimateNodeHeight } from '../../store/graphLayout';
@@ -40,7 +42,7 @@ export function CommandsReferenceBody({ initialQuery = '', onTry }: { initialQue
   const tk = useTokens();
   const [q, setQ] = useState(initialQuery);
   const [kind, setKind] = useState<Kind>('all');
-  const all = useMemo(() => commandReference(), []);
+  const all = useMemo(() => fullReference(), []);
   const shown = useMemo(() => searchReference(all, q).filter(e => kind === 'all' || e.kind === kind), [all, q, kind]);
   const kinds = Object.keys(REFERENCE_SECTIONS) as ReferenceEntry['kind'][];
   return (
@@ -107,7 +109,7 @@ function Entry({ e, onTry }: { e: ReferenceEntry; onTry: (text: string) => void 
           {e.slots.map(s => <span key={s.name} style={{ fontSize: 11.5, color: tk.text.muted }}><b style={{ color: tk.text.secondary }}>{s.name}</b> — {s.what}</span>)}
         </div>
       )}
-      {e.examples.map(x => <Example key={x.text + x.on} x={x} onTry={onTry} how={e.kind !== 'builder'} />)}
+      {e.examples.map(x => <Example key={x.text + x.on} x={x} onTry={onTry} how={e.kind !== 'builder' && !(e.kind === 'language' && e.group && !['picture', 'edit', 'pass'].includes(e.group))} />)}
     </div>
   );
 }
@@ -134,7 +136,10 @@ function ShowHow({ x }: { x: CommandExample }) {
   const tk = useTokens();
   const plan = useMemo(() => {
     let k = 0;
-    return execCommand(x.text, scratchGraph(x.on), { selected: x.selected ?? [], nextId: () => `how${++k}`, heightOf: estimateNodeHeight });
+    // A canonical line runs as the bar runs it (its sentence through the same executors).
+    const line = readLine(x.text, { seed: 1 });
+    const text = readsCanonically(line) && line.dialect === 'picture' ? line.picture!.sentence! : x.text;
+    return execCommand(text, scratchGraph(x.on), { selected: x.selected ?? [], nextId: () => `how${++k}`, heightOf: estimateNodeHeight });
   }, [x]);
   const newTypes = [...new Set(plan.nodes.filter(nd => !scratchGraph(x.on).some(o => o.id === nd.id)).map(nd => nd.type))];
   return (

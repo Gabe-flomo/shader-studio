@@ -1,0 +1,450 @@
+{
+ "circle · glow": {
+  "hash": "1b9ca8e8",
+  "black": 0.8118,
+  "clipped": 0.0398,
+  "lit": 0.0702,
+  "mean": 0.0603,
+  "spread": 0.1948
+ },
+ "circle · glow · colour by length": {
+  "hash": "75963433",
+  "black": 0.8827,
+  "clipped": 0.029,
+  "lit": 0.0691,
+  "mean": 0.0466,
+  "spread": 0.1545
+ },
+ "circle · rings": {
+  "hash": "4df8b38a",
+  "black": 0.8661,
+  "clipped": 0,
+  "lit": 0.0203,
+  "mean": 0.0185,
+  "spread": 0.0626
+ },
+ "circle · outline": {
+  "hash": "f195e869",
+  "black": 0.9932,
+  "clipped": 0.0056,
+  "lit": 0.0065,
+  "mean": 0.0054,
+  "spread": 0.0667
+ },
+ "circle · glow · colour by angle": {
+  "hash": "9078b20b",
+  "black": 0.8464,
+  "clipped": 0.0289,
+  "lit": 0.0528,
+  "mean": 0.0457,
+  "spread": 0.1678
+ },
+ "ring · glow": {
+  "hash": "367e42ce",
+  "black": 0.8118,
+  "clipped": 0,
+  "lit": 0.0521,
+  "mean": 0.0353,
+  "spread": 0.1021
+ },
+ "ring · glow · colour by length": {
+  "hash": "b04b1827",
+  "black": 0.8916,
+  "clipped": 0,
+  "lit": 0.0494,
+  "mean": 0.0323,
+  "spread": 0.1156
+ },
+ "ring · rings": {
+  "hash": "80118e34",
+  "black": 0.8597,
+  "clipped": 0,
+  "lit": 0.0276,
+  "mean": 0.0215,
+  "spread": 0.0702
+ },
+ "ring · outline": {
+  "hash": "55622abb",
+  "black": 0.9932,
+  "clipped": 0.0056,
+  "lit": 0.0065,
+  "mean": 0.0054,
+  "spread": 0.0667
+ },
+ "ring · glow · colour by angle": {
+  "hash": "d2a7aa39",
+  "black": 0.8509,
+  "clipped": 0,
+  "lit": 0.034,
+  "mean": 0.0266,
+  "spread": 0.0944
+ },
+ "box · glow": {
+  "hash": "f15546b6",
+  "black": 0.8117,
+  "clipped": 0.0367,
+  "lit": 0.0659,
+  "mean": 0.0567,
+  "spread": 0.1842
+ },
+ "box · glow · colour by length": {
+  "hash": "585775c7",
+  "black": 0.8729,
+  "clipped": 0.0151,
+  "lit": 0.0633,
+  "mean": 0.0415,
+  "spread": 0.141
+ },
+ "box · rings": {
+  "hash": "db0007c2",
+  "black": 0.8687,
+  "clipped": 0,
+  "lit": 0.0204,
+  "mean": 0.0189,
+  "spread": 0.0618
+ },
+ "box · outline": {
+  "hash": "612c3f1d",
+  "black": 0.9907,
+  "clipped": 0.0031,
+  "lit": 0.0093,
+  "mean": 0.007,
+  "spread": 0.0724
+ },
+ "box · glow · colour by angle": {
+  "hash": "7c124125",
+  "black": 0.8467,
+  "clipped": 0.0241,
+  "lit": 0.0493,
+  "mean": 0.0425,
+  "spread": 0.1582
+ },
+ "star · glow": {
+  "hash": "d23ad67a",
+  "black": 0.8314,
+  "clipped": 0.0141,
+  "lit": 0.0476,
+  "mean": 0.0368,
+  "spread": 0.1263
+ },
+ "star · glow · colour by length": {
+  "hash": "95224583",
+  "black": 0.8886,
+  "clipped": 0.0031,
+  "lit": 0.0339,
+  "mean": 0.025,
+  "spread": 0.0912
+ },
+ "star · rings": {
+  "hash": "1e9a328c",
+  "black": 0.8658,
+  "clipped": 0,
+  "lit": 0.0226,
+  "mean": 0.019,
+  "spread": 0.0635
+ },
+ "star · outline": {
+  "hash": "e294d405",
+  "black": 0.9916,
+  "clipped": 0.0061,
+  "lit": 0.0073,
+  "mean": 0.0062,
+  "spread": 0.0709
+ },
+ "star · glow · colour by angle": {
+  "hash": "f055a917",
+  "black": 0.8665,
+  "clipped": 0.0073,
+  "lit": 0.0324,
+  "mean": 0.0274,
+  "spread": 0.1113
+ },
+ "hexagon · glow": {
+  "hash": "a12b2a26",
+  "black": 0.7979,
+  "clipped": 0.0439,
+  "lit": 0.0769,
+  "mean": 0.0659,
+  "spread": 0.2035
+ },
+ "hexagon · glow · colour by length": {
+  "hash": "2432bc6f",
+  "black": 0.8721,
+  "clipped": 0.0353,
+  "lit": 0.0736,
+  "mean": 0.053,
+  "spread": 0.173
+ },
+ "hexagon · rings": {
+  "hash": "c714936c",
+  "black": 0.8651,
+  "clipped": 0,
+  "lit": 0.0227,
+  "mean": 0.0194,
+  "spread": 0.0648
+ },
+ "hexagon · outline": {
+  "hash": "b7628afb",
+  "black": 0.9926,
+  "clipped": 0.0061,
+  "lit": 0.0071,
+  "mean": 0.0059,
+  "spread": 0.0696
+ },
+ "hexagon · glow · colour by angle": {
+  "hash": "ea211e1f",
+  "black": 0.8347,
+  "clipped": 0.0318,
+  "lit": 0.0579,
+  "mean": 0.0499,
+  "spread": 0.1754
+ },
+ "heart · glow": {
+  "hash": "153a35ad",
+  "black": 0.734,
+  "clipped": 0.1163,
+  "lit": 0.1523,
+  "mean": 0.1375,
+  "spread": 0.3121
+ },
+ "heart · glow · colour by length": {
+  "hash": "6ef99aae",
+  "black": 0.7582,
+  "clipped": 0.0902,
+  "lit": 0.1199,
+  "mean": 0.1033,
+  "spread": 0.2652
+ },
+ "heart · rings": {
+  "hash": "048255cf",
+  "black": 0.875,
+  "clipped": 0,
+  "lit": 0.0208,
+  "mean": 0.0177,
+  "spread": 0.0628
+ },
+ "heart · outline": {
+  "hash": "ca893bbe",
+  "black": 0.9911,
+  "clipped": 0.0079,
+  "lit": 0.0085,
+  "mean": 0.0072,
+  "spread": 0.078
+ },
+ "heart · glow · colour by angle": {
+  "hash": "1e6cedc8",
+  "black": 0.7588,
+  "clipped": 0.1107,
+  "lit": 0.1472,
+  "mean": 0.1347,
+  "spread": 0.3142
+ },
+ "triangle · glow": {
+  "hash": "2a94ffc2",
+  "black": 0.8342,
+  "clipped": 0.0223,
+  "lit": 0.0506,
+  "mean": 0.042,
+  "spread": 0.1493
+ },
+ "triangle · glow · colour by length": {
+  "hash": "4402077b",
+  "black": 0.8852,
+  "clipped": 0.007,
+  "lit": 0.036,
+  "mean": 0.028,
+  "spread": 0.1056
+ },
+ "triangle · rings": {
+  "hash": "f1441db0",
+  "black": 0.8664,
+  "clipped": 0,
+  "lit": 0.0202,
+  "mean": 0.0182,
+  "spread": 0.0614
+ },
+ "triangle · outline": {
+  "hash": "b6cd1fed",
+  "black": 0.9926,
+  "clipped": 0.0043,
+  "lit": 0.007,
+  "mean": 0.0054,
+  "spread": 0.0658
+ },
+ "triangle · glow · colour by angle": {
+  "hash": "9e7318bb",
+  "black": 0.8691,
+  "clipped": 0.0137,
+  "lit": 0.036,
+  "mean": 0.0311,
+  "spread": 0.1292
+ },
+ "moon · glow": {
+  "hash": "54349e54",
+  "black": 0.814,
+  "clipped": 0.0354,
+  "lit": 0.0669,
+  "mean": 0.0565,
+  "spread": 0.1845
+ },
+ "moon · glow · colour by length": {
+  "hash": "a2cdc36f",
+  "black": 0.8832,
+  "clipped": 0.0233,
+  "lit": 0.0633,
+  "mean": 0.0427,
+  "spread": 0.1448
+ },
+ "moon · rings": {
+  "hash": "874b5236",
+  "black": 0.8663,
+  "clipped": 0,
+  "lit": 0.0206,
+  "mean": 0.0187,
+  "spread": 0.0631
+ },
+ "moon · outline": {
+  "hash": "1fc63485",
+  "black": 0.9927,
+  "clipped": 0.0058,
+  "lit": 0.0069,
+  "mean": 0.0057,
+  "spread": 0.0681
+ },
+ "moon · glow · colour by angle": {
+  "hash": "6bad5be9",
+  "black": 0.8491,
+  "clipped": 0.0254,
+  "lit": 0.0498,
+  "mean": 0.0435,
+  "spread": 0.1633
+ },
+ "circle · rings · colour by length": {
+  "hash": "96a7e662",
+  "black": 0.9017,
+  "clipped": 0,
+  "lit": 0.013,
+  "mean": 0.0156,
+  "spread": 0.0687
+ },
+ "circle · glow · tone-map": {
+  "hash": "42178a97",
+  "black": 0.8358,
+  "clipped": 0.0052,
+  "lit": 0.0835,
+  "mean": 0.0623,
+  "spread": 0.1919
+ },
+ "circle · glow · colour by length · tone-map": {
+  "hash": "a34acab8",
+  "black": 0.8861,
+  "clipped": 0.0024,
+  "lit": 0.078,
+  "mean": 0.0509,
+  "spread": 0.1657
+ },
+ "circle · glow · colour by time": {
+  "hash": "d265a80a",
+  "black": 0.9113,
+  "clipped": 0.0398,
+  "lit": 0.0178,
+  "mean": 0.0337,
+  "spread": 0.0689
+ },
+ "star · polar-repeat · glow · colour by length": {
+  "hash": "c7647a35",
+  "black": 0.8887,
+  "clipped": 0.0031,
+  "lit": 0.0329,
+  "mean": 0.0252,
+  "spread": 0.0928
+ },
+ "circle · twist · glow": {
+  "hash": "97e119e8",
+  "black": 0.8118,
+  "clipped": 0.0398,
+  "lit": 0.0702,
+  "mean": 0.0603,
+  "spread": 0.1948
+ },
+ "circle · swirl · rings": {
+  "hash": "ea05d681",
+  "black": 0.8663,
+  "clipped": 0,
+  "lit": 0.0203,
+  "mean": 0.0185,
+  "spread": 0.0626
+ },
+ "box · repeat · glow": {
+  "hash": "f9006079",
+  "black": 0.0006,
+  "clipped": 0.2353,
+  "lit": 0.4822,
+  "mean": 0.3783,
+  "spread": 0.341
+ },
+ "hexagon · mirror · outline": {
+  "hash": "c16b06cb",
+  "black": 0.9926,
+  "clipped": 0.0061,
+  "lit": 0.0071,
+  "mean": 0.0059,
+  "spread": 0.0696
+ },
+ "circle · onion · glow": {
+  "hash": "b78da078",
+  "black": 0.8118,
+  "clipped": 0.0469,
+  "lit": 0.0702,
+  "mean": 0.065,
+  "spread": 0.2121
+ },
+ "circle · warp · glow · colour by length": {
+  "hash": "d7c2f6b6",
+  "black": 0.9588,
+  "clipped": 0.0053,
+  "lit": 0.0121,
+  "mean": 0.0095,
+  "spread": 0.0691
+ },
+ "circle · glow · grain": {
+  "hash": "13a26137",
+  "black": 0.6074,
+  "clipped": 0.0398,
+  "lit": 0.0701,
+  "mean": 0.0698,
+  "spread": 0.1924
+ },
+ "circle · glow · brighten": {
+  "hash": "8c99fe38",
+  "black": 0,
+  "clipped": 0.044,
+  "lit": 0.1052,
+  "mean": 0.2052,
+  "spread": 0.1738
+ },
+ "noise · colour by it": {
+  "hash": "92fd6de2",
+  "black": 0,
+  "clipped": 0.0057,
+  "lit": 0.3189,
+  "mean": 0.2098,
+  "spread": 0.1987
+ },
+ "noise · warp · colour by it": {
+  "hash": "31e2fdc1",
+  "black": 0,
+  "clipped": 0.0023,
+  "lit": 0.2496,
+  "mean": 0.1795,
+  "spread": 0.177
+ },
+ "voronoi · colour by it": {
+  "hash": "169a3e8f",
+  "black": 0,
+  "clipped": 0.0272,
+  "lit": 0.4639,
+  "mean": 0.3138,
+  "spread": 0.2782
+ }
+}

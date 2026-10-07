@@ -74,11 +74,11 @@ describe('Scene Builder outputs', () => {
   it('round-trips outputs through the recipe and through Describe', () => {
     const recipes = [
       'surface · sphere · sphere at=(1,0,0) · output depth',
-      'surface · sphere · colour by depth palette sunset',
+      'surface · sphere · colour by depth palette=sunset',
       'gi · box · output normal',
-      'surface · torus · colour by height palette terrain',
+      'surface · torus · colour by height palette=terrain',
       'surface · sphere · plane · output shadow',
-      'gi · sphere · colour by ao palette mono',
+      'gi · sphere · colour by ao palette=mono',
     ];
     for (const r of recipes) {
       const { spec, errors } = parseRecipe(r);

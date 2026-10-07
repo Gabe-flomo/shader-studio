@@ -190,6 +190,60 @@ starter circuit that way.
   Smooth: a four-stop ramp), **Afterglow** (a cell that just switched off glows, the glow kept
   times Afterglow each step) and **Age fade** (live cells move towards Old cells as they age).
 
+## As text: the Recipe tab
+
+The **Recipe** tab shows the whole rule as one line of the shared Playfield language
+(`src/lang/dialects/grid.ts`; the plan is `docs/playfield-language-plan.md` §4.3). The words are the
+same as in the Do… bar and the other builders. The line is a preset (or a rule type) and then
+only what differs from it:
+
+```
+life walls board=480
+count born=3,6 survive=2,3 neighbours=von-neumann
+count neighbours=radius radius=5 born=34..45 survive=33..57       (this is bosco)
+stages born=2 survive= states=3                                   (this is brians-brain)
+smooth waves wave-speed=0.9 damping=0.995
+smooth custom u={u + 0.2 * lap_u} v={v} a=0.5
+patterns states=4
+  stencil .../.1./... → 2
+  stencil .../.3./... → 1 count=1:1..2
+blocks states=3
+  block 11/00 → 00/11
+  block 10/*0 → 00/=1 @mirror chance=0.8
+life · colours on=green empty=black · brush size=5 fill=0.3
+```
+
+- **Presets** are named by their slugged label: life, highlife, seeds, day-and-night, maze,
+  coral, anneal, diamoeba, replicator, life-without-death, caves, diamonds, bosco, majority,
+  brians-brain, star-wars, frogs, sticks, spirals, swirl, lava, bloomerang, heat, ripples,
+  mitosis, coral-growth, worms, spots, labyrinth, wireworld, falling-dots, crystal, falling-sand
+  and gas. The Count Maze is `maze` and the Smooth one is `labyrinth`.
+- **Settings:**
+  - `born=` / `survive=` take counts (`2,3`) or, with `neighbours=radius`, a range (`34..45`).
+    `rule=B36/S23` and a bare `B36/S23` also read.
+  - `neighbours=moore|von-neumann|radius`, `radius=`, `shape=box|circle`, `states=`.
+  - `board=` is cells across at 1080p (960, 480, 240, 120, 60). `wrap` / `walls`.
+  - `speed=` runs 0–1 a frame; above 1 it is steps a frame. `steps=`.
+  - `start=noise|empty|image|centre`, `density=`, `start-seed=`.
+  - Smooth: `spread=`, `cooling=`, `wave-speed=`, `damping=`, `feed=`, `kill=`, `spread-a=`,
+    `spread-b=`, `u={…}`, `v={…}`, `a=` to `d=`, `gain=`.
+  - `afterglow=`, `age-rate=`, `age-fade=`.
+- **Stencils.** Cells read top row first: `.` any, `*` not empty, a state (0–9, a–f). `→` the
+  state it becomes. `count=state:min..max` checks the neighbours. `@turns` and `@turns-mirrors`
+  cover every orientation.
+- **Blocks.** The before cells are `.`, `*` or a state; the after cells are `=` (unchanged) or a
+  state. Add `chance=` and `@mirror` or `@turns`.
+- `@off` switches a stencil or a block off.
+- **Randomness:** `feed=random`, `kill=random(0.05..0.06)`, `colours on=random` and a leading
+  `random` (`random stages`) draw from the interesting ranges of `src/lib/surprise`. `seed=42`
+  repeats a result.
+
+Typing reads the text as you go: mistakes are listed at their line and column with "did you mean".
+**Apply** (or ⌘Enter, or leaving the box) writes the text into the form as one undo step. Rules bake
+into the GLSL, so the text isn't applied on every keystroke. The Recipe chip on the card shows the
+same line, with `grid` in front so it pastes into the Do… bar. In the bar, `grid` is needed only
+for a name that is also another word (`grid swirl`, `grid ripples`, `grid diamonds`).
+
 ## Outputs
 
 | Output | What |

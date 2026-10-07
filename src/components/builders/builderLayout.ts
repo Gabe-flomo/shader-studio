@@ -84,6 +84,7 @@ export function gridRulesTabs(type: GridRuleType): BuilderSectionTab[] {
     { id: 'start', label: 'Start', icon: 'play', how: 'What a new board starts as, how big it is, what its edges do and how fast it runs.' },
     { id: 'brush', label: 'Brush', icon: 'hand', how: 'Hold the mouse button over the picture to paint cells in: its size, what it paints and how thickly.' },
     { id: 'colours', label: 'Colours', icon: 'spark', how: 'What the picture shows and the colour of each state, with an afterglow where cells die.' },
+    { id: 'recipe', label: 'Recipe', icon: 'text', gapBefore: true, how: 'The whole rule as one line of text in the Playfield language: read it, change it, paste one in. The same words work in the Do… bar.' },
   ];
 }
 
@@ -94,4 +95,5 @@ export const AGENT_RULES_TABS: BuilderSectionTab[] = [
   { id: 'rules', label: 'Rules', icon: 'expr', how: 'Every step each walker runs its rules top to bottom: When the condition holds, it does the actions.' },
   { id: 'trails', label: 'Trails', icon: 'wave', how: 'Walkers leave trails in four channels and steer by reading them ahead and to the sides.' },
   { id: 'look', label: 'Look', icon: 'eye', how: 'What the group\'s picture shows: the trail, one channel, or the walkers themselves.' },
+  { id: 'recipe', label: 'Recipe', icon: 'text', gapBefore: true, how: 'The whole rule set as text in the Playfield language: species, states and When … Do … rules. Read it, change it, paste one in.' },
 ];

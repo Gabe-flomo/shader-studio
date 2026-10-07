@@ -130,7 +130,8 @@ describe('RecipeChip', () => {
     const host = mount(<RecipeChip node={g} />);
     expect(host.querySelector('[data-recipe-full]')).toBeNull();
     act(() => showRecipeOf('g1'));
-    expect(host.querySelector('[data-recipe-full]')?.textContent).toMatch(/B3\/S23 · 240×135 · wrap/);
+    expect(host.querySelector('[data-recipe-full]')?.textContent).toBe('grid life');
+    expect(host.querySelector('[data-recipe-chip]')?.textContent).toMatch(/B3\/S23 · 240×135 · wrap/);
     click(host.querySelector('[data-recipe-open]'));
     expect(useBuilderWindows.getState().gridRules).toBe('g1');
   });

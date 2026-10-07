@@ -5,7 +5,7 @@
  */
 import { useThemeMode } from '../../theme/themeStore';
 import { C, C_LIGHT } from '../glslSyntax';
-import { recipeTokens, type RecipeKind } from '../../sceneBuilder/highlight';
+import { recipeTokens, type RecipeKind, type WordKind } from '../../sceneBuilder/highlight';
 import type { RecipeError } from '../../sceneBuilder/recipe';
 import type { Vec3 } from '../../sceneBuilder/spec';
 
@@ -36,8 +36,8 @@ export const css = (rgb: Vec3) => `rgb(${rgb.map(v => Math.round(v * 255)).join(
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /** The recipe as HTML for an editable overlay: same characters, coloured; swatches as a bar under the colour, mistakes wavy-underlined. */
-export function recipeHtml(src: string, pal: Pal, danger: string, errors?: RecipeError[]): string {
-  const toks = recipeTokens(src, errors);
+export function recipeHtml(src: string, pal: Pal, danger: string, errors?: RecipeError[], wordKind?: WordKind): string {
+  const toks = recipeTokens(src, errors, wordKind);
   // A vector's swatch spans its whole bracket.
   const spans: Array<{ from: number; to: number; rgb: Vec3 }> = [];
   toks.forEach((t, i) => {

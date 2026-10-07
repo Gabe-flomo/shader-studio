@@ -10,7 +10,7 @@
  */
 import { useMemo, type CSSProperties } from 'react';
 import { useTokens } from '../../theme/themeStore';
-import { recipeRuns, recipeTokens } from '../../sceneBuilder/highlight';
+import { recipeRuns, recipeTokens, type WordKind } from '../../sceneBuilder/highlight';
 import type { RecipeError } from '../../sceneBuilder/recipe';
 import type { Vec3 } from '../../sceneBuilder/spec';
 import { css, recipeColour, useRecipePalette } from './recipeColours';
@@ -22,10 +22,10 @@ export function Swatch({ rgb }: { rgb: Vec3 }) {
 }
 
 /** Read-only recipe text, coloured, with swatches and mistakes. */
-export function RecipeCode({ text, style, errors }: { text: string; style?: CSSProperties; errors?: RecipeError[] }) {
+export function RecipeCode({ text, style, errors, wordKind }: { text: string; style?: CSSProperties; errors?: RecipeError[]; /** Another dialect's words (lang/highlight.ts wordKindFor). */ wordKind?: WordKind }) {
   const pal = useRecipePalette();
   const tk = useTokens();
-  const runs = useMemo(() => recipeRuns(text, recipeTokens(text, errors)), [text, errors]);
+  const runs = useMemo(() => recipeRuns(text, recipeTokens(text, errors, wordKind)), [text, errors, wordKind]);
   return (
     <span data-recipe-code style={style}>
       {runs.map((r, i) => (

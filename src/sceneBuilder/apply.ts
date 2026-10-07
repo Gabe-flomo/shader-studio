@@ -142,7 +142,7 @@ export interface ApplyResult {
  * keeping the user's own settings where the new spec doesn't change them.
  * The graph's Output shows the scene.
  */
-export function applyScene(graph: GraphNode[], spec: SceneSpec, opts: { nextId: () => string; sceneId?: string | null; asNew?: boolean; at?: { x: number; y: number } }): ApplyResult {
+export function applyScene(graph: GraphNode[], spec: SceneSpec, opts: { nextId: () => string; sceneId?: string | null; asNew?: boolean; at?: { x: number; y: number }; /** Rebuild from the recipe: drop the settings changed by hand (§13 decision 4). */ restore?: boolean }): ApplyResult {
   const found = !opts.asNew && opts.sceneId ? findBuild(graph, opts.sceneId) : null;
   // Fresh ids never reuse one the graph already has.
   const taken = new Set(everyNode(graph).map(l => l.node.id));
@@ -166,7 +166,7 @@ export function applyScene(graph: GraphNode[], spec: SceneSpec, opts: { nextId: 
     const fresh = snapshot(node, roleById);
     snapshots[role] = JSON.stringify(fresh);
     if (old && found?.byRole.get(role)?.parent) node.position = { ...old.position };
-    if (old && was && old.type === node.type) {
+    if (old && was && old.type === node.type && !opts.restore) {
       for (const [k, v] of Object.entries(old.params)) {
         if (ignored(k)) continue;
         if (userChanged(old, k, v, was.params) && same(fresh.params[k], was.params[k])) { node.params[k] = v; kept.push(`${nameOf(node)} · ${paramName(node, k)}`); }

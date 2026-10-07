@@ -138,6 +138,77 @@ Rules run **top to bottom, every step**; a rule that applies with **Stop after t
 
 **Spawn a child (via the Emit mechanics).** A walker can't create another one directly: every walker is a fixed slot in the GPU's state texture, and a step only writes its own slot. So "spawn" lays a mark in trail channel 4, and the first time a rule set spawns, the editor adds a **Births Emit** in front of the group's Emit: Rate 2000 a second, Shape Field, born where the Trail's channel 4 is above 0.5 and nowhere else. Children are born near marks, a little later; each Rate birth takes the slot whose turn it is in the birth window (as every Rate birth does), and births are shared with the group's own Emit by Share. Spawning needs the group to fill a Trail (Deposit → Trail field). Use channel 4 for nothing else.
 
+## As text: the Recipe tab
+
+The **Recipe** tab shows the whole rule set in the shared Playfield language
+(`src/lang/dialects/agents.ts`; the plan is `docs/playfield-language-plan.md` §4.4). You can
+read it, change it or paste one in.
+
+```
+agents kind=ants edges=bounce
+sensors ahead=0.04 angle=35deg
+channels home, food
+masks Food, Nest
+species Ants speed=0.3 states=searching,carrying
+  state carrying color=gold
+  always do memory += 1/s, wander 5deg
+  when searching and mask Food > 0.5 do become carrying, turn around, memory = 0 @last
+  when searching and food anywhere > 0.05 do turn toward food 20deg
+  when carrying do leave food 1 fade=0.15, turn toward home 20deg, turn toward (-0.15,-0.1) 2deg
+```
+
+- **Settings come first.**
+  - `agents kind= edges= view= view-max=` sets the rule set's kind and edges, and how far and how
+    many neighbours a walker reads.
+  - `sensors ahead= angle=` and `flow size= evolve=` set the sensors and the flow field.
+  - `channels a, b` names the trail channels; `_` leaves one blank.
+  - `masks Food, Nest:texture` names the masks.
+- **Each species follows** with `speed=` and `states=`, then its `state <name> color=…` lines and
+  its rules. The rules go on indented lines under the species. On one line, put a colon after the
+  species: `species Slime: always do turn toward trail 45deg, wander 7deg, leave trail 1`.
+- **A rule** is `when <condition> and … do <action>, …`, or `always do …`. `@last` stops after the
+  rule; `@off` switches it off.
+- **Conditions:**
+  - a state, or `not <state>`;
+  - `<channel> ahead|left|right|anywhere|here > v`;
+  - `near <Species> > v`;
+  - `chance 60%` (a second);
+  - `age > 2s`;
+  - `memory > v`, `memory < v` or `memory = v`;
+  - `mask <Name> > v`;
+  - `neighbours > 8 who=own radius=0.08`.
+- **Actions:**
+  - `turn toward|away <channel>|centre|mouse|(x,y) 20deg`, and `turn around`;
+  - `wander 7deg`;
+  - `speed 0.4`, `accelerate 0.1/s`;
+  - `leave <channel> 1 fade=0.15`;
+  - `become <state>`;
+  - `memory = 0`, `memory += 1`, `memory += 1/s`, `memory = random 2`;
+  - `stop`, `stick`, `die`, `spawn 1`;
+  - `follow flow 10deg`, `against flow 10deg`;
+  - `align 10deg`;
+  - `separate`, `match` or `cohere 12deg who=others radius=0.045`;
+  - `slow jam=20`;
+  - `avoid-edges 12deg margin=0.1`;
+  - `orbit centre 8deg distance=0.5 cw`;
+  - `force gravity 0.75 angle=-90deg`, `force curl 0.6`, `force toward mouse 1`, `force away (x,y) 1`;
+  - `drag 0.35`;
+  - `fade 3s`.
+- **Names.**
+  - A bare word in a condition is a state.
+  - A channel is always followed by where it is read.
+  - A mask follows `mask`, and a species follows `near`.
+  - `trail` is the walker's own species' channel; `trail1` to `trail4` name a channel by number.
+  - A name with a space, or one that is a keyword, is quoted: `"wood chips"`.
+- **Randomness.** `wander random`, `turn toward trail random(20..40)` and a leading `random`
+  draw from the interesting ranges of `src/lib/surprise`. A leading `random` sets the sensors, each
+  species' speed and harmonious state colours. `seed=42` repeats a result.
+
+Typing reads the text as you go: mistakes are shown at their line and column, with "did you mean".
+**Apply** (or ⌘Enter, or leaving the box) writes the text into the editor as one undo step. The
+Rules chip on the group's card shows the same text. Every template reads back from its text to a
+rule set that makes exactly the same nodes (tested).
+
 ## States and the Memory limit
 
 A walker's state is kept in **Agent Output's Memory**, which is **two floats** — so a walker remembers exactly **a state and one number**:

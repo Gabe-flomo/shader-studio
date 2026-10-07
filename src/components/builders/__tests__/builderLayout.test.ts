@@ -24,16 +24,16 @@ describe('builder windows on a phone', () => {
 });
 
 describe('the builders\' tab model', () => {
-  it('Grid Rules: Presets · Neighbourhood · Born & Survive · Start · Brush · Colours for a Count rule', () => {
-    expect(gridRulesTabs('count').map(t => t.label)).toEqual(['Presets', 'Neighbourhood', 'Born & Survive', 'Start', 'Brush', 'Colours']);
+  it('Grid Rules: Presets · Neighbourhood · Born & Survive · Start · Brush · Colours · Recipe for a Count rule', () => {
+    expect(gridRulesTabs('count').map(t => t.label)).toEqual(['Presets', 'Neighbourhood', 'Born & Survive', 'Start', 'Brush', 'Colours', 'Recipe']);
   });
 
   it('the rule tab is named for the rule type (always id "rule"); Neighbourhood only where cells are counted', () => {
     const labels = (t: Parameters<typeof gridRulesTabs>[0]) => gridRulesTabs(t).map(x => x.label);
-    expect(labels('stages')).toEqual(['Presets', 'Neighbourhood', 'Stages', 'Start', 'Brush', 'Colours']);
-    expect(labels('patterns')).toEqual(['Presets', 'Stencils', 'Start', 'Brush', 'Colours']);
-    expect(labels('blocks')).toEqual(['Presets', 'Blocks', 'Start', 'Brush', 'Colours']);
-    expect(labels('smooth')).toEqual(['Presets', 'Smooth', 'Start', 'Brush', 'Colours']);
+    expect(labels('stages')).toEqual(['Presets', 'Neighbourhood', 'Stages', 'Start', 'Brush', 'Colours', 'Recipe']);
+    expect(labels('patterns')).toEqual(['Presets', 'Stencils', 'Start', 'Brush', 'Colours', 'Recipe']);
+    expect(labels('blocks')).toEqual(['Presets', 'Blocks', 'Start', 'Brush', 'Colours', 'Recipe']);
+    expect(labels('smooth')).toEqual(['Presets', 'Smooth', 'Start', 'Brush', 'Colours', 'Recipe']);
     for (const t of RULE_TYPES) {
       const tabs = gridRulesTabs(t.value);
       expect(tabs.find(x => x.id === 'rule'), t.value).toBeTruthy();
@@ -49,15 +49,15 @@ describe('the builders\' tab model', () => {
     }
   });
 
-  it('Agent Rules: Species · Rules · Trails · Look', () => {
-    expect(AGENT_RULES_TABS.map(t => t.label)).toEqual(['Species', 'Rules', 'Trails', 'Look']);
+  it('Agent Rules: Species · Rules · Trails · Look · Recipe', () => {
+    expect(AGENT_RULES_TABS.map(t => t.label)).toEqual(['Species', 'Rules', 'Trails', 'Look', 'Recipe']);
   });
 
   it('a phone shows one row: the left panel, the tabs, the right panel', () => {
     const row = sectionRow(gridRulesTabs('count'), undefined, 'Preview');
-    expect(row.map(r => r.value)).toEqual(['presets', 'neighbourhood', 'rule', 'start', 'brush', 'colours', PANEL_RIGHT]);
+    expect(row.map(r => r.value)).toEqual(['presets', 'neighbourhood', 'rule', 'start', 'brush', 'colours', 'recipe', PANEL_RIGHT]);
     expect(row.at(-1)!.label).toBe('Preview');
-    expect(sectionRow(AGENT_RULES_TABS).map(r => r.label)).toEqual(['Species', 'Rules', 'Trails', 'Look']);
+    expect(sectionRow(AGENT_RULES_TABS).map(r => r.label)).toEqual(['Species', 'Rules', 'Trails', 'Look', 'Recipe']);
     expect(sectionRow([{ id: 'shapes', label: 'Shapes' }, { id: 'recipe', label: 'Recipe', gapBefore: true }], 'Scene', 'Preview'))
       .toEqual([{ value: PANEL_LEFT, label: 'Scene' }, { value: 'shapes', label: 'Shapes' }, { value: 'recipe', label: 'Recipe', gapBefore: true }, { value: PANEL_RIGHT, label: 'Preview' }]);
   });
