@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.65',
+    date: '2026-10-07',
+    title: 'Falling sand fix',
+    highlights: [
+      { area: 'Studio', text: 'Falling sand in Grid Rules now piles into real heaps: the preset has a floor and starts as a cloud of grains instead of a striped sheet.', link: { kind: 'doc', path: 'docs/grid-rules.md' } },
+      { area: 'Studio', text: 'The Grid Rules preview now matches the canvas at the walls, so grains in the edge columns no longer hang in the air.' },
+    ],
+  },
+  {
     id: '2026.10.64',
     date: '2026-10-07',
     title: 'Surprise me',
