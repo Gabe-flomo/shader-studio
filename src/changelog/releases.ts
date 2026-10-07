@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.70',
+    date: '2026-10-07',
+    title: 'Do bar crash fix',
+    highlights: [
+      { area: 'Studio', text: 'Fixed: typing create palette, create mix or create crt-screen with some nodes selected could blank the whole app. The Do bar now can never take the app down.' },
+      { area: 'Studio', text: 'More examples rebuild from Show as commands: 184 of 398 now come out identical, up from 166.', link: { kind: 'doc', path: 'docs/reports/language-pressure-test.md' } },
+    ],
+  },
+  {
     id: '2026.10.69',
     date: '2026-10-07',
     title: 'Show as commands',
