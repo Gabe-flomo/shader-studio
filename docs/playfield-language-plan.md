@@ -1334,3 +1334,20 @@ under `src/lang/__tests__/goldens/`.
    the next header. Is that clear enough, or should one-line rules need `species Ants: …`?
 8. **Mixing dialects on one line** (`surface · sphere · pass "x" · fade 1s`) is allowed by the
    grammar. Should the first version refuse it to keep things simple?
+
+## 13. Decisions (user, 2026-10-07)
+
+1. **`colour by`** is canonical; `palette by` is an alias.
+2. **No "the"** in edit commands: `set glow falloff=8`. References resolve to existing nodes in edit verbs; new nodes come from `create …` or a build line.
+3. **One colour table** app-wide (accept the small shift in new graphs).
+4. **Editing a builder-made node** changes the node (marks *edited since build*); a **Rebuild from recipe** button restores the recipe.
+5. **History** stores what was typed.
+6. **`grid`** is needed only when a name clashes.
+7. **Agent one-liners use a colon**: `species Ants: always do …`.
+8. **Mixing dialects** on one line is refused in v1.
+
+Additions requested with these answers:
+- **Good defaults**: `circle · glow · colour by length` must look good with no numbers.
+- **Randomness**: `falloff=random` (and `random(0.2..2)`), a leading `random` that randomises every unset value (`random circle · glow · colour by length`), a seed (`seed=42`) to repeat a result, and a **random statement** generator ("surprise me", with size/complexity) built from simple rules so results are interesting.
+- **Autocomplete after verbs**: `create ` lists everything creatable; `connect ` suggests sockets and nodes that fit by type from the current graph (e.g. UV → circle).
+- **Consistency app-wide**: one vocabulary, one colour table, one set of names.
