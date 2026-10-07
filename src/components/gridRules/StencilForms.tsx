@@ -128,7 +128,8 @@ function Heading({ title, hint }: { title: string; hint: string }) {
 
 // ── Patterns ────────────────────────────────────────────────────────────────────────────────────
 
-export function PatternsForm({ p, set }: { p: P; set: Setter }) {
+/** `part`: the presets and states (the Presets tab), the rule list (the Stencils tab), or both. */
+export function PatternsForm({ p, set, part = 'all' }: { p: P; set: Setter; part?: 'presets' | 'rules' | 'all' }) {
   const tk = useTokens();
   const rules = gridShape(p).patterns;
   const top = statesOf(p) - 1;
@@ -136,9 +137,12 @@ export function PatternsForm({ p, set }: { p: P; set: Setter }) {
   const edit = (i: number, patch: Partial<PatternRule>) => save(rules.map((r, k) => (k === i ? { ...r, ...patch } : r)));
   return (
     <>
-      <Heading title="Presets" hint="Rules as pictures: each says what the 3×3 block round a cell must look like, and what the cell becomes." />
-      <StencilPresets table={PATTERN_PRESETS} p={p} set={set} />
-      <StatesRow p={p} set={set} />
+      {part !== 'rules' && <>
+        <Heading title="Presets" hint="Rules as pictures: each says what the 3×3 block round a cell must look like, and what the cell becomes." />
+        <StencilPresets table={PATTERN_PRESETS} p={p} set={set} />
+        <StatesRow p={p} set={set} />
+      </>}
+      {part !== 'presets' && <>
       <Heading title="Rules, tried in order" hint="Click a cell to cycle it: · any, a state, ≠0 not empty. The blue-ringed middle is the cell itself. The first rule that matches wins." />
       {rules.map((r, i) => (
         <Card key={i} title={`Rule ${i + 1}`} off={r.off} actions={<ListActions i={i} n={rules.length} off={!!r.off} onMove={d => save(move(rules, i, d))} onDelete={() => save(rules.filter((_, k) => k !== i))} onToggle={on => edit(i, { off: !on })} />}>
@@ -175,6 +179,7 @@ export function PatternsForm({ p, set }: { p: P; set: Setter }) {
         <Button size="sm" icon="plus" onClick={() => save([...rules, { cells: [ANY, ANY, ANY, ANY, 0, ANY, ANY, ANY, ANY], becomes: Math.min(1, top), symmetry: 'none', count: null }])}>Add a rule</Button>
         <span style={{ color: tk.text.muted, fontSize: 12 }}>No rule matches: the cell stays as it is.</span>
       </div>
+      </>}
     </>
   );
 }
@@ -189,7 +194,7 @@ function NumberBox({ value, max, onChange, label }: { value: number; max: number
 
 // ── Blocks ──────────────────────────────────────────────────────────────────────────────────────
 
-export function BlocksForm({ p, set }: { p: P; set: Setter }) {
+export function BlocksForm({ p, set, part = 'all' }: { p: P; set: Setter; part?: 'presets' | 'rules' | 'all' }) {
   const tk = useTokens();
   const rules = gridShape(p).blocks;
   const top = statesOf(p) - 1;
@@ -202,9 +207,12 @@ export function BlocksForm({ p, set }: { p: P; set: Setter }) {
   );
   return (
     <>
-      <Heading title="Presets" hint="Margolus blocks: the board in 2×2 blocks whose grid shifts one cell diagonally every step. A block that looks like a before picture becomes its after picture, all four cells at once." />
-      <StencilPresets table={BLOCK_PRESETS} p={p} set={set} />
-      <StatesRow p={p} set={set} />
+      {part !== 'rules' && <>
+        <Heading title="Presets" hint="Margolus blocks: the board in 2×2 blocks whose grid shifts one cell diagonally every step. A block that looks like a before picture becomes its after picture, all four cells at once." />
+        <StencilPresets table={BLOCK_PRESETS} p={p} set={set} />
+        <StatesRow p={p} set={set} />
+      </>}
+      {part !== 'presets' && <>
       <Heading title="Rules, tried in order" hint="Before: · any, a state, ≠0 not empty (the board's edge counts as not empty). After: = unchanged, or a state. An after that only rearranges its before keeps every count: nothing is made or lost." />
       {rules.map((r, i) => {
         const keeps = blockConserves(r);
@@ -231,6 +239,7 @@ export function BlocksForm({ p, set }: { p: P; set: Setter }) {
         <Button size="sm" icon="plus" onClick={() => save([...rules, { before: [1, ANY, 0, ANY], after: [0, SAME, 1, SAME], symmetry: 'none', chance: 1 }])}>Add a rule</Button>
         <span style={{ color: tk.text.muted, fontSize: 12 }}>No rule matches: the block stays as it is.</span>
       </div>
+      </>}
     </>
   );
 }

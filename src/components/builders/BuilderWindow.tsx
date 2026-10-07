@@ -5,8 +5,9 @@
  * subtitle, actions, close), collapsible side panels toggled from the header
  * (⌘[ / ⌘], remembered per builder) that become drawers on a narrow window,
  * a scrolling main area, and a footer with secondary actions on the left and
- * Done on the right. On a phone it fills the screen and the panels become tabs
- * (builderLayout.ts).
+ * Done on the right. The main area is tabs (`tabs`: one section at a time, each with its
+ * one-line "How this works"); on a phone it fills the screen and the side panels join the same
+ * tab row (builderLayout.ts).
  *
  * Built-in guidance comes with it (BuilderHelp.tsx, words in helpContent.ts): a Tips switch in
  * the header, and <BuilderHelp> / <EmptyHelp> / <HintMark> for the builder's sections, which find
@@ -19,12 +20,13 @@ import type { IconName } from '../ui/iconPaths';
 import { SidePanel, useNarrowWindow } from '../code/SidePanels';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
-import { Segmented } from '../ui/Choice';
 import { usePhoneDialog } from '../ui/phoneDialog';
-import { builderTabs, type BuilderTab } from './builderLayout';
+import { PANEL_LEFT, PANEL_RIGHT, sectionRow, type BuilderSectionTab } from './builderLayout';
+import { BuilderTabBar, HowLine } from './BuilderTabBar';
 import { BuilderHelpContext, HintLabel, TipsToggle } from './BuilderHelp';
 import { BuilderFlowStrip } from '../structure/BuilderFlowStrip';
 
+export { BuilderFold, BuilderTabBar, HowLine, useRememberedTab } from './BuilderTabBar';
 export { BuilderHelp, EmptyHelp, HintLabel, HintMark, TipsToggle, useTips } from './BuilderHelp';
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
@@ -68,7 +70,7 @@ function PanelToggle({ panel, open, onToggle, shortcut }: { panel: BuilderPanel;
 }
 
 export function BuilderWindow({
-  prefsKey, title, subtitle, icon, iconColor, left, right, headerActions, footer, onClose, width = 1240, height = 780, mainLabel = 'Edit', children,
+  prefsKey, title, subtitle, icon, iconColor, left, right, headerActions, footer, onClose, width = 1240, height = 780, mainLabel = 'Edit', tabs, children,
 }: {
   /** Names the remembered panel choices (`scene-builder`). */
   prefsKey: string;
@@ -85,13 +87,19 @@ export function BuilderWindow({
   height?: number;
   /** The main area's name in the phone's tab row (the side panels go by their labels). */
   mainLabel?: string;
+  /** The main area's tabs: the one shown is `value`; its `how` line shows at the top. */
+  tabs?: { items: BuilderSectionTab[]; value: string; onChange: (id: string) => void; ariaLabel?: string };
   children: ReactNode;
 }) {
   const tk = useTokens();
   const narrow = useNarrowWindow();
   // A phone (builderLayout.ts): the window is full screen and the panels are tabs, one at a time.
   const phone = usePhoneDialog();
-  const [tab, setTab] = useState<BuilderTab>('main');
+  // On a phone a side panel can be the shown section (a tab of the same row); null: the main area.
+  const [phonePanel, setPhonePanel] = useState<'left' | 'right' | null>(null);
+  const items = tabs?.items ?? [{ id: 'main', label: mainLabel }];
+  const current = tabs?.value ?? 'main';
+  const how = tabs?.items.find(t => t.id === current)?.how;
   const [wide, setWide] = useState(() => ({
     left: readPref(`builder:${prefsKey}:left`, left?.defaultOpen ?? true),
     right: readPref(`builder:${prefsKey}:right`, right?.defaultOpen ?? true),
@@ -141,15 +149,19 @@ export function BuilderWindow({
       {phone ? (
         <div data-builder-tabs style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
           <BuilderFlowStrip builder={prefsKey} />
-          {(left || right) && (
-            <div style={{ flexShrink: 0, padding: '8px 12px', borderBottom: `1px solid ${tk.border.subtle}` }}>
-              <Segmented<BuilderTab> fill ariaLabel="Section" value={tab} onChange={setTab} options={builderTabs(left?.label, mainLabel, right?.label)} />
-            </div>
+          {(left || right || items.length > 1) && (
+            <BuilderTabBar scroll ariaLabel={tabs?.ariaLabel ?? 'Section'} items={sectionRow(items, left?.label, right?.label).map(t => ({ ...t, icon: items.find(x => x.id === t.value)?.icon }))}
+              value={phonePanel === 'left' ? PANEL_LEFT : phonePanel === 'right' ? PANEL_RIGHT : current}
+              onChange={v => {
+                if (v === PANEL_LEFT) setPhonePanel('left');
+                else if (v === PANEL_RIGHT) setPhonePanel('right');
+                else { setPhonePanel(null); tabs?.onChange(v); }
+              }} />
           )}
           {/* All three stay mounted (a preview keeps running, a half-typed field keeps its text); only one shows. */}
-          {left && <div data-builder-panel={left.label} style={{ display: tab === 'left' ? 'flex' : 'none', flex: 1, minHeight: 0, overflowY: 'auto', flexDirection: 'column', background: tk.bg.subtle }}>{left.content}</div>}
-          <div data-builder-main style={{ display: tab === 'main' ? 'flex' : 'none', flex: 1, minHeight: 0, overflowY: 'auto', flexDirection: 'column' }}>{children}</div>
-          {right && <div data-builder-panel={right.label} style={{ display: tab === 'right' ? 'flex' : 'none', flex: 1, minHeight: 0, overflowY: 'auto', flexDirection: 'column', background: tk.bg.subtle }}>{right.content}</div>}
+          {left && <div data-builder-panel={left.label} style={{ display: phonePanel === 'left' ? 'flex' : 'none', flex: 1, minHeight: 0, overflowY: 'auto', flexDirection: 'column', background: tk.bg.subtle }}>{left.content}</div>}
+          <div data-builder-main style={{ display: phonePanel === null ? 'flex' : 'none', flex: 1, minHeight: 0, overflowY: 'auto', flexDirection: 'column' }}>{how && <HowLine text={how} />}{children}</div>
+          {right && <div data-builder-panel={right.label} style={{ display: phonePanel === 'right' ? 'flex' : 'none', flex: 1, minHeight: 0, overflowY: 'auto', flexDirection: 'column', background: tk.bg.subtle }}>{right.content}</div>}
         </div>
       ) : (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
@@ -162,7 +174,11 @@ export function BuilderWindow({
             {panelBox(left, 'left')}
           </SidePanel>
         )}
-        <div data-builder-main style={{ flex: 1, minWidth: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>{children}</div>
+        <div data-builder-main style={{ flex: 1, minWidth: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+          {tabs && <BuilderTabBar ariaLabel={tabs.ariaLabel ?? 'Sections'} items={tabs.items.map(t => ({ value: t.id, label: t.label, icon: t.icon, gapBefore: t.gapBefore }))} value={tabs.value} onChange={tabs.onChange} />}
+          {how && <HowLine text={how} />}
+          {children}
+        </div>
         {right && (
           <SidePanel side="right" label={right.label} open={open.right} narrow={narrow} width={right.width} onClose={() => set('right', false)}>
             {panelBox(right, 'right')}
