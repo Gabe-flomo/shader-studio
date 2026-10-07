@@ -62,3 +62,11 @@ export const AG_GROUP_READS: readonly ['alive', 'speed', 'spread', 'centroidX', 
 export type AgGroupRead = typeof AG_GROUP_READS[number];
 export function agReadPlan(side: number): Array<[number, number]>;
 export function agReadDecode(px: ArrayLike<number>, count: number, aspect: number): Record<AgGroupRead, number>;
+export const AG_NB_SLOTS: number;
+export const AG_NB_CAP2: number;
+export const AG_NB_CAP3: number;
+export const AG_NB_TX3: number;
+export function agNbTile(d3: boolean): [number, number];
+export function agNbCells(d3: boolean): number;
+export function agNbLayout(d3: boolean, aspect: number, radius: unknown, most: unknown): { nx: number; ny: number; nz: number; slots: number; uniform: [number, number, number, number] };
+export function agNbPasses(d3: boolean, slots: number): Array<{ count: boolean; atlas: number; x: number; prevAtlas: number; prevX: number }>;

@@ -191,7 +191,7 @@ export const TYPE_STAGE: Record<string, StageOf> = {
   pass: 'pass', blurTexture: 'rule', displaceTexture: 'rule', jumpFloodTexture: 'rule', displacementMap: 'bend',
   textureFade: 'rule', textureNeighbours: 'rule', gridRules: 'rule', echo: 'pass',
   // Simulation: the Agents family, step by step.
-  agentSense: 'sense', agentSteer: 'steer',
+  agentSense: 'sense', agentNeighbours: 'sense', agentSteer: 'steer',
   agentGravity: 'steer', agentWind: 'steer', agentCurl: 'steer', agentAttract: 'steer', agentVortex: 'steer', agentFlow: 'steer', agentSoundKick: 'steer',
   agentDeposit: 'deposit', trailField: 'trail', drawAgents: 'draw',
   agentInputs: 'any', agentOutput: 'any', agentBySpecies: 'any',

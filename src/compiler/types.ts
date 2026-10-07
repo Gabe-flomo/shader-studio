@@ -77,6 +77,12 @@ export interface AgentGroupProgram {
    * its centre and reach (x, y, z, Scene size: numbers or the uniforms their sliders write), set in .at.
    */
   grids?: Array<{ nodeId: string; slug: string; shader: string; at: AgentParam[] }>;
+  /**
+   * Neighbours nodes inside (docs/agents-group.md "Neighbours"): the group builds its grid every step,
+   * before the rule, into agentNbUniforms(slug); cells at least the largest `radius` across, as many
+   * slots as the largest `max` reads (numbers or the uniforms their sliders write).
+   */
+  neighbours?: { radius: AgentParam[]; max: AgentParam[] };
   /** stepsPerFrame, seed, preroll. */
   params: Record<string, AgentParam>;
   /**

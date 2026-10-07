@@ -436,3 +436,53 @@ export function agReadDecode(px, count, aspect) {
   out.group4 = Math.min(1, Math.max(0, 1 - g1 - g2 - g3));
   return out;
 }
+
+/*
+ * Neighbours (docs/agents-group.md "Neighbours"): the spatial grid a group with a Neighbours node
+ * builds every step, before its rule, shared by both hosts. Walkers are binned into cells at least
+ * the largest Neighbours radius across, so a walker's neighbours are all in the 3 × 3 (27 in 3D)
+ * cells round its own. Each cell keeps up to AG_NB_SLOTS walkers (the highest-numbered ones, in a
+ * fixed order: a plain point draw where the last walker drawn wins, peeled slot by slot) and an
+ * exact count; a query reads a fixed share of slots from every cell and weighs each cell by
+ * count / read, so it is exact while no cell overflows and an unbiased estimate after.
+ */
+
+/** Walkers a cell keeps (slots), at most. */
+export const AG_NB_SLOTS = 8;
+/** Cells across each side of the grid, at most: 2D, and 3D (where cells are also stacked in depth). */
+export const AG_NB_CAP2 = 256;
+export const AG_NB_CAP3 = 48;
+/** 3D: the depth slices of one slot's grid lie side by side, this many across (and AG_NB_CAP3 / this down). */
+export const AG_NB_TX3 = 8;
+/** One slot's grid (a tile) in texels: [width, height]. The atlases are AG_NB_SLOTS / 2 tiles across. */
+export function agNbTile(d3) { return d3 ? [AG_NB_CAP3 * AG_NB_TX3, AG_NB_CAP3 * Math.ceil(AG_NB_CAP3 / AG_NB_TX3)] : [AG_NB_CAP2, AG_NB_CAP2]; }
+/** Cells a query visits: 3 × 3, or 3 × 3 × 3 in 3D. */
+export function agNbCells(d3) { return d3 ? 27 : 9; }
+
+/**
+ * The grid for this step: `radius` and `most` are the largest Radius and Max neighbours of the
+ * group's Neighbours nodes now. Cells are at least `radius` across on every axis (fewer, wider
+ * cells when the cap is reached); `slots` is how many slots a query of `most` can read, so only
+ * those are built. `uniform` is the query's grid uniform: (nx, ny, nz, aspect).
+ */
+export function agNbLayout(d3, aspect, radius, most) {
+  const r = Math.max(1e-4, Number(radius) || 0.05);
+  const a = aspect > 0 ? aspect : 1;
+  const cap = d3 ? AG_NB_CAP3 : AG_NB_CAP2;
+  const cells = n => Math.max(1, Math.min(cap, Math.floor(n / r)));
+  const nx = cells(2 * a), ny = cells(2), nz = d3 ? cells(2) : 1;
+  const slots = Math.max(1, Math.min(AG_NB_SLOTS, Math.ceil(Math.max(1, Number(most) || 1) / agNbCells(d3))));
+  return { nx, ny, nz, slots, uniform: [nx, ny, nz, a] };
+}
+
+/**
+ * The passes of one step's grid, in order: the count (additive), then slot 0, 1, … (each reads the
+ * slot before it). `atlas`: which of the two atlases it writes (slot k: k & 1); `x`: its tile's
+ * first texel column; `prevAtlas` / `prevX`: the slot it peels below (-1: none).
+ */
+export function agNbPasses(d3, slots) {
+  const tw = agNbTile(d3)[0];
+  const out = [{ count: true, atlas: -1, x: 0, prevAtlas: -1, prevX: 0 }];
+  for (let k = 0; k < slots; k++) out.push({ count: false, atlas: k & 1, x: (k >> 1) * tw, prevAtlas: k ? (k - 1) & 1 : -1, prevX: k ? ((k - 1) >> 1) * tw : 0 });
+  return out;
+}

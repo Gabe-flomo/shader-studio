@@ -76,6 +76,7 @@ What can't be read inside: a chain that reads the previous frame (Echo, Bloom, t
 | **Steer** | Turns by the readings. **Jones** is the slime-mold paper's rule; **Smooth** turns in proportion; **Away** runs from the strongest. Turn and Jitter. |
 | **Move** | One step along the heading at Speed (**+ Drift** adds a velocity). At the edges: Wrap, Bounce or Slide. **Obstacle ƒ** takes a shape's distance: walkers turn back (or slide along it) instead of stepping in. |
 | **By species** | One of four numbers by the walker's species. |
+| **Neighbours** | The other walkers within **Radius** of this one (or of a point wired into Position), found through the group's grid (below): **Count**, **Centre** (their average position), **Heading** (their average velocity), **Push** (away from them: a unit vector from each times Radius ÷ its distance, so 1 at the edge of Radius and 2 at half of it) and **Nearest** (the distance to the closest; Radius when none). **Which**: everyone, its own kind, other kinds or one species. **Max neighbours**: how many it reads at most. **Across edges**: Wrap (sees across, for Wrap edges) or Stop. Boids, crowds and swarms from the walkers themselves, not a trail. |
 
 **Particles inside the group.** Forces each have a **+ Another force** input: wire one force's Force into the next one's **+ Another force** and they add up (Curl → Vortex → Attract), then the last into **Integrate**'s Force. (Saved graphs keep their wires: only the name changed, from Also.)
 
@@ -99,6 +100,39 @@ What can't be read inside: a chain that reads the previous frame (Echo, Bloom, t
 On a plate (Chladni) every beat does two things: it shakes the sand much harder for a moment (Shake rises with each hit), and, with Mode from Sound, it steps the plate to the next figure, which takes the sand a second or two to find. With a slow Beat that reads as a pulse every few seconds; that is the beat, not a glitch. Sand on a plate ships with Beat 0 (a still figure) for that reason.
 
 The group has a **Sound from** of its own (its Sound section): **Each node's own** (the default) leaves every listening node to its own card; any other choice (Level and Beat, Mic, Audio engine, Engine track 1–8) is shared by every Sound kick and Chladni inside, with the group's **Level** and **Beat**. One switch on the group card makes the whole rule hear the engine's kick track.
+
+## Neighbours: walkers that see each other
+
+A **Neighbours** node inside a group reads the walkers themselves: how many are within a radius, where their middle is, which way they go, and a push away from them. Until it, walkers only knew about each other through what they left in a trail (a blurred map of where they had been a step or more ago); the Boids preset still does that.
+
+**How it works.** A group with a Neighbours node builds a grid every step, just before its rule, from where the walkers are as the step begins:
+
+1. The picture (or the 3D box) is cut into cells at least the largest Radius of the group's Neighbours nodes across (on every axis), at most 256 a side in 2D and 48 in 3D (fewer, wider cells past that).
+2. **Count**: every live walker is drawn as a point into its cell's texel, added (half-float: exact to 2048 walkers a cell).
+3. **Slots**: each cell keeps up to 8 walkers (its position and index). Slot 0 is a plain point draw of every walker into its cell with no blending, so the last walker drawn, the highest index, stays (points are drawn in index order, which the GPU keeps). Slot 1 draws only the walkers below the index slot 0 kept in the same cell, and so on: each cell's walkers from the highest index down. Only as many slots as the largest Max neighbours can read are built.
+4. A query visits the 3 × 3 cells round the point (3 × 3 × 3 in 3D: since a cell is at least Radius across, every walker within Radius is in them), reads Max ÷ 9 slots of each (÷ 27 in 3D, 1 to 8), keeps the walkers within Radius, and weighs each cell by its count over what it read.
+
+So it is **exact while no cell holds more walkers than a query reads from it** (tested against a brute force over every pair), and in a denser crowd an estimate from a fixed, well-mixed sample (a walker's index has nothing to do with where it is): Count, Centre, Heading and Push are then unbiased estimates and Nearest is the nearest of the sample.
+
+The grid is GPU textures only (counting sort and bitonic sorts need compute shaders or hundreds of passes; this is the binning approach with per-cell slots, Harada's GPU Gems 3 grid built with ordered point draws instead of a stencil). It is the same on every run on a machine (the draw order and the additions of 1 are exact), it works on exported web pages (kit/agentHost.js builds it with the same shaders and plan, kit/agentPlan.js), and a step is a step whatever the frame rate.
+
+**Memory**, per group with Neighbours, whatever its count: 2D two slot atlases of 1024 × 256 RGBA32F and a 256 × 256 half-float count (8.1 MB); 3D 1536 × 288 atlases and a 384 × 288 count (7.3 MB).
+
+**Cost** (headless Chrome on ANGLE Metal, this Mac, 1920 × 1080; one step, GPU-synced; the Flock template's grid, Radius 0.05):
+
+| | 64k | 256k | 1M |
+|---|---|---|---|
+| 2D grid, Max 36 (count + 4 slots: 5 point draws) | 1.3–1.6 ms | 5.1–6.5 ms | 17–18 ms |
+| 2D grid, Max 72 (count + 8 slots) | 1.9 ms | 10.2 ms | 31 ms |
+| 2D grid, Max 36, Radius 0.02 (more, smaller cells) | 0.9 ms | 2.4 ms | 13.5 ms |
+| 3D grid, Max 36 (count + 2 slots) | 0.6 ms | 1.2 ms | 6.9 ms |
+| The rule with its query (Flock, Max 36) | 0.04 ms | 0.05 ms | 0.15 ms (2D), 0.24 ms (3D) |
+
+The grid is the cost, and it is one point per walker per slot: a WebGL point draw is about 300 M points a second here, slower where many walkers land in the same cell (they are written one after another). The query itself is cheap (its reads are of neighbouring cells, which stay in cache). So: Neighbours suits 64k comfortably and 256k with a smaller Max; at a million it takes most of a frame. The templates and examples that use it ship at 64k.
+
+**Limits.** One grid per group, sized by its largest Radius: a much smaller Radius on another Neighbours node in the same group reads cells far bigger than it needs (a coarser sample). It sees only its own group's walkers (not another Agents group's). Walkers born this step are not in the grid until the next. Per cell at most 8 are read; past that it estimates. Count past 2048 in one cell saturates. In 3D the grid is at most 48 cells a side (cells 0.074 across at 16:9), so a small Radius there reads more than it needs. The eye preview of a Neighbours node shows nobody near (an agent at each pixel has no grid).
+
+**Examples**: Examples → *Agents: rules* → **Flock (boids)**, **Swarm: orbiters**, **Crowd: two-way walkers** (docs/agent-rules.md), and *Simulations: agents* → **Crowd: lanes in two-way traffic**, which now steps round the walkers it sees just ahead with two Neighbours nodes (it used to read the crowd through its trail).
 
 ## 3D
 
@@ -196,7 +230,8 @@ Steps per frame also sets the pace: one step is 1/60 s of simulated time, so 2 s
 
 ## Limits for now
 
-- Up to 4 Agents groups and 4 Trail fields per graph; 4 species; 16 textures per program (each group counts its two state textures).
+- Up to 4 Agents groups and 4 Trail fields per graph; 4 species; 16 textures per program (each group counts its two state textures; Neighbours adds three).
+- Neighbours: see **Neighbours** above (one grid a group, sized by its largest Radius; at most 8 walkers read a cell; its own group only).
 - 3D: fields and shapes wired in are flat (read at x and y; Collide (3D scene) is the 3D one); a volume Trail has no Add / Block yet; Deposit's Size and Sense's 5-tap cross are 2D only; the eye preview of a node in a 3D group shows it as 2D (an agent standing on the picture's plane); a volume is at most 4096 cells across in its texture (160 rows at up to 25:9); Collide (3D scene)'s grid is coarse (48 cells across), so thin shapes thinner than a cell are missed: make Scene size smaller round them.
 
 ## On web pages
@@ -208,6 +243,7 @@ Exported pages (Export → web page or embed, and Present) run Agents groups as 
 - **Motion (texture)** reads the page's first Motion layer (a frame late, as in the app). A page without a Motion layer reads 0.
 - **Start over** and **Burst** work from the page's keys and rules as in Play.
 - **Readings** (Alive, Centre, Spread…) work on the page as in the app: the page sums only the groups its Play reads.
+- **Neighbours** works on the page as in the app: the page builds the same grid with the same shaders every step (checked with the Crowd lanes example exported).
 - Pages with agents draw at one device pixel per CSS pixel (as the app does), and need WebGL2 with float render targets; without them the page draws the picture without the agents and says so in the browser console.
 - A million walkers run at 60 fps on an M3 Pro in Chrome (the engine about 10–13 ms a frame at 1080p, as in the app).
 - **3D** runs on pages as in the app: volume Trails, the camera, depth of field, a ray-marched scene's camera and Depth (the page draws the same small probe programs) and Collide (3D scene)'s grid (the same grid program, every step). Checked for all five 3D examples: the page's simulation state is the app's bit for bit (to 2 s with their pre-rolls), its picture within 2 levels of 255. Readings work in 3D (Speed counts the depth; Centre and Spread are across and up).

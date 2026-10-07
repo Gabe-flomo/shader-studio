@@ -16,8 +16,8 @@
 // then Draw agents.
 //
 // Top-level names start with `ah` (the kit's one-scope rule).
-import { AG_OFFLINE_CHUNK, AG_PROBE_POINTS, AG_STEP_HZ, agCamera3, agDrawLook, agGovern, agGovernorState, agGroupState, agGroupSteps, agHear, agKeep, agLights, agListenState, agLiveState, agProject3, agReadDecode, agReadPlan, agRestartGroup, agStepTime, agStepWindow, agTrailSize, agVolLayout, agVolUniform } from './agentPlan.js';
-import { AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT3_VERT, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW3_VERT, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_PROJ3_FRAG, AG_READ_FRAG, AG_SUM_FRAG, AG_TRAIL3_FRAG, AG_TRAIL_FRAG } from './agentShaders.js';
+import { AG_NB_SLOTS, AG_OFFLINE_CHUNK, AG_PROBE_POINTS, AG_STEP_HZ, agNbLayout, agNbPasses, agNbTile, agCamera3, agDrawLook, agGovern, agGovernorState, agGroupState, agGroupSteps, agHear, agKeep, agLights, agListenState, agLiveState, agProject3, agReadDecode, agReadPlan, agRestartGroup, agStepTime, agStepWindow, agTrailSize, agVolLayout, agVolUniform } from './agentPlan.js';
+import { AG_NB_BIN_FRAG, AG_NB_BIN_VERT, AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT3_VERT, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW3_VERT, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_PROJ3_FRAG, AG_READ_FRAG, AG_SUM_FRAG, AG_TRAIL3_FRAG, AG_TRAIL_FRAG } from './agentShaders.js';
 import { GP_BESSEL_N, GP_BESSEL_W, GP_LEVELS, GP_VOL, GP_VOL_TILES, gpBesselTable, gpReadback } from './gpuParticles.js';
 
 /** Why a page can't run agents here, or null. */
@@ -77,6 +77,8 @@ export function ahCreate(gl, spec, env) {
   for (const d of draws) if (d.probe) vec4s.set(d.probe.uniform, [0, 0, 0, 0]);
   for (const g of groups) for (const gr of g.grids || []) { env.textures.set(gr.u.grid, null); vec4s.set(gr.u.at, [0, 0, 0, 2]); }
   for (const d of draws) { env.textures.set(d.u.tex, null); env.vec2s.set(d.u.tex + '_px', [1, 1]); }
+  // Neighbours: a group's grid (its two slot atlases and the count per cell) and its layout uniform.
+  for (const g of groups) if (g.neighbours && g.u.nb) { for (const k of ['a', 'b', 'n']) env.textures.set(g.u.nb[k], null); vec4s.set(g.u.nb.g, [1, 1, 1, 1]); }
   if (unsupported) {
     if (typeof console !== 'undefined') console.warn('[Playfield] ' + unsupported + ' The picture draws without them.');
     return { unsupported, active: false, run() {}, reset() {}, dispose() {} };
@@ -106,6 +108,8 @@ export function ahCreate(gl, spec, env) {
       down: raw(AG_FULL_VERT, AG_DOWN_FRAG), blur: raw(AG_FULL_VERT, AG_BLUR_FRAG), compose: raw(AG_FULL_VERT, AG_COMPOSE_FRAG),
     };
     // 3D (only when the page has a 3D group): a volume's deposit, step and front view, and the camera draw.
+    // Neighbours (only when a group has them): the grid's passes (kit/agentShaders.js AG_NB_BIN_VERT).
+    if (groups.some(g => g.neighbours)) fixed.nbBin = raw(AG_NB_BIN_VERT, AG_NB_BIN_FRAG);
     if (groups.some(g => g.space3d)) Object.assign(fixed, {
       deposit3: raw(AG_DEPOSIT3_VERT, AG_DEPOSIT_FRAG), trail3: raw(AG_FULL_VERT, AG_TRAIL3_FRAG), proj3: raw(AG_FULL_VERT, AG_PROJ3_FRAG), draw3: raw(AG_DRAW3_VERT, AG_DRAW_FRAG),
     });
@@ -185,6 +189,47 @@ export function ahCreate(gl, spec, env) {
     for (const fb of s.fb) clearFb(fb, g.side, g.side);
     G.set(g.slug, s);
     return s;
+  };
+  /**
+   * Neighbours (docs/agents-group.md "Neighbours"): a group's grid for this step, as the app builds it
+   * (lib/agentRunner.ts buildNeighbours): the count of each cell (additive points), then each slot
+   * (no blending: the last walker drawn, the highest index, stays). Scratch textures by group.
+   */
+  const NB = new Map();
+  const dropNb = s => { for (const x of [s.atlas[0], s.atlas[1], s.count]) { gl.deleteFramebuffer(x.fb); gl.deleteTexture(x.t); } };
+  const neighbours = (g, s, aspect) => {
+    const d3 = !!g.space3d;
+    const [tw, th] = agNbTile(d3);
+    let nb = NB.get(g.slug);
+    if (!nb) {
+      const make = (internal, format, type, w, h) => { const t = tex(internal, format, type, gl.NEAREST, gl.CLAMP_TO_EDGE, w, h); return { t, fb: fbOf([t]), w, h }; };
+      const aw = tw * AG_NB_SLOTS / 2;
+      nb = { atlas: [make(gl.RGBA32F, gl.RGBA, gl.FLOAT, aw, th), make(gl.RGBA32F, gl.RGBA, gl.FLOAT, aw, th)], count: make(gl.R16F, gl.RED, gl.HALF_FLOAT, tw, th) };
+      NB.set(g.slug, nb);
+    }
+    const radius = Math.max(...g.neighbours.radius.map(r => read(r, 0.05)));
+    const most = Math.max(...g.neighbours.max.map(m => read(m, 36)));
+    const L = agNbLayout(d3, aspect, radius, most);
+    for (const x of [nb.atlas[0], nb.atlas[1], nb.count]) clearFb(x.fb, x.w, x.h);
+    const P = fixed.nbBin;
+    gl.useProgram(P.p);
+    const t = s.tex[s.cur];
+    const set = (n, v) => ahSet(gl, P.u, n, v);
+    set('u_side', g.side); set('u_d3', d3 ? 1 : 0); set('u_grid', L.uniform);
+    gl.bindVertexArray(emptyVao);
+    for (const ps of agNbPasses(d3, L.slots)) {
+      samplers(P, [['u_a', t[0]], ['u_b', t[1]], ['u_prev', ps.prevAtlas >= 0 ? nb.atlas[ps.prevAtlas].t : null]]);
+      set('u_pass', [ps.x, ps.prevX, ps.prevAtlas >= 0 ? 1 : 0, ps.count ? 1 : 0]);
+      const into = ps.count ? nb.count : nb.atlas[ps.atlas];
+      set('u_target', [into.w, into.h]);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, into.fb); gl.viewport(0, 0, into.w, into.h);
+      if (ps.count) { gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.ONE, gl.ONE); }
+      gl.drawArrays(gl.POINTS, 0, g.side * g.side);
+      if (ps.count) gl.disable(gl.BLEND);
+    }
+    gl.bindVertexArray(null);
+    env.textures.set(g.u.nb.a, nb.atlas[0].t); env.textures.set(g.u.nb.b, nb.atlas[1].t); env.textures.set(g.u.nb.n, nb.count.t);
+    vec4s.set(g.u.nb.g, L.uniform);
   };
   const restartGroup = s => {
     for (const fb of s.fb) clearFb(fb, s.side, s.side);
@@ -579,6 +624,8 @@ export function ahCreate(gl, spec, env) {
             }
             env.textures.set(gr.u.grid, gt.t);
           }
+          // Neighbours: the grid of where the walkers are as this step begins.
+          if (g.neighbours && fixed.nbBin && g.u.nb) neighbours(g, s, aspect);
           bindState(g, s);
           gl.bindFramebuffer(gl.FRAMEBUFFER, s.fb[1 - s.cur]);
           gl.viewport(0, 0, g.side, g.side);
@@ -693,6 +740,8 @@ export function ahCreate(gl, spec, env) {
       for (const e of probes.values()) for (const x of [e.camera, e.depth]) if (x) gl.deleteProgram(x.p);
       for (const e of gridProgs.values()) gl.deleteProgram(e.p);
       for (const t of gridTex.values()) dropLook(t);
+      for (const nb of NB.values()) dropNb(nb);
+      NB.clear();
       for (const k in fixed) gl.deleteProgram(fixed[k].p);
       if (bessel) gl.deleteTexture(bessel);
       gl.deleteTexture(blank);

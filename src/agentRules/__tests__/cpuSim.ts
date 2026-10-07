@@ -32,7 +32,11 @@ export interface SimOptions {
   mouse?: number[];
 }
 
-export interface Program { code: string; out: Record<string, string>; inputsId: string; flowId?: string }
+export interface Program {
+  code: string; out: Record<string, string>; inputsId: string; flowId?: string;
+  /** Neighbours nodes (their loops are the GPU's, tested on their own in agentNeighbours.test.ts): their settings, by variable prefix. */
+  neighbours: Array<{ prefix: string; radius: number; species: string; wrap: boolean }>;
+}
 
 /** The inside's code (Agent Output left out) and the variables wired into Agent Output. */
 export function programOf(inside: GraphNode[]): Program {
@@ -41,7 +45,15 @@ export function programOf(inside: GraphNode[]): Program {
   const inputsId = inside.find(nd => nd.type === 'agentInputs')!.id;
   const flowId = inside.find(nd => nd.type === 'agentCurl')?.id;
   let out: Record<string, string> = {};
+  const neighbours: Program['neighbours'] = [];
   for (const nd of topologicalSort(inside)) {
+    if (nd.type === 'agentNeighbours') {
+      // A brute force over every walker stands in for the grid (the same answers while no cell overflows).
+      const prefix = `NB${neighbours.length}`;
+      neighbours.push({ prefix, radius: Number(nd.params.radius ?? 0.05), species: String(nd.params.species ?? 'all'), wrap: nd.params.edges !== 'stop' });
+      vars.set(nd.id, { count: `${prefix}_count`, centre: `${prefix}_centre`, heading: `${prefix}_heading`, push: `${prefix}_push`, nearest: `${prefix}_nearest` });
+      continue;
+    }
     const inputVars: Record<string, string> = {};
     for (const [k, inp] of Object.entries(nd.inputs)) {
       const c = inp.connection;
@@ -56,7 +68,39 @@ export function programOf(inside: GraphNode[]): Program {
   }
   // The rules' random numbers: the hash with `^` and `>>` as a function of the salt (glslEval has no bit operators).
   code = code.replace(/float\(agHash\(a_seed \^ 0x([0-9A-F]+)u\) >> 8\) \/ 16777216\.0/g, (_, h: string) => `agDice(${parseInt(h, 16)}.0)`);
-  return { code, out, inputsId, flowId };
+  return { code, out, inputsId, flowId, neighbours };
+}
+
+/** The Neighbours node's outputs for walker w over every other live walker (as the step began): count, centre, heading, push, nearest. */
+function neighboursOf(w: Walker, all: Walker[], nb: Program['neighbours'][number], d3: boolean, aspect: number): Record<string, Val> {
+  const dims = d3 ? 3 : 2;
+  const box = [aspect, 1, 1];
+  let n = 0, near = nb.radius;
+  const sum = [0, 0, 0], vel = [0, 0, 0], push = [0, 0, 0];
+  for (const o of all) {
+    if (o === w || o.alive < 0.5) continue;
+    if (nb.species === 'own' && o.species !== w.species) continue;
+    if (nb.species === 'others' && o.species === w.species) continue;
+    if (/^\d$/.test(nb.species) && o.species !== Number(nb.species) - 1) continue;
+    const d = [0, 1, 2].slice(0, dims).map(a => {
+      let x = o.pos[a] - w.pos[a];
+      if (nb.wrap) x -= 2 * box[a] * Math.floor(x / (2 * box[a]) + 0.5);
+      return x;
+    });
+    const l = Math.hypot(...d);
+    if (l >= nb.radius) continue;
+    const v = d3 ? (o.heading as number[]).map(x => x * o.speed) : [Math.cos(o.heading as number) * o.speed, Math.sin(o.heading as number) * o.speed];
+    n++;
+    for (let a = 0; a < dims; a++) { sum[a] += d[a]; vel[a] += v[a]; if (l > 1e-6) push[a] -= d[a] * nb.radius / (l * l); }
+    near = Math.min(near, l);
+  }
+  const cut = (v: number[]) => v.slice(0, dims);
+  return {
+    [`${nb.prefix}_count`]: n, [`${nb.prefix}_nearest`]: near,
+    [`${nb.prefix}_centre`]: n ? cut(w.pos.map((p, a) => p + sum[a] / n)) : [...w.pos],
+    [`${nb.prefix}_heading`]: n ? cut(vel.map(x => x / n)) : cut([0, 0, 0]),
+    [`${nb.prefix}_push`]: cut(push),
+  };
 }
 
 export const insideOf = (g: GraphNode) => (g.params.subgraph as SubgraphData).nodes;
@@ -97,6 +141,7 @@ export function stepWalkers(p: Program, walkers: Walker[], step: number, o: SimO
       agTurn3: (h: Val, s: Val, a: Val) => agTurn3(h as number[], s as number[], a as number),
       agAcross: (h: Val, a: Val) => agAcross(h as number[], a as number),
     };
+    for (const nb of p.neighbours) Object.assign(env, neighboursOf(w, walkers, nb, !!o.d3, aspect));
     if (o.d3) {
       const dir = w.heading as number[];
       env.a_dir = [...dir];

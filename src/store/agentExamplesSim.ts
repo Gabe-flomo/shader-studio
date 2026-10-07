@@ -60,7 +60,7 @@ export const SIM_AGENT_EXAMPLE_INDEX: Record<string, { label: string; descriptio
   },
   simAgentCrowd: {
     label: 'Crowd: lanes in two-way traffic',
-    description: 'Two crowds walk a corridor in opposite directions. Each walker heads for its goal round the pillars, sidesteps away from oncoming walkers and toward its own kind ahead, and slows where the crowd ahead is thick. Nobody is told to keep to one side, yet the crowd sorts itself into lanes, and jams form and clear round the pillars.',
+    description: 'Two crowds walk a corridor in opposite directions. Each walker heads for its goal round the pillars, sidesteps away from the oncoming walkers just ahead and toward its own kind (found with Neighbours: the walkers themselves, not a trail), and slows as the walkers ahead add up. Nobody is told to keep to one side, yet the crowd sorts itself into lanes, and jams form and clear round the pillars.',
     play: true,
   },
   simAgentPainters: {
@@ -1139,45 +1139,49 @@ const sandDriftPlay = play([
 export function crowdNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   const X = (dx: number) => x + dx, Y = (dy: number) => y + dy;
   const inputs = inputsWith('cwIn', [
-    { key: 'crowd', type: 'texture', label: 'Crowd' },
     { key: 'walls', type: 'float', label: 'Walls' },
   ], [
     'Agent Inputs: this walker as the step begins. Its Species (0 walks right, 1 walks left) came from the Emit it was born from.',
-    'Crowd and Walls are inputs added to the group. Crowd: the Trail field from outside, one step ago: channel 1 where right-walkers are, channel 2 where left-walkers are. Walls: the corridor\'s distance field (outside), read at this walker.',
+    'Walls is an input added to the group: the corridor\'s distance field (outside), read at this walker. The walkers find each other with Neighbours, not through the trail: the Trail outside only draws the floor.',
   ]);
   const who = expr('cwWho', 0, 640, {
-    label: 'Who to follow',
-    inputs: [{ name: 'species', type: 'float' }, { name: 'follow', type: 'float', slider: { min: -1, max: 2 } }, { name: 'avoid', type: 'float', slider: { min: 0, max: 4 } }],
-    values: { follow: -0.3, avoid: 1.5 },
+    label: 'Which way',
+    inputs: [{ name: 'species', type: 'float' }],
     lines: [['float goingLeft', 'step(0.5, species)']],
-    result: 'mix(vec4(follow, -avoid, 0.0, 0.0), vec4(-avoid, follow, 0.0, 0.0), goingLeft)',
-    outputType: 'vec4',
+    result: 'goingLeft',
+    outputType: 'float',
     wires: { species: ['cwIn', 'species'] },
-    exposed: [{ name: 'goingLeft', type: 'float' }],
     note: [
-      'Who to follow (an Expression Block): how much each crowd channel counts for this walker\'s sidestep, for Sense\'s Channels. Follow and Avoid are Play controls.',
-      'goingLeft: 1 for a left-walker (species 2), 0 for a right-walker.',
-      'Result: its own direction\'s walkers count Follow (−0.3: a little personal space, so people don\'t bunch up; above 0 they fall in behind each other in single file), the oncoming ones − Avoid (step out of their way).',
+      'Which way (an Expression Block): which way this walker is going.',
+      'goingLeft: 1 for a left-walker (species 2), 0 for a right-walker. Result: goingLeft.',
     ],
   });
-  const lanes = n('agentSense', 'cwLanes', 420, 100, {
-    angle: 35, distance: 0.05, weight: 1, width: '1',
-    ...note([
-      'Sense (lanes): reads the crowd 0.05 ahead, 35° to the left, straight on and 35° to the right, weighed by Who to follow: high where its own kind walk ahead, low where people come the other way.',
-    ]),
-  }, { texture: ['cwIn', 'crowd'], channels: ['cwWho', 'result'] });
-  const everyone = expr('cwEveryone', 420, 640, {
-    label: 'Everyone',
-    inputs: [],
-    lines: [],
-    result: 'vec4(1.0, 1.0, 0.0, 0.0)',
-    outputType: 'vec4',
-    note: ['Everyone (an Expression Block): both crowd channels counted alike, for the Sense that measures how packed it is ahead.'],
+  const ahead = expr('cwAhead', 0, 1000, {
+    label: 'Just ahead',
+    inputs: [{ name: 'pos', type: 'vec2' }, { name: 'heading', type: 'float' }, { name: 'look', type: 'float', slider: { min: 0, max: 0.1 } }],
+    values: { look: 0.03 },
+    lines: [['vec2 dir', 'vec2(cos(heading), sin(heading))']],
+    result: 'pos + dir * look',
+    outputType: 'vec2',
+    wires: { pos: ['cwIn', 'position'], heading: ['cwIn', 'heading'] },
+    note: [
+      'Just ahead (an Expression Block): a point Look ahead of the walker, where the two Neighbours look round, so it reacts to the people in front of it more than to those behind. Look is a Play control.',
+      'dir: the way it faces, as a unit vector. Result: its position plus Look along dir.',
+    ],
   });
-  const ahead = n('agentSense', 'cwAhead', 840, 640, {
-    angle: 20, distance: 0.025, weight: 1, width: '1',
-    ...note(['Sense (how packed): reads everybody, both directions, 0.025 ahead; its middle Reading (the y of Readings) is how crowded it is just in front.']),
-  }, { texture: ['cwIn', 'crowd'], channels: ['cwEveryone', 'result'] });
+  const oncoming = n('agentNeighbours', 'cwOncoming', 420, 100, {
+    radius: 0.045, max: 72, species: 'others', edges: 'wrap',
+    ...note([
+      'Neighbours (oncoming): the walkers going the other way (Which: Other kinds) within 0.045 of the point just ahead. Its Push points away from them, harder the closer they are; Count is how many.',
+      'This replaces the old trail reading: it sees the walkers themselves, so a walker steps round the person in front of it, not round a blur of where people were.',
+    ]),
+  }, { position: ['cwAhead', 'result'] });
+  const own = n('agentNeighbours', 'cwOwn', 420, 640, {
+    radius: 0.045, max: 72, species: 'own', edges: 'wrap',
+    ...note([
+      'Neighbours (own kind): the walkers going the same way within 0.045 of the point just ahead: their Centre (where they are) and Count. Way to go leans toward them (Follow) and slows as the two counts add up.',
+    ]),
+  }, { position: ['cwAhead', 'result'] });
   const walls = n('agentSense', 'cwWalls', 840, 1000, {
     angle: 45, distance: 0.03, weight: 1, width: '1',
     ...note(['Sense (walls), with no trail: its Field ƒ is the Walls input, so Here is how far the nearest wall or pillar is and Gradient points away from it.']),
@@ -1185,33 +1189,40 @@ export function crowdNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   const way = expr('cwWay', 1260, 100, {
     label: 'Way to go',
     inputs: [
-      { name: 'goingLeft', type: 'float' }, { name: 'reads', type: 'vec3' }, { name: 'packed', type: 'vec3' }, { name: 'wallDist', type: 'float' }, { name: 'wallDir', type: 'vec2' },
-      { name: 'rnd', type: 'float' },
+      { name: 'goingLeft', type: 'float' }, { name: 'ahead', type: 'vec2' },
+      { name: 'oncPush', type: 'vec2' }, { name: 'oncCount', type: 'float' }, { name: 'ownCentre', type: 'vec2' }, { name: 'ownCount', type: 'float' },
+      { name: 'wallDist', type: 'float' }, { name: 'wallDir', type: 'vec2' }, { name: 'rnd', type: 'float' },
+      { name: 'avoid', type: 'float', slider: { min: 0, max: 4 } }, { name: 'follow', type: 'float', slider: { min: -1, max: 2 } },
       { name: 'sidestep', type: 'float', slider: { min: 0, max: 90 } }, { name: 'pace', type: 'float', slider: { min: 0, max: 1 } },
-      { name: 'jam', type: 'float', slider: { min: 1, max: 60 } },
+      { name: 'jam', type: 'float', slider: { min: 4, max: 300 } },
     ],
-    values: { sidestep: 40, pace: 0.22, jam: 14 },
+    values: { avoid: 1.5, follow: 0.3, sidestep: 40, pace: 0.22, jam: 140 },
     lines: [
       ['vec2 goal', 'vec2(1.0 - 2.0 * goingLeft, 0.0)'],
+      ['vec2 side', 'vec2(-goal.y, goal.x)'],
       ['vec2 away', 'normalize(wallDir + vec2(1e-6, 0.0)) * exp(-max(wallDist, 0.0) / 0.06) * 2.0'],
       ['vec2 wish', 'goal + away'],
-      ['float lean', 'clamp((reads.x - reads.z) / (abs(reads.x) + abs(reads.z) + 0.5), -1.0, 1.0)'],
+      ['float dodge', 'dot(oncPush, side) / (oncCount + 1.0)'],
+      ['float join', 'ownCount > 0.5 ? dot(ownCentre - ahead, side) / 0.045 : 0.0'],
+      ['float lean', 'clamp(avoid * dodge + follow * join, -1.0, 1.0)'],
       ['float heading', 'atan(wish.y, wish.x) + radians(sidestep) * lean + (fract(rnd * 256.0) - 0.5) * 0.3'],
-      ['float crowding', 'max(packed.y, 0.0) / jam'],
+      ['float crowding', '(oncCount + ownCount) / jam'],
       ['float speed', 'pace * clamp(1.0 - crowding, 0.05, 1.0) * (0.85 + 0.3 * fract(rnd * 4096.0))'],
     ],
     result: 'heading',
     outputType: 'float',
     exposed: [{ name: 'speed', type: 'float' }, { name: 'crowding', type: 'float' }],
     wires: {
-      goingLeft: ['cwWho', 'goingLeft'], reads: ['cwLanes', 'readings'], packed: ['cwAhead', 'readings'],
+      goingLeft: ['cwWho', 'result'], ahead: ['cwAhead', 'result'],
+      oncPush: ['cwOncoming', 'push'], oncCount: ['cwOncoming', 'count'], ownCentre: ['cwOwn', 'centre'], ownCount: ['cwOwn', 'count'],
       wallDist: ['cwWalls', 'here'], wallDir: ['cwWalls', 'gradient'], rnd: ['cwIn', 'random'],
     },
     note: [
-      'Way to go (an Expression Block, in place of Steer): where this walker heads and how fast. Its Result is the new heading; speed and crowding are extra outputs. Sidestep, Pace and Jam are Play controls.',
-      'goal: straight along the corridor, right or left. away: a push away from the nearest wall or pillar (along the walls\' Gradient), strong close up and gone 0.1 away. wish: the two together: the way it would walk if it were alone.',
-      'lean: −1 to 1, how much better the left looks than the right (own kind ahead, nobody coming). heading: the wished-for way, sidestepping up to Sidestep degrees toward the better side, with a little wobble.',
-      'crowding: how packed it is just ahead, against Jam (the crowding at which people stop). speed: Pace × (1 − crowding), never quite 0 (Greenshields\' traffic rule), each step a little faster or slower than the next walker.',
+      'Way to go (an Expression Block, in place of Steer): where this walker heads and how fast. Its Result is the new heading; speed and crowding are extra outputs. Avoid, Follow, Sidestep, Pace and Jam are Play controls.',
+      'goal: straight along the corridor, right or left. side: square to it, to the walker\'s left. away: a push away from the nearest wall or pillar (along the walls\' Gradient), strong close up and gone 0.1 away. wish: the two together: the way it would walk if it were alone.',
+      'dodge: how much the oncoming walkers just ahead push it sideways (their Push along side, per walker). join: how far to the side its own kind ahead are, in radii (0 when there are none).',
+      'lean: −1 to 1, which side to swerve to: away from the oncoming (Avoid) and toward its own kind (Follow). heading: the wished-for way, swerving up to Sidestep degrees, with a little wobble.',
+      'crowding: how many walkers are just ahead (both Counts), against Jam (the number at which people stop). speed: Pace × (1 − crowding), never quite 0 (Greenshields\' traffic rule), each walker a little faster or slower than the next.',
     ],
   });
   const move = n('agentMove', 'cwMove', 1680, 100, {
@@ -1226,7 +1237,7 @@ export function crowdNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     lines: [['vec3 tint', 'mix(vec3(1.0, 0.6, 0.2), vec3(0.25, 0.75, 1.0), goingLeft)']],
     result: 'tint * mix(1.0, 0.35, clamp(crowding, 0.0, 1.0))',
     outputType: 'vec3',
-    wires: { goingLeft: ['cwWho', 'goingLeft'], crowding: ['cwWay', 'crowding'] },
+    wires: { goingLeft: ['cwWho', 'result'], crowding: ['cwWay', 'crowding'] },
     note: [
       'Colour (an Expression Block): this walker\'s own colour for Draw agents.',
       'tint: orange for right-walkers, sky blue for left-walkers. Result: dimmer the more packed it is ahead, so jams show as dark knots.',
@@ -1267,18 +1278,18 @@ export function crowdNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     mode: 'fill', shape: 'box', size: 0.78, x: 1, y: 0, heading: 'random', species: '2', share: 1,
     ...note(['Emit (left-walkers, species 2): the other half, scattered over the right half, so the two crowds meet head-on in the middle.']),
   });
-  let group = agentsGroup('crowd', X(420), Y(0), 'cwEmitR', [inputs, who, lanes, everyone, ahead, walls, way, move, colour, output], {
+  let group = agentsGroup('crowd', X(420), Y(0), 'cwEmitR', [inputs, who, ahead, oncoming, own, walls, way, move, colour, output], {
     label: 'Crowd', species: '2', tier: '64k', stepsPerFrame: 2, preroll: 0,
     ...note([
-      'Agents: 65,536 walkers (64k) of 2 species, 2 steps a frame. Inside (double-click): three Senses read the lanes, how packed it is ahead and the walls; Way to go picks a heading and a speed; Move walks, sliding along walls.',
+      'Agents: 65,536 walkers (64k) of 2 species, 2 steps a frame. Inside (double-click): two Neighbours find the oncoming walkers and the walkers of its own kind just ahead, a Sense reads the walls; Way to go picks a heading and a speed; Move walks, sliding along walls.',
+      'Before Neighbours, this crowd saw each other only through the Trail (a blurred map of where people had been a moment ago). Now each walker sees the walkers themselves: lanes form sharper and quicker, and a walker steps round the one in front of it.',
       'Why 64k: enough for a dense crowd, few enough that a lane is a line of people you can follow.',
     ]),
   });
-  group = groupInput(group, 'crowd', 'texture', 'Crowd', ['cwTrail', 'texture']);
   group = groupInput(group, 'walls', 'float', 'Walls', ['cwCorridor', 'result']);
   const deposit = n('agentDeposit', 'cwDeposit', X(840), Y(0), {
     amount: 1, size: 1, what: 'trail',
-    ...note(['Deposit: each walker leaves one unit a step in its own direction\'s channel: the crowd map.']),
+    ...note(['Deposit: each walker leaves one unit a step in its own direction\'s channel: the crowd map, drawn on the floor as faint streaks (the walkers no longer read it: they see each other with Neighbours).']),
   }, { agents: ['crowd', 'agents'] });
   const trail = n('trailField', 'cwTrail', X(1260), Y(0), {
     resolution: '512', diffuse: 1, halfLife: 0.08, edges: 'wrap', gain: 0.4, kernel: '5',
@@ -1311,17 +1322,18 @@ export function crowdNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
 }
 
 const crowdPlay = play([
-  inner('avoid', 'crowd', 'cwWhoAvoid', 'value', 'Avoid oncoming', 0, 4),
-  inner('follow', 'crowd', 'cwWhoFollow', 'value', 'Follow own kind', -1, 2),
+  inner('avoid', 'crowd', 'cwWayAvoid', 'value', 'Avoid oncoming', 0, 4),
+  inner('follow', 'crowd', 'cwWayFollow', 'value', 'Follow own kind', -1, 2),
   inner('side', 'crowd', 'cwWaySidestep', 'value', 'Sidestep (°)', 0, 90),
   inner('pace', 'crowd', 'cwWayPace', 'value', 'Walking pace', 0, 1),
-  inner('jam', 'crowd', 'cwWayJam', 'value', 'Jam density', 1, 60),
+  inner('jam', 'crowd', 'cwWayJam', 'value', 'Jam (walkers ahead)', 4, 300),
+  inner('look', 'crowd', 'cwAheadLook', 'value', 'Look ahead', 0, 0.1),
   ctl('again', 'crowd::restart', 'Start over', 0, 1),
 ], `**What it shows.** Two crowds walking through a corridor in opposite directions. Nobody is told to keep right or left, yet within seconds people sort themselves into lanes going each way, and jams build up and clear round the pillars (Helbing's lane formation; Greenshields' rule that traffic slows as it thickens).
 
-**How it's built.** One Agents group with two species. Each walker deposits into its own direction's channel of the Trail. Inside, one Sense reads the crowd ahead weighed so that its own kind count for and oncoming walkers against, another reads how packed it is just ahead, and a third reads the walls' distance field. Way to go (an Expression Block in place of Steer) heads for the goal, bends round pillars, sidesteps toward the better side and slows with the crowding.
+**How it's built.** One Agents group with two species. Inside, two **Neighbours** nodes look round a point just ahead of each walker and find the walkers themselves (the group's grid, rebuilt every step): one the oncoming walkers (their Push, away from them, and how many), the other its own kind (where they are, and how many). A Sense reads the walls' distance field. Way to go (an Expression Block in place of Steer) heads for the goal, bends round pillars, swerves away from the oncoming and toward its own kind, and slows as the walkers ahead add up. Each walker also deposits into its own direction's channel of a Trail, but only the floor drawing reads it: before Neighbours, the walkers sensed each other through that blurred trail.
 
-**Try.** **Avoid oncoming** 0 and the lanes never form: the crowds grind into each other. **Follow own kind** above 0 makes people fall in behind each other in single file; below 0 they keep their distance. **Jam density** low makes people stop early, so jams spread back like traffic waves. **Walking pace** is everyone's speed.`);
+**Try.** **Avoid oncoming** 0 and the lanes never form: the crowds grind into each other. **Follow own kind** above 0 makes people fall in behind each other in single file; below 0 they keep their distance. **Jam** low makes people stop early, so jams spread back like traffic waves. **Look ahead** 0 and walkers react to people beside and behind them as much as in front. **Walking pace** is everyone's speed.`);
 
 // ── Painter bots ─────────────────────────────────────────────────────────────
 
@@ -1499,9 +1511,10 @@ const KNOB_WHY: Record<string, string> = {
   repose: 'the steepest slope (sand depth per trail pixel) the sand holds before it slumps downhill, a slab at a time: the angle of repose.',
   follow: 'how much walkers going the same way count for the sidestep: below 0 they keep a little distance; above 0 they fall in behind each other in single file.',
   avoid: 'how much walkers coming the other way count against a side: the urge to step out of their way that makes lanes form.',
+  look: 'how far ahead of a walker its Neighbours look (picture units): further makes people react earlier to who is coming.',
   sidestep: 'the most a walker swerves from its way, in degrees, toward the better side.',
   pace: 'how fast people walk when nothing is in their way (picture units a second).',
-  jam: 'how packed it must be ahead for a walker to stop (Greenshields\' jam density). Low and people stop early, so jams spread back like traffic waves.',
+  jam: 'how many walkers just ahead make a walker stop (Greenshields\' jam density, counted by Neighbours). Low and people stop early, so jams spread back like traffic waves.',
   curl: 'how hard the bots swing from one curve to the other. 0 draws straight lines; high draws tight loops.',
   rhythm: 'how fast the bots swing (slow: long waves and big loops; fast: tight wiggles).',
   answer: 'the chance a step that a bot heading into paint answers it, flipping its curl and shifting its colour. 0 and every bot paints alone.',

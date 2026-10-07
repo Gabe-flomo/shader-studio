@@ -30,16 +30,17 @@
  */
 import * as THREE from 'three';
 import type { AgentDrawProgram, AgentGroupProgram, AgentParam, AgentsSpec, AgentTrailProgram } from '../compiler/types';
-import { agentDrawUniform, agentStateUniform, agentStepUniform, agentWindowUniform, trailStepUniforms, trailUniform, trailVolUniform } from '../nodes/definitions/agents';
+import { agentDrawUniform, agentNbUniforms, agentStateUniform, agentStepUniform, agentWindowUniform, trailStepUniforms, trailUniform, trailVolUniform } from '../nodes/definitions/agents';
 import { AG_BESSEL_UNIFORM, listenUniforms, sceneGridUniforms } from '../nodes/definitions/agentForces';
 import {
   AG_MAX_STEPS, AG_OFFLINE_CHUNK, AG_PROBE_POINTS, AG_STEP_HZ, agCamera3, agDrawLook, agGovern, agGovernorState, agGroupState, agGroupSteps, agHear, agKeep, agLights, agLiveState,
-  agListenState, agProject3, agReadDecode, agReadPlan, agRestartGroup, agStepTime, agStepWindow, agTrailSize, agVolLayout, agVolUniform, type AgGroupState, type AgListenState, type AgVolLayout,
+  agListenState, agNbLayout, agNbPasses, agNbTile, agProject3, agReadDecode, agReadPlan, agRestartGroup, agStepTime, agStepWindow, agTrailSize, agVolLayout, agVolUniform, type AgGroupState, type AgListenState, type AgVolLayout,
+  AG_NB_SLOTS,
 } from '../play/kit/agentPlan.js';
 import { GP_BESSEL_N, GP_BESSEL_W, GP_LEVELS, GP_VOL, GP_VOL_TILES, gpBesselTable, gpReadback, type GpReadback, type GpSoundInput } from '../play/kit/gpuParticles.js';
 import {
   AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT3_VERT, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW3_VERT, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_PROJ3_FRAG, AG_READ_FRAG, AG_SUM_FRAG,
-  AG_THUMB_DOTS_FRAG, AG_THUMB_DOTS_VERT, AG_TRAIL3_FRAG, AG_TRAIL_FRAG,
+  AG_NB_BIN_FRAG, AG_NB_BIN_VERT, AG_THUMB_DOTS_FRAG, AG_THUMB_DOTS_VERT, AG_TRAIL3_FRAG, AG_TRAIL_FRAG,
 } from '../play/kit/agentShaders.js';
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
 import { agentReadingsWanted, publishAgentReadings, setAgentGroups } from './agentReadings';
@@ -350,6 +351,18 @@ export class AgentRunner {
     u_light: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
     u_lightCol: { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] },
   }, true);
+  /**
+   * Neighbours (docs/agents-group.md "Neighbours"): each such group's grid, rebuilt every step just
+   * before its rule from the state it reads (so one scratch set serves the live preview and offline
+   * renders alike): two slot atlases (even and odd slots, full float) and the count per cell.
+   */
+  private nbGrids = new Map<string, { d3: boolean; atlas: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget]; count: THREE.WebGLRenderTarget }>();
+  private nbBinUniforms = () => ({
+    u_a: { value: null }, u_b: { value: null }, u_prev: { value: null }, u_side: { value: 1 }, u_d3: { value: 0 },
+    u_grid: { value: new THREE.Vector4(1, 1, 1, 1) }, u_pass: { value: new THREE.Vector4() }, u_target: { value: new THREE.Vector2(1, 1) },
+  });
+  private nbCountMat = raw(AG_NB_BIN_VERT, AG_NB_BIN_FRAG, this.nbBinUniforms(), true);
+  private nbSlotMat = raw(AG_NB_BIN_VERT, AG_NB_BIN_FRAG, this.nbBinUniforms(), false);
   /** J_n for round Chladni plates (made when one first needs it). */
   private bessel: THREE.DataTexture | null = null;
   private downMat = raw(AG_FULL_VERT, AG_DOWN_FRAG, { u_src: { value: null }, u_texel: { value: new THREE.Vector2() } }, false);
@@ -424,6 +437,11 @@ export class AgentRunner {
       for (const n of [agentStateUniform(g.slug, 'A'), agentStateUniform(g.slug, 'B'), ...(g.stateC ? [agentStateUniform(g.slug, 'C'), agentStateUniform(g.slug, 'D')] : [])]) if (!u[n]) u[n] = { value: null };
       if (!u[agentStepUniform(g.slug)]) u[agentStepUniform(g.slug)] = { value: 0 };
       if (!(u[agentWindowUniform(g.slug)]?.value instanceof THREE.Vector4)) u[agentWindowUniform(g.slug)] = { value: new THREE.Vector4(0, 0, 0, 0) };
+      if (g.neighbours) {
+        const n = agentNbUniforms(g.slug);
+        for (const k of [n.a, n.b, n.n]) if (!u[k]) u[k] = { value: null };
+        if (!(u[n.g]?.value instanceof THREE.Vector4)) u[n.g] = { value: new THREE.Vector4(1, 1, 1, 1) };
+      }
       for (const gr of g.grids ?? []) {
         const n = sceneGridUniforms(gr.slug);
         if (!u[n.grid]) u[n.grid] = { value: null };
@@ -490,6 +508,7 @@ export class AgentRunner {
       return { spec: g, material, ready: false, failed: false };
     });
     for (const e of old.values()) this.drop(e);
+    for (const slug of [...this.nbGrids.keys()]) if (!spec.groups.some(g => g.slug === slug && g.neighbours)) this.dropNeighbours(slug);
     // Trails' own step programs (Add / Block wired), kept while their source is unchanged.
     const oldTrails = new Map(this.trailSteps.map(e => [e.slug, e]));
     this.trailSteps = spec.trails.filter(t => t.stepShader).map(t => {
@@ -663,6 +682,12 @@ export class AgentRunner {
           if (stepTime === null) stepTime = agStepTime(s.step, p.spf, p.preroll);
           // Collide (3D scene): the Scene's grid at this step's clock (a moving scene moves the same live and offline).
           for (const gr of g.grids ?? []) this.fillGrid(targets, gr);
+          // Neighbours: the grid of where the walkers are as this step begins.
+          if (g.neighbours) {
+            const timedNb = k === 0 && (o.timer?.begin(`agents:${g.label} neighbours`) ?? false);
+            this.buildNeighbours(g, s, aspect);
+            if (timedNb) o.timer!.end();
+          }
           p.e.material.uniformsNeedUpdate = true;
           this.quad.material = p.e.material;
           const timed = k === 0 && (o.timer?.begin(`agents:${g.label} step`) ?? false);
@@ -846,6 +871,66 @@ export class AgentRunner {
       u[agentStateUniform(g.slug, 'C')].value = tex[2];
       u[agentStateUniform(g.slug, 'D')].value = tex[3];
     }
+  }
+
+  /**
+   * A group's neighbour grid for this step (kit/agentPlan.js agNbLayout / agNbPasses): the count of
+   * each cell (one additive point per live walker), then each slot (one point per walker not yet in
+   * a slot of its cell; no blending, so the last drawn, the highest index, stays). Deterministic:
+   * points are drawn in index order and blending 1s is exact.
+   */
+  private buildNeighbours(g: AgentGroupProgram, s: GroupState, aspect: number): void {
+    const nb = g.neighbours!;
+    const d3 = !!g.space3d;
+    const { renderer } = this.host;
+    let grid = this.nbGrids.get(g.slug);
+    if (grid && grid.d3 !== d3) { this.dropNeighbours(g.slug); grid = undefined; }
+    if (!grid) {
+      const [tw, th] = agNbTile(d3);
+      const opts = { type: THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, stencilBuffer: false } as const;
+      const atlas = (): THREE.WebGLRenderTarget => new THREE.WebGLRenderTarget(tw * AG_NB_SLOTS / 2, th, opts);
+      grid = {
+        d3, atlas: [atlas(), atlas()],
+        // Half float counts: exact to 2048 walkers a cell (blending half floats needs no extension).
+        count: new THREE.WebGLRenderTarget(tw, th, { ...opts, type: THREE.HalfFloatType, format: THREE.RedFormat }),
+      };
+      this.nbGrids.set(g.slug, grid);
+    }
+    const radius = Math.max(...nb.radius.map(r => this.read(r, 0.05)));
+    const most = Math.max(...nb.max.map(m => this.read(m, 36)));
+    const L = agNbLayout(d3, aspect, radius, most);
+    const [tw, th] = agNbTile(d3);
+    const prevColor = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
+    renderer.setClearColor(0x000000, 0);
+    for (const rt of [...grid.atlas, grid.count]) { renderer.setRenderTarget(rt); renderer.clear(true, false, false); }
+    renderer.setClearColor(prevColor, prevAlpha);
+    const st = s.rt[s.cur];
+    this.pointGeometry.setDrawRange(0, g.side * g.side);
+    for (const ps of agNbPasses(d3, L.slots)) {
+      const mat = ps.count ? this.nbCountMat : this.nbSlotMat;
+      const nu = mat.uniforms;
+      nu.u_a.value = st.textures[0]; nu.u_b.value = st.textures[1];
+      nu.u_prev.value = ps.prevAtlas >= 0 ? grid.atlas[ps.prevAtlas].texture : null;
+      nu.u_side.value = g.side; nu.u_d3.value = d3 ? 1 : 0;
+      (nu.u_grid.value as THREE.Vector4).fromArray(L.uniform);
+      (nu.u_pass.value as THREE.Vector4).set(ps.x, ps.prevX, ps.prevAtlas >= 0 ? 1 : 0, ps.count ? 1 : 0);
+      (nu.u_target.value as THREE.Vector2).set(ps.count ? tw : tw * AG_NB_SLOTS / 2, th);
+      mat.uniformsNeedUpdate = true;
+      this.points.material = mat;
+      renderer.setRenderTarget(ps.count ? grid.count : grid.atlas[ps.atlas]);
+      renderer.render(this.pointScene, this.host.camera);
+    }
+    const u = this.host.uniforms();
+    const n = agentNbUniforms(g.slug);
+    u[n.a].value = grid.atlas[0].texture; u[n.b].value = grid.atlas[1].texture; u[n.n].value = grid.count.texture;
+    (u[n.g].value as THREE.Vector4).fromArray(L.uniform);
+  }
+
+  private dropNeighbours(slug: string): void {
+    const grid = this.nbGrids.get(slug);
+    if (!grid) return;
+    grid.atlas[0].dispose(); grid.atlas[1].dispose(); grid.count.dispose();
+    this.nbGrids.delete(slug);
   }
 
   private pass(mat: THREE.RawShaderMaterial, into: THREE.WebGLRenderTarget): void {
@@ -1228,7 +1313,8 @@ export class AgentRunner {
       for (const d of this.spec.draws) if (u[agentDrawUniform(d.slug)]) u[agentDrawUniform(d.slug)].value = null;
     }
     this.steps = [];
-    for (const m of [this.depositMat, this.trailMat, this.drawMat, this.downMat, this.blurMat, this.composeMat, this.thumbMat, this.dotsMat, this.readMat, this.sumMat, this.placeholder, this.deposit3Mat, this.trail3Mat, this.proj3Mat, this.draw3Mat]) m.dispose();
+    for (const m of [this.depositMat, this.trailMat, this.drawMat, this.downMat, this.blurMat, this.composeMat, this.thumbMat, this.dotsMat, this.readMat, this.sumMat, this.placeholder, this.deposit3Mat, this.trail3Mat, this.proj3Mat, this.draw3Mat, this.nbCountMat, this.nbSlotMat]) m.dispose();
+    for (const slug of [...this.nbGrids.keys()]) this.dropNeighbours(slug);
     for (const r of this.reads.values()) { for (const rt of r.rts) rt.dispose(); r.reader.dispose(); }
     this.reads.clear();
     for (const id of [...this.dotReads.keys()]) this.dropDots(id);
