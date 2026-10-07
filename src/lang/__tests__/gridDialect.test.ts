@@ -60,7 +60,7 @@ describe('grid dialect: presets', () => {
       const params: P = { ...GRID_DEFAULTS, ...presetParams(p.ruleType, p.preset) };
       const n = rng.int(1, 5);
       for (let k = 0; k < n; k++) {
-        const key = rng.pick(['board', 'edges', 'rate', 'steps', 'density', 'seed', 'start', 'states', 'bornMask', 'surviveMask', 'neighbourhood', 'radius', 'bornLo', 'afterglow', 'ageFade', 'color0', 'color1', 'color5', 'glowColor', 'brushRadius', 'brushFill', 'brushState', 'feed', 'kill', 'template', 'customU', 'knobA', 'gain', 'shape']);
+        const key = rng.pick(['board', 'edges', 'rate', 'steps', 'density', 'seed', 'start', 'states', 'bornMask', 'surviveMask', 'neighbourhood', 'radius', 'bornLo', 'afterglow', 'ageFade', 'color0', 'color1', 'color5', 'glowColor', 'brushRadius', 'brushFill', 'brushState', 'feed', 'kill', 'template', 'customU', 'knobA', 'gain', 'shape', 'jitter']);
         if (key === 'board') params.board = rng.pick(BOARD_SIZES).value;
         else if (key === 'edges') params.edges = rng.pick(['wrap', 'walls']);
         else if (key === 'rate') params.rate = Math.round(rng.float(0.05, 1) * 100) / 100;
@@ -112,11 +112,21 @@ describe('grid dialect: the plan\'s examples', () => {
     expect(printGrid({ ...sand, blocks: [...(sand.blocks as unknown[]), { before: [2, 0, 0, 0], after: [0, 0, 0, 2], symmetry: 'rotate', chance: 0.5, off: true }] }, { pretty: true }))
       .toBe('grid blocks\n  block 11/00 → 00/11\n  block 1./0. → 0=/1= @mirror\n  block 10/*0 → 00/=1 chance=0.8 @mirror\n  block 20/00 → 00/02 chance=0.5 @turns @off');
   });
+  it('jitter= reads, prints and round-trips; falling sand has it, the gas turns it off', () => {
+    expect(read('grid falling-sand jitter=0.5')).toMatchObject({ ruleType: 'blocks', jitter: 0.5 });
+    // A look setting, as density is: the preset still reads as falling sand.
+    expect(printGrid(read('grid falling-sand jitter=0.5'))).toBe('falling-sand jitter=0.5');
+    expect(printGrid(read('grid gas jitter=0.7'))).toBe('grid gas jitter=0.7'); // "gas" clashes in the Do… bar, so it keeps its header
+    expect(read('grid falling-sand')).toMatchObject({ jitter: 1 });
+    expect(read('grid gas')).toMatchObject({ jitter: 0 });
+    const r = parseGrid('grid falling-sand jitter=2', { seed: 1 });
+    expect(r.errors.length + (Number(r.params.jitter) <= 1 ? 1 : 0)).toBeGreaterThan(0);
+  });
   it('stencil and block text runs on the CPU exactly as the preset it reads as (plan test 9)', () => {
     for (const [text, preset] of [
       ['grid patterns states=4 · stencil .../.1./... → 2 · stencil .../.2./... → 3 · stencil .../.3./... → 1 count=1:1..2', PATTERN_PRESETS.wireworld],
       ['grid blocks states=3 · block 11/00 → 00/11 · block 1./0. → 0=/1= @mirror · block 10/*0 → 00/=1 @mirror chance=0.8', BLOCK_PRESETS.sand],
-      ['grid blocks states=2 wrap · block 10/00 → 00/01 @turns · block 10/01 → 01/10 @turns · block 11/00 → 00/11 @turns · block 11/10 → 01/11 @turns', BLOCK_PRESETS.gas],
+      ['grid blocks states=2 wrap jitter=0 · block 10/00 → 00/01 @turns · block 10/01 → 01/10 @turns · block 11/00 → 00/11 @turns · block 11/10 → 01/11 @turns', BLOCK_PRESETS.gas],
       ['grid patterns states=2 · stencil .../.0./... → 1 count=1:1', PATTERN_PRESETS.crystal],
     ] as const) {
       // The same board and look; the rules (and states, edges) from the preset or from the text.
@@ -124,7 +134,8 @@ describe('grid dialect: the plan\'s examples', () => {
       expect(a.patterns ?? null).toEqual(b.patterns ?? null);
       expect(a.blocks ?? null).toEqual(b.blocks ?? null);
       const rs = (seed: number) => { const r = makeRng(seed); return () => r.next(); };
-      // Blocks roll their chance with Math.random: the same rolls for both.
+      // Blocks roll their dice from a hash of the block, the step and the Seed (gridRules/dice.ts):
+      // the same rolls for both. The gas says jitter=0: "grid blocks" starts from Falling sand (Jitter 1).
       const run = (p: P) => {
         const r = makeRng(9);
         const spy = vi.spyOn(Math, 'random').mockImplementation(() => r.next());

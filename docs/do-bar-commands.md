@@ -4104,7 +4104,7 @@ Examples:
 
 ### falling-sand
 
-Grid Rules · header. Falling sand (blocks): Grains (1) fall into empty cells (0), slide off each other down to the side, and rest on walls (2) and the floor. Nothing is lost or made. Also: sand.
+Grid Rules · header. Falling sand (blocks): Grains (1) fall into empty cells (0), slide off each other down to the side, and rest on walls (2) and the floor. Jitter 1 keeps a falling cloud from showing in bands. Nothing is lost or made. Also: sand.
 
 Words: `falling-sand`, `sand`
 

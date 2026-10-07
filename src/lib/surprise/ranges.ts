@@ -87,6 +87,8 @@ export const INTERESTING_RANGES: Record<string, CuratedRange> = {
   'gridrules.density': R(0.15, 0.5),
   'gridrules.rate': R(0.3, 1),
   'gridrules.afterglow': R(0.6, 0.97),
+  // Blocks: below ~0.5 a falling cloud still shows bands (gridRules/dice.ts).
+  'gridrules.jitter': R(0.6, 1),
 };
 
 /** Keys that are never randomised: bit masks, counters, switches stored as numbers. */

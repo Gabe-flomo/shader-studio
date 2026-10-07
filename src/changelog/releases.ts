@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.68',
+    date: '2026-10-07',
+    title: 'Sand jitter',
+    highlights: [
+      { area: 'Studio', text: 'Blocks rules have a Jitter setting that breaks up the row bands while sand falls; Falling sand uses it by default and still settles into a smooth heap.', link: { kind: 'doc', path: 'docs/grid-rules.md' } },
+      { area: 'Studio', text: 'The Grid Rules preview now rolls the same dice as the canvas, so random rules look identical in both. jitter= also works in recipes.' },
+    ],
+  },
+  {
     id: '2026.10.67',
     date: '2026-10-07',
     title: 'One Playfield language',

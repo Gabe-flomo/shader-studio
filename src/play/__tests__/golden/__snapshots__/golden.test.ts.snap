@@ -461,6 +461,7 @@ exports[`golden outputs: examples > gridRulesSand 1`] = `
   "brush": "- x120",
   "fill": "- x120",
   "grain": "- x120",
+  "jitter": "- x120",
   "paint": "- x120",
   "paints": "- x120",
   "reset": "- x120",

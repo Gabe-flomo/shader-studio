@@ -212,18 +212,24 @@ function patternLines(s: GridShape, N: GridNames, read: (d: string) => string): 
 }
 
 /**
- * Blocks (Margolus): this cell's 2×2 block (its grid shifted one cell diagonally on odd steps), its
- * four cells read, the rules tried in order; within a rule the variants are tried starting from one
- * rolled per block. Every cell of the block makes the same choice, so a rearranging rule conserves.
+ * Blocks (Margolus): this cell's 2×2 block (its grid shifted one cell diagonally on odd steps, and
+ * with Jitter its columns' segments shifted a row at random: gridRules/dice.ts), its four cells read,
+ * the rules tried in order; within a rule the variants are tried starting from one rolled per block.
+ * Every cell of the block makes the same choice, so a rearranging rule conserves. The dice are the
+ * whole-number grDice, so the CPU preview (gridRules/cpu.ts) rolls the same ones.
  * Wrap: the board's even part wraps (an odd last row or column sits out); walls: outside reads −1.
  */
 function blockLines(s: GridShape, N: GridNames, prev: string): string[] {
-  const { id } = N;
+  const { id, P } = N;
   const v = (name: string) => `${id}_${name}`;
   const L: string[] = [
     `float ${v('par')} = step(1.5, ${v('me')}.b);`,
     `vec2 ${v('W')} = floor(${v('res')} * 0.5) * 2.0;`,
-    `vec2 ${v('org')} = floor((${v('cell')} - ${v('par')}) * 0.5) * 2.0 + ${v('par')};`,
+    `float ${v('frame')} = ${FRAME};`,
+    // The block this cell is in (gridRules/dice.ts): the Margolus grid, each two-cell column's segments
+    // shifted a row at random with Jitter. z is 0 for a cell in no block this step (it stays as it is).
+    `vec3 ${v('blk')} = grBlockOf(${v('cell')}, ${v('par')}, ${v('W')}, clamp(${P('jitter')}, 0.0, 1.0), ${v('frame')}, ${P('seed')}, ${s.wrap ? '1.0' : '0.0'});`,
+    `vec2 ${v('org')} = ${v('blk')}.xy;`,
     `vec2 ${v('q')} = ${v('cell')} - ${v('org')};`,
     `float ${v('qi')} = ${v('q')}.x + (1.0 - ${v('q')}.y) * 2.0;`,
     `float ${v('live')} = step(${v('cell')}.x, ${v('W')}.x - 0.5) * step(${v('cell')}.y, ${v('W')}.y - 0.5);`,
@@ -239,13 +245,13 @@ function blockLines(s: GridShape, N: GridNames, prev: string): string[] {
       L.push(`float ${v('b' + q)} = (${v('p' + q)}.x < 0.0 || ${v('p' + q)}.y < 0.0 || ${v('p' + q)}.x > ${v('W')}.x - 0.5 || ${v('p' + q)}.y > ${v('W')}.y - 0.5) ? -1.0 : floor(texture2D(${prev}, (${v('p' + q)} + 0.5) / ${v('res')}).r + 0.5);`);
     }
   }
-  L.push(`float ${v('next')} = ${v('s')};`, `float ${v('done')} = 0.0;`);
+  L.push(`float ${v('next')} = ${v('s')};`, `float ${v('done')} = 1.0 - ${v('blk')}.z;`);
   s.blocks.filter(r => !r.off).forEach((r, j) => {
     const vars = blockVariants(r);
     const n = vars.length;
     // The variant tried first, and the chance, rolled once per block and step.
-    L.push(`float ${v(`o${j}`)} = floor(grHash(vec3(${v('key')}, ${FRAME} + ${f(31 + j * 2)})) * ${f(n)});`);
-    const dice = r.chance < 1 ? ` * step(grHash(vec3(${v('key')}, ${FRAME} + ${f(32 + j * 2)})), ${f(r.chance)})` : '';
+    L.push(`float ${v(`o${j}`)} = floor(grDice(${v('key')}, ${v('frame')}, ${f(31 + j * 2)}, ${P('seed')}) * ${f(n)});`);
+    const dice = r.chance < 1 ? ` * (grDice(${v('key')}, ${v('frame')}, ${f(32 + j * 2)}, ${P('seed')}) < ${f(r.chance)} ? 1.0 : 0.0)` : '';
     L.push(`float ${v(`best${j}`)} = 0.0;`, `float ${v(`pick${j}`)} = -1.0;`);
     vars.forEach(({ before }, k) => {
       const tests = before.map((spec, q) => specTest(spec, v('b' + q))).filter((t): t is string => !!t);
