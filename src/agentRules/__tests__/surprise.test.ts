@@ -18,7 +18,7 @@ import { rulesTemplateNodes } from '../templates';
 import { surpriseAgents } from '../surprise';
 import { programOf, simulate, walkersFor } from './cpuSim';
 
-const SEEDS = Array.from({ length: 40 }, (_, i) => 3 + i * 7727);
+const SEEDS = Array.from({ length: 60 }, (_, i) => 3 + i * 7727);
 
 describe('Agent Rules Surprise me', () => {
   it('the same seed gives the same rule set', () => {
@@ -27,17 +27,24 @@ describe('Agent Rules Surprise me', () => {
   });
 
   it('keeps sensors, speed, trail and colours in their bands; every kind and a second species turn up', () => {
-    const kinds = new Set<string>();
+    const kinds = new Set<string>(), styles = new Set<string>();
     let pairs = 0;
     for (const seed of SEEDS) {
       const s = surpriseAgents(makeRng(seed));
       kinds.add(s.kind);
+      if (s.style) styles.add(s.style);
+      expect(s.set.kind).toBe(s.kind);
       if (s.relation) { pairs++; expect(s.set.species).toHaveLength(2); }
-      expect(s.set.sensor.distance).toBeGreaterThanOrEqual(0.015);
-      expect(s.set.sensor.distance).toBeLessThanOrEqual(0.06);
-      expect(s.set.sensor.angle).toBeGreaterThanOrEqual(15);
-      expect(s.set.sensor.angle).toBeLessThanOrEqual(60);
-      for (const sp of s.set.species) { expect(sp.speed).toBeGreaterThan(0.02); expect(sp.speed).toBeLessThanOrEqual(0.55); }
+      if (s.style) {
+        expect(s.set.sensor.distance).toBeGreaterThanOrEqual(0.015);
+        expect(s.set.sensor.distance).toBeLessThanOrEqual(0.06);
+        expect(s.set.sensor.angle).toBeGreaterThanOrEqual(15);
+        expect(s.set.sensor.angle).toBeLessThanOrEqual(60);
+      }
+      for (const sp of s.set.species) { expect(sp.speed).toBeGreaterThan(0.02); expect(sp.speed).toBeLessThanOrEqual(1.6); }
+      // Nothing dies (a trail setup's Emit may not refill), and every walker shows: some rule of every species leaves trail.
+      expect(s.set.species.some(sp => sp.rules.some(rl => rl.do.some(a => a.kind === 'die'))), s.summary).toBe(false);
+      for (const sp of s.set.species) expect(sp.rules.some(rl => !rl.off && rl.do.some(a => a.kind === 'trail')), s.summary).toBe(true);
       expect(s.trail.halfLife).toBeGreaterThanOrEqual(0.03);
       expect(s.trail.halfLife).toBeLessThanOrEqual(0.3);
       for (const c of s.palette.flat()) expect(c >= 0 && c <= 1).toBe(true);
@@ -45,11 +52,14 @@ describe('Agent Rules Surprise me', () => {
       expect(normalizeRuleSet(JSON.parse(JSON.stringify(s.set)))).toEqual(s.set);
       s.set.species.forEach((sp, i) => sp.rules.forEach(r => expect(describeRule(s.set, i, r)).toMatch(/^When .+ → .+/)));
     }
-    expect(kinds).toEqual(new Set(['tracker', 'drifter', 'flocker', 'pulser']));
+    expect(kinds).toEqual(new Set(['trail', 'ants', 'flock', 'swarm', 'crowd', 'particles']));
+    expect(styles).toEqual(new Set(['tracker', 'drifter', 'flocker', 'pulser']));
     expect(pairs).toBeGreaterThan(0);
-    const d3 = surpriseAgents(makeRng(5), { d3: true });
-    expect(d3.set.sensor.distance).toBeGreaterThanOrEqual(0.1);
-    expect(d3.set.species[0].speed).toBeGreaterThanOrEqual(1);
+    for (const seed of SEEDS.slice(0, 10)) {
+      const d3 = surpriseAgents(makeRng(seed), { d3: true });
+      expect(d3.set.species[0].speed).toBeGreaterThanOrEqual(1);
+      if (d3.style) expect(d3.set.sensor.distance).toBeGreaterThanOrEqual(0.1);
+    }
   });
 
   it('every surprise compiles in a rules group, in 2D and 3D', () => {
@@ -70,8 +80,9 @@ describe('Agent Rules Surprise me', () => {
     for (const seed of SEEDS.slice(0, 12)) {
       const s = surpriseAgents(makeRng(seed));
       const w = simulate(programOf(generateRulesInside(s.set, { groupId: 'g', d3: false })), walkersFor(6), 4);
+      if (!s.style) continue; // neighbour and force kinds need the GPU's neighbour grid
       expect(w.every(x => x.speed > 0), s.summary).toBe(true);
-      if (s.kind !== 'pulser') expect(w.some(x => x.dep.some(v => v > 0)), s.summary).toBe(true);
+      if (s.style !== 'pulser') expect(w.some(x => x.dep.some(v => v > 0)), s.summary).toBe(true);
     }
   });
 });

@@ -36,17 +36,22 @@ offers **Reroll** (undo it and try a new seed) and **Undo**.
   Generations preset. Smooth jitters Gray–Scott feed and kill round known spots, or picks
   diffusion or waves. Patterns and Blocks vary a preset's start, density and chances. After 40
   rejected candidates it falls back to Life.
-- **Agent Rules** picks a *walker kind* and the template family it comes from:
-  - trackers (Slime mold);
-  - flow drifters (Slime mold on a flow field);
-  - flockers (Boids-like: gather to the trail, turn away where it is crowded);
-  - pulsers (Fireflies-like: two states, flashing).
+- **Agent Rules** first picks a *walker kind* (the rule set's Kind, docs/agent-rules.md) and a
+  template family of that kind:
+  - **Trail followers** (Slime mold) come in three styles:
+    - trackers;
+    - flow drifters;
+    - crowd-shy gatherers, which follow the trail and turn away where it is thick.
+  - **Carriers** pulse between two states (Fireflies).
+  - **Flocks, swarms, crowds and particles** start from their kind's template (Flock, Swarm,
+    Crowd, Particles), with every strength, reach and timing scaled by 0.65–1.5 within its bounds.
 
-  It then sets the sensor angle (15–60°) and distance (0.015–0.06), turn, wander, speed, deposit
-  (each rule's trail amount), decay (the Trail field's Half-life, 0.03–0.3) and colours (state
-  colours and the trail's Stops Palette). About a third of the time it adds a second species that
-  follows or avoids the first one's trail. A 3D group gets 3D bands (sensors 0.1–0.2, speed 1–1.5).
-  The rule sets use only actions a plain trail setup supports, so they run in any rules group.
+  For trail followers it then sets the sensor angle (15–60°) and distance (0.015–0.06), turn,
+  wander and speed. For every kind it sets the deposit (each rule's trail amount), the decay (the
+  Trail field's Half-life, 0.03–0.3) and the colours (state colours and the trail's Stops
+  Palette). About a third of the time, trail followers get a second species that follows or
+  avoids the first one's trail. Every walker leaves trail, so a plain trail setup shows any kind.
+  A 3D group gets 3D bands (sensors 0.1–0.2, speed 1–1.5).
 
 ## The API (`src/lib/surprise`)
 
@@ -128,7 +133,7 @@ For `random(a..b)` written by the user, sample the user's range directly
 - `src/components/sceneBuilder/surpriseActions.ts`: the GPU frame check (`sceneFrameStats`),
   undo and toasts.
 - `src/gridRules/surprise.ts`: `surpriseGrid`, `gridCandidate`, `gridFate` (the CPU test board).
-- `src/agentRules/surprise.ts`: `surpriseAgents`, `WALKER_KINDS`.
+- `src/agentRules/surprise.ts`: `surpriseAgents`, `SURPRISE_KINDS`.
 - `agentRules/storeActions.ts` `surpriseGroupRules`: rules, Trail field and palette in one undo step.
 - `src/nodes/randomizeParams.ts`: the card's Randomize, using the interesting ranges, and
   `randomizedGraph` for the whole graph level.

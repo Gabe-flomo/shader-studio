@@ -13,6 +13,7 @@ import { surpriseAgents } from '../../agentRules/surprise';
 import { surpriseGroupRules } from '../../agentRules/storeActions';
 import { randomizedGraph } from '../../nodes/randomizeParams';
 import { announceSurprise } from './announce';
+import { restartAgents } from '../../lib/agentRunner';
 
 /** The last seed per builder window (by node id) and for the whole graph. */
 export const useSurpriseSeeds = create<{ grid: Record<string, number>; agents: Record<string, number>; graph: number | null }>(() => ({ grid: {}, agents: {}, graph: null }));
@@ -43,6 +44,9 @@ export function surpriseAgentsAction(groupId: string, seed: number): void {
   if (!g) return;
   const s = surpriseAgents(makeRng(seed), { d3: g.params.space === '3d' });
   if (!surpriseGroupRules(groupId, s, `Surprise: ${s.summary}`)) return;
+  // A new rule set starts from a fresh board: the last one's walkers may be piled up or gone.
+  restartAgents(groupId);
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('agents-restart'));
   useSurpriseSeeds.setState(x => ({ agents: { ...x.agents, [groupId]: seed } }));
   announceSurprise({
     title: 'Surprise rules', seed, message: s.summary,

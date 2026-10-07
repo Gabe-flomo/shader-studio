@@ -44,11 +44,20 @@ export function surpriseGroupRules(groupId: string, s: AgentSurprise, label = 'S
   if (!g) return false;
   undoManager.push(before, { label });
   last = { id: '', at: 0 };
-  const trailId = g.inputs.trail?.connection?.nodeId;
+  // The Trail field the group's walkers deposit into (group → Deposit → Trail field), wired or not:
+  // a rule set that senses nothing has no Trail port, so the wire may be gone since an earlier surprise.
+  const reads = (x: { inputs: Record<string, { connection?: { nodeId: string } }> }, id: string) => Object.values(x.inputs).some(i => i.connection?.nodeId === id);
+  const deposits = before.filter(x => x.type === 'agentDeposit' && reads(x, groupId)).map(x => x.id);
+  const trailId = g.inputs.trail?.connection?.nodeId ?? before.find(x => x.type === 'trailField' && deposits.some(d => reads(x, d)))?.id;
   const trail = trailId ? before.find(x => x.id === trailId && x.type === 'trailField') : undefined;
-  const paletteIds = new Set(trail ? before.filter(x => x.type === 'stopPalette' && Object.values(x.inputs).some(i => i.connection?.nodeId === trail.id)).map(x => x.id) : []);
+  const paletteIds = new Set(trail ? before.filter(x => x.type === 'stopPalette' && reads(x, trail.id)).map(x => x.id) : []);
   const nodes = before.map(x => {
-    if (x.id === groupId) return applyRulesToGroup(x, s.set);
+    if (x.id === groupId) {
+      const ng = applyRulesToGroup(x, s.set);
+      // The Trail port came back: wire it to the Trail field again.
+      if (trail && ng.inputs.trail && !ng.inputs.trail.connection) return { ...ng, inputs: { ...ng.inputs, trail: { ...ng.inputs.trail, connection: { nodeId: trail.id, outputKey: 'texture' } } } };
+      return ng;
+    }
     if (trail && x.id === trail.id) return { ...x, params: { ...x.params, halfLife: s.trail.halfLife, diffuse: s.trail.diffuse } };
     if (paletteIds.has(x.id)) return { ...x, params: { ...x.params, ...Object.fromEntries(s.palette.map((c, i) => [`color${i}`, c])) } };
     return x;
