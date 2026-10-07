@@ -150,7 +150,9 @@ function blocksRule(rng: Rng): P {
   const key = rng.pick(Object.keys(BLOCK_PRESETS));
   const p = presetPatch(BLOCK_PRESETS[key]);
   const rules = structuredClone(p.blocks as BlockRule[]).map(r => (r.chance < 1 || rng.chance(0.3) ? { ...r, chance: Math.round(rng.float(0.5, 1) * 100) / 100 } : r));
-  return { ...p, blocks: rules, start: 'noise', density: key === 'gas' ? rng.float(0.08, 0.35) : rng.float(0.2, 0.5) };
+  // Sand starts as a cloud in the middle (its preset's start) so it falls and heaps; a board full of noise
+  // would fall as one barred sheet (every falling grain in a Margolus step lands on the same row parity).
+  return { ...p, blocks: rules, start: key === 'gas' ? 'noise' : 'centre', density: key === 'gas' ? rng.float(0.08, 0.35) : rng.float(0.2, 0.5) };
 }
 
 const r3 = (c: number[]) => c.map(v => Math.round(v * 1000) / 1000);
