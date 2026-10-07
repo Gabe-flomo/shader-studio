@@ -20,6 +20,8 @@ import {
   defaultSize, defaultWarpValues, emptySpec, newGroup, newShape, newWarp,
   type CameraSpec, type CombineOp, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type ToneMode, type Vec3, type WarpDef, type WarpSpec,
 } from './spec';
+import { COLOUR_TABLE, colourText } from '../lang/colours';
+import { suggest } from '../lang/fuzzy';
 import { DEFAULT_PALETTE, OUTPUTS, OUTPUT_WORDS, PALETTES, PALETTE_BY_KEY, outputClause, type OutputSpec } from './output';
 
 // ── Errors ──────────────────────────────────────────────────────────────────
@@ -139,37 +141,12 @@ const SHAPE_WORDS: Record<string, string> = Object.fromEntries(SHAPES.flatMap(s 
 const WARP_WORDS: Record<string, string> = Object.fromEntries(WARPS.flatMap(w => [[w.kind, w.kind], ...w.aliases.map(a => [a, w.kind])]));
 const SETTING_WORDS = ['sun', 'sky', 'bounce', 'shadows', 'shadow', 'ao', 'occlusion', 'fog', 'background', 'bg', 'tone', 'camera', 'cam', 'quality', 'custom', 'custom-warp', 'output', 'show', 'colour', 'color'];
 
-const COLOR_NAMES: Record<string, Vec3> = {
-  white: [1, 1, 1], black: [0, 0, 0], grey: [0.5, 0.5, 0.5], gray: [0.5, 0.5, 0.5], silver: [0.75, 0.75, 0.78],
-  red: [0.9, 0.15, 0.12], orange: [1, 0.55, 0.15], yellow: [1, 0.85, 0.2], gold: [1, 0.75, 0.3], green: [0.25, 0.75, 0.35],
-  teal: [0.15, 0.65, 0.6], cyan: [0.2, 0.8, 0.95], blue: [0.2, 0.4, 0.95], navy: [0.05, 0.08, 0.25], purple: [0.55, 0.3, 0.85],
-  violet: [0.6, 0.4, 1], pink: [1, 0.5, 0.7], magenta: [0.9, 0.2, 0.75], brown: [0.45, 0.28, 0.15], cream: [0.95, 0.9, 0.8],
-  sky: [0.45, 0.65, 0.9], night: [0.03, 0.035, 0.07],
-};
+const COLOR_NAMES = COLOUR_TABLE as Readonly<Record<string, Vec3>>;
 
 /** Every word a clause can start with, for "did you mean". */
 const CLAUSE_WORDS = [...Object.keys(MODE_WORDS), ...Object.keys(OP_WORDS), ...Object.keys(SHAPE_WORDS), ...Object.keys(WARP_WORDS), ...SETTING_WORDS];
 
-function editDistance(a: string, b: string): number {
-  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
-  for (let j = 1; j <= b.length; j++) d[0][j] = j;
-  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
-    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-    // Two letters swapped ("dpeth") is one slip.
-    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
-  }
-  return d[a.length][b.length];
-}
-
-export function suggest(word: string, among: string[]): string | null {
-  const w = word.toLowerCase();
-  let best: string | null = null, bestD = Infinity;
-  for (const c of among) {
-    const d = editDistance(w, c.toLowerCase());
-    if (d < bestD) { bestD = d; best = c; }
-  }
-  return best && bestD <= Math.max(1, Math.floor(w.length / 3)) ? best : null;
-}
+export { suggest };
 
 // ── Values ──────────────────────────────────────────────────────────────────
 
@@ -712,13 +689,7 @@ export const fmt = (n: number): string => {
 };
 const same = (a: number[], b: number[]) => a.length === b.length && a.every((x, i) => round(x) === round(b[i]));
 const fmtVec = (v: Vec3): string => (v[0] === v[1] && v[1] === v[2] ? fmt(v[0]) : `(${v.map(fmt).join(',')})`);
-const fmtColour = (v: Vec3): string => {
-  const name = Object.entries(COLOR_NAMES).find(([, c]) => same(c, v))?.[0];
-  if (name) return name;
-  const hex = v.map(x => Math.round(x * 255));
-  if (v.every((x, i) => round(hex[i] / 255) === round(x) && hex[i] >= 0 && hex[i] <= 255)) return `#${hex.map(h => h.toString(16).padStart(2, '0')).join('')}`;
-  return `(${v.map(fmt).join(',')})`;
-};
+const fmtColour = (v: Vec3): string => colourText(v);
 const fmtName = (s: string) => (/^[A-Za-z_][A-Za-z0-9_-]*$/.test(s) ? s : `"${s.replace(/"/g, '\'')}"`);
 const valueEq = (a: unknown, b: unknown) => (Array.isArray(a) && Array.isArray(b) ? same(a, b) : typeof a === 'number' && typeof b === 'number' ? round(a) === round(b) : a === b);
 

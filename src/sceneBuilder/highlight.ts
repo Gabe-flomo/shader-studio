@@ -15,6 +15,7 @@
  */
 import { continuesClause, parseRecipe, RECIPE_WORDS, type RecipeError } from './recipe';
 import type { Vec3 } from './spec';
+import { lex as sharedLex } from '../lang/lex';
 
 export type RecipeKind = 'mode' | 'shape' | 'op' | 'warp' | 'setting' | 'key' | 'number' | 'vector' | 'name' | 'colour' | 'punct' | 'comment' | 'plain';
 
@@ -34,32 +35,21 @@ const COLOUR_SETTINGS = new Set(['sky', 'bounce', 'background', 'bg']);
 
 type Raw = { from: number; to: number; t: 'word' | 'num' | 'hex' | 'str' | 'p' | 'sep' | 'comment'; v: string };
 
+/** The shared lexer's tokens (lang/lex.ts, one lexer for every surface: D1) in the highlighter's terms. */
 function lex(src: string): Raw[] {
-  const out: Raw[] = [];
-  let i = 0;
-  while (i < src.length) {
-    const c = src[i];
-    if (c === '/' && src[i + 1] === '/') { const j = src.indexOf('\n', i); const e = j < 0 ? src.length : j; out.push({ from: i, to: e, t: 'comment', v: src.slice(i, e) }); i = e; continue; }
-    if (c === '\n' || c === '·' || c === '•' || c === '|' || c === ';') { out.push({ from: i, to: i + 1, t: 'sep', v: c }); i++; continue; }
-    if (/\s/.test(c)) { i++; continue; }
-    if ('(),=@'.includes(c)) { out.push({ from: i, to: i + 1, t: 'p', v: c }); i++; continue; }
-    if (c === '"' || c === '\'' || c === '“' || c === '‘') {
-      const close = c === '“' ? '”' : c === '‘' ? '’' : c;
-      const j = src.indexOf(close, i + 1);
-      const e = j < 0 ? src.length : j + 1;
-      out.push({ from: i, to: e, t: 'str', v: src.slice(i, e) }); i = e; continue;
+  return sharedLex(src, { comments: true }).toks.filter(t => t.t !== 'eof').map((t): Raw => {
+    const v = src.slice(t.at, t.end);
+    const r = { from: t.at, to: t.end };
+    switch (t.t) {
+      case 'word': return { ...r, t: 'word', v };
+      case 'num': case 'range': return { ...r, t: 'num', v };
+      case 'hex': return { ...r, t: 'hex', v: v.slice(1) };
+      case 'str': case 'code': return { ...r, t: 'str', v };
+      case 'sep': return { ...r, t: 'sep', v };
+      case 'comment': return { ...r, t: 'comment', v };
+      default: return { ...r, t: 'p', v };
     }
-    const hex = c === '#' ? /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})(?![0-9a-zA-Z])/.exec(src.slice(i)) : null;
-    if (hex) { out.push({ from: i, to: i + hex[0].length, t: 'hex', v: hex[1] }); i += hex[0].length; continue; }
-    const nm = /^[-+−]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?(?:[ \t]*(?:deg|°|rad)\b|°)?/i.exec(src.slice(i));
-    if (nm && (/[\d.]/.test(c) || ((c === '-' || c === '+' || c === '−') && /[\d.]/.test(src[i + 1] ?? '')))) {
-      out.push({ from: i, to: i + nm[0].length, t: 'num', v: nm[0] }); i += nm[0].length; continue;
-    }
-    const wm = /^[A-Za-z_][A-Za-z0-9_-]*/.exec(src.slice(i));
-    if (wm) { out.push({ from: i, to: i + wm[0].length, t: 'word', v: wm[0] }); i += wm[0].length; continue; }
-    out.push({ from: i, to: i + 1, t: 'p', v: c }); i++;
-  }
-  return out;
+  });
 }
 
 const hexRgb = (h: string): Vec3 => {

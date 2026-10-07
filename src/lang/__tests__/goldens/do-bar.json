@@ -571,7 +571,7 @@
    "exprNode"
   ],
   "removed": [],
-  "hash": "8689c29e"
+  "hash": "9a56f316"
  },
  "commands:mixed · subtract the circle from the noise": {
   "reads": "combine",
@@ -798,7 +798,7 @@
   "ok": true,
   "added": [],
   "removed": [],
-  "hash": "6e4953ec"
+  "hash": "c71d1bbc"
  },
  "commands:circle [c] · set the radius to 0.1": {
   "reads": "set",
@@ -1406,7 +1406,7 @@
   "ok": true,
   "added": [],
   "removed": [],
-  "hash": "6e4953ec"
+  "hash": "c71d1bbc"
  },
  "verb adjust:circle · make the circle bigger": {
   "reads": "adjust",
@@ -1510,7 +1510,7 @@
    "light"
   ],
   "removed": [],
-  "hash": "3f50dc17"
+  "hash": "63264c11"
  },
  "action rings:circle [c] · add 8 rings": {
   "reads": "build",
@@ -1792,7 +1792,7 @@
    "oklabMix"
   ],
   "removed": [],
-  "hash": "2176eeb0"
+  "hash": "2c58f1f9"
  },
  "action mix-with:mixed [p,g] · mix these colours": {
   "reads": "build",
@@ -2087,7 +2087,7 @@
    "uv"
   ],
   "removed": [],
-  "hash": "90dd8a62"
+  "hash": "a509ec22"
  },
  "recipe palette-by-distance:circle · create a ring with falloff 0.3, colour it with a palette by the length of the space, multiply it by the circle, then output it": {
   "reads": "create colour combine output",
@@ -2129,7 +2129,7 @@
    "uv"
   ],
   "removed": [],
-  "hash": "150e1e8e"
+  "hash": "d0701ff8"
  },
  "recipe feedback-trails:empty · circle at the top left with a glow, then trails on the picture": {
   "reads": "build",
@@ -2493,7 +2493,7 @@
    "light"
   ],
   "removed": [],
-  "hash": "0d2ed96c"
+  "hash": "b5bff382"
  },
  "phrase:circle [c] · outline width 0.02": {
   "reads": "build",
@@ -2686,7 +2686,7 @@
    "oklabMix"
   ],
   "removed": [],
-  "hash": "2176eeb0"
+  "hash": "2c58f1f9"
  },
  "phrase:colour [p] · palette": {
   "reads": "build",
@@ -2825,7 +2825,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "5f3f5c88"
+  "hash": "c1f51dda"
  },
  "grid count:highLife:empty · highlife": {
   "reads": "build",
@@ -2843,7 +2843,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "8b94b17a"
+  "hash": "c009fc62"
  },
  "grid count:seeds:empty · seeds": {
   "reads": "build",
@@ -2861,7 +2861,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "cc525afe"
+  "hash": "12347792"
  },
  "grid count:dayNight:empty · day and night": {
   "reads": "build",
@@ -2879,7 +2879,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "1b5b8382"
+  "hash": "c20d8362"
  },
  "grid count:maze:empty · maze": {
   "reads": "build",
@@ -2897,7 +2897,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "a63c5f22"
+  "hash": "8984da92"
  },
  "grid count:coral:empty · coral": {
   "reads": "build",
@@ -2915,7 +2915,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "b8f6b63e"
+  "hash": "11a40350"
  },
  "grid count:anneal:empty · anneal": {
   "reads": "build",
@@ -2933,7 +2933,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "93a00b02"
+  "hash": "68b9df02"
  },
  "grid count:diamoeba:empty · diamoeba": {
   "reads": "build",
@@ -2951,7 +2951,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "704754e6"
+  "hash": "c6c84522"
  },
  "grid count:replicator:empty · replicator": {
   "reads": "build",
@@ -2969,7 +2969,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "fceae2ce"
+  "hash": "d5606d02"
  },
  "grid count:lifeWithoutDeath:empty · life without death": {
   "reads": "build",
@@ -2987,7 +2987,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "19966dde"
+  "hash": "43142288"
  },
  "grid count:diamonds:empty · diamonds": {
   "reads": "build",
@@ -3007,7 +3007,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "b959a3aa"
+  "hash": "8ccc36e2"
  },
  "grid count:caves:empty · caves": {
   "reads": "build",
@@ -3025,7 +3025,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "e34ca0c8"
+  "hash": "556ba7f2"
  },
  "grid count:bosco:empty · bosco": {
   "reads": "build",
@@ -3043,7 +3043,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "08a7cc02"
+  "hash": "8c034232"
  },
  "grid count:majority:empty · majority": {
   "reads": "build",
@@ -3061,7 +3061,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "d4a7651a"
+  "hash": "569097ca"
  },
  "grid stages:briansBrain:empty · brians brain": {
   "reads": "build",
@@ -3079,7 +3079,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "fef408e6"
+  "hash": "7838ce12"
  },
  "grid stages:starWars:empty · star wars": {
   "reads": "build",
@@ -3097,7 +3097,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "033aa142"
+  "hash": "24848e72"
  },
  "grid stages:frogs:empty · frogs": {
   "reads": "build",
@@ -3115,7 +3115,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "b3dd228a"
+  "hash": "46f8bcb2"
  },
  "grid stages:sticks:empty · sticks": {
   "reads": "build",
@@ -3133,7 +3133,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "b4d894f2"
+  "hash": "38c6fd4a"
  },
  "grid stages:spirals:empty · spirals": {
   "reads": "build!error",
@@ -3149,7 +3149,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "785cb5da"
+  "hash": "264baa42"
  },
  "grid stages:swirl:empty · swirl": {
   "reads": "build!error",
@@ -3165,7 +3165,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "43ea60ba"
+  "hash": "54156a42"
  },
  "grid stages:lava:empty · lava": {
   "reads": "build",
@@ -3183,7 +3183,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "83d90f72"
+  "hash": "be9955ba"
  },
  "grid stages:bloomerang:empty · bloomerang": {
   "reads": "build",
@@ -3201,7 +3201,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "e29090aa"
+  "hash": "d27603d6"
  },
  "grid smooth:heat:empty · heat": {
   "reads": "build",
@@ -3219,7 +3219,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "ed71fb18"
+  "hash": "65d640e2"
  },
  "grid smooth:ripples:empty · water ripples": {
   "reads": "build",
@@ -3237,7 +3237,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "8363fb38"
+  "hash": "1c881d62"
  },
  "grid smooth:mitosis:empty · reaction diffusion": {
   "reads": "build",
@@ -3255,7 +3255,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "87082506"
+  "hash": "4ba514fc"
  },
  "grid smooth:coralRd:empty · coral growth": {
   "reads": "build",
@@ -3273,7 +3273,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "1536fa12"
+  "hash": "6f35c462"
  },
  "grid smooth:worms:empty · worms": {
   "reads": "build",
@@ -3291,7 +3291,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "6e6801de"
+  "hash": "27c05262"
  },
  "grid smooth:spots:empty · spots": {
   "reads": "build",
@@ -3309,7 +3309,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "7bd06062"
+  "hash": "6d3e3394"
  },
  "grid smooth:maze:empty · labyrinth": {
   "reads": "build",
@@ -3327,7 +3327,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "0be4ee86"
+  "hash": "284d76fc"
  },
  "grid patterns:wireworld:empty · wireworld": {
   "reads": "build",
@@ -3345,7 +3345,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "8506ed6a"
+  "hash": "66ef6648"
  },
  "grid patterns:fallingDots:empty · falling dots": {
   "reads": "build",
@@ -3363,7 +3363,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "ea14fdda"
+  "hash": "12ba99d8"
  },
  "grid patterns:crystal:empty · crystal": {
   "reads": "build",
@@ -3381,7 +3381,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "4980d1ae"
+  "hash": "1bd1aacc"
  },
  "grid blocks:sand:empty · falling sand": {
   "reads": "build",
@@ -3399,7 +3399,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "010ecb16"
+  "hash": "d2965ef4"
  },
  "grid blocks:gas:empty · gas": {
   "reads": "build",
@@ -3417,7 +3417,7 @@
    "gridRules"
   ],
   "removed": [],
-  "hash": "dc6efa92"
+  "hash": "ebcd9694"
  },
  "output:noise · output the depth": {
   "reads": "output!error",

@@ -1027,7 +1027,7 @@ Examples:
 
 A colour word or #rrggbb fills a colour slot (a glow's tint, a mix colour) or sets a colour setting.
 
-Words: `red`, `orange`, `yellow`, `gold`, `green`, `lime`, `teal`, `cyan`, `blue`, `navy`, `purple`, `violet`, `magenta`, `pink`, `white`, `black`, `grey`, `gray`, `warm`, `cool`, `neon`, `fire`, `ice`
+Words: `white`, `black`, `grey`, `gray`, `silver`, `red`, `orange`, `yellow`, `gold`, `green`, `lime`, `teal`, `cyan`, `blue`, `navy`, `purple`, `violet`, `pink`, `magenta`, `brown`, `cream`, `sky`, `night`, `warm`, `cool`, `neon`, `fire`, `ice`
 
 ```
 <colour>

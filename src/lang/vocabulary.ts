@@ -12,8 +12,10 @@
  */
 
 import { SHAPES as SCENE_SHAPES, WARPS as SCENE_WARPS } from '../sceneBuilder/spec';
+import { COLOUR_TABLE, colourOf as colourOfAny, type RGB } from './colours';
+import { editDistance, fuzzBudget } from './fuzzy';
 
-export type RGB = [number, number, number];
+export type { RGB };
 
 /** Every Scene Builder warp kind and alias (for checking the mapping below stays valid). */
 export const SCENE_WARP_KINDS: readonly string[] = SCENE_WARPS.map(w => w.kind);
@@ -151,13 +153,8 @@ export const PARAMS: Readonly<Record<string, string[]>> = {
   zoom: ['zoom'],
 };
 
-/** Colour words. */
-export const COLOURS: Readonly<Record<string, RGB>> = {
-  red: [1, 0.15, 0.12], orange: [1, 0.55, 0.1], yellow: [1, 0.9, 0.15], gold: [1, 0.78, 0.3], green: [0.2, 0.85, 0.35], lime: [0.6, 1, 0.2],
-  teal: [0.1, 0.75, 0.7], cyan: [0.2, 0.9, 1], blue: [0.15, 0.4, 1], navy: [0.05, 0.1, 0.4], purple: [0.6, 0.25, 0.95], violet: [0.55, 0.3, 1],
-  magenta: [1, 0.2, 0.85], pink: [1, 0.45, 0.7], white: [1, 1, 1], black: [0, 0, 0], grey: [0.5, 0.5, 0.5], gray: [0.5, 0.5, 0.5],
-  warm: [1, 0.6, 0.3], cool: [0.35, 0.6, 1], neon: [1, 0.3, 0.9], fire: [1, 0.45, 0.1], ice: [0.6, 0.85, 1],
-};
+/** Colour words: the one table (colours.ts). */
+export const COLOURS: Readonly<Record<string, RGB>> = COLOUR_TABLE;
 
 /** Number words. */
 export const NUMBER_WORDS: Readonly<Record<string, number>> = {
@@ -187,26 +184,7 @@ export function tokenize(text: string): string[] {
     .filter(Boolean);
 }
 
-/** Edit distance (insert, delete, substitute, swap of neighbours), stopping past `max`. */
-export function editDistance(a: string, b: string, max = 2): number {
-  if (Math.abs(a.length - b.length) > max) return max + 1;
-  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i, ...new Array(b.length).fill(0)]);
-  for (let j = 1; j <= b.length; j++) d[0][j] = j;
-  for (let i = 1; i <= a.length; i++) {
-    let rowMin = Infinity;
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
-      rowMin = Math.min(rowMin, d[i][j]);
-    }
-    if (rowMin > max) return max + 1;
-  }
-  return d[a.length][b.length];
-}
-
-/** How far a typed word may be from a vocabulary word: none under 4 letters, 1 under 7, else 2. */
-export const fuzzBudget = (word: string) => (word.length < 4 ? 0 : word.length < 7 ? 1 : 2);
+export { editDistance, fuzzBudget };
 
 /**
  * Find a phrase (one or more words) of `entries` at position `i` of `tokens`: the longest exact
@@ -253,11 +231,5 @@ export function numberOf(token: string): number | null {
   return null;
 }
 
-/** A colour token: a colour word or #rrggbb / #rgb. */
-export function colourOf(token: string): RGB | null {
-  if (COLOURS[token]) return COLOURS[token];
-  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/.exec(token);
-  if (!m) return null;
-  const h = m[1].length === 3 ? m[1].split('').map(c => c + c).join('') : m[1];
-  return [0, 2, 4].map(k => Math.round(parseInt(h.slice(k, k + 2), 16) / 255 * 1000) / 1000) as RGB;
-}
+/** A colour token: a colour word or #rrggbb / #rgb (the one table, colours.ts). */
+export const colourOf = (token: string): RGB | null => colourOfAny(token);
