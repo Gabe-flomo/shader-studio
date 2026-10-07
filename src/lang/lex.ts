@@ -48,7 +48,7 @@ export function continuesClause(src: string, at: number): boolean {
 
 const round = (n: number) => Math.round(n * 10000) / 10000;
 const NUM_RE = /^[-+−]?(\d+(?:\.\d+)?(?!\.\.)\.?|\.\d+)(e[-+]?\d+)?/i;
-const CELL_ROW = '[.*=0-9]';
+const CELL_ROW = '[.*=0-9a-fA-F]';
 
 /**
  * Tokens of `src`. `comments`: keep `//` comments as tokens (the highlighter wants them; the
@@ -124,7 +124,9 @@ export function lex(src: string, opts: { comments?: boolean } = {}): LexResult {
     }
     // Grid cells: rows of 2 or 3 cells split by '/', all the same length (.../.1./..., 11/00, 1./0.).
     const cm = new RegExp(`^(${CELL_ROW}{2,3})(?:/(${CELL_ROW}{2,3})){1,2}(?![\\w.*=/])`).exec(rest);
-    if (cm && (/[.*=]/.test(c) || /^\d/.test(c))) {
+    const p0 = prev();
+    const cellsHere = /[.*=]/.test(c) || /^\d/.test(c) || (!!p0 && (p0.t === 'arrow' || (p0.t === 'word' && /^(stencil|block)$/i.test(p0.v))));
+    if (cm && cellsHere) {
       const rows = cm[0].split('/');
       const allNums = rows.every(r => /^\d+$/.test(r));
       if (rows.every(r => r.length === rows[0].length) && rows.length === rows[0].length && !(allNums && rows.length === 2 && rows[0].length === 3)) {

@@ -13,12 +13,14 @@
  * colours are live uniforms on the picture (no recompile); a select (type, neighbourhood,
  * template, start, board size, edges, steps) recompiles.
  */
-import { useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { BuilderFold, BuilderHelp, BuilderNote, BuilderWindow, HintLabel, useRememberedTab } from '../builders/BuilderWindow';
 import { gridRulesTabs } from '../builders/builderLayout';
+import { LanguageTab, type LanguageRead } from '../builders/LanguageTab';
+import { RECIPE_KEYS, parseGrid, printGrid } from '../../lang/dialects/grid';
 import type { HelpExample } from '../builders/helpContent';
 import { AssistList, useTypeAhead } from '../builders/TypeAhead';
 import { wordAssist, type Completion } from '../../lang/complete';
@@ -33,11 +35,10 @@ import { ColorSwatch } from '../ui/ColorPicker';
 import { MiniBoard, RulePreview } from './RulePreview';
 import { DyingStages, NeighbourhoodPictures, PictureSwitches, RuleSentence } from './BornSurvive';
 import { BlocksForm, PatternsForm } from './StencilForms';
-import { BLOCK_PRESETS, PATTERN_PRESETS } from '../../gridRules/stencils';
 import { rangeCounts } from '../../gridRules/explain';
 import {
   BOARD_SIZES, COUNT_PRESETS, GRID_DEFAULTS, MAX_RADIUS, MAX_STATES, MAX_STEPS, RULE_TYPES, SMOOTH_NAMES, SMOOTH_PRESETS, STAGES_PRESETS,
-  LOOKS, SMOOTH_FUNCTIONS, countsOf, customUpdateProblem, gridShape, matchingPreset, maxCount, parseRuleString, presetPatch, ruleString, ruleSummary,
+  LOOKS, SMOOTH_FUNCTIONS, countsOf, customUpdateProblem, gridShape, gridTypeDefaults, matchingPreset, maxCount, parseRuleString, presetPatch, ruleString, ruleSummary,
   type GridPreset, type GridRuleType,
 } from '../../gridRules/spec';
 import { gridAsNodesProblem } from '../../store/gridRulesAsNodes';
@@ -106,18 +107,10 @@ function GridRulesWindow({ node, tab, setTab, tabs, onClose }: {
         {tab === 'start' && <StartTab p={params} set={set} />}
         {tab === 'brush' && <BrushTab p={params} set={set} />}
         {tab === 'colours' && <ColoursTab p={params} set={set} onExample={onExample} />}
+        {tab === 'recipe' && <GridRecipeTab params={params} set={set} />}
       </div>
     </BuilderWindow>
   );
-}
-
-/** Switching type: the type's first preset, with its look (a working rule straight away). */
-function typeDefaults(t: GridRuleType): P {
-  if (t === 'stages') return { ruleType: t, ...presetPatch(STAGES_PRESETS.briansBrain) };
-  if (t === 'smooth') return { ruleType: t, ...presetPatch(SMOOTH_PRESETS.heat) };
-  if (t === 'patterns') return { ruleType: t, ...presetPatch(PATTERN_PRESETS.wireworld) };
-  if (t === 'blocks') return { ruleType: t, ...presetPatch(BLOCK_PRESETS.sand) };
-  return { ruleType: t, ...presetPatch(COUNT_PRESETS.life), ...LOOKS.count, brushState: 1 };
 }
 
 /** A template's look, when the template is picked without a preset. */
@@ -210,7 +203,7 @@ function PresetsTab({ p, set, onExample }: { p: P; set: Setter; onExample: (ex: 
   return (
     <>
       <Block title="Rule type" hint="The kind of rule: switching starts the new kind from its first preset.">
-        <TypePicker value={s.type} onChange={t => set(typeDefaults(t), true)} />
+        <TypePicker value={s.type} onChange={t => set(gridTypeDefaults(t), true)} />
       </Block>
       {s.type === 'smooth' ? <SmoothForm p={p} set={set} part="presets" />
         : s.type === 'patterns' ? <PatternsForm p={p} set={set} part="presets" />
@@ -531,5 +524,33 @@ function UpdateField({ label, value, saved, onDraft, onUse }: { label: string; v
       </Row>
       {problem && <span data-type-error style={{ color: tk.status.danger, fontSize: 12 }}>{problem}</span>}
     </>
+  );
+}
+
+/** The rule as text in the Playfield language (lang/dialects/grid.ts): the form, both ways. */
+function GridRecipeTab({ params, set }: { params: P; set: Setter }) {
+  const printed = useMemo(() => printGrid(params, { pretty: true }), [params]);
+  const read = useCallback((text: string, seed: number): LanguageRead => {
+    const r = parseGrid(text, { base: params, seed });
+    return {
+      errors: r.errors, hints: r.hints, resolved: r.resolved,
+      apply: () => {
+        const patch: P = {};
+        for (const k of RECIPE_KEYS) if (JSON.stringify(r.params[k]) !== JSON.stringify(params[k])) patch[k] = r.params[k];
+        if (r.params.ruleType !== params.ruleType) patch.ruleType = r.params.ruleType;
+        if (Object.keys(patch).length) set(patch, true);
+      },
+      kept: printGrid(r.params, { pretty: true }),
+    };
+  }, [params, set]);
+  return (
+    <LanguageTab dialect="grid" printed={printed} read={read}
+      note="A preset (life, seeds, brians-brain, mitosis, falling-sand…) or a rule type, then what differs: born=3,6 survive=2,3 neighbours=von-neumann board=480 walls speed=0.3. Patterns are stencil lines, Blocks are block lines. In the Do… bar the same line starts with grid when its name is also another word (grid swirl)."
+      examples={[
+        { label: 'HighLife on walls', text: 'highlife walls board=480' },
+        { label: 'Bosco', text: 'count neighbours=radius radius=5 born=34..45 survive=33..57' },
+        { label: 'Wireworld', text: 'patterns states=4\n  stencil .../.1./... → 2\n  stencil .../.2./... → 3\n  stencil .../.3./... → 1 count=1:1..2' },
+        { label: 'Random coral', text: 'smooth reaction feed=random kill=random' },
+      ]} />
   );
 }

@@ -58,7 +58,13 @@ const hexRgb = (h: string): Vec3 => {
 };
 
 /** A recipe's coloured runs, with swatches and the parser's mistakes. `errors` defaults to parsing it. */
-export function recipeTokens(src: string, errors: RecipeError[] = parseRecipe(src).errors): RecipeToken[] {
+/**
+ * How another dialect names its words (lang/highlight.ts wordKindFor): a word's kind, or null to
+ * fall back to the recipe's own words.
+ */
+export type WordKind = (word: string) => RecipeKind | null;
+
+export function recipeTokens(src: string, errors: RecipeError[] = parseRecipe(src).errors, wordKind?: WordKind): RecipeToken[] {
   const raw = lex(src);
   const out: RecipeToken[] = [];
   const colours = RECIPE_WORDS.colours as Record<string, Vec3>;
@@ -95,6 +101,9 @@ export function recipeTokens(src: string, errors: RecipeError[] = parseRecipe(sr
       if (next?.t === 'p' && next.v === '=') kind = 'key';
       else if (prev?.t === 'p' && prev.v === '=') { kind = colours[w] ? 'colour' : 'name'; if (colours[w]) swatch = colours[w]; }
       else if (prev?.t === 'p' && prev.v === '@') kind = 'warp';
+      else if (wordKind && wordKind(w)) kind = wordKind(w)!;
+      else if (wordKind && colours[w]) { kind = 'colour'; swatch = colours[w]; }
+      else if (wordKind) kind = 'plain';
       else if (w in RECIPE_WORDS.modes) kind = 'mode';
       else if (w in RECIPE_WORDS.ops) kind = 'op';
       else if (w in RECIPE_WORDS.shapes) kind = 'shape';

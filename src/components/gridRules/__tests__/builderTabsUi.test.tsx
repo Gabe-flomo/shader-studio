@@ -53,7 +53,7 @@ beforeEach(() => {
 describe('Grid Rules as tabs', () => {
   it('opens on Presets; each tab shows its own section and "How this works"; the tab is remembered', () => {
     mount(<GridRulesEditor nodeId="g1" onClose={() => {}} />);
-    expect(tabs()).toEqual(['Presets', 'Neighbourhood', 'Born & Survive', 'Start', 'Brush', 'Colours']);
+    expect(tabs()).toEqual(['Presets', 'Neighbourhood', 'Born & Survive', 'Start', 'Brush', 'Colours', 'Recipe']);
     expect($('[data-grid-tab]')?.getAttribute('data-grid-tab')).toBe('presets');
     expect($('[data-builder-how]')?.textContent).toMatch(/How this works: Pick the kind of rule/);
     expect($('[role="radiogroup"][aria-label="Rule type"]')).toBeTruthy();
@@ -94,7 +94,7 @@ describe('Grid Rules as tabs', () => {
     localStorage.setItem('builder:grid-rules:tab', 'neighbourhood');
     useNodeGraphStore.setState({ nodes: [{ ...structuredClone(grid), params: { ...grid.params, ruleType: 'smooth' } }] });
     mount(<GridRulesEditor nodeId="g1" onClose={() => {}} />);
-    expect(tabs()).toEqual(['Presets', 'Smooth', 'Start', 'Brush', 'Colours']);
+    expect(tabs()).toEqual(['Presets', 'Smooth', 'Start', 'Brush', 'Colours', 'Recipe']);
     expect($('[data-grid-tab]')?.getAttribute('data-grid-tab')).toBe('presets');
   });
 });
