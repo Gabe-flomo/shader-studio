@@ -5,7 +5,8 @@
  *    not empty (≠0) → any. The middle is "this cell is"; the cell after the arrow is what it
  *    becomes. Turns / mirrors make one stencil stand for every orientation; "and" adds a count.
  *  - Blocks: before → after 2×2 pictures; the after cycles unchanged (=) → each state. A badge says
- *    whether the rule keeps every state's count. Chance is rolled per block.
+ *    whether the rule keeps every state's count. Chance is rolled per block. Jitter (a live slider
+ *    under the rules) shuffles the block rows a little each step, so falling grains don't band.
  *
  * Every edit writes the node's `patterns` / `blocks` param (one undo step; it recompiles).
  */
@@ -16,6 +17,7 @@ import { Button, IconButton } from '../ui/Button';
 import { Segmented } from '../ui/Choice';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Toggle } from '../ui/Choice';
+import { HintLabel } from '../builders/BuilderWindow';
 import { GRID_DEFAULTS, MAX_STATES, gridShape, matchingPreset, presetPatch, type GridPreset } from '../../gridRules/spec';
 import {
   ANY, BLOCK_PRESETS, NOT_EMPTY, PATTERN_PRESETS, SAME, blockConserves,
@@ -194,6 +196,24 @@ function NumberBox({ value, max, onChange, label }: { value: number; max: number
 
 // ── Blocks ──────────────────────────────────────────────────────────────────────────────────────
 
+/** Jitter (gridRules/dice.ts): a live slider, so dragging it never recompiles. */
+function JitterRow({ p, set }: { p: P; set: Setter }) {
+  const tk = useTokens();
+  const v = typeof p.jitter === 'number' ? p.jitter : Number(GRID_DEFAULTS.jitter);
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '118px 1fr', alignItems: 'center', gap: 10 }}>
+      <span style={{ color: tk.text.secondary, fontSize: 12.5, minWidth: 0, display: 'flex' }}>
+        <HintLabel hint={JITTER_HINT}>Jitter</HintLabel>
+      </span>
+      <RulerSlider ariaLabel="Jitter" value={v} min={0} max={1} step={0.01} defaultValue={Number(GRID_DEFAULTS.jitter)} onChange={x => set({ jitter: x })} />
+    </div>
+  );
+}
+
+const JITTER_HINT = 'Shuffles the block grid a little each step: each two-cell column is cut into short segments, and a segment\'s blocks move up a row at random. '
+  + 'In plain Margolus every grain that falls ends the step in its block\'s bottom row, so a falling cloud shows in bands on every other row; Jitter breaks them up and makes slopes less rigid (grains fall about half as fast). '
+  + '0 is the classic grid (the HPP gas needs it to fly straight). A block still changes all four cells at once, so nothing is lost or made, and the same Seed gives the same run.';
+
 export function BlocksForm({ p, set, part = 'all' }: { p: P; set: Setter; part?: 'presets' | 'rules' | 'all' }) {
   const tk = useTokens();
   const rules = gridShape(p).blocks;
@@ -239,6 +259,7 @@ export function BlocksForm({ p, set, part = 'all' }: { p: P; set: Setter; part?:
         <Button size="sm" icon="plus" onClick={() => save([...rules, { before: [1, ANY, 0, ANY], after: [0, SAME, 1, SAME], symmetry: 'none', chance: 1 }])}>Add a rule</Button>
         <span style={{ color: tk.text.muted, fontSize: 12 }}>No rule matches: the block stays as it is.</span>
       </div>
+      <JitterRow p={p} set={set} />
       </>}
     </>
   );

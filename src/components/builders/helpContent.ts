@@ -208,6 +208,7 @@ export const BUILDER_HELP: Record<BuilderKey, Record<string, HelpEntry>> = {
       lines: [
         'Each rule is a 2×2 before picture and an after picture. A block that matches before becomes after (with its chance), else it stays as it is.',
         'Keep the counts the same on both sides and nothing is lost or made.',
+        'Jitter (under the rules) shuffles the block rows a little each step, so a falling cloud doesn\'t show in bands; 0 is the classic grid.',
       ],
     },
     run: {

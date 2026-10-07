@@ -13,6 +13,7 @@ import type { GraphNode, NodeDefinition, ParamDef } from '../../types/nodeGraph'
 import { p, pv3 } from './helpers';
 import { BOARD_SIZES, GRID_DEFAULTS, MAX_RADIUS, MAX_STATES, MAX_STEPS, gridShape } from '../../gridRules/spec';
 import { GRID_VIEWS, GR_HASH_GLSL, gridStepGLSL, gridViewGLSL, gridViewMode, type GridNames } from '../../gridRules/glsl';
+import { GR_DICE_GLSL } from '../../gridRules/dice';
 
 /** The pointer's button (1 while down over the picture). Declared only by the nodes that read it. */
 export const MOUSE_BUTTON_UNIFORM = 'u_mousebtn';
@@ -47,6 +48,7 @@ export const GRID_PARAM_DEFS: Record<string, ParamDef> = {
   surviveLo: num('Survive from', 0, 224, 0.5, 'Larger than Life: a live cell survives with at least this many…', 'Rule', { showWhen: { param: 'neighbourhood', value: 'radius' } }),
   surviveHi: num('Survive to', 0, 224, 0.5, '…and at most this many.', 'Rule', { showWhen: { param: 'neighbourhood', value: 'radius' } }),
   states: num('States', 2, MAX_STATES, 0.5, 'Stages: how many states, counting empty and on. 3 = on, one dying stage, off.', 'Rule', { showWhen: { param: 'ruleType', value: ['stages', 'patterns', 'blocks'] } }),
+  jitter: num('Jitter', 0, 1, 0.01, 'Blocks: shifts the blocks a row up or down at random, column by column, each step. Grains then stop falling in step on every other row (no bands), and slopes look less rigid. 0 is the classic Margolus grid; every block still changes all four cells at once, so nothing is lost or made.', 'Rule', { showWhen: { param: 'ruleType', value: 'blocks' } }),
   template: sel('Template', [['diffusion', 'Diffusion (heat)'], ['waves', 'Waves'], ['reaction', 'Reaction–diffusion'], ['custom', 'Custom update']], 'Smooth: which update every cell runs.', 'Rule'),
   customU: { label: 'New u', type: 'string', hint: 'Smooth, Custom: one expression for the new first value (u, v, lap_u, avg_u, n, s, e, w, a…d, t, rnd).', section: 'Rule' },
   customV: { label: 'New v', type: 'string', hint: 'Smooth, Custom: one expression for the new second value.', section: 'Rule' },
@@ -152,6 +154,8 @@ export const GridRulesStepNode: NodeDefinition = {
   paramDefs: GRID_PARAM_DEFS,
   assignable: false,
   glslFunction: GR_HASH_GLSL,
+  // Blocks' dice and block layout (gridRules/dice.ts): only Blocks boards carry them.
+  glslFunctionsFor: (node: GraphNode) => (gridShape(node.params).type === 'blocks' ? [GR_DICE_GLSL] : []),
   declarationsFor: () => [BUTTON_DECL],
   generateGLSL: (node, inputVars) => {
     const id = node.id;

@@ -199,6 +199,7 @@ export function buildGridRulesExamples(): Record<string, ExampleGraph> {
       }, [
         'Grid Rules, Blocks: Margolus falling sand on a ¼-size board with walls. 0 is air, 1 sand, 2 wall.',
         'Each step the board is cut into 2×2 blocks (the cut shifting one cell diagonally every other step); a block whose picture matches a rule becomes its after picture: a grain over air falls, a grain on a heap slides down to the side (with chance 0.8, rolled per block). The rules only rearrange, so the count of grains never changes.',
+        'Jitter 1: the blocks\' rows are shuffled a little each step, so the falling sand doesn\'t line up in bands on every other row (plain Margolus would).',
         'Hold the mouse button to pour sand; set Brush paints to 2 to draw walls, 0 to erase.',
       ]),
       out(['sand', 'color']),
@@ -207,10 +208,11 @@ export function buildGridRulesExamples(): Record<string, ExampleGraph> {
       ctl('brush', 'sand::brushRadius', 'Brush size (cells)', 0.5, 20, 0.5),
       ctl('paints', 'sand::brushState', 'Brush paints (0 air, 1 sand, 2 wall)', 0, 2, 0.5),
       ctl('fill', 'sand::brushFill', 'Brush fill', 0, 1, 0.01),
+      ctl('jitter', 'sand::jitter', 'Jitter (0: bands, 1: none)', 0, 1, 0.01),
       toggle('paint', 'sand::paint', 'Pour without the button'),
       toggle('reset', 'sand::reset', 'Reset'),
       colourCtl('grain', 'sand::color1', 'Sand'),
-    ], `**What it shows.** Falling sand as a Blocks rule (Toffoli and Margolus): 2×2 blocks change together, so grains move without ever being lost or doubled.\n\n${HOW}\n\n**Try.** Draw walls (Brush paints 2) as shelves, then pour sand on them. In the editor, lower the slide's Chance for steeper heaps.`),
+    ], `**What it shows.** Falling sand as a Blocks rule (Toffoli and Margolus): 2×2 blocks change together, so grains move without ever being lost or doubled.\n\n${HOW}\n\n**Try.** Draw walls (Brush paints 2) as shelves, then pour sand on them. In the editor, lower the slide's Chance for steeper heaps; set Jitter to 0 to see the bands it removes.`),
   };
 
   // 9 · Wireworld: Patterns, its starter circuit drawn into a Pass (whole-number cells, so == is exact)

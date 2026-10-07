@@ -19,6 +19,7 @@ import {
 import { gridCellsId } from '../gridRulesExpand';
 import { boardFrom, compileNodes, gridOf, margolusRef, patternsRef, randomGrid, rounded, stepperFor, type Grid } from './gridHarness';
 import { makeBoard, texel } from './glslRun';
+import { cpuBoard, cpuStep } from '../../gridRules/cpu';
 
 const G = 'node_3';
 const _ = ANY;
@@ -146,10 +147,38 @@ describe('Blocks (Margolus)', { timeout: 60000 }, () => {
     const start: Grid = Array.from({ length: 8 }, (_, r) => Array.from({ length: 8 }, (_, x) => (r < 3 && x >= 2 && x <= 5 ? 1 : 0)));
     const st = stepper(P, 8, 8);
     let b = boardFrom(start, gridSignature(shapeOf(P)), 'clamp');
-    for (let k = 0; k < 20; k++) { st.uniforms.u_time = 1 + k / 60; b = st.step(b); }
+    // Jitter (on in the preset) makes grains fall about half a cell a step: 40 steps, not 20.
+    for (let k = 0; k < 40; k++) { st.uniforms.u_time = 1 + k / 60; b = st.step(b); }
     const g = rounded(gridOf(b));
     expect(g.slice(0, 5).flat().every(v => v === 0)).toBe(true); // nothing left in the air
     expect(g[7].filter(v => v === 1).length).toBeGreaterThanOrEqual(4); // the floor row is covered
+  });
+
+  it('the CPU preview gives the same board as the GPU, step after step, Jitter and dice included', () => {
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ['sand, jitter 1', { ...BLOCK_PRESETS.sand.params }],
+      ['sand, jitter 0.4, seed 7', { ...BLOCK_PRESETS.sand.params, jitter: 0.4, seed: 7 }],
+      ['sand, jitter 0', { ...BLOCK_PRESETS.sand.params, jitter: 0 }],
+      ['gas, jitter 0.7', { ...BLOCK_PRESETS.gas.params, jitter: 0.7 }],
+    ];
+    for (const [name, params] of cases) for (const edges of ['walls', 'wrap']) for (const [w, h] of [[12, 10], [11, 9]]) {
+      const P = { ruleType: 'blocks', rate: 1, afterglow: 0, ...params, edges };
+      const states = Number(params.states) - 1;
+      const start = randomGrid(w, h, 5 + w + h, 0.4, states).map((row, r) => row.map((v, x) => ((h % 2 && r === 0) || (w % 2 && x === w - 1) ? 0 : v)));
+      const st = stepper(P, w, h);
+      let b = boardFrom(start, gridSignature(shapeOf(P)), edges === 'wrap' ? 'repeat' : 'clamp');
+      let c = cpuBoard(w, h);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) c.a[y * w + x] = start[h - 1 - y][x];
+      c.step = 3;
+      for (let k = 3; k < 15; k++) {
+        // The GPU's dice use the frame number; the CPU's its step count: frame k on both.
+        st.uniforms.u_time = (k + 0.5) / 60;
+        b = st.step(b);
+        c = cpuStep(P, c);
+        const cpu: Grid = Array.from({ length: h }, (_, r) => Array.from({ length: w }, (_, x) => c.a[(h - 1 - r) * w + x]));
+        expect(rounded(gridOf(b)), `${name}, ${edges}, ${w} × ${h}, frame ${k}`).toEqual(cpu);
+      }
+    }
   });
 });
 

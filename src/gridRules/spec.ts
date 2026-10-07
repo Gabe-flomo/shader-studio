@@ -220,6 +220,8 @@ export const GRID_DEFAULTS: Record<string, unknown> = {
   bornMask: maskOf([3]), surviveMask: maskOf([2, 3]),
   bornLo: 34, bornHi: 45, surviveLo: 33, surviveHi: 57,
   states: 3,
+  /** Blocks: how much the block grid is shuffled each step, 0 (classic Margolus) to 1 (gridRules/dice.ts). */
+  jitter: 0,
   template: 'diffusion', customU: 'u + 0.2 * lap_u', customV: 'v',
   spread: 0.9, decay: 0.004, waveSpeed: 0.9, damping: 0.995, feed: 0.0367, kill: 0.0649, diffA: 1, diffB: 0.5,
   knobA: 0.5, knobB: 0.5, knobC: 0.5, knobD: 0.5, gain: 1,

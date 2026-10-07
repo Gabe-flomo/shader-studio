@@ -324,7 +324,7 @@ exports[`golden shaders: every Play example exports the same bundle > gridRulesF
 
 exports[`golden shaders: every Play example exports the same bundle > gridRulesGas 1`] = `
 {
-  "bundle": "183a0f92bef438119ad1c6307153:22333",
+  "bundle": "0a9ef11461c6f3137bbc7f3fa44d:24187",
   "missing": [],
 }
 `;
@@ -352,7 +352,7 @@ exports[`golden shaders: every Play example exports the same bundle > gridRulesL
 
 exports[`golden shaders: every Play example exports the same bundle > gridRulesSand 1`] = `
 {
-  "bundle": "19a79e01b70f5b12ebc279210d89:19047",
+  "bundle": "083aa2dce33b6a1f55cf26506d8a:21362",
   "missing": [],
 }
 `;
@@ -5939,11 +5939,11 @@ exports[`golden shaders: every example compiles as it did > gridRulesGas 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "12c34b52e14a5b1325f761af8a7c:3995",
+  "fragmentShader": "103e9bf298495517e14a3a286e57:4036",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "09b40a2f8acd8f012ddc023a6095:108",
-  "paramBindings": "090bfab4ffd0610083d2766df3c0:1003",
+  "paramBindings": "12de18ef3b3a22086e678a4b9319:1047",
   "paramUniforms": [
     "u_p_gasxrulesx0xc2_afterglow",
     "u_p_gasxrulesx0xc2_ageFade",
@@ -5961,6 +5961,7 @@ exports[`golden shaders: every example compiles as it did > gridRulesGas 1`] = `
     "u_p_gasxrulesx0xc2_color7",
     "u_p_gasxrulesx0xc2_density",
     "u_p_gasxrulesx0xc2_glowColor",
+    "u_p_gasxrulesx0xc2_jitter",
     "u_p_gasxrulesx0xc2_oldColor",
     "u_p_gasxrulesx0xc2_paint",
     "u_p_gasxrulesx0xc2_rate",
@@ -5968,7 +5969,7 @@ exports[`golden shaders: every example compiles as it did > gridRulesGas 1`] = `
     "u_p_gasxrulesx0xc2_seed",
     "u_p_gasxrulesx0xc2_states",
   ],
-  "paramValues": "0ef1bfe19a4bb500729a50f44e3c:855",
+  "paramValues": "17e5a8ce367a3b0f511d2ac841d7:887",
   "passes": [
     {
       "filter": "nearest",
@@ -5982,6 +5983,7 @@ uniform float u_time;
 uniform vec2 u_mouse;
 uniform sampler2D u_fontTexture;
 uniform float u_p_gasxrulesx0xc2_states;
+uniform float u_p_gasxrulesx0xc2_jitter;
 uniform float u_p_gasxrulesx0xc2_rate;
 uniform float u_p_gasxrulesx0xc2_reset;
 uniform float u_p_gasxrulesx0xc2_density;
@@ -6039,6 +6041,39 @@ float grHash(vec3 p) {
     p3 = p3 + dot(p3, vec3(p3.z, p3.y, p3.x) + 31.32);
     return fract((p3.x + p3.y) * p3.z);
 }
+float grMod2048(float x) { return x - 2048.0 * floor(x / 2048.0); }
+
+
+float grRound(float h, float v) {
+    float a = grMod2048(h + grMod2048(v));
+    a = grMod2048(a * (2.0 * a + 1.0));
+    return grMod2048(a * 32.0) + floor(a / 64.0);
+}
+
+
+float grDice(vec2 key, float frame, float salt, float seed) {
+    return grRound(grRound(grRound(grRound(grRound(salt, floor(seed * 2.0)), key.x), key.y), frame), 1013.0) / 2048.0;
+}
+
+
+float grBlockPhase(float strip, float row, float par, float jitter, float frame, float seed) {
+    float flip = grDice(vec2(strip, floor(row / 4.0)), frame, 41.0, seed) < jitter * 0.5 ? 1.0 : 0.0;
+    return abs(par - flip);
+}
+
+
+vec3 grBlockOf(vec2 cell, float par, vec2 W, float jitter, float frame, float seed, float wrap) {
+    float ox = floor((cell.x - par) * 0.5) * 2.0 + par;
+    float strip = ox < 0.0 ? ox + W.x : ox;
+    float y = cell.y;
+    float p0 = grBlockPhase(strip, y, par, jitter, frame, seed);
+    float bottom = mod(y - p0, 2.0) < 0.5 ? 1.0 : 0.0;
+    float other = bottom > 0.5 ? y + 1.0 : y - 1.0;
+    // Wrapped by hand, not with mod(): a division by the board's height can round the wrong way on a GPU.
+    float row = wrap > 0.5 ? (other < 0.0 ? other + W.y : (other > W.y - 0.5 ? other - W.y : other)) : other;
+    float p1 = grBlockPhase(strip, row, par, jitter, frame, seed);
+    return vec3(ox, bottom > 0.5 ? y : y - 1.0, abs(p1 - p0) < 0.5 ? 1.0 : 0.0);
+}
 
 void main() {
     vec2 g_uv = (vUv - 0.5) * 2.0;
@@ -6060,7 +6095,9 @@ void main() {
     float gas_rules_0_c2_top = max(floor(u_p_gasxrulesx0xc2_states + 0.5), 2.0) - 1.0;
     float gas_rules_0_c2_par = step(1.5, gas_rules_0_c2_me.b);
     vec2 gas_rules_0_c2_W = floor(gas_rules_0_c2_res * 0.5) * 2.0;
-    vec2 gas_rules_0_c2_org = floor((gas_rules_0_c2_cell - gas_rules_0_c2_par) * 0.5) * 2.0 + gas_rules_0_c2_par;
+    float gas_rules_0_c2_frame = mod(floor(u_time * 60.0), 997.0);
+    vec3 gas_rules_0_c2_blk = grBlockOf(gas_rules_0_c2_cell, gas_rules_0_c2_par, gas_rules_0_c2_W, clamp(u_p_gasxrulesx0xc2_jitter, 0.0, 1.0), gas_rules_0_c2_frame, u_p_gasxrulesx0xc2_seed, 1.0);
+    vec2 gas_rules_0_c2_org = gas_rules_0_c2_blk.xy;
     vec2 gas_rules_0_c2_q = gas_rules_0_c2_cell - gas_rules_0_c2_org;
     float gas_rules_0_c2_qi = gas_rules_0_c2_q.x + (1.0 - gas_rules_0_c2_q.y) * 2.0;
     float gas_rules_0_c2_live = step(gas_rules_0_c2_cell.x, gas_rules_0_c2_W.x - 0.5) * step(gas_rules_0_c2_cell.y, gas_rules_0_c2_W.y - 0.5);
@@ -6070,8 +6107,8 @@ void main() {
     float gas_rules_0_c2_b2 = floor(texture2D(u_passprev_gas_rules_cells_0, (mod(gas_rules_0_c2_org + vec2(0.0, 0.0), gas_rules_0_c2_W) + 0.5) / gas_rules_0_c2_res).r + 0.5);
     float gas_rules_0_c2_b3 = floor(texture2D(u_passprev_gas_rules_cells_0, (mod(gas_rules_0_c2_org + vec2(1.0, 0.0), gas_rules_0_c2_W) + 0.5) / gas_rules_0_c2_res).r + 0.5);
     float gas_rules_0_c2_next = gas_rules_0_c2_s;
-    float gas_rules_0_c2_done = 0.0;
-    float gas_rules_0_c2_o0 = floor(grHash(vec3(gas_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 31.0)) * 4.0);
+    float gas_rules_0_c2_done = 1.0 - gas_rules_0_c2_blk.z;
+    float gas_rules_0_c2_o0 = floor(grDice(gas_rules_0_c2_key, gas_rules_0_c2_frame, 31.0, u_p_gasxrulesx0xc2_seed) * 4.0);
     float gas_rules_0_c2_best0 = 0.0;
     float gas_rules_0_c2_pick0 = -1.0;
     float gas_rules_0_c2_m0_0 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 0.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 4.0 - mod(0.0 - gas_rules_0_c2_o0 + 4.0, 4.0) : 0.0;
@@ -6083,7 +6120,7 @@ void main() {
     float gas_rules_0_c2_m0_3 = (abs(gas_rules_0_c2_b0 - 0.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 4.0 - mod(3.0 - gas_rules_0_c2_o0 + 4.0, 4.0) : 0.0;
     if (gas_rules_0_c2_m0_3 > gas_rules_0_c2_best0) { gas_rules_0_c2_best0 = gas_rules_0_c2_m0_3; gas_rules_0_c2_pick0 = 3.0; }
     if (gas_rules_0_c2_done < 0.5 && gas_rules_0_c2_best0 > 0.5) { gas_rules_0_c2_next = (gas_rules_0_c2_qi < 0.5 ? (gas_rules_0_c2_pick0 < 0.5 ? 0.0 : (gas_rules_0_c2_pick0 < 1.5 ? 0.0 : (gas_rules_0_c2_pick0 < 2.5 ? 1.0 : 0.0))) : (gas_rules_0_c2_qi < 1.5 ? (gas_rules_0_c2_pick0 < 0.5 ? 0.0 : (gas_rules_0_c2_pick0 < 1.5 ? 0.0 : (gas_rules_0_c2_pick0 < 2.5 ? 0.0 : 1.0))) : (gas_rules_0_c2_qi < 2.5 ? (gas_rules_0_c2_pick0 < 0.5 ? 0.0 : (gas_rules_0_c2_pick0 < 1.5 ? 1.0 : (gas_rules_0_c2_pick0 < 2.5 ? 0.0 : 0.0))) : (gas_rules_0_c2_pick0 < 0.5 ? 1.0 : (gas_rules_0_c2_pick0 < 1.5 ? 0.0 : (gas_rules_0_c2_pick0 < 2.5 ? 0.0 : 0.0)))))); gas_rules_0_c2_done = 1.0; }
-    float gas_rules_0_c2_o1 = floor(grHash(vec3(gas_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 33.0)) * 2.0);
+    float gas_rules_0_c2_o1 = floor(grDice(gas_rules_0_c2_key, gas_rules_0_c2_frame, 33.0, u_p_gasxrulesx0xc2_seed) * 2.0);
     float gas_rules_0_c2_best1 = 0.0;
     float gas_rules_0_c2_pick1 = -1.0;
     float gas_rules_0_c2_m1_0 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 0.0) < 0.5 && abs(gas_rules_0_c2_b3 - 1.0) < 0.5) ? 2.0 - mod(0.0 - gas_rules_0_c2_o1 + 2.0, 2.0) : 0.0;
@@ -6091,7 +6128,7 @@ void main() {
     float gas_rules_0_c2_m1_1 = (abs(gas_rules_0_c2_b0 - 0.0) < 0.5 && abs(gas_rules_0_c2_b1 - 1.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 2.0 - mod(1.0 - gas_rules_0_c2_o1 + 2.0, 2.0) : 0.0;
     if (gas_rules_0_c2_m1_1 > gas_rules_0_c2_best1) { gas_rules_0_c2_best1 = gas_rules_0_c2_m1_1; gas_rules_0_c2_pick1 = 1.0; }
     if (gas_rules_0_c2_done < 0.5 && gas_rules_0_c2_best1 > 0.5) { gas_rules_0_c2_next = (gas_rules_0_c2_qi < 0.5 ? (gas_rules_0_c2_pick1 < 0.5 ? 0.0 : 1.0) : (gas_rules_0_c2_qi < 1.5 ? (gas_rules_0_c2_pick1 < 0.5 ? 1.0 : 0.0) : (gas_rules_0_c2_qi < 2.5 ? (gas_rules_0_c2_pick1 < 0.5 ? 1.0 : 0.0) : (gas_rules_0_c2_pick1 < 0.5 ? 0.0 : 1.0)))); gas_rules_0_c2_done = 1.0; }
-    float gas_rules_0_c2_o2 = floor(grHash(vec3(gas_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 35.0)) * 4.0);
+    float gas_rules_0_c2_o2 = floor(grDice(gas_rules_0_c2_key, gas_rules_0_c2_frame, 35.0, u_p_gasxrulesx0xc2_seed) * 4.0);
     float gas_rules_0_c2_best2 = 0.0;
     float gas_rules_0_c2_pick2 = -1.0;
     float gas_rules_0_c2_m2_0 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 1.0) < 0.5 && abs(gas_rules_0_c2_b2 - 0.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 4.0 - mod(0.0 - gas_rules_0_c2_o2 + 4.0, 4.0) : 0.0;
@@ -6103,7 +6140,7 @@ void main() {
     float gas_rules_0_c2_m2_3 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 0.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 4.0 - mod(3.0 - gas_rules_0_c2_o2 + 4.0, 4.0) : 0.0;
     if (gas_rules_0_c2_m2_3 > gas_rules_0_c2_best2) { gas_rules_0_c2_best2 = gas_rules_0_c2_m2_3; gas_rules_0_c2_pick2 = 3.0; }
     if (gas_rules_0_c2_done < 0.5 && gas_rules_0_c2_best2 > 0.5) { gas_rules_0_c2_next = (gas_rules_0_c2_qi < 0.5 ? (gas_rules_0_c2_pick2 < 0.5 ? 0.0 : (gas_rules_0_c2_pick2 < 1.5 ? 1.0 : (gas_rules_0_c2_pick2 < 2.5 ? 1.0 : 0.0))) : (gas_rules_0_c2_qi < 1.5 ? (gas_rules_0_c2_pick2 < 0.5 ? 0.0 : (gas_rules_0_c2_pick2 < 1.5 ? 0.0 : (gas_rules_0_c2_pick2 < 2.5 ? 1.0 : 1.0))) : (gas_rules_0_c2_qi < 2.5 ? (gas_rules_0_c2_pick2 < 0.5 ? 1.0 : (gas_rules_0_c2_pick2 < 1.5 ? 1.0 : (gas_rules_0_c2_pick2 < 2.5 ? 0.0 : 0.0))) : (gas_rules_0_c2_pick2 < 0.5 ? 1.0 : (gas_rules_0_c2_pick2 < 1.5 ? 0.0 : (gas_rules_0_c2_pick2 < 2.5 ? 0.0 : 1.0)))))); gas_rules_0_c2_done = 1.0; }
-    float gas_rules_0_c2_o3 = floor(grHash(vec3(gas_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 37.0)) * 4.0);
+    float gas_rules_0_c2_o3 = floor(grDice(gas_rules_0_c2_key, gas_rules_0_c2_frame, 37.0, u_p_gasxrulesx0xc2_seed) * 4.0);
     float gas_rules_0_c2_best3 = 0.0;
     float gas_rules_0_c2_pick3 = -1.0;
     float gas_rules_0_c2_m3_0 = (abs(gas_rules_0_c2_b0 - 1.0) < 0.5 && abs(gas_rules_0_c2_b1 - 1.0) < 0.5 && abs(gas_rules_0_c2_b2 - 1.0) < 0.5 && abs(gas_rules_0_c2_b3 - 0.0) < 0.5) ? 4.0 - mod(0.0 - gas_rules_0_c2_o3 + 4.0, 4.0) : 0.0;
@@ -6684,11 +6721,11 @@ exports[`golden shaders: every example compiles as it did > gridRulesSand 1`] = 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "02a316222bb7821fc43b621df8be:4234",
+  "fragmentShader": "0e16173e39e21c0ce211f36a5a5a:4431",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "092b32cbabf2910cf2429357e1d3:114",
-  "paramBindings": "0ba9eaa23b4a8c0b9ca3eaabacb3:1047",
+  "paramBindings": "030970b0217db00a9fde2de88bc0:1093",
   "paramUniforms": [
     "u_p_sandxrulesx0xc2_afterglow",
     "u_p_sandxrulesx0xc2_ageFade",
@@ -6706,6 +6743,7 @@ exports[`golden shaders: every example compiles as it did > gridRulesSand 1`] = 
     "u_p_sandxrulesx0xc2_color7",
     "u_p_sandxrulesx0xc2_density",
     "u_p_sandxrulesx0xc2_glowColor",
+    "u_p_sandxrulesx0xc2_jitter",
     "u_p_sandxrulesx0xc2_oldColor",
     "u_p_sandxrulesx0xc2_paint",
     "u_p_sandxrulesx0xc2_rate",
@@ -6713,7 +6751,7 @@ exports[`golden shaders: every example compiles as it did > gridRulesSand 1`] = 
     "u_p_sandxrulesx0xc2_seed",
     "u_p_sandxrulesx0xc2_states",
   ],
-  "paramValues": "0b18e0bf11ad17006e8acfdca0aa:880",
+  "paramValues": "02de92fbacafde1510dedcff8bd2:913",
   "passes": [
     {
       "filter": "nearest",
@@ -6727,6 +6765,7 @@ uniform float u_time;
 uniform vec2 u_mouse;
 uniform sampler2D u_fontTexture;
 uniform float u_p_sandxrulesx0xc2_states;
+uniform float u_p_sandxrulesx0xc2_jitter;
 uniform float u_p_sandxrulesx0xc2_rate;
 uniform float u_p_sandxrulesx0xc2_reset;
 uniform float u_p_sandxrulesx0xc2_density;
@@ -6784,12 +6823,46 @@ float grHash(vec3 p) {
     p3 = p3 + dot(p3, vec3(p3.z, p3.y, p3.x) + 31.32);
     return fract((p3.x + p3.y) * p3.z);
 }
+float grMod2048(float x) { return x - 2048.0 * floor(x / 2048.0); }
+
+
+float grRound(float h, float v) {
+    float a = grMod2048(h + grMod2048(v));
+    a = grMod2048(a * (2.0 * a + 1.0));
+    return grMod2048(a * 32.0) + floor(a / 64.0);
+}
+
+
+float grDice(vec2 key, float frame, float salt, float seed) {
+    return grRound(grRound(grRound(grRound(grRound(salt, floor(seed * 2.0)), key.x), key.y), frame), 1013.0) / 2048.0;
+}
+
+
+float grBlockPhase(float strip, float row, float par, float jitter, float frame, float seed) {
+    float flip = grDice(vec2(strip, floor(row / 4.0)), frame, 41.0, seed) < jitter * 0.5 ? 1.0 : 0.0;
+    return abs(par - flip);
+}
+
+
+vec3 grBlockOf(vec2 cell, float par, vec2 W, float jitter, float frame, float seed, float wrap) {
+    float ox = floor((cell.x - par) * 0.5) * 2.0 + par;
+    float strip = ox < 0.0 ? ox + W.x : ox;
+    float y = cell.y;
+    float p0 = grBlockPhase(strip, y, par, jitter, frame, seed);
+    float bottom = mod(y - p0, 2.0) < 0.5 ? 1.0 : 0.0;
+    float other = bottom > 0.5 ? y + 1.0 : y - 1.0;
+    // Wrapped by hand, not with mod(): a division by the board's height can round the wrong way on a GPU.
+    float row = wrap > 0.5 ? (other < 0.0 ? other + W.y : (other > W.y - 0.5 ? other - W.y : other)) : other;
+    float p1 = grBlockPhase(strip, row, par, jitter, frame, seed);
+    return vec3(ox, bottom > 0.5 ? y : y - 1.0, abs(p1 - p0) < 0.5 ? 1.0 : 0.0);
+}
 
 void main() {
     vec2 g_uv = (vUv - 0.5) * 2.0;
     g_uv.x *= u_resolution.x / u_resolution.y;
     // Grid Rules, Blocks: Margolus falling sand on a ¼-size board with walls. 0 is air, 1 sand, 2 wall.
     // Each step the board is cut into 2×2 blocks (the cut shifting one cell diagonally every other step); a block whose picture matches a rule becomes its after picture: a grain over air falls, a grain on a heap slides down to the side (with chance 0.8, rolled per block). The rules only rearrange, so the count of grains never changes.
+    // Jitter 1: the blocks' rows are shuffled a little each step, so the falling sand doesn't line up in bands on every other row (plain Margolus would).
     // Hold the mouse button to pour sand; set Brush paints to 2 to draw walls, 0 to erase.
     vec2 sand_rules_0_c2_res = u_resolution;
     vec2 sand_rules_0_c2_cell = floor(gl_FragCoord.xy);
@@ -6806,7 +6879,9 @@ void main() {
     float sand_rules_0_c2_top = max(floor(u_p_sandxrulesx0xc2_states + 0.5), 2.0) - 1.0;
     float sand_rules_0_c2_par = step(1.5, sand_rules_0_c2_me.b);
     vec2 sand_rules_0_c2_W = floor(sand_rules_0_c2_res * 0.5) * 2.0;
-    vec2 sand_rules_0_c2_org = floor((sand_rules_0_c2_cell - sand_rules_0_c2_par) * 0.5) * 2.0 + sand_rules_0_c2_par;
+    float sand_rules_0_c2_frame = mod(floor(u_time * 60.0), 997.0);
+    vec3 sand_rules_0_c2_blk = grBlockOf(sand_rules_0_c2_cell, sand_rules_0_c2_par, sand_rules_0_c2_W, clamp(u_p_sandxrulesx0xc2_jitter, 0.0, 1.0), sand_rules_0_c2_frame, u_p_sandxrulesx0xc2_seed, 0.0);
+    vec2 sand_rules_0_c2_org = sand_rules_0_c2_blk.xy;
     vec2 sand_rules_0_c2_q = sand_rules_0_c2_cell - sand_rules_0_c2_org;
     float sand_rules_0_c2_qi = sand_rules_0_c2_q.x + (1.0 - sand_rules_0_c2_q.y) * 2.0;
     float sand_rules_0_c2_live = step(sand_rules_0_c2_cell.x, sand_rules_0_c2_W.x - 0.5) * step(sand_rules_0_c2_cell.y, sand_rules_0_c2_W.y - 0.5);
@@ -6820,14 +6895,14 @@ void main() {
     vec2 sand_rules_0_c2_p3 = sand_rules_0_c2_org + vec2(1.0, 0.0);
     float sand_rules_0_c2_b3 = (sand_rules_0_c2_p3.x < 0.0 || sand_rules_0_c2_p3.y < 0.0 || sand_rules_0_c2_p3.x > sand_rules_0_c2_W.x - 0.5 || sand_rules_0_c2_p3.y > sand_rules_0_c2_W.y - 0.5) ? -1.0 : floor(texture2D(u_passprev_sand_rules_cells_0, (sand_rules_0_c2_p3 + 0.5) / sand_rules_0_c2_res).r + 0.5);
     float sand_rules_0_c2_next = sand_rules_0_c2_s;
-    float sand_rules_0_c2_done = 0.0;
-    float sand_rules_0_c2_o0 = floor(grHash(vec3(sand_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 31.0)) * 1.0);
+    float sand_rules_0_c2_done = 1.0 - sand_rules_0_c2_blk.z;
+    float sand_rules_0_c2_o0 = floor(grDice(sand_rules_0_c2_key, sand_rules_0_c2_frame, 31.0, u_p_sandxrulesx0xc2_seed) * 1.0);
     float sand_rules_0_c2_best0 = 0.0;
     float sand_rules_0_c2_pick0 = -1.0;
     float sand_rules_0_c2_m0_0 = (abs(sand_rules_0_c2_b0 - 1.0) < 0.5 && abs(sand_rules_0_c2_b1 - 1.0) < 0.5 && abs(sand_rules_0_c2_b2 - 0.0) < 0.5 && abs(sand_rules_0_c2_b3 - 0.0) < 0.5) ? 1.0 - mod(0.0 - sand_rules_0_c2_o0 + 1.0, 1.0) : 0.0;
     if (sand_rules_0_c2_m0_0 > sand_rules_0_c2_best0) { sand_rules_0_c2_best0 = sand_rules_0_c2_m0_0; sand_rules_0_c2_pick0 = 0.0; }
     if (sand_rules_0_c2_done < 0.5 && sand_rules_0_c2_best0 > 0.5) { sand_rules_0_c2_next = (sand_rules_0_c2_qi < 0.5 ? 0.0 : (sand_rules_0_c2_qi < 1.5 ? 0.0 : (sand_rules_0_c2_qi < 2.5 ? 1.0 : 1.0))); sand_rules_0_c2_done = 1.0; }
-    float sand_rules_0_c2_o1 = floor(grHash(vec3(sand_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 33.0)) * 2.0);
+    float sand_rules_0_c2_o1 = floor(grDice(sand_rules_0_c2_key, sand_rules_0_c2_frame, 33.0, u_p_sandxrulesx0xc2_seed) * 2.0);
     float sand_rules_0_c2_best1 = 0.0;
     float sand_rules_0_c2_pick1 = -1.0;
     float sand_rules_0_c2_m1_0 = (abs(sand_rules_0_c2_b0 - 1.0) < 0.5 && abs(sand_rules_0_c2_b2 - 0.0) < 0.5) ? 2.0 - mod(0.0 - sand_rules_0_c2_o1 + 2.0, 2.0) : 0.0;
@@ -6835,14 +6910,14 @@ void main() {
     float sand_rules_0_c2_m1_1 = (abs(sand_rules_0_c2_b1 - 1.0) < 0.5 && abs(sand_rules_0_c2_b3 - 0.0) < 0.5) ? 2.0 - mod(1.0 - sand_rules_0_c2_o1 + 2.0, 2.0) : 0.0;
     if (sand_rules_0_c2_m1_1 > sand_rules_0_c2_best1) { sand_rules_0_c2_best1 = sand_rules_0_c2_m1_1; sand_rules_0_c2_pick1 = 1.0; }
     if (sand_rules_0_c2_done < 0.5 && sand_rules_0_c2_best1 > 0.5) { sand_rules_0_c2_next = (sand_rules_0_c2_qi < 0.5 ? (sand_rules_0_c2_pick1 < 0.5 ? 0.0 : sand_rules_0_c2_s) : (sand_rules_0_c2_qi < 1.5 ? (sand_rules_0_c2_pick1 < 0.5 ? sand_rules_0_c2_s : 0.0) : (sand_rules_0_c2_qi < 2.5 ? (sand_rules_0_c2_pick1 < 0.5 ? 1.0 : sand_rules_0_c2_s) : (sand_rules_0_c2_pick1 < 0.5 ? sand_rules_0_c2_s : 1.0)))); sand_rules_0_c2_done = 1.0; }
-    float sand_rules_0_c2_o2 = floor(grHash(vec3(sand_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 35.0)) * 2.0);
+    float sand_rules_0_c2_o2 = floor(grDice(sand_rules_0_c2_key, sand_rules_0_c2_frame, 35.0, u_p_sandxrulesx0xc2_seed) * 2.0);
     float sand_rules_0_c2_best2 = 0.0;
     float sand_rules_0_c2_pick2 = -1.0;
     float sand_rules_0_c2_m2_0 = (abs(sand_rules_0_c2_b0 - 1.0) < 0.5 && abs(sand_rules_0_c2_b1 - 0.0) < 0.5 && abs(sand_rules_0_c2_b2) > 0.5 && abs(sand_rules_0_c2_b3 - 0.0) < 0.5) ? 2.0 - mod(0.0 - sand_rules_0_c2_o2 + 2.0, 2.0) : 0.0;
     if (sand_rules_0_c2_m2_0 > sand_rules_0_c2_best2) { sand_rules_0_c2_best2 = sand_rules_0_c2_m2_0; sand_rules_0_c2_pick2 = 0.0; }
     float sand_rules_0_c2_m2_1 = (abs(sand_rules_0_c2_b0 - 0.0) < 0.5 && abs(sand_rules_0_c2_b1 - 1.0) < 0.5 && abs(sand_rules_0_c2_b2 - 0.0) < 0.5 && abs(sand_rules_0_c2_b3) > 0.5) ? 2.0 - mod(1.0 - sand_rules_0_c2_o2 + 2.0, 2.0) : 0.0;
     if (sand_rules_0_c2_m2_1 > sand_rules_0_c2_best2) { sand_rules_0_c2_best2 = sand_rules_0_c2_m2_1; sand_rules_0_c2_pick2 = 1.0; }
-    if (sand_rules_0_c2_done < 0.5 && sand_rules_0_c2_best2 * step(grHash(vec3(sand_rules_0_c2_key, mod(floor(u_time * 60.0), 997.0) + 36.0)), 0.8) > 0.5) { sand_rules_0_c2_next = (sand_rules_0_c2_qi < 0.5 ? (sand_rules_0_c2_pick2 < 0.5 ? 0.0 : 0.0) : (sand_rules_0_c2_qi < 1.5 ? (sand_rules_0_c2_pick2 < 0.5 ? 0.0 : 0.0) : (sand_rules_0_c2_qi < 2.5 ? (sand_rules_0_c2_pick2 < 0.5 ? sand_rules_0_c2_s : 1.0) : (sand_rules_0_c2_pick2 < 0.5 ? 1.0 : sand_rules_0_c2_s)))); sand_rules_0_c2_done = 1.0; }
+    if (sand_rules_0_c2_done < 0.5 && sand_rules_0_c2_best2 * (grDice(sand_rules_0_c2_key, sand_rules_0_c2_frame, 36.0, u_p_sandxrulesx0xc2_seed) < 0.8 ? 1.0 : 0.0) > 0.5) { sand_rules_0_c2_next = (sand_rules_0_c2_qi < 0.5 ? (sand_rules_0_c2_pick2 < 0.5 ? 0.0 : 0.0) : (sand_rules_0_c2_qi < 1.5 ? (sand_rules_0_c2_pick2 < 0.5 ? 0.0 : 0.0) : (sand_rules_0_c2_qi < 2.5 ? (sand_rules_0_c2_pick2 < 0.5 ? sand_rules_0_c2_s : 1.0) : (sand_rules_0_c2_pick2 < 0.5 ? 1.0 : sand_rules_0_c2_s)))); sand_rules_0_c2_done = 1.0; }
     sand_rules_0_c2_next = clamp(sand_rules_0_c2_next, 0.0, sand_rules_0_c2_top);
     float sand_rules_0_c2_ng = 0.0;
     if (abs(sand_rules_0_c2_next - sand_rules_0_c2_s) < 0.5) sand_rules_0_c2_ng = sand_rules_0_c2_next > 0.5 ? min(1.0, sand_rules_0_c2_g + u_p_sandxrulesx0xc2_ageRate) : sand_rules_0_c2_g * u_p_sandxrulesx0xc2_afterglow;
