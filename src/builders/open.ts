@@ -11,6 +11,7 @@ import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { estimateNodeHeight } from '../store/graphLayout';
 import { openNewSceneBuilder } from '../sceneBuilder/store';
 import { editSceneInBuilder } from '../sceneBuilder/actions';
+import { openNewSceneBuilder2D } from '../sceneBuilder2d/actions';
 import { addGridRules } from '../suggestions/doBarGridRules';
 import { toast } from '../components/ui/toastStore';
 import type { GraphNode } from '../types/nodeGraph';
@@ -42,6 +43,7 @@ export function newAgentRules(): string | null {
 /** Open a builder from the Builders section or menu. */
 export function openBuilder(id: BuilderId, at?: { x: number; y: number }): void {
   if (id === 'scene') openNewSceneBuilder(at);
+  else if (id === 'scene2d') openNewSceneBuilder2D(at);
   else if (id === 'grid') newGridRules();
   else newAgentRules();
 }

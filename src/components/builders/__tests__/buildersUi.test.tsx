@@ -51,10 +51,10 @@ beforeEach(() => {
 });
 
 describe('BuildersSection', () => {
-  it('shows the three builders, each opening its own', () => {
+  it('shows the four builders, each opening its own', () => {
     const opened = vi.fn();
     const host = mount(<BuildersSection onOpened={opened} />);
-    expect([...host.querySelectorAll('[data-builder]')].map(b => b.getAttribute('data-builder'))).toEqual(['scene', 'grid', 'agents']);
+    expect([...host.querySelectorAll('[data-builder]')].map(b => b.getAttribute('data-builder'))).toEqual(['scene', 'scene2d', 'grid', 'agents']);
     expect(host.textContent).toContain('shapes, combine, bend space, look, outputs');
     expect(host.textContent).toContain('Life, sand, heat, waves, Wireworld…');
     expect(host.textContent).toContain('slime, ants, flocks, infection…');
@@ -79,7 +79,7 @@ describe('BuildersSection', () => {
     expect(host.querySelectorAll('[data-builder]')).toHaveLength(0);
     expect(localStorage.getItem('nodeBrowser.buildersFolded')).toBe('1');
     click(host.querySelector('[data-builders-toggle]'));
-    expect(host.querySelectorAll('[data-builder]')).toHaveLength(3);
+    expect(host.querySelectorAll('[data-builder]')).toHaveLength(4);
     expect(localStorage.getItem('nodeBrowser.buildersFolded')).toBe('0');
   });
   it('while searching: only the builders found, unfolded; nothing when none', () => {

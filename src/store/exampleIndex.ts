@@ -36,6 +36,7 @@ import { SIM_GRID_EXAMPLE_INDEX } from './simGridExamples';
 import { GRID_RULES_EXAMPLE_INDEX, simGridsFolderKeys } from './gridRulesExampleIndex';
 import { AGENT_RULE_EXAMPLE_INDEX, AGENT_RULE_EXAMPLE_KEYS } from './agentRuleExamples';
 import { SCENE_BUILDER_EXAMPLE_INDEX, SCENE_BUILDER_EXAMPLE_KEYS } from './sceneBuilderExampleIndex';
+import { SCENE_BUILDER_2D_EXAMPLE_INDEX, SCENE_BUILDER_2D_EXAMPLE_KEYS } from './sceneBuilder2dExampleIndex';
 
 export type ExampleGraph = {
   label: string; nodes: GraphNode[]; counter: number;
@@ -242,6 +243,7 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...TEXTURE_TOOL_EXAMPLE_INDEX,
   // The 3D: Scene Builder folder (sceneBuilderExamples.ts): graphs the 3D Scene Builder made from its templates.
   ...SCENE_BUILDER_EXAMPLE_INDEX,
+  ...SCENE_BUILDER_2D_EXAMPLE_INDEX,
   // Simulations: grids (simGridExamples.ts, docs/simulations-grids.md): cellular automata from a Pass and its Previous.
   ...SIM_GRID_EXAMPLE_INDEX,
   // Grid Rules (gridRulesExamples.ts, docs/grid-rules.md): the same simulations as one node each.
@@ -297,6 +299,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "3D Lighting",       color: '#f9c468', keys: ['fresnelSchlickRim','refractDirFakeGlass','glassPhysical','glassMetaballs','litStillLife'] },
   { label: "GI Lighting",       color: ctp.green, keys: ['giSphereGround','giBoxFrame'] },
   { label: "3D: Scene Builder", color: ctp.sky, keys: SCENE_BUILDER_EXAMPLE_KEYS },
+  { label: "2D: Scene Builder", color: ctp.pink, keys: SCENE_BUILDER_2D_EXAMPLE_KEYS },
   { label: "Volumetric",        color: '#f5a97f', keys: ['glowMarcher','volAnimatedRepeat','volumeGlowDemo'] },
   { label: "Time Cube",         color: '#f5a97f', keys: TIME_CUBE_EXAMPLE_KEYS },
   { label: "4D",                color: '#b4a0ff', keys: FOURD_EXAMPLE_KEYS },

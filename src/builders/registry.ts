@@ -8,7 +8,7 @@
  */
 import type { IconName } from '../components/ui/iconPaths';
 
-export type BuilderId = 'scene' | 'grid' | 'agents';
+export type BuilderId = 'scene' | 'scene2d' | 'grid' | 'agents';
 
 export interface BuilderInfo {
   id: BuilderId;
@@ -31,6 +31,13 @@ export const BUILDERS: readonly BuilderInfo[] = [
     makes: 'shapes, combine, bend space, look, outputs',
     action: 'Opens the builder on a new scene',
     keywords: ['builder', 'builders', 'scene', '3d', 'raymarch', 'sdf', 'recipe'],
+  },
+  {
+    id: 'scene2d', title: '2D Scene Builder', icon: 'mask',
+    description: '2D pictures from a form or a recipe',
+    makes: 'shapes, rings of rings, kaleidoscopes, motion, glow',
+    action: 'Opens the builder on a new 2D scene',
+    keywords: ['builder', 'builders', 'scene', '2d', 'flat', 'shapes', 'sdf', 'kaleidoscope', 'recipe'],
   },
   {
     id: 'grid', title: 'Grid Rules', icon: 'grid',

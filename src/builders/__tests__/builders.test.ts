@@ -35,13 +35,15 @@ const handScene = (): GraphNode => ({ id: 'hand', type: 'sceneGroup', position: 
 const grid = (params: Record<string, unknown> = {}): GraphNode => ({ id: 'g1', type: 'gridRules', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params });
 
 describe('the Builders section', () => {
-  it('lists the three builders with a line each and what they make', () => {
-    expect(BUILDERS.map(b => b.title)).toEqual(['3D Scene Builder', 'Grid Rules', 'Agent Rules']);
+  it('lists the four builders with a line each and what they make', () => {
+    expect(BUILDERS.map(b => b.title)).toEqual(['3D Scene Builder', '2D Scene Builder', 'Grid Rules', 'Agent Rules']);
     for (const b of BUILDERS) { expect(b.description.length).toBeGreaterThan(10); expect(b.makes.length).toBeGreaterThan(5); }
   });
-  it('is searchable: "builder" finds all three, "scene" the Scene Builder, "rules" Grid and Agent Rules', () => {
-    expect(matchBuilders('builder').map(b => b.id)).toEqual(['scene', 'grid', 'agents']);
-    expect(matchBuilders('scene').map(b => b.id)).toEqual(['scene']);
+  it('is searchable: "builder" finds all four, "scene" the Scene Builders, "rules" Grid and Agent Rules', () => {
+    expect(matchBuilders('builder').map(b => b.id)).toEqual(['scene', 'scene2d', 'grid', 'agents']);
+    expect(matchBuilders('scene').map(b => b.id)).toEqual(['scene', 'scene2d']);
+    expect(matchBuilders('2d').map(b => b.id)).toEqual(['scene2d']);
+    expect(matchBuilders('kaleidoscope').map(b => b.id)).toEqual(['scene2d']);
     expect(matchBuilders('rules').map(b => b.id)).toEqual(['grid', 'agents']);
     expect(matchBuilders('slime').map(b => b.id)).toEqual(['agents']);
     expect(matchBuilders('wireworld').map(b => b.id)).toEqual(['grid']);
