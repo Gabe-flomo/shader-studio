@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.86',
+    date: '2026-10-08',
+    title: '4D shapes',
+    highlights: [
+      { area: 'Studio', text: 'More 4D shapes: duocylinder, spherinder, cubinder, cylindrical prism, ditorus, Clifford torus, and the 5-cell, 16-cell and 24-cell.', link: { kind: 'doc', path: 'docs/4d.md' } },
+      { area: 'Studio', text: '4D transforms and noise: Scale, Repeat, Mirror/Fold and Twist in 4D, plus Noise 4D for wobbling 4D shapes or evolving textures.' },
+      { area: 'Studio', text: 'Five new 4D examples: Duocylinder dance, The 24-cell, Clifford torus, a morphing 4D lattice, and a gallery of every 4D shape.' },
+    ],
+  },
+  {
     id: '2026.10.85',
     date: '2026-10-08',
     title: '4D slices and shadows',
