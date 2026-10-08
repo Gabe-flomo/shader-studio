@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.93',
+    date: '2026-10-08',
+    title: 'Library regrouped',
+    highlights: [
+      { area: 'Studio', text: 'The Nodes library is regrouped: 2D tools, 3D tools, 4D tools, SDF, Colour, Effects (with post-processing), Simulation, Generators and Math & Logic.' },
+      { area: 'Studio', text: 'Every library section explains itself: open 2D Primitives to read what an SDF is, or hover a row for a one-line summary.' },
+    ],
+  },
+  {
     id: '2026.10.92',
     date: '2026-10-08',
     title: '4D to 2D',
