@@ -773,6 +773,29 @@ export class ShaderAssembler {
   private nodeOutputs = new Map<string, Record<string, string>>();
   private mlgDynamicOutputs = new Map<string, Record<string, { type: string; label: string }>>();
   private sceneFnExtraParams = new Map<string, Array<{ name: string; type: string }>>();
+
+  /**
+   * A march loop's body is a GLSL function outside main(), so a Scene Group's port values (main()-scope
+   * variables) are not visible in it: they have to be parameters of the body function too. Adds `extra`
+   * to the body's extra parameters (the loop passes them on at every call).
+   */
+  private forwardSceneExtras(bodyExtra: Array<{ name: string; type: string }>, extra: Array<{ name: string; type: string }>): void {
+    for (const ep of extra) if (!bodyExtra.some(p => p.name === ep.name)) bodyExtra.push(ep);
+  }
+
+  /** A node inside a loop body that measures a Scene Group itself (writes `fn(pos)`): give its calls the group's arguments. */
+  private addBodySceneArgs(def: NodeDefinition, inputVars: Record<string, string>, code: string, bodyExtra: Array<{ name: string; type: string }>): string {
+    let out = code;
+    for (const [key, sock] of Object.entries(def.inputs)) {
+      if (sock.type !== 'scene3d') continue;
+      const fn = liveSceneFn(inputVars[key]);
+      const extra = fn ? this.sceneFnExtraParams.get(fn) : undefined;
+      if (!fn || !extra?.length) continue;
+      out = addSceneArgs(out, fn, extra.map(v => v.name).join(', '));
+      this.forwardSceneExtras(bodyExtra, extra);
+    }
+    return out;
+  }
   private isStateful = false;
   /** Echo nodes anywhere in the graph (incl. group subgraphs): snapshot ring size and spacing. */
   private echo: { copies: number; delay: number } | null = null;
@@ -2625,6 +2648,7 @@ export class ShaderAssembler {
                       this.nodeOutputs.set(gn.id, fbResult2.outputVars);
                     } else {
                       const resolvedExtraParams2 = this.sceneFnExtraParams.get(resolvedSceneFn2) ?? [];
+                      this.forwardSceneExtras(mlBodyExtraParams, resolvedExtraParams2);
                       const resolvedExtraStr2 = resolvedExtraParams2.length > 0
                         ? ', ' + resolvedExtraParams2.map(v => v.name).join(', ') : '';
                       const posVar2 = gnInputVars.pos || `${nodeSlug}_mp`;
@@ -2643,6 +2667,7 @@ export class ShaderAssembler {
                   }
                   if (mlVolumetric && gn.params.perDistance === true) gnInputVars[MARCH_STEP_REF_KEY] = mlPassthrough;
                   const gnResult = gDef.generateGLSL(this.patchBodyNode(gn, gDef, origIdBySlug(mlGrpSlugMap, gnOrigId)), gnInputVars);
+                  gnResult.code = this.addBodySceneArgs(gDef, gnInputVars, gnResult.code, mlBodyExtraParams);
                   bodyLines.push(gnResult.code);
                   // Handle assignOp accumulators nested inside this inline group
                   const gnSlugKey = gn.id.slice(mlGrpPrefix.length);
@@ -2716,6 +2741,7 @@ export class ShaderAssembler {
                   this.nodeOutputs.set(sn.id, fbResult.outputVars);
                 } else {
                   const resolvedExtraParams = this.sceneFnExtraParams.get(resolvedSceneFn) ?? [];
+                      this.forwardSceneExtras(mlBodyExtraParams, resolvedExtraParams);
                   const resolvedExtraStr = resolvedExtraParams.length > 0
                     ? ', ' + resolvedExtraParams.map(v => v.name).join(', ')
                     : '';
@@ -2737,6 +2763,7 @@ export class ShaderAssembler {
               // Per distance: weight this step's sample by the step the ray takes from here (compiler/marchJitter.ts).
               if (mlVolumetric && snEffective.params.perDistance === true) snInputVars[MARCH_STEP_REF_KEY] = mlPassthrough;
               const snResult = snDef.generateGLSL(this.patchBodyNode(snEffective, snDef, origIdBySlug(mlSubSlugMap, origId)), snInputVars);
+              snResult.code = this.addBodySceneArgs(snDef, snInputVars, snResult.code, mlBodyExtraParams);
 
               // ── assignOp in body: route output through inout accumulator ──────────
               if (sn.assignOp && sn.assignOp !== '=') {
@@ -3384,6 +3411,7 @@ export class ShaderAssembler {
                       this.nodeOutputs.set(gn.id, fbResult2.outputVars);
                     } else {
                       const resolvedExtraParams2 = this.sceneFnExtraParams.get(resolvedSceneFn2) ?? [];
+                      this.forwardSceneExtras(mlBodyExtraParams, resolvedExtraParams2);
                       const resolvedExtraStr2 = resolvedExtraParams2.length > 0
                         ? ', ' + resolvedExtraParams2.map(v => v.name).join(', ') : '';
                       const posVar2 = gnInputVars.pos || `${nodeSlug}_mp`;
@@ -3402,6 +3430,7 @@ export class ShaderAssembler {
                   }
                   if (mlVolumetric && gn.params.perDistance === true) gnInputVars[MARCH_STEP_REF_KEY] = mlPassthrough;
                   const gnResult = gDef.generateGLSL(this.patchBodyNode(gn, gDef, origIdBySlug(mlGrpSlugMap, gnOrigId)), gnInputVars);
+                  gnResult.code = this.addBodySceneArgs(gDef, gnInputVars, gnResult.code, mlBodyExtraParams);
                   bodyLines.push(gnResult.code);
                   const gnSlugKey = gn.id.slice(mlGrpPrefix.length);
                   const origGnForAcc = mlGrpSlugToOrigNode.get(gnSlugKey);
@@ -3470,6 +3499,7 @@ export class ShaderAssembler {
                   this.nodeOutputs.set(sn.id, fbResult.outputVars);
                 } else {
                   const resolvedExtraParams = this.sceneFnExtraParams.get(resolvedSceneFn) ?? [];
+                      this.forwardSceneExtras(mlBodyExtraParams, resolvedExtraParams);
                   const resolvedExtraStr = resolvedExtraParams.length > 0
                     ? ', ' + resolvedExtraParams.map(v => v.name).join(', ')
                     : '';
@@ -3491,6 +3521,7 @@ export class ShaderAssembler {
               // Per distance: weight this step's sample by the step the ray takes from here (compiler/marchJitter.ts).
               if (mlVolumetric && snEffective.params.perDistance === true) snInputVars[MARCH_STEP_REF_KEY] = mlPassthrough;
               const snResult = snDef.generateGLSL(this.patchBodyNode(snEffective, snDef, origIdBySlug(mlSubSlugMap, origId)), snInputVars);
+              snResult.code = this.addBodySceneArgs(snDef, snInputVars, snResult.code, mlBodyExtraParams);
 
               if (sn.assignOp && sn.assignOp !== '=') {
                 bodyLines.push(snResult.code);
