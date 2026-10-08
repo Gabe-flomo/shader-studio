@@ -28,6 +28,7 @@ import { RecipeOffer } from './RecipeOffer';
 import { useRecipeOffer } from '../../store/recipeOfferStore';
 import { askConfirm, askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
+import { openPatterns } from '../codeExplorer/explorerStore';
 import { showSocketPatch, socketVisible, socketsForParam } from '../../lib/socketsOnDemand';
 import { candidateFor, candidateLabel, collectPlayCandidates, upstreamControls } from '../../play/playControls';
 import { addCandidateControl, driveWithNull, graphNullDrives } from '../play/layerOps';
@@ -1916,6 +1917,13 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       Delete Group
                     </button>
                   </>
+                )}
+                {/* Pattern discovery (src/patterns): the techniques this node takes part in, in the Code Explorer. */}
+                {clickedNode && clickedNode.type !== 'output' && (
+                  <button style={ctxBtnStyle} title="The multi-node techniques this node takes part in (a glow falloff, a domain warp…), and other graphs that use them"
+                    onClick={() => { openPatterns(clickedNode.id); setContextMenu(null); }}>
+                    Patterns this is part of…
+                  </button>
                 )}
                 {/* Bake (docs/bake.md): render this part once to a video and play that instead. Top level only. */}
                 {clickedNode && activeGroupPath.length === 0 && (() => {
