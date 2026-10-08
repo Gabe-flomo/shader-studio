@@ -988,6 +988,7 @@ export const SdfAoNode: NodeDefinition = {
     pos:    { type: 'vec3',    label: 'Hit Pos'  },
     normal: { type: 'vec3',    label: 'Normal'   },
     hit:    { type: 'float',   label: 'Hit'      },
+    stretch: { type: 'float', label: 'Stretch', hint: 'Wire the March Loop\'s Stretch here when Warp safety is on, so this ray steps safely through warped space. Unwired, 1.' },
   },
   outputs: { ao: { type: 'float', label: 'AO' } },
   defaultParams: { stepDist: 0.05 },
@@ -1010,7 +1011,7 @@ export const SdfAoNode: NodeDefinition = {
       for (int ${id}_i = 1; ${id}_i <= 5; ${id}_i++) {
         float ${id}_fi  = float(${id}_i);
         float ${id}_exp = ${id}_fi * ${stepDist};
-        float ${id}_act = ${sceneFn}(${pos} + ${normal} * ${id}_exp);
+        float ${id}_act = ${sceneFn}(${pos} + ${normal} * ${id}_exp)${inputVars.stretch ? ` / max(${inputVars.stretch}, 1.0)` : ''};
         ${id}_aoAcc += ${id}_w * max(0.0, ${id}_exp - ${id}_act);
         ${id}_w     *= 0.5;
       }
@@ -1035,6 +1036,7 @@ export const SoftShadowNode: NodeDefinition = {
     normal:   { type: 'vec3',    label: 'Normal'    },
     hit:      { type: 'float',   label: 'Hit'       },
     lightDir: { type: 'vec3',    label: 'Light Dir' },
+    stretch:  { type: 'float',   label: 'Stretch', hint: 'Wire the March Loop\'s Stretch here when Warp safety is on, so this ray steps safely through warped space. Unwired, 1.' },
   },
   outputs: { shadow: { type: 'float', label: 'Shadow' } },
   defaultParams: { k: 16.0, tmax: 20.0 },
@@ -1059,7 +1061,7 @@ export const SoftShadowNode: NodeDefinition = {
       vec3  ${id}_rd = normalize(${lightDir});
       float ${id}_t  = 0.02;
       for (int ${id}_i = 0; ${id}_i < 64; ${id}_i++) {
-        float ${id}_h = ${sceneFn}(${id}_ro + ${id}_rd * ${id}_t);
+        float ${id}_h = ${sceneFn}(${id}_ro + ${id}_rd * ${id}_t)${inputVars.stretch ? ` / max(${inputVars.stretch}, 1.0)` : ''};
         if (${id}_h < 0.001) { ${id}_shadow = 0.0; break; }
         ${id}_shadow = min(${id}_shadow, ${k} * ${id}_h / ${id}_t);
         ${id}_t += clamp(${id}_h, 0.01, 0.2);

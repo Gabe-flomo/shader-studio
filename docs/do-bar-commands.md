@@ -3387,7 +3387,7 @@ Examples:
 Words: `quality`
 
 ```
-quality steps= dist= step= jitter=
+quality steps= dist= step= jitter= warp=
 ```
 
 | Slot | What |
@@ -3396,6 +3396,7 @@ quality steps= dist= step= jitter=
 | dist | number |
 | step | number |
 | jitter | number |
+| warp | off, auto, careful, high |
 
 Examples:
 

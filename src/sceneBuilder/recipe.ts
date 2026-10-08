@@ -685,7 +685,11 @@ class Parser {
           else if ((key === 'step' || key === 'stepscale') && a.value.kind === 'num') Q.stepScale = a.value.v;
           else if ((key === 'step' || key === 'stepscale') && a.value.kind === 'word' && a.value.v.toLowerCase() === 'auto') Q.stepScale = 'auto';
           else if (key === 'jitter' && a.value.kind === 'num') Q.jitter = a.value.v;
-          else this.fail(a, 'quality takes steps, dist, step (or step=auto) and jitter.');
+          else if (key === 'warp' && a.value.kind === 'word' && ['off', 'auto', 'careful', 'high'].includes(a.value.v.toLowerCase())) {
+            const w = a.value.v.toLowerCase();
+            if (w === 'off') delete Q.warp; else Q.warp = w as 'auto' | 'careful' | 'high';
+          }
+          else this.fail(a, 'quality takes steps, dist, step (or step=auto), jitter and warp (off, auto, careful or high).');
         }
         return;
       }
@@ -871,6 +875,7 @@ export function printRecipe(spec: SceneSpec, opts: { multiline?: boolean; pretty
   if (!valueEq(Q.maxDist, DQ.maxDist)) q.push(`dist=${fmt(Q.maxDist)}`);
   if (Q.stepScale !== DQ.stepScale) q.push(`step=${Q.stepScale === 'auto' ? 'auto' : fmt(Q.stepScale)}`);
   if (!valueEq(Q.jitter, DQ.jitter)) q.push(`jitter=${fmt(Q.jitter)}`);
+  if (Q.warp) q.push(`warp=${Q.warp}`);
   if (q.length) clauses.push(['quality', ...q].join(' '));
   const out = outputClause(spec.output);
   if (out) clauses.push(out);
