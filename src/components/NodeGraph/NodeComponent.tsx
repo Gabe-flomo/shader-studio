@@ -97,7 +97,8 @@ import { InsertLinkButton, LinkedText } from '../ui/Links';
 import { CreditLink } from '../ui/Credit';
 import { CreditEditor } from '../ui/CreditEditor';
 import { parseSourceCredit } from '../../types/credit';
-import { canRandomize, randomizableParams, randomizeAmount, randomizeExcluded } from '../../nodes/randomizeParams';
+import { canRandomize, isNodeSkipped, randomizableParams, randomizeExcluded } from '../../nodes/randomizeParams';
+import { getRandomizeOptions } from '../../nodes/randomizeOptions';
 import { useFoldState } from './foldState';
 import { RandomizeMenu } from './RandomizeMenu';
 import { timeReadoutRef } from '../../lib/timeTick';
@@ -505,7 +506,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const updateNodePosition = useNodeGraphStore(s => s.updateNodePosition);
   const removeNode         = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams       = useNodeGraphStore(s => s.updateNodeParams);
-  const randomizeNodeParams    = useNodeGraphStore(s => s.randomizeNodeParams);
+  // The saved Randomize options apply; with Focus on, the measuring code loads on demand.
+  const randomizeNodeParams = useCallback((id: string) => {
+    if (getRandomizeOptions().focus) void import('../surprise/surpriseActions').then(m => m.randomizeNodeAction(id));
+    else useNodeGraphStore.getState().randomizeNodeParams(id);
+  }, []);
   const foldedSections = useFoldState(s => s.folded);
   const toggleFold     = useFoldState(s => s.toggle);
   const [randomizeMenu, setRandomizeMenu] = useState<{ x: number; y: number } | null>(null);
@@ -2332,7 +2337,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           <div style={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }} onDoubleClick={e => e.stopPropagation()}>
             {canRandomize(node, def) && (
               <CardButton icon="dice" on={randomizeExcluded(node).length > 0}
-                label="Randomize the values on this card (right-click to choose which)"
+                label="Randomize the values on this card with the saved strength (right-click: strength and which)"
                 onClick={() => randomizeNodeParams(node.id)}
                 onContextMenu={e => setRandomizeMenu({ x: e.clientX, y: e.clientY })} />
             )}
@@ -2340,11 +2345,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               <RandomizeMenu
                 x={randomizeMenu.x}
                 y={randomizeMenu.y}
-                params={randomizableParams(node, def)}
+                params={randomizableParams(node, def, getRandomizeOptions())}
                 excluded={randomizeExcluded(node)}
                 onChange={next => updateNodeParams(node.id, { __randExclude: next.length ? next : undefined })}
-                amount={randomizeAmount(node)}
-                onAmountChange={a => updateNodeParams(node.id, { __randAmount: a >= 1 ? undefined : a })}
+                skipped={isNodeSkipped(node)}
+                onSkipChange={on => updateNodeParams(node.id, { __randSkip: on ? true : undefined })}
                 onRandomize={() => randomizeNodeParams(node.id)}
                 onClose={() => setRandomizeMenu(null)}
               />
@@ -3134,6 +3139,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     const { min: effMin, max: effMax } = paramSliderRange(node.params, key, paramDef);
     const defVal = def?.defaultParams?.[key];
     const hovered = hoveredSliderKey === key;
+    const randLocked = randomizeExcluded(node).includes(key);
     const drive = playDriven.get(`${node.id}::${key}`);
     const isKeyframed = node.inputs[key]?.type === 'float' && !node.inputs[key]?.connection
       && socketHasKeyframes(node, key) && !isKeyframeBypassed(node, key);
@@ -3178,7 +3184,12 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             Skipped in compact (paired) rows — there's no room, and each end can still be typed past
             its range to widen it. */}
         {!compact && (
-          <div style={{ display: 'flex', gap: 1, marginRight: -6, opacity: hovered || bidir || customRange ? 1 : 0.4, transition: 'opacity 120ms' }}>
+          <div style={{ display: 'flex', gap: 1, marginRight: -6, opacity: hovered || bidir || customRange || randLocked ? 1 : 0.4, transition: 'opacity 120ms' }}>
+            <span style={{ display: 'inline-flex', opacity: hovered || randLocked ? 1 : 0, transition: 'opacity 120ms' }}>
+              <CardButton icon="lock" on={randLocked}
+                label={randLocked ? 'Locked: Randomize never changes this. Click to unlock' : 'Lock: Randomize skips this setting'}
+                onClick={() => { const next = randLocked ? randomizeExcluded(node).filter(k => k !== key) : [...randomizeExcluded(node), key]; updateNodeParams(node.id, { __randExclude: next.length ? next : undefined }); }} />
+            </span>
             <CardButton icon="bidir" on={bidir}
               label={bidir ? `Range is −${+effMax.toFixed(3)} to ${+effMax.toFixed(3)}: click for 0 to max` : 'Make the range run both ways (−max to max)'}
               onClick={() => updateNodeParams(node.id, { [`__scBidir_${key}`]: !bidir, [`__scMin_${key}`]: null })} />
@@ -4781,11 +4792,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         <RandomizeMenu
           x={randomizeMenu.x}
           y={randomizeMenu.y}
-          params={randomizableParams(node, def)}
+          params={randomizableParams(node, def, getRandomizeOptions())}
           excluded={randomizeExcluded(node)}
           onChange={next => updateNodeParams(node.id, { __randExclude: next.length ? next : undefined })}
-                amount={randomizeAmount(node)}
-                onAmountChange={a => updateNodeParams(node.id, { __randAmount: a >= 1 ? undefined : a })}
+                skipped={isNodeSkipped(node)}
+                onSkipChange={on => updateNodeParams(node.id, { __randSkip: on ? true : undefined })}
           onRandomize={() => randomizeNodeParams(node.id)}
           onClose={() => setRandomizeMenu(null)}
         />

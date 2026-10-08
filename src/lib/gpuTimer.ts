@@ -9,10 +9,17 @@
  * Queries cannot nest: begin() while one is open is ignored and returns false.
  * Safari (and WebGL1) have no usable extension — `supported` is false and every
  * call is a no-op, so callers fall back to CPU timing.
+ *
+ * Isolation (Chrome on a Mac, ANGLE's Metal backend): a timer there reads from the
+ * start of the GPU command buffer it ends in, so it also counts everything queued
+ * since the last flush — a 0.02 ms draw read 2–4 ms after an unrelated heavy draw.
+ * A gl.flush() just before beginQuery submits that earlier work on its own and the
+ * timer reads only what follows (measured: 2.1 ms → 0.015 ms). With `isolate` on,
+ * every begin() flushes first; results carry the flag and the frame they belong to.
  */
-export interface TimerResult { name: string; ms: number }
+export interface TimerResult { name: string; ms: number; frame: number; isolated: boolean }
 
-interface Pending { name: string; query: WebGLQuery }
+interface Pending { name: string; query: WebGLQuery; frame: number; isolated: boolean }
 
 export class GpuTimer {
   readonly supported: boolean;
@@ -21,6 +28,10 @@ export class GpuTimer {
   private readonly pool: WebGLQuery[] = [];
   private active: Pending | null = null;
   private readonly gl: WebGL2RenderingContext | WebGLRenderingContext;
+  /** The frame the next queries belong to (set by the frame loop). */
+  frame = 0;
+  /** Flush before every begin(), so each query times only its own work (see above). */
+  isolate = false;
 
   constructor(gl: WebGL2RenderingContext | WebGLRenderingContext) {
     this.gl = gl;
@@ -29,15 +40,19 @@ export class GpuTimer {
     this.supported = !!this.ext;
   }
 
-  /** Start timing GPU work under `name`. False when unsupported or a query is already open. */
-  begin(name: string): boolean {
+  /**
+   * Start timing GPU work under `name`. False when unsupported or a query is already open.
+   * `isolated` (or the `isolate` flag) flushes the work queued so far first.
+   */
+  begin(name: string, isolated = this.isolate): boolean {
     if (!this.ext || this.active) return false;
     if (this.pending.length > 64) return false; // results never polled — don't leak queries
     const gl = this.gl as WebGL2RenderingContext;
     const query = this.pool.pop() ?? gl.createQuery();
     if (!query) return false;
+    if (isolated) gl.flush();
     gl.beginQuery(this.ext.TIME_ELAPSED_EXT, query);
-    this.active = { name, query };
+    this.active = { name, query, frame: this.frame, isolated };
     return true;
   }
 
@@ -62,7 +77,7 @@ export class GpuTimer {
       this.pending.shift();
       if (!disjoint) {
         const ns = gl.getQueryParameter(p.query, gl.QUERY_RESULT) as number;
-        out.push({ name: p.name, ms: ns / 1e6 });
+        out.push({ name: p.name, ms: ns / 1e6, frame: p.frame, isolated: p.isolated });
       }
       this.pool.push(p.query);
     }

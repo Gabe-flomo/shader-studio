@@ -1,6 +1,7 @@
-import { askText } from '../ui/dialogStore';
-import { seedFrom } from '../../lib/surprise';
-import { randomizeGraphAction, useSurpriseSeeds } from '../surprise/surpriseActions';
+import { randomizeGraphAction } from '../surprise/surpriseActions';
+import { RandomizePopover } from '../surprise/RandomizePopover';
+import { getRandomizeOptions, optionsSummary } from '../../nodes/randomizeOptions';
+import { lockedItems } from '../../nodes/randomizeParams';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
@@ -158,19 +159,21 @@ export function CanvasToolbar({
 }
 
 /**
- * Randomise all settings in this graph (docs/surprise.md): every free slider on the level on
- * screen, in its interesting range, from a new seed, as one undo step. Right-click: type a seed.
+ * Randomise all settings in this graph (docs/surprise.md): the settings on the level on screen,
+ * moved by the saved strength, locks and group options (the chevron or a right-click opens them,
+ * with a seed field), as one undo step. Click: randomise with the current options.
  */
 function RandomizeGraphButton() {
-  const ask = async () => {
-    const last = useSurpriseSeeds.getState().graph;
-    const text = await askText('Randomise all settings from a seed', { label: 'Seed (a number or a word)', initial: last === null ? '' : String(last), confirmLabel: 'Randomise' });
-    const seed = text === null ? null : seedFrom(text);
-    if (seed !== null) randomizeGraphAction(seed);
-  };
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [open, setOpen] = useState(false);
+  const [summary, setSummary] = useState('');
+  // The tooltip's one-line summary is worked out on hover: counting locks walks the whole graph.
+  const refresh = () => setSummary(optionsSummary(getRandomizeOptions(), lockedItems(useNodeGraphStore.getState().nodes).length));
   return (
-    <span onContextMenu={e => { e.preventDefault(); e.stopPropagation(); void ask(); }} style={{ display: 'inline-flex' }}>
-      <IconButton icon="dice" label="Randomise all settings in this graph: every free slider, in a range that looks good, from a new seed (one undo step) · right-click: type a seed" size="sm" onClick={() => randomizeGraphAction()} data-randomize-graph />
+    <span ref={anchor} onMouseEnter={refresh} onContextMenu={e => { e.preventDefault(); e.stopPropagation(); refresh(); setOpen(true); }} style={{ display: 'inline-flex', alignItems: 'center' }}>
+      <IconButton icon="dice" label={`Randomise settings in this graph, one undo step${summary ? ` (${summary})` : ''} · right-click or the arrow: options and a seed`} size="sm" onClick={() => void randomizeGraphAction()} data-randomize-graph />
+      <IconButton icon="chevD" label="Randomise options: strength, locks, groups, focus, seed" size="sm" active={open} onClick={() => { refresh(); setOpen(o => !o); }} data-randomize-options style={{ width: 16, marginLeft: -4 }} />
+      {open && <RandomizePopover anchorRef={anchor} onClose={() => setOpen(false)} />}
     </span>
   );
 }

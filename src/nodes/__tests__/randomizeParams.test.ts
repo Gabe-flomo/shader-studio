@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
+import { DEFAULT_RANDOMIZE_OPTIONS } from '../randomizeOptions';
 import { randomizableParams, randomizedGraph, randomizedParams } from '../randomizeParams';
+
+const FULL = { ...DEFAULT_RANDOMIZE_OPTIONS, strength: 1 };
 
 const def = {
   paramDefs: {
@@ -22,8 +25,8 @@ const node = (params: Record<string, unknown> = {}): GraphNode => ({
 
 describe('randomizedParams', () => {
   it('uses the interesting range inside the slider range, −1…1 when none is declared, and skips wired / keyframed / select', () => {
-    const lo = randomizedParams(node(), def, () => 0);
-    const hi = randomizedParams(node(), def, () => 0.999999);
+    const lo = randomizedParams(node(), def, () => 0, FULL);
+    const hi = randomizedParams(node(), def, () => 0.999999, FULL);
     // Radius 0.01–2 lands in 0.12–0.7 (lib/surprise ranges), Count 1–8 in 3–8.
     expect(lo.radius).toBe(0.12); expect(hi.radius).toBe(0.7);
     expect(lo.free).toBe(-1); expect(hi.free).toBe(1);
@@ -37,44 +40,32 @@ describe('randomizedParams', () => {
   it('stays inside the slider range for any draw, and never touches bit masks', () => {
     const masks = { paramDefs: { ...def.paramDefs, bornMask: { label: 'Born', type: 'float', min: 0, max: 511 } } } as unknown as NodeDefinition;
     for (let i = 0; i < 200; i++) {
-      const p = randomizedParams(node(), masks);
+      const p = randomizedParams(node(), masks, Math.random, FULL);
       expect(p.radius as number).toBeGreaterThanOrEqual(0.01); expect(p.radius as number).toBeLessThanOrEqual(2);
       expect('bornMask' in p).toBe(false);
     }
   });
 
   it('follows a typed max and the both-ways setting', () => {
-    expect(randomizedParams(node({ __scMax_radius: 3 }), def, () => 0.999999).radius).toBe(3);
-    expect(randomizedParams(node({ __scMax_radius: 3, __scBidir_radius: true }), def, () => 0).radius).toBe(-3);
+    expect(randomizedParams(node({ __scMax_radius: 3 }), def, () => 0.999999, FULL).radius).toBe(3);
+    expect(randomizedParams(node({ __scMax_radius: 3, __scBidir_radius: true }), def, () => 0, FULL).radius).toBe(-3);
   });
 
   it('keeps whole-number sliders whole', () => {
-    for (let i = 0; i < 20; i++) expect(Number.isInteger(randomizedParams(node(), def).count)).toBe(true);
+    for (let i = 0; i < 20; i++) expect(Number.isInteger(randomizedParams(node(), def, Math.random, FULL).count)).toBe(true);
   });
 
   it('leaves excluded sliders alone but still lists them', () => {
     const n = node({ __randExclude: ['radius', 'count'] });
-    expect(Object.keys(randomizedParams(n, def)).sort()).toEqual(['col', 'free']);
+    expect(Object.keys(randomizedParams(n, def, Math.random, FULL)).sort()).toEqual(['col', 'free']);
     expect(randomizableParams(n, def).map(p => p.key).sort()).toEqual(['col', 'count', 'free', 'radius']);
   });
 
   it('randomizes a whole graph level from a seed, repeatably', () => {
     const nodes: GraphNode[] = [{ id: 'a', type: 'fbm', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: {} }];
-    const a = randomizedGraph(nodes, 99), b = randomizedGraph(nodes, 99), c = randomizedGraph(nodes, 100);
+    const a = randomizedGraph(nodes, 99, FULL), b = randomizedGraph(nodes, 99, FULL), c = randomizedGraph(nodes, 100, FULL);
     expect(a).toEqual(b);
     expect(a.changed).toBeGreaterThan(0);
     expect(c.nodes).not.toEqual(a.nodes);
-  });
-
-  it('strength narrows the change to a window around the current value', () => {
-    // radius 0.01–2, current 1.0, strength 10% → window 0.199 wide centred on 1.0
-    const n = node({ radius: 1.0, __randAmount: 0.1 });
-    const lo = randomizedParams(n, def, () => 0).radius as number;
-    const hi = randomizedParams(n, def, () => 0.999999).radius as number;
-    expect(lo).toBeGreaterThanOrEqual(0.9); expect(hi).toBeLessThanOrEqual(1.1);
-    // near an edge the window shifts to stay inside the range
-    const edge = node({ radius: 1.99, __randAmount: 0.1 });
-    expect(randomizedParams(edge, def, () => 0.999999).radius as number).toBeLessThanOrEqual(2);
-    expect(randomizedParams(edge, def, () => 0).radius as number).toBeGreaterThanOrEqual(1.8);
   });
 });

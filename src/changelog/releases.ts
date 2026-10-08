@@ -39,6 +39,25 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.78',
+    date: '2026-10-08',
+    title: 'Randomise options',
+    highlights: [
+      { area: 'Studio', text: 'Randomise options on the canvas dice: strength, colours, choices, settings on a group face or inside groups, and a seed.' },
+      { area: 'Studio', text: 'Lock any slider (hover it for the lock) or skip a whole node, and Randomise never touches it. Locks are saved with the graph.' },
+      { area: 'Studio', text: 'Focus on what changes the picture: Randomise measures which settings change the image most and moves those more, leaving dead ones alone.' },
+    ],
+  },
+  {
+    id: '2026.10.77',
+    date: '2026-10-08',
+    title: 'Honest GPU timing',
+    highlights: [
+      { area: 'Studio', text: 'Honest GPU timing: the Performance panel shows your shader measured on its own, separate from all GPU work in the frame, plus a timer-floor note on Macs.' },
+      { area: 'Studio', text: 'Hovering the preview no longer redraws the whole shader to read one pixel colour, so the GPU reading stays flat instead of climbing.' },
+    ],
+  },
+  {
     id: '2026.10.76',
     date: '2026-10-08',
     title: 'Simpler Surprise',
