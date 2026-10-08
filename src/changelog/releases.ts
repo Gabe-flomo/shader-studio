@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.98',
+    date: '2026-10-08',
+    title: '2D builder functions',
+    highlights: [
+      { area: 'Studio', text: '2D Scene Builder functions: bend space with a GLSL function (twirl, z², inversion…) or draw a shape from one (flower, spiral, wobbly blob…).', link: { kind: 'doc', path: 'docs/scene-builder-2d.md' } },
+      { area: 'Studio', text: 'Find more pulls functions from your saved code, the Convert examples and the Expression Blocks in the examples; each becomes a Custom Function node.' },
+      { area: 'Studio', text: 'Type new 2d scene in the Do bar to open the 2D Scene Builder.' },
+    ],
+  },
+  {
     id: '2026.10.97',
     date: '2026-10-08',
     title: '2D grid scenes',
