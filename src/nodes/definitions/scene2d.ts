@@ -123,8 +123,8 @@ export const Mirror2DNode: NodeDefinition = {
     axes:    { label: 'Mirror', type: 'select', hint: 'Which lines to fold over: the vertical line (X), the horizontal line (Y) or both.', options: [
       { value: 'x', label: 'Left / right (X)' }, { value: 'y', label: 'Top / bottom (Y)' }, { value: 'xy', label: 'Both (four quarters)' },
     ] },
-    offsetX: { label: 'Offset X', type: 'float', min: -2, max: 2, step: 0.01, hint: 'Where the vertical fold line sits.' },
-    offsetY: { label: 'Offset Y', type: 'float', min: -2, max: 2, step: 0.01, hint: 'Where the horizontal fold line sits.' },
+    offsetX: { label: 'Offset X', type: 'float', min: -2, max: 2, step: 0.01, showWhen: { param: 'axes', value: ['x', 'xy'] }, hint: 'Where the vertical fold line sits.' },
+    offsetY: { label: 'Offset Y', type: 'float', min: -2, max: 2, step: 0.01, showWhen: { param: 'axes', value: ['y', 'xy'] }, hint: 'Where the horizontal fold line sits.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id;
