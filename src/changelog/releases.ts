@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.79',
+    date: '2026-10-08',
+    title: 'Relevant nodes',
+    highlights: [
+      { area: 'Studio', text: 'The Nodes library shows what fits: 3D-only categories fold into Not for this graph in a 2D graph, and come first inside a 3D scene.' },
+      { area: 'Studio', text: 'Fits here: select a node or drag a wire and the library lists nodes that take its output, ranked by how often they follow it. Show all brings everything back.' },
+    ],
+  },
+  {
     id: '2026.10.78',
     date: '2026-10-08',
     title: 'Randomise options',
