@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.96',
+    date: '2026-10-08',
+    title: 'Worked examples',
+    highlights: [
+      { area: 'Studio', text: 'Worked examples: each step of a line\'s step-by-step shows its value with sample inputs and a small bar of its range across the picture.', link: { kind: 'doc', path: 'docs/worked-examples.md' } },
+      { area: 'Studio', text: 'Change the sample values in the With row (angle = 0.5, iTime = 2…) and every step updates.' },
+    ],
+  },
+  {
     id: '2026.10.95',
     date: '2026-10-08',
     title: '2D Scene Builder',
