@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 /**
- * worker.ts — the image model's worker (docs/taste.md "How things look"): MobileCLIP-S0 through
+ * worker.ts — the image model's worker (docs/image-model.md): MobileCLIP-S0 through
  * Transformers.js, off the main thread so the UI never waits on it.
  *
  * Messages in:  { type: 'load', id, cfg }   load the tokenizer, processor and both towers (WebGPU, else WASM)
