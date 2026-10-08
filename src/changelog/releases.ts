@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.80',
+    date: '2026-10-08',
+    title: 'Explain more (experimental)',
+    highlights: [
+      { area: 'Studio', text: 'Experimental: an optional local model (1.4 GB, on your device) adds Explain more under code explanations, plus Explain this node and Explain this block.', link: { kind: 'doc', path: 'docs/explain-model.md' } },
+      { area: 'Studio', text: 'Its answers are labelled and can be wrong; they sit under the built-in explanation with the facts it was given. Download or remove it in Settings.' },
+    ],
+  },
+  {
     id: '2026.10.79',
     date: '2026-10-08',
     title: 'Relevant nodes',
