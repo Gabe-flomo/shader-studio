@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.76',
+    date: '2026-10-08',
+    title: 'Simpler Surprise',
+    highlights: [
+      { area: 'Studio', text: 'Do bar Surprise writes a random line again, leaning a little toward the shapes, steps and palettes your graphs use. Step through lines with the arrows.', link: { kind: 'doc', path: 'docs/surprise.md' } },
+      { area: 'Studio', text: 'Retired experiments: Evolve, Deep, ratings and the Taste page are gone. The image model stays, now under Settings, for future help features.', link: { kind: 'doc', path: 'docs/retired-experiments.md' } },
+    ],
+  },
+  {
     id: '2026.10.75',
     date: '2026-10-07',
     title: 'Taste by look',
