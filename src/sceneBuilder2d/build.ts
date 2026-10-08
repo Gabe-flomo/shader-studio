@@ -25,6 +25,7 @@ import {
   type DupSpec, type Item, type MotionSpec, type Scene2D, type ShapeSpec, type SpaceOp, type Vec2, type Vec3,
 } from './spec';
 import { colourText } from '../lang/colours';
+import { GRID_LABELS, gridProgram, type GridSpec } from './grid';
 
 export { ROLE_KEY };
 /** On the UV node: the scene it was built from (and, once applied, fingerprints of what was built). */
@@ -60,13 +61,13 @@ interface B {
 }
 
 /** An Expression Block with typed inputs (wired, or a float slider) and a float or vec3 result. */
-function expr(c: Ctx, role: string, label: string, inputs: Array<{ name: string; type: 'float' | 'vec2' | 'vec3'; from?: Ref; slider?: { value: number; min: number; max: number } }>, result: string, note: string, outputType: 'vec3' | 'float' = 'vec3'): GraphNode {
+function expr(c: Ctx, role: string, label: string, inputs: Array<{ name: string; type: 'float' | 'vec2' | 'vec3'; from?: Ref; slider?: { value: number; min: number; max: number } }>, result: string, note: string, outputType: 'vec3' | 'float' = 'vec3', lines: Array<{ lhs: string; op: string; rhs: string }> = []): GraphNode {
   const node: GraphNode = {
     id: c.idFor(role), type: 'exprNode', position: { x: 0, y: 0 },
     inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type, label: i.name, ...(i.from ? { connection: { ...i.from } } : {}) } as InputSocket])),
     outputs: { result: { type: outputType, label: 'Result' } },
     params: {
-      label, outputType, lines: [], result, expr: result,
+      label, outputType, lines, result, expr: result,
       inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: i.slider ? { min: i.slider.min, max: i.slider.max } : null })),
       ...Object.fromEntries(inputs.filter(i => i.slider).map(i => [i.name, i.slider!.value])),
       __comment: note, [ROLE_KEY]: role,
@@ -363,6 +364,7 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     acc = ref(mk(c, 'sdfFill', `${it.id}:fill`, {}, { d, fillColor: fill, background: acc },
       `Paints ${name} over what is behind it: inside the distance is negative, so the fill colour shows there; the edge is anti-aliased by one pixel.`), 'result');
   }
+  if (spec.grid) acc = emitGrid(b, spec.grid, pos, acc, anim);
   let final = acc;
   if (L.tone !== 'none') final = ref(mk(c, 'toneMap', 'tone', { mode: L.tone }, { color: final }, `Squeezes the bright, linear light into colours a screen can show (${L.tone.toUpperCase()}) without clipping highlights.`), 'color');
   const P = L.post;
@@ -378,6 +380,52 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
   tidy(c.nodes, 0, 0);
   // The UV node carries the scene; it is the one place its Recipe chip shows.
   return { nodes: c.nodes, final, sceneId: uv.id, warnings: c.warnings };
+}
+
+/** The grid (grid.ts): one Expression Block for the cells, then colour, glow and fill over what is behind. */
+function emitGrid(b: B, g: GridSpec, pos: Ref, behind: Ref, anim: Ref | null): Ref {
+  const { c, spec } = b;
+  const L = spec.look;
+  const prog = gridProgram(g);
+  const shapes = g.shapes.join(', ');
+  const inputs: Parameters<typeof expr>[3] = [
+    { name: 'uv', type: 'vec2', from: pos },
+    { name: 't', type: 'float', from: b.getTime() },
+  ];
+  if (prog.usesMouse) inputs.push({ name: 'mouse', type: 'vec2', from: ref(mk(c, 'mouse', 'grid:mouse', {}, {}, 'The mouse position, in the same space as UV: one of the grid\'s ripples starts here, so the waves follow the pointer.'), 'uv') });
+  inputs.push(
+    { name: 'size', type: 'float', slider: { value: g.size, min: 0.05, max: 1.5 } },
+    { name: 'amount', type: 'float', slider: { value: g.amount, min: 0, max: 1.5 } },
+    { name: 'freq', type: 'float', slider: { value: g.freq, min: 0, max: 40 } },
+    { name: 'speed', type: 'float', slider: { value: g.speed, min: -3, max: 3 } },
+  );
+  const rip = g.ripples.map(r => (r.from === 'point' ? `the point (${r.at.map(fmt).join(', ')})` : GRID_LABELS.from[r.from].toLowerCase())).join(' and ');
+  const ge = expr(c, 'grid', 'Grid', inputs, prog.result,
+    `The grid: ${g.cols} × ${g.rows} cells across ±${fmt(g.span)}, each holding a ${shapes.includes(',') ? `shape (${shapes}, given out ${GRID_LABELS.assign[g.assign].toLowerCase()})` : g.shapes[0]}. ` +
+    `Line by line: cs is a cell's size; id which cell this point is in (column, row); inGrid is 1 inside the grid; cc the cell's centre and q the point measured from it. ` +
+    `w is the ripple: a sine of the distance from ${rip} to the cell's centre, moving with time (freq rings per unit, speed cycles a second), averaged, −1..1. ` +
+    `It changes ${g.target === 'none' ? 'nothing but the colour' : GRID_LABELS.target[g.target].toLowerCase()} by amount. s is the shape's size (size × half a cell); k which shape the cell gets; d0… each shape's distance; d the one the cell uses (0 inside the grid's edge, far outside it). ` +
+    'The result packs three numbers: x the distance, y the ripple 0..1, z the shape (or a random per-cell value) 0..1. The sliders are live.',
+    'vec3', prog.lines);
+  const sp = mk(c, 'splitVec3', 'grid:split', {}, { v: ref(ge, 'result') }, 'Splits the grid\'s three numbers: X the distance to the cell\'s shape, Y the ripple (0..1), Z the shape index or per-cell value (0..1).');
+  const d = ref(sp, 'x');
+  let fill: Ref;
+  if (g.colourBy === 'ripple' || g.colourBy === 'cell') {
+    fill = paletteNode(c, 'grid:palette', L.colour.palette, ref(sp, g.colourBy === 'ripple' ? 'y' : 'z'), anim, L.colour.scale, L.colour.speed,
+      g.colourBy === 'ripple' ? 'Colours each cell by the ripple passing through it, so the waves show as colour.' : 'Colours each cell with its own random value through a palette.');
+  } else {
+    const c1 = mk(c, 'colorPicker', 'grid:color', { color: [...g.colour] }, {}, `The grid's first colour, ${col(g.colour)}: cells with the first shape.`);
+    const c2 = mk(c, 'colorPicker', 'grid:color2', { color: [...g.colour2] }, {}, `The grid's second colour, ${col(g.colour2)}: cells with the last shape.`);
+    fill = ref(expr(c, 'grid:shade', 'Grid colour', [{ name: 'a', type: 'vec3', from: ref(c1, 'rgb') }, { name: 'b', type: 'vec3', from: ref(c2, 'rgb') }, { name: 'k', type: 'float', from: ref(sp, 'z') }],
+      'mix(a, b, k)', 'Each cell\'s colour by its shape: the first colour for the first shape, the second for the last, blended between for a morph.'), 'result');
+  }
+  let acc = behind;
+  if (L.glow.mode === 'all' || (g.glow && L.glow.mode !== 'off')) {
+    const gl = mk(c, 'glowLayer', 'grid:glow', { intensity: L.glow.amount, power: L.glow.falloff }, { d, color: fill },
+      `The grid's glow: its colour × (${fmt(L.glow.amount)} ÷ distance) ^ ${fmt(L.glow.falloff)}, added to what is behind.`);
+    acc = ref(mk(c, 'addColor', 'grid:addglow', {}, { a: acc, b: ref(gl, 'result') }, 'Adds the grid\'s glow to what is behind it.'), 'result');
+  }
+  return ref(mk(c, 'sdfFill', 'grid:fill', {}, { d, fillColor: fill, background: acc }, 'Paints the grid\'s shapes over what is behind them.'), 'result');
 }
 
 function emitOutput(b: B, show: 'distance' | 'mask' | 'space', palette: string | undefined, dists: Ref[], pos: Ref, picture: Ref): Ref {

@@ -8,6 +8,8 @@ export const SCENE_BUILDER_2D_EXAMPLE_ROWS: Array<{ key: string; template: strin
   { key: 'sb2Kaleidoscope', template: 'kaleidoscope', label: '2D: Scene Builder · Kaleidoscope of glowing rings' },
   { key: 'sb2Orbits', template: 'orbits', label: '2D: Scene Builder · Orbiting shapes' },
   { key: 'sb2RingOfRings', template: 'ringOfRings', label: '2D: Scene Builder · A ring of rings' },
+  { key: 'sb2RippleGrid', template: 'rippleGrid', label: '2D: Scene Builder · Morphing ripple grid' },
+  { key: 'sb2MouseGrid', template: 'mouseGrid', label: '2D: Scene Builder · Ripples that follow the mouse' },
 ];
 
 export const SCENE_BUILDER_2D_EXAMPLE_KEYS = SCENE_BUILDER_2D_EXAMPLE_ROWS.map(r => r.key);

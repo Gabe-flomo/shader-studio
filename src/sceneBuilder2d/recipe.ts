@@ -25,6 +25,7 @@ import type { Arg as AstArg, Item as AstItem, Modifier } from '../lang/ast';
 import { COLOUR_TABLE, colourText } from '../lang/colours';
 import { suggest } from '../lang/fuzzy';
 import { PALETTE_BY_KEY, PALETTES } from '../sceneBuilder/output';
+import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, printGrid, type GridShape, type GridSpec } from './grid';
 import type { RecipeError } from '../sceneBuilder/recipe';
 import {
   COLOUR_BYS, DEFAULT_COLOR, DEFAULT_LOOK, MAX_DUP, MAX_LEVELS, MOTIONS, MOTION_BY_KIND, SHAPES, SHAPE_BY_KIND, SHOW_WORDS, SPACES, SPACE_BY_KIND, TONE_MODES,
@@ -53,7 +54,7 @@ export const DEFAULT_SMOOTH_K = 0.1;
 const SHAPE_WORDS: Record<string, string> = Object.fromEntries(SHAPES.flatMap(s => [[s.kind, s.kind], ...s.aliases.map(a => [a, s.kind])]));
 const SPACE_WORDS: Record<string, string> = Object.fromEntries(SPACES.flatMap(s => [[s.kind, s.kind], ...s.aliases.map(a => [a, s.kind])]));
 const MOTION_WORDS = [...MOTIONS.map(m => m.kind), 'ring'];
-const LOOK_WORDS = ['glow', 'colour', 'color', 'tone', 'tone-map', 'tonemap', 'background', 'bg', 'bloom', 'vignette', 'grain', 'scanlines', 'output', 'show'];
+const LOOK_WORDS = ['grid', 'glow', 'colour', 'color', 'tone', 'tone-map', 'tonemap', 'background', 'bg', 'bloom', 'vignette', 'grain', 'scanlines', 'output', 'show'];
 const CLAUSE_WORDS = [...Object.keys(SHAPE_WORDS), ...Object.keys(OP_WORDS), ...Object.keys(SPACE_WORDS), ...LOOK_WORDS];
 
 export const round = (n: number) => Math.round(n * 10000) / 10000;
@@ -128,11 +129,11 @@ class Parser {
 
   // ── Space ──
 
-  space(t: { at: number; end: number }, kind: string): SpaceOp {
+  space(t: { at: number; end: number }, kind: string, given?: AstArg[]): SpaceOp {
     const def: SpaceDef = SPACE_BY_KIND[kind];
     const op = newSpaceOp(kind, `p${++this.ids.p}`);
     let pos = 0;
-    for (const a of this.c.args([])) {
+    for (const a of given ?? this.c.args([])) {
       const key = a.key?.toLowerCase() ?? null;
       if (a.op !== '=') { this.fail(a, `${a.key}${a.op} changes a value by a factor: in a recipe, write ${a.key}=… .`); continue; }
       if (!key && def.select) {
@@ -299,6 +300,15 @@ class Parser {
       if (OP_WORDS[w] || SHAPE_WORDS[w]) {
         const it = this.item();
         if (it) scene.layers.push(it);
+      } else if (w === 'grid') {
+        // `grid 12 shape=…` is the cell grid; `grid 0.5` (a cell size) is still Tile's other name.
+        this.c.next();
+        const args = this.c.args([]);
+        const first = args.find(a => !a.key);
+        const isCells = args.some(a => a.key && !['cell'].includes(a.key.toLowerCase()))
+          || (!!first && first.value.k === 'num' && Number.isInteger(first.value.v) && first.value.v >= 2);
+        if (isCells || !args.length) this.grid(scene, args);
+        else scene.space.push(this.space(t, SPACE_WORDS[w], args));
       } else if (SPACE_WORDS[w]) {
         this.c.next();
         scene.space.push(this.space(t, SPACE_WORDS[w]));
@@ -327,7 +337,57 @@ class Parser {
     return { scene, errors: this.errors, warnings: this.warnings };
   }
 
+  /** `grid 12 [rows] shape=… assign=… size=… ripple=… freq=… speed=… target=… amount=… by=… color=… color2=… glow=off` */
+  private grid(scene: Scene2D, args: AstArg[]) {
+    const g = defaultGrid();
+    const shapes: GridShape[] = [];
+    const ripples: GridSpec['ripples'] = [];
+    let pos = 0;
+    const pick = <T extends string>(a: AstArg, list: readonly T[], what: string): T | null => {
+      const w = this.word(a);
+      if (w && (list as readonly string[]).includes(w)) return w as T;
+      this.fail(a, `${what} is one of ${list.join(', ')}.`);
+      return null;
+    };
+    for (const a of args) {
+      const key = a.key?.toLowerCase() ?? null;
+      if (!key) {
+        const n = this.num(a, pos === 0 ? 'Columns' : 'Rows');
+        if (n !== null) { if (pos === 0) { g.cols = g.rows = Math.max(1, Math.round(n)); } else g.rows = Math.max(1, Math.round(n)); }
+        pos++;
+        continue;
+      }
+      switch (key) {
+        case 'cols': case 'columns': { const n = this.num(a, key); if (n !== null) g.cols = Math.max(1, Math.round(n)); break; }
+        case 'rows': { const n = this.num(a, key); if (n !== null) g.rows = Math.max(1, Math.round(n)); break; }
+        case 'span': case 'size': case 'freq': case 'speed': case 'amount': case 'every': {
+          const n = this.num(a, key);
+          if (n !== null) (g as unknown as Record<string, number>)[key] = n;
+          break;
+        }
+        case 'shape': case 'shapes': { const v = pick(a, GRID_SHAPES, 'A grid shape'); if (v && shapes.length < 3) shapes.push(v); break; }
+        case 'assign': { const v = pick(a, GRID_ASSIGNS, 'assign'); if (v) g.assign = v; break; }
+        case 'target': { const v = pick(a, GRID_TARGETS, 'target'); if (v) g.target = v; break; }
+        case 'by': { const v = pick(a, GRID_COLOUR_BYS, 'by'); if (v) g.colourBy = v; break; }
+        case 'ripple': {
+          if (a.value.k === 'vec' || a.value.k === 'num') { const at = this.vec2(a, 'ripple'); if (at) ripples.push({ from: 'point', at }); break; }
+          const v = pick(a, RIPPLE_FROMS.filter(x => x !== 'point'), 'ripple');
+          if (v) ripples.push({ from: v, at: [0, 0] });
+          break;
+        }
+        case 'color': case 'colour': { const c = this.colour(a); if (c) g.colour = c; break; }
+        case 'color2': case 'colour2': { const c = this.colour(a); if (c) g.colour2 = c; break; }
+        case 'glow': { const w = this.word(a); g.glow = !(w === 'off' || w === 'no' || w === 'false'); break; }
+        default: this.fail(a, `grid has no setting “${a.key}”.`);
+      }
+    }
+    if (shapes.length) g.shapes = shapes;
+    if (ripples.length) g.ripples = ripples;
+    scene.grid = g;
+  }
+
   private look(scene: Scene2D, w: string, t: { at: number; end: number }, args: AstArg[]) {
+    if (w === 'grid') { this.grid(scene, args); return; }
     const L = scene.look;
     const first = args[0];
     const firstNum = first && !first.key && first.value.k === 'num' ? first.value.v : null;
@@ -500,6 +560,7 @@ export function printRecipe2D(scene: Scene2D, opts: { multiline?: boolean; prett
   const clauses: string[] = [];
   clauses.push(...scene.space.map(printSpace));
   clauses.push(...scene.layers.map(it => printItem(it, ind)));
+  if (scene.grid) clauses.push(printGrid(scene.grid, colourText));
   // Look.
   if (L.glow.mode !== 'off') {
     const g = ['glow'];

@@ -16,6 +16,8 @@
  * Pure data: no React, no store.
  */
 
+import type { GridSpec } from './grid';
+
 export type Vec2 = [number, number];
 export type Vec3 = [number, number, number];
 
@@ -263,6 +265,8 @@ export interface OutputSpec { show: Show2D; /** Colour the number through this p
 export interface Scene2D {
   space: SpaceOp[];
   layers: Item[];
+  /** A grid of cells drawn over the layers (grid.ts), or none. */
+  grid?: GridSpec | null;
   look: LookSpec;
   output?: OutputSpec;
 }
@@ -435,5 +439,5 @@ export function canonicalScene(spec: Scene2D): Scene2D {
 
 /** Does the scene have anything to draw? */
 export function hasShapes(spec: Scene2D): boolean {
-  return allShapes(spec).length > 0;
+  return allShapes(spec).length > 0 || !!spec.grid;
 }

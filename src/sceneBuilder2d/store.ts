@@ -6,8 +6,8 @@
 import { create } from 'zustand';
 import { starterScene, type Scene2D } from './spec';
 
-export type Builder2DTab = 'space' | 'shapes' | 'look' | 'output' | 'recipe' | 'templates';
-export const BUILDER_2D_TABS: Builder2DTab[] = ['space', 'shapes', 'look', 'output', 'recipe', 'templates'];
+export type Builder2DTab = 'space' | 'shapes' | 'grid' | 'look' | 'output' | 'recipe' | 'templates';
+export const BUILDER_2D_TABS: Builder2DTab[] = ['space', 'shapes', 'grid', 'look', 'output', 'recipe', 'templates'];
 
 interface Builder2DState {
   open: boolean;

@@ -34,6 +34,16 @@ export const TEMPLATES_2D: Template2D[] = [
     recipe: 'polar-repeat 6 · mirror x · smooth-union(circle r=0.12 at=(0.35,0.1), rounded-box size=(0.2,0.05) round=0.04 at=(0.55,0.2) rot=30) k=0.08 color=pink · glow 0.006 · tone aces · background night',
   },
   {
+    key: 'rippleGrid', label: 'Morphing ripple grid',
+    blurb: 'A grid of cells whose shapes melt from circles into squares as ripples from the four corners pass through, coloured by the wave.',
+    recipe: 'grid 14 shape=circle shape=box ripple=corners freq=9 speed=0.35 target=morph amount=0.9 · glow 0.006 · tone aces · bloom 0.4 · background night',
+  },
+  {
+    key: 'mouseGrid', label: 'Ripples that follow the mouse',
+    blurb: 'Diamonds in a checker with rings, swelling as waves spread from the middle and from wherever the mouse is.',
+    recipe: 'grid 16 shape=diamond shape=ring assign=checker ripple=centre ripple=mouse freq=10 speed=0.5 target=size amount=0.7 · glow 0.005 · tone aces · background navy',
+  },
+  {
     key: 'pixel', label: 'Pixel hearts',
     blurb: 'Hearts that pulse and bob, seen through a coarse pixel grid.',
     recipe: 'pixelate 0.05 · heart size=0.25 at=(-0.4,0) color=red @pulse(0.2 speed=0.5) · heart size=0.18 at=(0.35,0.1) color=pink @bob(0.12 speed=0.4) · background navy',

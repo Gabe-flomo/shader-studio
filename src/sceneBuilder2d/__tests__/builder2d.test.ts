@@ -39,7 +39,7 @@ describe('the 2D Scene Builder window', () => {
 
   it('builds the 2D: Scene Builder examples, each editable in the builder', () => {
     const ex = buildSceneBuilder2DExamples();
-    expect(Object.keys(ex)).toHaveLength(3);
+    expect(Object.keys(ex)).toHaveLength(5);
     for (const [k, g] of Object.entries(ex)) {
       expect(compileGraph({ nodes: g.nodes }).success, k).toBe(true);
       const uv = g.nodes.find(n => n.params.sceneBuilder2D);
