@@ -26,3 +26,6 @@ dist-ssr
 # Claude Code / internal
 .claude
 NODE_SYSTEM_IMPLEMENTATION_PLAN.md
+
+# The image model for the desktop bundle (tools/fetch-image-model.mjs)
+.cache

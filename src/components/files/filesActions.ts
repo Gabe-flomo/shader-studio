@@ -59,6 +59,10 @@ export function syncApp(keys: string[]): void {
         },
       }));
     }
+    // The image model's setting (docs/taste.md "How things look") is read once into its store.
+    if (any(k => k === 'shader-studio:settings:useImageModel' || k === 'shader-studio:settings:imageModelDownloaded')) {
+      void import('../../imageModel/client').then(({ refreshImageModelSettings }) => refreshImageModelSettings());
+    }
     const open = useNodeGraphStore.getState().currentGraph;
     if (open && localStorage.getItem(GRAPH_PREFIX + open.name) == null) useNodeGraphStore.setState({ currentGraph: null });
   } catch (e) { console.error('[files] refreshing the app after a change', e); }

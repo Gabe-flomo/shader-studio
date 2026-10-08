@@ -19,6 +19,7 @@ import { Size } from './fileUi';
 import { cardStyle } from './fileUiShared';
 import { StorageLimitControl } from './StorageLimitControl';
 import { AutosaveSettings } from './AutosaveSettings';
+import { ImageModelSetting } from '../taste/TasteLooks';
 import { TrackerModelsSettings } from './TrackerModelsSettings';
 import { openTastePage } from '../taste/tasteNav';
 import { useStorageLimit } from './useStorageLimit';
@@ -96,6 +97,10 @@ export function AppSettingsView({ inv, node, compact }: { inv: Inventory; node: 
               <span style={{ fontSize: 11.5, color: tk.text.muted }}>What Surprise, Deep and Evolve learned you like, where each preference came from, and your own steering: exploration, how strongly taste leans, the Do bar’s nudge, pins and bans.</span>
             </div>
             <Button size="sm" icon="thumbUp" onClick={openTastePage} data-open-taste-page>Open Your taste</Button>
+          </div>
+          <div data-setting="shader-studio:settings:useImageModel" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: compact ? '9px 6px 9px 12px' : '8px 10px 8px 14px', borderTop: `1px solid ${tk.border.subtle}` }}>
+            <span style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.primary }}>Image model</span>
+            <ImageModelSetting compact />
           </div>
         </div>
       </section>

@@ -9,6 +9,9 @@
  *    lower weight for the implicit ones.
  *  - A per-stage table: P(choice | stage), smoothed, from what was picked and liked ("you usually put an
  *    Expression Block in the space stage").
+ *  - The look (look.ts): when the image model is on, a graph's picture rides along as `emb:*` features.
+ *    Those never enter the linear weights; they move liked / disliked look centroids instead, and the
+ *    score adds the look part: score = w·x + look(x).
  *  - Ranking keeps ~25% exploration: Thompson-ish noise on uncertain features, and an ε share of slots
  *    filled at random, so it never collapses onto one style.
  *
@@ -17,6 +20,7 @@
 import type { Rng } from '../lib/surprise/rng';
 import { FAMILY_BY_ID, TECHNIQUE_BY_ID, type FamilyId } from '../patterns/catalogue';
 import type { Features } from './features';
+import { embOf, emptyLook, imageEmbedderId, isEmbKey, lookLearn, lookScore, type LookState } from './look';
 
 /** 2: the signal log and your steering are stored alongside the model (store.ts migrates version 1). */
 export const TASTE_VERSION = 2;
@@ -40,8 +44,12 @@ export interface TasteModel {
   signals: Partial<Record<SignalKind, number>>;
   /** Times each saved graph was opened (for "opened often"). */
   opens: Record<string, number>;
-  /** The image embedder whose emb:* weights these are, if any. */
+  /** The image embedder whose look this is, if any (a different one resets only the look). */
   embedder?: string;
+  /** The look: liked / disliked centroids of projected image embeddings (look.ts). */
+  look?: LookState;
+  /** Set only on the generators' model (steering.ts `effectiveModel`): the lean on the look part. Never stored. */
+  lookScale?: number;
   /**
    * Set only on the model the generators use (steering.ts `effectiveModel`): how many steering features
    * sit on top of the learned weights. Never stored.
@@ -63,10 +71,21 @@ export function emptyModel(): TasteModel {
 
 const sigmoid = (z: number) => 1 / (1 + Math.exp(-z));
 
-export function tasteScore(m: TasteModel, f: Features): number {
+/** The linear part: learned weights · features (the look's emb:* keys never carry weights). */
+export function linearScore(m: TasteModel, f: Features): number {
   let s = 0;
-  for (const k in f) s += (m.w[k] ?? 0) * f[k];
+  for (const k in f) if (!isEmbKey(k)) s += (m.w[k] ?? 0) * f[k];
   return s;
+}
+
+/** The look part: how close the graph's picture is to the liked looks (0 without a picture, or the model off). */
+export function lookPart(m: TasteModel, f: Features): number {
+  if (!m.look || m.look.embedder !== imageEmbedderId()) return 0;
+  return (m.lookScale ?? 1) * lookScore(m.look, embOf(f));
+}
+
+export function tasteScore(m: TasteModel, f: Features): number {
+  return linearScore(m, f) + lookPart(m, f);
 }
 
 /** P(a is preferred over b). */
@@ -74,12 +93,21 @@ export function preferProb(m: TasteModel, a: Features, b: Features): number {
   return sigmoid(tasteScore(m, a) - tasteScore(m, b));
 }
 
+/** Learn the look of `f` (when it has one and an embedder is registered): liked (value > 0) or disliked. */
+function learnLook(m: TasteModel, f: Features, value: number, weight: number): TasteModel {
+  const id = imageEmbedderId();
+  const x = id ? embOf(f) : null;
+  if (!x || !id || !value || !weight) return m;
+  const base = m.look && m.look.embedder === id && m.look.dims === x.length ? m.look : emptyLook(id, x.length);
+  return { ...m, embedder: id, look: lookLearn(base, x, value, weight) };
+}
+
 /** One gradient step on `x` with error `err` (target − prediction), scaled by `rate`; L2 on the touched weights. */
 function step(m: TasteModel, x: Features, err: number, rate: number): TasteModel {
   const w = { ...m.w }, n = { ...m.n };
   for (const k in x) {
     const v = x[k];
-    if (!v) continue;
+    if (!v || isEmbKey(k)) continue;
     const cur = w[k] ?? 0;
     const next = cur + rate * (err * v - L2 * cur);
     if (Math.abs(next) < 1e-6) delete w[k]; else w[k] = next;
@@ -119,8 +147,10 @@ const bump = (m: TasteModel, kind: SignalKind): TasteModel => ({ ...m, signals: 
 /** A pick: `winner` was preferred over `loser` (Bradley–Terry step). */
 export function learnPair(m: TasteModel, winner: Features, loser: Features, weight = 1, kind: SignalKind | null = 'pick'): TasteModel {
   const d = diff(winner, loser);
-  const p = sigmoid(tasteScore(m, d));
+  const p = sigmoid(linearScore(m, d));
   let out = step(m, d, 1 - p, LEARNING_RATE * weight);
+  // The look: the winner's joins the liked centroid, the loser's (more lightly) the disliked one.
+  out = learnLook(learnLook(out, winner, 1, weight), loser, -1, 0.5 * weight);
   out = stageCredit(out, winner, weight);
   // What the loser had and the winner didn't: a little less likely.
   const lost: Features = {};
@@ -133,8 +163,9 @@ export function learnPair(m: TasteModel, winner: Features, loser: Features, weig
 export function learnRating(m: TasteModel, f: Features, value: number, weight = 1, kind: SignalKind = 'rating'): TasteModel {
   const v = Math.max(-1, Math.min(1, value));
   const target = (v + 1) / 2;
-  const p = sigmoid(tasteScore(m, f));
+  const p = sigmoid(linearScore(m, f));
   let out = step(m, f, target - p, LEARNING_RATE * weight);
+  out = learnLook(out, f, v, weight);
   out = stageCredit(out, f, v > 0 ? v * weight : v * weight * 0.5);
   return bump(out, kind);
 }
@@ -238,8 +269,9 @@ export function nodeLean(m: TasteModel, bucket: string): number {
 
 /** Thompson-ish: the score with noise on features the model is unsure of. */
 export function sampledScore(m: TasteModel, f: Features, rng: Rng, tau = 0.5): number {
-  let s = 0;
+  let s = lookPart(m, f);
   for (const k in f) {
+    if (isEmbKey(k)) continue;
     const sd = tau / Math.sqrt(1 + (m.n[k] ?? 0));
     const z = Math.sqrt(-2 * Math.log(Math.max(1e-9, rng.next()))) * Math.cos(2 * Math.PI * rng.next());
     s += ((m.w[k] ?? 0) + sd * z) * f[k];

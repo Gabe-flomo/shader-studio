@@ -19,6 +19,7 @@ import { FAMILIES, TECHNIQUES } from '../../patterns/catalogue';
 import { Card, Pill } from './tasteUi';
 import { PinButtons } from './TasteFeatureRow';
 import { togglePin } from './tasteWords';
+import { imageModelUsable, useImageModel } from '../../imageModel/client';
 
 const EXAMPLE = 'I like dark minimal pieces with lots of motion, no fBm, more code';
 
@@ -28,7 +29,8 @@ export function TasteSteering() {
   const model = useTaste(s => s.model);
   const [text, setText] = useState(steering.context);
   const [pick, setPick] = useState('');
-  const setContext = (t: string) => { setText(t); updateSteering(s => withContext(s, t)); };
+  const byLook = useImageModel(imageModelUsable);
+  const setContext = (t: string) => { setText(t); updateSteering(s => withContext(s, t, { byLook })); };
   const editChip = (c: Chip, edit: 'flip' | 'remove') => updateSteering(s => ({
     ...s, chips: s.chips.map(x => (x.id === c.id && x.sign === c.sign ? (edit === 'flip' ? { ...x, flipped: !x.flipped, off: false } : { ...x, off: !x.off }) : x)),
   }));
@@ -47,19 +49,21 @@ export function TasteSteering() {
         <span style={label}>Tell it what you like</span>
         <textarea value={text} onChange={e => setContext(e.target.value)} rows={2} placeholder={EXAMPLE} aria-label="Your taste in your own words" data-taste-context
           style={{ resize: 'vertical', minHeight: 48, padding: '8px 10px', borderRadius: radius.md, border: `1px solid ${tk.border.default}`, background: tk.bg.subtle, color: tk.text.primary, font: `13px/1.45 ${fontFamily.ui}` }} />
-        <span style={hint}>Read on this device with Playfield’s own words (techniques, families, Do bar words, settings, look words like dark / minimal / moving / vivid). “no”, “less”, “without” flip the next phrase. It understood:</span>
+        <span style={hint}>Read on this device with Playfield’s own words (techniques, families, Do bar words, settings, look words like dark / minimal / moving / vivid). “no”, “less”, “without” flip the next phrase.{byLook ? ' Other words (“underwater”, “stained glass”) go to the image model: chips marked by look score candidates by how much their picture matches the words.' : ''} It understood:</span>
         <div data-taste-chips style={{ display: 'flex', gap: 6, flexWrap: 'wrap', minHeight: 24 }}>
           {!steering.chips.length && <span style={{ ...hint, color: tk.text.faint }}>nothing yet</span>}
           {steering.chips.map(c => {
             // Green when you want what the label says, red when you want less of it (grey when removed).
             const sg = c.off ? 0 : chipWanted(c) ? 1 : -1;
             return (
-              <span key={`${c.id}:${c.sign}`} data-chip={c.id} data-chip-sign={chipSign(c)} title={`“${c.phrase}” → ${c.features.join(', ')}`}
+              <span key={`${c.id}:${c.sign}`} data-chip={c.id} data-chip-sign={chipSign(c)} {...(c.look ? { 'data-chip-look': c.look } : {})} title={c.look ? `“${c.phrase}” → by look: the image model scores how much a candidate’s picture matches “${c.look}”` : `“${c.phrase}” → ${c.features.join(', ')}`}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 4px 2px 9px', borderRadius: 999, font: `500 11.5px ${fontFamily.ui}`,
                   background: sg > 0 ? `color-mix(in srgb, ${tk.status.success} 13%, transparent)` : sg < 0 ? `color-mix(in srgb, ${tk.status.danger} 13%, transparent)` : tk.bg.field,
                   color: sg > 0 ? tk.status.success : sg < 0 ? tk.status.danger : tk.text.faint, textDecoration: c.off ? 'line-through' : 'none' }}>
                 {sg >= 0 ? (c.off ? '' : '+ ') : '− '}{c.label}
-                <span style={{ color: tk.text.faint, fontWeight: 400 }}>“{c.phrase}”</span>
+                {c.look
+                  ? <span style={{ font: `600 9.5px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', padding: '0 5px', borderRadius: 999, background: tk.bg.field, color: tk.accent.base }}>by look</span>
+                  : <span style={{ color: tk.text.faint, fontWeight: 400 }}>“{c.phrase}”</span>}
                 <button type="button" title="Flip: like ↔ avoid" aria-label={`Flip ${c.label}`} onClick={() => editChip(c, 'flip')} style={chipBtn(tk)}><Icon name="bidir" size={11} /></button>
                 <button type="button" title={c.off ? 'Use it again' : 'Remove it'} aria-label={`${c.off ? 'Restore' : 'Remove'} ${c.label}`} onClick={() => editChip(c, 'remove')} style={chipBtn(tk)}><Icon name={c.off ? 'undo' : 'close'} size={11} /></button>
               </span>

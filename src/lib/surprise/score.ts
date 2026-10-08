@@ -125,6 +125,22 @@ export function scoreFrames(frames: readonly Frame[], recent: readonly Signature
   return { score, metrics, why, signature, degenerate: null };
 }
 
+/**
+ * The same score with another novelty (e.g. the image model's: distance to the last few kept looks, mixed
+ * with the histogram's). The score moves by novelty's weight; the why-chips are made again.
+ */
+export function withNovelty(sc: Score, novelty: number, hasRecent = true): Score {
+  if (sc.degenerate) return sc;
+  const n = clamp01(novelty);
+  const metrics = { ...sc.metrics, novelty: n };
+  const score = sc.score + WEIGHTS.novelty * (n - sc.metrics.novelty);
+  const why = (Object.keys(WHY) as Array<keyof Metrics>)
+    .filter(k => metrics[k] >= WHY[k][0] && (k !== 'novelty' || hasRecent))
+    .sort((a, b) => WEIGHTS[b] * metrics[b] - WEIGHTS[a] * metrics[a])
+    .slice(0, 3).map(k => WHY[k][1]);
+  return { ...sc, score, metrics, why };
+}
+
 /** The best `n` of some scored candidates, best first (degenerate ones never). Stable on ties. */
 export function bestOf<T extends { score: Score }>(items: readonly T[], n: number): T[] {
   return items.map((x, i) => ({ x, i })).filter(({ x }) => !x.score.degenerate)

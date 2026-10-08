@@ -46,6 +46,8 @@ export interface LogEntry {
   d: Record<string, number>;
   /** The change to the stage table, `stage=choice` → evidence. */
   st?: Record<string, number>;
+  /** The look (look.ts): evidence added to the liked and disliked look centroids. Not a weight, so not in `d`. */
+  lk?: { like: number; dislike: number };
 }
 
 export interface SignalLog {
@@ -96,7 +98,7 @@ export function stageDelta(before: Record<string, Record<string, number>>, after
  * Append an entry made of the exact weight change `delta`: listed rounded, the rounding carried. The oldest
  * entries past `cap` fold into `carried`.
  */
-export function appendLog(log: SignalLog, e: { at: number; kind: SignalKind; ref?: SignalRef; delta: Record<string, number>; st?: Record<string, number> }, cap = LOG_CAP): SignalLog {
+export function appendLog(log: SignalLog, e: { at: number; kind: SignalKind; ref?: SignalRef; delta: Record<string, number>; st?: Record<string, number>; lk?: { like: number; dislike: number } }, cap = LOG_CAP): SignalLog {
   const carried = { ...log.carried };
   const d: Record<string, number> = {};
   for (const [k, v] of Object.entries(e.delta)) {
@@ -105,7 +107,8 @@ export function appendLog(log: SignalLog, e: { at: number; kind: SignalKind; ref
     if (listed) d[k] = listed;
     if (v - listed) add(carried, k, v - listed);
   }
-  const entry: LogEntry = { id: log.next, at: e.at, kind: e.kind, ...(e.ref ? { ref: e.ref } : {}), d, ...(e.st && Object.keys(e.st).length ? { st: e.st } : {}) };
+  const lk = e.lk && (e.lk.like || e.lk.dislike) ? { like: Math.round(e.lk.like * 1000) / 1000, dislike: Math.round(e.lk.dislike * 1000) / 1000 } : null;
+  const entry: LogEntry = { id: log.next, at: e.at, kind: e.kind, ...(e.ref ? { ref: e.ref } : {}), d, ...(e.st && Object.keys(e.st).length ? { st: e.st } : {}), ...(lk ? { lk } : {}) };
   let entries = [...log.entries, entry];
   let dropped = log.dropped;
   if (entries.length > cap) {
@@ -167,7 +170,8 @@ export function parseLog(v: unknown): SignalLog {
   if (Array.isArray(v.entries)) for (const e of v.entries) {
     if (!isRecord(e) || typeof e.id !== 'number' || !KINDS.has(e.kind as SignalKind)) continue;
     const ref = isRecord(e.ref) ? (e.ref as SignalRef) : undefined;
-    entries.push({ id: e.id, at: Number(e.at) || 0, kind: e.kind as SignalKind, ...(ref ? { ref } : {}), d: numbers(e.d), ...(isRecord(e.st) ? { st: numbers(e.st) } : {}) });
+    const lk = isRecord(e.lk) ? { like: Number(e.lk.like) || 0, dislike: Number(e.lk.dislike) || 0 } : null;
+    entries.push({ id: e.id, at: Number(e.at) || 0, kind: e.kind as SignalKind, ...(ref ? { ref } : {}), d: numbers(e.d), ...(isRecord(e.st) ? { st: numbers(e.st) } : {}), ...(lk ? { lk } : {}) });
   }
   const next = Math.max(Number(v.next) || 1, (entries[entries.length - 1]?.id ?? 0) + 1);
   return { entries: entries.slice(-LOG_CAP), carried: numbers(v.carried), next, dropped: Number(v.dropped) || 0 };

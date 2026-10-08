@@ -23,6 +23,9 @@
  * additive layers). Import replaces the profile, or merges it, weighted by evidence:
  *     w = (w₁·n₁ + w₂·n₂) / (n₁ + n₂),  n = n₁ + n₂.
  *
+ * The look (look.ts): each layer carries its liked / disliked look centroids (projected image embeddings,
+ * never pictures). They're portable; layers add up weighted by evidence, like the weights.
+ *
  * Accounts are licence-only today, so a file is the transport. `TasteFileV2` is the seam for syncing a
  * profile later: the same object, sent somewhere else.
  */
@@ -30,6 +33,7 @@ import { TECHNIQUE_BY_ID } from '../patterns/catalogue';
 import { emptyModel, type Rating, type SignalKind, type TasteModel } from './model';
 import type { LogEntry, SignalLog } from './log';
 import { parseSteering, type Steering } from './steering';
+import { addLook, emptyLook, isEmptyLook, lookForFile, parseLook, type LookState } from './look';
 
 /** A learned layer: weights, evidence, the stage table, signal counts and ratings. */
 export interface Layer {
@@ -42,6 +46,8 @@ export interface Layer {
   from?: { label: string; at: number; summary?: string };
   /** The imported signal log (refs to items not here are marked foreign). For reading only. */
   log?: LogEntry[];
+  /** Liked / disliked look centroids (projected image embeddings, look.ts), when the image model was on. */
+  look?: LookState;
 }
 
 export interface Dormant {
@@ -54,7 +60,7 @@ export interface Dormant {
 
 export const emptyLayer = (): Layer => ({ w: {}, n: {}, stages: {}, signals: {}, ratings: {} });
 export const emptyDormant = (): Dormant => ({ w: {}, n: {}, ratings: {}, items: {} });
-export const isEmptyLayer = (l: Layer) => !Object.keys(l.w).length && !Object.keys(l.stages).length && !Object.keys(l.ratings).length;
+export const isEmptyLayer = (l: Layer) => !Object.keys(l.w).length && !Object.keys(l.stages).length && !Object.keys(l.ratings).length && isEmptyLook(l.look);
 
 const CODE_CHOICES = new Set(['Expression Block', 'Custom Function']);
 let TECH_NAMES: Set<string> | null = null;
@@ -94,10 +100,11 @@ export function combine(prior: Layer, local: TasteModel): TasteModel {
   if (isEmptyLayer(prior) && !Object.keys(prior.signals).length) return local;
   const ratings: TasteModel['ratings'] = {};
   for (const [id, r] of Object.entries({ ...prior.ratings, ...local.ratings })) if (r.v) ratings[id] = r;
+  const look = addLook(prior.look, local.look);
   return {
     ...local,
     w: sumInto(prior.w, local.w), n: sumInto(prior.n, local.n), stages: sumStages(prior.stages, local.stages),
-    signals: sumSignals(prior.signals, local.signals), ratings,
+    signals: sumSignals(prior.signals, local.signals), ratings, ...(look ? { look, embedder: look.embedder } : {}),
   };
 }
 
@@ -126,11 +133,25 @@ export function localAfter(prior: Layer, local: TasteModel, before: TasteModel, 
   const ratings: TasteModel['ratings'] = {};
   for (const [id, r] of Object.entries(after.ratings)) if (prior.ratings[id]?.v !== r.v || prior.ratings[id]?.at !== r.at) ratings[id] = r;
   for (const [id, r] of Object.entries(prior.ratings)) if (r.v && !after.ratings[id]) ratings[id] = { ...r, v: 0, at: Date.now() };
-  return { ...after, w: sumInto(local.w, dw), n: sumInto(local.n, dn), stages, signals, ratings, opens: after.opens };
+  // The look: this lesson's change (after − before) on top of the local layer's.
+  const look = after.look === before.look ? local.look
+    : !before.look || before.look.embedder !== after.look?.embedder ? after.look
+    : addLook(local.look ?? emptyLook(before.look.embedder, before.look.dims), lookChange(before.look, after.look));
+  return { ...after, w: sumInto(local.w, dw), n: sumInto(local.n, dn), stages, signals, ratings, opens: after.opens, look };
+}
+
+/** What a lesson added to a look (after − before, as a look of its own: the added evidence and its means). */
+function lookChange(before: LookState, after: LookState): LookState {
+  const part = (a: number[], wa: number, b: number[], wb: number) => {
+    const w = wb - wa;
+    return { v: w > 1e-12 ? b.map((x, i) => (x * wb - a[i] * wa) / w) : b.map(() => 0), w: Math.max(0, w) };
+  };
+  const L = part(before.like, before.likeW, after.like, after.likeW), D = part(before.dislike, before.dislikeW, after.dislike, after.dislikeW), S = part(before.seen, before.seenW, after.seen, after.seenW);
+  return { embedder: after.embedder, dims: after.dims, like: L.v, likeW: L.w, dislike: D.v, dislikeW: D.w, seen: S.v, seenW: S.w };
 }
 
 /** The portable part of a model, as a layer (what travels). */
-export function portablePart(m: Pick<TasteModel, 'w' | 'n' | 'stages' | 'signals' | 'ratings'>): Layer {
+export function portablePart(m: Pick<TasteModel, 'w' | 'n' | 'stages' | 'signals' | 'ratings' | 'look'>): Layer {
   const pick = (r: Record<string, number>) => Object.fromEntries(Object.entries(r).filter(([k]) => isPortable(k)));
   const stages: Layer['stages'] = {};
   for (const [st, row] of Object.entries(m.stages)) {
@@ -138,7 +159,7 @@ export function portablePart(m: Pick<TasteModel, 'w' | 'n' | 'stages' | 'signals
     if (Object.keys(kept).length) stages[st] = kept;
   }
   const ratings = Object.fromEntries(Object.entries(m.ratings).filter(([id, r]) => r.v && isPortableItem(id)));
-  return { w: pick(m.w), n: pick(m.n), stages, signals: { ...m.signals }, ratings };
+  return { w: pick(m.w), n: pick(m.n), stages, signals: { ...m.signals }, ratings, ...(isEmptyLook(m.look) ? {} : { look: m.look }) };
 }
 
 /** The install-specific part (sources and ratings of your own items). */
@@ -151,9 +172,10 @@ export function localPart(m: Pick<TasteModel, 'w' | 'n' | 'ratings'>): Pick<Dorm
 export function foldProfile(prior: Layer, local: TasteModel): Layer {
   const p = portablePart(local);
   const pp = portablePart(prior);
+  const look = lookForFile(addLook(prior.look, local.look));
   return {
     w: sumInto(pp.w, p.w), n: sumInto(pp.n, p.n), stages: sumStages(pp.stages, p.stages), signals: sumSignals(prior.signals, local.signals),
-    ratings: { ...pp.ratings, ...p.ratings },
+    ratings: { ...pp.ratings, ...p.ratings }, ...(look ? { look } : {}),
   };
 }
 
@@ -169,7 +191,8 @@ export function mergeLayers(a: Layer, b: Layer): Layer {
   }
   const ratings: Layer['ratings'] = { ...a.ratings };
   for (const [id, r] of Object.entries(b.ratings)) if (!ratings[id] || r.at > ratings[id].at) ratings[id] = r;
-  return { w, n, stages: sumStages(a.stages, b.stages), signals: sumSignals(a.signals, b.signals), ratings, ...(b.from ?? a.from ? { from: b.from ?? a.from } : {}) };
+  const look = addLook(a.look, b.look);
+  return { w, n, stages: sumStages(a.stages, b.stages), signals: sumSignals(a.signals, b.signals), ratings, ...(b.from ?? a.from ? { from: b.from ?? a.from } : {}), ...(look ? { look } : {}) };
 }
 
 // ── Dormant items ────────────────────────────────────────────────────────────
@@ -295,7 +318,8 @@ export function parseLayer(v: unknown): Layer {
   const stages: Layer['stages'] = {};
   if (isRecord(v.stages)) for (const [st, row] of Object.entries(v.stages)) stages[st] = numbers(row);
   const from = isRecord(v.from) && typeof v.from.label === 'string' ? { label: v.from.label, at: Number(v.from.at) || 0, ...(typeof v.from.summary === 'string' ? { summary: v.from.summary } : {}) } : undefined;
-  return { w: numbers(v.w), n: numbers(v.n), stages, signals: numbers(v.signals), ratings: ratingsOf(v.ratings), ...(from ? { from } : {}), ...(Array.isArray(v.log) ? { log: v.log as LogEntry[] } : {}) };
+  const look = parseLook(v.look);
+  return { w: numbers(v.w), n: numbers(v.n), stages, signals: numbers(v.signals), ratings: ratingsOf(v.ratings), ...(from ? { from } : {}), ...(Array.isArray(v.log) ? { log: v.log as LogEntry[] } : {}), ...(look ? { look } : {}) };
 }
 
 export function parseDormant(v: unknown): Dormant {

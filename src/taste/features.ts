@@ -13,7 +13,7 @@
  *   src:<id>                a source it was inspired by (or the rated item itself)
  *   img:<metric>            Deep's image metrics (colourful, contrast, detail, motion, structure, novelty), centred
  *   look:<dark|bright>      the picture's brightness, from its colour signature
- *   emb:<i>                 an image embedding's dimensions (none yet)
+ *   emb:<i>                 the image model's look, projected to 64 dims (look.ts); not learned linearly
  *   _bias                   always 1 (absorbs "likes everything" in single ratings; cancels in pairs)
  */
 import type { GraphNode } from '../types/nodeGraph';
@@ -24,6 +24,7 @@ import type { Composition } from '../lang/inspired/compose';
 import { getNodeDefinition } from '../nodes/definitions';
 import { interestingRange } from '../lib/surprise/ranges';
 import type { Metrics, Signature } from '../lib/surprise/score';
+import { isEmbKey } from './look';
 
 export type Features = Record<string, number>;
 
@@ -89,19 +90,12 @@ const settingWord = (key: string) => {
 
 // ── The seam for a small local image embedding ────────────────────────────────
 //
-// A later step can plug in a tiny on-device network (e.g. MobileNetV3-small via onnxruntime-web) that
-// turns a candidate's small frame into a vector. Nothing is registered now and no dependency is added:
-// `imageEmbedder()` is null, and `graphFeatures` takes `embedding` when a caller has one.
+// src/imageModel registers MobileCLIP-S0 here (when it's on): `embed` returns the picture's vector projected
+// to 64 dims (look.ts). `graphFeatures` takes `embedding` when a caller has one; with none registered, or
+// the model off, everything works as before.
 
-export interface ImageEmbedder {
-  /** A short id, stored with the model so a change of network resets the emb:* weights. */
-  id: string;
-  dims: number;
-  embed(frame: { rgba: ArrayLike<number>; w: number; h: number }): Promise<Float32Array>;
-}
-let embedder: ImageEmbedder | null = null;
-export function registerImageEmbedder(e: ImageEmbedder | null): void { embedder = e; }
-export function imageEmbedder(): ImageEmbedder | null { return embedder; }
+// (The registry lives in look.ts, which imports nothing, so the model can read it without a cycle.)
+export { registerImageEmbedder, imageEmbedder, imageEmbedderId, type ImageEmbedder } from './look';
 
 export interface FeatureExtras {
   /** The plan's stages, when the graph is a composition (more exact than reading the graph). */
@@ -111,7 +105,7 @@ export interface FeatureExtras {
   /** Deep's image metrics, when it was drawn. */
   metrics?: Metrics;
   signature?: Signature;
-  /** An image embedding (see ImageEmbedder). */
+  /** An image embedding, projected (see ImageEmbedder and look.ts). */
   embedding?: ArrayLike<number>;
   /** An id for the analysis cache. */
   id?: string;
@@ -192,12 +186,12 @@ export function nodeTypeFeatures(type: string): Features {
   return { _bias: 1, [nodeBucket(type)]: 1, [type === 'exprNode' || type === 'customFn' ? 'code:yes' : 'code:no']: 0.5 };
 }
 
-/** Scale a long vector down, so a big graph doesn't learn faster than a small one. */
+/** Scale a long vector down, so a big graph doesn't learn faster than a small one (the look's emb:* aside). */
 function normalise(f: Features): Features {
-  const nnz = Object.keys(f).length;
+  const nnz = Object.keys(f).filter(k => !isEmbKey(k)).length;
   if (nnz <= 12) return f;
   const k = Math.sqrt(12 / nnz);
   const out: Features = {};
-  for (const [key, v] of Object.entries(f)) out[key] = key === '_bias' ? v : v * k;
+  for (const [key, v] of Object.entries(f)) out[key] = key === '_bias' || isEmbKey(key) ? v : v * k;
   return out;
 }

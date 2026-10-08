@@ -49,6 +49,7 @@ export function TasteLogView() {
               <span style={{ flex: '1 1 200px', minWidth: 0, color: tk.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: openable ? 'underline dotted' : 'none' }}>{describeRef(e.ref) || '—'}</span>
               <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
                 {top.map(([k, v]) => <Pill key={k} tone={v >= 0 ? 'good' : 'bad'} title={k}>{featureName(model, k, v >= 0)} {signed(v, 2)}</Pill>)}
+                {e.lk && (e.lk.like > 0 || e.lk.dislike > 0) && <Pill tone="accent" title="The image model: evidence this lesson added to the liked / disliked look centroids (not a weight)">look: {e.lk.like > 0 ? `liked +${e.lk.like}` : ''}{e.lk.like > 0 && e.lk.dislike > 0 ? ', ' : ''}{e.lk.dislike > 0 ? `disliked +${e.lk.dislike}` : ''}</Pill>}
               </span>
             </button>
           );

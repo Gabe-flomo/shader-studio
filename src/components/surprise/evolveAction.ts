@@ -5,7 +5,9 @@
  * Surprise); Escape puts the original back exactly.
  *
  * Each candidate is drawn small at two moments: the later frame is its thumbnail, both are scored with
- * Deep's metrics (colourful, contrast, detail, motion, symmetry, novelty), which feed the model too.
+ * Deep's metrics (colourful, contrast, detail, motion, symmetry, novelty), which feed the model too. With
+ * the image model on, the thumbnail is embedded in the background and its look joins the features, so a
+ * pick also teaches the liked-look centroid (docs/taste.md "How things look").
  */
 import { create } from 'zustand';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -22,6 +24,9 @@ import { programPixels } from '../sceneBuilder/surpriseActions';
 import { cancelSurprise, gpuCheck, openSource, poolNow, useSurpriseCarousel } from './inspiredAction';
 import { announceSurprise } from './announce';
 import { toast } from '../ui/toastStore';
+import { imageModelUsable } from '../../imageModel/client';
+import { lookOf, thumbOf, type Look } from '../../imageModel/looks';
+import { rememberLook } from '../../imageModel/gallery';
 
 const TW = 192, TH = 120;
 
@@ -43,13 +48,16 @@ export const useEvolve = create<EvolveStore>(() => ({ open: false, state: null, 
 
 let gen: EvolveGen | null = null;
 const scores = new WeakMap<EvolveCand, Score>();
+/** Each candidate's look (image model), once embedded, and its thumbnail frame. */
+const looks = new WeakMap<EvolveCand, Look>();
+const frames = new WeakMap<EvolveCand, { rgba: Uint8Array; w: number; h: number }>();
 const opts: EvolveOptions = {
   check: gpuCheck,
   steering: tasteSteering,
   nextId: () => useNodeGraphStore.getState().newNodeId(),
   features: (c: EvolveCand): Features => {
-    const sc = scores.get(c);
-    return compositionFeatures(c.comp, sc ? { metrics: sc.metrics, signature: sc.signature } : {});
+    const sc = scores.get(c), lk = looks.get(c);
+    return compositionFeatures(c.comp, { ...(sc ? { metrics: sc.metrics, signature: sc.signature } : {}), ...(lk ? { embedding: lk.proj } : {}) });
   },
 };
 
@@ -61,6 +69,11 @@ function draw(c: EvolveCand): EvolveView {
   if (!px || px === 'error') return { thumb: null, score: null, why: [] };
   const score = scoreFrames(px.map(rgba => ({ rgba, w: TW, h: TH })));
   scores.set(c, score);
+  if (imageModelUsable()) {
+    const frame = { rgba: px[1] ?? px[0], w: TW, h: TH };
+    frames.set(c, frame);
+    void lookOf(frame).then(l => { if (l) looks.set(c, l); });
+  }
   let thumb: string | null = null;
   try {
     const cv = document.createElement('canvas');
@@ -175,6 +188,9 @@ export function keepEvolveSession(): void {
   const r = keepEvolve(state, focus, tasteModel(), opts);
   updateTaste(() => r.model, { kind: 'kept', ref: evolveRef(state, focus) });
   const c = state.pair[focus];
+  const lk = looks.get(c), fr = frames.get(c);
+  const thumb = lk && fr ? thumbOf(fr, 96, 60) : null;
+  if (lk && thumb) void rememberLook({ id: `evolve:${c.seed}:${state.round}`, proj: Array.from(lk.proj), thumb, label: c.comp.stages.map(x => x.what).join(' → ') || 'Evolve' });
   useNodeGraphStore.setState({ nodes: state.original });
   useNodeGraphStore.getState().setNodesRewritten(r.state.result!, `Evolve · round ${state.round}`);
   close();
