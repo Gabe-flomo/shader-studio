@@ -11,7 +11,10 @@ import { surpriseGrid } from '../../gridRules/surprise';
 import type { GridRuleType } from '../../gridRules/spec';
 import { surpriseAgents } from '../../agentRules/surprise';
 import { surpriseGroupRules } from '../../agentRules/storeActions';
-import { randomizedGraph } from '../../nodes/randomizeParams';
+import { lockedItems, randomizedGraph, type RandomChange } from '../../nodes/randomizeParams';
+import { getRandomizeOptions, optionsSummary, type RandomizeOptions } from '../../nodes/randomizeOptions';
+import { focusItems } from '../../nodes/randomizeFocus';
+import { focusWeights } from './focusWeights';
 import { announceSurprise } from './announce';
 import { restartAgents } from '../../lib/agentRunner';
 
@@ -56,31 +59,63 @@ export function surpriseAgentsAction(groupId: string, seed: number): void {
   });
 }
 
-/** Randomise all settings in this graph (the level on screen), from `seed`, one undo step. */
-export function randomizeGraphAction(seed: number = newSeed()): void {
+/** The options as used for one randomize (the saved ones, unless a caller overrides). */
+const currentOptions = (o?: Partial<RandomizeOptions>): RandomizeOptions => ({ ...getRandomizeOptions(), ...o });
+
+/**
+ * Randomise all settings in this graph (the level on screen), from `seed`, with the saved options
+ * (strength, locks, groups, Focus), one undo step. With Focus on, the graph is first drawn small
+ * with each setting nudged (about a second at most, progress in the dice's popover); if that can't
+ * be done every setting is weighted evenly. The same seed, options and graph give the same result.
+ */
+export async function randomizeGraphAction(seed: number = newSeed(), override?: Partial<RandomizeOptions>): Promise<void> {
+  const opts = currentOptions(override);
+  const st0 = useNodeGraphStore.getState();
+  const path = st0.activeGroupPath;
+  let weights: Record<string, number> | null = null;
+  if (opts.focus) {
+    const level0 = path.length ? getActiveNodes(st0.nodes, path) : st0.nodes;
+    if (level0) weights = await focusWeights(st0.nodes, path, focusItems(level0, opts), opts);
+  }
   const st = useNodeGraphStore.getState();
-  const path = st.activeGroupPath;
   const level = path.length ? getActiveNodes(st.nodes, path) : st.nodes;
   if (!level) return;
-  const r = randomizedGraph(level, seed);
+  const r = randomizedGraph(level, seed, opts, weights);
   if (!r.changed) return finishNothing();
   const nodes = path.length ? setActiveNodes(st.nodes, path, r.nodes) : r.nodes;
   if (!nodes) return;
   st.setNodesRewritten(nodes, `Randomised ${r.changed} settings (seed ${seed})`);
-  finish(seed, r.changed);
+  finish(seed, r.changed, r.changes, opts, !!weights, override);
 }
 
 function finishNothing() {
-  toast.info('Nothing to randomise', { message: 'No free sliders on this level of the graph.' });
+  toast.info('Nothing to randomise', { message: 'No free settings on this level of the graph, or they are all locked.' });
 }
 
-function finish(seed: number, changed: number) {
+function finish(seed: number, changed: number, changes: RandomChange[], opts: RandomizeOptions, measured: boolean, override?: Partial<RandomizeOptions>) {
   useSurpriseSeeds.setState({ graph: seed });
+  const top = changes.slice(0, 3).map(c => c.label).join(', ');
   announceSurprise({
     title: `Randomised ${changed} setting${changed === 1 ? '' : 's'}`, seed,
-    message: 'Every free slider on this level, inside its interesting range. Wired, keyframed and excluded sliders are kept.',
+    message: (opts.focus ? (measured ? `Focused on what changes the picture${top ? `: ${top}${changes.length > 3 ? ' and more' : ''}` : ''}. ` : 'Focus could not draw the graph, so every setting was weighted evenly. ') : '')
+      + `${optionsSummary(opts, lockedItems(useNodeGraphStore.getState().nodes).length)}. Wired, keyframed and locked settings are kept.`,
     stillCurrent: stillTop(),
     undo: undoGraph,
-    reroll: () => { undoGraph(); randomizeGraphAction(newSeed()); },
+    reroll: () => { undoGraph(); void randomizeGraphAction(newSeed(), override); },
   });
+}
+
+/**
+ * A node card's Randomize: the saved options apply (strength, choices, colours, locks, Focus).
+ * With Focus on, only this node's settings are measured.
+ */
+export async function randomizeNodeAction(nodeId: string): Promise<void> {
+  const opts = getRandomizeOptions();
+  const st = useNodeGraphStore.getState();
+  let weights: Record<string, number> | null = null;
+  if (opts.focus) {
+    const node = (st.activeGroupPath.length ? getActiveNodes(st.nodes, st.activeGroupPath) ?? st.nodes : st.nodes).find(n => n.id === nodeId);
+    if (node && node.type !== 'group') weights = await focusWeights(st.nodes, st.activeGroupPath, focusItems([node], { ...opts, groupFace: false, insideGroups: false }), opts);
+  }
+  useNodeGraphStore.getState().randomizeNodeParams(nodeId, weights);
 }

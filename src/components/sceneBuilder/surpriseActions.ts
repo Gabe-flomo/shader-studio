@@ -48,6 +48,16 @@ export function programFrameStats(vs: string, fs: string, uniforms: Record<strin
  * context for all of them). Null without WebGL2; 'error' when the shader doesn't compile.
  */
 export function programPixels(vs: string, fs: string, uniforms: Record<string, number | number[]>, times: number[], w = W, h = H): Uint8Array[] | 'error' | null {
+  return programFrames(vs, fs, times.map(t => ({ uniforms, t })), w, h);
+}
+
+/**
+ * Frames of one compiled program, each with its own uniforms and time, drawn on one WebGL2 context
+ * (Randomize's Focus renders a graph with each setting nudged this way). `stop` is asked before
+ * each frame; when true the frames drawn so far are returned. Null without WebGL2; 'error' when
+ * the shader doesn't compile.
+ */
+export function programFrames(vs: string, fs: string, frames: Array<{ uniforms: Record<string, number | number[]>; t: number }>, w = W, h = H, stop?: () => boolean): Uint8Array[] | 'error' | null {
   if (typeof document === 'undefined') return null;
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
@@ -65,19 +75,20 @@ export function programPixels(vs: string, fs: string, uniforms: Record<string, n
     if (posLoc >= 0) { gl.enableVertexAttribArray(posLoc); gl.vertexAttribPointer(posLoc, 3, gl.FLOAT, false, 20, 0); }
     if (uvLoc >= 0) { gl.enableVertexAttribArray(uvLoc); gl.vertexAttribPointer(uvLoc, 2, gl.FLOAT, false, 20, 12); }
     gl.useProgram(prog);
-    for (const [name, v] of Object.entries(uniforms)) {
-      const loc = gl.getUniformLocation(prog, name);
-      if (!loc) continue;
-      if (typeof v === 'number') gl.uniform1f(loc, v);
-      else if (v.length === 2) gl.uniform2f(loc, v[0], v[1]);
-      else if (v.length === 3) gl.uniform3f(loc, v[0], v[1], v[2]);
-      else if (v.length === 4) gl.uniform4f(loc, v[0], v[1], v[2], v[3]);
-    }
     gl.uniform2f(gl.getUniformLocation(prog, 'u_resolution'), w, h);
     gl.viewport(0, 0, w, h);
     const out: Uint8Array[] = [];
-    for (const t of times) {
-      gl.uniform1f(gl.getUniformLocation(prog, 'u_time'), t);
+    for (const f of frames) {
+      if (stop?.()) break;
+      for (const [name, v] of Object.entries(f.uniforms)) {
+        const loc = gl.getUniformLocation(prog, name);
+        if (!loc) continue;
+        if (typeof v === 'number') gl.uniform1f(loc, v);
+        else if (v.length === 2) gl.uniform2f(loc, v[0], v[1]);
+        else if (v.length === 3) gl.uniform3f(loc, v[0], v[1], v[2]);
+        else if (v.length === 4) gl.uniform4f(loc, v[0], v[1], v[2], v[3]);
+      }
+      gl.uniform1f(gl.getUniformLocation(prog, 'u_time'), f.t);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       const px = new Uint8Array(w * h * 4);
       gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
