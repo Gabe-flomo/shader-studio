@@ -293,5 +293,40 @@ export function buildFourDProjectionExamples(): Record<string, ExampleGraph> {
 **Try.** Set both turns to 0 and move **Sweep**: only w changes. Swap the Duocylinder for a **Tesseract**, **24-cell** or **Clifford Torus** (they all take the same 4D point). Raise Plane Slice 4D's Scale to zoom out.`),
   };
 
-  return { fourDTesseractProjection: tesseract, fourD24CellWireframe: cell24, fourDDuocylinderShadow: shadow, fourDHopfRings: hopf, fourDFlatTesseract: flat, fourDPlaneSlice: plane };
+  // ── 7. Quaternion Julia ──────────────────────────────────────────────────
+  const julia: ExampleGraph = {
+    ...FOURD_EXAMPLE_INDEX.fourDQuatJulia,
+    counter: 40,
+    nodes: [
+      n('time', 'time', 40, 460, { ...note('Time: drives the camera and the drift of c.') }),
+      n('marchCamera', 'cam', 40, 220, { camDist: 2.1, camAngle: 0.4, camElevation: 0.35, rotSpeed: 0.06, fov: 1.4, ...note('March Camera: slowly circles the fractal, close in.') }, { time: ['time', 'time'] }),
+      n('lfo', 'cxd', 40, 640, { waveform: 'sine', freq: 0.031, amplitude: 0.22, offset: -0.2, ...note('LFO: c x drifts between -0.42 and 0.02 about once every 32 seconds. Amplitude is the Play knob Drift.') }, { time: ['time', 'time'] }),
+      n('lfo', 'cyd', 40, 800, { waveform: 'sine', freq: 0.047, phase: 0.25, amplitude: 0.18, offset: 0.58, ...note('LFO: c y drifts between 0.4 and 0.76, at another speed so the two never line up.') }, { time: ['time', 'time'] }),
+      scene('scene', 40, 980, 'Quaternion Julia', [
+        n('lift4D', 'lift', 240, 80, { w: 0.0, ...note('Lift to 4D: the 3D point becomes (x, y, z, w). W is the Play knob Slice.') }, { pos: ['sp', 'pos'] }),
+        n('rotate4D', 'rot', 480, 80, { plane: 'xw', angle: 0, spin: 7, ...note('Rotate 4D in xw, slowly: the slice cuts the 4D fractal at a turning angle, so new folds come into view.') }, { p4: ['lift', 'p4'] }),
+        n('quatJuliaSDF', 'jul', 720, 80, { cx: -0.2, cy: 0.58, cz: 0.2, cw: 0.0, iters: 10, scale: 0.75, ...note('Quaternion Julia SDF: each 4D point is squared and shifted by c, again and again (10 times); points that stay small are inside. c x and c y come in through ports from the two LFOs, so the set changes shape over time.') }, { p4: ['rot', 'p4'] }),
+      ], ['jul', 'dist'],
+      'Scene Pos is lifted to 4D, turned in xw and measured against a quaternion Julia set whose constant c drifts in through ports.',
+      [{ key: 'cx', label: 'c x', from: ['cxd', 'value'], to: ['jul', 'cx'] }, { key: 'cy', label: 'c y', from: ['cyd', 'value'], to: ['jul', 'cy'] }]),
+      ...finish([0.03, 0.03, 0.06],
+        expr('col', 1180, 520, 'Surface colour', { x: ['hp', 'x'], y: ['hp', 'y'], z: ['hp', 'z'] },
+          'vec3(0.55, 0.45, 0.95) + vec3(0.45, 0.35, -0.35) * clamp(0.5 + 0.5 * sin(4.0 * length(vec3(x, y, z)) + 2.0 * y), 0.0, 1.0)',
+          'Surface colour: violet to warm orange in bands by distance from the middle, so the folds read.'),
+        'March Loop: finds where each ray meets the fractal. Its distance is an estimate, so Step Scale is a little under 1.'),
+    ].map(nd => (nd.type === 'marchLoopGroup' ? { ...nd, params: { ...nd.params, stepScale: 0.8, maxSteps: 160 } } : nd)),
+    play: play([
+      ctl('w', 'scene::lift::w', 'Slice (w)', -0.8, 0.8, 0.01),
+      ctl('d', 'cxd::amplitude', 'Drift', 0, 0.5, 0.005),
+      ctl('s', 'scene::rot::spin', 'xw turn (deg/s)', -40, 40, 0.5),
+      ctl('cz', 'scene::jul::cz', 'c z', -0.8, 0.8, 0.005),
+      ctl('c', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
+    ], `**What it shows.** A quaternion Julia set is the 4D version of the famous Julia fractal: each 4D point is squared (as a quaternion) and shifted by a constant c, over and over, and the points that never run away make the solid. What you see is its 3D slice: lumpy bulbs that curl into each other. As the LFOs move c, the whole set reshapes.
+
+**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** → **Rotate 4D** (xw) → **Quaternion Julia SDF**. Outside, two **LFOs** drift c x and c y into the group through ports; the usual camera, loop and lighting draw it, with Step Scale 0.8 because the distance is an estimate.
+
+**Try.** Set **Drift** to 0 and slide **c z** to explore single sets. Move **Slice** to cut the 4D fractal somewhere else. In the node, Iterations 6 is softer and faster; 14 adds fine detail.`),
+  };
+
+  return { fourDQuatJulia: julia, fourDTesseractProjection: tesseract, fourD24CellWireframe: cell24, fourDDuocylinderShadow: shadow, fourDHopfRings: hopf, fourDFlatTesseract: flat, fourDPlaneSlice: plane };
 }

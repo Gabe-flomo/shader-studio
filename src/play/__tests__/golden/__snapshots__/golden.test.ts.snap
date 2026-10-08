@@ -448,6 +448,16 @@ exports[`golden outputs: examples > fourDPlaneSlice 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > fourDQuatJulia 1`] = `
+{
+  "c": "- x120",
+  "cz": "- x120",
+  "d": "- x120",
+  "s": "- x120",
+  "w": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > fourDShapeGallery 1`] = `
 {
   "c": "- x120",

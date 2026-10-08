@@ -132,6 +132,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Repeat', types: ['repeat4D', 'fold4D', 'twist4D'] },
     { label: 'Shapes', types: ['hypersphereSDF', 'tesseractSDF', 'duocylinderSDF', 'spherinderSDF', 'cubinderSDF', 'cylPrismSDF', 'ditorusSDF', 'cliffordTorusSDF'] },
     { label: 'Polytopes', types: ['cell5SDF', 'cell16SDF', 'cell24SDF'] },
+    { label: 'Fractals', types: ['quatJuliaSDF', 'quatMandelSDF'] },
     { label: 'Noise',  types: ['noise4D'] },
     { label: 'Project', types: ['wireframe4D', 'project4D', 'stereo4D', 'stereoDist4D', 'hopfCirclesSDF'] },
   ],

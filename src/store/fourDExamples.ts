@@ -75,6 +75,11 @@ export const FOURD_EXAMPLE_INDEX: Record<string, { label: string; description: s
     description: 'All of 3D space laid onto a 3-sphere (stereographic projection) and turned in 4D: the Hopf circles, great circles of the 3-sphere, become interlocking rings that fill space, nested round a half-cut Clifford torus. Play sets the turn, the flow along the circles, the number and thickness of rings.',
     play: true,
   },
+  fourDQuatJulia: {
+    label: '4D: Quaternion Julia',
+    description: 'A quaternion Julia set, a 4D fractal, sliced into 3D: a lumpy, curling solid. Two slow LFOs drift its constant c, so the shape boils and folds, and it turns in 4D. Play moves the slice, the drift and the detail.',
+    play: true,
+  },
   // 4D straight to 2D (built in fourDProjectionExamples.ts)
   fourDFlatTesseract: {
     label: '4D: Flat tesseract (4D → 2D)',
