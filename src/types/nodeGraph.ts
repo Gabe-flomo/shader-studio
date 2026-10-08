@@ -110,6 +110,12 @@ export interface ParamDef {
    */
   hard?: boolean;
   hint?: string;
+  /**
+   * A momentary trigger (Start over, Burst): the card shows a button instead of a slider. Pressing
+   * it pulses the value to max for a moment, then back to min. It stays a float, so Play, keys,
+   * beats and rules can still drive it (each rise past the middle fires once).
+   */
+  trigger?: boolean;
   // Options for 'select' type
   options?: { value: string; label: string }[];
   // Conditionally show this param only when another param matches a value

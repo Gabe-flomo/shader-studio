@@ -183,7 +183,7 @@ export const TYPE_STAGE: Record<string, StageOf> = {
   vectorField: 'bend', gravityField: 'bend', spiralField: 'bend',
   // 4D: the shapes are objects, the rest bend the point.
   hypersphereSDF: 'objects', tesseractSDF: 'objects', duocylinderSDF: 'objects', spherinderSDF: 'objects', cubinderSDF: 'objects',
-  cylPrismSDF: 'objects', ditorusSDF: 'objects', cliffordTorusSDF: 'objects', cell5SDF: 'objects', cell16SDF: 'objects', cell24SDF: 'objects', noise4D: 'any',
+  cylPrismSDF: 'objects', ditorusSDF: 'objects', cliffordTorusSDF: 'objects', cell5SDF: 'objects', cell16SDF: 'objects', cell24SDF: 'objects', noise4D: 'any', wireframe4D: 'objects', project4D: 'objects', hopfCirclesSDF: 'objects',
   // 3D Primitives that warp space.
   mirrorFold3D: 'bend', domainWarp3D: 'bend', turbulence3D: 'bend',
   // 3D Scene.

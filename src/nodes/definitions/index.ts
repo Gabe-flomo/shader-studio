@@ -21,6 +21,7 @@ export { DataNode };
 import { Lift4DNode, Rotate4DNode, Translate4DNode, HypersphereSDFNode, TesseractSDFNode, FOURD_P2_NODES } from './fourD';
 import { SCENE2D_NODES } from './scene2d';
 export { Lift4DNode, Rotate4DNode, Translate4DNode, HypersphereSDFNode, TesseractSDFNode };
+import { FOURD_P3_NODES } from './fourDProject';
 
 // Sources
 export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
@@ -312,6 +313,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   hypersphereSDF: HypersphereSDFNode,
   tesseractSDF: TesseractSDFNode,
   ...FOURD_P2_NODES,
+  ...FOURD_P3_NODES,
   // The 2D Scene Builder's small nodes (docs/scene-builder-2d-plan.md)
   ...SCENE2D_NODES,
   timeCube: TimeCubeNode,

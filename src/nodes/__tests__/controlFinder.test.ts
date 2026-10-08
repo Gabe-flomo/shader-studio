@@ -167,6 +167,26 @@ describe('controlItems', () => {
     expect(onPlay).toBe(1);
   });
 
+  it('offers settings inside a group even with Randomize\'s group toggles off (the default)', () => {
+    expect(DEFAULT_RANDOMIZE_OPTIONS.groupFace).toBe(false);
+    expect(DEFAULT_RANDOMIZE_OPTIONS.insideGroups).toBe(false);
+    const inner = node({}, 'in1');
+    const group: GraphNode = { id: 'g', type: 'group', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { subgraph: { nodes: [inner], inputPorts: [], outputPorts: [] } } };
+    const groupCands = cands([inner]).map(c => ({ ...c, target: `g::${c.target}`, groupLabel: 'Group' }));
+    const { items: its } = controlItems([group], DEFAULT_RANDOMIZE_OPTIONS, groupCands, new Set());
+    expect(its.map(i => i.target).sort()).toEqual(probe.map(i => `g::in1::${i.key}`).sort());
+    expect(its[0].groupLabel).toBe('Group');
+  });
+
+  it('a setting surfaced on a group\'s face is offered, and only once', () => {
+    const key = probe[0].key;
+    const inner = node({}, 'in1');
+    const group: GraphNode = { id: 'g', type: 'group', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { [`in1::${key}`]: probe[0].cur, subgraph: { nodes: [inner], inputPorts: [], outputPorts: [] } } };
+    const groupCands = cands([inner]).map(c => ({ ...c, target: `g::${c.target}`, groupLabel: 'Group' }));
+    const { items: its } = controlItems([group], DEFAULT_RANDOMIZE_OPTIONS, groupCands, new Set());
+    expect(its.filter(i => i.target === `g::in1::${key}`)).toHaveLength(1);
+  });
+
   it('only offers settings Play can actually control', () => {
     const { items: its } = controlItems([node()], DEFAULT_RANDOMIZE_OPTIONS, [], new Set());
     expect(its).toEqual([]);

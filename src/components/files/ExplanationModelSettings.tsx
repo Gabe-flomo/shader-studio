@@ -11,7 +11,7 @@ import { Button } from '../ui/Button';
 import { Toggle } from '../ui/Choice';
 import { askConfirm } from '../ui/dialogStore';
 import { EXPLAIN_MODELS, LARGE_MODEL_BYTES, downloadBytes, formatBytes, type ExplainModelSpec } from '../../explainModel/config';
-import { downloadExplainModel, ensureExplainModel, removeExplainModel, selectExplainModel, setExplainModelEnabled, useExplainModel } from '../../explainModel/client';
+import { downloadExplainModel, ensureExplainModel, removeExplainModel, selectExplainModel, setExplainModelEnabled, setExplainStepsWithModel, useExplainModel } from '../../explainModel/client';
 import { cardStyle } from './fileUiShared';
 
 function Pill({ children, tone = 'muted', title }: { children: ReactNode; tone?: 'muted' | 'good' | 'bad' | 'accent' | 'warn'; title?: string }) {
@@ -101,6 +101,7 @@ export function ExplanationModelSettings() {
           {any && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 14px', borderBottom: `1px solid ${tk.border.subtle}` }}>
               <Toggle checked={s.enabled} onChange={setExplainModelEnabled} label="Use the explanation model" />
+              {s.enabled && <Toggle checked={s.autoSteps} onChange={setExplainStepsWithModel} label="Explain step-by-steps with it automatically" />}
               {s.enabled && s.downloaded && s.status === 'idle' && <Button size="sm" variant="ghost" onClick={() => { void ensureExplainModel(); }}>Load it now</Button>}
               {s.status === 'error' && <Button size="sm" variant="ghost" icon="reset" onClick={() => { void ensureExplainModel(true); }}>Try again</Button>}
             </div>

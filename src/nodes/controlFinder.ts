@@ -63,7 +63,7 @@ export interface ControlItem {
 
 /**
  * The settings Suggest controls would try: the ones Randomize would change with these options (locks,
- * skipped nodes, groups) that are free floats on the Play candidate list and not on Play already.
+ * skipped nodes; groups always, face and one level in) that are free floats on the Play candidate list and not on Play already.
  * `skipped` counts those left out for being on Play.
  */
 export function controlItems(level: GraphNode[], opts: RandomizeOptions, candidates: readonly PlayCandidate[], taken: ReadonlySet<string>): { items: ControlItem[]; onPlay: number } {
@@ -71,7 +71,9 @@ export function controlItems(level: GraphNode[], opts: RandomizeOptions, candida
   const seen = new Set<string>();
   const items: ControlItem[] = [];
   let onPlay = 0;
-  for (const f of focusItems(level, { ...opts, focus: false }, [], true)) {
+  // Group controls are often the ones that matter most, so Suggest controls always looks at a group's
+  // face and one level in, whatever Randomize's group toggles say (Play reaches both). Locks still apply.
+  for (const f of focusItems(level, { ...opts, focus: false, groupFace: true, insideGroups: true }, [], true)) {
     if (typeof f.lo !== 'number' || typeof f.hi !== 'number') continue;
     const target = [...f.path, f.nodeId, f.key].join('::');
     const c = byTarget.get(target);

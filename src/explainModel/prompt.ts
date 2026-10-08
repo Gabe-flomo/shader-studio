@@ -409,6 +409,49 @@ export function promptForBlock(code: string, s: ExplainScope): BuiltPrompt {
   return buildExplainPrompt({ scope: 'block', code, kind: scopeKind(s), inputs, facts, lineReadings });
 }
 
+
+// ── Step by step: one line's own steps (the rule-based "First … then …") ──────
+
+export const STEPS_SYSTEM_PROMPT =
+  'You explain one line of shader code (GLSL) step by step to a visual artist who is learning it. ' +
+  'The line has already been split into numbered steps; each step works on the result of earlier ones (named by their letter). ' +
+  'Reply with JSON objects, one per step, in order, and nothing else: ' +
+  '{"line": <step number>, "what": "<what this step does to the value, in plain words, with a tiny worked example when it helps, like: if x is 0.5 it becomes 1.0>", "effect": "<why it is there: what it changes in the picture, or empty>", "sure": "high|medium|low", "unsure_about": "<what you are unsure about, or empty>"}. ' +
+  'Be short: one short sentence per field. Do not repeat the code. ' +
+  'Use only the inputs, code and FACTS you are given: never invent names or purposes, and never contradict the FACTS. ' +
+  'Say "high" only when the facts make it clear, "low" when you are guessing.';
+
+export interface StepInfo { label: string; code: string; reading: string }
+
+/** A prompt for the steps of one line: each step's code (with earlier steps' letters) and its rule-based reading. */
+export function promptForSteps(lineText: string, steps: readonly StepInfo[], s: ExplainScope): BuiltPrompt {
+  const inputs = scopeInputs(s);
+  const ctx: ExplainContext = { ...(s.ctx ?? {}), types: { ...typesFromCode(s.enclosing ?? lineText), ...(s.ctx?.types ?? {}) } };
+  const skip = new Set(inputs.map(i => i.name));
+  const facts = gatherFacts(lineText, ctx, undefined, skip);
+  const factBlock = factLines(facts);
+  const shown = steps.slice(0, MAX_BLOCK_LINES);
+  const head = [`Kind: ${scopeKind(s) ?? 'GLSL'}`, ...inputLines(inputs)].join('\n');
+  const parts = [head, `The line:\n${lineText.trim()}`];
+  if (factBlock.length) parts.push(`FACTS (reliable, from a rule-based explainer; its wording can be clumsy):\n${factBlock.map(u => `- ${u}`).join('\n')}`);
+  const context = parts.join('\n\n');
+  const list = shown.map((st, i) => `${i + 1} (${st.label}): ${st.code}   [rule-based: ${st.reading}]`).join('\n');
+  const task = `Reply with one object for each of steps 1 to ${shown.length}, one per row.`;
+  const used = [...inputs.map(i => `Input ${i.text}`), ...factBlock];
+  const check: GroundingContext = {
+    lines: shown.map(st => st.code),
+    code: [lineText, ...shown.map(st => st.code)].join('\n'),
+    inputs: inputs.map(i => ({ name: i.name, type: i.type, numbers: i.numbers })),
+    inputText: inputs.map(i => i.text).join('\n'),
+    factsText: factBlock.join('\n'),
+    colourFacts: facts.colours,
+  };
+  return {
+    messages: [{ role: 'system', content: STEPS_SYSTEM_PROMPT }, { role: 'user', content: `${context}\n\nSteps:\n${list}\n\n${task}` }],
+    maxTokens: blockTokens(shown.length), context: `${context}\n\nSteps:\n${list}`, used, check,
+  };
+}
+
 /** A short stable id for a prompt's context (the cache's second half). */
 export const contextHash = (b: BuiltPrompt): string => hashText(b.context);
 

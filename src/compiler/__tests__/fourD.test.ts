@@ -199,7 +199,7 @@ describe('4D examples', () => {
   it('are listed in a 4D folder', () => {
     const f = EXAMPLE_FOLDERS.find(x => x.label === '4D')!;
     expect(f.keys).toEqual(FOURD_EXAMPLE_KEYS);
-    expect(FOURD_EXAMPLE_KEYS.length).toBe(8);
+    expect(FOURD_EXAMPLE_KEYS.length).toBe(14);
     for (const k of FOURD_EXAMPLE_KEYS) expect(EXAMPLE_GRAPHS[k].label).toBe(EXAMPLE_INDEX[k].label);
   });
 

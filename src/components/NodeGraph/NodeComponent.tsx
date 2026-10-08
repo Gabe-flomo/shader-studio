@@ -3133,6 +3133,36 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         </div>
       );
     }
+    // A trigger (Start over, Burst): a button that pulses the value; still a float for Play and wires.
+    if (paramDef.trigger && !compact) {
+      const drive = playDriven.get(`${node.id}::${key}`);
+      const lo = paramDef.min ?? 0, hi = paramDef.max ?? 1;
+      return (
+        <div key={key} data-param-key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}
+          onMouseEnter={() => setHoveredParamHint(paramDef.hint ?? null)} onMouseLeave={() => setHoveredParamHint(null)}>
+          {activeGroupId && (
+            <ParamSocket color={TYPE_COLORS.float} wired={false} touch={isTouchDevice}
+              register={el => { registerSocket(node.id, 'in', paramInputKey, el); }}
+              onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }} />
+          )}
+          {labelNode(false)}
+          {drive && <PlayDriveChip drive={drive} />}
+          <button
+            type="button"
+            aria-label={paramDef.label}
+            title={paramDef.hint}
+            onClick={() => { setFloat(key, String(hi)); window.setTimeout(() => setFloat(key, String(lo)), 160); }}
+            style={{
+              marginLeft: 'auto', height: 28, padding: '0 12px', borderRadius: radius.md, cursor: 'pointer',
+              border: `1px solid ${tk.border.default}`, background: tk.bg.field, color: tk.text.primary,
+              font: `600 12px ${fontFamily.ui}`, display: 'inline-flex', alignItems: 'center', gap: 6,
+            }}
+          >
+            <Icon name="reset" size={12} />{paramDef.label}
+          </button>
+        </div>
+      );
+    }
     const step = paramDef.step ?? 0.01;
     const bidir = node.params[`__scBidir_${key}`] === true;
     const customRange = hasCustomRange(node.params, key);

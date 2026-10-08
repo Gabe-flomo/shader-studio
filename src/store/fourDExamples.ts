@@ -54,16 +54,48 @@ export const FOURD_EXAMPLE_INDEX: Record<string, { label: string; description: s
     description: 'Ten 4D shapes in two rows, all turning in the xw plane: duocylinder, spherinder, cubinder, cylindrical prism, ditorus, 5-cell, 16-cell, 24-cell, tesseract and Clifford torus. Play sets the turn speed and the camera.',
     play: true,
   },
+  // Phase 3: projection (built in fourDProjectionExamples.ts)
+  fourDTesseractProjection: {
+    label: '4D: Rotating tesseract (projection)',
+    description: 'The classic picture of a tesseract: a small cube inside a big cube, joined corner to corner, turning inside out in 4D. Not a slice: the whole shape, projected from 4D into 3D with perspective, as glowing edges and corners. Play sets both turns, the camera distance and the thickness.',
+    play: true,
+  },
+  fourD24CellWireframe: {
+    label: '4D: 24-cell wireframe',
+    description: 'The 24-cell, 24 corners and 96 edges, projected straight down the fourth axis (orthographic) while it makes a slow double rotation in two perpendicular 4D planes. A shape with no 3D relative, drawn as a lattice of glowing lines. Play sets the turns and the size.',
+    play: true,
+  },
+  fourDDuocylinderShadow: {
+    label: '4D: Duocylinder shadow',
+    description: 'The same turning duocylinder twice: on the left a slice (one 3D layer of it) and on the right its solid shadow along w (every layer at once). Both turn in the same two 4D planes at the same speed, so you can see what the slice leaves out. Shadows and occlusion on a floor.',
+    play: true,
+  },
+  fourDHopfRings: {
+    label: '4D: Hopf rings',
+    description: 'All of 3D space laid onto a 3-sphere (stereographic projection) and turned in 4D: the Hopf circles, great circles of the 3-sphere, become interlocking rings that fill space, nested round a half-cut Clifford torus. Play sets the turn, the flow along the circles, the number and thickness of rings.',
+    play: true,
+  },
+  // 4D straight to 2D (built in fourDProjectionExamples.ts)
+  fourDFlatTesseract: {
+    label: '4D: Flat tesseract (4D → 2D)',
+    description: 'The tesseract projected all the way down to the flat picture, 4D to 3D along w and then 3D to 2D, as glowing lines: no 3D scene at all, just UV, the 4D Wireframe 2D node and SDF Glow. Play sets both turns, the size and the glow.',
+    play: true,
+  },
+  fourDPlaneSlice: {
+    label: '4D: Plane through a duocylinder (4D → 2D)',
+    description: 'A flat plane cutting through a turning duocylinder in 4D: the cross-section splits, merges and morphs like a lava lamp. UV becomes a 4D point (Plane Slice 4D), two 4D turns, a 4D shape, and the distance coloured by depth with SDF Fill. Play sets the sweep, the turns and the radii.',
+    play: true,
+  },
 };
 
-export const FOURD_EXAMPLE_KEYS = Object.keys(FOURD_EXAMPLE_INDEX);
+export const FOURD_EXAMPLE_KEYS =Object.keys(FOURD_EXAMPLE_INDEX);
 
-type Wire = [fromId: string, outputKey: string];
-const note = (text: string) => ({ __comment: text });
-const sub = (nodes: GraphNode[]): SubgraphData => ({ nodes, inputPorts: [], outputPorts: [] });
+export type Wire = [fromId: string, outputKey: string];
+export const note = (text: string) => ({ __comment: text });
+export const sub = (nodes: GraphNode[]): SubgraphData => ({ nodes, inputPorts: [], outputPorts: [] });
 
 /** A Scene Group: Scene Pos → `shapes` → Scene Output; `ports` carry floats in from outside (a wired value, like an LFO). */
-function scene(id: string, x: number, y: number, label: string, shapes: GraphNode[], dist: Wire, comment: string,
+export function scene(id: string, x: number, y: number, label: string, shapes: GraphNode[], dist: Wire, comment: string,
   ports: Array<{ key: string; label: string; from: Wire; to: [nodeId: string, inputKey: string] }> = []): GraphNode {
   const g = n('sceneGroup', id, x, y, {
     label, ...note(comment),
@@ -82,7 +114,7 @@ function scene(id: string, x: number, y: number, label: string, shapes: GraphNod
 }
 
 /** An Expression Block with float inputs and a vec3 result. */
-function expr(id: string, x: number, y: number, label: string, wires: Record<string, Wire>, result: string, comment: string): GraphNode {
+export function expr(id: string, x: number, y: number, label: string, wires: Record<string, Wire>, result: string, comment: string): GraphNode {
   const base = n('exprNode', id, x, y, {
     inputs: Object.keys(wires).map(name => ({ name, type: 'float', slider: null })),
     outputType: 'vec3', lines: [], result, expr: 'a', label, ...note(comment),
@@ -93,18 +125,18 @@ function expr(id: string, x: number, y: number, label: string, wires: Record<str
 }
 
 /** The March Loop body that changes nothing: Group Inputs → March Pos → Group Output. */
-const passBody = (id: string): SubgraphData => sub([
+export const passBody = (id: string): SubgraphData => sub([
   n('marchLoopInputs', `${id}_in`, 0, 180, { _groupOriginal: true }),
   n('marchLoopOutput', `${id}_out`, 440, 180, { _groupOriginal: true }, { pos: [`${id}_in`, 'marchPos'] }),
 ]);
 
-const SUN = { x: 0.55, y: 0.85, z: 0.45 };
+export const SUN = { x: 0.55, y: 0.85, z: 0.45 };
 
 /**
  * Loop, shadow, occlusion, Multi-Light, background, vignette and tone map: the same finishing for all.
  * `colour` is the Expression Block that picks a surface colour from the hit point.
  */
-function finish(bg: [number, number, number], colour: GraphNode, loopNote: string, outX = 1700): GraphNode[] {
+export function finish(bg: [number, number, number], colour: GraphNode, loopNote: string, outX = 1700): GraphNode[] {
   return [
     n('marchLoopGroup', 'march', 340, 220, { bg, maxSteps: 128, maxDist: 24, ...note(loopNote) }, { ro: ['cam', 'ro'], rd: ['cam', 'rd'], scene: ['scene', 'scene'] }),
     n('splitVec3', 'hp', 640, 420, { ...note('Split Vec3: the hit point as x, y, z, so the surface colour can depend on where the ray landed.') }, { v: ['march', 'pos'] }),
@@ -251,7 +283,7 @@ export function buildFourDExamples(): Record<string, ExampleGraph> {
 // ═══ Phase 2 examples: the new shapes and transforms ═══════════════════════════
 
 /** The floor's dark checker for a floor at height `h`: the Expression Block's first branch (hit points within 0.01 of the floor). */
-const checker = (h: number) => `y < ${(h + 0.01).toFixed(2)} ? vec3(0.16, 0.18, 0.28) + vec3(0.1, 0.11, 0.14) * mod(floor(x * 2.0) + floor(z * 2.0), 2.0) : `;
+export const checker = (h: number) => `y < ${(h + 0.01).toFixed(2)} ? vec3(0.16, 0.18, 0.28) + vec3(0.1, 0.11, 0.14) * mod(floor(x * 2.0) + floor(z * 2.0), 2.0) : `;
 
 export function buildFourDShapeExamples(): Record<string, ExampleGraph> {
   const floorNode = (id: string, h: number, text: string) => n('planeSDF3D', id, 520, 360, { height: h, ...note(text) }, { p: ['sp', 'pos'] });

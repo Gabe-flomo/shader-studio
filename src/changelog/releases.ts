@@ -39,6 +39,68 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.94',
+    date: '2026-10-08',
+    title: 'Model step-by-steps',
+    highlights: [
+      { area: 'Studio', text: 'Explain these steps: with the explanation model downloaded, a line\'s step-by-step can be explained by the model, a sentence per step with a confidence dot.', link: { kind: 'doc', path: 'docs/explain-model.md' } },
+      { area: 'Studio', text: 'Settings: turn on Explain step-by-steps with it automatically to have the model explain steps as soon as you open them.' },
+    ],
+  },
+  {
+    id: '2026.10.93',
+    date: '2026-10-08',
+    title: 'Library regrouped',
+    highlights: [
+      { area: 'Studio', text: 'The Nodes library is regrouped: 2D tools, 3D tools, 4D tools, SDF, Colour, Effects (with post-processing), Simulation, Generators and Math & Logic.' },
+      { area: 'Studio', text: 'Every library section explains itself: open 2D Primitives to read what an SDF is, or hover a row for a one-line summary.' },
+    ],
+  },
+  {
+    id: '2026.10.92',
+    date: '2026-10-08',
+    title: '4D to 2D',
+    highlights: [
+      { area: 'Studio', text: '4D straight to 2D: 4D Wireframe 2D draws a turning tesseract as flat glowing lines, and Plane Slice 4D cuts any 4D shape with a plane into morphing 2D shapes.', link: { kind: 'doc', path: 'docs/4d.md' } },
+      { area: 'Studio', text: 'Two new 4D examples: Flat tesseract and Plane through a duocylinder, plus a step-by-step guide to 4D projection in the docs.' },
+    ],
+  },
+  {
+    id: '2026.10.91',
+    date: '2026-10-08',
+    title: 'Trigger buttons',
+    highlights: [
+      { area: 'Studio', text: 'Trigger settings are buttons: Start over on Agents and Burst on Emit and Particles. Play, keys, beats and rules can still fire them.' },
+    ],
+  },
+  {
+    id: '2026.10.90',
+    date: '2026-10-08',
+    title: 'Suggest group controls',
+    highlights: [
+      { area: 'Play', text: 'Suggest controls now finds group controls too: settings on a group face and one level inside are always measured, since they often change the picture most.' },
+    ],
+  },
+  {
+    id: '2026.10.89',
+    date: '2026-10-08',
+    title: '4D scenes build themselves',
+    highlights: [
+      { area: 'Studio', text: 'Adding a 4D shape or transform now builds the 3D scene for it: a Scene Group with a Lift to 4D, plus a camera and march loop, like 3D shapes do.', link: { kind: 'doc', path: 'docs/4d.md' } },
+      { area: 'Studio', text: 'A second 4D shape joins the scene beside the first and shares its Lift, so one W slices both. 4D transforms get a tesseract to show what they do.' },
+    ],
+  },
+  {
+    id: '2026.10.88',
+    date: '2026-10-08',
+    title: '4D projection',
+    highlights: [
+      { area: 'Studio', text: '4D projection: 4D Wireframe draws the tesseract, 5-cell, 16-cell or 24-cell as glowing edges in perspective or orthographic, like the classic cube in a cube.', link: { kind: 'doc', path: 'docs/4d.md' } },
+      { area: 'Studio', text: 'Project 4D gives a 4D shape its solid shadow, and Stereographic 4D with Hopf Circles draws the famous linked rings of the 3-sphere.' },
+      { area: 'Studio', text: 'Four new 4D examples: Rotating tesseract, 24-cell wireframe, Duocylinder shadow and Hopf rings.' },
+    ],
+  },
+  {
     id: '2026.10.87',
     date: '2026-10-08',
     title: 'Volumetric port fix',

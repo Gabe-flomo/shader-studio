@@ -390,7 +390,7 @@ export const AgentsGroupNode: NodeDefinition = {
     tier: { label: 'Count', type: 'select', section: 'Agents', hint: 'How many walkers.', help: 'How many walkers there are. 256k runs anywhere; 1M is the slime look on a laptop GPU; 4M wants a fast GPU.', options: [
       { value: '64k', label: '64k' }, { value: '256k', label: '256k' }, { value: '1m', label: '1M' }, { value: '4m', label: '4M' },
     ] },
-    restart: { label: 'Start over', type: 'float', min: 0, max: 1, step: 0.01, section: 'Agents', hint: 'A trigger: each time it rises past 0.5 the simulation starts over (as ↺ Start over does).', help: 'A trigger for Play: route a key, a beat, a gesture or a rule to it and every walker is born again at step 0, the trails cleared, as the card\'s ↺ Start over does. Live only: a recording or a rendered video runs from its own start.' },
+    restart: { label: 'Start over', type: 'float', trigger: true, min: 0, max: 1, step: 0.01, section: 'Agents', hint: 'A trigger: each time it rises past 0.5 the simulation starts over (as ↺ Start over does).', help: 'A trigger for Play: route a key, a beat, a gesture or a rule to it and every walker is born again at step 0, the trails cleared, as the card\'s ↺ Start over does. Live only: a recording or a rendered video runs from its own start.' },
     species: { label: 'Species', type: 'select', section: 'Agents', hint: 'Kinds of walker (by index); each deposits in its own trail channel.', options: SPECIES_OPTIONS },
     stepsPerFrame: { label: 'Steps per frame', type: 'float', min: 1, max: 8, step: 1, hard: true, section: 'Steps', hint: 'Steps the rule runs each frame at 60 fps: the simulation\'s speed.', help: 'How many times every walker runs its rule each frame (at 60 frames a second). More is faster growth. When the GPU can\'t keep up, fewer steps run and the simulation falls behind the clock; the count of walkers never changes.' },
     seed: { label: 'Seed', type: 'float', min: 0, max: 1000, step: 1, section: 'Steps', hint: 'A different seed gives a different (but repeatable) run.' },
@@ -1016,7 +1016,7 @@ export const AgentEmitNode: NodeDefinition = {
     speed: { label: 'Speed', type: 'float', min: 0, max: 2, step: 0.01, hint: 'Starting speed along its facing (Move sets its own).' },
     speedVar: { label: 'Speed ±', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How much the starting speed varies, as a share of it (0.45: the Particles node\'s).' },
     spread: { label: 'Spread', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How far each one\'s direction strays from its facing toward a random one (1: any direction).' },
-    burst: { label: 'Burst', type: 'float', min: 0, max: 1, step: 0.01, hint: 'A trigger: each time it rises past 0.5 everyone is born again at once.', help: 'A trigger. Each time it rises past 0.5 every walker is born again at once, from this Emit. In Play, route a trigger source (a key, a beat, a pad) to it.' },
+    burst: { label: 'Burst', type: 'float', trigger: true, min: 0, max: 1, step: 0.01, hint: 'A trigger: each time it rises past 0.5 everyone is born again at once.', help: 'A trigger. Each time it rises past 0.5 every walker is born again at once, from this Emit. In Play, route a trigger source (a key, a beat, a pad) to it.' },
     share: { label: 'Share', type: 'float', min: 0, max: 10, step: 0.01, hint: 'With Also chained: this Emit\'s share of the births.' },
   },
   assignable: false,

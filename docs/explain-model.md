@@ -94,3 +94,9 @@ It can be wrong. In the first trial (docs/reports/explain-model-trial.md, with l
 - `src/components/explain/ExplainMore.tsx`, `ExplainAnswer.tsx`, `ExplainScope.tsx`: the action, the answer with its dot and tag, Compare, and what a host tells it about its surroundings
 - `src/components/files/ExplanationModelSettings.tsx`: the models list
 - Tests: `src/explainModel/__tests__` (fixture graphs, prompts without labels, input descriptions, JSON parsing, grounding, confidence, several models and Compare with a fake transport; no model is ever downloaded in tests)
+
+## Step by step with the model
+
+A line's **Step by step** fold (the rule-based "First … then …") has an **Explain these steps** action when the line has two or more steps. It sends the line, each step's code (with earlier steps named by their letter) and the rule-based reading of each step, and asks for one short JSON object per step: what the step does to the value (with a tiny worked example when it helps) and why it is there. Answers are read and checked like a block's lines, so every step gets a confidence dot, and they are labelled with the step letters.
+
+Settings → Explanation model → **Explain step-by-steps with it automatically** runs it as soon as a step-by-step is opened, when the model is on and downloaded. Off by default.
