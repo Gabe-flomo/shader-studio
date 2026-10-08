@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.99',
+    date: '2026-10-08',
+    title: '4D fractals',
+    highlights: [
+      { area: 'Studio', text: '4D fractals: Quaternion Julia and Quaternion Mandelbrot shapes, sliced into 3D like the other 4D shapes, under 4D → Fractals.', link: { kind: 'doc', path: 'docs/4d.md' } },
+      { area: 'Studio', text: 'New example 4D: Quaternion Julia, where the fractal boils and curls as its constant drifts and it turns in 4D.' },
+    ],
+  },
+  {
     id: '2026.10.98',
     date: '2026-10-08',
     title: '2D builder functions',
