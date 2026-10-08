@@ -7,9 +7,11 @@
  *   ranges.ts      interestingRange(key, legal, nodeType), sampleRange, randomValue,
  *                  INTERESTING_RANGES, registerInterestingRanges, neverRandomise
  *   colour.ts      harmoniousPalette, randomColour, darkBackground, lightBackground, rampPalette, hslToRgb
+ *   score.ts       scoreFrames (colour, contrast, detail, motion, novelty), signatureOf, bestOf
  *   degenerate.ts  frameStats (RGBA → stats), degenerateReason, withRetries / withRetriesAsync, statsJudge
  */
 export * from './rng';
 export * from './ranges';
 export * from './colour';
 export * from './degenerate';
+export * from './score';

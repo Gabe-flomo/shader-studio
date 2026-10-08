@@ -14,7 +14,7 @@ offers **Reroll** (undo it and try a new seed) and **Undo**.
 | Agent Rules header | **Surprise me** · seed · Reroll | A rule set, its trail's decay and its colours (see below). |
 | Node card | 🎲 Randomise | The card's free sliders, now inside their *interesting* ranges. |
 | Canvas toolbar | 🎲 **Randomise all settings in this graph** (right-click: type a seed) | Every free slider on the level on screen, from one seed. |
-| Do bar | 🎲, or type **surprise me** (`surprise me seed=42`) | A new graph *inspired by* 2–3 of your graphs, GLSL and the examples (below). It replaces the graph; Undo brings it back. `surprise me large 3d` or `random line` still makes a line of the language. |
+| Do bar | 🎲 (and **Deep**), or type **surprise me** (`surprise me seed=42`) | New graphs *inspired by* 2–3 of your graphs, GLSL and the examples (below), in a carousel. The one you keep replaces the graph; Undo brings it back. `surprise me large 3d` or `random line` still makes a line of the language. |
 
 ## How a surprise stays interesting
 
@@ -83,6 +83,23 @@ Each roll draws 2–3 **sources** and builds a new graph from their techniques a
 - **Steering.** The last five rolls are kept for the session. A fresh roll tries six seeds and
   keeps the one whose plan repeats the recent sources and families least. Steering only chooses
   the seed, so the same seed and the same sources always make the same graph.
+- **The carousel.** A roll shows its first candidate straight away. It replaces the whole graph,
+  previewed without an undo step. Two more are made in the background. ‹ › (or ← → while the line
+  is empty) step between them with a "1 / 3" counter, and stepping past the end makes another. Each
+  candidate keeps its own seed and sources. **Keep**, Enter or closing the bar commits the one on
+  screen as one undo step. **Undo**, Escape or ⌘Z puts the original graph back.
+- **Deep** (the toggle beside the dice, remembered per browser). Each roll makes up to 16 candidates
+  in the background, in at most 6 seconds, with progress shown. Each one is drawn at 64 × 40 at two
+  moments and scored on cheap image metrics (`lib/surprise/score.ts`):
+  - colourfulness;
+  - contrast;
+  - edge density (best around a third of the picture);
+  - movement between the two moments;
+  - mirror symmetry;
+  - novelty: the distance of a colour and edge histogram from the last five kept results.
+
+  Degenerate frames are dropped. The best five go into the carousel, best first, each with chips
+  saying why ("colourful · moves · new look").
 - **The toast** says "Inspired by A, B and C". Each name opens its source (an example or saved graph
   with the pieces selected, or the shader in the GLSL page), and the toast offers Reroll and Undo.
 
@@ -175,6 +192,7 @@ For `random(a..b)` written by the user, sample the user's range directly
 - `src/nodes/randomizeParams.ts`: the card's Randomize, using the interesting ranges, and
   `randomizedGraph` for the whole graph level.
 - `src/lang/inspired/`: the Do bar's Surprise (`lift.ts`, `fragments.ts`, `compose.ts`), and
-  `src/components/surprise/inspiredAction.ts`: the source pool, GPU check, undo step and toast.
+  `src/components/surprise/inspiredAction.ts`: the source pool, GPU check, carousel, Deep, undo step
+  and toast (`SurpriseStrip.tsx` draws the carousel). `lib/surprise/score.ts` scores Deep's frames.
 - `src/components/surprise/`: `SurpriseBar` (the button, seed field and Reroll),
   `announceSurprise` (the toast), and the Grid, Agent and graph actions.

@@ -4,18 +4,20 @@
  * Gathers the source pool (the bundled examples and Convert examples, plus the user's saved graphs, GLSL
  * page shaders and Custom Function presets, read from storage), steers a fresh seed away from the last
  * few rolls, checks each try on the GPU (it compiles, and its frame isn't blank, blown out or flat), and
- * replaces the graph with the result as one undo step. The toast names the sources; each name opens it.
+ * previews candidates in a carousel; the one kept replaces the graph as one undo step. The toast names
+ * the sources; each name opens it.
  */
+import { create } from 'zustand';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { loadExampleGraphs } from '../../store/exampleIndex';
 import { CONVERT_EXAMPLES } from '../../glslToGraph/examples';
 import { GLSL_KEY, isGraphEntry } from '../../files/inventory';
 import { compileGraph } from '../../compiler/graphCompiler';
-import { degenerateReason, newSeed } from '../../lib/surprise';
+import { bestOf, degenerateReason, newSeed, scoreFrames, type Score, type Signature } from '../../lib/surprise';
 import { inspire, makePool, remember, steerSeed, type InspPool, type InspireResult, type Inspiration, type RollMemory } from '../../lang/inspired/compose';
 import type { InspSource } from '../../lang/inspired/fragments';
-import { programFrameStats } from '../sceneBuilder/surpriseActions';
+import { programFrameStats, programPixels } from '../sceneBuilder/surpriseActions';
 import { announceSurprise } from './announce';
 import { toast } from '../ui/toastStore';
 
@@ -95,41 +97,207 @@ async function openInspiration(i: Inspiration): Promise<void> {
   return jr.jumpToSource({ sourceKind, origin: i.id.startsWith('example') ? 'example' : 'saved', docId: i.id, docLabel: i.label, field: 'code', line: i.line ?? 1, column: 1 });
 }
 
-let busy = false;
+// ── The carousel ─────────────────────────────────────────────────────────────
+//
+// A roll shows its first candidate at once (a full replacement of the graph, previewed without an undo
+// step) and makes two more in the background; ‹ › step between them, past the end makes another. Keep,
+// Enter or closing the bar commits the one on screen as one undo step; Escape or Undo puts the original
+// graph back. Deep makes many candidates, draws each small at two moments, scores them (lib/surprise
+// score.ts) and keeps the best few, best first.
 
-/** Surprise: a new graph inspired by 2–3 sources, replacing the graph (one undo step). A seed given makes that one exactly. */
-export async function inspiredSurprise(o: { seed?: number } = {}): Promise<InspireResult | null> {
-  if (busy) return null;
-  busy = true;
+export interface Candidate { res: InspireResult; score?: Score }
+
+interface CarouselState {
+  open: boolean;
+  items: Candidate[];
+  index: number;
+  /** Making candidates in the background. */
+  generating: boolean;
+  /** Deep: how far along. */
+  progress: { done: number; total: number } | null;
+  deep: boolean;
+  original: GraphNode[] | null;
+}
+
+const DEEP_KEY = 'surprise:deep';
+const readDeep = () => { try { return localStorage.getItem(DEEP_KEY) === '1'; } catch { return false; } };
+
+export const useSurpriseCarousel = create<CarouselState>(() => ({ open: false, items: [], index: 0, generating: false, progress: null, deep: readDeep(), original: null }));
+
+export function setDeep(deep: boolean): void {
+  useSurpriseCarousel.setState({ deep });
+  try { localStorage.setItem(DEEP_KEY, deep ? '1' : '0'); } catch { /* this session only */ }
+}
+
+/** The last few kept results' signatures, for novelty. */
+const keptSignatures: Signature[] = [];
+/** Bumped when a carousel closes, so background work for it stops. */
+let generation = 0;
+
+const later = (f: () => void) => {
+  const ric = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+  if (ric) ric(f, { timeout: 120 }); else setTimeout(f, 16);
+};
+
+function preview(c: Candidate): void {
+  useNodeGraphStore.setState({ nodes: c.res.nodes, selectedNodeId: null, selectedNodeIds: [] });
+  useNodeGraphStore.getState().compile();
+  if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(() => useNodeGraphStore.getState()._fitViewCallback?.());
+}
+
+/** One candidate: steered away from recent rolls and from what's already in the carousel. */
+function makeCandidate(pool: InspPool, seed?: number, tries = 10): InspireResult {
+  const inCarousel = useSurpriseCarousel.getState().items.map(c => ({ sources: c.res.inspirations.map(i => i.id), families: c.res.families }));
+  const history = [...readHistory(), ...inCarousel];
+  const fresh = () => steerSeed(pool, Array.from({ length: 6 }, () => newSeed()), history);
+  return inspire({ pool, seed: seed ?? fresh(), tries, check: gpuCheck, ...(seed == null ? { seedFor: () => fresh() } : {}), nextId: () => useNodeGraphStore.getState().newNodeId() });
+}
+
+/** Draw a candidate small at two moments and score it (null without WebGL2). */
+function scoreCandidate(res: InspireResult): Score | undefined {
+  const r = compileGraph({ nodes: res.nodes });
+  if (!r.success) return undefined;
+  const px = programPixels(r.vertexShader, r.fragmentShader, r.paramUniforms, [0.7, 2.3], 64, 40);
+  if (!px || px === 'error') return undefined;
+  return scoreFrames(px.map(rgba => ({ rgba, w: 64, h: 40 })), keptSignatures);
+}
+
+let poolPromise: Promise<InspPool> | null = null;
+const poolNow = () => (poolPromise ??= currentPool().finally(() => { poolPromise = null; }));
+
+/** Roll: open the carousel (or add to it) with a new candidate, and more in the background. */
+export async function startSurprise(o: { seed?: number; deep?: boolean } = {}): Promise<void> {
+  const deep = o.deep ?? useSurpriseCarousel.getState().deep;
+  const pool = await poolNow();
+  const st = useNodeGraphStore.getState();
+  if (st.activeGroupPath.length) st.exitToRoot();
+  const cur = useSurpriseCarousel.getState();
+  if (!cur.open) {
+    generation++;
+    useSurpriseCarousel.setState({ open: true, items: [], index: 0, original: useNodeGraphStore.getState().nodes, progress: null, generating: false });
+  }
+  const gen = generation;
+  if (deep && o.seed == null) { runDeep(pool, gen); return; }
   try {
-    const pool = await currentPool();
-    const history = readHistory();
-    const fresh = () => steerSeed(pool, Array.from({ length: 6 }, () => newSeed()), history);
-    const seed = o.seed ?? fresh();
-    const st = useNodeGraphStore.getState();
-    if (st.activeGroupPath.length) st.exitToRoot();
-    const res = inspire({ pool, seed, tries: 10, check: gpuCheck, ...(o.seed == null ? { seedFor: () => fresh() } : {}), nextId: () => useNodeGraphStore.getState().newNodeId() });
-    useNodeGraphStore.getState().setNodesRewritten(res.nodes, `Surprise · seed ${res.seed}`);
-    if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(() => useNodeGraphStore.getState()._fitViewCallback?.());
-    if (!res.fallback) writeHistory(remember(history, res));
-    const after = useNodeGraphStore.getState().nodes;
-    const skipped = res.rejected.length ? ` Skipped ${res.rejected.length} ${res.rejected.length === 1 ? 'try' : 'tries'}.` : '';
-    announceSurprise({
-      title: 'Surprise', seed: res.seed,
-      links: res.inspirations.length ? { lead: 'Inspired by', items: res.inspirations.map(i => ({ label: i.label, onClick: () => { void openInspiration(i); } })) } : undefined,
-      message: res.fallback
-        ? `Nothing inspired compiled, so this is a random line: ${res.line ?? ''}.${skipped}`
-        : `${res.stages.map(s => s.what).join(' → ')}.${skipped} Type “surprise me seed=${res.seed}” to make it again.`,
-      stillCurrent: () => useNodeGraphStore.getState().nodes === after,
-      undo: () => useNodeGraphStore.getState().undo(),
-      reroll: () => { useNodeGraphStore.getState().undo(); void inspiredSurprise(); },
-    });
-    return res;
+    const c: Candidate = { res: makeCandidate(pool, o.seed) };
+    const items = [...useSurpriseCarousel.getState().items, c];
+    useSurpriseCarousel.setState({ items, index: items.length - 1 });
+    preview(c);
   } catch (e) {
     console.error('[surprise]', e);
     toast.error('Surprise didn’t work', { details: e instanceof Error ? e.message : String(e) });
-    return null;
-  } finally {
-    busy = false;
+    return;
   }
+  // Two more, made while you look at the first.
+  if (useSurpriseCarousel.getState().items.length < 3) fillTo(pool, gen, 3);
+}
+
+function fillTo(pool: InspPool, gen: number, n: number): void {
+  useSurpriseCarousel.setState({ generating: true });
+  const step = () => {
+    if (gen !== generation || !useSurpriseCarousel.getState().open) return;
+    if (useSurpriseCarousel.getState().items.length >= n) { useSurpriseCarousel.setState({ generating: false }); return; }
+    try {
+      const c: Candidate = { res: makeCandidate(pool) };
+      if (gen !== generation) return;
+      useSurpriseCarousel.setState(s => ({ items: [...s.items, c] }));
+    } catch (e) { console.warn('[surprise] background candidate', e); useSurpriseCarousel.setState({ generating: false }); return; }
+    later(step);
+  };
+  later(step);
+}
+
+/** Deep: up to 16 candidates in at most 6 seconds, each drawn and scored; the best five go into the carousel. */
+function runDeep(pool: InspPool, gen: number, total = 16, budgetMs = 6000): void {
+  const t0 = Date.now();
+  const scored: Candidate[] = [];
+  useSurpriseCarousel.setState({ generating: true, progress: { done: 0, total } });
+  const finish = () => {
+    if (gen !== generation) return;
+    const withScore = scored.filter((c): c is Candidate & { score: Score } => !!c.score);
+    const best = withScore.length ? bestOf(withScore, 5) : scored.slice(0, 3);
+    const items = [...useSurpriseCarousel.getState().items, ...best];
+    useSurpriseCarousel.setState({ items, index: Math.max(0, items.length - best.length), generating: false, progress: null });
+    if (items.length) preview(items[useSurpriseCarousel.getState().index]);
+    else cancelSurprise();
+  };
+  const step = () => {
+    if (gen !== generation || !useSurpriseCarousel.getState().open) return;
+    if (scored.length >= total || Date.now() - t0 > budgetMs) { finish(); return; }
+    try {
+      const res = makeCandidate(pool, undefined, 4);
+      if (!res.fallback) scored.push({ res, score: scoreCandidate(res) });
+    } catch (e) { console.warn('[surprise] deep candidate', e); }
+    useSurpriseCarousel.setState({ progress: { done: Math.min(total, scored.length), total } });
+    later(step);
+  };
+  later(step);
+}
+
+/** ‹ or ›: the candidate before or after; past the end makes another. */
+export async function stepSurprise(dir: -1 | 1): Promise<void> {
+  const s = useSurpriseCarousel.getState();
+  if (!s.open) return;
+  const next = s.index + dir;
+  if (next < 0) return;
+  if (next < s.items.length) { useSurpriseCarousel.setState({ index: next }); preview(s.items[next]); return; }
+  const gen = generation;
+  const pool = await poolNow();
+  if (gen !== generation) return;
+  const c: Candidate = { res: makeCandidate(pool) };
+  const items = [...useSurpriseCarousel.getState().items, c];
+  useSurpriseCarousel.setState({ items, index: items.length - 1 });
+  preview(c);
+}
+
+function close(): void {
+  generation++;
+  useSurpriseCarousel.setState({ open: false, items: [], index: 0, original: null, generating: false, progress: null });
+}
+
+/** Escape or Undo: the original graph back, nothing committed. */
+export function cancelSurprise(): void {
+  const s = useSurpriseCarousel.getState();
+  if (!s.open) return;
+  if (s.original) { useNodeGraphStore.setState({ nodes: s.original }); useNodeGraphStore.getState().compile(); }
+  close();
+}
+
+/** Keep (Enter, or closing the bar): the candidate on screen, as one undo step back to the original. */
+export function keepSurprise(): InspireResult | null {
+  const s = useSurpriseCarousel.getState();
+  if (!s.open) return null;
+  const c = s.items[s.index];
+  if (!c || !s.original) { cancelSurprise(); return null; }
+  // What's on screen (with any change made while looking), committed over the original.
+  const shown = useNodeGraphStore.getState().nodes;
+  useNodeGraphStore.setState({ nodes: s.original });
+  useNodeGraphStore.getState().setNodesRewritten(shown, `Surprise · seed ${c.res.seed}`);
+  close();
+  const res = c.res;
+  if (!res.fallback) writeHistory(remember(readHistory(), res));
+  const sig = c.score?.signature ?? scoreCandidate(res)?.signature;
+  if (sig) { keptSignatures.push(sig); if (keptSignatures.length > 5) keptSignatures.shift(); }
+  const after = useNodeGraphStore.getState().nodes;
+  const skipped = res.rejected.length ? ` Skipped ${res.rejected.length} ${res.rejected.length === 1 ? 'try' : 'tries'}.` : '';
+  announceSurprise({
+    title: 'Surprise', seed: res.seed,
+    links: res.inspirations.length ? { lead: 'Inspired by', items: res.inspirations.map(i => ({ label: i.label, onClick: () => { void openInspiration(i); } })) } : undefined,
+    message: res.fallback
+      ? `Nothing inspired compiled, so this is a random line: ${res.line ?? ''}.${skipped}`
+      : `${res.stages.map(x => x.what).join(' → ')}.${skipped} Type “surprise me seed=${res.seed}” to make it again.`,
+    stillCurrent: () => useNodeGraphStore.getState().nodes === after,
+    undo: () => useNodeGraphStore.getState().undo(),
+    reroll: () => { useNodeGraphStore.getState().undo(); void startSurprise({ deep: false }).then(() => keepSurprise()); },
+  });
+  return res;
+}
+
+/** Open a candidate's source. */
+export function openSource(i: Inspiration): void { void openInspiration(i); }
+
+/** Surprise and keep it at once (one undo step): a seed given makes that one exactly. */
+export async function inspiredSurprise(o: { seed?: number } = {}): Promise<InspireResult | null> {
+  await startSurprise({ seed: o.seed, deep: false });
+  return keepSurprise();
 }
