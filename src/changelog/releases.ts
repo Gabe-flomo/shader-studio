@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.87',
+    date: '2026-10-08',
+    title: 'Volumetric port fix',
+    highlights: [
+      { area: 'Studio', text: 'Fixed: turning on volumetric in a scene whose shapes take settings through Scene Group ports (like the 4D examples) no longer fails with undeclared identifiers.' },
+    ],
+  },
+  {
     id: '2026.10.86',
     date: '2026-10-08',
     title: '4D shapes',
