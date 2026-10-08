@@ -84,8 +84,47 @@ export function planSceneGroupAdd(topLevel: GraphNode[], position: { x: number; 
   return { kind: 'wrap-scene', posInput: 'pos', distOutput: 'dist', ...placeScene(topLevel, position) };
 }
 
+/**
+ * How a 4D node joins a 3D scene (docs/4d.md). Every 4D shape measures a 4D
+ * point, so a scene needs Scene Pos → Lift to 4D (or Stereographic 4D) before it:
+ *
+ *   - lead 'lift':   Lift to 4D itself; a Tesseract after it shows the slice.
+ *   - lead 'stereo': Stereographic 4D; Hopf Circles after it, then Stereographic
+ *                    Distance to correct the distance by the map's stretch.
+ *   - lead 'shape':  a 4D shape (point in, distance out); a Lift goes before it.
+ *   - lead 'warp':   a 4D transform (point in, point out); a Lift before it and a
+ *                    Tesseract after it, so it shows.
+ *
+ * Projection nodes that already take a 3D position (4D Wireframe, Project 4D) are
+ * plain 3D shapes. Null for the rest (Noise 4D, Scale / Twist 4D's two-sided
+ * jobs, Stereographic Distance): those go in by hand.
+ */
+export type FourDRole = { kind: 'shape4d'; lead: 'lift' | 'stereo' | 'shape' | 'warp' };
+export const FOUR_D_CATEGORY = '4D';
+
+export function fourDRole(def: NodeDefinition): FourDRole | { kind: 'shape'; posInput: string; distOutput: string } | null {
+  if (def.category !== FOUR_D_CATEGORY) return null;
+  const pos3 = def.inputs.pos?.type === 'vec3';
+  const p4In = def.inputs.p4?.type === 'vec4';
+  const p4Out = def.outputs.p4?.type === 'vec4';
+  const distOut = def.outputs.dist?.type === 'float';
+  const distIn = !!def.inputs.dist;
+  if (distIn) return null;
+  if (def.type === 'lift4D') return { kind: 'shape4d', lead: 'lift' };
+  if (def.type === 'stereo4D') return { kind: 'shape4d', lead: 'stereo' };
+  if (pos3 && distOut) return { kind: 'shape', posInput: 'pos', distOutput: 'dist' };
+  if (p4In && distOut) return { kind: 'shape4d', lead: 'shape' };
+  if (p4In && p4Out) return { kind: 'shape4d', lead: 'warp' };
+  return null;
+}
+
 export function planSmart3DAdd(type: string, def: NodeDefinition, topLevel: GraphNode[], position: { x: number; y: number }): Smart3DPlan {
   if (MARCH_GROUP_TYPES.has(type) || type === 'sceneGroup' || type === 'spaceWarpGroup') return { kind: 'none' };
+
+  // A 4D shape or transform gets a 3D scene the same way, with a Lift to 4D inside (fourDRole).
+  if (def.category === FOUR_D_CATEGORY) {
+    return fourDRole(def) ? { kind: 'wrap-scene', posInput: null, distOutput: null, ...placeScene(topLevel, position) } : { kind: 'none' };
+  }
 
   if (SCENE_SPACE_CATEGORIES.has(def.category)) {
     const posInput = def.inputs.pos ? 'pos' : def.inputs.p ? 'p' : null;
