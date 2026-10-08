@@ -79,8 +79,11 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Fold',   types: ['fold3D', 'mirrorFold3D', 'kaleidoscope3D', 'sphereInvert3D', 'mobiusWarp3D', 'logPolarWarp3D', 'helixWarp3D'] },
   ],
   '4D': [
-    { label: 'Point',  types: ['lift4D', 'rotate4D', 'translate4D'] },
-    { label: 'Shapes', types: ['hypersphereSDF', 'tesseractSDF'] },
+    { label: 'Point',  types: ['lift4D', 'rotate4D', 'translate4D', 'scale4D'] },
+    { label: 'Repeat', types: ['repeat4D', 'fold4D', 'twist4D'] },
+    { label: 'Shapes', types: ['hypersphereSDF', 'tesseractSDF', 'duocylinderSDF', 'spherinderSDF', 'cubinderSDF', 'cylPrismSDF', 'ditorusSDF', 'cliffordTorusSDF'] },
+    { label: 'Polytopes', types: ['cell5SDF', 'cell16SDF', 'cell24SDF'] },
+    { label: 'Noise',  types: ['noise4D'] },
   ],
   '3D Lighting': [
     { label: 'Shadow',  types: ['sdfAo', 'softShadow'] },

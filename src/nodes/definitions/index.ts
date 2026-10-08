@@ -18,7 +18,7 @@ import { MidiInputNode } from './midi';
 export { MidiInputNode };
 import { DataNode } from './data';
 export { DataNode };
-import { Lift4DNode, Rotate4DNode, Translate4DNode, HypersphereSDFNode, TesseractSDFNode } from './fourD';
+import { Lift4DNode, Rotate4DNode, Translate4DNode, HypersphereSDFNode, TesseractSDFNode, FOURD_P2_NODES } from './fourD';
 export { Lift4DNode, Rotate4DNode, Translate4DNode, HypersphereSDFNode, TesseractSDFNode };
 
 // Sources
@@ -310,6 +310,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   translate4D: Translate4DNode,
   hypersphereSDF: HypersphereSDFNode,
   tesseractSDF: TesseractSDFNode,
+  ...FOURD_P2_NODES,
   timeCube: TimeCubeNode,
   timeSlice: TimeSliceNode,
   timeCubeView: TimeCubeViewNode,
