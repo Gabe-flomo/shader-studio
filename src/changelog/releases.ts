@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.101',
+    date: '2026-10-08',
+    title: 'Warp safety everywhere',
+    highlights: [
+      { area: 'Studio', text: 'Warp safety now works in volumetric loops and the GI Lit March Group; GI\'s shadow, bounce and reflection rays step safely too.', link: { kind: 'doc', path: 'docs/warp-safety.md' } },
+      { area: 'Studio', text: 'New Stretch output on the march loops: wire it into Soft Shadow or SDF AO so their rays don\'t tear through warped space.' },
+      { area: 'Studio', text: '3D Scene Builder: Quality → Warp safety (recipe: quality warp=careful), which also wires Stretch into its shadows and AO.' },
+    ],
+  },
+  {
     id: '2026.10.100',
     date: '2026-10-08',
     title: 'Warp safety',
