@@ -30,10 +30,11 @@ import type { GraphNode, NodeDefinition, SubgraphData } from '../types/nodeGraph
 import { getNodeDefinition } from './definitions';
 import { instantiateNode } from './scene3dDefaults';
 
-import { SCENE_SPACE_CATEGORIES } from './smart3d';
+import { SCENE_SPACE_CATEGORIES, fourDRole, type FourDRole } from './smart3d';
 
 export type SceneRole =
   | { kind: 'shape'; posInput: string; distOutput: string }
+  | FourDRole
   | { kind: 'warp'; posInput: string; posOutput: string; distInput: string | null; distOutput: string | null }
   | { kind: 'modifier'; posInput: string | null; distInput: string; distOutput: string };
 
@@ -42,6 +43,8 @@ const POS_OUTPUTS = ['pos', 'p', 'cellPos'];
 
 /** What a scene-space node does in a scene, from its sockets. Null for anything else. */
 export function sceneRole(def: NodeDefinition): SceneRole | null {
+  const four = fourDRole(def);
+  if (four) return four;
   if (!SCENE_SPACE_CATEGORIES.has(def.category)) return null;
   const posInput = def.inputs.pos?.type === 'vec3' ? 'pos' : def.inputs.p?.type === 'vec3' ? 'p' : null;
   const distInput = def.inputs.dist?.type === 'float' ? 'dist' : null;
@@ -97,6 +100,7 @@ export function buildShapeChain(
 ): { nodes: GraphNode[]; dist: Ref | null } {
   node.position = { ...at };
   const label = getNodeDefinition(node.type)?.label ?? node.type;
+  if (role.kind === 'shape4d') return build4DChain(nextId, node, role, pos, at);
   if (role.kind === 'shape') {
     wire(node, role.posInput, pos);
     if (role.distOutput !== 'surface') return { nodes: [node], dist: { nodeId: node.id, outputKey: role.distOutput } };
@@ -154,6 +158,60 @@ export function buildShapeChain(
   if (role.posInput) wire(node, role.posInput, pos);
   wire(node, role.distInput, { nodeId: partner.id, outputKey: 'dist' });
   return { nodes: [partner, ...out], dist: { nodeId: node.id, outputKey: role.distOutput } };
+}
+
+/**
+ * A 4D node's chain, from Scene Pos (`pos`) or an existing 4D point (`fromP4`)
+ * to a distance: a Lift to 4D before anything that measures a 4D point, and a
+ * Tesseract after a lift or a transform so it shows (fourDRole in smart3d.ts).
+ */
+function build4DChain(
+  nextId: () => string, node: GraphNode, role: FourDRole, pos: Ref, at: { x: number; y: number }, fromP4?: Ref,
+): { nodes: GraphNode[]; dist: Ref | null } {
+  const label = getNodeDefinition(node.type)?.label ?? node.type;
+  const out: GraphNode[] = [];
+  let x = at.x;
+  const place = (n: GraphNode) => { n.position = { x, y: at.y }; out.push(n); x += 440; };
+  let p4: Ref;
+  let stereo: GraphNode | null = null;
+  if (role.lead === 'lift' || role.lead === 'stereo') {
+    wire(node, 'pos', pos);
+    place(node);
+    p4 = { nodeId: node.id, outputKey: 'p4' };
+    if (role.lead === 'stereo') stereo = node;
+  } else if (fromP4) {
+    p4 = fromP4;
+  } else {
+    const lift = make(nextId, 'lift4D', at, note(`Turns the scene's 3D point into a 4D one, (x, y, z, w), so ${label} can measure it. W picks which 3D slice of the 4D shape you see: move it (or wire an LFO) to sweep through the shape. Slice direction changes the angle of the cut.`));
+    wire(lift, 'pos', pos);
+    place(lift);
+    p4 = { nodeId: lift.id, outputKey: 'p4' };
+  }
+  if (role.lead === 'warp') {
+    wire(node, 'p4', p4);
+    place(node);
+    p4 = { nodeId: node.id, outputKey: 'p4' };
+  }
+  if (role.lead === 'shape') {
+    wire(node, 'p4', p4);
+    place(node);
+    return { nodes: out, dist: { nodeId: node.id, outputKey: 'dist' } };
+  }
+  const partner = make(nextId, stereo ? 'hopfCirclesSDF' : 'tesseractSDF', at, note(stereo
+    ? `Rings of Hopf circles for ${label} to draw: they live on the 3-sphere that ${label} maps space onto. Swap them for a Clifford Torus or any 4D shape near the 3-sphere.`
+    : `A tesseract (the 4D cube) for ${label} to show. ${label} makes or moves a 4D point, which draws nothing on its own; this shape shows what it does. Swap it for any 4D shape.`));
+  wire(partner, 'p4', p4);
+  place(partner);
+  let dist: Ref = { nodeId: partner.id, outputKey: 'dist' };
+  if (stereo) {
+    const fix = make(nextId, 'stereoDist4D', at, note(`Corrects the distance for ${label}'s stretch, so the march doesn't overshoot where the map magnifies space. Keep it last.`));
+    wire(fix, 'dist', dist);
+    wire(fix, 'factor', { nodeId: stereo.id, outputKey: 'factor' });
+    wire(fix, 'scale', { nodeId: stereo.id, outputKey: 'scale' });
+    place(fix);
+    dist = { nodeId: fix.id, outputKey: 'dist' };
+  }
+  return { nodes: out, dist };
 }
 
 /**
@@ -230,28 +288,34 @@ export function addToScene(
 
   // An empty scene: the whole chain, straight into Scene Output.
   if (!current) {
-    if (opts.byHand && role.kind !== 'shape') { node.position = at; return done([node], `${label} was added; wire it between Scene Pos and a shape.`); }
+    if (opts.byHand && role.kind !== 'shape' && role.kind !== 'shape4d') { node.position = at; return done([node], `${label} was added; wire it between Scene Pos and a shape.`); }
     const chain = buildShapeChain(nextId, node, role, pos, at);
     wire(sceneOut, 'dist', chain.dist);
     return done(chain.nodes, `${label} is wired into the scene's output.`);
   }
 
-  if (role.kind === 'shape') {
+  if (role.kind === 'shape' || role.kind === 'shape4d') {
     let from: Ref = pos;
     const added: GraphNode[] = [];
+    // A 4D shape joins the 4D point a Lift in the scene already makes, so one W slices everything.
+    const lift = role.kind === 'shape4d' && role.lead === 'shape' ? nodes.find(n => n.type === 'lift4D') : undefined;
+    let fromP4: Ref | undefined = lift ? { nodeId: lift.id, outputKey: 'p4' } : undefined;
     if (!opts.byHand) {
       // Beside what's there: right, left, further right, further left…
       const k = shapeCount(nodes) + 1;
       const tx = Math.round(1.3 * Math.ceil(k / 2) * (k % 2 ? 1 : -1) * 100) / 100;
-      const shift = make(nextId, 'translate3D', at, {
-        tx, ty: 0, tz: 0, _autoShift: true,
-        ...note(`Moves ${label} ${Math.abs(tx)} to the ${tx > 0 ? 'right' : 'left'} so it sits beside the shapes already in the scene instead of inside them. Change X, Y and Z to place it, or delete this to put it back on the centre.`),
-      });
-      wire(shift, 'pos', pos);
-      from = { nodeId: shift.id, outputKey: 'pos' };
+      const where = `Moves ${label} ${Math.abs(tx)} to the ${tx > 0 ? 'right' : 'left'} so it sits beside the shapes already in the scene instead of inside them.`;
+      const shift = fromP4
+        ? make(nextId, 'translate4D', at, { tx, ty: 0, tz: 0, tw: 0, _autoShift: true, ...note(`${where} Change X, Y, Z and W to place it, or delete this to put it back on the centre.`) })
+        : make(nextId, 'translate3D', at, { tx, ty: 0, tz: 0, _autoShift: true, ...note(`${where} Change X, Y and Z to place it, or delete this to put it back on the centre.`) });
+      if (fromP4) { wire(shift, 'p4', fromP4); fromP4 = { nodeId: shift.id, outputKey: 'p4' }; }
+      else { wire(shift, 'pos', pos); from = { nodeId: shift.id, outputKey: 'pos' }; }
       added.push(shift);
     }
-    const chain = buildShapeChain(nextId, node, role, from, { x: at.x + (opts.byHand ? 0 : 440), y: at.y });
+    const chainAt = { x: at.x + (opts.byHand ? 0 : 440), y: at.y };
+    const chain = role.kind === 'shape4d'
+      ? build4DChain(nextId, node, role, from, chainAt, fromP4)
+      : buildShapeChain(nextId, node, role, from, chainAt);
     added.push(...chain.nodes);
     const right = Math.max(...chain.nodes.map(n => n.position.x));
     const union = make(nextId, 'sdfUnion', { x: right + 440, y: at.y }, {
