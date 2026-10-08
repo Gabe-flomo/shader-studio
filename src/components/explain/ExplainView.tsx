@@ -5,8 +5,8 @@
  * sub-expression; hovering a variable chip lights where the code reads it, and the other way
  * round. Each step can be made into a node, and a recognised idiom can be looked for elsewhere.
  */
-import { useMemo, useState } from 'react';
-import { allNodes, transferPlot, needsPicture, type ExplainContext, type Explanation, type LineExplanation, type Seg, type Step, type UseQuery } from '../../lib/glslPatterns';
+import { useEffect, useMemo, useState } from 'react';
+import { allNodes, transferPlot, needsPicture, workedSteps, workedVars, showValue, type ExplainContext, type Explanation, type LineExplanation, type Seg, type Step, type UseQuery, type Value, type WorkedVar } from '../../lib/glslPatterns';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
@@ -80,6 +80,11 @@ export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPictur
     background: 'none', color: tk.accent.text, cursor: 'pointer', font: `500 11.5px ${fontFamily.ui}`, flexShrink: 0,
   };
   const hasFold = ex.steps.length > 0 || !!literal;
+  // Worked examples: a sample value for each name the line reads (editable), and each step's number and spread.
+  const defaults = useMemo(() => workedVars(ex), [ex]);
+  const [overrides, setOverrides] = useState<Record<string, Value>>({});
+  const vars: WorkedVar[] = useMemo(() => defaults.map(v => (v.name in overrides ? { ...v, value: overrides[v.name] } : v)), [defaults, overrides]);
+  const worked = useMemo(() => (stepsOpen && ex.steps.length ? workedSteps(ex, vars) : []), [stepsOpen, ex, vars]);
   const autoSteps = useExplainModel(m => m.autoSteps && explainModelUsable(m));
   const stepInfo = useMemo(() => ex.steps.map(s => ({ label: s.label, code: s.code, reading: s.text })), [ex.steps]);
   return (
@@ -124,6 +129,9 @@ export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPictur
           <ExplainText segs={literal} activeVar={hoverVar} onVarHover={setHoverVar} />
         </div>
       )}
+      {stepsOpen && ex.steps.length > 0 && vars.length > 0 && (
+        <TryValues vars={vars} onChange={(name, v) => setOverrides(o => ({ ...o, [name]: v }))} onReset={Object.keys(overrides).length ? () => setOverrides({}) : undefined} />
+      )}
       {stepsOpen && ex.steps.length > 0 && (
         <ol data-explain-steps="" style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 2 }} onMouseLeave={() => setHover(null)}>
           {ex.steps.map((s, i) => {
@@ -137,6 +145,7 @@ export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPictur
                   {lead && <span style={{ color: tk.text.faint }}>{lead}, </span>}
                   <span data-explain-step-code="" style={{ font: `500 11.5px ${fontFamily.mono}`, background: tk.bg.field, padding: '0 4px', borderRadius: 4 }}><GlslCode code={s.code} /></span>
                   {' '}<ExplainText segs={s.segs} activeVar={hoverVar} onVarHover={setHoverVar} />.
+                  {worked[i] && <WorkedChip w={worked[i]} />}
                   {s.idiom && (
                     <span title="A well-known shader idiom" style={{ marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '0 6px', borderRadius: 9, background: alpha(tk.status.success, 0.12), color: tk.text.secondary, font: `600 10.5px ${fontFamily.ui}`, verticalAlign: 1 }}>
                       <Icon name="star" size={10} />{s.idiom.name}
@@ -180,5 +189,64 @@ export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPictur
       )}
       {explainMore && <ExplainMore text={ex.source} ctx={explainMore.ctx} where={explainMore.where} />}
     </div>
+  );
+}
+
+
+/** The sample values the worked numbers use: one small field per name the line reads. */
+function TryValues({ vars, onChange, onReset }: { vars: WorkedVar[]; onChange: (name: string, v: Value) => void; onReset?: () => void }) {
+  const tk = useTokens();
+  return (
+    <div data-explain-try="" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, font: `500 11.5px ${fontFamily.ui}`, color: tk.text.muted }}>
+      <span title="The numbers each step shows are worked out with these values. Change one to see how the line responds.">With</span>
+      {vars.map(v => <TryField key={v.name} v={v} onChange={val => onChange(v.name, val)} />)}
+      {onReset && <button type="button" onClick={onReset} style={{ border: 0, background: 'none', padding: 0, color: tk.accent.text, cursor: 'pointer', font: `600 11px ${fontFamily.ui}` }}>Reset</button>}
+    </div>
+  );
+}
+
+function TryField({ v, onChange }: { v: WorkedVar; onChange: (v: Value) => void }) {
+  const tk = useTokens();
+  const shown = showValue(v.value).replace(/^\(|\)$/g, '');
+  const [text, setText] = useState(shown);
+  useEffect(() => setText(shown), [shown]);
+  const commit = () => {
+    const nums = text.split(/[ ,]+/).map(Number).filter(n => Number.isFinite(n));
+    if (!nums.length) { setText(shown); return; }
+    const n = Array.isArray(v.value) ? v.value.length : 1;
+    onChange(n === 1 ? nums[0] : Array.from({ length: n }, (_, i) => nums[i] ?? nums[nums.length - 1]));
+  };
+  return (
+    <label title={`${v.name}: ${v.why}, usually ${showValue(v.range[0])} to ${showValue(v.range[1])}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+      <span style={{ font: `600 11px ${fontFamily.mono}`, color: tk.text.secondary }}>{v.name} =</span>
+      <input aria-label={`Sample value of ${v.name}`} value={text} onChange={e => setText(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+        style={{ width: Math.max(38, text.length * 7 + 14), height: 20, padding: '0 4px', border: `1px solid ${tk.border.subtle}`, borderRadius: 4, background: tk.bg.field, color: tk.text.primary, font: `500 11px ${fontFamily.mono}` }} />
+    </label>
+  );
+}
+
+/** A step's worked number, and a tiny bar of where it sits in the step's spread across the picture. */
+function WorkedChip({ w }: { w: { value: Value | null; range: [number, number] | null } }) {
+  const tk = useTokens();
+  if (w.value === null && !w.range) return null;
+  const val = w.value === null ? null : showValue(w.value);
+  const first = w.value === null ? null : Array.isArray(w.value) ? w.value[0] : w.value;
+  const r = w.range;
+  const t = r && first !== null && r[1] > r[0] ? Math.min(1, Math.max(0, (first - r[0]) / (r[1] - r[0]))) : null;
+  return (
+    <span data-explain-worked="" title={r ? `Here: ${val ?? '?'}. Across the picture it runs ${showValue(r[0])} to ${showValue(r[1])}.` : `Here: ${val}`}
+      style={{ marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 5, verticalAlign: 1 }}>
+      {val !== null && <span style={{ padding: '0 5px', borderRadius: 4, background: alpha(tk.accent.base, 0.1), color: tk.accent.text, font: `600 10.5px ${fontFamily.mono}` }}>= {val}</span>}
+      {r && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: tk.text.faint, font: `500 10px ${fontFamily.mono}` }}>
+          {showValue(r[0])}
+          <svg width="44" height="8" aria-hidden style={{ display: 'block' }}>
+            <rect x="0" y="3" width="44" height="2" rx="1" fill={tk.border.default} />
+            {t !== null && <circle cx={2 + t * 40} cy="4" r="3" fill={tk.accent.base} />}
+          </svg>
+          {showValue(r[1])}
+        </span>
+      )}
+    </span>
   );
 }
