@@ -524,6 +524,24 @@ export const SceneBuilderNode: NodeDefinition = {
   generateGLSL: () => ({ code: '', outputVars: {} }),
 };
 
+// Warp safety (docs/warp-safety.md), shared by the March Loop Group and the GI Lit March Group.
+const WARP_SAFETY_PARAMS = {
+    warpSafety:  { label: 'Warp safety', type: 'select' as const, options: [
+      { value: 'off', label: 'Off (as before)' },
+      { value: 'auto', label: 'Auto: learn the stretch, cap steps, back up on overshoot' },
+      { value: 'careful', label: 'Careful: also measure the stretch each step (slower)' },
+      { value: 'high', label: 'High: Careful with shorter, twice as many steps (slowest; extreme warps)' },
+    ], hint: 'Fixes tearing when a twist, bend, displacement or fold stretches space.',
+       help: 'A warp stretches space, so the distance a shape reports is no longer safe to step: rays jump through surfaces and the picture tears. Auto learns how stretched space is as the ray goes (when the distance shrinks faster than the ray moved, later steps are divided by that), never steps further than Max step, and when a step lands inside a surface it backs up with a short halving search. Careful also measures the stretch at every step from the distance\'s gradient: 4 more reads of the scene per step. High is Careful with shorter steps and twice the step budget, for extreme warps: the slowest, and only a little cleaner. In volumetric mode it keeps rays from skipping over the medium. Shadow, bounce and reflection rays divide by the same stretch (wire Stretch into Soft Shadow and AO nodes). See docs/warp-safety.md.' },
+    maxStep:     { label: 'Max step', type: 'float' as const, min: 0.02, max: 5.0, step: 0.01, showWhen: { param: 'warpSafety', value: ['auto', 'careful', 'high'] }, hint: 'The longest step a ray may take, whatever the distance says. Smaller catches thin, warped features; larger is faster.' },
+    showSteps:   { label: 'Show', type: 'select' as const, options: [
+      { value: 'picture', label: 'The picture' },
+      { value: 'steps', label: 'Steps heatmap (where rays struggle)' },
+    ], hint: 'Steps heatmap colours each pixel by how many steps its ray took: dark is easy, yellow and white is where it struggled, which is where warps tear.' },
+};
+
+const STRETCH_OUTPUT = { type: 'float' as const, label: 'Stretch', hint: 'With Warp safety on: how stretched space is where the ray stopped (1 = not at all). Wire it into Soft Shadow and AO so their rays step safely too.' };
+
 export const MarchLoopGroupNode: NodeDefinition = {
   type: 'marchLoopGroup', label: 'March Loop Group', category: '3D Scene',
   description: 'The ray marcher. For every pixel it walks a ray from the camera into the scene until it touches a surface, then shades it. Wire a March Camera into Ray Origin / Ray Dir and a Scene Group into Scene, and send Color to the Output. Double-click to edit the loop body, which runs at every step of the walk (bend space with March Pos → warps → Group Output, or accumulate glow with +=).',
@@ -545,6 +563,7 @@ export const MarchLoopGroupNode: NodeDefinition = {
     iterCount: { type: 'float', label: 'Iter Count', hint: 'Steps taken, as a whole number.' },
     hit:       { type: 'float', label: 'Hit',        hint: '1 where the ray touched a surface, 0 where it missed. Use it as a mask.' },
     pos:       { type: 'vec3',  label: 'Hit Pos',    hint: 'The 3D point where the ray stopped. Feed it to lighting and texture nodes.' },
+    stretch:   STRETCH_OUTPUT,
   },
   version: 3,
   migrateParams: params => keepOldJitter(foldLoopColours(params, [0.6, 0.7, 0.9])),
@@ -559,18 +578,7 @@ export const MarchLoopGroupNode: NodeDefinition = {
     maxSteps:    { label: 'Max Steps',   type: 'float' as const,   min: 8,    max: 256,   step: 4,    compileTime: true, hint: 'Maximum ray march iterations per pixel. Higher = deeper into geometry, more GPU cost.' },
     maxDist:     { label: 'Max Dist',    type: 'float' as const,   min: 5.0,  max: 100.0, step: 1.0,  hint: 'How far the ray travels before giving up and returning the background color.' },
     stepScale:   { label: 'Step Scale',  type: 'float' as const,   min: 0.3,  max: 1.0,   step: 0.05, hint: 'Fraction of the SDF distance to step each iteration. Lower = safer for thin features but slower. Not used in volumetric mode.' },
-    warpSafety:  { label: 'Warp safety', type: 'select' as const, options: [
-      { value: 'off', label: 'Off (as before)' },
-      { value: 'auto', label: 'Auto: learn the stretch, cap steps, back up on overshoot' },
-      { value: 'careful', label: 'Careful: also measure the stretch each step (slower)' },
-      { value: 'high', label: 'High: Careful with shorter, twice as many steps (slowest; extreme warps)' },
-    ], hint: 'Fixes tearing when a twist, bend, displacement or fold stretches space.',
-       help: 'A warp stretches space, so the distance a shape reports is no longer safe to step: rays jump through surfaces and the picture tears. Auto learns how stretched space is as the ray goes (when the distance shrinks faster than the ray moved, later steps are divided by that), never steps further than Max step, and when a step lands inside a surface it backs up with a short halving search. Careful also measures the stretch at every step from the distance\'s gradient: 4 more reads of the scene per step. High is Careful with shorter steps and twice the step budget, for extreme warps: the slowest, and only a little cleaner. Not used in volumetric mode. See docs/warp-safety.md.' },
-    maxStep:     { label: 'Max step', type: 'float' as const, min: 0.02, max: 5.0, step: 0.01, showWhen: { param: 'warpSafety', value: ['auto', 'careful', 'high'] }, hint: 'The longest step a ray may take, whatever the distance says. Smaller catches thin, warped features; larger is faster.' },
-    showSteps:   { label: 'Show', type: 'select' as const, options: [
-      { value: 'picture', label: 'The picture' },
-      { value: 'steps', label: 'Steps heatmap (where rays struggle)' },
-    ], hint: 'Steps heatmap colours each pixel by how many steps its ray took: dark is easy, yellow and white is where it struggled, which is where warps tear.' },
+    ...WARP_SAFETY_PARAMS,
     curvature:   { label: 'Space curvature', type: 'float' as const, min: -1.0, max: 1.0, step: 0.01, hint: 'Bends the rays like a curved universe. 0 = flat, ordinary space. Above 0 (spherical): rays curve back toward each other, so things shrink with distance, then grow again past the halfway point, and the far side of the world looms large. Below 0 (hyperbolic): rays spread, a fisheye tunnel where repeated things shrink fast. Left at 0 and never touched, the loop is built exactly as before.' },
     volumetric:  { label: 'Volumetric',  type: 'bool'  as const,                                       hint: 'When on, the ray passes through the scene accumulating color at every step. No hit detection. Use with marchSceneDist + accumulator nodes in the body.' },
     passthrough: { label: 'Passthrough', type: 'float' as const,   min: 0.001, max: 0.5,  step: 0.005, showWhen: { param: 'volumetric', value: 'true' }, hint: 'Minimum step size in volumetric mode. Prevents the ray from stalling at zero-distance surfaces. Also caps 1/vol to avoid blowout.' },
@@ -623,6 +631,7 @@ export const GILitMarchGroupNode: NodeDefinition = {
     gi:        { type: 'vec3',  label: 'GI' },
     diffuse:   { type: 'vec3',  label: 'Diffuse' },
     refl:      { type: 'vec3',  label: 'Reflection' },
+    stretch:   STRETCH_OUTPUT,
   },
   version: 3,
   migrateParams: params => keepOldJitter(foldLoopColours(params, [0.7, 0.7, 0.7])),
@@ -650,6 +659,7 @@ export const GILitMarchGroupNode: NodeDefinition = {
     maxSteps:    { label: 'Max Steps',    type: 'float' as const, min: 8,    max: 256,  step: 4,    compileTime: true, hint: 'Maximum ray march iterations per pixel.' },
     maxDist:     { label: 'Max Dist',     type: 'float' as const, min: 5.0,  max: 100,  step: 1.0,  hint: 'How far the ray travels before returning background.' },
     stepScale:   { label: 'Step Scale',   type: 'float' as const, min: 0.3,  max: 1.0,  step: 0.05, hint: 'Fraction of SDF distance to step. Lower = safer, slower.' },
+    ...WARP_SAFETY_PARAMS,
     curvature:   { label: 'Space curvature', type: 'float' as const, min: -1.0, max: 1.0, step: 0.01, hint: 'Bends the rays like a curved universe. 0 = flat, ordinary space. Above 0 (spherical): rays curve back toward each other, so things shrink with distance, then grow again past the halfway point, and the far side of the world looms large. Below 0 (hyperbolic): rays spread, a fisheye tunnel where repeated things shrink fast. Left at 0 and never touched, the loop is built exactly as before.' },
     volumetric:  { label: 'Volumetric',   type: 'bool'  as const,                                   hint: 'Accumulate density along the ray. GI/specular are disabled in this mode.' },
     passthrough: { label: 'Passthrough',  type: 'float' as const, min: 0.001, max: 0.5, step: 0.005, showWhen: { param: 'volumetric', value: 'true' }, hint: 'Minimum step in volumetric mode.' },

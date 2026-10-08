@@ -523,6 +523,7 @@ export function describeGraph(nodes: GraphNode[]): DescribeResult | null {
     const P = renderer.params;
     spec.quality = {
       steps: Math.round(num(P.maxSteps, 80)), maxDist: round(num(P.maxDist, 20)), stepScale: round(num(P.stepScale, 1)), jitter: round(num(P.jitter, 1)),
+      ...(P.warpSafety === 'auto' || P.warpSafety === 'careful' || P.warpSafety === 'high' ? { warp: P.warpSafety } : {}),
     };
     L.bg = vec(P.bg, [0, 0, 0]).map(round) as Vec3;
   }

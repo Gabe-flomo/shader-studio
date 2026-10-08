@@ -288,7 +288,7 @@ function sceneEntries(): Entry[] {
     ['background', ['bg'], 'the background colour or gradient', [{ key: 'top', type: 'colour', primary: true }, { key: 'bottom', type: 'colour' }]],
     ['tone', [], 'tone map', [{ key: 'mode', type: 'choice', options: TONE_MODES, primary: true }]],
     ['camera', ['cam'], 'the orbit camera', ['dist', 'angle', 'elev', 'orbit', 'zoom', 'flatten', 'x', 'y', 'z'].map((k, i) => ({ key: k, type: 'number' as const, ...(i === 0 ? { primary: true } : {}), ...(k === 'dist' ? { rand: { kind: 'num' as const, lo: 3, hi: 6 } } : k === 'orbit' ? { rand: { kind: 'num' as const, lo: 0, hi: 15 } } : k === 'elev' ? { rand: { kind: 'num' as const, lo: 5, hi: 35 } } : {}) }))],
-    ['quality', [], 'the march\'s steps and limits', ['steps', 'dist', 'step', 'jitter'].map(k => ({ key: k, type: 'number' as const }))],
+    ['quality', [], 'the march\'s steps and limits', [...['steps', 'dist', 'step', 'jitter'].map(k => ({ key: k, type: 'number' as const })), { key: 'warp', type: 'choice' as const, options: ['off', 'auto', 'careful', 'high'] }]],
   ];
   const SETTING_EXAMPLES: Record<string, string> = {
     sun: 'sphere · sun dir=(1,2,1)', sky: 'sphere · sky (0.5,0.6,0.9)', bounce: 'sphere · bounce (0.3,0.2,0.1)', shadows: 'sphere · shadows 16', ao: 'sphere · ao 0.06',

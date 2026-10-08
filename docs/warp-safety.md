@@ -17,7 +17,15 @@ The hit test also widens with distance (0.0005 × distance), so far-away surface
 
 **Show → Steps heatmap** replaces the final picture with how hard each ray worked. Dark means a ray found its way quickly; orange to white means it struggled or ran out of steps. Use it to see where the warp is causing trouble, and whether Max step or Max steps needs raising.
 
-Not used in volumetric mode or by the GI Lit March Group (yet).
+## Volumetric and GI Lit
+
+**Volumetric loops**: the stretch keeps rays from skipping over the medium (each step is `max(min(d / stretch, Max step), Passthrough)`). The extra probes (Careful's gradient) run the loop body on scratch copies of its accumulators, so they add no glow. Shorter steps sample the far field more often, so the background haze can lift a little. Turn on a glow's **Per distance** to make brightness follow ray length instead of step count.
+
+**GI Lit March Group**: it has the same Warp safety, Max step and Show settings. Its shadow, bounce and reflection rays also divide their steps by the stretch where the primary ray hit.
+
+## Stretch output → Soft Shadow and AO
+
+With Warp safety on, the March Loop and GI Lit groups output **Stretch**: how stretched space is where the ray stopped (1 = not at all). Wire it into **Soft Shadow** or **SDF AO** and their rays step safely through the warped scene too. The 3D Scene Builder does this for you when Quality → Warp safety is on (recipe: `quality warp=careful`).
 
 ## A trick that works by hand
 
