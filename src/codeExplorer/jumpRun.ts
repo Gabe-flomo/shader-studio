@@ -2,7 +2,7 @@
  * jumpRun.ts — carry out a jump to source (plans from jump.ts) in the app.
  * Opening another graph asks first when the open one has unsaved changes.
  */
-import { planJump, type JumpPlan } from './jump';
+import { planJump, type GraphRef } from './jump';
 import { requestNodeJump, requestTextJump } from './jumpStore';
 import { lastOpenedGraph } from './client';
 import type { Provenance } from './types';
@@ -19,7 +19,7 @@ import { closeCodeExplorer } from '../components/codeExplorer/explorerStore';
 
 const frame = () => new Promise<void>(r => requestAnimationFrame(() => r()));
 
-async function openGraph(plan: Extract<JumpPlan, { to: 'graph' }>): Promise<boolean> {
+async function openGraph(plan: { graph: GraphRef }): Promise<boolean> {
   const st = useNodeGraphStore.getState();
   const g = plan.graph;
   const isOpen = g.kind === 'open'
@@ -88,4 +88,21 @@ export async function jumpToSource(p: Provenance & { length?: number }): Promise
     case 'builder': requestPage('fn'); return;
     case 'none': toast.info(plan.why); return;
   }
+}
+
+/**
+ * Open a graph (asking first over unsaved changes) and select some of its nodes: the Patterns view's
+ * "show me where". Nodes inside groups are shown by their top-level group.
+ */
+export async function openGraphSelecting(graph: GraphRef, nodes: Array<{ id: string; path: string[] }>): Promise<void> {
+  closeCodeExplorer();
+  if (!(await openGraph({ graph }))) return;
+  requestPage('studio');
+  await frame();
+  const s = useNodeGraphStore.getState();
+  if (s.activeGroupPath.length) s.exitToDepth(0);
+  const top = [...new Set(nodes.map(n => n.path[0] ?? n.id))].filter(id => s.nodes.some(x => x.id === id));
+  if (!top.length) return;
+  s.focusNode(top[0]);
+  if (top.length > 1) useNodeGraphStore.getState().selectNodes(top);
 }

@@ -5,14 +5,29 @@
  */
 import { create } from 'zustand';
 
-export interface ExplorerRequest { open: boolean; query: string; n: number }
+export type ExplorerTab = 'code' | 'patterns';
 
-export const useCodeExplorer = create<ExplorerRequest>(() => ({ open: false, query: '', n: 0 }));
+export interface ExplorerRequest {
+  open: boolean; query: string; n: number;
+  /** Which view: written code, or multi-node patterns (src/patterns). */
+  tab: ExplorerTab;
+  /** Patterns: a node of the open graph to show the techniques of ("Patterns this is part of"). */
+  patternNode: string | null;
+}
+
+export const useCodeExplorer = create<ExplorerRequest>(() => ({ open: false, query: '', n: 0, tab: 'code', patternNode: null }));
 
 /** Open the Explorer on a function name or some words (or on its home page). */
 export function openCodeExplorer(query = ''): void {
-  useCodeExplorer.setState(s => ({ open: true, query, n: s.n + 1 }));
+  useCodeExplorer.setState(s => ({ open: true, query, n: s.n + 1, tab: 'code', patternNode: null }));
 }
+
+/** Open the Explorer on its Patterns view, optionally on one node of the open graph. */
+export function openPatterns(nodeId: string | null = null): void {
+  useCodeExplorer.setState(s => ({ open: true, query: '', n: s.n + 1, tab: 'patterns', patternNode: nodeId }));
+}
+
+export function setExplorerTab(tab: ExplorerTab): void { useCodeExplorer.setState({ tab }); }
 
 export function closeCodeExplorer(): void { useCodeExplorer.setState({ open: false }); }
 
