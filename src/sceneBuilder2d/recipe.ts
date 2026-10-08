@@ -25,6 +25,7 @@ import type { Arg as AstArg, Item as AstItem, Modifier } from '../lang/ast';
 import { COLOUR_TABLE, colourText } from '../lang/colours';
 import { suggest } from '../lang/fuzzy';
 import { PALETTE_BY_KEY, PALETTES } from '../sceneBuilder/output';
+import { BUILT_IN_FUNCTIONS, builtInFunction } from './functions';
 import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, printGrid, type GridShape, type GridSpec } from './grid';
 import type { RecipeError } from '../sceneBuilder/recipe';
 import {
@@ -54,6 +55,7 @@ export const DEFAULT_SMOOTH_K = 0.1;
 const SHAPE_WORDS: Record<string, string> = Object.fromEntries(SHAPES.flatMap(s => [[s.kind, s.kind], ...s.aliases.map(a => [a, s.kind])]));
 const SPACE_WORDS: Record<string, string> = Object.fromEntries(SPACES.flatMap(s => [[s.kind, s.kind], ...s.aliases.map(a => [a, s.kind])]));
 const MOTION_WORDS = [...MOTIONS.map(m => m.kind), 'ring'];
+const BUILT_IN_FN_NAMES = { space: BUILT_IN_FUNCTIONS.filter(f => f.role === 'space').map(f => f.name), shape: BUILT_IN_FUNCTIONS.filter(f => f.role === 'shape').map(f => f.name) };
 const LOOK_WORDS = ['grid', 'glow', 'colour', 'color', 'tone', 'tone-map', 'tonemap', 'background', 'bg', 'bloom', 'vignette', 'grain', 'scanlines', 'output', 'show'];
 const CLAUSE_WORDS = [...Object.keys(SHAPE_WORDS), ...Object.keys(OP_WORDS), ...Object.keys(SPACE_WORDS), ...LOOK_WORDS];
 
@@ -197,12 +199,18 @@ class Parser {
       if (a.op !== '=') { this.fail(a, `${a.key}${a.op} changes a value by a factor: in a recipe, write ${a.key}=… .`); continue; }
       if (!key) {
         const word = this.word(a);
-        if (a.value.k === 'str') { it.name = a.value.v; continue; }
+        if (a.value.k === 'str' && !(it.type === 'shape' && it.kind === 'fnshape' && !it.fn)) { it.name = a.value.v; continue; }
         if (word === 'glow') { it.glow = true; this.flagged = true; continue; }
         if (word === 'outline' || word === 'hollow') { it.hollow = 0.02; continue; }
         if (it.type === 'group') {
           if (a.value.k === 'num') { it.k = Math.max(0, a.value.v); continue; }
           this.fail(a, 'A combine takes k= (its blend radius), name= and the settings every item takes.');
+          continue;
+        }
+        if (it.kind === 'fnshape' && !it.fn && (a.value.k === 'word' || a.value.k === 'str')) {
+          const f = builtInFunction(a.value.v);
+          if (f && f.role === 'shape') it.fn = { name: f.name, code: f.code, timed: f.timed, from: f.from };
+          else this.fail(a, `“${a.value.v}” isn't a built-in shape function (${this.fnNames('shape')}). Functions from your code are picked in the builder.`);
           continue;
         }
         const p = def!.params[pos++];
@@ -309,6 +317,14 @@ class Parser {
           || (!!first && first.value.k === 'num' && Number.isInteger(first.value.v) && first.value.v >= 2);
         if (isCells || !args.length) this.grid(scene, args);
         else scene.space.push(this.space(t, SPACE_WORDS[w], args));
+      } else if (SPACE_WORDS[w] === 'fn') {
+        this.c.next();
+        const args = this.c.args([]);
+        const nm = args.find(a => !a.key);
+        const name = nm && (nm.value.k === 'word' || nm.value.k === 'str') ? nm.value.v : '';
+        const f = builtInFunction(name);
+        if (!f || f.role !== 'space') { this.fail(nm ?? t, `“${name}” isn't a built-in space function (${this.fnNames('space')}). Functions from your code are picked in the builder.`); continue; }
+        scene.space.push(newSpaceOp('fn', `p${++this.ids.p}`, { name: f.name, code: f.code, timed: 1, from: f.from }));
       } else if (SPACE_WORDS[w]) {
         this.c.next();
         scene.space.push(this.space(t, SPACE_WORDS[w]));
@@ -336,6 +352,8 @@ class Parser {
     walkItems(scene.layers, it => { it.id = it.type === 'group' ? `g${++g}` : `s${++s}`; for (const m of it.motion) m.id = `m${++mo}`; });
     return { scene, errors: this.errors, warnings: this.warnings };
   }
+
+  fnNames(role: 'space' | 'shape') { return BUILT_IN_FN_NAMES[role].join(', '); }
 
   /** `grid 12 [rows] shape=… assign=… size=… ripple=… freq=… speed=… target=… amount=… by=… color=… color2=… glow=off` */
   private grid(scene: Scene2D, args: AstArg[]) {
@@ -483,6 +501,7 @@ export function parseRecipe2D(src: string): ParseResult2D {
 // ── Printing ────────────────────────────────────────────────────────────────
 
 function printSpace(op: SpaceOp): string {
+  if (op.kind === 'fn') return `fn ${fmtName(String(op.values.name ?? 'f'))}`;
   const def = SPACE_BY_KIND[op.kind];
   if (!def) return op.kind;
   const defaults = defaultSpaceValues(op.kind);
@@ -541,7 +560,7 @@ function printItem(it: Item, indent: string | null = null): string {
     return [head, ...extra, ...common, ...mods].join(' ');
   }
   const def = SHAPE_BY_KIND[it.kind];
-  const parts: string[] = [it.kind];
+  const parts: string[] = [it.kind === 'fnshape' ? `fn-shape ${fmtName(it.fn?.name ?? 'f')}` : it.kind];
   const defaults = defaultSize(it.kind);
   for (const p of def.params) {
     const v = it.size[p.key];

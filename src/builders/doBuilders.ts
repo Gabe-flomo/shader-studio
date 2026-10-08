@@ -32,6 +32,7 @@ export function readBuilderCommand(text: string): BuilderCommand | null {
 
 export type BuilderAction =
   | { kind: 'new-scene' }
+  | { kind: 'new-scene2d' }
   | { kind: 'edit-scene'; sceneId: string }
   | { kind: 'new-grid' }
   | { kind: 'open-grid'; nodeId: string }
@@ -99,6 +100,8 @@ export function planBuilderCommand(cmd: BuilderCommand, ctx: BuilderContext): Bu
     case 'open-scene-builder':
     case 'new-3d-scene':
       return { id: cmd.id, label: 'Opens the 3D Scene Builder on a new scene', action: { kind: 'new-scene' } };
+    case 'new-2d-scene':
+      return { id: cmd.id, label: 'Opens the 2D Scene Builder on a new scene', action: { kind: 'new-scene2d' } };
     case 'edit-scene': {
       const t = sceneTarget(ctx, all);
       if (!t.node) return { id: cmd.id, label: 'Opens a built scene in the 3D Scene Builder', action: null, problem: `${which(t.many, 'scene the Scene Builder built')}${t.many ? '' : ' Scenes made by hand can be read with right-click → Describe in Scene Builder.'}` };

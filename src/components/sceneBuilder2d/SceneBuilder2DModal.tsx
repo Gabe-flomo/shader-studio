@@ -17,6 +17,7 @@ import {
 import { parseRecipe2D, printRecipe2D } from '../../sceneBuilder2d/recipe';
 import { TEMPLATES_2D, templateScene } from '../../sceneBuilder2d/templates';
 import { renderShapeThumbnail, renderSpaceThumbnail } from '../../sceneBuilder2d/thumbnails';
+import { BUILT_IN_FUNCTIONS, findFunctions, functionsFromGraphs, type FnEntry, type FnRole } from '../../sceneBuilder2d/functions';
 import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_LABELS, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, type GridShape, type GridSpec } from '../../sceneBuilder2d/grid';
 import { PALETTES } from '../../sceneBuilder/output';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -176,6 +177,72 @@ function LayerList() {
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 
+/** Where functions are found: your saved GLSL and presets (the Code Explorer's collector), the Convert examples, and Custom Function nodes in your saved graphs, the open graph and the examples. */
+async function gatherFunctions(): Promise<FnEntry[]> {
+  const [{ collectUserDocs }, { localKV }, ex, conv, { useNodeGraphStore }] = await Promise.all([
+    import('../../codeExplorer/userCorpus'), import('../../utils/library'), import('../../store/exampleGraphs'), import('../../glslToGraph/examples'), import('../../store/useNodeGraphStore'),
+  ]);
+  const docs = collectUserDocs(localKV, null);
+  const files = [
+    ...docs.flatMap(d => d.sources.filter(src => src.mode === 'file').map(src => ({ label: `${d.group.toLowerCase()}: ${d.label}`, code: src.text }))),
+    ...Object.entries(conv.CONVERT_EXAMPLES as Record<string, { label?: string; code: string }>).map(([k, e]) => ({ label: `convert example: ${e.label ?? k}`, code: e.code })),
+  ];
+  const saved: Array<{ label: string; nodes: unknown }> = [];
+  for (const key of localKV.keys()) {
+    if (!key.startsWith('shader-studio:')) continue;
+    try { const v = JSON.parse(localKV.get(key) ?? 'null') as { nodes?: unknown } | null; if (v && Array.isArray(v.nodes)) saved.push({ label: `saved: ${key.slice('shader-studio:'.length)}`, nodes: v.nodes }); } catch { /* not a graph */ }
+  }
+  const graphs = [
+    { label: 'this graph', nodes: useNodeGraphStore.getState().nodes },
+    ...saved,
+    ...Object.values(ex.EXAMPLE_GRAPHS as Record<string, { label: string; nodes: unknown }>).map(g => ({ label: `example: ${g.label}`, nodes: g.nodes })),
+  ];
+  return [...findFunctions(files), ...functionsFromGraphs(graphs)];
+}
+
+let foundCache: FnEntry[] | null = null;
+
+/** Built-in functions for a role, and on request the ones in your code and the examples. */
+function FunctionPicker({ role, onPick }: { role: FnRole; onPick: (f: FnEntry) => void }) {
+  const tk = useTokens();
+  const [found, setFound] = useState<FnEntry[] | null>(foundCache);
+  const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState('');
+  const look = async () => {
+    setBusy(true);
+    try { foundCache = await gatherFunctions(); setFound(foundCache); } finally { setBusy(false); }
+  };
+  const mine = (found ?? []).filter(f => f.role === role && (!q || `${f.name} ${f.from}`.toLowerCase().includes(q.toLowerCase())));
+  const chip: React.CSSProperties = { display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, padding: '6px 9px', border: 0, borderRadius: radius.md, background: tk.bg.field, color: tk.text.primary, cursor: 'pointer', textAlign: 'left', font: `600 11.5px ${fontFamily.mono}`, maxWidth: 230 };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {BUILT_IN_FUNCTIONS.filter(f => f.role === role).map(f => (
+          <button key={f.name} type="button" title={f.code} style={chip} onClick={() => onPick(f)}>
+            {f.name}<span style={{ font: `500 10.5px ${fontFamily.ui}`, color: tk.text.muted }}>{f.blurb}</span>
+          </button>
+        ))}
+      </div>
+      {!found
+        ? <Button size="sm" variant="ghost" icon="search" disabled={busy} onClick={() => void look()} style={{ alignSelf: 'flex-start' }}>{busy ? 'Looking…' : 'Find more in your code and the examples'}</Button>
+        : (
+          <>
+            <input aria-label="Search functions" placeholder={`${mine.length} ${role === 'space' ? 'vec2 f(vec2 p)' : 'float f(vec2 p)'} functions found: search…`} value={q} onChange={e => setQ(e.target.value)}
+              style={{ height: 28, padding: '0 8px', borderRadius: radius.sm, border: `1px solid ${tk.border.default}`, background: tk.bg.field, color: tk.text.primary, font: `500 12px ${fontFamily.ui}` }} />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 220, overflow: 'auto' }}>
+              {mine.slice(0, 60).map(f => (
+                <button key={`${f.from}:${f.name}`} type="button" title={f.code} style={chip} onClick={() => onPick(f)}>
+                  {f.name}<span style={{ font: `500 10.5px ${fontFamily.ui}`, color: tk.text.muted }}>{f.from}</span>
+                </button>
+              ))}
+              {!mine.length && <BuilderNote>None found.</BuilderNote>}
+            </div>
+          </>
+        )}
+    </div>
+  );
+}
+
 function SpaceTab() {
   const tk = useTokens();
   const scene = useSceneBuilder2D(s => s.scene);
@@ -196,7 +263,8 @@ function SpaceTab() {
             <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
               <Thumb k={JSON.stringify(op)} make={() => renderSpaceThumbnail(op, 64)} size={64} />
               <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <BuilderNote>{def.blurb}</BuilderNote>
+                <BuilderNote>{op.kind === 'fn' ? `${String(op.values.name)} (${String(op.values.from || 'a function')}): ${def.blurb}` : def.blurb}</BuilderNote>
+                {op.kind === 'fn' && <pre style={{ margin: 0, maxHeight: 140, overflow: 'auto', padding: 8, borderRadius: radius.sm, background: tk.bg.field, font: `500 10.5px/1.5 ${fontFamily.mono}`, color: tk.text.secondary }}>{String(op.values.code ?? '')}</pre>}
                 {def.select && (
                   <Row label={def.select.label}>
                     <Select ariaLabel={def.select.label} value={String(op.values[def.select.key] ?? def.select.def)} options={def.select.options.map(o => ({ value: o, label: o }))}
@@ -213,7 +281,7 @@ function SpaceTab() {
       })}
       <BuilderLabel>Add a space transform</BuilderLabel>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {SPACES.map(sp => (
+        {SPACES.filter(sp => sp.kind !== 'fn').map(sp => (
           <button key={sp.kind} type="button" title={sp.blurb} style={tile(tk)}
             onClick={() => edit(d => { d.space.push(newSpaceOp(sp.kind, nextId(d, 'p'))); })}>
             <Thumb k={`space:${sp.kind}`} make={() => renderSpaceThumbnail(newSpaceOp(sp.kind, 'x'), 44)} />
@@ -221,6 +289,8 @@ function SpaceTab() {
           </button>
         ))}
       </div>
+      <BuilderLabel hint="A GLSL function vec2 f(vec2 p[, float t]) that bends space: built in, or found in your code and the examples. It becomes a Custom Function node.">Add a function</BuilderLabel>
+      <FunctionPicker role="space" onPick={f => edit(d => { d.space.push(newSpaceOp('fn', nextId(d, 'p'), { name: f.name, code: f.code, timed: f.timed ? 1 : 0, from: f.from })); })} />
     </div>
   );
 }
@@ -242,6 +312,11 @@ function ItemInspector({ id }: { id: string }) {
                 onChange={v => upd(x => { if (x.type === 'group') x.op = v as CombineOp; })} />
             </Row>
             <NumRow label="Blend" hint="0 is a hard edge; above 0 melts the shapes together." value={it.k} min={0} max={0.5} step={0.005} onChange={v => upd(x => { if (x.type === 'group') x.k = v; }, 'k')} />
+          </>
+        ) : it.type === 'shape' && it.kind === 'fnshape' ? (
+          <>
+            <BuilderNote>{it.fn ? `${it.fn.name} (${it.fn.from}).` : 'No function.'} Edit the code on the built node (its helpers) to change the shape.</BuilderNote>
+            {it.fn && <pre style={{ margin: 0, maxHeight: 140, overflow: 'auto', padding: 8, borderRadius: radius.sm, background: 'rgba(127,127,127,0.12)', font: `500 10.5px/1.5 ${fontFamily.mono}` }}>{it.fn.code}</pre>}
           </>
         ) : shapeDef?.params.map(p => (
           <ParamControl key={p.key} p={p} keyBase={id} value={(it as ShapeSpec).size[p.key]} onChange={v => upd(x => { if (x.type === 'shape') x.size[p.key] = v; }, `size:${p.key}`)} />
@@ -311,13 +386,19 @@ function ShapesTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <BuilderLabel hint="Each shape is a distance field (SDF): how far every pixel is from its edge. Click one to add it as a new layer.">Add a shape</BuilderLabel>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {SHAPES.map(sh => (
+        {SHAPES.filter(sh => sh.kind !== 'fnshape').map(sh => (
           <button key={sh.kind} type="button" title={sh.blurb} style={tile(tk)} onClick={() => add(sh.kind)}>
             <Thumb k={`shape:${sh.kind}`} make={() => renderShapeThumbnail(sh.kind, 44)} />
             {sh.label}
           </button>
         ))}
       </div>
+      <BuilderLabel hint="A GLSL function float f(vec2 p[, float t]) that measures a shape: negative inside, positive outside. It becomes a Custom Function node.">Function shapes</BuilderLabel>
+      <FunctionPicker role="shape" onPick={f => {
+        let id = '';
+        edit(d => { id = nextId(d, 's'); d.layers.push(newShape('fnshape', id, { name: f.name, fn: { name: f.name, code: f.code, timed: f.timed, from: f.from }, color: [...DEFAULT_COLOURS[d.layers.length % DEFAULT_COLOURS.length]] as Vec3 })); });
+        select(id);
+      }} />
       {selectedId ? <ItemInspector key={selectedId} id={selectedId} /> : <BuilderNote>Select a layer on the left to change it.</BuilderNote>}
     </div>
   );

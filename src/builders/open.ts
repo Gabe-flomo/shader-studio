@@ -78,6 +78,7 @@ export function runBuilderAction(a: BuilderAction): boolean {
   const st = useNodeGraphStore.getState();
   switch (a.kind) {
     case 'new-scene': openNewSceneBuilder(); return true;
+    case 'new-scene2d': openNewSceneBuilder2D(); return true;
     case 'edit-scene': return editSceneInBuilder(a.sceneId);
     case 'new-grid': newGridRules(); return true;
     case 'open-grid': openGridRulesEditor(a.nodeId); return true;

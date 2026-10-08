@@ -26,6 +26,7 @@ import {
 } from './spec';
 import { colourText } from '../lang/colours';
 import { GRID_LABELS, gridProgram, type GridSpec } from './grid';
+import { callBody, type FnRef } from './functions';
 
 export { ROLE_KEY };
 /** On the UV node: the scene it was built from (and, once applied, fingerprints of what was built). */
@@ -77,6 +78,23 @@ function expr(c: Ctx, role: string, label: string, inputs: Array<{ name: string;
   return node;
 }
 
+/** A Custom Function node that carries a GLSL function (and its helpers) and calls it on p (and t). */
+function fnNode(b: B, role: string, f: FnRef, pos: Ref, out: 'vec2' | 'float', note: string): GraphNode {
+  const { c } = b;
+  const inputs: Array<{ name: string; type: string; slider: null }> = [{ name: 'p', type: 'vec2', slider: null }, ...(f.timed ? [{ name: 't', type: 'float', slider: null }] : [])];
+  const node: GraphNode = {
+    id: c.idFor(role), type: 'customFn', position: { x: 0, y: 0 },
+    inputs: {
+      p: { type: 'vec2', label: 'p', connection: { ...pos } },
+      ...(f.timed ? { t: { type: 'float', label: 't', connection: { ...b.getTime() } } as InputSocket } : {}),
+    },
+    outputs: { result: { type: out, label: 'Result' } },
+    params: { label: f.name, inputs, outputType: out, body: callBody(f), glslFunctions: f.code, __comment: note, [ROLE_KEY]: role },
+  };
+  c.nodes.push(node);
+  return node;
+}
+
 // ── Space ───────────────────────────────────────────────────────────────────
 
 function spaceNode(b: B, op: SpaceOp, pos: Ref): Ref {
@@ -93,6 +111,11 @@ function spaceNode(b: B, op: SpaceOp, pos: Ref): Ref {
   const note = (extra = '') => `${def.label} (space ${op.id}): ${def.blurb}${words.length ? ` ${words.join(', ')}.` : ''}${extra} It changes where every shape below it looks, not the shapes themselves.`;
   const n1 = (k: string, d: number) => num(v[k], d);
   switch (op.kind) {
+    case 'fn': {
+      const f: FnRef = { name: String(v.name ?? 'f'), code: String(v.code ?? ''), timed: num(v.timed, 1) > 0, from: String(v.from ?? '') };
+      if (!f.code) { c.warnings.push(`The function space transform ${op.id} has no code; left out.`); return pos; }
+      return ref(fnNode(b, op.id, f, pos, 'vec2', `${f.name} (space ${op.id}, ${f.from || 'a function'}): bends space through this GLSL function, vec2 ${f.name}(vec2 p${f.timed ? ', float t' : ''}). The function is in the node's helpers; the body calls it. Edit either to change what it does. It changes where every shape below it looks.`), 'result');
+    }
     case 'zoom': {
       const by = Math.max(0.01, n1('by', 1.5));
       return ref(mk(c, 'uvTransform2d', op.id, { sx: Math.round(1e6 / by) / 1e6, sy: Math.round(1e6 / by) / 1e6 }, { uv: pos }, note(` UV Transform 2D scales the coordinates by 1 ÷ ${fmt(by)}: smaller coordinates magnify.`)), 'result');
@@ -218,6 +241,11 @@ function shapeNode(b: B, sh: ShapeSpec, pos: Ref, name: string, sfx = ''): Ref {
     return `${p.label.toLowerCase()} ${Array.isArray(x) ? v2(x as Vec2) : fmt(Number(x))}`;
   }).join(', ');
   const note = `${name}: a ${def.label.toLowerCase()}${words ? `, ${words}` : ''}. ${def.blurb} It gives the distance from the point to its edge: negative inside, positive outside.`;
+  if (def.shape === 'fn') {
+    if (!sh.fn?.code) { c.warnings.push(`${name} has no function; drawn as a circle.`); return ref(mk(c, 'shapeSDF', `${sh.id}${sfx}`, { shape: 'circle', r: 0.3 }, { p: pos }, `${name}: a circle (its function is missing).`), 'distance'); }
+    const f = sh.fn;
+    return ref(fnNode(b, `${sh.id}${sfx}`, f, pos, 'float', `${name}: a shape measured by the GLSL function ${f.name} (${f.from || 'a function'}), float ${f.name}(vec2 p${f.timed ? ', float t' : ''}): negative inside, positive outside. The function is in the node's helpers; edit it to change the shape.`), 'result');
+  }
   if (def.shape === 'ring') {
     const hair = mk(c, 'ringSDF', `${sh.id}${sfx}`, { radius: params.radius }, { position: pos }, `${name}: a ring of radius ${fmt(Number(params.radius))}. Ring SDF is a hairline (the distance to a circle line); the Offset after it gives it thickness.`);
     const th = Number(sh.size.th ?? 0.04);

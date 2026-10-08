@@ -876,6 +876,17 @@ Examples:
 - `new 3d scene`
 - `build a 3d scene`
 
+### new 2d scene
+
+Opens the 2D Scene Builder on a new scene: shapes, space, a grid with ripples, functions and a look. Build adds it to the graph.
+
+Words: `new 2d scene`, `open the 2d scene builder`, `2d scene builder`, `make a 2d scene`, `build a 2d scene`, `create a 2d scene`, `start a 2d scene`, `new 2d grid`
+
+Examples:
+
+- `new 2d scene`
+- `2d scene builder`
+
 ### edit this scene
 
 Opens the 3D Scene Builder on a scene it built (as the Scene Group's right-click Edit in Scene Builder does). Works on the selected node's built scene, else the only built scene in the graph.

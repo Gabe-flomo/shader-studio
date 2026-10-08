@@ -253,7 +253,7 @@ export const COMMAND_VERBS: readonly CommandVerb[] = [
 
 /** What a builder command opens or does (builders/doBuilders.ts reads and plans it, builders/open.ts runs it). */
 export type BuilderCommandId =
-  | 'open-scene-builder' | 'new-3d-scene' | 'edit-scene'
+  | 'open-scene-builder' | 'new-3d-scene' | 'edit-scene' | 'new-2d-scene'
   | 'open-grid-rules' | 'new-grid-rules' | 'edit-rules'
   | 'open-agent-rules' | 'new-agent-rules'
   | 'show-recipe' | 'copy-recipe';
@@ -283,6 +283,11 @@ export const BUILDER_COMMANDS: readonly BuilderCommand[] = [
     id: 'new-3d-scene', words: ['new 3d scene', 'new scene', 'make a 3d scene', 'build a 3d scene', 'create a 3d scene', 'start a 3d scene'],
     summary: 'The same: the 3D Scene Builder on a new scene.',
     examples: [{ text: 'new 3d scene', on: 'empty' }, { text: 'build a 3d scene', on: 'empty' }],
+  },
+  {
+    id: 'new-2d-scene', words: ['new 2d scene', 'open the 2d scene builder', '2d scene builder', 'make a 2d scene', 'build a 2d scene', 'create a 2d scene', 'start a 2d scene', 'new 2d grid'],
+    summary: 'Opens the 2D Scene Builder on a new scene: shapes, space, a grid with ripples, functions and a look. Build adds it to the graph.',
+    examples: [{ text: 'new 2d scene', on: 'empty' }, { text: '2d scene builder', on: 'empty' }],
   },
   {
     id: 'edit-scene', words: ['edit this scene', 'edit the scene', 'edit it in the scene builder', 'edit in the scene builder', 'open this scene', 'open it in the scene builder', 'rebuild this scene'],
