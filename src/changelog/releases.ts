@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.85',
+    date: '2026-10-08',
+    title: '4D slices and shadows',
+    highlights: [
+      { area: 'Studio', text: 'Lift to 4D has a slice direction: face-, edge- or corner-first. Corner-first turns a tesseract into a tetrahedron, then an octahedron, then back.', link: { kind: 'doc', path: 'docs/4d.md' } },
+      { area: 'Studio', text: 'Shadows and ambient occlusion now work in scenes whose shapes take settings through Scene Group ports, and Play can reach settings inside a Scene Group.' },
+      { area: 'Studio', text: 'New example: Tesseract, all three slices, side by side. The 4D examples now have shadows and AO.' },
+    ],
+  },
+  {
     id: '2026.10.84',
     date: '2026-10-08',
     title: 'Curved space',
