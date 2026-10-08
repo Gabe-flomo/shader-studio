@@ -44,7 +44,7 @@ import { ppFrameSteps } from '../play/kit/passPlan.js';
 import { AgentRunner, AgentTargets } from '../lib/agentRunner';
 import type { AgentsSpec } from '../compiler/types';
 import type { PassProgram } from '../compiler/types';
-import { recordFrame, recordGpuPass, recordGpuCompile, setGpuTimerSupport, registerShaderCostMeasurer } from '../lib/perfStats';
+import { recordFrame, recordGpuResults, flushGpuFrame, recordGpuCompile, setGpuTimerSupport, registerShaderCostMeasurer } from '../lib/perfStats';
 import { viewportSnapshot } from '../lib/viewport';
 import { onRebuild } from '../lib/rebuild';
 import { buildPreviewUniforms } from './previewUniforms';
@@ -236,6 +236,9 @@ const withPassSources = (fs: string, passes: readonly string[]): string => (pass
 // holds 200 samples, so 20 Hz is plenty) instead of one GPU readback per
 // probe per frame.
 const PROBE_SAMPLE_EVERY = 3;
+// Every this many drawn frames (a multiple of the samplers' 6 and 3, so the probes run on it too)
+// the GPU timer runs isolated (lib/gpuTimer.ts): a few extra flushes, twice a second at 60 fps.
+const ISOLATE_EVERY = 30;
 
 const HIST_BINS = 48;
 
@@ -522,10 +525,29 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     setGpuTimerSupport(gpuTimer.supported);
     const costResults: number[] = [];
     const pollGpuTimer = () => {
-      for (const r of gpuTimer.poll()) {
-        if (r.name === 'cost') costResults.push(r.ms);
-        else recordGpuPass(r.name, r.ms);
-      }
+      const results = gpuTimer.poll();
+      if (!results.length) return;
+      for (const r of results) if (r.name === 'cost') costResults.push(r.ms);
+      recordGpuResults(results);
+      if (gpuTimer.outstanding === 0) flushGpuFrame();
+    };
+    // Isolated frames (see lib/gpuTimer.ts): every ISOLATE_EVERY-th drawn frame, and every frame drawn
+    // on demand, each GPU segment is flushed first so it counts only its own work, the picture's
+    // program is timed on its own ('shader'), and a fixed reference draw ('baseline') shows the
+    // timer's floor. Ordinary frames time the picture, echo and copy to screen as one span ('main').
+    let gpuFrameNo = 0;
+    const baselineScene = new THREE.Scene();
+    const baselineMat = new THREE.ShaderMaterial({
+      vertexShader: FALLBACK_VERTEX,
+      fragmentShader: 'void main() { gl_FragColor = vec4(0.5); }',
+      depthTest: false, depthWrite: false,
+    });
+    baselineScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), baselineMat));
+    const baselineRt = new THREE.WebGLRenderTarget(64, 64, { type: THREE.UnsignedByteType, depthBuffer: false });
+    /** The picture's GPU span: one query ('main') on ordinary frames; on isolated frames each step on its own. */
+    const pictureSegment = (step: 'shader' | 'echo' | 'present') => {
+      if (gpuTimer.isolate) { gpuTimer.end(); gpuTimer.begin(step); }
+      else if (step === 'shader') gpuTimer.begin('main');
     };
     let readbackCount = 0;
     const origReadPixels = renderer.readRenderTargetPixels.bind(renderer);
@@ -827,7 +849,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       for (let i = 0; i < WARMUP + RUNS && !signal?.aborted; i++) {
         const timed = i >= WARMUP;
         let t0 = 0;
-        if (timed) { if (!gpuTimer.begin('cost')) t0 = performance.now(); }
+        if (timed) { if (!gpuTimer.begin('cost', true)) t0 = performance.now(); } // isolated: frame work queued before it doesn't count
         drawAll();
         renderer.setRenderTarget(null);
         if (timed) {
@@ -1588,6 +1610,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           if (!queue.direct) playBackground.captureGraph(item.id, renderer.domElement);
         }
       };
+      // This frame's GPU segments belong together (their sum is the frame's GPU work); an isolated
+      // frame flushes before each one (lib/gpuTimer.ts). frameCount moves on after the picture, so
+      // `frameCount + 1` is the number the probes' "every 6th frame" test sees.
+      gpuTimer.frame = ++gpuFrameNo;
+      const isolatedFrame = gpuTimer.supported && (!dynamic || (frameCount + 1) % ISOLATE_EVERY === 0);
+      gpuTimer.isolate = isolatedFrame;
       if (plan.layersOnly) {
         needsRender = false;
         idleFrames = 0;
@@ -1634,10 +1662,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           if (material.uniforms.u_prevFrame) {
             material.uniforms.u_prevFrame.value = readRT.texture;
           }
-          gpuTimer.begin('main');
+          pictureSegment('shader');
           renderer.setRenderTarget(writeRT);
           renderer.render(scene, camera);
-          if (echoRef.current) captureEcho(writeRT.texture);
+          if (echoRef.current) { pictureSegment('echo'); captureEcho(writeRT.texture); }
+          pictureSegment('present');
           blitMat.uniforms.tInput.value = writeRT.texture;
           blitMat.uniforms.u_seed.value = ditherSeed(frameCount);
           renderer.setRenderTarget(null);
@@ -1653,7 +1682,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
             mesh.material = material;
           }
         } else {
-          gpuTimer.begin('main');
+          pictureSegment('shader');
           renderer.setRenderTarget(floatRt);
           // The eye preview of a float / vec2 in a "Show as" mode draws with its display program
           // (the same graph ending in the mode's colour map): no extra pass.
@@ -1661,11 +1690,21 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           if (pvMat) mesh.material = pvMat;
           renderer.render(scene, camera);
           if (pvMat) mesh.material = material;
-          if (echoRef.current) captureEcho(floatRt.texture);
+          if (echoRef.current) { pictureSegment('echo'); captureEcho(floatRt.texture); }
+          pictureSegment('present');
           blitMat.uniforms.tInput.value = floatRt.texture;
           blitMat.uniforms.u_seed.value = ditherSeed(frameCount);
           renderer.setRenderTarget(null);
           renderer.render(blitScene, camera);
+          gpuTimer.end();
+        }
+        // The reference draw: a constant colour into 64×64, timed like the shader. When it reads
+        // well above ~0.02 ms the timer (or a clocked-down GPU) is to blame, not the graph.
+        if (gpuTimer.isolate) {
+          gpuTimer.begin('baseline');
+          renderer.setRenderTarget(baselineRt);
+          renderer.render(baselineScene, camera);
+          renderer.setRenderTarget(null);
           gpuTimer.end();
         }
 
@@ -1687,6 +1726,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         // Everything from here to the end of the drawn frame is probes and readbacks
         const probeT0 = performance.now();
         readbackCount = 0;
+        // Their GPU side, on isolated frames (the samplers run on those: ISOLATE_EVERY is a multiple of theirs).
+        const probesTimed = gpuTimer.isolate && gpuTimer.begin('probes');
 
         // Throttled updates every N frames while animating. A frame drawn on
         // demand (slider, hover, recompile) may be the only one for a while, so
@@ -1716,13 +1757,19 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
             const rtW = rt.width;
             const rtH = rt.height;
             if (rtW > 0 && rtH > 0 && !pixelReadPending) {
-              renderer.setRenderTarget(rt);
-              renderer.render(scene, camera);
-              renderer.setRenderTarget(null);
-
               // WebGL Y-axis is flipped relative to DOM (0 = bottom)
               const px = Math.max(0, Math.min(rtW - 1, Math.round(mp.x)));
               const py = Math.max(0, Math.min(rtH - 1, Math.round(rtH - 1 - mp.y)));
+              // Only the pixel under the pointer is read, so only it is drawn: the scissor keeps this
+              // from being a second full-screen run of the shader (it was one every 6th frame while
+              // the pointer was over the picture, and every frame of a still graph's hover redraws).
+              rt.scissor.set(px, py, 1, 1);
+              rt.scissorTest = true;
+              renderer.setRenderTarget(rt);
+              renderer.render(scene, camera);
+              renderer.setRenderTarget(null);
+              rt.scissorTest = false;
+
               pixelReadPending = true;
               readPixels(rt, px, py, 1, 1, pixelBuf).then(() => {
                 pixelReadPending = false;
@@ -2147,6 +2194,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
             }
           }
         }
+        if (probesTimed) gpuTimer.end();
         recordFrame({
           cpuMs: performance.now() - frameT0, probeMs: performance.now() - probeT0, readbacks: readbackCount,
           fps: currentFps, width: gl.drawingBufferWidth, height: gl.drawingBufferHeight,
@@ -2160,6 +2208,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         }
       }
 
+      gpuTimer.isolate = false; // the node-cost measurer and anything else between frames choose for themselves
       // Keep the loop alive while something is moving, was just drawn, or the clock is running
       // (a frame with nothing to draw is cheap); otherwise, after a short idle run, stop
       // requesting frames until a trigger asks again. Stopping while playing froze the clock:
@@ -2210,7 +2259,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (pingPongB.current) { pingPongB.current.dispose(); pingPongB.current = null; }
       pingPongIdx.current = 0;
       disposeEchoRing();
-      for (const target of [rt, floatRt, histRt, probeRT]) target.dispose();
+      for (const target of [rt, floatRt, histRt, probeRT, baselineRt]) target.dispose();
       costRt?.dispose(); costRt = null;
       pvRunner.reset();
       reset.push('render targets');
@@ -2405,6 +2454,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       rt.dispose();
       floatRt.dispose();
       histRt.dispose();
+      baselineRt.dispose();
+      baselineMat.dispose();
       blitGeo.dispose();
       dataTextures.dispose();
       if (dataTexRef.current === dataTextures) dataTexRef.current = null;
