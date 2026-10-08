@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.75',
+    date: '2026-10-07',
+    title: 'Taste by look',
+    highlights: [
+      { area: 'Studio', text: 'A small image model runs on your device to learn how things look: Deep and Surprise avoid near-duplicates and lean toward looks you like.', link: { kind: 'doc', path: 'docs/taste.md' } },
+      { area: 'Files', text: 'Steer by any words: "neon city" or "underwater" in the taste context box become by-look chips. See it under How things look, or turn it off in Settings.' },
+    ],
+  },
+  {
     id: '2026.10.74',
     date: '2026-10-07',
     title: 'Your taste page',
