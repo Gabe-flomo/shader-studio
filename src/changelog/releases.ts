@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.90',
+    date: '2026-10-08',
+    title: 'Suggest group controls',
+    highlights: [
+      { area: 'Play', text: 'Suggest controls now finds group controls too: settings on a group face and one level inside are always measured, since they often change the picture most.' },
+    ],
+  },
+  {
     id: '2026.10.89',
     date: '2026-10-08',
     title: '4D scenes build themselves',
