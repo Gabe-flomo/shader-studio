@@ -1904,6 +1904,13 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                         Light the scene…
                       </button>
                     )}
+                    <button style={ctxBtnStyle} title={clickedNode.type === 'giLitMarchGroup' ? 'Back to a plain March Loop Group (its simple shading); settings, loop body and wires kept' : 'GI Lit lights the scene itself: soft shadows, AO, sky light, one bounce and reflections. Settings, loop body and wires kept'} onClick={() => {
+                      const id = clickedNode.id, to = clickedNode.type === 'giLitMarchGroup' ? 'marchLoopGroup' : 'giLitMarchGroup';
+                      setContextMenu(null);
+                      useNodeGraphStore.getState().convertMarchLoop(id, to);
+                    }}>
+                      {clickedNode.type === 'giLitMarchGroup' ? 'Switch to March Loop Group' : 'Switch to GI Lit March Group'}
+                    </button>
                     <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
                     <button style={{ ...ctxBtnStyle, color: tc.red }} onClick={() => {
                       removeNode(clickedNode.id);

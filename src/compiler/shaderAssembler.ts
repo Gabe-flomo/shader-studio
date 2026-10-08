@@ -32,6 +32,7 @@ import { agentNbHeader } from '../nodes/definitions/agentNeighbours';
 import { frozenValueOf } from '../nodes/sliderFreeze';
 import { marchJitterDecl, MARCH_STEP_REF_KEY } from './marchJitter';
 import { curvedMarch } from './curvedSpace';
+import { CELL3_DECL, CELL3_GLOBAL } from '../nodes/definitions/repeatScene';
 import { safeMarchLines, safeMarchSteps, stepsHeatmap, warpSafetyOf } from './warpSafety';
 import {
   getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed,
@@ -1006,6 +1007,7 @@ export class ShaderAssembler {
     if (node.type === 'marchLoopGroup') { this.compileMarchLoopGroupNode(node, inputVars, nodeSlug); return; }
     if (node.type === 'giLitMarchGroup') { this.compileGiLitMarchGroupNode(node, inputVars, nodeSlug); return; }
     if (node.type === 'spaceWarpGroup') { this.compileSpaceWarpGroupNode(node, inputVars, nodeSlug); return; }
+    if (node.type === 'repeatScene') { this.compileRepeatSceneNode(node, inputVars, nodeSlug); return; }
     if (node.bypassed) { this.compileBypassNode(node, inputVars, nodeSlug, def); return; }
     this.compileStandardNode(node, inputVars, nodeSlug, def);
   }
@@ -2141,6 +2143,81 @@ export class ShaderAssembler {
           this.nodeOutputs.set(node.id, { scene: fnName });
           return;
 
+  }
+
+  /**
+   * Repeat Scene (docs/repeat-scene.md): a scene function that measures the wired scene in a 3D grid
+   * of cells, with the neighbouring cells too when asked, setting g_cell3 (Repeat Cell) before each call.
+   */
+  private compileRepeatSceneNode(rawNode: GraphNode, inputVars: Record<string, string>, nodeSlug: string): void {
+    const node = this.patchGroupSelf(rawNode, nodeSlug);
+    const inner = liveSceneFn(inputVars.scene);
+    const ground = liveSceneFn(inputVars.ground);
+    if (!inner && !ground) { this.nodeOutputs.set(node.id, { scene: 'MISSING_SCENE' }); return; }
+    const num = (v: unknown, fb: number): string => {
+      if (typeof v === 'string') return v;
+      const n = typeof v === 'number' && Number.isFinite(v) ? v : fb;
+      return Number.isInteger(n) ? `${n}.0` : String(n);
+    };
+    const innerExtra = inner ? this.sceneFnExtraParams.get(inner) ?? [] : [];
+    const groundExtra = ground ? this.sceneFnExtraParams.get(ground) ?? [] : [];
+    const extra = [...innerExtra];
+    for (const e of groundExtra) if (!extra.some(x => x.name === e.name)) extra.push(e);
+    const call = (fn: string, ex: Array<{ name: string }>, pos: string) => `${fn}(${pos}${ex.length ? ', ' + ex.map(v => v.name).join(', ') : ''})`;
+    const mode = ['off', 'wall', 'near8', 'skip'].includes(String(rawNode.params.neighbours)) ? String(rawNode.params.neighbours) : 'skip';
+    const S = nodeSlug;
+    this.declarations.add(CELL3_DECL);
+    const lines: string[] = [];
+    if (inner) {
+      lines.push(
+        `    vec3  cs  = max(vec3(${num(node.params.cellX, 2)}, ${num(node.params.cellY, 2)}, ${num(node.params.cellZ, 2)}), vec3(1e-3));\n`,
+        `    vec3  lim = vec3(${num(node.params.countX, 0)}, ${num(node.params.countY, 0)}, ${num(node.params.countZ, 0)});\n`,
+        // The cell the point is in (copies past Count are clamped to the last one).
+        `    vec3  id  = floor(p / cs + 0.5);\n`,
+        `    id = mix(id, clamp(id, -lim, lim), step(0.5, lim));\n`,
+        `    vec3  q   = p - cs * id;\n`,
+        `    ${CELL3_GLOBAL} = id;\n`,
+        `    float d   = ${call(inner, innerExtra, 'q')};\n`,
+        // win: the copy that is nearest, left in g_cell3 at the end (Repeat Cell at a hit point reads it).
+        `    vec3  win = id;\n`,
+      );
+      if (mode === 'wall') {
+        // Never step past this cell's wall (an unlimited axis only; a clamped end cell has no wall outside).
+        lines.push(
+          `    vec3  wl  = 0.5 * cs - abs(q) + mix(vec3(0.0), vec3(1e9), step(0.5, lim) * step(lim, abs(id)));\n`,
+          `    d = min(d, max(min(wl.x, min(wl.y, wl.z)), 0.0) + 0.08 * min(cs.x, min(cs.y, cs.z)));\n`,
+        );
+      } else if (mode === 'near8' || mode === 'skip') {
+        lines.push(
+          // The 7 other cells round the corner of this cell the point is nearest.
+          `    vec3  o   = sign(q + 1e-6);\n`,
+          ...(mode === 'skip' ? [
+            `    vec3  wl  = 0.5 * cs - abs(q);\n`,
+            `    if (d > min(wl.x, min(wl.y, wl.z)) - ${num(node.params.overlap, 0.5)}) {\n`,
+          ] : [`    {\n`]),
+          `        for (int k = 1; k < 8; k++) {\n`,
+          `            float fk = float(k);\n`,
+          `            vec3  b  = vec3(mod(fk, 2.0), mod(floor(fk * 0.5), 2.0), floor(fk * 0.25));\n`,
+          `            vec3  c  = id + o * b;\n`,
+          `            c = mix(c, clamp(c, -lim, lim), step(0.5, lim));\n`,
+          `            if (dot(abs(c - id), vec3(1.0)) < 0.5) continue;\n`,
+          `            ${CELL3_GLOBAL} = c;\n`,
+          `            float dn = ${call(inner, innerExtra, 'p - cs * c')};\n`,
+          `            if (dn < d) { d = dn; win = c; }\n`,
+          `        }\n`,
+          `    }\n`,
+        );
+      }
+      lines.push(`    ${CELL3_GLOBAL} = win;\n`);
+    } else {
+      lines.push(`    float d = 1e9;\n`);
+    }
+    if (ground) lines.push(`    d = min(d, ${call(ground, groundExtra, 'p')});\n`);
+    const fnName = `repScene_${S}`;
+    const decl = extra.map(v => `${v.type} ${v.name}`).join(', ');
+    this.functions.add(`float ${fnName}(vec3 p${decl ? ', ' + decl : ''}) {\n${lines.join('')}    return d;\n}`);
+    if (extra.length) this.sceneFnExtraParams.set(fnName, extra);
+    this.nodeOutputs.set(node.id, { scene: fnName });
   }
 
   private compileMarchLoopGroupNode(rawNode: GraphNode, inputVars: Record<string, string>, nodeSlug: string): void {
@@ -4148,6 +4225,8 @@ export class ShaderAssembler {
 
   private buildResult() {
     const mainBody = this.mainCode.join('') + (this.stepsView ? `    gl_FragColor = vec4(${this.stepsView}, 1.0);\n` : '');
+    // Repeat Cell outside a Repeat Scene (or in a path that skips declarationsFor) still needs its global.
+    if (!this.declarations.has(CELL3_DECL) && (mainBody.includes(CELL3_GLOBAL) || [...this.functions].some(f => f.includes(CELL3_GLOBAL)))) this.declarations.add(CELL3_DECL);
     // Data uniforms and their row helpers first, so any function can call them.
     const functionCode = pruneUnusedGlslFunctions(dataBlocksFirst(dedupeGlslFunctions(Array.from(this.functions))), mainBody).join('\n');
     const paramUniformDecls = Object.entries(this.paramUniforms)

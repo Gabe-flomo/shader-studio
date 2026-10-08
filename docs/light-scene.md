@@ -34,3 +34,12 @@ Pick a look. It adds a lighting rig after the loop, wires it, and puts it on the
 With no Scene wired into the loop, there is nothing to shadow, so the shadow, AO and subsurface steps are left out.
 
 Code: `src/nodes/recipes/lightRecipes.ts`. It uses the starter-recipe machinery (`docs/starter-recipes.md`), plus `remove` in a recipe build for replacing.
+
+## Switch to GI Lit (and back)
+
+The Light the scene card also has **Global illumination (GI Lit)**, and the right-click menu has **Switch to GI Lit March Group** / **Switch to March Loop Group**. The loop keeps its id, its inside, the settings both share (steps, distance, warp safety, jitter, colours…) and every wire whose socket exists on both.
+
+- Going to GI Lit removes the loop's Light the scene rig, since GI lights the scene itself. If the Output showed the rig, it shows GI's Color instead.
+- Going back cuts wires from the GI-only outputs (AO, Shadow, GI, Diffuse, Reflection).
+
+Code: `src/nodes/convertMarchLoop.ts`.

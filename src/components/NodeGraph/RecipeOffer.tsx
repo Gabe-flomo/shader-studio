@@ -121,6 +121,10 @@ function OfferCard({ node, openedAt, canvasRef, pan, zoom }: {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 8px 8px' }}>
         {recipes.map(r => <RecipeRow key={r.id} label={r.label} description={r.description} onClick={() => pick(r.id)} />)}
+        {lighting && node.type === 'marchLoopGroup' && (
+          <RecipeRow label="Global illumination (GI Lit)" description="Turns the loop into a GI Lit March Group, which lights the scene itself: soft shadows, AO, sky light, one bounce and reflections. Slower; settings and wires kept."
+            onClick={() => { if (dontAsk) closeRecipeOffer(true); useNodeGraphStore.getState().convertMarchLoop(node.id, 'giLitMarchGroup'); }} />
+        )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px 7px 12px', borderTop: `1px solid ${tk.border.subtle}` }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: tk.text.muted, cursor: 'pointer', marginRight: 'auto', minWidth: 0 }}>

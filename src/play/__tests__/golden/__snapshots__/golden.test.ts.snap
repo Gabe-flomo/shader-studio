@@ -1698,6 +1698,15 @@ exports[`golden outputs: examples > playVideoSound 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > repeatSceneBubbles 1`] = `
+{
+  "a": "- x120",
+  "o": "- x120",
+  "s": "- x120",
+  "z": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > script3D 1`] = `
 {
   "hue": "- x120",

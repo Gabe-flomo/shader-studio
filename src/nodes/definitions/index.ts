@@ -241,6 +241,7 @@ import {
   MirrorFold3DNode, DomainWarp3DNode, Turbulence3DNode,
 } from './sdf3d';
 import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode, MarchSceneDistNode, GILitMarchGroupNode, VolumeGlowNode, VolumetricSceneNode, SceneBuilderNode } from './scene3d';
+import { RepeatSceneNode, RepeatCellNode } from './repeatScene';
 import { PaletteNode, GradientNode, HSVNode, PosterizeNode, InvertNode, HueRangeNode,
   ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode,
   LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode, OklabMixNode, ColorPickerNode, ColorizeNode, StopPaletteNode } from './color';
@@ -657,6 +658,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   giLitMarchGroup: GILitMarchGroupNode,
   volumetricScene: VolumetricSceneNode,
   sceneBuilder: SceneBuilderNode,
+  repeatScene: RepeatSceneNode,
+  repeatCell: RepeatCellNode,
   // Color
   palette: PaletteNode,
   gradient: GradientNode,
