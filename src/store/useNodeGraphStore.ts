@@ -30,7 +30,8 @@ import { execCommand, type CommandPlan } from '../suggestions/doCommands';
 import { applyMove, moveById, learnGraph, learnSaved, recordWireBetween, textSignature } from '../suggestions';
 import { closeRecipeOffer, noteNodeAdded } from './recipeOfferStore';
 import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES, AGENT_PRESET_TYPES, syncAgentSpaces } from '../nodes/definitions/agents';
-import { randomizedParams } from '../nodes/randomizeParams';
+import { randomizedParams, weightKey } from '../nodes/randomizeParams';
+import { getRandomizeOptions } from '../nodes/randomizeOptions';
 import { upgradeLegacyNode } from './legacyLabels';
 import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, usesHands, type PlayRecord, type PlayControl } from '../types/play';
 import { tidyGroups } from '../types/layerGroups';
@@ -905,7 +906,7 @@ interface NodeGraphState {
   updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void;
   updateNodeParams: (nodeId: string, params: Record<string, unknown>, options?: { immediate?: boolean }) => void;
   /** New random values for the node's free sliders (see nodes/randomizeParams.ts); one undo step per call */
-  randomizeNodeParams: (nodeId: string) => void;
+  randomizeNodeParams: (nodeId: string, weights?: Record<string, number> | null) => void;
   updateNodeOutputs: (nodeId: string, outputs: Record<string, { type: import('../types/nodeGraph').DataType; label: string }>) => void;
   updateNodeInputs: (nodeId: string, inputs: Record<string, import('../types/nodeGraph').InputSocket>) => void;
   setPreviewNodeId: (id: string | null) => void;
@@ -4209,6 +4210,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       };
     });
 
+    // Randomize's locks (__randExclude, __randSkip) never reach the shader: no recompile, no uniform push.
+    if (Object.keys(params).length > 0 && Object.keys(params).every(k => k.startsWith('__rand'))) return;
+
     // Optimisation: if every changed param already has a compiled uniform entry,
     // push the new values directly to ShaderCanvas via paramUniforms — no recompile.
     //
@@ -4248,13 +4252,15 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
   },
 
-  randomizeNodeParams: (nodeId) => {
+  randomizeNodeParams: (nodeId, weights) => {
     const { nodes, activeGroupPath } = get();
     const scope = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
     const node = scope.find(n => n.id === nodeId);
     const def = node ? getNodeDefinitionFor(node) : undefined;
     if (!node || !def) return;
-    const patch = randomizedParams(node, def);
+    const opts = getRandomizeOptions();
+    const weightOf = opts.focus && weights ? (k: string) => weights[node.type === 'group' ? k : weightKey(node.id, k)] : undefined;
+    const patch = randomizedParams(node, def, Math.random, opts, weightOf);
     if (Object.keys(patch).length === 0) return;
     // Its own undo step, even when clicked again right away (the param-edit burst would merge them)
     undoManager.push(nodes, { label: `Randomised ${nodeName(node)}`, nodeIds: [nodeId] });
