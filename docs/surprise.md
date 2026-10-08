@@ -172,3 +172,7 @@ For `random(a..b)` written by the user, sample the user's range directly
   `src/lang/surpriseBias.ts`: the word counts and the lean.
 - `src/components/surprise/`: `SurpriseStrip` (‹ ›), `surpriseSources` (the counts from examples and saved graphs), `SurpriseBar` (the button, seed field and Reroll),
   `announceSurprise` (the toast), and the Grid, Agent and graph actions.
+
+## Focus on what changes the picture, and Suggest controls
+
+Randomise's **Focus** (`src/nodes/randomizeFocus.ts`, `src/components/surprise/focusWeights.ts`) draws the graph at 64 × 64 with each setting nudged a quarter of the way to the low and high ends of its interesting range and weights the randomising by the mean absolute pixel difference (blended with the image model's embedding distance when it is loaded). It is time-boxed to about a second; settings not reached are weighted as without Focus. **Suggest controls** (docs/suggest-controls.md) reuses the same settings walk, locks and difference functions, but sweeps five points across the whole range to find controls for Play.

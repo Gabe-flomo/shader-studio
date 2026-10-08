@@ -2,7 +2,7 @@ import { randomizeGraphAction } from '../surprise/surpriseActions';
 import { RandomizePopover } from '../surprise/RandomizePopover';
 import { getRandomizeOptions, optionsSummary } from '../../nodes/randomizeOptions';
 import { lockedItems } from '../../nodes/randomizeParams';
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -18,6 +18,9 @@ import { Popover } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
 import { computeGraphStats, countNodes, mainBodyLines } from './graphStats';
 import { PerfBadge, PerfPanel } from './PerfPanel';
+
+// Loaded on first use: the finder pulls in the compiler and the offscreen renderer.
+const SuggestControlsPanel = lazy(() => import('../play/SuggestControlsPanel'));
 
 /**
  * Floating toolbar at the top centre of the canvas (desktop redesign): node count for the
@@ -166,6 +169,7 @@ export function CanvasToolbar({
 function RandomizeGraphButton() {
   const anchor = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
+  const [suggest, setSuggest] = useState(false);
   const [summary, setSummary] = useState('');
   // The tooltip's one-line summary is worked out on hover: counting locks walks the whole graph.
   const refresh = () => setSummary(optionsSummary(getRandomizeOptions(), lockedItems(useNodeGraphStore.getState().nodes).length));
@@ -173,7 +177,8 @@ function RandomizeGraphButton() {
     <span ref={anchor} onMouseEnter={refresh} onContextMenu={e => { e.preventDefault(); e.stopPropagation(); refresh(); setOpen(true); }} style={{ display: 'inline-flex', alignItems: 'center' }}>
       <IconButton icon="dice" label={`Randomise settings in this graph, one undo step${summary ? ` (${summary})` : ''} · right-click or the arrow: options and a seed`} size="sm" onClick={() => void randomizeGraphAction()} data-randomize-graph />
       <IconButton icon="chevD" label="Randomise options: strength, locks, groups, focus, seed" size="sm" active={open} onClick={() => { refresh(); setOpen(o => !o); }} data-randomize-options style={{ width: 16, marginLeft: -4 }} />
-      {open && <RandomizePopover anchorRef={anchor} onClose={() => setOpen(false)} />}
+      {open && <RandomizePopover anchorRef={anchor} onClose={() => setOpen(false)} onSuggest={() => setSuggest(true)} />}
+      {suggest && <Suspense fallback={null}><SuggestControlsPanel anchorRef={anchor} offerOpenPlay onClose={() => setSuggest(false)} /></Suspense>}
     </span>
   );
 }
