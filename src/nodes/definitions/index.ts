@@ -20,6 +20,7 @@ import { DataNode } from './data';
 export { DataNode };
 import { Lift4DNode, Rotate4DNode, Translate4DNode, HypersphereSDFNode, TesseractSDFNode, FOURD_P2_NODES } from './fourD';
 export { Lift4DNode, Rotate4DNode, Translate4DNode, HypersphereSDFNode, TesseractSDFNode };
+import { FOURD_P3_NODES } from './fourDProject';
 
 // Sources
 export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
@@ -311,6 +312,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   hypersphereSDF: HypersphereSDFNode,
   tesseractSDF: TesseractSDFNode,
   ...FOURD_P2_NODES,
+  ...FOURD_P3_NODES,
   timeCube: TimeCubeNode,
   timeSlice: TimeSliceNode,
   timeCubeView: TimeCubeViewNode,
