@@ -26,7 +26,7 @@ function gpuRow(name: string, passes: readonly PassProgram[] | null): { label: s
   if (name === 'shader') return { label: passes?.length ? 'Picture' : 'Shader', sub: 'GPU', tint: null };
   if (name === 'echo') return { label: 'Echo copies', sub: 'GPU', tint: null };
   if (name === 'present') return { label: 'Copy to screen', sub: 'GPU', tint: null };
-  if (name === 'probes') return { label: 'Probes and readouts', sub: 'GPU', tint: null };
+  if (name === 'probes') return { label: 'Probe draws', sub: 'GPU', tint: null };
   if (name === 'background') return { label: 'Background graphs', sub: 'GPU', tint: null };
   if (name === 'particles') return { label: 'Particles', sub: 'GPU', tint: null };
   if (name.startsWith('pass:')) {
@@ -45,6 +45,8 @@ const BUDGET_MS = 1000 / 60;
 const fmt = (ms: number | null, digits = 1) => (ms === null ? '—' : ms.toFixed(digits));
 /** Small times keep their digits: 0.05 ms, not 0.1. */
 const fmtMs = (ms: number | null) => (ms === null ? '—' : ms.toFixed(ms < 1 ? 2 : 1));
+
+const FLOOR_TIP = 'The reference draw is one 64×64 constant-colour draw timed the same way as the shader. On a Mac, Chrome (ANGLE Metal) reads 0.1 to 0.5 ms for it even when idle, and also counts earlier GPU work in the same frame, so tiny shader times are inflated by about that much. Much more than that means the GPU is clocked down or busy with another app.';
 
 /** The Mac caveat, behind the "?" next to the shader's number. */
 const ISOLATION_TIP = 'On a Mac, Chrome\'s GPU timer also counts GPU work queued earlier in the same frame, so a timer around one draw can read the whole frame. Twice a second (and on every still frame) Playfield flushes that work first and times the shader on its own: that is the Shader number. Frame GPU work is everything the frame did.';
@@ -218,8 +220,8 @@ export function PerfPanel({ onClose }: { onClose: () => void }) {
     : `on its own · worst ${fmtMs(shader.p95)}`;
   const kpis: [string, string, string, string?][] = gpuOk
     ? [
-        ['Shader (isolated)', `${fmtMs(shader.ms)} ms`, shaderSub, ISOLATION_TIP],
-        ['Frame GPU work', `${fmtMs(frameAvg)} ms`, `everything · worst ${fmtMs(frame.p95)}`],
+        ['Shader', `${fmtMs(shader.ms)} ms`, shaderSub, ISOLATION_TIP],
+        ['Frame GPU work (everything)', `${fmtMs(frameAvg)} ms`, `this frame's total · worst ${fmtMs(frame.p95)}`],
         ['FPS', `${snap.fps || '—'}`, 'display-capped'],
         ['Pixels', snap.width ? `${snap.width}×${snap.height}` : '—', `${((snap.width * snap.height) / 1e6).toFixed(2)} Mpx`],
       ]
@@ -241,9 +243,9 @@ export function PerfPanel({ onClose }: { onClose: () => void }) {
         <IconButton icon="close" label="Close" size="sm" tooltip={false} onClick={onClose} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderBottom: `1px solid ${tk.border.subtle}` }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', borderBottom: `1px solid ${tk.border.subtle}` }}>
         {kpis.map(([l, v, s, tip], i) => (
-          <div key={l} style={{ padding: '12px 12px', borderLeft: i ? `1px solid ${tk.border.subtle}` : 'none', minWidth: 0 }}>
+          <div key={l} style={{ padding: '12px 12px', borderLeft: i % 2 ? `1px solid ${tk.border.subtle}` : 'none', borderTop: i > 1 ? `1px solid ${tk.border.subtle}` : 'none', minWidth: 0 }}>
             <div style={{ fontSize: 11.5, color: tk.text.muted, display: 'flex', alignItems: 'center', gap: 4 }}>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l}</span>
               {tip && <HintMark text={tip} />}
@@ -257,9 +259,14 @@ export function PerfPanel({ onClose }: { onClose: () => void }) {
       <div style={section}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={caps}>{gpuOk ? 'Frame GPU work · last 120 frames' : 'Last 120 frames'}</span><span style={{ ...caps, textTransform: 'none' }}>dashed = 60 fps</span></div>
         <Sparkline values={frame.history} budget={BUDGET_MS} color={accent} warn={tk.status.danger} />
-        {gpuOk && snap.timer.noisy && (
-          <div style={{ ...note, color: tk.status.warning }}>
-            The GPU timer reads high right now: a tiny reference draw takes {fmtMs(snap.timer.baselineMs)} ms (normally about 0.02). The GPU is probably clocked down or busy with another app, so every number here is inflated by about that much. It isn't the shader.
+        {gpuOk && snap.timer.baselineMs !== null && (
+          <div style={{ ...note, display: 'flex', alignItems: 'center', gap: 4, color: snap.timer.noisy ? tk.status.warning : tk.text.muted }}>
+            <span>
+              {snap.timer.noisy
+                ? `The GPU timer reads high right now: a tiny reference draw takes ${fmtMs(snap.timer.baselineMs)} ms, so the GPU is clocked down or busy and every number here is inflated. It isn't the shader.`
+                : `Timer floor ${fmtMs(snap.timer.baselineMs)} ms (a tiny reference draw): smaller numbers are noise.`}
+            </span>
+            <HintMark text={FLOOR_TIP} />
           </div>
         )}
         {!gpuOk && snap.gpuTimer === 'unsupported' && (

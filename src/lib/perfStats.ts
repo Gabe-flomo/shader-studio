@@ -29,11 +29,11 @@ const HISTORY = 120;
 /** How many isolated samples (shader, reference draw, segments) are kept. */
 export const ISOLATED_HISTORY = 30;
 /**
- * The reference draw (a constant colour into 64×64) takes about 0.01–0.03 ms on a desktop GPU.
- * Well above that, the timer itself reads high: the GPU is clocked down, busy with other apps,
+ * The reference draw (a constant colour into 64×64) reads about 0.02–0.5 ms on a Mac in Chrome (ANGLE Metal's
+ * timer has a floor), far less elsewhere. Well above that, the timer itself reads high: the GPU is clocked down, busy with other apps,
  * or the timer is noisy, and every number in the panel is inflated by about as much.
  */
-export const BASELINE_NOISY_MS = 0.1;
+export const BASELINE_NOISY_MS = 0.6;
 
 const cpu = new Ring(HISTORY);
 /** Every timed GPU segment of a drawn frame, summed: what the timer saw the frame cost ("everything"). */
