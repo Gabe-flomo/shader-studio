@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.92',
+    date: '2026-10-08',
+    title: '4D to 2D',
+    highlights: [
+      { area: 'Studio', text: '4D straight to 2D: 4D Wireframe 2D draws a turning tesseract as flat glowing lines, and Plane Slice 4D cuts any 4D shape with a plane into morphing 2D shapes.', link: { kind: 'doc', path: 'docs/4d.md' } },
+      { area: 'Studio', text: 'Two new 4D examples: Flat tesseract and Plane through a duocylinder, plus a step-by-step guide to 4D projection in the docs.' },
+    ],
+  },
+  {
     id: '2026.10.91',
     date: '2026-10-08',
     title: 'Trigger buttons',
