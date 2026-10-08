@@ -359,7 +359,7 @@ exports[`golden shaders: every Play example exports the same bundle > fourDLatti
 
 exports[`golden shaders: every Play example exports the same bundle > fourDPlaneSlice 1`] = `
 {
-  "bundle": "13bd5ef83fba6018bcfa423ca826:8654",
+  "bundle": "1bf596ae1899d801227b23eb5d66:7712",
   "missing": [],
 }
 `;
@@ -4758,13 +4758,12 @@ exports[`golden shaders: every example compiles as it did > fourDPlaneSlice 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "14acb68ab8d27b1cee075de29894:6440",
+  "fragmentShader": "0a0d521e1324f91ac6518a228bd8:5795",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "15059b706b7959135d6c2af5fa94:260",
-  "paramBindings": "069fbaef1a4d5e08121eb94f5e92:846",
+  "nodeSlugs": "159e845c3788e111a42643111eb4:216",
+  "paramBindings": "11ee198f04b02b1cd785a433d3d1:666",
   "paramUniforms": [
-    "u_p_addcolorx0_scale",
     "u_p_duocylindex0_r1",
     "u_p_duocylindex0_r2",
     "u_p_fillx0_strokeWidth",
@@ -4772,9 +4771,6 @@ exports[`golden shaders: every example compiles as it did > fourDPlaneSlice 1`] 
     "u_p_lfox0_freq",
     "u_p_lfox0_offset",
     "u_p_lfox0_phase",
-    "u_p_lightx0_brightness",
-    "u_p_lightx0_innerFalloff",
-    "u_p_lightx0_tint",
     "u_p_palx0_anim",
     "u_p_palx0_scale",
     "u_p_palx0_speed",
@@ -4787,7 +4783,7 @@ exports[`golden shaders: every example compiles as it did > fourDPlaneSlice 1`] 
     "u_p_rotate4dx0xc2_angle",
     "u_p_rotate4dx0xc2_spin",
   ],
-  "paramValues": "0ac65e6bee100f1218221a88ffba:593",
+  "paramValues": "1ec0c19c04ffc40910bcf6fd6467:470",
   "passes": null,
   "success": true,
   "textureUniforms": {},
