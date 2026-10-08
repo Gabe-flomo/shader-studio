@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.81',
+    date: '2026-10-08',
+    title: 'Suggest controls',
+    highlights: [
+      { area: 'Play', text: 'Suggest controls: Playfield tries every setting across its range and lists the ones that change the picture most, smoothly and without blanking it.', link: { kind: 'doc', path: 'docs/suggest-controls.md' } },
+      { area: 'Play', text: 'Each suggestion shows a filmstrip of what it does and a usable range. Tick the ones you want and add them to Play in one step.' },
+    ],
+  },
+  {
     id: '2026.10.80',
     date: '2026-10-08',
     title: 'Explain more (experimental)',
