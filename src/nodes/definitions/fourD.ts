@@ -15,13 +15,13 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { p } from './helpers';
 
-const CAT = '4D';
+export const CAT = '4D';
 
 /** The six planes of rotation in 4D (a rotation turns one axis toward another): the pair each one turns. */
 export const ROTATION_PLANES_4D = ['xy', 'xz', 'xw', 'yz', 'yw', 'zw'] as const;
 export type RotationPlane4D = typeof ROTATION_PLANES_4D[number];
 
-const DEG = '0.017453292519943295';
+export const DEG = '0.017453292519943295';
 
 // ─── Lift to 4D ────────────────────────────────────────────────────────────────
 
@@ -206,7 +206,7 @@ export const Translate4DNode: NodeDefinition = {
 
 // ─── Shapes ────────────────────────────────────────────────────────────────────
 
-const SDF4D_GLSL = `
+export const SDF4D_GLSL = `
 float sdf4d_hypersphere(vec4 p, float r) { return length(p) - r; }
 float sdf4d_tesseract(vec4 p, float h, float rnd) {
     float rr = min(max(rnd, 0.0), h);
@@ -269,8 +269,8 @@ export const TesseractSDFNode: NodeDefinition = {
 // are bounds (docs/4d.md): a BOUND never overestimates the true distance and is 1-Lipschitz, so the
 // march can step by it safely; it only slows down (more steps) where it underestimates.
 
-type ShapeParam = { def: number; label: string; min: number; max: number; step: number; hint: string; help?: string };
-interface ShapeSpec {
+export type ShapeParam = { def: number; label: string; min: number; max: number; step: number; hint: string; help?: string };
+export interface ShapeSpec {
   type: string; label: string; aliases: string[]; description: string;
   params: Record<string, ShapeParam>;
   /** Name of the GLSL function (in `glsl`) called as fn(p4, ...params in order). */
@@ -278,7 +278,7 @@ interface ShapeSpec {
   distHint: string;
 }
 
-function shapeNode(s: ShapeSpec): NodeDefinition {
+export function shapeNode(s: ShapeSpec): NodeDefinition {
   const keys = Object.keys(s.params);
   return {
     type: s.type, label: s.label, category: CAT, aliases: s.aliases, description: s.description,

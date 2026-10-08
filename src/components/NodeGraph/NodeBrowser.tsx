@@ -84,6 +84,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Shapes', types: ['hypersphereSDF', 'tesseractSDF', 'duocylinderSDF', 'spherinderSDF', 'cubinderSDF', 'cylPrismSDF', 'ditorusSDF', 'cliffordTorusSDF'] },
     { label: 'Polytopes', types: ['cell5SDF', 'cell16SDF', 'cell24SDF'] },
     { label: 'Noise',  types: ['noise4D'] },
+    { label: 'Project', types: ['wireframe4D', 'project4D', 'stereo4D', 'stereoDist4D', 'hopfCirclesSDF'] },
   ],
   '3D Lighting': [
     { label: 'Shadow',  types: ['sdfAo', 'softShadow'] },
