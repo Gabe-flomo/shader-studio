@@ -1,25 +1,18 @@
 /**
- * client.ts — the image model in the app (docs/taste.md "How things look"): MobileCLIP-S0 in a Web Worker,
+ * client.ts — the image model in the app (docs/image-model.md): MobileCLIP-S0 in a Web Worker,
  * loaded lazily the first time something needs it (never at app start), with small LRU caches.
+ * Nothing uses it yet; it is kept ready for explanations and suggestions (docs/retired-experiments.md).
  *
  *   embedImage(frame) → its 512-d unit vector (or null when the model is off)
  *   embedText(text)   → the same for words
  *
  * Settings: "Use the image model". On the web the model is downloaded once (about 65 MB, with a progress
  * bar) and the browser keeps it; after that it's on by default. On the desktop the files are bundled with
- * the app, so it's on from the first launch and never touches the network. Off, or not loaded, everything
- * works exactly as before: the taste model has no look, Deep and Surprise use their histogram novelty, and
- * the context box lists unknown words.
+ * the app, so it's on from the first launch and never touches the network. Off, or not loaded, nothing changes.
  */
 import { create } from 'zustand';
 import { IMAGE_MODEL, LOCAL_MODEL_DIR, MODEL_BYTES } from './config';
-import { PROJECTION_VERSION, LOOK_DIMS, project, registerImageEmbedder } from '../taste/look';
 import type { WorkerConfig } from './worker';
-import { tasteSteering, updateSteering } from '../taste/store';
-import { withContext } from '../taste/context';
-
-/** What the taste model stores as its embedder: the model and the projection (a change of either resets the look). */
-export const EMBEDDER_ID = `${IMAGE_MODEL.id}+${PROJECTION_VERSION}`;
 
 const ENABLED_KEY = 'shader-studio:settings:useImageModel';
 const DOWNLOADED_KEY = 'shader-studio:settings:imageModelDownloaded';
@@ -236,27 +229,6 @@ export async function embedTexts(texts: readonly string[]): Promise<Array<Float3
   return Promise.all(texts.map(t => textCache.get(t) ?? Promise.resolve(null)));
 }
 export const embedText = async (text: string): Promise<Float32Array | null> => (await embedTexts([text]))[0];
-
-// ── The taste model's embedder ───────────────────────────────────────────────
-
-/** While the model can be used, the taste model sees looks (src/taste/look.ts); otherwise it has none. */
-function syncEmbedder(): void {
-  registerImageEmbedder(imageModelUsable() ? {
-    id: EMBEDDER_ID, dims: LOOK_DIMS,
-    embed: async f => { const v = await embedImage(f); return v ? project(v) : new Float32Array(LOOK_DIMS); },
-  } : null);
-}
-/** The context box reads words by look only while the model can be used: read it again when that changes. */
-function rereadContext(): void {
-  const s = tasteSteering();
-  if (!s.context.trim()) return;
-  const next = withContext(s, s.context, { byLook: imageModelUsable() });
-  if (JSON.stringify(next.chips) !== JSON.stringify(s.chips) || next.unknown.join('|') !== s.unknown.join('|')) updateSteering(() => next);
-}
-
-syncEmbedder();
-useImageModel.subscribe((s, prev) => { if (imageModelUsable(s) !== imageModelUsable(prev)) { syncEmbedder(); rereadContext(); } });
-rereadContext();
 
 /** For checking in dev: `window.__imageModel`. */
 if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as { __imageModel?: unknown }).__imageModel = { useImageModel, ensureImageModel, embedImage, embedText, embedTexts, downloadImageModel, setImageModelEnabled };

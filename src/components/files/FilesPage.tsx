@@ -33,8 +33,6 @@ import { APP_SETTINGS_ID, countLeaves, itemsOf, pathTo, walk, type FileNode } fr
 import { collectNotes, type NoteEntry } from '../../files/notes';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { NotesView } from './NotesView';
-import { OPEN_TASTE_VIEW, takeTasteViewRequest } from '../taste/tasteNav';
-import { lazyWithSuspense } from '../lazyWithSuspense';
 import { AppSettingsView } from './AppSettingsView';
 import { cleanupSuggestions } from '../../files/cleanup';
 import { localMutableKV } from '../../files/mutate';
@@ -84,10 +82,7 @@ const layerSetOf = (n: FileNode) => (n.kind === 'preset' && n.id.startsWith('lse
 const rackPresetOf = (n: FileNode) => (n.kind === 'preset' && n.id.startsWith('rpre:') ? loadRackPresets().find(x => x.id === n.id.slice(5)) : undefined);
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** The Taste page (docs/taste.md), loaded when it's first shown. */
-const LazyTastePage = lazyWithSuspense<{ compact?: boolean }>(() => import('../taste/TastePage'));
-
-type View = 'home' | 'browse' | 'cleanup' | 'workspace' | 'linked' | 'notes' | 'nodes' | 'taste';
+type View = 'home' | 'browse' | 'cleanup' | 'workspace' | 'linked' | 'notes' | 'nodes';
 /** The GLSL page reads these when it mounts: the editor's text and which saved shader it is. */
 const GLSL_EDITOR_KEY = 'shader-studio:glsl-editor';
 const GLSL_OPEN_KEY = 'glsl-editor:open-shader';
@@ -95,7 +90,7 @@ const GLSL_OPEN_KEY = 'glsl-editor:open-shader';
 export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: (p: Page) => void }) {
   const tk = useTokens();
   const { inv, building, estimate, usage } = useFilesInventory();
-  const [view, setView] = useState<View>(() => (takeTasteViewRequest() ? 'taste' : takeWorkspaceViewRequest() ? 'workspace' : takeCleanupRequest() ? 'cleanup' : 'home'));
+  const [view, setView] = useState<View>(() => (takeWorkspaceViewRequest() ? 'workspace' : takeCleanupRequest() ? 'cleanup' : 'home'));
   /** The linked folder the Linked folders view shows. */
   const [linkedId, setLinkedId] = useState<string | undefined>(undefined);
   /** The node type whose page is shown (the Nodes view). */
@@ -109,12 +104,6 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
     const go = () => { takeCleanupRequest(); setView('cleanup'); };
     window.addEventListener(OPEN_CLEANUP_VIEW, go);
     return () => window.removeEventListener(OPEN_CLEANUP_VIEW, go);
-  }, []);
-  // The Do bar's taste panel and App settings ask for the Taste view.
-  useEffect(() => {
-    const go = () => { takeTasteViewRequest(); setSheetId(null); setView('taste'); };
-    window.addEventListener(OPEN_TASTE_VIEW, go);
-    return () => window.removeEventListener(OPEN_TASTE_VIEW, go);
   }, []);
   // The top bar's workspace indicator asks for the Workspace view.
   useEffect(() => {
@@ -392,7 +381,6 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
     { id: 'cleanup', icon: 'spark', label: 'Clean up', sub: cleanupCount ? `${plural(cleanupCount, 'suggestion')}: old versions, unused files, duplicates` : 'Nothing to clean up', count: cleanupCount, tint: tk.status.success, onClick: () => show('cleanup') },
     { id: 'workspace', icon: 'folder', label: 'Workspace folder', sub: 'A folder on this computer that mirrors what’s saved', tint: tk.status.warning, onClick: () => show('workspace') },
     { id: 'linked', icon: 'link', label: 'Linked folders', sub: 'Folders of samples, images, videos and fonts, used in place', tint: tk.accent.base, onClick: () => show('linked') },
-    { id: 'taste', icon: 'thumbUp', label: 'Your taste', sub: 'What Surprise, Deep and Evolve learned you like, and your steering', tint: tk.status.success, onClick: () => show('taste') },
     { id: 'settings', icon: 'sliders', label: 'App settings', sub: 'Theme, shortcuts, panel sizes: reset to default here', tint: tk.text.muted, onClick: () => open(APP_SETTINGS_ID) },
   ];
   const home = <HomeView inv={inv} compact={compact} estimate={estimate} usage={usage} entries={entries} onOpen={open} onOpenNode={openNodePage} onOpenWhereItBelongs={openWhereItBelongs}
@@ -400,8 +388,8 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
       {inv.sections.map((s, i) => <SectionRow key={s.id} node={s} first={i === 0} state={checkState(s.id)} onCheck={on => onCheck(s.id, on)} onOpen={() => open(s.id)} />)}
     </div> : undefined} />;
   const nodesView = nodeType ? <NodePage type={nodeType} compact={compact} inv={inv} onOpen={open} onNavigate={onNavigate} /> : <NodesListView compact={compact} onOpenNode={openNodePage} />;
-  const special = (v: View) => (v === 'home' ? home : v === 'nodes' ? nodesView : v === 'cleanup' ? cleanup : v === 'workspace' ? workspace : v === 'linked' ? linked : v === 'notes' ? notes : v === 'taste' ? <LazyTastePage compact={compact} /> : null);
-  const specialCrumb = (v: View) => (v === 'nodes' && nodeType ? [{ id: 'nodes', label: 'Nodes', kind: 'section' as const, section: 'nodes' as const, size: 0 }, { id: `nodetype:${nodeType}`, label: getNodeDefinition(nodeType)?.label ?? nodeType, kind: 'node' as const, section: 'nodes' as const, size: 0 }] : crumb(v === 'cleanup' ? 'Clean up' : v === 'workspace' ? 'Workspace folder' : v === 'linked' ? 'Linked folders' : v === 'notes' ? 'Notes' : v === 'nodes' ? 'Nodes' : v === 'taste' ? 'Your taste' : 'Home'));
+  const special = (v: View) => (v === 'home' ? home : v === 'nodes' ? nodesView : v === 'cleanup' ? cleanup : v === 'workspace' ? workspace : v === 'linked' ? linked : v === 'notes' ? notes : null);
+  const specialCrumb = (v: View) => (v === 'nodes' && nodeType ? [{ id: 'nodes', label: 'Nodes', kind: 'section' as const, section: 'nodes' as const, size: 0 }, { id: `nodetype:${nodeType}`, label: getNodeDefinition(nodeType)?.label ?? nodeType, kind: 'node' as const, section: 'nodes' as const, size: 0 }] : crumb(v === 'cleanup' ? 'Clean up' : v === 'workspace' ? 'Workspace folder' : v === 'linked' ? 'Linked folders' : v === 'notes' ? 'Notes' : v === 'nodes' ? 'Nodes' : 'Home'));
   const banner = view !== 'workspace' && <WorkspaceBanner compact={compact} onOpen={() => setView('workspace')} />;
   const crumb = (label: string) => [{ id: view, label, kind: 'section' as const, section: 'graphs' as const, size: 0 }];
 
@@ -478,7 +466,6 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
           <NotesEntry count={notesCount} active={view === 'notes'} onClick={() => show('notes')} dense />
           <WorkspaceEntry active={view === 'workspace'} onClick={() => show('workspace')} />
           <LinkedFoldersEntry active={view === 'linked'} onClick={() => show('linked')} />
-          <SideEntry icon="thumbUp" tint={tk.status.success} label="Your taste" sub="" count={0} active={view === 'taste'} dense onClick={() => show('taste')} />
         </div>
         <div style={{ ...capsLabel(tk), padding: '12px 18px 6px' }}>Everything saved</div>
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '0 10px 16px' }}>
