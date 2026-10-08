@@ -20,6 +20,9 @@ import { matchBuilders } from '../../builders/registry';
 import { useStructureHints } from '../../structure/hintsStore';
 import { typesForStage } from '../../structure/browse';
 import { FLOWS, STAGES } from '../../structure/stages';
+import { misfitBadge, splitCategories } from '../../structure/relevance';
+import { useLibraryPrefs } from '../../structure/libraryPrefs';
+import { useFitsHere, useLibraryContext } from './useLibraryRelevance';
 
 // ── Nodes hidden from browser ─────────────────────────────────────────────────
 const HIDDEN_NODES = new Set([
@@ -381,12 +384,12 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
 
 // ── Node pill ─────────────────────────────────────────────────────────────────
 function NodePill({
-  label, description,
+  label, description, badge,
   isSelected, isHighlighted,
   onSingleClick, onDoubleClick,
   swapMode, btnRef, drag, onDragEnd,
 }: {
-  type: string; label: string; description?: string;
+  type: string; label: string; description?: string; badge?: string;
   isSelected: boolean; isHighlighted: boolean;
   onSingleClick: () => void; onDoubleClick: () => void;
   swapMode: boolean;
@@ -417,6 +420,7 @@ function NodePill({
       }}
     >
       {label}
+      {badge && <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: tk.text.faint, background: tk.bg.hover, borderRadius: radius.sm, padding: '1px 5px' }}>{badge}</span>}
     </button>
   );
 }
@@ -467,6 +471,13 @@ export function NodeBrowser({
   const showBuilders = !isGlsl && !swapTargetNodeId;
 
   const isSearching = searchQuery.trim().length > 0;
+  // What is relevant to this graph (structure/relevance.ts); not for the GLSL page's browser or a node switch.
+  const relevanceOn = !isGlsl && !swapTargetNodeId;
+  const relevantOnly = useLibraryPrefs(s => s.relevantOnly);
+  const setRelevantOnly = useLibraryPrefs(s => s.setRelevantOnly);
+  const libCtx = useLibraryContext(relevanceOn);
+  const fits = useFitsHere(relevanceOn && relevantOnly, HIDDEN_NODES);
+  const [showOther, setShowOther] = useState(false);
   // A stage picked on the flow strip (structure/hintsStore.ts); Back clears it.
   const stageBrowse = useStructureHints(st => st.browse);
   const setStageBrowse = useStructureHints(st => st.setBrowse);
@@ -521,13 +532,13 @@ export function NodeBrowser({
   }, [isGlsl, onAdd, onGlslInsert]);
 
   // A wrap of node pills, with the preview card for the selected one underneath.
-  const renderPills = (nodes: Array<{ type: string; label: string; description?: string }>) => (
+  const renderPills = (nodes: Array<{ type: string; label: string; description?: string; badge?: string }>) => (
     <>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {nodes.map(def => (
           <NodePill
             key={def.type}
-            type={def.type} label={def.label} description={def.description}
+            type={def.type} label={def.label} description={def.description} badge={def.badge}
             isSelected={previewType === def.type}
             isHighlighted={highlightType === def.type}
             onSingleClick={() => handleNodeClick(def.type)}
@@ -597,7 +608,7 @@ export function NodeBrowser({
       .map(def => ({ def, score: scoreNodeDef(def, trimmed) }))
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score || a.def.label.localeCompare(b.def.label))
-      .map(({ def }) => def);
+      .map(({ def }) => ({ type: def.type, label: def.label, description: def.description, badge: relevanceOn ? misfitBadge(def.category, libCtx.flow) ?? undefined : undefined }));
     const builderHits = showBuilders ? matchBuilders(trimmed).length : 0;
     innerContent = (
       <>
@@ -609,9 +620,33 @@ export function NodeBrowser({
     );
 
   } else if (path.length === 0) {
+    const filtering = relevanceOn && relevantOnly;
+    const countOf = (cat: string) => getNodesByCategory(cat).filter(d => !HIDDEN_NODES.has(d.type)).length;
+    const live = (cat: string) => countOf(cat) > 0;
+    const fitsOn = filtering;
+    const otherCats: string[] = [];
+    const sections = (libCtx.flow === '3d' && filtering
+      ? [CATEGORY_SECTIONS[1], CATEGORY_SECTIONS[0], ...CATEGORY_SECTIONS.slice(2)]
+      : CATEGORY_SECTIONS
+    ).map(section => {
+      const have = section.categories.filter(live);
+      if (!filtering) return { label: section.label, cats: have };
+      const { fit, other } = splitCategories(have, libCtx.flow);
+      otherCats.push(...other);
+      return { label: section.label, cats: fit };
+    }).filter(s => s.cats.length > 0);
     const favCount = favorites.filter(t => getNodeDefinition(t) && !HIDDEN_NODES.has(t)).length;
     innerContent = (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {libCtx && relevanceOn && (
+          <RelevanceBar relevantOnly={relevantOnly} onChange={setRelevantOnly} flowLabel={FLOWS[libCtx.flow].label} flowTitle={libCtx.inside ? `Inside ${getNodeDefinition(libCtx.inside)?.label ?? libCtx.inside}` : `This graph is ${FLOWS[libCtx.flow].label}`} />
+        )}
+        {fitsOn && fits.defs.length > 0 && (
+          <div data-fits-here>
+            <CapsLabel rule>Fits here{fits.from ? ` · after ${fits.from}` : ''}</CapsLabel>
+            {renderPills(fits.defs)}
+          </div>
+        )}
         {showBuilders && <BuildersSection onOpened={onBuilderOpened} />}
         {favCount > 0 && (
           <CategoryRow
@@ -622,23 +657,14 @@ export function NodeBrowser({
             onClick={() => { setPath(['__favorites__']); setPreviewType(null); }}
           />
         )}
-        {CATEGORY_SECTIONS.map(section => {
-          const sectionCats = section.categories.filter(cat => getNodesByCategory(cat).some(d => !HIDDEN_NODES.has(d.type)));
-          if (sectionCats.length === 0) return null;
-          return (
-            <div key={section.label}>
-              <CapsLabel rule>{section.label}</CapsLabel>
-              {sectionCats.map(cat => (
-                <CategoryRow
-                  key={cat}
-                  cat={cat}
-                  count={getNodesByCategory(cat).filter(d => !HIDDEN_NODES.has(d.type)).length}
-                  onClick={() => { setPath([cat]); setPreviewType(null); }}
-                />
-              ))}
-            </div>
-          );
-        })}
+        {sections.map(section => (
+          <div key={section.label}>
+            <CapsLabel rule>{section.label}</CapsLabel>
+            {section.cats.map(cat => (
+              <CategoryRow key={cat} cat={cat} count={countOf(cat)} onClick={() => { setPath([cat]); setPreviewType(null); }} />
+            ))}
+          </div>
+        ))}
         {/* Any categories not covered by sections (My Nodes, node packs by name) */}
         {categories.filter(cat => !CATEGORY_ORDER.includes(cat)).map(cat => {
           const n = getNodesByCategory(cat).filter(d => !HIDDEN_NODES.has(d.type)).length;
@@ -654,6 +680,19 @@ export function NodeBrowser({
             />
           );
         })}
+        {otherCats.length > 0 && (
+          <div data-not-for-graph>
+            <button onClick={() => setShowOther(v => !v)} aria-expanded={showOther}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 6, padding: '12px 2px 4px', border: 0, background: 'transparent', cursor: 'pointer', color: tk.text.faint, font: `700 10px ${fontFamily.ui}`, letterSpacing: '0.08em', textTransform: 'uppercase', textAlign: 'left' }}>
+              <Icon name={showOther ? 'chevD' : 'chevR'} size={12} />
+              <span>Not for this graph ({otherCats.reduce((n, c) => n + countOf(c), 0)})</span>
+              <span style={{ flex: 1, height: 1, background: tk.border.subtle }} />
+            </button>
+            {showOther && otherCats.map(cat => (
+              <CategoryRow key={cat} cat={cat} count={countOf(cat)} onClick={() => { setPath([cat]); setPreviewType(null); }} />
+            ))}
+          </div>
+        )}
       </div>
     );
 
@@ -738,5 +777,24 @@ function CategoryRow({ cat, icon, count, onClick }: {
       <Count n={count} />
       <Icon name="chevR" size={14} style={{ color: tk.text.disabled }} />
     </button>
+  );
+}
+
+// ── Relevant only / Show all ──────────────────────────────────────────────────
+function RelevanceBar({ relevantOnly, onChange, flowLabel, flowTitle }: { relevantOnly: boolean; onChange: (v: boolean) => void; flowLabel: string; flowTitle: string }) {
+  const tk = useTokens();
+  const seg = (on: boolean, label: string, value: boolean) => (
+    <button key={label} onClick={() => onChange(value)} aria-pressed={on}
+      style={{ flex: 1, height: 24, border: 0, borderRadius: radius.sm, cursor: 'pointer', whiteSpace: 'nowrap', font: `${on ? 600 : 500} 11.5px ${fontFamily.ui}`,
+        background: on ? tk.bg.selected : 'transparent', color: on ? tk.accent.text : tk.text.muted }}>{label}</button>
+  );
+  return (
+    <div data-library-relevance style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+      <div style={{ flex: 1, display: 'flex', gap: 2, padding: 2, borderRadius: radius.md, background: tk.bg.field }}>
+        {seg(relevantOnly, 'Relevant only', true)}
+        {seg(!relevantOnly, 'Show all', false)}
+      </div>
+      <span title={flowTitle} style={{ fontSize: 10.5, color: tk.text.faint, whiteSpace: 'nowrap' }}>{flowLabel}</span>
+    </div>
   );
 }
