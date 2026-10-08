@@ -168,6 +168,17 @@ export function fragmentFromNodes(src: InspSource, ids: string[], meta: { family
   };
 }
 
+/**
+ * What fills a stage, in words a person would use for "you usually put an Expression Block in the space
+ * stage": the technique's name, or for copied code what it is (Expression Block, Custom Function).
+ */
+export function stageChoice(f: Pick<Fragment, 'family' | 'what' | 'nodes'>): string {
+  if (f.family !== 'code') return f.what;
+  if (f.nodes.some(n => n.type === 'exprNode')) return 'Expression Block';
+  if (f.nodes.some(n => n.type === 'customFn')) return 'Custom Function';
+  return f.what;
+}
+
 const ARG_TYPES = new Set(['float', 'vec2', 'vec3']);
 const TIME_ARG = /^(t|time|tm|iTime|u_time|T)$/;
 

@@ -54,6 +54,11 @@ import { readSurpriseCommand, surpriseLine } from '../../lang/surprise';
 import { cancelSurprise, keepSurprise, startSurprise, stepSurprise } from '../surprise/inspiredAction';
 import { SurpriseStrip, DeepToggle } from '../surprise/SurpriseStrip';
 import { useSurpriseCarousel } from '../surprise/inspiredAction';
+import { EvolveStrip, EvolveToggle } from '../surprise/EvolveStrip';
+import { escapeEvolveSession, focusEvolve, keepEvolveSession, useEvolve } from '../surprise/evolveAction';
+import { TastePanel } from '../taste/TastePanel';
+import { useTaste } from '../../taste/store';
+import { nodeTypeLean, tasteRerank } from '../../taste';
 import { normaliseEnd, strength } from '../../suggestions/usage';
 import { historyAt, pushHistory, readHistory } from '../../suggestions/doBarHistory';
 import type { Assist } from '../../lang/complete';
@@ -97,8 +102,9 @@ function DoBarCrashed({ message }: { message: string }) {
     const onKey = (e: KeyboardEvent) => {
       // Escape (or ⌘Z) while Surprise candidates are showing: the original graph back.
       const carousel = useSurpriseCarousel.getState().open;
-      if (carousel && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.stopPropagation(); cancelSurprise(); return; }
-      if (e.key === 'Escape') { e.stopPropagation(); if (carousel) cancelSurprise(); closeDoBar(); }
+      const evolving = useEvolve.getState().open;
+      if ((carousel || evolving) && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.stopPropagation(); if (evolving) escapeEvolveSession(); else cancelSurprise(); return; }
+      if (e.key === 'Escape') { e.stopPropagation(); if (evolving) escapeEvolveSession(); if (carousel) cancelSurprise(); closeDoBar(); }
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
@@ -163,12 +169,13 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   const tk = useTokens();
   const inputRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState(initial);
-  const [panel, setPanel] = useState<'none' | 'teach' | 'taught' | 'script'>(/^teach\b/i.test(initial) ? 'teach' : 'none');
+  const [panel, setPanel] = useState<'none' | 'teach' | 'taught' | 'script' | 'taste'>(/^teach\b/i.test(initial) ? 'teach' : 'none');
   const [teachPhrase, setTeachPhrase] = useState(initial.replace(/^teach( the do bar)?\s*/i, ''));
   const [teachError, setTeachError] = useState<string | null>(null);
   const [active, setActive] = useState(0);
   const [caret, setCaret] = useState<number | null>(initial.length);
   const scope = useScope();
+  const taste = useTaste(s => s.model);
   // Type-ahead: the language's (graph-aware: create, connect, set…), else the plain-English vocabulary's.
   const assist = useMemo(() => {
     const t = rankTables();
@@ -179,10 +186,17 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
     const none: Assist = { items: [], from: 0, to: 0, signature: null };
     return (tx: string, c: number): Assist => readSafely('type-ahead', tx, () => {
       const lang = barAssist(tx, c, { nodes: scope.nodes, rank });
+      // Taste leans lightly on node choices (never past an exact match of the word typed).
+      if (lang.items.length > 1) {
+        const word = tx.slice(lang.from, lang.to).trim().toLowerCase();
+        const typeOf = new Map(getOfferedDefinitions().map(d => [d.label.toLowerCase(), d.type]));
+        const lean = (it: { label: string; detail: string }) => { const t = typeOf.get(it.detail.toLowerCase()) ?? typeOf.get(it.label.toLowerCase()); return t ? nodeTypeLean(taste, t) : 0; };
+        return { ...lang, items: tasteRerank(lang.items, lean, it => !!word && it.label.toLowerCase() === word) };
+      }
       if (lang.items.length || lang.signature) return lang;
       return doBarAssist(tx, c);
     }, none).value;
-  }, [scope.nodes]);
+  }, [scope.nodes, taste]);
   // The seed for `random` while you type (a line's own seed= wins); a new one after each run.
   const [seed, setSeed] = useState(freshSeed);
   const [histIndex, setHistIndex] = useState<number | null>(null);
@@ -197,15 +211,17 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
     const onKey = (e: KeyboardEvent) => {
       // Escape (or ⌘Z) while Surprise candidates are showing: the original graph back.
       const carousel = useSurpriseCarousel.getState().open;
-      if (carousel && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.stopPropagation(); cancelSurprise(); return; }
-      if (e.key === 'Escape') { e.stopPropagation(); if (carousel) cancelSurprise(); closeDoBar(); }
+      const evolving = useEvolve.getState().open;
+      if ((carousel || evolving) && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.stopPropagation(); if (evolving) escapeEvolveSession(); else cancelSurprise(); return; }
+      if (e.key === 'Escape') { e.stopPropagation(); if (evolving) escapeEvolveSession(); if (carousel) cancelSurprise(); closeDoBar(); }
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, []);
   // Closing the bar any other way keeps the candidate on screen.
-  useEffect(() => () => { if (useSurpriseCarousel.getState().open) keepSurprise(); }, []);
+  useEffect(() => () => { if (useSurpriseCarousel.getState().open) keepSurprise(); if (useEvolve.getState().open) keepEvolveSession(); }, []);
   const carouselOpen = useSurpriseCarousel(s => s.open);
+  const evolveOpen = useEvolve(s => s.open);
 
   // A builder phrase ("new 3d scene", "edit the rules", "show the recipe") is the whole sentence, read first (builders/doBuilders.ts).
   const rootNodes = useNodeGraphStore(s => s.nodes);
@@ -298,11 +314,12 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
     const target = currentStageTarget();
     const nodes = getOfferedDefinitions().filter(d => !HIDDEN_TYPES.has(d.type))
       .map(d => ({ d, s: scoreNodeDef(d, q) })).filter(x => x.s > 0)
-      .map(x => ({ ...x, s: x.s + (inTargetStage(x.d.type, target) ? STAGE_SEARCH_POINTS : 0) })).sort((a, b) => b.s - a.s).slice(0, 5)
+      // Taste adds at most 3 points (match tiers are 10+ apart), never to an exact match (120).
+      .map(x => ({ ...x, s: x.s + (inTargetStage(x.d.type, target) ? STAGE_SEARCH_POINTS : 0) + (x.s >= 120 ? 0 : 3 * nodeTypeLean(taste, x.d.type)) })).sort((a, b) => b.s - a.s).slice(0, 5)
       .map(x => ({ kind: 'node' as const, type: x.d.type, label: x.d.label, detail: x.d.category }));
     const idioms = (idiomFirst.length ? idiomFirst : matchIdioms(text, 3)).map(spec => ({ kind: 'idiom' as const, spec }));
     return idiomFirst.length ? idioms : [...nodes, ...idioms];
-  }, [] as Fallback[]).value, [text, plan, editing, builder, otherDialect, surprise, langErrors.length]);
+  }, [] as Fallback[]).value, [text, plan, editing, builder, otherDialect, surprise, langErrors.length, taste]);
   // A reading that threw (logged by readSafely): one line in the bar instead of a blank app.
   const readError = builderRead.error ?? surpriseRead.error ?? lineRead.error ?? planRead.error ?? cmdRead.error;
   useEffect(() => setActive(0), [fallback.length]);
@@ -339,6 +356,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
     if (surpriseMade) { setText(surpriseMade.line); setCaret(surpriseMade.line.length); return; }
     if (surpriseInspired) { pushHistory(text); setText(''); setCaret(0); void startSurprise({ seed: surpriseInspired.seed }); return; }
     if (carouselOpen && !text.trim()) { keepSurprise(); closeDoBar(); return; }
+    if (evolveOpen && !text.trim()) { keepEvolveSession(); closeDoBar(); return; }
     if (otherDialect) { runOther(otherDialect); return; }
     if (builder) {
       if (!builder.action) return;
@@ -390,6 +408,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
         font: `13px ${fontFamily.ui}`, overflow: 'hidden', maxHeight: 'calc(100vh - 200px)', display: 'flex', flexDirection: 'column',
       }}>
       <SurpriseStrip />
+      <EvolveStrip />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 8px 8px 12px' }}>
         <Icon name="edit" size={15} style={{ color: tk.accent.base }} />
         <input
@@ -403,6 +422,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
             if (e.key === 'Enter') { e.preventDefault(); run(); }
             // ← / → step through Surprise candidates while the line is empty.
             if (carouselOpen && !text && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); void stepSurprise(e.key === 'ArrowLeft' ? -1 : 1); return; }
+            if (evolveOpen && !text && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); focusEvolve(e.key === 'ArrowLeft' ? 0 : 1); return; }
             // ↑ / ↓ walk what you typed before (history keeps the words you typed) when no list is open.
             if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !fallback.length) {
               const list = readHistory();
@@ -423,6 +443,8 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
         <IconButton icon="dice" size="sm" label="Surprise me: new graphs inspired by 2–3 of your graphs and the examples, to step through with ‹ ›. Enter keeps one (it replaces this graph; Undo brings it back), Escape puts this graph back" data-do-surprise
           onClick={() => { void startSurprise(); requestAnimationFrame(() => inputRef.current?.focus()); }} />
         <DeepToggle />
+        <EvolveToggle />
+        <IconButton icon="thumbUp" size="sm" active={panel === 'taste'} label="Your taste: what Surprise, Deep and Evolve learned you like (all on this device)" data-do-taste onClick={() => setPanel(p => (p === 'taste' ? 'none' : 'taste'))} />
         <IconButton icon="info" size="sm" label="Commands: every verb, with examples to try" onClick={() => { closeDoBar(); openCommandsRef(); }} data-do-help />
         <IconButton icon="code" size="sm" active={panel === 'script'} label="Show as commands: this graph as Do… lines" data-do-script onClick={() => setPanel(p => (p === 'script' ? 'none' : 'script'))} />
         <IconButton icon="star" size="sm" active={panel === 'taught'} label="Your taught phrases" onClick={() => setPanel(p => (p === 'taught' ? 'none' : 'taught'))} />
@@ -567,6 +589,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
 
         {/* Taught phrases */}
         {panel === 'taught' && section(`Taught (${taughtMoves().length})`, <TaughtList />)}
+        {panel === 'taste' && section('Your taste', <TastePanel />)}
 
         {/* Search fallback */}
         {fallback.length > 0 && section('Not a phrase it knows: add a node', (
