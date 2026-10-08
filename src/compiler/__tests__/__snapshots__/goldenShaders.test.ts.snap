@@ -1540,6 +1540,13 @@ exports[`golden shaders: every Play example exports the same bundle > playWalls 
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > repeatSceneBubbles 1`] = `
+{
+  "bundle": "04798e7bb6565b11bb03d0b090a8:14708",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > script3D 1`] = `
 {
   "bundle": "0512a93d95be611206e17037d35c:9679",
@@ -15109,6 +15116,54 @@ exports[`golden shaders: every example compiles as it did > refractDirFakeGlass 
     "u_p_remapx7_outMin",
   ],
   "paramValues": "082669ef370d310a56aa91fcf4dd:633",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > repeatSceneBubbles 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0b03e03b9f8b5d1c3fa12d2020bd:11815",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "056145ca34ca8813a5221723fdc3:611",
+  "paramBindings": "182c6407d3f1ad01ad719b2d79a8:1211",
+  "paramUniforms": [
+    "u_p_floorx0xsgxplnx0_height",
+    "u_p_marchcamerx0_aperture",
+    "u_p_marchcamerx0_camAngle",
+    "u_p_marchcamerx0_camDist",
+    "u_p_marchcamerx0_camElevation",
+    "u_p_marchcamerx0_focalDist",
+    "u_p_marchcamerx0_fov",
+    "u_p_marchcamerx0_lensSpeed",
+    "u_p_marchcamerx0_rotSpeed",
+    "u_p_marchcamerx0_targetX",
+    "u_p_marchcamerx0_targetY",
+    "u_p_marchcamerx0_targetZ",
+    "u_p_marchloopgx0_albedo",
+    "u_p_marchloopgx0_bg",
+    "u_p_marchloopgx0_jitter",
+    "u_p_marchloopgx0_maxDist",
+    "u_p_marchloopgx0_stepScale",
+    "u_p_onexbubblex0xsgxrepeatcellx0_seed",
+    "u_p_onexbubblex0xsgxsphx0_radius",
+    "u_p_repeatcellx0xc2_seed",
+    "u_p_repeatscenx0_cellX",
+    "u_p_repeatscenx0_cellY",
+    "u_p_repeatscenx0_cellZ",
+    "u_p_repeatscenx0_countX",
+    "u_p_repeatscenx0_countY",
+    "u_p_repeatscenx0_countZ",
+    "u_p_repeatscenx0_overlap",
+  ],
+  "paramValues": "0b88a17bb5b00f1c689559a42613:902",
   "passes": null,
   "success": true,
   "textureUniforms": {},

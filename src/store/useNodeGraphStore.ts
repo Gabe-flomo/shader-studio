@@ -25,6 +25,7 @@ import { particlesAsNodes } from './particlesAsNodes';
 import { openGridRulesInGraph } from './gridRulesAsNodes';
 import { openNewSceneBuilder } from '../sceneBuilder/store';
 import { applyRecipe, LIGHT_SCENE_TYPES, placeNear, recipesFor } from '../nodes/recipes';
+import { convertMarchLoop, type MarchLoopType } from '../nodes/convertMarchLoop';
 import { runDoPlan as runDoPlanPure, type DoPlan } from '../suggestions/doBar';
 import { execCommand, type CommandPlan } from '../suggestions/doCommands';
 import { applyMove, moveById, learnGraph, learnSaved, recordWireBetween, textSignature } from '../suggestions';
@@ -868,6 +869,8 @@ interface NodeGraphState {
    * One undo step. Returns the ids added, or null when the node or recipe is gone.
    */
   applyStarterRecipe: (nodeId: string, recipeId: string) => string[] | null;
+  /** Turn a March Loop Group into a GI Lit March Group or back, in the level being edited (nodes/convertMarchLoop.ts). */
+  convertMarchLoop: (nodeId: string, to: MarchLoopType) => boolean;
   /**
    * Apply suggestion move `moveId` (suggestions/moves.ts) on socket `key` of node `nodeId`, in the
    * level being edited: one undo step, a compile, a toast. Selects the move's result node.
@@ -3383,6 +3386,26 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         : `${recipe.description}${r.shown ? ' It is on the Output now.' : ''} Every node it added has a note on what it does; undo takes it back to just the node.`,
     });
     return r.added;
+  },
+
+  convertMarchLoop: (nodeId, to) => {
+    closeRecipeOffer();
+    const st = get();
+    const path = st.activeGroupPath;
+    const scope = path.length ? getActiveNodes(st.nodes, path) : st.nodes;
+    if (!scope) return false;
+    const r = convertMarchLoop(scope, nodeId, to);
+    if (!r) return false;
+    const label = to === 'giLitMarchGroup' ? 'GI Lit March Group' : 'March Loop Group';
+    undoManager.push(st.nodes, { label: `Switched to ${label}`, nodeIds: [nodeId] });
+    set({ nodes: path.length ? (setActiveNodes(st.nodes, path, r.nodes) ?? st.nodes) : r.nodes });
+    get().compile();
+    const notes: string[] = [];
+    if (r.removedRig) notes.push(`The Light the scene rig (${r.removedRig} nodes) came out: GI Lit lights the scene itself, and its Color is on the Output.`);
+    if (r.dropped) notes.push(`${r.dropped} wire${r.dropped === 1 ? '' : 's'} from GI-only outputs (AO, Shadow, GI, Diffuse, Reflection) came off.`);
+    if (to === 'marchLoopGroup') notes.push('Light the scene (the sun button) adds lighting to it.');
+    toast.info(`Switched to ${label}`, { message: `${notes.join(' ')} Settings, the loop body and the other wires are kept. Undo puts it back.` });
+    return true;
   },
 
   applySuggestion: (nodeId, key, side, moveId, args = {}) => {
