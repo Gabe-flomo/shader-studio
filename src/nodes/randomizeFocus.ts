@@ -46,7 +46,7 @@ const numeric = (v: unknown): boolean => typeof v === 'number' || (Array.isArray
  * The settings Randomize all would change with these options (same walk, same locks), each with
  * its down and up probe values. Choices have no numeric probe and are left out.
  */
-export function focusItems(level: GraphNode[], opts: RandomizeOptions, path: string[] = []): FocusItem[] {
+export function focusItems(level: GraphNode[], opts: RandomizeOptions, path: string[] = [], sceneGroups = false): FocusItem[] {
   const out: FocusItem[] = [];
   const probe = (n: GraphNode, face: boolean) => {
     const def = getNodeDefinitionFor(n);
@@ -65,10 +65,12 @@ export function focusItems(level: GraphNode[], opts: RandomizeOptions, path: str
   };
   for (const n of level) {
     if (isNodeSkipped(n)) continue;
-    if (n.type !== 'group') { probe(n, false); continue; }
-    if (opts.groupFace) probe(n, true);
+    // `sceneGroups` (Suggest controls): a Scene Group's settings are Play candidates one level in, whatever "inside groups" says.
+    const scene = sceneGroups && n.type === 'sceneGroup';
+    if (n.type !== 'group' && !scene) { probe(n, false); continue; }
+    if (!scene && opts.groupFace) probe(n, true);
     const sg = n.params.subgraph as SubgraphData | undefined;
-    if (opts.insideGroups && sg && Array.isArray(sg.nodes)) out.push(...focusItems(sg.nodes, opts, [...path, n.id]));
+    if ((scene ? path.length === 0 : opts.insideGroups) && sg && Array.isArray(sg.nodes)) out.push(...focusItems(sg.nodes, opts, [...path, n.id], sceneGroups));
   }
   return out;
 }

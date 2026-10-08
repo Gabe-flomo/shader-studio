@@ -183,6 +183,31 @@ function origIdBySlug(slugMap: Map<string, string>, slug: string): string {
   return slug;
 }
 
+/**
+ * Give every call of the scene function `fn(...)` in `code` the extra arguments a Scene Group takes
+ * (the main()-scope variables its ports and wired settings read), so a node that measures the scene
+ * itself (Soft Shadow, SDF AO, Fake SSS, a particle volume probe...) sees the same shape the march
+ * loop does. The nodes write `fn(pos)`; this turns it into `fn(pos, extra1, extra2)`.
+ */
+export function addSceneArgs(code: string, fn: string, extraArgs: string): string {
+  if (!extraArgs) return code;
+  const needle = `${fn}(`;
+  let out = '';
+  let i = 0;
+  for (;;) {
+    const at = code.indexOf(needle, i);
+    // Only a whole identifier (`mapScene_a(` not `xmapScene_a(`), and not the function's own definition.
+    if (at < 0) { out += code.slice(i); return out; }
+    const before = at > 0 ? code[at - 1] : ' ';
+    if (/[A-Za-z0-9_]/.test(before)) { out += code.slice(i, at + needle.length); i = at + needle.length; continue; }
+    let depth = 1, j = at + needle.length;
+    for (; j < code.length && depth > 0; j++) { if (code[j] === '(') depth++; else if (code[j] === ')') depth--; }
+    // j is one past the closing paren: put the extra arguments before it.
+    out += code.slice(i, at + needle.length) + addSceneArgs(code.slice(at + needle.length, j - 1), fn, extraArgs) + ', ' + extraArgs + ')';
+    i = j;
+  }
+}
+
 function liveSceneFn(name: string | undefined): string {
   return name && name !== 'MISSING_SCENE' && name !== 'MISSING_SCENE_FN' ? name : '';
 }
@@ -3987,6 +4012,15 @@ export class ShaderAssembler {
           this.nodeOutputs.set(node.id, placeholderResult.outputVars);
         } else {
           const result = def.generateGLSL(patchedNode, inputVars);
+
+          // A node that measures a Scene Group itself (Soft Shadow, SDF AO...) writes `fn(pos)`: pass the
+          // group's port / wired-setting arguments too, as the march loop does.
+          for (const [key, sock] of Object.entries(def.inputs)) {
+            if (sock.type !== 'scene3d') continue;
+            const fn = liveSceneFn(inputVars[key]);
+            const extra = fn ? this.sceneFnExtraParams.get(fn) : undefined;
+            if (extra?.length) result.code = addSceneArgs(result.code, fn, extra.map(v => v.name).join(', '));
+          }
 
           // ── assignOp in the MAIN GRAPH ─────────────────────────────────────────
           // When assignOp is set (and not the default '='), declare an accumulator

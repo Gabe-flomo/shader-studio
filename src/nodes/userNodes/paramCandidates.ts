@@ -51,7 +51,8 @@ function numberOr(v: unknown, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 }
 
-export function collectParamCandidates(subgraph: SubgraphData): ParamCandidate[] {
+/** `sceneGroups`: also go one level into Scene Groups (Play reaches their settings; publishing a node does not). */
+export function collectParamCandidates(subgraph: SubgraphData, opts: { sceneGroups?: boolean } = {}): ParamCandidate[] {
   const out: ParamCandidate[] = [];
 
   const visit = (nodes: GraphNode[], prefix: string, groupLabel: string | undefined, overrides: Record<string, unknown>) => {
@@ -86,7 +87,7 @@ export function collectParamCandidates(subgraph: SubgraphData): ParamCandidate[]
   visit(subgraph.nodes, '', undefined, {});
   // One group in: a plain group, or an Agents group (its rule's sliders are uniforms of its update shader).
   for (const g of subgraph.nodes) {
-    if (g.type !== 'group' && g.type !== 'agentsGroup') continue;
+    if (g.type !== 'group' && g.type !== 'agentsGroup' && !(opts.sceneGroups && g.type === 'sceneGroup')) continue;
     const inner = g.params.subgraph as SubgraphData | undefined;
     if (!inner) continue;
     visit(inner.nodes, `${g.id}::`, labelOf(g), g.params);

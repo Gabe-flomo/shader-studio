@@ -72,7 +72,7 @@ function collectColourCandidates(nodes: GraphNode[]): PlayCandidate[] {
   };
   visit(nodes, '', undefined, {});
   for (const g of nodes) {
-    if (g.type !== 'group' && g.type !== 'agentsGroup') continue;
+    if (g.type !== 'group' && g.type !== 'agentsGroup' && g.type !== 'sceneGroup') continue;
     const inner = g.params.subgraph as SubgraphData | undefined;
     if (inner) visit(inner.nodes, `${g.id}::`, labelOf(g), g.params);
   }
@@ -85,7 +85,7 @@ function collectColourCandidates(nodes: GraphNode[]): PlayCandidate[] {
  * baked, so it is left out.
  */
 export function collectPlayCandidates(nodes: GraphNode[], paramBindings: Record<string, string>): PlayCandidate[] {
-  const floats: PlayCandidate[] = collectParamCandidates({ nodes, inputPorts: [], outputPorts: [] }).map(c => ({
+  const floats: PlayCandidate[] = collectParamCandidates({ nodes, inputPorts: [], outputPorts: [] }, { sceneGroups: true }).map(c => ({
     target: c.sourcePath, kind: 'float', nodeLabel: c.nodeLabel, groupLabel: c.groupLabel, paramLabel: c.paramLabel,
     min: c.min, max: c.max, step: c.step, value: c.value, ...(c.hint ? { hint: c.hint } : {}),
   }));
@@ -109,6 +109,16 @@ export function collectPlayCandidates(nodes: GraphNode[], paramBindings: Record<
   const seen = new Set(floats.map(c => c.target));
   return [...floats, ...nested.filter(c => !seen.has(c.target)), ...collectColourCandidates(nodes)]
     .filter(c => bindingKeyOf(c.target) in paramBindings)
+    // A Scene Group's setting that a wire takes over (a wired port, or a ps_ socket) is replaced in the shader: no control.
+    .filter(c => {
+      const parts = c.target.split('::');
+      if (parts.length !== 3) return true;
+      const g = nodes.find(x => x.id === parts[0] && x.type === 'sceneGroup');
+      if (!g) return true;
+      const sg = g.params.subgraph as SubgraphData | undefined;
+      const viaPort = (sg?.inputPorts ?? []).some(p => p.toNodeId === parts[1] && p.toInputKey === parts[2] && g.inputs[p.key]?.connection);
+      return !viaPort && !g.inputs[`ps_${parts[1]}_${parts[2]}`]?.connection;
+    })
     // Play takes free sliders only: one a wire has taken over (Center X under a wired Center) does nothing.
     .filter(c => { const n = findTargetNode(nodes, c.target); const key = c.target.split('::').pop()!; return !n || !driverOf(n, key); });
 }
