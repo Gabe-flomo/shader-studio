@@ -18,6 +18,8 @@ import { MidiInputNode } from './midi';
 export { MidiInputNode };
 import { DataNode } from './data';
 export { DataNode };
+import { Lift4DNode, Rotate4DNode, Translate4DNode, HypersphereSDFNode, TesseractSDFNode } from './fourD';
+export { Lift4DNode, Rotate4DNode, Translate4DNode, HypersphereSDFNode, TesseractSDFNode };
 
 // Sources
 export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
@@ -303,6 +305,11 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   videoInput: VideoInputNode,
   baked: BakedNode,
   // Time cube (docs/time-cube.md): a video as a box of time
+  lift4D: Lift4DNode,
+  rotate4D: Rotate4DNode,
+  translate4D: Translate4DNode,
+  hypersphereSDF: HypersphereSDFNode,
+  tesseractSDF: TesseractSDFNode,
   timeCube: TimeCubeNode,
   timeSlice: TimeSliceNode,
   timeCubeView: TimeCubeViewNode,

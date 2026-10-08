@@ -126,6 +126,7 @@ export const CATEGORY_STAGE: Record<string, StageOf> = {
   'Color Grading': 'colour',
   '3D Primitives': 'objects',
   '3D Transforms': 'bend',
+  '4D': 'bend',
   '3D Scene': 'scene',
   '3D Lighting': 'light',
   Passes: 'readout',
@@ -180,6 +181,8 @@ export const TYPE_STAGE: Record<string, StageOf> = {
   prevFrame: 'pass', sobel: 'shapeIt',
   // 2D Space fields that give directions.
   vectorField: 'bend', gravityField: 'bend', spiralField: 'bend',
+  // 4D: the shapes are objects, the rest bend the point.
+  hypersphereSDF: 'objects', tesseractSDF: 'objects',
   // 3D Primitives that warp space.
   mirrorFold3D: 'bend', domainWarp3D: 'bend', turbulence3D: 'bend',
   // 3D Scene.

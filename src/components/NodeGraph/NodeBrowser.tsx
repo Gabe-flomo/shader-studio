@@ -50,7 +50,7 @@ const HIDDEN_NODES = new Set([
 
 const CATEGORY_SECTIONS: Array<{ label: string; categories: string[] }> = [
   { label: 'Shapes',       categories: ['2D Primitives', 'SDF', '2D Space', '3D Primitives', '3D Boolean Ops', '3D Transforms', 'Combiners'] },
-  { label: '3D',           categories: ['3D Scene', '3D Lighting', 'Loops'] },
+  { label: '3D',           categories: ['3D Scene', '3D Lighting', '4D', 'Loops'] },
   { label: 'Color & Post', categories: ['Color', 'Color Grading', 'Post Processing', 'Effects', 'Passes', 'Texture tools'] },
   { label: 'Generators',   categories: ['Noise', 'Halftone', 'Fractals', 'Science', 'Particles', 'Particles & Fields', 'Simulation', 'Grid', 'Field'] },
   { label: 'Math & Logic', categories: ['Sources', 'Animation', 'Math', 'Matrix', 'Shapers', 'Conditionals'] },
@@ -77,6 +77,10 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Repeat', types: ['repeat3D', 'limitedRepeat3D', 'polarRepeat3D', 'mirroredRepeat3D', 'voxelize'] },
     { label: 'Warp',   types: ['twist3D', 'bend3D', 'sinWarp3D', 'displace3D', 'spiralWarp3D', 'domainWarp3D', 'turbulence3D', 'shear3D'] },
     { label: 'Fold',   types: ['fold3D', 'mirrorFold3D', 'kaleidoscope3D', 'sphereInvert3D', 'mobiusWarp3D', 'logPolarWarp3D', 'helixWarp3D'] },
+  ],
+  '4D': [
+    { label: 'Point',  types: ['lift4D', 'rotate4D', 'translate4D'] },
+    { label: 'Shapes', types: ['hypersphereSDF', 'tesseractSDF'] },
   ],
   '3D Lighting': [
     { label: 'Shadow',  types: ['sdfAo', 'softShadow'] },

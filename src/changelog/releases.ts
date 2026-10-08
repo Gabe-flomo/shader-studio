@@ -39,6 +39,24 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.83',
+    date: '2026-10-08',
+    title: 'First taste of 4D',
+    highlights: [
+      { area: 'Studio', text: 'A first taste of 4D: Lift to 4D, Rotate 4D (six planes), Translate 4D, Hypersphere and Tesseract nodes, sliced into a normal 3D scene.', link: { kind: 'doc', path: 'docs/4d.md' } },
+      { area: 'Studio', text: 'Two 4D examples: a turning tesseract slice, and a hypersphere swelling and shrinking inside a hollow tesseract as the slice sweeps.' },
+    ],
+  },
+  {
+    id: '2026.10.82',
+    date: '2026-10-08',
+    title: 'Explain with confidence',
+    highlights: [
+      { area: 'Studio', text: 'Explain more is more careful: it only sees the code and what feeds each input, not node names, and each answer gets a confidence dot with a not sure tag.', link: { kind: 'doc', path: 'docs/explain-model.md' } },
+      { area: 'Studio', text: 'Pick your explanation model in Settings: the fast Qwen2.5-Coder 1.5B or Qwen3 4B, which thinks first and is better at maths. Compare models shows both answers.' },
+    ],
+  },
+  {
     id: '2026.10.81',
     date: '2026-10-08',
     title: 'Suggest controls',
