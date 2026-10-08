@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.88',
+    date: '2026-10-08',
+    title: '4D projection',
+    highlights: [
+      { area: 'Studio', text: '4D projection: 4D Wireframe draws the tesseract, 5-cell, 16-cell or 24-cell as glowing edges in perspective or orthographic, like the classic cube in a cube.', link: { kind: 'doc', path: 'docs/4d.md' } },
+      { area: 'Studio', text: 'Project 4D gives a 4D shape its solid shadow, and Stereographic 4D with Hopf Circles draws the famous linked rings of the 3-sphere.' },
+      { area: 'Studio', text: 'Four new 4D examples: Rotating tesseract, 24-cell wireframe, Duocylinder shadow and Hopf rings.' },
+    ],
+  },
+  {
     id: '2026.10.87',
     date: '2026-10-08',
     title: 'Volumetric port fix',
