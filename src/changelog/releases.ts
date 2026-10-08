@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.89',
+    date: '2026-10-08',
+    title: '4D scenes build themselves',
+    highlights: [
+      { area: 'Studio', text: 'Adding a 4D shape or transform now builds the 3D scene for it: a Scene Group with a Lift to 4D, plus a camera and march loop, like 3D shapes do.', link: { kind: 'doc', path: 'docs/4d.md' } },
+      { area: 'Studio', text: 'A second 4D shape joins the scene beside the first and shares its Lift, so one W slices both. 4D transforms get a tesseract to show what they do.' },
+    ],
+  },
+  {
     id: '2026.10.88',
     date: '2026-10-08',
     title: '4D projection',
