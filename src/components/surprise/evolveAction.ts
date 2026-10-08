@@ -16,7 +16,8 @@ import {
   compositionFeatures, escapeEvolve, keepEvolve, learnedLine, makeEvolveGen, pickEvolve, startEvolve, tasteWhy,
   type EvolveCand, type EvolveGen, type EvolveOptions, type EvolveState, type Features,
 } from '../../taste';
-import { tasteModel, updateTaste, useTaste } from '../../taste/store';
+import type { SignalRef } from '../../taste/log';
+import { steeredModel, tasteModel, tasteSteering, updateTaste, useTaste } from '../../taste/store';
 import { programPixels } from '../sceneBuilder/surpriseActions';
 import { cancelSurprise, gpuCheck, openSource, poolNow, useSurpriseCarousel } from './inspiredAction';
 import { announceSurprise } from './announce';
@@ -44,6 +45,7 @@ let gen: EvolveGen | null = null;
 const scores = new WeakMap<EvolveCand, Score>();
 const opts: EvolveOptions = {
   check: gpuCheck,
+  steering: tasteSteering,
   nextId: () => useNodeGraphStore.getState().newNodeId(),
   features: (c: EvolveCand): Features => {
     const sc = scores.get(c);
@@ -77,7 +79,7 @@ function draw(c: EvolveCand): EvolveView {
 function viewsFor(s: EvolveState): Map<EvolveCand, EvolveView> {
   const old = useEvolve.getState().views;
   const m = new Map<EvolveCand, EvolveView>();
-  const model = tasteModel();
+  const model = steeredModel();
   for (const c of s.pair) {
     const v = old.get(c) ?? draw(c);
     m.set(c, { ...v, why: [...new Set([...(v.score?.why ?? []).slice(0, 2), ...tasteWhy(model, opts.features!(c), 2)])] });
@@ -133,7 +135,7 @@ export function pickEvolveCandidate(which: 0 | 1): void {
   later(() => {
     try {
       const r = pickEvolve(state, which, gen!, tasteModel(), opts);
-      updateTaste(() => r.model);
+      updateTaste(() => r.model, { kind: 'pick', ref: evolveRef(state, which) });
       useEvolve.setState({ state: r.state, views: viewsFor(r.state), focus: 0, busy: false, learned: learnedLine(r.model) });
       show(r.state.pair[0].comp.nodes);
     } catch (e) {
@@ -142,6 +144,13 @@ export function pickEvolveCandidate(which: 0 | 1): void {
       useEvolve.setState({ busy: false });
     }
   });
+}
+
+/** What the log keeps of an Evolve pick: the session's seed, the round and the pair (docs/taste.md). */
+function evolveRef(state: EvolveState, which: 0 | 1): SignalRef {
+  const c = state.pair[which], o = state.pair[1 - which];
+  const what = (x: EvolveCand) => x.comp.stages.map(st => st.what).join(' → ') || x.kind;
+  return { via: 'evolve', seed: state.seed, label: `Evolve round ${state.round}`, pair: { round: state.round, chosen: c.id, other: o.id, chosenWhat: what(c), otherWhat: what(o) } };
 }
 
 function close(): void {
@@ -164,7 +173,7 @@ export function keepEvolveSession(): void {
   const { state, focus } = useEvolve.getState();
   if (!state) { close(); return; }
   const r = keepEvolve(state, focus, tasteModel(), opts);
-  updateTaste(() => r.model);
+  updateTaste(() => r.model, { kind: 'kept', ref: evolveRef(state, focus) });
   const c = state.pair[focus];
   useNodeGraphStore.setState({ nodes: state.original });
   useNodeGraphStore.getState().setNodesRewritten(r.state.result!, `Evolve · round ${state.round}`);

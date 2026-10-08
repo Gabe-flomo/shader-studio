@@ -156,9 +156,11 @@ export function planFor(pool: InspPool, seed: number, bias?: PlanBias): Plan {
   // Fill in a random order, so no stage always goes first.
   const order = rng.shuffle([...stages]);
   const open = () => order.filter(s => !assign.has(s));
+  // A lean of exactly 0 is a ban (your steering, src/taste/steering.ts): that choice or source is never picked.
+  const banned = (st: Stage, f: Fragment) => bias?.stage?.(st, stageChoice(f), f.family) === 0 || bias?.source?.(f.sourceId) === 0;
   const mult = (st: Stage, f: Fragment) => Math.max(0.01, bias?.stage?.(st, stageChoice(f), f.family) ?? 1);
   // Branch: the source that must give a piece gives the first one (a stage of this plan, by taste).
-  const must = bias?.mustUse ? pool.bySource.get(bias.mustUse)?.filter(f => stages.includes(f.stage)) : undefined;
+  const must = bias?.mustUse ? pool.bySource.get(bias.mustUse)?.filter(f => stages.includes(f.stage) && !banned(f.stage, f)) : undefined;
   if (must?.length) {
     const f = rng.weighted(must.map(x => [x, mult(x.stage, x)] as const));
     assign.set(f.stage, f);
@@ -172,7 +174,7 @@ export function planFor(pool: InspPool, seed: number, bias?: PlanBias): Plan {
     if (!stageW.length) break;
     const st = rng.weighted(stageW);
     const fams = [...pool.byStage.get(st)!.entries()]
-      .map(([fam, whats]) => [fam, [...whats.entries()].map(([w, fs]) => [w, fs.filter(f => !chosen.includes(f.sourceId))] as const).filter(([, fs]) => fs.length)] as const)
+      .map(([fam, whats]) => [fam, [...whats.entries()].map(([w, fs]) => [w, fs.filter(f => !chosen.includes(f.sourceId) && !banned(st, f))] as const).filter(([, fs]) => fs.length)] as const)
       .filter(([, whats]) => whats.length);
     if (!fams.length) { order.splice(order.indexOf(st), 1); continue; }
     // With a lean: a technique weighs its stage multiplier times its best source's weight (a liked graph pulls
@@ -191,7 +193,7 @@ export function planFor(pool: InspPool, seed: number, bias?: PlanBias): Plan {
   // Still open: a chosen source may give a second stage (a second technique of its own).
   for (const st of open()) {
     if (rng.chance(st === 'space' || st === 'post' ? 0.5 : 0.85)) {
-      const frags = chosen.flatMap(id => pool.bySource.get(id)!.filter(f => f.stage === st && !(families.has(f.family) && f.family !== 'code')));
+      const frags = chosen.flatMap(id => pool.bySource.get(id)!.filter(f => f.stage === st && !(families.has(f.family) && f.family !== 'code') && !banned(st, f)));
       if (frags.length) { const f = rng.pick(frags); assign.set(st, f); families.add(f.family); }
     }
   }

@@ -20,6 +20,7 @@ import { cardStyle } from './fileUiShared';
 import { StorageLimitControl } from './StorageLimitControl';
 import { AutosaveSettings } from './AutosaveSettings';
 import { TrackerModelsSettings } from './TrackerModelsSettings';
+import { openTastePage } from '../taste/tasteNav';
 import { useStorageLimit } from './useStorageLimit';
 import { DEFAULT_STORAGE_LIMIT, limitLabel } from '../../files/storageLimit';
 
@@ -82,6 +83,22 @@ export function AppSettingsView({ inv, node, compact }: { inv: Inventory; node: 
 
       <AutosaveSettings />
       <TrackerModelsSettings />
+
+      <section aria-label="Your taste" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px', minHeight: 28 }}>
+          <span style={{ font: `650 13px ${fontFamily.ui}`, color: tk.text.primary }}>Your taste</span>
+          <span style={{ fontSize: 12, color: tk.text.faint, flex: 1 }}>This device</span>
+        </div>
+        <div style={{ ...cardStyle(tk), overflow: 'hidden' }}>
+          <div data-setting="shader-studio:taste" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: compact ? '9px 6px 9px 12px' : '8px 10px 8px 14px' }}>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <span style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.primary }}>Taste model and steering</span>
+              <span style={{ fontSize: 11.5, color: tk.text.muted }}>What Surprise, Deep and Evolve learned you like, where each preference came from, and your own steering: exploration, how strongly taste leans, the Do bar’s nudge, pins and bans.</span>
+            </div>
+            <Button size="sm" icon="thumbUp" onClick={openTastePage} data-open-taste-page>Open Your taste</Button>
+          </div>
+        </div>
+      </section>
 
       {cats.map(c => {
         const open = !closed.has(c.id);

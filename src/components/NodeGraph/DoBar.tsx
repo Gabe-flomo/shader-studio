@@ -57,8 +57,8 @@ import { useSurpriseCarousel } from '../surprise/inspiredAction';
 import { EvolveStrip, EvolveToggle } from '../surprise/EvolveStrip';
 import { escapeEvolveSession, focusEvolve, keepEvolveSession, useEvolve } from '../surprise/evolveAction';
 import { TastePanel } from '../taste/TastePanel';
-import { useTaste } from '../../taste/store';
-import { nodeTypeLean, tasteRerank } from '../../taste';
+import { steeredModel, useTaste } from '../../taste/store';
+import { emptyModel, nodeTypeLean, tasteRerank } from '../../taste';
 import { normaliseEnd, strength } from '../../suggestions/usage';
 import { historyAt, pushHistory, readHistory } from '../../suggestions/doBarHistory';
 import type { Assist } from '../../lang/complete';
@@ -175,7 +175,10 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   const [active, setActive] = useState(0);
   const [caret, setCaret] = useState<number | null>(initial.length);
   const scope = useScope();
-  const taste = useTaste(s => s.model);
+  // Learned + your steering (src/taste/steering.ts); the Do bar's nudge can be turned off on the Taste page.
+  const learnedTaste = useTaste(s => s.model);
+  const steering = useTaste(s => s.steering);
+  const taste = useMemo(() => (steering.nudge ? steeredModel(learnedTaste, steering) : emptyModel()), [learnedTaste, steering]);
   // Type-ahead: the language's (graph-aware: create, connect, set…), else the plain-English vocabulary's.
   const assist = useMemo(() => {
     const t = rankTables();

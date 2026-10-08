@@ -4,3 +4,5 @@ export * from './model';
 export * from './bias';
 export * from './evolve';
 export * from './rerank';
+export * from './steering';
+export * from './summary';
