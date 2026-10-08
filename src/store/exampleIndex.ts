@@ -16,6 +16,7 @@ import { ctp } from '../theme/palette';
 import { PLAY_EXAMPLE_INDEX, PLAY_EXAMPLE_KEYS } from './playExampleIndex';
 import { LEARN_COLOR_KEYS, LEARN_CURVES_KEYS, LEARN_EXAMPLE_INDEX, LEARN_EXAMPLE_KEYS, LEARN_GRID_KEYS, LEARN_MOVED_INDEX } from './learnExampleIndex';
 import { LEARN3D_EXAMPLE_INDEX, LEARN3D_EXAMPLE_KEYS } from './learn3dExampleIndex';
+import { CURVED_EXAMPLE_INDEX, CURVED_EXAMPLE_KEYS } from './curvedSpaceExampleIndex';
 import { COMBO_EXAMPLE_INDEX } from './comboExamples';
 import { MATRIX_EXAMPLE_INDEX, MATRIX_EXAMPLE_KEYS } from './matrixExamples';
 import { DATA_EXAMPLE_INDEX, DATA_EXAMPLE_KEYS } from './dataExampleIndex';
@@ -205,6 +206,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...LEARN_MOVED_INDEX,
   // The Learn 3D folder: ray marching one idea at a time (learn3dExampleIndex.ts).
   ...LEARN3D_EXAMPLE_INDEX,
+  // The Curved space folder: spherical and hyperbolic views, reverse perspective (curvedSpaceExampleIndex.ts).
+  ...CURVED_EXAMPLE_INDEX,
   // Node Combos built from the definitions (comboExamples.ts): the Grid Pattern → shape → Grid Paint flow, and field sockets.
   ...COMBO_EXAMPLE_INDEX,
   // The Matrices folder (matrixExamples.ts): combining, undoing, lattices, fractals, corner pin, colour.
@@ -264,6 +267,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Play",              color: ctp.pink, keys: PLAY_EXAMPLE_KEYS },
   { label: "Learn",             color: ctp.lavender, keys: LEARN_EXAMPLE_KEYS },
   { label: "Learn 3D",          color: ctp.lavender, keys: LEARN3D_EXAMPLE_KEYS },
+  { label: "Curved space",      color: ctp.lavender, keys: CURVED_EXAMPLE_KEYS },
   { label: "Curves & Shapes",   color: ctp.lavender, keys: LEARN_CURVES_KEYS },
   { label: "Color & Lighting",  color: ctp.peach, keys: [...LEARN_COLOR_KEYS, 'neonGlow','colorStopsCycle'] },
   { label: "Passes",            color: ctp.maroon, keys: PASS_EXAMPLE_KEYS },

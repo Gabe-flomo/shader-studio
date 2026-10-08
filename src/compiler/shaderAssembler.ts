@@ -31,6 +31,7 @@ import { AG_3D_GLSL, AG_HASH_GLSL, AG_STATE_C_GLSL, AGENT_GLOBALS, AGENT_GLOBALS
 import { agentNbHeader } from '../nodes/definitions/agentNeighbours';
 import { frozenValueOf } from '../nodes/sliderFreeze';
 import { marchJitterDecl, MARCH_STEP_REF_KEY } from './marchJitter';
+import { curvedMarch } from './curvedSpace';
 import {
   getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed,
   getAxisKeyframeConfig, generateVectorKeyframeGLSL, socketHasVectorKeyframes, VECTOR_AXES,
@@ -2802,45 +2803,49 @@ export class ShaderAssembler {
             slug: nodeSlug, params: rawNode.params, jitter: mlJitter, ro: mlRo, rd: mlRd, maxDist: mlMaxDist,
             maxSteps: mlMaxSteps, volumetric: mlVolumetric, passthrough: mlPassthrough, addFunction: fn => this.functions.add(fn),
           });
+          // Space curvature (only a loop with the param): the ray follows a geodesic of constant curvature, see compiler/curvedSpace.ts.
+          const curved = curvedMarch(nodeSlug, node.params.curvature, mlRo, mlRd, mlMaxDist, fn => this.functions.add(fn));
 
           const marchLoopLines = mlVolumetric ? [
             // Volumetric mode: no hit detection, runs all steps.
             // If scene connected: step by max(sdf, passthrough). If not: step by passthrough (pure density).
             accumDecls,
+            curved.decl,
             jitterDecl,
             `    float ${nodeSlug}_hit = 0.0;\n`,
             `    int   ${nodeSlug}_si  = 0;\n`,
             `    for (int ${nodeSlug}_i = 0; ${nodeSlug}_i < ${mlMaxSteps}; ${nodeSlug}_i++) {\n`,
-            `        vec3  ${nodeSlug}_rp_raw = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
+            `        vec3  ${nodeSlug}_rp_raw = ${curved.at(`${nodeSlug}_t`)};\n`,
             `        vec3  ${nodeSlug}_rp = ${warpPos(`${nodeSlug}_rp_raw`, `${nodeSlug}_t`)};\n`,
             mlHasScene
               ? `        float ${nodeSlug}_vol = max(${callScene(`${nodeSlug}_rp`)}, ${mlPassthrough});\n`
               : `        float ${nodeSlug}_vol = ${mlPassthrough};\n`,
             `        ${nodeSlug}_t += ${nodeSlug}_vol;\n`,
-            `        if (${nodeSlug}_t > ${mlMaxDist}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
+            `        if (${nodeSlug}_t > ${curved.end}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
             `    }\n`,
           ] : [
             // Standard raymarching: hit detection + stepScale.
             // si starts at Max Steps: a ray that neither hits nor passes Max
             // Dist has used every step, so Iter reads 1 there, not 0.
             accumDecls,
+            curved.decl,
             jitterDecl,
             `    float ${nodeSlug}_hit = 0.0;\n`,
             `    int   ${nodeSlug}_si  = ${mlMaxSteps};\n`,
             `    for (int ${nodeSlug}_i = 0; ${nodeSlug}_i < ${mlMaxSteps}; ${nodeSlug}_i++) {\n`,
-            `        vec3  ${nodeSlug}_rp_raw = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
+            `        vec3  ${nodeSlug}_rp_raw = ${curved.at(`${nodeSlug}_t`)};\n`,
             `        vec3  ${nodeSlug}_rp = ${warpPos(`${nodeSlug}_rp_raw`, `${nodeSlug}_t`)};\n`,
             `        float ${nodeSlug}_d  = ${callScene(`${nodeSlug}_rp`)};\n`,
             `        if (${nodeSlug}_d < 0.0005) { ${nodeSlug}_hit = 1.0; ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
-            `        ${nodeSlug}_t += ${nodeSlug}_d * ${mlStepScale};\n`,
-            `        if (${nodeSlug}_t > ${mlMaxDist}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
+            `        ${nodeSlug}_t += ${nodeSlug}_d * ${mlStepScale}${curved.stepFactor(`${nodeSlug}_t`)};\n`,
+            `        if (${nodeSlug}_t > ${curved.end}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
             `    }\n`,
           ];
           const marchCode = [
             ...marchLoopLines,
             `    float ${nodeSlug}_iter      = float(${nodeSlug}_si) / float(${mlMaxSteps});\n`,
             `    float ${nodeSlug}_iterCount = float(${nodeSlug}_si);\n`,
-            `    vec3  ${nodeSlug}_hp_raw  = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
+            `    vec3  ${nodeSlug}_hp_raw  = ${curved.at(`${nodeSlug}_t`)};\n`,
             `    vec3  ${nodeSlug}_hp  = ${warpPos(`${nodeSlug}_hp_raw`, `${nodeSlug}_t`)};\n`,
             // Normal estimation: skip in volumetric mode (no surface) or when no scene is connected
             ...(mlVolumetric || !mlHasScene ? [
@@ -3544,34 +3549,38 @@ export class ShaderAssembler {
             slug: nodeSlug, params: rawNode.params, jitter: mlJitter, ro: mlRo, rd: mlRd, maxDist: mlMaxDist,
             maxSteps: mlMaxSteps, volumetric: mlVolumetric, passthrough: mlPassthrough, addFunction: fn => this.functions.add(fn),
           });
+          // Space curvature (only a loop with the param): the ray follows a geodesic of constant curvature, see compiler/curvedSpace.ts.
+          const curved = curvedMarch(nodeSlug, node.params.curvature, mlRo, mlRd, mlMaxDist, fn => this.functions.add(fn));
 
           const giMarchLoopLines = mlVolumetric ? [
             accumDecls,
+            curved.decl,
             jitterDecl,
             `    float ${nodeSlug}_hit = 0.0;\n`,
             `    int   ${nodeSlug}_si  = 0;\n`,
             `    for (int ${nodeSlug}_i = 0; ${nodeSlug}_i < ${mlMaxSteps}; ${nodeSlug}_i++) {\n`,
-            `        vec3  ${nodeSlug}_rp_raw = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
+            `        vec3  ${nodeSlug}_rp_raw = ${curved.at(`${nodeSlug}_t`)};\n`,
             `        vec3  ${nodeSlug}_rp = ${warpPos(`${nodeSlug}_rp_raw`, `${nodeSlug}_t`)};\n`,
             mlHasScene
               ? `        float ${nodeSlug}_vol = max(${callScene(`${nodeSlug}_rp`)}, ${mlPassthrough});\n`
               : `        float ${nodeSlug}_vol = ${mlPassthrough};\n`,
             `        ${nodeSlug}_t += ${nodeSlug}_vol;\n`,
-            `        if (${nodeSlug}_t > ${mlMaxDist}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
+            `        if (${nodeSlug}_t > ${curved.end}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
             `    }\n`,
           ] : [
             // si starts at Max Steps: a ray that runs out of steps used them all.
             accumDecls,
+            curved.decl,
             jitterDecl,
             `    float ${nodeSlug}_hit = 0.0;\n`,
             `    int   ${nodeSlug}_si  = ${mlMaxSteps};\n`,
             `    for (int ${nodeSlug}_i = 0; ${nodeSlug}_i < ${mlMaxSteps}; ${nodeSlug}_i++) {\n`,
-            `        vec3  ${nodeSlug}_rp_raw = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
+            `        vec3  ${nodeSlug}_rp_raw = ${curved.at(`${nodeSlug}_t`)};\n`,
             `        vec3  ${nodeSlug}_rp = ${warpPos(`${nodeSlug}_rp_raw`, `${nodeSlug}_t`)};\n`,
             `        float ${nodeSlug}_d  = ${callScene(`${nodeSlug}_rp`)};\n`,
             `        if (${nodeSlug}_d < 0.0005) { ${nodeSlug}_hit = 1.0; ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
-            `        ${nodeSlug}_t += ${nodeSlug}_d * ${mlStepScale};\n`,
-            `        if (${nodeSlug}_t > ${mlMaxDist}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
+            `        ${nodeSlug}_t += ${nodeSlug}_d * ${mlStepScale}${curved.stepFactor(`${nodeSlug}_t`)};\n`,
+            `        if (${nodeSlug}_t > ${curved.end}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
             `    }\n`,
           ];
 
@@ -3683,7 +3692,7 @@ export class ShaderAssembler {
             ...giMarchLoopLines,
             `    float ${nodeSlug}_iter      = float(${nodeSlug}_si) / float(${mlMaxSteps});\n`,
             `    float ${nodeSlug}_iterCount = float(${nodeSlug}_si);\n`,
-            `    vec3  ${nodeSlug}_hp_raw  = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
+            `    vec3  ${nodeSlug}_hp_raw  = ${curved.at(`${nodeSlug}_t`)};\n`,
             `    vec3  ${nodeSlug}_hp  = ${warpPos(`${nodeSlug}_hp_raw`, `${nodeSlug}_t`)};\n`,
             ...(mlVolumetric || !mlHasScene ? [
               `    vec3  ${nodeSlug}_n   = vec3(0.0, 1.0, 0.0);\n`,
