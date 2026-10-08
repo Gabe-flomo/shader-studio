@@ -15,11 +15,12 @@
  */
 import type { GraphNode } from '../types/nodeGraph';
 import { deriveSeed, makeRng, type Rng } from '../lib/surprise/rng';
-import { compileProblem, inspire, realisePlan, withSource, type Composition, type InspPool, type Plan } from '../lang/inspired/compose';
+import { compileProblem, inspire, realisePlan, withSource, type Composition, type InspPool, type Plan, type PlanBias } from '../lang/inspired/compose';
 import { stageChoice, type Fragment, type Stage } from '../lang/inspired/fragments';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 import { randomizedParams } from '../nodes/randomizeParams';
-import { tasteBias } from './bias';
+import { steeredBias } from './bias';
+import type { Steering } from './steering';
 import { compositionFeatures, type Features } from './features';
 import { learnPair, learnSignal, stageMultiplier, type TasteModel } from './model';
 
@@ -50,6 +51,8 @@ export interface EvolveOptions {
   nextId?: () => string;
   /** Features of a candidate (default: its composition's; the app adds image metrics). */
   features?: (c: EvolveCand) => Features;
+  /** Your steering, read each round (src/taste/steering.ts): it leans the rounds and its bans hold. */
+  steering?: () => Steering | undefined;
 }
 
 const counter = (tag: string) => { let k = 0; return () => `ev${tag}_${++k}`; };
@@ -73,25 +76,28 @@ export function nudgeSettings(nodes: GraphNode[], rng: Rng, howMany = rng.int(1,
 }
 
 /** Another technique of the same family for one stage (by taste), or a post step added; null when none. */
-export function mutatePlan(pool: InspPool, plan: Plan, rng: Rng, model: TasteModel): { plan: Plan; change: string } | null {
+export function mutatePlan(pool: InspPool, plan: Plan, rng: Rng, model: TasteModel, bias?: PlanBias): { plan: Plan; change: string } | null {
+  // The lean on a choice: your steered bias when given (0 = banned, never picked), else the model's.
+  const lean = (stage: Stage, f: Fragment) => (bias?.stage ? bias.stage(stage, stageChoice(f), f.family) : stageMultiplier(model, stage, stageChoice(f), f.family));
   const swappable: Array<{ stage: Stage; from: Fragment; options: Fragment[] }> = [];
   for (const [stage, f] of plan.assign) {
     const whats = pool.byStage.get(stage)?.get(f.family);
     if (!whats) continue;
-    const options = [...whats.values()].map(fs => fs[0]).filter(o => stageChoice(o) !== stageChoice(f) || (f.family === 'code' && o.key !== f.key));
+    const options = [...whats.values()].map(fs => fs[0]).filter(o => (stageChoice(o) !== stageChoice(f) || (f.family === 'code' && o.key !== f.key)) && lean(stage, o) > 0);
     if (options.length) swappable.push({ stage, from: f, options });
   }
   const canPost = !plan.assign.has('post') && plan.stages.includes('post') && (pool.byStage.get('post')?.size ?? 0) > 0;
   if (canPost && (rng.chance(0.35) || !swappable.length)) {
-    const posts = [...pool.byStage.get('post')!.values()].flatMap(w => [...w.values()].map(fs => fs[0]));
-    const f = rng.weighted(posts.map(p => [p, stageMultiplier(model, 'post', stageChoice(p), p.family)] as const));
+    const posts = [...pool.byStage.get('post')!.values()].flatMap(w => [...w.values()].map(fs => fs[0])).filter(p => lean('post', p) > 0);
+    if (!posts.length) return null;
+    const f = rng.weighted(posts.map(p => [p, lean('post', p)] as const));
     const assign = new Map(plan.assign);
     assign.set('post', f);
     return { plan: { ...plan, assign }, change: `added ${stageChoice(f)} (post)` };
   }
   if (!swappable.length) return null;
   const s = rng.pick(swappable);
-  const to = rng.weighted(s.options.map(o => [o, stageMultiplier(model, s.stage, stageChoice(o), o.family)] as const));
+  const to = rng.weighted(s.options.map(o => [o, lean(s.stage, o)] as const));
   const assign = new Map(plan.assign);
   assign.set(s.stage, to);
   return { plan: { ...plan, assign, sources: [...new Set([...plan.sources, to.sourceId])] }, change: `swapped ${stageChoice(s.from)} → ${stageChoice(to)}` };
@@ -112,7 +118,7 @@ export function makeEvolveGen(pool: InspPool, o: EvolveOptions = {}): EvolveGen 
   const idFor = (tag: string) => o.nextId ?? counter(tag);
   return {
     fresh(seed, model, tag) {
-      const res = inspire({ pool, seed, tries: 6, check: o.check, nextId: idFor(tag), bias: tasteBias(model) });
+      const res = inspire({ pool, seed, tries: 6, check: o.check, nextId: idFor(tag), bias: steeredBias(model, o.steering?.()) });
       return { id: tag, kind: 'fresh', comp: res, seed: res.seed, changes: [] };
     },
     refine(pick, seed, model, tag) {
@@ -123,7 +129,7 @@ export function makeEvolveGen(pool: InspPool, o: EvolveOptions = {}): EvolveGen 
         let nodes = pick.comp.nodes;
         // Sometimes a technique swap (or a post step); always a few settings nudged.
         if (pick.comp.plan.assign.size && rng.chance(0.5)) {
-          const m = mutatePlan(pool, pick.comp.plan, rng, model);
+          const m = mutatePlan(pool, pick.comp.plan, rng, model, steeredBias(model, o.steering?.()));
           const next = m && realisePlan(m.plan, pick.comp.seed, idFor(`${tag}.${a}`));
           if (m && next) { comp = next; nodes = carrySettings(pick.comp, next); changes.push(m.change); }
         }
@@ -138,7 +144,7 @@ export function makeEvolveGen(pool: InspPool, o: EvolveOptions = {}): EvolveGen 
     branch(pick, seed, model, tag) {
       const srcId = `evolve:${pick.id}`;
       const p2 = withSource(pool, { id: srcId, label: 'Your pick', kind: 'graph', nodes: pick.comp.nodes });
-      const res = inspire({ pool: p2, seed, tries: 6, check: o.check, nextId: idFor(tag), bias: tasteBias(model, p2.bySource.has(srcId) ? { mustUse: srcId } : {}) });
+      const res = inspire({ pool: p2, seed, tries: 6, check: o.check, nextId: idFor(tag), bias: steeredBias(model, o.steering?.(), p2.bySource.has(srcId) ? { mustUse: srcId } : {}) });
       return { id: tag, kind: 'branch', comp: res, seed: res.seed, changes: [p2.bySource.has(srcId) ? 'grown from your pick' : 'a new branch'] };
     },
   };

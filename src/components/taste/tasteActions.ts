@@ -8,6 +8,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { loadExampleGraphs } from '../../store/exampleIndex';
 import { graphFeatures, learnSignal, nodeTypeFeatures, noteOpened, paletteFeatures, rateItem, techniqueFeatures, type Features, type RatingKind } from '../../taste';
 import { updateTaste } from '../../taste/store';
+import type { SignalRef } from '../../taste/log';
 
 export interface RateTarget {
   id: string;
@@ -21,7 +22,7 @@ export interface RateTarget {
 export async function rate(t: RateTarget, value: number): Promise<void> {
   let f: Features;
   try { f = await t.features(); } catch { f = { _bias: 1 }; }
-  updateTaste(m => rateItem(m, { id: t.id, kind: t.kind, label: t.label }, value, f));
+  updateTaste(m => rateItem(m, { id: t.id, kind: t.kind, label: t.label }, value, f), { kind: 'rating', ref: { via: 'rate', item: t.id, label: t.label, value } });
 }
 
 /** Rate targets for the things the app shows. */
@@ -55,7 +56,7 @@ export const rateTargets = {
 
 /** A node starred in the Nodes tab. */
 export function favouritedNode(type: string, on: boolean): void {
-  if (on) updateTaste(m => learnSignal(m, 'favourited', nodeTypeFeatures(type)));
+  if (on) updateTaste(m => learnSignal(m, 'favourited', nodeTypeFeatures(type)), { kind: 'favourited', ref: { via: 'nodes', item: `node:${type}`, label: type } });
 }
 
 /** A saved graph opened; the third and later opens count as "opened often". */
@@ -63,7 +64,7 @@ export function openedSaved(name: string, nodes: readonly GraphNode[]): void {
   updateTaste(m => {
     const o = noteOpened(m, `saved:${name}`);
     return o.often ? learnSignal(o.model, 'opened', graphFeatures(nodes, { id: `saved:${name}` })) : o.model;
-  });
+  }, { ref: { via: 'files', item: `saved:${name}`, label: name } });
 }
 
 let stopWatch: (() => void) | null = null;
@@ -72,7 +73,7 @@ let stopWatch: (() => void) | null = null;
  * After a kept surprise: the first edit within ten minutes counts as "edited after keeping" (a good sign),
  * and going back to the graph before it (Undo) counts as "undone".
  */
-export function watchAfterKeep(before: readonly GraphNode[], after: readonly GraphNode[], f: Features): void {
+export function watchAfterKeep(before: readonly GraphNode[], after: readonly GraphNode[], f: Features, ref?: SignalRef): void {
   stopWatch?.();
   const until = Date.now() + 10 * 60_000;
   const ids = (ns: readonly GraphNode[]) => ns.map(n => n.id).sort().join(',');
@@ -81,7 +82,7 @@ export function watchAfterKeep(before: readonly GraphNode[], after: readonly Gra
     if (s.nodes === after) return;
     stop();
     if (Date.now() > until) return;
-    updateTaste(m => learnSignal(m, ids(s.nodes) === beforeIds ? 'undone' : 'edited', f));
+    updateTaste(m => learnSignal(m, ids(s.nodes) === beforeIds ? 'undone' : 'edited', f), { ref });
   });
   const stop = () => { unsub(); if (stopWatch === stop) stopWatch = null; };
   stopWatch = stop;

@@ -18,7 +18,8 @@ import type { Rng } from '../lib/surprise/rng';
 import { FAMILY_BY_ID, TECHNIQUE_BY_ID, type FamilyId } from '../patterns/catalogue';
 import type { Features } from './features';
 
-export const TASTE_VERSION = 1;
+/** 2: the signal log and your steering are stored alongside the model (store.ts migrates version 1). */
+export const TASTE_VERSION = 2;
 
 export type SignalKind = 'pick' | 'rating' | 'kept' | 'undone' | 'favourited' | 'edited' | 'opened';
 export type RatingKind = 'graph' | 'shader' | 'example' | 'palette' | 'technique';
@@ -41,6 +42,11 @@ export interface TasteModel {
   opens: Record<string, number>;
   /** The image embedder whose emb:* weights these are, if any. */
   embedder?: string;
+  /**
+   * Set only on the model the generators use (steering.ts `effectiveModel`): how many steering features
+   * sit on top of the learned weights. Never stored.
+   */
+  steered?: number;
 }
 
 export const LEARNING_RATE = 0.2;
@@ -198,7 +204,8 @@ const article = (s: string) => (/^[aeiou]/i.test(s) ? `an ${s}` : `a ${s}`);
 
 /** How much the model knows: 0 with no signals, towards 1 after ~20. */
 export function confidence(m: TasteModel): number {
-  const n = Object.values(m.signals).reduce((s, v) => s + (v ?? 0), 0);
+  // Steering you gave counts as a few signals' worth: it's what you said, so it leans from the start.
+  const n = Object.values(m.signals).reduce((s, v) => s + (v ?? 0), 0) + 3 * (m.steered ?? 0);
   return n / (n + 10);
 }
 

@@ -7,6 +7,7 @@ import type { Plan, PlanBias } from '../lang/inspired/compose';
 import { stageChoice } from '../lang/inspired/fragments';
 import { sourceWeight, stageMultiplier, tasteScore, confidence, type TasteModel } from './model';
 import type { Features } from './features';
+import { bans, effectiveModel, isBannedChoice, type Steering } from './steering';
 
 /** The lean for a plan. Undefined for an empty model, so the generator is exactly the unbiased one. */
 export function tasteBias(m: TasteModel, extra: Partial<PlanBias> = {}): PlanBias | undefined {
@@ -36,4 +37,21 @@ export function planBonus(m: TasteModel): ((plan: Plan) => number) | undefined {
   if (!c) return undefined;
   // Comparable to a repetition point or two at full confidence.
   return plan => 2 * c * Math.tanh(tasteScore(m, planFeatures(plan)));
+}
+
+/**
+ * The lean with your steering on top (docs/taste.md "Steering"): the learned model plus the steering layer,
+ * times the lean, and bans made hard: a banned stage choice, technique, family or source weighs 0, which
+ * `planFor` never picks. Without steering it is exactly `tasteBias(m)`.
+ */
+export function steeredBias(m: TasteModel, s: Steering | undefined, extra: Partial<PlanBias> = {}): PlanBias | undefined {
+  if (!s) return tasteBias(m, extra);
+  const base = tasteBias(effectiveModel(m, s), extra);
+  const banned = bans(s);
+  if (!banned.size) return base;
+  return {
+    ...base,
+    stage: (stage, choice, family) => (isBannedChoice(banned, stage, choice, family) ? 0 : base?.stage?.(stage, choice, family) ?? 1),
+    source: id => (banned.has(`src:${id}`) ? 0 : base?.source?.(id) ?? 1),
+  };
 }

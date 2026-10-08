@@ -9,6 +9,7 @@ import { Button } from '../ui/Button';
 import { toast } from '../ui/toastStore';
 import { learnedLine, learnedTraits, stageSuggestions, type SignalKind } from '../../taste';
 import { exportTaste, importTaste, resetTaste, useTaste } from '../../taste/store';
+import { openTastePage } from './tasteNav';
 
 const SIGNAL_WORDS: Array<[SignalKind, string]> = [
   ['pick', 'Evolve picks'], ['rating', 'ratings'], ['kept', 'surprises kept'], ['undone', 'undone'], ['favourited', 'nodes starred'], ['edited', 'edited after keeping'], ['opened', 'opened often'],
@@ -28,17 +29,17 @@ export function TastePanel() {
   const muted = { fontSize: 11.5, color: tk.text.muted } as const;
   const download = () => {
     const blob = new Blob([exportTaste()], { type: 'application/json' });
-    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'playfield-taste.json' });
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'my-taste.playfield-taste' });
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
   const upload = () => {
-    const input = Object.assign(document.createElement('input'), { type: 'file', accept: '.json' });
+    const input = Object.assign(document.createElement('input'), { type: 'file', accept: '.playfield-taste,.json' });
     input.onchange = async () => {
       const f = input.files?.[0];
       if (!f) return;
-      const r = importTaste(await f.text());
-      if (r.ok) toast.success('Taste imported', { message: 'Surprise, Deep and Evolve now lean on it.' }); else toast.error('Couldn’t import that file', { message: r.error });
+      const r = importTaste(await f.text(), { mode: 'merge', present: (await import('../surprise/inspiredAction')).presentItems(), label: f.name.replace(/\.(playfield-taste|json)$/i, '') });
+      if (r.ok) toast.success('Taste imported', { message: 'Merged with yours by evidence. Surprise, Deep and Evolve now lean on it; the Taste page shows each layer.' }); else toast.error('Couldn’t import that file', { message: r.error });
     };
     input.click();
   };
@@ -68,7 +69,8 @@ export function TastePanel() {
           : 'Nothing yet: rate graphs, shaders, examples, palettes and techniques with like / dislike, keep surprises, or play a few rounds of Evolve.'}
         {' '}All of it stays on this device.
       </span>
-      <div style={{ display: 'flex', gap: 6 }}>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <Button size="sm" variant="primary" icon="popout" onClick={openTastePage} data-taste-open-page title="The Taste page: the profile, where each preference came from, the signal log and your steering">Open full page</Button>
         <Button size="sm" variant="ghost" icon="export" onClick={download} data-taste-export>Export</Button>
         <Button size="sm" variant="ghost" icon="import" onClick={upload}>Import</Button>
         <Button size="sm" variant="ghost" icon="reset" data-taste-reset onClick={() => {
