@@ -27,6 +27,10 @@ export interface FocusItem {
   binding: string;
   down: unknown;
   up: unknown;
+  /** The whole interesting range (the low and high ends Randomize at strength 1 reaches) and the current value; the control finder samples across it. */
+  lo?: unknown;
+  hi?: unknown;
+  cur?: unknown;
 }
 
 /** Number or number[] that is `t` of the way from `cur` to `to`. */
@@ -56,7 +60,7 @@ export function focusItems(level: GraphNode[], opts: RandomizeOptions, path: str
       const wk = face ? key : weightKey(n.id, key);
       // A group's override key `inner::param` (or `group::inner::param`) is bound by its last two parts.
       const binding = face ? key.split('::').slice(-2).join('::') : wk;
-      out.push({ weightKey: wk, path, nodeId: n.id, key, binding, down: toward(cur, lo[key], 0.25), up: toward(cur, hi[key], 0.25) });
+      out.push({ weightKey: wk, path, nodeId: n.id, key, binding, down: toward(cur, lo[key], 0.25), up: toward(cur, hi[key], 0.25), lo: lo[key], hi: hi[key], cur });
     }
   };
   for (const n of level) {

@@ -128,6 +128,10 @@ Hand tracking (docs/tracking.md) adds a **Hands** group to the source list, **On
 
 Add control lists the graph's live params and, in a folder per layer, every layer number. A control named after its layer follows the layer's renames. The chevron on a control (or a tap on the card) opens its details: where it comes from with **Go to layer** / **Show in graph** (the Studio opens centred on the node), the hint and node note, the range, and what drives it.
 
+### Suggest controls
+
+**Suggest controls** (beside Add control, and in the canvas dice popover as **Find the controls that matter**) draws the graph small with each free setting swept across its range and lists the ones that change the picture most, smoothly, without blanking it: a filmstrip across the usable range, Impact and Smooth chips, the suggested min/max. The top four are ticked; **Add to Play** makes them in one undo step with that range, labelled "Node · Setting". Locked settings and ones already on Play are never offered. How it scores, the time box and the naming hook: docs/suggest-controls.md.
+
 ### The mini mapper
 
 The **+** next to a layer's slider, and **Add control**'s target (after its own list of params), used to add the control outright and leave it unmapped. Now they both open a small popover — the **mini mapper** (`src/components/play/MiniMapper.tsx`, wiring in `miniMapperCore.ts`) — with the target named in its header and its sources grouped: **Control only** (no source, the old behaviour), **MIDI** (only once a device has been seen — a CC, note, velocity, gate or bend row, or **Learn**, which waits for the next input of any kind, the same `startLearn` a mapping row's Learn already uses), **Mouse & keys**, **Hands** (only once a Camera layer exists), **Audio** (a band, the setup's readers, an Audio Input node), **Layers** (every layer's sensor reads — fill, speed, born…), **Generators** (LFO, Noise, Clock, Function), **Controls** (an existing control, to cross-modulate) and **Increment** (wires a placeholder source with Increment's defaults; open **Mappings** to set what steps it and its range).
