@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.72',
+    date: '2026-10-07',
+    title: 'Inspired surprises',
+    highlights: [
+      { area: 'Studio', text: 'Surprise is inspired by 2-3 real graphs or GLSL files (examples and your own), borrowing techniques and code from each. The toast links to its sources.', link: { kind: 'doc', path: 'docs/surprise.md' } },
+      { area: 'Studio', text: 'A Do bar Surprise now replaces the current graph (one undo step), and results vary far more: 42 technique combinations in 50 rolls, up from 12.' },
+      { area: 'Studio', text: 'Surprise arrows: step through several candidates with ‹ › before keeping one. Deep mode tries up to 16 and shows the best 5, with why-chips.' },
+      { area: 'Studio', text: 'The Do bar is cleaner: just the input. The full reference is behind the ⓘ button.' },
+    ],
+  },
+  {
     id: '2026.10.71',
     date: '2026-10-07',
     title: 'Pattern discovery',
