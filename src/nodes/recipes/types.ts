@@ -33,6 +33,8 @@ export interface RecipeBuild {
   params?: Record<string, unknown>;
   /** What goes on the Output (one is added when the graph has none). */
   show?: Wire;
+  /** Ids of nodes already in the graph to take out first (a rig being replaced); wires into them are cut. */
+  remove?: string[];
 }
 
 export interface StarterRecipe {

@@ -11,6 +11,9 @@ import { NOISE_RECIPES, PALETTE_RECIPES, VORONOI_RECIPES } from './noiseRecipes'
 import { KALEIDO_RECIPES, POLAR_RECIPES, REPEAT_RECIPES, SDF_COMBINE_RECIPES, SDF_SHAPE_RECIPES, TILE_RECIPES } from './shapeRecipes';
 import { AUDIO_RECIPES, FEEDBACK_RECIPES, LFO_RECIPES, PARTICLE_RECIPES, PASS_RECIPES, PICTURE_EFFECT_RECIPES } from './effectRecipes';
 import { CHANGE_RECIPES, FADE_RECIPES, JUMP_FLOOD_RECIPES } from './textureRecipes';
+import { LIGHT_RECIPES } from './lightRecipes';
+
+export { LIGHT_SCENE_TYPES } from './lightRecipes';
 
 export type { StarterRecipe, RecipeBuild, RecipeContext } from './types';
 export { applyRecipe, placeNear } from './apply';
@@ -40,6 +43,8 @@ export const STARTER_RECIPES: Readonly<Record<string, StarterRecipe[]>> = {
   gpuParticles: PARTICLE_RECIPES,
   audioInput: AUDIO_RECIPES,
   lfo: LFO_RECIPES,
+  // Light the scene (docs/light-scene.md): 3D and 4D scenes both march through a March Loop Group.
+  marchLoopGroup: LIGHT_RECIPES,
   ...each(['bloom', 'vignette', 'grain', 'toneMap', 'chromaShift', 'colorSaturation', 'hueRotate', 'posterize', 'scanlines', 'brightnessContrast', 'toneCurve', 'invert', 'cmykHalftone'], PICTURE_EFFECT_RECIPES),
 };
 

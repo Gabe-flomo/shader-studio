@@ -25,7 +25,7 @@ import { learnedNext, rankTables } from '../../suggestions';
 import { nudgeByStage } from '../../structure/boost';
 import { currentStageTarget } from '../../structure/hintsStore';
 import { RecipeOffer } from './RecipeOffer';
-import { useRecipeOffer } from '../../store/recipeOfferStore';
+import { openRecipeOffer, useRecipeOffer } from '../../store/recipeOfferStore';
 import { askConfirm, askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
 import { openPatterns } from '../codeExplorer/explorerStore';
@@ -1895,6 +1895,15 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     }}>
                       Enter {clickedNode.type === 'giLitMarchGroup' ? 'GI Lit March Group' : 'March Loop Group'} <span style={{ color: tc.surface2, fontSize: '10px' }}>↵</span>
                     </button>
+                    {clickedNode.type === 'marchLoopGroup' && activeGroupPath.length === 0 && (
+                      <button style={ctxBtnStyle} title="Pick a lighting look: shadows, AO, lights and tone map are added after the loop and wired to the Output" onClick={() => {
+                        const id = clickedNode.id;
+                        setContextMenu(null);
+                        requestAnimationFrame(() => openRecipeOffer(id, 'marchLoopGroup'));
+                      }}>
+                        Light the scene…
+                      </button>
+                    )}
                     <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
                     <button style={{ ...ctxBtnStyle, color: tc.red }} onClick={() => {
                       removeNode(clickedNode.id);

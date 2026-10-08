@@ -52,6 +52,12 @@ export function noteNodeAdded(nodeId: string, type: string): void {
   useRecipeOffer.setState({ offer });
 }
 
+/** Open the offer for a node on request (its card's button or right-click menu), whatever the "don't ask" setting. */
+export function openRecipeOffer(nodeId: string, type: string): void {
+  if (!recipesFor(type).length) return;
+  useRecipeOffer.setState({ offer: { nodeId, type, openedAt: now() } });
+}
+
 /** Close the offer (nothing is added). `dontAskAgain` turns it off for that node type. */
 export function closeRecipeOffer(dontAskAgain = false): void {
   const { offer } = useRecipeOffer.getState();

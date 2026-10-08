@@ -24,7 +24,7 @@ import { rulesStarter } from '../agentRules/starter';
 import { particlesAsNodes } from './particlesAsNodes';
 import { openGridRulesInGraph } from './gridRulesAsNodes';
 import { openNewSceneBuilder } from '../sceneBuilder/store';
-import { applyRecipe, placeNear, recipesFor } from '../nodes/recipes';
+import { applyRecipe, LIGHT_SCENE_TYPES, placeNear, recipesFor } from '../nodes/recipes';
 import { runDoPlan as runDoPlanPure, type DoPlan } from '../suggestions/doBar';
 import { execCommand, type CommandPlan } from '../suggestions/doCommands';
 import { applyMove, moveById, learnGraph, learnSaved, recordWireBetween, textSignature } from '../suggestions';
@@ -3373,11 +3373,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const r = applyRecipe(before, nodeId, recipe, () => idGenerator.next());
     if (!r) return null;
     const label = getNodeDefinitionFor(self)?.label ?? self.type;
-    undoManager.push(before, { label: `Set up ${label}: ${recipe.label}` });
+    const lighting = LIGHT_SCENE_TYPES.has(self.type);
+    undoManager.push(before, { label: lighting ? `Light the scene: ${recipe.label}` : `Set up ${label}: ${recipe.label}` });
     set({ nodes: r.nodes });
     get().compile();
-    toast.info(`${label}: ${recipe.label}`, {
-      message: `${recipe.description}${r.shown ? ' It is on the Output now.' : ''} Every node it added has a note on what it does; undo takes it back to just the node.`,
+    toast.info(lighting ? `Lit: ${recipe.label}` : `${label}: ${recipe.label}`, {
+      message: lighting
+        ? `${recipe.description} Every node it added has a note; pick another look to replace it, or undo.`
+        : `${recipe.description}${r.shown ? ' It is on the Output now.' : ''} Every node it added has a note on what it does; undo takes it back to just the node.`,
     });
     return r.added;
   },
