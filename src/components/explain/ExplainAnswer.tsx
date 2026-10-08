@@ -75,7 +75,7 @@ export function NotSureTag({ reason }: { reason: string }) {
 }
 
 /** The model's structured answer: the summary, then each line's explanation with its dot and tag. */
-export function AnswerBody({ view, mode }: { view: AnswerView; mode: 'line' | 'block' | 'node' }) {
+export function AnswerBody({ view, mode, labels }: { view: AnswerView; mode: 'line' | 'block' | 'node'; /** Names for the numbered items (a line's step letters). */ labels?: readonly string[] }) {
   const tk = useTokens();
   if (view.plain) {
     const c = view.plain.confidence;
@@ -97,7 +97,7 @@ export function AnswerBody({ view, mode }: { view: AnswerView; mode: 'line' | 'b
         {view.items.map(({ item, confidence }, i) => (
           <li key={i} data-explain-item="" style={{ display: 'flex', gap: 7, alignItems: 'flex-start' }}>
             {confidence ? <ConfidenceDot c={confidence} /> : <span style={{ width: 8, flexShrink: 0 }} />}
-            {mode === 'block' && <span style={{ flexShrink: 0, minWidth: 14, color: tk.text.faint, font: `600 11px/1.9 ${fontFamily.mono}` }}>{item.line ?? i + 1}</span>}
+            {mode === 'block' && <span style={{ flexShrink: 0, minWidth: 14, color: tk.text.faint, font: `600 11px/1.9 ${fontFamily.mono}` }}>{labels?.[(item.line ?? i + 1) - 1] ?? item.line ?? i + 1}</span>}
             <span style={{ ...text, minWidth: 0 }}>
               {item.what && <Code text={item.what} />}{item.what && item.effect ? ' ' : ''}
               {item.effect && <span style={{ color: tk.text.secondary }}><Code text={item.effect} /></span>}

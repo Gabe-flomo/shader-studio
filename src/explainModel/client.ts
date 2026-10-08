@@ -20,6 +20,7 @@ import type { TokenLp } from './confidence';
 import type { ChatMessage, WorkerConfig } from './worker';
 
 const ENABLED_KEY = 'shader-studio:settings:useExplainModel';
+const AUTO_STEPS_KEY = 'shader-studio:settings:explainStepsWithModel';
 const DOWNLOADED_KEY = 'shader-studio:settings:explainModelDownloaded';
 const ACTIVE_KEY = 'shader-studio:settings:explainModelActive';
 /** The first model keeps the key the single-model version used; others add their id. */
@@ -46,6 +47,8 @@ export type ExplainModelStatus = 'idle' | 'loading' | 'ready' | 'error';
 export interface ExplainModelState {
   /** The setting: use the explanation model. */
   enabled: boolean;
+  /** The setting: explain the step-by-step of a line with the model as soon as it opens (when the model is usable). */
+  autoSteps: boolean;
   /** The ACTIVE model's files were downloaded once (the browser keeps them). */
   downloaded: boolean;
   /** The model "Explain more" uses. */
@@ -70,7 +73,7 @@ function initial(): ExplainModelState {
   const activeId = readActive();
   const downloaded = downloadedIds.includes(activeId);
   const setting = readFlag(ENABLED_KEY);
-  return { enabled: setting ?? downloaded, downloaded, activeId, downloadedIds, loadedId: null, busyId: null, status: 'idle', progress: null, backend: null, loadMs: null, tokensPerSec: null, error: null };
+  return { enabled: setting ?? downloaded, autoSteps: readFlag(AUTO_STEPS_KEY) === true, downloaded, activeId, downloadedIds, loadedId: null, busyId: null, status: 'idle', progress: null, backend: null, loadMs: null, tokensPerSec: null, error: null };
 }
 
 export const useExplainModel = create<ExplainModelState>(() => initial());
@@ -273,6 +276,12 @@ export function selectExplainModel(id: string): void {
 }
 
 /** The setting. Off frees the worker and its memory; the files stay downloaded. */
+/** Explain a line's steps with the model as soon as the steps are opened. */
+export function setExplainStepsWithModel(on: boolean): void {
+  writeFlag(AUTO_STEPS_KEY, on);
+  useExplainModel.setState({ autoSteps: on });
+}
+
 export function setExplainModelEnabled(on: boolean): void {
   writeFlag(ENABLED_KEY, on);
   useExplainModel.setState({ enabled: on });
