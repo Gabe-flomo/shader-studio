@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.94',
+    date: '2026-10-08',
+    title: 'Model step-by-steps',
+    highlights: [
+      { area: 'Studio', text: 'Explain these steps: with the explanation model downloaded, a line\'s step-by-step can be explained by the model, a sentence per step with a confidence dot.', link: { kind: 'doc', path: 'docs/explain-model.md' } },
+      { area: 'Studio', text: 'Settings: turn on Explain step-by-steps with it automatically to have the model explain steps as soon as you open them.' },
+    ],
+  },
+  {
     id: '2026.10.93',
     date: '2026-10-08',
     title: 'Library regrouped',
