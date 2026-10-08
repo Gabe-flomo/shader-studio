@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.100',
+    date: '2026-10-08',
+    title: 'Warp safety',
+    highlights: [
+      { area: 'Studio', text: 'Warp safety on the March Loop: Auto, Careful or High stop twisted, bent or folded 3D space from tearing, without slowing every ray.', link: { kind: 'doc', path: 'docs/warp-safety.md' } },
+      { area: 'Studio', text: 'March Loop Show → Steps heatmap: see where rays struggle (orange to white) to tune Max step and Max steps.' },
+      { area: 'Studio', text: 'March Camera takes one vec3 Target input instead of three floats; the X/Y/Z sliders still set it when nothing is wired.' },
+    ],
+  },
+  {
     id: '2026.10.99',
     date: '2026-10-08',
     title: '4D fractals',
