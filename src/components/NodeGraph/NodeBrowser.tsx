@@ -49,16 +49,65 @@ const HIDDEN_NODES = new Set([
 ]);
 
 const CATEGORY_SECTIONS: Array<{ label: string; categories: string[] }> = [
-  { label: 'Shapes',       categories: ['2D Primitives', 'SDF', '2D Space', '3D Primitives', '3D Boolean Ops', '3D Transforms', 'Combiners'] },
-  { label: '3D',           categories: ['3D Scene', '3D Lighting', '4D', 'Loops'] },
-  { label: 'Color & Post', categories: ['Color', 'Color Grading', 'Post Processing', 'Effects', 'Passes', 'Texture tools'] },
-  { label: 'Generators',   categories: ['Noise', 'Halftone', 'Fractals', 'Science', 'Particles', 'Particles & Fields', 'Simulation', 'Grid', 'Field'] },
-  { label: 'Math & Logic', categories: ['Sources', 'Animation', 'Math', 'Matrix', 'Shapers', 'Conditionals'] },
-  { label: 'Functions',    categories: ['My Nodes', 'Functions'] },
-  { label: 'Utility',      categories: ['Utility', 'Output'] },
+  { label: '2D tools',      categories: ['2D Primitives', '2D Space', 'Grid', 'Field', 'Halftone'] },
+  { label: '3D tools',      categories: ['3D Primitives', '3D Transforms', '3D Boolean Ops', '3D Scene', '3D Lighting', 'Loops'] },
+  { label: '4D tools',      categories: ['4D'] },
+  { label: 'SDF',           categories: ['SDF'] },
+  { label: 'Colour',        categories: ['Color', 'Color Grading', 'Combiners'] },
+  { label: 'Effects',       categories: ['Effects'] },
+  { label: 'Simulation',    categories: ['Simulation', 'Particles', 'Particles & Fields', 'Passes', 'Texture tools'] },
+  { label: 'Generators',    categories: ['Noise', 'Fractals', 'Science'] },
+  { label: 'Math & Logic',  categories: ['Sources', 'Animation', 'Math', 'Matrix', 'Shapers', 'Conditionals'] },
+  { label: 'Functions',     categories: ['My Nodes', 'Functions'] },
+  { label: 'Utility',       categories: ['Utility', 'Output'] },
 ];
 
-const CATEGORY_ORDER = CATEGORY_SECTIONS.flatMap(s => s.categories);
+/** Rows that show several node categories as one (the definitions keep their own category). */
+const MERGED_CATEGORIES: Record<string, string[]> = {
+  Effects: ['Effects', 'Post Processing'],
+};
+
+/** What a library row is for, shown under its title when it's open and as the row's tooltip. */
+export const CATEGORY_INFO: Record<string, string> = {
+  '2D Primitives': 'Flat shapes as distance fields (SDFs): for every pixel, how far it is from the shape. Negative inside, 0 on the edge, positive outside. Wire the distance into SDF Fill, SDF Glow or a palette. Patterns fill the whole picture.',
+  '2D Space': 'Change where every pixel looks before a shape or texture measures it: move, rotate, tile, mirror, warp or remap the UV. A space node bends everything after it.',
+  Grid: 'Cut the picture into cells and give each cell its own position, id and motion: grids of shapes, ripples through cells, per-cell variation.',
+  Field: 'Smooth fields made by adding up many sources (metaballs, Gaussian blobs), then thresholded or coloured.',
+  Halftone: 'Print looks: dots, lines and patterns whose size follows a brightness.',
+  '3D Primitives': '3D shapes as distance fields, measured from Scene Pos inside a Scene Group. Adding one at the top level builds the Scene Group, camera and march loop for you.',
+  '3D Transforms': 'Change 3D space before the shapes measure it: move, rotate, repeat, twist, bend or fold. Put them between Scene Pos and the shapes.',
+  '3D Boolean Ops': 'Join, cut or overlap 3D distances.',
+  '3D Scene': 'The 3D pipeline: a March Camera makes the rays, a Scene Group holds the shapes, a March Loop finds where each ray hits.',
+  '3D Lighting': 'Light what the march loop hit: shading, shadows, ambient occlusion, glass and fog. Wire them from the loop\'s outputs.',
+  Loops: 'Repeat a chain of nodes several times inside one shader.',
+  '4D': 'Shapes and transforms in four dimensions. Lift to 4D turns a 3D point into a 4D one and the shape is sliced back to 3D; projection nodes show the whole 4D shape at once; 4D Wireframe 2D and Plane Slice 4D go straight to the flat picture.',
+  SDF: 'Work on distances from any shape, 2D or 3D. Combine joins, cuts or overlaps two shapes; Modify grows, hollows or sharpens one; Style turns a distance into colour.',
+  Color: 'Make and change colour: pick colours, palettes and gradients, adjust, convert and blend.',
+  'Color Grading': 'Film-style adjustments on a finished colour: tone, curves, saturation, tone mapping and grain.',
+  Combiners: 'Put two pictures or colours together: mix, blend modes, masks, add, and glow layers.',
+  Effects: 'Finishing touches on the picture: blur, bloom, chromatic shifts, glows and post-processing like vignette, scanlines and pixelation.',
+  Simulation: 'Things that remember the last frame: agents (walkers with rules), particles, passes that read their own previous frame, and tools for the textures they make.',
+  Particles: 'GPU particles: emit, move and draw thousands of points.',
+  Passes: 'Render part of the graph to a texture, read it back later or in the next frame: feedback, trails, multi-step simulations.',
+  'Texture tools': 'Shape a texture\'s raw values: masks, levels, flow directions, outlines, fades.',
+  Noise: 'Smooth random patterns (value, Perlin, simplex, fBm, Voronoi) for textures, warps and motion.',
+  Fractals: 'Shapes that repeat at every scale: Mandelbrot, Julia, kaleidoscopic folds.',
+  Science: 'Physics-inspired patterns: waves, interference, reaction-diffusion and more.',
+  Sources: 'Inputs from outside the graph: UV, time, mouse, resolution, audio, video, constants.',
+  Animation: 'Values that move over time: LFOs, envelopes and keyframes.',
+  Math: 'Arithmetic, trigonometry, rounding, interpolation, vectors and comparison, one operation per node.',
+  Matrix: '2×2, 3×3 and 4×4 matrices: build, combine and apply transforms.',
+  Shapers: 'Curves that reshape a 0 to 1 value: easing, seats, sigmoids and Béziers.',
+  Conditionals: 'Pick between values with a condition.',
+  Functions: 'Custom GLSL functions and Expression Blocks: write your own maths.',
+  'My Nodes': 'Nodes you published from your own graphs.',
+  Utility: 'Helpers: comments, reroutes and tools for the graph itself.',
+  Output: 'Where the picture leaves the graph.',
+};
+
+const nodesOfRow = (row: string) => (MERGED_CATEGORIES[row] ?? [row]).flatMap(c => getNodesByCategory(c));
+
+const CATEGORY_ORDER = CATEGORY_SECTIONS.flatMap(s => s.categories.flatMap(c => MERGED_CATEGORIES[c] ?? [c]));
 
 // ── Sub-group definitions for categories that need them ───────────────────────
 const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>> = {
@@ -134,6 +183,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Lighting', types: ['light', 'glowToColor', 'light2d', 'radianceCascadesApprox'] },
     { label: 'Warp',     types: ['gravitationalLens', 'floatWarp'] },
   ],
+  // Effects also shows the Post Processing nodes (MERGED_CATEGORIES); anything not listed here goes under More.
   'Color Grading': [
     { label: 'Tone',  types: ['liftGammaGain', 'toneCurve', 'shadowsHighlights', 'toneMap'] },
     { label: 'Color', types: ['hueRotate', 'colorSaturation'] },
@@ -629,12 +679,12 @@ export function NodeBrowser({
 
   } else if (path.length === 0) {
     const filtering = relevanceOn && relevantOnly;
-    const countOf = (cat: string) => getNodesByCategory(cat).filter(d => !HIDDEN_NODES.has(d.type)).length;
+    const countOf = (cat: string) => nodesOfRow(cat).filter(d => !HIDDEN_NODES.has(d.type)).length;
     const live = (cat: string) => countOf(cat) > 0;
     const fitsOn = filtering;
     const otherCats: string[] = [];
     const sections = (libCtx.flow === '3d' && filtering
-      ? [CATEGORY_SECTIONS[1], CATEGORY_SECTIONS[0], ...CATEGORY_SECTIONS.slice(2)]
+      ? [...CATEGORY_SECTIONS.filter(x => x.label === '3D tools'), ...CATEGORY_SECTIONS.filter(x => x.label !== '3D tools')]
       : CATEGORY_SECTIONS
     ).map(section => {
       const have = section.categories.filter(live);
@@ -719,11 +769,18 @@ export function NodeBrowser({
 
   } else {
     const cat = path[0];
-    const rawNodes = getNodesByCategory(cat).filter(d => !HIDDEN_NODES.has(d.type));
-    const groups = CATEGORY_GROUPS[cat];
+    const rawNodes = nodesOfRow(cat).filter(d => !HIDDEN_NODES.has(d.type));
+    // Nodes no group lists still show, under More (and a merged row's other categories by name).
+    const listed = CATEGORY_GROUPS[cat];
+    const groups = listed ? [...listed, ...((MERGED_CATEGORIES[cat] ?? [cat]).map(c => ({
+      label: c === cat ? 'More' : c,
+      types: getNodesByCategory(c).map(d => d.type).filter(t => !listed.some(g => g.types.includes(t))),
+    })))] : undefined;
+    const info = CATEGORY_INFO[cat];
     innerContent = (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {crumb(cat, rawNodes.length)}
+        {info && <div data-category-info style={{ color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}`, padding: '0 2px 4px' }}>{info}</div>}
         {!isGlsl && <InstalledPackCard category={cat} />}
         {groups ? (
           groups.map(group => {
@@ -772,6 +829,7 @@ function CategoryRow({ cat, icon, count, onClick }: {
   return (
     <button
       onClick={onClick}
+      title={CATEGORY_INFO[cat]}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
