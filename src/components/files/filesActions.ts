@@ -63,6 +63,10 @@ export function syncApp(keys: string[]): void {
     if (any(k => k === 'shader-studio:settings:useImageModel' || k === 'shader-studio:settings:imageModelDownloaded')) {
       void import('../../imageModel/client').then(({ refreshImageModelSettings }) => refreshImageModelSettings());
     }
+    // The explanation model's setting (docs/explain-model.md) likewise.
+    if (any(k => k === 'shader-studio:settings:useExplainModel' || k === 'shader-studio:settings:explainModelDownloaded')) {
+      void import('../../explainModel/client').then(({ refreshExplainModelSettings }) => refreshExplainModelSettings());
+    }
     const open = useNodeGraphStore.getState().currentGraph;
     if (open && localStorage.getItem(GRAPH_PREFIX + open.name) == null) useNodeGraphStore.setState({ currentGraph: null });
   } catch (e) { console.error('[files] refreshing the app after a change', e); }

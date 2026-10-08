@@ -6,13 +6,14 @@
  * round. Each step can be made into a node, and a recognised idiom can be looked for elsewhere.
  */
 import { useMemo, useState } from 'react';
-import { allNodes, transferPlot, needsPicture, type Explanation, type LineExplanation, type Seg, type Step, type UseQuery } from '../../lib/glslPatterns';
+import { allNodes, transferPlot, needsPicture, type ExplainContext, type Explanation, type LineExplanation, type Seg, type Step, type UseQuery } from '../../lib/glslPatterns';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import { ExplainText } from './ExplainText';
 import { GlslCode, type CodeSpan } from './GlslCode';
 import { TransferPlotView } from './TransferPlotView';
+import { ExplainMore } from './ExplainMore';
 
 export interface ExplainViewProps {
   ex: Explanation | LineExplanation;
@@ -26,6 +27,11 @@ export interface ExplainViewProps {
    * inputs, so a plot can't say it. On demand only: nothing renders on the GPU until pressed.
    */
   onShowPicture?: () => void;
+  /**
+   * Offer "Explain more" (the optional on-device language model, docs/explain-model.md) for this line: its names'
+   * types, and where it is. Absent: no such action here.
+   */
+  explainMore?: { ctx?: ExplainContext; where?: string };
 }
 
 // The steps' fold is remembered for the session (collapsed by default)
@@ -44,7 +50,7 @@ function varSpans(ex: Explanation | LineExplanation): Array<{ start: number; end
   return out;
 }
 
-export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPicture }: ExplainViewProps) {
+export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPicture, explainMore }: ExplainViewProps) {
   const tk = useTokens();
   const [hover, setHover] = useState<Step | null>(null);
   const [hoverVar, setHoverVar] = useState<string | null>(null);
@@ -166,6 +172,7 @@ export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPictur
           )}
         </div>
       )}
+      {explainMore && <ExplainMore text={ex.source} ctx={explainMore.ctx} where={explainMore.where} />}
     </div>
   );
 }
