@@ -29,6 +29,7 @@ import { CONVERT_EXAMPLE_INDEX, CONVERT_EXAMPLE_KEYS } from './convertExampleInd
 import { BAKE_EXAMPLE_INDEX } from './bakeExamples';
 import { TIME_CUBE_EXAMPLE_INDEX, TIME_CUBE_EXAMPLE_KEYS } from './timeCubeExamples';
 import { FRAME_STACK_EXAMPLE_INDEX, FRAME_STACK_EXAMPLE_KEYS } from './frameStackExamples';
+import { FOURD_EXAMPLE_INDEX, FOURD_EXAMPLE_KEYS } from './fourDExamples';
 import { TEXTURE_TOOL_EXAMPLE_INDEX, TEXTURE_TOOL_EXAMPLE_KEYS } from './textureToolExamples';
 import { SIM_GRID_EXAMPLE_INDEX } from './simGridExamples';
 import { GRID_RULES_EXAMPLE_INDEX, simGridsFolderKeys } from './gridRulesExampleIndex';
@@ -232,6 +233,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...TIME_CUBE_EXAMPLE_INDEX,
   // Frame stack (frameStackExamples.ts, docs/frame-stack.md): a video's frames as cards to arrange.
   ...FRAME_STACK_EXAMPLE_INDEX,
+  // 4D (fourDExamples.ts, docs/4d.md): a tesseract and a hypersphere, seen as 3D slices.
+  ...FOURD_EXAMPLE_INDEX,
   // Texture tools (textureToolExamples.ts, docs/texture-tools.md): Mask, Levels, Flow, Neighbours, Change, Outline, Fade, Read.
   ...TEXTURE_TOOL_EXAMPLE_INDEX,
   // The 3D: Scene Builder folder (sceneBuilderExamples.ts): graphs the 3D Scene Builder made from its templates.
@@ -292,6 +295,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "3D: Scene Builder", color: ctp.sky, keys: SCENE_BUILDER_EXAMPLE_KEYS },
   { label: "Volumetric",        color: '#f5a97f', keys: ['glowMarcher','volAnimatedRepeat','volumeGlowDemo'] },
   { label: "Time Cube",         color: '#f5a97f', keys: TIME_CUBE_EXAMPLE_KEYS },
+  { label: "4D",                color: '#b4a0ff', keys: FOURD_EXAMPLE_KEYS },
   { label: "Frame Stack",       color: '#f5a97f', keys: FRAME_STACK_EXAMPLE_KEYS },
   { label: "From the Internet",    color: ctp.yellow, keys: ['fcTrippyNoise','fcSolar','fcPillars','fcGradient4','fcGrainGradient','fcTiling','fcTheScreen','fcShield','fcMainFrame','fcAtlantic','fcOrb','fcBitshift'] },
   { label: "Convert",            color: ctp.yellow, keys: CONVERT_EXAMPLE_KEYS },

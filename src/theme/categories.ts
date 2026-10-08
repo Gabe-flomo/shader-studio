@@ -20,6 +20,7 @@ const CUSTOM: Record<string, [string, string]> = {
   '3D Lighting': ['#f9c468', '#c98a0a'],
   Matrix: ['#f5c842', '#b8900a'],
   Halftone: ['#a6e3d5', '#1f9a82'],
+  '4D': ['#b4a0ff', '#6f4fd8'],
 };
 
 const BY_ACCENT: Record<string, Accent> = {
