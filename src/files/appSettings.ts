@@ -103,6 +103,7 @@ const KNOWN: Record<string, SettingInfo> = {
   'shader-studio:settings:imageModelDownloaded': S('Image model downloaded', 'devices', { hint: 'Forgets that it was downloaded; this browser may still keep the files' }),
   'shader-studio:settings:useExplainModel': S('Use the explanation model', 'devices', { hint: 'Back to the default: on once it’s downloaded' }),
   'shader-studio:settings:explainModelDownloaded': S('Explanation model downloaded', 'devices', { hint: 'Forgets that it was downloaded; this browser may still keep the files' }),
+  'shader-studio:settings:explainModelActive': S('Explanation model in use', 'devices', { hint: 'Back to the default model' }),
   // Code editors
   'shader-studio:glsl-editor': S('GLSL page: the open code', 'editors'),
   'glsl-editor:open-shader': S('GLSL page: the open shader', 'editors'),
@@ -143,6 +144,7 @@ const KNOWN: Record<string, SettingInfo> = {
 
 /** Key families (the first match wins). */
 const PREFIXES: ReadonlyArray<{ prefix: string; info: (tail: string) => SettingInfo }> = [
+  { prefix: 'shader-studio:settings:explainModelDownloaded:', info: t => S(`Explanation model downloaded: ${t}`, 'devices', { hint: 'Forgets that it was downloaded; this browser may still keep the files' }) },
   { prefix: 'shader-studio:present:sampleStill:', info: () => S('Sample still (cached picture)', 'present') },
   { prefix: 'shader-studio:finish', info: t => S(`Finish: ${words(t)}`, 'finish') },
   { prefix: 'shader-studio:play:', info: t => S(sentence(t), 'play') },

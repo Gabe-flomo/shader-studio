@@ -17,9 +17,10 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { AnswerCache, answerKey, hashText } from '../cache';
 import { EXPLAIN_MODEL, MAX_TOKENS, blockTokens, downloadBytes, formatBytes } from '../config';
 import {
-  SYSTEM_PROMPT, buildExplainPrompt, colourWords, factLines, gatherFacts, neighboursOf, nodeContextFor, promptForBlock, promptForLine, noFacts,
+  SYSTEM_PROMPT, buildExplainPrompt, colourWords, factLines, gatherFacts, lineNumberOf, neighboursOf, nodeContextFor, promptForBlock, promptForLine, noFacts,
   type NodeContext,
 } from '../prompt';
+import { describeInputs, type NodeDescriber } from '../inputs';
 import { functionSource, statementAt } from '../fnSource';
 import { explainAnswerCache, explainStream, removeExplainModel, setExplainTransport, useExplainModel, type ExplainRequest, type ExplainTransport } from '../client';
 
@@ -48,9 +49,9 @@ function fixture(): GraphNode[] {
 const namer = (t: string) => ({ length: 'Distance', exprNode: 'Expression Block', output: 'Output' } as Record<string, string>)[t];
 
 describe('neighbours from the graph', () => {
-  it('lists what feeds the node and what it feeds, by name', () => {
+  it('lists what feeds the node and what it feeds, by node TYPE name (never the user’s label)', () => {
     const n = neighboursOf(fixture(), 'glow', namer);
-    expect(n.upstream).toEqual([{ name: 'Distance to centre (Distance)', type: 'length', socket: 'd' }]);
+    expect(n.upstream).toEqual([{ name: 'Distance', type: 'length', socket: 'd' }]);
     expect(n.downstream).toEqual([{ name: 'Output', type: 'output', socket: 'result' }]);
   });
 
@@ -59,10 +60,10 @@ describe('neighbours from the graph', () => {
     expect(neighboursOf(fixture(), 'missing')).toEqual({ upstream: [], downstream: [] });
   });
 
-  it('builds the node context with its kind and label', () => {
+  it('builds the node context with its kind, never its label', () => {
     const c = nodeContextFor(fixture(), 'glow', namer)!;
     expect(c.kind).toBe('Expression Block');
-    expect(c.label).toBe('Soft glow');
+    expect(JSON.stringify(c)).not.toContain('Soft glow');
     expect(c.upstream).toHaveLength(1);
     expect(nodeContextFor(fixture(), 'nope')).toBeUndefined();
   });
@@ -106,56 +107,128 @@ describe('facts our rule-based explainer already knows', () => {
   });
 });
 
-describe('the prompt', () => {
+describe('the prompt: code only, inputs by type, no user labels', () => {
   const nodes = fixture();
   const enclosing = 'float g = exp(-d * 4.0)\nvec3 c = vec3(1.0, 0.8, 0.55) * g\nreturn c';
+  const describe_: NodeDescriber = t => (t === 'length'
+    ? { label: 'Length', description: 'Distance from a vector to the origin, multiplied by scale.', outputs: { result: 'Output' } }
+    : undefined);
 
-  it('carries the line, its neighbours, the earlier lines and the facts', () => {
-    const p = promptForLine('vec3 c = vec3(1.0, 0.8, 0.55) * g', { nodeId: 'glow', nodes, namer, enclosing, where: 'line 2 of 2', ctx: { types: { g: 'float' } } });
+  it('carries the kind, the inputs, the code up to the line, the facts and the line number', () => {
+    const p = promptForLine('vec3 c = vec3(1.0, 0.8, 0.55) * g', { nodeId: 'glow', nodes, namer, describe: describe_, enclosing, where: 'line 2 of 2', ctx: { types: { g: 'float' } } });
     const user = p.messages[p.messages.length - 1];
     expect(p.messages[0]).toEqual({ role: 'system', content: SYSTEM_PROMPT });
     expect(user.role).toBe('user');
-    expect(user.content).toContain('Node: Expression Block called "Soft glow"');
-    expect(user.content).toContain('Fed by: Distance to centre (Distance) -> d');
-    expect(user.content).toContain('Feeds: Output (from result)');
-    expect(user.content).toContain('Earlier lines:\nfloat g = exp(-d * 4.0)');
+    expect(user.content).toContain('Kind: Expression Block');
+    expect(user.content).toContain('- d: float, from Length (output Output): distance from the origin of a vector');
+    expect(user.content).toContain('- t: float, built in: time in seconds');
+    expect(user.content).toContain('Code:\n1: float g = exp(-d * 4.0)\n2: vec3 c = vec3(1.0, 0.8, 0.55) * g');
     expect(user.content).not.toContain('return c'); // later lines are not offered: they invite guessing
-    expect(user.content).toContain('FACTS');
+    expect(user.content).toContain('FACTS about line 2');
     expect(user.content).toMatch(/Colour: vec3\(1\.0, 0\.8, 0\.55\) is the colour a light warm orange/);
-    expect(user.content).toContain('vec3 c = vec3(1.0, 0.8, 0.55) * g');
-    expect(p.used.length).toBeGreaterThan(1);
+    expect(user.content).toContain('Explain line 2 only.');
+    expect(p.lineNo).toBe(2);
+    expect(p.used.some(u => u.startsWith('Input d: float'))).toBe(true);
     expect(p.maxTokens).toBe(MAX_TOKENS.line);
   });
 
-  it('is worded to explain the effect on the picture, shortly, without restating the code', () => {
-    expect(SYSTEM_PROMPT).toMatch(/what the line does to the picture and why/);
-    expect(SYSTEM_PROMPT).toMatch(/at most 2 short sentences/);
-    expect(SYSTEM_PROMPT).toMatch(/do not repeat the code/);
-    expect(SYSTEM_PROMPT).toMatch(/Not sure why/);
+  it('never contains a node label, a title or a neighbour’s name, anywhere in any message', () => {
+    const labelled = nodes.map(n => ({ ...n, params: { ...n.params, label: n.id === 'glow' ? 'MOONLIGHT glow' : 'SKYLINE source', title: 'MOONLIGHT title' } }));
+    const scope = { nodeId: 'glow', nodes: labelled, namer, describe: describe_, enclosing };
+    for (const p of [promptForLine('float g = exp(-d * 4.0)', scope), promptForBlock(enclosing, scope)]) {
+      const all = JSON.stringify(p.messages) + p.context + p.used.join('\n');
+      expect(all).not.toMatch(/MOONLIGHT|SKYLINE/);
+      expect(all).not.toContain('Fed by');
+      expect(all).not.toContain('Feeds');
+      expect(all).not.toContain('Technique');
+    }
   });
 
-  it('is the same prompt for the same graph and line, and a different context for a different graph', () => {
+  it('describes inputs by the upstream node TYPE and its output, not by what a person called it', () => {
+    const labelled = nodes.map(n => (n.id === 'dist' ? { ...n, params: { label: 'Cloud height' } } : n));
+    const [d, t] = describeInputs(labelled, 'glow', describe_);
+    expect(d.text).toBe('d: float, from Length (output Output): distance from the origin of a vector (0 or more)');
+    expect(d.text).not.toContain('Cloud');
+    expect(t.name).toBe('t');
+  });
+
+  it('knows what the common sources give, with their ranges', () => {
+    const g: GraphNode[] = [
+      node('u', 'uv', { outputs: { uv: { type: 'vec2', label: 'UV' } } }),
+      node('time', 'time'),
+      node('noise', 'fbm'),
+      node('k', 'constant', { params: { value: 0.25 } }),
+      node('b', 'exprNode', {
+        inputs: {
+          uv: { type: 'vec2', label: 'uv', connection: { nodeId: 'u', outputKey: 'uv' } },
+          t: { type: 'float', label: 't', connection: { nodeId: 'time', outputKey: 'time' } },
+          h: { type: 'float', label: 'h', connection: { nodeId: 'noise', outputKey: 'out' } },
+          k: { type: 'float', label: 'k', connection: { nodeId: 'k', outputKey: 'value' } },
+          s: { type: 'float', label: 's' },
+          z: { type: 'float', label: 'z' },
+        },
+        params: { inputs: [
+          { name: 'uv', type: 'vec2', slider: null }, { name: 't', type: 'float', slider: null }, { name: 'h', type: 'float', slider: null },
+          { name: 'k', type: 'float', slider: null }, { name: 's', type: 'float', slider: { min: 0, max: 5 } }, { name: 'z', type: 'float', slider: null },
+        ] },
+      }),
+    ];
+    const byName = Object.fromEntries(describeInputs(g, 'b', t => ({ label: { uv: 'UV', time: 'Time', fbm: 'Fractal Noise (FBM)' }[t as string] ?? t })).map(i => [i.name, i]));
+    expect(byName.uv.text).toMatch(/^uv: vec2, from UV: pixel position, centred: \(0,0\) is the middle of the picture, x and y run about -1\.\.1/);
+    expect(byName.t.text).toMatch(/^t: float, from Time: time in seconds/);
+    expect(byName.h.text).toMatch(/^h: float, from Fractal Noise \(FBM\): smooth noise value, range 0\.\.1/);
+    expect(byName.k.text).toBe('k: float, a constant, value 0.25');
+    expect(byName.s.text).toBe('s: float, a slider on the node, range 0..5');
+    expect(byName.s.numbers).toEqual([0, 5]);
+    expect(byName.z.text).toMatch(/not connected/);
+  });
+
+  it('does not let the generic name guess ("t is the clock") override a described input', () => {
+    const p = promptForLine('float a = t * 2.0', { nodeId: 'glow', nodes, namer, enclosing: 'float a = t * 2.0' });
+    expect(p.messages[p.messages.length - 1].content).not.toContain('Name: t is the clock');
+  });
+
+  it('is worded to give one short JSON object and trust the facts', () => {
+    expect(SYSTEM_PROMPT).toMatch(/ONE JSON object/);
+    expect(SYSTEM_PROMPT).toContain('"what"');
+    expect(SYSTEM_PROMPT).toContain('"effect"');
+    expect(SYSTEM_PROMPT).toContain('"sure"');
+    expect(SYSTEM_PROMPT).toContain('"unsure_about"');
+    expect(SYSTEM_PROMPT).toMatch(/never contradict the FACTS/);
+  });
+
+  it('is the same prompt for the same graph and line, and a different context when an input changes', () => {
     const a = promptForLine('float g = exp(-d * 4.0)', { nodeId: 'glow', nodes, namer, enclosing });
     const b = promptForLine('float g = exp(-d * 4.0)', { nodeId: 'glow', nodes, namer, enclosing });
     expect(a.context).toBe(b.context);
-    const other = nodes.map(n => (n.id === 'dist' ? { ...n, params: { label: 'Other' } } : n));
+    const other = nodes.map(n => (n.id === 'glow' ? { ...n, params: { ...n.params, inputs: [{ name: 'd', type: 'float', slider: { min: 0, max: 3 } }] }, inputs: {} } : n));
     const c = promptForLine('float g = exp(-d * 4.0)', { nodeId: 'glow', nodes: other, namer, enclosing });
     expect(c.context).not.toBe(a.context);
   });
 
   it('works with no graph at all (the GLSL page)', () => {
     const p = promptForLine('float g = exp(-d * 4.0)', { kind: 'GLSL page' });
-    expect(p.messages[p.messages.length - 1].content).toContain('Node: GLSL page');
+    const user = p.messages[p.messages.length - 1].content;
+    expect(user).toContain('Kind: GLSL page');
+    expect(user).toContain('Inputs: none');
   });
 
-  it('a block asks for a summary and one numbered sentence per line, with each line’s rule-based reading', () => {
-    const p = promptForBlock(enclosing, { nodeId: 'glow', nodes, namer });
+  it('finds the number of the line in its block', () => {
+    expect(lineNumberOf('vec3 c = vec3(1.0, 0.8, 0.55) * g', enclosing)).toBe(2);
+    expect(lineNumberOf('return c', enclosing)).toBe(3);
+    expect(lineNumberOf('x = 1', undefined, 'line 4 of the block')).toBe(4);
+    expect(lineNumberOf('x = 1', undefined)).toBe(1);
+  });
+
+  it('a block asks for a summary and one JSON object per line, each line numbered', () => {
+    const p = promptForBlock(enclosing, { nodeId: 'glow', nodes, namer, describe: describe_ });
     const user = p.messages[1].content;
-    expect(p.messages[0].content).toMatch(/exactly/);
+    expect(p.messages[0].content).toMatch(/JSON objects, one per line/);
     expect(user).toContain('1: float g = exp(-d * 4.0)');
-    expect(user).toContain('Summary: <');
-    expect(user).toContain('3: <one short sentence');
-    expect(user).toContain('Rule-based reading of each line');
+    expect(user).toContain('3: return c');
+    expect(user).toContain('one object for each of lines 1 to 3');
+    expect(user).toContain('Rule-based reading of each statement');
+    expect(user).toContain('- d: float, from Length');
     expect(p.maxTokens).toBe(blockTokens(3));
     expect(p.maxTokens).toBeLessThanOrEqual(MAX_TOKENS.block);
   });
@@ -239,13 +312,13 @@ const req = (over: Partial<ExplainRequest> = {}): ExplainRequest => ({
 describe('asking the model', () => {
   beforeEach(() => {
     explainAnswerCache.clear();
-    useExplainModel.setState({ enabled: true, downloaded: true, status: 'idle', progress: null, backend: null, error: null, tokensPerSec: null });
+    useExplainModel.setState({ enabled: true, downloaded: true, activeId: EXPLAIN_MODEL.id, downloadedIds: [EXPLAIN_MODEL.id], loadedId: null, busyId: null, status: 'idle', progress: null, backend: null, error: null, tokensPerSec: null });
   });
 
   it('the not-downloaded path: nothing loads, and the caller is told to offer the download', async () => {
     const { t } = fakeTransport(['x']);
     setExplainTransport(t);
-    useExplainModel.setState({ enabled: true, downloaded: false });
+    useExplainModel.setState({ enabled: true, downloaded: false, downloadedIds: [] });
     const r = await explainStream(req(), () => {});
     expect(r).toEqual({ ok: false, reason: 'not-downloaded' });
     expect(t.load).not.toHaveBeenCalled();
@@ -255,7 +328,7 @@ describe('asking the model', () => {
   it('off: nothing loads either', async () => {
     const { t } = fakeTransport(['x']);
     setExplainTransport(t);
-    useExplainModel.setState({ enabled: false, downloaded: true });
+    useExplainModel.setState({ enabled: false, downloaded: true, downloadedIds: [EXPLAIN_MODEL.id] });
     expect(await explainStream(req(), () => {})).toEqual({ ok: false, reason: 'off' });
     expect(t.load).not.toHaveBeenCalled();
   });
@@ -266,7 +339,7 @@ describe('asking the model', () => {
     const seen: string[] = [];
     const r = await explainStream(req(), s => seen.push(s));
     expect(seen).toEqual(['Makes a ', 'Makes a soft glow ', 'Makes a soft glow around the shape.']);
-    expect(r).toEqual({ ok: true, text: 'Makes a soft glow around the shape.', cached: false });
+    expect(r).toMatchObject({ ok: true, text: 'Makes a soft glow around the shape.', cached: false });
     expect(calls[0].maxTokens).toBe(90);
     expect(useExplainModel.getState().status).toBe('ready');
     expect(useExplainModel.getState().backend).toBe('webgpu');
@@ -275,7 +348,7 @@ describe('asking the model', () => {
     // The same code in the same context: answered from the cache, the model not asked again
     const seen2: string[] = [];
     const again = await explainStream(req(), s => seen2.push(s));
-    expect(again).toEqual({ ok: true, text: 'Makes a soft glow around the shape.', cached: true });
+    expect(again).toMatchObject({ ok: true, text: 'Makes a soft glow around the shape.', cached: true });
     expect(seen2).toEqual(['Makes a soft glow around the shape.']);
     expect(t.generate).toHaveBeenCalledTimes(1);
 
