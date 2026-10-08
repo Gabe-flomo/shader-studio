@@ -17,20 +17,15 @@ A builder for flat pictures, like the 3D Scene Builder: pick shapes, bend the sp
 
 **2D: Scene Builder** folder: Kaleidoscope of glowing rings, Orbiting shapes, A ring of rings.
 
-## Next
+## Functions
 
-- **Functions** from the Code Explorer applied as Expression Blocks to a shape, the space or the grid.
-- 2D scenes in the Do… bar.
+GLSL functions as building blocks, each built as a **Custom Function** node that carries the function (and any helpers it calls) and calls it:
 
-## Grid
+- **Space → Add a function**: a function that bends space, `vec2 f(vec2 p[, float t])`, applied like any space transform.
+- **Shapes → Function shapes**: a function that measures a shape, `float f(vec2 p[, float t])`: negative inside, positive outside.
 
-The **Grid** tab adds a grid of cells drawn over the layers:
+Built in: twirl, complexSquare, circleInvert, sineWarp, brickOffset, breathe (space); flower, spiralLine, superellipse, wobblyBlob, twoBlobs (shapes). **Find more in your code and the examples** looks through your saved GLSL shaders and presets, the Convert examples, and the Custom Function nodes and Expression Blocks in this graph, your saved graphs and the examples. An Expression Block counts when it has one vec2 input, float inputs that are sliders (their values are written in) or one time input, and a vec2 or float result. In a recipe: `fn twirl`, `fn-shape flower color=pink` (built-ins only; functions from your code are kept in the scene but picked in the builder).
 
-- **Cells**: columns × rows over a span round the centre; the shape's size as a share of its cell.
-- **Shapes**: up to three of circle, box, ring, diamond, triangle, hexagon and cross, given out to cells all the same, as a checker, by column, by row, every Nth, or at random.
-- **Ripples**: circular waves from the centre, the four corners, the mouse or a point (up to four, averaged), with rings per unit and speed. They change the shape's **size**, its **turn**, a **push** off the cell centre, or **morph** from the first shape into the second, or nothing (colour only).
-- **Colour**: by shape (two colours), by the ripple, or a random value per cell (both through the Look palette), with or without glow.
+## Do… bar
 
-It builds as one **Expression Block** whose lines are the maths step by step (cell size, which cell, the cell centre, the wave, the size, the shape choice, each shape's distance), with live sliders for size, amount, rings and speed. In a recipe: `grid 14 shape=circle shape=box ripple=corners freq=9 speed=0.35 target=morph amount=0.9` (`grid 0.5`, a cell size, is still Tile).
-
-Examples: **Morphing ripple grid**, **Ripples that follow the mouse**.
+`new 2d scene`, `2d scene builder`, `open the 2d scene builder` open the builder on a new scene.

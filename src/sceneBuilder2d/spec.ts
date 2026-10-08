@@ -17,6 +17,7 @@
  */
 
 import type { GridSpec } from './grid';
+import type { FnRef } from './functions';
 
 export type Vec2 = [number, number];
 export type Vec3 = [number, number, number];
@@ -88,6 +89,8 @@ export const SHAPES: ShapeDef[] = [
     params: [P('size', 'Radii', ['rx', 'ry'], [0.36, 0.2], 0.01, 2)] },
   { kind: 'moon', label: 'Moon', aliases: ['crescent'], shape: 'moon', blurb: 'A crescent.',
     params: [P('r', 'Radius', 'r', 0.3, 0.02, 2), P('cut', 'Cut radius', 'r2', 0.24, 0.02, 2), P('d', 'Offset', 'd', 0.18, 0, 2)] },
+  { kind: 'fnshape', label: 'Function shape', aliases: ['fn-shape', 'function-shape'], shape: 'fn', blurb: 'A shape measured by a GLSL function, float f(vec2 p): built in, or from your code and the examples.',
+    params: [] },
   { kind: 'vesica', label: 'Vesica', aliases: ['lens', 'eye'], shape: 'vesica', blurb: 'The lens where two circles overlap.',
     params: [P('w', 'Width', 'rx', 0.34, 0.02, 2), P('h', 'Height', 'he', 0.18, 0.02, 2)] },
 ];
@@ -145,6 +148,9 @@ export const SPACES: SpaceDef[] = [
   { kind: 'invert', label: 'Invert', aliases: ['inversion', 'inside-out'], type: 'inversionSpace', posIn: 'input', posOut: 'output', blurb: 'Turns space inside out round a circle.',
     params: [P('radius', 'Radius', 'radius', 1, 0.1, 3)] },
 ];
+
+SPACES.push({ kind: 'fn', label: 'Function', aliases: ['function'], type: 'customFn', posIn: 'p', posOut: 'result', params: [],
+  blurb: 'Bends space through a GLSL function, vec2 f(vec2 p): built in, or from your code and the examples.' });
 
 export const SPACE_BY_KIND: Record<string, SpaceDef> = Object.fromEntries(SPACES.map(s => [s.kind, s]));
 
@@ -223,6 +229,8 @@ interface ItemBase {
 export interface ShapeSpec extends ItemBase {
   type: 'shape';
   kind: string;
+  /** kind 'fnshape': the GLSL function that measures it (functions.ts). */
+  fn?: FnRef;
   /** Size settings by ParamDef key. */
   size: Record<string, number | Vec2>;
 }
@@ -412,6 +420,7 @@ export function itemSummary(it: Item): string {
 
 /** A space transform's chip words: its label and its main setting. */
 export function spaceSummary(op: SpaceOp): { label: string; value: string } {
+  if (op.kind === 'fn') return { label: 'Function', value: String(op.values.name ?? '') };
   const def = SPACE_BY_KIND[op.kind];
   if (!def) return { label: op.kind, value: '' };
   const r = (n: number) => String(Math.round(n * 1000) / 1000);
