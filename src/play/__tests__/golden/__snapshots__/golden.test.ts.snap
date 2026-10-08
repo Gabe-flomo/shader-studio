@@ -325,6 +325,22 @@ exports[`golden outputs: examples > flowAroundWords 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > fourDHypersphereInTesseract 1`] = `
+{
+  "a": "- x120",
+  "c": "- x120",
+  "sweep": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > fourDTesseractSlice 1`] = `
+{
+  "a": "- x120",
+  "c": "- x120",
+  "w": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > granulator 1`] = `
 {
   "count": "- x120",
