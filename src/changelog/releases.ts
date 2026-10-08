@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.91',
+    date: '2026-10-08',
+    title: 'Trigger buttons',
+    highlights: [
+      { area: 'Studio', text: 'Trigger settings are buttons: Start over on Agents and Burst on Emit and Particles. Play, keys, beats and rules can still fire them.' },
+    ],
+  },
+  {
     id: '2026.10.90',
     date: '2026-10-08',
     title: 'Suggest group controls',
