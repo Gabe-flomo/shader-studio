@@ -81,6 +81,7 @@ const KNOWN: Record<string, SettingInfo> = {
   'shader-studio:performance-rolling': S('Rolling performance takes', 'play', { data: true }),
   // Finish and looks
   'shader-studio:finish-looks': S('Saved looks', 'finish', { data: true }),
+  'shader-studio:taste': S('Your taste (what Surprise and Evolve learned you like)', 'studio', { data: true, hint: 'Ratings, picks and the per-stage table; Reset forgets them all' }),
   'shader-studio:finish-presets': S('Finish stack presets', 'finish', { data: true }),
   'shader-studio:finish-effects': S('Your Finish effects', 'finish', { data: true }),
   // Present

@@ -20,6 +20,10 @@ import type { InspSource } from '../../lang/inspired/fragments';
 import { programFrameStats, programPixels } from '../sceneBuilder/surpriseActions';
 import { announceSurprise } from './announce';
 import { toast } from '../ui/toastStore';
+import { makeRng } from '../../lib/surprise';
+import { blendScore, compositionFeatures, EXPLORE, learnPair, learnSignal, planBonus, rankWithExploration, sampledScore, tasteBias, tasteWhy, type Features } from '../../taste';
+import { tasteModel, updateTaste } from '../../taste/store';
+import { stopWatchingKeep, watchAfterKeep } from '../taste/tasteActions';
 
 const SAVED_PREFIX = 'shader-studio:';
 const PRESET_CFP = 'shader-studio:cfp:';
@@ -105,7 +109,13 @@ async function openInspiration(i: Inspiration): Promise<void> {
 // graph back. Deep makes many candidates, draws each small at two moments, scores them (lib/surprise
 // score.ts) and keeps the best few, best first.
 
-export interface Candidate { res: InspireResult; score?: Score }
+export interface Candidate { res: InspireResult; score?: Score; /** Why-chips from the taste model ("your: exp falloff"). */ taste?: string[] }
+
+/** What the taste model sees of a candidate (with Deep's metrics when it was drawn). */
+export const candidateFeatures = (c: Candidate): Features => compositionFeatures(c.res, c.score ? { metrics: c.score.metrics, signature: c.score.signature } : {});
+
+/** The candidates looked at in this carousel (for "kept over the ones looked at"). */
+const viewed = new Set<Candidate>();
 
 interface CarouselState {
   open: boolean;
@@ -140,6 +150,7 @@ const later = (f: () => void) => {
 };
 
 function preview(c: Candidate): void {
+  viewed.add(c);
   useNodeGraphStore.setState({ nodes: c.res.nodes, selectedNodeId: null, selectedNodeIds: [] });
   useNodeGraphStore.getState().compile();
   if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(() => useNodeGraphStore.getState()._fitViewCallback?.());
@@ -149,8 +160,11 @@ function preview(c: Candidate): void {
 function makeCandidate(pool: InspPool, seed?: number, tries = 10): InspireResult {
   const inCarousel = useSurpriseCarousel.getState().items.map(c => ({ sources: c.res.inspirations.map(i => i.id), families: c.res.families }));
   const history = [...readHistory(), ...inCarousel];
-  const fresh = () => steerSeed(pool, Array.from({ length: 6 }, () => newSeed()), history);
-  return inspire({ pool, seed: seed ?? fresh(), tries, check: gpuCheck, ...(seed == null ? { seedFor: () => fresh() } : {}), nextId: () => useNodeGraphStore.getState().newNodeId() });
+  // Taste leans on the plan and, three times in four, on which fresh seed is used (the fourth explores).
+  const model = tasteModel();
+  const bias = tasteBias(model);
+  const fresh = () => steerSeed(pool, Array.from({ length: 6 }, () => newSeed()), history, { bias, bonus: Math.random() < EXPLORE ? undefined : planBonus(model) });
+  return inspire({ pool, seed: seed ?? fresh(), tries, check: gpuCheck, bias, ...(seed == null ? { seedFor: () => fresh() } : {}), nextId: () => useNodeGraphStore.getState().newNodeId() });
 }
 
 /** Draw a candidate small at two moments and score it (null without WebGL2). */
@@ -163,7 +177,7 @@ function scoreCandidate(res: InspireResult): Score | undefined {
 }
 
 let poolPromise: Promise<InspPool> | null = null;
-const poolNow = () => (poolPromise ??= currentPool().finally(() => { poolPromise = null; }));
+export const poolNow = () => (poolPromise ??= currentPool().finally(() => { poolPromise = null; }));
 
 /** Roll: open the carousel (or add to it) with a new candidate, and more in the background. */
 export async function startSurprise(o: { seed?: number; deep?: boolean } = {}): Promise<void> {
@@ -215,7 +229,12 @@ function runDeep(pool: InspPool, gen: number, total = 16, budgetMs = 6000): void
   const finish = () => {
     if (gen !== generation) return;
     const withScore = scored.filter((c): c is Candidate & { score: Score } => !!c.score);
-    const best = withScore.length ? bestOf(withScore, 5) : scored.slice(0, 3);
+    // Deep's score blended with taste, ranked with ~25% exploration (src/taste), the best five kept.
+    const model = tasteModel();
+    const rng = makeRng(newSeed());
+    const ranked = rankWithExploration(bestOf(withScore, withScore.length), (c, r) => blendScore(c.score.score, sampledScore(model, candidateFeatures(c), r), model), rng)
+      .map(x => ({ ...x.item, taste: x.explored ? ['exploring'] : tasteWhy(model, candidateFeatures(x.item)) }));
+    const best = withScore.length ? ranked.slice(0, 5) : scored.slice(0, 3);
     const items = [...useSurpriseCarousel.getState().items, ...best];
     useSurpriseCarousel.setState({ items, index: Math.max(0, items.length - best.length), generating: false, progress: null });
     if (items.length) preview(items[useSurpriseCarousel.getState().index]);
@@ -252,6 +271,7 @@ export async function stepSurprise(dir: -1 | 1): Promise<void> {
 
 function close(): void {
   generation++;
+  viewed.clear();
   useSurpriseCarousel.setState({ open: false, items: [], index: 0, original: null, generating: false, progress: null });
 }
 
@@ -259,6 +279,9 @@ function close(): void {
 export function cancelSurprise(): void {
   const s = useSurpriseCarousel.getState();
   if (!s.open) return;
+  // Undone: the one on screen wasn't wanted (a light lesson).
+  const shown = s.items[s.index];
+  if (shown && !shown.res.fallback) updateTaste(m => learnSignal(m, 'undone', candidateFeatures(shown)));
   if (s.original) { useNodeGraphStore.setState({ nodes: s.original }); useNodeGraphStore.getState().compile(); }
   close();
 }
@@ -273,12 +296,18 @@ export function keepSurprise(): InspireResult | null {
   const shown = useNodeGraphStore.getState().nodes;
   useNodeGraphStore.setState({ nodes: s.original });
   useNodeGraphStore.getState().setNodesRewritten(shown, `Surprise · seed ${c.res.seed}`);
+  // Kept: it wins (lightly) over the others looked at, and counts as kept.
+  const others = [...viewed].filter(v => v !== c && !v.res.fallback);
+  const kf = candidateFeatures(c);
+  if (!c.res.fallback) updateTaste(m => others.reduce((acc, o) => learnPair(acc, kf, candidateFeatures(o), 0.3, null), learnSignal(m, 'kept', kf)));
+  const original = s.original;
   close();
   const res = c.res;
   if (!res.fallback) writeHistory(remember(readHistory(), res));
   const sig = c.score?.signature ?? scoreCandidate(res)?.signature;
   if (sig) { keptSignatures.push(sig); if (keptSignatures.length > 5) keptSignatures.shift(); }
   const after = useNodeGraphStore.getState().nodes;
+  if (!res.fallback) watchAfterKeep(original, after, kf);
   const skipped = res.rejected.length ? ` Skipped ${res.rejected.length} ${res.rejected.length === 1 ? 'try' : 'tries'}.` : '';
   announceSurprise({
     title: 'Surprise', seed: res.seed,
@@ -287,8 +316,8 @@ export function keepSurprise(): InspireResult | null {
       ? `Nothing inspired compiled, so this is a random line: ${res.line ?? ''}.${skipped}`
       : `${res.stages.map(x => x.what).join(' → ')}.${skipped} Type “surprise me seed=${res.seed}” to make it again.`,
     stillCurrent: () => useNodeGraphStore.getState().nodes === after,
-    undo: () => useNodeGraphStore.getState().undo(),
-    reroll: () => { useNodeGraphStore.getState().undo(); void startSurprise({ deep: false }).then(() => keepSurprise()); },
+    undo: () => { stopWatchingKeep(); if (!res.fallback) updateTaste(m => learnSignal(m, 'undone', kf)); useNodeGraphStore.getState().undo(); },
+    reroll: () => { stopWatchingKeep(); useNodeGraphStore.getState().undo(); void startSurprise({ deep: false }).then(() => keepSurprise()); },
   });
   return res;
 }

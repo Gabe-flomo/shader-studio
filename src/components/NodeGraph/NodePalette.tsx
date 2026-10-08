@@ -1,4 +1,6 @@
 import { offerCustomFunctionsExport } from '../playfile/exportMenus';
+import { RateButtons } from '../taste/RateButtons';
+import { favouritedNode, openedSaved, rateTargets } from '../taste/tasteActions';
 import { ProBadgeFor } from '../account/ProSheet';
 import { BROWSE_STAGE_EVENT } from '../../structure/browse';
 import { useCan } from '../../lib/plan';
@@ -429,6 +431,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                   <div style={{ paddingLeft: 14, display: 'flex', flexDirection: 'column', gap: 1 }}>
                     {hits.slice(0, 15).map(({ k, folder }) => (
                       <ItemRow key={k} label={EXAMPLE_INDEX[k].label} icon="graphs" color={tk.status.success} source={EXAMPLE_INDEX[k].source}
+                        extra={<RateButtons target={rateTargets.example(k, EXAMPLE_INDEX[k].label)} quiet />}
                         hint={`${folder}${EXAMPLE_INDEX[k].description ? ` · ${EXAMPLE_INDEX[k].description}` : ''}`}
                         onClick={() => { loadExampleGraph(k); onNodeAdded?.(); }} />
                     ))}
@@ -460,6 +463,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                             .sort((a, b) => EXAMPLE_INDEX[a].label.localeCompare(EXAMPLE_INDEX[b].label))
                             .map(k => (
                               <ItemRow key={k} label={EXAMPLE_INDEX[k].label} icon="graphs" color={tk.status.success} hint={EXAMPLE_INDEX[k].description} source={EXAMPLE_INDEX[k].source} tag={EXAMPLE_INDEX[k].play ? 'Play' : undefined}
+                                extra={<RateButtons target={rateTargets.example(k, EXAMPLE_INDEX[k].label)} quiet />}
                                 onClick={() => { loadExampleGraph(k); onNodeAdded?.(); }} />
                             ))}
                         </div>
@@ -507,8 +511,8 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               renderItem={(item) => (
                 <ItemRow label={item.label} icon="graphs" color={tabColor('graphs')} tag={savedGraphHasPlay(item.id) ? 'Play' : undefined}
                   selected={currentGraph?.name === item.id}
-                  extra={<><GraphLinkBadge graph={item.id} compact /><VersionsButton name={item.id} onOpened={() => onNodeAdded?.()} /></>}
-                  onClick={() => { if (reportFileResult(loadSavedGraph(item.id), { failTitle: `Couldn’t open “${item.label}”` })) onNodeAdded?.(); }}
+                  extra={<><RateButtons target={rateTargets.saved(item.id)} quiet /><GraphLinkBadge graph={item.id} compact /><VersionsButton name={item.id} onOpened={() => onNodeAdded?.()} /></>}
+                  onClick={() => { if (reportFileResult(loadSavedGraph(item.id), { failTitle: `Couldn’t open “${item.label}”` })) { openedSaved(item.id, useNodeGraphStore.getState().nodes); onNodeAdded?.(); } }}
                   onDelete={() => { deleteSavedGraph(item.id); refreshSavedNames(); }} />
               )}
               emptyHint={!showGraphSaveInput && <EmptyHint>Save the current graph to keep it here.</EmptyHint>}
@@ -837,6 +841,7 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
     setFavorites(prev => {
       const next = prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type];
       localStorage.setItem('nodepalette_favorites', JSON.stringify(next));
+      favouritedNode(type, !prev.includes(type));
       return next;
     });
   };

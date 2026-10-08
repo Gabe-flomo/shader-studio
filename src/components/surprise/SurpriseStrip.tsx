@@ -52,9 +52,10 @@ export function SurpriseStrip() {
           <div style={{ width: `${(100 * s.progress!.done) / Math.max(1, s.progress!.total)}%`, height: '100%', background: tk.accent.base, transition: 'width 120ms' }} />
         </div>
       )}
-      {c && !deepRunning && (c.score?.why.length || c.res.stages.length) ? (
+      {c && !deepRunning && (c.score?.why.length || c.taste?.length || c.res.stages.length) ? (
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', padding: '0 4px' }} data-do-carousel-why>
           {c.score?.why.map(w => <span key={w} style={{ ...chip, background: alpha(tk.accent.base, 0.14), color: tk.accent.text }}>{w}</span>)}
+          {c.taste?.map(w => <span key={w} data-do-carousel-taste style={chip}>{w}</span>)}
           <span style={{ fontSize: 11, color: tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.res.stages.map(x => x.what).join(' → ')}</span>
         </div>
       ) : null}

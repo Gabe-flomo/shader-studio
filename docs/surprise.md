@@ -100,6 +100,11 @@ Each roll draws 2–3 **sources** and builds a new graph from their techniques a
 
   Degenerate frames are dropped. The best five go into the carousel, best first, each with chips
   saying why ("colourful · moves · new look").
+- **Taste** (docs/taste.md). A small local model learns from what you keep, undo, rate and pick in
+  **Evolve** (the button beside Deep). It leans each stage's technique choice by P(technique | stage),
+  weighs liked graphs and GLSL more as sources, and steers fresh seeds toward plans you like. Deep ranks
+  by its score plus taste. About a quarter of everything stays exploration. With no ratings or picks
+  there is no lean, so a seed makes exactly what it made before.
 - **The toast** says "Inspired by A, B and C". Each name opens its source (an example or saved graph
   with the pieces selected, or the shader in the GLSL page), and the toast offers Reroll and Undo.
 

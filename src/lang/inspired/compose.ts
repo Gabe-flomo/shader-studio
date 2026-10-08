@@ -21,7 +21,7 @@ import { compileGraph } from '../../compiler/graphCompiler';
 import { execCommand } from '../../suggestions/doCommands';
 import { surpriseLine } from '../surprise';
 import { readLine } from '../run';
-import { fragmentsOf, type Fragment, type InspSource, type Stage, type VType } from './fragments';
+import { fragmentsOf, stageChoice, type Fragment, type InspSource, type Stage, type VType } from './fragments';
 
 export interface InspPool {
   sources: InspSource[];
@@ -58,10 +58,14 @@ export interface Composition {
   nodes: GraphNode[];
   seed: number;
   inspirations: Inspiration[];
-  /** Per stage: where it came from (a fragment key, or 'playfield'). */
-  stages: Array<{ stage: Stage; from: string; family: string; what: string }>;
+  /** Per stage: where it came from (a fragment key, or 'playfield'), and the choice that fills it (stageChoice). */
+  stages: Array<{ stage: Stage; from: string; family: string; what: string; choice: string }>;
   /** The technique families used (sources only), sorted. */
   families: string[];
+  /** The plan it was realised from (Evolve's Refine swaps one piece of it). */
+  plan: Plan;
+  /** Node id → where it came from in the plan (`stage/fragment key/template id`), so a re-realised plan can carry settings over. */
+  origin: Record<string, string>;
 }
 
 export interface InspireResult extends Composition {
@@ -107,10 +111,41 @@ function conversion(id: string, from: VType, to: VType): GraphNode {
   };
 }
 
-interface Plan { stages: Stage[]; assign: Map<Stage, Fragment>; sources: string[] }
+export interface Plan { stages: Stage[]; assign: Map<Stage, Fragment>; sources: string[] }
+
+/**
+ * A lean for the plan (the taste model, src/taste): multipliers on a stage's choices and on sources, and
+ * a source that must give one piece (Evolve's Branch). Without one, the plan is exactly the unbiased one.
+ */
+export interface PlanBias {
+  /** How much more (>1) or less (<1) likely this choice is for this stage. */
+  stage?(stage: Stage, choice: string, family: string): number;
+  /** How much more or less likely this source is picked among those using a technique. */
+  source?(sourceId: string): number;
+  /** A source id that brings the first piece. */
+  mustUse?: string;
+}
+
+/** The pool with one more source (Evolve's Branch: the pick as a source). */
+export function withSource(pool: InspPool, src: InspSource): InspPool {
+  const fs = fragmentsOf(src);
+  if (!fs.length) return pool;
+  const byStage: InspPool['byStage'] = new Map([...pool.byStage].map(([st, fams]) => [st, new Map([...fams].map(([fam, whats]) => [fam, new Map(whats)]))]));
+  for (const f of fs) {
+    const fams = byStage.get(f.stage) ?? new Map<string, Map<string, Fragment[]>>();
+    byStage.set(f.stage, fams);
+    const whats = fams.get(f.family) ?? new Map<string, Fragment[]>();
+    fams.set(f.family, whats);
+    const w = f.family === 'code' ? `${f.how}:${f.nodes.length > 1 ? 'chain' : f.nodes[0]?.type}` : f.what;
+    whats.set(w, [...(whats.get(w) ?? []), f]);
+  }
+  const bySource = new Map(pool.bySource);
+  bySource.set(src.id, fs);
+  return { sources: [...pool.sources.filter(s => s.id !== src.id), src], bySource, byStage };
+}
 
 /** Steps 1–2: which sources, which fragment for which stage. */
-export function planFor(pool: InspPool, seed: number): Plan {
+export function planFor(pool: InspPool, seed: number, bias?: PlanBias): Plan {
   const rng = makeRng(seed);
   const hasPicture = [...pool.bySource.values()].some(fs => fs.some(f => f.stage === 'picture'));
   const stages = hasPicture && rng.chance(0.3) ? PICTURE : CHAIN;
@@ -121,6 +156,15 @@ export function planFor(pool: InspPool, seed: number): Plan {
   // Fill in a random order, so no stage always goes first.
   const order = rng.shuffle([...stages]);
   const open = () => order.filter(s => !assign.has(s));
+  const mult = (st: Stage, f: Fragment) => Math.max(0.01, bias?.stage?.(st, stageChoice(f), f.family) ?? 1);
+  // Branch: the source that must give a piece gives the first one (a stage of this plan, by taste).
+  const must = bias?.mustUse ? pool.bySource.get(bias.mustUse)?.filter(f => stages.includes(f.stage)) : undefined;
+  if (must?.length) {
+    const f = rng.weighted(must.map(x => [x, mult(x.stage, x)] as const));
+    assign.set(f.stage, f);
+    chosen.push(f.sourceId);
+    families.add(f.family);
+  }
   // Stage first, then a family (each family as likely as another, one not used yet), then a technique of
   // it, then one graph using it: a technique found in a hundred examples is no likelier than a rare one.
   for (let i = 0; i < want + 3 && chosen.length < want; i++) {
@@ -131,9 +175,15 @@ export function planFor(pool: InspPool, seed: number): Plan {
       .map(([fam, whats]) => [fam, [...whats.entries()].map(([w, fs]) => [w, fs.filter(f => !chosen.includes(f.sourceId))] as const).filter(([, fs]) => fs.length)] as const)
       .filter(([, whats]) => whats.length);
     if (!fams.length) { order.splice(order.indexOf(st), 1); continue; }
-    const [fam, whats] = rng.weighted(fams.map(x => [x, families.has(x[0]) ? 0.05 : 1] as const));
-    const [, inst] = rng.pick(whats);
-    const f = rng.pick(inst);
+    // With a lean: a technique weighs its stage multiplier times its best source's weight (a liked graph pulls
+    // its techniques in), a family the mean of its techniques.
+    const srcW = (f: Fragment) => Math.max(0.01, bias?.source?.(f.sourceId) ?? 1);
+    const whatLean = (fs: readonly Fragment[]) => mult(st, fs[0]) * Math.max(...fs.map(srcW));
+    const leaning = !!(bias?.stage || bias?.source);
+    const famLean = (whats: typeof fams[number][1]) => (leaning ? whats.reduce((s, [, fs]) => s + whatLean(fs), 0) / whats.length : 1);
+    const [fam, whats] = rng.weighted(fams.map(x => [x, (families.has(x[0]) ? 0.05 : 1) * famLean(x[1])] as const));
+    const [, inst] = leaning ? rng.weighted(whats.map(x => [x, whatLean(x[1])] as const)) : rng.pick(whats);
+    const f = bias?.source ? rng.weighted(inst.map(x => [x, Math.max(0.01, bias.source!(x.sourceId))] as const)) : rng.pick(inst);
     assign.set(st, f);
     chosen.push(f.sourceId);
     families.add(fam);
@@ -151,15 +201,22 @@ export function planFor(pool: InspPool, seed: number): Plan {
 }
 
 /** Step 3: the graph. `nextId` names the new nodes. */
-export function realise(pool: InspPool, seed: number, nextId: () => string): Composition | null {
-  const plan = planFor(pool, seed);
+export function realise(pool: InspPool, seed: number, nextId: () => string, bias?: PlanBias): Composition | null {
+  return realisePlan(planFor(pool, seed, bias), seed, nextId);
+}
+
+/** Step 3 for a given plan (Evolve's Refine realises a plan with one piece swapped). */
+export function realisePlan(plan: Plan, seed: number, nextId: () => string): Composition | null {
   const rng = makeRng(seed).fork('realise');
+  const origin: Record<string, string> = {};
   const out: GraphNode[] = [];
   const uv = n('uv', nextId(), 0, 0);
   const time = n('time', nextId(), 0, 260);
   uv.params.__comment = 'Where each pixel is: the coordinates the first piece reads.';
   time.params.__comment = 'Seconds since start, for the pieces that move.';
   out.push(uv, time);
+  origin[uv.id] = 'uv';
+  origin[time.id] = 'time';
   let cur = { nodeId: uv.id, key: 'uv', type: 'vec2' as VType };
   let x = 380;
   const stagesUsed: Composition['stages'] = [];
@@ -188,6 +245,7 @@ export function realise(pool: InspPool, seed: number, nextId: () => string): Com
     for (const tmpl of f.nodes) {
       const nd = JSON.parse(JSON.stringify(tmpl)) as GraphNode;
       nd.id = ids.get(tmpl.id)!;
+      origin[nd.id] = `${st}/${f.key}/${tmpl.id}`;
       nd.position = { x: x + ((tmpl.position?.x ?? 0) - minX), y: (tmpl.position?.y ?? 0) - minY };
       for (const s of Object.values(nd.inputs ?? {})) if (s.connection) {
         const to = ids.get(s.connection.nodeId);
@@ -215,7 +273,7 @@ export function realise(pool: InspPool, seed: number, nextId: () => string): Com
       x += 300;
       cur = { nodeId: m.id, key: 'result', type: 'vec3' };
     }
-    stagesUsed.push({ stage: st, from: f.key, family: f.sourceId === 'playfield' ? 'playfield' : f.family, what: f.what });
+    stagesUsed.push({ stage: st, from: f.key, family: f.sourceId === 'playfield' ? 'playfield' : f.family, what: f.what, choice: stageChoice(f) });
     if (f.sourceId !== 'playfield') {
       const e = insp.get(f.sourceId) ?? { id: f.sourceId, label: f.sourceLabel, what: [], at: [], ...(f.line ? { line: f.line } : {}) };
       e.what.push(f.what);
@@ -240,6 +298,7 @@ export function realise(pool: InspPool, seed: number, nextId: () => string): Com
   return {
     nodes: out, seed, inspirations: [...insp.values()], stages: stagesUsed,
     families: [...new Set(stagesUsed.filter(s => s.family !== 'playfield').map(s => s.family))].sort(),
+    plan, origin,
   };
 }
 
@@ -271,6 +330,8 @@ export interface InspireOptions {
   nextId?: () => string;
   /** The seed for try `attempt` (default: derived from `seed`). The app steers each retry too. */
   seedFor?: (attempt: number) => number;
+  /** A lean for each plan (the taste model). */
+  bias?: PlanBias;
 }
 
 function counter(seed: number): () => string {
@@ -286,14 +347,14 @@ export function inspire(o: InspireOptions): InspireResult {
     const s = a === 0 ? o.seed : o.seedFor ? o.seedFor(a) : deriveSeed(o.seed, a);
     const next = o.nextId ?? counter(s);
     let made: Composition | null = null;
-    try { made = realise(o.pool, s, next); } catch (e) { rejected.push({ seed: s, why: e instanceof Error ? e.message : String(e) }); continue; }
+    try { made = realise(o.pool, s, next, o.bias); } catch (e) { rejected.push({ seed: s, why: e instanceof Error ? e.message : String(e) }); continue; }
     if (!made) { rejected.push({ seed: s, why: 'no sources' }); continue; }
     const why = compileProblem(made.nodes) ?? o.check?.(made.nodes) ?? null;
     if (why) { rejected.push({ seed: s, why }); continue; }
     return { ...made, fallback: false, rejected };
   }
   const old = lineGraph(o.seed, o.nextId ?? counter(o.seed));
-  return { nodes: old?.nodes ?? [n('output', 'out', 0, 0)], seed: o.seed, inspirations: [], stages: [], families: [], fallback: true, rejected, line: old?.line };
+  return { nodes: old?.nodes ?? [n('output', 'out', 0, 0)], seed: o.seed, inspirations: [], stages: [], families: [], plan: { stages: [], assign: new Map(), sources: [] }, origin: {}, fallback: true, rejected, line: old?.line };
 }
 
 // ── History steering ─────────────────────────────────────────────────────────
@@ -301,8 +362,8 @@ export function inspire(o: InspireOptions): InspireResult {
 export interface RollMemory { sources: string[]; families: string[] }
 
 /** How much a seed's plan repeats the last rolls: shared sources count double, shared families once. */
-export function repetition(pool: InspPool, seed: number, history: readonly RollMemory[]): number {
-  const plan = planFor(pool, seed);
+export function repetition(pool: InspPool, seed: number, history: readonly RollMemory[], bias?: PlanBias): number {
+  const plan = planFor(pool, seed, bias);
   const srcs = new Set(history.flatMap(h => h.sources));
   const fams = new Map<string, number>();
   for (const h of history) for (const f of h.families) fams.set(f, (fams.get(f) ?? 0) + 1);
@@ -313,11 +374,12 @@ export function repetition(pool: InspPool, seed: number, history: readonly RollM
 }
 
 /** Of a few fresh seeds, the one whose plan repeats the last ~5 rolls least (the first on a tie). */
-export function steerSeed(pool: InspPool, candidates: readonly number[], history: readonly RollMemory[]): number {
-  if (!history.length) return candidates[0];
+export function steerSeed(pool: InspPool, candidates: readonly number[], history: readonly RollMemory[], o: { bias?: PlanBias; bonus?: (plan: Plan, seed: number) => number } = {}): number {
+  if (!history.length && !o.bonus) return candidates[0];
   let best = candidates[0], bestScore = Infinity;
   for (const c of candidates) {
-    const sc = repetition(pool, c, history);
+    // Repetition, less what the taste model makes of the plan (src/taste: higher is liked more).
+    const sc = (history.length ? repetition(pool, c, history, o.bias) : 0) - (o.bonus ? o.bonus(planFor(pool, c, o.bias), c) : 0);
     if (sc < bestScore) { best = c; bestScore = sc; }
   }
   return best;
