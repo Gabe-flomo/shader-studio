@@ -353,15 +353,25 @@ exports[`golden outputs: examples > fourDHypersphereInTesseract 1`] = `
 {
   "a": "- x120",
   "c": "- x120",
+  "lid": "- x120",
   "sweep": "- x120",
 }
 `;
 
 exports[`golden outputs: examples > fourDTesseractSlice 1`] = `
 {
-  "a": "- x120",
   "c": "- x120",
-  "w": "- x120",
+  "centre": "- x120",
+  "size": "- x120",
+  "sweep": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > fourDThreeSlices 1`] = `
+{
+  "c": "- x120",
+  "centre": "- x120",
+  "sweep": "- x120",
 }
 `;
 
