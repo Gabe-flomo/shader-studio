@@ -45,12 +45,12 @@ export interface BuildResult {
   warnings: string[];
 }
 
-type Ref = { nodeId: string; outputKey: string };
+export type Ref = { nodeId: string; outputKey: string };
 
 const rad = (deg: number) => Math.round(deg * Math.PI / 180 * 1e6) / 1e6;
 const v3 = (v: Vec3) => `(${v.map(fmt).join(', ')})`;
 
-interface Ctx {
+export interface Ctx {
   spec: SceneSpec;
   idFor: (role: string) => string;
   /** Prepended to every role made in this scope (the Materials group's copies of the shapes). */
@@ -60,7 +60,7 @@ interface Ctx {
 }
 
 /** A node of `type` from its definition: sockets as defined, params = defaults + `params`, wires and note. */
-function mk(ctx: Ctx, type: string, role: string, params: Record<string, unknown>, wires: Record<string, Ref | null | undefined>, note: string, list = ctx.nodes): GraphNode {
+export function mk(ctx: Ctx, type: string, role: string, params: Record<string, unknown>, wires: Record<string, Ref | null | undefined>, note: string, list = ctx.nodes): GraphNode {
   const def = getNodeDefinition(type);
   if (!def) throw new Error(`Scene Builder: unknown node type ${type}`);
   const inputs: Record<string, InputSocket> = {};
@@ -79,20 +79,20 @@ function mk(ctx: Ctx, type: string, role: string, params: Record<string, unknown
   return node;
 }
 
-const ref = (n: GraphNode, outputKey: string): Ref => ({ nodeId: n.id, outputKey });
+export const ref = (n: GraphNode, outputKey: string): Ref => ({ nodeId: n.id, outputKey });
 
 /** A vec3 Mix / Add (the arithmetic nodes carry their vector type in params.outputType and on their sockets). */
-function vecMath(ctx: Ctx, type: 'mix' | 'add', role: string, a: Ref, b: Ref, t: Ref | null, note: string, list = ctx.nodes): GraphNode {
+export function vecMath(ctx: Ctx, type: 'mix' | 'add', role: string, a: Ref, b: Ref, t: Ref | null, note: string, list = ctx.nodes): GraphNode {
   const n = mk(ctx, type, role, { outputType: 'vec3' }, type === 'mix' ? { a, b, t } : { a, b }, note, list);
   for (const k of ['a', 'b']) n.inputs[k] = { ...n.inputs[k], type: 'vec3' };
   for (const k of Object.keys(n.outputs)) n.outputs[k] = { ...n.outputs[k], type: 'vec3' };
   return n;
 }
 
-type ExprInput = { name: string; type: 'float' | 'vec3'; from?: Ref; slider?: { value: number; min: number; max: number } };
+export type ExprInput = { name: string; type: 'float' | 'vec3'; from?: Ref; slider?: { value: number; min: number; max: number } };
 
 /** An Expression Block with typed inputs (wired, or a float slider) and a vec3 (or float) result. */
-function exprBlock(ctx: Ctx, role: string, label: string, inputs: ExprInput[], result: string, note: string, list = ctx.nodes, outputType: 'vec3' | 'float' = 'vec3'): GraphNode {
+export function exprBlock(ctx: Ctx, role: string, label: string, inputs: ExprInput[], result: string, note: string, list = ctx.nodes, outputType: 'vec3' | 'float' = 'vec3'): GraphNode {
   const node: GraphNode = {
     id: ctx.idFor(role), type: 'exprNode', position: { x: 0, y: 0 },
     inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type, label: i.name, ...(i.from ? { connection: { ...i.from } } : {}) }])),
@@ -395,7 +395,7 @@ function cardHeight(n: GraphNode): number {
 }
 
 /** Columns by data flow, each column in the order the nodes were made. */
-function tidy(nodes: GraphNode[], x0: number, y0: number) {
+export function tidy(nodes: GraphNode[], x0: number, y0: number) {
   const order = new Map(nodes.map((n, i) => [n.id, i]));
   const at = layoutByRank(nodes, { startX: x0, startY: y0, colW: 440, gap: 40, heightOf: cardHeight, order: (a, b) => order.get(a.id)! - order.get(b.id)! });
   for (const n of nodes) n.position = at.get(n.id) ?? n.position;
