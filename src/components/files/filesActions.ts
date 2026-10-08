@@ -59,7 +59,7 @@ export function syncApp(keys: string[]): void {
         },
       }));
     }
-    // The image model's setting (docs/taste.md "How things look") is read once into its store.
+    // The image model's setting (docs/image-model.md) is read once into its store.
     if (any(k => k === 'shader-studio:settings:useImageModel' || k === 'shader-studio:settings:imageModelDownloaded')) {
       void import('../../imageModel/client').then(({ refreshImageModelSettings }) => refreshImageModelSettings());
     }

@@ -1,5 +1,5 @@
 /**
- * config.ts — which image+text model Playfield runs on this device (docs/taste.md "How things look").
+ * config.ts — which image+text model Playfield runs on this device (docs/image-model.md).
  *
  * MobileCLIP-S0 (Apple), in the ONNX export Transformers.js reads (Xenova/mobileclip_s0, pinned to a
  * revision). The vision tower runs in fp16: its int8 export ranks colours wrongly (a red picture scored
@@ -12,7 +12,7 @@
 export interface ModelFile { path: string; bytes: number }
 
 export const IMAGE_MODEL = {
-  /** Stored with the taste model's look (with the projection's version), so a change of model resets only the look. */
+  /** A short id for this model. */
   id: 'mobileclip-s0',
   name: 'MobileCLIP-S0',
   repo: 'Xenova/mobileclip_s0',
@@ -30,7 +30,7 @@ export const IMAGE_MODEL = {
     { path: 'onnx/vision_model_fp16.onnx', bytes: 22876479 },
     { path: 'onnx/text_model_quantized.onnx', bytes: 42799238 },
   ] as ModelFile[],
-  licence: 'Apple sample-code licence as shipped with the ONNX export (see docs/taste.md for the upstream weights terms)',
+  licence: 'Apple sample-code licence as shipped with the ONNX export (see docs/image-model.md)',
 } as const;
 
 /** Shipped with the desktop bundle beside the model (the licence notice its redistribution needs); never fetched by the app. */

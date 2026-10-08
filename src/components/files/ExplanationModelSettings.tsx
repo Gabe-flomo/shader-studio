@@ -4,15 +4,21 @@
  * with progress, and a way to remove it. Nothing downloads until the button is pressed; nothing is sent
  * anywhere once it has.
  */
+import type { ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
-import { fontFamily } from '../../theme/tokens';
+import { alpha, fontFamily } from '../../theme/tokens';
 import { Button } from '../ui/Button';
 import { Toggle } from '../ui/Choice';
 import { askConfirm } from '../ui/dialogStore';
-import { Pill } from '../taste/tasteUi';
 import { EXPLAIN_MODEL, downloadBytes, formatBytes } from '../../explainModel/config';
 import { downloadExplainModel, ensureExplainModel, explainModelUsable, removeExplainModel, setExplainModelEnabled, useExplainModel } from '../../explainModel/client';
 import { cardStyle } from './fileUiShared';
+
+function Pill({ children, tone = 'muted', title }: { children: ReactNode; tone?: 'muted' | 'good' | 'bad' | 'accent'; title?: string }) {
+  const tk = useTokens();
+  const c = tone === 'good' ? tk.status.success : tone === 'bad' ? tk.status.danger : tone === 'accent' ? tk.accent.base : tk.text.muted;
+  return <span title={title} style={{ display: 'inline-flex', alignItems: 'center', font: `500 11px ${fontFamily.ui}`, padding: '2px 8px', borderRadius: 999, background: alpha(c, 0.1), color: c, whiteSpace: 'nowrap' }}>{children}</span>;
+}
 
 export function ExplanationModelSettings() {
   const tk = useTokens();

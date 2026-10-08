@@ -11,6 +11,7 @@ import { measureNodeCosts, type NodeCostReport } from '../../lib/nodeCost';
 import { recompileTriggers } from '../../lib/recompileTriggers';
 import type { PassProgram } from '../../compiler/types';
 import { programTintColour } from '../../lib/programTints';
+import { HintMark } from '../builders/BuilderHelp';
 
 const SCALE_MARK: Record<number, string> = { 0.5: ' (½)', 0.25: ' (¼)', 0.125: ' (⅛)' };
 
@@ -20,7 +21,13 @@ const SCALE_MARK: Record<number, string> = { 0.5: ' (½)', 0.25: ' (¼)', 0.125:
  * colour. Null for a pass no longer in the graph (its timer's last average lingers).
  */
 function gpuRow(name: string, passes: readonly PassProgram[] | null): { label: string; sub: string; tint: string | null } | null {
-  if (name === 'main') return { label: passes?.length ? 'Picture' : 'Shader', sub: 'GPU', tint: null };
+  // 'main' is an ordinary frame's whole picture span (isolated frames split it into the rows below).
+  if (name === 'main') return { label: 'Picture + copy', sub: 'GPU', tint: null };
+  if (name === 'shader') return { label: passes?.length ? 'Picture' : 'Shader', sub: 'GPU', tint: null };
+  if (name === 'echo') return { label: 'Echo copies', sub: 'GPU', tint: null };
+  if (name === 'present') return { label: 'Copy to screen', sub: 'GPU', tint: null };
+  if (name === 'probes') return { label: 'Probe draws', sub: 'GPU', tint: null };
+  if (name === 'background') return { label: 'Background graphs', sub: 'GPU', tint: null };
   if (name === 'particles') return { label: 'Particles', sub: 'GPU', tint: null };
   if (name.startsWith('pass:')) {
     const i = passes ? passes.findIndex(p => p.slug === name.slice(5)) : -1;
@@ -36,6 +43,13 @@ function gpuRow(name: string, passes: readonly PassProgram[] | null): { label: s
 const BUDGET_MS = 1000 / 60;
 
 const fmt = (ms: number | null, digits = 1) => (ms === null ? '—' : ms.toFixed(digits));
+/** Small times keep their digits: 0.05 ms, not 0.1. */
+const fmtMs = (ms: number | null) => (ms === null ? '—' : ms.toFixed(ms < 1 ? 2 : 1));
+
+const FLOOR_TIP = 'The reference draw is one 64×64 constant-colour draw timed the same way as the shader. On a Mac, Chrome (ANGLE Metal) reads 0.1 to 0.5 ms for it even when idle, and also counts earlier GPU work in the same frame, so tiny shader times are inflated by about that much. Much more than that means the GPU is clocked down or busy with another app.';
+
+/** The Mac caveat, behind the "?" next to the shader's number. */
+const ISOLATION_TIP = 'On a Mac, Chrome\'s GPU timer also counts GPU work queued earlier in the same frame, so a timer around one draw can read the whole frame. Twice a second (and on every still frame) Playfield flushes that work first and times the shader on its own: that is the Shader number. Frame GPU work is everything the frame did.';
 
 function usePerfSnapshot(): PerfSnapshot {
   const [snap, setSnap] = useState(getPerfSnapshot);
@@ -91,11 +105,14 @@ function PlaySection({ section, caps, note }: { section: React.CSSProperties; ca
   );
 }
 
-/** Live "4.2 ms" for the toolbar button; GPU time when available, CPU frame time otherwise. */
+/**
+ * Live "0.05 ms" for the toolbar button: the shader on its own (isolated GPU samples) when the
+ * timer works, else the frame's GPU work, else CPU frame time.
+ */
 export function PerfBadge() {
   const snap = usePerfSnapshot();
-  const ms = snap.gpuTimer === 'supported' ? snap.gpu.avg : snap.cpu.avg;
-  return <span style={{ font: `600 11px ${fontFamily.mono}`, minWidth: 46, textAlign: 'right' }}>{ms === null ? 'perf' : `${fmt(ms)} ms`}</span>;
+  const ms = snap.gpuTimer === 'supported' ? (snap.shader.ms ?? snap.gpu.avg) : snap.cpu.avg;
+  return <span style={{ font: `600 11px ${fontFamily.mono}`, minWidth: 46, textAlign: 'right' }}>{ms === null ? 'perf' : `${fmtMs(ms)} ms`}</span>;
 }
 
 /** Frame-time history with the 60 fps budget line, drawn at device resolution. */
@@ -159,7 +176,10 @@ export function PerfPanel({ onClose }: { onClose: () => void }) {
   const shape = useMemo(() => shaderShape(fragmentShader ?? ''), [fragmentShader]);
   const triggers = useMemo(() => recompileTriggers(nodes), [nodes]);
   const graphPasses = useNodeGraphStore(s => s.passes);
-  const gpuRows = snap.passes.flatMap(p => { const r = gpuRow(p.name, graphPasses); return r ? [{ ...r, name: p.name, avg: p.avg }] : []; });
+  const gpuRows = snap.passes
+    // The probes' span is there on every isolated frame; a row only when something was probed.
+    .filter(p => p.name !== 'probes' || p.avg >= 0.01 || (snap.readbacks ?? 0) > 0)
+    .flatMap(p => { const r = gpuRow(p.name, graphPasses); return r ? [{ ...r, name: p.name, avg: p.avg, isolated: p.isolated }] : []; });
 
   const gpuOk = snap.gpuTimer === 'supported';
   const frame = gpuOk ? snap.gpu : snap.cpu;
@@ -194,12 +214,24 @@ export function PerfPanel({ onClose }: { onClose: () => void }) {
   const note = { fontSize: 11.5, color: tk.text.muted, lineHeight: 1.45 };
   const btn = { border: 0, borderRadius: radius.md, padding: '6px 10px', cursor: 'pointer', font: `600 12px ${fontFamily.ui}`, background: tk.accent.base, color: '#fff' };
 
-  const kpis: [string, string, string][] = [
-    [gpuOk ? 'GPU frame' : 'Frame', `${fmt(frameAvg)} ms`, over ? `over the ${BUDGET_MS.toFixed(1)} ms budget` : `of ${BUDGET_MS.toFixed(1)} ms budget`],
-    ['Worst', `${fmt(frame.p95)} ms`, 'slowest 5% of frames'],
-    ['FPS', `${snap.fps || '—'}`, 'display-capped'],
-    ['Pixels', snap.width ? `${snap.width}×${snap.height}` : '—', `${((snap.width * snap.height) / 1e6).toFixed(2)} Mpx`],
-  ];
+  const shader = snap.shader;
+  const shaderSub = shader.ms === null ? 'waiting for a sample'
+    : shader.atFloor ? 'too small to time'
+    : `on its own · worst ${fmtMs(shader.p95)}`;
+  const kpis: [string, string, string, string?][] = gpuOk
+    ? [
+        ['Shader', `${fmtMs(shader.ms)} ms`, shaderSub, ISOLATION_TIP],
+        ['Frame GPU work (everything)', `${fmtMs(frameAvg)} ms`, `this frame's total · worst ${fmtMs(frame.p95)}`],
+        ['FPS', `${snap.fps || '—'}`, 'display-capped'],
+        ['Pixels', snap.width ? `${snap.width}×${snap.height}` : '—', `${((snap.width * snap.height) / 1e6).toFixed(2)} Mpx`],
+      ]
+    : [
+        ['Frame', `${fmt(frameAvg)} ms`, over ? `over the ${BUDGET_MS.toFixed(1)} ms budget` : `of ${BUDGET_MS.toFixed(1)} ms budget`],
+        ['Worst', `${fmt(frame.p95)} ms`, 'slowest 5% of frames'],
+        ['FPS', `${snap.fps || '—'}`, 'display-capped'],
+        ['Pixels', snap.width ? `${snap.width}×${snap.height}` : '—', `${((snap.width * snap.height) / 1e6).toFixed(2)} Mpx`],
+      ];
+  const segMax = Math.max(1e-3, ...gpuRows.map(q => q.avg), snap.probeMs ?? 0);
 
   return (
     <div style={{ color: tk.text.secondary }}>
@@ -211,19 +243,32 @@ export function PerfPanel({ onClose }: { onClose: () => void }) {
         <IconButton icon="close" label="Close" size="sm" tooltip={false} onClick={onClose} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderBottom: `1px solid ${tk.border.subtle}` }}>
-        {kpis.map(([l, v, s], i) => (
-          <div key={l} style={{ padding: '12px 12px', borderLeft: i ? `1px solid ${tk.border.subtle}` : 'none', minWidth: 0 }}>
-            <div style={{ fontSize: 11.5, color: tk.text.muted }}>{l}</div>
-            <div style={{ font: `650 18px ${fontFamily.ui}`, color: i === 0 && over ? tk.status.warning : tk.text.primary, whiteSpace: 'nowrap' }}>{v}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', borderBottom: `1px solid ${tk.border.subtle}` }}>
+        {kpis.map(([l, v, s, tip], i) => (
+          <div key={l} style={{ padding: '12px 12px', borderLeft: i % 2 ? `1px solid ${tk.border.subtle}` : 'none', borderTop: i > 1 ? `1px solid ${tk.border.subtle}` : 'none', minWidth: 0 }}>
+            <div style={{ fontSize: 11.5, color: tk.text.muted, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l}</span>
+              {tip && <HintMark text={tip} />}
+            </div>
+            <div style={{ font: `650 18px ${fontFamily.ui}`, color: i === 0 && (gpuOk ? (shader.ms ?? 0) > BUDGET_MS : over) ? tk.status.warning : tk.text.primary, whiteSpace: 'nowrap' }}>{v}</div>
             <div style={{ fontSize: 10.5, color: tk.text.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s}</div>
           </div>
         ))}
       </div>
 
       <div style={section}>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={caps}>Last 120 frames</span><span style={{ ...caps, textTransform: 'none' }}>dashed = 60 fps</span></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={caps}>{gpuOk ? 'Frame GPU work · last 120 frames' : 'Last 120 frames'}</span><span style={{ ...caps, textTransform: 'none' }}>dashed = 60 fps</span></div>
         <Sparkline values={frame.history} budget={BUDGET_MS} color={accent} warn={tk.status.danger} />
+        {gpuOk && snap.timer.baselineMs !== null && (
+          <div style={{ ...note, display: 'flex', alignItems: 'center', gap: 4, color: snap.timer.noisy ? tk.status.warning : tk.text.muted }}>
+            <span>
+              {snap.timer.noisy
+                ? `The GPU timer reads high right now: a tiny reference draw takes ${fmtMs(snap.timer.baselineMs)} ms, so the GPU is clocked down or busy and every number here is inflated. It isn't the shader.`
+                : `Timer floor ${fmtMs(snap.timer.baselineMs)} ms (a tiny reference draw): smaller numbers are noise.`}
+            </span>
+            <HintMark text={FLOOR_TIP} />
+          </div>
+        )}
         {!gpuOk && snap.gpuTimer === 'unsupported' && (
           <div style={note}>This browser has no GPU timer, so these are CPU frame times: the work of issuing the frame, not the GPU's. Chrome or Edge on desktop give real GPU numbers.</div>
         )}
@@ -233,13 +278,16 @@ export function PerfPanel({ onClose }: { onClose: () => void }) {
         <div style={section}>
           <div style={caps}>Where the frame goes</div>
           {gpuRows.map(p => (
-            <Bar key={p.name} label={p.label} value={p.avg} max={Math.max(frameAvg ?? 0, ...gpuRows.map(q => q.avg))} unit="ms" color={p.tint ?? tk.accent.base} sub={p.sub} />
+            <Bar key={p.name} label={p.label} value={p.avg} max={segMax} unit="ms" color={p.tint ?? tk.accent.base} sub={p.isolated ? p.sub : `${p.sub} · not isolated`} />
           ))}
+          {gpuRows.some(p => p.isolated) && (
+            <div style={note}>Each GPU row is timed on its own (isolated frames, twice a second). Probes and readouts run on every 6th frame.</div>
+          )}
           {gpuRows.some(p => p.name.startsWith('pass:')) && (
             <div style={note}>Each Pass draws its program into its texture first, at its Scale (½ is a quarter of the pixels). A slow pass with a wide Blur or Glow after it: set it to ½ or ¼.</div>
           )}
           {snap.probeMs !== null && (
-            <Bar label="Probes and readouts" value={snap.probeMs} max={Math.max(frameAvg ?? 0, snap.probeMs)} unit="ms" color={tk.text.faint} sub={`CPU · ${Math.round(snap.readbacks ?? 0)} readbacks`} />
+            <Bar label="Probes and readouts" value={snap.probeMs} max={segMax} unit="ms" color={tk.text.faint} sub={`CPU · ${Math.round(snap.readbacks ?? 0)} readbacks`} />
           )}
           {(snap.readbacks ?? 0) >= 3 && <div style={note}>Each readback waits for the GPU. Close eye previews and scopes you are not watching.</div>}
         </div>

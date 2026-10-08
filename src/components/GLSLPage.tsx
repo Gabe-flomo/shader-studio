@@ -1,6 +1,4 @@
 import { offerSetExport } from './playfile/exportMenus';
-import { RateButtons } from './taste/RateButtons';
-import { rateTargets } from './taste/tasteActions';
 import { recordActivity } from '../files/activity';
 import { redactSealedCode } from '../nodes/userNodes/userNodeRegistry';
 import { ProBadgeFor } from './account/ProSheet';
@@ -673,7 +671,6 @@ function SavedShaderCard({ shader, open, renaming, renameVal, onRenameChange, on
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{shader.name}</span>
           </span>
         )}
-        {!renaming && <span onDoubleClick={e => e.stopPropagation()}><RateButtons target={rateTargets.shader(shader.id, shader.name)} quiet={!hover} /></span>}
         {!renaming && (
           <IconButton
             icon="more" label="Shader actions" size="sm"

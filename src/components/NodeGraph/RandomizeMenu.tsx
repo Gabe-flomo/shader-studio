@@ -4,25 +4,26 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
-import { RulerSlider } from '../ui/RulerSlider';
+import { RandomizeOptionsPanel, TickRow } from '../surprise/RandomizeOptionsPanel';
 import { portalGuard } from '../ui/portalGuard';
 
 const MARGIN = 8;
 
 /**
- * Right-click on a node's die: which sliders Randomize may change. All are ticked by default;
- * unticked keys are stored on the node (params.__randExclude). Stays open while ticking; Esc or a
+ * Right-click on a node's die: the Randomize options (strength, colours, choices, Focus; shared with the
+ * canvas dice), whether the canvas dice skips this node, and which settings Randomize may change. All are
+ * ticked by default; unticked keys are locked and stored on the node (params.__randExclude). Stays open while ticking; Esc or a
  * click outside closes it.
  */
-export function RandomizeMenu({ x, y, params, excluded, onChange, amount, onAmountChange, onRandomize, onClose }: {
+export function RandomizeMenu({ x, y, params, excluded, onChange, skipped, onSkipChange, onRandomize, onClose }: {
   x: number;
   y: number;
   params: Array<{ key: string; label: string }>;
   excluded: string[];
   onChange: (excluded: string[]) => void;
-  /** Strength 0.01–1: how much of each slider's range a randomize may move it */
-  amount: number;
-  onAmountChange: (amount: number) => void;
+  /** Leave this whole node out of the canvas dice (Randomize all) */
+  skipped: boolean;
+  onSkipChange: (skipped: boolean) => void;
   onRandomize: () => void;
   onClose: () => void;
 }) {
@@ -56,7 +57,7 @@ export function RandomizeMenu({ x, y, params, excluded, onChange, amount, onAmou
       {...portalGuard}
       ref={ref}
       role="dialog"
-      aria-label="Sliders to randomize"
+      aria-label="Randomize options"
       data-captures-escape
       onMouseDown={e => e.stopPropagation()}
       style={{
@@ -72,14 +73,9 @@ export function RandomizeMenu({ x, y, params, excluded, onChange, amount, onAmou
           style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.accent.text, font: `600 11.5px ${fontFamily.ui}` }}
         >{allOn ? 'None' : 'All'}</button>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 8px 8px' }}
-        title="How far a randomize may move each slider: 100% picks anywhere in its range, 10% nudges it around its current value">
-        <span style={{ width: 58, flexShrink: 0, color: tk.text.secondary }}>Strength</span>
-        <RulerSlider value={Math.round(amount * 100)} min={1} max={100} step={1} integer hard defaultValue={100}
-          onChange={v => onAmountChange(Math.min(1, Math.max(0.01, v / 100)))} ariaLabel="Randomize strength (percent)" />
-        <span style={{ flexShrink: 0, color: tk.text.muted }}>%</span>
-      </div>
-      <div style={{ maxHeight: 300, overflowY: 'auto', borderTop: `1px solid ${tk.border.subtle}`, paddingTop: 4 }}>
+      <RandomizeOptionsPanel scope="node" />
+      <TickRow on={skipped} label="Skip this node in Randomize all" hint="The canvas dice leaves this node alone (its own dice still works)" onClick={() => onSkipChange(!skipped)} />
+      <div style={{ maxHeight: 300, overflowY: 'auto', borderTop: `1px solid ${tk.border.subtle}`, paddingTop: 4, marginTop: 4 }}>
         {params.map(p => {
           const on = !off.has(p.key);
           return (

@@ -39,8 +39,10 @@ import { rackKeyboard } from './lib/rackKeyboard'
 import { tape, useTape } from './lib/tape'
 import { audioEngine } from './lib/audioEngine'
 import { padGrid } from './lib/padGrid'
+import { dropRetiredExperimentData } from './lib/retiredExperiments'
 
 // The webcam turns off as soon as no layer or hand tracking uses it.
+dropRetiredExperimentData()
 installCameraKeeper()
 // Long presses on touch screens: no browser menu over the app's own.
 installTouchGuards()
