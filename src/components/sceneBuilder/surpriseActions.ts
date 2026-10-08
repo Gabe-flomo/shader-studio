@@ -37,14 +37,25 @@ export function sceneFrameStats(spec: SceneSpec, t = 0.5): FrameStats | null {
  * Surprise uses it too). Null without WebGL2; a shader that doesn't compile reads as blank.
  */
 export function programFrameStats(vs: string, fs: string, uniforms: Record<string, number | number[]>, t = 0.5): FrameStats | null {
+  const px = programPixels(vs, fs, uniforms, [t], W, H);
+  if (px === null) return null;
+  if (px === 'error') return { clipped: 0, black: 1, flat: true, mean: 0, spread: 0 };
+  return frameStats(px[0], W, H);
+}
+
+/**
+ * A compiled graph's shaders drawn at `w` × `h`, once per time in `times`, as RGBA bytes (one WebGL2
+ * context for all of them). Null without WebGL2; 'error' when the shader doesn't compile.
+ */
+export function programPixels(vs: string, fs: string, uniforms: Record<string, number | number[]>, times: number[], w = W, h = H): Uint8Array[] | 'error' | null {
   if (typeof document === 'undefined') return null;
   const canvas = document.createElement('canvas');
-  canvas.width = W; canvas.height = H;
+  canvas.width = w; canvas.height = h;
   const gl = canvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
   if (!gl) return null;
   try {
     const prog = makeProgram(gl, vs, fs);
-    if (typeof prog === 'string') return { clipped: 0, black: 1, flat: true, mean: 0, spread: 0 };
+    if (typeof prog === 'string') return 'error';
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 0, 0, 0, 1, -1, 0, 1, 0, -1, 1, 0, 0, 1, 1, 1, 0, 1, 1]), gl.STATIC_DRAW);
@@ -62,14 +73,18 @@ export function programFrameStats(vs: string, fs: string, uniforms: Record<strin
       else if (v.length === 3) gl.uniform3f(loc, v[0], v[1], v[2]);
       else if (v.length === 4) gl.uniform4f(loc, v[0], v[1], v[2], v[3]);
     }
-    gl.uniform2f(gl.getUniformLocation(prog, 'u_resolution'), W, H);
-    gl.uniform1f(gl.getUniformLocation(prog, 'u_time'), t);
-    gl.viewport(0, 0, W, H);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    const px = new Uint8Array(W * H * 4);
-    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    gl.uniform2f(gl.getUniformLocation(prog, 'u_resolution'), w, h);
+    gl.viewport(0, 0, w, h);
+    const out: Uint8Array[] = [];
+    for (const t of times) {
+      gl.uniform1f(gl.getUniformLocation(prog, 'u_time'), t);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      const px = new Uint8Array(w * h * 4);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      out.push(px);
+    }
     gl.deleteProgram(prog); gl.deleteBuffer(buf); gl.deleteVertexArray(vao);
-    return frameStats(px, W, H);
+    return out;
   } catch {
     return null;
   } finally {

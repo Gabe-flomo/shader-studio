@@ -51,7 +51,9 @@ import { barAssist } from '../../lang/barAssist';
 import { wordKindFor } from '../../lang/highlight';
 import { freshSeed } from '../../lang/random';
 import { readSurpriseCommand, surpriseLine } from '../../lang/surprise';
-import { inspiredSurprise } from '../surprise/inspiredAction';
+import { cancelSurprise, keepSurprise, startSurprise, stepSurprise } from '../surprise/inspiredAction';
+import { SurpriseStrip, DeepToggle } from '../surprise/SurpriseStrip';
+import { useSurpriseCarousel } from '../surprise/inspiredAction';
 import { normaliseEnd, strength } from '../../suggestions/usage';
 import { historyAt, pushHistory, readHistory } from '../../suggestions/doBarHistory';
 import type { Assist } from '../../lang/complete';
@@ -92,7 +94,12 @@ class DoBarBoundary extends Component<{ children: ReactNode }, { error: Error | 
 function DoBarCrashed({ message }: { message: string }) {
   const tk = useTokens();
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); closeDoBar(); } };
+    const onKey = (e: KeyboardEvent) => {
+      // Escape (or ⌘Z) while Surprise candidates are showing: the original graph back.
+      const carousel = useSurpriseCarousel.getState().open;
+      if (carousel && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.stopPropagation(); cancelSurprise(); return; }
+      if (e.key === 'Escape') { e.stopPropagation(); if (carousel) cancelSurprise(); closeDoBar(); }
+    };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, []);
@@ -187,10 +194,18 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
 
   useEffect(() => { setTimeout(() => inputRef.current?.focus(), 0); }, []);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); closeDoBar(); } };
+    const onKey = (e: KeyboardEvent) => {
+      // Escape (or ⌘Z) while Surprise candidates are showing: the original graph back.
+      const carousel = useSurpriseCarousel.getState().open;
+      if (carousel && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.stopPropagation(); cancelSurprise(); return; }
+      if (e.key === 'Escape') { e.stopPropagation(); if (carousel) cancelSurprise(); closeDoBar(); }
+    };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, []);
+  // Closing the bar any other way keeps the candidate on screen.
+  useEffect(() => () => { if (useSurpriseCarousel.getState().open) keepSurprise(); }, []);
+  const carouselOpen = useSurpriseCarousel(s => s.open);
 
   // A builder phrase ("new 3d scene", "edit the rules", "show the recipe") is the whole sentence, read first (builders/doBuilders.ts).
   const rootNodes = useNodeGraphStore(s => s.nodes);
@@ -322,7 +337,8 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   };
   const run = () => {
     if (surpriseMade) { setText(surpriseMade.line); setCaret(surpriseMade.line.length); return; }
-    if (surpriseInspired) { pushHistory(text); closeDoBar(); void inspiredSurprise({ seed: surpriseInspired.seed }); return; }
+    if (surpriseInspired) { pushHistory(text); setText(''); setCaret(0); void startSurprise({ seed: surpriseInspired.seed }); return; }
+    if (carouselOpen && !text.trim()) { keepSurprise(); closeDoBar(); return; }
     if (otherDialect) { runOther(otherDialect); return; }
     if (builder) {
       if (!builder.action) return;
@@ -373,6 +389,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
         background: tk.bg.panel, color: tk.text.primary, border: `1px solid ${tk.border.default}`, borderRadius: radius.lg, boxShadow: tk.shadow.popover,
         font: `13px ${fontFamily.ui}`, overflow: 'hidden', maxHeight: 'calc(100vh - 200px)', display: 'flex', flexDirection: 'column',
       }}>
+      <SurpriseStrip />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 8px 8px 12px' }}>
         <Icon name="edit" size={15} style={{ color: tk.accent.base }} />
         <input
@@ -384,6 +401,8 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
             // Tab takes a suggestion, Enter still runs the phrase.
             if (e.key !== 'Enter' && ta.onKeyDown(e)) return;
             if (e.key === 'Enter') { e.preventDefault(); run(); }
+            // ← / → step through Surprise candidates while the line is empty.
+            if (carouselOpen && !text && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); void stepSurprise(e.key === 'ArrowLeft' ? -1 : 1); return; }
             // ↑ / ↓ walk what you typed before (history keeps the words you typed) when no list is open.
             if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !fallback.length) {
               const list = readHistory();
@@ -401,8 +420,9 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
           data-do-input
           style={{ flex: 1, minWidth: 0, border: 0, outline: 'none', background: 'transparent', color: tk.text.primary, font: `14px ${fontFamily.ui}` }}
         />
-        <IconButton icon="dice" size="sm" label="Surprise me: a new graph inspired by 2–3 of your graphs and the examples (replaces this one; Undo brings it back). Type “surprise me large 3d” for a random line instead" data-do-surprise
-          onClick={() => { closeDoBar(); void inspiredSurprise(); }} />
+        <IconButton icon="dice" size="sm" label="Surprise me: new graphs inspired by 2–3 of your graphs and the examples, to step through with ‹ ›. Enter keeps one (it replaces this graph; Undo brings it back), Escape puts this graph back" data-do-surprise
+          onClick={() => { void startSurprise(); requestAnimationFrame(() => inputRef.current?.focus()); }} />
+        <DeepToggle />
         <IconButton icon="info" size="sm" label="Commands: every verb, with examples to try" onClick={() => { closeDoBar(); openCommandsRef(); }} data-do-help />
         <IconButton icon="code" size="sm" active={panel === 'script'} label="Show as commands: this graph as Do… lines" data-do-script onClick={() => setPanel(p => (p === 'script' ? 'none' : 'script'))} />
         <IconButton icon="star" size="sm" active={panel === 'taught'} label="Your taught phrases" onClick={() => setPanel(p => (p === 'taught' ? 'none' : 'taught'))} />
@@ -433,7 +453,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
         {/* "surprise me": an inspired graph, made on Enter */}
         {surpriseInspired && section('Enter makes it', (
           <span style={muted} data-do-surprise-inspired>
-            A new graph inspired by 2–3 of your graphs, GLSL and the examples{surpriseInspired.seed != null ? `, seed ${surpriseInspired.seed}` : ''}. It replaces this graph; Undo brings it back. Add “line” for a random line of the language instead.
+            New graphs inspired by 2–3 of your graphs, GLSL and the examples{surpriseInspired.seed != null ? `, starting with seed ${surpriseInspired.seed}` : ''}, to step through with ‹ ›. Enter keeps one (it replaces this graph); Escape puts this graph back. Add “line” for a random line of the language instead.
           </span>
         ))}
         {/* "surprise me": the line it made */}
@@ -560,11 +580,6 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
             ))}
           </div>
         ))}
-        {!text.trim() && !check && panel === 'none' && (
-          <div style={{ padding: '4px 12px 10px', ...muted }}>
-            Shapes, actions and values: “heart at the top left with rings”, “twist the space 0.5”, “glow falloff 4 red”. Edits too: “connect the noise to the output”, “switch the noise to voronoi”, “make the circle bigger”. Chain clauses with “then”: each builds on “it”. Builders: “new 3d scene”, “new grid rules”, “edit the rules”, “show the recipe”. The ⓘ lists every command.
-          </div>
-        )}
       </div>
     </div>,
     document.body,
