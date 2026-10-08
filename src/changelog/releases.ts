@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.95',
+    date: '2026-10-08',
+    title: '2D Scene Builder',
+    highlights: [
+      { area: 'Studio', text: 'The 2D Scene Builder: pick shapes from a gallery, bend the space (tile, kaleidoscope, warp…), add motion and rings of copies, set the look, then Build.', link: { kind: 'doc', path: 'docs/scene-builder-2d.md' } },
+      { area: 'Studio', text: 'It writes a real node graph with notes, previews live, has a Recipe tab, and right-click → Edit in 2D Scene Builder brings a built scene back to the form.' },
+      { area: 'Studio', text: 'New examples folder 2D: Scene Builder: a kaleidoscope of glowing rings, orbiting shapes, and a ring of rings.' },
+    ],
+  },
+  {
     id: '2026.10.94',
     date: '2026-10-08',
     title: 'Model step-by-steps',
