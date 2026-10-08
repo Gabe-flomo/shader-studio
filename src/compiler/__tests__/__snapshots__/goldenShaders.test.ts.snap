@@ -105,6 +105,27 @@ exports[`golden shaders: every Play example exports the same bundle > convertCir
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > curvedHyperbolic 1`] = `
+{
+  "bundle": "0fade8b77ea01707c35902c7d569:15809",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > curvedReverse 1`] = `
+{
+  "bundle": "1edd56d0a62ca50b00bc722496ba:16507",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > curvedSpherical 1`] = `
+{
+  "bundle": "0a1857f93eef3f077f8d1665a8b3:14752",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > dataCityBars 1`] = `
 {
   "bundle": "079fb7078e08a804593da67fd51b:4297",
@@ -2552,6 +2573,151 @@ exports[`golden shaders: every example compiles as it did > crtTv 1`] = `
     "u_p_palx0_value",
   ],
   "paramValues": "0c8938ef9689d404cdf2b7fd925f:638",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > curvedHyperbolic 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "06261633dc743d0eca9e5d14792d:12832",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "179e8730e5a0be04a38c8745e0f7:495",
+  "paramBindings": "1b65ecd110498d0ee775018fb8e2:1291",
+  "paramUniforms": [
+    "u_p_hallxofxcolumnsx0xsgxcylx0_height",
+    "u_p_hallxofxcolumnsx0xsgxcylx0_radius",
+    "u_p_hallxofxcolumnsx0xsgxplnx0_height",
+    "u_p_hallxofxcolumnsx0xsgxrepx0_cellX",
+    "u_p_hallxofxcolumnsx0xsgxrepx0_cellY",
+    "u_p_hallxofxcolumnsx0xsgxrepx0_cellZ",
+    "u_p_hallxofxcolumnsx0xsgxsdfunionx0_k",
+    "u_p_hallxofxcolumnsx0xsgxtrx0_tx",
+    "u_p_hallxofxcolumnsx0xsgxtrx0_ty",
+    "u_p_hallxofxcolumnsx0xsgxtrx0_tz",
+    "u_p_marchcamerx0_aperture",
+    "u_p_marchcamerx0_camAngle",
+    "u_p_marchcamerx0_camDist",
+    "u_p_marchcamerx0_camElevation",
+    "u_p_marchcamerx0_focalDist",
+    "u_p_marchcamerx0_fov",
+    "u_p_marchcamerx0_lensSpeed",
+    "u_p_marchcamerx0_rotSpeed",
+    "u_p_marchcamerx0_targetX",
+    "u_p_marchcamerx0_targetY",
+    "u_p_marchcamerx0_targetZ",
+    "u_p_marchloopgx0_albedo",
+    "u_p_marchloopgx0_bg",
+    "u_p_marchloopgx0_curvature",
+    "u_p_marchloopgx0_jitter",
+    "u_p_marchloopgx0_maxDist",
+    "u_p_marchloopgx0_stepScale",
+  ],
+  "paramValues": "1cb7550d37cc1d1c29492f420502:1007",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > curvedReverse 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0db89a73a8cfc81fda03672757c1:13159",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "076c4b342bfda90d238d4ce37093:510",
+  "paramBindings": "154b03173ba205104bac845d0f73:1499",
+  "paramUniforms": [
+    "u_p_boxesxonxaxfloorx0xsgxplnx0_height",
+    "u_p_boxesxonxaxfloorx0xsgxrepx0_cellX",
+    "u_p_boxesxonxaxfloorx0xsgxrepx0_cellY",
+    "u_p_boxesxonxaxfloorx0xsgxrepx0_cellZ",
+    "u_p_boxesxonxaxfloorx0xsgxroundedboxx0_radius",
+    "u_p_boxesxonxaxfloorx0xsgxroundedboxx0_sizeX",
+    "u_p_boxesxonxaxfloorx0xsgxroundedboxx0_sizeY",
+    "u_p_boxesxonxaxfloorx0xsgxroundedboxx0_sizeZ",
+    "u_p_boxesxonxaxfloorx0xsgxsdfunionx0_k",
+    "u_p_boxesxonxaxfloorx0xsgxtrx0_tx",
+    "u_p_boxesxonxaxfloorx0xsgxtrx0_ty",
+    "u_p_boxesxonxaxfloorx0xsgxtrx0_tz",
+    "u_p_marchcamerx0_aperture",
+    "u_p_marchcamerx0_camAngle",
+    "u_p_marchcamerx0_camDist",
+    "u_p_marchcamerx0_camElevation",
+    "u_p_marchcamerx0_focalDist",
+    "u_p_marchcamerx0_fov",
+    "u_p_marchcamerx0_lensSpeed",
+    "u_p_marchcamerx0_reverseDist",
+    "u_p_marchcamerx0_reverseStrength",
+    "u_p_marchcamerx0_rotSpeed",
+    "u_p_marchcamerx0_targetX",
+    "u_p_marchcamerx0_targetY",
+    "u_p_marchcamerx0_targetZ",
+    "u_p_marchloopgx0_albedo",
+    "u_p_marchloopgx0_bg",
+    "u_p_marchloopgx0_jitter",
+    "u_p_marchloopgx0_maxDist",
+    "u_p_marchloopgx0_stepScale",
+  ],
+  "paramValues": "1d42efa76641db0461d48e7eaac6:1179",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > curvedSpherical 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "045c2ff2d2a4c218610ebc368cda:12008",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0ee59c3b82e38d0cb8d7646fafa8:435",
+  "paramBindings": "07613524a4faf7135f9db5f19f92:1163",
+  "paramUniforms": [
+    "u_p_marchcamerx0_aperture",
+    "u_p_marchcamerx0_camAngle",
+    "u_p_marchcamerx0_camDist",
+    "u_p_marchcamerx0_camElevation",
+    "u_p_marchcamerx0_focalDist",
+    "u_p_marchcamerx0_fov",
+    "u_p_marchcamerx0_lensSpeed",
+    "u_p_marchcamerx0_rotSpeed",
+    "u_p_marchcamerx0_targetX",
+    "u_p_marchcamerx0_targetY",
+    "u_p_marchcamerx0_targetZ",
+    "u_p_marchloopgx0_albedo",
+    "u_p_marchloopgx0_bg",
+    "u_p_marchloopgx0_curvature",
+    "u_p_marchloopgx0_jitter",
+    "u_p_marchloopgx0_maxDist",
+    "u_p_marchloopgx0_stepScale",
+    "u_p_spherexlatticex0xsgxrepx0_cellX",
+    "u_p_spherexlatticex0xsgxrepx0_cellY",
+    "u_p_spherexlatticex0xsgxrepx0_cellZ",
+    "u_p_spherexlatticex0xsgxsphx0_radius",
+    "u_p_spherexlatticex0xsgxtrx0_tx",
+    "u_p_spherexlatticex0xsgxtrx0_ty",
+    "u_p_spherexlatticex0xsgxtrx0_tz",
+    "u_p_spherexradiusx0_value",
+  ],
+  "paramValues": "098fe16ed78bdd1be2b2b2f1f432:906",
   "passes": null,
   "success": true,
   "textureUniforms": {},
