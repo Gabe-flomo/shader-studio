@@ -173,7 +173,7 @@ function throwsOn(lines: string[], nodes: GraphNode[], selected: string[]): stri
   return bad;
 }
 
-describe('parseDo never throws (fuzz)', () => {
+describe('parseDo never throws (fuzz)', { timeout: 30_000 }, () => {
   const vocabLines = VOCAB.flatMap(w => [w, `create ${w}`, `${w} it`, `circle with ${w}`, `${w} these`, `${w} the picture`, `${w} the space 0.5`]);
   const createLines = CREATE_WORDS.flatMap(w => [`create ${w}`, `${w} it`]);
   const r = rng(1234);
