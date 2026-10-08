@@ -27,14 +27,23 @@ const W = 96, H = 64;
  */
 export function sceneFrameStats(spec: SceneSpec, t = 0.5): FrameStats | null {
   if (typeof document === 'undefined') return null;
+  const c = compileSpec(spec);
+  if (c.error) return { clipped: 0, black: 1, flat: true, mean: 0, spread: 0 };
+  return programFrameStats(c.vs, c.fs, c.uniforms, t);
+}
+
+/**
+ * The frame stats of a compiled graph's shaders drawn at 96 × 64, `t` seconds in (the Do bar's
+ * Surprise uses it too). Null without WebGL2; a shader that doesn't compile reads as blank.
+ */
+export function programFrameStats(vs: string, fs: string, uniforms: Record<string, number | number[]>, t = 0.5): FrameStats | null {
+  if (typeof document === 'undefined') return null;
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const gl = canvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
   if (!gl) return null;
   try {
-    const c = compileSpec(spec);
-    if (c.error) return { clipped: 0, black: 1, flat: true, mean: 0, spread: 0 };
-    const prog = makeProgram(gl, c.vs, c.fs);
+    const prog = makeProgram(gl, vs, fs);
     if (typeof prog === 'string') return { clipped: 0, black: 1, flat: true, mean: 0, spread: 0 };
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
@@ -45,7 +54,7 @@ export function sceneFrameStats(spec: SceneSpec, t = 0.5): FrameStats | null {
     if (posLoc >= 0) { gl.enableVertexAttribArray(posLoc); gl.vertexAttribPointer(posLoc, 3, gl.FLOAT, false, 20, 0); }
     if (uvLoc >= 0) { gl.enableVertexAttribArray(uvLoc); gl.vertexAttribPointer(uvLoc, 2, gl.FLOAT, false, 20, 12); }
     gl.useProgram(prog);
-    for (const [name, v] of Object.entries(c.uniforms)) {
+    for (const [name, v] of Object.entries(uniforms)) {
       const loc = gl.getUniformLocation(prog, name);
       if (!loc) continue;
       if (typeof v === 'number') gl.uniform1f(loc, v);

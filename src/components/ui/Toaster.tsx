@@ -58,6 +58,18 @@ function ToastCard({ toast }: { toast: Toast }) {
       <span style={{ color, marginTop: 1 }}><Icon name={icon} /></span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, color: tk.text.primary }}>{toast.title}</div>
+        {toast.links && toast.links.items.length > 0 && (
+          <div style={{ marginTop: 2 }} data-testid="toast-links">
+            {toast.links.lead}{' '}
+            {toast.links.items.map((l, i, all) => (
+              <span key={i}>
+                <button type="button" style={{ ...btn, fontWeight: 500, color: tk.accent.text, textDecoration: 'underline', textUnderlineOffset: 2 }}
+                  onClick={() => { l.onClick(); dismiss(toast.id); }}>{l.label}</button>
+                {i < all.length - 2 ? ', ' : i === all.length - 2 ? ' and ' : ''}
+              </span>
+            ))}
+          </div>
+        )}
         {toast.message && <div style={{ marginTop: 2 }}>{toast.message}</div>}
         {(toast.action || toast.secondary || toast.details) && (
           <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>

@@ -14,6 +14,7 @@ offers **Reroll** (undo it and try a new seed) and **Undo**.
 | Agent Rules header | **Surprise me** · seed · Reroll | A rule set, its trail's decay and its colours (see below). |
 | Node card | 🎲 Randomise | The card's free sliders, now inside their *interesting* ranges. |
 | Canvas toolbar | 🎲 **Randomise all settings in this graph** (right-click: type a seed) | Every free slider on the level on screen, from one seed. |
+| Do bar | 🎲, or type **surprise me** (`surprise me seed=42`) | A new graph *inspired by* 2–3 of your graphs, GLSL and the examples (below). It replaces the graph; Undo brings it back. `surprise me large 3d` or `random line` still makes a line of the language. |
 
 ## How a surprise stays interesting
 
@@ -52,6 +53,42 @@ offers **Reroll** (undo it and try a new seed) and **Undo**.
   Palette). About a third of the time, trail followers get a second species that follows or
   avoids the first one's trail. Every walker leaves trail, so a plain trail setup shows any kind.
   A 3D group gets 3D bands (sensors 0.1–0.2, speed 1–1.5).
+
+## Inspired by (the Do bar's Surprise)
+
+Each roll draws 2–3 **sources** and builds a new graph from their techniques and code
+(`src/lang/inspired`):
+
+- **Sources.** The bundled examples and Convert examples, plus your saved graphs, GLSL-page shaders
+  and Custom Function presets (read from storage; linked workspace files are not read, they load
+  asynchronously). Each source is cut into *fragments* (`fragments.ts`), one stage's worth each,
+  typed by what it takes and gives: space (vec2 → vec2), field (vec2 → float), light
+  (float → float), colour (float → vec3), post (vec3 → vec3), or a whole picture (vec2 → vec3).
+  Fragments come from pattern discovery's technique hits (`src/patterns`: the matched nodes, copied
+  with their settings and the constant nodes feeding them), from Expression Blocks and Custom
+  Functions (copied whole), and from GLSL functions lifted into a Custom Function (`lift.ts`: the
+  function, the helpers it calls, its `const`s and `#define`s, all renamed into a namespace such as
+  `ip3k9f_hash`, so two sources' `hash()` compile side by side; `iTime` becomes `u_time`; a function
+  that reads a texture or the frame is left).
+- **The plan** (`compose.ts` `planFor`): space → field → light → colour → post, or space → picture →
+  post. A stage is picked, then a technique family (each family as likely as another, and not one
+  this roll already used), then a technique, then a source using it, so a technique found in a
+  hundred examples is no likelier than a rare one. A required stage nobody filled takes Playfield's
+  own piece (Circle SDF, Palette).
+- **Wiring** (`realise`): uv → space → field → light → colour → post → Output. Conversions are
+  inserted where types differ, and a light stage lights the colour (colour × light). Every node gets
+  a note saying which source and technique it came from.
+- **Checks.** The real compiler, then (in the app) a GPU compile and the degenerate check at two
+  moments. A failure tries another seed, up to 10 times, then falls back to the old line generator.
+- **Steering.** The last five rolls are kept for the session. A fresh roll tries six seeds and
+  keeps the one whose plan repeats the recent sources and families least. Steering only chooses
+  the seed, so the same seed and the same sources always make the same graph.
+- **The toast** says "Inspired by A, B and C". Each name opens its source (an example or saved graph
+  with the pieces selected, or the shader in the GLSL page), and the toast offers Reroll and Undo.
+
+Over 50 seeds of the examples (`__tests__/inspired.test.ts`), all 50 compile and parse. They make
+42 distinct technique-family combinations, and the commonest family, colour mapping, is in 70% of
+them. The old line generator made 12 combinations, with colour mapping in all of them.
 
 ## The API (`src/lib/surprise`)
 
@@ -137,5 +174,7 @@ For `random(a..b)` written by the user, sample the user's range directly
 - `agentRules/storeActions.ts` `surpriseGroupRules`: rules, Trail field and palette in one undo step.
 - `src/nodes/randomizeParams.ts`: the card's Randomize, using the interesting ranges, and
   `randomizedGraph` for the whole graph level.
+- `src/lang/inspired/`: the Do bar's Surprise (`lift.ts`, `fragments.ts`, `compose.ts`), and
+  `src/components/surprise/inspiredAction.ts`: the source pool, GPU check, undo step and toast.
 - `src/components/surprise/`: `SurpriseBar` (the button, seed field and Reroll),
   `announceSurprise` (the toast), and the Grid, Agent and graph actions.
