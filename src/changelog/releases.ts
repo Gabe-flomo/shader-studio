@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.78',
+    date: '2026-10-08',
+    title: 'Randomise options',
+    highlights: [
+      { area: 'Studio', text: 'Randomise options on the canvas dice: strength, colours, choices, settings on a group face or inside groups, and a seed.' },
+      { area: 'Studio', text: 'Lock any slider (hover it for the lock) or skip a whole node, and Randomise never touches it. Locks are saved with the graph.' },
+      { area: 'Studio', text: 'Focus on what changes the picture: Randomise measures which settings change the image most and moves those more, leaving dead ones alone.' },
+    ],
+  },
+  {
     id: '2026.10.77',
     date: '2026-10-08',
     title: 'Honest GPU timing',
