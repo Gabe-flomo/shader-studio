@@ -6,6 +6,11 @@
  * few rolls, checks each try on the GPU (it compiles, and its frame isn't blank, blown out or flat), and
  * previews candidates in a carousel; the one kept replaces the graph as one undo step. The toast names
  * the sources; each name opens it.
+ *
+ * With the image model on (src/imageModel, docs/taste.md "How things look"), each candidate's picture is
+ * embedded: its look joins the taste features, Deep's novelty mixes in the distance to the last kept looks,
+ * near-identical candidates never sit side by side in the carousel, and the context box's words by look
+ * score candidates by image–text similarity. Off, it all works as before.
  */
 import { create } from 'zustand';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -14,7 +19,7 @@ import { loadExampleGraphs } from '../../store/exampleIndex';
 import { CONVERT_EXAMPLES } from '../../glslToGraph/examples';
 import { GLSL_KEY, isGraphEntry } from '../../files/inventory';
 import { compileGraph } from '../../compiler/graphCompiler';
-import { bestOf, degenerateReason, newSeed, scoreFrames, type Score, type Signature } from '../../lib/surprise';
+import { bestOf, degenerateReason, newSeed, scoreFrames, withNovelty, type Score, type Signature } from '../../lib/surprise';
 import { inspire, makePool, remember, steerSeed, type InspPool, type InspireResult, type Inspiration, type RollMemory } from '../../lang/inspired/compose';
 import type { InspSource } from '../../lang/inspired/fragments';
 import { programFrameStats, programPixels } from '../sceneBuilder/surpriseActions';
@@ -26,6 +31,10 @@ import { steeredModel, tasteModel, tasteSteering, updateTaste, wakeDormant } fro
 import { contentHash, type PresentItem } from '../../taste/portable';
 import type { SignalRef } from '../../taste/log';
 import { stopWatchingKeep, watchAfterKeep } from '../taste/tasteActions';
+import { cosine, DUPLICATE_COS, dropLookalikes, lookNovelty, textLookParts, textLookScore, type LookTerm } from '../../taste/look';
+import { ensureImageModel, imageModelUsable } from '../../imageModel/client';
+import { lookFrame, lookFrameOf, lookOf, lookTermsFor, thumbOf, withinMs, type Frame, type Look } from '../../imageModel/looks';
+import { rememberLook } from '../../imageModel/gallery';
 
 const SAVED_PREFIX = 'shader-studio:';
 const PRESET_CFP = 'shader-studio:cfp:';
@@ -119,10 +128,28 @@ async function openInspiration(i: Inspiration): Promise<void> {
 // graph back. Deep makes many candidates, draws each small at two moments, scores them (lib/surprise
 // score.ts) and keeps the best few, best first.
 
-export interface Candidate { res: InspireResult; score?: Score; /** Why-chips from the taste model ("your: exp falloff"). */ taste?: string[] }
+export interface Candidate {
+  res: InspireResult;
+  score?: Score;
+  /** Why-chips from the taste model ("your: exp falloff"). */
+  taste?: string[];
+  /** Its picture for the image model, and its look once embedded (null: none, or the model is off). */
+  frame?: Frame | null;
+  look?: Look | null;
+}
 
-/** What the taste model sees of a candidate (with Deep's metrics when it was drawn). */
-export const candidateFeatures = (c: Candidate): Features => compositionFeatures(c.res, c.score ? { metrics: c.score.metrics, signature: c.score.signature } : {});
+/** What the taste model sees of a candidate (with Deep's metrics when it was drawn, and its look when embedded). */
+export const candidateFeatures = (c: Candidate): Features => compositionFeatures(c.res, {
+  ...(c.score ? { metrics: c.score.metrics, signature: c.score.signature } : {}),
+  ...(c.look ? { embedding: c.look.proj } : {}),
+});
+
+/** Embed a candidate's picture (drawn now if it wasn't), in the background; resolves when it's done. */
+function attachLook(c: Candidate): Promise<Look | null> {
+  if (!imageModelUsable()) return Promise.resolve(null);
+  if (c.frame === undefined) c.frame = lookFrame(c.res.nodes);
+  return lookOf(c.frame ?? null).then(l => (c.look = l));
+}
 
 /** The candidates looked at in this carousel (for "kept over the ones looked at"). */
 const viewed = new Set<Candidate>();
@@ -151,6 +178,13 @@ export function setDeep(deep: boolean): void {
 
 /** The last few kept results' signatures, for novelty. */
 const keptSignatures: Signature[] = [];
+/** The last few kept results' looks (full embeddings), for novelty by look. */
+const keptLooks: Float32Array[] = [];
+const KEPT_LOOKS = 8;
+/** How long Deep waits for the image model after drawing (the first roll may still be loading it). */
+const LOOK_WAIT_MS = 4000;
+/** How much Deep's ranking moves for words by look (their score is about ±0.6 per word). */
+const WORDS_WEIGHT = 0.3;
 /** Bumped when a carousel closes, so background work for it stops. */
 let generation = 0;
 
@@ -179,13 +213,14 @@ function makeCandidate(pool: InspPool, seed?: number, tries = 10): InspireResult
   return inspire({ pool, seed: seed ?? fresh(), tries, check: gpuCheck, bias, ...(seed == null ? { seedFor: () => fresh() } : {}), nextId: () => useNodeGraphStore.getState().newNodeId() });
 }
 
-/** Draw a candidate small at two moments and score it (null without WebGL2). */
-function scoreCandidate(res: InspireResult): Score | undefined {
+/** Draw a candidate small at two moments and score it (null without WebGL2); with the model on, draw its picture for it too. */
+function scoreCandidate(res: InspireResult, withFrame = false): { score?: Score; frame?: Frame | null } {
   const r = compileGraph({ nodes: res.nodes });
-  if (!r.success) return undefined;
+  if (!r.success) return {};
   const px = programPixels(r.vertexShader, r.fragmentShader, r.paramUniforms, [0.7, 2.3], 64, 40);
-  if (!px || px === 'error') return undefined;
-  return scoreFrames(px.map(rgba => ({ rgba, w: 64, h: 40 })), keptSignatures);
+  if (!px || px === 'error') return {};
+  const score = scoreFrames(px.map(rgba => ({ rgba, w: 64, h: 40 })), keptSignatures);
+  return { score, ...(withFrame && !score.degenerate ? { frame: lookFrameOf(r.vertexShader, r.fragmentShader, r.paramUniforms) } : {}) };
 }
 
 let poolPromise: Promise<InspPool> | null = null;
@@ -209,6 +244,7 @@ export async function startSurprise(o: { seed?: number; deep?: boolean } = {}): 
     const items = [...useSurpriseCarousel.getState().items, c];
     useSurpriseCarousel.setState({ items, index: items.length - 1 });
     preview(c);
+    void attachLook(c);
   } catch (e) {
     console.error('[surprise]', e);
     toast.error('Surprise didn’t work', { details: e instanceof Error ? e.message : String(e) });
@@ -218,39 +254,76 @@ export async function startSurprise(o: { seed?: number; deep?: boolean } = {}): 
   if (useSurpriseCarousel.getState().items.length < 3) fillTo(pool, gen, 3);
 }
 
+/** Whether a candidate looks nearly the same as one already in the carousel (by the image model). */
+function lookalike(c: Candidate): boolean {
+  if (!c.look) return false;
+  return useSurpriseCarousel.getState().items.some(o => o !== c && o.look && cosine(o.look.full, c.look!.full) >= DUPLICATE_COS);
+}
+
 function fillTo(pool: InspPool, gen: number, n: number): void {
   useSurpriseCarousel.setState({ generating: true });
-  const step = () => {
+  let retries = 0;
+  const step = async () => {
     if (gen !== generation || !useSurpriseCarousel.getState().open) return;
     if (useSurpriseCarousel.getState().items.length >= n) { useSurpriseCarousel.setState({ generating: false }); return; }
     try {
       const c: Candidate = { res: makeCandidate(pool) };
+      // With the image model: one that looks nearly the same as one already here is made again (twice at most).
+      if (imageModelUsable()) await withinMs(attachLook(c), 3000);
       if (gen !== generation) return;
+      if (lookalike(c) && retries < 2) { retries++; later(() => { void step(); }); return; }
+      retries = 0;
       useSurpriseCarousel.setState(s => ({ items: [...s.items, c] }));
     } catch (e) { console.warn('[surprise] background candidate', e); useSurpriseCarousel.setState({ generating: false }); return; }
-    later(step);
+    later(() => { void step(); });
   };
-  later(step);
+  later(() => { void step(); });
 }
 
 /** Deep: up to 16 candidates in at most 6 seconds, each drawn and scored; the best five go into the carousel. */
 function runDeep(pool: InspPool, gen: number, total = 16, budgetMs = 6000): void {
   const t0 = Date.now();
   const scored: Candidate[] = [];
+  // The image model, when on: loaded now if it wasn't (the first time it's needed), each candidate's picture embedded as it's drawn.
+  const lookOn = imageModelUsable();
+  if (lookOn) void ensureImageModel();
+  const looks: Array<Promise<unknown>> = [];
+  const termsP = lookOn ? lookTermsFor(tasteSteering()) : null;
   useSurpriseCarousel.setState({ generating: true, progress: { done: 0, total } });
-  const finish = () => {
+  const finish = async () => {
     if (gen !== generation) return;
+    let terms: LookTerm[] = [], neutral: Float32Array | null = null;
+    if (lookOn) {
+      await withinMs(Promise.allSettled(looks), LOOK_WAIT_MS);
+      const t = termsP ? await withinMs(termsP, 1500) : null;
+      if (t) ({ terms, neutral } = t);
+      if (gen !== generation) return;
+    }
     // Banned features (your steering) never make the cut, when anything else is left.
     const banned = bans(tasteSteering());
-    const scoredOk = scored.filter((c): c is Candidate & { score: Score } => !!c.score);
+    let scoredOk = scored.filter((c): c is Candidate & { score: Score } => !!c.score);
+    // Looks only count when nearly every candidate has one (a half-loaded model mustn't favour the ones that
+    // finished); one that couldn't be drawn for the model just gets no look part.
+    const allLooks = lookOn && scoredOk.length > 0 && scoredOk.filter(c => c.look).length >= 0.8 * scoredOk.length;
+    if (allLooks) {
+      // Novelty: the histogram's, mixed half and half with the distance to the last few kept looks.
+      scoredOk = scoredOk.map(c => (!c.look ? c : { ...c, score: withNovelty(c.score, keptLooks.length ? 0.5 * c.score.metrics.novelty + 0.5 * lookNovelty(c.look!.full, keptLooks) : c.score.metrics.novelty, keptLooks.length > 0 || keptSignatures.length > 0) }));
+    }
     const allowed = scoredOk.filter(c => isAllowed(candidateFeatures(c), banned));
     const withScore = allowed.length ? allowed : scoredOk;
-    // Deep's score blended with taste (learned + steering), ranked with your exploration share (src/taste), the best five kept.
+    // Deep's score blended with taste (learned + steering, and how it looks), ranked with your exploration share (src/taste), the best five kept.
     const model = steeredModel();
+    const lean = tasteSteering().lean;
+    const words = (c: Candidate) => (allLooks && terms.length && c.look ? lean * textLookScore(c.look.full, terms, neutral) : 0);
     const rng = makeRng(newSeed());
-    const ranked = rankWithExploration(bestOf(withScore, withScore.length), (c, r) => blendScore(c.score.score, sampledScore(model, candidateFeatures(c), r), model), rng, tasteSteering().explore)
-      .map(x => ({ ...x.item, taste: x.explored ? ['exploring'] : tasteWhy(model, candidateFeatures(x.item)) }));
-    const best = withScore.length ? ranked.slice(0, 5) : scored.slice(0, 3);
+    // Words by look are what you asked for, measured on the picture itself, so they aren't scaled by how sure the
+    // learned model is (blendScore's confidence): they add up to about ±0.18 to Deep's 0…1 score.
+    const ranked = rankWithExploration(bestOf(withScore, withScore.length), (c, r) => blendScore(c.score.score, sampledScore(model, candidateFeatures(c), r), model) + WORDS_WEIGHT * words(c), rng, tasteSteering().explore)
+      .map(x => ({ ...x.item, taste: x.explored ? ['exploring'] : [...lookWhy(x.item, terms, neutral), ...tasteWhy(model, candidateFeatures(x.item))].slice(0, 3) }));
+    // No two near-identical looks in the carousel.
+    const distinct = allLooks ? dropLookalikes(ranked, c => c.look?.full).kept : ranked;
+    const best = withScore.length ? distinct.slice(0, 5) : scored.slice(0, 3);
+    lastDeep = { ranked: distinct.map(c => ({ seed: c.res.seed, deep: c.score.score, words: words(c), look: c.look ?? null, taste: c.taste ?? [] })), terms: terms.map(t => t.text) };
     const items = [...useSurpriseCarousel.getState().items, ...best];
     useSurpriseCarousel.setState({ items, index: Math.max(0, items.length - best.length), generating: false, progress: null });
     if (items.length) preview(items[useSurpriseCarousel.getState().index]);
@@ -258,15 +331,30 @@ function runDeep(pool: InspPool, gen: number, total = 16, budgetMs = 6000): void
   };
   const step = () => {
     if (gen !== generation || !useSurpriseCarousel.getState().open) return;
-    if (scored.length >= total || Date.now() - t0 > budgetMs) { finish(); return; }
+    if (scored.length >= total || Date.now() - t0 > budgetMs) { void finish(); return; }
     try {
       const res = makeCandidate(pool, undefined, 4);
-      if (!res.fallback) scored.push({ res, score: scoreCandidate(res) });
+      if (!res.fallback) {
+        const { score, frame } = scoreCandidate(res, lookOn);
+        const c: Candidate = { res, score, ...(lookOn ? { frame: frame ?? null } : {}) };
+        scored.push(c);
+        if (lookOn && frame) looks.push(attachLook(c));
+      }
     } catch (e) { console.warn('[surprise] deep candidate', e); }
     useSurpriseCarousel.setState({ progress: { done: Math.min(total, scored.length), total } });
     later(step);
   };
   later(step);
+}
+
+/** The last Deep roll's ranking, for checking in dev (`window.__lastDeep`). */
+let lastDeep: { ranked: Array<{ seed: number; deep: number; words: number; look: Look | null; taste: string[] }>; terms: string[] } | null = null;
+if (import.meta.env.DEV && typeof window !== 'undefined') Object.defineProperty(window, '__lastDeep', { get: () => lastDeep, configurable: true });
+
+/** Why-chips by look: the word it matches best ("looks neon"). */
+function lookWhy(c: Candidate, terms: readonly LookTerm[], neutral: Float32Array | null): string[] {
+  if (!c.look || !terms.length) return [];
+  return textLookParts(c.look.full, terms.filter(t => t.sign > 0), neutral).filter(p => p.d > 0.012).sort((a, b) => b.d - a.d).slice(0, 1).map(p => `looks ${p.text}`);
 }
 
 /** ‹ or ›: the candidate before or after; past the end makes another. */
@@ -283,6 +371,7 @@ export async function stepSurprise(dir: -1 | 1): Promise<void> {
   const items = [...useSurpriseCarousel.getState().items, c];
   useSurpriseCarousel.setState({ items, index: items.length - 1 });
   preview(c);
+  void attachLook(c);
 }
 
 function close(): void {
@@ -320,8 +409,13 @@ export function keepSurprise(): InspireResult | null {
   close();
   const res = c.res;
   if (!res.fallback) writeHistory(remember(readHistory(), res));
-  const sig = c.score?.signature ?? scoreCandidate(res)?.signature;
+  const sig = c.score?.signature ?? scoreCandidate(res).score?.signature;
   if (sig) { keptSignatures.push(sig); if (keptSignatures.length > 5) keptSignatures.shift(); }
+  if (c.look) {
+    keptLooks.push(c.look.full); if (keptLooks.length > KEPT_LOOKS) keptLooks.shift();
+    const thumb = c.frame ? thumbOf(c.frame) : null;
+    if (thumb && !res.fallback) void rememberLook({ id: `surprise:${res.seed}`, proj: Array.from(c.look.proj), thumb, label: res.stages.map(x => x.what).join(' → ') || 'Surprise' });
+  }
   const after = useNodeGraphStore.getState().nodes;
   if (!res.fallback) watchAfterKeep(original, after, kf, surpriseRef(res));
   const skipped = res.rejected.length ? ` Skipped ${res.rejected.length} ${res.rejected.length === 1 ? 'try' : 'tries'}.` : '';

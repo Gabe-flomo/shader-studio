@@ -19,6 +19,7 @@ import { create } from 'zustand';
 import { emptyModel, TASTE_VERSION, type SignalKind, type TasteModel } from './model';
 import { appendLog, emptyLog, migrateLog, parseLog, stageDelta, weightDelta, type SignalLog, type SignalRef } from './log';
 import { defaultSteering, effectiveModel, parseSteering, type Steering } from './steering';
+import { parseLook } from './look';
 import {
   applyImport, combine, emptyDormant, emptyLayer, legacyAsExport, localAfter, makeExport, parseDormant, parseExport, parseLayer, reactivate,
   type Dormant, type Layer, type PresentItem,
@@ -35,8 +36,8 @@ export interface TasteFile { model: TasteModel; log: SignalLog; steering: Steeri
 
 /** The stored value's text. */
 export function serialiseTaste(m: TasteModel, extra: Partial<Omit<TasteFile, 'model'>> = {}): string {
-  const { steered: _s, ...model } = m;
-  void _s;
+  const { steered: _s, lookScale: _l, ...model } = m;
+  void _s; void _l;
   return JSON.stringify({
     format: FORMAT, version: TASTE_VERSION, model, log: extra.log ?? migrateLog(m.w), steering: extra.steering ?? defaultSteering(),
     prior: extra.prior ?? emptyLayer(), dormant: extra.dormant ?? emptyDormant(),
@@ -68,6 +69,7 @@ export function parseTaste(text: string): ({ ok: true } & TasteFile & { /** It h
   const model: TasteModel = {
     ...emptyModel(), w: numbers(m.w), n: numbers(m.n), stages, ratings, signals: numbers(m.signals), opens: numbers(m.opens),
     ...(typeof m.embedder === 'string' ? { embedder: m.embedder } : {}),
+    ...(parseLook(m.look) ? { look: parseLook(m.look) } : {}),
   };
   // Version 1 had no log: what it learned is carried (traces say "from before the log").
   const log = version >= 2 && isRecord(v.log) ? parseLog(v.log) : migrateLog(model.w);
@@ -150,8 +152,11 @@ export function updateTaste(fn: (m: TasteModel) => TasteModel, ctx: LogContext =
   const delta = weightDelta(st0.local.w, loc.w);
   const sd = stageDelta(st0.local.stages, loc.stages);
   const kind = ctx.kind ?? KIND_ORDER.find(k => (next.signals[k] ?? 0) > (before.signals[k] ?? 0));
-  const log = kind && (Object.keys(delta).length || Object.keys(sd).length)
-    ? appendLog(st0.log, { at: now, kind, ref: ctx.ref, delta, st: sd })
+  // The look's added evidence (a new embedder starts from nothing, so all of it counts).
+  const lk0 = st0.local.look?.embedder === loc.look?.embedder ? st0.local.look : undefined;
+  const lk = { like: (loc.look?.likeW ?? 0) - (lk0?.likeW ?? 0), dislike: (loc.look?.dislikeW ?? 0) - (lk0?.dislikeW ?? 0) };
+  const log = kind && (Object.keys(delta).length || Object.keys(sd).length || lk.like || lk.dislike)
+    ? appendLog(st0.log, { at: now, kind, ref: ctx.ref, delta, st: sd, lk })
     // Not a lesson (an open counted, nothing learned), or one with no kind: its change is carried, so traces still add up.
     : Object.keys(delta).length ? { ...st0.log, carried: addInto(st0.log.carried, delta) } : st0.log;
   useTaste.setState({ local: loc, model: combine(st0.prior, loc), log });

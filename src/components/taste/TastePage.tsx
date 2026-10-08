@@ -6,6 +6,7 @@
  *   What it learned   likes and dislikes by kind, each with its trace; the stage table; favourite sources;
  *                 how sure; imported learning not on this install
  *   Signal log    every lesson, filterable by kind; an entry opens its item or seed
+ *   How things look   the local image model (status, toggle), the liked-look centroids, the most-liked looks
  *   Your steering the context box (parsed into chips), pins, and the dials — kept apart from what was learned
  *   Model internals   the raw weights, counts and constants, a "score this graph" tester, Export / Import / Reset
  */
@@ -25,6 +26,7 @@ import { TasteFeatureRow } from './TasteFeatureRow';
 import { TasteLogView } from './TasteLogView';
 import { TasteSteering } from './TasteSteering';
 import { TasteInternals } from './TasteInternals';
+import { TasteLooks, useImageModelLine } from './TasteLooks';
 import { canOpenRef, openRef } from './tasteNav';
 
 const STAGE_ORDER = ['space', 'field', 'picture', 'light', 'colour', 'post'];
@@ -54,6 +56,7 @@ export default function TastePage({ compact = false }: { compact?: boolean }) {
   const tops = stageTops(model, 1);
   const muted = { fontSize: 12, color: tk.text.muted, lineHeight: 1.5 } as const;
   const steerCount = Object.keys(sw).length;
+  const modelLine = useImageModelLine();
 
   return (
     <div data-taste-page style={{ display: 'flex', flexDirection: 'column', gap: compact ? 14 : 18, padding: compact ? '14px 12px 40px' : '22px 28px 60px', maxWidth: 980, width: '100%', boxSizing: 'border-box', margin: '0 auto' }}>
@@ -63,7 +66,7 @@ export default function TastePage({ compact = false }: { compact?: boolean }) {
         </span>
         <div style={{ flex: 1, minWidth: 200, display: 'flex', flexDirection: 'column', gap: 3 }}>
           <h1 style={{ margin: 0, font: `650 ${compact ? 17 : 20}px ${fontFamily.ui}`, letterSpacing: '-0.015em', color: tk.text.primary }}>Your taste</h1>
-          <span style={muted}>What Surprise, Deep and Evolve learned you like, where each preference came from, and your own steering on top. A small local model: nothing leaves this device, and no AI is asked anything.</span>
+          <span style={muted}>What Surprise, Deep and Evolve learned you like, where each preference came from, and your own steering on top. A small local model: nothing leaves this device, and no cloud AI is asked anything (the optional image model runs here too).</span>
         </div>
         <HowSure value={sure.confidence} word={sure.word} signals={sure.signals} />
       </div>
@@ -157,6 +160,10 @@ export default function TastePage({ compact = false }: { compact?: boolean }) {
         )}
       </Section>
 
+      <Section id="looks" title="How things look" icon="eye" summary={`${modelLine}${model.look ? ` · ${model.look.likeW.toFixed(1)} liked, ${model.look.dislikeW.toFixed(1)} disliked looks` : ''}`}>
+        <TasteLooks />
+      </Section>
+
       <Section id="log" title="Signal log" icon="history" summary={log.entries.length ? `${plural(log.entries.length, 'signal')} · ${Object.entries(counts).map(([k, n]) => `${n} ${k}`).join(', ')}` : 'empty'}>
         <TasteLogView />
       </Section>
@@ -166,7 +173,7 @@ export default function TastePage({ compact = false }: { compact?: boolean }) {
         <TasteSteering />
       </Section>
 
-      <Section id="internals" title="Model internals" icon="code" summary={`${plural(Object.keys(model.w).length, 'weight')} · version 2 · embedder ${model.embedder ?? 'none'}`}>
+      <Section id="internals" title="Model internals" icon="code" summary={`${plural(Object.keys(model.w).length, 'weight')} · version 2 · embedder ${model.look?.embedder ?? model.embedder ?? 'none'}`}>
         <TasteInternals compact={compact} />
       </Section>
     </div>

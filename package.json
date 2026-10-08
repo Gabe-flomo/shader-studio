@@ -20,6 +20,7 @@
     "report:language": "WRITE_REPORT=1 vitest run src/lang/__tests__/languagePressure.test.ts"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.1",
     "@mediapipe/tasks-vision": "^1.0.1",
     "@noble/ciphers": "^2.4.0",
     "@noble/ed25519": "^3.2.0",

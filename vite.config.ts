@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 /**
@@ -57,6 +57,43 @@ function mediapipeWasm(): Plugin {
   }
 }
 
+// The image model (docs/taste.md "How things look"). ONNX Runtime's WebAssembly is an asset of the
+// model's worker (src/imageModel/worker.ts imports it with ?url), so it's served by the app, never a CDN,
+// and only loaded when the model is first needed. The model's own files (tools/fetch-image-model.mjs, kept in
+// .cache/image-model/, not committed) are copied to <base>models/ only in a Tauri build, so the desktop
+// app works offline from its first launch; the web build downloads them from Hugging Face once instead.
+// In dev they're served too when present (try the desktop path with ?imageModel=local).
+const MODEL_CACHE = fileURLToPath(new URL('./.cache/image-model/', import.meta.url))
+function imageModelFiles(bundleModel: boolean): Plugin {
+  return {
+    name: 'image-model-files',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const url = (req.url ?? '').split('?')[0]
+        const model = /\/models\/(.+)$/.exec(url)
+        const file = model && !model[1].includes('..') ? MODEL_CACHE + decodeURIComponent(model[1]) : null
+        if (file && existsSync(file)) {
+          res.setHeader('Content-Type', file.endsWith('.json') ? 'application/json' : 'application/octet-stream')
+          res.end(readFileSync(file))
+          return
+        }
+        next()
+      })
+    },
+    async buildStart() {
+      if (!bundleModel) return
+      const tool = await import('./tools/fetch-image-model.mjs')
+      if (tool.missingFiles().length) await tool.fetchImageModel(s => this.info(s))
+    },
+    async generateBundle() {
+      if (!bundleModel) return
+      const tool = await import('./tools/fetch-image-model.mjs')
+      const { repo, files } = tool.modelConfig()
+      for (const f of files) this.emitFile({ type: 'asset', fileName: `models/${repo}/${f.path}`, source: readFileSync(`${tool.cacheDir(repo)}/${f.path}`) })
+    },
+  }
+}
+
 // https://vite.dev/config/
 // base switches automatically: '/' for Tauri desktop, '/shader-studio/' for GitHub Pages.
 // TAURI_ENV_PLATFORM is set by the Tauri CLI during both `tauri dev` and `tauri build`.
@@ -72,7 +109,7 @@ const usePolling = process.env.VITE_USE_POLLING === '1';
 const appVersion = (JSON.parse(readFileSync(fileURLToPath(new URL('./src-tauri/tauri.conf.json', import.meta.url)), 'utf8')) as { version?: string }).version ?? '0.0.0'
 
 export default defineConfig({
-  plugins: [react(), mediapipeWasm(), threeSlimSource()],
+  plugins: [react(), mediapipeWasm(), threeSlimSource(), imageModelFiles(isTauri)],
   define: { __APP_VERSION__: JSON.stringify(appVersion) },
   // The hand tracker's worker imports MediaPipe as an ES module.
   worker: { format: 'es' },

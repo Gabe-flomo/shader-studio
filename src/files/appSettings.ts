@@ -100,6 +100,8 @@ const KNOWN: Record<string, SettingInfo> = {
   'shader-studio:settings:warmupTracker:hands': S('Warm up hand tracking on open', 'devices'),
   'shader-studio:settings:warmupTracker:face': S('Warm up face tracking on open', 'devices'),
   'shader-studio:settings:warmupTracker:pose': S('Warm up body tracking on open', 'devices'),
+  'shader-studio:settings:useImageModel': S('Use the image model', 'devices', { hint: 'Back to the default: on once it’s downloaded (always on in the desktop app)' }),
+  'shader-studio:settings:imageModelDownloaded': S('Image model downloaded', 'devices', { hint: 'Forgets that it was downloaded; this browser may still keep the files' }),
   // Code editors
   'shader-studio:glsl-editor': S('GLSL page: the open code', 'editors'),
   'glsl-editor:open-shader': S('GLSL page: the open shader', 'editors'),

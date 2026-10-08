@@ -19,6 +19,8 @@ import { isPortable } from '../../taste/portable';
 import { LOG_CAP, logCounts } from '../../taste/log';
 import { Card, Pill } from './tasteUi';
 import { plural, signed } from './tasteWords';
+import { imageModelUsable } from '../../imageModel/client';
+import { textLookParts, textLookScore } from '../../taste/look';
 
 type SortKey = 'key' | 'kind' | 'profile' | 'local' | 'steer' | 'total' | 'n';
 
@@ -31,7 +33,7 @@ export function TasteInternals({ compact }: { compact: boolean }) {
   const steering = useTaste(s => s.steering);
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<{ by: SortKey; dir: 1 | -1 }>({ by: 'total', dir: -1 });
-  const [tested, setTested] = useState<{ f: Record<string, number>; at: number } | null>(null);
+  const [tested, setTested] = useState<{ f: Record<string, number>; at: number; lookText?: number; words?: Array<{ text: string; d: number }>; looking?: boolean } | null>(null);
   const [pending, setPending] = useState<{ name: string; text: string } | null>(null);
   const sw = useMemo(() => steeringWeights(steering), [steering]);
   const rows = useMemo(() => {
@@ -54,7 +56,24 @@ export function TasteInternals({ compact }: { compact: boolean }) {
   );
   const num = (v: number) => <td style={{ textAlign: 'right', padding: '3px 6px', font: `11.5px ${fontFamily.mono}`, color: v > 0 ? tk.status.success : v < 0 ? tk.status.danger : tk.text.faint }}>{v ? signed(v, 3) : '·'}</td>;
 
-  const breakdown = tested ? scoreBreakdown(model, steering, tested.f, 10) : null;
+  const breakdown = tested ? scoreBreakdown(model, steering, tested.f, 10, tested.lookText ?? 0) : null;
+  // The canvas graph scored: its features at once; with the image model on, its picture's look and the words by look follow.
+  const scoreCanvas = () => {
+    const nodes = useNodeGraphStore.getState().nodes;
+    const at = Date.now();
+    const usable = imageModelUsable();
+    setTested({ f: graphFeatures(nodes), at, looking: usable });
+    if (!usable) return;
+    void import('../../imageModel/looks').then(async L => {
+      const look = await L.graphLook(nodes);
+      const { terms, neutral } = await L.lookTermsFor(steering);
+      const lean = steering.lean;
+      setTested(t => (t && t.at === at ? {
+        f: graphFeatures(nodes, look ? { embedding: look.proj } : {}), at, looking: false,
+        lookText: look ? lean * textLookScore(look.full, terms, neutral) : 0, words: look ? textLookParts(look.full, terms, neutral) : [],
+      } : t));
+    });
+  };
   const layerScore = (w: Record<string, number>) => (tested ? Object.entries(tested.f).reduce((s, [k, x]) => s + (w[k] ?? 0) * x, 0) : 0);
 
   const download = (kind: 'profile' | 'everything') => {
@@ -98,7 +117,7 @@ export function TasteInternals({ compact }: { compact: boolean }) {
           <Pill>{plural(Object.keys(prior.w).length, 'imported weight')}</Pill>
           <Pill>{plural(Object.keys(sw).length, 'steering weight')}</Pill>
           <Pill>stored version {TASTE_VERSION}</Pill>
-          <Pill>embedder {model.embedder ?? 'none'}</Pill>
+          <Pill>embedder {model.look?.embedder ?? model.embedder ?? 'none'}</Pill>
         </div>
         <span style={muted}>
           Signals learned from: {Object.entries(model.signals).filter(([, n]) => n).map(([k, n]) => `${n} ${k}`).join(', ') || 'none'} · in the log: {Object.entries(counts).map(([k, n]) => `${n} ${k}`).join(', ') || 'none'} (cap {LOG_CAP}, {log.dropped} folded).
@@ -112,7 +131,7 @@ export function TasteInternals({ compact }: { compact: boolean }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ font: `650 12.5px ${fontFamily.ui}`, color: tk.text.primary }}>Score this graph</span>
           <span style={{ ...muted, flex: 1 }}>The canvas graph’s features and its score: imported + this install + your steering.</span>
-          <Button size="sm" onClick={() => setTested({ f: graphFeatures(useNodeGraphStore.getState().nodes), at: Date.now() })} data-taste-score>Score the canvas graph</Button>
+          <Button size="sm" onClick={scoreCanvas} data-taste-score>Score the canvas graph</Button>
         </div>
         {tested && breakdown && (
           <div data-taste-score-result style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -120,13 +139,20 @@ export function TasteInternals({ compact }: { compact: boolean }) {
               <Pill tone="accent">imported {signed(layerScore(prior.w), 3)}</Pill>
               <Pill tone="good">this install {signed(layerScore(local.w), 3)}</Pill>
               <Pill tone="warn">steering {signed(breakdown.steering, 3)}</Pill>
+              <span data-taste-score-look style={{ display: 'contents' }}>
+                {tested.looking ? <Pill>look: drawing…</Pill> : imageModelUsable() ? <>
+                  <Pill tone="accent" title="How close its picture is to the liked looks minus the disliked ones (image model)">look {signed(breakdown.look, 3)}</Pill>
+                  {tested.words?.length ? <Pill tone="warn" title={tested.words.map(w => `“${w.text}” ${signed(w.d, 3)} vs neutral`).join(' · ')}>words by look {signed(breakdown.lookText, 3)}</Pill> : null}
+                </> : <Pill title="Turn the image model on (How things look) to score the picture too">look: model off</Pill>}
+              </span>
               <Pill tone={breakdown.total >= 0 ? 'good' : 'bad'}>total {signed(breakdown.total, 3)}</Pill>
             </div>
             <span style={muted}>Top contributions: {breakdown.top.map(c => `${featureName(model, c.key)} ${signed(c.learned + c.steering, 3)}${c.steering ? ` (steering ${signed(c.steering, 2)})` : ''}`).join(' · ') || 'none'}</span>
             <details>
               <summary style={{ ...muted, cursor: 'pointer' }}>Feature vector ({Object.keys(tested.f).length})</summary>
               <div style={{ font: `11px/1.6 ${fontFamily.mono}`, color: tk.text.secondary, marginTop: 4 }}>
-                {Object.entries(tested.f).sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) => `${k}=${v.toFixed(2)}`).join('  ')}
+                {Object.entries(tested.f).filter(([k]) => !k.startsWith('emb:')).sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) => `${k}=${v.toFixed(2)}`).join('  ')}
+                {Object.keys(tested.f).some(k => k.startsWith('emb:')) && `  emb:0…${Object.keys(tested.f).filter(k => k.startsWith('emb:')).length - 1} (its look, projected)`}
               </div>
             </details>
           </div>

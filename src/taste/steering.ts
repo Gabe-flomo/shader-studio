@@ -10,7 +10,7 @@
  * source (bias.ts, compose.ts `planFor`). Pure.
  */
 import { TECHNIQUE_BY_ID } from '../patterns/catalogue';
-import { EXPLORE, type TasteModel } from './model';
+import { EXPLORE, lookPart, type TasteModel } from './model';
 import type { Features } from './features';
 
 export type Pin = 'boost' | 'avoid' | 'ban';
@@ -31,6 +31,11 @@ export interface Chip {
   flipped?: boolean;
   /** You removed it (it counts for nothing). */
   off?: boolean;
+  /**
+   * By look: words the image model scores (image–text similarity, look.ts `textLookScore`) instead of, or
+   * as well as, the vocabulary's features. Only made while the image model is on.
+   */
+  look?: string;
 }
 
 export interface Steering {
@@ -73,7 +78,14 @@ export function steeringWeights(s: Steering): Record<string, number> {
   return w;
 }
 
-export const hasSteering = (s: Steering): boolean => Object.keys(steeringWeights(s)).length > 0;
+/** Words the image model scores, with their sign (chips "by look" that aren't removed). */
+export function lookTerms(s: Steering): Array<{ text: string; sign: number }> {
+  const out: Array<{ text: string; sign: number }> = [];
+  for (const c of s.chips) { const sg = chipSign(c); if (c.look && sg && !out.some(t => t.text === c.look && t.sign === sg)) out.push({ text: c.look, sign: sg }); }
+  return out;
+}
+
+export const hasSteering = (s: Steering): boolean => Object.keys(steeringWeights(s)).length > 0 || lookTerms(s).length > 0;
 
 /** The features you banned. */
 export function bans(s: Steering): Set<string> {
@@ -106,32 +118,49 @@ export function isBannedChoice(banned: ReadonlySet<string>, stage: string, choic
  */
 export function effectiveModel(m: TasteModel, s: Steering): TasteModel {
   const sw = steeringWeights(s);
-  if (s.lean <= 0) return { ...m, w: {}, stages: {}, ratings: {}, steered: 0 };
-  if (!Object.keys(sw).length && s.lean === 1) return m;
+  if (s.lean <= 0) return { ...m, w: {}, stages: {}, ratings: {}, look: undefined, steered: 0 };
+  // Words by look count as steering too (they lean from the start); the text scoring itself is the caller's (it needs the model).
+  const steered = Object.keys(sw).length + lookTerms(s).length;
+  if (!steered && s.lean === 1) return m;
   const w: Record<string, number> = {};
   for (const k of new Set([...Object.keys(m.w), ...Object.keys(sw)])) {
     const v = s.lean * ((m.w[k] ?? 0) + (sw[k] ?? 0));
     if (v) w[k] = v;
   }
-  return { ...m, w, steered: Object.keys(sw).length };
+  return { ...m, w, steered, ...(s.lean !== 1 ? { lookScale: s.lean } : {}) };
 }
 
 export interface Contribution { key: string; x: number; learned: number; steering: number }
-export interface ScoreBreakdown { learned: number; steering: number; total: number; top: Contribution[] }
+export interface ScoreBreakdown {
+  /** The linear part learned (imported + this install). */
+  learned: number;
+  steering: number;
+  /** The look part: how close its picture is to the liked looks (0 without a picture or the model). */
+  look: number;
+  /** Words by look (image–text), when the caller scored them (`lookText`). */
+  lookText: number;
+  total: number;
+  top: Contribution[];
+}
 
-/** A graph's score, split into what was learned and what you steered, with its top contributing features. */
-export function scoreBreakdown(m: TasteModel, s: Steering, f: Features, k = 8): ScoreBreakdown {
+/**
+ * A graph's score, split into what was learned, what you steered and how it looks, with its top contributing
+ * features. `lookText` is the words-by-look part, scored by the caller (it needs the image model).
+ */
+export function scoreBreakdown(m: TasteModel, s: Steering, f: Features, k = 8, lookText = 0): ScoreBreakdown {
   const sw = steeringWeights(s);
   let learned = 0, steering = 0;
   const all: Contribution[] = [];
+  const look = lookPart(m, f);
   for (const key in f) {
+    if (key.startsWith('emb:')) continue;
     const x = f[key];
     const l = (m.w[key] ?? 0) * x, st = (sw[key] ?? 0) * x;
     learned += l; steering += st;
     if (l || st) all.push({ key, x, learned: l, steering: st });
   }
   all.sort((a, b) => Math.abs(b.learned + b.steering) - Math.abs(a.learned + a.steering) || a.key.localeCompare(b.key));
-  return { learned, steering, total: learned + steering, top: all.slice(0, k) };
+  return { learned, steering, look, lookText, total: learned + steering + look + lookText, top: all.slice(0, k) };
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -147,6 +176,7 @@ export function parseSteering(v: unknown): Steering {
     chips.push({
       id: c.id, phrase: String(c.phrase ?? ''), label: String(c.label ?? c.id), features: c.features.filter((x): x is string => typeof x === 'string'),
       sign: c.sign === -1 ? -1 : 1, ...(c.negated ? { negated: true } : {}), ...(c.flipped ? { flipped: true } : {}), ...(c.off ? { off: true } : {}),
+      ...(typeof c.look === 'string' && c.look ? { look: c.look } : {}),
     });
   }
   const pins: Record<string, Pin> = {};

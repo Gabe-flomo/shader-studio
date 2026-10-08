@@ -1,8 +1,9 @@
 # Your taste: a small local model of what you like
 
 Playfield learns which looks you like from what you pick, keep and rate. It uses that to lean Surprise,
-Deep and Evolve toward your style. It's small: a sparse linear score over hand-made features. It runs on
-your device, with no cloud AI and no network calls. The code is in `src/taste/`; the app side is in
+Deep and Evolve toward your style. It's small: a sparse linear score over hand-made features, plus an
+optional small image model that sees how candidates look (below). It runs on your device, with no cloud
+AI: the only network call is the image model's one-time download on the web. The code is in `src/taste/`; the app side is in
 `src/components/taste/` and `src/components/surprise/evolveAction.ts`.
 
 ## What it sees: the features (`features.ts`)
@@ -19,13 +20,14 @@ A graph becomes a sparse feature vector:
 | Palettes | `pal:dark`, `pal:vivid` | Palette and Stops Palette colours |
 | Sources | `src:example:neonGrid` | what a surprise was inspired by, or the rated item itself |
 | Image metrics | `img:colourful`, `look:dark` | Deep's cheap metrics (colourfulness, contrast, detail, motion, symmetry, novelty) and brightness, when the candidate was drawn |
+| Its look | `emb:0` … `emb:63` | the image model's embedding of its picture, projected to 64 dims (see "How things look"); never a linear weight |
 
 Long vectors are scaled down, so a big graph doesn't learn faster than a small one.
 
-**The seam for an image network.** `registerImageEmbedder({ id, dims, embed(frame) })` lets a later step
-add a small local image embedding, for example MobileNetV3-small via onnxruntime-web. Its vector would go
-in as `emb:<i>` features (`graphFeatures(nodes, { embedding })`). Nothing is registered and no dependency
-is added yet. The model stores the embedder's id, so a change of network can reset those weights.
+**The seam for an image network.** `registerImageEmbedder({ id, dims, embed(frame) })` (`look.ts`) is
+filled by the image model while it's on. Its projected vector goes in as `emb:<i>` features
+(`graphFeatures(nodes, { embedding })`). The look stores the embedder's id, so a change of model (or of
+the projection) resets only the look.
 
 ## How it learns (`model.ts`)
 
@@ -57,6 +59,94 @@ P(X ≻ Y) on held-out pairs is 0.74 after 3 picks, 0.81 after 5, 0.88 after 10 
 pairs are ranked right after 3 picks. With noisy picks (80% X), it still learns X. The exploration share
 measures 0.246, and the disliked style still comes first in about 13% of rankings.
 
+## How things look: the image model (`src/imageModel/`, `src/taste/look.ts`)
+
+**The model.** MobileCLIP-S0 (Apple), a small CLIP-style image + text model, in the ONNX export
+Transformers.js reads (`Xenova/mobileclip_s0`, pinned to a revision in `src/imageModel/config.ts`). The
+vision tower runs in fp16 (21.8 MB) and the text tower in int8 (40.8 MB); with the tokenizer it's 65 MB.
+The vision tower's int8 export is not used: it ranks colours wrongly (a red picture scored closer to
+"blue" than to "red"), while fp16 matches fp32 to three decimal places.
+
+**Where it runs.** In a Web Worker (`worker.ts`), on WebGPU when the adapter has `shader-f16`, else on
+WebAssembly (ONNX Runtime's WebAssembly is an asset of the app, never a CDN). It loads lazily, the first
+time something needs it (a Deep roll, a Surprise, Evolve, the Taste page's tester), never at app start.
+`embedImage(frame)` and `embedText(text)` return unit-length 512-d vectors, with small LRU caches keyed by
+a hash of the frame or by the text.
+
+- **Web:** downloaded once from Hugging Face, with a progress bar (How things look, or App settings →
+  Your taste → Image model), and kept by the browser (Transformers.js's Cache Storage). After that,
+  "Use the image model" is on by default.
+- **Desktop:** the files are bundled with the app (`dist/models/`, copied in by `vite.config.ts` in a
+  Tauri build; `tools/fetch-image-model.mjs` fetches them into `.cache/image-model/` the first time), so
+  it works offline from the first launch and never touches the network. It's on by default.
+- **Off** (or not loaded): everything works exactly as before. The taste model has no look, Deep and
+  Surprise use their histogram novelty, and the context box lists unknown words.
+
+Measured in the browser pane (Apple silicon): download + load 7.7 s the first time on WebGPU, 3.3 s from
+the cache, 0.75 s from the bundled files on WebAssembly; a picture takes about 50 ms on WebGPU and 160 ms
+on single-threaded WebAssembly (the first one about 0.8 s while shaders compile).
+
+**Into the taste model.** The 512 dense numbers aren't fed to the sparse linear model: they would swamp
+its few sparse features and learn slowly. Instead:
+
+- **A fixed projection.** Each vector is projected to 64 dims with a seeded Gaussian random projection
+  (the same matrix on every install, made from the seed rather than shipped; Johnson–Lindenstrauss keeps
+  cosines within about ±0.1) and normalised. It rides along as `emb:*` features; the linear learner, the
+  Thompson noise and the long-vector scaling all skip those keys.
+- **Centroids per layer.** Each layer (imported profile, this install) keeps weighted means of the liked
+  looks, the disliked looks and every look learned from (`seen`). A pick adds the winner to *liked* at the
+  pick's weight and the loser to *disliked* at half; ratings and implicit signals add at their own weight
+  (an undo dislikes). Layers add up weighted by evidence, like the weights.
+- **The score.** Centre on `seen` (shrunk towards 0 by 2 pseudo-signals, so one like already means
+  something), then
+
+      look(x) = c(n_L)·cos(x − m, L − m) − c(n_D)·cos(x − m, D − m),   c(n) = n / (n + 2)
+
+  and `score = w·x + look(x)` (`lookPart`, scaled by the lean like the weights). The log notes each
+  lesson's look evidence (`lk`) apart from the weight changes; the Signal log shows it as "look: liked
+  +0.5".
+
+**Words by look.** While the model is on, the context box sends words the vocabulary doesn't know
+("underwater", "stained glass", "city") and look words ("neon", "dark") to the image model too: a run of
+them is one phrase ("neon city"), punctuation ends it, and "no" turns it round. They show as chips marked
+**by look**; only what neither can use (one- and two-letter tokens, numbers) is listed as not understood.
+A candidate's picture is scored against each phrase by image–text similarity, measured against a neutral
+prompt so it's centred:
+
+    text(x) = Σ sign · 0.6 · tanh(20 · (x·t − x·t₀)),   t = "an abstract image of <phrase>", t₀ = "an abstract image"
+
+Deep adds 0.3 × that (× the lean) to a candidate's blended score. It isn't scaled by the learned model's
+confidence: it's what you asked for, measured on the picture. In the browser check, with "neon" in the
+context, the carousel's top five had a higher mean neon score than the rest in every roll (rank
+correlation 0.05–0.53 over 14–15 candidates, with exploration at 25%).
+
+**Novelty.** With looks, Deep's novelty is the histogram's mixed half and half with the distance to the
+last 8 kept looks (`lookNovelty`: 1 − the closest cosine, over 0.3). No two candidates closer than 0.96
+(cosine) go into the carousel (`dropLookalikes`); Surprise's background candidates are made again (twice
+at most) when one looks nearly the same as one already there. Looks only count in a Deep roll when at
+least 80% of its candidates have one (a model still loading mustn't favour the ones that finished).
+
+**Examples.** Once the model has loaded, the bundled examples' pictures are embedded in the background,
+one per idle moment (a hidden tab pauses it; about 130 ms each), and kept in IndexedDB with small
+thumbnails. Rating an example then carries its look.
+
+**On the Taste page,** **How things look** shows the model's status (on or off, loaded, size, backend,
+load and per-picture time), the setting (or the one-time download), the look centroids' evidence by
+layer, and the most-liked looks: kept surprises, Evolve picks and examples, ranked by their look score.
+**Score this graph** draws the canvas graph for the model and shows the look part and the words-by-look
+part apart from the learned and steering parts.
+
+**Portable.** Exported profiles carry each layer's projected centroids and their evidence
+(`profile.look`: `like`, `dislike`, `seen`, each 64 numbers, with `likeW`, `dislikeW`, `seenW` and the
+embedder id), never pictures. Import merges them by evidence, or replaces them.
+
+**Licence.** The ONNX export ships Apple's sample-code licence (it allows redistribution with the
+notice; the desktop bundle carries it as `models/Xenova/mobileclip_s0/LICENSE`). Apple's upstream
+repository (`apple/ml-mobileclip`) now lists its model weights under the Apple ML Research Model terms,
+which are for research only. Check which applies before shipping it in a paid build; `config.ts` is the one
+place to switch model (for example to an MIT-licensed TinyCLIP export), and the embedder id makes the
+switch reset only the look.
+
 ## Where it's used
 
 - **Surprise** (the Do bar's 🎲): the inspired generator leans on the model through `PlanBias`
@@ -69,7 +159,8 @@ measures 0.246, and the disliked style still comes first in about 13% of ranking
   A liked graph pulls its techniques in. Fresh seeds are steered by the plan's taste as well as by how
   little it repeats recent rolls. An empty model gives no lean at all, so the plans are the same as before.
 - **Deep**: candidates are ranked by Deep's score plus taste, with the taste part growing with confidence
-  (at most ~0.3), and with ~25% exploration. Chips say why: "your: exp falloff", or "exploring".
+  (at most ~0.3), and with ~25% exploration. Chips say why: "your: exp falloff", "looks neon", or
+  "exploring". With the image model on, the look and words by look count too (above).
 - **Evolve** (below).
 - **The Do bar**: type-ahead and node search lean on node types you like. An item moves up at most about
   1.5 places, or 3 points within a match tier. Exact matches never move.
@@ -160,11 +251,11 @@ sections show a one-line summary.
 - **Model internals** (developer view):
   - the raw weight table: imported, here, steering, total and evidence. Sort by any column; search by
     key or name;
-  - weight and layer counts, the stored version (2), and the embedder (none);
+  - weight and layer counts, the stored version (2), and the embedder (the image model and projection, or none);
   - signal counts from the model and from the log;
   - the constants: learning rate 0.2, L2 0.01, ε 0.25 (and your own setting), and the signal weights;
   - **Score this graph**: the canvas graph's feature vector and its score, split into imported, this
-    install and steering, with the top contributing features;
+    install, steering, its look and words by look, with the top contributing features;
   - **Export profile** and **Export everything**;
   - **Import…**, then Merge or Replace;
   - **Reset learned**, **Reset steering** or **Reset both**.
@@ -315,5 +406,6 @@ together: `{ format: 'playfield-taste', version: 2, model, prior, dormant, log, 
 is the local layer. Version 1 (the model alone) migrates on read; a newer version is refused.
 
 Like your other Playfield data, it travels only in profile ZIPs, backups and the `.playfield-taste` files
-you export. Nothing is sent anywhere, and no cloud model is asked anything: the summary is templates, and
-the context box is a word matcher. Reset forgets what was learned, your steering, or both.
+you export. Nothing is sent anywhere, and no cloud model is asked anything: the summary is templates, the
+context box is a word matcher, and the image model runs on this device (on the web it's downloaded once
+from Hugging Face; nothing is uploaded). Its kept-look thumbnails stay in this browser's IndexedDB. Reset forgets what was learned, your steering, or both.

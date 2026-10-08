@@ -9,6 +9,7 @@ import { loadExampleGraphs } from '../../store/exampleIndex';
 import { graphFeatures, learnSignal, nodeTypeFeatures, noteOpened, paletteFeatures, rateItem, techniqueFeatures, type Features, type RatingKind } from '../../taste';
 import { updateTaste } from '../../taste/store';
 import type { SignalRef } from '../../taste/log';
+import { imageModelUsable } from '../../imageModel/client';
 
 export interface RateTarget {
   id: string;
@@ -39,7 +40,13 @@ export const rateTargets = {
     };
   },
   example(key: string, label: string): RateTarget {
-    return { id: `example:${key}`, kind: 'example', label, features: async () => graphFeatures((await loadExampleGraphs())[key]?.nodes ?? [], { id: `example:${key}` }) };
+    // With the image model on and the example's picture embedded already (in the background), its look comes too.
+    return {
+      id: `example:${key}`, kind: 'example', label, features: async () => {
+        const look = imageModelUsable() ? await import('../../imageModel/gallery').then(g => g.exampleLook(key)).catch(() => null) : null;
+        return graphFeatures((await loadExampleGraphs())[key]?.nodes ?? [], { id: `example:${key}`, ...(look ? { embedding: look } : {}) });
+      },
+    };
   },
   shader(id: string, label: string): RateTarget {
     // A GLSL shader: it carries code; its functions' stages come from the inspired fragments when it's a source.
