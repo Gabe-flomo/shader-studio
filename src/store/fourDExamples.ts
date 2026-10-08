@@ -109,19 +109,19 @@ export function buildFourDExamples(): Record<string, ExampleGraph> {
     nodes: [
       n('time', 'time', 40, 460, { ...note('Time: drives the camera orbit and the slice sweep.') }),
       n('lfo', 'sweep', 40, 640, { waveform: 'sine', freq: 0.07, amplitude: 1.0, offset: 0, ...note('LFO (sine): the slice position W, sweeping between -1 and 1 about once every 14 seconds (this tesseract reaches 1 = twice its half size, corner-first). Its Amplitude is the Play knob Sweep and its Offset is the Play knob Centre: set Sweep to 0 and Centre holds the slice still wherever you put it.') }, { time: ['time', 'time'] }),
-      n('marchCamera', 'cam', 40, 220, { camDist: 4.8, camAngle: 0.7, camElevation: 0.42, rotSpeed: 0.1, fov: 1.5, ...note('March Camera: slowly circles the middle. The camera is the only thing that moves in 3D; the shape changes because the slice moves through the 4D tesseract.') }, { time: ['time', 'time'] }),
+      n('marchCamera', 'cam', 40, 220, { camDist: 3.9, camAngle: 0.7, camElevation: 0.42, rotSpeed: 0.1, fov: 1.5, ...note('March Camera: slowly circles the middle. The camera is the only thing that moves in 3D; the shape changes because the slice moves through the 4D tesseract.') }, { time: ['time', 'time'] }),
       scene('scene', 40, 860, 'Tesseract slice', [
         n('lift4D', 'lift', 240, 80, { sliceDir: 'corner', ...note('Lift to 4D, Slice direction Corner-first: the cut is a flat 3D layer whose normal is (1,1,1,1)/2, so it meets the tesseract at a corner first. W arrives through the port from the LFO outside. At the largest W the layer touches one corner: a point. Lower W and it opens into a tetrahedron, then a truncated tetrahedron, and at W = 0 an octahedron. Then it runs back down the other side.') }, { pos: ['sp', 'pos'] }),
         n('tesseractSDF', 'ts', 520, 80, { size: 0.5, rounding: 0.03, ...note('Tesseract SDF: the box formula with four coordinates. Half size 0.5 in every direction, edges rounded by 0.03. Half size is a Play knob that reaches straight in here. The cut reaches the corner at W = 2 x half size = 1.0.') }, { p4: ['lift', 'p4'] }),
-        n('planeSDF3D', 'floor', 520, 360, { height: -1.25, ...note('A floor at y = -1.25, below the largest slice, so the shadow of the shape has somewhere to land. It is plain 3D: it never meets the 4D part.') }, { p: ['sp', 'pos'] }),
+        n('planeSDF3D', 'floor', 520, 360, { height: -1.15, ...note('A floor at y = -1.15, just below the largest slice, so the shadow of the shape has somewhere to land. It is plain 3D: it never meets the 4D part.') }, { p: ['sp', 'pos'] }),
         n('sdfUnion', 'un', 820, 200, { k: 0, ...note('Union: the scene is the nearer of the slice and the floor.') }, { a: ['ts', 'dist'], b: ['floor', 'dist'] }),
       ], ['un', 'dist'],
       'The whole 4D idea lives in this group: the point from Scene Pos is lifted to 4D along a corner-first slice, and measured against a tesseract. A distance comes out and goes to Scene Output, so the camera, the march loop and the lighting outside (including the shadow and occlusion, which measure this very group) are the same as for any 3D scene.',
       [{ key: 'w', label: 'W (slice)', from: ['sweep', 'value'], to: ['lift', 'w'] }]),
       ...finish([0.05, 0.055, 0.1],
         expr('col', 1180, 520, 'Surface colour', { x: ['hp', 'x'], y: ['hp', 'y'], z: ['hp', 'z'] },
-          'y < -1.24 ? vec3(0.16, 0.18, 0.28) + vec3(0.1, 0.11, 0.14) * mod(floor(x * 2.0) + floor(z * 2.0), 2.0) : vec3(0.95, 0.32, 0.3) + vec3(0.05, 0.46, 0.05) * clamp(0.5 + 0.45 * (x + y + z), 0.0, 1.0)',
-          'Surface colour from where the ray landed: a dark blue checker on the floor (y below -1.24), and on the slice a slide from coral to gold along the diagonal so the flat faces of the tetrahedron and octahedron read.'),
+          'y < -1.14 ? vec3(0.16, 0.18, 0.28) + vec3(0.1, 0.11, 0.14) * mod(floor(x * 2.0) + floor(z * 2.0), 2.0) : vec3(0.95, 0.32, 0.3) + vec3(0.05, 0.46, 0.05) * clamp(0.5 + 0.45 * (x + y + z), 0.0, 1.0)',
+          'Surface colour from where the ray landed: a dark blue checker on the floor (y below -1.14), and on the slice a slide from coral to gold along the diagonal so the flat faces of the tetrahedron and octahedron read.'),
         'March Loop: finds, for each pixel, where the ray meets the scene and the surface direction there. Its Hit, Normal and Hit Pos feed the shadow, the occlusion and the lighting.'),
     ],
     play: play([
@@ -192,7 +192,7 @@ export function buildFourDExamples(): Record<string, ExampleGraph> {
     nodes: [
       n('time', 'time', 40, 460, { ...note('Time: drives the camera orbit and the slice sweep.') }),
       n('lfo', 'sweep', 40, 640, { waveform: 'sine', freq: 0.06, amplitude: 0.9, offset: 0, ...note('LFO (sine): one slice position W for all three, about once every 17 seconds, between -0.9 and 0.9. The face-first cube is only there while |W| is under 0.5, the edge-first prism under 0.71 and the corner-first shape under 1.0. Amplitude is the Play knob Sweep; Offset is the knob Centre.') }, { time: ['time', 'time'] }),
-      n('marchCamera', 'cam', 40, 220, { camDist: 8.2, camAngle: 0.35, camElevation: 0.4, rotSpeed: 0.0, fov: 1.5, ...note('March Camera: pulled back to see all three in a row. It does not orbit on its own (Rot Speed 0); Camera angle is a Play knob.') }, { time: ['time', 'time'] }),
+      n('marchCamera', 'cam', 40, 220, { camDist: 8.8, camAngle: 3.2, camElevation: 0.45, rotSpeed: 0.0, fov: 1.5, ...note('March Camera: pulled back to see all three in a row. It does not orbit on its own (Rot Speed 0); Camera angle is a Play knob.') }, { time: ['time', 'time'] }),
       scene('scene', 40, 860, 'Three slices', [
         ...shapeNodes,
         n('sdfUnion', 'u1', 1080, 200, { k: 0, ...note('Union: the face-first and edge-first shapes, whichever is nearer.') }, { a: ['ts_a', 'dist'], b: ['ts_b', 'dist'] }),
