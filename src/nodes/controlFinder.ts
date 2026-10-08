@@ -71,7 +71,7 @@ export function controlItems(level: GraphNode[], opts: RandomizeOptions, candida
   const seen = new Set<string>();
   const items: ControlItem[] = [];
   let onPlay = 0;
-  for (const f of focusItems(level, { ...opts, focus: false })) {
+  for (const f of focusItems(level, { ...opts, focus: false }, [], true)) {
     if (typeof f.lo !== 'number' || typeof f.hi !== 'number') continue;
     const target = [...f.path, f.nodeId, f.key].join('::');
     const c = byTarget.get(target);

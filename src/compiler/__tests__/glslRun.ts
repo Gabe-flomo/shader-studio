@@ -72,6 +72,7 @@ export const BUILTINS: Env = {
 };
 
 class Return { v: Val; constructor(v: Val) { this.v = v; } }
+class Break {}
 interface FnDef { params: string[]; start: number; end: number }
 
 class Machine {
@@ -105,6 +106,7 @@ class Machine {
       if (run) throw new Return(v);
       return;
     }
+    if (t.v === 'break') { this.next(); this.eat(';'); if (run) throw new Break(); return; }
     if (t.v === 'const') this.next();
     if (t.t === 'id' && TYPES.has(this.peek().v) && this.peek(1)?.t === 'id') { this.decl(run); this.eat(';'); return; }
     this.simple(run);
@@ -154,7 +156,11 @@ class Machine {
       this.simple(false);
       this.eat(')');
       const go = run && !!c;
-      this.stmt(go);
+      const bodyAt = this.i;
+      let broke = false;
+      try { this.stmt(go); } catch (e) { if (!(e instanceof Break)) throw e; broke = true; }
+      // A `break`: skip the rest of the body (parsing only), then leave the loop.
+      if (broke) { this.i = bodyAt; this.stmt(false); return; }
       const end = this.i;
       if (!go) { this.i = end; return; }
       this.i = incAt;

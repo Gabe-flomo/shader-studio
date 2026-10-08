@@ -25,6 +25,46 @@ const DEG = '0.017453292519943295';
 
 // ─── Lift to 4D ────────────────────────────────────────────────────────────────
 
+/**
+ * Which way the slice cuts. The slice is a hyperplane (a 3D flat inside 4D) with a normal n; the 3D
+ * point is mapped to `basis · pos + n · w`, where basis is three orthonormal vectors perpendicular to n.
+ *   face   n = (0,0,0,1)        the w axis: the slice is parallel to one of the tesseract's cubic cells
+ *   edge   n = (0,0,1,1) / √2   the slice meets an edge first
+ *   corner n = (1,1,1,1) / 2    the slice meets a corner first: point, tetrahedron, octahedron, ...
+ *   custom two angles (see sliceNormal)
+ */
+export const SLICE_DIRECTIONS = ['face', 'edge', 'corner', 'custom'] as const;
+
+/** Custom direction: tilt `a` away from the w axis (degrees), toward the spatial direction chosen by `b` (degrees). */
+export function sliceNormal(dir: string, a = 0, b = 0): [number, number, number, number] {
+  if (dir === 'edge') return [0, 0, Math.SQRT1_2, Math.SQRT1_2];
+  if (dir === 'corner') return [0.5, 0.5, 0.5, 0.5];
+  if (dir === 'custom') {
+    const ra = a * Math.PI / 180, rb = b * Math.PI / 180;
+    const s = Math.sin(ra);
+    // The spatial part points along (cos b, sin b / √2, sin b / √2): b = 0 along x, b = 54.74 along a cube diagonal.
+    return [s * Math.cos(rb), s * Math.sin(rb) * Math.SQRT1_2, s * Math.sin(rb) * Math.SQRT1_2, Math.cos(ra)];
+  }
+  return [0, 0, 0, 1];
+}
+
+/**
+ * The orthonormal basis of a slice: three 4D vectors perpendicular to n (and to each other), plus n itself.
+ * They are the columns of the Householder reflection that carries the w axis onto n, which is what the
+ * shader applies (no matrices needed): lift(pos, w) = pos.x * b0 + pos.y * b1 + pos.z * b2 + w * n.
+ */
+export function sliceBasis(n: readonly number[]): { basis: number[][]; normal: number[] } {
+  const v = [-n[0], -n[1], -n[2], 1 - n[3]];
+  const vv = v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3];
+  const col = (k: number) => {
+    const e = [0, 0, 0, 0]; e[k] = 1;
+    if (vv < 1e-8) return e;
+    const d = 2 * v[k] / vv;
+    return e.map((x, i) => x - v[i] * d);
+  };
+  return { basis: [col(0), col(1), col(2)], normal: col(3) };
+}
+
 export const Lift4DNode: NodeDefinition = {
   type: 'lift4D', label: 'Lift to 4D', category: CAT,
   aliases: ['4d', 'slice', 'fourth dimension', 'vec4 point'],
@@ -36,17 +76,43 @@ export const Lift4DNode: NodeDefinition = {
     w:   { type: 'float', label: 'W (slice)', hint: 'Where the slice is along the fourth axis. Wire a Time or an LFO for a slice that sweeps through the shape.' },
   },
   outputs: { p4: { type: 'vec4', label: 'Point 4D', hint: 'The point as (x, y, z, w). Wire into Rotate 4D, Translate 4D or a 4D shape.' } },
-  defaultParams: { w: 0.0 },
+  defaultParams: { w: 0.0, sliceDir: 'face', sliceA: 60.0, sliceB: 54.7356 },
   paramDefs: {
     w: { label: 'W (slice)', type: 'float', min: -2.0, max: 2.0, step: 0.01, hint: 'Which slice of the 4D shape you see. 0 is through the middle.',
-         help: 'The fourth coordinate given to every point. A 4D shape is solid in four directions; this chooses the 3D layer you are looking at. At 0 you cut through the middle, past the shape\'s edge in w the slice is empty. Animatable and live.' },
+         help: 'How far along the slice direction the cut is. A 4D shape is solid in four directions; this chooses the 3D layer you are looking at. At 0 you cut through the middle, past the shape\'s edge the slice is empty. Animatable and live.' },
+    sliceDir: { label: 'Slice direction', type: 'select', hint: 'Which way the slice cuts: face-first, edge-first, corner-first or custom angles.',
+                help: 'Face-first slices parallel to a cubic cell (the w axis): a tesseract gives a cube. Edge-first tilts the cut to (0,0,1,1): the slice meets an edge first. Corner-first cuts along (1,1,1,1): a tesseract gives a point, then a tetrahedron, then an octahedron at w = 0, and back. Custom takes two angles.',
+                options: [{ value: 'face', label: 'Face-first' }, { value: 'edge', label: 'Edge-first' }, { value: 'corner', label: 'Corner-first' }, { value: 'custom', label: 'Custom' }] },
+    sliceA: { label: 'Tilt (deg)', type: 'float', min: 0.0, max: 90.0, step: 0.5, showWhen: { param: 'sliceDir', value: 'custom' },
+              hint: 'Custom: how far the slice normal leans away from the w axis. 0 is face-first.' },
+    sliceB: { label: 'Swing (deg)', type: 'float', min: 0.0, max: 90.0, step: 0.5, showWhen: { param: 'sliceDir', value: 'custom' },
+              hint: 'Custom: which way it leans among x, y and z. Tilt 45 with Swing 0 is edge-first; Tilt 60 with Swing 54.74 is corner-first.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id;
     const pos = inputVars.pos || 'vec3(0.0)';
     const w = inputVars.w || p(node.params.w, 0.0);
+    const dir = String(node.params.sliceDir ?? 'face');
+    if (dir !== 'edge' && dir !== 'corner' && dir !== 'custom') {
+      return { code: `    vec4 ${id}_p4 = vec4(${pos}, ${w});\n`, outputVars: { p4: `${id}_p4` } };
+    }
+    // The normal n, then the reflection that carries the w axis onto n: its first three columns are the
+    // slice's orthonormal basis, its fourth is n, so H * (pos, w) = basis * pos + n * w.
+    let nExpr: string;
+    if (dir === 'edge') nExpr = 'vec4(0.0, 0.0, 0.70710678, 0.70710678)';
+    else if (dir === 'corner') nExpr = 'vec4(0.5)';
+    else {
+      const a = `(${p(node.params.sliceA, 60.0)} * ${DEG})`, b = `(${p(node.params.sliceB, 54.7356)} * ${DEG})`;
+      nExpr = `vec4(sin(${a}) * cos(${b}), sin(${a}) * sin(${b}) * 0.70710678, sin(${a}) * sin(${b}) * 0.70710678, cos(${a}))`;
+    }
     return {
-      code: `    vec4 ${id}_p4 = vec4(${pos}, ${w});\n`,
+      code: [
+        `    vec4  ${id}_n = ${nExpr};\n`,
+        `    vec4  ${id}_v = vec4(0.0, 0.0, 0.0, 1.0) - ${id}_n;\n`,
+        `    float ${id}_vv = dot(${id}_v, ${id}_v);\n`,
+        `    vec4  ${id}_q = vec4(${pos}, ${w});\n`,
+        `    vec4  ${id}_p4 = ${id}_vv < 0.00000001 ? ${id}_q : ${id}_q - ${id}_v * (2.0 * dot(${id}_v, ${id}_q) / ${id}_vv);\n`,
+      ].join(''),
       outputVars: { p4: `${id}_p4` },
     };
   },

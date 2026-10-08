@@ -72,7 +72,7 @@ function collectColourCandidates(nodes: GraphNode[]): PlayCandidate[] {
   };
   visit(nodes, '', undefined, {});
   for (const g of nodes) {
-    if (g.type !== 'group' && g.type !== 'agentsGroup') continue;
+    if (g.type !== 'group' && g.type !== 'agentsGroup' && g.type !== 'sceneGroup') continue;
     const inner = g.params.subgraph as SubgraphData | undefined;
     if (inner) visit(inner.nodes, `${g.id}::`, labelOf(g), g.params);
   }
@@ -85,7 +85,7 @@ function collectColourCandidates(nodes: GraphNode[]): PlayCandidate[] {
  * baked, so it is left out.
  */
 export function collectPlayCandidates(nodes: GraphNode[], paramBindings: Record<string, string>): PlayCandidate[] {
-  const floats: PlayCandidate[] = collectParamCandidates({ nodes, inputPorts: [], outputPorts: [] }).map(c => ({
+  const floats: PlayCandidate[] = collectParamCandidates({ nodes, inputPorts: [], outputPorts: [] }, { sceneGroups: true }).map(c => ({
     target: c.sourcePath, kind: 'float', nodeLabel: c.nodeLabel, groupLabel: c.groupLabel, paramLabel: c.paramLabel,
     min: c.min, max: c.max, step: c.step, value: c.value, ...(c.hint ? { hint: c.hint } : {}),
   }));
