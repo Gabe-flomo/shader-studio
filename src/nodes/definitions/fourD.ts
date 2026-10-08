@@ -704,3 +704,72 @@ export const FOURD_P2_NODES: Record<string, NodeDefinition> = {
   scale4D: Scale4DNode, repeat4D: Repeat4DNode, fold4D: Fold4DNode, twist4D: Twist4DNode, noise4D: Noise4DNode,
 };
 export const FOURD_SHAPE_TYPES = ['hypersphereSDF', 'tesseractSDF', 'duocylinderSDF', 'spherinderSDF', 'cubinderSDF', 'cylPrismSDF', 'ditorusSDF', 'cliffordTorusSDF', 'cell5SDF', 'cell16SDF', 'cell24SDF'] as const;
+
+// ─── 4D fractals: quaternion Julia and Mandelbrot sets ─────────────────────────
+// A quaternion q = (x, y, z, w) squares as (x² − y² − z² − w², 2xy, 2xz, 2xw). Iterating q → q² + c from
+// the point (Julia) or from 0 with c = the point (Mandelbrot) and estimating the distance from how fast
+// |q| grows gives a 4D fractal; its 3D slice is the familiar lumpy, curling solid.
+
+export const QuatJuliaSDFNode = shapeNode({
+  type: 'quatJuliaSDF', label: 'Quaternion Julia SDF', fn: 'sdf4d_quatJulia',
+  aliases: ['quaternion julia', '4d julia', 'julia 4d', 'quaternion fractal', '4d fractal'],
+  description:
+    'A quaternion Julia set: every 4D point q is iterated q → q² + c, and points that never escape are inside. The constant c (four numbers) picks the set; moving it slowly makes the shape boil and curl. ' +
+    'Its distance is the usual fractal estimate 0.5·|q|·log|q| / |dq|: a safe lower bound, so lower the march loop\'s Step Scale a little (0.8) if you see holes. The slice at w is the 3D Julia most people picture.',
+  params: {
+    cx: { def: -0.2, label: 'c x', min: -1.5, max: 1.5, step: 0.005, hint: 'The real part of c. Around −0.2 to 0.4 gives connected, interesting sets.' },
+    cy: { def: 0.6, label: 'c y', min: -1.5, max: 1.5, step: 0.005, hint: 'The first imaginary part of c.' },
+    cz: { def: 0.2, label: 'c z', min: -1.5, max: 1.5, step: 0.005, hint: 'The second imaginary part of c.' },
+    cw: { def: 0.0, label: 'c w', min: -1.5, max: 1.5, step: 0.005, hint: 'The third imaginary part of c.' },
+    iters: { def: 10, label: 'Iterations', min: 1, max: 24, step: 1, hint: 'How many times to square: more is more detail (and slower). 8 to 12 is plenty.' },
+    scale: { def: 0.75, label: 'Scale', min: 0.05, max: 5, step: 0.01, hint: 'Size of the set in the scene.' },
+  },
+  glsl: `
+float sdf4d_quatJulia(vec4 p, float cx, float cy, float cz, float cw, float iters, float scale) {
+    vec4 z = p / scale;
+    vec4 c = vec4(cx, cy, cz, cw);
+    float md2 = 1.0;
+    float mz2 = dot(z, z);
+    for (int i = 0; i < 24; i++) {
+        if (float(i) >= iters) break;
+        md2 *= 4.0 * mz2;
+        z = vec4(z.x * z.x - dot(z.yzw, z.yzw), 2.0 * z.x * z.yzw) + c;
+        mz2 = dot(z, z);
+        if (mz2 > 16.0) break;
+    }
+    return 0.25 * sqrt(mz2 / md2) * log(max(mz2, 1e-8)) * scale;
+}`,
+  distHint: 'Estimated distance to the set (a lower bound): negative inside.',
+});
+
+export const QuatMandelSDFNode = shapeNode({
+  type: 'quatMandelSDF', label: 'Quaternion Mandelbrot SDF', fn: 'sdf4d_quatMandel',
+  aliases: ['quaternion mandelbrot', '4d mandelbrot', 'mandelbrot 4d'],
+  description:
+    'The quaternion Mandelbrot set: from q = 0, iterate q → q² + p with p the 4D point; points that never escape are inside. Its slices are the 2D Mandelbrot spun round its axis, and turning it in 4D reveals more. ' +
+    'Distance by the fractal estimate (a lower bound): lower Step Scale a little if you see holes.',
+  params: {
+    iters: { def: 10, label: 'Iterations', min: 1, max: 24, step: 1, hint: 'How many times to square: more is more detail.' },
+    scale: { def: 0.6, label: 'Scale', min: 0.05, max: 5, step: 0.01, hint: 'Size of the set in the scene.' },
+  },
+  glsl: `
+float sdf4d_quatMandel(vec4 p, float iters, float scale) {
+    vec4 c = p / scale;
+    vec4 z = c;
+    float dr = 1.0;
+    float r = length(z);
+    for (int i = 0; i < 24; i++) {
+        if (float(i) >= iters || r > 4.0) break;
+        dr = 2.0 * r * dr + 1.0;
+        z = vec4(z.x * z.x - dot(z.yzw, z.yzw), 2.0 * z.x * z.yzw) + c;
+        r = length(z);
+    }
+    // A point that never escaped is inside the set (the estimate is meaningless there).
+    if (r < 2.0) return -0.002 * scale;
+    return 0.5 * r * log(r) / dr * scale;
+}`,
+  distHint: 'Estimated distance to the set (a lower bound): negative inside.',
+});
+
+/** Phase 4 nodes (4D fractals), for the registry. */
+export const FOURD_P4_NODES: Record<string, NodeDefinition> = { quatJuliaSDF: QuatJuliaSDFNode, quatMandelSDF: QuatMandelSDFNode };
