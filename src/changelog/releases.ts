@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.103',
+    date: '2026-10-08',
+    title: 'Repeat Scene',
+    highlights: [
+      { area: 'Studio', text: 'Repeat Scene repeats a whole 3D scene in a grid and checks neighbouring cells cheaply, so copies can overlap without being sliced.', link: { kind: 'doc', path: 'docs/repeat-scene.md' } },
+      { area: 'Studio', text: 'Repeat Cell gives each copy its own random size, place or colour. New example: Repeat Scene: overlapping bubbles.', link: { kind: 'example', key: 'repeatSceneBubbles' } },
+      { area: 'Studio', text: 'Switch a March Loop Group to a GI Lit March Group and back (right-click, or the Light the scene card); body, settings and wires kept.', link: { kind: 'doc', path: 'docs/light-scene.md' } },
+    ],
+  },
+  {
     id: '2026.10.102',
     date: '2026-10-08',
     title: 'Light the scene',
