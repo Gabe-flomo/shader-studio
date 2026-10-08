@@ -108,6 +108,7 @@ import { startOverMenuItem } from '../../play/startOver';
 import { SoloButton, SoloStrip } from './Solo';
 import { GuidesToggle } from './GuidesToggle';
 import { OpenPlayableButton } from './OpenPlayable';
+import { SuggestControlsButton } from './SuggestControlsButton';
 import { MidiFileCard } from './MidiFileCard';
 import { MidiSourceOptions, PadSourceOptions } from './MidiSourceOptions';
 import { PadGridCard } from './PadGridCard';
@@ -522,6 +523,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         <IconButton icon="code" label={`Put it on a website: a player with controls, or the picture as a background, as a snippet or a page${websiteOk ? '' : ' (Pro)'}`} style={websiteOk ? undefined : { opacity: 0.5 }} onClick={() => { if (requireFeature('export.website')) setEmbedOpen(true); }} />
         <IconButton icon="record" label={`Record a performance: play for up to a minute, watch it back, render it frame by frame${takesOk ? '' : ' (Pro)'}`} style={takesOk ? undefined : { opacity: 0.5 }} onClick={() => useTakes.getState().openPerformance()} />
         <IconButton icon="play" label="Stage: the picture and its controls on their own, as people will play with it" onClick={() => useStage.getState().open('full')} />
+        <SuggestControlsButton compact={compact} />
         {addControlButtonEl}
         <span ref={pageMoreRef} style={{ display: 'inline-flex' }}>
           <IconButton icon="more" label="More" onClick={() => { const r = pageMoreRef.current?.getBoundingClientRect(); setPageMore(r ? { x: r.right - 200, y: r.bottom + 4 } : null); }} />

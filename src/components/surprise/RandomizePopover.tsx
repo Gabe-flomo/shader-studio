@@ -15,7 +15,7 @@ import { randomizeGraphAction, useSurpriseSeeds } from './surpriseActions';
  * The canvas dice's options (opened by its chevron or a right-click): strength, what to include,
  * the seed, and the locked settings with a clear-all. Options are saved at once; "Randomise" uses them.
  */
-export function RandomizePopover({ anchorRef, onClose }: { anchorRef: RefObject<HTMLElement | null>; onClose: () => void }) {
+export function RandomizePopover({ anchorRef, onClose, onSuggest }: { anchorRef: RefObject<HTMLElement | null>; onClose: () => void; onSuggest?: () => void }) {
   const tk = useTokens();
   const opts = useRandomizeOptions();
   const nodes = useNodeGraphStore(s => s.nodes);
@@ -69,6 +69,10 @@ export function RandomizePopover({ anchorRef, onClose }: { anchorRef: RefObject<
         </div>
         <div style={{ padding: '6px 4px 4px', borderTop: `1px solid ${tk.border.subtle}` }}>
           <Button size="sm" variant="primary" icon="dice" onClick={() => go(true)} style={{ width: '100%', justifyContent: 'center' }}>Randomise</Button>
+          {onSuggest && (
+            <Button size="sm" icon="spark" onClick={() => { onClose(); onSuggest(); }} style={{ width: '100%', justifyContent: 'center', marginTop: 6 }}
+              title="Draw the graph at a few points of each setting and add the ones that matter most to Play (uses the groups and locks above)">Find the controls that matter</Button>
+          )}
           <div style={{ padding: '6px 4px 0', color: tk.text.muted, fontSize: 11 }}>{optionsSummary(opts, locked.length)}</div>
         </div>
       </div>
