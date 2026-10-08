@@ -17,6 +17,7 @@ import {
 import { parseRecipe2D, printRecipe2D } from '../../sceneBuilder2d/recipe';
 import { TEMPLATES_2D, templateScene } from '../../sceneBuilder2d/templates';
 import { renderShapeThumbnail, renderSpaceThumbnail } from '../../sceneBuilder2d/thumbnails';
+import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_LABELS, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, type GridShape, type GridSpec } from '../../sceneBuilder2d/grid';
 import { PALETTES } from '../../sceneBuilder/output';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { BuilderLabel, BuilderNote, BuilderWindow } from '../builders/BuilderWindow';
@@ -33,6 +34,7 @@ import { Preview2D, compileScene2D } from './Preview2D';
 const TABS: Array<{ id: Builder2DTab; label: string; icon: IconName; gapBefore?: boolean }> = [
   { id: 'space', label: 'Space', icon: 'wave' },
   { id: 'shapes', label: 'Shapes', icon: 'mask' },
+  { id: 'grid', label: 'Grid', icon: 'grid' },
   { id: 'look', label: 'Look', icon: 'sun' },
   { id: 'output', label: 'Output', icon: 'eye' },
   { id: 'recipe', label: 'Recipe', icon: 'text', gapBefore: true },
@@ -323,8 +325,85 @@ function ShapesTab() {
 
 const DEFAULT_COLOURS: Vec3[] = [[0.35, 0.8, 1], [1, 0.45, 0.7], [1, 0.8, 0.3], [0.5, 1, 0.6], [0.75, 0.55, 1]];
 
+function GridTab() {
+  const tk = useTokens();
+  const grid = useSceneBuilder2D(s => s.scene.grid);
+  const set = (fn: (g: GridSpec) => void, key?: string) => edit(d => { if (d.grid) fn(d.grid); }, key && `grid:${key}`);
+  if (!grid) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <BuilderNote>A grid of cells, each with its own shape, and ripples that travel through the cells and change them: their size, their turn, a push, or a morph from one shape into another. It is drawn over the layers.</BuilderNote>
+        <Button variant="primary" icon="grid" onClick={() => edit(d => { d.grid = defaultGrid(); })} style={{ alignSelf: 'flex-start' }}>Add a grid</Button>
+      </div>
+    );
+  }
+  const toggleShape = (k: GridShape) => set(g => {
+    if (g.shapes.includes(k)) { if (g.shapes.length > 1) g.shapes = g.shapes.filter(x => x !== k); }
+    else if (g.shapes.length < 3) g.shapes = [...g.shapes, k];
+  });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Card id="grid2-cells" defaultOpen title="Cells" summary={`${grid.cols} × ${grid.rows}`}
+        actions={<IconButton icon="trash" label="Remove the grid" size="sm" onClick={() => edit(d => { d.grid = null; })} />}>
+        <NumRow label="Columns" integer value={grid.cols} min={1} max={48} onChange={v => set(g => { g.cols = Math.round(v); }, 'cols')} />
+        <NumRow label="Rows" integer value={grid.rows} min={1} max={48} onChange={v => set(g => { g.rows = Math.round(v); }, 'rows')} />
+        <NumRow label="Span" hint="Half the grid's width: 1 reaches the top edge." value={grid.span} min={0.1} max={3} onChange={v => set(g => { g.span = v; }, 'span')} />
+        <NumRow label="Shape size" hint="A share of the cell: 1 touches the neighbours." value={grid.size} min={0.05} max={1.5} onChange={v => set(g => { g.size = v; }, 'size')} />
+      </Card>
+      <Card id="grid2-shapes" defaultOpen title="Shapes" summary={grid.shapes.join(', ')}>
+        <BuilderNote>Pick up to three. With more than one, a rule gives each cell its shape.</BuilderNote>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {GRID_SHAPES.map(k => (
+            <button key={k} type="button" style={tile(tk, grid.shapes.includes(k))} onClick={() => toggleShape(k)} aria-pressed={grid.shapes.includes(k)}>
+              <Thumb k={`gshape:${k}`} make={() => renderShapeThumbnail(k === 'box' ? 'box' : k, 44)} />
+              {k}
+            </button>
+          ))}
+        </div>
+        {grid.shapes.length > 1 && (
+          <Row label="Give out">
+            <Select ariaLabel="Give out shapes" value={grid.assign} options={GRID_ASSIGNS.map(a => ({ value: a, label: GRID_LABELS.assign[a] }))} onChange={v => set(g => { g.assign = v as GridSpec['assign']; })} />
+          </Row>
+        )}
+        {grid.shapes.length > 1 && grid.assign === 'every' && <NumRow label="Every" integer value={grid.every} min={2} max={12} onChange={v => set(g => { g.every = Math.round(v); }, 'every')} />}
+      </Card>
+      <Card id="grid2-ripples" defaultOpen title="Ripples" summary={grid.ripples.map(r => r.from).join(' + ')}>
+        {grid.ripples.map((r, i) => (
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <Row label={`From ${grid.ripples.length > 1 ? i + 1 : ''}`}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <Select ariaLabel="Ripple from" value={r.from} options={RIPPLE_FROMS.map(x => ({ value: x, label: GRID_LABELS.from[x] }))} onChange={v => set(g => { g.ripples[i].from = v as typeof r.from; })} />
+                {grid.ripples.length > 1 && <IconButton icon="trash" label="Remove this ripple" size="sm" onClick={() => set(g => { g.ripples.splice(i, 1); })} />}
+              </div>
+            </Row>
+            {r.from === 'point' && <Vec2Row label="Point" value={r.at} min={-1.5} max={1.5} onChange={v => set(g => { g.ripples[i].at = v; }, `rip${i}`)} />}
+          </div>
+        ))}
+        {grid.ripples.length < 4 && <Button size="sm" variant="ghost" icon="plus" onClick={() => set(g => { g.ripples.push({ from: 'corners', at: [0, 0] }); })} style={{ alignSelf: 'flex-start' }}>Another ripple</Button>}
+        <NumRow label="Rings" hint="Waves per unit of distance." value={grid.freq} min={0} max={40} step={0.1} onChange={v => set(g => { g.freq = v; }, 'freq')} />
+        <NumRow label="Speed" hint="Cycles a second. 0 stands still." value={grid.speed} min={-3} max={3} onChange={v => set(g => { g.speed = v; }, 'speed')} />
+        <Row label="Changes">
+          <Select ariaLabel="What the ripple changes" value={grid.target} options={GRID_TARGETS.map(x => ({ value: x, label: GRID_LABELS.target[x] }))} onChange={v => set(g => { g.target = v as GridSpec['target']; })} />
+        </Row>
+        {grid.target !== 'none' && <NumRow label="Amount" value={grid.amount} min={0} max={1.5} onChange={v => set(g => { g.amount = v; }, 'amount')} />}
+        {grid.target === 'morph' && grid.shapes.length < 2 && <BuilderNote>Morph blends the first two shapes: pick a second one above (a box is used until you do).</BuilderNote>}
+      </Card>
+      <Card id="grid2-colour" title="Colour" summary={GRID_LABELS.colourBy[grid.colourBy]}>
+        <Row label="Colour by">
+          <Select ariaLabel="Grid colour by" value={grid.colourBy} options={GRID_COLOUR_BYS.map(x => ({ value: x, label: GRID_LABELS.colourBy[x] }))} onChange={v => set(g => { g.colourBy = v as GridSpec['colourBy']; })} />
+        </Row>
+        {grid.colourBy === 'shape'
+          ? <><ColourRow label="First" value={grid.colour} onChange={v => set(g => { g.colour = v; }, 'c1')} /><ColourRow label="Second" value={grid.colour2} onChange={v => set(g => { g.colour2 = v; }, 'c2')} /></>
+          : <BuilderNote>Uses the palette on the Look tab.</BuilderNote>}
+        <Row label="Glow"><Toggle checked={grid.glow} onChange={v => set(g => { g.glow = v; })} label="Glows (when Look → Glow is on)" /></Row>
+      </Card>
+    </div>
+  );
+}
+
 function LookTab() {
   const look = useSceneBuilder2D(s => s.scene.look);
+  const hasGrid = useSceneBuilder2D(s => !!s.scene.grid && s.scene.grid.colourBy !== 'shape');
   const set = (fn: (l: Scene2D['look']) => void, key?: string) => edit(d => fn(d.look), key && `look:${key}`);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -333,9 +412,9 @@ function LookTab() {
         <Row label="Colour by">
           <Select ariaLabel="Colour by" value={look.colour.by} options={COLOUR_BYS.map(c => ({ value: c, label: c === 'layer' ? "each layer's colour" : c }))} onChange={v => set(l => { l.colour.by = v as typeof l.colour.by; })} />
         </Row>
-        {look.colour.by !== 'layer' && (
+        {(look.colour.by !== 'layer' || hasGrid) && (
           <>
-            <Row label="Palette"><Select ariaLabel="Palette" value={look.colour.palette} options={PALETTES.map(p => ({ value: p.key, label: p.label }))} onChange={v => set(l => { l.colour.palette = v; })} /></Row>
+            <Row label="Palette" hint={look.colour.by === 'layer' ? 'Used by the grid (Grid → Colour by ripple or cell).' : undefined}><Select ariaLabel="Palette" value={look.colour.palette} options={PALETTES.map(p => ({ value: p.key, label: p.label }))} onChange={v => set(l => { l.colour.palette = v; })} /></Row>
             <NumRow label="Scale" value={look.colour.scale} min={0.1} max={8} onChange={v => set(l => { l.colour.scale = v; }, 'cs')} />
             <NumRow label="Drift" hint="How fast the palette cycles over time." value={look.colour.speed} min={-1} max={1} onChange={v => set(l => { l.colour.speed = v; }, 'cv')} />
           </>
@@ -432,7 +511,7 @@ function PreviewPanel() {
       <BuilderLabel>Preview</BuilderLabel>
       <Preview2D scene={scene} />
       <BuilderLabel meta={`${c.nodes} nodes`}>What Build makes</BuilderLabel>
-      <BuilderNote>UV → {scene.space.length ? `${scene.space.length} space transform${scene.space.length === 1 ? '' : 's'} → ` : ''}{allShapes(scene).length} shape{allShapes(scene).length === 1 ? '' : 's'} with their placing, motion and copies → colour and glow{scene.look.tone !== 'none' ? ' → Tone Map' : ''} → the Output. Every node gets a note.</BuilderNote>
+      <BuilderNote>UV → {scene.space.length ? `${scene.space.length} space transform${scene.space.length === 1 ? '' : 's'} → ` : ''}{allShapes(scene).length} shape{allShapes(scene).length === 1 ? '' : 's'} with their placing, motion and copies{scene.grid ? ' and a grid (one Expression Block, line by line)' : ''} → colour and glow{scene.look.tone !== 'none' ? ' → Tone Map' : ''} → the Output. Every node gets a note.</BuilderNote>
     </div>
   );
 }
@@ -466,13 +545,13 @@ export function SceneBuilder2DModal() {
   }, [undo, redo]);
 
   const shapes = allShapes(scene).length;
-  const body = { space: <SpaceTab />, shapes: <ShapesTab />, look: <LookTab />, output: <OutputTab />, recipe: <RecipeTab />, templates: <TemplatesTab /> }[tab];
+  const body = { space: <SpaceTab />, shapes: <ShapesTab />, grid: <GridTab />, look: <LookTab />, output: <OutputTab />, recipe: <RecipeTab />, templates: <TemplatesTab /> }[tab];
   void num;
   return (
     <BuilderWindow
       prefsKey="scene-builder-2d"
       title="2D Scene Builder"
-      subtitle={`${editing ? 'Editing a built scene' : 'A new scene'} · ${scene.space.length} space · ${shapes} shape${shapes === 1 ? '' : 's'}`}
+      subtitle={`${editing ? 'Editing a built scene' : 'A new scene'} · ${scene.space.length} space · ${shapes} shape${shapes === 1 ? '' : 's'}${scene.grid ? ` · a ${scene.grid.cols} × ${scene.grid.rows} grid` : ''}`}
       icon="mask"
       iconColor={tk.kind.fn}
       onClose={close}
@@ -489,7 +568,7 @@ export function SceneBuilder2DModal() {
         <span style={{ flex: 1 }} />
         {dirty && <BuilderNote style={{ color: tk.text.faint }}>Not built yet</BuilderNote>}
         <Button onClick={close}>Done</Button>
-        <Button variant="primary" icon="rebuild" disabled={!shapes} onClick={() => buildFromBuilder2D(false)}>{editing ? 'Rebuild' : 'Build'}</Button>
+        <Button variant="primary" icon="rebuild" disabled={!shapes && !scene.grid} onClick={() => buildFromBuilder2D(false)}>{editing ? 'Rebuild' : 'Build'}</Button>
       </>}
     >
       <div style={{ padding: '14px 16px' }}>{body}</div>

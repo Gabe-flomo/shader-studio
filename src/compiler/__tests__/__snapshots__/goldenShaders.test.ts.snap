@@ -15131,6 +15131,40 @@ exports[`golden shaders: every example compiles as it did > sb2Kaleidoscope 1`] 
 }
 `;
 
+exports[`golden shaders: every example compiles as it did > sb2MouseGrid 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "13a2a067cd263012dad2d86dc927:7202",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "08fe4e964c60dc11b705a0d102ff:357",
+  "paramBindings": "1bbeaedad586e3079a664e1e3909:612",
+  "paramUniforms": [
+    "u_p_addcolorx10_scale",
+    "u_p_colorpickex3_color",
+    "u_p_fillx11_strokeWidth",
+    "u_p_glowx9_intensity",
+    "u_p_glowx9_power",
+    "u_p_gridx6_amount",
+    "u_p_gridx6_freq",
+    "u_p_gridx6_size",
+    "u_p_gridx6_speed",
+    "u_p_palx8_anim",
+    "u_p_palx8_scale",
+    "u_p_palx8_speed",
+    "u_p_palx8_value",
+  ],
+  "paramValues": "09bbfd2b091b550580203f030790:344",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
 exports[`golden shaders: every example compiles as it did > sb2Orbits 1`] = `
 {
   "audioUniforms": {},
@@ -15288,6 +15322,43 @@ exports[`golden shaders: every example compiles as it did > sb2RingOfRings 1`] =
     "u_p_sdfunionx20_k",
   ],
   "paramValues": "142a24db5f94cd185eb62792c083:1375",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > sb2RippleGrid 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1c300b3a64c2cb17830e815b2ff0:9981",
+  "isStateful": true,
+  "liveUniforms": {},
+  "nodeSlugs": "040001e6261e36198881b7d93928:369",
+  "paramBindings": "1e8b2995c573b3051c7d976ba631:788",
+  "paramUniforms": [
+    "u_p_addcolorx9_scale",
+    "u_p_bloomx12_intensity",
+    "u_p_bloomx12_radius",
+    "u_p_bloomx12_threshold",
+    "u_p_colorpickex3_color",
+    "u_p_fillx10_strokeWidth",
+    "u_p_glowx8_intensity",
+    "u_p_glowx8_power",
+    "u_p_gridx5_amount",
+    "u_p_gridx5_freq",
+    "u_p_gridx5_size",
+    "u_p_gridx5_speed",
+    "u_p_palx7_anim",
+    "u_p_palx7_scale",
+    "u_p_palx7_speed",
+    "u_p_palx7_value",
+  ],
+  "paramValues": "02d13667145fda093e1eb2e3c800:434",
   "passes": null,
   "success": true,
   "textureUniforms": {},
