@@ -1,13 +1,15 @@
 /**
  * prompt.ts — what the explanation model is told (docs/explain-model.md "How the grounding works").
  *
- * The model is small, so it is never asked to work things out alone. Every prompt carries:
- *   - the line (or the whole block / function) and the code around it,
- *   - the node it belongs to and its neighbours in the graph (what feeds it, what it feeds),
- *   - FACTS our rule-based explainer already knows for certain: the plain reading of the line, the
- *     idioms in it, what each function it calls does, the techniques the pattern catalogue finds on this
- *     node ("exponential falloff"), and what the names it reads mean (time, resolution, uv).
- * and is told to say what the line does to the picture and why, in plain words, without restating the code.
+ * The model is small, so it is never asked to work things out alone, and it is never told anything a user typed
+ * as a label: a node called "Moonlight" made it explain moonlight. A code explanation (a line, a block) carries ONLY:
+ *   - the code (the lines up to and including the one asked about; later lines invited guessing),
+ *   - its inputs: name, type and what each really is, described by TYPE ("from UV", "range 0..1"), see inputs.ts,
+ *   - FACTS our rule-based explainer derives from the code itself: the plain reading, the idioms in it, what each
+ *     function it calls does, colour literals named in words,
+ *   - the line, with its number.
+ * No node label or title, no graph name, no neighbour labels, no technique names (those can come from labels).
+ * The answer is a small JSON object per line (structured.ts) so each claim can be checked (confidence.ts).
  *
  * Pure: no DOM, no model, no store. The same graph and line always give the same prompt.
  */
@@ -16,12 +18,14 @@ import { explainLine, explainExpression, functionsIn, functionInfo, parseLine, s
 import { analyseGraph, techniquesAtNode } from '../patterns/patternIndex';
 import { hashText } from './cache';
 import { MAX_BLOCK_LINES, MAX_TOKENS, blockTokens } from './config';
+import { describeInputs, type InputInfo, type NodeDescriber } from './inputs';
+import type { GroundingContext } from './confidence';
 import type { ChatMessage } from './worker';
 
 // ── Where the code lives ──────────────────────────────────────────────────────
 
 export interface Neighbour {
-  /** The node's name (its label, else its type's name). */
+  /** The node TYPE's name ("Distance"), never what the user called it. */
   name: string;
   type: string;
   /** The socket on the code's own node that this one is wired to. */
@@ -31,8 +35,6 @@ export interface Neighbour {
 export interface NodeContext {
   /** "Expression Block", "Custom Function", "GLSL page"… */
   kind: string;
-  /** What the user called it, if anything. */
-  label?: string;
   upstream: Neighbour[];
   downstream: Neighbour[];
   /** Techniques the pattern catalogue finds on this node, with their one-line reasons. */
@@ -45,11 +47,9 @@ const squash = (s: string) => s.replace(/\s+/g, ' ').trim();
 /** Names for a node type: the registry's label. Injected so this file stays free of the node registry. */
 export type NodeNamer = (type: string) => string | undefined;
 
-const nameOf = (n: GraphNode, namer?: NodeNamer): string => {
-  const own = typeof n.params?.label === 'string' ? n.params.label.trim() : '';
-  const type = namer?.(n.type) ?? (n.type === 'exprNode' ? 'Expression Block' : n.type === 'customFn' ? 'Custom Function' : n.type);
-  return own ? `${own} (${type})` : type;
-};
+/** A node's TYPE name. User labels are deliberately never used: they steer a small model into explaining the label. */
+const nameOf = (n: GraphNode, namer?: NodeNamer): string =>
+  namer?.(n.type) ?? (n.type === 'exprNode' ? 'Expression Block' : n.type === 'customFn' ? 'Custom Function' : n.type);
 
 /** What feeds a node and what it feeds, from the graph's wires (one level: the nodes beside it). */
 export function neighboursOf(nodes: readonly GraphNode[], nodeId: string, namer?: NodeNamer): Pick<NodeContext, 'upstream' | 'downstream'> {
@@ -77,17 +77,16 @@ export function neighboursOf(nodes: readonly GraphNode[], nodeId: string, namer?
   return { upstream: upstream.slice(0, MAX_NEIGHBOURS), downstream: downstream.slice(0, MAX_NEIGHBOURS) };
 }
 
-/** The node context for a node in a graph: neighbours plus the techniques found on it. */
+/** The node context for a node in a graph: neighbours (by type) plus the techniques found on it. */
 export function nodeContextFor(nodes: readonly GraphNode[], nodeId: string, namer?: NodeNamer): NodeContext | undefined {
   const me = nodes.find(n => n.id === nodeId);
   if (!me) return undefined;
-  const label = typeof me.params?.label === 'string' && me.params.label.trim() ? me.params.label.trim() : undefined;
   let techniques: NodeContext['techniques'] = [];
   try {
     const gp = analyseGraph({ id: 'open:', label: 'open graph', origin: 'open', nodes });
     techniques = techniquesAtNode(gp, nodeId).map(t => ({ name: t.technique.name, explain: t.technique.explain, lines: t.hits.flatMap(h => (h.line ? [squash(h.line)] : [])) }));
   } catch (e) { console.warn('[explain model] patterns', e); }
-  return { kind: me.type === 'exprNode' ? 'Expression Block' : me.type === 'customFn' ? 'Custom Function' : nameOf(me, namer), label, ...neighboursOf(nodes, nodeId, namer), techniques };
+  return { kind: nameOf(me, namer), ...neighboursOf(nodes, nodeId, namer), techniques };
 }
 
 // ── Facts ─────────────────────────────────────────────────────────────────────
@@ -115,7 +114,7 @@ export interface Facts {
   idioms: string[];
   /** The functions it calls: "name(...): what it gives". */
   functions: string[];
-  /** Techniques found on the node: "name: why". */
+  /** Techniques found on the node: "name: why". Not used by code explanations (see the header). */
   techniques: string[];
   /** What the names it reads are. */
   names: string[];
@@ -130,8 +129,11 @@ export const noFacts = (): Facts => ({ idioms: [], functions: [], techniques: []
 const ident = /[A-Za-z_]\w*/g;
 const uniq = <T,>(xs: T[]) => [...new Set(xs)];
 
-/** Everything the rule-based explainer knows about one line: plain strings, ready for a prompt (and the UI's "facts used"). */
-export function gatherFacts(lineText: string, ctx: ExplainContext = {}, node?: NodeContext): Facts {
+/**
+ * Everything the rule-based explainer knows about one line: plain strings, ready for a prompt (and the UI's "facts used").
+ * `skipNames`: names whose meaning the caller states better (a node's inputs), so the generic guess ("t is the clock") is left out.
+ */
+export function gatherFacts(lineText: string, ctx: ExplainContext = {}, node?: NodeContext, skipNames?: ReadonlySet<string>): Facts {
   const f = noFacts();
   const ex = explainLine(lineText, ctx);
   if (ex.ok) {
@@ -152,7 +154,7 @@ export function gatherFacts(lineText: string, ctx: ExplainContext = {}, node?: N
   const names = uniq(exprText.match(ident) ?? []);
   for (const n of names) {
     const m = NAME_MEANINGS[n];
-    if (m) f.names.push(m);
+    if (m && !skipNames?.has(n)) f.names.push(m);
   }
   for (const [n, t] of Object.entries(ctx.types ?? {})) if (t && names.includes(n)) f.types.push(`${n}: ${t}`);
   // Only techniques found in this very line: ones found elsewhere on the node would colour the answer with things this line doesn't do
@@ -209,9 +211,12 @@ export interface PromptInput {
   code: string;
   /** The code around the line: the enclosing block or function. */
   enclosing?: string;
-  /** Where the line is: "line 3 of the block", "the Return line". */
+  /** Where the line is, if the number can't be found in the code: "line 3 of the block". */
   where?: string;
-  node?: NodeContext;
+  /** "Expression Block", "Custom Function", "GLSL page". Never a user label. */
+  kind?: string;
+  /** What each input is, by type (inputs.ts). */
+  inputs?: InputInfo[];
   facts: Facts;
   /** For a block: the facts of each of its lines' readings (statement text → reading). */
   lineReadings?: Array<{ text: string; reading: string }>;
@@ -224,89 +229,132 @@ export interface BuiltPrompt {
   context: string;
   /** The grounding facts the model was given (for the UI to show). */
   used: string[];
+  /** What the answer is checked against (confidence.ts). Absent for node explanations. */
+  check?: GroundingContext;
+  /** The line asked about, 1-based (line scope). */
+  lineNo?: number;
 }
 
 export const SYSTEM_PROMPT =
-  'You explain shader code (GLSL) to a visual artist who is learning it. ' +
-  'Say what the line does to the picture and why it is there, in plain words. ' +
-  'Answer in at most 2 short sentences (under 50 words). Start straight away with the effect on the picture. ' +
-  'Do not explain syntax, do not say how a function works in general, do not repeat the code. ' +
-  'Only mention names that appear in the code or the lines before it. Trust the FACTS: never contradict them. ' +
-  'If the purpose is not clear from the facts and the other lines, say "Not sure why, but" and give only what it does.';
+  'You explain one line of shader code (GLSL) to a visual artist who is learning it. ' +
+  'Reply with ONE JSON object and nothing else: {"line": <number>, "what": "<what the line computes, in plain words>", "effect": "<what it does to the picture>", "sure": "high|medium|low", "unsure_about": "<what you are unsure about, or empty>"}. ' +
+  'Be short: "what" and "effect" are one short sentence each. Do not repeat the code. ' +
+  'Use only the inputs, code and FACTS you are given: never invent names, numbers, colours or purposes, and never contradict the FACTS. ' +
+  'Say "high" only when the facts make the effect clear, "low" when you are guessing. "unsure_about" must be empty unless something in the line really cannot be told from the facts.';
 
-/** Worked examples, as earlier turns of the chat: the small model copies their length and tone. */
+/** Worked examples, as earlier turns of the chat: the small model copies their length, tone and shape. */
 export const EXAMPLES: ChatMessage[] = [
-  { role: 'user', content: 'Node: Expression Block\nFed by: Distance -> d\n\nFACTS:\n- Idiom: Exponential glow: 1 right at the edge, fading quickly and smoothly to 0 further away\n\nLine:\nfloat g = exp(-d * 4.0)\n\nExplain this line.' },
-  { role: 'assistant', content: 'Turns the distance d into a soft glow: full brightness at the shape, fading smoothly away from it. The 4.0 sets how tight the glow hugs the shape; a bigger number makes it tighter.' },
-  { role: 'user', content: 'Node: Expression Block\nFed by: Time -> t\n\nEarlier lines:\nfloat a = uv.x * 6.0\n\nLine:\nfloat w = sin(a - t * 2.0)\n\nExplain this line.' },
-  { role: 'assistant', content: 'Makes vertical bands that drift sideways over time: sin repeats across the picture, and subtracting the clock slides the pattern along. Not sure how w is used next, but it is a moving stripe pattern between -1 and 1.' },
+  {
+    role: 'user',
+    content: 'Kind: Expression Block\nInputs:\n- d: float, from Length (output Output): distance from the origin of a vector (0 or more)\n\nCode:\n1: float g = exp(-d * 4.0)\n\nFACTS about line 1 (reliable):\n- Idiom: Exponential glow: 1 right at the edge, fading quickly and smoothly to 0 further away\n\nExplain line 1 only.',
+  },
+  {
+    role: 'assistant',
+    content: '{"line":1,"what":"Turns the distance d into a value that is 1 at distance 0 and drops smoothly towards 0.","effect":"A soft glow: brightest at the shape and fading away from it; the 4.0 sets how tightly it hugs the shape.","sure":"high","unsure_about":""}',
+  },
+  {
+    role: 'user',
+    content: 'Kind: Expression Block\nInputs:\n- uv: vec2, from UV: pixel position, centred: (0,0) is the middle of the picture, x and y run about -1..1 (x is widened by the aspect ratio)\n- t: float, built in: time in seconds since start; it grows without limit\n\nCode:\n1: float a = uv.x * 6.0\n2: float w = sin(a - t * 2.0)\n\nFACTS about line 2 (reliable):\n- Function sin: gives the sine wave of an angle, repeating every 6.28\n\nExplain line 2 only.',
+  },
+  {
+    role: 'assistant',
+    content: '{"line":2,"what":"A sine wave of the horizontal position a, shifted by the clock t.","effect":"Vertical stripes that slide sideways over time, with values between -1 and 1.","sure":"medium","unsure_about":"how w is used on the next line"}',
+  },
+  {
+    role: 'user',
+    content: 'Kind: Custom Function\nInputs:\n- h: float, from Fractal Noise (FBM): smooth noise value, range 0..1\n\nCode:\n1: float m = step(0.6, h)\n\nFACTS about line 1 (reliable):\n- Function step: gives a hard switch: 0 while x is below edge, 1 from edge on\n- Types: h: float\n\nExplain line 1 only.',
+  },
+  {
+    role: 'assistant',
+    content: '{"line":1,"what":"1 where the noise value h is 0.6 or more, and 0 below that.","effect":"A hard-edged on/off mask that keeps only the brightest patches of the noise.","sure":"high","unsure_about":""}',
+  },
 ];
 
 export const BLOCK_SYSTEM_PROMPT =
   'You explain shader code (GLSL) to a visual artist who is learning it. ' +
-  'Say what the code does to the picture and why, in plain words, never repeating the code. ' +
-  'Follow the answer format you are given exactly: a two-sentence summary, then one short sentence per code line. ' +
-  'Only mention names that appear in the code. Trust the FACTS: never contradict them. If a line\'s purpose is unclear, say "not sure why" for that line.';
+  'Reply with JSON objects, one per line, and nothing else. First {"summary": "<two short sentences: what the whole piece does to the picture>"}, then one object for each code line, in order: ' +
+  '{"line": <number>, "what": "<what the line computes, in plain words>", "effect": "<what it does to the picture>", "sure": "high|medium|low", "unsure_about": "<what you are unsure about, or empty>"}. ' +
+  'Be short: one short sentence per field. Do not repeat the code. ' +
+  'Use only the inputs, code and FACTS you are given: never invent names, numbers, colours or purposes, and never contradict the FACTS. ' +
+  'Say "high" only when the facts make the effect clear, "low" when you are guessing. "unsure_about" must be empty unless something in the line really cannot be told from the facts.';
 
-/** The reply's shape, spelled out for a small model: a summary, then one numbered line per statement. */
-export function blockFormat(lines: number): string {
-  const n = Math.max(1, Math.min(lines, MAX_BLOCK_LINES));
-  return ['Answer in exactly this format, nothing else:', 'Summary: <two short sentences: what the whole piece does to the picture, and why>',
-    ...Array.from({ length: n }, (_, i) => `${i + 1}: <one short sentence: what line ${i + 1} does to the picture>`)].join('\n');
-}
-
-function nodeLines(n: NodeContext): string[] {
-  const out = [`Node: ${n.kind}${n.label ? ` called "${n.label}"` : ''}`];
-  if (n.upstream.length) out.push(`Fed by: ${n.upstream.map(u => `${u.name} -> ${u.socket}`).join('; ')}`);
-  else out.push('Fed by: nothing wired (it only uses its own values)');
-  if (n.downstream.length) out.push(`Feeds: ${n.downstream.map(d => `${d.name} (from ${d.socket})`).join('; ')}`);
-  return out;
+function inputLines(inputs: readonly InputInfo[] | undefined): string[] {
+  if (!inputs?.length) return ['Inputs: none'];
+  return ['Inputs:', ...inputs.map(i => `- ${i.text}`)];
 }
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}\n…` : s);
+const rawLines = (code: string) => code.trim().split('\n').filter(l => l.trim());
+const numbered = (lines: readonly string[], from = 1) => lines.map((l, i) => `${from + i}: ${l.trim()}`).join('\n');
+
+/** Which line of `enclosing` is `lineText` (1-based): by text, else from the "line N" in `where`, else 1. */
+export function lineNumberOf(lineText: string, enclosing: string | undefined, where?: string): number {
+  const want = squash(lineText);
+  if (enclosing?.trim()) {
+    const lines = rawLines(enclosing).map(squash);
+    let at = lines.findIndex(l => l === want);
+    if (at < 0) at = lines.findIndex(l => want && l.includes(want));
+    if (at >= 0) return at + 1;
+  }
+  const m = /line (\d+)/i.exec(where ?? '');
+  return m ? Math.max(1, Number(m[1])) : 1;
+}
 
 /** Build the chat messages for a line or a block. */
 export function buildExplainPrompt(p: PromptInput): BuiltPrompt {
-  const used = factLines(p.facts);
-  const ctxParts: string[] = [];
-  if (p.node) ctxParts.push(nodeLines(p.node).join('\n'));
-  if (p.scope === 'line' && p.enclosing && p.enclosing.trim() !== p.code.trim()) {
-    // Only what comes before the line: it tells what the names are. Later lines invite guessing.
-    const at = p.enclosing.indexOf(p.code.trim());
-    const before = (at >= 0 ? p.enclosing.slice(0, at) : p.enclosing).trim();
-    if (before) ctxParts.push(`Earlier lines:\n${before.length > 700 ? `…${before.slice(-700)}` : before}`);
-  }
-  if (used.length) ctxParts.push(`FACTS (reliable, from a rule-based explainer; its wording can be clumsy):\n${used.map(u => `- ${u}`).join('\n')}`);
-  if (p.lineReadings?.length) ctxParts.push(`Rule-based reading of each line:\n${p.lineReadings.map(l => `- ${l.text} => ${l.reading}`).join('\n')}`);
-  const context = ctxParts.join('\n\n');
+  const inputInfo = p.inputs ?? [];
+  const used = [...inputInfo.map(i => `Input ${i.text}`), ...factLines(p.facts)];
+  const kind = p.kind ?? 'GLSL';
+  const factBlock = factLines(p.facts);
+  const lines = rawLines(p.scope === 'block' ? p.code : p.enclosing?.trim() ? p.enclosing : p.code);
+  const check: GroundingContext = {
+    lines,
+    code: lines.join('\n'),
+    inputs: inputInfo.map(i => ({ name: i.name, type: i.type, numbers: i.numbers })),
+    inputText: inputInfo.map(i => i.text).join('\n'),
+    factsText: factBlock.join('\n'),
+    colourFacts: p.facts.colours,
+  };
 
-  const task = p.scope === 'line'
-    ? 'Explain this line.'
-    : blockFormat(codeLines(p.code));
-  const body = p.scope === 'line'
-    ? `${context}\n\nLine${p.where ? ` (${p.where})` : ''}:\n${p.code.trim()}\n\n${task}`
-    : `${context}\n\nCode:\n${numbered(p.code)}\n\n${task}`;
+  if (p.scope === 'line') {
+    const lineNo = lineNumberOf(p.code, p.enclosing, p.where);
+    // The code: only up to and including the line (the rest invites guessing); the line itself is the one we were given
+    const before = rawLines(p.enclosing ?? '').slice(0, Math.max(0, lineNo - 1));
+    const upTo = [...before, p.code.trim()].slice(-14);
+    const first = lineNo - (upTo.length - 1);
+    const head = [`Kind: ${kind}`, ...inputLines(inputInfo)].join('\n');
+    const facts = factBlock.length ? `\n\nFACTS about line ${lineNo} (reliable, from a rule-based explainer; its wording can be clumsy):\n${factBlock.map(u => `- ${u}`).join('\n')}` : '';
+    const context = `${head}\n\nCode:\n${numbered(upTo.slice(0, -1), first)}${facts}`;
+    const body = `${head}\n\nCode:\n${numbered(upTo, first)}${facts}\n\nExplain line ${lineNo} only.`;
+    return {
+      messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...EXAMPLES, { role: 'user', content: body }],
+      maxTokens: MAX_TOKENS.line, context, used, check, lineNo,
+    };
+  }
+
+  const n = Math.min(lines.length, MAX_BLOCK_LINES);
+  const head = [`Kind: ${kind}`, ...inputLines(inputInfo)].join('\n');
+  const parts = [head];
+  if (factBlock.length) parts.push(`FACTS (reliable, from a rule-based explainer; its wording can be clumsy):\n${factBlock.map(u => `- ${u}`).join('\n')}`);
+  if (p.lineReadings?.length) parts.push(`Rule-based reading of each statement:\n${p.lineReadings.map(l => `- ${l.text} => ${l.reading}`).join('\n')}`);
+  const context = parts.join('\n\n');
+  const task = `Reply with the summary object, then ${n === 1 ? 'one object for line 1' : `one object for each of lines 1 to ${n}`}, one per row.`;
   return {
-    messages: p.scope === 'line'
-      ? [{ role: 'system', content: SYSTEM_PROMPT }, ...EXAMPLES, { role: 'user', content: body }]
-      : [{ role: 'system', content: BLOCK_SYSTEM_PROMPT }, { role: 'user', content: body }],
-    maxTokens: p.scope === 'line' ? MAX_TOKENS.line : blockTokens(codeLines(p.code)),
-    context,
-    used,
+    messages: [{ role: 'system', content: BLOCK_SYSTEM_PROMPT }, { role: 'user', content: `${context}\n\nCode:\n${clip(numbered(lines), 2400)}\n\n${task}` }],
+    maxTokens: blockTokens(lines.length), context, used, check,
   };
 }
-
-const codeLines = (code: string) => code.trim().split('\n').filter(l => l.trim()).length;
-const numbered = (code: string) => clip(code.trim().split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n'), 2400);
 
 // ── Building from a place in the app ──────────────────────────────────────────
 
 export interface ExplainScope {
   /** Node the code belongs to (Expression Block, Custom Function), when it belongs to one. */
   nodeId?: string;
-  /** The graph level that node is in (for its neighbours). */
+  /** The graph level that node is in (for its inputs). */
   nodes?: readonly GraphNode[];
+  /** Node type → its name; node type → its registry description (for the inputs' meaning). Registry-owned, never user labels. */
   namer?: NodeNamer;
+  describe?: NodeDescriber;
   /** The whole enclosing code (all lines of the block; the function body), for the line's surroundings. */
   enclosing?: string;
   /** "Expression Block" / "Custom Function" / "GLSL page" when there is no node. */
@@ -316,18 +364,24 @@ export interface ExplainScope {
   ctx?: ExplainContext;
 }
 
-/** The node context for a scope (none for the GLSL page or when no graph is known). */
-export function scopeNode(s: ExplainScope): NodeContext | undefined {
-  if (s.nodeId && s.nodes) return nodeContextFor(s.nodes, s.nodeId, s.namer);
-  if (s.kind) return { kind: s.kind, upstream: [], downstream: [], techniques: [] };
-  return undefined;
+/** The kind of code a scope holds, by node type, never by label. */
+export function scopeKind(s: ExplainScope): string | undefined {
+  const me = s.nodeId && s.nodes?.find(n => n.id === s.nodeId);
+  if (me) return nameOf(me, s.namer);
+  return s.kind;
+}
+
+/** The inputs of the node a scope belongs to (none for the GLSL page). */
+export function scopeInputs(s: ExplainScope): InputInfo[] {
+  return s.nodeId && s.nodes ? describeInputs(s.nodes, s.nodeId, s.describe) : [];
 }
 
 /** A line's prompt, built from a scope. */
 export function promptForLine(lineText: string, s: ExplainScope): BuiltPrompt {
-  const node = scopeNode(s);
+  const inputs = scopeInputs(s);
   const ctx: ExplainContext = { ...(s.ctx ?? {}), types: { ...typesFromCode(s.enclosing ?? lineText), ...(s.ctx?.types ?? {}) } };
-  return buildExplainPrompt({ scope: 'line', code: lineText, enclosing: s.enclosing, where: s.where, node, facts: gatherFacts(lineText, ctx, node) });
+  const skip = new Set(inputs.map(i => i.name));
+  return buildExplainPrompt({ scope: 'line', code: lineText, enclosing: s.enclosing, where: s.where, kind: scopeKind(s), inputs, facts: gatherFacts(lineText, ctx, undefined, skip) });
 }
 
 /** The statements of some code: split at `;` (a function body), or a line each when it has none (an Expression Block's lines). */
@@ -336,23 +390,23 @@ export function statementsOf(code: string): Array<{ text: string }> {
   return code.split('\n').map(l => l.trim()).filter(Boolean).map(text => ({ text }));
 }
 
-/** A whole block's prompt: its statements, each with the rule-based reading. */
+/** A whole block's prompt: its lines, each with the rule-based reading. */
 export function promptForBlock(code: string, s: ExplainScope): BuiltPrompt {
-  const node = scopeNode(s);
+  const inputs = scopeInputs(s);
   const ctx: ExplainContext = { ...(s.ctx ?? {}), types: { ...typesFromCode(code), ...(s.ctx?.types ?? {}) } };
+  const skip = new Set(inputs.map(i => i.name));
   const lineReadings: NonNullable<PromptInput['lineReadings']> = [];
   const facts = noFacts();
   for (const st of statementsOf(code).slice(0, 24)) {
     const ex = explainLine(st.text, ctx);
     if (!ex.ok) continue;
     lineReadings.push({ text: st.text.replace(/\s+/g, ' ').trim(), reading: ex.lead });
-    const f = gatherFacts(st.text, ctx);
+    const f = gatherFacts(st.text, ctx, undefined, skip);
     facts.idioms.push(...f.idioms); facts.functions.push(...f.functions); facts.names.push(...f.names); facts.colours.push(...f.colours);
   }
   facts.idioms = uniq(facts.idioms).filter(i => !i.startsWith('usually')); facts.functions = uniq(facts.functions); facts.names = uniq(facts.names); facts.colours = uniq(facts.colours);
-  if (node) facts.techniques = node.techniques.map(t => `${t.name}: ${t.explain}`);
   // The block's readings are listed per line; the facts here are the shared ones
-  return buildExplainPrompt({ scope: 'block', code, node, facts, lineReadings });
+  return buildExplainPrompt({ scope: 'block', code, kind: scopeKind(s), inputs, facts, lineReadings });
 }
 
 /** A short stable id for a prompt's context (the cache's second half). */

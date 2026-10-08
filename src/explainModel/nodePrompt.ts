@@ -1,5 +1,6 @@
 /**
  * nodePrompt.ts — "Explain this node" (docs/explain-model.md): what a whole node is doing in this graph.
+ * User-given labels and titles are never included (they steer a small model); nodes are named by TYPE.
  * Simple retrieval keeps the prompt small: only what this question needs — the node's own help text, its
  * stage in the picture's pipeline, the techniques found on it, what feeds it and what it feeds, the settings
  * that differ from a fresh node's, and (for code nodes) the code. Pure.
@@ -70,8 +71,7 @@ export function promptForNode(node: GraphNode, nodes: readonly GraphNode[], def:
   const changed = changedParams(node.params, def.defaultParams);
   if (changed.length) facts.push(`Settings changed from the defaults: ${changed.join('; ')}`);
   const code = nodeCode(node).trim();
-  const label = typeof node.params?.label === 'string' && node.params.label.trim() ? ` called "${node.params.label.trim()}"` : '';
-  let body = `Node${label}\nFACTS:\n${facts.map(f => `- ${f}`).join('\n')}`;
+  let body = `FACTS:\n${facts.map(f => `- ${f}`).join('\n')}`;
   if (code) {
     const last = code.split('\n').pop() ?? '';
     const reading = gatherFacts(last).reading;

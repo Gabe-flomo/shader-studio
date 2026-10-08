@@ -13,10 +13,15 @@ import type { ExplainContext } from '../../lib/glslPatterns';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
-import { EXPLAIN_MODEL, downloadBytes, formatBytes } from '../../explainModel/config';
+import { downloadBytes, formatBytes, modelById } from '../../explainModel/config';
 import { useExplainModel } from '../../explainModel/client';
 import { useModelAnswer, type AskSpec } from '../../explainModel/useAnswer';
+import { viewAnswer } from '../../explainModel/assess';
 import { useExplainScope } from './ExplainScope';
+import { AnswerBody, ComparePanel } from './ExplainAnswer';
+import { useElapsed } from './useElapsed';
+
+export { AnswerText } from './ExplainAnswer';
 
 export interface ExplainMoreProps {
   /** The line (mode 'line') or the whole code (mode 'block'). */
@@ -33,52 +38,16 @@ export interface ExplainMoreProps {
   auto?: boolean;
 }
 
-/** An answer as paragraphs and list items ("- …" or the block format's "3: …"). */
-export function AnswerText({ text }: { text: string }) {
-  const tk = useTokens();
-  const parts = useMemo(() => {
-    const out: Array<{ list: boolean; items: Array<{ n?: string; text: string }> }> = [];
-    for (const raw of text.split('\n')) {
-      const line = raw.trim();
-      if (!line) continue;
-      const summary = /^summary\s*:\s*(.*)$/i.exec(line);
-      if (summary) { out.push({ list: false, items: [{ text: summary[1] }] }); continue; }
-      const item = /^(?:([-*•])|(\d+)\s*[.):])\s*(.*)$/.exec(line);
-      if (!item) { out.push({ list: false, items: [{ text: line }] }); continue; }
-      const last = out[out.length - 1];
-      const it = { n: item[2], text: item[3] };
-      if (last?.list) last.items.push(it); else out.push({ list: true, items: [it] });
-    }
-    return out;
-  }, [text]);
-  return (
-    <div data-explain-answer="" style={{ display: 'flex', flexDirection: 'column', gap: 6, font: `500 12.5px/1.55 ${fontFamily.ui}`, color: tk.text.primary }}>
-      {parts.map((p, i) => p.list
-        ? (
-          <ul key={i} style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {p.items.map((it, j) => (
-              <li key={j} style={{ display: 'flex', gap: 8 }}>
-                <span style={{ flexShrink: 0, minWidth: 16, color: tk.text.faint, font: `600 11px/1.9 ${fontFamily.mono}` }}>{it.n ?? '•'}</span>
-                <span style={{ minWidth: 0 }}><Code text={it.text} /></span>
-              </li>
-            ))}
-          </ul>
-        )
-        : <p key={i} style={{ margin: 0 }}><Code text={p.items.map(x => x.text).join(' ')} /></p>)}
-    </div>
-  );
-}
-
-/** `backticked` words as code. */
-function Code({ text }: { text: string }) {
-  return <>{text.split(/(`[^`]+`)/).map((s, i) => (s.startsWith('`') && s.endsWith('`') && s.length > 2 ? <code key={i} style={{ font: `500 0.92em ${fontFamily.mono}` }}>{s.slice(1, -1)}</code> : s))}</>;
-}
-
 export function ExplainMore({ text, ctx, mode = 'line', where, label, build, auto }: ExplainMoreProps) {
   const tk = useTokens();
   const scope = useExplainScope();
   const model = useExplainModel();
-  const { state, ask, confirmDownload, stop, dismiss } = useModelAnswer();
+  const { state, ask, confirmDownload, stop, dismiss, doubleCheck, compare, closeCompare } = useModelAnswer();
+  const active = modelById(model.activeId);
+  const elapsed = useElapsed(state.phase === 'working' ? state.startedAt : undefined);
+  const view = useMemo(() => viewAnswer({
+    kind: mode, raw: state.meta?.raw ?? state.text, tokens: state.meta?.tokens, check: state.check, lineNo: state.lineNo, samples: state.samples, done: state.phase === 'done',
+  }), [mode, state.text, state.meta, state.check, state.lineNo, state.samples, state.phase]);
 
   const spec: AskSpec = {
     kind: mode,
@@ -88,6 +57,10 @@ export function ExplainMore({ text, ctx, mode = 'line', where, label, build, aut
       const s = {
         nodeId: scope.nodeId, kind: scope.kind, nodes: scope.getNodes?.(), enclosing: scope.enclosing?.(), where,
         namer: (t: string) => getNodeDefinition(t)?.label, ctx,
+        describe: (t: string) => {
+          const d = getNodeDefinition(t);
+          return d ? { label: d.label, description: d.description, outputs: Object.fromEntries(Object.entries(d.outputs ?? {}).map(([k, v]) => [k, v.label])) } : undefined;
+        },
       };
       return mode === 'block' ? prompt.promptForBlock(text, s) : prompt.promptForLine(text, s);
     }),
@@ -122,11 +95,11 @@ export function ExplainMore({ text, ctx, mode = 'line', where, label, build, aut
           <span style={{ font: `500 11.5px/1.5 ${fontFamily.ui}`, color: tk.text.muted }}>
             {model.downloaded
               ? 'Turn it on to use the copy this browser already keeps.'
-              : `A one-time download of ${formatBytes(downloadBytes())} (${EXPLAIN_MODEL.name}, ${EXPLAIN_MODEL.licence}). After that it runs here, offline: your code never leaves this device.`}
+              : `A one-time download of ${formatBytes(downloadBytes('webgpu', active))} (${active.name}, ${active.licence}). After that it runs here, offline: your code never leaves this device.`}
           </span>
           <div style={{ display: 'flex', gap: 6 }}>
             <button type="button" data-explain-action="download-model" style={{ ...small, background: tk.ink.base, color: tk.ink.text }} onClick={() => { void confirmDownload(); }}>
-              <Icon name="import" size={12} />{model.downloaded ? 'Turn it on' : `Download ${formatBytes(downloadBytes())} and explain`}
+              <Icon name="import" size={12} />{model.downloaded ? 'Turn it on' : `Download ${formatBytes(downloadBytes('webgpu', active))} and explain`}
             </button>
             <button type="button" style={quiet} onClick={dismiss}>Not now</button>
           </div>
@@ -148,18 +121,44 @@ export function ExplainMore({ text, ctx, mode = 'line', where, label, build, aut
         <div data-explain-model="" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', borderRadius: radius.md, background: alpha(tk.accent.base, 0.06), border: `1px solid ${alpha(tk.accent.base, 0.18)}` }}>
           <span data-explain-model-label="" style={{ display: 'flex', alignItems: 'center', gap: 5, font: `650 10px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', color: tk.text.faint }}>
             <Icon name="spark" size={10} />Explained by a local model
-            <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>· {EXPLAIN_MODEL.name}{model.backend ? ` on ${model.backend === 'webgpu' ? 'WebGPU' : 'WebAssembly'}` : ''}{state.cached ? ' · from this session' : ''} · can be wrong</span>
+            <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>· {active.name}{model.backend ? ` on ${model.backend === 'webgpu' ? 'WebGPU' : 'WebAssembly'}` : ''}{state.cached ? ' · from this session' : ''} · can be wrong</span>
           </span>
-          {state.text
-            ? <AnswerText text={state.text} />
-            : <span style={{ font: `500 12px ${fontFamily.ui}`, color: tk.text.muted }}>{model.status === 'loading' ? 'Loading the model…' : 'Thinking…'}</span>}
-          {busy && <span aria-hidden style={{ alignSelf: 'flex-start', width: 6, height: 12, background: tk.accent.base, opacity: 0.6 }} />}
+          {view.split.thinkingNow && busy
+            ? <span data-explain-thinking="" style={{ font: `500 12px ${fontFamily.ui}`, color: tk.text.muted }}>Thinking… {elapsed} s</span>
+            : view.empty
+              ? <span style={{ font: `500 12px ${fontFamily.ui}`, color: tk.text.muted }}>{view.ranOut ? 'It used up its thinking budget before answering. Try again, or pick a faster model.' : model.status === 'loading' ? 'Loading the model…' : `Thinking…${busy && active.thinks ? ` ${elapsed} s` : ''}`}</span>
+              : <AnswerBody view={view} mode={mode} />}
+          {view.split.thinking && (
+            <details data-explain-reasoning="" style={{ font: `500 11.5px/1.5 ${fontFamily.ui}`, color: tk.text.muted }}>
+              <summary style={{ cursor: 'pointer', color: tk.text.faint, fontWeight: 600 }}>Show reasoning</summary>
+              <div style={{ margin: '4px 0 0', whiteSpace: 'pre-wrap', maxHeight: 220, overflow: 'auto', fontFamily: fontFamily.mono, fontSize: 11 }}>{view.split.thinking}</div>
+            </details>
+          )}
+          {busy && !view.split.thinkingNow && <span aria-hidden style={{ alignSelf: 'flex-start', width: 6, height: 12, background: tk.accent.base, opacity: 0.6 }} />}
+          {state.phase === 'done' && state.meta && (
+            <span data-explain-timing="" style={{ font: `500 10.5px ${fontFamily.ui}`, color: tk.text.faint }}>
+              {(state.meta.ms / 1000).toFixed(1)} s{state.meta.tokensPerSec ? ` · ${state.meta.tokensPerSec} tokens a second` : ''}{state.samples ? ' · double-checked' : ''}
+            </span>
+          )}
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {busy
               ? <button type="button" style={quiet} onClick={stop}>Stop</button>
               : <button type="button" style={quiet} onClick={() => { void ask(spec); }}>Ask again</button>}
+            {!busy && mode !== 'node' && !state.samples && (
+              <button type="button" data-explain-action="double-check" style={quiet} disabled={state.checking} onClick={() => { void doubleCheck(); }}
+                title="Ask twice more at a looser setting and see whether the answers agree. Slower.">
+                {state.checking ? 'Double-checking…' : 'Double-check'}
+              </button>
+            )}
+            {!busy && model.downloadedIds.length > 1 && (
+              <button type="button" data-explain-action="compare-models" style={quiet} onClick={() => { void compare(); }}
+                title="Ask every downloaded model the same question, one after another, and show the answers side by side">
+                Compare models
+              </button>
+            )}
             {!busy && <button type="button" style={quiet} onClick={dismiss}>Hide</button>}
           </div>
+          {state.compare && <ComparePanel entries={state.compare} mode={mode} state={state} onClose={closeCompare} />}
           {state.used.length > 0 && (
             <details data-explain-facts="" style={{ font: `500 11.5px/1.5 ${fontFamily.ui}`, color: tk.text.muted }}>
               <summary style={{ cursor: 'pointer', color: tk.text.faint, fontWeight: 600 }}>Facts it was given ({state.used.length})</summary>

@@ -46,7 +46,7 @@ describe('the node prompt', () => {
     const user = p.messages[1].content;
     expect(p.messages[0].content).toBe(NODE_SYSTEM_PROMPT);
     expect(NODE_SYSTEM_PROMPT).toMatch(/at most 3 short sentences/);
-    expect(user).toContain('Node called "Ring"');
+    expect(user).not.toContain('Ring'); // the user's label for the node is never told to the model
     expect(user).toContain('What the node is for (its help): Write a few lines of maths.');
     expect(user).toContain('Fed by: UV -> p');
     expect(user).toContain('Feeds: Output (from result)');
