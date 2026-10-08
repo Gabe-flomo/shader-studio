@@ -67,6 +67,7 @@ export const BUILDER_HELP: Record<BuilderKey, Record<string, HelpEntry>> = {
       lines: [
         'A warp changes the space a shape lives in, not the shape: repeat it forever, mirror it, twist or bend it. Warps stack top to bottom.',
         'On the whole scene they bend every shape; on a group, everything in it; on a shape, only that shape.',
+        'To bend the rays instead of the shapes, use Space curvature on the March Loop card once the scene is built: above 0 the world curves round like a ball, below 0 it opens into a fisheye tunnel.',
       ],
       examples: [
         { label: 'Twist everything', insert: { recipe: 'twist 0.5' } },
@@ -89,6 +90,7 @@ export const BUILDER_HELP: Record<BuilderKey, Record<string, HelpEntry>> = {
       lines: [
         'An orbit camera: it circles the point it looks at. Distance is how far away, Angle where it stands round the point, Elevation how far above.',
         'Set Orbit speed to turn it over time, or Flatten to 1 for an isometric drawing.',
+        'Once it is built, the March Camera card has Perspective: Reverse makes things farther away look bigger, like a Byzantine icon.',
       ],
       examples: [{ label: 'Slow orbit from further away', insert: { recipe: 'camera dist=6 orbit=10' } }],
     },

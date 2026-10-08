@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.84',
+    date: '2026-10-08',
+    title: 'Curved space',
+    highlights: [
+      { area: 'Studio', text: 'Curved space: a Space curvature setting on March Loop groups bends rays through spherical (k > 0) or hyperbolic (k < 0) space, exactly, and works on Play.', link: { kind: 'doc', path: 'docs/curved-space.md' } },
+      { area: 'Studio', text: 'March Camera gets a Perspective choice: normal, orthographic or reverse, where farther things look bigger.' },
+      { area: 'Studio', text: 'Three new examples in Curved space: a spherical world of spheres, a hyperbolic tunnel of columns, and a reverse-perspective room.' },
+    ],
+  },
+  {
     id: '2026.10.83',
     date: '2026-10-08',
     title: 'First taste of 4D',

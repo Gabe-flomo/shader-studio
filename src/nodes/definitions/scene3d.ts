@@ -141,6 +141,8 @@ export const MarchCameraNode: NodeDefinition = {
   defaultParams: {
     camDist: 3.0, camAngle: 0.6, camElevation: 0.3, rotSpeed: 0.0, fov: 1.5,
     targetX: 0.0, targetY: 0.0, targetZ: 0.0, aperture: 0.0, focalDist: 3.0, lensSpeed: 0.0,
+    // Only read when Perspective is Reverse (hidden otherwise, so they are not uniforms and the code is unchanged).
+    reverseStrength: 1.0, reverseDist: 8.0,
   },
   paramDefs: {
     camDist:      { label: 'Cam Dist',   type: 'float' as const, min: 0.1,  max: 20.0, step: 0.05, hint: 'Distance from the camera to the target point.' },
@@ -155,6 +157,13 @@ export const MarchCameraNode: NodeDefinition = {
     focalDist:    { label: 'Focal Dist', type: 'float' as const, min: 0.1,  max: 50.0, step: 0.1,   hint: 'Distance from camera at which the scene is perfectly sharp.' },
     lensSpeed:    { label: 'Lens Speed', type: 'float' as const, min: 0.0,  max: 5.0,  step: 0.05,  hint: 'Speed at which the aperture grain drifts over time. 0 = frozen static.' },
     // No default: a camera without it compiles exactly as before; the Scene Builder sets it when Flatten is above 0.
+    projection:   { label: 'Perspective', type: 'select' as const, options: [
+      { value: 'normal',       label: 'Normal' },
+      { value: 'orthographic', label: 'Orthographic (parallel)' },
+      { value: 'reverse',      label: 'Reverse (far = bigger)' },
+    ], hint: 'Normal: rays fan out from the camera, far things look smaller. Orthographic: rays run parallel, size does not change with distance. Reverse: rays start spread out and aim at a point in front of the camera, so far things look bigger.' },
+    reverseStrength: { label: 'Reverse strength', type: 'float' as const, min: 0.0, max: 1.0, step: 0.01, showWhen: { param: 'projection', value: 'reverse' }, hint: '0 = parallel rays (orthographic), 1 = the rays meet exactly at the Converge distance. In between they meet farther out. Whatever the strength, the look-at target keeps its size.' },
+    reverseDist:  { label: 'Converge at', type: 'float' as const, min: 0.5, max: 50.0, step: 0.1, showWhen: { param: 'projection', value: 'reverse' }, hint: 'How far in front of the camera the rays meet (at strength 1). Things nearer than this look bigger the farther away they are; past it the picture flips, like a real lens focus.' },
     ortho:        { label: 'Flatten',    type: 'float' as const, min: 0.0,  max: 1.0,  step: 0.01,  hint: 'From perspective (0) to orthographic (1): parallel edges stay parallel, like an isometric drawing. The same Flatten as Time Cube View and Draw agents.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -186,11 +195,21 @@ export const MarchCameraNode: NodeDefinition = {
       // Pinhole ray direction
       `    vec3  ${id}_rd0   = normalize(${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2 + ${fov} * ${id}_fwd);\n`,
       // Flatten (only when set): the rays' origins spread across the picture and their directions close up.
-      ...(node.params.ortho !== undefined ? [
-        `    float ${id}_or    = clamp(${p(node.params.ortho, 0.0)}, 0.0, 1.0);\n`,
+      ...(node.params.ortho !== undefined || node.params.projection === 'orthographic' ? [
+        `    float ${id}_or    = clamp(${node.params.projection === 'orthographic' ? '1.0' : p(node.params.ortho, 0.0)}, 0.0, 1.0);\n`,
         `    vec3  ${id}_lat   = ${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2;\n`,
         `    ${id}_ro0 += ${id}_or * ${camDist} / max(${fov}, 0.05) * ${id}_lat;\n`,
         `    ${id}_rd0 = normalize(max(${fov}, 0.05) * ${id}_fwd + (1.0 - ${id}_or) * ${id}_lat);\n`,
+      ] : []),
+      // Reverse perspective (docs/curved-space.md): origins spread over the image plane, directions aimed at a point
+      // 'Converge at' in front, so the lateral offset at depth z is O·(1 − a·z/D): smaller farther away, so far things look bigger.
+      ...(node.params.projection === 'reverse' ? [
+        `    float ${id}_ra    = clamp(${p(node.params.reverseStrength, 1.0)}, 0.0, 1.0);\n`,
+        `    float ${id}_rD    = max(${p(node.params.reverseDist, 8.0)}, 0.1);\n`,
+        `    vec3  ${id}_rlat  = ${uv}.x * ${id}_rgt + ${uv}.y * ${id}_up2;\n`,
+        `    vec3  ${id}_rO    = ${camDist} / max(${fov}, 0.05) / max(1.0 - ${id}_ra * ${camDist} / ${id}_rD, 0.2) * ${id}_rlat;\n`,
+        `    ${id}_ro0 += ${id}_rO;\n`,
+        `    ${id}_rd0 = normalize(${id}_rD * ${id}_fwd - ${id}_ra * ${id}_rO);\n`,
       ] : []),
       // Per-pixel hash for lens disk radius; angle drifts over time via lensSpeed
       `    float ${id}_h1    = fract(sin(dot(${uv}, vec2(127.1, 311.7))) * 43758.5453);\n`,
@@ -533,6 +552,7 @@ export const MarchLoopGroupNode: NodeDefinition = {
     maxSteps:    { label: 'Max Steps',   type: 'float' as const,   min: 8,    max: 256,   step: 4,    compileTime: true, hint: 'Maximum ray march iterations per pixel. Higher = deeper into geometry, more GPU cost.' },
     maxDist:     { label: 'Max Dist',    type: 'float' as const,   min: 5.0,  max: 100.0, step: 1.0,  hint: 'How far the ray travels before giving up and returning the background color.' },
     stepScale:   { label: 'Step Scale',  type: 'float' as const,   min: 0.3,  max: 1.0,   step: 0.05, hint: 'Fraction of the SDF distance to step each iteration. Lower = safer for thin features but slower. Not used in volumetric mode.' },
+    curvature:   { label: 'Space curvature', type: 'float' as const, min: -1.0, max: 1.0, step: 0.01, hint: 'Bends the rays like a curved universe. 0 = flat, ordinary space. Above 0 (spherical): rays curve back toward each other, so things shrink with distance, then grow again past the halfway point, and the far side of the world looms large. Below 0 (hyperbolic): rays spread, a fisheye tunnel where repeated things shrink fast. Left at 0 and never touched, the loop is built exactly as before.' },
     volumetric:  { label: 'Volumetric',  type: 'bool'  as const,                                       hint: 'When on, the ray passes through the scene accumulating color at every step. No hit detection. Use with marchSceneDist + accumulator nodes in the body.' },
     passthrough: { label: 'Passthrough', type: 'float' as const,   min: 0.001, max: 0.5,  step: 0.005, showWhen: { param: 'volumetric', value: 'true' }, hint: 'Minimum step size in volumetric mode. Prevents the ray from stalling at zero-distance surfaces. Also caps 1/vol to avoid blowout.' },
     jitter:      { label: 'Jitter',      type: 'float' as const,   min: 0.0,  max: 1.0,   step: 0.01,  hint: 'Starts each pixel\'s ray a little way along, by a different amount, so the steps of neighbouring rays don\'t line up into rings (banding). 1 = spread over one step, 0 = off.' },
@@ -611,6 +631,7 @@ export const GILitMarchGroupNode: NodeDefinition = {
     maxSteps:    { label: 'Max Steps',    type: 'float' as const, min: 8,    max: 256,  step: 4,    compileTime: true, hint: 'Maximum ray march iterations per pixel.' },
     maxDist:     { label: 'Max Dist',     type: 'float' as const, min: 5.0,  max: 100,  step: 1.0,  hint: 'How far the ray travels before returning background.' },
     stepScale:   { label: 'Step Scale',   type: 'float' as const, min: 0.3,  max: 1.0,  step: 0.05, hint: 'Fraction of SDF distance to step. Lower = safer, slower.' },
+    curvature:   { label: 'Space curvature', type: 'float' as const, min: -1.0, max: 1.0, step: 0.01, hint: 'Bends the rays like a curved universe. 0 = flat, ordinary space. Above 0 (spherical): rays curve back toward each other, so things shrink with distance, then grow again past the halfway point, and the far side of the world looms large. Below 0 (hyperbolic): rays spread, a fisheye tunnel where repeated things shrink fast. Left at 0 and never touched, the loop is built exactly as before.' },
     volumetric:  { label: 'Volumetric',   type: 'bool'  as const,                                   hint: 'Accumulate density along the ray. GI/specular are disabled in this mode.' },
     passthrough: { label: 'Passthrough',  type: 'float' as const, min: 0.001, max: 0.5, step: 0.005, showWhen: { param: 'volumetric', value: 'true' }, hint: 'Minimum step in volumetric mode.' },
     jitter:      { label: 'Jitter',      type: 'float' as const,   min: 0.0,  max: 1.0,   step: 0.01,  hint: 'Starts each pixel\'s ray a little way along, by a different amount, so the steps of neighbouring rays don\'t line up into rings (banding). 1 = spread over one step, 0 = off.' },
