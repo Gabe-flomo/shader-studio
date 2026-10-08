@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.71',
+    date: '2026-10-07',
+    title: 'Pattern discovery',
+    highlights: [
+      { area: 'Studio', text: 'Patterns in the Code Explorer: 41 techniques in 13 families (light falloff, domain warp, tiling, wave interference...) with the graphs that use each one.', link: { kind: 'doc', path: 'docs/reports/pattern-discovery.md' } },
+      { area: 'Studio', text: 'Each technique shows its maths and its variants side by side. Open a graph to see the matching nodes, or right-click a node for its patterns.' },
+    ],
+  },
+  {
     id: '2026.10.70',
     date: '2026-10-07',
     title: 'Do bar crash fix',
