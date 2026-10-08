@@ -75,6 +75,17 @@ export const FOURD_EXAMPLE_INDEX: Record<string, { label: string; description: s
     description: 'All of 3D space laid onto a 3-sphere (stereographic projection) and turned in 4D: the Hopf circles, great circles of the 3-sphere, become interlocking rings that fill space, nested round a half-cut Clifford torus. Play sets the turn, the flow along the circles, the number and thickness of rings.',
     play: true,
   },
+  // 4D straight to 2D (built in fourDProjectionExamples.ts)
+  fourDFlatTesseract: {
+    label: '4D: Flat tesseract (4D → 2D)',
+    description: 'The tesseract projected all the way down to the flat picture, 4D to 3D along w and then 3D to 2D, as glowing lines: no 3D scene at all, just UV, the 4D Wireframe 2D node and SDF Glow. Play sets both turns, the size and the glow.',
+    play: true,
+  },
+  fourDPlaneSlice: {
+    label: '4D: Plane through a duocylinder (4D → 2D)',
+    description: 'A flat plane cutting through a turning duocylinder in 4D: the cross-section splits, merges and morphs like a lava lamp. UV becomes a 4D point (Plane Slice 4D), two 4D turns, a 4D shape, and the distance coloured by depth with SDF Fill. Play sets the sweep, the turns and the radii.',
+    play: true,
+  },
 };
 
 export const FOURD_EXAMPLE_KEYS =Object.keys(FOURD_EXAMPLE_INDEX);

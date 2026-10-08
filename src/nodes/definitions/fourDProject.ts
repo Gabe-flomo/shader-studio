@@ -458,7 +458,123 @@ float sdf4d_hopf(vec4 p, float R, float t, float cnt, float latDeg, float spread
   distHint: 'Exact signed distance to the tubes.',
 });
 
+
+// ─── 4D → 2D: a flat wireframe and a plane slice ───────────────────────────────
+
+const WIRE2D_HELPERS = `
+vec2 sdf4d_proj2(vec4 v, float camD, float persp, float camD3, float persp3) {
+    vec3 q = v.xyz * mix(1.0, camD / max(camD - v.w, 0.05), persp);
+    return q.xy * mix(1.0, camD3 / max(camD3 - q.z, 0.05), persp3);
+}
+float sdf4d_seg2d(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p - a;
+    vec2 ba = b - a;
+    float h = clamp(dot(pa, ba) / max(dot(ba, ba), 0.00000001), 0.0, 1.0);
+    vec2 d = pa - ba * h;
+    return dot(d, d);
+}`;
+
+/** One polytope's flat wireframe: every corner turned, projected 4D → 3D → 2D once, then one segment test per edge. */
+export function wireframe2DFunction(kind: string): string {
+  const { vertices, edges } = polytope(kind);
+  const term = (x: number, k: number) => (Math.abs(x) < 1e-9 ? '' : `c${k} * ${lit(x)}`);
+  const lines: string[] = [];
+  vertices.forEach((v, i) => {
+    const sum = v.map((x, k) => term(x, k)).filter(Boolean).join(' + ').replace(/\+ c(\d) \* -/g, '- c$1 * ');
+    lines.push(`    vec2 q${i} = sdf4d_proj2((${sum}) * R, camD, persp, camD3, persp3);\n`);
+  });
+  lines.push('    float e2 = 1000000.0;\n    float v2 = 1000000.0;\n');
+  for (const [a, b] of edges) lines.push(`    e2 = min(e2, sdf4d_seg2d(p, q${a}, q${b}));\n`);
+  vertices.forEach((_, i) => lines.push(`    v2 = min(v2, dot(p - q${i}, p - q${i}));\n`));
+  return `
+float sdf4d_wire2d_${kind}(vec2 p, vec4 c0, vec4 c1, vec4 c2, vec4 c3, float R, float camD, float persp, float camD3, float persp3, float er, float vr) {
+${lines.join('')}    return min(sqrt(e2) - er, sqrt(v2) - vr);
+}`;
+}
+
+const rotFlat = rotationDefs('xw', 'yz');
+
+export const Wireframe4D2DNode: NodeDefinition = {
+  type: 'wireframe4D2D', label: '4D Wireframe 2D', category: CAT,
+  aliases: ['tesseract 2d', 'flat tesseract', 'hypercube drawing', '4d to 2d', 'projected tesseract 2d'],
+  description:
+    'A 4D polytope (tesseract, 5-cell, 16-cell or 24-cell) turned in 4D and projected all the way down to the flat picture: 4D → 3D along w, then 3D → 2D along z, as lines and dots. ' +
+    'This is the classic animated tesseract, as a 2D distance: wire UV in and use it like a circle, with SDF Glow, SDF Fill or a palette. No 3D scene needed.',
+  inputs: {
+    uv:      { type: 'vec2',  label: 'UV', hint: 'The 2D point being measured: wire UV here (or a warped UV).' },
+    radius:  { type: 'float', label: 'Radius' },
+    edge:    { type: 'float', label: 'Line width' },
+    vertex:  { type: 'float', label: 'Dot radius' },
+    angle1:  { type: 'float', label: 'Turn 1 angle (deg)' },
+    angle2:  { type: 'float', label: 'Turn 2 angle (deg)' },
+  },
+  outputs: { dist: { type: 'float', label: 'Distance', hint: 'Distance to the lines and dots, in UV units: 0 on a line. Wire into SDF Glow or SDF Fill.' } },
+  defaultParams: { polytope: 'tesseract', projection: 'perspective', projection3: 'perspective', radius: 0.35, camDist: 3.0, camDist3: 4.0, edge: 0.004, vertex: 0.012, ...rotFlat.defaults, spin1: 20, spin2: 12 },
+  paramDefs: {
+    polytope: { label: 'Polytope', type: 'select', hint: 'Which 4D shape to draw.',
+                options: [{ value: 'tesseract', label: 'Tesseract (16 / 32)' }, { value: 'cell5', label: '5-cell (5 / 10)' }, { value: 'cell16', label: '16-cell (8 / 24)' }, { value: 'cell24', label: '24-cell (24 / 96)' }] },
+    projection: { label: '4D → 3D', type: 'select', hint: 'Perspective along w (cube in a cube) or orthographic (drop w).',
+                  options: [{ value: 'perspective', label: 'Perspective' }, { value: 'orthographic', label: 'Orthographic' }] },
+    camDist: { label: 'W camera distance', type: 'float', min: 1.05, max: 12.0, step: 0.01, showWhen: { param: 'projection', value: 'perspective' },
+               hint: 'How far along w the 4D camera sits, in units of the radius. Near is dramatic, far is nearly orthographic.' },
+    projection3: { label: '3D → 2D', type: 'select', hint: 'Perspective along z (near edges bigger) or orthographic (drop z).',
+                   options: [{ value: 'perspective', label: 'Perspective' }, { value: 'orthographic', label: 'Orthographic' }] },
+    camDist3: { label: 'Z camera distance', type: 'float', min: 1.05, max: 12.0, step: 0.01, showWhen: { param: 'projection3', value: 'perspective' },
+                hint: 'How far along z the flat camera sits, in units of the radius.' },
+    radius:  { label: 'Radius', type: 'float', min: 0.02, max: 2.0, step: 0.005, hint: 'Size on screen: distance from the centre to each corner before projecting, in UV units.' },
+    edge:    { label: 'Line width', type: 'float', min: 0.0005, max: 0.05, step: 0.0005, hint: 'Half the thickness of each line, in UV units. SDF Glow makes even a thin line shine.' },
+    vertex:  { label: 'Dot radius', type: 'float', min: 0.0, max: 0.08, step: 0.0005, hint: 'Radius of the dot at each corner. 0 hides them.' },
+    ...rotFlat.paramDefs,
+  },
+  glslFunctionsFor: (node: GraphNode) => [WIRE2D_HELPERS, wireframe2DFunction(String(node.params.polytope ?? 'tesseract'))],
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const kind = (POLYTOPES as readonly string[]).includes(String(node.params.polytope)) ? String(node.params.polytope) : 'tesseract';
+    const persp = node.params.projection === 'orthographic' ? '0.0' : '1.0';
+    const persp3 = node.params.projection3 === 'orthographic' ? '0.0' : '1.0';
+    const R = inputVars.radius || p(node.params.radius, 0.35);
+    const d = p(node.params.camDist, 3.0), d3 = p(node.params.camDist3, 4.0);
+    const er = inputVars.edge || p(node.params.edge, 0.004), vr = inputVars.vertex || p(node.params.vertex, 0.012);
+    return {
+      code: rotationColumns(node, inputVars) +
+        // The camera distances are in radii, so the look doesn't change with Radius.
+        `    float ${id}_dist = sdf4d_wire2d_${kind}(${inputVars.uv || 'g_uv'}, ${colArgs(id)}, ${R}, ${d} * ${R}, ${persp}, ${d3} * ${R}, ${persp3}, ${er}, ${vr});\n`,
+      outputVars: { dist: `${id}_dist` },
+    };
+  },
+};
+
+export const PlaneSlice4DNode: NodeDefinition = {
+  type: 'planeSlice4D', label: 'Plane Slice 4D', category: CAT,
+  aliases: ['4d to 2d', 'slice 4d in 2d', 'lift 2d to 4d', 'flat 4d slice', '2d slice of 4d'],
+  description:
+    'Turns the flat picture into a plane through 4D space: each UV point (x, y) becomes the 4D point (x, y, z, w). Wire it into Rotate 4D and any 4D shape, and the shape\'s distance is a 2D picture: the cross-section of a 4D object by a plane. ' +
+    'Turn it in the planes that leave the picture (xz, xw, yz, yw, zw) and shapes split, merge and morph like a lava lamp. Use the distance with SDF Fill or SDF Glow.',
+  inputs: {
+    uv:    { type: 'vec2',  label: 'UV', hint: 'The 2D point: wire UV here.' },
+    z:     { type: 'float', label: 'Z' },
+    w:     { type: 'float', label: 'W' },
+    scale: { type: 'float', label: 'Scale' },
+  },
+  outputs: { p4: { type: 'vec4', label: 'Point 4D', hint: 'The point as (x, y, z, w). Wire into Rotate 4D, Translate 4D or a 4D shape.' } },
+  defaultParams: { z: 0.0, w: 0.0, scale: 2.0 },
+  paramDefs: {
+    z:     { label: 'Z', type: 'float', min: -2.0, max: 2.0, step: 0.01, hint: 'Where the plane sits along z. Move it to sweep the plane through the shape.' },
+    w:     { label: 'W', type: 'float', min: -2.0, max: 2.0, step: 0.01, hint: 'Where the plane sits along w, the fourth axis. Wire an LFO for a slice that sweeps.' },
+    scale: { label: 'Scale', type: 'float', min: 0.1, max: 10.0, step: 0.01, hint: 'How much 4D space the picture covers: 2 shows about ±1 across the height.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const z = inputVars.z || p(node.params.z, 0.0), w = inputVars.w || p(node.params.w, 0.0), sc = inputVars.scale || p(node.params.scale, 2.0);
+    return {
+      code: `    vec4 ${id}_p4 = vec4((${inputVars.uv || 'g_uv'}) * ${sc}, ${z}, ${w});\n`,
+      outputVars: { p4: `${id}_p4` },
+    };
+  },
+};
+
 /** Phase 3 nodes, for the registry. */
 export const FOURD_P3_NODES: Record<string, NodeDefinition> = {
   wireframe4D: Wireframe4DNode, project4D: Project4DNode, stereo4D: Stereographic4DNode, stereoDist4D: StereoDistanceNode, hopfCirclesSDF: HopfCirclesSDFNode,
+  wireframe4D2D: Wireframe4D2DNode, planeSlice4D: PlaneSlice4DNode,
 };

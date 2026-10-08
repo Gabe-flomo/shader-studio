@@ -234,5 +234,64 @@ export function buildFourDProjectionExamples(): Record<string, ExampleGraph> {
 **Try.** Set **xw turn** to 0 and the picture holds still while **Flow** slides the circles round themselves, and no ring ever collides. Slide **Ring latitude** to move the middle ring of circles (90 is the one on the torus), and set Fibres per ring to 16 inside the group for a denser bundle. Slide **Scale** to zoom the picture in or out; circles near the middle are thin, those out near the north pole are fat, which is the stretch of the map. In Hopf Circles SDF try Rings 1, Latitude 90: one ring, all on the torus (the Villarceau circles).`),
   };
 
-  return { fourDTesseractProjection: tesseract, fourD24CellWireframe: cell24, fourDDuocylinderShadow: shadow, fourDHopfRings: hopf };
+  // ── 5. Flat tesseract (4D → 2D) ──────────────────────────────────────────
+  const flat: ExampleGraph = {
+    ...FOURD_EXAMPLE_INDEX.fourDFlatTesseract,
+    counter: 20,
+    nodes: [
+      n('uv', 'uv', 40, 220, { ...note('UV: the flat picture, centred, about -1 to 1 up the height.') }),
+      n('wireframe4D2D', 'wire', 300, 220, {
+        polytope: 'tesseract', projection: 'perspective', camDist: 3.0, projection3: 'perspective', camDist3: 4.0,
+        radius: 0.42, edge: 0.003, vertex: 0.01, plane1: 'xw', spin1: 18, plane2: 'yz', spin2: 11,
+        ...note('4D Wireframe 2D: the sixteen corners of a tesseract, turned in 4D (Turn 1 in xw swaps the inner and outer cube; Turn 2 in yz rolls it), seen by a camera on the w axis (4D → 3D, the cube in a cube) and then by a flat camera on the z axis (3D → 2D). The result is a distance to thin lines and dots on the picture, like a circle\'s distance.'),
+      }, { uv: ['uv', 'uv'] }),
+      n('light', 'halo', 600, 120, { mode: 'glow', brightness: 18, tint: [0.25, 0.55, 1.0], ...note('SDF Glow, wide: a soft blue halo that fades with the distance to the nearest line.') }, { distance: ['wire', 'dist'] }),
+      n('light', 'core', 600, 360, { mode: 'glow', brightness: 70, tint: [1.0, 0.85, 0.95], ...note('SDF Glow, tight: a near-white core on each line, so the lines look like lit wire.') }, { distance: ['wire', 'dist'] }),
+      n('addColor', 'sum', 880, 220, { ...note('Add Colors: the halo plus the core.') }, { a: ['halo', 'tinted'], b: ['core', 'tinted'] }),
+      n('toneMap', 'tone', 1120, 220, { mode: 'aces', ...note('Tone Map: the glow goes above 1 where lines cross; ACES rolls it off instead of clipping.') }, { color: ['sum', 'result'] }),
+      n('output', 'out', 1360, 220, { ...note('Output: the picture.') }, { color: ['tone', 'color'] }),
+    ],
+    play: play([
+      ctl('t1', 'wire::spin1', 'xw turn (deg/s)', -90, 90, 0.5),
+      ctl('t2', 'wire::spin2', 'yz turn (deg/s)', -90, 90, 0.5),
+      ctl('r', 'wire::radius', 'Size', 0.1, 0.9, 0.005),
+      ctl('g', 'halo::brightness', 'Glow falloff', 3, 60, 0.5),
+    ], `**What it shows.** A tesseract drawn the way it usually is in books and animations: the whole 4D cube projected down to a flat picture. First a camera on the fourth axis (w) sees it in perspective, which gives the small cube inside the big cube; then a flat camera looks at that 3D picture along z. As it turns in the xw plane the inner cube swells out through the faces and becomes the outer one.
+
+**How it is built.** UV → **4D Wireframe 2D** → two **SDF Glow** nodes (a wide blue halo, a tight white core) → **Add Colors** → **Tone Map** → Output. The wireframe node's distance works like any 2D shape's, so you can also fill it, warp UV before it, or tile it.
+
+**Try.** Set **yz turn** to 0 and watch the pure 4D turn. In the node, switch **4D → 3D** to Orthographic: the inner and outer cubes flatten onto each other. Try Polytope **24-cell**, or warp the UV first (a polar or kaleidoscope node) for a mandala of tesseracts.`),
+  };
+
+  // ── 6. Plane through a duocylinder (4D → 2D) ─────────────────────────────
+  const plane: ExampleGraph = {
+    ...FOURD_EXAMPLE_INDEX.fourDPlaneSlice,
+    counter: 20,
+    nodes: [
+      n('uv', 'uv', 40, 220, { ...note('UV: the flat picture.') }),
+      n('time', 'time', 40, 460, { ...note('Time: drives the sweep.') }),
+      n('lfo', 'sweep', 300, 460, { waveform: 'sine', freq: 0.05, amplitude: 0.5, offset: 0, ...note('LFO (sine): where the plane sits along w, sweeping between -0.5 and 0.5 about once every 20 seconds. Its Amplitude is the Play slider Sweep.') }, { time: ['time', 'time'] }),
+      n('planeSlice4D', 'slice', 300, 220, { scale: 1.7, z: 0.0, ...note('Plane Slice 4D: every point of the picture becomes the 4D point (x, y, z, w), with z fixed and w from the LFO. The picture is now a flat plane through 4D space.') }, { uv: ['uv', 'uv'], w: ['sweep', 'value'] }),
+      n('rotate4D', 'turnA', 560, 220, { plane: 'xw', angle: 0, spin: 9, ...note('Rotate 4D, xw: tilts the plane into the fourth axis over time, so the cut passes through different parts of the shape.') }, { p4: ['slice', 'p4'] }),
+      n('rotate4D', 'turnB', 800, 220, { plane: 'yz', angle: 25, spin: -6, ...note('Rotate 4D, yz: a second, slower turn the other way, so the pattern never quite repeats.') }, { p4: ['turnA', 'p4'] }),
+      n('duocylinderSDF', 'duo', 1040, 220, { r1: 0.8, r2: 0.55, ...note('Duocylinder SDF: two discs at right angles (one in xy, one in zw). Its cross-section by a plane is anything from a disc to a square-ish blob, and it splits in two as the plane turns.') }, { p4: ['turnB', 'p4'] }),
+      n('palette', 'pal', 1280, 80, { preset: 'rainbow', scale: 4.0, ...note('Palette: colours the inside by how deep each point is in the shape (the distance), so the blobs show contour bands.') }, { value: ['duo', 'dist'] }),
+      n('sdfFill', 'fill', 1520, 220, { strokeWidth: 0.012, ...note('SDF Fill: the inside in the palette colour, a thin white outline on the edge, dark outside.') }, { d: ['duo', 'dist'], fillColor: ['pal', 'color'] }),
+      n('toneMap', 'tone', 1760, 220, { mode: 'aces', ...note('Tone Map.') }, { color: ['fill', 'result'] }),
+      n('output', 'out', 2000, 220, { ...note('Output: the picture.') }, { color: ['tone', 'color'] }),
+    ],
+    play: play([
+      ctl('s', 'sweep::amplitude', 'Sweep', 0, 1, 0.01),
+      ctl('a', 'turnA::spin', 'xw turn (deg/s)', -45, 45, 0.5),
+      ctl('b', 'turnB::spin', 'yz turn (deg/s)', -45, 45, 0.5),
+      ctl('r1', 'duo::r1', 'Radius 1', 0.2, 1.2, 0.01),
+      ctl('r2', 'duo::r2', 'Radius 2', 0.2, 1.2, 0.01),
+    ], `**What it shows.** A 4D shape seen through a flat window. The picture is a plane through 4D space, and you see where it cuts a duocylinder. As the plane tilts into the fourth dimension, the cut shape grows, splits into two blobs, merges back and changes outline, though the duocylinder itself never changes.
+
+**How it is built.** UV → **Plane Slice 4D** (w from an LFO) → **Rotate 4D** (xw) → **Rotate 4D** (yz) → **Duocylinder SDF**. The distance is then coloured like any 2D shape: a Palette by depth and **SDF Fill** with an outline.
+
+**Try.** Set both turns to 0 and move **Sweep**: only w changes. Swap the Duocylinder for a **Tesseract**, **24-cell** or **Clifford Torus** (they all take the same 4D point). Raise Plane Slice 4D's Scale to zoom out.`),
+  };
+
+  return { fourDTesseractProjection: tesseract, fourD24CellWireframe: cell24, fourDDuocylinderShadow: shadow, fourDHopfRings: hopf, fourDFlatTesseract: flat, fourDPlaneSlice: plane };
 }

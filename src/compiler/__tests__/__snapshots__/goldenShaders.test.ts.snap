@@ -329,6 +329,13 @@ exports[`golden shaders: every Play example exports the same bundle > fourDDuocy
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > fourDFlatTesseract 1`] = `
+{
+  "bundle": "141f06a45f2fab13f2848947382c:12980",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > fourDHopfRings 1`] = `
 {
   "bundle": "1b8125c1fd2e32196ab52d507909:29526",
@@ -346,6 +353,13 @@ exports[`golden shaders: every Play example exports the same bundle > fourDHyper
 exports[`golden shaders: every Play example exports the same bundle > fourDLattice 1`] = `
 {
   "bundle": "1a8cc9422005da1faa9a12ff9561:20986",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > fourDPlaneSlice 1`] = `
+{
+  "bundle": "1bf596ae1899d801227b23eb5d66:7712",
   "missing": [],
 }
 `;
@@ -4477,6 +4491,43 @@ exports[`golden shaders: every example compiles as it did > fourDDuocylinderShad
 }
 `;
 
+exports[`golden shaders: every example compiles as it did > fourDFlatTesseract 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1f6d2add01e3c40934621884412d:11018",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1a407898c1156d0cd92e80fc79bf:135",
+  "paramBindings": "0fbc276498495e03b8575701d0b6:693",
+  "paramUniforms": [
+    "u_p_addcolorx0_scale",
+    "u_p_lightx0_brightness",
+    "u_p_lightx0_innerFalloff",
+    "u_p_lightx0_tint",
+    "u_p_lightx0xc2_brightness",
+    "u_p_lightx0xc2_innerFalloff",
+    "u_p_lightx0xc2_tint",
+    "u_p_wireframe4x0_angle1",
+    "u_p_wireframe4x0_angle2",
+    "u_p_wireframe4x0_camDist",
+    "u_p_wireframe4x0_camDist3",
+    "u_p_wireframe4x0_edge",
+    "u_p_wireframe4x0_radius",
+    "u_p_wireframe4x0_spin1",
+    "u_p_wireframe4x0_spin2",
+    "u_p_wireframe4x0_vertex",
+  ],
+  "paramValues": "19ef420d0ebe320d1c8006e8d22a:510",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
 exports[`golden shaders: every example compiles as it did > fourDHopfRings 1`] = `
 {
   "audioUniforms": {},
@@ -4694,6 +4745,45 @@ exports[`golden shaders: every example compiles as it did > fourDLattice 1`] = `
     "u_p_vignettex0_strength",
   ],
   "paramValues": "08250570bf3f340db7bdf0f97ebe:1680",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > fourDPlaneSlice 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0a0d521e1324f91ac6518a228bd8:5795",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "159e845c3788e111a42643111eb4:216",
+  "paramBindings": "11ee198f04b02b1cd785a433d3d1:666",
+  "paramUniforms": [
+    "u_p_duocylindex0_r1",
+    "u_p_duocylindex0_r2",
+    "u_p_fillx0_strokeWidth",
+    "u_p_lfox0_amplitude",
+    "u_p_lfox0_freq",
+    "u_p_lfox0_offset",
+    "u_p_lfox0_phase",
+    "u_p_palx0_anim",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
+    "u_p_planeslicex0_scale",
+    "u_p_planeslicex0_w",
+    "u_p_planeslicex0_z",
+    "u_p_rotate4dx0_angle",
+    "u_p_rotate4dx0_spin",
+    "u_p_rotate4dx0xc2_angle",
+    "u_p_rotate4dx0xc2_spin",
+  ],
+  "paramValues": "1ec0c19c04ffc40910bcf6fd6467:470",
   "passes": null,
   "success": true,
   "textureUniforms": {},

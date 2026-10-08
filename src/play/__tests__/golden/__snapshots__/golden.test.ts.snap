@@ -399,6 +399,15 @@ exports[`golden outputs: examples > fourDDuocylinderShadow 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > fourDFlatTesseract 1`] = `
+{
+  "g": "- x120",
+  "r": "- x120",
+  "t1": "- x120",
+  "t2": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > fourDHopfRings 1`] = `
 {
   "c": "- x120",
@@ -426,6 +435,16 @@ exports[`golden outputs: examples > fourDLattice 1`] = `
   "r": "- x120",
   "s": "- x120",
   "w": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > fourDPlaneSlice 1`] = `
+{
+  "a": "- x120",
+  "b": "- x120",
+  "r1": "- x120",
+  "r2": "- x120",
+  "s": "- x120",
 }
 `;
 
