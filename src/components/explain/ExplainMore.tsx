@@ -27,7 +27,9 @@ export interface ExplainMoreProps {
   /** The line (mode 'line') or the whole code (mode 'block'). */
   text: string;
   ctx?: ExplainContext;
-  mode?: 'line' | 'block' | 'node';
+  mode?: 'line' | 'block' | 'node' | 'steps';
+  /** mode 'steps': the line's rule-based steps, explained one by one. */
+  steps?: Array<{ label: string; code: string; reading: string }>;
   /** Words for where the line is: "line 3 of this block". */
   where?: string;
   /** The button's words. */
@@ -38,7 +40,9 @@ export interface ExplainMoreProps {
   auto?: boolean;
 }
 
-export function ExplainMore({ text, ctx, mode = 'line', where, label, build, auto }: ExplainMoreProps) {
+export function ExplainMore({ text, ctx, mode = 'line', where, label, build, auto, steps }: ExplainMoreProps) {
+  // Steps are a numbered list, read and checked like a block's lines.
+  const kind: 'line' | 'block' | 'node' = mode === 'steps' ? 'block' : mode;
   const tk = useTokens();
   const scope = useExplainScope();
   const model = useExplainModel();
@@ -46,12 +50,12 @@ export function ExplainMore({ text, ctx, mode = 'line', where, label, build, aut
   const active = modelById(model.activeId);
   const elapsed = useElapsed(state.phase === 'working' ? state.startedAt : undefined);
   const view = useMemo(() => viewAnswer({
-    kind: mode, raw: state.meta?.raw ?? state.text, tokens: state.meta?.tokens, check: state.check, lineNo: state.lineNo, samples: state.samples, done: state.phase === 'done',
-  }), [mode, state.text, state.meta, state.check, state.lineNo, state.samples, state.phase]);
+    kind, raw: state.meta?.raw ?? state.text, tokens: state.meta?.tokens, check: state.check, lineNo: state.lineNo, samples: state.samples, done: state.phase === 'done',
+  }), [kind, state.text, state.meta, state.check, state.lineNo, state.samples, state.phase]);
 
   const spec: AskSpec = {
-    kind: mode,
-    code: text,
+    kind,
+    code: mode === 'steps' ? `steps:${text}` : text,
     build: build ?? (async () => {
       const [prompt, { getNodeDefinition }] = await Promise.all([import('../../explainModel/prompt'), import('../../nodes/definitions')]);
       const s = {
@@ -62,6 +66,7 @@ export function ExplainMore({ text, ctx, mode = 'line', where, label, build, aut
           return d ? { label: d.label, description: d.description, outputs: Object.fromEntries(Object.entries(d.outputs ?? {}).map(([k, v]) => [k, v.label])) } : undefined;
         },
       };
+      if (mode === 'steps') return prompt.promptForSteps(text, steps ?? [], s);
       return mode === 'block' ? prompt.promptForBlock(text, s) : prompt.promptForLine(text, s);
     }),
   };
@@ -83,7 +88,7 @@ export function ExplainMore({ text, ctx, mode = 'line', where, label, build, aut
       {state.phase === 'idle' && (
         <button type="button" data-explain-action="explain-more" style={{ ...small, alignSelf: 'flex-start' }} onClick={() => { void ask(spec); }}
           title="Ask the small language model on this device why this is here and what it does to the picture">
-          <Icon name="spark" size={12} />{label ?? (mode === 'block' ? 'Explain this block' : mode === 'node' ? 'Explain this node' : 'Explain more')}
+          <Icon name="spark" size={12} />{label ?? (mode === 'block' ? 'Explain this block' : mode === 'node' ? 'Explain this node' : mode === 'steps' ? 'Explain these steps' : 'Explain more')}
         </button>
       )}
 
@@ -127,7 +132,7 @@ export function ExplainMore({ text, ctx, mode = 'line', where, label, build, aut
             ? <span data-explain-thinking="" style={{ font: `500 12px ${fontFamily.ui}`, color: tk.text.muted }}>Thinking… {elapsed} s</span>
             : view.empty
               ? <span style={{ font: `500 12px ${fontFamily.ui}`, color: tk.text.muted }}>{view.ranOut ? 'It used up its thinking budget before answering. Try again, or pick a faster model.' : model.status === 'loading' ? 'Loading the model…' : `Thinking…${busy && active.thinks ? ` ${elapsed} s` : ''}`}</span>
-              : <AnswerBody view={view} mode={mode} />}
+              : <AnswerBody view={view} mode={kind} labels={mode === 'steps' ? steps?.map(x => x.label) : undefined} />}
           {view.split.thinking && (
             <details data-explain-reasoning="" style={{ font: `500 11.5px/1.5 ${fontFamily.ui}`, color: tk.text.muted }}>
               <summary style={{ cursor: 'pointer', color: tk.text.faint, fontWeight: 600 }}>Show reasoning</summary>
@@ -158,7 +163,7 @@ export function ExplainMore({ text, ctx, mode = 'line', where, label, build, aut
             )}
             {!busy && <button type="button" style={quiet} onClick={dismiss}>Hide</button>}
           </div>
-          {state.compare && <ComparePanel entries={state.compare} mode={mode} state={state} onClose={closeCompare} />}
+          {state.compare && <ComparePanel entries={state.compare} mode={kind} state={state} onClose={closeCompare} />}
           {state.used.length > 0 && (
             <details data-explain-facts="" style={{ font: `500 11.5px/1.5 ${fontFamily.ui}`, color: tk.text.muted }}>
               <summary style={{ cursor: 'pointer', color: tk.text.faint, fontWeight: 600 }}>Facts it was given ({state.used.length})</summary>
