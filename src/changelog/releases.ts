@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.97',
+    date: '2026-10-08',
+    title: '2D grid scenes',
+    highlights: [
+      { area: 'Studio', text: '2D Scene Builder Grid tab: a grid of cells with up to three shapes given out by checker, column, row, every Nth or at random.', link: { kind: 'doc', path: 'docs/scene-builder-2d.md' } },
+      { area: 'Studio', text: 'Ripples from the centre, corners, the mouse or a point travel through the grid and change each cell: size, turn, a push, or a morph between shapes.' },
+      { area: 'Studio', text: 'Two new examples: Morphing ripple grid and Ripples that follow the mouse. In recipes: grid 14 shape=circle shape=box target=morph.' },
+    ],
+  },
+  {
     id: '2026.10.96',
     date: '2026-10-08',
     title: 'Worked examples',
