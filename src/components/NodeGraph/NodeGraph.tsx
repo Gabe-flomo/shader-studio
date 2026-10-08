@@ -56,6 +56,7 @@ import { BuilderWindowsHost } from '../builders/BuilderWindowsHost';
 import { BUILDERS } from '../../builders/registry';
 import { openBuilder } from '../../builders/open';
 import { builderSceneOf, describeIntoBuilder, editSceneInBuilder } from '../../sceneBuilder/actions';
+import { useLibraryPrefs } from '../../structure/libraryPrefs';
 const OptimizeModal = lazyWithSuspense<PropsOf<typeof OptimizeModalT>>(() => import('./OptimizeModal').then(m => ({ default: m.OptimizeModal })));
 const BakeDialogHost = lazyWithSuspense<Record<string, never>>(() => import('../bake/BakeDialog').then(m => ({ default: m.BakeDialogHost })));
 const SceneBuilderModal = lazyWithSuspense<Record<string, never>>(() => import('../sceneBuilder/SceneBuilderModal').then(m => ({ default: m.SceneBuilderModal })));
@@ -732,6 +733,15 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     return (srcNode.outputs[dragConnection.sourceOutputKey]?.type ??
       srcDef?.outputs[dragConnection.sourceOutputKey]?.type ?? null) as import('../../types/nodeGraph').DataType | null;
   }, [dragConnection, displayNodes, activeSubgraph]);
+
+  // Tell the node library which wire is being dragged, so it can offer what fits (structure/libraryPrefs.ts).
+  const dragSourceId = dragConnection?.sourceNodeId ?? null;
+  useEffect(() => {
+    if (!dragSourceId || !draggingType) { useLibraryPrefs.getState().setWire(null); return; }
+    const src = displayNodesRef.current.find(n => n.id === dragSourceId);
+    useLibraryPrefs.getState().setWire(src ? { nodeType: src.type, outType: draggingType } : null);
+    return () => useLibraryPrefs.getState().setWire(null);
+  }, [dragSourceId, draggingType]);
 
   // ── Mobile tap-to-connect ───────────────────────────────────────────────────
   // Two-tap flow: tap output socket → pending, tap input socket → connect.
