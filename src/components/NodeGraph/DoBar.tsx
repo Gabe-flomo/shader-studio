@@ -51,6 +51,7 @@ import { barAssist } from '../../lang/barAssist';
 import { wordKindFor } from '../../lang/highlight';
 import { freshSeed } from '../../lang/random';
 import { readSurpriseCommand, surpriseLine } from '../../lang/surprise';
+import { inspiredSurprise } from '../surprise/inspiredAction';
 import { normaliseEnd, strength } from '../../suggestions/usage';
 import { historyAt, pushHistory, readHistory } from '../../suggestions/doBarHistory';
 import type { Assist } from '../../lang/complete';
@@ -210,10 +211,14 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   // "surprise me [small|large] [2d|3d]": a random line, shown before it runs (lang/surprise.ts).
   const surpriseRead = useMemo(() => readSafely('“surprise me”', text, () => {
     const sp = builder ? null : readSurpriseCommand(text);
-    return { surprise: sp, made: sp ? surpriseLine({ ...sp, seed: sp.seed ?? seed }) : null };
-  }, { surprise: null, made: null }), [text, builder, seed]);
+    // Plain "surprise me" (maybe with a seed) makes a graph inspired by your graphs and the examples;
+    // a size, a dialect or "random line" makes a line of the language, as before.
+    const inspired = !!sp && !sp.size && !sp.dialect && !/\b(line|statement)\b/i.test(text);
+    return { surprise: sp, made: sp && !inspired ? surpriseLine({ ...sp, seed: sp.seed ?? seed }) : null, inspired: inspired ? { seed: sp!.seed } : null };
+  }, { surprise: null, made: null, inspired: null }), [text, builder, seed]);
   const surprise = surpriseRead.value.surprise;
   const surpriseMade = surpriseRead.value.made;
+  const surpriseInspired = surpriseRead.value.inspired;
   // The line in the shared language (lang/run.ts): canonical text runs through the same executors as plain English.
   const lineRead = useMemo(() => readSafely('the line reader', text, () => (text.trim() && !builder && !surprise ? readLine(text, { seed }) : null), null as LineRead | null), [text, builder, surprise, seed]);
   const line = lineRead.value;
@@ -317,6 +322,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   };
   const run = () => {
     if (surpriseMade) { setText(surpriseMade.line); setCaret(surpriseMade.line.length); return; }
+    if (surpriseInspired) { pushHistory(text); closeDoBar(); void inspiredSurprise({ seed: surpriseInspired.seed }); return; }
     if (otherDialect) { runOther(otherDialect); return; }
     if (builder) {
       if (!builder.action) return;
@@ -395,8 +401,8 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
           data-do-input
           style={{ flex: 1, minWidth: 0, border: 0, outline: 'none', background: 'transparent', color: tk.text.primary, font: `14px ${fontFamily.ui}` }}
         />
-        <IconButton icon="dice" size="sm" label="Surprise me: a random line to try (type “surprise me large 3d” for a size or a 3D scene)" data-do-surprise
-          onClick={() => { const s = surpriseLine({ seed: freshSeed() }); setText(s.line); setCaret(s.line.length); requestAnimationFrame(() => inputRef.current?.focus()); }} />
+        <IconButton icon="dice" size="sm" label="Surprise me: a new graph inspired by 2–3 of your graphs and the examples (replaces this one; Undo brings it back). Type “surprise me large 3d” for a random line instead" data-do-surprise
+          onClick={() => { closeDoBar(); void inspiredSurprise(); }} />
         <IconButton icon="info" size="sm" label="Commands: every verb, with examples to try" onClick={() => { closeDoBar(); openCommandsRef(); }} data-do-help />
         <IconButton icon="code" size="sm" active={panel === 'script'} label="Show as commands: this graph as Do… lines" data-do-script onClick={() => setPanel(p => (p === 'script' ? 'none' : 'script'))} />
         <IconButton icon="star" size="sm" active={panel === 'taught'} label="Your taught phrases" onClick={() => setPanel(p => (p === 'taught' ? 'none' : 'taught'))} />
@@ -424,6 +430,12 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
             {!/seed\s*=?\s*\w/i.test(text) && <span style={muted}>seed {canonicalRun.seed}</span>}
           </div>
         )}
+        {/* "surprise me": an inspired graph, made on Enter */}
+        {surpriseInspired && section('Enter makes it', (
+          <span style={muted} data-do-surprise-inspired>
+            A new graph inspired by 2–3 of your graphs, GLSL and the examples{surpriseInspired.seed != null ? `, seed ${surpriseInspired.seed}` : ''}. It replaces this graph; Undo brings it back. Add “line” for a random line of the language instead.
+          </span>
+        ))}
         {/* "surprise me": the line it made */}
         {surpriseMade && section('Enter puts this line in the bar', (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} data-do-surprise-line>
