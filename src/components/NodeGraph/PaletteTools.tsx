@@ -10,9 +10,6 @@
  *   → Stops ▾   (Palette) convert this cosine palette into editable colour stops:
  *               Auto picks the fewest stops within ~1% of the original, or pick a count
  */
-import { RateButtons } from '../taste/RateButtons';
-import { rateTargets } from '../taste/tasteActions';
-import { paletteColoursOf } from '../../taste/features';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -213,9 +210,6 @@ export function PaletteTools({ node }: { node: GraphNode }) {
       </span>
       <Button size="sm" variant="ghost" icon="save" onClick={() => void save()} title={isStops ? 'Keep these colours in the Library, to use here or as a background' : 'Save this palette as a preset'}>Save</Button>
       {isStops && <Button size="sm" variant="ghost" icon="bidir" onClick={reverse} title="Turn the stops end to end">Reverse</Button>}
-      <span title="Rate this palette: your taste learns which palettes you like (dark, light, vivid, muted)" style={{ display: 'inline-flex', alignItems: 'center' }}>
-        <RateButtons target={rateTargets.palette(paletteColoursOf(node), `${node.params.label ?? (isStops ? 'Stops Palette' : 'Palette')}`)} size={24} />
-      </span>
       <span ref={pasteBtn} style={{ display: 'inline-flex' }}>
         <Button size="sm" variant="ghost" icon="import" onClick={() => setPasteOpen(o => !o)}
           title="Paste hex codes, a coolors.co link, rgb()/hsl(), vec3() or a JSON list">Paste</Button>

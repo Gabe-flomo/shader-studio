@@ -14,7 +14,7 @@ offers **Reroll** (undo it and try a new seed) and **Undo**.
 | Agent Rules header | **Surprise me** · seed · Reroll | A rule set, its trail's decay and its colours (see below). |
 | Node card | 🎲 Randomise | The card's free sliders, now inside their *interesting* ranges. |
 | Canvas toolbar | 🎲 **Randomise all settings in this graph** (right-click: type a seed) | Every free slider on the level on screen, from one seed. |
-| Do bar | 🎲 (and **Deep**), or type **surprise me** (`surprise me seed=42`) | New graphs *inspired by* 2–3 of your graphs, GLSL and the examples (below), in a carousel. The one you keep replaces the graph; Undo brings it back. `surprise me large 3d` or `random line` still makes a line of the language. |
+| Do bar | 🎲, or type **surprise me** (`surprise me seed=42`, `surprise me large 3d`, `random line`) | A random line of the language in the bar, a little inspired by the examples and your saved graphs (below). ‹ › step through the lines made there. Enter runs it; edit it first if you like. |
 
 ## How a surprise stays interesting
 
@@ -54,63 +54,35 @@ offers **Reroll** (undo it and try a new seed) and **Undo**.
   avoids the first one's trail. Every walker leaves trail, so a plain trail setup shows any kind.
   A 3D group gets 3D bands (sensors 0.1–0.2, speed 1–1.5).
 
-## Inspired by (the Do bar's Surprise)
+## A little inspired by (the Do bar's Surprise)
 
-Each roll draws 2–3 **sources** and builds a new graph from their techniques and code
-(`src/lang/inspired`):
+The Do bar's Surprise writes one random **line of the Playfield language** (`src/lang/surprise.ts`):
+2D (shape, space steps, a light step, colour, post) or 3D (mode, shapes and combines, warps, camera),
+small, medium or large. It goes into the bar as plain text, so you can read it, edit it and then
+run it with Enter. Every value comes from the seeded generator above, so a seed repeats its line.
 
-- **Sources.** The bundled examples and Convert examples, plus your saved graphs, GLSL-page shaders
-  and Custom Function presets (read from storage; linked workspace files are not read, they load
-  asynchronously). Each source is cut into *fragments* (`fragments.ts`), one stage's worth each,
-  typed by what it takes and gives: space (vec2 → vec2), field (vec2 → float), light
-  (float → float), colour (float → vec3), post (vec3 → vec3), or a whole picture (vec2 → vec3).
-  Fragments come from pattern discovery's technique hits (`src/patterns`: the matched nodes, copied
-  with their settings and the constant nodes feeding them), from Expression Blocks and Custom
-  Functions (copied whole), and from GLSL functions lifted into a Custom Function (`lift.ts`: the
-  function, the helpers it calls, its `const`s and `#define`s, all renamed into a namespace such as
-  `ip3k9f_hash`, so two sources' `hash()` compile side by side; `iTime` becomes `u_time`; a function
-  that reads a texture or the frame is left).
-- **The plan** (`compose.ts` `planFor`): space → field → light → colour → post, or space → picture →
-  post. A stage is picked, then a technique family (each family as likely as another, and not one
-  this roll already used), then a technique, then a source using it, so a technique found in a
-  hundred examples is no likelier than a rare one. A required stage nobody filled takes Playfield's
-  own piece (Circle SDF, Palette).
-- **Wiring** (`realise`): uv → space → field → light → colour → post → Output. Conversions are
-  inserted where types differ, and a light stage lights the colour (colour × light). Every node gets
-  a note saying which source and technique it came from.
-- **Checks.** The real compiler, then (in the app) a GPU compile and the degenerate check at two
-  moments. A failure tries another seed, up to 10 times, then falls back to the old line generator.
-- **Steering.** The last five rolls are kept for the session. A fresh roll tries six seeds and
-  keeps the one whose plan repeats the recent sources and families least. Steering only chooses
-  the seed, so the same seed and the same sources always make the same graph.
-- **The carousel.** A roll shows its first candidate straight away. It replaces the whole graph,
-  previewed without an undo step. Two more are made in the background. ‹ › (or ← → while the line
-  is empty) step between them with a "1 / 3" counter, and stepping past the end makes another. Each
-  candidate keeps its own seed and sources. **Keep**, Enter or closing the bar commits the one on
-  screen as one undo step. **Undo**, Escape or ⌘Z puts the original graph back.
-- **Deep** (the toggle beside the dice, remembered per browser). Each roll makes up to 16 candidates
-  in the background, in at most 6 seconds, with progress shown. Each one is drawn at 64 × 40 at two
-  moments and scored on cheap image metrics (`lib/surprise/score.ts`):
-  - colourfulness;
-  - contrast;
-  - edge density (best around a third of the picture);
-  - movement between the two moments;
-  - mirror symmetry;
-  - novelty: the distance of a colour and edge histogram from the last five kept results.
+To make the lines feel at home, the word choices lean toward what your graphs use
+(`src/lang/surpriseBias.ts`, `src/components/surprise/surpriseSources.ts`):
 
-  Degenerate frames are dropped. The best five go into the carousel, best first, each with chips
-  saying why ("colourful · moves · new look").
-- **Taste** (docs/taste.md). A small local model learns from what you keep, undo, rate and pick in
-  **Evolve** (the button beside Deep). It leans each stage's technique choice by P(technique | stage),
-  weighs liked graphs and GLSL more as sources, and steers fresh seeds toward plans you like. Deep ranks
-  by its score plus taste. About a quarter of everything stays exploration. With no ratings or picks
-  there is no lean, so a seed makes exactly what it made before.
-- **The toast** says "Inspired by A, B and C". Each name opens its source (an example or saved graph
-  with the pieces selected, or the shader in the GLSL page), and the toast offers Reroll and Undo.
+- **What is counted.** For each bundled example and each saved graph, which words it uses: shapes
+  (circle, star, hexagon…), space steps (twist, swirl, polar-repeat, repeat, mirror, warp), light
+  steps (glow, rings, outline), post steps (tone-map, grain, brighten), colour drivers, the
+  Palette presets by name, and in 3D the mode, the shapes and the warps. A node type or a setting
+  finds a word ("star" is a Shape SDF set to star; "fire" is a Palette node on the Fire preset).
+  A graph counts once per word. Your saved graphs count four times as much as an example, being few.
+  Linked workspace files are not read.
+- **How it leans.** Within one list, a word used by every graph weighs up to about 3 times what a
+  word used by none does (the weights are multiplied by 0.6 to 2). Nothing is ruled out, and the
+  values (sizes, falloffs, colours) are as random as before. With no counts the old lists are used
+  untouched, so the lines are exactly the generator's.
+- **Seeds.** A seed repeats its line while the examples and saved graphs stay the same. Saving a
+  graph can change which line a seed makes.
+- **‹ ›.** While the bar holds a line it made, ‹ 2 / 3 › above the input steps back and forward
+  through the lines made in this session; › past the end makes another. Each line is just text from a
+  seed: nothing is drawn or scored, and nothing replaces your graph. Editing the line ends the walk.
 
-Over 50 seeds of the examples (`__tests__/inspired.test.ts`), all 50 compile and parse. They make
-42 distinct technique-family combinations, and the commonest family, colour mapping, is in 70% of
-them. The old line generator made 12 combinations, with colour mapping in all of them.
+The earlier experiments (building a whole graph from sources, Deep, Evolve and a taste model) were
+retired on 2026-10-08: docs/retired-experiments.md.
 
 ## The API (`src/lib/surprise`)
 
@@ -196,8 +168,7 @@ For `random(a..b)` written by the user, sample the user's range directly
 - `agentRules/storeActions.ts` `surpriseGroupRules`: rules, Trail field and palette in one undo step.
 - `src/nodes/randomizeParams.ts`: the card's Randomize, using the interesting ranges, and
   `randomizedGraph` for the whole graph level.
-- `src/lang/inspired/`: the Do bar's Surprise (`lift.ts`, `fragments.ts`, `compose.ts`), and
-  `src/components/surprise/inspiredAction.ts`: the source pool, GPU check, carousel, Deep, undo step
-  and toast (`SurpriseStrip.tsx` draws the carousel). `lib/surprise/score.ts` scores Deep's frames.
-- `src/components/surprise/`: `SurpriseBar` (the button, seed field and Reroll),
+- `src/lang/surprise.ts`: the Do bar's random line (`surpriseLine`, `readSurpriseCommand`);
+  `src/lang/surpriseBias.ts`: the word counts and the lean.
+- `src/components/surprise/`: `SurpriseStrip` (‹ ›), `surpriseSources` (the counts from examples and saved graphs), `SurpriseBar` (the button, seed field and Reroll),
   `announceSurprise` (the toast), and the Grid, Agent and graph actions.

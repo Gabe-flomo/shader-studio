@@ -1,21 +1,17 @@
 /**
- * looks.ts — pictures of graphs for the image model, and the context box's words by look
- * (docs/taste.md "How things look").
+ * looks.ts — pictures of graphs for the image model (docs/image-model.md).
  *
  *   lookFrame(nodes)        draw a graph once, square, at the model's input size (null without WebGL2)
- *   lookOf(frame)           its embedding: the full 512-d vector and the 64-d projection the taste model keeps
- *   lookTermsFor(steering)  the steering's words by look, embedded, with the neutral prompt they're measured against
- *   thumbOf(frame)          a small JPEG of a frame, for the Taste page's "most-liked looks"
+ *   lookOf(frame)           its embedding: the full 512-d vector
+ *   thumbOf(frame)          a small JPEG of a frame
  */
 import type { GraphNode } from '../types/nodeGraph';
 import { compileGraph } from '../compiler/graphCompiler';
 import { programPixels } from '../components/sceneBuilder/surpriseActions';
-import { lookPrompt, NEUTRAL_PROMPT, project, type LookTerm } from '../taste/look';
-import { lookTerms, type Steering } from '../taste/steering';
-import { embedImage, embedTexts, imageModelUsable } from './client';
+import { embedImage, imageModelUsable } from './client';
 
 export interface Frame { rgba: Uint8Array; w: number; h: number }
-export interface Look { full: Float32Array; proj: Float32Array }
+export interface Look { full: Float32Array }
 
 /** The side a graph is drawn at for the model (it resizes to 256 and centre-crops). */
 export const LOOK_SIDE = 192;
@@ -40,21 +36,11 @@ export function lookFrameOf(vs: string, fs: string, uniforms: Record<string, num
 export async function lookOf(frame: Frame | null): Promise<Look | null> {
   if (!frame || !imageModelUsable()) return null;
   const full = await embedImage(frame);
-  return full ? { full, proj: project(full) } : null;
+  return full ? { full } : null;
 }
 
 /** A graph's look: drawn, then embedded. */
 export const graphLook = (nodes: readonly GraphNode[]): Promise<Look | null> => (imageModelUsable() ? lookOf(lookFrame(nodes)) : Promise.resolve(null));
-
-/** The steering's words by look, embedded (empty when there are none or the model is off). */
-export async function lookTermsFor(s: Steering): Promise<{ terms: LookTerm[]; neutral: Float32Array | null }> {
-  const words = lookTerms(s);
-  if (!words.length || !imageModelUsable()) return { terms: [], neutral: null };
-  const [neutral, ...vecs] = await embedTexts([NEUTRAL_PROMPT, ...words.map(w => lookPrompt(w.text))]);
-  const terms: LookTerm[] = [];
-  words.forEach((w, i) => { const v = vecs[i]; if (v) terms.push({ text: w.text, sign: w.sign, emb: v }); });
-  return { terms, neutral };
-}
 
 /** A small JPEG of a frame (flipped upright), or null without a 2D canvas. */
 export function thumbOf(f: Frame, w = 96, h = 96): string | null {

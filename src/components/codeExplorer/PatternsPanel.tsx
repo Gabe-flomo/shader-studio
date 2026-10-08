@@ -8,8 +8,6 @@
  * "Patterns this is part of" (a node's right-click menu) shows that node's techniques on top.
  * Loaded lazily with the tab: the index is built when the view opens.
  */
-import { RateButtons } from '../taste/RateButtons';
-import { rateTargets } from '../taste/tasteActions';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
@@ -182,7 +180,6 @@ function TechniqueCard({ technique: t, index }: { technique: Technique; index: P
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span style={{ font: `600 13px ${fontFamily.ui}`, flex: 1, minWidth: 0 }}>{t.name}</span>
         <span style={{ fontSize: 11.5, color: users.length ? tk.text.muted : tk.text.faint }}>{users.length} {users.length === 1 ? 'graph' : 'graphs'}</span>
-        <span style={{ alignSelf: 'center' }}><RateButtons target={rateTargets.technique(t.id, t.name)} quiet /></span>
       </div>
       <span style={{ fontSize: 12, lineHeight: 1.5, color: tk.text.muted }}>{t.explain}</span>
       <code style={{ font: `500 12px ${fontFamily.mono}`, color: tk.text.secondary }}>{t.maths}</code>

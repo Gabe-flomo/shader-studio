@@ -39,11 +39,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.76',
+    date: '2026-10-08',
+    title: 'Simpler Surprise',
+    highlights: [
+      { area: 'Studio', text: 'Do bar Surprise writes a random line again, leaning a little toward the shapes, steps and palettes your graphs use. Step through lines with the arrows.', link: { kind: 'doc', path: 'docs/surprise.md' } },
+      { area: 'Studio', text: 'Retired experiments: Evolve, Deep, ratings and the Taste page are gone. The image model stays, now under Settings, for future help features.', link: { kind: 'doc', path: 'docs/retired-experiments.md' } },
+    ],
+  },
+  {
     id: '2026.10.75',
     date: '2026-10-07',
     title: 'Taste by look',
     highlights: [
-      { area: 'Studio', text: 'A small image model runs on your device to learn how things look: Deep and Surprise avoid near-duplicates and lean toward looks you like.', link: { kind: 'doc', path: 'docs/taste.md' } },
+      { area: 'Studio', text: 'A small image model runs on your device to learn how things look: Deep and Surprise avoid near-duplicates and lean toward looks you like.', link: { kind: 'doc', path: 'docs/retired-experiments.md' } },
       { area: 'Files', text: 'Steer by any words: "neon city" or "underwater" in the taste context box become by-look chips. See it under How things look, or turn it off in Settings.' },
     ],
   },
@@ -52,7 +61,7 @@ export const RELEASES: Release[] = [
     date: '2026-10-07',
     title: 'Your taste page',
     highlights: [
-      { area: 'Files', text: 'A Your taste page in Files: a plain-language profile of what you like, what it learned with a trace back to each pick or rating, and a log of every signal.', link: { kind: 'doc', path: 'docs/taste.md' } },
+      { area: 'Files', text: 'A Your taste page in Files: a plain-language profile of what you like, what it learned with a trace back to each pick or rating, and a log of every signal.', link: { kind: 'doc', path: 'docs/retired-experiments.md' } },
       { area: 'Files', text: 'Steer your taste: type context like "dark, lots of motion, no fBm" and see the chips it understood, or boost, avoid or ban any technique.' },
       { area: 'Files', text: 'Take your taste with you: export a .playfield-taste profile and import it on another install, where it keeps learning on top.' },
     ],
@@ -62,7 +71,7 @@ export const RELEASES: Release[] = [
     date: '2026-10-07',
     title: 'Evolve and your taste',
     highlights: [
-      { area: 'Studio', text: 'Evolve in the Do bar: pick between two surprises, then choose a Refine of your pick or a Branch inspired by it, round after round.', link: { kind: 'doc', path: 'docs/taste.md' } },
+      { area: 'Studio', text: 'Evolve in the Do bar: pick between two surprises, then choose a Refine of your pick or a Branch inspired by it, round after round.', link: { kind: 'doc', path: 'docs/retired-experiments.md' } },
       { area: 'Studio', text: 'Playfield learns your taste on your machine (no cloud): from Evolve picks, likes, and what you keep or undo. Surprise, Deep and suggestions lean toward it.' },
       { area: 'Studio', text: 'Like or dislike saved graphs, examples, GLSL shaders, palettes and pattern cards. A Your taste panel shows what it learned, with Reset and Export.' },
     ],

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * fetch-image-model.mjs — fetch the image model's files (src/imageModel/config.ts) into
- * .cache/image-model/<repo>/ for the desktop bundle (docs/taste.md "How things look").
+ * .cache/image-model/<repo>/ for the desktop bundle (docs/image-model.md).
  *
  * The desktop app ships these files inside the app (vite.config.ts copies them to dist/models/ in a Tauri
  * build), so it works offline from the first launch. They aren't committed: a Tauri build runs this when

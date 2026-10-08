@@ -57,7 +57,7 @@ function mediapipeWasm(): Plugin {
   }
 }
 
-// The image model (docs/taste.md "How things look"). ONNX Runtime's WebAssembly is an asset of the
+// The image model (docs/image-model.md). ONNX Runtime's WebAssembly is an asset of the
 // model's worker (src/imageModel/worker.ts imports it with ?url), so it's served by the app, never a CDN,
 // and only loaded when the model is first needed. The model's own files (tools/fetch-image-model.mjs, kept in
 // .cache/image-model/, not committed) are copied to <base>models/ only in a Tauri build, so the desktop
