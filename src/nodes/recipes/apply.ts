@@ -54,9 +54,17 @@ export interface AppliedRecipe {
 
 /** The graph with `recipe` built round node `selfId`; null when the node isn't there. */
 export function applyRecipe(nodes: GraphNode[], selfId: string, recipe: StarterRecipe, nextId: () => string, heightOf: (nd: GraphNode) => number = cardHeight): AppliedRecipe | null {
-  const self = nodes.find(nd => nd.id === selfId);
+  let self = nodes.find(nd => nd.id === selfId);
   if (!self) return null;
   const build = recipe.build(recipeContext(nodes, self));
+  // A rig being replaced: its nodes go, and any wire into them is cut.
+  const gone = new Set((build.remove ?? []).filter(id => id !== selfId));
+  if (gone.size) {
+    nodes = nodes.filter(nd => !gone.has(nd.id)).map(nd => Object.values(nd.inputs).some(i => i.connection && gone.has(i.connection.nodeId))
+      ? { ...nd, inputs: Object.fromEntries(Object.entries(nd.inputs).map(([k, i]) => [k, i.connection && gone.has(i.connection.nodeId) ? { ...i, connection: undefined } : i])) }
+      : nd);
+    self = nodes.find(nd => nd.id === selfId)!;
+  }
   const { nodes: fresh, idOf } = freshIds(build.nodes, nextId);
   const real = (w: Wire): Wire => [w[0] === SELF ? self.id : idOf(w[0]), w[1]];
 

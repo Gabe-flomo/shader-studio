@@ -26,6 +26,7 @@ import { extendRangePatch, hasCustomRange, paramSliderRange, resetRangePatch } f
 import { frozenValueOf } from '../../nodes/sliderFreeze';
 import { isAssignable, legacyAssignOp } from '../../nodes/assignable';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { openRecipeOffer } from '../../store/recipeOfferStore';
 import { nodeJumpSignal, takeNodeJump, useCodeJump } from '../../codeExplorer/jumpStore';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 // Editors that only open on demand load in their own chunks (type-only imports
@@ -2353,6 +2354,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 onRandomize={() => randomizeNodeParams(node.id)}
                 onClose={() => setRandomizeMenu(null)}
               />
+            )}
+            {node.type === 'marchLoopGroup' && (
+              <CardButton icon="sun" tint="success" label="Light the scene: pick a lighting look (shadows, AO, lights, tone map), wired to the Output"
+                onClick={() => requestAnimationFrame(() => openRecipeOffer(node.id, node.type))} />
             )}
             <CardButton icon="copy" label="Duplicate group (an independent copy)" onClick={() => duplicateGroup(node.id)} />
             <CardButton icon="save" tint="success" on={savedFlash} label="Save as a preset" onClick={() => {
