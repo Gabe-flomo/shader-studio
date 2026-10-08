@@ -26,6 +26,7 @@ import { buildSimGridExamples } from './simGridExamples';
 import { buildGridRulesExamples } from './gridRulesExamples';
 import { buildAgentRuleExamples } from './agentRuleExamples';
 import { buildSceneBuilderExamples } from './sceneBuilderExamples';
+import { buildSceneBuilder2DExamples } from './sceneBuilder2dExamples';
 import { buildAgentExamples } from './agentExamples';
 import { buildAgentShaderExamples } from './agentShaderExamples';
 import { buildAgent3dExamples } from './agentExamples3d';
@@ -12652,7 +12653,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
 };
 
 // The Learn folder is built from the node definitions at load; its last lesson reuses a graph above.
-Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildLearn3dExamples(), buildCurvedSpaceExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildConvertExamples(), buildPassExamples(), buildAgentExamples(), buildAgentShaderExamples(), buildAgent3dExamples(), buildSimAgentExamples(), buildAgentSketchExamples(), buildBakeExamples(EXAMPLE_GRAPHS), buildTimeCubeExamples(), buildFrameStackExamples(), buildFourDExamples(), buildFourDProjectionExamples(), buildTextureToolExamples(), buildSimGridExamples(), buildSceneBuilderExamples(), buildAgentRuleExamples(), buildGridRulesExamples());
+Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildLearn3dExamples(), buildCurvedSpaceExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildConvertExamples(), buildPassExamples(), buildAgentExamples(), buildAgentShaderExamples(), buildAgent3dExamples(), buildSimAgentExamples(), buildAgentSketchExamples(), buildBakeExamples(EXAMPLE_GRAPHS), buildTimeCubeExamples(), buildFrameStackExamples(), buildFourDExamples(), buildFourDProjectionExamples(), buildTextureToolExamples(), buildSimGridExamples(), buildSceneBuilderExamples(), buildSceneBuilder2DExamples(), buildAgentRuleExamples(), buildGridRulesExamples());
 
 // Every example's Play setup is in the rules shape (implementation guide, phase 9): authored with actions,
 // a signal's When and links where that reads easiest, opened as the rules they play as.

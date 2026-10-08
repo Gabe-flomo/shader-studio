@@ -52,6 +52,8 @@ import { unbakeNode } from '../../lib/bake/runner';
 import type { OptimizeModal as OptimizeModalT } from './OptimizeModal';
 import { previewBanner } from '../../lib/nodePreview/previewPlan';
 import { useSceneBuilder } from '../../sceneBuilder/store';
+import { useSceneBuilder2D } from '../../sceneBuilder2d/store';
+import { builder2dSceneOf, editScene2DInBuilder } from '../../sceneBuilder2d/actions';
 import { BuilderWindowsHost } from '../builders/BuilderWindowsHost';
 import { BUILDERS } from '../../builders/registry';
 import { openBuilder } from '../../builders/open';
@@ -60,6 +62,7 @@ import { useLibraryPrefs } from '../../structure/libraryPrefs';
 const OptimizeModal = lazyWithSuspense<PropsOf<typeof OptimizeModalT>>(() => import('./OptimizeModal').then(m => ({ default: m.OptimizeModal })));
 const BakeDialogHost = lazyWithSuspense<Record<string, never>>(() => import('../bake/BakeDialog').then(m => ({ default: m.BakeDialogHost })));
 const SceneBuilderModal = lazyWithSuspense<Record<string, never>>(() => import('../sceneBuilder/SceneBuilderModal').then(m => ({ default: m.SceneBuilderModal })));
+const SceneBuilder2DModal = lazyWithSuspense<Record<string, never>>(() => import('../sceneBuilder2d/SceneBuilder2DModal').then(m => ({ default: m.SceneBuilder2DModal })));
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 const NODE_WIDTH = 360;
@@ -124,6 +127,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   const [showOptimize, setShowOptimize] = useState(false);
   const bakeRequest = useBakeDialog(s => s.request);
   const sceneBuilderOpen = useSceneBuilder(s => s.open);
+  const sceneBuilder2DOpen = useSceneBuilder2D(s => s.open);
   const tc = useCtp();
   const tk = useTokens();
   const ctxBtnStyle = ctxBtnStyleFor(tc);
@@ -1417,6 +1421,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       {showOptimize && <OptimizeModal onClose={() => setShowOptimize(false)} />}
       {bakeRequest && <BakeDialogHost />}
       {sceneBuilderOpen && <SceneBuilderModal />}
+      {sceneBuilder2DOpen && <SceneBuilder2DModal />}
       {/* The Grid Rules and Agent Rules editors (builders/windows.ts) */}
       {!locked && <BuilderWindowsHost />}
       {redesignToolbar && !locked && <SelectionBar top={previewNodeId ? 108 : 66} />}
@@ -1828,6 +1833,14 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                   <>
                     <button style={ctxBtnStyle} onClick={() => { editSceneInBuilder(clickedNode.id); setContextMenu(null); }}>
                       Edit in Scene Builder
+                    </button>
+                    <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                  </>
+                )}
+                {clickedNode && activeGroupPath.length === 0 && builder2dSceneOf(clickedNode.id) && (
+                  <>
+                    <button style={ctxBtnStyle} onClick={() => { editScene2DInBuilder(clickedNode.id); setContextMenu(null); }}>
+                      Edit in 2D Scene Builder
                     </button>
                     <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
                   </>
