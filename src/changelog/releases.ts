@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.74',
+    date: '2026-10-07',
+    title: 'Your taste page',
+    highlights: [
+      { area: 'Files', text: 'A Your taste page in Files: a plain-language profile of what you like, what it learned with a trace back to each pick or rating, and a log of every signal.', link: { kind: 'doc', path: 'docs/taste.md' } },
+      { area: 'Files', text: 'Steer your taste: type context like "dark, lots of motion, no fBm" and see the chips it understood, or boost, avoid or ban any technique.' },
+      { area: 'Files', text: 'Take your taste with you: export a .playfield-taste profile and import it on another install, where it keeps learning on top.' },
+    ],
+  },
+  {
     id: '2026.10.73',
     date: '2026-10-07',
     title: 'Evolve and your taste',
