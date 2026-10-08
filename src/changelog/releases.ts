@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.73',
+    date: '2026-10-07',
+    title: 'Evolve and your taste',
+    highlights: [
+      { area: 'Studio', text: 'Evolve in the Do bar: pick between two surprises, then choose a Refine of your pick or a Branch inspired by it, round after round.', link: { kind: 'doc', path: 'docs/taste.md' } },
+      { area: 'Studio', text: 'Playfield learns your taste on your machine (no cloud): from Evolve picks, likes, and what you keep or undo. Surprise, Deep and suggestions lean toward it.' },
+      { area: 'Studio', text: 'Like or dislike saved graphs, examples, GLSL shaders, palettes and pattern cards. A Your taste panel shows what it learned, with Reset and Export.' },
+    ],
+  },
+  {
     id: '2026.10.72',
     date: '2026-10-07',
     title: 'Inspired surprises',
