@@ -11,7 +11,7 @@ Both open the same panel (`src/components/play/SuggestControlsPanel.tsx`). It st
 
 ## What is tried
 
-The settings Randomise would change with the saved options: same locks (a locked setting or a skipped node is never suggested), same group toggles (**Settings on a group's face**, **Inside groups**). Only free floats that are live uniforms in the last compile and not on Play yet; colours, choices, wired and baked settings are not offered. The whole graph is measured, since Play's targets are the root level's (and one group in).
+The settings Randomise would change with the saved options: same locks (a locked setting or a skipped node is never suggested). Groups are always included, whatever Randomise's group toggles say: the settings on a group's face first, then the settings one level inside, since group controls are often the ones that change the picture most. Only free floats that are live uniforms in the last compile and not on Play yet; colours, choices, wired and baked settings are not offered. The whole graph is measured, since Play's targets are the root level's (and one group in).
 
 ## The scoring (`src/nodes/controlFinder.ts`)
 
