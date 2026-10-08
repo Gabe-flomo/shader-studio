@@ -25,7 +25,8 @@ export interface UseHere {
   apply: (built: BuiltFunction, made: Made) => void;
 }
 
-function scopeNodes(): GraphNode[] {
+/** The nodes of the graph level being edited (the neighbours of a node are in it). */
+export function scopeNodes(): GraphNode[] {
   const st = useNodeGraphStore.getState();
   return getActiveNodes(st.nodes, st.activeGroupPath) ?? st.nodes;
 }
@@ -42,6 +43,15 @@ export function exprBlockRoles(node: GraphNode, nodes: GraphNode[] = scopeNodes(
     if (role) out[name] = role;
   }
   return out;
+}
+
+/** An Expression Block's code as it compiles: its lines, then Return (what "Explain more" is told about the surroundings). */
+export function exprBlockCode(node: GraphNode): string {
+  const lines = (node.params.lines as Array<{ lhs?: string; op?: string; rhs?: string; off?: boolean }> | undefined) ?? [];
+  const out = lines.filter(l => l.rhs?.trim() && !l.off).map(l => `${l.lhs ?? ''} ${l.op || '='} ${l.rhs}`.trim());
+  const ret = typeof node.params.result === 'string' ? node.params.result.trim() : '';
+  if (ret) out.push(`return ${ret}`);
+  return out.join('\n');
 }
 
 /** The explain / generalise context of an Expression Block. */

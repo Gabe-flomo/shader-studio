@@ -26,7 +26,8 @@ import { HowUsedButton } from '../codeExplorer/HowUsedButton';
 import { useCustomFnJump } from '../codeExplorer/useCodeJumpFocus';
 import { StatementsExplain } from '../explain/StatementsExplain';
 import { useExplainDialogs } from '../explain/useExplainDialogs';
-import { customFnContext, customFnUseHere } from '../explain/hosts';
+import { customFnContext, customFnUseHere, scopeNodes } from '../explain/hosts';
+import { ExplainScopeProvider } from '../explain/ExplainScope';
 import { useFnCardScope } from '../explain/functionCard/fnCardStore';
 
 const TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
@@ -72,6 +73,8 @@ export function CustomFnModal({ node, onClose }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the inputs, body and wiring are what it reads
   const explainCtx = useMemo(() => customFnContext(node), [node.params.inputs, node.params.body, node.inputs]);
   const explainDialogs = useExplainDialogs({ onJumped: onClose });
+  // "Explain more" is told which function this is (its neighbours in the graph) and the whole body around a statement
+  const explainScope = useMemo(() => ({ nodeId: node.id, kind: 'Custom Function', getNodes: scopeNodes, enclosing: () => `${glslFns ? `${glslFns}\n` : ''}${body}` }), [node.id, body, glslFns]);
   const completions = useMemo(
     () => buildCompletions((rawInputs as Array<{ name: string; type: DataType }> | undefined) ?? []),
     [rawInputs],
@@ -231,6 +234,7 @@ export function CustomFnModal({ node, onClose }: Props) {
   };
 
   return (
+    <ExplainScopeProvider value={explainScope}>
     <Modal
       title="Custom Function"
       subtitle={`${labelParam} · Custom Function node`}
@@ -393,6 +397,7 @@ export function CustomFnModal({ node, onClose }: Props) {
         </SidePanel>
       </div>
     </Modal>
+    </ExplainScopeProvider>
   );
 }
 

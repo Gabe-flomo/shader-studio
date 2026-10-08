@@ -22,6 +22,10 @@ import { openCodeExplorer } from '../../codeExplorer/explorerStore';
 import { openExternal } from '../../../utils/openExternal';
 import { useNodeGraphStore, getActiveNodes } from '../../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../../nodes/definitions';
+import { ExplainMore } from '../ExplainMore';
+import { promptForNode } from '../../../explainModel/nodePrompt';
+import { ExplainScopeProvider } from '../ExplainScope';
+import { functionSource, statementAt } from '../../../explainModel/fnSource';
 import { closeFunctionCard, pinFunctionCard, type AnchorRect, type CardRequest, type FunctionCardRequest, type NodeCardRequest } from './fnCardStore';
 import { nodeCardModel } from './nodeCard';
 
@@ -74,6 +78,16 @@ function NodeCard({ req }: { req: NodeCardRequest }) {
           {model.use && <UseTag use={model.use} />}
         </div>
       )}
+      {node && def && (
+        <ExplainMore mode="node" text={`${node.id}:${JSON.stringify(node.params).length}`} label="Explain this node" auto={req.explain}
+          build={async () => {
+            const st = useNodeGraphStore.getState();
+            const nodes = getActiveNodes(st.nodes, st.activeGroupPath) ?? st.nodes;
+            const cur = nodes.find(n => n.id === node.id) ?? node;
+            const help = def.brief?.summary ?? (Array.isArray(def.description) ? (def.description as string[]).join(' ') : def.description);
+            return promptForNode(cur, nodes, { label: def.label, category: def.category, help, defaultParams: def.defaultParams as Record<string, unknown> | undefined }, t => getNodeDefinition(t)?.label);
+          }} />
+      )}
       <Links>
         {model.fnName && <LinkButton icon="search" onClick={() => { closeFunctionCard(); openCodeExplorer(model.fnName); }}>How is this used?</LinkButton>}
         {req.onMore && <LinkButton icon="info" onClick={() => { closeFunctionCard(); req.onMore?.(); }}>Sockets and wiring</LinkButton>}
@@ -124,6 +138,7 @@ function FnBody({ model, req }: { model: FunctionCardModel; req: FunctionCardReq
           <span style={{ color: tk.text.secondary }}><ExplainText segs={model.here} /></span>
         </div>
       )}
+      <CardExplainMore model={model} req={req} />
       <Links>
         <LinkButton icon="search" onClick={() => { closeFunctionCard(); openCodeExplorer(model.name); }}>How is this used?</LinkButton>
         {model.snippet && (insert
@@ -136,6 +151,22 @@ function FnBody({ model, req }: { model: FunctionCardModel; req: FunctionCardReq
         )}
       </Links>
     </>
+  );
+}
+
+/** "Explain more" in a card: a user's function as a whole, else the statement the clicked call is in. */
+function CardExplainMore({ model, req }: { model: FunctionCardModel; req: FunctionCardRequest }) {
+  const all = [req.code, req.scope.source].filter(Boolean).join('\n');
+  const scope = useMemo(() => ({ kind: 'GLSL code', enclosing: () => req.code }), [req.code]);
+  const fn = model.kind === 'user' ? functionSource(all, model.name) : null;
+  const stmt = fn ? null : statementAt(req.code, req.pos);
+  if (!fn && !stmt) return null;
+  return (
+    <ExplainScopeProvider value={scope}>
+      {fn
+        ? <ExplainMore mode="block" text={fn} ctx={req.scope} label="Explain this function" />
+        : <ExplainMore text={stmt!} ctx={req.scope} where={`the statement calling ${model.name}`} />}
+    </ExplainScopeProvider>
   );
 }
 
