@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.102',
+    date: '2026-10-08',
+    title: 'Light the scene',
+    highlights: [
+      { area: 'Studio', text: 'Light the scene: the sun button (or right-click) on a March Loop Group lights a 3D or 4D scene in one click, wired to the Output.', link: { kind: 'doc', path: 'docs/light-scene.md' } },
+      { area: 'Studio', text: 'Eight looks: Daylight, Studio, Golden hour, Moonlight, Clay, Neon rim, Wax / skin and Quick. Picking another replaces the rig.' },
+    ],
+  },
+  {
     id: '2026.10.101',
     date: '2026-10-08',
     title: 'Warp safety everywhere',
