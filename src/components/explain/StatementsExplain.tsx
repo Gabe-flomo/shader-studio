@@ -8,6 +8,7 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import { ExplainRow } from './ExplainRow';
+import { ExplainMore } from './ExplainMore';
 import { GlslCode } from './GlslCode';
 
 export function StatementsExplain({ code, ctx, onMakeNode, onFindUses, onShowPicture }: {
@@ -31,6 +32,7 @@ export function StatementsExplain({ code, ctx, onMakeNode, onFindUses, onShowPic
         <span style={{ fontWeight: 400, color: tk.text.faint }}>statement by statement, in plain words</span>
       </button>
       {open && stmts.length === 0 && <span style={{ fontSize: 12, color: tk.text.muted }}>No statements to explain yet.</span>}
+      {open && stmts.length > 0 && <ExplainMore mode="block" text={code} ctx={ctx} label="Explain this function" />}
       {open && stmts.map((s, i) => {
         const parsed = parseLine(s.text);
         const exprStart = parsed.ok ? parsed.line.exprStart : 0;
@@ -39,7 +41,7 @@ export function StatementsExplain({ code, ctx, onMakeNode, onFindUses, onShowPic
             <div style={{ font: `500 11.5px ${fontFamily.mono}` }}>
               <span style={{ color: tk.text.disabled, marginRight: 8 }}>{s.line}</span><GlslCode code={s.text} />
             </div>
-            <ExplainRow text={s.text} exprStart={exprStart} ctx={ctx} onFindUses={onFindUses}
+            <ExplainRow text={s.text} exprStart={exprStart} ctx={ctx} onFindUses={onFindUses} where={`statement ${i + 1} of ${stmts.length}`}
               onShowPicture={onShowPicture && parsed.ok && (parsed.line.isReturn || parsed.line.declType) ? () => onShowPicture({ target: parsed.line.target, isReturn: parsed.line.isReturn }) : undefined}
               onMakeNode={onMakeNode ? span => onMakeNode({ start: s.start + span.start, end: s.start + span.end }) : undefined} />
           </div>

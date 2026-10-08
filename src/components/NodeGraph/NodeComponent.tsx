@@ -4752,6 +4752,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           <CardButton icon="info" on={showNodeTooltip} label={showNodeTooltip ? 'Hide node info' : 'Node info'}
             onClick={() => (showNodeTooltip ? setShowNodeTooltip(false) : toggleNodeCard(infoButtonRef.current?.querySelector('button') ?? null, node.id, () => setShowNodeTooltip(true)))} />
         </span>
+        <CardButton icon="spark" label="Explain this node: what it does in this graph (a local language model; the info card opens first)"
+          onClick={() => toggleNodeCard(infoButtonRef.current?.querySelector('button') ?? null, node.id, () => setShowNodeTooltip(true), true)} />
         <CardButton icon="comment" tint="success" on={showCommentEditor || !!nodeComment}
           label={nodeComment ? 'Edit comment' : 'Add a comment'}
           onClick={() => { setShowCommentEditor(v => !v); setShowCommentPreview(false); }} />

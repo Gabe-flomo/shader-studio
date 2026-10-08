@@ -22,9 +22,11 @@ export interface ExplainRowProps {
   indent?: number;
   /** Show this line's picture (the ▶ line preview), for lines a plot can't show. */
   onShowPicture?: () => void;
+  /** Where the line is, for "Explain more" ("line 3 of this block", "the Return line"). */
+  where?: string;
 }
 
-export const ExplainRow = memo(function ExplainRow({ text, exprStart, ctx, onMakeNode, onFindUses, indent = 0, onShowPicture }: ExplainRowProps) {
+export const ExplainRow = memo(function ExplainRow({ text, exprStart, ctx, onMakeNode, onFindUses, indent = 0, onShowPicture, where }: ExplainRowProps) {
   const tk = useTokens();
   const [open, setOpen] = useState(false);
   const ex = useMemo(() => explainLine(text, ctx), [text, ctx]);
@@ -44,7 +46,7 @@ export const ExplainRow = memo(function ExplainRow({ text, exprStart, ctx, onMak
         <span data-explain-summary="" style={{ font: `500 12px ${fontFamily.ui}`, color: tk.text.muted, whiteSpace: open ? 'normal' : 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}><ExplainText segs={ex.leadSegs} /></span>
       </button>
       {open && (
-        <ExplainView ex={ex} onMakeNode={onMakeNode} onFindUses={onFindUses} onShowPicture={onShowPicture} editable={{ start: exprStart, end: text.length }} />
+        <ExplainView ex={ex} onMakeNode={onMakeNode} onFindUses={onFindUses} onShowPicture={onShowPicture} editable={{ start: exprStart, end: text.length }} explainMore={{ ctx, where }} />
       )}
     </div>
   );

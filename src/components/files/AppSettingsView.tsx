@@ -20,6 +20,7 @@ import { cardStyle } from './fileUiShared';
 import { StorageLimitControl } from './StorageLimitControl';
 import { AutosaveSettings } from './AutosaveSettings';
 import { ImageModelSetting } from '../taste/TasteLooks';
+import { ExplanationModelSettings } from './ExplanationModelSettings';
 import { TrackerModelsSettings } from './TrackerModelsSettings';
 import { openTastePage } from '../taste/tasteNav';
 import { useStorageLimit } from './useStorageLimit';
@@ -84,6 +85,7 @@ export function AppSettingsView({ inv, node, compact }: { inv: Inventory; node: 
 
       <AutosaveSettings />
       <TrackerModelsSettings />
+      <ExplanationModelSettings />
 
       <section aria-label="Your taste" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px', minHeight: 28 }}>

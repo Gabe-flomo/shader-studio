@@ -30,7 +30,9 @@ import { HowUsedButton } from '../codeExplorer/HowUsedButton';
 import { useExprBlockJump } from '../codeExplorer/useCodeJumpFocus';
 import { ExplainRow } from '../explain/ExplainRow';
 import { useExplainDialogs } from '../explain/useExplainDialogs';
-import { exprBlockContext, exprBlockUseHere } from '../explain/hosts';
+import { exprBlockContext, exprBlockUseHere, exprBlockCode, scopeNodes } from '../explain/hosts';
+import { ExplainScopeProvider } from '../explain/ExplainScope';
+import { ExplainMore } from '../explain/ExplainMore';
 import { useFnCardScope } from '../explain/functionCard/fnCardStore';
 import type { GeneraliseContext } from '../../lib/glslPatterns';
 import { snippetLines, type Snippet } from '../../suggestions/snippets';
@@ -139,6 +141,8 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the inputs, lines and wiring are what it reads
   const explainCtx = useMemo(() => exprBlockContext(node), [node.params.inputs, node.params.lines, node.params.outputType, node.inputs]);
   const explainDialogs = useExplainDialogs({ onJumped: onClose });
+  // "Explain more" is told which block this is (its neighbours in the graph) and the whole code around a line
+  const explainScope = useMemo(() => ({ nodeId: node.id, kind: 'Expression Block', getNodes: scopeNodes, enclosing: () => exprBlockCode(scopeNodes().find(n => n.id === node.id) ?? node) }), [node]);
 
   // ── Undo / Redo ──────────────────────────────────────────────────────────────
   const history      = useRef<Snapshot[]>([{ lines, result }]);
@@ -310,6 +314,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   const showCarry = (inp: InputDef) => insideLoop || !!inp.carry;
 
   return (
+    <ExplainScopeProvider value={explainScope}>
     <Modal
       title="Expression Block"
       subtitle={`${label} · ${customInputs.length} ${customInputs.length === 1 ? 'input' : 'inputs'} → ${outputType}`}
@@ -455,7 +460,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
                   <IconButton icon="close" label="Remove line" size="sm" tone="danger" tooltip={false} onClick={() => removeLine(i)} />
                 </span>
               </div>
-              {line.rhs.trim() && !line.off && <LineExplain node={node} index={i} line={line} ctx={explainCtx} dialogs={explainDialogs} />}
+              {line.rhs.trim() && !line.off && <LineExplain node={node} index={i} line={line} total={lines.length} ctx={explainCtx} dialogs={explainDialogs} />}
               </Fragment>
             ))}
             {lines.length === 0 && <Note>No lines yet. Each line assigns to a variable, top to bottom.</Note>}
@@ -477,6 +482,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
             </div>
             {result.trim() ? <LineExplain node={node} index="return" line={{ lhs: '', op: '', rhs: result }} ctx={explainCtx} dialogs={explainDialogs} /> : null}
             <Note>The final expression of type {outputType} that the block outputs.</Note>
+            {(lines.some(l => l.rhs.trim() && !l.off) || result.trim()) && <ExplainMore mode="block" text={exprBlockCode(node)} ctx={explainCtx} label="Explain this block" />}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -497,6 +503,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
         {explainDialogs.dialogs}
       </div>
     </Modal>
+    </ExplainScopeProvider>
   );
 }
 
@@ -504,13 +511,13 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
  * The Explain row under a line (or Return): the line as it compiles, explained; a part of its
  * expression can be made into a node and, if wanted, used here in its place.
  */
-function LineExplain({ node, index, line, ctx, dialogs }: {
-  node: GraphNode; index: number | 'return'; line: WarpLine; ctx: GeneraliseContext; dialogs: ReturnType<typeof useExplainDialogs>;
+function LineExplain({ node, index, line, ctx, dialogs, total }: {
+  node: GraphNode; index: number | 'return'; line: WarpLine; total?: number; ctx: GeneraliseContext; dialogs: ReturnType<typeof useExplainDialogs>;
 }) {
   const head = index === 'return' ? 'return ' : `${line.lhs} ${line.op || '='} `;
   const text = head + line.rhs;
   return (
-    <ExplainRow text={text} exprStart={head.length} ctx={ctx} indent={index === 'return' ? 0 : 28}
+    <ExplainRow text={text} exprStart={head.length} ctx={ctx} indent={index === 'return' ? 0 : 28} where={index === 'return' ? 'the Return line (the block’s result)' : `line ${index + 1}${total ? ` of ${total}` : ''}`}
       onFindUses={dialogs.findUses}
       onShowPicture={() => startLineProbe(node, index === 'return' ? { kind: 'return' } : { kind: 'line', index })}
       onMakeNode={span => {
