@@ -19,7 +19,7 @@ import { detectFlow } from './flow';
 // ── Graph context ───────────────────────────────────────────────────────────
 
 /** Categories whose nodes only work in a 3D scene. */
-export const THREE_D_CATEGORIES: ReadonlySet<string> = new Set(['3D Primitives', '3D Boolean Ops', '3D Transforms', '3D Scene', '3D Lighting', '4D']);
+export const THREE_D_CATEGORIES: ReadonlySet<string> = new Set(['3D Primitives', '3D Boolean Ops', '3D Transforms', '3D Scene', '3D Lighting', '4D', '4D Shapes', '4D Space', '4D Projection']);
 
 export interface LibraryContext {
   flow: FlowId;
