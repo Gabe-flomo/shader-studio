@@ -28,7 +28,7 @@ export const KIND_SECTIONS: Record<WalkerKind, readonly SectionDef[]> = {
   ants: [{ id: 'born', cards: [] }, { id: 'senses', cards: ['senses'] }, { id: 'turning', cards: ['wobble'] }, { id: 'moving', cards: [] }, { id: 'trail', cards: ['trail'] }],
   particles: [
     { id: 'born', cards: [] },
-    { id: 'forces', cards: ['gravity', 'wind', 'curl', 'attract', 'drag'], reorder: true },
+    { id: 'forces', cards: ['gravity', 'wind', 'curl', 'field', 'attract', 'drag'], reorder: true },
     { id: 'moving', cards: [] },
     { id: 'life', cards: ['fade', 'die'] },
     { id: 'look', cards: [] },
@@ -114,6 +114,7 @@ export const CARD_WORDS: Record<CardId, { title: string; hint: string }> = {
   gravity: { title: 'Gravity', hint: 'The same pull everywhere, one way (down is −90°).' },
   wind: { title: 'Wind', hint: 'A steady push one way, rising and falling in gusts.' },
   curl: { title: 'Curl flow', hint: 'Swirling currents that never bunch them up.' },
+  field: { title: 'Follow a field', hint: 'Flow along a field you pick, combine or write yourself.' },
   attract: { title: 'Attract / repel', hint: 'A pull toward a point or the mouse; negative pushes away.' },
   drag: { title: 'Drag', hint: 'Loses this share of its speed every second.' },
   fade: { title: 'Fade with age', hint: 'Its colour dims to black over this many seconds.' },

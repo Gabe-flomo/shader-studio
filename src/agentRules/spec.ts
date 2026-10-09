@@ -12,6 +12,8 @@
  * That is the limit: a walker can't remember more than a state and one number.
  */
 
+import { type FieldSpec, DEFAULT_FIELD, fieldName, liveLayers } from './fields';
+
 export type Cmp = '>' | '<';
 /** Which trail channel: the walker's own species' channel, or channel 1–4 (0–3 here). */
 export type ChannelRef = 'own' | 0 | 1 | 2 | 3;
@@ -98,7 +100,13 @@ export type RuleAction =
   /** Drag: loses this share of its speed a second (exponential: frame-rate independent). */
   | { kind: 'drag'; amount: number }
   /** Fade with age: its colour dims to black over `seconds` from birth (Draw agents' Colour by State or Agent). */
-  | { kind: 'fade'; seconds: number };
+  | { kind: 'fade'; seconds: number }
+  /**
+   * Follow a field (fields.ts): a velocity field built from layers (known fields, your own
+   * expressions), as a force (`strength` × the field a second²) or, with `grip`, ridden: the
+   * velocity eases toward `strength` × the field at `grip` a second.
+   */
+  | { kind: 'field'; strength: number; grip?: number; spec: FieldSpec };
 
 export interface AgentRule {
   /** All must hold (an empty list: always). */
@@ -235,6 +243,7 @@ export const ACTION_KINDS: Array<{ kind: RuleAction['kind']; label: string }> = 
   { kind: 'force', label: 'apply a force' },
   { kind: 'drag', label: 'drag (slow down)' },
   { kind: 'fade', label: 'fade with age' },
+  { kind: 'field', label: 'follow a field' },
 ];
 
 /** The rule set's view radius and how many neighbours a reading reads at most, when it doesn't say. */
@@ -261,7 +270,7 @@ export const WALKER_KINDS: Record<WalkerKind, { label: string; blurb: string; se
     label: 'Particles', blurb: 'No sensing: forces (gravity, wind, curl, toward or away from a point or the mouse) move them; they live, fade and are born again.',
     sections: ['masks', 'flow'],
     conditions: ['chance', 'age', 'mask', 'memory', 'shape'],
-    actions: ['force', 'drag', 'fade', 'bounce', 'speed', 'wander', 'die', 'trail', 'memory'],
+    actions: ['force', 'field', 'drag', 'fade', 'bounce', 'speed', 'wander', 'die', 'trail', 'memory'],
     templates: ['particles'],
   },
   flock: {
@@ -282,7 +291,7 @@ export const WALKER_KINDS: Record<WalkerKind, { label: string; blurb: string; se
     label: 'Swarm / orbiters', blurb: 'Orbit a point (or the mouse) and flock loosely: keep apart, drift together.',
     sections: ['neighbours', 'states', 'flow'],
     conditions: ['neighbours', 'chance', 'age', 'state', 'shape'],
-    actions: ['orbit', 'separate', 'cohere', 'match', 'force', 'drag', 'wander', 'speed', 'state', 'trail'],
+    actions: ['orbit', 'separate', 'cohere', 'match', 'force', 'field', 'drag', 'wander', 'speed', 'state', 'trail'],
     templates: ['swarm'],
   },
   crowd: {
@@ -348,6 +357,7 @@ export function newAction(kind: RuleAction['kind']): RuleAction {
     case 'force': return { kind, field: 'gravity', strength: 0.5, angle: -90 };
     case 'drag': return { kind, amount: 0.5 };
     case 'fade': return { kind, seconds: 3 };
+    case 'field': return { kind, strength: 1, grip: 3, spec: DEFAULT_FIELD() };
     default: return { kind } as RuleAction;
   }
 }
@@ -423,6 +433,7 @@ export function describeAction(set: AgentRuleSet, sp: number, a: RuleAction): st
     }
     case 'drag': return `drag ${num(a.amount)} a second`;
     case 'fade': return `fade with age over ${num(a.seconds)} s`;
+    case 'field': return `follow a field (${fieldName(a.spec)}) ×${num(a.strength)}${a.grip ? `, riding it (grip ${num(a.grip)})` : ', as a force'}`;
   }
 }
 
@@ -466,6 +477,7 @@ export function rulePorts(set: AgentRuleSet): Array<{ key: string; type: 'textur
   if (sensedChannels(set).length) ports.push({ key: 'trail', type: 'texture', label: 'Trail' });
   set.masks.forEach((m, i) => { if (i < MAX_MASKS) ports.push({ key: `mask${i + 1}`, type: m.kind === 'texture' ? 'texture' : 'float', label: m.name || `Mask ${i + 1}` }); });
   if (set.collide) ports.push({ key: 'scene', type: 'scene3d', label: 'Scene' });
+  if (usesFieldSlope(set)) ports.push({ key: 'field', type: 'float', label: 'Field ƒ' });
   return ports;
 }
 
@@ -483,6 +495,9 @@ export function notesFor3d(set: AgentRuleSet): string[] {
   if (acts(set).some(a => a.kind === 'force' && (a.field === 'point' || a.field === 'mouse'))) out.push('A pull toward a point or the mouse: the point is on the picture\'s plane (z 0) in 3D.');
   return out;
 }
+
+/** Does a rule set follow a field with a slope layer (it reads the group's Field ƒ socket)? */
+export const usesFieldSlope = (set: AgentRuleSet) => acts(set).some(a => a.kind === 'field' && liveLayers(a.spec).some(l => l.layer.kind === 'slope'));
 
 /** Does a rule set read the flow field (follow a flow field, or curl noise as a force)? */
 export const usesFlow = (set: AgentRuleSet) => usesAction(set, 'flow') || acts(set).some(a => a.kind === 'force' && a.field === 'curl');

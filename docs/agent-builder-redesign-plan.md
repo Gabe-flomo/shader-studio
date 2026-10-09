@@ -285,3 +285,25 @@ Not done yet:
 - The focus demo panel can cover the lens's bottom-right in a short viewport.
 - Look has no legend (it draws nothing on the picture).
 - **For the field builder** (pick, combine or write vector fields), the seams: the curl demo (`makeDemo`, demos.ts) rides particles through a field given as a function of position and time (`curlAt`), so a field builder can add a `field` demo kind that rides particles through the composed field; a legend entry is a plain object (`LegendEntry`) with a colour, numbers, a line and a demo, so a composed field can be one entry per layer; `curlArrows` (diagram.ts) draws the curl field over the picture; taking a field function instead of calling `curlAt` would let it draw any field.
+
+## Follow a field status (2026-10-09)
+
+The user asked for a field builder for curl-like forces: known fields, your own, the field in motion. Built (docs/agent-builder.md "Follow a field"):
+
+- **A Follow a field card** in Particles' Forces: Strength, Ride it (Grip) or Push (a force), and layers that add up.
+- **A gallery of eleven moving tiles:** curl noise, vortex, source / sink, saddle, dipole, waves, uniform wind, spiral, shear, the slope of a picture or shape in the graph (through a new Field ƒ socket on the group), and your own. Each layer has 1–3 plain sliders, a weight, an on / off switch, and folded Turn, mask (inside / outside a circle or box) and animate (drift, spin).
+- **Your own:** vx, vy (vz in 3D) in x, y, t (z), checked as you type by glslPatterns' parse and typecheck, errors inline, six examples.
+- **Nodes:** a new rule action `field`. The rule set makes one Expression Block per field (the layers as lines, returning the velocity; the layers kept on its params as `fieldSpec`), a Flow node per slope layer, and the push or ride in the rule's block. Open as nodes, Play, export and the agents language (`field 1 grip=3 layers="…"`) keep working.
+- **One source of truth:** the CPU runs the same GLSL lines through glslPatterns' evaluator, so the arrows, tiles, focus demo and thumbnails are the GPU's field (tested against the generated shader run on the CPU).
+- **Visuals:** the field's arrows over the picture, masks and centres; one legend entry per layer, worded from its values; a hovered layer drawn alone; focus plays the field moving with particles riding it.
+- A **Whirlpool** preset.
+
+Not done yet:
+
+- **Reuse outside agents:** the same field could feed the Particles node or a Vector Field input (an Expression Block reading UV instead of the walker's position). Not built: the Particles engine takes its forces as uniforms, not a node chain, so it needs its own plumbing.
+- Follow a field is only a Particles card; flocks, crowds and orbiters could steer along a field (turn toward it) with the same layers.
+- The slope layer isn't drawn (its field is the graph's); a GPU-rendered arrow pass could show it.
+- The overlay draws the field at time 0; drifting and spinning layers move only in the focus demo.
+- Curl noise in a field is four crossing waves (exact on CPU and GPU); it is more regular than the Curl noise node's gradient noise.
+- A mask is a circle or a box typed in; the Where picker (phase 3) should let it be a shape from the graph, dragged on the picture.
+- The Whirlpool preset keeps the Spark fountain's Emit (a preset changes only the rules), so particles start at the bottom.

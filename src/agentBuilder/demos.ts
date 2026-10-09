@@ -10,6 +10,7 @@
  */
 import type { DemoSpec } from './legend';
 import { curlAt } from './diagram';
+import { fieldFunction, layerSpec, rideField } from '../agentRules/fields';
 
 export interface Pt { x: number; y: number }
 export interface DemoFrame {
@@ -148,6 +149,49 @@ export function makeDemo(spec: DemoSpec, colour = '#ff9a6b'): Demo {
           for (const r of riders) {
             for (const seg of unwrapped(r.slice(Math.max(0, f - 45), f + 1))) fr.paths.push({ pts: seg, colour: HOT, width: 1.8, opacity: 0.7 });
             fr.dots.push({ ...r[f], r: 5, colour: HOT });
+          }
+          return fr;
+        },
+      };
+    }
+    case 'field': {
+      // The field in motion (its arrows at the clock, so a drifting or spinning layer moves; the
+      // dashes march) with particles riding it as the card does (ridden or pushed).
+      const period = 6;
+      const lit = spec.layer !== undefined ? layerSpec(spec.spec, spec.layer) : spec.spec;
+      const fn = fieldFunction(lit);
+      const all = fieldFunction(spec.spec);
+      const r = rand(7);
+      const starts = Array.from({ length: 14 }, () => ({ x: BOX.x0 + r() * (BOX.x1 - BOX.x0), y: BOX.y0 + r() * (BOX.y1 - BOX.y0) }));
+      const riders = rideField(all, starts, { seconds: period, strength: spec.strength, grip: spec.grip, box: BOX, fps: DEMO_FPS });
+      const masks = lit.layers.filter(l => !l.off && l.mask).map(l => l.mask!);
+      return {
+        period, bounds: BOX,
+        key: [{ colour, label: spec.layer !== undefined ? 'this layer (moving)' : 'the field (moving)' }, { colour: HOT, label: 'particles riding the whole field' }],
+        frame(t) {
+          const f = frameOf(t, period), fr = empty();
+          const cols = 13, rows = 8;
+          const pts: Array<{ p: Pt; v: Pt; m: number }> = [];
+          let top = 1e-6;
+          for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+            const p = { x: BOX.x0 + (i + 0.5) * (BOX.x1 - BOX.x0) / cols, y: BOX.y0 + (j + 0.5) * (BOX.y1 - BOX.y0) / rows };
+            const [vx, vy] = fn(p.x, p.y, f * DT);
+            const m = Math.hypot(vx, vy);
+            top = Math.max(top, m);
+            pts.push({ p, v: { x: vx, y: vy }, m });
+          }
+          for (const { p, v, m } of pts) {
+            if (m < 1e-6) continue;
+            const L = 0.1 * Math.min(1, m / top + 0.3);
+            fr.arrows.push({ from: { x: p.x - v.x / m * L, y: p.y - v.y / m * L }, to: { x: p.x + v.x / m * L, y: p.y + v.y / m * L }, colour, width: 1.3, flow: true });
+          }
+          for (const m of masks) {
+            if (m.shape === 'circle') fr.rings.push({ x: m.x, y: m.y, r: m.size, colour, dashed: true });
+            else fr.rects.push({ x0: m.x - m.size, y0: m.y - m.size, x1: m.x + m.size, y1: m.y + m.size, colour, dashed: true });
+          }
+          for (const tr of riders) {
+            for (const seg of unwrapped(tr.slice(Math.max(0, f - 45), f + 1))) fr.paths.push({ pts: seg, colour: HOT, width: 1.6, opacity: 0.6 });
+            fr.dots.push({ ...tr[f], r: 4, colour: HOT });
           }
           return fr;
         },

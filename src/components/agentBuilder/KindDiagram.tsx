@@ -28,13 +28,27 @@ import {
 } from '../../agentBuilder/diagram';
 import type { ViewRect } from '../builders/studio/LiveViewport';
 import { DiagramTags, type ViewportLink } from './ViewportLegend';
-import { FORCE_PARTICLE, LEGEND_COLOURS, dimFor, num, tagCollector } from '../../agentBuilder/legend';
+import { FIELD_COLOURS, FORCE_PARTICLE, LEGEND_COLOURS, dimFor, num, tagCollector } from '../../agentBuilder/legend';
+import { FIELD_KINDS, fieldArrows, fieldFunction, layerSpec, normalizeFieldSpec } from '../../agentRules/fields';
 
 type Act<K extends RuleAction['kind']> = Extract<RuleAction, { kind: K }>;
 const fmt = (v: number, d = 3) => String(Math.round(v * 10 ** d) / 10 ** d);
 const INK = 'rgba(255,255,255,0.92)';
 const FAINT = 'rgba(255,255,255,0.4)';
 const WARM = '#ff9a6b';
+
+/** The field's arrows, cached by field and picture rect (a slider drag redraws only when they change). */
+const arrowCache = new Map<string, ReturnType<typeof fieldArrows>>();
+function cachedArrows(im: ViewRect, spec: Parameters<typeof fieldFunction>[0]) {
+  const key = `${Math.round(im.x)},${Math.round(im.y)},${Math.round(im.w)},${Math.round(im.h)}:${JSON.stringify(spec)}`;
+  let a = arrowCache.get(key);
+  if (!a) {
+    a = fieldArrows(im, fieldFunction(spec), 18);
+    if (arrowCache.size > 24) arrowCache.delete(arrowCache.keys().next().value!);
+    arrowCache.set(key, a);
+  }
+  return a;
+}
 
 export function useDiagramLabel() {
   const tk = useTokens();
@@ -88,6 +102,45 @@ export function KindDiagram({ focus, cards, set, sp, box, viewRef, life, anchor,
             </g>
           ))}
           {tag(arrows[Math.min(arrows.length - 1, Math.round(arrows.length * 0.3))]?.to ?? { x: im.x + im.w - 40, y: im.y + 30 }, c.key, `×${num(a.strength, 2)}`, `${c.key}-t`)}
+        </g>,
+      );
+    }
+    // Follow a field: its arrows over the picture (the field the GPU runs, evaluated on the CPU at
+    // grid points, at time 0); a lit layer draws alone in its colour, with its mask and centre.
+    for (const c of of(['field'])) {
+      const a = c.action as Act<'field'>;
+      const spec = normalizeFieldSpec(a.spec);
+      const litLayer = link?.lit?.startsWith(`${c.key}:L`) ? Number(link.lit.slice(c.key.length + 2)) : -1;
+      const one = litLayer >= 0 && spec.layers[litLayer];
+      const colour = one ? FIELD_COLOURS[litLayer % FIELD_COLOURS.length] : LEGEND_COLOURS.field;
+      const arrows = cachedArrows(im, one ? layerSpec(spec, litLayer) : spec);
+      const fade = (k: number) => (litLayer >= 0 && k !== litLayer ? 0.35 : 1);
+      parts.push(
+        <g key={c.key} data-force="field" data-field-arrows={arrows.length} data-field-lit={litLayer >= 0 ? litLayer : undefined} opacity={(!c.on ? 0.3 : hotKey && !isHot(c) ? 0.45 : 1) * (link?.dim && link.lit && !link.lit.startsWith(c.key) ? 0.16 : 1) * (isHot(c) ? 1 : 0.8)}>
+          {arrows.map((ar, i) => ar.k < 0.02 ? null : (
+            <g key={i} opacity={0.35 + 0.65 * ar.k}>
+              <line x1={ar.from.x} y1={ar.from.y} x2={ar.to.x} y2={ar.to.y} stroke={colour} strokeWidth={isHot(c) ? 1.8 : 1.4} />
+              <path d={arrowHead(ar.from, ar.to, 5)} fill="none" stroke={colour} strokeWidth={isHot(c) ? 1.8 : 1.4} />
+            </g>
+          ))}
+          {spec.layers.map((l, k) => {
+            if (l.off) return null;
+            const col = FIELD_COLOURS[k % FIELD_COLOURS.length];
+            const m = l.mask;
+            const ctr = FIELD_KINDS[l.kind].centre ? picToView(im, { x: l.x ?? 0, y: l.y ?? 0 }) : null;
+            const mc = m ? picToView(im, { x: m.x, y: m.y }) : null;
+            const mr = m ? m.size * im.h / 2 : 0;
+            const tagAt = ctr ?? (mc ? { x: mc.x, y: mc.y - mr } : arrows[Math.min(arrows.length - 1, Math.round(arrows.length * (0.2 + 0.15 * k)))]?.at ?? { x: im.x + 40, y: im.y + 30 });
+            return (
+              <g key={k} data-field-layer={k} opacity={fade(k)}>
+                {m && mc && (m.shape === 'circle'
+                  ? <circle cx={mc.x} cy={mc.y} r={mr} fill="none" stroke={col} strokeWidth={1.6} strokeDasharray="6 5" />
+                  : <rect x={mc.x - mr} y={mc.y - mr} width={2 * mr} height={2 * mr} fill="none" stroke={col} strokeWidth={1.6} strokeDasharray="6 5" />)}
+                {ctr && <circle cx={ctr.x} cy={ctr.y} r={4.5} fill={col} stroke="rgba(0,0,0,0.5)" />}
+                {tag(tagAt, `${c.key}:L${k}`, `×${num(l.weight, 2)}`, `${c.key}-L${k}`)}
+              </g>
+            );
+          })}
         </g>,
       );
     }

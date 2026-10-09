@@ -9,6 +9,7 @@ import type { AgentRuleSet, RuleAction, RuleCondition } from '../agentRules/spec
 import { cardRule, conditionsOf } from './behaviours';
 import { miniRandom } from './miniSim';
 import { curlAt } from './diagram';
+import { fieldFunction } from '../agentRules/fields';
 
 /** Where a preset's dots are born, for its thumbnail (the presets carry no Emit of their own). */
 export interface DotEmit {
@@ -146,6 +147,14 @@ export class DotSim {
             } else if (a.field === 'curl') { const c = this.curl(x[i], y[i]); fx = c[0] * a.strength; fy = c[1] * a.strength; }
             else { const tx = a.field === 'mouse' ? 0 : a.x ?? 0, ty = a.field === 'mouse' ? 0 : a.y ?? 0; const dx = tx - x[i], dy = ty - y[i], l = Math.hypot(dx, dy) || 1; fx = dx / l * a.strength; fy = dy / l * a.strength; }
             const nvx = Math.cos(h) * spd + fx * dt, nvy = Math.sin(h) * spd + fy * dt;
+            spd = Math.hypot(nvx, nvy); if (spd > 1e-6) h = Math.atan2(nvy, nvx);
+            break;
+          }
+          case 'field': {
+            const [fx, fy] = fieldFunction(a.spec)(x[i], y[i], this.t);
+            let nvx = Math.cos(h) * spd, nvy = Math.sin(h) * spd;
+            if (a.grip && a.grip > 0) { const k = 1 - Math.exp(-a.grip * dt); nvx += (fx * a.strength - nvx) * k; nvy += (fy * a.strength - nvy) * k; }
+            else { nvx += fx * a.strength * dt; nvy += fy * a.strength * dt; }
             spd = Math.hypot(nvx, nvy); if (spd > 1e-6) h = Math.atan2(nvy, nvx);
             break;
           }

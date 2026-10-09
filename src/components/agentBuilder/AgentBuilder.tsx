@@ -350,7 +350,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
     const def = sections.find(x => x.id === id)!;
     return (
       <SectionCards section={def} all={behaviours.cards} set={set} sp={s} update={update} cardsFor={kindCards(kind)}
-        focusCard={focusCard} hotCard={focus.card} onFocusSetting={onFocusSetting} only={only}
+        focusCard={focusCard} hotCard={focus.card} onFocusSetting={onFocusSetting} only={only} d3={d3}
         intro={<>{sectionHeader(id)}{intro}</>} />
     );
   };
@@ -442,7 +442,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       case 'born': return `${born.shape} · ${born.count.replace('m', 'M')}`;
       case 'senses': case 'turning': case 'trail': return sectionSummary(cards, id);
       case 'moving': return sectionSummary(cards, 'moving');
-      case 'forces': return titles(['gravity', 'wind', 'curl', 'attract', 'drag']);
+      case 'forces': return titles(['gravity', 'wind', 'curl', 'field', 'attract', 'drag']);
       case 'life': {
         const f = on(['fade'])[0]?.action, d = on(['die'])[0];
         return [f?.kind === 'fade' ? `fades ${r3(f.seconds)} s` : '', d?.when?.kind === 'age' ? `dies at ${r3(d.when.seconds)} s` : d ? 'dies' : ''].filter(Boolean).join(' · ') || 'for ever';
@@ -509,7 +509,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
     if (current === 'born') return d3 ? (camera ? 'Drawn through the 3D camera as it starts (it then circles).' : 'Seen from the front: no 3D camera to look through.') : undefined;
     if (current === 'senses' || current === 'turning' || current === 'trail' || (current === 'moving' && focus.setting !== 'edges' && trailKind)) return 'One walker, up close.';
     if ((current === 'neighbours' || current === 'steering') && !(focus.card?.startsWith('avoidEdges'))) return `One ${kind === 'crowd' ? 'person' : kind === 'swarm' ? 'orbiter' : 'bird'} and made-up neighbours, up close.`;
-    if (current === 'forces') return 'One particle with its forces; the curl flow over the picture.';
+    if (current === 'forces') return behaviours.cards.some(c => c.on && c.card === 'field') ? 'One particle with its forces; the field (and any curl flow) as arrows over the picture.' : 'One particle with its forces; the curl flow over the picture.';
     return undefined;
   })();
   const overlay = ({ w, h, image }: { w: number; h: number; image: ViewRect }) => {
