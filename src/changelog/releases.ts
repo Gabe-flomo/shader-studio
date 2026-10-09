@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.122',
+    date: '2026-10-09',
+    title: 'Explain view',
+    highlights: [
+      { area: 'Studio', text: 'Expression Block: a line\'s fold is a short summary with Open explain view: the line, its steps, a big live picture (the main canvas pauses), and Try values.' },
+      { area: 'Studio', text: 'When a line moves with time, the explain view adds Time: play, scrub, speed, and a filmstrip of the picture over a few seconds.' },
+      { area: 'Studio', text: 'The model explains a line inside the explain view; the editor keeps Explain the block.' },
+    ],
+  },
+  {
     id: '2026.10.121',
     date: '2026-10-09',
     title: 'Smarter Expression Builder',
