@@ -29,6 +29,7 @@ import { insertSnippet } from '../code/useCompletion';
 import { HowUsedButton } from '../codeExplorer/HowUsedButton';
 import { useExprBlockJump } from '../codeExplorer/useCodeJumpFocus';
 import { ExplainRow } from '../explain/ExplainRow';
+import { exprBlockBuildUp } from '../explain/buildUpHost';
 import { useExplainDialogs } from '../explain/useExplainDialogs';
 import { exprBlockContext, exprBlockUseHere, exprBlockCode, scopeNodes } from '../explain/hosts';
 import { ExplainScopeProvider } from '../explain/ExplainScope';
@@ -78,6 +79,9 @@ interface WarpLine {
 
 
 const TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
+
+// Presses of a line's ▶ (each opens and focuses that line's Explain build-up once)
+let explainSeq = 0;
 const OPS = ['=', '+=', '-=', '*=', '/='];
 
 
@@ -148,6 +152,9 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
     return lineConcepts([...ls, { lhs: '', rhs: '' }], explainCtx).map(k => ({ ...explainCtx, known: k.known, roles: k.roles }));
   }, [explainCtx, node.params.lines]);
   const explainDialogs = useExplainDialogs({ onJumped: onClose });
+  // ▶ on a line (or Return) opens its Explain build-up, ready to step through; seq makes a repeat press count
+  const [explainOpen, setExplainOpen] = useState<{ at: number | 'return'; seq: number } | null>(null);
+  const openExplain = (at: number | 'return') => setExplainOpen({ at, seq: ++explainSeq });
   // "Explain more" is told which block this is (its neighbours in the graph) and the whole code around a line
   const explainScope = useMemo(() => ({ nodeId: node.id, kind: 'Expression Block', getNodes: scopeNodes, enclosing: () => exprBlockCode(scopeNodes().find(n => n.id === node.id) ?? node) }), [node]);
 
@@ -461,13 +468,13 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
                   {...exprProps(line.rhs, v => updateLine(i, 'rhs', v), v => ({ lines: lines.map((l, j) => j === i ? { ...l, rhs: v } : l), result }))}
                 />
                 <span style={{ display: 'flex', alignItems: 'center' }}>
-                  <ProbeButton node={node} target={{ kind: 'line', index: i }} label={`Preview line ${i + 1}`} />
+                  <ProbeButton node={node} target={{ kind: 'line', index: i }} label={`Preview line ${i + 1}`} onStart={() => openExplain(i)} />
                   <IconButton icon="chevU" label="Move up" size="sm" tooltip={false} disabled={i === 0} onClick={() => moveLine(i, i - 1)} />
                   <IconButton icon="chevD" label="Move down" size="sm" tooltip={false} disabled={i === lines.length - 1} onClick={() => moveLine(i, i + 1)} />
                   <IconButton icon="close" label="Remove line" size="sm" tone="danger" tooltip={false} onClick={() => removeLine(i)} />
                 </span>
               </div>
-              {line.rhs.trim() && !line.off && <LineExplain node={node} index={i} line={line} total={lines.length} ctx={lineCtxs[i] ?? explainCtx} dialogs={explainDialogs} />}
+              {line.rhs.trim() && !line.off && <LineExplain node={node} index={i} line={line} total={lines.length} ctx={lineCtxs[i] ?? explainCtx} dialogs={explainDialogs} openRequest={explainOpen?.at === i ? explainOpen.seq : undefined} />}
               </Fragment>
             ))}
             {lines.length === 0 && <Note>No lines yet. Each line assigns to a variable, top to bottom.</Note>}
@@ -485,9 +492,9 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
                 style={{ flex: 1 }}
                 {...exprProps(result, updateResult, v => ({ lines, result: v }))}
               />
-              <ProbeButton node={node} target={{ kind: 'return' }} label="Preview the return value" />
+              <ProbeButton node={node} target={{ kind: 'return' }} label="Preview the return value" onStart={() => openExplain('return')} />
             </div>
-            {result.trim() ? <LineExplain node={node} index="return" line={{ lhs: '', op: '', rhs: result }} ctx={lineCtxs[lineCtxs.length - 1] ?? explainCtx} dialogs={explainDialogs} /> : null}
+            {result.trim() ? <LineExplain node={node} index="return" line={{ lhs: '', op: '', rhs: result }} ctx={lineCtxs[lineCtxs.length - 1] ?? explainCtx} dialogs={explainDialogs} openRequest={explainOpen?.at === 'return' ? explainOpen.seq : undefined} /> : null}
             <Note>The final expression of type {outputType} that the block outputs.</Note>
             {(lines.some(l => l.rhs.trim() && !l.off) || result.trim()) && <ExplainMore mode="block" text={exprBlockCode(node)} ctx={explainCtx} label="Explain this block" />}
           </div>
@@ -518,14 +525,18 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
  * The Explain row under a line (or Return): the line as it compiles, explained; a part of its
  * expression can be made into a node and, if wanted, used here in its place.
  */
-function LineExplain({ node, index, line, ctx, dialogs, total }: {
+function LineExplain({ node, index, line, ctx, dialogs, total, openRequest }: {
   node: GraphNode; index: number | 'return'; line: WarpLine; total?: number; ctx: GeneraliseContext; dialogs: ReturnType<typeof useExplainDialogs>;
+  /** ▶ on this line was pressed (a counter): its Explain opens, ready to step through. */
+  openRequest?: number;
 }) {
   const head = index === 'return' ? 'return ' : `${line.lhs} ${line.op || '='} `;
   const text = head + line.rhs;
+  // The build-up's pictures and step-through (buildUpHost.ts); made again when the block changes
+  const buildUp = useMemo(() => exprBlockBuildUp(node, index), [node, index]);
   return (
     <ExplainRow text={text} exprStart={head.length} ctx={ctx} indent={index === 'return' ? 0 : 28} where={index === 'return' ? 'the Return line (the block’s result)' : `line ${index + 1}${total ? ` of ${total}` : ''}`}
-      onFindUses={dialogs.findUses}
+      onFindUses={dialogs.findUses} buildUp={buildUp} openRequest={openRequest}
       onShowPicture={() => startLineProbe(node, index === 'return' ? { kind: 'return' } : { kind: 'line', index })}
       onMakeNode={span => {
         const rel = { start: span.start - head.length, end: span.end - head.length };
