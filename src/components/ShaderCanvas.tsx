@@ -45,6 +45,7 @@ import { OfflineHistory } from '../lib/offlineHistory';
 import { PassRunner, PassTargets } from '../lib/passRunner';
 import { ppFrameSteps } from '../play/kit/passPlan.js';
 import { AgentRunner, AgentTargets, agentSpotRegistry } from '../lib/agentRunner';
+import { hoodWanted } from '../lib/agentHood';
 import type { AgentsSpec } from '../compiler/types';
 import type { PassProgram } from '../compiler/types';
 import { recordFrame, recordGpuResults, flushGpuFrame, recordGpuCompile, setGpuTimerSupport, registerShaderCostMeasurer, getPerfSnapshot } from '../lib/perfStats';
@@ -1703,6 +1704,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
             if (frameCount % 10 === 0 || !dynamic) agentRunner!.drawThumbnails(agentTargets!);
             // The Agent Builder's species spotlight, only while one is showing.
             if (agentSpotRegistry.size() > 0 && (frameCount % 2 === 0 || !dynamic)) agentRunner!.drawSpotlights(agentTargets!);
+            // The Agent Builder's Under the hood, only while one is open (and once more after, to let go).
+            if (hoodWanted() || agentRunner!.hoodHeld) agentRunner!.drawHood(agentTargets!);
           }
         }
         if (isStatefulRef.current) {

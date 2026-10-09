@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
 /**
  * A numeric <input> that can actually be cleared.
@@ -34,22 +34,22 @@ export function NumberInput({
   title?: string;
   disabled?: boolean;
 }) {
-  const [text, setText] = useState(() => format(value));
-  const focused = useRef(false);
-
-  useEffect(() => {
-    if (!focused.current) setText(format(value));
-  }, [value, format]);
+  // The text being typed, only while the field has focus; otherwise the field shows `value` as is.
+  // (Derived, not synced in an effect: an effect that set the text on every new value scheduled an
+  // extra render per change, and a burst of key repeats on a slider beside it, which the browser
+  // runs ahead of React's queued renders, piled them up into "Maximum update depth exceeded".)
+  const [draft, setDraft] = useState<string | null>(null);
+  const text = draft ?? format(value);
 
   return (
     <input
       type="text"
       inputMode="decimal"
       value={text}
-      onFocus={() => { focused.current = true; }}
+      onFocus={() => setDraft(format(value))}
       onChange={e => {
         const raw = e.target.value;
-        setText(raw);
+        setDraft(raw);
         // Mid-edit states (empty, a lone sign, a trailing decimal point)
         // parse to a stale/wrong number or NaN — leave them displayed
         // as-is without committing anything until they resolve into a
@@ -58,11 +58,7 @@ export function NumberInput({
         const n = parseFloat(raw);
         if (!isNaN(n)) onCommit(n);
       }}
-      onBlur={() => {
-        focused.current = false;
-        const n = parseFloat(text);
-        setText(format(isNaN(n) ? value : n));
-      }}
+      onBlur={() => setDraft(null)}
       style={style}
       {...rest}
     />

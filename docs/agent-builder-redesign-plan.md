@@ -250,3 +250,20 @@ Not done yet, for phase 3 and later:
 - The view ring's lens re-fits when the radius jumps to more than about twice or less than half the size it was fitted for, so after a big jump the ring is the same size again.
 - The species spotlight draws each walker as a sharp 2 px dot without depth of field, so thousands of walkers of one kind become a cloud.
 - A crowd in 3D is the flock's setup with the crowd's rules, and its goal points are on the picture's plane.
+
+## Under the hood status (2026-10-09)
+
+The user asked to see what the walkers look like and do in their textures. Built (docs/agent-builder.md "Under the hood"):
+
+- **A panel under the live picture** (the layers button; remembered, closed by default) showing each state texture channel by channel, labelled with what it holds and colour-mapped by meaning: position as a gradient, heading as a hue wheel, speed and age as ramps, life with dead walkers black, kinds in their chip colours, memory as a heat map, deposits in the trail channels' colours. Each has a legend and its range. C and D only when the group keeps them; 3D shows x, y, z and the velocity.
+- **The trail field's channels** as swatches, named and coloured as the Smells / Lays chips, with what reads and writes each.
+- **Linking:** point at a texel and the walker is ringed on the picture with its numbers; click the picture and the nearest walker within 8 px is picked and its texel lit in every texture; Follow keeps the ring and the numbers on it; the selected section (or a kind chip) lights the channels it uses.
+- **Cheap:** GPU-drawn thumbnails read back a few times a second without a stall, a 5-texel read for one walker, a one-texel GPU pick; nothing runs while the panel is closed. The runner has a read-only `stateView` for this.
+- **The phase 2 loose end:** "Maximum update depth exceeded" after 60–80 quick key presses on a builder slider. Found and fixed: `NumberInput` (the ruler's number box) copied each new value into its text in an effect, one extra render per value. Key repeats, which the browser runs ahead of React's queued renders, piled those renders up past React's limit of 50. The text is now derived (typed text only while focused). Reproduced in the browser with real key repeats before the fix (the error at about the 50th press) and not after (100 presses each way); a test hammers the sliders and checks NumberInput renders once a value.
+
+Not done yet:
+
+- The memory heat maps are fixed at 0–1, and the deposit maps too: a memory that counts past 1 saturates. An automatic range (a GPU min / max) would fix it.
+- The thumbnails sample every side ÷ 128-th walker; there is no zoom into a region of the texture.
+- A 3D group without a live 3D Draw agents is placed as if seen from the front.
+- The panel takes up to about half the viewport's height; it scrolls rather than resizes.
