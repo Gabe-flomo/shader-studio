@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.119',
+    date: '2026-10-09',
+    title: 'Previews under their line',
+    highlights: [
+      { area: 'Studio', text: 'Expression Block: ▶ on a line opens its picture right under that line, not at the bottom of the list; ↑ / ↓ move it along with the line.' },
+    ],
+  },
+  {
     id: '2026.10.118',
     date: '2026-10-09',
     title: 'Beam and Ride a curve',
