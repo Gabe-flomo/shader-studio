@@ -1,6 +1,6 @@
 # Graph series: versions as major.minor (plan)
 
-**Status:** plan only, nothing built. Asked for 2026-10-08.
+**Status:** plan with the user's answers (2026-10-08), not built yet.
 
 ## The idea
 
@@ -40,7 +40,27 @@ Saving asks exactly that: **Minor** (default, Enter), **Major**, or **New graph*
 7. **Cap.** 30 versions is too few for a series. Make it per series (say 200), still dropping the oldest *minor* versions first and never a family's first or latest.
 8. **Later (Play):** a layer that cycles through a series' versions (majors, or one family's minors) as backgrounds: "pattern stacking" over iterations of one idea.
 
-## Questions for the user
+## Decisions (the user's answers)
+
+1. **A new major starts at x.0** (2.4 → Major → 3.0).
+2. **Every save gets a new number by default**, counting up on its own. **Save in place** (overwrite the open version) is also offered, but it isn't the default.
+3. **History is capped by size, not count.** A series may not grow past a size limit (a setting, with a sensible default). When it would, the oldest minor versions go first; a family's first and latest are never dropped.
+4. **A series is its name.** Saving under a name that already exists (from an example, another graph or a fresh start) adds a **new family** to that series: XYZ 3.0 after XYZ 2.x. A brand-new name starts at 1.0. Opening an example does not start a series by itself; only saving under a name does.
+5. **Files gets a Series view** (families folded, versions inside).
+6. **Save opens a small menu** with sensible defaults:
+   - **Untitled graph:** the default is **New graph**, with the name field focused. Typing an existing series' name switches the button to "Add family 3.0 to XYZ".
+   - **Saved graph open:** the default is **Minor** (Enter). **Major**, **Save in place** and **Save as new graph** sit beside it, each showing the number it will give.
+   - The optional note ("What changed?") stays.
+7. **Storage: a small local database.** Series live in IndexedDB rather than localStorage. One record per version, indexed by series name, major, minor and saved date, with an optional note and tags, which allows queries ("every version of Curves from last week", "families with a note"). It also lifts localStorage's few-megabyte ceiling, so the size limit means something. Old localStorage graphs migrate once, on first open, and the existing lists keep working by reading through the new store. This is also the base the back-burnered query explorer needs.
+
+## Build order
+
+1. The store (IndexedDB, migration, size limit) with tests, with no UI change yet.
+2. The save menu and name chip ("Curves 2.3").
+3. The Files Series view, and opening any version.
+4. `.playfile` export of a whole series or one version.
+5. Later: the Play layer that cycles a series' versions.
+## Questions (answered above)
 
 1. **Major numbering:** should a new major start at x.0 (3.0) or x.1?
 2. **Saving over a version:** should it ever replace a version in place, or is every save a new number? The plan says always a new number; "Revert to 2.1" makes 2.5 a copy of 2.1.
