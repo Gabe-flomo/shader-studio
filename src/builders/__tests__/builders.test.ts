@@ -174,6 +174,7 @@ describe('Do… bar builder phrases', () => {
     ['open grid rules', 'open-grid-rules'], ['new grid rules', 'new-grid-rules'], ['edit the rules', 'edit-rules'],
     ['open agent rules', 'open-agent-rules'], ['new agent rules', 'new-agent-rules'],
     ['new 3d agents', 'new-3d-agents'], ['3D agent builder', 'new-3d-agents'], ['open the 3d agent builder', 'new-3d-agents'],
+    ['new 3d agents round a shape', 'new-3d-agents-shape'], ['agents around a shape', 'new-3d-agents-shape'],
     ['show the recipe', 'show-recipe'], ['copy the recipe', 'copy-recipe'], ['please copy the recipe', 'copy-recipe'],
   ];
   for (const [text, id] of phrases) it(`“${text}” reads as ${id}`, () => expect(readBuilderCommand(text)?.id).toBe(id));
@@ -205,6 +206,7 @@ describe('Do… bar builder phrases', () => {
     expect(plan('edit the rules', [...s.nodes, grid()], ['g1']).action).toEqual({ kind: 'open-grid', nodeId: 'g1' });
     expect(plan('open agent rules', []).action).toEqual({ kind: 'new-agents' });
     expect(plan('new 3d agents', []).action).toEqual({ kind: 'new-agents3d' });
+    expect(plan('new 3d agents round a shape', []).action).toEqual({ kind: 'new-agents3d', template: 'shape3d' });
     expect(plan('show the recipe', graph, [march.id]).action).toEqual({ kind: 'show-recipe', nodeId: scene.id });
     expect(plan('copy the recipe', [grid()]).action).toEqual({ kind: 'copy-recipe', nodeId: 'g1' });
     expect(plan('copy the recipe', [handScene()]).action).toBeNull();

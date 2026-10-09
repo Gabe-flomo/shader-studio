@@ -148,7 +148,10 @@ describe('Agent Rules as tabs', () => {
     expect($$('[data-camera]').map(x => x.getAttribute('data-camera'))).toEqual(['camDist', 'camAngle', 'camElevation', 'rotSpeed', 'fov']);
     expect($('[data-fold="agentRules:open:dof"] button')?.getAttribute('aria-expanded')).toBe('false');
     expect($('[data-fold="agentRules:open:dof"]')?.textContent).toMatch(/focus 1 · blur 0\.2/);
-    const two = $$('[data-agent-space] button').find(b => b.textContent === '2D') ?? null;
+    // Around a shape: folded, "none" until one is picked.
+    expect($('[data-fold="agentRules:open:shape"] button')?.getAttribute('aria-expanded')).toBe('false');
+    expect($('[data-fold="agentRules:open:shape"]')?.textContent).toMatch(/Around a shape.*none/);
+    const two =$$('[data-agent-space] button').find(b => b.textContent === '2D') ?? null;
     click(two);
     const after = useNodeGraphStore.getState().nodes.find(n => n.id === group.id)!;
     expect(after.params.space).toBe('2d');

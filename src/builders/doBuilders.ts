@@ -37,7 +37,7 @@ export type BuilderAction =
   | { kind: 'new-grid' }
   | { kind: 'open-grid'; nodeId: string }
   | { kind: 'new-agents' }
-  | { kind: 'new-agents3d' }
+  | { kind: 'new-agents3d'; template?: string }
   | { kind: 'open-agents'; groupId: string }
   | { kind: 'show-recipe'; nodeId: string }
   | { kind: 'copy-recipe'; nodeId: string };
@@ -126,6 +126,8 @@ export function planBuilderCommand(cmd: BuilderCommand, ctx: BuilderContext): Bu
       return { id: cmd.id, label: 'Adds an Agents group in rules mode and opens its rules', action: { kind: 'new-agents' } };
     case 'new-3d-agents':
       return { id: cmd.id, label: 'Adds 3D agents (Ball Emit, volume Trail, an orbiting camera) and opens their rules', action: { kind: 'new-agents3d' } };
+    case 'new-3d-agents-shape':
+      return { id: cmd.id, label: 'Adds 3D agents round a ray-marched torus (Collide (3D scene), drawn through its camera) and opens their rules', action: { kind: 'new-agents3d', template: 'shape3d' } };
     case 'edit-rules': {
       const t = pickOne(ctx, all, nd => isGrid(nd) || isRulesGroup(nd));
       if (!t.node) return { id: cmd.id, label: 'Opens the rules', action: null, problem: which(t.many, 'Grid Rules node or rules Agents group') };

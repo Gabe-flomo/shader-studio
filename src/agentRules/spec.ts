@@ -137,9 +137,18 @@ export interface AgentRuleSet {
   sensor: { distance: number; angle: number };
   /** The flow field Follow a flow field reads (Curl noise: Size, Evolve). */
   flow: { size: number; evolve: number };
+  /**
+   * Around a shape (3D): the walkers are kept out of a ray-marched Scene wired into the group's
+   * Scene port, by a Collide (3D scene) after Move (agentRules/shape3d.ts sets it up). Missing: none.
+   */
+  collide?: AgentCollide;
   /** One per species (1–4): the group's Species follows it. */
   species: AgentSpeciesRules[];
 }
+
+/** Collide (3D scene)'s settings for a rules group round a shape: Scene size, Margin, Cushion, Bounce. */
+export interface AgentCollide { reach: number; margin: number; cushion: number; bounce: number }
+export const DEFAULT_COLLIDE: AgentCollide = { reach: 1.6, margin: 0.03, cushion: 0.18, bounce: 0.2 };
 
 export const MAX_SPECIES = 4;
 export const MAX_STATES = 8;
@@ -447,10 +456,11 @@ export const usesDeposit = (set: AgentRuleSet) => acts(set).some(a => a.kind ===
 export const usesStop = (set: AgentRuleSet) => set.species.some(s => s.rules.some(r => !r.off && r.stop));
 
 /** The ports a rule set puts on the group card: the trail (when anything smells it) and its masks. */
-export function rulePorts(set: AgentRuleSet): Array<{ key: string; type: 'texture' | 'float'; label: string }> {
-  const ports: Array<{ key: string; type: 'texture' | 'float'; label: string }> = [];
+export function rulePorts(set: AgentRuleSet): Array<{ key: string; type: 'texture' | 'float' | 'scene3d'; label: string }> {
+  const ports: Array<{ key: string; type: 'texture' | 'float' | 'scene3d'; label: string }> = [];
   if (sensedChannels(set).length) ports.push({ key: 'trail', type: 'texture', label: 'Trail' });
   set.masks.forEach((m, i) => { if (i < MAX_MASKS) ports.push({ key: `mask${i + 1}`, type: m.kind === 'texture' ? 'texture' : 'float', label: m.name || `Mask ${i + 1}` }); });
+  if (set.collide) ports.push({ key: 'scene', type: 'scene3d', label: 'Scene' });
   return ports;
 }
 
@@ -518,6 +528,7 @@ export function normalizeRuleSet(raw: unknown): AgentRuleSet {
     edges: r.edges === 'bounce' || r.edges === 'slide' ? r.edges : 'wrap',
     sensor: { distance: r.sensor?.distance ?? d.sensor.distance, angle: r.sensor?.angle ?? d.sensor.angle },
     flow: { size: r.flow?.size ?? 1, evolve: r.flow?.evolve ?? 0.15 },
+    ...(r.collide && typeof r.collide === 'object' ? { collide: { ...DEFAULT_COLLIDE, ...Object.fromEntries(Object.entries(r.collide).filter(([, v]) => typeof v === 'number' && isFinite(v))) } } : {}),
     species,
   };
 }
