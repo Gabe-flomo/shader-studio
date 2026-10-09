@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.113',
+    date: '2026-10-08',
+    title: 'Agents around a shape',
+    highlights: [
+      { area: 'Studio', text: 'Agent Rules in 3D: Look → Around a shape adds a lit torus, sphere or box the walkers flow round and hide behind. Do… bar: "new 3d agents round a shape".', link: { kind: 'doc', path: 'docs/agent-rules.md' } },
+      { area: 'Studio', text: 'Adding an Agents group offers Rules in 3D; switching a 3D setup to 2D removes the camera and adds the trail palette, so 2D ⇄ 3D round trips cleanly.' },
+    ],
+  },
+  {
     id: '2026.10.112',
     date: '2026-10-08',
     title: '3D Agent Builder',
