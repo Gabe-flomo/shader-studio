@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.123',
+    date: '2026-10-09',
+    title: 'Fewer, clearer builders',
+    highlights: [
+      { area: 'Studio', text: 'March Loop and GI Lit cards show Warp safety (Off, Auto, Careful, High), Show (the steps heatmap) and Jitter pattern; Max step appears with Warp safety on.' },
+      { area: 'Studio', text: 'Agent Rules and the 3D Agent Builder are one Agent Builder (2D or 3D). The Expression Builder is hidden while it is reworked.' },
+    ],
+  },
+  {
     id: '2026.10.122',
     date: '2026-10-09',
     title: 'Explain view',
