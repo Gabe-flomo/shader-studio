@@ -61,14 +61,16 @@ export function cleanupSuggestions(inv: Inventory, opts: CleanupOptions = {}): C
 
   const versions: Suggestion[] = [];
   for (const n of all) {
-    if (n.kind !== 'versions') continue;
-    const old = (n.children ?? []).slice(keep); // children are newest first
+    // A graph's Earlier versions (its Family folders inside are walked, not counted on their own).
+    if (n.kind !== 'versions' || !n.id.endsWith('/versions')) continue;
+    const flat = (n.children ?? []).flatMap(c => (c.kind === 'version' ? [c] : (c.children ?? []).filter(v => v.kind === 'version')));
+    const old = flat.slice(keep); // newest first
     if (!old.length) continue;
     const graph = inv.byId.get(inv.parentOf.get(n.id) ?? '');
     versions.push({
       id: `versions:${n.id}`, kind: 'versions', nodeId: graph?.id ?? n.id, label: graph?.label ?? n.label,
       removeIds: old.map(v => v.id), size: old.reduce((s, v) => s + v.size, 0),
-      reason: `${old.length} earlier version${old.length === 1 ? '' : 's'} (${old[old.length - 1].label.replace('Version ', 'v')}${old.length > 1 ? `–${old[0].label.replace('Version ', 'v')}` : ''}) past the newest ${keep}`,
+      reason: `${old.length} earlier version${old.length === 1 ? '' : 's'} (${old[old.length - 1].label.replace('Version ', '')}${old.length > 1 ? `–${old[0].label.replace('Version ', '')}` : ''}) past the newest ${keep}`,
     });
   }
 

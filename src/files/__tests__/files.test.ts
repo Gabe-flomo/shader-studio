@@ -89,7 +89,7 @@ describe('inventory', () => {
     const i = await inv(memoryKV(fixture()));
     const g = node(i, 'graph:Sunset');
     expect(labels(g.children)).toEqual(['Earlier versions', 'Play setup']);
-    expect(labels(node(i, 'graph:Sunset/versions').children)).toEqual(['Version 2', 'Version 1']);
+    expect(labels(node(i, 'graph:Sunset/versions').children)).toEqual(['Version 1.1', 'Version 1.0']);
     expect(labels(node(i, 'graph:Sunset/play').children)).toEqual(['Takes', 'Datasets', 'Layer kinds', 'Media']);
     expect(labels(node(i, 'graph:Sunset/media').children)).toEqual(['Logo', 'Old still']);
     expect(pathTo(i, 'graph:Sunset/take:t2').map(n => n.label)).toEqual(['Graphs', 'Skies', 'Sunset', 'Play setup', 'Takes', 'Take 2']);
@@ -144,7 +144,7 @@ describe('clean up', () => {
     const by = Object.fromEntries(groups.map(g => [g.kind, g.items]));
     expect(by.versions.map(s => s.label)).toEqual(['Waves']);
     expect(by.versions[0].removeIds).toEqual(['graph:Waves/v:2', 'graph:Waves/v:1']);
-    expect(by.versions[0].reason).toMatch(/2 earlier versions \(v1–v2\) past the newest 5/);
+    expect(by.versions[0].reason).toMatch(/2 earlier versions \(1\.0–1\.1\) past the newest 5/);
     expect(by.unused.map(s => s.nodeId).sort()).toEqual(['graph:Sunset/dataset:spare', 'graph:Sunset/media:play.display.image.src', 'pres:Lesson one/src:src2']);
     expect(by.duplicate.map(s => s.label).sort()).toEqual(['Plasma again', 'Waves copy'].sort());
     expect(by.duplicate.find(s => s.label === 'Waves copy')!.reason).toBe('Same content as “Waves”, which is newer');
