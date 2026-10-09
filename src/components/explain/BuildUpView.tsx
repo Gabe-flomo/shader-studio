@@ -51,6 +51,9 @@ export interface BuildUpViewProps {
 // The last focus request (a counter) the view acted on
 let focusTaken = 0;
 
+/** A focus request no view has acted on yet (a view opened on its own, like the explain view). */
+export const newFocusSignal = () => focusTaken + 1;
+
 /**
  * Whether the element is on screen and the page is showing (true where IntersectionObserver
  * isn't available). A hidden tab or a scrolled-away panel renders nothing until it shows again.

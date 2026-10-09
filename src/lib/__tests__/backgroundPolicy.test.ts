@@ -46,4 +46,12 @@ describe('background policy', () => {
     expect(at({ lastDraw: 1000 - 1000 / SLOW_FPS / 2 })).toBe('skip');
     expect(at({ lastDraw: 1000 - 1000 / SLOW_FPS })).toBe('draw');
   });
+
+  it('an overlay holding the preview stops the loop, focused or not, unless an output or a recording needs it', () => {
+    const at = (o: Partial<Parameters<typeof backgroundFrame>[0]>) => backgroundFrame({ focused: true, mode: 'keep', fullSpeed: false, now: 1000, lastDraw: 0, ...o });
+    expect(at({ held: true })).toBe('hold');
+    expect(at({ held: true, focused: false, mode: 'slow' })).toBe('hold');
+    expect(at({ held: true, fullSpeed: true })).toBe('draw');
+    expect(at({ held: false })).toBe('draw');
+  });
 });

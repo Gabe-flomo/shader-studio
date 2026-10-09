@@ -49,7 +49,7 @@ let buildUpOpenPref = true;
 const isLine = (ex: Explanation | LineExplanation): ex is LineExplanation => 'leadSegs' in ex;
 
 /** Where each variable is read in the source (start → name), the assigned name included. */
-function varSpans(ex: Explanation | LineExplanation): Array<{ start: number; end: number; name: string }> {
+export function varSpans(ex: Explanation | LineExplanation): Array<{ start: number; end: number; name: string }> {
   const out = allNodes(ex.root).flatMap(n => (n.kind === 'ident' && n.end > n.start ? [{ start: n.start, end: n.end, name: n.name }] : []));
   if (isLine(ex) && ex.line.target) {
     const base = ex.line.target.split(/[.[]/)[0];

@@ -36,6 +36,7 @@ import { attachLayerDrop } from '../play/layerDrop';
 import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
 import { appFocused, backgroundFrame, backgroundMode, onFocusChange, onLongHidden } from '../lib/backgroundPolicy';
+import { onPreviewHold, previewHeld } from '../lib/previewHold';
 import { emitTimeTick } from '../lib/timeTick';
 import { outputTap } from '../lib/outputTap';
 import { GpuTimer } from '../lib/gpuTimer';
@@ -511,6 +512,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     let lastSlowDraw = 0;
     const needsFullSpeed = () => outputTap.frame !== null || renderKeepAlive.active();
     const unsubFocus = onFocusChange(f => { if (f) requestRender(); });
+    // An overlay holding the preview (lib/previewHold.ts) let go: draw again.
+    const unsubHold = onPreviewHold(h => { if (!h) requestRender(); });
     // Hidden for minutes: give the WebGL context back (other tabs and apps get the GPU memory);
     // showing again restores it, and the context-restored handler below rebuilds everything.
     let releasedContext = false;
@@ -1504,8 +1507,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       // A rebuild is building the program and targets again: keep the last picture until it's done.
       if (gpuReset) { lastRafTime = now; scheduleFrame(); return; }
       // Another window in front: Pause stops the loop until focus returns; Slow draws SLOW_FPS a second.
-      const bg = backgroundFrame({ focused: appFocused(), mode: backgroundMode(), fullSpeed: needsFullSpeed(), now, lastDraw: lastSlowDraw });
+      const bg = backgroundFrame({ focused: appFocused(), mode: backgroundMode(), fullSpeed: needsFullSpeed(), now, lastDraw: lastSlowDraw, held: previewHeld() });
       if (bg === 'stop') { lastRafTime = now; loopRunning = false; return; }
+      // Held by an overlay (the explain view draws its own picture): stop until it lets go. The
+      // clock doesn't jump on return (dt starts at 0), and the held time isn't a slow second for
+      // Auto resolution: the frame counters start over.
+      if (bg === 'hold') { lastRafTime = null; loopRunning = false; fpsFrameCount = 0; fpsLastTime = 0; drawnThisSecond = 0; return; }
       if (bg === 'skip') { scheduleFrame(); return; }
       lastSlowDraw = now;
       const frameT0 = performance.now();
@@ -2473,6 +2480,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       unsubWake();
       unsubBackground();
       unsubFocus();
+      unsubHold();
       unsubLongHidden();
       playOverlay.setWake(null);
       unsubQueueGraphs();
