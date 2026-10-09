@@ -24,9 +24,14 @@ export interface BuilderInfo {
   action: string;
   /** Words the node browser's search finds it by (with the title, description and makes). */
   keywords: string[];
+  /**
+   * Kept working (its code, saved setups, the Do… bar where noted) but not listed: the Expression
+   * Builder (not helpful enough yet), and the 3D Agent Builder (the Agent Builder does 2D and 3D).
+   */
+  hidden?: boolean;
 }
 
-export const BUILDERS: readonly BuilderInfo[] = [
+export const ALL_BUILDERS: readonly BuilderInfo[] = [
   {
     id: 'scene', title: '3D Scene Builder', icon: 'cube',
     description: '3D scenes from a form or a recipe',
@@ -49,11 +54,11 @@ export const BUILDERS: readonly BuilderInfo[] = [
     keywords: ['builder', 'builders', 'rules', 'grid', 'cellular', 'automaton', 'automata', 'cells', 'simulation'],
   },
   {
-    id: 'agents', title: 'Agent Rules', icon: 'swarm',
-    description: 'Walkers that follow When … Do …',
-    makes: 'slime, ants, flocks, infection…',
-    action: 'Adds an Agents group in rules mode and opens its rules',
-    keywords: ['builder', 'builders', 'rules', 'agents', 'agent', 'walkers', 'boids', 'when do'],
+    id: 'agents', title: 'Agent Builder', icon: 'swarm',
+    description: 'Walkers in 2D or 3D, from rules',
+    makes: 'slime, ants, flocks, swarms, particles…',
+    action: 'Adds an Agents group and opens its builder (Space switches 2D / 3D)',
+    keywords: ['builder', 'builders', 'rules', 'agents', 'agent', 'walkers', 'boids', 'when do', '3d', 'volume', 'swarm', 'flock', 'slime'],
   },
   {
     id: 'agents3d', title: '3D Agent Builder', icon: 'swarm',
@@ -61,6 +66,7 @@ export const BUILDERS: readonly BuilderInfo[] = [
     makes: '3D slime, 3D flocks, orbiting swarms, curl smoke…',
     action: 'Adds 3D agents (Ball Emit, volume Trail, orbiting camera) and opens their rules',
     keywords: ['builder', 'builders', 'agents', 'agent', '3d', 'volume', 'swarm', 'flock', 'orbit', 'camera', 'depth'],
+    hidden: true,
   },
   {
     id: 'expr', title: 'Expression Builder', icon: 'expr',
@@ -68,10 +74,14 @@ export const BUILDERS: readonly BuilderInfo[] = [
     makes: 'repeats, folds, warps, distances, colour from space',
     action: 'Opens the builder on UV; Add to graph makes an Expression Block',
     keywords: ['builder', 'builders', 'expression', 'expressions', 'glsl', 'code', 'moves', 'formula', 'math', 'uv', 'warp', 'fold', 'repeat'],
+    hidden: true,
   },
 ];
 
-export const builderInfo = (id: BuilderId): BuilderInfo => BUILDERS.find(b => b.id === id)!;
+/** The builders the node browser, the canvas menu and search list. */
+export const BUILDERS: readonly BuilderInfo[] = ALL_BUILDERS.filter(b => !b.hidden);
+
+export const builderInfo = (id: BuilderId): BuilderInfo => ALL_BUILDERS.find(b => b.id === id)!;
 
 /** The builders a search finds: every word of the query is in the builder's text, or starts one of its words. */
 export function matchBuilders(query: string): BuilderInfo[] {

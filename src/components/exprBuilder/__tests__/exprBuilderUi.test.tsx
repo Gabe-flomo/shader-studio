@@ -43,7 +43,7 @@ import { unpackCatalogue, type PackedCatalogue } from '../../../exprBuilder/pack
 import { setBuilderCatalogue } from '../../../exprBuilder/catalogueSource';
 import { useExprBuilder } from '../../../exprBuilder/store';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
-import { BuildersSection } from '../../builders/BuildersSection';
+import { openBuilder } from '../../../builders/open';
 import { ExpressionBuilderModal } from '../ExpressionBuilderModal';
 import { chainOfBlock, previewGraph } from '../../../exprBuilder/block';
 import { compileGraph } from '../../../compiler/graphCompiler';
@@ -81,9 +81,8 @@ beforeEach(() => {
 });
 
 describe('the Expression Builder window', () => {
-  it('opens from the Builders section on UV, with the grid grouped and folded', async () => {
-    const host = mount(<BuildersSection />);
-    click(host.querySelector('[data-builder="expr"]'));
+  it('opens on UV (hidden from the Builders section; openBuilder still opens it), with the grid grouped and folded', async () => {
+    openBuilder('expr');
     expect(useExprBuilder.getState().open).toBe(true);
     mount(<ExpressionBuilderModal />);
     // The catalogue, the dull filter's slices, then the pictures' debounce

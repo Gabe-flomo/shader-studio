@@ -27,7 +27,6 @@ import { templateSpec } from '../../../sceneBuilder/templates';
 import { useBuilderWindows, showRecipeOf } from '../../../builders/windows';
 import { BuildersSection } from '../BuildersSection';
 import { useBuildersFold } from '../../../builders/fold';
-import { useExprBuilder } from '../../../exprBuilder/store';
 import { RecipeChip } from '../RecipeChip';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -52,14 +51,13 @@ beforeEach(() => {
 });
 
 describe('BuildersSection', () => {
-  it('shows the six builders, each opening its own', () => {
+  it('shows the four visible builders, each opening its own', () => {
     const opened = vi.fn();
     const host = mount(<BuildersSection onOpened={opened} />);
-    expect([...host.querySelectorAll('[data-builder]')].map(b => b.getAttribute('data-builder'))).toEqual(['scene', 'scene2d', 'grid', 'agents', 'agents3d', 'expr']);
+    expect([...host.querySelectorAll('[data-builder]')].map(b => b.getAttribute('data-builder'))).toEqual(['scene', 'scene2d', 'grid', 'agents']);
     expect(host.textContent).toContain('shapes, combine, bend space, look, outputs');
-    expect(host.textContent).toContain('repeats, folds, warps, distances, colour from space');
     expect(host.textContent).toContain('Life, sand, heat, waves, Wireworld…');
-    expect(host.textContent).toContain('slime, ants, flocks, infection…');
+    expect(host.textContent).toContain('slime, ants, flocks, swarms, particles…');
 
     click(host.querySelector('[data-builder="scene"]'));
     expect(useSceneBuilder.getState().open).toBe(true);
@@ -73,9 +71,7 @@ describe('BuildersSection', () => {
     const a = useNodeGraphStore.getState().nodes.find(n => n.type === 'agentsGroup');
     expect(a?.params.ruleMode).toBe('rules');
     expect(useBuilderWindows.getState().agentRules).toBe(a?.id);
-    click(host.querySelector('[data-builder="expr"]'));
-    expect(useExprBuilder.getState().open).toBe(true);
-    expect(opened).toHaveBeenCalledTimes(4);
+    expect(opened).toHaveBeenCalledTimes(3);
   });
   it('folds, and remembers it', () => {
     const host = mount(<BuildersSection />);
@@ -83,7 +79,7 @@ describe('BuildersSection', () => {
     expect(host.querySelectorAll('[data-builder]')).toHaveLength(0);
     expect(localStorage.getItem('nodeBrowser.buildersFolded')).toBe('1');
     click(host.querySelector('[data-builders-toggle]'));
-    expect(host.querySelectorAll('[data-builder]')).toHaveLength(6);
+    expect(host.querySelectorAll('[data-builder]')).toHaveLength(4);
     expect(localStorage.getItem('nodeBrowser.buildersFolded')).toBe('0');
   });
   it('while searching: only the builders found, unfolded; nothing when none', () => {

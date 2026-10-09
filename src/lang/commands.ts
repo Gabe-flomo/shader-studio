@@ -289,11 +289,7 @@ export const BUILDER_COMMANDS: readonly BuilderCommand[] = [
     summary: 'Opens the 2D Scene Builder on a new scene: shapes, space, a grid with ripples, functions and a look. Build adds it to the graph.',
     examples: [{ text: 'new 2d scene', on: 'empty' }, { text: '2d scene builder', on: 'empty' }],
   },
-  {
-    id: 'new-expression', words: ['new expression', 'expression builder', 'open the expression builder', 'build an expression', 'new expression builder', 'grow an expression'],
-    summary: 'Opens the Expression Builder on UV: pick moves taken from real shaders one at a time (each tile a small picture of the result), tune their numbers, then Add to graph makes an Expression Block.',
-    examples: [{ text: 'new expression', on: 'empty' }, { text: 'expression builder', on: 'empty' }],
-  },
+  // 'new-expression' (the Expression Builder) is hidden for now: its code stays, the Do… bar no longer offers it.
   {
     id: 'edit-scene', words: ['edit this scene', 'edit the scene', 'edit it in the scene builder', 'edit in the scene builder', 'open this scene', 'open it in the scene builder', 'rebuild this scene'],
     summary: 'Opens the 3D Scene Builder on a scene it built (as the Scene Group\'s right-click Edit in Scene Builder does).',
