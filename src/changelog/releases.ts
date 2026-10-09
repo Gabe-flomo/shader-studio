@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.124',
+    date: '2026-10-09',
+    title: 'The new Agent Builder',
+    highlights: [
+      { area: 'Studio', text: 'Agent Builder starts with what you are making (trail followers, particles, flocks, orbiters), each with a moving picture.', link: { kind: 'doc', path: 'docs/agent-builder.md' } },
+      { area: 'Studio', text: 'Trail followers build from cards (Born, Senses, Turning, Moving, Trail) around the live picture; each draws its diagram on a walker as you drag.' },
+      { area: 'Studio', text: 'Presets along the bottom as picture cards, including slime variants: veins, cells, mesh, clumps.' },
+    ],
+  },
+  {
     id: '2026.10.123',
     date: '2026-10-09',
     title: 'Fewer, clearer builders',
