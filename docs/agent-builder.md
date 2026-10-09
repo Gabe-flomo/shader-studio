@@ -181,6 +181,70 @@ Selecting a section draws its diagram over the live picture. Pointing at or drag
 
 The geometry is in `src/agentBuilder/diagram.ts`, and the drawing is `components/agentBuilder/WalkerDiagram.tsx`.
 
+The diagrams carry no sentences: each drawing has a small coloured tag with its number, and the words are in the legend (below). Older notes above that quote labels ("turns 45° toward the smell") describe what the legend now says.
+
+## Legend, tags and focus
+
+The user's feedback (2026-10-09) on a particles preset: the labels ("curl flow ×0.9 · eddies 1.4", "gravity 0.25", "one particle · all together (orange)", "its speed now", "a second later: 45%") were spread all over the picture. The viewport is now a main picture with clean panels, as in tool UIs.
+
+### One legend
+
+**On the picture**, a compact panel in the viewport's top-left corner, lists what is drawn now. It folds (remembered, `builder:agent-builder:studio:legend`) to a row of colour dots. Each entry has:
+
+- a colour dot, the same colour as its drawing and its tags;
+- its name and key numbers ("Drag 0.8 · keeps 45%");
+- one plain line on what it does to the walkers, worded from the live values and directions: "Gravity 0.25, pointing up: each particle is pulled upward; its speed that way grows by 0.25 a second." "Drag 0.8: after a second a particle keeps 45% of its speed." "View radius 0.12: each bird looks this far around it, and only knows the ones inside."
+
+A short note under the title says what a lens shows ("One walker, up close.") or how a 3D birth shape is drawn.
+
+| Section | Entries |
+|---|---|
+| Forces | Curl flow, Gravity, Wind, Attract / Repel, Drag (each card, on or off), and All together when the forces don't cancel |
+| Neighbours | View radius, Max neighbours (orbiters add Keep apart, Stay together, Match heading) |
+| Turning (flocks, crowds) | View radius, Max neighbours, then Head for, Keep apart, Match heading, Stay together, Slow in a crowd, Avoid edges, Wander |
+| Orbit | each Orbit |
+| Life | Lives for (the Emit's Life), Fade with age, Dies |
+| Moving | Speed (for trail followers, with the steps to reach its feelers), At the edges |
+| Senses · Turning · Trail · Born (trail followers) | Sensors · Turn, Wobble · Trail · Born |
+
+Look draws nothing, so it has no legend. The phrases are pure functions, one per behaviour (`agentBuilder/legend.ts`, `phrase`): directions in words (the nearest of eight: up, up and to the right…), a negative force turned round ("pointing up (negative: turned round)"), 0 said plainly ("Drag 0: nothing slows particles"), and the walker's noun per kind (walker, ant, particle, bird, person, orbiter). The entries are rebuilt only when the values they read change.
+
+### Tags on the picture
+
+Each drawing has a small tag: a dot in its colour and a number ("0.25", "×0.9", "≤ 12°", "1 s · 45%", "36 / 36"), never a sentence. They are placed so they don't overlap each other, the legend or the focus demo (`layoutTags`: each tag at its point if free, else the nearest free spot tried round it, kept inside the viewport).
+
+When the legend is tall it takes the left of the viewport, so the lens (Senses, Turning, Neighbours…) is centred in the rest. The Forces diagram's particle stands right of the middle, clear of the legend.
+
+### Linking
+
+- Hovering a legend entry or a tag lights its drawing and its tag, dims the other drawings, and lights its control in the inspector: the card (or the setting, for View radius, Max neighbours, Turn, Speed…) is scrolled into view and pulses.
+- The reverse: pointing at a card or a setting in the inspector lights its legend entry (`entryForFocus`).
+
+### Focus
+
+Clicking a legend entry or a tag focuses that behaviour:
+
+- the other drawings fade;
+- the inspector shows only that card's controls, under a short head: its plain line and a little more about it, from the field guide in our own words (`moreAbout`);
+- a small **moving demo** plays in the viewport's bottom-right corner, from the live values (`agentBuilder/demos.ts`), with a key under it:
+  - Gravity and Wind: a particle thrown with it and a ghost without it, the paths drawn over three seconds with a mark each second;
+  - Curl flow: the field in motion (its dashes march, and it drifts with Changes) with particles riding it;
+  - Drag: two particles thrown side by side, one with drag, its half-second marks bunching up as it slows;
+  - Attract / Repel: paths bending to (or from) the point, with the straight ones they would have taken;
+  - All together: particles under every force at once;
+  - Fade, Dies, Lives for: one particle ageing, its brightness its colour, and where it dies;
+  - Keep apart, Match heading, Stay together: sixteen boids with the live turn rates, one with its view ring, its neighbours and the focused rule's arrow;
+  - View radius, Max neighbours: the ring moving through others, the ones inside lit up to Max;
+  - Head for, Slow in a crowd, Avoid edges, Wander, Orbit, Speed, At the edges: walkers doing just that;
+  - Sensors, Turn: three feelers reading a trail (a wave) and the walker turning toward (or away from) the strongest;
+  - Trail: what a walker leaves, halving every half-life and spreading;
+  - Born: walkers appearing in the shape.
+- **Esc** or **×** leaves focus (a second Esc closes the builder, as before). Picking a section leaves it too.
+
+### What it costs
+
+The demos are a few CPU walkers simulated once per change of value (30 steps a second over their loop) and drawn on a 320 × 200 canvas each animation frame, only while a focus view is open: nothing is scheduled otherwise (tested). The legend and the tags are plain React from memoised entries; the tag layout is a few rectangle tests.
+
 ## Presets
 
 Each kind has its own strip:
@@ -252,6 +316,7 @@ On the picture a walker is placed as Draw agents places it: in 2D at (x ÷ aspec
 - `src/agentBuilder/`: `behaviours.ts` (cards ↔ rules for every kind, only when, reorder, kinds), `cards.ts` (trail followers), `sections.ts`, `onlyWhen.ts`, `kinds.ts`, `presets.ts`, `words.ts`, `diagram.ts`, `miniSim.ts`, `dotSim.ts`, `actions.ts` (the store side: make, Back, setup params with their own undo steps, presets).
 - `src/components/builders/studio/`: `StudioShell.tsx`, `LiveViewport.tsx`.
 - Under the hood: `src/agentBuilder/hood.ts` (channels, maps, highlights, texel ↔ walker ↔ picture), `src/components/agentBuilder/HoodView.tsx` (the panel, the ring and the card), `hoodStore.ts`, `src/lib/agentHood.ts` (requests), `src/lib/agentHoodGpu.ts` (thumbnails, one walker's read, picking), `AgentRunner.stateView` / `drawHood`.
+- Legend, tags and focus: `src/agentBuilder/legend.ts` (the phrases, the entries, linking, the tag layout, the focus words), `src/agentBuilder/demos.ts` (the focus demos), `src/components/agentBuilder/ViewportLegend.tsx` (the legend, the tags, the demo panel).
 - `src/components/agentBuilder/`: `AgentBuilder.tsx`, `BehaviourCard.tsx`, `SectionCards.tsx`, `OnlyWhenLine.tsx`, `KindChips.tsx`, `SpeciesSpotlight.tsx`, `WalkerDiagram.tsx`, `KindDiagram.tsx`, `pictures.tsx`, `presetThumbs.ts`, `useLensRef.ts`, `useRuleSetEditing.ts`. They are loaded lazily by `BuilderWindowsHost`.
 - `src/lib/previewMirror.ts`.
 - The window state: `builders/windows.ts` (`agentBuilder`).

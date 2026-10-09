@@ -21,6 +21,8 @@ import {
 import type { ViewRect } from '../builders/studio/LiveViewport';
 import { sphereOnPicture } from '../../agentBuilder/diagram';
 import { agCamera3, agProject3 } from '../../play/kit/agentPlan.js';
+import { DiagramTags, type ViewportLink } from './ViewportLegend';
+import { LEGEND_COLOURS, dimFor, num, tagCollector } from '../../agentBuilder/legend';
 
 const readNum = (v: unknown, d: number) => (typeof v === 'number' && isFinite(v) ? v : d);
 
@@ -29,9 +31,9 @@ const readNum = (v: unknown, d: number) => (typeof v === 'number' && isFinite(v)
  * orbits): a ball as a shaded sphere with its equator and a meridian (the far halves dashed), a
  * shell as the same lines without the fill, a box and the whole box as their twelve edges.
  */
-function Born3d({ born, camera, image, hot, label, accent }: {
+function Born3d({ born, camera, image, hot, tag, accent }: {
   born: BornInfo; camera: { params: Record<string, unknown>; mirror?: boolean }; image: ViewRect; hot: boolean; accent: string;
-  label: (p: Pt, text: string, opts?: { hot?: boolean; anchor?: 'start' | 'middle' | 'end'; key?: string }) => React.ReactNode;
+  tag: (p: Pt, entry: string, text: string, key?: string) => null;
 }) {
   const cam = agCamera3({ params: camera.params, mirror: camera.mirror }, readNum, 0, image.h);
   const project = (p: [number, number, number]) => agProject3(cam, p);
@@ -90,8 +92,7 @@ function Born3d({ born, camera, image, hot, label, accent }: {
   return (
     <g data-diagram="born" data-born={born.shape} data-size={String(Math.round(born.size * 1000) / 1000)} data-born-3d="projected">
       {shape}
-      {label({ x: top.x, y: Math.max(image.y + 18, top.y - 18) }, `born here · ${born.count.toUpperCase().replace('K', 'k')} walkers`, { hot, key: 'b3' })}
-      {label({ x: image.x + image.w / 2, y: image.y + image.h - 18 }, 'through the 3D camera, as it starts (it then circles)', { key: 'b3cam' })}
+      {tag({ x: top.x, y: Math.max(image.y + 18, top.y - 18) }, 'born', born.count.toUpperCase().replace('K', 'k'), 'b3')}
     </g>
   );
 }
@@ -101,29 +102,23 @@ export interface TrailInfo { halfLife: number; diffuse: number }
 
 const fmt = (v: number, d = 3) => String(Math.round(v * 10 ** d) / 10 ** d);
 
-export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3, camera, feelersShown = true }: {
+export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3, camera, feelersShown = true, link }: {
   focus: DiagramFocus; cards: TrailCards; box: { w: number; h: number; image: ViewRect };
   born?: BornInfo; trail?: TrailInfo; lensRef: number; d3: boolean;
   /** In 3D: Draw agents' camera settings, to draw the Emit's ball, shell or box through it. */
   camera?: { params: Record<string, unknown>; mirror?: boolean };
   /** Moving: draw its feelers ahead (trail followers only). */
   feelersShown?: boolean;
+  /** The legend's linking: the tags, and the drawings dimmed while another entry is lit. */
+  link?: ViewportLink;
 }) {
   const tk = useTokens();
   const accent = tk.accent.base;
   const ink = 'rgba(255,255,255,0.92)';
   const faint = 'rgba(255,255,255,0.45)';
-  const lens = lensFor(box.w, box.h, lensRef);
-  const label = (p: Pt, text: string, opts: { hot?: boolean; anchor?: 'start' | 'middle' | 'end'; key?: string } = {}) => {
-    const w = text.length * 6.6 + 14;
-    const x = opts.anchor === 'start' ? p.x : opts.anchor === 'end' ? p.x - w : p.x - w / 2;
-    return (
-      <g key={opts.key ?? text} data-label={text}>
-        <rect x={x} y={p.y - 11} width={w} height={22} rx={7} fill="rgba(13,13,18,0.82)" stroke={opts.hot ? accent : 'rgba(255,255,255,0.18)'} />
-        <text x={x + w / 2} y={p.y + 4} textAnchor="middle" fill={opts.hot ? '#fff' : ink} style={{ font: `600 11.5px ${fontFamily.ui}` }}>{text}</text>
-      </g>
-    );
-  };
+  const lens = lensFor(box.w, box.h, lensRef, link?.freeLeft ?? 0);
+  const { list: tags, tag } = tagCollector();
+  const dim = (id: string) => dimFor(link, id);
   const walker = (l: Lens) => (
     <g data-walker>
       <path d={`M ${l.walker.x} ${l.walker.y - 11} L ${l.walker.x + 7} ${l.walker.y + 7} L ${l.walker.x} ${l.walker.y + 3} L ${l.walker.x - 7} ${l.walker.y + 7} Z`} fill={ink} />
@@ -137,17 +132,17 @@ export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3, cam
     const f = feelers(lens, s.distance, s.angle);
     const arcR = Math.min(f.length * 0.42, lens.r * 0.32);
     body = (
-      <g data-diagram="senses" data-distance={fmt(s.distance, 4)} data-angle={fmt(s.angle, 2)} opacity={s.on ? 1 : 0.4}>
+      <g data-diagram="senses" data-distance={fmt(s.distance, 4)} data-angle={fmt(s.angle, 2)} opacity={(s.on ? 1 : 0.4) * dim('senses')}>
         {(['left', 'centre', 'right'] as const).map(k => (
           <g key={k}>
             <line data-feeler={k} x1={lens.walker.x} y1={lens.walker.y} x2={f[k].x} y2={f[k].y} stroke={k === 'centre' && hot('distance') ? accent : ink} strokeWidth={k === 'centre' && hot('distance') ? 2.5 : 1.6} strokeDasharray={k === 'centre' ? undefined : '5 4'} />
-            <circle cx={f[k].x} cy={f[k].y} r={9} fill="rgba(13,13,18,0.6)" stroke={accent} strokeWidth={2} />
+            <circle cx={f[k].x} cy={f[k].y} r={9} fill="rgba(13,13,18,0.6)" stroke={LEGEND_COLOURS.senses} strokeWidth={2} />
             <text x={f[k].x} y={f[k].y + 4} textAnchor="middle" fill="#fff" style={{ font: `700 10px ${fontFamily.ui}` }}>{k === 'left' ? 'L' : k === 'centre' ? 'C' : 'R'}</text>
           </g>
         ))}
         <path data-angle-arc d={arcPath(lens.walker, arcR, 0, s.angle)} fill="none" stroke={hot('angle') ? accent : faint} strokeWidth={hot('angle') ? 2.5 : 1.5} />
-        {label(along(lens.walker, f.length * 0.55, Math.min(s.angle + 22, 150)), `How wide ${fmt(s.angle, 1)}°`, { hot: hot('angle'), anchor: 'end' })}
-        {label(along(lens.walker, f.length * 0.55, -Math.min(s.angle + 22, 150)), `How far ahead ${fmt(s.distance)}`, { hot: hot('distance'), anchor: 'start' })}
+        {tag(along(lens.walker, f.length * 0.55, Math.min(s.angle + 22, 150)), 'senses', `±${num(s.angle, 1)}°`, 'wide')}
+        {tag(along(lens.walker, f.length * 0.55, -Math.min(s.angle + 22, 150)), 'senses', num(s.distance), 'far')}
         {walker(lens)}
       </g>
     );
@@ -156,15 +151,15 @@ export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3, cam
     const r = lens.r * 0.72;
     body = (
       <g data-diagram="turning" data-turn={fmt(t.sharp, 2)} data-wobble={fmt(t.wobbleOn ? t.wobble : 0, 2)}>
-        {t.wobbleOn && t.wobble > 0 && <path data-wobble-fan d={wedgePath(lens.walker, r * 0.95, t.wobble)} fill={hot('wobble') ? 'rgba(58,111,247,0.35)' : 'rgba(255,255,255,0.12)'} stroke={hot('wobble') ? accent : 'rgba(255,255,255,0.3)'} />}
+        {t.wobbleOn && t.wobble > 0 && <path data-wobble-fan d={wedgePath(lens.walker, r * 0.95, t.wobble)} fill={hot('wobble') ? 'rgba(214,214,224,0.3)' : 'rgba(255,255,255,0.12)'} stroke={hot('wobble') ? LEGEND_COLOURS.wobble : 'rgba(255,255,255,0.3)'} opacity={dim('wobble')} />}
         <line x1={lens.walker.x} y1={lens.walker.y} x2={lens.walker.x} y2={lens.walker.y - r} stroke={faint} strokeWidth={1.5} strokeDasharray="5 4" />
-        {t.sharpOn && <>
+        {t.sharpOn && <g opacity={dim('turn')}>
           <line data-new-heading x1={lens.walker.x} y1={lens.walker.y} x2={along(lens.walker, r, t.sharp).x} y2={along(lens.walker, r, t.sharp).y} stroke={ink} strokeWidth={2} />
-          <path data-turn-arc d={arcPath(lens.walker, r * 0.55, 0, t.sharp)} fill="none" stroke={hot('sharp') ? accent : ink} strokeWidth={hot('sharp') ? 3 : 2} />
-          {label(along(lens.walker, r + 18, t.sharp / 2), `turns ${fmt(t.sharp, 1)}° toward the smell`, { hot: hot('sharp') })}
-        </>}
-        {!t.sharpOn && label({ x: lens.walker.x, y: lens.walker.y - r - 16 }, 'Senses off: it doesn\'t turn toward a smell')}
-        {t.wobbleOn && t.wobble > 0 && label(along(lens.walker, r * 0.95 + 18, -t.wobble - 6), `wobble ±${fmt(t.wobble, 1)}°`, { hot: hot('wobble'), anchor: 'start' })}
+          <path data-turn-arc d={arcPath(lens.walker, r * 0.55, 0, t.sharp)} fill="none" stroke={LEGEND_COLOURS.turn} strokeWidth={hot('sharp') ? 3 : 2} />
+          {tag(along(lens.walker, r + 16, t.sharp / 2), 'turn', `${num(t.sharp, 1)}°`, 'turn')}
+        </g>}
+        {!t.sharpOn && tag({ x: lens.walker.x, y: lens.walker.y - r - 14 }, 'turn', 'no turn', 'noturn')}
+        {t.wobbleOn && t.wobble > 0 && tag(along(lens.walker, r * 0.95 + 16, -t.wobble - 8), 'wobble', `±${num(t.wobble, 1)}°`, 'wob')}
         {walker(lens)}
       </g>
     );
@@ -179,11 +174,11 @@ export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3, cam
           <line x1={lens.walker.x} y1={lens.walker.y} x2={f.centre.x} y2={f.centre.y} stroke={faint} strokeWidth={1.2} strokeDasharray="3 5" />
           <circle cx={f.centre.x} cy={f.centre.y} r={5} fill="none" stroke={faint} />
         </>}
-        {steps.map((p, i) => <circle key={i} data-step={i} cx={p.x} cy={p.y} r={3.2} fill={hot('speed') ? accent : ink} opacity={1 - i * 0.14} />)}
+        {steps.map((p, i) => <circle key={i} data-step={i} cx={p.x} cy={p.y} r={3.2} fill={hot('speed') ? '#fff' : LEGEND_COLOURS.speed} opacity={1 - i * 0.14} />)}
         {walker(lens)}
-        {label({ x: lens.walker.x + 16, y: lens.walker.y + 20 }, `one step ${fmt(m.speed / 60, 4)}`, { hot: hot('speed'), anchor: 'start' })}
-        {feelersShown && isFinite(n) && label({ x: f.centre.x + 12, y: f.centre.y }, `${Math.round(n)} steps to its feelers`, { anchor: 'start', key: 'n' })}
-        {!feelersShown && label({ x: lens.walker.x, y: lens.walker.y - 40 }, `${fmt(m.speed, 3)} a second`, { hot: hot('speed'), key: 'persec' })}
+        {tag({ x: lens.walker.x + 50, y: lens.walker.y + 20 }, 'speed', `${num(m.speed / 60, 4)} / step`, 'step')}
+        {feelersShown && isFinite(n) && tag({ x: f.centre.x + 50, y: f.centre.y }, 'speed', `${Math.round(n)} steps`, 'n')}
+        {!feelersShown && tag({ x: lens.walker.x, y: lens.walker.y - 40 }, 'speed', `${num(m.speed, 3)} / s`, 'persec')}
       </g>
     );
   } else if (focus.section === 'moving') {
@@ -193,20 +188,20 @@ export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3, cam
     const inbound = `M ${x1 - 140} ${y + 40} L ${x1} ${y}`;
     body = (
       <g data-diagram="edges" data-edges={e}>
-        <rect x={im.x + 1} y={im.y + 1} width={im.w - 2} height={im.h - 2} fill="none" stroke={accent} strokeWidth={2} strokeDasharray="8 6" />
+        <rect x={im.x + 1} y={im.y + 1} width={im.w - 2} height={im.h - 2} fill="none" stroke={LEGEND_COLOURS.edges} strokeWidth={2} strokeDasharray="8 6" />
         <path d={inbound} stroke={ink} strokeWidth={2.5} fill="none" />
         {e === 'wrap' && <>
           <path d={`M ${im.x + 2} ${y} L ${im.x + 140} ${y - 40}`} stroke={ink} strokeWidth={2.5} fill="none" />
           <path d={`M ${x1} ${y} C ${x1 - 40} ${y - 120}, ${im.x + 40} ${y - 120}, ${im.x + 2} ${y}`} stroke={faint} strokeWidth={1.5} strokeDasharray="4 6" fill="none" />
-          {label({ x: im.x + im.w / 2, y: y - 110 }, 'Wrap: out one side, in the other')}
+          {tag({ x: im.x + im.w / 2, y: y - 100 }, 'edges', 'wrap')}
         </>}
         {e === 'bounce' && <>
           <path d={`M ${x1} ${y} L ${x1 - 140} ${y - 40}`} stroke={ink} strokeWidth={2.5} fill="none" />
-          {label({ x: x1 - 170, y: y - 70 }, 'Bounce: turns back')}
+          {tag({ x: x1 - 170, y: y - 66 }, 'edges', 'bounce')}
         </>}
         {e === 'slide' && <>
           <path d={`M ${x1} ${y} L ${x1} ${y - 110}`} stroke={ink} strokeWidth={2.5} fill="none" />
-          {label({ x: x1 - 120, y: y - 70 }, 'Slide: runs along the edge')}
+          {tag({ x: x1 - 60, y: y - 66 }, 'edges', 'slide')}
         </>}
       </g>
     );
@@ -228,13 +223,13 @@ export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3, cam
           </g>
         ))}
         <path d={`M ${head.x} ${head.y - 13} L ${head.x + 8} ${head.y + 8} L ${head.x} ${head.y + 3} L ${head.x - 8} ${head.y + 8} Z`} fill={ink} />
-        {label({ x: head.x + 22, y: head.y }, `leaves ${fmt(t.amount, 2)} a step`, { hot: hot('amount'), anchor: 'start' })}
-        {label({ x: head.x + 22, y: dots[3].y }, `half gone in ${fmt(tr.halfLife, 3)} s`, { hot: hot('fades'), anchor: 'start' })}
-        {label({ x: head.x - 22, y: dots[6].y }, `spreads ${Math.round(tr.diffuse * 100)}% a step`, { hot: hot('spreads'), anchor: 'end' })}
+        {tag({ x: head.x + 44, y: head.y }, 'trail', num(t.amount, 2), 'amount')}
+        {tag({ x: head.x + 54, y: dots[3].y }, 'trail', `½ ${num(tr.halfLife, 3)} s`, 'half')}
+        {tag({ x: head.x - 50, y: dots[6].y }, 'trail', `${Math.round(tr.diffuse * 100)}%`, 'spread')}
       </g>
     );
   } else if (focus.section === 'born' && born && d3 && camera) {
-    body = <Born3d born={born} camera={camera} image={box.image} hot={hot('where') || hot('count') || hot('size')} label={label} accent={accent} />;
+    body = <Born3d born={born} camera={camera} image={box.image} hot={hot('where') || hot('count') || hot('size')} tag={tag} accent={accent} />;
   } else if (focus.section === 'born' && born) {
     const im = box.image;
     const c = picToView(im, { x: born.x, y: born.y });
@@ -247,9 +242,8 @@ export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3, cam
         {shape === 'line' && <line x1={c.x - rpx} y1={c.y} x2={c.x + rpx} y2={c.y} stroke={accent} strokeWidth={3} />}
         {shape === 'point' && <circle cx={c.x} cy={c.y} r={6} fill={accent} />}
         {shape === 'screen' && <rect x={im.x + 3} y={im.y + 3} width={im.w - 6} height={im.h - 6} fill="none" stroke={accent} strokeWidth={2.5} strokeDasharray="8 6" />}
-        {(shape === 'picture' || shape === 'field') && label({ x: c.x, y: c.y }, 'born where the picture is bright')}
-        {label({ x: c.x, y: Math.max(im.y + 18, c.y - Math.max(rpx, 8) - 18) }, `born here · ${born.count.toUpperCase().replace('K', 'k')} walkers`, { hot: hot('where') || hot('count') })}
-        {d3 && label({ x: c.x, y: Math.min(im.y + im.h - 18, c.y + Math.max(rpx, 8) + 18) }, 'seen from the front (no 3D camera to look through)', { key: '3d' })}
+        {(shape === 'picture' || shape === 'field') && tag({ x: c.x, y: c.y + 24 }, 'born', 'bright', 'bright')}
+        {tag({ x: c.x, y: Math.max(im.y + 18, c.y - Math.max(rpx, 8) - 16) }, 'born', born.count.toUpperCase().replace('K', 'k'), 'count')}
       </g>
     );
   }
@@ -262,9 +256,9 @@ export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3, cam
         <circle data-lens cx={lens.cx} cy={lens.cy} r={lens.r + 1.5} fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth={1.5} />
         <circle cx={lens.cx} cy={lens.cy} r={lens.r} fill="rgba(13,13,18,0.74)" />
         <g clipPath="url(#ab-lens)">{body}</g>
-        {label({ x: lens.cx, y: lens.cy + lens.r + 18 }, `one walker, ${Math.round(lens.scale / (box.image.h / 2))}× closer`, { key: 'zoom' })}
       </>}
       {!lensOn && body}
+      <DiagramTags requests={tags} bounds={{ x: 0, y: 0, w: box.w, h: box.h }} link={link} />
     </svg>
   );
 }

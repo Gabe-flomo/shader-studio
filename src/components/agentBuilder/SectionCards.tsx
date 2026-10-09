@@ -44,7 +44,7 @@ export function cardSummary(c: CardRead): string {
   }
 }
 
-export function SectionCards({ section, all, set, sp, update, focusCard, hotCard, onFocusSetting, intro, cardsFor }: {
+export function SectionCards({ section, all, set, sp, update, focusCard, hotCard, onFocusSetting, intro, cardsFor, only }: {
   section: SectionDef;
   /** Every card of the kind (reading order). */
   all: readonly CardRead[];
@@ -57,6 +57,8 @@ export function SectionCards({ section, all, set, sp, update, focusCard, hotCard
   intro?: ReactNode;
   /** The card order new cards are placed by (the kind's). */
   cardsFor: readonly CardId[];
+  /** Focus: show only this card (its key), without the intro, the + chips and the order hint. */
+  only?: string;
 }) {
   const tk = useTokens();
   const cards = all.filter(c => section.cards.includes(c.card));
@@ -65,8 +67,9 @@ export function SectionCards({ section, all, set, sp, update, focusCard, hotCard
   const move = (i: number, j: number) => update(reorderCards(set, sp, cards, i, j));
   return (
     <div data-section-cards={section.id} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {intro}
+      {!only && intro}
       {cards.map((c, i) => {
+        if (only && c.key !== only) return null;
         const words = CARD_WORDS[c.card];
         const handle = section.reorder && cards.length > 1 ? (
           <button type="button" data-card-handle={c.key} draggable aria-label={`Move ${words.title}: drag, or ↑ ↓`} title="Drag to change the order they run in (or ↑ / ↓)"
@@ -100,8 +103,8 @@ export function SectionCards({ section, all, set, sp, update, focusCard, hotCard
           </div>
         );
       })}
-      {cards.length === 0 && <span style={{ fontSize: 12, color: tk.text.muted, padding: '2px 2px 0' }}>Nothing here yet: add one below.</span>}
-      {missing.length > 0 && (
+      {!only && cards.length === 0 && <span style={{ fontSize: 12, color: tk.text.muted, padding: '2px 2px 0' }}>Nothing here yet: add one below.</span>}
+      {!only && missing.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {missing.map(id => (
             <button key={id} type="button" data-card-add={id} title={CARD_WORDS[id].hint} onClick={() => update(addCard(set, sp, id, cardsFor).set)}
@@ -111,7 +114,7 @@ export function SectionCards({ section, all, set, sp, update, focusCard, hotCard
           ))}
         </div>
       )}
-      {section.reorder && cards.length > 1 && <span style={{ fontSize: 11, color: tk.text.faint, display: 'flex', alignItems: 'center', gap: 5 }}><Icon name="grip" size={12} />They run top to bottom: drag to reorder.</span>}
+      {!only && section.reorder && cards.length > 1 && <span style={{ fontSize: 11, color: tk.text.faint, display: 'flex', alignItems: 'center', gap: 5 }}><Icon name="grip" size={12} />They run top to bottom: drag to reorder.</span>}
     </div>
   );
 }

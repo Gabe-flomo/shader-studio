@@ -28,9 +28,11 @@ export interface Lens {
  * `ref` should stay put while a slider moves (the section's value when it was picked), so the
  * feelers visibly grow and shrink with the slider.
  */
-export function lensFor(w: number, h: number, ref: number): Lens {
-  const r = Math.max(60, Math.min(w, h) * 0.34);
-  const cx = w / 2, cy = h / 2;
+export function lensFor(w: number, h: number, ref: number, left = 0): Lens {
+  // `left`: the viewport's free area starts there (right of the legend).
+  const fw = Math.max(w - left, w * 0.5);
+  const r = Math.max(60, Math.min(fw, h) * 0.34);
+  const cx = w - fw / 2, cy = h / 2;
   const scale = (r * 0.5) / Math.max(ref, 1e-4);
   return { cx, cy, r, scale, walker: { x: cx, y: cy + r * 0.42 } };
 }
@@ -94,9 +96,10 @@ export function containRect(w: number, h: number, sw: number, sh: number): { x: 
 // ── Neighbours, flocking, forces, orbits (phase 2) ───────────────────────────
 
 /** A lens with the walker in its middle, magnified so the view radius `radius` is 0.42 of the lens. */
-export function ringLens(w: number, h: number, radius: number): Lens {
-  const r = Math.max(60, Math.min(w, h) * 0.36);
-  const cx = w / 2, cy = h / 2;
+export function ringLens(w: number, h: number, radius: number, left = 0): Lens {
+  const fw = Math.max(w - left, w * 0.5);
+  const r = Math.max(60, Math.min(fw, h) * 0.36);
+  const cx = w - fw / 2, cy = h / 2;
   return { cx, cy, r, scale: (r * 0.42) / Math.max(radius, 1e-4), walker: { x: cx, y: cy } };
 }
 

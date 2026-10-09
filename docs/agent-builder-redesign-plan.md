@@ -267,3 +267,21 @@ Not done yet:
 - The thumbnails sample every side ÷ 128-th walker; there is no zoom into a region of the texture.
 - A 3D group without a live 3D Draw agents is placed as if seen from the front.
 - The panel takes up to about half the viewport's height; it scrolls rather than resizes.
+
+## Viewport legend and focus status (2026-10-09)
+
+The user's feedback on a particles preset (gravity, curl and drag): the viewport is better, but its labels were spread all over the picture. They asked for a main viewport with clean panels, explanatory words worded from the values, hover linking to the controls, and a focus view that shows a behaviour in motion. Built (docs/agent-builder.md "Legend, tags and focus"):
+
+- **One legend** in the viewport's corner (folds, remembered) listing what is drawn: a colour dot matching the drawing, the key numbers, and one plain line from the live values ("Gravity 0.25, pointing up: each particle is pulled upward; its speed that way grows by 0.25 a second."). The phrase generators are pure, one per behaviour, for every kind (trail followers, particles, flocks, crowds, orbiters).
+- **Small tags** on the picture instead of the free-floating labels: a coloured dot and a number, laid out so they don't overlap each other or the legend. A tall legend moves the lens right.
+- **Linking**: hovering a legend entry or a tag lights its drawing (the others dim) and scrolls to and pulses its control; pointing at a control lights its entry.
+- **Focus**: clicking an entry or a tag fades the other drawings, shows only that card in the inspector with a little more about it, and plays a small looping CPU demo from the live values (gravity with and without, the curl field moving with a rider, drag side by side, attract paths, boids, the view ring, feelers on a trail, an orbit…). Esc or × leaves.
+- **Light**: the demos run only in focus; the legend is rebuilt only when its values change.
+
+Not done yet:
+
+- The curl phrase doesn't give the eddies' size in picture units: the GPU Curl noise's scale isn't the diagram's field, so "eddies 1.4" stays the Eddies setting with "bigger: smaller, busier swirls".
+- The demos are pictures of the rule, not the GPU result, and their scale is the demo's own (the view ring is not drawn at the live radius).
+- The focus demo panel can cover the lens's bottom-right in a short viewport.
+- Look has no legend (it draws nothing on the picture).
+- **For the field builder** (pick, combine or write vector fields), the seams: the curl demo (`makeDemo`, demos.ts) rides particles through a field given as a function of position and time (`curlAt`), so a field builder can add a `field` demo kind that rides particles through the composed field; a legend entry is a plain object (`LegendEntry`) with a colour, numbers, a line and a demo, so a composed field can be one entry per layer; `curlArrows` (diagram.ts) draws the curl field over the picture; taking a field function instead of calling `curlAt` would let it draw any field.
