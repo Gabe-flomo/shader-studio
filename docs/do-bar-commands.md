@@ -2761,6 +2761,186 @@ Examples:
 
 - `schwarz-p` — on an empty graph (just an Output)
 
+### hypersphere
+
+3D scene · maker. Hypersphere: A 4D ball: its slice is a ball that grows and shrinks as W moves. Also: 4d-ball, 4d-sphere.
+
+Words: `hypersphere`, `4d-ball`, `4d-sphere`
+
+```
+hypersphere [r] w= spin= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Radius · default 0.6 · random: 0.3–0.96 |
+| w | Slice (w) · Where the 3D slice cuts the 4D shape. · default 0 · random: -0.6666666666666666–0.6666666666666666 |
+| spin | Spin · Degrees a second it turns in the xw plane. · default 0 · random: -30–30 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `hypersphere` — on an empty graph (just an Output)
+
+### tesseract
+
+3D scene · maker. Tesseract: A 4D cube, cut corner-first: as W moves it goes from a point to a tetrahedron, an octahedron and back. Also: hypercube, 4d-cube.
+
+Words: `tesseract`, `hypercube`, `4d-cube`
+
+```
+tesseract [size] round= w= spin= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| size (bare) | Size (half) · default 0.5 · random: 0.25–0.8 |
+| round | Round · default 0.02 · random: 0.01–0.032 |
+| w | Slice (w) · Where the 3D slice cuts the 4D shape. · default 0 · random: -0.6666666666666666–0.6666666666666666 |
+| spin | Spin · Degrees a second it turns in the xw plane. · default 12 · random: 6–19.200000000000003 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `tesseract` — on an empty graph (just an Output)
+
+### duocylinder
+
+3D scene · maker. Duocylinder: Two discs at right angles in 4D; turning, it rolls between a cylinder and a pill. Also: 4d-cylinder.
+
+Words: `duocylinder`, `4d-cylinder`
+
+```
+duocylinder [r1] r2= w= spin= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| r1 (bare) | Radius xy · default 0.6 · random: 0.3–0.96 |
+| r2 | Radius zw · default 0.45 · random: 0.225–0.7200000000000001 |
+| w | Slice (w) · default 0 · random: -0.6666666666666666–0.6666666666666666 |
+| spin | Spin · default 15 · random: 7.5–24 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `duocylinder` — on an empty graph (just an Output)
+
+### clifford-torus
+
+3D scene · maker. Clifford torus: A torus on the 4D sphere: its slice is a pair of linked rings or a fat torus. Also: clifford, 4d-torus.
+
+Words: `clifford-torus`, `clifford`, `4d-torus`
+
+```
+clifford-torus [r] t= w= spin= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Radius · default 0.8 · random: 0.4–1.2800000000000002 |
+| t | Thickness · default 0.15 · random: 0.075–0.24 |
+| w | Slice (w) · default 0 · random: -0.6666666666666666–0.6666666666666666 |
+| spin | Spin · default 9 · random: 4.5–14.4 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `clifford-torus` — on an empty graph (just an Output)
+
+### cell24
+
+3D scene · maker. 24-cell: A regular 4D solid with no 3D relative; its slices are octahedra and their cousins. Also: icositetrachoron, twenty-four-cell.
+
+Words: `cell24`, `icositetrachoron`, `twenty-four-cell`
+
+```
+cell24 [r] w= spin= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| r (bare) | Radius · default 0.7 · random: 0.35–1.1199999999999999 |
+| w | Slice (w) · default 0 · random: -0.6666666666666666–0.6666666666666666 |
+| spin | Spin · default 10 · random: 5–16 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `cell24` — on an empty graph (just an Output)
+
+### julia4d
+
+3D scene · maker. Quaternion Julia: A 4D fractal, sliced: lumpy bulbs that curl into each other. Also: julia, quaternion-julia.
+
+Words: `julia4d`, `julia`, `quaternion-julia`
+
+```
+julia4d [cx] cy= scale= w= spin= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| cx (bare) | c x · default -0.2 · random: -0.7–0.3 |
+| cy | c y · default 0.6 · random: 0.3–0.96 |
+| scale | Size · default 0.75 · random: 0.375–1.2000000000000002 |
+| w | Slice (w) · default 0 · random: -0.6666666666666666–0.6666666666666666 |
+| spin | Spin · default 6 · random: 3–9.600000000000001 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `julia4d` — on an empty graph (just an Output)
+
+### mandel4d
+
+3D scene · maker. Quaternion Mandelbrot: The 4D Mandelbrot set, sliced: the familiar outline spun round and folded. Also: mandelbrot4d, quaternion-mandelbrot.
+
+Words: `mandel4d`, `mandelbrot4d`, `quaternion-mandelbrot`
+
+```
+mandel4d [scale] w= spin= at= rot= color= shine= name= [glass]
+```
+
+| Slot | What |
+|---|---|
+| scale (bare) | Size · default 0.6 · random: 0.3–0.96 |
+| w | Slice (w) · default 0 · random: -0.6666666666666666–0.6666666666666666 |
+| spin | Spin · default 6 · random: 3–9.600000000000001 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+
+Examples:
+
+- `mandel4d` — on an empty graph (just an Output)
+
 ### union( )
 
 2D picture · combine. join: the nearer surface wins Also: add, combine. Old words (still read, with a hint): group.

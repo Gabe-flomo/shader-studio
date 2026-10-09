@@ -30,8 +30,65 @@ const num = (s: Record<string, number | Vec3>, k: string) => Number(s[k]);
 const v3 = (s: Record<string, number | Vec3>, k: string) => s[k] as Vec3;
 
 /** A shape's distance at a size (its defaults, or a gallery variant's): the node formulas, sdf3d.ts. */
+// ── 4D shapes, sliced (as the builder builds them: Lift to 4D, a fixed turn in xw, the shape) ──
+type V4 = [number, number, number, number];
+/** The 3D point lifted onto a slice whose normal is n (face: the w axis, corner: (1,1,1,1)/2), by a Householder reflection. */
+function lift4(x: number, y: number, z: number, slice: 'face' | 'edge' | 'corner', w: number): V4 {
+  const n: V4 = slice === 'corner' ? [0.5, 0.5, 0.5, 0.5] : slice === 'edge' ? [0, 0, Math.SQRT1_2, Math.SQRT1_2] : [0, 0, 0, 1];
+  const p: V4 = [x, y, z, 0];
+  if (slice === 'face') return [x, y, z, w];
+  const v: V4 = [-n[0], -n[1], -n[2], 1 - n[3]];
+  const vv = v[0] ** 2 + v[1] ** 2 + v[2] ** 2 + v[3] ** 2;
+  const k = 2 * (p[0] * v[0] + p[1] * v[1] + p[2] * v[2] + p[3] * v[3]) / vv;
+  return [p[0] - k * v[0] + n[0] * w, p[1] - k * v[1] + n[1] * w, p[2] - k * v[2] + n[2] * w, p[3] - k * v[3] + n[3] * w];
+}
+/** A fixed 25° turn in xw, so a thumbnail shows a turned shape. */
+const turnXW = (q: V4): V4 => { const c = Math.cos(0.44), sn = Math.sin(0.44); return [c * q[0] + sn * q[3], q[1], q[2], -sn * q[0] + c * q[3]]; };
+const len4 = (q: V4) => Math.hypot(q[0], q[1], q[2], q[3]);
+function sdf4(kind: string, s: Record<string, number | Vec3>, q: V4): number {
+  switch (kind) {
+    case 'hypersphere': return len4(q) - num(s, 'r');
+    case 'tesseract': {
+      const h = num(s, 'size'), r = num(s, 'round');
+      const d = q.map(v => Math.abs(v) - h + r);
+      return Math.hypot(...d.map(v => Math.max(v, 0))) + Math.min(Math.max(...d), 0) - r;
+    }
+    case 'duocylinder': {
+      const a = len2(q[0], q[1]) - num(s, 'r1'), b = len2(q[2], q[3]) - num(s, 'r2');
+      return len2(Math.max(a, 0), Math.max(b, 0)) + Math.min(Math.max(a, b), 0);
+    }
+    case 'clifford-torus': { const c = num(s, 'r') * Math.SQRT1_2; return len2(len2(q[0], q[1]) - c, len2(q[2], q[3]) - c) - num(s, 't'); }
+    case 'cell24': {
+      const a = q.map(Math.abs);
+      let m = -Infinity;
+      for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) m = Math.max(m, a[i] + a[j]);
+      return (m - num(s, 'r') * Math.SQRT2) * Math.SQRT1_2;
+    }
+    case 'julia4d': case 'mandel4d': {
+      const sc = num(s, 'scale');
+      let z: V4 = [q[0] / sc, q[1] / sc, q[2] / sc, q[3] / sc];
+      const c: V4 = kind === 'julia4d' ? [num(s, 'cx'), num(s, 'cy'), 0.2, 0] : [...z] as V4;
+      let dr = 1, r = len4(z);
+      for (let i = 0; i < 9 && r < 4; i++) {
+        dr = 2 * r * dr + (kind === 'mandel4d' ? 1 : 0);
+        const yzw = z[1] ** 2 + z[2] ** 2 + z[3] ** 2;
+        z = [z[0] * z[0] - yzw + c[0], 2 * z[0] * z[1] + c[1], 2 * z[0] * z[2] + c[2], 2 * z[0] * z[3] + c[3]];
+        r = len4(z);
+      }
+      if (r < 2) return -0.002 * sc;
+      return 0.5 * r * Math.log(r) / Math.max(dr, 1e-6) * sc;
+    }
+    default: return len4(q) - 0.5;
+  }
+}
+
+/** The 3D distance of a builder shape (at its size `over`), for thumbnails. */
 function makeSdf(def: ShapeDef, over: Record<string, number | Vec3> = {}): Sdf {
   const s = { ...defaultSize(def.kind), ...over };
+  if (def.fourD) {
+    const slice = def.fourD.slice, w = Number(s.w ?? 0);
+    return (x, y, z) => sdf4(def.kind, s, turnXW(lift4(x, y, z, slice, w)));
+  }
   switch (def.kind) {
     case 'sphere': { const r = num(s, 'r'); return (x, y, z) => len3(x, y, z) - r; }
     case 'box': { const b = v3(s, 'size'); const r = num(s, 'round'); const bb: Vec3 = [b[0] - r, b[1] - r, b[2] - r]; return (x, y, z) => box(x, y, z, bb) - r; }

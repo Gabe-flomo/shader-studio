@@ -53,6 +53,8 @@ export interface ShapeDef {
   field?: boolean;
   /** Not an exact distance: the march wants smaller steps. */
   stepHint?: number;
+  /** A 4D shape: built as Lift to 4D (slice `w`, this direction) → Rotate 4D in xw (`spin`) → the shape, measured from p4. */
+  fourD?: { slice: 'face' | 'edge' | 'corner' };
   blurb: string;
 }
 
@@ -100,6 +102,21 @@ export const SHAPES: ShapeDef[] = [
     params: [P('freq', 'Frequency', 'frequency', 3.5, 0.1, 10), P('t', 'Thickness', 'thickness', 0.3, 0.001, 0.5, 0.005), P('ball', 'Ball radius', '', 1.1, 0, 5, 0.01, { hint: 'The ball the lattice is cut to. 0 fills all of space.' })] },
   { kind: 'schwarz-p', label: 'Schwarz-P', aliases: ['schwarz'], type: 'schwarzPField', posKey: 'pos', distKey: 'surface', field: true, stepHint: 0.6, blurb: 'A lattice of round chambers, cut to a ball.',
     params: [P('freq', 'Frequency', 'frequency', 3.5, 0.1, 10), P('t', 'Thickness', 'thickness', 0.3, 0.001, 0.5, 0.005), P('ball', 'Ball radius', '', 1.1, 0, 5, 0.01)] },
+  // 4D shapes (docs/4d.md): sliced into the scene. W moves the slice; Spin turns the shape in the xw plane, so the slice morphs.
+  { kind: 'hypersphere', label: 'Hypersphere', aliases: ['4d-ball', '4d-sphere'], type: 'hypersphereSDF', posKey: 'p4', distKey: 'dist', fourD: { slice: 'face' }, blurb: 'A 4D ball: its slice is a ball that grows and shrinks as W moves.',
+    params: [P('r', 'Radius', 'radius', 0.6, 0.01, 5), P('w', 'Slice (w)', '', 0, -2, 2, 0.01, { hint: 'Where the 3D slice cuts the 4D shape.' }), P('spin', 'Spin', '', 0, -90, 90, 0.5, { hint: 'Degrees a second it turns in the xw plane.' })] },
+  { kind: 'tesseract', label: 'Tesseract', aliases: ['hypercube', '4d-cube'], type: 'tesseractSDF', posKey: 'p4', distKey: 'dist', fourD: { slice: 'corner' }, blurb: 'A 4D cube, cut corner-first: as W moves it goes from a point to a tetrahedron, an octahedron and back.',
+    params: [P('size', 'Size (half)', 'size', 0.5, 0.01, 5), P('round', 'Round', 'rounding', 0.02, 0, 0.5, 0.005), P('w', 'Slice (w)', '', 0, -2, 2, 0.01, { hint: 'Where the 3D slice cuts the 4D shape.' }), P('spin', 'Spin', '', 12, -90, 90, 0.5, { hint: 'Degrees a second it turns in the xw plane.' })] },
+  { kind: 'duocylinder', label: 'Duocylinder', aliases: ['4d-cylinder'], type: 'duocylinderSDF', posKey: 'p4', distKey: 'dist', fourD: { slice: 'face' }, blurb: 'Two discs at right angles in 4D; turning, it rolls between a cylinder and a pill.',
+    params: [P('r1', 'Radius xy', 'r1', 0.6, 0.01, 5), P('r2', 'Radius zw', 'r2', 0.45, 0.01, 5), P('w', 'Slice (w)', '', 0, -2, 2, 0.01), P('spin', 'Spin', '', 15, -90, 90, 0.5)] },
+  { kind: 'clifford-torus', label: 'Clifford torus', aliases: ['clifford', '4d-torus'], type: 'cliffordTorusSDF', posKey: 'p4', distKey: 'dist', fourD: { slice: 'face' }, blurb: 'A torus on the 4D sphere: its slice is a pair of linked rings or a fat torus.',
+    params: [P('r', 'Radius', 'radius', 0.8, 0.05, 5), P('t', 'Thickness', 'thickness', 0.15, 0.005, 1, 0.005), P('w', 'Slice (w)', '', 0, -2, 2, 0.01), P('spin', 'Spin', '', 9, -90, 90, 0.5)] },
+  { kind: 'cell24', label: '24-cell', aliases: ['icositetrachoron', 'twenty-four-cell'], type: 'cell24SDF', posKey: 'p4', distKey: 'dist', fourD: { slice: 'corner' }, blurb: 'A regular 4D solid with no 3D relative; its slices are octahedra and their cousins.',
+    params: [P('r', 'Radius', 'radius', 0.7, 0.05, 5), P('w', 'Slice (w)', '', 0, -2, 2, 0.01), P('spin', 'Spin', '', 10, -90, 90, 0.5)] },
+  { kind: 'julia4d', label: 'Quaternion Julia', aliases: ['julia', 'quaternion-julia'], type: 'quatJuliaSDF', posKey: 'p4', distKey: 'dist', stepHint: 0.8, fourD: { slice: 'face' }, blurb: 'A 4D fractal, sliced: lumpy bulbs that curl into each other.',
+    params: [P('cx', 'c x', 'cx', -0.2, -1.5, 1.5, 0.005), P('cy', 'c y', 'cy', 0.6, -1.5, 1.5, 0.005), P('scale', 'Size', 'scale', 0.75, 0.05, 5), P('w', 'Slice (w)', '', 0, -2, 2, 0.01), P('spin', 'Spin', '', 6, -90, 90, 0.5)] },
+  { kind: 'mandel4d', label: 'Quaternion Mandelbrot', aliases: ['mandelbrot4d', 'quaternion-mandelbrot'], type: 'quatMandelSDF', posKey: 'p4', distKey: 'dist', stepHint: 0.8, fourD: { slice: 'face' }, blurb: 'The 4D Mandelbrot set, sliced: the familiar outline spun round and folded.',
+    params: [P('scale', 'Size', 'scale', 0.6, 0.05, 5), P('w', 'Slice (w)', '', 0, -2, 2, 0.01), P('spin', 'Spin', '', 6, -90, 90, 0.5)] },
 ];
 
 export const SHAPE_BY_KIND: Record<string, ShapeDef> = Object.fromEntries(SHAPES.map(s => [s.kind, s]));
