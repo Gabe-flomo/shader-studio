@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.115',
+    date: '2026-10-09',
+    title: 'Explain, rebuilt',
+    highlights: [
+      { area: 'Studio', text: 'Expression Block lines have a Build-up: each input and step as a small picture with its range. Click a row or use ← → to see that step on the preview; ▶ on a line opens it.', link: { kind: 'doc', path: 'docs/explain-model.md' } },
+      { area: 'Studio', text: 'Explain always asks the on-device model: each line in plain words, then what the whole block does. It reads measured values and where each input really comes from.' },
+      { area: 'Studio', text: 'A bigger optional model, Olmo 3 7B (3.8 GB, WebGPU), for machines with 16 GB or more. Save and Load now sit beside the graph name in the top bar.' },
+    ],
+  },
+  {
     id: '2026.10.114',
     date: '2026-10-09',
     title: 'No more angle seams',
