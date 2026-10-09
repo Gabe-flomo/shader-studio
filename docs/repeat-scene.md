@@ -20,19 +20,30 @@ Repeat 3D only folds the position, so the shape is measured once, in its own cel
 - **Cell X/Y/Z**: the spacing. Make one huge (Cell Y 50) to repeat across a floor only.
 - **Copies each side**: 0 = forever, otherwise the grid stops after that many copies each side of the middle.
 - **Not repeated**: another Scene Group added once (a floor, a centrepiece).
+- **Combine with Not repeated**: how the copies and the Not repeated scene meet.
+  - Union: both.
+  - Smooth union: they melt together.
+  - Carve: Not repeated cuts the copies.
+  - Carve into: the copies cut Not repeated.
+  - Intersect: only where both are.
+  - **Blend** sets how soft the meeting is; 0 is a hard edge.
 
 ## Repeat Cell
 
 **Repeat Cell** (3D Transforms) says which copy is being measured, so each copy can differ:
 
 - **Cell**: whole numbers, (0, 0, 0) in the middle;
-- **Random** and **Random 3**: 0–1 per copy, steady over time, with a **Seed**.
+- **Random** and **Random 3**: 0–1 per copy, steady over time, with a **Seed**;
+- **Centre**: where the copy sits in the world (Cell × the spacing). Measure its distance to a point to make copies react to it, such as swelling near a centrepiece.
 
 Use it inside the repeated Scene Group to vary size, offset, spin or anything else.
 
 **After the March Loop**, wire the Repeat Scene into Repeat Cell's *Repeat Scene* and the loop's *Hit Pos* into its *Hit Pos*. It then gives the copy each ray actually hit, so a bubble is one colour even where it overlaps another's cell. Each call of the repeated scene leaves the nearest copy's cell behind for it to read.
 
-Example: **Repeat Scene: overlapping bubbles** (3D SDF). Set Neighbours to Off to see the slicing.
+Examples (3D SDF folder):
+
+- **Repeat Scene: overlapping bubbles**. Set Neighbours to Off to see the slicing.
+- **Repeat Scene: around a centrepiece**. Copies melt into a floor and a big sphere (Smooth union) and swell near the middle (Centre).
 
 ## How it compiles
 
@@ -44,7 +55,7 @@ float repScene_x(vec3 p, …) {
   g_cell3 = id; d = scene(p - cell*id)  // own copy
   [skip] if (d > nearest wall − overlap)
   [near8] for the 7 other corner cells c: g_cell3 = c; d = min(d, scene(p − cell*c))
-  g_cell3 = nearest copy; d = min(d, notRepeated(p)); return d;
+  g_cell3 = nearest copy; d = combine(d, notRepeated(p), blend); return d;
 }
 ```
 

@@ -1707,6 +1707,14 @@ exports[`golden outputs: examples > repeatSceneBubbles 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > repeatSceneCentrepiece 1`] = `
+{
+  "a": "- x120",
+  "b": "- x120",
+  "s": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > script3D 1`] = `
 {
   "hue": "- x120",
