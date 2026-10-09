@@ -15,7 +15,8 @@ Each answer is one small JSON object per line (`what`, `effect`, how `sure`, wha
 
 Where it appears:
 
-- every line of an **Expression Block** and every statement of a **Custom Function**: one **Explain** button beside the line, and a folded **Show working** (the line's build-up with its numbers; that view is its own piece of work);
+- a line of an **Expression Block**: **Explain with the model** in the line's explain view (Open explain view under the line; docs/expression-explainer.md, "The explain view"); the editor itself has no per-line model button;
+- every statement of a **Custom Function**: one **Explain** button beside the statement, and its folded build-up;
 - **Explain the block** (Expression Block) / **Explain this function** (Custom Function, a user function's function card): each line in plain words, then **Altogether**: a two-sentence summary of what the whole block is for, last;
 - the **GLSL page**'s Explain panel and the **function card** (click a function name): the statement the call is in, or the whole function for your own functions;
 - the **✨ button on a node card's bottom toolbar**: **Explain this node**: its role in this graph, what feeds it, what it feeds, and what its current settings do.

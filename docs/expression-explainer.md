@@ -6,7 +6,7 @@
 
 Any expression in the app can be explained in plain language, step by step, and any part of it can become a node of its own.
 
-- **Expression Block editor.** Under every line, and under Return, there is an **Explain** row. Folded, it is a one-line summary (`uv, r → 2 steps → d`). Open it, or press the line's **▶**, for the **build-up view** (below): the line as GLSL builds it, a row per input and step with a small picture, which you can step through on the big preview.
+- **Expression Block editor.** Under every line, and under Return, there is a light fold. Folded, it is a one-line summary (`uv, r → 2 steps → d`). Open it (or press the line's **▶**, which also shows the line's picture under it) for one sentence of what the line does, its idiom's chip, and **Open explain view**: the full view of that line in place of the editor (below, "The explain view"). The editor's only language-model action is **Explain the block**.
 - **Custom Function editor.** An **Explain** section under the body shows each statement's build-up (pictures worked out on the CPU).
 
 > **2026-10-09:** the Explain panel no longer shows worded sentences ("In short", "First … then …"): they read badly and couldn't capture context. It shows the build-up instead. The wording below is still produced by the library and used by the code card's hover line, the Code explorer, the Do bar and the language model's prompt.
@@ -61,9 +61,22 @@ The panel shows a line as it is built, in the order GLSL computes it (`src/compo
   - when a render per row would cost too much: a **1D strip** along the screen's horizontal middle, worked out on the CPU (`cpuStrip`, from the sample inputs) where the evaluator can, else one rendered row (96 × 1).
 - **The sample inputs** ("With `base` = … Reset") drive the CPU pictures, the numbers of constants nothing rendered, and the usual ranges. A rendered picture's range is measured from the render.
 - **Step-through.** Click a row, or press **← / →** while the list has focus, to show that row on the big ▶ preview (the line preview, pointed at the sub-expression) and light its span in the code. The selected row is marked. **Escape**, or clicking it again, goes back to the whole line (Escape then doesn't close the editor).
-- **▶ on a line opens it.** Pressing ▶ on a line (or Return) in the Expression Block opens that line's Explain row with the build-up focused, ready for ← / →.
+- **▶ on a line** (Expression Block) keeps the inline picture under the line and opens the line's fold, whose **Open explain view** leads to the build-up.
 - Hovering a row lights its part of the code; hovering an input lights its reads. Steps keep **+ Node**, an idiom's name and **Where else?**; "Explain these steps" and "Explain more" (the optional model) stay where they were.
 - The build-up is the panel's primary section: open by default, its fold remembered for the session. The Explain row itself starts folded.
+
+### The explain view (Expression Block, 2026-10-09)
+
+**Open explain view** under a line replaces the editor's content (same modal) with one line explained in full (`src/components/explain/LineExplainView.tsx`, loaded on demand). **‹ Lines** (or Escape with nothing selected) goes back; ‹ › step to the line above or below ("Line 2 of 3", then Return).
+
+- **The line at the top**, the selected step's part lit.
+- **Step by step**: the build-up (above), without the ▶ preview: click a row or ← / → to pick it, Escape for the whole line.
+- **Picture**: a live render of the selected row (`ExplainLiveCanvas.tsx`), up to 900 px on a side, every frame, the clock running from the main clock's value. One program holds every row (`liveRender.ts`: the build-up's `pv_s*` copy of the block plus a display mapping like the small pictures'); `u_pvSel` picks the row, so stepping never recompiles. The range under it is read back from a 48 px float target four times a second. It needs the block at the top level (inside a group it says so). The context is given back on close.
+- **The main canvas pauses** while the view is open: it takes a hold (`src/lib/previewHold.ts`, `holdPreview()`), and ShaderCanvas's loop stops (`backgroundFrame` returns `'hold'`) with its clock paused and its Auto resolution counters reset, so held time never counts as a slow second. An output window or a recording keeps full speed. Back or closing the editor lets go.
+- **Try values** (folded, with a summary; remembered for the session): a control for each name the line reads that the block can assign (its inputs, variables from lines above, `t`, `p`). **Live** (the default) keeps the real value; off, a float gets a ruler slider (typing past the max widens it) and a vec2 / vec3 / vec4 gets component fields, plus a swatch when it is a colour. A value set by hand becomes a uniform `u_xo<n>` with `name = u_xo<n>;` right after the lines above, so overriding `flick` replaces its computed value. Only switching a name live / not live recompiles; values are uniforms. The same values feed the steps' CPU numbers (worked.ts), replacing the old "With … Reset" fields here. **Reset** makes every name live.
+- **Explain with the model**: the model's line explanation (ExplainMore, `docs/explain-model.md`), with the download offer when there is no model.
+
+The Custom Function editor is unchanged: its statements keep the Explain row (model button + folded build-up).
 
 **What varies.** In an Expression Block the host knows the wiring (`src/components/explain/buildUpHost.ts`, `exprBlockVarying`): an input wired from anything but a constant source (Time, a constant, a colour, Mouse…) varies, a slider doesn't, and a line's variable varies when its expression reads one that does. Elsewhere (the GLSL page, a Custom Function) screen coordinates and space-like names vary. A render that comes out flat is shown as a constant anyway.
 
@@ -295,7 +308,7 @@ Then add a positive and a negative case to `src/lib/glslPatterns/__tests__/match
   - "Use it here too" in GLSL text and in a Custom Function;
   - find uses with provenance, inside groups, by idiom and by made pattern.
 
-`src/components/explain/__tests__/buildUp.test.tsx` (jsdom): which Expression Block names vary, the step probe (lines above + `pv_step`, compiled by the eye preview, graph untouched, ↑ / ↓ from a step), one compile for all rows of a line with `u_pvSel` and the cache, the heavy-graph count, the picture colour maps; the view renders a row per input / step / result with no worded sentences, click / again / ← → / Escape step through, an open request opens and focuses, and ▶ on a line in the real Expression Block editor opens its build-up and steps on the preview.
+`src/components/explain/__tests__/buildUp.test.tsx` (jsdom): which Expression Block names vary, the step probe (lines above + `pv_step`, compiled by the eye preview, graph untouched, ↑ / ↓ from a step), one compile for all rows of a line with `u_pvSel` and the cache, the heavy-graph count, the picture colour maps; the view renders a row per input / step / result with no worded sentences, click / again / ← → / Escape step through, an open request opens and focuses, and ▶ on a line in the real Expression Block editor opens its fold. `explainView.test.tsx`: the light fold, no per-line model button in the editor (Explain the block stays), the view opening and Back, ‹ ›, the main-canvas hold taken and released (Back and close), step selection driving the live picture's row, overrides as uniforms assigned before the rows, Reset, and the model action in the view.
 
 `src/components/explain/functionCard/__tests__/`:
 - **functionCard.test.tsx** (jsdom): the shortcut and click rules, a point to a character in a field (lines, tabs, scrolling), placement; a plain click in read-only code opens a focused card and a click on a variable doesn't; not inside a button or after a selection; Esc closes and gives focus back, a click outside closes; ⌥-press opens without moving the caret and the click after it is swallowed; ⌘I / F1 in the arguments; one-line inputs; hover peek, leave and typing; long press and a moved finger; scopes; the card's dialog, table, meaning, plot, Here and links; Insert / Copy snippet; the node ⓘ toggle.
