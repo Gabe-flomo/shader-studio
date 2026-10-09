@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.116',
+    date: '2026-10-09',
+    title: 'Faster Curve Trace',
+    highlights: [
+      { area: 'Studio', text: 'Curve Trace skips the parts of the curve that can\'t be nearest: a Live dot with a long trail does about an eighth of the GPU work, with the same picture.', link: { kind: 'doc', path: 'docs/curve-trace.md' } },
+    ],
+  },
+  {
     id: '2026.10.115',
     date: '2026-10-09',
     title: 'Explain, rebuilt',
