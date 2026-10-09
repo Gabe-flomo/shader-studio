@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.111',
+    date: '2026-10-08',
+    title: '4D in the Scene Builder',
+    highlights: [
+      { area: 'Studio', text: '3D Scene Builder adds 4D shapes: hypersphere, tesseract, duocylinder, Clifford torus, 24-cell and quaternion Julia/Mandelbrot, sliced at W with 4D rotations.' },
+      { area: 'Studio', text: 'Cones in the 3D Scene Builder now point up; builder help titles read cleaner.' },
+    ],
+  },
+  {
     id: '2026.10.110',
     date: '2026-10-08',
     title: 'Series everywhere',
