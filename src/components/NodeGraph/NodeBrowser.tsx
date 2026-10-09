@@ -48,19 +48,55 @@ const HIDDEN_NODES = new Set([
   'agentInputs', 'agentOutput', 'agentStepOut', 'trailStepOut', 'agentProbeOut', 'agentGridOut',
 ]);
 
-const CATEGORY_SECTIONS: Array<{ label: string; categories: string[] }> = [
-  { label: '2D tools',      categories: ['2D Primitives', '2D Space', 'Grid', 'Field', 'Halftone'] },
-  { label: '3D tools',      categories: ['3D Primitives', '3D Transforms', '3D Boolean Ops', '3D Scene', '3D Lighting', 'Loops'] },
-  { label: '4D tools',      categories: ['4D'] },
-  { label: 'SDF',           categories: ['SDF'] },
-  { label: 'Colour',        categories: ['Color', 'Color Grading', 'Combiners'] },
-  { label: 'Effects',       categories: ['Effects'] },
-  { label: 'Simulation',    categories: ['Simulation', 'Particles', 'Particles & Fields', 'Passes', 'Texture tools'] },
-  { label: 'Generators',    categories: ['Noise', 'Fractals', 'Science'] },
-  { label: 'Math & Logic',  categories: ['Sources', 'Animation', 'Math', 'Matrix', 'Shapers', 'Conditionals'] },
-  { label: 'Functions',     categories: ['My Nodes', 'Functions'] },
-  { label: 'Utility',       categories: ['Utility', 'Output'] },
+const CATEGORY_SECTIONS_RAW: Array<{ label: string; categories: string[] }> = [
+  { label: '2D tools',         categories: ['2D Primitives', '2D Space', 'Grid', 'Field', 'Halftone'] },
+  { label: '3D tools',         categories: ['3D Primitives', '3D Transforms', '3D Boolean Ops', '3D Scene', '3D Lighting', 'Loops', '4D Shapes', '4D Space', '4D Projection'] },
+  { label: 'Shape operations', categories: ['SDF'] },
+  { label: 'Colour',           categories: ['Color', 'Color Grading', 'Combiners'] },
+  { label: 'Effects',          categories: ['Effects', 'Passes', 'Texture tools'] },
+  { label: 'Agents',           categories: ['Agents', 'Agent presets', 'Particles', 'Particles & Fields'] },
+  { label: 'Generators',       categories: ['Noise', 'Fractals', 'Science'] },
+  { label: 'Math & Logic',     categories: ['Sources', 'Animation', 'Math', 'Matrix', 'Shapers', 'Conditionals'] },
+  { label: 'Functions',        categories: ['My Nodes', 'Functions'] },
+  { label: 'Utility',          categories: ['Utility', 'Output'] },
 ];
+
+/** How a row reads in the library (the node definitions keep their own category names). */
+const ROW_LABELS: Record<string, string> = {
+  '2D Primitives': '2D Shapes',
+  '3D Primitives': '3D Shapes',
+  SDF: 'Combine, cut & fill (SDF)',
+  Science: 'Chladni',
+};
+export const rowLabel = (row: string) => ROW_LABELS[row] ?? row;
+
+const PRESET_TYPES = ['slimeMoldPreset', 'multiSlimePreset', 'antsPreset', 'boidsPreset', 'strandsPreset', 'growPicturePreset', 'myceliumPreset', 'particlesPreset', 'curlSmokePreset', 'soundBurstPreset', 'galaxyPreset', 'sandPlatePreset'];
+const FOURD_SPACE = ['lift4D', 'rotate4D', 'translate4D', 'scale4D', 'repeat4D', 'fold4D', 'twist4D', 'noise4D'];
+const FOURD_PROJECTION = ['wireframe4D', 'project4D', 'stereo4D', 'stereoDist4D', 'wireframe4D2D', 'planeSlice4D'];
+
+/** Rows made from part of one category: 4D split three ways, the agent presets apart from the rest. */
+const VIRTUAL_ROWS: Record<string, { from: string; only?: string[]; not?: string[] }> = {
+  '4D Shapes': { from: '4D', not: [...FOURD_SPACE, ...FOURD_PROJECTION] },
+  '4D Space': { from: '4D', only: FOURD_SPACE },
+  '4D Projection': { from: '4D', only: FOURD_PROJECTION },
+  Agents: { from: 'Simulation', not: PRESET_TYPES },
+  'Agent presets': { from: 'Simulation', only: PRESET_TYPES },
+};
+
+/** The library row a node is listed under. */
+export function rowOfType(type: string, category: string): string {
+  for (const [row, v] of Object.entries(VIRTUAL_ROWS)) {
+    if (v.from !== category) continue;
+    if (v.only ? v.only.includes(type) : !(v.not ?? []).includes(type)) return row;
+  }
+  return category;
+}
+
+const byLabel = (a: string, b: string) => a.localeCompare(b);
+/** Sections and their rows, alphabetical at every level. */
+const CATEGORY_SECTIONS = [...CATEGORY_SECTIONS_RAW]
+  .map(sec => ({ ...sec, categories: [...sec.categories].sort((a, b) => byLabel(rowLabel(a), rowLabel(b))) }))
+  .sort((a, b) => byLabel(a.label, b.label));
 
 /** Rows that show several node categories as one (the definitions keep their own category). */
 const MERGED_CATEGORIES: Record<string, string[]> = {
@@ -80,7 +116,13 @@ export const CATEGORY_INFO: Record<string, string> = {
   '3D Scene': 'The 3D pipeline: a March Camera makes the rays, a Scene Group holds the shapes, a March Loop finds where each ray hits.',
   '3D Lighting': 'Light what the march loop hit: shading, shadows, ambient occlusion, glass and fog. Wire them from the loop\'s outputs.',
   Loops: 'Repeat a chain of nodes several times inside one shader.',
+  '4D Shapes': 'Shapes in four dimensions, measured at a 4D point (from Lift to 4D): hypersphere, tesseract, duocylinder, the regular polytopes and quaternion fractals. What you see is their 3D slice.',
+  '4D Space': 'Get a point into 4D and change it there: Lift to 4D turns the 3D point into a 4D one (choosing how the slice cuts), then move, turn in any of the six 4D planes, scale, repeat, fold, twist or add noise, before a 4D shape measures it.',
+  '4D Projection': 'See a whole 4D shape at once instead of a slice: project it into 3D (perspective or stereographic), draw its wireframe, or go straight to the flat picture.',
+  Agents: 'Walkers, particles and slime that move and leave trails: the Agents group and the nodes that go outside and inside it.',
+  'Agent presets': 'Ready-made Agents setups, one click each: slime mold, ants, boids, galaxy, smoke and more. Open the group to change how they behave.',
   '4D': 'Shapes and transforms in four dimensions. Lift to 4D turns a 3D point into a 4D one and the shape is sliced back to 3D; projection nodes show the whole 4D shape at once; 4D Wireframe 2D and Plane Slice 4D go straight to the flat picture.',
+  Science: 'Chladni plates: the standing-wave patterns of a vibrating plate, and the waves that make them.',
   SDF: 'Work on distances from any shape, 2D or 3D. Combine joins, cuts or overlaps two shapes; Modify grows, hollows or sharpens one; Style turns a distance into colour.',
   Color: 'Make and change colour: pick colours, palettes and gradients, adjust, convert and blend.',
   'Color Grading': 'Film-style adjustments on a finished colour: tone, curves, saturation, tone mapping and grain.',
@@ -92,7 +134,6 @@ export const CATEGORY_INFO: Record<string, string> = {
   'Texture tools': 'Shape a texture\'s raw values: masks, levels, flow directions, outlines, fades.',
   Noise: 'Smooth random patterns (value, Perlin, simplex, fBm, Voronoi) for textures, warps and motion.',
   Fractals: 'Shapes that repeat at every scale: Mandelbrot, Julia, kaleidoscopic folds.',
-  Science: 'Physics-inspired patterns: waves, interference, reaction-diffusion and more.',
   Sources: 'Inputs from outside the graph: UV, time, mouse, resolution, audio, video, constants.',
   Animation: 'Values that move over time: LFOs, envelopes and keyframes.',
   Math: 'Arithmetic, trigonometry, rounding, interpolation, vectors and comparison, one operation per node.',
@@ -105,9 +146,13 @@ export const CATEGORY_INFO: Record<string, string> = {
   Output: 'Where the picture leaves the graph.',
 };
 
-const nodesOfRow = (row: string) => (MERGED_CATEGORIES[row] ?? [row]).flatMap(c => getNodesByCategory(c));
+const nodesOfRow = (row: string) => {
+  const v = VIRTUAL_ROWS[row];
+  if (v) return getNodesByCategory(v.from).filter(d => (v.only ? v.only.includes(d.type) : !(v.not ?? []).includes(d.type)));
+  return (MERGED_CATEGORIES[row] ?? [row]).flatMap(c => getNodesByCategory(c));
+};
 
-const CATEGORY_ORDER = CATEGORY_SECTIONS.flatMap(s => s.categories.flatMap(c => MERGED_CATEGORIES[c] ?? [c]));
+const CATEGORY_ORDER = [...CATEGORY_SECTIONS.flatMap(s => s.categories.flatMap(c => MERGED_CATEGORIES[c] ?? [c])), ...new Set(Object.values(VIRTUAL_ROWS).map(v => v.from))];
 
 // ── Sub-group definitions for categories that need them ───────────────────────
 const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>> = {
@@ -127,14 +172,14 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Warp',   types: ['twist3D', 'bend3D', 'sinWarp3D', 'displace3D', 'spiralWarp3D', 'domainWarp3D', 'turbulence3D', 'shear3D'] },
     { label: 'Fold',   types: ['fold3D', 'mirrorFold3D', 'kaleidoscope3D', 'sphereInvert3D', 'mobiusWarp3D', 'logPolarWarp3D', 'helixWarp3D'] },
   ],
-  '4D': [
-    { label: 'Point',  types: ['lift4D', 'rotate4D', 'translate4D', 'scale4D'] },
-    { label: 'Repeat', types: ['repeat4D', 'fold4D', 'twist4D'] },
-    { label: 'Shapes', types: ['hypersphereSDF', 'tesseractSDF', 'duocylinderSDF', 'spherinderSDF', 'cubinderSDF', 'cylPrismSDF', 'ditorusSDF', 'cliffordTorusSDF'] },
+  '4D Shapes': [
+    { label: 'Fractals',  types: ['quatJuliaSDF', 'quatMandelSDF'] },
     { label: 'Polytopes', types: ['cell5SDF', 'cell16SDF', 'cell24SDF'] },
-    { label: 'Fractals', types: ['quatJuliaSDF', 'quatMandelSDF'] },
-    { label: 'Noise',  types: ['noise4D'] },
-    { label: 'Project', types: ['wireframe4D', 'project4D', 'stereo4D', 'stereoDist4D', 'hopfCirclesSDF'] },
+    { label: 'Solids',    types: ['hypersphereSDF', 'tesseractSDF', 'duocylinderSDF', 'spherinderSDF', 'cubinderSDF', 'cylPrismSDF', 'ditorusSDF', 'cliffordTorusSDF', 'hopfCirclesSDF'] },
+  ],
+  '4D Space': [
+    { label: 'Into 4D, move and turn', types: ['lift4D', 'translate4D', 'rotate4D', 'scale4D'] },
+    { label: 'Repeat, fold and warp',  types: ['repeat4D', 'fold4D', 'twist4D', 'noise4D'] },
   ],
   '3D Lighting': [
     { label: 'Shadow',  types: ['sdfAo', 'softShadow'] },
@@ -171,8 +216,8 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Bezier',  types: ['quadBezierShaper', 'cubicBezierShaper'] },
   ],
   // The Agents family (docs/agents-plan.md): the inside nodes only go into an open Agents group.
-  Simulation: [
-    { label: 'Start here', types: ['slimeMoldPreset', 'multiSlimePreset', 'antsPreset', 'boidsPreset', 'strandsPreset', 'growPicturePreset', 'myceliumPreset', 'particlesPreset', 'curlSmokePreset', 'soundBurstPreset', 'galaxyPreset', 'sandPlatePreset', 'agentsGroup'] },
+  Agents: [
+    { label: 'Start here', types: ['agentsGroup'] },
     { label: 'Outside the group', types: ['agentEmit', 'agentDeposit', 'trailField', 'drawAgents'] },
     { label: 'Inside: walkers', types: ['agentSense', 'agentNeighbours', 'agentSteer', 'agentMove', 'agentBySpecies'] },
     { label: 'Inside: forces', types: ['agentGravity', 'agentWind', 'agentCurl', 'agentAttract', 'agentVortex', 'agentFlow', 'agentSoundKick'] },
@@ -553,7 +598,7 @@ export function NodeBrowser({
       const { nodeType } = (e as CustomEvent<{ nodeType: string }>).detail;
       const def = getNodeDefinition(nodeType);
       if (!def) return;
-      setPath([def.category]);
+      setPath([rowOfType(def.type, def.category)]);
       setPreviewType(nodeType);
       setHighlightType(nodeType);
       setTimeout(() => {
@@ -773,19 +818,25 @@ export function NodeBrowser({
     const rawNodes = nodesOfRow(cat).filter(d => !HIDDEN_NODES.has(d.type));
     // Nodes no group lists still show, under More (and a merged row's other categories by name).
     const listed = CATEGORY_GROUPS[cat];
-    const groups = listed ? [...listed, ...((MERGED_CATEGORIES[cat] ?? [cat]).map(c => ({
+    const rowTypes = new Set(rawNodes.map(d => d.type));
+    const sortedListed = listed ? [...listed].sort((a, b) => (a.label === 'Start here' ? -1 : b.label === 'Start here' ? 1 : byLabel(a.label, b.label))) : undefined;
+    const groups = sortedListed ? [...sortedListed, ...((MERGED_CATEGORIES[cat] ?? [cat]).map(c => ({
       label: c === cat ? 'More' : c,
-      types: getNodesByCategory(c).map(d => d.type).filter(t => !listed.some(g => g.types.includes(t))),
+      types: (VIRTUAL_ROWS[cat] ? [...rowTypes] : getNodesByCategory(c).map(d => d.type)).filter(t => !sortedListed.some(g => g.types.includes(t))),
     })))] : undefined;
+    // In Agent presets every node is a preset: no need to say so on each.
+    const shown = (list: typeof rawNodes) => [...list]
+      .map(d => (cat === 'Agent presets' ? { ...d, label: d.label.replace(/\s*\(preset\)$/i, '') } : d))
+      .sort((a, b) => byLabel(a.label, b.label));
     const info = CATEGORY_INFO[cat];
     innerContent = (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {crumb(cat, rawNodes.length)}
+        {crumb(rowLabel(cat), rawNodes.length)}
         {info && <div data-category-info style={{ color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}`, padding: '0 2px 4px' }}>{info}</div>}
         {!isGlsl && <InstalledPackCard category={cat} />}
         {groups ? (
           groups.map(group => {
-            const groupNodes = rawNodes.filter(d => group.types.includes(d.type));
+            const groupNodes = shown(rawNodes.filter(d => group.types.includes(d.type)));
             if (groupNodes.length === 0) return null;
             return (
               <div key={group.label}>
@@ -795,7 +846,7 @@ export function NodeBrowser({
             );
           })
         ) : (
-          <div style={{ marginTop: 4 }}>{renderPills([...rawNodes].sort((a, b) => a.label.localeCompare(b.label)))}</div>
+          <div style={{ marginTop: 4 }}>{renderPills(shown(rawNodes))}</div>
         )}
       </div>
     );
@@ -840,7 +891,7 @@ function CategoryRow({ cat, icon, count, onClick }: {
       }}
     >
       {icon && <span style={{ width: 14, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>}
-      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat}</span>
+      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rowLabel(cat)}</span>
       <Count n={count} />
       <Icon name="chevR" size={14} style={{ color: tk.text.disabled }} />
     </button>
