@@ -155,3 +155,64 @@ It's planned with the Suggestion hub and the Query explorer, not built in the fi
 
 Each phase is one PR with tests. Moves and ranking are pure modules (`src/exprBuilder/`), and the
 window lives with the other builders (`components/builders/`).
+
+## Phase 1 status (2026-10-09)
+
+Built: the move catalogue, `src/exprBuilder/` (no UI).
+
+- `moves.ts`: the types (Move, MoveContext, MoveSource, Catalogue) and the API: `buildCatalogue(docs)`,
+  `movesFor(seed)`, `applyMove(expr, move, holes)`, `followers(move)`, `mergeCatalogues`.
+- `mine.ts`: mining. Each statement's subject (what it assigns and reads, else the best name it reads),
+  its steps along the subject's path (`x * #a`, `fract(x)`, `x - #a`) and every compound on that path
+  (`fract(x * #a) - #b`). Arguments that don't read the subject are mined for their own variable.
+  Kept only when it type-checks and calls nothing but built-ins and the always-there helpers.
+- `context.ts`: dimension, what fed the variable (through wires, group ports and other code nodes), what
+  the result went into, and pattern-index techniques at the node.
+- `generated.ts`: swizzles, one component driving another, products, rotations in each plane (63).
+- `exampleMoves.ts` + `prebuilt/moves.json` (packed by `pack.ts`): the examples' catalogue. Regenerate
+  with `EXPR_BUILDER_WRITE=1 npx vitest run src/exprBuilder/__tests__/prebuilt.test.ts`; the test
+  fails when it's out of date (hash of the examples' code and graphs, and the content).
+- `localMoves.ts` / `liveMoves.ts`: the user's code (saved graphs, the open graph, presets, GLSL page
+  shaders, the Convert page, linked .glsl files) mined on device from the Code explorer's own sync
+  (`onCorpusCollected` in `codeExplorer/client.ts`), per doc, only when it changed.
+
+Numbers:
+
+- **1,865 moves**: 1,802 mined (719 single steps, 729 seen more than once) and 63 generated.
+- **1,191 order pairs.** 131 of the 140 example docs with code give moves.
+- **Size:** the prebuilt file is 371 KB; unpacking takes about 45 ms, and mining every example about 0.5 s.
+
+| Dimension | Moves | Top families (by uses) |
+|---|---|---|
+| 2D | 1,452 | scale, offset, build, swizzle, clamp, repeat, mask, wave |
+| 3D world | 148 | swizzle, scale, offset, clamp, curve, wave |
+| 3D surface | 198 | scale, build, cell, offset, clamp, repeat |
+| 1D time | 104 | scale, wave, fold, offset, repeat |
+
+Surprises:
+
+- **The examples' code is mostly scalar arithmetic.**
+  - The classic space tricks are rare or absent as written code: 16 warps, 7 rotations, 1 polar.
+  - No colour by world space.
+  - Most of that is done with nodes, not code. The generated families fill some of the gap.
+- **3D world-space code is mostly 3D agents.** Few March Loop Expression Blocks exist; the scenes are
+  built from nodes (Repeat 3D, Translate 3D…).
+- **The Code explorer's statement spans stop before a closing parenthesis.** The miner reads on to the
+  statement's end instead.
+- **Some example Expression Blocks have no `params.inputs`.** Their types come from the sockets.
+- **Imported code calling its own helpers is skipped.** That includes `hash21`, `noise` and `fbm`:
+  the move wouldn't compile alone.
+- **Common moves after another:**
+  - after `fract`: `x - #a` and `step`;
+  - after `length` (2D): `x - #a` (21 times), then `smoothstep`.
+
+Recommendations for phase 2:
+
+- Open the window with `liveCatalogue()`. Show steps (`move.step`) in the grid, with compounds as
+  "recipes" (their `steps` replay as a chain).
+- Put same-type moves first (`sig.in === sig.out`). Put type-changing ones (`x.x`, `length(x)`) in
+  their own row.
+- Mine nodes as moves too (a Repeat 3D node is a `fract` repeat), so 3D world space gets real moves
+  rather than mostly generated ones.
+- Carry helper functions with a move (its `glslFunctions`), so imported tricks that call `hash21` or
+  `noise` can be used.
