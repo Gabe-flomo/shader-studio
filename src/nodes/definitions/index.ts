@@ -148,6 +148,7 @@ export { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursN
 export { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, TrailStepOutNode, AgentProbeOutNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode, MultiSlimePresetNode, AntsPresetNode, BoidsPresetNode, StrandsPresetNode, GrowPicturePresetNode, GalaxyPresetNode, MyceliumPresetNode, SandPlatePresetNode } from './agents';
 export { AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode } from './agentForces';
 export { AgentNeighboursNode } from './agentNeighbours';
+export { AgentRideCurveNode } from './agentRideCurve';
 
 // Math
 export {
@@ -283,11 +284,12 @@ import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurText
 import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 import { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, TrailStepOutNode, AgentProbeOutNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode, MultiSlimePresetNode, AntsPresetNode, BoidsPresetNode, StrandsPresetNode, GrowPicturePresetNode, GalaxyPresetNode, MyceliumPresetNode, SandPlatePresetNode } from './agents';
 import { AgentNeighboursNode } from './agentNeighbours';
+import { AgentRideCurveNode } from './agentRideCurve';
 import { AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode, AgentCollideSceneNode, AgentGridOutNode } from './agentForces';
 
 // Every setting of the Agents family has a "?" on its card: its hint, unless it has a fuller help of its own.
 for (const d of [AgentsGroupNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, DrawAgentsNode,
-  AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode, AgentCollideSceneNode, AgentNeighboursNode]) {
+  AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode, AgentCollideSceneNode, AgentNeighboursNode, AgentRideCurveNode]) {
   for (const pd of Object.values(d.paramDefs ?? {})) if (pd.hint && !pd.help) pd.help = pd.hint;
 }
 
@@ -534,6 +536,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   agentProbeOut: AgentProbeOutNode,
   agentCollideScene: AgentCollideSceneNode,
   agentNeighbours: AgentNeighboursNode,
+  agentRideCurve: AgentRideCurveNode,
   agentGridOut: AgentGridOutNode,
   multiSlimePreset: MultiSlimePresetNode,
   antsPreset: AntsPresetNode,

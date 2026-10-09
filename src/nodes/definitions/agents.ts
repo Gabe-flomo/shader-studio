@@ -69,6 +69,8 @@ export const AGENT_INSIDE_TYPES = new Set([
   'agentCollideScene',
   // The walkers near this one, through the group's grid (docs/agents-group.md "Neighbours").
   'agentNeighbours',
+  // Walkers locked onto a parametric curve (agentRideCurve.ts).
+  'agentRideCurve',
 ]);
 /** The starters in the Simulation category: each builds a whole working setup (store/agentExamples.ts). */
 export const AGENT_PRESET_TYPES = new Set([
@@ -157,6 +159,7 @@ export const AGENT_3D_SOCKETS: Record<string, { in?: string[]; out?: string[] }>
   agentChladni: { in: ['position', 'velocity'], out: ['position', 'velocity'] },
   agentCollideScene: { in: ['position', 'velocity'], out: ['position', 'velocity'] },
   agentNeighbours: { in: ['position'], out: ['centre', 'heading', 'push'] },
+  agentRideCurve: { out: ['position', 'velocity', 'heading'] },
   agentEmit: { in: ['position'] },
 };
 /** Draw agents' sockets in 3D only: a ray-marched scene's camera and depth (docs/agents-group.md "3D"). */
@@ -304,13 +307,14 @@ const THIS_AGENT = 'Unwired: this walker\'s own (the card shows "← this walker
 const WALKER_READS: Record<string, string> = {
   position: '← this walker\'s position', velocity: '← this walker\'s velocity', heading: '← this walker\'s heading',
   random: '← a fresh random number', age: '← this walker\'s age', life: '← this walker\'s life',
+  memory: '← this walker\'s memory',
 };
 const WALKER_SOCKETS: Record<string, string[]> = {
   agentSense: ['position', 'heading'], agentSteer: ['heading', 'random'], agentMove: ['position', 'heading'],
   agentWind: ['position'], agentCurl: ['position'], agentAttract: ['position'], agentVortex: ['position'], agentFlow: ['position'],
   agentSoundKick: ['position'], agentIntegrate: ['position', 'velocity'], agentCollide: ['position', 'velocity'],
   agentChladni: ['position', 'velocity'], agentAge: ['age', 'life'], agentCollideScene: ['position', 'velocity'],
-  agentNeighbours: ['position'],
+  agentNeighbours: ['position'], agentRideCurve: ['memory'],
 };
 const OUTPUT_KEEPS: Record<string, string> = {
   position: 'unchanged', velocity: 'unchanged', heading: 'unchanged', speed: 'unchanged', memory: 'unchanged', colour: 'unchanged',

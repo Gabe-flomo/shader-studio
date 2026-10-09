@@ -18,7 +18,7 @@
 import type { GraphNode, NodeDefinition, ParamDef } from '../../types/nodeGraph';
 import { p } from './helpers';
 
-type Axis = 'X' | 'Y' | 'Z';
+export type Axis = 'X' | 'Y' | 'Z';
 
 const WAVES = [
   { value: 'sine', label: 'Sine' },
@@ -31,7 +31,7 @@ const WAVES = [
 /** Only names, numbers, operators and brackets: a custom axis can't break out of its expression. */
 const SAFE_EXPR = /^[A-Za-z0-9_+\-*/%().,\s<>=?:!&|]*$/;
 
-function axisParams(a: Axis): Record<string, ParamDef> {
+export function axisParams(a: Axis): Record<string, ParamDef> {
   const custom = { param: `wave${a}`, value: 'custom' };
   const notCustom = { param: `wave${a}`, value: ['sine', 'triangle', 'square', 'saw'] };
   return {
@@ -44,11 +44,11 @@ function axisParams(a: Axis): Record<string, ParamDef> {
   } as Record<string, ParamDef>;
 }
 
-function axisDefaults(a: Axis, d: { freq: number; phase: number; amp: number }, expr: string): Record<string, unknown> {
+export function axisDefaults(a: Axis, d: { freq: number; phase: number; amp: number }, expr: string): Record<string, unknown> {
   return { [`wave${a}`]: 'sine', [`freq${a}`]: d.freq, [`phase${a}`]: d.phase, [`amp${a}`]: d.amp, [`off${a}`]: 0, [`expr${a}`]: expr };
 }
 
-const COMMON_PARAMS = (thick: { def: number; max: number }, segs: number): Record<string, ParamDef> => ({
+export const COMMON_PARAMS = (thick: { def: number; max: number }, segs: number): Record<string, ParamDef> => ({
   mode: { section: 'Curve', label: 'Motion', type: 'select', compileTime: true, options: [
     { value: 'lateral', label: 'Lateral: X and Y swing (Lissajous)' },
     { value: 'rotary', label: 'Rotary: two circles, same way (loops)' },
@@ -193,31 +193,50 @@ function chunkedLoop(id: string, vt: string, n: number, point: string, pos: stri
   ];
 }
 
+/** One axis's piece of the curve's point: its GLSL, its reach and its speed bound (see axisExpr). */
+type CurvePart = { expr: string; bound: string | null; lip: string | null };
+
+/**
+ * The curve's point at a GLSL float `t` for a set of frequencies: X, Y (and Z) by the node's waves,
+ * or the two circles of Rotary motion. The expression reads `t`, `${node.id}_damp` (exp(−Damping × t),
+ * set by the caller) and, in a Custom axis, `time`: the caller declares all three.
+ */
+export function curvePointWith(node: GraphNode, inputVars: Record<string, string>, axes: Axis[], freqOf: (a: Axis) => string): { point: string; parts: CurvePart[] } {
+  const id = node.id;
+  const vt = axes.length === 3 ? 'vec3' : 'vec2';
+  const mode = String(node.params.mode ?? 'lateral');
+  const parts = axes.map(a => axisExpr(node, a, inputVars, freqOf));
+  const damping = p(node.params.damping, 0);
+  if (mode === 'rotary' || mode === 'counter') {
+    // Two circles: the first from X's settings, the second from Y's (counter: the second turns the other way).
+    const c = (a: Axis) => ({ f: freqOf(a), ph: livePhase(node, inputVars[`phase${a}`] || p(node.params[`phase${a}`], 0), freqOf(a)), r: p(node.params[`amp${a}`], 1) });
+    const A = c('X'), B = c('Y'), op = mode === 'counter' ? '-' : '+';
+    const offX = p(node.params.offX, 0), offY = p(node.params.offY, 0);
+    const lip = `(abs(${A.r}) * (abs(${A.f}) + abs(${damping})) + abs(${B.r}) * (abs(${B.f}) + abs(${damping})))`;
+    parts[0] = { expr: `(${offX} + ${id}_damp * (${A.r} * cos(${A.f} * t + ${A.ph}) + ${B.r} * cos(${B.f} * t + ${B.ph})))`, bound: `(abs(${offX}) + abs(${A.r}) + abs(${B.r}))`, lip };
+    parts[1] = { expr: `(${offY} + ${id}_damp * (${A.r} * sin(${A.f} * t + ${A.ph}) ${op} ${B.r} * sin(${B.f} * t + ${B.ph})))`, bound: `(abs(${offY}) + abs(${A.r}) + abs(${B.r}))`, lip };
+  }
+  return { point: `${vt}(${parts.map(x => x.expr).join(', ')})`, parts };
+}
+
+/**
+ * The curve's point as the node draws it: figure A from the frequencies, blended into figure B
+ * (the B frequencies) by Morph amount when Morph is on. Used by Curve Trace and by Ride a curve
+ * (agentRideCurve.ts), which evaluates it once per walker.
+ */
+export function curvePoint(node: GraphNode, inputVars: Record<string, string>, axes: Axis[]): { point: string; shapeA: { point: string; parts: CurvePart[] }; shapeB: { point: string; parts: CurvePart[] } | null } {
+  const shapeA = curvePointWith(node, inputVars, axes, a => inputVars[`freq${a}`] || p(node.params[`freq${a}`], 1));
+  const shapeB = node.params.morphOn === true ? curvePointWith(node, inputVars, axes, a => inputVars[`freq${a}B`] || p(node.params[`freq${a}B`], 1)) : null;
+  const morph = inputVars.morph || p(node.params.morph, 0);
+  const point = shapeB ? `mix(${shapeA.point}, ${shapeB.point}, clamp(${morph}, 0.0, 1.0))` : shapeA.point;
+  return { point, shapeA, shapeB };
+}
+
 /** The shared loop: nearest piece of the polyline and where along it. */
 function traceCode(node: GraphNode, inputVars: Record<string, string>, axes: Axis[], pos: string): { code: string; bounds: string[] | null; along: string } {
   const id = node.id;
   const vt = axes.length === 3 ? 'vec3' : 'vec2';
-  const mode = String(node.params.mode ?? 'lateral');
-  // The point at the loop's t for a set of frequencies (Morph builds two and blends them).
-  const pointWith = (freqOf: (a: Axis) => string): { point: string; parts: Array<{ expr: string; bound: string | null; lip: string | null }> } => {
-    const parts = axes.map(a => axisExpr(node, a, inputVars, freqOf));
-    const damping = p(node.params.damping, 0);
-    if (mode === 'rotary' || mode === 'counter') {
-      // Two circles: the first from X's settings, the second from Y's (counter: the second turns the other way).
-      const c = (a: Axis) => ({ f: freqOf(a), ph: livePhase(node, inputVars[`phase${a}`] || p(node.params[`phase${a}`], 0), freqOf(a)), r: p(node.params[`amp${a}`], 1) });
-      const A = c('X'), B = c('Y'), op = mode === 'counter' ? '-' : '+';
-      const offX = p(node.params.offX, 0), offY = p(node.params.offY, 0);
-      const lip = `(abs(${A.r}) * (abs(${A.f}) + abs(${damping})) + abs(${B.r}) * (abs(${B.f}) + abs(${damping})))`;
-      parts[0] = { expr: `(${offX} + ${id}_damp * (${A.r} * cos(${A.f} * t + ${A.ph}) + ${B.r} * cos(${B.f} * t + ${B.ph})))`, bound: `(abs(${offX}) + abs(${A.r}) + abs(${B.r}))`, lip };
-      parts[1] = { expr: `(${offY} + ${id}_damp * (${A.r} * sin(${A.f} * t + ${A.ph}) ${op} ${B.r} * sin(${B.f} * t + ${B.ph})))`, bound: `(abs(${offY}) + abs(${A.r}) + abs(${B.r}))`, lip };
-    }
-    return { point: `${vt}(${parts.map(x => x.expr).join(', ')})`, parts };
-  };
-  const shapeA = pointWith(a => inputVars[`freq${a}`] || p(node.params[`freq${a}`], 1));
-  const morphing = node.params.morphOn === true;
-  const shapeB = morphing ? pointWith(a => inputVars[`freq${a}B`] || p(node.params[`freq${a}B`], 1)) : null;
-  const morph = inputVars.morph || p(node.params.morph, 0);
-  const point = shapeB ? `mix(${shapeA.point}, ${shapeB.point}, clamp(${morph}, 0.0, 1.0))` : shapeA.point;
+  const { point, shapeA, shapeB } = curvePoint(node, inputVars, axes);
   const both = (x: string | null, y: string | null) => (x && y ? `max(${x}, ${y})` : null);
   const parts = shapeB ? shapeA.parts.map((x, i) => ({ expr: x.expr, bound: both(x.bound, shapeB.parts[i].bound), lip: both(x.lip, shapeB.parts[i].lip) })) : shapeA.parts;
   // How fast the curve can move per unit of t (null: it can jump, so no stretch can be skipped)

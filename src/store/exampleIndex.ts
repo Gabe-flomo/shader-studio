@@ -37,6 +37,7 @@ import { TEXTURE_TOOL_EXAMPLE_INDEX, TEXTURE_TOOL_EXAMPLE_KEYS } from './texture
 import { SIM_GRID_EXAMPLE_INDEX } from './simGridExamples';
 import { GRID_RULES_EXAMPLE_INDEX, simGridsFolderKeys } from './gridRulesExampleIndex';
 import { AGENT_RULE_EXAMPLE_INDEX, AGENT_RULE_EXAMPLE_KEYS } from './agentRuleExamples';
+import { RIDE_CURVE_EXAMPLE_INDEX, RIDE_CURVE_EXAMPLE_KEYS } from './agentRideCurveExamples';
 import { SCENE_BUILDER_EXAMPLE_INDEX, SCENE_BUILDER_EXAMPLE_KEYS } from './sceneBuilderExampleIndex';
 import { SCENE_BUILDER_2D_EXAMPLE_INDEX, SCENE_BUILDER_2D_EXAMPLE_KEYS } from './sceneBuilder2dExampleIndex';
 
@@ -231,6 +232,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...AGENT_3D_EXAMPLE_INDEX,
   // Simulations: agents: classic agent-based models as custom rules from ordinary nodes (agentExamplesSim.ts).
   ...SIM_AGENT_EXAMPLE_INDEX,
+  // Ride a curve: walkers locked onto Curve Trace's curves (agentRideCurveExamples.ts).
+  ...RIDE_CURVE_EXAMPLE_INDEX,
   // The Slime mold rule as a Script layer, with a Play setup (agentSketchExamples.ts).
   ...Object.fromEntries(Object.entries(AGENT_RULE_INDEX).map(([k, v]) => [k, { ...v, play: true }])),
   // The Convert folder (convertExampleIndex.ts, graphs in convertExamples.ts): what the Convert page makes of its Soft circle, as written and optimised.
@@ -278,7 +281,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Color & Lighting",  color: ctp.peach, keys: [...LEARN_COLOR_KEYS, 'neonGlow','colorStopsCycle'] },
   { label: "Passes",            color: ctp.maroon, keys: PASS_EXAMPLE_KEYS },
   { label: "Texture tools",     color: ctp.flamingo, keys: TEXTURE_TOOL_EXAMPLE_KEYS },
-  { label: "Simulation",        color: ctp.green, keys: AGENT_EXAMPLE_KEYS },
+  { label: "Simulation",        color: ctp.green, keys: [...AGENT_EXAMPLE_KEYS, ...RIDE_CURVE_EXAMPLE_KEYS] },
   { label: "Simulations: grids", color: ctp.green, keys: simGridsFolderKeys() },
   { label: "Agents: rules",     color: ctp.green, keys: AGENT_RULE_EXAMPLE_KEYS },
   { label: "Agents with shaders", color: ctp.green, keys: AGENT_SHADER_EXAMPLE_KEYS },
