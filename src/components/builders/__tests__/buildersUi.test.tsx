@@ -67,10 +67,10 @@ describe('BuildersSection', () => {
     const g = useNodeGraphStore.getState().nodes.find(n => n.type === 'gridRules');
     expect(useBuilderWindows.getState().gridRules).toBe(g?.id);
 
+    // The Agent Builder opens on its start page ("What are you making?"): no group until a kind is picked.
     click(host.querySelector('[data-builder="agents"]'));
-    const a = useNodeGraphStore.getState().nodes.find(n => n.type === 'agentsGroup');
-    expect(a?.params.ruleMode).toBe('rules');
-    expect(useBuilderWindows.getState().agentRules).toBe(a?.id);
+    expect(useNodeGraphStore.getState().nodes.find(n => n.type === 'agentsGroup')).toBeUndefined();
+    expect(useBuilderWindows.getState().agentBuilder).toEqual({ groupId: null });
     expect(opened).toHaveBeenCalledTimes(3);
   });
   it('folds, and remembers it', () => {

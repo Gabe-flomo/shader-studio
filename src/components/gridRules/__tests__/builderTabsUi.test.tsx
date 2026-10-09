@@ -23,8 +23,7 @@ import { GridRulesEditor } from '../GridRulesEditor';
 import { AgentRulesModal } from '../../NodeGraph/AgentRulesModal';
 import { COUNT_PRESETS, GRID_DEFAULTS, presetPatch } from '../../../gridRules/spec';
 import { useBuilderWindows } from '../../../builders/windows';
-import { openBuilder } from '../../../builders/open';
-import { BuildersSection } from '../../builders/BuildersSection';
+import { newAgentRules, openBuilder } from '../../../builders/open';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 HTMLCanvasElement.prototype.getContext = (() => null) as unknown as HTMLCanvasElement['getContext'];
@@ -121,8 +120,7 @@ describe('Grid Rules as tabs', () => {
 describe('Agent Rules as tabs', () => {
   it('Species · Rules · Trails · Look, opening on Rules; masks and sensors folded', () => {
     useBuilderWindows.setState({ gridRules: null, agentRules: null, recipe: null });
-    mount(<BuildersSection />);
-    click($('[data-builder="agents"]'));
+    newAgentRules(); // the rules starter (the Builders entry now opens the Agent Builder's start page)
     const group = useNodeGraphStore.getState().nodes.find(n => n.type === 'agentsGroup')!;
     mount(<AgentRulesModal node={group} onClose={() => {}} />);
     expect(tabs()).toEqual(['Species', 'Rules', 'Trails', 'Look', 'Recipe']);
@@ -161,8 +159,7 @@ describe('Agent Rules as tabs', () => {
   it('Recipe: the rule set as text; Apply writes it into the group (one step)', () => {
     vi.useFakeTimers();
     useBuilderWindows.setState({ gridRules: null, agentRules: null, recipe: null });
-    mount(<BuildersSection />);
-    click($('[data-builder="agents"]'));
+    newAgentRules(); // the rules starter (the Builders entry now opens the Agent Builder's start page)
     const group = useNodeGraphStore.getState().nodes.find(n => n.type === 'agentsGroup')!;
     localStorage.setItem('builder:agent-rules:tab', 'recipe');
     mount(<AgentRulesModal node={group} onClose={() => {}} />);

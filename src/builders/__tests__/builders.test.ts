@@ -62,7 +62,7 @@ describe('the Builders section', () => {
 describe('opening a builder', () => {
   beforeEach(() => {
     useNodeGraphStore.setState({ nodes: [], activeGroupPath: [], selectedNodeId: null, selectedNodeIds: [] });
-    useBuilderWindows.setState({ gridRules: null, agentRules: null, recipe: null });
+    useBuilderWindows.setState({ gridRules: null, agentRules: null, agentBuilder: null, recipe: null });
     useSceneBuilder.setState({ open: false, targetSceneId: null });
   });
   it('Expression Builder: its window on a new chain from UV, at the menu\'s point', () => {
@@ -92,11 +92,11 @@ describe('opening a builder', () => {
     expect(out?.inputs.color.connection?.nodeId).toBe(g.id);
     expect(useSceneBuilder.getState().open).toBe(false);
   });
-  it('Agent Rules: a new Agents group in rules mode, with its rules open', () => {
+  it('Agent Builder: its start page, nothing added until a kind is picked', () => {
     openBuilder('agents');
-    const g = useNodeGraphStore.getState().nodes.find(n => n.type === 'agentsGroup')!;
-    expect(g.params.ruleMode).toBe('rules');
-    expect(useBuilderWindows.getState().agentRules).toBe(g.id);
+    expect(useNodeGraphStore.getState().nodes.find(n => n.type === 'agentsGroup')).toBeUndefined();
+    expect(useBuilderWindows.getState().agentBuilder).toEqual({ groupId: null });
+    expect(useBuilderWindows.getState().agentRules).toBeNull();
     expect(useBuilderWindows.getState().gridRules).toBeNull();
   });
   it('3D Agent Builder: a 3D rules group with a volume Trail and a camera, its rules open', () => {
@@ -108,7 +108,8 @@ describe('opening a builder', () => {
     expect(nodes.find(n => n.type === 'agentEmit')!.params.shape).toBe('ball');
     expect(nodes.find(n => n.type === 'trailField')!.params.volume).toBe('96');
     expect(nodes.find(n => n.type === 'drawAgents')!.params.rotSpeed).toBeGreaterThan(0);
-    expect(useBuilderWindows.getState().agentRules).toBe(g.id);
+    // A 3D slime: trail followers open in the Agent Builder.
+    expect(useBuilderWindows.getState().agentBuilder).toEqual({ groupId: g.id });
   });
 });
 
@@ -227,7 +228,7 @@ describe('Do… bar builder phrases', () => {
   });
   it('runs the same open actions', () => {
     useNodeGraphStore.setState({ nodes: [], activeGroupPath: [], selectedNodeId: null, selectedNodeIds: [] });
-    useBuilderWindows.setState({ gridRules: null, agentRules: null, recipe: null });
+    useBuilderWindows.setState({ gridRules: null, agentRules: null, agentBuilder: null, recipe: null });
     runBuilderAction(plan('new grid rules', [])!.action!);
     const g = useNodeGraphStore.getState().nodes.find(n => n.type === 'gridRules')!;
     expect(useBuilderWindows.getState().gridRules).toBe(g.id);
