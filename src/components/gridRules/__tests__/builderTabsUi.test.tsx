@@ -23,6 +23,7 @@ import { GridRulesEditor } from '../GridRulesEditor';
 import { AgentRulesModal } from '../../NodeGraph/AgentRulesModal';
 import { COUNT_PRESETS, GRID_DEFAULTS, presetPatch } from '../../../gridRules/spec';
 import { useBuilderWindows } from '../../../builders/windows';
+import { openBuilder } from '../../../builders/open';
 import { BuildersSection } from '../../builders/BuildersSection';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -139,8 +140,7 @@ describe('Agent Rules as tabs', () => {
 
   it('3D Agent Builder: Space 3D in the header, the camera on Look (depth of field folded); 2D takes the camera away', () => {
     useBuilderWindows.setState({ gridRules: null, agentRules: null, recipe: null });
-    mount(<BuildersSection />);
-    click($('[data-builder="agents3d"]'));
+    openBuilder('agents3d'); // hidden from the list; still the 3D setup behind "new 3d agents"
     const group = useNodeGraphStore.getState().nodes.find(n => n.type === 'agentsGroup')!;
     localStorage.setItem('builder:agent-rules:tab', 'look');
     mount(<AgentRulesModal node={group} onClose={() => {}} />);
