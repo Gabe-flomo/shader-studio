@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.109',
+    date: '2026-10-08',
+    title: 'Graph series',
+    highlights: [
+      { area: 'Studio', text: 'Saving makes a series: Minor for a tweak (2.3 → 2.4), Major for a new direction (→ 3.0), Save in place, or New graph. The name chip shows Curves 2.3.', link: { kind: 'doc', path: 'docs/graph-series-plan.md' } },
+      { area: 'Studio', text: 'Saving under a name that is already a series adds a new family to it; older saves read as 1.0, 1.1…' },
+      { area: 'Files', text: 'Files shows each graph\'s versions as 2.3, grouped into families. History is capped by size (App settings), keeping each family\'s first and latest.' },
+    ],
+  },
+  {
     id: '2026.10.108',
     date: '2026-10-08',
     title: 'Live harmonograph',
