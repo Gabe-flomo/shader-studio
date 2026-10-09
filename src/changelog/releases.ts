@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.107',
+    date: '2026-10-08',
+    title: 'Clearer explanations, cleaner bar',
+    highlights: [
+      { area: 'Studio', text: 'Explanations read shading as ideas: the floor, the sunlight, the sky light, a rim; later lines reuse them, and colours show as swatches.' },
+      { area: 'Studio', text: 'The graph\'s name sits in the top bar (Untitled until saved): click it to name and save. Page tabs are icons that open on hover.' },
+      { area: 'Studio', text: 'Nodes library: 2D/3D Shapes, 4D split into Shapes, Space and Projection, Agents and Agent presets, Chladni; alphabetical throughout.' },
+      { area: 'Studio', text: '3D examples are lighter: shadows and occlusion only where lighting is the point (the sun button adds them anywhere).' },
+    ],
+  },
+  {
     id: '2026.10.106',
     date: '2026-10-08',
     title: 'Better bloom, quieter background',
