@@ -39,7 +39,7 @@ export function exprBlockRoles(node: GraphNode, nodes: GraphNode[] = scopeNodes(
     if (!c) continue;
     const src = nodes.find(n => n.id === c.nodeId);
     if (!src) continue;
-    const role = roleOfSourceNode(src.type, src.outputs?.[c.outputKey]?.type as GlslType | undefined);
+    const role = roleOfSourceNode(src.type, src.outputs?.[c.outputKey]?.type as GlslType | undefined, c.outputKey);
     if (role) out[name] = role;
   }
   return out;

@@ -28,6 +28,8 @@ export interface IdiomText {
   code(name: string): string;
   role(name: string): Role;
   type(name: string): GlslType;
+  /** What an earlier line made this hole's name stand for ("the floor"), when it is a bare name. */
+  known?(name: string): string | undefined;
 }
 
 export interface HoleSpec {
@@ -68,6 +70,8 @@ export interface Idiom {
   meaning?: (c: IdiomText) => string;
   /** The common job it does ("a hard on/off mask"), shown as a tag. */
   use?: string;
+  /** Its short noun is a concept later lines can read a name as ("the floor", "the sunlight"): lineConcepts. */
+  concept?: boolean;
 }
 
 const V2: GlslType[] = ['vec2'];
@@ -77,7 +81,107 @@ const F: GlslType[] = ['float', 'int'];
 
 const big = (c: IdiomText, k: string) => (c.v(k) ?? 0) > 100;
 
+/** Plain words for a light direction written as numbers: "above and to the right". */
+function dirWords(code: string): string {
+  const m = /vec3\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)/.exec(code);
+  if (!m) return '';
+  const [x, y, z] = [m[1], m[2], m[3]].map(Number);
+  const len = Math.hypot(x, y, z) || 1;
+  const parts: string[] = [];
+  if (y / len > 0.35) parts.push('above'); else if (y / len < -0.35) parts.push('below');
+  if (x / len > 0.35) parts.push('the right'); else if (x / len < -0.35) parts.push('the left');
+  if (z / len > 0.35) parts.push('the front'); else if (z / len < -0.35) parts.push('behind');
+  if (!parts.length) return '';
+  return `coming from ${parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`}`;
+}
+
+const DIR: GlslType[] = ['vec3', 'vec2'];
+/** Degrees from straight up for a threshold on normal.y (step(0.95, n.y) → within 18°). */
+const fromUp = (k: number | undefined) => (k === undefined ? '' : ` (within about ${Math.round(Math.acos(Math.max(-1, Math.min(1, k))) * 180 / Math.PI)}° of straight up)`);
+
+/**
+ * Lighting and surface idioms first, so they win over the general ones (remap, step, max):
+ * in a 3D shading block these read as concepts (sunlight, sky light, the floor), not maths.
+ */
+const LIGHT_IDIOMS: Idiom[] = [
+  {
+    id: 'floor-mask', name: 'Floor mask', category: 'shape', fnName: 'floorMask', short: 'the floor',
+    patterns: ['step(#k, $n.y) * step($p.y, #h)'],
+    holes: { n: { roles: ['direction'], types: DIR, strict: true }, p: { roles: ['space'], types: DIR } },
+    noun: c => `the floor: surfaces facing up below height ${c.n('h')}`,
+    how: c => `is 1 where the surface faces up (${c.h('n')}.y at least ${c.n('k')}) and sits below height ${c.n('h')}: the ground, and 0 everywhere else`,
+    meaning: c => `1 on the floor and 0 everywhere else: surfaces facing up${fromUp(c.v('k'))} that sit below height ${c.n('h')}`,
+    use: 'a floor mask', concept: true, role: 'mask', keywords: ['floor', 'ground', 'mask', 'normal'],
+  },
+  {
+    id: 'diffuse-light', name: 'Diffuse light (facing the light)', category: 'colour', fnName: 'diffuse', short: 'the sunlight',
+    // Either side a known direction (from the graph, normalize(…), or the code), or the light written as normalize(…).
+    patterns: ['max(dot($n, normalize($l)), 0.0)', 'clamp(dot($n, normalize($l)), 0.0, 1.0)', 'max(dot($n, $l), 0.0)', 'clamp(dot($n, $l), 0.0, 1.0)'],
+    holes: { n: { types: DIR }, l: { types: DIR } },
+    where: c => c.role('n') === 'direction' || c.role('l') === 'direction' || /^(normalize|vec3)\(/.test(c.code('l')) || /^normalize\(/.test(c.code('n')),
+    noun: c => `how directly the surface faces the light${dirWords(c.code('l')) ? ` ${dirWords(c.code('l'))}` : ''}`,
+    how: c => `takes the dot product of the surface's normal ${c.h('n')} and the light's direction ${c.h('l')} and cuts it at 0, so the side facing away stays dark (Lambert diffuse lighting)`,
+    meaning: c => `the sunlight on the surface${dirWords(c.code('l')) ? `, ${dirWords(c.code('l'))}` : ''}: 1 where the surface faces the light head-on, fading to 0 as it turns side-on, 0 on the side facing away`,
+    use: 'sunlight (diffuse)', concept: true, role: 'mask', keywords: ['lambert', 'diffuse', 'light', 'sun', 'dot', 'normal'],
+  },
+  {
+    id: 'sky-light', name: 'Sky light (facing up)', category: 'colour', fnName: 'skyLight', short: 'the sky light',
+    patterns: ['$n.y * 0.5 + 0.5'],
+    holes: { n: { roles: ['direction'], types: DIR, strict: true } },
+    noun: () => 'how much the surface faces up',
+    how: c => `moves the normal's height ${c.h('n')}.y from −1…1 to 0…1: 1 facing straight up, ½ on walls, 0 facing down`,
+    meaning: () => 'the light from the sky: 1 on surfaces facing up, ½ on walls, 0 underneath, a soft fill from above',
+    use: 'sky light (soft fill)', concept: true, role: 'mask', keywords: ['sky', 'hemisphere', 'ambient', 'light', 'normal'],
+  },
+  {
+    id: 'faces-up', name: 'Faces up', category: 'shape', fnName: 'facesUp', short: 'the upward faces',
+    patterns: ['step(#k, $n.y)'],
+    holes: { n: { roles: ['direction'], types: DIR, strict: true } },
+    noun: c => `the surfaces facing up${fromUp(c.v('k'))}`,
+    how: c => `is 1 where the normal's height ${c.h('n')}.y is at least ${c.n('k')}, so only surfaces facing up count, 0 on walls and undersides`,
+    meaning: c => `1 on surfaces facing up${fromUp(c.v('k'))}: floors, tabletops, the tops of things; 0 on walls and undersides`,
+    use: 'top faces', concept: true, role: 'mask', keywords: ['up', 'top', 'floor', 'normal', 'step'],
+  },
+  {
+    id: 'faces-sideways', name: 'Faces sideways', category: 'shape', fnName: 'facesSideways', short: 'the sideways faces',
+    patterns: ['pow(1.0 - abs($n.y), #k)'],
+    holes: { n: { roles: ['direction'], types: DIR, strict: true } },
+    noun: () => 'how much the surface faces sideways',
+    how: c => `is 1 where the normal ${c.h('n')} is level (a wall) and falls to 0 toward straight up or down, sharpened by the power ${c.n('k')}`,
+    meaning: () => 'bright on walls and the sides of things, dark on tops and bottoms: an edge light round the silhouette',
+    use: 'side light / rim', concept: true, role: 'mask', keywords: ['rim', 'side', 'wall', 'normal'],
+  },
+  {
+    id: 'fresnel', name: 'Rim (facing away from the view)', category: 'colour', fnName: 'rim', short: 'the rim',
+    patterns: ['pow(1.0 - max(dot($n, $v), 0.0), #k)', 'pow(1.0 - dot($n, $v), #k)', 'pow(1.0 - abs(dot($n, $v)), #k)'],
+    holes: { n: { roles: ['direction'], types: DIR, strict: true }, v: { types: DIR } },
+    noun: () => 'the rim, where the surface turns away from the view',
+    how: c => `is 0 where the surface faces the view ${c.h('v')} and rises toward 1 at its edges, sharpened by the power ${c.n('k')} (a Fresnel-style rim)`,
+    meaning: () => 'a rim light: dark where the surface faces you, bright round its edges where it turns away',
+    use: 'rim light', concept: true, role: 'mask', keywords: ['fresnel', 'rim', 'edge', 'normal', 'view'],
+  },
+  {
+    id: 'below-height', name: 'Below a height', category: 'shape', fnName: 'below', short: 'what is below',
+    patterns: ['step($p.y, #h)'],
+    holes: { p: { roles: ['space'], types: DIR, strict: true } },
+    noun: c => `below height ${c.n('h')}`,
+    how: c => `is 1 where ${c.h('p')} is below height ${c.n('h')} and 0 above it`,
+    meaning: c => `1 for everything below height ${c.n('h')}, 0 above it`,
+    use: 'below a height', role: 'mask', keywords: ['height', 'below', 'step'],
+  },
+  {
+    id: 'above-height', name: 'Above a height', category: 'shape', fnName: 'above', short: 'what is above',
+    patterns: ['step(#h, $p.y)'],
+    holes: { p: { roles: ['space'], types: DIR, strict: true } },
+    noun: c => `above height ${c.n('h')}`,
+    how: c => `is 1 where ${c.h('p')} is at or above height ${c.n('h')} and 0 below it`,
+    meaning: c => `1 for everything at or above height ${c.n('h')}, 0 below it`,
+    use: 'above a height', role: 'mask', keywords: ['height', 'above', 'step'],
+  },
+];
+
 export const IDIOMS: Idiom[] = [
+  ...LIGHT_IDIOMS,
   // ── Randomness ──────────────────────────────────────────────────────────────
   {
     id: 'hash-sin-dot', name: 'Sine hash', category: 'random', fnName: 'hash21', short: 'the random number',
@@ -473,6 +577,15 @@ export const IDIOMS: Idiom[] = [
     noun: c => `the average of ${c.h('c')}’s channels`,
     how: c => `averages the red, green and blue of ${c.h('c')}: a simple grey (it ignores that green looks brighter)`,
     role: 'value', keywords: ['grey', 'gray', 'average'],
+  },
+  {
+    id: 'cos-palette-1', name: 'Cosine palette (one cycle)', category: 'colour', fnName: 'cosPalette1', short: 'the palette colour',
+    patterns: ['$a + $b * cos(6.28318 * ($t + $d))', '$a + $b * cos(6.28318 * $t + $d)'],
+    holes: { t: { types: ['float', 'int'], input: 't' }, a: { input: 'bias' }, b: { input: 'amp' }, d: { input: 'phase' } },
+    noun: c => `a palette colour picked by ${c.h('t')}`,
+    how: c => `picks a colour for ${c.h('t')} from a cosine palette: each channel a cosine wave around ${c.h('a')}, swinging by ${c.h('b')}, offset per channel by ${c.h('d')}, so 0…1 runs once round the hues`,
+    meaning: c => `a colour picked by ${c.h('t')} from a looping rainbow-like gradient: as ${c.h('t')} goes from 0 to 1 it runs once round the hues`,
+    use: 'a colour gradient', concept: true, role: 'colour', keywords: ['palette', 'cosine', 'colour', 'rainbow', 'gradient'],
   },
   {
     id: 'iq-palette', name: 'Cosine palette (Inigo Quilez)', category: 'colour', fnName: 'cosPalette', short: 'the palette colour',

@@ -35,6 +35,7 @@ import { ExplainScopeProvider } from '../explain/ExplainScope';
 import { ExplainMore } from '../explain/ExplainMore';
 import { useFnCardScope } from '../explain/functionCard/fnCardStore';
 import type { GeneraliseContext } from '../../lib/glslPatterns';
+import { lineConcepts } from '../../lib/glslPatterns/explain';
 import { snippetLines, type Snippet } from '../../suggestions/snippets';
 
 // ── Convert ExprBlock warp lines → FnDef array (one fn per line, f1/f2/f3…) ──
@@ -140,6 +141,12 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   // The explainer: types and roles of the block's names (inputs, typed lines, what feeds them)
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the inputs, lines and wiring are what it reads
   const explainCtx = useMemo(() => exprBlockContext(node), [node.params.inputs, node.params.lines, node.params.outputType, node.inputs]);
+  // What earlier lines made each name stand for ("fl" → "the floor"), so later lines read it as that.
+  const lineCtxs = useMemo(() => {
+    const ls = ((node.params.lines as WarpLine[] | undefined) ?? []).map(l => ({ lhs: l.off ? '' : l.lhs, rhs: l.off ? '' : l.rhs }));
+    // One more (empty) line: its entry is what the Return line knows.
+    return lineConcepts([...ls, { lhs: '', rhs: '' }], explainCtx).map(k => ({ ...explainCtx, known: k.known, roles: k.roles }));
+  }, [explainCtx, node.params.lines]);
   const explainDialogs = useExplainDialogs({ onJumped: onClose });
   // "Explain more" is told which block this is (its neighbours in the graph) and the whole code around a line
   const explainScope = useMemo(() => ({ nodeId: node.id, kind: 'Expression Block', getNodes: scopeNodes, enclosing: () => exprBlockCode(scopeNodes().find(n => n.id === node.id) ?? node) }), [node]);
@@ -460,7 +467,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
                   <IconButton icon="close" label="Remove line" size="sm" tone="danger" tooltip={false} onClick={() => removeLine(i)} />
                 </span>
               </div>
-              {line.rhs.trim() && !line.off && <LineExplain node={node} index={i} line={line} total={lines.length} ctx={explainCtx} dialogs={explainDialogs} />}
+              {line.rhs.trim() && !line.off && <LineExplain node={node} index={i} line={line} total={lines.length} ctx={lineCtxs[i] ?? explainCtx} dialogs={explainDialogs} />}
               </Fragment>
             ))}
             {lines.length === 0 && <Note>No lines yet. Each line assigns to a variable, top to bottom.</Note>}
@@ -480,7 +487,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
               />
               <ProbeButton node={node} target={{ kind: 'return' }} label="Preview the return value" />
             </div>
-            {result.trim() ? <LineExplain node={node} index="return" line={{ lhs: '', op: '', rhs: result }} ctx={explainCtx} dialogs={explainDialogs} /> : null}
+            {result.trim() ? <LineExplain node={node} index="return" line={{ lhs: '', op: '', rhs: result }} ctx={lineCtxs[lineCtxs.length - 1] ?? explainCtx} dialogs={explainDialogs} /> : null}
             <Note>The final expression of type {outputType} that the block outputs.</Note>
             {(lines.some(l => l.rhs.trim() && !l.off) || result.trim()) && <ExplainMore mode="block" text={exprBlockCode(node)} ctx={explainCtx} label="Explain this block" />}
           </div>
