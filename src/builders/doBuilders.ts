@@ -1,7 +1,7 @@
 /**
  * doBuilders.ts — the Do… bar's builder phrases (lang/commands.ts BUILDER_COMMANDS): "new 3d
  * scene", "edit this scene", "new grid rules", "edit the rules", "open agent rules", "new 3d
- * agents", "show the recipe", "copy the recipe".
+ * agents", "new expression", "show the recipe", "copy the recipe".
  *
  * A builder phrase is the whole sentence: lower-cased, with "the", "a", "an", "please" and
  * punctuation left out, it must be one of a command's phrases. `readBuilderCommand` finds it,
@@ -33,6 +33,7 @@ export function readBuilderCommand(text: string): BuilderCommand | null {
 export type BuilderAction =
   | { kind: 'new-scene' }
   | { kind: 'new-scene2d' }
+  | { kind: 'new-expression' }
   | { kind: 'edit-scene'; sceneId: string }
   | { kind: 'new-grid' }
   | { kind: 'open-grid'; nodeId: string }
@@ -103,6 +104,8 @@ export function planBuilderCommand(cmd: BuilderCommand, ctx: BuilderContext): Bu
       return { id: cmd.id, label: 'Opens the 3D Scene Builder on a new scene', action: { kind: 'new-scene' } };
     case 'new-2d-scene':
       return { id: cmd.id, label: 'Opens the 2D Scene Builder on a new scene', action: { kind: 'new-scene2d' } };
+    case 'new-expression':
+      return { id: cmd.id, label: 'Opens the Expression Builder on UV', action: { kind: 'new-expression' } };
     case 'edit-scene': {
       const t = sceneTarget(ctx, all);
       if (!t.node) return { id: cmd.id, label: 'Opens a built scene in the 3D Scene Builder', action: null, problem: `${which(t.many, 'scene the Scene Builder built')}${t.many ? '' : ' Scenes made by hand can be read with right-click → Describe in Scene Builder.'}` };

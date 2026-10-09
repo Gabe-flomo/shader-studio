@@ -1,15 +1,16 @@
 /**
  * registry.ts — the builders, as the node browser's Builders section shows them
  * (docs/node-browser.md, "Builders"): the 3D and 2D Scene Builders, Grid Rules, Agent Rules and the
- * 3D Agent Builder (Agent Rules in a volume, seen through a camera). Each is a
- * window that writes a graph for you from a form or a few lines of text.
+ * 3D Agent Builder (Agent Rules in a volume, seen through a camera) and the Expression Builder (an
+ * expression grown move by move from UV, a world position or time). Each is a window that writes a
+ * graph for you from a form, a few lines of text or a few clicks.
  *
  * The section, the empty-canvas right-click menu and the Do… bar ("new 3d scene", "new grid
  * rules"…) all read this list, and builders/open.ts opens them. Pure: no store here.
  */
 import type { IconName } from '../components/ui/iconPaths';
 
-export type BuilderId = 'scene' | 'scene2d' | 'grid' | 'agents' | 'agents3d';
+export type BuilderId = 'scene' | 'scene2d' | 'grid' | 'agents' | 'agents3d' | 'expr';
 
 export interface BuilderInfo {
   id: BuilderId;
@@ -60,6 +61,13 @@ export const BUILDERS: readonly BuilderInfo[] = [
     makes: '3D slime, 3D flocks, orbiting swarms, curl smoke…',
     action: 'Adds 3D agents (Ball Emit, volume Trail, orbiting camera) and opens their rules',
     keywords: ['builder', 'builders', 'agents', 'agent', '3d', 'volume', 'swarm', 'flock', 'orbit', 'camera', 'depth'],
+  },
+  {
+    id: 'expr', title: 'Expression Builder', icon: 'expr',
+    description: 'An expression grown one move at a time',
+    makes: 'repeats, folds, warps, distances, colour from space',
+    action: 'Opens the builder on UV; Add to graph makes an Expression Block',
+    keywords: ['builder', 'builders', 'expression', 'expressions', 'glsl', 'code', 'moves', 'formula', 'math', 'uv', 'warp', 'fold', 'repeat'],
   },
 ];
 

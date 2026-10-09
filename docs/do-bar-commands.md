@@ -887,6 +887,17 @@ Examples:
 - `new 2d scene`
 - `2d scene builder`
 
+### new expression
+
+Opens the Expression Builder on UV: pick moves taken from real shaders one at a time (each tile a small picture of the result), tune their numbers, then Add to graph makes an Expression Block.
+
+Words: `new expression`, `expression builder`, `open the expression builder`, `build an expression`, `new expression builder`, `grow an expression`
+
+Examples:
+
+- `new expression`
+- `expression builder`
+
 ### edit this scene
 
 Opens the 3D Scene Builder on a scene it built (as the Scene Group's right-click Edit in Scene Builder does). Works on the selected node's built scene, else the only built scene in the graph.

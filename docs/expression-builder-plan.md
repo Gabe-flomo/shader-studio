@@ -216,3 +216,64 @@ Recommendations for phase 2:
   rather than mostly generated ones.
 - Carry helper functions with a move (its `glslFunctions`), so imported tricks that call `hash21` or
   `noise` can be used.
+
+## Phase 2 status (2026-10-09)
+
+Built: the builder window (user doc: [expression-builder.md](expression-builder.md)).
+
+- **Entry.** "Expression Builder" in `builders/registry.ts`: the node browser's Builders section, the
+  empty canvas's right-click Builders menu, and the Do… bar ("new expression", "expression
+  builder", "build an expression"). The window is lazy (`BuilderWindowsHost`), and so is the
+  catalogue: `builders/open.ts` imports only the light store (`exprBuilder/store.ts`, `seeds.ts`).
+- **Seeds** (`exprBuilder/seeds.ts`): UV, World position, Time, or a float / vec2 / vec3 variable.
+  A seed is an object (kind, name, type, role, dimension, feeds / into / techniques, and `from` for
+  the socket it came from), which is phase 4's seam.
+- **The chain** (`exprBuilder/chain.ts`, `store.ts`): a line of steps with a cursor. Clicking a row goes
+  back; the rows after it stay dimmed until something else is picked; picking the same move walks
+  forward. Each step keeps a copy of its move (template, signature, holes as values, sources).
+- **The grid** (`nextMoves`): same-type moves, type-changing moves and recipes (mined compounds whose
+  steps all resolve and chain by type), each template once. The order is `rankMoves` (a pure
+  function, passed in, so phase 3 replaces it): moves seen in the seed's dimension and feed first,
+  then by count. When the chain's role has fewer than 24 moves, moves of any role follow.
+- **Pictures** (`components/exprBuilder/exprPictures.ts`): the Explain build-up's render path, made
+  reusable as `buildUpHost.renderBlockRows(node, nodes, …)`. Tiles render as extra rows of the same
+  block Add to graph makes (`block.ts previewGraph`), one compile per section, debounced, cached by
+  shader + uniforms, only while on screen, strips when the cost budget says so. A batch that fails
+  is retried tile by tile, and a tile that doesn't compile is shown as such and can't be picked. A
+  time seed is drawn on the CPU (`plotChain`: a plot for a float, a strip for a vector).
+- **Holes are sliders.** Number holes, and float variable holes (`x * $u`), are sliders on tiles
+  (before picking) and on chain rows (after). Typing past the max widens the range; there are no
+  min/max fields. The slider's range leaves out far-off values (one shader's `100000.0`).
+- **Output** (`block.ts`, `actions.ts`): an Expression Block with a typed local per step, each line
+  ending in a `/* note */` (what it does and where it came from; the block's Note has the full
+  version), a slider input per number (`s2_a`), the seed wired from a UV / Time node (World position
+  and variables stay inputs), a vec3 result into a free Output, and the chain in `__exprChain`.
+- **Help:** cards for every section, with the worked example (UV → Repeat → Centre → Circle) as a
+  button that loads the chain (`exprBuilder/examples.ts` resolves templates against the catalogue).
+
+Tests: `exprBuilder/__tests__/chain.test.ts` (seeds; grouping; ranking; UV → 3 moves → a block that
+compiles, typed per line, the GLSL parses; slider round trip; every first move from UV compiles;
+time plots; Add to graph), `components/exprBuilder/__tests__/exprBuilderUi.test.tsx` (open, pick,
+go back, walk forward, tune, add to graph, worked example, Seed and Code tabs), and the builders'
+registry, Do… bar and help tests.
+
+Seen in the browser: UV → zoom → repeat → distance renders in every tile and chain row (a grid of
+round gradients), hovering `smoothstep` shows the grid of dots big, and the block added to the graph
+compiles with no GLSL errors when wired to the Output.
+
+Found on the way (for phase 3):
+
+- **The phase 1 type check lets some moves through that GLSL rejects:** `vec4(x, #a)` on a float
+  (vec4 from two floats), `step(x, $u)` on a vec3 with a float `$u`. The GPU check catches them (the
+  tile says "Doesn't compile here"). Constructor arity and built-in overloads should be checked in
+  `glslPatterns/types.ts` so they never reach the grid.
+- **Generated moves have role 'unknown'.** The chain keeps the role through them while the type stays.
+- **Hole ranges can be wild** (a seen 100000); the slider trims them, the catalogue could too.
+
+Recommendations for phase 3:
+
+- Replace `rankMoves` with order statistics (`followers`) by context; rank recipes by how often their
+  steps follow the chain's last move.
+- Dull-move filter on the CPU (evaluate.ts over a grid of UVs): constant, NaN, aliasing, unchanged.
+  The renders give ranges too (`fieldSummary`), which could feed the same filter for free.
+- Idiom naming on the chain (`explainTree` over the inlined expression) and provenance links (Find uses).
