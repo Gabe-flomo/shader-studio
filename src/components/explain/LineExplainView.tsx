@@ -12,6 +12,8 @@
  *  - Try values: a control for each name the line reads (an input, a slider, an earlier line's
  *    variable, the clock). Live (the default) keeps the real value; off, the control's value
  *    replaces it in this picture only, and in the CPU numbers of the steps (worked.ts), so they agree.
+ *  - Time: when the line moves with time (timeNames.ts), the picture's own clock (play, scrub, speed)
+ *    and a filmstrip of it across a few seconds (ExplainLiveCanvas.tsx).
  *  - Explain with the model: the on-device model's line explanation (ExplainMore, docs/explain-model.md).
  *
  * The saved graph is never touched: the picture is a copy of the block (liveRender.ts).
@@ -39,6 +41,7 @@ import { exprBlockBuildUp, exprBlockVarying, type BuildUpHost } from './buildUpH
 import { liveProgram, liveUniformValues, type LiveType } from './liveRender';
 import { lineIdiom } from './LineFold';
 import { scopeNodes } from './hosts';
+import { lineTimeNames } from './timeNames';
 
 type Line = { lhs: string; op?: string; rhs: string; off?: boolean };
 type InputDef = { name: string; type: string; slider?: { min: number; max: number } | null };
@@ -94,6 +97,8 @@ export function LineExplainView({ node, at, stops, ctx, onGo, onBack, onFindUses
 
   const { text, head } = lineText(node, at);
   const ex = useMemo(() => explainLine(text, ctx), [text, ctx]);
+  // The names it reads that move with time (the clock, a wired Time, a line above made from one)
+  const timeNames = useMemo(() => lineTimeNames(text, node, at, scopeNodes()), [text, node, at]);
   // Wiring-aware: which names vary across the picture, and the small row pictures (no ▶ preview: the big picture is here)
   const host: BuildUpHost = useMemo(() => {
     const h = exprBlockBuildUp(node, at);
@@ -170,6 +175,7 @@ export function LineExplainView({ node, at, stops, ctx, onGo, onBack, onFindUses
   const liveNote = (name: string): string => {
     const inp = inputs.find(i => i.name === name);
     if (name === 't' && !inp) return 'the clock';
+    if (timeNames.includes(name)) return inp ? 'wired, moves with time' : 'from a line above, moves with time';
     if (inp?.slider) return `slider, ${showValue(nowParamValue(node, name))}`;
     if (inp && node.inputs?.[name]?.connection) return varyingNow.has(name) ? 'wired, varies' : 'wired';
     if (inp) return 'input';
@@ -247,7 +253,9 @@ export function LineExplainView({ node, at, stops, ctx, onGo, onBack, onFindUses
         <div style={{ ...pane, flex: '0 1 380px', borderLeft: `1px solid ${tk.border.subtle}` }}>
           <SectionHead meta={shownRow ? (shownRow.kind === 'result' ? `${shownRow.label}, the whole line` : shownRow.kind === 'input' ? `the input ${shownRow.label}` : `step ${shownRow.label}`) : undefined}>Picture</SectionHead>
           {topLevel
-            ? <ExplainLiveCanvas program={program} values={values} sel={sel} size={340} rowKey={shownKey} />
+            ? <ExplainLiveCanvas program={program} values={values} sel={sel} size={340} rowKey={shownKey}
+                // A time name set by hand holds still, so it no longer moves the picture
+                timeNames={timeNames.filter(n => !(n in overrides))} />
             : <span style={{ font: `500 12px/1.5 ${fontFamily.ui}`, color: tk.text.muted }}>The live picture needs the block at the top level of the graph (inside a group its inputs come from the group). The steps’ small pictures still work.</span>}
           {selRow && !program?.slots.has(selRow.key) && <span style={{ font: `500 11.5px ${fontFamily.ui}`, color: tk.text.faint }}>That row can’t be drawn on its own, so this is the whole line.</span>}
 

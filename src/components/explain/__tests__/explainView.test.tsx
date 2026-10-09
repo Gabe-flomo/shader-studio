@@ -33,6 +33,7 @@ import { exprBlockBuildUp } from '../buildUpHost';
 import { liveProgram, liveUniformValues, rawRange } from '../liveRender';
 import { LineFold } from '../LineFold';
 import { overridable } from '../LineExplainView';
+import { lineTimeNames, timeNamesOf } from '../timeNames';
 import { ExprBlockModal } from '../../NodeGraph/ExprBlockModal';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -140,6 +141,25 @@ describe('the explain view', () => {
     expect(previewHeld()).toBe(false);
   });
 
+  it('a line that moves with time gets the Time controls: play, scrub, speed, a filmstrip', async () => {
+    await openView(); // line 3: h reads w, which line 2 made from s (wired from Time)
+    expect(q('[data-explain-time]')).not.toBeNull();
+    expect(q('[data-explain-time-names]')!.textContent).toContain('w');
+    const play = q('[data-explain-time-play]')!;
+    const was = play.getAttribute('aria-pressed');
+    click('[data-explain-time-play]');
+    expect(q('[data-explain-time-play]')!.getAttribute('aria-pressed')).not.toBe(was);
+    click('[data-explain-time-speed="2"]');
+    expect(q('[data-explain-time-speed="2"]')!.getAttribute('aria-pressed')).toBe('true');
+    click('[data-explain-time-strip]');
+    expect(q('[data-explain-filmstrip]')).not.toBeNull();
+    // Line 1 (q = uv * 3.0) doesn't move with time: no Time controls
+    click('[data-explain-nav="prev"]');
+    click('[data-explain-nav="prev"]');
+    expect(q('[data-explain-where]')!.textContent).toBe('Line 1 of 3');
+    expect(q('[data-explain-time]')).toBeNull();
+  });
+
   it('closing the editor while it is open lets the main canvas go', async () => {
     await openView();
     expect(previewHeld()).toBe(true);
@@ -211,6 +231,19 @@ describe('the live program', () => {
     expect(liveUniformValues(set, {}).u_xo1).toBeUndefined();
     // The saved graph is untouched
     expect(useNodeGraphStore.getState().nodes).toEqual(graph());
+  });
+
+  it('what moves with time: the clock, inputs with a clock upstream, and lines made from them', () => {
+    const nodes = useNodeGraphStore.getState().nodes;
+    const names = timeNamesOf(blockOf(), 2, nodes);
+    expect(names.has('s')).toBe(true); // wired from Time
+    expect(names.has('w')).toBe(true); // w = s * k
+    expect(names.has('q')).toBe(false); // q = uv * 3.0
+    expect(names.has('k')).toBe(false); // a slider
+    expect(names.has('t')).toBe(true); // the block's clock
+    expect(lineTimeNames('float h = sin(q.x + w) * k', blockOf(), 2, nodes)).toEqual(['w']);
+    expect(lineTimeNames('vec2 q = uv * 3.0', blockOf(), 0, nodes)).toEqual([]);
+    expect(lineTimeNames('return vec3(h + t)', blockOf(), 'return', nodes)).toEqual(['h', 't']); // h is made from w
   });
 
   it('names that can be set: the block’s inputs, the variables above, t and p', () => {
