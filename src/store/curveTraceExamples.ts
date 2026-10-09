@@ -125,11 +125,11 @@ function knot(): GraphNode[] {
     expr('spin', 0, 500, { label: 'Wind', inputs: [{ name: 't', type: 'float' }], lines: [], result: '1.5708 + 0.15 * t', outputType: 'float', wires: { t: ['time', 'time'] }, note: ['Wind: X phase starts at a quarter turn and creeps forward, so the knot slowly changes shape.'] }),
     n('marchCamera', 'cam', 0, 0, { camDist: 5.5, camAngle: 0.6, camElevation: 0.35, rotSpeed: 0.08, fov: 1.6, ...note(['March Camera: circles the knot slowly.']) }, { time: ['time', 'time'] }),
     scene,
-    n('marchLoopGroup', 'march', 700, 200, { maxSteps: 120, maxDist: 30, bg: [0.04, 0.045, 0.07], albedo: [0.85, 0.55, 0.3], subgraph: body, ...note(['March Loop: finds the tube. Lit by Light the scene (Studio).']) }, { ro: ['cam', 'ro'], rd: ['cam', 'rd'], scene: ['scene', 'scene'] }),
+    n('marchLoopGroup', 'march', 700, 200, { maxSteps: 120, maxDist: 30, bg: [0.04, 0.045, 0.07], albedo: [0.85, 0.55, 0.3], subgraph: body, ...note(['March Loop: finds the tube. Lit by Light the scene (Quick: no shadow rays, so the many-segment tube stays fast).']) }, { ro: ['cam', 'ro'], rd: ['cam', 'rd'], scene: ['scene', 'scene'] }),
     n('output', 'out', 1600, 200),
   ];
   let k = 0;
-  const lit = applyRecipe(nodes, 'march', LIGHT_RECIPES.find(r => r.id === 'light-studio')!, () => `lt${k++}`);
+  const lit = applyRecipe(nodes, 'march', LIGHT_RECIPES.find(r => r.id === 'light-quick')!, () => `lt${k++}`);
   return lit ? lit.nodes : nodes;
 }
 
@@ -178,7 +178,7 @@ export function buildCurveTraceExamples(): Record<string, ExampleGraph> {
         ctl('e', 'cam::camElevation', 'Camera height', -1, 1.2, 0.01),
       ], `**What it shows.** A 3D Lissajous curve: X, Y and Z each a sine wave (3, 2 and 5 cycles per turn), traced as a tube. The X phase creeps forward with time, so the knot slowly winds through its family of shapes.
 
-**How it is built.** One **Curve Trace 3D** in a Scene Group: a continuous line of 240 straight pieces, as a tube distance field (Thickness), so it marches and lights like any shape. Lit with **Light the scene → Studio**: the sun button on the March Loop swaps the look.
+**How it is built.** One **Curve Trace 3D** in a Scene Group: a continuous line of 240 straight pieces, as a tube distance field (Thickness), so it marches and lights like any shape. Lit with **Light the scene → Quick** (no shadow rays, so it stays fast): the sun button on the March Loop swaps the look, e.g. Studio for shadows.
 
 **Try.** Open the Knot group: set Z frequency to 0 for a flat Lissajous ribbon, or try 2 : 3 : 7. Switch Motion to Rotary (opposite ways) for a 3D star with Z bobbing. Raise Damping and Turns for a spiral that winds inward.`),
     },

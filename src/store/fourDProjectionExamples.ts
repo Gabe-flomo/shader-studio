@@ -25,8 +25,7 @@ function vec3Add(id: string, x: number, y: number, comment: string, a: [string, 
 }
 
 /**
- * Like `finish`, for the wireframes: no soft shadow (thin tubes cast hair-thin shadows and the shadow ray is expensive),
- * ambient occlusion and Multi-Light on the tubes, and a glow from the march loop's Iter output added on top.
+ * Like `finish`, for the wireframes: Multi-Light on the tubes (no shadow or occlusion rays), and a glow from the march loop's Iter output added on top.
  */
 function finishGlow(bg: [number, number, number], colour: GraphNode, glow: GraphNode, loopNote: string): GraphNode[] {
   return [
@@ -35,12 +34,10 @@ function finishGlow(bg: [number, number, number], colour: GraphNode, glow: Graph
     colour,
     glow,
     n('makeVec3', 'sun', 900, 40, { r: SUN.x, g: SUN.y, b: SUN.z, ...note('Make Vec3: the direction the sun shines from. It goes to Multi-Light to light the tubes.') }),
-    n('sdfAo', 'ao', 900, 380, { stepDist: 0.06, ...note('SDF Ambient Occlusion: darkens the tubes where another edge or a corner is close by, which gives the wireframe depth. It measures the same Scene Group.') },
-      { scene: ['scene', 'scene'], pos: ['march', 'pos'], normal: ['march', 'normal'], hit: ['march', 'hit'] }),
     n('multiLight', 'lit', 1180, 220, {
       sunR: 1.1, sunG: 1.0, sunB: 0.9, skyR: 0.3, skyG: 0.38, skyB: 0.6, bounceR: 0.1, bounceG: 0.08, bounceB: 0.1,
-      ...note('Multi-Light: a warm sun from one side and a cool sky fill from above over the tube colour, darkened by occlusion.'),
-    }, { baseColor: ['col', 'result'], normal: ['march', 'normal'], hit: ['march', 'hit'], ao: ['ao', 'ao'], sunDir: ['sun', 'rgb'] }),
+      ...note('Multi-Light: a warm sun from one side and a cool sky fill from above over the tube colour (no occlusion rays, so it stays quick).'),
+    }, { baseColor: ['col', 'result'], normal: ['march', 'normal'], hit: ['march', 'hit'], sunDir: ['sun', 'rgb'] }),
     n('colorPicker', 'sky', 1180, 520, { color: bg, ...note('Background colour: what a ray that hits nothing shows.') }),
     n('select', 'pick', 1420, 220, { outputType: 'vec3', ...note('Hit is 1 where the ray touched a tube: show the lit tube there, the background elsewhere.') },
       { mask: ['march', 'hit'], ifTrue: ['lit', 'color'], ifFalse: ['sky', 'rgb'] }),
@@ -71,7 +68,7 @@ export function buildFourDProjectionExamples(): Record<string, ExampleGraph> {
           ...note('4D Wireframe, Tesseract, Perspective. Sixteen corners (±1, ±1, ±1, ±1 scaled to radius 1.5) and thirty-two edges. Each corner is turned in 4D, then seen by a camera on the w axis 3.2 away: a corner at w moves to xyz × 3.2 / (3.2 − w), so the corners with positive w are closer and bigger (the outer cube) and those with negative w are farther and smaller (the inner cube). The edges between them are the eight struts. Turn 1 is the xw plane, which swaps the two cubes through each other; Turn 2 is yz, an ordinary roll. Spin is in degrees a second.'),
         }, { pos: ['sp', 'pos'] }),
       ], ['wire', 'dist'],
-      'One 3D shape, built from a 4D object: the wireframe is a distance to thin tubes along the projected edges and balls at the projected corners, so it behaves like any other 3D shape here (lighting, occlusion, glow).'),
+      'One 3D shape, built from a 4D object: the wireframe is a distance to thin tubes along the projected edges and balls at the projected corners, so it behaves like any other 3D shape here (lighting, glow).'),
       ...finishGlow([0.02, 0.025, 0.06],
         expr('col', 1180, 520, 'Tube colour', { x: ['hp', 'x'], y: ['hp', 'y'], z: ['hp', 'z'] },
           'mix(vec3(0.25, 0.85, 1.0), vec3(1.0, 0.35, 0.65), clamp(length(vec3(x, y, z)) / 1.25 - 0.45, 0.0, 1.0))',
@@ -150,7 +147,7 @@ export function buildFourDProjectionExamples(): Record<string, ExampleGraph> {
           shape: 'duocylinder', size: 0.7, ratio: 0.8, wRange: 1.0, samples: 20, smooth: 1.2, stepScale: 0.8, plane1: 'xw', plane2: 'yz',
           ...note('Project 4D, Duocylinder: the solid shadow along w. It measures the duocylinder (radius 0.7 and 0.56) at 20 values of w between −1 and +1 and keeps the nearest, so it is where ANY layer of the shape is. Turn 1 (xw) and Turn 2 (yz) come from the ports, matching the slice. An approximation: 20 layers, softened with Smooth 1.2 (a blend as wide as the spacing), and Step scale 0.8 shortens the march steps so a coarse sample count cannot overshoot.'),
         }, { pos: ['mvR', 'pos'] }),
-        n('planeSDF3D', 'floor', 440, 560, { height: fl, ...note('A floor at y = −1.05, below both shapes, for shadows and occlusion.') }, { p: ['sp', 'pos'] }),
+        n('planeSDF3D', 'floor', 440, 560, { height: fl, ...note('A floor at y = −1.05, below both shapes, to stand over.') }, { p: ['sp', 'pos'] }),
         n('sdfUnion', 'u1', 1240, 100, { k: 0, ...note('Union: the slice or the shadow, whichever is nearer.') }, { a: ['dc', 'dist'], b: ['prj', 'dist'] }),
         n('sdfUnion', 'u2', 1440, 200, { k: 0, ...note('Union with the floor.') }, { a: ['u1', 'dist'], b: ['floor', 'dist'] }),
       ], ['u2', 'dist'],
@@ -165,7 +162,7 @@ export function buildFourDProjectionExamples(): Record<string, ExampleGraph> {
         expr('col', 1180, 520, 'Surface colour', { x: ['hp', 'x'], y: ['hp', 'y'], z: ['hp', 'z'] },
           checker(fl) + 'x < 0.0 ? vec3(1.0, 0.6, 0.22) + vec3(0.0, 0.2, 0.2) * clamp(0.5 + 0.5 * y, 0.0, 1.0) : vec3(0.22, 0.62, 1.0) + vec3(0.6, 0.0, -0.3) * clamp(0.5 - 0.5 * y, 0.0, 1.0)',
           'Surface colour from where the ray landed: a dark checker on the floor, orange for the slice (left of the middle) and blue for the shadow (right).'),
-        'March Loop: finds where each ray meets the scene; Soft Shadow and Ambient Occlusion measure the same Scene Group.'),
+        'March Loop: finds where each ray meets the scene; Multi-Light lights it (the sun button adds shadows).'),
     ],
     play: play([
       ctl('t1', 'turn1::b', 'xw turn (deg/s)', -90, 90, 0.5),
@@ -229,7 +226,7 @@ export function buildFourDProjectionExamples(): Record<string, ExampleGraph> {
       ctl('c', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
     ], `**What it shows.** The 3-sphere is the 4D ball's skin, and all of 3D space can be laid onto it by **stereographic projection**: every point of space lands on a point of the 3-sphere, the origin at one pole and "infinity" at the other. Here that picture is turned in 4D and then looked at back in 3D. The **Hopf circles** (a few of the great circles that fill the 3-sphere, any two linked once) become the famous interlocking rings that fill space, nested around a **Clifford torus** (the half-cut shell). Circles stay circles under the map, so each ring is a true circle, or a line if it passes through the north pole.
 
-**How it is built.** Inside the Scene Group: Scene Pos → **Stereographic 4D** (scale 1, turned in xw and xy) → **Hopf Circles SDF** (3 rings of 8) and **Clifford Torus SDF**; each distance goes through **Stereographic Distance**, which divides out the stretch of the map so the march cannot step through a ring; a plane cuts the torus open and a sphere bounds the whole. A port brings in the Hopf flow. Outside: the usual camera, loop, occlusion, lighting and an Iter glow.
+**How it is built.** Inside the Scene Group: Scene Pos → **Stereographic 4D** (scale 1, turned in xw and xy) → **Hopf Circles SDF** (3 rings of 8) and **Clifford Torus SDF**; each distance goes through **Stereographic Distance**, which divides out the stretch of the map so the march cannot step through a ring; a plane cuts the torus open and a sphere bounds the whole. A port brings in the Hopf flow. Outside: the usual camera, loop, lighting and an Iter glow.
 
 **Try.** Set **xw turn** to 0 and the picture holds still while **Flow** slides the circles round themselves, and no ring ever collides. Slide **Ring latitude** to move the middle ring of circles (90 is the one on the torus), and set Fibres per ring to 16 inside the group for a denser bundle. Slide **Scale** to zoom the picture in or out; circles near the middle are thin, those out near the north pole are fat, which is the stretch of the map. In Hopf Circles SDF try Rings 1, Latitude 90: one ring, all on the torus (the Villarceau circles).`),
   };
