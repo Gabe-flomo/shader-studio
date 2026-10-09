@@ -231,22 +231,17 @@ describe('the view', () => {
     expect(play3.compareDocumentPosition(moved[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('▶ on a line in the Expression Block opens that line’s build-up', () => {
+  it('▶ on a line in the Expression Block opens that line’s fold, with Open explain view', () => {
     act(() => root.render(<ExprBlockModal node={blockOf()} onClose={() => {}} />));
     const play = document.querySelector<HTMLButtonElement>('[data-probe=\'{"kind":"line","index":2}\']')!;
     expect(play).not.toBeNull();
-    expect(document.querySelectorAll('[data-buildup]')).toHaveLength(0);
+    expect(document.querySelectorAll('[data-line-fold-body]')).toHaveLength(0);
     act(() => play.click());
     expect(useLineProbe.getState().probe).toEqual({ nodeId: 'blk', target: { kind: 'line', index: 2 } });
-    const views = document.querySelectorAll('[data-buildup]');
-    expect(views).toHaveLength(1);
-    expect(views[0].querySelector('[data-buildup-row="result"]')!.textContent).toContain('h =');
-    // Stepping from there shows a step on the preview
-    act(() => views[0].querySelector<HTMLElement>('[data-buildup-row="step:B"]')!.click());
-    expect(useLineProbe.getState().probe?.target).toMatchObject({ kind: 'expr', line: 2, code: 'sin(q.x + w)', type: 'float', step: 'B' });
-    // Escape with a row selected goes back to the whole line and keeps the editor open
-    act(() => { views[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
-    expect(useLineProbe.getState().probe?.target).toEqual({ kind: 'line', index: 2 });
-    expect(document.querySelectorAll('[data-buildup]')).toHaveLength(1);
+    // The picture stays under the line; the fold opens light (the build-up is in the explain view)
+    const bodies = document.querySelectorAll('[data-line-fold-body]');
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].querySelector('[data-explain-action="open-view"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-buildup]')).toHaveLength(0);
   });
 });

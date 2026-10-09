@@ -144,7 +144,7 @@ const pack = (v: string, type: string) =>
   type === 'vec2' ? `vec4(${v}, 0.0, 1.0)` : type === 'vec3' ? `vec4(${v}, 1.0)` : type === 'vec4' ? `vec4((${v}).rgb, 1.0)` : `vec4(float(${v}), 0.0, 0.0, 1.0)`;
 
 /** Uniform values from a compile, as three.js uniforms. */
-function uniformsOf(values: Record<string, number | number[]>): Record<string, THREE.IUniform> {
+export function uniformsOf(values: Record<string, number | number[]>): Record<string, THREE.IUniform> {
   const out: Record<string, THREE.IUniform> = {};
   for (const [k, v] of Object.entries(values)) {
     out[k] = { value: Array.isArray(v) ? (v.length === 2 ? new THREE.Vector2(v[0], v[1]) : v.length === 3 ? new THREE.Vector3(v[0], v[1], v[2]) : new THREE.Vector4(v[0], v[1], v[2] ?? 0, v[3] ?? 0)) : v };

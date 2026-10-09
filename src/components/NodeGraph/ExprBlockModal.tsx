@@ -1,4 +1,4 @@
-import React, { Fragment, useState, useEffect, useMemo, useRef } from 'react';
+import React, { Fragment, Suspense, lazy, useState, useEffect, useMemo, useRef } from 'react';
 import { toggleLineOff } from '../../lib/exprLines';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { setInputSlider } from '../../nodes/sliderFreeze';
@@ -21,15 +21,14 @@ import { Select } from '../ui/Select';
 import { toast } from '../ui/toastStore';
 import { CodeInput } from '../code/CodeField';
 import { ReferencePanel } from '../code/ReferencePanel';
-import { LinePreviewPanel, ProbeButton, startLineProbe } from '../code/LinePreview';
+import { LinePreviewPanel, ProbeButton } from '../code/LinePreview';
 import type { EditorPanel } from '../code/editorPanelPrefs';
 import { CollapseInputsButton, FunctionsToggle, InputsRail, SidePanel, useEditorSidePanels } from '../code/SidePanels';
 import { buildCompletions } from '../code/glslReference';
 import { insertSnippet } from '../code/useCompletion';
 import { HowUsedButton } from '../codeExplorer/HowUsedButton';
 import { useExprBlockJump } from '../codeExplorer/useCodeJumpFocus';
-import { ExplainRow } from '../explain/ExplainRow';
-import { exprBlockBuildUp } from '../explain/buildUpHost';
+import { LineFold } from '../explain/LineFold';
 import { useExplainDialogs } from '../explain/useExplainDialogs';
 import { exprBlockContext, exprBlockUseHere, exprBlockCode, scopeNodes } from '../explain/hosts';
 import { ExplainScopeProvider } from '../explain/ExplainScope';
@@ -80,8 +79,10 @@ interface WarpLine {
 
 const TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
 
-// Presses of a line's ▶ (each opens and focuses that line's Explain build-up once)
+// Presses of a line's ▶ (each opens that line's fold once)
 let explainSeq = 0;
+// The explain view of one line (the steps, a live picture, values to try, the model): loaded when first opened
+const LineExplainView = lazy(() => import('../explain/LineExplainView').then(m => ({ default: m.LineExplainView })));
 const OPS = ['=', '+=', '-=', '*=', '/='];
 
 
@@ -152,9 +153,13 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
     return lineConcepts([...ls, { lhs: '', rhs: '' }], explainCtx).map(k => ({ ...explainCtx, known: k.known, roles: k.roles }));
   }, [explainCtx, node.params.lines]);
   const explainDialogs = useExplainDialogs({ onJumped: onClose });
-  // ▶ on a line (or Return) opens its Explain build-up, ready to step through; seq makes a repeat press count
+  // ▶ on a line (or Return) opens its fold (a short summary and Open explain view); seq makes a repeat press count
   const [explainOpen, setExplainOpen] = useState<{ at: number | 'return'; seq: number } | null>(null);
   const openExplain = (at: number | 'return') => setExplainOpen({ at, seq: ++explainSeq });
+  // The explain view of one line, in place of the editor's content (null: the editor)
+  const [viewAt, setViewAt] = useState<number | 'return' | null>(null);
+  // What the viewed line knows (the names earlier lines made), like its fold
+  const viewCtx = viewAt === null ? explainCtx : viewAt === 'return' ? (lineCtxs[lineCtxs.length - 1] ?? explainCtx) : (lineCtxs[viewAt] ?? explainCtx);
   // Explain is told which block this is (its neighbours in the graph) and the whole code around a line
   const explainScope = useMemo(() => ({ nodeId: node.id, kind: 'Expression Block', getNodes: scopeNodes, enclosing: () => exprBlockCode(scopeNodes().find(n => n.id === node.id) ?? node) }), [node]);
 
@@ -386,6 +391,24 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
         )
       }
     >
+      {viewAt !== null ? (
+        // ── The explain view of one line: replaces the editor until Back ──
+        <div style={{ display: 'flex', height: '100%', minHeight: 0, position: 'relative' }}>
+          <Suspense fallback={<div style={{ padding: 20 }}><Note>Opening the explain view…</Note></div>}>
+            <LineExplainView key={String(viewAt)} node={node} at={viewAt} stops={explainStops(lines, result)}
+              ctx={viewCtx}
+              onGo={setViewAt} onBack={() => setViewAt(null)} onFindUses={explainDialogs.findUses}
+              onMakeNode={span => {
+                const at = viewAt;
+                const head = at === 'return' ? 'return ' : `${lines[at]?.lhs ?? ''} ${lines[at]?.op || '='} `;
+                const rhs = at === 'return' ? result : lines[at]?.rhs ?? '';
+                const rel = { start: span.start - head.length, end: span.end - head.length };
+                explainDialogs.makeNode({ source: rhs, span: rel, ctx: viewCtx, useHere: exprBlockUseHere(node.id, at, rel) });
+              }} />
+          </Suspense>
+          {explainDialogs.dialogs}
+        </div>
+      ) : (
       <div {...fnScope} style={{ display: 'flex', height: '100%', minHeight: 0, position: 'relative' }}>
         {/* ── Inputs: a panel, folded to a rail of chips, or a drawer on a narrow window ── */}
         {(!panels.inputs || narrow) && <InputsRail inputs={customInputs} onExpand={() => setPanel('inputs', true)} />}
@@ -476,7 +499,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
               </div>
               {/* ▶ on this line: its picture opens right here, not at the bottom */}
               <LinePreviewPanel node={node} at={{ kind: 'line', index: i }} />
-              {line.rhs.trim() && !line.off && <LineExplain node={node} index={i} line={line} total={lines.length} ctx={lineCtxs[i] ?? explainCtx} dialogs={explainDialogs} openRequest={explainOpen?.at === i ? explainOpen.seq : undefined} />}
+              {line.rhs.trim() && !line.off && <LineExplain index={i} line={line} ctx={lineCtxs[i] ?? explainCtx} openRequest={explainOpen?.at === i ? explainOpen.seq : undefined} onOpenView={setViewAt} />}
               </Fragment>
             ))}
             {lines.length === 0 && <Note>No lines yet. Each line assigns to a variable, top to bottom.</Note>}
@@ -498,7 +521,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
               <ProbeButton node={node} target={{ kind: 'return' }} label="Preview the return value" onStart={() => openExplain('return')} />
             </div>
             <LinePreviewPanel node={node} at={{ kind: 'return' }} />
-            {result.trim() ? <LineExplain node={node} index="return" line={{ lhs: '', op: '', rhs: result }} ctx={lineCtxs[lineCtxs.length - 1] ?? explainCtx} dialogs={explainDialogs} openRequest={explainOpen?.at === 'return' ? explainOpen.seq : undefined} /> : null}
+            {result.trim() ? <LineExplain index="return" line={{ lhs: '', op: '', rhs: result }} ctx={lineCtxs[lineCtxs.length - 1] ?? explainCtx} openRequest={explainOpen?.at === 'return' ? explainOpen.seq : undefined} onOpenView={setViewAt} /> : null}
             <Note>The final expression of type {outputType} that the block outputs.</Note>
             {(lines.some(l => l.rhs.trim() && !l.off) || result.trim()) && <ExplainMore mode="block" text={exprBlockCode(node)} ctx={explainCtx} />}
           </div>
@@ -520,33 +543,34 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
         </SidePanel>
         {explainDialogs.dialogs}
       </div>
+      )}
     </Modal>
     </ExplainScopeProvider>
   );
 }
 
 /**
- * The Explain row under a line (or Return): the line as it compiles, explained; a part of its
- * expression can be made into a node and, if wanted, used here in its place.
+ * The fold under a line (or Return): what it reads → its steps → what it sets; open, one sentence of
+ * what it does and Open explain view (LineFold.tsx). The model's line explanation and the build-up
+ * live in the explain view, not here.
  */
-function LineExplain({ node, index, line, ctx, dialogs, total, openRequest }: {
-  node: GraphNode; index: number | 'return'; line: WarpLine; total?: number; ctx: GeneraliseContext; dialogs: ReturnType<typeof useExplainDialogs>;
-  /** ▶ on this line was pressed (a counter): its Explain opens, ready to step through. */
+function LineExplain({ index, line, ctx, openRequest, onOpenView }: {
+  index: number | 'return'; line: WarpLine; ctx: GeneraliseContext;
+  /** ▶ on this line was pressed (a counter): its fold opens. */
   openRequest?: number;
+  onOpenView: (at: number | 'return') => void;
 }) {
   const head = index === 'return' ? 'return ' : `${line.lhs} ${line.op || '='} `;
-  const text = head + line.rhs;
-  // The build-up's pictures and step-through (buildUpHost.ts); made again when the block changes
-  const buildUp = useMemo(() => exprBlockBuildUp(node, index), [node, index]);
-  return (
-    <ExplainRow text={text} exprStart={head.length} ctx={ctx} indent={index === 'return' ? 0 : 28} where={index === 'return' ? 'the Return line (the block’s result)' : `line ${index + 1}${total ? ` of ${total}` : ''}`}
-      onFindUses={dialogs.findUses} buildUp={buildUp} openRequest={openRequest}
-      onShowPicture={() => startLineProbe(node, index === 'return' ? { kind: 'return' } : { kind: 'line', index })}
-      onMakeNode={span => {
-        const rel = { start: span.start - head.length, end: span.end - head.length };
-        dialogs.makeNode({ source: line.rhs, span: rel, ctx, useHere: exprBlockUseHere(node.id, index, rel) });
-      }} />
-  );
+  const open = useMemo(() => () => onOpenView(index), [onOpenView, index]);
+  return <LineFold text={head + line.rhs} ctx={ctx} indent={index === 'return' ? 0 : 28} openRequest={openRequest} onOpenView={open} />;
+}
+
+/** Where the explain view's ‹ › go: the lines that are on and written, then Return when there is one. */
+function explainStops(lines: WarpLine[], result: string): Array<number | 'return'> {
+  const out: Array<number | 'return'> = [];
+  lines.forEach((l, i) => { if (l.rhs.trim() && l.lhs.trim() && !l.off) out.push(i); });
+  if (result.trim()) out.push('return');
+  return out;
 }
 
 const smallField = (tk: ReturnType<typeof useTokens>): React.CSSProperties => ({

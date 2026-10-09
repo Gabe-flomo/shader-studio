@@ -46,9 +46,12 @@ export function setReleaseGpuWhenHidden(on: boolean): void {
 /**
  * What the render loop does this frame while another window may be in front: 'draw', 'skip'
  * (Slow down, too soon since the last drawn frame: ask for the next one) or 'stop' (Pause: stop
- * the loop until focus returns). Pure, for the loop and the tests.
+ * the loop until focus returns). 'hold': an overlay holds the preview (lib/previewHold.ts, the
+ * explain view drawing its own picture): stop until it lets go, the clock paused. An output
+ * window or a recording (fullSpeed) is never held. Pure, for the loop and the tests.
  */
-export function backgroundFrame(o: { focused: boolean; mode: BackgroundMode; fullSpeed: boolean; now: number; lastDraw: number }): 'draw' | 'skip' | 'stop' {
+export function backgroundFrame(o: { focused: boolean; mode: BackgroundMode; fullSpeed: boolean; now: number; lastDraw: number; held?: boolean }): 'draw' | 'skip' | 'stop' | 'hold' {
+  if (o.held && !o.fullSpeed) return 'hold';
   if (o.focused || o.fullSpeed || o.mode === 'keep') return 'draw';
   if (o.mode === 'pause') return 'stop';
   return o.now - o.lastDraw < 1000 / SLOW_FPS ? 'skip' : 'draw';

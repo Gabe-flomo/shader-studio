@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.121',
+    date: '2026-10-09',
+    title: 'Smarter Expression Builder',
+    highlights: [
+      { area: 'Studio', text: 'Expression Builder ranks what usually comes next in shaders like yours, hides dull moves (Show hidden), and names what you built: cell repeat, domain warp…' },
+      { area: 'Studio', text: 'Surprise me builds a random chain of moves that work; Undo takes it back. Each "used in" opens the code it came from.' },
+    ],
+  },
+  {
     id: '2026.10.120',
     date: '2026-10-09',
     title: 'Expression Builder',
