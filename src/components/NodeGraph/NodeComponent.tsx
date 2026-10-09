@@ -2834,10 +2834,13 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {isMarchLoopGroup && !collapsed && (() => {
           const outerDef = getNodeDefinitionFor(node);
           const outerParamDefs = outerDef?.paramDefs ?? {};
-          // Colours first: they are what people reach for; the march tuning follows.
+          // Colours first: they are what people reach for; the march tuning follows, choices (Warp safety,
+          // Show, Jitter pattern) included. A setting gated on another (Max step only with Warp safety on) hides with it.
+          const shown = Object.entries(outerParamDefs).filter(([, pd]) => isParamVisible(pd, node.params, outerDef?.defaultParams));
           const outerEntries = [
-            ...Object.entries(outerParamDefs).filter(([, pd]) => pd.type === 'vec3color'),
-            ...Object.entries(outerParamDefs).filter(([, pd]) => pd.type === 'float' || pd.type === 'bool'),
+            ...shown.filter(([, pd]) => pd.type === 'vec3color'),
+            // The rest in the order the node defines them, so Warp safety sits by its Max step
+            ...shown.filter(([, pd]) => pd.type === 'float' || pd.type === 'bool' || pd.type === 'select'),
           ];
           if (outerEntries.length === 0) return null;
           const hidden = node.params.__marchSettingsHidden === true;
@@ -2868,6 +2871,17 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                           onChange={rgb => updateNodeParams(node.id, { [paramKey]: rgb }, { immediate: true })}
                         />
                       )}
+                    </div>
+                  );
+                }
+                if (paramDef.type === 'select') {
+                  const raw = node.params[paramKey] ?? (def.defaultParams as Record<string, unknown> | undefined)?.[paramKey];
+                  const val = raw !== undefined ? String(raw) : (paramDef.options?.[0]?.value ?? '');
+                  return (
+                    <div key={paramKey} data-param-key={paramKey} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 10px 4px 14px' }}>
+                      <ParamLabel title={paramDef.hint} help={paramDef.help}>{paramDef.label}</ParamLabel>
+                      <Select ariaLabel={paramDef.label} value={val} options={paramDef.options ?? []}
+                        onChange={v => updateNodeParams(node.id, { [paramKey]: v }, { immediate: true })} style={{ flex: 1, minWidth: 0 }} />
                     </div>
                   );
                 }
