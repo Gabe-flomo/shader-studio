@@ -35,6 +35,7 @@ import { padGridUniforms } from '../lib/padGrid';
 import { attachLayerDrop } from '../play/layerDrop';
 import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
+import { appFocused, backgroundFrame, backgroundMode, onFocusChange, onLongHidden } from '../lib/backgroundPolicy';
 import { emitTimeTick } from '../lib/timeTick';
 import { outputTap } from '../lib/outputTap';
 import { GpuTimer } from '../lib/gpuTimer';
@@ -504,6 +505,27 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const unsubBackground = playBackground.onChange(requestRender);
     // The Mapping editor's preview takes the live picture: a still one is drawn once so it has something to show.
     playOverlay.setWake(requestRender);
+    // Background (App settings → Background, lib/backgroundPolicy.ts): another window in front slows
+    // or pauses the loop; focus coming back wakes it. An output window or a recording keeps full speed.
+    let lastSlowDraw = 0;
+    const needsFullSpeed = () => outputTap.frame !== null || renderKeepAlive.active();
+    const unsubFocus = onFocusChange(f => { if (f) requestRender(); });
+    // Hidden for minutes: give the WebGL context back (other tabs and apps get the GPU memory);
+    // showing again restores it, and the context-restored handler below rebuilds everything.
+    let releasedContext = false;
+    const unsubLongHidden = onLongHidden({
+      release: () => {
+        if (needsFullSpeed() || glContextLost) return;
+        releasedContext = true;
+        console.info('[ShaderCanvas] hidden for a while: giving the GPU context back until the tab shows again');
+        renderer.forceContextLoss();
+      },
+      restore: () => {
+        if (!releasedContext) return;
+        releasedContext = false;
+        renderer.forceContextRestore();
+      },
+    });
     // Hidden container (another page is showing) → treat like a hidden tab.
     const io = typeof IntersectionObserver !== 'undefined'
       ? new IntersectionObserver(entries => {
@@ -1477,6 +1499,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (glContextLost) { lastRafTime = now; scheduleFrame(); return; }
       // A rebuild is building the program and targets again: keep the last picture until it's done.
       if (gpuReset) { lastRafTime = now; scheduleFrame(); return; }
+      // Another window in front: Pause stops the loop until focus returns; Slow draws SLOW_FPS a second.
+      const bg = backgroundFrame({ focused: appFocused(), mode: backgroundMode(), fullSpeed: needsFullSpeed(), now, lastDraw: lastSlowDraw });
+      if (bg === 'stop') { lastRafTime = now; loopRunning = false; return; }
+      if (bg === 'skip') { scheduleFrame(); return; }
+      lastSlowDraw = now;
       const frameT0 = performance.now();
       pollGpuTimer();
 
@@ -2432,6 +2459,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       unsubRender();
       unsubWake();
       unsubBackground();
+      unsubFocus();
+      unsubLongHidden();
       playOverlay.setWake(null);
       unsubQueueGraphs();
       pruneBgPrograms(new Set());

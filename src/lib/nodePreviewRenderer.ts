@@ -7,6 +7,7 @@
  */
 
 import * as THREE from 'three';
+import { onLongHidden } from './backgroundPolicy';
 
 function djb2(s: string): number {
   let h = 5381;
@@ -193,6 +194,21 @@ class NodePreviewRenderer {
       if (key.startsWith(`${nodeId}@`)) this.cache.delete(key);
     }
   }
+
+  /**
+   * Give the WebGL context back (the tab has been hidden for minutes: lib/backgroundPolicy.ts).
+   * Cached thumbnails stay; the next render makes a new context. Skipped while a render is running.
+   */
+  release() {
+    if (!this.renderer || this.inFlight > 0) return;
+    this.renderTarget?.dispose();
+    this.renderTarget = null;
+    this.renderer.forceContextLoss();
+    this.renderer.dispose();
+    this.renderer = null;
+    this.contextLost = false;
+  }
 }
 
 export const nodePreviewRenderer = new NodePreviewRenderer();
+onLongHidden({ release: () => nodePreviewRenderer.release(), restore: () => { /* made again on the next render */ } });
