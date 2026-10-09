@@ -31,6 +31,17 @@ describe('Curve Trace', () => {
     for (const c of EXAMPLE_GRAPHS[key].play!.controls) expect(live.has(c.target), `${c.label} → ${c.target}`).toBe(true);
   });
 
+  it('smooth curves skip stretches that can\'t be nearest; curves that can jump visit every segment', () => {
+    // Sine, triangle and both rotary motions have a speed bound: the chunked loop (a ball round each stretch)
+    for (const p of [{ waveX: 'sine' }, { waveX: 'triangle' }, { mode: 'rotary' }, { mode: 'counter', morphOn: true }]) {
+      expect(flat({ ...p, segments: 256 }).fragmentShader, JSON.stringify(p)).toMatch(/_reach = /);
+    }
+    // Square, saw and custom axes can jump, and short curves aren't worth it: the plain loop
+    for (const p of [{ waveX: 'square' }, { waveY: 'saw' }, { waveX: 'custom' }, { segments: 16 }]) {
+      expect(flat({ segments: 256, ...p }).fragmentShader, JSON.stringify(p)).not.toMatch(/_reach = /);
+    }
+  });
+
   it.each(['lateral', 'rotary', 'counter'])('motion %s compiles', mode => {
     const r = flat({ mode });
     expect(r.errors ?? []).toEqual([]);
