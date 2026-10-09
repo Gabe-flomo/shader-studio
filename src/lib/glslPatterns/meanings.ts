@@ -82,6 +82,6 @@ export const MEANINGS: Record<string, Meaning> = {
   'mod-repeat': { meaning: c => `${c.h('p')} counting up to ${c.h('c')} and starting again from 0`, use: 'repetition' },
   'step-threshold-inv': { meaning: c => `1 while ${c.h('x')} stays under ${c.h('e')} and 0 otherwise: a switch that is on only when ${c.h('x')} is ${lowWord(c, 'e')}`, use: 'a hard on/off mask' },
   'step-threshold': { meaning: c => `0 until ${c.h('x')} reaches ${c.h('e')}, then 1: a switch that turns on once ${c.h('x')} is ${highWord(c, 'e')}`, use: 'a hard on/off mask' },
-  'mix': { meaning: c => (c.v('t') !== undefined ? `mostly ${(c.v('t') as number) < 0.5 ? c.h('a') : c.h('b')}, with a share of ${(c.v('t') as number) < 0.5 ? c.h('b') : c.h('a')} mixed in` : `${c.h('a')} when ${c.h('t')} is 0, ${c.h('b')} when it is 1, and a blend in between`), use: 'a crossfade' },
+  'mix': { meaning: c => (c.known?.('t') ? `${c.h('b')} for ${c.h('t')}, ${c.h('a')} everywhere else, blending where it changes` : c.v('t') !== undefined ? `mostly ${(c.v('t') as number) < 0.5 ? c.h('a') : c.h('b')}, with a share of ${(c.v('t') as number) < 0.5 ? c.h('b') : c.h('a')} mixed in` : `${c.h('a')} when ${c.h('t')} is 0, ${c.h('b')} when it is 1, and a blend in between`), use: 'a crossfade' },
   'invert': { meaning: c => (c.role('x') === 'colour' ? `the photo negative of ${c.h('x')}` : `${c.h('x')} upside down: 1 where it was 0, 0 where it was 1`), use: 'flipping a mask' },
 };

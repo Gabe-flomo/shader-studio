@@ -26,6 +26,12 @@ export interface ExplainContext {
   roles?: RoleEnv;
   /** Turn idiom recognition off (tests, or to see the plain composition). */
   noIdioms?: boolean;
+  /**
+   * What earlier lines made a name stand for ("the floor", "the sunlight"), so later lines read
+   * it as that concept: `mix(a, b, fl)` → "b for the floor fl". An Expression Block passes its
+   * earlier lines' concepts (lineConcepts).
+   */
+  known?: Record<string, string>;
 }
 
 /** One recognised idiom in an expression. */
@@ -91,6 +97,8 @@ export interface Explanation {
    */
   meaning?: string;
   meaningSegs?: Seg[];
+  /** What the whole thing stands for, when it is a known idiom ("the floor"): later lines' `known`. */
+  concept?: string;
   /** The idiom's common job ("a hard on/off mask"), when the whole thing is one. */
   use?: string;
   /** A composed expression's one-line summary from its parts ("In short: uv → … → the ramps, 0…1."). */
@@ -134,6 +142,7 @@ const num = (v: number) => mark.n(fmt(v));
 // ── Templates ─────────────────────────────────────────────────────────────────
 
 interface TC {
+  st: State;
   node: Expr;
   a: Desc[];
   type: GlslType;
@@ -229,6 +238,20 @@ function binaryWords(c: TC, op: string): Words {
     if (sp >= 0 && c.a[1 - sp].type === 'float') return { noun: `${c.n(sp)} scaled by ${c.n(1 - sp)}`, short: 'the scaled space', how: `scales ${c.s(sp)} by ${c.s(1 - sp)}: bigger values zoom out` };
     const tm = A.role === 'time' ? 0 : B.role === 'time' ? 1 : -1;
     if (tm >= 0) return { noun: `${c.n(tm)} times ${c.n(1 - tm)}`, short: 'the scaled time', how: `multiplies the time ${c.s(tm)} by ${c.s(1 - tm)} (a speed)` };
+    // x * (1.0 - m): "x, except m".
+    const node = c.node;
+    if (node.kind === 'binary') {
+      const sides = [node.left, node.right];
+      const fi = sides.findIndex(x => x.kind === 'binary' && x.op === '-' && constValue(x.left) === 1);
+      if (fi >= 0) {
+        const inner = (sides[fi] as Extract<Expr, { kind: 'binary' }>).right;
+        const innerCode = c.st.src ? c.st.src.slice(inner.start, inner.end).trim() : printShort(inner);
+        const known = inner.kind === 'ident' ? c.st.known[inner.name] : undefined;
+        const chip = inner.kind === 'ident' ? mark.v(innerCode, inner.name, typeOf(c.st, inner)) : mark.c(innerCode);
+        const what = known ? `${known} ${chip}` : `where ${chip} is 1`;
+        return { noun: `${c.n(1 - fi)}, except ${what}`, short: c.a[1 - fi].short, how: `keeps ${c.s(1 - fi)} everywhere except ${what}, where it is 0` };
+      }
+    }
     const mk = A.role === 'mask' ? 0 : B.role === 'mask' ? 1 : -1;
     if (mk >= 0) return { noun: `${c.n(1 - mk)} masked by ${c.n(mk)}`, short: 'the masked value', how: `keeps ${c.s(1 - mk)} where ${c.s(mk)} is 1, 0 where it is 0` };
     return { noun: `${c.n(0)} times ${c.n(1)}`, short: 'the product', how: `multiplies ${c.s(0)} by ${c.s(1)}` };
@@ -425,6 +448,7 @@ interface State {
   hits: IdiomHit[];
   noIdioms: boolean;
   norm: Map<number, N>;
+  known: Record<string, string>;
 }
 
 const LABELS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -457,7 +481,10 @@ function leafDesc(st: State, e: Expr): Desc {
   // A leaf reads as a token: a number, a name from the code (typed when known), or a snippet
   const base = e.kind === 'ident' ? e.name : e.kind === 'member' && e.object.kind === 'ident' ? e.object.name : null;
   const tok = v !== undefined ? mark.n(fmt(v)) : base ? mark.v(text, base, type) : mark.c(text);
-  return { node: e, code: text, type, role, leaf: true, noun: tok, short: tok, how: '', value: v, range: v !== undefined ? [v, v] : undefined };
+  // A name an earlier line gave a meaning to reads as that meaning ("the floor fl").
+  const known = e.kind === 'ident' ? st.known[e.name] : undefined;
+  const word = known ? `${known} ${tok}` : tok;
+  return { node: e, code: text, type, role, leaf: true, noun: word, short: word, how: '', value: v, range: v !== undefined ? [v, v] : undefined };
 }
 
 function printShort(e: Expr): string {
@@ -479,6 +506,7 @@ function normOf(st: State, e: Expr): N {
 function holeText(st: State, b: Bindings, descOf: (name: string) => Desc | undefined): IdiomText {
   return {
     h: name => { const d = descOf(name); return !d ? '' : d.leaf ? d.noun : d.short; },
+    known: name => { const x = b[name]; return x && x.expr.kind === 'ident' ? st.known[x.expr.name] : undefined; },
     n: name => { const v = b[name]?.value; return v !== undefined ? mark.n(fmt(v)) : (descOf(name)?.short ?? ''); },
     v: name => b[name]?.value,
     code: name => { const x = b[name]; return x ? (st.src ? st.src.slice(x.expr.start, x.expr.end).trim() : printShort(x.expr)) : ''; },
@@ -575,7 +603,7 @@ function walkNode(st: State, e: Expr): Desc {
 
   const kids = childrenOf(e).map(k => walkNode(st, k));
   const tc: TC = {
-    node: e, a: kids, type, role: roleInfo.role,
+    st, node: e, a: kids, type, role: roleInfo.role,
     n: i => { const d = kids[i]; if (!d) return ''; return d.leaf ? d.noun : plainLength(d.noun) <= 48 ? d.noun : d.short; },
     s: i => { const d = kids[i]; if (!d) return ''; return d.leaf ? d.noun : d.short; },
     p: i => { const d = kids[i]; if (!d) return ''; return d.leaf ? d.noun : d.code.length <= 16 ? mark.c(d.code) : d.short; },
@@ -611,7 +639,7 @@ function makeState(src: string, root: Expr, ctx: ExplainContext): State {
   const env = ctx.types ?? {};
   const types = inferTypes(root, env);
   const roles = inferRoles(root, types, ctx.roles ?? {});
-  return { src, types, roles, env, roleEnv: ctx.roles ?? {}, descs: new Map(), steps: [], hits: [], noIdioms: !!ctx.noIdioms, norm: new Map() };
+  return { src, types, roles, env, roleEnv: ctx.roles ?? {}, descs: new Map(), steps: [], hits: [], noIdioms: !!ctx.noIdioms, norm: new Map(), known: ctx.known ?? {} };
 }
 
 /** "First, A = uv * 3.0: zooms… Then, … Finally, fract(C): …", with the code and names as tokens. */
@@ -673,10 +701,36 @@ export function explainTree(root: Expr, src: string, ctx: ExplainContext = {}): 
     ok: true, sentence: toPlainText(sentence), sentenceSegs: parseSegs(sentence),
     ...(meaning ? { meaning: toPlainText(meaning), meaningSegs: parseSegs(meaning), use: d.idiom?.idiom.use } : {}),
     ...(inShort ? { inShort: toPlainText(inShort), inShortSegs: parseSegs(inShort) } : {}),
+    ...(d.idiom?.idiom.concept && d.idiom.idiom.short ? { concept: d.idiom.idiom.short } : {}),
     steps: st.steps, breakdown: toPlainText(bd), breakdownSegs: bd, type: d.type, role: d.role,
     idioms: st.hits, root, source: src, descs: st.descs,
   };
 }
+
+/**
+ * For each line of a block (`lhs = rhs`, in order), the names earlier lines gave a meaning to:
+ * `float fl = step(0.95, n.y) * step(p.y, -0.98)` makes later lines read `fl` as "the floor".
+ * A name assigned again without a known meaning forgets it.
+ */
+export function lineConcepts(lines: ReadonlyArray<{ lhs: string; rhs: string }>, ctx: ExplainContext = {}): Array<Pick<ExplainContext, 'known' | 'roles'>> {
+  const known: Record<string, string> = { ...(ctx.known ?? {}) };
+  // Roles carried by data flow, not names: a local made by normalize(…), or from a Normal input, is a direction.
+  const roles: RoleEnv = { ...(ctx.roles ?? {}) };
+  const out: Array<Pick<ExplainContext, 'known' | 'roles'>> = [];
+  for (const l of lines) {
+    out.push({ known: { ...known }, roles: { ...roles } });
+    const name = /([A-Za-z_]\w*)\s*$/.exec(l.lhs.trim())?.[1];
+    if (!name || !l.rhs.trim()) continue;
+    const r = parseExpr(l.rhs);
+    const ex = r.ok ? explainTree(r.expr, l.rhs, { ...ctx, known: { ...known }, roles: { ...roles } }) : null;
+    if (ex?.concept) known[name] = ex.concept; else delete known[name];
+    if (ex && CARRIED_ROLES.has(ex.role)) roles[name] = ex.role; else if (!(ctx.roles ?? {})[name]) delete roles[name];
+  }
+  return out;
+}
+
+/** Roles strong enough to carry to later lines (never read off a type alone: vec3 → colour is a guess). */
+const CARRIED_ROLES = new Set<Role>(['direction', 'distance', 'mask', 'angle', 'time']);
 
 /** Explain an expression. */
 export function explainExpression(src: string, ctx: ExplainContext = {}): ExplainResult {

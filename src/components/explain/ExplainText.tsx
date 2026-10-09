@@ -41,6 +41,17 @@ export function segColor(s: Seg, pal: Pal): string {
   }
 }
 
+/** A colour written as numbers (`vec3(0.18, 0.2, 0.26)`), as CSS, when every channel is a plausible colour (0…1.5). */
+export function literalColour(code: string): string | null {
+  const m = /^vec3\(\s*(-?[\d.]+)\s*(?:,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*)?\)$/.exec(code.trim());
+  if (!m) return null;
+  const v = [m[1], m[2] ?? m[1], m[3] ?? m[1]].map(Number);
+  if (v.some(x => !Number.isFinite(x) || x < 0 || x > 1.5)) return null;
+  // Shown as the screen shows it: clipped, and gamma-encoded like the canvas output.
+  const c = v.map(x => Math.round(Math.min(1, x) * 255));
+  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+}
+
 export interface ExplainTextProps {
   segs: Seg[];
   /** The variable lit from elsewhere (hovered in the code). */
@@ -66,8 +77,10 @@ export const ExplainText = memo(function ExplainText({ segs, activeVar, onVarHov
         };
         const label = spokenToken(s);
         if (s.kind === 'code') {
+          const swatch = literalColour(s.text);
           return (
-            <span key={i} data-explain-chip="code" role="text" aria-label={label} style={{ ...chip, background: tk.bg.field, boxShadow: `inset 0 0 0 1px ${tk.border.subtle}`, whiteSpace: 'normal' }}>
+            <span key={i} data-explain-chip="code" role="text" aria-label={swatch ? `${label}, the colour shown` : label} style={{ ...chip, background: tk.bg.field, boxShadow: `inset 0 0 0 1px ${tk.border.subtle}`, whiteSpace: 'normal' }}>
+              {swatch && <span data-explain-swatch="" aria-hidden="true" style={{ display: 'inline-block', width: '0.95em', height: '0.95em', borderRadius: 3, marginRight: 4, verticalAlign: '-0.12em', background: swatch, boxShadow: `inset 0 0 0 1px ${alpha(tk.text.primary, 0.25)}` }} />}
               <GlslCode code={s.text} />
             </span>
           );

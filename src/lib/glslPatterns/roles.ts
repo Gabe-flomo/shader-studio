@@ -24,7 +24,7 @@ const NAME_RULES: Array<{ re: RegExp; role: Role; types?: GlslType[] }> = [
   { re: /^(?:t|time|u_time|itime|tt|now|phase)$/i, role: 'time', types: ['float', 'unknown'] },
   { re: /^(?:a|ang|angle|theta|phi|rot|rotation|spin|turn)\d*$/i, role: 'angle', types: ['float', 'unknown'] },
   { re: /^(?:mask|m|alpha|edge|shape|fill|stroke)\d*$/i, role: 'mask', types: ['float', 'unknown'] },
-  { re: /^(?:dir|direction|rd|ray|n|nor|normal|v|vel|velocity|flow)\d*$/i, role: 'direction', types: ['vec2', 'vec3', 'unknown'] },
+  { re: /^(?:dir|direction|rd|ray|n|nor|nrm|nrml|norm|normal|v|vel|velocity|flow|ld|lightdir|sundir|l)\d*$/i, role: 'direction', types: ['vec2', 'vec3', 'unknown'] },
   { re: /^(?:id|cell|cellid|tile|ipos|i)\d*$/i, role: 'cell', types: ['vec2', 'unknown'] },
 ];
 
@@ -53,7 +53,17 @@ export const SOURCE_NODE_ROLES: Record<string, Role> = {
 };
 
 /** The role of a graph node's output, by its type id (and output type when the type says nothing). */
-export function roleOfSourceNode(nodeType: string, outType?: GlslType): Role | null {
+/** What a node's output is by the output's own key, whatever the node: a March Loop's Normal is a direction. */
+const OUTPUT_KEY_ROLES: Array<{ re: RegExp; role: Role; types?: GlslType[] }> = [
+  { re: /^(normal|nrm|nor|n|surfacenormal|rn)$/i, role: 'direction', types: ['vec3', 'vec2'] },
+  { re: /^(rd|raydir|dir|direction|lightdir|sundir)$/i, role: 'direction', types: ['vec3', 'vec2'] },
+  { re: /^(pos|position|hitpos|hp|p|worldpos|ro|rayorigin)$/i, role: 'space', types: ['vec3', 'vec2'] },
+  { re: /^(dist|distance|depth|sdf|d)$/i, role: 'distance', types: ['float'] },
+  { re: /^(hit|mask|ao|shadow|occlusion|alpha)$/i, role: 'mask', types: ['float'] },
+];
+
+export function roleOfSourceNode(nodeType: string, outType?: GlslType, outputKey?: string): Role | null {
+  if (outputKey) for (const r of OUTPUT_KEY_ROLES) if (r.re.test(outputKey) && (!r.types || !outType || r.types.includes(outType))) return r.role;
   if (SOURCE_NODE_ROLES[nodeType]) return SOURCE_NODE_ROLES[nodeType];
   const t = nodeType.toLowerCase();
   if (/sdf|distance/.test(t)) return 'distance';
