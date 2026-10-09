@@ -73,6 +73,37 @@ function call(name: string, a: Value[]): Value {
       return f.length === 1 ? Array(n).fill(f[0]) : f.slice(0, n);
     }
     case 'mat2': { const f = flat(a); return [NaN, ...(f.length === 1 ? [f[0], 0, 0, f[0]] : f.slice(0, 4))]; }
+    // Playfield's always-there helpers (compiler/shaderAssembler.ts BUILTIN_HELPERS_GLSL and friends)
+    case 'rotate': { const v = x as number[], s = Math.sin(y as number), c = Math.cos(y as number); return [v[0] * c - v[1] * s, v[0] * s + v[1] * c]; }
+    case 'rot2D': { const s = Math.sin(x as number), c = Math.cos(x as number); return [NaN, c, -s, s, c]; }
+    case 'noiseHash1': { const p = x as number[]; return fract(Math.sin(p[0] * 127.1 + p[1] * 311.7) * 43758.5453123); }
+    case 'noiseHash2': { const p = x as number[]; return [p[0] * 127.1 + p[1] * 311.7, p[0] * 269.5 + p[1] * 183.3].map(v => -1 + 2 * fract(Math.sin(v) * 43758.5453123)); }
+    case 'valueNoise': {
+      const p = x as number[];
+      const i = p.map(Math.floor), f = p.map(fract), u = f.map(v => v * v * (3 - 2 * v));
+      const h = (dx: number, dy: number) => call('noiseHash1', [[i[0] + dx, i[1] + dy]]) as number;
+      const lerp = (a0: number, a1: number, t: number) => a0 * (1 - t) + a1 * t;
+      return lerp(lerp(h(0, 0), h(1, 0), u[0]), lerp(h(0, 1), h(1, 1), u[0]), u[1]);
+    }
+    case 'sdBox': {
+      const p = x as number[], b = y as number[];
+      const d = [Math.abs(p[0]) - b[0], Math.abs(p[1]) - b[1]];
+      return Math.hypot(Math.max(d[0], 0), Math.max(d[1], 0)) + Math.min(Math.max(d[0], d[1]), 0);
+    }
+    case 'sdSegment': {
+      const p = x as number[], q = y as number[], r = z as number[];
+      const pa = [p[0] - q[0], p[1] - q[1]], ba = [r[0] - q[0], r[1] - q[1]];
+      const h = Math.min(1, Math.max(0, (pa[0] * ba[0] + pa[1] * ba[1]) / (ba[0] * ba[0] + ba[1] * ba[1])));
+      return Math.hypot(pa[0] - ba[0] * h, pa[1] - ba[1] * h);
+    }
+    case 'opRepeat': { const s = y as number; return map1(x, v => { const w = v + s * 0.5; return w - s * Math.floor(w / s) - s * 0.5; }); }
+    case 'opRepeatPolar': {
+      const p = x as number[], an = (2 * Math.PI) / (y as number);
+      let ang = Math.atan2(p[1], p[0]) + an * 0.5;
+      ang = ang - an * Math.floor(ang / an) - an * 0.5;
+      const l = Math.hypot(p[0], p[1]);
+      return [Math.cos(ang) * l, Math.sin(ang) * l];
+    }
     default: throw new Error(`evaluate: no rule for ${name}()`);
   }
 }
@@ -81,6 +112,62 @@ function mul(a: Value, b: Value): Value {
   if (isMat2(a) && isV(b) && !isMat2(b)) return [a[1] * b[0] + a[3] * b[1], a[2] * b[0] + a[4] * b[1]];
   if (isV(a) && !isMat2(a) && isMat2(b)) return [a[0] * b[1] + a[1] * b[2], a[0] * b[3] + a[1] * b[4]];
   return map2(a, b, (x, y) => x * y);
+}
+
+/**
+ * `evaluate`, compiled once into closures: the same results, a few times faster when one
+ * expression runs over many points (the Expression Builder's dull-move filter). Throws when run
+ * on anything it can't do, like `evaluate`.
+ */
+export function compileExpr(e: Expr): (env: EvalEnv) => Value {
+  switch (e.kind) {
+    case 'num': { const v = e.value; return () => v; }
+    case 'ident': {
+      const name = e.name, c = NAMED_CONSTANTS[name];
+      return env => {
+        const v = env[name];
+        if (v !== undefined) return v;
+        if (c !== undefined) return c;
+        throw new Error(`evaluate: ${name} has no value`);
+      };
+    }
+    case 'unary': {
+      const a = compileExpr(e.arg);
+      if (e.op === '-') return env => map1(a(env), x => -x);
+      if (e.op === '!') return env => map1(a(env), x => (x ? 0 : 1));
+      return a;
+    }
+    case 'binary': {
+      const l = compileExpr(e.left), r = compileExpr(e.right);
+      switch (e.op) {
+        case '+': return env => map2(l(env), r(env), (x, y) => x + y);
+        case '-': return env => map2(l(env), r(env), (x, y) => x - y);
+        case '*': return env => mul(l(env), r(env));
+        case '/': return env => map2(l(env), r(env), (x, y) => x / y);
+        case '<': return env => Number((l(env) as number) < (r(env) as number));
+        case '>': return env => Number((l(env) as number) > (r(env) as number));
+        case '<=': return env => Number((l(env) as number) <= (r(env) as number));
+        case '>=': return env => Number((l(env) as number) >= (r(env) as number));
+        case '==': return env => Number(l(env) === r(env));
+        case '!=': return env => Number(l(env) !== r(env));
+        case '&&': return env => Number(!!l(env) && !!r(env));
+        case '||': return env => Number(!!l(env) || !!r(env));
+        default: { const op = e.op; return () => { throw new Error(`evaluate: no rule for ${op}`); }; }
+      }
+    }
+    case 'ternary': { const t = compileExpr(e.test), a = compileExpr(e.then), b = compileExpr(e.else); return env => (t(env) ? a(env) : b(env)); }
+    case 'member': {
+      const o = compileExpr(e.object);
+      const idx = e.field.split('').map(swzIndex);
+      if (idx.length === 1) { const i = idx[0]; return env => { const v = o(env); return isV(v) ? v[i] : v; }; }
+      return env => { const v = o(env); return idx.map(i => (isV(v) ? v[i] : v)); };
+    }
+    case 'index': { const o = compileExpr(e.object), i = compileExpr(e.index); return env => (o(env) as number[])[i(env) as number]; }
+    case 'call': {
+      const args = e.args.map(compileExpr), name = e.callee;
+      return env => call(name, args.map(a => a(env)));
+    }
+  }
 }
 
 /** Evaluate an expression with the given names bound. Throws on anything it can't do. */

@@ -2,7 +2,7 @@
  * shared.ts — what the miner and the generated moves both need: the move identity (an anonymous
  * shape of a template), hole names, the helper functions every Playfield shader has, and families.
  */
-import { allNodes, BUILTIN_FUNCTION_NAMES, explainTree, parseExpr, type Expr, type GlslType, type Role, type TypeEnv } from '../lib/glslPatterns';
+import { allNodes, BUILTIN_FUNCTION_NAMES, checkTypes, explainTree, parseExpr, type Expr, type GlslType, type Role, type TypeEnv } from '../lib/glslPatterns';
 import { normalize, type N } from '../lib/glslPatterns/match';
 import { rangeForValue } from '../lib/rangeMath';
 import { hashText } from '../codeExplorer/extract';
@@ -157,3 +157,48 @@ export function holeRange(min: number, max: number, def: number): { min: number;
   return { min: Math.min(lo.min, min), max: Math.max(hi.max, max) };
 }
 
+
+/**
+ * How big a number in a move can sensibly get, by what the move acts on: a zoom of space up to 64×,
+ * a colour scaled up to 8, an angle up to two turns… The slider's range stays inside it (the
+ * default too far out still shows: typing past the end widens any slider).
+ */
+export const ROLE_MAGNITUDE: Record<Role, number> = {
+  space: 64, cell: 64, colour: 8, direction: 8, mask: 4, distance: 16, angle: 12.6, time: 32, value: 100, unknown: 100,
+};
+
+/**
+ * A number hole's slider range from the values seen (value → times seen): the 10th to 90th
+ * percentile, weighted by use, around the default, clamped to the role's magnitude. Values seen
+ * zero times (the extremes of a merged catalogue) count only when nothing else was counted.
+ */
+export function robustRange(seen: ReadonlyArray<readonly [number, number]>, def: number, role: Role): { min: number; max: number } {
+  const counted = seen.filter(([v, n]) => n > 0 && Number.isFinite(v));
+  const vals = (counted.length ? counted : seen.filter(([v]) => Number.isFinite(v)).map(([v]) => [v, 1] as const)).slice().sort((a, b) => a[0] - b[0]);
+  if (!vals.length) return holeRange(def, def, def);
+  const total = vals.reduce((s, [, n]) => s + n, 0);
+  const at = (q: number) => {
+    let acc = 0;
+    for (const [v, n] of vals) { acc += n; if (acc >= q * total) return v; }
+    return vals[vals.length - 1][0];
+  };
+  const M = ROLE_MAGNITUDE[role] ?? 100;
+  const lo = Math.max(-M, Math.min(at(0.1), def)), hi = Math.min(M, Math.max(at(0.9), def));
+  const r = holeRange(Math.min(lo, hi), Math.max(lo, hi), def);
+  const lim = Math.max(M, Math.abs(def));
+  return { min: Math.max(r.min, -lim), max: Math.min(r.max, lim) };
+}
+
+const validTemplateCache = new Map<string, boolean>();
+/** Does a template type-check strictly (GLSL ES 3.0) with these names, giving `out`? */
+export function validTemplate(template: string, env: TypeEnv, out: GlslType): boolean {
+  const k = `${out}|${JSON.stringify(env)}|${template}`;
+  let v = validTemplateCache.get(k);
+  if (v === undefined) {
+    const r = parseExpr(template);
+    const c = r.ok ? checkTypes(r.expr, { ...HELPER_ENV, ...env }) : null;
+    v = !!c && c.ok && c.type === out;
+    validTemplateCache.set(k, v);
+  }
+  return v;
+}

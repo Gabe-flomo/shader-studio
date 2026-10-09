@@ -1,0 +1,4539 @@
+{
+"about": "WebGL 2 compile results for strict type-check cases: each case is compiled in a fragment shader with Playfield helpers as <out> r = <code>; with env names declared. Regenerate in a browser when the checker rules change.",
+"capturedWith": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Claude/2.26454.2 Chrome/152.0.7977.130 Safari/537.36",
+"renderer": "WebKit WebGL",
+"cases": [
+{
+"code": "x ? 1.5 : 1.5",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": false,
+"error": "'' : boolean expression expected",
+"from": "old-catalogue"
+},
+{
+"code": "x ? v_u : v_v",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": false,
+"error": "'' : boolean expression expected",
+"from": "old-catalogue"
+},
+{
+"code": "x ? vec3(1.5, 1.5, 1.5) : vec3(1.5, 1.5, 1.5)",
+"env": {
+"x": "float"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'' : boolean expression expected",
+"from": "old-catalogue"
+},
+{
+"code": "step(x, v_u)",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "vec2",
+"compiles": false,
+"error": "'step' : no matching overloaded function found",
+"from": "old-catalogue"
+},
+{
+"code": "mix(x, vec3(1.5, 1.5, 1.5), v_u)",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'mix' : no matching overloaded function found",
+"from": "old-catalogue"
+},
+{
+"code": "x ? 1.5 : v_u",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": false,
+"error": "'' : boolean expression expected",
+"from": "old-catalogue"
+},
+{
+"code": "vec3(1.5, 1.5, 1.5) * x",
+"env": {
+"x": "vec2"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'*' : wrong operand types - no operation '*' exists that takes a left-hand operand of type 'const 3-",
+"from": "old-catalogue"
+},
+{
+"code": "x + vec3(1.5, 1.5, 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": false,
+"error": "'+' : wrong operand types - no operation '+' exists that takes a left-hand operand of type 'highp 2-",
+"from": "old-catalogue"
+},
+{
+"code": "vec3(1.5, 1.5, 1.5) * 1.5 / x",
+"env": {
+"x": "vec2"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'/' : wrong operand types - no operation '/' exists that takes a left-hand operand of type 'const 3-",
+"from": "old-catalogue"
+},
+{
+"code": "mix(vec3(1.5, 1.5, 1.5), vec3(1.5, 1.5, 1.5), x)",
+"env": {
+"x": "vec2"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'mix' : no matching overloaded function found",
+"from": "old-catalogue"
+},
+{
+"code": "step(x, 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": false,
+"error": "'step' : no matching overloaded function found",
+"from": "old-catalogue"
+},
+{
+"code": "x / v_u.xy",
+"env": {
+"x": "vec4",
+"v_u": "vec2"
+},
+"out": "vec4",
+"compiles": false,
+"error": "'/' : wrong operand types - no operation '/' exists that takes a left-hand operand of type 'highp 4-",
+"from": "old-catalogue"
+},
+{
+"code": "x ? 1.5 : v_u > 1.5 ? 1.5 : 1.5",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": false,
+"error": "'' : boolean expression expected",
+"from": "old-catalogue"
+},
+{
+"code": "vec4(x, 1.5)",
+"env": {
+"x": "float"
+},
+"out": "vec4",
+"compiles": false,
+"error": "'constructor' : not enough data provided for construction",
+"from": "old-catalogue"
+},
+{
+"code": "pow(x, 1.5)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'pow' : no matching overloaded function found",
+"from": "old-catalogue"
+},
+{
+"code": "step(x, 1.5)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'step' : no matching overloaded function found",
+"from": "old-catalogue"
+},
+{
+"code": "vec4(x, 1.5)",
+"env": {
+"x": "float"
+},
+"out": "vec4",
+"compiles": false,
+"error": "'constructor' : not enough data provided for construction",
+"from": "old-catalogue"
+},
+{
+"code": "x ? 1.5 : v_u > 1.5 ? 1.5 : v_v > 1.5 ? 1.5 : 1.5",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": false,
+"error": "'' : boolean expression expected",
+"from": "old-catalogue"
+},
+{
+"code": "x ? 1.5 : v_u > 1.5 ? 1.5 : v_v > 1.5 ? 1.5 : v_w",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float",
+"v_w": "float"
+},
+"out": "float",
+"compiles": false,
+"error": "'' : boolean expression expected",
+"from": "old-catalogue"
+},
+{
+"code": "x ? 1.5 : v_u > 1.5 ? 1.5 : v_v",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": false,
+"error": "'' : boolean expression expected",
+"from": "old-catalogue"
+},
+{
+"code": "x ? 1.5 : v_u > v_v ? v_w : v_r",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float",
+"v_w": "float",
+"v_r": "float"
+},
+"out": "float",
+"compiles": false,
+"error": "'' : boolean expression expected",
+"from": "old-catalogue"
+},
+{
+"code": "x ? v_u * (1.5 - v_v) + 1.5 : 1.5",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": false,
+"error": "'' : boolean expression expected",
+"from": "old-catalogue"
+},
+{
+"code": "x ? v_u : max(v_v - 1.5, 1.5)",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": false,
+"error": "'' : boolean expression expected",
+"from": "old-catalogue"
+},
+{
+"code": "x ? vec3(1.5, 1.5, 1.5) : vec3(1.5)",
+"env": {
+"x": "float"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'' : boolean expression expected",
+"from": "old-catalogue"
+},
+{
+"code": "mix(x, vec3(1.5), v_u)",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'mix' : no matching overloaded function found",
+"from": "old-catalogue"
+},
+{
+"code": "v_u < 1.5 ? v_v / 1.5 : x",
+"env": {
+"x": "vec2",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": false,
+"error": "'?:' : mismatching ternary operator operand types 'highp float and 'highp 2-component vector of floa",
+"from": "old-catalogue"
+},
+{
+"code": "v_u < 1.5 ? v_v * 1.5 : x",
+"env": {
+"x": "vec2",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": false,
+"error": "'?:' : mismatching ternary operator operand types 'highp float and 'highp 2-component vector of floa",
+"from": "old-catalogue"
+},
+{
+"code": "v_u < 1.5 ? v_v : x",
+"env": {
+"x": "vec2",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": false,
+"error": "'?:' : mismatching ternary operator operand types 'highp float and 'highp 2-component vector of floa",
+"from": "old-catalogue"
+},
+{
+"code": "v_u > 1.5 ? x : 1.5",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "vec2",
+"compiles": false,
+"error": "'?:' : mismatching ternary operator operand types 'highp 2-component vector of float and 'const floa",
+"from": "old-catalogue"
+},
+{
+"code": "v_u > 1.5 ? x : length(v_v)",
+"env": {
+"x": "vec2",
+"v_u": "float",
+"v_v": "vec2"
+},
+"out": "vec2",
+"compiles": false,
+"error": "'?:' : mismatching ternary operator operand types 'highp 2-component vector of float and 'highp floa",
+"from": "old-catalogue"
+},
+{
+"code": "v_u > 1.5 ? x : vec3(1.5)",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "vec2",
+"compiles": false,
+"error": "'?:' : mismatching ternary operator operand types 'highp 2-component vector of float and 'const 3-co",
+"from": "old-catalogue"
+},
+{
+"code": "vec3(1.5, 1.5, 1.5) * (1.5 + 1.5 * v_u) * x",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'*' : wrong operand types - no operation '*' exists that takes a left-hand operand of type 'highp 3-",
+"from": "old-catalogue"
+},
+{
+"code": "vec3(1.5, 1.5, 1.5) * smoothstep(1.5, 1.5, v_u) * x",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'*' : wrong operand types - no operation '*' exists that takes a left-hand operand of type 'highp 3-",
+"from": "old-catalogue"
+},
+{
+"code": "max(v_u, x)",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "vec2",
+"compiles": false,
+"error": "'max' : no matching overloaded function found",
+"from": "old-catalogue"
+},
+{
+"code": "v_u > 1.5 ? x : v_v > 1.5 ? v_w.g : v_r.g",
+"env": {
+"x": "vec3",
+"v_u": "float",
+"v_v": "float",
+"v_w": "vec3",
+"v_r": "vec3"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'?:' : mismatching ternary operator operand types 'highp 3-component vector of float and 'highp floa",
+"from": "old-catalogue"
+},
+{
+"code": "v_u > 1.5 ? x : v_v.g",
+"env": {
+"x": "vec3",
+"v_u": "float",
+"v_v": "vec3"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'?:' : mismatching ternary operator operand types 'highp 3-component vector of float and 'highp floa",
+"from": "old-catalogue"
+},
+{
+"code": "v_u.x > 1.5 ? v_u.x : x",
+"env": {
+"x": "vec3",
+"v_u": "vec2"
+},
+"out": "float",
+"compiles": false,
+"error": "'?:' : mismatching ternary operator operand types 'highp float and 'highp 3-component vector of floa",
+"from": "old-catalogue"
+},
+{
+"code": "v_u.x > 1.5 ? v_u.y : x",
+"env": {
+"x": "vec3",
+"v_u": "vec2"
+},
+"out": "float",
+"compiles": false,
+"error": "'?:' : mismatching ternary operator operand types 'highp float and 'highp 3-component vector of floa",
+"from": "old-catalogue"
+},
+{
+"code": "x ? 1.5 : 1.5",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": false,
+"error": "'' : boolean expression expected",
+"from": "old-catalogue"
+},
+{
+"code": "x + vec2(1.5, 1.5)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'+' : wrong operand types - no operation '+' exists that takes a left-hand operand of type 'highp 3-",
+"from": "old-catalogue"
+},
+{
+"code": "step(x, v_u)",
+"env": {
+"x": "vec3",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'step' : no matching overloaded function found",
+"from": "old-catalogue"
+},
+{
+"code": "vec3(1.5, 1.5, 1.5) * x",
+"env": {
+"x": "vec4"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'*' : wrong operand types - no operation '*' exists that takes a left-hand operand of type 'const 3-",
+"from": "old-catalogue"
+},
+{
+"code": "vec3(1.5, 1.5, 1.5) * v_u + x",
+"env": {
+"x": "vec4",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'+' : wrong operand types - no operation '+' exists that takes a left-hand operand of type 'highp 3-",
+"from": "old-catalogue"
+},
+{
+"code": "step(x, 1.5)",
+"env": {
+"x": "vec4"
+},
+"out": "vec4",
+"compiles": false,
+"error": "'step' : no matching overloaded function found",
+"from": "old-catalogue"
+},
+{
+"code": "x * 1.5",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "length(x)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.y",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * (1.5 - v_u)",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "max(x, 1.5)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.y * 1.5",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "floor(x)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "floor(x.x + 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "step(x, 1.5)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 - x",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "sin(x)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "-x",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "abs(x)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * exp(-x / v_u)",
+"env": {
+"x": "vec3",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "exp(x)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "-x",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x / 1.5",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x < 1.5 ? vec3(1.5, 1.5, 1.5) : vec3(1.5, 1.5, 1.5)",
+"env": {
+"x": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "mod(floor(x * 1.5) + floor(v_u * 1.5), 1.5)",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "float(floor(x.x + 1.5) == 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 * x",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "smoothstep(1.5, 1.5, x)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 * (x + vec3(1.5, 1.5, 1.5))",
+"env": {
+"x": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "atan(v_u.y, v_u.x) - x + 1.5",
+"env": {
+"x": "float",
+"v_u": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "min(x, v_u)",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "length(x - v_u)",
+"env": {
+"x": "vec2",
+"v_u": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 - x",
+"env": {
+"x": "vec4"
+},
+"out": "vec4",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 + x",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x > 1.5 ? 1.5 : 1.5",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "abs(vec3(1.5, 1.5, 1.5) - x)",
+"env": {
+"x": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec4(x, 1.5, 1.5, 1.5)",
+"env": {
+"x": "float"
+},
+"out": "vec4",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "atan(x.y, x.x) - v_u + 1.5",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "mod(atan(x.y, x.x) - v_u + 1.5, 1.5)",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "fract(sin(dot(x, vec3(1.5, 1.5, 1.5))) * 1.5)",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "abs(x)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 / max(abs(x), 1.5) * 1.5",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "smoothstep(x, -x, v_t)",
+"env": {
+"x": "float",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 + 1.5 * x + 1.5 * v_u",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "step(x.y, 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x + 1.5",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.g",
+"env": {
+"x": "vec4"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "(1.5 + 1.5 * cos(1.5 * (v_t + vec3(1.5, 1.5, 1.5)))) * x",
+"env": {
+"x": "float",
+"v_t": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x + v_u - v_v",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "step(v_u, 1.5) * x",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec4(1.5, x, 1.5, 1.5)",
+"env": {
+"x": "float"
+},
+"out": "vec4",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "length(x) - 1.5",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "float(x.y > 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "smoothstep(1.5, 1.5, length(x - vec2(1.5, 1.5)))",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "step(1.5, x)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "length(x)",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x + v_t * 1.5",
+"env": {
+"x": "float",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x + v_t * 1.5",
+"env": {
+"x": "float",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "clamp(x * 1.5, 1.5, 1.5)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "cos(x * 1.5)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 - step(v_u, x)",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * 1.5 + v_t",
+"env": {
+"x": "float",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "float(x == 1.5)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec2(cos(x), sin(x))",
+"env": {
+"x": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 / dot(x - v_u, x - v_u)",
+"env": {
+"x": "vec2",
+"v_u": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * v_u * 1.5",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "abs(x.x - 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "sin(x.y * 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * (1.5 + 1.5 * v_v + 1.5 * v_w) * v_u",
+"env": {
+"x": "vec3",
+"v_v": "float",
+"v_w": "float",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "clamp(x.y * 1.5 + 1.5, 1.5, 1.5)",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "floor(x)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "max(x.r, 1.5)",
+"env": {
+"x": "vec4"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "max(x, 1.5)",
+"env": {
+"x": "vec4"
+},
+"out": "vec4",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 + x",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * (1.5 - v_u)",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "fwidth(x)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "float(x)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 * step(1.5, fract(sin(floor(x * 1.5) * 1.5) * 1.5))",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 + 1.5 * step(1.5, fract(sin(floor(x * 1.5) * 1.5) * 1.5))",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "floor(x)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "sin(floor(x * 1.5) * 1.5)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_u > 1.5 ? atan(v_v.y, v_v.x) : x",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 - x / v_u",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 * (1.5 - x)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * (vec3(1.5, 1.5, 1.5) + vec3(1.5, 1.5, 1.5) * v_u)",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "step(1.5, x) * step(x, 1.5) * v_u * v_v",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * step(1.5, v_u)",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x + vec3(1.5, 1.5, 1.5) * v_u * (1.5 - v_v)",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x + 1.5 * v_v + v_u",
+"env": {
+"x": "float",
+"v_v": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "float(x < v_u)",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "max(max(x, v_u), max(v_v, v_w))",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float",
+"v_w": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "mix(vec4(1.5, 1.5, 1.5, 1.5), vec4(1.5, 1.5, 1.5, 1.5), x)",
+"env": {
+"x": "float"
+},
+"out": "vec4",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec2(floor(1.5 * x + 1.5), 1.5)",
+"env": {
+"x": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_t - x.y - 1.5 * x.x",
+"env": {
+"x": "vec2",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x + 1.5",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "length(x)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "-1.5 * x",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 - smoothstep(1.5, 1.5, length(fract(x * 1.5) - 1.5))",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "abs(x.x - 1.5) - 1.5",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x - vec2(v_u)",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x / max(v_u, 1.5)",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "-x / max(v_v, 1.5) * v_u * 1.5",
+"env": {
+"x": "vec2",
+"v_v": "float",
+"v_u": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 * sin(x.x * 1.5 + v_t * 1.5)",
+"env": {
+"x": "vec2",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "exp(-abs(x.y - v_u) * 1.5) * step(x.y, v_u + 1.5)",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "step(1.5, x.x) * step(1.5, x.y)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "smoothstep(1.5, 1.5, length(x - vec2(1.5, 1.5))) + smoothstep(1.5, 1.5, length(x - vec2(1.5, 1.5)))",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "abs(x.y - v_u)",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "exp(-1.5 * x.y)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "fract(x * 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "sin(x.x * 1.5 + v_t * 1.5)",
+"env": {
+"x": "vec2",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "step(1.5, fract(sin(dot(x, vec2(1.5, 1.5))) * 1.5))",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.z - 1.5",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * (1.5 + 1.5 * v_v + 1.5 * v_w) + 1.5 * v_u",
+"env": {
+"x": "vec3",
+"v_v": "float",
+"v_w": "float",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x + 1.5",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.x + x.y + x.z",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 - abs(x.y)",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x + vec3(v_u * v_v * v_w)",
+"env": {
+"x": "vec3",
+"v_u": "float",
+"v_v": "float",
+"v_w": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "fract(x.xz / 1.5) - 1.5",
+"env": {
+"x": "vec3"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x / v_u",
+"env": {
+"x": "vec3",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * (1.5 + 1.5 * v_u)",
+"env": {
+"x": "vec3",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "fract(x.xz / 1.5)",
+"env": {
+"x": "vec3"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "step(x.y, 1.5)",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 - exp(-max(x.g, 1.5) * 1.5)",
+"env": {
+"x": "vec4"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "-max(x.g, 1.5) * 1.5",
+"env": {
+"x": "vec4"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "exp(-max(x.g, 1.5) * 1.5)",
+"env": {
+"x": "vec4"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 * x - v_u * log(v_v) - 1.5 * v_t",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x - 1.5 * v_t",
+"env": {
+"x": "float",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 * (x + v_u * 1.5 + vec3(1.5, 1.5, 1.5))",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "sin(x * 1.5 + v_t * 1.5) * 1.5",
+"env": {
+"x": "float",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_u * vec2(cos(x), sin(x))",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * x",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 + x / v_u",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "cos(1.5 * (x * 1.5 + vec3(1.5, 1.5, 1.5)))",
+"env": {
+"x": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "-max(x, 1.5)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 / abs(sin(x * 1.5 + v_t) / 1.5)",
+"env": {
+"x": "float",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "mod(x + v_u * 1.5, v_u) - v_u * 1.5",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "step(1.5, v_v + x) * (1.5 - v_u)",
+"env": {
+"x": "float",
+"v_v": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 * cos(1.5 * (x * 1.5 + vec3(1.5, 1.5, 1.5)) - v_t * 1.5)",
+"env": {
+"x": "float",
+"v_t": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec3(1.5, 1.5, 1.5) * (1.5 + 1.5 * smoothstep(1.5, 1.5, x))",
+"env": {
+"x": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * 1.5 + vec3(1.5, 1.5, 1.5)",
+"env": {
+"x": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x + vec3(1.5, 1.5, 1.5)",
+"env": {
+"x": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "exp(-x * 1.5 / max(v_u, 1.5))",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "max(abs(x), 1.5)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "mix(vec3(1.5, 1.5, 1.5), vec3(1.5, 1.5, 1.5), step(1.5, x))",
+"env": {
+"x": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "pow(1.5 / abs(sin(x * 1.5 + v_t) / 1.5), 1.5)",
+"env": {
+"x": "float",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "smoothstep(x, -x, v_u)",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec3(1.5) * exp(x * 1.5)",
+"env": {
+"x": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "-fract(x * v_u / 1.5) * 1.5",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 - fract(x * 1.5)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "pow(1.5 - fract(x * 1.5), 1.5) * 1.5",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 + 1.5 * cos(1.5 * (x * 1.5 + vec3(1.5, 1.5, 1.5)))",
+"env": {
+"x": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "exp(x)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "sqrt(max(1.5 - x * x, 1.5))",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec2(1.5 + 1.5 * sin(x * 1.5), 1.5)",
+"env": {
+"x": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "-abs(x)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x > 1.5 && x < 1.5 ? v_u * (1.5 - v_v) + 1.5 : 1.5",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_u > 1.5 ? 1.5 : clamp(v_v + x / 1.5, 1.5, 1.5)",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x < 1.5 ? 1.5 + v_u : 1.5 - 1.5 * v_v",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x > v_u ? v_v : v_w",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float",
+"v_w": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 - v_u * x",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 - step(x, v_u)",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "abs(v_t) + 1.5 - x",
+"env": {
+"x": "float",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "mod(x + v_u * 1.5, v_u) - v_u * 1.5",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * step(v_v * 1.5, v_w) * (1.5 - v_u)",
+"env": {
+"x": "float",
+"v_v": "float",
+"v_w": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * (1.5 - step(v_u, fract(v_v * 1.5))) * step(1.5, v_w)",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float",
+"v_w": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 * (x + v_u - v_v)",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 * (x * 1.5 + vec3(1.5, 1.5, 1.5))",
+"env": {
+"x": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_u * 1.5 * vec4(equal(vec4(x), vec4(1.5, 1.5, 1.5, 1.5)))",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "vec4",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec3(1.5, 1.5, 1.5) * max(x, 1.5) * 1.5",
+"env": {
+"x": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "(v_u + v_v) * x",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_u * (1.5 - x) * step(v_v * 1.5, v_w)",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float",
+"v_w": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "(x + v_v) * v_u",
+"env": {
+"x": "float",
+"v_v": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_v * x * v_u",
+"env": {
+"x": "float",
+"v_v": "vec3",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_u * step(1.5, v_v) * x",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * clamp(1.5 - v_u, 1.5, 1.5)",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * mix(1.5, clamp(1.5 - v_u / 1.5, 1.5, 1.5), v_v)",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "step(1.5, x) * step(x, 1.5) * step(v_u, v_v)",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "floor((x + 1.5) / 1.5) + (v_u > 1.5 ? 1.5 : 1.5)",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * 1.5 + v_u / 1.5",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x + v_u * v_v * 1.5",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 * length(vec3(v_u, x, v_v)) + 1.5 * x",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * v_w + v_u * v_v",
+"env": {
+"x": "float",
+"v_w": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x / 1.5 + 1.5",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 + 1.5 * fract(x * 1.5)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_u * v_v * (1.5 - v_v) * x + 1.5",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_t + v_u * (1.5 + 1.5 * x) / 1.5",
+"env": {
+"x": "float",
+"v_t": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_v * v_t * 1.5 + vec3(1.5, 1.5, 1.5) * x * v_t * 1.5 + v_u",
+"env": {
+"x": "float",
+"v_v": "vec3",
+"v_t": "float",
+"v_u": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec3(1.5) + x",
+"env": {
+"x": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "clamp(1.5 - 1.5 * x, 1.5, 1.5)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "clamp(1.5 + 1.5 * (v_u - v_v + 1.5 * x), 1.5, 1.5)",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "clamp(v_u + x / 1.5, 1.5, 1.5)",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "exp(-(v_v * x + v_u) / 1.5)",
+"env": {
+"x": "float",
+"v_v": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "floor(x / 1.5 + 1.5)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "length(x)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "min(x + v_u + v_v, 1.5)",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "mix(1.5, 1.5, clamp(x, 1.5, 1.5))",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "mix(v_u + v_v, v_w, x)",
+"env": {
+"x": "float",
+"v_u": "vec3",
+"v_v": "vec3",
+"v_w": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "mix(x, v_u, step(1.5, abs(v_t)))",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "sin(x * 1.5 - v_t * 1.5 + sin(v_u * 1.5 + v_t * 1.5) * 1.5)",
+"env": {
+"x": "float",
+"v_t": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "step(1.5, abs(x - v_u))",
+"env": {
+"x": "float",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec2(1.5, x)",
+"env": {
+"x": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec3(x / 1.5)",
+"env": {
+"x": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec4(x + v_u - v_v, v_w - v_r, 1.5, 1.5)",
+"env": {
+"x": "float",
+"v_u": "float",
+"v_v": "float",
+"v_w": "float",
+"v_r": "float"
+},
+"out": "vec4",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "-1.5 * clamp(mod(v_t - x.y - 1.5 * x.x + 1.5, 1.5) - 1.5, 1.5, 1.5)",
+"env": {
+"x": "vec2",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "smoothstep(1.5, 1.5, x)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "abs(x)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec2(-x.y, x.x) * 1.5 / v_u - x / v_u * clamp((v_u - 1.5) / 1.5, 1.5, 1.5)",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_u > 1.5 ? vec3(x, 1.5) : vec3(1.5)",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x / (v_u.y * 1.5 - x.y) / 1.5",
+"env": {
+"x": "vec2",
+"v_u": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec2(-x.y, x.x) * 1.5 / v_u",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.x * cos(v_u) - x.y * sin(v_u)",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 - abs(x.y)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 / abs(tan(v_t + x.x - x.y * v_u * 1.5 + vec3(1.5, 1.5, 1.5)))",
+"env": {
+"x": "vec2",
+"v_t": "float",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.y / 1.5 + v_u - x.x",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "abs(x.y - 1.5 * sin(v_t * 1.5)) - 1.5",
+"env": {
+"x": "vec2",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "length((x - vec2(1.5, 1.5)) * vec2(1.5, 1.5)) - 1.5",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x - v_w * v_u * v_v",
+"env": {
+"x": "vec2",
+"v_w": "vec2",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.y - 1.5 * sin(v_t * 1.5)",
+"env": {
+"x": "vec2",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * (1.5 - v_u / v_v)",
+"env": {
+"x": "vec2",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * (v_u - v_v)",
+"env": {
+"x": "vec2",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "mat2(cos(1.5), sin(1.5), -sin(1.5), cos(1.5)) * (x * v_u.y * 1.5)",
+"env": {
+"x": "vec2",
+"v_u": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 * sin(x.x * 1.5 - v_t * 1.5)",
+"env": {
+"x": "vec2",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "sin(dot(ceil(x - sin(x)), vec2(1.5, 1.5))) * 1.5",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec3(1.5, 1.5, 1.5) * (1.5 + 1.5 * sin(x.x * 1.5) * sin(x.y * 1.5))",
+"env": {
+"x": "vec2"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "length(x - v_v) * v_u",
+"env": {
+"x": "vec2",
+"v_v": "vec2",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * v_u.y",
+"env": {
+"x": "vec2",
+"v_u": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.x * cos(v_u)",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "float(floor(x.x + 1.5) == 1.5) * float(v_u < 1.5)",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * rot2D(v_u * 1.5 + v_t * 1.5)",
+"env": {
+"x": "vec2",
+"v_u": "float",
+"v_t": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "smoothstep(1.5, 1.5, min(fract(x.x), fract(x.y))) * smoothstep(1.5, 1.5, min(1.5 - fract(x.x), 1.5 - fract(x.y)))",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "step(noiseHash1(v_u - vec2(1.5, 1.5)), v_v) * step(abs(x.y), 1.5) * step(x.x, 1.5)",
+"env": {
+"x": "vec2",
+"v_u": "vec2",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "atan(x.y, x.x) + v_u / v_v / 1.5",
+"env": {
+"x": "vec2",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_t + x.x - x.y * v_u * 1.5 + vec3(1.5, 1.5, 1.5)",
+"env": {
+"x": "vec2",
+"v_t": "float",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.x + sin(x.y * 1.5 + v_t) / 1.5",
+"env": {
+"x": "vec2",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x + (fract(v_u * 1.5) - 1.5) * 1.5",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.x * 1.5 + x.y",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x + v_t * vec2(1.5, 1.5)",
+"env": {
+"x": "vec2",
+"v_t": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 + 1.5 * sin(x.x * 1.5 - 1.5) + 1.5 * sin(x.x * 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "atan(x.x, x.y) + 1.5",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_u + x.y * max(1.5, -v_u * 1.5)",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_t + x.xyx + vec3(1.5, 1.5, 1.5)",
+"env": {
+"x": "vec2",
+"v_t": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x + v_u + v_v",
+"env": {
+"x": "vec2",
+"v_u": "vec2",
+"v_v": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "length(max(x, 1.5)) + min(max(x.x, x.y), 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "abs(x.y - 1.5 * sin(v_t * 1.5))",
+"env": {
+"x": "vec2",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "ceil(x - sin(x))",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "cos(x.x / 1.5 + cos(x.x / 1.5))",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "dot(x, x + 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "fract(sin(dot(ceil(x - sin(x)), vec2(1.5, 1.5))) * 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "length(max(x, 1.5))",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "max(v_u, x.y * 1.5)",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "mix(x, v_u * abs(v_v), v_w)",
+"env": {
+"x": "vec2",
+"v_u": "vec2",
+"v_v": "float",
+"v_w": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "mod(x.x, 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "sign(x)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "sin(x.y * 1.5 + sin(x.x * 1.5 + v_t * 1.5) * 1.5 - v_t * 1.5)",
+"env": {
+"x": "vec2",
+"v_t": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "sin(x.x * 1.5 + v_u)",
+"env": {
+"x": "vec2",
+"v_u": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "sqrt(x)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "step(noiseHash1(x - vec2(1.5, 1.5)), v_u)",
+"env": {
+"x": "vec2",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "tan(v_t + x.x - x.y * v_u * 1.5 + vec3(1.5, 1.5, 1.5))",
+"env": {
+"x": "vec2",
+"v_t": "float",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec2(step(1.5, mod(floor(x.y * 1.5), 1.5)) * 1.5, 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec3(x, 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "-x.r",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "cross(x, v_u) / v_v",
+"env": {
+"x": "vec3",
+"v_u": "vec3",
+"v_v": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * (1.5 - 1.5 * v_u)",
+"env": {
+"x": "vec3",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.r * vec3(1.5, 1.5, 1.5) * 1.5",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * v_u",
+"env": {
+"x": "vec3",
+"v_u": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * x * x",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "vec3(1.5, 1.5, 1.5) + x * 1.5",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_u + x + v_v * 1.5",
+"env": {
+"x": "vec3",
+"v_u": "vec3",
+"v_v": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.r + v_u.r + v_v.r + v_w.r + v_r.r",
+"env": {
+"x": "vec3",
+"v_u": "vec3",
+"v_v": "vec3",
+"v_w": "vec3",
+"v_r": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "exp(x)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "mix(x, v_u, v_v)",
+"env": {
+"x": "vec3",
+"v_u": "vec3",
+"v_v": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.r",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_u.x > 1.5 ? v_u.y : x.y * mix(1.5, v_v, v_w)",
+"env": {
+"x": "vec3",
+"v_u": "vec2",
+"v_v": "float",
+"v_w": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_u + 1.5 * x.g + v_v - (v_w + v_r) * v_u",
+"env": {
+"x": "vec3",
+"v_u": "float",
+"v_v": "float",
+"v_w": "float",
+"v_r": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x - vec3((v_u.x - 1.5) * 1.5, 1.5, (v_u.z - 1.5) * 1.5)",
+"env": {
+"x": "vec3",
+"v_u": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * (1.5 - v_u / v_v)",
+"env": {
+"x": "vec3",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "sin(x.x * 1.5) * cos(x.z * 1.5) * 1.5",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x / v_v * (v_v - v_w) * v_u",
+"env": {
+"x": "vec3",
+"v_v": "float",
+"v_w": "float",
+"v_u": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x * v_u",
+"env": {
+"x": "vec3",
+"v_u": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "atan(x.z, x.x) + v_u / v_v / 1.5",
+"env": {
+"x": "vec3",
+"v_u": "float",
+"v_v": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "sin(x.x * 1.5) * cos(x.z * 1.5) * 1.5 + fract(sin(dot(x.xz, vec2(1.5, 1.5))) * 1.5) * 1.5",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.y + x.z * 1.5 + 1.5",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_u + 1.5 * x.g",
+"env": {
+"x": "vec3",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.r + v_u.r + v_v.r + v_w.r + v_r.r + v_s.r + v_q.r",
+"env": {
+"x": "vec3",
+"v_u": "vec3",
+"v_v": "vec3",
+"v_w": "vec3",
+"v_r": "vec3",
+"v_s": "vec3",
+"v_q": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "abs(x.x) + abs(x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "atan(x.z, x.x)",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "dot(cos(x), cos(x.yzx / 1.5))",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "fract(sin(dot(x.xz, vec2(1.5, 1.5))) * 1.5)",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "pow(max(x, vec3(1.5)), vec3(1.5))",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "step(x.y, v_u)",
+"env": {
+"x": "vec3",
+"v_u": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.yzx",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "-x.g",
+"env": {
+"x": "vec4"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "clamp(x, 1.5, 1.5)",
+"env": {
+"x": "vec4"
+},
+"out": "vec4",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "-x.r * 1.5",
+"env": {
+"x": "vec4"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "-x.a / 1.5",
+"env": {
+"x": "vec4"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "1.5 - exp(-x.b / 1.5)",
+"env": {
+"x": "vec4"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "v_u * x",
+"env": {
+"x": "vec4",
+"v_u": "float"
+},
+"out": "vec4",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "exp(-x.g * 1.5)",
+"env": {
+"x": "vec4"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "max(x.r, 1.5)",
+"env": {
+"x": "vec4"
+},
+"out": "float",
+"compiles": true,
+"from": "old-catalogue"
+},
+{
+"code": "x.yx",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x.xx",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x.yy",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec2(x.y, -x.x)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x, 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, 1.5, x.y)",
+"env": {
+"x": "vec2"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x.xzy",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x.yxz",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x.yzx",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x.zxy",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x.zyx",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x.xy",
+"env": {
+"x": "vec3"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x.xz",
+"env": {
+"x": "vec3"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x.yz",
+"env": {
+"x": "vec3"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec2(x.x + 1.5 * sin(x.y * 1.5), x.y)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec2(x.x + 1.5 * cos(x.y * 1.5), x.y)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec2(x.x + 1.5 * abs(x.y * 1.5), x.y)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec2(x.x + 1.5 * fract(x.y * 1.5), x.y)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec2(x.x, x.y + 1.5 * sin(x.x * 1.5))",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec2(x.x, x.y + 1.5 * cos(x.x * 1.5))",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec2(x.x, x.y + 1.5 * abs(x.x * 1.5))",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec2(x.x, x.y + 1.5 * fract(x.x * 1.5))",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x + 1.5 * sin(x.y * 1.5), x.y, x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x + 1.5 * cos(x.y * 1.5), x.y, x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x + 1.5 * abs(x.y * 1.5), x.y, x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x + 1.5 * fract(x.y * 1.5), x.y, x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x + 1.5 * sin(x.z * 1.5), x.y, x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x + 1.5 * cos(x.z * 1.5), x.y, x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x + 1.5 * abs(x.z * 1.5), x.y, x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x + 1.5 * fract(x.z * 1.5), x.y, x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, x.y + 1.5 * sin(x.x * 1.5), x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, x.y + 1.5 * cos(x.x * 1.5), x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, x.y + 1.5 * abs(x.x * 1.5), x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, x.y + 1.5 * fract(x.x * 1.5), x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, x.y + 1.5 * sin(x.z * 1.5), x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, x.y + 1.5 * cos(x.z * 1.5), x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, x.y + 1.5 * abs(x.z * 1.5), x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, x.y + 1.5 * fract(x.z * 1.5), x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, x.y, x.z + 1.5 * sin(x.x * 1.5))",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, x.y, x.z + 1.5 * cos(x.x * 1.5))",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, x.y, x.z + 1.5 * abs(x.x * 1.5))",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, x.y, x.z + 1.5 * fract(x.x * 1.5))",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, x.y, x.z + 1.5 * sin(x.y * 1.5))",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, x.y, x.z + 1.5 * cos(x.y * 1.5))",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, x.y, x.z + 1.5 * abs(x.y * 1.5))",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, x.y, x.z + 1.5 * fract(x.y * 1.5))",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x.x * x.y",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x * x.yx",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x * x.x",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x * x.y",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x.x * x.y * x.z",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x * x.yzx",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x.xy * x.z",
+"env": {
+"x": "vec3"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "x * x.x",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.y * x.z, x.z * x.x, x.x * x.y)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "rotate(x, 1.5)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "rotate(x, 1.5 * v_t)",
+"env": {
+"x": "vec2",
+"v_t": "float"
+},
+"out": "vec2",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(rotate(x.xy, 1.5), x.z)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(rotate(x.xy, 1.5 * v_t), x.z)",
+"env": {
+"x": "vec3",
+"v_t": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(rotate(x.xz, 1.5), x.y).xzy",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(rotate(x.xz, 1.5 * v_t), x.y).xzy",
+"env": {
+"x": "vec3",
+"v_t": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, rotate(x.yz, 1.5))",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec3(x.x, rotate(x.yz, 1.5 * v_t))",
+"env": {
+"x": "vec3",
+"v_t": "float"
+},
+"out": "vec3",
+"compiles": true,
+"from": "generated"
+},
+{
+"code": "vec4(x, 1.0)",
+"env": {
+"x": "float"
+},
+"out": "vec4",
+"compiles": false,
+"error": "'constructor' : not enough data provided for construction",
+"from": "hand"
+},
+{
+"code": "vec3(x)",
+"env": {
+"x": "vec2"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'constructor' : not enough data provided for construction",
+"from": "hand"
+},
+{
+"code": "vec2(x, 1.0)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": false,
+"error": "'constructor' : too many arguments",
+"from": "hand"
+},
+{
+"code": "vec2(1.0, 2.0, 3.0)",
+"env": {},
+"out": "vec2",
+"compiles": false,
+"error": "'constructor' : too many arguments",
+"from": "hand"
+},
+{
+"code": "vec3(x, 1.0)",
+"env": {
+"x": "vec2"
+},
+"out": "vec3",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "vec4(x, x)",
+"env": {
+"x": "vec2"
+},
+"out": "vec4",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "vec2(x)",
+"env": {
+"x": "vec3"
+},
+"out": "vec2",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "vec2(1, 2)",
+"env": {},
+"out": "vec2",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "mat2(x, x)",
+"env": {
+"x": "vec2"
+},
+"out": "mat2",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "mat2(x)",
+"env": {
+"x": "vec3"
+},
+"out": "mat2",
+"compiles": false,
+"error": "'constructor' : not enough data provided for construction",
+"from": "hand"
+},
+{
+"code": "float(x)",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "step(x, u)",
+"env": {
+"x": "vec3",
+"u": "float"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'step' : no matching overloaded function found",
+"from": "hand"
+},
+{
+"code": "step(0.5, x)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "step(x, 0.5)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": false,
+"error": "'step' : no matching overloaded function found",
+"from": "hand"
+},
+{
+"code": "pow(x, 2.0)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'pow' : no matching overloaded function found",
+"from": "hand"
+},
+{
+"code": "mix(x, vec3(1.0), u)",
+"env": {
+"x": "float",
+"u": "float"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'mix' : no matching overloaded function found",
+"from": "hand"
+},
+{
+"code": "mix(x, x, 0.5)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "max(u, x)",
+"env": {
+"x": "vec2",
+"u": "float"
+},
+"out": "vec2",
+"compiles": false,
+"error": "'max' : no matching overloaded function found",
+"from": "hand"
+},
+{
+"code": "min(x, 0.5)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "clamp(x, 0.0, 1.0)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "clamp(u, x, x)",
+"env": {
+"x": "vec2",
+"u": "float"
+},
+"out": "vec2",
+"compiles": false,
+"error": "'clamp' : no matching overloaded function found",
+"from": "hand"
+},
+{
+"code": "mod(x, 2.0)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "smoothstep(0.0, 1.0, x)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "smoothstep(x, x, 0.5)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": false,
+"error": "'smoothstep' : no matching overloaded function found",
+"from": "hand"
+},
+{
+"code": "rotate(x, 0.5)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'rotate' : no matching overloaded function found",
+"from": "hand"
+},
+{
+"code": "rotate(x, 0.5)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "x * 2",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": false,
+"error": "'*' : wrong operand types - no operation '*' exists that takes a left-hand operand of type 'highp 2-",
+"from": "hand"
+},
+{
+"code": "x + 1",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": false,
+"error": "'+' : wrong operand types - no operation '+' exists that takes a left-hand operand of type 'highp fl",
+"from": "hand"
+},
+{
+"code": "pow(x, 2)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": false,
+"error": "'pow' : no matching overloaded function found",
+"from": "hand"
+},
+{
+"code": "1 + 2",
+"env": {},
+"out": "int",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "x + vec3(1.0)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": false,
+"error": "'+' : wrong operand types - no operation '+' exists that takes a left-hand operand of type 'highp 2-",
+"from": "hand"
+},
+{
+"code": "mat2(1.0) * x",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'*' : wrong operand types - no operation '*' exists that takes a left-hand operand of type 'const 2X",
+"from": "hand"
+},
+{
+"code": "mat2(1.0) * x",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "x * mat2(1.0)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "x.z",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": false,
+"error": "'z' : vector field selection out of range",
+"from": "hand"
+},
+{
+"code": "x.x",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": false,
+"error": "'x' :  field selection requires structure, vector, or interface block on left hand side",
+"from": "hand"
+},
+{
+"code": "x.zxy",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "x.rgb",
+"env": {
+"x": "vec4"
+},
+"out": "vec3",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "x ? 1.0 : 2.0",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": false,
+"error": "'' : boolean expression expected",
+"from": "hand"
+},
+{
+"code": "u > 0.5 ? x : u",
+"env": {
+"x": "vec2",
+"u": "float"
+},
+"out": "vec2",
+"compiles": false,
+"error": "'?:' : mismatching ternary operator operand types 'highp 2-component vector of float and 'highp floa",
+"from": "hand"
+},
+{
+"code": "x > 0.5 ? x : 1.0",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "x[1]",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "x[1.0]",
+"env": {
+"x": "vec3"
+},
+"out": "float",
+"compiles": false,
+"error": "'[]' : integer expression required",
+"from": "hand"
+},
+{
+"code": "-x",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "atan(x.y, x.x)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "atan(x)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "dot(x, vec2(1.0))",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "dot(x, vec3(1.0))",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": false,
+"error": "'dot' : no matching overloaded function found",
+"from": "hand"
+},
+{
+"code": "cross(x, x)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "cross(x, x)",
+"env": {
+"x": "vec2"
+},
+"out": "vec3",
+"compiles": false,
+"error": "'cross' : no matching overloaded function found",
+"from": "hand"
+},
+{
+"code": "length(x) * vec2(1.0)",
+"env": {
+"x": "vec3"
+},
+"out": "vec2",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "normalize(x)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "sdBox(x, vec2(0.5))",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "opRepeat(x, 1.0)",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "smin(x, 0.5, 0.1)",
+"env": {
+"x": "float"
+},
+"out": "float",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "smin(x, 0.5, 0.1)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": false,
+"error": "'smin' : no matching overloaded function found",
+"from": "hand"
+},
+{
+"code": "valueNoise(x * 3.0)",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "noiseHash2(x)",
+"env": {
+"x": "vec3"
+},
+"out": "vec2",
+"compiles": false,
+"error": "'noiseHash2' : no matching overloaded function found",
+"from": "hand"
+},
+{
+"code": "fract(x) * 2.0 - 1.0",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "abs(x) - vec3(0.5)",
+"env": {
+"x": "vec3"
+},
+"out": "vec3",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "max(abs(x.x), abs(x.y))",
+"env": {
+"x": "vec2"
+},
+"out": "float",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "vec3(x, 0.0) * mat3(1.0)",
+"env": {
+"x": "vec2"
+},
+"out": "vec3",
+"compiles": true,
+"from": "hand"
+},
+{
+"code": "mat3(1.0) * x",
+"env": {
+"x": "vec2"
+},
+"out": "vec2",
+"compiles": false,
+"error": "'*' : wrong operand types - no operation '*' exists that takes a left-hand operand of type 'const 3X",
+"from": "hand"
+},
+{
+"code": "x / u",
+"env": {
+"x": "vec4",
+"u": "vec2"
+},
+"out": "vec4",
+"compiles": false,
+"error": "'/' : wrong operand types - no operation '/' exists that takes a left-hand operand of type 'highp 4-",
+"from": "hand"
+}
+]
+}

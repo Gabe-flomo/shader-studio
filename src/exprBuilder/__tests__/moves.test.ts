@@ -89,8 +89,13 @@ describe('the catalogue', () => {
     expect(k.kind).toBe('number');
     if (k.kind === 'number') {
       expect(k.vals.length).toBeGreaterThan(1);
-      expect(k.range.min).toBeLessThanOrEqual(k.seenMin);
-      expect(k.range.max).toBeGreaterThanOrEqual(k.seenMax);
+      // The usual values (10th–90th percentile), not the far-off ones, kept to a zoom's size.
+      expect(k.range.min).toBeLessThanOrEqual(k.default);
+      expect(k.range.max).toBeGreaterThanOrEqual(k.default);
+      expect(k.range.max).toBeLessThanOrEqual(64);
+      const used = k.vals.reduce((s, [, n]) => s + n, 0);
+      const inside = k.vals.filter(([v]) => v >= k.range.min && v <= k.range.max).reduce((s, [, n]) => s + n, 0);
+      expect(inside / used).toBeGreaterThan(0.75);
       expect(k.default).toBe(k.vals[0][0]);
     }
     for (const m of mined) for (const h of m.holes) {

@@ -277,3 +277,74 @@ Recommendations for phase 3:
 - Dull-move filter on the CPU (evaluate.ts over a grid of UVs): constant, NaN, aliasing, unchanged.
   The renders give ranges too (`fieldSummary`), which could feed the same filter for free.
 - Idiom naming on the chain (`explainTree` over the inlined expression) and provenance links (Find uses).
+
+## Phase 3 status (2026-10-09)
+
+Built: smart ranking and the catalogue fixes phase 2 found (user doc: [expression-builder.md](expression-builder.md)).
+
+- **Strict types** (`glslPatterns/typecheck.ts` `checkTypes`): GLSL ES 3.0's rules, not the explainer's lenient
+  guess. Constructor component counts (`vec4(float, float)` too few, `vec2(vec2, float)` an argument left over),
+  built-in and helper overloads from the function registry (genType arguments must agree: `step(float, vec3)` yes,
+  `step(vec3, float)` no), no int → float, swizzles only on vectors and within their size, bool conditions, equal
+  ternary branches. The miner keeps only moves that pass it, `movesFor` checks every move again (`validMove`), and
+  generated moves must pass it. **Checked against the GPU:** 464 cases (every move phase 2's catalogue rejected, a
+  spread of the accepted ones, every generated move, hand-written edge cases) compiled with WebGL 2 in the browser
+  (`glslPatterns/__tests__/fixtures/webglCompile.json`, 73 fail on the GPU); the checker agrees on all of them.
+- **A mining bug fixed on the way:** a step along a statement's path was typed with the subject's type, not with
+  what it acted on, so after `length(p)` the next step `x - #a` was recorded as a vec2 move, and its order pair
+  joined a float to a vec2. Steps are now typed (and fed) by their child; this alone took the held-out top-10 from
+  52% to 67%. Same-type moves of the shape-keeping families (scale, offset, repeat, fold…) keep their input's role
+  (a moved position isn't a colour because it is a vec3).
+- **Catalogue tidy-up:** generated moves have roles (swizzles keep whatever they act on, `sig.keep`; rotations,
+  couplings and products act on space; vec3 ones also in 2D). Number holes' slider ranges are the 10th–90th
+  percentile of the values seen, around the default, clamped by role (`ROLE_MAGNITUDE`: space 64, colour 8,
+  angle 12.6…). Order statistics also record what fed the variable (`OrderStat.feed`). `MOVES_SCHEMA` 2; the
+  prebuilt catalogue regenerated: 1,747 mined moves (+63 generated), 1,207 order pairs, 365 KB.
+- **Ranking** (`rank.ts`): Witten–Bell back-off from (last move, dimension, feed) → (last move, dimension) → (last
+  move) → (its family, dimension) → a base of uses weighted by context match (dimension, feed ×3 or ×0.2, into,
+  techniques; other roles ×0.3; generated moves count as 1.5 uses). The candidate pool now includes other roles
+  (lower). Recipes rank by their first step. Pure; the per-catalogue index is cached (`rankIndex`).
+- **Held-out evaluation** (`rank.test.ts`, five folds over the examples, occurrence-weighted, 2,212 next-move cases,
+  87% of them a move the other folds have):
+
+  | | top-1 | top-5 | top-10 | MRR | chance top-10 |
+  |---|---|---|---|---|---|
+  | phase 3 | 42.1% | 61.5% | 69.7% | 0.518 | 12.2% (~148 candidates) |
+  | phase 2 order | 13.1% | 35.0% | 51.9% | 0.246 | |
+  | 2D only | 37.4% | 58.0% | 67.0% | 0.477 | 6.2% |
+  | 3D surface | 67.8% | 83.5% | 85.5% | 0.755 | 24.4% |
+  | 3D world (63 cases) | 36.4% | 41.8% | 54.5% | 0.403 | 45.2% |
+
+- **Dull filter** (`dull.ts`): 36 points spread over the tile (R2 sequence, so a repeat can't line up with the
+  grid), two samples half a pixel apart each; a world seed gets a depth per point so z-only moves aren't "no
+  change"; time runs 96 samples. Constant, NaN (> 2% of points), unchanged, aliasing (within-pixel spread over the
+  overall spread > 0.22; along time, two-sample jumps no bigger than one-sample ones). Moves the evaluator can't
+  run are left alone. Templates compile to closures once (`compileExpr`, cached); the chain so far is evaluated
+  once per position. The evaluator learnt Playfield's helpers (rotate, noise, sdBox, opRepeat…).
+- **The window:** the filter runs in ~6 ms slices after each step, the first two pages of each section first
+  (shown as soon as they're done), cached per chain position; "Show hidden (n)" per section, hidden tiles say why.
+  Step rows show the chain's name (`naming.ts`: chain idioms, then glslPatterns idioms on the inlined chain);
+  finishing moves of the current name are lifted ×2.5. "used in" sources jump to the code (`jumpToSource`), "Where
+  else?" opens Find uses with the template as a pattern (`$x * #a`). Surprise me (`surprise.ts`, mulberry32) and an
+  undo stack (picks, Surprise me, seeds, examples).
+- **Perf** (browser, dev build, 482 UV candidates): `nextMoves` 1–8 ms; the dull filter ~30 ms of work in 5–6
+  slices of ≤ 7 ms, first pages in ~15–20 ms, all in ~55 ms. Cold (first open after a load, JIT and caches empty):
+  ~490 ms of work in 60 slices, the longest 24 ms. Surprise me 6–21 ms per press. In Node: 0.05 ms per tile.
+
+Tests: `glslPatterns/__tests__/typecheck.test.ts` (rules, the GPU fixture, compiled evaluator),
+`exprBuilder/__tests__/rank.test.ts` (back-off, contexts, boosts, the held-out evaluation),
+`exprBuilder/__tests__/phase3.test.ts` (every move on every seed type it claims, roles, ranges, the dull filter,
+naming, provenance, Surprise me deterministic and compiling), and the window's tests (Show hidden, the source link,
+Where else, names on rows, Surprise me and Undo).
+
+Seen in the browser: UV → fract → x − 0.5 names the rows "cell repeat", "centred cells"; Surprise me from UV gave
+`uv − vec2(…) → length → − 0.07` (named *distance field*, *Circle SDF*) and stripes into a colour; from World
+position `sin(p.x·k)·cos(p.z·k) → ×0.5 → +0.5` (named *Remap −1…1 to 0…1*). Where else? lists the uses.
+
+For phase 4:
+
+- **3D world data is thin** (63 held-out cases, mostly 3D agents): mine nodes as moves (Repeat 3D, Translate 3D…),
+  and let a socket seed bring its real feed, into and techniques so the context weights have something to match.
+- The slice view: the dull filter already varies z for world seeds; the tiles should show it.
+- Name more multi-step idioms (fbm-like sums, smooth unions) and add them to glslPatterns so Explain knows them too.
+- Surprise me could jitter hole values within their ranges, and offer "again" variations of one chain.

@@ -26,12 +26,12 @@ import type { DocInput, Origin } from '../codeExplorer/types';
 import type { GraphNode } from '../types/nodeGraph';
 import { mineDoc } from './mine';
 import { generatedMoves } from './generated';
-import { moveId, varDefault, holeRange } from './shared';
+import { moveId, varDefault, holeRange, robustRange, validTemplate } from './shared';
 
-export { moveId, varDefault, holeRange };
+export { moveId, varDefault, holeRange, robustRange };
 
 /** Bumped when the stored shape or the mining rules change: the prebuilt catalogue is rebuilt. */
-export const MOVES_SCHEMA = 1;
+export const MOVES_SCHEMA = 2;
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
@@ -78,6 +78,8 @@ export interface MoveSignature {
   role: Role;
   /** What the result stands for. */
   outRole: Role;
+  /** The result stands for what `x` stood for, whatever that was (a swizzle of a colour is a colour). */
+  keep?: true;
 }
 
 export interface NumberHole {
@@ -144,8 +146,11 @@ export interface Move {
   generated?: true;
 }
 
-/** Which move follows which along the same variable's chain (`from`'s result is `to`'s x). */
-export interface OrderStat { from: string; to: string; dim: Dimension; n: number }
+/**
+ * Which move follows which along the same variable's chain (`from`'s result is `to`'s x), in a
+ * dimension and for a subject fed by `feed` (what fed the variable `to` acts on).
+ */
+export interface OrderStat { from: string; to: string; dim: Dimension; feed: Feed; n: number }
 
 export interface Catalogue {
   schema: number;
@@ -278,8 +283,8 @@ export class CatalogueBuilder {
     }
   }
 
-  addPair(fromKey: string, toKey: string, dim: Dimension, n = 1): void {
-    bump(this.order, `${moveId(fromKey)}>${moveId(toKey)}>${dim}`, n);
+  addPair(fromKey: string, toKey: string, dim: Dimension, feed: Feed = 'unknown', n = 1): void {
+    bump(this.order, `${moveId(fromKey)}>${moveId(toKey)}>${dim}>${feed}`, n);
   }
 
   /** Add a whole catalogue (another doc set, the prebuilt one, a local one). */
@@ -315,7 +320,7 @@ export class CatalogueBuilder {
     }
     for (const o of cat.order) {
       const from = idToKey.get(o.from), to = idToKey.get(o.to);
-      if (from && to) bump(this.order, `${moveId(from)}>${moveId(to)}>${o.dim}`, o.n);
+      if (from && to) bump(this.order, `${moveId(from)}>${moveId(to)}>${o.dim}>${o.feed ?? 'unknown'}`, o.n);
     }
   }
 
@@ -337,7 +342,8 @@ export class CatalogueBuilder {
           const all = entries.map(([v]) => v);
           const seenMin = Math.min(...all), seenMax = Math.max(...all);
           const def = counted[0]?.[0] ?? h.default;
-          return { ...h, default: def, seenMin, seenMax, range: holeRange(seenMin, seenMax, def), vals: counted.slice(0, VALS_CAP) };
+          // The slider covers the usual values (10th to 90th percentile), not one shader's 100000.
+          return { ...h, default: def, seenMin, seenMax, range: robustRange(entries, def, m.sig.role), vals: counted.slice(0, VALS_CAP) };
         }
         const nm = a.names.get(h.name);
         const names = nm ? [...nm.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).slice(0, 4).map(([k]) => k) : h.names;
@@ -354,10 +360,10 @@ export class CatalogueBuilder {
     const ids = new Set(moves.map(m => m.id));
     const order: OrderStat[] = [];
     for (const [k, n] of this.order) {
-      const [from, to, dim] = k.split('>');
-      if (ids.has(from) && ids.has(to)) order.push({ from, to, dim: dim as Dimension, n });
+      const [from, to, dim, feed] = k.split('>');
+      if (ids.has(from) && ids.has(to)) order.push({ from, to, dim: dim as Dimension, feed: (feed || 'unknown') as Feed, n });
     }
-    order.sort((x, y) => y.n - x.n || x.from.localeCompare(y.from) || x.to.localeCompare(y.to) || x.dim.localeCompare(y.dim));
+    order.sort((x, y) => y.n - x.n || x.from.localeCompare(y.from) || x.to.localeCompare(y.to) || x.dim.localeCompare(y.dim) || x.feed.localeCompare(y.feed));
     return { schema: MOVES_SCHEMA, docs: this.docs, moves, order };
   }
 }
@@ -409,6 +415,7 @@ export function movesFor(seed: Seed, cat: Catalogue = activeCatalogue()): Move[]
   const feeds = asList(seed.feeds), into = asList(seed.into), techs = seed.techniques;
   return cat.moves.filter(m => {
     if (m.sig.in !== seed.type) return false;
+    if (!validMove(m)) return false;
     if (seed.role && m.sig.role !== seed.role && m.sig.role !== 'unknown') return false;
     const cs = m.contexts.filter(c => c.dim === seed.dimension);
     if (!cs.length) return false;
@@ -418,6 +425,18 @@ export function movesFor(seed: Seed, cat: Catalogue = activeCatalogue()): Move[]
     if (techs?.length && !cs.some(c => c.techniques.some(t => techs.includes(t)))) return false;
     return true;
   });
+}
+
+const validCache = new WeakMap<object, boolean>();
+/**
+ * Does the move type-check by GLSL ES 3.0's rules on its input type, giving the type it says?
+ * (The miner checks this already; catalogues from older rules, or made elsewhere, are checked here
+ * so a move that can't compile never reaches the grid.)
+ */
+export function validMove(m: Pick<Move, 'template' | 'holes' | 'sig'>): boolean {
+  let v = validCache.get(m);
+  if (v === undefined) { v = validTemplate(m.template, templateEnv(m), m.sig.out); validCache.set(m, v); }
+  return v;
 }
 
 /** Moves that followed `move` along a chain (in a dimension, or all), most often first. */
@@ -495,6 +514,28 @@ export function moveLabel(m: Pick<Move, 'family' | 'sig'>): string {
   if (m.family === 'offset') return r === 'space' ? 'move' : r === 'colour' ? 'tint' : r === 'time' ? 'delay' : 'offset';
   if (m.family === 'colour' && r === 'space') return 'colour by space';
   return m.family;
+}
+
+/** A place a move was seen, with what it takes to open it there (Find uses / the Code explorer's jump). */
+export interface SourceRef {
+  /** As `sourceLabel` says it. */
+  label: string;
+  docId: string;
+  docLabel: string;
+  origin: Origin;
+  /** The node's group path, its own id last. */
+  nodePath?: string[];
+  field?: string;
+  line?: number;
+}
+
+export function sourceRef(cat: Pick<Catalogue, 'docs'>, s: MoveSource): SourceRef | null {
+  const d = cat.docs[s.doc];
+  if (!d) return null;
+  return {
+    label: sourceLabel(cat, s), docId: d.id, docLabel: d.label, origin: d.origin,
+    ...(s.path?.length ? { nodePath: s.path } : {}), ...(s.field !== undefined ? { field: s.field } : {}), ...(s.line !== undefined ? { line: s.line } : {}),
+  };
 }
 
 /** "Fractal Rings", or "your import: Shadertoy tunnel" for the user's own code. */

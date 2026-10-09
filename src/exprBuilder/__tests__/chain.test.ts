@@ -13,7 +13,7 @@ import { compileGraph } from '../../compiler/graphCompiler';
 import { typeOfExpr, type Catalogue, type Move } from '../moves';
 import { unpackCatalogue, type PackedCatalogue } from '../pack';
 import {
-  TIME_SEED, UV_SEED, WORLD_SEED, chainEnd, inlineSteps, nextMoves, plotChain, rankMoves, seedForMoves, stepCode, stepFromMove, tileSteps, variableSeed,
+  TIME_SEED, UV_SEED, WORLD_SEED, chainEnd, inlineSteps, nextMoves, plotChain, simpleRank, seedForMoves, stepCode, stepFromMove, tileSteps, variableSeed,
   type Chain, type ChainStep, type Tile,
 } from '../chain';
 import { CHAIN_KEY, chainBlock, chainBlockParams, chainGraph, chainOfBlock, previewGraph } from '../block';
@@ -71,9 +71,9 @@ describe('the grid of next moves', () => {
     expect(new Set(all).size).toBe(all.length);
   });
 
-  it('ranks context matches first, then by count (a pure, replaceable function)', () => {
+  it('phase 2\'s baseline ranks context matches first, then by count; the ranker is replaceable', () => {
     const ms = cat.moves.filter(m => m.sig.in === 'vec2').slice(0, 200);
-    const ranked = rankMoves(ms, { dimension: '2d', feeds: ['uv'] });
+    const ranked = simpleRank(ms, { dimension: '2d', feeds: ['uv'] }, cat).map(s => s.move);
     expect(ranked.length).toBe(ms.length);
     const hit = (m: Move) => !m.generated && m.contexts.some(c => c.dim === '2d' && c.feed === 'uv');
     const firstMiss = ranked.findIndex(m => !hit(m));
@@ -81,7 +81,7 @@ describe('the grid of next moves', () => {
     const hits = ranked.filter(hit);
     for (let i = 1; i < hits.length; i++) expect(hits[i - 1].count).toBeGreaterThanOrEqual(hits[i].count);
     // A different ranking plugs in
-    const rev = nextMoves({ seed: UV_SEED, steps: [] }, cat, 0, moves => [...moves].reverse());
+    const rev = nextMoves({ seed: UV_SEED, steps: [] }, cat, 0, moves => [...moves].reverse().map((move, i) => ({ move, score: -i, follow: 0 })));
     expect(rev.same[0].key).not.toBe(nextMoves({ seed: UV_SEED, steps: [] }, cat).same[0].key);
   });
 
@@ -217,7 +217,7 @@ describe('Add to graph', () => {
   it('places the nodes beside the graph and wires a colour result into a free Output', () => {
     const out = { id: 'o', type: 'output', position: { x: 0, y: 0 }, inputs: { color: { type: 'vec3', label: 'Color' } }, outputs: {}, params: {} } as never;
     let chain: Chain = { seed: WORLD_SEED, steps: [] };
-    chain = apply(chain, pick(nextMoves(chain, cat).same, 'fract(x)'));
+    chain = apply(chain, nextMoves(chain, cat).same.find(t => t.kind === 'step' && t.move.sig.out === 'vec3')!);
     let n = 0;
     const r = addChain([out], chain, { nextId: () => `a${++n}` });
     expect(r.wiredOutput).toBe(true);
