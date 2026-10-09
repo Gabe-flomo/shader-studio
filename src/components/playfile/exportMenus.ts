@@ -1,7 +1,7 @@
 /**
- * Every download the app offers, with `.playfile` as the first choice and the
- * readable format it always had as the other (docs/playfile-format.md,
- * "Where the app writes one"). Each `offer…` opens the small format menu at
+ * Every download the app offers. Graphs and Play setups export as `.playfile` only (a readable JSON
+ * file still opens); other things keep `.playfile` first and their readable format as the other
+ * (docs/playfile-format.md, "Where the app writes one"). Each `offer…` opens the small format menu at
  * the button that asked; the plan's gates stay as they were for each export.
  */
 import { requireFeature } from '../../lib/plan';
@@ -28,22 +28,19 @@ function playfileChoices(asPlay: boolean, hint: string) {
 
 /** The Studio's Export (top bar, phone menu, the shortcut). */
 export function offerGraphExport(anchor: Anchor): void {
-  chooseExportFormat(anchor, [
-    ...playfileChoices(false, 'The graph and what it uses (published nodes, functions, images), in one file that opens anywhere'),
-    { label: 'As readable JSON', icon: 'code', hint: 'The graph alone, as a .json file you can read and edit', run: async () => {
-      reportFileResult(await useNodeGraphStore.getState().exportGraph(), { failTitle: 'Couldn’t export the graph', success: 'Graph exported' });
-    } },
-  ], 'Export this graph');
+  // Graphs export as .playfile only (a JSON graph still opens; saving it again writes a .playfile).
+  offerOrRun(anchor, playfileChoices(false, 'The graph and what it uses (published nodes, functions, images), in one file that opens anywhere'), 'Export this graph');
+}
+
+/** One way to save: just do it. Several (linked presentations): ask. */
+function offerOrRun(anchor: Anchor, choices: ReturnType<typeof playfileChoices>, title: string): void {
+  if (choices.length === 1) { void choices[0].run(); return; }
+  chooseExportFormat(anchor, choices, title);
 }
 
 /** The Play page's export. */
 export function offerPlayExport(anchor: Anchor): void {
-  chooseExportFormat(anchor, [
-    ...playfileChoices(true, 'The graph, the panel and the mappings as they are now, with what they use'),
-    { label: 'As readable JSON', icon: 'code', hint: 'A play file (.json): the graph and its Play setup, readable', run: async () => {
-      reportFileResult(await useNodeGraphStore.getState().exportPlayFile(), { failTitle: 'Couldn’t export the play file', success: 'Play file exported' });
-    } },
-  ], 'Export the Play setup');
+  offerOrRun(anchor, playfileChoices(true, 'The graph, the panel and the mappings as they are now, with what they use'), 'Export the Play setup');
 }
 
 /** A presentation (the open one when `name` is its name, or a saved one). */

@@ -518,7 +518,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       <>
         <OpenPlayableButton compact={compact} />
         <IconButton icon="import" label="Import a play file (a graph with its Play panel and mappings)" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }} />
-        <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now (.playfile, or readable JSON)" disabled={play.controls.length === 0} onClick={e => offerPlayExport(e.currentTarget)} />
+        <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now (.playfile)" disabled={play.controls.length === 0} onClick={e => offerPlayExport(e.currentTarget)} />
         {!play.notes && !play.source && !notesEditing && <IconButton icon="comment" label="Add notes: what this setup shows, how to play it, and where it comes from (saved with the graph and in play files)" onClick={() => setNotesEditing(true)} />}
         <IconButton icon="code" label={`Put it on a website: a player with controls, or the picture as a background, as a snippet or a page${websiteOk ? '' : ' (Pro)'}`} style={websiteOk ? undefined : { opacity: 0.5 }} onClick={() => { if (requireFeature('export.website')) setEmbedOpen(true); }} />
         <IconButton icon="record" label={`Record a performance: play for up to a minute, watch it back, render it frame by frame${takesOk ? '' : ' (Pro)'}`} style={takesOk ? undefined : { opacity: 0.5 }} onClick={() => useTakes.getState().openPerformance()} />
