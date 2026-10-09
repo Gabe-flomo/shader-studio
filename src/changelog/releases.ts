@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.106',
+    date: '2026-10-08',
+    title: 'Better bloom, quieter background',
+    highlights: [
+      { area: 'Studio', text: 'Upgrade an old Bloom to a same-frame glow (right-click or the card\'s spark button): no lag or smear behind moving things, a soft core and a long tail.', link: { kind: 'doc', path: 'docs/blur-and-glow.md' } },
+      { area: 'Studio', text: 'Glow (texture) Bloom chain has Tail, for a long, dreamy falloff; Tone Map has Jodie Reinhard, which keeps bright glows coloured.' },
+      { area: 'Files', text: 'App settings → Background: slow down or pause while another window is in front, and free GPU memory after 3 minutes hidden, so other tabs don\'t run short.', link: { kind: 'doc', path: 'docs/background.md' } },
+    ],
+  },
+  {
     id: '2026.10.105',
     date: '2026-10-08',
     title: 'Curve Trace',
