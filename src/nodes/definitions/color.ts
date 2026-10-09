@@ -124,7 +124,11 @@ vec3 gradientBlend(vec2 uv, vec3 colorA, vec3 colorB, int mode, float offset) {
     if (mode == 0) { t = uv.x * 0.5 + 0.5; }
     else if (mode == 1) { t = uv.y * 0.5 + 0.5; }
     else if (mode == 2) { t = length(uv); }
-    else if (mode == 3) { t = atan(uv.y, uv.x) / 6.28318 + 0.5; }
+    // Angular, seamless: the angle up from the bottom on either side (left half mirrors the right),
+    // so it runs Color A at the bottom to Color B at the top with no jump where atan wraps at ±π.
+    else if (mode == 3) { t = atan(uv.y, abs(uv.x)) / 3.14159265 + 0.5; }
+    // Angular, wrap: one full turn, 0 → 1, with a hard seam on the left where the angle wraps.
+    else if (mode == 5) { t = atan(uv.y, uv.x) / 6.28318 + 0.5; }
     else { t = (uv.x + uv.y) * 0.5 * 0.7071 + 0.5; }
     return mix(colorA, colorB, clamp(t + offset, 0.0, 1.0));
 }`;
@@ -264,7 +268,7 @@ export const GradientNode: NodeDefinition = {
   type: 'gradient',
   label: 'Gradient',
   category: 'Color',
-  description: 'Blend between two colors across UV space. Modes: Linear X, Linear Y, Radial (distance), Angular (atan2), Diagonal.',
+  description: 'Blend between two colors across UV space. Modes: Linear X, Linear Y, Radial (distance), Angular (round the centre, no seam), Angular full turn (with a seam where the angle wraps), Diagonal.',
   inputs: {
     uv:       { type: 'vec2',  label: 'UV'       },
     color_a:  { type: 'vec3',  label: 'Color A'  },
@@ -287,6 +291,7 @@ export const GradientNode: NodeDefinition = {
       { value: 'linear_y', label: 'Linear Y'  },
       { value: 'radial',   label: 'Radial'    },
       { value: 'angular',  label: 'Angular'   },
+      { value: 'angularWrap', label: 'Angular, full turn' },
       { value: 'diagonal', label: 'Diagonal'  },
     ]},
     color_a:  { label: 'Color A',  type: 'vec3',  min: 0, max: 1, step: 0.01 },
@@ -298,7 +303,7 @@ export const GradientNode: NodeDefinition = {
     const uvVar    = inputVars.uv       ?? 'vec2(0.0)';
     const tOffset  = inputVars.t_offset ?? p(node.params.t_offset, 0.0);
     const modeStr  = (node.params.mode as string) ?? 'linear_x';
-    const modeMap: Record<string, number> = { linear_x: 0, linear_y: 1, radial: 2, angular: 3, diagonal: 4 };
+    const modeMap: Record<string, number> = { linear_x: 0, linear_y: 1, radial: 2, angular: 3, diagonal: 4, angularWrap: 5 };
     const modeInt  = modeMap[modeStr] ?? 0;
     const colorA = inputVars.color_a ?? pv3(node.params.color_a, [1.0, 0.2, 0.2]);
     const colorB = inputVars.color_b ?? pv3(node.params.color_b, [0.2, 0.2, 1.0]);
