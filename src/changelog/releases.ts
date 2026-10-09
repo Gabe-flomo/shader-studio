@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.105',
+    date: '2026-10-08',
+    title: 'Curve Trace',
+    highlights: [
+      { area: 'Studio', text: 'Curve Trace (2D) and Curve Trace 3D: continuous Lissajous and harmonograph curves as distance fields you can colour, glow or combine like any SDF.', link: { kind: 'doc', path: 'docs/curve-trace.md' } },
+      { area: 'Studio', text: 'Draw a curve with a moving pen and a fading trail, or morph between two figures. Lateral or rotary motion; waves or your own formula in t.', link: { kind: 'example', key: 'curveTracePen' } },
+      { area: 'Studio', text: 'New examples: pen drawing, morph, harmonograph intervals and a 3D Lissajous knot.', link: { kind: 'example', key: 'curveTraceKnot' } },
+    ],
+  },
+  {
     id: '2026.10.104',
     date: '2026-10-08',
     title: 'Repeat Scene combine',
