@@ -21,6 +21,7 @@ import { hasHiddenBlur } from '../compiler/blurPasses';
 import { agentPreset } from './agentExamples';
 import { addAgentPieceTo, agentStarter, freshIds, placeInFreeSpace, startRuleIn, type AgentPiece, type AgentRuleStart } from './agentSetup';
 import { rulesStarter } from '../agentRules/starter';
+import { agents3dStarter } from '../agentRules/space3d';
 import { particlesAsNodes } from './particlesAsNodes';
 import { openGridRulesInGraph } from './gridRulesAsNodes';
 import { openNewSceneBuilder } from '../sceneBuilder/store';
@@ -894,7 +895,7 @@ interface NodeGraphState {
    * Add an Agents starter setup at the top level (the Add Agents group choice): Emit → Agents → …,
    * wired to the Output over what it showed, one undo step. Returns the Agents group's id.
    */
-  addAgentsStarter: (kind: 'particles' | 'slime' | 'rules', position?: { x: number; y: number }) => string | null;
+  addAgentsStarter: (kind: 'particles' | 'slime' | 'rules' | 'rules3d', position?: { x: number; y: number }) => string | null;
   /**
    * Spawn a pre-wired subgraph from a descriptor.
    * `origin` is the top-left anchor in canvas space.
@@ -3494,19 +3495,23 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     if (get().activeGroupPath.length) get().exitToRoot();
     const before = get().nodes;
     const output = graphOutput(before);
-    // Rules: the Slime setup with its group in rules mode (docs/agent-rules.md).
-    const starter = kind === 'rules' ? rulesStarter(output?.inputs.color?.connection ?? null) : agentStarter(kind, output?.inputs.color?.connection ?? null);
+    // Rules: the Slime setup with its group in rules mode (docs/agent-rules.md). Rules in 3D: the
+    // 3D Agent Builder's setup (agentRules/space3d.ts), seen through Draw agents' camera.
+    const starter = kind === 'rules3d' ? agents3dStarter()
+      : kind === 'rules' ? rulesStarter(output?.inputs.color?.connection ?? null) : agentStarter(kind, output?.inputs.color?.connection ?? null);
     const { nodes: fresh, idOf } = freshIds(starter.nodes, () => idGenerator.next());
     const placed = placeInFreeSpace(before, fresh, position ?? get()._viewportCenterGetter?.() ?? { x: 0, y: 0 });
-    undoManager.push(before, { label: `Added an Agents group (${kind === 'particles' ? 'Particles' : kind === 'rules' ? 'Rules' : 'Slime'})` });
+    undoManager.push(before, { label: `Added an Agents group (${kind === 'particles' ? 'Particles' : kind === 'rules' ? 'Rules' : kind === 'rules3d' ? 'Rules in 3D' : 'Slime'})` });
     let nodes = [...before, ...placed];
     const out = { nodeId: idOf(starter.out.nodeId), outputKey: starter.out.outputKey };
     if (output) nodes = nodes.map(n => n.id === output.id ? { ...n, inputs: { ...n.inputs, color: { ...n.inputs.color, connection: out } } } : n);
     set({ nodes });
     get().compile();
     get().focusNode(idOf(starter.groupId));
-    toast.info(kind === 'particles' ? 'Particles added' : kind === 'rules' ? 'Agent rules added' : 'Slime added', {
-      message: `${kind === 'particles' ? 'Emit → Agents (Curl noise → Integrate inside) → Draw agents' : kind === 'rules' ? 'Emit → Agents (rules: turn toward the trail, wander, leave trail; press Edit rules) → Deposit → Trail field → palette' : 'Emit → Agents (Sense → Steer → Move inside) → Deposit → Trail field → palette'}${output ? ', wired to the Output over what it showed' : ''}. Double-click the group to open its rule; every node has a note.`,
+    toast.info(kind === 'particles' ? 'Particles added' : kind === 'rules' ? 'Agent rules added' : kind === 'rules3d' ? '3D agents added' : 'Slime added', {
+      message: kind === 'rules3d'
+        ? `Emit (a Ball) → Agents (Space 3D, rules: the 3D slime) → Deposit → a volume Trail, and Draw agents through an orbiting camera${output ? ', on the Output' : ''}. The rules editor's Templates… has 3D flocks, orbiters and curl smoke; its Look tab the camera. Every node has a note.`
+        : `${kind === 'particles' ? 'Emit → Agents (Curl noise → Integrate inside) → Draw agents' : kind === 'rules' ? 'Emit → Agents (rules: turn toward the trail, wander, leave trail; press Edit rules) → Deposit → Trail field → palette' : 'Emit → Agents (Sense → Steer → Move inside) → Deposit → Trail field → palette'}${output ? ', wired to the Output over what it showed' : ''}. Double-click the group to open its rule; every node has a note.`,
     });
     return idOf(starter.groupId);
   },

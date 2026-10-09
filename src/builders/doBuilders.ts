@@ -1,7 +1,7 @@
 /**
  * doBuilders.ts — the Do… bar's builder phrases (lang/commands.ts BUILDER_COMMANDS): "new 3d
- * scene", "edit this scene", "new grid rules", "edit the rules", "open agent rules", "show the
- * recipe", "copy the recipe".
+ * scene", "edit this scene", "new grid rules", "edit the rules", "open agent rules", "new 3d
+ * agents", "show the recipe", "copy the recipe".
  *
  * A builder phrase is the whole sentence: lower-cased, with "the", "a", "an", "please" and
  * punctuation left out, it must be one of a command's phrases. `readBuilderCommand` finds it,
@@ -37,6 +37,7 @@ export type BuilderAction =
   | { kind: 'new-grid' }
   | { kind: 'open-grid'; nodeId: string }
   | { kind: 'new-agents' }
+  | { kind: 'new-agents3d' }
   | { kind: 'open-agents'; groupId: string }
   | { kind: 'show-recipe'; nodeId: string }
   | { kind: 'copy-recipe'; nodeId: string };
@@ -123,6 +124,8 @@ export function planBuilderCommand(cmd: BuilderCommand, ctx: BuilderContext): Bu
     }
     case 'new-agent-rules':
       return { id: cmd.id, label: 'Adds an Agents group in rules mode and opens its rules', action: { kind: 'new-agents' } };
+    case 'new-3d-agents':
+      return { id: cmd.id, label: 'Adds 3D agents (Ball Emit, volume Trail, an orbiting camera) and opens their rules', action: { kind: 'new-agents3d' } };
     case 'edit-rules': {
       const t = pickOne(ctx, all, nd => isGrid(nd) || isRulesGroup(nd));
       if (!t.node) return { id: cmd.id, label: 'Opens the rules', action: null, problem: which(t.many, 'Grid Rules node or rules Agents group') };

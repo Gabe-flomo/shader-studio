@@ -293,6 +293,21 @@ export const BUILDER_HELP: Record<BuilderKey, Record<string, HelpEntry>> = {
         'Every option is also an output socket on the Trail field (Channel 1–4) or Draw agents (Density).',
       ],
     },
+    space: {
+      title: 'Space: 2D or 3D',
+      lines: [
+        'Pattern: flat walkers move on the picture; 3D walkers fill a box (2 deep) and are seen through a camera.',
+        'Switching turns the whole setup: the trail becomes a volume, Emit\'s Disc becomes a Ball, a trail follower\'s sensors and speed go five times further (a volume\'s cells are coarse), and Draw agents gets a camera. Undo switches it back.',
+      ],
+    },
+    camera: {
+      title: 'The camera',
+      lines: [
+        'Pattern: Distance and Zoom frame the box; Angle and Elevation choose the side you look from; Orbit speed turns round it over time.',
+        'Focus and Blur are depth of field: walkers at the focus stay sharp, nearer and further ones spread into soft discs, which is what makes the depth read.',
+        'These are Draw agents\' Camera settings: the card has the rest (Flatten, Translate, Drift).',
+      ],
+    },
   },
 };
 

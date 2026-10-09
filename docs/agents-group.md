@@ -149,6 +149,8 @@ Set the group's **Space** (its Agents section) to **3D** and the walkers live in
 
 **Draw agents in 3D** sees the walkers through a camera, the same camera as Time Cube View and Frame Stack: **Distance**, **Angle** (degrees here), **Elevation** (degrees), **Orbit speed** (degrees a second), **Zoom**, **Flatten** (perspective to isometric), **Translate X / Y / Z** (move the camera and the point it looks at together). It turns the March Camera's way round, so the same numbers give the same view. On top, the Particles node's **Drift** (a slow turn, a bob and breathing) and depth of field: **Focus** (where it is sharp, as a share of Distance), **Blur** and **Max blur** (out of focus a walker spreads into a soft disc that keeps its light; wider than Max blur, walkers are thinned at random and each survivor is heavier, so blur costs no fill rate). Streaks draw their sharp share as lines and the blurred share as discs. Lights orbit in 3D and their halos land where the camera sees them.
 
+**Rules in 3D**: Builders → **3D Agent Builder** (or the Do… bar's "new 3d agents") sets all of this up round a rules group (a Ball Emit, a volume Trail, Draw agents through an orbiting camera), and the rules editor's **Space 2D / 3D** switch turns a rules setup either way (docs/agent-rules.md "2D and 3D").
+
 **Examples** (Examples → *Agents in 3D*), every node explained in its note:
 
 - **3D slime mold**: the slime rule in a 96-row volume, a foam of tubes through the whole box, an orbiting camera.

@@ -1,6 +1,7 @@
 /**
- * registry.ts — the three builders, as the node browser's Builders section shows them
- * (docs/node-browser.md, "Builders"): the 3D Scene Builder, Grid Rules and Agent Rules. Each is a
+ * registry.ts — the builders, as the node browser's Builders section shows them
+ * (docs/node-browser.md, "Builders"): the 3D and 2D Scene Builders, Grid Rules, Agent Rules and the
+ * 3D Agent Builder (Agent Rules in a volume, seen through a camera). Each is a
  * window that writes a graph for you from a form or a few lines of text.
  *
  * The section, the empty-canvas right-click menu and the Do… bar ("new 3d scene", "new grid
@@ -8,7 +9,7 @@
  */
 import type { IconName } from '../components/ui/iconPaths';
 
-export type BuilderId = 'scene' | 'scene2d' | 'grid' | 'agents';
+export type BuilderId = 'scene' | 'scene2d' | 'grid' | 'agents' | 'agents3d';
 
 export interface BuilderInfo {
   id: BuilderId;
@@ -52,6 +53,13 @@ export const BUILDERS: readonly BuilderInfo[] = [
     makes: 'slime, ants, flocks, infection…',
     action: 'Adds an Agents group in rules mode and opens its rules',
     keywords: ['builder', 'builders', 'rules', 'agents', 'agent', 'walkers', 'boids', 'when do'],
+  },
+  {
+    id: 'agents3d', title: '3D Agent Builder', icon: 'swarm',
+    description: 'Walkers in a volume, seen through a camera',
+    makes: '3D slime, 3D flocks, orbiting swarms, curl smoke…',
+    action: 'Adds 3D agents (Ball Emit, volume Trail, orbiting camera) and opens their rules',
+    keywords: ['builder', 'builders', 'agents', 'agent', '3d', 'volume', 'swarm', 'flock', 'orbit', 'camera', 'depth'],
   },
 ];
 

@@ -12,6 +12,7 @@ For the Agents group itself (Emit, Deposit, Trail field, Draw agents) see docs/a
 ## Start here
 
 - **Builders** (the node browser's first section, on the desktop and on a phone) → **Agent Rules**, the empty canvas's right-click → **Builders** → **Agent Rules…**, or the Do… bar's "new agent rules": the setup below, with its rules editor already open. "open agent rules" or "edit the rules" opens the selected (or only) rules group's editor.
+- **Builders → 3D Agent Builder** (or the right-click menu's **Builders**, or the Do… bar's "new 3d agents" / "3d agent builder"): the same in a volume, seen through a camera (below, "The 3D Agent Builder").
 - **Add an Agents group** (node browser → Simulation → Agents) and pick **Rules (When … Do …)**. You get Emit → Agents → Deposit → Trail field → palette, wired to the Output, with one rule that already moves: *always → turn toward its own trail, wander, leave trail* (slime mold).
 - Or open an example: **Examples → Agents: rules** (eleven templates, below).
 - Or, on any Agents group in node mode, **Write as rules…** under its buttons (it replaces the inside; undo brings it back).
@@ -27,8 +28,9 @@ Rules the first time, then on the tab last used. Rarely used settings are folded
 - **Species**: up to 4 species (each lays its own trail channel by default, and the group's Species follows), each with a **Speed** (picture units a second: every walker starts at it) and up to 8 **states** with a name and a colour; **Edges** (wrap, bounce, slide) for every species.
 - **Rules**: the rules of the selected species (pick another above them), top to bottom. Each rule is a card: its sentence, **When** (conditions joined by *and*), **Do** (actions, in order), **Stop after this rule**, On/off, move up/down, duplicate, remove. **+ and…** adds a condition, **+ do…** an action. **Masks** (folded): up to two inputs on the group card, a texture or any number chain read where the walker stands.
 - **Trails**: names for the four **trail channels** (so the sentences read "food trail"); folded, the **Sensors** (how far ahead, how wide) every trail reading uses, and the **Flow field** when a rule follows one.
-- **Look**: what the picture shows (below).
-- **Templates…** (top right) replaces the rule set with a template's.
+- **Look**: what the picture shows (below); in 3D first the **Camera**.
+- **Space 2D / 3D** (the header): where the walkers live. Switching turns the whole setup (below, "2D and 3D"); one undo step.
+- **Templates…** (top right) replaces the rule set with a template's. In 3D the **3D setups** come first (they set the Emit, Trail and camera too); a flat template picked in 3D is rescaled for the volume. In 2D the 3D setups are at the end (picking one switches Space).
 - **Show the lines** shows, under each rule, the Expression Block lines it compiles to.
 - **Open as nodes** (bottom left) closes the editor and enters the group.
 
@@ -241,7 +243,35 @@ A rules group's walkers lay no trail on the step they are born (Agent Output's `
 
 ## 2D and 3D
 
-Set the group's Space to 3D and the inside is generated again for 3D (the heading is a direction there, not an angle). Turns happen in this step's turning plane (the same plane Sense reads in); toward a point, the centre or the mouse, the point is on the picture's plane; masks are read at x and y. A 3D trail is a coarse volume (96 rows): raise Sensors ahead to 0.1–0.2 and the Speed to 1–1.5, or walkers can't escape their own trail (the editor says so). Open as nodes in 3D gives 3D nodes; switching Space after opening as nodes needs Back to rules.
+Set the group's Space to 3D and the inside is generated again for 3D (the heading is a direction there, not an angle). Turns happen in this step's turning plane (the same plane Sense reads in); toward a point, the centre or the mouse, the point is on the picture's plane; masks are read at x and y. A 3D trail is a coarse volume (96 rows): Sensors ahead 0.1–0.2 and Speed 1–1.5, or walkers can't escape their own trail (the editor says so). Open as nodes in 3D gives 3D nodes; switching Space after opening as nodes needs Back to rules.
+
+**The editor's Space switch** (header, Space 2D / 3D) turns the setup, not only the group (`agentRules/space3d.ts` `convertGroupSpace`), in one undo step:
+
+| | 2D → 3D | 3D → 2D |
+|---|---|---|
+| Rules | a set that smells a trail: Sensors ahead and every speed (each species' Speed, set speed, accelerate) × 5 (0.03 → 0.15, 0.22 → 1.1). Flocks, swarms and particles (Neighbours, forces) are left alone: their distances are picture units either way | ÷ 5, so 2D → 3D → 2D is where it started |
+| Emit | Disc → Ball, Ring → Sphere, twice the size | Ball → Disc, Sphere → Ring, half the size |
+| Trail field | a volume by itself (a 3D group fills it); Volume 96 when unset, Half-life doubled | flat again, Half-life halved |
+| The view | Draw agents gets the camera's settings where it has none; when the Output doesn't show the group's Draw agents it is wired to one (a new Draw agents over a Night backdrop when there is none, marked as added), and what it showed is remembered on the group | the nodes added for 3D go and the Output shows what it showed before |
+
+**The camera** (Look tab, in 3D): Draw agents' **Distance**, **Angle**, **Elevation**, **Orbit speed** and **Zoom** as ruler sliders (typing past the end widens the range, kept on the card), with **Depth of field** (Focus, Blur, Max blur) folded and its summary showing. What the picture shows is folded under it in 3D (a 3D Trail's picture is the volume seen flat from the front).
+
+## The 3D Agent Builder
+
+**Builders → 3D Agent Builder**, the empty canvas's right-click → **Builders**, or the Do… bar's "new 3d agents" (also "3d agent builder", "new agents in 3d", "add 3d agents"). It adds, on the Output:
+
+> Emit (a **Ball** 0.5 round the middle, facing outward) → **Agents** (Space 3D, rules mode: the 3D slime, 256k walkers, Pre-roll 3) → Deposit → **Trail field** (a 96-row volume) and its Image back into the group; **Draw agents** through an orbiting camera (3.8 away, 15° up, 6° a second, a little blur) over a Night backdrop → Output
+
+and opens the rules editor. Every node has a note saying what it does here and why.
+
+| 3D setup (Templates… → 3D setups) | Rules | Setup |
+|---|---|---|
+| **3D slime mold** | always → turn toward its own trail (30°), wander ±6°, leave trail; sensors 0.15 ahead, Speed 1.2 | 256k; Ball, outward; Volume 96, Half-life 0.1; glowing dots coloured by heading |
+| **3D flock (boids)** | always → steer away from neighbours within 0.08 (12°), match their heading (10°), move to their centre (3°), wobble; Speed 0.7 | 64k; the whole box, any way; streaks by heading, camera 20° up circling at 10° a second |
+| **Swarm: orbiters in 3D** | always → orbit the centre at 0.6 (5°), steer away, move to their centre, wobble; more than 60 neighbours → packed (orange), faster; fewer → circling | 64k; Ball 0.8; Colour by Agent; camera 38° up (a galaxy-like ring) |
+| **Particles: 3D curl smoke** | always → curl noise 1.2 (3D curl), drag 0.4, fade over 6 s; older than 6 s → die | 64k; Keep full from a small Ball; Edges Bounce |
+
+A 3D setup picked on a flat group switches it to 3D first. Not built yet: a "round a shape" setup (a ray-marched shape, Collide (3D scene) and Depth, as the *Swarm round a torus* example does by hand).
 
 ## Templates (Examples → Agents: rules)
 
@@ -273,4 +303,4 @@ The node versions in *Simulations: agents* go further where rules can't (births 
 
 ## Code
 
-`src/agentRules/`: `spec.ts` (the rule set's types, defaults and sentences), `generate.ts` (rule set → inside nodes), `apply.ts` (rules mode on a group, Open as nodes, Back to rules, the Births Emit), `templates.ts` (the eleven templates and their setups), `starter.ts`, `storeActions.ts` (undo, compile, Space changes). The editor is `components/NodeGraph/AgentRulesModal.tsx`; the card buttons `AgentRulesCard.tsx`. Tests: `src/agentRules/__tests__/agentRules.test.ts` runs the generated GLSL on the CPU (`cpuSim.ts`, through `compiler/__tests__/glslEval.ts`) for every condition and action, state machines, the chance, determinism and Open as nodes; `agentKinds.test.ts` the kinds' filters, the neighbour conditions and actions (a brute force standing in for the Neighbours node), forces, drag, fade, orbit and Open as nodes with Neighbours.
+`src/agentRules/`: `spec.ts` (the rule set's types, defaults and sentences), `generate.ts` (rule set → inside nodes), `apply.ts` (rules mode on a group, Open as nodes, Back to rules, the Births Emit), `templates.ts` (the eleven templates and their setups), `space3d.ts` (the 3D templates, the 3D Agent Builder's setup, the Space switch's conversion), `starter.ts`, `storeActions.ts` (undo, compile, Space changes). The editor is `components/NodeGraph/AgentRulesModal.tsx`; the card buttons `AgentRulesCard.tsx`. Tests: `src/agentRules/__tests__/agentRules.test.ts` runs the generated GLSL on the CPU (`cpuSim.ts`, through `compiler/__tests__/glslEval.ts`) for every condition and action, state machines, the chance, determinism and Open as nodes; `agents3d.test.ts` the 3D setup, the 3D templates and the Space switch both ways; `agentKinds.test.ts` the kinds' filters, the neighbour conditions and actions (a brute force standing in for the Neighbours node), forces, drag, fade, orbit and Open as nodes with Neighbours.

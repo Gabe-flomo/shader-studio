@@ -953,6 +953,17 @@ Examples:
 - `new agent rules`
 - `new agents with rules`
 
+### new 3d agents
+
+Adds 3D agents (Emit in a Ball → Agents in Space 3D, rules mode → Deposit → a volume Trail, Draw agents through an orbiting camera, on the Output) and opens their rules: Space 2D / 3D, 3D templates, the camera on the Look tab.
+
+Words: `new 3d agents`, `new 3d agent rules`, `add 3d agents`, `make 3d agents`, `new agents in 3d`, `3d agent builder`, `open the 3d agent builder`, `new 3d swarm`, `new 3d slime`
+
+Examples:
+
+- `new 3d agents`
+- `3d agent builder`
+
 ### show the recipe
 
 Shows the recipe chip of a builder-made node expanded: a built scene's recipe, a Grid Rules node's rule, a rules group's rules. Works on the selected builder-made node, else the only one.
