@@ -23,6 +23,7 @@ import { agentRulesSummary, builderRecipeOf, gridRecipeText, highlightRecipe, sc
 import { normalisePhrase, planBuilderCommand, readBuilderCommand } from '../doBuilders';
 import { openBuilder, runBuilderAction } from '../open';
 import { useBuilderWindows } from '../windows';
+import { useExprBuilder } from '../../exprBuilder/store';
 import { groupRules } from '../../agentRules/apply';
 import { COUNT_PRESETS, SMOOTH_PRESETS, presetPatch } from '../../gridRules/spec';
 
@@ -35,12 +36,15 @@ const handScene = (): GraphNode => ({ id: 'hand', type: 'sceneGroup', position: 
 const grid = (params: Record<string, unknown> = {}): GraphNode => ({ id: 'g1', type: 'gridRules', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params });
 
 describe('the Builders section', () => {
-  it('lists the five builders with a line each and what they make', () => {
-    expect(BUILDERS.map(b => b.title)).toEqual(['3D Scene Builder', '2D Scene Builder', 'Grid Rules', 'Agent Rules', '3D Agent Builder']);
+  it('lists the six builders with a line each and what they make', () => {
+    expect(BUILDERS.map(b => b.title)).toEqual(['3D Scene Builder', '2D Scene Builder', 'Grid Rules', 'Agent Rules', '3D Agent Builder', 'Expression Builder']);
     for (const b of BUILDERS) { expect(b.description.length).toBeGreaterThan(10); expect(b.makes.length).toBeGreaterThan(5); }
   });
-  it('is searchable: "builder" finds all five, "scene" the Scene Builders, "rules" Grid and Agent Rules, "3d" the 3D ones', () => {
-    expect(matchBuilders('builder').map(b => b.id)).toEqual(['scene', 'scene2d', 'grid', 'agents', 'agents3d']);
+  it('is searchable: "builder" finds all six, "scene" the Scene Builders, "rules" Grid and Agent Rules, "3d" the 3D ones, "expression" the Expression Builder', () => {
+    expect(matchBuilders('builder').map(b => b.id)).toEqual(['scene', 'scene2d', 'grid', 'agents', 'agents3d', 'expr']);
+    expect(matchBuilders('expression').map(b => b.id)).toEqual(['expr']);
+    expect(matchBuilders('glsl').map(b => b.id)).toEqual(['expr']);
+    expect(matchBuilders('warp').map(b => b.id)).toEqual(['expr']);
     expect(matchBuilders('scene').map(b => b.id)).toEqual(['scene', 'scene2d']);
     expect(matchBuilders('2d').map(b => b.id)).toEqual(['scene2d']);
     expect(matchBuilders('kaleidoscope').map(b => b.id)).toEqual(['scene2d']);
@@ -60,6 +64,16 @@ describe('opening a builder', () => {
     useNodeGraphStore.setState({ nodes: [], activeGroupPath: [], selectedNodeId: null, selectedNodeIds: [] });
     useBuilderWindows.setState({ gridRules: null, agentRules: null, recipe: null });
     useSceneBuilder.setState({ open: false, targetSceneId: null });
+  });
+  it('Expression Builder: its window on a new chain from UV, at the menu\'s point', () => {
+    useExprBuilder.setState({ open: false });
+    openBuilder('expr', { x: 40, y: 60 });
+    const xb = useExprBuilder.getState();
+    expect(xb.open).toBe(true);
+    expect(xb.chain.seed.kind).toBe('uv');
+    expect(xb.chain.steps).toEqual([]);
+    expect(xb.place).toEqual({ x: 40, y: 60 });
+    expect(useNodeGraphStore.getState().nodes).toEqual([]);
   });
   it('3D Scene Builder: the builder on a new scene', () => {
     openBuilder('scene');
@@ -175,6 +189,7 @@ describe('Do… bar builder phrases', () => {
     ['open agent rules', 'open-agent-rules'], ['new agent rules', 'new-agent-rules'],
     ['new 3d agents', 'new-3d-agents'], ['3D agent builder', 'new-3d-agents'], ['open the 3d agent builder', 'new-3d-agents'],
     ['new 3d agents round a shape', 'new-3d-agents-shape'], ['agents around a shape', 'new-3d-agents-shape'],
+    ['new expression', 'new-expression'], ['Expression builder', 'new-expression'], ['open the expression builder', 'new-expression'], ['build an expression', 'new-expression'],
     ['show the recipe', 'show-recipe'], ['copy the recipe', 'copy-recipe'], ['please copy the recipe', 'copy-recipe'],
   ];
   for (const [text, id] of phrases) it(`“${text}” reads as ${id}`, () => expect(readBuilderCommand(text)?.id).toBe(id));
@@ -206,6 +221,7 @@ describe('Do… bar builder phrases', () => {
     expect(plan('edit the rules', [...s.nodes, grid()], ['g1']).action).toEqual({ kind: 'open-grid', nodeId: 'g1' });
     expect(plan('open agent rules', []).action).toEqual({ kind: 'new-agents' });
     expect(plan('new 3d agents', []).action).toEqual({ kind: 'new-agents3d' });
+    expect(plan('new expression', []).action).toEqual({ kind: 'new-expression' });
     expect(plan('new 3d agents round a shape', []).action).toEqual({ kind: 'new-agents3d', template: 'shape3d' });
     expect(plan('show the recipe', graph, [march.id]).action).toEqual({ kind: 'show-recipe', nodeId: scene.id });
     expect(plan('copy the recipe', [grid()]).action).toEqual({ kind: 'copy-recipe', nodeId: 'g1' });
@@ -223,5 +239,9 @@ describe('Do… bar builder phrases', () => {
     useNodeGraphStore.setState({ nodes: graph });
     expect(runBuilderAction({ kind: 'edit-scene', sceneId: scene.id })).toBe(true);
     expect(useSceneBuilder.getState().targetSceneId).toBe(scene.id);
+    useExprBuilder.setState({ open: false });
+    expect(runBuilderAction(plan('new expression', [])!.action!)).toBe(true);
+    expect(useExprBuilder.getState().open).toBe(true);
+    expect(useExprBuilder.getState().chain.seed.kind).toBe('uv');
   });
 });

@@ -8,6 +8,7 @@
  *  - Agent Rules: a new Agents group in rules mode (the Rules starter), its rules editor open.
  *  - 3D Agent Builder: a new 3D rules group (agentRules/space3d.ts: Ball Emit, a volume Trail, Draw
  *    agents through an orbiting camera), its rules editor open.
+ *  - Expression Builder: its window on a new chain from UV (Add to graph makes the Expression Block).
  */
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { estimateNodeHeight } from '../store/graphLayout';
@@ -16,6 +17,7 @@ import { editSceneInBuilder } from '../sceneBuilder/actions';
 import { openNewSceneBuilder2D } from '../sceneBuilder2d/actions';
 import { addGridRules } from '../suggestions/doBarGridRules';
 import { toast } from '../components/ui/toastStore';
+import { openExpressionBuilder } from '../exprBuilder/store';
 import type { GraphNode } from '../types/nodeGraph';
 import type { BuilderId } from './registry';
 import { openAgentRulesWindow, openGridRulesEditor, showRecipeOf } from './windows';
@@ -55,6 +57,7 @@ export function openBuilder(id: BuilderId, at?: { x: number; y: number }): void 
   else if (id === 'scene2d') openNewSceneBuilder2D(at);
   else if (id === 'grid') newGridRules();
   else if (id === 'agents3d') newAgents3d();
+  else if (id === 'expr') openExpressionBuilder({ place: at });
   else newAgentRules();
 }
 
@@ -89,6 +92,7 @@ export function runBuilderAction(a: BuilderAction): boolean {
   switch (a.kind) {
     case 'new-scene': openNewSceneBuilder(); return true;
     case 'new-scene2d': openNewSceneBuilder2D(); return true;
+    case 'new-expression': openExpressionBuilder(); return true;
     case 'edit-scene': return editSceneInBuilder(a.sceneId);
     case 'new-grid': newGridRules(); return true;
     case 'open-grid': openGridRulesEditor(a.nodeId); return true;

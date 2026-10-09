@@ -157,6 +157,19 @@ export async function renderExprBlockRows(nodeId: string, at: number | 'return',
   const nodes = scopeNodes();
   const node = nodes.find(n => n.id === nodeId);
   if (!node) return null;
+  return renderBlockRows(node, nodes, at, rows, shape);
+}
+
+/** A row to render: its key, its expression (in the block's names after line `at`) and its type. */
+export type RenderRow = Pick<BuildUpRow, 'key' | 'expr' | 'type'>;
+
+/**
+ * Render rows as extra variables of an Expression Block in any graph (`nodes`, which holds the
+ * block): the Explain panel's build-up (the open graph) and the Expression Builder's tiles (its
+ * own small graph). `size` overrides a square's pixels (a bigger picture for a preview).
+ */
+export async function renderBlockRows(node: GraphNode, nodes: readonly GraphNode[], at: number | 'return', rows: readonly RenderRow[], shape: PictureShape, size?: number): Promise<Map<string, RowField> | null> {
+  const nodeId = node.id;
   // Rows with the same expression share a draw (the result is usually the last step)
   const distinct: Array<{ expr: string; type: string }> = [];
   const slot = new Map<string, number>();
@@ -174,9 +187,9 @@ export async function renderExprBlockRows(nodeId: string, at: number | 'return',
   const tail = names.map((v, i) => `  ${i ? 'else ' : ''}if (u_pvSel < ${i}.5) gl_FragColor = ${pack(v!, distinct[i].type)};`).join('\n');
   const fs = inject(compiled.fragmentShader, 'uniform float u_pvSel;\n', tail);
   if (!fs) return null;
-  const [w, h] = shape === 'square' ? [SQUARE_PX, SQUARE_PX] : [STRIP_PX, 1];
+  const [w, h] = shape === 'square' ? [size ?? SQUARE_PX, size ?? SQUARE_PX] : [STRIP_PX, 1];
   // u_time stays out of the key: a picture is a snapshot, like the node thumbnails
-  const key = `${djb2(fs)}|${shape}|${JSON.stringify(compiled.paramUniforms)}`;
+  const key = `${djb2(fs)}|${shape}|${w}|${JSON.stringify(compiled.paramUniforms)}`;
   let fields = cache.get(key);
   if (!fields) {
     const uniforms = { ...uniformsOf(compiled.paramUniforms), u_time: { value: useNodeGraphStore.getState().currentTime ?? 0 } };

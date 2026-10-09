@@ -1,6 +1,6 @@
 /**
  * helpContent.ts — the builders' built-in guidance (docs/scene-builder.md, docs/grid-rules.md,
- * docs/agent-rules.md): a short "how this works" for every builder section, rule type and empty
+ * docs/agent-rules.md, docs/expression-builder.md): a short "how this works" for every builder section, rule type and empty
  * list, each with a worked example the user can click to insert, and a plain-language hint for
  * every Agent Rules condition and action.
  *
@@ -17,7 +17,9 @@ export type HelpInsert =
   /** Grid Rules: params set on the node. */
   | { patch: Record<string, unknown> }
   /** Agent Rules: a rule added to the species' list. */
-  | { rule: AgentRule };
+  | { rule: AgentRule }
+  /** Expression Builder: a chain from a seed, as move templates with their numbers (exprBuilder/examples.ts). */
+  | { chain: { seed: 'uv' | 'world' | 'time'; steps: Array<{ template: string; values?: Record<string, number> }> } };
 
 export interface HelpExample { label: string; insert: HelpInsert }
 
@@ -28,7 +30,7 @@ export interface HelpEntry {
   examples?: HelpExample[];
 }
 
-export type BuilderKey = 'scene-builder' | 'grid-rules' | 'agent-rules';
+export type BuilderKey = 'scene-builder' | 'grid-rules' | 'agent-rules' | 'expr-builder';
 
 const mask = (counts: number[]) => counts.reduce((m, k) => m | (1 << k), 0);
 
@@ -315,6 +317,78 @@ export const BUILDER_HELP: Record<BuilderKey, Record<string, HelpEntry>> = {
         'Draw agents\' Depth is the March Loop\'s Distance: walkers further than the surface along a pixel\'s ray are hidden behind it.',
         'Torus, Sphere or Box; None takes every node it added away again.',
       ],
+    },
+  },
+  // ── Expression Builder ────────────────────────────────────────────────────────
+  'expr-builder': {
+    seed: {
+      title: 'The seed',
+      lines: [
+        'What the expression starts from: UV (the picture\'s coordinates, 2D), a world position (3D, a slice of it is drawn here), time (1D, drawn as a plot) or a plain variable of a type.',
+        'UV and Time are wired from a UV or Time node when you add the block; a world position or a variable stays an input for you to wire.',
+      ],
+      examples: [{ label: 'UV → Repeat → Centre → Circle', insert: { chain: { seed: 'uv', steps: [{ template: 'fract(x * #a)', values: { '#a': 4 } }, { template: 'x - #a', values: { '#a': 0.5 } }, { template: 'length(x)' }] } } }],
+    },
+    chain: {
+      title: 'The chain',
+      lines: [
+        'The expression so far, one row per move, each with a small picture of what it has become. The seed is the first row.',
+        'Click a row to go back to it: the rows after it stay (dimmed) until you pick a different move, and picking the same one walks forward again. Open a row\'s sliders to tune it any time.',
+        'Worked example: start from UV → Repeat (fract(x * 4)) → Centre (x − 0.5) → Circle (length(x)): a grid of dots.',
+      ],
+      examples: [{ label: 'UV → Repeat → Centre → Circle', insert: { chain: { seed: 'uv', steps: [{ template: 'fract(x * #a)', values: { '#a': 4 } }, { template: 'x - #a', values: { '#a': 0.5 } }, { template: 'length(x)' }] } } }],
+    },
+    'empty-chain': {
+      title: 'Grow an expression',
+      lines: [
+        'Pick a move from the grid: each tile is your expression with that move applied, drawn small. Hover one to see it big.',
+        'Keep going: every move works on the result of the last. Start from UV → Repeat → Centre → Circle for a grid of dots.',
+      ],
+      examples: [{ label: 'UV → Repeat → Centre → Circle', insert: { chain: { seed: 'uv', steps: [{ template: 'fract(x * #a)', values: { '#a': 4 } }, { template: 'x - #a', values: { '#a': 0.5 } }, { template: 'length(x)' }] } } }],
+    },
+    moves: {
+      title: 'Next moves',
+      lines: [
+        'Moves taken from real shaders (the examples, and your own code on this device), for the type the chain is now: the ones used where yours is (2D picture space, 3D world space, time) first, then the most used.',
+        'Moves that keep the type come first; ones that change it (x.x, length(x), a colour from space) and recipes (several moves seen together) are folded below with a summary.',
+      ],
+    },
+    same: {
+      title: 'Same type',
+      lines: ['Moves that give back the type they take (vec2 → vec2): zoom, move, repeat, fold, warp, rotate. They change the space, so the next moves still apply to it.'],
+    },
+    changing: {
+      title: 'Changes the type',
+      lines: ['Moves that turn the expression into another type: x.x or length(x) make a float (a distance, a mask), vec3(…) or a palette make a colour. After one, the grid shows the moves for the new type.'],
+    },
+    recipes: {
+      title: 'Recipes',
+      lines: ['Moves seen together in real code (fract(x * a) − b, length(x − c) − r), shown as one tile. Picking one adds its steps one row each, so each stays tunable.'],
+    },
+    holes: {
+      title: 'Numbers are sliders',
+      lines: [
+        'A move\'s numbers (how much to zoom, how many cells, a radius) are sliders: open a tile\'s sliders to tune it before you pick it, or a row\'s afterwards. They start at the value used most in the shaders the move came from.',
+        'Type a number past the end of a slider and the range grows to fit it. In the block, each one is a slider input (s2_a is step 2\'s first number).',
+      ],
+    },
+    preview: {
+      title: 'The preview',
+      lines: [
+        'The expression drawn big: a float in grey over its range (the range is written under it), a vec2 as red and green, a vec3 as its colour, time as a plot.',
+        'Hover a tile to see what it would make; move off it to see the chain again.',
+      ],
+    },
+    output: {
+      title: 'Add to graph',
+      lines: [
+        'Makes an Expression Block: one line per step (a float, vec2 or vec3 local with a note on what it does and where the move came from) and a slider for each number. The seed comes from a UV or Time node.',
+        'The chain is kept on the block, so a later version can open it here again. A colour result goes into the Output when its Color is free.',
+      ],
+    },
+    code: {
+      title: 'The code',
+      lines: ['The lines the block will have, exactly: what the preview draws is what you add. Each step is a local (s1, s2…) computed from the one before.'],
     },
   },
 };
