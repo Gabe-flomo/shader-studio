@@ -103,6 +103,35 @@ function morph(): GraphNode[] {
   );
 }
 
+/** The museum harmonograph: frequencies in Hz, a dot that leaves a short trail, solid at high frequencies. */
+function live(): GraphNode[] {
+  return [
+    n('curveTrace', 'curve', 500, 200, {
+      draw: 'live', persistence: 0.25, freqX: 1, freqY: 1, phaseX: 1.5708, ampX: 0.42, ampY: 0.42, thickness: 0.0035, segments: 720,
+      ...note([
+        'Curve Trace, Draw: Live. X and Y frequencies are in cycles a second: at 1 and 1 (X a quarter turn ahead) the dot goes round a circle once a second.',
+        'The line is the last Persistence seconds of the dot\'s path. At low frequencies that is a dot with a short tail; raise them and the same quarter second covers more and more of the figure until it is a solid line. At 0 Hz the dot rests in the middle.',
+      ]),
+    }),
+    expr('ink', 1000, 200, {
+      label: 'Ink', outputType: 'vec3',
+      inputs: [{ name: 'd', type: 'float' }, { name: 'a', type: 'float' }, { name: 'head', type: 'float' }],
+      wires: { d: ['curve', 'distance'], a: ['curve', 'along'], head: ['curve', 'head'] },
+      lines: [
+        ['float w', 'fwidth(d) + 0.0005'],
+        ['float trail', '(smoothstep(w, -w, d) + 0.0015 / max(abs(d), 0.0015) * 0.25) * (0.15 + 0.85 * a * a)'],
+        ['float dot', 'smoothstep(0.016, 0.008, head) + 0.004 / max(head, 0.004) * 0.6'],
+      ],
+      result: 'vec3(0.02, 0.025, 0.035) + vec3(0.55, 0.85, 1.0) * trail + vec3(1.0, 0.95, 0.85) * dot',
+      note: [
+        'Ink: the trail (a pixel-wide line on Distance with a faint glow) fading toward its tail (Along is 0 at the tail, 1 at the dot), and the dot itself drawn bright from Head.',
+        'Nothing here is fixed: Distance, Along and Head are plain numbers, so colour and style them however you like.',
+      ],
+    }),
+    out(['ink', 'result'], 1400, 200),
+  ];
+}
+
 function knot(): GraphNode[] {
   const scene = n('sceneGroup', 'scene', 300, 500, {
     label: 'Knot', ...note(['The knot: one Curve Trace 3D. Time comes in through a port so the knot can turn (a Scene Group\'s inside is a function of position; outside values come in as ports).']),
@@ -170,6 +199,19 @@ export function buildCurveTraceExamples(): Record<string, ExampleGraph> {
 **How it is built.** **Curve Trace** with **Morph** on works out both figures at every point along the curve and blends them by Morph amount, which **Flow** eases between 0 and 1 over time. Both figures are closed curves, so every in-between shape is closed too.
 
 **Try.** Pick figure B's frequencies with the sliders. On the card, try Morph with Motion Rotary (opposite ways): a star flowering into another star.`),
+    },
+    curveTraceLive: {
+      ...CURVE_TRACE_EXAMPLE_INDEX.curveTraceLive, counter: 20, nodes: live(),
+      play: play([
+        ctl('x', 'curve::freqX', 'X (Hz)', 0, 30, 0.01),
+        ctl('y', 'curve::freqY', 'Y (Hz)', 0, 30, 0.01),
+        ctl('p', 'curve::phaseX', 'X phase', -3.1416, 3.1416, 0.01),
+        ctl('s', 'curve::persistence', 'Persistence (s)', 0.02, 1.5, 0.01),
+      ], `**What it shows.** The museum harmonograph: two frequencies, X and Y, in cycles a second. At 0 Hz there is just a dot in the middle. At 1 and 1 it circles once a second, leaving a short trail. Turn them up and the dot moves faster; the trail (the last quarter second of its path) covers more and more of the figure until it is a solid line.
+
+**How it is built.** One **Curve Trace** with Draw set to **Live**: time is real time, so a frequency is a speed, and **Persistence** is how many seconds of path stay on screen. **Ink** draws the trail fading toward its tail (Along) and the dot from **Head**.
+
+**Try.** X 1, Y 1 is a circle; X 2, Y 1 a figure eight; X 3, Y 2 the fifth's pretzel. Slightly off ratios (X 3, Y 2.01) make the figure slowly turn, as the real machine does. Shorten Persistence to see only the dot, lengthen it to keep the whole figure.`),
     },
     curveTraceKnot: {
       ...CURVE_TRACE_EXAMPLE_INDEX.curveTraceKnot, counter: 60, nodes: knot(),
