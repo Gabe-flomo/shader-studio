@@ -964,6 +964,17 @@ Examples:
 - `new 3d agents`
 - `3d agent builder`
 
+### new 3d agents round a shape
+
+Adds 3D agents round a ray-marched torus (the 3D slime with Collide (3D scene), drawn through the March Camera and hidden behind the torus, on the Output) and opens their rules; Look → Around a shape picks a Sphere or a Box.
+
+Words: `new 3d agents round a shape`, `new 3d agents around a shape`, `3d agents round a shape`, `3d agents around a shape`, `new 3d agents round a torus`, `agents round a torus`, `agents around a shape`
+
+Examples:
+
+- `new 3d agents round a shape`
+- `agents round a torus`
+
 ### show the recipe
 
 Shows the recipe chip of a builder-made node expanded: a built scene's recipe, a Grid Rules node's rule, a rules group's rules. Works on the selected builder-made node, else the only one.

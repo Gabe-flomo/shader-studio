@@ -36,8 +36,8 @@ import {
 import { groupRules } from '../../agentRules/apply';
 import { generateRulesInside, ruleIds } from '../../agentRules/generate';
 import { RULES_TEMPLATES } from '../../agentRules/templates';
-import { applyGroupRules, applyGroupTemplate3d, openGroupAsNodes, setGroupSpace, setGroupView } from '../../agentRules/storeActions';
-import { CAMERA_3D, CAMERA_CONTROLS, RULES_TEMPLATES_3D, rescaleForSpace, type AgentSpace, type CameraKey } from '../../agentRules/space3d';
+import { applyGroupRules, applyGroupTemplate3d, openGroupAsNodes, setGroupShape, setGroupSpace, setGroupView } from '../../agentRules/storeActions';
+import { CAMERA_3D, CAMERA_CONTROLS, RULES_TEMPLATES_3D, SHAPE_KINDS, rescaleForSpace, shapeOf, type AgentSpace, type CameraKey, type ShapeKind } from '../../agentRules/space3d';
 import { SurpriseBar } from '../surprise/SurpriseBar';
 import { surpriseAgentsAction, useSurpriseSeeds } from '../surprise/surpriseActions';
 import { AGENT_VIEWS, agentsViewOf, type AgentsView } from '../../agentRules/outputs';
@@ -116,10 +116,17 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
   const pickTemplate = (k: string) => {
     if (k.startsWith('3d:')) { flush(); applyGroupTemplate3d(node.id, k.slice(3)); setSp(0); return; }
     const t = RULES_TEMPLATES.find(x => x.key === k);
-    if (t) { update(d3 ? rescaleForSpace(t.set(), '3d') : t.set()); setSp(0); }
+    // A group round a shape keeps its Collide through a flat template.
+    if (t) { const next = d3 ? rescaleForSpace(t.set(), '3d') : t.set(); update(set.collide ? { ...next, collide: set.collide } : next); setSp(0); }
   };
   const setSpace = (to: AgentSpace) => { flush(); setGroupSpace(node.id, to); };
   const draw = useNodeGraphStore(st => agentsViewOf(st.nodes, node.id).draw);
+  // Round a shape: the shape's kind, and the March Camera Draw agents sees through (its camera then is the scene's).
+  const shape = useNodeGraphStore(st => shapeOf(st.nodes, node.id)?.kind ?? null);
+  const sceneCam = useNodeGraphStore(st => {
+    const id = agentsViewOf(st.nodes, node.id).draw?.inputs.camOrigin?.connection?.nodeId;
+    return id ? st.nodes.find(x => x.id === id && x.type === 'marchCamera') : undefined;
+  });
   const notes3d = d3 ? notesFor3d(set) : [];
   const view = useNodeGraphStore(st => agentsViewOf(st.nodes, node.id).current);
   const addExample = (ex: HelpExample) => { if ('rule' in ex.insert) setRules([...species.rules, structuredClone(ex.insert.rule)]); };
@@ -233,14 +240,25 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
   const lookTab = (
     <TabPane>
       {d3 && <>
-        <SectionLabel meta={draw ? 'Draw agents' : undefined} hint="In 3D the walkers are seen through Draw agents' camera: where it stands, how it turns, what is sharp.">Camera</SectionLabel>
+        <SectionLabel meta={sceneCam ? 'March Camera' : draw ? 'Draw agents' : undefined} hint="In 3D the walkers are seen through a camera: Draw agents' own, or the March Camera of the shape they are round. Where it stands, how it turns, what is sharp.">Camera</SectionLabel>
         <BuilderHelp id="camera" />
         {draw ? <>
-          {CAMERA_CONTROLS.filter(c => !c.fold).map(c => <CameraRow key={c.key} draw={draw} k={c.key} label={c.label} step={c.step} />)}
+          {CAMERA_CONTROLS.filter(c => !c.fold).map(c => (sceneCam
+            ? <CameraRow key={c.key} node={sceneCam} k={c.key} label={c.label} step={c.key === 'camAngle' || c.key === 'camElevation' || c.key === 'rotSpeed' ? 0.01 : c.step} />
+            : <CameraRow key={c.key} node={draw} k={c.key} label={c.label} step={c.step} />))}
+          {sceneCam && <Note>Round a shape the walkers are seen through the shape's March Camera, so these move it (angles in radians); the shape and the walkers move together.</Note>}
           <BuilderFold foldKey="agentRules:open:dof" title="Depth of field" summary={`focus ${cam('focus')} · blur ${cam('blur')}`}>
-            {CAMERA_CONTROLS.filter(c => c.fold).map(c => <CameraRow key={c.key} draw={draw} k={c.key} label={c.label} step={c.step} />)}
+            {CAMERA_CONTROLS.filter(c => c.fold).map(c => <CameraRow key={c.key} node={draw} k={c.key} label={c.label} step={c.step} />)}
           </BuilderFold>
         </> : <Note>No Draw agents shows this group, so there is no camera: the card's Next steps adds one (Draw agents), or switch Space to 2D and back.</Note>}
+        <BuilderFold foldKey="agentRules:open:shape" title="Around a shape" summary={shape ? `${SHAPE_KINDS.find(k => k.value === shape)?.label ?? shape} · Collide (3D scene)` : 'none: the walkers fill the box'}>
+          <BuilderHelp id="shape" />
+          <Row label="Shape" hint="A ray-marched shape in the middle of the box: Collide (3D scene) keeps the walkers out of it, and they are drawn through its camera, hidden behind it. None takes it away again.">
+            <Select ariaLabel="Around a shape" value={shape ?? ''} height={30}
+              options={[{ value: '', label: 'None' }, ...SHAPE_KINDS.map(k => ({ value: k.value, label: k.label }))]}
+              onChange={v => { flush(); setGroupShape(node.id, (v || null) as ShapeKind | null); }} />
+          </Row>
+        </BuilderFold>
         <BuilderFold foldKey="agentRules:open:picture3d" title="What the picture shows" summary={view ? `${AGENT_VIEWS.find(v => v.value === view)?.label ?? view} · the trail seen flat` : 'the walkers, through the camera'}>
           {pictureShows}
         </BuilderFold>
@@ -288,7 +306,7 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
         {tab === 'rules' && rulesTab}
         {tab === 'trails' && trailsTab}
         {tab === 'look' && lookTab}
-        {tab === 'recipe' && <TabPane wide><AgentsRecipe set={set} onApply={next => { update(next); flush(); setSp(0); }} /></TabPane>}
+        {tab === 'recipe' && <TabPane wide><AgentsRecipe set={set} onApply={next => { update(set.collide && !next.collide ? { ...next, collide: set.collide } : next); flush(); setSp(0); }} /></TabPane>}
       </div>
     </BuilderWindow>
   );
@@ -512,18 +530,19 @@ function Piece({ children, onRemove, hint }: { children: React.ReactNode; onRemo
 }
 
 /**
- * One of Draw agents' camera settings, on the Look tab in 3D: a ruler slider writing the card's own
- * param (one undo step a drag). Typing past its range widens it, kept on the card (__scMax_).
+ * One camera setting on the Look tab in 3D (Draw agents' own, or the shape's March Camera): a ruler
+ * slider writing the card's param (one undo step a drag). Typing past its range widens it, kept on the card (__scMax_).
  */
-function CameraRow({ draw, k, label, step }: { draw: GraphNode; k: CameraKey; label: string; step: number }) {
-  const def = getNodeDefinition('drawAgents')?.paramDefs?.[k];
-  const value = typeof draw.params[k] === 'number' ? draw.params[k] as number : CAMERA_3D[k];
-  const range = paramSliderRange(draw.params, k, { min: def?.min, max: def?.max });
-  const set = (patch: Record<string, unknown>) => useNodeGraphStore.getState().updateNodeParams(draw.id, patch);
+function CameraRow({ node: cam, k, label, step }: { node: GraphNode; k: CameraKey; label: string; step: number }) {
+  const def = getNodeDefinition(cam.type)?.paramDefs?.[k];
+  const fallback = (getNodeDefinition(cam.type)?.defaultParams?.[k] as number | undefined) ?? CAMERA_3D[k];
+  const value = typeof cam.params[k] === 'number' ? cam.params[k] as number : fallback;
+  const range = paramSliderRange(cam.params, k, { min: def?.min, max: def?.max });
+  const set = (patch: Record<string, unknown>) => useNodeGraphStore.getState().updateNodeParams(cam.id, patch);
   return (
     <Row label={label} hint={typeof def?.hint === 'string' ? def.hint : undefined}>
       <div data-camera={k}>
-        <RulerSlider value={value} min={range.min} max={range.max} step={step} defaultValue={CAMERA_3D[k]} ariaLabel={label}
+        <RulerSlider value={value} min={range.min} max={range.max} step={step} defaultValue={fallback} ariaLabel={label}
           onChange={v => set({ [k]: v })} onRange={(min, max) => set(extendRangePatch(k, min, max))} />
       </div>
     </Row>

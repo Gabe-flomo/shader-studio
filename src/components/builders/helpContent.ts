@@ -308,6 +308,14 @@ export const BUILDER_HELP: Record<BuilderKey, Record<string, HelpEntry>> = {
         'These are Draw agents\' Camera settings: the card has the rest (Flatten, Translate, Drift).',
       ],
     },
+    shape: {
+      title: 'Around a shape',
+      lines: [
+        'Pattern: one Scene feeds both the March Loop (to draw the shape) and the group\'s Scene socket (Collide (3D scene), to keep walkers out); one March Camera feeds both the march and Draw agents, so shape and walkers line up.',
+        'Draw agents\' Depth is the March Loop\'s Distance: walkers further than the surface along a pixel\'s ray are hidden behind it.',
+        'Torus, Sphere or Box; None takes every node it added away again.',
+      ],
+    },
   },
 };
 

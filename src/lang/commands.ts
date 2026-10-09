@@ -255,7 +255,7 @@ export const COMMAND_VERBS: readonly CommandVerb[] = [
 export type BuilderCommandId =
   | 'open-scene-builder' | 'new-3d-scene' | 'edit-scene' | 'new-2d-scene'
   | 'open-grid-rules' | 'new-grid-rules' | 'edit-rules'
-  | 'open-agent-rules' | 'new-agent-rules' | 'new-3d-agents'
+  | 'open-agent-rules' | 'new-agent-rules' | 'new-3d-agents' | 'new-3d-agents-shape'
   | 'show-recipe' | 'copy-recipe';
 
 export interface BuilderCommand {
@@ -327,6 +327,11 @@ export const BUILDER_COMMANDS: readonly BuilderCommand[] = [
     id: 'new-3d-agents', words: ['new 3d agents', 'new 3d agent rules', 'add 3d agents', 'make 3d agents', 'new agents in 3d', '3d agent builder', 'open the 3d agent builder', 'new 3d swarm', 'new 3d slime'],
     summary: 'Adds 3D agents (Emit in a Ball → Agents in Space 3D, rules mode → Deposit → a volume Trail, Draw agents through an orbiting camera, on the Output) and opens their rules: Space 2D / 3D, 3D templates, the camera on the Look tab.',
     examples: [{ text: 'new 3d agents', on: 'empty' }, { text: '3d agent builder', on: 'empty' }],
+  },
+  {
+    id: 'new-3d-agents-shape', words: ['new 3d agents round a shape', 'new 3d agents around a shape', '3d agents round a shape', '3d agents around a shape', 'new 3d agents round a torus', 'agents round a torus', 'agents around a shape'],
+    summary: 'Adds 3D agents round a ray-marched torus (the 3D slime with Collide (3D scene), drawn through the March Camera and hidden behind the torus, on the Output) and opens their rules; Look → Around a shape picks a Sphere or a Box.',
+    examples: [{ text: 'new 3d agents round a shape', on: 'empty' }, { text: 'agents round a torus', on: 'empty' }],
   },
   {
     id: 'show-recipe', words: ['show the recipe', 'show recipe', 'show its recipe', 'what is the recipe', 'show the rule', 'show me the recipe'],

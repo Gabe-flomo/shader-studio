@@ -9,6 +9,13 @@
  *    group: the rules' sensors and speeds rescaled, Emit's shape (Disc ↔ Ball, Ring ↔ Sphere), the
  *    Trail's fade, and a camera view (Draw agents) added for 3D and taken away again back in 2D.
  *  - `applyTemplate3d`: a 3D template onto a group and its setup (switching it to 3D first).
+ *  - Around a shape (`addShapeAround`, `stripShape`): a ray-marched torus, sphere or box the walkers
+ *    flow round, as the "Swarm round a torus" example wires it: the Scene into the group's Scene port
+ *    and Collide (3D scene) after Move (the rules' `collide`), Draw agents through the March Camera
+ *    and hidden behind the shape by the March Loop's Distance, over the lit shape.
+ *
+ * Nodes these add are marked with the group's id (`__spaceAdded`, `__shapeAdded`) so switching back
+ * or taking the shape away removes exactly them; the builder's own camera view is marked `true`.
  *
  * Pure: the store applies the results (agentRules/storeActions.ts) with one undo step and a compile.
  */
@@ -17,9 +24,10 @@ import { n } from '../store/graphBuilder';
 import { expr, note } from '../store/agentExampleKit';
 import { placeInFreeSpace } from '../store/agentSetup';
 import { graphOutput } from '../nodes/scene3dDefaults';
+import { DRAW_3D_INPUTS } from '../nodes/definitions/agents';
 import { applyRulesToGroup, groupRules, isRulesGroup } from './apply';
 import { rulesGroupNote } from './generate';
-import { type AgentRuleSet, type AgentSpeciesRules, sensedChannels } from './spec';
+import { type AgentRuleSet, type AgentSpeciesRules, DEFAULT_COLLIDE, sensedChannels } from './spec';
 
 type Conn = { nodeId: string; outputKey: string };
 type Params = Record<string, unknown>;
@@ -91,6 +99,8 @@ export interface Rules3dTemplate {
   draw: Params;
   /** A note per node: what it does here and why (the group's note starts with its rules). */
   notes: { group: string[]; emit: string[]; deposit: string[]; trail: string[]; draw: string[] };
+  /** Around a shape: the setup adds this ray-marched shape (addShapeAround) after the rest. */
+  shape?: ShapeKind;
 }
 
 const base = (o: Partial<AgentRuleSet> & { species: AgentSpeciesRules[] }): AgentRuleSet => ({
@@ -238,6 +248,25 @@ export const RULES_TEMPLATES_3D: Rules3dTemplate[] = [
   },
 ];
 
+RULES_TEMPLATES_3D.push({
+  key: 'shape3d', label: 'Around a shape: slime round a torus', set: slime3d, tier: '256k', preroll: 3, shape: 'torus',
+  blurb: 'The 3D slime round a ray-marched torus: Collide (3D scene) keeps the walkers out of it, so the network grows over and round it; they are drawn through the scene\'s camera and hidden behind it.',
+  emit: { mode: 'fill', shape: 'sphere', heading: 'random', x: 0, y: 0, z: 0, size: 1, life: 0 },
+  deposit: { amount: 4, size: 1, what: 'trail' },
+  trail: { volume: '96', diffuse: 1, halfLife: 0.1, edges: 'wrap', gain: 0.04, kernel: '3' },
+  draw: { style: 'glow', colorBy: 'heading', palette: 'ab', colorA: [1, 0.55, 0.2], colorB: [0.35, 0.65, 1], scaleBy: 'crowd', size: 1.4, brightness: 2.2, glow: 0.9, fade: 'off', lights: '0', ...CAMERA_3D, blur: 0.25 },
+  notes: {
+    group: [
+      'Space 3D, round a shape: the 3D slime (sensors 0.15 ahead, Speed 1.2) with Collide (3D scene) after Move, reading the Torus scene through the group\'s Scene socket, so the walkers can\'t go into the torus and their network wraps round it.',
+      'Try: Edit rules → Look → Around a shape: Sphere or Box; None takes the shape away again.',
+    ],
+    emit: ['Emit: every walker born at once on a Sphere 1.0 round the middle (its shell, outside the shape), facing any way, so none starts inside the torus.'],
+    deposit: ['Deposit: every walker drops 4 units of trail in the volume cell it stands in, every step (the rules\' "leave trail" × 4).'],
+    trail: ['Trail field, filled by a 3D group: a 96-row volume, spread to each cell\'s 6 neighbours and half gone in 0.1 s. Its Image goes back into the group for the rules\' Sense.'],
+    draw: ['Draw agents in 3D through the scene\'s camera (Camera from, Camera ray: the March Camera\'s), over the lit torus; Depth is the March Loop\'s Distance, so walkers behind the torus are hidden.', 'Colour by Heading, amber one way and blue the other; Blur 0.25 softens the near and far ones.'],
+  },
+});
+
 export const rulesTemplate3d = (key: string) => RULES_TEMPLATES_3D.find(t => t.key === key);
 
 // ── The setup's pieces ───────────────────────────────────────────────────────
@@ -276,9 +305,16 @@ export function agents3dStarter(key = 'slime3d'): { nodes: GraphNode[]; out: Con
   if (group.inputs.trail) group.inputs.trail = { ...group.inputs.trail, connection: { nodeId: 'a3Trail', outputKey: 'texture' } };
   const deposit = n('agentDeposit', 'a3Deposit', 840, 0, { ...t.deposit, ...note(t.notes.deposit) }, { agents: ['a3Agents', 'agents'] });
   const trail = n('trailField', 'a3Trail', 1260, 0, { resolution: '0.5', ...t.trail, ...note(t.notes.trail) }, { deposit: ['a3Deposit', 'deposit'] });
-  const back = backdrop('a3Uv', 'a3Back', 840, 760);
-  const draw = n('drawAgents', 'a3Draw', 1680, 0, { ...t.draw, ...note(t.notes.draw) }, { agents: ['a3Agents', 'agents'], over: ['a3Back', 'result'] });
-  return { nodes: [emit, group, deposit, trail, ...back, draw], out: { nodeId: 'a3Draw', outputKey: 'color' }, groupId: 'a3Agents' };
+  // The camera view is the builder's: marked, so switching to 2D swaps it for the flat palette.
+  const back = backdrop('a3Uv', 'a3Back', 840, 760, { __spaceAdded: true });
+  const draw = n('drawAgents', 'a3Draw', 1680, 0, { ...t.draw, __spaceAdded: true, ...note(t.notes.draw) }, { agents: ['a3Agents', 'agents'], over: ['a3Back', 'result'] });
+  let nodes = [emit, group, deposit, trail, ...back, draw];
+  // Around a shape: the shape added round the group (its marks name the temporary ids: the store remaps them, remapMarks).
+  if (t.shape) {
+    let k = 0;
+    nodes = addShapeAround(nodes, 'a3Agents', t.shape, () => `a3s${++k}`)?.nodes ?? nodes;
+  }
+  return { nodes, out: { nodeId: 'a3Draw', outputKey: 'color' }, groupId: 'a3Agents' };
 }
 
 // ── What a group's setup is ──────────────────────────────────────────────────
@@ -323,14 +359,17 @@ const EMIT_TO_2D: Record<string, string> = { ball: 'disc', sphere: 'ring' };
  *    shows what it showed before.
  */
 export function convertGroupSpace(nodes: GraphNode[], groupId: string, to: AgentSpace, nextId: () => string): { nodes: GraphNode[]; message: string; added: string[] } | null {
-  const g = nodes.find(x => x.id === groupId);
-  if (!g || g.type !== 'agentsGroup' || spaceOfGroup(g) === to) return null;
+  const g0 = nodes.find(x => x.id === groupId);
+  if (!g0 || g0.type !== 'agentsGroup' || spaceOfGroup(g0) === to) return null;
   const d3 = to === '3d';
+  const said: string[] = [];
+  // A shape works in 3D only: it goes first.
+  if (!d3 && shapeOf(nodes, groupId)) { nodes = stripShape(nodes, groupId); said.push('the shape is gone (it works in 3D only)'); }
+  const g = nodes.find(x => x.id === groupId)!;
   const setup = setupOf(nodes, groupId);
   const emitIds = new Set(setup.emits.map(x => x.id));
   const trailIds = new Set(setup.trails.map(x => x.id));
   const drawIds = new Set(setup.draws.map(x => x.id));
-  const said: string[] = [];
 
   // The group, its rules rescaled.
   let group: GraphNode = { ...g, params: { ...g.params, space: to } };
@@ -397,9 +436,10 @@ export function convertGroupSpace(nodes: GraphNode[], groupId: string, to: Agent
       });
     }
   } else {
-    const gone = new Set(out.filter(x => x.params.__spaceAdded === groupId).map(x => x.id));
+    const gone = addedFor(out, groupId, '__spaceAdded');
     const flat = g.params.__flatView as Conn | null | undefined;
-    const restore = output && flat !== undefined && (!showing || gone.has(showing.nodeId) || drawIds.has(showing.nodeId));
+    const lost = !showing || gone.has(showing.nodeId) || drawIds.has(showing.nodeId);
+    const restore = !!output && flat !== undefined && lost;
     out = out.filter(x => !gone.has(x.id)).map(x => {
       if (restore && x.id === output!.id) {
         const back = flat && out.some(y => y.id === flat.nodeId) && !gone.has(flat.nodeId) ? flat : undefined;
@@ -414,8 +454,17 @@ export function convertGroupSpace(nodes: GraphNode[], groupId: string, to: Agent
       }
       return x;
     });
-    if (gone.size) said.push('the camera view it added is gone');
+    if (gone.size) said.push('the camera view is gone');
     if (restore) said.push('the Output shows what it showed before');
+    else if (output && lost && gone.size) {
+      // A setup born in 3D (the builder's): the flat view the 2D starter has, the trail through a palette, on the Output.
+      const flatView = flatPicture(out, groupId, nextId);
+      if (flatView) {
+        out = flatView.nodes.map(x => (x.id === output.id ? { ...x, inputs: { ...x.inputs, color: { ...x.inputs.color, connection: flatView.out } } } : x));
+        added.push(...flatView.added);
+        said.push(flatView.added.length ? 'the trail shows through a palette on the Output, as the 2D starter\'s' : 'the Output shows the trail\'s palette');
+      }
+    }
   }
   const message = `${d3 ? 'In 3D' : 'Flat (2D)'}: ${said.join('; ') || 'the group\'s Space changed'}.`;
   return { nodes: out, message, added };
@@ -432,7 +481,9 @@ export function applyTemplate3d(nodes: GraphNode[], groupId: string, key: string
   if (!t || !g0 || g0.type !== 'agentsGroup') return null;
   let list = nodes;
   if (spaceOfGroup(g0) !== '3d') list = convertGroupSpace(nodes, groupId, '3d', nextId)?.nodes ?? nodes;
-  const set = t.set();
+  // A group round a shape keeps it (and its Collide) through a template without one.
+  const had = groupRules(list.find(x => x.id === groupId)!).collide;
+  const set = { ...t.set(), ...(had && !t.shape ? { collide: had } : {}) };
   const s = setupOf(list, groupId);
   const first = (xs: GraphNode[]) => xs[0]?.id;
   const ids = { emit: first(s.emits), deposit: first(s.deposits), trail: first(s.trails), draw: first(s.draws) };
@@ -449,5 +500,227 @@ export function applyTemplate3d(nodes: GraphNode[], groupId: string, key: string
     if (x.id === ids.draw) return { ...x, params: { ...x.params, ...t.draw, ...note(t.notes.draw) } };
     return x;
   });
+  if (t.shape) list = addShapeAround(list, groupId, t.shape, nextId)?.nodes ?? list;
   return { nodes: list, message: t.blurb };
+}
+
+// ── Nodes added for a group (the 3D view, the shape) ─────────────────────────
+
+type Mark = '__spaceAdded' | '__shapeAdded';
+
+/**
+ * The nodes added for the group under `mark`: those marked with its id, its Draw agents marked
+ * `true` (the builder's), and what feeds only them and is marked too (the builder's backdrop).
+ */
+export function addedFor(nodes: GraphNode[], groupId: string, mark: Mark): Set<string> {
+  const set = new Set(nodes.filter(x => x.params[mark] === groupId || (x.params[mark] === true && x.type === 'drawAgents' && x.inputs.agents?.connection?.nodeId === groupId)).map(x => x.id));
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const x of nodes) {
+      if (set.has(x.id) || !x.params[mark]) continue;
+      const readers = nodes.filter(y => reads(y, x.id));
+      if (readers.length && readers.every(y => set.has(y.id))) { set.add(x.id); grew = true; }
+    }
+  }
+  return set;
+}
+
+/** Owner marks (and the group's remembered flat view) after the setup's nodes got fresh ids. */
+export function remapMarks(nodes: GraphNode[], idOf: (old: string) => string): GraphNode[] {
+  return nodes.map(x => {
+    const params = { ...x.params };
+    let changed = false;
+    for (const k of ['__spaceAdded', '__shapeAdded'] as const) if (typeof params[k] === 'string') { params[k] = idOf(params[k] as string); changed = true; }
+    for (const k of ['__flatView', '__overBefore'] as const) {
+      const c = params[k] as Conn | null | undefined;
+      if (c) { params[k] = { ...c, nodeId: idOf(c.nodeId) }; changed = true; }
+    }
+    return changed ? { ...x, params } : x;
+  });
+}
+
+/** The 2D starter's colours for a trail: black through amber to pale gold. */
+const FLAT_STOPS: Array<[number, number, number]> = [[0, 0, 0], [0.16, 0.05, 0.01], [0.75, 0.38, 0.05], [1, 0.82, 0.32], [1, 0.98, 0.85]];
+
+/** The group's trail as the 2D starter shows it: a Stops Palette on its Trail field's Amount (the one there, or a new one). */
+function flatPicture(nodes: GraphNode[], groupId: string, nextId: () => string): { nodes: GraphNode[]; out: Conn; added: string[] } | null {
+  const trail = setupOf(nodes, groupId).trails[0];
+  if (!trail) return null;
+  const had = nodes.find(x => x.type === 'stopPalette' && x.inputs.value?.connection?.nodeId === trail.id);
+  if (had) return { nodes, out: { nodeId: had.id, outputKey: 'color' }, added: [] };
+  const id = nextId();
+  const colour = n('stopPalette', id, trail.position.x + 420, trail.position.y, {
+    stops: '5', wrap: 'clamp', blend: 'smooth', scale: 1, speed: 0,
+    ...Object.fromEntries(FLAT_STOPS.map((c, i) => [`color${i}`, c])),
+    ...note([
+      'Stops Palette: the trail\'s Amount as colour, black where there is none, through amber to pale gold in the thickest veins (the 2D starter\'s).',
+      'Added when the group went flat: in 2D the trail is the picture; in 3D a camera (Draw agents) shows the walkers instead.',
+    ]),
+  }, { value: [trail.id, 'amount'] });
+  const placed = placeInFreeSpace(nodes, [colour], colour.position);
+  return { nodes: [...nodes, ...placed], out: { nodeId: id, outputKey: 'color' }, added: [id] };
+}
+
+// ── Around a shape ───────────────────────────────────────────────────────────
+
+export type ShapeKind = 'torus' | 'sphere' | 'box';
+export const SHAPE_KINDS: Array<{ value: ShapeKind; label: string }> = [
+  { value: 'torus', label: 'Torus' }, { value: 'sphere', label: 'Sphere' }, { value: 'box', label: 'Box' },
+];
+const SDF_OF: Record<ShapeKind, { type: string; params: Params; note: string[] }> = {
+  torus: { type: 'torusSDF3D', params: { majorR: 0.85, minorR: 0.3 }, note: ['Torus SDF 3D: a ring 0.85 from its middle, its tube 0.3 thick, lying flat (round the up axis). Its distance is the whole scene.', 'Try: Tube r 0.15 for a thin hoop the walkers pour through.'] },
+  sphere: { type: 'sphereSDF3D', params: { radius: 0.6 }, note: ['Sphere SDF 3D: a ball 0.6 round the middle. Its distance is the whole scene.', 'Try: Radius 0.9 to crowd the walkers against the box\'s edges.'] },
+  box: { type: 'boxSDF3D', params: { sizeX: 0.45, sizeY: 0.45, sizeZ: 0.45 }, note: ['Box SDF 3D: a cube 0.9 across round the middle (half-sizes 0.45). Its distance is the whole scene.', 'Try: Size Y 0.1 for a slab the walkers flow over and under.'] },
+};
+
+/** The shape round group `groupId` (its Scene Group, marked as added for it) and its kind, or null. */
+export function shapeOf(nodes: GraphNode[], groupId: string): { kind: ShapeKind; sceneId: string; camId?: string } | null {
+  const scene = nodes.find(x => x.type === 'sceneGroup' && x.params.__shapeAdded === groupId);
+  if (!scene) return null;
+  const inner = ((scene.params.subgraph as { nodes?: GraphNode[] } | undefined)?.nodes) ?? [];
+  const kind = (Object.keys(SDF_OF) as ShapeKind[]).find(k => inner.some(x => x.type === SDF_OF[k].type)) ?? 'torus';
+  const cam = nodes.find(x => x.type === 'marchCamera' && x.params.__shapeAdded === groupId);
+  return { kind, sceneId: scene.id, camId: cam?.id };
+}
+
+const DRAW_SCENE_KEYS = Object.keys(DRAW_3D_INPUTS) as Array<keyof typeof DRAW_3D_INPUTS>;
+
+/**
+ * The group round a ray-marched shape (the "Swarm round a torus" example's wiring), or with its
+ * shape changed to `kind` when it has one. The group goes to 3D first. Added, each with a note and
+ * marked for the group: Time → March Camera, a Scene Group (Scene Pos → the shape's SDF → Scene
+ * Output), a March Loop, the shape's colour, Multi-Light and Tone Map. The rules gain Collide
+ * (3D scene) (their `collide`) and the group a Scene socket wired to the Scene. Draw agents sees
+ * the walkers through the March Camera (Camera from, Camera ray), hides those behind the shape
+ * (Depth: the March Loop's Distance) and draws them over the lit shape; what it drew over before
+ * is remembered for stripShape. Emit's Ball or Disc becomes a Sphere shell outside the shape.
+ */
+export function addShapeAround(nodes: GraphNode[], groupId: string, kind: ShapeKind, nextId: () => string): { nodes: GraphNode[]; message: string } | null {
+  const g0 = nodes.find(x => x.id === groupId);
+  if (!g0 || g0.type !== 'agentsGroup') return null;
+  let list = nodes;
+  if (spaceOfGroup(g0) !== '3d') list = convertGroupSpace(list, groupId, '3d', nextId)?.nodes ?? list;
+  const sdf = SDF_OF[kind];
+  const label = SHAPE_KINDS.find(k => k.value === kind)!.label;
+  // A shape there already: only its SDF changes.
+  const was = shapeOf(list, groupId);
+  if (was) {
+    if (was.kind === kind) return null;
+    list = list.map(x => {
+      if (x.id !== was.sceneId) return x;
+      const sg = x.params.subgraph as { nodes: GraphNode[] };
+      const inner = sg.nodes.map(m => (m.type === SDF_OF[was.kind].type
+        ? { ...n(sdf.type, m.id, m.position.x, m.position.y, { ...sdf.params, ...note(sdf.note) }), inputs: { ...n(sdf.type, m.id, 0, 0).inputs, pos: m.inputs.pos } }
+        : m));
+      return { ...x, params: { ...x.params, label, subgraph: { ...sg, nodes: inner } } };
+    });
+    return { nodes: list, message: `The shape is a ${label.toLowerCase()} now.` };
+  }
+  const mark = { __shapeAdded: groupId };
+  const id = { time: nextId(), cam: nextId(), scene: nextId(), pos: nextId(), sdf: nextId(), sOut: nextId(), march: nextId(), mIn: nextId(), mOut: nextId(), base: nextId(), lit: nextId(), tone: nextId() };
+  const time = n('time', id.time, 0, 0, { ...mark, ...note(['Time: the clock, so the March Camera circles the shape the same way in the preview and in a recording.']) });
+  const cam = n('marchCamera', id.cam, 420, 0, {
+    camDist: 3.6, camAngle: 0.4, camElevation: 0.42, rotSpeed: 0.12, fov: 1.6, targetX: 0, targetY: 0, targetZ: 0, ...mark,
+    ...note(['March Camera: 3.6 from the middle, 24° above it, circling at 0.12 radians a second. Its Ray Origin and Ray Dir go to the March Loop and to Draw agents (Camera from, Camera ray), so the walkers are seen through the same camera as the shape.', 'Try: Edit rules → Look: its Distance, Angle, Elevation, Orbit speed and Zoom are there.']),
+  }, { time: [id.time, 'time'] });
+  const scene = n('sceneGroup', id.scene, 0, 300, {
+    label, ...mark,
+    subgraph: {
+      nodes: [
+        n('scenePos', id.pos, 0, 200, { _groupOriginal: true, ...note(['Scene Pos: the point being measured: every ray step of the march, and every cell of Collide (3D scene)\'s grid.']) }),
+        n(sdf.type, id.sdf, 420, 200, { ...sdf.params, ...note(sdf.note) }, { pos: [id.pos, 'pos'] }),
+        n('sceneOutput', id.sOut, 840, 200, { _groupOriginal: true, ...note([`Scene Output: the ${label.toLowerCase()}'s distance is the scene: the March Loop draws it, Collide (3D scene) keeps the walkers out of it.`]) }, { dist: [id.sdf, 'dist'] }),
+      ],
+      inputPorts: [], outputPorts: [],
+    },
+    ...note([`Scene Group: the shape as one distance function, here a ${label.toLowerCase()}. The same Scene goes to the March Loop (to draw it) and into the Agents group's Scene socket (to collide with it).`, 'Try: Edit rules → Look → Around a shape for a Sphere or a Box.']),
+  });
+  const march = n('marchLoopGroup', id.march, 840, 0, {
+    maxSteps: 80, bg: [0.02, 0.022, 0.035], ...mark,
+    subgraph: {
+      nodes: [
+        n('marchLoopInputs', id.mIn, 0, 180, { _groupOriginal: true, ...note(['Group Inputs: where the ray has got to (March Pos) at each step of the march.']) }),
+        n('marchLoopOutput', id.mOut, 440, 180, { _groupOriginal: true, ...note(['Group Output: the point measured at this step, left as it is (nothing warped).']) }, { pos: [id.mIn, 'marchPos'] }),
+      ],
+      inputPorts: [], outputPorts: [],
+    },
+    ...note(['March Loop: for each pixel, steps along its ray until it hits the shape. Its Normal and Hit light the shape; its Distance (how far the ray went) goes to Draw agents\' Depth, so walkers behind the shape are hidden.']),
+  }, { ro: [id.cam, 'ro'], rd: [id.cam, 'rd'], scene: [id.scene, 'scene'] });
+  const base = n('colorPicker', id.base, 840, 300, { color: [0.32, 0.34, 0.4], ...mark, ...note(['Color Picker: the shape\'s colour, a cool dark grey that lets the walkers\' light stand out.']) });
+  const lit = n('multiLight', id.lit, 1260, 0, {
+    sunDirX: 0.6, sunDirY: 0.8, sunDirZ: 0.3, skyR: 0.08, skyG: 0.1, skyB: 0.16, bounceR: 0.05, bounceG: 0.03, bounceB: 0.02, ...mark,
+    ...note(['Multi-Light: the shape lit by a sun from above and a faint blue sky; where the rays miss (Hit 0) it stays dark.']),
+  }, { baseColor: [id.base, 'rgb'], normal: [id.march, 'normal'], hit: [id.march, 'hit'] });
+  const tone = n('toneMap', id.tone, 1680, 0, { mode: 'aces', ...mark, ...note(['Tone Map: keeps the lit shape from clipping; its colour is what Draw agents draws the walkers over.']) }, { color: [id.lit, 'color'] });
+  const g = list.find(x => x.id === groupId)!;
+  const placed = placeInFreeSpace(list, [time, cam, scene, march, base, lit, tone], { x: g.position.x, y: g.position.y - 1300 });
+
+  const setup = setupOf(list, groupId);
+  const drawId = setup.draws[0]?.id;
+  const emitId = setup.emits[0]?.id;
+  list = list.map(x => {
+    if (x.id === groupId) {
+      const set = { ...groupRules(x), collide: { ...DEFAULT_COLLIDE } };
+      const ng = applyRulesToGroup(x, set);
+      return { ...ng, inputs: { ...ng.inputs, scene: { ...ng.inputs.scene, connection: { nodeId: id.scene, outputKey: 'scene' } } } };
+    }
+    if (x.id === drawId) {
+      const inputs: GraphNode['inputs'] = { ...x.inputs, over: { ...x.inputs.over, connection: { nodeId: id.tone, outputKey: 'color' } } };
+      inputs.camOrigin = { ...DRAW_3D_INPUTS.camOrigin, connection: { nodeId: id.cam, outputKey: 'ro' } };
+      inputs.camRay = { ...DRAW_3D_INPUTS.camRay, connection: { nodeId: id.cam, outputKey: 'rd' } };
+      inputs.depth = { ...DRAW_3D_INPUTS.depth, connection: { nodeId: id.march, outputKey: 'dist' } };
+      return { ...x, inputs, params: { ...x.params, agentSpace: '3d', __overBefore: x.inputs.over?.connection ?? null } };
+    }
+    if (x.id === emitId && x.params.shape !== 'sphere') {
+      return { ...x, params: { ...x.params, __shapeEmitBefore: { shape: x.params.shape, size: x.params.size }, shape: 'sphere', size: 1 } };
+    }
+    return x;
+  });
+  list = [...list, ...placed];
+  const output = graphOutput(list);
+  if (output && drawId && output.inputs.color?.connection?.nodeId !== drawId) {
+    list = list.map(x => (x.id === output.id ? { ...x, inputs: { ...x.inputs, color: { ...x.inputs.color, connection: { nodeId: drawId, outputKey: 'color' } } } } : x));
+  }
+  return { nodes: list, message: `Round a ${label.toLowerCase()}: Collide (3D scene) keeps the walkers out of it, and they are drawn through its camera, hidden behind it.${drawId ? '' : ' Add a Draw agents (the card\'s Next steps) to see them.'}` };
+}
+
+/** The group without its shape: the nodes added for it gone, Collide out of its rules, Draw agents and Emit as they were. */
+export function stripShape(nodes: GraphNode[], groupId: string): GraphNode[] {
+  const gone = addedFor(nodes, groupId, '__shapeAdded');
+  const g = nodes.find(x => x.id === groupId);
+  if (!g || (!gone.size && !groupRules(g).collide)) return nodes;
+  const setup = setupOf(nodes, groupId);
+  const drawIds = new Set(setup.draws.map(x => x.id));
+  const emitIds = new Set(setup.emits.map(x => x.id));
+  let list = nodes.filter(x => !gone.has(x.id)).map(x => {
+    if (x.id === groupId) {
+      const set = { ...groupRules(x) };
+      delete set.collide;
+      return isRulesGroup(x) ? applyRulesToGroup(x, set) : { ...x, params: { ...x.params, agentRules: set } };
+    }
+    if (drawIds.has(x.id) && x.params.__overBefore !== undefined) {
+      const before = x.params.__overBefore as Conn | null;
+      const inputs = { ...x.inputs };
+      for (const k of DRAW_SCENE_KEYS) if (inputs[k]) { const s = { ...inputs[k] }; delete s.connection; inputs[k] = s; }
+      const over = { ...inputs.over };
+      if (before && !gone.has(before.nodeId)) over.connection = before; else delete over.connection;
+      inputs.over = over;
+      const params = { ...x.params };
+      delete params.__overBefore;
+      return { ...x, inputs, params };
+    }
+    if (emitIds.has(x.id) && x.params.__shapeEmitBefore) {
+      const b = x.params.__shapeEmitBefore as { shape: unknown; size: unknown };
+      const params: Params = { ...x.params, shape: b.shape, size: b.size };
+      delete params.__shapeEmitBefore;
+      return { ...x, params };
+    }
+    return x;
+  });
+  const output = graphOutput(list);
+  const showing = output?.inputs.color?.connection;
+  if (output && showing && gone.has(showing.nodeId) && setup.draws[0]) {
+    list = list.map(x => (x.id === output.id ? { ...x, inputs: { ...x.inputs, color: { ...x.inputs.color, connection: { nodeId: setup.draws[0].id, outputKey: 'color' } } } } : x));
+  }
+  return list;
 }

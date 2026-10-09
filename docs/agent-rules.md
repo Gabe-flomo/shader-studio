@@ -13,7 +13,7 @@ For the Agents group itself (Emit, Deposit, Trail field, Draw agents) see docs/a
 
 - **Builders** (the node browser's first section, on the desktop and on a phone) → **Agent Rules**, the empty canvas's right-click → **Builders** → **Agent Rules…**, or the Do… bar's "new agent rules": the setup below, with its rules editor already open. "open agent rules" or "edit the rules" opens the selected (or only) rules group's editor.
 - **Builders → 3D Agent Builder** (or the right-click menu's **Builders**, or the Do… bar's "new 3d agents" / "3d agent builder"): the same in a volume, seen through a camera (below, "The 3D Agent Builder").
-- **Add an Agents group** (node browser → Simulation → Agents) and pick **Rules (When … Do …)**. You get Emit → Agents → Deposit → Trail field → palette, wired to the Output, with one rule that already moves: *always → turn toward its own trail, wander, leave trail* (slime mold).
+- **Add an Agents group** (node browser → Simulation → Agents) and pick **Rules (When … Do …)**. You get Emit → Agents → Deposit → Trail field → palette, wired to the Output, with one rule that already moves: *always → turn toward its own trail, wander, leave trail* (slime mold). **Rules in 3D**, beside it, adds the 3D Agent Builder's setup instead.
 - Or open an example: **Examples → Agents: rules** (eleven templates, below).
 - Or, on any Agents group in node mode, **Write as rules…** under its buttons (it replaces the inside; undo brings it back).
 
@@ -252,9 +252,22 @@ Set the group's Space to 3D and the inside is generated again for 3D (the headin
 | Rules | a set that smells a trail: Sensors ahead and every speed (each species' Speed, set speed, accelerate) × 5 (0.03 → 0.15, 0.22 → 1.1). Flocks, swarms and particles (Neighbours, forces) are left alone: their distances are picture units either way | ÷ 5, so 2D → 3D → 2D is where it started |
 | Emit | Disc → Ball, Ring → Sphere, twice the size | Ball → Disc, Sphere → Ring, half the size |
 | Trail field | a volume by itself (a 3D group fills it); Volume 96 when unset, Half-life doubled | flat again, Half-life halved |
-| The view | Draw agents gets the camera's settings where it has none; when the Output doesn't show the group's Draw agents it is wired to one (a new Draw agents over a Night backdrop when there is none, marked as added), and what it showed is remembered on the group | the nodes added for 3D go and the Output shows what it showed before |
+| The view | Draw agents gets the camera's settings where it has none; when the Output doesn't show the group's Draw agents it is wired to one (a new Draw agents over a Night backdrop when there is none, marked as added), and what it showed is remembered on the group | the camera view added for 3D goes (the switch's, or the 3D Agent Builder's own Draw agents and backdrop) and the Output shows what it showed before; a setup born in 3D gets the 2D starter's view instead: a Stops Palette on the Trail's Amount, on the Output |
+| A shape (Around a shape) | | taken away first: it works in 3D only |
 
-**The camera** (Look tab, in 3D): Draw agents' **Distance**, **Angle**, **Elevation**, **Orbit speed** and **Zoom** as ruler sliders (typing past the end widens the range, kept on the card), with **Depth of field** (Focus, Blur, Max blur) folded and its summary showing. What the picture shows is folded under it in 3D (a 3D Trail's picture is the volume seen flat from the front).
+So 2D → 3D → 2D lands back on the graph it started from, and the 3D Agent Builder's setup switched to 2D is the 2D rules starter's shape: Emit (Disc) → Agents → Deposit → Trail field → palette → Output, no Draw agents. Nodes the switch, the builder or a shape add are marked with the group's id (`__spaceAdded`, `__shapeAdded`; the builder's view `true`), so only they are taken away.
+
+**The camera** (Look tab, in 3D): Draw agents' **Distance**, **Angle**, **Elevation**, **Orbit speed** and **Zoom** as ruler sliders (typing past the end widens the range, kept on the card), with **Depth of field** (Focus, Blur, Max blur) folded and its summary showing. Round a shape they are the shape's **March Camera**'s instead (angles in radians), since the walkers are seen through it. **Around a shape** (folded, "none" until one is picked) and What the picture shows are folded under it in 3D (a 3D Trail's picture is the volume seen flat from the front).
+
+### Around a shape
+
+Look → **Around a shape**: **Torus**, **Sphere** or **Box** (or **None**), one undo step (`agentRules/space3d.ts` `addShapeAround` / `stripShape`), wired as the *Swarm round a torus* example is:
+
+- **The shape**: Time → **March Camera** (3.6 away, 24° up, circling at 0.12 rad/s) → **March Loop** ← a **Scene Group** (Scene Pos → Torus / Sphere / Box SDF 3D → Scene Output); a Color Picker, **Multi-Light** and **Tone Map** light it. Every node has a note.
+- **Collision**: the rules get `collide` (Scene size 1.6, Margin 0.03, Cushion 0.18, Bounce 0.2): the group gains a **Scene** socket wired to the Scene Group, and the generated inside a **Collide (3D scene)** after Move (Position and Velocity from Move, the Scene through Agent Inputs) and *Heading after the shape* (an Expression Block: the heading follows the velocity Collide leaves). In 2D Collide isn't generated (it works in 3D only); the Scene socket stays.
+- **The view**: Draw agents' **Camera from** / **Camera ray** are the March Camera's Ray Origin / Ray Dir, its **Depth** the March Loop's Distance (walkers behind the shape are hidden), and it draws over the lit shape (Tone Map). What it drew over before is remembered.
+- **Emit**: a Ball or Disc becomes a **Sphere** shell 1.0 round the middle (outside the shape), remembered.
+- Another kind changes only the SDF; **None** takes away every node it added and puts Draw agents, Emit and the rules back as they were. A template picked round a shape keeps the shape (and its Collide); the Recipe tab's Apply keeps it too.
 
 ## The 3D Agent Builder
 
@@ -270,8 +283,9 @@ and opens the rules editor. Every node has a note saying what it does here and w
 | **3D flock (boids)** | always → steer away from neighbours within 0.08 (12°), match their heading (10°), move to their centre (3°), wobble; Speed 0.7 | 64k; the whole box, any way; streaks by heading, camera 20° up circling at 10° a second |
 | **Swarm: orbiters in 3D** | always → orbit the centre at 0.6 (5°), steer away, move to their centre, wobble; more than 60 neighbours → packed (orange), faster; fewer → circling | 64k; Ball 0.8; Colour by Agent; camera 38° up (a galaxy-like ring) |
 | **Particles: 3D curl smoke** | always → curl noise 1.2 (3D curl), drag 0.4, fade over 6 s; older than 6 s → die | 64k; Keep full from a small Ball; Edges Bounce |
+| **Around a shape: slime round a torus** | the 3D slime, with Collide (3D scene) | 256k; a Sphere shell 1.0; the torus (Around a shape), drawn through its March Camera and hidden behind it. The Do… bar's "new 3d agents round a shape" (also "agents round a torus") adds this one |
 
-A 3D setup picked on a flat group switches it to 3D first. Not built yet: a "round a shape" setup (a ray-marched shape, Collide (3D scene) and Depth, as the *Swarm round a torus* example does by hand).
+A 3D setup picked on a flat group switches it to 3D first.
 
 ## Templates (Examples → Agents: rules)
 

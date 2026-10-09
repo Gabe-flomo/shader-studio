@@ -42,9 +42,9 @@ export function newAgentRules(): string | null {
   return id;
 }
 
-/** Add a 3D rules Agents group (the 3D Agent Builder's setup, on the Output) and open its rules editor. */
-export function newAgents3d(): string | null {
-  const id = useNodeGraphStore.getState().addAgentsStarter('rules3d');
+/** Add a 3D rules Agents group (the 3D Agent Builder's setup, from 3D template `template`, on the Output) and open its rules editor. */
+export function newAgents3d(template?: string): string | null {
+  const id = useNodeGraphStore.getState().addAgentsStarter('rules3d', undefined, template);
   if (id) openAgentRulesWindow(id);
   return id;
 }
@@ -93,7 +93,7 @@ export function runBuilderAction(a: BuilderAction): boolean {
     case 'new-grid': newGridRules(); return true;
     case 'open-grid': openGridRulesEditor(a.nodeId); return true;
     case 'new-agents': return !!newAgentRules();
-    case 'new-agents3d': return !!newAgents3d();
+    case 'new-agents3d': return !!newAgents3d(a.template);
     case 'open-agents': openAgentRulesWindow(a.groupId); return true;
     case 'show-recipe': {
       // A node on the top level: go there and bring its card into view.

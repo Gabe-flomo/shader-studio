@@ -10,7 +10,7 @@ import type { AgentRuleSet } from './spec';
 import type { AgentSurprise } from './surprise';
 import { setAgentsView, type AgentsView } from './outputs';
 import { openAgentRulesWindow } from '../builders/windows';
-import { type AgentSpace, applyTemplate3d, convertGroupSpace } from './space3d';
+import { type AgentSpace, type ShapeKind, addShapeAround, applyTemplate3d, convertGroupSpace, shapeOf, stripShape } from './space3d';
 
 /** Open a rules group's rules editor (the card's Edit rules, its title double-click, Write as rules, the Builders section). */
 export const openAgentRulesEditor = (groupId: string) => openAgentRulesWindow(groupId);
@@ -113,6 +113,28 @@ export function setGroupSpace(groupId: string, to: AgentSpace): boolean {
   useNodeGraphStore.setState({ nodes: r.nodes });
   st.compile();
   toast.info(to === '3d' ? 'Agents in 3D' : 'Agents flat (2D)', { message: `${r.message} Undo switches it back.` });
+  return true;
+}
+
+/** Around a shape (or none): the group round a ray-marched torus, sphere or box, or its shape taken away; one undo step. */
+export function setGroupShape(groupId: string, kind: ShapeKind | null): boolean {
+  const st = useNodeGraphStore.getState();
+  let nodes = st.nodes;
+  let message: string;
+  if (kind) {
+    const r = addShapeAround(nodes, groupId, kind, () => st.newNodeId());
+    if (!r) return false;
+    nodes = r.nodes; message = r.message;
+  } else {
+    if (!shapeOf(nodes, groupId)) return false;
+    nodes = stripShape(nodes, groupId);
+    message = 'The shape is gone: Collide (3D scene) is out of the rules, and Draw agents sees the walkers through its own camera again.';
+  }
+  undoManager.push(st.nodes, { label: kind ? 'Agents round a shape' : 'Agents: shape taken away' });
+  last = { id: '', at: 0 };
+  useNodeGraphStore.setState({ nodes });
+  st.compile();
+  toast.info(kind ? 'Round a shape' : 'No shape', { message: `${message} Undo brings it back.` });
   return true;
 }
 
