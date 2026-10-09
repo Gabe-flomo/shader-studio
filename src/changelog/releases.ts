@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.128',
+    date: '2026-10-09',
+    title: 'Follow a field',
+    highlights: [
+      { area: 'Studio', text: 'Agent Builder: Follow a field. Pick fields from moving tiles (curl, vortex, source, saddle, dipole, waves, spiral…) and stack them with weights, masks and spin.' },
+      { area: 'Studio', text: 'Write your own field as vx, vy in x, y, t, checked as you type. Ride it (trace its lines) or Push (swing past them); the field is drawn over the picture.' },
+    ],
+  },
+  {
     id: '2026.10.127',
     date: '2026-10-09',
     title: 'A calmer viewport',
