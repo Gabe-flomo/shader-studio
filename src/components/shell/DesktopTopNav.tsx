@@ -194,7 +194,7 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
               onClick={() => { void importAnyFile(onPageChange); }} />
             <IconButton icon="code" label="Import a GLSL shader as a node"
               onClick={async () => { reportGlslImport(await importGlslFromFile()); }} />
-            <IconButton icon="export" label="Export this graph to a file (.playfile or readable JSON)" shortcut={shortcuts.export}
+            <IconButton icon="export" label="Export this graph as a .playfile" shortcut={shortcuts.export}
               onClick={e => offerGraphExport(e.currentTarget)} />
           </>
         ) : (
@@ -205,7 +205,7 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
             <Tooltip label="Import a GLSL fragment shader (Shadertoy or raw) as a node, wired UV → shader → Output">
               <Button size="sm" icon="code" onClick={async () => { reportGlslImport(await importGlslFromFile()); }}>GLSL</Button>
             </Tooltip>
-            <Tooltip label="Export this graph: a .playfile with what it uses, or readable JSON" shortcut={shortcuts.export}>
+            <Tooltip label="Export this graph as a .playfile, with what it uses" shortcut={shortcuts.export}>
               <Button size="sm" icon="export" onClick={e => offerGraphExport(e.currentTarget)}>Export</Button>
             </Tooltip>
           </>
