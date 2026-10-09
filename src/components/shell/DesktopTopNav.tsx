@@ -114,8 +114,13 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         {!hideWordmark && <span style={{ fontWeight: 700, fontSize: 14.5, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Playfield</span>}
       </div>
 
-      {/* The name sits before the tabs, so the strip opening on hover only takes up empty space. */}
-      <GraphNameChip />
+      {/* The name sits before the tabs, so the strip opening on hover only takes up empty space.
+          Save and Load sit beside it: everything about which graph is open is in one place. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0, flexShrink: 1 }}>
+        <GraphNameChip />
+        <SaveGraphButton compact={iconOnly} align="start" />
+        <LoadGraphButton align="start" />
+      </div>
 
       <div
         role="tablist"
@@ -171,9 +176,6 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         {!foldAux && <WorkspaceChip compact={compact} />}
         <IconButton icon="undo" label="Undo" shortcut={shortcuts.undo} onClick={undo} />
         <IconButton icon="redo" label="Redo" onClick={redo} />
-        {!iconOnly && <Divider />}
-        <SaveGraphButton compact={iconOnly} />
-        <LoadGraphButton />
         {!iconOnly && <Divider />}
         {foldAux ? (
           <OverflowMenu mode={mode} toggleTheme={toggleTheme} rebuildShortcut={shortcuts.rebuild} />
@@ -351,7 +353,7 @@ function Divider() {
 }
 
 /** Save (a new version of the open graph, or under a name). `compact` (phones) drops the name label; the dot stays on the icon. */
-export function SaveGraphButton({ compact = false }: { compact?: boolean }) {
+export function SaveGraphButton({ compact = false, align = 'end' }: { compact?: boolean; /** Which edge of the button the save form lines up with. */ align?: 'start' | 'end' }) {
   const tk = useTokens();
   const current = useNodeGraphStore(s => s.currentGraph);
   const dirty = useNodeGraphStore(s => s.graphDirty);
@@ -364,7 +366,7 @@ export function SaveGraphButton({ compact = false }: { compact?: boolean }) {
         {compact && dirty && <span aria-label="Unsaved changes" style={{ position: 'absolute', top: 8, right: 6, width: 6, height: 6, borderRadius: '50%', background: tk.status.warning, pointerEvents: 'none' }} />}
       </span>
       {open && (
-        <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={300} padding={10}>
+        <Popover anchorRef={anchor} onClose={() => setOpen(false)} align={align} width={300} padding={10}>
           <SaveGraphForm onDone={() => setOpen(false)} />
         </Popover>
       )}
@@ -376,7 +378,7 @@ export function SaveGraphButton({ compact = false }: { compact?: boolean }) {
  * The saved-graphs menu: the same list as the sidebar's Saved Graphs, in the same folders (shared
  * folder state, so collapsing one here collapses it there too).
  */
-export function LoadGraphButton() {
+export function LoadGraphButton({ align = 'end' }: { /** Which edge of the button the list lines up with. */ align?: 'start' | 'end' } = {}) {
   const tk = useTokens();
   const getSavedGraphNames = useNodeGraphStore(s => s.getSavedGraphNames);
   const loadSavedGraph = useNodeGraphStore(s => s.loadSavedGraph);
@@ -412,7 +414,7 @@ export function LoadGraphButton() {
     <span ref={anchor} style={{ display: 'inline-flex' }}>
       <IconButton icon="folder" label="Load a saved graph" active={open} tooltip={!open} onClick={() => setOpen(o => !o)} />
       {open && (
-        <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={280}>
+        <Popover anchorRef={anchor} onClose={() => setOpen(false)} align={align} width={280}>
           {names.length === 0 ? (
             <div style={{ padding: '10px 10px', color: tk.text.faint }}>No saved graphs yet.</div>
           ) : (
