@@ -26,6 +26,7 @@ import { extendRangePatch, hasCustomRange, paramSliderRange, resetRangePatch } f
 import { frozenValueOf } from '../../nodes/sliderFreeze';
 import { isAssignable, legacyAssignOp } from '../../nodes/assignable';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { openRecipeOffer } from '../../store/recipeOfferStore';
 import { nodeJumpSignal, takeNodeJump, useCodeJump } from '../../codeExplorer/jumpStore';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 // Editors that only open on demand load in their own chunks (type-only imports
@@ -2353,6 +2354,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 onRandomize={() => randomizeNodeParams(node.id)}
                 onClose={() => setRandomizeMenu(null)}
               />
+            )}
+            {node.type === 'marchLoopGroup' && (
+              <CardButton icon="sun" tint="success" label="Light the scene: pick a lighting look (shadows, AO, lights, tone map), wired to the Output"
+                onClick={() => requestAnimationFrame(() => openRecipeOffer(node.id, node.type))} />
             )}
             <CardButton icon="copy" label="Duplicate group (an independent copy)" onClick={() => duplicateGroup(node.id)} />
             <CardButton icon="save" tint="success" on={savedFlash} label="Save as a preset" onClick={() => {
@@ -4807,6 +4812,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               if (un?.source?.kind === 'code') setPublishCode({ code: un.source.code, entry: un.source.entry, label: un.label, existingId: un.id });
               else openUserNodeSource(node.type, { x: node.position.x, y: node.position.y + 260 });
             }} />
+        )}
+        {node.type === 'bloom' && (
+          <CardButton icon="spark" tint="success" label="Upgrade to same-frame glow: a Pass, a Glow (texture) Bloom chain and Add glow replace this Bloom (no lag or smear, a long soft tail); settings kept"
+            onClick={() => useNodeGraphStore.getState().upgradeBloom(node.id)} />
         )}
         {Object.keys(def.paramDefs ?? {}).length > 0 && (
           <CardButton icon="resetParams" label="Reset parameters to defaults"

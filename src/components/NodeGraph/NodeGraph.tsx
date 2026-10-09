@@ -25,7 +25,7 @@ import { learnedNext, rankTables } from '../../suggestions';
 import { nudgeByStage } from '../../structure/boost';
 import { currentStageTarget } from '../../structure/hintsStore';
 import { RecipeOffer } from './RecipeOffer';
-import { useRecipeOffer } from '../../store/recipeOfferStore';
+import { openRecipeOffer, useRecipeOffer } from '../../store/recipeOfferStore';
 import { askConfirm, askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
 import { openPatterns } from '../codeExplorer/explorerStore';
@@ -1895,6 +1895,22 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     }}>
                       Enter {clickedNode.type === 'giLitMarchGroup' ? 'GI Lit March Group' : 'March Loop Group'} <span style={{ color: tc.surface2, fontSize: '10px' }}>↵</span>
                     </button>
+                    {clickedNode.type === 'marchLoopGroup' && activeGroupPath.length === 0 && (
+                      <button style={ctxBtnStyle} title="Pick a lighting look: shadows, AO, lights and tone map are added after the loop and wired to the Output" onClick={() => {
+                        const id = clickedNode.id;
+                        setContextMenu(null);
+                        requestAnimationFrame(() => openRecipeOffer(id, 'marchLoopGroup'));
+                      }}>
+                        Light the scene…
+                      </button>
+                    )}
+                    <button style={ctxBtnStyle} title={clickedNode.type === 'giLitMarchGroup' ? 'Back to a plain March Loop Group (its simple shading); settings, loop body and wires kept' : 'GI Lit lights the scene itself: soft shadows, AO, sky light, one bounce and reflections. Settings, loop body and wires kept'} onClick={() => {
+                      const id = clickedNode.id, to = clickedNode.type === 'giLitMarchGroup' ? 'marchLoopGroup' : 'giLitMarchGroup';
+                      setContextMenu(null);
+                      useNodeGraphStore.getState().convertMarchLoop(id, to);
+                    }}>
+                      {clickedNode.type === 'giLitMarchGroup' ? 'Switch to March Loop Group' : 'Switch to GI Lit March Group'}
+                    </button>
                     <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
                     <button style={{ ...ctxBtnStyle, color: tc.red }} onClick={() => {
                       removeNode(clickedNode.id);
@@ -1940,6 +1956,16 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       Delete Group
                     </button>
                   </>
+                )}
+                {/* The old Bloom reads last frame: offer the same-frame Pass → Glow (texture) setup. */}
+                {clickedNode?.type === 'bloom' && (
+                  <button style={ctxBtnStyle} title="Replace it with a Pass, a Glow (texture) Bloom chain and Add glow: same frame (no lag or smear), a soft core with a long tail; settings kept" onClick={() => {
+                    const id = clickedNode.id;
+                    setContextMenu(null);
+                    useNodeGraphStore.getState().upgradeBloom(id);
+                  }}>
+                    Upgrade to same-frame glow
+                  </button>
                 )}
                 {/* Pattern discovery (src/patterns): the techniques this node takes part in, in the Code Explorer. */}
                 {clickedNode && clickedNode.type !== 'output' && (

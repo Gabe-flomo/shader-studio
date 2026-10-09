@@ -469,7 +469,7 @@ export function describeGraph(nodes: GraphNode[]): DescribeResult | null {
       dist: round(num(P.camDist, 3)), angle: deg(num(P.camAngle, 0.6)), elev: deg(num(P.camElevation, 0.3)), orbit: deg(num(P.rotSpeed, 0)),
       zoom: round(num(P.fov, 1.5)), flatten: round(num(P.ortho, 0)), x: round(num(P.targetX, 0)), y: round(num(P.targetY, 0)), z: round(num(P.targetZ, 0)),
     };
-    r.wiredParams(cam, ['camDist', 'camAngle', 'camElevation', 'rotSpeed', 'fov', 'targetX', 'targetY', 'targetZ'], 'March Camera');
+    r.wiredParams(cam, ['camDist', 'camAngle', 'camElevation', 'rotSpeed', 'fov', 'target', 'targetX', 'targetY', 'targetZ'], 'March Camera');
     if (num(P.aperture, 0) > 0) r.unknown.push('March Camera\'s depth of field (Aperture) has no builder setting.');
     recognized.push('March Camera');
   } else r.unknown.push(cam ? `${label(cam)} makes the rays: not a March Camera, so the camera is the builder's default.` : 'Nothing is wired into the loop\'s Ray Origin.');
@@ -523,6 +523,7 @@ export function describeGraph(nodes: GraphNode[]): DescribeResult | null {
     const P = renderer.params;
     spec.quality = {
       steps: Math.round(num(P.maxSteps, 80)), maxDist: round(num(P.maxDist, 20)), stepScale: round(num(P.stepScale, 1)), jitter: round(num(P.jitter, 1)),
+      ...(P.warpSafety === 'auto' || P.warpSafety === 'careful' || P.warpSafety === 'high' ? { warp: P.warpSafety } : {}),
     };
     L.bg = vec(P.bg, [0, 0, 0]).map(round) as Vec3;
   }

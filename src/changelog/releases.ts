@@ -39,6 +39,114 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.110',
+    date: '2026-10-08',
+    title: 'Series everywhere',
+    highlights: [
+      { area: 'Files', text: 'Export a saved graph as this version or the whole series in one .playfile; opening a whole series brings every version back.' },
+      { area: 'Play', text: 'Background: queue a series\' every version, or the newest of each family, and step through iterations of one idea with Change background.' },
+    ],
+  },
+  {
+    id: '2026.10.109',
+    date: '2026-10-08',
+    title: 'Graph series',
+    highlights: [
+      { area: 'Studio', text: 'Saving makes a series: Minor for a tweak (2.3 → 2.4), Major for a new direction (→ 3.0), Save in place, or New graph. The name chip shows Curves 2.3.', link: { kind: 'doc', path: 'docs/graph-series-plan.md' } },
+      { area: 'Studio', text: 'Saving under a name that is already a series adds a new family to it; older saves read as 1.0, 1.1…' },
+      { area: 'Files', text: 'Files shows each graph\'s versions as 2.3, grouped into families. History is capped by size (App settings), keeping each family\'s first and latest.' },
+    ],
+  },
+  {
+    id: '2026.10.108',
+    date: '2026-10-08',
+    title: 'Live harmonograph',
+    highlights: [
+      { area: 'Studio', text: 'Curve Trace Live mode: X and Y in Hz move a dot that leaves a trail; slow, a dot with a tail, fast, a solid figure, like a museum harmonograph.', link: { kind: 'example', key: 'curveTraceLive' } },
+      { area: 'Studio', text: 'Curve Trace has a Head output (the moving dot) for drawing it bright.', link: { kind: 'doc', path: 'docs/curve-trace.md' } },
+      { area: 'Files', text: 'Graphs and Play setups now export as .playfile in one click; JSON files still open.' },
+    ],
+  },
+  {
+    id: '2026.10.107',
+    date: '2026-10-08',
+    title: 'Clearer explanations, cleaner bar',
+    highlights: [
+      { area: 'Studio', text: 'Explanations read shading as ideas: the floor, the sunlight, the sky light, a rim; later lines reuse them, and colours show as swatches.' },
+      { area: 'Studio', text: 'The graph\'s name sits in the top bar (Untitled until saved): click it to name and save. Page tabs are icons that open on hover.' },
+      { area: 'Studio', text: 'Nodes library: 2D/3D Shapes, 4D split into Shapes, Space and Projection, Agents and Agent presets, Chladni; alphabetical throughout.' },
+      { area: 'Studio', text: '3D examples are lighter: shadows and occlusion only where lighting is the point (the sun button adds them anywhere).' },
+    ],
+  },
+  {
+    id: '2026.10.106',
+    date: '2026-10-08',
+    title: 'Better bloom, quieter background',
+    highlights: [
+      { area: 'Studio', text: 'Upgrade an old Bloom to a same-frame glow (right-click or the card\'s spark button): no lag or smear behind moving things, a soft core and a long tail.', link: { kind: 'doc', path: 'docs/blur-and-glow.md' } },
+      { area: 'Studio', text: 'Glow (texture) Bloom chain has Tail, for a long, dreamy falloff; Tone Map has Jodie Reinhard, which keeps bright glows coloured.' },
+      { area: 'Files', text: 'App settings → Background: slow down or pause while another window is in front, and free GPU memory after 3 minutes hidden, so other tabs don\'t run short.', link: { kind: 'doc', path: 'docs/background.md' } },
+    ],
+  },
+  {
+    id: '2026.10.105',
+    date: '2026-10-08',
+    title: 'Curve Trace',
+    highlights: [
+      { area: 'Studio', text: 'Curve Trace (2D) and Curve Trace 3D: continuous Lissajous and harmonograph curves as distance fields you can colour, glow or combine like any SDF.', link: { kind: 'doc', path: 'docs/curve-trace.md' } },
+      { area: 'Studio', text: 'Draw a curve with a moving pen and a fading trail, or morph between two figures. Lateral or rotary motion; waves or your own formula in t.', link: { kind: 'example', key: 'curveTracePen' } },
+      { area: 'Studio', text: 'New examples: pen drawing, morph, harmonograph intervals and a 3D Lissajous knot.', link: { kind: 'example', key: 'curveTraceKnot' } },
+    ],
+  },
+  {
+    id: '2026.10.104',
+    date: '2026-10-08',
+    title: 'Repeat Scene combine',
+    highlights: [
+      { area: 'Studio', text: 'Repeat Scene can melt, carve or intersect its copies with the Not repeated scene (Combine + Blend), not just place them side by side.', link: { kind: 'doc', path: 'docs/repeat-scene.md' } },
+      { area: 'Studio', text: 'Repeat Cell has a Centre output, so copies can react to a point. New example: Repeat Scene: around a centrepiece.', link: { kind: 'example', key: 'repeatSceneCentrepiece' } },
+    ],
+  },
+  {
+    id: '2026.10.103',
+    date: '2026-10-08',
+    title: 'Repeat Scene',
+    highlights: [
+      { area: 'Studio', text: 'Repeat Scene repeats a whole 3D scene in a grid and checks neighbouring cells cheaply, so copies can overlap without being sliced.', link: { kind: 'doc', path: 'docs/repeat-scene.md' } },
+      { area: 'Studio', text: 'Repeat Cell gives each copy its own random size, place or colour. New example: Repeat Scene: overlapping bubbles.', link: { kind: 'example', key: 'repeatSceneBubbles' } },
+      { area: 'Studio', text: 'Switch a March Loop Group to a GI Lit March Group and back (right-click, or the Light the scene card); body, settings and wires kept.', link: { kind: 'doc', path: 'docs/light-scene.md' } },
+    ],
+  },
+  {
+    id: '2026.10.102',
+    date: '2026-10-08',
+    title: 'Light the scene',
+    highlights: [
+      { area: 'Studio', text: 'Light the scene: the sun button (or right-click) on a March Loop Group lights a 3D or 4D scene in one click, wired to the Output.', link: { kind: 'doc', path: 'docs/light-scene.md' } },
+      { area: 'Studio', text: 'Eight looks: Daylight, Studio, Golden hour, Moonlight, Clay, Neon rim, Wax / skin and Quick. Picking another replaces the rig.' },
+    ],
+  },
+  {
+    id: '2026.10.101',
+    date: '2026-10-08',
+    title: 'Warp safety everywhere',
+    highlights: [
+      { area: 'Studio', text: 'Warp safety now works in volumetric loops and the GI Lit March Group; GI\'s shadow, bounce and reflection rays step safely too.', link: { kind: 'doc', path: 'docs/warp-safety.md' } },
+      { area: 'Studio', text: 'New Stretch output on the march loops: wire it into Soft Shadow or SDF AO so their rays don\'t tear through warped space.' },
+      { area: 'Studio', text: '3D Scene Builder: Quality → Warp safety (recipe: quality warp=careful), which also wires Stretch into its shadows and AO.' },
+    ],
+  },
+  {
+    id: '2026.10.100',
+    date: '2026-10-08',
+    title: 'Warp safety',
+    highlights: [
+      { area: 'Studio', text: 'Warp safety on the March Loop: Auto, Careful or High stop twisted, bent or folded 3D space from tearing, without slowing every ray.', link: { kind: 'doc', path: 'docs/warp-safety.md' } },
+      { area: 'Studio', text: 'March Loop Show → Steps heatmap: see where rays struggle (orange to white) to tune Max step and Max steps.' },
+      { area: 'Studio', text: 'March Camera takes one vec3 Target input instead of three floats; the X/Y/Z sliders still set it when nothing is wired.' },
+    ],
+  },
+  {
     id: '2026.10.99',
     date: '2026-10-08',
     title: '4D fractals',
@@ -436,9 +544,9 @@ export const RELEASES: Release[] = [
     date: '2026-10-06',
     title: 'Clearer explanations',
     highlights: [
-      { area: 'Studio', text: 'Phones and tablets: builders open full screen with tabs, the Do… bar has a button, previews get Show as, and ? help opens on tap.' },
-      { area: 'Studio', text: 'Touch: hold for "is this typical?" and function uses, the brush paints with a finger, and the clip trimmer has big handles and Set In / Set Out.' },
-      { area: 'Studio', text: 'Time Cube can choose and edit a video on phones, line previews have ▶ and ▲▼, and the Code Explorer opens on mobile.' },
+      { area: 'Studio', text: 'Explanations read plainly first: "silent is 1 while a stays under 0.02…", with a tag for the common job it does; the literal steps fold away below.' },
+      { area: 'Studio', text: 'Names, numbers and code in explanations are coloured chips, like the code above; hover one to light where it is read.' },
+      { area: 'Studio', text: 'Lines that map one number to another show a small plot of the curve, with its edges marked: click it to enlarge.' },
     ],
   },
   {

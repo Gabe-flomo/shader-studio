@@ -24,7 +24,9 @@ import { rulesStarter } from '../agentRules/starter';
 import { particlesAsNodes } from './particlesAsNodes';
 import { openGridRulesInGraph } from './gridRulesAsNodes';
 import { openNewSceneBuilder } from '../sceneBuilder/store';
-import { applyRecipe, placeNear, recipesFor } from '../nodes/recipes';
+import { applyRecipe, LIGHT_SCENE_TYPES, placeNear, recipesFor } from '../nodes/recipes';
+import { convertMarchLoop, type MarchLoopType } from '../nodes/convertMarchLoop';
+import { upgradeBloom } from '../nodes/upgradeBloom';
 import { runDoPlan as runDoPlanPure, type DoPlan } from '../suggestions/doBar';
 import { execCommand, type CommandPlan } from '../suggestions/doCommands';
 import { applyMove, moveById, learnGraph, learnSaved, recordWireBetween, textSignature } from '../suggestions';
@@ -151,7 +153,7 @@ import { loadFolders, createFolder, moveItemsToFolder } from '../utils/assetFold
 import type { FileResult } from '../utils/fileIO';
 import { BLANK_GRAPH, DEFAULT_EXAMPLE, loadExampleGraphs } from './exampleIndex';
 import { loadImageTextureFromFile } from '../lib/loadImageTexture';
-import { archiveCurrent, deleteHistory, readVersion } from './graphVersions';
+import { archiveCurrent, deleteHistory, nextNumber, readVersion, replaceVersion, versionMeta, type SaveKind } from './graphVersions';
 import type { ExampleGraph } from './exampleIndex';
 import { layoutByRank, estimateNodeHeight } from './graphLayout';
 import { arrangeByStage } from '../structure/arrange';
@@ -534,7 +536,7 @@ export interface ScratchSnapshot {
   looseGroups: import('../types/nodeGraph').LooseGroup[];
   play: PlayRecord;
   datasets: DatasetsRecord;
-  currentGraph: { name: string; version: number; latest: boolean } | null;
+  currentGraph: { name: string; version: number; major: number; minor: number; latest: boolean } | null;
   graphDirty: boolean;
   previewNodeId: string | null;
   activeGroupId: string | null;
@@ -868,6 +870,10 @@ interface NodeGraphState {
    * One undo step. Returns the ids added, or null when the node or recipe is gone.
    */
   applyStarterRecipe: (nodeId: string, recipeId: string) => string[] | null;
+  /** Turn a March Loop Group into a GI Lit March Group or back, in the level being edited (nodes/convertMarchLoop.ts). */
+  convertMarchLoop: (nodeId: string, to: MarchLoopType) => boolean;
+  /** Turn an old Bloom (reads last frame) into Pass → Glow (texture) → Add glow, in the level being edited (nodes/upgradeBloom.ts). */
+  upgradeBloom: (nodeId: string) => boolean;
   /**
    * Apply suggestion move `moveId` (suggestions/moves.ts) on socket `key` of node `nodeId`, in the
    * level being edited: one undo step, a compile, a toast. Selects the move's result node.
@@ -1042,9 +1048,10 @@ interface NodeGraphState {
    * project: the new save becomes its next version and the one it replaces
    * is kept in the project's history (graphVersions.ts). `note` says what changed.
    */
-  saveGraph: (name: string, note?: string) => Promise<FileResult>;
+  /** Save under `name`: kind minor (default with that series open), major (a new family), inPlace (over the open version) or new (a new series, or a new family when the name exists). docs/graph-series-plan.md */
+  saveGraph: (name: string, note?: string, kind?: SaveKind) => Promise<FileResult>;
   /** The saved graph open right now (loaded or last saved), and which version; null for examples, imports and new graphs. */
-  currentGraph: { name: string; version: number; latest: boolean } | null;
+  currentGraph: { name: string; version: number; major: number; minor: number; latest: boolean } | null;
   /** Bumped whenever a whole different graph is loaded (an example, a saved graph, an import): not by edits or undo. */
   graphEpoch: number;
   /** The open graph changed since it was loaded or saved. */
@@ -3373,13 +3380,55 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const r = applyRecipe(before, nodeId, recipe, () => idGenerator.next());
     if (!r) return null;
     const label = getNodeDefinitionFor(self)?.label ?? self.type;
-    undoManager.push(before, { label: `Set up ${label}: ${recipe.label}` });
+    const lighting = LIGHT_SCENE_TYPES.has(self.type);
+    undoManager.push(before, { label: lighting ? `Light the scene: ${recipe.label}` : `Set up ${label}: ${recipe.label}` });
     set({ nodes: r.nodes });
     get().compile();
-    toast.info(`${label}: ${recipe.label}`, {
-      message: `${recipe.description}${r.shown ? ' It is on the Output now.' : ''} Every node it added has a note on what it does; undo takes it back to just the node.`,
+    toast.info(lighting ? `Lit: ${recipe.label}` : `${label}: ${recipe.label}`, {
+      message: lighting
+        ? `${recipe.description} Every node it added has a note; pick another look to replace it, or undo.`
+        : `${recipe.description}${r.shown ? ' It is on the Output now.' : ''} Every node it added has a note on what it does; undo takes it back to just the node.`,
     });
     return r.added;
+  },
+
+  convertMarchLoop: (nodeId, to) => {
+    closeRecipeOffer();
+    const st = get();
+    const path = st.activeGroupPath;
+    const scope = path.length ? getActiveNodes(st.nodes, path) : st.nodes;
+    if (!scope) return false;
+    const r = convertMarchLoop(scope, nodeId, to);
+    if (!r) return false;
+    const label = to === 'giLitMarchGroup' ? 'GI Lit March Group' : 'March Loop Group';
+    undoManager.push(st.nodes, { label: `Switched to ${label}`, nodeIds: [nodeId] });
+    set({ nodes: path.length ? (setActiveNodes(st.nodes, path, r.nodes) ?? st.nodes) : r.nodes });
+    get().compile();
+    const notes: string[] = [];
+    if (r.removedRig) notes.push(`The Light the scene rig (${r.removedRig} nodes) came out: GI Lit lights the scene itself, and its Color is on the Output.`);
+    if (r.dropped) notes.push(`${r.dropped} wire${r.dropped === 1 ? '' : 's'} from GI-only outputs (AO, Shadow, GI, Diffuse, Reflection) came off.`);
+    if (to === 'marchLoopGroup') notes.push('Light the scene (the sun button) adds lighting to it.');
+    toast.info(`Switched to ${label}`, { message: `${notes.join(' ')} Settings, the loop body and the other wires are kept. Undo puts it back.` });
+    return true;
+  },
+
+  upgradeBloom: (nodeId) => {
+    const st = get();
+    const path = st.activeGroupPath;
+    const scope = path.length ? getActiveNodes(st.nodes, path) : st.nodes;
+    if (!scope) return false;
+    const r = upgradeBloom(scope, nodeId, () => idGenerator.next());
+    if (!r) {
+      toast.info('Nothing to upgrade', { message: 'Wire a picture into the Bloom\'s Color first.' });
+      return false;
+    }
+    undoManager.push(st.nodes, { label: 'Upgraded Bloom to same-frame glow', nodeIds: [nodeId] });
+    set({ nodes: path.length ? (setActiveNodes(st.nodes, path, r.nodes) ?? st.nodes) : r.nodes });
+    get().compile();
+    toast.info('Bloom upgraded: same frame, no lag', {
+      message: `A Pass, a Glow (texture) Bloom chain and Add glow replace it; Threshold, Intensity and Radius came across (Softness is Knee now), and Tail stretches the glow's falloff.${r.droppedWires ? ` ${r.droppedWires} wire${r.droppedWires === 1 ? '' : 's'} into Threshold or Intensity came off (the Glow has them as sliders).` : ''} Undo puts the old Bloom back.`,
+    });
+    return true;
   },
 
   applySuggestion: (nodeId, key, side, moveId, args = {}) => {
@@ -5527,22 +5576,35 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   deselectAll: () => set({ selectedNodeIds: [] }),
 
   // ─── Save / Load ───────────────────────────────────────────────────────────
-  saveGraph: async (name, note) => {
-    const { nodes, looseGroups, play, datasets } = get();
+  saveGraph: async (name, note, kind) => {
+    const { nodes, looseGroups, play, datasets, currentGraph: open } = get();
     // `play` (and `datasets`) are left out when empty so graphs without them look as they always did.
     const playField = { ...(isPlayRecordEmpty(play) ? {} : { play }), ...datasetsField(datasets) };
-    // The version this replaces goes into the project's history first.
-    const version = archiveCurrent(name);
     const noteField = note?.trim() ? { note: note.trim().slice(0, 300) } : {};
     // Its links to presentations belong to the graph, not to a version: a new version keeps them.
     const linked = linkedPresentationsOf(name);
     const linkField = linked.length ? { [GRAPH_LINK_FIELD]: linked } : {};
-    const payload = JSON.stringify({ nodes, looseGroups, ...playField, layout: LAYOUT_VERSION, savedAt: Date.now(), version, ...noteField, ...linkField });
+    // A series is its name (docs/graph-series-plan.md). The open version is the base when it is from this series.
+    const base = open && open.name === name ? { major: open.major, minor: open.minor } : null;
+    const how = kind ?? (base ? 'minor' : 'new');
+    if (how === 'inPlace' && open && base) {
+      // Save in place: the open version keeps its numbers, its graph is replaced.
+      const payload = JSON.stringify({ nodes, looseGroups, ...playField, layout: LAYOUT_VERSION, savedAt: Date.now(), version: open.version, ...base, ...noteField, ...linkField });
+      try { if (!replaceVersion(name, open.version, payload)) return { ok: false, error: `“${name}” ${base.major}.${base.minor} is no longer there to save over.` }; }
+      catch (e) { return { ok: false, error: `Couldn’t save over “${name}”: ${errorMessage(e)}` }; }
+      set({ graphDirty: false });
+      window.dispatchEvent(new Event(SAVED_GRAPHS_CHANGED));
+      return { ok: true };
+    }
+    const number = nextNumber(name, how === 'inPlace' ? 'minor' : how, base);
+    // The version this replaces goes into the series' history first.
+    const version = archiveCurrent(name);
+    const payload = JSON.stringify({ nodes, looseGroups, ...playField, layout: LAYOUT_VERSION, savedAt: Date.now(), version, ...number, ...noteField, ...linkField });
     // localStorage is the primary store; a quota failure here means nothing
     // was saved, so stop before the (optional) disk mirror.
     const stored = safeSetItem(`shader-studio:${name}`, payload, `graph "${name}"`);
     if (!stored.ok) return stored;
-    set({ currentGraph: { name, version, latest: true }, graphDirty: false });
+    set({ currentGraph: { name, version, ...number, latest: true }, graphDirty: false });
     learnSaved(name, nodes, payload);
     recordActivity('save', name);
     window.dispatchEvent(new Event(SAVED_GRAPHS_CHANGED));
@@ -5611,13 +5673,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     idGenerator.syncFromGraph(nodes);
     // Reset group navigation so a saved graph that was captured inside a
     // subgraph doesn't leave the editor stranded in a non-existent group.
-    let version = 1;
-    try { const v = (JSON.parse(raw) as { version?: unknown }).version; if (typeof v === 'number') version = v; } catch { /* parsed above */ }
+    const meta = versionMeta(raw) ?? { version: 1, major: 1, minor: 0 };
+    const version = meta.version;
     let latestVersion = version;
     try { const v = latest ? (JSON.parse(latest) as { version?: unknown }).version : undefined; if (typeof v === 'number') latestVersion = v; } catch { /* newest is unreadable: treat this as it */ }
     set(st => ({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], play, datasets, previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
     get().compile();
-    set({ currentGraph: { name, version, latest: version === latestVersion }, graphDirty: false });
+    set({ currentGraph: { name, version, major: meta.major, minor: meta.minor, latest: version === latestVersion }, graphDirty: false });
     announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
     announceGraphOpened({ kind: 'saved', name });
     return { ok: true };

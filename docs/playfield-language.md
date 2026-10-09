@@ -197,7 +197,7 @@ Edit verbs leave "the" out: `set glow falloff=8`. A clause that is only a refere
 | `background [top] bottom=` | bg | top (bare): colour; bottom: colour | `sphere · background navy` |
 | `tone [mode]` |  | mode (bare): aces, agx, hable, reinhard2, tanh, oklab, none | `sphere · tone agx` |
 | `camera [dist] angle= elev= orbit= zoom= flatten= x= y= z=` | cam | dist (bare): random: 3–6; angle: number; elev: random: 5–35; orbit: random: 0–15; zoom: number; flatten: number; x: number; y: number; z: number | `sphere · camera dist=5 orbit=10` |
-| `quality steps= dist= step= jitter=` |  | steps: number; dist: number; step: number; jitter: number | `sphere · quality steps=128` |
+| `quality steps= dist= step= jitter= warp=` |  | steps: number; dist: number; step: number; jitter: number; warp: off, auto, careful, high | `sphere · quality steps=128` |
 
 ## Grid Rules
 

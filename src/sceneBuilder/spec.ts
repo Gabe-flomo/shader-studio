@@ -292,6 +292,8 @@ export interface QualitySpec {
   /** A number, or 'auto': the smallest step any warp or shape asks for. */
   stepScale: number | 'auto';
   jitter: number;
+  /** The loop's Warp safety (docs/warp-safety.md); absent = off. */
+  warp?: 'auto' | 'careful' | 'high';
 }
 
 export interface SceneSpec {

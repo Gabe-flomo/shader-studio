@@ -96,8 +96,9 @@ function makeSdf(def: ShapeDef, over: Record<string, number | Vec3> = {}): Sdf {
     case 'cone': {
       const a = rad(num(s, 'angle')), h = num(s, 'h');
       const wx = h * Math.tan(a), wy = h;
+      // Pointing up, as the builder makes it: tip at the top (the node's y flipped about its height).
       return (x, y, z) => {
-        const qx = len2(x, z), qy = y;
+        const qx = len2(x, z), qy = h - y;
         const t = clamp((qx * wx + qy * wy) / (wx * wx + wy * wy), 0, 1);
         const ax = qx - wx * t, ay = qy - wy * t;
         const bx = qx - wx * clamp(qx / wx, 0, 1), by = qy - wy;

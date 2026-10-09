@@ -53,15 +53,15 @@ function useElementWidth<T extends HTMLElement>(): [RefObject<T | null>, number]
   return [ref, width];
 }
 
-const TABS: { page: Page; label: string }[] = [
-  { page: 'studio', label: 'Studio' },
-  { page: 'play', label: 'Play' },
-  { page: 'present', label: 'Present' },
-  { page: 'fn', label: 'Builder' },
-  { page: 'glsl', label: 'GLSL' },
-  { page: 'convert', label: 'Convert' },
-  { page: 'shortcuts', label: 'Keys' },
-  { page: 'files', label: 'Files' },
+/** The pages, as icons: the current one shows its name, and hovering the strip shows them all. Keys lives under Files (App settings) and the More menu. */
+const TABS: { page: Page; label: string; icon: IconName }[] = [
+  { page: 'studio', label: 'Studio', icon: 'layoutGraph' },
+  { page: 'play', label: 'Play', icon: 'play' },
+  { page: 'present', label: 'Present', icon: 'slides' },
+  { page: 'fn', label: 'Builder', icon: 'wave' },
+  { page: 'glsl', label: 'GLSL', icon: 'code' },
+  { page: 'convert', label: 'Convert', icon: 'bidir' },
+  { page: 'files', label: 'Files', icon: 'folder' },
 ];
 
 /**
@@ -95,6 +95,8 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
   const foldAux = compact || fold.foldAux;
   const hideWordmark = compact || fold.hideWordmark;
   const showRecordLabel = !compact && fold.recordLabel;
+  // Hovering (or focusing) the tab strip shows every page's name; otherwise only the current one's.
+  const [tabsOpen, setTabsOpen] = useState(false);
 
   return (
     <div
@@ -112,8 +114,15 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         {!hideWordmark && <span style={{ fontWeight: 700, fontSize: 14.5, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Playfield</span>}
       </div>
 
+      {/* The name sits before the tabs, so the strip opening on hover only takes up empty space. */}
+      <GraphNameChip />
+
       <div
         role="tablist"
+        onMouseEnter={() => setTabsOpen(true)}
+        onMouseLeave={() => setTabsOpen(false)}
+        onFocus={() => setTabsOpen(true)}
+        onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setTabsOpen(false); }}
         style={{
           display: 'flex', gap: 2, padding: 3, borderRadius: 10, background: tk.bg.hover, flexShrink: 1, minWidth: 0,
           // Always scrollable, not just once `fold.scrollTabs` kicks in: the right cluster
@@ -125,19 +134,25 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
       >
         {TABS.map(t => {
           const on = page === t.page;
+          const named = on || tabsOpen;
           return (
             <button
               key={t.page}
               role="tab"
               aria-selected={on}
+              aria-label={t.label}
+              title={named ? undefined : t.label}
               onClick={() => onPageChange(t.page)}
               style={{
-                padding: compact ? '6px 10px' : '6px 14px', borderRadius: 7, border: 0, cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: named ? 6 : 0,
+                padding: named ? '6px 12px 6px 10px' : '6px 9px', borderRadius: 7, border: 0, cursor: 'pointer',
                 background: on ? tk.bg.panel : 'transparent', boxShadow: on ? '0 1px 2px rgba(20,20,30,0.1)' : 'none',
                 color: on ? tk.text.primary : tk.text.faint, font: `${on ? 600 : 500} 13px ${fontFamily.ui}`, whiteSpace: 'nowrap',
+                transition: 'padding 0.16s ease, gap 0.16s ease',
               }}
             >
-              {t.label}
+              <Icon name={t.icon} size={15} />
+              <span style={{ display: 'inline-block', maxWidth: named ? 90 : 0, overflow: 'hidden', transition: 'max-width 0.18s ease', verticalAlign: 'middle' }}>{t.label}</span>
               {t.page === 'convert' && <ProBadgeFor feature="convert" style={{ marginLeft: 6 }} />}
               {t.page === 'play' && hasPlay && <span aria-label="This graph has a Play setup" style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: tk.accent.base, marginLeft: 6, verticalAlign: 'middle' }} />}
             </button>
@@ -179,7 +194,7 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
               onClick={() => { void importAnyFile(onPageChange); }} />
             <IconButton icon="code" label="Import a GLSL shader as a node"
               onClick={async () => { reportGlslImport(await importGlslFromFile()); }} />
-            <IconButton icon="export" label="Export this graph to a file (.playfile or readable JSON)" shortcut={shortcuts.export}
+            <IconButton icon="export" label="Export this graph as a .playfile" shortcut={shortcuts.export}
               onClick={e => offerGraphExport(e.currentTarget)} />
           </>
         ) : (
@@ -190,7 +205,7 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
             <Tooltip label="Import a GLSL fragment shader (Shadertoy or raw) as a node, wired UV → shader → Output">
               <Button size="sm" icon="code" onClick={async () => { reportGlslImport(await importGlslFromFile()); }}>GLSL</Button>
             </Tooltip>
-            <Tooltip label="Export this graph: a .playfile with what it uses, or readable JSON" shortcut={shortcuts.export}>
+            <Tooltip label="Export this graph as a .playfile, with what it uses" shortcut={shortcuts.export}>
               <Button size="sm" icon="export" onClick={e => offerGraphExport(e.currentTarget)}>Export</Button>
             </Tooltip>
           </>
@@ -236,6 +251,7 @@ function OverflowMenu({ mode, toggleTheme, rebuildShortcut }: { mode: ThemeMode;
             <OverflowRow icon="rebuild" label={`${REBUILD_TOOLTIP}${rebuildShortcut ? ` (${rebuildShortcut})` : ''}`}
               onClick={() => { void rebuildWithToast(); setOpen(false); }} />
             <OverflowRow icon="book" label="Do… bar commands" onClick={() => { requestPage('studio'); openCommandsRef(); setOpen(false); }} />
+            <OverflowRow icon="keyboard" label="Keyboard shortcuts" onClick={() => { requestPage('shortcuts'); setOpen(false); }} />
             <OverflowRow icon={mode === 'light' ? 'moon' : 'sun'} label={mode === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
               onClick={() => { toggleTheme(); setOpen(false); }} />
           </div>
@@ -287,6 +303,48 @@ function AccountButton() {
   );
 }
 
+/**
+ * The open graph's name, in the middle of the bar: "Untitled" until it is saved, its version,
+ * and a dot while there are unsaved changes. Clicking it opens the save form (name it, or save
+ * a new version): this is how a graph is saved.
+ */
+function GraphNameChip() {
+  const tk = useTokens();
+  const current = useNodeGraphStore(s => s.currentGraph);
+  const dirty = useNodeGraphStore(s => s.graphDirty);
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [open, setOpen] = useState(false);
+  const name = current?.name ?? 'Untitled';
+  return (
+    <span ref={anchor} style={{ display: 'inline-flex', minWidth: 0, flexShrink: 1 }}>
+      <Tooltip label={current ? (dirty ? `Unsaved changes: save “${name}” as a new version (Minor), a new family (Major), in place, or under another name` : `Saved: “${name}” ${current.major}.${current.minor}`) : 'Not saved yet: give it a name to save it'}>
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-label={`${name}${current ? `, version ${current.major}.${current.minor}` : ''}${dirty ? ', unsaved changes' : ''}: save`}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 7, minWidth: 0, maxWidth: 280, height: 30, padding: '0 10px',
+            border: `1px solid ${open ? tk.border.strong : 'transparent'}`, borderRadius: radius.md, background: open ? tk.bg.hover : 'none',
+            cursor: 'pointer', color: current ? tk.text.primary : tk.text.faint, font: `${current ? 600 : 500} 13px ${fontFamily.ui}`,
+          }}
+          onMouseEnter={e => { if (!open) e.currentTarget.style.background = tk.bg.hover; }}
+          onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'none'; }}
+        >
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{name}</span>
+          {current && <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.mono}`, flexShrink: 0 }}>{current.major}.{current.minor}</span>}
+          {(dirty || !current) && <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: dirty ? tk.status.warning : tk.border.strong, flexShrink: 0 }} />}
+          <Icon name="chevD" size={11} style={{ color: tk.text.faint, flexShrink: 0 }} />
+        </button>
+      </Tooltip>
+      {open && (
+        <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="start" width={320} padding={10}>
+          <SaveGraphForm onDone={() => setOpen(false)} />
+        </Popover>
+      )}
+    </span>
+  );
+}
+
 function Divider() {
   const tk = useTokens();
   return <span style={{ width: 1, height: 20, background: tk.border.default, margin: '0 6px', flexShrink: 0 }} />;
@@ -301,18 +359,6 @@ export function SaveGraphButton({ compact = false }: { compact?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <span ref={anchor} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-      {current && !compact && (
-        <button
-          type="button"
-          onClick={() => setOpen(o => !o)}
-          title={dirty ? 'Unsaved changes: save a new version' : 'Saved'}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: 200, height: 28, padding: '0 8px', border: 0, borderRadius: radius.md, background: 'none', cursor: 'pointer', color: tk.text.secondary, font: `500 12px ${fontFamily.ui}` }}
-        >
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current.name}</span>
-          <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.mono}` }}>v{current.version}</span>
-          {dirty && <span aria-label="Unsaved changes" style={{ width: 7, height: 7, borderRadius: '50%', background: tk.status.warning, flexShrink: 0 }} />}
-        </button>
-      )}
       <span style={{ position: 'relative', display: 'inline-flex' }}>
         <IconButton icon="save" label={current ? `Save “${current.name}” as a new version` : 'Save graph'} active={open} tooltip={!open} onClick={() => setOpen(o => !o)} style={compact ? { width: 36, height: 40 } : undefined} />
         {compact && dirty && <span aria-label="Unsaved changes" style={{ position: 'absolute', top: 8, right: 6, width: 6, height: 6, borderRadius: '50%', background: tk.status.warning, pointerEvents: 'none' }} />}

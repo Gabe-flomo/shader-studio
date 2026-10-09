@@ -121,7 +121,10 @@ const KNOWN: Record<string, SettingInfo> = {
   'shader-studio:settings:customFnDir': S('Custom function export folder', 'saving'),
   'shader-studio:settings:filesKeepVersions': S('Clean up: versions to keep', 'saving'),
   'shader-studio:settings:storageLimit': S('Storage limit', 'saving', { hint: 'Back to 10 GB' }),
+  'shader-studio:settings:backgroundMode': S('In the background: slow, pause or keep drawing', 'app', { hint: 'Back to Slow down (about 8 frames a second while another window is in front)' }),
+  'shader-studio:settings:releaseGpuWhenHidden': S('Free GPU memory when hidden', 'app', { hint: 'Back to on: after 3 minutes hidden the GPU memory is given back' }),
   'shader-studio:settings:autosave': S('Autosave', 'saving', { hint: 'Back to every 5 minutes' }),
+  'shader-studio:settings:seriesHistoryMB': S('Series history size limit', 'saving', { hint: 'Back to 3 MB per series: past it the oldest tweaks are dropped, never a family’s first or latest' }),
   // Windows
   'playfield:builderWindow': S('Builder window', 'windows'),
   'playfield:history-window': S('History window', 'windows'),

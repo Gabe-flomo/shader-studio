@@ -534,7 +534,7 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     tidy(inner, 0, 180);
     return { nodes: inner, inputPorts: [], outputPorts: [] };
   };
-  const loopParams = { maxSteps: Q.steps, maxDist: Q.maxDist, stepScale: step, jitter: Q.jitter, bg: [...L.bg] };
+  const loopParams = { maxSteps: Q.steps, maxDist: Q.maxDist, stepScale: step, jitter: Q.jitter, bg: [...L.bg], ...(Q.warp ? { warpSafety: Q.warp } : {}) };
 
   let final: Ref;
   let march: MarchRefs | null = null;
@@ -591,9 +591,11 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
       { ro: ref(cam, 'ro'), rd: ref(cam, 'rd'), scene: ref(scene, 'scene') }, loopNote(' until it lands on a surface. Its outputs (Hit Pos, Normal, Hit, Depth) feed the lighting after it'));
     const hit = ref(loop, 'hit'), pos = ref(loop, 'pos'), normal = ref(loop, 'normal');
     march = { kind: 'march', loop, scene: ref(scene, 'scene'), sun: sun ? ref(sun, 'rgb') : null, maxDist: Q.maxDist, camDist: C.dist };
-    const ao = L.ao > 0 ? mk(ctx, 'sdfAo', 'ao', { stepDist: L.ao }, { scene: ref(scene, 'scene'), pos, normal, hit },
+    // With Warp safety on, the shadow and AO rays divide by the loop's Stretch too.
+    const stretch = Q.warp ? { stretch: ref(loop, 'stretch') } : {};
+    const ao = L.ao > 0 ? mk(ctx, 'sdfAo', 'ao', { stepDist: L.ao }, { scene: ref(scene, 'scene'), pos, normal, hit, ...stretch },
       'Ambient occlusion: steps out along the surface\'s normal and darkens creases and corners where other surfaces are close.') : null;
-    const shadow = L.shadows > 0 ? mk(ctx, 'softShadow', 'shadow', { k: L.shadows, tmax: Q.maxDist }, { scene: ref(scene, 'scene'), pos, normal, hit, lightDir: sun ? ref(sun, 'rgb') : null },
+    const shadow = L.shadows > 0 ? mk(ctx, 'softShadow', 'shadow', { k: L.shadows, tmax: Q.maxDist }, { scene: ref(scene, 'scene'), pos, normal, hit, lightDir: sun ? ref(sun, 'rgb') : null, ...stretch },
       `Soft shadows: marches again from the hit point toward the sun; Hardness ${fmt(L.shadows)} (8 soft … 32 hard).`) : null;
     const colours = new Set(shapes.map(s => s.color.join()));
     const shines = new Set(shapes.map(s => s.shine));

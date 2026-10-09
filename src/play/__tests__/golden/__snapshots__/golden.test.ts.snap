@@ -142,6 +142,46 @@ exports[`golden outputs: examples > convertCircleOptimised 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > curveTraceIntervals 1`] = `
+{
+  "a": "- x120",
+  "b": "- x120",
+  "d": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > curveTraceKnot 1`] = `
+{
+  "a": "- x120",
+  "e": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > curveTraceLive 1`] = `
+{
+  "p": "- x120",
+  "s": "- x120",
+  "x": "- x120",
+  "y": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > curveTraceMorph 1`] = `
+{
+  "a": "- x120",
+  "b": "- x120",
+  "r": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > curveTracePen 1`] = `
+{
+  "p": "- x120",
+  "s": "- x120",
+  "t": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > curvedHyperbolic 1`] = `
 {
   "a": "- x120",
@@ -1695,6 +1735,23 @@ exports[`golden outputs: examples > playVideoSound 1`] = `
 {
   "radius": "- x120",
   "vol": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > repeatSceneBubbles 1`] = `
+{
+  "a": "- x120",
+  "o": "- x120",
+  "s": "- x120",
+  "z": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > repeatSceneCentrepiece 1`] = `
+{
+  "a": "- x120",
+  "b": "- x120",
+  "s": "- x120",
 }
 `;
 

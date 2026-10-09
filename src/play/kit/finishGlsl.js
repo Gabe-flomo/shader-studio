@@ -110,3 +110,10 @@ export const FN_CRT_MASK_GLSL = `vec3 crtMaskFn(vec2 pixel, float cellSize, floa
   mask *= 1.0 - scan * row * 0.6;
   return mask;
 }`;
+
+/** Jodie Reinhard (Tone Map mode 'jodie' only, so other graphs compile as before): Reinhard on luminance blended toward per-channel Reinhard as it brightens; highlights keep their colour. */
+export const FN_TONE_JODIE_GLSL = `vec3 toneJodie(vec3 c) {
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  vec3 tc = c / (c + 1.0);
+  return mix(c / (l + 1.0), tc, tc);
+}`;

@@ -17,6 +17,8 @@ import { PLAY_EXAMPLE_INDEX, PLAY_EXAMPLE_KEYS } from './playExampleIndex';
 import { LEARN_COLOR_KEYS, LEARN_CURVES_KEYS, LEARN_EXAMPLE_INDEX, LEARN_EXAMPLE_KEYS, LEARN_GRID_KEYS, LEARN_MOVED_INDEX } from './learnExampleIndex';
 import { LEARN3D_EXAMPLE_INDEX, LEARN3D_EXAMPLE_KEYS } from './learn3dExampleIndex';
 import { CURVED_EXAMPLE_INDEX, CURVED_EXAMPLE_KEYS } from './curvedSpaceExampleIndex';
+import { REPEAT_SCENE_EXAMPLE_INDEX, REPEAT_SCENE_EXAMPLE_KEYS } from './repeatSceneExampleIndex';
+import { CURVE_TRACE_EXAMPLE_INDEX, CURVE_TRACE_2D_KEYS, CURVE_TRACE_3D_KEYS } from './curveTraceExampleIndex';
 import { COMBO_EXAMPLE_INDEX } from './comboExamples';
 import { MATRIX_EXAMPLE_INDEX, MATRIX_EXAMPLE_KEYS } from './matrixExamples';
 import { DATA_EXAMPLE_INDEX, DATA_EXAMPLE_KEYS } from './dataExampleIndex';
@@ -209,6 +211,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...LEARN3D_EXAMPLE_INDEX,
   // The Curved space folder: spherical and hyperbolic views, reverse perspective (curvedSpaceExampleIndex.ts).
   ...CURVED_EXAMPLE_INDEX,
+  ...REPEAT_SCENE_EXAMPLE_INDEX,
+  ...CURVE_TRACE_EXAMPLE_INDEX,
   // Node Combos built from the definitions (comboExamples.ts): the Grid Pattern → shape → Grid Paint flow, and field sockets.
   ...COMBO_EXAMPLE_INDEX,
   // The Matrices folder (matrixExamples.ts): combining, undoing, lattices, fractals, corner pin, colour.
@@ -270,7 +274,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Learn",             color: ctp.lavender, keys: LEARN_EXAMPLE_KEYS },
   { label: "Learn 3D",          color: ctp.lavender, keys: LEARN3D_EXAMPLE_KEYS },
   { label: "Curved space",      color: ctp.lavender, keys: CURVED_EXAMPLE_KEYS },
-  { label: "Curves & Shapes",   color: ctp.lavender, keys: LEARN_CURVES_KEYS },
+  { label: "Curves & Shapes",   color: ctp.lavender, keys: [...CURVE_TRACE_2D_KEYS, ...LEARN_CURVES_KEYS] },
   { label: "Color & Lighting",  color: ctp.peach, keys: [...LEARN_COLOR_KEYS, 'neonGlow','colorStopsCycle'] },
   { label: "Passes",            color: ctp.maroon, keys: PASS_EXAMPLE_KEYS },
   { label: "Texture tools",     color: ctp.flamingo, keys: TEXTURE_TOOL_EXAMPLE_KEYS },
@@ -295,7 +299,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Blur & Lens",       color: ctp.blue, keys: ['motionBlurTrails','tiltShiftScene','dofOrbitOrbs','dofDepthBlur','comboBlurDirectional'] },
   { label: "Functions",         color: ctp.sapphire, keys: ['ringGlow'] },
   { label: "3D Basics",         color: ctp.sky, keys: ['raymarchSpheres','rayMarchOutputs3D','shapesAndGround3D','softMetaballs3D','normalColorDemo'] },
-  { label: "3D SDF",            color: ctp.sky, keys: ['sdfPolarRepeat','sdfBend3D','sdCrossScene3D','infinitePillars3D','spiralWorld3D','gyroidWarped','bakeHeavyScene','mlgWiggleTunnel','voxelTerrain'] },
+  { label: "3D SDF",            color: ctp.sky, keys: [...REPEAT_SCENE_EXAMPLE_KEYS, ...CURVE_TRACE_3D_KEYS, 'sdfPolarRepeat','sdfBend3D','sdCrossScene3D','infinitePillars3D','spiralWorld3D','gyroidWarped','bakeHeavyScene','mlgWiggleTunnel','voxelTerrain'] },
   { label: "3D Lighting",       color: '#f9c468', keys: ['fresnelSchlickRim','refractDirFakeGlass','glassPhysical','glassMetaballs','litStillLife'] },
   { label: "GI Lighting",       color: ctp.green, keys: ['giSphereGround','giBoxFrame'] },
   { label: "3D: Scene Builder", color: ctp.sky, keys: SCENE_BUILDER_EXAMPLE_KEYS },

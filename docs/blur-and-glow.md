@@ -129,3 +129,20 @@ The test was a headless Chrome on an Apple M3 Pro (ANGLE Metal), using `EXT_disj
 - Xor, [Blur Philosophy](https://mini.gmshaders.com/p/blur-philosophy) and *Blur Philosophy 2*, GM Shaders: separable passes, reading between texels (4 taps for 3×3), the ±√½ offset, and repeating small blurs or downscaling for wide ones.
 - Aras Pranckevičius, [Fast blur with animated radius](https://aras-p.info/blog/2026/10/01/Fast-blur-with-animated-radius/), 2026: downsample, then Gaussian, then B-spline reconstruction, subtracting the variance the resampling adds.
 - Christian Sigg and Markus Hadwiger, *Fast Third-Order Texture Filtering*, GPU Gems 2, ch. 20: the 4-tap cubic B-spline read.
+
+## Tail (bloom chain)
+
+A Glow (texture) made since Tail existed weights its wider levels more: level k counts `1 + Tail × (k − 1)` times. The sum is still divided by the total weight, so brightness stays the same. 0 spreads the glow evenly (the old look); 0.4 (the default) or more gives a tight core with a long, dreamy falloff, like a camera lens. A Glow saved before Tail compiles exactly as before.
+
+## Upgrading the old Bloom
+
+The **Bloom** node (Effects) reads the frame before, so anything moving lags and smears, and it needs a brightness floor so faint light doesn't creep across the frame. Right-click it, or use the spark button on its card, and choose **Upgrade to same-frame glow**. That replaces it with:
+
+```
+picture ─► Pass ─texture─► Glow (texture), Bloom chain ─┐
+     └──────── Pass Color ─────────────────────────────┴─► Add glow ─► (where Bloom went)
+```
+
+The Glow keeps the Bloom's id, so Play controls on Threshold, Intensity and Radius keep working. Softness becomes Knee, and Radius is halved (the chain's tail reaches several times further). Wires into Bloom's Threshold or Intensity sockets come off, because the Glow has those as sliders. Undo puts the old Bloom back.
+
+Tone Map gains **Jodie Reinhard**: Reinhard on luminance, blended toward per-channel Reinhard as the light gets brighter, so bright glows keep their colour instead of going white.

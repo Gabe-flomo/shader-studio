@@ -581,6 +581,11 @@ export function QualityTab() {
       {Q.stepScale !== 'auto' && <NumRow label="" value={Q.stepScale} min={0.3} max={1} step={0.05} onChange={v => edit(d => { d.quality.stepScale = v; }, 'q:step')} />}
       {hints.length > 0 && <BuilderNote>Asking for smaller steps: {hints.map(h => `${h.why} (${h.value})`).join('; ')}.</BuilderNote>}
       <NumRow label="Jitter" hint="Starts each pixel's ray a little way along so steps don't line up into rings." value={Q.jitter} min={0} max={1} onChange={v => edit(d => { d.quality.jitter = v; }, 'q:jitter')} />
+      <Row label="Warp safety" hint="Stops twisted, bent or folded space from tearing: Auto learns the stretch, Careful also measures it each step, High takes shorter steps too. Slower in that order.">
+        <Segmented size="sm" ariaLabel="Warp safety" value={Q.warp ?? 'off'}
+          options={[{ value: 'off', label: 'Off' }, { value: 'auto', label: 'Auto' }, { value: 'careful', label: 'Careful' }, { value: 'high', label: 'High' }]}
+          onChange={v => edit(d => { if (v === 'off') delete d.quality.warp; else d.quality.warp = v as 'auto' | 'careful' | 'high'; })} />
+      </Row>
     </Pane>
   );
 }

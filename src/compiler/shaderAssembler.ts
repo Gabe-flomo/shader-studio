@@ -32,6 +32,8 @@ import { agentNbHeader } from '../nodes/definitions/agentNeighbours';
 import { frozenValueOf } from '../nodes/sliderFreeze';
 import { marchJitterDecl, MARCH_STEP_REF_KEY } from './marchJitter';
 import { curvedMarch } from './curvedSpace';
+import { CELL3_DECL, CELL3_GLOBAL, CELL3SIZE_GLOBAL } from '../nodes/definitions/repeatScene';
+import { safeMarchLines, safeMarchSteps, stepsHeatmap, warpSafetyOf } from './warpSafety';
 import {
   getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed,
   getAxisKeyframeConfig, generateVectorKeyframeGLSL, socketHasVectorKeyframes, VECTOR_AXES,
@@ -759,6 +761,8 @@ export class ShaderAssembler {
   private nodeMap: Map<string, GraphNode>;
   private functions = new Set<string>();
   private mainCode: string[] = [];
+  /** A March Loop's Steps heatmap: replaces the final picture, whatever shades the scene after it. */
+  private stepsView: string | null = null;
   private paramUniforms: Record<string, number | number[]> = {};
   // `${originalNodeId}::${paramKey}` → uniform name, for every param that
   // became a uniform. The store's slider fast path looks its param up here.
@@ -1003,6 +1007,7 @@ export class ShaderAssembler {
     if (node.type === 'marchLoopGroup') { this.compileMarchLoopGroupNode(node, inputVars, nodeSlug); return; }
     if (node.type === 'giLitMarchGroup') { this.compileGiLitMarchGroupNode(node, inputVars, nodeSlug); return; }
     if (node.type === 'spaceWarpGroup') { this.compileSpaceWarpGroupNode(node, inputVars, nodeSlug); return; }
+    if (node.type === 'repeatScene') { this.compileRepeatSceneNode(node, inputVars, nodeSlug); return; }
     if (node.bypassed) { this.compileBypassNode(node, inputVars, nodeSlug, def); return; }
     this.compileStandardNode(node, inputVars, nodeSlug, def);
   }
@@ -2140,6 +2145,97 @@ export class ShaderAssembler {
 
   }
 
+  /**
+   * Repeat Scene (docs/repeat-scene.md): a scene function that measures the wired scene in a 3D grid
+   * of cells, with the neighbouring cells too when asked, setting g_cell3 (Repeat Cell) before each call.
+   */
+  private compileRepeatSceneNode(rawNode: GraphNode, inputVars: Record<string, string>, nodeSlug: string): void {
+    const node = this.patchGroupSelf(rawNode, nodeSlug);
+    const inner = liveSceneFn(inputVars.scene);
+    const ground = liveSceneFn(inputVars.ground);
+    if (!inner && !ground) { this.nodeOutputs.set(node.id, { scene: 'MISSING_SCENE' }); return; }
+    const num = (v: unknown, fb: number): string => {
+      if (typeof v === 'string') return v;
+      const n = typeof v === 'number' && Number.isFinite(v) ? v : fb;
+      return Number.isInteger(n) ? `${n}.0` : String(n);
+    };
+    const innerExtra = inner ? this.sceneFnExtraParams.get(inner) ?? [] : [];
+    const groundExtra = ground ? this.sceneFnExtraParams.get(ground) ?? [] : [];
+    const extra = [...innerExtra];
+    for (const e of groundExtra) if (!extra.some(x => x.name === e.name)) extra.push(e);
+    const call = (fn: string, ex: Array<{ name: string }>, pos: string) => `${fn}(${pos}${ex.length ? ', ' + ex.map(v => v.name).join(', ') : ''})`;
+    const mode = ['off', 'wall', 'near8', 'skip'].includes(String(rawNode.params.neighbours)) ? String(rawNode.params.neighbours) : 'skip';
+    const S = nodeSlug;
+    this.declarations.add(CELL3_DECL);
+    const lines: string[] = [];
+    if (inner) {
+      lines.push(
+        `    vec3  cs  = max(vec3(${num(node.params.cellX, 2)}, ${num(node.params.cellY, 2)}, ${num(node.params.cellZ, 2)}), vec3(1e-3));\n`,
+        `    vec3  lim = vec3(${num(node.params.countX, 0)}, ${num(node.params.countY, 0)}, ${num(node.params.countZ, 0)});\n`,
+        // The cell the point is in (copies past Count are clamped to the last one).
+        `    vec3  id  = floor(p / cs + 0.5);\n`,
+        `    id = mix(id, clamp(id, -lim, lim), step(0.5, lim));\n`,
+        `    vec3  q   = p - cs * id;\n`,
+        `    ${CELL3SIZE_GLOBAL} = cs;\n`,
+        `    ${CELL3_GLOBAL} = id;\n`,
+        `    float d   = ${call(inner, innerExtra, 'q')};\n`,
+        // win: the copy that is nearest, left in g_cell3 at the end (Repeat Cell at a hit point reads it).
+        `    vec3  win = id;\n`,
+      );
+      if (mode === 'wall') {
+        // Never step past this cell's wall (an unlimited axis only; a clamped end cell has no wall outside).
+        lines.push(
+          `    vec3  wl  = 0.5 * cs - abs(q) + mix(vec3(0.0), vec3(1e9), step(0.5, lim) * step(lim, abs(id)));\n`,
+          `    d = min(d, max(min(wl.x, min(wl.y, wl.z)), 0.0) + 0.08 * min(cs.x, min(cs.y, cs.z)));\n`,
+        );
+      } else if (mode === 'near8' || mode === 'skip') {
+        lines.push(
+          // The 7 other cells round the corner of this cell the point is nearest.
+          `    vec3  o   = sign(q + 1e-6);\n`,
+          ...(mode === 'skip' ? [
+            `    vec3  wl  = 0.5 * cs - abs(q);\n`,
+            `    if (d > min(wl.x, min(wl.y, wl.z)) - ${num(node.params.overlap, 0.5)}) {\n`,
+          ] : [`    {\n`]),
+          `        for (int k = 1; k < 8; k++) {\n`,
+          `            float fk = float(k);\n`,
+          `            vec3  b  = vec3(mod(fk, 2.0), mod(floor(fk * 0.5), 2.0), floor(fk * 0.25));\n`,
+          `            vec3  c  = id + o * b;\n`,
+          `            c = mix(c, clamp(c, -lim, lim), step(0.5, lim));\n`,
+          `            if (dot(abs(c - id), vec3(1.0)) < 0.5) continue;\n`,
+          `            ${CELL3_GLOBAL} = c;\n`,
+          `            float dn = ${call(inner, innerExtra, 'p - cs * c')};\n`,
+          `            if (dn < d) { d = dn; win = c; }\n`,
+          `        }\n`,
+          `    }\n`,
+        );
+      }
+      lines.push(`    ${CELL3_GLOBAL} = win;\n`);
+    } else {
+      lines.push(`    float d = 1e9;\n`);
+    }
+    if (ground) {
+      // Combine with the scene that isn't repeated: union, a smooth blend, either one carving the other, or only where both are.
+      const combine = ['union', 'smooth', 'carve', 'carveInto', 'intersect'].includes(String(rawNode.params.combine)) ? String(rawNode.params.combine) : 'union';
+      const k = `max(${num(node.params.blend, 0.3)}, 1e-4)`;
+      const g = call(ground, groundExtra, 'p');
+      if (!inner || combine === 'union') lines.push(`    d = min(d, ${g});\n`);
+      else {
+        lines.push(`    float dg = ${g};\n`);
+        // Blend 0 gives the hard version of each.
+        const hard = `(${num(node.params.blend, 0.3)} <= 0.0)`;
+        if (combine === 'smooth') lines.push(`    d = ${hard} ? min(d, dg) : smin(d, dg, ${k});\n`);
+        else if (combine === 'carve') lines.push(`    d = ${hard} ? max(d, -dg) : -smin(-d, dg, ${k});\n`);
+        else if (combine === 'carveInto') lines.push(`    d = ${hard} ? max(dg, -d) : -smin(-dg, d, ${k});\n`);
+        else lines.push(`    d = ${hard} ? max(d, dg) : -smin(-d, -dg, ${k});\n`);
+      }
+    }
+    const fnName = `repScene_${S}`;
+    const decl = extra.map(v => `${v.type} ${v.name}`).join(', ');
+    this.functions.add(`float ${fnName}(vec3 p${decl ? ', ' + decl : ''}) {\n${lines.join('')}    return d;\n}`);
+    if (extra.length) this.sceneFnExtraParams.set(fnName, extra);
+    this.nodeOutputs.set(node.id, { scene: fnName });
+  }
+
   private compileMarchLoopGroupNode(rawNode: GraphNode, inputVars: Record<string, string>, nodeSlug: string): void {
           // The group's own sliders (Max Dist, Jitter, colours…) are live uniforms;
           // step counts are compileTime and stay baked.
@@ -2837,10 +2933,13 @@ export class ShaderAssembler {
           const mlExtraArgsStr = mlExtraArgsList.length > 0 ? ', ' + mlExtraArgsList.join(', ') : '';
           const mlBodyExtraArgsStr = mlBodyExtraParams.length > 0 ? ', ' + mlBodyExtraParams.map(v => v.name).join(', ') : '';
           const mlBodyAccArgsStr = mlBodyAccumulators.length > 0 ? ', ' + mlBodyAccumulators.map(a => a.varName).join(', ') : '';
-          const warpPos = (expr: string, t: string): string => {
+          // quiet: the body runs on scratch copies of its accumulators (`_q`), so warp safety's extra probes add no glow.
+          const mlBodyAccQuietStr = mlBodyAccumulators.length > 0 ? ', ' + mlBodyAccumulators.map(a => `${a.varName}_q`).join(', ') : '';
+          const warpPos = (expr: string, t: string, quiet = false): string => {
             if (!warpBodyFn) return expr;
-            if (mlHasNewStyle) return `${warpBodyFn}(${expr}, ${t}, ${mlRo}, ${mlRd}${mlExtraArgsStr}${mlBodyExtraArgsStr}${mlBodyAccArgsStr})`;
-            return `${warpBodyFn}(${expr}, ${t}${mlBodyExtraArgsStr}${mlBodyAccArgsStr})`;
+            const acc = quiet ? mlBodyAccQuietStr : mlBodyAccArgsStr;
+            if (mlHasNewStyle) return `${warpBodyFn}(${expr}, ${t}, ${mlRo}, ${mlRd}${mlExtraArgsStr}${mlBodyExtraArgsStr}${acc})`;
+            return `${warpBodyFn}(${expr}, ${t}${mlBodyExtraArgsStr}${acc})`;
           };
           // Build extra args for scene function calls (passes external vars from main() scope)
           const mlSceneExtraParams = this.sceneFnExtraParams.get(mlSceneFn) ?? [];
@@ -2858,7 +2957,19 @@ export class ShaderAssembler {
           // Space curvature (only a loop with the param): the ray follows a geodesic of constant curvature, see compiler/curvedSpace.ts.
           const curved = curvedMarch(nodeSlug, node.params.curvature, mlRo, mlRd, mlMaxDist, fn => this.functions.add(fn));
 
-          const marchLoopLines = mlVolumetric ? [
+          // Warp safety (docs/warp-safety.md): only a loop with the setting changes; Off builds exactly as before.
+          const mlSafety = warpSafetyOf(node.params.warpSafety);
+          const mlSafe = mlSafety !== 'off' && (!mlVolumetric || mlHasScene);
+          const mlSafeSteps = mlSafe ? safeMarchSteps(mlSafety, mlMaxSteps) : mlMaxSteps;
+          const safeLoop = (): string[] => safeMarchLines({
+            S: nodeSlug, safety: mlSafety as Exclude<typeof mlSafety, 'off'>, maxSteps: mlMaxSteps, stepScale: mlStepScale,
+            maxStep: fmtP(node.params.maxStep, 0.5), volumetric: mlVolumetric, passthrough: mlPassthrough,
+            at: t => curved.at(t), stepFactor: t => curved.stepFactor(t), end: curved.end,
+            sample: (raw, t) => callScene(warpPos(raw, t)), probe: (raw, t) => callScene(warpPos(raw, t, true)),
+            prelude: [accumDecls, mlBodyAccumulators.map(a => `    ${a.type} ${a.varName}_q = ${a.initExpr};\n`).join(''), curved.decl, jitterDecl],
+          });
+
+          const marchLoopLines = mlSafe ? safeLoop() : mlVolumetric ? [
             // Volumetric mode: no hit detection, runs all steps.
             // If scene connected: step by max(sdf, passthrough). If not: step by passthrough (pure density).
             accumDecls,
@@ -2895,7 +3006,7 @@ export class ShaderAssembler {
           ];
           const marchCode = [
             ...marchLoopLines,
-            `    float ${nodeSlug}_iter      = float(${nodeSlug}_si) / float(${mlMaxSteps});\n`,
+            `    float ${nodeSlug}_iter      = float(${nodeSlug}_si) / float(${mlSafeSteps});\n`,
             `    float ${nodeSlug}_iterCount = float(${nodeSlug}_si);\n`,
             `    vec3  ${nodeSlug}_hp_raw  = ${curved.at(`${nodeSlug}_t`)};\n`,
             `    vec3  ${nodeSlug}_hp  = ${warpPos(`${nodeSlug}_hp_raw`, `${nodeSlug}_t`)};\n`,
@@ -2918,9 +3029,14 @@ export class ShaderAssembler {
             `    float ${nodeSlug}_diff   = max(0.0, dot(${nodeSlug}_n, ${nodeSlug}_ld));\n`,
             `    vec3  ${nodeSlug}_alb    = ${mlAlbedo};\n`,
             `    vec3  ${nodeSlug}_color  = ${nodeSlug}_hit > 0.5 ? ${nodeSlug}_alb * (0.15 + 0.85 * ${nodeSlug}_diff) : ${nodeSlug}_bg;\n`,
+            ...(node.params.showSteps === 'steps' ? [
+              // Steps heatmap: dark where rays found their way quickly, yellow-white where they struggled.
+              stepsHeatmap(nodeSlug),
+            ] : []),
           ].join('');
 
           this.mainCode.push(marchCode);
+          if (node.params.showSteps === 'steps' && this.fieldDepth === 0) this.stepsView = `${nodeSlug}_color`;
           const mlgAccOutputs: Record<string, string> = {};
           const mlgAccSockets: Record<string, { type: string; label: string }> = {};
           mlBodyAccumulators.forEach((acc, i) => {
@@ -2937,6 +3053,7 @@ export class ShaderAssembler {
             iterCount: `${nodeSlug}_iterCount`,
             hit:       `${nodeSlug}_hit`,
             pos:       `${nodeSlug}_hp`,
+            stretch:   mlSafe ? `${nodeSlug}_lip` : '1.0',
             ...mlgAccOutputs,
           });
           return;
@@ -3589,10 +3706,13 @@ export class ShaderAssembler {
           const mlExtraArgsStr = mlExtraArgsList.length > 0 ? ', ' + mlExtraArgsList.join(', ') : '';
           const mlBodyExtraArgsStr = mlBodyExtraParams.length > 0 ? ', ' + mlBodyExtraParams.map(v => v.name).join(', ') : '';
           const mlBodyAccArgsStr = mlBodyAccumulators.length > 0 ? ', ' + mlBodyAccumulators.map(a => a.varName).join(', ') : '';
-          const warpPos = (expr: string, t: string): string => {
+          // quiet: the body runs on scratch copies of its accumulators (`_q`), so warp safety's extra probes add no glow.
+          const mlBodyAccQuietStr = mlBodyAccumulators.length > 0 ? ', ' + mlBodyAccumulators.map(a => `${a.varName}_q`).join(', ') : '';
+          const warpPos = (expr: string, t: string, quiet = false): string => {
             if (!warpBodyFn) return expr;
-            if (mlHasNewStyle) return `${warpBodyFn}(${expr}, ${t}, ${mlRo}, ${mlRd}${mlExtraArgsStr}${mlBodyExtraArgsStr}${mlBodyAccArgsStr})`;
-            return `${warpBodyFn}(${expr}, ${t}${mlBodyExtraArgsStr}${mlBodyAccArgsStr})`;
+            const acc = quiet ? mlBodyAccQuietStr : mlBodyAccArgsStr;
+            if (mlHasNewStyle) return `${warpBodyFn}(${expr}, ${t}, ${mlRo}, ${mlRd}${mlExtraArgsStr}${mlBodyExtraArgsStr}${acc})`;
+            return `${warpBodyFn}(${expr}, ${t}${mlBodyExtraArgsStr}${acc})`;
           };
           const mlSceneExtraParams = this.sceneFnExtraParams.get(mlSceneFn) ?? [];
           const mlSceneExtraArgsStr = mlSceneExtraParams.length > 0 ? ', ' + mlSceneExtraParams.map(v => v.name).join(', ') : '';
@@ -3608,7 +3728,18 @@ export class ShaderAssembler {
           // Space curvature (only a loop with the param): the ray follows a geodesic of constant curvature, see compiler/curvedSpace.ts.
           const curved = curvedMarch(nodeSlug, node.params.curvature, mlRo, mlRd, mlMaxDist, fn => this.functions.add(fn));
 
-          const giMarchLoopLines = mlVolumetric ? [
+          // Warp safety, as on the March Loop (docs/warp-safety.md); the shadow, bounce and reflection rays divide by the stretch too.
+          const giSafety = warpSafetyOf(node.params.warpSafety);
+          const giSafe = giSafety !== 'off' && (!mlVolumetric || mlHasScene);
+          const giSafeSteps = giSafe ? safeMarchSteps(giSafety, mlMaxSteps) : mlMaxSteps;
+          const giDiv = giSafe ? ` / ${nodeSlug}_lip` : '';
+          const giMarchLoopLines = giSafe ? safeMarchLines({
+            S: nodeSlug, safety: giSafety as Exclude<typeof giSafety, 'off'>, maxSteps: mlMaxSteps, stepScale: mlStepScale,
+            maxStep: fmtP(node.params.maxStep, 0.5), volumetric: mlVolumetric, passthrough: mlPassthrough,
+            at: t => curved.at(t), stepFactor: t => curved.stepFactor(t), end: curved.end,
+            sample: (raw, t) => callScene(warpPos(raw, t)), probe: (raw, t) => callScene(warpPos(raw, t, true)),
+            prelude: [accumDecls, mlBodyAccumulators.map(a => `    ${a.type} ${a.varName}_q = ${a.initExpr};\n`).join(''), curved.decl, jitterDecl],
+          }) : mlVolumetric ? [
             accumDecls,
             curved.decl,
             jitterDecl,
@@ -3673,7 +3804,7 @@ export class ShaderAssembler {
             `        float ${nodeSlug}_shd = ${callScene(`${nodeSlug}_shro + ${nodeSlug}_ld * ${nodeSlug}_sht`)};\n`,
             `        if (${nodeSlug}_shd < 0.0001) { ${nodeSlug}_sha = 0.0; break; }\n`,
             `        ${nodeSlug}_sha = min(${nodeSlug}_sha, 8.0 * ${nodeSlug}_shd / ${nodeSlug}_sht);\n`,
-            `        ${nodeSlug}_sht += ${nodeSlug}_shd;\n`,
+            `        ${nodeSlug}_sht += ${nodeSlug}_shd${giDiv};\n`,
             `        if (${nodeSlug}_sht > 8.0) break;\n`,
             `    }\n`,
             `    ${nodeSlug}_sha = clamp(${nodeSlug}_sha, 0.0, 1.0);\n`,
@@ -3698,7 +3829,7 @@ export class ShaderAssembler {
             `    for (int ${nodeSlug}_gii = 0; ${nodeSlug}_gii < ${nodeSlug}_giSt; ${nodeSlug}_gii++) {\n`,
             `        float ${nodeSlug}_gd = ${callScene(`${nodeSlug}_hp + ${nodeSlug}_gdir * ${nodeSlug}_gt + ${nodeSlug}_n * 0.003`)};\n`,
             `        if (${nodeSlug}_gd < 0.0005) { ${nodeSlug}_ghit = 1.0; break; }\n`,
-            `        ${nodeSlug}_gt += ${nodeSlug}_gd;\n`,
+            `        ${nodeSlug}_gt += ${nodeSlug}_gd${giDiv};\n`,
             `        if (${nodeSlug}_gt > 3.0) break;\n`,
             `    }\n`,
             `    vec3  ${nodeSlug}_giC    = ${nodeSlug}_ghit > 0.5 ? ${nodeSlug}_alb * 0.35 : ${nodeSlug}_skyC * 0.5;\n`,
@@ -3711,7 +3842,7 @@ export class ShaderAssembler {
             `    for (int ${nodeSlug}_ri = 0; ${nodeSlug}_ri < ${nodeSlug}_spSt; ${nodeSlug}_ri++) {\n`,
             `        float ${nodeSlug}_rd2 = ${callScene(`${nodeSlug}_hp + ${nodeSlug}_rv * ${nodeSlug}_rt + ${nodeSlug}_n * 0.003`)};\n`,
             `        if (${nodeSlug}_rd2 < 0.0005) { ${nodeSlug}_rhit = 1.0; break; }\n`,
-            `        ${nodeSlug}_rt += ${nodeSlug}_rd2;\n`,
+            `        ${nodeSlug}_rt += ${nodeSlug}_rd2${giDiv};\n`,
             `        if (${nodeSlug}_rt > ${mlMaxDist} * 0.5) break;\n`,
             `    }\n`,
             `    vec3  ${nodeSlug}_rhp    = ${nodeSlug}_hp + ${nodeSlug}_rv * ${nodeSlug}_rt;\n`,
@@ -3746,7 +3877,7 @@ export class ShaderAssembler {
 
           const giMarchCode = [
             ...giMarchLoopLines,
-            `    float ${nodeSlug}_iter      = float(${nodeSlug}_si) / float(${mlMaxSteps});\n`,
+            `    float ${nodeSlug}_iter      = float(${nodeSlug}_si) / float(${giSafeSteps});\n`,
             `    float ${nodeSlug}_iterCount = float(${nodeSlug}_si);\n`,
             `    vec3  ${nodeSlug}_hp_raw  = ${curved.at(`${nodeSlug}_t`)};\n`,
             `    vec3  ${nodeSlug}_hp  = ${warpPos(`${nodeSlug}_hp_raw`, `${nodeSlug}_t`)};\n`,
@@ -3765,9 +3896,11 @@ export class ShaderAssembler {
             `    vec3  ${nodeSlug}_normal = ${nodeSlug}_n * ${nodeSlug}_hit;\n`,
             `    vec3  ${nodeSlug}_bg     = ${bgVar};\n`,
             ...giLightingLines,
+            ...(node.params.showSteps === 'steps' ? [stepsHeatmap(nodeSlug)] : []),
           ].join('');
 
           this.mainCode.push(giMarchCode);
+          if (node.params.showSteps === 'steps' && this.fieldDepth === 0) this.stepsView = `${nodeSlug}_color`;
           const mlgAccOutputs: Record<string, string> = {};
           const mlgAccSockets: Record<string, { type: string; label: string }> = {};
           mlBodyAccumulators.forEach((acc, i) => {
@@ -3789,6 +3922,7 @@ export class ShaderAssembler {
             gi:        `${nodeSlug}_gi`,
             diffuse:   `${nodeSlug}_diff`,
             refl:      `${nodeSlug}_refl`,
+            stretch:   giSafe ? `${nodeSlug}_lip` : '1.0',
             ...mlgAccOutputs,
           });
           return;
@@ -4106,7 +4240,9 @@ export class ShaderAssembler {
   }
 
   private buildResult() {
-    const mainBody = this.mainCode.join('');
+    const mainBody = this.mainCode.join('') + (this.stepsView ? `    gl_FragColor = vec4(${this.stepsView}, 1.0);\n` : '');
+    // Repeat Cell outside a Repeat Scene (or in a path that skips declarationsFor) still needs its global.
+    if (!this.declarations.has(CELL3_DECL) && [CELL3_GLOBAL, CELL3SIZE_GLOBAL].some(g => mainBody.includes(g) || [...this.functions].some(f => f.includes(g)))) this.declarations.add(CELL3_DECL);
     // Data uniforms and their row helpers first, so any function can call them.
     const functionCode = pruneUnusedGlslFunctions(dataBlocksFirst(dedupeGlslFunctions(Array.from(this.functions))), mainBody).join('\n');
     const paramUniformDecls = Object.entries(this.paramUniforms)

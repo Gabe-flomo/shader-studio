@@ -16,6 +16,7 @@ import { isLibraryKey, PRESENTATION_FOLDER_SCOPE, PRESENTATION_KEY_PREFIX, type 
 import { GRAPH_LINK_FIELD, normalizeLinks, PRESENTATION_LINK_FIELD } from '../present/links';
 import { describeSetting, groupSettings, settingLabel } from './appSettings';
 import { countBakedRefs } from '../lib/videoUsage';
+import { numberOf, seriesLabel } from '../store/graphVersions';
 
 export type SectionId = 'graphs' | 'presentations' | 'glsl' | 'functions' | 'presets' | 'nodes' | 'scripts' | 'backgrounds' | 'settings';
 
@@ -680,12 +681,23 @@ function graphNode(name: string, raw: string, g: Obj, historyRaw: string | null)
   const children: FileNode[] = [];
   const history = arr(parseJson(historyRaw)).map(obj).filter((v): v is Obj => !!v && typeof v.version === 'number');
   if (history.length) {
-    const versions: FileNode[] = history.sort((a, b) => (b.version as number) - (a.version as number)).map(v => ({
-      id: `${id}/v:${v.version}`, section: 'graphs', kind: 'version', label: `Version ${v.version}`, part: true,
+    // The series (docs/graph-series-plan.md): versions as major.minor, newest family first, and
+    // grouped into families when there is more than one.
+    const num_ = (v: Obj) => numberOf({ version: v.version as number, major: num(v.major), minor: num(v.minor) });
+    const sorted = history.sort((a, b) => num_(b).major - num_(a).major || num_(b).minor - num_(a).minor || (b.version as number) - (a.version as number));
+    const versions: FileNode[] = sorted.map(v => ({
+      id: `${id}/v:${v.version}`, section: 'graphs', kind: 'version', label: `Version ${seriesLabel(num_(v))}`, part: true,
       detail: str(v.note) || `${arr(obj(parseJson(str(v.payload)))?.nodes).length} nodes`, size: size(v), modified: num(v.savedAt),
       ref: { t: 'part', key: vkey, path: [], match: { field: 'version', value: v.version as number } },
     }));
-    children.push({ id: `${id}/versions`, section: 'graphs', kind: 'versions', label: 'Earlier versions', part: true, detail: plural(versions.length, 'version'), size: (historyRaw?.length ?? 0) + vkey.length, children: versions, ref: { t: 'key', key: vkey } });
+    const majors = [...new Set(sorted.map(v => num_(v).major))];
+    const grouped: FileNode[] = majors.length > 1
+      ? majors.map(m => {
+        const fam = versions.filter((_, i) => num_(sorted[i]).major === m);
+        return { id: `${id}/family:${m}`, section: 'graphs' as const, kind: 'versions' as const, label: `Family ${m}`, part: true, detail: plural(fam.length, 'version'), size: fam.reduce((n, v) => n + (v.size ?? 0), 0), children: fam };
+      })
+      : versions;
+    children.push({ id: `${id}/versions`, section: 'graphs', kind: 'versions', label: 'Earlier versions', part: true, detail: majors.length > 1 ? `${plural(versions.length, 'version')} in ${plural(majors.length, 'family', 'families')}` : plural(versions.length, 'version'), size: (historyRaw?.length ?? 0) + vkey.length, children: grouped, ref: { t: 'key', key: vkey } });
   }
   const play = obj(g.play);
   const datasets = obj(g.datasets);
@@ -765,10 +777,10 @@ function graphNode(name: string, raw: string, g: Obj, historyRaw: string | null)
   } else if (play && arr(play.layers).length + arr(play.controls).length > 0) {
     children.push({ id: `${id}/play`, section: 'graphs', kind: 'play', label: 'Play setup', part: true, size: size(play), detail: [plural(arr(play.layers).length, 'layer'), plural(arr(play.controls).length, 'control')].join(' · ') });
   }
-  const version = num(g.version) ?? 1;
+  const current = numberOf({ version: num(g.version) ?? 1, major: num(g.major), minor: num(g.minor) });
   return {
     id, section: 'graphs', kind: 'graph', label: name,
-    detail: [`v${version}`, plural(arr(g.nodes).length, 'node'), play && (arr(play.layers).length || arr(play.controls).length) ? 'Play' : ''].filter(Boolean).join(' · '),
+    detail: [seriesLabel(current), plural(arr(g.nodes).length, 'node'), play && (arr(play.layers).length || arr(play.controls).length) ? 'Play' : ''].filter(Boolean).join(' · '),
     size: key.length + raw.length + (historyRaw ? vkey.length + historyRaw.length : 0), modified: num(g.savedAt),
     ref: { t: 'key', key }, ...(historyRaw ? { extraRefs: [{ t: 'key', key: vkey }] } : {}), membership: { scope: 'graphs', id: name },
     hash: hashText(JSON.stringify([g.nodes, g.looseGroups ?? null, g.play ?? null, g.datasets ?? null])),

@@ -4,6 +4,7 @@
  * fit a setup, videos kept as data URLs when small enough, and saved graphs
  * copied into a source.
  */
+import { readVersion } from '../../store/graphVersions';
 import { BACKGROUND_IMAGE_MAX, BACKGROUND_IMAGE_SIDE, BACKGROUND_VIDEO_KEEP, type BackgroundItem } from '../../types/play';
 import { BACKGROUND_GRAPH_MAX } from '../../types/playLayers';
 import { mediaType } from '../../lib/mediaSources';
@@ -91,6 +92,18 @@ export function savedGraphSource(name: string): BackgroundItem {
   if (!parsed || !Array.isArray(parsed.nodes)) throw new Error(`There is no saved graph named “${name}”.`);
   if (JSON.stringify(parsed.nodes).length > BACKGROUND_GRAPH_MAX) throw new Error(`“${name}” is too big to copy into a setup (over ${sizeText(BACKGROUND_GRAPH_MAX)}).`);
   return { id: newSourceId(), kind: 'graph', name, graph: `saved:${name}`, nodes: parsed.nodes };
+}
+
+/**
+ * One version of a saved graph's series as a source ("Curves 2.3"), copied like a saved graph
+ * (docs/graph-series-plan.md): a queue of these steps through iterations of one idea.
+ */
+export function savedVersionSource(name: string, version: number, label: string): BackgroundItem {
+  let parsed: { nodes?: unknown } | null = null;
+  try { parsed = JSON.parse(readVersion(name, version) ?? 'null'); } catch { parsed = null; }
+  if (!parsed || !Array.isArray(parsed.nodes)) throw new Error(`“${name}” has no version ${label}.`);
+  if (JSON.stringify(parsed.nodes).length > BACKGROUND_GRAPH_MAX) throw new Error(`“${name}” ${label} is too big to copy into a setup (over ${sizeText(BACKGROUND_GRAPH_MAX)}).`);
+  return { id: newSourceId(), kind: 'graph', name: `${name} ${label}`, graph: `saved:${name}@${label}`, nodes: parsed.nodes };
 }
 
 /** A bundled example as a source (compiled when it first shows). */

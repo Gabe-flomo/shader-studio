@@ -16,7 +16,7 @@ import { Icon } from '../ui/Icon';
 import { portalGuard } from '../ui/portalGuard';
 import { closeRecipeOffer, useRecipeOffer } from '../../store/recipeOfferStore';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { recipesFor } from '../../nodes/recipes';
+import { LIGHT_SCENE_TYPES, recipesFor } from '../../nodes/recipes';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { getCardSize } from './socketRegistry';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -56,6 +56,9 @@ function OfferCard({ node, openedAt, canvasRef, pan, zoom }: {
   useEffect(() => { dontAskRef.current = dontAsk; }, [dontAsk]);
   const recipes = recipesFor(node.type);
   const label = (typeof node.params.label === 'string' && node.params.label) || getNodeDefinition(node.type)?.label || node.type;
+  const lighting = LIGHT_SCENE_TYPES.has(node.type);
+  const title = lighting ? 'Light the scene' : `Set up ${label}?`;
+  const sub = lighting ? 'Pick a look: shadows, AO, lights and tone map are added and wired. Picking again replaces it.' : 'One click adds and wires a few nodes, each with a note.';
 
   // Beside the card: right of it, else left, level with its top; always on screen.
   useLayoutEffect(() => {
@@ -98,7 +101,7 @@ function OfferCard({ node, openedAt, canvasRef, pan, zoom }: {
       {...portalGuard}
       ref={ref}
       role="dialog"
-      aria-label={`Set up ${label}`}
+      aria-label={title}
       data-recipe-offer={node.type}
       style={{
         position: 'fixed', left: -9999, top: 0, zIndex: 900, width: WIDTH, maxWidth: `calc(100vw - ${MARGIN * 2}px)`, boxSizing: 'border-box',
@@ -108,23 +111,27 @@ function OfferCard({ node, openedAt, canvasRef, pan, zoom }: {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 6px 8px 12px' }}>
         <span style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: alpha(tk.accent.base, 0.12), color: tk.accent.base }}>
-          <Icon name="spark" size={14} />
+          <Icon name={lighting ? 'sun' : 'spark'} size={14} />
         </span>
         <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
-          <b style={{ fontSize: 13, fontWeight: 650, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Set up {label}?</b>
-          <span style={{ fontSize: 11.5, color: tk.text.muted }}>One click adds and wires a few nodes, each with a note.</span>
+          <b style={{ fontSize: 13, fontWeight: 650, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</b>
+          <span style={{ fontSize: 11.5, color: tk.text.muted }}>{sub}</span>
         </span>
         <IconButton icon="close" size="sm" label="Just the node" shortcut="esc" onClick={() => closeRecipeOffer(dontAsk)} />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 8px 8px' }}>
         {recipes.map(r => <RecipeRow key={r.id} label={r.label} description={r.description} onClick={() => pick(r.id)} />)}
+        {lighting && node.type === 'marchLoopGroup' && (
+          <RecipeRow label="Global illumination (GI Lit)" description="Turns the loop into a GI Lit March Group, which lights the scene itself: soft shadows, AO, sky light, one bounce and reflections. Slower; settings and wires kept."
+            onClick={() => { if (dontAsk) closeRecipeOffer(true); useNodeGraphStore.getState().convertMarchLoop(node.id, 'giLitMarchGroup'); }} />
+        )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px 7px 12px', borderTop: `1px solid ${tk.border.subtle}` }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: tk.text.muted, cursor: 'pointer', marginRight: 'auto', minWidth: 0 }}>
           <input type="checkbox" checked={dontAsk} onChange={e => setDontAsk(e.target.checked)} style={{ margin: 0, accentColor: tk.accent.base }} />
-          Don't ask for this node again
+          {lighting ? "Don't offer when I add one" : "Don't ask for this node again"}
         </label>
-        <Button size="sm" variant="ghost" onClick={() => closeRecipeOffer(dontAsk)}>Just the node</Button>
+        <Button size="sm" variant="ghost" onClick={() => closeRecipeOffer(dontAsk)}>{lighting ? 'Not now' : 'Just the node'}</Button>
       </div>
     </div>,
     document.body,

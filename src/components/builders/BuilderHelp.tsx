@@ -122,7 +122,7 @@ function Card({ entry, id, onExample, onDismiss, compact }: { entry: HelpEntry; 
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <Icon name="info" size={13} style={{ color: tk.accent.base, flexShrink: 0 }} />
-        <b style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.primary, flex: 1 }}>{compact ? entry.title : `How this works: ${entry.title}`}</b>
+        <b style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.primary, flex: 1 }}>{entry.title}</b>
         {onDismiss && (
           <button type="button" onClick={onDismiss} data-help-dismiss title="Hide this tip (Tips in the header brings it back)"
             style={{ border: 0, background: 'none', cursor: 'pointer', color: tk.text.faint, font: `500 11.5px ${fontFamily.ui}` }}>Got it</button>
