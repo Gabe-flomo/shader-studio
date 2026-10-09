@@ -83,12 +83,14 @@ In the **Expression Block editor**, every input, every line and Return has a sma
 - **The value is the one right after that line.** A variable that later lines change (`h *= 2.0`) shows the value at the line you picked.
 - **Mid-typing.** A line that isn't finished, or code that doesn't compile yet, gets a note in the panel, and the picture stays the last one that worked.
 - **Closing.** The × (or closing the editor) ends it, and the eye goes back to what it showed before.
+- **A step of a line.** The Explain panel's build-up view (docs/expression-explainer.md) shows one part of a line here: click a row there, or ← / →, and the panel reads `Line 2 · B = sin(length(q) * k - t)`. The line's ▶ stays lit; Escape goes back to the whole line, and ↑ / ↓ walk on from that line. Pressing a line's ▶ also opens its build-up.
 - **Custom Function.** Its body is free-form GLSL, so instead of a ▶ per line there is a **Preview a variable** picker under the body. It lists the inputs, every named float / vec2 / vec3 / vec4 local the body declares (`float l = …`), and Return. ↑ / ↓ step through the same list.
 
 **How it works.** A line preview is the eye preview pointed at a temporary probe (`lib/nodePreview/lineProbe.ts`).
 
 - **The probe copy.** While a probe is set, the preview compile uses a *copy* of the block whose only output is the probed variable, as if it were an "Also outputs" socket:
   - Expression Block: the lines up to the probed one, with the variable exposed. Inputs keep no lines, and Return uses the block's own result.
+  - A step (`kind: 'expr'`): the lines above the step's line, then `<type> pv_step = <the sub-expression>;`, exposed.
   - Custom Function: `pv_probe = <name>;` is inserted after the statement that declares the variable, plus one extra out output.
 - **Who uses the copy.** `probedNode()` hands the copy to `buildPreviewGraph`, the value runner's target and the Show as UI, so they all agree.
 - **The saved graph is never touched:** no param change, no undo step, no dirty mark.

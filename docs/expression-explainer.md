@@ -6,8 +6,10 @@
 
 Any expression in the app can be explained in plain language, step by step, and any part of it can become a node of its own.
 
-- **Expression Block editor.** Under every line, and under Return, there is an **Explain** row. Folded, it is one sentence: `d is the signed distance to a circle of radius 0.3.` Open it for the steps. Hovering a step lights up its part of the code.
-- **Custom Function editor.** An **Explain** section under the body explains it statement by statement.
+- **Expression Block editor.** Under every line, and under Return, there is an **Explain** row. Folded, it is a one-line summary (`uv, r → 2 steps → d`). Open it, or press the line's **▶**, for the **build-up view** (below): the line as GLSL builds it, a row per input and step with a small picture, which you can step through on the big preview.
+- **Custom Function editor.** An **Explain** section under the body shows each statement's build-up (pictures worked out on the CPU).
+
+> **2026-10-09:** the Explain panel no longer shows worded sentences ("In short", "First … then …"): they read badly and couldn't capture context. It shows the build-up instead. The wording below is still produced by the library and used by the code card's hover line, the Code explorer, the Do bar and the language model's prompt.
 - **The code card's Code page.** Point at a line and its sentence appears at the bottom of the code (not on touch screens).
 - **GLSL page.** Select an expression, or put the caret in a statement, and press **ⓘ Explain** in the toolbar. The explanation opens under the editor.
 
@@ -48,11 +50,30 @@ Hovering a variable chip lights where the code reads it, and hovering a variable
 
 Places that need a string (the code card's hover tooltip, Make-a-node descriptions saved into node notes, Code Explorer search, tests) use `toPlainText`, which wraps names and code in backticks: "`silent` is where `a` is below 0.02."
 
+### The build-up view (the Explain panel)
+
+The panel shows a line as it is built, in the order GLSL computes it (`src/components/explain/BuildUpView.tsx`, rows from `src/lib/glslPatterns/buildUp.ts`):
+
+- **One row per input** the line reads, **one per step** (the explainer's steps, inside-out, earlier steps shown as their letters: `sin(A)`), then **the result** (the line's target, or `result` for Return).
+- Each row has its label, its code, its type, **a small picture** and **its range**:
+  - the same everywhere (a number, a slider, the clock, a colour constant): a **swatch** for a vec3 / vec4, else the **number**;
+  - varies across the screen: a **small render** (64 px): a float in grey with its range mapped to black … white and labelled, a vec2 as red / green, a vec3 as its colour;
+  - when a render per row would cost too much: a **1D strip** along the screen's horizontal middle, worked out on the CPU (`cpuStrip`, from the sample inputs) where the evaluator can, else one rendered row (96 × 1).
+- **The sample inputs** ("With `base` = … Reset") drive the CPU pictures, the numbers of constants nothing rendered, and the usual ranges. A rendered picture's range is measured from the render.
+- **Step-through.** Click a row, or press **← / →** while the list has focus, to show that row on the big ▶ preview (the line preview, pointed at the sub-expression) and light its span in the code. The selected row is marked. **Escape**, or clicking it again, goes back to the whole line (Escape then doesn't close the editor).
+- **▶ on a line opens it.** Pressing ▶ on a line (or Return) in the Expression Block opens that line's Explain row with the build-up focused, ready for ← / →.
+- Hovering a row lights its part of the code; hovering an input lights its reads. Steps keep **+ Node**, an idiom's name and **Where else?**; "Explain these steps" and "Explain more" (the optional model) stay where they were.
+- The build-up is the panel's primary section: open by default, its fold remembered for the session. The Explain row itself starts folded.
+
+**What varies.** In an Expression Block the host knows the wiring (`src/components/explain/buildUpHost.ts`, `exprBlockVarying`): an input wired from anything but a constant source (Time, a constant, a colour, Mouse…) varies, a slider doesn't, and a line's variable varies when its expression reads one that does. Elsewhere (the GLSL page, a Custom Function) screen coordinates and space-like names vary. A render that comes out flat is shown as a constant anyway.
+
+**Cost.** All the rows of a line are **one compile**: a copy of the block keeps the lines above, declares each row as its own variable (`float pv_s0 = …;`), and one program writes the row a `u_pvSel` uniform picks; each row is then one tiny draw into a float target, read back (`nodePreviewRenderer.renderValues`). Renders are debounced (250 ms), cached by shader + uniform values, made only while the panel is open, on screen and the page visible. Before rendering, the upstream graph is checked (`pictureBudget`): a March Loop, a Pass, agents, particles, feedback, textures or video, more than 40 nodes, or a last render over 120 ms → strips instead. A block inside a group gets strips (its inputs come from the group's sockets).
+
 ### A picture of the line
 
 When a line is a function of one number (float → float: `1.0 - step(0.02, a)`, smoothstep, sin, fract, pow, a remap, a clamp), a **mini transfer plot** sits beside the sentence (about 120×60; click to enlarge, with the axes' numbers). x is the input over a range picked from the literals (0…0.1 around a 0.02 edge, the two ends of a smoothstep, a clamp's limits, 0…2π for a sine), y the result, and every edge is marked and labelled. It is sampled on the CPU with the explainer's own evaluator (`evaluate.ts`, ~160 points), so it costs no GPU work (`plot.ts`).
 
-A line that reads space (a vec2 / vec3 such as `uv`, `p`) or several inputs offers **Show picture** instead, in the Expression Block and Custom Function editors. It opens the per-line ▶ preview for that line on demand; nothing renders until it is pressed.
+A line that reads space (a vec2 / vec3 such as `uv`, `p`) or several inputs gets its pictures from the build-up view instead (the old **Show picture** button is gone: selecting the result row shows the whole line on the ▶ preview).
 
 Parts the explainer has no rule for get literal words. An unknown function reads as "calls foo(p, 2), a function this explainer doesn't know". It never guesses past its rules.
 
@@ -263,6 +284,7 @@ Then add a positive and a negative case to `src/lib/glslPatterns/__tests__/match
   - idioms inside compositions, and lines (declarations, compound assignment, return);
   - role inference by graph, name, type and operation.
 - **segments.test.ts**: segments for a set of idioms, `toPlainText` backticks, In short summaries, every idiom has a meaning and a use and its meaning reads without empty holes.
+- **buildUp.test.ts**: rows (inputs, steps inside-out, the result; a compound line; Return; an idiom as one step), what varies (host-given and default), constant / render / strip-cpu / strip-render, every fallback reason, the CPU strip, flatness.
 - **plot.test.ts**: the 0.02 edge plots over 0…0.1, every edge is inside the range, ranges for shapers, no plot for space or several inputs.
 - **functionCard.test.ts**: every highlighter built-in and every prelude helper has a meaning (one test per registry entry), helper signatures match their GLSL; function detection at a caret or click (in and right after a name, across lines and tokens, with `enclosing` in the arguments; not in comments, members, `#define`s, keywords); user function signatures and comments; overloads; the plot with a call's literals; per-call explanations; snippets.
 - **generalise.test.ts**:
@@ -273,13 +295,16 @@ Then add a positive and a negative case to `src/lib/glslPatterns/__tests__/match
   - "Use it here too" in GLSL text and in a Custom Function;
   - find uses with provenance, inside groups, by idiom and by made pattern.
 
+`src/components/explain/__tests__/buildUp.test.tsx` (jsdom): which Expression Block names vary, the step probe (lines above + `pv_step`, compiled by the eye preview, graph untouched, ↑ / ↓ from a step), one compile for all rows of a line with `u_pvSel` and the cache, the heavy-graph count, the picture colour maps; the view renders a row per input / step / result with no worded sentences, click / again / ← → / Escape step through, an open request opens and focuses, and ▶ on a line in the real Expression Block editor opens its build-up and steps on the preview.
+
 `src/components/explain/functionCard/__tests__/`:
 - **functionCard.test.tsx** (jsdom): the shortcut and click rules, a point to a character in a field (lines, tabs, scrolling), placement; a plain click in read-only code opens a focused card and a click on a variable doesn't; not inside a button or after a selection; Esc closes and gives focus back, a click outside closes; ⌥-press opens without moving the caret and the click after it is swallowed; ⌘I / F1 in the arguments; one-line inputs; hover peek, leave and typing; long press and a moved finger; scopes; the card's dialog, table, meaning, plot, Here and links; Insert / Copy snippet; the node ⓘ toggle.
 - **nodeCard.test.ts**: a node that is one function, an Expression Block's returned idiom and its fallback to a line, a Custom Function's return, nothing when nothing applies.
 
 ## Limits
 
-- The transfer plot is for the line as a whole; steps don't get their own. Show picture opens the editor's line preview rather than an inline thumbnail.
+- The transfer plot is for the line as a whole; steps get build-up pictures instead.
+- Build-up pictures are a snapshot: they re-render when the block changes or the panel opens, not when an upstream slider moves, and at u_time as it was. Stepping through on the big preview works in the Expression Block only (a Custom Function's statements get CPU pictures and the whole-statement preview). A row whose type the explainer can't tell (`unknown`) gets a CPU strip or nothing.
 
 - One expression at a time. A statement's control flow (`if`, `for`) is skipped and only the simple statements inside are explained. Ints, bools and matrices beyond `mat2` have types but few words.
 - Roles are heuristics with stated evidence. A float named `c`, used as a coordinate, may read as a colour channel. The graph's wiring wins when there is one.

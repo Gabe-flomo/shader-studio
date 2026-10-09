@@ -188,6 +188,67 @@ class NodePreviewRenderer {
     }
   }
 
+  /**
+   * Raw values, not a picture: `fragmentShader` drawn `passes` times into a small float target
+   * (w × h), the uniform `u_pvSel` set to 0, 1, 2… for each, and every pass read back as RGBA
+   * floats (row 0 at the bottom). One compile for all the passes. The Explain panel's build-up
+   * pictures use it (one pass per row). Null when the shader doesn't compile or the context is lost.
+   * `ms` is the whole cost: compile, draws and readbacks.
+   */
+  async renderValues(
+    fragmentShader: string,
+    uniforms: Record<string, THREE.IUniform>,
+    w: number,
+    h: number,
+    passes: number,
+  ): Promise<{ fields: Float32Array[]; ms: number } | null> {
+    if (this.contextLost || passes <= 0) return null;
+    await this.acquireSlot();
+    const t0 = performance.now();
+    const r = this.getRenderer(Math.max(8, w));
+    const rt = new THREE.WebGLRenderTarget(w, h, {
+      type: THREE.FloatType, format: THREE.RGBAFormat, depthBuffer: false, stencilBuffer: false,
+      minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false,
+    });
+    const sel = { value: 0 };
+    const material = new THREE.ShaderMaterial({
+      vertexShader: PREVIEW_VERTEX,
+      fragmentShader,
+      uniforms: {
+        u_time: { value: uniforms.u_time?.value ?? 0 },
+        u_resolution: { value: new THREE.Vector2(w, h) },
+        u_mouse: { value: new THREE.Vector2(0, 0) },
+        ...uniforms,
+        u_pvSel: sel,
+      },
+    });
+    const mesh = new THREE.Mesh(this.geometry, material);
+    this.scene.add(mesh);
+    const prevOnError = r.debug.onShaderError;
+    let failed = false;
+    r.debug.onShaderError = () => { failed = true; };
+    const fields: Float32Array[] = [];
+    try {
+      for (let i = 0; i < passes && !failed; i++) {
+        sel.value = i;
+        r.setRenderTarget(rt);
+        r.render(this.scene, this.camera);
+        r.setRenderTarget(null);
+        if (failed) break;
+        const buf = new Float32Array(w * h * 4);
+        r.readRenderTargetPixels(rt, 0, 0, w, h, buf);
+        fields.push(buf);
+      }
+    } finally {
+      r.debug.onShaderError = prevOnError;
+      this.scene.remove(mesh);
+      material.dispose();
+      rt.dispose();
+      this.releaseSlot();
+    }
+    return failed ? null : { fields, ms: performance.now() - t0 };
+  }
+
   /** Invalidate all cached previews for a node (call when its connections change). */
   invalidatePreview(nodeId: string) {
     for (const key of this.cache.keys()) {

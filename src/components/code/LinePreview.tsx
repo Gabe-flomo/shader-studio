@@ -15,7 +15,7 @@ import { Icon } from '../ui/Icon';
 import { ValuePreview } from '../NodeGraph/ValuePreview';
 import { previewBus } from '../../lib/nodePreview/previewBus';
 import { valueKey } from '../../lib/nodePreview/valueField';
-import { applyProbe, probeSteps, resolveProbe, sameTarget, stepProbe, useLineProbe, type ProbeTarget } from '../../lib/nodePreview/lineProbe';
+import { applyProbe, lineTarget, probeSteps, resolveProbe, sameTarget, stepProbe, useLineProbe, type ProbeTarget } from '../../lib/nodePreview/lineProbe';
 import { Select } from '../ui/Select';
 
 // The eye's node before a probe took it, given back when the probe ends.
@@ -44,14 +44,18 @@ export function stopLineProbe() {
   else st.compile();
 }
 
-/** The ▶ next to an input, a line or Return. */
-export function ProbeButton({ node, target, label }: { node: GraphNode; target: ProbeTarget; label: string }) {
+/**
+ * The ▶ next to an input, a line or Return. `onStart` runs when a press starts the preview (the
+ * Expression Block opens the line's Explain build-up with it). A line's ▶ stays lit while one of
+ * its steps is shown (the build-up's step-through).
+ */
+export function ProbeButton({ node, target, label, onStart }: { node: GraphNode; target: ProbeTarget; label: string; onStart?: () => void }) {
   const tk = useTokens();
-  const on = useLineProbe(s => !!s.probe && s.probe.nodeId === node.id && sameTarget(s.probe.target, target));
+  const on = useLineProbe(s => !!s.probe && s.probe.nodeId === node.id && (sameTarget(s.probe.target, target) || (s.probe.target.kind === 'expr' && sameTarget(lineTarget(s.probe.target)!, target))));
   return (
     <button type="button" data-probe={JSON.stringify(target)} aria-pressed={on} aria-label={label} title={`${label} (↑ / ↓ step while it's open)`}
       onMouseDown={e => e.preventDefault()}
-      onClick={() => (on ? stopLineProbe() : startLineProbe(node, target))}
+      onClick={() => { if (on) stopLineProbe(); else { startLineProbe(node, target); onStart?.(); } }}
       style={{
         width: 26, height: 26, flexShrink: 0, padding: 0, border: 0, borderRadius: radius.sm, cursor: 'pointer',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
