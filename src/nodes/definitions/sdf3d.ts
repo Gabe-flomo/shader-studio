@@ -267,17 +267,18 @@ export const CylinderSDF3DNode: NodeDefinition = {
 
 export const ConeSDF3DNode: NodeDefinition = {
   type: 'coneSDF3D', label: 'Cone SDF 3D', category: '3D Primitives',
-  description: 'Signed distance to a cone pointing up (angle in radians, height).',
+  description: 'Signed distance to a cone (angle in radians, height). Pointing Up: tip at the top, standing on its base at the origin. Cones saved before this setting point down (tip at the origin, base above) and keep doing so.',
   inputs: {
     pos:    { type: 'vec3',  label: 'Position' },
     angle:  { type: 'float', label: 'Angle (rad)' },
     height: { type: 'float', label: 'Height' },
   },
   outputs: { dist: { type: 'float', label: 'Distance' } },
-  defaultParams: { angle: 0.4, height: 1.0 },
+  defaultParams: { angle: 0.4, height: 1.0, pointing: 'up' },
   paramDefs: {
     angle:  { label: 'Angle (rad)', type: 'float', min: 0.01, max: 1.57, step: 0.01 },
     height: { label: 'Height',      type: 'float', min: 0.1,  max: 5.0,  step: 0.05 },
+    pointing: { label: 'Pointing', type: 'select', compileTime: true, options: [{ value: 'up', label: 'Up (tip at the top)' }, { value: 'down', label: 'Down (tip at the origin)' }], hint: 'Up: the cone stands on its base at the origin with its tip at Height. Down: the tip at the origin and the base above (how cones were before this setting).' },
   },
   glslFunction: SDF3D_PRIMS_GLSL,
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -285,8 +286,12 @@ export const ConeSDF3DNode: NodeDefinition = {
     const pos = inputVars.pos    || 'vec3(0.0)';
     const a   = inputVars.angle  || p(node.params.angle,  0.4);
     const h   = inputVars.height || p(node.params.height, 1.0);
+    // No setting (saved before it): down, as it always was.
+    const up = node.params.pointing === 'up';
     return {
-      code: `    float ${id}_dist = sdf3d_cone(${pos}, ${a}, ${h});\n`,
+      code: up
+        ? `    vec3  ${id}_cp = ${pos};\n    float ${id}_dist = sdf3d_cone(vec3(${id}_cp.x, ${h} - ${id}_cp.y, ${id}_cp.z), ${a}, ${h});\n`
+        : `    float ${id}_dist = sdf3d_cone(${pos}, ${a}, ${h});\n`,
       outputVars: { dist: `${id}_dist` },
     };
   },
