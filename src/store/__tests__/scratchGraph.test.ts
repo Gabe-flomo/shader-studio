@@ -30,7 +30,7 @@ describe('scratch graph', () => {
     const st = useNodeGraphStore.getState();
     st.endScratch(false);
     st.replaceGraph(mine());
-    useNodeGraphStore.setState({ currentGraph: { name: 'Mine', version: 2, latest: true }, graphDirty: false, selectedNodeId: 'f2v' });
+    useNodeGraphStore.setState({ currentGraph: { name: 'Mine', version: 2, major: 1, minor: 1, latest: true }, graphDirty: false, selectedNodeId: 'f2v' });
   });
 
   it('shows the candidate and puts the user’s graph back on leave, dirty flag included', () => {
@@ -48,7 +48,7 @@ describe('scratch graph', () => {
     s = useNodeGraphStore.getState();
     expect(s.scratch).toBeNull();
     expect(s.nodes.map(n => n.id)).toEqual(['uv', 'f2v', 'out']);
-    expect(s.currentGraph).toEqual({ name: 'Mine', version: 2, latest: true });
+    expect(s.currentGraph).toEqual({ name: 'Mine', version: 2, major: 1, minor: 1, latest: true });
     expect(s.graphDirty).toBe(false);
     expect(s.selectedNodeId).toBe('f2v');
   });

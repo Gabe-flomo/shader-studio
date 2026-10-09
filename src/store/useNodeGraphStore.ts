@@ -153,7 +153,7 @@ import { loadFolders, createFolder, moveItemsToFolder } from '../utils/assetFold
 import type { FileResult } from '../utils/fileIO';
 import { BLANK_GRAPH, DEFAULT_EXAMPLE, loadExampleGraphs } from './exampleIndex';
 import { loadImageTextureFromFile } from '../lib/loadImageTexture';
-import { archiveCurrent, deleteHistory, readVersion } from './graphVersions';
+import { archiveCurrent, deleteHistory, nextNumber, readVersion, replaceVersion, versionMeta, type SaveKind } from './graphVersions';
 import type { ExampleGraph } from './exampleIndex';
 import { layoutByRank, estimateNodeHeight } from './graphLayout';
 import { arrangeByStage } from '../structure/arrange';
@@ -536,7 +536,7 @@ export interface ScratchSnapshot {
   looseGroups: import('../types/nodeGraph').LooseGroup[];
   play: PlayRecord;
   datasets: DatasetsRecord;
-  currentGraph: { name: string; version: number; latest: boolean } | null;
+  currentGraph: { name: string; version: number; major: number; minor: number; latest: boolean } | null;
   graphDirty: boolean;
   previewNodeId: string | null;
   activeGroupId: string | null;
@@ -1048,9 +1048,10 @@ interface NodeGraphState {
    * project: the new save becomes its next version and the one it replaces
    * is kept in the project's history (graphVersions.ts). `note` says what changed.
    */
-  saveGraph: (name: string, note?: string) => Promise<FileResult>;
+  /** Save under `name`: kind minor (default with that series open), major (a new family), inPlace (over the open version) or new (a new series, or a new family when the name exists). docs/graph-series-plan.md */
+  saveGraph: (name: string, note?: string, kind?: SaveKind) => Promise<FileResult>;
   /** The saved graph open right now (loaded or last saved), and which version; null for examples, imports and new graphs. */
-  currentGraph: { name: string; version: number; latest: boolean } | null;
+  currentGraph: { name: string; version: number; major: number; minor: number; latest: boolean } | null;
   /** Bumped whenever a whole different graph is loaded (an example, a saved graph, an import): not by edits or undo. */
   graphEpoch: number;
   /** The open graph changed since it was loaded or saved. */
@@ -5575,22 +5576,35 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   deselectAll: () => set({ selectedNodeIds: [] }),
 
   // ─── Save / Load ───────────────────────────────────────────────────────────
-  saveGraph: async (name, note) => {
-    const { nodes, looseGroups, play, datasets } = get();
+  saveGraph: async (name, note, kind) => {
+    const { nodes, looseGroups, play, datasets, currentGraph: open } = get();
     // `play` (and `datasets`) are left out when empty so graphs without them look as they always did.
     const playField = { ...(isPlayRecordEmpty(play) ? {} : { play }), ...datasetsField(datasets) };
-    // The version this replaces goes into the project's history first.
-    const version = archiveCurrent(name);
     const noteField = note?.trim() ? { note: note.trim().slice(0, 300) } : {};
     // Its links to presentations belong to the graph, not to a version: a new version keeps them.
     const linked = linkedPresentationsOf(name);
     const linkField = linked.length ? { [GRAPH_LINK_FIELD]: linked } : {};
-    const payload = JSON.stringify({ nodes, looseGroups, ...playField, layout: LAYOUT_VERSION, savedAt: Date.now(), version, ...noteField, ...linkField });
+    // A series is its name (docs/graph-series-plan.md). The open version is the base when it is from this series.
+    const base = open && open.name === name ? { major: open.major, minor: open.minor } : null;
+    const how = kind ?? (base ? 'minor' : 'new');
+    if (how === 'inPlace' && open && base) {
+      // Save in place: the open version keeps its numbers, its graph is replaced.
+      const payload = JSON.stringify({ nodes, looseGroups, ...playField, layout: LAYOUT_VERSION, savedAt: Date.now(), version: open.version, ...base, ...noteField, ...linkField });
+      try { if (!replaceVersion(name, open.version, payload)) return { ok: false, error: `“${name}” ${base.major}.${base.minor} is no longer there to save over.` }; }
+      catch (e) { return { ok: false, error: `Couldn’t save over “${name}”: ${errorMessage(e)}` }; }
+      set({ graphDirty: false });
+      window.dispatchEvent(new Event(SAVED_GRAPHS_CHANGED));
+      return { ok: true };
+    }
+    const number = nextNumber(name, how === 'inPlace' ? 'minor' : how, base);
+    // The version this replaces goes into the series' history first.
+    const version = archiveCurrent(name);
+    const payload = JSON.stringify({ nodes, looseGroups, ...playField, layout: LAYOUT_VERSION, savedAt: Date.now(), version, ...number, ...noteField, ...linkField });
     // localStorage is the primary store; a quota failure here means nothing
     // was saved, so stop before the (optional) disk mirror.
     const stored = safeSetItem(`shader-studio:${name}`, payload, `graph "${name}"`);
     if (!stored.ok) return stored;
-    set({ currentGraph: { name, version, latest: true }, graphDirty: false });
+    set({ currentGraph: { name, version, ...number, latest: true }, graphDirty: false });
     learnSaved(name, nodes, payload);
     recordActivity('save', name);
     window.dispatchEvent(new Event(SAVED_GRAPHS_CHANGED));
@@ -5659,13 +5673,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     idGenerator.syncFromGraph(nodes);
     // Reset group navigation so a saved graph that was captured inside a
     // subgraph doesn't leave the editor stranded in a non-existent group.
-    let version = 1;
-    try { const v = (JSON.parse(raw) as { version?: unknown }).version; if (typeof v === 'number') version = v; } catch { /* parsed above */ }
+    const meta = versionMeta(raw) ?? { version: 1, major: 1, minor: 0 };
+    const version = meta.version;
     let latestVersion = version;
     try { const v = latest ? (JSON.parse(latest) as { version?: unknown }).version : undefined; if (typeof v === 'number') latestVersion = v; } catch { /* newest is unreadable: treat this as it */ }
     set(st => ({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], play, datasets, previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
     get().compile();
-    set({ currentGraph: { name, version, latest: version === latestVersion }, graphDirty: false });
+    set({ currentGraph: { name, version, major: meta.major, minor: meta.minor, latest: version === latestVersion }, graphDirty: false });
     announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
     announceGraphOpened({ kind: 'saved', name });
     return { ok: true };

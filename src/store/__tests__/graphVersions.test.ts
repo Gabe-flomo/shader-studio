@@ -33,7 +33,7 @@ describe('saved graph versions', () => {
     const s = useNodeGraphStore.getState();
     setRadius(0.1);
     await s.saveGraph('Glow');
-    expect(useNodeGraphStore.getState().currentGraph).toEqual({ name: 'Glow', version: 1, latest: true });
+    expect(useNodeGraphStore.getState().currentGraph).toEqual({ name: 'Glow', version: 1, major: 1, minor: 0, latest: true });
     setRadius(0.2);
     expect(useNodeGraphStore.getState().graphDirty).toBe(true);
     await s.saveGraph('Glow', 'bigger');
@@ -48,7 +48,7 @@ describe('saved graph versions', () => {
     setRadius(0.2); await s.saveGraph('Glow');
     expect(s.loadGraphVersion('Glow', 1).ok).toBe(true);
     expect(radius()).toBe(0.1);
-    expect(useNodeGraphStore.getState().currentGraph).toEqual({ name: 'Glow', version: 1, latest: false });
+    expect(useNodeGraphStore.getState().currentGraph).toEqual({ name: 'Glow', version: 1, major: 1, minor: 0, latest: false });
     expect(useNodeGraphStore.getState().graphDirty).toBe(false);
     await s.saveGraph('Glow', 'back to small');
     expect(listVersions('Glow').map(v => v.version)).toEqual([3, 2, 1]);
