@@ -544,9 +544,9 @@ export const RELEASES: Release[] = [
     date: '2026-10-06',
     title: 'Clearer explanations',
     highlights: [
-      { area: 'Studio', text: 'Phones and tablets: builders open full screen with tabs, the Do… bar has a button, previews get Show as, and ? help opens on tap.' },
-      { area: 'Studio', text: 'Touch: hold for "is this typical?" and function uses, the brush paints with a finger, and the clip trimmer has big handles and Set In / Set Out.' },
-      { area: 'Studio', text: 'Time Cube can choose and edit a video on phones, line previews have ▶ and ▲▼, and the Code Explorer opens on mobile.' },
+      { area: 'Studio', text: 'Explanations read plainly first: "silent is 1 while a stays under 0.02…", with a tag for the common job it does; the literal steps fold away below.' },
+      { area: 'Studio', text: 'Names, numbers and code in explanations are coloured chips, like the code above; hover one to light where it is read.' },
+      { area: 'Studio', text: 'Lines that map one number to another show a small plot of the curve, with its edges marked: click it to enlarge.' },
     ],
   },
   {
