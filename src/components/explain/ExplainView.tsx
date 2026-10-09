@@ -1,19 +1,24 @@
 /**
- * An explanation, shown: the code (highlighted, with the hovered part lit), the plain meaning
- * first, a mini plot when it is a function of one number, and, folded under it, the literal
- * reading and the "First … then …" steps. Hovering a step (or an idiom chip) lights its
- * sub-expression; hovering a variable chip lights where the code reads it, and the other way
- * round. Each step can be made into a node, and a recognised idiom can be looked for elsewhere.
+ * An explanation, shown: the code (highlighted, with the hovered or selected part lit), a mini
+ * plot when it is a function of one number, and the build-up view (BuildUpView.tsx): one row per
+ * input, per step and for the result, each with its code, a small picture and its range. Click a
+ * row (or ←/→ on the list) to show that step on the big ▶ preview, where the host can; Escape
+ * goes back to the whole line. Each step can be made into a node, and a recognised idiom can be
+ * looked for elsewhere. The sample inputs ("With base = …") drive the CPU pictures and ranges.
+ *
+ * No worded sentences here: the rule-based wording (explain.ts) stays for the Code explorer, the
+ * Do bar and the model's prompt, but this panel shows values instead.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { allNodes, transferPlot, needsPicture, workedSteps, workedVars, showValue, type ExplainContext, type Explanation, type LineExplanation, type Seg, type Step, type UseQuery, type Value, type WorkedVar } from '../../lib/glslPatterns';
+import { allNodes, buildUpRows, transferPlot, workedSteps, workedVars, showValue, type ExplainContext, type Explanation, type LineExplanation, type UseQuery, type Value, type WorkedVar } from '../../lib/glslPatterns';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
-import { ExplainText } from './ExplainText';
 import { GlslCode, type CodeSpan } from './GlslCode';
 import { TransferPlotView } from './TransferPlotView';
 import { ExplainMore } from './ExplainMore';
+import { BuildUpView } from './BuildUpView';
+import type { BuildUpHost } from './buildUpHost';
 
 export interface ExplainViewProps {
   ex: Explanation | LineExplanation;
@@ -23,8 +28,8 @@ export interface ExplainViewProps {
   /** Only spans inside this range can be made into nodes (the expression part of a line). */
   editable?: { start: number; end: number };
   /**
-   * Show the line's picture (the per-line ▶ probe): offered when the line reads space or several
-   * inputs, so a plot can't say it. On demand only: nothing renders on the GPU until pressed.
+   * Show the whole line on the big preview (the per-line ▶ probe) where there is no build-up
+   * host to step through: selecting the result row calls it.
    */
   onShowPicture?: () => void;
   /**
@@ -32,10 +37,14 @@ export interface ExplainViewProps {
    * it is. Absent: no such action here (the Expression Block's rows put their own Explain beside the line).
    */
   explainMore?: { ctx?: ExplainContext; where?: string };
+  /** Where the line lives (an Expression Block): wiring-aware pictures and step-through on the ▶ preview. */
+  buildUp?: BuildUpHost;
+  /** Changes when ▶ on the line opened this view: the build-up takes focus, ready to step. */
+  focusSignal?: number;
 }
 
-// The steps' fold is remembered for the session (collapsed by default)
-let stepsOpenPref = false;
+// The build-up's fold is remembered for the session (it is the primary section: open by default)
+let buildUpOpenPref = true;
 
 const isLine = (ex: Explanation | LineExplanation): ex is LineExplanation => 'leadSegs' in ex;
 
@@ -50,12 +59,16 @@ function varSpans(ex: Explanation | LineExplanation): Array<{ start: number; end
   return out;
 }
 
-export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPicture, explainMore }: ExplainViewProps) {
+export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPicture, explainMore, buildUp, focusSignal }: ExplainViewProps) {
   const tk = useTokens();
-  const [hover, setHover] = useState<Step | null>(null);
+  const [hover, setHover] = useState<{ start: number; end: number } | null>(null);
   const [hoverVar, setHoverVar] = useState<string | null>(null);
-  const [stepsOpen, setStepsOpenState] = useState(stepsOpenPref);
-  const setStepsOpen = (v: boolean) => { stepsOpenPref = v; setStepsOpenState(v); };
+  const [selected, setSelected] = useState<string | null>(null);
+  const [open, setOpenState] = useState(buildUpOpenPref);
+  const setOpen = (v: boolean) => { buildUpOpenPref = v; setOpenState(v); };
+  // ▶ on the line opens the build-up even when it was folded
+  const [seenSignal, setSeenSignal] = useState<number | undefined>(undefined);
+  if (focusSignal !== seenSignal) { setSeenSignal(focusSignal); if (focusSignal) setOpenState(true); }
   const src = ex.source;
   const canMake = (s: { start: number; end: number }) => !!onMakeNode && (!editable || (s.start >= editable.start && s.end <= editable.end));
   const rootSpan = { start: ex.root.start, end: ex.root.end };
@@ -63,109 +76,74 @@ export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPictur
   const reads = useMemo(() => varSpans(ex), [ex]);
   const varMap = useMemo(() => new Map(reads.map(r => [r.start, r.name])), [reads]);
   const plot = useMemo(() => transferPlot(ex), [ex]);
-  const picture = !plot && !!onShowPicture && needsPicture(ex);
-  // What to lead with: the plain meaning when there is one; the literal reading folds under it
-  const lead: Seg[] = isLine(ex) ? ex.leadSegs : ex.meaningSegs ?? ex.sentenceSegs;
-  const literal: Seg[] | null = isLine(ex) ? (ex.lineMeaningSegs ? ex.lineSentenceSegs : null) : ex.meaningSegs ? ex.sentenceSegs : null;
   const resultName = isLine(ex) ? ex.line.target : undefined;
+  const varies = buildUp?.varies;
+  const rows = useMemo(() => buildUpRows(ex, varies), [ex, varies]);
+  // The line was edited and the selected row is gone: nothing is selected
+  const selRow = rows.find(r => r.key === selected) ?? null;
   const spans: CodeSpan[] = [
     ...(hoverVar ? reads.filter(r => r.name === hoverVar).map(r => ({ start: r.start, end: r.end, kind: 'var' as const })) : []),
-    ...(hover ? [{ start: hover.start, end: hover.end, kind: 'step' as const }] : []),
+    ...(hover ? [{ start: hover.start, end: hover.end, kind: 'step' as const }] : selRow && selRow.kind !== 'input' ? [{ start: selRow.start, end: selRow.end, kind: 'step' as const }] : []),
+    ...(!hoverVar && selRow?.kind === 'input' ? reads.filter(r => r.name === selRow.label).map(r => ({ start: r.start, end: r.end, kind: 'var' as const })) : []),
   ];
-  // A touch screen can't hover: a step's actions stay visible there (a tap still lights the step)
-  const noHover = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none)').matches;
   const small: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: 4, height: 24, padding: '0 8px', border: 0, borderRadius: radius.sm,
     background: 'none', color: tk.accent.text, cursor: 'pointer', font: `500 11.5px ${fontFamily.ui}`, flexShrink: 0,
   };
-  const hasFold = ex.steps.length > 0 || !!literal;
-  // Worked examples: a sample value for each name the line reads (editable), and each step's number and spread.
+  // Worked examples: a sample value for each name the line reads (editable), and each row's usual spread
   const defaults = useMemo(() => workedVars(ex), [ex]);
   const [overrides, setOverrides] = useState<Record<string, Value>>({});
   const vars: WorkedVar[] = useMemo(() => defaults.map(v => (v.name in overrides ? { ...v, value: overrides[v.name] } : v)), [defaults, overrides]);
-  const worked = useMemo(() => (stepsOpen && ex.steps.length ? workedSteps(ex, vars) : []), [stepsOpen, ex, vars]);
+  const ranges = useMemo(() => {
+    const out = new Map<string, [number, number] | null>();
+    if (!open) return out;
+    for (const v of vars) out.set(`in:${v.name}`, v.range);
+    for (const w of ex.steps.length ? workedSteps(ex, vars) : []) out.set(`step:${w.label}`, w.range);
+    const last = ex.steps[ex.steps.length - 1];
+    if (last && last.node === ex.root) out.set('result', out.get(`step:${last.label}`) ?? null);
+    return out;
+  }, [open, ex, vars]);
+  const idioms = useMemo(() => new Map(ex.steps.flatMap(s => (s.idiom ? [[s.label, s.idiom] as const] : []))), [ex.steps]);
+  const inputs = rows.filter(r => r.kind === 'input').length;
+
+  // Selecting a row shows it on the big preview (the host's ▶ probe); none: the whole line again
+  const select = (key: string | null) => {
+    setSelected(key);
+    const row = rows.find(r => r.key === key) ?? null;
+    if (buildUp?.show) buildUp.show(row);
+    else if (row?.kind === 'result' && onShowPicture) onShowPicture();
+  };
   return (
     <div data-explain-view="" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', borderRadius: radius.lg, background: tk.bg.subtle, border: `1px solid ${tk.border.subtle}` }}>
-      {/* The code, highlighted, with the hovered part lit */}
+      {/* The code, highlighted, with the hovered (or selected) part lit */}
       <div data-explain-code="" style={{ font: `500 12px/1.6 ${fontFamily.mono}` }}>
         <GlslCode code={src} spans={spans} vars={varMap} onVarHover={setHoverVar} />
       </div>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <div style={{ flex: '1 1 200px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div data-explain-sentence="" style={{ font: `600 13px/1.55 ${fontFamily.ui}`, color: tk.text.primary }}>
-            <ExplainText segs={lead} activeVar={hoverVar} onVarHover={setHoverVar} />
-          </div>
+      {(ex.use || plot) && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           {ex.use && (
             <span data-explain-use="" title="What this is usually for" style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 9, background: alpha(tk.status.success, 0.12), color: tk.text.secondary, font: `600 11px ${fontFamily.ui}` }}>
               <Icon name="star" size={10} />{ex.use}
             </span>
           )}
-          {ex.inShortSegs && (
-            <div data-explain-inshort="" style={{ font: `500 12.5px/1.55 ${fontFamily.ui}`, color: tk.text.secondary }}>
-              <ExplainText segs={ex.inShortSegs} activeVar={hoverVar} onVarHover={setHoverVar} />
-            </div>
-          )}
-        </div>
-        {plot && <TransferPlotView plot={plot} resultName={resultName} />}
-        {picture && (
-          <button type="button" data-explain-action="show-picture" onClick={onShowPicture} title="Render this line over the picture (the ▶ line preview)"
-            style={{ ...small, background: tk.bg.field, color: tk.text.secondary }}>
-            <Icon name="play" size={11} />Show picture
-          </button>
-        )}
-      </div>
-      {hasFold && (
-        <button type="button" aria-expanded={stepsOpen} data-explain-steps-toggle="" onClick={() => setStepsOpen(!stepsOpen)}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 0, border: 0, background: 'none', cursor: 'pointer', color: tk.text.muted, font: `600 11.5px ${fontFamily.ui}`, textAlign: 'left' }}>
-          <Icon name={stepsOpen ? 'chevD' : 'chevR'} size={11} />
-          {literal ? 'Literal reading and steps' : ex.steps.length === 1 ? 'The step' : `Step by step (${ex.steps.length})`}
-        </button>
-      )}
-      {stepsOpen && literal && (
-        <div data-explain-literal="" style={{ font: `500 12.5px/1.55 ${fontFamily.ui}`, color: tk.text.secondary }}>
-          <ExplainText segs={literal} activeVar={hoverVar} onVarHover={setHoverVar} />
+          {plot && <TransferPlotView plot={plot} resultName={resultName} />}
         </div>
       )}
-      {stepsOpen && ex.steps.length > 0 && vars.length > 0 && (
+      <button type="button" aria-expanded={open} data-buildup-toggle="" onClick={() => setOpen(!open)}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 0, border: 0, background: 'none', cursor: 'pointer', color: tk.text.muted, font: `600 11.5px ${fontFamily.ui}`, textAlign: 'left' }}>
+        <Icon name={open ? 'chevD' : 'chevR'} size={11} />
+        Build-up
+        <span style={{ fontWeight: 400, color: tk.text.faint }}>
+          {inputs} input{inputs === 1 ? '' : 's'} · {ex.steps.length} step{ex.steps.length === 1 ? '' : 's'}{open && buildUp?.show ? ' · click a row or ← → to show it on the preview' : ''}
+        </span>
+      </button>
+      {open && vars.length > 0 && (
         <TryValues vars={vars} onChange={(name, v) => setOverrides(o => ({ ...o, [name]: v }))} onReset={Object.keys(overrides).length ? () => setOverrides({}) : undefined} />
       )}
-      {stepsOpen && ex.steps.length > 0 && (
-        <ol data-explain-steps="" style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 2 }} onMouseLeave={() => setHover(null)}>
-          {ex.steps.map((s, i) => {
-            const lead = ex.steps.length === 1 ? '' : i === 0 ? 'First' : i === ex.steps.length - 1 ? 'Finally' : 'Then';
-            const on = hover === s;
-            return (
-              <li key={s.label} data-explain-step={s.label} onMouseEnter={() => setHover(s)} onFocus={() => setHover(s)} tabIndex={0}
-                style={{ display: 'flex', flexWrap: noHover ? 'wrap' : undefined, gap: 8, alignItems: 'flex-start', padding: '4px 6px', borderRadius: radius.sm, background: on ? alpha(tk.accent.base, 0.08) : 'none', outline: 'none' }}>
-                <span style={{ flexShrink: 0, minWidth: 18, height: 18, borderRadius: 5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: on ? tk.accent.base : tk.bg.field, color: on ? '#fff' : tk.text.muted, font: `650 10.5px ${fontFamily.mono}` }}>{s.label}</span>
-                <span style={{ flex: 1, minWidth: 0, font: `500 12.5px/1.55 ${fontFamily.ui}`, color: tk.text.secondary }}>
-                  {lead && <span style={{ color: tk.text.faint }}>{lead}, </span>}
-                  <span data-explain-step-code="" style={{ font: `500 11.5px ${fontFamily.mono}`, background: tk.bg.field, padding: '0 4px', borderRadius: 4 }}><GlslCode code={s.code} /></span>
-                  {' '}<ExplainText segs={s.segs} activeVar={hoverVar} onVarHover={setHoverVar} />.
-                  {worked[i] && <WorkedChip w={worked[i]} />}
-                  {s.idiom && (
-                    <span title="A well-known shader idiom" style={{ marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '0 6px', borderRadius: 9, background: alpha(tk.status.success, 0.12), color: tk.text.secondary, font: `600 10.5px ${fontFamily.ui}`, verticalAlign: 1 }}>
-                      <Icon name="star" size={10} />{s.idiom.name}
-                    </span>
-                  )}
-                </span>
-                <span style={{ display: 'flex', gap: 2, opacity: on || noHover ? 1 : 0, transition: 'opacity 0.1s', ...(noHover ? { flexBasis: '100%', paddingLeft: 20 } : null) }}>
-                  {s.idiom && onFindUses && (
-                    <button type="button" data-explain-action="find-uses" title={`Where else is “${s.idiom.name}” used?`} style={small}
-                      onClick={() => onFindUses({ idiomId: s.idiom!.id }, s.idiom!.name)}>
-                      <Icon name="search" size={12} />Where else?
-                    </button>
-                  )}
-                  {canMake(s) && (
-                    <button type="button" data-explain-action="make-node" title={`Make a node from ${s.code}`} style={small} onClick={() => onMakeNode!({ start: s.start, end: s.end })}>
-                      <Icon name="plus" size={12} />Node
-                    </button>
-                  )}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
+      {open && (
+        <BuildUpView rows={rows} vars={vars} ranges={ranges} host={buildUp} activeVar={hoverVar}
+          onHoverSpan={setHover} onHoverVar={setHoverVar} selected={selRow?.key ?? null} onSelect={select}
+          canMake={canMake} onMakeNode={onMakeNode} onFindUses={onFindUses} idioms={idioms} focusSignal={focusSignal} />
       )}
       {(canMake(rootSpan) || (rootIdiom && onFindUses)) && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -187,12 +165,12 @@ export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPictur
 }
 
 
-/** The sample values the worked numbers use: one small field per name the line reads. */
+/** The sample values the CPU pictures and ranges use: one small field per name the line reads. */
 function TryValues({ vars, onChange, onReset }: { vars: WorkedVar[]; onChange: (name: string, v: Value) => void; onReset?: () => void }) {
   const tk = useTokens();
   return (
     <div data-explain-try="" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, font: `500 11.5px ${fontFamily.ui}`, color: tk.text.muted }}>
-      <span title="The numbers each step shows are worked out with these values. Change one to see how the line responds.">With</span>
+      <span title="Pictures the CPU works out (strips, numbers) and the usual ranges use these values. Change one to see how the line responds.">With</span>
       {vars.map(v => <TryField key={v.name} v={v} onChange={val => onChange(v.name, val)} />)}
       {onReset && <button type="button" onClick={onReset} style={{ border: 0, background: 'none', padding: 0, color: tk.accent.text, cursor: 'pointer', font: `600 11px ${fontFamily.ui}` }}>Reset</button>}
     </div>
@@ -216,31 +194,5 @@ function TryField({ v, onChange }: { v: WorkedVar; onChange: (v: Value) => void 
       <input aria-label={`Sample value of ${v.name}`} value={text} onChange={e => setText(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
         style={{ width: Math.max(38, text.length * 7 + 14), height: 20, padding: '0 4px', border: `1px solid ${tk.border.subtle}`, borderRadius: 4, background: tk.bg.field, color: tk.text.primary, font: `500 11px ${fontFamily.mono}` }} />
     </label>
-  );
-}
-
-/** A step's worked number, and a tiny bar of where it sits in the step's spread across the picture. */
-function WorkedChip({ w }: { w: { value: Value | null; range: [number, number] | null } }) {
-  const tk = useTokens();
-  if (w.value === null && !w.range) return null;
-  const val = w.value === null ? null : showValue(w.value);
-  const first = w.value === null ? null : Array.isArray(w.value) ? w.value[0] : w.value;
-  const r = w.range;
-  const t = r && first !== null && r[1] > r[0] ? Math.min(1, Math.max(0, (first - r[0]) / (r[1] - r[0]))) : null;
-  return (
-    <span data-explain-worked="" title={r ? `Here: ${val ?? '?'}. Across the picture it runs ${showValue(r[0])} to ${showValue(r[1])}.` : `Here: ${val}`}
-      style={{ marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 5, verticalAlign: 1 }}>
-      {val !== null && <span style={{ padding: '0 5px', borderRadius: 4, background: alpha(tk.accent.base, 0.1), color: tk.accent.text, font: `600 10.5px ${fontFamily.mono}` }}>= {val}</span>}
-      {r && (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: tk.text.faint, font: `500 10px ${fontFamily.mono}` }}>
-          {showValue(r[0])}
-          <svg width="44" height="8" aria-hidden style={{ display: 'block' }}>
-            <rect x="0" y="3" width="44" height="2" rx="1" fill={tk.border.default} />
-            {t !== null && <circle cx={2 + t * 40} cy="4" r="3" fill={tk.accent.base} />}
-          </svg>
-          {showValue(r[1])}
-        </span>
-      )}
-    </span>
   );
 }

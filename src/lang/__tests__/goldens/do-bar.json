@@ -237,7 +237,7 @@
    "polarSpace"
   ],
   "removed": [],
-  "hash": "83402974"
+  "hash": "6d2d1b1a"
  },
  "commands:noise · tone map the palette": {
   "reads": "build",
@@ -1701,7 +1701,7 @@
    "polarSpace"
   ],
   "removed": [],
-  "hash": "f8c72cd4"
+  "hash": "d81f519e"
  },
  "action polar:noise · polar the noise": {
   "reads": "build",
@@ -1710,7 +1710,7 @@
    "polarSpace"
   ],
   "removed": [],
-  "hash": "83402974"
+  "hash": "6d2d1b1a"
  },
  "action mirror:circle [c] · mirror both ways": {
   "reads": "build",
@@ -2577,7 +2577,7 @@
    "polarSpace"
   ],
   "removed": [],
-  "hash": "f8c72cd4"
+  "hash": "d81f519e"
  },
  "phrase:circle [c] · mirror it": {
   "reads": "build",

@@ -90,7 +90,7 @@ vec4 pvz_showV(vec2 p) {
 const MAIN_RE = /\bvoid\s+main\s*\(/;
 
 /** `fs` with `helpers` before main() and its last statement block ending in `tail`. Null if fs has no main. */
-function inject(fs: string, helpers: string, tail: string): string | null {
+export function inject(fs: string, helpers: string, tail: string): string | null {
   const m = MAIN_RE.exec(fs);
   const end = fs.lastIndexOf('}');
   if (!m || end < m.index) return null;

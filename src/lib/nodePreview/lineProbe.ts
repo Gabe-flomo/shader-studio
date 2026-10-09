@@ -8,6 +8,8 @@
  *  - Expression Block: the lines up to and including the probed one (the variable's value right
  *    after that line), with the variable exposed (params.outputs). An input probe keeps no lines;
  *    the Return probe is the block's own result.
+ *  - A step of a line (kind 'expr', the Explain panel's build-up): the lines above it, then
+ *    `<type> pv_step = <the sub-expression>;`, with pv_step exposed.
  *  - Custom Function: the body with `pv_probe = <name>;` put after the statement that declares
  *    the variable, and `pv_probe` as an extra (out) output (no `__`: GLSL reserves it).
  *
@@ -23,7 +25,12 @@ export type ProbeTarget =
   | { kind: 'line'; index: number }
   | { kind: 'return' }
   /** A Custom Function's named local (its declaration's line in the body, 0-based). */
-  | { kind: 'local'; name: string; line: number };
+  | { kind: 'local'; name: string; line: number }
+  /**
+   * A part of an Expression Block line (the Explain panel's build-up, one step): `code` is that
+   * sub-expression, computed after the lines above `line` ran; `step` names it ("B").
+   */
+  | { kind: 'expr'; line: number | 'return'; code: string; type: string; step: string };
 
 export interface LineProbe { nodeId: string; target: ProbeTarget }
 
@@ -94,6 +101,12 @@ export function resolveProbe(node: GraphNode, target: ProbeTarget): ResolvedProb
     if (!type) return { error: `No input called ${target.name}.` };
     return { name: target.name, type, label: `Input · ${type} ${target.name}` };
   }
+  if (target.kind === 'expr') {
+    if (node.type === 'customFn') return { error: 'Stepping through a line works in an Expression Block.' };
+    if (!target.code.trim()) return { error: 'That step is empty.' };
+    const where = target.line === 'return' ? 'Return' : `Line ${target.line + 1}`;
+    return { name: PROBE_STEP, type: target.type, label: `${where} · ${target.step} = ${clip(target.code, 40)}` };
+  }
   if (target.kind === 'local') {
     const local = customFnLocals(typeof node.params.body === 'string' ? node.params.body : '').find(l => l.name === target.name);
     if (!local) return { error: `${target.name} isn't declared in the body any more.` };
@@ -111,6 +124,8 @@ export function resolveProbe(node: GraphNode, target: ProbeTarget): ResolvedProb
 
 /** The probe output's socket key on the copy. */
 export const PROBE_KEY = 'pv_probe';
+/** The variable a step probe (kind 'expr') declares in the copy. */
+export const PROBE_STEP = 'pv_step';
 
 /**
  * The copy of `node` the eye preview compiles for a probe: its only output is the probed value
@@ -157,6 +172,18 @@ export function applyProbe(node: GraphNode, target: ProbeTarget): { node: GraphN
   }
   // Expression Block: the lines up to the probed one, the variable exposed; the result is the type's zero
   const lines = (node.params.lines as ExprLine[] | undefined) ?? [];
+  if (target.kind === 'expr') {
+    // The lines above the step's line, then the step as a variable of its own
+    const above = target.line === 'return' ? lines : lines.slice(0, target.line);
+    return {
+      node: {
+        ...node,
+        params: { ...node.params, lines: [...above, { lhs: `${r.type} ${PROBE_STEP}`, op: '=', rhs: target.code }], result: '', outputs: [PROBE_STEP] },
+        outputs: { [PROBE_STEP]: { type: r.type as never, label: target.step } } as GraphNode['outputs'],
+      },
+      outputKey: PROBE_STEP,
+    };
+  }
   const kept = target.kind === 'line' ? lines.slice(0, target.index + 1) : [];
   return {
     node: {
@@ -223,8 +250,16 @@ export function sameTarget(a: ProbeTarget, b: ProbeTarget): boolean {
 /** The target `step` away from `current` in probeSteps order (clamped at the ends). */
 export function stepProbe(node: GraphNode, current: ProbeTarget, step: number): ProbeTarget {
   const steps = probeSteps(node);
+  // A step of a line walks from its line
+  if (current.kind === 'expr') current = lineTarget(current) ?? current;
   let i = steps.findIndex(s => sameTarget(s, current));
   if (i < 0 && current.kind === 'local') i = steps.findIndex(s => s.kind === 'local' && s.name === current.name);
   if (i < 0) return steps[0];
   return steps[Math.max(0, Math.min(steps.length - 1, i + step))];
+}
+
+/** The whole line a target is on: a step's line (or Return); a line or Return itself; else null. */
+export function lineTarget(t: ProbeTarget): ProbeTarget | null {
+  if (t.kind === 'expr') return t.line === 'return' ? { kind: 'return' } : { kind: 'line', index: t.line };
+  return t.kind === 'line' || t.kind === 'return' ? t : null;
 }

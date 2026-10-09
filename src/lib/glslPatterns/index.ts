@@ -46,3 +46,7 @@ export {
 } from './functions';
 export { functionAt, functionsIn, declaredFunctions, commentSpans, type FunctionHit, type FunctionAtOptions, type DeclaredFunction } from './fnAt';
 export { functionCard, functionCardFor, plotForCall, explainCall, snippetFor, type FunctionCardModel, type FunctionCardContext } from './fnCard';
+export {
+  buildUpRows, defaultVarying, exprSource, pictureBudget, pictureKind, cpuStrip, cpuValue, spanOf, isFlat, HEAVY_TYPE, MAX_NODES, MAX_MS, STRIP_SAMPLES,
+  type BuildUpRow, type BuildUpKind, type PictureKind, type GraphCost,
+} from './buildUp';

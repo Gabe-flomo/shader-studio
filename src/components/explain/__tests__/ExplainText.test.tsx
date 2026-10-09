@@ -68,21 +68,21 @@ describe('GlslCode and ExplainView', () => {
     expect(html).toMatch(/data-explain-var-highlight[^>]*><span[^>]*>a<\/span><\/mark>/);
   });
 
-  it('leads with the plain meaning, folds the literal reading, and plots a function of one number', () => {
+  it('shows the build-up (no worded sentence), the idiom\'s use and a plot of a function of one number', () => {
     const html = renderToStaticMarkup(<ExplainView ex={line()} />);
-    expect(html).toContain('data-explain-sentence');
-    expect(html).toContain('stays under');
-    expect(html).toContain('Literal reading and steps');
-    expect(html).not.toContain('data-explain-literal'); // folded by default
+    expect(html).not.toContain('data-explain-sentence');
+    expect(html).not.toContain('stays under');
+    expect(html).toContain('data-buildup=""');
+    expect(html).toContain('data-buildup-row="in:a"');
+    expect(html).toContain('data-buildup-row="result"');
     expect(html).toContain('data-transfer-plot="small"');
     expect(html).toContain('a hard on/off mask');
   });
 
-  it('offers a picture instead of a plot for a line that reads space', () => {
-    const r = explainLine('float d = length(p) - 0.3', { types: { p: 'vec2' } });
+  it('a line that reads space draws its steps (a CPU strip where nothing can render)', () => {
+    const r = explainLine('float d = sin(p.x * 4.0) - 0.3', { types: { p: 'vec2' } });
     if (!r.ok) throw new Error(r.error);
     const html = renderToStaticMarkup(<ExplainView ex={r} onShowPicture={() => {}} />);
-    expect(html).not.toContain('data-transfer-plot');
-    expect(html).toContain('data-explain-action="show-picture"');
+    expect(html).toMatch(/data-buildup-row="step:A"[^>]*data-picture="strip-cpu"/);
   });
 });

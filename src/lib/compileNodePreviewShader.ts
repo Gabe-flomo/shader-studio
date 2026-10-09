@@ -6,7 +6,7 @@
  */
 
 import type { GraphNode } from '../types/nodeGraph';
-import { compileGraph } from '../compiler/graphCompiler';
+import { compileGraph, type CompilationResult } from '../compiler/graphCompiler';
 import { pickPreviewOutput, prefOf } from './nodePreview/showAs';
 
 const SKIP_TYPES = new Set(['output', 'vec4Output', 'scope']);
@@ -118,13 +118,27 @@ export function compileNodePreviewShader(
 ): string | null {
   const targetNode = nodes.find(n => n.id === nodeId);
   if (!targetNode || SKIP_TYPES.has(targetNode.type)) return null;
-
   if (targetNode.type === 'gridLayout') {
     const cols = typeof targetNode.params.columns === 'number' ? targetNode.params.columns : 10;
     return buildGridPreviewShader(cols);
   }
   if (targetNode.type === 'neighborDist') return NEIGHBOR_DIST_PREVIEW;
   if (targetNode.type === 'gridDensityWarp') return buildDensityWarpPreviewShader(targetNode);
+  const r = compileNodePreviewGraph(nodeId, nodes);
+  return r ? r.fragmentShader : null;
+}
+
+/**
+ * The same preview graph (the node, its ancestors, a synthetic output), compiled: the whole
+ * result, for callers that need the variable map or the uniforms too (the Explain panel's
+ * build-up pictures). Null when it doesn't compile or the node has nothing to draw.
+ */
+export function compileNodePreviewGraph(
+  nodeId: string,
+  nodes: GraphNode[],
+): CompilationResult | null {
+  const targetNode = nodes.find(n => n.id === nodeId);
+  if (!targetNode || SKIP_TYPES.has(targetNode.type)) return null;
 
   // BFS: collect all transitive dependencies of targetNode
   const included = new Set<string>();
@@ -198,5 +212,5 @@ export function compileNodePreviewShader(
   };
 
   const result = compileGraph({ nodes: [...subgraph, ...extraNodes, syntheticOutput] });
-  return result.success ? result.fragmentShader : null;
+  return result.success ? result : null;
 }

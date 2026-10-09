@@ -26,21 +26,29 @@ export const PolarSpaceNode: NodeDefinition = {
     angle:    { type: 'float', label: 'Angle' },
     radius:   { type: 'float', label: 'Radius' },
   },
-  defaultParams: { twist: 0.0, radialScale: 1.0 },
+  defaultParams: { twist: 0.0, radialScale: 1.0, seam: 'turn' },
   paramDefs: {
     twist:       { label: 'Twist',        type: 'float', min: -5.0, max: 5.0, step: 0.01, hint: 'Spins the angle more the further from center. 0 is plain polar.' },
     radialScale: { label: 'Radial Scale', type: 'float', min: 0.1,  max: 5.0, step: 0.01, hint: 'Multiplies the radius. Above 1 pushes rings outward faster.' },
+    seam:        { label: 'Seam', type: 'select', options: [
+      { value: 'turn',   label: 'Full turn' },
+      { value: 'mirror', label: 'Mirrored (no seam)' },
+    ], hint: 'Full turn: Angle runs 0 → 1 once round, jumping back to 0 on the left. Patterns that repeat a whole number of times round (petals, arms, a colour wheel) meet up there; anything else shows a line. Mirrored: Angle runs 0 on the right to 1 on the left, the bottom half mirroring the top, so nothing ever jumps (patterns become symmetric top to bottom).' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id     = node.id;
     const inVar  = inputVars.input       || 'vec2(0.0)';
     const twist  = inputVars.twist       || p(node.params.twist, 0.0);
     const rscale = inputVars.radialScale || p(node.params.radialScale, 1.0);
+    const seam   = node.params.seam === 'mirror' ? 'mirror' : 'turn';
     return {
       code: [
         `    float ${id}_r = length(${inVar}) * ${rscale};\n`,
         // Raw angle [0,1)
-        `    float ${id}_a = fract(atan(${inVar}.y, ${inVar}.x) / 6.28318 + 0.5);\n`,
+        seam === 'mirror'
+          // Mirrored: the angle from the right, either way round (0…1 over half a turn), so the top and bottom halves meet with no jump
+          ? `    float ${id}_a = abs(atan(${inVar}.y, ${inVar}.x)) / 3.14159265;\n`
+          : `    float ${id}_a = fract(atan(${inVar}.y, ${inVar}.x) / 6.28318 + 0.5);\n`,
         // Seamless angle: encode as (cos, sin) on unit circle — zero wrap discontinuity
         `    vec2  ${id}_seamless = vec2(cos(${id}_a * 6.28318), sin(${id}_a * 6.28318)) * 0.5 + 0.5;\n`,
         `    vec2  ${id}_output   = vec2(${id}_a + ${id}_r * ${twist}, ${id}_r);\n`,
@@ -71,18 +79,26 @@ export const LogPolarSpaceNode: NodeDefinition = {
     seamless: { type: 'vec2',  label: 'Seamless' },
     angle:    { type: 'float', label: 'Angle' },
   },
-  defaultParams: { scale: 1.0 },
+  defaultParams: { scale: 1.0, seam: 'turn' },
   paramDefs: {
     scale: { label: 'Scale', type: 'float', min: 0.1, max: 5.0, step: 0.05, hint: 'Stretches the log-radius axis; higher packs more rings toward the center.' },
+    seam:        { label: 'Seam', type: 'select', options: [
+      { value: 'turn',   label: 'Full turn' },
+      { value: 'mirror', label: 'Mirrored (no seam)' },
+    ], hint: 'Full turn: Angle runs 0 → 1 once round, jumping back to 0 on the left. Patterns that repeat a whole number of times round (petals, arms, a colour wheel) meet up there; anything else shows a line. Mirrored: Angle runs 0 on the right to 1 on the left, the bottom half mirroring the top, so nothing ever jumps (patterns become symmetric top to bottom).' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
     const inVar = inputVars.input || 'vec2(0.0)';
     const scale = inputVars.scale || p(node.params.scale, 1.0);
+    const seam  = node.params.seam === 'mirror' ? 'mirror' : 'turn';
     return {
       code: [
         `    float ${id}_r = length(${inVar});\n`,
-        `    float ${id}_a = fract(atan(${inVar}.y, ${inVar}.x) / 6.28318 + 0.5);\n`,
+        seam === 'mirror'
+          // Mirrored: the angle from the right, either way round (0…1 over half a turn), so the top and bottom halves meet with no jump
+          ? `    float ${id}_a = abs(atan(${inVar}.y, ${inVar}.x)) / 3.14159265;\n`
+          : `    float ${id}_a = fract(atan(${inVar}.y, ${inVar}.x) / 6.28318 + 0.5);\n`,
         `    vec2  ${id}_seamless = vec2(cos(${id}_a * 6.28318), sin(${id}_a * 6.28318)) * 0.5 + 0.5;\n`,
         `    vec2  ${id}_output   = vec2(${id}_a, log(max(${id}_r, 0.00001)) * ${scale});\n`,
       ].join(''),

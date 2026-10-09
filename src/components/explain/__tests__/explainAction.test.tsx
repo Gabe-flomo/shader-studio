@@ -71,7 +71,7 @@ describe('the Explain action without a model', () => {
   it('an Expression Block line row leads with Explain, not a rule-based sentence; its working stays folded', () => {
     const host = mount(<ExplainRow text="float g = exp(-d * 4.0)" exprStart={10} ctx={{ types: { d: 'float' } }} where="line 1 of 2" />);
     expect(host.querySelector('[data-explain-action="explain"]')?.textContent).toBe('Explain');
-    expect(host.querySelector('[data-explain-summary]')).toBeNull();
+    expect(host.querySelector('[data-explain-summary]')?.textContent).toBe('d → 1 step → g');
     expect(host.textContent).not.toMatch(/glow|fading/i);
     expect(host.querySelector('[data-explain-view]')).toBeNull();
     click(host.querySelector('[data-explain-toggle]'));
