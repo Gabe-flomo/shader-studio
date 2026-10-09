@@ -68,23 +68,36 @@ export function PreviewQualityPicker({ onPanel = false }: { onPanel?: boolean } 
   const tk = useTokens();
   const scale = usePreviewQuality(s => s.scale);
   const setScale = usePreviewQuality(s => s.setScale);
+  const auto = usePreviewQuality(s => s.auto);
+  const autoScale = usePreviewQuality(s => s.autoScale);
+  const setAuto = usePreviewQuality(s => s.setAuto);
   const ref = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const cur = PREVIEW_QUALITIES.find(q => Math.abs(q.value - scale) < 1e-6) ?? PREVIEW_QUALITIES[0];
+  const autoCur = PREVIEW_QUALITIES.find(q => Math.abs(q.value - autoScale) < 1e-6) ?? PREVIEW_QUALITIES[0];
+  // Auto: "Auto" at Full, "Auto ½" once it has stepped down (tinted, like a fixed lower setting)
+  const shown = auto ? { label: `Auto (${autoCur.label})`, short: autoCur.value < 1 ? `Auto ${autoCur.short}` : 'Auto', value: autoCur.value } : cur;
   return (
     <>
-      <Tooltip label="Preview resolution" description="Render the preview at Full, Half, Third or Quarter resolution: lower runs heavy scenes faster. Exports are always full resolution." placement="bottom">
-        <button ref={ref} type="button" aria-label={`Preview resolution: ${cur.label}`} aria-expanded={open} onClick={() => setOpen(o => !o)} data-preview-quality={cur.label}
+      <Tooltip label="Preview resolution" description="Auto drops the resolution when a scene is heavy enough to slow the app, and goes back up when it fits. Or fix it at Full, Half, Third or Quarter. Exports are always full resolution." placement="bottom">
+        <button ref={ref} type="button" aria-label={`Preview resolution: ${shown.label}`} aria-expanded={open} onClick={() => setOpen(o => !o)} data-preview-quality={shown.label}
           style={{ height: 26, minWidth: 34, padding: '0 7px', marginRight: 4, border: 0, borderRadius: radius.md, cursor: 'pointer', font: `600 11px ${fontFamily.ui}`,
-            background: cur.value < 1 ? alpha(tk.accent.base, 0.16) : 'transparent', color: cur.value < 1 ? tk.accent.text : onPanel ? tk.text.muted : alpha('#ffffff', 0.7) }}>
-          {cur.short}
+            background: shown.value < 1 ? alpha(tk.accent.base, 0.16) : 'transparent', color: shown.value < 1 ? tk.accent.text : onPanel ? tk.text.muted : alpha('#ffffff', 0.7) }}>
+          {shown.short}
         </button>
       </Tooltip>
       {open && (
         <Popover anchorRef={ref} onClose={() => setOpen(false)} width={180} padding={6}>
           <div role="radiogroup" aria-label="Preview resolution" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <button type="button" role="radio" aria-checked={auto} onClick={() => { setAuto(); setOpen(false); }}
+              title="Starts at Full; drops a level when the picture's GPU work would slow the app, and goes back up when it fits"
+              style={{ display: 'flex', alignItems: 'center', gap: 8, height: 30, padding: '0 10px', border: 0, borderRadius: radius.md, cursor: 'pointer', textAlign: 'left',
+                background: auto ? tk.bg.selected : 'transparent', color: auto ? tk.accent.text : tk.text.primary, font: `${auto ? 600 : 500} 12.5px ${fontFamily.ui}` }}>
+              <span style={{ flex: 1 }}>Auto</span>
+              <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.mono}` }}>{auto ? (autoCur.value === 1 ? '1×' : autoCur.short) : ''}</span>
+            </button>
             {PREVIEW_QUALITIES.map(q => {
-              const on = q.value === cur.value;
+              const on = !auto && q.value === cur.value;
               return (
                 <button key={q.label} type="button" role="radio" aria-checked={on} onClick={() => { setScale(q.value); setOpen(false); }}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, height: 30, padding: '0 10px', border: 0, borderRadius: radius.md, cursor: 'pointer', textAlign: 'left',
