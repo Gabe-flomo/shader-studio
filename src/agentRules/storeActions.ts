@@ -10,6 +10,7 @@ import type { AgentRuleSet } from './spec';
 import type { AgentSurprise } from './surprise';
 import { setAgentsView, type AgentsView } from './outputs';
 import { openAgentRulesWindow } from '../builders/windows';
+import { type AgentSpace, applyTemplate3d, convertGroupSpace } from './space3d';
 
 /** Open a rules group's rules editor (the card's Edit rules, its title double-click, Write as rules, the Builders section). */
 export const openAgentRulesEditor = (groupId: string) => openAgentRulesWindow(groupId);
@@ -93,6 +94,34 @@ export function setGroupView(groupId: string, view: AgentsView): boolean {
   const r = setAgentsView(st.nodes, groupId, view);
   if ('error' in r) { toast.info('Can\'t show that', { message: r.error }); return false; }
   undoManager.push(st.nodes, { label: 'Changed what the agents picture shows' });
+  last = { id: '', at: 0 };
+  useNodeGraphStore.setState({ nodes: r.nodes });
+  st.compile();
+  return true;
+}
+
+/**
+ * The editor's Space switch (agentRules/space3d.ts convertGroupSpace): the group and its setup in
+ * 2D or 3D (rules rescaled, Emit's shape, the Trail, a camera view), one undo step.
+ */
+export function setGroupSpace(groupId: string, to: AgentSpace): boolean {
+  const st = useNodeGraphStore.getState();
+  const r = convertGroupSpace(st.nodes, groupId, to, () => st.newNodeId());
+  if (!r) return false;
+  undoManager.push(st.nodes, { label: to === '3d' ? 'Agents group to 3D' : 'Agents group to 2D' });
+  last = { id: '', at: 0 };
+  useNodeGraphStore.setState({ nodes: r.nodes });
+  st.compile();
+  toast.info(to === '3d' ? 'Agents in 3D' : 'Agents flat (2D)', { message: `${r.message} Undo switches it back.` });
+  return true;
+}
+
+/** A 3D template onto the group and its setup (switching it to 3D first), one undo step. */
+export function applyGroupTemplate3d(groupId: string, key: string): boolean {
+  const st = useNodeGraphStore.getState();
+  const r = applyTemplate3d(st.nodes, groupId, key, () => st.newNodeId());
+  if (!r) return false;
+  undoManager.push(st.nodes, { label: 'Agent rules: 3D template' });
   last = { id: '', at: 0 };
   useNodeGraphStore.setState({ nodes: r.nodes });
   st.compile();

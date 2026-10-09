@@ -255,7 +255,7 @@ export const COMMAND_VERBS: readonly CommandVerb[] = [
 export type BuilderCommandId =
   | 'open-scene-builder' | 'new-3d-scene' | 'edit-scene' | 'new-2d-scene'
   | 'open-grid-rules' | 'new-grid-rules' | 'edit-rules'
-  | 'open-agent-rules' | 'new-agent-rules'
+  | 'open-agent-rules' | 'new-agent-rules' | 'new-3d-agents'
   | 'show-recipe' | 'copy-recipe';
 
 export interface BuilderCommand {
@@ -322,6 +322,11 @@ export const BUILDER_COMMANDS: readonly BuilderCommand[] = [
     id: 'new-agent-rules', words: ['new agent rules', 'add agent rules', 'new agents with rules', 'new rules agents', 'add an agents group with rules'],
     summary: 'Adds an Agents group in rules mode (Emit → Agents → Deposit → Trail field → palette, on the Output) and opens its rules.',
     examples: [{ text: 'new agent rules', on: 'empty' }, { text: 'new agents with rules', on: 'empty' }],
+  },
+  {
+    id: 'new-3d-agents', words: ['new 3d agents', 'new 3d agent rules', 'add 3d agents', 'make 3d agents', 'new agents in 3d', '3d agent builder', 'open the 3d agent builder', 'new 3d swarm', 'new 3d slime'],
+    summary: 'Adds 3D agents (Emit in a Ball → Agents in Space 3D, rules mode → Deposit → a volume Trail, Draw agents through an orbiting camera, on the Output) and opens their rules: Space 2D / 3D, 3D templates, the camera on the Look tab.',
+    examples: [{ text: 'new 3d agents', on: 'empty' }, { text: '3d agent builder', on: 'empty' }],
   },
   {
     id: 'show-recipe', words: ['show the recipe', 'show recipe', 'show its recipe', 'what is the recipe', 'show the rule', 'show me the recipe'],

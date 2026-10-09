@@ -6,6 +6,8 @@
  *  - 3D Scene Builder: the builder on a new scene (Build adds it to the graph).
  *  - Grid Rules: a new Grid Rules node (on the Output when the graph is empty), its editor open.
  *  - Agent Rules: a new Agents group in rules mode (the Rules starter), its rules editor open.
+ *  - 3D Agent Builder: a new 3D rules group (agentRules/space3d.ts: Ball Emit, a volume Trail, Draw
+ *    agents through an orbiting camera), its rules editor open.
  */
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { estimateNodeHeight } from '../store/graphLayout';
@@ -40,11 +42,19 @@ export function newAgentRules(): string | null {
   return id;
 }
 
+/** Add a 3D rules Agents group (the 3D Agent Builder's setup, on the Output) and open its rules editor. */
+export function newAgents3d(): string | null {
+  const id = useNodeGraphStore.getState().addAgentsStarter('rules3d');
+  if (id) openAgentRulesWindow(id);
+  return id;
+}
+
 /** Open a builder from the Builders section or menu. */
 export function openBuilder(id: BuilderId, at?: { x: number; y: number }): void {
   if (id === 'scene') openNewSceneBuilder(at);
   else if (id === 'scene2d') openNewSceneBuilder2D(at);
   else if (id === 'grid') newGridRules();
+  else if (id === 'agents3d') newAgents3d();
   else newAgentRules();
 }
 
@@ -83,6 +93,7 @@ export function runBuilderAction(a: BuilderAction): boolean {
     case 'new-grid': newGridRules(); return true;
     case 'open-grid': openGridRulesEditor(a.nodeId); return true;
     case 'new-agents': return !!newAgentRules();
+    case 'new-agents3d': return !!newAgents3d();
     case 'open-agents': openAgentRulesWindow(a.groupId); return true;
     case 'show-recipe': {
       // A node on the top level: go there and bring its card into view.

@@ -3,8 +3,10 @@
  * in the builders' window (BuilderWindow: Tips, tabs). Four tabs, each with its "How this works"
  * (builderLayout.ts AGENT_RULES_TABS), the one last used remembered: Species (speed, edges and
  * states), Rules (the selected species' rules, top to bottom; masks folded), Trails (the channels;
- * sensors and the flow field folded) and Look (what the picture shows). Every change applies live
- * (the group's inside is generated again and compiled); Open as nodes shows the nodes they make.
+ * sensors and the flow field folded) and Look (what the picture shows; in 3D first the camera).
+ * Every change applies live (the group's inside is generated again and compiled); Open as nodes
+ * shows the nodes they make. The header's Space 2D / 3D switch turns the whole setup
+ * (agentRules/space3d.ts), and in 3D the Templates menu offers the 3D setups first.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LanguageTab, type LanguageRead } from '../builders/LanguageTab';
@@ -13,7 +15,10 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
-import { Toggle } from '../ui/Choice';
+import { Segmented, Toggle } from '../ui/Choice';
+import { RulerSlider } from '../ui/RulerSlider';
+import { getNodeDefinition } from '../../nodes/definitions';
+import { extendRangePatch, paramSliderRange } from '../../nodes/sliderRange';
 import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
 import { BuilderFold, BuilderHelp, BuilderWindow, EmptyHelp, HintLabel, HintMark, useRememberedTab } from '../builders/BuilderWindow';
@@ -31,7 +36,8 @@ import {
 import { groupRules } from '../../agentRules/apply';
 import { generateRulesInside, ruleIds } from '../../agentRules/generate';
 import { RULES_TEMPLATES } from '../../agentRules/templates';
-import { applyGroupRules, openGroupAsNodes, setGroupView } from '../../agentRules/storeActions';
+import { applyGroupRules, applyGroupTemplate3d, openGroupAsNodes, setGroupSpace, setGroupView } from '../../agentRules/storeActions';
+import { CAMERA_3D, CAMERA_CONTROLS, RULES_TEMPLATES_3D, rescaleForSpace, type AgentSpace, type CameraKey } from '../../agentRules/space3d';
 import { SurpriseBar } from '../surprise/SurpriseBar';
 import { surpriseAgentsAction, useSurpriseSeeds } from '../surprise/surpriseActions';
 import { AGENT_VIEWS, agentsViewOf, type AgentsView } from '../../agentRules/outputs';
@@ -98,11 +104,22 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
   const shows = (section: RulesSection) => showsSection(set, section);
   // Templates: this kind's first, then the rest.
   const ownTemplates = WALKER_KINDS[kind].templates;
+  // In 3D the 3D setups come first (each sets the Emit, Trail and camera too); a flat template is rescaled for the volume.
+  const templates3d = RULES_TEMPLATES_3D.map(t => ({ value: `3d:${t.key}`, label: t.label, group: d3 ? '3D setups' : 'In 3D (switches Space)' }));
   const templateOptions = [
     { value: '', label: 'Templates…' },
-    ...RULES_TEMPLATES.filter(t => ownTemplates.includes(t.key)).map(t => ({ value: t.key, label: t.label, group: WALKER_KINDS[kind].label })),
-    ...RULES_TEMPLATES.filter(t => !ownTemplates.includes(t.key)).map(t => ({ value: t.key, label: t.label, group: 'Other kinds' })),
+    ...(d3 ? templates3d : []),
+    ...RULES_TEMPLATES.filter(t => ownTemplates.includes(t.key)).map(t => ({ value: t.key, label: t.label, group: d3 ? `${WALKER_KINDS[kind].label} (rules only)` : WALKER_KINDS[kind].label })),
+    ...RULES_TEMPLATES.filter(t => !ownTemplates.includes(t.key)).map(t => ({ value: t.key, label: t.label, group: d3 ? 'Other kinds (rules only)' : 'Other kinds' })),
+    ...(d3 ? [] : templates3d),
   ];
+  const pickTemplate = (k: string) => {
+    if (k.startsWith('3d:')) { flush(); applyGroupTemplate3d(node.id, k.slice(3)); setSp(0); return; }
+    const t = RULES_TEMPLATES.find(x => x.key === k);
+    if (t) { update(d3 ? rescaleForSpace(t.set(), '3d') : t.set()); setSp(0); }
+  };
+  const setSpace = (to: AgentSpace) => { flush(); setGroupSpace(node.id, to); };
+  const draw = useNodeGraphStore(st => agentsViewOf(st.nodes, node.id).draw);
   const notes3d = d3 ? notesFor3d(set) : [];
   const view = useNodeGraphStore(st => agentsViewOf(st.nodes, node.id).current);
   const addExample = (ex: HelpExample) => { if ('rule' in ex.insert) setRules([...species.rules, structuredClone(ex.insert.rule)]); };
@@ -206,13 +223,32 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
     </TabPane>
   );
 
+  const pictureShows = <>
+    <Select ariaLabel="What the picture shows" value={view ?? ''} height={30}
+      options={[...(view ? [] : [{ value: '', label: 'Not wired: nothing reads the trail' }]), ...AGENT_VIEWS.map(v => ({ value: v.value, label: v.label }))]}
+      onChange={v => { if (v) setGroupView(node.id, v as AgentsView); }} />
+    <Note>{AGENT_VIEWS.find(v => v.value === view)?.hint ?? (d3 ? 'In 3D the trail\'s picture is the volume seen flat from the front; the camera above is how you see the walkers.' : 'Wire the Trail field\'s Amount into a Palette to see the trail.')}</Note>
+  </>;
+  const cam = (k: CameraKey) => (typeof draw?.params[k] === 'number' ? draw.params[k] as number : CAMERA_3D[k]);
   const lookTab = (
     <TabPane>
-      <SectionLabel hint="What the group's picture shows: the trail, one trail channel, or where the walkers are. Each is also an output socket.">What the picture shows</SectionLabel>
-      <Select ariaLabel="What the picture shows" value={view ?? ''} height={30}
-        options={[...(view ? [] : [{ value: '', label: 'Not wired: nothing reads the trail' }]), ...AGENT_VIEWS.map(v => ({ value: v.value, label: v.label }))]}
-        onChange={v => { if (v) setGroupView(node.id, v as AgentsView); }} />
-      <Note>{AGENT_VIEWS.find(v => v.value === view)?.hint ?? 'Wire the Trail field\'s Amount into a Palette to see the trail.'}</Note>
+      {d3 && <>
+        <SectionLabel meta={draw ? 'Draw agents' : undefined} hint="In 3D the walkers are seen through Draw agents' camera: where it stands, how it turns, what is sharp.">Camera</SectionLabel>
+        <BuilderHelp id="camera" />
+        {draw ? <>
+          {CAMERA_CONTROLS.filter(c => !c.fold).map(c => <CameraRow key={c.key} draw={draw} k={c.key} label={c.label} step={c.step} />)}
+          <BuilderFold foldKey="agentRules:open:dof" title="Depth of field" summary={`focus ${cam('focus')} · blur ${cam('blur')}`}>
+            {CAMERA_CONTROLS.filter(c => c.fold).map(c => <CameraRow key={c.key} draw={draw} k={c.key} label={c.label} step={c.step} />)}
+          </BuilderFold>
+        </> : <Note>No Draw agents shows this group, so there is no camera: the card's Next steps adds one (Draw agents), or switch Space to 2D and back.</Note>}
+        <BuilderFold foldKey="agentRules:open:picture3d" title="What the picture shows" summary={view ? `${AGENT_VIEWS.find(v => v.value === view)?.label ?? view} · the trail seen flat` : 'the walkers, through the camera'}>
+          {pictureShows}
+        </BuilderFold>
+      </>}
+      {!d3 && <>
+        <SectionLabel hint="What the group's picture shows: the trail, one trail channel, or where the walkers are. Each is also an output socket.">What the picture shows</SectionLabel>
+        {pictureShows}
+      </>}
       <Note>Each state's colour (Species tab) shows through Draw agents' Colour by State.</Note>
       {notes3d.map(t => <Note key={t}>3D: {t}</Note>)}
     </TabPane>
@@ -226,11 +262,18 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
       icon="expr" iconColor={tk.kind.expr} width={1100} height={780} onClose={close}
       tabs={{ items: AGENT_RULES_TABS, value: tab, onChange: setTab, ariaLabel: 'Agent Rules sections' }}
       headerActions={<>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} data-agent-space={d3 ? '3d' : '2d'}>
+          <HintLabel hint="Space: 2D walkers move on the picture; 3D walkers fill a box seen through a camera. Switching turns the setup (Trail ↔ volume, Disc ↔ Ball, sensors and speed rescaled, a camera view); undo switches it back.">
+            <span style={{ fontSize: 12, color: tk.text.muted }}>Space</span>
+          </HintLabel>
+          <Segmented size="sm" ariaLabel="Space" value={d3 ? '3d' : '2d'} onChange={v => setSpace(v)}
+            options={[{ value: '2d' as AgentSpace, label: '2D' }, { value: '3d' as AgentSpace, label: '3D' }]} />
+        </span>
         <SurpriseBar seed={surpriseSeed} onSurprise={seed => { flush(); surpriseAgentsAction(node.id, seed); setSp(0); }}
           title="A random rule set: a walker kind, its sensors, turn, speed, trail and colours, sometimes a second species (one undo step)" />
         <Select ariaLabel="Start from a template" value="" height={30}
           options={templateOptions}
-          onChange={k => { const t = RULES_TEMPLATES.find(x => x.key === k); if (t) { update(t.set()); setSp(0); } }} />
+          onChange={pickTemplate} />
       </>}
       footer={<>
         <Button icon="fn" title="Show the nodes these rules make (Start, a block per rule, Finish, Move), every one with a note, and edit them as nodes" onClick={() => { flush(); onClose(); openGroupAsNodes(node.id); }}>Open as nodes</Button>
@@ -465,6 +508,25 @@ function Piece({ children, onRemove, hint }: { children: React.ReactNode; onRemo
       {hint && <HintMark text={hint} />}
       {onRemove && <button type="button" aria-label="Remove" title="Remove" onClick={onRemove} style={{ width: 20, height: 20, padding: 0, border: 0, background: 'none', color: tk.text.faint, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="close" size={12} /></button>}
     </span>
+  );
+}
+
+/**
+ * One of Draw agents' camera settings, on the Look tab in 3D: a ruler slider writing the card's own
+ * param (one undo step a drag). Typing past its range widens it, kept on the card (__scMax_).
+ */
+function CameraRow({ draw, k, label, step }: { draw: GraphNode; k: CameraKey; label: string; step: number }) {
+  const def = getNodeDefinition('drawAgents')?.paramDefs?.[k];
+  const value = typeof draw.params[k] === 'number' ? draw.params[k] as number : CAMERA_3D[k];
+  const range = paramSliderRange(draw.params, k, { min: def?.min, max: def?.max });
+  const set = (patch: Record<string, unknown>) => useNodeGraphStore.getState().updateNodeParams(draw.id, patch);
+  return (
+    <Row label={label} hint={typeof def?.hint === 'string' ? def.hint : undefined}>
+      <div data-camera={k}>
+        <RulerSlider value={value} min={range.min} max={range.max} step={step} defaultValue={CAMERA_3D[k]} ariaLabel={label}
+          onChange={v => set({ [k]: v })} onRange={(min, max) => set(extendRangePatch(k, min, max))} />
+      </div>
+    </Row>
   );
 }
 

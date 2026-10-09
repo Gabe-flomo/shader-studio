@@ -137,6 +137,24 @@ describe('Agent Rules as tabs', () => {
     expect(localStorage.getItem('builder:agent-rules:tab')).toBe('species');
   });
 
+  it('3D Agent Builder: Space 3D in the header, the camera on Look (depth of field folded); 2D takes the camera away', () => {
+    useBuilderWindows.setState({ gridRules: null, agentRules: null, recipe: null });
+    mount(<BuildersSection />);
+    click($('[data-builder="agents3d"]'));
+    const group = useNodeGraphStore.getState().nodes.find(n => n.type === 'agentsGroup')!;
+    localStorage.setItem('builder:agent-rules:tab', 'look');
+    mount(<AgentRulesModal node={group} onClose={() => {}} />);
+    expect($('[data-agent-space]')?.getAttribute('data-agent-space')).toBe('3d');
+    expect($$('[data-camera]').map(x => x.getAttribute('data-camera'))).toEqual(['camDist', 'camAngle', 'camElevation', 'rotSpeed', 'fov']);
+    expect($('[data-fold="agentRules:open:dof"] button')?.getAttribute('aria-expanded')).toBe('false');
+    expect($('[data-fold="agentRules:open:dof"]')?.textContent).toMatch(/focus 1 · blur 0\.2/);
+    const two = $$('[data-agent-space] button').find(b => b.textContent === '2D') ?? null;
+    click(two);
+    const after = useNodeGraphStore.getState().nodes.find(n => n.id === group.id)!;
+    expect(after.params.space).toBe('2d');
+    expect(useNodeGraphStore.getState().nodes.find(n => n.type === 'agentEmit')!.params.shape).toBe('disc');
+  });
+
   it('Recipe: the rule set as text; Apply writes it into the group (one step)', () => {
     vi.useFakeTimers();
     useBuilderWindows.setState({ gridRules: null, agentRules: null, recipe: null });

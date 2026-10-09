@@ -35,19 +35,21 @@ const handScene = (): GraphNode => ({ id: 'hand', type: 'sceneGroup', position: 
 const grid = (params: Record<string, unknown> = {}): GraphNode => ({ id: 'g1', type: 'gridRules', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params });
 
 describe('the Builders section', () => {
-  it('lists the four builders with a line each and what they make', () => {
-    expect(BUILDERS.map(b => b.title)).toEqual(['3D Scene Builder', '2D Scene Builder', 'Grid Rules', 'Agent Rules']);
+  it('lists the five builders with a line each and what they make', () => {
+    expect(BUILDERS.map(b => b.title)).toEqual(['3D Scene Builder', '2D Scene Builder', 'Grid Rules', 'Agent Rules', '3D Agent Builder']);
     for (const b of BUILDERS) { expect(b.description.length).toBeGreaterThan(10); expect(b.makes.length).toBeGreaterThan(5); }
   });
-  it('is searchable: "builder" finds all four, "scene" the Scene Builders, "rules" Grid and Agent Rules', () => {
-    expect(matchBuilders('builder').map(b => b.id)).toEqual(['scene', 'scene2d', 'grid', 'agents']);
+  it('is searchable: "builder" finds all five, "scene" the Scene Builders, "rules" Grid and Agent Rules, "3d" the 3D ones', () => {
+    expect(matchBuilders('builder').map(b => b.id)).toEqual(['scene', 'scene2d', 'grid', 'agents', 'agents3d']);
     expect(matchBuilders('scene').map(b => b.id)).toEqual(['scene', 'scene2d']);
     expect(matchBuilders('2d').map(b => b.id)).toEqual(['scene2d']);
     expect(matchBuilders('kaleidoscope').map(b => b.id)).toEqual(['scene2d']);
     expect(matchBuilders('rules').map(b => b.id)).toEqual(['grid', 'agents']);
-    expect(matchBuilders('slime').map(b => b.id)).toEqual(['agents']);
+    expect(matchBuilders('slime').map(b => b.id)).toEqual(['agents', 'agents3d']);
+    expect(matchBuilders('agents').map(b => b.id)).toEqual(['agents', 'agents3d']);
+    expect(matchBuilders('3d agents').map(b => b.id)).toEqual(['agents3d']);
     expect(matchBuilders('wireworld').map(b => b.id)).toEqual(['grid']);
-    expect(matchBuilders('3d').map(b => b.id)).toEqual(['scene']);
+    expect(matchBuilders('3d').map(b => b.id)).toEqual(['scene', 'agents3d']);
     expect(matchBuilders('n')).toEqual([]);
     expect(matchBuilders('voronoi')).toEqual([]);
   });
@@ -82,6 +84,17 @@ describe('opening a builder', () => {
     expect(g.params.ruleMode).toBe('rules');
     expect(useBuilderWindows.getState().agentRules).toBe(g.id);
     expect(useBuilderWindows.getState().gridRules).toBeNull();
+  });
+  it('3D Agent Builder: a 3D rules group with a volume Trail and a camera, its rules open', () => {
+    openBuilder('agents3d');
+    const nodes = useNodeGraphStore.getState().nodes;
+    const g = nodes.find(n => n.type === 'agentsGroup')!;
+    expect(g.params.ruleMode).toBe('rules');
+    expect(g.params.space).toBe('3d');
+    expect(nodes.find(n => n.type === 'agentEmit')!.params.shape).toBe('ball');
+    expect(nodes.find(n => n.type === 'trailField')!.params.volume).toBe('96');
+    expect(nodes.find(n => n.type === 'drawAgents')!.params.rotSpeed).toBeGreaterThan(0);
+    expect(useBuilderWindows.getState().agentRules).toBe(g.id);
   });
 });
 
@@ -160,6 +173,7 @@ describe('Do… bar builder phrases', () => {
     ['new 3d scene', 'new-3d-scene'], ['edit this scene', 'edit-scene'],
     ['open grid rules', 'open-grid-rules'], ['new grid rules', 'new-grid-rules'], ['edit the rules', 'edit-rules'],
     ['open agent rules', 'open-agent-rules'], ['new agent rules', 'new-agent-rules'],
+    ['new 3d agents', 'new-3d-agents'], ['3D agent builder', 'new-3d-agents'], ['open the 3d agent builder', 'new-3d-agents'],
     ['show the recipe', 'show-recipe'], ['copy the recipe', 'copy-recipe'], ['please copy the recipe', 'copy-recipe'],
   ];
   for (const [text, id] of phrases) it(`“${text}” reads as ${id}`, () => expect(readBuilderCommand(text)?.id).toBe(id));
@@ -190,6 +204,7 @@ describe('Do… bar builder phrases', () => {
     expect(plan('edit the rules', s.nodes).action).toEqual({ kind: 'open-agents', groupId: s.groupId });
     expect(plan('edit the rules', [...s.nodes, grid()], ['g1']).action).toEqual({ kind: 'open-grid', nodeId: 'g1' });
     expect(plan('open agent rules', []).action).toEqual({ kind: 'new-agents' });
+    expect(plan('new 3d agents', []).action).toEqual({ kind: 'new-agents3d' });
     expect(plan('show the recipe', graph, [march.id]).action).toEqual({ kind: 'show-recipe', nodeId: scene.id });
     expect(plan('copy the recipe', [grid()]).action).toEqual({ kind: 'copy-recipe', nodeId: 'g1' });
     expect(plan('copy the recipe', [handScene()]).action).toBeNull();

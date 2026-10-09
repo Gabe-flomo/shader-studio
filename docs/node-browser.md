@@ -7,17 +7,18 @@ The node browser (opened via the **+** button or by double-clicking empty canvas
 ## Builders
 
 The first section of the browser (the desktop palette, its drawer, and the phone's Nodes tab) is
-**Builders**: three windows that write a graph for you from a form or a few lines of text.
+**Builders**: windows that write a graph for you from a form or a few lines of text.
 
 | Builder | Makes | A click |
 |---|---|---|
 | **3D Scene Builder** | shapes, combine, bend space, look, outputs | opens the builder on a new scene ([scene-builder.md](scene-builder.md)) |
 | **Grid Rules** | Life, sand, heat, waves, Wireworld… | adds a Grid Rules node and opens its editor ([grid-rules.md](grid-rules.md)) |
 | **Agent Rules** | slime, ants, flocks, infection… | adds an Agents group in rules mode and opens its rules ([agent-rules.md](agent-rules.md)) |
+| **3D Agent Builder** | 3D slime, 3D flocks, orbiting swarms, curl smoke… | adds 3D agents (Ball Emit, a volume Trail, Draw agents through an orbiting camera) and opens their rules ([agent-rules.md](agent-rules.md) "The 3D Agent Builder") |
 
 The section folds (the header's chevron) and stays folded in this browser. Searching "builder",
 "scene", "rules" (or what they make: "sand", "slime") shows the builders found above the node
-results. The empty canvas's right-click menu has the same three under **Builders**, and the Do…
+results. The empty canvas's right-click menu has the same builders under **Builders**, and the Do…
 bar opens them by name: "new 3d scene", "new grid rules", "new agent rules", "edit the rules"
 ([do-bar-commands.md](do-bar-commands.md), Builders). Code: `src/builders/` (registry, open,
 recipe, Do… bar phrases) and `src/components/builders/BuildersSection.tsx`.
