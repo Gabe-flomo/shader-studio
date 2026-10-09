@@ -302,6 +302,14 @@ float blBloomSum(float radius, float srcScale, float levels) {
   float s = 0.0;
   for (int k = 1; k <= ${BL_MAX_LEVELS}; k++) { if (float(k) > levels) break; s += blBloomW(radius, srcScale, float(k)); }
   return s;
+}
+float blBloomWt(float radius, float srcScale, float k, float tail) {
+  return blBloomW(radius, srcScale, k) * (1.0 + max(tail, 0.0) * (k - 1.0));
+}
+float blBloomSumT(float radius, float srcScale, float levels, float tail) {
+  float s = 0.0;
+  for (int k = 1; k <= ${BL_MAX_LEVELS}; k++) { if (float(k) > levels) break; s += blBloomWt(radius, srcScale, float(k), tail); }
+  return s;
 }`;
 
 /** blGlsl for the graph (GLSL ES 1.00 style): one string, so a program with several blur nodes declares it once. */

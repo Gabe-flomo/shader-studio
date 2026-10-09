@@ -1957,6 +1957,16 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     </button>
                   </>
                 )}
+                {/* The old Bloom reads last frame: offer the same-frame Pass → Glow (texture) setup. */}
+                {clickedNode?.type === 'bloom' && (
+                  <button style={ctxBtnStyle} title="Replace it with a Pass, a Glow (texture) Bloom chain and Add glow: same frame (no lag or smear), a soft core with a long tail; settings kept" onClick={() => {
+                    const id = clickedNode.id;
+                    setContextMenu(null);
+                    useNodeGraphStore.getState().upgradeBloom(id);
+                  }}>
+                    Upgrade to same-frame glow
+                  </button>
+                )}
                 {/* Pattern discovery (src/patterns): the techniques this node takes part in, in the Code Explorer. */}
                 {clickedNode && clickedNode.type !== 'output' && (
                   <button style={ctxBtnStyle} title="The multi-node techniques this node takes part in (a glow falloff, a domain warp…), and other graphs that use them"

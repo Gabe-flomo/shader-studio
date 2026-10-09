@@ -26,6 +26,7 @@ import { openGridRulesInGraph } from './gridRulesAsNodes';
 import { openNewSceneBuilder } from '../sceneBuilder/store';
 import { applyRecipe, LIGHT_SCENE_TYPES, placeNear, recipesFor } from '../nodes/recipes';
 import { convertMarchLoop, type MarchLoopType } from '../nodes/convertMarchLoop';
+import { upgradeBloom } from '../nodes/upgradeBloom';
 import { runDoPlan as runDoPlanPure, type DoPlan } from '../suggestions/doBar';
 import { execCommand, type CommandPlan } from '../suggestions/doCommands';
 import { applyMove, moveById, learnGraph, learnSaved, recordWireBetween, textSignature } from '../suggestions';
@@ -871,6 +872,8 @@ interface NodeGraphState {
   applyStarterRecipe: (nodeId: string, recipeId: string) => string[] | null;
   /** Turn a March Loop Group into a GI Lit March Group or back, in the level being edited (nodes/convertMarchLoop.ts). */
   convertMarchLoop: (nodeId: string, to: MarchLoopType) => boolean;
+  /** Turn an old Bloom (reads last frame) into Pass → Glow (texture) → Add glow, in the level being edited (nodes/upgradeBloom.ts). */
+  upgradeBloom: (nodeId: string) => boolean;
   /**
    * Apply suggestion move `moveId` (suggestions/moves.ts) on socket `key` of node `nodeId`, in the
    * level being edited: one undo step, a compile, a toast. Selects the move's result node.
@@ -3405,6 +3408,25 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     if (r.dropped) notes.push(`${r.dropped} wire${r.dropped === 1 ? '' : 's'} from GI-only outputs (AO, Shadow, GI, Diffuse, Reflection) came off.`);
     if (to === 'marchLoopGroup') notes.push('Light the scene (the sun button) adds lighting to it.');
     toast.info(`Switched to ${label}`, { message: `${notes.join(' ')} Settings, the loop body and the other wires are kept. Undo puts it back.` });
+    return true;
+  },
+
+  upgradeBloom: (nodeId) => {
+    const st = get();
+    const path = st.activeGroupPath;
+    const scope = path.length ? getActiveNodes(st.nodes, path) : st.nodes;
+    if (!scope) return false;
+    const r = upgradeBloom(scope, nodeId, () => idGenerator.next());
+    if (!r) {
+      toast.info('Nothing to upgrade', { message: 'Wire a picture into the Bloom\'s Color first.' });
+      return false;
+    }
+    undoManager.push(st.nodes, { label: 'Upgraded Bloom to same-frame glow', nodeIds: [nodeId] });
+    set({ nodes: path.length ? (setActiveNodes(st.nodes, path, r.nodes) ?? st.nodes) : r.nodes });
+    get().compile();
+    toast.info('Bloom upgraded: same frame, no lag', {
+      message: `A Pass, a Glow (texture) Bloom chain and Add glow replace it; Threshold, Intensity and Radius came across (Softness is Knee now), and Tail stretches the glow's falloff.${r.droppedWires ? ` ${r.droppedWires} wire${r.droppedWires === 1 ? '' : 's'} into Threshold or Intensity came off (the Glow has them as sliders).` : ''} Undo puts the old Bloom back.`,
+    });
     return true;
   },
 

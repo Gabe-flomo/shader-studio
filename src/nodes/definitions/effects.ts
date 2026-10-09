@@ -3,7 +3,7 @@ import { f, p, pv3, zeroFor } from './helpers';
 import { PALETTE_GLSL_FN } from './color';
 import { MARCH_STEP_REF_KEY, stepWeightGlsl } from '../../compiler/marchJitter';
 // Shared with the Play page's Finish stack (play/kit/finish.js), so both tone-map and mask the same way.
-import { FN_CRT_MASK_GLSL, FN_TONE_FUNCTIONS, FN_TONE_GLSL } from '../../play/kit/finishGlsl.js';
+import { FN_CRT_MASK_GLSL, FN_TONE_FUNCTIONS, FN_TONE_GLSL, FN_TONE_JODIE_GLSL } from '../../play/kit/finishGlsl.js';
 import { BL_BASE_GLSL, BL_PREV_GLSL } from '../../play/kit/blur.js';
 
 
@@ -34,7 +34,7 @@ export const ToneMapNode: NodeDefinition = {
   type: 'toneMap',
   label: 'Tone Map',
   category: 'Color Grading',
-  description: 'Apply tone mapping to a vec3 color. ACES, Hable, Unreal, Tanh, Reinhard2, Lottes, Uchimura, AgX, or OkLab: a roll-off on perceptual lightness that keeps hues where they are instead of drifting toward yellow or white.',
+  description: 'Apply tone mapping to a vec3 color. ACES, Hable, Unreal, Tanh, Reinhard2, Jodie Reinhard, Lottes, Uchimura, AgX, or OkLab: a roll-off on perceptual lightness that keeps hues where they are instead of drifting toward yellow or white.',
   inputs: {
     color: { type: 'vec3', label: 'Color' },
   },
@@ -52,6 +52,7 @@ export const ToneMapNode: NodeDefinition = {
         { value: 'tanh',       label: 'Tanh'       },
         { value: 'tanh2',      label: 'Tanh (squared)' },
         { value: 'reinhard2',  label: 'Reinhard2'  },
+        { value: 'jodie',      label: 'Jodie Reinhard (keeps highlight colour)' },
         { value: 'lottes',     label: 'Lottes'     },
         { value: 'uchimura',   label: 'Uchimura'   },
         { value: 'agx',        label: 'AgX'        },
@@ -62,9 +63,11 @@ export const ToneMapNode: NodeDefinition = {
     oklabHighlights: { label: 'Highlights', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'mode', value: 'oklab' }, hint: 'How much very bright colours lose chroma on the way to white. 0 keeps them fully saturated (and lets them clip), 1 fades them to white.' },
   },
   glslFunction: FN_TONE_GLSL,
+  glslFunctionsFor: node => (node.params.mode === 'jodie' ? [FN_TONE_JODIE_GLSL] : []),
   generateGLSL: (node: GraphNode, inputVars) => {
     const colorVar = inputVars.color ?? 'vec3(0.0)';
     const mode = (node.params.mode as string) ?? 'aces';
+    if (mode === 'jodie') return { code: `    vec3 ${node.id}_color = toneJodie(${colorVar});\n`, outputVars: { color: `${node.id}_color` } };
     const fnMap: Record<string, string> = FN_TONE_FUNCTIONS;
     const outVar = `${node.id}_color`;
     if (mode === 'oklab') {
@@ -1461,7 +1464,7 @@ export const BloomNode: NodeDefinition = {
   type: 'bloom',
   label: 'Bloom',
   category: 'Effects',
-  description: 'Real screen-space bloom, After Effects Deep Glow-style — a post effect on the FINAL rendered color (no SDF/distance value needed, just like Grain applies to the whole image regardless of source). Samples a wide disk of the previous frame with genuine inverse-square distance weighting (the same falloff shape as the original Deep Glow formula), giving a continuous tight-core-to-soft-edge falloff instead of a flat blurred smudge. Wire your final scene color + UV, generally right before Output.',
+  description: 'Real screen-space bloom, After Effects Deep Glow-style — a post effect on the FINAL rendered color (no SDF/distance value needed, just like Grain applies to the whole image regardless of source). Samples a wide disk of the previous frame with genuine inverse-square distance weighting (the same falloff shape as the original Deep Glow formula), giving a continuous tight-core-to-soft-edge falloff instead of a flat blurred smudge. Wire your final scene color + UV, generally right before Output. Because it reads the frame before, moving things lag and smear: right-click → Upgrade to same-frame glow swaps in a Pass and a Glow (texture) Bloom chain.',
   inputs: {
     color:     { type: 'vec3',  label: 'Color' },
     uv:        { type: 'vec2',  label: 'UV' },
