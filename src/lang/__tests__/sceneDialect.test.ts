@@ -122,7 +122,7 @@ function randomSpec(rng: Rng): SceneSpec {
     const sh = newShape(def.kind, `s${++ids}`);
     for (const p of def.params) {
       const r = sceneRand(p);
-      if (r.kind === 'num') sh.size[p.key] = r.int ? Math.round(rng.float(r.lo, r.hi)) : Math.round(rng.float(r.lo, r.hi) * 100) / 100;
+      if (r.kind === 'num') sh.size[p.key] = r.int ? Math.round(rng.float(r.lo, r.hi)) : Math.round(rng.float(r.lo, r.hi) * 100) / 100 + 0;
       else if (r.kind === 'vec') sh.size[p.key] = v3(r.lo, r.hi);
     }
     if (rng.chance(0.5)) sh.at = v3(-1, 1);
@@ -138,7 +138,7 @@ function randomSpec(rng: Rng): SceneSpec {
     const w = newWarp(def.kind, `w${++ids}`);
     for (const p of def.params) {
       const r = sceneRand(p);
-      if (r.kind === 'num') w.values[p.key] = r.int ? Math.round(rng.float(r.lo, r.hi)) : Math.round(rng.float(r.lo, r.hi) * 100) / 100;
+      if (r.kind === 'num') w.values[p.key] = r.int ? Math.round(rng.float(r.lo, r.hi)) : Math.round(rng.float(r.lo, r.hi) * 100) / 100 + 0;
       else if (r.kind === 'vec') w.values[p.key] = v3(r.lo, r.hi);
     }
     return w;
