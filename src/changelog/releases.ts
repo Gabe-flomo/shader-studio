@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.104',
+    date: '2026-10-08',
+    title: 'Repeat Scene combine',
+    highlights: [
+      { area: 'Studio', text: 'Repeat Scene can melt, carve or intersect its copies with the Not repeated scene (Combine + Blend), not just place them side by side.', link: { kind: 'doc', path: 'docs/repeat-scene.md' } },
+      { area: 'Studio', text: 'Repeat Cell has a Centre output, so copies can react to a point. New example: Repeat Scene: around a centrepiece.', link: { kind: 'example', key: 'repeatSceneCentrepiece' } },
+    ],
+  },
+  {
     id: '2026.10.103',
     date: '2026-10-08',
     title: 'Repeat Scene',
