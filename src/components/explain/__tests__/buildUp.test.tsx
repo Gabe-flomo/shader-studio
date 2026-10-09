@@ -212,6 +212,25 @@ describe('the view', () => {
     expect(document.activeElement).toBe(el.querySelector('[data-buildup]'));
   });
 
+  it('▶ on a line opens its picture right under that line, and ↑ / ↓ move it with the line', () => {
+    act(() => root.render(<ExprBlockModal node={blockOf()} onClose={() => {}} />));
+    expect(document.querySelectorAll('[data-line-preview]')).toHaveLength(0);
+    act(() => document.querySelector<HTMLButtonElement>('[data-probe=\'{"kind":"line","index":1}\']')!.click());
+    const panels = document.querySelectorAll('[data-line-preview]');
+    expect(panels).toHaveLength(1);
+    // After line 2's ▶ and before line 3's: under the line, not at the bottom of the list
+    const play2 = document.querySelector('[data-probe=\'{"kind":"line","index":1}\']')!;
+    const play3 = document.querySelector('[data-probe=\'{"kind":"line","index":2}\']')!;
+    expect(play2.compareDocumentPosition(panels[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(panels[0].compareDocumentPosition(play3) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // One ↓ steps once (only one panel listens), and the panel follows to line 3
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); });
+    expect(useLineProbe.getState().probe?.target).toEqual({ kind: 'line', index: 2 });
+    const moved = document.querySelectorAll('[data-line-preview]');
+    expect(moved).toHaveLength(1);
+    expect(play3.compareDocumentPosition(moved[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('▶ on a line in the Expression Block opens that line’s build-up', () => {
     act(() => root.render(<ExprBlockModal node={blockOf()} onClose={() => {}} />));
     const play = document.querySelector<HTMLButtonElement>('[data-probe=\'{"kind":"line","index":2}\']')!;
