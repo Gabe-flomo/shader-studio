@@ -25,6 +25,7 @@ import {
   DEFAULT_NEIGHBOURS, channelName, describeAction, kindOf, describeCondition, describeRule, neighbourReadOf, neighbourReads, rulePorts, sensedChannels,
   usesAction, usesDeposit, usesFade, usesFlow, usesStop,
 } from './spec';
+import { fieldLines, fieldName, normalizeFieldSpec } from './fields';
 
 type Wire = [string, string];
 type ExprType = 'float' | 'vec2' | 'vec3' | 'vec4';
@@ -77,6 +78,9 @@ export const ruleIds = (gid: string) => ({
   collide: `${gid}_ru_collide`, after: `${gid}_ru_after`,
   channel: (k: string) => `${gid}_ru_ch_${k}`, sense: (k: string) => `${gid}_ru_sense_${k}`, mask: (m: number) => `${gid}_ru_mask${m + 1}`,
   neighbours: (k: string) => `${gid}_ru_nb_${k}`,
+  /** Follow a field (species, rule, action: 1-based): its field's Expression Block, and a slope layer's Flow node. */
+  field: (sp: number, rule: number, j: number) => `${gid}_ru_fld${sp + 1}_${rule + 1}_${j}`,
+  slope: (sp: number, rule: number, j: number, layer: number) => `${gid}_ru_fld${sp + 1}_${rule + 1}_${j}_slope${layer}`,
   rule: (sp: number, i: number) => `${gid}_ru_r${sp + 1}_${i + 1}`,
 });
 
@@ -171,6 +175,46 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
       ].join('\n'),
     })));
   });
+
+  // ── Follow a field: one Expression Block per field (fields.ts), and a Flow node per slope layer ──
+  let fy = 40 + senses.length * ROW + 420 + neighbourReads(set).length * 640;
+  set.species.forEach((sp, s) => sp.rules.forEach((rule, ri) => {
+    if (rule.off) return;
+    rule.do.forEach((a, ai) => {
+      if (a.kind !== 'field') return;
+      const j = ai + 1;
+      const spec = normalizeFieldSpec(a.spec);
+      const f = fieldLines(spec, d3);
+      for (const li of f.slopes) {
+        const l = spec.layers[li - 1];
+        nodes.push(space(n('agentFlow', id.slope(s, ri, j, li), 420, fy, {
+          mode: l.around ? 'around' : 'slope', strength: l.flip ? 1 : -1, step: 0.01,
+          __comment: [
+            `Flow: layer ${li} of the field "${fieldName(spec)}": ${l.around ? 'round the contour lines of' : l.flip ? 'up the slope of' : 'down the slope of'} the field wired into the group's Field ƒ socket (a picture's brightness, a shape's distance: any chain of nodes).`,
+            'Its Force is the layer\'s velocity; the field block beside it weights, turns and masks it.',
+          ].join('\n'),
+        }, { field: IN('field') })));
+        fy += 420;
+      }
+      const block1 = block(id.field(s, ri, j), 840, fy, {
+        label: `Field: ${fieldName(spec)}`,
+        inputs: [{ name: 'pos', type: P, from: IN('position') }, ...f.slopes.map(li => ({ name: `slope${li}`, type: P, from: [id.slope(s, ri, j, li), 'force'] as Wire }))],
+        lines: f.lines.map(l => ({ lhs: l.lhs, op: l.op, rhs: l.rhs })),
+        result: f.result, outputType: P, exposed: [],
+        note: [
+          `Field (an Expression Block, made by the Agent Builder's Follow a field card): the velocity of "${fieldName(spec)}" where the walker stands${d3 ? ' (the known fields lie in the picture\'s plane; your own can push in z)' : ''}. Rule ${ri + 1}${many ? ` of the ${sp.name}` : ''} pushes the walker along it.`,
+          'pos: where the walker is (Agent Inputs\' Position).',
+          ...f.lines.filter(l => l.why).map(l => l.why!),
+          `result: ${f.result}, picture units a second.`,
+          'Its layers are kept on this node (fieldSpec), so the card reads them back.',
+        ],
+      });
+      block1.params.fieldSpec = spec;
+      block1.params.fieldOf = { species: s, rule: ri, action: ai, strength: a.strength, ...(a.grip ? { grip: a.grip } : {}) };
+      nodes.push(block1);
+      fy += 640;
+    });
+  }));
 
   // ── Start: the values the rules carry ──
   const dep = usesDeposit(set), die = usesAction(set, 'die'), stop = usesStop(set), fade = usesFade(set), particlesKind = kindOf(set) === 'particles';
@@ -359,6 +403,7 @@ function ruleBlock(set: AgentRuleSet, rule: AgentRule, s: number, ri: number, c:
     extra[hereVar(ch)] = { type: 'float', from: [c.id.sense(ch), 'here'] };
   }
   set.masks.forEach((m, i) => { extra[`mask${i + 1}`] = m.kind === 'texture' ? { type: 'vec3', from: [c.id.mask(i), 'color'] } : { type: 'float', from: c.IN(`mask${i + 1}`) }; });
+  rule.do.forEach((a, ai) => { if (a.kind === 'field') extra[`fld${ai + 1}`] = { type: c.P, from: [c.id.field(s, ri, ai + 1), 'result'] }; });
   for (const [name, e] of Object.entries(extra)) if (reads.has(name)) inputs.push({ name, ...e });
 
   const exposed = order.filter(v => modified.has(v)).map(v => ({ name: v, type: c.chain[v] }));
@@ -378,7 +423,7 @@ function ruleBlock(set: AgentRuleSet, rule: AgentRule, s: number, ri: number, c:
 }
 
 const READS: Record<string, string> = {
-  sp: 'its species, 0–3', age: 'seconds since it was born', pos: 'where it is', flow: 'the curl-noise flow at the walker',
+  sp: 'its species, 0–3', age: 'seconds since it was born', pos: 'where it is', flow: 'the curl-noise flow at the walker', 'fld#': 'the field\'s velocity at the walker (the Field block beside it)',
   crowd: 'the trail\'s four channels where it stands (Sense\'s Channels here): with a velocity Deposit, the crowd\'s flow and count',
   smell: 'Sense\'s readings: x left, y ahead, z right', here: 'the trail where it stands', 'mask#': 'the mask where it stands',
   nbCount: 'how many walkers are within reach (a Neighbours node\'s Count)', nbCentre: 'where their middle is (Neighbours\' Centre)',
@@ -612,6 +657,17 @@ function actionLines(set: AgentRuleSet, a: RuleAction, s: number, ri: number, j:
       add(`${P} vel${j}`, '=', `${d3 ? 'h' : 'vec2(cos(h), sin(h))'} * spd + go * ${force} * a_dt`, `vel${j}: its velocity (heading × speed) after ${why} for one step (a_dt, 1/60 s).`);
       add('spd', '=', `length(vel${j})`, `spd: the speed, the velocity's length (${say}).`, 'spd');
       add('h', '=', d3 ? `spd > 1e-6 ? vel${j} / spd : h` : `spd > 1e-6 ? atan(vel${j}.y, vel${j}.x) : h`, `h: the heading, the velocity's direction (kept when it stands still).`, 'h');
+      return;
+    }
+    case 'field': {
+      read('h'); read('spd');
+      const fld = read(`fld${j}`);
+      const S = glf(a.strength);
+      add(`${c.P} vel${j}`, '=', `${d3 ? 'h' : 'vec2(cos(h), sin(h))'} * spd`, `vel${j}: its velocity now (heading × speed).`);
+      if (a.grip && a.grip > 0) add(`vel${j}`, '=', `mix(vel${j}, ${fld} * ${S}, go * (1.0 - exp(-${glf(a.grip)} * a_dt)))`, `vel${j}: eased toward the field's velocity × ${a.strength} (fld${j}, the Field block's), at ${a.grip} a second (1 − e^(−grip·dt) a step: the same at any frame rate): it rides the field.`);
+      else add(`vel${j}`, '+=', `go * ${S} * ${fld} * a_dt`, `vel${j}: pushed by the field × ${a.strength} (fld${j}, the Field block's velocity, as a force) for one step (a_dt, 1/60 s).`);
+      add('spd', '=', `length(vel${j})`, `spd: the speed, the velocity's length (${say}).`, 'spd');
+      add('h', '=', d3 ? `spd > 1e-6 ? vel${j} / spd : h` : `spd > 1e-6 ? atan(vel${j}.y, vel${j}.x) : h`, 'h: the heading, the velocity\'s direction (kept when it stands still).', 'h');
       return;
     }
     case 'drag':

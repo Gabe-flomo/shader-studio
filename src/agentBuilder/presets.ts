@@ -82,6 +82,14 @@ export const PARTICLE_PRESETS: readonly BuilderPreset[] = [
       always({ kind: 'drag', amount: 2 }, { kind: 'force', field: 'gravity', strength: 0.4, angle: -90 }, { kind: 'fade', seconds: 1.5 }),
       { when: [{ kind: 'age', cmp: '>', seconds: 1.5 }], do: [{ kind: 'die' }] },
     ])] }) },
+  { key: 'whirlpool', label: 'Whirlpool', hint: 'Follow a field: a vortex plus curl noise × 0.5 inside a circle, ridden; they fade over 6 s.', dots: [{ shape: 'screen', x: 0, y: 0, size: 1, heading: 'random', speed: 0.1, life: 6 }],
+    set: () => base({ kind: 'particles', edges: 'wrap', species: [kindOne('Water', 0.1, [0.4, 0.85, 1], [
+      always({ kind: 'field', strength: 1, grip: 3, spec: { layers: [
+        { kind: 'vortex', weight: 0.6, size: 0.35, x: 0, y: 0 },
+        { kind: 'curl', weight: 0.3, size: 0.25, mask: { shape: 'circle', x: 0, y: 0, size: 0.7 }, animate: { mode: 'drift', speed: 0.08, angle: 30 } },
+      ] } }, { kind: 'fade', seconds: 6 }),
+      { when: [{ kind: 'age', cmp: '>', seconds: 6 }], do: [{ kind: 'die' }] },
+    ])] }) },
 ];
 
 const birds = (name: string, rules: RuleAction[], speed = 0.4): Sp => kindOne(name, speed, [0.75, 0.9, 1], [always(...rules)]);

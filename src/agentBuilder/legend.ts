@@ -19,6 +19,7 @@ import type { CardRead } from './behaviours';
 import type { TrailCards } from './cards';
 import type { DiagramFocus } from './diagram';
 import { CARD_WORDS } from './sections';
+import { type FieldLayer, type FieldSpec, FIELD_KINDS, normalizeFieldSpec, ownParts } from '../agentRules/fields';
 
 type Act<K extends RuleAction['kind']> = Extract<RuleAction, { kind: K }>;
 
@@ -167,6 +168,46 @@ export const phrase = {
     if (!on) return `Trail off: ${n.many} leave nothing behind.`;
     return `Trail ${num(amount, 2)} a step: it leaves ${num(amount, 2)} where it walks; half of it is gone in ${num(halfLife, 3)} s, and ${pct(diffuse)} spreads to the pixels round it each step.`;
   },
+  /**
+   * One layer of a field: "Vortex at the centre, strength 0.6: particles circle anticlockwise,
+   * faster near the middle." Then what is done to it: turned, only inside a shape, drifting.
+   */
+  fieldLayer(n: Noun, l: FieldLayer): string {
+    const w = Math.abs(l.weight), back = l.weight < 0;
+    const at = (l.x ?? 0) === 0 && (l.y ?? 0) === 0 ? 'at the centre' : `at ${where(l.x ?? 0, l.y ?? 0)}`;
+    const s = num(l.size ?? FIELD_KINDS[l.kind].defaults.size ?? 0, 2);
+    const way = (cw: boolean) => ((cw !== back) ? 'clockwise' : 'anticlockwise');
+    const dir = (deg: number) => directionWords(back ? deg + 180 : deg).to;
+    let head: string;
+    if (w < 1e-6) head = `${FIELD_KINDS[l.kind].label} × 0: it adds nothing.`;
+    else switch (l.kind) {
+      case 'curl': head = `Curl noise, eddies ${s} across, strength ${num(w, 2)}: ${n.many} ride swirling eddies that never bunch them up.`; break;
+      case 'vortex': head = `Vortex ${at}, strength ${num(w, 2)}: ${n.many} circle ${way(!!l.flip)}, faster near the middle (fastest ${s} out).`; break;
+      case 'source': head = (!!l.flip !== back)
+        ? `Sink ${at}, strength ${num(w, 2)}: ${n.many} stream in to it and gather there.`
+        : `Source ${at}, strength ${num(w, 2)}: ${n.many} stream out from it, fastest ${s} out, slower further away.`; break;
+      case 'saddle': head = `Saddle ${at}, strength ${num(w, 2)}: ${n.many} come in from ${dir((l.angle ?? 0) + 90)} and ${dir((l.angle ?? 0) - 90)} and leave to the ${dir(l.angle ?? 0)} and ${dir((l.angle ?? 0) + 180)}.`; break;
+      case 'dipole': head = `Dipole ${at}, strength ${num(w, 2)}: ${n.many} pour out of one pole and into the other, ${s} each side, flowing ${dir((l.angle ?? 0) + (l.flip ? 180 : 0))} between them.`; break;
+      case 'waves': head = `Waves ${s} long, strength ${num(w, 2)}: ${n.many} flow ${dir((l.angle ?? 0) + (l.flip ? 180 : 0))}, weaving from side to side.`; break;
+      case 'wind': head = `Uniform wind, strength ${num(w, 2)}, blowing ${dir(l.angle ?? 0)}: every ${n.one} is pushed the same way everywhere.`; break;
+      case 'spiral': head = `Spiral ${at}, strength ${num(w, 2)}: ${n.many} circle ${way(!!l.flip)} and drain into the middle.`; break;
+      case 'shear': head = `Shear ${at}, band ${s}, strength ${num(w, 2)}: ${n.many} on one side of the line flow ${dir((l.angle ?? 0) + (l.flip ? 180 : 0))}, on the other ${dir((l.angle ?? 0) + (l.flip ? 0 : 180))}.`; break;
+      case 'slope': head = `Slope of the graph's field (Field ƒ), strength ${num(w, 2)}: ${n.many} flow ${l.around ? 'round its contour lines' : (!!l.flip !== back) ? 'uphill, toward its high places' : 'downhill, toward its low places'}.`; break;
+      case 'own': head = ownParts(l, true).some(p => !p.check.ok) ? `Your own field: not running yet; fix ${ownParts(l, true).filter(p => !p.check.ok).map(p => p.key).join(' and ')} in its card.` : `Your own field, × ${num(l.weight, 2)}: vx = ${l.vx ?? ''}, vy = ${l.vy ?? ''}${l.vz && l.vz.trim() !== '0.0' ? `, vz = ${l.vz}` : ''}.`; break;
+    }
+    const extra: string[] = [];
+    if (l.rotate) extra.push(`turned ${num(l.rotate, 1)}°`);
+    if (l.mask) extra.push(`only ${l.mask.outside ? 'outside' : 'inside'} a ${l.mask.shape} ${l.mask.shape === 'circle' ? 'radius' : 'half-width'} ${num(l.mask.size, 2)} round ${where(l.mask.x, l.mask.y)}`);
+    if (l.animate?.speed) extra.push(l.animate.mode === 'spin' ? `turning ${num(l.animate.speed, 1)}° a second` : `drifting ${directionWords(l.animate.angle ?? 0).to} at ${num(l.animate.speed, 2)} a second`);
+    if (l.off) extra.push('switched off');
+    return extra.length ? `${head.replace(/\.$/, '')}; ${extra.join(', ')}.` : head;
+  },
+  /** How the card uses its field: ridden or as a force. */
+  fieldHow(n: Noun, strength: number, grip: number | undefined): string {
+    return grip && grip > 0
+      ? `Each ${n.one} rides the field × ${num(strength, 2)}: its velocity eases toward the field's, at ${num(grip, 2)} a second.`
+      : `The field × ${num(strength, 2)} is a force: each ${n.one}'s velocity changes by it every second.`;
+  },
   born(n: Noun, shape: string, size: number, count: string): string {
     const many = count.toUpperCase().replace('K', 'k');
     const at = shape === 'screen' ? 'all over the picture' : shape === 'point' ? 'at one point'
@@ -197,7 +238,9 @@ export type DemoSpec =
   | { kind: 'speed'; speed: number }
   | { kind: 'edges'; edges: 'wrap' | 'bounce' | 'slide' }
   | { kind: 'trail'; amount: number; halfLife: number; diffuse: number }
-  | { kind: 'born'; shape: string };
+  | { kind: 'born'; shape: string }
+  /** Follow a field: the field in motion, particles riding it (`layer`: only that layer, else all). */
+  | { kind: 'field'; spec: FieldSpec; strength: number; grip?: number; layer?: number };
 
 export interface LegendEntry {
   /** A card's key (`gravity#0`), or a fixed id (`senses`, `turn`, `view`, `max`, `sum`, `born`…). */
@@ -223,7 +266,7 @@ export const LEGEND_COLOURS = {
   gravity: '#ff9a6b', wind: '#8fd3ff', curl: '#b79cff', attract: '#ffd166', drag: '#6fd6c4', sum: '#ffffff',
   fade: '#ffd166', die: '#ff7a7a', lives: '#6fd6c4',
   separate: '#ff9a6b', match: '#57b6ff', cohere: '#7ad38a', avoidEdges: '#8aa8ff', goal: '#e8a33a', slow: '#d58cff', wobble: '#d6d6e0',
-  view: '#7f9cff', max: '#ffffff', orbit: '#b79cff',
+  view: '#7f9cff', max: '#ffffff', orbit: '#b79cff', field: '#7ee0ff',
   senses: '#7f9cff', turn: '#ffd166', speed: '#6fd6c4', edges: '#8aa8ff', trail: '#e8a33a', born: '#7f9cff',
 } as const;
 
@@ -304,6 +347,7 @@ export function legendEntries(inp: LegendInput): LegendEntry[] {
           line: phrase.attract(n, a.strength, t, a.x ?? 0, a.y ?? 0), settings: ['strength', 'target', 'x', 'y'],
           demo: { kind: 'attract', strength: a.strength, x: t === 'mouse' ? 0 : a.x ?? 0, y: t === 'mouse' ? 0 : a.y ?? 0 } };
       }
+      case 'field': return null;
       case 'drag': return { ...base, title: 'Drag', colour: LEGEND_COLOURS.drag, numbers: `${num(a.amount, 2)} · keeps ${pct(Math.exp(-Math.max(0, a.amount)))}`,
         line: phrase.drag(n, a.amount), settings: ['drag'], demo: { kind: 'drag', amount: Math.max(0, a.amount) } };
       case 'fade': return { ...base, title: 'Fade with age', colour: LEGEND_COLOURS.fade, numbers: `${num(a.seconds, 2)} s`, line: phrase.fade(n, a.seconds), settings: ['fade'],
@@ -330,7 +374,7 @@ export function legendEntries(inp: LegendInput): LegendEntry[] {
       default: return null;
     }
   };
-  const of = (ids: string[]) => ids.flatMap(id => cards.filter(c => c.card === id)).map(card).filter((e): e is LegendEntry => !!e);
+  const of = (ids: string[]) => ids.flatMap(id => cards.filter(c => c.card === id)).flatMap(c => (c.action.kind === 'field' ? fieldEntries(c, n) : [card(c)])).filter((e): e is LegendEntry => !!e);
   const viewEntries = (): LegendEntry[] => [
     { id: 'view', title: 'View radius', colour: LEGEND_COLOURS.view, numbers: num(radius, 3), line: phrase.view(n, radius), on: true, settings: ['radius'], el: 'view', demo: { kind: 'view', radius, max } },
     { id: 'max', title: 'Max neighbours', colour: LEGEND_COLOURS.max, numbers: num(max, 0), line: phrase.max(n, max), on: true, settings: ['max'], el: 'view', demo: { kind: 'view', radius, max } },
@@ -338,7 +382,7 @@ export function legendEntries(inp: LegendInput): LegendEntry[] {
   const t = inp.trail;
   switch (section) {
     case 'forces': {
-      out.push(...of(['curl', 'gravity', 'wind', 'attract', 'drag']));
+      out.push(...of(['curl', 'field', 'gravity', 'wind', 'attract', 'drag']));
       const sum = forceSum(cards);
       if (sum.strength > 1e-3) {
         const forces = cards.filter(c => c.on && c.action.kind === 'force').map(c => { const a = c.action as Act<'force'>; return { field: a.field, strength: a.strength, angle: a.angle, x: a.x, y: a.y }; });
@@ -400,6 +444,23 @@ export function legendEntries(inp: LegendInput): LegendEntry[] {
   }
   return out;
 }
+
+/** A Follow a field card's entries: one per layer, its colour, numbers and line, its demo the field with only that layer. */
+export function fieldEntries(c: CardRead, n: Noun): LegendEntry[] {
+  const a = c.action as Act<'field'>;
+  const spec = normalizeFieldSpec(a.spec);
+  const how = phrase.fieldHow(n, a.strength, a.grip);
+  return spec.layers.map((l, k) => ({
+    id: `${c.key}:L${k}`, card: c.key, el: c.key, on: c.on && !l.off,
+    title: FIELD_KINDS[l.kind].label, colour: FIELD_COLOURS[k % FIELD_COLOURS.length],
+    numbers: `× ${num(l.weight, 2)}${l.mask ? ` · ${l.mask.outside ? 'outside' : 'inside'} ${l.mask.shape}` : ''}${l.animate?.speed ? ` · ${l.animate.mode}` : ''}`,
+    line: `${phrase.fieldLayer(n, l)}${k === 0 ? ` ${how}` : ''}`,
+    settings: [`layer${k}`],
+    demo: { kind: 'field', spec, strength: a.strength, ...(a.grip ? { grip: a.grip } : {}), layer: k },
+  }));
+}
+/** Each field layer's colour (its legend dot, tag and lit arrows). */
+export const FIELD_COLOURS = ['#7ee0ff', '#b79cff', '#ffd166', '#7ad38a', '#ff9a6b', '#ff8fc8'];
 
 /**
  * The legend entry for what the pointer is on in the inspector (a card, a setting): the reverse of
@@ -501,6 +562,7 @@ const MORE: Record<string, string> = {
   speed: 'How far it moves each second; one step is a sixtieth of it. For trail followers the steps to reach the feelers matter: about 9 to 1 gives the classic slime network.',
   edges: 'What happens at the picture\'s edge: wrap (out one side, in the other: no edge at all), bounce (turn back) or slide (run along it).',
   trail: 'Each step every walker adds to the trail where it stands; the trail keeps a share of itself (set by the half-life) and blurs a little into its neighbours. The walkers smell what they and the others left: many small rules, one big pattern.',
+  field: 'A field gives every point of the picture a velocity. Layers add up, each with its weight; a mask keeps one to a shape, and Animate lets it drift or spin. Ride (grip) makes particles take on the field\'s velocity, so they trace its streamlines; Push makes it a force, so they overshoot and swing like real matter. The arrows on the picture are the very field the GPU runs.',
   born: 'Every group has a fixed number of walkers. They are born inside the shape, facing the way you pick, all at once or as a stream.',
 };
 
@@ -509,6 +571,7 @@ export const behaviourOf = (e: Pick<LegendEntry, 'id' | 'demo'>): string => {
   const k = e.id.split('#')[0];
   if (k === 'wobble') return 'wander';
   if (k === 'attract') return 'attract';
+  if (e.demo.kind === 'field') return 'field';
   return k;
 };
 

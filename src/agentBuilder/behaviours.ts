@@ -19,12 +19,13 @@ import {
   type AgentRule, type AgentRuleSet, type AgentSpeciesRules, type RuleAction, type RuleCondition,
   MAX_SPECIES, describeRule,
 } from '../agentRules/spec';
+import { DEFAULT_FIELD } from '../agentRules/fields';
 
 export type CardId =
   // Trail followers
   | 'senses' | 'wobble' | 'trail'
   // Particles
-  | 'gravity' | 'wind' | 'curl' | 'attract' | 'drag' | 'fade' | 'die'
+  | 'gravity' | 'wind' | 'curl' | 'field' | 'attract' | 'drag' | 'fade' | 'die'
   // Flocks, crowds and orbiters
   | 'separate' | 'match' | 'cohere' | 'avoidEdges' | 'goal' | 'slow' | 'orbit';
 
@@ -51,6 +52,7 @@ export const CARD_DEFS: Record<CardId, CardDef> = {
   gravity: { id: 'gravity', multi: true, match: force(['gravity']), make: () => ({ kind: 'force', field: 'gravity', strength: 0.5, angle: -90 }) },
   wind: { id: 'wind', multi: true, match: force(['wind']), make: () => ({ kind: 'force', field: 'wind', strength: 0.3, angle: 0 }) },
   curl: { id: 'curl', multi: true, match: force(['curl']), make: () => ({ kind: 'force', field: 'curl', strength: 0.6 }) },
+  field: { id: 'field', multi: true, match: is('field'), make: () => ({ kind: 'field', strength: 1, grip: 3, spec: DEFAULT_FIELD() }) },
   attract: { id: 'attract', multi: true, match: force(['point', 'mouse']), make: () => ({ kind: 'force', field: 'point', strength: 0.6, x: 0, y: 0 }) },
   drag: { id: 'drag', match: is('drag'), make: () => ({ kind: 'drag', amount: 0.5 }) },
   fade: { id: 'fade', match: is('fade'), make: () => ({ kind: 'fade', seconds: 3 }) },

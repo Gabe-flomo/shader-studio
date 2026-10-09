@@ -109,6 +109,7 @@ Advanced rules is added under them when a kind has rules the cards can't show.
   - Wind: Strength, Direction, in gusts.
   - Curl flow: Strength, Eddies; More: Changes.
   - Attract / repel: Pull (negative pushes), toward A point or The mouse, Across, Up.
+  - Follow a field: a vector field you pick, combine or write (below).
   - Drag.
 
   They run in order: drag the handle to reorder.
@@ -245,11 +246,74 @@ Clicking a legend entry or a tag focuses that behaviour:
 
 The demos are a few CPU walkers simulated once per change of value (30 steps a second over their loop) and drawn on a 320 × 200 canvas each animation frame, only while a focus view is open: nothing is scheduled otherwise (tested). The legend and the tags are plain React from memoised entries; the tag layout is a few rectangle tests.
 
+## Follow a field
+
+The user asked (2026-10-09) for a field builder for curl-like forces: known fields to pick from, a way to write your own, and the field shown in motion. **Follow a field** is a Forces card (particles). Several can be there.
+
+### The card
+
+- **Strength:** the field's velocity times this.
+- **How it moves them:**
+  - **Ride it** (the default): the velocity eases toward strength × the field at **Grip** a second (1 − e^(−grip·dt) a step), so particles trace the field's lines;
+  - **Push (a force):** strength × the field is added to the velocity as a force, so they overshoot and swing.
+- **Layers**, which add up. Each has a weight (negative turns it round), an on / off switch, its own sliders, and a folded **Turn, mask, animate**:
+  - **Turn its flow:** every arrow turned by so many degrees (a vortex turned 60° spirals in);
+  - **Where:** everywhere, only inside or only outside a circle or a box (with a soft edge);
+  - **Animate:** still, drift (the layer slides along a direction, wrapping round the picture), or spin (it turns round its centre, degrees a second).
+- **Add a layer** opens the gallery, eleven moving tiles (a few particles riding each field):
+
+| Layer | Sliders | Which way |
+|---|---|---|
+| Curl noise | Eddy size | |
+| Vortex | Core, Across, Up | ↺ / ↻ |
+| Source / sink | Core, Across, Up | out / in |
+| Saddle | Scale, Across, Up, Direction | |
+| Dipole | Spread, Across, Up, Direction | left → right / right → left |
+| Waves | Wavelength, Direction | |
+| Uniform wind | Direction | |
+| Spiral (vortex + sink) | Core, Across, Up | ↺ / ↻ |
+| Shear | Band, Across, Up, Direction | |
+| Slope of a picture | Along the slope / round its contours | downhill / uphill |
+| Your own | vx, vy (and vz in 3D) | |
+
+**Your own** is `vx = …` and `vy = …` (and `vz` in 3D), in x, y (from the layer's centre, picture units), t (seconds) and z (3D), with PI and TAU. Each part is checked as you type, as the GPU will check it (`agentRules/fields.ts checkOwn`, glslPatterns' parse and typecheck): it must parse, use only those names and the GLSL built-ins (sin, cos, length, atan, mix…), and be one float with no ints (`x * 2` is an error: "write 2.0, not 2"). The error shows under the box. A part that doesn't check leaves its layer out of the shader; the rest runs. Six examples insert in one click (Whirlpool, Drain, Ripples, Four eddies, Rings, Pulse).
+
+**Slope of a picture** reads the group's new **Field ƒ** socket (it appears when a slope layer is on): wire a picture's brightness, a shape's distance, any chain of nodes. Its layer is a Flow node inside (Slope or Around mode). It can't be drawn on the CPU, so the overlay leaves it out, and its legend line says so.
+
+### How it becomes nodes
+
+The card is one rule action, `{ kind: 'field', strength, grip?, spec: { layers } }` (`agentRules/spec.ts`), so the rule set stays the one source of truth and the cards read back from it. `generate.ts` makes:
+
+- **one Expression Block per field**, `Field: vortex + curl noise × 0.5, inside a circle`. It reads the walker's position (`pos`, from Agent Inputs) and returns the field's velocity (vec2, or `vec3(f, fz)` in 3D). Its lines are the layers, written by `fieldLines` (one variable per layer: centre, local point, frame, velocity, mask, `f +=` weight × velocity), each line explained in the node's note. It keeps the layers on its params (`fieldSpec`, with `fieldOf`: which rule, strength and grip), so Open as nodes keeps them;
+- **one Flow node per slope layer**, its Field ƒ wired to the group's Field ƒ socket, its Force wired into the Field block;
+- in the **rule's own block**, the push or the ride: `vel = heading × speed`, then `vel = mix(vel, fld × strength, go × (1 − e^(−grip·dt)))` (ride) or `vel += go × strength × fld × dt` (push), and the speed and heading from `vel`, as the Gravity force does.
+
+Why this mapping: the rule blocks already integrate forces (Gravity, Curl, Attract are lines in the rule's block, Curl noise a node beside it). A field is the same shape, a vector at the walker, so it needs no new force node: the Expression Block is the field (readable, editable after Open as nodes) and the rule block is the force. Flow with a vector input or Gravity's Direction wired would have needed a new socket and would push only as a force, not ride.
+
+**One source of truth for the maths:** the CPU never re-implements a field. `fieldFunction` parses the same `fieldLines` with glslPatterns and runs them (compiled once per field, cached), so the arrows, the focus demo, the gallery tiles, the preset thumbnails (dotSim) and the GPU agree. A test runs the generated shader on the CPU (cpuSim, through the nodes' own GLSL) and checks the velocity equals `fieldFunction`'s.
+
+**Curl noise** here is the curl of four crossing sine waves of a stream function (not the Curl noise node's gradient noise): exactly divergence-free, the same on the CPU and the GPU, eddies about Eddy size across. The Curl flow card is unchanged.
+
+**3D:** the known fields lie in the picture's plane (vz 0); your own can push in z.
+
+**Text:** in the agents language a field is `field 1 grip=3 layers="{'layers':[…]}"` (JSON with ' for "), so the rules editor's text view round-trips it. The rules editor shows a field action as "follow a field (vortex + …) × 1, riding it", with Strength and Ride / Push; the layers are edited in the builder.
+
+### On the picture
+
+- The Forces diagram draws the field as arrows over the picture (18 across, at time 0, brightness by speed), the masks as dashed circles or boxes, each centred layer's centre as a dot, and a tag `×weight` per layer. The arrows are cached per field and picture size.
+- **The legend has one entry per layer**, in its colour: "Vortex at the centre, strength 0.6: particles circle anticlockwise, faster near the middle (fastest 0.35 out). Each particle rides the field × 1: its velocity eases toward the field's, at 3 a second." Masks, turns, drift and spin are added to the line ("…; only inside a circle radius 0.7 round (0, 0), drifting up and to the right at 0.08 a second."). An own layer that doesn't check says "not running yet; fix vx in its card".
+- Hovering an entry (or its tag, or its row in the card) draws **that layer alone**, the others' marks faded.
+- **Focus** plays the field in motion: its arrows at the demo's clock (a drifting or spinning layer moves, the dashes march), its masks, and fourteen particles riding the whole field the way the card does (ride or push).
+
+### Preset
+
+**Whirlpool** (particles): a vortex plus curl noise × 0.5 inside a circle, drifting, ridden; they fade over 6 s.
+
 ## Presets
 
 Each kind has its own strip:
 
-- Particles: Spark fountain, Smoke, Snow, Drain, Burst.
+- Particles: Spark fountain, Smoke, Snow, Drain, Burst, Whirlpool.
 - Flocks: Boids, Glassy streams, Bait balls, Gnats, Murmuration.
 - Crowds: Two-way lanes, One door, Crossing.
 - Orbiters: Swarm, Two arms, Tight ring, Opposite ways, Moths.
@@ -317,6 +381,7 @@ On the picture a walker is placed as Draw agents places it: in 2D at (x ÷ aspec
 - `src/components/builders/studio/`: `StudioShell.tsx`, `LiveViewport.tsx`.
 - Under the hood: `src/agentBuilder/hood.ts` (channels, maps, highlights, texel ↔ walker ↔ picture), `src/components/agentBuilder/HoodView.tsx` (the panel, the ring and the card), `hoodStore.ts`, `src/lib/agentHood.ts` (requests), `src/lib/agentHoodGpu.ts` (thumbnails, one walker's read, picking), `AgentRunner.stateView` / `drawHood`.
 - Legend, tags and focus: `src/agentBuilder/legend.ts` (the phrases, the entries, linking, the tag layout, the focus words), `src/agentBuilder/demos.ts` (the focus demos), `src/components/agentBuilder/ViewportLegend.tsx` (the legend, the tags, the demo panel).
+- Follow a field: `src/agentRules/fields.ts` (the layers, their GLSL lines, the CPU function, own-expression checks, text), `generate.ts` (the Field block, slope Flow nodes, the rule's push or ride), `src/components/agentBuilder/FieldCard.tsx` (the card, the layers, the gallery tiles, your own), `KindDiagram.tsx` (the arrows), `legend.ts` (`fieldEntries`, `phrase.fieldLayer`), `demos.ts` (the `field` demo).
 - `src/components/agentBuilder/`: `AgentBuilder.tsx`, `BehaviourCard.tsx`, `SectionCards.tsx`, `OnlyWhenLine.tsx`, `KindChips.tsx`, `SpeciesSpotlight.tsx`, `WalkerDiagram.tsx`, `KindDiagram.tsx`, `pictures.tsx`, `presetThumbs.ts`, `useLensRef.ts`, `useRuleSetEditing.ts`. They are loaded lazily by `BuilderWindowsHost`.
 - `src/lib/previewMirror.ts`.
 - The window state: `builders/windows.ts` (`agentBuilder`).

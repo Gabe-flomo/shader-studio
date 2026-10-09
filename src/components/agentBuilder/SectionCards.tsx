@@ -18,6 +18,8 @@ import { CARD_WORDS, MORE_HINTS, type SectionDef } from '../../agentBuilder/sect
 import { setFlow } from '../../agentBuilder/cards';
 import { BehaviourCard, SettingRow, SliderSetting, type CardPicture } from './BehaviourCard';
 import { OnlyWhenLine } from './OnlyWhenLine';
+import { FieldSettings } from './FieldCard';
+import { fieldName } from '../../agentRules/fields';
 
 type Act<K extends RuleAction['kind']> = Extract<RuleAction, { kind: K }>;
 const n = (v: number, d = 2) => String(Math.round(v * 10 ** d) / 10 ** d);
@@ -31,6 +33,7 @@ export function cardSummary(c: CardRead): string {
       if (a.field === 'curl') return `strength ${n(a.strength)}`;
       return `${a.strength < 0 ? 'pushes away' : 'pulls in'} ${n(Math.abs(a.strength))} · ${a.field === 'mouse' ? 'the mouse' : `(${n(a.x ?? 0)}, ${n(a.y ?? 0)})`}`;
     }
+    case 'field': return `${fieldName(a.spec)} · ${a.grip ? 'rides it' : 'a force'}`;
     case 'drag': return `loses ${n(a.amount)} a second`;
     case 'fade': return `black after ${n(a.seconds, 1)} s`;
     case 'die': return c.when?.kind === 'age' && c.when.cmp === '>' ? `at ${n(c.when.seconds)} s old` : c.when ? 'when its only when holds' : 'at once (give it an only when)';
@@ -44,7 +47,7 @@ export function cardSummary(c: CardRead): string {
   }
 }
 
-export function SectionCards({ section, all, set, sp, update, focusCard, hotCard, onFocusSetting, intro, cardsFor, only }: {
+export function SectionCards({ section, all, set, sp, update, focusCard, hotCard, onFocusSetting, intro, cardsFor, only, d3 = false }: {
   section: SectionDef;
   /** Every card of the kind (reading order). */
   all: readonly CardRead[];
@@ -59,6 +62,8 @@ export function SectionCards({ section, all, set, sp, update, focusCard, hotCard
   cardsFor: readonly CardId[];
   /** Focus: show only this card (its key), without the intro, the + chips and the order hint. */
   only?: string;
+  /** A 3D group (Follow a field's own layers have a vz). */
+  d3?: boolean;
 }) {
   const tk = useTokens();
   const cards = all.filter(c => section.cards.includes(c.card));
@@ -98,7 +103,7 @@ export function SectionCards({ section, all, set, sp, update, focusCard, hotCard
               onlyWhen={<OnlyWhenLine id={c.key} set={set} sp={sp} when={c.when} onFocus={s => { focusCard(c.key); onFocusSetting(s); }}
                 onChange={w => update(setOnlyWhen(set, sp, c.at, w))} />}
               more={moreSettings(c, set, sp, update, onFocusSetting)}>
-              <CardSettings c={c} set={set} sp={sp} update={update} onFocus={onFocusSetting} />
+              <CardSettings c={c} set={set} sp={sp} update={update} onFocus={onFocusSetting} d3={d3} />
             </BehaviourCard>
           </div>
         );
@@ -122,10 +127,11 @@ export function SectionCards({ section, all, set, sp, update, focusCard, hotCard
 const WHO = [{ value: 'all' as const, label: 'Any kind' }, { value: 'own' as const, label: 'Its kind' }, { value: 'others' as const, label: 'Others' }];
 
 /** The sliders a card shows. */
-function CardSettings({ c, set, sp, update, onFocus }: { c: CardRead; set: AgentRuleSet; sp: number; update: (s: AgentRuleSet) => void; onFocus: (s: string | undefined) => void }) {
+function CardSettings({ c, set, sp, update, onFocus, d3 }: { c: CardRead; set: AgentRuleSet; sp: number; update: (s: AgentRuleSet) => void; onFocus: (s: string | undefined) => void; d3: boolean }) {
   const patch = <A extends RuleAction>(p: Partial<A>) => update(patchAt<A>(set, sp, c.at, p));
   const a = c.action;
   switch (a.kind) {
+    case 'field': return <FieldSettings id={c.key} action={a} d3={d3} onFocus={onFocus} onChange={p => patch<Act<'field'>>(p)} />;
     case 'force': {
       if (a.field === 'gravity' || a.field === 'wind') return <>
         <SliderSetting id="strength" label="Strength" hint={MORE_HINTS.strength} value={a.strength} min={0} max={3} step={0.01} onFocus={onFocus} onChange={v => patch<Act<'force'>>({ strength: v })} />

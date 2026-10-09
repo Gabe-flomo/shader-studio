@@ -29,6 +29,7 @@ import { fmtNum } from '../print';
 import { suggest } from '../fuzzy';
 import { drawFrom, freshSeed, makeRng, rangeFor, resolveRandom, seedOf, type RandSpec, type Resolved, type Rng } from '../random';
 import { registerEntries, type Entry } from '../registry';
+import { type FieldSpec, DEFAULT_FIELD, fieldFromText, fieldToText } from '../../agentRules/fields';
 import {
   ACTION_KINDS, CONDITION_KINDS, DEFAULT_STATE_COLOURS, MAX_MASKS, MAX_SPECIES, MAX_STATES, WALKER_KIND_KEYS, defaultRuleSet, normalizeRuleSet,
   type AgentRule, type AgentRuleSet, type AgentSpeciesRules, type ChannelRef, type Cmp, type NeighbourWho, type RuleAction, type RuleCondition, type SenseWhere, type WalkerKind,
@@ -110,6 +111,8 @@ export function printAction(set: AgentRuleSet, sp: AgentSpeciesRules, a: RuleAct
     }
     case 'drag': return `drag ${fmtNum(a.amount)}`;
     case 'fade': return `fade ${fmtNum(a.seconds)}s`;
+    // The layers ride along as one quoted string (JSON with ' for "): fields.ts fieldToText.
+    case 'field': return `field ${fmtNum(a.strength)}${a.grip ? ` grip=${fmtNum(a.grip)}` : ''} layers="${fieldToText(a.spec)}"`;
   }
 }
 
@@ -547,7 +550,18 @@ export function parseAgents(src: string, opts: { seed?: number } = {}): AgentsPa
         }
         case 'drag': { const v = numVal('drag'); return v === null ? null : { kind: 'drag', amount: v }; }
         case 'fade': { const v = numVal('seconds', u => u === null || u === 's'); return v === null ? null : { kind: 'fade', seconds: v }; }
-        default: unknown(x, 'an action', ['turn', 'wander', 'speed', 'accelerate', 'leave', 'become', 'memory', 'stop', 'stick', 'die', 'spawn', 'follow', 'against', 'align', 'separate', 'match', 'cohere', 'slow', 'avoid-edges', 'orbit', 'force', 'drag', 'fade']); while (!c.atClauseEnd() && c.peek().t !== ',' && c.peek().t !== '@') c.next(); return null;
+        case 'field': {
+          // field 1 grip=3 layers="{'layers':[…]}" (the Agent Builder's Follow a field; fields.ts fieldToText).
+          const v = numVal('field'); let grip: number | undefined; let spec: FieldSpec | null = null;
+          while (c.peek().t === 'word' && ['grip', 'layers'].includes(nameOf(c.peek()).toLowerCase()) && c.peek(1).t === '=') {
+            const k = nameOf(c.next()).toLowerCase(); c.next();
+            if (k === 'grip') grip = numVal('grip') ?? undefined;
+            else { const t = c.next(); spec = t.t === 'str' ? fieldFromText(t.v) : null; if (!spec) c.error(t, 'layers="…" as the Agent Builder writes it.'); }
+          }
+          if (v === null) return null;
+          return { kind: 'field', strength: v, ...(grip ? { grip } : {}), spec: spec ?? DEFAULT_FIELD() };
+        }
+        default: unknown(x, 'an action', ['turn', 'wander', 'speed', 'accelerate', 'leave', 'become', 'memory', 'stop', 'stick', 'die', 'spawn', 'follow', 'against', 'align', 'separate', 'match', 'cohere', 'slow', 'avoid-edges', 'orbit', 'force', 'field', 'drag', 'fade']); while (!c.atClauseEnd() && c.peek().t !== ',' && c.peek().t !== '@') c.next(); return null;
       }
     };
     for (const at of d.ruleAt) {

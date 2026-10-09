@@ -431,6 +431,7 @@ export const ACTION_HELP: Record<RuleAction['kind'], { hint: string; example: st
   force: { hint: 'A force that changes the velocity (so the heading and the speed follow): gravity, a gusty wind, curl noise, or a pull toward a point or the mouse (negative pushes away).', example: 'apply gravity 0.5 at −90°' },
   drag: { hint: 'Lose this share of the speed every second, like moving through water.', example: 'drag 0.5 a second' },
   fade: { hint: 'Dim to black over the seconds since it was born (its colour; Draw agents\' Colour by State shows it).', example: 'fade with age over 3 s' },
+  field: { hint: 'Push (or carry) it along a vector field built from layers: curl noise, a vortex, a source or sink, waves, your own vx and vy… Build the layers in the Agent Builder\'s Follow a field card.', example: 'follow a field (vortex + curl noise × 0.5) ×1, riding it' },
 };
 
 export function helpFor(builder: string, id: string): HelpEntry | null {

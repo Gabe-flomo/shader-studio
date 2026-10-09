@@ -15,7 +15,7 @@ import { Tooltip } from '../ui/Tooltip';
 import { RulerSlider } from '../ui/RulerSlider';
 
 export type CardPicture = 'born' | 'senses' | 'turning' | 'moving' | 'trail' | 'advanced'
-  | 'gravity' | 'wind' | 'curl' | 'attract' | 'drag' | 'fade' | 'die' | 'life' | 'look' | 'neighbours'
+  | 'gravity' | 'wind' | 'curl' | 'field' | 'attract' | 'drag' | 'fade' | 'die' | 'life' | 'look' | 'neighbours'
   | 'separate' | 'match' | 'cohere' | 'avoidEdges' | 'goal' | 'slow' | 'orbit' | 'wobble';
 
 /** A card's small picture: the behaviour drawn in a few strokes. */
@@ -60,6 +60,10 @@ export function CardGlyph({ kind, size = 40 }: { kind: CardPicture; size?: numbe
       </>;
       case 'curl': return <>
         <path d="M20 20 m-2 0 a2 2 0 1 1 4 0 a5 5 0 1 1 -10 0 a8 8 0 1 1 16 0 a11 11 0 0 1 -6 9.6" fill="none" stroke={a} strokeWidth={1.7} strokeLinecap="round" />
+      </>;
+      case 'field': return <>
+        {[13, 20, 27].map((y, i) => <path key={y} d={`M7 ${y} C 14 ${y - 6 + i * 2}, 22 ${y + 6 - i * 2}, 31 ${y - 1}`} fill="none" stroke={i === 1 ? a : ink} strokeWidth={1.6} strokeLinecap="round" />)}
+        <path d="M28 17.5 L31.5 19 L28.5 21.6" fill="none" stroke={a} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
       </>;
       case 'attract': return <>
         <circle cx={20} cy={20} r={3.2} fill={a} />

@@ -11,6 +11,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LanguageTab, type LanguageRead } from '../builders/LanguageTab';
 import { parseAgents, printAgents } from '../../lang/dialects/agents';
+import { fieldName } from '../../agentRules/fields';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
@@ -503,6 +504,12 @@ function ActionEditor({ a, ctx, onChange }: { a: RuleAction; ctx: EditCtx; onCha
       <Num value={a.strength} step={0.05} onCommit={v => onChange({ ...a, strength: v })} title="Strength, picture units a second² (negative pushes away from a point or the mouse)" />
       {(a.field === 'gravity' || a.field === 'wind') && <><Word>at</Word><Num value={a.angle ?? (a.field === 'gravity' ? -90 : 0)} step={5} onCommit={v => onChange({ ...a, angle: v })} title="Direction in degrees: 0 right, 90 up, −90 down" /><Word>°</Word></>}
       {a.field === 'point' && <><Word>x</Word><Num value={a.x ?? 0} step={0.05} onCommit={v => onChange({ ...a, x: v })} /><Word>y</Word><Num value={a.y ?? 0} step={0.05} onCommit={v => onChange({ ...a, y: v })} /></>}
+    </>;
+    case 'field': return <>
+      <Word>follow a field</Word>
+      <span title="Its layers are built in the Agent Builder's Follow a field card (Forces)." style={{ fontSize: 12, opacity: 0.75 }}>({fieldName(a.spec)})</span>
+      <Word>×</Word><Num value={a.strength} step={0.05} onCommit={v => onChange({ ...a, strength: v })} title="Strength: the field's velocity times this" />
+      <Small label="how" value={a.grip ? 'ride' : 'push'} options={[{ value: 'ride', label: 'riding it' }, { value: 'push', label: 'as a force' }]} onChange={v => onChange({ ...a, grip: v === 'ride' ? (a.grip || 3) : undefined })} />
     </>;
     case 'drag': return <><Word>drag</Word><Num value={a.amount} step={0.05} onCommit={v => onChange({ ...a, amount: Math.max(0, v) })} /><Word>a second</Word></>;
     case 'fade': return <><Word>fade with age over</Word><Num value={a.seconds} step={0.1} onCommit={v => onChange({ ...a, seconds: Math.max(0.01, v) })} /><Word>s</Word></>;
