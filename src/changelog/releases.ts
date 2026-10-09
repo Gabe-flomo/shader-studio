@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.114',
+    date: '2026-10-09',
+    title: 'No more angle seams',
+    highlights: [
+      { area: 'Studio', text: 'Gradient Angular has no seam on the left any more (the old one-turn version is Angular, full turn). The 2D Scene Builder\'s colour by angle is seamless too.' },
+      { area: 'Studio', text: 'Polar Space and Log-Polar Space have a Seam setting: Mirrored (no seam) for noise, ramps and gradients; Full turn for petals, arms and colour wheels.' },
+    ],
+  },
+  {
     id: '2026.10.113',
     date: '2026-10-08',
     title: 'Agents around a shape',
