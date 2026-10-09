@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.125',
+    date: '2026-10-09',
+    title: 'Particles, flocks and orbiters',
+    highlights: [
+      { area: 'Studio', text: 'Agent Builder builds particles (forces as arrows), flocks (view radius ring, neighbours lit), orbiters (the orbit circle) and crowds, each from cards.' },
+      { area: 'Studio', text: 'Walker kinds as chips: add, rename, colour; picking one spotlights its walkers. Any card can say "only when…", and cards drag to reorder.' },
+    ],
+  },
+  {
     id: '2026.10.124',
     date: '2026-10-09',
     title: 'The new Agent Builder',
