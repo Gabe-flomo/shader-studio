@@ -103,12 +103,26 @@ function openGraphInput(): { nodes: unknown; label: string } | null {
   return { nodes: s.nodes, label: s.currentGraph ? `${s.currentGraph.name} (open, edited)` : 'Open graph' };
 }
 
-async function sync(kind: 'user' | 'examples' | 'linked', prefixes: string[], collect: () => Promise<DocInput[]> | DocInput[]): Promise<SyncResult | null> {
+export type CorpusKind = 'user' | 'examples' | 'linked';
+type CorpusListener = (kind: CorpusKind, prefixes: readonly string[], docs: readonly DocInput[]) => void;
+const corpusListeners = new Set<CorpusListener>();
+
+/**
+ * Hear every doc set the index syncs (the complete current set of `prefixes`' docs), as collected.
+ * The Expression Builder's move catalogue reads the user's code this way (exprBuilder/liveMoves.ts).
+ */
+export function onCorpusCollected(fn: CorpusListener): () => void {
+  corpusListeners.add(fn);
+  return () => { corpusListeners.delete(fn); };
+}
+
+async function sync(kind: CorpusKind, prefixes: string[], collect: () => Promise<DocInput[]> | DocInput[]): Promise<SyncResult | null> {
   useExplorerStatus.setState(s => ({ busy: s.busy + 1 }));
   try {
     const t0 = performance.now();
     const docs = await collect();
     const collectMs = performance.now() - t0;
+    for (const fn of corpusListeners) { try { fn(kind, prefixes, docs); } catch (e) { console.warn('[code explorer] corpus listener failed', e); } }
     const r = await call<SyncResult>({ t: 'sync', prefixes, docs });
     useExplorerStatus.setState(s => ({
       syncs: { ...s.syncs, [kind]: { ...r, at: Date.now(), collectMs } },
