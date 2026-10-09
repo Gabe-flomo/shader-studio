@@ -14,7 +14,7 @@
  * unchanged. Born, the trail's Fades / Spreads and Look write the nodes round the group. Changes
  * apply live: a quarter of a second after you stop, one undo step a burst.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
@@ -50,6 +50,10 @@ import { KindPicture } from './pictures';
 import { usePresetThumbs } from './presetThumbs';
 import { HoodLayer, HoodPanel } from './HoodView';
 import { channelIndex, hoodHighlights, hoodTrailChannels, TRAIL_HEX, type Rgb } from '../../agentBuilder/hood';
+import { type Box, type LegendEntry, entryForFocus, focusOfEntry, legendEntries, moreAbout } from '../../agentBuilder/legend';
+import { onlyWhenText } from '../../agentBuilder/onlyWhen';
+import { DEMO_H, DEMO_W, FocusDemo, ViewportLegend, type ViewportLink } from './ViewportLegend';
+import { Icon } from '../ui/Icon';
 
 type Section = SectionId | 'advanced';
 
@@ -177,6 +181,8 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const shown: Section = advanced ? 'advanced' : current;
   const select = (x: Section) => {
     setLit(null);
+    setFocusId(null);
+    setHoverEntry(null);
     setChipPicked(false);
     if (x === 'advanced') setAdvanced(true); else { setAdvanced(false); setFocus({ section: x as DiagramSection }); }
   };
@@ -195,6 +201,39 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const presets = presetsFor(kind);
   const thumbs = usePresetThumbs(presets);
   const trailChannels = useMemo(() => hoodTrailChannels(set, { velocity: depositWhat === 'velocity' }), [set, depositWhat]);
+
+  // ── The legend, its tags and focus (legend.ts, ViewportLegend.tsx) ──
+  // Rebuilt only when the values it reads change.
+  const lifeSecs = emit ? num(emit.params.life, 0) : null;
+  const entries = useMemo(() => legendEntries({
+    set, sp: s, kind, section: current as DiagramSection, cards: behaviours.cards, trail: trailKind ? cards : undefined,
+    born: { shape: born.shape, size: born.size, count: born.count }, trailField: { halfLife: trail.halfLife, diffuse: trail.diffuse }, life: lifeSecs,
+    whenText: c => onlyWhenText(set, s, c),
+  }), [set, s, kind, current, behaviours.cards, trailKind, cards, born.shape, born.size, born.count, trail.halfLife, trail.diffuse, lifeSecs]);
+  const [hoverEntry, setHoverEntry] = useState<string | null>(null);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const [legendBox, setLegendBox] = useState<Box | null>(null);
+  const onLegendBox = useCallback((b: Box | null) => setLegendBox(o => (o && b && o.left === b.left && o.top === b.top && o.w === b.w && o.h === b.h ? o : b)), []);
+  const inspectorRef = useRef<HTMLDivElement>(null);
+  const focused: LegendEntry | null = (!advanced && entries.find(e => e.id === focusId)) || null;
+  const hovered = hoverEntry && entries.some(e => e.id === hoverEntry) ? hoverEntry : null;
+  const litEntry = hovered ?? focused?.id ?? entryForFocus(entries, focus);
+  // Hovering or focusing an entry points its control: scroll the inspector to it and pulse it.
+  const pointed = hovered ?? focused?.id ?? null;
+  useEffect(() => {
+    const e = entries.find(x => x.id === pointed);
+    const root = inspectorRef.current;
+    if (!e || !root || !e.el) return;
+    const card = root.querySelector(`[data-card="${e.el}"]`);
+    const setting = !e.card && e.settings?.[0] ? card?.querySelector(`[data-setting="${e.settings[0]}"]`) : null;
+    const el = (setting ?? card) as HTMLElement | null;
+    if (!el) return;
+    el.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+    el.setAttribute('data-link-pulse', '');
+    const t = setTimeout(() => el.removeAttribute('data-link-pulse'), 1000);
+    return () => { clearTimeout(t); el.removeAttribute('data-link-pulse'); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pointed, focused?.id]);
 
   if (!group) return null;
   const name = (typeof group.params.label === 'string' && group.params.label) || 'Agents';
@@ -307,11 +346,11 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
     const w = words(id);
     return <SectionIntro title={w.label} hint={w.hint} learn={w.learn} guide={w.guide} />;
   };
-  const sectionCards = (id: SectionId, intro?: React.ReactNode) => {
+  const sectionCards = (id: SectionId, intro?: React.ReactNode, only?: string) => {
     const def = sections.find(x => x.id === id)!;
     return (
       <SectionCards section={def} all={behaviours.cards} set={set} sp={s} update={update} cardsFor={kindCards(kind)}
-        focusCard={focusCard} hotCard={focus.card} onFocusSetting={onFocusSetting}
+        focusCard={focusCard} hotCard={focus.card} onFocusSetting={onFocusSetting} only={only}
         intro={<>{sectionHeader(id)}{intro}</>} />
     );
   };
@@ -379,7 +418,21 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       case 'advanced': return advancedCards;
     }
   })();
-  const inspector = <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 14 }} data-inspector={shown}>{body}</div>;
+  // Focus: only that card's controls, under a short "more" from the field guide.
+  const focusBody = (() => {
+    if (!focused) return body;
+    if (focused.el === 'view') return viewCard;
+    if (focused.el === 'lives') return lifeIntro ?? body;
+    if (focused.el.includes('#')) return sectionCards(current, undefined, focused.el);
+    return body;
+  })();
+  const inspector = (
+    <div ref={inspectorRef} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 14 }} data-inspector={shown} data-inspector-focus={focused?.id}>
+      <style>{'@keyframes ab-link-pulse { 0% { box-shadow: 0 0 0 0 rgba(58,111,247,0.55), inset 0 0 0 1.5px rgba(58,111,247,0.8); } 100% { box-shadow: 0 0 0 10px rgba(58,111,247,0), inset 0 0 0 1.5px rgba(58,111,247,0.4); } } [data-link-pulse] { animation: ab-link-pulse 0.9s ease-out; border-radius: 14px; }'}</style>
+      {focused && <FocusIntro entry={focused} onClose={() => setFocusId(null)} />}
+      {focusBody}
+    </div>
+  );
 
   // ── Nav ──
   const on = (ids: string[]) => behaviours.cards.filter(c => c.on && ids.includes(c.card));
@@ -439,8 +492,40 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const camera = d3 && draw ? { params: draw.params as Record<string, unknown>, mirror: draw.params.mirror === true } : undefined;
   const hotTrailCard = trailKind && focus.card && (['senses', 'wobble', 'trail'] as const).find(c => c === focus.card);
   const hoodSpecies = set.species.map(x => ({ name: x.name, colour: (x.states[0]?.colour ?? [1, 1, 1]) as Rgb }));
+  const enterFocus = (id: string) => {
+    const e = entries.find(x => x.id === id);
+    if (!e) return;
+    setFocusId(id);
+    setFocus(f => ({ ...f, section: current, ...focusOfEntry(e) }));
+  };
+  const hoverLegend = (id: string | null) => {
+    setHoverEntry(id);
+    const e = entries.find(x => x.id === id);
+    if (e) setFocus(f => ({ ...f, section: current, ...focusOfEntry(e) }));
+    else if (focused) setFocus(f => ({ ...f, section: current, ...focusOfEntry(focused) }));
+    else setFocus(f => (f.setting === undefined ? f : { ...f, setting: undefined }));
+  };
+  const lensNote = (() => {
+    if (current === 'born') return d3 ? (camera ? 'Drawn through the 3D camera as it starts (it then circles).' : 'Seen from the front: no 3D camera to look through.') : undefined;
+    if (current === 'senses' || current === 'turning' || current === 'trail' || (current === 'moving' && focus.setting !== 'edges' && trailKind)) return 'One walker, up close.';
+    if ((current === 'neighbours' || current === 'steering') && !(focus.card?.startsWith('avoidEdges'))) return `One ${kind === 'crowd' ? 'person' : kind === 'swarm' ? 'orbiter' : 'bird'} and made-up neighbours, up close.`;
+    if (current === 'forces') return 'One particle with its forces; the curl flow over the picture.';
+    return undefined;
+  })();
   const overlay = ({ w, h, image }: { w: number; h: number; image: ViewRect }) => {
     const box = { w, h, image };
+    const demoBox: Box = { left: w - 12 - (DEMO_W + 20), top: h - 12 - (DEMO_H + 70), w: DEMO_W + 20, h: DEMO_H + 70 };
+    const link: ViewportLink = {
+      entries, lit: litEntry, dim: !!hovered || !!focused, focused: focused?.id ?? null,
+      onHover: hoverLegend, onFocus: enterFocus,
+      avoid: [...(legendBox ? [legendBox] : []), ...(focused ? [demoBox] : [])],
+      // A tall legend takes the left: the lens is centred in what is left of the viewport.
+      freeLeft: legendBox && legendBox.h > h * 0.3 ? legendBox.left + legendBox.w + 8 : 0,
+    };
+    const legend = <>
+      <ViewportLegend entries={entries} lit={litEntry} focused={focused?.id ?? null} note={lensNote} onHover={hoverLegend} onFocus={enterFocus} onBox={onLegendBox} />
+      {focused && <FocusDemo entry={focused} onClose={() => setFocusId(null)} />}
+    </>;
     let spot: React.ReactNode = null;
     if (lit !== null && set.species.length > 1 && lit < set.species.length) {
       const sc = (set.species[lit].states[0]?.colour ?? [1, 1, 1]) as [number, number, number];
@@ -454,19 +539,24 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
     if (walkerSection) {
       const when = hotTrailCard ? cards.when[hotTrailCard] : null;
       return <>
-        <WalkerDiagram focus={{ ...focus, section: current as DiagramSection }} cards={cards} box={box} born={born} trail={trail} lensRef={lensRef} d3={d3} camera={camera} feelersShown={trailKind} />
+        <WalkerDiagram focus={{ ...focus, section: current as DiagramSection }} cards={cards} box={box} born={born} trail={trail} lensRef={lensRef} d3={d3} camera={camera} feelersShown={trailKind} link={link} />
         {when && <svg width={w} height={h} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
           <OnlyWhenOverlay set={set} sp={s} c={when} title={CARD_WORDS[hotTrailCard as RuleCard].title} box={box} />
         </svg>}
+        {legend}
       </>;
     }
     if (current === 'look') return null;
-    return <KindDiagram focus={{ ...focus, section: current as DiagramSection }} cards={behaviours.cards as CardRead[]} set={set} sp={s} box={box} viewRef={viewRef}
-      life={num(emit?.params.life, 0)} />;
+    return <>
+      <KindDiagram focus={{ ...focus, section: current as DiagramSection }} cards={behaviours.cards as CardRead[]} set={set} sp={s} box={box} viewRef={viewRef}
+        life={num(emit?.params.life, 0)} link={link} />
+      {legend}
+    </>;
   };
 
   return (
     <StudioShell prefsKey="agent-builder" icon="swarm" title={name} kind={`${kindLabel} · ${d3 ? '3D' : '2D'}`} onClose={close}
+      onEscape={() => { if (!focused) return false; setFocusId(null); return true; }}
       onBack={onBack} backLabel="Back to the start (takes this group away)"
       space={{ value: d3 ? '3d' : '2d', onChange: v => { flush(); setGroupSpace(groupId, v); }, hint: 'Switching turns the whole setup (sensors and speed rescaled, Trail ↔ volume); undo switches it back.' }}
       actions={<>
@@ -501,6 +591,26 @@ function SectionIntro({ title, hint, learn, guide }: { title: string; hint: stri
         <p data-learn-text={title} style={{ margin: 0, fontSize: 12, lineHeight: 1.55, color: tk.text.secondary }}>{learn}</p>
         <span style={{ fontSize: 11, color: tk.text.faint }}>{guide}</span>
       </>}
+    </div>
+  );
+}
+
+/** The focus view's head in the inspector: the behaviour, its plain line, a little more, and ×. */
+function FocusIntro({ entry, onClose }: { entry: LegendEntry; onClose: () => void }) {
+  const tk = useTokens();
+  return (
+    <div data-focus-intro={entry.id} style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, borderRadius: radius.card, background: tk.bg.selected, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span aria-hidden style={{ width: 10, height: 10, borderRadius: '50%', background: entry.colour, boxShadow: '0 0 0 1px rgba(0,0,0,0.25)', flexShrink: 0 }} />
+        <b style={{ fontSize: 14, fontWeight: 650, flex: 1 }}>{entry.title}</b>
+        <span style={{ fontSize: 11, color: tk.text.faint }}>Esc to leave</span>
+        <button type="button" data-focus-leave aria-label="Leave focus" title="Leave focus (Esc)" onClick={onClose}
+          style={{ width: 24, height: 24, padding: 0, border: 0, borderRadius: 7, background: 'none', color: tk.text.muted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="close" size={13} />
+        </button>
+      </span>
+      <span data-focus-line style={{ fontSize: 12.5, lineHeight: 1.45, color: tk.text.primary }}>{entry.line}</span>
+      <span data-focus-more style={{ fontSize: 12, lineHeight: 1.55, color: tk.text.secondary }}>{moreAbout(entry)}</span>
     </div>
   );
 }

@@ -47,6 +47,8 @@ export interface StudioShellProps {
   /** Its kind ("Trail followers · 2D"). */
   kind?: ReactNode;
   onClose: () => void;
+  /** Esc first asks this (a focus view leaves on Esc): true means it was handled and the builder stays open. */
+  onEscape?: () => boolean;
   /** Back (left of the name): the start page, or wherever the builder came from. */
   onBack?: () => void;
   backLabel?: string;
@@ -72,7 +74,8 @@ export function StudioShell(p: StudioShellProps) {
   const narrow = useNarrowWindow() || phone;
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(p.onClose);
-  useEffect(() => { onCloseRef.current = p.onClose; });
+  const onEscapeRef = useRef(p.onEscape);
+  useEffect(() => { onCloseRef.current = p.onClose; onEscapeRef.current = p.onEscape; });
   const key = (f: Fold) => `builder:${p.prefsKey}:studio:${f}`;
   const [wide, setWide] = useState<Record<Fold, boolean>>(() => ({ nav: readPref(key('nav'), true), inspector: readPref(key('inspector'), true), presets: readPref(key('presets'), true) }));
   const [drawers, setDrawers] = useState({ nav: false, inspector: false });
@@ -92,6 +95,7 @@ export function StudioShell(p: StudioShellProps) {
         const dialogs = document.querySelectorAll('[aria-modal="true"]');
         if (dialogs[dialogs.length - 1] !== panelRef.current || (e.target as HTMLElement | null)?.closest?.('[data-captures-escape]')) return;
         e.stopPropagation();
+        if (onEscapeRef.current?.()) return;
         onCloseRef.current();
         return;
       }
