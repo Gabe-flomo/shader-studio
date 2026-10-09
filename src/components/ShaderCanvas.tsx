@@ -45,7 +45,8 @@ import { ppFrameSteps } from '../play/kit/passPlan.js';
 import { AgentRunner, AgentTargets } from '../lib/agentRunner';
 import type { AgentsSpec } from '../compiler/types';
 import type { PassProgram } from '../compiler/types';
-import { recordFrame, recordGpuResults, flushGpuFrame, recordGpuCompile, setGpuTimerSupport, registerShaderCostMeasurer } from '../lib/perfStats';
+import { recordFrame, recordGpuResults, flushGpuFrame, recordGpuCompile, setGpuTimerSupport, registerShaderCostMeasurer, getPerfSnapshot } from '../lib/perfStats';
+import { autoQualityStep, newAutoState } from '../lib/autoQuality';
 import { viewportSnapshot } from '../lib/viewport';
 import { onRebuild } from '../lib/rebuild';
 import { buildPreviewUniforms } from './previewUniforms';
@@ -1461,6 +1462,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     let fpsFrameCount = 0;
     let fpsLastTime = 0;
     let currentFps = 0;
+    // Auto resolution (lib/autoQuality.ts): decided once a second from what the frames cost.
+    const autoState = newAutoState();
+    let drawnThisSecond = 0;
     // Per-node Uint8Array buffers for audio FFT data — allocated once, reused each frame
     const audioFreqBuffers = new Map<string, Uint8Array>();
     // Mouse pixel sample + histogram readback state. Reads are asynchronous
@@ -1515,6 +1519,14 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         currentFps = Math.round(fpsFrameCount * 1000 / fpsElapsed);
         fpsFrameCount = 0;
         fpsLastTime = now;
+        const pq = usePreviewQuality.getState();
+        // Only while the window is in front: a background window is slowed on purpose (Background GPU policy).
+        if (pq.auto && pq.holds === 0 && appFocused()) {
+          const snap = getPerfSnapshot();
+          const gpuMs = snap.gpuTimer === 'supported' ? snap.gpu.avg : null;
+          pq.setAutoScale(autoQualityStep(autoState, pq.autoScale, { gpuMs, floorMs: snap.timer.baselineMs, fps: currentFps, drawing: drawnThisSecond > 1 }, now));
+        }
+        drawnThisSecond = 0;
       }
 
       if (lastRafTime === null) lastRafTime = now;
@@ -1652,6 +1664,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       } else if (plan.shader) {
         needsRender = false;
         idleFrames = 0;
+        drawnThisSecond++;
         // The Motion (texture) node's grid, as the overlay's last frame left it (a frame late, like the Layers node).
         if (readsMotionNow()) refreshMotionTexture(renderer.domElement.width || 1, renderer.domElement.height || 1);
         // Before the picture, its other programs in the frame's order (kit/passPlan.js ppFrameSteps, the

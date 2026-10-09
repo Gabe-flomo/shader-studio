@@ -13,6 +13,16 @@ describe('preview resolution', () => {
     expect(localStorage.getItem('shader-studio:preview-quality')).toBe(String(1 / 3));
   });
 
+  it('starts on Auto, which follows its own level until a share is picked', () => {
+    usePreviewQuality.getState().setAuto();
+    expect(localStorage.getItem('shader-studio:preview-quality')).toBe('auto');
+    usePreviewQuality.getState().setAutoScale(1 / 3);
+    expect(effectivePreviewQuality()).toBeCloseTo(1 / 3);
+    usePreviewQuality.getState().setScale(1 / 2);
+    expect(usePreviewQuality.getState().auto).toBe(false);
+    expect(effectivePreviewQuality()).toBe(1 / 2);
+  });
+
   it('is held at Full while anything (an export) holds it, then goes back', () => {
     usePreviewQuality.getState().setScale(1 / 4);
     const a = usePreviewQuality.getState().hold();
