@@ -16,9 +16,11 @@ import type { IconName } from '../ui/iconPaths';
 import { Popover } from '../ui/Popover';
 import { Sheet } from '../ui/Sheet';
 import { toast } from '../ui/toastStore';
-import { exampleGraphSource, savedGraphSource } from './backgroundFiles';
+import { exampleGraphSource, savedGraphSource, savedVersionSource } from './backgroundFiles';
+import { listVersions, seriesLabel } from '../../store/graphVersions';
+import { BACKGROUND_QUEUE_MAX } from '../../types/playLayers';
 
-interface Row { key: string; label: string; hint?: string; icon: IconName; make: () => BackgroundItem }
+interface Row { key: string; label: string; hint?: string; icon: IconName; make: () => BackgroundItem | BackgroundItem[] }
 interface Group { key: string; label: string; colour?: string; rows: Row[] }
 
 const narrowScreen = () => typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 640px)').matches;
@@ -54,7 +56,20 @@ function GraphList({ onPick }: { onPick: (item: BackgroundItem) => void }) {
 
   const groups = useMemo<Group[]>(() => {
     const out: Group[] = [{ key: 'this', label: 'This setup', rows: [{ key: 'this', label: 'This graph', hint: 'The graph open in the Studio, with its controls and mappings', icon: 'graphs', make: thisGraphSource }] }];
-    const saved = [...names].sort((a, b) => a.localeCompare(b)).map<Row>(n => ({ key: `saved:${n}`, label: n, hint: n === openName ? 'Open now · copied as it was saved' : 'Copied into this setup', icon: 'save', make: () => savedGraphSource(n) }));
+    const saved = [...names].sort((a, b) => a.localeCompare(b)).flatMap<Row>(n => {
+      const row: Row = { key: `saved:${n}`, label: n, hint: n === openName ? 'Open now · copied as it was saved' : 'Copied into this setup', icon: 'save', make: () => savedGraphSource(n) };
+      // A series (docs/graph-series-plan.md): queue its versions, to step through iterations of one idea.
+      const versions = listVersions(n);
+      if (versions.length < 2) return [row];
+      const asSources = (vs: typeof versions) => () => [...vs].reverse().slice(-BACKGROUND_QUEUE_MAX).map(v => savedVersionSource(n, v.version, seriesLabel(v)));
+      const families = [...new Set(versions.map(v => v.major))];
+      const newestOfEach = families.map(m => versions.find(v => v.major === m)!);
+      return [
+        row,
+        { key: `series:${n}`, label: `${n} · every version (${versions.length})`, hint: 'Each saved version in the queue, oldest first: step through them with Change background', icon: 'layers', make: asSources(versions) },
+        ...(families.length > 1 ? [{ key: `families:${n}`, label: `${n} · newest of each family (${families.length})`, hint: 'One per family: the big ideas, side by side', icon: 'layers' as const, make: asSources(newestOfEach) }] : []),
+      ];
+    });
     if (saved.length) out.push({ key: 'saved', label: 'Your graphs', rows: saved });
     for (const f of EXAMPLE_FOLDERS) {
       const rows = f.keys.filter(k => EXAMPLE_INDEX[k]).map<Row>(k => ({ key: `example:${k}`, label: EXAMPLE_INDEX[k].label, hint: EXAMPLE_INDEX[k].description, icon: 'graphs', make: () => exampleGraphSource(k, EXAMPLE_INDEX[k].label) }));
@@ -69,7 +84,7 @@ function GraphList({ onPick }: { onPick: (item: BackgroundItem) => void }) {
     return groups.map(g => ({ ...g, rows: g.rows.filter(r => `${r.label} ${r.hint ?? ''} ${g.label}`.toLowerCase().includes(w)) })).filter(g => g.rows.length);
   }, [groups, q]);
   const pick = (r: Row) => {
-    try { onPick(r.make()); } catch (e) { toast.error('Couldn’t add that graph', { message: e instanceof Error ? e.message : String(e) }); }
+    try { const made = r.make(); for (const item of Array.isArray(made) ? made : [made]) onPick(item); } catch (e) { toast.error('Couldn’t add that graph', { message: e instanceof Error ? e.message : String(e) }); }
   };
 
   return (

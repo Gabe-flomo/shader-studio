@@ -66,6 +66,10 @@ Saving asks exactly that: **Minor** (default, Enter), **Major**, or **New graph*
   - with nothing open: name field, Save 1.0, or "Add 3.0" when the name exists.
 - The name chip and the versions list show 2.3 numbers; the list is grouped by family.
 
+- Files shows versions as 2.3 in Family folders (#698).
+- `.playfile`: export this version or the whole series; a whole series imports with its versions under a new name (#700).
+- Play Background: the graph picker can queue a series' every version, or the newest of each family, as sources ("Curves 2.3"), so Change background steps through iterations of one idea.
+
 ## Build order
 
 1. The store (IndexedDB, migration, size limit) with tests, with no UI change yet.
