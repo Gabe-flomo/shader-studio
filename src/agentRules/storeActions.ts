@@ -5,25 +5,37 @@
  */
 import { useNodeGraphStore, undoManager } from '../store/useNodeGraphStore';
 import { toast } from '../components/ui/toastStore';
-import { applyRulesToGroup, backToRules, ensureBirthEmit, openRulesAsNodes, rulesNeedRegenerating } from './apply';
-import type { AgentRuleSet } from './spec';
+import { applyRulesToGroup, backToRules, ensureBirthEmit, groupRules, openRulesAsNodes, rulesNeedRegenerating } from './apply';
+import { type AgentRuleSet, kindOf } from './spec';
 import type { AgentSurprise } from './surprise';
 import { setAgentsView, type AgentsView } from './outputs';
-import { openAgentRulesWindow } from '../builders/windows';
+import { openAgentBuilder, openAgentRulesWindow } from '../builders/windows';
+import { BUILDER_KINDS } from '../agentBuilder/kinds';
 import { type AgentSpace, type ShapeKind, addShapeAround, applyTemplate3d, convertGroupSpace, shapeOf, stripShape } from './space3d';
 
-/** Open a rules group's rules editor (the card's Edit rules, its title double-click, Write as rules, the Builders section). */
-export const openAgentRulesEditor = (groupId: string) => openAgentRulesWindow(groupId);
+/**
+ * Open a rules group in the Agent Builder (the card's Edit rules, its title double-click, Write as
+ * rules): trail followers (and ants, a trail-follower preset) open there; the kinds the builder
+ * doesn't draw yet (particles, flocks, orbiters, crowds: phase 2) open the rules editor.
+ */
+export function openAgentRulesEditor(groupId: string): void {
+  const g = useNodeGraphStore.getState().nodes.find(x => x.id === groupId);
+  if (g && BUILDER_KINDS.has(kindOf(groupRules(g)))) openAgentBuilder(groupId);
+  else openAgentRulesWindow(groupId);
+}
 
 let last = { id: '', at: 0 };
 
-/** The rules editor's change: the group's inside generated again (one undo step per burst of edits). */
-export function applyGroupRules(groupId: string, set: AgentRuleSet, label = 'Edited agent rules'): void {
+/**
+ * The rules editor's change: the group's inside generated again (one undo step per burst of
+ * edits; `newStep` starts one of its own, as a preset does).
+ */
+export function applyGroupRules(groupId: string, set: AgentRuleSet, label = 'Edited agent rules', newStep = false): void {
   const st = useNodeGraphStore.getState();
   const before = st.nodes;
   if (!before.some(x => x.id === groupId)) return;
   const now = Date.now();
-  if (last.id !== groupId || now - last.at > 1500) undoManager.push(before, { label });
+  if (newStep || last.id !== groupId || now - last.at > 1500) undoManager.push(before, { label });
   last = { id: groupId, at: now };
   let nodes = before.map(x => (x.id === groupId ? applyRulesToGroup(x, set) : x));
   const birth = ensureBirthEmit(nodes, groupId, () => st.newNodeId());

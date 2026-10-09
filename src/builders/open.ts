@@ -5,7 +5,7 @@
  *
  *  - 3D Scene Builder: the builder on a new scene (Build adds it to the graph).
  *  - Grid Rules: a new Grid Rules node (on the Output when the graph is empty), its editor open.
- *  - Agent Rules: a new Agents group in rules mode (the Rules starter), its rules editor open.
+ *  - Agent Builder: its start page ("What are you making?"); picking a kind adds the group.
  *  - 3D Agent Builder: a new 3D rules group (agentRules/space3d.ts: Ball Emit, a volume Trail, Draw
  *    agents through an orbiting camera), its rules editor open.
  *  - Expression Builder: its window on a new chain from UV (Add to graph makes the Expression Block).
@@ -20,7 +20,8 @@ import { toast } from '../components/ui/toastStore';
 import { openExpressionBuilder } from '../exprBuilder/store';
 import type { GraphNode } from '../types/nodeGraph';
 import type { BuilderId } from './registry';
-import { openAgentRulesWindow, openGridRulesEditor, showRecipeOf } from './windows';
+import { openAgentBuilder, openGridRulesEditor, showRecipeOf } from './windows';
+import { openAgentRulesEditor } from '../agentRules/storeActions';
 import { builderRecipeOf } from './recipe';
 import type { BuilderAction } from './doBuilders';
 
@@ -37,17 +38,17 @@ export function newGridRules(): string {
   return made.id;
 }
 
-/** Add an Agents group in rules mode (wired to the Output) and open its rules editor. */
+/** Add an Agents group in rules mode (wired to the Output) and open it in the Agent Builder. */
 export function newAgentRules(): string | null {
   const id = useNodeGraphStore.getState().addAgentsStarter('rules');
-  if (id) openAgentRulesWindow(id);
+  if (id) openAgentBuilder(id);
   return id;
 }
 
-/** Add a 3D rules Agents group (the 3D Agent Builder's setup, from 3D template `template`, on the Output) and open its rules editor. */
+/** Add a 3D rules Agents group (the 3D Agent Builder's setup, from 3D template `template`, on the Output) and open it in the Agent Builder. */
 export function newAgents3d(template?: string): string | null {
   const id = useNodeGraphStore.getState().addAgentsStarter('rules3d', undefined, template);
-  if (id) openAgentRulesWindow(id);
+  if (id) openAgentRulesEditor(id);
   return id;
 }
 
@@ -58,7 +59,8 @@ export function openBuilder(id: BuilderId, at?: { x: number; y: number }): void 
   else if (id === 'grid') newGridRules();
   else if (id === 'agents3d') newAgents3d();
   else if (id === 'expr') openExpressionBuilder({ place: at });
-  else newAgentRules();
+  // The Agent Builder opens on its start page ("What are you making?"): nothing is added until a kind is picked.
+  else openAgentBuilder(null);
 }
 
 /** Copy a builder-made node's recipe (a scene's recipe, a Grid Rules rule, a group's rules as sentences). */
@@ -96,9 +98,9 @@ export function runBuilderAction(a: BuilderAction): boolean {
     case 'edit-scene': return editSceneInBuilder(a.sceneId);
     case 'new-grid': newGridRules(); return true;
     case 'open-grid': openGridRulesEditor(a.nodeId); return true;
-    case 'new-agents': return !!newAgentRules();
+    case 'new-agents': openAgentBuilder(null); return true;
     case 'new-agents3d': return !!newAgents3d(a.template);
-    case 'open-agents': openAgentRulesWindow(a.groupId); return true;
+    case 'open-agents': openAgentRulesEditor(a.groupId); return true;
     case 'show-recipe': {
       // A node on the top level: go there and bring its card into view.
       if (st.nodes.some(nd => nd.id === a.nodeId)) {

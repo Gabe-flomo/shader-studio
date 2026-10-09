@@ -170,3 +170,44 @@ The bottom strip holds picture cards per kind (Slime, Ants + food, Two species, 
 | 5 | Move the 2D / 3D Scene Builders and Grid Rules onto the shell | |
 
 Each phase is one PR with tests, checked in the browser (screenshots), in the app's style.
+
+## Phase 1 status (2026-10-09)
+
+Built (docs/agent-builder.md):
+
+- **The shared shell** (`components/builders/studio/StudioShell.tsx`):
+  - top bar (Back, name, kind, 2D | 3D, Add to graph / Done);
+  - left nav with summaries;
+  - live viewport;
+  - right inspector;
+  - presets strip.
+
+  The panels fold (remembered, ⌘[ / ⌘]) and are drawers under 1100 px.
+- **The live viewport** shows the main preview's own frames (`lib/previewMirror.ts`, sent by ShaderCanvas after each frame). The builder doesn't pause the main preview as the explain view does, because the agents' simulation only runs in the main pipeline: the main canvas keeps drawing under the window, and the builder copies its frames.
+- **The start page:** Trail followers, Particles, Flocks and Orbiters, each with a moving picture (a small CPU simulation), and 2D / 3D. Trail followers is built. The other three make their template's setup and open the rules editor.
+- **Trail followers' cards:**
+  - Born: the Emit and the Count.
+  - Senses: switch, How far ahead, How wide, Smells chips, Avoid it.
+  - Turning: How sharply; Wobble with its own switch.
+  - Moving: Speed, At the edges.
+  - Trail: switch, Leaves, Fades, Spreads; Lays chips.
+  - Advanced rules: everything else, opening the rules editor.
+
+  The cards are the same rule set (`src/agentBuilder/cards.ts`). Old sets open as they are, and reading and writing back is lossless for every template.
+- **Viewport diagrams** for every section: the feelers (figure 2.4) in a lens over the dimmed picture, the turn arc and wobble fan, the steps, the edges, the trail's fading dots, and the birth shape at true size. They follow the slider as it moves.
+- **Presets:** 8 picture cards (the trail templates plus four slime variants from the field guide's table). Thumbnails are rendered once per session. A preset is one undo step.
+- **Entry points:**
+  - Builders → Agent Builder and "new agent rules" open the start page.
+  - Edit rules and a title double-click open the builder for trail followers and ants, and the rules editor for other kinds.
+  - "new 3d agents" opens the builder.
+
+Not done yet, for phase 2 and later:
+
+- Particles, Flocks and Orbiters sections (forces, neighbours with view radius and max neighbours diagrams, orbit), and a Crowd place on the start page.
+- Kinds of walker as editable chips (add, rename, up to 4). Phase 1 only switches between existing species.
+- "Only when…" lines on cards. Conditional rules are Advanced rules for now.
+- Drag to reorder cards.
+- Ants are mostly Advanced rules until Memory (phase 4) and "only when" exist.
+- In the Born diagram, a 3D Emit's ball or shell is drawn flat.
+- The lens shows the walker over the dimmed live picture, not a magnified crop. A crop of the middle was tried, but the middle is often the bright birth disc, which hid the diagram.
+- Thumbnails are a CPU simulation of the cards, not GPU renders of each preset.

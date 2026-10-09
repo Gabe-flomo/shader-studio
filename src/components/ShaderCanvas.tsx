@@ -37,6 +37,7 @@ import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
 import { appFocused, backgroundFrame, backgroundMode, onFocusChange, onLongHidden } from '../lib/backgroundPolicy';
 import { onPreviewHold, previewHeld } from '../lib/previewHold';
+import { previewMirrored, sendPreviewFrame, setPreviewWake } from '../lib/previewMirror';
 import { emitTimeTick } from '../lib/timeTick';
 import { outputTap } from '../lib/outputTap';
 import { GpuTimer } from '../lib/gpuTimer';
@@ -498,6 +499,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (!loopRunning) scheduleFrame();
     };
     requestRenderRef.current = requestRender;
+    setPreviewWake(requestRender);
     // Every store write is a user action (Phase 1 removed the idle ones), so
     // any of them may have changed what the canvas should show.
     const unsubRender = useNodeGraphStore.subscribe(() => requestRender());
@@ -1668,6 +1670,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         frameCount++;
         drawQueueGraphs();
         playOverlay.draw(renderer.domElement, elapsed, layerDt);
+        // A builder's viewport shows this frame (lib/previewMirror.ts): copied while it is still in the drawing buffer.
+        if (previewMirrored()) sendPreviewFrame(renderer.domElement);
       } else if (plan.shader) {
         needsRender = false;
         idleFrames = 0;
@@ -1764,6 +1768,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
 
         // ── Play layers: drawn over the picture while it is still in the drawing buffer ──
         playOverlay.draw(renderer.domElement, elapsed, layerDt);
+        // A builder's viewport shows this frame (lib/previewMirror.ts): copied while it is still in the drawing buffer.
+        if (previewMirrored()) sendPreviewFrame(renderer.domElement);
 
         // Check for GLSL errors after first few renders
         const newErrors = flushGlErrors();
@@ -2474,6 +2480,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     return () => {
       cancelAnimationFrame(animFrameRef.current);
       loopRunning = false;
+      setPreviewWake(null);
       clockAtTeardown = virtualTime;
       unregisterRebuild();
       unsubRender();

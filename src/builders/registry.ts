@@ -57,7 +57,7 @@ export const ALL_BUILDERS: readonly BuilderInfo[] = [
     id: 'agents', title: 'Agent Builder', icon: 'swarm',
     description: 'Walkers in 2D or 3D, from rules',
     makes: 'slime, ants, flocks, swarms, particles…',
-    action: 'Adds an Agents group and opens its builder (Space switches 2D / 3D)',
+    action: 'Opens the builder on "What are you making?" (2D or 3D)',
     keywords: ['builder', 'builders', 'rules', 'agents', 'agent', 'walkers', 'boids', 'when do', '3d', 'volume', 'swarm', 'flock', 'slime'],
   },
   {
