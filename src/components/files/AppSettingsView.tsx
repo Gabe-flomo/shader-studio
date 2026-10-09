@@ -17,6 +17,7 @@ import { describeSetting, resetAllKeys } from '../../files/appSettings';
 import { resetSettings } from './filesActions';
 import { Size } from './fileUi';
 import { cardStyle } from './fileUiShared';
+import { requestPage } from '../page';
 import { BackgroundSettings } from './BackgroundSettings';
 import { StorageLimitControl } from './StorageLimitControl';
 import { AutosaveSettings } from './AutosaveSettings';
@@ -64,6 +65,7 @@ export function AppSettingsView({ inv, node, compact }: { inv: Inventory; node: 
             {plural(countLeaves(cats), 'preference')} · {formatSize(node.size)}. Reset one to go back to its default. They travel in profile ZIPs and backups.
           </span>
         </div>
+        <Button size="sm" icon="keyboard" onClick={() => requestPage('shortcuts')}>Keyboard shortcuts</Button>
         <Button size="sm" icon="reset" disabled={!resettable.length} onClick={() => { void resetAll(); }}>Reset all app settings…</Button>
       </div>
 
