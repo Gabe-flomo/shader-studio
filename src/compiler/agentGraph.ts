@@ -149,10 +149,14 @@ export function agentStepNodes(group: GraphNode, volumeOf?: (nodeId: string) => 
   const SINK_TYPES: Record<string, 'vec2' | 'float' | 'vec3' | 'vec4'> = {
     position: v2, velocity: v2, heading: d3 ? 'vec3' : 'float', speed: 'float', alive: 'float', memory: 'vec2', deposit: 'vec4', colour: 'vec3',
   };
+  // Ride a curve keeps its place along the curve in Memory: with Agent Output's Memory unwired, its Memory goes there by itself.
+  const ride = nodes.find(n => n.type === 'agentRideCurve');
   for (const [key, type] of Object.entries(SINK_TYPES)) {
     const inp = out?.inputs[key];
-    if (!inp?.connection && !['position', 'velocity', 'heading', 'speed', 'alive'].includes(key)) continue;
-    sinkInputs[key] = { type, label: key, ...(inp?.connection ? { connection: inp.connection } : {}) };
+    const auto = key === 'memory' && !inp?.connection && ride ? { nodeId: ride.id, outputKey: 'memory' } : undefined;
+    const connection = inp?.connection ?? auto;
+    if (!connection && !['position', 'velocity', 'heading', 'speed', 'alive'].includes(key)) continue;
+    sinkInputs[key] = { type, label: key, ...(connection ? { connection } : {}) };
   }
   if (group.inputs.emit?.connection) sinkInputs.emit = { type: 'emitter', label: 'Emit', connection: group.inputs.emit.connection };
   const stateC = needsStateC(group, nodes, out);
@@ -172,12 +176,14 @@ export const groupIs3d = (g: GraphNode) => g.params.space === '3d';
 /**
  * Does a group need per-walker state (state C and D, docs/agents-plan.md §3.3)? When it has more
  * than one species (each keeps the species its Emit gave it), when Agent Output sets Memory,
- * Deposit or Colour, or when anything inside reads Agent Inputs' Memory or Colour. Otherwise the
+ * Deposit or Colour, when anything inside reads Agent Inputs' Memory or Colour, or when a Ride a
+ * curve inside keeps its place along the curve there (it reads Memory by itself). Otherwise the
  * update shader is exactly P1's: two outputs, the species from the index.
  */
 export function needsStateC(group: GraphNode, inside: GraphNode[], out: GraphNode | null | undefined): boolean {
   if (groupSpecies(group) > 1) return true;
   if (out && ['memory', 'deposit', 'colour'].some(k => out.inputs[k]?.connection)) return true;
+  if (inside.some(n => n.type === 'agentRideCurve')) return true;
   const inputsId = inside.find(n => n.type === 'agentInputs')?.id;
   return !!inputsId && inside.some(n => Object.values(n.inputs).some(i => i.connection?.nodeId === inputsId && (i.connection.outputKey === 'memory' || i.connection.outputKey === 'colour')));
 }

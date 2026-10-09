@@ -94,12 +94,30 @@ What can't be read inside: a chain that reads the previous frame (Echo, Bloom, t
 | **Collide** | After Integrate: keeps walkers out of a shape (its distance into Shape ƒ); they slide round it. Bounce, Friction. |
 | **Collide (3D scene)** | In a 3D group, after Integrate: keeps walkers out of a ray-marched scene (a Scene through a port on the group), read on a coarse 48-cell grid; they bounce off or slide along its surfaces. Scene size, X / Y / Z, Margin, Cushion, Bounce, Friction. |
 | **Chladni** | After Integrate (or alone): sand on a vibrating plate gathers on its still lines. Square or round; N and M, or the sound, pick the figure. |
+| **Ride a curve** | Instead of forces: locks walkers onto a parametric curve (Curve Trace's), each keeping its own place along it in Memory. Speed, Spread, Ribbon width, Loop. See **Ride a curve** below. |
 
 **Sound.** Sound kick and Chladni listen to **Sound from**: the **Level** slider (map Live audio or a track to it in Play), the **Mic**, or the Play page's **Audio engine** (its master or a track). **Beat** is a silent stand-in kick at a tempo while you build: it only moves numbers, and it is part of the simulation, so a recording matches the preview. Set it to 0 when real sound drives Level.
 
 On a plate (Chladni) every beat does two things: it shakes the sand much harder for a moment (Shake rises with each hit), and, with Mode from Sound, it steps the plate to the next figure, which takes the sand a second or two to find. With a slow Beat that reads as a pulse every few seconds; that is the beat, not a glitch. Sand on a plate ships with Beat 0 (a still figure) for that reason.
 
 The group has a **Sound from** of its own (its Sound section): **Each node's own** (the default) leaves every listening node to its own card; any other choice (Level and Beat, Mic, Audio engine, Engine track 1–8) is shared by every Sound kick and Chladni inside, with the group's **Level** and **Beat**. One switch on the group card makes the whole rule hear the engine's kick track.
+
+## Ride a curve: walkers on a parametric curve
+
+A **Ride a curve** node (Inside: moving) puts every walker on a curve and moves it along. The curve is **Curve Trace**'s (docs/curve-trace.md), with the same settings and the same code: each axis a Sine, Triangle, Square or Saw with its frequency, phase, size and offset, or Custom GLSL in `t` and `time`; **Motion** Lateral (Lissajous), Rotary or Counter (two circles, stars and flowers); **Damping**; **Turns**; **Morph** into a second figure (the B frequencies). Wire its Position and Velocity into Agent Output and that is the whole rule.
+
+**How it works.** Agents are "push": each walker carries its own state. The node keeps the walker's place along the curve in **Memory.x**, adds its speed every step and stands it at curve(t). That is three evaluations of the curve per walker (the point, and either side of it for the tangent), with no search over the curve's segments and no buffer, so it costs about what a force does at any count. Curve Trace, drawing the same curve as a distance field, has to find the nearest of hundreds of segments at every pixel.
+
+- **Memory.** Memory.x holds the place plus 1 (0 means not on the curve yet: a walker just born, or one that was there before the node was added), so each walker's first step puts it at its Spread place. Memory.y passes through for the rest of the rule. **Agent Output's Memory left unwired takes the node's Memory by itself**, so you only wire Position and Velocity; wire it yourself to pass it through other nodes first. The group gets per-walker state whenever a Ride a curve is inside.
+- **Speed** is in turns a second (one turn is 2π of t: the whole figure when Turns is 1); negative rides backward. **Speed variation** gives each walker its own speed (±, from its Index, so the same every run) and **Direction** sends them all one way or half each way.
+- **Spread**: where each walker starts, at random or evenly spaced by Index, over **Spread over** of the curve (0: all at the start, a stream that sets off together).
+- **Ribbon width**: each walker rides in its own lane up to this far to either side of the curve, across its normal, so they make a band; **Wander** sways each one across the band at about **Wander rate** a second. In 3D the band is a tube of that radius round the curve (the lanes go round the tangent, measured from the picture's depth, so a flat figure's ribbon lies flat; where the curve runs straight into the depth the lanes turn over).
+- **Loop**, at the end of the curve: **Wrap** goes on round (seamless on a closed figure: whole-number ratios with Turns 1); **Ping-pong** turns back, and its velocity with it; **Respawn** jumps back to the start (riding backward, to the end): a stream along an open curve or a Damping spiral.
+- **Outputs**: Position, Velocity (the curve's tangent × the walker's speed, in picture units a second, so Draw agents' streaks, Colour by Speed and Heading, and Deposit's Velocity trail see real motion: fast on the long sweeps, slow at the turns), Heading, Speed, **Along** (0 at the start, 1 at the end: colour along the curve) and Memory.
+- **Sockets**: Speed, Ribbon width, Morph amount, X / Y frequency and phase take wires (an LFO into Morph amount, Time into a phase to turn the figure). Every slider is a Play control.
+- **3D**: in a 3D group the curve gets **Z** (its own wave, frequency, phase, size and offset, and a Z frequency B), as Curve Trace 3D's; the box is the picture across and up and ±1 deep.
+
+**Examples** (Examples → *Simulation*): **Walkers on a harmonograph** (a 3 : 2 Lissajous ridden by 256k walkers as a band, streaks coloured by speed over the trail they lay) and **Morphing ribbon** (an LFO morphs the figure from 3 : 2 into 5 : 4 and back; each walker coloured by Along).
 
 ## Neighbours: walkers that see each other
 

@@ -22,7 +22,7 @@
 import type { GraphNode, NodeDefinition, ParamDef } from '../../types/nodeGraph';
 import { p, pv3, withNewOutputs } from './helpers';
 
-type Axis = 'X' | 'Y' | 'Z';
+export type Axis = 'X' | 'Y' | 'Z';
 
 const WAVES = [
   { value: 'sine', label: 'Sine' },
@@ -35,7 +35,7 @@ const WAVES = [
 /** Only names, numbers, operators and brackets: a custom axis can't break out of its expression. */
 const SAFE_EXPR = /^[A-Za-z0-9_+\-*/%().,\s<>=?:!&|]*$/;
 
-function axisParams(a: Axis): Record<string, ParamDef> {
+export function axisParams(a: Axis): Record<string, ParamDef> {
   const custom = { param: `wave${a}`, value: 'custom' };
   const notCustom = { param: `wave${a}`, value: ['sine', 'triangle', 'square', 'saw'] };
   return {
@@ -48,7 +48,7 @@ function axisParams(a: Axis): Record<string, ParamDef> {
   } as Record<string, ParamDef>;
 }
 
-function axisDefaults(a: Axis, d: { freq: number; phase: number; amp: number }, expr: string): Record<string, unknown> {
+export function axisDefaults(a: Axis, d: { freq: number; phase: number; amp: number }, expr: string): Record<string, unknown> {
   return { [`wave${a}`]: 'sine', [`freq${a}`]: d.freq, [`phase${a}`]: d.phase, [`amp${a}`]: d.amp, [`off${a}`]: 0, [`expr${a}`]: expr };
 }
 
@@ -68,7 +68,7 @@ const BEAM_PARAMS: Record<string, ParamDef> = {
 
 const BEAM_DEFAULTS = { beamWidth: 0.004, glow: 0.3, dwell: 1, brightness: 2, beamColor: [0.35, 1.0, 0.55], beamScale: '1' };
 
-const COMMON_PARAMS = (thick: { def: number; max: number }, segs: number, beam = false): Record<string, ParamDef> => ({
+export const COMMON_PARAMS = (thick: { def: number; max: number }, segs: number, beam = false): Record<string, ParamDef> => ({
   mode: { section: 'Curve', label: 'Motion', type: 'select', compileTime: true, options: [
     { value: 'lateral', label: 'Lateral: X and Y swing (Lissajous)' },
     { value: 'rotary', label: 'Rotary: two circles, same way (loops)' },
@@ -217,7 +217,7 @@ function chunkedLoop(id: string, vt: string, n: number, point: string, pos: stri
   ];
 }
 
-interface CurvePoint {
+export interface CurvePoint {
   /** The point at the loop's `t` (reads `<id>_damp`, and `time` for a Custom axis). */
   point: string;
   /** Per axis: how far it reaches (null: unknown). */
@@ -231,7 +231,7 @@ interface CurvePoint {
 }
 
 /** The curve's point at `t` for the node's motion, waves and Morph. */
-function curvePoint(node: GraphNode, inputVars: Record<string, string>, axes: Axis[]): CurvePoint {
+export function curvePoint(node: GraphNode, inputVars: Record<string, string>, axes: Axis[]): CurvePoint {
   const id = node.id;
   const vt = axes.length === 3 ? 'vec3' : 'vec2';
   const mode = String(node.params.mode ?? 'lateral');

@@ -1,5 +1,27 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`golden outputs: examples > agentRideHarmonograph 1`] = `
+{
+  "again": "- x120",
+  "phase": "- x120",
+  "speed": "- x120",
+  "var": "- x120",
+  "wander": "- x120",
+  "width": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > agentRideMorph 1`] = `
+{
+  "again": "- x120",
+  "rate": "- x120",
+  "speed": "- x120",
+  "width": "- x120",
+  "xb": "- x120",
+  "yb": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > agentRuleSlime 1`] = `
 {
   "angle": "- x120",
