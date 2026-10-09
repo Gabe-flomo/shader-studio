@@ -95,18 +95,102 @@ function livePhase(node: GraphNode, phase: string, freq: string): string {
 }
 
 /** GLSL for one axis at the loop's `t`. */
-function axisExpr(node: GraphNode, a: Axis, inputVars: Record<string, string>, freqOf: (a: Axis) => string): { expr: string; bound: string | null } {
+/**
+ * One axis: its GLSL at the loop's `t`, a bound on how far it reaches (`bound`), and a bound on how
+ * fast it moves per unit of t (`lip`, null when it can jump: square, saw, custom), which lets the
+ * loop skip whole stretches of the curve that can't hold the nearest point.
+ */
+function axisExpr(node: GraphNode, a: Axis, inputVars: Record<string, string>, freqOf: (a: Axis) => string): { expr: string; bound: string | null; lip: string | null } {
   const wave = String(node.params[`wave${a}`] ?? 'sine');
   const off = p(node.params[`off${a}`], 0);
   if (wave === 'custom') {
     const raw = String(node.params[`expr${a}`] ?? '0.0').trim() || '0.0';
     if (!SAFE_EXPR.test(raw)) throw new Error(`Node ${node.id}: ${a} = "${raw}" has characters a curve formula can't use (only names, numbers, operators and brackets).`);
-    return { expr: `(${off} + (${raw}))`, bound: null };
+    return { expr: `(${off} + (${raw}))`, bound: null, lip: null };
   }
   const freq = freqOf(a);
   const phase = livePhase(node, inputVars[`phase${a}`] || p(node.params[`phase${a}`], 0), freq);
   const amp = p(node.params[`amp${a}`], 1);
-  return { expr: `(${off} + ${amp} * ${node.id}_damp * ${waveExpr(wave, `${freq} * t + ${phase}`)})`, bound: `(abs(${off}) + abs(${amp}))` };
+  // Speed along the axis: amp × (frequency + damping) for a sine; a triangle's slope is 2/π of a sine's peak.
+  const damping = p(node.params.damping, 0);
+  const slope = wave === 'sine' ? `abs(${freq})` : wave === 'triangle' ? `(0.63662 * abs(${freq}))` : null;
+  const lip = slope ? `(abs(${amp}) * (${slope} + abs(${damping})))` : null;
+  return { expr: `(${off} + ${amp} * ${node.id}_damp * ${waveExpr(wave, `${freq} * t + ${phase}`)})`, bound: `(abs(${off}) + abs(${amp}))`, lip };
+}
+
+/** Segments per stretch the chunked loop tests as a whole. */
+const CHUNK = 16;
+
+/** One segment, from `prev` to `cur` (the point at the loop's t): keeps the nearest, squared, and where along it. */
+const segmentLines = (id: string, vt: string, n: number, point: string, pos: string, dampAt: (tv: string) => string, ind: string, i: string): string[] => [
+  `${ind}float ${id}_f = float(${i}) / ${n}.0;\n`,
+  `${ind}t = mix(${id}_t0, ${id}_t1, ${id}_f);\n`,
+  `${ind}${id}_damp = ${dampAt('t')};\n`,
+  `${ind}${vt} ${id}_cur = ${point};\n`,
+  `${ind}${vt} ${id}_pa = ${pos} - ${id}_prev;\n`,
+  `${ind}${vt} ${id}_ba = ${id}_cur - ${id}_prev;\n`,
+  `${ind}float ${id}_h = clamp(dot(${id}_pa, ${id}_ba) / max(dot(${id}_ba, ${id}_ba), 1e-10), 0.0, 1.0);\n`,
+  `${ind}${vt} ${id}_q = ${id}_pa - ${id}_ba * ${id}_h;\n`,
+  // Squared distances in the loop, one square root after it.
+  `${ind}float ${id}_dd = dot(${id}_q, ${id}_q);\n`,
+  `${ind}if (${id}_dd < ${id}_d) { ${id}_d = ${id}_dd; ${id}_u = (float(${i}) - 1.0 + ${id}_h) / ${n}.0; }\n`,
+  `${ind}${id}_prev = ${id}_cur;\n`,
+];
+
+/** Every segment, in order: for curves that can jump (square, saw, custom), where nothing can be skipped. */
+function plainLoop(id: string, vt: string, n: number, point: string, pos: string, dampAt: (tv: string) => string): string[] {
+  return [
+    `      float t = ${id}_t0;\n`,
+    `      float ${id}_damp = ${dampAt('t')};\n`,
+    `      ${vt} ${id}_prev = ${point};\n`,
+    `      for (int ${id}_i = 1; ${id}_i <= ${n}; ${id}_i++) {\n`,
+    ...segmentLines(id, vt, n, point, pos, dampAt, '        ', `${id}_i`),
+    `      }\n`,
+  ];
+}
+
+/**
+ * The same nearest segment, found without visiting most of them. The curve moves at most `lip` per
+ * unit of t, so every point of a stretch of CHUNK segments lies within (CHUNK / 2) × dt × lip of the
+ * stretch's middle vertex. First pass: the middle vertices alone (each is on the polyline, so the
+ * nearest of them is an upper bound on the answer). Second pass: only the stretches whose ball comes
+ * nearer than the best so far are walked segment by segment. The result is the plain loop's, at a
+ * fraction of the cost away from the curve (and most pixels are away from a thin line).
+ */
+function chunkedLoop(id: string, vt: string, n: number, point: string, pos: string, lip: string, dampAt: (tv: string) => string): string[] {
+  const chunks = Math.ceil(n / CHUNK);
+  const midOf = (c: string) => `min(float(${c} * ${CHUNK} + ${CHUNK / 2}), ${n}.0)`;
+  return [
+    `      float t = ${id}_t0;\n`,
+    `      float ${id}_damp = 1.0;\n`,
+    `      float ${id}_dt = (${id}_t1 - ${id}_t0) / ${n}.0;\n`,
+    // A stretch's reach round its middle vertex (its far end is CHUNK / 2 segments away)
+    // (× the most Damping can swell it: exp(−Damping × t) passes 1 where t is negative, a Pen's tail at the start)
+    `      float ${id}_reach = ${lip} * abs(${id}_dt) * ${CHUNK / 2}.0 * max(1.0, max(${dampAt(`${id}_t0`)}, ${dampAt(`${id}_t1`)}));\n`,
+    // Kept apart from the best segment (not seeded into it), so the segment through that vertex still
+    // claims it and sets Along.
+    `      float ${id}_ub = 1e9;\n`,
+    `      for (int ${id}_c = 0; ${id}_c < ${chunks}; ${id}_c++) {\n`,
+    `        t = ${id}_t0 + ${id}_dt * ${midOf(`${id}_c`)};\n`,
+    `        ${id}_damp = ${dampAt('t')};\n`,
+    `        ${vt} ${id}_m = ${pos} - ${point};\n`,
+    `        ${id}_ub = min(${id}_ub, dot(${id}_m, ${id}_m));\n`,
+    `      }\n`,
+    `      for (int ${id}_c = 0; ${id}_c < ${chunks}; ${id}_c++) {\n`,
+    `        t = ${id}_t0 + ${id}_dt * ${midOf(`${id}_c`)};\n`,
+    `        ${id}_damp = ${dampAt('t')};\n`,
+    `        float ${id}_lb = max(length(${pos} - ${point}) - ${id}_reach, 0.0);\n`,
+    `        if (${id}_lb * ${id}_lb > min(${id}_d, ${id}_ub)) continue;\n`,
+    `        t = ${id}_t0 + ${id}_dt * float(${id}_c * ${CHUNK});\n`,
+    `        ${id}_damp = ${dampAt('t')};\n`,
+    `        ${vt} ${id}_prev = ${point};\n`,
+    `        for (int ${id}_j = 1; ${id}_j <= ${CHUNK}; ${id}_j++) {\n`,
+    `          int ${id}_i = ${id}_c * ${CHUNK} + ${id}_j;\n`,
+    `          if (${id}_i > ${n}) break;\n`,
+    ...segmentLines(id, vt, n, point, pos, dampAt, '          ', `${id}_i`),
+    `        }\n`,
+    `      }\n`,
+  ];
 }
 
 /** The shared loop: nearest piece of the polyline and where along it. */
@@ -115,15 +199,17 @@ function traceCode(node: GraphNode, inputVars: Record<string, string>, axes: Axi
   const vt = axes.length === 3 ? 'vec3' : 'vec2';
   const mode = String(node.params.mode ?? 'lateral');
   // The point at the loop's t for a set of frequencies (Morph builds two and blends them).
-  const pointWith = (freqOf: (a: Axis) => string): { point: string; parts: Array<{ expr: string; bound: string | null }> } => {
+  const pointWith = (freqOf: (a: Axis) => string): { point: string; parts: Array<{ expr: string; bound: string | null; lip: string | null }> } => {
     const parts = axes.map(a => axisExpr(node, a, inputVars, freqOf));
+    const damping = p(node.params.damping, 0);
     if (mode === 'rotary' || mode === 'counter') {
       // Two circles: the first from X's settings, the second from Y's (counter: the second turns the other way).
       const c = (a: Axis) => ({ f: freqOf(a), ph: livePhase(node, inputVars[`phase${a}`] || p(node.params[`phase${a}`], 0), freqOf(a)), r: p(node.params[`amp${a}`], 1) });
       const A = c('X'), B = c('Y'), op = mode === 'counter' ? '-' : '+';
       const offX = p(node.params.offX, 0), offY = p(node.params.offY, 0);
-      parts[0] = { expr: `(${offX} + ${id}_damp * (${A.r} * cos(${A.f} * t + ${A.ph}) + ${B.r} * cos(${B.f} * t + ${B.ph})))`, bound: `(abs(${offX}) + abs(${A.r}) + abs(${B.r}))` };
-      parts[1] = { expr: `(${offY} + ${id}_damp * (${A.r} * sin(${A.f} * t + ${A.ph}) ${op} ${B.r} * sin(${B.f} * t + ${B.ph})))`, bound: `(abs(${offY}) + abs(${A.r}) + abs(${B.r}))` };
+      const lip = `(abs(${A.r}) * (abs(${A.f}) + abs(${damping})) + abs(${B.r}) * (abs(${B.f}) + abs(${damping})))`;
+      parts[0] = { expr: `(${offX} + ${id}_damp * (${A.r} * cos(${A.f} * t + ${A.ph}) + ${B.r} * cos(${B.f} * t + ${B.ph})))`, bound: `(abs(${offX}) + abs(${A.r}) + abs(${B.r}))`, lip };
+      parts[1] = { expr: `(${offY} + ${id}_damp * (${A.r} * sin(${A.f} * t + ${A.ph}) ${op} ${B.r} * sin(${B.f} * t + ${B.ph})))`, bound: `(abs(${offY}) + abs(${A.r}) + abs(${B.r}))`, lip };
     }
     return { point: `${vt}(${parts.map(x => x.expr).join(', ')})`, parts };
   };
@@ -132,7 +218,10 @@ function traceCode(node: GraphNode, inputVars: Record<string, string>, axes: Axi
   const shapeB = morphing ? pointWith(a => inputVars[`freq${a}B`] || p(node.params[`freq${a}B`], 1)) : null;
   const morph = inputVars.morph || p(node.params.morph, 0);
   const point = shapeB ? `mix(${shapeA.point}, ${shapeB.point}, clamp(${morph}, 0.0, 1.0))` : shapeA.point;
-  const parts = shapeB ? shapeA.parts.map((x, i) => ({ expr: x.expr, bound: x.bound && shapeB.parts[i].bound ? `max(${x.bound}, ${shapeB.parts[i].bound})` : null })) : shapeA.parts;
+  const both = (x: string | null, y: string | null) => (x && y ? `max(${x}, ${y})` : null);
+  const parts = shapeB ? shapeA.parts.map((x, i) => ({ expr: x.expr, bound: both(x.bound, shapeB.parts[i].bound), lip: both(x.lip, shapeB.parts[i].lip) })) : shapeA.parts;
+  // How fast the curve can move per unit of t (null: it can jump, so no stretch can be skipped)
+  const lip = parts.every(x => x.lip) ? `length(${vt}(${parts.map(x => x.lip).join(', ')}))` : null;
   const n = Math.max(16, Math.min(2048, Math.round(Number(node.params.segments) || 256)));
   const turns = p(node.params.turns, 1);
   const start = inputVars.start || p(node.params.start, 0);
@@ -163,23 +252,8 @@ function traceCode(node: GraphNode, inputVars: Record<string, string>, axes: Axi
       `      float ${id}_t0 = ${start} * ${turns} * 6.28318;\n`,
       `      float ${id}_t1 = ${end} * ${turns} * 6.28318;\n`,
     ]),
-    `      float t = ${id}_t0;\n`,
-    `      float ${id}_damp = ${dampAt('t')};\n`,
-    `      ${vt} ${id}_prev = ${point};\n`,
-    `      for (int ${id}_i = 1; ${id}_i <= ${n}; ${id}_i++) {\n`,
-    `        float ${id}_f = float(${id}_i) / ${n}.0;\n`,
-    `        t = mix(${id}_t0, ${id}_t1, ${id}_f);\n`,
-    `        ${id}_damp = ${dampAt('t')};\n`,
-    `        ${vt} ${id}_cur = ${point};\n`,
-    `        ${vt} ${id}_pa = ${pos} - ${id}_prev;\n`,
-    `        ${vt} ${id}_ba = ${id}_cur - ${id}_prev;\n`,
-    `        float ${id}_h = clamp(dot(${id}_pa, ${id}_ba) / max(dot(${id}_ba, ${id}_ba), 1e-10), 0.0, 1.0);\n`,
-    `        ${vt} ${id}_q = ${id}_pa - ${id}_ba * ${id}_h;\n`,
-    // Squared distances in the loop, one square root after it.
-    `        float ${id}_dd = dot(${id}_q, ${id}_q);\n`,
-    `        if (${id}_dd < ${id}_d) { ${id}_d = ${id}_dd; ${id}_u = (float(${id}_i) - 1.0 + ${id}_h) / ${n}.0; }\n`,
-    `        ${id}_prev = ${id}_cur;\n`,
-    `      }\n`,
+    // `__plainLoop` (tests only) forces the plain loop, to check the chunked one against it.
+    ...(lip && n >= 2 * CHUNK && node.params.__plainLoop !== true ? chunkedLoop(id, vt, n, point, pos, lip, dampAt) : plainLoop(id, vt, n, point, pos, dampAt)),
     `      ${id}_d = sqrt(${id}_d);\n`,
     // The head: where the curve is at its end (Live and Pen: where the dot is now).
     `      t = ${id}_t1;\n`,

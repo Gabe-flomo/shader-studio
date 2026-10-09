@@ -107,35 +107,35 @@ exports[`golden shaders: every Play example exports the same bundle > convertCir
 
 exports[`golden shaders: every Play example exports the same bundle > curveTraceIntervals 1`] = `
 {
-  "bundle": "128a072619322408dbe7672b58b2:25831",
+  "bundle": "18324f0e150e1c064bc8c0ada411:36533",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > curveTraceKnot 1`] = `
 {
-  "bundle": "1ca2b17a4df55d01b7907d3efb32:20648",
+  "bundle": "187846004df6a01c2cfa603e245e:23855",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > curveTraceLive 1`] = `
 {
-  "bundle": "14a7b64108ab641b5e4c46dd2a00:7592",
+  "bundle": "0c2dbfdcf39bea1aa527b40e2d74:9901",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > curveTraceMorph 1`] = `
 {
-  "bundle": "14515711385ac3110aa557bb841b:8802",
+  "bundle": "0436493d2f382811f94060372008:11669",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > curveTracePen 1`] = `
 {
-  "bundle": "18f5c6bc0bb8e8109bba16f86b90:7149",
+  "bundle": "19f5a49261816a12b38bec19f61f:9210",
   "missing": [],
 }
 `;
@@ -2740,7 +2740,7 @@ exports[`golden shaders: every example compiles as it did > curveTraceIntervals 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "18e525d3f0589119c2136e3d89bb:20669",
+  "fragmentShader": "1116edc2dd9f410ff0b55dcdcdb7:31295",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "17d5e3ab08f536086f0184327655:264",
@@ -2816,7 +2816,7 @@ exports[`golden shaders: every example compiles as it did > curveTraceKnot 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1e66ef244f1e400114065af72c64:16233",
+  "fragmentShader": "0f287df0de34f00c8d72748884a2:19421",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0e50cf72f6c65811a6f0f6c01307:397",
@@ -2886,7 +2886,7 @@ exports[`golden shaders: every example compiles as it did > curveTraceLive 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "151cac89386db60b9f19bee1a107:6010",
+  "fragmentShader": "03541e93a6e7b11c5367e48e5862:8300",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "09e0c8da69b96517d9d14822e79d:58",
@@ -2919,7 +2919,7 @@ exports[`golden shaders: every example compiles as it did > curveTraceMorph 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "11d280a95ca144074161b51aa8ac:7013",
+  "fragmentShader": "094fa28a8ce03e1f678b69591f30:9861",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "13b7312adb1f90134dc4fff05ee5:119",
@@ -2957,7 +2957,7 @@ exports[`golden shaders: every example compiles as it did > curveTracePen 1`] = 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "159a942c7ee1f41a5ba000b7c3a3:5619",
+  "fragmentShader": "189d93d16759961591e7f6943f43:7661",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "09e0c8da69b96517d9d14822e79d:58",

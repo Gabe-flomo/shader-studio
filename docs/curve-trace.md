@@ -40,7 +40,10 @@ With **Morph** on, the node works out a second figure from the **B** frequencies
 
 ## Cost
 
-Each pixel (2D), or each march step (3D), loops over Segments pieces.
+Each pixel (2D), or each march step (3D), finds the nearest of the Segments pieces.
+- Smooth curves (Sine and Triangle waves, both Rotary motions, Morph between them) don't visit every piece. The curve is cut into stretches of 16, and how fast it can move bounds how far each stretch reaches from its middle point. A pixel first measures the distance to every stretch's middle, then walks only the stretches that could hold something nearer. Away from the line that skips most of the work: a Live dot with a 720-segment trail went from about 70 ms to 9 ms of GPU work at 2048 × 2048. Distance and Head are exactly what visiting every piece gives; Along can differ only where the curve passes over itself, where two places are equally near.
+- It helps little when the curve is dense: high frequencies with a long trail, where a stretch reaches across most of the picture.
+- Square, Saw and Custom axes can jump, so nothing can be bounded: they visit every piece.
 - The 3D node skips the loop when the point is clearly outside the curve's bounding sphere. With a Custom axis the bound is unknown, so it always loops.
 - Use about 10 segments per wiggle: 256–400 is plenty for ratios up to 9:8.
 
