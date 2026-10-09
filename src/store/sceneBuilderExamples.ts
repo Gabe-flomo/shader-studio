@@ -18,6 +18,9 @@ export function buildSceneBuilderExamples(): Record<string, ExampleGraph> {
   for (const r of SCENE_BUILDER_EXAMPLE_ROWS) {
     let i = 0;
     const spec = templateSpec(r.template);
+    // Examples stay light: no shadow or occlusion rays (they multiply the march's cost). The builder's
+    // Look tab, or the March Loop's sun button, adds them back.
+    spec.look = { ...spec.look, shadows: 0, ao: 0 };
     const res = applyScene([], spec, { nextId: () => `${r.key}_${++i}`, at: { x: 0, y: 0 } });
     const recipe = printRecipe(spec, { multiline: true });
     const nodes = res.nodes.map(n => n.id === res.sceneId

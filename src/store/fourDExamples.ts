@@ -4,7 +4,7 @@
  * All are ordinary ray-marched 3D scenes. Inside the Scene Group the point being measured is
  * lifted to 4D (w = the slice, in a chosen slice direction), maybe turned in a plane that includes w,
  * and measured against a 4D shape; the distance goes to Scene Output like any other. Nothing outside
- * the group knows. The lighting has shadows and ambient occlusion, which measure the same group.
+ * the group knows. The lighting is a plain Multi-Light (no shadow or occlusion rays, so 4D stays quick).
  *
  * Every node carries a comment saying what it is and why it is there.
  */
@@ -16,12 +16,12 @@ import { getNodeDefinition } from '../nodes/definitions';
 export const FOURD_EXAMPLE_INDEX: Record<string, { label: string; description: string; play: true }> = {
   fourDTesseractSlice: {
     label: '4D: Tesseract slice',
-    description: 'A tesseract (a 4D cube) cut corner-first. As the slice sweeps through it you see a point grow into a tetrahedron, a truncated tetrahedron, an octahedron, and back. Shadows and occlusion on a floor. Play moves the sweep, the centre and the size.',
+    description: 'A tesseract (a 4D cube) cut corner-first. As the slice sweeps through it you see a point grow into a tetrahedron, a truncated tetrahedron, an octahedron, and back. On a floor. Play moves the sweep, the centre and the size.',
     play: true,
   },
   fourDHypersphereInTesseract: {
     label: '4D: Hypersphere in a tesseract',
-    description: 'A hypersphere inside a hollow tesseract, in an open tray with shadows. The slice sweeps slowly along w, so the orange ball swells and shrinks inside a blue box that morphs as it turns. Play turns the box and lowers the cut straight inside the Scene Group.',
+    description: 'A hypersphere inside a hollow tesseract, in an open tray. The slice sweeps slowly along w, so the orange ball swells and shrinks inside a blue box that morphs as it turns. Play turns the box and lowers the cut straight inside the Scene Group.',
     play: true,
   },
   fourDThreeSlices: {
@@ -31,7 +31,7 @@ export const FOURD_EXAMPLE_INDEX: Record<string, { label: string; description: s
   },
   fourDDuocylinderDance: {
     label: '4D: Duocylinder dance',
-    description: 'A duocylinder (two circles multiplied) tumbling in two 4D planes at once. Its 3D slice stretches, shortens and rolls without repeating. Shadows and occlusion on a floor. Play sets both turn speeds, the cut and the radius.',
+    description: 'A duocylinder (two circles multiplied) tumbling in two 4D planes at once. Its 3D slice stretches, shortens and rolls without repeating. On a floor. Play sets both turn speeds, the cut and the radius.',
     play: true,
   },
   fourD24Cell: {
@@ -67,7 +67,7 @@ export const FOURD_EXAMPLE_INDEX: Record<string, { label: string; description: s
   },
   fourDDuocylinderShadow: {
     label: '4D: Duocylinder shadow',
-    description: 'The same turning duocylinder twice: on the left a slice (one 3D layer of it) and on the right its solid shadow along w (every layer at once). Both turn in the same two 4D planes at the same speed, so you can see what the slice leaves out. Shadows and occlusion on a floor.',
+    description: 'The same turning duocylinder twice: on the left a slice (one 3D layer of it) and on the right its solid shadow along w (every layer at once). Both turn in the same two 4D planes at the same speed, so you can see what the slice leaves out. On a floor.',
     play: true,
   },
   fourDHopfRings: {
@@ -138,7 +138,7 @@ export const passBody = (id: string): SubgraphData => sub([
 export const SUN = { x: 0.55, y: 0.85, z: 0.45 };
 
 /**
- * Loop, shadow, occlusion, Multi-Light, background, vignette and tone map: the same finishing for all.
+ * Loop, Multi-Light, background, vignette and tone map: the same finishing for all.
  * `colour` is the Expression Block that picks a surface colour from the hit point.
  */
 export function finish(bg: [number, number, number], colour: GraphNode, loopNote: string, outX = 1700): GraphNode[] {
@@ -146,15 +146,11 @@ export function finish(bg: [number, number, number], colour: GraphNode, loopNote
     n('marchLoopGroup', 'march', 340, 220, { bg, maxSteps: 128, maxDist: 24, ...note(loopNote) }, { ro: ['cam', 'ro'], rd: ['cam', 'rd'], scene: ['scene', 'scene'] }),
     n('splitVec3', 'hp', 640, 420, { ...note('Split Vec3: the hit point as x, y, z, so the surface colour can depend on where the ray landed.') }, { v: ['march', 'pos'] }),
     colour,
-    n('makeVec3', 'sun', 900, 40, { r: SUN.x, g: SUN.y, b: SUN.z, ...note('Make Vec3: the direction the sun shines from, as one vector. It goes to the shadow (to know which way to look for blockers) and to Multi-Light (to light the surface), so the shadow and the light always agree.') }),
-    n('softShadow', 'shadow', 900, 200, { k: 12, tmax: 20, ...note('Soft Shadow: from each hit point a second ray goes toward the sun through the SAME Scene Group, so the shadow has the shape of the slice at this very w. It reads the group\'s wired values (the slice position) as the march loop does. Hardness 12 gives a soft edge.') },
-      { scene: ['scene', 'scene'], pos: ['march', 'pos'], normal: ['march', 'normal'], hit: ['march', 'hit'], lightDir: ['sun', 'rgb'] }),
-    n('sdfAo', 'ao', 900, 380, { stepDist: 0.07, ...note('SDF Ambient Occlusion: steps along the surface normal and compares the distance it expects with the scene\'s real distance there; where the real one is smaller, something is close by and the corner darkens. Again it measures the same Scene Group.') },
-      { scene: ['scene', 'scene'], pos: ['march', 'pos'], normal: ['march', 'normal'], hit: ['march', 'hit'] }),
+    n('makeVec3', 'sun', 900, 40, { r: SUN.x, g: SUN.y, b: SUN.z, ...note('Make Vec3: the direction the sun shines from, as one vector. It goes to Multi-Light to light the surface.') }),
     n('multiLight', 'lit', 1180, 220, {
       sunR: 1.25, sunG: 1.05, sunB: 0.85, skyR: 0.22, skyG: 0.3, skyB: 0.5, bounceR: 0.09, bounceG: 0.06, bounceB: 0.05,
-      ...note('Multi-Light: warm sun from one side (shadowed), a cool sky fill from above and a little bounce light (both darkened by occlusion), over the surface colour, in linear light.'),
-    }, { baseColor: ['col', 'result'], normal: ['march', 'normal'], hit: ['march', 'hit'], ao: ['ao', 'ao'], shadow: ['shadow', 'shadow'], sunDir: ['sun', 'rgb'] }),
+      ...note('Multi-Light: warm sun from one side, a cool sky fill from above and a little bounce light, over the surface colour, in linear light. No shadow or occlusion rays, so 4D shapes stay quick to draw: the March Loop\'s sun button (Light the scene) adds them.'),
+    }, { baseColor: ['col', 'result'], normal: ['march', 'normal'], hit: ['march', 'hit'], sunDir: ['sun', 'rgb'] }),
     n('colorPicker', 'sky', 1180, 520, { color: bg, ...note('Background colour: what a ray that hits nothing shows.') }),
     n('select', 'pick', 1420, 220, { outputType: 'vec3', ...note('Hit is 1 where the ray touched the shape: show the lit surface there, the background elsewhere.') },
       { mask: ['march', 'hit'], ifTrue: ['lit', 'color'], ifFalse: ['sky', 'rgb'] }),
@@ -176,16 +172,16 @@ export function buildFourDExamples(): Record<string, ExampleGraph> {
       scene('scene', 40, 860, 'Tesseract slice', [
         n('lift4D', 'lift', 240, 80, { sliceDir: 'corner', ...note('Lift to 4D, Slice direction Corner-first: the cut is a flat 3D layer whose normal is (1,1,1,1)/2, so it meets the tesseract at a corner first. W arrives through the port from the LFO outside. At the largest W the layer touches one corner: a point. Lower W and it opens into a tetrahedron, then a truncated tetrahedron, and at W = 0 an octahedron. Then it runs back down the other side.') }, { pos: ['sp', 'pos'] }),
         n('tesseractSDF', 'ts', 520, 80, { size: 0.5, rounding: 0.03, ...note('Tesseract SDF: the box formula with four coordinates. Half size 0.5 in every direction, edges rounded by 0.03. Half size is a Play knob that reaches straight in here. The cut reaches the corner at W = 2 x half size = 1.0.') }, { p4: ['lift', 'p4'] }),
-        n('planeSDF3D', 'floor', 520, 360, { height: -1.15, ...note('A floor at y = -1.15, just below the largest slice, so the shadow of the shape has somewhere to land. It is plain 3D: it never meets the 4D part.') }, { p: ['sp', 'pos'] }),
+        n('planeSDF3D', 'floor', 520, 360, { height: -1.15, ...note('A floor at y = -1.15, just below the largest slice, so the shape has something to stand over. It is plain 3D: it never meets the 4D part.') }, { p: ['sp', 'pos'] }),
         n('sdfUnion', 'un', 820, 200, { k: 0, ...note('Union: the scene is the nearer of the slice and the floor.') }, { a: ['ts', 'dist'], b: ['floor', 'dist'] }),
       ], ['un', 'dist'],
-      'The whole 4D idea lives in this group: the point from Scene Pos is lifted to 4D along a corner-first slice, and measured against a tesseract. A distance comes out and goes to Scene Output, so the camera, the march loop and the lighting outside (including the shadow and occlusion, which measure this very group) are the same as for any 3D scene.',
+      'The whole 4D idea lives in this group: the point from Scene Pos is lifted to 4D along a corner-first slice, and measured against a tesseract. A distance comes out and goes to Scene Output, so the camera, the march loop and the lighting outside are the same as for any 3D scene.',
       [{ key: 'w', label: 'W (slice)', from: ['sweep', 'value'], to: ['lift', 'w'] }]),
       ...finish([0.05, 0.055, 0.1],
         expr('col', 1180, 520, 'Surface colour', { x: ['hp', 'x'], y: ['hp', 'y'], z: ['hp', 'z'] },
           'y < -1.14 ? vec3(0.16, 0.18, 0.28) + vec3(0.1, 0.11, 0.14) * mod(floor(x * 2.0) + floor(z * 2.0), 2.0) : vec3(0.95, 0.32, 0.3) + vec3(0.05, 0.46, 0.05) * clamp(0.5 + 0.45 * (x + y + z), 0.0, 1.0)',
           'Surface colour from where the ray landed: a dark blue checker on the floor (y below -1.14), and on the slice a slide from coral to gold along the diagonal so the flat faces of the tetrahedron and octahedron read.'),
-        'March Loop: finds, for each pixel, where the ray meets the scene and the surface direction there. Its Hit, Normal and Hit Pos feed the shadow, the occlusion and the lighting.'),
+        'March Loop: finds, for each pixel, where the ray meets the scene and the surface direction there. Its Hit, Normal and Hit Pos feed the lighting.'),
     ],
     play: play([
       ctl('sweep', 'sweep::amplitude', 'Sweep (w range)', 0, 1.1, 0.01),
@@ -194,7 +190,7 @@ export function buildFourDExamples(): Record<string, ExampleGraph> {
       ctl('c', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
     ], `**What it shows.** A tesseract is a cube with a fourth direction, w: eight cubes folded around a point you cannot see all at once. The screen shows 3D, so this is one slice of it. Here the slice is cut **corner-first**: its direction is (1,1,1,1), diagonal to all four axes, so it meets the tesseract at a corner. At the extreme w you see a single point. As w comes down it opens into a **tetrahedron**, grows, has its corners cut off (a truncated tetrahedron) and at w = 0 is a perfect **octahedron**. Then it runs back through the same shapes in reverse to a point on the far side.
 
-**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** (Slice direction: Corner-first) → **Tesseract SDF** → Union with a floor → Scene Output. Outside, an LFO sweeps w; an ordinary March Camera and March Loop find the surface, and Soft Shadow and SDF Ambient Occlusion measure the same Scene Group, so the shadow on the floor is the shadow of the slice you are seeing.
+**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** (Slice direction: Corner-first) → **Tesseract SDF** → Union with a floor → Scene Output. Outside, an LFO sweeps w; an ordinary March Camera and March Loop find the surface, and Multi-Light lights it. For shadows, use the March Loop's sun button (Light the scene): Soft Shadow measures the same Scene Group, so the shadow on the floor is the shadow of the slice you are seeing.
 
 **Try.** Set **Sweep** to 0 and slide **Centre** to hold any slice: about 0.5 and above is a tetrahedron, 0 an octahedron. **Tesseract half size** is a Play knob on a setting inside the Scene Group; the point is always reached at twice the half size. On Lift to 4D change the Slice direction to **Face-first** to see the cube (the slice is empty beyond w = half size), or **Edge-first**.`),
   };
@@ -260,7 +256,7 @@ export function buildFourDExamples(): Record<string, ExampleGraph> {
         ...shapeNodes,
         n('sdfUnion', 'u1', 1080, 200, { k: 0, ...note('Union: the face-first and edge-first shapes, whichever is nearer.') }, { a: ['ts_a', 'dist'], b: ['ts_b', 'dist'] }),
         n('sdfUnion', 'u2', 1260, 300, { k: 0, ...note('Union: adds the corner-first shape.') }, { a: ['u1', 'dist'], b: ['ts_c', 'dist'] }),
-        n('planeSDF3D', 'floor', 1260, 560, { height: -1.15, ...note('A floor at y = -1.15, below the largest octahedron, to catch the three shadows.') }, { p: ['sp', 'pos'] }),
+        n('planeSDF3D', 'floor', 1260, 560, { height: -1.15, ...note('A floor at y = -1.15, below the largest octahedron.') }, { p: ['sp', 'pos'] }),
         n('sdfUnion', 'un', 1480, 380, { k: 0, ...note('Union: the shapes or the floor, whichever is nearer.') }, { a: ['u2', 'dist'], b: ['floor', 'dist'] }),
       ], ['un', 'dist'],
       'Three tesseracts in a row, each with its own Lift to 4D cutting a different way, all reading the same W through one port. The difference you see is only the direction of the cut.',
@@ -277,7 +273,7 @@ export function buildFourDExamples(): Record<string, ExampleGraph> {
       ctl('c', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
     ], `**What it shows.** The same tesseract cut three ways at the same instant. **Left, face-first**: the cut is parallel to one of the cubic cells, so you see a plain cube until w passes the half size and the cube is gone. **Middle, edge-first**: the cut leans toward the edges (normal along (0,0,1,1)), so it is a box, longer than a cube, that shortens over a longer range of w. **Right, corner-first**: the cut leans along (1,1,1,1) so it starts at a point, becomes a tetrahedron, then an octahedron at w = 0 and back. Each is a different 3D picture of one and the same 4D object.
 
-**How it is built.** One Scene Group holds all three: Scene Pos → **Translate 3D** (to its place in the row) → **Lift to 4D** (Slice direction Face-, Edge- or Corner-first) → **Tesseract SDF**, then the three joined by Unions with a floor. One LFO outside feeds all three Lift to 4D through ports, so they always share w. Shadows and occlusion measure the whole group.
+**How it is built.** One Scene Group holds all three: Scene Pos → **Translate 3D** (to its place in the row) → **Lift to 4D** (Slice direction Face-, Edge- or Corner-first) → **Tesseract SDF**, then the three joined by Unions with a floor. One LFO outside feeds all three Lift to 4D through ports, so they always share w.
 
 **Try.** Set **Sweep** to 0 and move **Centre** from 0 to 1: the cube disappears at 0.5, the prism at 0.71 and the corner-first shape last, at 1.0. At Centre 0 compare the three: a cube, a longer box, and a regular octahedron. Open the group and try the **Custom** direction on one of the Lift to 4D nodes.`),
   };
@@ -308,7 +304,7 @@ export function buildFourDShapeExamples(): Record<string, ExampleGraph> {
         floorNode('floor', -1.0, 'A floor at y = -1.0, just below the largest the shape gets (its reach is the square root of both radii squared, about 0.88), so the shadow has somewhere to land.'),
         n('sdfUnion', 'un', 1240, 200, { k: 0, ...note('Union: the scene is the nearer of the duocylinder and the floor.') }, { a: ['dc', 'dist'], b: ['floor', 'dist'] }),
       ], ['un', 'dist'],
-      'Scene Pos is lifted to 4D, turned in two planes and measured against a duocylinder. Everything outside (camera, march loop, shadows) is an ordinary 3D scene.'),
+      'Scene Pos is lifted to 4D, turned in two planes and measured against a duocylinder. Everything outside (camera, march loop, lighting) is an ordinary 3D scene.'),
       ...finish([0.05, 0.055, 0.1],
         expr('col', 1180, 520, 'Surface colour', { x: ['hp', 'x'], y: ['hp', 'y'], z: ['hp', 'z'] },
           checker(-1.0) + 'vec3(0.2, 0.62, 0.95) + vec3(0.75, -0.1, -0.5) * clamp(0.5 + 0.55 * (x - z + 0.5 * y), 0.0, 1.0)',
@@ -323,7 +319,7 @@ export function buildFourDShapeExamples(): Record<string, ExampleGraph> {
       ctl('c', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
     ], `**What it shows.** A duocylinder is the product of two circles: one in the xy plane, one in the zw plane, so it is round in two separate ways. Its 3D slice at rest is a cylinder, but it is turned in two planes at once. The **xw** turn swaps x with the fourth direction, so the cylinder stretches and shortens as different parts of the shape pass through the slice. The **yz** turn is an ordinary roll. Together they make the shape tumble and breathe without end.
 
-**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** → **Rotate 4D** (xw) → **Rotate 4D** (yz) → **Duocylinder SDF** → Union with a floor → Scene Output. The camera, march loop, shadows and lighting outside know nothing about the fourth dimension.
+**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** → **Rotate 4D** (xw) → **Rotate 4D** (yz) → **Duocylinder SDF** → Union with a floor → Scene Output. The camera, march loop and lighting outside know nothing about the fourth dimension.
 
 **Try.** Set both turn speeds to 0 and slide **Slice**: the cylinder shortens and vanishes at the zw radius (0.56). Turn only **xw**, then only **yz**, to see which motion is the 4D one. Change **Radius xy** to fatten or thin the cylinder.`),
   };
@@ -415,7 +411,7 @@ export function buildFourDShapeExamples(): Record<string, ExampleGraph> {
         n('rotate4D', 'rot', 480, 80, { plane: 'xw', angle: 0, spin: 12, ...note('Rotate 4D in xw, 12 degrees a second, BEFORE the repeat: the whole lattice turns, so the slice cuts the rows of spheres at a changing slant.') }, { p4: ['lift', 'p4'] }),
         n('repeat4D', 'rep', 720, 80, { cellX: 1.2, cellY: 1.2, cellZ: 1.2, cellW: 1.2, limit: 1, ...note('Repeat 4D: a lattice with cells 1.2 across in all four directions, with one extra copy on each side of the middle (Count limit 1): 3 x 3 x 3 x 3 = 81 hyperspheres. Cell size is a Play knob.') }, { p4: ['rot', 'p4'] }),
         n('hypersphereSDF', 'ball', 960, 80, { radius: 0.4, ...note('Hypersphere SDF: a 4D ball of radius 0.4 in each cell. Its slice is a 3D ball of radius √(0.4² − w²) where w is how far the slice sits from the ball\'s centre; as the lattice turns, each copy is cut nearer to or further from its centre, so the balls swell and shrink out of step. Radius is a Play knob.') }, { p4: ['rep', 'p4'] }),
-        floorNode('floor', -2.2, 'A floor at y = -2.2, below the lattice, for shadows.'),
+        floorNode('floor', -2.2, 'A floor at y = -2.2, below the lattice.'),
         n('sdfUnion', 'un', 1240, 200, { k: 0, ...note('Union: the scene is the nearer of the lattice and the floor.') }, { a: ['ball', 'dist'], b: ['floor', 'dist'] }),
       ], ['un', 'dist'],
       'Scene Pos is lifted to 4D, turned, repeated on a 4D lattice and measured against a hypersphere: a lattice of balls whose 3D slice morphs as the lattice turns.'),
@@ -473,7 +469,7 @@ export function buildFourDShapeExamples(): Record<string, ExampleGraph> {
       n('marchCamera', 'cam', 40, 220, { camDist: 8.6, camAngle: 3.14, camElevation: 0.55, rotSpeed: 0.0, fov: 1.5, ...note('March Camera: pulled back to see two rows of five. It does not orbit on its own (Rot Speed 0); Camera angle is a Play knob.') }, { time: ['time', 'time'] }),
       scene('scene', 40, 860, 'Gallery', [
         ...galleryShapes, ...unions,
-        floorNode('floor', -1.15, 'A floor at y = -1.15 for the shadows.'),
+        floorNode('floor', -1.15, 'A floor at y = -1.15.'),
         n('sdfUnion', 'un', 1500, 400, { k: 0, ...note('Union: all the shapes or the floor, whichever is nearer.') }, { a: ['u8', 'dist'], b: ['floor', 'dist'] }),
       ], ['un', 'dist'],
       'Ten 4D shapes, each lifted, turned by the same angle and measured, then joined. The same angle comes in through ten ports.',
