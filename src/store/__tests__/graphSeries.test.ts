@@ -18,7 +18,7 @@ vi.hoisted(() => {
 });
 
 import { useNodeGraphStore } from '../useNodeGraphStore';
-import { listVersions, nextNumber, numberOf, trimToSize, type GraphVersion } from '../graphVersions';
+import { adoptSeriesHistory, listVersions, nextNumber, numberOf, seriesHistory, trimToSize, type GraphVersion } from '../graphVersions';
 
 const st = () => useNodeGraphStore.getState();
 const label = () => { const c = st().currentGraph; return c ? `${c.major}.${c.minor}` : null; };
@@ -79,5 +79,19 @@ describe('graph series', () => {
     const hist = [v(1, 1, 0), v(2, 1, 1), v(3, 1, 2), v(4, 1, 3), v(5, 2, 0), v(6, 2, 1), v(7, 2, 2)];
     const kept = trimToSize(hist, 5 * 200);
     expect(kept.map(x => `${x.major}.${x.minor}`)).toEqual(['1.0', '1.3', '2.0', '2.1', '2.2']);
+  });
+
+  it('a whole series travels: its history is adopted only by a name with none of its own', async () => {
+    await st().saveGraph('Trip', 'a', 'new');
+    await st().saveGraph('Trip', 'b');
+    await st().saveGraph('Trip', 'c', 'major');
+    const history = seriesHistory('Trip');
+    expect(history.map(v => `${v.major}.${v.minor}`)).toEqual(['1.0', '1.1']);
+    // Arriving under a new name: the versions come with their numbers.
+    localStorage.setItem('shader-studio:Trip copy', localStorage.getItem('shader-studio:Trip')!);
+    expect(adoptSeriesHistory('Trip copy', history)).toBe(2);
+    expect(listVersions('Trip copy').map(v => `${v.major}.${v.minor}`)).toEqual(['2.0', '1.1', '1.0']);
+    // A name that has its own past keeps it.
+    expect(adoptSeriesHistory('Trip', [{ version: 9, major: 9, minor: 0, savedAt: 1, payload: '{}' }])).toBe(0);
   });
 });

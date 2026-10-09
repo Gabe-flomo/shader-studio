@@ -5,6 +5,7 @@
  * the button that asked; the plan's gates stay as they were for each export.
  */
 import { requireFeature } from '../../lib/plan';
+import { seriesHistory } from '../../store/graphVersions';
 import { PLAYFILE_EXT } from '../../playfile/format';
 import { currentGraphLinks, exportCurrentGraph, exportPlayfile, exportPresentationPlayfile, openNodePackDialog } from '../../playfile/app';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -17,8 +18,15 @@ const report = (failTitle: string) => (r: Parameters<typeof reportFileResult>[0]
 
 /** ".playfile", and when the open graph is linked to presentations, ".playfile without them" too. */
 function playfileChoices(asPlay: boolean, hint: string) {
-  const links = currentGraphLinks(useNodeGraphStore.getState().currentGraph?.name);
+  const current = useNodeGraphStore.getState().currentGraph;
+  const links = currentGraphLinks(current?.name);
   const fail = asPlay ? 'Couldn’t export the play file' : 'Couldn’t export the graph';
+  // A saved series with earlier versions: this version, or the whole series in one file.
+  const earlier = current ? seriesHistory(current.name).length : 0;
+  if (!links.length && earlier) return [
+    { label: `As ${PLAYFILE_EXT}: this version (${current!.major}.${current!.minor})`, icon: 'export' as const, hint, run: async () => report(fail)(await exportCurrentGraph(asPlay)) },
+    { label: `As ${PLAYFILE_EXT}: the whole series (${earlier + 1} versions)`, icon: 'export' as const, hint: 'Every saved version, families and notes included: opening it brings the series back', run: async () => report(fail)(await exportCurrentGraph(asPlay, { series: true })) },
+  ];
   if (!links.length) return [{ label: `As ${PLAYFILE_EXT}`, icon: 'export' as const, hint, run: async () => report(fail)(await exportCurrentGraph(asPlay)) }];
   return [
     { label: `As ${PLAYFILE_EXT}, with ${links.length === 1 ? 'its linked presentation' : `its ${links.length} linked presentations`}`, icon: 'export' as const, hint, run: async () => report(fail)(await exportCurrentGraph(asPlay, { linked: true })) },
