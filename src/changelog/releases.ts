@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.120',
+    date: '2026-10-09',
+    title: 'Expression Builder',
+    highlights: [
+      { area: 'Studio', text: 'Expression Builder: start from UV, a world position or Time and grow an expression from moves found in real shaders, each shown as a live picture.', link: { kind: 'doc', path: 'docs/expression-builder.md' } },
+      { area: 'Studio', text: 'Tune a move\'s numbers before or after picking it, go back to any step, then Add to graph: a commented Expression Block with sliders. Do… bar: "new expression".' },
+    ],
+  },
+  {
     id: '2026.10.119',
     date: '2026-10-09',
     title: 'Previews under their line',
