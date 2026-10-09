@@ -40,7 +40,7 @@ import {
 import { GP_BESSEL_N, GP_BESSEL_W, GP_LEVELS, GP_VOL, GP_VOL_TILES, gpBesselTable, gpReadback, type GpReadback, type GpSoundInput } from '../play/kit/gpuParticles.js';
 import {
   AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT3_VERT, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW3_VERT, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_PROJ3_FRAG, AG_READ_FRAG, AG_SUM_FRAG,
-  AG_NB_BIN_FRAG, AG_NB_BIN_VERT, AG_THUMB_DOTS_FRAG, AG_THUMB_DOTS_VERT, AG_TRAIL3_FRAG, AG_TRAIL_FRAG,
+  AG_NB_BIN_FRAG, AG_NB_BIN_VERT, AG_SPOT_FRAG, AG_SPOT_VERT, AG_THUMB_DOTS_FRAG, AG_THUMB_DOTS_VERT, AG_TRAIL3_FRAG, AG_TRAIL_FRAG,
 } from '../play/kit/agentShaders.js';
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
 import { agentReadingsWanted, publishAgentReadings, setAgentGroups } from './agentReadings';
@@ -53,6 +53,38 @@ export const trailThumbRegistry = new CanvasProbeRegistry();
 export const agentThumbRegistry = new CanvasProbeRegistry();
 /** Most walkers a group card's thumbnail draws (every k-th one beyond it): the dots stay cheap at 4M. */
 const THUMB_DOTS = 1 << 16;
+/**
+ * The Agent Builder's species spotlight (by the Agents group's node id): the live runner draws only one
+ * species' walkers into it as bright dots, over black, in the picture's place for them. The canvas says
+ * what to draw: `dataset.species` (0-based; absent or -1: every species) and `dataset.colour`
+ * ('r,g,b', 0–1). The runner writes back `dataset.spot` ('live' once drawn; 'flat' for a 3D group with
+ * no live Draw agents camera to project through; 'none' before the group has state) and `dataset.dots`
+ * (the walkers it looked at, every species).
+ */
+export const agentSpotRegistry = new CanvasProbeRegistry();
+/** Most walkers the spotlight looks at (every k-th one beyond it). */
+const SPOT_DOTS = 1 << 18;
+/** The spotlight's width in pixels (its height follows the picture's aspect). */
+const SPOT_W = 640;
+/** A spotlight dot's size in pixels. */
+const SPOT_PX = 2;
+
+/** A small target and an async readback of it (a pixel buffer and a fence, no stall). */
+interface DotRead { rt: THREE.WebGLRenderTarget; W: number; H: number; pbo: WebGLBuffer | null; sync: WebGLSync | null; buf: Uint8Array }
+
+/** '0.2,0.5,1' → [0.2, 0.5, 1], clamped to 0–1 (white when it does not read). */
+export function parseSpotColour(s: string | undefined): [number, number, number] {
+  const v = (s ?? '').split(',').map(x => (x.trim() === '' ? NaN : Number(x)));
+  if (v.length < 3 || v.slice(0, 3).some(x => !Number.isFinite(x))) return [1, 1, 1];
+  return [0, 1, 2].map(i => Math.min(1, Math.max(0, v[i]))) as [number, number, number];
+}
+
+/** The species index a spotlight canvas asks for (-1: all of them). */
+export function parseSpotSpecies(s: string | undefined): number {
+  if (s === undefined || s.trim() === '') return -1;
+  const n = Number(s);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : -1;
+}
 
 /** What the group cards show: count, steps a frame and how fast the simulation keeps up. */
 export interface AgentStats { count: number; stepsPerFrame: number; rate: number; step: number }
@@ -394,9 +426,23 @@ export class AgentRunner {
    * a frame or more later when the GPU has finished (no stall: a synchronous read here waited for
    * the whole frame's simulation, about 0.35–0.9 ms a frame on average on an M3 Pro).
    */
-  private dotReads = new Map<string, { rt: THREE.WebGLRenderTarget; W: number; H: number; pbo: WebGLBuffer | null; sync: WebGLSync | null; buf: Uint8Array }>();
+  private dotReads = new Map<string, DotRead>();
   /** The picture's aspect at the last run (the dots thumbnail's shape). */
   private aspect = 16 / 9;
+  /** The clock of the last live run (where a 3D spotlight's camera was then). */
+  private lastTime = 0;
+  // The Agent Builder's species spotlight (agentSpotRegistry): one species' walkers as additive dots.
+  private spotMat = raw(AG_SPOT_VERT, AG_SPOT_FRAG, {
+    u_a: { value: null }, u_b: { value: null }, u_c: { value: null }, u_cam: { value: null },
+    u_side: { value: 1 }, u_stride: { value: 1 }, u_species: { value: 1 }, u_stateC: { value: 0 }, u_only: { value: -1 }, u_deep: { value: 0 }, u_camSrc: { value: 0 },
+    u_aspect: { value: 1 }, u_px: { value: SPOT_PX }, u_gain: { value: 1 }, u_col: { value: new THREE.Vector3(1, 1, 1) },
+    u_eye: { value: new THREE.Vector3() }, u_fwd: { value: new THREE.Vector3(0, 0, -1) }, u_right: { value: new THREE.Vector3(1, 0, 0) }, u_up: { value: new THREE.Vector3(0, 1, 0) },
+    u_lens: { value: 1.8 }, u_ortho: { value: 0 }, u_camDist: { value: 3 },
+  }, true);
+  private spot: THREE.Points;
+  private spotScene = new THREE.Scene();
+  /** Each spotlight canvas's target and read (keyed `spot:<node id>`, apart from the group cards' dots). */
+  private spotReads = new Map<string, DotRead>();
   // Readings for Play (P6): the live state summed on the GPU into 2 × 1 texels, read back without a stall.
   private readMat = raw(AG_FULL_VERT, AG_READ_FRAG, {
     u_a: { value: null }, u_b: { value: null }, u_c: { value: null }, u_side: { value: 1 }, u_species: { value: 1 }, u_stateC: { value: 0 }, u_w: { value: 1 }, u_deep: { value: 0 },
@@ -422,6 +468,9 @@ export class AgentRunner {
     this.dots = new THREE.Points(this.pointGeometry, this.dotsMat);
     this.dots.frustumCulled = false;
     this.dotsScene.add(this.dots);
+    this.spot = new THREE.Points(this.pointGeometry, this.spotMat);
+    this.spot.frustumCulled = false;
+    this.spotScene.add(this.spot);
   }
 
   get current(): AgentsSpec { return this.spec; }
@@ -612,7 +661,7 @@ export class AgentRunner {
     const u = this.host.uniforms();
     const w = Math.max(1, o.width), h = Math.max(1, o.height);
     const aspect = w / h;
-    if (o.live) this.aspect = aspect;
+    if (o.live) { this.aspect = aspect; this.lastTime = o.time; }
     // A group steps once its rule is compiled, and its Collide (3D scene) grids too (else its first steps would collide with nothing).
     const gridDone = (g: AgentGroupProgram) => (g.grids ?? []).every(gr => this.gridPrograms.some(x => x.slug === gr.slug && (x.ready || x.failed)));
     const ready = this.steps.filter(e => e.spec.live && e.ready && !e.failed && gridDone(e.spec));
@@ -1231,11 +1280,7 @@ export class AgentRunner {
       };
       // A read started earlier: show it once the GPU is done; until then leave the card as it is.
       if (d.sync) {
-        if (gl.getSyncParameter(d.sync, gl.SYNC_STATUS) !== gl.SIGNALED) continue;
-        gl.deleteSync(d.sync); d.sync = null;
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, d.pbo);
-        gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, d.buf);
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        if (!this.finishRead(d)) continue;
         show();
       }
       const n = g.side * g.side;
@@ -1259,20 +1304,7 @@ export class AgentRunner {
       renderer.autoClear = prevAuto;
       if (async) {
         // Start the read into a pixel buffer; the next call picks it up (no wait for the GPU).
-        const fb = (renderer.properties.get(d.rt) as { __webglFramebuffer?: WebGLFramebuffer }).__webglFramebuffer ?? null;
-        if (fb) {
-          if (!d.pbo) {
-            d.pbo = gl.createBuffer();
-            gl.bindBuffer(gl.PIXEL_PACK_BUFFER, d.pbo);
-            gl.bufferData(gl.PIXEL_PACK_BUFFER, d.buf.byteLength, gl.STREAM_READ);
-          } else gl.bindBuffer(gl.PIXEL_PACK_BUFFER, d.pbo);
-          const prevRead = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING);
-          gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fb);
-          gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, 0);
-          gl.bindFramebuffer(gl.READ_FRAMEBUFFER, prevRead);
-          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-          d.sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-        }
+        this.startRead(d);
       } else {
         renderer.readRenderTargetPixels(d.rt, 0, 0, W, H, d.buf);
         show();
@@ -1287,11 +1319,158 @@ export class AgentRunner {
   private dropDots(nodeId: string): void {
     const d = this.dotReads.get(nodeId);
     if (!d) return;
+    this.freeRead(d);
+    this.dotReads.delete(nodeId);
+  }
+
+  private freeRead(d: DotRead): void {
     const gl = this.host.renderer.getContext() as WebGL2RenderingContext;
     if (d.sync) gl.deleteSync(d.sync);
     if (d.pbo) gl.deleteBuffer(d.pbo);
     d.rt.dispose();
-    this.dotReads.delete(nodeId);
+  }
+
+  /** Starts a read of `d.rt` into its pixel buffer and fences it (WebGL2; picked up by finishRead). */
+  private startRead(d: DotRead): void {
+    const { renderer } = this.host;
+    const gl = renderer.getContext() as WebGL2RenderingContext;
+    const fb = (renderer.properties.get(d.rt) as { __webglFramebuffer?: WebGLFramebuffer }).__webglFramebuffer ?? null;
+    if (!fb) return;
+    if (!d.pbo) {
+      d.pbo = gl.createBuffer();
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, d.pbo);
+      gl.bufferData(gl.PIXEL_PACK_BUFFER, d.buf.byteLength, gl.STREAM_READ);
+    } else gl.bindBuffer(gl.PIXEL_PACK_BUFFER, d.pbo);
+    const prevRead = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fb);
+    gl.readPixels(0, 0, d.W, d.H, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, prevRead);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    d.sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+  }
+
+  /** A fenced read: false while the GPU is still at it; once done, its pixels are in `d.buf`. */
+  private finishRead(d: DotRead): boolean {
+    if (!d.sync) return false;
+    const gl = this.host.renderer.getContext() as WebGL2RenderingContext;
+    if (gl.getSyncParameter(d.sync, gl.SYNC_STATUS) !== gl.SIGNALED) return false;
+    gl.deleteSync(d.sync); d.sync = null;
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, d.pbo);
+    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, d.buf);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    return true;
+  }
+
+  /** Copies a read's pixels (bottom row first) into a canvas the same size. */
+  private static blit(ctx: CanvasRenderingContext2D, d: DotRead): void {
+    const { W, H } = d;
+    const img = ctx.createImageData(W, H);
+    for (let y = 0; y < H; y++) img.data.set(d.buf.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
+    ctx.putImageData(img, 0, 0);
+  }
+
+  /** Lets a spotlight's target go. */
+  private dropSpot(nodeId: string): void {
+    const key = `spot:${nodeId}`;
+    const d = this.spotReads.get(key);
+    if (!d) return;
+    this.freeRead(d);
+    this.spotReads.delete(key);
+  }
+
+  /**
+   * The Agent Builder's species spotlight (agentSpotRegistry): for each group with a canvas there, its
+   * live walkers of `dataset.species` only (every k-th beyond SPOT_DOTS) as additive dots in
+   * `dataset.colour` over black, SPOT_W wide in the picture's shape, read back without a stall (a frame
+   * or more late). 2D: at (x / aspect, y), as the picture has them. 3D: through the group's first live
+   * Draw agents camera at the last live run's time (a scene's camera when that Draw probes one), without
+   * depth of field; a 3D group with no live Draw agents draws nothing and says `dataset.spot = 'flat'`.
+   */
+  drawSpotlights(targets: AgentTargets): void {
+    const { renderer, camera } = this.host;
+    const gl = renderer.getContext() as WebGL2RenderingContext;
+    const async = typeof gl.fenceSync === 'function';
+    for (const g of this.spec.groups) {
+      const canvas = agentSpotRegistry.get(g.nodeId);
+      if (!canvas) { this.dropSpot(g.nodeId); continue; }
+      const key = `spot:${g.nodeId}`;
+      const W = SPOT_W, H = Math.max(8, Math.round(W / Math.max(0.25, this.aspect)));
+      let d = this.spotReads.get(key);
+      if (d && d.H !== H) { this.dropSpot(g.nodeId); d = undefined; }
+      if (!d) {
+        d = { rt: new THREE.WebGLRenderTarget(W, H, { type: THREE.UnsignedByteType, depthBuffer: false }), W, H, pbo: null, sync: null, buf: new Uint8Array(W * H * 4) };
+        this.spotReads.set(key, d);
+      }
+      if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+      const ctx = canvas.getContext('2d');
+      if (!ctx) continue;
+      const gs = targets.groups.get(g.slug);
+      const view3 = g.space3d ? this.spec.draws.find(x => x.group === g.slug && x.live && x.space3d) : undefined;
+      if (!gs || (g.space3d && !view3)) {
+        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+        canvas.dataset.spot = gs ? 'flat' : 'none';
+        canvas.dataset.dots = '0';
+        continue;
+      }
+      // A read started earlier: show it once the GPU is done; until then leave the canvas as it is.
+      if (d.sync) {
+        if (!this.finishRead(d)) continue;
+        AgentRunner.blit(ctx, d);
+        canvas.dataset.spot = 'live';
+      }
+      const n = g.side * g.side;
+      const stride = Math.max(1, Math.ceil(n / SPOT_DOTS));
+      const drawn = Math.ceil(n / stride);
+      const only = parseSpotSpecies(canvas.dataset.species);
+      const species = Math.max(1, g.species);
+      const su = this.spotMat.uniforms;
+      su.u_a.value = gs.rt[gs.cur].textures[0];
+      su.u_b.value = gs.rt[gs.cur].textures[1];
+      su.u_c.value = g.stateC ? gs.rt[gs.cur].textures[2] : null;
+      su.u_stateC.value = g.stateC ? 1 : 0;
+      su.u_side.value = g.side; su.u_stride.value = stride; su.u_species.value = species; su.u_only.value = only;
+      su.u_aspect.value = this.aspect;
+      (su.u_col.value as THREE.Vector3).fromArray(parseSpotColour(canvas.dataset.colour));
+      // Each dot as bright as an even spread of that kind (about 1 / species of the walkers) needs to read
+      // about 0.6: a crowd saturates, and a sparse kind still shows at 0.2 or more.
+      const share = only >= 0 ? drawn / species : drawn;
+      su.u_gain.value = Math.min(1, Math.max(0.2, 0.6 * W * H / Math.max(1, share * SPOT_PX * SPOT_PX)));
+      su.u_deep.value = 0; su.u_camSrc.value = 0; su.u_cam.value = null;
+      if (view3) {
+        su.u_deep.value = 1;
+        const ds = targets.draws.get(view3.slug);
+        const cam = agCamera3(view3, this.reader, this.lastTime, ds?.h ?? H);
+        (su.u_eye.value as THREE.Vector3).fromArray(cam.eye); (su.u_fwd.value as THREE.Vector3).fromArray(cam.fwd);
+        (su.u_right.value as THREE.Vector3).fromArray(cam.right); (su.u_up.value as THREE.Vector3).fromArray(cam.up);
+        su.u_lens.value = cam.lens; su.u_ortho.value = cam.ortho; su.u_camDist.value = cam.dist;
+        // A scene's camera (its probe has run): the same rays the 3D draw used.
+        const probed = !!view3.probe && !!ds?.cam && this.probes.some(e => e.slug === `${view3.slug}:camera` && e.ready && !e.failed);
+        if (probed) { su.u_camSrc.value = 1; su.u_cam.value = ds!.cam!.texture; }
+      }
+      this.spotMat.uniformsNeedUpdate = true;
+      const prevColor = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
+      const prevAuto = renderer.autoClear;
+      renderer.setClearColor(0x000000, 1);
+      renderer.setRenderTarget(d.rt);
+      renderer.clear(true, false, false);
+      renderer.setClearColor(prevColor, prevAlpha);
+      renderer.autoClear = false;
+      this.pointGeometry.setDrawRange(0, drawn);
+      renderer.render(this.spotScene, camera);
+      renderer.autoClear = prevAuto;
+      if (async) this.startRead(d);
+      else {
+        renderer.readRenderTargetPixels(d.rt, 0, 0, W, H, d.buf);
+        AgentRunner.blit(ctx, d);
+        canvas.dataset.spot = 'live';
+      }
+      renderer.setRenderTarget(null);
+      canvas.dataset.dots = String(drawn);
+    }
+    for (const k of [...this.spotReads.keys()]) {
+      const id = k.slice('spot:'.length);
+      if (!this.spec.groups.some(g => g.nodeId === id)) this.dropSpot(id);
+    }
   }
 
   dispose(): void {
@@ -1318,6 +1497,8 @@ export class AgentRunner {
     for (const r of this.reads.values()) { for (const rt of r.rts) rt.dispose(); r.reader.dispose(); }
     this.reads.clear();
     for (const id of [...this.dotReads.keys()]) this.dropDots(id);
+    for (const k of [...this.spotReads.keys()]) this.dropSpot(k.slice('spot:'.length));
+    this.spotMat.dispose();
     this.pointGeometry.dispose();
     this.thumbRt?.dispose();
     this.bessel?.dispose();

@@ -19,15 +19,95 @@ import {
   type DiagramFocus, type Lens, type Pt, along, arcPath, feelers, lensFor, picToView, stepsBehind, stepsToFeelers, usesLens, wedgePath,
 } from '../../agentBuilder/diagram';
 import type { ViewRect } from '../builders/studio/LiveViewport';
+import { sphereOnPicture } from '../../agentBuilder/diagram';
+import { agCamera3, agProject3 } from '../../play/kit/agentPlan.js';
 
-export interface BornInfo { shape: string; size: number; x: number; y: number; count: string }
+const readNum = (v: unknown, d: number) => (typeof v === 'number' && isFinite(v) ? v : d);
+
+/**
+ * A 3D Emit's shape through Draw agents' camera (agentPlan.js agCamera3 at its start, before it
+ * orbits): a ball as a shaded sphere with its equator and a meridian (the far halves dashed), a
+ * shell as the same lines without the fill, a box and the whole box as their twelve edges.
+ */
+function Born3d({ born, camera, image, hot, label, accent }: {
+  born: BornInfo; camera: { params: Record<string, unknown>; mirror?: boolean }; image: ViewRect; hot: boolean; accent: string;
+  label: (p: Pt, text: string, opts?: { hot?: boolean; anchor?: 'start' | 'middle' | 'end'; key?: string }) => React.ReactNode;
+}) {
+  const cam = agCamera3({ params: camera.params, mirror: camera.mirror }, readNum, 0, image.h);
+  const project = (p: [number, number, number]) => agProject3(cam, p);
+  const toView = (p: Pt) => picToView(image, p);
+  const aspect = image.w / Math.max(image.h, 1);
+  const c: [number, number, number] = [born.x, born.y, born.z ?? 0];
+  const poly = (pts: Array<Pt & { back: boolean }>, back: boolean) => {
+    // Split into runs of front or back points.
+    const runs: string[] = [];
+    let cur: string[] = [];
+    pts.forEach((p, i) => {
+      if (p.back === back) cur.push(`${i && cur.length ? 'L' : 'M'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`);
+      else if (cur.length) { runs.push(cur.join(' ')); cur = []; }
+    });
+    if (cur.length) runs.push(cur.join(' '));
+    return runs.join(' ');
+  };
+  const sw = hot ? 3 : 2;
+  let shape: React.ReactNode;
+  let top: Pt;
+  if (born.shape === 'ball' || born.shape === 'sphere') {
+    const s = sphereOnPicture(project, toView, c, born.size);
+    top = { x: s.centre.x, y: s.centre.y - s.radius };
+    shape = (
+      <g data-born3d={born.shape} data-born3d-r={s.radius.toFixed(1)}>
+        <defs>
+          <radialGradient id="ab-ball" cx="38%" cy="34%" r="70%">
+            <stop offset="0%" stopColor="rgba(140,170,255,0.45)" /><stop offset="100%" stopColor="rgba(58,111,247,0.08)" />
+          </radialGradient>
+        </defs>
+        <circle cx={s.centre.x} cy={s.centre.y} r={Math.max(s.radius, 2)} fill={born.shape === 'ball' ? 'url(#ab-ball)' : 'none'} stroke={accent} strokeWidth={sw} />
+        {[s.equator, s.meridian, s.side].map((ring, i) => <g key={i}>
+          <path d={poly(ring, true)} fill="none" stroke={accent} strokeWidth={1.2} strokeDasharray="4 5" opacity={0.6} />
+          <path d={poly(ring, false)} fill="none" stroke={accent} strokeWidth={1.6} opacity={i === 2 ? 0.5 : 0.9} />
+        </g>)}
+      </g>
+    );
+  } else if (born.shape === 'point') {
+    const p = toView(project(c));
+    top = { x: p.x, y: p.y - 8 };
+    shape = <circle data-born3d="point" cx={p.x} cy={p.y} r={6} fill={accent} />;
+  } else {
+    const hx = born.shape === 'screen' ? aspect : born.size, hy = born.shape === 'screen' ? 1 : born.size, hz = born.shape === 'screen' ? 1 : born.size;
+    const o: [number, number, number] = born.shape === 'screen' ? [0, 0, 0] : c;
+    const corner = (i: number): [number, number, number] => [o[0] + (i & 1 ? hx : -hx), o[1] + (i & 2 ? hy : -hy), o[2] + (i & 4 ? hz : -hz)];
+    const pts = Array.from({ length: 8 }, (_, i) => toView(project(corner(i))));
+    const edges: Array<[number, number]> = [];
+    for (let i = 0; i < 8; i++) for (const b of [1, 2, 4]) if (!(i & b)) edges.push([i, i | b]);
+    top = pts.reduce((a, p) => (p.y < a.y ? p : a), pts[0]);
+    shape = (
+      <g data-born3d={born.shape === 'screen' ? 'screen' : 'box'}>
+        {edges.map(([a, b], k) => <line key={k} x1={pts[a].x} y1={pts[a].y} x2={pts[b].x} y2={pts[b].y} stroke={accent} strokeWidth={sw} strokeDasharray={born.shape === 'screen' ? '8 6' : undefined} />)}
+      </g>
+    );
+  }
+  return (
+    <g data-diagram="born" data-born={born.shape} data-size={String(Math.round(born.size * 1000) / 1000)} data-born-3d="projected">
+      {shape}
+      {label({ x: top.x, y: Math.max(image.y + 18, top.y - 18) }, `born here · ${born.count.toUpperCase().replace('K', 'k')} walkers`, { hot, key: 'b3' })}
+      {label({ x: image.x + image.w / 2, y: image.y + image.h - 18 }, 'through the 3D camera, as it starts (it then circles)', { key: 'b3cam' })}
+    </g>
+  );
+}
+
+export interface BornInfo { shape: string; size: number; x: number; y: number; z?: number; count: string }
 export interface TrailInfo { halfLife: number; diffuse: number }
 
 const fmt = (v: number, d = 3) => String(Math.round(v * 10 ** d) / 10 ** d);
 
-export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3 }: {
+export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3, camera, feelersShown = true }: {
   focus: DiagramFocus; cards: TrailCards; box: { w: number; h: number; image: ViewRect };
   born?: BornInfo; trail?: TrailInfo; lensRef: number; d3: boolean;
+  /** In 3D: Draw agents' camera settings, to draw the Emit's ball, shell or box through it. */
+  camera?: { params: Record<string, unknown>; mirror?: boolean };
+  /** Moving: draw its feelers ahead (trail followers only). */
+  feelersShown?: boolean;
 }) {
   const tk = useTokens();
   const accent = tk.accent.base;
@@ -95,12 +175,15 @@ export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3 }: {
     const f = feelers(lens, s.distance, s.angle);
     body = (
       <g data-diagram="moving" data-speed={fmt(m.speed, 4)} data-step-px={fmt((m.speed / 60) * lens.scale, 2)}>
-        <line x1={lens.walker.x} y1={lens.walker.y} x2={f.centre.x} y2={f.centre.y} stroke={faint} strokeWidth={1.2} strokeDasharray="3 5" />
-        <circle cx={f.centre.x} cy={f.centre.y} r={5} fill="none" stroke={faint} />
+        {feelersShown && <>
+          <line x1={lens.walker.x} y1={lens.walker.y} x2={f.centre.x} y2={f.centre.y} stroke={faint} strokeWidth={1.2} strokeDasharray="3 5" />
+          <circle cx={f.centre.x} cy={f.centre.y} r={5} fill="none" stroke={faint} />
+        </>}
         {steps.map((p, i) => <circle key={i} data-step={i} cx={p.x} cy={p.y} r={3.2} fill={hot('speed') ? accent : ink} opacity={1 - i * 0.14} />)}
         {walker(lens)}
         {label({ x: lens.walker.x + 16, y: lens.walker.y + 20 }, `one step ${fmt(m.speed / 60, 4)}`, { hot: hot('speed'), anchor: 'start' })}
-        {isFinite(n) && label({ x: f.centre.x + 12, y: f.centre.y }, `${Math.round(n)} steps to its feelers`, { anchor: 'start', key: 'n' })}
+        {feelersShown && isFinite(n) && label({ x: f.centre.x + 12, y: f.centre.y }, `${Math.round(n)} steps to its feelers`, { anchor: 'start', key: 'n' })}
+        {!feelersShown && label({ x: lens.walker.x, y: lens.walker.y - 40 }, `${fmt(m.speed, 3)} a second`, { hot: hot('speed'), key: 'persec' })}
       </g>
     );
   } else if (focus.section === 'moving') {
@@ -150,6 +233,8 @@ export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3 }: {
         {label({ x: head.x - 22, y: dots[6].y }, `spreads ${Math.round(tr.diffuse * 100)}% a step`, { hot: hot('spreads'), anchor: 'end' })}
       </g>
     );
+  } else if (focus.section === 'born' && born && d3 && camera) {
+    body = <Born3d born={born} camera={camera} image={box.image} hot={hot('where') || hot('count') || hot('size')} label={label} accent={accent} />;
   } else if (focus.section === 'born' && born) {
     const im = box.image;
     const c = picToView(im, { x: born.x, y: born.y });
@@ -164,7 +249,7 @@ export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3 }: {
         {shape === 'screen' && <rect x={im.x + 3} y={im.y + 3} width={im.w - 6} height={im.h - 6} fill="none" stroke={accent} strokeWidth={2.5} strokeDasharray="8 6" />}
         {(shape === 'picture' || shape === 'field') && label({ x: c.x, y: c.y }, 'born where the picture is bright')}
         {label({ x: c.x, y: Math.max(im.y + 18, c.y - Math.max(rpx, 8) - 18) }, `born here · ${born.count.toUpperCase().replace('K', 'k')} walkers`, { hot: hot('where') || hot('count') })}
-        {d3 && label({ x: c.x, y: Math.min(im.y + im.h - 18, c.y + Math.max(rpx, 8) + 18) }, 'seen flat: in 3D it is a ball or a shell', { key: '3d' })}
+        {d3 && label({ x: c.x, y: Math.min(im.y + im.h - 18, c.y + Math.max(rpx, 8) + 18) }, 'seen from the front (no 3D camera to look through)', { key: '3d' })}
       </g>
     );
   }

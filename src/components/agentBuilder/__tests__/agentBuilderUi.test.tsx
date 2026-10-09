@@ -96,11 +96,11 @@ describe('the shared shell', () => {
 });
 
 describe('the start page', () => {
-  it('asks what you are making: four kinds with pictures, 2D / 3D; nothing is added yet', () => {
+  it('asks what you are making: five kinds with pictures (Crowds has its own), 2D / 3D; nothing is added yet', () => {
     mount(<AgentBuilder groupId={null} onClose={() => {}} />);
-    expect($$('[data-start-kind]').map(b => b.getAttribute('data-start-kind'))).toEqual(['trail', 'particles', 'flock', 'orbit']);
-    expect($$('[data-kind-picture]').length).toBe(4);
-    expect($$('[data-start-old]').length).toBe(3);
+    expect($$('[data-start-kind]').map(b => b.getAttribute('data-start-kind'))).toEqual(['trail', 'particles', 'flock', 'crowd', 'orbit']);
+    expect($$('[data-kind-picture]').length).toBe(5);
+    expect($$('[data-start-old]').length).toBe(0);
     expect($('[aria-label="Start in 2D or 3D"]')).toBeTruthy();
     expect(useNodeGraphStore.getState().nodes).toEqual([]);
   });
@@ -135,12 +135,21 @@ describe('the start page', () => {
     expect($('[data-studio-kind]')?.textContent).toBe('Trail followers · 3D');
   });
 
-  it('a kind not built yet (Particles) makes its setup and opens the rules editor', () => {
+  it('Particles makes the spark fountain\'s own setup (its Emit and Draw agents, one undo step) and opens on Forces', () => {
     mount(<AgentBuilder groupId={null} onClose={() => {}} />);
     click($('[data-start-kind="particles"]'));
     const g = group()!;
-    expect(groupRules(g).kind).toBe('particles');
-    expect(useBuilderWindows.getState()).toMatchObject({ agentRules: g.id, agentBuilder: null });
+    expect(groupRules(g)).toEqual(rulesTemplate('particles')!.set());
+    const nodes = useNodeGraphStore.getState().nodes;
+    expect(nodes.find(n => n.type === 'agentEmit')!.params).toMatchObject({ mode: 'respawn', heading: 'up' });
+    expect(nodes.find(n => n.type === 'drawAgents')!.inputs.agents.connection?.nodeId).toBe(g.id);
+    expect(useBuilderWindows.getState().agentRules).toBeNull();
+    expect($('[data-studio-kind]')?.textContent).toBe('Particles · 2D');
+    expect($$('[data-studio-section]').map(b => b.getAttribute('data-studio-section'))).toEqual(['born', 'forces', 'moving', 'life', 'look']);
+    expect($('[data-inspector]')?.getAttribute('data-inspector')).toBe('forces');
+    expect($$('[data-card-slot]').map(c => c.getAttribute('data-card-slot'))).toEqual(['gravity#0', 'curl#0', 'drag#0', 'attract#0']);
+    act(() => { useNodeGraphStore.getState().undo(); });
+    expect(group()).toBeUndefined();
   });
 });
 
@@ -249,7 +258,7 @@ describe('the ways in', () => {
     expect(useNodeGraphStore.getState().nodes).toEqual([]);
   });
 
-  it('Edit rules on a trail-follower group opens the builder; other kinds (and Advanced) open the rules editor', () => {
+  it('Edit rules on any rules group opens the builder (flocks too, since phase 2); Advanced opens the rules editor', () => {
     const trail = applyRulesToGroup({ id: 'g1', type: 'agentsGroup', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: {} } as GraphNode, rulesTemplate('slime')!.set());
     const ants = applyRulesToGroup({ ...trail, id: 'g2' }, rulesTemplate('ants')!.set());
     const boids = applyRulesToGroup({ ...trail, id: 'g3' }, rulesTemplate('boids')!.set());
@@ -259,7 +268,7 @@ describe('the ways in', () => {
     openAgentRulesEditor('g2');
     expect(useBuilderWindows.getState().agentBuilder).toEqual({ groupId: 'g2' });
     openAgentRulesEditor('g3');
-    expect(useBuilderWindows.getState()).toMatchObject({ agentBuilder: null, agentRules: 'g3' });
+    expect(useBuilderWindows.getState()).toMatchObject({ agentBuilder: { groupId: 'g3' }, agentRules: null });
     expect(runBuilderAction({ kind: 'open-agents', groupId: 'g1' } as Parameters<typeof runBuilderAction>[0])).toBe(true);
     expect(useBuilderWindows.getState().agentBuilder).toEqual({ groupId: 'g1' });
   });

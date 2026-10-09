@@ -15,8 +15,8 @@ import { type AgentSpace, type ShapeKind, addShapeAround, applyTemplate3d, conve
 
 /**
  * Open a rules group in the Agent Builder (the card's Edit rules, its title double-click, Write as
- * rules): trail followers (and ants, a trail-follower preset) open there; the kinds the builder
- * doesn't draw yet (particles, flocks, orbiters, crowds: phase 2) open the rules editor.
+ * rules): every kind opens there since phase 2 (trail followers, ants, particles, flocks, crowds,
+ * orbiters); a kind it doesn't know opens the rules editor, which stays for Advanced rules.
  */
 export function openAgentRulesEditor(groupId: string): void {
   const g = useNodeGraphStore.getState().nodes.find(x => x.id === groupId);

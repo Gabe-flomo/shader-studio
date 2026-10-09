@@ -24,7 +24,7 @@ import { rulesStarter } from '../starter';
 import { RULES_TEMPLATES, rulesTemplateNodes } from '../templates';
 import {
   type AgentRule, type AgentRuleSet, type RuleAction, type RuleCondition,
-  chancePerStep, defaultRuleSet, describeRule, normalizeRuleSet, rulePorts,
+  chancePerStep, defaultRuleSet, describeCondition, describeRule, newCondition, normalizeRuleSet, notesFor3d, rulePorts,
 } from '../spec';
 import { insideOf, programOf, simulate, stepWalkers, walkersFor, type SimOptions, type Walker } from './cpuSim';
 
@@ -104,6 +104,12 @@ describe('conditions', () => {
     ['outside a mask', { kind: 'mask', mask: 0, cmp: '>', value: 0.5 }, 'float(mask1 > 0.5)', {}, { masks: () => [0, 0] }, 0],
     ['chance 100% a second', { kind: 'chance', perSecond: 1 }, 'float odds1 = 1.0 - pow(1.0 - 1.0, a_dt)', {}, {}, 1],
     ['chance 0%', { kind: 'chance', perSecond: 0 }, 'float(dice1 < odds1)', {}, {}, 0],
+    ['inside a circle', { kind: 'shape', shape: 'circle', x: 0.2, y: 0, size: 0.3 }, 'float(length(pos - vec2(0.2, 0.0)) < 0.3)', { pos: [0, 0] }, {}, 1],
+    ['inside a circle (beyond it)', { kind: 'shape', shape: 'circle', x: 0.2, y: 0, size: 0.3 }, 'float(length(pos - vec2(0.2, 0.0)) < 0.3)', { pos: [0.6, 0] }, {}, 0],
+    ['outside a circle', { kind: 'shape', shape: 'circle', x: 0, y: 0, size: 0.4, outside: true }, 'float(length(pos - vec2(0.0, 0.0)) >= 0.4)', { pos: [0.5, 0] }, {}, 1],
+    ['inside a box', { kind: 'shape', shape: 'box', x: 0, y: 0.1, size: 0.2 }, 'float(max(abs(pos.x - 0.0), abs(pos.y - 0.1)) < 0.2)', { pos: [0.15, 0.25] }, {}, 1],
+    ['inside a box (corner beyond a circle)', { kind: 'shape', shape: 'box', x: 0, y: 0, size: 0.2 }, 'float(max(abs(pos.x - 0.0), abs(pos.y - 0.0)) < 0.2)', { pos: [0.19, 0.19] }, {}, 1],
+    ['outside a box', { kind: 'shape', shape: 'box', x: 0, y: 0, size: 0.2, outside: true }, 'float(max(abs(pos.x - 0.0), abs(pos.y - 0.0)) >= 0.2)', { pos: [0.1, 0] }, {}, 0],
   ];
   for (const [name, c, glsl, w, o, expected] of cases) {
     it(`${name}: ${glsl}`, () => {
@@ -114,6 +120,33 @@ describe('conditions', () => {
       expect(Math.floor(after.mem[0] + 0.01), name).toBe(expected ? 1 : Math.floor((w.mem?.[0] ?? 0) + 0.01));
     });
   }
+
+  it('inside a shape: reads pos, says it plainly, starts as a circle, and compiles in 2D and 3D (x and y only)', () => {
+    const c: RuleCondition = { kind: 'shape', shape: 'box', x: 0.2, y: 0, size: 0.3, outside: true };
+    expect(newCondition('shape')).toEqual({ kind: 'shape', shape: 'circle', x: 0, y: 0, size: 0.4 });
+    const set = setOf([when(c)]);
+    expect(describeCondition(set, 0, c)).toBe('outside a box round (0.2, 0), half-width 0.3');
+    expect(describeCondition(set, 0, newCondition('shape'))).toBe('inside a circle round (0, 0), radius 0.4');
+    const block = generateRulesInside(set, { groupId: GID, d3: false }).find(x => x.id === ruleIds(GID).rule(0, 0))!;
+    expect((block.params.inputs as Array<{ name: string }>).map(i => i.name)).toContain('pos');
+    expect(block.inputs.pos?.connection).toBeTruthy();
+    const b3 = generateRulesInside(set, { groupId: GID, d3: true }).find(x => x.id === ruleIds(GID).rule(0, 0))!;
+    expect(JSON.stringify(b3.params.lines)).toContain('max(abs(pos.xy.x - 0.2), abs(pos.xy.y - 0.0)) >= 0.3');
+    expect(notesFor3d(set).some(t => t.includes('column'))).toBe(true);
+    expect(notesFor3d(setOf([when({ kind: 'age', cmp: '>', seconds: 1 })])).some(t => t.includes('column'))).toBe(false);
+    const w3 = one(setOf([when({ kind: 'shape', shape: 'circle', x: 0, y: 0, size: 0.3 })]), { pos: [0.1, 0, 0.9] }, { d3: true });
+    expect(Math.floor(w3.mem[0] + 0.01)).toBe(1); // deep in z, still inside the column
+    for (const space of ['2d', '3d'] as const) {
+      const nodes = rulesTemplateNodes('slime', `sh${space}`);
+      const gi = nodes.findIndex(x => x.type === 'agentsGroup');
+      const tset = RULES_TEMPLATES[0].set();
+      tset.species[0].rules.push(when(c), when({ kind: 'shape', shape: 'circle', x: -0.1, y: 0.2, size: 0.25 }));
+      nodes[gi] = applyRulesToGroup({ ...nodes[gi], params: { ...nodes[gi].params, space } }, tset);
+      const r = compileGraph({ nodes });
+      expect(r.errors, space).toBeUndefined();
+      expect(r.agents!.groups[0].fragmentShader, space).toContain('length(');
+    }
+  });
 
   it('a texture mask is read through Sample (texture) as brightness', () => {
     const set = setOf([when({ kind: 'mask', mask: 0, cmp: '>', value: 0.5 })], { masks: [{ name: 'Pic', kind: 'texture' }] });

@@ -60,11 +60,14 @@ describe('cards from a rule set', () => {
     expect(c.advanced[1].text).toMatch(/age > 5 s → die/);
   });
 
-  it('the ants template: its turns are conditional (Advanced); the always rule\'s wander is Wobble', () => {
+  it('the ants template: a turn with one plain condition is a card with an "only when"; two conditions, Stop or a Memory fade stay Advanced', () => {
     const c = readCards(rulesTemplate('ants')!.set(), 0);
-    expect(c.senses.on).toBe(false);
-    expect(c.trail.on).toBe(false);
+    // "When carrying → … turn toward home trail": Senses, only when carrying.
+    expect(c.senses).toMatchObject({ on: true, channel: 0 });
+    expect(c.when.senses).toEqual({ kind: 'state', state: 1 });
+    expect(c.trail.on).toBe(false); // its trails fade with Memory
     expect(c.turning.wobble).toBe(5);
+    expect(c.when.wobble).toBeNull();
     expect(c.advanced.length).toBeGreaterThan(3);
   });
 
@@ -99,11 +102,11 @@ describe('cards → rule values', () => {
     expect(s.species[0].rules[0].do[0]).toMatchObject({ channel: 1, away: true });
   });
 
-  it('a switch moves its action into a rule of its own (so the rule\'s off carries it), keeping the order; on again restores it', () => {
+  it('a switch moves its action into a rule of its own (so the rule\'s off carries it), splitting its rule in place so the order is kept; on again restores it', () => {
     const off = setCardOn(slime(), 0, 'senses', false);
     expect(off.species[0].rules).toEqual([
-      { when: [{ kind: 'always' }], do: [{ kind: 'wander', degrees: 7 }, { kind: 'trail', channel: 'own', amount: 1 }] },
       { when: [{ kind: 'always' }], do: [{ kind: 'turn', toward: 'trail', channel: 'own', degrees: 45 }], off: true },
+      { when: [{ kind: 'always' }], do: [{ kind: 'wander', degrees: 7 }, { kind: 'trail', channel: 'own', amount: 1 }] },
     ]);
     const c = readCards(off, 0);
     expect(c.senses.on).toBe(false);
@@ -111,7 +114,10 @@ describe('cards → rule values', () => {
     expect(c.advanced).toEqual([]);
     const on = setCardOn(off, 0, 'senses', true);
     expect(readCards(on, 0).senses.on).toBe(true);
-    expect(on.species[0].rules[1].off).toBeUndefined();
+    expect(on.species[0].rules[0].off).toBeUndefined();
+    // The middle card: the rule is split round it.
+    const w = setCardOn(slime(), 0, 'wobble', false);
+    expect(w.species[0].rules.map(r => [r.do.map(a => a.kind), !!r.off])).toEqual([[['turn'], false], [['wander'], true], [['trail'], false]]);
   });
 
   it('switching on a card that isn\'t there adds it (Senses first, Trail after the others)', () => {
@@ -146,12 +152,12 @@ describe('presets, kinds and words', () => {
     expect(trailPreset('slime')!.set()).not.toBe(trailPreset('slime')!.set());
   });
 
-  it('the start page\'s kinds map to the rule sets\' kinds and templates; only Trail followers is built in phase 1', () => {
+  it('the start page\'s kinds map to the rule sets\' kinds and templates; every kind is built (phase 2), Crowds with a card of its own', () => {
     expect(START_CARDS.map(c => [c.label, c.kind, c.built])).toEqual([
-      ['Trail followers', 'trail', true], ['Particles', 'particles', false], ['Flocks', 'flock', false], ['Orbiters', 'swarm', false],
+      ['Trail followers', 'trail', true], ['Particles', 'particles', true], ['Flocks', 'flock', true], ['Crowds', 'crowd', true], ['Orbiters', 'swarm', true],
     ]);
     for (const c of START_CARDS) expect(rulesTemplate(c.template), c.id).toBeTruthy();
-    expect([...BUILDER_KINDS]).toEqual(['trail', 'ants']);
+    expect([...BUILDER_KINDS]).toEqual(['trail', 'ants', 'particles', 'flock', 'crowd', 'swarm']);
   });
 
   it('sections in the field guide\'s order, each with a hint and a Learn more', () => {

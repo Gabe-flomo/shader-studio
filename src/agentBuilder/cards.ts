@@ -1,10 +1,6 @@
 /**
- * cards.ts — the Agent Builder's behaviour cards (docs/agent-builder.md) read from and written to
- * an Agents group's rule set (agentRules/spec.ts). Pure.
- *
- * The cards are another view of the same rule set, so generate.ts makes the same nodes from it
- * and Open as nodes, Play and web export keep working. A card is an action in an "always" rule
- * (no conditions, no Stop after this rule):
+ * cards.ts — Trail followers' behaviour cards (docs/agent-builder.md), read from and written to an
+ * Agents group's rule set (agentRules/spec.ts) through the cards of every kind (behaviours.ts). Pure.
  *
  *  - Senses: a Turn toward a trail (its channel is the Smells chip; Avoid is Turn away). The
  *    sensors (how far ahead, how wide) are the rule set's.
@@ -12,41 +8,25 @@
  *  - Moving: Speed is the species' speed; At the edges is the rule set's edges.
  *  - Trail: a Leave trail (without a Memory fade).
  *
- * The first matching action in reading order is the card's; anything else (conditions, Stop, a
- * second Turn, a state change…) is an Advanced rule, edited in the rules editor. An old rule set
- * opens as it is: editing a card changes its action in place, and only switching a card off or on
- * moves that action into a rule of its own (so the rule's `off` can carry the switch).
+ * The first matching action in a rule the cards can read is the card's: an always rule, or one
+ * with an "only when" (behaviours.ts). Anything else is an Advanced rule, edited in the rules editor.
  */
-import {
-  type AgentRule, type AgentRuleSet, type ChannelRef, type RuleAction,
-  describeRule,
-} from '../agentRules/spec';
+import type { AgentRuleSet, ChannelRef, RuleAction, RuleCondition } from '../agentRules/spec';
+import { addCard, cardRule, locate, patchAt, readBehaviours, setOnAt, type Loc } from './behaviours';
+
+export type { Loc } from './behaviours';
 
 /** The behaviours a card holds (Moving and Born aren't rules). */
 export type RuleCard = 'senses' | 'wobble' | 'trail';
 export const RULE_CARDS: readonly RuleCard[] = ['senses', 'wobble', 'trail'];
 
-/** Where a card's action is: rule and action index in the species' rules. */
-export interface Loc { rule: number; action: number }
-
-/** A rule the cards can read: always (no conditions but "always"), no Stop. */
-export const plainRule = (r: AgentRule) => !r.stop && r.when.every(c => c.kind === 'always');
-
-const MATCH: Record<RuleCard, (a: RuleAction) => boolean> = {
-  senses: a => a.kind === 'turn' && a.toward === 'trail',
-  wobble: a => a.kind === 'wander',
-  trail: a => a.kind === 'trail' && !a.fade,
-};
+/** A rule the cards can read (always, or one "only when"; no Stop). */
+export const plainRule = cardRule;
 
 /** Each card's action, the first matching one in reading order (null: not there). */
 export function locateCards(set: AgentRuleSet, sp: number): Record<RuleCard, Loc | null> {
   const out: Record<RuleCard, Loc | null> = { senses: null, wobble: null, trail: null };
-  (set.species[sp]?.rules ?? []).forEach((r, ri) => {
-    if (!plainRule(r)) return;
-    r.do.forEach((a, ai) => {
-      for (const c of RULE_CARDS) if (!out[c] && MATCH[c](a)) { out[c] = { rule: ri, action: ai }; return; }
-    });
-  });
+  for (const l of locate(set, sp, RULE_CARDS)) out[l.card as RuleCard] = { rule: l.rule, action: l.action };
   return out;
 }
 
@@ -58,89 +38,49 @@ export interface TrailCards {
   turning: { sharp: number; sharpOn: boolean; wobble: number; wobbleOn: boolean };
   moving: { speed: number; edges: AgentRuleSet['edges'] };
   trail: { on: boolean; there: boolean; amount: number; channel: ChannelRef };
+  /** Each card's "only when" (null: always, or not there). */
+  when: Record<RuleCard, RuleCondition | null>;
+  /** Where each card's action is (null: not there). */
+  at: Record<RuleCard, Loc | null>;
   /** Rules (by index) with something the cards don't show: each is an Advanced rule card. */
   advanced: Array<{ rule: number; text: string; off: boolean }>;
 }
 
-const actionAt = (set: AgentRuleSet, sp: number, l: Loc | null) => (l ? set.species[sp].rules[l.rule].do[l.action] : undefined);
-const onAt = (set: AgentRuleSet, sp: number, l: Loc | null) => !!l && !set.species[sp].rules[l.rule].off;
-
 /** The cards of species `sp`, read from the rule set. */
 export function readCards(set: AgentRuleSet, sp: number): TrailCards {
   const s = Math.min(Math.max(sp, 0), set.species.length - 1);
-  const at = locateCards(set, s);
-  const turn = actionAt(set, s, at.senses) as Extract<RuleAction, { kind: 'turn' }> | undefined;
-  const wander = actionAt(set, s, at.wobble) as Extract<RuleAction, { kind: 'wander' }> | undefined;
-  const trail = actionAt(set, s, at.trail) as Extract<RuleAction, { kind: 'trail' }> | undefined;
-  const taken = new Set(RULE_CARDS.map(c => at[c]).filter((l): l is Loc => !!l).map(l => `${l.rule}:${l.action}`));
-  const advanced: TrailCards['advanced'] = [];
-  set.species[s].rules.forEach((r, ri) => {
-    const rest = r.do.filter((_, ai) => !taken.has(`${ri}:${ai}`));
-    if (plainRule(r) && !rest.length) return;
-    advanced.push({ rule: ri, text: describeRule(set, s, plainRule(r) ? { ...r, do: rest } : r), off: !!r.off });
-  });
-  const sensesOn = onAt(set, s, at.senses);
+  const b = readBehaviours(set, s, RULE_CARDS);
+  const get = (c: RuleCard) => b.cards.find(x => x.card === c);
+  const turn = get('senses')?.action as Extract<RuleAction, { kind: 'turn' }> | undefined;
+  const wander = get('wobble')?.action as Extract<RuleAction, { kind: 'wander' }> | undefined;
+  const trail = get('trail')?.action as Extract<RuleAction, { kind: 'trail' }> | undefined;
+  const on = (c: RuleCard) => !!get(c)?.on;
   return {
-    senses: { on: sensesOn, there: !!at.senses, channel: turn?.channel ?? 'own', away: !!turn?.away, distance: set.sensor.distance, angle: set.sensor.angle },
-    turning: { sharp: turn?.degrees ?? CARD_DEFAULTS.turn, sharpOn: sensesOn, wobble: wander?.degrees ?? 0, wobbleOn: onAt(set, s, at.wobble) },
+    senses: { on: on('senses'), there: !!turn, channel: turn?.channel ?? 'own', away: !!turn?.away, distance: set.sensor.distance, angle: set.sensor.angle },
+    turning: { sharp: turn?.degrees ?? CARD_DEFAULTS.turn, sharpOn: on('senses'), wobble: wander?.degrees ?? 0, wobbleOn: on('wobble') },
     moving: { speed: set.species[s].speed, edges: set.edges },
-    trail: { on: onAt(set, s, at.trail), there: !!at.trail, amount: trail?.amount ?? CARD_DEFAULTS.amount, channel: trail?.channel ?? 'own' },
-    advanced,
+    trail: { on: on('trail'), there: !!trail, amount: trail?.amount ?? CARD_DEFAULTS.amount, channel: trail?.channel ?? 'own' },
+    when: { senses: get('senses')?.when ?? null, wobble: get('wobble')?.when ?? null, trail: get('trail')?.when ?? null },
+    at: { senses: get('senses')?.at ?? null, wobble: get('wobble')?.at ?? null, trail: get('trail')?.at ?? null },
+    advanced: b.advanced,
   };
 }
 
 // ── Writing ──────────────────────────────────────────────────────────────────
 
-const withRules = (set: AgentRuleSet, sp: number, rules: AgentRule[]): AgentRuleSet =>
-  ({ ...set, species: set.species.map((x, i) => (i === sp ? { ...x, rules } : x)) });
-
-const always = (a: RuleAction, off = false): AgentRule => ({ when: [{ kind: 'always' }], do: [a], ...(off ? { off: true } : {}) });
-
-const NEW_ACTION: Record<RuleCard, () => RuleAction> = {
-  senses: () => ({ kind: 'turn', toward: 'trail', channel: 'own', degrees: CARD_DEFAULTS.turn }),
-  wobble: () => ({ kind: 'wander', degrees: CARD_DEFAULTS.wobble }),
-  trail: () => ({ kind: 'trail', channel: 'own', amount: CARD_DEFAULTS.amount }),
-};
-
-/**
- * The species' rules with card `c`'s action alone in a rule of its own (so its rule's `off` is the
- * card's switch): a new always rule when it isn't there, placed after the card before it (Senses,
- * Wobble, Trail: the slime step's order), else first.
- */
-function ownRule(set: AgentRuleSet, sp: number, c: RuleCard): { rules: AgentRule[]; at: number } {
-  const rules = set.species[sp].rules.map(r => ({ ...r, do: [...r.do] }));
-  const at = locateCards(set, sp)[c];
-  if (at) {
-    const r = rules[at.rule];
-    if (r.do.length === 1) return { rules, at: at.rule };
-    const [a] = r.do.splice(at.action, 1);
-    rules.splice(at.rule + 1, 0, always(a, !!r.off));
-    return { rules, at: at.rule + 1 };
-  }
-  const locs = locateCards(set, sp);
-  const before = RULE_CARDS.slice(0, RULE_CARDS.indexOf(c)).map(k => locs[k]).filter((l): l is Loc => !!l);
-  const pos = before.length ? Math.max(...before.map(l => l.rule)) + 1 : 0;
-  rules.splice(pos, 0, always(NEW_ACTION[c](), true));
-  return { rules, at: pos };
-}
-
 /** Switch a card on or off (its action's rule's `off`). Switching on a card that isn't there adds it. */
 export function setCardOn(set: AgentRuleSet, sp: number, c: RuleCard, on: boolean): AgentRuleSet {
-  if (!on && !locateCards(set, sp)[c]) return set;
-  const { rules, at } = ownRule(set, sp, c);
-  const r = { ...rules[at] };
-  if (on) delete r.off; else r.off = true;
-  rules[at] = r;
-  return withRules(set, sp, rules);
+  const at = locateCards(set, sp)[c];
+  if (at) return setOnAt(set, sp, at, on);
+  return on ? addCard(set, sp, c, RULE_CARDS).set : set;
 }
 
 /** Change a card's action (adding it, switched on, when it isn't there). */
 export function patchCard<A extends RuleAction>(set: AgentRuleSet, sp: number, c: RuleCard, patch: Partial<A>): AgentRuleSet {
-  let next = set;
-  let at = locateCards(next, sp)[c];
-  if (!at) { next = setCardOn(next, sp, c, true); at = locateCards(next, sp)[c]!; }
-  const rules = next.species[sp].rules.map((r, ri) => (ri !== at!.rule ? r : { ...r, do: r.do.map((a, ai) => (ai === at!.action ? { ...a, ...patch } as RuleAction : a)) }));
-  return withRules(next, sp, rules);
+  const at = locateCards(set, sp)[c];
+  if (at) return patchAt(set, sp, at, patch);
+  const added = addCard(set, sp, c, RULE_CARDS);
+  return patchAt(added.set, sp, added.at, patch);
 }
 
 /** The settings every card reads that live on the rule set or the species. */
@@ -148,6 +88,11 @@ export const setSensors = (set: AgentRuleSet, patch: Partial<AgentRuleSet['senso
 export const setEdges = (set: AgentRuleSet, edges: AgentRuleSet['edges']): AgentRuleSet => ({ ...set, edges });
 export const setSpeed = (set: AgentRuleSet, sp: number, speed: number): AgentRuleSet =>
   ({ ...set, species: set.species.map((x, i) => (i === sp ? { ...x, speed } : x)) });
+/** The rule set's view radius and how many neighbours a reading counts at most. */
+export const setNeighbours = (set: AgentRuleSet, patch: Partial<{ radius: number; max: number }>): AgentRuleSet =>
+  ({ ...set, neighbours: { radius: set.neighbours?.radius ?? 0.05, max: set.neighbours?.max ?? 36, ...patch } });
+/** The flow field's Size and Evolve (Curl noise). */
+export const setFlow = (set: AgentRuleSet, patch: Partial<AgentRuleSet['flow']>): AgentRuleSet => ({ ...set, flow: { ...set.flow, ...patch } });
 
 // ── Smells ───────────────────────────────────────────────────────────────────
 

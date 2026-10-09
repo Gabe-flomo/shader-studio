@@ -47,7 +47,9 @@ export type RuleCondition =
   /** A mask (a texture or any chain wired into the group) where the walker stands. */
   | { kind: 'mask'; mask: number; cmp: Cmp; value: number }
   /** How many walkers (everyone, its own kind or other kinds) are within `radius` (0: the rule set's view radius): a Neighbours node's Count. */
-  | { kind: 'neighbours'; who: NeighbourWho; cmp: Cmp; count: number; radius?: number };
+  | { kind: 'neighbours'; who: NeighbourWho; cmp: Cmp; count: number; radius?: number }
+  /** Where the walker stands, inside (or outside) a simple shape on the picture: a circle (radius `size`) or a box (half-width `size`) centred at (x, y). In 3D the shape is a column through the depth (it reads x and y). */
+  | { kind: 'shape'; shape: 'circle' | 'box'; x: number; y: number; size: number; outside?: boolean };
 
 export type RuleAction =
   /** Turn toward (or away from) the trail, a point, the centre or the mouse, at most `degrees` a step. */
@@ -207,6 +209,7 @@ export const CONDITION_KINDS: Array<{ kind: RuleCondition['kind']; label: string
   { kind: 'memory', label: 'Memory number' },
   { kind: 'mask', label: 'inside a mask' },
   { kind: 'neighbours', label: 'neighbours within reach' },
+  { kind: 'shape', label: 'inside a shape' },
 ];
 
 export const ACTION_KINDS: Array<{ kind: RuleAction['kind']; label: string }> = [
@@ -250,42 +253,42 @@ export const WALKER_KINDS: Record<WalkerKind, { label: string; blurb: string; se
   trail: {
     label: 'Trail followers', blurb: 'Walkers that smell a trail and lay one: slime mold, veins and networks.',
     sections: ['states', 'channels', 'masks', 'sensors', 'flow'],
-    conditions: ['sense', 'near', 'chance', 'age', 'state', 'memory', 'mask'],
+    conditions: ['sense', 'near', 'chance', 'age', 'state', 'memory', 'mask', 'shape'],
     actions: ['turn', 'wander', 'trail', 'speed', 'flow', 'bounce', 'state', 'memory', 'stop', 'stick', 'die', 'spawn', 'align'],
     templates: ['slime', 'dla', 'predatorPrey'],
   },
   particles: {
     label: 'Particles', blurb: 'No sensing: forces (gravity, wind, curl, toward or away from a point or the mouse) move them; they live, fade and are born again.',
     sections: ['masks', 'flow'],
-    conditions: ['chance', 'age', 'mask', 'memory'],
+    conditions: ['chance', 'age', 'mask', 'memory', 'shape'],
     actions: ['force', 'drag', 'fade', 'bounce', 'speed', 'wander', 'die', 'trail', 'memory'],
     templates: ['particles'],
   },
   flock: {
     label: 'Flock (boids)', blurb: 'Birds that see each other: steer away from the nearest, match their heading, move to their centre, avoid the edges.',
     sections: ['neighbours', 'masks'],
-    conditions: ['neighbours', 'chance', 'age', 'mask'],
+    conditions: ['neighbours', 'chance', 'age', 'mask', 'shape'],
     actions: ['separate', 'match', 'cohere', 'avoidEdges', 'wander', 'speed', 'turn', 'bounce', 'trail'],
     templates: ['boids'],
   },
   ants: {
     label: 'Ants / carriers', blurb: 'States and memory: searching and carrying, timers and counters, smells laid and followed, masks for food and the nest.',
     sections: ['states', 'channels', 'masks', 'sensors', 'flow'],
-    conditions: ['state', 'memory', 'sense', 'near', 'mask', 'chance', 'age', 'neighbours'],
+    conditions: ['state', 'memory', 'sense', 'near', 'mask', 'chance', 'age', 'neighbours', 'shape'],
     actions: ['state', 'memory', 'turn', 'trail', 'wander', 'speed', 'bounce', 'stop', 'stick', 'die', 'spawn', 'flow'],
     templates: ['ants', 'termites', 'sir', 'fireflies'],
   },
   swarm: {
     label: 'Swarm / orbiters', blurb: 'Orbit a point (or the mouse) and flock loosely: keep apart, drift together.',
     sections: ['neighbours', 'states', 'flow'],
-    conditions: ['neighbours', 'chance', 'age', 'state'],
+    conditions: ['neighbours', 'chance', 'age', 'state', 'shape'],
     actions: ['orbit', 'separate', 'cohere', 'match', 'force', 'drag', 'wander', 'speed', 'state', 'trail'],
     templates: ['swarm'],
   },
   crowd: {
     label: 'Crowd', blurb: 'People walking to a goal (a point or a flow field), slowing and steering round each other by how many are near.',
     sections: ['neighbours', 'states', 'masks', 'flow'],
-    conditions: ['neighbours', 'mask', 'chance', 'age', 'state'],
+    conditions: ['neighbours', 'mask', 'chance', 'age', 'state', 'shape'],
     actions: ['turn', 'flow', 'slow', 'separate', 'match', 'avoidEdges', 'wander', 'speed', 'state', 'stop', 'trail'],
     templates: ['crowd'],
   },
@@ -321,6 +324,7 @@ export function newCondition(kind: RuleCondition['kind']): RuleCondition {
     case 'memory': return { kind, cmp: '>', value: 1 };
     case 'mask': return { kind, mask: 0, cmp: '>', value: 0.5 };
     case 'neighbours': return { kind, who: 'all', cmp: '>', count: 8 };
+    case 'shape': return { kind, shape: 'circle', x: 0, y: 0, size: 0.4 };
   }
 }
 
@@ -374,6 +378,7 @@ export function describeCondition(set: AgentRuleSet, sp: number, c: RuleConditio
     case 'memory': return `Memory number ${c.cmp} ${num(c.value)}`;
     case 'mask': return `${maskName(set, c.mask)} ${c.cmp} ${num(c.value)}`;
     case 'neighbours': return `${c.cmp === '>' ? 'more' : 'fewer'} than ${num(c.count)} ${WHO[c.who]} within ${num(reach(set, c.radius))}`;
+    case 'shape': return `${c.outside ? 'outside' : 'inside'} a ${c.shape} round (${num(c.x)}, ${num(c.y)}), ${c.shape === 'circle' ? 'radius' : 'half-width'} ${num(c.size)}`;
   }
 }
 
@@ -473,6 +478,7 @@ export function notesFor3d(set: AgentRuleSet): string[] {
   if (usesAction(set, 'flow')) out.push('Follow a flow field: the curl noise is 3D in a 3D group.');
   if (usesAction(set, 'align')) out.push('Align with the crowd: a velocity trail in 3D is a volume of (x, y, z, count): the count is channel 4, not 3.');
   if (neighbourReads(set).length) out.push('Neighbours in 3D look round a ball (the 27 grid cells round it), and the grid is coarser (at most 48 cells a side): a radius under about 0.05 then reads more cells\' worth than it needs.');
+  if (usesCondition(set, 'shape')) out.push('Inside a shape: the circle or box is a column through the depth in 3D (it reads only x and y).');
   if (usesAction(set, 'orbit')) out.push('Orbit: they circle the point round an axis through it square to the picture, at any depth.');
   if (acts(set).some(a => a.kind === 'force' && (a.field === 'point' || a.field === 'mouse'))) out.push('A pull toward a point or the mouse: the point is on the picture\'s plane (z 0) in 3D.');
   return out;

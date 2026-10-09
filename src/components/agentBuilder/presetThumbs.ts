@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { TrailSim, simFromRules, walkersFor } from '../../agentBuilder/miniSim';
 import type { BuilderPreset } from '../../agentBuilder/presets';
+import { DotSim } from '../../agentBuilder/dotSim';
 
 const BG: [number, number, number] = [13, 13, 18];
 
@@ -30,6 +31,22 @@ export function renderPresetThumb(p: BuilderPreset, w = 176, h = 100, steps = 26
   c.width = w; c.height = h;
   const ctx = c.getContext('2d');
   if (!ctx) return null;
+  if (p.dots) {
+    // Particles, flocks, crowds, orbiters: their dots run from the preset's cards, the last second as fading streaks.
+    const set = p.set();
+    // Neighbours are exact here (every pair), so the kinds that look round them get fewer dots.
+    const sim = new DotSim(set, set.kind === 'particles' ? 480 : 260, p.dots, w / h, 7);
+    ctx.fillStyle = `rgb(${BG.join(',')})`;
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 240; i++) {
+      sim.step();
+      if (i < 180) continue;
+      ctx.fillStyle = `rgba(${BG.join(',')},0.12)`;
+      ctx.fillRect(0, 0, w, h);
+      sim.draw(ctx, w, h, 1.4);
+    }
+    try { return c.toDataURL('image/png'); } catch { return null; }
+  }
   const base = simFromRules(p.set(), { halfLife: 0.06, diffuse: 1 });
   const sim = new TrailSim(w, h, walkersFor(w, h), p.sim ? p.sim(base) : base, 7);
   for (let i = 0; i < steps; i++) sim.step();

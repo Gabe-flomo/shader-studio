@@ -103,6 +103,7 @@ unless wired. One undo step (`agentRules/outputs.ts`).
 | Memory number | its one number, `>`, `<` or `=` | `float(mem.y > 1.0)` |
 | inside a mask | a mask where it stands (a texture's brightness, or the number), `>` or `<` | `float(mask1 > 0.5)` |
 | neighbours within reach | more (or fewer) than N walkers (everyone, its own kind or other kinds) within the radius: a Neighbours node's Count | `float(nb1Count > 8.0)` |
+| inside a shape | where it stands is inside (or outside) a circle (radius) or a box (half-width) round a point; in 3D a column through the depth (x and y only) | `float(length(pos - vec2(0.0, 0.0)) < 0.4)` |
 
 **Frame-rate independent chance.** A step is 1/60 s of simulated time whatever the frame rate (docs/agents-group.md), and a chance *p* a second is `1 − (1 − p)^dt` a step, so the chance over a second is *p* at any step length (tested at 30, 60, 120 and 240 steps a second, and by running the generated GLSL at 60 and 120). Each rule draws its own random number from the walker's seed (the step, its index and the group's Seed) hashed with a number of the rule's own: repeatable, independent of the other rules.
 
