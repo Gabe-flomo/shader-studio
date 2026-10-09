@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.108',
+    date: '2026-10-08',
+    title: 'Live harmonograph',
+    highlights: [
+      { area: 'Studio', text: 'Curve Trace Live mode: X and Y in Hz move a dot that leaves a trail; slow, a dot with a tail, fast, a solid figure, like a museum harmonograph.', link: { kind: 'example', key: 'curveTraceLive' } },
+      { area: 'Studio', text: 'Curve Trace has a Head output (the moving dot) for drawing it bright.', link: { kind: 'doc', path: 'docs/curve-trace.md' } },
+      { area: 'Files', text: 'Graphs and Play setups now export as .playfile in one click; JSON files still open.' },
+    ],
+  },
+  {
     id: '2026.10.107',
     date: '2026-10-08',
     title: 'Clearer explanations, cleaner bar',
