@@ -132,6 +132,37 @@ function live(): GraphNode[] {
   ];
 }
 
+/** The same dot on an oscilloscope screen: Draw: Beam lays it into a fading screen of its own. */
+function beam(): GraphNode[] {
+  return [
+    n('curveTrace', 'beam', 500, 200, {
+      draw: 'beam', persistence: 0.5, freqX: 3.01, freqY: 2, phaseX: 1.5708, ampX: 0.42, ampY: 0.42, segments: 128,
+      beamWidth: 0.0035, glow: 0.35, dwell: 1, brightness: 2.5, beamColor: [0.35, 1.0, 0.55],
+      ...note([
+        'Curve Trace, Draw: Beam. The dot moves as in Live (X and Y in cycles a second), but it is drawn the way a scope\'s screen does it: each frame only the stretch it covered since the last frame is laid into a screen of its own, which fades by e every Persistence seconds.',
+        'So the cost stays the same however long the trail is or however much of the figure it covers. X is 3.01 Hz against Y\'s 2, a hair off the fifth, so the figure slowly turns, as on a real scope.',
+        'Colour is the screen in Beam colour, saturating toward white where the trace is brightest (where it crosses itself or moves slowly: Dwell). Head is the exact distance to the dot.',
+      ]),
+    }),
+    expr('scope', 1000, 200, {
+      label: 'Scope', outputType: 'vec3',
+      inputs: [{ name: 'beam', type: 'vec3' }, { name: 'head', type: 'float' }],
+      wires: { beam: ['beam', 'color'], head: ['beam', 'head'] },
+      lines: [
+        ['vec2 cell', 'abs(fract(g_uv * 5.0 + 0.5) - 0.5) / 5.0'],
+        ['float grid', 'smoothstep(0.003, 0.0, min(cell.x, cell.y)) * 0.06'],
+        ['float spot', '0.0025 / max(head, 0.0025) * 0.35'],
+      ],
+      result: 'vec3(0.01, 0.02, 0.015) + vec3(0.3, 0.6, 0.4) * grid + beam + vec3(0.8, 1.0, 0.85) * spot',
+      note: [
+        'Scope: a dark glass with a faint graticule (grid: lines every 0.2 picture units), the beam\'s Colour on top, and a small hot spot where the dot is now (from Head, 1 / distance).',
+        'Nothing here is fixed: Colour is a plain picture and Intensity a plain number, so blur, tint or glow them like anything else.',
+      ],
+    }),
+    out(['scope', 'result'], 1400, 200),
+  ];
+}
+
 function knot(): GraphNode[] {
   const scene = n('sceneGroup', 'scene', 300, 500, {
     label: 'Knot', ...note(['The knot: one Curve Trace 3D. Time comes in through a port so the knot can turn (a Scene Group\'s inside is a function of position; outside values come in as ports).']),
@@ -212,6 +243,19 @@ export function buildCurveTraceExamples(): Record<string, ExampleGraph> {
 **How it is built.** One **Curve Trace** with Draw set to **Live**: time is real time, so a frequency is a speed, and **Persistence** is how many seconds of path stay on screen. **Ink** draws the trail fading toward its tail (Along) and the dot from **Head**.
 
 **Try.** X 1, Y 1 is a circle; X 2, Y 1 a figure eight; X 3, Y 2 the fifth's pretzel. Slightly off ratios (X 3, Y 2.01) make the figure slowly turn, as the real machine does. Shorten Persistence to see only the dot, lengthen it to keep the whole figure.`),
+    },
+    curveTraceBeam: {
+      ...CURVE_TRACE_EXAMPLE_INDEX.curveTraceBeam, counter: 20, nodes: beam(),
+      play: play([
+        ctl('x', 'beam::freqX', 'X (Hz)', 0, 60, 0.01),
+        ctl('y', 'beam::freqY', 'Y (Hz)', 0, 60, 0.01),
+        ctl('s', 'beam::persistence', 'Persistence (s)', 0.02, 3, 0.01),
+        ctl('g', 'beam::glow', 'Glow', 0, 2, 0.01),
+      ], `**What it shows.** An oscilloscope in X-Y mode: a dot driven by two frequencies (3.01 and 2 Hz, a hair off the fifth, so the figure slowly turns) draws on a phosphor screen that glows and fades.
+
+**How it is built.** One **Curve Trace** with Draw set to **Beam**. Each frame it draws only the stretch the dot covered since the last frame into a screen of its own (a Pass the compiler adds), and fades the screen by e every **Persistence** seconds. So the cost doesn't depend on how long the trail is: turn X and Y up to 40 Hz with 3 seconds of persistence and it costs what a slow dot does. **Scope** puts the beam's Colour on a dark graticule and adds a hot spot at the dot from **Head**.
+
+**Try.** X 1, Y 1 is a circle; 0 Hz is a resting dot (it burns bright: Dwell). Push both past 30 Hz: the figure fills in solid, brightest where it crosses itself. On the card, try Damping, Motion Rotary, or Morph.`),
     },
     curveTraceKnot: {
       ...CURVE_TRACE_EXAMPLE_INDEX.curveTraceKnot, counter: 60, nodes: knot(),

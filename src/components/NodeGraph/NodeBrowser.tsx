@@ -42,6 +42,8 @@ const HIDDEN_NODES = new Set([
   'blurStage',
   // One step of a Grid Rules board (compiler/gridRulesExpand.ts).
   'gridRulesStep',
+  // One frame of a Curve Trace Beam's screen (compiler/curveBeamExpand.ts).
+  'curveTraceBeamStep',
   // Made by Bake… (lib/bake): a node's frozen render, never added by hand.
   'baked',
   // An Agents group's anchors (made with the group) and its update shader's end (compiler/agentGraph.ts).

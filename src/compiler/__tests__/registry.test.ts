@@ -59,6 +59,8 @@ const CONNECTION_GATED = new Set([
   ...Object.keys(NODE_REGISTRY.frameStack.paramDefs ?? {}).filter(k => k !== 'background').map(k => `frameStack.${k}`),
   // A Grid Rules step (made by the compiler, compiler/gridRulesExpand.ts) reads nothing until its board is wired
   ...Object.keys(NODE_REGISTRY.gridRulesStep.paramDefs ?? {}).map(k => `gridRulesStep.${k}`),
+  // A Curve Trace Beam's step (compiler/curveBeamExpand.ts) likewise draws nothing until its screen is wired
+  ...Object.keys(NODE_REGISTRY.curveTraceBeamStep.paramDefs ?? {}).map(k => `curveTraceBeamStep.${k}`),
 ]);
 
 function makeNode(id: string, type: string, def: NodeDefinition, x = 0): GraphNode {

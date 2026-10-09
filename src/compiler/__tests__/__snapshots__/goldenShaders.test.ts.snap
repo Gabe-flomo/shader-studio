@@ -105,6 +105,13 @@ exports[`golden shaders: every Play example exports the same bundle > convertCir
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > curveTraceBeam 1`] = `
+{
+  "bundle": "104e5db0c12b5406699527b82df5:15661",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > curveTraceIntervals 1`] = `
 {
   "bundle": "18324f0e150e1c064bc8c0ada411:36533",
@@ -2728,6 +2735,205 @@ exports[`golden shaders: every example compiles as it did > crtTv 1`] = `
   ],
   "paramValues": "0c8938ef9689d404cdf2b7fd925f:638",
   "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > curveTraceBeam 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0b4a49fbb8c94d0fa06e2b0c64d0:4660",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0cc544c05d833f188edfa11366db:133",
+  "paramBindings": "08f5e97622f787059ef7cfb56694:793",
+  "paramUniforms": [
+    "u_p_curvetracex0xc2_ampX",
+    "u_p_curvetracex0xc2_ampY",
+    "u_p_curvetracex0xc2_beamColor",
+    "u_p_curvetracex0xc2_beamWidth",
+    "u_p_curvetracex0xc2_brightness",
+    "u_p_curvetracex0xc2_damping",
+    "u_p_curvetracex0xc2_dwell",
+    "u_p_curvetracex0xc2_freqX",
+    "u_p_curvetracex0xc2_freqY",
+    "u_p_curvetracex0xc2_glow",
+    "u_p_curvetracex0xc2_offX",
+    "u_p_curvetracex0xc2_offY",
+    "u_p_curvetracex0xc2_persistence",
+    "u_p_curvetracex0xc2_phaseX",
+    "u_p_curvetracex0xc2_phaseY",
+    "u_p_curvetracex0xc2_thickness",
+    "u_p_curvetracex0xc2_turns",
+  ],
+  "paramValues": "1417af2254e58900fedb6e16bf76:609",
+  "passes": [
+    {
+      "filter": "linear",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_curvetracex0xc2_freqX;
+uniform float u_p_curvetracex0xc2_phaseX;
+uniform float u_p_curvetracex0xc2_ampX;
+uniform float u_p_curvetracex0xc2_offX;
+uniform float u_p_curvetracex0xc2_freqY;
+uniform float u_p_curvetracex0xc2_phaseY;
+uniform float u_p_curvetracex0xc2_ampY;
+uniform float u_p_curvetracex0xc2_offY;
+uniform float u_p_curvetracex0xc2_turns;
+uniform float u_p_curvetracex0xc2_persistence;
+uniform float u_p_curvetracex0xc2_damping;
+uniform float u_p_curvetracex0xc2_thickness;
+uniform float u_p_curvetracex0xc2_beamWidth;
+uniform float u_p_curvetracex0xc2_glow;
+uniform float u_p_curvetracex0xc2_dwell;
+uniform float u_p_curvetracex0xc2_brightness;
+uniform vec3 u_p_curvetracex0xc2_beamColor;
+uniform sampler2D u_pass_curve_screen_0;
+uniform vec2 u_pass_curve_screen_0_px;
+uniform sampler2D u_passprev_curve_screen_0;
+uniform vec2 u_passprev_curve_screen_0_px;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+float ctErf(float x) {
+  float x2 = x * x;
+  float e = sqrt(1.0 - exp(-x2 * (1.27324 + 0.147 * x2) / (1.0 + 0.147 * x2)));
+  return x < 0.0 ? -e : e;
+}
+
+
+float ctLorF(float s, float a2) {
+  float a = sqrt(a2);
+  return s / (2.0 * a2 * (a2 + s * s)) + atan(s / a) / (2.0 * a2 * a);
+}
+
+
+float ctBeamInk(vec2 p, vec2 a, vec2 b, float w, float glow, float dwell, float sweep) {
+  vec2 ab = b - a;
+  float L = length(ab);
+  vec2 dir = L > 1e-7 ? ab / L : vec2(1.0, 0.0);
+  vec2 pa = p - a;
+  float along = dot(pa, dir);
+  float d2 = max(dot(pa, pa) - along * along, 0.0);
+  float s0 = -along / w;
+  float s1 = (L - along) / w;
+  float h = 0.5 * (ctErf(s1) - ctErf(s0));
+  float g = exp(-d2 / (w * w));
+  float frac = L > 1e-3 * w ? min(1.0, h * 1.77245 * w / L) : exp(-s0 * s0);
+  float ink = g * (h * sweep + dwell * frac);
+  if (glow > 0.0) {
+    float gw = 4.0 * w;
+    float a2 = gw * gw + d2;
+    ink += sweep * glow * 0.63662 * gw * gw * gw * (ctLorF(L - along, a2) - ctLorF(-along, a2));
+    // Dwell's halo: the halo round the nearest point, for the share of the piece within it.
+    float q = along - clamp(along, 0.0, L);
+    float r = gw * gw / (gw * gw + d2 + q * q);
+    ink += dwell * glow * r * sqrt(r) * min(1.0, 2.0 * gw / max(L, 1e-9));
+  }
+  return ink;
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Curve Trace, Draw: Beam. The dot moves as in Live (X and Y in cycles a second), but it is drawn the way a scope's screen does it: each frame only the stretch it covered since the last frame is laid into a screen of its own, which fades by e every Persistence seconds.
+    // So the cost stays the same however long the trail is or however much of the figure it covers. X is 3.01 Hz against Y's 2, a hair off the fifth, so the figure slowly turns, as on a real scope.
+    // Colour is the screen in Beam colour, saturating toward white where the trace is brightest (where it crosses itself or moves slowly: Dwell). Head is the exact distance to the dot.
+    vec3 curvetrace_0_c2_bc = vec3(0.0);
+    float curvetrace_0_c2_ba = 0.0;
+    {
+      float time = u_time;
+      vec4 curvetrace_0_c2_pv = texture2D(u_passprev_curve_screen_0, vUv);
+      float curvetrace_0_c2_m = dot(floor(curvetrace_0_c2_pv.gba * 255.0 + 0.5), vec3(65536.0, 256.0, 1.0));
+      float curvetrace_0_c2_now = mod(time, 128.0);
+      float curvetrace_0_c2_span = curvetrace_0_c2_m > 0.5 ? mod(curvetrace_0_c2_now - (curvetrace_0_c2_m - 1.0) / 65536.0, 128.0) : 1e9;
+      float curvetrace_0_c2_P = max(u_p_curvetracex0xc2_persistence, 0.0005);
+      float curvetrace_0_c2_w = max(u_p_curvetracex0xc2_beamWidth, 0.0001);
+      float curvetrace_0_c2_om = 6.28318 * (max(abs(u_p_curvetracex0xc2_freqX), abs(u_p_curvetracex0xc2_freqY)) + abs(u_p_curvetracex0xc2_damping));
+      bool curvetrace_0_c2_fresh = curvetrace_0_c2_span > 1.0;
+      float curvetrace_0_c2_back = curvetrace_0_c2_fresh ? min(min(4.0 * curvetrace_0_c2_P, 1.0), 128.0 * 0.2 / max(curvetrace_0_c2_om, 0.001)) : curvetrace_0_c2_span;
+      vec2 curvetrace_0_c2_c = vec2(u_p_curvetracex0xc2_offX, u_p_curvetracex0xc2_offY);
+      float curvetrace_0_c2_z = curvetrace_0_c2_fresh ? 1.0 : exp(-u_p_curvetracex0xc2_damping * 6.28318 * curvetrace_0_c2_span);
+      vec2 curvetrace_0_c2_src = curvetrace_0_c2_c + (g_uv - curvetrace_0_c2_c) / curvetrace_0_c2_z;
+      float curvetrace_0_c2_old = curvetrace_0_c2_fresh ? 0.0 : texture2D(u_passprev_curve_screen_0, curvetrace_0_c2_src / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5).r * exp(-curvetrace_0_c2_span / curvetrace_0_c2_P);
+      int curvetrace_0_c2_k = int(clamp(ceil(curvetrace_0_c2_om * curvetrace_0_c2_back / 0.2), curvetrace_0_c2_back > 0.0 ? 1.0 : 0.0, 128.0));
+      float curvetrace_0_c2_dw = u_p_curvetracex0xc2_dwell * 2.0 * (curvetrace_0_c2_back / max(float(curvetrace_0_c2_k), 1.0)) / curvetrace_0_c2_P;
+      float curvetrace_0_c2_ink = 0.0;
+      float curvetrace_0_c2_vc = 6.28318 * length(vec2(abs(u_p_curvetracex0xc2_ampX), abs(u_p_curvetracex0xc2_ampY))) / curvetrace_0_c2_P;
+      float curvetrace_0_c2_T = time * 6.28318;
+      float t = curvetrace_0_c2_T - curvetrace_0_c2_back * 6.28318;
+      float curvetrace_0_c2_damp = exp(-u_p_curvetracex0xc2_damping * (curvetrace_0_c2_T - t));
+      vec2 curvetrace_0_c2_a = vec2((u_p_curvetracex0xc2_offX + u_p_curvetracex0xc2_ampX * curvetrace_0_c2_damp * sin(u_p_curvetracex0xc2_freqX * t + (u_p_curvetracex0xc2_phaseX * min(abs(u_p_curvetracex0xc2_freqX), 1.0)))), (u_p_curvetracex0xc2_offY + u_p_curvetracex0xc2_ampY * curvetrace_0_c2_damp * sin(u_p_curvetracex0xc2_freqY * t + (u_p_curvetracex0xc2_phaseY * min(abs(u_p_curvetracex0xc2_freqY), 1.0)))));
+      for (int curvetrace_0_c2_i = 1; curvetrace_0_c2_i <= 128; curvetrace_0_c2_i++) {
+        if (curvetrace_0_c2_i > curvetrace_0_c2_k) break;
+        float curvetrace_0_c2_f = float(curvetrace_0_c2_i) / float(curvetrace_0_c2_k);
+        t = curvetrace_0_c2_T - curvetrace_0_c2_back * (1.0 - curvetrace_0_c2_f) * 6.28318;
+        curvetrace_0_c2_damp = exp(-u_p_curvetracex0xc2_damping * (curvetrace_0_c2_T - t));
+        vec2 curvetrace_0_c2_b = vec2((u_p_curvetracex0xc2_offX + u_p_curvetracex0xc2_ampX * curvetrace_0_c2_damp * sin(u_p_curvetracex0xc2_freqX * t + (u_p_curvetracex0xc2_phaseX * min(abs(u_p_curvetracex0xc2_freqX), 1.0)))), (u_p_curvetracex0xc2_offY + u_p_curvetracex0xc2_ampY * curvetrace_0_c2_damp * sin(u_p_curvetracex0xc2_freqY * t + (u_p_curvetracex0xc2_phaseY * min(abs(u_p_curvetracex0xc2_freqY), 1.0)))));
+        float curvetrace_0_c2_age = curvetrace_0_c2_back * (1.0 - curvetrace_0_c2_f + 0.5 / float(curvetrace_0_c2_k));
+        float curvetrace_0_c2_sw = min(1.0, curvetrace_0_c2_vc * curvetrace_0_c2_back / (float(curvetrace_0_c2_k) * max(length(curvetrace_0_c2_b - curvetrace_0_c2_a), 1e-9)));
+        curvetrace_0_c2_ink += ctBeamInk(g_uv, curvetrace_0_c2_a, curvetrace_0_c2_b, curvetrace_0_c2_w, u_p_curvetracex0xc2_glow, curvetrace_0_c2_dw, curvetrace_0_c2_sw) * exp(-curvetrace_0_c2_age / curvetrace_0_c2_P);
+        curvetrace_0_c2_a = curvetrace_0_c2_b;
+      }
+      float curvetrace_0_c2_q = floor(curvetrace_0_c2_now * 65536.0) + 1.0;
+      curvetrace_0_c2_bc = vec3(curvetrace_0_c2_old + curvetrace_0_c2_ink, floor(curvetrace_0_c2_q / 65536.0) / 255.0, mod(floor(curvetrace_0_c2_q / 256.0), 256.0) / 255.0);
+      curvetrace_0_c2_ba = mod(curvetrace_0_c2_q, 256.0) / 255.0;
+    }
+    gl_FragColor = vec4(curvetrace_0_c2_bc, curvetrace_0_c2_ba);
+}",
+      "label": "Curve screen",
+      "live": true,
+      "nodeId": "beam__beam",
+      "nodeIds": [
+        "beam__beamstep",
+        "beam",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "curve_screen_0",
+      ],
+      "scale": 1,
+      "slug": "curve_screen_0",
+      "wrap": "clamp",
+    },
+  ],
   "success": true,
   "textureUniforms": {},
   "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",

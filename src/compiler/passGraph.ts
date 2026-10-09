@@ -40,6 +40,7 @@ import { agentPlacementProblems, agentProgramProblems } from './agentRules';
 import { expandPassGroups } from './passGroups';
 import { FINAL, planHiddenBlurs } from './hiddenBlurs';
 import { GRID_TYPE, expandGridRules } from './gridRulesExpand';
+import { expandCurveBeams, isBeamTrace } from './curveBeamExpand';
 
 export const PASS_TYPE = 'pass';
 /** Most Pass nodes in one graph. */
@@ -53,7 +54,8 @@ type Sub = { nodes?: GraphNode[] } | undefined;
 export function hasPassNode(nodes: GraphNode[]): boolean {
   for (const n of nodes) {
     // A Grid Rules node is opened into a board Pass (compiler/gridRulesExpand.ts).
-    if (n.type === PASS_TYPE || n.type === GRID_TYPE) return true;
+    // So is a Curve Trace in Draw: Beam, into its screen Pass (compiler/curveBeamExpand.ts).
+    if (n.type === PASS_TYPE || n.type === GRID_TYPE || isBeamTrace(n)) return true;
     const sg = n.params?.subgraph as Sub;
     if (sg?.nodes && hasPassNode(sg.nodes)) return true;
   }
@@ -183,7 +185,10 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     const opened = expandPassGroups(graph.nodes);
     if ('errors' in opened) return failure(opened.errors);
     // Grid Rules nodes: each opened into its board Pass and step (compiler/gridRulesExpand.ts); without one, unchanged.
-    const grid = expandGridRules(opened.nodes);
+    const gridOnly = expandGridRules(opened.nodes);
+    // Curve Trace in Draw: Beam: each opened into its screen Pass and step (compiler/curveBeamExpand.ts); without one, unchanged.
+    const beams = expandCurveBeams(gridOnly.nodes);
+    const grid = beams.bindAs.size ? { nodes: beams.nodes, bindAs: new Map([...gridOnly.bindAs, ...beams.bindAs]) } : gridOnly;
     // With agents: every node of (or wired into) a 3D group marked for its space (a 2D graph is left as it is).
     const nodes = agents ? syncAgentSpaces(grid.nodes, getNodeDefinition) : grid.nodes;
 
@@ -191,7 +196,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     if (!validation.valid) return failure(validation.errors ?? ['Invalid graph']);
 
     const passNodes = nodes.filter(n => n.type === PASS_TYPE);
-    if (passNodes.length > MAX_PASSES) return failure([`A graph can have up to ${MAX_PASSES} Pass nodes (this one has ${passNodes.length}${grid.bindAs.size ? ', counting each Grid Rules board, and its picture when its Texture is wired' : ''})`]);
+    if (passNodes.length > MAX_PASSES) return failure([`A graph can have up to ${MAX_PASSES} Pass nodes (this one has ${passNodes.length}${gridOnly.bindAs.size ? ', counting each Grid Rules board, and its picture when its Texture is wired' : ''}${beams.bindAs.size ? ', counting each Curve Trace Beam\'s screen' : ''})`]);
     const byId = new Map(nodes.map(n => [n.id, n]));
 
     // 1. Slugs, once for the whole graph, in the usual sort order (Previous wires left out, so feedback isn't a cycle;
