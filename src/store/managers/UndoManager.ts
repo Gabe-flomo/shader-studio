@@ -74,6 +74,12 @@ export class UndoManager {
     try { run(); } finally { this.suspended--; }
   }
 
+  /** Run a mutating action as part of the step already on top (a burst that has its step): its own pushes are ignored. */
+  quietly(run: () => void): void {
+    this.suspended++;
+    try { run(); } finally { this.suspended--; }
+  }
+
   /** Fold every step made after the step with id `afterId` (0 for all of them) into one: the first
    *  of them already holds the state from before the whole gesture, so dropping the rest makes the
    *  gesture a single undo. Named by `meta`. (A drop that adds a node and wires it in.) */

@@ -4632,6 +4632,16 @@ Words: `neighbours`
 neighbours
 ```
 
+### shape
+
+Agent Rules · condition. Condition: inside a shape.
+
+Words: `shape`
+
+```
+shape
+```
+
 ### turn
 
 Agent Rules · action. Action: turn toward / away.

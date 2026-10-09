@@ -404,6 +404,7 @@ export const CONDITION_HELP: Record<RuleCondition['kind'], { hint: string; examp
   memory: { hint: 'The walker\'s one free number: a timer, a counter, an energy.', example: 'Memory number > 1' },
   mask: { hint: 'A mask (a texture\'s brightness or a number) where the walker stands.', example: 'Food mask > 0.5' },
   neighbours: { hint: 'How many other walkers (everyone, its own kind or other kinds) are within the radius: the walkers themselves, found through the group\'s grid (a Neighbours node).', example: 'more than 8 neighbours within 0.05' },
+  shape: { hint: 'Where the walker stands: inside (or outside) a circle or a box round a point. In 3D, a column through the depth.', example: 'inside a circle round (0, 0), radius 0.4' },
 };
 
 /** A plain-language hint for each Agent Rules action (the + do… picker and its "?"). */

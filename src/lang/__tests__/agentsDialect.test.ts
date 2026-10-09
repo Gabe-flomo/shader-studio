@@ -73,6 +73,7 @@ function randomSet(seed: number): AgentRuleSet {
         if (c.kind === 'sense') { c.channel = rng.pick(['own', 0, 2] as const); c.where = rng.pick(['ahead', 'left', 'right', 'any', 'here'] as const); c.cmp = rng.pick(['>', '<'] as const); }
         if (c.kind === 'near') c.species = rng.int(0, set.species.length - 1);
         if (c.kind === 'mask') c.mask = rng.int(0, set.masks.length - 1);
+        if (c.kind === 'shape') { c.shape = rng.pick(['circle', 'box'] as const); c.x = Math.round(rng.float(-1, 1) * 100) / 100; c.y = Math.round(rng.float(-1, 1) * 100) / 100; c.size = Math.round(rng.float(0.05, 0.8) * 100) / 100; if (rng.chance(0.5)) c.outside = true; }
         if (c.kind === 'memory') c.cmp = rng.pick(['>', '<', '='] as const);
         if (c.kind === 'neighbours') { c.who = rng.pick(['all', 'own', 'others'] as const); if (rng.chance(0.5)) c.radius = 0.08; }
         return c;
@@ -159,6 +160,21 @@ describe('agents dialect: names, mistakes, one-liners, randomness', () => {
     const set = RULES_TEMPLATES.find(t => t.key === 'termites')!.set();
     expect(printAgents(set)).toContain('channels "wood chips"');
     expect(printAgents(set)).toContain('leave "wood chips" -1');
+  });
+  it('inside / outside a shape reads and prints back the same; a state called inside is quoted', () => {
+    const set = read('species Ants: when inside circle (0,0) 0.4 and outside box (0.2,-0.1) 0.3 do wander 5deg');
+    expect(set.species[0].rules[0].when).toEqual([
+      { kind: 'shape', shape: 'circle', x: 0, y: 0, size: 0.4 },
+      { kind: 'shape', shape: 'box', x: 0.2, y: -0.1, size: 0.3, outside: true },
+    ]);
+    const text = printAgents(set);
+    expect(text).toContain('inside circle (0,0) 0.4 and outside box (0.2,-0.1) 0.3');
+    expect(canon(read(text))).toEqual(canon(set));
+    expect(printAgents(read(text))).toBe(text);
+    expect(parseAgents('species Ants: when inside circle 0.4 do wander 5deg').errors.length).toBeGreaterThan(0);
+    const odd = read('species Ants states="inside",out: when "inside" do wander 5deg');
+    expect(printAgents(odd)).toContain('"inside"');
+    expect(canon(read(printAgents(odd)))).toEqual(canon(odd));
   });
   it('mistakes at their place with "did you mean"', () => {
     const r = parseAgents('species Ants states=searching,carrying\n  when serching do wander 5deg');

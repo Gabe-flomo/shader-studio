@@ -188,6 +188,62 @@ uniform float u_gain;
 out vec4 o_col;
 void main() { o_col = vec4(vec3(1.0, 0.72, 0.32) * u_gain, 1.0); }`;
 
+/**
+ * The Agent Builder's species spotlight: every u_stride-th live walker of species u_only (-1: all)
+ * as one additive point of u_px pixels in u_col × u_gain, where the picture shows it: 2D at
+ * (x / aspect, y); 3D (u_deep 1) through the Draw agents camera as AG_DRAW3_VERT places it (the
+ * built-in camera's uniforms, or a scene's from u_cam), without depth of field. Not part of any picture.
+ */
+export const AG_SPOT_VERT = `precision highp float;
+precision highp int;
+uniform highp sampler2D u_a;
+uniform highp sampler2D u_b;
+uniform highp sampler2D u_c;
+uniform highp sampler2D u_cam;
+uniform int u_side, u_stride, u_species, u_stateC, u_only, u_deep, u_camSrc;
+uniform float u_aspect, u_px;
+uniform vec3 u_eye, u_fwd, u_right, u_up;
+uniform float u_lens, u_ortho, u_camDist;
+void spotCull() { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; }
+void main() {
+  int id = gl_VertexID * u_stride;
+  ivec2 t = ivec2(id % u_side, id / u_side);
+  if (t.y >= u_side) { spotCull(); return; }
+  vec4 A = texelFetch(u_a, t, 0), B = texelFetch(u_b, t, 0);
+  if (B.w <= 0.0) { spotCull(); return; }
+  if (u_only >= 0) {
+    float sp = u_stateC == 1 ? texelFetch(u_c, t, 0).x : float(id % max(u_species, 1));
+    if (int(floor(sp + 0.5)) != u_only) { spotCull(); return; }
+  }
+  gl_PointSize = u_px;
+  if (u_deep == 0) { gl_Position = vec4(A.x / u_aspect, A.y, 0.0, 1.0); return; }
+  vec3 eye = u_eye, f = u_fwd, r = u_right, u = u_up;
+  float lens = u_lens, cd = u_camDist, fl = clamp(u_ortho, 0.0, 1.0);
+  if (u_camSrc == 1) {
+    eye = texelFetch(u_cam, ivec2(0, 0), 0).xyz;
+    f = normalize(texelFetch(u_cam, ivec2(1, 0), 0).xyz);
+    vec3 rx = normalize(texelFetch(u_cam, ivec2(2, 0), 0).xyz), ry = normalize(texelFetch(u_cam, ivec2(3, 0), 0).xyz);
+    float cx = dot(rx, f), cy = clamp(dot(ry, f), -0.9999, 0.9999);
+    lens = 0.5 / tan(acos(cy));
+    r = normalize(rx - cx * f);
+    u = normalize(ry - cy * f);
+    u = normalize(u - dot(r, u) * r);
+    cd = max(0.1, dot(-eye, f));
+    fl = 0.0;
+  }
+  vec3 d = A.xyz - eye;
+  float z = dot(d, f);
+  if (z < 0.06 && fl < 0.999) { spotCull(); return; }
+  float w = mix(z, cd, fl);
+  vec2 q = vec2(dot(d, r), dot(d, u)) * lens / w;
+  gl_Position = vec4(q.x / u_aspect, q.y, 0.0, 1.0);
+}`;
+export const AG_SPOT_FRAG = `precision highp float;
+uniform vec3 u_col;
+uniform float u_gain;
+out vec4 o_col;
+void main() { o_col = vec4(u_col * u_gain, 1.0); }`;
+
 /*
  * Readings (P6): a group's walkers summed on the GPU into a 2 × 1 target, read back a frame or two
  * later without a stall (gpReadback). Two halves side by side, each summing 8 × 8 blocks a pass:

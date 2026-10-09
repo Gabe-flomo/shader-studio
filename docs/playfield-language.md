@@ -265,6 +265,7 @@ Edit verbs leave "the" out: `set glow falloff=8`. A clause that is only a refere
 | `memory` |  |  |  |
 | `mask` |  |  |  |
 | `neighbours` |  |  |  |
+| `shape` |  |  |  |
 | `turn` |  |  | `turn toward food 20deg` |
 | `wander` |  |  | `wander 7deg` |
 | `speed` |  |  | `speed 0.4` |

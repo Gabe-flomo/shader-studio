@@ -331,7 +331,7 @@ function ruleBlock(set: AgentRuleSet, rule: AgentRule, s: number, ri: number, c:
   if (c.stopSeen) terms.push(`(1.0 - ${read('done')})`);
   if (c.many) terms.push(`float(${read('sp')} == ${glf(s)})`);
   let k = 0;
-  for (const cond of rule.when) terms.push(...conditionTerm(set, cond, s, ri, () => k++, add, read));
+  for (const cond of rule.when) terms.push(...conditionTerm(set, cond, s, ri, () => k++, add, read, c.d3));
   add('float go', '=', terms.length ? terms.join(' * ') : '1.0',
     `1 when this rule applies to this walker this step, else 0: ${[c.stopSeen ? 'no rule above stopped it' : '', c.many ? `it is a ${set.species[s].name}` : '', ...rule.when.filter(w => w.kind !== 'always').map(w => describeCondition(set, s, w))].filter(Boolean).join(', and ') || 'always'}. Every action below is scaled by it.`);
 
@@ -405,7 +405,7 @@ function ruleUses(set: AgentRuleSet, who: NeighbourWho, radius: number): string[
 
 type Add = (lhs: string, op: string, rhs: string, text: string, mods?: string) => void;
 
-function conditionTerm(set: AgentRuleSet, cond: RuleCondition, s: number, ri: number, next: () => number, add: Add, read: (v: string) => string): string[] {
+function conditionTerm(set: AgentRuleSet, cond: RuleCondition, s: number, ri: number, next: () => number, add: Add, read: (v: string) => string, d3 = false): string[] {
   switch (cond.kind) {
     case 'always': return [];
     case 'sense': {
@@ -436,6 +436,13 @@ function conditionTerm(set: AgentRuleSet, cond: RuleCondition, s: number, ri: nu
       return [`float(${m.kind === 'texture' ? `dot(${v}, vec3(0.299, 0.587, 0.114))` : v} ${cond.cmp} ${glf(cond.value)})`];
     }
     case 'neighbours': return [`float(${read(nbVar(set, cond.who, cond.radius, 'Count'))} ${cond.cmp} ${glf(cond.count)})`];
+    case 'shape': {
+      // In 3D the shape is a column through the depth: only x and y count.
+      const p = `${read('pos')}${d3 ? '.xy' : ''}`;
+      const at = `vec2(${glf(cond.x)}, ${glf(cond.y)})`;
+      const dist = cond.shape === 'circle' ? `length(${p} - ${at})` : `max(abs(${p}.x - ${glf(cond.x)}), abs(${p}.y - ${glf(cond.y)}))`;
+      return [`float(${dist} ${cond.outside ? '>=' : '<'} ${glf(Math.max(cond.size, 0))})`];
+    }
   }
 }
 

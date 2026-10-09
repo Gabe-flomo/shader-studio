@@ -33,6 +33,18 @@ export class CanvasProbeRegistry {
     return this.canvases.has(key) || (this.mirrors.get(key)?.length ?? 0) > 0;
   }
 
+  /** How many keys have a canvas (main or mirror): 0 means nothing to draw. */
+  size(): number {
+    let n = this.canvases.size;
+    for (const [k, l] of this.mirrors) if (l.length && !this.canvases.has(k)) n++;
+    return n;
+  }
+
+  /** The keys with a canvas (main or mirror). */
+  keys(): string[] {
+    return [...new Set([...this.canvases.keys(), ...[...this.mirrors].filter(([, l]) => l.length).map(([k]) => k)])];
+  }
+
   /** The main canvas only (what a mirror copies from), not a mirror. */
   main(key: string): HTMLCanvasElement | undefined {
     return this.canvases.get(key);

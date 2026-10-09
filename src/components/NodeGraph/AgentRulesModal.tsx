@@ -425,6 +425,13 @@ function ConditionEditor({ c, ctx, onChange }: { c: RuleCondition; ctx: EditCtx;
       <Who value={c.who} onChange={who => onChange({ ...c, who })} />
       <Reach set={set} value={c.radius} onChange={radius => onChange({ ...c, radius })} />
     </>;
+    case 'shape': return <>
+      <Small label="inside or outside" value={c.outside ? 'outside' : 'inside'} options={[{ value: 'inside', label: 'inside' }, { value: 'outside', label: 'outside' }]} onChange={v => onChange({ ...c, outside: v === 'outside' ? true : undefined })} />
+      <Small label="which shape" value={c.shape} options={[{ value: 'circle', label: 'a circle' }, { value: 'box', label: 'a box' }]} onChange={v => onChange({ ...c, shape: v as 'circle' | 'box' })} />
+      <Word>x</Word><Num value={c.x} step={0.05} onCommit={v => onChange({ ...c, x: v })} />
+      <Word>y</Word><Num value={c.y} step={0.05} onCommit={v => onChange({ ...c, y: v })} />
+      <Word>{c.shape === 'circle' ? 'radius' : 'half-width'}</Word><Num value={c.size} step={0.05} onCommit={v => onChange({ ...c, size: Math.max(0, v) })} />
+    </>;
   }
 }
 

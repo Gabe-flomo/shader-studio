@@ -211,3 +211,42 @@ Not done yet, for phase 2 and later:
 - In the Born diagram, a 3D Emit's ball or shell is drawn flat.
 - The lens shows the walker over the dimmed live picture, not a magnified crop. A crop of the middle was tried, but the middle is often the bright birth disc, which hid the diagram.
 - Thumbnails are a CPU simulation of the cards, not GPU renders of each preset.
+
+## Phase 2 status (2026-10-09)
+
+Built (docs/agent-builder.md):
+
+- **Every kind is a builder.** These open in the builder from the start page and from Edit rules, and their 2D groups are their example's own setup (Emit, Draw agents, palette):
+  - Particles: Born, Forces, Moving, Life, Look.
+  - Flocks and Crowds: Born, Neighbours, Turning, Moving.
+  - Orbiters: Born, Orbit, Neighbours, Moving.
+- **Crowds** has its own start card, built with the Flocks sections plus Head for and Slow in a crowd. It is a flock with a goal, but what you make looks different and starts from a different setup (two kinds walking opposite ways), so it gets its own picture and presets.
+- **One card model for every kind** (`agentBuilder/behaviours.ts`): a card is an action of a rule with at most one plain condition. Every template of the new kinds (2D and 3D) and every new preset round-trips unchanged, with identical generated nodes.
+- **Kinds of walker as chips:**
+  - add (a copy, up to 4), rename in place, colour, remove; each kind has its own cards;
+  - picking one lights its walkers in the viewport: the picture dims and the agent runner draws only that species, in 2D and through the 3D camera;
+  - adding or removing a kind restarts the walkers, so births share them out.
+- **"Only when…" lines** on every card, trail followers included: a neighbour is near, it smells …, inside / outside a shape, older than, by chance, in state.
+  - "Inside a shape" is a new `shape` rule condition, also in the rules editor, the language and the Do… bar.
+  - A shape is drawn on the picture; other conditions are a badge.
+- **Drag to reorder** cards in Forces, Turning, Orbit and Orbiters' Neighbours (or ↑ / ↓ on the grip); a shared rule is split there. Switching a card off now splits its rule in place too, so the order is kept.
+- **Diagrams:**
+  - force arrows and their sum, the curl field, the attract point;
+  - the view radius ring with the counted neighbours lit;
+  - separation, alignment and cohesion, and the avoid-edges band;
+  - the orbit circle with its direction;
+  - brightness by age.
+- **Phase 1 follow-ups:**
+  - making a setup is an undo step of its own, and setup edits have their own steps per burst;
+  - a 3D Born ball, shell or box is drawn through Draw agents' camera.
+- **Presets** for each kind (5 particles, 5 flocks, 3 crowds, 5 orbiters), with thumbnails from a small CPU dot simulation of their cards.
+
+Not done yet, for phase 3 and later:
+
+- The Where picker (masks with thumbnails). "Inside a shape" is a circle or a box typed in; phase 3 should let you pick a shape from the graph and drag it on the picture.
+- Look for the other kinds (only particles have it), and trail swatches.
+- An "only when" holds one condition. Two (a state and a smell, as the ants have) are still Advanced rules, as are Memory conditions (phase 4).
+- The 3D Born diagram is drawn through the camera as it starts. An orbiting camera moves on, so the outline drifts from the picture.
+- The view ring's lens re-fits when the radius jumps to more than about twice or less than half the size it was fitted for, so after a big jump the ring is the same size again.
+- The species spotlight draws each walker as a sharp 2 px dot without depth of field, so thousands of walkers of one kind become a cloud.
+- A crowd in 3D is the flock's setup with the crowd's rules, and its goal points are on the picture's plane.

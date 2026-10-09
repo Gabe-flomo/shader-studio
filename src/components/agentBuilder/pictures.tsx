@@ -5,6 +5,8 @@
 import { useEffect, useRef } from 'react';
 import type { StartKind } from '../../agentBuilder/kinds';
 import { TrailSim, dotsFor, miniRandom, stepFlock, stepOrbit, stepParticles, walkersFor, type Dot } from '../../agentBuilder/miniSim';
+import { DotSim } from '../../agentBuilder/dotSim';
+import { CROWD_PRESETS } from '../../agentBuilder/presets';
 
 const BG: [number, number, number] = [13, 13, 18];
 
@@ -40,6 +42,20 @@ export function KindPicture({ kind, width = 240, height = 136, accent = '#ffcf7a
           ctx.imageSmoothingEnabled = true;
           ctx.drawImage(off, 0, 0, W, H);
         }
+        raf = requestAnimationFrame(frame);
+      };
+      frame();
+    } else if (kind === 'crowd') {
+      // Two crowds walking opposite ways, from the Crowds card's own rules (dotSim.ts).
+      const p = CROWD_PRESETS[0];
+      const sim = new DotSim(p.set(), 160, p.dots ?? [], W / H, 4);
+      for (let i = 0; i < 120; i++) sim.step();
+      const frame = () => {
+        if (!alive) return;
+        sim.step();
+        ctx.fillStyle = 'rgba(13,13,18,0.28)';
+        ctx.fillRect(0, 0, W, H);
+        sim.draw(ctx, W, H, 3.2);
         raf = requestAnimationFrame(frame);
       };
       frame();

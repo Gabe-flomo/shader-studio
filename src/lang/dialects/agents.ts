@@ -36,7 +36,7 @@ import {
 
 const WHERE_WORDS: Record<string, SenseWhere> = { ahead: 'ahead', left: 'left', right: 'right', anywhere: 'any', any: 'any', here: 'here' };
 const WHERE_TEXT: Record<SenseWhere, string> = { ahead: 'ahead', left: 'left', right: 'right', any: 'anywhere', here: 'here' };
-const KEYWORDS = new Set(['when', 'always', 'do', 'and', 'not', 'near', 'chance', 'age', 'memory', 'mask', 'neighbours', 'trail', 'species', 'state', 'agents', 'sensors', 'channels', 'masks', 'flow', 'random', 'seed',
+const KEYWORDS = new Set(['when', 'always', 'do', 'and', 'not', 'near', 'chance', 'age', 'memory', 'mask', 'neighbours', 'trail', 'species', 'state', 'agents', 'sensors', 'channels', 'masks', 'flow', 'random', 'seed', 'inside', 'outside', 'circle', 'box',
   ...Object.keys(WHERE_WORDS)]);
 
 /** Interesting ranges for rule numbers (degrees a step, amounts…), by what they are. */
@@ -49,7 +49,7 @@ const AG_RAND: Record<string, RandSpec> = {
   speed: rangeFor('speed') ?? { kind: 'num', lo: 0.1, hi: 1.2, log: true }, amount: { kind: 'num', lo: 0.5, hi: 2 }, fade: { kind: 'num', lo: 0.05, hi: 0.3 },
   drag: { kind: 'num', lo: 0.1, hi: 0.8 }, force: { kind: 'num', lo: 0.2, hi: 1.2 }, seconds: { kind: 'num', lo: 1, hi: 5 }, value: { kind: 'num', lo: 0.05, hi: 0.8 },
   chance: { kind: 'num', lo: 0.05, hi: 0.8 }, count: { kind: 'num', lo: 4, hi: 30, int: true }, distance: { kind: 'num', lo: 0.3, hi: 0.7 }, margin: { kind: 'num', lo: 0.05, hi: 0.15 },
-  jam: { kind: 'num', lo: 10, hi: 40, int: true }, radius: { kind: 'num', lo: 0.02, hi: 0.08 },
+  jam: { kind: 'num', lo: 10, hi: 40, int: true }, radius: { kind: 'num', lo: 0.02, hi: 0.08 }, size: { kind: 'num', lo: 0.15, hi: 0.6 },
 };
 
 // ── Printing ──────────────────────────────────────────────────────────────
@@ -79,6 +79,7 @@ export function printCondition(set: AgentRuleSet, sp: AgentSpeciesRules, c: Rule
     case 'memory': return `memory ${c.cmp} ${fmtNum(c.value)}`;
     case 'mask': return `mask ${nameText(set.masks[c.mask]?.name || `mask${c.mask + 1}`)} ${c.cmp} ${fmtNum(c.value)}`;
     case 'neighbours': return ['neighbours', c.cmp, fmtNum(c.count), ...whoArgs(c.who, c.radius)].join(' ');
+    case 'shape': return `${c.outside ? 'outside' : 'inside'} ${c.shape} ${point(c.x, c.y)} ${fmtNum(c.size)}`;
   }
 }
 
@@ -419,6 +420,13 @@ export function parseAgents(src: string, opts: { seed?: number } = {}): AgentsPa
         const cm = cmpOf(); const n = numVal('count');
         const o: { who: NeighbourWho; radius?: number } = { who: 'all' }; whoRadius(o);
         return cm && n !== null ? { kind: 'neighbours', who: o.who, cmp: cm, count: n, ...(o.radius ? { radius: o.radius } : {}) } : null;
+      }
+      if (x.t === 'word' && (w === 'inside' || w === 'outside') && c.peek().t === 'word' && ['circle', 'box'].includes(nameOf(c.peek()).toLowerCase())) {
+        const shape = nameOf(c.next()).toLowerCase() as 'circle' | 'box';
+        const at = c.peek().t === '(' ? c.vector() : null;
+        if (at?.k !== 'vec') { c.error(c.peek(), `Where the ${shape} sits: ${w} ${shape} (0,0) 0.4.`); return null; }
+        const size = numVal('size');
+        return size === null ? null : { kind: 'shape', shape, x: at.v[0], y: at.v[1] ?? at.v[0], size, ...(w === 'outside' ? { outside: true } : {}) };
       }
       // A channel read somewhere, or a state.
       if (isWhere(c.peek())) {

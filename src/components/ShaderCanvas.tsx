@@ -44,7 +44,7 @@ import { GpuTimer } from '../lib/gpuTimer';
 import { OfflineHistory } from '../lib/offlineHistory';
 import { PassRunner, PassTargets } from '../lib/passRunner';
 import { ppFrameSteps } from '../play/kit/passPlan.js';
-import { AgentRunner, AgentTargets } from '../lib/agentRunner';
+import { AgentRunner, AgentTargets, agentSpotRegistry } from '../lib/agentRunner';
 import type { AgentsSpec } from '../compiler/types';
 import type { PassProgram } from '../compiler/types';
 import { recordFrame, recordGpuResults, flushGpuFrame, recordGpuCompile, setGpuTimerSupport, registerShaderCostMeasurer, getPerfSnapshot } from '../lib/perfStats';
@@ -1701,6 +1701,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
             agentRunner!.run(agentTargets!, { width: fw, height: fh, time: elapsed, live: true, frameMs: lastAgentFrame ? nowMs - lastAgentFrame : 0, timer: gpuTimer });
             lastAgentFrame = nowMs;
             if (frameCount % 10 === 0 || !dynamic) agentRunner!.drawThumbnails(agentTargets!);
+            // The Agent Builder's species spotlight, only while one is showing.
+            if (agentSpotRegistry.size() > 0 && (frameCount % 2 === 0 || !dynamic)) agentRunner!.drawSpotlights(agentTargets!);
           }
         }
         if (isStatefulRef.current) {
