@@ -335,7 +335,7 @@ export function paletteNode(c: Ctx, role: string, key: string, value: Ref, anim:
 
 const DRIVERS: Record<string, { code: string; what: string }> = {
   length: { code: 'length(uv)', what: 'how far each point is from the centre' },
-  angle: { code: 'atan(uv.y, uv.x) / 6.28318 + 0.5', what: 'the angle of each point round the centre (0 to 1)' },
+  angle: { code: 'abs(atan(uv.y, uv.x)) / 3.14159265', what: 'the angle of each point round the centre, 0 on the right to 1 on the left, the bottom half mirroring the top so there is no seam' },
   x: { code: 'uv.x * 0.5 + 0.5', what: 'how far across each point is' },
   y: { code: 'uv.y * 0.5 + 0.5', what: 'how far up each point is' },
 };
