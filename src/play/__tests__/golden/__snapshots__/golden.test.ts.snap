@@ -157,6 +157,15 @@ exports[`golden outputs: examples > curveTraceKnot 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > curveTraceLive 1`] = `
+{
+  "p": "- x120",
+  "s": "- x120",
+  "x": "- x120",
+  "y": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > curveTraceMorph 1`] = `
 {
   "a": "- x120",

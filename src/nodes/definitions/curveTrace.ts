@@ -59,8 +59,10 @@ const COMMON_PARAMS = (thick: { def: number; max: number }, segs: number): Recor
   draw: { section: 'Curve', label: 'Draw', type: 'select', compileTime: true, options: [
     { value: 'whole', label: 'The whole curve (Start to End)' },
     { value: 'pen', label: 'Pen: a moving head with a trail' },
+    { value: 'live', label: 'Live: frequencies in Hz, a dot that leaves a trail' },
   ], hint: 'Pen: a head runs along the curve and leaves a trail. Slow, you see it drawn; fast with a long Trail, it becomes the whole figure.' },
   penSpeed: { section: 'Curve', label: 'Pen speed', type: 'float', min: 0, max: 20, step: 0.01, showWhen: { param: 'draw', value: 'pen' }, hint: 'How fast the head moves, in turns a second. 0.1 draws slowly; 5+ blurs into a continuous figure.' },
+  persistence: { section: 'Curve', label: 'Persistence (s)', type: 'float', min: 0.001, max: 3, step: 0.001, showWhen: { param: 'draw', value: 'live' }, hint: 'How many seconds of the dot\'s path stay on screen. Low frequencies show a dot with a short tail; as they rise, the same time covers more of the figure until it is a solid line.' },
   trail: { section: 'Curve', label: 'Trail', type: 'float', min: 0.001, max: 4, step: 0.001, showWhen: { param: 'draw', value: 'pen' }, hint: 'How much of the curve stays behind the head, in turns. 1 is a whole figure (for whole-number ratios). Along runs 0 at the tail to 1 at the head: fade with it.' },
   start: { section: 'Curve', label: 'Start', type: 'float', min: 0, max: 1, step: 0.001, showWhen: { param: 'draw', value: 'whole' }, hint: 'Where the drawn part begins (0–1 of the curve). Wire it to draw the curve on or off.' },
   end: { section: 'Curve', label: 'End', type: 'float', min: 0, max: 1, step: 0.001, showWhen: { param: 'draw', value: 'whole' }, hint: 'Where the drawn part ends (0–1).' },
@@ -73,7 +75,7 @@ const COMMON_PARAMS = (thick: { def: number; max: number }, segs: number): Recor
   segments: { section: 'Curve', label: 'Segments', type: 'float', min: 16, max: 2048, step: 1, compileTime: true, hint: `Straight pieces the curve is cut into. More for high frequencies (a smooth curve needs ~10 per wiggle); costs that many steps per pixel. Default ${segs}.` },
 });
 
-const COMMON_DEFAULTS = (thick: number, segs: number) => ({ mode: 'lateral', draw: 'whole', penSpeed: 0.25, trail: 0.5, morphOn: false, morph: 0, freqXB: 5, freqYB: 4, turns: 1, start: 0, end: 1, damping: 0, thickness: thick, segments: segs });
+const COMMON_DEFAULTS = (thick: number, segs: number) => ({ mode: 'lateral', draw: 'whole', penSpeed: 0.25, trail: 0.5, persistence: 0.2, morphOn: false, morph: 0, freqXB: 5, freqYB: 4, turns: 1, start: 0, end: 1, damping: 0, thickness: thick, segments: segs });
 
 function waveExpr(wave: string, x: string): string {
   switch (wave) {
@@ -82,6 +84,14 @@ function waveExpr(wave: string, x: string): string {
     case 'saw': return `(2.0 * fract(${x} / 6.28318 + 0.5) - 1.0)`;
     default: return `sin(${x})`;
   }
+}
+
+/**
+ * Live: a phase only means something once its wave moves, so it grows in over the first hertz.
+ * At 0 Hz every axis sits at its offset: the dot rests in the middle, as on a real harmonograph.
+ */
+function livePhase(node: GraphNode, phase: string, freq: string): string {
+  return node.params.draw === 'live' ? `(${phase} * min(abs(${freq}), 1.0))` : phase;
 }
 
 /** GLSL for one axis at the loop's `t`. */
@@ -94,7 +104,7 @@ function axisExpr(node: GraphNode, a: Axis, inputVars: Record<string, string>, f
     return { expr: `(${off} + (${raw}))`, bound: null };
   }
   const freq = freqOf(a);
-  const phase = inputVars[`phase${a}`] || p(node.params[`phase${a}`], 0);
+  const phase = livePhase(node, inputVars[`phase${a}`] || p(node.params[`phase${a}`], 0), freq);
   const amp = p(node.params[`amp${a}`], 1);
   return { expr: `(${off} + ${amp} * ${node.id}_damp * ${waveExpr(wave, `${freq} * t + ${phase}`)})`, bound: `(abs(${off}) + abs(${amp}))` };
 }
@@ -109,7 +119,7 @@ function traceCode(node: GraphNode, inputVars: Record<string, string>, axes: Axi
     const parts = axes.map(a => axisExpr(node, a, inputVars, freqOf));
     if (mode === 'rotary' || mode === 'counter') {
       // Two circles: the first from X's settings, the second from Y's (counter: the second turns the other way).
-      const c = (a: Axis) => ({ f: freqOf(a), ph: inputVars[`phase${a}`] || p(node.params[`phase${a}`], 0), r: p(node.params[`amp${a}`], 1) });
+      const c = (a: Axis) => ({ f: freqOf(a), ph: livePhase(node, inputVars[`phase${a}`] || p(node.params[`phase${a}`], 0), freqOf(a)), r: p(node.params[`amp${a}`], 1) });
       const A = c('X'), B = c('Y'), op = mode === 'counter' ? '-' : '+';
       const offX = p(node.params.offX, 0), offY = p(node.params.offY, 0);
       parts[0] = { expr: `(${offX} + ${id}_damp * (${A.r} * cos(${A.f} * t + ${A.ph}) + ${B.r} * cos(${B.f} * t + ${B.ph})))`, bound: `(abs(${offX}) + abs(${A.r}) + abs(${B.r}))` };
@@ -130,12 +140,21 @@ function traceCode(node: GraphNode, inputVars: Record<string, string>, axes: Axi
   const time = inputVars.time || 'u_time';
   const damping = p(node.params.damping, 0);
   const pen = node.params.draw === 'pen';
+  const live = node.params.draw === 'live';
+  // Damping: from the start of t, or (Live) from the head back, so the trail shrinks behind the dot.
+  const dampAt = (tv: string) => (live ? `exp(-${damping} * (${id}_t1 - ${tv}))` : `exp(-${damping} * ${tv})`);
   const code = [
     `    float ${id}_d  = 1e9;\n`,
     `    float ${id}_u  = 0.0;\n`,
+    `    float ${id}_hd = 1e9;\n`,
     `    {\n`,
     `      float time = ${time};\n`,
-    ...(pen ? [
+    ...(live ? [
+      // Live: t is real time (2π a second), so a frequency is cycles a second: the dot goes round
+      // as fast as the frequency says, and the trail is the last Persistence seconds of its path.
+      `      float ${id}_t1 = time * 6.28318;\n`,
+      `      float ${id}_t0 = (time - max(${p(node.params.persistence, 0.2)}, 0.0005)) * 6.28318;\n`,
+    ] : pen ? [
       // Pen: the head moves Pen speed turns a second; the drawn part is the last Trail turns behind it.
       `      float ${id}_head = time * ${p(node.params.penSpeed, 0.25)};\n`,
       `      float ${id}_t0 = (${id}_head - ${p(node.params.trail, 0.5)}) * 6.28318;\n`,
@@ -145,12 +164,12 @@ function traceCode(node: GraphNode, inputVars: Record<string, string>, axes: Axi
       `      float ${id}_t1 = ${end} * ${turns} * 6.28318;\n`,
     ]),
     `      float t = ${id}_t0;\n`,
-    `      float ${id}_damp = exp(-${damping} * t);\n`,
+    `      float ${id}_damp = ${dampAt('t')};\n`,
     `      ${vt} ${id}_prev = ${point};\n`,
     `      for (int ${id}_i = 1; ${id}_i <= ${n}; ${id}_i++) {\n`,
     `        float ${id}_f = float(${id}_i) / ${n}.0;\n`,
     `        t = mix(${id}_t0, ${id}_t1, ${id}_f);\n`,
-    `        ${id}_damp = exp(-${damping} * t);\n`,
+    `        ${id}_damp = ${dampAt('t')};\n`,
     `        ${vt} ${id}_cur = ${point};\n`,
     `        ${vt} ${id}_pa = ${pos} - ${id}_prev;\n`,
     `        ${vt} ${id}_ba = ${id}_cur - ${id}_prev;\n`,
@@ -162,10 +181,14 @@ function traceCode(node: GraphNode, inputVars: Record<string, string>, axes: Axi
     `        ${id}_prev = ${id}_cur;\n`,
     `      }\n`,
     `      ${id}_d = sqrt(${id}_d);\n`,
+    // The head: where the curve is at its end (Live and Pen: where the dot is now).
+    `      t = ${id}_t1;\n`,
+    `      ${id}_damp = ${dampAt('t')};\n`,
+    `      ${id}_hd = length(${pos} - ${point});\n`,
     `    }\n`,
   ].join('');
   // Along: 0 → 1 over the drawn part (Pen: tail → head, so it fades a trail).
-  const along = pen ? `${id}_u` : `mix(${start}, ${end}, ${id}_u)`;
+  const along = pen || live ? `${id}_u` : `mix(${start}, ${end}, ${id}_u)`;
   return { code, bounds: parts.every(x => x.bound) ? parts.map(x => x.bound!) : null, along };
 }
 
@@ -188,6 +211,7 @@ export const CurveTraceNode: NodeDefinition = {
   outputs: {
     distance: { type: 'float', label: 'Distance', hint: 'Distance to the curve minus Thickness: negative on the line. An SDF like any other.' },
     along: { type: 'float', label: 'Along', hint: 'Where on the curve the nearest point is: 0 at Start, 1 at End. Colour along the line with it (a Palette on Along).' },
+    head: { type: 'float', label: 'Head', hint: 'Distance to the end of the curve: in Live and Pen, the moving dot. Draw a bright dot with it (a glow on Head).' },
   },
   defaultParams: {
     ...axisDefaults('X', { freq: 3, phase: 1.5708, amp: 0.4 }, 'sin(3.0 * t)'),
@@ -205,7 +229,7 @@ export const CurveTraceNode: NodeDefinition = {
     const { code, along } = traceCode(node, inputVars, ['X', 'Y'], uv);
     return {
       code: `    // Curve Trace. ${SHAPES_NOTE}\n` + code + `    float ${id}_dist = ${id}_d - ${p(node.params.thickness, 0.004)};\n    float ${id}_along = ${along};\n`,
-      outputVars: { distance: `${id}_dist`, along: `${id}_along` },
+      outputVars: { distance: `${id}_dist`, along: `${id}_along`, head: `${id}_hd` },
     };
   },
 };
@@ -229,6 +253,7 @@ export const CurveTrace3DNode: NodeDefinition = {
   outputs: {
     dist: { type: 'float', label: 'Distance', hint: 'Distance to the tube: an SDF like any shape.' },
     along: { type: 'float', label: 'Along', hint: 'Where along the curve (0 at Start, 1 at End): for colour or for varying thickness.' },
+    head: { type: 'float', label: 'Head', hint: 'Distance to the end of the curve (in Live and Pen, the moving dot): a ball there with a Sphere-like Thickness.' },
   },
   defaultParams: {
     ...axisDefaults('X', { freq: 3, phase: 1.5708, amp: 1.0 }, 'sin(3.0 * t)'),
@@ -252,13 +277,13 @@ export const CurveTrace3DNode: NodeDefinition = {
     const wrapped = bounds
       ? `    float ${id}_R = length(vec3(${bounds.join(', ')}));\n`
         + `    float ${id}_far = length(${pos}) - ${id}_R;\n`
-        + `    float ${id}_d = ${id}_far;\n    float ${id}_u = 0.0;\n`
-        + `    if (${id}_far < ${thick} + 0.25) {\n` + code.replace(`    float ${id}_d  = 1e9;\n    float ${id}_u  = 0.0;\n`, `    ${id}_d = 1e9;\n`) + `    }\n`
+        + `    float ${id}_d = ${id}_far;\n    float ${id}_u = 0.0;\n    float ${id}_hd = ${id}_far;\n`
+        + `    if (${id}_far < ${thick} + 0.25) {\n` + code.replace(`    float ${id}_d  = 1e9;\n    float ${id}_u  = 0.0;\n    float ${id}_hd = 1e9;\n`, `    ${id}_d = 1e9;\n`) + `    }\n`
       : code;
     return {
       code: `    // Curve Trace 3D. ${SHAPES_NOTE} Z on its own frequency (5) makes a knot.\n` + wrapped
         + `    float ${id}_dist = ${id}_d - ${thick};\n    float ${id}_along = ${along};\n`,
-      outputVars: { dist: `${id}_dist`, along: `${id}_along` },
+      outputVars: { dist: `${id}_dist`, along: `${id}_along`, head: `${id}_hd` },
     };
   },
 };

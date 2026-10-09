@@ -24,6 +24,16 @@ These are the two halves of a harmonograph chart. Damping (with more Turns) shri
   - Slow, you watch it draw.
   - Fast, with Trail 1, it becomes the whole continuous figure.
 
+## Draw: Live (like a harmonograph or a scope)
+
+- **Frequencies are cycles a second.** At 1 Hz the dot goes round once a second; at 0 Hz it rests in the middle (a phase grows in over the first hertz, so a still axis sits at its offset).
+- **Persistence** is how many seconds of the dot's path stay on screen. At low frequencies that is a dot with a short tail; as the frequencies rise, the same time covers more of the figure until it is a solid line.
+- **Damping** shrinks the trail toward its tail.
+- **Along** runs 0 at the tail to 1 at the dot.
+- **Head** (a new output, in every mode) is the distance to the end of the curve: in Live and Pen, the dot itself.
+
+Example: **Curve Trace: live harmonograph**.
+
 ## Morph
 
 With **Morph** on, the node works out a second figure from the **B** frequencies at every point along the curve, and blends the two by **Morph amount**. Both figures are closed, so every in-between shape is a smooth closed curve too. Wire an LFO or a Time expression into Morph amount to flow back and forth.
