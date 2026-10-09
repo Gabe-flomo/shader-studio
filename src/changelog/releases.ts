@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.112',
+    date: '2026-10-08',
+    title: '3D Agent Builder',
+    highlights: [
+      { area: 'Studio', text: '3D Agent Builder: walkers in a ball, a volume trail and an orbiting camera in one click, with the rules editor open. Do… bar: "new 3d agents".', link: { kind: 'doc', path: 'docs/agent-rules.md' } },
+      { area: 'Studio', text: 'Agent Rules has a Space 2D / 3D switch that converts the whole setup (sensors, Emit shape, trail, camera) in one undo step.' },
+      { area: 'Studio', text: 'In 3D the Look tab has the camera (distance, angle, elevation, orbit, zoom, depth of field); new 3D templates: slime, flock, orbiters, curl smoke.' },
+    ],
+  },
+  {
     id: '2026.10.111',
     date: '2026-10-08',
     title: '4D in the Scene Builder',
