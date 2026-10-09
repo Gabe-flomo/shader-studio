@@ -44,4 +44,26 @@ describe('Repeat Scene', () => {
     expect(r.errors ?? []).toEqual([]);
     expect(r.fragmentShader).toContain('vec3 g_cell3 = vec3(0.0);');
   });
+
+  it.each([
+    ['union', 'd = min(d, mapScene_'],
+    ['smooth', 'smin(d, dg,'],
+    ['carve', 'max(d, -dg) : -smin(-d, dg,'],
+    ['carveInto', 'max(dg, -d) : -smin(-dg, d,'],
+    ['intersect', 'max(d, dg) : -smin(-d, -dg,'],
+  ])('combine=%s with Not repeated', (combine, line) => {
+    const nodes = graph().map(nd => (nd.type === 'repeatScene' ? { ...nd, params: { ...nd.params, combine } } : nd));
+    const r = compileGraph({ nodes });
+    expect(r.errors ?? []).toEqual([]);
+    expect(fnOf(r.fragmentShader)).toContain(line);
+  });
+
+  it('Repeat Cell Centre is the cell times the spacing', () => {
+    const nodes = resolveNodeAliases(EXAMPLE_GRAPHS.repeatSceneCentrepiece.nodes, getNodeDefinition);
+    const r = compileGraph({ nodes });
+    expect(r.errors ?? []).toEqual([]);
+    expect(r.fragmentShader).toContain('vec3 g_cellSize3 = vec3(0.0);');
+    expect(fnOf(r.fragmentShader)).toContain('g_cellSize3 = cs;');
+    expect(r.fragmentShader).toMatch(/_ctr\s+= \w+_cell \* g_cellSize3;/);
+  });
 });

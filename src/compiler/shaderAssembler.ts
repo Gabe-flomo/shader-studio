@@ -32,7 +32,7 @@ import { agentNbHeader } from '../nodes/definitions/agentNeighbours';
 import { frozenValueOf } from '../nodes/sliderFreeze';
 import { marchJitterDecl, MARCH_STEP_REF_KEY } from './marchJitter';
 import { curvedMarch } from './curvedSpace';
-import { CELL3_DECL, CELL3_GLOBAL } from '../nodes/definitions/repeatScene';
+import { CELL3_DECL, CELL3_GLOBAL, CELL3SIZE_GLOBAL } from '../nodes/definitions/repeatScene';
 import { safeMarchLines, safeMarchSteps, stepsHeatmap, warpSafetyOf } from './warpSafety';
 import {
   getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed,
@@ -2176,6 +2176,7 @@ export class ShaderAssembler {
         `    vec3  id  = floor(p / cs + 0.5);\n`,
         `    id = mix(id, clamp(id, -lim, lim), step(0.5, lim));\n`,
         `    vec3  q   = p - cs * id;\n`,
+        `    ${CELL3SIZE_GLOBAL} = cs;\n`,
         `    ${CELL3_GLOBAL} = id;\n`,
         `    float d   = ${call(inner, innerExtra, 'q')};\n`,
         // win: the copy that is nearest, left in g_cell3 at the end (Repeat Cell at a hit point reads it).
@@ -2212,7 +2213,22 @@ export class ShaderAssembler {
     } else {
       lines.push(`    float d = 1e9;\n`);
     }
-    if (ground) lines.push(`    d = min(d, ${call(ground, groundExtra, 'p')});\n`);
+    if (ground) {
+      // Combine with the scene that isn't repeated: union, a smooth blend, either one carving the other, or only where both are.
+      const combine = ['union', 'smooth', 'carve', 'carveInto', 'intersect'].includes(String(rawNode.params.combine)) ? String(rawNode.params.combine) : 'union';
+      const k = `max(${num(node.params.blend, 0.3)}, 1e-4)`;
+      const g = call(ground, groundExtra, 'p');
+      if (!inner || combine === 'union') lines.push(`    d = min(d, ${g});\n`);
+      else {
+        lines.push(`    float dg = ${g};\n`);
+        // Blend 0 gives the hard version of each.
+        const hard = `(${num(node.params.blend, 0.3)} <= 0.0)`;
+        if (combine === 'smooth') lines.push(`    d = ${hard} ? min(d, dg) : smin(d, dg, ${k});\n`);
+        else if (combine === 'carve') lines.push(`    d = ${hard} ? max(d, -dg) : -smin(-d, dg, ${k});\n`);
+        else if (combine === 'carveInto') lines.push(`    d = ${hard} ? max(dg, -d) : -smin(-dg, d, ${k});\n`);
+        else lines.push(`    d = ${hard} ? max(d, dg) : -smin(-d, -dg, ${k});\n`);
+      }
+    }
     const fnName = `repScene_${S}`;
     const decl = extra.map(v => `${v.type} ${v.name}`).join(', ');
     this.functions.add(`float ${fnName}(vec3 p${decl ? ', ' + decl : ''}) {\n${lines.join('')}    return d;\n}`);
@@ -4226,7 +4242,7 @@ export class ShaderAssembler {
   private buildResult() {
     const mainBody = this.mainCode.join('') + (this.stepsView ? `    gl_FragColor = vec4(${this.stepsView}, 1.0);\n` : '');
     // Repeat Cell outside a Repeat Scene (or in a path that skips declarationsFor) still needs its global.
-    if (!this.declarations.has(CELL3_DECL) && (mainBody.includes(CELL3_GLOBAL) || [...this.functions].some(f => f.includes(CELL3_GLOBAL)))) this.declarations.add(CELL3_DECL);
+    if (!this.declarations.has(CELL3_DECL) && [CELL3_GLOBAL, CELL3SIZE_GLOBAL].some(g => mainBody.includes(g) || [...this.functions].some(f => f.includes(g)))) this.declarations.add(CELL3_DECL);
     // Data uniforms and their row helpers first, so any function can call them.
     const functionCode = pruneUnusedGlslFunctions(dataBlocksFirst(dedupeGlslFunctions(Array.from(this.functions))), mainBody).join('\n');
     const paramUniformDecls = Object.entries(this.paramUniforms)

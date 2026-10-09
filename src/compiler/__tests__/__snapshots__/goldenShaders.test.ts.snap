@@ -1542,7 +1542,14 @@ exports[`golden shaders: every Play example exports the same bundle > playWalls 
 
 exports[`golden shaders: every Play example exports the same bundle > repeatSceneBubbles 1`] = `
 {
-  "bundle": "04798e7bb6565b11bb03d0b090a8:14708",
+  "bundle": "1317f4ad0abceb14640b82169527:14928",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > repeatSceneCentrepiece 1`] = `
+{
+  "bundle": "18ceba35a96059169ef084e6bab6:16448",
   "missing": [],
 }
 `;
@@ -15129,7 +15136,7 @@ exports[`golden shaders: every example compiles as it did > repeatSceneBubbles 1
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0b03e03b9f8b5d1c3fa12d2020bd:11815",
+  "fragmentShader": "1c581f2f4c16701a49dec557dbe5:12031",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "056145ca34ca8813a5221723fdc3:611",
@@ -15164,6 +15171,57 @@ exports[`golden shaders: every example compiles as it did > repeatSceneBubbles 1
     "u_p_repeatscenx0_overlap",
   ],
   "paramValues": "0b88a17bb5b00f1c689559a42613:902",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > repeatSceneCentrepiece 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0afd19e0f2c2331d40aa99949750:13365",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "074e80b87f2c0913e7042c93104a:740",
+  "paramBindings": "0481c7db1aa99c04b39e99baa078:1375",
+  "paramUniforms": [
+    "u_p_floorxandxcentrex0xsgxplnx0_height",
+    "u_p_floorxandxcentrex0xsgxsdfunionx0_k",
+    "u_p_floorxandxcentrex0xsgxsphx0xc2_radius",
+    "u_p_marchcamerx0_aperture",
+    "u_p_marchcamerx0_camAngle",
+    "u_p_marchcamerx0_camDist",
+    "u_p_marchcamerx0_camElevation",
+    "u_p_marchcamerx0_focalDist",
+    "u_p_marchcamerx0_fov",
+    "u_p_marchcamerx0_lensSpeed",
+    "u_p_marchcamerx0_rotSpeed",
+    "u_p_marchcamerx0_targetX",
+    "u_p_marchcamerx0_targetY",
+    "u_p_marchcamerx0_targetZ",
+    "u_p_marchloopgx0_albedo",
+    "u_p_marchloopgx0_bg",
+    "u_p_marchloopgx0_jitter",
+    "u_p_marchloopgx0_maxDist",
+    "u_p_marchloopgx0_stepScale",
+    "u_p_onexbubblex0xsgxrepeatcellx0_seed",
+    "u_p_onexbubblex0xsgxsphx0_radius",
+    "u_p_repeatcellx0xc2_seed",
+    "u_p_repeatscenx0_blend",
+    "u_p_repeatscenx0_cellX",
+    "u_p_repeatscenx0_cellY",
+    "u_p_repeatscenx0_cellZ",
+    "u_p_repeatscenx0_countX",
+    "u_p_repeatscenx0_countY",
+    "u_p_repeatscenx0_countZ",
+    "u_p_repeatscenx0_overlap",
+  ],
+  "paramValues": "1aae999d700d3b12f6480cbd800b:1037",
   "passes": null,
   "success": true,
   "textureUniforms": {},
