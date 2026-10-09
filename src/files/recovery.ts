@@ -10,6 +10,7 @@
  * - At launch, a session that didn't end cleanly with unsaved work autosaved
  *   gets the Recover dialog.
  */
+import { listVersions, numberOf } from '../store/graphVersions';
 import { create } from 'zustand';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { useTakes } from '../lib/takes';
@@ -227,7 +228,10 @@ export async function restoreSnapshot(file: string): Promise<boolean> {
   if (stillSaved) {
     try { const v = (JSON.parse(localStorage.getItem(`shader-studio:${name}`) ?? '{}') as { version?: unknown }).version; latest = typeof v !== 'number' || v === snap.project.version; } catch { /* treat as latest */ }
   }
-  useNodeGraphStore.setState({ currentGraph: stillSaved ? { name: name!, version: snap.project.version ?? 1, latest } : null, graphDirty: true });
+  const version = snap.project.version ?? 1;
+  // Its place in the series: as stored for that version, else as an older save reads (1.(v − 1)).
+  const num = stillSaved ? (listVersions(name!).find(v => v.version === version) ?? numberOf({ version })) : numberOf({ version });
+  useNodeGraphStore.setState({ currentGraph: stillSaved ? { name: name!, version, major: num.major, minor: num.minor, latest } : null, graphDirty: true });
   toast.success(`Recovered “${name ?? 'Untitled'}”`, { message: 'It’s as it was when it was last autosaved, with its changes still unsaved. Save it to keep it.' });
   return true;
 }

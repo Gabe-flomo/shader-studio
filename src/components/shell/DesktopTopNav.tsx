@@ -317,11 +317,11 @@ function GraphNameChip() {
   const name = current?.name ?? 'Untitled';
   return (
     <span ref={anchor} style={{ display: 'inline-flex', minWidth: 0, flexShrink: 1 }}>
-      <Tooltip label={current ? (dirty ? `Unsaved changes: save “${name}” as a new version, or under another name` : `Saved: “${name}” v${current.version}`) : 'Not saved yet: give it a name to save it'}>
+      <Tooltip label={current ? (dirty ? `Unsaved changes: save “${name}” as a new version (Minor), a new family (Major), in place, or under another name` : `Saved: “${name}” ${current.major}.${current.minor}`) : 'Not saved yet: give it a name to save it'}>
         <button
           type="button"
           onClick={() => setOpen(o => !o)}
-          aria-label={`${name}${current ? `, version ${current.version}` : ''}${dirty ? ', unsaved changes' : ''}: save`}
+          aria-label={`${name}${current ? `, version ${current.major}.${current.minor}` : ''}${dirty ? ', unsaved changes' : ''}: save`}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 7, minWidth: 0, maxWidth: 280, height: 30, padding: '0 10px',
             border: `1px solid ${open ? tk.border.strong : 'transparent'}`, borderRadius: radius.md, background: open ? tk.bg.hover : 'none',
@@ -331,7 +331,7 @@ function GraphNameChip() {
           onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'none'; }}
         >
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{name}</span>
-          {current && <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.mono}`, flexShrink: 0 }}>v{current.version}</span>}
+          {current && <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.mono}`, flexShrink: 0 }}>{current.major}.{current.minor}</span>}
           {(dirty || !current) && <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: dirty ? tk.status.warning : tk.border.strong, flexShrink: 0 }} />}
           <Icon name="chevD" size={11} style={{ color: tk.text.faint, flexShrink: 0 }} />
         </button>

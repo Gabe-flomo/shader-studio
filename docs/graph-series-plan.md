@@ -1,6 +1,6 @@
 # Graph series: versions as major.minor (plan)
 
-**Status:** plan with the user's answers (2026-10-08), not built yet.
+**Status:** step 2 (numbering, save menu, size cap) is built on the existing localStorage store. Step 1 (IndexedDB) and the Files Series view are next.
 
 ## The idea
 
@@ -52,6 +52,19 @@ Saving asks exactly that: **Minor** (default, Enter), **Major**, or **New graph*
    - **Saved graph open:** the default is **Minor** (Enter). **Major**, **Save in place** and **Save as new graph** sit beside it, each showing the number it will give.
    - The optional note ("What changed?") stays.
 7. **Storage: a small local database.** Series live in IndexedDB rather than localStorage. One record per version, indexed by series name, major, minor and saved date, with an optional note and tags, which allows queries ("every version of Curves from last week", "families with a note"). It also lifts localStorage's few-megabyte ceiling, so the size limit means something. Old localStorage graphs migrate once, on first open, and the existing lists keep working by reading through the new store. This is also the base the back-burnered query explorer needs.
+
+## Built (2026-10-08)
+
+- `graphVersions.ts`:
+  - `major`/`minor` on every version; older saves read as 1.(v − 1);
+  - `nextNumber` (minor, major, new family for an existing name, 1.0 for a new one);
+  - `replaceVersion` (save in place);
+  - `trimToSize`: history capped by the size setting (`shader-studio:settings:seriesHistoryMB`, 3 MB), dropping the oldest tweaks first and keeping each family's first and latest.
+- `saveGraph(name, note, kind)` and `currentGraph.major/minor`.
+- The save menu:
+  - with a saved graph open: Minor (default), Major, Save in place, New graph…;
+  - with nothing open: name field, Save 1.0, or "Add 3.0" when the name exists.
+- The name chip and the versions list show 2.3 numbers; the list is grouped by family.
 
 ## Build order
 
