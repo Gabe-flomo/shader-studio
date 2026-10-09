@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.127',
+    date: '2026-10-09',
+    title: 'A calmer viewport',
+    highlights: [
+      { area: 'Studio', text: 'Agent Builder: one "On the picture" legend explains each overlay in plain words from its values; the drawings carry small tags instead of scattered labels.' },
+      { area: 'Studio', text: 'Hover a legend entry, tag or control to light the other two. Click one to focus it: its control alone, a short explanation and a looping demo.' },
+    ],
+  },
+  {
     id: '2026.10.126',
     date: '2026-10-09',
     title: 'Under the hood',
