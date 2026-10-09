@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.117',
+    date: '2026-10-09',
+    title: 'Auto preview resolution',
+    highlights: [
+      { area: 'Studio', text: 'Preview resolution has Auto (the new default): a scene heavy enough to slow the app drops to ½, ⅓ or ¼ and comes back up when it fits. The button reads Auto ½.' },
+      { area: 'Studio', text: 'The ? help marks show one tooltip, not two.' },
+    ],
+  },
+  {
     id: '2026.10.116',
     date: '2026-10-09',
     title: 'Faster Curve Trace',
