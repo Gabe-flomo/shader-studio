@@ -67,17 +67,39 @@ export function ProbeButton({ node, target, label, onStart }: { node: GraphNode;
 }
 
 /** The panel: header (which line, its range), the preview with Show as, and the stepping keys. */
-export function LinePreviewPanel({ node }: { node: GraphNode }) {
+export function LinePreviewPanel({ node, at }: {
+  node: GraphNode;
+  /**
+   * Where this panel sits. A line or Return: it shows only while that line (or a step of it) is
+   * previewed, right under it. 'rest': the one panel for everything no line claims (inputs), which
+   * also owns the probe's housekeeping (the eye moving away, closing, ↑ / ↓). Absent: one panel
+   * for every probe (the Custom Function editor).
+   */
+  at?: ProbeTarget | 'rest';
+}) {
   const tk = useTokens();
-  const probe = useLineProbe(s => (s.probe && s.probe.nodeId === node.id ? s.probe : null));
+  const owner = at === undefined || at === 'rest';
+  const probe = useLineProbe(s => {
+    const pr = s.probe && s.probe.nodeId === node.id ? s.probe : null;
+    if (!pr || at === undefined) return pr;
+    const line = lineTarget(pr.target);
+    if (at === 'rest') return line ? null : pr;
+    return line && sameTarget(line, at) ? pr : null;
+  });
+  // Housekeeping reads the probe whatever line it is on (only the owner does it, once)
+  const anyProbe = useLineProbe(s => (owner && s.probe && s.probe.nodeId === node.id ? s.probe : null));
+  const panelRef = useRef<HTMLDivElement>(null);
   const eyeHere = useNodeGraphStore(s => s.previewNodeId === node.id);
   const errors = useNodeGraphStore(s => s.glslErrors.length);
   const rangeRef = useRef<HTMLSpanElement>(null);
 
   // The eye moved to another node: this probe is over
-  useEffect(() => { if (probe && !eyeHere) useLineProbe.getState().set(null); }, [probe, eyeHere]);
+  useEffect(() => { if (owner && anyProbe && !eyeHere) useLineProbe.getState().set(null); }, [owner, anyProbe, eyeHere]);
   // Closing the editor ends the probe
-  useEffect(() => () => { if (useLineProbe.getState().probe?.nodeId === node.id) stopLineProbe(); }, [node.id]);
+  useEffect(() => () => { if (owner && useLineProbe.getState().probe?.nodeId === node.id) stopLineProbe(); }, [owner, node.id]);
+  // Shown under a line (or moved there by ↑ / ↓): bring it into view
+  const shownKey = probe ? JSON.stringify(probe.target) : '';
+  useEffect(() => { if (shownKey && !owner) panelRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }); }, [shownKey, owner]);
 
   // Step to the next (1) or previous (-1) input, line or Return
   const step = (dir: 1 | -1) => {
@@ -91,7 +113,7 @@ export function LinePreviewPanel({ node }: { node: GraphNode }) {
 
   // ↑ / ↓ step through the inputs, lines and Return (not while typing in a field)
   useEffect(() => {
-    if (!probe) return;
+    if (!owner || !anyProbe) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -103,7 +125,7 @@ export function LinePreviewPanel({ node }: { node: GraphNode }) {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [probe, node]);
+  }, [owner, anyProbe, node]);
 
   // The header's range, from each readback (no re-render)
   useEffect(() => {
@@ -123,7 +145,7 @@ export function LinePreviewPanel({ node }: { node: GraphNode }) {
   const applied = applyProbe(node, probe.target);
   const problem = 'error' in applied ? applied.error : null;
   return (
-    <div data-line-preview="" style={{ border: `1px solid ${tk.border.default}`, borderRadius: radius.lg, overflow: 'hidden', background: tk.bg.subtle }}>
+    <div ref={panelRef} data-line-preview="" style={{ border: `1px solid ${tk.border.default}`, borderRadius: radius.lg, overflow: 'hidden', background: tk.bg.subtle }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px 7px 12px', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.panel }}>
         <Icon name="play" size={12} style={{ color: tk.accent.base, flexShrink: 0 }} />
         <span data-line-preview-head="" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', font: `500 12px ${fontFamily.mono}`, color: tk.text.primary }}>
