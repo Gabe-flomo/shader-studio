@@ -167,6 +167,21 @@ export function readVersion(name: string, version: number): string | null {
   return readHistory(name).find(v => v.version === version)?.payload ?? null;
 }
 
+/** A series' earlier versions, oldest first (for a whole-series .playfile). */
+export function seriesHistory(name: string): GraphVersion[] {
+  return readHistory(name);
+}
+
+/**
+ * A whole series arriving from a .playfile: its earlier versions become this name's history.
+ * Only for a name with no history of its own (an import never mixes two series' pasts).
+ */
+export function adoptSeriesHistory(name: string, history: unknown): number {
+  if (readHistory(name).length || !Array.isArray(history)) return 0;
+  const list = history.filter((x): x is GraphVersion => !!x && typeof x.payload === 'string' && typeof x.version === 'number');
+  return list.length ? writeHistory(name, list) : 0;
+}
+
 export function deleteHistory(name: string): void {
   localStorage.removeItem(HISTORY_PREFIX + name);
 }

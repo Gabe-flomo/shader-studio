@@ -21,7 +21,7 @@ import { installMerge, installSources, type Profile } from '../files/profileZip'
 import { getAllUserNodes, getUserNode, makeUserNodeId, registerUserNode } from '../nodes/userNodes/userNodeRegistry';
 import { addImage, getImage, hasVideo, importVideoFiles, listImages, videoZipFiles } from '../lib/backgroundLibrary';
 import { recordInstalledPack } from '../nodePacks/installed';
-import { archiveCurrent } from '../store/graphVersions';
+import { adoptSeriesHistory, archiveCurrent, seriesHistory } from '../store/graphVersions';
 import { parsePresentation } from '../types/presentation';
 import { PRESENTATION_KEY_PREFIX } from '../utils/library';
 import { buildBundle, videoIdsIn, videoItemsFrom, type BundleOptions } from './bundle';
@@ -62,8 +62,17 @@ export function appImportEnv(): ImportEnv {
     makeNodeId: makeUserNodeId,
     // The graph a replace overwrites goes into its history first, like a save.
     writeGraph: (name, value) => {
+      const { seriesHistory: history, ...graph } = JSON.parse(value) as Record<string, unknown>;
+      const fresh = localStorage.getItem(GRAPH_PREFIX + name) === null;
+      if (fresh && Array.isArray(history) && history.length) {
+        // A whole series under a new name: its versions come too, numbers kept.
+        adoptSeriesHistory(name, history);
+        localStorage.setItem(GRAPH_PREFIX + name, JSON.stringify(graph));
+        return;
+      }
+      // Replacing a graph of yours: yours keeps its history and this becomes its newest version.
       const version = archiveCurrent(name);
-      localStorage.setItem(GRAPH_PREFIX + name, JSON.stringify({ ...JSON.parse(value), version }));
+      localStorage.setItem(GRAPH_PREFIX + name, JSON.stringify({ ...graph, version }));
     },
     backgrounds: async () => (await listImages()).map(m => ({ name: m.name, bytes: m.bytes })),
     addBackground: async (bytes, type, name) => { await addImage(new Blob([bytes.slice().buffer], { type }), { name }); },
@@ -221,7 +230,7 @@ export async function videosFor(items: readonly WriteItem[]): Promise<{ items: W
 
 
 /** The open graph (or its Play setup) as a .playfile, with what it uses. */
-export async function exportCurrentGraph(asPlay: boolean, opts: { linked?: boolean } = {}): Promise<FileResult> {
+export async function exportCurrentGraph(asPlay: boolean, opts: { linked?: boolean; series?: boolean } = {}): Promise<FileResult> {
   const { useNodeGraphStore } = await import('../store/useNodeGraphStore');
   const st = useNodeGraphStore.getState();
   let name = st.currentGraph?.name ?? '';
@@ -233,7 +242,11 @@ export async function exportCurrentGraph(asPlay: boolean, opts: { linked?: boole
   const key = GRAPH_PREFIX + name;
   // The open graph as it is now; its saved record's links travel with it.
   const links = st.currentGraph ? currentGraphLinks(name) : [];
-  const json = links.length ? JSON.stringify({ ...JSON.parse(st.graphFileJson(asPlay)), linkedPresentations: links }) : st.graphFileJson(asPlay);
+  // The whole series (docs/graph-series-plan.md): its earlier versions ride inside the graph.
+  const history = opts.series && st.currentGraph ? seriesHistory(name) : [];
+  const json = links.length || history.length
+    ? JSON.stringify({ ...JSON.parse(st.graphFileJson(asPlay)), ...(links.length ? { linkedPresentations: links } : {}), ...(history.length ? { seriesHistory: history } : {}) })
+    : st.graphFileJson(asPlay);
   return exportPlayfile([`graph:${name}`], {
     fileName: name, overlay: { [key]: json }, asPlay: asPlay ? new Set([`graph:${name}`]) : undefined, linked: opts.linked ?? true,
     success: asPlay ? `Exported “${name}” as a Play file` : `Exported “${name}”`,
