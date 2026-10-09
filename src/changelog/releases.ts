@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.118',
+    date: '2026-10-09',
+    title: 'Beam and Ride a curve',
+    highlights: [
+      { area: 'Studio', text: 'Curve Trace Beam mode: an oscilloscope screen that keeps a fading trail, at a cost that doesn\'t grow with Persistence (dense figures 10× cheaper than Live).', link: { kind: 'example', key: 'curveTraceBeam' } },
+      { area: 'Studio', text: 'Agents: Ride a curve puts walkers on a Curve Trace-style curve (waves, Rotary, Morph), each with its own place, speed and lane across a ribbon. 2D and 3D.', link: { kind: 'doc', path: 'docs/agents-group.md' } },
+      { area: 'Studio', text: 'New examples: Curve Trace: oscilloscope beam, Walkers on a harmonograph, Morphing ribbon.' },
+    ],
+  },
+  {
     id: '2026.10.117',
     date: '2026-10-09',
     title: 'Auto preview resolution',
