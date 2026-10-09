@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.110',
+    date: '2026-10-08',
+    title: 'Series everywhere',
+    highlights: [
+      { area: 'Files', text: 'Export a saved graph as this version or the whole series in one .playfile; opening a whole series brings every version back.' },
+      { area: 'Play', text: 'Background: queue a series\' every version, or the newest of each family, and step through iterations of one idea with Change background.' },
+    ],
+  },
+  {
     id: '2026.10.109',
     date: '2026-10-08',
     title: 'Graph series',
