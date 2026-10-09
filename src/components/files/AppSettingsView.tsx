@@ -17,6 +17,7 @@ import { describeSetting, resetAllKeys } from '../../files/appSettings';
 import { resetSettings } from './filesActions';
 import { Size } from './fileUi';
 import { cardStyle } from './fileUiShared';
+import { BackgroundSettings } from './BackgroundSettings';
 import { StorageLimitControl } from './StorageLimitControl';
 import { AutosaveSettings } from './AutosaveSettings';
 import { ImageModelSetting } from './ImageModelSetting';
@@ -83,6 +84,7 @@ export function AppSettingsView({ inv, node, compact }: { inv: Inventory; node: 
       </section>
 
       <AutosaveSettings />
+      <BackgroundSettings compact={compact} />
       <TrackerModelsSettings />
       <ExplanationModelSettings />
 
