@@ -27,7 +27,7 @@ export {
   type Generalised, type GenInput, type GenChoices, type BuiltFunction, type GeneraliseContext,
 } from './generalise';
 export { evaluate, evaluateFunction, type Value, type EvalEnv } from './evaluate';
-export { workedVars, workedSteps, freeNames, showValue, type WorkedVar, type WorkedStep } from './worked';
+export { workedVars, workedSteps, workedBlock, freeNames, showValue, type WorkedVar, type WorkedStep, type BlockInput, type BlockLineNumbers } from './worked';
 export { findUses, matchesInLine, codeLines, provenance, exprBlockEnv, customFnEnv, type UseSource, type UseHit, type UseQuery } from './findUses';
 export { toExprPreset, toPublishNode, exprPresetParams, insertFunction, callInCustomFn } from './saveFlows';
 

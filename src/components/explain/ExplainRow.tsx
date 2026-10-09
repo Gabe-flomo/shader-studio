@@ -1,6 +1,8 @@
 /**
- * The Explain row under an Expression Block line (and Return): one sentence, folded; open it
- * for the steps, with hover highlighting, Make a node and Where else.
+ * The Explain row under an Expression Block line (and Return), and under a Custom Function's statements: one
+ * **Explain** action, which asks the on-device language model (docs/explain-model.md; it offers the download when
+ * the model isn't there), and a folded "Show working" with the line's build-up (ExplainView): hover highlighting,
+ * the numbers, Make a node and Where else.
  */
 import { memo, useMemo, useState } from 'react';
 import { explainLine, type ExplainContext, type UseQuery } from '../../lib/glslPatterns';
@@ -8,7 +10,7 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import { ExplainView } from './ExplainView';
-import { ExplainText } from './ExplainText';
+import { ExplainMore } from './ExplainMore';
 
 export interface ExplainRowProps {
   /** The whole line as it compiles: `float d = length(p) - r` or `return col`. */
@@ -22,7 +24,7 @@ export interface ExplainRowProps {
   indent?: number;
   /** Show this line's picture (the ▶ line preview), for lines a plot can't show. */
   onShowPicture?: () => void;
-  /** Where the line is, for "Explain more" ("line 3 of this block", "the Return line"). */
+  /** Where the line is, for Explain ("line 3 of this block", "the Return line"). */
   where?: string;
 }
 
@@ -30,23 +32,22 @@ export const ExplainRow = memo(function ExplainRow({ text, exprStart, ctx, onMak
   const tk = useTokens();
   const [open, setOpen] = useState(false);
   const ex = useMemo(() => explainLine(text, ctx), [text, ctx]);
-  if (!ex.ok) {
-    return (
-      <div data-explain-row="error" style={{ marginLeft: indent, font: `500 11.5px ${fontFamily.ui}`, color: tk.text.faint }}>
-        Explain: {ex.error === 'Nothing to explain' ? 'nothing to explain yet.' : `can’t read this line yet (${ex.error}).`}
-      </div>
-    );
-  }
+  if (!ex.ok && ex.error === 'Nothing to explain') return null;
   return (
-    <div data-explain-row="" style={{ marginLeft: indent, display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <button type="button" aria-expanded={open} data-explain-toggle="" onClick={() => setOpen(o => !o)} title={open ? 'Hide the steps' : 'Explain this line, step by step'}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, padding: '2px 6px', margin: '-2px 0 0 -6px', border: 0, borderRadius: radius.sm, background: 'none', cursor: 'pointer', textAlign: 'left' }}>
-        <Icon name={open ? 'chevD' : 'chevR'} size={11} style={{ color: tk.text.faint }} />
-        <span style={{ font: `650 10px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', color: tk.text.faint, flexShrink: 0 }}>Explain</span>
-        <span data-explain-summary="" style={{ font: `500 12px ${fontFamily.ui}`, color: tk.text.muted, whiteSpace: open ? 'normal' : 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}><ExplainText segs={ex.leadSegs} /></span>
-      </button>
-      {open && (
-        <ExplainView ex={ex} onMakeNode={onMakeNode} onFindUses={onFindUses} onShowPicture={onShowPicture} editable={{ start: exprStart, end: text.length }} explainMore={{ ctx, where }} />
+    <div data-explain-row={ex.ok ? '' : 'error'} style={{ marginLeft: indent, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+          <ExplainMore key={text} text={text} ctx={ctx} where={where} />
+        </div>
+        {ex.ok && (
+          <button type="button" aria-expanded={open} data-explain-toggle="" onClick={() => setOpen(o => !o)} title={open ? 'Hide the working' : 'Show how this line builds up its value, with the numbers'}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 26, flexShrink: 0, padding: '0 6px', border: 0, borderRadius: radius.sm, background: 'none', cursor: 'pointer', color: tk.text.faint, font: `600 11px ${fontFamily.ui}` }}>
+            <Icon name={open ? 'chevD' : 'chevR'} size={11} />Show working
+          </button>
+        )}
+      </div>
+      {ex.ok && open && (
+        <ExplainView ex={ex} onMakeNode={onMakeNode} onFindUses={onFindUses} onShowPicture={onShowPicture} editable={{ start: exprStart, end: text.length }} />
       )}
     </div>
   );

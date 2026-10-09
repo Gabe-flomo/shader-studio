@@ -148,7 +148,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
     return lineConcepts([...ls, { lhs: '', rhs: '' }], explainCtx).map(k => ({ ...explainCtx, known: k.known, roles: k.roles }));
   }, [explainCtx, node.params.lines]);
   const explainDialogs = useExplainDialogs({ onJumped: onClose });
-  // "Explain more" is told which block this is (its neighbours in the graph) and the whole code around a line
+  // Explain is told which block this is (its neighbours in the graph) and the whole code around a line
   const explainScope = useMemo(() => ({ nodeId: node.id, kind: 'Expression Block', getNodes: scopeNodes, enclosing: () => exprBlockCode(scopeNodes().find(n => n.id === node.id) ?? node) }), [node]);
 
   // ── Undo / Redo ──────────────────────────────────────────────────────────────
@@ -489,7 +489,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
             </div>
             {result.trim() ? <LineExplain node={node} index="return" line={{ lhs: '', op: '', rhs: result }} ctx={lineCtxs[lineCtxs.length - 1] ?? explainCtx} dialogs={explainDialogs} /> : null}
             <Note>The final expression of type {outputType} that the block outputs.</Note>
-            {(lines.some(l => l.rhs.trim() && !l.off) || result.trim()) && <ExplainMore mode="block" text={exprBlockCode(node)} ctx={explainCtx} label="Explain this block" />}
+            {(lines.some(l => l.rhs.trim() && !l.off) || result.trim()) && <ExplainMore mode="block" text={exprBlockCode(node)} ctx={explainCtx} />}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

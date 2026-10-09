@@ -13,7 +13,7 @@ vi.hoisted(() => {
   });
 });
 
-import { EXPLAIN_MODELS, EXPLAIN_MODEL, THINK_BUDGET, downloadBytes, maxTokensFor, modelById } from '../config';
+import { EXPLAIN_MODELS, EXPLAIN_MODEL, THINK_BUDGET, downloadBytes, formatBytes, maxTokensFor, modelById } from '../config';
 import {
   downloadExplainModel, explainAnswerCache, explainCompare, explainSamples, explainStream, removeExplainModel, selectExplainModel, setExplainTransport,
   useExplainModel, type ExplainRequest, type ExplainTransport,
@@ -53,8 +53,8 @@ beforeEach(() => {
 });
 
 describe('the registry', () => {
-  it('lists the coder (default) and Qwen3 4B; all Apache-2.0, pinned, q4f16 on WebGPU', () => {
-    expect(EXPLAIN_MODELS.map(m => m.id)).toEqual(['qwen2.5-coder-1.5b-instruct', 'qwen3-4b']);
+  it('lists the coder (default), Qwen3 4B and Olmo 3 7B; all Apache-2.0, pinned, q4f16 on WebGPU', () => {
+    expect(EXPLAIN_MODELS.map(m => m.id)).toEqual(['qwen2.5-coder-1.5b-instruct', 'qwen3-4b', 'olmo-3-7b-instruct']);
     expect(EXPLAIN_MODEL.id).toBe('qwen2.5-coder-1.5b-instruct');
     for (const m of EXPLAIN_MODELS) {
       expect(m.licence).toBe('Apache-2.0');
@@ -70,6 +70,22 @@ describe('the registry', () => {
     expect(downloadBytes('webgpu', modelById('qwen3-4b'))).toBeGreaterThan(2.7e9);
     expect(modelById('qwen3-4b').large).toBe(true);
     expect(modelById('qwen3-4b').weights.wasm).toBeUndefined();
+  });
+  it('the 7B model is an optional, large, WebGPU-only download with a memory warning, split into files a browser can hold', () => {
+    const m = modelById('olmo-3-7b-instruct');
+    expect(m.repo).toBe('onnx-community/Olmo-3-7B-Instruct-ONNX');
+    expect(m.thinks).toBe(false);
+    expect(m.large).toBe(true);
+    expect(m.memory).toMatch(/about 5 GB of graphics memory/);
+    expect(m.weights.wasm).toBeUndefined();
+    expect(downloadBytes('webgpu', m)).toBeGreaterThan(3.7e9);
+    expect(downloadBytes('webgpu', m)).toBeLessThan(3.9e9);
+    expect(formatBytes(downloadBytes('webgpu', m))).toBe('3.8 GB');
+    // Each weights file stays under the 2 GiB a single browser buffer can hold (the q4f16 external-data split)
+    for (const f of m.weights.webgpu) expect(f.bytes).toBeLessThan(2 ** 31);
+    expect(m.weights.webgpu.map(f => f.path)).toEqual(['onnx/model_q4f16.onnx', 'onnx/model_q4f16.onnx_data', 'onnx/model_q4f16.onnx_data_1']);
+    // Never the default
+    expect(EXPLAIN_MODEL.id).not.toBe(m.id);
   });
   it('an unknown id falls back to the default', () => {
     expect(modelById('nope')).toBe(EXPLAIN_MODEL);

@@ -7,6 +7,13 @@
  *
  *   qwen2.5-coder-1.5b  the default: fast, no reasoning pass
  *   qwen3-4b            thinks first (a <think> pass); better at maths; 2.8 GB, WebGPU only
+ *   olmo-3-7b-instruct  the biggest that loads: 7B, general (not a coder), 3.8 GB, WebGPU only, ~5 GB of GPU memory
+ *
+ * A 7-8B coder was looked for (2026-10-09, Hugging Face API): Qwen2.5-Coder-7B-Instruct has no ONNX export at all;
+ * onnx-community/Qwen3-8B-ONNX is an onnxruntime-genai build (one 6.4 GB data file, no Transformers.js layout);
+ * Qwen3.5-9B, Granite 8B and Mistral 7B there are genai builds too. Olmo 3 7B Instruct is a Transformers.js build
+ * (q4f16 in two external-data files under 2.1 GB, architecture supported from Transformers.js 4.0); its plain-q4
+ * WebAssembly build (3.9 GB) is past the 4 GB WebAssembly heap once the runtime is in, so it is WebGPU only.
  *
  * Considered and dropped, each tried in the browser (docs/reports/explain-model-trial.md):
  *   - Qwen3-1.7B: its ONNX q4f16 is one 1.43 GB file; ONNX Runtime's WebAssembly heap runs out creating the session
@@ -35,6 +42,8 @@ export interface ExplainModelSpec {
   weights: { webgpu: ModelFile[]; wasm?: ModelFile[] };
   /** Larger than most browsers like: warn before downloading or loading. */
   large?: boolean;
+  /** For a large model: what it needs, in a sentence, for the warning ("Needs about 5 GB of graphics memory…"). */
+  memory?: string;
 }
 
 const QWEN3_FILES: ModelFile[] = [
@@ -82,6 +91,34 @@ export const EXPLAIN_MODELS: readonly ExplainModelSpec[] = [
       ],
     },
     large: true,
+  },
+  {
+    // The biggest that loads here (docs/explain-model.md "A bigger model"): no 7-8B coder model has a Transformers.js
+    // build (Qwen2.5-Coder-7B has no ONNX export; Qwen3-8B-ONNX is an onnxruntime-genai build in one 6.4 GB file).
+    id: 'olmo-3-7b-instruct',
+    name: 'Olmo 3 7B Instruct',
+    repo: 'onnx-community/Olmo-3-7B-Instruct-ONNX',
+    revision: '64cf5a8d2dac83c3b889d44c422de2ae3e2b2e7d',
+    licence: 'Apache-2.0',
+    thinks: false,
+    note: 'The biggest: a 7B general model (not a coder), slower, and the most careful wording. Needs WebGPU.',
+    dtype: { webgpu: 'q4f16' },
+    files: [
+      { path: 'config.json', bytes: 1928 },
+      { path: 'generation_config.json', bytes: 208 },
+      { path: 'tokenizer.json', bytes: 4119438 },
+      { path: 'tokenizer_config.json', bytes: 3085 },
+    ],
+    weights: {
+      // Split into external-data files under 2.1 GB each (config: use_external_data_format q4f16 = 2), like Qwen3 4B
+      webgpu: [
+        { path: 'onnx/model_q4f16.onnx', bytes: 414480 },
+        { path: 'onnx/model_q4f16.onnx_data', bytes: 2077432032 },
+        { path: 'onnx/model_q4f16.onnx_data_1', bytes: 1732204768 },
+      ],
+    },
+    large: true,
+    memory: 'It needs about 5 GB of graphics memory while it runs (3.8 GB of weights plus room for the conversation), so use it on a computer with 16 GB of memory or more.',
   },
 ];
 

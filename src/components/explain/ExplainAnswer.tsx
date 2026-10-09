@@ -74,8 +74,8 @@ export function NotSureTag({ reason }: { reason: string }) {
   );
 }
 
-/** The model's structured answer: the summary, then each line's explanation with its dot and tag. */
-export function AnswerBody({ view, mode, labels }: { view: AnswerView; mode: 'line' | 'block' | 'node'; /** Names for the numbered items (a line's step letters). */ labels?: readonly string[] }) {
+/** The model's structured answer: each line's explanation with its dot and tag, then (a block) the summary of the whole. */
+export function AnswerBody({ view, mode }: { view: AnswerView; mode: 'line' | 'block' | 'node' }) {
   const tk = useTokens();
   if (view.plain) {
     const c = view.plain.confidence;
@@ -92,12 +92,11 @@ export function AnswerBody({ view, mode, labels }: { view: AnswerView; mode: 'li
   const text: React.CSSProperties = { font: `500 12.5px/1.55 ${fontFamily.ui}`, color: tk.text.primary };
   return (
     <div data-explain-answer="" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {view.summary && <p style={{ ...text, margin: 0 }}><Code text={view.summary} /></p>}
       <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
         {view.items.map(({ item, confidence }, i) => (
           <li key={i} data-explain-item="" style={{ display: 'flex', gap: 7, alignItems: 'flex-start' }}>
             {confidence ? <ConfidenceDot c={confidence} /> : <span style={{ width: 8, flexShrink: 0 }} />}
-            {mode === 'block' && <span style={{ flexShrink: 0, minWidth: 14, color: tk.text.faint, font: `600 11px/1.9 ${fontFamily.mono}` }}>{labels?.[(item.line ?? i + 1) - 1] ?? item.line ?? i + 1}</span>}
+            {mode === 'block' && <span style={{ flexShrink: 0, minWidth: 14, color: tk.text.faint, font: `600 11px/1.9 ${fontFamily.mono}` }}>{item.line ?? i + 1}</span>}
             <span style={{ ...text, minWidth: 0 }}>
               {item.what && <Code text={item.what} />}{item.what && item.effect ? ' ' : ''}
               {item.effect && <span style={{ color: tk.text.secondary }}><Code text={item.effect} /></span>}
@@ -106,6 +105,12 @@ export function AnswerBody({ view, mode, labels }: { view: AnswerView; mode: 'li
           </li>
         ))}
       </ul>
+      {view.summary && (
+        <div data-explain-summary-all="" style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: view.items.length ? 6 : 0, borderTop: view.items.length ? `1px solid ${alpha(tk.accent.base, 0.14)}` : 'none' }}>
+          {mode === 'block' && <span style={{ font: `650 10px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', color: tk.text.faint }}>Altogether</span>}
+          <p style={{ ...text, margin: 0 }}><Code text={view.summary} /></p>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 /**
- * fnSource.ts — pieces of source the function card hands to "Explain more": the statement a call sits in, and
+ * fnSource.ts — pieces of source the function card hands to Explain: the statement a call sits in, and
  * a user function's whole declaration (signature and body). Pure.
  */
 import { declaredFunctions, splitStatements } from '../lib/glslPatterns';

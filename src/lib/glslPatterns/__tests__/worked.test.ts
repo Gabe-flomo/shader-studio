@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { explainLine, workedSteps, workedVars, showValue } from '..';
+import { explainLine, workedBlock, workedSteps, workedVars, showValue } from '..';
 
 const line = (src: string) => {
   const ex = explainLine(src, { types: { angle: 'float', wind: 'float', home: 'float' } });
@@ -41,6 +41,27 @@ describe('worked examples', () => {
     expect(showValue(steps[steps.length - 1].value!)).toMatch(/^\(.+, .+\)$/);
     const tex = line('vec3 c = texture(img, uv).rgb * 2.0;');
     expect(workedSteps(tex, workedVars(tex)).some(s => s.value === null)).toBe(true);
+  });
+
+  it('measures a whole block: each line at the sample pixel and across the picture, carried into later lines', () => {
+    const r = workedBlock(
+      ['float sky = 0.5 + 0.5 * n.y', 'vec3 col = mix(vec3(0.0), vec3(1.0), sky)', 'col *= k', 'col.x += 1.0', 'return col', 'vec3 tex = texture(img, uv).rgb'],
+      [
+        { name: 'n', type: 'vec3', value: [0, 1, 0], range: [-1, 1], unit: true },
+        { name: 'k', type: 'float', value: 2, range: [2, 2], fixed: true },
+      ],
+    );
+    expect(r[0]).toMatchObject({ target: 'sky', value: 1 });
+    // A unit-length normal keeps 0.5 + 0.5 * n.y inside 0..1
+    expect(r[0].ranges![0][0]).toBeGreaterThanOrEqual(0);
+    expect(r[0].ranges![0][1]).toBeLessThanOrEqual(1);
+    expect(r[1].value).toEqual([1, 1, 1]);
+    expect(r[2].value).toEqual([2, 2, 2]); // col *= k, k fixed at 2
+    expect(r[3].value).toEqual([3, 2, 2]); // col.x += 1.0
+    expect(r[4].target).toBeUndefined();
+    expect(r[4].value).toEqual([3, 2, 2]);
+    expect(r[4].ranges).toHaveLength(3);
+    expect(r[5]).toEqual({ target: 'tex', value: null, ranges: null }); // a texture read can't be done on the CPU
   });
 
   it('formats values for reading', () => {

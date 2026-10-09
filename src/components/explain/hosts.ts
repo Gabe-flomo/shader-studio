@@ -45,7 +45,7 @@ export function exprBlockRoles(node: GraphNode, nodes: GraphNode[] = scopeNodes(
   return out;
 }
 
-/** An Expression Block's code as it compiles: its lines, then Return (what "Explain more" is told about the surroundings). */
+/** An Expression Block's code as it compiles: its lines, then Return (what Explain is told about the surroundings). */
 export function exprBlockCode(node: GraphNode): string {
   const lines = (node.params.lines as Array<{ lhs?: string; op?: string; rhs?: string; off?: boolean }> | undefined) ?? [];
   const out = lines.filter(l => l.rhs?.trim() && !l.off).map(l => `${l.lhs ?? ''} ${l.op || '='} ${l.rhs}`.trim());

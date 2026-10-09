@@ -14,7 +14,6 @@ import { ExplainText } from './ExplainText';
 import { GlslCode, type CodeSpan } from './GlslCode';
 import { TransferPlotView } from './TransferPlotView';
 import { ExplainMore } from './ExplainMore';
-import { explainModelUsable, useExplainModel } from '../../explainModel/client';
 
 export interface ExplainViewProps {
   ex: Explanation | LineExplanation;
@@ -29,8 +28,8 @@ export interface ExplainViewProps {
    */
   onShowPicture?: () => void;
   /**
-   * Offer "Explain more" (the optional on-device language model, docs/explain-model.md) for this line: its names'
-   * types, and where it is. Absent: no such action here.
+   * Offer "Explain" (the on-device language model, docs/explain-model.md) for this line: its names' types, and where
+   * it is. Absent: no such action here (the Expression Block's rows put their own Explain beside the line).
    */
   explainMore?: { ctx?: ExplainContext; where?: string };
 }
@@ -85,8 +84,6 @@ export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPictur
   const [overrides, setOverrides] = useState<Record<string, Value>>({});
   const vars: WorkedVar[] = useMemo(() => defaults.map(v => (v.name in overrides ? { ...v, value: overrides[v.name] } : v)), [defaults, overrides]);
   const worked = useMemo(() => (stepsOpen && ex.steps.length ? workedSteps(ex, vars) : []), [stepsOpen, ex, vars]);
-  const autoSteps = useExplainModel(m => m.autoSteps && explainModelUsable(m));
-  const stepInfo = useMemo(() => ex.steps.map(s => ({ label: s.label, code: s.code, reading: s.text })), [ex.steps]);
   return (
     <div data-explain-view="" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', borderRadius: radius.lg, background: tk.bg.subtle, border: `1px solid ${tk.border.subtle}` }}>
       {/* The code, highlighted, with the hovered part lit */}
@@ -169,9 +166,6 @@ export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPictur
             );
           })}
         </ol>
-      )}
-      {stepsOpen && explainMore && ex.steps.length > 1 && (
-        <ExplainMore key={`steps:${src}`} mode="steps" text={src} steps={stepInfo} ctx={explainMore.ctx} where={explainMore.where} auto={autoSteps} />
       )}
       {(canMake(rootSpan) || (rootIdiom && onFindUses)) && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
