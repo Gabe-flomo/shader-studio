@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.126',
+    date: '2026-10-09',
+    title: 'Under the hood',
+    highlights: [
+      { area: 'Studio', text: 'Agent Builder: Under the hood shows the walkers\' state textures channel by channel (position, heading, age, life, memory…) and the trail channels.' },
+      { area: 'Studio', text: 'Hover a texel to ring its walker with its numbers, click a walker to light its texel, Follow one as it moves.' },
+      { area: 'Studio', text: 'Fixed: holding a key on a slider\'s number box could crash the panel ("Maximum update depth").' },
+    ],
+  },
+  {
     id: '2026.10.125',
     date: '2026-10-09',
     title: 'Particles, flocks and orbiters',
