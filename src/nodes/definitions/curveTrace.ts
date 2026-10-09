@@ -11,12 +11,16 @@
  * Along is where on the curve the nearest point is (0 at Start, 1 at End), for colouring along
  * the line. Start / End (wireable) draw it on or off.
  *
+ * Draw: Beam (2D) draws Live's dot like an oscilloscope screen: a Pass the compiler adds
+ * (compiler/curveBeamExpand.ts) keeps a fading screen, and each frame only the stretch the dot
+ * covered since the last is laid into it. Outputs Intensity and Colour (a glow, not a distance).
+ *
  * The 3D version runs inside a Scene Group. It skips the loop when the point is clearly outside
  * the curve's bounding sphere (distance to the sphere is a safe lower bound), so most march
  * steps cost one length().
  */
 import type { GraphNode, NodeDefinition, ParamDef } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, pv3, withNewOutputs } from './helpers';
 
 export type Axis = 'X' | 'Y' | 'Z';
 
@@ -48,7 +52,23 @@ export function axisDefaults(a: Axis, d: { freq: number; phase: number; amp: num
   return { [`wave${a}`]: 'sine', [`freq${a}`]: d.freq, [`phase${a}`]: d.phase, [`amp${a}`]: d.amp, [`off${a}`]: 0, [`expr${a}`]: expr };
 }
 
-export const COMMON_PARAMS = (thick: { def: number; max: number }, segs: number): Record<string, ParamDef> => ({
+const BEAM = { param: 'draw', value: 'beam' };
+
+/** Beam (2D only): an oscilloscope screen. The node draws into a buffer of its own (compiler/curveBeamExpand.ts). */
+const BEAM_PARAMS: Record<string, ParamDef> = {
+  beamWidth: { section: 'Beam', label: 'Beam width', type: 'float', min: 0.0005, max: 0.05, step: 0.0001, showWhen: BEAM, hint: 'How wide the beam\'s spot is (a soft Gaussian, in picture units: the picture is 2 tall).' },
+  glow: { section: 'Beam', label: 'Glow', type: 'float', min: 0, max: 2, step: 0.01, showWhen: BEAM, hint: 'A wide soft halo round the beam (four times Beam width), laid into the screen with it.' },
+  dwell: { section: 'Beam', label: 'Dwell', type: 'float', min: 0, max: 4, step: 0.01, showWhen: BEAM, hint: 'How much brighter the beam burns where it moves slowly, as on a real screen: a resting dot glows, a fast sweep is a thin line. 0: the same brightness at any speed.' },
+  brightness: { section: 'Beam', label: 'Brightness', type: 'float', min: 0, max: 10, step: 0.01, showWhen: BEAM, hint: 'Colour only: how hard Intensity drives the colour. Bright places saturate toward white, as phosphor does.' },
+  beamColor: { section: 'Beam', label: 'Beam colour', type: 'vec3color', showWhen: BEAM, hint: 'The phosphor\'s colour (Colour output).' },
+  beamScale: { section: 'Beam', label: 'Screen size', type: 'select', compileTime: true, showWhen: BEAM, options: [
+    { value: '1', label: 'Full size' }, { value: '0.5', label: '½ (4× cheaper, softer)' }, { value: '0.25', label: '¼' },
+  ], hint: 'The size of the beam\'s screen (its own buffer) relative to the picture. ½ costs a quarter and is softer.' },
+};
+
+const BEAM_DEFAULTS = { beamWidth: 0.004, glow: 0.3, dwell: 1, brightness: 2, beamColor: [0.35, 1.0, 0.55], beamScale: '1' };
+
+export const COMMON_PARAMS = (thick: { def: number; max: number }, segs: number, beam = false): Record<string, ParamDef> => ({
   mode: { section: 'Curve', label: 'Motion', type: 'select', compileTime: true, options: [
     { value: 'lateral', label: 'Lateral: X and Y swing (Lissajous)' },
     { value: 'rotary', label: 'Rotary: two circles, same way (loops)' },
@@ -60,9 +80,12 @@ export const COMMON_PARAMS = (thick: { def: number; max: number }, segs: number)
     { value: 'whole', label: 'The whole curve (Start to End)' },
     { value: 'pen', label: 'Pen: a moving head with a trail' },
     { value: 'live', label: 'Live: frequencies in Hz, a dot that leaves a trail' },
-  ], hint: 'Pen: a head runs along the curve and leaves a trail. Slow, you see it drawn; fast with a long Trail, it becomes the whole figure.' },
+    ...(beam ? [{ value: 'beam', label: 'Beam: Live on an oscilloscope screen (glow, cheap)' }] : []),
+  ], hint: beam
+    ? 'Pen: a head runs along the curve and leaves a trail. Live: frequencies in Hz, the last Persistence seconds as a distance. Beam: the same dot drawn like a scope, into a screen that fades: a glow, not a distance, and its cost doesn\'t grow with the trail.'
+    : 'Pen: a head runs along the curve and leaves a trail. Slow, you see it drawn; fast with a long Trail, it becomes the whole figure.' },
   penSpeed: { section: 'Curve', label: 'Pen speed', type: 'float', min: 0, max: 20, step: 0.01, showWhen: { param: 'draw', value: 'pen' }, hint: 'How fast the head moves, in turns a second. 0.1 draws slowly; 5+ blurs into a continuous figure.' },
-  persistence: { section: 'Curve', label: 'Persistence (s)', type: 'float', min: 0.001, max: 3, step: 0.001, showWhen: { param: 'draw', value: 'live' }, hint: 'How many seconds of the dot\'s path stay on screen. Low frequencies show a dot with a short tail; as they rise, the same time covers more of the figure until it is a solid line.' },
+  persistence: { section: 'Curve', label: 'Persistence (s)', type: 'float', min: 0.001, max: 3, step: 0.001, showWhen: { param: 'draw', value: beam ? ['live', 'beam'] : 'live' }, hint: 'How many seconds of the dot\'s path stay on screen. Low frequencies show a dot with a short tail; as they rise, the same time covers more of the figure until it is a solid line. Beam: the screen fades by e (to 37%) every Persistence seconds.' },
   trail: { section: 'Curve', label: 'Trail', type: 'float', min: 0.001, max: 4, step: 0.001, showWhen: { param: 'draw', value: 'pen' }, hint: 'How much of the curve stays behind the head, in turns. 1 is a whole figure (for whole-number ratios). Along runs 0 at the tail to 1 at the head: fade with it.' },
   start: { section: 'Curve', label: 'Start', type: 'float', min: 0, max: 1, step: 0.001, showWhen: { param: 'draw', value: 'whole' }, hint: 'Where the drawn part begins (0–1 of the curve). Wire it to draw the curve on or off.' },
   end: { section: 'Curve', label: 'End', type: 'float', min: 0, max: 1, step: 0.001, showWhen: { param: 'draw', value: 'whole' }, hint: 'Where the drawn part ends (0–1).' },
@@ -72,7 +95,8 @@ export const COMMON_PARAMS = (thick: { def: number; max: number }, segs: number)
   freqXB: { section: 'Morph', label: 'X frequency B', type: 'float', min: 0, max: 20, step: 0.01, showWhen: { param: 'morphOn', value: 'true' }, hint: 'X frequency of the figure it morphs into.' },
   freqYB: { section: 'Morph', label: 'Y frequency B', type: 'float', min: 0, max: 20, step: 0.01, showWhen: { param: 'morphOn', value: 'true' }, hint: 'Y frequency of the figure it morphs into.' },
   thickness: { section: 'Curve', label: 'Thickness', type: 'float', min: 0, max: thick.max, step: 0.001, hint: 'Half the line\'s width: subtracted from the distance. 0 is an infinitely thin line (use a glow on Distance).' },
-  segments: { section: 'Curve', label: 'Segments', type: 'float', min: 16, max: 2048, step: 1, compileTime: true, hint: `Straight pieces the curve is cut into. More for high frequencies (a smooth curve needs ~10 per wiggle); costs that many steps per pixel. Default ${segs}.` },
+  segments: { section: 'Curve', label: 'Segments', type: 'float', min: 16, max: 2048, step: 1, compileTime: true, hint: `Straight pieces the curve is cut into. More for high frequencies (a smooth curve needs ~10 per wiggle); costs that many steps per pixel. Default ${segs}.${beam ? ' Beam: the most pieces one frame\'s stretch is cut into (it uses as few as keep it a curve).' : ''}` },
+  ...(beam ? BEAM_PARAMS : {}),
 });
 
 const COMMON_DEFAULTS = (thick: number, segs: number) => ({ mode: 'lateral', draw: 'whole', penSpeed: 0.25, trail: 0.5, persistence: 0.2, morphOn: false, morph: 0, freqXB: 5, freqYB: 4, turns: 1, start: 0, end: 1, damping: 0, thickness: thick, segments: segs });
@@ -91,7 +115,7 @@ function waveExpr(wave: string, x: string): string {
  * At 0 Hz every axis sits at its offset: the dot rests in the middle, as on a real harmonograph.
  */
 function livePhase(node: GraphNode, phase: string, freq: string): string {
-  return node.params.draw === 'live' ? `(${phase} * min(abs(${freq}), 1.0))` : phase;
+  return node.params.draw === 'live' || node.params.draw === 'beam' ? `(${phase} * min(abs(${freq}), 1.0))` : phase;
 }
 
 /** GLSL for one axis at the loop's `t`. */
@@ -193,54 +217,65 @@ function chunkedLoop(id: string, vt: string, n: number, point: string, pos: stri
   ];
 }
 
-/** One axis's piece of the curve's point: its GLSL, its reach and its speed bound (see axisExpr). */
-type CurvePart = { expr: string; bound: string | null; lip: string | null };
+export interface CurvePoint {
+  /** The point at the loop's `t` (reads `<id>_damp`, and `time` for a Custom axis). */
+  point: string;
+  /** Per axis: how far it reaches (null: unknown). */
+  bounds: string[] | null;
+  /** How fast the curve can move per unit of t (null: it can jump). */
+  lip: string | null;
+  /** Every frequency the point turns at (Morph: both figures'), or null when an axis is Custom. */
+  freqs: string[] | null;
+  /** How far the point swings from its centre (amplitudes only), or null when an axis is Custom. */
+  reach: string | null;
+}
 
-/**
- * The curve's point at a GLSL float `t` for a set of frequencies: X, Y (and Z) by the node's waves,
- * or the two circles of Rotary motion. The expression reads `t`, `${node.id}_damp` (exp(−Damping × t),
- * set by the caller) and, in a Custom axis, `time`: the caller declares all three.
- */
-export function curvePointWith(node: GraphNode, inputVars: Record<string, string>, axes: Axis[], freqOf: (a: Axis) => string): { point: string; parts: CurvePart[] } {
+/** The curve's point at `t` for the node's motion, waves and Morph. */
+export function curvePoint(node: GraphNode, inputVars: Record<string, string>, axes: Axis[]): CurvePoint {
   const id = node.id;
   const vt = axes.length === 3 ? 'vec3' : 'vec2';
   const mode = String(node.params.mode ?? 'lateral');
-  const parts = axes.map(a => axisExpr(node, a, inputVars, freqOf));
-  const damping = p(node.params.damping, 0);
-  if (mode === 'rotary' || mode === 'counter') {
-    // Two circles: the first from X's settings, the second from Y's (counter: the second turns the other way).
-    const c = (a: Axis) => ({ f: freqOf(a), ph: livePhase(node, inputVars[`phase${a}`] || p(node.params[`phase${a}`], 0), freqOf(a)), r: p(node.params[`amp${a}`], 1) });
-    const A = c('X'), B = c('Y'), op = mode === 'counter' ? '-' : '+';
-    const offX = p(node.params.offX, 0), offY = p(node.params.offY, 0);
-    const lip = `(abs(${A.r}) * (abs(${A.f}) + abs(${damping})) + abs(${B.r}) * (abs(${B.f}) + abs(${damping})))`;
-    parts[0] = { expr: `(${offX} + ${id}_damp * (${A.r} * cos(${A.f} * t + ${A.ph}) + ${B.r} * cos(${B.f} * t + ${B.ph})))`, bound: `(abs(${offX}) + abs(${A.r}) + abs(${B.r}))`, lip };
-    parts[1] = { expr: `(${offY} + ${id}_damp * (${A.r} * sin(${A.f} * t + ${A.ph}) ${op} ${B.r} * sin(${B.f} * t + ${B.ph})))`, bound: `(abs(${offY}) + abs(${A.r}) + abs(${B.r}))`, lip };
-  }
-  return { point: `${vt}(${parts.map(x => x.expr).join(', ')})`, parts };
-}
-
-/**
- * The curve's point as the node draws it: figure A from the frequencies, blended into figure B
- * (the B frequencies) by Morph amount when Morph is on. Used by Curve Trace and by Ride a curve
- * (agentRideCurve.ts), which evaluates it once per walker.
- */
-export function curvePoint(node: GraphNode, inputVars: Record<string, string>, axes: Axis[]): { point: string; shapeA: { point: string; parts: CurvePart[] }; shapeB: { point: string; parts: CurvePart[] } | null } {
-  const shapeA = curvePointWith(node, inputVars, axes, a => inputVars[`freq${a}`] || p(node.params[`freq${a}`], 1));
-  const shapeB = node.params.morphOn === true ? curvePointWith(node, inputVars, axes, a => inputVars[`freq${a}B`] || p(node.params[`freq${a}B`], 1)) : null;
+  const rotary = mode === 'rotary' || mode === 'counter';
+  // The point at the loop's t for a set of frequencies (Morph builds two and blends them).
+  const pointWith = (freqOf: (a: Axis) => string): { point: string; parts: Array<{ expr: string; bound: string | null; lip: string | null }> } => {
+    const parts = axes.map(a => axisExpr(node, a, inputVars, freqOf));
+    const damping = p(node.params.damping, 0);
+    if (rotary) {
+      // Two circles: the first from X's settings, the second from Y's (counter: the second turns the other way).
+      const c = (a: Axis) => ({ f: freqOf(a), ph: livePhase(node, inputVars[`phase${a}`] || p(node.params[`phase${a}`], 0), freqOf(a)), r: p(node.params[`amp${a}`], 1) });
+      const A = c('X'), B = c('Y'), op = mode === 'counter' ? '-' : '+';
+      const offX = p(node.params.offX, 0), offY = p(node.params.offY, 0);
+      const lip = `(abs(${A.r}) * (abs(${A.f}) + abs(${damping})) + abs(${B.r}) * (abs(${B.f}) + abs(${damping})))`;
+      parts[0] = { expr: `(${offX} + ${id}_damp * (${A.r} * cos(${A.f} * t + ${A.ph}) + ${B.r} * cos(${B.f} * t + ${B.ph})))`, bound: `(abs(${offX}) + abs(${A.r}) + abs(${B.r}))`, lip };
+      parts[1] = { expr: `(${offY} + ${id}_damp * (${A.r} * sin(${A.f} * t + ${A.ph}) ${op} ${B.r} * sin(${B.f} * t + ${B.ph})))`, bound: `(abs(${offY}) + abs(${A.r}) + abs(${B.r}))`, lip };
+    }
+    return { point: `${vt}(${parts.map(x => x.expr).join(', ')})`, parts };
+  };
+  const freqA = (a: Axis) => inputVars[`freq${a}`] || p(node.params[`freq${a}`], 1);
+  const freqB = (a: Axis) => inputVars[`freq${a}B`] || p(node.params[`freq${a}B`], 1);
+  const shapeA = pointWith(freqA);
+  const morphing = node.params.morphOn === true;
+  const shapeB = morphing ? pointWith(freqB) : null;
   const morph = inputVars.morph || p(node.params.morph, 0);
   const point = shapeB ? `mix(${shapeA.point}, ${shapeB.point}, clamp(${morph}, 0.0, 1.0))` : shapeA.point;
-  return { point, shapeA, shapeB };
+  const both = (x: string | null, y: string | null) => (x && y ? `max(${x}, ${y})` : null);
+  const parts = shapeB ? shapeA.parts.map((x, i) => ({ expr: x.expr, bound: both(x.bound, shapeB.parts[i].bound), lip: both(x.lip, shapeB.parts[i].lip) })) : shapeA.parts;
+  // How fast the curve can move per unit of t (null: it can jump, so no stretch can be skipped)
+  const lip = parts.every(x => x.lip) ? `length(${vt}(${parts.map(x => x.lip).join(', ')}))` : null;
+  // Rotary motions turn at X's and Y's frequencies whatever the waves say; a Custom lateral axis has no frequency.
+  const turning: Axis[] = rotary ? ['X', 'Y'] : axes;
+  const custom = !rotary && axes.some(a => String(node.params[`wave${a}`] ?? 'sine') === 'custom');
+  const freqs = custom ? null : [...turning.map(freqA), ...(morphing ? turning.map(freqB) : [])];
+  const amp = (a: Axis) => `abs(${p(node.params[`amp${a}`], 1)})`;
+  const reach = custom ? null : rotary ? `(${amp('X')} + ${amp('Y')})` : `length(${vt}(${axes.map(amp).join(', ')}))`;
+  return { point, bounds: parts.every(x => x.bound) ? parts.map(x => x.bound!) : null, lip, freqs, reach };
 }
 
 /** The shared loop: nearest piece of the polyline and where along it. */
 function traceCode(node: GraphNode, inputVars: Record<string, string>, axes: Axis[], pos: string): { code: string; bounds: string[] | null; along: string } {
   const id = node.id;
   const vt = axes.length === 3 ? 'vec3' : 'vec2';
-  const { point, shapeA, shapeB } = curvePoint(node, inputVars, axes);
-  const both = (x: string | null, y: string | null) => (x && y ? `max(${x}, ${y})` : null);
-  const parts = shapeB ? shapeA.parts.map((x, i) => ({ expr: x.expr, bound: both(x.bound, shapeB.parts[i].bound), lip: both(x.lip, shapeB.parts[i].lip) })) : shapeA.parts;
-  // How fast the curve can move per unit of t (null: it can jump, so no stretch can be skipped)
-  const lip = parts.every(x => x.lip) ? `length(${vt}(${parts.map(x => x.lip).join(', ')}))` : null;
+  const { point, bounds, lip } = curvePoint(node, inputVars, axes);
   const n = Math.max(16, Math.min(2048, Math.round(Number(node.params.segments) || 256)));
   const turns = p(node.params.turns, 1);
   const start = inputVars.start || p(node.params.start, 0);
@@ -282,10 +317,165 @@ function traceCode(node: GraphNode, inputVars: Record<string, string>, axes: Axi
   ].join('');
   // Along: 0 → 1 over the drawn part (Pen: tail → head, so it fades a trail).
   const along = pen || live ? `${id}_u` : `mix(${start}, ${end}, ${id}_u)`;
-  return { code, bounds: parts.every(x => x.bound) ? parts.map(x => x.bound!) : null, along };
+  return { code, bounds, along };
 }
 
-const SHAPES_NOTE = 'Lissajous: X 3, Y 2, X phase 1.5708. A circle: X 1, Y 1, phase 1.5708. A harmonograph: X 2, Y 3, Damping 0.05, Turns 8. Rotary opposite ways, X 2, Y 3: a five-pointed star.';
+// ── Beam: Live drawn the way an oscilloscope screen does (docs/curve-trace.md) ─────────────────
+//
+// The node is opened by the compiler (compiler/curveBeamExpand.ts) into a step that draws its
+// screen and a Pass that keeps it: each frame the step fades last frame's screen and lays in only
+// the stretch the dot covered since then. Its cost is that stretch's few pieces per pixel, however
+// long the trail stays on screen. The screen's own pixels remember when they were last drawn, so it
+// needs no frame clock from the host: the preview, a recording at any frame rate and an exported
+// page all get the same picture for the same times.
+
+/** Most angle a wave may turn across one piece of a frame's stretch (radians): sags under ½% of its size. */
+const BEAM_TURN = 0.2;
+
+/**
+ * GLSL helpers for the step. ctBeamInk: what one straight piece a → b lays at p, the line integral
+ * of a Gaussian spot of width w along it (so pieces join seamlessly and an endless line peaks at 1),
+ * times `sweep` (how much one pass of the beam lays down, below), plus Dwell (the spot's time near p:
+ * a resting or slow beam burns brighter) and Glow (a squared-Lorentzian halo four times wider, its
+ * integral in closed form).
+ */
+export const CURVE_BEAM_GLSL = `
+float ctErf(float x) {
+  float x2 = x * x;
+  float e = sqrt(1.0 - exp(-x2 * (1.27324 + 0.147 * x2) / (1.0 + 0.147 * x2)));
+  return x < 0.0 ? -e : e;
+}
+float ctLorF(float s, float a2) {
+  float a = sqrt(a2);
+  return s / (2.0 * a2 * (a2 + s * s)) + atan(s / a) / (2.0 * a2 * a);
+}
+float ctBeamInk(vec2 p, vec2 a, vec2 b, float w, float glow, float dwell, float sweep) {
+  vec2 ab = b - a;
+  float L = length(ab);
+  vec2 dir = L > 1e-7 ? ab / L : vec2(1.0, 0.0);
+  vec2 pa = p - a;
+  float along = dot(pa, dir);
+  float d2 = max(dot(pa, pa) - along * along, 0.0);
+  float s0 = -along / w;
+  float s1 = (L - along) / w;
+  float h = 0.5 * (ctErf(s1) - ctErf(s0));
+  float g = exp(-d2 / (w * w));
+  float frac = L > 1e-3 * w ? min(1.0, h * 1.77245 * w / L) : exp(-s0 * s0);
+  float ink = g * (h * sweep + dwell * frac);
+  if (glow > 0.0) {
+    float gw = 4.0 * w;
+    float a2 = gw * gw + d2;
+    ink += sweep * glow * 0.63662 * gw * gw * gw * (ctLorF(L - along, a2) - ctLorF(-along, a2));
+    // Dwell's halo: the halo round the nearest point, for the share of the piece within it.
+    float q = along - clamp(along, 0.0, L);
+    float r = gw * gw / (gw * gw + d2 + q * q);
+    ink += dwell * glow * r * sqrt(r) * min(1.0, 2.0 * gw / max(L, 1e-9));
+  }
+  return ink;
+}
+`;
+
+/** Wraps a list of GLSL float expressions in max(): the fastest frequency the curve turns at. */
+const maxOf = (xs: string[]): string => xs.map(x => `abs(${x})`).reduce((a, b) => `max(${a}, ${b})`);
+
+/** The Beam step's code: the whole of the beam screen's Pass program. Outputs `<id>_bc` (rgb) and `<id>_ba`. */
+function beamStepCode(node: GraphNode, inputVars: Record<string, string>): string {
+  const id = node.id;
+  const uv = inputVars.uv || 'g_uv';
+  const prev = inputVars.prev;
+  const time = inputVars.time || 'u_time';
+  const n = Math.max(16, Math.min(2048, Math.round(Number(node.params.segments) || 256)));
+  const { point, freqs, reach } = curvePoint(node, inputVars, ['X', 'Y']);
+  const damping = p(node.params.damping, 0);
+  const persist = p(node.params.persistence, 0.2);
+  const decl = `    vec3 ${id}_bc = vec3(0.0);\n    float ${id}_ba = 0.0;\n`;
+  if (!prev) return decl;
+  // Pieces this frame: as few as keep every wave turning under BEAM_TURN a piece (a Custom axis: Segments).
+  const pieces = freqs
+    ? `int(clamp(ceil(${id}_om * ${id}_back / ${BEAM_TURN}), ${id}_back > 0.0 ? 1.0 : 0.0, ${n}.0))`
+    : `(${id}_back > 0.0 ? ${n} : 0)`;
+  return decl + [
+    `    {\n`,
+    `      float time = ${time};\n`,
+    // Last frame's screen here: red is the glow; green, blue and alpha the time it was drawn
+    // (seconds mod 128 in 1/65536ths, plus one: 0 is a screen never drawn).
+    `      vec4 ${id}_pv = texture2D(${prev}, vUv);\n`,
+    `      float ${id}_m = dot(floor(${id}_pv.gba * 255.0 + 0.5), vec3(65536.0, 256.0, 1.0));\n`,
+    `      float ${id}_now = mod(time, 128.0);\n`,
+    `      float ${id}_span = ${id}_m > 0.5 ? mod(${id}_now - (${id}_m - 1.0) / 65536.0, 128.0) : 1e9;\n`,
+    `      float ${id}_P = max(${persist}, 0.0005);\n`,
+    `      float ${id}_w = max(${p(node.params.beamWidth, 0.004)}, 0.0001);\n`,
+    // How fast the waves turn (radians a second): the frame's stretch gets a piece per BEAM_TURN of it.
+    `      float ${id}_om = 6.28318 * (${freqs ? maxOf(freqs) : '1.0'} + abs(${damping}));\n`,
+    // A fresh screen (the first frame, time run backwards, a gap of over a second) starts with the
+    // last 4 × Persistence (at most a second, and no more than Segments pieces can keep a curve).
+    `      bool ${id}_fresh = ${id}_span > 1.0;\n`,
+    `      float ${id}_back = ${id}_fresh ? min(min(4.0 * ${id}_P, 1.0), ${freqs ? `${n}.0 * ${BEAM_TURN} / max(${id}_om, 0.001)` : '1.0'}) : ${id}_span;\n`,
+    // Damping: last frame's screen shrinks toward the curve's centre as the waves do (Live's trail shrinks the same way).
+    `      vec2 ${id}_c = vec2(${p(node.params.offX, 0)}, ${p(node.params.offY, 0)});\n`,
+    `      float ${id}_z = ${id}_fresh ? 1.0 : exp(-${damping} * 6.28318 * ${id}_span);\n`,
+    `      vec2 ${id}_src = ${id}_c + (g_uv - ${id}_c) / ${id}_z;\n`,
+    // ...and fades by exp(−dt / Persistence).
+    `      float ${id}_old = ${id}_fresh ? 0.0 : texture2D(${prev}, ${id}_src / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5).r * exp(-${id}_span / ${id}_P);\n`,
+    `      int ${id}_k = ${pieces};\n`,
+    `      float ${id}_dw = ${p(node.params.dwell, 1)} * 2.0 * (${id}_back / max(float(${id}_k), 1.0)) / ${id}_P;\n`,
+    `      float ${id}_ink = 0.0;\n`,
+    // One pass lays a full line (1) while the beam is slower than going once round its swing per
+    // Persistence; faster, each pass lays proportionally less (as a scope's faster sweep does), so a
+    // figure retraced many times within Persistence settles near 1 instead of piling up, and is
+    // brighter where the beam slows (the turns of a Lissajous).
+    `      float ${id}_vc = 6.28318 * ${reach ?? '1.0'} / ${id}_P;\n`,
+    `      float ${id}_T = time * 6.28318;\n`,
+    `      float t = ${id}_T - ${id}_back * 6.28318;\n`,
+    `      float ${id}_damp = exp(-${damping} * (${id}_T - t));\n`,
+    `      vec2 ${id}_a = ${point};\n`,
+    `      for (int ${id}_i = 1; ${id}_i <= ${n}; ${id}_i++) {\n`,
+    `        if (${id}_i > ${id}_k) break;\n`,
+    `        float ${id}_f = float(${id}_i) / float(${id}_k);\n`,
+    `        t = ${id}_T - ${id}_back * (1.0 - ${id}_f) * 6.28318;\n`,
+    `        ${id}_damp = exp(-${damping} * (${id}_T - t));\n`,
+    `        vec2 ${id}_b = ${point};\n`,
+    // Each piece fades by its own age (its middle), so a long stretch fades smoothly along its length.
+    `        float ${id}_age = ${id}_back * (1.0 - ${id}_f + 0.5 / float(${id}_k));\n`,
+    `        float ${id}_sw = min(1.0, ${id}_vc * ${id}_back / (float(${id}_k) * max(length(${id}_b - ${id}_a), 1e-9)));\n`,
+    `        ${id}_ink += ctBeamInk(${uv}, ${id}_a, ${id}_b, ${id}_w, ${p(node.params.glow, 0.3)}, ${id}_dw, ${id}_sw) * exp(-${id}_age / ${id}_P);\n`,
+    `        ${id}_a = ${id}_b;\n`,
+    `      }\n`,
+    `      float ${id}_q = floor(${id}_now * 65536.0) + 1.0;\n`,
+    `      ${id}_bc = vec3(${id}_old + ${id}_ink, floor(${id}_q / 65536.0) / 255.0, mod(floor(${id}_q / 256.0), 256.0) / 255.0);\n`,
+    `      ${id}_ba = mod(${id}_q, 256.0) / 255.0;\n`,
+    `    }\n`,
+  ].join('');
+}
+
+/** The node itself in Beam mode: reads its screen (the `__beam` texture) and measures the dot. */
+function beamViewCode(node: GraphNode, inputVars: Record<string, string>): { code: string; outputVars: Record<string, string> } {
+  const id = node.id;
+  const uv = inputVars.uv || 'g_uv';
+  const { point } = curvePoint(node, inputVars, ['X', 'Y']);
+  const screen = inputVars.__beam;
+  const code = [
+    `    // Curve Trace, Beam: the dot draws into its own fading screen (a Pass the compiler adds).\n`,
+    `    float ${id}_hd = 1e9;\n`,
+    `    {\n`,
+    `      float time = ${inputVars.time || 'u_time'};\n`,
+    `      float t = time * 6.28318;\n`,
+    `      float ${id}_damp = 1.0;\n`,
+    `      ${id}_hd = length(${uv} - ${point});\n`,
+    `    }\n`,
+    `    float ${id}_I = ${screen ? `texture2D(${screen}, vUv).r` : '0.0'};\n`,
+    `    vec3 ${id}_col = 1.0 - exp(-${p(node.params.brightness, 2)} * ${id}_I * ${pv3(node.params.beamColor, BEAM_DEFAULTS.beamColor)});\n`,
+    `    float ${id}_dist = ${id}_hd - ${p(node.params.thickness, 0.004)};\n`,
+  ].join('');
+  return { code, outputVars: { distance: `${id}_dist`, along: '1.0', head: `${id}_hd`, intensity: `${id}_I`, color: `${id}_col` } };
+}
+
+const BEAM_OUTPUTS: GraphNode['outputs'] = {
+  intensity: { type: 'float', label: 'Intensity', hint: 'Beam only: the screen\'s glow here, 0 where the beam never went, about 1 on a line it just drew; it adds up where the figure crosses itself and fades by Persistence.' },
+  color: { type: 'vec3', label: 'Colour', hint: 'Beam only: Intensity in the Beam colour, saturating toward white where it is bright (Brightness).' },
+};
+
+const SHAPES_NOTE ='Lissajous: X 3, Y 2, X phase 1.5708. A circle: X 1, Y 1, phase 1.5708. A harmonograph: X 2, Y 3, Damping 0.05, Turns 8. Rotary opposite ways, X 2, Y 3: a five-pointed star.';
 
 export const CurveTraceNode: NodeDefinition = {
   type: 'curveTrace', label: 'Curve Trace', category: '2D Primitives',
@@ -304,27 +494,53 @@ export const CurveTraceNode: NodeDefinition = {
   outputs: {
     distance: { type: 'float', label: 'Distance', hint: 'Distance to the curve minus Thickness: negative on the line. An SDF like any other.' },
     along: { type: 'float', label: 'Along', hint: 'Where on the curve the nearest point is: 0 at Start, 1 at End. Colour along the line with it (a Palette on Along).' },
-    head: { type: 'float', label: 'Head', hint: 'Distance to the end of the curve: in Live and Pen, the moving dot. Draw a bright dot with it (a glow on Head).' },
+    head: { type: 'float', label: 'Head', hint: 'Distance to the end of the curve: in Live, Pen and Beam, the moving dot. Draw a bright dot with it (a glow on Head).' },
+    ...BEAM_OUTPUTS,
   },
+  syncSockets: withNewOutputs(BEAM_OUTPUTS),
   defaultParams: {
     ...axisDefaults('X', { freq: 3, phase: 1.5708, amp: 0.4 }, 'sin(3.0 * t)'),
     ...axisDefaults('Y', { freq: 2, phase: 0, amp: 0.4 }, 'sin(2.0 * t)'),
     ...COMMON_DEFAULTS(0.004, 256),
+    ...BEAM_DEFAULTS,
   },
   paramDefs: {
     ...axisParams('X'),
     ...axisParams('Y'),
-    ...COMMON_PARAMS({ def: 0.004, max: 0.3 }, 256),
+    ...COMMON_PARAMS({ def: 0.004, max: 0.3 }, 256, true),
   },
   generateGLSL: (node, inputVars) => {
     const id = node.id;
+    if (node.params.draw === 'beam') return beamViewCode(node, inputVars);
     const uv = inputVars.uv || 'g_uv';
     const { code, along } = traceCode(node, inputVars, ['X', 'Y'], uv);
     return {
       code: `    // Curve Trace. ${SHAPES_NOTE}\n` + code + `    float ${id}_dist = ${id}_d - ${p(node.params.thickness, 0.004)};\n    float ${id}_along = ${along};\n`,
-      outputVars: { distance: `${id}_dist`, along: `${id}_along`, head: `${id}_hd` },
+      // Intensity and Colour belong to Beam: nothing in the other modes.
+      outputVars: { distance: `${id}_dist`, along: `${id}_along`, head: `${id}_hd`, intensity: '0.0', color: 'vec3(0.0)' },
     };
   },
+};
+
+/** One frame of a Beam screen: made by the compiler (compiler/curveBeamExpand.ts), never in a graph. */
+export const CurveBeamStepNode: NodeDefinition = {
+  type: 'curveTraceBeamStep',
+  label: 'Curve Trace beam step',
+  category: 'Output',
+  description: 'Internal: a Curve Trace Beam\'s screen, faded, with the stretch the dot covered since the last frame laid in.',
+  inputs: {
+    prev: { type: 'texture', label: 'Screen a frame ago' },
+    ...CurveTraceNode.inputs,
+  },
+  outputs: {
+    color: { type: 'vec3', label: 'Color' },
+    alpha: { type: 'float', label: 'Alpha' },
+  },
+  defaultParams: CurveTraceNode.defaultParams,
+  paramDefs: CurveTraceNode.paramDefs,
+  assignable: false,
+  glslFunction: CURVE_BEAM_GLSL,
+  generateGLSL: (node, inputVars) => ({ code: beamStepCode(node, inputVars), outputVars: { color: `${node.id}_bc`, alpha: `${node.id}_ba` } }),
 };
 
 export const CurveTrace3DNode: NodeDefinition = {

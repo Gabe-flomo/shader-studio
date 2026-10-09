@@ -200,7 +200,7 @@ export const TYPE_STAGE: Record<string, StageOf> = {
   agentDeposit: 'deposit', trailField: 'trail', drawAgents: 'draw',
   agentInputs: 'any', agentOutput: 'any', agentBySpecies: 'any',
   // Output: the hidden ends of passes keep their stage.
-  blurStage: 'rule', gridRulesStep: 'rule',
+  blurStage: 'rule', gridRulesStep: 'rule', curveTraceBeamStep: 'rule',
   // Interpolation that makes masks.
   smoothstep: 'any',
   // A picked colour is a constant (a tint fed anywhere), not a colouring step.

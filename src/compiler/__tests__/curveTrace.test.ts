@@ -77,3 +77,62 @@ describe('Curve Trace', () => {
     expect(custom.fragmentShader).not.toMatch(/_far < /);
   });
 });
+
+describe('Curve Trace: Beam', () => {
+  const beam = (params: Record<string, unknown> = {}, extra: Record<string, [string, string]> = {}) => compileGraph({ nodes: [
+    n('time', 'tm', -400, 0, {}),
+    n('curveTrace', 'c', 0, 0, { draw: 'beam', freqX: 3, freqY: 2, ...params }, extra),
+    n('output', 'out', 800, 0, {}, { color: ['c', 'color'] }),
+  ] });
+
+  it('draws into a screen Pass of its own, read by the node', () => {
+    const r = beam();
+    expect(r.errors ?? []).toEqual([]);
+    expect(r.passes?.length).toBe(1);
+    const screen = r.passes![0];
+    // The step: fades its own Previous and lays in the frame's stretch
+    expect(screen.fragmentShader).toMatch(/texture2D\(u_passprev_\w+, vUv\)/);
+    expect(screen.fragmentShader).toMatch(/ctBeamInk\(/);
+    expect(screen.nodeIds).toEqual(expect.arrayContaining(['c__beamstep', 'c']));
+    // The node: reads the screen; no per-pixel loop over the trail in the picture
+    expect(r.fragmentShader).toMatch(new RegExp(`texture2D\\(u_pass_${screen.slug}, vUv\\)\\.r`));
+    expect(r.fragmentShader).not.toMatch(/ctBeamInk|_reach = |sqrt\(\w+_d\)/);
+  });
+
+  it('costs the same whatever the Persistence: the loop is bounded by Segments, not the trail', () => {
+    const a = beam({ persistence: 0.05 }).passes![0].fragmentShader;
+    const b = beam({ persistence: 3 }).passes![0].fragmentShader;
+    expect(a).toBe(b);
+    expect(beam({ segments: 64 }).passes![0].fragmentShader).toMatch(/_i <= 64;/);
+  });
+
+  it('keeps its own clock (only u_time): recordings at any frame rate step it the same way', () => {
+    const fs = beam().passes![0].fragmentShader;
+    expect(fs).not.toMatch(/u_dt\b|u_frame\b|u_prevTime/);
+    // The time it was drawn is written into the screen (green, blue, alpha) and read back
+    expect(fs).toMatch(/\.gba \* 255\.0/);
+  });
+
+  it('its sliders drive the step without a recompile (bound to the node)', () => {
+    const r = beam();
+    for (const k of ['glow', 'beamWidth', 'dwell', 'persistence', 'freqX', 'brightness']) expect(Object.keys(r.paramBindings ?? {})).toContain(`c::${k}`);
+  });
+
+  it('wires into the node drive the step too, and every motion and wave compiles', () => {
+    const wired = beam({}, { time: ['tm', 'time'] });
+    expect(wired.errors ?? []).toEqual([]);
+    for (const p of [{ mode: 'rotary' }, { mode: 'counter', morphOn: true }, { waveX: 'square' }, { waveX: 'custom', exprX: 'sin(3.0 * t)' }, { damping: 0.05 }, { beamScale: '0.5' }]) {
+      const r = beam(p);
+      expect(r.errors ?? [], JSON.stringify(p)).toEqual([]);
+    }
+    expect(beam({ beamScale: '0.5' }).passes![0].scale).toBe(0.5);
+    // A Custom axis has no frequency: it takes Segments pieces a frame
+    expect(beam({ waveX: 'custom', exprX: 'sin(3.0 * t)', segments: 32 }).passes![0].fragmentShader).toMatch(/_back > 0\.0 \? 32 : 0/);
+  });
+
+  it('other Draw modes are unchanged and add no pass; 3D has no Beam', () => {
+    expect(flat({ draw: 'live' }).passes ?? []).toEqual([]);
+    const opts = (getNodeDefinition('curveTrace3D')!.paramDefs!.draw as { options: Array<{ value: string }> }).options.map(o => o.value);
+    expect(opts).not.toContain('beam');
+  });
+});
