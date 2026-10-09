@@ -19,7 +19,6 @@ import { TransferPlotView } from './TransferPlotView';
 import { ExplainMore } from './ExplainMore';
 import { BuildUpView } from './BuildUpView';
 import type { BuildUpHost } from './buildUpHost';
-import { explainModelUsable, useExplainModel } from '../../explainModel/client';
 
 export interface ExplainViewProps {
   ex: Explanation | LineExplanation;
@@ -34,8 +33,8 @@ export interface ExplainViewProps {
    */
   onShowPicture?: () => void;
   /**
-   * Offer "Explain more" (the optional on-device language model, docs/explain-model.md) for this line: its names'
-   * types, and where it is. Absent: no such action here.
+   * Offer "Explain" (the on-device language model, docs/explain-model.md) for this line: its names' types, and where
+   * it is. Absent: no such action here (the Expression Block's rows put their own Explain beside the line).
    */
   explainMore?: { ctx?: ExplainContext; where?: string };
   /** Where the line lives (an Expression Block): wiring-aware pictures and step-through on the ▶ preview. */
@@ -105,8 +104,6 @@ export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPictur
     return out;
   }, [open, ex, vars]);
   const idioms = useMemo(() => new Map(ex.steps.flatMap(s => (s.idiom ? [[s.label, s.idiom] as const] : []))), [ex.steps]);
-  const autoSteps = useExplainModel(m => m.autoSteps && explainModelUsable(m));
-  const stepInfo = useMemo(() => ex.steps.map(s => ({ label: s.label, code: s.code, reading: s.text })), [ex.steps]);
   const inputs = rows.filter(r => r.kind === 'input').length;
 
   // Selecting a row shows it on the big preview (the host's ▶ probe); none: the whole line again
@@ -147,9 +144,6 @@ export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPictur
         <BuildUpView rows={rows} vars={vars} ranges={ranges} host={buildUp} activeVar={hoverVar}
           onHoverSpan={setHover} onHoverVar={setHoverVar} selected={selRow?.key ?? null} onSelect={select}
           canMake={canMake} onMakeNode={onMakeNode} onFindUses={onFindUses} idioms={idioms} focusSignal={focusSignal} />
-      )}
-      {open && explainMore && ex.steps.length > 1 && (
-        <ExplainMore key={`steps:${src}`} mode="steps" text={src} steps={stepInfo} ctx={explainMore.ctx} where={explainMore.where} auto={autoSteps} />
       )}
       {(canMake(rootSpan) || (rootIdiom && onFindUses)) && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>

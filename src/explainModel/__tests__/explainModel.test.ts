@@ -18,7 +18,6 @@ import { AnswerCache, answerKey, hashText } from '../cache';
 import { EXPLAIN_MODEL, MAX_TOKENS, blockTokens, downloadBytes, formatBytes } from '../config';
 import {
   SYSTEM_PROMPT, buildExplainPrompt, colourWords, factLines, gatherFacts, lineNumberOf, neighboursOf, nodeContextFor, promptForBlock, promptForLine, noFacts,
-  type NodeContext,
 } from '../prompt';
 import { describeInputs, type NodeDescriber } from '../inputs';
 import { functionSource, statementAt } from '../fnSource';
@@ -52,7 +51,7 @@ describe('neighbours from the graph', () => {
   it('lists what feeds the node and what it feeds, by node TYPE name (never the user’s label)', () => {
     const n = neighboursOf(fixture(), 'glow', namer);
     expect(n.upstream).toEqual([{ name: 'Distance', type: 'length', socket: 'd' }]);
-    expect(n.downstream).toEqual([{ name: 'Output', type: 'output', socket: 'result' }]);
+    expect(n.downstream).toEqual([{ name: 'Output', type: 'output', socket: 'result', input: 'color' }]);
   });
 
   it('is empty for a node nobody wires', () => {
@@ -69,14 +68,17 @@ describe('neighbours from the graph', () => {
   });
 });
 
-describe('facts our rule-based explainer already knows', () => {
-  it('names the idiom, the function, the types and the rule-based reading of a line', () => {
-    const f = gatherFacts('float g = exp(-d * 4.0)', { types: { d: 'float' } });
+describe('facts: looked up, never the rule-based readings', () => {
+  it('says what each function does, and nothing of the rule-based reading, idioms or steps', () => {
+    const f = gatherFacts('float g = exp(-d * 4.0)');
     const all = factLines(f).join('\n');
-    expect(f.reading).toBeTruthy();
-    expect(all).toMatch(/Exponential glow/i);
     expect(all).toMatch(/Function exp: gives/);
-    expect(all).toMatch(/Types: d: float/);
+    expect(all).not.toMatch(/Exponential glow|Idiom|reading|First|Then/i);
+    expect(Object.keys(f).sort()).toEqual(['colours', 'functions', 'measured', 'names', 'trace']);
+  });
+
+  it('leaves out constructors (vec3(…) only builds a value)', () => {
+    expect(gatherFacts('vec3 c = vec3(1.0, 0.8, 0.55) * g').functions).toEqual([]);
   });
 
   it('says what the global names mean (time, resolution, uv)', () => {
@@ -93,18 +95,6 @@ describe('facts our rule-based explainer already knows', () => {
     expect(colourWords(0.5, 0.5, 0.5)).toBe('a mid grey');
     expect(gatherFacts('vec3 c = vec3(1.0, 0.8, 0.55) * g').colours[0]).toMatch(/is the colour a light warm orange/);
   });
-
-  it('uses a technique only when it was found in this very line', () => {
-    const node: NodeContext = {
-      kind: 'Expression Block', upstream: [], downstream: [],
-      techniques: [
-        { name: 'Exponential falloff', explain: 'Brightness halves every fixed step away.', lines: ['float g = exp(-d * 4.0)'] },
-        { name: 'Mix by a mask', explain: 'Blend two colours.', lines: ['vec3 c = mix(a, b, m)'] },
-      ],
-    };
-    const f = gatherFacts('float  g = exp(-d * 4.0)', { types: { d: 'float' } }, node);
-    expect(f.techniques).toEqual(['Exponential falloff: Brightness halves every fixed step away.']);
-  });
 });
 
 describe('the prompt: code only, inputs by type, no user labels', () => {
@@ -120,36 +110,96 @@ describe('the prompt: code only, inputs by type, no user labels', () => {
     expect(p.messages[0]).toEqual({ role: 'system', content: SYSTEM_PROMPT });
     expect(user.role).toBe('user');
     expect(user.content).toContain('Kind: Expression Block');
-    expect(user.content).toContain('- d: float, from Length (output Output): distance from the origin of a vector');
+    expect(user.content).toContain('- d: float, from a Length node (float): distance from the origin of a vector');
     expect(user.content).toContain('- t: float, built in: time in seconds');
+    expect(user.content).toContain("The block's result feeds: the color input of an Output node");
     expect(user.content).toContain('Code:\n1: float g = exp(-d * 4.0)\n2: vec3 c = vec3(1.0, 0.8, 0.55) * g');
     expect(user.content).not.toContain('return c'); // later lines are not offered: they invite guessing
     expect(user.content).toContain('FACTS about line 2');
+    expect(user.content).toContain('- Built from: g: made on line 1 (float g = exp(-d * 4.0)), from the input d (a Length node)');
     expect(user.content).toMatch(/Colour: vec3\(1\.0, 0\.8, 0\.55\) is the colour a light warm orange/);
+    expect(user.content).toMatch(/- Measured: line 1, g: [\d.]+ at the sample pixel; across the picture [\d.]+\.\.[\d.]+/);
+    expect(user.content).toMatch(/- Measured: line 2, c: \([\d., ]+\) at the sample pixel; across the picture x /);
     expect(user.content).toContain('Explain line 2 only.');
     expect(p.lineNo).toBe(2);
     expect(p.used.some(u => u.startsWith('Input d: float'))).toBe(true);
     expect(p.maxTokens).toBe(MAX_TOKENS.line);
   });
 
-  it('never contains a node label, a title or a neighbour’s name, anywhere in any message', () => {
+  it('never contains a node label, a title or a neighbour’s label, anywhere in any message', () => {
     const labelled = nodes.map(n => ({ ...n, params: { ...n.params, label: n.id === 'glow' ? 'MOONLIGHT glow' : 'SKYLINE source', title: 'MOONLIGHT title' } }));
     const scope = { nodeId: 'glow', nodes: labelled, namer, describe: describe_, enclosing };
     for (const p of [promptForLine('float g = exp(-d * 4.0)', scope), promptForBlock(enclosing, scope)]) {
       const all = JSON.stringify(p.messages) + p.context + p.used.join('\n');
       expect(all).not.toMatch(/MOONLIGHT|SKYLINE/);
-      expect(all).not.toContain('Fed by');
-      expect(all).not.toContain('Feeds');
       expect(all).not.toContain('Technique');
+      // What it feeds is there, by node type
+      expect(all).toContain('an Output node');
+    }
+  });
+
+  it('never carries the rule-based readings, idioms or steps', () => {
+    const scope = { nodeId: 'glow', nodes, namer, describe: describe_, enclosing };
+    for (const p of [promptForLine('float g = exp(-d * 4.0)', scope), promptForLine('vec3 c = vec3(1.0, 0.8, 0.55) * g', scope), promptForBlock(enclosing, scope)]) {
+      const all = JSON.stringify(p.messages) + p.context + p.used.join('\n');
+      expect(all).not.toMatch(/rule-based|Idiom|literally|Exponential glow|usually used for|reading of/i);
     }
   });
 
   it('describes inputs by the upstream node TYPE and its output, not by what a person called it', () => {
     const labelled = nodes.map(n => (n.id === 'dist' ? { ...n, params: { label: 'Cloud height' } } : n));
     const [d, t] = describeInputs(labelled, 'glow', describe_);
-    expect(d.text).toBe('d: float, from Length (output Output): distance from the origin of a vector (0 or more)');
+    expect(d.text).toBe('d: float, from a Length node (float): distance from the origin of a vector (0 or more)');
     expect(d.text).not.toContain('Cloud');
+    expect(d.source).toBe('a Length node');
     expect(t.name).toBe('t');
+  });
+
+  it('traces a normal, a colour constant and earlier lines back to their sources', () => {
+    const g: GraphNode[] = [
+      node('march', 'marchLoop', { outputs: { normal: { type: 'vec3', label: 'Normal' }, dist: { type: 'float', label: 'Dist' } }, params: { label: 'MY SCENE' } }),
+      node('col', 'colorPicker', { params: { color: [0.8, 0.45, 0.25], label: 'Sunset' } }),
+      node('b', 'exprNode', {
+        inputs: {
+          n: { type: 'vec3', label: 'n', connection: { nodeId: 'march', outputKey: 'normal' } },
+          warm: { type: 'vec3', label: 'warm', connection: { nodeId: 'col', outputKey: 'rgb' } },
+        },
+        params: { inputs: [{ name: 'n', type: 'vec3', slider: null }, { name: 'warm', type: 'vec3', slider: null }] },
+      }),
+      node('o', 'output', { inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'b', outputKey: 'result' } } } }),
+    ];
+    const describe2: NodeDescriber = t => ({
+      marchLoop: { label: 'March Loop', outputs: { normal: 'Normal', dist: 'Dist' }, outputTypes: { normal: 'vec3', dist: 'float' }, outputHints: { normal: 'The direction the surface faces where the ray hit.' } },
+      colorPicker: { label: 'Color', outputs: { rgb: 'Color', r: 'R' } },
+      output: { label: 'Output', inputs: { color: 'Color' } },
+    } as Record<string, ReturnType<NodeDescriber>>)[t];
+    const namer2 = (t: string) => ({ marchLoop: 'March Loop', colorPicker: 'Color', output: 'Output', exprNode: 'Expression Block' } as Record<string, string>)[t];
+    const code = 'float sky = 0.5 + 0.5 * n.y\nvec3 col = mix(warm, vec3(0.4, 0.6, 1.0), sky)\nreturn col';
+    const p = promptForLine('vec3 col = mix(warm, vec3(0.4, 0.6, 1.0), sky)', { nodeId: 'b', nodes: g, namer: namer2, describe: describe2, enclosing: code });
+    const user = p.messages[p.messages.length - 1].content;
+    expect(user).toContain('- n: vec3, from the Normal output of a March Loop node (vec3, unit length): The direction the surface faces where the ray hit');
+    expect(user).toContain('- warm: vec3, from a Color node: the fixed value (0.8, 0.45, 0.25), the colour a mid warm orange');
+    expect(user).toContain('- Built from: sky: made on line 1 (float sky = 0.5 + 0.5 * n.y), from the input n (the Normal output of a March Loop node)');
+    expect(user).toContain("The block's result feeds: the Color input of an Output node");
+    // n is drawn as unit-length directions, so sky = 0.5 + 0.5 * n.y stays in 0..1
+    const sky = /Measured: line 1, sky: ([\d.]+) at the sample pixel; across the picture ([\d.]+)\.\.([\d.]+)/.exec(user)!;
+    expect(Number(sky[2])).toBeGreaterThanOrEqual(0);
+    expect(Number(sky[3])).toBeLessThanOrEqual(1);
+    expect(user).toContain('n = (0.3, 0.8, 0.52) at the sample pixel, drawn over random unit-length directions');
+    expect(user).toContain('warm = (0.8, 0.45, 0.25) (fixed)');
+    expect(user).not.toMatch(/MY SCENE|Sunset/);
+  });
+
+  it('says when a measurement rests on a guessed range, and never calls it "the same everywhere"', () => {
+    const g: GraphNode[] = [
+      node('src', 'mystery', { outputs: { out: { type: 'float', label: 'Out' } } }),
+      node('b', 'exprNode', { inputs: { k: { type: 'float', label: 'k', connection: { nodeId: 'src', outputKey: 'out' } } }, params: { inputs: [{ name: 'k', type: 'float', slider: null }] } }),
+    ];
+    const p = promptForLine('float m = step(5.0, k)', { nodeId: 'b', nodes: g, enclosing: 'float m = step(5.0, k)' });
+    const user = p.messages[p.messages.length - 1].content;
+    expect(user).toContain('no change over the guessed range (a guess: k assumed to run 0..1)');
+    expect(user).not.toContain('the same everywhere');
+    expect(user).toContain('(assumed: nothing says its range)');
   });
 
   it('knows what the common sources give, with their ranges', () => {
@@ -173,13 +223,16 @@ describe('the prompt: code only, inputs by type, no user labels', () => {
         ] },
       }),
     ];
-    const byName = Object.fromEntries(describeInputs(g, 'b', t => ({ label: { uv: 'UV', time: 'Time', fbm: 'Fractal Noise (FBM)' }[t as string] ?? t })).map(i => [i.name, i]));
-    expect(byName.uv.text).toMatch(/^uv: vec2, from UV: pixel position, centred: \(0,0\) is the middle of the picture, x and y run about -1\.\.1/);
-    expect(byName.t.text).toMatch(/^t: float, from Time: time in seconds/);
-    expect(byName.h.text).toMatch(/^h: float, from Fractal Noise \(FBM\): smooth noise value, range 0\.\.1/);
-    expect(byName.k.text).toBe('k: float, a constant, value 0.25');
-    expect(byName.s.text).toBe('s: float, a slider on the node, range 0..5');
-    expect(byName.s.numbers).toEqual([0, 5]);
+    const byName = Object.fromEntries(describeInputs(g, 'b', t => ({ label: { uv: 'UV', time: 'Time', fbm: 'Fractal Noise (FBM)', constant: 'Constant' }[t as string] ?? t })).map(i => [i.name, i]));
+    expect(byName.uv.text).toMatch(/^uv: vec2, from a UV node \(vec2\): pixel position, centred: \(0,0\) is the middle of the picture, x and y run about -1\.\.1/);
+    expect(byName.uv.sample).toMatchObject({ value: [0.3, 0.2], range: [-1, 1] });
+    expect(byName.t.text).toMatch(/^t: float, from a Time node: time in seconds/);
+    expect(byName.t.sample).toMatchObject({ value: 2, range: [0, 10] });
+    expect(byName.h.text).toMatch(/^h: float, from a Fractal Noise \(FBM\) node: smooth noise value, range 0\.\.1/);
+    expect(byName.k.text).toBe('k: float, from a Constant node: the fixed value 0.25');
+    expect(byName.k.sample).toMatchObject({ value: 0.25, range: [0.25, 0.25] });
+    expect(byName.s.text).toBe('s: float, a slider on the node, range 0..5, now 2.5');
+    expect(byName.s.numbers).toEqual([0, 5, 2.5]);
     expect(byName.z.text).toMatch(/not connected/);
   });
 
@@ -220,15 +273,18 @@ describe('the prompt: code only, inputs by type, no user labels', () => {
     expect(lineNumberOf('x = 1', undefined)).toBe(1);
   });
 
-  it('a block asks for a summary and one JSON object per line, each line numbered', () => {
+  it('a block asks for one JSON object per line, then the summary of the whole block last', () => {
     const p = promptForBlock(enclosing, { nodeId: 'glow', nodes, namer, describe: describe_ });
     const user = p.messages[1].content;
-    expect(p.messages[0].content).toMatch(/JSON objects, one per line/);
+    expect(p.messages[0].content).toMatch(/First one object for each code line, in order/);
+    expect(p.messages[0].content).toMatch(/Then, last, \{"summary": "<two short sentences: what the whole block is for/);
     expect(user).toContain('1: float g = exp(-d * 4.0)');
     expect(user).toContain('3: return c');
-    expect(user).toContain('one object for each of lines 1 to 3');
-    expect(user).toContain('Rule-based reading of each statement');
-    expect(user).toContain('- d: float, from Length');
+    expect(user).toContain('one object for each of lines 1 to 3, one per row, then the summary object last');
+    expect(user).toContain('- d: float, from a Length node');
+    expect(user).toContain('- Line 2: built from g: made on line 1');
+    expect(user).toMatch(/- Line 3: measured the result: \(/);
+    expect(user).not.toMatch(/rule-based/i);
     expect(p.maxTokens).toBe(blockTokens(3));
     expect(p.maxTokens).toBeLessThanOrEqual(MAX_TOKENS.block);
   });

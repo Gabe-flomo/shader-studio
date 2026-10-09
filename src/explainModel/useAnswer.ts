@@ -1,5 +1,5 @@
 /**
- * useAnswer.ts — one "Explain more" button's life: idle → (offer the download) → working (streaming) →
+ * useAnswer.ts — one Explain button's life: idle → (offer the download) → working (streaming) →
  * done / failed. Shared by the line action, the block action and the function card. Also the two on-demand extras:
  * the double-check (ask twice more, compare) and Compare models (the same prompt on every downloaded model).
  */

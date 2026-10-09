@@ -154,7 +154,7 @@ function FnBody({ model, req }: { model: FunctionCardModel; req: FunctionCardReq
   );
 }
 
-/** "Explain more" in a card: a user's function as a whole, else the statement the clicked call is in. */
+/** Explain in a card: a user's function as a whole, else the statement the clicked call is in. */
 function CardExplainMore({ model, req }: { model: FunctionCardModel; req: FunctionCardRequest }) {
   const all = [req.code, req.scope.source].filter(Boolean).join('\n');
   const scope = useMemo(() => ({ kind: 'GLSL code', enclosing: () => req.code }), [req.code]);

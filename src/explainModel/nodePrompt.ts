@@ -7,7 +7,7 @@
  */
 import type { GraphNode } from '../types/nodeGraph';
 import { STAGES, stageOfType } from '../structure/stages';
-import { gatherFacts, nodeContextFor, type BuiltPrompt, type NodeNamer } from './prompt';
+import { nodeContextFor, type BuiltPrompt, type NodeNamer } from './prompt';
 
 /** What the node registry says about a node type (passed in, so this file stays free of the registry). */
 export interface NodeDefInfo {
@@ -73,9 +73,7 @@ export function promptForNode(node: GraphNode, nodes: readonly GraphNode[], def:
   const code = nodeCode(node).trim();
   let body = `FACTS:\n${facts.map(f => `- ${f}`).join('\n')}`;
   if (code) {
-    const last = code.split('\n').pop() ?? '';
-    const reading = gatherFacts(last).reading;
-    body += `\n\nIts code:\n${code.length > 900 ? `${code.slice(0, 900)}\n…` : code}${reading ? `\n(Rule-based reading of the last line: ${reading})` : ''}`;
+    body += `\n\nIts code:\n${code.length > 900 ? `${code.slice(0, 900)}\n…` : code}`;
   }
   return {
     messages: [{ role: 'system', content: NODE_SYSTEM_PROMPT }, { role: 'user', content: `${body}\n\nExplain this node.` }],

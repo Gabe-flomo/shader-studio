@@ -17,7 +17,8 @@
     "release:sync": "node tools/release-version.mjs",
     "docs:do-bar": "WRITE_DOCS=1 vitest run src/suggestions/__tests__/doCommands.test.ts -t docs",
     "docs:language": "WRITE_DOCS=1 vitest run src/lang/__tests__/reference.test.ts",
-    "report:language": "WRITE_REPORT=1 vitest run src/lang/__tests__/languagePressure.test.ts"
+    "report:language": "WRITE_REPORT=1 vitest run src/lang/__tests__/languagePressure.test.ts",
+    "report:explain-prompts": "WRITE_REPORT=1 vitest run src/explainModel/__tests__/promptReport.test.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",

@@ -1,5 +1,5 @@
 /**
- * ExplainScope — what a place that explains code tells "Explain more" about its surroundings (docs/explain-model.md):
+ * ExplainScope — what a place that explains code tells Explain about its surroundings (docs/explain-model.md):
  * the node the code belongs to (for its neighbours and the techniques found on it), the whole enclosing code, and
  * words for where it is. A place that provides nothing still works: the model just gets less to go on.
  */

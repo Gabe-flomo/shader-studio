@@ -163,6 +163,14 @@ describe('the grounding check', () => {
     expect(invented).toContainEqual(expect.objectContaining({ kind: 'colour', contradiction: false }));
   });
 
+  it('lets an answer give a value the line was measured to take, but not one outside its measured range', () => {
+    const measured = ctx({ ranges: [[[-6, 6]], [[-1, 1]], null] });
+    expect(groundingCheck({ line: 2, what: 'A wave that is about 0.7 here.', effect: '' }, measured, 2).filter(x => x.kind === 'number')).toEqual([]);
+    expect(groundingCheck({ line: 2, what: 'A wave that reaches 4.5.', effect: '' }, measured, 2).some(x => x.kind === 'number')).toBe(true);
+    // The measured numbers written in the facts count too
+    expect(groundingCheck({ line: 3, what: 'It is 0.823 at the sample pixel.', effect: '' }, ctx({ factsText: 'Measured: line 3, c: 0.823 at the sample pixel' }), 3).filter(x => x.kind === 'number')).toEqual([]);
+  });
+
   it('flags an answer about a different line than the one asked', () => {
     expect(groundingCheck({ line: 3, what: 'x', effect: 'y' }, ctx(), 2)).toContainEqual(expect.objectContaining({ kind: 'line' }));
   });

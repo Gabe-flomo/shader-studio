@@ -70,6 +70,11 @@ export interface GroundingContext {
   factsText: string;
   /** Colour facts: "vec3(1.0, 0.8, 0.55) is the colour a light warm orange (red, green, blue)". */
   colourFacts: string[];
+  /**
+   * Each code line's measured spread across the picture, one [min, max] per component (null: not measured), so an
+   * answer may give a value the line really takes ("about 0.5") without it counting as invented.
+   */
+  ranges?: Array<Array<[number, number]> | null>;
 }
 
 export interface GroundingIssue {
@@ -142,11 +147,15 @@ export function groundingCheck(item: Pick<ExplainItem, 'line' | 'what' | 'effect
     }
   }
 
-  // 3. Numbers: every number said must be in the code, an input's range, or a free small one
+  // 3. Numbers: every number said must be in the code, the inputs, the facts (measured numbers included), a free
+  //    small one, or a value the line was measured to take across the picture
   const allowed = [...codeNumbers(g.code), ...codeNumbers(g.inputText), ...g.inputs.flatMap(i => i.numbers), ...codeNumbers(g.factsText), ...FREE_NUMBERS];
+  const lineIdx = item.line ?? askedLine;
+  const spread = lineIdx !== undefined ? g.ranges?.[lineIdx - 1] ?? null : null;
+  const inSpread = (n: number) => !!spread?.some(([lo, hi]) => n >= lo - 1e-6 && n <= hi + 1e-6);
   const strangers: number[] = [];
   const nums = (said.match(numberRe) ?? []).map(Number);
-  for (const n of nums) if (!allowed.some(a => near(a, n) || near(-a, n))) strangers.push(n);
+  for (const n of nums) if (!allowed.some(a => near(a, n) || near(-a, n)) && !inSpread(n)) strangers.push(n);
   if (strangers.length) issues.push({ kind: 'number', detail: `says ${[...new Set(strangers)].slice(0, 3).join(', ')}, which is not in the code or its inputs`, contradiction: false });
 
   // 4. Colours: a named colour must be the one the facts name (or one the code names)

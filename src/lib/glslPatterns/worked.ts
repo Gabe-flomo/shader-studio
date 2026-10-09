@@ -15,6 +15,7 @@ import { allNodes } from './ast';
 import { evaluate, type EvalEnv, type Value } from './evaluate';
 import { NAMED_CONSTANTS } from './match';
 import type { Explanation, LineExplanation } from './explain';
+import { parseLine, type ParsedLine } from './parse';
 
 export interface WorkedVar {
   name: string;
@@ -139,4 +140,117 @@ export function showValue(v: Value): string {
   };
   const f = flatOf(v);
   return f.length === 1 ? one(f[0]) : `(${f.map(one).join(', ')})`;
+}
+
+// ── A whole block, measured ───────────────────────────────────────────────────
+
+/** How one input of a block is drawn: a fixed value, a range, or a random unit-length direction. */
+export interface BlockInput {
+  name: string;
+  /** 'float', 'vec2', 'vec3', 'vec4'. */
+  type: string;
+  /** The value at the sample pixel. */
+  value: Value;
+  /** Where it runs across the picture, per component. Equal ends: it does not change. */
+  range: [number, number];
+  /** A direction: drawn as a random unit-length vector (a surface normal, a ray direction). */
+  unit?: boolean;
+  /** It does not change across the picture: always `value`. */
+  fixed?: boolean;
+}
+
+export interface BlockLineNumbers {
+  /** The variable the line writes (`d`; `p` for `p.xy`); undefined for `return` and bare expressions. */
+  target?: string;
+  /** Its value at the sample pixel (the whole variable after the line ran); null when it can't be computed here. */
+  value: Value | null;
+  /** Its spread across the picture, one [min, max] per component; null when unknown. */
+  ranges: Array<[number, number]> | null;
+}
+
+const SWZ_ALL = 'xyzwrgbastpq';
+
+/** Write `v` into `target` (`d`, `p.xy`, with `+=` and friends); the variable's new value, or null when it can't. */
+function assign(env: EvalEnv, target: string, op: string | undefined, v: Value): Value | null {
+  const [base, field] = target.split('.');
+  const old = env[base];
+  const combine = (a: number, b: number) => (op === '+=' ? a + b : op === '-=' ? a - b : op === '*=' ? a * b : op === '/=' ? a / b : b);
+  if (!field) {
+    if (!op || op === '=') { env[base] = v; return v; }
+    if (old === undefined) return null;
+    const next: Value = Array.isArray(old)
+      ? old.map((x, i) => combine(x, Array.isArray(v) ? v[i] ?? 0 : v))
+      : combine(old, Array.isArray(v) ? v[0] : v);
+    env[base] = next;
+    return next;
+  }
+  if (!Array.isArray(old)) return null;
+  const next = [...old];
+  const vals = Array.isArray(v) ? v : Array(field.length).fill(v);
+  for (let i = 0; i < field.length; i++) {
+    const k = SWZ_ALL.indexOf(field[i]) % 4;
+    if (k < 0 || k >= next.length) return null;
+    next[k] = combine(next[k], vals[i] ?? 0);
+  }
+  env[base] = next;
+  return next;
+}
+
+/** Run the statements once in `env` (changed in place): each line's result, or null where the CPU can't. */
+function runBlock(lines: readonly ParsedLine[], env: EvalEnv): Array<Value | null> {
+  return lines.map(l => {
+    const v = tryEval(l.expr, env);
+    const base = l.target?.split('.')[0];
+    if (v === null) { if (base) delete env[base]; return null; }
+    if (!l.target) return v;
+    const out = assign(env, l.target, l.op, v);
+    if (out === null || !flatOf(out).every(Number.isFinite)) { if (base) delete env[base]; return null; }
+    return out;
+  });
+}
+
+/** A random unit-length vector of `n` components. */
+function unitVec(n: number, draw: () => number): number[] {
+  for (let tries = 0; tries < 100; tries++) {
+    const v = Array.from({ length: n }, () => draw() * 2 - 1);
+    const l = Math.hypot(...v);
+    if (l > 1e-3 && l <= 1) return v.map(x => x / l);
+  }
+  return [0, 1, 0, 0].slice(0, n);
+}
+
+/**
+ * Every line of a block measured on the CPU: once at the sample pixel (the inputs' `value`s), and many times with the
+ * inputs drawn over their ranges (deterministic), each line's result carried into the lines after it. A line the
+ * evaluator can't do (a texture read, a user function) has no numbers, and neither has anything built from it.
+ */
+export function workedBlock(statements: readonly string[], inputs: readonly BlockInput[], samples = 200): BlockLineNumbers[] {
+  const parsed = statements.map(s => parseLine(s));
+  const lines = parsed.flatMap(p => (p.ok ? [p.line] : []));
+  const draw = rng(0x2545f491);
+  const start = (pick: (i: BlockInput) => Value): EvalEnv => Object.fromEntries(inputs.map(i => [i.name, pick(i)]));
+  const at = runBlock(lines, start(i => i.value));
+  const spread: Array<Array<[number, number]> | null> = lines.map(() => null);
+  for (let s = 0; s < samples; s++) {
+    const env = start(i => {
+      if (i.fixed) return i.value;
+      const n = dims(i.type);
+      if (i.unit && n > 1) return unitVec(n, draw);
+      const one = () => i.range[0] + (i.range[1] - i.range[0]) * draw();
+      return n === 1 ? one() : Array.from({ length: n }, one);
+    });
+    runBlock(lines, env).forEach((v, k) => {
+      if (v === null) return;
+      const f = flatOf(v);
+      const r = spread[k] ?? (spread[k] = f.map(x => [x, x] as [number, number]));
+      f.forEach((x, c) => { if (r[c]) { r[c][0] = Math.min(r[c][0], x); r[c][1] = Math.max(r[c][1], x); } });
+    });
+  }
+  // One entry per statement (one that does not parse has no numbers)
+  let k = 0;
+  return parsed.map(p => {
+    if (!p.ok) return { value: null, ranges: null };
+    const i = k++;
+    return { target: p.line.target?.split('.')[0], value: at[i], ranges: spread[i] };
+  });
 }

@@ -1,6 +1,6 @@
 /**
  * Explanation models in App settings (docs/explain-model.md): the optional on-device language models behind
- * "Explain more". A list: each model with its size, licence, whether it thinks first, a download / remove button,
+ * Explain. A list: each model with its size, licence, whether it thinks first, a download / remove button,
  * its status, and a radio for "use this one". Several can be downloaded; the active one is remembered; only one is
  * in memory at a time. Nothing downloads until a button is pressed; nothing is sent anywhere once it has.
  */
@@ -11,7 +11,7 @@ import { Button } from '../ui/Button';
 import { Toggle } from '../ui/Choice';
 import { askConfirm } from '../ui/dialogStore';
 import { EXPLAIN_MODELS, LARGE_MODEL_BYTES, downloadBytes, formatBytes, type ExplainModelSpec } from '../../explainModel/config';
-import { downloadExplainModel, ensureExplainModel, removeExplainModel, selectExplainModel, setExplainModelEnabled, setExplainStepsWithModel, useExplainModel } from '../../explainModel/client';
+import { downloadExplainModel, ensureExplainModel, removeExplainModel, selectExplainModel, setExplainModelEnabled, useExplainModel } from '../../explainModel/client';
 import { cardStyle } from './fileUiShared';
 
 function Pill({ children, tone = 'muted', title }: { children: ReactNode; tone?: 'muted' | 'good' | 'bad' | 'accent' | 'warn'; title?: string }) {
@@ -39,7 +39,7 @@ function ModelRow({ m, last }: { m: ExplainModelSpec; last: boolean }) {
   };
   const download = async () => {
     if (big) {
-      const ok = await askConfirm(`Download ${m.name} (${size})?`, { message: 'This is a large model for a browser. It needs a lot of memory while it runs, and a computer with a good graphics card (WebGPU). If the page slows down or the model fails to load, remove it and use a smaller one.', confirmLabel: `Download ${size}` });
+      const ok = await askConfirm(`Download ${m.name} (${size})?`, { message: `This is a large model for a browser. ${m.memory ?? 'It needs a lot of memory while it runs, and a computer with a good graphics card (WebGPU).'} If the page slows down or the model fails to load, remove it and use a smaller one.`, confirmLabel: `Download ${size}` });
       if (!ok) return;
     }
     void downloadExplainModel(m.id);
@@ -63,7 +63,7 @@ function ModelRow({ m, last }: { m: ExplainModelSpec; last: boolean }) {
         {!has && !busy && <Button size="sm" variant="primary" icon="import" onClick={() => { void download(); }} data-explain-model-download={m.id}>Download</Button>}
         {has && !busy && <Button size="sm" variant="ghost" icon="trash" onClick={() => { void remove(); }}>Remove</Button>}
       </div>
-      <span style={muted}>{m.note}{big ? ' Large for a browser: it needs a lot of memory.' : ''}</span>
+      <span style={muted}>{m.note}{big ? ` Large for a browser: ${m.memory ?? 'it needs a lot of memory.'}` : ''}</span>
       {busy && (
         <div data-explain-model-progress style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ flex: 1, maxWidth: 320, height: 6, borderRadius: 3, background: tk.bg.field, overflow: 'hidden' }}>
@@ -94,14 +94,13 @@ export function ExplanationModelSettings() {
     <section aria-label="Explanation model" data-setting="shader-studio:settings:useExplainModel" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px', minHeight: 28 }}>
         <span style={{ font: `650 13px ${fontFamily.ui}`, color: tk.text.primary }}>Explanation model</span>
-        <span style={{ fontSize: 12, color: tk.text.faint, flex: 1 }}>Optional · “Explain more” (docs/explain-model.md)</span>
+        <span style={{ fontSize: 12, color: tk.text.faint, flex: 1 }}>Behind Explain (docs/explain-model.md)</span>
       </div>
       <div style={{ ...cardStyle(tk), overflow: 'hidden' }}>
         <div data-explain-model-setting style={{ display: 'flex', flexDirection: 'column' }}>
           {any && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 14px', borderBottom: `1px solid ${tk.border.subtle}` }}>
               <Toggle checked={s.enabled} onChange={setExplainModelEnabled} label="Use the explanation model" />
-              {s.enabled && <Toggle checked={s.autoSteps} onChange={setExplainStepsWithModel} label="Explain step-by-steps with it automatically" />}
               {s.enabled && s.downloaded && s.status === 'idle' && <Button size="sm" variant="ghost" onClick={() => { void ensureExplainModel(); }}>Load it now</Button>}
               {s.status === 'error' && <Button size="sm" variant="ghost" icon="reset" onClick={() => { void ensureExplainModel(true); }}>Try again</Button>}
             </div>
@@ -111,7 +110,7 @@ export function ExplanationModelSettings() {
           </div>
           <div style={{ padding: '8px 14px 10px', borderTop: `1px solid ${tk.border.subtle}` }}>
             <span style={muted}>
-              Pick the one “Explain more” uses; download as many as you like to try them (a <strong>Compare models</strong> button then shows their answers side by side). Each is a one-time download from Hugging Face, only when you press its button; none is part of the app, and only one is held in memory at a time. They add an <strong>Explain more</strong> button under the explanations in Expression Blocks, Custom Functions, the GLSL page and the function cards: why a line is there and what it does to the picture, written by a small language model that runs on this device, told what the rule-based explainer already knows. Every answer carries a confidence dot, and a “not sure” tag when it should not be trusted. It can be wrong. Your code is never sent anywhere.
+              Pick the one <strong>Explain</strong> uses; download as many as you like to try them (a <strong>Compare models</strong> button then shows their answers side by side). Each is a one-time download from Hugging Face, only when you press its button; none is part of the app, and only one is held in memory at a time. Explain, on each line of an Expression Block or Custom Function, on a whole block, on the GLSL page and in the function cards, is written by the model on this device: what each line does and what that does to the picture, then what the whole block is for. It is told only facts: the code, where each input comes from (by node type, never your labels), the numbers each line takes across the picture, and what the block feeds. Every answer carries a confidence dot, and a “not sure” tag when it should not be trusted. It can be wrong. Your code is never sent anywhere.
             </span>
           </div>
         </div>

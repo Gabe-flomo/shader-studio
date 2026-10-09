@@ -1,12 +1,13 @@
 /**
- * ExplainMore — the "✨ Explain more" action (docs/explain-model.md): under a deterministic explanation, ask the
- * optional on-device language model why the line is there and what it does to the picture. The answer streams
- * in under a label ("explained by a local model"), with the facts it was given folded below. If the model
- * isn't downloaded yet, the action offers the one-time download (size, progress) first.
+ * ExplainMore — the "✨ Explain" action (docs/explain-model.md): ask the on-device language model what a line (or a
+ * whole block) does and what that does to the picture. Explain is always the model: there is no rule-based wording
+ * to fall back on. The answer streams in under a label ("explained by a local model"), with the facts it was given
+ * folded below. If the model isn't downloaded (or is turned off), the action offers the one-time download, with its
+ * size and what it is, first.
  *
- * `mode="line"` explains one statement; `mode="block"` a whole Expression Block / function (a paragraph and a
- * line-by-line list). Nothing is loaded until the button is pressed: the prompt builder and the model are
- * imported on demand.
+ * `mode="line"` explains one statement; `mode="block"` a whole Expression Block / function (each line in plain
+ * words, then a summary of the whole block); `mode="node"` a whole node. Nothing is loaded until the button is
+ * pressed: the prompt builder and the model are imported on demand.
  */
 import { useEffect, useMemo, useRef } from 'react';
 import type { ExplainContext } from '../../lib/glslPatterns';
@@ -14,7 +15,8 @@ import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import { downloadBytes, formatBytes, modelById } from '../../explainModel/config';
-import { useExplainModel } from '../../explainModel/client';
+import { useShallow } from 'zustand/react/shallow';
+import { useExplainModel, type ExplainModelState } from '../../explainModel/client';
 import { useModelAnswer, type AskSpec } from '../../explainModel/useAnswer';
 import { viewAnswer } from '../../explainModel/assess';
 import { useExplainScope } from './ExplainScope';
@@ -27,9 +29,7 @@ export interface ExplainMoreProps {
   /** The line (mode 'line') or the whole code (mode 'block'). */
   text: string;
   ctx?: ExplainContext;
-  mode?: 'line' | 'block' | 'node' | 'steps';
-  /** mode 'steps': the line's rule-based steps, explained one by one. */
-  steps?: Array<{ label: string; code: string; reading: string }>;
+  mode?: 'line' | 'block' | 'node';
   /** Words for where the line is: "line 3 of this block". */
   where?: string;
   /** The button's words. */
@@ -40,13 +40,21 @@ export interface ExplainMoreProps {
   auto?: boolean;
 }
 
-export function ExplainMore({ text, ctx, mode = 'line', where, label, build, auto, steps }: ExplainMoreProps) {
-  // Steps are a numbered list, read and checked like a block's lines.
-  const kind: 'line' | 'block' | 'node' = mode === 'steps' ? 'block' : mode;
+const IDLE_MODEL: Pick<ExplainModelState, 'activeId' | 'status' | 'progress' | 'backend' | 'downloaded' | 'downloadedIds'> = {
+  activeId: '', status: 'idle', progress: null, backend: null, downloaded: false, downloadedIds: [],
+};
+
+export function ExplainMore({ text, ctx, mode = 'line', where, label, build, auto }: ExplainMoreProps) {
+  const kind = mode;
   const tk = useTokens();
   const scope = useExplainScope();
-  const model = useExplainModel();
   const { state, ask, confirmDownload, stop, dismiss, doubleCheck, compare, closeCompare } = useModelAnswer();
+  // Every line has one of these: an idle button reads nothing from the model store, so a download's progress
+  // only re-renders the ones that are showing something
+  const live = state.phase !== 'idle';
+  const model = useExplainModel(useShallow(m => (live
+    ? { activeId: m.activeId, status: m.status, progress: m.progress, backend: m.backend, downloaded: m.downloaded, downloadedIds: m.downloadedIds }
+    : IDLE_MODEL)));
   const active = modelById(model.activeId);
   const elapsed = useElapsed(state.phase === 'working' ? state.startedAt : undefined);
   const view = useMemo(() => viewAnswer({
@@ -55,18 +63,13 @@ export function ExplainMore({ text, ctx, mode = 'line', where, label, build, aut
 
   const spec: AskSpec = {
     kind,
-    code: mode === 'steps' ? `steps:${text}` : text,
+    code: text,
     build: build ?? (async () => {
-      const [prompt, { getNodeDefinition }] = await Promise.all([import('../../explainModel/prompt'), import('../../nodes/definitions')]);
+      const [prompt, { describerFrom }, { getNodeDefinition }] = await Promise.all([import('../../explainModel/prompt'), import('../../explainModel/inputs'), import('../../nodes/definitions')]);
       const s = {
         nodeId: scope.nodeId, kind: scope.kind, nodes: scope.getNodes?.(), enclosing: scope.enclosing?.(), where,
-        namer: (t: string) => getNodeDefinition(t)?.label, ctx,
-        describe: (t: string) => {
-          const d = getNodeDefinition(t);
-          return d ? { label: d.label, description: d.description, outputs: Object.fromEntries(Object.entries(d.outputs ?? {}).map(([k, v]) => [k, v.label])) } : undefined;
-        },
+        namer: (t: string) => getNodeDefinition(t)?.label, ctx, describe: describerFrom(getNodeDefinition),
       };
-      if (mode === 'steps') return prompt.promptForSteps(text, steps ?? [], s);
       return mode === 'block' ? prompt.promptForBlock(text, s) : prompt.promptForLine(text, s);
     }),
   };
@@ -86,21 +89,21 @@ export function ExplainMore({ text, ctx, mode = 'line', where, label, build, aut
   return (
     <div data-explain-more="" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {state.phase === 'idle' && (
-        <button type="button" data-explain-action="explain-more" style={{ ...small, alignSelf: 'flex-start' }} onClick={() => { void ask(spec); }}
-          title="Ask the small language model on this device why this is here and what it does to the picture">
-          <Icon name="spark" size={12} />{label ?? (mode === 'block' ? 'Explain this block' : mode === 'node' ? 'Explain this node' : mode === 'steps' ? 'Explain these steps' : 'Explain more')}
+        <button type="button" data-explain-action="explain" style={{ ...small, alignSelf: 'flex-start' }} onClick={() => { void ask(spec); }}
+          title={mode === 'block' ? 'Explain each line in plain words, then what the whole block is for (a language model on this device)' : 'Explain what this does and what it does to the picture (a language model on this device)'}>
+          <Icon name="spark" size={12} />{label ?? (mode === 'block' ? 'Explain the block' : mode === 'node' ? 'Explain this node' : 'Explain')}
         </button>
       )}
 
       {state.phase === 'offer' && !downloading && (
         <div data-explain-offer="" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', borderRadius: radius.md, background: alpha(tk.accent.base, 0.07) }}>
           <span style={{ font: `600 12px ${fontFamily.ui}`, color: tk.text.primary }}>
-            {model.downloaded ? 'The explanation model is off.' : 'Explain more needs a small language model on this device.'}
+            {model.downloaded ? 'The explanation model is off.' : 'Explain uses a language model that runs on this device.'}
           </span>
           <span style={{ font: `500 11.5px/1.5 ${fontFamily.ui}`, color: tk.text.muted }}>
             {model.downloaded
               ? 'Turn it on to use the copy this browser already keeps.'
-              : `A one-time download of ${formatBytes(downloadBytes('webgpu', active))} (${active.name}, ${active.licence}). After that it runs here, offline: your code never leaves this device.`}
+              : `It reads the code with what we measured about it (where each value comes from, the numbers it takes across the picture) and says in plain words what each line does. A one-time download of ${formatBytes(downloadBytes('webgpu', active))} (${active.name}, ${active.licence}); nothing downloads until you press the button. After that it runs here, offline: your code never leaves this device. Bigger models are in Settings, Explanation model.`}
           </span>
           <div style={{ display: 'flex', gap: 6 }}>
             <button type="button" data-explain-action="download-model" style={{ ...small, background: tk.ink.base, color: tk.ink.text }} onClick={() => { void confirmDownload(); }}>
@@ -132,7 +135,7 @@ export function ExplainMore({ text, ctx, mode = 'line', where, label, build, aut
             ? <span data-explain-thinking="" style={{ font: `500 12px ${fontFamily.ui}`, color: tk.text.muted }}>Thinking… {elapsed} s</span>
             : view.empty
               ? <span style={{ font: `500 12px ${fontFamily.ui}`, color: tk.text.muted }}>{view.ranOut ? 'It used up its thinking budget before answering. Try again, or pick a faster model.' : model.status === 'loading' ? 'Loading the model…' : `Thinking…${busy && active.thinks ? ` ${elapsed} s` : ''}`}</span>
-              : <AnswerBody view={view} mode={kind} labels={mode === 'steps' ? steps?.map(x => x.label) : undefined} />}
+              : <AnswerBody view={view} mode={kind} />}
           {view.split.thinking && (
             <details data-explain-reasoning="" style={{ font: `500 11.5px/1.5 ${fontFamily.ui}`, color: tk.text.muted }}>
               <summary style={{ cursor: 'pointer', color: tk.text.faint, fontWeight: 600 }}>Show reasoning</summary>
