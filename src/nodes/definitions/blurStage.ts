@@ -48,6 +48,7 @@ export const BlurStageNode: NodeDefinition = {
     radius: { label: 'Radius', type: 'float', min: 0, max: 64, step: 0.5 },
     threshold: { label: 'Threshold', type: 'float', min: 0, max: 2, step: 0.01 },
     knee: { label: 'Knee', type: 'float', min: 0, max: 1, step: 0.01 },
+    tail: { label: 'Tail', type: 'float', min: 0, max: 2, step: 0.01 },
   },
   assignable: false,
   glslFunctions: [BL_BASE_GLSL, BL_GLSL_GRAPH, BL_BLOOM_W_GLSL],
@@ -86,8 +87,10 @@ export const BlurStageNode: NodeDefinition = {
         const low = P.__low as string, cur = P.__cur as string;
         const k = num(P.__level, 1), levels = num(P.__levels, 2), s0 = f(num(P.__bloomScale, 1));
         const lowTexel = `(${passPxUniform(low)} / ${f(num(P.__lowScale, 1))})`;
-        const lowW = P.__lowRaw === true ? ` * blBloomW(${radius}, ${s0}, ${f(levels)})` : '';
-        code = `    vec4 ${out} = texture2D(${cur}, vUv) * blBloomW(${radius}, ${s0}, ${f(k)}) + blTent(${low}, vUv, ${lowTexel})${lowW};\n`;
+        // Tail (Glows made since it existed): wider levels weigh more, (1 + Tail × (k − 1)), like a lens's long falloff.
+        const W = (lvl: string) => (P.tail !== undefined ? `blBloomWt(${radius}, ${s0}, ${lvl}, ${p(P.tail, 0)})` : `blBloomW(${radius}, ${s0}, ${lvl})`);
+        const lowW = P.__lowRaw === true ? ` * ${W(f(levels))}` : '';
+        code = `    vec4 ${out} = texture2D(${cur}, vUv) * ${W(f(k))} + blTent(${low}, vUv, ${lowTexel})${lowW};\n`;
       }
     }
     return { code, outputVars: { color: `${out}.rgb`, alpha: `${out}.a` } };

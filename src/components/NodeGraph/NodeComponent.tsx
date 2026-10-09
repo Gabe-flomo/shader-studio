@@ -4813,6 +4813,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               else openUserNodeSource(node.type, { x: node.position.x, y: node.position.y + 260 });
             }} />
         )}
+        {node.type === 'bloom' && (
+          <CardButton icon="spark" tint="success" label="Upgrade to same-frame glow: a Pass, a Glow (texture) Bloom chain and Add glow replace this Bloom (no lag or smear, a long soft tail); settings kept"
+            onClick={() => useNodeGraphStore.getState().upgradeBloom(node.id)} />
+        )}
         {Object.keys(def.paramDefs ?? {}).length > 0 && (
           <CardButton icon="resetParams" label="Reset parameters to defaults"
             onClick={() => { if (def.defaultParams) updateNodeParams(node.id, def.defaultParams as Record<string, unknown>, { immediate: true }); }} />

@@ -310,7 +310,7 @@ export const GlowTextureNode: NodeDefinition = {
   outputs: {
     glow: { type: 'vec3', label: 'Glow', hint: 'The light to add over the picture.' },
   },
-  defaultParams: { method: 'bloom', threshold: 0.5, knee: 0.1, radius: 12, intensity: 1.5, tint: [1, 1, 1], quality: '24' },
+  defaultParams: { method: 'bloom', threshold: 0.5, knee: 0.1, radius: 12, intensity: 1.5, tint: [1, 1, 1], quality: '24', tail: 0.4 },
   paramDefs: {
     method: { label: 'Method', type: 'select', hint: 'Bloom chain: soft core, long tail. Smooth: one Gaussian. Fast: one pass, grainy when wide.', help: METHOD_HELP, options: [
       { value: 'bloom', label: 'Bloom chain' }, { value: 'smooth', label: 'Smooth (Gaussian)' }, { value: 'fast', label: 'Fast (one pass)' },
@@ -319,6 +319,7 @@ export const GlowTextureNode: NodeDefinition = {
     knee: { label: 'Knee', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How softly the glow fades in above Threshold: 0 is a hard cut, 0.1 a gentle ramp.' },
     radius: { label: 'Radius', type: 'float', min: 0, max: 64, step: 0.5, hint: 'How far the glow spreads, in picture pixels. The Bloom chain\'s tail reaches a few times further.' },
     intensity: { label: 'Intensity', type: 'float', min: 0, max: 8, step: 0.05, hint: 'How bright the glow is.' },
+    tail: { label: 'Tail', type: 'float', min: 0, max: 2, step: 0.01, showWhen: { param: 'method', value: 'bloom' }, hint: 'Bloom chain: how much of the glow goes into its wide, soft levels. 0 spreads it evenly; higher gives a tight core with a long, dreamy falloff, like a lens. The total brightness stays the same.' },
     tint: { label: 'Tint', type: 'vec3color', hint: 'Colour the glow is multiplied by (white keeps the picture\'s own colours).' },
     quality: QUALITY,
   },
@@ -336,7 +337,10 @@ export const GlowTextureNode: NodeDefinition = {
     if (hidden && hidden.levels > 0) {
       // Bloom chain: level 1 holds every level's share added up; divide by their total weight (energy kept).
       const s0 = typeof node.params.__blurSrcScale === 'number' ? fl(node.params.__blurSrcScale) : '1.0';
-      code += `    vec3 ${id}_acc = ${readHidden(hidden, uv)}.rgb / max(blBloomSum(${radius}, ${s0}, ${fl(hidden.levels)}), 1e-4);\n`;
+      const sum = node.params.tail !== undefined
+        ? `blBloomSumT(${radius}, ${s0}, ${fl(hidden.levels)}, ${p(node.params.tail, 0)})`
+        : `blBloomSum(${radius}, ${s0}, ${fl(hidden.levels)})`;
+      code += `    vec3 ${id}_acc = ${readHidden(hidden, uv)}.rgb / max(${sum}, 1e-4);\n`;
     } else if (hidden) {
       code += `    vec3 ${id}_acc = ${readHidden(hidden, uv)}.rgb;\n`;
     } else {

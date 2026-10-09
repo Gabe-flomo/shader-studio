@@ -450,7 +450,7 @@ exports[`golden shaders: every Play example exports the same bundle > gridLavaLa
 
 exports[`golden shaders: every Play example exports the same bundle > gridRulesBrain 1`] = `
 {
-  "bundle": "092a4201d9cda4064133aed4ca74:44822",
+  "bundle": "088d65300267721a085959c1c948:45892",
   "missing": [],
 }
 `;
@@ -6052,11 +6052,11 @@ exports[`golden shaders: every example compiles as it did > gridRulesBrain 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "19402170cb65bd045d7089e614ce:5933",
+  "fragmentShader": "013e8323ede440006a6469387de1:6156",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "03a9cbb9146c3e1d334cbbc3569c:233",
-  "paramBindings": "02bf96753e19ae0dba00cf8b1523:1241",
+  "paramBindings": "13c64ee808339c1b0b3a0152e906:1275",
   "paramUniforms": [
     "u_p_addcolorx0_scale",
     "u_p_brainxrulesx0xc3_afterglow",
@@ -6082,10 +6082,11 @@ exports[`golden shaders: every example compiles as it did > gridRulesBrain 1`] =
     "u_p_tglowx0_intensity",
     "u_p_tglowx0_knee",
     "u_p_tglowx0_radius",
+    "u_p_tglowx0_tail",
     "u_p_tglowx0_threshold",
     "u_p_tglowx0_tint",
   ],
-  "paramValues": "064de89dc55d0e19c606f1e47def:958",
+  "paramValues": "1095b27ccede47054ae1507f753a:983",
   "passes": [
     {
       "filter": "nearest",
@@ -6349,6 +6350,7 @@ uniform vec3 u_p_brainxrulesx0xc3_oldColor;
 uniform float u_p_tglowx0_radius;
 uniform float u_p_tglowx0_threshold;
 uniform float u_p_tglowx0_knee;
+uniform float u_p_tglowx0_tail;
 uniform sampler2D u_pass_brain_rules_pict_0;
 uniform vec2 u_pass_brain_rules_pict_0_px;
 uniform sampler2D u_passprev_brain_rules_pict_0;
@@ -6475,6 +6477,7 @@ uniform sampler2D u_fontTexture;
 uniform float u_p_tglowx0_radius;
 uniform float u_p_tglowx0_threshold;
 uniform float u_p_tglowx0_knee;
+uniform float u_p_tglowx0_tail;
 uniform sampler2D u_pass_tglow_0Bld1;
 uniform vec2 u_pass_tglow_0Bld1_px;
 
@@ -6573,6 +6576,7 @@ uniform sampler2D u_fontTexture;
 uniform float u_p_tglowx0_radius;
 uniform float u_p_tglowx0_threshold;
 uniform float u_p_tglowx0_knee;
+uniform float u_p_tglowx0_tail;
 uniform sampler2D u_pass_tglow_0Bld2;
 uniform vec2 u_pass_tglow_0Bld2_px;
 
@@ -6671,6 +6675,7 @@ uniform sampler2D u_fontTexture;
 uniform float u_p_tglowx0_radius;
 uniform float u_p_tglowx0_threshold;
 uniform float u_p_tglowx0_knee;
+uniform float u_p_tglowx0_tail;
 uniform sampler2D u_pass_tglow_0Bld3;
 uniform vec2 u_pass_tglow_0Bld3_px;
 
@@ -6769,6 +6774,7 @@ uniform sampler2D u_fontTexture;
 uniform float u_p_tglowx0_radius;
 uniform float u_p_tglowx0_threshold;
 uniform float u_p_tglowx0_knee;
+uniform float u_p_tglowx0_tail;
 uniform sampler2D u_pass_tglow_0Bld3;
 uniform vec2 u_pass_tglow_0Bld3_px;
 uniform sampler2D u_pass_tglow_0Bld4;
@@ -6830,11 +6836,18 @@ float blBloomW(float radius, float srcScale, float k) {
 
 
 
+
+float blBloomWt(float radius, float srcScale, float k, float tail) {
+  return blBloomW(radius, srcScale, k) * (1.0 + max(tail, 0.0) * (k - 1.0));
+}
+
+
+
 void main() {
     vec2 g_uv = (vUv - 0.5) * 2.0;
     g_uv.x *= u_resolution.x / u_resolution.y;
     // Glow (texture): the bright on cells, spread into a soft light (a bloom chain on the board's Texture).
-    vec4 tglow_0_o = texture2D(u_pass_tglow_0Bld3, vUv) * blBloomW(u_p_tglowx0_radius, 1.0, 3.0) + blTent(u_pass_tglow_0Bld4, vUv, (u_pass_tglow_0Bld4_px / 0.0625)) * blBloomW(u_p_tglowx0_radius, 1.0, 4.0);
+    vec4 tglow_0_o = texture2D(u_pass_tglow_0Bld3, vUv) * blBloomWt(u_p_tglowx0_radius, 1.0, 3.0, u_p_tglowx0_tail) + blTent(u_pass_tglow_0Bld4, vUv, (u_pass_tglow_0Bld4_px / 0.0625)) * blBloomWt(u_p_tglowx0_radius, 1.0, 4.0, u_p_tglowx0_tail);
     gl_FragColor = vec4(tglow_0_o.rgb, tglow_0_o.a);
 }",
       "hidden": true,
@@ -6866,6 +6879,7 @@ uniform sampler2D u_fontTexture;
 uniform float u_p_tglowx0_radius;
 uniform float u_p_tglowx0_threshold;
 uniform float u_p_tglowx0_knee;
+uniform float u_p_tglowx0_tail;
 uniform sampler2D u_pass_tglow_0Bld2;
 uniform vec2 u_pass_tglow_0Bld2_px;
 uniform sampler2D u_pass_tglow_0Blu3;
@@ -6927,11 +6941,18 @@ float blBloomW(float radius, float srcScale, float k) {
 
 
 
+
+float blBloomWt(float radius, float srcScale, float k, float tail) {
+  return blBloomW(radius, srcScale, k) * (1.0 + max(tail, 0.0) * (k - 1.0));
+}
+
+
+
 void main() {
     vec2 g_uv = (vUv - 0.5) * 2.0;
     g_uv.x *= u_resolution.x / u_resolution.y;
     // Glow (texture): the bright on cells, spread into a soft light (a bloom chain on the board's Texture).
-    vec4 tglow_0_o = texture2D(u_pass_tglow_0Bld2, vUv) * blBloomW(u_p_tglowx0_radius, 1.0, 2.0) + blTent(u_pass_tglow_0Blu3, vUv, (u_pass_tglow_0Blu3_px / 0.125));
+    vec4 tglow_0_o = texture2D(u_pass_tglow_0Bld2, vUv) * blBloomWt(u_p_tglowx0_radius, 1.0, 2.0, u_p_tglowx0_tail) + blTent(u_pass_tglow_0Blu3, vUv, (u_pass_tglow_0Blu3_px / 0.125));
     gl_FragColor = vec4(tglow_0_o.rgb, tglow_0_o.a);
 }",
       "hidden": true,
@@ -6963,6 +6984,7 @@ uniform sampler2D u_fontTexture;
 uniform float u_p_tglowx0_radius;
 uniform float u_p_tglowx0_threshold;
 uniform float u_p_tglowx0_knee;
+uniform float u_p_tglowx0_tail;
 uniform sampler2D u_pass_tglow_0Bld1;
 uniform vec2 u_pass_tglow_0Bld1_px;
 uniform sampler2D u_pass_tglow_0Blu2;
@@ -7024,11 +7046,18 @@ float blBloomW(float radius, float srcScale, float k) {
 
 
 
+
+float blBloomWt(float radius, float srcScale, float k, float tail) {
+  return blBloomW(radius, srcScale, k) * (1.0 + max(tail, 0.0) * (k - 1.0));
+}
+
+
+
 void main() {
     vec2 g_uv = (vUv - 0.5) * 2.0;
     g_uv.x *= u_resolution.x / u_resolution.y;
     // Glow (texture): the bright on cells, spread into a soft light (a bloom chain on the board's Texture).
-    vec4 tglow_0_o = texture2D(u_pass_tglow_0Bld1, vUv) * blBloomW(u_p_tglowx0_radius, 1.0, 1.0) + blTent(u_pass_tglow_0Blu2, vUv, (u_pass_tglow_0Blu2_px / 0.25));
+    vec4 tglow_0_o = texture2D(u_pass_tglow_0Bld1, vUv) * blBloomWt(u_p_tglowx0_radius, 1.0, 1.0, u_p_tglowx0_tail) + blTent(u_pass_tglow_0Blu2, vUv, (u_pass_tglow_0Blu2_px / 0.25));
     gl_FragColor = vec4(tglow_0_o.rgb, tglow_0_o.a);
 }",
       "hidden": true,
