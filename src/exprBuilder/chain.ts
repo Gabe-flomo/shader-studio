@@ -17,9 +17,11 @@
  */
 import { evaluate, formatNumber, parseExpr, type GlslType, type Role, type Value } from '../lib/glslPatterns';
 import {
-  applyMove, holeRange, movesFor, moveLabel, sourceLabel,
-  type Catalogue, type Dimension, type Feed, type Move, type MoveFamily, type MoveHole, type MoveSignature, type Seed,
+  applyMove, movesFor, moveLabel, sourceLabel, sourceRef, validMove,
+  type Catalogue, type Dimension, type Feed, type Move, type MoveFamily, type MoveHole, type MoveSignature, type Seed, type SourceRef,
 } from './moves';
+import { rankByContext, type RankContext, type Scored } from './rank';
+import { currentName, finishingBoost, type ChainName } from './naming';
 
 // ── Seeds (seeds.ts: kept light, the Builders menu opens the window with one) ──
 
@@ -60,13 +62,12 @@ export interface Chain {
 const VAR_SLIDER = { value: 0.5, min: 0, max: 1 };
 
 /**
- * A number hole's slider: round the values seen most, leaving out far-off ones (one shader's
- * `x * 100000.0` would make the slider useless for everyone else). Typing past it still widens it.
+ * A number hole's slider: the catalogue's range (the usual values, 10th to 90th percentile, kept
+ * to a sensible size for the role: `robustRange`), always with the default in it. One shader's
+ * `x * 100000.0` doesn't stretch it; typing past the end still widens it.
  */
 export function sliderRange(h: Extract<MoveHole, { kind: 'number' }>): { min: number; max: number } {
-  const scale = Math.max(1, Math.abs(h.default)) * 10;
-  const near = [h.default, ...h.vals.map(v => v[0])].filter(v => Math.abs(v) <= scale);
-  return holeRange(Math.min(...near), Math.max(...near), h.default);
+  return { min: Math.min(h.range.min, h.default), max: Math.max(h.range.max, h.default) };
 }
 
 /** A move's holes as values: numbers start at their most used value; a time is the block's `t`. */
@@ -80,6 +81,20 @@ export function stepHoles(holes: readonly MoveHole[]): StepHole[] {
     if (h.type === 'float') return { name: h.name, kind: 'number', ...VAR_SLIDER, label: h.names[0] };
     return { name: h.name, kind: 'code', code: h.default, type: h.type };
   });
+}
+
+/** Up to three places a move was seen, to open (a label each, as `moveSources`). */
+export function moveSourceRefs(m: Move, cat: Pick<Catalogue, 'docs'>): SourceRef[] {
+  const out: SourceRef[] = [];
+  const labels = new Set<string>();
+  for (const s of m.sources) {
+    const r = sourceRef(cat, s);
+    if (!r || labels.has(r.label)) continue;
+    labels.add(r.label);
+    out.push(r);
+    if (out.length === 3) break;
+  }
+  return out;
 }
 
 /** Up to three places a move was seen, as labels ("Fractal Rings", "your import: Tunnel"). */
@@ -137,8 +152,9 @@ export function chainEnd(chain: Chain, upTo = chain.steps.length): { type: GlslT
   const n = Math.min(upTo, chain.steps.length);
   for (let i = 0; i < n; i++) {
     const s = chain.steps[i];
-    // A generated move keeps the role (a swizzle of space is still space) unless its type changed.
-    role = s.sig.outRole !== 'unknown' ? s.sig.outRole : s.sig.out === type ? role : 'unknown';
+    // A move that keeps the role (a swizzle of space is still space, of a colour a colour) keeps
+    // it; one that says nothing keeps it while the type stays.
+    role = s.sig.keep ? role : s.sig.outRole !== 'unknown' ? s.sig.outRole : s.sig.out === type ? role : 'unknown';
     type = s.sig.out;
   }
   return { type, role, name: n ? localName(n - 1) : chain.seed.name };
@@ -175,7 +191,11 @@ export interface Tile {
   template: string;
   outType: GlslType;
   sources: string[];
+  /** Where those came from, to open them (Find uses / the Code explorer). */
+  sourceRefs: SourceRef[];
   count: number;
+  /** The ranking's score (log of the chance of coming next, with boosts); higher first. */
+  score: number;
 }
 
 export interface NextMoves {
@@ -185,56 +205,100 @@ export interface NextMoves {
   changing: Tile[];
   /** Mined compounds, replayed as their steps. */
   recipes: Tile[];
+  /** What the chain is called now (naming.ts), whose finishing moves were lifted. */
+  name: ChainName | null;
 }
 
-/** What ranking knows of where the chain is. */
-export interface RankContext { dimension: Dimension; feeds?: readonly Feed[] }
+export type { RankContext };
+
+/** A ranker: the pool scored and in order, best first (rank.ts's `rankByContext` by default). */
+export type Ranker = (pool: readonly Move[], ctx: RankContext, cat: Catalogue) => Scored[];
 
 /**
- * Phase 2's order, kept a pure function so phase 3 can replace it: moves seen in a context like
- * the seed's (its dimension and what fed it) first, then by how often they were seen. Stable.
+ * Phase 2's order, kept as the baseline the ranking is measured against: moves seen in the seed's
+ * dimension and feed first, then by how often they were seen. Stable.
  */
-export function rankMoves(moves: readonly Move[], ctx: RankContext): Move[] {
+export const simpleRank: Ranker = (moves, ctx) => {
   const match = (m: Move) => m.contexts.some(c => c.dim === ctx.dimension && (!ctx.feeds?.length || ctx.feeds.includes(c.feed)));
   return moves.map((m, i) => ({ m, i, hit: match(m) && !m.generated ? 1 : 0 }))
     .sort((a, b) => b.hit - a.hit || b.m.count - a.m.count || a.i - b.i)
-    .map(x => x.m);
+    .map((x, i) => ({ move: x.m, score: -i, follow: 0 }));
+};
+
+/** What fed the value at the chain's end: the seed's feeds while it is still what the seed was, else what it became. */
+export function chainFeeds(chain: Chain, upTo = chain.steps.length): Feed[] | undefined {
+  const end = chainEnd(chain, upTo);
+  if (end.type === chain.seed.type && end.role === chain.seed.role) return chain.seed.feeds;
+  const byRole: Partial<Record<Role, Feed>> = { distance: 'distance', colour: 'colour', mask: 'mask', cell: 'cell', time: 'time', direction: 'normal', value: 'value' };
+  if (end.role === 'space') return end.type === 'vec3' || chain.seed.kind === 'world' ? ['position'] : ['uv', 'fragCoord'];
+  const f = byRole[end.role];
+  return f ? [f] : undefined;
 }
 
-/** Fewer than this with the chain's role, and moves of any role are added after them. */
-const ROLE_MIN = 24;
+/** The ranking's view of where the chain is (its last move, what fed it, the seed's context). */
+export function rankContext(chain: Chain, upTo = chain.steps.length): RankContext {
+  const last = upTo ? chain.steps[upTo - 1] : null;
+  return {
+    dimension: chainDimension(chain, upTo),
+    feeds: chainFeeds(chain, upTo),
+    into: chain.seed.into,
+    techniques: chain.seed.techniques,
+    prev: last?.moveId ?? null,
+    prevFamily: last?.family ?? null,
+  };
+}
 
-/** The candidate moves for the chain after `upTo` steps, grouped and ranked. */
-export function nextMoves(chain: Chain, cat: Catalogue, upTo = chain.steps.length, rank: (moves: readonly Move[], ctx: RankContext) => Move[] = rankMoves): NextMoves {
+/**
+ * The moves that can come next: those for the chain's type in its dimension, the chain's role
+ * first; other roles come too (the ranking puts them lower, `OTHER_ROLE`) — a component of space
+ * can go on as a plain value.
+ */
+export function candidatePool(seed: Seed, cat: Catalogue): Move[] {
+  const pool = movesFor(seed, cat);
+  if (!seed.role) return pool;
+  const have = new Set(pool.map(m => m.id));
+  return [...pool, ...movesFor({ type: seed.type, dimension: seed.dimension }, cat).filter(m => !have.has(m.id))];
+}
+/** A recipe's score: its first step's, plus a little for how often the whole was seen. */
+const RECIPE_COUNT_WEIGHT = 0.25;
+
+/**
+ * The candidate moves for the chain after `upTo` steps, grouped and ranked: what usually comes
+ * next by context (rank.ts), with the finishing moves of what the chain has become lifted
+ * (naming.ts). Every move here type-checks strictly on the chain's type (moves.ts `validMove`).
+ */
+export function nextMoves(chain: Chain, cat: Catalogue, upTo = chain.steps.length, rank: Ranker = rankByContext): NextMoves {
   const seed = seedForMoves(chain, upTo);
-  let pool = movesFor(seed, cat);
-  if (seed.role && pool.length < ROLE_MIN) {
-    const have = new Set(pool.map(m => m.id));
-    pool = [...pool, ...movesFor({ type: seed.type, dimension: seed.dimension }, cat).filter(m => !have.has(m.id))];
-  }
-  const ranked = rank(pool, { dimension: seed.dimension, feeds: upTo === 0 ? chain.seed.feeds : undefined });
+  const pool = candidatePool(seed, cat);
+  const name = currentName(chain, upTo);
+  const ctx: RankContext = { ...rankContext(chain, upTo), role: seed.role, boost: finishingBoost(name, pool) };
+  const ranked = rank(pool, ctx, cat);
+  const scoreOf = new Map(ranked.map(r => [r.move.id, r.score]));
   const byId = new Map(cat.moves.map(m => [m.id, m]));
-  const out: NextMoves = { same: [], changing: [], recipes: [] };
+  const out: NextMoves = { same: [], changing: [], recipes: [], name };
   const seen = new Set<string>();
-  for (const m of ranked) {
+  for (const { move: m, score } of ranked) {
     if (seen.has(`${m.sig.in}|${m.template}`)) continue;
-    const tileOf = (kind: Tile['kind'], moves: Move[]): Tile => ({
-      key: m.id, kind, moves, move: m, label: moveLabel(m), template: m.template, outType: m.sig.out, sources: moveSources(m, cat), count: m.count,
+    const tileOf = (kind: Tile['kind'], moves: Move[], sc: number): Tile => ({
+      key: m.id, kind, moves, move: m, label: moveLabel(m), template: m.template, outType: m.sig.out,
+      sources: moveSources(m, cat), sourceRefs: moveSourceRefs(m, cat), count: m.count, score: sc,
     });
     if (m.step || m.generated) {
       seen.add(`${m.sig.in}|${m.template}`);
-      (m.sig.out === m.sig.in ? out.same : out.changing).push(tileOf('step', [m]));
+      (m.sig.out === m.sig.in ? out.same : out.changing).push(tileOf('step', [m], score));
     } else if (m.steps && m.steps.length >= 2) {
       const steps = m.steps.map(id => byId.get(id));
-      // Replayable only when every step is there and each one's type follows on from the last.
-      if (steps.some(s => !s)) continue;
+      // Replayable only when every step is there, valid, and each one's type follows on from the last.
+      if (steps.some(s => !s || !validMove(s))) continue;
       let t: GlslType = seed.type, ok = true;
       for (const s of steps as Move[]) { if (s.sig.in !== t) { ok = false; break; } t = s.sig.out; }
       if (!ok || t !== m.sig.out) continue;
       seen.add(`${m.sig.in}|${m.template}`);
-      out.recipes.push(tileOf('recipe', steps as Move[]));
+      const first = scoreOf.get(steps[0]!.id) ?? score;
+      out.recipes.push(tileOf('recipe', steps as Move[], first + RECIPE_COUNT_WEIGHT * Math.log1p(m.count)));
     }
   }
+  out.recipes.sort((a, b) => b.score - a.score || b.count - a.count);
   return out;
 }
 

@@ -68,12 +68,50 @@ The move catalogue (`src/exprBuilder/`, phase 1) is mined from the bundled examp
 your own saved graphs, imports and linked `.glsl` files, on this device only. A few families
 (swizzles, one component driving another, products, rotations) are made by type instead.
 
-For now the grid is ordered simply: moves seen where yours is (the seed's dimension and what fed
-it) first, then by how often they were seen. Smarter ranking comes next.
+Every move is checked by GLSL ES 3.0's rules on the type it acts on (constructor sizes, built-in
+overloads like `step(float, vec3)` but not `step(vec3, float)`, no int → float), so a move that
+wouldn't compile never reaches the grid.
+
+## How the grid is ordered
+
+- **What usually comes next.** After a `fract` repeat, the examples usually centre the cells
+  (`x - 0.5`) or measure a distance; those come first. The order statistics are counted by
+  context (2D or 3D, what fed the value: UV, a March Loop's position, a distance…) and fall back to
+  more general counts where the examples are thin. With no step yet, moves used most in a context
+  like yours lead.
+- **Dull moves are hidden.** Each candidate runs on the CPU over the tile's picture. It goes under
+  **Show hidden (n)** when it is constant, not a number (NaN or infinite), no change from the step
+  before, or too fine to see at the tile's size (it would shimmer). The others are lifted a little
+  by how much they change the picture. A hidden tile says why.
+- **Names.** Each step row shows what the chain has become when that step makes it something:
+  *cell repeat*, *centred cells*, *grid of circles*, *grid of dots*, *domain warp*,
+  *kaleidoscope fold*, *polar coordinates*, *rings*, *glow*, *colour by space*, or an idiom the
+  Explain panel knows (*Circle SDF*, *Invert*…). The usual finishing moves of that name (after a
+  cell repeat: centre, distance, cell id) are lifted.
+
+## Used in, Where else?
+
+Each tile's **used in** names up to three shaders the move was found in; click one to open it
+where it is written (the graph at that node, its editor at the line, or the GLSL page for a file).
+**Where else?** opens Find uses for the move's shape across this graph, the examples and your
+saved code.
+
+## Surprise me and Undo
+
+**Surprise me** (footer) adds 2–5 random moves after the selected step, drawn from what usually
+comes next (likelier moves more often) and never a dull one. Each press gives a different chain;
+the steps are ordinary steps, so you can go back to one, tune it or pick something else.
+**Undo** takes back the last pick, Surprise me, new seed or loaded example.
 
 ## Code
 
-- `src/exprBuilder/chain.ts`: seeds, steps, the grid of next moves, `rankMoves` (pure, replaceable).
+- `src/exprBuilder/chain.ts`: seeds, steps, the grid of next moves (`nextMoves`, its ranker replaceable).
+- `src/exprBuilder/rank.ts`: what usually comes next, by context, with back-off.
+- `src/exprBuilder/dull.ts`: the dull-move filter (CPU evaluation over the picture).
+- `src/exprBuilder/naming.ts`: names for the chain and their finishing moves.
+- `src/exprBuilder/surprise.ts`: Surprise me (a seeded random chain).
+- `src/exprBuilder/provenance.ts`: sources as Code explorer jumps, templates as Find uses patterns.
+- `src/lib/glslPatterns/typecheck.ts`: the strict GLSL ES 3.0 type check.
 - `src/exprBuilder/block.ts`: the chain as an Expression Block, and the small graph the pictures render.
 - `src/exprBuilder/store.ts`, `actions.ts`: the window's state; Add to graph.
 - `src/components/exprBuilder/`: the window and its pictures (the Explain build-up's render path).

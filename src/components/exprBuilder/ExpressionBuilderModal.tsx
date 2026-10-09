@@ -9,8 +9,21 @@
  * Pictures are small real renders of the block Add to graph makes (exprPictures.ts), only for
  * tiles on screen, debounced and cached; a time seed is plotted on the CPU. Store reads are
  * selectors; the window is lazy (BuilderWindowsHost) and the catalogue loads when it opens.
+ *
+ * Phase 3: the grid is ranked by what usually comes next (rank.ts, inside `nextMoves`); the dull-move
+ * filter (dull.ts) runs on the CPU in slices of a few milliseconds after each step, then hides what
+ * wouldn't show ("Show hidden (n)") and lifts what changes the picture; each step row names what the
+ * chain has become (naming.ts); "used in" sources open where they are written, "Where else?" opens
+ * Find uses; Surprise me grows a random chain (surprise.ts), undoably.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { chainNames } from '../../exprBuilder/naming';
+import { applyVerdicts, chainSamples, DULL_WORDS, judgeSteps, type DullReason, type Verdict } from '../../exprBuilder/dull';
+import { surpriseSteps } from '../../exprBuilder/surprise';
+import { sourceProvenance, templatePattern } from '../../exprBuilder/provenance';
+import type { SourceRef } from '../../exprBuilder/moves';
+import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
+import type { FindUsesDialog as FindUsesDialogT } from '../explain/FindUsesDialog';
 import { useExprBuilder, type ExprTab } from '../../exprBuilder/store';
 import { addBuilderChainToGraph } from '../../exprBuilder/actions';
 import { builderCatalogue } from '../../exprBuilder/catalogueSource';
@@ -41,14 +54,91 @@ const TILE_PX = 112;
 /** Tiles shown per section before "Show more". */
 const PAGE = 12;
 const DRAWABLE = new Set(['float', 'vec2', 'vec3', 'vec4']);
+/** The dull-move filter works in slices of about this long, so a step never holds a frame. */
+const SLICE_MS = 6;
+/** Tiles judged first (the ones on screen): this many per section, then the rest. */
+const FIRST = 2 * PAGE;
+
+const FindUsesDialog = lazyWithSuspense<PropsOf<typeof FindUsesDialogT>>(() => import('../explain/FindUsesDialog').then(m => ({ default: m.FindUsesDialog })));
+
+/** Timings for the last step (dev builds: `window.__xbPerf`), for checking the per-step cost. */
+interface XbPerf { nextMovesMs: number; tiles: number; judgeMs: number; slices: number; maxSliceMs: number; wallMs: number; firstMs: number }
+const perf = (patch: Partial<XbPerf>) => {
+  if (!import.meta.env.DEV || typeof window === 'undefined') return;
+  const w = window as unknown as { __xbPerf?: Partial<XbPerf> };
+  w.__xbPerf = { ...w.__xbPerf, ...patch };
+};
 
 /** The grid for (catalogue, chain, cursor): worked out once, read by the grid and the preview. */
 let lastGroups: { cat: Catalogue; chain: Chain; at: number; groups: NextMoves } | null = null;
 function groupsFor(cat: Catalogue, chain: Chain, at: number): NextMoves {
   if (lastGroups && lastGroups.cat === cat && lastGroups.chain === chain && lastGroups.at === at) return lastGroups.groups;
+  const t0 = performance.now();
   const groups = nextMoves(chain, cat, at);
+  perf({ nextMovesMs: performance.now() - t0 });
   lastGroups = { cat, chain, at, groups };
   return groups;
+}
+
+// ── The dull-move filter, a few milliseconds at a time ────────────────────────
+
+/** A chain position's identity for the verdicts: the seed and the steps' moves and values. */
+const positionKey = (chain: Chain, at: number) => `${chain.seed.kind}:${chain.seed.type}|${chain.steps.slice(0, at).map(s => `${s.template}:${s.holes.map(h => (h.kind === 'number' ? h.value : h.code)).join(',')}`).join(';')}`;
+const verdictCache = new Map<string, Map<string, Verdict>>();
+
+/**
+ * The dull filter's verdicts for the grid at (chain, at): null until the first pages are in (they
+ * go first, and are shown as soon as they're done), then all of them. The work is cut into slices
+ * of SLICE_MS and cached per position.
+ */
+function useVerdicts(cat: Catalogue | null, chain: Chain, at: number, groups: NextMoves | null): Map<string, Verdict> | null {
+  const key = useMemo(() => positionKey(chain, at), [chain, at]);
+  const [state, setState] = useState<{ key: string; v: Map<string, Verdict> } | null>(() => (verdictCache.has(key) ? { key, v: verdictCache.get(key)! } : null));
+  useEffect(() => {
+    if (!cat || !groups) return;
+    const have = verdictCache.get(key);
+    if (have) { setState({ key, v: have }); return; }
+    const all = [groups.same, groups.changing, groups.recipes];
+    const firstN = all.reduce((n, t) => n + Math.min(FIRST, t.length), 0);
+    const order = [...all.flatMap(t => t.slice(0, FIRST)), ...all.flatMap(t => t.slice(FIRST))];
+    let published = false;
+    const v = new Map<string, Verdict>();
+    let i = 0, slices = 0, maxSlice = 0, work = 0;
+    const start = performance.now();
+    let samples: ReturnType<typeof chainSamples> | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const run = () => {
+      const t0 = performance.now();
+      samples ??= chainSamples(chain, at);
+      while (i < order.length && performance.now() - t0 < SLICE_MS) {
+        const t = order[i++];
+        v.set(t.key, judgeSteps(samples, tileSteps(t, cat)));
+      }
+      const dt = performance.now() - t0;
+      slices++; work += dt; maxSlice = Math.max(maxSlice, dt);
+      // The first pages are in (well before the pictures' debounce): show them sorted now.
+      if (!published && i >= firstN && i < order.length) {
+        published = true;
+        perf({ firstMs: performance.now() - start });
+        setState({ key, v: new Map(v) });
+      }
+      if (i < order.length) { timer = setTimeout(run, 0); return; }
+      if (verdictCache.size > 40) verdictCache.delete(verdictCache.keys().next().value!);
+      verdictCache.set(key, v);
+      perf({ tiles: order.length, judgeMs: work, slices, maxSliceMs: maxSlice, wallMs: performance.now() - start });
+      setState({ key, v });
+    };
+    timer = setTimeout(run, 0);
+    return () => { if (timer) clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` and `groups` cover the chain position
+  }, [key, groups, cat]);
+  return state && state.key === key ? state.v : null;
+}
+
+/** Open where a move was found (the graph at its node and line, or the file): the Code explorer's jump. */
+function openSource(ref: SourceRef) {
+  void import('../../codeExplorer/jumpRun').then(m => m.jumpToSource(sourceProvenance(ref)));
+  useExprBuilder.getState().close();
 }
 
 const TABS: BuilderSectionTab[] = [
@@ -178,6 +268,7 @@ function ChainPanel({ cat, onExample }: { cat: Catalogue | null; onExample: (ex:
     ...chain.steps.map((s, i) => ({ key: `s${i}`, expr: localName(i), type: s.sig.out })),
   ], [chain]);
   const r = useRenders(chain, chain.steps.length, rows, onScreen && !!cat);
+  const names = useMemo(() => chainNames(chain), [chain]);
   const time = chain.seed.kind === 'time';
   const pic = (key: string, i: number, type: string) => {
     if (time) { const p = timePicture(chain, i); return p ? (p.kind === 'plot' ? <MiniPlot pic={p} /> : <CpuPictureView pic={p} size={40} />) : <PicturePlaceholder size={40} />; }
@@ -194,7 +285,7 @@ function ChainPanel({ cat, onExample }: { cat: Catalogue | null; onExample: (ex:
         </li>
         {chain.steps.map((s, i) => (
           <li key={i}>
-            <ChainRow index={i + 1} on={at === i + 1} ahead={i >= at} badge={String(i + 1)} title={s.label} step={s}
+            <ChainRow index={i + 1} on={at === i + 1} ahead={i >= at} badge={String(i + 1)} title={s.label} step={s} name={names[i]?.name}
               code={`${localName(i)} = ${inlineSteps([s], i ? localName(i - 1) : chain.seed.name).expr}`} type={s.sig.out} picture={pic(`s${i}`, i + 1, s.sig.out)}
               tuning={openStep === i} />
             {openStep === i && (
@@ -219,8 +310,8 @@ function MiniPlot({ pic, size = 40 }: { pic: Extract<CpuPicture, { kind: 'plot' 
   return <svg data-xb-plot="mini" width={W} height={H} style={{ background: tk.bg.field, borderRadius: 5, flexShrink: 0 }}><path d={d} fill="none" stroke={tk.accent.base} strokeWidth={1.5} /></svg>;
 }
 
-function ChainRow({ index, on, ahead, badge, title, code, type, picture, step, tuning }: {
-  index: number; on: boolean; ahead: boolean; badge: string; title: string; code: string; type: string; picture: ReactNode; step?: ChainStep; tuning?: boolean;
+function ChainRow({ index, on, ahead, badge, title, code, type, picture, step, tuning, name }: {
+  index: number; on: boolean; ahead: boolean; badge: string; title: string; code: string; type: string; picture: ReactNode; step?: ChainStep; tuning?: boolean; name?: string;
 }) {
   const tk = useTokens();
   const tunable = !!step?.holes.some(h => h.kind === 'number');
@@ -239,8 +330,12 @@ function ChainRow({ index, on, ahead, badge, title, code, type, picture, step, t
       }}>{badge}</span>
       <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          <b style={{ font: `600 12px ${fontFamily.ui}`, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</b>
+          <b style={{ font: `600 12px ${fontFamily.ui}`, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: name ? 0 : 1 }}>{title}</b>
           <span style={{ font: `500 10px ${fontFamily.mono}`, color: tk.text.faint }}>{type}</span>
+          {name && (
+            <span data-xb-name="" title={`With this step the chain is a ${name}`}
+              style={{ font: `600 10px ${fontFamily.ui}`, color: tk.accent.text, background: alpha(tk.accent.base, 0.14), borderRadius: 5, padding: '1px 6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{name}</span>
+          )}
           {tunable && (
             <button type="button" data-xb-tune-step={index - 1} aria-pressed={!!tuning} title={tuning ? 'Hide its sliders' : 'Tune its numbers'}
               onClick={e => { e.stopPropagation(); useExprBuilder.getState().setOpenStep(tuning ? null : index - 1); }}
@@ -266,9 +361,14 @@ function writeFold(id: string, open: boolean) {
 }
 
 /** A group of tiles: open by default only for the primary one; folded ones show a summary. */
-function MoveSection({ id, title, tiles, defaultOpen, cat, chain, at, hint }: { id: 'same' | 'changing' | 'recipes'; title: string; tiles: Tile[]; defaultOpen: boolean; cat: Catalogue; chain: Chain; at: number; hint: string }) {
+function MoveSection({ id, title, tiles: ranked, defaultOpen, cat, chain, at, hint, verdicts, onWhere }: {
+  id: 'same' | 'changing' | 'recipes'; title: string; tiles: Tile[]; defaultOpen: boolean; cat: Catalogue; chain: Chain; at: number; hint: string;
+  verdicts: Map<string, Verdict> | null; onWhere: (tile: Tile) => void;
+}) {
   const tk = useTokens();
   const [open, setOpen] = useState(() => readFold(id, defaultOpen));
+  const { shown: tiles, hidden } = useMemo(() => applyVerdicts(ranked, verdicts), [ranked, verdicts]);
+  const showHidden = useExprBuilder(s => !!s.showHidden[id]);
   // How many tiles show: a page more per click, back to one page when the list changes.
   const [more, setMore] = useState<{ of: Tile[]; n: number }>({ of: tiles, n: PAGE });
   const limit = more.of === tiles ? more.n : PAGE;
@@ -287,17 +387,29 @@ function MoveSection({ id, title, tiles, defaultOpen, cat, chain, at, hint }: { 
       {open && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 0 6px' }}>
           {id !== 'same' && <BuilderHelp id={id} />}
-          <TileGrid tiles={shown} cat={cat} chain={chain} at={at} />
-          {tiles.length > limit && (
-            <Button size="sm" icon="plus" onClick={() => setMore({ of: tiles, n: limit + PAGE })} style={{ alignSelf: 'flex-start' }}>Show {Math.min(PAGE, tiles.length - limit)} more</Button>
+          <TileGrid tiles={shown} cat={cat} chain={chain} at={at} onWhere={onWhere} />
+          {(tiles.length > limit || hidden.length > 0) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {tiles.length > limit && (
+                <Button size="sm" icon="plus" onClick={() => setMore({ of: tiles, n: limit + PAGE })}>Show {Math.min(PAGE, tiles.length - limit)} more</Button>
+              )}
+              {hidden.length > 0 && (
+                <Button size="sm" variant="ghost" icon={showHidden ? 'eyeOff' : 'eye'} data-xb-show-hidden={id} aria-pressed={showHidden}
+                  title="Moves that wouldn't show here: constant, not a number, no change, or too fine to see"
+                  onClick={() => useExprBuilder.getState().setShowHidden(id, !showHidden)}>
+                  {showHidden ? 'Hide' : 'Show hidden'} ({hidden.length})
+                </Button>
+              )}
+            </div>
           )}
+          {showHidden && hidden.length > 0 && <TileGrid tiles={hidden.map(h => h.tile)} reasons={new Map(hidden.map(h => [h.tile.key, h.reason]))} cat={cat} chain={chain} at={at} onWhere={onWhere} />}
         </div>
       )}
     </section>
   );
 }
 
-function TileGrid({ tiles, cat, chain, at }: { tiles: Tile[]; cat: Catalogue; chain: Chain; at: number }) {
+function TileGrid({ tiles, cat, chain, at, onWhere, reasons }: { tiles: Tile[]; cat: Catalogue; chain: Chain; at: number; onWhere: (tile: Tile) => void; reasons?: Map<string, DullReason> }) {
   const ref = useRef<HTMLDivElement>(null);
   const onScreen = useOnScreen(ref);
   const drafts = useExprBuilder(s => s.drafts);
@@ -310,7 +422,7 @@ function TileGrid({ tiles, cat, chain, at }: { tiles: Tile[]; cat: Catalogue; ch
   const r = useRenders(chain, at, rows, onScreen);
   const time = chain.seed.kind === 'time';
   return (
-    <div ref={ref} data-xb-grid="" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(156px, 1fr))', gap: 8 }}>
+    <div ref={ref} data-xb-grid={reasons ? 'hidden' : ''} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(156px, 1fr))', gap: 8 }}>
       {built.map(b => {
         const pic = time ? timePicture(chain, at, b.steps) : null;
         const f = r.fields.get(b.tile.key);
@@ -319,13 +431,13 @@ function TileGrid({ tiles, cat, chain, at }: { tiles: Tile[]; cat: Catalogue; ch
           ? (pic ? (pic.kind === 'plot' ? <MiniPlot pic={pic} size={TILE_PX} /> : <CpuPictureView pic={pic} size={TILE_PX} />) : <PicturePlaceholder size={TILE_PX} text="Can't plot this" />)
           : f ? <FieldPicture field={f} type={b.type} size={TILE_PX} label={b.tile.label} />
             : <PicturePlaceholder size={TILE_PX} text={broken ? 'Doesn\'t compile here' : DRAWABLE.has(b.type) ? undefined : b.type} />;
-        return <TileView key={b.tile.key} tile={b.tile} steps={b.steps} picture={picture} broken={broken} />;
+        return <TileView key={b.tile.key} tile={b.tile} steps={b.steps} picture={picture} broken={broken} reason={reasons?.get(b.tile.key)} onWhere={onWhere} />;
       })}
     </div>
   );
 }
 
-function TileView({ tile, steps, picture, broken }: { tile: Tile; steps: ChainStep[]; picture: ReactNode; broken: boolean }) {
+function TileView({ tile, steps, picture, broken, reason, onWhere }: { tile: Tile; steps: ChainStep[]; picture: ReactNode; broken: boolean; reason?: DullReason; onWhere: (tile: Tile) => void }) {
   const tk = useTokens();
   const expanded = useExprBuilder(s => s.expanded === tile.key);
   const hovered = useExprBuilder(s => s.hover === tile.key);
@@ -333,7 +445,7 @@ function TileView({ tile, steps, picture, broken }: { tile: Tile; steps: ChainSt
   const st = () => useExprBuilder.getState();
   const pick = () => { if (!broken) st().pick(steps); };
   return (
-    <div data-xb-tile={tile.key} data-kind={tile.kind} data-broken={broken ? '' : undefined}
+    <div data-xb-tile={tile.key} data-kind={tile.kind} data-broken={broken ? '' : undefined} data-dull={reason}
       onMouseEnter={() => st().setHover(tile.key)} onMouseLeave={() => { if (st().hover === tile.key) st().setHover(null); }}
       style={{
         display: 'flex', flexDirection: 'column', gap: 6, padding: 8, borderRadius: radius.md, minWidth: 0, gridColumn: expanded ? 'span 2' : undefined,
@@ -352,9 +464,8 @@ function TileView({ tile, steps, picture, broken }: { tile: Tile; steps: ChainSt
         </span>
         <code style={{ font: `500 11px ${fontFamily.mono}`, color: tk.text.secondary, wordBreak: 'break-word' }}>{tile.template}</code>
       </button>
-      <span data-xb-sources="" style={{ fontSize: 10.5, color: tk.text.muted, lineHeight: 1.35 }}>
-        {tile.sources.length ? <>used in: {tile.sources.join(', ')}</> : <>made by type (no source)</>}
-      </span>
+      {reason && <span data-xb-reason={reason} style={{ fontSize: 10.5, color: tk.text.faint, fontStyle: 'italic' }}>Hidden: {DULL_WORDS[reason]}</span>}
+      <SourceLinks tile={tile} onWhere={onWhere} />
       {tunable && (
         <button type="button" data-xb-tune={tile.key} aria-expanded={expanded} onClick={() => st().setExpanded(expanded ? null : tile.key)}
           style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 4, border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.accent.text, font: `500 11px ${fontFamily.ui}` }}>
@@ -371,19 +482,45 @@ function TileView({ tile, steps, picture, broken }: { tile: Tile; steps: ChainSt
   );
 }
 
+/** "used in: A, B, C": each opens where it is written; "Where else?" finds every use of the move's shape. */
+function SourceLinks({ tile, onWhere, size = 10.5 }: { tile: Tile; onWhere: (tile: Tile) => void; size?: number }) {
+  const tk = useTokens();
+  const link = { border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.accent.text, font: `500 ${size}px ${fontFamily.ui}`, textDecoration: 'underline', textDecorationColor: alpha(tk.accent.base, 0.35), textUnderlineOffset: 2 } as const;
+  return (
+    <span data-xb-sources="" style={{ fontSize: size, color: tk.text.muted, lineHeight: 1.45 }}>
+      {tile.sourceRefs.length ? (
+        <>used in:{' '}
+          {tile.sourceRefs.map((r, i) => (
+            <span key={i}>
+              <button type="button" data-xb-source={r.docId} title={`Open where it is written: ${r.label}${r.line ? `, line ${r.line}` : ''}`} style={link}
+                onClick={e => { e.stopPropagation(); openSource(r); }}>{r.label}</button>{i < tile.sourceRefs.length - 1 ? ', ' : ' · '}
+            </span>
+          ))}
+        </>
+      ) : <>made by type · </>}
+      <button type="button" data-xb-where={tile.key} title={`Where else is ${tile.template} used?`} style={link} onClick={e => { e.stopPropagation(); onWhere(tile); }}>Where else?</button>
+    </span>
+  );
+}
+
 function MovesTab({ cat, onExample }: { cat: Catalogue | null; onExample: (ex: HelpExample) => void }) {
   const chain = useExprBuilder(s => s.chain);
   const at = useExprBuilder(s => s.at);
   const groups: NextMoves | null = useMemo(() => (cat ? groupsFor(cat, chain, at) : null), [cat, chain, at]);
+  const verdicts = useVerdicts(cat, chain, at, groups);
+  const [where, setWhere] = useState<Tile | null>(null);
   const end = chainEnd(chain, at);
   if (!cat || !groups) return <BuilderNote style={{ padding: 6 }}>Reading the moves from the examples and your code…</BuilderNote>;
+  const sections = { cat, chain, at, verdicts, onWhere: setWhere };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {at === 0 && !chain.steps.length ? <EmptyHelp id="empty-chain" onExample={onExample} /> : <BuilderHelp id="moves" />}
-      <BuilderLabel meta={<span>for a <code>{end.type}</code>{end.role !== 'unknown' ? ` (${end.role})` : ''}</span>}>Next moves</BuilderLabel>
-      <MoveSection id="same" title="Same type" tiles={groups.same} defaultOpen cat={cat} chain={chain} at={at} hint={`Moves that keep it a ${end.type}`} />
-      <MoveSection id="changing" title="Changes the type" tiles={groups.changing} defaultOpen={false} cat={cat} chain={chain} at={at} hint="x.x, length(x), a colour from space…" />
-      <MoveSection id="recipes" title="Recipes" tiles={groups.recipes} defaultOpen={false} cat={cat} chain={chain} at={at} hint="Moves seen together, replayed as steps" />
+      <BuilderLabel meta={<span>for a <code>{end.type}</code>{end.role !== 'unknown' ? ` (${end.role})` : ''}{groups.name ? <> · now a <b data-xb-current-name="">{groups.name.name}</b></> : null}</span>}
+        hint="Ranked by what usually comes next in the examples and your code, in a context like this one. Moves that wouldn't show here are hidden (Show hidden).">Next moves</BuilderLabel>
+      <MoveSection id="same" title="Same type" tiles={groups.same} defaultOpen hint={`Moves that keep it a ${end.type}`} {...sections} />
+      <MoveSection id="changing" title="Changes the type" tiles={groups.changing} defaultOpen={false} hint="x.x, length(x), a colour from space…" {...sections} />
+      <MoveSection id="recipes" title="Recipes" tiles={groups.recipes} defaultOpen={false} hint="Moves seen together, replayed as steps" {...sections} />
+      {where && <FindUsesDialog query={{ pattern: templatePattern(where.template) }} title={where.template} onClose={() => setWhere(null)} onJumped={() => useExprBuilder.getState().close()} />}
     </div>
   );
 }
@@ -451,6 +588,7 @@ function PreviewPanel({ cat }: { cat: Catalogue | null }) {
   const drafts = useExprBuilder(s => s.drafts);
   const groups = useMemo(() => (cat ? groupsFor(cat, chain, at) : null), [cat, chain, at]);
   const tile = hover && groups ? [...groups.same, ...groups.changing, ...groups.recipes].find(t => t.key === hover) ?? null : null;
+  const hoverReason = tile ? verdictCache.get(positionKey(chain, at))?.get(tile.key)?.dull ?? null : null;
   const end = chainEnd(chain, at);
   const steps = useMemo(() => (tile && cat ? tileSteps(tile, cat, drafts[tile.key]) : []), [tile, cat, drafts]);
   const shown = tile ? inlineSteps(steps, end.name) : { expr: end.name, type: end.type };
@@ -470,6 +608,7 @@ function PreviewPanel({ cat }: { cat: Catalogue | null }) {
       </div>
       <code style={{ font: `500 11.5px ${fontFamily.mono}`, color: tk.text.secondary, wordBreak: 'break-word' }}>{tile ? `${tile.template}  → ${shown.type}` : `${end.name} : ${end.type}`}</code>
       {tile && <span style={{ fontSize: 11.5, color: tk.text.muted }}>{tile.sources.length ? `Used in: ${tile.sources.join(', ')}` : 'Made by type, not mined.'}</span>}
+      {tile && hoverReason && <span data-xb-preview-reason="" style={{ fontSize: 11.5, color: tk.text.faint, fontStyle: 'italic' }}>Hidden from the grid: {DULL_WORDS[hoverReason]}.</span>}
       <BuilderHelp id="preview" />
       <BuilderHelp id="holes" />
     </div>
@@ -497,6 +636,13 @@ export function ExpressionBuilderModal() {
     useExprBuilder.getState().setTab('moves');
   };
   const end = chainEnd(chain, at);
+  const canUndo = useExprBuilder(s => s.undoStack.length > 0);
+  const surprise = () => {
+    if (!cat) return;
+    const st = useExprBuilder.getState();
+    const steps = surpriseSteps(st.chain, cat, { seed: st.surpriseSeed, at: st.at });
+    if (steps.length) { st.surprise(steps); st.setTab('moves'); }
+  };
   return (
     <BuilderWindow
       prefsKey="expr-builder"
@@ -511,6 +657,8 @@ export function ExpressionBuilderModal() {
       right={{ label: 'Preview', icon: 'eye', width: 300, content: <PreviewPanel cat={cat} /> }}
       footer={<>
         <Button icon="reset" disabled={!chain.steps.length} onClick={() => useExprBuilder.getState().setSeed(chain.seed)} title="Clear the steps and start again from the seed">Start over</Button>
+        <Button icon="undo" data-xb-undo="" disabled={!canUndo} onClick={() => useExprBuilder.getState().undo()} title="Put the chain back as it was before the last pick, Surprise me or new seed">Undo</Button>
+        <Button icon="dice" data-xb-surprise="" disabled={!cat} onClick={surprise} title="Add 2–5 random moves, drawn from what usually comes next (and never dull ones). Undo takes them back; each step stays editable.">Surprise me</Button>
         <BuilderNote>Add to graph makes an Expression Block: a line per step with a note, a slider per number.</BuilderNote>
         <span style={{ flex: 1 }} />
         <Button onClick={close}>Done</Button>

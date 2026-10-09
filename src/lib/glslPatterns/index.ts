@@ -12,6 +12,7 @@ export type { Expr, GlslType, BinaryOp, UnaryOp } from './ast';
 export { printExpr, childrenOf, allNodes, walk, formatNumber, sourceOf } from './ast';
 export { parseExpr, parseLine, splitStatements, pickExplainSpan, type ParseResult, type ParsedLine, type Statement } from './parse';
 export { inferTypes, typesFromCode, GLOBAL_TYPES, type TypeEnv } from './types';
+export { checkTypes, type TypeCheck } from './typecheck';
 export { inferRoles, roleFromName, roleFromType, roleOfSourceNode, type Role, type RoleEnv, type RoleInfo } from './roles';
 export { matchPattern, compilePattern, normalize, canonicalKey, constValue, closeEnough, NAMED_CONSTANTS, type Bindings, type Binding } from './match';
 export { IDIOMS, idiomById, registerIdiom, type Idiom, type IdiomText, type HoleSpec, type IdiomCategory } from './idioms';
@@ -26,7 +27,7 @@ export {
   generalise, generaliseText, buildFunction, descriptionFor, toIdentifier, patternIsUsable,
   type Generalised, type GenInput, type GenChoices, type BuiltFunction, type GeneraliseContext,
 } from './generalise';
-export { evaluate, evaluateFunction, type Value, type EvalEnv } from './evaluate';
+export { compileExpr, evaluate, evaluateFunction, type Value, type EvalEnv } from './evaluate';
 export { workedVars, workedSteps, workedBlock, freeNames, showValue, type WorkedVar, type WorkedStep, type BlockInput, type BlockLineNumbers } from './worked';
 export { findUses, matchesInLine, codeLines, provenance, exprBlockEnv, customFnEnv, type UseSource, type UseHit, type UseQuery } from './findUses';
 export { toExprPreset, toPublishNode, exprPresetParams, insertFunction, callInCustomFn } from './saveFlows';

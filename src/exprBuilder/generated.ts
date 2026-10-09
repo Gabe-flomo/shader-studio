@@ -9,10 +9,14 @@
  *  - rotations in each plane: `rotate(x, #a)` in 2D; xy / xz / yz in 3D; and turning with time.
  *
  * Marked `generated: true`, with no sources; their contexts list the dimensions they apply in.
+ *
+ * Roles: a swizzle (and a lift `vec3(x, #a)`) keeps whatever `x` stood for (`sig.keep`), so it
+ * offers itself on space and colour alike; one component driving another, rotations and products
+ * act on space (a product down to one number is a plain value).
  */
 import { inferTypes, parseExpr, type GlslType, type Role, type TypeEnv } from '../lib/glslPatterns';
-import { HELPER_ENV, moveId, templateKey, varDefault } from './shared';
-import type { Dimension, Move, MoveFamily, MoveHole } from './moves';
+import { HELPER_ENV, moveId, templateKey, validTemplate, varDefault } from './shared';
+import type { Dimension, Move, MoveFamily, MoveHole, MoveSignature } from './moves';
 
 interface Spec {
   template: string;
@@ -21,10 +25,14 @@ interface Spec {
   holes?: Array<{ name: string; default: number; min: number; max: number } | { name: string; role: Role; type: GlslType }>;
 }
 
+/** The role a family's generated moves act on ('unknown': any, the result keeping it). */
+const FAMILY_ROLE: Partial<Record<MoveFamily, Role>> = { couple: 'space', product: 'space', rotate: 'space' };
+
 const DIMS: Record<Spec['in'], Dimension[]> = {
   float: ['1d-time', '2d'],
   vec2: ['2d', '3d-world', '3d-surface'],
-  vec3: ['3d-world', '3d-surface'],
+  // A 2D picture lifted to 3D (`vec3(x, #a)`) or a colour gets them too.
+  vec3: ['3d-world', '3d-surface', '2d'],
 };
 
 const C2 = ['x', 'y'], C3 = ['x', 'y', 'z'];
@@ -96,10 +104,16 @@ export function generatedMoves(): Move[] {
     if (!r.ok) throw new Error(`Generated move “${s.template}” doesn't parse`);
     const outType = inferTypes(r.expr, env).get(r.expr.id) ?? 'unknown';
     if (outType === 'unknown') throw new Error(`Generated move “${s.template}” doesn't type`);
-    const key = templateKey(s.template, s.in, 'unknown', env)!;
+    // Strictly (GLSL ES 3.0): every generated move must compile on its own type.
+    if (!validTemplate(s.template, env, outType)) throw new Error(`Generated move “${s.template}” doesn't type-check strictly`);
+    const role: Role = FAMILY_ROLE[s.family] ?? 'unknown';
+    const sig: MoveSignature = role === 'unknown'
+      ? { in: s.in, out: outType, role, outRole: 'unknown', keep: true }
+      : { in: s.in, out: outType, role, outRole: outType === 'float' ? 'value' : role };
+    const key = templateKey(s.template, s.in, role, env)!;
     out.push({
       id: moveId(key), key, template: s.template, family: s.family,
-      sig: { in: s.in, out: outType, role: 'unknown', outRole: outType === 'float' ? 'value' : 'unknown' },
+      sig,
       holes, count: 0, sources: [], sourceCount: 0,
       contexts: DIMS[s.in].map(dim => ({ dim, feed: 'unknown', into: 'unknown', techniques: [], n: 0 })),
       generated: true,

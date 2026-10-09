@@ -23,7 +23,7 @@ export interface PackedCatalogue {
   strings: string[];
   docs: Array<[string, string, Origin]>;
   moves: PackedMove[];
-  /** Flat: from, to (move indices), dimension (string index), count. */
+  /** Flat: from, to (move indices), dimension, feed (string indices), count. */
   order: number[];
 }
 
@@ -48,7 +48,7 @@ export function packCatalogue(cat: Catalogue, hash: string): PackedCatalogue {
   ]);
   const order = cat.order.flatMap(o => {
     const f = at.get(o.from), t = at.get(o.to);
-    return f === undefined || t === undefined ? [] : [f, t, s(o.dim), o.n];
+    return f === undefined || t === undefined ? [] : [f, t, s(o.dim), s(o.feed), o.n];
   });
   return { schema: MOVES_SCHEMA, hash, strings, docs: cat.docs.map(d => [d.id, d.label, d.origin]), moves, order };
 }
@@ -87,7 +87,7 @@ export function unpackCatalogue(p: PackedCatalogue): Catalogue {
   });
   p.moves.forEach((pm, i) => { if (pm[12].length) moves[i].steps = pm[12].map(j => moves[j].id); });
   const order = [];
-  for (let i = 0; i + 3 < p.order.length; i += 4) order.push({ from: moves[p.order[i]].id, to: moves[p.order[i + 1]].id, dim: S[p.order[i + 2]] as Dimension, n: p.order[i + 3] });
+  for (let i = 0; i + 4 < p.order.length; i += 5) order.push({ from: moves[p.order[i]].id, to: moves[p.order[i + 1]].id, dim: S[p.order[i + 2]] as Dimension, feed: S[p.order[i + 3]] as Feed, n: p.order[i + 4] });
   const mined: Catalogue = { schema: p.schema, docs: p.docs.map(([id, label, origin]) => ({ id, label, origin })), moves, order };
   const b = new CatalogueBuilder();
   b.addCatalogue(mined);

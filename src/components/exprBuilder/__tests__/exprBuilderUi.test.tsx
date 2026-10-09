@@ -30,6 +30,12 @@ vi.mock('../exprPictures', async importOriginal => {
   };
 });
 
+const jumps = vi.hoisted(() => ({ calls: [] as unknown[] }));
+vi.mock('../../../codeExplorer/jumpRun', () => ({ jumpToSource: async (p: unknown) => { jumps.calls.push(p); } }));
+vi.mock('../../explain/FindUsesDialog', () => ({
+  FindUsesDialog: ({ query, title }: { query: { pattern?: string }; title: string }) => <div data-test-find-uses={query.pattern}>{title}</div>,
+}));
+
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import raw from '../../../exprBuilder/prebuilt/moves.json?raw';
@@ -80,6 +86,8 @@ describe('the Expression Builder window', () => {
     click(host.querySelector('[data-builder="expr"]'));
     expect(useExprBuilder.getState().open).toBe(true);
     mount(<ExpressionBuilderModal />);
+    // The catalogue, the dull filter's slices, then the pictures' debounce
+    await settle();
     await settle();
     await settle();
     expect($('[role="dialog"]')?.textContent).toContain('Expression Builder');
@@ -96,7 +104,7 @@ describe('the Expression Builder window', () => {
     // The empty chain's help, with the worked example
     expect($('[data-builder-help="empty:empty-chain"]')?.textContent).toMatch(/UV → Repeat → Centre → Circle/);
     // The renders asked for were the tiles applied to the seed
-    expect(rendered.calls.some(c => c.rows.some(r => r.expr === 'uv * 0.5'))).toBe(true);
+    expect(rendered.calls.some(c => c.rows.some(r => r.expr === 'uv * 2.0'))).toBe(true);
   });
 
   it('pick a move, go back to a step, walk forward, then add to graph', async () => {
@@ -109,7 +117,7 @@ describe('the Expression Builder window', () => {
     await settle(10);
     pick('length(x)');
     await settle();
-    expect(rows().map(r => r.text)).toEqual(['uv', 's1 = uv * 0.5', 's2 = fract(s1)', 's3 = length(s2)']);
+    expect(rows().map(r => r.text)).toEqual(['uv', 's1 = uv * 2.0', 's2 = fract(s1)', 's3 = length(s2)']);
     expect($('[role="dialog"]')?.textContent).toContain('UV → zoom → repeat → distance · float');
 
     // Back to step 1: steps 2 and 3 stay, dimmed; the grid is for a vec2 again
@@ -124,8 +132,9 @@ describe('the Expression Builder window', () => {
     click($('[data-xb-step="2"]'));
     expect(useExprBuilder.getState().chain.steps).toHaveLength(3);
     await settle(10);
-    pick('abs(x)');
-    expect(useExprBuilder.getState().chain.steps.map(s => s.template)).toEqual(['x * #a', 'fract(x)', 'abs(x)']);
+    const other = $$('[data-xb-section="same"] [data-xb-tile]:not([data-broken]) code').map(c => c.textContent!).find(t => t !== 'length(x)' && t !== 'x * #a')!;
+    pick(other);
+    expect(useExprBuilder.getState().chain.steps.map(s => s.template)).toEqual(['x * #a', 'fract(x)', other]);
     expect(rows().some(r => r.ahead)).toBe(false);
 
     // Tune step 1 afterwards: its slider is in the chain
@@ -140,9 +149,9 @@ describe('the Expression Builder window', () => {
     expect(nodes.map(n => n.type)).toEqual(['uv', 'exprNode']);
     const block = nodes[1];
     expect(block.inputs.uv.connection).toEqual({ nodeId: nodes[0].id, outputKey: 'uv' });
-    expect(block.params.outputType).toBe('vec2');
+    expect(block.params.outputType).toBe(useExprBuilder.getState().chain.steps[2].sig.out);
     expect(block.params.s1_a).toBe(4);
-    expect(chainOfBlock(block)?.steps.map(s => s.template)).toEqual(['x * #a', 'fract(x)', 'abs(x)']);
+    expect(chainOfBlock(block)?.steps.map(s => s.template)).toEqual(['x * #a', 'fract(x)', other]);
     // It compiles, as the block the preview drew (with an Output to compile against)
     const pv = previewGraph(chainOfBlock(block)!);
     expect(pv.nodes.find(n => n.id === pv.blockId)!.params.lines).toEqual(block.params.lines);
@@ -175,5 +184,82 @@ describe('the Expression Builder window', () => {
     click($('[data-builder-tab="seed"]'));
     click($('[data-xb-seed="time"] button'));
     expect(useExprBuilder.getState().chain).toMatchObject({ seed: { kind: 'time', type: 'float' }, steps: [] });
+  });
+
+  it('hides dull moves behind "Show hidden (n)", and shows why', async () => {
+    useExprBuilder.getState().openWith();
+    mount(<ExpressionBuilderModal />);
+    await settle(); await settle(); await settle();
+    const btn = $('[data-xb-show-hidden="same"]');
+    expect(btn?.textContent).toMatch(/^Show hidden \(\d+\)$/);
+    const n = Number(/\((\d+)\)/.exec(btn!.textContent!)![1]);
+    expect(n).toBeGreaterThan(0);
+    expect($('[data-xb-grid="hidden"]')).toBeNull();
+    click(btn);
+    const hidden = $$('[data-xb-grid="hidden"] [data-xb-tile]');
+    expect(hidden.length).toBe(n);
+    expect(hidden.every(t => t.hasAttribute('data-dull'))).toBe(true);
+    expect(hidden[0].querySelector('[data-xb-reason]')?.textContent).toMatch(/^Hidden: /);
+    // None of the shown ones is dull
+    expect($$('[data-xb-section="same"] [data-xb-grid=""] [data-xb-tile][data-dull]')).toHaveLength(0);
+    click($('[data-xb-show-hidden="same"]'));
+    expect($('[data-xb-grid="hidden"]')).toBeNull();
+  });
+
+  it('"used in" opens the source where it is written; "Where else?" opens Find uses with the move\'s shape', async () => {
+    jumps.calls.length = 0;
+    useExprBuilder.getState().openWith();
+    mount(<ExpressionBuilderModal />);
+    await settle();
+    const t = tile('x * #a')!;
+    const link = t.querySelector('[data-xb-source]') as HTMLElement;
+    expect(link.textContent).toBeTruthy();
+    click(link);
+    await settle(10);
+    expect(jumps.calls).toHaveLength(1);
+    expect(jumps.calls[0]).toMatchObject({ docId: link.getAttribute('data-xb-source') });
+    expect(useExprBuilder.getState().open).toBe(false);
+
+    useExprBuilder.getState().openWith();
+    await settle();
+    click(tile('x * #a')!.querySelector('[data-xb-where]'));
+    await settle(10);
+    expect($('[data-test-find-uses]')?.getAttribute('data-test-find-uses')).toBe('$x * #a');
+  });
+
+  it('names the chain on its rows as it grows', async () => {
+    useExprBuilder.getState().openWith();
+    mount(<ExpressionBuilderModal />);
+    await settle();
+    click($('[data-builder-help="empty:empty-chain"] [data-help-example]'));
+    await settle(10);
+    expect($$('[data-xb-name]').map(n => n.textContent)).toEqual(['cell repeat', 'centred cells', 'grid of circles']);
+    expect($('[data-xb-current-name]')?.textContent).toBe('grid of circles');
+  });
+
+  it('Surprise me adds 2–5 steps (the same ones for the same seed); Undo takes them back; they stay editable', async () => {
+    useExprBuilder.getState().openWith();
+    mount(<ExpressionBuilderModal />);
+    await settle();
+    expect(($('[data-xb-undo]') as HTMLButtonElement).disabled).toBe(true);
+    act(() => useExprBuilder.setState({ surpriseSeed: 11 }));
+    click($('[data-xb-surprise]'));
+    const first = useExprBuilder.getState().chain.steps.map(s => s.template);
+    expect(first.length).toBeGreaterThanOrEqual(2);
+    expect(first.length).toBeLessThanOrEqual(5);
+    expect(useExprBuilder.getState().at).toBe(first.length);
+    expect(rows()).toHaveLength(first.length + 1);
+    // Undo, then the same seed again: the same chain
+    click($('[data-xb-undo]'));
+    expect(useExprBuilder.getState().chain.steps).toHaveLength(0);
+    act(() => useExprBuilder.setState({ surpriseSeed: 11 }));
+    click($('[data-xb-surprise]'));
+    expect(useExprBuilder.getState().chain.steps.map(s => s.template)).toEqual(first);
+    // Editable: go back to step 1 and tune it, or pick something else there
+    click($('[data-xb-step="1"]'));
+    expect(useExprBuilder.getState().at).toBe(1);
+    // The block compiles
+    const pv = previewGraph(useExprBuilder.getState().chain);
+    expect(compileGraph({ nodes: pv.nodes }).success).toBe(true);
   });
 });

@@ -27,7 +27,7 @@ import { parseSource, type Expr as CeExpr, type Stmt } from '../codeExplorer/par
 import { lineIndexAt, lineStarts } from '../codeExplorer/tokenizer';
 import type { SourceInput } from '../codeExplorer/types';
 import {
-  allNodes, childrenOf, GLOBAL_TYPES, inferRoles, inferTypes, parseExpr, printExpr, roleFromName, roleFromType, typesFromCode,
+  allNodes, checkTypes, childrenOf, GLOBAL_TYPES, inferRoles, inferTypes, parseExpr, printExpr, roleFromName, roleFromType, typesFromCode,
   type Expr, type GlslType, type Role, type RoleEnv, type TypeEnv,
 } from '../lib/glslPatterns';
 import { normalize, NAMED_CONSTANTS, type N } from '../lib/glslPatterns/match';
@@ -35,7 +35,7 @@ import { customFnEnv, exprBlockEnv } from '../lib/glslPatterns/findUses';
 import { vecOf } from '../lib/glslPatterns/types';
 import { dimensionOf, feedRole, graphContext, nameFeed, type FeedInfo, type GraphContext, type NodeSite } from './context';
 import { callOk, familyOf, HELPER_ENV, HOLE_TYPES, idiomOf, numHoleName, SUBJ, templateKey, VALUE_TYPES, varHoleName } from './shared';
-import type { CatalogueBuilder, Dimension, Feed, Instance, Into, MoveDoc, MoveSignature } from './moves';
+import type { CatalogueBuilder, Dimension, Feed, Instance, Into, MoveDoc, MoveFamily, MoveSignature } from './moves';
 
 /** Compounds bigger than this (tree nodes) are too specific to be a move. */
 const MAX_COMPOUND = 24;
@@ -108,15 +108,26 @@ function makeDraft(text: string, env: TypeEnv, sType: GlslType, roles: RoleEnv, 
   if (!t.ok) return null;
   const tEnv: TypeEnv = { ...HELPER_ENV, x: sType };
   for (const h of holes) tEnv[h.name] = h.type;
-  const out = inferTypes(t.expr, tEnv).get(t.expr.id) ?? 'unknown';
+  // GLSL ES 3.0's rules, strictly (constructor sizes, built-in overloads, no int → float): a move
+  // that wouldn't compile on its own type never reaches the builder's grid.
+  const strict = checkTypes(t.expr, tEnv);
+  if (!strict.ok) return null;
+  const out = strict.type;
   if (!VALUE_TYPES.has(out)) return null;
   const subjRole = nodes.filter(n => n.kind === 'ident' && n.name === SUBJ).map(n => roleInfo.get(n.id)?.role).find(Boolean) ?? roleFromType(sType);
   const sig: MoveSignature = { in: sType, out, role: subjRole, outRole: roleInfo.get(I.id)?.role ?? roleFromType(out) };
   const key = templateKey(template, sType, subjRole, tEnv);
   if (!key) return null;
   const idiom = idiomOf(template, tEnv);
-  return { key, template, family: familyOf(t.expr, sig), sig, holes, norm: N0, ...(idiom ? { idiom } : {}) };
+  const family = familyOf(t.expr, sig);
+  // Moving, scaling, folding, repeating… space gives space (a vec3 of space isn't a colour because
+  // vec3s often are): these keep what the subject stood for while the type stays.
+  if (out === sType && KEEPS_ROLE.has(family) && subjRole !== 'unknown') sig.outRole = subjRole;
+  return { key, template, family, sig, holes, norm: N0, ...(idiom ? { idiom } : {}) };
 }
+
+/** Families whose result, when the type stays, stands for what their input did. */
+const KEEPS_ROLE: ReadonlySet<MoveFamily> = new Set(['scale', 'offset', 'repeat', 'fold', 'warp', 'rotate', 'clamp', 'swizzle', 'couple', 'product', 'blend', 'curve', 'wave']);
 
 /** anonKey on an instance tree (names typed from the environment). */
 function anonInst(n: N, typeOf: (name: string) => GlslType): string {
@@ -217,7 +228,7 @@ interface DocState {
   /** Code node (path) → the last step of its result. */
   nodeLast: Map<string, string>;
   /** Wires between code nodes, resolved once every node has been read. */
-  deferred: Array<{ from: string; to: string; dim: Dimension }>;
+  deferred: Array<{ from: string; to: string; dim: Dimension; feed: Feed }>;
 }
 
 export function mineDoc(md: MoveDoc, b: CatalogueBuilder): void {
@@ -231,7 +242,7 @@ export function mineDoc(md: MoveDoc, b: CatalogueBuilder): void {
   }
   for (const w of ds.deferred) {
     const from = ds.nodeLast.get(w.from);
-    if (from) b.addPair(from, w.to, w.dim);
+    if (from) b.addPair(from, w.to, w.dim, w.feed);
   }
 }
 
@@ -311,6 +322,10 @@ function mineSource(src: SourceInput, ds: DocState): void {
     const parents = new Map<number, Expr>();
     for (const n of allNodes(it.expr)) for (const c of childrenOf(n)) parents.set(c.id, n);
     const seen = new Set<string>();
+    // Every node's type and role in the statement: a step along the path acts on what its child
+    // gives (after `length(p)` the next step acts on a float distance, not on p's vec2).
+    const stmtTypes = inferTypes(it.expr, { ...HELPER_ENV, ...env });
+    const stmtRoles = inferRoles(it.expr, stmtTypes, roles);
 
     /** Mine one subject's path through `root`, then the side branches that don't read it. */
     const mineTree = (root: Expr, sj: Subject, rootInto: Into, depth: number): { first?: string; last?: string; feed: FeedInfo; dim: Dimension } => {
@@ -337,35 +352,42 @@ function mineSource(src: SourceInput, ds: DocState): void {
         if (p?.kind === 'call' && CALL_INTO[p.callee]) return CALL_INTO[p.callee];
         return rootInto;
       };
-      const ctx = (n: Expr) => ({ dim, feed: sFeed.feed as Feed, into: intoOf(n), techniques });
+      const ctx = (n: Expr, feed: Feed = sFeed.feed) => ({ dim, feed, into: intoOf(n), techniques });
       const draftCache = new Map<string, Draft | null>();
-      const draft = (txt: string) => {
-        if (!draftCache.has(txt)) draftCache.set(txt, makeDraft(txt, env, sj.type, rolesHere, userFns));
-        return draftCache.get(txt)!;
+      const draft = (txt: string, type: GlslType = sj.type, role: Role = sRole) => {
+        const k = `${type}|${role}|${txt}`;
+        if (!draftCache.has(k)) draftCache.set(k, VALUE_TYPES.has(type) ? makeDraft(txt, env, type, { ...rolesHere, [SUBJ]: role }, userFns) : null);
+        return draftCache.get(k)!;
       };
-      // Steps along the path, innermost first.
-      const stepsOf = (n: Expr): Array<{ n: Expr; d: Draft | null }> => {
+      // Steps along the path, innermost first, each typed by what it acts on (its child) and fed by
+      // what that is (a distance once the path went through `length`).
+      const stepsOf = (n: Expr): Array<{ n: Expr; d: Draft | null; feed: Feed }> => {
         if (isSubj(n)) return [];
         const kids = childrenOf(n).filter(c => contains.has(c.id));
         if (kids.length === 1) {
-          const below = stepsOf(kids[0]);
-          const txt = printExpr(n, new Map([[kids[0].id, SUBJ]]));
-          return [...below, { n, d: allNodes(n).length - allNodes(kids[0]).length + 1 <= MAX_STEP ? draft(txt) : null }];
+          const kid = kids[0];
+          const below = stepsOf(kid);
+          const txt = printExpr(n, new Map([[kid.id, SUBJ]]));
+          const kt = isSubj(kid) ? sj.type : stmtTypes.get(kid.id) ?? 'unknown';
+          const kr = isSubj(kid) ? sRole : stmtRoles.get(kid.id)?.role ?? roleFromType(kt);
+          // Space stays fed as the subject was (the statement's dimension says which space).
+          const feed = (kt === sj.type && kr === sRole) || kr === 'space' ? sFeed.feed : roleFeedOf(kr, kt, sFeed.feed);
+          return [...below, { n, d: allNodes(n).length - allNodes(kid).length + 1 <= MAX_STEP ? draft(txt, kt, kr) : null, feed }];
         }
-        return [{ n, d: allNodes(n).length <= MAX_STEP ? draft(printExpr(n, occMap)) : null }];
+        return [{ n, d: allNodes(n).length <= MAX_STEP ? draft(printExpr(n, occMap)) : null, feed: sFeed.feed }];
       };
-      const emit = (d: Draft, n: Expr, step: boolean, stepKeys: string[]) => {
+      const emit = (d: Draft, n: Expr, step: boolean, stepKeys: string[], feed?: Feed) => {
         const k = `${n.id}|${d.key}`;
         if (seen.has(k)) return;
         seen.add(k);
-        ds.b.addInstance({ ...d, step, steps: stepKeys, src: srcRef, ctx: ctx(n) });
+        ds.b.addInstance({ ...d, step, steps: stepKeys, src: srcRef, ctx: ctx(n, feed) });
       };
       const steps = stepsOf(root);
-      for (const x of steps) if (x.d) emit(x.d, x.n, true, [x.d.key]);
+      for (const x of steps) if (x.d) emit(x.d, x.n, true, [x.d.key], x.feed);
       // Order inside the statement: consecutive valid steps (a step that isn't a move breaks the chain).
       for (let i = 1; i < steps.length; i++) {
         const a = steps[i - 1].d, c = steps[i].d;
-        if (a && c) ds.b.addPair(a.key, c.key, dim);
+        if (a && c) ds.b.addPair(a.key, c.key, dim, steps[i].feed);
       }
       // Compounds: every sub-expression on the path.
       for (const n of allNodes(root)) {
@@ -386,7 +408,7 @@ function mineSource(src: SourceInput, ds: DocState): void {
           if (!side) continue;
           const r = mineTree(n, side, intoOf(n), depth + 1);
           const prevSide = lastStep.get(side.name);
-          if (prevSide && r.first) ds.b.addPair(prevSide, r.first, r.dim);
+          if (prevSide && r.first) ds.b.addPair(prevSide, r.first, r.dim, r.feed.feed);
         }
       }
       const valid = steps.map(x => x.d).filter((x): x is Draft => !!x);
@@ -396,12 +418,12 @@ function mineSource(src: SourceInput, ds: DocState): void {
     const r = mineTree(it.expr, subj, into, 0);
     // Across statements: the move that made the subject, then this one.
     const prev = lastStep.get(subj.name);
-    if (prev && r.first) ds.b.addPair(prev, r.first, r.dim);
+    if (prev && r.first) ds.b.addPair(prev, r.first, r.dim, r.feed.feed);
     // Across wires: a code node feeding this one.
     if (!prev && r.first && site && topFn && node?.inputs?.[subj.name]?.connection) {
       const c = node.inputs[subj.name].connection!;
       const from = [...site.ancestors.map(a => a.id), c.nodeId].join('/');
-      ds.deferred.push({ from, to: r.first, dim: r.dim });
+      ds.deferred.push({ from, to: r.first, dim: r.dim, feed: r.feed.feed });
     }
     if (it.target) {
       // A new type is a new thing: a length of space is a distance, not space.
