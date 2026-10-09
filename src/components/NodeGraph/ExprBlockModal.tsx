@@ -474,12 +474,15 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
                   <IconButton icon="close" label="Remove line" size="sm" tone="danger" tooltip={false} onClick={() => removeLine(i)} />
                 </span>
               </div>
+              {/* ▶ on this line: its picture opens right here, not at the bottom */}
+              <LinePreviewPanel node={node} at={{ kind: 'line', index: i }} />
               {line.rhs.trim() && !line.off && <LineExplain node={node} index={i} line={line} total={lines.length} ctx={lineCtxs[i] ?? explainCtx} dialogs={explainDialogs} openRequest={explainOpen?.at === i ? explainOpen.seq : undefined} />}
               </Fragment>
             ))}
             {lines.length === 0 && <Note>No lines yet. Each line assigns to a variable, top to bottom.</Note>}
             <AddRow onClick={addLine}>Add line</AddRow>
-            <LinePreviewPanel node={node} />
+            {/* The inputs' previews (no line to sit under), and the probe's housekeeping */}
+            <LinePreviewPanel node={node} at="rest" />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -494,6 +497,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
               />
               <ProbeButton node={node} target={{ kind: 'return' }} label="Preview the return value" onStart={() => openExplain('return')} />
             </div>
+            <LinePreviewPanel node={node} at={{ kind: 'return' }} />
             {result.trim() ? <LineExplain node={node} index="return" line={{ lhs: '', op: '', rhs: result }} ctx={lineCtxs[lineCtxs.length - 1] ?? explainCtx} dialogs={explainDialogs} openRequest={explainOpen?.at === 'return' ? explainOpen.seq : undefined} /> : null}
             <Note>The final expression of type {outputType} that the block outputs.</Note>
             {(lines.some(l => l.rhs.trim() && !l.off) || result.trim()) && <ExplainMore mode="block" text={exprBlockCode(node)} ctx={explainCtx} />}
