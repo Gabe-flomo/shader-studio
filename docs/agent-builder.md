@@ -207,10 +207,51 @@ Clicking a card replaces the rule set as one undo step. In 3D the set is rescale
 
 The thumbnails are rendered once per session, one at a time, by a small CPU simulation (`src/agentBuilder/miniSim.ts`). It runs the same rule at the trail's pixel scale, so a thumbnail is a close-up of the pattern. The start page's moving pictures use the same code. They are pictures of the motion, not the GPU simulation, which only the viewport shows.
 
+## Under the hood: the walkers in their textures
+
+The **layers** button in the top bar (Under the hood) opens a panel under the live picture. It shows the walkers as the GPU keeps them (field guide 2.5): each group's walkers live in square RGBA32F textures, one texel a walker, walker *i* at (*i* mod side, *i* ÷ side). The panel's header gives the side and the count ("512 × 512 texels = 262,144 walkers"), from the runner. The choice is remembered (`builder:agent-builder:studio:hood`); the panel closes from its × or the button.
+
+While it is open the picture shows no section diagram, so the rings sit on the plain picture.
+
+### The textures, channel by channel
+
+Each texture is a group of four small pictures (R, G, B, A), one pixel a walker, each with its name, a legend bar and its range, and a line on what the texture is for. Dead walkers (life 0 or less, or not born yet) are black in every channel.
+
+| Texture | R | G | B | A |
+|---|---|---|---|---|
+| A (2D) | position x: gradient, left −aspect → right +aspect | position y: gradient, bottom −1 → top 1 | heading: a hue wheel, one turn | age: a ramp up to the Emit's life; for walkers that live for ever a soft ramp (half way at about 21 s) |
+| B (2D) | velocity x: blue one way, orange the other | velocity y: the same | speed: a ramp, 0 → 1.5 × the fastest kind's speed | life: a ramp, green for ever, black dead |
+| A (3D) | position x | position y | position z (back → front) | age |
+| B (3D) | velocity x | velocity y | velocity z | life |
+| C | kind: each walker in its kind's chip colour | memory x: a heat map, 0–1 | memory y: a heat map, 0–1 | its own colour, unpacked |
+| D | deposit in channel 1 … 4, each in that trail channel's colour, 0–1 |
+
+C and D are shown only when the group keeps them (more than one kind, Memory, Colour or its own Deposit). In 3D the heading is the velocity's direction, so it has no channel of its own.
+
+The **trail field** follows: its four channels as swatches in the picture's shape, named and coloured as the builder's Smells / Lays chips, each with what reads it ("read by Senses", "only when it smells") and what writes it ("written by Trail (Deposit)", birth marks). A velocity trail (Deposit What: Velocity) shows velocity x, velocity y and the count.
+
+### Linking a walker to the picture
+
+- **Point at a pixel** of any texture: that walker's numbers are read (one texel of each texture), a white ring marks it on the live picture, a dot marks it on the trail swatches, its texel is marked in every texture, and a card at the top right shows walker no., texel, position, heading (degrees), speed, age, life, kind, and memory and deposit when it has them.
+- **Click the picture**: the nearest live walker within 8 pixels is picked (the GPU finds it). Its texel lights up in every texture and the ring turns solid blue. A click on a texel picks that walker too. A click where nobody is lets go.
+- **Follow** (on the card) keeps reading the picked walker every frame, so the ring and the numbers move with it. Off, the card keeps the numbers from when it was picked, and the dashed ring stays where it was then.
+- **The selected section lights the channels it uses**, and dims the others: Senses → the trail channels it smells and the heading; Turning and Steering → the heading; Moving and Forces → velocity, speed and heading; Born → position, age and life; Life → age and life; Trail → its deposit (D) and the channel it lays; Neighbours → position and velocity; Orbit → position and heading; Look → kind, colour and age; a kind chip → the kind. In 3D the heading and speed are the velocity channels.
+
+On the picture a walker is placed as Draw agents places it: in 2D at (x ÷ aspect, y); in 3D through the group's first live Draw agents camera (its orbit at the last frame's time, or a scene's camera when its probe has run), the projection the species spotlight uses, computed on the GPU. A 3D group without a live 3D Draw agents is placed as if seen from the front (best effort).
+
+### What it costs
+
+- Nothing runs while the panel is closed: ShaderCanvas calls the runner's `drawHood` only while a request is open (`lib/agentHood.ts`), and the GPU part (`lib/agentHoodGpu.ts`) is loaded the first time one opens.
+- The thumbnails are drawn on the GPU into one small 8-bit atlas (128 × 128 pixels a channel: every side ÷ 128-th walker each way), at most four times a second and only when the walkers have stepped, and read back without a stall (a pixel buffer and a fence). There is no readback of the state itself.
+- A walker's numbers are one texel of each texture (5 × 1 floats), read the same way, each frame the walker is hovered or followed, else once.
+- A pick draws every live walker as a point into one float texel, the nearest winning the depth test, and reads that texel back.
+- The runner's `stateView(targets, groupId)` is the only way in: a frozen, read-only view (side, count, kinds, C and D, aspect, step, the current copy of A–D, the trail its Deposit fills, the 3D camera). It doesn't expose the targets or the ping-pong.
+
 ## Files
 
 - `src/agentBuilder/`: `behaviours.ts` (cards ↔ rules for every kind, only when, reorder, kinds), `cards.ts` (trail followers), `sections.ts`, `onlyWhen.ts`, `kinds.ts`, `presets.ts`, `words.ts`, `diagram.ts`, `miniSim.ts`, `dotSim.ts`, `actions.ts` (the store side: make, Back, setup params with their own undo steps, presets).
 - `src/components/builders/studio/`: `StudioShell.tsx`, `LiveViewport.tsx`.
+- Under the hood: `src/agentBuilder/hood.ts` (channels, maps, highlights, texel ↔ walker ↔ picture), `src/components/agentBuilder/HoodView.tsx` (the panel, the ring and the card), `hoodStore.ts`, `src/lib/agentHood.ts` (requests), `src/lib/agentHoodGpu.ts` (thumbnails, one walker's read, picking), `AgentRunner.stateView` / `drawHood`.
 - `src/components/agentBuilder/`: `AgentBuilder.tsx`, `BehaviourCard.tsx`, `SectionCards.tsx`, `OnlyWhenLine.tsx`, `KindChips.tsx`, `SpeciesSpotlight.tsx`, `WalkerDiagram.tsx`, `KindDiagram.tsx`, `pictures.tsx`, `presetThumbs.ts`, `useLensRef.ts`, `useRuleSetEditing.ts`. They are loaded lazily by `BuilderWindowsHost`.
 - `src/lib/previewMirror.ts`.
 - The window state: `builders/windows.ts` (`agentBuilder`).

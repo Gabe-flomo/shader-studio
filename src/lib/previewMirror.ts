@@ -37,3 +37,6 @@ export function sendPreviewFrame(src: HTMLCanvasElement): void {
 
 /** ShaderCanvas: how to ask for a frame (its requestRender); null when it goes. */
 export function setPreviewWake(fn: (() => void) | null): void { wake = fn; }
+
+/** Ask the main preview for one frame (a paused clock draws one), e.g. for a builder's read of the live state. */
+export function wakePreview(): void { wake?.(); }

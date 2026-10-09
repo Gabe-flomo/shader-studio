@@ -48,6 +48,8 @@ import { useLensRef } from './useLensRef';
 import { useRuleSetEditing } from './useRuleSetEditing';
 import { KindPicture } from './pictures';
 import { usePresetThumbs } from './presetThumbs';
+import { HoodLayer, HoodPanel } from './HoodView';
+import { channelIndex, hoodHighlights, hoodTrailChannels, TRAIL_HEX, type Rgb } from '../../agentBuilder/hood';
 
 type Section = SectionId | 'advanced';
 
@@ -125,6 +127,9 @@ const FACING = [{ value: 'random', label: 'Any way' }, { value: 'inward', label:
 const BIRTHS = [{ value: 'fill', label: 'All at once' }, { value: 'rate', label: 'A stream' }, { value: 'respawn', label: 'Kept full' }];
 const STYLES = [{ value: 'points' as const, label: 'Dots' }, { value: 'glow' as const, label: 'Glow' }, { value: 'streaks' as const, label: 'Streaks' }, { value: 'ink' as const, label: 'Ink' }];
 const num = (v: unknown, d: number) => (typeof v === 'number' && isFinite(v) ? v : d);
+const HOOD_PREF = 'builder:agent-builder:studio:hood';
+const readHood = () => { try { return localStorage.getItem(HOOD_PREF) === '1'; } catch { return false; } };
+const writeHood = (v: boolean) => { try { localStorage.setItem(HOOD_PREF, v ? '1' : '0'); } catch { /* this session only */ } };
 const r3 = (v: number) => String(Math.round(v * 1000) / 1000);
 
 /** The section a kind opens on (its main one). */
@@ -136,6 +141,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const emit = useNodeGraphStore(s => setupOf(s.nodes, groupId).emit);
   const trailNode = useNodeGraphStore(s => setupOf(s.nodes, groupId).trail);
   const draw = useNodeGraphStore(s => setupOf(s.nodes, groupId).draw);
+  const depositWhat = useNodeGraphStore(s => String(setupOf(s.nodes, groupId).deposit?.params.what ?? 'trail'));
   const { set, setSet, update: apply, flush } = useRuleSetEditing(groupId);
   const kind = kindOf(set);
   const trailKind = isTrailKind(kind);
@@ -145,6 +151,10 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const [preset, setPreset] = useState<string | null>(null);
   const [advanced, setAdvanced] = useState(false);
   const [lit, setLit] = useState<number | null>(null);
+  // Under the hood (HoodView.tsx): the walkers in their state textures, under the picture.
+  const [hoodOpen, setHoodOpenState] = useState(readHood);
+  const setHoodOpen = (v: boolean) => { setHoodOpenState(v); writeHood(v); };
+  const [chipPicked, setChipPicked] = useState(false);
   const update = (next: AgentRuleSet) => { apply(next); setPreset(null); };
   // A kind added or taken away: start the walkers over once the rules are in, so births share them
   // out among the kinds (walkers born all at once keep the kind they were born with).
@@ -167,6 +177,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const shown: Section = advanced ? 'advanced' : current;
   const select = (x: Section) => {
     setLit(null);
+    setChipPicked(false);
     if (x === 'advanced') setAdvanced(true); else { setAdvanced(false); setFocus({ section: x as DiagramSection }); }
   };
   const onFocusSetting = (setting: string | undefined) => setFocus(f => ({ ...f, section: current, setting }));
@@ -183,6 +194,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const viewRef = useLensRef(viewRadius, `${current}:view`, 0.5, 2.2);
   const presets = presetsFor(kind);
   const thumbs = usePresetThumbs(presets);
+  const trailChannels = useMemo(() => hoodTrailChannels(set, { velocity: depositWhat === 'velocity' }), [set, depositWhat]);
 
   if (!group) return null;
   const name = (typeof group.params.label === 'string' && group.params.label) || 'Agents';
@@ -226,7 +238,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   );
 
   // ── Trail followers (phase 1's cards, with their "only when") ──
-  const chips = smellChips(set).map(c => ({ ...c, dot: c.value === 'own' ? undefined : ['#e8a33a', '#57b6ff', '#7ad38a', '#c792ea'][c.value as number] }));
+  const chips = smellChips(set).map(c => ({ ...c, dot: c.value === 'own' ? undefined : TRAIL_HEX[c.value as number] }));
   const onlyWhen = (c: RuleCard) => {
     const at = cards.at[c];
     if (!at) return undefined;
@@ -395,7 +407,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
     || (id === 'neighbours' && kind === 'swarm' && !on(['separate', 'match', 'cohere']).length);
   const nav = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '14px 10px' }}>
-      <KindChips set={set} sp={s} update={update} onSelect={i => { setSp(i); setLit(set.species.length > 1 || i > 0 ? i : null); }} />
+      <KindChips set={set} sp={s} update={update} onSelect={i => { setSp(i); setLit(set.species.length > 1 || i > 0 ? i : null); setChipPicked(true); }} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <StudioLabel meta="one step, in order">Sections</StudioLabel>
         {sections.map(x => {
@@ -418,15 +430,26 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
     </div>
   );
 
+  // The channels the selected section (or a picked kind) uses, lit under the hood.
+  const hoodLit = hoodHighlights(chipPicked ? null : shown, {
+    d3, kindPicked: chipPicked,
+    reads: trailKind ? (cards.senses.on ? [channelIndex(cards.senses.channel, s)] : []) : trailChannels.filter(t => t.readBy.length).map(t => t.index),
+    writes: trailKind ? (cards.trail.on ? [channelIndex(cards.trail.channel, s)] : []) : trailChannels.filter(t => t.writtenBy.length).map(t => t.index),
+  });
   const camera = d3 && draw ? { params: draw.params as Record<string, unknown>, mirror: draw.params.mirror === true } : undefined;
   const hotTrailCard = trailKind && focus.card && (['senses', 'wobble', 'trail'] as const).find(c => c === focus.card);
+  const hoodSpecies = set.species.map(x => ({ name: x.name, colour: (x.states[0]?.colour ?? [1, 1, 1]) as Rgb }));
   const overlay = ({ w, h, image }: { w: number; h: number; image: ViewRect }) => {
-    if (advanced) return null;
     const box = { w, h, image };
+    let spot: React.ReactNode = null;
     if (lit !== null && set.species.length > 1 && lit < set.species.length) {
       const sc = (set.species[lit].states[0]?.colour ?? [1, 1, 1]) as [number, number, number];
-      return <SpeciesSpotlight groupId={groupId} species={lit} colour={sc} name={set.species[lit].name} image={image} onClose={() => setLit(null)} />;
+      spot = <SpeciesSpotlight groupId={groupId} species={lit} colour={sc} name={set.species[lit].name} image={image} onClose={() => setLit(null)} />;
     }
+    // Under the hood: the plain picture (no diagram), the ring on a walker and its numbers.
+    if (hoodOpen) return <>{spot}<HoodLayer box={box} speciesNames={hoodSpecies.map(x => x.name)} /></>;
+    if (advanced) return null;
+    if (spot) return spot;
     const walkerSection = trailKind || current === 'born' || current === 'moving';
     if (walkerSection) {
       const when = hotTrailCard ? cards.when[hotTrailCard] : null;
@@ -447,12 +470,17 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       onBack={onBack} backLabel="Back to the start (takes this group away)"
       space={{ value: d3 ? '3d' : '2d', onChange: v => { flush(); setGroupSpace(groupId, v); }, hint: 'Switching turns the whole setup (sensors and speed rescaled, Trail ↔ volume); undo switches it back.' }}
       actions={<>
+        <IconButton icon="layers" label={hoodOpen ? 'Hide Under the hood' : 'Under the hood: the walkers in their textures'} size="sm" active={hoodOpen} onClick={() => setHoodOpen(!hoodOpen)} data-hood-toggle />
         <IconButton icon="expr" label="All rules (the rules editor)" size="sm" onClick={() => { flush(); openAgentRulesWindow(groupId); }} data-open-rules />
         <IconButton icon="fn" label="Open as nodes" size="sm" onClick={() => { flush(); onClose(); openGroupAsNodes(groupId); }} />
       </>}
       primary={{ label: madeHere ? 'Add to graph' : 'Done', onClick: close, title: madeHere ? 'Keep it (it is already live in your graph, wired to the Output)' : undefined }}
       nav={nav} inspector={inspector} presets={presetStrip}>
       <LiveViewport overlay={overlay} />
+      {hoodOpen && (
+        <HoodPanel groupId={groupId} species={hoodSpecies} trails={trailChannels} highlight={hoodLit} onClose={() => setHoodOpen(false)}
+          speedMax={Math.max(0.05, ...set.species.map(x => x.speed), num(emit?.params.speed, 0)) * 1.5} lifeMax={num(emit?.params.life, 0)} />
+      )}
     </StudioShell>
   );
 }

@@ -44,6 +44,8 @@ import {
 } from '../play/kit/agentShaders.js';
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
 import { agentReadingsWanted, publishAgentReadings, setAgentGroups } from './agentReadings';
+import { hoodRequests, pokeHood } from './agentHood';
+import type { AgentHoodGpu, AgentStateView } from './agentHoodGpu';
 
 type Uniforms = Record<string, THREE.IUniform>;
 
@@ -1473,7 +1475,70 @@ export class AgentRunner {
     }
   }
 
+  /**
+   * A read-only view of one group's live state (by its node id), for looking at it, never for
+   * changing it: its side and count, whether it keeps C and D, the copy of its state textures the
+   * next step reads (what was drawn this frame), the trail its Deposit fills, and in 3D the camera
+   * its first live Draw agents sees through. Frozen; it doesn't expose the targets or the ping-pong,
+   * and asking changes nothing. Null before the group has state.
+   */
+  stateView(targets: AgentTargets, nodeId: string): AgentStateView | null {
+    const g = this.spec.groups.find(x => x.nodeId === nodeId);
+    const s = g && targets.groups.get(g.slug);
+    if (!g || !s || s.side !== g.side) return null;
+    const rt = s.rt[s.cur];
+    const deps = this.spec.deposits.filter(d => d.group === g.slug);
+    const dep = deps.find(d => d.what !== 'velocity') ?? deps[0];
+    const ts = dep ? targets.trails.get(dep.trail) : undefined;
+    const tp = dep ? this.spec.trails.find(t => t.slug === dep.trail) : undefined;
+    const trail = ts && tp && dep
+      ? Object.freeze({ nodeId: tp.nodeId, texture: (ts.proj ?? ts.rt[ts.cur]).texture, w: ts.vol ? ts.vol.nx : ts.w, h: ts.vol ? ts.vol.ny : ts.h, velocity: dep.what === 'velocity' })
+      : null;
+    let camera: AgentStateView['camera'] = null;
+    const view3 = g.space3d ? this.spec.draws.find(x => x.group === g.slug && x.live && x.space3d) : undefined;
+    if (view3) {
+      const ds = targets.draws.get(view3.slug);
+      const c = agCamera3(view3, this.reader, this.lastTime, ds?.h ?? 360);
+      const probed = !!view3.probe && !!ds?.cam && this.probes.some(e => e.slug === `${view3.slug}:camera` && e.ready && !e.failed);
+      camera = Object.freeze({ eye: [...c.eye], fwd: [...c.fwd], right: [...c.right], up: [...c.up], lens: c.lens, ortho: c.ortho, dist: c.dist, scene: probed ? ds!.cam!.texture : null });
+    }
+    return Object.freeze({
+      nodeId, slug: g.slug, side: g.side, count: g.side * g.side, species: Math.max(1, g.species), stateC: !!g.stateC, d3: !!g.space3d,
+      aspect: this.aspect, step: s.step,
+      textures: Object.freeze({ A: rt.textures[0], B: rt.textures[1], C: g.stateC ? rt.textures[2] : null, D: g.stateC ? rt.textures[3] : null }),
+      trail, camera,
+    });
+  }
+
+  // The Agent Builder's Under the hood (lib/agentHood.ts): loaded and made the first time one is open.
+  private hood: AgentHoodGpu | null = null;
+  private hoodLoading = false;
+  private disposed = false;
+  /** Whether the hood still holds targets (ShaderCanvas calls drawHood once more after the last one closes, to free them). */
+  get hoodHeld(): boolean { return !!this.hood?.busy; }
+
+  /**
+   * The open Under the hood views: their colour-mapped thumbnails (a few times a second), one walker's
+   * numbers, a click's nearest walker; all from stateView, all read back without a stall. Does nothing
+   * (and loads nothing) while none is open.
+   */
+  drawHood(targets: AgentTargets): void {
+    const reqs = hoodRequests();
+    if (!this.hood) {
+      if (!reqs.length || this.hoodLoading) return;
+      this.hoodLoading = true;
+      void import('./agentHoodGpu').then(m => {
+        if (!this.disposed) { this.hood = new m.AgentHoodGpu(this.host.renderer, this.host.geometry, this.host.camera); pokeHood(); }
+      }).finally(() => { this.hoodLoading = false; });
+      return;
+    }
+    this.hood.frame(reqs, id => this.stateView(targets, id));
+  }
+
   dispose(): void {
+    this.disposed = true;
+    this.hood?.dispose();
+    this.hood = null;
     for (const e of this.steps) this.drop(e);
     for (const e of this.trailSteps) this.drop(e);
     for (const e of this.probes) this.drop(e);
