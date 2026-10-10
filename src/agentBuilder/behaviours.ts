@@ -79,7 +79,7 @@ const ALWAYS_CARDS: readonly CardId[] = ['memory'];
 const GATED_CARDS: readonly CardId[] = ['goal', 'turnRound', 'senses', 'trail', 'wobble'];
 
 /** The conditions an "only when" line can say (one per card). The rest make a rule Advanced. */
-export const ONLY_WHEN_KINDS = ['neighbours', 'sense', 'shape', 'age', 'chance', 'state'] as const;
+export const ONLY_WHEN_KINDS = ['neighbours', 'sense', 'shape', 'mask', 'age', 'chance', 'state'] as const;
 export type OnlyWhenKind = typeof ONLY_WHEN_KINDS[number];
 
 /** Where a card's action is: rule and action index in the species' rules. */

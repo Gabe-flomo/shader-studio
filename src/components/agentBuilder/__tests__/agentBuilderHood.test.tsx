@@ -245,7 +245,8 @@ describe('the phase 2 loose end: a hammered slider', () => {
       expect(groupRules(group()!).species[0].speed).toBeCloseTo(0.22 + 60 * 0.005);
     } finally { console.error = orig; }
     expect(errs.filter(e => /Maximum update depth|Too many re-renders/.test(e))).toEqual([]);
-  });
+  // 360 renders of the whole builder: about 3 s alone, more under a loaded full run.
+  }, 20_000);
 
   it('NumberInput shows a new value in the same render (no second render from an effect)', () => {
     let renders = 0;

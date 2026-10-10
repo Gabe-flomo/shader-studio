@@ -169,7 +169,7 @@ Each card has an optional **Only when…** line. "+ Only when…" opens a picker
 
 - a neighbour is near (more than N within its view; any kind, its kind, others);
 - it smells … above / below …;
-- inside / outside a shape: a circle or a box (Across, Up, Radius). This is a new rule condition, `shape`, until phase 3's Where picker;
+- inside / outside a region: picked in the Where picker (a shape, mask or texture of your graph, or one drawn on the picture; see "Where"), a `mask` condition. Older sets' typed-in circle or box (`shape`) still work;
 - older / younger than … s;
 - by chance … % a second;
 - in / not in state ….
@@ -229,7 +229,7 @@ A short note under the title says what a lens shows ("One walker, up close.") or
 | Moving | Speed (for trail followers, with the steps to reach its feelers), At the edges |
 | Senses · Turning · Trail · Born (trail followers) | Sensors · Turn, Wobble · Trail · Born |
 
-Look draws nothing, so it has no legend. The phrases are pure functions, one per behaviour (`agentBuilder/legend.ts`, `phrase`): directions in words (the nearest of eight: up, up and to the right…), a negative force turned round ("pointing up (negative: turned round)"), 0 said plainly ("Drag 0: nothing slows particles"), and the walker's noun per kind (walker, ant, particle, bird, person, orbiter). The entries are rebuilt only when the values they read change.
+Look's legend says how they are drawn and what the colour means (see "Look"). The phrases are pure functions, one per behaviour (`agentBuilder/legend.ts`, `phrase`): directions in words (the nearest of eight: up, up and to the right…), a negative force turned round ("pointing up (negative: turned round)"), 0 said plainly ("Drag 0: nothing slows particles"), and the walker's noun per kind (walker, ant, particle, bird, person, orbiter). The entries are rebuilt only when the values they read change.
 
 ### Tags on the picture
 
@@ -279,7 +279,7 @@ The user asked (2026-10-09) for a field builder for curl-like forces: known fiel
   - **Push (a force):** strength × the field is added to the velocity as a force, so they overshoot and swing.
 - **Layers**, which add up. Each has a weight (negative turns it round), an on / off switch, its own sliders, and a folded **Turn, mask, animate**:
   - **Turn its flow:** every arrow turned by so many degrees (a vortex turned 60° spirals in);
-  - **Where:** everywhere, only inside or only outside a circle or a box (with a soft edge);
+  - **Where:** everywhere, or only in a region picked in the Where picker (inside or outside; older layers' typed-in circle or box, with a soft edge, still work);
   - **Animate:** still, drift (the layer slides along a direction, wrapping round the picture), or spin (it turns round its centre, degrees a second).
 - **Add a layer** opens the gallery, eleven moving tiles (a few particles riding each field):
 
@@ -434,6 +434,54 @@ On the picture a walker is placed as Draw agents places it: in 2D at (x ÷ aspec
 - A pick draws every live walker as a point into one float texel, the nearest winning the depth test, and reads that texel back.
 - The runner's `stateView(targets, groupId)` is the only way in: a frozen, read-only view (side, count, kinds, C and D, aspect, step, the current copy of A–D, the trail its Deposit fills, the 3D camera). It doesn't expose the targets or the ping-pong.
 
+## Where: regions of your graph, and shapes made on the picture
+
+Wherever a card asks "where", the **Where picker** answers it. It replaced every typed-in circle or box:
+
+| Use | Where it is | What it writes |
+|---|---|---|
+| Only when inside / outside | a card's "Only when… → inside / outside a region…" | a mask slot of the rule set (up to four), a `mask` condition, and the group's mask socket wired to the region |
+| A field layer's region | Follow a field → a layer → Turn, mask, animate → Only in a region | the layer's `mask.region` (the same mask slots); the Field block reads `mask1`… where the walker stands |
+| The slope layer's field | Follow a field → Slope of a picture → The slope of | the group's Field ƒ socket |
+| Born inside | Born → Or born inside | the Emit: Shape Field with Where ƒ (a shape or mask, through a small adapter block), or Picture (a texture); Threshold ½ |
+| Walls | Moving → Walls, and At a wall (Turn back / Slide along) | the rule set's `obstacle`, the group's Obstacle ƒ socket into Move's Obstacle ƒ (a mask, or "outside", through an adapter); in 3D a Scene goes to Collide (3D scene) |
+
+**The list** (`agentBuilder/where.ts listRegions`) holds everything at the top of the graph that can say "here":
+
+- a **shape**: a float output that is a distance (an SDF node, a "Distance" output, a shape made here): inside where it is below 0;
+- a **mask**: any other float output that changes across the picture: inside where it is above ½;
+- a **texture** (a Pass, a Trail, a Texture node): inside where it is bright;
+- in 3D, a **Scene** (walls only).
+
+Constants, the agents' own nodes and anything downstream of the group (a cycle) are left out; the group's own trail texture is allowed (it is read a step late, as Sense reads it). Each tile has a **thumbnail**: the node's own chain compiled as a node preview and its raw values rendered on the GPU in the picture's shape (`lib/regionValues.ts`, through `nodePreviewRenderer.renderValues`), inside in the accent colour. Thumbnails are cached by shader and uniforms. A texture shows its card's thumbnail when it has one.
+
+**Make one here**: Circle, Box, Ring, Polygon or Text. Pick one and draw it on the live picture: drag from the middle for a circle or ring, corner to corner for a box or a word, click the corners of a polygon (the first again, Enter or a double-click closes it), Esc stops; a click without a drag makes a default one there. It becomes a real node (`agentBuilder/madeShapes.ts`): an Expression Block "Where: circle" returning the shape's signed distance, with a note line by line. Its place and size are the block's **sliders** (cx, cy, r, w, h, t, s, p0x…), so dragging its handles writes uniforms (no recompile, the walkers aren't started over); only a polygon's corner count or a word's letters are in its lines. The spec is kept on the node (`whereShape`), so the builder reads it back and shows its handles; a block whose lines were edited by hand is just a graph output. Text is a 5 × 7 pixel font, each run of lit pixels a box.
+
+**On the picture** (`RegionOverlay.tsx`): pointing at a Where row (or a tile in its list) draws the region over the live picture, the part where the card does nothing shaded, with a badge ("acts inside · Pond", "a wall · Polygon", "born inside · Circle"). A region of the graph is shaded from its GPU values with a smooth outline (marching squares); a shape made here is its vector outline with handles: the middle moves it, the edge or corner sizes it, a ring's inner handle sets its width, a polygon's corners move and the "+" on each side adds one. **Done** (or Esc) stops showing it. A walls region is tinted red.
+
+Old typed-in shapes (an only when's `shape`, a field layer's circle or box mask) still load and work; their settings offer **Make it a shape you can drag**.
+
+## Trail channels
+
+The trail's four channels are **named colour swatches** (Trail → Channels): a colour chip (ten colours, each with its word) and a name you click to rename in place. Each lists what **reads** it (Senses, an only when, Look) and what **writes** it (Trail (Deposit), birth marks). **+ Channel** adds the next free one, named (food, home…), up to four. The names are the rule set's `channels`, the colours its `channelColours`.
+
+- The Smells / Lays chips and the "it smells …" only when read "its trail · amber", "food · yellow" (`agentBuilder/trailChannels.ts channelChips`).
+- Under the hood's trail swatches take the same names and colours.
+- **Tint the picture** lays each channel in its colour over the live picture, from the runner's live trail (an Under the hood request for just the four channels, read back a few times a second; off while Under the hood is open).
+- **Fades** and **Spreads** have a before / after strip: a line of trail now, one half-life later and three, from the trail field's own step (blend toward the neighbours by Diffuse, halve every Half-life).
+
+## Look (every kind)
+
+Every kind has a Look section (`LookSection.tsx`, `agentBuilder/look.ts`):
+
+- **Drawn as**: Dots, Glow, Streaks or Ink, Size, Brightness (and Streak length): Draw agents. With no Draw agents (trail followers: the trail is the picture), **Draw the walkers too** adds one over what the Output showed.
+- **Colour**: by Kind (Draw agents' Colour by State: the kinds' and states' colours, named and coloured here, + State), Speed (with Fast is), Age, Heading, One colour (Draw agents' palette, or Colour A → B), **A trail** (the rules colour each walker from its kind's colour, dimmed, to a channel's colour as that trail is under it: the rule set's `look`, Finish's colour, Draw agents' Colour by Agent), or **A memory** (phase 4's `colourBy`).
+- **The trail**: what the picture shows (the trail, one channel, walker density) and its palette: five ready-made palettes and each stop's colour (the Stops Palette that shows the trail).
+- **3D: Camera**: Distance, Angle, Elevation, Orbit speed, Zoom, Focus, Blur, Max blur (Draw agents' camera), and Around a shape.
+- The legend says what is drawn: "Each walker is a dot with a soft glow, 1.2 pixels across", "Colour: slow particles at the palette's start, fast ones at its end", the trail's palette, the camera. Focus plays a few walkers drawn and coloured that way.
+
+The left nav also has **What they are**: the kind (Trail followers, Particles, Flock, Ants, Swarm, Crowd), which picks the sections. With Walls, the Flow field card (Moving, when a rule follows the flow field), states in Look, Channels and the Where picker, everything the old editor's Species, Trails and Look tabs had is in the builder.
+
 ## Files
 
 - `src/agentBuilder/`: `behaviours.ts` (cards ↔ rules for every kind, only when, reorder, kinds), `cards.ts` (trail followers), `sections.ts`, `onlyWhen.ts`, `kinds.ts`, `presets.ts`, `surprise.ts` (Surprise me per kind), `words.ts`, `diagram.ts`, `miniSim.ts`, `dotSim.ts`, `actions.ts` (the store side: make, Back, setup params with their own undo steps, presets, clearing the graph, the builder groups, Start over).
@@ -443,5 +491,7 @@ On the picture a walker is placed as Draw agents places it: in 2D at (x ÷ aspec
 - Legend, tags and focus: `src/agentBuilder/legend.ts` (the phrases, the entries, linking, the tag layout, the focus words), `src/agentBuilder/demos.ts` (the focus demos), `src/components/agentBuilder/ViewportLegend.tsx` (the legend, the tags, the demo panel).
 - Follow a field: `src/agentRules/fields.ts` (the layers, their GLSL lines, the CPU function, own-expression checks, text), `generate.ts` (the Field block, slope Flow nodes, the rule's push or ride), `src/components/agentBuilder/FieldCard.tsx` (the card, the layers, the gallery tiles, your own), `KindDiagram.tsx` (the arrows), `legend.ts` (`fieldEntries`, `phrase.fieldLayer`), `demos.ts` (the `field` demo).
 - `src/components/agentBuilder/`: `AgentBuilder.tsx`, `BehaviourCard.tsx`, `SectionCards.tsx`, `OnlyWhenLine.tsx`, `KindChips.tsx`, `SpeciesSpotlight.tsx`, `WalkerDiagram.tsx`, `KindDiagram.tsx`, `pictures.tsx`, `presetThumbs.ts`, `useLensRef.ts`, `useRuleSetEditing.ts`. They are loaded lazily by `BuilderWindowsHost`.
+- Where: `src/agentBuilder/where.ts` (the list, inside / outside, mask slots, adapters), `madeShapes.ts` (shapes as nodes, the pixel font), `whereActions.ts` (the store side: pick, read back, drag), `src/lib/regionValues.ts` (GPU values, thumbnails, the shaded region and its outline, slope arrows), `src/components/agentBuilder/WherePicker.tsx`, `RegionOverlay.tsx`.
+- Trail channels: `src/agentBuilder/trailChannels.ts`, `src/components/agentBuilder/TrailChannels.tsx`. Look: `src/agentBuilder/look.ts`, `lookActions.ts`, `src/components/agentBuilder/LookSection.tsx`.
 - `src/lib/previewMirror.ts`.
 - The window state: `builders/windows.ts` (`agentBuilder`).

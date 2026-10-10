@@ -173,7 +173,7 @@ export interface AgentRuleSet {
   neighbours?: { radius: number; max: number };
   /** Names of the four trail channels, for the sentences ("food trail"). Empty: "trail 1"… */
   channels: string[];
-  /** Up to two masks: inputs on the group card (a texture, or any number chain read where the walker is). */
+  /** Up to four masks: inputs on the group card (a texture, or any number chain read where the walker is). */
   masks: AgentMask[];
   /** What happens at the edges of the picture (or the 3D box). */
   edges: 'wrap' | 'bounce' | 'slide';
@@ -188,6 +188,16 @@ export interface AgentRuleSet {
   collide?: AgentCollide;
   /** One per species (1–4): the group's Species follows it. */
   species: AgentSpeciesRules[];
+  /**
+   * Walls (the Agent Builder's Obstacles): a shape's distance wired into the group's Obstacle ƒ socket
+   * goes to Move's Obstacle ƒ: a walker can't step where it is below 0 and turns back (or slides
+   * along it). Missing: no walls.
+   */
+  obstacle?: { on: 'turn' | 'slide' };
+  /** The four trail channels' colours (hex, the builder's swatches and Under the hood). Missing: TRAIL_COLOURS. */
+  channelColours?: string[];
+  /** How the rules colour each walker (Draw agents' Colour by Agent), when not by its state. Missing: by its state. */
+  look?: WalkerLook;
   /** Named memories (memory.ts): at most four numbers between them. Missing: none (More memory unused). */
   memories?: AgentMemory[];
   /**
@@ -197,6 +207,18 @@ export interface AgentRuleSet {
   colourBy?: { memory: string; lo: number; hi: number };
 }
 
+/**
+ * The rules' own colouring of a walker, read by Draw agents' Colour by Agent: by how much of a trail
+ * channel is where it stands (from its kind's colour, dimmed, to the channel's colour). Colour by a
+ * memory (`colourBy`) wins over it.
+ */
+export type WalkerLook = { by: 'trail'; channel: 0 | 1 | 2 | 3; gain: number };
+
+/** The trail channels' default colours: amber, blue, green, violet (the builder's swatches). */
+export const TRAIL_COLOURS = ['#e8a33a', '#57b6ff', '#7ad38a', '#c792ea'] as const;
+/** A channel's colour (hex): its own, or the default. */
+export const channelColour = (set: AgentRuleSet, c: number): string => set.channelColours?.[c] || TRAIL_COLOURS[c] || '#ffffff';
+
 /** Collide (3D scene)'s settings for a rules group round a shape: Scene size, Margin, Cushion, Bounce. */
 export interface AgentCollide { reach: number; margin: number; cushion: number; bounce: number }
 export const DEFAULT_COLLIDE: AgentCollide = { reach: 1.6, margin: 0.03, cushion: 0.18, bounce: 0.2 };
@@ -204,7 +226,7 @@ export const DEFAULT_COLLIDE: AgentCollide = { reach: 1.6, margin: 0.03, cushion
 export const MAX_SPECIES = 4;
 export const MEMORY_TYPES: readonly MemoryType[] = ['counter', 'timer', 'flag', 'value', 'position', 'level'];
 export const MAX_STATES = 8;
-export const MAX_MASKS = 2;
+export const MAX_MASKS = 4;
 
 /** A walker's chance of a rule with `perSecond` firing in one step of `dt` seconds. */
 export const chancePerStep = (perSecond: number, dt: number) => 1 - Math.pow(1 - Math.min(Math.max(perSecond, 0), 1), dt);
@@ -541,6 +563,8 @@ export function sensedChannels(set: AgentRuleSet): string[] {
       if (a.kind === 'mem') for (const k of memorySmells(set, a)) used.add(k);
     }
   }
+  // Colour by a trail channel reads it where the walker stands.
+  if (set.look?.by === 'trail') used.add(String(set.look.channel));
   return ['own', '0', '1', '2', '3'].filter(k => used.has(k));
 }
 
@@ -559,6 +583,7 @@ export function rulePorts(set: AgentRuleSet): Array<{ key: string; type: 'textur
   set.masks.forEach((m, i) => { if (i < MAX_MASKS) ports.push({ key: `mask${i + 1}`, type: m.kind === 'texture' ? 'texture' : 'float', label: m.name || `Mask ${i + 1}` }); });
   if (set.collide) ports.push({ key: 'scene', type: 'scene3d', label: 'Scene' });
   if (usesFieldSlope(set)) ports.push({ key: 'field', type: 'float', label: 'Field ƒ' });
+  if (set.obstacle) ports.push({ key: 'obstacle', type: 'float', label: 'Obstacle ƒ' });
   return ports;
 }
 
@@ -660,6 +685,9 @@ export function normalizeRuleSet(raw: unknown): AgentRuleSet {
     flow: { size: r.flow?.size ?? 1, evolve: r.flow?.evolve ?? 0.15 },
     ...(r.collide && typeof r.collide === 'object' ? { collide: { ...DEFAULT_COLLIDE, ...Object.fromEntries(Object.entries(r.collide).filter(([, v]) => typeof v === 'number' && isFinite(v))) } } : {}),
     species,
+    ...(r.obstacle && typeof r.obstacle === 'object' ? { obstacle: { on: r.obstacle.on === 'slide' ? 'slide' : 'turn' } } : {}),
+    ...(Array.isArray(r.channelColours) ? { channelColours: [0, 1, 2, 3].map(i => (typeof r.channelColours![i] === 'string' && /^#[0-9a-f]{6}$/i.test(r.channelColours![i]) ? r.channelColours![i] : TRAIL_COLOURS[i])) } : {}),
+    ...(r.look && typeof r.look === 'object' && r.look.by === 'trail' ? { look: { by: 'trail' as const, channel: ([0, 1, 2, 3].includes(Number(r.look.channel)) ? Number(r.look.channel) : 0) as 0 | 1 | 2 | 3, gain: Number(r.look.gain) > 0 ? Number(r.look.gain) : 1 } } : {}),
     ...(Array.isArray(r.memories) && r.memories.length ? { memories: r.memories.filter(m => m && typeof m.id === 'string' && typeof m.name === 'string' && MEMORY_TYPES.includes(m.type)) } : {}),
     ...(r.colourBy && typeof r.colourBy === 'object' && typeof r.colourBy.memory === 'string' ? { colourBy: { memory: r.colourBy.memory, lo: Number(r.colourBy.lo) || 0, hi: Number.isFinite(Number(r.colourBy.hi)) ? Number(r.colourBy.hi) : 1 } } : {}),
   };

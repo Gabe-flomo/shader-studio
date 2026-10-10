@@ -382,6 +382,8 @@ export function OnlyWhenOverlay({ set, sp, c, title, box }: { set: AgentRuleSet;
       </g>
     );
   }
+  // A region of the graph: the Where picker's overlay draws it (RegionOverlay).
+  if (c.kind === 'mask') return null;
   return <g data-only-when-diagram={c.kind}>{label({ x: box.w / 2, y: 26 }, text, { hot: true, key: 'only' })}</g>;
 }
 

@@ -576,6 +576,45 @@ export function makeDemo(spec: DemoSpec, colour = '#ff9a6b'): Demo {
         },
       };
     }
+    case 'look': {
+      // A dozen walkers wandering: speed, age and heading pick their colour along the palette.
+      const period = 6, n = 14, r = rand(5), cols = spec.colours.length ? spec.colours : [colour];
+      const at = (t: number) => cols[Math.min(cols.length - 1, Math.max(0, Math.floor(t * cols.length * 0.999)))];
+      const walkers = Array.from({ length: n }, (_, i) => {
+        let p = { x: (r() - 0.5) * 2.6, y: (r() - 0.5) * 1.6 }, h = r() * Math.PI * 2;
+        const sp = 0.25 + r() * 0.9, born = r() * period;
+        const track: Array<Pt & { h: number }> = [];
+        for (let k = 0; k <= period * DEMO_FPS; k++) {
+          h += (r() - 0.5) * 0.35;
+          p = { x: wrap(p.x + Math.cos(h) * sp * DT, BOX.x0, BOX.x1), y: wrap(p.y + Math.sin(h) * sp * DT, BOX.y0, BOX.y1) };
+          track.push({ ...p, h });
+        }
+        return { track, sp, born, i };
+      });
+      const tint = (w: typeof walkers[number], f: number) => {
+        const age = ((f * DT - w.born + period) % period) / period;
+        switch (spec.colourBy) {
+          case 'speed': return at((w.sp - 0.25) / 0.9);
+          case 'age': return at(age);
+          case 'heading': return at(((w.track[f].h / (Math.PI * 2)) % 1 + 1) % 1);
+          case 'single': return cols[0];
+          default: return w.i % 3 === 0 ? (cols[cols.length - 1] ?? colour) : colour;
+        }
+      };
+      return {
+        period, bounds: BOX, key: [{ colour: cols[0], label: 'start of the palette' }, { colour: cols[cols.length - 1], label: 'its end' }],
+        frame(t) {
+          const f = frameOf(t, period), fr = empty();
+          for (const w of walkers) {
+            const c = tint(w, f);
+            if (spec.style === 'streaks') fr.paths.push({ pts: w.track.slice(Math.max(0, f - 8), f + 1).filter((q, k, a) => !k || Math.abs(q.x - a[k - 1].x) < 1), colour: c, width: 2.5 });
+            fr.dots.push({ ...w.track[f], r: spec.style === 'glow' ? 7 : 3.5, colour: c, opacity: spec.style === 'glow' ? 0.35 : 1 });
+            if (spec.style === 'glow') fr.dots.push({ ...w.track[f], r: 2.5, colour: c });
+          }
+          return fr;
+        },
+      };
+    }
     case 'born': {
       const period = 3, n = 70, r = rand(2);
       const pts = Array.from({ length: n }, (): Pt => {

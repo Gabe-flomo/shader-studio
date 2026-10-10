@@ -84,9 +84,13 @@ describe('Follow a field', () => {
     // Weight it down, and keep it inside a circle.
     key($('[data-setting="layer1-weight"] [data-ruler-track]'), 'Home');
     click($('[data-field-extras="1"]'));
-    click($$('[data-setting="layer1-mask"] button').find(b => b.textContent === 'Only inside') ?? null);
     settle();
-    expect(fieldOf()!.spec.layers[1]).toMatchObject({ kind: 'curl', weight: -2, mask: { shape: 'circle', size: 0.5 } });
+    // Phase 3: a layer's region is picked in the Where picker: a circle drawn on the picture.
+    click($('[data-where-open="layer1-where"]'));
+    click($('[data-setting="layer1-mask"] [data-where-make="circle"]'));
+    act(() => { $('[data-where-draw]')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 400, clientY: 300 })); });
+    act(() => { $('[data-where-draw]')!.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 400, clientY: 300 })); });
+    expect(fieldOf()!.spec.layers[1]).toMatchObject({ kind: 'curl', weight: -2, mask: { region: { mask: 0, read: 'shape', name: 'Circle' } } });
     // Hovering a layer's legend entry draws that layer alone.
     hover($('[data-legend-entry="field#0:L1"]'));
     expect($('[data-force="field"]')?.getAttribute('data-field-lit')).toBe('1');

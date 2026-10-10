@@ -97,8 +97,9 @@ describe('one legend instead of scattered labels', () => {
     expect(legendIds()).toEqual(['lives', 'fade#0', 'die#0']);
     click($('[data-studio-section="moving"]'));
     expect(legendIds()).toEqual(['speed', 'edges']);
+    // Look (phase 3): how they are drawn and what the colour says.
     click($('[data-studio-section="look"]'));
-    expect($('[data-viewport-legend]')).toBeNull();
+    expect(legendIds()).toEqual(['look:style', 'look:colour', 'look:trail']);
   });
 });
 

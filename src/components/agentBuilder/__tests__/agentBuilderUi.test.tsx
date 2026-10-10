@@ -115,7 +115,7 @@ describe('the start page', () => {
     expect(nodes.find(n => n.type === 'trailField')!.params).toMatchObject({ halfLife: 0.05, resolution: '1024' });
     expect(nodes.find(n => n.type === 'agentDeposit')!.params.amount).toBe(4);
     expect(opened).toEqual([g.id]);
-    expect($$('[data-studio-section]').map(b => b.getAttribute('data-studio-section'))).toEqual(['born', 'senses', 'turning', 'moving', 'trail', 'memory', 'advanced']);
+    expect($$('[data-studio-section]').map(b => b.getAttribute('data-studio-section'))).toEqual(['born', 'senses', 'turning', 'moving', 'trail', 'memory', 'look', 'advanced']);
     expect($('[data-inspector]')?.getAttribute('data-inspector')).toBe('senses');
     expect($('[data-card="senses"]')?.getAttribute('data-card-on')).toBe('true');
     // Only the primary section is open: the others are one-line summaries in the nav.

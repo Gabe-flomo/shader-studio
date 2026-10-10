@@ -24,8 +24,8 @@ export interface SectionDef {
 }
 
 export const KIND_SECTIONS: Record<WalkerKind, readonly SectionDef[]> = {
-  trail: [{ id: 'born', cards: [] }, { id: 'senses', cards: ['senses'] }, { id: 'turning', cards: ['wobble'] }, { id: 'moving', cards: [] }, { id: 'trail', cards: ['trail'] }, { id: 'memory', cards: [] }],
-  ants: [{ id: 'born', cards: [] }, { id: 'senses', cards: ['senses'] }, { id: 'turning', cards: ['wobble'] }, { id: 'moving', cards: [] }, { id: 'trail', cards: ['trail'] }, { id: 'memory', cards: [] }],
+  trail: [{ id: 'born', cards: [] }, { id: 'senses', cards: ['senses'] }, { id: 'turning', cards: ['wobble'] }, { id: 'moving', cards: [] }, { id: 'trail', cards: ['trail'] }, { id: 'memory', cards: [] }, { id: 'look', cards: [] }],
+  ants: [{ id: 'born', cards: [] }, { id: 'senses', cards: ['senses'] }, { id: 'turning', cards: ['wobble'] }, { id: 'moving', cards: [] }, { id: 'trail', cards: ['trail'] }, { id: 'memory', cards: [] }, { id: 'look', cards: [] }],
   particles: [
     { id: 'born', cards: [] },
     { id: 'forces', cards: ['gravity', 'wind', 'curl', 'field', 'attract', 'drag'], reorder: true },
@@ -40,6 +40,7 @@ export const KIND_SECTIONS: Record<WalkerKind, readonly SectionDef[]> = {
     { id: 'steering', cards: ['separate', 'match', 'cohere', 'avoidEdges', 'wobble'], reorder: true },
     { id: 'moving', cards: [] },
     { id: 'memory', cards: [] },
+    { id: 'look', cards: [] },
   ],
   crowd: [
     { id: 'born', cards: [] },
@@ -47,6 +48,7 @@ export const KIND_SECTIONS: Record<WalkerKind, readonly SectionDef[]> = {
     { id: 'steering', cards: ['goal', 'separate', 'match', 'cohere', 'slow', 'avoidEdges', 'wobble'], reorder: true },
     { id: 'moving', cards: [] },
     { id: 'memory', cards: [] },
+    { id: 'look', cards: [] },
   ],
   swarm: [
     { id: 'born', cards: [] },
@@ -54,6 +56,7 @@ export const KIND_SECTIONS: Record<WalkerKind, readonly SectionDef[]> = {
     { id: 'neighbours', cards: ['separate', 'cohere', 'match'], reorder: true },
     { id: 'moving', cards: [] },
     { id: 'memory', cards: [] },
+    { id: 'look', cards: [] },
   ],
 };
 
@@ -79,8 +82,8 @@ const OTHER: Record<Exclude<SectionId, TrailSection>, SectionWords> = {
   },
   look: {
     label: 'Look', icon: 'eye',
-    hint: 'How the particles are drawn: dots, glow or streaks, their size and colour.',
-    learn: 'Draw agents draws every live particle over the picture: soft dots, dots with a glow, streaks back along the motion, or ink. Size and Brightness set each one; the colour is its kind\'s, dimmed by Fade with age.',
+    hint: 'How the walkers and the trail are drawn: dots, glow or streaks, size, what the colour says, the trail\'s palette and, in 3D, the camera.',
+    learn: 'Draw agents draws every live walker over the picture: soft dots, dots with a glow, streaks back along the motion, or ink. Size and Brightness set each one. The colour can say its kind (and state), how fast it goes, how old it is, which way it heads, how much of a trail is where it stands, or a memory. The trail itself is drawn by its palette; in 3D the walkers are seen through a camera that can circle them.',
     guide: 'Field guide 2.11, Drawing the walkers',
   },
   neighbours: {

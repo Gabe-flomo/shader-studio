@@ -322,3 +322,25 @@ Built:
 Cost: 8 MB at 256k walkers and 32 MB at 1M (both copies).
 
 The agent stopped at the usage limit before its final run. I finished it: the full suite passes (9060), and a browser check showed adding an energy level, an "Add up what it smells" card, Colour by energy and the ants preset as cards, compiling with no GLSL errors.
+
+## Phase 3 status (2026-10-10)
+
+Built (docs/agent-builder.md "Where", "Trail channels", "Look"):
+
+- **The Where picker** everywhere a card asks where: only when inside / outside, a field layer's region, the slope layer's Field ƒ, Born inside and Walls (Moving). It lists the graph's shapes (SDFs), masks (any float that varies), textures and, in 3D, Scenes, each with a GPU thumbnail of the node's own chain (`lib/regionValues.ts`, cached). Picking wires the right socket per use: a mask slot (now up to four) and a `mask` condition; a layer's `mask.region`, read in the Field block; Field ƒ; the Emit's Where ƒ (through a small adapter block) or Picture; a new `obstacle` on the rule set into Move's Obstacle ƒ (Turn back / Slide along), or a Scene into Collide in 3D.
+- **Make one here**: circle, box, ring, polygon and text, drawn by dragging (or clicking corners) on the live picture. Each is a real Expression Block with a note, its place and size as sliders, so dragging its handles writes uniforms; it reads back from its node (`whereShape`) and keeps its handles.
+- **On the picture**: the region shaded where the card does nothing, with a smooth outline and a badge; shapes made here with handles.
+- **Trail swatches**: up to four named, coloured channels (renamed in place, ten colours), each with what reads and writes it; the Smells / Lays chips, Under the hood and the new **Tint the picture** use the same names and colours. Fades and Spreads have a before / after strip.
+- **Look for every kind**: drawn as, size, brightness; colour by kind (with the kinds' states named and coloured), speed, age, heading, one colour, a trail channel (the rules colour the walker: the rule set's `look`, Finish's colour) or a memory (phase 4's seam, used); the palette; the trail's palette and what the picture shows; in 3D the camera and Around a shape. A legend says what the colour means, with a focus demo. "Draw the walkers too" adds a Draw agents where there is none.
+- **#767's gaps** (the old editor's tabs): the kind ("What they are" in the nav), masks (the Where picker), channel names (swatches), states (Look), the flow field (a card in Moving when a rule follows it), views and the 3D camera (Look).
+- **Phase 2 and field follow-ups**: the 3D Born outline follows the orbiting camera (on the preview's clock); the lens zooms over a third of a second after a big radius jump (with #767's continuous re-fit, the ring no longer snaps back); a slope layer's arrows are drawn from the graph's field, evaluated on the GPU at the picture's points.
+- **Spec and generate, additive only**: `obstacle`, `channelColours`, `look` (by a trail) and MAX_MASKS 4 in spec.ts; Move's Obstacle ƒ, Finish's trail colour and the Field block's region inputs in generate.ts; `mask` is an "only when" the cards can say.
+
+Not done yet:
+
+- A texture can't be a wall or a slope (they need a field: a function of position); sampling a texture inside a field chain would do it.
+- A field layer masked by a graph region is drawn unmasked on the CPU arrows (the region is outlined instead).
+- Thumbnails are a still at time 0; a moving region (noise with time) is shown as it starts.
+- Tint the picture and Under the hood share one request per group, so the tint is off while Under the hood is open.
+- Text is a blocky 5 × 7 font (A–Z, 0–9, a few marks).
+- The slope arrows sit beside the card's own field arrows; with many layers the picture is busy.

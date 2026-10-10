@@ -4507,7 +4507,7 @@ Examples:
 
 ### masks
 
-Agent Rules · setting. Up to two masks (inputs on the group card); Name:texture for a texture.
+Agent Rules · setting. Up to four masks (inputs on the group card); Name:texture for a texture.
 
 Words: `masks`
 

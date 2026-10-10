@@ -23,14 +23,13 @@ import { restartAgents } from '../../lib/agentRunner';
 import { Button, IconButton } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
 import { Select } from '../ui/Select';
-import { ColorSwatch } from '../ui/ColorPicker';
 import { PresetCard, StudioLabel, StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
 import { LiveViewport, type ViewRect } from '../builders/studio/LiveViewport';
-import { type AgentRuleSet, type ChannelRef, type RuleCondition, DEFAULT_NEIGHBOURS, kindOf, WALKER_KINDS } from '../../agentRules/spec';
+import { type AgentRuleSet, type ChannelRef, type RuleCondition, type WalkerKind, DEFAULT_NEIGHBOURS, kindOf, usesFlow, WALKER_KINDS, WALKER_KIND_KEYS } from '../../agentRules/spec';
 import { openGroupAsNodes, setGroupSpace } from '../../agentRules/storeActions';
-import { patchCard, readCards, sectionSummary, setCardOn, setEdges, setNeighbours, setSensors, setSpeed, smellChips, type RuleCard } from '../../agentBuilder/cards';
-import { type CardRead, readBehaviours, setMemWhen, setOnlyWhen, setSpeciesColour } from '../../agentBuilder/behaviours';
-import { MemoryColourRow, MemoryLens, MemorySection, TimesChip } from './MemorySection';
+import { patchCard, readCards, sectionSummary, setCardOn, setEdges, setFlow, setNeighbours, setSensors, setSpeed, type RuleCard } from '../../agentBuilder/cards';
+import { type CardRead, readBehaviours, setMemWhen, setOnlyWhen } from '../../agentBuilder/behaviours';
+import { MemoryLens, MemorySection, TimesChip } from './MemorySection';
 import { memorySlotNames } from '../../agentBuilder/memory';
 import { type DiagramFocus, type DiagramSection } from '../../agentBuilder/diagram';
 import { START_CARDS, type StartCard } from '../../agentBuilder/kinds';
@@ -50,7 +49,16 @@ import { useRuleSetEditing } from './useRuleSetEditing';
 import { KindPicture } from './pictures';
 import { usePresetThumbs } from './presetThumbs';
 import { HoodLayer, HoodPanel } from './HoodView';
-import { channelIndex, hoodHighlights, hoodTrailChannels, TRAIL_HEX, type Rgb } from '../../agentBuilder/hood';
+import { channelIndex, hoodHighlights, hoodTrailChannels, type Rgb } from '../../agentBuilder/hood';
+import { channelChips } from '../../agentBuilder/trailChannels';
+import { type WhereEdit, type WherePick, setWhere } from '../../agentBuilder/whereActions';
+import type { WhereUse } from '../../agentBuilder/where';
+import { lookEntries, cssOf, stopsOf } from '../../agentBuilder/look';
+import { trailPaletteOf } from '../../agentBuilder/lookActions';
+import { WhereFocusContext, WhereRow, type WhereDrawing, type WhereFocus, type WhereShown } from './WherePicker';
+import { RegionOverlay, SlopeArrows } from './RegionOverlay';
+import { FadeStrip, TrailChannelsCard, TrailTint } from './TrailChannels';
+import { LookSection } from './LookSection';
 import { type Box, type LegendEntry, entryForFocus, focusOfEntry, legendEntries, moreAbout } from '../../agentBuilder/legend';
 import { onlyWhenText } from '../../agentBuilder/onlyWhen';
 import { DEMO_H, DEMO_W, FocusDemo, ViewportLegend, type ViewportLink } from './ViewportLegend';
@@ -228,9 +236,13 @@ const SHAPES_2D = [{ value: 'disc', label: 'Disc' }, { value: 'ring', label: 'Ri
 const SHAPES_3D = [{ value: 'ball', label: 'Ball' }, { value: 'sphere', label: 'Sphere (shell)' }, { value: 'box', label: 'Box' }, { value: 'point', label: 'Point' }, { value: 'screen', label: 'Whole box' }];
 const FACING = [{ value: 'random', label: 'Any way' }, { value: 'inward', label: 'Inward' }, { value: 'outward', label: 'Outward' }, { value: 'up', label: 'Up' }];
 const BIRTHS = [{ value: 'fill', label: 'All at once' }, { value: 'rate', label: 'A stream' }, { value: 'respawn', label: 'Kept full' }];
-const STYLES = [{ value: 'points' as const, label: 'Dots' }, { value: 'glow' as const, label: 'Glow' }, { value: 'streaks' as const, label: 'Streaks' }, { value: 'ink' as const, label: 'Ink' }];
 const num = (v: unknown, d: number) => (typeof v === 'number' && isFinite(v) ? v : d);
 const HOOD_PREF = 'builder:agent-builder:studio:hood';
+const TINT_PREF = 'builder:agent-builder:studio:tint';
+const readPref = (k: string) => { try { return localStorage.getItem(k) === '1'; } catch { return false; } };
+const writePref = (k: string, v: boolean) => { try { localStorage.setItem(k, v ? '1' : '0'); } catch { /* this session only */ } };
+/** Born in a region: the Emit's Shape Field or Picture, in words. */
+const BORN_REGION = [{ value: 'field', label: 'A region (below)' }, { value: 'picture', label: 'A texture (below)' }];
 const readHood = () => { try { return localStorage.getItem(HOOD_PREF) === '1'; } catch { return false; } };
 const writeHood = (v: boolean) => { try { localStorage.setItem(HOOD_PREF, v ? '1' : '0'); } catch { /* this session only */ } };
 const r3 = (v: number) => String(Math.round(v * 1000) / 1000);
@@ -263,6 +275,28 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   // Memory (phase 4): the memory being edited; the viewport colours the walkers by it.
   const [memPicked, setMemPicked] = useState<string | null>(null);
   const update = (next: AgentRuleSet) => { apply(next); setPreset(null); };
+  // Where (the Where picker): the region shown over the picture, a shape being drawn, and the pick.
+  const [whereShown, setWhereShown] = useState<WhereShown | null>(null);
+  const [drawing, setDrawing] = useState<WhereDrawing | null>(null);
+  const [tint, setTintState] = useState(() => readPref(TINT_PREF));
+  const setTint = (v: boolean) => { setTintState(v); writePref(TINT_PREF, v); };
+  const applyWhere = (use: WhereUse, pick: WherePick | null, edit: WhereEdit = {}) => {
+    flush();
+    const next = setWhere(groupId, use, pick, edit);
+    if (next) { setSet(next); setPreset(null); }
+    // Born somewhere else: start the walkers over so they are born there.
+    if (use === 'born') setTimeout(() => restartAgents(groupId), 400);
+  };
+  // One context value while nothing it holds changes (its readers re-render only then).
+  const applyRef = useRef(applyWhere);
+  applyRef.current = applyWhere;
+  const space3d = group?.params.space === '3d';
+  const whereCtx = useMemo<WhereFocus>(() => ({
+    groupId, d3: space3d, shown: whereShown,
+    show: w => setWhereShown(o => (o?.key === w?.key && o?.region?.nodeId === w?.region?.nodeId && o?.outside === w?.outside ? o : w)),
+    drawing, draw: setDrawing, apply: (u, p, e) => applyRef.current(u, p, e),
+  }), [groupId, space3d, whereShown, drawing]);
+  const trailStopsKey = useNodeGraphStore(s => JSON.stringify(stopsOf(trailPaletteOf(s.nodes, groupId)).map(cssOf)));
   // A kind added or taken away: start the walkers over once the rules are in, so births share them
   // out among the kinds (walkers born all at once keep the kind they were born with).
   const kindsWas = useRef(set.species.length);
@@ -284,6 +318,8 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const shown: Section = advanced ? 'advanced' : current;
   const select = (x: Section) => {
     setLit(null);
+    setWhereShown(null);
+    setDrawing(null);
     setFocusId(null);
     setHoverEntry(null);
     setChipPicked(false);
@@ -308,11 +344,11 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   // ── The legend, its tags and focus (legend.ts, ViewportLegend.tsx) ──
   // Rebuilt only when the values it reads change.
   const lifeSecs = emit ? num(emit.params.life, 0) : null;
-  const entries = useMemo(() => legendEntries({
+  const entries = useMemo(() => (current === 'look' ? lookEntries({ set, kind, draw, d3: group?.params.space === '3d', trailStops: JSON.parse(trailStopsKey) as string[] }) : legendEntries({
     set, sp: s, kind, section: current as DiagramSection, cards: behaviours.cards, trail: trailKind ? cards : undefined,
     born: { shape: born.shape, size: born.size, count: born.count }, trailField: { halfLife: trail.halfLife, diffuse: trail.diffuse }, life: lifeSecs,
     whenText: c => onlyWhenText(set, s, c),
-  }), [set, s, kind, current, behaviours.cards, trailKind, cards, born.shape, born.size, born.count, trail.halfLife, trail.diffuse, lifeSecs]);
+  })), [set, s, kind, current, behaviours.cards, trailKind, cards, born.shape, born.size, born.count, trail.halfLife, trail.diffuse, lifeSecs, draw, trailStopsKey, group?.params.space]);
   const [hoverEntry, setHoverEntry] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [legendBox, setLegendBox] = useState<Box | null>(null);
@@ -373,9 +409,14 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       </>}>
       {!emit && <span style={{ fontSize: 12, color: tk.text.muted }}>No Emit is wired into this group: they are born anywhere, all at once.</span>}
       <SettingRow id="where" label="Where" hint={SETTING_HINTS.where} onFocus={onFocusSetting}>
-        <Select ariaLabel="Where they are born" value={born.shape} options={(d3 ? SHAPES_3D : SHAPES_2D).concat((d3 ? SHAPES_3D : SHAPES_2D).some(x => x.value === born.shape) ? [] : [{ value: born.shape, label: born.shape }])}
+        <Select ariaLabel="Where they are born" value={born.shape} options={(d3 ? SHAPES_3D : SHAPES_2D).concat((d3 ? SHAPES_3D : SHAPES_2D).some(x => x.value === born.shape) ? [] : [BORN_REGION.find(x => x.value === born.shape) ?? { value: born.shape, label: born.shape }])}
           onChange={v => setSetupParam(emit?.id, { shape: v })} />
       </SettingRow>
+      {emit && (
+        <SettingRow id="bornWhere" label="Or born inside" hint="A shape, mask or texture of your graph, or one you draw on the picture: they are born only there." onFocus={onFocusSetting}>
+          <WhereRow id="born" use="born" onFocus={onFocusSetting} />
+        </SettingRow>
+      )}
       <SliderSetting id="size" label="Size" hint={SETTING_HINTS.size} value={born.size} min={0} max={2} step={0.01} onFocus={onFocusSetting}
         onChange={v => setSetupParam(emit?.id, { size: v })} disabled={!emit || born.shape === 'screen' || born.shape === 'point'} />
       <SettingRow id="count" label="How many" hint={SETTING_HINTS.count} onFocus={onFocusSetting}>
@@ -385,13 +426,14 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   );
 
   // ── Trail followers (phase 1's cards, with their "only when") ──
-  const chips = smellChips(set).map(c => ({ ...c, dot: c.value === 'own' ? undefined : TRAIL_HEX[c.value as number] }));
+  const chips = channelChips(set, s);
   const onlyWhen = (c: RuleCard) => {
     const at = cards.at[c];
     if (!at) return undefined;
     return <OnlyWhenLine id={c} set={set} sp={s} when={cards.when[c]} memWhen={cards.memWhen[c]}
       onFocus={x => { focusCard(c); onFocusSetting(x); }} onChange={(w: RuleCondition | null) => update(setOnlyWhen(set, s, at, w))}
-      onMemChange={(w: RuleCondition | null) => update(setMemWhen(set, s, at, w))} />;
+      onMemChange={(w: RuleCondition | null) => update(setMemWhen(set, s, at, w))}
+      whereEdit={(s2, w) => setOnlyWhen(s2, s, readCards(s2, s).at[c] ?? at, w)} />;
   };
   // Memory: trail followers' cards beyond the three (a second Senses or Trail a memory gates, Head for, Turn round).
   const extraCards = (ids: string[]) => {
@@ -444,8 +486,24 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
         <Segmented size="sm" fill ariaLabel="At the edges" value={cards.moving.edges} onChange={v => update(setEdges(set, v))}
           options={[{ value: 'wrap' as const, label: 'Wrap' }, { value: 'bounce' as const, label: 'Bounce' }, { value: 'slide' as const, label: 'Slide' }]} />
       </SettingRow>
+      <SettingRow id="walls" label="Walls" hint={d3 ? 'A shape of your graph (a column through the depth) or a 3D scene wired in: they can\'t go in, and flow round it.' : 'A shape of your graph, or one you draw on the picture: they can\'t go in (Move\'s Obstacle ƒ).'} onFocus={onFocusSetting}>
+        <WhereRow id="walls" use="obstacle" onFocus={onFocusSetting} />
+      </SettingRow>
+      {set.obstacle && (
+        <SettingRow id="wallsHow" label="At a wall" hint="Turn back: it stays put and turns round (slime, ants). Slide: it moves along the wall's edge." onFocus={onFocusSetting}>
+          <Segmented size="sm" fill ariaLabel="At a wall" value={set.obstacle.on} onChange={v => update({ ...set, obstacle: { on: v } })}
+            options={[{ value: 'turn' as const, label: 'Turn back' }, { value: 'slide' as const, label: 'Slide along' }]} />
+        </SettingRow>
+      )}
     </BehaviourCard>
   );
+  // The flow field (Follow a flow field, curl noise as a force): its size and how fast it changes. Particles have it on their Curl card.
+  const flowCard = usesFlow(set) && kind !== 'particles' ? (
+    <BehaviourCard id="flow" picture="curl" title="Flow field" hint="The curl-noise currents that Follow a flow field turns along." summary={`eddies ${r3(set.flow.size)} · changes ${r3(set.flow.evolve)}`}>
+      <SliderSetting id="flowSize" label="Eddies" hint={MORE_HINTS.flowSize} value={set.flow.size} min={0.2} max={4} step={0.05} onFocus={onFocusSetting} onChange={v => update(setFlow(set, { size: v }))} />
+      <SliderSetting id="flowEvolve" label="Changes" hint={MORE_HINTS.flowEvolve} value={set.flow.evolve} min={0} max={1} step={0.01} onFocus={onFocusSetting} onChange={v => update(setFlow(set, { evolve: v }))} />
+    </BehaviourCard>
+  ) : null;
   const trailCard = (
     <div onPointerEnter={() => focusCard('trail')}>
       <BehaviourCard id="trail" picture="trail" title="Trail" hint={words('trail').hint} learn={words('trail').learn} guide={words('trail').guide}
@@ -460,9 +518,13 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
             onFocus={onFocusSetting} onChange={v => setSetupParam(trailNode.id, { halfLife: Math.max(0.005, v) })} />
           <SliderSetting id="spreads" label="Spreads" hint={SETTING_HINTS.spreads} value={trail.diffuse} min={0} max={1} step={0.01}
             onFocus={onFocusSetting} onChange={v => setSetupParam(trailNode.id, { diffuse: v })} />
+          <FadeStrip halfLife={trail.halfLife} diffuse={trail.diffuse} colour={chips.find(c => c.value === cards.trail.channel)?.dot} />
         </> : <span style={{ fontSize: 12, color: tk.text.muted }}>No Trail field: wire the group into a Deposit and a Trail field to see and smell it.</span>}
       </BehaviourCard>
       {extraCards(['trail'])}
+      <div style={{ marginTop: 12 }}>
+        <TrailChannelsCard set={set} update={update} velocity={depositWhat === 'velocity'} tint={tint} onTint={setTint} />
+      </div>
     </div>
   );
 
@@ -493,25 +555,8 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
         onChange={v => setSetupParam(emit.id, { life: Math.max(0, v) })} />
     </BehaviourCard>
   ) : undefined;
-  const colour = (set.species[s]?.states[0]?.colour ?? [1, 1, 1]) as [number, number, number];
   const lookCard = (
-    <>
-      {sectionHeader('look')}
-      <BehaviourCard id="look" picture="look" title="Drawn as" hint={words('look').hint} summary={draw ? `${STYLES.find(x => x.value === draw.params.style)?.label ?? 'Dots'} · size ${r3(num(draw.params.size, 1.5))}` : 'no Draw agents'}>
-        {draw ? <>
-          <SettingRow id="style" label="Style" hint={MORE_HINTS.style} onFocus={onFocusSetting}>
-            <Segmented size="sm" fill ariaLabel="Style" value={(String(draw.params.style ?? 'points')) as typeof STYLES[number]['value']} options={STYLES} onChange={v => setSetupParam(draw.id, { style: v })} />
-          </SettingRow>
-          <SliderSetting id="dsize" label="Size" hint={MORE_HINTS.size} value={num(draw.params.size, 1.5)} min={0.25} max={8} step={0.05} onFocus={onFocusSetting} onChange={v => setSetupParam(draw.id, { size: v })} />
-          <SliderSetting id="brightness" label="Brightness" hint={MORE_HINTS.brightness} value={num(draw.params.brightness, 0.5)} min={0} max={3} step={0.01} onFocus={onFocusSetting} onChange={v => setSetupParam(draw.id, { brightness: v })} />
-        </> : <span style={{ fontSize: 12, color: tk.text.muted }}>No Draw agents shows this group: the trail is the picture.</span>}
-        <SettingRow id="colour" label={`${set.species[s]?.name ?? 'Its'} colour`} hint={MORE_HINTS.colour} onFocus={onFocusSetting}>
-          <ColorSwatch label="Colour" value={colour} onChange={rgb => update(setSpeciesColour(set, s, rgb as [number, number, number]))} />
-        </SettingRow>
-        {/* Memory (phase 4) seam: colour by a memory. */}
-        <MemoryColourRow set={set} update={update} onFocus={onFocusSetting} />
-      </BehaviourCard>
-    </>
+    <LookSection groupId={groupId} set={set} sp={s} update={update} draw={draw} d3={d3} intro={sectionHeader('look')} onFocus={onFocusSetting} flush={flush} />
   );
 
   const advancedCards = (
@@ -526,7 +571,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       case 'born': return bornCard;
       case 'senses': return sensesCard;
       case 'turning': return turningCard;
-      case 'moving': return movingCard;
+      case 'moving': return <>{movingCard}{flowCard}</>;
       case 'trail': return trailCard;
       case 'forces': return sectionCards('forces');
       case 'life': return sectionCards('life', lifeIntro);
@@ -568,7 +613,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
         const f = on(['fade'])[0]?.action, d = on(['die'])[0];
         return [f?.kind === 'fade' ? `fades ${r3(f.seconds)} s` : '', d?.when?.kind === 'age' ? `dies at ${r3(d.when.seconds)} s` : d ? 'dies' : ''].filter(Boolean).join(' · ') || 'for ever';
       }
-      case 'look': return draw ? `${String(draw.params.style ?? 'points')} · ${r3(num(draw.params.size, 1.5))}` : 'the trail';
+      case 'look': return draw ? `${String(draw.params.style ?? 'points')} · ${r3(num(draw.params.size, 1.5))}` : 'the trail is the picture';
       case 'neighbours': return `sees ${r3(viewRadius)} · max ${set.neighbours?.max ?? DEFAULT_NEIGHBOURS.max}`;
       case 'steering': return titles(['goal', 'separate', 'match', 'cohere', 'slow', 'avoidEdges', 'wobble']);
       case 'orbit': {
@@ -583,6 +628,11 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const nav = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '14px 10px' }}>
       <KindChips set={set} sp={s} update={update} onSelect={i => { setSp(i); setLit(set.species.length > 1 || i > 0 ? i : null); setChipPicked(true); }} />
+      <span data-walker-kind title={WALKER_KINDS[kind].blurb} style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        <StudioLabel meta="its sections">What they are</StudioLabel>
+        <Select ariaLabel="What kind of walkers" value={kind} options={WALKER_KIND_KEYS.map(k => ({ value: k, label: WALKER_KINDS[k].label }))}
+          onChange={v => update({ ...set, kind: v as WalkerKind })} />
+      </span>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <StudioLabel meta="one step, in order">Sections</StudioLabel>
         {sections.map(x => {
@@ -629,6 +679,15 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
     else if (focused) setFocus(f => ({ ...f, section: current, ...focusOfEntry(focused) }));
     else setFocus(f => (f.setting === undefined ? f : { ...f, setting: undefined }));
   };
+  // Follow a field's slope layer: its arrows from the graph's field wired into Field ƒ (lib/regionValues).
+  const slopeField = (() => {
+    for (const c of behaviours.cards) {
+      if (!c.on || c.action.kind !== 'field') continue;
+      const l = c.action.spec.layers.find(x => x.kind === 'slope' && !x.off);
+      if (l) return { flip: !!l.flip, around: !!l.around };
+    }
+    return null;
+  })();
   const lensNote = (() => {
     if (current === 'born') return d3 ? (camera ? 'Drawn through the 3D camera as it starts (it then circles).' : 'Seen from the front: no 3D camera to look through.') : undefined;
     if (current === 'senses' || current === 'turning' || current === 'trail' || (current === 'moving' && focus.setting !== 'edges' && trailKind)) return 'One walker, up close.';
@@ -636,7 +695,13 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
     if (current === 'forces') return behaviours.cards.some(c => c.on && c.card === 'field') ? 'One particle with its forces; the field (and any curl flow) as arrows over the picture.' : 'One particle with its forces; the curl flow over the picture.';
     return undefined;
   })();
-  const overlay = ({ w, h, image }: { w: number; h: number; image: ViewRect }) => {
+  // The region pointed at in a Where row stays drawn (with its handles) over whatever else the picture shows.
+  const overlay = (b: { w: number; h: number; image: ViewRect }) => <>
+    {baseOverlay(b)}
+    {!drawing && !hoodOpen && whereShown?.region && <RegionOverlay shown={whereShown} drawing={null} box={b} onClose={() => setWhereShown(null)} />}
+    {!drawing && !hoodOpen && !advanced && current === 'forces' && slopeField && <SlopeArrows groupId={groupId} box={b} flip={slopeField.flip} around={slopeField.around} />}
+  </>;
+  const baseOverlay = ({ w, h, image }: { w: number; h: number; image: ViewRect }) => {
     const box = { w, h, image };
     const demoBox: Box = { left: w - 12 - (DEMO_W + 20), top: h - 12 - (DEMO_H + 70), w: DEMO_W + 20, h: DEMO_H + 70 };
     const link: ViewportLink = {
@@ -659,12 +724,17 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
     if (current === 'memory' && !advanced && !hoodOpen) return <MemoryLens groupId={groupId} set={set} memoryId={memPicked} image={image} />;
     // Under the hood: the plain picture (no diagram), the ring on a walker and its numbers.
     if (hoodOpen) return <>{spot}<HoodLayer box={box} speciesNames={hoodSpecies.map(x => x.name)} /></>;
+    // The trail's channels in their colours (Trail: Tint the picture).
+    const tinted = tint && !advanced ? <TrailTint groupId={groupId} set={set} box={box} velocity={depositWhat === 'velocity'} /> : null;
+    // Where: a shape being drawn, or the region pointed at, over everything else.
+    if (drawing) return <>{tinted}<RegionOverlay shown={whereShown} drawing={drawing} box={box} /></>;
     if (advanced) return null;
     if (spot) return spot;
     const walkerSection = trailKind || current === 'born' || current === 'moving';
     if (walkerSection) {
       const when = hotTrailCard ? cards.when[hotTrailCard] : null;
       return <>
+        {tinted}
         <WalkerDiagram focus={{ ...focus, section: current as DiagramSection }} cards={cards} box={box} born={born} trail={trail} lensRef={lensRef} d3={d3} camera={camera} feelersShown={trailKind} link={link} />
         {when && <svg width={w} height={h} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
           <OnlyWhenOverlay set={set} sp={s} c={when} title={CARD_WORDS[hotTrailCard as RuleCard].title} box={box} />
@@ -672,8 +742,9 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
         {legend}
       </>;
     }
-    if (current === 'look') return null;
+    if (current === 'look') return <>{tinted}{legend}</>;
     return <>
+      {tinted}
       <KindDiagram focus={{ ...focus, section: current as DiagramSection }} cards={behaviours.cards as CardRead[]} set={set} sp={s} box={box} viewRef={viewRef}
         life={num(emit?.params.life, 0)} link={link} />
       {legend}
@@ -681,8 +752,9 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   };
 
   return (
+    <WhereFocusContext.Provider value={whereCtx}>
     <StudioShell prefsKey="agent-builder" icon="swarm" title={name} kind={`${kindLabel} · ${d3 ? '3D' : '2D'}`} onClose={close}
-      onEscape={() => { if (!focused) return false; setFocusId(null); return true; }}
+      onEscape={() => { if (drawing) { setDrawing(null); return true; } if (whereShown) { setWhereShown(null); return true; } if (!focused) return false; setFocusId(null); return true; }}
       onBack={onBack} backLabel="Back to the start (takes this group away)"
       space={{ value: d3 ? '3d' : '2d', onChange: v => { flush(); setGroupSpace(groupId, v); }, hint: 'Switching turns the whole setup (sensors and speed rescaled, Trail ↔ volume); undo switches it back.' }}
       actions={<>
@@ -699,6 +771,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
           speedMax={Math.max(0.05, ...set.species.map(x => x.speed), num(emit?.params.speed, 0)) * 1.5} lifeMax={num(emit?.params.life, 0)} />
       )}
     </StudioShell>
+    </WhereFocusContext.Provider>
   );
 }
 
