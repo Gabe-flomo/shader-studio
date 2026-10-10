@@ -15,6 +15,9 @@
  *    picture and follows as it moves. With Shadows from wired, the point light's light is
  *    soft-shadowed by the scene's objects.
  *
+ * Metric models (Depth Pro, ZoeDepth: experimental) give real distances: wired into Picture distance, they are used
+ * as they are and Nearest / Farthest are skipped (where the distance reads 0, e.g. another model, calibration again).
+ *
  * Calibration: depth models give *relative* nearness, not distances. Nearest / Farthest say where, in
  * scene units, the picture's nearest and farthest things sit; nearness is interpolated in 1/distance
  * (the models' nearness behaves like inverse depth), so the middle of the range lands where the eye
@@ -30,6 +33,14 @@ export const DEPTH_SCENE_GLSL = `float depthSceneDist(float nearness, float near
   float inv = mix(1.0 / max(farD, 1e-3), 1.0 / max(nearD, 1e-3), n);
   return 1.0 / max(inv, 1e-6);
 }`;
+
+/** The picture's distance: a metric one when wired (and above 0), else the calibrated nearness. */
+const pictureDist = (node: { params: Record<string, unknown> }, nearness: string, metric: string | undefined): string => {
+  const cal = `depthSceneDist(${nearness}, ${p(node.params.nearD, 1.5)}, ${p(node.params.farD, 8)})`;
+  return metric ? `((${metric}) > 0.0 ? (${metric}) : ${cal})` : cal;
+};
+
+const METRIC_HINT = 'From a metric model (Depth Pro, ZoeDepth): the Depth node\'s Distance, in metres. Used as it is: Nearest / Farthest are skipped. Unwired: Picture depth with calibration.';
 
 /** The same sum on the CPU, for tests and for anything that needs to place a picture's pixel. */
 export function depthSceneDist(nearness: number, nearD: number, farD: number): number {
@@ -53,6 +64,7 @@ export const DepthCompositeNode: NodeDefinition = {
   inputs: {
     picture: { type: 'vec3', label: 'Picture', hint: 'The picture\'s colour (a Texture Input or Video Input\'s colour).' },
     nearness: { type: 'float', label: 'Picture depth', hint: 'The Depth node\'s Depth (Near is: Bright): 1 nearest.' },
+    distance: { type: 'float', label: 'Picture distance', hint: METRIC_HINT },
     scene: { type: 'vec3', label: 'Scene', hint: 'The 3D scene\'s colour (the March Loop\'s Color, or after your lighting).' },
     dist: { type: 'float', label: 'Scene distance', hint: 'The March Loop\'s Distance: how far each ray went.' },
     hit: { type: 'float', label: 'Scene hit', hint: 'The March Loop\'s Hit. Where the scene has nothing, the picture shows. Unwired: everywhere counts as hit.' },
@@ -83,7 +95,7 @@ export const DepthCompositeNode: NodeDefinition = {
     const soft = p(node.params.softness, 0.08);
     const show = String(node.params.show ?? 'composite');
     const lines = [
-      `    float ${id}_pd = depthSceneDist(${nearness}, ${p(node.params.nearD, 1.5)}, ${p(node.params.farD, 8)});\n`,
+      `    float ${id}_pd = ${pictureDist(node, nearness, inputVars.distance)};\n`,
       // Scene nearer than the picture: 1 (soft over Edge softness either side of equal distance)
       `    float ${id}_front = clamp(${hit}, 0.0, 1.0) * smoothstep(-max(${soft}, 1e-4), max(${soft}, 1e-4), ${id}_pd - (${dist}));\n`,
       show === 'distances'
@@ -101,14 +113,15 @@ export const DepthLightNode: NodeDefinition = {
   label: 'Depth Light',
   aliases: ['relight', 'light the picture', 'glow on picture', 'picture lighting'],
   category: '3D Scene',
-  description: 'The picture lit by a light in the 3D scene, such as a glowing sphere: each pixel is placed in 3D along the camera\'s ray at the picture\'s depth, and faces the way its neighbours say. Light adds to the picture where it faces the light, fading with distance. Chain several for several lights.',
+  description: 'The picture lit by a light in the 3D scene, such as a glowing sphere: each pixel is placed in 3D along the camera\'s ray at the picture\'s depth, and faces the way its neighbours say. Light adds to the picture where it faces the light, fading with distance. "Link to scene object…" makes the light follow a shape or Translate inside a Scene Group; "Add a light" chains another, linked to another object.',
   inputs: {
     picture: { type: 'vec3', label: 'Picture', hint: 'The colour to light: the picture, or a Depth Composite\'s Color (only the picture\'s pixels are lit).' },
     nearness: { type: 'float', label: 'Picture depth', hint: 'The Depth node\'s Depth (Near is: Bright).' },
+    distance: { type: 'float', label: 'Picture distance', hint: METRIC_HINT },
     ro: { type: 'vec3', label: 'Ray Origin', hint: 'The March Camera\'s Ray Origin (the same camera as the scene).' },
     rd: { type: 'vec3', label: 'Ray Dir', hint: 'The March Camera\'s Ray Dir.' },
-    lightPos: { type: 'vec3', label: 'Light position', hint: 'Where the light is: a glowing sphere\'s centre, a point in the scene. Wire a vec3 to move it.' },
-    lightColor: { type: 'vec3', label: 'Light colour', hint: 'The light\'s colour (a glow\'s tint).' },
+    lightPos: { type: 'vec3', label: 'Light position', hint: 'Where the light is: a glowing sphere\'s centre, a point in the scene. "Link to scene object…" on the card wires it from a shape or Translate in a Scene Group, so the light follows it.' },
+    lightColor: { type: 'vec3', label: 'Light colour', hint: 'The light\'s colour (a glow\'s tint). A link wires it from the object\'s colour when it has one.' },
     mask: { type: 'float', label: 'Where', hint: 'Light only here (1) and not there (0). Wire 1 − Depth Composite\'s Scene in front so the 3D objects aren\'t relit as if they were the picture. Unwired: everywhere.' },
     glow: { type: 'scene3d', label: 'Glowing scene', hint: 'A Scene Group of the glowing objects: their light reaches the picture from wherever they are, whatever their shape, and follows them as they move. Wire the same Scene the March Loop draws, or a Scene Group of only the glowing parts.' },
     occluders: { type: 'scene3d', label: 'Shadows from', hint: 'A Scene whose objects cast soft shadows of the Light position\'s light onto the picture. Usually the scene the March Loop draws.' },
@@ -146,7 +159,7 @@ export const DepthLightNode: NodeDefinition = {
     const glowFn = inputVars.glow;
     const occFn = inputVars.occluders;
     const code = [
-      `    float ${id}_pd = depthSceneDist(${nearness}, ${p(node.params.nearD, 1.5)}, ${p(node.params.farD, 8)});\n`,
+      `    float ${id}_pd = ${pictureDist(node, nearness, inputVars.distance)};\n`,
       `    vec3 ${id}_point = (${ro}) + normalize(${rd}) * ${id}_pd;\n`,
       // The surface's direction from its neighbours (screen-space slopes of the 3D point), facing the camera
       `    vec3 ${id}_n = cross(dFdx(${id}_point), dFdy(${id}_point));\n`,
@@ -195,4 +208,99 @@ export const DepthLightNode: NodeDefinition = {
     return { code, outputVars: { color: `${id}_color`, light: `${id}_light`, point: `${id}_point`, normal: `${id}_n` } };
   },
   glslFunction: DEPTH_SCENE_GLSL,
+};
+
+// ── Picture Environment ──────────────────────────────────────────────────────
+
+/**
+ * GLSL: a direction → where to read it in the picture (0–1 texture coordinates), the picture taken as the backdrop the
+ * camera sees. In the frame it is the camera's own projection (a direction that points at a pixel reads that pixel);
+ * past the frame's edge it carries on evenly in angle, mirrored back and forth (so it never runs out); behind the
+ * camera it is the mirror image of in front (|z|). F, R, U: the camera's axes; fov: its FOV (screen distance);
+ * aspect: width / height.
+ */
+export const PICTURE_ENV_GLSL = `float pictureEnvAxis(float a, float h) {
+  float s = abs(a) <= h ? tan(a) / tan(h) : sign(a) * (1.0 + (abs(a) - h) / max(h, 1e-3));
+  float t = s * 0.5 + 0.5;
+  return 1.0 - abs(1.0 - mod(t, 2.0));
+}
+vec2 pictureEnvUv(vec3 d, vec3 F, vec3 R, vec3 U, float fov, float aspect) {
+  d = normalize(d);
+  float z = max(abs(dot(d, F)), 1e-4);
+  float ax = atan(dot(d, R), z);
+  float ay = atan(dot(d, U), z);
+  return vec2(pictureEnvAxis(ax, atan(aspect / fov)), pictureEnvAxis(ay, atan(1.0 / fov)));
+}`;
+
+const dot3 = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+/** The same mapping on the CPU (tests). */
+export function pictureEnvUv(d: [number, number, number], F: number[], R: number[], U: number[], fov: number, aspect: number): [number, number] {
+  const l = Math.hypot(...d) || 1;
+  const n = d.map(v => v / l);
+  const z = Math.max(Math.abs(dot3(n, F)), 1e-4);
+  const axis = (a: number, h: number) => {
+    const s = Math.abs(a) <= h ? Math.tan(a) / Math.tan(h) : Math.sign(a) * (1 + (Math.abs(a) - h) / Math.max(h, 1e-3));
+    const t = s * 0.5 + 0.5;
+    const m = ((t % 2) + 2) % 2;
+    return 1 - Math.abs(1 - m);
+  };
+  return [axis(Math.atan2(dot3(n, R), z), Math.atan(aspect / fov)), axis(Math.atan2(dot3(n, U), z), Math.atan(1 / fov))];
+}
+
+export const PictureEnvironmentNode: NodeDefinition = {
+  type: 'pictureEnvironment',
+  label: 'Picture Environment',
+  aliases: ['environment map', 'reflect the picture', 'chrome', 'image based lighting', 'ibl', 'ambient from picture', 'reflections'],
+  category: '3D Scene',
+  description: 'The picture as the world around the 3D objects: a colour for any direction, so a chrome sphere shows the room, and the picture\'s average colour as ambient light. Wire the picture\'s Texture, a direction (reflect(Ray Dir, Normal) for reflections, the Normal for soft light) and the March Camera\'s Forward, Right and Up. The picture is only what the camera saw: directions outside the frame are mirrored back in, behind the camera is the front mirrored.',
+  inputs: {
+    picture: { type: 'texture', label: 'Picture', hint: 'The picture\'s Texture (a Texture Input\'s Texture output).' },
+    dir: { type: 'vec3', label: 'Direction', hint: 'Which way to look: reflect(Ray Dir, Normal) for a mirror, the Normal for diffuse light. Unwired: the ray\'s own direction (the picture, as the backdrop).' },
+    forward: { type: 'vec3', label: 'Forward', hint: 'The March Camera\'s Forward. Unwired: looking along +z.' },
+    right: { type: 'vec3', label: 'Right', hint: 'The March Camera\'s Right. Unwired: +x.' },
+    up: { type: 'vec3', label: 'Up', hint: 'The March Camera\'s Up. Unwired: +y.' },
+  },
+  outputs: {
+    color: { type: 'vec3', label: 'Color', hint: 'The picture\'s colour in that direction (softened by Blur).' },
+    ambient: { type: 'vec3', label: 'Ambient', hint: 'The picture\'s average colour: multiply a surface by it for light that matches the room.' },
+    uv: { type: 'vec2', label: 'Picture UV', hint: 'Where in the picture (0–1) the direction lands.' },
+  },
+  defaultParams: { fov: 1.5, blur: 0, strength: 1 },
+  paramDefs: {
+    fov: { label: 'Camera FOV', type: 'float', min: 0.5, max: 3.14, step: 0.05, hint: 'The March Camera\'s FOV, so a direction lands where the camera saw it.' },
+    blur: { label: 'Blur', type: 'float', min: 0, max: 0.3, step: 0.005, hint: 'Softens the reflection (rough metal): reads a small patch round the point instead of one pixel.' },
+    strength: { label: 'Strength', type: 'float', min: 0, max: 4, step: 0.01, hint: 'Scales Color and Ambient.' },
+  },
+  glslFunction: PICTURE_ENV_GLSL,
+  generateGLSL: (node, inputVars) => {
+    const id = node.id;
+    const tex = inputVars.picture;
+    const dir = inputVars.dir || 'normalize(vec3(g_uv, 1.5))';
+    const F = inputVars.forward || 'vec3(0.0, 0.0, 1.0)';
+    const R = inputVars.right || 'vec3(1.0, 0.0, 0.0)';
+    const U = inputVars.up || 'vec3(0.0, 1.0, 0.0)';
+    const k = p(node.params.strength, 1);
+    if (!tex) {
+      return { code: `    vec2 ${id}_uv = vec2(0.5);\n`, outputVars: { color: 'vec3(0.0)', ambient: 'vec3(0.0)', uv: `${id}_uv` } };
+    }
+    const code = [
+      `    vec2 ${id}_uv = pictureEnvUv(${dir}, ${F}, ${R}, ${U}, max(${p(node.params.fov, 1.5)}, 0.05), u_resolution.x / u_resolution.y);\n`,
+      // Blur: the point and 8 round it, Blur apart (in picture units); 0 reads the one pixel nine times (cheap enough).
+      `    vec3 ${id}_color = vec3(0.0);\n`,
+      `    for (int ${id}_i = 0; ${id}_i < 9; ${id}_i++) {\n`,
+      `      vec2 ${id}_o = vec2(mod(float(${id}_i), 3.0) - 1.0, floor(float(${id}_i) / 3.0) - 1.0) * ${p(node.params.blur, 0)};\n`,
+      `      ${id}_color += texture2D(${tex}, clamp(${id}_uv + ${id}_o, 0.0, 1.0)).rgb;\n`,
+      `    }\n`,
+      `    ${id}_color *= ${k} / 9.0;\n`,
+      // Ambient: the mean of a 5 × 5 grid over the whole picture
+      `    vec3 ${id}_amb = vec3(0.0);\n`,
+      `    for (int ${id}_j = 0; ${id}_j < 25; ${id}_j++) {\n`,
+      `      vec2 ${id}_g = (vec2(mod(float(${id}_j), 5.0), floor(float(${id}_j) / 5.0)) + 0.5) / 5.0;\n`,
+      `      ${id}_amb += texture2D(${tex}, ${id}_g).rgb;\n`,
+      `    }\n`,
+      `    ${id}_amb *= ${k} / 25.0;\n`,
+    ].join('');
+    return { code, outputVars: { color: `${id}_color`, ambient: `${id}_amb`, uv: `${id}_uv` } };
+  },
 };

@@ -141,9 +141,8 @@ video). Keeping them made the change safe, and saved graphs compile to the same 
 
 ## Limits and next
 
-- **Webcam depth:** Live depth from the webcam runs every 4th frame. The Depth node may still show "press Bake
-  depth" for a camera source, because it treats every Video Input as a file. That depends on the Depth
-  node's own work.
+- **Webcam depth:** Live depth from the webcam runs every 4th frame (the Depth engine tells a webcam from a video
+  file, so it no longer asks for a bake).
 - **Files → Used by** describes a graph whose Texture node uses a library picture as "Its Play setup (a
   copy)". The wording comes from the backgrounds source.
 - **Web exports** carry the picture as before (from the texture). The embedded copy also rides along in the

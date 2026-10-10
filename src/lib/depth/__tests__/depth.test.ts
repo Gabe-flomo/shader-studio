@@ -15,9 +15,9 @@ import { getNodeDefinition } from '../../../nodes/definitions';
 import {
   DEPTH_SOURCE_MARK, depthBakeOf, depthNearMask, depthNormal, depthOut, depthParallax, depthSampler, type DepthBakeInfo,
 } from '../../../nodes/definitions/depth';
-import { depthNodesIn, depthSources } from '../engine';
+import { depthNodesIn, depthSources, webcamIdsIn } from '../engine';
 import {
-  DEPTH_BAKE_MAX_SECONDS, bakedParams, blendDepth, depthBakeFileName, depthRowsUp, depthToGreyRgba, followSource, grabSize, planDepthBake, shouldRun, type RunCheck,
+  DEPTH_BAKE_MAX_SECONDS, bakedParams, blendDepth, depthBakeFileName, depthRowsUp, depthToGreyRgba, followSource, grabSize, planDepthBake, shouldRun, sourceNeedsBake, type RunCheck,
 } from '../plan';
 import { countVideoRefs } from '../../videoUsage';
 import type { GraphNode } from '../../../types/nodeGraph';
@@ -56,8 +56,8 @@ describe('Depth node compiles', () => {
     for (const [k, s] of [...Object.entries(def.inputs), ...Object.entries(def.outputs)]) expect(s.hint?.length ?? 0, k).toBeGreaterThan(10);
     for (const [k, pd] of Object.entries(def.paramDefs ?? {})) expect(pd.hint?.length ?? 0, k).toBeGreaterThan(10);
     expect(def.defaultParams?.model).toBe('depth-anything-v2-small');
-    expect(def.paramDefs!.model).toBeUndefined(); // one model now: no picker
-    expect(Object.keys(def.outputs)).toEqual(['depth', 'texture', 'nearMask', 'normal', 'parallaxUv']);
+    expect(def.paramDefs!.model).toBeUndefined(); // the picker is on the card, with experimental models on
+    expect(Object.keys(def.outputs)).toEqual(['depth', 'texture', 'nearMask', 'normal', 'parallaxUv', 'distance']);
   });
 
   for (const output of Object.keys(OUTPUTS)) {
@@ -248,5 +248,22 @@ describe('bake depth bookkeeping', () => {
     expect(followSource({ time: 1, paused: false, rate: 1 }, { time: 1.5, paused: false }, 30, 10).seek).toBe(1);
     expect(followSource({ time: 1, paused: true, rate: 1 }, { time: 1.02, paused: true }, 30, 10)).toEqual({ seek: 1, play: false, rate: 1 });
     expect(followSource({ time: 12, paused: false, rate: 2 }, { time: 0, paused: false }, 30, 10)).toMatchObject({ rate: 2, seek: 10 - 0.5 / 30 });
+  });
+});
+
+describe('webcam sources run live', () => {
+  it('a video file must be baked first; a webcam (Video Input reading the camera) runs live; the picture and textures too', () => {
+    const nodes = [
+      n('videoInput', 'clip', 0, 0),
+      n('videoInput', 'cam', 0, 0, { source: 'webcam' }),
+      n('group', 'g', 0, 0, { subgraph: { nodes: [n('videoInput', 'cam2', 0, 0, { source: 'webcam' })], inputPorts: [], outputPorts: [] } }),
+    ];
+    const webcams = webcamIdsIn(nodes);
+    expect([...webcams].sort()).toEqual(['cam', 'cam2']);
+    const videoUniforms = { u_vid_clip: 'clip', u_vid_cam: 'cam' };
+    expect(sourceNeedsBake('u_vid_clip', videoUniforms, webcams)).toBe(true);
+    expect(sourceNeedsBake('u_vid_cam', videoUniforms, webcams)).toBe(false);
+    expect(sourceNeedsBake('picture', videoUniforms, webcams)).toBe(false);
+    expect(sourceNeedsBake('u_tex_pic', videoUniforms, webcams)).toBe(false);
   });
 });

@@ -29,7 +29,9 @@ export function depthModels() {
     const repo = /repo: '([^']+)'/.exec(block)[1];
     const revision = /revision: '([^']+)'/.exec(block)[1];
     const own = [...block.matchAll(/\{ path: '([^']+)', bytes: (\d+) \}/g)].map(m => ({ path: m[1], bytes: Number(m[2]) }));
-    const files = /files: DA_FILES/.test(block) ? [...shared.DA_FILES, ...own] : own;
+    const all = /files: DA_FILES/.test(block) ? [...shared.DA_FILES, ...own] : own;
+    // A file both backends use (one fp32 or fp16 file) is fetched once
+    const files = all.filter((f, i) => all.findIndex(g => g.path === f.path) === i);
     return { id, repo, revision, files };
   });
 }

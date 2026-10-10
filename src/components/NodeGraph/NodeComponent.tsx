@@ -26,6 +26,7 @@ import { frozenValueOf } from '../../nodes/sliderFreeze';
 import { isAssignable, legacyAssignOp } from '../../nodes/assignable';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { openRecipeOffer } from '../../store/recipeOfferStore';
+import { PICTURE_DEPTH_SET } from '../../nodes/recipes';
 import { nodeJumpSignal, takeNodeJump, useCodeJump } from '../../codeExplorer/jumpStore';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 // Editors that only open on demand load in their own chunks (type-only imports
@@ -132,6 +133,7 @@ import { StageTag } from '../structure/stageUi';
 import { BakedCardBody } from '../bake/BakedCardBody';
 import { TimeCubeCardBody } from '../timeCube/TimeCubeCardBody';
 import { DepthCardBody } from '../depth/DepthCardBody';
+import { DepthLightCardBody } from '../depth/DepthLightCardBody';
 import { TimeCubeViewKeyInfo } from '../timeCube/TimeCubeViewKeyInfo';
 import { toggleNodeCard } from '../explain/functionCard/fnCardStore';
 import { bakedSourceName } from '../../nodes/definitions/baked';
@@ -2139,6 +2141,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             {node.type === 'marchLoopGroup' && (
               <CardButton icon="sun" tint="success" label="Light the scene: pick a lighting look (shadows, AO, lights, tone map), wired to the Output"
                 onClick={() => requestAnimationFrame(() => openRecipeOffer(node.id, node.type))} />
+            )}
+            {(node.type === 'marchLoopGroup' || node.type === 'giLitMarchGroup') && (
+              <CardButton icon="layers" label="Add a picture with depth: a picture (drop an image on it), its Depth and a Depth Composite, wired to this loop and the Output (optionally lit by the scene)"
+                onClick={() => requestAnimationFrame(() => openRecipeOffer(node.id, PICTURE_DEPTH_SET))} />
             )}
             <CardButton icon="copy" label="Duplicate group (an independent copy)" onClick={() => duplicateGroup(node.id)} />
             <CardButton icon="save" tint="success" on={savedFlash} label="Save as a preset" onClick={() => {
@@ -4276,6 +4282,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {!collapsed && node.type === 'gridRules' && <GridRulesCardBody node={node} touch={isTouchDevice} onOpen={() => openGridRulesEditor(node.id)} />}
         {!collapsed && node.type === 'timeCube' && <TimeCubeCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'depth' && <DepthCardBody node={node} touch={isTouchDevice} />}
+        {!collapsed && node.type === 'depthLight' && <DepthLightCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'timeCubeView' && <TimeCubeViewKeyInfo node={node} touch={isTouchDevice} />}
 
         {/* ── CustomFn / ExprNode slider params (hidden when collapsed) ── */}

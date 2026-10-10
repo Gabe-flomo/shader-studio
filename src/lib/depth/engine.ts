@@ -20,7 +20,9 @@ import type { GraphNode, SubgraphData } from '../../types/nodeGraph';
 import { DEPTH_SOURCE_MARK, DEPTH_TYPE, depthBakeId, depthPlaysBake, depthSideOf, depthUpdateOf, type DepthBakeInfo } from '../../nodes/definitions/depth';
 import { depthModelUsable, estimateDepth, type DepthFrame } from '../../depthModel/client';
 import { depthModelById } from '../../depthModel/config';
-import { blendDepth, depthRowsUp, followSource, grabSize, shouldRun } from './plan';
+import { effectiveDepthModel } from '../../depthModel/experimental';
+import { metricDistance } from '../../depthModel/workerCore';
+import { blendDepth, depthRowsUp, followSource, grabSize, shouldRun, sourceNeedsBake } from './plan';
 import { getImage, getVideo } from '../backgroundLibrary';
 import { forgetMedia, rememberMedia } from '../mediaSources';
 
@@ -57,6 +59,16 @@ export function depthNodesIn(nodes: readonly GraphNode[], out: GraphNode[] = [])
     if (n.type === DEPTH_TYPE) out.push(n);
     const sg = n.params?.subgraph as SubgraphData | undefined;
     if (sg?.nodes?.length) depthNodesIn(sg.nodes, out);
+  }
+  return out;
+}
+
+/** Every webcam source (a Video Input reading the camera, docs/texture-node.md), inside groups too. */
+export function webcamIdsIn(nodes: readonly GraphNode[], out = new Set<string>()): Set<string> {
+  for (const n of nodes) {
+    if (n.type === 'videoInput' && n.params?.source === 'webcam') out.add(n.id);
+    const sg = n.params?.subgraph as SubgraphData | undefined;
+    if (sg?.nodes?.length) webcamIdsIn(sg.nodes, out);
   }
   return out;
 }
@@ -128,6 +140,10 @@ interface Slot {
   tex: THREE.DataTexture | null;
   /** The last frame sent to the model (for Compare), RGBA top-down. */
   lastFrame: { rgba: Uint8Array; w: number; h: number } | null;
+  /** The model it last ran (the effective one: experimental models fall back to the default while off). */
+  model: string;
+  /** A metric model's nearest and farthest distance in the last frame (metres); null for relative models. */
+  range: [number, number] | null;
   bake: { key: string; el: HTMLVideoElement | null; tex: THREE.Texture | null; url: string | null } | null;
 }
 
@@ -145,6 +161,8 @@ class DepthEngine {
   /** Source video elements of baked nodes (by source sampler's node id), from the hosts that play them. */
   private videoElementOf: ((nodeId: string) => HTMLVideoElement | null) | null = null;
   private videoUniforms: Record<string, string> = {};
+  /** Video Inputs reading the webcam: live, never baked. */
+  private webcamIds = new Set<string>();
 
   setHost(host: DepthHost | null): void {
     this.host = host;
@@ -162,6 +180,8 @@ class DepthEngine {
   status(nodeId: string): DepthStatus { return this.slots.get(nodeId)?.status ?? idleStatus(); }
   /** The frame the node last sent to its model (RGBA, top-down), for Compare. */
   lastFrame(nodeId: string): { rgba: Uint8Array; w: number; h: number } | null { return this.slots.get(nodeId)?.lastFrame ?? null; }
+  /** A metric model's distance range in the node's last frame (metres), or null. */
+  metricRange(nodeId: string): [number, number] | null { return this.slots.get(nodeId)?.range ?? null; }
   /** The node's current depth (0–1 nearness, top-down) and its size. */
   currentDepth(nodeId: string): { depth: Float32Array; w: number; h: number } | null {
     const s = this.slots.get(nodeId);
@@ -174,12 +194,13 @@ class DepthEngine {
   }
 
   sync(nodes: readonly GraphNode[]): void {
+    this.webcamIds = webcamIdsIn(nodes);
     const want = new Map(depthNodesIn(nodes).map(n => [n.id, n]));
     for (const [id, s] of this.slots) if (!want.has(id)) this.drop(id, s);
     for (const [id, n] of want) {
       let s = this.slots.get(id);
       if (!s) {
-        s = { node: n, status: idleStatus(), busy: false, framesSince: 0, lastKey: null, ranSinceProgram: false, depth: null, tex: null, lastFrame: null, bake: null };
+        s = { node: n, status: idleStatus(), busy: false, framesSince: 0, lastKey: null, ranSinceProgram: false, depth: null, tex: null, lastFrame: null, model: effectiveDepthModel(n.params.model).id, range: null, bake: null };
         this.slots.set(id, s);
       }
       const before = s.node;
@@ -187,7 +208,7 @@ class DepthEngine {
       // A new model or size runs again (a still too), and smoothing doesn't blend across them.
       if (before.params.model !== n.params.model || before.params.resolution !== n.params.resolution) { s.lastKey = null; s.depth = null; s.ranSinceProgram = false; }
       this.syncBake(id, s);
-      const usable = depthModelUsable(String(n.params.model ?? ''));
+      const usable = depthModelUsable(effectiveDepthModel(n.params.model).id);
       const playsBake = !!depthPlaysBake(n);
       if (!playsBake && !usable && s.status.state !== 'needs-download') { s.status = { ...s.status, state: 'needs-download' }; this.changed(); }
       else if (!playsBake && usable && s.status.state === 'needs-download') { s.status = { ...s.status, state: 'idle' }; this.changed(); this.host?.requestRender(); }
@@ -207,7 +228,7 @@ class DepthEngine {
 
   /** Any node that might run this frame (ShaderCanvas skips afterFrame otherwise). */
   wants(): boolean {
-    for (const s of this.slots.values()) if (!s.busy && depthUpdateOf(s.node) !== 'baked' && depthModelUsable(String(s.node.params.model ?? ''))) return true;
+    for (const s of this.slots.values()) if (!s.busy && depthUpdateOf(s.node) !== 'baked' && depthModelUsable(effectiveDepthModel(s.node.params.model).id)) return true;
     return false;
   }
 
@@ -217,7 +238,9 @@ class DepthEngine {
       if (!s) continue;
       s.framesSince++;
       const n = s.node;
-      const model = String(n.params.model ?? '');
+      const model = effectiveDepthModel(n.params.model).id;
+      // The experimental setting switched the model under it: run again, no blending across models.
+      if (model !== s.model) { s.model = model; s.lastKey = null; s.depth = null; s.range = null; s.ranSinceProgram = false; }
       const update = depthUpdateOf(n);
       if (update === 'baked') continue;
       const usable = depthModelUsable(model);
@@ -227,9 +250,8 @@ class DepthEngine {
       const hasSource = src === 'picture' ? ctx.canvas.width > 0 : !!tex && info.w > 0 && info.h > 0;
       const side = depthSideOf(n);
       const runKey = info.still ? `${info.still}|${model}|${side}` : null;
-      // A video's depth is baked first (it plays smoothly then), never worked out live
-      const video = src !== 'picture' && src in this.videoUniforms;
-      if (video) {
+      // A video's depth is baked first (it plays smoothly then), never worked out live; a webcam runs live.
+      if (sourceNeedsBake(src, this.videoUniforms, this.webcamIds)) {
         if (usable && s.status.state !== 'needs-bake') { s.status = { ...s.status, state: 'needs-bake', message: undefined }; this.changed(); }
         continue;
       }
@@ -274,6 +296,7 @@ class DepthEngine {
         const smoothing = runKey ? 0 : Number(s.node.params.smoothing) || 0;
         const sameSize = s.status.w === r.w && s.status.h === r.h;
         s.depth = blendDepth(sameSize ? s.depth : null, r.depth, smoothing);
+        s.range = r.range ?? null;
         this.upload(id, s, r.w, r.h);
         s.status = { state: 'ready', ms: r.ms, w: r.w, h: r.h, runs: s.status.runs + 1 };
         this.changed();
@@ -298,7 +321,16 @@ class DepthEngine {
       this.host?.setTexture(id, tex);
     }
     const one = THREE.DataUtils.toHalfFloat(1);
-    depthRowsUp(s.depth, w, h, tex.image.data as Uint16Array, THREE.DataUtils.toHalfFloat, one);
+    const data = tex.image.data as Uint16Array;
+    depthRowsUp(s.depth, w, h, data, THREE.DataUtils.toHalfFloat, one);
+    // A metric model: green holds the distance in metres (the Depth node's Distance output), red stays nearness.
+    const range = s.range;
+    if (range) {
+      for (let y = 0; y < h; y++) {
+        const src = (h - 1 - y) * w;
+        for (let x = 0; x < w; x++) data[(y * w + x) * 4 + 1] = THREE.DataUtils.toHalfFloat(metricDistance(s.depth[src + x], range[0], range[1]));
+      }
+    }
     tex.needsUpdate = true;
   }
 

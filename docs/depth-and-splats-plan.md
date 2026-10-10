@@ -183,3 +183,21 @@ Next:
 - glowing SDF objects found automatically as lights;
 - the picture as the environment;
 - an example graph built from a photo.
+
+### Phase 1b status (finished, `claude/depth-finish`)
+
+Built:
+- **Link to a scene object** on Depth Light: the light follows a shape or Translate 3D inside a Scene Group (its
+  sliders, Play, time-driven chains inside the group, values wired into the group's face) and takes its colour (a
+  Scene Builder swatch, or the scene's glow tint). The Scene Group gains a position output per linked object.
+  **Add a light** chains another Depth Light, linked to another object: one light per node.
+- **The picture as the environment:** Picture Environment gives the picture's colour in any direction (a
+  screen-space backdrop mapping, mirrored past the frame and behind the camera) and its average colour. The March
+  Camera now outputs its Forward / Right / Up.
+- **Add a picture with depth** on March Loop and GI Lit cards: picture → Depth → Depth Composite, optionally lit by
+  the scene and reflected, wired to the loop and the Output, with "turn the camera to face the picture".
+- **Experimental depth models** (a setting): Base and MiDaS again, plus Depth Anything V3 Small, Depth Pro and
+  ZoeDepth. The metric ones give real distances (the Depth node's Distance), which Depth Composite and Depth Light
+  use directly. Timings and quality per model are in docs/depth-node.md.
+
+Next: the example graph from a real photo; camera match ("match the picture's camera"); phase 1c (Pieces).

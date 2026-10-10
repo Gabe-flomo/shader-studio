@@ -1,6 +1,6 @@
 /**
  * Depth (docs/depth-node.md): a picture in, its depth out, worked out on this device by a small model
- * (Depth Anything V2 Small or Base, or MiDaS DPT-Hybrid; src/depthModel/).
+ * (Depth Anything V2 Small; with experimental depth models on, others too: src/depthModel/).
  *
  * The model runs outside the shader, in a worker (lib/depth/engine.ts): frames of the wired texture are grabbed
  * at the model's size, the depth comes back and is uploaded to a texture this node samples. The picture never
@@ -9,7 +9,9 @@
  *
  * The sampler: `u_tex_<slug>` (the store's nodeTextures[id], a half-float texture, live), or `u_vid_<slug>` once a
  * video's depth is baked (the store's videoTextures[id]: the depth video, kept on the source video's time).
- * The texture holds nearness: 1 is the nearest thing in the frame (both model families give inverse depth).
+ * The texture holds nearness in red: 1 is the nearest thing in the frame. With a metric model (Depth Pro, ZoeDepth)
+ * green holds the distance in metres, read by the Distance output; otherwise Distance is 0 (Depth Composite and Depth
+ * Light then use their Nearest / Farthest calibration).
  *
  * The node writes one comment into its code naming the texture wired into it (DEPTH_SOURCE_MARK), so the engine
  * knows which texture to read: the same way Particles' Emit from does (play/kit/gpuParticles.js).
@@ -20,7 +22,8 @@ import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { p } from './helpers';
 import { texUv } from './passes';
 import { TEXTURE_TOOLS_CATEGORY } from './textureTools';
-import { DEPTH_SIDES, DEFAULT_DEPTH_MODEL_ID } from '../../depthModel/config';
+import { DEPTH_SIDES, DEFAULT_DEPTH_MODEL_ID, isMetricModel } from '../../depthModel/config';
+import { effectiveDepthModel } from '../../depthModel/experimental';
 
 export const DEPTH_TYPE = 'depth';
 /** `// depth-source <depth sampler> <wired sampler>`: what the engine reads (lib/depth/engine.ts). */
@@ -129,6 +132,7 @@ export const DepthNode: NodeDefinition = {
     nearMask: { type: 'float', label: 'Near mask', hint: '1 where the picture is nearer than Cut-off, fading over Softness: cut out a subject, or replace the background.' },
     normal: { type: 'vec3', label: 'Normals', hint: 'The surface direction from the depth\'s slopes (−1…1, z towards you): wire into a lighting node to relight a flat picture.' },
     parallaxUv: { type: 'vec2', label: 'Parallax UV', hint: 'This pixel\'s UV moved by its depth: wire into the picture\'s Texture Input UV for a small 2.5D camera shift.' },
+    distance: { type: 'float', label: 'Distance (metric)', hint: 'With a metric model (Depth Pro or ZoeDepth, experimental): how far this pixel is, in metres. Wire it into Depth Composite\'s or Depth Light\'s Picture distance. 0 with other models and with a bake.' },
   },
   socketsOnDemand: { direction: ['shift'] },
   defaultParams: {
@@ -136,8 +140,8 @@ export const DepthNode: NodeDefinition = {
     cutoff: 0.6, softness: 0.1, relief: 0.3, shift: 0.04, focus: 0.5,
   },
   paramDefs: {
-    // model: one model now (Depth Anything V2 Small), so no picker; params.model stays for saved graphs and a future second model.
-    resolution: { label: 'Resolution', type: 'select', section: MODEL_SECTION, hint: 'The long side of the frame the model sees. Smaller is faster, larger finer. (MiDaS always runs at 384: its model has a fixed size.)', options: DEPTH_SIDES.map(s => ({ value: String(s), label: `${s} px` })) },
+    // model: picked on the card (DepthCardBody) only while experimental depth models are on; otherwise Small runs.
+    resolution: { label: 'Resolution', type: 'select', section: MODEL_SECTION, hint: 'The long side of the frame the model sees. Smaller is faster, larger finer. (The experimental MiDaS, ZoeDepth and Depth Pro run at their own fixed size.)', options: DEPTH_SIDES.map(s => ({ value: String(s), label: `${s} px` })) },
     update: { label: 'Update', type: 'select', section: MODEL_SECTION, hint: 'Live: a new depth as fast as the model goes. Every Nth frame: lighter. Baked: play the depth Bake depth stored (smooth and exact; web pages need it).', options: [
       { value: 'live', label: 'Live' }, { value: 'every', label: 'Every Nth frame' }, { value: 'baked', label: 'Baked' },
     ] },
@@ -178,9 +182,12 @@ export const DepthNode: NodeDefinition = {
       `    vec3 ${id}_normal = normalize(vec3(-${id}_dx * ${p(P.relief, 0.3)}, -${id}_dy * ${p(P.relief, 0.3)}, 1.0));\n`,
       `    vec2 ${id}_par = ${uv} + ${dir} * ${p(P.shift, 0.04)} * (${id}_near - ${p(P.focus, 0.5)});\n`,
     ];
+    // A metric model's distance (metres) is in green; a bake keeps only nearness.
+    const metric = !bake && isMetricModel(effectiveDepthModel(P.model));
+    if (metric) lines.push(`    float ${id}_dist = texture2D(${S}, ${id}_st).g;\n`);
     return {
       code: lines.join(''),
-      outputVars: { depth: `${id}_depth`, texture: S, nearMask: `${id}_mask`, normal: `${id}_normal`, parallaxUv: `${id}_par` },
+      outputVars: { depth: `${id}_depth`, texture: S, nearMask: `${id}_mask`, normal: `${id}_normal`, parallaxUv: `${id}_par`, distance: metric ? `${id}_dist` : '0.0' },
     };
   },
 };

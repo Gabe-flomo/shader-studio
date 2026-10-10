@@ -884,7 +884,7 @@ interface NodeGraphState {
    * when the node is added): helper nodes in free space, wired, noted, the result on the Output.
    * One undo step. Returns the ids added, or null when the node or recipe is gone.
    */
-  applyStarterRecipe: (nodeId: string, recipeId: string) => string[] | null;
+  applyStarterRecipe: (nodeId: string, recipeId: string, set?: string, options?: Record<string, boolean>) => string[] | null;
   /** Turn a March Loop Group into a GI Lit March Group or back, in the level being edited (nodes/convertMarchLoop.ts). */
   convertMarchLoop: (nodeId: string, to: MarchLoopType) => boolean;
   /** Turn an old Bloom (reads last frame) into Pass → Glow (texture) → Add glow, in the level being edited (nodes/upgradeBloom.ts). */
@@ -972,6 +972,11 @@ interface NodeGraphState {
    * members that no longer exist.
    */
   setNodesRewritten: (nodes: GraphNode[], label?: string) => void;
+  /**
+   * An edit of the top level built by a pure function with fresh ids (the Depth Light card's links,
+   * nodes/sceneLink.ts): one undo step and a compile. False when `edit` returns null (nothing changes).
+   */
+  rewriteTopLevel: (edit: (nodes: GraphNode[], nextId: () => string) => GraphNode[] | null, label: string) => boolean;
 
   /** Change the vector type of a vectorizable math node (sin, cos, pow, etc.).
    *  Updates params.outputType plus the primary input and output socket types. */
@@ -3407,18 +3412,18 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     });
   },
 
-  applyStarterRecipe: (nodeId, recipeId) => {
+  applyStarterRecipe: (nodeId, recipeId, recipeSet, options) => {
     closeRecipeOffer();
     // Recipes are built on the top level, where the Output is.
     if (get().activeGroupPath.length) return null;
     const before = get().nodes;
     const self = before.find(n => n.id === nodeId);
-    const recipe = self ? recipesFor(self.type).find(r => r.id === recipeId) : undefined;
+    const recipe = self ? recipesFor(recipeSet ?? self.type).find(r => r.id === recipeId) : undefined;
     if (!self || !recipe) return null;
-    const r = applyRecipe(before, nodeId, recipe, () => idGenerator.next());
+    const r = applyRecipe(before, nodeId, recipe, () => idGenerator.next(), undefined, options);
     if (!r) return null;
     const label = getNodeDefinitionFor(self)?.label ?? self.type;
-    const lighting = LIGHT_SCENE_TYPES.has(self.type);
+    const lighting = !recipeSet && LIGHT_SCENE_TYPES.has(self.type);
     undoManager.push(before, { label: lighting ? `Light the scene: ${recipe.label}` : `Set up ${label}: ${recipe.label}` });
     set({ nodes: r.nodes });
     get().compile();
@@ -5023,6 +5028,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       return { nodes: state.nodes.map(n => n.id === nodeId ? { ...n, bypassed: !n.bypassed } : n) };
     });
     get().compile();
+  },
+
+  rewriteTopLevel: (edit, label) => {
+    const before = get().nodes;
+    const next = edit(before, () => idGenerator.next());
+    if (!next) return false;
+    get().setNodesRewritten(next, label);
+    return true;
   },
 
   setNodesRewritten: (nodes, label) => {

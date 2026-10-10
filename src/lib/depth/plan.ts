@@ -43,6 +43,16 @@ export interface RunCheck {
   video?: boolean;
 }
 
+/**
+ * Whether a Depth node's source must be baked first: a video file (a Video Input or Baked node's sampler). A webcam
+ * (a Video Input with `params.source: 'webcam'`, docs/texture-node.md) is a live feed that can't be baked: it runs
+ * live, at the node's Update (the Texture node's Generate depth sets every 4th frame).
+ */
+export function sourceNeedsBake(src: string, videoUniforms: Record<string, string>, webcamIds: ReadonlySet<string>): boolean {
+  if (src === 'picture' || !(src in videoUniforms)) return false;
+  return !webcamIds.has(videoUniforms[src]);
+}
+
 /** Whether a Depth node runs its model on this frame. */
 export function shouldRun(c: RunCheck): boolean {
   if (!c.usable || !c.hasSource || c.busy || c.update === 'baked' || c.video) return false;
