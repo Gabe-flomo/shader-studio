@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.132',
+    date: '2026-10-10',
+    title: 'Glow and shadows on pictures',
+    highlights: [
+      { area: 'Studio', text: 'Depth Light: wire a Glowing scene and its objects light the picture from wherever they are, any shape, following as they move. No positions to type.' },
+      { area: 'Studio', text: 'Depth Light: Shadows from casts the scene\'s objects\' soft shadows onto the picture.' },
+      { area: 'Studio', text: 'Depth keeps one model (Depth Anything V2 Small). A video\'s depth is baked first so it plays smoothly.' },
+    ],
+  },
+  {
     id: '2026.10.131',
     date: '2026-10-09',
     title: 'Pictures in 3D scenes',
