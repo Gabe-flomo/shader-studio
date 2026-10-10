@@ -181,10 +181,21 @@ describe('diagram geometry', () => {
     expect(feelers(lens, 0.07, 30).length).toBeCloseTo(f.length * 2);
   });
 
-  it('the lens keeps its scale while a slider moves within reach, and re-fits when it goes far', () => {
+  it('the lens keeps its scale while a slider moves within reach, and zooms smoothly (no jump) past it', () => {
     expect(keepRef(0.035, 0.05)).toBe(0.035);
-    expect(keepRef(0.035, 0.12)).toBe(0.12);
-    expect(keepRef(0.035, 0.005)).toBe(0.005);
+    // Past reach the reference follows the value: the feeler stays pinned at 1.8 (or 0.3) of its base length.
+    expect(keepRef(0.035, 0.12)).toBeCloseTo(0.12 / 1.8);
+    expect(keepRef(0.035, 0.005)).toBeCloseTo(0.005 / 0.3);
+    // Dragging 0.001 → 0.3 in small steps: the feeler's length on screen never drops (the old re-fit snapped it back).
+    let ref = 0.001, last = 0;
+    for (let v = 0.001; v <= 0.3; v += 0.001) {
+      ref = keepRef(ref, v);
+      const len = feelers(lensFor(800, 600, ref), v, 0).length;
+      expect(len).toBeGreaterThanOrEqual(last - 1e-6);
+      last = len;
+    }
+    // …and it never leaves the lens (0.9 of the radius at most).
+    expect(last).toBeLessThanOrEqual(lensFor(800, 600, ref).r * 0.9 + 1e-6);
   });
 
   it('steps, arcs and picture points', () => {

@@ -121,7 +121,7 @@ describe('operation cards', () => {
       }
     }
     expect(OP_CARDS.map(o => o.id)).toEqual(['countUp', 'countDown', 'startTimer', 'toggle', 'setOn', 'setOff', 'setTo', 'place', 'smell', 'sum', 'decay', 'reset', 'expr']);
-  });
+  }, 30_000); // compiles every card: about 4.5 s alone, past the default 5 s on a loaded full run
 
   it('counts, toggles, remembers, adds up and decays on the walker (the generated GLSL run on the CPU)', () => {
     let set = withMem({ channels: ['food', '', '', ''] });

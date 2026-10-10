@@ -10,6 +10,9 @@ import { toast } from '../ui/toastStore';
 import { surpriseGrid } from '../../gridRules/surprise';
 import type { GridRuleType } from '../../gridRules/spec';
 import { surpriseAgents } from '../../agentRules/surprise';
+import { surpriseForKind } from '../../agentBuilder/surprise';
+import { groupRules } from '../../agentRules/apply';
+import { kindOf } from '../../agentRules/spec';
 import { surpriseGroupRules } from '../../agentRules/storeActions';
 import { lockedItems, randomizedGraph, type RandomChange } from '../../nodes/randomizeParams';
 import { getRandomizeOptions, optionsSummary, type RandomizeOptions } from '../../nodes/randomizeOptions';
@@ -57,6 +60,30 @@ export function surpriseAgentsAction(groupId: string, seed: number): void {
     undo: undoGraph,
     reroll: () => { undoGraph(); surpriseAgentsAction(groupId, newSeed()); },
   });
+}
+
+/**
+ * Agent Builder → Surprise me (agentBuilder/surprise.ts): a random rule set of the group's own kind
+ * (so the builder keeps its sections), its trail's numbers and colours, one undo step, with the seed
+ * in a toast (Reroll, Undo). A shape's Collide is kept, as a preset keeps it.
+ */
+export function surpriseBuilderAction(groupId: string, seed: number): boolean {
+  const g = useNodeGraphStore.getState().nodes.find(n => n.id === groupId);
+  if (!g) return false;
+  const was = groupRules(g);
+  const s = surpriseForKind(makeRng(seed), kindOf(was), { d3: g.params.space === '3d' });
+  const set = was.collide ? { ...s.set, collide: was.collide } : s.set;
+  if (!surpriseGroupRules(groupId, { ...s, set }, `Surprise: ${s.summary}`)) return false;
+  restartAgents(groupId);
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('agents-restart'));
+  useSurpriseSeeds.setState(x => ({ agents: { ...x.agents, [groupId]: seed } }));
+  announceSurprise({
+    title: 'Surprise', seed, message: s.summary,
+    stillCurrent: stillTop(),
+    undo: undoGraph,
+    reroll: () => { undoGraph(); surpriseBuilderAction(groupId, newSeed()); },
+  });
+  return true;
 }
 
 /** The options as used for one randomize (the saved ones, unless a caller overrides). */

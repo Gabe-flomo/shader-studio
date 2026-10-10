@@ -13,6 +13,18 @@ export function rulerUnit(min: number, max: number, integer = false): number {
   return range > 20 ? 10 : range > 4.5 ? 1 : 0.1;
 }
 
+/**
+ * A finer ruler unit for a small range (0–0.12, say), which the default 0.1 unit squeezes into a
+ * few pixels of drag: the smallest 1, 2 or 5 × 10^k whose whole range is at most 800 px of drag.
+ * Undefined for ranges above 0.45 (the default unit already suits those).
+ */
+export function fineUnit(min: number, max: number): number | undefined {
+  const range = Math.abs(max - min);
+  if (!(range > 0) || range > 0.45) return undefined;
+  for (const u of [0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05]) if ((range / u) * PX_PER_UNIT <= 800) return u;
+  return undefined;
+}
+
 export interface Tick {
   /** Offset from the needle in px (negative = left, the ≤ value side). */
   dx: number;
