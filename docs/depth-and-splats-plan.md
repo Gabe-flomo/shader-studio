@@ -83,6 +83,33 @@ surface direction. The picture becomes a surface the scene can light and hide th
 - **Limits:** the picture's own lighting is baked in (relighting adds and tints, but can't remove a
   harsh shadow), and the surface is the visible front only.
 
+## 1c. Pieces: a picture rebuilt from things that can move
+
+The user (2026-10-09), after After Effects' CC Ball Action: take an image (or video, or depth) and
+rebuild it out of pieces (circles, squares, spheres, particles). Each piece takes the picture's colour
+at its **home**, the place it started. The picture isn't a copy laid on top: it is *made of* the pieces,
+so whatever happens to the pieces (drift, scatter, swirl, fall, orbit) happens to the picture.
+
+- **Pieces (2D, in the shader).** A node: Picture + Shape (circle, square, hexagon, a glyph) + Count.
+  Each cell draws its shape at **home + offset**, coloured from the picture at **home**.
+  - **Offset** is any vec2 field you wire: noise, time, a Follow-a-field field, the mouse.
+  - Size can follow brightness (halftone-like) or depth.
+  - The cell search checks neighbours, as Repeat Scene does, so pieces can travel past their cells
+    and overlap.
+  - Outputs: Colour, Mask, Piece ID, Home.
+  - It's the simple workflow the Halftone Grid only half covers.
+- **Balls (3D, CC Ball Action).** The same in a March Loop. Each piece is a sphere (or box) lifted by
+  brightness or by the **Depth node**, coloured from home, displaced by a vec3 field. It uses Repeat
+  Scene's per-cell centre and neighbour checks.
+- **Pieces as walkers (agents).** Emit "picture as pieces":
+  - one walker per grid point, its home kept in a named memory (a place, phase 4) and its colour
+    taken from the picture at birth;
+  - forces and fields scatter them, and a **Return home** card (spring to the home memory, with
+    strength and delay) pulls the picture back together;
+  - drawn as dots, discs or splats (section 3);
+  - an Agent Builder kind or preset: "A picture in pieces".
+- **Video:** pieces resample their home colour every frame, so the picture plays while it scatters.
+
 ## 2. Splat Scene node
 
 - **Load** `.ply` (the 3DGS standard), `.splat`, `.spz` and `.ksplat` files from the workspace or a
@@ -118,6 +145,7 @@ surface direction. The picture becomes a surface the scene can light and hide th
 |---|---|---|
 | 1 | Depth node with the three models (download, worker, live and baked video, outputs, compare) | The same video's depth from all three, side by side with timings; a near mask cuts out a subject |
 | 1b | Depth in 3D scenes: depth composite (calibrate, edges, agents), the picture lit by lights and glowing objects with shadows, relighting, the picture as the environment | A glowing sphere behind a person in a photo, hidden by them and lighting their shoulder |
+| 1c | Pieces: 2D Pieces node (offset field, neighbour cells), 3D balls by brightness/depth, pieces as walkers with Return home | A photo scattered by a field and flowing back home; a CC-Ball-Action-style 3D version |
 | 2 | Splat Scene node: load and render, with the camera and depth compositing | A scan from Polycam / Luma renders inside a March Loop scene and is occluded correctly |
 | 3 | Per-splat modifiers | A scan dissolving by noise, driven from Play |
 | 4 | Agents as splats: the Splats look, then Emit from a splat file and return home | A scan blown apart by a field, flowing back |
