@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.138',
+    date: '2026-10-10',
+    title: 'Space blocks',
+    highlights: [
+      { area: 'Studio', text: '2D Scene Builder: space blocks of uv.x / uv.y / uv lines with x, y and t, a library of 37 warps, Random offers three, and blocks chain or combine.' },
+      { area: 'Studio', text: '2D Scene Builder: Surprise me makes a whole scene (warps, shapes, motion and colours) from a seed, as one undo step.' },
+    ],
+  },
+  {
     id: '2026.10.137',
     date: '2026-10-10',
     title: 'Shader Texture and small exports',
