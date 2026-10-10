@@ -12,6 +12,7 @@
  */
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { estimateNodeHeight } from '../store/graphLayout';
+import { intoView } from '../components/NodeGraph/spawnPoint';
 import { openNewSceneBuilder } from '../sceneBuilder/store';
 import { editSceneInBuilder } from '../sceneBuilder/actions';
 import { openNewSceneBuilder2D } from '../sceneBuilder2d/actions';
@@ -32,7 +33,8 @@ export function newGridRules(): string {
   const now = useNodeGraphStore.getState();
   const selected = now.selectedNodeIds.length ? now.selectedNodeIds : now.selectedNodeId ? [now.selectedNodeId] : [];
   const made = addGridRules(now.nodes, {}, selected.filter(id => now.nodes.some(nd => nd.id === id)), () => now.newNodeId(), { topLevel: true, heightOf: estimateNodeHeight });
-  now.setNodesRewritten(made.nodes, 'Added Grid Rules');
+  // Beside the selection or the Output; brought into the visible canvas when that is off screen.
+  now.setNodesRewritten(intoView(now.nodes, made.nodes, 'ifOutOfView'), 'Added Grid Rules');
   useNodeGraphStore.getState().focusNode(made.id);
   openGridRulesEditor(made.id);
   return made.id;

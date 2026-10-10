@@ -3,6 +3,7 @@
  * that is already there, and Build / Rebuild into the graph (apply.ts does the work).
  */
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
+import { intoView } from '../components/NodeGraph/spawnPoint';
 import { toast } from '../components/ui/toastStore';
 import { useSceneBuilder2D } from './store';
 import { applyScene2D, find2dBuild, scene2dOfBuild } from './apply';
@@ -51,7 +52,9 @@ export function buildFromBuilder2D(asNew = false): boolean {
     nextId: () => useNodeGraphStore.getState().newNodeId(),
     sceneId: fresh ? null : target, asNew: fresh, at: sb.at ?? undefined,
   });
-  useNodeGraphStore.getState().setNodesRewritten(result.nodes, fresh ? 'Built a 2D scene' : 'Rebuilt the 2D scene');
+  // A new scene lands in the visible canvas (where the builder was opened from, when it was).
+  const placed = fresh ? intoView(nodes, result.nodes, sb.at ? 'ifOutOfView' : 'centre') : result.nodes;
+  useNodeGraphStore.getState().setNodesRewritten(placed, fresh ? 'Built a 2D scene' : 'Rebuilt the 2D scene');
   useNodeGraphStore.getState().focusNode(result.focusId);
   sb.setTarget(result.sceneId);
   sb.markBuilt();

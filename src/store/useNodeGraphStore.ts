@@ -23,12 +23,13 @@ import { hasPassNode } from '../compiler/passGraph';
 import { hasHiddenBlur } from '../compiler/blurPasses';
 import { agentPreset } from './agentExamples';
 import { addAgentPieceTo, agentStarter, freshIds, placeInFreeSpace, startRuleIn, type AgentPiece, type AgentRuleStart } from './agentSetup';
+import { cardCentre, placeSetupInView, settleAddedInView } from './placement';
 import { rulesStarter } from '../agentRules/starter';
 import { agents3dStarter, remapMarks } from '../agentRules/space3d';
 import { particlesAsNodes } from './particlesAsNodes';
 import { openGridRulesInGraph } from './gridRulesAsNodes';
 import { openNewSceneBuilder } from '../sceneBuilder/store';
-import { applyRecipe, LIGHT_SCENE_TYPES, placeNear, recipesFor } from '../nodes/recipes';
+import { applyRecipe, LIGHT_SCENE_TYPES, recipesFor } from '../nodes/recipes';
 import { convertMarchLoop, type MarchLoopType } from '../nodes/convertMarchLoop';
 import { upgradeBloom } from '../nodes/upgradeBloom';
 import { runDoPlan as runDoPlanPure, type DoPlan } from '../suggestions/doBar';
@@ -3171,7 +3172,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
 
     const groupId = idGenerator.next();
-    const pos = position ?? { x: 200 + Math.random() * 100, y: 200 + Math.random() * 100 };
+    // No position given: the middle of the visible canvas.
+    const mid = get()._viewportCenterGetter?.();
+    const pos = position ?? (mid ? { x: Math.round(mid.x - 180), y: Math.round(mid.y - 90) } : { x: 200, y: 200 });
     const { activeGroupPath } = get();
 
     // Auto-seal when loading inside an existing regular group to prevent
@@ -3425,7 +3428,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const label = getNodeDefinitionFor(self)?.label ?? self.type;
     const lighting = !recipeSet && LIGHT_SCENE_TYPES.has(self.type);
     undoManager.push(before, { label: lighting ? `Light the scene: ${recipe.label}` : `Set up ${label}: ${recipe.label}` });
-    set({ nodes: r.nodes });
+    // Placed round the node; brought into view if all of it ended up off screen (store/placement.ts).
+    set({ nodes: settleAddedInView(before, r.nodes, get()._viewportRectGetter?.() ?? null) });
     get().compile();
     toast.info(lighting ? `Lit: ${recipe.label}` : `${label}: ${recipe.label}`, {
       message: lighting
@@ -3485,7 +3489,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     if (!r) return null;
     const label = nodeName(self);
     undoManager.push(st.nodes, { label: `${move.label} on ${label}`, nodeIds: [nodeId] });
-    const nodes = path.length ? (setActiveNodes(st.nodes, path, r.nodes) ?? st.nodes) : r.nodes;
+    const inView = settleAddedInView(scope, r.nodes, st._viewportRectGetter?.() ?? null);
+    const nodes = path.length ? (setActiveNodes(st.nodes, path, inView) ?? st.nodes) : inView;
     const select = r.resultNodeId && r.nodes.some(nd => nd.id === r.resultNodeId) ? r.resultNodeId : nodeId;
     set({ nodes, selectedNodeId: select, selectedNodeIds: [select] });
     get().compile();
@@ -3507,7 +3512,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const r = runDoPlanPure(scope, plan, () => idGenerator.next(), { topLevel: path.length === 0 });
     if (!r.ran.length) return [];
     undoManager.push(st.nodes, { label: `Do: ${label}` });
-    const nodes = path.length ? (setActiveNodes(st.nodes, path, r.nodes) ?? st.nodes) : r.nodes;
+    // What the plan added lands where you are looking when the planner put it off screen (store/placement.ts).
+    const inView = settleAddedInView(scope, r.nodes, st._viewportRectGetter?.() ?? null);
+    const nodes = path.length ? (setActiveNodes(st.nodes, path, inView) ?? st.nodes) : inView;
     set({ nodes, ...(r.select ? { selectedNodeId: r.select, selectedNodeIds: [r.select] } : {}) });
     get().compile();
     return r.ran;
@@ -3518,8 +3525,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const path = st.activeGroupPath;
     const scope = (path.length ? getActiveNodes(st.nodes, path) : st.nodes) ?? [];
     const selected = (st.selectedNodeIds.length > 1 ? st.selectedNodeIds : st.selectedNodeId ? [st.selectedNodeId] : st.selectedNodeIds).filter(id => scope.some(n => n.id === id));
-    const plan = execCommand(text, scope, { selected, picks, nextId: () => idGenerator.next(), topLevel: path.length === 0 });
-    if (!plan.ok) return plan;
+    const planned = execCommand(text, scope, { selected, picks, nextId: () => idGenerator.next(), topLevel: path.length === 0 });
+    if (!planned.ok) return planned;
+    // What the command added lands where you are looking when it went off screen (store/placement.ts).
+    const plan = planned.nodes === scope ? planned : { ...planned, nodes: settleAddedInView(scope, planned.nodes, st._viewportRectGetter?.() ?? null) };
     const graphChanged = plan.nodes !== scope;
     if (graphChanged || plan.group) {
       undoManager.batch(st.nodes, () => {
@@ -3544,7 +3553,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const { nodes: fresh0, idOf } = freshIds(starter.nodes, () => idGenerator.next());
     // Owner marks of the 3D setup (its camera view, its shape) name the temporary ids: follow the fresh ones.
     const fresh = remapMarks(fresh0, idOf);
-    const placed = placeInFreeSpace(before, fresh, position ?? get()._viewportCenterGetter?.() ?? { x: 0, y: 0 });
+    // In the visible canvas (centred on a drop point when there is one), off any card there (store/placement.ts).
+    const placed = placeSetupInView(before, fresh, get()._viewportRectGetter?.() ?? null, { at: position ? cardCentre(position) : get()._viewportCenterGetter?.() });
     undoManager.push(before, { label: `Added an Agents group (${kind === 'particles' ? 'Particles' : kind === 'rules' ? 'Rules' : kind === 'rules3d' ? 'Rules in 3D' : 'Slime'})` });
     let nodes = [...before, ...placed];
     const out = { nodeId: idOf(starter.out.nodeId), outputKey: starter.out.outputKey };
@@ -3568,7 +3578,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const scope = path.length ? getActiveNodes(st.nodes, path) : st.nodes;
     if (!scope) return null;
     const id = idGenerator.next();
-    const placed = placeNear(scope, [{ ...node, id }]);
+    // Where it was asked for, or the free spot nearest it (not slid down past a column of cards).
+    const placed = placeInFreeSpace(scope, [{ ...node, id }], node.position);
     undoManager.push(st.nodes, { label: `Added ${label}` });
     const list = [...scope, ...placed];
     const nodes = path.length ? (setActiveNodes(st.nodes, path, list) ?? st.nodes) : list;
@@ -3623,8 +3634,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         if (!preset) return undefined;
         undoManager.push(get().nodes, { label: `Added the ${preset.label} preset` });
         const { out } = preset;
-        // In free space beside the graph, its own cards apart: never on top of what is there.
-        const added = placeInFreeSpace(get().nodes, preset.nodes, position);
+        // In the visible canvas, round where it was added, its own cards apart: never on top of what is there.
+        const added = placeSetupInView(get().nodes, preset.nodes, get()._viewportRectGetter?.() ?? null, { at: cardCentre(position) });
         let nodes = [...get().nodes, ...added];
         const output = graphOutput(get().nodes);
         if (output) nodes = nodes.map(n => n.id === output.id

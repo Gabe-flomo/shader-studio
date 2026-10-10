@@ -6,7 +6,8 @@
  */
 import type { GraphNode } from '../types/nodeGraph';
 import { useNodeGraphStore, undoManager } from '../store/useNodeGraphStore';
-import { freshIds, placeInFreeSpace } from '../store/agentSetup';
+import { freshIds } from '../store/agentSetup';
+import { placeSetupInView } from '../store/placement';
 import { graphOutput } from '../nodes/scene3dDefaults';
 import { applyRulesToGroup, groupRules, isRulesGroup } from '../agentRules/apply';
 import { agentsViewOf } from '../agentRules/outputs';
@@ -44,7 +45,8 @@ function addTemplateSetup(card: StartCard): string | null {
   const outNode = all.find(x => x.type === 'output');
   const out = outNode?.inputs.color?.connection;
   const { nodes: fresh, idOf } = freshIds(all.filter(x => x !== outNode), () => st.newNodeId());
-  const placed = placeInFreeSpace(before, fresh, st._viewportCenterGetter?.() ?? { x: 0, y: 0 });
+  // Centred in the visible canvas, off any card there (store/placement.ts).
+  const placed = placeSetupInView(before, fresh, st._viewportRectGetter?.() ?? null, { at: st._viewportCenterGetter?.() });
   undoManager.push(before, { label: `Added an Agents group (${card.label})` });
   const output = graphOutput(before);
   let nodes = [...before, ...placed];

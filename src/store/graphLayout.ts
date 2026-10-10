@@ -35,26 +35,118 @@ function codeCardExtra(node: GraphNode, inputCount: number): number {
   return 0;
 }
 
+/** A card's width on the canvas. */
+const CARD_W = 360;
+
 /**
  * Columns by data-flow rank (the Studio's auto layout and the converter's),
  * each column stacked top to bottom with `gap` between cards. `heightOf`
  * gives a card's height (measured when it has rendered, estimated before);
  * `order` sorts a column (by id when omitted).
+ *
+ * Kept compact (docs/structure-hints.md "Auto layout"):
+ * - ranks are pulled toward what a node feeds (`compactRanks`), so a Time or a constant that only
+ *   the end of a long chain reads sits one column before it, not alone in the first column;
+ * - each connected piece of the graph is laid out on its own and the pieces are packed in rows
+ *   (`packPieces`): the piece with the Output first, the rest beside it while they fit within its
+ *   width, else on a row below, with the usual gaps between them. Nothing is left stranded.
  */
 export function layoutByRank(
   nodes: GraphNode[],
   opts: { heightOf?: (n: GraphNode) => number; order?: (a: GraphNode, b: GraphNode) => number; startX?: number; startY?: number; colW?: number; gap?: number } = {},
 ): Map<string, { x: number; y: number }> {
   const { heightOf = estimateNodeHeight, order, startX = 40, startY = 60, colW = 440, gap = 32 } = opts;
-  const out = new Map<string, { x: number; y: number }>();
-  for (const { rank, nodes: column } of groupNodesByRank(nodes)) {
-    let y = startY;
-    for (const n of order ? [...column].sort(order) : column) {
-      out.set(n.id, { x: startX + rank * colW, y });
-      y += heightOf(n) + gap;
+  const rank = compactRanks(nodes);
+  const byId = (a: GraphNode, b: GraphNode) => a.id.localeCompare(b.id);
+  const pieces = connectedPieces(nodes).map(list => {
+    const min = Math.min(...list.map(n => rank.get(n.id)!));
+    const cols = new Map<number, GraphNode[]>();
+    for (const n of list) { const c = rank.get(n.id)! - min; cols.set(c, [...(cols.get(c) ?? []), n]); }
+    const at = new Map<string, { x: number; y: number }>();
+    let w = 0, h = 0;
+    for (const [c, column] of cols) {
+      let y = 0;
+      for (const n of [...column].sort(order ?? byId)) {
+        at.set(n.id, { x: c * colW, y });
+        y += heightOf(n) + gap;
+      }
+      w = Math.max(w, c * colW + CARD_W);
+      h = Math.max(h, y - gap);
     }
+    return { at, w, h };
+  });
+  const out = new Map<string, { x: number; y: number }>();
+  for (const { piece, x, y } of packPieces(pieces, { startX, startY, gapX: colW - CARD_W, gapY: gap * 3 })) {
+    for (const [id, p] of piece.at) out.set(id, { x: x + p.x, y: y + p.y });
   }
   return out;
+}
+
+/**
+ * Pieces (each with its own width and height) placed in rows: the first at the start, each next
+ * one right of the one before with `gapX` between them while the row stays within the widest
+ * piece's width (at least three columns), else at the start of a new row `gapY` below the tallest
+ * piece of the row above. Returns each piece's top-left.
+ */
+export function packPieces<T extends { w: number; h: number }>(pieces: readonly T[], opts: { startX: number; startY: number; gapX: number; gapY: number }): Array<{ piece: T; x: number; y: number }> {
+  const { startX, startY, gapX, gapY } = opts;
+  const limit = Math.max(3 * (CARD_W + gapX) - gapX, ...pieces.map(p => p.w));
+  const out: Array<{ piece: T; x: number; y: number }> = [];
+  let x = startX, rowY = startY, rowH = 0;
+  for (const piece of pieces) {
+    if (x > startX && x - startX + piece.w > limit) { rowY += rowH + gapY; x = startX; rowH = 0; }
+    out.push({ piece, x, y: rowY });
+    x += piece.w + gapX;
+    rowH = Math.max(rowH, piece.h);
+  }
+  return out;
+}
+
+/** In-scope wires as [from, to], a Loop Carry's feedback `next` left out (it points back upstream). */
+function wiresOf(nodes: GraphNode[]): Array<[string, string]> {
+  const ids = new Set(nodes.map(n => n.id));
+  const out: Array<[string, string]> = [];
+  for (const n of nodes) for (const [key, input] of Object.entries(n.inputs)) {
+    if (n.type === 'loopCarry' && key === 'next') continue;
+    if (input.connection && ids.has(input.connection.nodeId) && input.connection.nodeId !== n.id) out.push([input.connection.nodeId, n.id]);
+  }
+  return out;
+}
+
+/**
+ * The graph's connected pieces (nodes joined by wires either way): the piece holding an Output
+ * first, then the biggest, ties in the order the nodes come in.
+ */
+export function connectedPieces(nodes: GraphNode[]): GraphNode[][] {
+  const parent = new Map(nodes.map(n => [n.id, n.id]));
+  const find = (id: string): string => { let r = id; while (parent.get(r) !== r) r = parent.get(r)!; parent.set(id, r); return r; };
+  for (const [a, b] of wiresOf(nodes)) { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(rb, ra); }
+  const groups = new Map<string, GraphNode[]>();
+  for (const n of nodes) { const r = find(n.id); groups.set(r, [...(groups.get(r) ?? []), n]); }
+  const first = new Map(nodes.map((n, i) => [n.id, i]));
+  const hasOutput = (g: GraphNode[]) => g.some(n => n.type === 'output' || n.type === 'vec4Output');
+  return [...groups.values()].sort((a, b) =>
+    Number(hasOutput(b)) - Number(hasOutput(a)) || b.length - a.length || first.get(a[0].id)! - first.get(b[0].id)!);
+}
+
+/**
+ * Ranks for the layout: the data-flow ranks (`computeNodeRanks`), then every node that feeds
+ * something moved right to just before the earliest node it feeds. Without it a Time or a
+ * constant read only at the end of a long chain stayed in the first column, many columns from
+ * what it feeds (Convert's "lone column on the left"). Wires still run left to right.
+ */
+export function compactRanks(nodes: GraphNode[]): Map<string, number> {
+  const rank = computeNodeRanks(nodes);
+  const consumers = new Map<string, string[]>();
+  for (const [from, to] of wiresOf(nodes)) consumers.set(from, [...(consumers.get(from) ?? []), to]);
+  const byRankDown = [...nodes].sort((a, b) => rank.get(b.id)! - rank.get(a.id)!);
+  for (const n of byRankDown) {
+    const cs = consumers.get(n.id);
+    if (!cs?.length) continue;
+    const before = Math.min(...cs.map(c => rank.get(c)!)) - 1;
+    if (before > rank.get(n.id)!) rank.set(n.id, before);
+  }
+  return rank;
 }
 
 /**
