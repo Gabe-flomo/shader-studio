@@ -1,7 +1,7 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { audioUniformName } from '../../compiler/audioUniformNames';
 import { p, withNewOutputs } from './helpers';
-import { clipGlsl } from '../../lib/media/clip';
+import { clipGlsl, clipOutputSize, cleanTransform, isIdentity, parseSavedClip } from '../../lib/media/clip';
 
 /**
  * Loop Index — outputs the current iteration counter `i` when placed inside
@@ -199,11 +199,38 @@ const VIDEO_INPUT_TEXTURE: GraphNode['outputs'] = {
   texture: { type: 'texture', label: 'Texture', hint: 'The video itself as a texture: wire it into Sample, Edges, Blur, Glow or Displace (texture), a Texture tool (Mask for a colour key, Levels, Neighbours), or Particles\' Emit from, with no copy Pass in between. For Change (what moved), draw it into a Pass first.' },
 };
 
+/**
+ * The Texture node (docs/texture-node.md): one card for a picture, a video or the webcam.
+ *
+ * It keeps the two engine types it always had: a picture is a `textureInput` (sampler
+ * `u_tex_<slug>`), a video or the webcam a `videoInput` (sampler `u_vid_<slug>`). The
+ * card's Image / Video / Webcam switch swaps the type in place (lib/texture/textureSource.ts):
+ * same id, same sockets, wires kept. Only Texture Input is offered by the node browser
+ * (labelled Texture); Video Input stays registered for every saved graph and for the switch.
+ *
+ * Picture extras (crop / rotate / flip in `clip`, `tile`, `wrap`, `filter`) emit code only when
+ * set, so every graph saved before compiles to the same shader.
+ */
+export const TEXTURE_WRAPS = ['clamp', 'repeat', 'mirror'] as const;
+export type TextureWrap = typeof TEXTURE_WRAPS[number];
+export const textureWrapOf = (v: unknown): TextureWrap => (v === 'repeat' || v === 'mirror' ? v : 'clamp');
+export const textureTileOf = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.min(64, v) : 1);
+
+/** The picture's aspect after its crop / rotate (what Fit and Fill keep). */
+export function croppedAspect(aspect: number, rawClip: unknown): number {
+  const c = parseSavedClip(rawClip);
+  const xf = c ? cleanTransform(c) : null;
+  if (!xf || isIdentity(xf)) return aspect;
+  const [w, h] = clipOutputSize(aspect * 1000, 1000, xf);
+  return h > 0 ? w / h : aspect;
+}
+
 export const TextureInputNode: NodeDefinition = {
   type: 'textureInput',
-  label: 'Texture Input',
+  label: 'Texture',
+  aliases: ['Texture Input', 'Image', 'Picture', 'Video', 'Webcam', 'Camera', 'Shadertoy channel'],
   category: 'Sources',
-  description: 'Samples an image texture loaded from a file. Wire to UV for sampling position. Fit controls how the image’s own aspect ratio is respected: Stretch fills the UV space exactly (may distort), Fit shows the whole image with padding, Fill covers the space and crops.',
+  description: 'A picture, a video or the webcam as a texture. Upload or drop a file, pick one from the library, paste an image URL, or turn the webcam on. Wire to UV for where to sample. Fit: Stretch fills the UV space exactly (may distort), Fit shows the whole picture with padding, Fill covers the space and crops.',
   inputs: {
     uv: { type: 'vec2', label: 'UV' },
   },
@@ -228,8 +255,9 @@ export const TextureInputNode: NodeDefinition = {
     // Map from centered [-aspect,aspect] × [-1,1] UV back to [0,1] UV for texture sampling
     const samplerUV = `(${uvVar} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5)`;
     const fit = typeof node.params.fit === 'string' ? node.params.fit : 'stretch';
-    const imageAspect = typeof node.params._imageAspect === 'number' && node.params._imageAspect > 0
+    const rawAspect = typeof node.params._imageAspect === 'number' && node.params._imageAspect > 0
       ? node.params._imageAspect : 1;
+    const imageAspect = croppedAspect(rawAspect, node.params.clip);
 
     let fitUV = samplerUV;
     let fitLines = '';
@@ -252,10 +280,25 @@ export const TextureInputNode: NodeDefinition = {
       ].join('');
       fitUV = `${id}_fitUV`;
     }
+    // Tiling, wrap and the crop / rotate / flip: only when set (older graphs compile as before).
+    const tile = textureTileOf(node.params.tile);
+    const wrap = textureWrapOf(node.params.wrap);
+    const xf = clipGlsl(id, `${id}_st`, node.params.clip);
+    let sampleUV = `clamp(${fitUV}, 0.0, 1.0)`;
+    let extra = '';
+    if (tile !== 1 || wrap !== 'clamp' || xf.code) {
+      const tiled = tile !== 1 ? `((${fitUV} - 0.5) * ${tile.toFixed(4)} + 0.5)` : fitUV;
+      const wrapped = wrap === 'repeat' ? `fract(${tiled})`
+        : wrap === 'mirror' ? `(1.0 - abs(mod(${tiled}, 2.0) - 1.0))`
+          : `clamp(${tiled}, 0.0, 1.0)`;
+      extra = `    vec2 ${id}_st = ${wrapped};\n${xf.code}`;
+      sampleUV = xf.st;
+    }
     return {
       code: [
         fitLines,
-        `    vec4 ${id}_sample = texture2D(u_tex_${id}, clamp(${fitUV}, 0.0, 1.0));\n`,
+        extra,
+        `    vec4 ${id}_sample = texture2D(u_tex_${id}, ${sampleUV});\n`,
         `    vec3 ${id}_color = ${id}_sample.rgb;\n`,
         `    float ${id}_alpha = ${id}_sample.a;\n`,
       ].join(''),
@@ -311,9 +354,11 @@ export const AudioInputNode: NodeDefinition = {
 
 export const VideoInputNode: NodeDefinition = {
   type: 'videoInput',
-  label: 'Video Input',
+  // The Texture node's video and webcam side (see TextureInputNode): not offered by the browser.
+  label: 'Texture',
+  aliases: ['Video Input'],
   category: 'Sources',
-  description: 'Samples a video file frame-by-frame. Wire to UV for sampling position.',
+  description: 'A video file played frame by frame, or the webcam (Source: Webcam), as a texture. Wire to UV for sampling position.',
   inputs: {
     uv: { type: 'vec2', label: 'UV' },
   },

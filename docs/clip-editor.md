@@ -22,6 +22,7 @@ something to it.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Time Cube | **Edit clip…** on the card, or a double-click on its strip | ✓ | ✓ (By length / Equal) | ✓ | ✓ | ✓ (ticks, frame budget) | | | ✓ | ✓ |
 | Video Input node | **⤢** on the card header, a double-click on its thumbnail, or **Edit clip…** in its settings (◉) | ✓ | ✓ | ✓ | | | ✓ | ✓ | ✓ | ✓ |
+| Texture node, Image (a still: no transport or timeline) | **Edit…** on the card, or a double-click on its picture | | | | | | | | ✓ | ✓ |
 | Video layer (Play) | **Edit clip…** in the layer's Video section | ✓ | ✓ | ✓ | | | ✓ | ✓ | ✓ | ✓ |
 | Baked node | **Edit clip…** on the card, or a double-click on its poster | ✓ (one stretch) | | | | | ✓ | ✓ | ✓ | |
 | Background video (the header's, or one in a Background layer's queue) | **Edit clip…** beside Loop / Sound / Speed | ✓ | ✓ | ✓ | | | ✓ | ✓ | | |

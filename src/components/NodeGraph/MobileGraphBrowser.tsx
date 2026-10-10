@@ -9,6 +9,7 @@
  * in the graph — never by dragging, always by picking from a list.
  */
 
+import { takePicture } from '../../lib/texture/pictureHost';
 import { inputLabelOf } from '../../lib/inputNames';
 import { toggleLineOff } from '../../lib/exprLines';
 import { errorMessage } from '../../utils/fileIO';
@@ -32,7 +33,6 @@ import { typesCompatible } from '../../lib/typesCompatible';
 import { groupNodesByRank, computeNodeRanks } from '../../store/graphLayout';
 import { moveItem } from '../../lib/reorder';
 import { GLSL_PALETTE } from '../../lib/glslPalette';
-import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
 import {
   VECTOR_AXES, EASING_PRESETS, socketHasKeyframes, socketHasVectorKeyframes,
   getKeyframeConfig, getAxisKeyframeConfig,
@@ -1457,7 +1457,6 @@ export function MobileGraphBrowser() {
   const setNodeAssignOp = useNodeGraphStore(s => s.setNodeAssignOp);
   const setNodeAssignInit = useNodeGraphStore(s => s.setNodeAssignInit);
   const toggleNodeCarryMode = useNodeGraphStore(s => s.toggleNodeCarryMode);
-  const setNodeTexture = useNodeGraphStore(s => s.setNodeTexture);
   const nodeTextures = useNodeGraphStore(s => s.nodeTextures);
   // Cross-cutting with App.tsx's bottom action bar — see the store field's
   // own comment. mobileKeyframeTool is read here to drive the canvas editor
@@ -2178,11 +2177,8 @@ export function MobileGraphBrowser() {
       const file = e.target.files?.[0];
       e.target.value = ''; // allow re-picking the same file
       if (!file) return;
-      loadImageTextureFromFile(file)
-        .then(({ texture, thumbnailDataUrl, imageAspect }) => {
-          setNodeTexture(node.id, texture);
-          updateNodeParams(node.id, { _thumbnailUrl: thumbnailDataUrl, _imageAspect: imageAspect }, { immediate: true });
-        })
+      // Kept with the graph and in the library, as the desktop card does (docs/texture-node.md).
+      takePicture(node.id, file, { name: file.name.replace(/\.[a-z0-9]{2,5}$/i, '') })
         .catch(err => toast.error('Couldn’t load that image', { message: 'The file may be damaged or in a format the browser can’t read. Your graph wasn’t changed.', details: errorMessage(err) }));
     };
     return (

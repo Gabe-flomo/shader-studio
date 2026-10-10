@@ -26,6 +26,8 @@ import { useFitsHere, useLibraryContext } from './useLibraryRelevance';
 
 // ── Nodes hidden from browser ─────────────────────────────────────────────────
 const HIDDEN_NODES = new Set([
+  // Texture (textureInput) is the one card for pictures, videos and the webcam; its Source switch makes a videoInput.
+  'videoInput',
   'output', 'vec4Output', 'loopIndex',
   'groupOutput', 'groupInput', 'marchLoopInputs', 'marchLoopOutput', 'scope',
   'forLoop', 'loopRippleStep', 'loopRotateStep', 'loopDomainFold',

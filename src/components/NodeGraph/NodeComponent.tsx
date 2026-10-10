@@ -18,7 +18,6 @@ if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
   `;
   document.head.appendChild(s);
 }
-import { toast } from '../ui/toastStore';
 import type { GraphNode, DataType, NodeDefinition, ParamDef } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
@@ -66,7 +65,8 @@ const PublishNodeModal    = lazyWithSuspense<PropsOf<typeof PublishNodeModalT>>(
 import { AudioInputModal } from './AudioInputModal';
 import { VideoInputModal } from './VideoInputModal';
 import { VideoInputClipModal } from './VideoInputClipModal';
-import { addVideoFile } from '../../lib/backgroundLibrary';
+import { TextureCardBody } from './TextureCardBody';
+import { KIND_LABEL, textureKindOf } from '../../lib/texture/textureSource';
 
 /** The Video Input card's thumbnail follows the engine (a file reopened after a reload). */
 const subscribeVideoEngine = (fn: () => void) => videoEngine.onChange(fn);
@@ -556,9 +556,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const isSwapTarget       = swapTargetNodeId === node.id;
   // Texture input
   const setNodeTexture     = useNodeGraphStore(s => s.setNodeTexture);
-  const nodeTexture        = useNodeGraphStore(s => node.type === 'textureInput' ? s.nodeTextures[node.id] : null);
-  // Video input
-  const setVideoTexture    = useNodeGraphStore(s => s.setVideoTexture);
 
   // What the card and the eye button offer as a preview (lib/nodePreview/previewPlan.ts): the
   // node's value or colour read back from the eye preview, its diagram, a live readout, or nothing.
@@ -864,115 +861,114 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     );
   }
 
-  // ── Texture Input node special card ─────────────────────────────────────────
-  if (node.type === 'textureInput') {
-    const thumbnailUrl = node.params._thumbnailUrl as string | undefined;
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      loadImageTextureFromFile(file)
-        .then(({ texture, thumbnailDataUrl, imageAspect }) => {
-          setNodeTexture(node.id, texture);
-          updateNodeParams(node.id, { _thumbnailUrl: thumbnailDataUrl, _imageAspect: imageAspect }, { immediate: true });
-        })
-        .catch(err => toast.error('Couldn’t load that image', { message: 'The file may be damaged or in a format the browser can’t read. Your graph wasn’t changed.', details: errorMessage(err) }));
+  // ── Texture node (docs/texture-node.md): one card for a picture, a video or the webcam ──
+  // Texture Input and Video Input are its two engine types; the Source switch swaps them in place,
+  // so this branch is the same for both (and its hooks live in TextureCardBody, the same whatever the source).
+  if (node.type === 'textureInput' || node.type === 'videoInput') {
+    // The thumbnail and Edit clip follow the engine (a file reopened from the library after a reload).
+    React.useSyncExternalStore(subscribeVideoEngine, () => videoEngine.url(node.id));
+    const kind = textureKindOf(node);
+    const isVideo = kind === 'video';
+    const videoReady = isVideo && !!videoEngine.url(node.id);
+    const hasFile = !!node.params._hasFile;
+    const isPlaying = !!node.params._isPlaying;
+    const clipped = !!node.params.clip && isVideo;
+    const toggleVideoPlay = () => {
+      if (isPlaying) { videoEngine.pause(node.id); updateNodeParams(node.id, { _isPlaying: false }, { immediate: true }); }
+      else { videoEngine.play(node.id); updateNodeParams(node.id, { _isPlaying: true }, { immediate: true }); }
     };
-
+    const headBtn = (on: boolean) => ({ background: 'none', border: 'none', color: on ? tc.mauve : tc.surface2, cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 });
     return (
-      <div
-        data-node-id={node.id}
-        style={specialCardStyle()}
-      >
-        {/* Header */}
-        <div
-          onMouseDown={(e) => {
-            if (e.button === 2) return;
-            e.stopPropagation();
-            startNodeMouseDrag({
-              nodeId: node.id,
-              cardEl: (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-node-id]'),
-              startClient: { x: e.clientX, y: e.clientY },
-              startPosition: node.position,
-              getZoom,
-              threshold: 0,
-              commit: pos => updateNodePosition(node.id, pos),
-              onSettle: () => setSelectedNodeId(isSelected ? null : node.id),
-            });
-          }}
-          style={specialHeadStyle}
-        >
-          <span style={{ fontWeight: 600, fontSize: '11px' }}>Texture Input</span>
-          <button onMouseDown={e => e.stopPropagation()} onClick={() => removeNode(node.id)} style={{ background: 'none', border: 'none', color: tc.red, cursor: 'pointer', fontSize: '13px' }}>✕</button>
-        </div>
-
-        {/* Thumbnail or placeholder */}
-        <div style={{ padding: '8px 10px', display: 'flex', gap: '8px', alignItems: 'center' }} onMouseDown={e => e.stopPropagation()}>
-          {thumbnailUrl ? (
-            <img src={thumbnailUrl} alt="texture" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: '4px', border: `1px solid ${tc.surface1}`, flexShrink: 0 }} />
-          ) : (
-            <div style={{ width: 48, height: 48, background: tc.surface0, borderRadius: '4px', border: `1px dashed ${tc.surface1}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🖼</div>
-          )}
-          <label style={{ fontSize: '10px', color: tc.blue, cursor: 'pointer', border: `1px solid ${tc.blue}55`, borderRadius: '3px', padding: '3px 7px' }}>
-            {nodeTexture ? 'Change' : 'Load Image'}
-            <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
-          </label>
-        </div>
-
-        {/* Fit mode — this card bypasses the generic paramDefs renderer
-            (it returns early, above), so unlike most select params this one
-            needs its own dropdown here. */}
-        <div style={{ padding: '0 10px 8px', display: 'flex', alignItems: 'center', gap: '6px' }} onMouseDown={e => e.stopPropagation()}>
-          <span style={{ color: tc.overlay0, fontSize: '10px' }}>Fit</span>
-          <select
-            value={(node.params.fit as string) ?? 'stretch'}
-            onChange={e => updateNodeParams(node.id, { fit: e.target.value }, { immediate: true })}
-            style={{ background: tc.mantle, border: `1px solid ${tc.surface1}`, color: tc.text, borderRadius: '3px', fontSize: '10px', padding: '2px 4px', outline: 'none', cursor: 'pointer', flex: 1 }}
+      <>
+        <div data-node-id={node.id} data-texture-node={kind} style={{ ...specialCardStyle(), width: 280 }}>
+          {/* Header */}
+          <div
+            onMouseDown={(e) => {
+              if (e.button === 2) return;
+              e.stopPropagation();
+              startNodeMouseDrag({
+                nodeId: node.id,
+                cardEl: (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-node-id]'),
+                startClient: { x: e.clientX, y: e.clientY },
+                startPosition: node.position,
+                getZoom,
+                threshold: 0,
+                commit: pos => updateNodePosition(node.id, pos),
+                onSettle: () => setSelectedNodeId(isSelected ? null : node.id),
+              });
+            }}
+            style={specialHeadStyle}
           >
-            <option value="stretch">Stretch</option>
-            <option value="contain">Fit (no crop)</option>
-            <option value="cover">Fill (crop)</option>
-          </select>
-        </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {isVideo && (
+                <button
+                  onMouseDown={e => e.stopPropagation()}
+                  onClick={toggleVideoPlay}
+                  title={isPlaying ? 'Pause' : 'Play'}
+                  disabled={!hasFile}
+                  style={{ background: 'none', border: 'none', color: !hasFile ? tc.surface1 : isPlaying ? tc.green : tc.mauve, cursor: hasFile ? 'pointer' : 'default', fontSize: '11px', padding: '0', lineHeight: 1 }}
+                >{isPlaying ? '⏸' : '▶'}</button>
+              )}
+              <span style={{ fontWeight: 600, fontSize: '11px' }}>Texture</span>
+              <span style={{ fontSize: '10px', color: tc.subtext0 }}>{KIND_LABEL[kind]}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {isVideo && (
+                <button onMouseDown={e => e.stopPropagation()} onClick={() => setShowVideoClip(true)} disabled={!videoReady} aria-label="Edit clip"
+                  title={videoReady ? 'Open the video: trim, segments, speed, loop, crop (the clip editor)' : 'Load a video first'}
+                  style={{ ...headBtn(false), color: clipped ? tc.yellow : videoReady ? tc.surface2 : tc.surface0, cursor: videoReady ? 'pointer' : 'default' }}>⤢</button>
+              )}
+              {isVideo && (
+                <button onMouseDown={e => e.stopPropagation()} onClick={() => setShowVideoInputModal(v => !v)} title="Open video settings" style={headBtn(showVideoInputModal)}>◉</button>
+              )}
+              <button onMouseDown={e => e.stopPropagation()} onClick={() => removeNode(node.id)} style={{ background: 'none', border: 'none', color: tc.red, cursor: 'pointer', fontSize: '13px' }}>✕</button>
+            </div>
+          </div>
 
-        {/* Sockets row: UV input on left, outputs on right */}
-        <div style={{ padding: '3px 0 5px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          {/* UV input socket */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '4px' }}>
-            <div
-              data-socket="in"
-              ref={el => { registerSocket(node.id, 'in', 'uv', el); }}
-              onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, 'uv'); }}
-              onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapInputSocket?.(node.id, 'uv'); }}
-              style={{
-                width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12,
-                borderRadius: '50%',
-                background: node.inputs.uv?.connection ? TYPE_COLORS['vec2'] : '#333',
-                border: `2px solid ${TYPE_COLORS['vec2']}`,
-                cursor: 'pointer',
-                marginLeft: isTouchDevice ? '-11px' : '-6px',
-                flexShrink: 0,
-                touchAction: 'manipulation',
-              }}
-            />
-            <span style={{ fontSize: '10px', color: tc.subtext0 }}>UV</span>
-          </div>
-          {/* Output sockets */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
-            {Object.entries(node.outputs).map(([key, out]) => (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
-                <span style={{ fontSize: '10px', color: tc.subtext0 }}>{out.label}</span>
-                <div
-                  data-socket="out"
-                  ref={el => { registerSocket(node.id, 'out', key, el); }}
-                  onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
-                  onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, key); }}
-                  style={{ width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12, borderRadius: '50%', background: TYPE_COLORS[out.type] ?? '#888', border: `2px solid ${TYPE_COLORS[out.type] ?? '#888'}`, cursor: 'crosshair', marginRight: isTouchDevice ? '-11px' : '-6px', touchAction: 'manipulation', boxShadow: pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === key ? `0 0 0 3px ${TYPE_COLORS[out.type] ?? '#888'}, 0 0 12px ${TYPE_COLORS[out.type] ?? '#888'}` : undefined }}
-                />
-              </div>
-            ))}
+          <TextureCardBody node={node} onEditClip={() => setShowVideoClip(true)} />
+
+          {/* Sockets row: UV input on left, outputs on right */}
+          <div style={{ padding: '3px 0 5px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '4px' }}>
+              <div
+                data-socket="in"
+                ref={el => { registerSocket(node.id, 'in', 'uv', el); }}
+                onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, 'uv'); }}
+                onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapInputSocket?.(node.id, 'uv'); }}
+                style={{
+                  width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12,
+                  borderRadius: '50%',
+                  background: node.inputs.uv?.connection ? TYPE_COLORS['vec2'] : '#333',
+                  border: `2px solid ${TYPE_COLORS['vec2']}`,
+                  cursor: 'pointer',
+                  marginLeft: isTouchDevice ? '-11px' : '-6px',
+                  flexShrink: 0,
+                  touchAction: 'manipulation',
+                }}
+              />
+              <span style={{ fontSize: '10px', color: tc.subtext0 }}>UV</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
+              {Object.entries(node.outputs).map(([key, out]) => (
+                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
+                  <span style={{ fontSize: '10px', color: tc.subtext0 }}>{out.label}</span>
+                  <div
+                    data-socket="out"
+                    ref={el => { registerSocket(node.id, 'out', key, el); }}
+                    onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
+                    onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, key); }}
+                    style={{ width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12, borderRadius: '50%', background: TYPE_COLORS[out.type] ?? '#888', border: `2px solid ${TYPE_COLORS[out.type] ?? '#888'}`, cursor: 'crosshair', marginRight: isTouchDevice ? '-11px' : '-6px', touchAction: 'manipulation', boxShadow: pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === key ? `0 0 0 3px ${TYPE_COLORS[out.type] ?? '#888'}, 0 0 12px ${TYPE_COLORS[out.type] ?? '#888'}` : undefined }}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+        {isVideo && showVideoInputModal && (
+          <VideoInputModal node={node} onClose={() => setShowVideoInputModal(false)} onEditClip={videoReady ? () => { setShowVideoInputModal(false); setShowVideoClip(true); } : undefined} />
+        )}
+        {isVideo && showVideoClip && <VideoInputClipModal node={node} onClose={() => setShowVideoClip(false)} />}
+      </>
     );
   }
 
@@ -1314,222 +1310,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           </div>
         </div>
       </div>
-    );
-  }
-
-  // ── Video Input node special card ────────────────────────────────────────────
-  if (node.type === 'videoInput') {
-    // The engine's own URL first: a file reopened from the library after a reload has a new one.
-    React.useSyncExternalStore(subscribeVideoEngine, () => videoEngine.url(node.id));
-    const thumbnailUrl = videoEngine.url(node.id) ?? (node.params._thumbnailUrl as string | undefined);
-    const clipped = !!node.params.clip;
-    const hasFile      = !!(node.params._hasFile);
-    const isPlaying    = !!(node.params._isPlaying);
-    const fileName     = (node.params._fileName as string) || '';
-    const videoFileInputRef = React.useRef<HTMLInputElement>(null);
-
-    // Resolves (never rejects) with the outcome; a video that fails to decode
-    // or times out leaves the node's params untouched instead of hanging.
-    const loadVideoFile = async (file: File): Promise<FileResult> => {
-      if (!file.name.match(/\.(mp4|webm|mov|ogg|mkv)$/i)) {
-        const error = `"${file.name}" is not a supported video file (mp4, webm, mov, ogg, mkv)`;
-        console.error('[VideoInput]', error);
-        return { ok: false, error };
-      }
-      try {
-        await videoEngine.loadVideo(node.id, file);
-      } catch (e) {
-        // videoEngine.loadVideo already logged the failure.
-        return { ok: false, error: errorMessage(e) };
-      }
-      const tex = videoEngine.getTexture(node.id);
-      setVideoTexture(node.id, tex);
-      videoEngine.play(node.id);
-      const thumbUrl = URL.createObjectURL(file);
-      // A new file starts with no clip settings (the old ones were for another video).
-      updateNodeParams(node.id, {
-        _fileName: file.name, _hasFile: true, _isPlaying: true,
-        _thumbnailUrl: thumbUrl, clip: undefined,
-      }, { immediate: true });
-      // Kept in the video library so it opens again after a reload (with its clip settings).
-      void addVideoFile(file).then(m => {
-        videoEngine.setLibraryId(node.id, m.id);
-        updateNodeParams(node.id, { videoId: m.id }, { immediate: true });
-      }, () => { /* no IndexedDB: this session only, as before */ });
-      return { ok: true };
-    };
-
-    const handleVideoDrop = (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const f = e.dataTransfer.files[0];
-      if (f) loadVideoFile(f);
-    };
-
-    const handleVideoFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const f = e.target.files?.[0];
-      if (f) loadVideoFile(f);
-      e.target.value = '';
-    };
-
-    const toggleVideoPlay = () => {
-      if (isPlaying) {
-        videoEngine.pause(node.id);
-        updateNodeParams(node.id, { _isPlaying: false }, { immediate: true });
-      } else {
-        videoEngine.play(node.id);
-        updateNodeParams(node.id, { _isPlaying: true }, { immediate: true });
-      }
-    };
-
-    return (
-      <>
-        <div
-          data-node-id={node.id}
-          style={specialCardStyle()}
-        >
-          {/* Header */}
-          <div
-            onMouseDown={(e) => {
-              if (e.button === 2) return;
-              e.stopPropagation();
-              startNodeMouseDrag({
-                nodeId: node.id,
-                cardEl: (e.currentTarget as HTMLElement).closest<HTMLElement>('[data-node-id]'),
-                startClient: { x: e.clientX, y: e.clientY },
-                startPosition: node.position,
-                getZoom,
-                threshold: 0,
-                commit: pos => updateNodePosition(node.id, pos),
-                onSettle: () => setSelectedNodeId(isSelected ? null : node.id),
-              });
-            }}
-            style={specialHeadStyle}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <button
-                onMouseDown={e => e.stopPropagation()}
-                onClick={toggleVideoPlay}
-                title={isPlaying ? 'Pause' : 'Play'}
-                disabled={!hasFile}
-                style={{ background: 'none', border: 'none', color: !hasFile ? tc.surface1 : isPlaying ? tc.green : tc.mauve, cursor: hasFile ? 'pointer' : 'default', fontSize: '11px', padding: '0', lineHeight: 1 }}
-              >{isPlaying ? '⏸' : '▶'}</button>
-              <span style={{ fontWeight: 600, fontSize: '11px', color: tc.mauve }}>Video Input</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <button
-                onMouseDown={e => e.stopPropagation()}
-                onClick={() => setShowVideoClip(true)}
-                disabled={!thumbnailUrl}
-                title={thumbnailUrl ? 'Open the video: trim, segments, speed, loop, crop (the clip editor)' : 'Load a video first'}
-                aria-label="Edit clip"
-                style={{ background: 'none', border: 'none', color: clipped ? tc.yellow : thumbnailUrl ? tc.surface2 : tc.surface0, cursor: thumbnailUrl ? 'pointer' : 'default', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
-              >⤢</button>
-              <button
-                onMouseDown={e => e.stopPropagation()}
-                onClick={() => setShowVideoInputModal(v => !v)}
-                title="Open video settings"
-                style={{ background: 'none', border: 'none', color: showVideoInputModal ? tc.mauve : tc.surface2, cursor: 'pointer', fontSize: '12px', padding: '0 2px', lineHeight: 1 }}
-              >◉</button>
-              <button onMouseDown={e => e.stopPropagation()} onClick={() => removeNode(node.id)} style={{ background: 'none', border: 'none', color: tc.red, cursor: 'pointer', fontSize: '13px' }}>✕</button>
-            </div>
-          </div>
-
-          {/* Hidden file input */}
-          <input
-            ref={videoFileInputRef}
-            type="file"
-            accept="video/mp4,video/webm,video/ogg,video/quicktime,.mkv"
-            style={{ display: 'none' }}
-            onChange={handleVideoFileInput}
-          />
-
-          {/* Drop zone / thumbnail */}
-          <div
-            onDrop={handleVideoDrop}
-            onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
-            onMouseDown={e => e.stopPropagation()}
-            onClick={() => videoFileInputRef.current?.click()}
-            onDoubleClick={e => { if (thumbnailUrl) { e.preventDefault(); e.stopPropagation(); setShowVideoClip(true); } }}
-            title={thumbnailUrl ? 'Click: another file · double-click: open the clip editor' : undefined}
-            style={{
-              margin: '6px 8px',
-              border: `1px dashed ${tc.surface1}`,
-              borderRadius: '4px',
-              cursor: 'pointer',
-              background: tc.mantle,
-              overflow: 'hidden',
-              minHeight: '48px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            {thumbnailUrl ? (
-              <video
-                src={thumbnailUrl}
-                style={{ width: '100%', maxHeight: '100px', objectFit: 'cover', display: 'block' }}
-                muted
-                playsInline
-              />
-            ) : (
-              <span style={{ fontSize: '10px', color: tc.surface2, padding: '10px' }}>Click or drop MP4 / WebM / MOV</span>
-            )}
-          </div>
-
-          {/* File name */}
-          {hasFile && (
-            <div style={{ padding: '2px 10px 4px', overflow: 'hidden' }} onMouseDown={e => e.stopPropagation()}>
-              <span style={{ fontSize: '10px', color: tc.mauve, fontFamily: 'monospace', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                ▶ {fileName}
-              </span>
-            </div>
-          )}
-
-          {/* Sockets row: UV input on left, outputs on right */}
-          <div style={{ padding: '3px 0 5px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            {/* UV input socket */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '4px' }}>
-              <div
-                data-socket="in"
-                ref={el => { registerSocket(node.id, 'in', 'uv', el); }}
-                onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, 'uv'); }}
-                onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapInputSocket?.(node.id, 'uv'); }}
-                style={{
-                  width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12,
-                  borderRadius: '50%',
-                  background: node.inputs.uv?.connection ? TYPE_COLORS['vec2'] : '#333',
-                  border: `2px solid ${TYPE_COLORS['vec2']}`,
-                  cursor: 'pointer',
-                  marginLeft: isTouchDevice ? '-11px' : '-6px',
-                  flexShrink: 0,
-                  touchAction: 'manipulation',
-                }}
-              />
-              <span style={{ fontSize: '10px', color: tc.subtext0 }}>UV</span>
-            </div>
-            {/* Output sockets */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
-              {Object.entries(node.outputs).map(([key, out]) => (
-                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '4px' }}>
-                  <span style={{ fontSize: '10px', color: tc.subtext0 }}>{out.label}</span>
-                  <div
-                    data-socket="out"
-                    ref={el => { registerSocket(node.id, 'out', key, el); }}
-                    onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
-                    onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, key); }}
-                    style={{ width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12, borderRadius: '50%', background: TYPE_COLORS[out.type] ?? '#888', border: `2px solid ${TYPE_COLORS[out.type] ?? '#888'}`, cursor: 'crosshair', marginRight: isTouchDevice ? '-11px' : '-6px', touchAction: 'manipulation' }}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        {showVideoInputModal && (
-          <VideoInputModal node={node} onClose={() => setShowVideoInputModal(false)} onEditClip={thumbnailUrl ? () => { setShowVideoInputModal(false); setShowVideoClip(true); } : undefined} />
-        )}
-        {showVideoClip && <VideoInputClipModal node={node} onClose={() => setShowVideoClip(false)} />}
-      </>
     );
   }
 
