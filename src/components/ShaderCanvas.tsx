@@ -22,6 +22,7 @@ import { playBackground, planFrame, planGraphs, planShowsThis } from '../play/ba
 import { playVideoLayers } from '../play/videoLayers';
 import { timeCubes } from '../lib/timeCube/volumes';
 import { bakedVideos } from '../lib/bakedVideos';
+import { depthEngine } from '../lib/depth/engine';
 import { playDrumPads } from '../play/drumPads';
 import { compiledQueueGraph, onQueueGraphsChange } from '../play/queueGraphs';
 import type { BackgroundItem } from '../types/play';
@@ -371,6 +372,26 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     timeCubes.sync(useNodeGraphStore.getState().nodes);
     const off = useNodeGraphStore.subscribe((s, prev) => { if (s.nodes !== prev.nodes) timeCubes.sync(s.nodes); });
     return () => { off(); timeCubes.setHost(null); };
+  }, []);
+  // Depth nodes (docs/depth-node.md): their depth comes in through the store's node textures (a baked video's
+  // through the video textures); each compile says which texture each one reads.
+  useEffect(() => {
+    depthEngine.setHost({
+      setTexture: (id, tex) => useNodeGraphStore.getState().setNodeTexture(id, tex),
+      setVideoTexture: (id, tex) => useNodeGraphStore.getState().setVideoTexture(id, tex),
+      requestRender: () => requestRenderRef.current(),
+    });
+    depthEngine.setVideoElements(id => videoEngine.element(id) ?? bakedVideos.element(id));
+    const program = (s: ReturnType<typeof useNodeGraphStore.getState>) =>
+      depthEngine.setProgram([s.fragmentShader, ...(s.passes ?? []).map(p => p.fragmentShader)], s.textureUniforms, s.videoUniforms);
+    const st0 = useNodeGraphStore.getState();
+    depthEngine.sync(st0.nodes);
+    program(st0);
+    const off = useNodeGraphStore.subscribe((s, prev) => {
+      if (s.nodes !== prev.nodes) depthEngine.sync(s.nodes);
+      if (s.fragmentShader !== prev.fragmentShader || s.passes !== prev.passes || s.textureUniforms !== prev.textureUniforms || s.videoUniforms !== prev.videoUniforms) program(s);
+    });
+    return () => { off(); depthEngine.setHost(null); depthEngine.setVideoElements(null); };
   }, []);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
@@ -1637,6 +1658,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       playVideoLayers.follow(elapsed, playing);
       // Baked nodes: each video on frame (t − start) × fps (lib/bakedVideos.ts).
       bakedVideos.follow(elapsed, playing);
+      // Baked depth videos keep to their source video (lib/depth/engine.ts).
+      depthEngine.follow();
       // Video Input nodes with clip settings: on their playlist for the clock (docs/clip-editor.md).
       videoEngine.follow(elapsed, playing);
       // Drum pads: the clock their hits are stamped with, and mapped numbers on sounding pads.
@@ -1775,6 +1798,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         playOverlay.draw(renderer.domElement, elapsed, layerDt);
         // A builder's viewport shows this frame (lib/previewMirror.ts): copied while it is still in the drawing buffer.
         if (previewMirrored()) sendPreviewFrame(renderer.domElement);
+        // Depth nodes (docs/depth-node.md): a frame of each one's source for its model, read now while the picture is
+        // still in the drawing buffer. Only for nodes whose model is downloaded; the worker never holds the frame up.
+        if (depthEngine.wants()) depthEngine.afterFrame({ renderer, uniforms: material.uniforms, canvas: renderer.domElement, playing });
 
         // Check for GLSL errors after first few renders
         const newErrors = flushGlErrors();

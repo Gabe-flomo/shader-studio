@@ -153,3 +153,19 @@ so whatever happens to the pieces (drift, scatter, swirl, fall, orbit) happens t
 Each phase is one PR with tests, checked in the browser.
 
 **Later: camera tracking** (the user, 2026-10-09: after depth works). First import tracks from other tools (Blender `.chan` / JSON, After Effects, CamTrackAR, Record3D with LiDAR depth) to drive the March Camera per frame, plus an in-app solver for tripod pans. A handheld in-app tracker (features plus depth) and a COLMAP sidecar on the desktop app come later still.
+
+### Phase 1 status (Depth node)
+
+Built:
+- the Depth node with three models, each pinned and licence-checked; Base is non-commercial and marked "testing only";
+- live, every-Nth-frame and baked updates, with smoothing;
+- five outputs: Depth, Depth texture, Near mask, Normals, Parallax UV;
+- Compare models;
+- Bake depth;
+- baked depth in web pages (docs/depth-node.md).
+
+The agent stopped at the usage limit while building. I finished it: the full suite passes (9102), and in the browser the card renders and the graph compiles with no errors.
+
+Not yet done: running the real models in the browser, which needs the one-time download from Hugging Face. Timings and quality per model are still to measure.
+
+Next: phase 1b (depth in 3D scenes).
