@@ -22,7 +22,7 @@ import { withAgentSpace } from '../nodes/definitions/agents';
 import { getNodeDefinition } from '../nodes/definitions';
 import {
   type AgentRule, type AgentRuleSet, type ChannelRef, type NeighbourWho, type RuleAction, type RuleCondition,
-  DEFAULT_NEIGHBOURS, channelName, describeAction, kindOf, describeCondition, describeRule, neighbourReadOf, neighbourReads, rulePorts, sensedChannels,
+  DEFAULT_NEIGHBOURS, channelColour, channelName, describeAction, kindOf, describeCondition, describeRule, neighbourReadOf, neighbourReads, rulePorts, sensedChannels,
   usesAction, usesDeposit, usesFade, usesFlow, usesStop,
 } from './spec';
 import { fieldLines, fieldName, normalizeFieldSpec } from './fields';
@@ -196,9 +196,13 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
         }, { field: IN('field') })));
         fy += 420;
       }
+      // A layer masked by a region of the graph (the Where picker) reads that mask where the walker stands.
+      const regionIns = f.regions.filter(m => set.masks[m]).map(m => (set.masks[m].kind === 'texture'
+        ? { name: `mask${m + 1}`, type: 'vec3' as ExprType, from: [id.mask(m), 'color'] as Wire }
+        : { name: `mask${m + 1}`, type: 'float' as ExprType, from: IN(`mask${m + 1}`) }));
       const block1 = block(id.field(s, ri, j), 840, fy, {
         label: `Field: ${fieldName(spec)}`,
-        inputs: [{ name: 'pos', type: P, from: IN('position') }, ...f.slopes.map(li => ({ name: `slope${li}`, type: P, from: [id.slope(s, ri, j, li), 'force'] as Wire }))],
+        inputs: [{ name: 'pos', type: P, from: IN('position') }, ...f.slopes.map(li => ({ name: `slope${li}`, type: P, from: [id.slope(s, ri, j, li), 'force'] as Wire })), ...regionIns],
         lines: f.lines.map(l => ({ lhs: l.lhs, op: l.op, rhs: l.rhs })),
         result: f.result, outputType: P, exposed: [],
         note: [
@@ -274,13 +278,18 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
     return st.length === 1 ? vec3Of(st[0].colour) : st.slice(0, -1).map((c, i) => `state < ${glf(i + 0.5)} ? ${vec3Of(c.colour)} : `).join('') + vec3Of(st[st.length - 1].colour);
   };
   const colours = set.species.map((_, s) => colourOf(s));
-  const colour = colours.length === 1 ? colours[0] : colours.slice(0, -1).map((c, i) => `sp < ${glf(i + 0.5)} ? (${c}) : `).join('') + `(${colours[colours.length - 1]})`;
+  const stateColour = colours.length === 1 ? colours[0] : colours.slice(0, -1).map((c, i) => `sp < ${glf(i + 0.5)} ? (${c}) : `).join('') + `(${colours[colours.length - 1]})`;
+  // Look: coloured by a trail channel where it stands (its kind's colour, dimmed, to the channel's).
+  const lookTrail = set.look?.by === 'trail' && senses.includes(String(set.look.channel)) ? set.look : null;
+  const chanRgb = (hex: string) => { const v = parseInt(hex.slice(1), 16); return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255]; };
+  const colour = lookTrail ? `mix((${stateColour}) * 0.25, ${vec3Of(chanRgb(channelColour(set, lookTrail.channel)))}, clamp(here * ${glf(lookTrail.gain)}, 0.0, 1.0))` : stateColour;
   nodes.push(block(id.finish, x, 200, {
     label: 'Finish',
     inputs: [
       { name: 'mem', type: 'vec2', from: src.mem }, { name: 'spd', type: 'float', from: src.spd },
       ...(many ? [{ name: 'sp', type: 'float' as ExprType, from: IN('species') }] : []),
       ...(fade ? [{ name: 'bright', type: 'float' as ExprType, from: src.bright }] : []),
+      ...(lookTrail ? [{ name: 'here', type: 'float' as ExprType, from: [id.sense(String(lookTrail.channel)), 'here'] as Wire }] : []),
     ],
     lines: [
       { lhs: 'float state', op: '=', rhs: 'floor(mem.x + 0.01)' },
@@ -293,18 +302,22 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
       'state: the walker\'s state, Memory x without its stuck half.',
       'stuck: 1 once a rule made it stick (Memory x has a half added), else 0.',
       'speed: the speed the rules left (never below 0), and 0 while stuck.',
-      `result: its colour, its state's colour (${set.species.map(sp => sp.states.map(st => st.name).join(' / ')).join('; ')})${fade ? ', times bright (dimmed by "fade with age")' : ''}, for Draw agents' Colour by Agent.`,
+      lookTrail
+        ? `result: its colour: from its state's colour, dimmed, to ${channelName(set, lookTrail.channel)}'s colour as that trail where it stands (here, × ${lookTrail.gain}) goes from 0 to 1${fade ? ', times bright (dimmed by "fade with age")' : ''}, for Draw agents' Colour by Agent.`
+        : `result: its colour, its state's colour (${set.species.map(sp => sp.states.map(st => st.name).join(' / ')).join('; ')})${fade ? ', times bright (dimmed by "fade with age")' : ''}, for Draw agents' Colour by Agent.`,
+      ...(lookTrail ? [`here: ${channelName(set, lookTrail.channel)} where the walker stands (the Sense beside it).`] : []),
     ],
   }));
   x += 460;
 
   // ── Move and Agent Output ──
   nodes.push(space(n('agentMove', id.move, x, 120, {
-    speed: set.species[0]?.speed ?? 0.25, edges: set.edges, onObstacle: 'turn',
+    speed: set.species[0]?.speed ?? 0.25, edges: set.edges, onObstacle: set.obstacle?.on ?? 'turn',
     __comment: [
       `Move: one step along the heading the rules left, at Finish's speed. Edges: ${set.edges === 'wrap' ? 'Wrap (out one side, in the other)' : set.edges === 'bounce' ? 'Bounce (reflected back in)' : 'Slide (stopped at the edge)'}.`,
-    ].join('\n'),
-  }, { heading: src.h, speed: [id.finish, 'speed'] })));
+      set.obstacle ? `Obstacle ƒ: the shape wired into the group's Obstacle ƒ socket (a distance, below 0 inside): a walker can't step into it, and ${set.obstacle.on === 'slide' ? 'slides along its edge' : 'turns back'} instead (On obstacle).` : '',
+    ].filter(Boolean).join('\n'),
+  }, { heading: src.h, speed: [id.finish, 'speed'], ...(set.obstacle ? { obstacle: IN('obstacle') } : {}) })));
   x += 420;
   const outWires: Record<string, Wire> = {
     position: [id.move, 'position'], heading: [id.move, 'heading'], speed: [id.finish, 'speed'], memory: src.mem, colour: [id.finish, 'result'],

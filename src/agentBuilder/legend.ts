@@ -197,7 +197,8 @@ export const phrase = {
     }
     const extra: string[] = [];
     if (l.rotate) extra.push(`turned ${num(l.rotate, 1)}°`);
-    if (l.mask) extra.push(`only ${l.mask.outside ? 'outside' : 'inside'} a ${l.mask.shape} ${l.mask.shape === 'circle' ? 'radius' : 'half-width'} ${num(l.mask.size, 2)} round ${where(l.mask.x, l.mask.y)}`);
+    if (l.mask?.region) extra.push(`only ${l.mask.outside ? 'outside' : 'inside'} ${l.mask.region.name ?? 'its region'} (from the graph)`);
+    else if (l.mask) extra.push(`only ${l.mask.outside ? 'outside' : 'inside'} a ${l.mask.shape} ${l.mask.shape === 'circle' ? 'radius' : 'half-width'} ${num(l.mask.size, 2)} round ${where(l.mask.x, l.mask.y)}`);
     if (l.animate?.speed) extra.push(l.animate.mode === 'spin' ? `turning ${num(l.animate.speed, 1)}° a second` : `drifting ${directionWords(l.animate.angle ?? 0).to} at ${num(l.animate.speed, 2)} a second`);
     if (l.off) extra.push('switched off');
     return extra.length ? `${head.replace(/\.$/, '')}; ${extra.join(', ')}.` : head;
@@ -453,7 +454,7 @@ export function fieldEntries(c: CardRead, n: Noun): LegendEntry[] {
   return spec.layers.map((l, k) => ({
     id: `${c.key}:L${k}`, card: c.key, el: c.key, on: c.on && !l.off,
     title: FIELD_KINDS[l.kind].label, colour: FIELD_COLOURS[k % FIELD_COLOURS.length],
-    numbers: `× ${num(l.weight, 2)}${l.mask ? ` · ${l.mask.outside ? 'outside' : 'inside'} ${l.mask.shape}` : ''}${l.animate?.speed ? ` · ${l.animate.mode}` : ''}`,
+    numbers: `× ${num(l.weight, 2)}${l.mask ? ` · ${l.mask.outside ? 'outside' : 'inside'} ${l.mask.region ? l.mask.region.name ?? 'a region' : l.mask.shape}` : ''}${l.animate?.speed ? ` · ${l.animate.mode}` : ''}`,
     line: `${phrase.fieldLayer(n, l)}${k === 0 ? ` ${how}` : ''}`,
     settings: [`layer${k}`],
     demo: { kind: 'field', spec, strength: a.strength, ...(a.grip ? { grip: a.grip } : {}), layer: k },

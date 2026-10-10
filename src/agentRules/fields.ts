@@ -24,8 +24,14 @@ import {
 
 export type FieldKind = 'curl' | 'vortex' | 'source' | 'saddle' | 'dipole' | 'waves' | 'wind' | 'spiral' | 'shear' | 'slope' | 'own';
 
-/** Only inside (or outside) a circle (radius `size`) or a box (half-width `size`) round (x, y), picture units. */
-export interface FieldMask { shape: 'circle' | 'box'; x: number; y: number; size: number; outside?: boolean }
+/**
+ * Only inside (or outside) a circle (radius `size`) or a box (half-width `size`) round (x, y), picture
+ * units; or, with `region`, a region of the graph picked in the Where picker: the group's mask
+ * `region.mask` (0-based), read as a shape's distance (inside below 0), a 0–1 mask (inside above ½)
+ * or a texture's brightness (above ½).
+ */
+export interface FieldMask { shape: 'circle' | 'box'; x: number; y: number; size: number; outside?: boolean; region?: FieldRegion }
+export interface FieldRegion { mask: number; read: 'shape' | 'mask' | 'texture'; name?: string }
 /** Drift: the layer slides along `angle` at `speed` picture units a second (wrapping round the picture). Spin: it turns round its centre, `speed` degrees a second. */
 export interface FieldAnimate { mode: 'drift' | 'spin'; speed: number; angle?: number }
 
@@ -148,7 +154,14 @@ export function normalizeFieldSpec(raw: unknown): FieldSpec {
       if (l.around) out.around = true;
       if (l.off) out.off = true;
       for (const k of ['vx', 'vy', 'vz'] as const) if (typeof l[k] === 'string') out[k] = l[k]; else if (d[k] !== undefined) out[k] = d[k];
-      if (l.mask && typeof l.mask === 'object') out.mask = { shape: l.mask.shape === 'box' ? 'box' : 'circle', x: num(l.mask.x, 0), y: num(l.mask.y, 0), size: Math.max(0, num(l.mask.size, 0.5)), ...(l.mask.outside ? { outside: true } : {}) };
+      if (l.mask && typeof l.mask === 'object') {
+        const rg = l.mask.region;
+        out.mask = {
+          shape: l.mask.shape === 'box' ? 'box' : 'circle', x: num(l.mask.x, 0), y: num(l.mask.y, 0), size: Math.max(0, num(l.mask.size, 0.5)), ...(l.mask.outside ? { outside: true } : {}),
+          ...(rg && typeof rg === 'object' && Number.isInteger(rg.mask) && rg.mask >= 0 && rg.mask < 4
+            ? { region: { mask: rg.mask, read: rg.read === 'texture' || rg.read === 'mask' ? rg.read : 'shape', ...(typeof rg.name === 'string' ? { name: rg.name } : {}) } as FieldRegion } : {}),
+        };
+      }
       if (l.animate && typeof l.animate === 'object') out.animate = { mode: l.animate.mode === 'spin' ? 'spin' : 'drift', speed: num(l.animate.speed, 0.1), ...(typeof l.animate.angle === 'number' ? { angle: l.animate.angle } : {}) };
       return out;
     }),
@@ -269,12 +282,13 @@ export function ownParts(l: FieldLayer, d3: boolean): Array<{ key: 'vx' | 'vy' |
  * in 3D it reads a vec3 and returns `vec3(f, fz)` (the known fields lie in the picture's plane;
  * your own can push in z). A slope layer reads `slope<i>` (vec2: a Flow node's push, wired in).
  */
-export function fieldLines(spec: FieldSpec, d3 = false): { lines: FieldLine[]; result: string; slopes: number[] } {
+export function fieldLines(spec: FieldSpec, d3 = false, o: { cpu?: boolean } = {}): { lines: FieldLine[]; result: string; slopes: number[]; regions: number[] } {
   const P = 'pos';
   const PXY = d3 ? 'pos.xy' : 'pos';
   const lines: FieldLine[] = [];
   const add = (lhs: string, op: string, rhs: string, why?: string) => lines.push({ lhs, op, rhs, ...(why ? { why } : {}) });
   const slopes: number[] = [];
+  const regions: number[] = [];
   add('vec2 f', '=', 'vec2(0.0)', 'f: the field\'s velocity here, the layers below added up (picture units a second).');
   if (d3) add('float fz', '=', '0.0', 'fz: its depth part (only your own layers push in z).');
   for (const { layer: l, i } of liveLayers(spec, d3)) {
@@ -357,16 +371,25 @@ export function fieldLines(spec: FieldSpec, d3 = false): { lines: FieldLine[]; r
       add(`v${i}`, '=', `vec2(${glf(Math.cos(r))} * v${i}.x - ${glf(Math.sin(r))} * v${i}.y, ${glf(Math.sin(r))} * v${i}.x + ${glf(Math.cos(r))} * v${i}.y)`, `v${i}: turned ${l.rotate}°.`);
     }
     let w = glf(l.weight);
-    if (l.mask) {
+    if (l.mask?.region) {
+      // A region of the graph: the group's mask, read where the walker stands (the CPU can't: drawn unmasked).
+      const m = l.mask, rg = l.mask.region!;
+      if (!regions.includes(rg.mask)) regions.push(rg.mask);
+      const v = `mask${rg.mask + 1}`;
+      const inside = rg.read === 'shape' ? `step(${v}, 0.0)` : rg.read === 'texture' ? `step(0.5, dot(${v}, vec3(0.299, 0.587, 0.114)))` : `step(0.5, ${v})`;
+      add(`float m${i}`, '=', o.cpu ? '1.0' : m.outside ? `1.0 - ${inside}` : inside,
+        `m${i}: 1 ${m.outside ? 'outside' : 'inside'} ${rg.name ?? `mask ${rg.mask + 1}`} (${v}: the group's mask ${rg.mask + 1} where the walker stands${rg.read === 'shape' ? ', a distance: inside below 0' : rg.read === 'texture' ? ', a texture: inside where bright' : ', inside above ½'}), 0 elsewhere.`);
+      w = `${w} * m${i}`;
+    } else if (l.mask) {
       const m = l.mask;
       const dist = m.shape === 'circle' ? `length(${PXY} - ${v2(m.x, m.y)})` : `max(abs(${PXY}.x - ${glf(m.x)}), abs(${PXY}.y - ${glf(m.y)}))`;
       const edge = `smoothstep(${glf(Math.max(m.size, 0) - 0.02)}, ${glf(Math.max(m.size, 0) + 0.02)}, ${dist})`;
       add(`float m${i}`, '=', m.outside ? edge : `1.0 - ${edge}`, `m${i}: 1 ${m.outside ? 'outside' : 'inside'} a ${m.shape} round (${m.x}, ${m.y}), ${m.shape === 'circle' ? 'radius' : 'half-width'} ${m.size}, 0 elsewhere (a soft edge).`);
       w = `${w} * m${i}`;
     }
-    add('f', '+=', `${w} * v${i}`, `f: plus the ${name} × ${l.weight}${l.mask ? ` ${l.mask.outside ? 'outside' : 'inside'} its ${l.mask.shape}` : ''}.`);
+    add('f', '+=', `${w} * v${i}`, `f: plus the ${name} × ${l.weight}${l.mask ? ` ${l.mask.outside ? 'outside' : 'inside'} ${l.mask.region ? l.mask.region.name ?? 'its region' : `its ${l.mask.shape}`}` : ''}.`);
   }
-  return { lines, result: d3 ? 'vec3(f, fz)' : 'f', slopes };
+  return { lines, result: d3 ? 'vec3(f, fz)' : 'f', slopes, regions };
 }
 
 // ── The same lines on the CPU ────────────────────────────────────────────────
@@ -384,7 +407,7 @@ export function fieldFunction(spec: FieldSpec, d3 = false): FieldFn {
   const key = `${d3 ? 3 : 2}:${JSON.stringify(spec)}`;
   const hit = fnCache.get(key);
   if (hit) return hit;
-  const { lines, result } = fieldLines(spec, d3);
+  const { lines, result } = fieldLines(spec, d3, { cpu: true });
   const steps: Array<{ name: string; part?: string; op: string; run: (env: EvalEnv) => Value }> = [];
   try {
     for (const l of lines) {
@@ -488,5 +511,5 @@ export function fieldName(spec: FieldSpec): string {
   return on.map((l, i) => {
     const n = l.kind === 'slope' ? 'slope' : FIELD_KINDS[l.kind].label.toLowerCase();
     return i > 0 && w0 && Math.abs(l.weight / w0 - 1) > 1e-3 ? `${n} × ${Math.round(l.weight / w0 * 100) / 100}` : n;
-  }).join(' + ') + (masked ? `, ${masked.outside ? 'outside' : 'inside'} a ${masked.shape}` : '');
+  }).join(' + ') + (masked ? `, ${masked.outside ? 'outside' : 'inside'} ${masked.region ? masked.region.name ?? 'a region' : `a ${masked.shape}`}` : '');
 }
