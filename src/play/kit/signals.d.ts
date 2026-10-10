@@ -54,7 +54,10 @@ export type SgValueRef =
   | { kind: 'prop'; layerId: string; key: string }
   | { kind: 'reading'; layerId: string; read: string }
   | { kind: 'axis'; axis: 'x' | 'y'; anchor: string }
-  | { kind: 'picture'; ch: 'lum' | 'r' | 'g' | 'b'; region: string };
+  | { kind: 'picture'; ch: 'lum' | 'r' | 'g' | 'b'; region: string }
+  | { kind: 'builtin'; read: 'count' | 'active' | 'share' };
 export function sgParseValueRef(ref: string): SgValueRef | null;
+export function sgBuiltIn(read: 'count' | 'active' | 'share', count: number, active: number): number;
+export function sgBuiltInUnit(read: 'count' | 'active' | 'share', count: number, active: number, max?: number): number;
 export function sgScreenPoint(ref: string): { x: number; y: number } | null;
 export function sgValueKey(t: Pick<ValueCondition, 'value' | 'cmp' | 'threshold' | 'hysteresis' | 'tolerance' | 'hi' | 'unit' | 'window' | 'noise'>): string;
