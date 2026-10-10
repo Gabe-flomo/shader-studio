@@ -8,7 +8,7 @@
  * moving with a particle riding it; a flock demo runs a dozen boids with the live turn rates; and
  * so on (`makeDemo`).
  */
-import type { DemoSpec } from './legend';
+import type { DemoEdges, DemoSpec } from './legend';
 import { curlAt } from './diagram';
 import { fieldFunction, layerSpec, rideField } from '../agentRules/fields';
 
@@ -64,6 +64,22 @@ const turnToward = (h: number, want: number, max: number) => {
 /** A rule's "degrees a step" (60 steps a second) as radians per demo step. */
 const perStep = (deg: number) => Math.max(0, deg) * DEG * (60 / DEMO_FPS);
 const wrap = (v: number, lo: number, hi: number) => (v < lo ? v + (hi - lo) : v > hi ? v - (hi - lo) : v);
+
+/**
+ * A walker that stepped out of the panel (BOX), back in the way the group's At the edges says: wrap
+ * (out one side, in the other), bounce (its heading reflected) or slide (held at the edge). So a
+ * demo's walker never walks out of the picture.
+ */
+export function keepIn(p: Pt, h: number, edges: DemoEdges = 'wrap', box = BOX): { p: Pt; h: number } {
+  if (p.x >= box.x0 && p.x <= box.x1 && p.y >= box.y0 && p.y <= box.y1) return { p, h };
+  if (edges === 'wrap') return { p: { x: wrap(p.x, box.x0, box.x1), y: wrap(p.y, box.y0, box.y1) }, h };
+  const q = { x: Math.max(box.x0, Math.min(box.x1, p.x)), y: Math.max(box.y0, Math.min(box.y1, p.y)) };
+  if (edges === 'slide') return { p: q, h };
+  let nh = h;
+  if (p.x !== q.x) nh = Math.PI - nh;
+  if (p.y !== q.y) nh = -nh;
+  return { p: q, h: nh };
+}
 
 /** Points of a track up to frame `f`. */
 const upTo = (track: Pt[], f: number) => track.slice(0, Math.min(f + 1, track.length));
@@ -335,7 +351,7 @@ export function makeDemo(spec: DemoSpec, colour = '#ff9a6b'): Demo {
         const out: Pt[] = [p];
         for (let k = 1; k <= period * DEMO_FPS; k++) {
           h = turnToward(h, Math.atan2(G.y - p.y, G.x - p.x), perStep(spec.degrees));
-          p = { x: p.x + Math.cos(h) * 0.7 * DT, y: p.y + Math.sin(h) * 0.7 * DT };
+          ({ p, h } = keepIn({ x: p.x + Math.cos(h) * 0.7 * DT, y: p.y + Math.sin(h) * 0.7 * DT }, h, spec.edges));
           out.push(p);
         }
         return out;
@@ -345,7 +361,7 @@ export function makeDemo(spec: DemoSpec, colour = '#ff9a6b'): Demo {
         frame(t) {
           const f = frameOf(t, period), fr = empty();
           fr.rings.push({ ...G, r: 0.08, colour, dashed: true }, { ...G, r: 0.025, colour, fill: colour });
-          tracks.forEach(tr => { fr.paths.push({ pts: upTo(tr, f), colour, width: 2 }); fr.dots.push({ ...tr[f], r: 4.5, colour: HOT }); });
+          tracks.forEach(tr => { for (const seg of unwrapped(upTo(tr, f))) fr.paths.push({ pts: seg, colour, width: 2 }); fr.dots.push({ ...tr[f], r: 4.5, colour: HOT }); });
           return fr;
         },
       };
@@ -403,16 +419,20 @@ export function makeDemo(spec: DemoSpec, colour = '#ff9a6b'): Demo {
         const out: Pt[] = [p];
         for (let k = 1; k <= period * DEMO_FPS; k++) {
           h += ((r() * 2 - 1) + (r() * 2 - 1)) * spec.degrees * DEG;
-          p = { x: p.x + Math.cos(h) * 0.55 * DT, y: p.y + Math.sin(h) * 0.55 * DT };
+          ({ p, h } = keepIn({ x: p.x + Math.cos(h) * 0.55 * DT, y: p.y + Math.sin(h) * 0.55 * DT }, h, spec.edges));
           out.push(p);
         }
         return out;
       });
       return {
-        period, bounds: fit([...tracks.flat(), { x: -1.5, y: 0 }, { x: 1.4, y: 0 }]), key: [{ colour, label: 'random turns each step' }, { colour: GHOST, label: 'straight on' }],
+        period, bounds: BOX, key: [{ colour, label: 'random turns each step' }, { colour: GHOST, label: 'straight on' }],
         frame(t) {
           const f = frameOf(t, period), fr = empty();
-          tracks.forEach(tr => { fr.paths.push({ pts: [tr[0], { x: tr[0].x + 0.55 * f * DT, y: tr[0].y }], colour: GHOST, dashed: true }); fr.paths.push({ pts: upTo(tr, f), colour, width: 2 }); fr.dots.push({ ...tr[f], r: 4.5, colour: HOT }); });
+          tracks.forEach(tr => {
+            fr.paths.push({ pts: [tr[0], { x: Math.min(BOX.x1, tr[0].x + 0.55 * f * DT), y: tr[0].y }], colour: GHOST, dashed: true });
+            for (const seg of unwrapped(upTo(tr, f))) fr.paths.push({ pts: seg, colour, width: 2 });
+            fr.dots.push({ ...tr[f], r: 4.5, colour: HOT });
+          });
           return fr;
         },
       };
@@ -454,9 +474,7 @@ export function makeDemo(spec: DemoSpec, colour = '#ff9a6b'): Demo {
         const [L, C, Rr] = feel;
         const step = perStep(spec.turn) * (spec.away ? -1 : 1);
         if (C > L && C > Rr) { /* straight on */ } else if (L > C && Rr > C) h += step * (rnd() < 0.5 ? 1 : -1); else if (L > Rr) h += step; else if (Rr > L) h -= step;
-        p = { x: p.x + Math.cos(h) * speed * DT, y: p.y + Math.sin(h) * speed * DT };
-        if (p.x > 1.55) p = { x: -1.55, y: p.y };
-        p.y = Math.max(-0.95, Math.min(0.95, p.y));
+        ({ p, h } = keepIn({ x: p.x + Math.cos(h) * speed * DT, y: p.y + Math.sin(h) * speed * DT }, h, spec.edges));
       }
       const wave = Array.from({ length: 65 }, (_, i) => { const x = BOX.x0 + (i / 64) * (BOX.x1 - BOX.x0); return { x, y: curve(x) }; });
       return {
@@ -486,17 +504,17 @@ export function makeDemo(spec: DemoSpec, colour = '#ff9a6b'): Demo {
           const tang = spec.cw ? { x: out_.y, y: -out_.x } : { x: -out_.y, y: out_.x };
           const k2 = Math.max(-1, Math.min(1, (r - R) / R * 2));
           h = turnToward(h, Math.atan2(tang.y - out_.y * k2, tang.x - out_.x * k2), perStep(spec.degrees));
-          p = { x: p.x + Math.cos(h) * speed * DT, y: p.y + Math.sin(h) * speed * DT };
+          ({ p, h } = keepIn({ x: p.x + Math.cos(h) * speed * DT, y: p.y + Math.sin(h) * speed * DT }, h, spec.edges));
           out.push(p);
         }
         return out;
       });
       return {
-        period, bounds: fit([...tracks.flat(), { x: -R, y: -R }, { x: R, y: R }]), key: [{ colour, label: 'its circle' }, { colour: HOT, label: 'walkers turning onto it' }],
+        period, bounds: BOX, key: [{ colour, label: 'its circle' }, { colour: HOT, label: 'walkers turning onto it' }],
         frame(t) {
           const f = frameOf(t, period), fr = empty();
           fr.rings.push({ x: 0, y: 0, r: R, colour, dashed: true }, { x: 0, y: 0, r: 0.03, colour, fill: colour });
-          tracks.forEach(tr => { fr.paths.push({ pts: tr.slice(Math.max(0, f - 90), f + 1), colour: HOT, width: 2, opacity: 0.75 }); fr.dots.push({ ...tr[f], r: 5, colour: HOT }); });
+          tracks.forEach(tr => { for (const seg of unwrapped(tr.slice(Math.max(0, f - 90), f + 1))) fr.paths.push({ pts: seg, colour: HOT, width: 2, opacity: 0.75 }); fr.dots.push({ ...tr[f], r: 5, colour: HOT }); });
           return fr;
         },
       };
