@@ -163,7 +163,7 @@
   // (Without the kit, as some tests run the page, a plain linear shape.)
   function curve(u, m) { return typeof SSKit !== 'undefined' && SSKit.routes ? SSKit.routes.curve(u, m.curve, m.curveY) : Math.max(0, Math.min(1, u)); }
   function triggerKey(t) {
-    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; case 'hand': return 'hand:' + t.side + ':' + t.gesture; case 'face': return 'face:' + t.gesture; case 'pose': return 'pose:' + t.gesture; case 'proximity': return 'prox:' + t.a + ':' + t.b + ':' + t.when + ':' + t.distance + ':' + t.margin; case 'reader': return 'reader:' + t.readerId + ':' + t.threshold + ':' + t.hysteresis; case 'value': return typeof SSKit !== 'undefined' && SSKit.signals ? SSKit.signals.valueKey(t) : 'val:' + t.value + ':' + t.cmp + ':' + t.threshold + ':' + t.hysteresis + ':' + t.tolerance; case 'signal': return 'sig:' + t.signal; }
+    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.wrap ? 'c' + (t.note % 12) : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; case 'hand': return 'hand:' + t.side + ':' + t.gesture; case 'face': return 'face:' + t.gesture; case 'pose': return 'pose:' + t.gesture; case 'proximity': return 'prox:' + t.a + ':' + t.b + ':' + t.when + ':' + t.distance + ':' + t.margin; case 'reader': return 'reader:' + t.readerId + ':' + t.threshold + ':' + t.hysteresis; case 'value': return typeof SSKit !== 'undefined' && SSKit.signals ? SSKit.signals.valueKey(t) : 'val:' + t.value + ':' + t.cmp + ':' + t.threshold + ':' + t.hysteresis + ':' + t.tolerance; case 'signal': return 'sig:' + t.signal; }
     return '';
   }
   // Firing modes (once, held, every N frames or seconds, on release): how many times a trigger fires this frame.
@@ -340,6 +340,10 @@ void main() {
     listening: false,
     camera: null, cameraStream: null,
   };
+  // Octaves wrapped, line for line kit/midi.js kmClassMask, kmWrapRead and kmClassUnit: the range's pitch classes (all with none) in any octave.
+  function classMask(range) { if (!range || range[1] - range[0] >= 11) return 0xfff; let m = 0; for (let n = range[0]; n <= range[1]; n++) m |= 1 << (n % 12); return m; }
+  function wrapRead(ch, range) { const mask = classMask(range); let note = -1, best = 0, gate = false; for (let n = 0; n < 128; n++) { if (!(mask & (1 << (n % 12)))) continue; if (ch.noteSeq[n] > best) { best = ch.noteSeq[n]; note = n; } if (!gate && ch.held.has(n)) gate = true; } return { note: note, vel: note < 0 ? 0 : ch.noteVel[note], gate: gate }; }
+  function classUnit(range, note) { const pc = note % 12; if (!range) return pc / 11; const span = Math.min(11, range[1] - range[0]); return span <= 0 ? 1 : Math.max(0, Math.min(1, ((pc - (range[0] % 12) + 12) % 12) / span)); }
   function press(key, vel) { shared.presses.set(key, (shared.presses.get(key) || 0) + 1); shared.held.set(key, (shared.held.get(key) || 0) + 1); shared.velocities.set(key, vel == null ? 1 : vel); }
   function release(key) { const n = (shared.held.get(key) || 0) - 1; if (n > 0) shared.held.set(key, n); else shared.held.delete(key); }
   function onMidi(data, device) {
@@ -354,7 +358,9 @@ void main() {
       else if (type === 0xb0) { ch.cc[data[1] & 127] = data[2]; ch.seenCc[data[1] & 127] = 1; }
       else if (type === 0xe0) { ch.bend = Math.max(-1, Math.min(1, (((data[2] << 7) | data[1]) - 8192) / 8192)); ch.seenBend = true; }
     }
-    if (noteOn || noteOff) for (const k of ['note:0:*', 'note:0:' + data[1], 'note:' + chn + ':*', 'note:' + chn + ':' + data[1]]) { if (noteOn) press(k, data[2] / 127); else release(k); }
+    // Any note, the exact note and its pitch class (`c0` C … `c11` B: triggers that wrap octaves), as the app's noteKeys.
+    const pcKey = 'c' + (data[1] % 12);
+    if (noteOn || noteOff) for (const k of ['note:0:*', 'note:0:' + data[1], 'note:0:' + pcKey, 'note:' + chn + ':*', 'note:' + chn + ':' + data[1], 'note:' + chn + ':' + pcKey]) { if (noteOn) press(k, data[2] / 127); else release(k); }
   }
   function onOscMessage(address, args) {
     shared.osc.set(address, args);
@@ -1809,10 +1815,14 @@ void main() {
         case 'tilt': { const t = shared.tilt; if (!t.got) return null; if (s.axis === 'alpha') return ((t.alpha % 360) + 360) % 360 / 360; const v = Math.max(-90, Math.min(90, s.axis === 'beta' ? t.beta : t.gamma)); return (v + 90) / 180; }
         case 'gamepad': { const p = gamepad(s.pad); if (!p) return null; if (s.control === 'axis') { const a = p.axes[s.index]; return a === undefined ? null : Math.max(0, Math.min(1, (a + 1) / 2)); } const b = p.buttons[s.index]; return b ? b.value : null; }
         case 'pad': return padG ? KM.gridRead(padG, padCfg, s.read, s.col, s.row, time) : null;
+        // A built-in signal (the app's sgBuiltInUnit): the share, or a count over its "full at".
+        case 'signals': { const n = (play.signals || []).length, a = Math.min(sigActive, n); if (s.read === 'share') return n > 0 ? a / n : 0; return Math.max(0, Math.min(1, (s.read === 'count' ? n : a) / Math.max(1, s.max || 8))); }
         case 'midi': {
           // Locked knobs (whichever moved last) and note ranges, as the app reads them (kit/midi.js).
           if (KM && s.signal === 'cc' && s.locks && s.locks.length) { const v = KM.lockRead(shared.midiLocks, s.locks); return v === null ? null : v / 127; }
           const chr = shared.midi[Math.max(0, Math.min(16, s.channel))];
+          // Octaves wrapped (kit/midi.js kmWrapRead, kmClassUnit): only the range's pitch classes count, and a note reads its class.
+          if (s.wrap && (s.signal === 'note' || s.signal === 'velocity' || s.signal === 'gate')) { const w = wrapRead(chr, s.range); if (w.note < 0) return null; return s.signal === 'note' ? classUnit(s.range, w.note) : s.signal === 'velocity' ? w.vel / 127 : w.gate ? 1 : 0; }
           if (KM && s.range && (s.signal === 'note' || s.signal === 'velocity' || s.signal === 'gate')) { const r = KM.rangeRead(chr.noteSeq, chr.noteVel, chr.held, s.range); if (r.note < 0) return null; return s.signal === 'note' ? KM.noteUnit(s.range, r.note) : s.signal === 'velocity' ? r.vel / 127 : r.gate ? 1 : 0; }
           const ch = chr; switch (s.signal) { case 'note': return ch.seenNote ? ch.note / 127 : null; case 'velocity': return ch.seenNote ? ch.vel / 127 : null; case 'gate': return ch.seenNote ? (ch.held.size ? 1 : 0) : null; case 'bend': return ch.seenBend ? (ch.bend + 1) / 2 : null; case 'cc': { if (typeof s.cc !== 'number') return null; const n = s.cc & 127; return ch.seenCc[n] ? ch.cc[n] / 127 : null; } } return null; }
         case 'audio': { const a = audioById.get(s.nodeId); if (!a || !a.an) return null; const v = a.levels[s.band]; return v === undefined ? null : v; }
@@ -1893,6 +1903,8 @@ void main() {
       if (r.kind === 'control') { const c = controls.get(r.id); const v = !c ? undefined : live.has(c.id) ? live.get(c.id) : base.get(c.id); return v === undefined ? null : Array.isArray(v) ? (v[0] + v[1] + v[2]) / 3 : v; }
       if (r.kind === 'mapping') { const m = play.mappings.find(x => x.id === r.id); if (!m) return null; if (m.increment) { const st = incState.get(m.id); if (!st || !INC) return null; const rg = INC.range(m.outMin, m.outMax); return rg[1] > rg[0] ? Math.max(0, Math.min(1, (INC.fold(st.p, rg[0], rg[1], m.increment.limit) - rg[0]) / (rg[1] - rg[0]))) : 0; } if (m.source.kind === 'trigger') { const st = trig.get(m.id); return st ? st.value : 0; } return readSource(m.source); }
       if (r.kind === 'mouse') return r.axis === 'x' ? mouse.x : mouse.y;
+      // The built-in signals, raw (the app's sgBuiltIn).
+      if (r.kind === 'builtin') { const n = (play.signals || []).length, a = Math.min(sigActive, n); return r.read === 'count' ? n : r.read === 'active' ? a : n > 0 ? a / n : 0; }
       if (r.kind === 'distance') return anchorGap(r.a, r.b);
       if (r.kind === 'reading') return readSource({ kind: 'sensor', layerId: r.layerId, read: r.read, otherId: '' });
       if (r.kind === 'source') { const v = rtState ? rtState.values.get(r.id) : undefined; return v === undefined ? null : v; }
@@ -2002,6 +2014,8 @@ void main() {
     // A signal: its "When signal fires" triggers see a press and its release at once.
     // Signals sent this frame (by an action or a layer): true for the frame, for combinations to read.
     const sigSent = new Set(), sigLevels = new Map(), sigSeen = new Map(), sigPayload = new Map();
+    // How many signals were on at the last count (the built-in Signals: active).
+    let sigActive = 0;
     const sigById = new Map((play.signals || []).map(s => [s.id, s]));
     function sigLevel(id) { return sigWorked.has(id) ? sigLevels.get(id) || false : sigSent.has(id); }
     // What a signal captures (sample and hold): a number from a value path, or a position from pos:<anchor>.
@@ -2075,6 +2089,10 @@ void main() {
         if (level && !was) { press('sig:' + s.id); linkFire(s.id, 'rise', !(!hasLevel(s.id) && linkSent.has(s.id))); }
         else if (!level && was) { release('sig:' + s.id); linkFire(s.id, 'fall', true); }
       }
+      // The built-in Signals: active, before the one-frame levels go (a sent signal counts in its frame).
+      let on = 0;
+      for (const s of play.signals || []) if (lvl(s.id)) on++;
+      sigActive = on;
       sigSent.clear();
       linkSent.clear();
     }

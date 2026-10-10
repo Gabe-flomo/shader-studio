@@ -106,6 +106,58 @@ export function kmNoteUnit(range, note) {
   return span > 0 ? Math.max(0, Math.min(1, (note - range[0]) / span)) : 1;
 }
 
+// ── Note classes (any octave) ───────────────────────────────────────────────
+
+/** A note's pitch class, 0 (C) to 11 (B), whatever its octave. */
+export function kmPitchClass(n) {
+  return ((Math.round(n) % 12) + 12) % 12;
+}
+
+/** "C", "F#": a pitch class's name (any note number works: its octave is dropped). */
+export function kmClassName(n) {
+  return KM_NOTE_NAMES[kmPitchClass(n)];
+}
+
+/**
+ * The pitch classes a range covers when octaves wrap, as a 12-bit mask (bit
+ * 0 is C): every class for no range or a range of an octave or more; C2–E2
+ * covers C, C#, D, D# and E in every octave.
+ */
+export function kmClassMask(range) {
+  if (!range || range[1] - range[0] >= 11) return 0xfff;
+  let m = 0;
+  for (let n = range[0]; n <= range[1]; n++) m |= 1 << kmPitchClass(n);
+  return m;
+}
+
+/**
+ * kmRangeRead with octaves wrapped: only notes whose pitch class the range
+ * covers count (kmClassMask), in any octave. `note` is the latest such note
+ * (-1 while none has played), `gate` whether one is held.
+ */
+export function kmWrapRead(seq, vel, held, range) {
+  const mask = kmClassMask(range);
+  let note = -1, best = 0, gate = false;
+  for (let n = 0; n < 128; n++) {
+    if (!(mask & (1 << (n % 12)))) continue;
+    if (seq[n] > best) { best = seq[n]; note = n; }
+    if (!gate && held.has(n)) gate = true;
+  }
+  return { note: note, vel: note < 0 ? 0 : vel[note], gate: gate };
+}
+
+/**
+ * A note as 0..1 with octaves wrapped: its pitch class across the range's
+ * classes (from the low end's class upwards), else C 0 to B 1.
+ */
+export function kmClassUnit(range, note) {
+  const pc = kmPitchClass(note);
+  if (!range) return pc / 11;
+  const span = Math.min(11, range[1] - range[0]);
+  if (span <= 0) return 1;
+  return Math.max(0, Math.min(1, ((pc - kmPitchClass(range[0]) + 12) % 12) / span));
+}
+
 // ── Pad grids ───────────────────────────────────────────────────────────────
 
 /**
