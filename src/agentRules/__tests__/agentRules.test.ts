@@ -447,9 +447,9 @@ describe('templates, examples and the starter', () => {
 
   it('a saved rule set with missing parts is read safely', () => {
     expect(normalizeRuleSet(undefined).species.length).toBe(1);
-    const odd = normalizeRuleSet({ species: [{ rules: [] }], edges: 'nope', masks: [1, 2, 3] });
+    const odd = normalizeRuleSet({ species: [{ rules: [] }], edges: 'nope', masks: [1, 2, 3, 4, 5] });
     expect(odd.edges).toBe('wrap');
-    expect(odd.masks.length).toBe(2);
+    expect(odd.masks.length).toBe(4);
     expect(odd.species[0].states.length).toBe(1);
   });
 });

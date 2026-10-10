@@ -5,25 +5,26 @@
  * Cards it doesn't have yet are "+ Gravity" chips under them. The cards are the rule set
  * (agentBuilder/behaviours.ts), so every change is a rule change.
  */
-import { useState, type ReactNode } from 'react';
+import { useContext, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import { Segmented } from '../ui/Choice';
 import type { AgentRuleSet, NeighbourWho, RuleAction, RuleCondition } from '../../agentRules/spec';
 import {
-  type CardId, type CardRead, addCard, patchAt, removeAt, reorderCards, setMemWhen, setOnAt, setOnlyWhen,
+  type CardId, type CardRead, type Loc, addCard, patchAt, removeAt, reorderCards, setMemWhen, setOnAt, setOnlyWhen,
 } from '../../agentBuilder/behaviours';
 import { TimesChip } from './MemorySection';
-import { smellChips } from '../../agentBuilder/cards';
-import { TRAIL_HEX } from '../../agentBuilder/hood';
+import { channelChips } from '../../agentBuilder/trailChannels';
+import type { FieldMask } from '../../agentRules/fields';
+import { WhereFocusContext, type WhereFocus } from './WherePicker';
 import type { ChannelRef } from '../../agentRules/spec';
 import { ChipRow } from './BehaviourCard';
 import { CARD_WORDS, MORE_HINTS, type SectionDef } from '../../agentBuilder/sections';
 import { setFlow } from '../../agentBuilder/cards';
 import { BehaviourCard, SettingRow, SliderSetting, type CardPicture } from './BehaviourCard';
 import { OnlyWhenLine } from './OnlyWhenLine';
-import { FieldSettings } from './FieldCard';
+import { FieldSettings, type FieldWhere } from './FieldCard';
 import { fieldName } from '../../agentRules/fields';
 
 type Act<K extends RuleAction['kind']> = Extract<RuleAction, { kind: K }>;
@@ -110,7 +111,8 @@ export function SectionCards({ section, all, set, sp, update, focusCard, hotCard
               on={c.on} onToggle={on => update(setOnAt(set, sp, c.at, on))}
               onRemove={() => update(removeAt(set, sp, c.at))}
               onlyWhen={<OnlyWhenLine id={c.key} set={set} sp={sp} when={c.when} memWhen={c.memWhen ?? null} onFocus={s => { focusCard(c.key); onFocusSetting(s); }}
-                onChange={w => update(setOnlyWhen(set, sp, c.at, w))} onMemChange={w => update(setMemWhen(set, sp, c.at, w))} />}
+                onChange={w => update(setOnlyWhen(set, sp, c.at, w))} onMemChange={w => update(setMemWhen(set, sp, c.at, w))}
+                whereEdit={(s2, w) => setOnlyWhen(s2, sp, c.at, w)} />}
               more={moreSettings(c, set, sp, update, onFocusSetting)}>
               <CardSettings c={c} set={set} sp={sp} update={update} onFocus={onFocusSetting} d3={d3} />
             </BehaviourCard>
@@ -136,14 +138,29 @@ export function SectionCards({ section, all, set, sp, update, focusCard, hotCard
 const WHO = [{ value: 'all' as const, label: 'Any kind' }, { value: 'own' as const, label: 'Its kind' }, { value: 'others' as const, label: 'Others' }];
 
 /** The sliders a card shows. */
+/** The Where picker for a Follow a field card: a layer's region, and the slope layer's Field ƒ. */
+function fieldWhere(ctx: WhereFocus | null, sp: number, at: Loc): FieldWhere | undefined {
+  if (!ctx) return undefined;
+  const editLayer = (s2: AgentRuleSet, k: number, m: FieldMask | undefined) => {
+    const act = s2.species[sp]?.rules[at.rule]?.do[at.action];
+    if (act?.kind !== 'field') return s2;
+    return patchAt<Act<'field'>>(s2, sp, at, { spec: { layers: act.spec.layers.map((l, j) => (j === k ? { ...l, mask: m } : l)) } });
+  };
+  return {
+    mask: (k, pick, slot) => ctx.apply('fieldMask', pick, { fieldMask: (s2, m) => editLayer(s2, k, m), slot }),
+    slope: pick => ctx.apply('slope', pick),
+  };
+}
+
 function CardSettings({ c, set, sp, update, onFocus, d3 }: { c: CardRead; set: AgentRuleSet; sp: number; update: (s: AgentRuleSet) => void; onFocus: (s: string | undefined) => void; d3: boolean }) {
   const patch = <A extends RuleAction>(p: Partial<A>) => update(patchAt<A>(set, sp, c.at, p));
   const a = c.action;
   // Its main slider × a memory ("speed × energy"; memory.ts).
   const times = <TimesChip id={c.key} set={set} times={a.times} onChange={t => update(patchAt(set, sp, c.at, { times: t } as Partial<RuleAction>))} />;
-  const chips = smellChips(set).map(x => ({ ...x, dot: x.value === 'own' ? undefined : TRAIL_HEX[x.value as number] }));
+  const chips = channelChips(set, sp);
+  const ctx = useContext(WhereFocusContext);
   switch (a.kind) {
-    case 'field': return <FieldSettings id={c.key} action={a} d3={d3} onFocus={onFocus} onChange={p => patch<Act<'field'>>(p)} />;
+    case 'field': return <FieldSettings id={c.key} action={a} d3={d3} onFocus={onFocus} onChange={p => patch<Act<'field'>>(p)} where={fieldWhere(ctx, sp, c.at)} />;
     case 'force': {
       if (a.field === 'gravity' || a.field === 'wind') return <>
         <SliderSetting id="strength" label="Strength" hint={MORE_HINTS.strength} value={a.strength} min={0} max={3} step={0.01} onFocus={onFocus} onChange={v => patch<Act<'force'>>({ strength: v })} right={times} />

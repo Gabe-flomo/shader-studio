@@ -3,7 +3,7 @@
  * plain conditions; once picked it is a small chip ("only when · older than 2 s") with its few
  * settings under it, and × takes it away. It is the card's rule's condition (behaviours.ts).
  */
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
@@ -12,11 +12,17 @@ import { Segmented } from '../ui/Choice';
 import { Select } from '../ui/Select';
 import type { AgentRuleSet, ChannelRef, RuleCondition } from '../../agentRules/spec';
 import { ONLY_WHEN_PICKER, newOnlyWhen, onlyWhenText } from '../../agentBuilder/onlyWhen';
-import { smellChips } from '../../agentBuilder/cards';
+import { channelChips } from '../../agentBuilder/trailChannels';
 import { MEMORY_TYPE_WORDS, newMemCondition } from '../../agentBuilder/memory';
 import { ChipRow, SettingRow, SliderSetting } from './BehaviourCard';
+import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { whereNow } from '../../agentBuilder/whereActions';
+import { WhereFocusContext, WherePicker } from './WherePicker';
 
-export function OnlyWhenLine({ id, set, sp, when, memWhen = null, onChange, onMemChange, onFocus }: {
+/** How a card puts an "inside a region" condition on its rule (behaviours.ts setOnlyWhen at its place). */
+export type WhereCondEdit = (set: AgentRuleSet, c: RuleCondition | null) => AgentRuleSet;
+
+export function OnlyWhenLine({ id, set, sp, when, memWhen = null, onChange, onMemChange, onFocus, whereEdit }: {
   id: string; set: AgentRuleSet; sp: number; when: RuleCondition | null;
   /** Its memory condition ("and carrying is on"), kept apart from `when` (behaviours.ts setMemWhen). */
   memWhen?: RuleCondition | null;
@@ -24,19 +30,42 @@ export function OnlyWhenLine({ id, set, sp, when, memWhen = null, onChange, onMe
   /** Set or clear the memory condition; without it no memory is offered. */
   onMemChange?: (c: RuleCondition | null) => void;
   onFocus?: (setting: string | undefined) => void;
+  /** Inside / outside a region of the graph (the Where picker): how the condition goes on the card's rule. */
+  whereEdit?: WhereCondEdit;
 }) {
   const tk = useTokens();
+  const ctx = useContext(WhereFocusContext);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [opened, setOpened] = useState<'when' | 'mem' | null>(null);
+  // "Inside / outside a region…" picked: the Where picker, open, until a region is picked.
+  const [picking, setPicking] = useState(false);
+  const regions = !!(whereEdit && ctx);
+  const pickFirst = (kind: string) => {
+    if (kind === 'mask' && regions) { setPicking(true); setOpened('when'); return; }
+    setOpened('when');
+    onChange(newOnlyWhen(kind as Parameters<typeof newOnlyWhen>[0]));
+  };
   const memories = onMemChange ? (set.memories ?? []) : [];
   const offerMem = memories.length > 0 && !memWhen;
   const items: MenuItem[] = [
-    ...(!when ? [{ heading: 'Only when' } as MenuItem, ...ONLY_WHEN_PICKER.map(p => ({ label: p.label, hint: p.hint, onSelect: () => { setOpened('when'); onChange(newOnlyWhen(p.kind)); } }))] : []),
+    ...(!when ? [{ heading: 'Only when' } as MenuItem, ...ONLY_WHEN_PICKER.filter(p => p.kind !== 'mask' || regions).map(p => ({ label: p.label, hint: p.hint, onSelect: () => pickFirst(p.kind) }))] : []),
     ...(offerMem ? [{ heading: when ? 'And a memory' : 'A memory' } as MenuItem, ...memories.map(m => ({ label: `${m.name}…`, hint: MEMORY_TYPE_WORDS[m.type].label, onSelect: () => { setOpened('mem'); onMemChange!(newMemCondition(m)); } }))] : []),
   ];
   return (
     <div data-only-when-line={id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {when && <ConditionChip id={id} set={set} sp={sp} c={when} lead="only when" open={opened === 'when'} onOpen={v => setOpened(v ? 'when' : null)} onChange={onChange} onFocus={onFocus} />}
+      {picking && !when && ctx && whereEdit && (
+        <div data-only-when-picking={id} style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 10, borderLeft: `2px solid ${alpha(tk.accent.base, 0.3)}` }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: tk.accent.text, fontWeight: 600 }}>
+            only when inside…
+            <button type="button" aria-label="Never mind" onClick={() => setPicking(false)} style={{ marginLeft: 'auto', width: 20, height: 20, padding: 0, border: 0, background: 'none', color: tk.text.faint, cursor: 'pointer' }}><Icon name="close" size={12} /></button>
+          </span>
+          <WherePicker id={`${id}:where`} use="onlyWhen" region={null} outside={false} startOpen onFocus={onFocus}
+            onPick={p => { setPicking(false); if (p) ctx.apply('onlyWhen', p, { condition: whereEdit }); }} />
+        </div>
+      )}
+      {when && <ConditionChip id={id} set={set} sp={sp} c={when} lead="only when" open={opened === 'when'} onOpen={v => setOpened(v ? 'when' : null)}
+        onChange={c => (c === null && when.kind === 'mask' && regions ? ctx!.apply('onlyWhen', null, { condition: whereEdit, slot: when.mask }) : onChange(c))} onFocus={onFocus}
+        where={regions ? (p => ctx!.apply('onlyWhen', p, { condition: whereEdit, ...(when.kind === 'mask' ? { slot: when.mask } : {}) })) : undefined} />}
       {memWhen && onMemChange && <ConditionChip id={`${id}:mem`} set={set} sp={sp} c={memWhen} lead={when ? 'and' : 'only when'} open={opened === 'mem'} onOpen={v => setOpened(v ? 'mem' : null)} onChange={onMemChange} onFocus={onFocus} />}
       {items.length > 0 && (
         <div>
@@ -51,9 +80,11 @@ export function OnlyWhenLine({ id, set, sp, when, memWhen = null, onChange, onMe
   );
 }
 
-function ConditionChip({ id, set, sp, c, lead, open, onOpen, onChange, onFocus }: {
+function ConditionChip({ id, set, sp, c, lead, open, onOpen, onChange, onFocus, where }: {
   id: string; set: AgentRuleSet; sp: number; c: RuleCondition; lead: string; open: boolean; onOpen: (v: boolean) => void;
   onChange: (c: RuleCondition | null) => void; onFocus?: (setting: string | undefined) => void;
+  /** A region picked (the Where picker) for this condition. */
+  where?: (p: Parameters<React.ComponentProps<typeof WherePicker>['onPick']>[0]) => void;
 }) {
   const tk = useTokens();
   const text = onlyWhenText(set, sp, c);
@@ -73,13 +104,16 @@ function ConditionChip({ id, set, sp, c, lead, open, onOpen, onChange, onFocus }
         </button>
       </span>
       {open && <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingLeft: 10, borderLeft: `2px solid ${alpha(tk.accent.base, 0.3)}` }}>
-        <ConditionSettings set={set} sp={sp} c={c} onChange={onChange} onFocus={onFocus} />
+        <ConditionSettings id={id} set={set} sp={sp} c={c} onChange={onChange} onFocus={onFocus} where={where} />
       </div>}
     </div>
   );
 }
 
-function ConditionSettings({ set, sp, c, onChange, onFocus }: { set: AgentRuleSet; sp: number; c: RuleCondition; onChange: (c: RuleCondition) => void; onFocus?: (s: string | undefined) => void }) {
+function ConditionSettings({ id, set, sp, c, onChange, onFocus, where }: {
+  id: string; set: AgentRuleSet; sp: number; c: RuleCondition; onChange: (c: RuleCondition) => void; onFocus?: (s: string | undefined) => void;
+  where?: (p: Parameters<React.ComponentProps<typeof WherePicker>['onPick']>[0]) => void;
+}) {
   // The settings already carry their "when." id; the diagram reads it as the only when being edited.
   const f = (s: string | undefined) => onFocus?.(s);
   switch (c.kind) {
@@ -92,7 +126,7 @@ function ConditionSettings({ set, sp, c, onChange, onFocus }: { set: AgentRuleSe
     </>;
     case 'sense': return <>
       <SettingRow id="when.channel" label="It smells" onFocus={f}>
-        <ChipRow label="It smells" options={smellChips(set)} value={c.channel} onChange={v => onChange({ ...c, channel: v as ChannelRef })} />
+        <ChipRow label="It smells" options={channelChips(set, sp)} value={c.channel} onChange={v => onChange({ ...c, channel: v as ChannelRef })} />
       </SettingRow>
       <SliderSetting id="when.value" label={c.cmp === '>' ? 'Above' : 'Below'} value={c.value} min={0} max={2} step={0.01} onFocus={f} onChange={v => onChange({ ...c, value: v })}
         right={<Segmented size="sm" ariaLabel="Above or below" value={c.cmp} onChange={v => onChange({ ...c, cmp: v })} options={[{ value: '>' as const, label: 'Above' }, { value: '<' as const, label: 'Below' }]} />} />
@@ -107,6 +141,8 @@ function ConditionSettings({ set, sp, c, onChange, onFocus }: { set: AgentRuleSe
       <SliderSetting id="when.size" label={c.shape === 'circle' ? 'Radius' : 'Half-width'} value={c.size} min={0} max={1.5} step={0.01} onFocus={f} onChange={v => onChange({ ...c, size: v })} />
       <SliderSetting id="when.x" label="Across" value={c.x} min={-1.8} max={1.8} step={0.01} onFocus={f} onChange={v => onChange({ ...c, x: v })} />
       <SliderSetting id="when.y" label="Up" value={c.y} min={-1} max={1} step={0.01} onFocus={f} onChange={v => onChange({ ...c, y: v })} />
+      {where && <button type="button" data-only-when-to-region={id} onClick={() => where({ make: c.shape === 'circle' ? { shape: 'circle', x: c.x, y: c.y, size: c.size } : { shape: 'box', x: c.x, y: c.y, size: c.size, h: c.size }, outside: !!c.outside })}
+        title="The same shape as a node you drag on the picture (the Where picker)" style={{ alignSelf: 'flex-start', padding: 0, border: 0, background: 'none', cursor: 'pointer', color: 'inherit', font: 'inherit', fontSize: 11.5, textDecoration: 'underline' }}>Make it a shape you can drag</button>}
     </>;
     case 'age': return (
       <SliderSetting id="when.seconds" label={c.cmp === '>' ? 'Older than (s)' : 'Younger than (s)'} value={c.seconds} min={0} max={20} step={0.1} onFocus={f} onChange={v => onChange({ ...c, seconds: v })}
@@ -139,9 +175,17 @@ function ConditionSettings({ set, sp, c, onChange, onFocus }: { set: AgentRuleSe
         right={<Segmented size="sm" ariaLabel="Above or below" value={c.cmp === '<' ? '<' : '>'} onChange={v => onChange({ ...c, cmp: v })}
           options={m?.type === 'timer' ? [{ value: '>' as const, label: 'After' }, { value: '<' as const, label: 'Within' }] : [{ value: '>' as const, label: m?.type === 'position' ? 'Further' : 'Above' }, { value: '<' as const, label: m?.type === 'position' ? 'Within' : 'Below' }]} />} />;
     }
-    case 'mask': return (
-      <SliderSetting id="when.mask" label={`${set.masks[c.mask]?.name || 'Mask'} ${c.cmp === '>' ? 'above' : 'below'}`} value={c.value} min={0} max={1} step={0.01} onFocus={f} onChange={v => onChange({ ...c, value: v })} />
-    );
+    case 'mask': return where
+      ? <MaskWhere id={id} c={c} onPick={where} onFocus={f} />
+      : <SliderSetting id="when.mask" label={`${set.masks[c.mask]?.name || 'Mask'} ${c.cmp === '>' ? 'above' : 'below'}`} value={c.value} min={0} max={1} step={0.01} onFocus={f} onChange={v => onChange({ ...c, value: v })} />;
     default: return null;
   }
+}
+
+/** An "inside a region" condition's region: the Where picker on what its mask socket reads. */
+function MaskWhere({ id, c, onPick, onFocus }: { id: string; c: RuleCondition; onPick: (p: Parameters<React.ComponentProps<typeof WherePicker>['onPick']>[0]) => void; onFocus?: (s: string | undefined) => void }) {
+  const ctx = useContext(WhereFocusContext);
+  const nowKey = useNodeGraphStore(s => JSON.stringify(whereNow(s.nodes, ctx?.groupId ?? '', 'onlyWhen', { condition: c })));
+  const now = JSON.parse(nowKey) as ReturnType<typeof whereNow>;
+  return <WherePicker id={`${id}:where`} use="onlyWhen" region={now.region} outside={now.outside} onPick={onPick} onFocus={onFocus} clearable={false} />;
 }

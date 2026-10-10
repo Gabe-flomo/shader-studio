@@ -243,6 +243,8 @@ export type DemoSpec =
   | { kind: 'edges'; edges: 'wrap' | 'bounce' | 'slide' }
   | { kind: 'trail'; amount: number; halfLife: number; diffuse: number }
   | { kind: 'born'; shape: string }
+  /** Look: a few walkers drawn the way Draw agents draws them, coloured by the choice (`colours`: the palette, start to end). */
+  | { kind: 'look'; style: string; colourBy: string; colours: string[] }
   /** Follow a field: the field in motion, particles riding it (`layer`: only that layer, else all). */
   | { kind: 'field'; spec: FieldSpec; strength: number; grip?: number; layer?: number };
 

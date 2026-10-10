@@ -12,7 +12,7 @@
  *   C = (species, memory x, memory y, own colour packed)  D = its own deposit, one amount a trail channel
  * C and D only when the rule needs per-walker state. Life ≤ 0 is a dead walker (or one not born yet).
  */
-import type { AgentRuleSet, ChannelRef } from '../agentRules/spec';
+import { type AgentRuleSet, type ChannelRef, channelColour } from '../agentRules/spec';
 
 export type Rgb = [number, number, number];
 export type HoodTextureId = 'A' | 'B' | 'C' | 'D' | 'E';
@@ -219,7 +219,8 @@ export function hoodTrailChannels(set: AgentRuleSet, o: { velocity?: boolean } =
   });
   const names = o.velocity ? ['velocity x', 'velocity y', 'count', 'channel 4'] : [0, 1, 2, 3].map(i => set.channels[i]?.trim() || `trail ${i + 1}`);
   if (o.velocity) [0, 1, 2].forEach(i => add(writes, i, 'Deposit (velocity)'));
-  return [0, 1, 2, 3].map(i => ({ index: i, key: `trail${i}` as HoodKey, name: names[i], colour: TRAIL_RGB[i], readBy: reads[i], writtenBy: writes[i] }));
+  if (set.look?.by === 'trail' && !set.colourBy) add(reads, set.look.channel, 'Look (colour)');
+  return [0, 1, 2, 3].map(i => ({ index: i, key: `trail${i}` as HoodKey, name: names[i], colour: o.velocity ? TRAIL_RGB[i] : hexRgb(channelColour(set, i)), readBy: reads[i], writtenBy: writes[i] }));
 }
 
 // ── Which channels a section uses ───────────────────────────────────────────

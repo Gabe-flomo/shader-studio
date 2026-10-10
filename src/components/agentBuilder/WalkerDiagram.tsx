@@ -12,6 +12,8 @@
  * The lens keeps its magnification while a slider moves (diagram.ts keepRef), so the feelers
  * grow and shrink as you drag.
  */
+import { useEffect, useState } from 'react';
+import { clockNow, subscribeTimeTick } from '../../lib/timeTick';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
 import type { TrailCards } from '../../agentBuilder/cards';
@@ -26,6 +28,22 @@ import { LEGEND_COLOURS, dimFor, num, tagCollector } from '../../agentBuilder/le
 
 const readNum = (v: unknown, d: number) => (typeof v === 'number' && isFinite(v) ? v : d);
 
+/** The preview's clock, re-read about 30 times a second while `on` (0 when off or before a frame). */
+function usePreviewClock(on: boolean): number {
+  const [t, setT] = useState(() => (on ? clockNow() ?? 0 : 0));
+  useEffect(() => {
+    if (!on) { setT(0); return; }
+    let last = 0;
+    return subscribeTimeTick(time => {
+      const now = performance.now();
+      if (now - last < 33) return;
+      last = now;
+      setT(time);
+    });
+  }, [on]);
+  return on ? t : 0;
+}
+
 /**
  * A 3D Emit's shape through Draw agents' camera (agentPlan.js agCamera3 at its start, before it
  * orbits): a ball as a shaded sphere with its equator and a meridian (the far halves dashed), a
@@ -35,7 +53,10 @@ function Born3d({ born, camera, image, hot, tag, accent }: {
   born: BornInfo; camera: { params: Record<string, unknown>; mirror?: boolean }; image: ViewRect; hot: boolean; accent: string;
   tag: (p: Pt, entry: string, text: string, key?: string) => null;
 }) {
-  const cam = agCamera3({ params: camera.params, mirror: camera.mirror }, readNum, 0, image.h);
+  // The camera as it is now: it orbits (Orbit speed, Drift) on the preview's clock, so the outline follows it.
+  const moving = readNum(camera.params.rotSpeed, 0) !== 0 || readNum(camera.params.drift, 0) !== 0;
+  const time = usePreviewClock(moving);
+  const cam = agCamera3({ params: camera.params, mirror: camera.mirror }, readNum, time, image.h);
   const project = (p: [number, number, number]) => agProject3(cam, p);
   const toView = (p: Pt) => picToView(image, p);
   const aspect = image.w / Math.max(image.h, 1);

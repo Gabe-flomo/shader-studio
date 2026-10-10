@@ -19,16 +19,26 @@ import {
 } from '../../agentRules/fields';
 import { FIELD_COLOURS } from '../../agentBuilder/legend';
 import { SettingRow, SliderSetting } from './BehaviourCard';
+import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import type { FieldMask } from '../../agentRules/fields';
+import type { WherePick } from '../../agentBuilder/whereActions';
+import { whereNow } from '../../agentBuilder/whereActions';
+import { WhereFocusContext, WherePicker } from './WherePicker';
+import { useContext } from 'react';
+
+/** The Where picker for a field's layers: a layer's region (its mask), and the slope layer's Field ƒ. */
+export interface FieldWhere { mask: (k: number, pick: WherePick | null, slot?: number) => void; slope: (pick: WherePick | null) => void }
 
 type FieldAct = { kind: 'field'; strength: number; grip?: number; spec: FieldSpec };
 
-export function FieldSettings({ id, action, d3, onChange, onFocus }: {
+export function FieldSettings({ id, action, d3, onChange, onFocus, where }: {
   /** The card's key (gravity#0 style), for data attributes. */
   id: string;
   action: FieldAct;
   d3: boolean;
   onChange: (patch: Partial<FieldAct>) => void;
   onFocus: (s: string | undefined) => void;
+  where?: FieldWhere;
 }) {
   const tk = useTokens();
   const spec = useMemo(() => normalizeFieldSpec(action.spec), [action.spec]);
@@ -52,7 +62,7 @@ export function FieldSettings({ id, action, d3, onChange, onFocus }: {
       </span>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {spec.layers.map((l, k) => (
-          <LayerRow key={k} k={k} layer={l} d3={d3} open={open === k} onOpen={() => setOpen(open === k ? null : k)} onFocus={onFocus}
+          <LayerRow key={k} k={k} layer={l} d3={d3} open={open === k} where={where} onOpen={() => setOpen(open === k ? null : k)} onFocus={onFocus}
             onPatch={p => patchLayer(k, p)} onRemove={() => { setLayers(spec.layers.filter((_, j) => j !== k)); setOpen(null); }} />
         ))}
         {!spec.layers.length && <span style={{ fontSize: 12, color: tk.text.muted }}>No layers: the field is still. Add one below.</span>}
@@ -79,8 +89,8 @@ export function FieldSettings({ id, action, d3, onChange, onFocus }: {
   );
 }
 
-function LayerRow({ k, layer: l, d3, open, onOpen, onPatch, onRemove, onFocus }: {
-  k: number; layer: FieldLayer; d3: boolean; open: boolean; onOpen: () => void;
+function LayerRow({ k, layer: l, d3, open, onOpen, onPatch, onRemove, onFocus, where }: {
+  k: number; layer: FieldLayer; d3: boolean; open: boolean; onOpen: () => void; where?: FieldWhere;
   onPatch: (p: Partial<FieldLayer>) => void; onRemove: () => void; onFocus: (s: string | undefined) => void;
 }) {
   const tk = useTokens();
@@ -127,10 +137,12 @@ function LayerRow({ k, layer: l, d3, open, onOpen, onPatch, onRemove, onFocus }:
               <Segmented size="sm" fill ariaLabel="Along" value={l.around ? 'round' : 'down'} onChange={v => onPatch({ around: v === 'round' ? true : undefined })}
                 options={[{ value: 'down' as const, label: 'The slope' }, { value: 'round' as const, label: 'Round its contours' }]} />
             </SettingRow>
-            <span style={{ fontSize: 11.5, color: tk.text.muted, lineHeight: 1.45 }}>Wire a picture, a shape or any chain into the group's <b>Field ƒ</b> socket. It isn't drawn here: the walkers show it.</span>
+            {where
+              ? <SettingRow id={`layer${k}-slope`} label="The slope of" hint="A shape or any number chain of your graph, wired into the group's Field ƒ socket; its arrows are drawn on the picture." onFocus={focus}><SlopeWhere k={k} onPick={where.slope} onFocus={focus} /></SettingRow>
+              : <span style={{ fontSize: 11.5, color: tk.text.muted, lineHeight: 1.45 }}>Wire a picture, a shape or any chain into the group's <b>Field ƒ</b> socket.</span>}
           </>}
           {l.kind === 'own' && <OwnEditor k={k} layer={l} d3={d3} onPatch={onPatch} />}
-          <Extras k={k} layer={l} onPatch={onPatch} onFocus={focus} />
+          <Extras k={k} layer={l} onPatch={onPatch} onFocus={focus} where={where} />
         </div>
       )}
     </div>
@@ -138,7 +150,7 @@ function LayerRow({ k, layer: l, d3, open, onOpen, onPatch, onRemove, onFocus }:
 }
 
 /** Rotate, mask, animate: folded. */
-function Extras({ k, layer: l, onPatch, onFocus }: { k: number; layer: FieldLayer; onPatch: (p: Partial<FieldLayer>) => void; onFocus: (s: string | undefined) => void }) {
+function Extras({ k, layer: l, onPatch, onFocus, where }: { k: number; layer: FieldLayer; onPatch: (p: Partial<FieldLayer>) => void; onFocus: (s: string | undefined) => void; where?: FieldWhere }) {
   const tk = useTokens();
   const [open, setOpen] = useState(!!(l.rotate || l.mask || l.animate));
   const m = l.mask, an = l.animate;
@@ -150,12 +162,16 @@ function Extras({ k, layer: l, onPatch, onFocus }: { k: number; layer: FieldLaye
       </button>
       {open && <>
         <SliderSetting id={`layer${k}-rotate`} label="Turn its flow (°)" hint="Turn every arrow of this layer: a vortex turned 60° spirals in." value={l.rotate ?? 0} min={-180} max={180} step={1} onFocus={onFocus} onChange={v => onPatch({ rotate: v || undefined })} />
-        <SettingRow id={`layer${k}-mask`} label="Where" onFocus={onFocus}>
+        {where && (!m || m.region) ? (
+          <SettingRow id={`layer${k}-mask`} label="Only in a region" hint="A shape, mask or texture of your graph, or one you draw on the picture: the layer acts only inside (or outside) it." onFocus={onFocus}>
+            <LayerWhere k={k} mask={m} onPick={(p, slot) => where.mask(k, p, slot)} onFocus={onFocus} />
+          </SettingRow>
+        ) : <SettingRow id={`layer${k}-mask`} label="Where" onFocus={onFocus}>
           <Segmented size="sm" fill ariaLabel="Where" value={!m ? 'all' : m.outside ? 'out' : 'in'}
             onChange={v => onPatch({ mask: v === 'all' ? undefined : { shape: m?.shape ?? 'circle', x: m?.x ?? 0, y: m?.y ?? 0, size: m?.size ?? 0.5, ...(v === 'out' ? { outside: true } : {}) } })}
             options={[{ value: 'all' as const, label: 'Everywhere' }, { value: 'in' as const, label: 'Only inside' }, { value: 'out' as const, label: 'Only outside' }]} />
-        </SettingRow>
-        {m && <>
+        </SettingRow>}
+        {m && !m.region && <>
           <SettingRow id={`layer${k}-shape`} label="Shape" onFocus={onFocus}>
             <Segmented size="sm" fill ariaLabel="Shape" value={m.shape} onChange={v => onPatch({ mask: { ...m, shape: v } })}
               options={[{ value: 'circle' as const, label: 'Circle' }, { value: 'box' as const, label: 'Box' }]} />
@@ -163,6 +179,8 @@ function Extras({ k, layer: l, onPatch, onFocus }: { k: number; layer: FieldLaye
           <SliderSetting id={`layer${k}-msize`} label={m.shape === 'circle' ? 'Radius' : 'Half-width'} value={m.size} min={0.02} max={2} step={0.01} onFocus={onFocus} onChange={v => onPatch({ mask: { ...m, size: Math.max(0.02, v) } })} />
           <SliderSetting id={`layer${k}-mx`} label="Its centre across" value={m.x} min={-1.8} max={1.8} step={0.01} onFocus={onFocus} onChange={v => onPatch({ mask: { ...m, x: v } })} />
           <SliderSetting id={`layer${k}-my`} label="Its centre up" value={m.y} min={-1} max={1} step={0.01} onFocus={onFocus} onChange={v => onPatch({ mask: { ...m, y: v } })} />
+          {where && <button type="button" data-field-mask-to-region={k} onClick={() => where.mask(k, { make: m.shape === 'circle' ? { shape: 'circle', x: m.x, y: m.y, size: m.size } : { shape: 'box', x: m.x, y: m.y, size: m.size, h: m.size }, outside: !!m.outside })}
+            style={{ alignSelf: 'flex-start', padding: 0, border: 0, background: 'none', cursor: 'pointer', color: tk.text.muted, fontSize: 11.5, textDecoration: 'underline' }}>Make it a shape you can drag</button>}
         </>}
         <SettingRow id={`layer${k}-animate`} label="Animate" onFocus={onFocus}>
           <Segmented size="sm" fill ariaLabel="Animate" value={an?.mode ?? 'still'}
@@ -272,4 +290,18 @@ function FieldTile({ kind }: { kind: FieldKind }) {
     return () => { tiles.delete(draw); if (!tiles.size && raf) { cancelAnimationFrame(raf); raf = 0; } };
   }, [pic, tk.accent.base, tk.text.primary]);
   return <canvas ref={ref} width={TILE_W} height={TILE_H} style={{ width: '100%', height: TILE_H, borderRadius: radius.sm ?? 6, background: tk.bg.render, display: 'block' }} />;
+}
+
+function SlopeWhere({ k, onPick, onFocus }: { k: number; onPick: (p: WherePick | null) => void; onFocus: (s: string | undefined) => void }) {
+  const ctx = useContext(WhereFocusContext);
+  const key = useNodeGraphStore(s => JSON.stringify(whereNow(s.nodes, ctx?.groupId ?? '', 'slope')));
+  const now = JSON.parse(key) as ReturnType<typeof whereNow>;
+  return <WherePicker id={`layer${k}-slope`} use="slope" region={now.region} outside={false} allowOutside={false} onPick={onPick} onFocus={onFocus} />;
+}
+
+function LayerWhere({ k, mask, onPick, onFocus }: { k: number; mask?: FieldMask; onPick: (p: WherePick | null, slot?: number) => void; onFocus: (s: string | undefined) => void }) {
+  const ctx = useContext(WhereFocusContext);
+  const key = useNodeGraphStore(s => JSON.stringify(whereNow(s.nodes, ctx?.groupId ?? '', 'fieldMask', { fieldMask: mask })));
+  const now = JSON.parse(key) as ReturnType<typeof whereNow>;
+  return <WherePicker id={`layer${k}-where`} use="fieldMask" region={now.region} outside={now.outside} onPick={p => onPick(p, mask?.region?.mask)} onFocus={onFocus} />;
 }

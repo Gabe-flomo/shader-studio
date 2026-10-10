@@ -63,7 +63,7 @@ describe('flocks', () => {
     vi.useFakeTimers();
     start('flock');
     expect($('[data-studio-kind]')?.textContent).toBe('Flock (boids) · 2D');
-    expect($$('[data-studio-section]').map(b => b.getAttribute('data-studio-section'))).toEqual(['born', 'neighbours', 'steering', 'moving', 'memory', 'advanced']);
+    expect($$('[data-studio-section]').map(b => b.getAttribute('data-studio-section'))).toEqual(['born', 'neighbours', 'steering', 'moving', 'memory', 'look', 'advanced']);
     const d = () => $('[data-diagram="neighbours"]')!;
     expect(d().getAttribute('data-radius')).toBe('0.05');
     const ring0 = Number(d().getAttribute('data-ring-px'));
@@ -140,7 +140,7 @@ describe('orbiters and crowds', () => {
   it('Orbiters open on Orbit: the circle at its radius, which way round', () => {
     vi.useFakeTimers();
     start('orbit');
-    expect($$('[data-studio-section]').map(b => b.getAttribute('data-studio-section'))).toEqual(['born', 'orbit', 'neighbours', 'moving', 'memory', 'advanced']); // its packed / circling state rules stay Advanced
+    expect($$('[data-studio-section]').map(b => b.getAttribute('data-studio-section'))).toEqual(['born', 'orbit', 'neighbours', 'moving', 'memory', 'look', 'advanced']); // its packed / circling state rules stay Advanced
     const o = () => $('[data-orbit="orbit#0"]')!;
     const r0 = Number(o().getAttribute('data-orbit-r'));
     key($('[data-card-slot="orbit#0"] [data-setting="distance"] [data-ruler-track]'), 'End');
@@ -207,14 +207,12 @@ describe('"only when…"', () => {
     settle();
     const rules = groupRules(group()!).species[0].rules;
     expect(rules.find(r => r.do[0].kind === 'cohere')!.when).toEqual([{ kind: 'age', cmp: '>', seconds: 2 }]);
-    // Clear it, then pick a shape: the viewport shades where it doesn't act.
+    // Clear it, then ask for a region: the Where picker opens (phase 3: agentBuilderPhase3Ui).
     click($('[data-only-when-clear="cohere#0"]'));
     click($('[data-only-when-add="cohere#0"]'));
     click($$('[role="menuitem"]').find(b => b.textContent?.includes('inside / outside')) ?? null);
-    hover($('[data-card-slot="cohere#0"]'));
-    expect($('[data-only-when-diagram="shape"]')?.getAttribute('data-inside')).toBe('inside');
-    settle();
-    expect(groupRules(group()!).species[0].rules.find(r => r.do[0].kind === 'cohere')!.when).toEqual([{ kind: 'shape', shape: 'circle', x: 0, y: 0, size: 0.4 }]);
+    expect($('[data-only-when-picking="cohere#0"] [data-where-panel]')).toBeTruthy();
+    expect($$('[data-where-make]').map(b => b.getAttribute('data-where-make'))).toEqual(['circle', 'box', 'ring', 'polygon', 'text']);
   });
 
   it('trail followers\' cards have the line too (Senses only when a neighbour is near)', () => {

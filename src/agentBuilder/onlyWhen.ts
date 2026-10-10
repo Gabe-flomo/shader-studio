@@ -9,7 +9,7 @@ import { memWhenText } from './memory';
 export const ONLY_WHEN_PICKER: ReadonlyArray<{ kind: OnlyWhenKind; label: string; hint: string }> = [
   { kind: 'neighbours', label: 'a neighbour is near', hint: 'More than so many walkers within its view.' },
   { kind: 'sense', label: 'it smells …', hint: 'A trail it smells anywhere ahead is above a level.' },
-  { kind: 'shape', label: 'inside / outside a shape', hint: 'Where it stands: inside or outside a circle or a box.' },
+  { kind: 'mask', label: 'inside / outside a region…', hint: 'Where it stands: inside or outside a shape, a mask or a texture of your graph, or one you draw on the picture.' },
   { kind: 'age', label: 'older than …', hint: 'Seconds since it was born.' },
   { kind: 'chance', label: 'by chance …', hint: 'A random chance each second.' },
   { kind: 'state', label: 'in state …', hint: 'One of its kind\'s states (from the rules editor).' },
@@ -21,6 +21,7 @@ export function newOnlyWhen(kind: OnlyWhenKind): RuleCondition {
     case 'neighbours': return { kind, who: 'all', cmp: '>', count: 0 };
     case 'sense': return { kind, channel: 'own', where: 'any', cmp: '>', value: 0.3 };
     case 'shape': return { kind, shape: 'circle', x: 0, y: 0, size: 0.4 };
+    case 'mask': return { kind, mask: 0, cmp: '>', value: 0.5 };
     case 'age': return { kind, cmp: '>', seconds: 2 };
     case 'chance': return { kind, perSecond: 0.2 };
     case 'state': return { kind, state: 0 };
@@ -44,7 +45,7 @@ export function onlyWhenText(set: AgentRuleSet, sp: number, c: RuleCondition): s
     case 'state': return `${c.not ? 'not ' : ''}${set.species[sp]?.states[c.state]?.name || `state ${c.state + 1}`}`;
     // Memory (phase 4): a named memory; a mask only beside one (the ants' "inside Food and carrying is off").
     case 'mem': return memWhenText(set, c);
-    case 'mask': return `${c.cmp === '>' ? 'inside' : 'outside'} ${set.masks[c.mask]?.name || `mask ${c.mask + 1}`}`;
+    case 'mask': return `${(c.value === 0 ? c.cmp === '<' : c.cmp === '>') ? 'inside' : 'outside'} ${set.masks[c.mask]?.name || `mask ${c.mask + 1}`}`;
     default: return 'a condition';
   }
 }
