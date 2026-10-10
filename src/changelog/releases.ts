@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.134',
+    date: '2026-10-10',
+    title: 'Pictures inside 3D scenes',
+    highlights: [
+      { area: 'Studio', text: 'March Loop: Add a picture with depth sets up a picture, its depth and a Depth Composite in one click, optionally lit by the scene and reflected.', link: { kind: 'doc', path: 'docs/depth-node.md' } },
+      { area: 'Studio', text: 'Depth Light: Link to scene object makes a light follow a shape or its Translate, live. Picture Environment lets objects reflect the picture.' },
+      { area: 'Studio', text: 'Depth: try other models (experimental, Compare side by side); Depth Pro and ZoeDepth give metres. A webcam runs live.' },
+    ],
+  },
+  {
     id: '2026.10.133',
     date: '2026-10-10',
     title: 'One Texture node',
