@@ -63,7 +63,7 @@ describe('flocks', () => {
     vi.useFakeTimers();
     start('flock');
     expect($('[data-studio-kind]')?.textContent).toBe('Flock (boids) · 2D');
-    expect($$('[data-studio-section]').map(b => b.getAttribute('data-studio-section'))).toEqual(['born', 'neighbours', 'steering', 'moving']);
+    expect($$('[data-studio-section]').map(b => b.getAttribute('data-studio-section'))).toEqual(['born', 'neighbours', 'steering', 'moving', 'memory']);
     const d = () => $('[data-diagram="neighbours"]')!;
     expect(d().getAttribute('data-radius')).toBe('0.05');
     const ring0 = Number(d().getAttribute('data-ring-px'));
@@ -140,7 +140,7 @@ describe('orbiters and crowds', () => {
   it('Orbiters open on Orbit: the circle at its radius, which way round', () => {
     vi.useFakeTimers();
     start('orbit');
-    expect($$('[data-studio-section]').map(b => b.getAttribute('data-studio-section'))).toEqual(['born', 'orbit', 'neighbours', 'moving', 'advanced']); // its packed / circling state rules stay Advanced
+    expect($$('[data-studio-section]').map(b => b.getAttribute('data-studio-section'))).toEqual(['born', 'orbit', 'neighbours', 'moving', 'memory', 'advanced']); // its packed / circling state rules stay Advanced
     const o = () => $('[data-orbit="orbit#0"]')!;
     const r0 = Number(o().getAttribute('data-orbit-r'));
     key($('[data-card-slot="orbit#0"] [data-setting="distance"] [data-ruler-track]'), 'End');

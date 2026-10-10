@@ -31,7 +31,7 @@ import { drawFrom, freshSeed, makeRng, rangeFor, resolveRandom, seedOf, type Ran
 import { registerEntries, type Entry } from '../registry';
 import { type FieldSpec, DEFAULT_FIELD, fieldFromText, fieldToText } from '../../agentRules/fields';
 import {
-  ACTION_KINDS, CONDITION_KINDS, DEFAULT_STATE_COLOURS, MAX_MASKS, MAX_SPECIES, MAX_STATES, WALKER_KIND_KEYS, defaultRuleSet, normalizeRuleSet,
+  ACTION_KINDS, CONDITION_KINDS, DEFAULT_STATE_COLOURS, MAX_MASKS, MAX_SPECIES, MAX_STATES, WALKER_KIND_KEYS, defaultRuleSet, memoryOf, normalizeRuleSet,
   type AgentRule, type AgentRuleSet, type AgentSpeciesRules, type ChannelRef, type Cmp, type NeighbourWho, type RuleAction, type RuleCondition, type SenseWhere, type WalkerKind,
 } from '../../agentRules/spec';
 
@@ -81,6 +81,7 @@ export function printCondition(set: AgentRuleSet, sp: AgentSpeciesRules, c: Rule
     case 'mask': return `mask ${nameText(set.masks[c.mask]?.name || `mask${c.mask + 1}`)} ${c.cmp} ${fmtNum(c.value)}`;
     case 'neighbours': return ['neighbours', c.cmp, fmtNum(c.count), ...whoArgs(c.who, c.radius)].join(' ');
     case 'shape': return `${c.outside ? 'outside' : 'inside'} ${c.shape} ${point(c.x, c.y)} ${fmtNum(c.size)}`;
+    case 'mem': return `mem ${nameText(memoryOf(set, c.memory)?.name ?? 'memory')} ${c.cmp} ${fmtNum(c.value)}`;
   }
 }
 
@@ -113,6 +114,8 @@ export function printAction(set: AgentRuleSet, sp: AgentSpeciesRules, a: RuleAct
     case 'fade': return `fade ${fmtNum(a.seconds)}s`;
     // The layers ride along as one quoted string (JSON with ' for "): fields.ts fieldToText.
     case 'field': return `field ${fmtNum(a.strength)}${a.grip ? ` grip=${fmtNum(a.grip)}` : ''} layers="${fieldToText(a.spec)}"`;
+    // Named memories are printed (not read back yet: the Agent Builder keeps them).
+    case 'mem': return `mem ${nameText(memoryOf(set, a.memory)?.name ?? 'memory')} ${a.op}${a.op === 'expr' ? ` "${(a.expr ?? '').replace(/"/g, "'")}"` : a.value !== undefined ? ` ${fmtNum(a.value)}${a.perSecond ? '/s' : ''}` : ''}`;
   }
 }
 

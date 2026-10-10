@@ -4,7 +4,7 @@
  * (figure 2.4 of the field guide: Distance ahead, at +Angle on the left and −Angle on the right),
  * the turn arc, the wobble fan, the step length, and the edges. Pure: the SVG draws these.
  */
-export type DiagramSection = 'born' | 'senses' | 'turning' | 'moving' | 'trail' | 'forces' | 'life' | 'look' | 'neighbours' | 'steering' | 'orbit';
+export type DiagramSection = 'born' | 'senses' | 'turning' | 'moving' | 'trail' | 'forces' | 'life' | 'look' | 'neighbours' | 'steering' | 'orbit' | 'memory';
 
 /** What is drawn: the selected section, the setting under the pointer or being dragged, and the card it belongs to (`gravity#0`). */
 export interface DiagramFocus { section: DiagramSection; setting?: string; card?: string }

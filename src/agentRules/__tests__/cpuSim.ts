@@ -19,6 +19,8 @@ export const agHash = (x0: number): number => {
 export interface Walker {
   pos: number[]; heading: number | number[]; speed: number; age: number; life: number; species: number; index: number;
   mem: number[]; alive: number; dep: number[]; colour: number[];
+  /** More memory (state E): the named memories. */
+  mem2?: number[];
 }
 
 export interface SimOptions {
@@ -126,7 +128,7 @@ export function stepWalkers(p: Program, walkers: Walker[], step: number, o: SimO
     const env: Env = {
       a_pos: [...w.pos], a_heading: typeof w.heading === 'number' ? w.heading : Math.atan2(w.heading[1], w.heading[0]),
       a_speed: w.speed, a_age: age, a_life: w.life, a_species: w.species, a_index: w.index,
-      a_seed: seed, a_random: (seed >>> 8) / 16777216, a_mem: [...w.mem], a_colour: [...w.colour], a_dt: dt, a_step: step,
+      a_seed: seed, a_random: (seed >>> 8) / 16777216, a_mem: [...w.mem], a_mem2: [...(w.mem2 ?? [0, 0, 0, 0])], a_colour: [...w.colour], a_dt: dt, a_step: step,
       a_ownChannels: [1, 0, 0, 0], u_resolution: res, u_time: step * dt, u_mouse: o.mouse ?? [res[0] / 2, res[1] / 2],
       TRAIL: 0, MASK1: o.masks?.(w.pos)[0] ?? 0, MASK2: o.masks?.(w.pos)[1] ?? 0, FLOW: o.flow?.(w.pos) ?? (o.d3 ? [1, 0, 0] : [1, 0]),
       agDice: (salt: Val) => (agHash((seed ^ (salt as number)) >>> 0) >>> 8) / 16777216,
@@ -157,6 +159,7 @@ export function stepWalkers(p: Program, walkers: Walker[], step: number, o: SimO
       heading: o.d3 ? norm(heading as number[]) : heading,
       speed: get('speed') as number,
       mem: (get('memory') as number[] | undefined) ?? w.mem,
+      mem2: (get('moreMemory') as number[] | undefined) ?? w.mem2,
       alive: (get('alive') as number | undefined) ?? 1,
       dep: (get('deposit') as number[] | undefined) ?? w.dep,
       colour: (get('colour') as number[] | undefined) ?? w.colour,

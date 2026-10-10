@@ -4,6 +4,7 @@
  */
 import { type AgentRuleSet, type RuleCondition, DEFAULT_NEIGHBOURS, channelName } from '../agentRules/spec';
 import type { OnlyWhenKind } from './behaviours';
+import { memWhenText } from './memory';
 
 export const ONLY_WHEN_PICKER: ReadonlyArray<{ kind: OnlyWhenKind; label: string; hint: string }> = [
   { kind: 'neighbours', label: 'a neighbour is near', hint: 'More than so many walkers within its view.' },
@@ -41,6 +42,9 @@ export function onlyWhenText(set: AgentRuleSet, sp: number, c: RuleCondition): s
     case 'age': return `${c.cmp === '>' ? 'older' : 'younger'} than ${n(c.seconds, 2)} s`;
     case 'chance': return `by chance, ${n(c.perSecond * 100, 1)}% a second`;
     case 'state': return `${c.not ? 'not ' : ''}${set.species[sp]?.states[c.state]?.name || `state ${c.state + 1}`}`;
+    // Memory (phase 4): a named memory; a mask only beside one (the ants' "inside Food and carrying is off").
+    case 'mem': return memWhenText(set, c);
+    case 'mask': return `${c.cmp === '>' ? 'inside' : 'outside'} ${set.masks[c.mask]?.name || `mask ${c.mask + 1}`}`;
     default: return 'a condition';
   }
 }

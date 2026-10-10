@@ -27,7 +27,9 @@ export type CardId =
   // Particles
   | 'gravity' | 'wind' | 'curl' | 'field' | 'attract' | 'drag' | 'fade' | 'die'
   // Flocks, crowds and orbiters
-  | 'separate' | 'match' | 'cohere' | 'avoidEdges' | 'goal' | 'slow' | 'orbit';
+  | 'separate' | 'match' | 'cohere' | 'avoidEdges' | 'goal' | 'slow' | 'orbit'
+  // Memory (phase 4): a memory operation (any kind), and Turn round (a card when a memory gates it)
+  | 'memory' | 'turnRound';
 
 export interface CardDef {
   id: CardId;
@@ -64,7 +66,17 @@ export const CARD_DEFS: Record<CardId, CardDef> = {
   goal: { id: 'goal', multi: true, match: a => a.kind === 'turn' && a.toward !== 'trail', make: () => ({ kind: 'turn', toward: 'point', x: 0.8, y: 0, degrees: 10 }) },
   slow: { id: 'slow', match: is('slow'), make: () => ({ kind: 'slow', who: 'all', jam: 20 }) },
   orbit: { id: 'orbit', multi: true, match: is('orbit'), make: () => ({ kind: 'orbit', target: 'centre', distance: 0.5, degrees: 6 }) },
+  memory: { id: 'memory', multi: true, match: is('mem'), make: () => ({ kind: 'mem', memory: '', op: 'add', value: 1 }) },
+  turnRound: { id: 'turnRound', multi: true, match: is('bounce'), make: () => ({ kind: 'bounce' }) },
 };
+
+/**
+ * Cards every kind reads (memory operations), and cards read only in a rule a memory gates ("only
+ * when carrying"): there a second Senses or Trail is a card of its own too. Rules without a memory
+ * condition read exactly as before.
+ */
+const ALWAYS_CARDS: readonly CardId[] = ['memory'];
+const GATED_CARDS: readonly CardId[] = ['goal', 'turnRound', 'senses', 'trail', 'wobble'];
 
 /** The conditions an "only when" line can say (one per card). The rest make a rule Advanced. */
 export const ONLY_WHEN_KINDS = ['neighbours', 'sense', 'shape', 'age', 'chance', 'state'] as const;
@@ -78,14 +90,21 @@ export interface CardAt extends Loc { card: CardId }
 export const conditionsOf = (r: AgentRule) => r.when.filter(c => c.kind !== 'always');
 const sayable = (c: RuleCondition) => (ONLY_WHEN_KINDS as readonly string[]).includes(c.kind);
 
-/** A rule whose actions can be cards: no Stop after this rule, and at most one condition, one the cards can say. */
+/**
+ * A rule whose actions can be cards: no Stop after this rule, and at most one condition the cards
+ * can say, plus at most one named-memory condition ("and carrying is on"); with a memory condition
+ * the other may also be a mask ("inside Food").
+ */
 export function cardRule(r: AgentRule): boolean {
   const c = conditionsOf(r);
-  return !r.stop && c.length <= 1 && c.every(sayable);
+  const mem = c.filter(x => x.kind === 'mem'), rest = c.filter(x => x.kind !== 'mem');
+  return !r.stop && mem.length <= 1 && rest.length <= 1 && rest.every(x => sayable(x) || (mem.length === 1 && x.kind === 'mask'));
 }
+/** A rule's named-memory condition (null: none). */
+export const memConditionOf = (r: AgentRule) => r.when.find(c => c.kind === 'mem') ?? null;
 
-/** Actions that change what a condition reads (its state, its Memory number): later actions in a conditional rule stay Advanced. */
-const changesWhen = (a: RuleAction) => a.kind === 'state' || a.kind === 'memory';
+/** Actions that change what a condition reads (its state, its Memory number, a memory): later actions in a conditional rule stay Advanced. */
+const changesWhen = (a: RuleAction) => a.kind === 'state' || a.kind === 'memory' || a.kind === 'mem';
 
 /**
  * The cards of species `sp` (of the given kinds), in reading order: each action that matches a
@@ -97,12 +116,14 @@ export function locate(set: AgentRuleSet, sp: number, cards: readonly CardId[]):
   (set.species[sp]?.rules ?? []).forEach((r, ri) => {
     if (!cardRule(r)) return;
     const conditional = conditionsOf(r).length > 0;
+    const gated = !!memConditionOf(r);
+    const ids = [...cards, ...ALWAYS_CARDS.filter(x => !cards.includes(x)), ...(gated && cards.includes('senses') ? GATED_CARDS.filter(x => !cards.includes(x)) : [])];
     let blocked = false;
     r.do.forEach((a, ai) => {
       if (!blocked) {
-        for (const id of cards) {
+        for (const id of ids) {
           const d = CARD_DEFS[id];
-          if (d.match(a) && (d.multi || !found.has(id))) { found.add(id); out.push({ card: id, rule: ri, action: ai }); break; }
+          if (d.match(a) && (d.multi || gated || !found.has(id))) { found.add(id); out.push({ card: id, rule: ri, action: ai }); break; }
         }
       }
       if (conditional && changesWhen(a)) blocked = true;
@@ -120,6 +141,8 @@ export interface CardRead<A extends RuleAction = RuleAction> {
   on: boolean;
   /** Its "only when" (null: always). */
   when: RuleCondition | null;
+  /** Its named-memory condition, the "and …" of its only when (null: none). */
+  memWhen?: RuleCondition | null;
 }
 
 export interface Behaviours {
@@ -138,7 +161,7 @@ export function readBehaviours(set: AgentRuleSet, sp: number, cards: readonly Ca
     const r = rules[l.rule];
     const n = nth.get(l.card) ?? 0;
     nth.set(l.card, n + 1);
-    return { card: l.card, key: `${l.card}#${n}`, at: { rule: l.rule, action: l.action }, action: r.do[l.action], on: !r.off, when: conditionsOf(r)[0] ?? null };
+    return { card: l.card, key: `${l.card}#${n}`, at: { rule: l.rule, action: l.action }, action: r.do[l.action], on: !r.off, when: conditionsOf(r).find(c => c.kind !== 'mem') ?? null, memWhen: memConditionOf(r) };
   });
   const taken = new Set(at.map(l => `${l.rule}:${l.action}`));
   const advanced: Behaviours['advanced'] = [];
@@ -210,11 +233,23 @@ export function removeAt(set: AgentRuleSet, sp: number, at: Loc): AgentRuleSet {
   return withRules(set, sp, rules);
 }
 
-/** Give the card at `at` an "only when" (null: always): its action in a rule of its own with that condition. */
+/** Give the card at `at` an "only when" (null: always): its action in a rule of its own with that condition (a memory condition stays). */
 export function setOnlyWhen(set: AgentRuleSet, sp: number, at: Loc, cond: RuleCondition | null): AgentRuleSet {
   const rules = cloneRules(set, sp);
   const ri = isolate(rules, at);
-  rules[ri] = { ...rules[ri], when: cond ? [cond] : [{ kind: 'always' }] };
+  const mem = memConditionOf(rules[ri]);
+  const when = [...(cond ? [cond] : []), ...(mem && cond?.kind !== 'mem' ? [mem] : [])];
+  rules[ri] = { ...rules[ri], when: when.length ? when : [{ kind: 'always' }] };
+  return withRules(set, sp, rules);
+}
+
+/** Give the card at `at` a memory condition ("and carrying is on"; null: none), keeping its other only when. */
+export function setMemWhen(set: AgentRuleSet, sp: number, at: Loc, cond: RuleCondition | null): AgentRuleSet {
+  const rules = cloneRules(set, sp);
+  const ri = isolate(rules, at);
+  const rest = conditionsOf(rules[ri]).filter(c => c.kind !== 'mem');
+  const when = [...rest, ...(cond ? [cond] : [])];
+  rules[ri] = { ...rules[ri], when: when.length ? when : [{ kind: 'always' }] };
   return withRules(set, sp, rules);
 }
 

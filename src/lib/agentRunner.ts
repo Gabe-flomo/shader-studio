@@ -37,6 +37,7 @@ import {
   agListenState, agNbLayout, agNbPasses, agNbTile, agProject3, agReadDecode, agReadPlan, agRestartGroup, agStepTime, agStepWindow, agTrailSize, agVolLayout, agVolUniform, type AgGroupState, type AgListenState, type AgVolLayout,
   AG_NB_SLOTS,
 } from '../play/kit/agentPlan.js';
+import { MEM_LENS_FRAG, MEM_LENS_VERT, MEM_RANGE_FRAG, MEM_RANGE_N, decodeMemRanges, parseMemSlot } from './agentMemoryGpu';
 import { GP_BESSEL_N, GP_BESSEL_W, GP_LEVELS, GP_VOL, GP_VOL_TILES, gpBesselTable, gpReadback, type GpReadback, type GpSoundInput } from '../play/kit/gpuParticles.js';
 import {
   AG_BLUR_FRAG, AG_COMPOSE_FRAG, AG_DEPOSIT3_VERT, AG_DEPOSIT_FRAG, AG_DEPOSIT_VERT, AG_DOWN_FRAG, AG_DRAW3_VERT, AG_DRAW_FRAG, AG_DRAW_VERT, AG_FULL_VERT, AG_PROJ3_FRAG, AG_READ_FRAG, AG_SUM_FRAG,
@@ -141,12 +142,12 @@ export class AgentTargets {
   /** A group's state (made, all dead, when its count or its per-walker state changes). */
   group(g: AgentGroupProgram): GroupState {
     // A new Space (2D ↔ 3D) means new state too: the same texels mean different things.
-    const key = `${g.side}${g.stateC ? ':C' : ''}${g.space3d ? ':3D' : ''}`;
+    const key = `${g.side}${g.stateC ? ':C' : ''}${g.stateC && g.stateE ? ':E' : ''}${g.space3d ? ':3D' : ''}`;
     let s = this.groups.get(g.slug);
     if (s && s.key === key) return s;
     if (s) { s.rt[0].dispose(); s.rt[1].dispose(); this.dropListen(s); }
-    // State A and B; with per-walker state also C (species, memory, colour) and D (its deposit).
-    const make = () => new THREE.WebGLRenderTarget(g.side, g.side, { ...STATE_OPTS, count: g.stateC ? 4 : 2 });
+    // State A and B; with per-walker state also C (species, memory, colour) and D (its deposit); with More memory also E.
+    const make = () => new THREE.WebGLRenderTarget(g.side, g.side, { ...STATE_OPTS, count: g.stateC ? (g.stateE ? 5 : 4) : 2 });
     s = { ...(agGroupState() as AgGroupState<ListenState>), key, side: g.side, rt: [make(), make()], cur: 0 };
     this.clear(s.rt[0]); this.clear(s.rt[1]);
     this.renderer.setRenderTarget(null);
@@ -445,6 +446,17 @@ export class AgentRunner {
   private spotScene = new THREE.Scene();
   /** Each spotlight canvas's target and read (keyed `spot:<node id>`, apart from the group cards' dots). */
   private spotReads = new Map<string, DotRead>();
+  // The Memory section's lens (agentMemoryGpu.ts): walkers coloured by one memory; and its live ranges.
+  private memMat = raw(MEM_LENS_VERT, MEM_LENS_FRAG, {
+    u_a: { value: null }, u_b: { value: null }, u_c: { value: null }, u_e: { value: null }, u_cam: { value: null },
+    u_side: { value: 1 }, u_stride: { value: 1 }, u_species: { value: 1 }, u_stateC: { value: 0 }, u_only: { value: -1 }, u_deep: { value: 0 }, u_camSrc: { value: 0 },
+    u_aspect: { value: 1 }, u_px: { value: SPOT_PX }, u_gain: { value: 1 }, u_col: { value: new THREE.Vector3(1, 1, 1) },
+    u_eye: { value: new THREE.Vector3() }, u_fwd: { value: new THREE.Vector3(0, 0, -1) }, u_right: { value: new THREE.Vector3(1, 0, 0) }, u_up: { value: new THREE.Vector3(0, 1, 0) },
+    u_lens: { value: 1.8 }, u_ortho: { value: 0 }, u_camDist: { value: 3 },
+    u_memSrc: { value: 0 }, u_memComp: { value: 0 }, u_lo: { value: 0 }, u_hi: { value: 1 },
+  }, false);
+  private memRangeMat = raw(AG_FULL_VERT, MEM_RANGE_FRAG, { u_b: { value: null }, u_c: { value: null }, u_e: { value: null }, u_side: { value: 1 }, u_stride: { value: 1 }, u_hasE: { value: 0 } }, false);
+  private memRanges = new Map<string, { rt: THREE.WebGLRenderTarget; reader: GpReadback; busy: boolean; last: Float32Array | null; at: number }>();
   // Readings for Play (P6): the live state summed on the GPU into 2 × 1 texels, read back without a stall.
   private readMat = raw(AG_FULL_VERT, AG_READ_FRAG, {
     u_a: { value: null }, u_b: { value: null }, u_c: { value: null }, u_side: { value: 1 }, u_species: { value: 1 }, u_stateC: { value: 0 }, u_w: { value: 1 }, u_deep: { value: 0 },
@@ -485,7 +497,7 @@ export class AgentRunner {
   private ensureUniforms(): void {
     const u = this.host.uniforms();
     for (const g of this.spec.groups) {
-      for (const n of [agentStateUniform(g.slug, 'A'), agentStateUniform(g.slug, 'B'), ...(g.stateC ? [agentStateUniform(g.slug, 'C'), agentStateUniform(g.slug, 'D')] : [])]) if (!u[n]) u[n] = { value: null };
+      for (const n of [agentStateUniform(g.slug, 'A'), agentStateUniform(g.slug, 'B'), ...(g.stateC ? [agentStateUniform(g.slug, 'C'), agentStateUniform(g.slug, 'D')] : []), ...(g.stateC && g.stateE ? [agentStateUniform(g.slug, 'E')] : [])]) if (!u[n]) u[n] = { value: null };
       if (!u[agentStepUniform(g.slug)]) u[agentStepUniform(g.slug)] = { value: 0 };
       if (!(u[agentWindowUniform(g.slug)]?.value instanceof THREE.Vector4)) u[agentWindowUniform(g.slug)] = { value: new THREE.Vector4(0, 0, 0, 0) };
       if (g.neighbours) {
@@ -921,6 +933,7 @@ export class AgentRunner {
     if (g.stateC && tex.length >= 4) {
       u[agentStateUniform(g.slug, 'C')].value = tex[2];
       u[agentStateUniform(g.slug, 'D')].value = tex[3];
+      if (g.stateE && tex.length >= 5) u[agentStateUniform(g.slug, 'E')].value = tex[4];
     }
   }
 
@@ -1423,6 +1436,10 @@ export class AgentRunner {
       const n = g.side * g.side;
       const stride = Math.max(1, Math.ceil(n / SPOT_DOTS));
       const drawn = Math.ceil(n / stride);
+      // The Memory section's lens: ranges for the panel, and the walkers coloured by the memory being edited.
+      const memLens = canvas.dataset.mem !== undefined;
+      if (memLens) this.memoryRange(g, gs, canvas);
+      const memSlot = memLens ? parseMemSlot(canvas.dataset.mem) : null;
       const only = parseSpotSpecies(canvas.dataset.species);
       const species = Math.max(1, g.species);
       const su = this.spotMat.uniforms;
@@ -1450,6 +1467,17 @@ export class AgentRunner {
         if (probed) { su.u_camSrc.value = 1; su.u_cam.value = ds!.cam!.texture; }
       }
       this.spotMat.uniformsNeedUpdate = true;
+      if (memLens) {
+        const mu = this.memMat.uniforms;
+        for (const k of Object.keys(su)) if (mu[k] && k !== 'u_col') mu[k].value = su[k].value;
+        mu.u_e.value = g.stateC && g.stateE ? gs.rt[gs.cur].textures[4] ?? null : null;
+        mu.u_memSrc.value = memSlot?.src ?? 0; mu.u_memComp.value = memSlot?.comp ?? 0;
+        const [lo, hi] = (canvas.dataset.memRange ?? '0,1').split(',').map(Number);
+        mu.u_lo.value = Number.isFinite(lo) ? lo : 0; mu.u_hi.value = Number.isFinite(hi) ? hi : 1;
+        mu.u_px.value = 3;
+        this.memMat.uniformsNeedUpdate = true;
+        this.spot.material = this.memMat;
+      } else this.spot.material = this.spotMat;
       const prevColor = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
       const prevAuto = renderer.autoClear;
       renderer.setClearColor(0x000000, 1);
@@ -1457,7 +1485,7 @@ export class AgentRunner {
       renderer.clear(true, false, false);
       renderer.setClearColor(prevColor, prevAlpha);
       renderer.autoClear = false;
-      this.pointGeometry.setDrawRange(0, drawn);
+      this.pointGeometry.setDrawRange(0, memLens && !memSlot ? 0 : drawn);
       renderer.render(this.spotScene, camera);
       renderer.autoClear = prevAuto;
       if (async) this.startRead(d);
@@ -1473,6 +1501,37 @@ export class AgentRunner {
       const id = k.slice('spot:'.length);
       if (!this.spec.groups.some(g => g.nodeId === id)) this.dropSpot(id);
     }
+  }
+
+  /**
+   * The Memory section's live ranges: 4096 walkers sampled (agentMemoryGpu.ts MEM_RANGE_FRAG) a few
+   * times a second, read back without a stall; each memory number's min / max over the live ones
+   * goes on the canvas as `dataset.ranges` ('lo,hi;…' for Memory x, Memory y, E.x … E.w).
+   */
+  private memoryRange(g: AgentGroupProgram, gs: GroupState, canvas: HTMLCanvasElement): void {
+    const { renderer } = this.host;
+    if (!g.stateC) { canvas.dataset.ranges = ''; return; }
+    let r = this.memRanges.get(g.nodeId);
+    if (!r) {
+      r = { rt: new THREE.WebGLRenderTarget(MEM_RANGE_N, 2 * MEM_RANGE_N, { type: THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, stencilBuffer: false }), reader: gpReadback(renderer.getContext() as WebGL2RenderingContext), busy: false, last: null, at: 0 };
+      this.memRanges.set(g.nodeId, r);
+    }
+    const px = r.reader.poll();
+    if (px && px !== r.last) {
+      r.last = px; r.busy = false;
+      const d = decodeMemRanges(px);
+      canvas.dataset.ranges = d ? d.map(([a, b]) => `${a},${b}`).join(';') : '';
+    }
+    const now = performance.now();
+    if (r.busy || now - r.at < 250) return;
+    r.at = now;
+    const u = this.memRangeMat.uniforms, tex = gs.rt[gs.cur].textures;
+    u.u_b.value = tex[1]; u.u_c.value = tex[2]; u.u_e.value = g.stateE ? tex[4] ?? null : null; u.u_hasE.value = g.stateE && tex[4] ? 1 : 0;
+    u.u_side.value = g.side; u.u_stride.value = Math.max(1, Math.floor(g.side * g.side / (MEM_RANGE_N * MEM_RANGE_N)));
+    this.pass(this.memRangeMat, r.rt);
+    const fb = (renderer.properties.get(r.rt) as { __webglFramebuffer?: WebGLFramebuffer }).__webglFramebuffer ?? null;
+    if (fb && r.reader.request(fb, MEM_RANGE_N, 2 * MEM_RANGE_N)) r.busy = true;
+    renderer.setRenderTarget(null);
   }
 
   /**
@@ -1505,7 +1564,8 @@ export class AgentRunner {
     return Object.freeze({
       nodeId, slug: g.slug, side: g.side, count: g.side * g.side, species: Math.max(1, g.species), stateC: !!g.stateC, d3: !!g.space3d,
       aspect: this.aspect, step: s.step,
-      textures: Object.freeze({ A: rt.textures[0], B: rt.textures[1], C: g.stateC ? rt.textures[2] : null, D: g.stateC ? rt.textures[3] : null }),
+      stateE: !!(g.stateC && g.stateE),
+      textures: Object.freeze({ A: rt.textures[0], B: rt.textures[1], C: g.stateC ? rt.textures[2] : null, D: g.stateC ? rt.textures[3] : null, E: g.stateC && g.stateE ? rt.textures[4] ?? null : null }),
       trail, camera,
     });
   }
@@ -1548,7 +1608,7 @@ export class AgentRunner {
     this.gridPrograms = [];
     const u = this.boundTo;
     if (u) {
-      for (const g of this.spec.groups) for (const n of [agentStateUniform(g.slug, 'A'), agentStateUniform(g.slug, 'B'), agentStateUniform(g.slug, 'C'), agentStateUniform(g.slug, 'D')]) if (u[n]) u[n].value = null;
+      for (const g of this.spec.groups) for (const n of [agentStateUniform(g.slug, 'A'), agentStateUniform(g.slug, 'B'), agentStateUniform(g.slug, 'C'), agentStateUniform(g.slug, 'D'), agentStateUniform(g.slug, 'E')]) if (u[n]) u[n].value = null;
       for (const t of this.spec.trails) {
         if (u[trailUniform(t.slug)]) u[trailUniform(t.slug)].value = null;
         const n = trailStepUniforms(t.slug);
@@ -1564,6 +1624,9 @@ export class AgentRunner {
     for (const id of [...this.dotReads.keys()]) this.dropDots(id);
     for (const k of [...this.spotReads.keys()]) this.dropSpot(k.slice('spot:'.length));
     this.spotMat.dispose();
+    this.memMat.dispose(); this.memRangeMat.dispose();
+    for (const r of this.memRanges.values()) { r.rt.dispose(); r.reader.dispose(); }
+    this.memRanges.clear();
     this.pointGeometry.dispose();
     this.thumbRt?.dispose();
     this.bessel?.dispose();
