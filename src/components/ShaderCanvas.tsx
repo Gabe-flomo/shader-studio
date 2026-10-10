@@ -115,6 +115,17 @@ export interface OfflineRenderHandle {
 
 // Font texture: 16×16 grid of ASCII chars (codes 0-255), 64×64 px per cell.
 // Built once at module load and shared across all ShaderCanvas instances.
+/**
+ * Write a uniform the frame loop sets every frame. After a Rebuild or a restored WebGL context the
+ * material's uniforms are a new object (previewUniforms.ts): one it lacks is added, never written
+ * through `undefined` (the "Cannot set properties of undefined (setting 'value')" of a restore).
+ */
+function setUniform(mat: THREE.ShaderMaterial, name: string, value: unknown): void {
+  const u = mat.uniforms[name];
+  if (u) u.value = value;
+  else mat.uniforms[name] = { value };
+}
+
 function buildFontTexture(): THREE.CanvasTexture {
   const GRID = 16, CELL = 64, SIZE = GRID * CELL;
   const canvas = document.createElement('canvas');
@@ -1037,7 +1048,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         },
         dispose: r => r.dispose(),
         draw: (t, into, prev, echoes) => {
-          material.uniforms.u_time.value = t;
+          setUniform(material, 'u_time', t);
           if (passRunner && offlinePassTargets) passRunner.run(offlinePassTargets, exportW, exportH, undefined, offlinePassStage, passRunner.splitsForParticles ? 'rest' : undefined);
           if (material.uniforms.u_prevFrame) material.uniforms.u_prevFrame.value = prev ? prev.texture : null;
           for (let i = 0; i < 6; i++) { const u = material.uniforms[`u_echo${i}`]; if (u) u.value = echoes[i]?.texture ?? null; }
@@ -1426,8 +1437,32 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       glContextLost = true;
       console.warn('[ShaderCanvas] WebGL context lost — rendering paused until the browser restores it');
       useNodeGraphStore.getState().setGlContextLost(true);
+      // The old context's objects go now, while deleting them is a no-op (see dropGpuObjects);
+      // its timer queries are forgotten (they can't be read on the new one).
+      gpuTimer.reset();
+      try {
+        dropGpuObjects();
+        // Geometries too: three.js keeps the old context's vertex arrays with them and deletes those
+        // on the new context when a geometry is disposed later ("deleteVertexArray: object does not belong").
+        const geos = new Set<THREE.BufferGeometry>([geometry]);
+        for (const sc of [scene, blitScene, baselineScene, compileScene, costScene, bgScene, probeScene, probeCompileScene]) {
+          sc.traverse(o => { const g = (o as THREE.Mesh).geometry; if (g) geos.add(g); });
+        }
+        for (const g of geos) g.dispose();
+        passRunner?.contextLost();
+        agentRunner?.contextLost();
+        depthEngine.contextLost();
+        // The Particles engines keep raw GL objects: let them go now (the restore makes new ones).
+        releaseGpuParticlesRenderer(renderer);
+      } catch (err) { console.warn('[ShaderCanvas] dropping GPU objects on context loss failed', err); }
     };
     const handleContextRestored = () => {
+      // The timer extension belongs to a context: ask the new one for it.
+      gpuTimer.reset();
+      // Auto resolution reads the frame rate: the time lost (and the rebuild's slow first frames)
+      // isn't the shader's cost, so the count starts again and the first readings only settle.
+      fpsFrameCount = 0; fpsLastTime = 0;
+      autoState.lastChange = performance.now();
       glContextLost = false;
       console.warn('[ShaderCanvas] WebGL context restored — rebuilding GPU resources');
       lastRafTime = null; // don't count the lost interval as one giant dt
@@ -1540,7 +1575,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (document.hidden || !canvasVisible) { lastRafTime = now; scheduleFrame(); return; }
       // While the WebGL context is lost every GL call is a no-op (and the
       // readbacks below would return garbage), so idle until it's restored.
-      if (glContextLost) { lastRafTime = now; scheduleFrame(); return; }
+      // isContextLost(): lost already, before the event arrives (a draw now would read nulls from GL).
+      if (glContextLost || gl.isContextLost()) { lastRafTime = now; scheduleFrame(); return; }
       // A rebuild is building the program and targets again: keep the last picture until it's done.
       if (gpuReset) { lastRafTime = now; scheduleFrame(); return; }
       // Another window in front: Pause stops the loop until focus returns; Slow draws SLOW_FPS a second.
@@ -1591,8 +1627,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         // The tape's scale: racks with Snap to scale put live notes in it.
         audioEngineHost.setScale(rec.arrangement?.scale);
       }
-      material.uniforms.u_time.value = elapsed;
-      material.uniforms.u_frameDt.value = timePlayingRef.current ? dt : 0;
+      setUniform(material, 'u_time', elapsed);
+      setUniform(material, 'u_frameDt', timePlayingRef.current ? dt : 0);
       // Clock followers (time readouts, keyframe playheads) get every frame: a listener call is
       // cheap, and throttling it made the readout visibly choppy once frames were throttled.
       // Always emitted: it also records the clock for clockNow() (freezing a keyframed slider).
@@ -2345,9 +2381,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       }
       return m;
     };
-    const doResetGpu = async (): Promise<string[]> => {
-      const reset: string[] = [];
-      compileGeneration++; // a swap still compiling is superseded: this builds the newest source
+    /**
+     * Throw away the render targets, textures and probe programs (each is made again on its next
+     * use). Run when the context is lost too: then three.js forgets their GL objects while every
+     * delete is a no-op, instead of deleting the old context's objects on the new one after the
+     * restore ("delete: object does not belong to this context"). Running it twice is harmless.
+     */
+    const dropGpuObjects = () => {
       // Probe programs (node outputs, scopes) are built again on demand.
       for (const cache of [probeMatCache, scopeMatCache, previewScopeMatCache]) { cache.forEach(disposeProbeMat); cache.clear(); }
       lastProbeFs = null; lastScopeFs = null; lastPreviewScopeFs = null; lastProbedNodeId = null;
@@ -2358,10 +2398,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       disposeEchoRing();
       for (const target of [rt, floatRt, histRt, probeRT, baselineRt]) target.dispose();
       costRt?.dispose(); costRt = null;
+      for (const t of costPassRts.values()) t.dispose();
+      costPassRts.clear();
       pvRunner.reset();
-      reset.push('render targets');
-      if (isStatefulRef.current) reset.push('feedback history');
-      if (echoRef.current) reset.push('echo history');
+      passTargets?.dispose(); offlinePassTargets?.dispose(); offlinePassTargets = null;
+      agentTargets?.dispose(); offlineAgentTargets?.dispose(); offlineAgentTargets = null;
       // Textures: each is uploaded again the next time it's drawn.
       const textures = new Set<THREE.Texture>([FONT_TEXTURE]);
       const st = useNodeGraphStore.getState();
@@ -2370,9 +2411,18 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       for (const t of Object.values(st.nodeTextures)) collect(t);
       for (const t of Object.values(st.videoTextures)) collect(t);
       for (const t of textures) t.dispose();
-      reset.push('textures');
       blitMat.dispose();
       probeDummy.dispose();
+    };
+    const doResetGpu = async (): Promise<string[]> => {
+      const reset: string[] = [];
+      compileGeneration++; // a swap still compiling is superseded: this builds the newest source
+      dropGpuObjects();
+      reset.push('render targets');
+      if (isStatefulRef.current) reset.push('feedback history');
+      if (echoRef.current) reset.push('echo history');
+      reset.push('textures');
+      const st = useNodeGraphStore.getState();
       // The program: the old material goes first, so three.js links a new one instead of reusing it.
       const vsSrc = st.vertexShader || FALLBACK_VERTEX;
       const fsSrc = (st.rawGlslShader ?? st.fragmentShader) || FALLBACK_FRAGMENT;
@@ -2461,7 +2511,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (t !== renderer.domElement && t?.closest?.('button, input, select, textarea, a, [role="slider"], [role="button"], [contenteditable="true"]')) return;
       buttonHeld = true;
       handleMouseMove(e);
-      material.uniforms.u_mousebtn.value = 1;
+      setUniform(material, 'u_mousebtn', 1);
       playEngine.setPreviewButton(true);
       requestRender();
     };
@@ -2471,7 +2521,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const handleButtonUp = () => {
       if (!buttonHeld) return;
       buttonHeld = false;
-      material.uniforms.u_mousebtn.value = 0;
+      setUniform(material, 'u_mousebtn', 0);
       playEngine.setPreviewButton(false);
       requestRender();
     };
@@ -2485,7 +2535,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const handleResetTime = () => {
       virtualTime = 0;
       lastRafTime = null;
-      material.uniforms.u_time.value = 0;
+      setUniform(material, 'u_time', 0);
       resetGpuParticles();
       passTargets?.clearPrevious();
       agentTargets?.resetAll();
@@ -2503,7 +2553,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (typeof t !== 'number') return;
       virtualTime = t;
       lastRafTime = null;
-      material.uniforms.u_time.value = t;
+      setUniform(material, 'u_time', t);
       requestRender();
     };
     window.addEventListener('seek-time', handleSeekTime);
@@ -2516,7 +2566,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (typeof delta !== 'number') return;
       virtualTime = Math.max(0, virtualTime + delta);
       lastRafTime = null;
-      material.uniforms.u_time.value = virtualTime;
+      setUniform(material, 'u_time', virtualTime);
       requestRender();
     };
     window.addEventListener('step-time', handleStepTime);

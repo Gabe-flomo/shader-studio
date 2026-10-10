@@ -100,6 +100,12 @@ class Grabber {
   private rt: THREE.WebGLRenderTarget | null = null;
   constructor() { this.scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.mat)); }
 
+  /** The context was lost: the target goes (made again on the next grab), while deleting is a no-op. */
+  drop(): void {
+    this.rt?.dispose(); this.rt = null; this.mat.dispose();
+    this.scene.traverse(o => (o as THREE.Mesh).geometry?.dispose());
+  }
+
   /** RGBA bytes, rows bottom-up. */
   grab(renderer: THREE.WebGLRenderer, tex: THREE.Texture, w: number, h: number): Uint8Array {
     if (!this.rt || this.rt.width !== w || this.rt.height !== h) {
@@ -163,6 +169,16 @@ class DepthEngine {
   private videoUniforms: Record<string, string> = {};
   /** Video Inputs reading the webcam: live, never baked. */
   private webcamIds = new Set<string>();
+
+  /**
+   * The preview's WebGL context was lost: the GPU objects the engine keeps (the grabber's target,
+   * each node's depth texture) are let go now, while deleting is a no-op; they are uploaded or
+   * made again on their next use, on the restored context.
+   */
+  contextLost(): void {
+    this.grabber?.drop();
+    for (const s of this.slots.values()) { s.tex?.dispose(); s.bake?.tex?.dispose(); }
+  }
 
   setHost(host: DepthHost | null): void {
     this.host = host;

@@ -61,10 +61,16 @@ class NodePreviewRenderer {
       const el = this.renderer.domElement;
       el.addEventListener('webglcontextlost', e => {
         e.preventDefault(); // allow the browser to restore it
+        // A renderer given back by release() loses its context after it has gone: that is not this one's.
+        if (this.renderer?.domElement !== el) return;
         this.contextLost = true;
+        // The target's GL objects belong to the lost context: let them go now (deleting is a no-op),
+        // not on the restored one ("object does not belong to this context").
+        this.renderTarget?.dispose();
         console.warn('[nodePreviewRenderer] WebGL context lost — previews paused until restored');
       });
       el.addEventListener('webglcontextrestored', () => {
+        if (this.renderer?.domElement !== el) return;
         this.contextLost = false;
       });
       this.renderTarget = new THREE.WebGLRenderTarget(size, size, {
