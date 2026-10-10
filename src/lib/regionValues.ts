@@ -91,12 +91,39 @@ export function regionImage(f: RegionField, kind: 'shape' | 'mask', mode: 'thumb
         img.data.set([px[0], px[1], px[2], 255], k);
       } else {
         const idle = o.outside ? inside : !inside;
-        img.data.set(edge ? [ar, ag, ab, 235] : idle ? [8, 8, 12, 140] : [0, 0, 0, 0], k);
+        img.data.set(idle ? [8, 8, 12, 150] : [0, 0, 0, 0], k);
       }
     }
   }
   ctx.putImageData(img, 0, 0);
   return c.toDataURL('image/png');
+}
+
+/**
+ * The region's edge as line segments (marching squares on the values, interpolated), each end in
+ * 0–1 of the picture across and down (top 0): a smooth outline to draw over the picture.
+ */
+export function regionEdge(f: RegionField, kind: 'shape' | 'mask'): Array<[number, number, number, number]> {
+  const lvl = kind === 'shape' ? 0 : 0.5;
+  const v = (i: number, j: number) => f.data[j * f.w + i] - lvl;
+  const out: Array<[number, number, number, number]> = [];
+  const X = (i: number) => (i + 0.5) / f.w, Y = (j: number) => 1 - (j + 0.5) / f.h;
+  for (let j = 0; j < f.h - 1; j++) for (let i = 0; i < f.w - 1; i++) {
+    const a = v(i, j), b = v(i + 1, j), c = v(i + 1, j + 1), d = v(i, j + 1);
+    const pts: Array<[number, number]> = [];
+    const cross = (p: number, q: number, x0: number, y0: number, x1: number, y1: number) => {
+      if ((p < 0) === (q < 0)) return;
+      const t = p / (p - q);
+      pts.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]);
+    };
+    cross(a, b, X(i), Y(j), X(i + 1), Y(j));
+    cross(b, c, X(i + 1), Y(j), X(i + 1), Y(j + 1));
+    cross(c, d, X(i + 1), Y(j + 1), X(i), Y(j + 1));
+    cross(d, a, X(i), Y(j + 1), X(i), Y(j));
+    if (pts.length >= 2) out.push([pts[0][0], pts[0][1], pts[1][0], pts[1][1]]);
+    if (pts.length === 4) out.push([pts[2][0], pts[2][1], pts[3][0], pts[3][1]]);
+  }
+  return out;
 }
 
 /**

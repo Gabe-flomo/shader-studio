@@ -13,7 +13,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { picToView } from '../../agentBuilder/diagram';
 import { type MadeShape, newMadeShape, readMadeShape, textBoxes } from '../../agentBuilder/madeShapes';
 import { setMadeShape } from '../../agentBuilder/whereActions';
-import { regionField, regionImage, slopeArrows } from '../../lib/regionValues';
+import { regionEdge, regionField, regionImage, slopeArrows } from '../../lib/regionValues';
 import type { ViewRect } from '../builders/studio/LiveViewport';
 import type { WhereDrawing, WhereShown } from './WherePicker';
 
@@ -225,15 +225,20 @@ function GraphRegion({ shown, box, label }: { shown: WhereShown; box: { w: numbe
   const im = box.image;
   const nodeKey = useNodeGraphStore(s => { const nd = s.nodes.find(x => x.id === r.nodeId); return nd ? JSON.stringify(nd.params) : ''; });
   const [url, setUrl] = useState('');
+  const [segs, setSegs] = useState<Array<[number, number, number, number]>>([]);
+  const edge = segs.map(([x0, y0, x1, y1]) => `M ${(im.x + x0 * im.w).toFixed(1)} ${(im.y + y0 * im.h).toFixed(1)} L ${(im.x + x1 * im.w).toFixed(1)} ${(im.y + y1 * im.h).toFixed(1)}`).join(' ');
   useEffect(() => {
     setUrl('');
+    setSegs([]);
     if (r.kind !== 'shape' && r.kind !== 'mask') return;
     let alive = true;
     const aspect = im.w / Math.max(im.h, 1);
-    const h = 108, w = Math.max(8, Math.round(h * aspect));
+    const h = 216, w = Math.max(8, Math.round(h * aspect));
     const t = setTimeout(() => {
       regionField(useNodeGraphStore.getState().nodes, r.nodeId, r.outputKey, w, h).then(f => {
-        if (alive && f) setUrl(regionImage(f, r.kind as 'shape' | 'mask', 'shade', { outside: shown.use === 'obstacle' ? !shown.outside : shown.outside, accent: [91, 140, 255] }));
+        if (!alive || !f) return;
+        setUrl(regionImage(f, r.kind as 'shape' | 'mask', 'shade', { outside: shown.use === 'obstacle' ? !shown.outside : shown.outside }));
+        setSegs(regionEdge(f, r.kind as 'shape' | 'mask'));
       }, () => {});
     }, 80);
     return () => { alive = false; clearTimeout(t); };
@@ -242,6 +247,8 @@ function GraphRegion({ shown, box, label }: { shown: WhereShown; box: { w: numbe
   return (
     <svg data-region-overlay="graph" data-region-kind={r.kind} data-region-shaded={url ? 'yes' : 'no'} width={box.w} height={box.h} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
       {url && <image href={url} x={im.x} y={im.y} width={im.w} height={im.h} preserveAspectRatio="none" style={{ imageRendering: 'auto' }} />}
+      <defs><clipPath id="ab-region-clip"><rect x={im.x} y={im.y} width={im.w} height={im.h} /></clipPath></defs>
+      {edge && <path data-region-edge d={edge} clipPath="url(#ab-region-clip)" fill="none" stroke="#5b8cff" strokeWidth={2.2} strokeLinecap="round" />}
       <Badge x={im.x + im.w / 2} y={im.y + 20} text={words} />
     </svg>
   );

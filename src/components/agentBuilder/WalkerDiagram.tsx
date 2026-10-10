@@ -263,8 +263,8 @@ export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3, cam
         {shape === 'line' && <line x1={c.x - rpx} y1={c.y} x2={c.x + rpx} y2={c.y} stroke={accent} strokeWidth={3} />}
         {shape === 'point' && <circle cx={c.x} cy={c.y} r={6} fill={accent} />}
         {shape === 'screen' && <rect x={im.x + 3} y={im.y + 3} width={im.w - 6} height={im.h - 6} fill="none" stroke={accent} strokeWidth={2.5} strokeDasharray="8 6" />}
-        {(shape === 'picture' || shape === 'field') && tag({ x: c.x, y: c.y + 24 }, 'born', 'bright', 'bright')}
-        {tag({ x: c.x, y: Math.max(im.y + 18, c.y - Math.max(rpx, 8) - 16) }, 'born', born.count.toUpperCase().replace('K', 'k'), 'count')}
+        {/* Born in a region (the Where picker): the region itself is drawn by its overlay. */}
+        {shape !== 'picture' && shape !== 'field' && tag({ x: c.x, y: Math.max(im.y + 18, c.y - Math.max(rpx, 8) - 16) }, 'born', born.count.toUpperCase().replace('K', 'k'), 'count')}
       </g>
     );
   }

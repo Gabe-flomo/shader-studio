@@ -212,7 +212,7 @@ export const phrase = {
   born(n: Noun, shape: string, size: number, count: string): string {
     const many = count.toUpperCase().replace('K', 'k');
     const at = shape === 'screen' ? 'all over the picture' : shape === 'point' ? 'at one point'
-      : shape === 'picture' || shape === 'field' ? 'where the picture is bright'
+      : shape === 'picture' ? 'where a picture is bright' : shape === 'field' ? 'only inside a region (Or born inside)'
         : `in a ${shape === 'sphere' ? 'shell' : shape === 'ball' ? 'ball' : shape} of size ${num(size, 2)}`;
     return `Born ${at}: ${many} ${n.many}.`;
   },

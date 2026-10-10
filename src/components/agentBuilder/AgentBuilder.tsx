@@ -284,12 +284,18 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
     flush();
     const next = setWhere(groupId, use, pick, edit);
     if (next) { setSet(next); setPreset(null); }
+    // Born somewhere else: start the walkers over so they are born there.
+    if (use === 'born') setTimeout(() => restartAgents(groupId), 400);
   };
-  const whereCtx: WhereFocus = {
-    groupId, d3: group?.params.space === '3d', shown: whereShown,
+  // One context value while nothing it holds changes (its readers re-render only then).
+  const applyRef = useRef(applyWhere);
+  applyRef.current = applyWhere;
+  const space3d = group?.params.space === '3d';
+  const whereCtx = useMemo<WhereFocus>(() => ({
+    groupId, d3: space3d, shown: whereShown,
     show: w => setWhereShown(o => (o?.key === w?.key && o?.region?.nodeId === w?.region?.nodeId && o?.outside === w?.outside ? o : w)),
-    drawing, draw: setDrawing, apply: applyWhere,
-  };
+    drawing, draw: setDrawing, apply: (u, p, e) => applyRef.current(u, p, e),
+  }), [groupId, space3d, whereShown, drawing]);
   const trailStopsKey = useNodeGraphStore(s => JSON.stringify(stopsOf(trailPaletteOf(s.nodes, groupId)).map(cssOf)));
   // A kind added or taken away: start the walkers over once the rules are in, so births share them
   // out among the kinds (walkers born all at once keep the kind they were born with).

@@ -147,7 +147,7 @@ describe('trail channels', () => {
     expect($('[data-channel="0"]')?.textContent).toMatch(/read by.*Senses/);
     click($('[data-channel-add]'));
     settle();
-    expect(groupRules(group()).channels[1]).toBe('home');
+    expect(groupRules(group()).channels[1]).toBe('food');
     click($('[data-channel-name="1"]'));
     input($('[data-channel-name-input="1"]'), 'food');
     blur($('[data-channel-name-input="1"]'));

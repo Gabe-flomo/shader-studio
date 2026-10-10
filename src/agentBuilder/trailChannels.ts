@@ -55,8 +55,9 @@ export function channelSwatches(set: AgentRuleSet, o: { velocity?: boolean } = {
 export function channelChips(set: AgentRuleSet, sp: number): Array<{ value: ChannelRef; label: string; dot: string }> {
   const own = Math.min(3, sp);
   return [
-    { value: 'own' as ChannelRef, label: `its trail · ${colourWord(channelColour(set, own))}`, dot: channelColour(set, own) },
-    ...channelSwatches(set).map(c => ({ value: c.index as ChannelRef, label: `${c.label} · ${c.word}`, dot: c.colour })),
+    { value: 'own' as ChannelRef, label: `its trail${set.channels[own]?.trim() ? ` (${set.channels[own].trim()})` : ''} · ${colourWord(channelColour(set, own))}`, dot: channelColour(set, own) },
+    // Its own channel is "its trail" already (with one kind, the same channel: shown once).
+    ...channelSwatches(set).filter(c => c.index !== own || (c.name && set.species.length > 1)).map(c => ({ value: c.index as ChannelRef, label: `${c.label} · ${c.word}`, dot: c.colour })),
   ];
 }
 
@@ -75,7 +76,8 @@ export function addChannel(set: AgentRuleSet, name?: string): { set: AgentRuleSe
   const shown = new Set(channelSwatches(set).map(c => c.index));
   const i = [0, 1, 2, 3].find(k => !shown.has(k));
   if (i === undefined) return null;
-  return { set: renameChannel(set, i, name ?? ['food', 'home', 'danger', 'path'][i] ?? `trail ${i + 1}`), index: i };
+  const taken = new Set(set.channels.map(c => c.trim()));
+  return { set: renameChannel(set, i, name ?? ['food', 'home', 'danger', 'path'].find(w => !taken.has(w)) ?? `trail ${i + 1}`), index: i };
 }
 
 /**

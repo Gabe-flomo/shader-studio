@@ -178,7 +178,7 @@ function StatesEditor({ set, sp, update }: { set: AgentRuleSet; sp: number; upda
         <span key={i} data-state={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <ColorSwatch size="sm" showHex={false} label={`${st.name} colour`} value={st.colour as Rgb} onChange={c => patch(i, { colour: c as Rgb })} />
           {editing === i
-            ? <input autoFocus defaultValue={st.name} aria-label="State name" data-state-name-input={i}
+            ? <input autoFocus onFocus={e => e.currentTarget.select()} defaultValue={st.name} aria-label="State name" data-state-name-input={i}
               onBlur={e => { setEditing(null); if (e.currentTarget.value.trim()) patch(i, { name: e.currentTarget.value.trim().slice(0, 24) }); }}
               onKeyDown={e => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); if (e.key === 'Escape') setEditing(null); }}
               style={{ flex: 1, height: 22, padding: '0 6px', border: 0, outline: 'none', borderRadius: 6, background: tk.bg.panel, color: tk.text.primary, boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, font: `500 12px ${fontFamily.ui}` }} />

@@ -64,7 +64,7 @@ function ChannelRow({ c, set, update }: { c: ChannelSwatch; set: AgentRuleSet; u
         <button type="button" data-channel-colour={c.index} aria-label={`${c.label}'s colour: ${c.word}`} title="Its colour" onClick={() => setPick(v => !v)}
           style={{ width: 18, height: 18, padding: 0, border: 0, borderRadius: '50%', background: c.colour, cursor: 'pointer', boxShadow: `0 0 0 2px ${tk.bg.panel}, 0 0 0 3px ${alpha(c.colour, 0.7)}`, flexShrink: 0 }} />
         {editing ? (
-          <input data-channel-name-input={c.index} autoFocus value={text} maxLength={24} aria-label="Channel name"
+          <input data-channel-name-input={c.index} autoFocus onFocus={e => e.currentTarget.select()} value={text} maxLength={24} aria-label="Channel name"
             onChange={e => setText(e.currentTarget.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setText(c.name); setEditing(false); } }}
             style={{ flex: 1, minWidth: 0, height: 22, padding: '0 6px', border: 0, outline: 'none', borderRadius: 6, background: tk.bg.panel, color: tk.text.primary, boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, font: `600 12.5px ${fontFamily.ui}` }} />
         ) : (
@@ -89,11 +89,13 @@ function ChannelRow({ c, set, update }: { c: ChannelSwatch; set: AgentRuleSet; u
   );
 }
 
-/** Before / after: a line of trail now, after ¼ s and after 1 s, from Fades and Spreads. */
+/** Before / after: a line of trail now, after one half-life and after three, from Fades and Spreads. */
 export function FadeStrip({ halfLife, diffuse, colour = '#e8a33a' }: { halfLife: number; diffuse: number; colour?: string }) {
   const tk = useTokens();
-  const at = [0, 0.25, 1];
-  const strips = useMemo(() => fadeStrip(halfLife, diffuse, at), [halfLife, diffuse]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Now, one half-life later and three: what Fades and Spreads leave of a line of trail.
+  const at = useMemo(() => [0, Math.max(halfLife, 1 / 60), Math.max(halfLife, 1 / 60) * 3], [halfLife]);
+  const strips = useMemo(() => fadeStrip(halfLife, diffuse, at), [halfLife, diffuse, at]);
+  const secs = (t: number) => `${t < 1 ? Math.round(t * 1000) / 1000 : Math.round(t * 100) / 100} s`;
   return (
     <div data-fade-strip style={{ display: 'flex', gap: 6 }}>
       {strips.map((v, k) => {
@@ -103,7 +105,7 @@ export function FadeStrip({ halfLife, diffuse, colour = '#e8a33a' }: { halfLife:
             <span style={{ height: 22, borderRadius: 5, background: tk.bg.render, boxShadow: `inset 0 0 0 1px ${tk.border.subtle}`, overflow: 'hidden', display: 'flex' }}>
               {v.map((x, i) => <span key={i} style={{ flex: 1, background: colour, opacity: Math.min(1, Math.sqrt(Math.max(0, x)) * 1.2) }} />)}
             </span>
-            <span style={{ fontSize: 10, color: tk.text.faint, textAlign: 'center' }}>{k === 0 ? 'now' : `${at[k] === 1 ? '1 s' : '¼ s'} · ${Math.round(peak * 100)}%`}</span>
+            <span style={{ fontSize: 10, color: tk.text.faint, textAlign: 'center' }}>{k === 0 ? 'now' : `${secs(at[k])} · ${Math.round(peak * 100)}%`}</span>
           </span>
         );
       })}
