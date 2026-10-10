@@ -1,6 +1,7 @@
 import { offerGraphExport } from '../playfile/exportMenus';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { SAVED_GRAPHS_CHANGED, useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { groupGraphsByTime, sortGraphsByRecent } from '../../store/graphRecency';
 import { getMembership, loadFolders, toggleFolderCollapsed } from '../../utils/assetFolders';
 
 /** The folder scope the sidebar's Saved Graphs list uses (FolderableList scopeKey) */
@@ -26,6 +27,7 @@ import { KeyboardPill } from '../play/engine/KeyboardPill';
 import { reportFileResult, reportGlslImport } from './reportFileResult';
 import { importAnyFile } from './importAnyFile';
 import { SaveGraphForm, VersionsButton } from './GraphVersions';
+import { AutosaveIndicator } from './AutosaveControls';
 import { GraphLinkBadge } from './GraphLinks';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './rebuildAction';
 import { getTopNavFold } from './topNavFold';
@@ -117,7 +119,7 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
       {/* The name sits before the tabs, so the strip opening on hover only takes up empty space.
           Save and Load sit beside it: everything about which graph is open is in one place. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0, flexShrink: 1 }}>
-        <GraphNameChip />
+        <GraphNameChip compact={iconOnly || barWidth < 1500} />
         <SaveGraphButton compact={iconOnly} align="start" />
         <LoadGraphButton align="start" />
       </div>
@@ -310,7 +312,7 @@ function AccountButton() {
  * and a dot while there are unsaved changes. Clicking it opens the save form (name it, or save
  * a new version): this is how a graph is saved.
  */
-function GraphNameChip() {
+function GraphNameChip({ compact = false }: { /** A narrow bar: the autosave indicator shows only its countdown. */ compact?: boolean }) {
   const tk = useTokens();
   const current = useNodeGraphStore(s => s.currentGraph);
   const dirty = useNodeGraphStore(s => s.graphDirty);
@@ -319,7 +321,7 @@ function GraphNameChip() {
   const name = current?.name ?? 'Untitled';
   return (
     <span ref={anchor} style={{ display: 'inline-flex', minWidth: 0, flexShrink: 1 }}>
-      <Tooltip label={current ? (dirty ? `Unsaved changes: save “${name}” as a new version (Minor), a new family (Major), in place, or under another name` : `Saved: “${name}” ${current.major}.${current.minor}`) : 'Not saved yet: give it a name to save it'}>
+      <Tooltip grow label={current ? (dirty ? `Unsaved changes: save “${name}” as a new version (Minor), a new family (Major), in place, or under another name` : `Saved: “${name}” ${current.major}.${current.minor}`) : 'Not saved yet: give it a name to save it'}>
         <button
           type="button"
           onClick={() => setOpen(o => !o)}
@@ -338,6 +340,7 @@ function GraphNameChip() {
           <Icon name="chevD" size={11} style={{ color: tk.text.faint, flexShrink: 0 }} />
         </button>
       </Tooltip>
+      <AutosaveIndicator compact={compact} onClick={() => setOpen(o => !o)} />
       {open && (
         <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="start" width={320} padding={10}>
           <SaveGraphForm onDone={() => setOpen(false)} />
@@ -397,8 +400,14 @@ export function LoadGraphButton({ align = 'end' }: { /** Which edge of the butto
   const names = open ? getSavedGraphNames() : [];
   const folders = open ? loadFolders(GRAPH_FOLDER_SCOPE) : [];
   const membership = open ? getMembership(GRAPH_FOLDER_SCOPE) : {};
-  const inFolder = (folderId: string) => names.filter(n => membership[n] === folderId);
-  const loose = names.filter(n => !membership[n] || !folders.some(f => f.id === membership[n]));
+  // Recent work first: graphs outside folders under Today / This week / Earlier (by the newest save
+  // of any version), then the folders, each newest first inside.
+  const now = Date.now();
+  const inFolder = (folderId: string) => sortGraphsByRecent(names.filter(n => membership[n] === folderId));
+  const loose = groupGraphsByTime(names.filter(n => !membership[n] || !folders.some(f => f.id === membership[n])), now);
+  const head = (label: string) => (
+    <div style={{ padding: '8px 8px 3px', color: tk.text.faint, font: `700 10px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</div>
+  );
   const row = (n: string, indent: boolean) => (
     <LoadRow
       key={n}
@@ -418,7 +427,9 @@ export function LoadGraphButton({ align = 'end' }: { /** Which edge of the butto
           {names.length === 0 ? (
             <div style={{ padding: '10px 10px', color: tk.text.faint }}>No saved graphs yet.</div>
           ) : (
-            <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+            <div data-load-scroll="" style={{ maxHeight: 'min(420px, 60vh)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
+              {loose.map(g => <div key={g.id}>{head(g.label)}{g.items.map(n => row(n, false))}</div>)}
+              {folders.length > 0 && head('Folders')}
               {folders.map(f => {
                 const items = inFolder(f.id);
                 return (
@@ -440,7 +451,6 @@ export function LoadGraphButton({ align = 'end' }: { /** Which edge of the butto
                   </div>
                 );
               })}
-              {loose.map(n => row(n, false))}
             </div>
           )}
         </Popover>

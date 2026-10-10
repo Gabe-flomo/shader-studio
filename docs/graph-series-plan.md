@@ -1,6 +1,6 @@
 # Graph series: versions as major.minor (plan)
 
-**Status:** step 2 (numbering, save menu, size cap) is built on the existing localStorage store. Step 1 (IndexedDB) and the Files Series view are next.
+**Status:** step 2 (numbering, save menu, size cap) is built on the existing localStorage store, with saved graphs listed by time and autosave as minor versions (2026-10-10). Step 1 (IndexedDB) and the Files Series view are next.
 
 ## The idea
 
@@ -69,6 +69,28 @@ Saving asks exactly that: **Minor** (default, Enter), **Major**, or **New graph*
 - Files shows versions as 2.3 in Family folders (#698).
 - `.playfile`: export this version or the whole series; a whole series imports with its versions under a new name (#700).
 - Play Background: the graph picker can queue a series' every version, or the newest of each family, as sources ("Curves 2.3"), so Change background steps through iterations of one idea.
+
+## Saved graphs by time (2026-10-10)
+
+- The top bar's Load menu and the sidebar's Saved Graphs list graphs under **Today** (the last 24 hours), **This week** (the last 7 days) and **Earlier**, newest first; an undated graph (saved before `savedAt`) sits at the end of Earlier.
+- "Worked on" is the latest save of **any** version in the series (`lastWorkedOn` in `src/store/graphRecency.ts`): saving an older version in place counts. It reads the history's own `savedAt` fields without parsing every stored graph, and caches per series until the stored text changes.
+- **Folders:** the time groups hold the graphs outside folders; the folders follow as their own **Folders** section, each sorted newest first inside. Recent work stays at the top without breaking anyone's folders, and a graph is never listed twice.
+- Both lists scroll inside themselves: the Load menu at `min(420px, 60vh)`, the sidebar at `min(60vh, 560px)` (FolderableList's `maxHeight`; its other lists are unchanged).
+- The Files page keeps its name order: it is the storage manager (sizes, clean up, moving things between folders), and its graph rows already show when each was saved.
+
+## Autosave (2026-10-10)
+
+Not crash recovery (docs/crash-recovery.md keeps snapshots of unsaved work outside a graph's history). This saves the open graph **as a version**:
+
+- **What:** the next **minor** version of the open series, through `saveGraph(name, "Autosave", "minor", { auto: true })`, the normal save path, so the size cap, the storage limit (`safeSetItem`) and the history trimming all apply. The version carries the note "Autosave" and `auto: true`.
+- **When:** every 2 / 5 / 10 / 15 minutes (5 by default; `shader-studio:settings:versionAutosaveMin`, which also takes a shorter dev value such as `0.25`), and only if the graph changed since its last save. A save by hand starts the countdown again.
+- **Which graphs:** only a graph saved once (an untitled graph or an example can't autosave). It is **on by default for each graph**: it starts when a named graph is opened or saved, and stops when you leave it. Turning it off is for this graph only; the next graph opened starts on again. "On for every saved graph I open" (`…:versionAutosaveOn`) changes that default.
+- **How long:** "While it's open" (the default) or "For 30 minutes"; when the 30 minutes are up, a last change is saved and it ends with a note.
+- **Waiting:** while Convert holds a scratch graph (`scratch`, `endScratch`) or a recording or render holds autosaves (`holdAutosave`), a due save waits and is tried again 5 s later. The builders and explain views don't swap the graph, so there is nothing else to wait for.
+- **Failing:** a failed save (storage full, the storage limit) **pauses** autosave with the reason, in a toast (with Resume) and in the save menu; it resumes from there, or when a save by hand works. It never retries in a loop.
+- **Trimming:** `trimVictim` drops the oldest **autosave** first, then the oldest tweak saved by hand; a family's first and latest are still never dropped. Saving over an autosave in place makes it an ordinary version.
+- **Seeing it:** an indicator by the name chip ("Autosave on · next in 3 min"; on a narrower bar just the countdown), which flashes "Saved 2.4 automatically" for 4 s after each autosave and shows "Autosave paused" when paused. Clicking it opens the save menu, whose Autosave section has the switch, how often, how long, and the default.
+- Code: `src/files/versionAutosave.ts` (the rules, timers injected), `src/files/versionAutosaveApp.ts` (wired to the store, started in `main.tsx`), `src/components/shell/AutosaveControls.tsx`.
 
 ## Build order
 

@@ -1072,7 +1072,7 @@ interface NodeGraphState {
    * is kept in the project's history (graphVersions.ts). `note` says what changed.
    */
   /** Save under `name`: kind minor (default with that series open), major (a new family), inPlace (over the open version) or new (a new series, or a new family when the name exists). docs/graph-series-plan.md */
-  saveGraph: (name: string, note?: string, kind?: SaveKind) => Promise<FileResult>;
+  saveGraph: (name: string, note?: string, kind?: SaveKind, opts?: { /** Autosave (files/versionAutosave.ts): the version is marked `auto`, and history trimming drops those first. */ auto?: boolean }) => Promise<FileResult>;
   /** The saved graph open right now (loaded or last saved), and which version; null for examples, imports and new graphs. */
   currentGraph: { name: string; version: number; major: number; minor: number; latest: boolean } | null;
   /** Bumped whenever a whole different graph is loaded (an example, a saved graph, an import): not by edits or undo. */
@@ -5649,11 +5649,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   deselectAll: () => set({ selectedNodeIds: [] }),
 
   // ─── Save / Load ───────────────────────────────────────────────────────────
-  saveGraph: async (name, note, kind) => {
+  saveGraph: async (name, note, kind, opts) => {
     const { nodes, looseGroups, play, datasets, currentGraph: open } = get();
     // `play` (and `datasets`) are left out when empty so graphs without them look as they always did.
     const playField = { ...(isPlayRecordEmpty(play) ? {} : { play }), ...datasetsField(datasets) };
-    const noteField = note?.trim() ? { note: note.trim().slice(0, 300) } : {};
+    const noteField = { ...(note?.trim() ? { note: note.trim().slice(0, 300) } : {}), ...(opts?.auto ? { auto: true } : {}) };
     // Its links to presentations belong to the graph, not to a version: a new version keeps them.
     const linked = linkedPresentationsOf(name);
     const linkField = linked.length ? { [GRAPH_LINK_FIELD]: linked } : {};
