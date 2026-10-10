@@ -627,6 +627,29 @@ export class AgentRunner {
     this.compileMesh.material = this.placeholder;
   }
 
+  /**
+   * The WebGL context was lost: everything the runner holds on the GPU outside the shared targets
+   * (thumbnails, readbacks and their buffers, neighbour grids, the hood) goes now, while deleting
+   * is a no-op. Each is made again on its next use; recompileAll() follows on the restore. Left
+   * for later, they would be deleted on (or bound to) the new context as the old one's objects.
+   */
+  contextLost(): void {
+    this.hood?.dispose();
+    this.hood = null;
+    for (const slug of [...this.nbGrids.keys()]) this.dropNeighbours(slug);
+    for (const r of this.reads.values()) { for (const rt of r.rts) rt.dispose(); r.reader.dispose(); }
+    this.reads.clear();
+    for (const id of [...this.dotReads.keys()]) this.dropDots(id);
+    for (const k of [...this.spotReads.keys()]) this.dropSpot(k.slice('spot:'.length));
+    for (const r of this.memRanges.values()) { r.rt.dispose(); r.reader.dispose(); }
+    this.memRanges.clear();
+    this.thumbRt?.dispose();
+    this.thumbRt = null;
+    this.bessel?.dispose();
+    // three.js deletes a geometry's vertex arrays when it is disposed: now, not on the new context.
+    this.pointGeometry.dispose();
+  }
+
   /** Compile every update shader again (after the GPU context was rebuilt). */
   recompileAll(): void {
     const spec = this.spec, vs = this.vertexShader;

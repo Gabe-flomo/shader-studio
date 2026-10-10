@@ -199,6 +199,12 @@ export class PassRunner {
     this.compileMesh.material = this.thumbMat;
   }
 
+  /** The WebGL context was lost: the thumbnail target goes now (made again on its next use), while deleting is a no-op. */
+  contextLost(): void {
+    this.thumbRt?.dispose();
+    this.thumbRt = null;
+  }
+
   /** Compile every program again (after the GPU context was rebuilt). */
   recompileAll(): void {
     const passes = this.entries.map(e => e.spec);
