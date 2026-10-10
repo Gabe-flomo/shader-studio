@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.135',
+    date: '2026-10-10',
+    title: 'Everyday fixes',
+    highlights: [
+      { area: 'Studio', text: 'New nodes land where you are looking (builders, Do bar, recipes), and Convert / Auto layout keep graphs compact instead of stranding nodes far left.' },
+      { area: 'Studio', text: 'Agent Builder: smooth How far ahead slider, Surprise me is back, Edit this one / Start over / Add another, and advanced rules stay in the builder.' },
+      { area: 'Studio', text: 'Expression Blocks: select a number → Make a slider; Copy as code and Make a function; a simpler card; Functions fold out from the side.' },
+      { area: 'Studio', text: 'Fixed: the preview after a lost GPU context (no more console errors), and the Do bar reads back agents recipes it printed.' },
+    ],
+  },
+  {
     id: '2026.10.134',
     date: '2026-10-10',
     title: 'Pictures inside 3D scenes',
