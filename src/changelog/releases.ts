@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.133',
+    date: '2026-10-10',
+    title: 'One Texture node',
+    highlights: [
+      { area: 'Studio', text: 'One Texture node for pictures, videos and the webcam: upload, drop, pick from the library, or paste an image URL. Crop, rotate, tile and trim on the card.', link: { kind: 'doc', path: 'docs/texture-node.md' } },
+      { area: 'Studio', text: 'Fixed: saved graphs reopen with their pictures. Each is kept in the library and embedded small in the graph, so it survives reloads and travels in .playfiles.' },
+      { area: 'Studio', text: 'Webcam on the card with Play\'s camera and hand controls; map a hand to any slider. Generate depth adds a wired Depth node (or Depth Composite in 3D).' },
+    ],
+  },
+  {
     id: '2026.10.132',
     date: '2026-10-10',
     title: 'Glow and shadows on pictures',
