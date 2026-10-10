@@ -45,11 +45,13 @@ function useMidiDeviceNames(): string[] {
 
 const DEFAULT_OPEN = new Set(['Control only', 'Signal']);
 
-export function MiniMapper({ anchorRef, target, label, onClose }: {
+export function MiniMapper({ anchorRef, target, label, onClose, unfold }: {
   anchorRef: React.RefObject<HTMLElement | null>;
   target: MiniMapperTarget;
   label: string;
   onClose: () => void;
+  /** Sections open from the start besides the usual ones (the Texture card's webcam opens Hands). */
+  unfold?: string[];
 }) {
   const tk = useTokens();
   const play = useNodeGraphStore(s => s.play);
@@ -58,7 +60,7 @@ export function MiniMapper({ anchorRef, target, label, onClose }: {
   const hasCamera = play.layers.some(l => l.kind === 'camera');
   const readers = audioReaderBank.readers();
   const [query, setQuery] = useState('');
-  const [unfolded, setUnfolded] = useState<Set<string>>(() => new Set(DEFAULT_OPEN));
+  const [unfolded, setUnfolded] = useState<Set<string>>(() => new Set([...DEFAULT_OPEN, ...(unfold ?? [])]));
   const [learning, setLearning] = useState(false);
   const [wired, setWired] = useState<{ controlId: string; mappingId?: string } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);

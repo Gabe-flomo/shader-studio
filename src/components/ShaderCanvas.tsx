@@ -35,6 +35,9 @@ import { bindGpuParticles, drawGpuParticles, gpuParticlesActive, particleSoundOf
 import { padGridUniforms } from '../lib/padGrid';
 import { attachLayerDrop } from '../play/layerDrop';
 import { videoEngine } from '../lib/videoEngine';
+import { installPictureRestore } from '../lib/texture/pictureHost';
+import { webcamTextures } from '../lib/texture/webcamHost';
+import { cameraInput } from '../lib/cameraInput';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
 import { appFocused, backgroundFrame, backgroundMode, onFocusChange, onLongHidden } from '../lib/backgroundPolicy';
 import { onPreviewHold, previewHeld } from '../lib/previewHold';
@@ -362,6 +365,16 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     collect(useNodeGraphStore.getState().nodes);
     const off = useNodeGraphStore.subscribe((s, prev) => { if (s.nodes !== prev.nodes) collect(s.nodes); });
     return () => { off(); videoEngine.setHost(null); };
+  }, []);
+  // Texture nodes (docs/texture-node.md): a saved graph's pictures come back (lib/texture/pictureHost.ts),
+  // and a webcam Texture node shows the camera (lib/texture/webcam.ts).
+  useEffect(() => {
+    const offPictures = installPictureRestore();
+    const sync = () => webcamTextures.sync(useNodeGraphStore.getState().nodes);
+    sync();
+    const offNodes = useNodeGraphStore.subscribe((s, prev) => { if (s.nodes !== prev.nodes) sync(); });
+    const offCam = cameraInput.onStatus(() => { sync(); requestRenderRef.current(); });
+    return () => { offPictures(); offNodes(); offCam(); };
   }, []);
   // Time Cube nodes (docs/time-cube.md): their stacked frames come in through the store's node textures, like a Texture Input's.
   useEffect(() => {
@@ -1638,7 +1651,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       // continues from where it stopped. Takes and offline renders drive their own time (stepLayers)
       // and never go through this draw() call, so they're unaffected.
       const layerDt = playing ? dt : 0;
-      const videoActive = videoIdsRef.current.some(id => videoEngine.active(id));
+      const videoActive = videoIdsRef.current.some(id => videoEngine.active(id)) || webcamTextures.active();
       const shaderMoving = playing && (
         usesTimeRef.current || hasTimeNodeRef.current || gpuParticlesActive() ||
         audioAmps.size > 0 || liveValues.size > 0 || videoActive || bakedVideos.active() || isStatefulRef.current || echoRef.current !== null ||

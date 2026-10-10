@@ -11,6 +11,9 @@ import { askText } from '../components/ui/dialogStore';
 import { toast } from '../components/ui/toastStore';
 import { LIGHTING_CATEGORY, MARCH_GROUP_TYPES, planSceneGroupAdd, planSmart3DAdd } from '../nodes/smart3d';
 import { TIME_CUBE_AUTO_TYPES, planTimeCubeAdd } from '../lib/timeCube/autoWire';
+import { switchTextureKind, textureKindOf, type TextureKind } from '../lib/texture/textureSource';
+import { planGenerateDepth, type DepthPlan, type Rect as ViewRect } from '../lib/texture/generateDepth';
+import { ensureCameraLayer } from '../lib/texture/webcam';
 import { addToScene, buildSceneSubgraphFor, camerasToWiden, rigSettingsFor, sceneRole, targetScene } from '../nodes/scene3dShapes';
 import { VOLUMETRIC_LOOP_TYPES, volumetricOff, volumetricOn } from '../nodes/volumetricAuto';
 import { askChoice } from '../components/ui/dialogStore';
@@ -44,7 +47,7 @@ import { retypeDataNode } from '../nodes/definitions/data';
 import { migratePlayRecord } from './migratePlay';
 import { clearLegacyColumnsWire } from '../nodes/definitions/gridColumns';
 import { playEngine } from '../lib/playEngine';
-import { bakeControlValues, bakeLayerValues } from '../play/playControls';
+import { bakeControlValues, bakeLayerValues, playId } from '../play/playControls';
 import { TRACK_LIMIT, buildPlayHtml, type EmbedOptions, type PlayHtmlInput, type PlayMedia, type PlayMediaFile } from '../play/exportHtml';
 import type { CpSaved } from '../play/kit/clipPlay.js';
 import { bakeFor } from '../types/playTracking';
@@ -706,6 +709,17 @@ interface NodeGraphState {
   registerFitView: (cb: () => void) => void;
   _viewportCenterGetter: (() => { x: number; y: number }) | null;
   registerViewportCenterGetter: (cb: () => { x: number; y: number }) => void;
+  /** The part of the graph on screen, in graph coordinates (registered by NodeGraph): where nodes made from a card go. */
+  _viewportRectGetter: (() => ViewRect) | null;
+  registerViewportRectGetter: (cb: (() => ViewRect) | null) => void;
+  /**
+   * The Texture node's source (docs/texture-node.md): Image, Video or Webcam. The same node
+   * (id, place, wires) with the type that source needs; Webcam adds a hidden Camera layer to
+   * Play when there is none. One undo step.
+   */
+  switchTextureSource: (nodeId: string, kind: TextureKind) => void;
+  /** The Texture card's Generate depth: a Depth node (and a Depth Composite in a 3D graph) beside it. One undo step. */
+  generateTextureDepth: (nodeId: string) => DepthPlan | null;
   /** Move the canvas: `pan` in screen px, `zoom` clamped to the canvas's range. Registered by NodeGraph. */
   _setViewCallback: ((pan: { x: number; y: number }, zoom: number) => void) | null;
   registerSetView: (cb: (pan: { x: number; y: number }, zoom: number) => void) => void;
@@ -1816,6 +1830,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   nodeHighlightFilter: null,
   _fitViewCallback: null,
   _viewportCenterGetter: null,
+  _viewportRectGetter: null,
   _setViewCallback: null,
   swapTargetNodeId: null,
   searchPaletteOpen: false,
@@ -2612,6 +2627,28 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
   registerFitView: (cb) => set({ _fitViewCallback: cb }),
   registerViewportCenterGetter: (cb) => set({ _viewportCenterGetter: cb }),
+  registerViewportRectGetter: (cb) => set({ _viewportRectGetter: cb }),
+  switchTextureSource: (nodeId, kind) => {
+    const node = get().nodes.find(n => n.id === nodeId);
+    if (!node || textureKindOf(node) === kind) return;
+    const next = switchTextureKind(node, kind);
+    if (next === node) return;
+    undoManager.push(get().nodes, { label: `Texture: ${kind === 'image' ? 'Image' : kind === 'video' ? 'Video' : 'Webcam'}`, nodeIds: [nodeId] });
+    set(st => ({ nodes: st.nodes.map(n => (n.id === nodeId ? next : n)) }));
+    if (kind === 'webcam') {
+      const made = ensureCameraLayer(get().play, () => playId('layer'), next.params.mirror !== false);
+      if (made.created) get().setPlay(made.play);
+    }
+    get().compile();
+  },
+  generateTextureDepth: (nodeId) => {
+    const plan = planGenerateDepth(get().nodes, nodeId, () => idGenerator.next(), get()._viewportRectGetter?.() ?? null);
+    if (!plan) return null;
+    undoManager.push(get().nodes, { label: 'Generate depth' });
+    set({ nodes: plan.nodes, selectedNodeId: plan.depthId });
+    get().compile();
+    return plan;
+  },
   registerSetView: (cb) => set({ _setViewCallback: cb }),
   setSwapTargetNodeId: (id) => set({ swapTargetNodeId: id }),
   setSearchPaletteOpen: (open) => set({ searchPaletteOpen: open }),

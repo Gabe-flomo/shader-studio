@@ -713,12 +713,13 @@ export function ClipEditor({ source, meta, value, onChange, plan, side, fps = 30
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             {caps.edit && seg<ClipPreviewMode>(mode, [['source', 'Source'], ['result', 'Result']], setMode, 'Preview')}
-            <button type="button" style={btn()} onClick={() => step(-1)} title="Back a frame (←)" aria-label="Back a frame">◀︎|</button>
-            <button type="button" style={{ ...btn(playing), minWidth: 64 }} onClick={togglePlay} title="Play / pause (space)">{playing ? '❚❚ Pause' : '▶ Play'}</button>
-            <button type="button" style={btn()} onClick={() => step(1)} title="Forward a frame (→)" aria-label="Forward a frame">|▶︎</button>
+            {/* A still picture (the Texture node's image) has no time: no transport. */}
+            {!caps.still && <button type="button" style={btn()} onClick={() => step(-1)} title="Back a frame (←)" aria-label="Back a frame">◀︎|</button>}
+            {!caps.still && <button type="button" style={{ ...btn(playing), minWidth: 64 }} onClick={togglePlay} title="Play / pause (space)">{playing ? '❚❚ Pause' : '▶ Play'}</button>}
+            {!caps.still && <button type="button" style={btn()} onClick={() => step(1)} title="Forward a frame (→)" aria-label="Forward a frame">|▶︎</button>}
             {!result && caps.trim && <button type="button" style={btn(loop)} onClick={() => setLoop(v => !v)} title="Play only the kept segments, in order, round and round (forwards: Result plays them as the host will)">⟲ Loop selection</button>}
             {result && !playback && seq.length > 0 && seg<number>(rate, CUBE_RATES.map(r => [r, r ? `${r} fps` : 'Match'] as [number, string]), setRate, 'Result frame rate')}
-            <span style={{ ...small, marginLeft: 'auto', color: tk.text.secondary }}>{readout}</span>
+            <span style={{ ...small, marginLeft: 'auto', color: tk.text.secondary }}>{caps.still ? `${meta.width}×${meta.height}` : readout}</span>
           </div>
           {result && (
             <span style={{ ...small, fontSize: 10.5, color: tk.text.faint }}>
@@ -819,10 +820,10 @@ export function ClipEditor({ source, meta, value, onChange, plan, side, fps = 30
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={label}>Result</span>
               <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
-                {['First', 'Middle', 'Last'].map((n, i) => (
+                {(caps.still ? ['As sampled'] : ['First', 'Middle', 'Last']).map((n, i) => (
                   <figure key={n} style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'center' }}>
                     <canvas ref={resultRefs[i]} width={resW * 2} height={resH * 2} style={{ width: resW, height: resH, borderRadius: 4, background: '#000' }} />
-                    <figcaption style={{ ...small, fontSize: 10.5 }}>{n}{pick ? ` · ${pick[i].toFixed(2)} s` : ''}</figcaption>
+                    <figcaption style={{ ...small, fontSize: 10.5 }}>{n}{pick && !caps.still ? ` · ${pick[i].toFixed(2)} s` : ''}</figcaption>
                   </figure>
                 ))}
               </div>
@@ -832,7 +833,7 @@ export function ClipEditor({ source, meta, value, onChange, plan, side, fps = 30
       </div>
 
       {/* Trimmer */}
-      <div style={{ padding: '10px 16px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ padding: '10px 16px 12px', display: caps.still ? 'none' : 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <b style={{ fontSize: 12.5, color: tk.text.primary, fontVariantNumeric: 'tabular-nums' }}>
             {plan && caps.frameSamples ? `${plan.frames} frames · one every ${plan.every < 1 ? `${plan.every.toFixed(plan.every < 0.1 ? 3 : 2)} s` : `${plan.every.toFixed(2)} s`}`
