@@ -4519,6 +4519,81 @@ Examples:
 
 - `masks Food, Nest` — on an empty graph (just an Output)
 
+### remember
+
+Agent Rules · setting. A named memory each walker keeps: a counter, timer, flag, value, position or level.
+
+Words: `remember`
+
+```
+remember start= fade=
+```
+
+| Slot | What |
+|---|---|
+| start | number |
+| fade | number |
+
+Examples:
+
+- `remember carrying flag` — on an empty graph (just an Output)
+- `remember energy level start=1 fade=0.3` — on an empty graph (just an Output)
+
+### color-by
+
+Agent Rules · setting. Colour each walker by a memory instead of its state. Also: colour-by.
+
+Words: `color-by`, `colour-by`
+
+```
+color-by lo= hi=
+```
+
+| Slot | What |
+|---|---|
+| lo | number |
+| hi | number |
+
+Examples:
+
+- `remember energy level · color-by energy lo=0 hi=1` — on an empty graph (just an Output)
+
+### collide
+
+Agent Rules · setting. In 3D: keep the walkers out of the scene wired into the group.
+
+Words: `collide`
+
+```
+collide reach= margin= cushion= bounce=
+```
+
+| Slot | What |
+|---|---|
+| reach | number |
+| margin | number |
+| cushion | number |
+| bounce | number |
+
+Examples:
+
+- `collide reach=1.6 margin=0.03 cushion=0.18 bounce=0.2` — on an empty graph (just an Output)
+
+### mem
+
+Agent Rules · action. A named memory: change it (an action) or read it (a condition).
+
+Words: `mem`
+
+```
+mem
+```
+
+Examples:
+
+- `remember carrying flag · remember away timer · species Ants: when mem carrying > 0.5 do mem away reset` — on an empty graph (just an Output)
+- `remember energy level · always do mem energy add -0.1/s` — on an empty graph (just an Output)
+
 ### species
 
 Agent Rules · header. A species: its name, speed and states, then its rules (indented, or after a colon on one line).

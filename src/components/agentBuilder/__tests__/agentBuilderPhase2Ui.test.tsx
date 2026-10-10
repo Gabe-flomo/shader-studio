@@ -63,7 +63,7 @@ describe('flocks', () => {
     vi.useFakeTimers();
     start('flock');
     expect($('[data-studio-kind]')?.textContent).toBe('Flock (boids) · 2D');
-    expect($$('[data-studio-section]').map(b => b.getAttribute('data-studio-section'))).toEqual(['born', 'neighbours', 'steering', 'moving', 'memory']);
+    expect($$('[data-studio-section]').map(b => b.getAttribute('data-studio-section'))).toEqual(['born', 'neighbours', 'steering', 'moving', 'memory', 'advanced']);
     const d = () => $('[data-diagram="neighbours"]')!;
     expect(d().getAttribute('data-radius')).toBe('0.05');
     const ring0 = Number(d().getAttribute('data-ring-px'));

@@ -13,6 +13,7 @@ import { Toggle } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
 import { Tooltip } from '../ui/Tooltip';
 import { RulerSlider } from '../ui/RulerSlider';
+import { fineUnit } from '../ui/rulerMath';
 
 export type CardPicture = 'born' | 'senses' | 'turning' | 'moving' | 'trail' | 'advanced'
   | 'gravity' | 'wind' | 'curl' | 'field' | 'attract' | 'drag' | 'fade' | 'die' | 'life' | 'look' | 'neighbours'
@@ -218,14 +219,25 @@ export function SettingRow({ id, label, hint, onFocus, children, right }: {
   );
 }
 
-/** A slider setting (the app's ruler). */
+/** Ranges widened by typing past a slider's end, by setting, for as long as the app is open (the builder's cards remount as you move about). */
+const widened = new Map<string, { min: number; max: number }>();
+
+/**
+ * A slider setting (the app's ruler). A small range (How far ahead's 0–0.12) gets a finer ruler
+ * (rulerMath fineUnit), so it is a comfortable drag rather than a few pixels. Typing past the end
+ * widens the range (the slider conventions), and the wider range is kept for that setting.
+ */
 export function SliderSetting({ id, label, hint, value, min, max, step, onChange, onFocus, disabled, right, defaultValue }: {
   id: string; label: string; hint?: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void;
   onFocus?: (s: string | undefined) => void; disabled?: boolean; right?: ReactNode; defaultValue?: number;
 }) {
+  const key = `${id}:${min}:${max}`;
+  const [range, setRange] = useState(() => widened.get(key) ?? null);
+  const lo = range ? Math.min(range.min, min) : min, hi = range ? Math.max(range.max, max) : max;
   return (
     <SettingRow id={id} label={label} hint={hint} onFocus={onFocus} right={right}>
-      <RulerSlider value={value} min={min} max={max} step={step} onChange={onChange} ariaLabel={label} disabled={disabled} defaultValue={defaultValue} />
+      <RulerSlider value={value} min={lo} max={hi} step={step} onChange={onChange} ariaLabel={label} disabled={disabled} defaultValue={defaultValue}
+        unit={fineUnit} onRange={(a, b) => { const r = { min: a, max: b }; widened.set(key, r); setRange(r); }} />
     </SettingRow>
   );
 }

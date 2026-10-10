@@ -18,7 +18,7 @@ import { alpha, fontFamily, radius, type Tokens } from '../../theme/tokens';
 import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { builderRecipeOf, highlightRecipe, type RecipeTokenKind } from '../../builders/recipe';
-import { openAgentRulesWindow, openGridRulesEditor, useBuilderWindows } from '../../builders/windows';
+import { openAgentBuilder, openGridRulesEditor, useBuilderWindows } from '../../builders/windows';
 import { copyRecipeOf } from '../../builders/open';
 import { editSceneInBuilder, rebuildFromRecipe } from '../../sceneBuilder/actions';
 import { RecipeCode } from '../sceneBuilder/RecipeCode';
@@ -61,7 +61,7 @@ export function RecipeChip({ node, touch = false }: { node: GraphNode; touch?: b
   const openIt = () => {
     if (recipe.kind === 'scene') editSceneInBuilder(node.id);
     else if (recipe.kind === 'grid') openGridRulesEditor(node.id);
-    else openAgentRulesWindow(node.id);
+    else openAgentBuilder(node.id); // every kind of rules group opens in the Agent Builder
   };
   const mono = `${touch ? 12 : 11}px/1.5 ${fontFamily.mono}`;
   return (

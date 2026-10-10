@@ -117,7 +117,7 @@ describe('the Memory section', () => {
   it('the ants preset is cards: two Senses, Head for and Turn round, memories with their cards, nothing Advanced', () => {
     startTrail();
     click($('[data-preset="ants"]'));
-    expect($('[data-studio-section="advanced"]')).toBeNull();
+    expect($('[data-studio-section="advanced"] [data-studio-summary]')?.textContent).toBe('every rule as lines');
     click($('[data-studio-section="senses"]'));
     expect($$('[data-card-slot]').map(x => x.getAttribute('data-card-slot'))).toEqual(['senses#1']);
     expect($$('[data-only-when-chip]').map(x => x.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('carrying is off'), expect.stringContaining('carrying is on')]));

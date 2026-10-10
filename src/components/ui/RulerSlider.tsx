@@ -57,7 +57,7 @@ function installWheelGestures(): void {
 
 export function RulerSlider({
   value, min, max, step = 0.01, defaultValue, onChange, integer = false, keyframed, disabled = false,
-  ariaLabel, touch = false, onType, onRange, hard = false,
+  ariaLabel, touch = false, onType, onRange, hard = false, unit: unitProp,
 }: {
   value: number;
   min: number;
@@ -86,6 +86,11 @@ export function RulerSlider({
   onRange?: (min: number, max: number) => void;
   /** A physical limit (0–1 opacity, an audio unit's range): a typed value is clamped, never widens the range. */
   hard?: boolean;
+  /**
+   * The ruler's unit (40 px of drag), for a small range the default would squeeze (rulerMath
+   * fineUnit). A function gets the range in use, which a typed value may have widened.
+   */
+  unit?: number | ((min: number, max: number) => number | undefined);
 }) {
   const tk = useTokens();
   const locked = disabled || !!keyframed;
@@ -107,7 +112,7 @@ export function RulerSlider({
     if (r.extended) { setTyped({ min: r.min, max: r.max, base }); onRange?.(r.min, r.max); }
     (onType ?? onChange)(r.value);
   };
-  const unit = rulerUnit(min, max, integer);
+  const unit = (typeof unitProp === 'function' ? unitProp(min, max) : unitProp) ?? rulerUnit(min, max, integer);
   const effectiveStep = integer ? 1 : step;
   const h = touch ? 36 : 28;
   const fmt = useCallback((n: number) => formatValue(n, effectiveStep, integer), [effectiveStep, integer]);

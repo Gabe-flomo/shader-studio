@@ -9,12 +9,12 @@ import { useNodeGraphStore, undoManager } from '../store/useNodeGraphStore';
 import { freshIds } from '../store/agentSetup';
 import { placeSetupInView } from '../store/placement';
 import { graphOutput } from '../nodes/scene3dDefaults';
-import { applyRulesToGroup, groupRules } from '../agentRules/apply';
+import { applyRulesToGroup, groupRules, isRulesGroup } from '../agentRules/apply';
 import { agentsViewOf } from '../agentRules/outputs';
 import { rulesTemplate, rulesTemplateNodes } from '../agentRules/templates';
 import { rescaleForSpace } from '../agentRules/space3d';
 import { applyGroupRules } from '../agentRules/storeActions';
-import type { AgentRuleSet } from '../agentRules/spec';
+import { type AgentRuleSet, WALKER_KINDS, kindOf } from '../agentRules/spec';
 import { type StartCard } from './kinds';
 import { builderPreset } from './presets';
 
@@ -144,4 +144,83 @@ export function applyBuilderPreset(groupId: string, key: string): AgentRuleSet |
   if (was.collide) set = { ...set, collide: was.collide };
   applyGroupRules(groupId, set, `Agent Builder: ${p.label}`, true);
   return set;
+}
+
+// ── Opening the builder on a graph that already has groups; clearing the graph ──
+
+/** A builder group on the top level (a rules Agents group), as the "Edit this one / Start over / Add another" prompt lists it. */
+export interface BuilderGroup { id: string; label: string; kind: string; d3: boolean }
+
+/** The rules Agents groups on the top level of `nodes` (the ones the Agent Builder makes and edits). */
+export function builderGroups(nodes: readonly GraphNode[]): BuilderGroup[] {
+  return nodes.filter(isRulesGroup).map(g => ({
+    id: g.id,
+    label: (typeof g.params.label === 'string' && g.params.label) || 'Agents',
+    kind: WALKER_KINDS[kindOf(groupRules(g))].label,
+    d3: g.params.space === '3d',
+  }));
+}
+
+const isOutput = (n: GraphNode) => n.type === 'output' || n.type === 'vec4Output';
+
+/** How many nodes the start page's "Clear the graph first" would take away (all but the Output). */
+export const clearableCount = (nodes: readonly GraphNode[]) => nodes.filter(n => !isOutput(n)).length;
+
+const unwired = (n: GraphNode, gone: (id: string) => boolean): GraphNode => ({
+  ...n, inputs: Object.fromEntries(Object.entries(n.inputs).map(([k, v]) => [k, v.connection && gone(v.connection.nodeId) ? { ...v, connection: undefined } : v])),
+});
+
+/**
+ * The start page's "Clear the graph first": everything but the Output (unwired), one undo step of its
+ * own ("Agent Builder: cleared the graph"). Returns the graph as it was, for Back.
+ */
+export function clearGraphForBuilder(): GraphNode[] {
+  const st = useNodeGraphStore.getState();
+  if (st.activeGroupPath.length) st.exitToRoot();
+  const before = useNodeGraphStore.getState().nodes;
+  undoManager.push(before, { label: 'Agent Builder: cleared the graph' });
+  const nodes = before.filter(isOutput).map(n => unwired(n, () => true));
+  useNodeGraphStore.setState({ nodes, selectedNodeId: null, selectedNodeIds: [] });
+  useNodeGraphStore.getState().compile();
+  return before;
+}
+
+/**
+ * The nodes that belong to a group's setup and nothing else: the group, then (until nothing changes)
+ * every node only the setup reads from (its Emit, a picture wired only into it) and every node that
+ * reads only from the setup (Deposit, Trail field, its palette, Draw agents). The Output and nodes
+ * with no wires at all are never part of it. Pure.
+ */
+export function agentSetupIds(nodes: readonly GraphNode[], groupId: string): Set<string> {
+  if (!nodes.some(n => n.id === groupId)) return new Set();
+  const ids = new Set<string>([groupId]);
+  const sources = (n: GraphNode) => Object.values(n.inputs).map(i => i.connection?.nodeId).filter((x): x is string => !!x);
+  const readers = new Map<string, string[]>();
+  for (const n of nodes) for (const s of sources(n)) readers.set(s, [...(readers.get(s) ?? []), n.id]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const n of nodes) {
+      if (ids.has(n.id) || isOutput(n)) continue;
+      const from = sources(n), to = readers.get(n.id) ?? [];
+      const downstream = from.length > 0 && from.every(x => ids.has(x));
+      const upstream = to.length > 0 && to.every(x => ids.has(x));
+      if (downstream || upstream) { ids.add(n.id); grew = true; }
+    }
+  }
+  return ids;
+}
+
+/** "Start over": take a group and its setup away (agentSetupIds), one undo step. */
+export function removeAgentSetup(groupId: string): boolean {
+  const st = useNodeGraphStore.getState();
+  if (st.activeGroupPath.length) st.exitToRoot();
+  const before = useNodeGraphStore.getState().nodes;
+  const gone = agentSetupIds(before, groupId);
+  if (!gone.size) return false;
+  undoManager.push(before, { label: 'Agent Builder: started over' });
+  const nodes = before.filter(n => !gone.has(n.id)).map(n => unwired(n, id => gone.has(id)));
+  useNodeGraphStore.setState({ nodes, selectedNodeId: null, selectedNodeIds: [] });
+  useNodeGraphStore.getState().compile();
+  return true;
 }
