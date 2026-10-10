@@ -169,3 +169,17 @@ The agent stopped at the usage limit while building. I finished it: the full sui
 Not yet done: running the real models in the browser, which needs the one-time download from Hugging Face. Timings and quality per model are still to measure.
 
 Next: phase 1b (depth in 3D scenes).
+
+### Phase 1b status (first part)
+
+Built:
+- **Depth Composite:** the nearer wins, with calibration in 1/distance, edge softness, the Scene in front mask, and a Show mode for calibrating;
+- **Depth Light:** a point light or glowing object lights the picture; the picture's 3D point comes from the camera rays, its normal from screen-space slopes, with reach, wrap and own-light controls.
+
+Checked offscreen with a synthetic near disc against a scene disc at distance 3: the near disc covers the scene, and a light between the camera and the disc lights it while a light behind it doesn't.
+
+Next:
+- shadows from SDF objects onto the picture (needs the scene's distance function at the picture's points);
+- glowing SDF objects found automatically as lights;
+- the picture as the environment;
+- an example graph built from a photo.
