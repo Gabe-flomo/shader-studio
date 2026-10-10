@@ -39,6 +39,18 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.137',
+    date: '2026-10-10',
+    title: 'Shader Texture and small exports',
+    highlights: [
+      { area: 'Studio', text: 'Shader Texture: a node with its own graph drawn into a texture you can wire anywhere (food, masks, starts). Starters, edit inside, update on change.' },
+      { area: 'Studio', text: 'Agent Builder: pick Where from the graph\'s shapes with thumbnails or draw one, named trail swatches, and Look for every kind.' },
+      { area: 'Studio', text: 'Group sockets look and work the same everywhere: locks on built-ins, + Add an input, rename and remove. Scene Pos and Output only inside 3D.' },
+      { area: 'Play', text: 'Built-in signals (count, active, share) and MIDI notes in any octave, with Map 12 notes to 12 targets.' },
+      { area: 'Files', text: 'Web export is small: a plain shader exports as a ~12 KB snippet instead of 1.5 MB, plus Copy GLSL. The full player only brings what the graph uses.' },
+    ],
+  },
+  {
     id: '2026.10.136',
     date: '2026-10-10',
     title: 'Autosave',
