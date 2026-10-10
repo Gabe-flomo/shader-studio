@@ -30,6 +30,22 @@ node's rule, a rules group's rules, with Copy and Open.
 
 ---
 
+## Where new nodes land
+
+Whatever adds nodes puts them **in the part of the canvas you're looking at** (`src/store/placement.ts`, `src/store/freeSpace.ts`).
+
+- **One node** (the browser, search, the Do… bar's node picks, a saved node's source, a group preset): centred in the view. If a card is already there, it goes to the free spot nearest the centre (`spawnPoint`).
+- **A setup** (Agents starters and presets, the Agent Builder, the 3D and 2D Scene Builders, the Expression Builder, the Do… bar's scene and agents lines): its own layout is kept and it moves as one block, centred in the view. If cards are in the way, it takes the free spot nearest the view's centre, never "right of the whole graph". A setup bigger than the view starts at the view's top-left corner.
+- **Things placed beside a card** (starter recipes, Light the scene, Add a picture with depth, Do… bar plans and commands, card suggestions, Grid Rules): they stay beside that card. If all of it would end up off screen (its middle is off screen and less than a quarter shows), it is brought into view.
+- **Left where they are:**
+  - Generate depth already lands beside its card, inside the view.
+  - Bake and Unbake replace a node in place.
+  - Duplicate offsets the copy a little from the original.
+  - A drag from the browser lands where you drop it.
+  - Rebuilds and rewrites that remove nodes keep their positions.
+
+---
+
 ## Categories
 
 ```

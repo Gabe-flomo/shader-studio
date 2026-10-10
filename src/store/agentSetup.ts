@@ -17,6 +17,7 @@ import { n } from './graphBuilder';
 import { note } from './agentExampleKit';
 import { estimateNodeHeight } from './graphLayout';
 import { graphOutput } from '../nodes/scene3dDefaults';
+import { boundsOf, nearestFree } from './freeSpace';
 
 type Conn = { nodeId: string; outputKey: string };
 interface Box { x: number; y: number; w: number; h: number }
@@ -92,31 +93,16 @@ export function untangle(nodes: GraphNode[], heightOf: (nd: GraphNode) => number
 
 /**
  * A new setup moved into free space: where it was asked for (`want`, its top-left) if nothing
- * there is in the way, else just right of the graph or just below it, whichever is nearer to
- * `want`. Its own cards are untangled first.
+ * there is in the way, else the free spot nearest to `want` (store/freeSpace.ts), never on a
+ * card and never further off than it has to be. Its own cards are untangled first, and move as
+ * one block. To land a setup in the visible canvas, see store/placement.ts (placeSetupInView).
  */
 export function placeInFreeSpace(existing: GraphNode[], added: GraphNode[], want: { x: number; y: number }, heightOf: (nd: GraphNode) => number = cardHeight): GraphNode[] {
   const tidy = untangle(added, heightOf);
-  if (!tidy.length) return tidy;
-  const boxes = tidy.map(nd => boxOf(nd, heightOf));
-  const minX = Math.min(...boxes.map(b => b.x)), minY = Math.min(...boxes.map(b => b.y));
-  const shifted = (dx: number, dy: number) => boxes.map(b => ({ ...b, x: b.x + dx, y: b.y + dy }));
-  const there = existing.map(nd => boxOf(nd, heightOf));
-  const clear = (dx: number, dy: number) => !shifted(dx, dy).some(b => there.some(e => overlaps(b, e, MARGIN / 2)));
-  let dx = want.x - minX, dy = want.y - minY;
-  if (there.length && !clear(dx, dy)) {
-    const right = Math.max(...there.map(e => e.x + e.w)) + MARGIN;
-    const top = Math.min(...there.map(e => e.y));
-    const left = Math.min(...there.map(e => e.x));
-    const bottom = Math.max(...there.map(e => e.y + e.h)) + MARGIN;
-    const options = [
-      { dx: right - minX, dy: top - minY },
-      { dx: left - minX, dy: bottom - minY },
-    ];
-    const dist = (o: { dx: number; dy: number }) => Math.hypot(o.dx - dx, o.dy - dy);
-    const best = options.sort((a, b) => dist(a) - dist(b))[0];
-    dx = best.dx; dy = best.dy;
-  }
+  const block = boundsOf(tidy.map(nd => boxOf(nd, heightOf)));
+  if (!block) return tidy;
+  const at = nearestFree(block, existing.map(nd => boxOf(nd, heightOf)), want, MARGIN / 2);
+  const dx = at.x - block.x, dy = at.y - block.y;
   return tidy.map(nd => ({ ...nd, position: { x: Math.round(nd.position.x + dx), y: Math.round(nd.position.y + dy) } }));
 }
 

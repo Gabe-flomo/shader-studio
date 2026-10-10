@@ -216,8 +216,8 @@ export const SOFT_CIRCLE_AS_WRITTEN: GraphNode[] = [
     "id": "colorPicker_8",
     "type": "colorPicker",
     "position": {
-      "x": 40,
-      "y": 412
+      "x": 2240,
+      "y": 236
     },
     "inputs": {},
     "outputs": {

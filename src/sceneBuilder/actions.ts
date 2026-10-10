@@ -6,7 +6,7 @@
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { askChoice } from '../components/ui/dialogStore';
 import { toast } from '../components/ui/toastStore';
-import { spawnPoint } from '../components/NodeGraph/spawnPoint';
+import { intoView, spawnPoint } from '../components/NodeGraph/spawnPoint';
 import { META_KEY, metaOf, type SceneBuilderMeta } from './build';
 import { applyScene, checkEdits, sceneOfBuild } from './apply';
 import { describeGraph } from './recognize';
@@ -82,7 +82,9 @@ export async function buildFromBuilder(asNew = false): Promise<boolean> {
     nextId: () => useNodeGraphStore.getState().newNodeId(),
     sceneId: rebuildAsNew ? null : target, asNew: rebuildAsNew, at: sb.at ?? spawnPoint(),
   });
-  useNodeGraphStore.getState().setNodesRewritten(result.nodes, rebuildAsNew ? 'Built a 3D scene' : 'Rebuilt the 3D scene');
+  // A new scene lands in the visible canvas (where the builder was opened from, when it was).
+  const placed = rebuildAsNew ? intoView(nodes, result.nodes, sb.at ? 'ifOutOfView' : 'centre') : result.nodes;
+  useNodeGraphStore.getState().setNodesRewritten(placed, rebuildAsNew ? 'Built a 3D scene' : 'Rebuilt the 3D scene');
   useNodeGraphStore.getState().focusNode(result.focusId);
   sb.setTarget(result.sceneId);
   sb.markBuilt();
