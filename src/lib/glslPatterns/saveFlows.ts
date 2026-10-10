@@ -52,7 +52,8 @@ export function toPublishNode(g: Generalised, built: BuiltFunction, label: strin
     position: { x: 0, y: 0 },
     inputs,
     outputs: { result: { type: preset.outputType, label: 'Result' } },
-    params: { ...exprPresetParams(preset), __description: description ?? g.description },
+    // The description is the preset's comment: the block's note (there is no separate description)
+    params: exprPresetParams(preset),
   } as GraphNode;
 }
 

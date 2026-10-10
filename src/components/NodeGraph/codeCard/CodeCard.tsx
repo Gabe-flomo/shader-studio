@@ -1,9 +1,11 @@
 /**
  * CodeCard — the card face of an Expression Block or a Custom Function: a carousel of read-only
- * pages (Code → Preview → Note → Description; empty ones left out), flipped with the dots, the
- * arrows, a sideways swipe or scroll, or ←/→ when the card has focus. The page is remembered per
- * node (cardPageStore). Editing happens in the full editor: double-click the card or press Edit,
- * whose tooltip is the block's signature.
+ * pages (Code → Preview → Note; empty ones left out), flipped with the dots, the arrows, a
+ * sideways swipe or scroll, or ←/→ when the card has focus. The page is remembered per node
+ * (cardPageStore). The bar holds only the page name (its tooltip is the block's signature) and
+ * the pager: editing happens in the full editor (the card header's button, a double-click or
+ * ↵), and the note is written from the card's footer (or the Note page's own link). There is no
+ * separate description: the note is it (codeCardModel migrateDescriptionToNote).
  *
  * The Preview page is the eye preview's own card preview (ValuePreview: Show as, Detail, the output
  * picker, the range key), fed by the same GPU value path and throttled async readback. It is live
@@ -31,13 +33,13 @@ import { useFnCardScope } from '../../explain/functionCard/fnCardStore';
 import { customFnEnv, exprBlockEnv } from '../../../lib/glslPatterns/findUses';
 import {
   CARD_PAGE_LABEL, cardPages, codeLinesFor, isEmptyCodeNode, noteOf, previewOptionsFor, resolvePage,
-  signatureFor, signatureText, stepPage, userDescriptionOf, type CardPageId,
+  signatureFor, signatureText, stepPage, type CardPageId,
 } from './codeCardModel';
 
 interface Props {
   node: GraphNode;
   touch?: boolean;
-  /** Open the full editor (Expression Block / Custom Function modal). Without it there is no Edit button. */
+  /** Open the full editor (Expression Block / Custom Function modal): double-click or ↵ on the card. */
   onEdit?: () => void;
   /** Open the node's own comment editor. Without it the card edits the note in place. */
   onEditNote?: () => void;
@@ -50,7 +52,7 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
   const dark = useThemeMode() === 'dark';
   const isFn = node.type === 'customFn';
 
-  // The signature lives in the Edit button's tooltip (and the empty state), not on a page
+  // The signature lives in the page name's tooltip (and the empty state), not on a page
   const sig = useMemo(() => signatureText(signatureFor(node)), [node]);
 
   const pages = useMemo(() => cardPages(node), [node]);
@@ -75,23 +77,13 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
 
   // Without a comment editor of the host's own, the note is written right here
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
-  const editNote = onEditNote ?? (() => { setDescDraft(null); setNoteDraft(noteOf(node)); });
+  const editNote = onEditNote ?? (() => setNoteDraft(noteOf(node)));
   const saveNote = () => {
     if (noteDraft === null) return;
-    useNodeGraphStore.getState().updateNodeParams(node.id, { __comment: noteDraft.trim() ? noteDraft : undefined });
+    // One text: an old separate description was merged into the draft, so it goes with the save
+    useNodeGraphStore.getState().updateNodeParams(node.id, { __comment: noteDraft.trim() ? noteDraft : undefined, __description: undefined });
     if (noteDraft.trim()) go('note');
     setNoteDraft(null);
-  };
-
-  // The description is only ever the block's own, written here
-  const [descDraft, setDescDraft] = useState<string | null>(null);
-  const editDescription = () => { setNoteDraft(null); setDescDraft(userDescriptionOf(node)); };
-  const saveDescription = () => {
-    if (descDraft === null) return;
-    const v = descDraft.trim();
-    useNodeGraphStore.getState().updateNodeParams(node.id, { __description: v || undefined });
-    if (v) go('description');
-    setDescDraft(null);
   };
 
   const code = useMemo(() => codeLinesFor(node).join('\n'), [node]);
@@ -153,17 +145,6 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
 
   // ── Pages ──────────────────────────────────────────────────────────────────
   const mono = `${touch ? 12.5 : 11.5}px/1.65 ${fontFamily.mono}`;
-  const pill = (props: { label: string; icon: React.ComponentProps<typeof Icon>['name']; onClick: () => void; title: string; data?: string }) => (
-    <button type="button" title={props.title} aria-label={props.title} data-card-action={props.data}
-      onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}
-      onClick={e => { e.stopPropagation(); props.onClick(); }}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 4, height: touch ? 30 : 22, padding: '0 7px', border: 0, borderRadius: radius.sm,
-        background: 'none', color: tk.text.muted, cursor: 'pointer', font: `500 11px ${fontFamily.ui}`, flexShrink: 0,
-      }}>
-      <Icon name={props.icon} size={12} />{props.label}
-    </button>
-  );
 
   const body = (() => {
     if (page === 'code') {
@@ -196,7 +177,7 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
       );
     }
     if (page === 'preview') return <PreviewPage node={node} empty={empty} isFn={isFn} sig={sig} touch={touch} />;
-    if (page === 'note') {
+    {
       const credit = parseSourceCredit(node.params.__credit);
       const note = noteOf(node);
       return (
@@ -214,7 +195,6 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
         </div>
       );
     }
-    return <DescriptionPage node={node} onEdit={editDescription} />;
   })();
 
   return (
@@ -235,9 +215,9 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
       }}
       style={{ padding: '6px 10px 8px 12px', display: 'flex', flexDirection: 'column', gap: 5, outline: 'none' }}
     >
-      {/* Bar: page name · pager · note · edit */}
+      {/* Bar: page name (its tooltip is the signature) · pager */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, minHeight: touch ? 30 : 22 }}>
-        <span style={{ font: `650 10px ${fontFamily.ui}`, letterSpacing: '0.08em', textTransform: 'uppercase', color: tk.text.faint, marginRight: 'auto', whiteSpace: 'nowrap' }}>
+        <span title={sig} data-card-page-name="" style={{ font: `650 10px ${fontFamily.ui}`, letterSpacing: '0.08em', textTransform: 'uppercase', color: tk.text.faint, marginRight: 'auto', whiteSpace: 'nowrap' }}>
           {CARD_PAGE_LABEL[page]}
         </span>
         {pages.length > 1 && (
@@ -255,14 +235,9 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
             <PagerArrow dir={1} touch={touch} onClick={() => flip(1)} />
           </div>
         )}
-        {!noteOf(node) && pill({ label: 'Note', icon: 'plus', title: 'Add a note to this block', onClick: editNote, data: 'add-note' })}
-        {!userDescriptionOf(node) && pill({ label: 'Description', icon: 'plus', title: 'Add a description of this block', onClick: editDescription, data: 'add-description' })}
-        {onEdit && pill({ label: 'Edit', icon: isFn ? 'fn' : 'expr', title: `${sig}\n${isFn ? 'Open the Custom Function editor' : 'Open the Expression Block editor: lines, on/off, order, inputs'} (or double-click the card)`, onClick: onEdit, data: 'edit' })}
       </div>
       {noteDraft !== null ? (
         <TextDraft label="Note" value={noteDraft} placeholder="What this block does, why, where it comes from" onChange={setNoteDraft} onSave={saveNote} onCancel={() => setNoteDraft(null)} />
-      ) : descDraft !== null ? (
-        <TextDraft label="Description" value={descDraft} placeholder="What this block does, in a sentence or two" onChange={setDescDraft} onSave={saveDescription} onCancel={() => setDescDraft(null)} />
       ) : body}
     </div>
   );
@@ -324,22 +299,6 @@ function PreviewPage({ node, empty, isFn, sig, touch }: { node: GraphNode; empty
         }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, font: `600 12.5px ${fontFamily.ui}` }}><Icon name="eye" size={14} />Preview the output</span>
         <span style={{ font: `500 11px/1.35 ${fontFamily.ui}`, color: '#9a9cab' }}>{shows}</span>
-      </button>
-    </div>
-  );
-}
-
-/** The description: the block's own (the page only exists when one is written). */
-function DescriptionPage({ node, onEdit }: { node: GraphNode; onEdit: () => void }) {
-  const tk = useTokens();
-  return (
-    <div data-card-description="" style={{ font: `500 12.5px/1.5 ${fontFamily.ui}`, color: tk.text.secondary, padding: '6px 10px', background: tk.bg.subtle, borderRadius: radius.md, userSelect: 'text' }}>
-      <div style={{ whiteSpace: 'pre-wrap', maxHeight: 180, overflowY: 'auto' }}>{userDescriptionOf(node)}</div>
-      <button type="button" data-card-action="edit-description"
-        onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}
-        onClick={e => { e.stopPropagation(); onEdit(); }}
-        style={{ marginTop: 4, padding: 0, border: 0, background: 'none', color: tk.accent.text, cursor: 'pointer', font: `500 11px ${fontFamily.ui}` }}>
-        Edit description
       </button>
     </div>
   );

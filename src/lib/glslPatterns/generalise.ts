@@ -86,7 +86,8 @@ export function toIdentifier(text: string, fallback = 'value'): string {
   return id;
 }
 
-function uniqueName(want: string, taken: Set<string>, reserved = GLSL_WORDS): string {
+/** `want` as a valid identifier not in `taken` (nor a GLSL word): edge0, edge02… Adds it to `taken`. */
+export function uniqueName(want: string, taken: Set<string>, reserved = GLSL_WORDS): string {
   let base = toIdentifier(want);
   if (reserved.has(base)) base = `${base}In`;
   let n = base, i = 2;
@@ -102,7 +103,8 @@ const PARAM_NAMES: Record<string, string[]> = {
   rotate: ['p', 'angle'], palette: ['t', 'bias', 'amp', 'freq', 'phase'], sdBox: ['p', 'halfSize'], opRepeat: ['p', 'period'], exp: ['x'],
 };
 
-function literalName(node: Expr, parent: Expr | null, roles: Map<number, { role: Role }>, types: Map<number, GlslType>): string {
+/** A literal's name from where it sits: the edge of a smoothstep is `edge0`, a factor on space is `zoom`… */
+export function literalName(node: Expr, parent: Expr | null, roles: Map<number, { role: Role }>, types: Map<number, GlslType>): string {
   if (!parent) return 'value';
   if (parent.kind === 'call') {
     const i = parent.args.indexOf(node);

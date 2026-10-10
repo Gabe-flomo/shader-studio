@@ -18,7 +18,7 @@ import type { GraphNode } from '../../../types/nodeGraph';
 import { ExprBlockNode, CustomFnNode } from '../../../nodes/definitions/effects';
 import {
   cardPages, codeLinesFor, fnNameFrom, previewOptionsFor, isEmptyCodeNode, parseSourceLabelsKey, resolvePage, signatureFor,
-  signatureText, sourceLabelsFor, sourceLabelsKey, stepPage,
+  signatureText, sourceLabelsFor, sourceLabelsKey, stepPage, noteOf, mergeNoteTexts, migrateDescriptionToNote, type CardPageId,
 } from '../codeCard/codeCardModel';
 import { CARD_PAGE_STORAGE_KEY, loadCardPages, useCardPages } from '../codeCard/cardPageStore';
 import { highlightGlsl, highlightCacheSize } from '../codeCard/highlight';
@@ -127,10 +127,11 @@ describe('pages', () => {
     expect(isEmptyCodeNode(fresh)).toBe(true);
     expect(cardPages(fresh)).toEqual(['preview']);
     expect(cardPages({ ...fresh, params: { ...fresh.params, __description: '  ' } } as GraphNode)).toEqual(['preview']);
-    expect(cardPages({ ...fresh, params: { ...fresh.params, __description: 'Doubles a' } } as GraphNode)).toEqual(['preview', 'description']);
+    // An old separate description shows on the Note page (it is the note now)
+    expect(cardPages({ ...fresh, params: { ...fresh.params, __description: 'Doubles a' } } as GraphNode)).toEqual(['preview', 'note']);
   });
 
-  it('lines, a result of its own, a note, a credit and a description each add their page', () => {
+  it('lines, a result of its own, and a note (or a credit, or an old description) each add their page', () => {
     const withLines = expr('e', { inputs: [{ name: 'a', type: 'float' }], lines: [{ lhs: 'a', op: '*=', rhs: '2.0' }], result: 'a' });
     expect(cardPages(withLines)).toEqual(['code', 'preview']);
     const resultOnly = expr('e', { inputs: [{ name: 'a', type: 'float' }], lines: [], result: 'a * 2.0' });
@@ -138,7 +139,8 @@ describe('pages', () => {
     const incomplete = expr('e', { inputs: [{ name: 'a', type: 'float' }], lines: [{ lhs: 'a', op: '=', rhs: '' }], result: 'a' });
     expect(isEmptyCodeNode(incomplete)).toBe(true);
     const noted = expr('e', { inputs: [], lines: [{ lhs: 'p', op: '=', rhs: 'vec3(1.0)' }], result: 'p', __comment: '  why  ', __description: 'what' });
-    expect(cardPages(noted)).toEqual(['code', 'preview', 'note', 'description']);
+    expect(cardPages(noted)).toEqual(['code', 'preview', 'note']);
+    expect(noteOf(noted)).toBe('what\n\nwhy');
     const blankNote = expr('e', { inputs: [], lines: [], result: '', __comment: '   ' });
     expect(cardPages(blankNote)).toEqual(['preview']);
     const credited = expr('e', { inputs: [], lines: [], result: '', __credit: { title: 'x' } });
@@ -155,16 +157,16 @@ describe('pages', () => {
   it('resolves and steps pages, wrapping and falling back when a page went away', () => {
     const pages = ['code', 'preview', 'note'] as const;
     expect(resolvePage(pages, 'note')).toBe('note');
-    expect(resolvePage(pages, 'description')).toBe('code');
+    expect(resolvePage(pages, 'description' as CardPageId)).toBe('code');
     expect(resolvePage(pages, undefined)).toBe('code');
     expect(stepPage(pages, 'note', 1)).toBe('code');
     expect(stepPage(pages, 'code', -1)).toBe('note');
     expect(stepPage(['preview'], 'preview', 1)).toBe('preview');
   });
 
-  it('keeps the order Code → Preview → Note → Description, with no Signature page', () => {
+  it('keeps the order Code → Preview → Note, with no Signature or Description page', () => {
     const all = expr('e', { inputs: [{ name: 'a', type: 'float' }], lines: [{ lhs: 'a', op: '*=', rhs: '2.0' }], result: 'a', __comment: 'n', __description: 'd' });
-    expect(cardPages(all)).toEqual(['code', 'preview', 'note', 'description']);
+    expect(cardPages(all)).toEqual(['code', 'preview', 'note']);
     expect(cardPages(all)).not.toContain('signature');
   });
 });
@@ -186,6 +188,11 @@ describe('remembered page', () => {
     expect(loadCardPages()).toEqual({ a: 'preview', b: 'note' });
   });
 
+  it('a remembered Description page (it joined the note) comes back as the Note page', () => {
+    storage.set(CARD_PAGE_STORAGE_KEY, JSON.stringify({ a: 'description' }));
+    expect(loadCardPages()).toEqual({ a: 'note' });
+  });
+
   it('ignores junk in storage and survives storage that throws', () => {
     storage.set(CARD_PAGE_STORAGE_KEY, JSON.stringify({ a: 'code', b: 'bogus', c: 3 }));
     expect(loadCardPages()).toEqual({ a: 'code' });
@@ -194,8 +201,8 @@ describe('remembered page', () => {
     const setItem = localStorage.setItem;
     localStorage.setItem = () => { throw new Error('quota'); };
     try {
-      useCardPages.getState().setPage('n3', 'description');
-      expect(useCardPages.getState().pages.n3).toBe('description');
+      useCardPages.getState().setPage('n3', 'note');
+      expect(useCardPages.getState().pages.n3).toBe('note');
     } finally { localStorage.setItem = setItem; }
   });
 });
@@ -287,5 +294,31 @@ describe('read-only code', () => {
     expect(highlightCacheSize()).toBe(before + 1);
     expect(a[0].map(t => t.text).join('')).toBe('float x = sin(1.0);');
     expect(highlightGlsl('float x = sin(1.0);', false)).not.toBe(a);
+  });
+});
+
+describe('the description joined the note', () => {
+  it('merges the two texts, description first, never dropping either', () => {
+    expect(mergeNoteTexts('', '')).toBe('');
+    expect(mergeNoteTexts('What it does', '')).toBe('What it does');
+    expect(mergeNoteTexts('', ' Why ')).toBe('Why');
+    expect(mergeNoteTexts('What it does', 'Why')).toBe('What it does\n\nWhy');
+    // One already holds the other: the longer one, once
+    expect(mergeNoteTexts('Glow', 'Glow around the ring')).toBe('Glow around the ring');
+    expect(mergeNoteTexts('Glow around the ring', 'Glow')).toBe('Glow around the ring');
+  });
+
+  it('migrates an old node: the description goes into __comment and the field goes', () => {
+    const old = expr('e', { inputs: [], lines: [], result: 'a', __comment: 'Why', __description: 'What' });
+    const m = migrateDescriptionToNote(old);
+    expect(m.params.__comment).toBe('What\n\nWhy');
+    expect('__description' in m.params).toBe(false);
+    const onlyDesc = migrateDescriptionToNote(expr('e', { inputs: [], result: 'a', __description: 'What' }));
+    expect(onlyDesc.params.__comment).toBe('What');
+    const blank = migrateDescriptionToNote(expr('e', { inputs: [], result: 'a', __description: '  ' }));
+    expect('__comment' in blank.params).toBe(false);
+    // Untouched when there is nothing to migrate (same object)
+    const plain = expr('e', { inputs: [], result: 'a', __comment: 'n' });
+    expect(migrateDescriptionToNote(plain)).toBe(plain);
   });
 });
