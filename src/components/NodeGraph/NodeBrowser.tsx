@@ -41,6 +41,8 @@ const HIDDEN_NODES = new Set([
   'grid',
   // Made by the compiler at the end of a Pass's program (compiler/passGraph.ts).
   'passOutput',
+  // The end of a Shader Texture's inside, made with the node (docs/texture-builder.md).
+  'shaderTextureOutput',
   // A hidden pass of Blur / Glow (texture) (compiler/hiddenBlurs.ts).
   'blurStage',
   // One step of a Grid Rules board (compiler/gridRulesExpand.ts).

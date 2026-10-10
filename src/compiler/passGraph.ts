@@ -41,6 +41,8 @@ import { expandPassGroups } from './passGroups';
 import { FINAL, planHiddenBlurs } from './hiddenBlurs';
 import { GRID_TYPE, expandGridRules } from './gridRulesExpand';
 import { expandCurveBeams, isBeamTrace } from './curveBeamExpand';
+import { expandShaderTextures, hasShaderTexture } from './shaderTextureExpand';
+import { SHADER_TEXTURE_TYPE } from '../nodes/definitions/shaderTexture';
 
 export const PASS_TYPE = 'pass';
 /** Most Pass nodes in one graph. */
@@ -55,7 +57,8 @@ export function hasPassNode(nodes: GraphNode[]): boolean {
   for (const n of nodes) {
     // A Grid Rules node is opened into a board Pass (compiler/gridRulesExpand.ts).
     // So is a Curve Trace in Draw: Beam, into its screen Pass (compiler/curveBeamExpand.ts).
-    if (n.type === PASS_TYPE || n.type === GRID_TYPE || isBeamTrace(n)) return true;
+    // So is a Shader Texture, into its inside and a Pass (compiler/shaderTextureExpand.ts).
+    if (n.type === PASS_TYPE || n.type === GRID_TYPE || n.type === SHADER_TEXTURE_TYPE || isBeamTrace(n)) return true;
     const sg = n.params?.subgraph as Sub;
     if (sg?.nodes && hasPassNode(sg.nodes)) return true;
   }
@@ -170,6 +173,11 @@ function orderPasses(ids: string[], reads: Map<string, Set<string>>): string[] |
   return out.length === ids.length ? out : null;
 }
 
+/** A Shader Texture's fixed texture size in pixels (`__size`), or null: scaled with the picture. */
+function passFixedSize(v: unknown): number | null {
+  return typeof v === 'number' && isFinite(v) && v >= 1 ? Math.min(4096, Math.round(v)) : null;
+}
+
 const countSamplers = (fs: string) => (fs.match(/^uniform sampler2D \w+;/gm) ?? []).length;
 
 export function compilePassGraph(graph: NodeGraph): CompilationResult {
@@ -182,8 +190,15 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     }
     // A Pass inside a plain group (phase 7): the group is opened onto the top level for the cut
     // (compiler/passGroups.ts). Inside any other kind of group, an error saying why.
-    const opened = expandPassGroups(graph.nodes);
+    // Shader Textures (docs/texture-builder.md) are opened into their inside and a Pass first, and again after a
+    // plain group with one inside has been opened (a few rounds at most); without one, exactly as before.
+    let opened = expandPassGroups(expandShaderTextures(graph.nodes));
     if ('errors' in opened) return failure(opened.errors);
+    for (let round = 0; round < 8 && hasShaderTexture(opened.nodes); round++) {
+      const more = expandPassGroups(expandShaderTextures(opened.nodes));
+      if ('errors' in more) return failure(more.errors);
+      opened = { nodes: more.nodes, groups: new Map([...opened.groups, ...more.groups]) };
+    }
     // Grid Rules nodes: each opened into its board Pass and step (compiler/gridRulesExpand.ts); without one, unchanged.
     const gridOnly = expandGridRules(opened.nodes);
     // Curve Trace in Draw: Beam: each opened into its screen Pass and step (compiler/curveBeamExpand.ts); without one, unchanged.
@@ -295,6 +310,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
       for (const r of [...c.reads, ...c.readsPrevious]) visit(r);
     };
     for (const r of [...finalList.reads, ...finalList.readsPrevious]) visit(r);
+    // A Shader Texture draws even before anything reads it, so its card and the inside's preview show it.
+    for (const p of passNodes) if (p.params.__alwaysLive === true) visit(p.id);
     // With agents: what the picture needs, through passes, trails, drawings and groups (a fixpoint).
     const depositTo = agents ? depositTargets(nodes) : new Map<string, string>();
     const liveAgents = new Set<string>();
@@ -408,7 +425,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
           alpha: { type: 'float', label: 'Alpha', ...(pass.inputs.alpha?.connection ? { connection: pass.inputs.alpha.connection } : { defaultValue: 1 }) },
         },
       };
-      const r = compileList(hidden.annotate([...c.nodes.values(), sink], id), PASS_SCALES[String(pass.params.scale ?? '1')] ?? 1);
+      const fixedSize = passFixedSize(pass.params.__size);
+      const r = compileList(hidden.annotate([...c.nodes.values(), sink], id), fixedSize ? 1 : PASS_SCALES[String(pass.params.scale ?? '1')] ?? 1);
       absorb(r);
       for (const [nid, vars] of r.nodeOutputVars) if (nid !== sink.id && !passVars.has(nid)) passVars.set(nid, vars);
       const slug = slugs.get(id)!;
@@ -427,6 +445,10 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         ...(agents ? { afterAgents: afterAgents.has(id) } : {}),
         ...(beforeParticles.has(id) ? { beforeParticles: true } : {}),
         ...(passRepeat(pass.params.repeat) > 1 ? { repeat: passRepeat(pass.params.repeat) } : {}),
+        // A Shader Texture's fixed size and how often it draws (only present when set).
+        ...(fixedSize ? { size: fixedSize } : {}),
+        ...(pass.params.__update === 'once' || pass.params.__update === 'change' ? { update: pass.params.__update } : {}),
+        ...(pass.params.__update === 'change' && pass.params.__stillTime === true ? { stillTime: true } : {}),
       });
     }
     // 5. With agents: each group's update shader, and the engine's view of deposits, trails and drawings.
@@ -568,6 +590,12 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     // (slugs are shared, so a node's variables have the same names in every program it lands in).
     const nodeOutputVars = new Map([...passVars, ...fin.nodeOutputVars]);
     let finalNodeIds = finalNodes.filter(n => n.type !== PASS_TYPE && !(agents && isAgentSource(n))).map(n => n.id);
+    // A Shader Texture's card has only Texture, Color and Alpha: its Pass's other outputs (Previous, Step) aren't probed.
+    for (const p of passNodes) {
+      if (p.params.__alwaysLive !== true) continue;
+      const v = nodeOutputVars.get(p.id);
+      if (v) nodeOutputVars.set(p.id, Object.fromEntries(Object.entries(v).filter(([k]) => k === 'texture' || k === 'color' || k === 'alpha')));
+    }
     // Show passes: a Grid Rules node runs in its board's program too.
     if (grid.bindAs.size) for (const p of passes) for (const [id, as] of grid.bindAs) if (p.nodeIds.includes(id) && !p.nodeIds.includes(as)) p.nodeIds = [...p.nodeIds, as];
     // An opened group (a Pass inside it): its card reads its outputs from the nodes behind them, and
