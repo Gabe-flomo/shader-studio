@@ -46,6 +46,9 @@ A registry-wide test checks that every node resolves to a stage, that every cate
   - *Noise mixed in after a finish:* a noise joins the picture after a Post node that it doesn't pass through.
   - **Exceptions:** anything wired to a node that reads a previous frame (Pass, Previous Frame, Echo, Fade, Grid Rules, Motion Blur) is left alone, because feedback is deliberate. So is anything inside an iterated group or loop, and anything passing through an Expression Block or custom function.
   - **False-positive bar:** fewer than 2% of the bundled examples may be flagged. Today none are (0 of 395).
+- **Auto layout** (flow, the default; `layoutByRank` in `src/store/graphLayout.ts`, also used by Convert and GLSL import). Nodes go in left-to-right columns by data-flow rank, and the layout stays compact:
+  - A node is pulled right, next to the first node it feeds (`compactRanks`). A Time or a constant read only at the end of a long chain used to sit alone in the first column, far from everything else.
+  - Each connected piece of the graph is laid out on its own (`connectedPieces`). The piece with the Output comes first. The others are packed beside it in rows no wider than the widest piece, with the usual column gap (`packPieces`), so nothing is stranded far left or far right.
 - **Arrange by stage** (`src/structure/arrange.ts`). Open the ▾ beside **Auto layout** and choose **By stage**. Nodes are placed in left-to-right columns by stage, with the Output last.
   - Maths, time and constants sit in the column of the first stage they feed.
   - A loose group's members stay together in one column.
