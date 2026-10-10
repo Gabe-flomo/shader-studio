@@ -94,6 +94,29 @@ function imageModelFiles(bundleModel: boolean): Plugin {
   }
 }
 
+// The Depth node's models (docs/depth-node.md): each is an opt-in download from Hugging Face. For a local check
+// (`?depthModel=local`) the dev server serves the files tools/fetch-depth-models.mjs put in .cache/depth-models/.
+// Never bundled (Depth Anything V2 Base's licence is non-commercial; the others download on first use).
+const DEPTH_CACHE = fileURLToPath(new URL('./.cache/depth-models/', import.meta.url))
+function depthModelFiles(): Plugin {
+  return {
+    name: 'depth-model-files',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const url = (req.url ?? '').split('?')[0]
+        const m = /\/depth-models\/(.+)$/.exec(url)
+        const file = m && !m[1].includes('..') ? DEPTH_CACHE + decodeURIComponent(m[1]) : null
+        if (file && existsSync(file)) {
+          res.setHeader('Content-Type', file.endsWith('.json') ? 'application/json' : 'application/octet-stream')
+          res.end(readFileSync(file))
+          return
+        }
+        next()
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 // base switches automatically: '/' for Tauri desktop, '/shader-studio/' for GitHub Pages.
 // TAURI_ENV_PLATFORM is set by the Tauri CLI during both `tauri dev` and `tauri build`.
@@ -109,7 +132,7 @@ const usePolling = process.env.VITE_USE_POLLING === '1';
 const appVersion = (JSON.parse(readFileSync(fileURLToPath(new URL('./src-tauri/tauri.conf.json', import.meta.url)), 'utf8')) as { version?: string }).version ?? '0.0.0'
 
 export default defineConfig({
-  plugins: [react(), mediapipeWasm(), threeSlimSource(), imageModelFiles(isTauri)],
+  plugins: [react(), mediapipeWasm(), threeSlimSource(), imageModelFiles(isTauri), depthModelFiles()],
   define: { __APP_VERSION__: JSON.stringify(appVersion) },
   // The hand tracker's worker imports MediaPipe as an ES module.
   worker: { format: 'es' },

@@ -11,6 +11,7 @@ import { knobParamDefs, withInputExpressions } from '../../glsl/inputExpr';
 import { VideoInputNode } from './sources';
 export { VideoInputNode };
 import { BakedNode } from './baked';
+import { DepthNode } from './depth';
 import { TimeCubeNode, TimeCubeViewNode, TimeSliceNode } from './timeCube';
 import { FrameStackNode } from './frameStack';
 export { BakedNode };
@@ -310,6 +311,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   audioInput: AudioInputNode,
   videoInput: VideoInputNode,
   baked: BakedNode,
+  // Depth (docs/depth-node.md): a picture's depth from an on-device model
+  depth: DepthNode,
   // Time cube (docs/time-cube.md): a video as a box of time
   lift4D: Lift4DNode,
   rotate4D: Rotate4DNode,

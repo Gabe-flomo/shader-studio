@@ -1,3 +1,4 @@
+import { DEPTH_TYPE, depthSampler } from '../nodes/definitions/depth';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { dataBlocksFirst } from '../data/dataGlsl';
 import { MAX_GROUP_ITERATIONS } from '../nodes/definitions/group';
@@ -989,6 +990,11 @@ export class ShaderAssembler {
         if (node.type === 'textureInput' || node.type === 'timeCube') {
           this.textureUniforms[`u_tex_${nodeSlug}`] = node.id;
         }
+        // The Depth node (docs/depth-node.md): its depth, filled by lib/depth/engine.ts (a baked video's plays as a video).
+        if (node.type === DEPTH_TYPE) {
+          if (depthSampler(node, nodeSlug).startsWith('u_vid_')) this.videoUniforms[`u_vid_${nodeSlug}`] = node.id;
+          else this.textureUniforms[`u_tex_${nodeSlug}`] = node.id;
+        }
         // Nodes with their own image slots (published user nodes): one
         // sampler per slot, bound from nodeTextures["<id>::<slot>"].
         def.textureSlots?.forEach(slot => {
@@ -1507,6 +1513,10 @@ export class ShaderAssembler {
               // and bound from the original node's textures, exactly as at the top level.
               if (subNode.type === 'textureInput' || subNode.type === 'timeCube') this.textureUniforms[`u_tex_${subNode.id}`] = originalId;
               if (subNode.type === 'baked') this.videoUniforms[`u_vid_${subNode.id}`] = originalId;
+              if (subNode.type === DEPTH_TYPE) {
+                if (depthSampler(subNode).startsWith('u_vid_')) this.videoUniforms[`u_vid_${subNode.id}`] = originalId;
+                else this.textureUniforms[`u_tex_${subNode.id}`] = originalId;
+              }
               subDef.textureSlots?.forEach(slot => { this.textureUniforms[`u_tex_${subNode.id}_${slot}`] = `${originalId}::${slot}`; });
               const { patchedNode: patchedSub, uniforms: subUniforms, bindings: subBindings } = patchNodeParamsForUniforms(effectiveSubNode, subDef, fn => this.functions.add(fn), originalId);
               Object.assign(this.paramUniforms, subUniforms);
