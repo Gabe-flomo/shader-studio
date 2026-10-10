@@ -90,6 +90,35 @@ In the file a signal may carry `"when": { "kind": "trigger", "trigger": {…} }`
 
 Deleting a signal leaves what sent or listened for it in place, marked **Missing signal**. Signals themselves aren't recorded in takes: what they did is (the actions they fired, the controls they moved).
 
+## Built-in signals
+
+Three numbers about the setup's signals, always there whatever the setup holds:
+
+| | Value path | Reads |
+| --- | --- | --- |
+| **Signals: count** | `sigs:count` | how many signals the setup has; it changes as signals are added or removed |
+| **Signals: active** | `sigs:active` | how many are on now (a sent signal counts in the frame it is worked out) |
+| **Signals: active share** | `sigs:share` | active ÷ count, 0 to 1 (0 with no signals) |
+
+They're read-only and can't be deleted: they aren't signals of the record, so
+there's nothing on the Rules page to remove, and a setup with no signals reads 0.
+They're marked **Built in** wherever they show:
+
+- the Inputs board's sources column has a **Built in** group with a card for
+  each (its value now, and **Map**, which makes a source of the record reading
+  it and starts Map mode);
+- the mapping Source picker lists them under **From the setup**;
+- the condition value picker lists them under **Signals (built in)**.
+
+In a condition they read raw (`sigs:active above 2`); a percent condition
+measures the counts against 0..the number of signals. As a mapping source
+(`{ "kind": "signals", "read": "count" | "active" | "share", "max": 8 }`) the
+share reads as it is and a count reads over **full at** (`max`, default 8),
+clamped to 0..1. Active is tallied at the end of `tickSignalLevels`, so a
+condition (worked out before the levels) sees last frame's tally. The kit has
+`sgBuiltIn` / `sgBuiltInUnit` (`play/kit/signals.js`); the web runtime reads
+them the same way.
+
 ## Signals as rules (guide phase 2)
 
 A signal is a rule: **When** its inputs, combined, **Do** its reactions.

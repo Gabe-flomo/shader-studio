@@ -32,6 +32,10 @@ const SOURCE_GROUPS: { heading: string; entries: Entry[] }[] = [
     { value: 'sensor', label: 'Layer sensor', icon: 'eye', description: 'Zone fill, speed, spread, distance…' },
     // Data (a column of a dataset's row) is hidden for now with its layer (implementation guide, small tasks); saved setups keep it.
     { value: 'captured', label: 'Set from a signal', icon: 'target', description: 'The value a signal captured, written as it is (sample and hold)', keywords: 'capture sample hold set jump' },
+    // The built-in signals: always there, read-only (types/play.ts BUILT_IN_SIGNALS).
+    { value: 'signals:count', label: 'Signals: count', icon: 'spark', description: 'Built in · how many signals the setup has', keywords: 'built in signals number total' },
+    { value: 'signals:active', label: 'Signals: active', icon: 'spark', description: 'Built in · how many signals are on now', keywords: 'built in signals on true' },
+    { value: 'signals:share', label: 'Signals: active share', icon: 'spark', description: 'Built in · active ÷ count, 0 to 1', keywords: 'built in signals ratio percent' },
   ] },
   { heading: 'Generators', entries: [
     { value: 'lfo', label: 'LFO', icon: 'wave', description: 'Sine, triangle, saw or square', keywords: 'oscillator' },

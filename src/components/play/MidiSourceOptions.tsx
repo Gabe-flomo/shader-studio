@@ -9,7 +9,8 @@
  *          (whichever moved last); each has its ×, and unlocking keeps the CC.
  *   notes  the note range: **Set range** asks for the low key, then the high
  *          key; the ends can be typed (C2, 36); **Learn a note** waits for one
- *          key (velocity, gate); **Reset to full range**.
+ *          key (velocity, gate); **Reset to full range**; **Any octave** wraps
+ *          octaves (the range's pitch classes count in every octave).
  *   pads   a Pad grid source: what it reads, and the grid's card below.
  */
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
@@ -18,12 +19,13 @@ import { ASSIGN_FLASH_MS, assignCc, claimMidiListen, isUnassignedCc, lastMidiAss
 import { activeLabel, lockLabel, sameLock, useActiveInput } from './midiUi';
 import { PAD_GRID_READS, type MidiLock } from '../../types/playMidi';
 import type { PlaySource } from '../../types/play';
-import { kmNoteName, kmParseNote, kmRange } from '../../play/kit/midi.js';
+import { kmClassName, kmNoteName, kmParseNote, kmRange } from '../../play/kit/midi.js';
+import { noteClassesLabel } from '../../play/playSources';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
-import { Segmented } from '../ui/Choice';
+import { Segmented, Toggle } from '../ui/Choice';
 import { Field } from '../ui/Field';
 import { rowField } from '../ui/rowLayout';
 import { NumberInput } from '../NodeGraph/NumberInput';
@@ -217,6 +219,16 @@ function NoteRange({ source, labelStyle, onChange }: { source: MidiSource; label
     return () => window.removeEventListener('keydown', onKey);
   }, [step]);
   const lo = range ? range[0] : 0, hi = range ? range[1] : 127;
+  const wrap = !!source.wrap;
+  const setWrap = (on: boolean) => {
+    const { wrap: _w, ...rest } = source;
+    void _w;
+    onChange(on ? { ...rest, wrap: true } : rest);
+  };
+  // The note played last, and its pitch class (what a wrapped row hears).
+  const active = useActiveInput();
+  const lastNote = active?.kind === 'note' ? active.number : null;
+  const allClasses = !range || hi - lo >= 11;
   return (
     <>
       <Row label="Notes" labelStyle={labelStyle}>
@@ -239,13 +251,25 @@ function NoteRange({ source, labelStyle, onChange }: { source: MidiSource; label
           <span style={{ fontWeight: 500, opacity: 0.8 }}> Esc to cancel</span>
         </div>
       )}
+      <Row label="Octaves" labelStyle={labelStyle}>
+        <span data-testid="midi-wrap" title="Any octave: a note counts by its name (C, C#…) whatever octave it is played in, so C2, C3 and C4 all count as C">
+          <Toggle checked={wrap} onChange={setWrap} label="Any octave (wrap)" />
+        </span>
+        {wrap && <span data-testid="midi-note-classes" style={{ font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary }}>{allClasses ? 'All 12 notes' : noteClassesLabel(range ?? undefined)}</span>}
+        {lastNote !== null && <span data-testid="midi-last-note" style={{ font: `11px ${fontFamily.mono}`, color: tk.text.faint }}>last {kmNoteName(lastNote)}{wrap ? ` → ${kmClassName(lastNote)}` : ''}</span>}
+      </Row>
+      {wrap && source.signal === 'note' && (
+        <div style={{ margin: '-2px 0 6px 60px', color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>
+          {allClasses ? 'C reads 0, B reads 1, in any octave' : `${kmClassName(lo)} reads 0, ${kmClassName(lo + Math.min(11, hi - lo))} reads 1, in any octave`}
+        </div>
+      )}
       {range && (
         <Row label="" labelStyle={labelStyle}>
           <NoteField key={`lo${lo}`} label="Lowest note" value={lo} onCommit={n => setRange(kmRange(n, Math.max(n, hi)))} />
           <span style={{ color: tk.text.faint }}>to</span>
           <NoteField key={`hi${hi}`} label="Highest note" value={hi} onCommit={n => setRange(kmRange(Math.min(n, lo), n))} />
           <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>
-            {source.signal === 'note' ? `${kmNoteName(lo)} reads 0, ${kmNoteName(hi)} reads 1` : 'Notes outside are ignored'}
+            {wrap ? 'Their note names count in every octave' : source.signal === 'note' ? `${kmNoteName(lo)} reads 0, ${kmNoteName(hi)} reads 1` : 'Notes outside are ignored'}
           </span>
         </Row>
       )}

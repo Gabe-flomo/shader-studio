@@ -23,7 +23,7 @@ import { base64ToBytes, eventIndexAt, parseMidiFile, type MidiFileData } from '.
 import type { MidiLock, PlayMidiFile } from '../types/play';
 import { parseMidiLocks } from '../types/playMidi';
 import { selectMidiTransport, type MidiBackendStatus, type MidiOutPort, type MidiSourceInfo, type MidiTransport } from './midiTransport';
-import { kmLockRead, kmLockRecord, kmRangeRead, type KmLockEntry } from '../play/kit/midi.js';
+import { kmLockRead, kmLockRecord, kmRangeRead, kmWrapRead, type KmLockEntry } from '../play/kit/midi.js';
 import { midiMonitor, midiMessageLength } from './midiMonitor';
 import { isTypingTarget, keyboardClaimed } from './keyboardClaim';
 
@@ -233,6 +233,15 @@ export class MidiEngine implements InputSource {
   readRange(channel: number, range: readonly [number, number] | null | undefined): { note: number; vel: number; gate: boolean } {
     const ch = this.channels[Math.max(0, Math.min(16, channel))];
     return kmRangeRead(ch.noteSeq, ch.noteVel, ch.held, range);
+  }
+
+  /**
+   * readRange with octaves wrapped: notes whose pitch class the range covers
+   * (all twelve with no range), in any octave (kit/midi.js kmWrapRead).
+   */
+  readWrapped(channel: number, range: readonly [number, number] | null | undefined): { note: number; vel: number; gate: boolean } {
+    const ch = this.channels[Math.max(0, Math.min(16, channel))];
+    return kmWrapRead(ch.noteSeq, ch.noteVel, ch.held, range);
   }
 
   // ── Message ingestion (all backends end up here) ─────────────────────────

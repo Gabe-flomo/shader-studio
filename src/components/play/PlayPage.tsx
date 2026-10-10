@@ -111,6 +111,8 @@ import { OpenPlayableButton } from './OpenPlayable';
 import { SuggestControlsButton } from './SuggestControlsButton';
 import { MidiFileCard } from './MidiFileCard';
 import { MidiSourceOptions, PadSourceOptions } from './MidiSourceOptions';
+import { BuiltInSignalOptions, BuiltInSignalsSection } from './BuiltInSignals';
+import { NoteClassMapDialog } from './NoteClassMapDialog';
 import { PadGridCard } from './PadGridCard';
 import { AnchorPicker, FirePicker, TriggerPicker, type TriggerLayerRef } from './TriggerPicker';
 import { actionsForLayer, layerNumericProps, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, parsePropTarget, type ActionKind } from '../../types/play';
@@ -1461,6 +1463,7 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
   const [learnFor, setLearnFor] = useState<string | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null);
+  const [noteMap, setNoteMap] = useState(false);
   useEffect(() => {
     if (!learnFor) return;
     void midiEngine.connectWebMidi({ retry: true });
@@ -1644,7 +1647,10 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
               } })),
               'separator',
               { label: 'Another input…', hint: 'A knob, a key, the mouse: pick it on the card, or press Learn', icon: 'plus' as const, onSelect: () => onRecord(p => addFreeSource(p, allSources ? { kind: 'midi', signal: 'cc', channel: 0 } : { kind: 'mouse', axis: 'x' }).play) },
+              { heading: 'MIDI' },
+              { label: 'Map 12 notes → 12 targets…', hint: 'C to B onto controls or layers in order; any octave hits the same one', icon: 'piano' as const, onSelect: () => { if (!allSources) { openProSheet('play.sources'); return; } setNoteMap(true); } },
             ]} />}
+            {noteMap && <NoteClassMapDialog play={play} onRecord={onRecord} onClose={() => setNoteMap(false)} />}
           </>
         )}
       />
@@ -1661,6 +1667,8 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
             <SourceGroups sources={ownSources} mappings={play.mappings} words={sourceWords} gridStyle={grid ? PANEL_GRID_WIDE : undefined}
               renderItem={x => (x.kind === 'source' ? sourceCard(x.def) : rowFor(x.mapping, { collapsed: collapsed.has(x.mapping.id) }))} />
           )}
+          {/* The built-in signals: always there, whatever the setup has (Signals: count, active, share). */}
+          {mode !== 'drawer' && <ProLock feature="play.sources" style={{ display: 'block', width: '100%' }}><BuiltInSignalsSection onRecord={onRecord} /></ProLock>}
           {!!play.pairs?.length && (
             <PairMappingsSection play={play} grid={grid} audioNodes={audioNodes} layerRefs={layerRefs} onAdd={onAddPair} onUpdate={onUpdatePair} onRemove={onRemovePair} />
           )}
@@ -2478,6 +2486,8 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
       return <MidiSourceOptions source={source} labelStyle={labelStyle} numStyle={numStyle} onChange={onChange} />;
     case 'pad':
       return <PadSourceOptions source={source} labelStyle={labelStyle} numStyle={numStyle} onChange={onChange} />;
+    case 'signals':
+      return <BuiltInSignalOptions source={source} labelStyle={labelStyle} numStyle={numStyle} onChange={onChange} />;
     case 'sensor': {
       const sensing = layerRefs.filter(l => sensorReadsFor(l).length);
       if (!sensing.length) return row(hint('Add a layer first: a shape, particles, a null…'));

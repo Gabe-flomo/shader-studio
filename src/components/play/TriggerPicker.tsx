@@ -25,7 +25,8 @@ import {
   anchorChoice, anchorOptions, anchorPick, fireModes, fireOf, keyName, ordinal, repeatHint, triggerFromKind, triggerLabel, withFire,
 } from '../../play/playSources';
 import { playEngine } from '../../lib/playEngine';
-import { Segmented } from '../ui/Choice';
+import { Segmented, Toggle } from '../ui/Choice';
+import { kmClassName, kmNoteName } from '../../play/kit/midi.js';
 import { Field } from '../ui/Field';
 import { Select } from '../ui/Select';
 import { Icon } from '../ui/Icon';
@@ -44,6 +45,7 @@ import { ReaderMeter } from './AudioReadersPanel';
 import { ConditionFields, SignalPicker } from './ConditionFields';
 import type { AudioReader } from '../../types/play';
 import { pulseForHz, pulseHz } from '../../play/triggers';
+import { withNoteWrap } from '../../play/noteClassMap';
 
 export interface TriggerLayerRef { id: string; label: string; kind: string }
 
@@ -70,8 +72,17 @@ export function TriggerPicker({ trigger: t, layers, numStyle, onChange }: {
       }} height={26} />
       {t.on === 'key' && <span style={{ height: 26, padding: '0 8px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', background: tk.bg.field, font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary }}>{keyName(t.code)}</span>}
       {t.on === 'note' && <>
-        <NumberInput value={t.note} min={-1} max={127} step={1} title="Note number, -1 for any note" onCommit={n => onChange({ ...t, note: Math.max(-1, Math.min(127, Math.round(n))) })} style={{ ...numStyle, width: 44 }} />
+        {t.wrap
+          // Any octave: the note is a pitch class, C to B (or any note).
+          ? <Select ariaLabel="Note (any octave)" value={`${t.note}`} options={NOTE_CLASS_OPTIONS} onChange={v => onChange({ ...t, note: parseInt(v, 10) })} height={26} />
+          : <>
+            <NumberInput value={t.note} min={-1} max={127} step={1} title="Note number, -1 for any note" onCommit={n => onChange({ ...t, note: Math.max(-1, Math.min(127, Math.round(n))) })} style={{ ...numStyle, width: 44 }} />
+            {t.note >= 0 && <span data-testid="trigger-note-name" style={{ font: `600 11.5px ${fontFamily.mono}`, color: tk.text.secondary }}>{kmNoteName(t.note)}</span>}
+          </>}
         <Select ariaLabel="Trigger channel" value={`${t.channel}`} options={CHANNELS} onChange={v => onChange({ ...t, channel: parseInt(v, 10) || 0 })} height={26} />
+        <span title="Any octave: the note's name (C, C#…) fires it in every octave, so C2, C3 and C4 all fire C" style={{ display: 'inline-flex' }}>
+          <Toggle checked={!!t.wrap} label="Any octave" onChange={on => onChange(withNoteWrap(t, on))} />
+        </span>
       </>}
       {t.on === 'osc' && <>
         <Field value={t.address} onChange={e => onChange({ ...t, address: e.target.value.startsWith('/') ? e.target.value : `/${e.target.value}` })} height={26} mono style={{ flex: 1, minWidth: 110 }} placeholder="/1/push1" />
@@ -138,6 +149,10 @@ export function TriggerPicker({ trigger: t, layers, numStyle, onChange }: {
 }
 
 const NO_READERS: AudioReader[] = [];
+
+/** A note trigger's pitch classes (any octave), and any note. */
+const NOTE_CLASS_OPTIONS = [{ value: '-1', label: 'Any note' }, ...Array.from({ length: 12 }, (_, i) => ({ value: `${i}`, label: `${kmClassName(i)} (any octave)` }))];
+
 const NO_SIGNAL_LIST: NonNullable<import('../../types/play').PlayRecord['signals']> = [];
 
 /** An audio reader trigger: which reader, the level it fires at, how far it falls before it can fire again, and the level now. */

@@ -23,6 +23,8 @@ export function valueRange(play: PlayRecord, ref: string): ValueRange | null {
   if (!r) return null;
   switch (r.kind) {
     case 'mapping': case 'source': case 'mouse': return [0, 1];
+    // The built-in signals: the share 0..1, the counts up to how many signals there are.
+    case 'builtin': return r.read === 'share' ? [0, 1] : [0, Math.max(1, play.signals?.length ?? 0)];
     case 'distance': return null;
     case 'reading': return readingRange(r.read as SensorRead);
     case 'axis': case 'picture': return [0, 1];
