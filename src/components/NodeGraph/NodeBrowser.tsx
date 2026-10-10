@@ -23,9 +23,12 @@ import { FLOWS, STAGES } from '../../structure/stages';
 import { misfitBadge, splitCategories } from '../../structure/relevance';
 import { useLibraryPrefs } from '../../structure/libraryPrefs';
 import { useFitsHere, useLibraryContext } from './useLibraryRelevance';
+import { spawnPoint } from './spawnPoint';
 
 // ── Nodes hidden from browser ─────────────────────────────────────────────────
 const HIDDEN_NODES = new Set([
+  // Texture (textureInput) is the one card for pictures, videos and the webcam; its Source switch makes a videoInput.
+  'videoInput',
   'output', 'vec4Output', 'loopIndex',
   'groupOutput', 'groupInput', 'marchLoopInputs', 'marchLoopOutput', 'scope',
   'forLoop', 'loopRippleStep', 'loopRotateStep', 'loopDomainFold',
@@ -465,7 +468,7 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
           )}
           {userNode.source && (
             <Button size="sm" icon="layoutGraph" style={{ flex: 1 }} title="Place the node's source graph as a group; publish it again to update this node type"
-              onClick={() => openUserNodeSource(userNode.id, { x: 200 + Math.random() * 120, y: 120 + Math.random() * 200 })}>
+              onClick={() => openUserNodeSource(userNode.id, spawnPoint())}>
               Open source graph
             </Button>
           )}

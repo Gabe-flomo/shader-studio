@@ -15,13 +15,14 @@
 import type { AgentRuleSet, ChannelRef } from '../agentRules/spec';
 
 export type Rgb = [number, number, number];
-export type HoodTextureId = 'A' | 'B' | 'C' | 'D';
+export type HoodTextureId = 'A' | 'B' | 'C' | 'D' | 'E';
 /** How a channel is coloured. */
 export type HoodMap = 'gradient' | 'diverge' | 'hue' | 'ramp' | 'soft' | 'life' | 'species' | 'heat' | 'packed' | 'channel';
 export type HoodKey =
   | 'posX' | 'posY' | 'posZ' | 'heading' | 'age' | 'velX' | 'velY' | 'velZ' | 'speed' | 'life'
   | 'species' | 'memX' | 'memY' | 'colour' | 'dep0' | 'dep1' | 'dep2' | 'dep3'
-  | 'trail0' | 'trail1' | 'trail2' | 'trail3';
+  | 'trail0' | 'trail1' | 'trail2' | 'trail3'
+  | 'more0' | 'more1' | 'more2' | 'more3';
 
 export interface HoodChannel {
   key: HoodKey;
@@ -47,6 +48,10 @@ export interface HoodContext {
   d3: boolean;
   /** The group keeps C and D. */
   stateC: boolean;
+  /** The group keeps More memory (state E, the named memories). */
+  stateE?: boolean;
+  /** E's four channels' names (the named memories in their slots; '' for a free one). */
+  memoryNames?: string[];
   /** The picture's width ÷ height (positions run ±aspect across). */
   aspect: number;
   /** Fastest a walker goes, about (the speed ramp's top). */
@@ -166,6 +171,15 @@ export function hoodTextures(ctx: HoodContext): HoodTexture[] {
     out.push({
       id: 'D', title: 'D · what it leaves', learn: 'How much it adds to each of the four trail channels where it lands, every step (times the Deposit\'s Amount).',
       channels: [0, 1, 2, 3].map(i => ch('D', i, `dep${i}` as HoodKey, `deposit ${i + 1}`, 'channel', [0, 1], '0', '1', `What it lays in trail channel ${i + 1}.`, ctx.trailColours[i] ?? TRAIL_RGB[i])),
+    });
+  }
+  if (ctx.stateC && ctx.stateE) {
+    out.push({
+      id: 'E', title: 'E · its named memories', learn: 'Kept only when it has named memories (the Memory section): four more numbers it carries from step to step, a counter, a timer, on / off, a level, a place (two of them).',
+      channels: [0, 1, 2, 3].map(i => {
+        const name = ctx.memoryNames?.[i] || '';
+        return ch('E', i, `more${i}` as HoodKey, name || `more memory ${'xyzw'[i]}`, 'heat', [0, 1], '0', '1', name ? `The memory ${name}.` : 'A free memory slot.');
+      }),
     });
   }
   return out;
@@ -369,7 +383,7 @@ export const HOOD_TRAIL_GAIN = 0.15;
 
 /** What the GPU draws for each thumbnail of hoodAtlas (in its order): source texture, channel, map, range, colour. */
 export function hoodTileSpecs(textures: HoodTexture[], trails: HoodTrailChannel[]): Array<{ source: number; comp: number; map: number; lo: number; hi: number; colour: Rgb }> {
-  const src: Record<HoodTextureId, number> = { A: 0, B: 1, C: 2, D: 3 };
+  const src: Record<HoodTextureId, number> = { A: 0, B: 1, C: 2, D: 3, E: 5 };
   return [
     ...textures.flatMap(t => t.channels.map(c => ({ source: src[c.texture], comp: c.comp, map: MAP_ID[c.map], lo: c.range[0], hi: c.range[1], colour: c.colour ?? [1, 1, 1] as Rgb }))),
     ...trails.map(t => ({ source: 4, comp: t.index, map: MAP_ID.channel, lo: 0, hi: HOOD_TRAIL_GAIN, colour: t.colour })),

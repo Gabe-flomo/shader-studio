@@ -28,15 +28,16 @@ import { PresetCard, StudioLabel, StudioNavItem, StudioShell } from '../builders
 import { LiveViewport, type ViewRect } from '../builders/studio/LiveViewport';
 import { type AgentRuleSet, type ChannelRef, type RuleCondition, DEFAULT_NEIGHBOURS, kindOf, WALKER_KINDS } from '../../agentRules/spec';
 import { openGroupAsNodes, setGroupSpace } from '../../agentRules/storeActions';
-import { openAgentRulesWindow } from '../../builders/windows';
 import { patchCard, readCards, sectionSummary, setCardOn, setEdges, setNeighbours, setSensors, setSpeed, smellChips, type RuleCard } from '../../agentBuilder/cards';
-import { type CardRead, readBehaviours, setOnlyWhen, setSpeciesColour } from '../../agentBuilder/behaviours';
+import { type CardRead, readBehaviours, setMemWhen, setOnlyWhen, setSpeciesColour } from '../../agentBuilder/behaviours';
+import { MemoryColourRow, MemoryLens, MemorySection, TimesChip } from './MemorySection';
+import { memorySlotNames } from '../../agentBuilder/memory';
 import { type DiagramFocus, type DiagramSection } from '../../agentBuilder/diagram';
 import { START_CARDS, type StartCard } from '../../agentBuilder/kinds';
 import { presetsFor } from '../../agentBuilder/presets';
 import { SETTING_HINTS } from '../../agentBuilder/words';
 import { CARD_WORDS, KIND_SECTIONS, MORE_HINTS, type SectionId, isTrailKind, kindCards, sectionWordsOf } from '../../agentBuilder/sections';
-import { applyBuilderPreset, discardAgentGroup, makeAgentGroup, setSetupParam, setupOf } from '../../agentBuilder/actions';
+import { type BuilderGroup, applyBuilderPreset, builderGroups, clearableCount, clearGraphForBuilder, discardAgentGroup, makeAgentGroup, removeAgentSetup, setSetupParam, setupOf } from '../../agentBuilder/actions';
 import { BehaviourCard, ChipRow, SettingRow, SliderSetting } from './BehaviourCard';
 import { WalkerDiagram, type BornInfo } from './WalkerDiagram';
 import { KindDiagram, OnlyWhenOverlay } from './KindDiagram';
@@ -54,6 +55,10 @@ import { type Box, type LegendEntry, entryForFocus, focusOfEntry, legendEntries,
 import { onlyWhenText } from '../../agentBuilder/onlyWhen';
 import { DEMO_H, DEMO_W, FocusDemo, ViewportLegend, type ViewportLink } from './ViewportLegend';
 import { Icon } from '../ui/Icon';
+import { AdvancedRules, type AdvancedView } from './AdvancedRules';
+import { SurpriseBar } from '../surprise/SurpriseBar';
+import { surpriseBuilderAction, useSurpriseSeeds } from '../surprise/surpriseActions';
+import { newSeed } from '../../lib/surprise';
 
 type Section = SectionId | 'advanced';
 
@@ -64,24 +69,106 @@ export function AgentBuilder({ groupId, onClose, onOpenGroup }: {
 }) {
   const [made, setMade] = useState<{ groupId: string; before: GraphNode[] } | null>(null);
   const [startSpace, setStartSpace] = useState<'2d' | '3d'>('2d');
+  // The start page's "Clear the graph first?" (keep is the default).
+  const [clearFirst, setClearFirst] = useState<'keep' | 'clear'>('keep');
+  // Opened with builder groups already in the graph: Edit this one / Start over / Add another. Null until answered.
+  const [answer, setAnswer] = useState<{ to: 'add' | 'over'; gone?: string } | null>(null);
+  const groupsKey = useNodeGraphStore(s => JSON.stringify(builderGroups(s.nodes)));
+  const groups = useMemo(() => JSON.parse(groupsKey) as BuilderGroup[], [groupsKey]);
+  const clearable = useNodeGraphStore(s => clearableCount(s.nodes));
   const id = groupId ?? made?.groupId ?? null;
   const pick = (card: StartCard) => {
+    // "Clear the graph first": its own undo step, before the one that adds the group; Back brings the whole graph back.
+    const original = clearFirst === 'clear' && clearable > 0 ? clearGraphForBuilder() : null;
     const r = makeAgentGroup(card, startSpace);
     if (!r) return;
-    if (!card.built) { openAgentRulesWindow(r.groupId); return; }
-    setMade(r);
+    setMade({ groupId: r.groupId, before: original ?? r.before });
     onOpenGroup?.(r.groupId);
   };
-  if (!id) return <StartPage space={startSpace} onSpace={setStartSpace} onPick={pick} onClose={onClose} />;
+  if (!id && groups.length && !answer) {
+    return <ExistingPrompt groups={groups} onClose={onClose}
+      onEdit={g => onOpenGroup?.(g)}
+      onStartOver={g => { const label = groups.find(x => x.id === g)?.label; if (removeAgentSetup(g)) setAnswer({ to: 'over', gone: label }); }}
+      onAdd={() => setAnswer({ to: 'add' })} />;
+  }
+  if (!id) {
+    return <StartPage space={startSpace} onSpace={setStartSpace} onPick={pick} onClose={onClose}
+      clearable={clearable} clearFirst={clearFirst} onClearFirst={setClearFirst}
+      note={answer?.to === 'over' ? `Started over: ${answer.gone ?? 'the group'} and its setup are gone (undo brings them back).` : undefined} />;
+  }
   return (
     <KindEditor key={id} groupId={id} madeHere={made?.groupId === id} onClose={onClose}
-      onBack={made?.groupId === id ? () => { const before = made.before; setMade(null); onOpenGroup?.(null); discardAgentGroup(before); } : undefined} />
+      onBack={made?.groupId === id ? () => { const before = made.before; setMade(null); setAnswer(a => a ?? { to: 'add' }); onOpenGroup?.(null); discardAgentGroup(before); } : undefined} />
+  );
+}
+
+// ── Opened with builder groups already in the graph ──────────────────────────
+
+/**
+ * "This graph already has an Agents group": Edit this one (the default, Enter), Start over (take it
+ * and its setup away, then the start page) or Add another (the start page). With several, pick which.
+ */
+function ExistingPrompt({ groups, onEdit, onStartOver, onAdd, onClose }: {
+  groups: BuilderGroup[]; onEdit: (id: string) => void; onStartOver: (id: string) => void; onAdd: () => void; onClose: () => void;
+}) {
+  const tk = useTokens();
+  const selectedId = useNodeGraphStore(s => s.selectedNodeId);
+  const [picked, setPicked] = useState(() => groups.find(g => g.id === selectedId)?.id ?? groups[0].id);
+  const sel = groups.find(g => g.id === picked) ?? groups[0];
+  const many = groups.length > 1;
+  return (
+    <StudioShell prefsKey="agent-builder" icon="swarm" title="Agent Builder" kind={many ? `${groups.length} Agents groups in this graph` : 'An Agents group is already here'} onClose={onClose}>
+      <div data-agent-existing style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '48px 24px', gap: 20 }}
+        onKeyDown={e => { if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'BUTTON') onEdit(sel.id); }}>
+        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, textAlign: 'center' }}>
+          <b style={{ fontSize: 20, fontWeight: 650, letterSpacing: '-0.01em' }}>{many ? 'This graph already has Agents groups' : 'This graph already has an Agents group'}</b>
+          <span style={{ fontSize: 12.5, color: tk.text.muted, maxWidth: 520 }}>
+            {many ? 'Pick one to edit or start over, or add another beside them.' : 'Edit it, start it over from a new kind, or add another beside it.'} Undo takes back whatever you choose.
+          </span>
+        </span>
+        {many && (
+          <div role="radiogroup" aria-label="Which group" style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%', maxWidth: 440 }}>
+            {groups.map(g => {
+              const on = g.id === sel.id;
+              return (
+                <button key={g.id} type="button" role="radio" aria-checked={on} data-existing-group={g.id} onClick={() => setPicked(g.id)} onDoubleClick={() => onEdit(g.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', border: 0, borderRadius: radius.card, cursor: 'pointer', textAlign: 'left',
+                    background: on ? tk.bg.selected : tk.bg.panel, color: tk.text.primary, boxShadow: on ? `inset 0 0 0 1.5px ${tk.accent.base}` : `inset 0 0 0 1px ${tk.border.default}`,
+                  }}>
+                  <Icon name="swarm" size={16} />
+                  <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <b style={{ fontSize: 13, fontWeight: 650 }}>{g.label}</b>
+                    <span style={{ fontSize: 11.5, color: tk.text.muted }}>{g.kind} · {g.d3 ? '3D' : '2D'}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {!many && (
+          <span data-existing-group={sel.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, fontSize: 13 }}>
+            <Icon name="swarm" size={16} /><b style={{ fontWeight: 650 }}>{sel.label}</b><span style={{ color: tk.text.muted }}>{sel.kind} · {sel.d3 ? '3D' : '2D'}</span>
+          </span>
+        )}
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10 }}>
+          <Button variant="primary" icon="edit" onClick={() => onEdit(sel.id)} data-existing-edit autoFocus>{many ? `Edit ${sel.label}` : 'Edit this one'}</Button>
+          <Button icon="rebuild" onClick={() => onStartOver(sel.id)} data-existing-over title={`Take ${sel.label} and its setup away, then pick a kind (undo brings it back)`}>Start over</Button>
+          <Button icon="plus" onClick={onAdd} data-existing-add title="Keep what is here and add a new group beside it">Add another</Button>
+        </div>
+      </div>
+    </StudioShell>
   );
 }
 
 // ── Start page ───────────────────────────────────────────────────────────────
 
-function StartPage({ space, onSpace, onPick, onClose }: { space: '2d' | '3d'; onSpace: (v: '2d' | '3d') => void; onPick: (c: StartCard) => void; onClose: () => void }) {
+function StartPage({ space, onSpace, onPick, onClose, clearable, clearFirst, onClearFirst, note }: {
+  space: '2d' | '3d'; onSpace: (v: '2d' | '3d') => void; onPick: (c: StartCard) => void; onClose: () => void;
+  /** Nodes in the graph besides the Output: "Clear the graph first?" shows when there are any. */
+  clearable: number; clearFirst: 'keep' | 'clear'; onClearFirst: (v: 'keep' | 'clear') => void;
+  note?: string;
+}) {
   const tk = useTokens();
   return (
     <StudioShell prefsKey="agent-builder" icon="swarm" title="Agent Builder" kind="What are you making?" onClose={onClose}>
@@ -89,11 +176,25 @@ function StartPage({ space, onSpace, onPick, onClose }: { space: '2d' | '3d'; on
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
           <b style={{ fontSize: 20, fontWeight: 650, letterSpacing: '-0.01em' }}>What are you making?</b>
           <span style={{ fontSize: 12.5, color: tk.text.muted }}>Many small walkers, one big pattern. Pick a kind; you can change everything after.</span>
+          {note && <span data-start-note style={{ fontSize: 12, color: tk.text.secondary }}>{note}</span>}
         </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: tk.text.muted }}>
-          Make it in
-          <Segmented ariaLabel="Start in 2D or 3D" value={space} onChange={onSpace} options={[{ value: '2d' as const, label: '2D' }, { value: '3d' as const, label: '3D' }]} />
+        <span style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: 18, fontSize: 12.5, color: tk.text.muted }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            Make it in
+            <Segmented ariaLabel="Start in 2D or 3D" value={space} onChange={onSpace} options={[{ value: '2d' as const, label: '2D' }, { value: '3d' as const, label: '3D' }]} />
+          </span>
+          {clearable > 0 && (
+            <span data-start-clear={clearFirst} style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}
+              title="Clear: everything but the Output goes first, as an undo step of its own (undo, or Back, brings it all back). Keep: the new group is added beside what is there.">
+              Your graph has {clearable} {clearable === 1 ? 'node' : 'nodes'}:
+              <Segmented ariaLabel="Clear the current graph first?" value={clearFirst} onChange={onClearFirst}
+                options={[{ value: 'keep' as const, label: 'Keep them' }, { value: 'clear' as const, label: 'Clear the graph first' }]} />
+            </span>
+          )}
         </span>
+        {clearFirst === 'clear' && clearable > 0 && (
+          <span data-start-clear-note style={{ fontSize: 12, color: tk.status.warningText, marginTop: -10 }}>Picking a kind clears the graph first (all but the Output). Undo or Back brings it back.</span>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(196px, 1fr))', gap: 14, width: '100%', maxWidth: 1180 }}>
           {START_CARDS.map(c => <StartKindCard key={c.id} card={c} onPick={() => onPick(c)} />)}
         </div>
@@ -107,7 +208,6 @@ function StartKindCard({ card, onPick }: { card: StartCard; onPick: () => void }
   const [hover, setHover] = useState(false);
   return (
     <button type="button" data-start-kind={card.id} onClick={onPick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      title={card.built ? undefined : 'Opens the rules editor for now: its builder sections come next.'}
       style={{
         display: 'flex', flexDirection: 'column', gap: 10, padding: 10, border: 0, borderRadius: radius.card, cursor: 'pointer', textAlign: 'left',
         background: hover ? tk.bg.hover : tk.bg.panel, boxShadow: hover ? `inset 0 0 0 1.5px ${tk.accent.base}` : `inset 0 0 0 1px ${tk.border.default}`, color: tk.text.primary,
@@ -117,7 +217,6 @@ function StartKindCard({ card, onPick }: { card: StartCard; onPick: () => void }
         <b style={{ fontSize: 14, fontWeight: 650 }}>{card.label}</b>
         <span style={{ fontSize: 12, color: tk.text.muted }}>{card.makes}</span>
       </span>
-      {!card.built && <span data-start-old style={{ padding: '0 4px', fontSize: 11, color: tk.text.faint }}>Opens the rules editor for now</span>}
     </button>
   );
 }
@@ -154,11 +253,15 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const [focus, setFocus] = useState<DiagramFocus>({ section: FIRST[kind] ?? 'born' });
   const [preset, setPreset] = useState<string | null>(null);
   const [advanced, setAdvanced] = useState(false);
+  const [advView, setAdvView] = useState<AdvancedView>('advanced');
   const [lit, setLit] = useState<number | null>(null);
   // Under the hood (HoodView.tsx): the walkers in their state textures, under the picture.
   const [hoodOpen, setHoodOpenState] = useState(readHood);
   const setHoodOpen = (v: boolean) => { setHoodOpenState(v); writeHood(v); };
   const [chipPicked, setChipPicked] = useState(false);
+  const surpriseSeed = useSurpriseSeeds(st => st.agents[groupId] ?? null);
+  // Memory (phase 4): the memory being edited; the viewport colours the walkers by it.
+  const [memPicked, setMemPicked] = useState<string | null>(null);
   const update = (next: AgentRuleSet) => { apply(next); setPreset(null); };
   // A kind added or taken away: start the walkers over once the rules are in, so births share them
   // out among the kinds (walkers born all at once keep the kind they were born with).
@@ -196,7 +299,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const trail = { halfLife: num(trailNode?.params.halfLife, 0.12), diffuse: num(trailNode?.params.diffuse, 1) };
   const viewRadius = set.neighbours?.radius ?? DEFAULT_NEIGHBOURS.radius;
   const lensRef = useLensRef(cards.senses.distance, current);
-  // The view ring stays between half and twice its size (0.21–0.92 of the lens) before the lens re-fits.
+  // The view ring stays between half and twice its size (0.21–0.92 of the lens); past that the lens zooms with it.
   const viewRef = useLensRef(viewRadius, `${current}:view`, 0.5, 2.2);
   const presets = presetsFor(kind);
   const thumbs = usePresetThumbs(presets);
@@ -246,6 +349,11 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
     if (next) { setSet(next); setSp(0); setPreset(key); setLit(null); }
   };
   const words = sectionWordsOf;
+  // Surprise me (agentBuilder/surprise.ts): a random setup of this kind, one undo step; the rules come back through the store.
+  const surprise = (seed: number = newSeed()) => {
+    flush();
+    if (surpriseBuilderAction(groupId, seed)) { setSp(0); setPreset(null); setLit(null); }
+  };
 
   // ── Born ──
   const bornCard = (
@@ -281,8 +389,21 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const onlyWhen = (c: RuleCard) => {
     const at = cards.at[c];
     if (!at) return undefined;
-    return <OnlyWhenLine id={c} set={set} sp={s} when={cards.when[c]}
-      onFocus={x => { focusCard(c); onFocusSetting(x); }} onChange={(w: RuleCondition | null) => update(setOnlyWhen(set, s, at, w))} />;
+    return <OnlyWhenLine id={c} set={set} sp={s} when={cards.when[c]} memWhen={cards.memWhen[c]}
+      onFocus={x => { focusCard(c); onFocusSetting(x); }} onChange={(w: RuleCondition | null) => update(setOnlyWhen(set, s, at, w))}
+      onMemChange={(w: RuleCondition | null) => update(setMemWhen(set, s, at, w))} />;
+  };
+  // Memory: trail followers' cards beyond the three (a second Senses or Trail a memory gates, Head for, Turn round).
+  const extraCards = (ids: string[]) => {
+    const list = cards.extras.filter(c => ids.includes(c.card));
+    if (!list.length) return null;
+    return <SectionCards section={{ id: current, cards: [] }} all={[]} extras={list} set={set} sp={s} update={update} cardsFor={kindCards(kind)}
+      focusCard={focusCard} hotCard={focus.card} onFocusSetting={onFocusSetting} d3={d3} />;
+  };
+  const trailTimes = (c: RuleCard) => {
+    const at = cards.at[c];
+    const a = at ? set.species[s]?.rules[at.rule]?.do[at.action] : undefined;
+    return at && a ? <TimesChip id={c} set={set} times={a.times} onChange={t => update(patchCard(set, s, c, { times: t }))} /> : undefined;
   };
   const sensesCard = (
     <div onPointerEnter={() => focusCard('senses')}>
@@ -297,6 +418,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
           <ChipRow label="Smells" options={chips} value={cards.senses.channel} onChange={v => update(patchCard(set, s, 'senses', { channel: v as ChannelRef }))} />
         </SettingRow>
       </BehaviourCard>
+      {extraCards(['senses'])}
     </div>
   );
   const turningCard = (
@@ -309,13 +431,15 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
           onFocus={onFocusSetting} onChange={v => update(patchCard(set, s, 'wobble', { degrees: v }))}
           right={<span data-card-switch="wobble"><Toggle checked={cards.turning.wobbleOn} onChange={on => update(setCardOn(set, s, 'wobble', on))} /></span>} />
       </BehaviourCard>
+      {extraCards(['wobble', 'goal', 'turnRound'])}
     </div>
   );
   const movingCard = (
     <BehaviourCard id="moving" picture="moving" title="Moving" hint={words('moving').hint} learn={words('moving').learn} guide={words('moving').guide}
       summary={sectionSummary(cards, 'moving')}>
       <SliderSetting id="speed" label="Speed" hint={SETTING_HINTS.speed} value={cards.moving.speed} min={0} max={d3 ? 2 : kind === 'particles' ? 3 : 1} step={0.005}
-        onFocus={onFocusSetting} onChange={v => update(setSpeed(set, s, v))} />
+        onFocus={onFocusSetting} onChange={v => update(setSpeed(set, s, v))}
+        right={<TimesChip id="speed" set={set} times={set.species[s]?.speedTimes} onChange={t => update({ ...set, species: set.species.map((x, i) => (i === s ? { ...x, speedTimes: t } : x)) })} />} />
       <SettingRow id="edges" label="At the edges" hint={SETTING_HINTS.edges} onFocus={onFocusSetting}>
         <Segmented size="sm" fill ariaLabel="At the edges" value={cards.moving.edges} onChange={v => update(setEdges(set, v))}
           options={[{ value: 'wrap' as const, label: 'Wrap' }, { value: 'bounce' as const, label: 'Bounce' }, { value: 'slide' as const, label: 'Slide' }]} />
@@ -330,7 +454,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
           <ChipRow label="Lays" options={chips} value={cards.trail.channel} onChange={v => update(patchCard(set, s, 'trail', { channel: v as ChannelRef }))} />
         </SettingRow>}>
         <SliderSetting id="amount" label="Leaves" hint={SETTING_HINTS.amount} value={cards.trail.amount} min={0} max={4} step={0.05}
-          onFocus={onFocusSetting} onChange={v => update(patchCard(set, s, 'trail', { amount: v }))} />
+          onFocus={onFocusSetting} onChange={v => update(patchCard(set, s, 'trail', { amount: v }))} right={trailTimes('trail')} />
         {trailNode ? <>
           <SliderSetting id="fades" label="Fades" hint={SETTING_HINTS.fades} value={trail.halfLife} min={0.005} max={1} step={0.005}
             onFocus={onFocusSetting} onChange={v => setSetupParam(trailNode.id, { halfLife: Math.max(0.005, v) })} />
@@ -338,6 +462,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
             onFocus={onFocusSetting} onChange={v => setSetupParam(trailNode.id, { diffuse: v })} />
         </> : <span style={{ fontSize: 12, color: tk.text.muted }}>No Trail field: wire the group into a Deposit and a Trail field to see and smell it.</span>}
       </BehaviourCard>
+      {extraCards(['trail'])}
     </div>
   );
 
@@ -383,23 +508,17 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
         <SettingRow id="colour" label={`${set.species[s]?.name ?? 'Its'} colour`} hint={MORE_HINTS.colour} onFocus={onFocusSetting}>
           <ColorSwatch label="Colour" value={colour} onChange={rgb => update(setSpeciesColour(set, s, rgb as [number, number, number]))} />
         </SettingRow>
+        {/* Memory (phase 4) seam: colour by a memory. */}
+        <MemoryColourRow set={set} update={update} onFocus={onFocusSetting} />
       </BehaviourCard>
     </>
   );
 
   const advancedCards = (
-    <BehaviourCard id="advanced" picture="advanced" title="Advanced rules" hint="Rules the cards can't show yet (two conditions, Stop, states, memory): they keep working; edit them in the rules editor."
-      summary={`${advancedRules.length} ${advancedRules.length === 1 ? 'rule' : 'rules'}, run top to bottom`}
-      footer={<Button size="sm" icon="expr" data-open-rules-editor onClick={() => { flush(); openAgentRulesWindow(groupId); }}>Edit in the rules editor</Button>}>
-      <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {advancedRules.map(a => (
-          <li key={a.rule} data-advanced-rule={a.rule} style={{ display: 'flex', gap: 8, fontSize: 12, lineHeight: 1.5, color: a.off ? tk.text.faint : tk.text.secondary }}>
-            <span style={{ font: `700 11px ${fontFamily.mono}`, color: tk.text.faint, width: 16, flexShrink: 0, paddingTop: 1 }}>{a.rule + 1}</span>
-            <span data-advanced-text>{a.text}</span>
-          </li>
-        ))}
-      </ol>
-    </BehaviourCard>
+    <AdvancedRules set={set} sp={s} advanced={advancedRules} update={update} view={advView} onView={setAdvView}
+      intro={<SectionIntro title="Advanced rules" hint="Rules the cards can't show (two conditions, Stop, states, masks, memory) as When … Do … lines: edit them here. Every rule lists all of them, in the order they run."
+        learn="Each step, a walker runs its rules from top to bottom. A rule's When must all hold for its Do to happen; Stop after this rule skips the rules below it for that walker. The cards are rules too: Every rule shows them as lines, and a rule the cards can read shows up on its card again."
+        guide="docs/agent-rules.md" />} />
   );
 
   const body = (() => {
@@ -415,6 +534,8 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       case 'neighbours': return KIND_SECTIONS[kind].find(x => x.id === 'neighbours')!.cards.length ? sectionCards('neighbours', viewCard) : <>{sectionHeader('neighbours')}{viewCard}</>;
       case 'steering': return sectionCards('steering');
       case 'orbit': return sectionCards('orbit');
+      case 'memory': return <MemorySection set={set} sp={s} update={update} cards={trailKind ? readBehaviours(set, s, ['senses', 'wobble', 'trail']).cards : behaviours.cards}
+        picked={memPicked} onPick={setMemPicked} onFocusSetting={onFocusSetting} intro={sectionHeader('memory')} d3={d3} />;
       case 'advanced': return advancedCards;
     }
   })();
@@ -454,6 +575,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
         const o = on(['orbit'])[0]?.action;
         return o?.kind === 'orbit' ? `radius ${r3(o.distance)} · ${o.cw ? 'clockwise' : 'anticlockwise'}` : 'none';
       }
+      case 'memory': return set.memories?.length ? set.memories.map(m => m.name).join(' · ') : 'none';
     }
   };
   const dim = (id: SectionId) => (id === 'senses' && !cards.senses.on) || (id === 'trail' && !cards.trail.on)
@@ -467,16 +589,18 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
           const w = words(x.id);
           return <StudioNavItem key={x.id} id={x.id} icon={w.icon} label={w.label} hint={w.hint} summary={summary(x.id)} selected={shown === x.id} onClick={() => select(x.id)} dim={dim(x.id)} />;
         })}
-        {advancedRules.length > 0 && (
-          <StudioNavItem id="advanced" icon="expr" label="Advanced rules" summary={`${advancedRules.length} in the rules editor`} selected={shown === 'advanced'} onClick={() => select('advanced')} />
-        )}
+        <StudioNavItem id="advanced" icon="expr" label="Advanced rules" hint="Every rule as When … Do … lines, edited here"
+          summary={advancedRules.length ? `${advancedRules.length} beyond the cards` : 'every rule as lines'} selected={shown === 'advanced'} onClick={() => select('advanced')} dim={!advancedRules.length} />
       </div>
     </div>
   );
 
   const presetStrip = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <StudioLabel meta="click to apply · undo takes it back">Presets</StudioLabel>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ flex: 1 }}><StudioLabel meta="click to apply · undo takes it back">Presets</StudioLabel></span>
+        <SurpriseBar seed={surpriseSeed} onSurprise={surprise} title={`A random ${kindLabel.toLowerCase()} setup from a new seed: every number varied, new colours (one undo step)`} />
+      </span>
       <div style={{ display: 'flex', gap: 12 }}>
         {presets.map(p => <PresetCard key={p.key} id={p.key} label={p.label} hint={p.hint} src={thumbs[p.key]} active={preset === p.key} onClick={() => applyPreset(p.key)} />)}
       </div>
@@ -531,6 +655,8 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       const sc = (set.species[lit].states[0]?.colour ?? [1, 1, 1]) as [number, number, number];
       spot = <SpeciesSpotlight groupId={groupId} species={lit} colour={sc} name={set.species[lit].name} image={image} onClose={() => setLit(null)} />;
     }
+    // Memory: the walkers coloured by the memory being edited (and the live ranges sampled).
+    if (current === 'memory' && !advanced && !hoodOpen) return <MemoryLens groupId={groupId} set={set} memoryId={memPicked} image={image} />;
     // Under the hood: the plain picture (no diagram), the ring on a walker and its numbers.
     if (hoodOpen) return <>{spot}<HoodLayer box={box} speciesNames={hoodSpecies.map(x => x.name)} /></>;
     if (advanced) return null;
@@ -561,14 +687,15 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       space={{ value: d3 ? '3d' : '2d', onChange: v => { flush(); setGroupSpace(groupId, v); }, hint: 'Switching turns the whole setup (sensors and speed rescaled, Trail ↔ volume); undo switches it back.' }}
       actions={<>
         <IconButton icon="layers" label={hoodOpen ? 'Hide Under the hood' : 'Under the hood: the walkers in their textures'} size="sm" active={hoodOpen} onClick={() => setHoodOpen(!hoodOpen)} data-hood-toggle />
-        <IconButton icon="expr" label="All rules (the rules editor)" size="sm" onClick={() => { flush(); openAgentRulesWindow(groupId); }} data-open-rules />
+        <IconButton icon="dice" label="Surprise me: a random setup of this kind (one undo step)" size="sm" onClick={() => surprise()} data-surprise-top />
+        <IconButton icon="expr" label="Every rule as When … Do … lines (Advanced rules)" size="sm" active={shown === 'advanced' && advView === 'all'} onClick={() => { select('advanced'); setAdvView('all'); }} data-open-rules />
         <IconButton icon="fn" label="Open as nodes" size="sm" onClick={() => { flush(); onClose(); openGroupAsNodes(groupId); }} />
       </>}
       primary={{ label: madeHere ? 'Add to graph' : 'Done', onClick: close, title: madeHere ? 'Keep it (it is already live in your graph, wired to the Output)' : undefined }}
       nav={nav} inspector={inspector} presets={presetStrip}>
       <LiveViewport overlay={overlay} />
       {hoodOpen && (
-        <HoodPanel groupId={groupId} species={hoodSpecies} trails={trailChannels} highlight={hoodLit} onClose={() => setHoodOpen(false)}
+        <HoodPanel groupId={groupId} species={hoodSpecies} trails={trailChannels} highlight={hoodLit} onClose={() => setHoodOpen(false)} memoryNames={memorySlotNames(set)}
           speedMax={Math.max(0.05, ...set.species.map(x => x.speed), num(emit?.params.speed, 0)) * 1.5} lifeMax={num(emit?.params.life, 0)} />
       )}
     </StudioShell>

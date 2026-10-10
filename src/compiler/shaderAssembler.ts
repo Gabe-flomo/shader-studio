@@ -1,3 +1,5 @@
+import { DEPTH_TYPE, depthSampler } from '../nodes/definitions/depth';
+import { LINK_AT, LINK_COL, LINK_TOKEN_RE, linkColourSource, linkUniformToken, translateChain } from '../nodes/sceneLink';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { dataBlocksFirst } from '../data/dataGlsl';
 import { MAX_GROUP_ITERATIONS } from '../nodes/definitions/group';
@@ -27,7 +29,7 @@ import { audioUniformName } from './audioUniformNames';
 import { coerce, coerceLossy } from '../lib/typesCompatible';
 import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { loopColour } from '../nodes/definitions/scene3d';
-import { AG_3D_GLSL, AG_HASH_GLSL, AG_STATE_C_GLSL, AGENT_GLOBALS, AGENT_GLOBALS_3D, AGENT_STATE_C_GLOBALS, agentStateUniform, agentStepUniform, agentWindowUniform } from '../nodes/definitions/agents';
+import { AG_3D_GLSL, AG_HASH_GLSL, AG_STATE_C_GLSL, AGENT_GLOBALS, AGENT_GLOBALS_3D, AGENT_STATE_C_GLOBALS, AGENT_STATE_E_GLOBALS, agentStateUniform, agentStepUniform, agentWindowUniform } from '../nodes/definitions/agents';
 import { agentNbHeader } from '../nodes/definitions/agentNeighbours';
 import { frozenValueOf } from '../nodes/sliderFreeze';
 import { marchJitterDecl, MARCH_STEP_REF_KEY } from './marchJitter';
@@ -678,6 +680,11 @@ export interface AgentProgramOptions {
    */
   stateC?: boolean;
   /**
+   * More memory (with stateC): a fifth output and sampler, E = four more numbers the walker keeps
+   * (a_mem2, Agent Inputs' / Agent Output's More memory).
+   */
+  stateE?: boolean;
+  /**
    * Space 3D (docs/agents-plan.md "3D"): A = (pos.xyz, age), B = (vel.xyz, life); the globals are
    * vec3 (a_dir the heading, a_across this step's random direction across it) and g_uv is a_pos.xy.
    */
@@ -696,9 +703,11 @@ function agentHeader(o: AgentProgramOptions): string {
     'layout(location = 0) out highp vec4 o_a;',
     'layout(location = 1) out highp vec4 o_b;',
     ...(o.stateC ? ['layout(location = 2) out highp vec4 o_c;', 'layout(location = 3) out highp vec4 o_d;'] : []),
+    ...(o.stateC && o.stateE ? ['layout(location = 4) out highp vec4 o_e;'] : []),
     `uniform sampler2D ${agentStateUniform(o.slug, 'A')};`,
     `uniform sampler2D ${agentStateUniform(o.slug, 'B')};`,
     ...(o.stateC ? [`uniform sampler2D ${agentStateUniform(o.slug, 'C')};`, `uniform sampler2D ${agentStateUniform(o.slug, 'D')};`] : []),
+    ...(o.stateC && o.stateE ? [`uniform sampler2D ${agentStateUniform(o.slug, 'E')};`] : []),
     `uniform highp uint ${agentStepUniform(o.slug)};`,
     `uniform vec4 ${agentWindowUniform(o.slug)};`,
     ...o.declarations,
@@ -709,6 +718,7 @@ function agentHeader(o: AgentProgramOptions): string {
     'const float a_dt = 1.0 / 60.0;',
     ...(o.space3d ? AGENT_GLOBALS_3D : AGENT_GLOBALS).map(([t, name]) => `${t} ${name};`),
     ...(o.stateC ? AGENT_STATE_C_GLOBALS.map(([t, name]) => `${t} ${name};`) : []),
+    ...(o.stateC && o.stateE ? AGENT_STATE_E_GLOBALS.map(([t, name]) => `${t} ${name};`) : []),
     'vec4 a_ownChannels;',
     AG_HASH_GLSL,
     ...(o.space3d ? [AG_3D_GLSL] : []),
@@ -726,11 +736,12 @@ function agentPrelude(o: AgentProgramOptions): string {
     `    vec4 a_sA = texelFetch(${A}, a_tex, 0);`,
     `    vec4 a_sB = texelFetch(${B}, a_tex, 0);`,
     ...(o.stateC ? [`    vec4 a_sC = texelFetch(${agentStateUniform(o.slug, 'C')}, a_tex, 0);`, `    vec4 a_sD = texelFetch(${agentStateUniform(o.slug, 'D')}, a_tex, 0);`] : []),
+    ...(o.stateC && o.stateE ? [`    vec4 a_sE = texelFetch(${agentStateUniform(o.slug, 'E')}, a_tex, 0);`] : []),
     '    a_index = float(a_tex.y * a_side + a_tex.x);',
     `    a_born = mod(a_index - ${W}.x + a_count, a_count) < ${W}.y${o.respawn ? ' || a_sB.w <= 0.0' : ''};`,
     // Dead and not born this step: keep the texel as it is, at almost no cost.
     o.stateC
-      ? '    if (!a_born && a_sB.w <= 0.0) { o_a = a_sA; o_b = a_sB; o_c = a_sC; o_d = a_sD; return; }'
+      ? `    if (!a_born && a_sB.w <= 0.0) { o_a = a_sA; o_b = a_sB; o_c = a_sC; o_d = a_sD;${o.stateE ? ' o_e = a_sE;' : ''} return; }`
       : '    if (!a_born && a_sB.w <= 0.0) { o_a = a_sA; o_b = a_sB; return; }',
     `    a_seed = agHash(uint(a_tex.y * a_side + a_tex.x) * 0x9E3779B1u ^ agHash(${agentStepUniform(o.slug)} ^ (uint(max(${o.seed}, 0.0)) * 0x85EBCA6Bu)));`,
     '    a_random = float(a_seed >> 8) / 16777216.0;',
@@ -749,6 +760,7 @@ function agentPrelude(o: AgentProgramOptions): string {
     ]),
     // With per-walker state the species is the one its Emit gave it (state C); else its index's.
     o.stateC ? '    a_species = a_sC.x; a_mem = a_sC.yz; a_colour = agUnpackColour(a_sC.w);' : '    a_species = mod(a_index, a_speciesCount);',
+    ...(o.stateC && o.stateE ? ['    a_mem2 = a_sE;'] : []),
     o.species > 1
       ? '    a_ownChannels = (vec4(equal(vec4(a_species), vec4(0.0, 1.0, 2.0, 3.0))) * 1.5 - 0.5) * vec4(lessThan(vec4(0.0, 1.0, 2.0, 3.0), vec4(a_speciesCount)));'
       : '    a_ownChannels = vec4(1.0, 0.0, 0.0, 0.0);',
@@ -807,6 +819,8 @@ export class ShaderAssembler {
   private nodeSlugMap = new Map<string, string>();
   private sortedNodes: GraphNode[];
   private allNodes: GraphNode[];
+  /** Link colour tokens → their value, for when the swatch isn't a uniform (sceneLinkOutputs). */
+  private linkFallbacks = new Map<string, string>();
   private seedOutputs = new Map<string, Record<string, string>>();
   /** ShaderAssemblerOptions.slugs (Pass node path only). */
   private fixedSlugs: Map<string, string> | undefined;
@@ -978,6 +992,11 @@ export class ShaderAssembler {
         // A Time Cube's volume is an atlas texture bound the same way (lib/timeCube/volumes.ts).
         if (node.type === 'textureInput' || node.type === 'timeCube') {
           this.textureUniforms[`u_tex_${nodeSlug}`] = node.id;
+        }
+        // The Depth node (docs/depth-node.md): its depth, filled by lib/depth/engine.ts (a baked video's plays as a video).
+        if (node.type === DEPTH_TYPE) {
+          if (depthSampler(node, nodeSlug).startsWith('u_vid_')) this.videoUniforms[`u_vid_${nodeSlug}`] = node.id;
+          else this.textureUniforms[`u_tex_${nodeSlug}`] = node.id;
         }
         // Nodes with their own image slots (published user nodes): one
         // sampler per slot, bound from nodeTextures["<id>::<slot>"].
@@ -1497,6 +1516,10 @@ export class ShaderAssembler {
               // and bound from the original node's textures, exactly as at the top level.
               if (subNode.type === 'textureInput' || subNode.type === 'timeCube') this.textureUniforms[`u_tex_${subNode.id}`] = originalId;
               if (subNode.type === 'baked') this.videoUniforms[`u_vid_${subNode.id}`] = originalId;
+              if (subNode.type === DEPTH_TYPE) {
+                if (depthSampler(subNode).startsWith('u_vid_')) this.videoUniforms[`u_vid_${subNode.id}`] = originalId;
+                else this.textureUniforms[`u_tex_${subNode.id}`] = originalId;
+              }
               subDef.textureSlots?.forEach(slot => { this.textureUniforms[`u_tex_${subNode.id}_${slot}`] = `${originalId}::${slot}`; });
               const { patchedNode: patchedSub, uniforms: subUniforms, bindings: subBindings } = patchNodeParamsForUniforms(effectiveSubNode, subDef, fn => this.functions.add(fn), originalId);
               Object.assign(this.paramUniforms, subUniforms);
@@ -1988,6 +2011,8 @@ export class ShaderAssembler {
 
           const sgSorted = topologicalSort(sgPrefixedNodes);
           let sgLastFloatVar = '100.0';  // default return value (large dist = miss)
+          // What each inner node was compiled with, for the link outputs (nodes/sceneLink.ts)
+          const sgRec = new Map<string, { inputs: Record<string, string>; params: Record<string, unknown>; code: string }>();
 
           for (const sn of sgSorted) {
             if (this.nodeOutputs.has(sn.id)) continue;  // scenePos already registered
@@ -2110,9 +2135,11 @@ export class ShaderAssembler {
                 effectiveSn = { ...effectiveSn, params: { ...effectiveSn.params, [paramKey]: v } };
               }
             }
-            const snResult = snDef.generateGLSL(this.patchBodyNode(effectiveSn, snDef, origIdBySlug(sgSubSlugMap, origId)), snInputVars);
+            const patchedSn = this.patchBodyNode(effectiveSn, snDef, origIdBySlug(sgSubSlugMap, origId));
+            const snResult = snDef.generateGLSL(patchedSn, snInputVars);
             sceneFnLines.push(snResult.code);
             this.nodeOutputs.set(sn.id, snResult.outputVars);
+            sgRec.set(sn.id, { inputs: snInputVars, params: patchedSn.params, code: snResult.code });
 
             // Track the latest node's distance as the candidate return value
             { const dv = sceneDistanceVar(snDef, sn, snResult.outputVars); if (dv) sgLastFloatVar = dv; }
@@ -2140,9 +2167,77 @@ export class ShaderAssembler {
           this.functions.add(fnDef);
           if (sgExtraParams.length > 0) this.sceneFnExtraParams.set(fnName, sgExtraParams);
 
-          this.nodeOutputs.set(node.id, { scene: fnName });
+          this.nodeOutputs.set(node.id, { scene: fnName, ...this.sceneLinkOutputs(node, subgraph, sgPrefix, sgSubSlugMap, sgSorted, sgRec) });
           return;
 
+  }
+
+  /**
+   * A Scene Group's link outputs (nodes/sceneLink.ts): for each `at_<inner id>` on its card, where that object is,
+   * as a main() expression; for each `col_<inner id>`, its colour. A Translate's offset is what it reads: a uniform,
+   * a keyframe curve or a value wired from outside the group are main() values already; a chain wired inside the
+   * group that doesn't read Scene Pos is copied into main() (once); anything else falls back to its slider.
+   */
+  private sceneLinkOutputs(
+    node: GraphNode, subgraph: SubgraphData, sgPrefix: string, slugMap: Map<string, string>, sorted: GraphNode[],
+    rec: Map<string, { inputs: Record<string, string>; params: Record<string, unknown>; code: string }>,
+  ): Record<string, string> {
+    const keys = Object.keys(node.outputs ?? {}).filter(k => k.startsWith(LINK_AT) || k.startsWith(LINK_COL));
+    if (!keys.length) return {};
+    const out: Record<string, string> = {};
+    const pre = (id: string) => sgPrefix + (slugMap.get(id) ?? id);
+    const byPre = new Map(sorted.map(n => [n.id, n]));
+    const hoisted = new Set<string>();
+    const readsP = (code: string) => /(?<![\w.])p(?![\w])/.test(code);
+    const local = (expr: string) => expr.includes(sgPrefix) || readsP(expr);
+    // The inner nodes an input reads, in compile order; null when any of them can't run in main().
+    const upstream = (start: GraphNode, key: string): GraphNode[] | null => {
+      const need = new Set<string>();
+      const stack = [start.inputs[key]?.connection?.nodeId].filter(Boolean) as string[];
+      while (stack.length) {
+        const id = stack.pop()!;
+        if (need.has(id)) continue;
+        const n = byPre.get(id);
+        const r = rec.get(id);
+        // Scene Pos (the point being measured) or code that reads `p` can't run in main(); vars of the nodes it is
+        // wired to are fine (they are copied too).
+        if (!n || !r || n.type === 'scenePos' || n.type === 'group' || readsP(r.code)) return null;
+        need.add(id);
+        for (const i of Object.values(n.inputs)) if (i.connection && byPre.has(i.connection.nodeId)) stack.push(i.connection.nodeId);
+      }
+      return sorted.filter(n => need.has(n.id));
+    };
+    const offset = (tId: string, k: string): string => {
+      const r = rec.get(tId);
+      const t = byPre.get(tId);
+      if (!r || !t) return '0.0';
+      const v = r.inputs[k];
+      const param = typeof r.params[k] === 'string' ? String(r.params[k]) : formatFloat(typeof r.params[k] === 'number' ? r.params[k] as number : 0);
+      if (!v) return param;
+      if (!local(v)) return v;
+      const chain = upstream(t, k);
+      if (!chain) return param;
+      for (const n of chain) {
+        if (hoisted.has(n.id)) continue;
+        hoisted.add(n.id);
+        this.mainCode.push(`    // ${node.id}: copied from the Scene Group for a link (where an object is)\n`, rec.get(n.id)!.code);
+      }
+      return v;
+    };
+    for (const key of keys) {
+      const innerId = key.startsWith(LINK_AT) ? key.slice(LINK_AT.length) : key.slice(LINK_COL.length);
+      if (key.startsWith(LINK_AT)) {
+        const terms = translateChain(subgraph.nodes, innerId).map(id => `vec3(${['tx', 'ty', 'tz'].map(k => offset(pre(id), k)).join(', ')})`);
+        out[key] = terms.length ? `(${terms.join(' + ')})` : 'vec3(0.0)';
+      } else {
+        const src = linkColourSource(this.allNodes, node, innerId);
+        if (!src) { out[key] = 'vec3(1.0)'; continue; }
+        const token = linkUniformToken(src.nodeId, src.key);
+        this.linkFallbacks.set(token, `vec3(${src.value.slice(0, 3).map(x => formatFloat(Number(x) || 0)).join(', ')})`);
+        out[key] = token;
+      }
+    }
+    return out;
   }
 
   /**
@@ -4240,6 +4335,12 @@ export class ShaderAssembler {
   }
 
   private buildResult() {
+    // Link colours (nodes/sceneLink.ts): the swatch's live uniform once every node is compiled, else its value.
+    const linkToken = (s: string) => s.replace(LINK_TOKEN_RE, (m: string, id: string, key: string) => {
+      const u = this.paramBindings[`${id}::${key}`];
+      return u && u in this.paramUniforms ? u : this.linkFallbacks.get(m) ?? 'vec3(1.0)';
+    });
+    if (this.linkFallbacks.size) this.mainCode = this.mainCode.map(linkToken);
     const mainBody = this.mainCode.join('') + (this.stepsView ? `    gl_FragColor = vec4(${this.stepsView}, 1.0);\n` : '');
     // Repeat Cell outside a Repeat Scene (or in a path that skips declarationsFor) still needs its global.
     if (!this.declarations.has(CELL3_DECL) && [CELL3_GLOBAL, CELL3SIZE_GLOBAL].some(g => mainBody.includes(g) || [...this.functions].some(f => f.includes(g)))) this.declarations.add(CELL3_DECL);
@@ -4339,6 +4440,7 @@ function toAgentEyeProgram(fs: string): string {
     'const float a_count = 1.0;',
     ...AGENT_GLOBALS.map(([t, name]) => `${t} ${name};`),
     ...AGENT_STATE_C_GLOBALS.map(([t, name]) => `${t} ${name};`),
+    ...AGENT_STATE_E_GLOBALS.map(([t, name]) => `${t} ${name};`),
     'vec4 a_ownChannels;',
     AG_HASH_GLSL,
     AG_STATE_C_GLSL,
@@ -4347,7 +4449,7 @@ function toAgentEyeProgram(fs: string): string {
   const set = [
     '    a_pos = g_uv; a_vel = vec2(0.0); a_heading = 0.0; a_speed = 0.0; a_age = 0.0; a_life = 1.0e30;',
     '    a_species = 0.0; a_index = 0.0; a_random = 0.5; a_seed = 0u; a_born = false; a_step = 0u;',
-    '    a_mem = vec2(0.0); a_colour = vec3(1.0); a_ownChannels = vec4(1.0, 0.0, 0.0, 0.0);',
+    '    a_mem = vec2(0.0); a_mem2 = vec4(0.0); a_colour = vec3(1.0); a_ownChannels = vec4(1.0, 0.0, 0.0, 0.0);',
     '',
   ].join('\n');
   return fs

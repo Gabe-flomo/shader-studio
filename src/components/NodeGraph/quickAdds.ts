@@ -49,7 +49,7 @@ function feedRules(type: string, text: string): Rule[] {
       if (has(text, 'center', 'centre', 'offset', 'translate', 'shift')) return [['mouse', 'uv', 'follow the pointer'], ['vec2Const', 'val', 'a fixed point'], ['uv', 'uv', 'per-pixel']];
       return [['uv', 'uv', 'the screen'], ['pixelUV', 'uv', 'pixel-square screen'], ['mouse', 'uv', 'follow the pointer']];
     case 'texture':
-      return [['pass', 'texture', 'draw a picture into a texture'], ['textureInput', 'texture', 'an image'], ['videoInput', 'texture', 'a video or the camera']];
+      return [['pass', 'texture', 'draw a picture into a texture'], ['textureInput', 'texture', 'a picture, a video or the webcam']];
     case 'vec3':
     case 'vec4':
       if (has(text, 'pos', 'normal', 'dir')) return [];

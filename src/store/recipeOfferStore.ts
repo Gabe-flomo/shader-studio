@@ -14,6 +14,7 @@ export const RECIPES_OFF_KEY = 'shader-studio:settings:starterRecipesOff';
 
 export interface RecipeOffer {
   nodeId: string;
+  /** The recipe set: the node's type, or a set opened from its card (PICTURE_DEPTH_SET). */
   type: string;
   /** When it opened (performance.now / Date.now ms): clicks just after it opens don't close it. */
   openedAt: number;

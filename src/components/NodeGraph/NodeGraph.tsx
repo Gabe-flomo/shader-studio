@@ -1184,6 +1184,18 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       return { x: (cx - p.x) / z, y: (cy - p.y) / z };
     });
   }, [registerViewportCenterGetter]);
+  // The part of the graph on screen (graph coordinates): nodes made from a card stay in view (lib/texture/generateDepth.ts).
+  useEffect(() => {
+    const reg = useNodeGraphStore.getState().registerViewportRectGetter;
+    reg(() => {
+      const el = canvasRef.current;
+      const z = zoomRef.current || 1;
+      const p = panRef.current ?? { x: 0, y: 0 };
+      const r = el ? el.getBoundingClientRect() : { width: 960, height: 600 };
+      return { x: -p.x / z, y: -p.y / z, w: r.width / z, h: r.height / z };
+    });
+    return () => reg(null);
+  }, []);
 
   // A node dragged out of the node browser lands here (nodeDrop.ts): the canvas says where the pointer is in the
   // graph, whether it takes drops, and which wire a data-edge key names.

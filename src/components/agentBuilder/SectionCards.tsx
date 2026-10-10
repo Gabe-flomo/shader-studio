@@ -12,8 +12,13 @@ import { Icon } from '../ui/Icon';
 import { Segmented } from '../ui/Choice';
 import type { AgentRuleSet, NeighbourWho, RuleAction, RuleCondition } from '../../agentRules/spec';
 import {
-  type CardId, type CardRead, addCard, patchAt, removeAt, reorderCards, setOnAt, setOnlyWhen,
+  type CardId, type CardRead, addCard, patchAt, removeAt, reorderCards, setMemWhen, setOnAt, setOnlyWhen,
 } from '../../agentBuilder/behaviours';
+import { TimesChip } from './MemorySection';
+import { smellChips } from '../../agentBuilder/cards';
+import { TRAIL_HEX } from '../../agentBuilder/hood';
+import type { ChannelRef } from '../../agentRules/spec';
+import { ChipRow } from './BehaviourCard';
 import { CARD_WORDS, MORE_HINTS, type SectionDef } from '../../agentBuilder/sections';
 import { setFlow } from '../../agentBuilder/cards';
 import { BehaviourCard, SettingRow, SliderSetting, type CardPicture } from './BehaviourCard';
@@ -39,15 +44,17 @@ export function cardSummary(c: CardRead): string {
     case 'die': return c.when?.kind === 'age' && c.when.cmp === '>' ? `at ${n(c.when.seconds)} s old` : c.when ? 'when its only when holds' : 'at once (give it an only when)';
     case 'separate': case 'match': case 'cohere': return `up to ${n(a.degrees, 1)}° a step`;
     case 'avoidEdges': return `within ${n(a.margin)} · ${n(a.degrees, 1)}°`;
-    case 'turn': return a.toward === 'point' ? `(${n(a.x ?? 0)}, ${n(a.y ?? 0)}) · ${n(a.degrees, 1)}°` : `the ${a.toward} · ${n(a.degrees, 1)}°`;
+    case 'turn': return a.toward === 'trail' ? `${n(a.degrees, 1)}° toward a smell` : a.toward === 'point' ? `(${n(a.x ?? 0)}, ${n(a.y ?? 0)}) · ${n(a.degrees, 1)}°` : `the ${a.toward} · ${n(a.degrees, 1)}°`;
     case 'slow': return `nearly stops at ${n(a.jam, 0)}`;
     case 'orbit': return `${a.target === 'point' ? `(${n(a.x ?? 0)}, ${n(a.y ?? 0)})` : `the ${a.target}`} · ${n(a.distance)} out${a.cw ? ' · clockwise' : ''}`;
     case 'wander': return `±${n(a.degrees, 1)}°`;
+    case 'trail': return `leaves ${n(a.amount)}`;
+    case 'bounce': return c.when || c.memWhen ? 'when its only when holds' : 'every step';
     default: return '';
   }
 }
 
-export function SectionCards({ section, all, set, sp, update, focusCard, hotCard, onFocusSetting, intro, cardsFor, only, d3 = false }: {
+export function SectionCards({ section, all, set, sp, update, focusCard, hotCard, onFocusSetting, intro, cardsFor, only, d3 = false, extras }: {
   section: SectionDef;
   /** Every card of the kind (reading order). */
   all: readonly CardRead[];
@@ -64,10 +71,12 @@ export function SectionCards({ section, all, set, sp, update, focusCard, hotCard
   only?: string;
   /** A 3D group (Follow a field's own layers have a vz). */
   d3?: boolean;
+  /** Show just these cards (trail followers' extra cards, a second Senses gated by a memory): no + chips. */
+  extras?: readonly CardRead[];
 }) {
   const tk = useTokens();
-  const cards = all.filter(c => section.cards.includes(c.card));
-  const missing = section.cards.filter(id => !cards.some(c => c.card === id));
+  const cards = extras ?? all.filter(c => section.cards.includes(c.card));
+  const missing = extras ? [] : section.cards.filter(id => !cards.some(c => c.card === id));
   const [drag, setDrag] = useState<{ from: number; over: number } | null>(null);
   const move = (i: number, j: number) => update(reorderCards(set, sp, cards, i, j));
   return (
@@ -100,15 +109,15 @@ export function SectionCards({ section, all, set, sp, update, focusCard, hotCard
               hot={hotCard === c.key} handle={handle}
               on={c.on} onToggle={on => update(setOnAt(set, sp, c.at, on))}
               onRemove={() => update(removeAt(set, sp, c.at))}
-              onlyWhen={<OnlyWhenLine id={c.key} set={set} sp={sp} when={c.when} onFocus={s => { focusCard(c.key); onFocusSetting(s); }}
-                onChange={w => update(setOnlyWhen(set, sp, c.at, w))} />}
+              onlyWhen={<OnlyWhenLine id={c.key} set={set} sp={sp} when={c.when} memWhen={c.memWhen ?? null} onFocus={s => { focusCard(c.key); onFocusSetting(s); }}
+                onChange={w => update(setOnlyWhen(set, sp, c.at, w))} onMemChange={w => update(setMemWhen(set, sp, c.at, w))} />}
               more={moreSettings(c, set, sp, update, onFocusSetting)}>
               <CardSettings c={c} set={set} sp={sp} update={update} onFocus={onFocusSetting} d3={d3} />
             </BehaviourCard>
           </div>
         );
       })}
-      {!only && cards.length === 0 && <span style={{ fontSize: 12, color: tk.text.muted, padding: '2px 2px 0' }}>Nothing here yet: add one below.</span>}
+      {!only && !extras && cards.length === 0 && <span style={{ fontSize: 12, color: tk.text.muted, padding: '2px 2px 0' }}>Nothing here yet: add one below.</span>}
       {!only && missing.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {missing.map(id => (
@@ -130,15 +139,18 @@ const WHO = [{ value: 'all' as const, label: 'Any kind' }, { value: 'own' as con
 function CardSettings({ c, set, sp, update, onFocus, d3 }: { c: CardRead; set: AgentRuleSet; sp: number; update: (s: AgentRuleSet) => void; onFocus: (s: string | undefined) => void; d3: boolean }) {
   const patch = <A extends RuleAction>(p: Partial<A>) => update(patchAt<A>(set, sp, c.at, p));
   const a = c.action;
+  // Its main slider × a memory ("speed × energy"; memory.ts).
+  const times = <TimesChip id={c.key} set={set} times={a.times} onChange={t => update(patchAt(set, sp, c.at, { times: t } as Partial<RuleAction>))} />;
+  const chips = smellChips(set).map(x => ({ ...x, dot: x.value === 'own' ? undefined : TRAIL_HEX[x.value as number] }));
   switch (a.kind) {
     case 'field': return <FieldSettings id={c.key} action={a} d3={d3} onFocus={onFocus} onChange={p => patch<Act<'field'>>(p)} />;
     case 'force': {
       if (a.field === 'gravity' || a.field === 'wind') return <>
-        <SliderSetting id="strength" label="Strength" hint={MORE_HINTS.strength} value={a.strength} min={0} max={3} step={0.01} onFocus={onFocus} onChange={v => patch<Act<'force'>>({ strength: v })} />
+        <SliderSetting id="strength" label="Strength" hint={MORE_HINTS.strength} value={a.strength} min={0} max={3} step={0.01} onFocus={onFocus} onChange={v => patch<Act<'force'>>({ strength: v })} right={times} />
         <SliderSetting id="angle" label="Direction (°)" hint={MORE_HINTS.direction} value={a.angle ?? (a.field === 'gravity' ? -90 : 0)} min={-180} max={180} step={1} onFocus={onFocus} onChange={v => patch<Act<'force'>>({ angle: v })} />
       </>;
       if (a.field === 'curl') return <>
-        <SliderSetting id="strength" label="Strength" hint={MORE_HINTS.strength} value={a.strength} min={0} max={3} step={0.01} onFocus={onFocus} onChange={v => patch<Act<'force'>>({ strength: v })} />
+        <SliderSetting id="strength" label="Strength" hint={MORE_HINTS.strength} value={a.strength} min={0} max={3} step={0.01} onFocus={onFocus} onChange={v => patch<Act<'force'>>({ strength: v })} right={times} />
         <SliderSetting id="flowSize" label="Eddies" hint={MORE_HINTS.flowSize} value={set.flow.size} min={0.2} max={4} step={0.05} onFocus={onFocus} onChange={v => update(setFlow(set, { size: v }))} />
       </>;
       return <>
@@ -153,7 +165,7 @@ function CardSettings({ c, set, sp, update, onFocus, d3 }: { c: CardRead; set: A
         </>}
       </>;
     }
-    case 'drag': return <SliderSetting id="drag" label="Drag" hint={MORE_HINTS.dragAmount} value={a.amount} min={0} max={4} step={0.01} onFocus={onFocus} onChange={v => patch<Act<'drag'>>({ amount: v })} />;
+    case 'drag': return <SliderSetting id="drag" label="Drag" hint={MORE_HINTS.dragAmount} value={a.amount} min={0} max={4} step={0.01} onFocus={onFocus} onChange={v => patch<Act<'drag'>>({ amount: v })} right={times} />;
     case 'fade': return <SliderSetting id="fade" label="Fades over (s)" hint={MORE_HINTS.fadeSeconds} value={a.seconds} min={0.1} max={20} step={0.1} onFocus={onFocus} onChange={v => patch<Act<'fade'>>({ seconds: Math.max(0.1, v) })} />;
     case 'die': {
       const w = c.when;
@@ -162,14 +174,20 @@ function CardSettings({ c, set, sp, update, onFocus, d3 }: { c: CardRead; set: A
         onChange={v => update(setOnlyWhen(set, sp, c.at, { ...w, seconds: v } as RuleCondition))} />;
     }
     case 'separate': case 'match': case 'cohere':
-      return <SliderSetting id="degrees" label="How hard (° a step)" hint={MORE_HINTS.degrees} value={a.degrees} min={0} max={45} step={0.5} onFocus={onFocus} onChange={v => patch<Act<'separate'>>({ degrees: v })} />;
+      return <SliderSetting id="degrees" label="How hard (° a step)" hint={MORE_HINTS.degrees} value={a.degrees} min={0} max={45} step={0.5} onFocus={onFocus} onChange={v => patch<Act<'separate'>>({ degrees: v })} right={times} />;
     case 'avoidEdges': return <>
       <SliderSetting id="degrees" label="How hard (° a step)" hint={MORE_HINTS.degrees} value={a.degrees} min={0} max={45} step={0.5} onFocus={onFocus} onChange={v => patch<Act<'avoidEdges'>>({ degrees: v })} />
       <SliderSetting id="margin" label="From the edge" hint={MORE_HINTS.margin} value={a.margin} min={0} max={0.6} step={0.005} onFocus={onFocus} onChange={v => patch<Act<'avoidEdges'>>({ margin: v })} />
     </>;
-    case 'turn': return <>
+    case 'turn': if (a.toward === 'trail') return <>
+      <SliderSetting id="sharp" label="How sharply (°)" value={a.degrees} min={0} max={90} step={0.5} onFocus={onFocus} onChange={v => patch<Act<'turn'>>({ degrees: v })} right={times} />
+      <SettingRow id="smells" label="Smells" onFocus={onFocus}>
+        <ChipRow label="Smells" options={chips} value={a.channel ?? 'own'} onChange={v => patch<Act<'turn'>>({ channel: v as ChannelRef })} />
+      </SettingRow>
+    </>;
+    return <>
       <SettingRow id="target" label="Toward" hint={MORE_HINTS.target} onFocus={onFocus}>
-        <Segmented size="sm" fill ariaLabel="Head for" value={a.toward === 'trail' ? 'point' : a.toward} onChange={v => patch<Act<'turn'>>({ toward: v })}
+        <Segmented size="sm" fill ariaLabel="Head for" value={a.toward} onChange={v => patch<Act<'turn'>>({ toward: v })}
           options={[{ value: 'point' as const, label: 'A point' }, { value: 'centre' as const, label: 'Centre' }, { value: 'mouse' as const, label: 'Mouse' }]} />
       </SettingRow>
       {a.toward === 'point' && <>
@@ -195,7 +213,14 @@ function CardSettings({ c, set, sp, update, onFocus, d3 }: { c: CardRead; set: A
       </SettingRow>
       <SliderSetting id="degrees" label="How hard (° a step)" hint={MORE_HINTS.degrees} value={a.degrees} min={0} max={30} step={0.5} onFocus={onFocus} onChange={v => patch<Act<'orbit'>>({ degrees: v })} />
     </>;
-    case 'wander': return <SliderSetting id="wobble" label="Wander (±°)" hint="A random turn of up to this many degrees each step." value={a.degrees} min={0} max={45} step={0.5} onFocus={onFocus} onChange={v => patch<Act<'wander'>>({ degrees: v })} />;
+    case 'wander': return <SliderSetting id="wobble" label="Wander (±°)" hint="A random turn of up to this many degrees each step." value={a.degrees} min={0} max={45} step={0.5} onFocus={onFocus} onChange={v => patch<Act<'wander'>>({ degrees: v })} right={times} />;
+    case 'trail': return <>
+      <SliderSetting id="amount" label="Leaves" value={a.amount} min={0} max={4} step={0.05} onFocus={onFocus} onChange={v => patch<Act<'trail'>>({ amount: v })} right={times} />
+      <SettingRow id="lays" label="Lays" onFocus={onFocus}>
+        <ChipRow label="Lays" options={chips} value={a.channel} onChange={v => patch<Act<'trail'>>({ channel: v as ChannelRef })} />
+      </SettingRow>
+    </>;
+    case 'bounce': return null;
     default: return null;
   }
 }

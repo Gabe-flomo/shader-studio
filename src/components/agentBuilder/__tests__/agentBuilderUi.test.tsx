@@ -115,7 +115,7 @@ describe('the start page', () => {
     expect(nodes.find(n => n.type === 'trailField')!.params).toMatchObject({ halfLife: 0.05, resolution: '1024' });
     expect(nodes.find(n => n.type === 'agentDeposit')!.params.amount).toBe(4);
     expect(opened).toEqual([g.id]);
-    expect($$('[data-studio-section]').map(b => b.getAttribute('data-studio-section'))).toEqual(['born', 'senses', 'turning', 'moving', 'trail']);
+    expect($$('[data-studio-section]').map(b => b.getAttribute('data-studio-section'))).toEqual(['born', 'senses', 'turning', 'moving', 'trail', 'memory', 'advanced']);
     expect($('[data-inspector]')?.getAttribute('data-inspector')).toBe('senses');
     expect($('[data-card="senses"]')?.getAttribute('data-card-on')).toBe('true');
     // Only the primary section is open: the others are one-line summaries in the nav.
@@ -145,7 +145,7 @@ describe('the start page', () => {
     expect(nodes.find(n => n.type === 'drawAgents')!.inputs.agents.connection?.nodeId).toBe(g.id);
     expect(useBuilderWindows.getState().agentRules).toBeNull();
     expect($('[data-studio-kind]')?.textContent).toBe('Particles · 2D');
-    expect($$('[data-studio-section]').map(b => b.getAttribute('data-studio-section'))).toEqual(['born', 'forces', 'moving', 'life', 'look']);
+    expect($$('[data-studio-section]').map(b => b.getAttribute('data-studio-section'))).toEqual(['born', 'forces', 'moving', 'life', 'memory', 'look', 'advanced']);
     expect($('[data-inspector]')?.getAttribute('data-inspector')).toBe('forces');
     expect($$('[data-card-slot]').map(c => c.getAttribute('data-card-slot'))).toEqual(['gravity#0', 'curl#0', 'drag#0', 'attract#0']);
     act(() => { useNodeGraphStore.getState().undo(); });
@@ -206,7 +206,7 @@ describe('cards and the diagram', () => {
     expect($('[data-diagram="born"]')?.getAttribute('data-size')).toBe('0.15');
   });
 
-  it('an old rule set opens in the builder: its rules map to cards, the rest is Advanced (opening the rules editor)', () => {
+  it('an old rule set opens in the builder: its rules map to cards, the rest is Advanced (edited in the builder, never the rules editor)', () => {
     const old = normalizeOld();
     const g = applyRulesToGroup({ id: 'g1', type: 'agentsGroup', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { tier: '64k' } } as GraphNode, old);
     useNodeGraphStore.setState({ nodes: [g] });
@@ -215,8 +215,8 @@ describe('cards and the diagram', () => {
     expect($('[data-studio-section="moving"] [data-studio-summary]')?.textContent).toBe('0.3 · bounce');
     click($('[data-studio-section="advanced"]'));
     expect($$('[data-advanced-text]').map(x => x.textContent)).toEqual(['When age > 5 s → die']);
-    click($('[data-open-rules-editor]'));
-    expect(useBuilderWindows.getState()).toMatchObject({ agentRules: 'g1', agentBuilder: null });
+    expect($('[data-open-rules-editor]')).toBeNull();
+    expect(useBuilderWindows.getState().agentRules).toBeNull();
   });
 });
 
@@ -239,10 +239,12 @@ describe('presets', () => {
     expect($('[data-studio-section="turning"] [data-studio-summary]')?.textContent).toBe('20° · wobble 7°');
     click($('[data-preset="ants"]'));
     expect(groupRules(group()!).kind).toBe('ants');
-    expect($('[data-studio-section="advanced"]')).toBeTruthy();
+    // The ants are cards now (named memories, phase 4): nothing Advanced.
+    expect($('[data-studio-section="memory"] [data-studio-summary]')?.textContent).toBe('carrying · away');
+    expect($('[data-studio-section="advanced"] [data-studio-summary]')?.textContent).toBe('every rule as lines');
     act(() => { useNodeGraphStore.getState().undo(); });
     expect(groupRules(group()!).species[0].rules[0].do[0]).toMatchObject({ kind: 'turn', degrees: 20 });
-    expect($('[data-studio-section="advanced"]')).toBeNull();
+    expect($('[data-studio-section="memory"] [data-studio-summary]')?.textContent).toBe('none');
     act(() => { useNodeGraphStore.getState().undo(); });
     expect(groupRules(group()!).species[0].rules[0].do[0]).toMatchObject({ kind: 'turn', degrees: 45 });
   });
@@ -258,7 +260,7 @@ describe('the ways in', () => {
     expect(useNodeGraphStore.getState().nodes).toEqual([]);
   });
 
-  it('Edit rules on any rules group opens the builder (flocks too, since phase 2); Advanced opens the rules editor', () => {
+  it('Edit rules on any rules group opens the builder (flocks too, since phase 2); nothing opens the old rules editor', () => {
     const trail = applyRulesToGroup({ id: 'g1', type: 'agentsGroup', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: {} } as GraphNode, rulesTemplate('slime')!.set());
     const ants = applyRulesToGroup({ ...trail, id: 'g2' }, rulesTemplate('ants')!.set());
     const boids = applyRulesToGroup({ ...trail, id: 'g3' }, rulesTemplate('boids')!.set());

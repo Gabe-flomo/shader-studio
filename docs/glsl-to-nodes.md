@@ -383,7 +383,10 @@ constructors) that run fine in the Studio.
 
 Layout: the converter places nodes with the Studio's rank columns (440 px
 apart, card heights estimated the way auto layout does), in program order down
-each column.
+each column. The layout is compact (docs/structure-hints.md, "Auto layout"):
+a value read only near the end, like `u_time` in a tint, sits one column before
+what reads it rather than alone in the first column, and separate pieces are
+packed together.
 
 Decisions taken with you: badges on imported code (yes); inexact expressions
 are offered as the node with a warning, with the option to keep the code

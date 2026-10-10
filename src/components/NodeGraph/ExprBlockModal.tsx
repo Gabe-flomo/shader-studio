@@ -23,7 +23,7 @@ import { CodeInput } from '../code/CodeField';
 import { ReferencePanel } from '../code/ReferencePanel';
 import { LinePreviewPanel, ProbeButton } from '../code/LinePreview';
 import type { EditorPanel } from '../code/editorPanelPrefs';
-import { CollapseInputsButton, FunctionsToggle, InputsRail, SidePanel, useEditorSidePanels } from '../code/SidePanels';
+import { CollapseInputsButton, FunctionsTab, InputsRail, SidePanel, useEditorSidePanels } from '../code/SidePanels';
 import { buildCompletions } from '../code/glslReference';
 import { insertSnippet } from '../code/useCompletion';
 import { HowUsedButton } from '../codeExplorer/HowUsedButton';
@@ -37,27 +37,14 @@ import { useFnCardScope } from '../explain/functionCard/fnCardStore';
 import type { GeneraliseContext } from '../../lib/glslPatterns';
 import { lineConcepts } from '../../lib/glslPatterns/explain';
 import { snippetLines, type Snippet } from '../../suggestions/snippets';
-
-// ── Convert ExprBlock warp lines → FnDef array (one fn per line, f1/f2/f3…) ──
-// Names are always sequential (f1, f2, …). The return type is inferred from a
-// typed LHS ("float …", "vec3 …") or falls back to the ExprBlock outputType.
-function linesToFnDefs(
-  lines: WarpLine[],
-  defaultType: 'float' | 'vec2' | 'vec3' = 'float',
-): Array<Omit<FnDef, 'id'>> {
-  let fnIndex = 0;
-  return lines
-    .filter(l => l.rhs && l.rhs.trim() && !l.off)
-    .map(line => {
-      fnIndex++;
-      const lhs = line.lhs.trim();
-      const typedMatch = lhs.match(/^(float|vec2|vec3)\s+/);
-      const returnType = typedMatch
-        ? (typedMatch[1] as 'float' | 'vec2' | 'vec3')
-        : defaultType;
-      return { name: `f${fnIndex}`, returnType, body: line.rhs };
-    });
-}
+import { Menu, type MenuItem } from '../ui/Menu';
+import { MakeSliderButton } from '../code/MakeSlider';
+import { applyCodeSlider, useLiteralOffer } from '../code/codeSliderActions';
+import { exprBlockMakeSlider, namesInCodeNode, type ExprSliderWhere } from '../../nodes/codeSlider';
+import { nameForLiteral } from '../../lib/glslPatterns/literalSlider';
+import { exprBlockFunctionText, exprBlockLinesText, exprBlockToCustomFn } from '../../nodes/exprToCustomFn';
+import { madeByFunctionBuilder, noteOf } from './codeCard/codeCardModel';
+import { setActiveNodes, switchScopeFor } from '../../store/useNodeGraphStore';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -95,7 +82,8 @@ interface Props {
   onClose: () => void;
 }
 
-type Snapshot = { lines: WarpLine[]; result: string };
+/** One step of the editor's own undo: the code, and the inputs (Make a slider adds one). */
+type Snapshot = { lines: WarpLine[]; result: string; inputs?: InputDef[] };
 
 /** The expression field last focused: reference-panel clicks insert there. */
 interface InsertTarget {
@@ -164,40 +152,72 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   const explainScope = useMemo(() => ({ nodeId: node.id, kind: 'Expression Block', getNodes: scopeNodes, enclosing: () => exprBlockCode(scopeNodes().find(n => n.id === node.id) ?? node) }), [node]);
 
   // ── Undo / Redo ──────────────────────────────────────────────────────────────
-  const history      = useRef<Snapshot[]>([{ lines, result }]);
+  const history      = useRef<Snapshot[]>([{ lines, result, inputs: customInputs }]);
   const historyIndex = useRef(0);
   const [historyPos, setHistoryPos] = useState(0);
   const [historyLen, setHistoryLen] = useState(1);
 
   const pushHistory = (snap: Snapshot) => {
     const trimmed = history.current.slice(0, historyIndex.current + 1);
-    trimmed.push(snap);
+    trimmed.push({ ...snap, inputs: snap.inputs ?? trimmed[trimmed.length - 1]?.inputs ?? customInputs });
     history.current      = trimmed;
     historyIndex.current = trimmed.length - 1;
     setHistoryPos(historyIndex.current);
     setHistoryLen(trimmed.length);
   };
 
+  /** Put a snapshot back: the code, and the inputs when they differ (a slider made since). */
+  const restore = (snap: Snapshot) => {
+    updateNodeParams(node.id, { lines: snap.lines, result: snap.result });
+    const cur = (node.params.inputs as InputDef[] | undefined) ?? [];
+    if (snap.inputs && JSON.stringify(snap.inputs) !== JSON.stringify(cur)) {
+      updateNodeParams(node.id, { inputs: snap.inputs });
+      updateNodeSockets(node.id, snap.inputs, outputType, exposedOutputs(exposed));
+    }
+  };
+
   const undo = () => {
     if (historyIndex.current <= 0) return;
     historyIndex.current -= 1;
     setHistoryPos(historyIndex.current);
-    const snap = history.current[historyIndex.current];
-    updateNodeParams(node.id, { lines: snap.lines, result: snap.result });
+    restore(history.current[historyIndex.current]);
   };
 
   const redo = () => {
     if (historyIndex.current >= history.current.length - 1) return;
     historyIndex.current += 1;
     setHistoryPos(historyIndex.current);
-    const snap = history.current[historyIndex.current];
-    updateNodeParams(node.id, { lines: snap.lines, result: snap.result });
+    restore(history.current[historyIndex.current]);
   };
 
   const canUndo = historyPos > 0;
   const canRedo = historyPos < historyLen - 1;
 
   const target = useRef<InsertTarget | null>(null);
+
+  // ── Make a slider: the number under the caret becomes a slider input (code/MakeSlider.tsx) ──
+  const literal = useLiteralOffer<ExprSliderWhere>();
+  const offerName = useMemo(() => {
+    const o = literal.offer;
+    if (!o) return undefined;
+    const text = o.where.kind === 'return' ? result : lines[o.where.index]?.[o.where.field] ?? '';
+    return text.slice(o.lit.start, o.lit.end) === o.lit.text ? nameForLiteral(text, o.lit, namesInCodeNode(node), explainCtx) : undefined;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the offer and the code it points into
+  }, [literal.offer, node.params.lines, node.params.result, node.params.inputs]);
+  const makeSlider = () => {
+    const o = literal.offer;
+    if (!o) return;
+    const r = exprBlockMakeSlider(node, o.where, o.lit, explainCtx);
+    literal.clear();
+    if (!r) return;
+    applyCodeSlider(node.id, r, o.lit.text, outputType, exposedOutputs(exposed));
+    pushHistory({ lines: (r.params.lines as WarpLine[] | undefined) ?? lines, result: (r.params.result as string | undefined) ?? result, inputs: r.inputs as InputDef[] });
+  };
+  const sliderOfferAt = (where: ExprSliderWhere, indent: number) => {
+    const o = literal.offer;
+    if (!o || JSON.stringify(o.where) !== JSON.stringify(where)) return null;
+    return <MakeSliderButton lit={o.lit} name={offerName} onMake={makeSlider} indent={indent} />;
+  };
 
   // ── Input management ───────────────────────────────────────────────────────
 
@@ -315,20 +335,63 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   };
 
   /** Props for an expression field: autocomplete, history, and registering as the insert target. */
-  const exprProps = (value: string, set: (v: string) => void, snap: (v: string) => Snapshot) => ({
+  const exprProps = (value: string, set: (v: string) => void, snap: (v: string) => Snapshot, where: ExprSliderWhere) => ({
     value,
     completions,
     onChange: (v: string) => { set(v); if (target.current) target.current.value = v; },
     onFocus: (el: HTMLInputElement) => { target.current = { el, value, set, snap }; },
     onBlur: handleAnyBlur,
     onKeyDown: handleAnyKeyDown,
+    // A number under the caret offers Make a slider
+    onSelect: (el: HTMLInputElement) => literal.track(el, where),
   });
 
-  // Open in Function Builder. fnBuilderFns (the bodies authored there) win; lines convert as a fallback.
-  const hasFnBuilderFns = Array.isArray(node.params.fnBuilderFns) && (node.params.fnBuilderFns as FnDef[]).length > 0;
-  const safeOutputType = (outputType === 'float' || outputType === 'vec2' || outputType === 'vec3') ? outputType : 'float';
-  const linesFns = !hasFnBuilderFns ? linesToFnDefs(lines, safeOutputType) : [];
-  const canOpenInBuilder = hasFnBuilderFns || linesFns.length > 0;
+  // Edit in the Function Builder: only on a block the Builder made (its fnBuilderFns, the bodies
+  // authored there) and that hasn't grown lines since. The Builder writes one expression back, so
+  // opening any other block there (its lines as f1, f2, …) lost its lines on the way back.
+  const canOpenInBuilder = madeByFunctionBuilder(node);
+
+  // ── Copy as code / Make a function ────────────────────────────────────────
+  const [fnMenu, setFnMenu] = useState<{ x: number; y: number } | null>(null);
+  const copyText = (text: string, what: string) => {
+    const n = text.split('\n').length;
+    const done = navigator.clipboard?.writeText(text);
+    if (!done) { toast.error('Couldn’t copy to the clipboard'); return; }
+    done.then(
+      () => toast.success(`Copied ${what}`, { message: `${n} line${n === 1 ? '' : 's'} of GLSL` }),
+      () => toast.error('Couldn’t copy to the clipboard'),
+    );
+  };
+  const turnIntoCustomFn = () => {
+    const r = exprBlockToCustomFn(node);
+    if (!r.ok) { toast.info('It stays an Expression Block', { message: r.reason }); return; }
+    const st = useNodeGraphStore.getState();
+    const where = switchScopeFor(st, node.id);
+    if (!where) { toast.error('The block isn’t in this view'); return; }
+    const list = where.scope.map(n => (n.id === node.id ? r.node : n));
+    const next = where.path.length > 0 ? setActiveNodes(st.nodes, where.path, list) : list;
+    if (!next) return;
+    onClose();
+    st.setNodesRewritten(next, `Turned ${label} into a Custom Function`);
+    toast.success(`${label} is now a Custom Function`, { message: 'Same inputs, sliders and wires; its lines are the function’s body. Undo turns it back.' });
+  };
+  const returnOnly = !lines.some(l => l.rhs.trim() && l.lhs.trim() && !l.off) && result.trim() !== '';
+  const fnMenuItems: MenuItem[] = [
+    { label: 'Turn into a Custom Function', icon: 'fn', hint: 'In place: same inputs, sliders and wires', onSelect: turnIntoCustomFn },
+    { label: 'Make a node from Return…', icon: 'nodes', hint: returnOnly ? 'A reusable node, its numbers as sliders' : 'For a block that is only a Return', disabled: !returnOnly,
+      onSelect: () => explainDialogs.makeNode({ source: result, span: { start: 0, end: result.length }, ctx: lineCtxs[lineCtxs.length - 1] ?? explainCtx, useHere: exprBlockUseHere(node.id, 'return', { start: 0, end: result.length }) }) },
+    'separator',
+    { label: 'Copy as a GLSL function', icon: 'copy', hint: 'Its inputs as parameters', onSelect: () => copyText(exprBlockFunctionText(node), 'the block as a function') },
+  ];
+
+  // ── Note: the block's one description (the card shows it on its Note page) ──
+  const [noteDraft, setNoteDraft] = useState<string | null>(null);
+  const noteValue = noteDraft ?? noteOf(node);
+  const saveNote = () => {
+    if (noteDraft === null) return;
+    updateNodeParams(node.id, { __comment: noteDraft.trim() ? noteDraft : undefined, __description: undefined });
+    setNoteDraft(null);
+  };
 
   const showCarry = (inp: InputDef) => insideLoop || !!inp.carry;
 
@@ -345,12 +408,21 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
       headerActions={
         <>
           <HowUsedButton />
-          <FunctionsToggle open={panels.functions} onToggle={() => togglePanel('functions')} />
+          <Button size="sm" variant="ghost" icon="copy" data-expr-action="copy-code"
+            title="Copy the block as plain GLSL lines (off lines as comments, then return)"
+            onClick={() => copyText(exprBlockLinesText(node), 'the block as code')}>
+            Copy as code
+          </Button>
+          <Button size="sm" variant="ghost" icon="fn" data-expr-action="make-function"
+            title="Turn it into a Custom Function, make a node from it, or copy it as a GLSL function"
+            onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setFnMenu({ x: r.left, y: r.bottom + 4 }); }}>
+            Make a function
+          </Button>
           {canOpenInBuilder && (
-            <Button size="sm" variant="ghost" icon="fn" style={{ marginRight: 4 }}
-              title={hasFnBuilderFns ? 'Re-open in the Function Builder' : 'Open these lines as functions in the Function Builder'}
+            <Button size="sm" variant="ghost" icon="fn" style={{ marginRight: 4 }} data-expr-action="function-builder"
+              title="Re-open in the Function Builder (it made this block)"
               onClick={() => {
-                useFunctionBuilder.getState().openNodeInBuilder(node.id, (hasFnBuilderFns ? node.params.fnBuilderFns : linesFns) as FnDef[]);
+                useFunctionBuilder.getState().openNodeInBuilder(node.id, node.params.fnBuilderFns as FnDef[]);
                 onClose();
               }}>
               Edit in Builder
@@ -475,7 +547,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
                 <CodeInput
                   ariaLabel={`Line ${i + 1} target`}
                   placeholder="p.xy"
-                  {...exprProps(line.lhs, v => updateLine(i, 'lhs', v), v => ({ lines: lines.map((l, j) => j === i ? { ...l, lhs: v } : l), result }))}
+                  {...exprProps(line.lhs, v => updateLine(i, 'lhs', v), v => ({ lines: lines.map((l, j) => j === i ? { ...l, lhs: v } : l), result }), { kind: 'line', index: i, field: 'lhs' })}
                 />
                 <Select
                   ariaLabel={`Line ${i + 1} operator`}
@@ -488,7 +560,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
                 <CodeInput
                   ariaLabel={`Line ${i + 1} expression`}
                   placeholder="expression…"
-                  {...exprProps(line.rhs, v => updateLine(i, 'rhs', v), v => ({ lines: lines.map((l, j) => j === i ? { ...l, rhs: v } : l), result }))}
+                  {...exprProps(line.rhs, v => updateLine(i, 'rhs', v), v => ({ lines: lines.map((l, j) => j === i ? { ...l, rhs: v } : l), result }), { kind: 'line', index: i, field: 'rhs' })}
                 />
                 <span style={{ display: 'flex', alignItems: 'center' }}>
                   <ProbeButton node={node} target={{ kind: 'line', index: i }} label={`Preview line ${i + 1}`} onStart={() => openExplain(i)} />
@@ -497,6 +569,8 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
                   <IconButton icon="close" label="Remove line" size="sm" tone="danger" tooltip={false} onClick={() => removeLine(i)} />
                 </span>
               </div>
+              {sliderOfferAt({ kind: 'line', index: i, field: 'lhs' }, 28)}
+              {sliderOfferAt({ kind: 'line', index: i, field: 'rhs' }, 28 + 110 + 64 + 12)}
               {/* ▶ on this line: its picture opens right here, not at the bottom */}
               <LinePreviewPanel node={node} at={{ kind: 'line', index: i }} />
               {line.rhs.trim() && !line.off && <LineExplain index={i} line={line} ctx={lineCtxs[i] ?? explainCtx} openRequest={explainOpen?.at === i ? explainOpen.seq : undefined} onOpenView={setViewAt} />}
@@ -516,14 +590,23 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
                 ariaLabel="Return expression"
                 placeholder="p"
                 style={{ flex: 1 }}
-                {...exprProps(result, updateResult, v => ({ lines, result: v }))}
+                {...exprProps(result, updateResult, v => ({ lines, result: v }), { kind: 'return' })}
               />
               <ProbeButton node={node} target={{ kind: 'return' }} label="Preview the return value" onStart={() => openExplain('return')} />
             </div>
+            {sliderOfferAt({ kind: 'return' }, 0)}
             <LinePreviewPanel node={node} at={{ kind: 'return' }} />
             {result.trim() ? <LineExplain index="return" line={{ lhs: '', op: '', rhs: result }} ctx={lineCtxs[lineCtxs.length - 1] ?? explainCtx} openRequest={explainOpen?.at === 'return' ? explainOpen.seq : undefined} onOpenView={setViewAt} /> : null}
             <Note>The final expression of type {outputType} that the block outputs.</Note>
             {(lines.some(l => l.rhs.trim() && !l.off) || result.trim()) && <ExplainMore mode="block" text={exprBlockCode(node)} ctx={explainCtx} />}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <SectionLabel meta="shows on the card">Note</SectionLabel>
+            <textarea aria-label="Note" data-expr-note="" value={noteValue} placeholder="What this block does, why, where it comes from"
+              onChange={e => setNoteDraft(e.target.value)} onBlur={saveNote}
+              onKeyDown={e => { if (e.key === 'Escape' && noteDraft !== null) { e.stopPropagation(); setNoteDraft(null); } if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); saveNote(); } }}
+              style={{ width: '100%', minHeight: 56, boxSizing: 'border-box', resize: 'vertical', border: 0, outline: 'none', borderRadius: radius.control, padding: '8px 10px', background: tk.bg.field, color: tk.text.primary, font: `12.5px/1.45 ${fontFamily.ui}` }} />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -538,12 +621,15 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
           </div>
         </div>
 
+        {/* The palette's fold tab on the right edge (a drawer on a narrow window has its own scrim to close it) */}
+        {!(narrow && panels.functions) && <FunctionsTab open={panels.functions} onToggle={() => togglePanel('functions')} />}
         <SidePanel side="right" label="Functions" open={panels.functions} narrow={narrow} width={300} onClose={() => setPanel('functions', false)}>
           <ReferencePanel variables={customInputs} onInsert={insertFromReference} wrapAll={autoWrap} onWrapAllChange={setAutoWrap} onSnippet={insertSnippetLines} />
         </SidePanel>
         {explainDialogs.dialogs}
       </div>
       )}
+      {fnMenu && <Menu x={fnMenu.x} y={fnMenu.y} minWidth={280} items={fnMenuItems} onClose={() => setFnMenu(null)} />}
     </Modal>
     </ExplainScopeProvider>
   );

@@ -102,6 +102,13 @@ On a plate (Chladni) every beat does two things: it shakes the sand much harder 
 
 The group has a **Sound from** of its own (its Sound section): **Each node's own** (the default) leaves every listening node to its own card; any other choice (Level and Beat, Mic, Audio engine, Engine track 1–8) is shared by every Sound kick and Chladni inside, with the group's **Level** and **Beat**. One switch on the group card makes the whole rule hear the engine's kick track.
 
+## Memory slots
+
+A walker keeps **Memory** (two numbers, state C, `a_mem`) and, when something uses it, **More memory**:
+four more numbers in a fifth state texture, E (`a_mem2`, Agent Inputs' and Agent Output's *More memory*
+sockets). The Agent Builder's named memories live there (docs/agent-builder.md "Memory"). A group that
+never reads or sets More memory compiles without E, exactly as before.
+
 ## Ride a curve: walkers on a parametric curve
 
 A **Ride a curve** node (Inside: moving) puts every walker on a curve and moves it along. The curve is **Curve Trace**'s (docs/curve-trace.md), with the same settings and the same code: each axis a Sine, Triangle, Square or Saw with its frequency, phase, size and offset, or Custom GLSL in `t` and `time`; **Motion** Lateral (Lissajous), Rotary or Counter (two circles, stars and flowers); **Damping**; **Turns**; **Morph** into a second figure (the B frequencies). Wire its Position and Velocity into Agent Output and that is the whole rule.

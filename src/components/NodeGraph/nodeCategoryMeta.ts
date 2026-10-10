@@ -26,4 +26,6 @@ export const CATEGORY_COLORS: Record<string, string> = {
 };
 
 // ── Types to hide from node listings (internal / special) ─────────────────────
-export const HIDDEN_TYPES = new Set(['group', 'forwardCamera', 'marchPos', 'marchDist', 'marchOutput', 'scenePos', 'sceneOutput', 'spaceWarpGroup', 'passOutput', 'blurStage', 'gridRulesStep', 'curveTraceBeamStep', 'baked', 'agentInputs', 'agentOutput', 'agentStepOut', 'trailStepOut', 'agentProbeOut', 'agentGridOut']);
+export const HIDDEN_TYPES = new Set(['group', 'forwardCamera', 'marchPos', 'marchDist', 'marchOutput', 'scenePos', 'sceneOutput', 'spaceWarpGroup', 'passOutput', 'blurStage', 'gridRulesStep', 'curveTraceBeamStep', 'baked', 'agentInputs', 'agentOutput', 'agentStepOut', 'trailStepOut', 'agentProbeOut', 'agentGridOut',
+  // The Texture node's video / webcam side: Texture (textureInput) is offered, its Source switch makes this one.
+  'videoInput']);

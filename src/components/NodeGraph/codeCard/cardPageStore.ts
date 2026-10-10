@@ -16,7 +16,8 @@ export function loadCardPages(): Record<string, CardPageId> {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
     const out: Record<string, CardPageId> = {};
     for (const [k, v] of Object.entries(parsed)) {
-      if (v === 'code' || v === 'preview' || v === 'note' || v === 'description') out[k] = v;
+      if (v === 'code' || v === 'preview' || v === 'note') out[k] = v;
+      else if (v === 'description') out[k] = 'note'; // the description joined the note
       else if (v === 'signature') out[k] = 'preview'; // the page the Preview replaced
     }
     return out;

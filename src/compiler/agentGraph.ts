@@ -97,7 +97,7 @@ export const groupSpecies = (g: GraphNode) => Math.max(1, Math.min(4, Math.round
  *  - the outer nodes upstream of the group's ports and Emit (gathered by the caller's `collect`).
  * `innerIds` are the inside nodes, for the placement and purity rules.
  */
-export function agentStepNodes(group: GraphNode, volumeOf?: (nodeId: string) => string | null): { inner: GraphNode[]; sink: GraphNode; starts: Array<{ nodeId: string; outputKey: string }>; problems: string[]; stateC: boolean; space3d: boolean; grids: Array<{ nodeId: string; from: { nodeId: string; outputKey: string } }> } {
+export function agentStepNodes(group: GraphNode, volumeOf?: (nodeId: string) => string | null): { inner: GraphNode[]; sink: GraphNode; starts: Array<{ nodeId: string; outputKey: string }>; problems: string[]; stateC: boolean; stateE: boolean; space3d: boolean; grids: Array<{ nodeId: string; from: { nodeId: string; outputKey: string } }> } {
   const d3 = groupIs3d(group);
   const sg = group.params.subgraph as SubgraphData | undefined;
   const nodes = sg?.nodes ?? [];
@@ -147,7 +147,7 @@ export function agentStepNodes(group: GraphNode, volumeOf?: (nodeId: string) => 
   const sinkInputs: GraphNode['inputs'] = {};
   const v2 = d3 ? 'vec3' : 'vec2';
   const SINK_TYPES: Record<string, 'vec2' | 'float' | 'vec3' | 'vec4'> = {
-    position: v2, velocity: v2, heading: d3 ? 'vec3' : 'float', speed: 'float', alive: 'float', memory: 'vec2', deposit: 'vec4', colour: 'vec3',
+    position: v2, velocity: v2, heading: d3 ? 'vec3' : 'float', speed: 'float', alive: 'float', memory: 'vec2', moreMemory: 'vec4', deposit: 'vec4', colour: 'vec3',
   };
   // Ride a curve keeps its place along the curve in Memory: with Agent Output's Memory unwired, its Memory goes there by itself.
   const ride = nodes.find(n => n.type === 'agentRideCurve');
@@ -159,10 +159,11 @@ export function agentStepNodes(group: GraphNode, volumeOf?: (nodeId: string) => 
     sinkInputs[key] = { type, label: key, ...(connection ? { connection } : {}) };
   }
   if (group.inputs.emit?.connection) sinkInputs.emit = { type: 'emitter', label: 'Emit', connection: group.inputs.emit.connection };
-  const stateC = needsStateC(group, nodes, out);
-  const sink: GraphNode = { id: `${group.id}__step`, type: 'agentStepOut', position: { x: 0, y: 0 }, params: { ...(stateC ? { stateC: true } : {}), ...(d3 ? { agentSpace: '3d' } : {}), ...(outputNode?.params.quietBirth === true ? { quietBirth: true } : {}) }, outputs: {}, inputs: sinkInputs };
+  const stateE = needsStateE(nodes, out);
+  const stateC = stateE || needsStateC(group, nodes, out);
+  const sink: GraphNode = { id: `${group.id}__step`, type: 'agentStepOut', position: { x: 0, y: 0 }, params: { ...(stateC ? { stateC: true } : {}), ...(stateE ? { stateE: true } : {}), ...(d3 ? { agentSpace: '3d' } : {}), ...(outputNode?.params.quietBirth === true ? { quietBirth: true } : {}) }, outputs: {}, inputs: sinkInputs };
   if (!outputNode) problems.push(`Node ${group.id}: ${labelOf(group)} has no Agent Output inside; open it and Start over, or add the preset again.`);
-  return { inner, sink, starts, problems, stateC, space3d: d3, grids };
+  return { inner, sink, starts, problems, stateC, stateE, space3d: d3, grids };
 }
 
 /** The end of a Collide (3D scene)'s grid program (AgentGridOutNode), wired to the Scene outside. */
@@ -186,6 +187,17 @@ export function needsStateC(group: GraphNode, inside: GraphNode[], out: GraphNod
   if (inside.some(n => n.type === 'agentRideCurve')) return true;
   const inputsId = inside.find(n => n.type === 'agentInputs')?.id;
   return !!inputsId && inside.some(n => Object.values(n.inputs).some(i => i.connection?.nodeId === inputsId && (i.connection.outputKey === 'memory' || i.connection.outputKey === 'colour')));
+}
+
+/**
+ * Does a group need More memory (state E, a fifth state texture: four more numbers a walker keeps,
+ * docs/agents-group.md "Memory slots")? Only when Agent Output sets More memory or something
+ * inside reads Agent Inputs' More memory: every other group compiles exactly as before.
+ */
+export function needsStateE(inside: GraphNode[], out: GraphNode | null | undefined): boolean {
+  if (out?.inputs.moreMemory?.connection) return true;
+  const inputsId = inside.find(n => n.type === 'agentInputs')?.id;
+  return !!inputsId && inside.some(n => Object.values(n.inputs).some(i => i.connection?.nodeId === inputsId && i.connection.outputKey === 'moreMemory'));
 }
 
 /** Slugs for each group's inside, after the top level's (the same `used` set, so none collide). */

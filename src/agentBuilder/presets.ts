@@ -8,6 +8,7 @@
 import type { AgentRule, AgentRuleSet, RuleAction, WalkerKind } from '../agentRules/spec';
 import { rulesTemplate } from '../agentRules/templates';
 import { patchCard, setSensors } from './cards';
+import { antsWithMemories } from './memory';
 import type { SimParams } from './miniSim';
 import type { DotEmit } from './dotSim';
 
@@ -43,7 +44,8 @@ export const TRAIL_PRESETS: readonly BuilderPreset[] = [
   { key: 'cells', label: 'Round cells', hint: 'Feelers 45° apart: calmer, rounder cells.', set: slimeWith(s => setSensors(s, { angle: 45 })) },
   { key: 'mesh', label: 'Busy mesh', hint: 'A big turn (90°): a dense mesh with many junctions.', set: slimeWith(s => patchCard(s, 0, 'senses', { degrees: 90 })) },
   { key: 'clumps', label: 'Clumps', hint: 'Feelers 90° apart and a tiny turn: separate round clumps.', set: slimeWith(s => patchCard(setSensors(s, { angle: 90 }), 0, 'senses', { degrees: 12 })) },
-  { key: 'ants', label: 'Ants with food', hint: 'Search by one smell, carry home by the other (wire Food and Nest masks).', set: tpl('ants'), sim: ANTS_SIM },
+  // Rebuilt with named memories (carrying, away) so every rule is a card; old ants sets open as they were.
+  { key: 'ants', label: 'Ants with food', hint: 'Remember carrying (on / off) and away (a timer): search by one smell, carry home by the other (wire Food and Nest masks).', set: antsWithMemories, sim: ANTS_SIM },
   { key: 'predatorPrey', label: 'Predator & prey', hint: 'Prey follow their own trail and flee the predators\'; predators chase.', set: tpl('predatorPrey') },
   { key: 'dla', label: 'Frost (DLA)', hint: 'Random walkers stick where they touch the crystal: branching frost.', set: tpl('dla'), sim: p => ({ ...p, mode: 'dla' }) },
 ];

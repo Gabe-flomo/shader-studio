@@ -10,7 +10,7 @@ import { compileGraph } from '../../../compiler/graphCompiler';
 import { n } from '../../../store/graphBuilder';
 import { estimateNodeHeight } from '../../../store/graphLayout';
 import { getNodeDefinition } from '../../definitions';
-import { applyRecipe, placeNear, STARTER_RECIPES } from '..';
+import { applyRecipe, placeNear, PICTURE_DEPTH_SET, STARTER_RECIPES } from '..';
 import type { GraphNode } from '../../../types/nodeGraph';
 
 const H = (nd: GraphNode) => estimateNodeHeight(nd);
@@ -32,7 +32,8 @@ const starts = (type: string): Array<{ name: string; nodes: GraphNode[] }> => [
 ];
 
 describe('every starter recipe', () => {
-  for (const [type, recipes] of Object.entries(STARTER_RECIPES)) {
+  // The picture-with-depth set is opened from a March Loop card, not keyed by a node type (depthRecipes.test.ts)
+  for (const [type, recipes] of Object.entries(STARTER_RECIPES).filter(([t]) => t !== PICTURE_DEPTH_SET)) {
     it(`${type} is a real node type`, () => expect(getNodeDefinition(type), type).toBeDefined());
     for (const recipe of recipes) {
       for (const start of starts(type)) {

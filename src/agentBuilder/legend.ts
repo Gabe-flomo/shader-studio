@@ -221,6 +221,9 @@ export const phrase = {
 // ── The legend ───────────────────────────────────────────────────────────────
 
 /** What a focus view animates (demos.ts), with the live values it needs. */
+/** What a demo's walker does at the edge of its panel: the group's At the edges (wrap, bounce or slide), so it never walks out of the picture. */
+export type DemoEdges = 'wrap' | 'bounce' | 'slide';
+
 export type DemoSpec =
   | { kind: 'gravity' | 'wind'; strength: number; angle: number }
   | { kind: 'curl'; strength: number; eddies: number; evolve: number }
@@ -229,13 +232,13 @@ export type DemoSpec =
   | { kind: 'sum'; forces: Array<{ field: string; strength: number; angle?: number; x?: number; y?: number }>; drag: number; eddies: number }
   | { kind: 'life'; fade: number | null; dies: number | null }
   | { kind: 'flock'; rule: 'separate' | 'match' | 'cohere'; separate: number; match: number; cohere: number }
-  | { kind: 'goal'; degrees: number }
+  | { kind: 'goal'; degrees: number; edges?: DemoEdges }
   | { kind: 'slow'; jam: number }
   | { kind: 'avoidEdges'; margin: number; degrees: number }
-  | { kind: 'wander'; degrees: number }
+  | { kind: 'wander'; degrees: number; edges?: DemoEdges }
   | { kind: 'view'; radius: number; max: number }
-  | { kind: 'senses'; angle: number; turn: number; away: boolean }
-  | { kind: 'orbit'; degrees: number; cw: boolean }
+  | { kind: 'senses'; angle: number; turn: number; away: boolean; edges?: DemoEdges }
+  | { kind: 'orbit'; degrees: number; cw: boolean; edges?: DemoEdges }
   | { kind: 'speed'; speed: number }
   | { kind: 'edges'; edges: 'wrap' | 'bounce' | 'slide' }
   | { kind: 'trail'; amount: number; halfLife: number; diffuse: number }
@@ -443,7 +446,9 @@ export function legendEntries(inp: LegendInput): LegendEntry[] {
       break;
     default: break;
   }
-  return out;
+  // The walkers in the focus demos keep to the picture the way the group's walkers do (wrap, bounce or slide).
+  const walks = new Set(['senses', 'goal', 'wander', 'orbit']);
+  return out.map(e => (walks.has(e.demo.kind) ? { ...e, demo: { ...e.demo, edges: set.edges } as DemoSpec } : e));
 }
 
 /** A Follow a field card's entries: one per layer, its colour, numbers and line, its demo the field with only that layer. */

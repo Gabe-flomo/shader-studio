@@ -22,8 +22,8 @@ export interface TimerResult { name: string; ms: number; frame: number; isolated
 interface Pending { name: string; query: WebGLQuery; frame: number; isolated: boolean }
 
 export class GpuTimer {
-  readonly supported: boolean;
-  private readonly ext: { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number } | null;
+  supported: boolean;
+  private ext: { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number } | null;
   private readonly pending: Pending[] = [];
   private readonly pool: WebGLQuery[] = [];
   private active: Pending | null = null;
@@ -35,8 +35,27 @@ export class GpuTimer {
 
   constructor(gl: WebGL2RenderingContext | WebGLRenderingContext) {
     this.gl = gl;
+    this.ext = GpuTimer.extOf(gl);
+    this.supported = !!this.ext;
+  }
+
+  private static extOf(gl: WebGL2RenderingContext | WebGLRenderingContext): GpuTimer['ext'] {
     const isGl2 = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
-    this.ext = isGl2 ? (gl.getExtension('EXT_disjoint_timer_query_webgl2') as GpuTimer['ext']) : null;
+    return isGl2 && !gl.isContextLost?.() ? (gl.getExtension('EXT_disjoint_timer_query_webgl2') as GpuTimer['ext']) : null;
+  }
+
+  /**
+   * The context was lost or restored: its queries (and the extension, which belongs to one
+   * context) are forgotten without touching GL, and the extension is asked for again when the
+   * context is live. Without it a restored context reads the old queries and the old extension
+   * ("getQueryParameter: object does not belong to this context", "EXT_disjoint_timer_query_webgl2
+   * not enabled").
+   */
+  reset(): void {
+    this.active = null;
+    this.pending.length = 0;
+    this.pool.length = 0;
+    this.ext = GpuTimer.extOf(this.gl);
     this.supported = !!this.ext;
   }
 
@@ -45,7 +64,7 @@ export class GpuTimer {
    * `isolated` (or the `isolate` flag) flushes the work queued so far first.
    */
   begin(name: string, isolated = this.isolate): boolean {
-    if (!this.ext || this.active) return false;
+    if (!this.ext || this.active || this.gl.isContextLost?.()) return false;
     if (this.pending.length > 64) return false; // results never polled — don't leak queries
     const gl = this.gl as WebGL2RenderingContext;
     const query = this.pool.pop() ?? gl.createQuery();
@@ -65,7 +84,7 @@ export class GpuTimer {
 
   /** Collect the results that are ready. After a GPU disjoint event the pending ones are dropped as unreliable. */
   poll(): TimerResult[] {
-    if (!this.ext || this.pending.length === 0) return [];
+    if (!this.ext || this.pending.length === 0 || this.gl.isContextLost?.()) return [];
     const gl = this.gl as WebGL2RenderingContext;
     const out: TimerResult[] = [];
     const disjoint = gl.getParameter(this.ext.GPU_DISJOINT_EXT) as boolean;

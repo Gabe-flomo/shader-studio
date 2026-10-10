@@ -13,6 +13,7 @@ import type { PlayRecord } from '../types/play';
 import { cameraInput } from './cameraInput';
 import { trackerFeeds } from './handFeed';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
+import { webcamNodes } from './texture/textureSource';
 
 /** Does this Play setup show or read the camera? */
 export function playUsesCamera(play: Pick<PlayRecord, 'layers'>): boolean {
@@ -39,10 +40,15 @@ export function installCameraKeeper(): void {
   installed = true;
   const check = () => {
     if (cameraInput.getStatus() !== 'on') return;
-    if (playUsesCamera(useNodeGraphStore.getState().play) || handsHoldCamera()) return;
+    const st = useNodeGraphStore.getState();
+    // A webcam Texture node shows it too (docs/texture-node.md).
+    if (playUsesCamera(st.play) || handsHoldCamera() || webcamNodes(st.nodes).length) return;
     cameraInput.stop();
   };
   let lastPlay = useNodeGraphStore.getState().play;
-  useNodeGraphStore.subscribe(s => { if (s.play !== lastPlay) { lastPlay = s.play; check(); } });
+  let lastNodes = useNodeGraphStore.getState().nodes;
+  useNodeGraphStore.subscribe(s => {
+    if (s.play !== lastPlay || s.nodes !== lastNodes) { lastPlay = s.play; lastNodes = s.nodes; check(); }
+  });
   for (const f of Object.values(trackerFeeds)) f.onStatus(() => check());
 }

@@ -25,7 +25,7 @@ import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore
 import { getOfferedDefinitions } from '../../nodes/definitions';
 import { scoreNodeDef } from '../../nodes/searchNodes';
 import { HIDDEN_TYPES } from './nodeCategoryMeta';
-import { spawnPoint } from './spawnPoint';
+import { intoView, spawnPoint } from './spawnPoint';
 import { parseDo, type DoPlan } from '../../suggestions/doBar';
 import { inTargetStage, STAGE_SEARCH_POINTS } from '../../structure/boost';
 import { currentStageTarget } from '../../structure/hintsStore';
@@ -228,18 +228,21 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   const line = lineRead.value;
   const canonicalRun = line && readsCanonically(line) ? line : null;
   const runText = canonicalRun?.dialect === 'picture' ? canonicalRun.picture!.sentence! : text;
+  // An agents line (it starts with agents or species) is only ever agents: with a mistake in it, its
+  // own errors show, not the picture phrases' reading of its words (its flow isn't the Pass Flow node).
   const otherDialect = canonicalRun && canonicalRun.dialect !== 'picture' ? canonicalRun : null;
+  const ownDialect = !!otherDialect || line?.dialect === 'agents';
   const planRead = useMemo(() => {
     const empty: DoPlan = { steps: [], reading: [], unknown: [] };
-    return text.trim() && !builder && !otherDialect && !surprise ? readSafely('the phrase reader', runText, () => parseDo(runText, scope), empty) : { value: empty, error: null };
-  }, [runText, text, scope, builder, otherDialect, surprise]);
+    return text.trim() && !builder && !ownDialect && !surprise ? readSafely('the phrase reader', runText, () => parseDo(runText, scope), empty) : { value: empty, error: null };
+  }, [runText, text, scope, builder, ownDialect, surprise]);
   const plan = planRead.value;
   // The command language (doCommands.ts): every clause, previewed on a copy of the graph.
   const [picks, setPicks] = useState<Record<string, string>>({});
   const cmdRead = useMemo(() => {
-    if (!text.trim() || plan.intent || builder || otherDialect || surprise) return { value: null, error: null };
+    if (!text.trim() || plan.intent || builder || ownDialect || surprise) return { value: null, error: null };
     return readSafely('the command preview', runText, () => execCommand(runText, scope.nodes, { selected: scope.selected, picks, topLevel: scope.topLevel }), null as CommandPlan | null);
-  }, [runText, text, scope, picks, plan.intent, builder, otherDialect, surprise]);
+  }, [runText, text, scope, picks, plan.intent, builder, ownDialect, surprise]);
   const cmd = cmdRead.value;
   // The canonical line under the bar: what was typed in the language's own words (or ✓ when it already is).
   const canonical = useMemo(() => {
@@ -311,12 +314,12 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
       const nextId = () => useNodeGraphStore.getState().newNodeId();
       if (r.dialect === 'scene') {
         const made = sceneNodes(nodes, r.scene!, nextId, spawnPoint());
-        useNodeGraphStore.getState().setNodesRewritten(made.nodes, `Do: ${text.trim()}`);
+        useNodeGraphStore.getState().setNodesRewritten(intoView(nodes, made.nodes), `Do: ${text.trim()}`);
         useNodeGraphStore.getState().focusNode(made.focusId);
         toast.success('3D scene built', { message: 'Right-click the Scene Group → Edit in Scene Builder to change it. Undo takes it back.' });
       } else if (r.dialect === 'agents') {
         const made = agentsNodes(nodes, r.agents!, nextId, spawnPoint());
-        useNodeGraphStore.getState().setNodesRewritten(made.nodes, `Do: ${text.trim()}`);
+        useNodeGraphStore.getState().setNodesRewritten(intoView(nodes, made.nodes), `Do: ${text.trim()}`);
         useNodeGraphStore.getState().focusNode(made.groupId);
         toast.success('Agents added with these rules', { message: 'Double-click the group to open its rules. Undo takes it back.' });
       }
@@ -394,6 +397,19 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
           value={text}
           onChange={e => { setText(e.target.value); setCaret(e.target.selectionStart); }}
           onSelect={e => setCaret((e.target as HTMLInputElement).selectionStart)}
+          onPaste={e => {
+            // A copied recipe is several lines (Copy recipe gives the pretty form); a one-line box would
+            // run them together, so a recipe that reads goes in as its own one-line form.
+            const pasted = e.clipboardData.getData('text');
+            if (!/\n/.test(pasted.trim())) return;
+            const one = readSafely('the pasted recipe', pasted, () => { const r = readLine(pasted, { seed }); return r.dialect !== 'picture' && readsCanonically(r) ? r.canonical : null; }, null as string | null).value;
+            if (!one) return;
+            e.preventDefault();
+            const el = e.currentTarget;
+            const from = el.selectionStart ?? text.length, to = el.selectionEnd ?? from;
+            const next = text.slice(0, from) + one + text.slice(to);
+            setText(next); setCaret(from + one.length);
+          }}
           onKeyDown={e => {
             // Tab takes a suggestion, Enter still runs the phrase.
             if (e.key !== 'Enter' && ta.onKeyDown(e)) return;

@@ -20,6 +20,7 @@ import { playId } from '../../play/playControls';
 import { requireFeature } from '../plan';
 import { addVideoFile } from '../backgroundLibrary';
 import { bakedVideos } from '../bakedVideos';
+import { depthEngine } from '../depth/engine';
 import { cpIsPlain, cpParse } from '../../play/kit/clipPlay.js';
 import { videoEngine } from '../videoEngine';
 import { timeCubes } from '../timeCube/volumes';
@@ -126,6 +127,7 @@ export async function renderBake(graph: GraphNode[], plan: BakePlan, handle: Bak
       if (handle.cancelled) throw new Error('cancelled');
       const step = steps[j];
       await Promise.all([bakedVideos.seek(step.time), videoEngine.seek(step.time), timeCubes.settled()]);
+      await depthEngine.seek();
       offline.renderAtTime(step.time, { dt: 1 / plan.fps, first: j === 0 });
       offline.readPixels(pixels, w, h);
       if (step.preIndex !== null) { pre[step.preIndex] = pixels.slice(); }

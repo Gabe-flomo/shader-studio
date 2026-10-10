@@ -22,6 +22,8 @@ export interface RecipeContext {
   nodes: GraphNode[];
   /** What the Output shows now (its Color wire), when it isn't the new node itself; null when nothing. */
   shown: Wire | null;
+  /** Choices made in the offer (e.g. the picture-with-depth offer's "turn the camera to face it"). */
+  options?: Record<string, boolean>;
 }
 
 export interface RecipeBuild {
@@ -35,6 +37,8 @@ export interface RecipeBuild {
   show?: Wire;
   /** Ids of nodes already in the graph to take out first (a rig being replaced); wires into them are cut. */
   remove?: string[];
+  /** Changes to nodes already in the graph: params merged in, outputs replaced (a camera turned, a Scene Group's link outputs). */
+  patch?: Array<{ id: string; params?: Record<string, unknown>; outputs?: GraphNode['outputs'] }>;
 }
 
 export interface StarterRecipe {

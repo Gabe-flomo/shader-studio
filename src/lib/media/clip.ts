@@ -222,7 +222,7 @@ export function transformKey(xf: ClipTransform): string {
 // ── Hosts, and what the editor shows each ────────────────────────────────────
 
 /** Who opened the editor: each host gets the controls that mean something to it. */
-export type ClipHost = 'timeCube' | 'videoInput' | 'videoLayer' | 'baked' | 'background' | 'viewer';
+export type ClipHost = 'timeCube' | 'videoInput' | 'videoLayer' | 'baked' | 'background' | 'viewer' | 'image';
 
 export interface ClipCaps {
   /** In / Out handles on the strip. */
@@ -244,6 +244,8 @@ export interface ClipCaps {
   loop: boolean;
   /** False: a viewer (nothing to apply; the strip only scrubs). */
   edit: boolean;
+  /** A still picture (the Texture node's image): no transport and no timeline. */
+  still?: boolean;
 }
 
 const NO_CAPS: ClipCaps = { trim: false, segments: false, reverse: false, distribute: false, ramp: false, frameSamples: false, crop: false, rotate: false, flip: false, speed: false, loop: false, edit: false };
@@ -259,13 +261,15 @@ export const CLIP_CAPS: Readonly<Record<ClipHost, ClipCaps>> = {
   // A background's Placement already crops and turns it: timing only.
   background: { ...NO_CAPS, trim: true, segments: true, reverse: true, speed: true, loop: true, edit: true },
   viewer: NO_CAPS,
+  // The Texture node's picture (docs/texture-node.md): crop, rotate and flip a still.
+  image: { ...NO_CAPS, crop: true, rotate: true, flip: true, edit: true, still: true },
 };
 
 /** Does the host play the clip as a playlist (rather than sample frames from it, or only show it)? */
-export const isPlaybackHost = (h: ClipHost) => h !== 'timeCube' && h !== 'viewer';
+export const isPlaybackHost = (h: ClipHost) => h !== 'timeCube' && h !== 'viewer' && h !== 'image';
 
 /** Hosts that keep speed and loop in their own fields (a Video Input's, a layer's), not in the clip. */
-export const HOST_OWN_SPEED: Readonly<Record<ClipHost, boolean>> = { timeCube: false, videoInput: true, videoLayer: true, baked: false, background: true, viewer: false };
+export const HOST_OWN_SPEED: Readonly<Record<ClipHost, boolean>> = { timeCube: false, videoInput: true, videoLayer: true, baked: false, background: true, viewer: false, image: false };
 
 export type SavedClip = CpSaved;
 

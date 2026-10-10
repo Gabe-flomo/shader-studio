@@ -39,9 +39,9 @@ export function placeNear(obstacles: GraphNode[], added: GraphNode[], heightOf: 
 }
 
 /** The recipe's view of the graph round `self`. */
-export function recipeContext(nodes: GraphNode[], self: GraphNode): RecipeContext {
+export function recipeContext(nodes: GraphNode[], self: GraphNode, options?: Record<string, boolean>): RecipeContext {
   const c = graphOutput(nodes)?.inputs.color?.connection;
-  return { self, nodes, shown: c && c.nodeId !== self.id ? [c.nodeId, c.outputKey] : null };
+  return { self, nodes, shown: c && c.nodeId !== self.id ? [c.nodeId, c.outputKey] : null, ...(options ? { options } : {}) };
 }
 
 export interface AppliedRecipe {
@@ -53,10 +53,10 @@ export interface AppliedRecipe {
 }
 
 /** The graph with `recipe` built round node `selfId`; null when the node isn't there. */
-export function applyRecipe(nodes: GraphNode[], selfId: string, recipe: StarterRecipe, nextId: () => string, heightOf: (nd: GraphNode) => number = cardHeight): AppliedRecipe | null {
+export function applyRecipe(nodes: GraphNode[], selfId: string, recipe: StarterRecipe, nextId: () => string, heightOf: (nd: GraphNode) => number = cardHeight, options?: Record<string, boolean>): AppliedRecipe | null {
   let self = nodes.find(nd => nd.id === selfId);
   if (!self) return null;
-  const build = recipe.build(recipeContext(nodes, self));
+  const build = recipe.build(recipeContext(nodes, self, options));
   // A rig being replaced: its nodes go, and any wire into them is cut.
   const gone = new Set((build.remove ?? []).filter(id => id !== selfId));
   if (gone.size) {
@@ -99,7 +99,12 @@ export function applyRecipe(nodes: GraphNode[], selfId: string, recipe: StarterR
     wiredSelf.params[k] = v;
   }
 
-  let next = [...nodes.map(nd => nd.id === self.id ? wiredSelf : nd), ...added];
+  const patches = new Map((build.patch ?? []).map(pt => [pt.id, pt]));
+  let next = [...nodes.map(nd => {
+    const base = nd.id === self.id ? wiredSelf : nd;
+    const pt = patches.get(nd.id);
+    return pt ? { ...base, params: { ...base.params, ...(pt.params ?? {}) }, outputs: pt.outputs ?? base.outputs } : base;
+  }), ...added];
   let shown = false;
   if (build.show && output && output.inputs.color?.type === 'vec3') {
     const [nodeId, outputKey] = real(build.show);

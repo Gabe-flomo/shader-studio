@@ -4,6 +4,7 @@
  */
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { placeInFreeSpace } from '../store/agentSetup';
+import { intoView } from '../components/NodeGraph/spawnPoint';
 import { toast } from '../components/ui/toastStore';
 import type { GraphNode } from '../types/nodeGraph';
 import { useExprBuilder } from './store';
@@ -38,7 +39,8 @@ export function addBuilderChainToGraph(): string | null {
   if (st.activeGroupPath.length) st.exitToRoot();
   const now = useNodeGraphStore.getState();
   const r = addChain(now.nodes, xb.chain, { nextId: () => useNodeGraphStore.getState().newNodeId(), upTo: xb.at, at: xb.place ?? undefined });
-  now.setNodesRewritten(r.nodes, 'Added a built expression');
+  // In the visible canvas (where the builder was opened from, when it was).
+  now.setNodesRewritten(intoView(now.nodes, r.nodes, xb.place ? 'ifOutOfView' : 'centre'), 'Added a built expression');
   useNodeGraphStore.getState().focusNode(r.blockId);
   toast.success('Expression Block added', {
     message: `${xb.at} step${xb.at === 1 ? '' : 's'}, one line each with a note; the moves' numbers are its sliders.${r.wiredOutput ? ' Its colour goes to the Output.' : ''}`,

@@ -336,7 +336,7 @@ describe('the maths helpers', () => {
 describe('quick adds, Switch to and starter offers', () => {
   it('a texture output offers the Texture tools; a texture input offers its sources', () => {
     expect(suggestQuickAdds({ type: 'texture', dir: 'out', label: 'Texture' }).map(q => q.type)).toEqual(['textureMask', 'textureLevels', 'textureFlow']);
-    expect(suggestQuickAdds({ type: 'texture', dir: 'in', label: 'Texture' }).map(q => q.type)).toEqual(['pass', 'textureInput', 'videoInput']);
+    expect(suggestQuickAdds({ type: 'texture', dir: 'in', label: 'Texture' }).map(q => q.type)).toEqual(['pass', 'textureInput']); // one Texture node: picture, video or webcam (docs/texture-node.md)
   });
 
   it('a mask or shaped value goes to colour first; a distance from a jump flood to Outline; a glow to the layering nodes', () => {

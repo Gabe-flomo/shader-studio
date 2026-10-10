@@ -73,6 +73,7 @@ export function webAgents(a: AgentsSpec, play?: PlayRecord): WebAgents {
       ...(grids ? { grids: grids.map(({ nodeId: _g, ...gr }) => ({ ...gr, u: sceneGridUniforms(gr.slug) })) } : {}),
       u: {
         A: agentStateUniform(g.slug, 'A'), B: agentStateUniform(g.slug, 'B'), C: agentStateUniform(g.slug, 'C'), D: agentStateUniform(g.slug, 'D'),
+        ...(g.stateC && g.stateE ? { E: agentStateUniform(g.slug, 'E') } : {}),
         step: agentStepUniform(g.slug), win: agentWindowUniform(g.slug),
         ...(g.neighbours ? { nb: agentNbUniforms(g.slug) } : {}),
       },

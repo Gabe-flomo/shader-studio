@@ -307,3 +307,18 @@ Not done yet:
 - Curl noise in a field is four crossing waves (exact on CPU and GPU); it is more regular than the Curl noise node's gradient noise.
 - A mask is a circle or a box typed in; the Where picker (phase 3) should let it be a shape from the graph, dragged on the picture.
 - The Whirlpool preset keeps the Spark fountain's Emit (a preset changes only the rules), so particles start at the bottom.
+
+### Phase 4 status (Memory)
+
+Built:
+- named memories (counter, timer, on/off, value, place, fading level), in a fifth state texture E, "More memory", four numbers per walker, only for groups that use it;
+- operation cards with "only when" (up to two conditions);
+- expressions checked by glslPatterns;
+- memory in conditions, as slider multipliers and in Colour by a memory;
+- Ants with food rebuilt from memories;
+- Under the hood shows E;
+- web pages carry E (play/kit/agentHost.js).
+
+Cost: 8 MB at 256k walkers and 32 MB at 1M (both copies).
+
+The agent stopped at the usage limit before its final run. I finished it: the full suite passes (9060), and a browser check showed adding an energy level, an "Add up what it smells" card, Colour by energy and the ants preset as cards, compiling with no GLSL errors.

@@ -69,6 +69,8 @@ export interface AgentGroupProgram {
   species: number;
   /** Per-walker state (state C and D: species, memory, colour, its own deposit): four state textures, not two. */
   stateC?: boolean;
+  /** More memory (with stateC): a fifth state texture, E = four more numbers a walker keeps (the builder's named memories). */
+  stateE?: boolean;
   /** Space 3D: A = (pos.xyz, age), B = (vel.xyz, life); its Deposits fill volumes, its Draws use a camera. */
   space3d?: boolean;
   /**

@@ -4,7 +4,7 @@
  * (figure 2.4 of the field guide: Distance ahead, at +Angle on the left and −Angle on the right),
  * the turn arc, the wobble fan, the step length, and the edges. Pure: the SVG draws these.
  */
-export type DiagramSection = 'born' | 'senses' | 'turning' | 'moving' | 'trail' | 'forces' | 'life' | 'look' | 'neighbours' | 'steering' | 'orbit';
+export type DiagramSection = 'born' | 'senses' | 'turning' | 'moving' | 'trail' | 'forces' | 'life' | 'look' | 'neighbours' | 'steering' | 'orbit' | 'memory';
 
 /** What is drawn: the selected section, the setting under the pointer or being dragged, and the card it belongs to (`gravity#0`). */
 export interface DiagramFocus { section: DiagramSection; setting?: string; card?: string }
@@ -73,11 +73,18 @@ export function stepsBehind(lens: Lens, speed: number, n = 5): Pt[] {
 /** How many steps it takes to reach its feelers (the field guide's 9 : 1 for slime). */
 export const stepsToFeelers = (distance: number, speed: number) => (speed > 0 ? distance / (speed / 60) : Infinity);
 
-/** Keep the lens' magnification while the value stays within this share of the reference; else re-fit. */
-export function keepRef(ref: number, value: number, lo = 0.25, hi = 2.6): number {
-  if (!(ref > 0)) return Math.max(value, 1e-4);
-  const k = value / ref;
-  return k < lo || k > hi ? Math.max(value, 1e-4) : ref;
+/**
+ * The lens's reference while a slider moves: kept while the value stays within `lo`–`hi` of it,
+ * so the feelers grow and shrink with the slider. Past either end the reference follows the value
+ * (value ÷ hi, value ÷ lo), so the feelers stay pinned at that length and the lens zooms smoothly
+ * instead of re-fitting in one jump (which made the drawing snap back and jump while dragging).
+ * At `hi` (1.8: 0.9 of the lens radius) a feeler at any angle stays inside the lens.
+ */
+export function keepRef(ref: number, value: number, lo = 0.3, hi = 1.8): number {
+  const v = Math.max(value, 1e-4);
+  if (!(ref > 0)) return v;
+  const k = v / ref;
+  return k > hi ? v / hi : k < lo ? v / lo : ref;
 }
 
 /** A picture point (x across ±aspect, y up ±1) on the shown image rect. */

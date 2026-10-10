@@ -31,14 +31,19 @@ import { drawFrom, freshSeed, makeRng, rangeFor, resolveRandom, seedOf, type Ran
 import { registerEntries, type Entry } from '../registry';
 import { type FieldSpec, DEFAULT_FIELD, fieldFromText, fieldToText } from '../../agentRules/fields';
 import {
-  ACTION_KINDS, CONDITION_KINDS, DEFAULT_STATE_COLOURS, MAX_MASKS, MAX_SPECIES, MAX_STATES, WALKER_KIND_KEYS, defaultRuleSet, normalizeRuleSet,
-  type AgentRule, type AgentRuleSet, type AgentSpeciesRules, type ChannelRef, type Cmp, type NeighbourWho, type RuleAction, type RuleCondition, type SenseWhere, type WalkerKind,
+  ACTION_KINDS, CONDITION_KINDS, DEFAULT_STATE_COLOURS, MAX_MASKS, MAX_SPECIES, MAX_STATES, WALKER_KIND_KEYS, defaultRuleSet, memoryOf, normalizeRuleSet,
+  MEMORY_TYPES, DEFAULT_COLLIDE,
+  type AgentMemory, type AgentRule, type AgentRuleSet, type AgentSpeciesRules, type ChannelRef, type Cmp, type MemoryOp, type MemoryType, type NeighbourWho, type RuleAction, type RuleCondition, type SenseWhere, type WalkerKind,
 } from '../../agentRules/spec';
 
 const WHERE_WORDS: Record<string, SenseWhere> = { ahead: 'ahead', left: 'left', right: 'right', anywhere: 'any', any: 'any', here: 'here' };
 const WHERE_TEXT: Record<SenseWhere, string> = { ahead: 'ahead', left: 'left', right: 'right', any: 'anywhere', here: 'here' };
 const KEYWORDS = new Set(['when', 'always', 'do', 'and', 'not', 'near', 'chance', 'age', 'memory', 'mask', 'neighbours', 'trail', 'species', 'state', 'agents', 'sensors', 'channels', 'masks', 'flow', 'random', 'seed', 'inside', 'outside', 'circle', 'box',
-  ...Object.keys(WHERE_WORDS)]);
+  'mem', 'remember', 'collide', 'color-by', 'colour-by', 'times', 'times-fade', 'from', ...Object.keys(WHERE_WORDS)]);
+/** Words that start a top-level clause, for reading a recipe whose line breaks were lost (pasted into one line). */
+const TOP_WORDS = new Set(['agents', 'sensors', 'channels', 'masks', 'species', 'remember', 'collide', 'color-by', 'colour-by']);
+/** A named memory's operations (memory.ts's operation cards). */
+const MEM_OPS: readonly MemoryOp[] = ['add', 'set', 'toggle', 'reset', 'place', 'smell', 'sum', 'decay', 'expr'];
 
 /** Interesting ranges for rule numbers (degrees a step, amounts…), by what they are. */
 const AG_RAND: Record<string, RandSpec> = {
@@ -81,10 +86,21 @@ export function printCondition(set: AgentRuleSet, sp: AgentSpeciesRules, c: Rule
     case 'mask': return `mask ${nameText(set.masks[c.mask]?.name || `mask${c.mask + 1}`)} ${c.cmp} ${fmtNum(c.value)}`;
     case 'neighbours': return ['neighbours', c.cmp, fmtNum(c.count), ...whoArgs(c.who, c.radius)].join(' ');
     case 'shape': return `${c.outside ? 'outside' : 'inside'} ${c.shape} ${point(c.x, c.y)} ${fmtNum(c.size)}`;
+    case 'mem': return `mem ${memText(set, c.memory)} ${c.cmp} ${fmtNum(c.value)}`;
   }
 }
 
+/** A named memory by its name (its id when it has none). */
+const memText = (set: AgentRuleSet, id: string) => nameText(memoryOf(set, id)?.name || id || 'memory');
+
+/** An action, with its "× a memory" (`times=energy`, `times-fade=0.5`) when it has one. */
 export function printAction(set: AgentRuleSet, sp: AgentSpeciesRules, a: RuleAction): string {
+  const base = printActionBase(set, sp, a);
+  if (!a.times) return base;
+  return `${base} times=${memText(set, a.times.memory)}${a.times.fade !== undefined ? ` times-fade=${fmtNum(a.times.fade)}` : ''}`;
+}
+
+function printActionBase(set: AgentRuleSet, sp: AgentSpeciesRules, a: RuleAction): string {
   switch (a.kind) {
     case 'turn': {
       const what = a.toward === 'trail' ? channelText(set, a.channel) : a.toward === 'point' ? point(a.x, a.y) : a.toward;
@@ -113,6 +129,11 @@ export function printAction(set: AgentRuleSet, sp: AgentSpeciesRules, a: RuleAct
     case 'fade': return `fade ${fmtNum(a.seconds)}s`;
     // The layers ride along as one quoted string (JSON with ' for "): fields.ts fieldToText.
     case 'field': return `field ${fmtNum(a.strength)}${a.grip ? ` grip=${fmtNum(a.grip)}` : ''} layers="${fieldToText(a.spec)}"`;
+    // A named memory's operation: mem carrying set 1 · mem away reset · mem food sum 1 from=food · mem fuel expr "fuel * 0.98".
+    case 'mem': {
+      const what = a.op === 'expr' ? ` "${(a.expr ?? '').replace(/"/g, "'")}"` : a.value !== undefined ? ` ${fmtNum(a.value)}${a.perSecond ? '/s' : ''}` : '';
+      return `mem ${memText(set, a.memory)} ${a.op}${what}${a.channel !== undefined ? ` from=${channelText(set, a.channel)}` : ''}`;
+    }
   }
 }
 
@@ -143,10 +164,18 @@ export function printAgents(raw: AgentRuleSet, opts: { pretty?: boolean } = {}):
   while (ch.length && !ch[ch.length - 1].trim()) ch.pop();
   if (ch.length) top.push(`channels ${ch.map(c => (c.trim() ? nameText(c.trim()) : '_')).join(', ')}`);
   if (set.masks.length) top.push(`masks ${set.masks.map(m => `${nameText(m.name || 'mask')}${m.kind === 'texture' ? ':texture' : ''}`).join(', ')}`);
+  // Named memories (memory.ts), a line each; the id only when it isn't the one reading gives (m1, m2… in order).
+  (set.memories ?? []).forEach((m, i) => {
+    top.push([`remember ${nameText(m.name)} ${m.type}`, ...(m.start !== undefined ? [`start=${fmtNum(m.start)}`] : []), ...(m.fade !== undefined ? [`fade=${fmtNum(m.fade)}`] : []),
+      ...(m.id !== `m${i + 1}` ? [`id=${nameText(m.id)}`] : [])].join(' '));
+  });
+  if (set.colourBy) top.push(`color-by ${memText(set, set.colourBy.memory)} lo=${fmtNum(set.colourBy.lo)} hi=${fmtNum(set.colourBy.hi)}`);
+  if (set.collide) top.push(`collide reach=${fmtNum(set.collide.reach)} margin=${fmtNum(set.collide.margin)} cushion=${fmtNum(set.collide.cushion)} bounce=${fmtNum(set.collide.bounce)}`);
   const blocks: string[] = [];
   for (const sp of set.species) {
     const h = [`species ${nameText(sp.name)}`];
     if (sp.speed !== 0.25) h.push(`speed=${fmtNum(sp.speed)}`);
+    if (sp.speedTimes) h.push(`speed-times=${memText(set, sp.speedTimes.memory)}`, ...(sp.speedTimes.fade !== undefined ? [`speed-times-fade=${fmtNum(sp.speedTimes.fade)}`] : []));
     const names = sp.states.map(s => s.name);
     if (!(names.length === 1 && names[0] === 'walking')) h.push(`states=${names.map(nameText).join(',')}`);
     const body: string[] = [];
@@ -170,9 +199,48 @@ export interface AgentsParse {
 
 type SpeciesDraft = { sp: AgentSpeciesRules; colours: Record<number, boolean>; ruleAt: number[]; header: Tok };
 
+const wordIs = (t: Tok | undefined, ...ws: string[]) => !!t && t.t === 'word' && ws.includes(t.v.toLowerCase());
+
+/**
+ * A recipe whose line breaks were lost (the pretty recipe pasted into a one-line box: "agents
+ * kind=particles edges=bounce flow size=1.2 … species Sparks speed=1.1 always do …") reads as the
+ * same lines: a separator goes in before every word that can only start a clause. The ones put in
+ * are returned, so a species header followed by one reads its rules as if after a colon.
+ */
+function unflatten(c: Cursor): Set<Tok> {
+  const made = new Set<Tok>();
+  const out: Tok[] = [];
+  const toks = c.toks;
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i];
+    const prev = out[out.length - 1];
+    if (t.t === 'word' && prev && prev.t !== 'sep' && prev.t !== '=' && prev.t !== ':' && toks[i + 1]?.t !== '=') {
+      const w = t.v.toLowerCase();
+      const next = toks[i + 1], after = toks[i + 2];
+      const starts = TOP_WORDS.has(w)
+        // A rule: not "when always" (a rule's own head).
+        || (w === 'when' && !wordIs(prev, 'when', 'and'))
+        || (w === 'always' && !wordIs(prev, 'when', 'and') && wordIs(next, 'do'))
+        // The flow settings line (flow size=…), not "follow flow 10deg".
+        || (w === 'flow' && next?.t === 'word' && after?.t === '=' && !wordIs(prev, 'follow', 'against'))
+        // A state's colour: state carrying color=gold.
+        || (w === 'state' && (next?.t === 'word' || next?.t === 'str') && wordIs(after, 'color', 'colour') && toks[i + 3]?.t === '=');
+      if (starts) {
+        const sep: Tok = { t: 'sep', nl: false, indent: 0, at: t.at, end: t.at };
+        made.add(sep);
+        out.push(sep);
+      }
+    }
+    out.push(t);
+  }
+  c.toks = out;
+  return made;
+}
+
 /** Read agents text into a rule set. `seed`: for `random` values. */
 export function parseAgents(src: string, opts: { seed?: number } = {}): AgentsParse {
   const c = new Cursor(src);
+  const joined = unflatten(c);
   const set: AgentRuleSet = { ...defaultRuleSet(), species: [] };
   const resolved: Resolved[] = [];
   let seed: number | null = (() => { const m = /(?:^|[\s·;|])seed\s*=?\s*([A-Za-z0-9_-]+)/i.exec(src); return m ? seedOf(m[1]) : null; })();
@@ -182,6 +250,9 @@ export function parseAgents(src: string, opts: { seed?: number } = {}): AgentsPa
   const given = new Set<string>();
   const drafts: SpeciesDraft[] = [];
   const loose: number[] = [];
+  const memories: AgentMemory[] = [];
+  /** Memory names read before every memory is known: set to the memory's id at the end of pass 1. */
+  const memRefs: Array<{ name: string; at: Tok; put: (id: string) => void }> = [];
 
   /** A number, a number with a unit, or `random…` for what `what` is. */
   const numVal = (what: string, unitOk?: (u: string | null) => boolean): number | null => {
@@ -333,6 +404,8 @@ export function parseAgents(src: string, opts: { seed?: number } = {}): AgentsPa
       if (drafts.length >= MAX_SPECIES) c.error(t, `At most ${MAX_SPECIES} species.`);
       const i = drafts.length;
       const sp: AgentSpeciesRules = { name: nt.v, speed: 0.25, states: [{ name: 'walking', colour: DEFAULT_STATE_COLOURS[0] }], rules: [] };
+      let times: { name: string; at: Tok } | null = null;
+      let timesFade: number | undefined;
       settingArgs(`species`, (key, a) => {
         if (key === 'speed') { const n = num(a.v, a.at, 'speed'); if (n !== null) sp.speed = n; }
         else if (key === 'states') {
@@ -341,24 +414,94 @@ export function parseAgents(src: string, opts: { seed?: number } = {}): AgentsPa
           if (!names.length) c.error(a.at, 'states is names: states=searching,carrying.');
           if (names.length > MAX_STATES) c.error(a.at, `At most ${MAX_STATES} states.`);
           sp.states = names.slice(0, MAX_STATES).map((n, j) => ({ name: n, colour: DEFAULT_STATE_COLOURS[j] ?? [1, 1, 1] }));
-        } else { const s = suggest(key, ['speed', 'states']); c.error(a.at, `species takes speed= and states=.${s ? ` Did you mean “${s}”?` : ''}`); }
+        } else if (key === 'speed-times') { const n = a.v.k === 'word' || a.v.k === 'str' ? a.v.v : ''; if (n) times = { name: n, at: a.at }; else c.error(a.at, 'speed-times is a memory\'s name: speed-times=energy.'); }
+        else if (key === 'speed-times-fade') { const n = num(a.v, a.at, key); if (n !== null) timesFade = n; }
+        else { const s = suggest(key, ['speed', 'states', 'speed-times']); c.error(a.at, `species takes speed=, states= and speed-times=.${s ? ` Did you mean “${s}”?` : ''}`); }
       });
+      const tm = times as { name: string; at: Tok } | null;
+      if (tm) {
+        memRefs.push({ name: tm.name, at: tm.at, put: id => { sp.speedTimes = { memory: id, ...(timesFade !== undefined ? { fade: timesFade } : {}) }; } });
+      }
       sp.states[0] = sp.states[0] ?? { name: 'walking', colour: DEFAULT_STATE_COLOURS[0] };
       if (sp.states.length === 1 && sp.states[0].name === 'walking') sp.states[0] = { name: 'walking', colour: DEFAULT_STATE_COLOURS[i] ?? [1, 1, 1] };
       cur = { sp, colours: {}, ruleAt: [], header: t };
       drafts.push(cur);
       headerIndent = startNewLine ? lineIndent : headerIndent;
       if (c.peek().t === ':') { c.next(); colonLine = true; }
-      else colonLine = false;
+      // Its rules straight after it on a line whose breaks were lost: as if after a colon.
+      else colonLine = joined.has(c.peek());
       continue;
     }
-    const s = suggest(w || nameOf(t), ['agents', 'sensors', 'flow', 'channels', 'masks', 'species', 'when', 'always']);
+    if (w === 'remember') {
+      // remember energy level start=1 fade=0.3 (id=m3 when it isn't the next in order).
+      c.next();
+      const nt = c.next();
+      const tt = c.next();
+      const type = (tt.t === 'word' ? tt.v.toLowerCase() : '') as MemoryType;
+      if ((nt.t !== 'word' && nt.t !== 'str') || !MEMORY_TYPES.includes(type)) { c.error(nt, `remember a memory: remember energy level (a ${MEMORY_TYPES.join(', ')}).`); c.skipClause(); continue; }
+      const m: AgentMemory = { id: '', name: nt.v, type };
+      settingArgs('remember', (key, a) => {
+        if (key === 'id') { const v = a.v.k === 'word' || a.v.k === 'str' ? a.v.v : ''; if (v) m.id = v; else c.error(a.at, 'id is a word.'); return; }
+        const n = num(a.v, a.at, key);
+        if (n === null) return;
+        if (key === 'start') m.start = n; else if (key === 'fade') m.fade = n; else c.error(a.at, 'remember takes start=, fade= and id=.');
+      });
+      memories.push(m);
+      continue;
+    }
+    if (w === 'collide') {
+      c.next();
+      const col = { ...DEFAULT_COLLIDE };
+      settingArgs('collide', (key, a) => {
+        const n = num(a.v, a.at, key);
+        if (n === null) return;
+        if (key === 'reach' || key === 'margin' || key === 'cushion' || key === 'bounce') col[key] = n; else c.error(a.at, 'collide takes reach=, margin=, cushion= and bounce=.');
+      });
+      set.collide = col;
+      continue;
+    }
+    if (w === 'color-by' || w === 'colour-by') {
+      c.next();
+      const nt = c.next();
+      if (nt.t !== 'word' && nt.t !== 'str') { c.error(nt, 'color-by a memory: color-by energy lo=0 hi=1.'); c.skipClause(); continue; }
+      const by = { memory: nt.v, lo: 0, hi: 1 };
+      settingArgs('color-by', (key, a) => {
+        const n = num(a.v, a.at, key);
+        if (n === null) return;
+        if (key === 'lo') by.lo = n; else if (key === 'hi') by.hi = n; else c.error(a.at, 'color-by takes lo= and hi=.');
+      });
+      set.colourBy = by;
+      memRefs.push({ name: nt.v, at: nt, put: id => { by.memory = id; } });
+      continue;
+    }
+    const s = suggest(w || nameOf(t), ['agents', 'sensors', 'flow', 'channels', 'masks', 'remember', 'collide', 'color-by', 'species', 'when', 'always']);
     c.error(t, `“${c.text(t)}” doesn't start an agents line.${s ? ` Did you mean “${s}”?` : ''}`);
     c.skipClause();
   }
   void loose;
   set.species = drafts.map(d => d.sp);
   if (!set.species.length) set.species = defaultRuleSet().species;
+  // Memories: ids in order (m1, m2…) unless given; references read by name (or by id).
+  if (memories.length) {
+    const taken = new Set(memories.map(m => m.id).filter(Boolean));
+    let k = 1;
+    for (const m of memories) {
+      if (m.id) continue;
+      while (taken.has(`m${k}`)) k++;
+      m.id = `m${k}`;
+      taken.add(m.id);
+    }
+    set.memories = memories;
+  }
+  const memId = (name: string): string | null => {
+    const n = name.toLowerCase();
+    return (memories.find(m => m.name.toLowerCase() === n) ?? memories.find(m => m.id.toLowerCase() === n))?.id ?? null;
+  };
+  const memUnknown = (name: string, at: Tok) => {
+    const s = suggest(name, memories.map(m => m.name));
+    c.error(at, `“${name}” isn't a memory.${s ? ` Did you mean “${s}”?` : memories.length ? ` (${memories.map(m => m.name).join(', ')})` : ' Add one first: remember carrying flag.'}`);
+  };
+  for (const r of memRefs) { const id = memId(r.name); if (id) r.put(id); else memUnknown(r.name, r.at); }
 
   // Pass 2: the rules, now that every channel, mask, species and state has its name.
   const channelOf = (x: Tok): ChannelRef | null => {
@@ -431,6 +574,16 @@ export function parseAgents(src: string, opts: { seed?: number } = {}): AgentsPa
         const size = numVal('size');
         return size === null ? null : { kind: 'shape', shape, x: at.v[0], y: at.v[1] ?? at.v[0], size, ...(w === 'outside' ? { outside: true } : {}) };
       }
+      if (x.t === 'word' && w === 'mem') {
+        // A named memory: mem carrying > 0.5 · mem away > 2 · mem home < 0.1.
+        const y = c.next();
+        const id = memId(nameOf(y));
+        if (!id) { memUnknown(nameOf(y) || c.text(y), y); return null; }
+        const cm = c.next();
+        const op = cm.t === 'cmp' && (cm.v === '>' || cm.v === '<') ? cm.v : cm.t === '=' ? '=' : null;
+        if (!op) { c.error(cm, 'mem name > v, mem name < v or mem name = v.'); return null; }
+        const v = numVal('value'); return v === null ? null : { kind: 'mem', memory: id, cmp: op, value: v };
+      }
       // A channel read somewhere, or a state.
       if (isWhere(c.peek())) {
         const ch = channelOf(x);
@@ -457,7 +610,24 @@ export function parseAgents(src: string, opts: { seed?: number } = {}): AgentsPa
       return null;
     };
     const degrees = (what: string) => numVal(what, u => u === null || u === 'deg');
+    /** An action and its "× a memory" (times=energy times-fade=0.5) after it. */
     const action = (): RuleAction | null => {
+      const a = actionBase();
+      let times = null as { memory: string; fade?: number } | null;
+      while (c.peek().t === 'word' && c.peek(1).t === '=' && ['times', 'times-fade'].includes(nameOf(c.peek()).toLowerCase())) {
+        const k = nameOf(c.next()).toLowerCase(); c.next();
+        if (k === 'times') {
+          const y = c.next();
+          const id = memId(nameOf(y));
+          if (!id) { memUnknown(nameOf(y) || c.text(y), y); continue; }
+          times = { ...(times ?? {}), memory: id };
+        } else { const f = numVal('fade'); if (f !== null) times = { memory: times?.memory ?? '', fade: f }; }
+      }
+      if (!a || !times) return a;
+      if (!times.memory) { c.error(c.toks[c.i - 1], 'times-fade goes with times=: times=away times-fade=0.5.'); return a; }
+      return { ...a, times };
+    };
+    const actionBase = (): RuleAction | null => {
       const x = c.next();
       const w = nameOf(x).toLowerCase();
       switch (w) {
@@ -561,7 +731,35 @@ export function parseAgents(src: string, opts: { seed?: number } = {}): AgentsPa
           if (v === null) return null;
           return { kind: 'field', strength: v, ...(grip ? { grip } : {}), spec: spec ?? DEFAULT_FIELD() };
         }
-        default: unknown(x, 'an action', ['turn', 'wander', 'speed', 'accelerate', 'leave', 'become', 'memory', 'stop', 'stick', 'die', 'spawn', 'follow', 'against', 'align', 'separate', 'match', 'cohere', 'slow', 'avoid-edges', 'orbit', 'force', 'field', 'drag', 'fade']); while (!c.atClauseEnd() && c.peek().t !== ',' && c.peek().t !== '@') c.next(); return null;
+        case 'mem': {
+          // mem carrying set 1 · mem away reset · mem food sum 1 from=food · mem fuel expr "fuel * 0.98" (memory.ts's operation cards).
+          const y = c.next();
+          const id = memId(nameOf(y));
+          if (!id) { memUnknown(nameOf(y) || c.text(y), y); return null; }
+          const ot = c.next();
+          const op = nameOf(ot).toLowerCase() as MemoryOp;
+          if (ot.t !== 'word' || !MEM_OPS.includes(op)) { c.error(ot, `What to do to it: ${MEM_OPS.join(', ')}.`); return null; }
+          const a: Extract<RuleAction, { kind: 'mem' }> = { kind: 'mem', memory: id, op };
+          if (op === 'expr') {
+            const e = c.next();
+            if (e.t !== 'str') { c.error(e, 'mem name expr "the expression".'); return null; }
+            a.expr = e.v;
+          } else if (c.peek().t === 'num' || (c.peek().t === 'word' && nameOf(c.peek()).toLowerCase() === 'random')) {
+            const t1 = c.peek();
+            const v = numVal('value');
+            if (v === null) return null;
+            a.value = v;
+            if (t1.t === 'num' && t1.unit === '/s') a.perSecond = true;
+          }
+          if (c.peek().t === 'word' && nameOf(c.peek()).toLowerCase() === 'from' && c.peek(1).t === '=') {
+            c.next(); c.next();
+            const z = c.next(); const ch = channelOf(z);
+            if (ch === null) { unknown(z, 'a trail channel', ['trail', ...set.channels.filter(Boolean)]); return null; }
+            a.channel = ch;
+          }
+          return a;
+        }
+        default: unknown(x, 'an action', ['mem', 'turn', 'wander', 'speed', 'accelerate', 'leave', 'become', 'memory', 'stop', 'stick', 'die', 'spawn', 'follow', 'against', 'align', 'separate', 'match', 'cohere', 'slow', 'avoid-edges', 'orbit', 'force', 'field', 'drag', 'fade']); while (!c.atClauseEnd() && c.peek().t !== ',' && c.peek().t !== '@') c.next(); return null;
       }
     };
     for (const at of d.ruleAt) {
@@ -621,6 +819,10 @@ const agentEntries = (): Entry[] => [
   { id: 'agents:flow', kind: 'setting', dialects: ['agents'], words: ['flow'], params: [{ key: 'size', type: 'number', rand: AG_RAND['flow-size'] }, { key: 'evolve', type: 'number', rand: AG_RAND.evolve }], summary: 'The flow field (curl noise) follow flow reads.', examples: ['flow size=1.2 evolve=0.2'], stage: 'agents' },
   { id: 'agents:channels', kind: 'setting', dialects: ['agents'], words: ['channels'], params: [], summary: 'Names for the four trail channels (_ for a blank one).', examples: ['channels home, food'], stage: 'agents' },
   { id: 'agents:masks', kind: 'setting', dialects: ['agents'], words: ['masks'], params: [], summary: 'Up to four masks (inputs on the group card); Name:texture for a texture.', examples: ['masks Food, Nest'], stage: 'agents' },
+  { id: 'agents:remember', kind: 'setting', dialects: ['agents'], words: ['remember'], params: [{ key: 'start', type: 'number' }, { key: 'fade', type: 'number' }], summary: 'A named memory each walker keeps: a counter, timer, flag, value, position or level.', examples: ['remember carrying flag', 'remember energy level start=1 fade=0.3'], stage: 'agents' },
+  { id: 'agents:color-by', kind: 'setting', dialects: ['agents'], words: ['color-by', 'colour-by'], params: [{ key: 'lo', type: 'number' }, { key: 'hi', type: 'number' }], summary: 'Colour each walker by a memory instead of its state.', examples: ['remember energy level · color-by energy lo=0 hi=1'], stage: 'colour' },
+  { id: 'agents:collide', kind: 'setting', dialects: ['agents'], words: ['collide'], params: [{ key: 'reach', type: 'number' }, { key: 'margin', type: 'number' }, { key: 'cushion', type: 'number' }, { key: 'bounce', type: 'number' }], summary: 'In 3D: keep the walkers out of the scene wired into the group.', examples: ['collide reach=1.6 margin=0.03 cushion=0.18 bounce=0.2'], stage: 'agents' },
+  { id: 'agents:mem', kind: 'action', dialects: ['agents'], words: ['mem'], params: [], summary: 'A named memory: change it (an action) or read it (a condition).', examples: ['remember carrying flag · remember away timer · species Ants: when mem carrying > 0.5 do mem away reset', 'remember energy level · always do mem energy add -0.1/s'] },
   { id: 'agents:species', kind: 'header', dialects: ['agents'], words: ['species'], params: [{ key: 'speed', type: 'number', rand: AG_RAND.speed }, { key: 'states', type: 'list' }], summary: 'A species: its name, speed and states, then its rules (indented, or after a colon on one line).', examples: ['species Ants speed=0.3 states=searching,carrying', 'species Slime: always do wander 7deg'], stage: 'agents' },
   { id: 'agents:state', kind: 'setting', dialects: ['agents'], words: ['state'], params: [{ key: 'color', type: 'colour', rand: { kind: 'colour' } }], summary: 'A state\'s colour, under its species.', examples: ['state carrying color=gold'], stage: 'colour' },
   { id: 'agents:when', kind: 'header', dialects: ['agents'], words: ['when', 'always'], params: [], summary: 'A rule: when <condition> and … do <action>, …  (or always do …); @last stops after it, @off switches it off.', examples: ['when searching and food anywhere > 0.05 do turn toward food 20deg', 'always do wander 7deg'], stage: 'rule' },

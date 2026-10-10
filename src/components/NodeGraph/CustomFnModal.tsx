@@ -19,7 +19,7 @@ import { ReferencePanel } from '../code/ReferencePanel';
 import { LinePreviewPanel, ProbePicker, startLineProbe } from '../code/LinePreview';
 import { probeSteps } from '../../lib/nodePreview/lineProbe';
 import type { EditorPanel } from '../code/editorPanelPrefs';
-import { FunctionsToggle, SidePanel, useEditorSidePanels } from '../code/SidePanels';
+import { FunctionsTab, SidePanel, useEditorSidePanels } from '../code/SidePanels';
 import { buildCompletions } from '../code/glslReference';
 import { insertSnippet } from '../code/useCompletion';
 import { HowUsedButton } from '../codeExplorer/HowUsedButton';
@@ -29,6 +29,10 @@ import { useExplainDialogs } from '../explain/useExplainDialogs';
 import { customFnContext, customFnUseHere, scopeNodes } from '../explain/hosts';
 import { ExplainScopeProvider } from '../explain/ExplainScope';
 import { useFnCardScope } from '../explain/functionCard/fnCardStore';
+import { MakeSliderButton } from '../code/MakeSlider';
+import { applyCodeSlider, useLiteralOffer } from '../code/codeSliderActions';
+import { customFnMakeSlider, namesInCodeNode } from '../../nodes/codeSlider';
+import { nameForLiteral } from '../../lib/glslPatterns/literalSlider';
 
 const TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
 
@@ -82,12 +86,17 @@ export function CustomFnModal({ node, onClose }: Props) {
 
   // ── Undo / Redo for body ────────────────────────────────────────────────────
   const bodyHistory      = useRef<string[]>([body]);
+  // The inputs at each step (Make a slider adds one with the body change), so undo takes both back
+  const inputsHistory    = useRef<Array<typeof customInputs>>([customInputs]);
   const bodyHistoryIndex = useRef<number>(0);
   const [bodyHistoryPos, setBodyHistoryPos] = useState(0);
   const [bodyHistoryLen, setBodyHistoryLen] = useState(1);
 
-  const pushBodyHistory = (newBody: string) => {
+  const pushBodyHistory = (newBody: string, inputs?: typeof customInputs) => {
     const trimmed = bodyHistory.current.slice(0, bodyHistoryIndex.current + 1);
+    const ins = inputsHistory.current.slice(0, bodyHistoryIndex.current + 1);
+    ins.push(inputs ?? ins[ins.length - 1] ?? customInputs);
+    inputsHistory.current = ins;
     trimmed.push(newBody);
     bodyHistory.current      = trimmed;
     bodyHistoryIndex.current = trimmed.length - 1;
@@ -100,11 +109,21 @@ export function CustomFnModal({ node, onClose }: Props) {
     pushBodyHistory(newBody);
   };
 
+  /** Put step `i` back: the body, and the inputs when they differ (a slider made since). */
+  const restoreStep = (i: number) => {
+    updateNodeParams(node.id, { body: bodyHistory.current[i] });
+    const ins = inputsHistory.current[i];
+    if (ins && JSON.stringify(ins) !== JSON.stringify(customInputs)) {
+      updateNodeParams(node.id, { inputs: ins });
+      updateNodeSockets(node.id, ins, outputType, extraOutputs);
+    }
+  };
+
   const undoBody = () => {
     if (bodyHistoryIndex.current <= 0) return;
     bodyHistoryIndex.current -= 1;
     setBodyHistoryPos(bodyHistoryIndex.current);
-    updateNodeParams(node.id, { body: bodyHistory.current[bodyHistoryIndex.current] });
+    restoreStep(bodyHistoryIndex.current);
     requestAnimationFrame(() => bodyRef.current?.focus());
   };
 
@@ -112,8 +131,27 @@ export function CustomFnModal({ node, onClose }: Props) {
     if (bodyHistoryIndex.current >= bodyHistory.current.length - 1) return;
     bodyHistoryIndex.current += 1;
     setBodyHistoryPos(bodyHistoryIndex.current);
-    updateNodeParams(node.id, { body: bodyHistory.current[bodyHistoryIndex.current] });
+    restoreStep(bodyHistoryIndex.current);
     requestAnimationFrame(() => bodyRef.current?.focus());
+  };
+
+  // ── Make a slider: the number under the caret in the body becomes a slider input ──
+  const literal = useLiteralOffer<'body'>();
+  const offerName = useMemo(() => {
+    const o = literal.offer;
+    return o && body.slice(o.lit.start, o.lit.end) === o.lit.text ? nameForLiteral(body, o.lit, namesInCodeNode(node), explainCtx) : undefined;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the offer and the body it points into
+  }, [literal.offer, body, node.params.inputs]);
+  const makeSlider = () => {
+    const o = literal.offer;
+    if (!o) return;
+    const r = customFnMakeSlider(node, o.lit, explainCtx);
+    literal.clear();
+    if (!r) return;
+    handleBodyBlur();
+    applyCodeSlider(node.id, r, o.lit.text, outputType, extraOutputs);
+    pushBodyHistory(r.text, r.inputs as typeof customInputs);
+    requestAnimationFrame(() => { bodyRef.current?.focus(); bodyRef.current?.setSelectionRange(r.start, r.end); });
   };
 
   const canUndoBody = bodyHistoryPos > 0;
@@ -243,7 +281,7 @@ export function CustomFnModal({ node, onClose }: Props) {
       width={980}
       height={800}
       onClose={onClose}
-      headerActions={<><HowUsedButton /><FunctionsToggle open={functionsOpen} onToggle={() => togglePanel('functions')} /></>}
+      headerActions={<HowUsedButton />}
       footer={
         <>
           <Button icon="export" onClick={handleSavePreset}>Save as preset</Button>
@@ -325,6 +363,7 @@ export function CustomFnModal({ node, onClose }: Props) {
               completions={completions}
               textareaRef={el => { bodyRef.current = el; }}
               onFocus={() => { lastField.current = 'body'; }}
+              onSelect={el => literal.track(el, 'body')}
               onBlur={handleBodyBlur}
               onKeyDown={handleBodyKeyDown}
               actions={
@@ -334,7 +373,8 @@ export function CustomFnModal({ node, onClose }: Props) {
                 </>
               }
             />
-            <Note>Use your input names directly. Write a single expression, or a block that ends with <code>return</code>.</Note>
+            {literal.offer && <MakeSliderButton lit={literal.offer.lit} name={offerName} onMake={makeSlider} />}
+            <Note>Use your input names directly. Write a single expression, or a block that ends with <code>return</code>. Put the caret on a number to make it a slider.</Note>
           </Section>
 
           {/* Preview a variable: the inputs, the body's named locals, Return (code/LinePreview.tsx) */}
@@ -386,6 +426,8 @@ export function CustomFnModal({ node, onClose }: Props) {
           </div>
         </div>
 
+        {/* The palette's fold tab on the right edge (a drawer on a narrow window has its own scrim to close it) */}
+        {!(narrow && functionsOpen) && <FunctionsTab open={functionsOpen} onToggle={() => togglePanel('functions')} />}
         <SidePanel side="right" label="Functions" open={functionsOpen} narrow={narrow} width={300} onClose={() => setPanel('functions', false)}>
           <ReferencePanel
             variables={customInputs}

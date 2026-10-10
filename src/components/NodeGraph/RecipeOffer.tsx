@@ -16,7 +16,7 @@ import { Icon } from '../ui/Icon';
 import { portalGuard } from '../ui/portalGuard';
 import { closeRecipeOffer, useRecipeOffer } from '../../store/recipeOfferStore';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { LIGHT_SCENE_TYPES, recipesFor } from '../../nodes/recipes';
+import { FACE_CAMERA_OPTION, LIGHT_SCENE_TYPES, PICTURE_DEPTH_SET, recipesFor } from '../../nodes/recipes';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { getCardSize } from './socketRegistry';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -39,11 +39,13 @@ export function RecipeOffer({ nodes, canvasRef, pan, zoom }: {
   // The node went (undo, delete, another graph) or the view went into a group: nothing to set up.
   useEffect(() => { if (offer && (!node || inGroup)) closeRecipeOffer(); }, [offer, node, inGroup]);
   if (!offer || !node || inGroup) return null;
-  return <OfferCard key={offer.nodeId} node={node} openedAt={offer.openedAt} canvasRef={canvasRef} pan={pan} zoom={zoom} />;
+  return <OfferCard key={`${offer.nodeId}:${offer.type}`} node={node} set={offer.type} openedAt={offer.openedAt} canvasRef={canvasRef} pan={pan} zoom={zoom} />;
 }
 
-function OfferCard({ node, openedAt, canvasRef, pan, zoom }: {
+function OfferCard({ node, set, openedAt, canvasRef, pan, zoom }: {
   node: GraphNode;
+  /** The recipe set (the node's type, or one opened from its card). */
+  set: string;
   openedAt: number;
   canvasRef: RefObject<HTMLDivElement | null>;
   pan: { x: number; y: number };
@@ -54,11 +56,15 @@ function OfferCard({ node, openedAt, canvasRef, pan, zoom }: {
   const [dontAsk, setDontAsk] = useState(false);
   const dontAskRef = useRef(dontAsk);
   useEffect(() => { dontAskRef.current = dontAsk; }, [dontAsk]);
-  const recipes = recipesFor(node.type);
+  const recipes = recipesFor(set);
   const label = (typeof node.params.label === 'string' && node.params.label) || getNodeDefinition(node.type)?.label || node.type;
-  const lighting = LIGHT_SCENE_TYPES.has(node.type);
-  const title = lighting ? 'Light the scene' : `Set up ${label}?`;
-  const sub = lighting ? 'Pick a look: shadows, AO, lights and tone map are added and wired. Picking again replaces it.' : 'One click adds and wires a few nodes, each with a note.';
+  const picture = set === PICTURE_DEPTH_SET;
+  const lighting = !picture && LIGHT_SCENE_TYPES.has(node.type);
+  const [faceCamera, setFaceCamera] = useState(true);
+  const title = picture ? 'Add a picture with depth' : lighting ? 'Light the scene' : `Set up ${label}?`;
+  const sub = picture
+    ? 'A picture (drop an image on it), its depth and a Depth Composite, wired to this loop and the Output. Picking again replaces it.'
+    : lighting ? 'Pick a look: shadows, AO, lights and tone map are added and wired. Picking again replaces it.' : 'One click adds and wires a few nodes, each with a note.';
 
   // Beside the card: right of it, else left, level with its top; always on screen.
   useLayoutEffect(() => {
@@ -93,7 +99,8 @@ function OfferCard({ node, openedAt, canvasRef, pan, zoom }: {
 
   const pick = (id: string) => {
     if (dontAsk) closeRecipeOffer(true);
-    useNodeGraphStore.getState().applyStarterRecipe(node.id, id);
+    if (picture) useNodeGraphStore.getState().applyStarterRecipe(node.id, id, set, { [FACE_CAMERA_OPTION]: faceCamera });
+    else useNodeGraphStore.getState().applyStarterRecipe(node.id, id);
   };
 
   return createPortal(
@@ -111,7 +118,7 @@ function OfferCard({ node, openedAt, canvasRef, pan, zoom }: {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 6px 8px 12px' }}>
         <span style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: alpha(tk.accent.base, 0.12), color: tk.accent.base }}>
-          <Icon name={lighting ? 'sun' : 'spark'} size={14} />
+          <Icon name={lighting ? 'sun' : picture ? 'layers' : 'spark'} size={14} />
         </span>
         <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
           <b style={{ fontSize: 13, fontWeight: 650, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</b>
@@ -127,11 +134,19 @@ function OfferCard({ node, openedAt, canvasRef, pan, zoom }: {
         )}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px 7px 12px', borderTop: `1px solid ${tk.border.subtle}` }}>
+        {picture ? (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: tk.text.muted, cursor: 'pointer', marginRight: 'auto', minWidth: 0 }}
+            title="Sets the March Camera's Angle and Elevation to 0 and stops its orbit: a photo is seen from the front">
+            <input type="checkbox" checked={faceCamera} data-testid="picture-depth-face-camera" onChange={e => setFaceCamera(e.target.checked)} style={{ margin: 0, accentColor: tk.accent.base }} />
+            Turn the camera to face the picture
+          </label>
+        ) : (
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: tk.text.muted, cursor: 'pointer', marginRight: 'auto', minWidth: 0 }}>
           <input type="checkbox" checked={dontAsk} onChange={e => setDontAsk(e.target.checked)} style={{ margin: 0, accentColor: tk.accent.base }} />
           {lighting ? "Don't offer when I add one" : "Don't ask for this node again"}
         </label>
-        <Button size="sm" variant="ghost" onClick={() => closeRecipeOffer(dontAsk)}>{lighting ? 'Not now' : 'Just the node'}</Button>
+        )}
+        <Button size="sm" variant="ghost" onClick={() => closeRecipeOffer(dontAsk)}>{lighting || picture ? 'Not now' : 'Just the node'}</Button>
       </div>
     </div>,
     document.body,

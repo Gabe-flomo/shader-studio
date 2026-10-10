@@ -39,6 +39,75 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.135',
+    date: '2026-10-10',
+    title: 'Everyday fixes',
+    highlights: [
+      { area: 'Studio', text: 'New nodes land where you are looking (builders, Do bar, recipes), and Convert / Auto layout keep graphs compact instead of stranding nodes far left.' },
+      { area: 'Studio', text: 'Agent Builder: smooth How far ahead slider, Surprise me is back, Edit this one / Start over / Add another, and advanced rules stay in the builder.' },
+      { area: 'Studio', text: 'Expression Blocks: select a number → Make a slider; Copy as code and Make a function; a simpler card; Functions fold out from the side.' },
+      { area: 'Studio', text: 'Fixed: the preview after a lost GPU context (no more console errors), and the Do bar reads back agents recipes it printed.' },
+    ],
+  },
+  {
+    id: '2026.10.134',
+    date: '2026-10-10',
+    title: 'Pictures inside 3D scenes',
+    highlights: [
+      { area: 'Studio', text: 'March Loop: Add a picture with depth sets up a picture, its depth and a Depth Composite in one click, optionally lit by the scene and reflected.', link: { kind: 'doc', path: 'docs/depth-node.md' } },
+      { area: 'Studio', text: 'Depth Light: Link to scene object makes a light follow a shape or its Translate, live. Picture Environment lets objects reflect the picture.' },
+      { area: 'Studio', text: 'Depth: try other models (experimental, Compare side by side); Depth Pro and ZoeDepth give metres. A webcam runs live.' },
+    ],
+  },
+  {
+    id: '2026.10.133',
+    date: '2026-10-10',
+    title: 'One Texture node',
+    highlights: [
+      { area: 'Studio', text: 'One Texture node for pictures, videos and the webcam: upload, drop, pick from the library, or paste an image URL. Crop, rotate, tile and trim on the card.', link: { kind: 'doc', path: 'docs/texture-node.md' } },
+      { area: 'Studio', text: 'Fixed: saved graphs reopen with their pictures. Each is kept in the library and embedded small in the graph, so it survives reloads and travels in .playfiles.' },
+      { area: 'Studio', text: 'Webcam on the card with Play\'s camera and hand controls; map a hand to any slider. Generate depth adds a wired Depth node (or Depth Composite in 3D).' },
+    ],
+  },
+  {
+    id: '2026.10.132',
+    date: '2026-10-10',
+    title: 'Glow and shadows on pictures',
+    highlights: [
+      { area: 'Studio', text: 'Depth Light: wire a Glowing scene and its objects light the picture from wherever they are, any shape, following as they move. No positions to type.' },
+      { area: 'Studio', text: 'Depth Light: Shadows from casts the scene\'s objects\' soft shadows onto the picture.' },
+      { area: 'Studio', text: 'Depth keeps one model (Depth Anything V2 Small). A video\'s depth is baked first so it plays smoothly.' },
+    ],
+  },
+  {
+    id: '2026.10.131',
+    date: '2026-10-09',
+    title: 'Pictures in 3D scenes',
+    highlights: [
+      { area: 'Studio', text: 'Depth Composite: a picture with depth and a 3D scene, the nearer wins per pixel, so 3D objects pass behind and in front of people.', link: { kind: 'doc', path: 'docs/depth-node.md' } },
+      { area: 'Studio', text: 'Depth Light: a light or glowing object in the scene lights the picture where it faces it, fading with distance; chain several for more lights.' },
+    ],
+  },
+  {
+    id: '2026.10.130',
+    date: '2026-10-09',
+    title: 'Depth',
+    highlights: [
+      { area: 'Studio', text: 'Depth node: depth from any image, video or texture, worked out on this device by one of three models you can compare (downloaded once, when first used).', link: { kind: 'doc', path: 'docs/depth-node.md' } },
+      { area: 'Studio', text: 'Outputs a near mask (cut out a subject), normals (relight a flat picture) and parallax UV (a 2.5D shift). Bake depth for smooth video and web pages.' },
+    ],
+  },
+  {
+    id: '2026.10.129',
+    date: '2026-10-09',
+    title: 'Walkers that remember',
+    highlights: [
+      { area: 'Studio', text: 'Agent Builder Memory: name up to four numbers a walker keeps (counter, timer, on/off, a value, a place, a level that fades), each with live range.' },
+      { area: 'Studio', text: 'Change them with cards (count, set, toggle, add up what it smells, decay, reset) or an expression; use them in "only when", sliders and colour.' },
+      { area: 'Studio', text: 'Ants with food is now cards, with carrying and away memories; a card can have two "only when" conditions.' },
+    ],
+  },
+  {
     id: '2026.10.128',
     date: '2026-10-09',
     title: 'Follow a field',

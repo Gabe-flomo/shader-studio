@@ -26,14 +26,26 @@ export function buildPreviewUniforms(
   shared: Record<string, THREE.IUniform>,
 ): Record<string, THREE.IUniform> {
   const mouse = prev.u_mouse?.value as THREE.Vector2 | undefined;
-  const u: Record<string, THREE.IUniform> = {
+  const u: Record<string, THREE.IUniform> = {};
+  // Everything else the old program had (a Data node's table, a Particles engine's state, a Baked
+  // node's texel size, anything bound outside the compile) is carried over as a new object, so the
+  // first frame finds it: the frame loop writes `uniforms.x.value` and a missing one would throw.
+  // A render target's texture belonged to a target that is being thrown away: it starts empty.
+  for (const [name, p] of Object.entries(prev)) {
+    const v: unknown = p?.value;
+    u[name] = { value: (v as { isRenderTargetTexture?: boolean } | null)?.isRenderTargetTexture ? null : v };
+  }
+  Object.assign(u, {
     u_time:       { value: prev.u_time?.value ?? 0 },
+    // The frame's length and the button: written every frame and on every press (ShaderCanvas).
+    u_frameDt:    { value: prev.u_frameDt?.value ?? 0 },
+    u_mousebtn:   { value: prev.u_mousebtn?.value ?? 0 },
     u_resolution: { value: new THREE.Vector2(size.width || 1, size.height || 1) },
     u_mouse:      { value: mouse ? mouse.clone() : new THREE.Vector2(0, 0) },
     u_prevFrame:  { value: null },
     ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])),
     ...shared,
-  };
+  });
   for (const [name, value] of Object.entries(st.paramUniforms)) u[name] = { value };
   for (const [name, nodeId] of Object.entries(st.textureUniforms)) u[name] = { value: st.nodeTextures[nodeId] ?? null };
   for (const [name, nodeId] of Object.entries(st.videoUniforms)) u[name] = { value: st.videoTextures[nodeId] ?? null };

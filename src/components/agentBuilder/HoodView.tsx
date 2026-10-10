@@ -42,6 +42,8 @@ export interface HoodPanelProps {
   trails: HoodTrailChannel[];
   /** Channels the selected section uses. */
   highlight: ReadonlySet<HoodKey>;
+  /** State E's four channels' names: the named memories in their slots ('' for a free one). */
+  memoryNames?: string[];
   onClose: () => void;
 }
 
@@ -68,8 +70,8 @@ export function HoodPanel(p: HoodPanelProps) {
 
   const speciesKey = JSON.stringify(p.species);
   const textures = useMemo<HoodTexture[]>(() => (info ? hoodTextures({
-    d3: info.d3, stateC: info.stateC, aspect: info.aspect, speedMax: p.speedMax, lifeMax: p.lifeMax, species: p.species, trailColours: TRAIL_RGB,
-  }) : []), [info, p.speedMax, p.lifeMax, speciesKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    d3: info.d3, stateC: info.stateC, stateE: info.stateE, memoryNames: p.memoryNames, aspect: info.aspect, speedMax: p.speedMax, lifeMax: p.lifeMax, species: p.species, trailColours: TRAIL_RGB,
+  }) : []), [info, p.speedMax, p.lifeMax, speciesKey, (p.memoryNames ?? []).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
   const trails = info?.trail ? p.trails : [];
   const atlas = useMemo(() => (info ? hoodAtlas(textures, trails.length, info.aspect) : null), [info, textures, trails.length]);
   const trailKey = JSON.stringify(trails.map(t => t.colour));

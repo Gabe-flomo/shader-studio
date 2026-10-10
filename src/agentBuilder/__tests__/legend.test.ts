@@ -165,7 +165,7 @@ describe('legend entries match what each section draws', () => {
     for (const set of sets) {
       for (const sec of KIND_SECTIONS[set.kind ?? 'trail']) {
         const e = entriesFor(set, sec.id);
-        if (sec.id === 'look') continue;
+        if (sec.id === 'look' || sec.id === 'memory') continue;
         expect(e.length, `${set.kind} ${sec.id}`).toBeGreaterThan(0);
         for (const x of e) {
           expect(x.line.length).toBeGreaterThan(10);

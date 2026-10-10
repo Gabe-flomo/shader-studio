@@ -256,6 +256,10 @@ Edit verbs leave "the" out: `set glow falloff=8`. A clause that is only a refere
 | `flow size= evolve=` |  | size: random: 0.6–2; evolve: random: 0.05–0.4 | `flow size=1.2 evolve=0.2` |
 | `channels` |  |  | `channels home, food` |
 | `masks` |  |  | `masks Food, Nest` |
+| `remember start= fade=` |  | start: number; fade: number | `remember carrying flag` |
+| `color-by lo= hi=` | colour-by | lo: number; hi: number | `remember energy level · color-by energy lo=0 hi=1` |
+| `collide reach= margin= cushion= bounce=` |  | reach: number; margin: number; cushion: number; bounce: number | `collide reach=1.6 margin=0.03 cushion=0.18 bounce=0.2` |
+| `mem` |  |  | `remember carrying flag · remember away timer · species Ants: when mem carrying > 0.5 do mem away reset` |
 | `species speed= states=` |  | speed: random: 0.1–1.2 (log); states: list | `species Ants speed=0.3 states=searching,carrying` |
 | `state color=` |  | color: random: a harmonious colour | `state carrying color=gold` |
 | `when` | always |  | `when searching and food anywhere > 0.05 do turn toward food 20deg` |

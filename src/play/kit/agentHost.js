@@ -69,7 +69,7 @@ export function ahCreate(gl, spec, env) {
   const unsupported = ahUnsupported(gl);
   const groups = spec.groups || [], deposits = spec.deposits || [], trails = spec.trails || [], draws = spec.draws || [];
   // Every sampler the agents fill starts blank (the app's empty texture), every `_px` at one pixel.
-  for (const g of groups) for (const k of ['A', 'B', 'C', 'D']) env.textures.set(g.u[k], null);
+  for (const g of groups) for (const k of ['A', 'B', 'C', 'D', 'E']) if (g.u[k]) env.textures.set(g.u[k], null);
   for (const t of trails) { env.textures.set(t.u.tex, null); env.vec2s.set(t.u.tex + '_px', [1, 1]); if (t.stepShader) env.textures.set(t.u.src, null); }
   // 3D: a volume Trail's layout and a Draw agents' scene probe point are uniforms every program may read.
   const vec4s = new Map();
@@ -178,12 +178,12 @@ export function ahCreate(gl, spec, env) {
   const dropGroup = s => { for (const side of s.tex) for (const t of side) gl.deleteTexture(t); for (const fb of s.fb) gl.deleteFramebuffer(fb); dropListen(s); };
   const dropListen = s => { for (const l of s.listen.values()) if (l.levelTex) gl.deleteTexture(l.levelTex); s.listen.clear(); };
   const group = g => {
-    const key = g.side + (g.stateC ? ':C' : '') + (g.space3d ? ':3D' : '');
+    const key = g.side + (g.stateC ? ':C' : '') + (g.stateC && g.stateE ? ':E' : '') + (g.space3d ? ':3D' : '');
     let s = G.get(g.slug);
     if (s && s.key === key) return s;
     if (s) dropGroup(s);
-    // State A and B; with per-walker state also C (species, memory, colour) and D (its deposit). RGBA32F, MRT.
-    const count = g.stateC ? 4 : 2;
+    // State A and B; with per-walker state also C (species, memory, colour) and D (its deposit); with More memory also E. RGBA32F, MRT.
+    const count = g.stateC ? (g.stateE ? 5 : 4) : 2;
     const tx = [0, 1].map(() => Array.from({ length: count }, () => tex(gl.RGBA32F, gl.RGBA, gl.FLOAT, gl.NEAREST, gl.CLAMP_TO_EDGE, g.side, g.side)));
     s = Object.assign(agGroupState(), { key, side: g.side, tex: tx, fb: tx.map(fbOf), cur: 0 });
     for (const fb of s.fb) clearFb(fb, g.side, g.side);
@@ -359,7 +359,7 @@ export function ahCreate(gl, spec, env) {
   const bindState = (g, s) => {
     const t = s.tex[s.cur];
     env.textures.set(g.u.A, t[0]); env.textures.set(g.u.B, t[1]);
-    if (g.stateC) { env.textures.set(g.u.C, t[2]); env.textures.set(g.u.D, t[3]); }
+    if (g.stateC) { env.textures.set(g.u.C, t[2]); env.textures.set(g.u.D, t[3]); if (g.stateE && g.u.E) env.textures.set(g.u.E, t[4]); }
   };
 
   /** One step of listening for group g, before its rule: values for its uniforms (and the level history uploaded). */

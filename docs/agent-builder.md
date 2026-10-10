@@ -4,10 +4,11 @@ The Agent Builder makes and edits an Agents group's walkers with pictures instea
 
 ## Ways in
 
-- **Builders → Agent Builder**, the canvas menu's Builders, or the Do… bar's "new agent rules": the start page. Nothing is added until you pick a kind.
+- **Builders → Agent Builder**, the canvas menu's Builders, or the Do… bar's "new agent rules": the start page. Nothing is added until you pick a kind. When the graph already has an Agents group the builder made (a rules group on the top level), it asks first (see "Opening with a group already there").
 - **Edit rules ↗** on a rules group's card, or a double-click on its title, opens the builder on that group, for every kind (trail followers, ants, particles, flocks, crowds, orbiters).
 - **"new 3d agents"** adds the 3D slime setup and opens it in the builder.
-- The rules editor (`AgentRulesModal`) is still there, for advanced rules. It opens from the builder's top bar (`{}`, "All rules") and from the Advanced rules card.
+- A rules group's Recipe chip (**Open rules**) opens the builder too.
+- The builder never sends you to the old rules editor (`AgentRulesModal`): its Advanced rules edit every rule as When … Do … lines, in the builder. The old editor is still in the code but nothing in the builder opens it.
 
 ## Start page: what are you making?
 
@@ -24,6 +25,20 @@ The start page shows five cards, each with a small moving picture: **Trail follo
 Crowds have a card of their own but the Flocks sections. A crowd is a flock with somewhere to go (Head for) that slows in a jam. What you make looks different (people in lanes, not birds) and starts from a different setup, so it gets its own picture and presets.
 
 **Back** (top left) on a group made from the start page takes it away again and returns to the start page. Undo brings it back. **Add to graph** keeps it: it is already live in the graph. On a group that was already there, the button reads **Done**.
+
+### Clear the current graph first?
+
+When the graph has anything besides its Output, the start page asks beside **Make it in**: "Your graph has N nodes: **Keep them** | **Clear the graph first**". **Keep them** is the default: the new group is added beside what is there. With **Clear the graph first** picked, a line under it says what will happen, and picking a kind first clears everything but the Output (unwired), as an undo step of its own ("Agent Builder: cleared the graph"), then adds the group as its own step. So undo takes back the group, then the clear. **Back** puts the whole graph back as it was before the clear (`agentBuilder/actions.ts clearGraphForBuilder`).
+
+### Opening with a group already there
+
+Opened from the entry, the Do… bar or the canvas menu while the graph has a builder group (a rules Agents group on the top level), the builder asks instead of adding another:
+
+- **Edit this one** (the default): the builder on that group, as **Edit rules ↗** opens it.
+- **Start over**: the group and its setup go (the Emit, Deposit, Trail field, palette, Draw agents: every node only it reads from or that reads only from it, `agentSetupIds`), as one undo step ("Agent Builder: started over"); then the start page, with a line saying what went and that undo brings it back.
+- **Add another**: the start page; the new group goes beside the others.
+
+With several groups, they are listed (name, kind, 2D or 3D) and you pick one; the selected one on the canvas is picked to start with, and Edit and Start over act on the picked one. A double-click on a group edits it.
 
 ## The layout (shared builder shell)
 
@@ -63,7 +78,7 @@ Only the selected section's card is open. The others are their summaries in the 
 | Turning | How sharply; Wobble (its own switch) | that Turn's degrees; a Wander |
 | Moving | Speed, At the edges (Wrap / Bounce / Slide) | the species' speed; the rule set's edges |
 | Trail (switch) | Leaves, Fades, Spreads; More: Lays (chips) | a Leave trail's amount and channel; the Trail field's Half-life and Diffuse |
-| Advanced rules | each rule the cards can't show, as a sentence | opens the rules editor |
+| Advanced rules | each rule the cards can't show, as a card with its When … Do … lines, edited in place; Every rule shows them all | the rules themselves |
 
 Born, Turning and Moving have no on/off switch, because a walker is always born, turns and moves.
 
@@ -100,7 +115,11 @@ The model is in `src/agentBuilder/behaviours.ts` (`addSpecies`, `renameSpecies`,
 | Flocks, Crowds | Born · Neighbours · Turning · Moving |
 | Orbiters | Born · Orbit · Neighbours · Moving |
 
-Advanced rules is added under them when a kind has rules the cards can't show.
+Advanced rules is always last. Its summary says how many rules are beyond the cards, or "every rule as lines" (dimmed) when the cards show them all.
+
+### Advanced rules
+
+The rules the cards can't show (two conditions, Stop after this rule, states, masks, memory…) are a list of cards in the builder's style (`components/agentBuilder/AdvancedRules.tsx`). Each card is a rule: its number and its sentence, an on/off switch, move up and down, duplicate and take away, and its **When** and **Do** lines, every condition and action editable as in the old rules editor (the pieces are shared: `components/agentRules/RuleEditors.tsx`), with **+ and…**, **+ do…** and **Stop after this rule**. **Only these | Every rule** switches between the rules the cards can't show and all of the kind's rules, in the order they run. **Add a rule** adds one at the end (and shows every rule). The top bar's `{}` opens Every rule. Edits apply like the cards' (a quarter of a second after you stop, one undo step a burst); a rule the cards can read shows up on its card again.
 
 ### Particles (field guide 2.9)
 
@@ -165,7 +184,9 @@ In sections where order matters (Forces, Turning, Orbit, Orbiters' Neighbours) e
 
 Selecting a section draws its diagram over the live picture. Pointing at or dragging a setting lights its part, and the diagram moves with the slider.
 
-- **Senses:** one walker up close, in a lens over the dimmed picture, with its three feelers. "How far ahead" is the centre feeler; "How wide" is the angle on the left and right. The feelers are labelled L, C and R, as in the field guide's figure 2.4. The lens keeps its magnification while you drag (`diagram.ts keepRef`), so the feelers grow and shrink. It only re-fits when the value moves far.
+- **Senses:** one walker up close, in a lens over the dimmed picture, with its three feelers. "How far ahead" is the centre feeler; "How wide" is the angle on the left and right. The feelers are labelled L, C and R, as in the field guide's figure 2.4. The lens keeps its magnification while you drag (`diagram.ts keepRef`), so the feelers grow and shrink. Past 1.8 times (or under 0.3 times) the length they started at, the lens zooms with the value instead: the feelers stay pinned at that length, inside the lens at any angle, and the zoom follows smoothly. (It used to re-fit in one jump at 2.6 times, which made the drawing snap back and jump as you dragged outward.)
+
+**The sliders.** A small range gets a finer ruler (`rulerMath.ts fineUnit`): How far ahead's 0–0.12 is 480 px of drag (0.001 every 4 px) rather than 48 px, and View radius is 0.02 a ruler unit. Typing a number past the end widens the range (the slider conventions), and the builder keeps the wider range for that setting while the app is open, so it is still there when the card comes back.
 - **Turning:** the turn arc to the new heading ("turns 45° toward the smell") and the wobble's fan.
 - **Moving:** the last steps behind the walker ("one step 0.0037") and how many steps it takes to reach its feelers. Pointing at **At the edges** draws the picture's edge with what happens there.
 - **Trail:** the dots it left, fading by the half-life and spreading by Diffuse.
@@ -236,7 +257,7 @@ Clicking a legend entry or a tag focuses that behaviour:
   - Fade, Dies, Lives for: one particle ageing, its brightness its colour, and where it dies;
   - Keep apart, Match heading, Stay together: sixteen boids with the live turn rates, one with its view ring, its neighbours and the focused rule's arrow;
   - View radius, Max neighbours: the ring moving through others, the ones inside lit up to Max;
-  - Head for, Slow in a crowd, Avoid edges, Wander, Orbit, Speed, At the edges: walkers doing just that;
+  - Head for, Slow in a crowd, Avoid edges, Wander, Orbit, Speed, At the edges: walkers doing just that (the ones that walk freely, Sensors, Head for, Wander and Orbit, keep to the panel the way the group's At the edges says: they wrap, bounce or slide, `demos.ts keepIn`, so a walker never walks out of the picture);
   - Sensors, Turn: three feelers reading a trail (a wave) and the walker turning toward (or away from) the strongest;
   - Trail: what a walker leaves, halving every half-life and spreading;
   - Born: walkers appearing in the shape.
@@ -309,6 +330,34 @@ Why this mapping: the rule blocks already integrate forces (Gravity, Curl, Attra
 
 **Whirlpool** (particles): a vortex plus curl noise × 0.5 inside a circle, drifting, ridden; they fade over 6 s.
 
+## Memory: named numbers a walker keeps
+
+The **Memory** section (Trail followers and the other kinds) holds up to four numbers each walker
+carries from step to step, with names you choose.
+
+- **Kinds:** Counter, Timer (counts seconds by itself), On / off, A value, A place (two numbers),
+  A level that fades (drains by itself, like energy). Each has a *Starts at* (and a *Fades* for a
+  level), and its live range shows on the card.
+- **Operation cards** change a memory, each with its own "only when…":
+  - Count up / down;
+  - Set to, set on / off, toggle;
+  - Remember what it smells;
+  - Add up what it smells;
+  - Decay over time;
+  - Reset.
+- **Write it as an expression** for anything else (`energy = energy * 0.98 + here.food`), checked
+  as you type.
+- **Used everywhere:**
+  - in any card's "only when" (`carrying is on`, `energy > 0.5`, a timer's "after 2 s"), with up
+    to two conditions on a card;
+  - as a slider multiplier ("× a memory");
+  - in **Colour by a memory**, which colours the walkers by it while you edit.
+- **Ants with food** is built from memories now (carrying, away) instead of Advanced rules.
+- **Under the hood:** the memories live in a fifth state texture, **E (More memory)**, four numbers
+  per walker. Under the hood shows it with each channel named. Only groups that use memories get it,
+  so every other graph compiles as before. It costs 8 MB more at 256k walkers and 32 MB more at 1M
+  (both copies, float32).
+
 ## Presets
 
 Each kind has its own strip:
@@ -332,6 +381,16 @@ The Trail followers' strip holds the trail templates and four slime variants fro
 - Frost (DLA).
 
 Clicking a card replaces the rule set as one undo step. In 3D the set is rescaled, and a shape's Collide is kept.
+
+### Surprise me
+
+**Surprise me** sits at the right of the presets strip (with its seed: type one and press Enter to make that result again, and Reroll), and as the dice in the top bar. It makes a random setup of the group's own kind, so the sections stay the same (`agentBuilder/surprise.ts`):
+
+- Trail followers: half the time one of the hand-written styles of the rules editor's Surprise me (trackers, flow drifters, crowd-shy gatherers, sometimes a second species that follows or avoids the first), else one of the kind's presets with its sensors, speeds and every action's numbers varied inside bands where it still forms patterns;
+- Ants / carriers: the pulsers style, or the ants preset varied (memories kept exactly);
+- Particles, flocks, crowds, orbiters: one of the kind's presets, every number varied, new colours. Dies rules stay and no trail is added, because the builder's setups are born again and drawn by Draw agents.
+
+The trail's Half-life, Diffuse and palette are new too. In 3D the result is rescaled like a preset (only presets that rescale are used), and a shape's Collide is kept. It is one undo step, the walkers start over, and the toast has the seed, Reroll and Undo (`surpriseActions.ts surpriseBuilderAction`).
 
 The thumbnails are rendered once per session, one at a time, by a small CPU simulation (`src/agentBuilder/miniSim.ts`). It runs the same rule at the trail's pixel scale, so a thumbnail is a close-up of the pattern. The start page's moving pictures use the same code. They are pictures of the motion, not the GPU simulation, which only the viewport shows.
 
@@ -377,7 +436,8 @@ On the picture a walker is placed as Draw agents places it: in 2D at (x ÷ aspec
 
 ## Files
 
-- `src/agentBuilder/`: `behaviours.ts` (cards ↔ rules for every kind, only when, reorder, kinds), `cards.ts` (trail followers), `sections.ts`, `onlyWhen.ts`, `kinds.ts`, `presets.ts`, `words.ts`, `diagram.ts`, `miniSim.ts`, `dotSim.ts`, `actions.ts` (the store side: make, Back, setup params with their own undo steps, presets).
+- `src/agentBuilder/`: `behaviours.ts` (cards ↔ rules for every kind, only when, reorder, kinds), `cards.ts` (trail followers), `sections.ts`, `onlyWhen.ts`, `kinds.ts`, `presets.ts`, `surprise.ts` (Surprise me per kind), `words.ts`, `diagram.ts`, `miniSim.ts`, `dotSim.ts`, `actions.ts` (the store side: make, Back, setup params with their own undo steps, presets, clearing the graph, the builder groups, Start over).
+- Advanced rules: `src/components/agentBuilder/AdvancedRules.tsx` (the card list), `src/components/agentRules/RuleEditors.tsx` (the When … Do … pieces, shared with the old rules editor).
 - `src/components/builders/studio/`: `StudioShell.tsx`, `LiveViewport.tsx`.
 - Under the hood: `src/agentBuilder/hood.ts` (channels, maps, highlights, texel ↔ walker ↔ picture), `src/components/agentBuilder/HoodView.tsx` (the panel, the ring and the card), `hoodStore.ts`, `src/lib/agentHood.ts` (requests), `src/lib/agentHoodGpu.ts` (thumbnails, one walker's read, picking), `AgentRunner.stateView` / `drawHood`.
 - Legend, tags and focus: `src/agentBuilder/legend.ts` (the phrases, the entries, linking, the tag layout, the focus words), `src/agentBuilder/demos.ts` (the focus demos), `src/components/agentBuilder/ViewportLegend.tsx` (the legend, the tags, the demo panel).

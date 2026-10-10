@@ -13,7 +13,7 @@ import type { WalkerKind } from '../agentRules/spec';
 import type { CardId } from './behaviours';
 import { TRAIL_SECTIONS, type TrailSection } from './words';
 
-export type SectionId = TrailSection | 'forces' | 'life' | 'look' | 'neighbours' | 'steering' | 'orbit';
+export type SectionId = TrailSection | 'forces' | 'life' | 'look' | 'neighbours' | 'steering' | 'orbit' | 'memory';
 
 export interface SectionDef {
   id: SectionId;
@@ -24,13 +24,14 @@ export interface SectionDef {
 }
 
 export const KIND_SECTIONS: Record<WalkerKind, readonly SectionDef[]> = {
-  trail: [{ id: 'born', cards: [] }, { id: 'senses', cards: ['senses'] }, { id: 'turning', cards: ['wobble'] }, { id: 'moving', cards: [] }, { id: 'trail', cards: ['trail'] }],
-  ants: [{ id: 'born', cards: [] }, { id: 'senses', cards: ['senses'] }, { id: 'turning', cards: ['wobble'] }, { id: 'moving', cards: [] }, { id: 'trail', cards: ['trail'] }],
+  trail: [{ id: 'born', cards: [] }, { id: 'senses', cards: ['senses'] }, { id: 'turning', cards: ['wobble'] }, { id: 'moving', cards: [] }, { id: 'trail', cards: ['trail'] }, { id: 'memory', cards: [] }],
+  ants: [{ id: 'born', cards: [] }, { id: 'senses', cards: ['senses'] }, { id: 'turning', cards: ['wobble'] }, { id: 'moving', cards: [] }, { id: 'trail', cards: ['trail'] }, { id: 'memory', cards: [] }],
   particles: [
     { id: 'born', cards: [] },
     { id: 'forces', cards: ['gravity', 'wind', 'curl', 'field', 'attract', 'drag'], reorder: true },
     { id: 'moving', cards: [] },
     { id: 'life', cards: ['fade', 'die'] },
+    { id: 'memory', cards: [] },
     { id: 'look', cards: [] },
   ],
   flock: [
@@ -38,18 +39,21 @@ export const KIND_SECTIONS: Record<WalkerKind, readonly SectionDef[]> = {
     { id: 'neighbours', cards: [] },
     { id: 'steering', cards: ['separate', 'match', 'cohere', 'avoidEdges', 'wobble'], reorder: true },
     { id: 'moving', cards: [] },
+    { id: 'memory', cards: [] },
   ],
   crowd: [
     { id: 'born', cards: [] },
     { id: 'neighbours', cards: [] },
     { id: 'steering', cards: ['goal', 'separate', 'match', 'cohere', 'slow', 'avoidEdges', 'wobble'], reorder: true },
     { id: 'moving', cards: [] },
+    { id: 'memory', cards: [] },
   ],
   swarm: [
     { id: 'born', cards: [] },
     { id: 'orbit', cards: ['orbit', 'wobble'], reorder: true },
     { id: 'neighbours', cards: ['separate', 'cohere', 'match'], reorder: true },
     { id: 'moving', cards: [] },
+    { id: 'memory', cards: [] },
   ],
 };
 
@@ -91,6 +95,12 @@ const OTHER: Record<Exclude<SectionId, TrailSection>, SectionWords> = {
     learn: 'Three local rules make a flock: separation (turn away from the ones too close), alignment (turn toward the way they go) and cohesion (turn toward their middle). Each turns it at most so many degrees a step, in order. Strong alignment gives glassy streams; strong cohesion tight balls; strong separation a loose gas.',
     guide: 'Field guide 2.2, Flocking: separation, alignment, cohesion',
   },
+  memory: {
+    label: 'Memory', icon: 'clock',
+    hint: 'Numbers each walker keeps from step to step: counters, timers, on / off, a place, a level that fades.',
+    learn: 'A walker can carry a few numbers of its own from one step to the next: whether it carries food, how long since it left home, how much energy it has left. Each memory is changed by small cards (count up when…, start a timer, toggle, remember where it was, add up what it smells, decay) or by a line you write (energy = energy * 0.98 + here.food). Any card can then act only when a memory says so (only when carrying is on), and any slider can be multiplied by one (speed × energy).',
+    guide: 'Field guide 2.10, Species, memory and colour of their own',
+  },
   orbit: {
     label: 'Orbit', icon: 'loop',
     hint: 'The point it circles, how far out, which way, and how hard it turns.',
@@ -126,6 +136,8 @@ export const CARD_WORDS: Record<CardId, { title: string; hint: string }> = {
   goal: { title: 'Head for', hint: 'Turn toward a point, the centre or the mouse.' },
   slow: { title: 'Slow in a crowd', hint: 'Slow down as the ones round it reach a jam.' },
   orbit: { title: 'Orbit', hint: 'Circle a point at a distance.' },
+  memory: { title: 'Memory', hint: 'Changes one of its memories.' },
+  turnRound: { title: 'Turn round', hint: 'Turns round on the spot.' },
 };
 
 /** Each setting's one-line hint for the cards of the new kinds. */

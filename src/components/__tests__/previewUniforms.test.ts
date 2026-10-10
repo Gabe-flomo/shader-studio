@@ -54,3 +54,30 @@ describe('buildPreviewUniforms (Rebuild, GPU recovery)', () => {
     expect(u.u_fontTexture).toBe(font);
   });
 });
+
+describe('buildPreviewUniforms after a restored WebGL context', () => {
+  // The frame loop writes u_time, u_frameDt and u_mousebtn every frame / press; a missing one threw
+  // "Cannot set properties of undefined (setting 'value')" after every restore.
+  const rtTex = new THREE.WebGLRenderTarget(2, 2).texture;
+  const data = new THREE.DataTexture(new Uint8Array(4), 1, 1);
+  const prev: Record<string, THREE.IUniform> = {
+    u_time: { value: 3 }, u_frameDt: { value: 1 / 60 }, u_mousebtn: { value: 1 },
+    u_data_rows: { value: 12 }, u_data_tex: { value: data }, u_pass_out: { value: rtTex },
+  };
+  const empty: PreviewUniformSource = { paramUniforms: {}, textureUniforms: {}, videoUniforms: {}, audioUniforms: {}, liveUniforms: {}, nodeTextures: {}, videoTextures: {} };
+  const u = buildPreviewUniforms(empty, prev, { width: 8, height: 8 }, {});
+
+  it('has every uniform the frame loop writes', () => {
+    for (const k of ['u_time', 'u_frameDt', 'u_mousebtn', 'u_mouse', 'u_resolution', 'u_prevFrame']) expect(u[k], k).toBeDefined();
+    expect(u.u_frameDt.value).toBeCloseTo(1 / 60);
+    expect(u.u_mousebtn.value).toBe(1);
+    expect(buildPreviewUniforms(empty, {}, { width: 8, height: 8 }, {}).u_frameDt.value).toBe(0);
+  });
+
+  it('carries over what was bound outside the compile (Data nodes…), as new objects; a render target\'s texture starts empty', () => {
+    expect(u.u_data_rows.value).toBe(12);
+    expect(u.u_data_tex.value).toBe(data);
+    expect(u.u_data_tex).not.toBe(prev.u_data_tex);
+    expect(u.u_pass_out.value).toBeNull();
+  });
+});
