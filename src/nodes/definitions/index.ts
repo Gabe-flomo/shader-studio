@@ -12,6 +12,7 @@ import { VideoInputNode } from './sources';
 export { VideoInputNode };
 import { BakedNode } from './baked';
 import { DepthNode } from './depth';
+import { DepthCompositeNode, DepthLightNode } from './depthScene';
 import { TimeCubeNode, TimeCubeViewNode, TimeSliceNode } from './timeCube';
 import { FrameStackNode } from './frameStack';
 export { BakedNode };
@@ -313,6 +314,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   baked: BakedNode,
   // Depth (docs/depth-node.md): a picture's depth from an on-device model
   depth: DepthNode,
+  // Depth in 3D scenes (docs/depth-node.md): a picture with depth inside a ray-marched scene
+  depthComposite: DepthCompositeNode,
+  depthLight: DepthLightNode,
   // Time cube (docs/time-cube.md): a video as a box of time
   lift4D: Lift4DNode,
   rotate4D: Rotate4DNode,

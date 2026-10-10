@@ -60,3 +60,37 @@ grabs frames of each Depth node's source at the model's size, after the preview 
 worker. It smooths the result and uploads it to a half-float texture the node samples. `plan.ts` decides when
 a node is due a run; `bake.ts` handles baking. For a local check, `tools/fetch-depth-models.mjs` downloads
 the files into `.cache/depth-models/`, and `?depthModel=local` makes the dev server use them.
+
+## Depth in 3D scenes
+
+Two nodes put a picture with depth inside a ray-marched scene (3D Scene in the node browser).
+
+**Depth Composite** puts 3D objects behind or in front of what's in the picture.
+- **Wire:** the picture's colour, the Depth node's Depth, and the March Loop's Color, Distance and Hit.
+- **Result:** at each pixel the nearer one wins. A sphere 3 units back hides behind a person standing at
+  2, and shows around them.
+- **Calibrate:** depth models give relative nearness, not distances. **Nearest** and **Farthest** say
+  where, in scene units, the picture's nearest and farthest things are. Set them with **Show: Picture
+  distance** (bright is near), so objects sit where you expect.
+- **Edge softness** fades the scene in at the picture's edges, to hide halos round hair.
+- **Scene in front** is a mask of where the 3D objects show.
+
+**Depth Light** lights the picture from a light in the scene, such as a glowing sphere.
+- **Wire:** the picture (or a Depth Composite's Color), its Depth, the March Camera's Ray Origin and Ray
+  Dir, and the light's position (a glowing sphere's centre) and colour.
+- **How it works:** each pixel is placed in 3D along the camera's ray at the picture's distance. Its
+  neighbours give the way it faces, and light adds where it faces the light, fading with distance
+  (**Reach**). **Wrap** softens it round curved surfaces.
+- **Own light** dims the picture's own lighting first, for a night relight.
+- **Where:** wire 1 − Depth Composite's *Scene in front* so the 3D objects aren't lit as if they were
+  the picture.
+- **Several lights:** chain several Depth Lights.
+- **Outputs:** **Light** gives only the added light (blur it for a soft glow), and **Picture point** and
+  **Picture normal** give each pixel's place and direction in the scene.
+
+**Limits:**
+- The camera must roughly match the picture's: a still or tripod shot, with a March Camera at a similar
+  field of view. Moving cameras need tracking (planned).
+- The picture's own lighting is baked in, so a light can add and tint but can't remove a harsh shadow.
+- The picture is a surface seen from the front.
+- Shadows from 3D objects onto the picture, and the picture as an environment for reflections, are next.
