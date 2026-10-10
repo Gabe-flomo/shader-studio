@@ -252,7 +252,7 @@ export function CodeField({
  * autocomplete as CodeField. Styled like the app's Field.
  */
 export function CodeInput({
-  value, onChange, completions, ariaLabel, placeholder, height = 34, style, inputRef, onFocus, onBlur, onKeyDown,
+  value, onChange, completions, ariaLabel, placeholder, height = 34, style, inputRef, onFocus, onBlur, onKeyDown, onSelect,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -266,6 +266,8 @@ export function CodeInput({
   onBlur?: () => void;
   /** Called for keys the suggestion popup doesn't consume. */
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  /** The caret or selection moved (click, keys, select): read it from the element. */
+  onSelect?: (el: HTMLInputElement) => void;
 }) {
   const tk = useTokens();
   const pal = useThemeMode() === 'dark' ? C : C_LIGHT;
@@ -290,7 +292,7 @@ export function CodeInput({
 
   const text: CSSProperties = { font: `500 ${FONT_SIZE}px ${fontFamily.mono}`, whiteSpace: 'pre', letterSpacing: 0 };
   const [caret, setCaret] = useState<number | null>(null);
-  const trackCaret = (e: React.SyntheticEvent<HTMLInputElement>) => { const el = e.currentTarget; setCaret(el.selectionStart === el.selectionEnd ? el.selectionStart : null); };
+  const trackCaret = (e: React.SyntheticEvent<HTMLInputElement>) => { const el = e.currentTarget; setCaret(el.selectionStart === el.selectionEnd ? el.selectionStart : null); onSelect?.(el); };
   return (
     <span style={{
       position: 'relative', height, minWidth: 0, display: 'flex', alignItems: 'center', padding: '0 10px', borderRadius: radius.control,

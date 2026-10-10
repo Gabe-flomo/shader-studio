@@ -77,6 +77,8 @@ if (import.meta.env.DEV) {
     midiMonitor, rackKeyboard,
     /** Linked folders without a folder picker: `(await linked()).devLinkOpfs('Samples', { 'kick.wav': blob })` links a folder in the browser's private file system. */
     linked: () => import('./files/linkedFolders'),
+    /** Lose and restore the preview's WebGL context and report GL errors after it: `await contextLossCheck({ example: 'agentRulesSlime' })` (lib/contextLossCheck.ts). */
+    contextLossCheck: (o?: { example?: string; lostMs?: number; afterMs?: number; loadMs?: number }) => import('./lib/contextLossCheck').then(m => m.contextLossCheck(o)),
     /** The Layers node's distance field (docs/layers-node.md): `(await layersField()).layersFieldMode()` is 'gpu' | 'cpu' | 'off'; `.setLayersFieldForceCpu(true)` compares with the old CPU field. */
     layersField: () => import('./play/layersTexture'),
     /** The 3D Scene Builder (docs/scene-builder.md): `(await sceneBuilder()).useSceneBuilder.getState().openWith(…)`, recipes, templates, describe. */

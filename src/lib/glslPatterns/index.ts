@@ -31,6 +31,7 @@ export { compileExpr, evaluate, evaluateFunction, type Value, type EvalEnv } fro
 export { workedVars, workedSteps, workedBlock, freeNames, showValue, type WorkedVar, type WorkedStep, type BlockInput, type BlockLineNumbers } from './worked';
 export { findUses, matchesInLine, codeLines, provenance, exprBlockEnv, customFnEnv, type UseSource, type UseHit, type UseQuery } from './findUses';
 export { toExprPreset, toPublishNode, exprPresetParams, insertFunction, callInCustomFn } from './saveFlows';
+export { literalAt, nameForLiteral, literalToSlider, namesIn, type LiteralSpan, type MadeSlider, type LiteralNameContext } from './literalSlider';
 
 import { IDIOMS } from './idioms';
 

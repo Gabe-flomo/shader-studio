@@ -278,6 +278,8 @@ export function drawGpuParticles(material: THREE.ShaderMaterial, o: { width: num
   const h = ensureHost();
   const uniforms = material.uniforms;
   if (!renderer || !h || !h.active()) return;
+  // A context already lost (before its event arrives) answers getParameter with null: draw nothing.
+  if (renderer.getContext().isContextLost()) return;
   if (h.unsupported) {
     if (!warned) { warned = true; toast.warning('Particles can\'t run here', { message: h.unsupported }); }
     return;
