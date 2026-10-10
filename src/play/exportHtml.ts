@@ -22,6 +22,10 @@
  * inputs (carried in the page as data URLs), and GPU particle systems. `unsupportedFeatures` lists what a
  * graph uses that it still can't run, `leftBehind` what stays out of the page,
  * and `mediaCarried` what each image, video or song adds to it.
+ *
+ * A page carries only the kit's feature groups its bundle uses (`kitGroupsFor`);
+ * a graph that is one fragment shader exports without the player at all
+ * (play/embedLite.ts, docs/web-export.md).
  */
 import { conditionRanges, readsPicture } from './conditionRange';
 import runtimeSource from './runtime/play-runtime.js?raw';
@@ -509,26 +513,156 @@ function runtimeOptions(o: EmbedOptions) {
 }
 
 /**
+ * The kit's files in dependency order, each with the feature group it
+ * belongs to (none: always in the page). A page leaves out the groups its
+ * bundle doesn't use (`kitGroupsFor`): a plain shader with a few layers
+ * carries no Finish, particles, agents, audio engine, tracking or scripts.
+ */
+export type KitGroup = 'script' | 'agentsCpu' | 'trackers' | 'data' | 'finish' | 'blur' | 'audioFx' | 'drums' | 'jfa' | 'gpuParticles' | 'passes' | 'agentsGpu';
+export const KIT_FILES: { name: string; src: string; group?: KitGroup }[] = [
+  { name: 'particle-sim', src: particleSource }, { name: 'geometry', src: geometrySource },
+  { name: 'sketch3d', src: sketch3dSource, group: 'script' }, { name: 'p5', src: p5Source, group: 'script' },
+  { name: 'fonts', src: fontsSource }, { name: 'glyphs', src: glyphsSource }, { name: 'layers', src: layersSource },
+  { name: 'displace', src: displaceSource }, { name: 'mattes', src: mattesSource }, { name: 'bodies', src: bodiesSource },
+  { name: 'relationship', src: relationshipSource }, { name: 'agents', src: agentsSource, group: 'agentsCpu' }, { name: 'motion', src: motionSource },
+  { name: 'hands', src: handsSource, group: 'trackers' }, { name: 'tracks', src: tracksSource, group: 'trackers' },
+  { name: 'face', src: faceSource, group: 'trackers' }, { name: 'pose', src: poseSource, group: 'trackers' },
+  { name: 'queue', src: queueSource }, { name: 'data', src: dataSource, group: 'data' }, { name: 'midi', src: midiSource },
+  { name: 'clipPlay', src: clipPlaySource }, { name: 'kit', src: kitSource },
+  { name: 'finishGlsl', src: finishGlslSource, group: 'finish' }, { name: 'blur', src: blurSource, group: 'blur' },
+  { name: 'finish', src: finishSource, group: 'finish' }, { name: 'waterLayer', src: waterLayerSource, group: 'finish' },
+  { name: 'signals', src: signalsSource }, { name: 'routes', src: routesSource }, { name: 'increment', src: incrementSource },
+  { name: 'audioFx', src: audioFxSource, group: 'audioFx' }, { name: 'drumPads', src: drumPadsSource, group: 'drums' },
+  { name: 'granulator', src: granulatorSource, group: 'drums' }, { name: 'macros', src: macrosSource }, { name: 'fn', src: fnSource },
+  { name: 'spread', src: spreadSource }, { name: 'jfa', src: jfaSource, group: 'jfa' }, { name: 'gpuParticles', src: gpuParticlesSource, group: 'gpuParticles' },
+  { name: 'passPlan', src: passPlanSource }, { name: 'passHost', src: passHostSource, group: 'passes' },
+  { name: 'agentPlan', src: agentPlanSource, group: 'agentsGpu' }, { name: 'agentShaders', src: agentShadersSource, group: 'agentsGpu' },
+  { name: 'agentHost', src: agentHostSource, group: 'agentsGpu' },
+];
+/** Every kit file, in order (the full kit). */
+export const KIT_SOURCES = KIT_FILES.map(f => f.src);
+export const KIT_GROUPS: KitGroup[] = ['script', 'agentsCpu', 'trackers', 'data', 'finish', 'blur', 'audioFx', 'drums', 'jfa', 'gpuParticles', 'passes', 'agentsGpu'];
+/** What each group is, as the export dialog says it. */
+export const KIT_GROUP_NAMES: Record<KitGroup, string> = {
+  script: 'Script layers (p5 and 3D)', agentsCpu: 'Agents layers', trackers: 'Hand, face and pose tracking', data: 'Data', finish: 'Finish effects and Water layers',
+  blur: 'Blur (for Finish and particles)', audioFx: 'Audio effects', drums: 'Drum pads and the Audio engine', jfa: 'The Layers node', gpuParticles: 'Particles', passes: 'Pass nodes', agentsGpu: 'Agents',
+};
+
+/** The kit's API the runtime reads (SSKit.*), each with the group it needs. */
+const KIT_API: [string, string, KitGroup?, string?][] = [
+  ['createLayerKit', 'createLayerKit'], ['anchor', 'geoAnchor'], ['clip', '{ parse: cpParse, playlist: cpPlaylist, at: cpAt, follow: cpFollow }'],
+  ['hands', '{ create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }', 'trackers'],
+  ['tracks', '{ decode: tkDecode, fromBase64: tkFromBase64, driver: tkDriver, drive: tkDrive, handsFrame: tkHandsFrame, videoTime: tkVideoTime, subjectAge: tkSubjectAge }', 'trackers'],
+  ['face', '{ create: fcCreate, update: fcUpdate, read: fcRead, gate: fcGate, point: fcPoint }', 'trackers'],
+  ['pose', '{ create: psCreate, update: psUpdate, read: psRead, gate: psGate, point: psPoint }', 'trackers'],
+  ['data', '{ unit: kdUnit, column: kdColumn }', 'data'],
+  ['midi', '{ lockRecord: kmLockRecord, lockRead: kmLockRead, rangeRead: kmRangeRead, noteUnit: kmNoteUnit, gridFit: kmGridFit, gridMessage: kmGridMessage, gridFill: kmGridFill, gridRead: kmGridRead }'],
+  ['finish', '{ create: fnCreate, active: fnActive, mapLayers: fnMapLayers, usesMotion: fnUsesMotion, looks: { create: fnLookNew, act: fnLookAct, step: fnLookStep, value: fnLookValue, reset: fnLookReset, is: fnLookIs } }', 'finish'],
+  ['audioFx', '{ chain: afCreateChain, loadWorklet: afLoadWorklet, needsWorklet: afNeedsWorklet }', 'audioFx'],
+  ['drumPads', '{ sampler: dpCreateSampler, numbers: dpHitNumbers, key: dpKey, synth: dpSynthBuffer, padOfKey: dpPadOfKey, padOfNote: dpPadOfNote, padOfCell: dpPadOfCell, slots: dpSlots, pick: dpPickPad, hash: dpHash01 }', 'drums'],
+  ['granulator', '{ create: grCreate, settings: grSettings, summary: grSummary, synth: grSynthBuffer, params: GR_PARAMS, fromPoints: grFromPoints }', 'drums'],
+  ['macros', '{ curve: mcCurve, value: mcTargetValue }'],
+  ['signals', '{ gate: sgGate, condNew: sgCondNew, condStep: sgCondStep, condRewind: sgCondRewind, logic: sgLogic, order: sgSignalOrder, signalPlan: sgSignalPlan, levelDeps: sgLevelDeps, pulseLinks: sgPulseLinks, reactions: sgReactions, shapeNew: sgShapeNew, shapeRewind: sgShapeRewind, shaped: sgShaped, shapeStep: sgShapeStep, lagNew: sgLagNew, lagStep: sgLagStep, linkPlan: sgLinkPlan, linkNew: sgLinkNew, linkClear: sgLinkClear, linkFire: sgLinkFire, linkDue: sgLinkDue, runActions: sgRunActions, swapNew: sgSwapNew, swapStep: sgSwapStep, parseRef: sgParseValueRef, point: sgScreenPoint, valueKey: sgValueKey, depth: SG_DEPTH }'],
+  ['routes', '{ state: rtNew, sourcesOf: rtSourcesOf, frame: rtFrame, rewind: rtRewind, curve: rtCurve, map: rtMap, triggersOf: rtTriggersOf }'],
+  ['increment', '{ create: incNew, range: incRange, fold: incFold, threshold: incThreshold, repeat: incRepeat, advance: incAdvance, reset: incReset, glide: incGlide }'],
+  ['fn', '{ eval: fnEval }'], ['spread', '{ weight: spWeight, weights: spWeights, value: spValue }'],
+  ['jfa', '{ create: jfCreate }', 'jfa'],
+  ['gpuParticles', '{ host: gpHost, readback: gpReadback, slots: gpProbeSlots, probeField: gpProbeField, vol: GP_VOL, volTiles: GP_VOL_TILES }', 'gpuParticles'],
+  // The frame's order (passPlan.js) schedules particles and agents too: always in; only the Pass host is optional.
+  ['passes', '{ create: phCreate, steps: ppFrameSteps }', 'passes', '{ create: null, steps: ppFrameSteps }'],
+  ['agents', '{ create: ahCreate, unsupported: ahUnsupported }', 'agentsGpu'],
+];
+
+/**
+ * The groups a page needs, from its bundle (playBundle): conservative, so a
+ * feature that might run is always in. The runtime reads every group's API
+ * as optional (`SSKit.x ? … : null`), so a group left out is a feature that
+ * stays at rest, never a crash; docs/web-export.md lists the rules.
+ */
+export function kitGroupsFor(bundle: ReturnType<typeof playBundle>): Set<KitGroup> {
+  const play = bundle.play;
+  const json = JSON.stringify(play);
+  const shaders = [bundle.fragmentShader, ...(bundle.graphPasses ?? []).map(p => p.fragmentShader), ...Object.values(bundle.backgroundGraphs ?? {}).map(g => g.fragmentShader)].join('\n');
+  const g = new Set<KitGroup>();
+  if (/"kind":"script"|"code"|"sketch/.test(json) || play.layerKinds?.length || playUses3D(play)) g.add('script');
+  if (json.includes('"kind":"agents"')) g.add('agentsCpu');
+  if (play.hands || play.face || play.pose || bundle.tracks || bundle.hands || /hand|face|pose/i.test(json)) g.add('trackers');
+  if (bundle.datasets || /"kind":"data"|dataset/i.test(json)) g.add('data');
+  if (play.finish || /"kind":"water"|look/i.test(json)) g.add('finish');
+  if (play.audioFx) g.add('audioFx');
+  if (play.audioEngine || json.includes('"kind":"drumpad"')) g.add('drums');
+  if (/\bu_layers(Field)?\b/.test(shaders)) g.add('jfa');
+  if (bundle.graphPasses?.length) g.add('passes');
+  if (bundle.agents) g.add('agentsGpu');
+  if (shaders.includes('// gpu-particles ')) g.add('gpuParticles');
+  return withKitDeps(g);
+}
+
+/** The groups other groups read as they load: Agents run on the particles' shaders, which (like Finish) build on Blur's. */
+const KIT_DEPS: Partial<Record<KitGroup, KitGroup[]>> = { agentsGpu: ['gpuParticles'], gpuParticles: ['blur'], finish: ['blur'] };
+function withKitDeps(groups: ReadonlySet<KitGroup>): Set<KitGroup> {
+  const out = new Set(groups);
+  const todo = [...out];
+  while (todo.length) for (const d of KIT_DEPS[todo.pop()!] ?? []) if (!out.has(d)) { out.add(d); todo.push(d); }
+  return out;
+}
+
+/**
  * The layer kit as a plain script: its files in dependency order, with their
  * imports and `export`s removed, in one closure that hands the runtime
  * createLayerKit. The kit's files keep their top-level names distinct so
- * they can share this scope.
+ * they can share this scope. With `groups`, only those feature groups come
+ * along: a name an included file imports from a left-out one is a stub that
+ * says so if it is ever called, and the left-out APIs are null.
  */
-export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, p5Source, fontsSource, glyphsSource, layersSource, displaceSource, mattesSource, bodiesSource, relationshipSource, agentsSource, motionSource, handsSource, tracksSource, faceSource, poseSource, queueSource, dataSource, midiSource, clipPlaySource, kitSource, finishGlslSource, blurSource, finishSource, waterLayerSource, signalsSource, routesSource, incrementSource, audioFxSource, drumPadsSource, granulatorSource, macrosSource, fnSource, spreadSource, jfaSource, gpuParticlesSource, passPlanSource, passHostSource, agentPlanSource, agentShadersSource, agentHostSource];
-export function kitScript(): string {
-  const body = KIT_SOURCES.map(src => src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
-  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, clip: { parse: cpParse, playlist: cpPlaylist, at: cpAt, follow: cpFollow }, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, tracks: { decode: tkDecode, fromBase64: tkFromBase64, driver: tkDriver, drive: tkDrive, handsFrame: tkHandsFrame, videoTime: tkVideoTime, subjectAge: tkSubjectAge }, face: { create: fcCreate, update: fcUpdate, read: fcRead, gate: fcGate, point: fcPoint }, pose: { create: psCreate, update: psUpdate, read: psRead, gate: psGate, point: psPoint }, data: { unit: kdUnit, column: kdColumn }, midi: { lockRecord: kmLockRecord, lockRead: kmLockRead, rangeRead: kmRangeRead, noteUnit: kmNoteUnit, gridFit: kmGridFit, gridMessage: kmGridMessage, gridFill: kmGridFill, gridRead: kmGridRead }, finish: { create: fnCreate, active: fnActive, mapLayers: fnMapLayers, usesMotion: fnUsesMotion, looks: { create: fnLookNew, act: fnLookAct, step: fnLookStep, value: fnLookValue, reset: fnLookReset, is: fnLookIs } }, audioFx: { chain: afCreateChain, loadWorklet: afLoadWorklet, needsWorklet: afNeedsWorklet }, drumPads: { sampler: dpCreateSampler, numbers: dpHitNumbers, key: dpKey, synth: dpSynthBuffer, padOfKey: dpPadOfKey, padOfNote: dpPadOfNote, padOfCell: dpPadOfCell, slots: dpSlots, pick: dpPickPad, hash: dpHash01 }, granulator: { create: grCreate, settings: grSettings, summary: grSummary, synth: grSynthBuffer, params: GR_PARAMS, fromPoints: grFromPoints }, macros: { curve: mcCurve, value: mcTargetValue }, signals: { gate: sgGate, condNew: sgCondNew, condStep: sgCondStep, condRewind: sgCondRewind, logic: sgLogic, order: sgSignalOrder, signalPlan: sgSignalPlan, levelDeps: sgLevelDeps, pulseLinks: sgPulseLinks, reactions: sgReactions, shapeNew: sgShapeNew, shapeRewind: sgShapeRewind, shaped: sgShaped, shapeStep: sgShapeStep, lagNew: sgLagNew, lagStep: sgLagStep, linkPlan: sgLinkPlan, linkNew: sgLinkNew, linkClear: sgLinkClear, linkFire: sgLinkFire, linkDue: sgLinkDue, runActions: sgRunActions, swapNew: sgSwapNew, swapStep: sgSwapStep, parseRef: sgParseValueRef, point: sgScreenPoint, valueKey: sgValueKey, depth: SG_DEPTH }, routes: { state: rtNew, sourcesOf: rtSourcesOf, frame: rtFrame, rewind: rtRewind, curve: rtCurve, map: rtMap, triggersOf: rtTriggersOf }, increment: { create: incNew, range: incRange, fold: incFold, threshold: incThreshold, repeat: incRepeat, advance: incAdvance, reset: incReset, glide: incGlide }, fn: { eval: fnEval }, spread: { weight: spWeight, weights: spWeights, value: spValue }, jfa: { create: jfCreate }, gpuParticles: { host: gpHost, readback: gpReadback, slots: gpProbeSlots, probeField: gpProbeField, vol: GP_VOL, volTiles: GP_VOL_TILES }, passes: { create: phCreate, steps: ppFrameSteps }, agents: { create: ahCreate, unsupported: ahUnsupported } };\n})();\n`;
+export function kitScript(asked?: ReadonlySet<KitGroup>): string {
+  const groups = asked && withKitDeps(asked);
+  const on =(f: { group?: KitGroup }) => !f.group || !groups || groups.has(f.group);
+  const files = KIT_FILES.filter(on);
+  const left = new Map(KIT_FILES.filter(f => !on(f)).map(f => [f.name, f.group!]));
+  const stubs = new Map<string, KitGroup>();
+  for (const f of files) {
+    for (const m of f.src.matchAll(/^import \{([^}]*)\} from '(?:\.\.?\/)+([\w-]+)\.js';$/gm)) {
+      const group = left.get(m[2]);
+      if (group) for (const n of m[1].split(',').map(x => x.trim()).filter(Boolean)) stubs.set(n, group);
+    }
+  }
+  const stub = [...stubs].map(([n, gr]) => `function ${n}() { throw new Error('[Playfield] ${KIT_GROUP_NAMES[gr]}: not in this page'); }`).join('\n');
+  const body = files.map(f => f.src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
+  const api = KIT_API.map(([k, v, gr, off]) => `${k}: ${!gr || !groups || groups.has(gr) ? v : off ?? 'null'}`).join(', ');
+  return `var SSKit = (function () {\n${stub}${stub ? '\n' : ''}${body}\nreturn { ${api} };\n})();\n`;
 }
 
 /**
  * The page's scripts: three.js first when a 3D Script layer needs it (a
  * global `SSThree` the runtime hands the kit), then the kit and the player.
  * Without the three.js script loaded (loadThreeSource) a 3D layer draws
- * nothing in the page and says why.
+ * nothing in the page and says why. With `groups`, only that much of the kit.
  */
-export function runtimeScript(play: PlayRecord): string {
+export function runtimeScript(play: PlayRecord, groups?: ReadonlySet<KitGroup>): string {
   const three = playUses3D(play) ? threeSource() ?? '' : '';
-  return (three + (three ? '\n' : '') + kitScript() + runtimeSource).replace(/<\/script/gi, '<\\/script');
+  return (three + (three ? '\n' : '') + kitScript(groups) + runtimeSource).replace(/<\/script/gi, '<\\/script');
+}
+
+/** The groups a page carries: all of them for a Present canvas (its host may swap a Script layer's code). */
+function pageGroups(input: PlayHtmlInput, options: EmbedOptions): Set<KitGroup> | undefined {
+  return options.host ? undefined : kitGroupsFor(playBundle(input));
+}
+
+/** What each kit group adds to a page (its files, as they go in), in bytes. */
+export function kitGroupBytes(): Record<KitGroup, number> {
+  const out = Object.fromEntries(KIT_GROUPS.map(g => [g, 0])) as Record<KitGroup, number>;
+  for (const f of KIT_FILES) if (f.group) out[f.group] += f.src.length;
+  return out;
+}
+/** What a feature adds to the player: its group and the groups it brings along (Agents: the particles' shaders and Blur). */
+export function kitFeatureBytes(group: KitGroup): number {
+  const bytes = kitGroupBytes();
+  return [...withKitDeps(new Set([group]))].reduce((n, g) => n + bytes[g], 0);
+}
+/** The player's own size: the runtime and the kit's always-on files. */
+export function playerCoreBytes(): number {
+  return runtimeSource.length + KIT_FILES.filter(f => !f.group).reduce((n, f) => n + f.src.length, 0);
 }
 
 /** What three.js adds to the page, for the export dialogs; null when no layer needs it. Before it loads, about how much. */
@@ -554,7 +688,7 @@ export function buildPlayHtml(input: PlayHtmlInput, options: EmbedOptions = DEFA
 <div id="play"></div>
 <script>window.PLAY_BUNDLE = ${scriptJson(playBundle(input))};
 window.PLAY_OPTIONS = ${scriptJson(runtimeOptions(options))};</script>
-<script>${runtimeScript(input.play)}</script>
+<script>${runtimeScript(input.play, pageGroups(input, options))}</script>
 </body>
 </html>
 `;
@@ -579,7 +713,7 @@ export function buildPlaySnippet(input: PlayHtmlInput, options: EmbedOptions = D
   return `<!-- Playfield · ${escapeHtml(input.title)} (${bg ? `background, ${options.placement === 'page' ? 'whole page' : 'fills its section'}` : 'player with controls'}) -->
 <div data-shader-studio style="${style}"></div>
 <script>
-${runtimeScript(input.play)}
+${runtimeScript(input.play, pageGroups(input, options))}
 (function(){var e=document.currentScript.previousElementSibling;${hostFix}
 ShaderStudioPlay.mount(e, ${scriptJson(playBundle(input))}, ${scriptJson(runtimeOptions(options))});})();
 </script>

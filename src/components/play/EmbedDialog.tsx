@@ -13,7 +13,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
-import { DEFAULT_EMBED, HAND_BYTES, buildPlaySnippet, leftBehind, mediaCarried, playUses3D, threeCarried, type EmbedOptions } from '../../play/exportHtml';
+import { DEFAULT_EMBED, HAND_BYTES, KIT_GROUP_NAMES, buildPlaySnippet, kitFeatureBytes, kitGroupBytes, kitGroupsFor, leftBehind, mediaCarried, playBundle, playerCoreBytes, playUses3D, threeCarried, type EmbedOptions, type KitGroup } from '../../play/exportHtml';
+import { buildGlslOnly, buildLitePage, buildLiteSnippet, liteBlockers, liteImages } from '../../play/embedLite';
+import { saveTextFile } from '../../utils/fileIO';
 import { usesHands } from '../../types/play';
 import { useThreeSource } from '../../play/threeSource';
 import { Icon } from '../ui/Icon';
@@ -52,21 +54,33 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
   const { input, missing } = useMemo(() => playWebInput(title), [playWebInput, title]);
   // A 3D Script layer brings three.js along: the snippet is rebuilt once it has loaded.
   const threeReady = useThreeSource(playUses3D(input.play));
-  const snippet = useMemo(() => buildPlaySnippet(input, opts), [input, opts, threeReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The small snippet (a canvas, a WebGL2 bootstrap and the GLSL) whenever it can run the graph; the full player otherwise or when asked for.
+  const blockers = useMemo(() => liteBlockers(input), [input]);
+  const [wantFull, setWantFull] = useState(false);
+  const small = blockers.length === 0 && !wantFull;
+  const playerSnippet = useMemo(() => (small ? '' : buildPlaySnippet(input, opts)), [input, opts, small, threeReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  const smallSnippet = useMemo(() => (blockers.length ? '' : buildLiteSnippet(input, opts)), [input, opts, blockers]);
+  const snippet = small ? smallSnippet : playerSnippet;
+  // What the full player carries: its core, then each feature group this graph needs.
+  const groups = useMemo(() => [...kitGroupsFor(playBundle(input))], [input]);
+  const groupBytes = useMemo(() => kitGroupBytes(), []);
+  const blockerText = blockers.map(b => `${b.what}${b.feature && groups.includes(b.feature as KitGroup) ? ` (+${KB(kitFeatureBytes(b.feature as KitGroup))})` : ''}`).join(', ');
+  const fileImages = useMemo(() => liteImages(input).filter(i => !i.inline), [input]);
   const left = useMemo(() => leftBehind(input.play, input.media, { hands: withHands, graphs: input.backgroundGraphs ?? {}, datasets: input.datasets }), [input, withHands]);
   const carried = useMemo(() => { const t = threeCarried(input.play); return [...(t ? [t] : []), ...mediaCarried(input.media, withHands ? 'pending' : undefined, input.play, input.datasets)]; }, [input, withHands, threeReady]); // eslint-disable-line react-hooks/exhaustive-deps
   // Show what the reader recognises: the div, then the mount call; the runtime and the piece are elided.
   const preview = useMemo(() => {
+    if (small) return snippet.split('\n').filter(l => !/^\s/.test(l) || l.includes('data-playfield')).slice(0, 8).join('\n') + '\n…';
     const lines = snippet.trimEnd().split('\n');
     let mountAt = -1;
     for (let i = lines.length - 1; i >= 0; i--) if (lines[i].includes('ShaderStudioPlay.mount(e,')) { mountAt = i; break; }
     const mount = mountAt >= 0 ? lines[mountAt].replace(/mount\(e, \{.*\}, \{/, 'mount(e, {…your piece…}, {') : '';
     return [lines[0], lines[1], '<script>', `  /* Playfield runtime, ${KB(snippet.length)} with your piece */`, '  ' + mount.trim(), '</script>'].join('\n');
-  }, [snippet]);
+  }, [snippet, small]);
 
   /** The snippet to copy: with hand tracking's files packed in when asked for (the preview never carries them). */
   const fullSnippet = async () => {
-    if (!withHands) return snippet;
+    if (small || !withHands) return snippet;
     setPacking(true);
     try {
       const { loadHandAssets } = await import('../../play/handExport');
@@ -76,10 +90,19 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
   const copy = async () => {
     let text: string;
     try { text = await fullSnippet(); } catch { toast.error('Couldn’t pack hand tracking', { message: 'Its files didn’t load. Try again, or copy without hand tracking.' }); return; }
-    try { await navigator.clipboard.writeText(text); toast.success('Embed snippet copied', { message: bg ? 'Paste it inside the section you want it behind.' : 'Paste it where the player should go.' }); }
+    try { await navigator.clipboard.writeText(text); toast.success('Embed snippet copied', { message: `${bg ? 'Paste it inside the section you want it behind.' : 'Paste it where the player should go.'}${small && fileImages.length ? ` Put ${fileImages.map(f => f.src).join(', ')} next to the page.` : ''}` }); }
     catch { toast.error('Couldn’t copy', { message: 'Your browser blocked the clipboard. Download the page instead.' }); }
   };
+  const copyGlsl = async () => {
+    try { await navigator.clipboard.writeText(buildGlslOnly(input)); toast.success('GLSL copied', { message: 'The fragment shader, with the uniforms it reads and their values listed at the top.' }); }
+    catch { toast.error('Couldn’t copy', { message: 'Your browser blocked the clipboard.' }); }
+  };
   const download = async () => {
+    if (small) {
+      const base = (title.trim() || 'play').replace(/[^\w\- ]+/g, '').trim() || 'play';
+      if (reportFileResult(await saveTextFile(buildLitePage(input, opts), `${base}.html`, 'text/html'), { failTitle: 'Couldn’t export the page', success: 'Web page exported' })) onClose();
+      return;
+    }
     setPacking(withHands);
     try { if (reportFileResult(await exportPlayHtml(opts, title, { hands: withHands }), { failTitle: 'Couldn’t export the page', success: 'Web page exported' })) onClose(); }
     catch { toast.error('Couldn’t pack hand tracking', { message: 'Its files didn’t load. Try again, or export without hand tracking.' }); }
@@ -100,6 +123,7 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
       footer={(
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', width: '100%' }}>
           <Button variant="ghost" onClick={onClose}>Close</Button>
+          <Button variant="ghost" icon="code" onClick={copyGlsl} title="Just the fragment shader, for your own WebGL code">Copy GLSL</Button>
           <Button icon="export" disabled={packing} onClick={download}>{packing ? 'Packing…' : 'Download page'}</Button>
           <Button variant="primary" icon="copy" disabled={packing} onClick={copy}>Copy snippet</Button>
         </div>
@@ -107,6 +131,24 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
     >
       <div style={{ display: 'flex', flexDirection: wide ? 'row' : 'column', height: wide ? '100%' : undefined, minHeight: 0 }}>
       <div style={{ width: wide ? 400 : undefined, flexShrink: 0, overflowY: wide ? 'auto' : undefined, padding: '4px 20px 18px', borderRight: wide ? `1px solid ${tk.border.subtle}` : undefined }}>
+      {label('Snippet')}
+      <Segmented
+        fill
+        ariaLabel="Snippet kind"
+        value={small ? 'small' : 'player'}
+        onChange={v => setWantFull(v === 'player')}
+        options={[
+          { value: 'small', label: 'Small', sub: 'canvas + WebGL2 + GLSL', disabled: blockers.length > 0 },
+          { value: 'player', label: 'Full player', sub: 'controls, layers, mappings' },
+        ]}
+      />
+      {blockers.length
+        ? note(`This graph needs the full player: it uses ${blockerText}. The player is ${KB(playerCoreBytes())} before what it adds for those.`)
+        : small
+          ? note(`No player, no libraries: the shader runs on its own, with the values the controls have now baked in. Set one from the page with data-u_name="…" on the div, or el.playfield.set('u_name', v).${input.play.controls.length ? ' Its controls panel doesn’t come along: choose Full player for that.' : ''}`)
+          : note('The full player: the picture with its controls panel, layers and mappings, and only the parts of the player this graph uses.')}
+      {small && fileImages.length > 0 && note(`Too big to carry inside the snippet: ${fileImages.map(f => `${f.label} (as ${f.src})`).join(', ')}. Put ${fileImages.length === 1 ? 'that file' : 'those files'} next to the page the snippet goes in, under that name.`)}
+
       {label('What')}
       <Segmented
         fill
@@ -114,7 +156,7 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
         value={opts.mode}
         onChange={mode => set({ mode })}
         options={[
-          { value: 'player', label: 'Player', sub: 'picture + controls' },
+          { value: 'player', label: small ? 'In the page' : 'Player', sub: small ? 'a block, like a video' : 'picture + controls' },
           { value: 'background', label: 'Background', sub: 'picture only' },
         ]}
       />
@@ -143,11 +185,13 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
         <>
           {label('Size')}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <Segmented size="sm" ariaLabel="Fit" value={opts.fit} onChange={fit => set({ fit })} options={[{ value: 'contain', label: 'Keep shape', title: 'Letterbox to the canvas shape set on the Play page' }, { value: 'cover', label: 'Fill', title: 'Fill the player’s box' }]} />
-            <span style={{ color: tk.text.muted, font: `12px ${fontFamily.ui}` }}>Snippet height</span>
-            <Field type="number" value={String(opts.height)} onChange={e => set({ height: Math.max(200, parseInt(e.target.value, 10) || 560) })} height={30} mono style={{ width: 90 }} suffix="px" />
+            {!small && <Segmented size="sm" ariaLabel="Fit" value={opts.fit} onChange={fit => set({ fit })} options={[{ value: 'contain', label: 'Keep shape', title: 'Letterbox to the canvas shape set on the Play page' }, { value: 'cover', label: 'Fill', title: 'Fill the player’s box' }]} />}
+            {(!small || input.aspect === 'free') && <span style={{ color: tk.text.muted, font: `12px ${fontFamily.ui}` }}>Snippet height</span>}
+            {(!small || input.aspect === 'free') && <Field type="number" value={String(opts.height)} onChange={e => set({ height: Math.max(200, parseInt(e.target.value, 10) || 560) })} height={30} mono style={{ width: 90 }} suffix="px" />}
           </div>
-          {note('The page version fills the browser window. On a phone the controls move under the picture.')}
+          {note(small
+            ? (input.aspect === 'free' ? 'As wide as where you paste it, this tall. The page version fills the browser window.' : `As wide as where you paste it, in the canvas shape set on the Play page (${input.aspect}). The page version fills the browser window.`)
+            : 'The page version fills the browser window. On a phone the controls move under the picture.')}
         </>
       )}
 
@@ -172,7 +216,9 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
         ? (opts.placement === 'section'
           ? 'Paste it as the first thing inside the section, hero or card you want it behind (in Webflow, Squarespace or WordPress: an Embed / Code block). Your text stays on top.'
           : 'Paste it anywhere in the page, ideally near the top of <body>. It sits behind all content.')
-        : 'Paste it where the player should appear. Or download the page, host it, and use <iframe src="…" style="border:0;width:100%;height:560px">. Add ?mode=background to the page URL for the picture only.')}
+        : small
+          ? 'Paste it where the picture should appear. It needs nothing else: no library, no other file. Or download the page, host it, and use <iframe src="…" style="border:0;width:100%;height:560px">.'
+          : 'Paste it where the player should appear. Or download the page, host it, and use <iframe src="…" style="border:0;width:100%;height:560px">. Add ?mode=background to the page URL for the picture only.')}
 
       {missing.length > 0 && (
         <div style={{ marginTop: 12, padding: '8px 12px', borderRadius: radius.md, background: alpha(tk.status.warning, 0.12), color: tk.status.warningText, font: `12px/1.5 ${fontFamily.ui}` }}>
@@ -192,6 +238,19 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
           </div>
         </>
       )}
+      {!small && (
+        <>
+          {label('The player')}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {[{ what: 'Player core (runtime and layer kit)', bytes: playerCoreBytes() }, ...groups.map(g => ({ what: KIT_GROUP_NAMES[g], bytes: groupBytes[g] }))].map(x => (
+              <div key={x.what} style={{ display: 'flex', gap: 8, font: `12px/1.45 ${fontFamily.ui}`, color: tk.text.muted }}>
+                <span style={{ flex: 1, minWidth: 0 }}>{x.what}</span>
+                <span style={{ font: `11.5px ${fontFamily.mono}`, color: tk.text.secondary, flexShrink: 0 }}>+{KB(x.bytes)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
       {carried.length > 0 && (
         <>
           {label('In the page')}
@@ -205,7 +264,7 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
           </div>
         </>
       )}
-      {note(`Comes along: the picture, ${bg ? '' : 'controls, '}mappings and layers${input.play.layers.some(l => l.kind === 'image') ? ', images placed as layers' : ''}${carried.length ? ', and what is listed above' : ''}. Google Fonts load from Google when the page opens.${input.play.layers.some(l => l.kind === 'video' && l.sound !== 'off' && !!input.media?.layerVideos?.[l.id]?.src) ? ' A video layer’s sound (and its audio readers) starts at the visitor’s first click or key.' : ''}${input.media?.audio?.some(a => a.src) ? (bg ? ' A background listens to its song silently from the visitor’s first click or key.' : ' The song plays when the visitor clicks Play sound; the picture reacts from then on.') : ''}`)}
+      {small ? note(`Comes along: the picture, its GLSL and its current values${input.passes?.stateful ? ', with its previous-frame feedback' : ''}${Object.keys(input.media?.textures ?? {}).length ? ', and its images' : ''}.`) : note(`Comes along: the picture, ${bg ? '' : 'controls, '}mappings and layers${input.play.layers.some(l => l.kind === 'image') ? ', images placed as layers' : ''}${carried.length ? ', and what is listed above' : ''}. Google Fonts load from Google when the page opens.${input.play.layers.some(l => l.kind === 'video' && l.sound !== 'off' && !!input.media?.layerVideos?.[l.id]?.src) ? ' A video layer’s sound (and its audio readers) starts at the visitor’s first click or key.' : ''}${input.media?.audio?.some(a => a.src) ? (bg ? ' A background listens to its song silently from the visitor’s first click or key.' : ' The song plays when the visitor clicks Play sound; the picture reacts from then on.') : ''}`)}
       </div>
       <SitePreview snippet={snippet} opts={opts} title={title} site={site} device={device} onSite={setSite} onDevice={setDevice} wide={wide} />
       </div>
