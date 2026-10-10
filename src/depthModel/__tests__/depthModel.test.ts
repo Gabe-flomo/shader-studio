@@ -23,17 +23,17 @@ import { depthModels as toolModels } from '../../../tools/fetch-depth-models.mjs
 const SUFFIX: Record<string, string> = { fp16: '_fp16', q4f16: '_q4f16', q8: '_quantized', uint8: '_uint8' };
 
 describe('depth model config', () => {
-  it('has the three models, Small first (the default)', () => {
-    expect(DEPTH_MODELS.map(m => m.repo)).toEqual(['onnx-community/depth-anything-v2-small', 'onnx-community/depth-anything-v2-base', 'Xenova/dpt-hybrid-midas']);
+  it('keeps one model, Depth Anything V2 Small (Base and MiDaS dropped 2026-10-10)', () => {
+    expect(DEPTH_MODELS.map(m => m.repo)).toEqual(['onnx-community/depth-anything-v2-small']);
     expect(DEFAULT_DEPTH_MODEL_ID).toBe('depth-anything-v2-small');
+    // Saved graphs that picked a dropped model fall back to it
+    expect(depthModelById('depth-anything-v2-base').id).toBe(DEFAULT_DEPTH_MODEL_ID);
     expect(depthModelById('nope').id).toBe(DEFAULT_DEPTH_MODEL_ID);
   });
 
-  it('pins every model to a revision (a commit sha, checked 2026-10-09)', () => {
+  it('pins it to a revision (a commit sha, checked 2026-10-09)', () => {
     for (const m of DEPTH_MODELS) expect(m.revision, m.id).toMatch(/^[0-9a-f]{40}$/);
     expect(depthModelById('depth-anything-v2-small').revision).toBe('4472b7362082ad9968fee890ca0f1e5aca36b93d');
-    expect(depthModelById('depth-anything-v2-base').revision).toBe('dd4557d492cd7b563738ac8d9ccff9094620983c');
-    expect(depthModelById('dpt-hybrid-midas').revision).toBe('8af5a62e326ba3e842759aa27e13008c1c758db5');
   });
 
   it('runs fp16 maths on WebGPU and 8-bit on WebAssembly, each with its file', () => {
@@ -45,31 +45,14 @@ describe('depth model config', () => {
     }
   });
 
-  it('knows each download’s size (from the Hugging Face tree)', () => {
-    const small = depthModelById('depth-anything-v2-small'), base = depthModelById('depth-anything-v2-base'), midas = depthModelById('dpt-hybrid-midas');
+  it('knows its download size (from the Hugging Face tree) and licence', () => {
+    const small = depthModelById('depth-anything-v2-small');
     expect(small.weights.webgpu.bytes).toBe(49642442);
     expect(small.weights.wasm.bytes).toBe(27258801);
-    expect(base.weights.webgpu.bytes).toBe(72484282);
-    expect(midas.weights.webgpu.bytes).toBe(118219625);
-    expect(midas.weights.wasm.bytes).toBe(123702011);
     expect(formatDepthBytes(depthDownloadBytes(small, 'webgpu'))).toBe('50 MB');
-    expect(formatDepthBytes(depthDownloadBytes(base, 'webgpu'))).toBe('72 MB');
-    expect(formatDepthBytes(depthDownloadBytes(midas, 'webgpu'))).toBe('118 MB');
-  });
-
-  it('marks Base as testing only (CC-BY-NC); Small and MiDaS are Apache-2.0', () => {
-    expect(depthModelById('depth-anything-v2-small')).toMatchObject({ licence: 'Apache-2.0', commercial: true });
-    expect(depthModelById('dpt-hybrid-midas')).toMatchObject({ licence: 'Apache-2.0', commercial: true });
-    const base = depthModelById('depth-anything-v2-base');
-    expect(base).toMatchObject({ licence: 'CC-BY-NC-4.0', commercial: false });
-    expect(licenceLine(base)).toMatch(/testing only, not for paid releases/i);
-    expect(base.note).toMatch(/testing only/i);
-  });
-
-  it('MiDaS runs only at its own side (fixed position embeddings); Depth Anything at the node\'s', () => {
-    expect(modelSide(depthModelById('dpt-hybrid-midas'), 518)).toBe(384);
-    expect(modelSide(depthModelById('depth-anything-v2-small'), 518)).toBe(518);
-    expect(modelSide(depthModelById('depth-anything-v2-base'), 256)).toBe(256);
+    expect(small).toMatchObject({ licence: 'Apache-2.0', commercial: true });
+    expect(licenceLine(small)).toBe('Licence: Apache-2.0.');
+    expect(modelSide(small, 518)).toBe(518);
   });
 
   it('the fetch tool reads the same repos, revisions and files', () => {
@@ -137,11 +120,11 @@ describe('depth worker protocol', () => {
   it('falls back to WebAssembly (8-bit) when WebGPU fails or lacks shader-f16', async () => {
     const out: Array<Record<string, unknown>> = [];
     const a = mockLoader({ failGpu: true });
-    await createDepthWorker(a.loader, m => out.push(m as Record<string, unknown>))({ type: 'load', id: 1, cfg: cfgOf('dpt-hybrid-midas') });
-    expect(a.calls.map(c => `${c.backend}:${c.dtype}`)).toEqual(['webgpu:q4f16', 'wasm:uint8']);
+    await createDepthWorker(a.loader, m => out.push(m as Record<string, unknown>))({ type: 'load', id: 1, cfg: cfgOf('depth-anything-v2-small') });
+    expect(a.calls.map(c => `${c.backend}:${c.dtype}`)).toEqual(['webgpu:fp16', 'wasm:q8']);
     expect(out.at(-1)).toMatchObject({ type: 'ready', backend: 'wasm' });
     const b = mockLoader({ gpu: false });
-    await createDepthWorker(b.loader, () => {})({ type: 'load', id: 1, cfg: cfgOf('depth-anything-v2-base') });
+    await createDepthWorker(b.loader, () => {})({ type: 'load', id: 1, cfg: cfgOf('depth-anything-v2-small') });
     expect(b.calls.map(c => `${c.backend}:${c.dtype}`)).toEqual(['wasm:q8']);
   });
 
@@ -149,9 +132,9 @@ describe('depth worker protocol', () => {
     const out: Array<Record<string, unknown>> = [];
     const { loader, calls } = mockLoader();
     const on = createDepthWorker(loader, m => out.push(m as Record<string, unknown>));
-    await on({ type: 'depth', id: 1, model: 'dpt-hybrid-midas', rgba: new Uint8Array(4), w: 1, h: 1 });
+    await on({ type: 'depth', id: 1, model: 'depth-anything-v2-small', rgba: new Uint8Array(4), w: 1, h: 1 });
     expect(out.at(-1)).toMatchObject({ type: 'error', id: 1 });
-    await Promise.all([on({ type: 'load', id: 2, cfg: cfgOf('dpt-hybrid-midas') }), on({ type: 'load', id: 3, cfg: cfgOf('dpt-hybrid-midas') })]);
+    await Promise.all([on({ type: 'load', id: 2, cfg: cfgOf('depth-anything-v2-small') }), on({ type: 'load', id: 3, cfg: cfgOf('depth-anything-v2-small') })]);
     expect(calls).toHaveLength(1);
     expect(out.filter(m => m.type === 'ready')).toHaveLength(2);
   });

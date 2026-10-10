@@ -15,6 +15,7 @@ import { depthOfferBytes, downloadDepthModel, probeLikelyBackend, useDepthModels
 import { Button } from '../ui/Button';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 import type { DepthCompare as DepthCompareT } from './DepthCompare';
+import { DEPTH_MODELS } from '../../depthModel/config';
 
 // The compare view loads on demand, in its own chunk.
 const DepthCompare = lazyWithSuspense<PropsOf<typeof DepthCompareT>>(() => import('./DepthCompare').then(m => ({ default: m.DepthCompare })));
@@ -70,6 +71,7 @@ export function DepthCardBody({ node }: { node: GraphNode; touch?: boolean }) {
       case 'running': return 'Working out the first depth…';
       case 'ready': return `${status.ms != null ? `${Math.round(status.ms)} ms a frame` : 'Ready'} · ${status.w}×${status.h}${entry?.backend ? ` · ${entry.backend === 'webgpu' ? 'WebGPU' : 'WebAssembly'}` : ''}`;
       case 'no-source': return status.message ?? 'Waiting for a picture.';
+      case 'needs-bake': return 'A video\'s depth is baked first, so it plays smoothly: press Bake depth.';
       case 'error': return status.message ?? 'The model failed.';
       default: return entry?.status === 'loading' ? 'Loading the model…' : 'Waiting for the first frame.';
     }
@@ -101,7 +103,7 @@ export function DepthCardBody({ node }: { node: GraphNode; touch?: boolean }) {
         </>
       )}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <Button size="sm" onClick={() => setComparing(true)} title="The three models side by side on the current frame, with their time per frame">Compare models</Button>
+        {DEPTH_MODELS.length > 1 && <Button size="sm" onClick={() => setComparing(true)} title="The models side by side on the current frame, with their time per frame">Compare models</Button>}
         {bake ? (
           <Button size="sm" onClick={() => bake.abort.abort()}>Cancel bake ({bake.done}/{bake.total})</Button>
         ) : (

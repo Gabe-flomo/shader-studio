@@ -30,6 +30,8 @@ const SKIP = new Set(['output', 'vec4Output']);
 const CONNECTION_GATED = new Set([
   'neighborDist.dispScale',   // only in the hash-displacement path (cellID wired, displacement not)
   'glassScene.diffuseness',   // the node emits no code at all until its scene inputs are wired
+  // Depth Light: the glow settings only with a Glowing scene wired, the shadow ones only with Shadows from
+  'depthLight.glowColor', 'depthLight.glowIntensity', 'depthLight.glowReach', 'depthLight.shadowSoftness', 'depthLight.lightRadius',
   // GI Lit March Group: the PBR lighting block is only emitted once a scene is wired
   'giLitMarchGroup.metallic', 'giLitMarchGroup.roughness', 'giLitMarchGroup.lightStrength',
   'giLitMarchGroup.giStrength', 'giLitMarchGroup.specStrength',

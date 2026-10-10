@@ -22,26 +22,23 @@ The Depth node is in the node browser under Texture tools. The plan it belongs t
 | Normals | The surface direction from the depth's slopes (z towards you). Wire it into a lighting node to relight a flat picture; *Relief* sets how deep the bumps are |
 | Parallax UV | This pixel's UV moved by its depth. Wire it into the picture's Texture Input UV for a small 2.5D camera shift (*Shift*, *Focus*) |
 
-## The models
+## The model
 
-Each is downloaded once, the first time a Depth node needs it. The card offers the download with its
-size; the browser keeps it after that, and it works offline. They are here side by side for testing.
-Once one proves best, the others go.
+**Depth Anything V2 Small** (Apache-2.0): fast, with sharp edges. It's a 50 MB download (27 MB on
+WebAssembly), offered by the card the first time a Depth node needs it. The browser keeps it after
+that, and it works offline.
 
-| Model | Download | Licence | Like |
-|---|---|---|---|
-| Depth Anything V2 Small (default) | 50 MB (WebGPU, fp16), 27 MB (WebAssembly, 8-bit) | Apache-2.0 | Fast, sharp edges |
-| Depth Anything V2 Base | 72 MB / 102 MB | CC-BY-NC-4.0: **testing only, never in a paid release** | Cleaner surfaces, finer detail, slower |
-| MiDaS DPT-Hybrid | 118 MB / 124 MB | Apache-2.0 (MIT code) | Smoother, softer edges; always runs at 384 px |
-
-- **Compare models** runs every downloaded model on the current frame, side by side, with its time
-  per frame. Models not yet downloaded offer the download there.
-- **Resolution** is the long side of the frame the model sees: smaller is faster, larger is finer.
+Base and MiDaS DPT-Hybrid were tried side by side and dropped (2026-10-10). Saved graphs that picked
+them use Small. **Resolution** is the long side of the frame the model sees: smaller is faster,
+larger is finer.
 
 ## Video
 
-- **Live:** a new depth as fast as the model goes. The picture never waits: the last depth stays until
-  the next arrives.
+- **A video's depth is baked first.** Press **Bake depth**: it runs the model once over the clip, and
+  then plays smoothly. A Video Input wired in live shows "press Bake depth" instead of working it out
+  frame by frame.
+- **Live** is for stills and the picture itself: a new depth as fast as the model goes. The picture
+  never waits: the last depth stays until the next arrives.
 - **Every Nth frame:** lighter.
 - **Smoothing** blends each new depth with the last, to calm the flicker video depth has.
 - **Bake depth** runs the model once over a whole clip (or an image), and stores the depth as a video
@@ -85,6 +82,13 @@ Two nodes put a picture with depth inside a ray-marched scene (3D Scene in the n
 - **Where:** wire 1 − Depth Composite's *Scene in front* so the 3D objects aren't lit as if they were
   the picture.
 - **Several lights:** chain several Depth Lights.
+- **Glowing scene:** wire a Scene Group of glowing objects (or the whole scene). Their glow reaches the
+  picture from wherever they are, whatever their shape, and follows them as they move. Each pixel asks
+  the scene how far the nearest glowing surface is, and which way. Set it with **Glow colour**,
+  **Glow strength** and **Glow reach**. No positions are typed in.
+- **Shadows from:** wire the scene, and its objects cast soft shadows of the point light onto the
+  picture. **Shadow sharpness** sets the edge, and **Light size** stops the shadow ray short of the
+  light, so a glowing sphere around it doesn't shadow itself.
 - **Outputs:** **Light** gives only the added light (blur it for a soft glow), and **Picture point** and
   **Picture normal** give each pixel's place and direction in the scene.
 
@@ -93,4 +97,4 @@ Two nodes put a picture with depth inside a ray-marched scene (3D Scene in the n
   field of view. Moving cameras need tracking (planned).
 - The picture's own lighting is baked in, so a light can add and tint but can't remove a harsh shadow.
 - The picture is a surface seen from the front.
-- Shadows from 3D objects onto the picture, and the picture as an environment for reflections, are next.
+- The picture as an environment for reflections, and linking a light to a scene object, are next.

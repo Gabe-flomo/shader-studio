@@ -10,7 +10,10 @@
  *  - Depth Light: the picture lit by a light (or a glowing object) in the scene. Each pixel becomes a
  *    3D point (the camera's ray, out to the picture's distance), and the point's neighbours give its
  *    surface direction, so a red glow beside someone's shoulder tints the shoulder and fades with
- *    distance.
+ *    distance. With a Glowing scene wired, the glow comes from the scene's own distance field: each
+ *    point asks how far the nearest glowing surface is and which way, so any shape glows on the
+ *    picture and follows as it moves. With Shadows from wired, the point light's light is
+ *    soft-shadowed by the scene's objects.
  *
  * Calibration: depth models give *relative* nearness, not distances. Nearest / Farthest say where, in
  * scene units, the picture's nearest and farthest things sit; nearness is interpolated in 1/distance
@@ -107,6 +110,8 @@ export const DepthLightNode: NodeDefinition = {
     lightPos: { type: 'vec3', label: 'Light position', hint: 'Where the light is: a glowing sphere\'s centre, a point in the scene. Wire a vec3 to move it.' },
     lightColor: { type: 'vec3', label: 'Light colour', hint: 'The light\'s colour (a glow\'s tint).' },
     mask: { type: 'float', label: 'Where', hint: 'Light only here (1) and not there (0). Wire 1 − Depth Composite\'s Scene in front so the 3D objects aren\'t relit as if they were the picture. Unwired: everywhere.' },
+    glow: { type: 'scene3d', label: 'Glowing scene', hint: 'A Scene Group of the glowing objects: their light reaches the picture from wherever they are, whatever their shape, and follows them as they move. Wire the same Scene the March Loop draws, or a Scene Group of only the glowing parts.' },
+    occluders: { type: 'scene3d', label: 'Shadows from', hint: 'A Scene whose objects cast soft shadows of the Light position\'s light onto the picture. Usually the scene the March Loop draws.' },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color', hint: 'The picture with this light added (dimmed first by Own light).' },
@@ -114,7 +119,7 @@ export const DepthLightNode: NodeDefinition = {
     point: { type: 'vec3', label: 'Picture point', hint: 'Where each pixel sits in the scene (its 3D position).' },
     normal: { type: 'vec3', label: 'Picture normal', hint: 'Which way each pixel faces in the scene.' },
   },
-  defaultParams: { nearD: 1.5, farD: 8, lightPos: [0.6, 0.4, 2.0], lightColor: [1.0, 0.35, 0.2], intensity: 2, range: 1.5, wrap: 0.2, own: 1 },
+  defaultParams: { nearD: 1.5, farD: 8, lightPos: [0.6, 0.4, 2.0], lightColor: [1.0, 0.35, 0.2], intensity: 2, range: 1.5, wrap: 0.2, own: 1, glowColor: [0.4, 0.7, 1.0], glowIntensity: 2, glowReach: 0.6, shadowSoftness: 12, lightRadius: 0.05 },
   paramDefs: {
     ...calibrationParams,
     lightPos: { label: 'Light position', type: 'vec3', min: -10, max: 10, step: 0.01, hint: 'Where the light is in the scene (x right, y up, z away from a default camera).' },
@@ -123,6 +128,11 @@ export const DepthLightNode: NodeDefinition = {
     range: { label: 'Reach', type: 'float', min: 0.05, max: 20, step: 0.01, hint: 'How far it reaches: at this distance it has fallen to a quarter.' },
     wrap: { label: 'Wrap', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Lets light reach round onto surfaces turned slightly away: softer, more like skin and cloth.' },
     own: { label: 'Own light', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How much of the picture\'s own lighting stays: 1 all of it (the light adds), lower darkens it first, for a night relight.' },
+    glowColor: { label: 'Glow colour', type: 'vec3color', section: 'Glowing scene', hint: 'The colour the Glowing scene\'s objects give off (with Glowing scene wired).' },
+    glowIntensity: { label: 'Glow strength', type: 'float', min: 0, max: 20, step: 0.01, section: 'Glowing scene', hint: 'How brightly they light the picture.' },
+    glowReach: { label: 'Glow reach', type: 'float', min: 0.02, max: 10, step: 0.01, section: 'Glowing scene', hint: 'How far from their surfaces the glow reaches before it has faded to about a third.' },
+    shadowSoftness: { label: 'Shadow sharpness', type: 'float', min: 1, max: 64, step: 0.5, section: 'Shadows', hint: 'With Shadows from wired: higher is a crisper shadow edge, lower a softer one.' },
+    lightRadius: { label: 'Light size', type: 'float', min: 0, max: 3, step: 0.01, section: 'Shadows', hint: 'How big the light is: the shadow ray stops this far from it, so a glowing sphere around the light doesn\'t shadow its own light. Set it to the sphere\'s radius.' },
   },
   generateGLSL: (node, inputVars) => {
     const id = node.id;
@@ -133,6 +143,8 @@ export const DepthLightNode: NodeDefinition = {
     const lightPos = inputVars.lightPos || pv3(node.params.lightPos, [0.6, 0.4, 2.0]);
     const lightColor = inputVars.lightColor || pv3(node.params.lightColor, [1.0, 0.35, 0.2]);
     const mask = inputVars.mask || '1.0';
+    const glowFn = inputVars.glow;
+    const occFn = inputVars.occluders;
     const code = [
       `    float ${id}_pd = depthSceneDist(${nearness}, ${p(node.params.nearD, 1.5)}, ${p(node.params.farD, 8)});\n`,
       `    vec3 ${id}_point = (${ro}) + normalize(${rd}) * ${id}_pd;\n`,
@@ -147,7 +159,37 @@ export const DepthLightNode: NodeDefinition = {
       // Falls to a quarter at Reach (inverse square, softened near the light)
       `    float ${id}_r = max(${p(node.params.range, 1.5)}, 1e-3);\n`,
       `    float ${id}_att = 1.0 / (1.0 + 3.0 * (${id}_dl * ${id}_dl) / (${id}_r * ${id}_r));\n`,
-      `    vec3 ${id}_light = (${lightColor}) * ${p(node.params.intensity, 2)} * ${id}_face * ${id}_att * clamp(${mask}, 0.0, 1.0);\n`,
+      `    float ${id}_shadow = 1.0;\n`,
+      // Shadows: a soft-shadow march from the picture's point towards the light, through Shadows from
+      ...(occFn ? [
+        `    {\n`,
+        `      vec3 ${id}_L = ${id}_toL / max(${id}_dl, 1e-5);\n`,
+        `      float ${id}_t = 0.02;\n`,
+        `      float ${id}_stop = ${id}_dl - ${p(node.params.lightRadius, 0.05)};\n`,
+        `      for (int ${id}_i = 0; ${id}_i < 48; ${id}_i++) {\n`,
+        `        if (${id}_t >= ${id}_stop) break;\n`,
+        `        float ${id}_h = ${occFn}(${id}_point + ${id}_L * ${id}_t);\n`,
+        `        if (${id}_h < 0.001) { ${id}_shadow = 0.0; break; }\n`,
+        `        ${id}_shadow = min(${id}_shadow, ${p(node.params.shadowSoftness, 12)} * ${id}_h / ${id}_t);\n`,
+        `        ${id}_t += clamp(${id}_h, 0.01, 0.3);\n`,
+        `      }\n`,
+        `      ${id}_shadow = clamp(${id}_shadow, 0.0, 1.0);\n`,
+        `    }\n`,
+      ] : []),
+      `    vec3 ${id}_light = (${lightColor}) * ${p(node.params.intensity, 2)} * ${id}_face * ${id}_att * ${id}_shadow * clamp(${mask}, 0.0, 1.0);\n`,
+      // Glowing scene: light from the nearest glowing surface, along the direction the field falls towards it
+      ...(glowFn ? [
+        `    {\n`,
+        `      float ${id}_gd = max(${glowFn}(${id}_point), 0.0);\n`,
+        `      const vec2 ${id}_k = vec2(1.0, -1.0);\n`,
+        `      float ${id}_e = 0.01;\n`,
+        `      vec3 ${id}_grad = ${id}_k.xyy * ${glowFn}(${id}_point + ${id}_k.xyy * ${id}_e) + ${id}_k.yyx * ${glowFn}(${id}_point + ${id}_k.yyx * ${id}_e)`,
+        ` + ${id}_k.yxy * ${glowFn}(${id}_point + ${id}_k.yxy * ${id}_e) + ${id}_k.xxx * ${glowFn}(${id}_point + ${id}_k.xxx * ${id}_e);\n`,
+        `      vec3 ${id}_toG = length(${id}_grad) > 1e-9 ? -normalize(${id}_grad) : -normalize(${rd});\n`,
+        `      float ${id}_gface = max((dot(${id}_n, ${id}_toG) + ${id}_w) / (1.0 + ${id}_w), 0.0);\n`,
+        `      ${id}_light += ${inputVars.glowColor || pv3(node.params.glowColor, [0.4, 0.7, 1.0])} * ${p(node.params.glowIntensity, 2)} * exp(-${id}_gd / max(${p(node.params.glowReach, 0.6)}, 1e-3)) * ${id}_gface * clamp(${mask}, 0.0, 1.0);\n`,
+        `    }\n`,
+      ] : []),
       `    vec3 ${id}_color = (${picture}) * mix(1.0, ${p(node.params.own, 1)}, clamp(${mask}, 0.0, 1.0)) + (${picture}) * ${id}_light;\n`,
     ].join('');
     return { code, outputVars: { color: `${id}_color`, light: `${id}_light`, point: `${id}_point`, normal: `${id}_n` } };
