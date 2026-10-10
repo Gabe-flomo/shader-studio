@@ -13,19 +13,21 @@ import { signalNames } from './signalNames';
 import { ANCHOR_KINDS, DEFAULT_FIRE, HAND_PINCH_POINT, PAD_ANCHOR, handAnchor, layerNumericProps, parseEventAnchor, parseHandAnchor, parseSignalAnchor, type PlayLayer } from '../types/play';
 import { HD_POINT_NAMES } from './kit/hands.js';
 import { datasetStore } from '../data/datasetStore';
-import { DATA_ROW_COLUMN } from '../types/play';
+import { BUILT_IN_SIGNALS, DATA_ROW_COLUMN, type BuiltInSignalRead } from '../types/play';
 import { audioReaderBank } from '../lib/audioReaderBank';
 import { readerLabel } from './audioReaders';
 import type { PadGridRead } from '../types/playMidi';
-import { kmNoteName } from './kit/midi.js';
+import { kmClassName, kmNoteName } from './kit/midi.js';
 import { FACE_GESTURE_LABELS, POSE_GESTURE_LABELS, TRACK_SOURCE_TYPES, trackAnchorLabel, trackSource, trackSourceLabel, type FaceSourceType, type PoseSourceType } from './trackSources';
 import { parseTrackAnchor } from '../types/playTracking';
 import { agentReadLabel } from '../lib/agentReadings';
 
 export type HandSourceType = `hand:${HandRead}`;
+/** `signals:<read>`: a built-in signal (count, active, share). */
+export type BuiltInSourceType = `signals:${BuiltInSignalRead}`;
 /** `reader:<id>`: one audio reader. */
 export type ReaderSourceType = `reader:${string}`;
-export type SourceType = FaceSourceType | PoseSourceType | 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'fn' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | 'pad' | 'data' | 'captured' | HandSourceType | ReaderSourceType;
+export type SourceType = FaceSourceType | PoseSourceType | 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'fn' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | 'pad' | 'data' | 'captured' | BuiltInSourceType | HandSourceType | ReaderSourceType;
 /** Not a source: the picker's entry that opens the Audio readers panel. */
 export const OPEN_READERS = 'readers:open';
 
@@ -58,6 +60,9 @@ export const SOURCE_TYPES: { value: SourceType; label: string; group?: string }[
   { value: 'sensor', label: 'Layer sensor (zone fill, speed…)' },
   { value: 'data', label: 'Data (the current row of a dataset)' },
   { value: 'captured', label: 'Set from a signal (its captured value)' },
+  { value: 'signals:count', label: 'Signals: count (built in)' },
+  { value: 'signals:active', label: 'Signals: active (built in)' },
+  { value: 'signals:share', label: 'Signals: active share (built in)' },
   { value: 'lfo', label: 'LFO' },
   { value: 'noise', label: 'Noise' },
   { value: 'clock', label: 'Clock (BPM)' },
@@ -175,6 +180,7 @@ export function sourceType(s: PlaySource): SourceType {
   if (s.kind === 'face') return `face:${s.read}`;
   if (s.kind === 'pose') return `pose:${s.read}`;
   if (s.kind === 'reader') return `reader:${s.readerId}`;
+  if (s.kind === 'signals') return `signals:${s.read}`;
   return s.kind;
 }
 
@@ -184,9 +190,10 @@ export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId =
   if (t.startsWith('face:')) return trackSource('face', t.slice(5), prev);
   if (t.startsWith('pose:')) return trackSource('pose', t.slice(5), prev);
   if (t.startsWith('reader:')) return { kind: 'reader', readerId: t.slice(7) };
+  if (t.startsWith('signals:')) return { kind: 'signals', read: t.slice(8) as BuiltInSignalRead };
   const channel = prev.kind === 'midi' ? prev.channel : 0;
-  // A note range carries over between note, velocity and gate; locks stay with a CC.
-  const range = prev.kind === 'midi' && prev.range ? { range: prev.range } : {};
+  // A note range and octave wrapping carry over between note, velocity and gate; locks stay with a CC.
+  const range = prev.kind === 'midi' ? { ...(prev.range ? { range: prev.range } : {}), ...(prev.wrap ? { wrap: true } : {}) } : {};
   switch (t) {
     // A CC row starts without a knob: the first CC that moves becomes its CC (lib/midiAutoLearn.ts).
     case 'midi:cc': return { kind: 'midi', signal: 'cc', channel, ...(prev.kind === 'midi' && prev.cc !== undefined ? { cc: prev.cc } : {}), ...(prev.kind === 'midi' && prev.locks ? { locks: prev.locks } : {}) };
@@ -241,8 +248,9 @@ export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string;
   if (s.kind === 'face' || s.kind === 'pose') return trackSourceLabel(s);
   if (s.kind === 'pad') return padSourceLabel(s);
   if (s.kind === 'captured') return `Set · ${signalName(s.signal)}’s value${s.release === 'back' ? ', then back' : s.release === 'value' ? `, then ${s.rest ?? 0}` : ''}`;
+  if (s.kind === 'signals') return builtInSignalLabel(s.read);
   const ch = s.channel === 0 ? '' : ` · ch. ${s.channel}`;
-  const range = s.range ? ` ${kmNoteName(s.range[0])}–${kmNoteName(s.range[1])}` : '';
+  const range = s.wrap ? ` ${noteClassesLabel(s.range)}` : s.range ? ` ${kmNoteName(s.range[0])}–${kmNoteName(s.range[1])}` : '';
   switch (s.signal) {
     case 'cc': return s.locks?.length ? `CC ${s.locks.map(l => l.cc).join(', ')} · locked` : s.cc === undefined ? 'MIDI CC · turn a knob' : `CC ${s.cc}${ch}`;
     case 'note': return `Note${range}${ch}`;
@@ -250,6 +258,17 @@ export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string;
     case 'gate': return `Gate${range}${ch}`;
     case 'bend': return `Bend${ch}`;
   }
+}
+
+/** "Signals: count", "Signals: active", "Signals: active share". */
+export function builtInSignalLabel(read: BuiltInSignalRead): string {
+  return BUILT_IN_SIGNALS.find(b => b.read === read)?.label ?? 'Signals';
+}
+
+/** A wrapped note source's classes: "(any octave)" for all twelve, "C (any octave)" for one, "C–E (any octave)" for a run. */
+export function noteClassesLabel(range: readonly [number, number] | undefined): string {
+  if (!range || range[1] - range[0] >= 11) return 'class (any octave)';
+  return range[0] === range[1] ? `${kmClassName(range[0])} (any octave)` : `${kmClassName(range[0])}–${kmClassName(range[1])} (any octave)`;
 }
 
 const PAD_LABELS: Record<PadGridRead, string> = { x: 'Pad X', y: 'Pad Y', velocity: 'Pad velocity', pressure: 'Pad pressure', gate: 'Pad gate', cell: 'Pad cell' };
@@ -293,7 +312,7 @@ const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 
 export function triggerLabel(t: TriggerSpec, layers: ReadonlyArray<{ id: string; label: string }> = [], ctx: LabelContext = {}): string {
   switch (t.on) {
     case 'key': return `Key ${keyName(t.code)}`;
-    case 'note': return `${t.note < 0 ? 'Any note' : `${NOTE_NAMES[t.note % 12]}${Math.floor(t.note / 12) - 1}`}${t.channel ? ` · ch. ${t.channel}` : ''}`;
+    case 'note': return `${t.note < 0 ? 'Any note' : t.wrap ? `${kmClassName(t.note)} (any octave)` : `${NOTE_NAMES[t.note % 12]}${Math.floor(t.note / 12) - 1}`}${t.channel ? ` · ch. ${t.channel}` : ''}`;
     case 'mouse': return 'Click';
     case 'osc': return `OSC ${t.address}`;
     case 'beat': return t.unit === 'hz' ? `Pulse @ ${Math.round(pulseHz(t) * 1000) / 1000} Hz` : t.beats === 1 ? `Every beat @ ${t.bpm}` : `Every ${t.beats} beats @ ${t.bpm}`;
@@ -365,6 +384,7 @@ export function valueRefLabel(ref: string, ctx: LabelContext = {}): string {
     case 'mapping': { const m = ctx.mappings?.find(x => x.id === r.id); return m ? `${sourceLabel(m.source, ctx.controls, ctx.layers)} (source)` : 'Missing mapping'; }
     case 'source': { const m = ctx.mappings?.find(x => x.id === r.id); return m ? `${sourceLabel(m.source, ctx.controls, ctx.layers)} (source)` : 'A source'; }
     case 'mouse': return `Mouse ${r.axis.toUpperCase()}`;
+    case 'builtin': return builtInSignalLabel(r.read);
     case 'distance': return `${anchorLabel(r.a, ctx.layers)} ↔ ${anchorLabel(r.b, ctx.layers)}`;
     case 'reading': return `${ctx.layers?.find(l => l.id === r.layerId)?.label ?? agentReadLabel(r.layerId) ?? 'Missing layer'} · ${SENSOR_LABELS[r.read as SensorRead] ?? r.read}`;
     case 'axis': return `${anchorLabel(r.anchor, ctx.layers)} ${r.axis.toUpperCase()}`;

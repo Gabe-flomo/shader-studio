@@ -74,6 +74,7 @@ const subscribeVideoEngine = (fn: () => void) => videoEngine.onChange(fn);
 import { MidiInputCard } from './MidiInputCard';
 import { GroupParamPicker } from './GroupParamPicker';
 import { NodeInlineViz, AudioFreqRangeViz, hasRealDiagram } from './NodeInlineViz';
+import { ShaderTextureCardBody } from '../shaderTexture/ShaderTextureCardBody';
 import { ValuePreview } from './ValuePreview';
 import { AgentPreviewPanel } from './AgentPreviewPanels';
 import { previewPlan } from '../../lib/nodePreview/previewPlan';
@@ -116,7 +117,7 @@ import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
-import { Segmented, Toggle } from '../ui/Choice';
+import { Toggle } from '../ui/Choice';
 import { ColorSwatch } from '../ui/ColorPicker';
 import { PaletteTools } from './PaletteTools';
 import { ParticlePresets } from './ParticlePresets';
@@ -127,6 +128,9 @@ import { CardBadge, CardButton, CardDivider, KeyframedRuler, ParamLabel, ParamSo
 import { driveKey, playDrivenMap } from '../../play/playDriven';
 import { driverOf } from '../../play/paramDrivers';
 import { PlayDriveChip } from './PlayDriveChip';
+import { AddGroupPort, BUILT_IN_TIP, GroupPortName } from './GroupPorts';
+import { Chip } from '../ui/Chip';
+import { groupAddable, groupCardPorts, portKeyFor, type GroupPort } from '../../nodes/groupPorts';
 import { MAX_GROUP_ITERATIONS } from '../../nodes/definitions/group';
 import { programTintColour, programTintsCached } from '../../lib/programTints';
 import { StageTag } from '../structure/stageUi';
@@ -547,6 +551,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const mlGroupHiddenOutputs = (activeGroupNode?.params?.hiddenOutputs as string[] | undefined) ?? [];
   const renameGroupPort        = useNodeGraphStore(s => s.renameGroupPort);
   const removeGroupInputPort   = useNodeGraphStore(s => s.removeGroupInputPort);
+  const removeGroupOutput      = useNodeGraphStore(s => s.removeGroupOutput);
   const saveGroupPreset        = useNodeGraphStore(s => s.saveGroupPreset);
   const duplicateGroup         = useNodeGraphStore(s => s.duplicateGroup);
   const ungroupNode            = useNodeGraphStore(s => s.ungroupNode);
@@ -1452,12 +1457,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     );
   }
 
-  // ── March Loop anchor node state ────────────────────────────────────────────
-  const [addingMarchInput, setAddingMarchInput] = useState<{name: string; type: DataType} | null>(null);
-
   // ── Group node special card ──────────────────────────────────────────────────
-  const [editingPortKey, setEditingPortKey] = useState<string | null>(null);
-  const [editingPortLabel, setEditingPortLabel] = useState('');
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [editingSectionLabel, setEditingSectionLabel] = useState('');
   const [savingMode, setSavingMode] = useState(false);
@@ -1480,13 +1480,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     { key: 'pos',       type: 'vec3' as DataType,  label: 'Hit Pos' },
   ] as const;
 
-  const SOCKET_COLORS: Record<string, string> = {
-    vec3: tc.green,
-    float: tc.red,
-    vec2: tc.blue,
-    vec4: tc.peach,
-  };
-
   const handleAnchorDragMouseDown = (e: React.MouseEvent) => {
     if (e.button === 2) return;
     e.stopPropagation();
@@ -1502,13 +1495,18 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     });
   };
 
-  // ── Agent Inputs (inside an Agents group): this walker's own values, then what comes in from outside ──
-  if (node.type === 'agentInputs') {
+  // ── A group's inner inputs card: Agent Inputs (Agents group) and Group Inputs (March Loop) ──
+  // Built-in values first (locked), then the inputs added from outside, then "+ Add an input"
+  // (components/NodeGraph/GroupPorts.tsx: the same look on every group).
+  if (node.type === 'agentInputs' || node.type === 'marchLoopInputs') {
+    const isAgents = node.type === 'agentInputs';
     const extraInputs = (node.params.extraInputs ?? []) as Array<{ key: string; type: string; label: string }>;
-    const own = [...Object.entries(AGENT_INPUT_OUTPUTS), ...Object.entries(AGENT_INPUT_STATE_OUTPUTS)];
+    const own: Array<[string, { type: string; label: string; hint?: string }]> = isAgents
+      ? [...Object.entries(AGENT_INPUT_OUTPUTS), ...Object.entries(AGENT_INPUT_STATE_OUTPUTS)]
+      : Object.entries(def.outputs).filter(([key]) => !extraInputs.some(e => e.key === key));
     const sectionHead: React.CSSProperties = { padding: '10px 14px 2px', font: `600 11px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', color: tk.text.muted };
     const sectionNote: React.CSSProperties = { padding: '0 14px 6px', fontSize: 11.5, lineHeight: 1.45, color: tk.text.faint };
-    const outRow = (key: string, type: string, label: React.ReactNode, title: string, extra?: React.ReactNode) => {
+    const outRow = (key: string, type: string, label: React.ReactNode, title: string) => {
       const color = TYPE_COLORS[type] ?? tk.text.faint;
       return (
         <div
@@ -1519,8 +1517,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           onMouseLeave={leaveOutputSocket}
           onDoubleClick={e => { e.stopPropagation(); useNodeGraphStore.getState().disconnectOutput(node.id, key); }}
         >
-          {extra}
-          <span style={{ fontSize: 12.5, color: tk.text.secondary }}>{label}</span>
+          {label}
           <div
             data-socket="out"
             ref={el => { if (el) registerSocket(node.id, 'out', key, el); }}
@@ -1533,7 +1530,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         </div>
       );
     };
-    const TYPE_WORDS: Record<string, string> = { float: 'number', vec2: 'pair (x, y)', vec3: 'colour / 3 numbers', vec4: '4 numbers', texture: 'image', scene3d: 'a 3D scene' };
+    const outside = isAgents ? 'the Agents card' : 'the March Loop card';
     return (
       <div
         data-node-id={node.id}
@@ -1547,379 +1544,98 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           onClick={() => { setSelectedNodeId(isSelected ? null : node.id); selectNode(node.id, false); }}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontWeight: 600, fontSize: 13, color: tk.text.primary }}>
-            <Icon name="import" size={14} />Agent Inputs
+            <Icon name="import" size={14} />{isAgents ? 'Agent Inputs' : 'Group Inputs'}
           </span>
         </div>
 
-        <div style={sectionHead}>This walker</div>
+        <div style={sectionHead}>{isAgents ? 'This walker' : 'This step of the loop'}</div>
         <div style={sectionNote}>
-          Its own values as each step begins. You rarely need to wire these: any unwired socket inside the group already reads them (the faint “← this walker’s …” on a node).
+          {isAgents
+            ? <>Its own values as each step begins. You rarely need to wire these: any unwired socket inside the group already reads them (the faint “← this walker’s …” on a node).</>
+            : <>The ray at this step: where it started, which way it points, the point it has reached and how far it has gone.</>}
         </div>
         <div style={{ paddingBottom: 6 }}>
-          {own.map(([key, o]) => outRow(key, o.type, o.label, `${o.label}: ${o.hint}`))}
+          {own.map(([key, o]) => outRow(key, o.type, <GroupPortName label={o.label} origin="built-in" socketSide="right" />, o.hint ? `${o.label}: ${o.hint}` : o.label))}
         </div>
 
         <div style={{ ...sectionHead, borderTop: `1px solid ${tk.border.subtle}`, paddingTop: 10 }}>From outside the group</div>
         <div style={sectionNote}>
-          Each input added here is also a socket on the Agents card, where you wire it (a Trail’s Image, a number, a picture).
+          Each input added here is also a socket on {outside}, where you wire it{isAgents ? ' (a Trail’s Image, a number, a picture)' : ''}.
         </div>
         <div style={{ paddingBottom: 4 }}>
           {extraInputs.length === 0 && (
             <div style={{ padding: '0 14px 4px', fontSize: 11.5, fontStyle: 'italic', color: tk.text.faint }}>None yet.</div>
           )}
           {extraInputs.map(({ key, type, label }) => outRow(key, type,
-            editingPortKey === `mlgin_${key}` ? (
-              <input
-                autoFocus
-                aria-label="Input name"
-                value={editingPortLabel}
-                onChange={e => setEditingPortLabel(e.target.value)}
-                onMouseDown={e => e.stopPropagation()}
-                onBlur={() => {
-                  if (editingPortLabel.trim() && activeGroupId) renameMarchLoopInput(activeGroupId, key, editingPortLabel.trim());
-                  setEditingPortKey(null);
-                }}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                  if (e.key === 'Escape') setEditingPortKey(null);
-                }}
-                style={{ width: 110, fontSize: 12, background: tk.bg.field, border: `1px solid ${tk.border.default}`, color: tk.text.primary, borderRadius: 5, padding: '1px 5px', outline: 'none' }}
-              />
-            ) : (
-              <span style={{ cursor: 'text', color: tk.text.primary }} onDoubleClick={() => { setEditingPortKey(`mlgin_${key}`); setEditingPortLabel(label); }}>
-                {label} <span style={{ color: tk.text.faint, fontSize: 11 }}>({TYPE_WORDS[type] ?? type})</span>
-              </span>
-            ),
-            `${label}: wired on the Agents card (outside the group). Double-click the name to rename it.`,
-            <IconButton icon="close" label={`Remove ${label}`} size="sm" tone="danger" tooltip={false}
-              onMouseDown={e => e.stopPropagation()}
-              onClick={() => activeGroupId && removeMarchLoopInput(activeGroupId, key)} />,
+            <GroupPortName label={label} type={type} origin="added" socketSide="right"
+              onRename={name => { if (activeGroupId) renameMarchLoopInput(activeGroupId, key, name); }}
+              onRemove={() => { if (activeGroupId) removeMarchLoopInput(activeGroupId, key); }} />,
+            `${label}: wired on ${outside} (outside the group).`,
           ))}
         </div>
-        <div style={{ borderTop: `1px solid ${tk.border.subtle}`, padding: 8 }} onMouseDown={e => e.stopPropagation()}>
-          {addingMarchInput ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <input
-                autoFocus
-                aria-label="Input name"
-                placeholder="Name (e.g. Trail, Strength)"
-                value={addingMarchInput.name}
-                onChange={e => setAddingMarchInput(prev => prev ? { ...prev, name: e.target.value } : prev)}
-                onKeyDown={e => {
-                  e.stopPropagation();
-                  if (e.key === 'Escape') setAddingMarchInput(null);
-                  if (e.key === 'Enter' && addingMarchInput.name.trim() && activeGroupId) {
-                    addMarchLoopInput(activeGroupId, addingMarchInput.name.trim(), addingMarchInput.type, addingMarchInput.name.trim());
-                    setAddingMarchInput(null);
-                  }
-                }}
-                style={{ width: '100%', boxSizing: 'border-box', height: 30, fontSize: 12.5, background: tk.bg.field, border: 0, borderRadius: 6, color: tk.text.primary, padding: '0 8px', outline: 'none' }}
-              />
-              <Segmented
-                fill size="sm" ariaLabel="What it carries"
-                value={addingMarchInput.type as 'float' | 'vec2' | 'vec3' | 'vec4' | 'texture' | 'scene3d'}
-                options={([['float', 'Number'], ['vec2', 'x, y'], ['vec3', 'Colour'], ['vec4', '4'], ['texture', 'Image'], ['scene3d', 'Scene']] as const).map(([value, label]) => ({ value, label }))}
-                onChange={t => setAddingMarchInput(prev => prev ? { ...prev, type: t } : prev)}
-              />
-              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                <Button size="sm" variant="ghost" style={{ height: 28 }} onClick={() => setAddingMarchInput(null)}>Cancel</Button>
-                <Button size="sm" variant="primary" style={{ height: 28 }} disabled={!addingMarchInput.name.trim()}
-                  onClick={() => {
-                    if (addingMarchInput.name.trim() && activeGroupId) {
-                      addMarchLoopInput(activeGroupId, addingMarchInput.name.trim(), addingMarchInput.type, addingMarchInput.name.trim());
-                      setAddingMarchInput(null);
-                    }
-                  }}>Add</Button>
-              </div>
-            </div>
-          ) : (
-            <Button size="sm" variant="ghost" icon="plus" style={{ width: '100%', height: 28 }}
-              title="Adds a socket on the Agents card (outside the group) and its matching output here"
-              onClick={() => setAddingMarchInput({ name: '', type: 'texture' })}>Add an input from outside</Button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  if (node.type === 'marchLoopInputs') {
-    const extraInputs = (node.params.extraInputs ?? []) as Array<{key: string; type: string; label: string}>;
-    const fixedOutputs: ReadonlyArray<{ key: string; type: string; label: string }> = [
-      { key: 'ro',        type: 'vec3',  label: 'Ray Origin' },
-      { key: 'rd',        type: 'vec3',  label: 'Ray Dir' },
-      { key: 'marchPos',  type: 'vec3',  label: 'March Pos' },
-      { key: 'marchDist', type: 'float', label: 'March Dist' },
-    ];
-
-    return (
-      <div
-        data-node-id={node.id}
-        style={specialCardStyle({ zIndex })}
-        onMouseDown={() => { setZIndex(++zCounter); }}
-        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); }}
-      >
-        {/* Header */}
-        <div
-          style={{
-            borderBottom: `1px solid ${tk.border.subtle}`,
-            padding: '6px 10px',
-            fontWeight: 700,
-            fontSize: '11px',
-            color: '#88aacc',
-            cursor: 'grab',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
-          onMouseDown={handleAnchorDragMouseDown}
-          onClick={() => { setSelectedNodeId(isSelected ? null : node.id); selectNode(node.id, false); }}
-        >
-          <span style={{ fontSize: '10px' }}>&#9668;</span>
-          Group Inputs
-        </div>
-
-        {/* Fixed outputs */}
-        <div style={{ padding: '6px 0' }}>
-          {fixedOutputs.map(({ key, type, label }) => {
-            const color = SOCKET_COLORS[type] ?? tc.subtext0;
-            return (
-              <div
-                key={key}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '2px 8px 2px 10px', gap: 6, position: 'relative' }}
-                onMouseEnter={() => { holdTip(); setHoveredOutput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'out' }); }}
-                onMouseLeave={leaveOutputSocket}
-                onDoubleClick={e => { e.stopPropagation(); useNodeGraphStore.getState().disconnectOutput(node.id, key); }}
-              >
-                <span style={{ fontSize: '10px', color: tc.surface2 }}>&#128274;</span>
-                <span style={{ fontSize: '11px', color: tc.subtext0 }}>{label}</span>
-                <div
-                  ref={el => { if (el) registerSocket(node.id, 'out', key, el); }}
-                  onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
-                  style={{
-                    width: 10, height: 10, borderRadius: '50%',
-                    background: hoveredOutput === key ? '#ffffff' : color,
-                    border: `2px solid ${color}`,
-                    cursor: 'crosshair',
-                    flexShrink: 0,
-                    transition: 'background 0.1s',
-                  }}
-                />
-              </div>
-            );
-          })}
-
-          {/* User-added extra outputs */}
-          {extraInputs.map(({ key, type, label }) => {
-            const color = SOCKET_COLORS[type] ?? tc.subtext0;
-            return (
-              <div
-                key={key}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '2px 8px 2px 10px', gap: 6, position: 'relative' }}
-                onMouseEnter={() => { holdTip(); setHoveredOutput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'out' }); }}
-                onMouseLeave={leaveOutputSocket}
-                onDoubleClick={e => { e.stopPropagation(); useNodeGraphStore.getState().disconnectOutput(node.id, key); }}
-              >
-                <button
-                  onClick={() => activeGroupId && removeMarchLoopInput(activeGroupId, key)}
-                  style={{
-                    background: 'none', border: 'none', color: tc.surface2, cursor: 'pointer',
-                    padding: '0 2px', fontSize: '11px', lineHeight: 1,
-                  }}
-                  title={`Remove ${label}`}
-                >&#10005;</button>
-                {editingPortKey === `mlgin_${key}` ? (
-                  <input
-                    autoFocus
-                    value={editingPortLabel}
-                    onChange={e => setEditingPortLabel(e.target.value)}
-                    onMouseDown={e => e.stopPropagation()}
-                    onBlur={() => {
-                      if (editingPortLabel.trim() && activeGroupId) renameMarchLoopInput(activeGroupId, key, editingPortLabel.trim());
-                      setEditingPortKey(null);
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                      if (e.key === 'Escape') setEditingPortKey(null);
-                    }}
-                    style={{ width: '60px', fontSize: '10px', background: tc.base, border: '1px solid #88aacc', color: tc.text, borderRadius: '2px', padding: '0 3px', outline: 'none' }}
-                  />
-                ) : (
-                  <span
-                    style={{ fontSize: '11px', color: tc.text, cursor: 'text' }}
-                    title="Double-click to rename"
-                    onDoubleClick={() => { setEditingPortKey(`mlgin_${key}`); setEditingPortLabel(label); }}
-                  >{label}</span>
-                )}
-                <span style={{ fontSize: '10px', color: tc.surface2 }}>({type})</span>
-                <div
-                  ref={el => { if (el) registerSocket(node.id, 'out', key, el); }}
-                  onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
-                  style={{
-                    width: 10, height: 10, borderRadius: '50%',
-                    background: hoveredOutput === key ? '#ffffff' : color,
-                    border: `2px solid ${color}`,
-                    cursor: 'crosshair',
-                    flexShrink: 0,
-                    transition: 'background 0.1s',
-                  }}
-                />
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Add Input form */}
-        <div style={{ borderTop: `1px solid ${tc.surface0}88`, padding: '6px 8px' }}>
-          {addingMarchInput ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <input
-                autoFocus
-                placeholder="name (e.g. speed)"
-                value={addingMarchInput.name}
-                onChange={e => setAddingMarchInput(prev => prev ? { ...prev, name: e.target.value } : prev)}
-                onKeyDown={e => {
-                  if (e.key === 'Escape') setAddingMarchInput(null);
-                  if (e.key === 'Enter' && addingMarchInput.name.trim() && activeGroupId) {
-                    addMarchLoopInput(activeGroupId, addingMarchInput.name.trim(), addingMarchInput.type, addingMarchInput.name.trim());
-                    setAddingMarchInput(null);
-                  }
-                }}
-                style={{ ...inputStyle_, width: '100%', boxSizing: 'border-box' }}
-              />
-              <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                {(['float', 'vec2', 'vec3', 'vec4'] as DataType[]).map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setAddingMarchInput(prev => prev ? { ...prev, type: t } : prev)}
-                    style={{
-                      background: addingMarchInput.type === t ? '#88aacc' : `${tc.surface0}88`,
-                      border: `1px solid ${addingMarchInput.type === t ? '#88aacc' : tc.surface2}`,
-                      borderRadius: 3, color: addingMarchInput.type === t ? tc.base : tc.subtext0,
-                      fontSize: '10px', padding: '2px 5px', cursor: 'pointer',
-                    }}
-                  >{t}</button>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: 4 }}>
-                <button
-                  onClick={() => {
-                    if (addingMarchInput.name.trim() && activeGroupId) {
-                      addMarchLoopInput(activeGroupId, addingMarchInput.name.trim(), addingMarchInput.type, addingMarchInput.name.trim());
-                      setAddingMarchInput(null);
-                    }
-                  }}
-                  style={{ flex: 1, background: '#88aacc22', border: '1px solid #88aacc', borderRadius: 3, color: '#88aacc', fontSize: '10px', padding: '3px 0', cursor: 'pointer' }}
-                >Add</button>
-                <button
-                  onClick={() => setAddingMarchInput(null)}
-                  style={{ flex: 1, background: 'none', border: `1px solid ${tc.surface1}`, borderRadius: 3, color: tc.surface2, fontSize: '10px', padding: '3px 0', cursor: 'pointer' }}
-                >Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setAddingMarchInput({ name: '', type: 'float' })}
-              style={{
-                width: '100%', background: 'none', border: `1px dashed ${tc.surface1}`,
-                borderRadius: 3, color: tc.surface2, fontSize: '10px', padding: '3px 0',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-              }}
-            >
-              <span>&#43;</span> Add Input
-            </button>
-          )}
-        </div>
+        <AddGroupPort dir="in" types={groupAddable(isAgents ? 'agentsGroup' : 'marchLoopGroup').inputs ?? []} defaultType={isAgents ? 'texture' : 'float'}
+          placeholder={isAgents ? 'Name (e.g. Trail, Strength)' : 'Name (e.g. Speed)'}
+          title={`Adds a socket on ${outside} (outside the group) and its matching output here`}
+          onAdd={(name, type) => { if (activeGroupId) addMarchLoopInput(activeGroupId, portKeyFor(name, Object.keys(activeGroupNode?.inputs ?? {})), type, name); }} />
       </div>
     );
   }
 
   if (node.type === 'marchLoopOutput') {
+    const posInp = node.inputs.pos;
+    const posColor = TYPE_COLORS[posInp?.type ?? 'vec3'] ?? tk.text.faint;
+    const isConnected = !!posInp?.connection;
     return (
       <div
         data-node-id={node.id}
-        style={specialCardStyle({ zIndex })}
+        style={specialCardStyle({ zIndex, width: 300 })}
         onMouseDown={() => { setZIndex(++zCounter); }}
         onContextMenu={e => { e.preventDefault(); e.stopPropagation(); }}
       >
-        {/* Header */}
         <div
-          style={{
-            borderBottom: `1px solid ${tk.border.subtle}`,
-            padding: '6px 10px',
-            fontWeight: 700,
-            fontSize: '11px',
-            color: '#88aacc',
-            cursor: 'grab',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
+          style={specialHeadStyle}
           onMouseDown={handleAnchorDragMouseDown}
           onClick={() => { setSelectedNodeId(isSelected ? null : node.id); selectNode(node.id, false); }}
         >
-          Group Output
-          <span style={{ fontSize: '10px' }}>&#9658;</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontWeight: 600, fontSize: 13, color: tk.text.primary }}>
+            <Icon name="export" size={14} />Group Output
+          </span>
         </div>
 
-        {/* pos input socket */}
+        {/* The point the scene is measured at: built in */}
         <div style={{ padding: '6px 0' }}>
-          {(() => {
-            const posInp = node.inputs.pos;
-            const color = tc.green;
-            const isConnected = !!posInp?.connection;
-            return (
-              <div
-                style={{ display: 'flex', alignItems: 'center', padding: '2px 10px 2px 8px', gap: 6, position: 'relative' }}
-                onMouseEnter={() => setHoveredInput('pos')}
-                onMouseLeave={() => setHoveredInput(null)}
-              >
-                <div
-                  ref={el => { if (el) registerSocket(node.id, 'in', 'pos', el); }}
-                  onMouseUp={() => onEndConnection(node.id, 'pos')}
-                  style={{
-                    width: 10, height: 10, borderRadius: '50%',
-                    background: isConnected ? color : (hoveredInput === 'pos' ? '#ffffff' : 'transparent'),
-                    border: `2px solid ${color}`,
-                    cursor: 'crosshair',
-                    flexShrink: 0,
-                    transition: 'background 0.1s',
-                  }}
-                />
-                <span style={{ fontSize: '11px', color: tc.subtext0 }}>Position</span>
-                <span style={{ fontSize: '10px', color: tc.surface2 }}>&#128274;</span>
-              </div>
-            );
-          })()}
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 24, padding: '0 14px 0 0', position: 'relative' }}
+            title={`Position: the (warped) point to measure the scene at. ${BUILT_IN_TIP}`}
+            onMouseEnter={() => setHoveredInput('pos')}
+            onMouseLeave={() => setHoveredInput(null)}
+          >
+            <div
+              ref={el => { if (el) registerSocket(node.id, 'in', 'pos', el); }}
+              onMouseUp={() => onEndConnection(node.id, 'pos')}
+              style={{
+                width: 12, height: 12, borderRadius: '50%', boxSizing: 'border-box', marginLeft: -6, flexShrink: 0, cursor: 'crosshair',
+                background: isConnected ? posColor : (hoveredInput === 'pos' ? posColor : tk.bg.panel), border: `2px solid ${posColor}`,
+                boxShadow: `0 0 0 2px ${tk.bg.panel}`,
+              }}
+            />
+            <GroupPortName label={posInp?.label ?? 'Position'} origin="built-in" socketSide="left" />
+          </div>
         </div>
 
-        {/* Standard outputs toggle section */}
+        {/* Which of the loop's built-in outputs show on the March Loop card */}
         {activeGroupId && (
-          <div style={{ borderTop: `1px solid ${tc.surface0}88`, padding: '6px 8px' }}>
-            <div style={{ fontSize: '10px', color: tc.surface2, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Outputs
+          <div style={{ borderTop: `1px solid ${tk.border.subtle}`, padding: '8px 14px 10px' }} onMouseDown={e => e.stopPropagation()}>
+            <div style={{ font: `600 11px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', color: tk.text.muted, marginBottom: 6 }}>
+              Outputs on the card
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {MARCH_STANDARD_OUTPUTS.map(({ key, type, label }) => {
                 const isHidden = mlGroupHiddenOutputs.includes(key);
-                const color = SOCKET_COLORS[type] ?? tc.subtext0;
                 return (
-                  <button
-                    key={key}
-                    title={isHidden ? `Show ${label} output` : `Hide ${label} output`}
-                    onClick={() => toggleMarchLoopOutputPort(activeGroupId, key)}
-                    style={{
-                      background: isHidden ? 'none' : `${color}22`,
-                      border: `1px solid ${isHidden ? tc.surface1 : color}`,
-                      borderRadius: 3,
-                      color: isHidden ? tc.surface2 : color,
-                      fontSize: '10px',
-                      padding: '2px 5px',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s',
-                    }}
-                  >
-                    {label}
-                  </button>
+                  <Chip key={key} mono={false} active={!isHidden} dot={isHidden ? undefined : TYPE_COLORS[type]}
+                    title={isHidden ? `Show ${label} on the March Loop card` : `Hide ${label} from the March Loop card`}
+                    onClick={() => toggleMarchLoopOutputPort(activeGroupId, key)}>{label}</Chip>
                 );
               })}
             </div>
@@ -1934,8 +1650,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     const defaultLabel = node.type === 'sceneGroup' ? 'Scene Group' : node.type === 'spaceWarpGroup' ? 'Space Warp Group' : node.type === 'marchLoopGroup' ? 'March Loop Group' : node.type === 'giLitMarchGroup' ? 'GI Lit March Group' : 'Group';
     const groupLabel = typeof node.params.label === 'string' ? node.params.label : defaultLabel;
     const nodeCount = subgraph?.nodes.length ?? 0;
-    const inputPorts = subgraph?.inputPorts ?? [];
-    const outputPorts = subgraph?.outputPorts ?? [];
     const groupIters = typeof node.params.iterations === 'number' ? node.params.iterations : 1;
     const hasInnerGroups = subgraph?.nodes.some(n => n.type === 'group') ?? false;
     const isSceneGroup = node.type === 'sceneGroup';
@@ -2219,232 +1933,89 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           </div>
         )}
 
-        {/* Port list */}
-        <div style={{ padding: '6px 14px', display: 'flex', gap: 12, justifyContent: 'space-between' }}>
-          {/* Inputs */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-            {/* MarchLoopGroup: render definition-based inputs */}
-            {isMarchLoopGroup && (() => {
-              // The definition's own sockets are fixed; anything else was added by the user and can be renamed.
-              const fixedInputs = def?.inputs ?? {};
-              return Object.entries(node.inputs).map(([key, input]) => {
-                const isExtraInput = !(key in fixedInputs) && !key.startsWith('ps_');
-                return (
-                  <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '4px', height: isTouchDevice ? 40 : 30 }}>
-                    <div
-                      ref={el => { registerSocket(node.id, 'in', key, el); }}
-                      onMouseUp={e => {
-                        e.stopPropagation();
-                        if (node.inputs[key]?.connection && !isConnectionDragging) {
-                          disconnectInput(node.id, key);
-                        } else {
-                          onEndConnection(node.id, key);
-                        }
-                      }}
-                      style={{
-                        width: 12, height: 12, borderRadius: '50%',
-                        background: node.inputs[key]?.connection
-                          ? (TYPE_COLORS[input.type] ?? '#888')
-                          : tk.bg.panel,
-                        boxShadow: node.inputs[key]?.connection ? `0 0 0 2px ${tk.bg.panel}` : undefined,
-                        border: `2px solid ${TYPE_COLORS[input.type] ?? '#888'}`,
-                        cursor: 'crosshair',
-                        position: 'relative', left: -22,
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                    {isExtraInput && editingPortKey === `mlgext_${key}` ? (
-                      <input
-                        autoFocus
-                        value={editingPortLabel}
-                        onChange={e => setEditingPortLabel(e.target.value)}
-                        onMouseDown={e => e.stopPropagation()}
-                        onBlur={() => {
-                          if (editingPortLabel.trim()) renameMarchLoopInput(node.id, key, editingPortLabel.trim());
-                          setEditingPortKey(null);
+        {/* Port list: built-in sockets (locked) and added ones (rename, ×) look the same on every
+            group (nodes/groupPorts.ts, components/NodeGraph/GroupPorts.tsx) */}
+        {(() => {
+          const ports = groupCardPorts(node, def);
+          const renamePort = (p: GroupPort) => (name: string) => {
+            if (p.store === 'extra') renameMarchLoopInput(node.id, p.key, name);
+            else renameGroupPort(node.id, p.key, p.dir, name);
+          };
+          const removePort = (p: GroupPort) => () => {
+            if (p.store === 'extra') removeMarchLoopInput(node.id, p.key);
+            else if (p.dir === 'in') removeGroupInputPort(node.id, p.key);
+            else removeGroupOutput(node.id, p.key);
+          };
+          const rowH = isTouchDevice ? 40 : 30;
+          return (
+            <div style={{ padding: '6px 14px', display: 'flex', gap: 12, justifyContent: 'space-between' }}>
+              {/* Inputs */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
+                {ports.inputs.map(port => {
+                  const wired = !!node.inputs[port.key]?.connection;
+                  const color = TYPE_COLORS[port.type] ?? '#888';
+                  return (
+                    <div key={port.key} data-group-port={`in:${port.key}`} style={{ display: 'flex', alignItems: 'center', gap: 4, height: rowH }}>
+                      <div
+                        ref={el => { registerSocket(node.id, 'in', port.key, el); }}
+                        onMouseEnter={() => onSocketHover?.({ nodeId: node.id, key: port.key, dir: 'in' })}
+                        onMouseLeave={() => onSocketHover?.(null)}
+                        onMouseUp={e => {
+                          e.stopPropagation();
+                          if (wired && !isConnectionDragging) disconnectInput(node.id, port.key);
+                          else onEndConnection(node.id, port.key);
                         }}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                          if (e.key === 'Escape') setEditingPortKey(null);
+                        style={{
+                          width: 12, height: 12, borderRadius: '50%', flexShrink: 0,
+                          background: wired ? color : tk.bg.panel,
+                          boxShadow: wired ? `0 0 0 2px ${tk.bg.panel}` : undefined,
+                          border: `2px solid ${color}`,
+                          cursor: 'crosshair',
+                          position: 'relative', left: -22,
+                          boxSizing: 'border-box',
                         }}
-                        style={{ width: 96, height: 24, fontSize: 12.5, background: tk.bg.panel, border: 0, boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, color: tk.text.primary, borderRadius: 6, padding: '0 6px', outline: 'none', marginLeft: -16 }}
                       />
-                    ) : (
-                      <span
-                        style={{ fontSize: 12.5, color: tk.text.secondary, marginLeft: -16, cursor: isExtraInput ? 'text' : 'default' }}
-                        title={isExtraInput ? 'Double-click to rename' : undefined}
-                        onDoubleClick={isExtraInput ? e => { e.stopPropagation(); setEditingPortKey(`mlgext_${key}`); setEditingPortLabel(input.label); } : undefined}
-                      >{input.label}</span>
-                    )}
-                  </div>
-                );
-              });
-            })()}
-            {inputPorts.map((port) => (
-              <div key={port.key} style={{ display: 'flex', alignItems: 'center', gap: '4px', height: isTouchDevice ? 40 : 30 }}>
-                {/* Socket dot */}
-                <div
-                  ref={el => { registerSocket(node.id, 'in', port.key, el); }}
-                  onMouseEnter={() => onSocketHover?.({ nodeId: node.id, key: port.key, dir: 'in' })}
-                  onMouseLeave={() => onSocketHover?.(null)}
-                  onMouseUp={e => {
-                    e.stopPropagation();
-                    if (node.inputs[port.key]?.connection && !isConnectionDragging) {
-                      disconnectInput(node.id, port.key);
-                    } else {
-                      onEndConnection(node.id, port.key);
-                    }
-                  }}
-                  style={{
-                    width: 12, height: 12, borderRadius: '50%',
-                    background: node.inputs[port.key]?.connection
-                      ? (TYPE_COLORS[port.type] ?? '#888')
-                      : tk.bg.panel,
-                    boxShadow: node.inputs[port.key]?.connection ? `0 0 0 2px ${tk.bg.panel}` : undefined,
-                    border: `2px solid ${TYPE_COLORS[port.type] ?? '#888'}`,
-                    cursor: 'crosshair',
-                    position: 'relative', left: -22,
-                    boxSizing: 'border-box',
-                  }}
-                />
-                {editingPortKey === port.key ? (
-                  <input
-                    autoFocus
-                    value={editingPortLabel}
-                    onMouseDown={e => e.stopPropagation()}
-                    onChange={e => setEditingPortLabel(e.target.value)}
-                    onBlur={() => {
-                      if (editingPortLabel.trim()) {
-                        renameGroupPort(node.id, port.key, 'in', editingPortLabel.trim());
-                      }
-                      setEditingPortKey(null);
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                      if (e.key === 'Escape') setEditingPortKey(null);
-                    }}
-                    style={{ width: 96, height: 24, fontSize: 12.5, background: tk.bg.panel, border: 0, boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, color: tk.text.primary, borderRadius: 6, padding: '0 6px', outline: 'none' }}
-                  />
-                ) : (
-                  <span
-                    style={{ fontSize: 12.5, color: tk.text.secondary, marginLeft: -16, cursor: 'text' }}
-                    title="Double-click to rename"
-                    onDoubleClick={e => { e.stopPropagation(); setEditingPortKey(port.key); setEditingPortLabel(port.label); }}
-                  >{port.label}</span>
-                )}
+                      <GroupPortName label={port.label} type={port.type} origin={port.origin} socketSide="left" style={{ marginLeft: -16 }}
+                        onRename={port.origin === 'added' ? renamePort(port) : undefined}
+                        onRemove={port.origin === 'added' ? removePort(port) : undefined} />
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
 
-          {/* Outputs */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 0, alignItems: 'flex-end', minWidth: 0 }}>
-            {/* MarchLoopGroup: always show the full definition output set + any dynamic
-                accumulator outputs (acc0, acc1…) from the stored node, skipping hidden ones */}
-            {isMarchLoopGroup && (() => {
-              const defOuts = def?.outputs ?? {};
-              // Dynamic acc* outputs not in the definition (added at compile time)
-              const dynOuts = Object.fromEntries(
-                Object.entries(node.outputs).filter(([k]) => k.startsWith('acc'))
-              );
-              const mergedOuts = { ...defOuts, ...dynOuts };
-              const hidden = (node.params.hiddenOutputs as string[] | undefined) ?? [];
-              return Object.entries(mergedOuts).filter(([key]) => !hidden.includes(key));
-            })().map(([key, output]) => (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px', height: isTouchDevice ? 40 : 30 }}>
-                <span style={{ fontSize: 12.5, color: tk.text.secondary }}>{output.label}</span>
-                <div
-                  data-socket="out"
-                  ref={el => { registerSocket(node.id, 'out', key, el); }}
-                  onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, key, e); }}
-                  onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, key); }}
-                  style={{
-                    width: isTouchDevice ? 20 : 12,
-                    height: isTouchDevice ? 20 : 12,
-                    borderRadius: '50%',
-                    background: TYPE_COLORS[output.type] ?? '#888',
-                    cursor: 'crosshair',
-                    position: 'relative',
-                    right: isTouchDevice ? -26 : -22,
-                    touchAction: 'manipulation',
-                    boxShadow: pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === key
-                      ? `0 0 0 3px ${TYPE_COLORS[output.type] ?? '#888'}, 0 0 10px ${TYPE_COLORS[output.type] ?? '#888'}`
-                      : `0 0 0 2px ${tk.bg.panel}`,
-                  }}
-                />
+              {/* Outputs */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0, alignItems: 'flex-end', minWidth: 0 }}>
+                {ports.outputs.map(port => {
+                  const color = TYPE_COLORS[port.type] ?? '#888';
+                  const pending = pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === port.key;
+                  return (
+                    <div key={port.key} data-group-port={`out:${port.key}`} style={{ display: 'flex', alignItems: 'center', gap: 6, height: rowH }}>
+                      <GroupPortName label={port.label} type={port.type} origin={port.origin} socketSide="right"
+                        onRename={port.origin === 'added' && port.store ? renamePort(port) : undefined}
+                        onRemove={port.origin === 'added' && port.store ? removePort(port) : undefined} />
+                      <div
+                        data-socket="out"
+                        ref={el => { registerSocket(node.id, 'out', port.key, el); }}
+                        onMouseEnter={() => onSocketHover?.({ nodeId: node.id, key: port.key, dir: 'out' })}
+                        onMouseLeave={() => onSocketHover?.(null)}
+                        onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, port.key, e); }}
+                        onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, port.key); }}
+                        style={{
+                          width: isTouchDevice ? 20 : 12, height: isTouchDevice ? 20 : 12, borderRadius: '50%', flexShrink: 0,
+                          background: color,
+                          cursor: 'crosshair',
+                          position: 'relative', right: isTouchDevice ? -26 : -22,
+                          touchAction: 'manipulation',
+                          boxShadow: pending ? `0 0 0 3px ${color}, 0 0 10px ${color}` : `0 0 0 2px ${tk.bg.panel}`,
+                        }}
+                      />
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-            {/* SceneGroup: always show the scene output socket */}
-            {isSceneGroup && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', height: isTouchDevice ? 40 : 30 }}>
-                <span style={{ fontSize: 12.5, color: tk.text.secondary }}>Scene</span>
-                <div
-                  data-socket="out"
-                  ref={el => { registerSocket(node.id, 'out', 'scene', el); }}
-                  onMouseDown={e => onStartConnection(node.id, 'scene', e)}
-                  onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, 'scene'); }}
-                  style={{
-                    width: isTouchDevice ? 20 : 12,
-                    height: isTouchDevice ? 20 : 12,
-                    borderRadius: '50%',
-                    background: TYPE_COLORS['scene3d'] ?? '#cc88aa',
-                    cursor: 'crosshair',
-                    position: 'relative',
-                    right: isTouchDevice ? -26 : -22,
-                    touchAction: 'manipulation',
-                    boxShadow: pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === 'scene'
-                      ? `0 0 0 3px ${TYPE_COLORS['scene3d'] ?? '#cc88aa'}, 0 0 10px ${TYPE_COLORS['scene3d'] ?? '#cc88aa'}`
-                      : undefined,
-                  }}
-                />
-              </div>
-            )}
-            {outputPorts.map(port => (
-              <div key={port.key} style={{ display: 'flex', alignItems: 'center', gap: '4px', height: isTouchDevice ? 40 : 30 }}>
-                {editingPortKey === ('out_' + port.key) ? (
-                  <input
-                    autoFocus
-                    value={editingPortLabel}
-                    onMouseDown={e => e.stopPropagation()}
-                    onChange={e => setEditingPortLabel(e.target.value)}
-                    onBlur={() => {
-                      if (editingPortLabel.trim()) {
-                        renameGroupPort(node.id, port.key, 'out', editingPortLabel.trim());
-                      }
-                      setEditingPortKey(null);
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                      if (e.key === 'Escape') setEditingPortKey(null);
-                    }}
-                    style={{ width: 96, height: 24, fontSize: 12.5, background: tk.bg.panel, border: 0, boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, color: tk.text.primary, borderRadius: 6, padding: '0 6px', outline: 'none' }}
-                  />
-                ) : (
-                  <span
-                    style={{ fontSize: 12.5, color: tk.text.secondary, cursor: 'text' }}
-                    title="Double-click to rename"
-                    onDoubleClick={e => { e.stopPropagation(); setEditingPortKey('out_' + port.key); setEditingPortLabel(port.label); }}
-                  >{port.label}</span>
-                )}
-                <div
-                  data-socket="out"
-                  ref={el => { registerSocket(node.id, 'out', port.key, el); }}
-                  onMouseEnter={() => onSocketHover?.({ nodeId: node.id, key: port.key, dir: 'out' })}
-                  onMouseLeave={() => onSocketHover?.(null)}
-                  onMouseDown={e => onStartConnection(node.id, port.key, e)}
-                  onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, port.key); }}
-                  style={{
-                    width: isTouchDevice ? 20 : 12, height: isTouchDevice ? 20 : 12, borderRadius: '50%',
-                    background: TYPE_COLORS[port.type] ?? '#888',
-                    cursor: 'crosshair',
-                    position: 'relative', right: isTouchDevice ? -26 : -22,
-                    touchAction: 'manipulation',
-                    boxShadow: pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === port.key ? `0 0 0 3px ${TYPE_COLORS[port.type] ?? '#888'}, 0 0 10px ${TYPE_COLORS[port.type] ?? '#888'}` : undefined,
-                  }}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
+            </div>
+          );
+        })()}
 
         {/* A scene the 3D Scene Builder built: its recipe (docs/scene-builder.md, "The Recipe chip") */}
         {isSceneGroup && !collapsed && !!node.params.sceneBuilder && <RecipeChip node={node} touch={isTouchDevice} />}
@@ -3275,7 +2846,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           e.stopPropagation();
           // A rules group (docs/agent-rules.md) opens its rules editor; Open as nodes enters it.
           if (node.type === 'agentsGroup' && node.params.ruleMode === 'rules' && !savingMode) openAgentRulesEditor(node.id);
-          else if ((node.type === 'sceneGroup' || node.type === 'agentsGroup') && !savingMode) onEnterGroup?.(node.id);
+          else if ((node.type === 'sceneGroup' || node.type === 'agentsGroup' || node.type === 'shaderTexture') && !savingMode) onEnterGroup?.(node.id);
           else setCollapsed(v => !v);
         }}
         style={{
@@ -3564,6 +3135,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       {node.type === 'pass' && <NodeInlineViz node={node} />}
       {/* The Agents family (docs/agents-plan.md): the group's numbers and Open rule, a Trail's texture */}
       {(node.type === 'agentsGroup' || node.type === 'trailField') && <NodeInlineViz node={node} onEnterGroup={onEnterGroup} />}
+      {node.type === 'shaderTexture' && <ShaderTextureCardBody node={node} onEnterGroup={onEnterGroup} />}
       {node.type === 'agentOutput' && (
         <div style={{ padding: '8px 14px', fontSize: 11.5, lineHeight: 1.45, color: tk.text.faint, borderBottom: `1px solid ${tk.border.subtle}` }}>
           What this walker becomes at the end of the step. Anything left unwired stays as it was, so an empty rule stands still.
@@ -3808,7 +3380,12 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                     }
                   }}
                 >
-                  {slotName}
+                  {node.type === 'agentsGroup' ? (
+                    // An Agents group's sockets: built in (Emit…) or added from Agent Inputs (GroupPorts.tsx)
+                    <GroupPortName label={slotName} type={input.type} origin={key in def.inputs ? 'built-in' : 'added'} socketSide="left"
+                      onRename={name => renameMarchLoopInput(node.id, key, name)}
+                      onRemove={() => removeMarchLoopInput(node.id, key)} />
+                  ) : slotName}
                   {isField && (
                     // A badge, not a button: it sits inside the label, whose click disconnects, so it swallows its own clicks.
                     <span

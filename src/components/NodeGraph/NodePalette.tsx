@@ -11,6 +11,7 @@ import { NodeBrowser } from './NodeBrowser';
 import { nodeDragProps, nodeDragStyle, type DropPayload } from './nodeDrop';
 import { ImportGlslModal } from './ImportGlslModal';
 import { FolderableList } from './FolderableList';
+import { groupByTime, lastWorkedOn, sortByRecent } from '../../store/graphRecency';
 import type { CustomFnPreset } from '../../types/customFnPreset';
 import { FnThumbnail } from '../code/FnThumbnail';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -504,6 +505,11 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               scopeKey="graphs"
               color={tabColor('graphs')}
               items={savedNames.map(name => ({ id: name, label: name }))}
+              // Recent work first (Today, This week, Earlier, by the newest save of any version), folders after.
+              groupLoose={items => groupByTime(items, i => lastWorkedOn(i.id), i => i.label)}
+              sortItems={items => sortByRecent(items, i => lastWorkedOn(i.id), i => i.label)}
+              foldersLast
+              maxHeight="min(60vh, 560px)"
               renderItem={(item) => (
                 <ItemRow label={item.label} icon="graphs" color={tabColor('graphs')} tag={savedGraphHasPlay(item.id) ? 'Play' : undefined}
                   selected={currentGraph?.name === item.id}

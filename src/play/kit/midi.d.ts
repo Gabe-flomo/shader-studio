@@ -12,6 +12,11 @@ export function kmRange(a: number, b: number): [number, number] | null;
 export function kmInRange(range: readonly [number, number] | null | undefined, note: number): boolean;
 export function kmRangeRead(seq: ArrayLike<number>, vel: ArrayLike<number>, held: { has(n: number): boolean }, range: readonly [number, number] | null | undefined): { note: number; vel: number; gate: boolean };
 export function kmNoteUnit(range: readonly [number, number] | null | undefined, note: number): number;
+export function kmPitchClass(n: number): number;
+export function kmClassName(n: number): string;
+export function kmClassMask(range: readonly [number, number] | null | undefined): number;
+export function kmWrapRead(seq: ArrayLike<number>, vel: ArrayLike<number>, held: { has(n: number): boolean }, range: readonly [number, number] | null | undefined): { note: number; vel: number; gate: boolean };
+export function kmClassUnit(range: readonly [number, number] | null | undefined, note: number): number;
 
 export const KM_LAYOUTS: Record<'push' | 'launchpad' | 'launchpadClassic', PadGridLayoutGeo>;
 export function kmLayoutOf(pg: PlayPadGrid): PadGridLayoutGeo;

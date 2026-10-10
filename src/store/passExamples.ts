@@ -11,6 +11,7 @@ import { ctl, n } from './graphBuilder';
 import { buildPassExamplesMore, PASS_EXAMPLE_INDEX_MORE } from './passExamplesMore';
 import { buildPassExamplesP7, PASS_EXAMPLE_INDEX_P7 } from './passExamplesP7';
 import { buildDisplacementExamples, DISPLACEMENT_EXAMPLE_INDEX } from './displacementExamples';
+import { buildPassExamplesTexture, PASS_EXAMPLE_INDEX_TEXTURE } from './passExamplesTexture';
 
 export const PASS_EXAMPLE_INDEX: Record<string, { label: string; description: string; play: true }> = {
   passEdgeGlow: {
@@ -21,6 +22,8 @@ export const PASS_EXAMPLE_INDEX: Record<string, { label: string; description: st
   ...PASS_EXAMPLE_INDEX_MORE,
   // Passes 7 to 9 (passExamplesP7.ts): a repeated jump-flood Pass, Edges straight from a picture, a blur group.
   ...PASS_EXAMPLE_INDEX_P7,
+  // Passes 10 (passExamplesTexture.ts): a Shader Texture as the slime's food.
+  ...PASS_EXAMPLE_INDEX_TEXTURE,
   // The Displacement Map node (displacementExamples.ts).
   ...DISPLACEMENT_EXAMPLE_INDEX,
 };
@@ -120,6 +123,6 @@ export function buildPassExamples(): Record<string, ExampleGraph> {
   };
 
   Object.assign(graphs, buildPassExamplesMore(), buildDisplacementExamples());
-  Object.assign(graphs, buildPassExamplesP7());
+  Object.assign(graphs, buildPassExamplesP7(), buildPassExamplesTexture());
   return graphs;
 }

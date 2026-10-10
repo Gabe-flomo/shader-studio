@@ -23,12 +23,12 @@ import { inputBus, paramChannelKey, type InputSource, type InputWriter } from '.
 import { midiEngine, type MidiEvent } from './midiEngine';
 import { keyboardClaimed } from './keyboardClaim';
 import { padGrid } from './padGrid';
-import { kmNoteUnit } from '../play/kit/midi.js';
+import { kmClassUnit, kmNoteUnit } from '../play/kit/midi.js';
 import { audioEngine } from './audioEngine';
 import { oscClient, oscNumber, type OscMessage } from './oscClient';
-import { anchorDistance, beatAt, firesWhileHeld, newFireState, newTriggerState, noiseAt, proximityCondition, signalKey, stepFire, stepTrigger, triggerKey, type FireState, type TriggerState } from '../play/triggers';
+import { anchorDistance, beatAt, firesWhileHeld, newFireState, newTriggerState, noiseAt, noteKeys, proximityCondition, signalKey, stepFire, stepTrigger, triggerKey, type FireState, type TriggerState } from '../play/triggers';
 import { incAdvance, incFold, incGlide, incGliding, incNew, incRange, incRepeat, incReset, incThreshold, type IncState } from '../play/kit/increment.js';
-import { sgLevelDeps, sgPulseLinks, sgReactions, sgSignalPlan, type SgSignalPlanEntry, sgCondNew, sgCondRewind, sgCondStep, sgLinkClear, sgLinkDue, sgLinkFire, sgLinkNew, sgLinkPlan, sgLogic, type SgLinkPlan, type SgLinkState, type SgLoop, sgParseValueRef, sgShapeNew, sgShapeRewind, sgShapeStep, sgShaped, sgSignalOrder, type SgShapeState, sgRunActions, sgScreenPoint, sgSwapNew, sgSwapStep, type SgCondState, type SgSwapState } from '../play/kit/signals.js';
+import { sgLevelDeps, sgPulseLinks, sgReactions, sgSignalPlan, type SgSignalPlanEntry, sgCondNew, sgCondRewind, sgCondStep, sgLinkClear, sgLinkDue, sgLinkFire, sgLinkNew, sgLinkPlan, sgLogic, type SgLinkPlan, type SgLinkState, type SgLoop, sgBuiltIn, sgBuiltInUnit, sgParseValueRef, sgShapeNew, sgShapeRewind, sgShapeStep, sgShaped, sgSignalOrder, type SgShapeState, sgRunActions, sgScreenPoint, sgSwapNew, sgSwapStep, type SgCondState, type SgSwapState } from '../play/kit/signals.js';
 import { readFinishValue } from '../types/playFinish';
 import { AUDIO_FX_TARGET_PREFIX, readAudioFxValue } from '../types/playAudioFx';
 import { signalNames } from '../play/signalNames';
@@ -39,7 +39,7 @@ import { geoAnchor } from '../play/kit/geometry.js';
 import { fnEval } from '../play/kit/fn.js';
 import type { TriggerSpec } from '../types/play';
 import type { LfoShape, PlayAction, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource, SensorRead } from '../types/play';
-import { isLookAction, sensorKey } from '../types/play';
+import { BUILT_IN_SIGNAL_MAX, isLookAction, sensorKey } from '../types/play';
 import { fnLookAct, fnLookNew, fnLookReset, fnLookStep, fnLookValue } from '../play/kit/finish.js';
 import { parseGrainsTarget } from '../types/playAudioEngine';
 import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parsePropTarget, parseReaderTarget, spreadPropId } from '../types/play';
@@ -281,7 +281,7 @@ class PlayEngine implements InputSource {
   }
 
   private noteKeys(channel: number, note: number): string[] {
-    return [`note:0:*`, `note:0:${note}`, `note:${channel}:*`, `note:${channel}:${note}`];
+    return noteKeys(channel, note);
   }
 
   private onOsc = (m: OscMessage) => {
@@ -829,6 +829,8 @@ class PlayEngine implements InputSource {
         return m ? this.readMapping(m) : null;
       }
       case 'mouse': return r.axis === 'x' ? this.mouseX : this.mouseY;
+      // The built-in signals, raw: how many there are, how many are on, the share on.
+      case 'builtin': return sgBuiltIn(r.read, this.signalTotal(), this.sigActive);
       case 'distance': return this.anchorGap(r.a, r.b);
       case 'reading': return this.readSource({ kind: 'sensor', layerId: r.layerId, read: r.read as SensorRead, otherId: '' });
       // A source's reading this frame (an old mapping's too, by its id).
@@ -892,6 +894,20 @@ class PlayEngine implements InputSource {
     else v = this.readValue(c.what);
     // Nothing to read (a hand out of view): the last capture stays.
     if (v !== null) this.sigPayload.set(s.id, v);
+  }
+
+  /** How many signals were on at the last frame's count (the built-in Signals: active). */
+  private sigActive = 0;
+
+  /** How many signals the setup has (the built-in Signals: count). */
+  private signalTotal(): number {
+    return this.record.signals?.length ?? 0;
+  }
+
+  /** The built-in signals now: count, active and the share on (the Inputs board's readouts). */
+  builtInSignals(): { count: number; active: number; share: number } {
+    const count = this.signalTotal(), active = Math.min(this.sigActive, count);
+    return { count, active, share: sgBuiltIn('share', count, active) };
   }
 
   /** Is a signal true now: its own definition (and timing), or sent this frame. */
@@ -979,6 +995,10 @@ class PlayEngine implements InputSource {
       }
       else if (!level && was) { this.release(key); sgLinkFire(this.links, this.linkPlan, s.id, this.time, 'fall', true); }
     }
+    // The built-in Signals: active, before the one-frame levels go: a sent signal counts in its frame.
+    let active = 0;
+    for (const s of this.record.signals ?? []) if (lvl(s.id)) active++;
+    this.sigActive = active;
     // One-frame levels of sent signals last until the next frame's combinations have read them.
     sent.clear();
     this.linkSent.clear();
@@ -1302,6 +1322,12 @@ class PlayEngine implements InputSource {
       case 'midi': {
         // Locked knobs: whichever locked control moved last, on any channel setting.
         if (source.signal === 'cc' && source.locks?.length) { const v = midiEngine.readLocked(source.locks); return v === null ? null : v / 127; }
+        // Octaves wrapped: only the range's pitch classes count (all with no range), and a note reads its class.
+        if (source.wrap && (source.signal === 'note' || source.signal === 'velocity' || source.signal === 'gate')) {
+          const r = midiEngine.readWrapped(source.channel, source.range);
+          if (r.note < 0) return null;
+          return source.signal === 'note' ? kmClassUnit(source.range, r.note) : source.signal === 'velocity' ? r.vel / 127 : r.gate ? 1 : 0;
+        }
         // A note range: only notes inside it count, and a note reads 0..1 across it.
         if (source.range && (source.signal === 'note' || source.signal === 'velocity' || source.signal === 'gate')) {
           const r = midiEngine.readRange(source.channel, source.range);
@@ -1321,6 +1347,8 @@ class PlayEngine implements InputSource {
       }
       case 'pad':
         return padGrid.read(source.read, source.col, source.row);
+      case 'signals':
+        return sgBuiltInUnit(source.read, this.signalTotal(), this.sigActive, source.max ?? BUILT_IN_SIGNAL_MAX);
       case 'mouse':
         return source.axis === 'x' ? this.mouseX : source.axis === 'y' ? this.mouseY : this.mouseDown;
       case 'key':
@@ -1993,6 +2021,8 @@ class PlayEngine implements InputSource {
     if (this.pairMoving || this.incMoving) return true;
     if (this.record.mappings.some(m => m.enabled && m.increment?.on === 'repeat')) return true;
     return this.record.mappings.some(m => m.enabled && sourceAnimates(m.source, (this.triggerStates.get(m.id)?.stage ?? 'idle') === 'idle'))
+      // The record's own sources too (a note's envelope fading out after "Map 12 notes"), their state kept by source id.
+      || (this.record.sources ?? []).some(s => s.enabled && sourceAnimates(s.source, (this.triggerStates.get(s.id)?.stage ?? 'idle') === 'idle'))
       || (this.record.pairMappings ?? []).some(m => m.enabled && m.source.kind === 'value' && sourceAnimates(m.source.source, (this.triggerStates.get(m.id)?.stage ?? 'idle') === 'idle'));
   }
 

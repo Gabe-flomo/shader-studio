@@ -23,6 +23,7 @@ import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { typesCompatible } from '../../lib/typesCompatible';
 import { HIDDEN_TYPES } from './nodeCategoryMeta';
+import { useHiddenHere } from './useAddScope';
 import { categoryColor } from '../../theme/categories';
 import { useThemeMode } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
@@ -45,12 +46,12 @@ function labelFor(n: GraphNode): string {
 interface SubGroup { name: string | null; types: string[] }
 interface CategoryGroup { name: string; subgroups: SubGroup[] }
 
-function buildCategories(userNodesVersion: number): CategoryGroup[] {
+function buildCategories(userNodesVersion: number, hidden: ReadonlySet<string>): CategoryGroup[] {
   void userNodesVersion; // the argument is what invalidates the memo below
   const catMap = new Map<string, Map<string | null, string[]>>();
   for (const def of getOfferedDefinitions()) {
     const type = def.type;
-    if (HIDDEN_TYPES.has(type)) continue;
+    if (hidden.has(type)) continue;
     if (!catMap.has(def.category)) catMap.set(def.category, new Map());
     const subMap = catMap.get(def.category)!;
     const sub = def.subcategory ?? null;
@@ -116,7 +117,9 @@ function pairingsFor(newDef: NodeDefinition, existing: GraphNode): Pairing[] {
 export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
   const tc = useCtp();
   const userNodesVersion = useUserNodesVersion();
-  const CATEGORIES = useMemo(() => buildCategories(userNodesVersion), [userNodesVersion]);
+  // Scene Pos / Scene Output… only inside the group they belong to (nodes/addScope.ts).
+  const hidden = useHiddenHere(HIDDEN_TYPES);
+  const CATEGORIES = useMemo(() => buildCategories(userNodesVersion, hidden), [userNodesVersion, hidden]);
   const mode = useThemeMode();
   const pairHeadStyle: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: tc.overlay0, letterSpacing: '0.08em', margin: '4px 0 6px' };
   const promotedStyle: React.CSSProperties = { font: `500 11px ${fontFamily.ui}`, color: '#a8720a', background: 'rgba(217,154,30,0.14)', borderRadius: 6, padding: '2px 7px' };
@@ -297,7 +300,7 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {/* A stage picked on the flow strip's chip (docs/structure-hints.md): its nodes first. */}
       {stageBrowse && (() => {
-        const list = typesForStage(stageBrowse.flow, stageBrowse.stage, HIDDEN_TYPES);
+        const list = typesForStage(stageBrowse.flow, stageBrowse.stage, hidden);
         return (
           <div data-stage-browse={stageBrowse.stage} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '6px 0 8px', marginBottom: 6, borderBottom: `1px solid ${tc.surface0}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', minHeight: 36 }}>

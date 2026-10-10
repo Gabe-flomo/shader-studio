@@ -28,6 +28,8 @@ export interface BarAssistCtx {
   nodes: GraphNode[];
   /** How often a wire from (type, out) to (type, in) is made: 0…1 (the usage table). */
   rank?: (fromType: string, outKey: string, toType: string, inKey: string) => number;
+  /** Node types `create` doesn't offer here (e.g. Scene Pos outside a Scene Group: nodes/addScope.ts). */
+  hidden?: ReadonlySet<string>;
 }
 
 const slug = (s: string) => s.toLowerCase().replace(/[()]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -83,10 +85,10 @@ function heads(nodes: GraphNode[]): Completion[] {
 }
 
 /** Everything `create` can make, grouped: shapes first, then nodes by category. */
-export function creatable(): Completion[] {
+export function creatable(hidden?: ReadonlySet<string>): Completion[] {
   const out: Completion[] = [];
   for (const s of WORD_SHAPES.filter(x => x.node2d)) out.push({ label: s.words[0], insert: s.words[0], kind: 'shape', detail: getNodeDefinition(s.node2d!.type)?.label ?? s.id, words: s.words.slice(1), group: 'Shapes' });
-  const defs = getOfferedDefinitions().filter(d => !d.deprecated && d.type !== 'output').sort((a, b) => a.category.localeCompare(b.category) || a.label.localeCompare(b.label));
+  const defs = getOfferedDefinitions().filter(d => !d.deprecated && d.type !== 'output' && !hidden?.has(d.type)).sort((a, b) => a.category.localeCompare(b.category) || a.label.localeCompare(b.label));
   for (const d of defs) out.push({ label: slug(d.label), insert: slug(d.label), kind: 'value', detail: d.label, words: [d.type, ...(d.aliases ?? [])], group: d.category });
   return out;
 }
@@ -152,7 +154,7 @@ export function barAssist(text: string, caret: number, ctx: BarAssistCtx): Assis
   };
 
   if (verb === 'create' && words.length === 1) {
-    items = word ? rankCompletions(word, creatable(), 40) : creatable();
+    items = word ? rankCompletions(word, creatable(ctx.hidden), 40) : creatable(ctx.hidden);
     signature = verbSig('create');
   } else if (verb === 'connect' || verb === 'reconnect') {
     const arrow = /(→|->)\s*$/.test(clause) || words.includes('→') || words.includes('->');
@@ -190,13 +192,13 @@ export function barAssist(text: string, caret: number, ctx: BarAssistCtx): Assis
     if (!word) items = nodeRefs().slice(0, 12);
     signature = verbSig(verb);
   } else if (verb === 'switch' && words.length >= 2 && (words[2] === 'to' || /\bto\s*$/.test(clause))) {
-    items = rankCompletions(word, creatable().filter(c => c.group !== 'Shapes'), 12);
+    items = rankCompletions(word, creatable(ctx.hidden).filter(c => c.group !== 'Shapes'), 12);
     signature = verbSig('switch');
   } else if (verb === 'switch' && words.length === 1) {
     items = rankCompletions(word, nodeRefs(), 12);
     signature = verbSig('switch');
   } else if (verb === 'insert') {
-    if (words.length === 1) items = rankCompletions(word, creatable().filter(c => c.group !== 'Shapes'), 16);
+    if (words.length === 1) items = rankCompletions(word, creatable(ctx.hidden).filter(c => c.group !== 'Shapes'), 16);
     else if (['between', 'after', 'before', 'and'].includes(words[words.length - 1])) items = rankCompletions(word, nodeRefs(), 12);
     else if (words.length === 2 && !word) items = ['between', 'after', 'before'].map(w => ({ label: w, insert: `${w} `, kind: 'param' as const, detail: `insert … ${w} …` }));
     signature = verbSig('insert');

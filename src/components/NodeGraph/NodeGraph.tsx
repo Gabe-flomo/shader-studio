@@ -38,7 +38,8 @@ import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { ruleIsEmpty } from '../../store/agentSetup';
-import { Segmented } from '../ui/Choice';
+import { AddGroupPort, GroupPortName } from './GroupPorts';
+import { groupAddable } from '../../nodes/groupPorts';
 import { Icon } from '../ui/Icon';
 import { TYPE_COLORS } from './typeColors';
 import { SelectionBar } from '../shell/SelectionBar';
@@ -59,6 +60,8 @@ import { BUILDERS } from '../../builders/registry';
 import { openBuilder } from '../../builders/open';
 import { builderSceneOf, describeIntoBuilder, editSceneInBuilder } from '../../sceneBuilder/actions';
 import { useLibraryPrefs } from '../../structure/libraryPrefs';
+import { ShaderTextureInsidePanel } from '../shaderTexture/ShaderTextureCardBody';
+import { turnIntoShaderTexture } from '../shaderTexture/actions';
 const OptimizeModal = lazyWithSuspense<PropsOf<typeof OptimizeModalT>>(() => import('./OptimizeModal').then(m => ({ default: m.OptimizeModal })));
 const BakeDialogHost = lazyWithSuspense<Record<string, never>>(() => import('../bake/BakeDialog').then(m => ({ default: m.BakeDialogHost })));
 const SceneBuilderModal = lazyWithSuspense<Record<string, never>>(() => import('../sceneBuilder/SceneBuilderModal').then(m => ({ default: m.SceneBuilderModal })));
@@ -146,10 +149,6 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   const terminalDot: React.CSSProperties = {
     position: 'absolute', top: '50%', width: 12, height: 12, marginTop: -6, boxSizing: 'border-box', borderRadius: '50%', cursor: 'crosshair',
   };
-  const terminalInput: React.CSSProperties = {
-    width: 100, height: 24, padding: '0 6px', border: 0, outline: 'none', borderRadius: 6,
-    background: tk.bg.panel, boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, color: tk.text.primary, font: `500 12.5px ${fontFamily.ui}`,
-  };
   const [canvasWidth, setCanvasWidth]   = useState(window.innerWidth);
   const [canvasHeight, setCanvasHeight] = useState(window.innerHeight);
   const compactToolbar = canvasWidth < 700;
@@ -177,6 +176,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   const setGroupOutput          = useNodeGraphStore(s => s.setGroupOutput);
   const addGroupOutput          = useNodeGraphStore(s => s.addGroupOutput);
   const removeGroupOutput       = useNodeGraphStore(s => s.removeGroupOutput);
+  const removeGroupInputPort    = useNodeGraphStore(s => s.removeGroupInputPort);
   const renameGroupPort         = useNodeGraphStore(s => s.renameGroupPort);
   const addGroupInput           = useNodeGraphStore(s => s.addGroupInput);
   const rerouteGroupInput       = useNodeGraphStore(s => s.rerouteGroupInput);
@@ -283,26 +283,28 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   // An Agents group has its own anchored Agent Inputs / Agent Output cards (ports are added on Agent
   // Inputs), so it never shows the generic Group inputs / Group output terminals.
   const isInsideAgentsGroup = activeGroupNode?.type === 'agentsGroup';
+  // A Shader Texture (docs/texture-builder.md) ends in its own Texture Output: no Group terminals either.
+  const isInsideShaderTexture = activeGroupNode?.type === 'shaderTexture';
 
   // Position the Group Output terminal to the right of all subgraph nodes
   const groupOutputTerminalPos = React.useMemo(() => {
-    if (!activeGroupId || isInsideAgentsGroup) return null;
+    if (!activeGroupId || isInsideAgentsGroup || isInsideShaderTexture) return null;
     if (displayNodes.length === 0) return { x: 500, y: 160 }; // default for empty group
     const maxX = Math.max(...displayNodes.map(n => n.position.x)) + NODE_WIDTH + 80;
     const ys   = displayNodes.map(n => n.position.y);
     const midY = (Math.min(...ys) + Math.max(...ys)) / 2 - 40;
     return { x: maxX, y: midY };
-  }, [activeGroupId, displayNodes, isInsideAgentsGroup]);
+  }, [activeGroupId, displayNodes, isInsideAgentsGroup, isInsideShaderTexture]);
 
   // Position the Group Input terminal to the left of all subgraph nodes
   const groupInputTerminalPos = React.useMemo(() => {
-    if (!activeGroupId || isInsideAgentsGroup) return null;
+    if (!activeGroupId || isInsideAgentsGroup || isInsideShaderTexture) return null;
     if (displayNodes.length === 0) return { x: 80, y: 160 }; // default for empty group
     const minX = Math.min(...displayNodes.map(n => n.position.x)) - 220;
     const ys   = displayNodes.map(n => n.position.y);
     const midY = (Math.min(...ys) + Math.max(...ys)) / 2 - 40;
     return { x: minX, y: midY };
-  }, [activeGroupId, displayNodes, isInsideAgentsGroup]);
+  }, [activeGroupId, displayNodes, isInsideAgentsGroup, isInsideShaderTexture]);
 
   // Compile problems mapped onto the cards that caused them (shown on the card, not only in the error panel)
   const glslErrors      = useNodeGraphStore(s => s.glslErrors);
@@ -315,9 +317,6 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string | null; paramKey?: string } | null>(null);
   const [emptyRuleDismissed, setEmptyRuleDismissed] = useState<Set<string>>(() => new Set());
-  const [addingGroupInput, setAddingGroupInput] = useState<{ name: string; type: import('../../types/nodeGraph').DataType } | null>(null);
-  const [editingOutputPortKey, setEditingOutputPortKey] = useState<string | null>(null);
-  const [editingOutputPortLabel, setEditingOutputPortLabel] = useState('');
 
   // ── Feature 1: Option-click socket → filtered palette ──────────────────────
   const [pendingSocket, setPendingSocket] = useState<{
@@ -1534,7 +1533,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
               const outerSg = outer?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
               gn = outerSg?.nodes.find(n => n.id === gid);
             }
-            const defaultLbl = gn?.type === 'sceneGroup' ? 'Scene Group' : gn?.type === 'spaceWarpGroup' ? 'Space Warp Group' : gn?.type === 'marchLoopGroup' ? 'March Loop Group' : gn?.type === 'giLitMarchGroup' ? 'GI Lit March Group' : gn?.type === 'agentsGroup' ? 'Agents' : 'Group';
+            const defaultLbl = gn?.type === 'sceneGroup' ? 'Scene Group' : gn?.type === 'spaceWarpGroup' ? 'Space Warp Group' : gn?.type === 'marchLoopGroup' ? 'March Loop Group' : gn?.type === 'giLitMarchGroup' ? 'GI Lit March Group' : gn?.type === 'agentsGroup' ? 'Agents' : gn?.type === 'shaderTexture' ? 'Shader Texture' : 'Group';
             const lbl = typeof gn?.params?.label === 'string' ? gn.params.label : defaultLbl;
             const isLast = depth === activeGroupPath.length - 1;
             return (
@@ -1559,6 +1558,11 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             </span>
           )}
         </div>
+      )}
+
+      {/* Inside a Shader Texture: its live texture and a way out (docs/texture-builder.md). */}
+      {isInsideShaderTexture && activeGroupPath.length === 1 && activeGroupNode && (
+        <ShaderTextureInsidePanel node={activeGroupNode} top={redesignToolbar ? 108 : 56} />
       )}
 
       {/* An empty Agents rule: the walkers stand still. Suggest a starting rule (one click adds and wires it). */}
@@ -1819,6 +1823,14 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     }}>
                       Duplicate Selection
                     </button>
+                    {activeGroupPath.length === 0 && (
+                      <button style={ctxBtnStyle} title="Put these nodes inside a new Shader Texture: their picture is drawn into a texture, wired where their result went" onClick={() => {
+                        setContextMenu(null);
+                        turnIntoShaderTexture(ids);
+                      }}>
+                        Turn into a Shader Texture
+                      </button>
+                    )}
                     <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
                   </>
                 )}
@@ -1940,6 +1952,14 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     }}>
                       Enter Group
                     </button>
+                    {activeGroupPath.length === 0 && (
+                      <button style={ctxBtnStyle} title="Make this group a Shader Texture: its inside is drawn into a texture" onClick={() => {
+                        setContextMenu(null);
+                        turnIntoShaderTexture([clickedNode.id]);
+                      }}>
+                        Turn into a Shader Texture
+                      </button>
+                    )}
                     <button style={ctxBtnStyle} onClick={() => {
                       const id = clickedNode.id;
                       setContextMenu(null);
@@ -2111,7 +2131,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           />
         ))}
 
-        {/* Group Output terminal — shown when inside a regular group view (not sceneGroup) */}
+        {/* Group Output terminal — shown when inside a regular group view (not sceneGroup).
+            Its rows and "+ Add an output" are the shared group-socket look (GroupPorts.tsx). */}
         {activeGroupId && activeSubgraph && groupOutputTerminalPos && !isInsideSceneGroup && (
           <div
             data-node-id="__group_output__"
@@ -2151,50 +2172,24 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       boxShadow: isDraggingCompatible ? `0 0 0 3px ${alpha(color, 0.35)}` : port.fromNodeId ? `0 0 0 2px ${tk.bg.panel}` : undefined,
                     }}
                   />
-                  {editingOutputPortKey === port.key ? (
-                    <input
-                      autoFocus
-                      aria-label="Output name"
-                      value={editingOutputPortLabel}
-                      onMouseDown={e => e.stopPropagation()}
-                      onChange={e => setEditingOutputPortLabel(e.target.value)}
-                      onBlur={() => {
-                        if (editingOutputPortLabel.trim() && activeGroupId) {
-                          renameGroupPort(activeGroupId, port.key, 'out', editingOutputPortLabel.trim());
-                        }
-                        setEditingOutputPortKey(null);
-                      }}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                        if (e.key === 'Escape') setEditingOutputPortKey(null);
-                      }}
-                      style={terminalInput}
-                    />
-                  ) : (
-                    <span
-                      style={{ color: tk.text.secondary, cursor: 'text', flexShrink: 0 }}
-                      title="Double-click to rename"
-                      onDoubleClick={() => { setEditingOutputPortKey(port.key); setEditingOutputPortLabel(port.label); }}
-                    >{port.label}</span>
-                  )}
-                  <span style={{
-                    flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11.5,
-                    color: port.fromNodeId ? tk.text.muted : tk.text.faint, fontStyle: port.fromNodeId ? 'normal' : 'italic',
-                  }}>
-                    {port.fromNodeId ? `← ${srcLabel}` : srcLabel}
-                  </span>
-                  <IconButton icon="close" label="Remove this output" size="sm" tone="danger" tooltip={false}
-                    onMouseDown={e => e.stopPropagation()}
-                    onClick={() => activeGroupId && removeGroupOutput(activeGroupId, port.key)} />
+                  <GroupPortName label={port.label} type={port.type} origin="added" socketSide="left" style={{ flex: 1 }}
+                    detail={(
+                      <span style={{
+                        flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11.5, textAlign: 'right',
+                        color: port.fromNodeId ? tk.text.muted : tk.text.faint, fontStyle: port.fromNodeId ? 'normal' : 'italic',
+                      }}>
+                        {port.fromNodeId ? `← ${srcLabel}` : srcLabel}
+                      </span>
+                    )}
+                    onRename={name => { if (activeGroupId) renameGroupPort(activeGroupId, port.key, 'out', name); }}
+                    onRemove={() => { if (activeGroupId) removeGroupOutput(activeGroupId, port.key); }} />
                 </div>
               );
             })}
 
-            <div style={{ padding: '4px 8px 8px' }}>
-              <Button size="sm" variant="ghost" icon="plus" style={{ width: '100%', height: 28 }}
-                onMouseDown={e => e.stopPropagation()}
-                onClick={() => activeGroupId && addGroupOutput(activeGroupId)}>Add output</Button>
-            </div>
+            <AddGroupPort dir="out" types={groupAddable('group').outputs ?? []} bordered={(activeSubgraph.outputPorts ?? []).length > 0}
+              title="Adds a socket on the group's card; wire a node's output into it here"
+              onAdd={(name, type) => { if (activeGroupId) addGroupOutput(activeGroupId, type, name); }} />
           </div>
         )}
 
@@ -2214,9 +2209,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
               const isDragging = !!dragConnection;
               const color = TYPE_COLORS[port.type] ?? tk.text.faint;
               return (
-                <div key={port.key} style={{ ...terminalRow, padding: '0 16px 0 14px' }}>
-                  <span style={{ flex: 1, color: tk.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{port.label}</span>
-                  <span style={{ font: `500 11px ${fontFamily.mono}`, color: tk.text.faint, flexShrink: 0 }}>{port.type}</span>
+                <div key={port.key} style={{ ...terminalRow, padding: '0 16px 0 8px', justifyContent: 'flex-end' }}>
+                  <GroupPortName label={port.label} type={port.type} origin="added" socketSide="right"
+                    onRename={name => { if (activeGroupId) renameGroupPort(activeGroupId, port.key, 'in', name); }}
+                    onRemove={() => { if (activeGroupId) removeGroupInputPort(activeGroupId, port.key); }} />
                   {/* Output socket — drag FROM this to an inner node input */}
                   <div
                     ref={el => { registerSocket('__group_input__', 'out', port.key, el); }}
@@ -2230,44 +2226,9 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
               );
             })}
 
-            {/* Add input form / button */}
-            <div style={{ borderTop: `1px solid ${tk.border.subtle}`, padding: 8 }}>
-              {addingGroupInput ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} onMouseDown={e => e.stopPropagation()}>
-                  <input
-                    autoFocus
-                    aria-label="Input name"
-                    placeholder="Input name"
-                    value={addingGroupInput.name}
-                    onChange={e => setAddingGroupInput(prev => prev ? { ...prev, name: e.target.value } : null)}
-                    onKeyDown={e => e.stopPropagation()}
-                    style={{ ...terminalInput, width: '100%', height: 30, boxShadow: 'none', background: tk.bg.field }}
-                  />
-                  <Segmented
-                    fill
-                    size="sm"
-                    ariaLabel="Input type"
-                    value={addingGroupInput.type}
-                    // texture: a Pass's (or an image's) texture wired in from outside, for Sample / Edges / Blur inside (passes phase 7).
-                    options={(['float', 'vec2', 'vec3', 'vec4', 'texture'] as const).map(t => ({ value: t, label: t }))}
-                    onChange={t => setAddingGroupInput(prev => prev ? { ...prev, type: t } : null)}
-                  />
-                  <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                    <Button size="sm" variant="ghost" style={{ height: 28 }} onClick={() => setAddingGroupInput(null)}>Cancel</Button>
-                    <Button size="sm" variant="primary" style={{ height: 28 }} disabled={!addingGroupInput.name.trim()}
-                      onClick={() => {
-                        if (addingGroupInput.name.trim() && activeGroupId) {
-                          addGroupInput(activeGroupId, addingGroupInput.type, addingGroupInput.name.trim());
-                        }
-                        setAddingGroupInput(null);
-                      }}>Add</Button>
-                  </div>
-                </div>
-              ) : (
-                <Button size="sm" variant="ghost" icon="plus" style={{ width: '100%', height: 28 }}
-                  onClick={() => setAddingGroupInput({ name: '', type: 'float' })}>Add input</Button>
-              )}
-            </div>
+            <AddGroupPort dir="in" types={groupAddable('group').inputs ?? []} bordered={(activeSubgraph.inputPorts ?? []).length > 0}
+              title="Adds a socket on the group's card; wire it into a node here"
+              onAdd={(name, type) => { if (activeGroupId) addGroupInput(activeGroupId, type, name); }} />
           </div>
         )}
         </div>

@@ -43,11 +43,12 @@ export function newTriggerState(seen = 0): TriggerState {
   return { seen, value: 0, stage: 'idle', peak: 1, index: -1 };
 }
 
-/** Where presses and gates are counted: one string per distinct trigger. Notes register under the exact and the any-note key. */
+/** Where presses and gates are counted: one string per distinct trigger. Notes register under the exact, the pitch-class and the any-note key (noteKeys). */
 export function triggerKey(t: TriggerSpec): string {
   switch (t.on) {
     case 'key': return `key:${t.code}`;
-    case 'note': return `note:${t.channel}:${t.note < 0 ? '*' : t.note}`;
+    // Octaves wrapped: the pitch class's key (`c0` C … `c11` B), pressed by that class in any octave.
+    case 'note': return `note:${t.channel}:${t.note < 0 ? '*' : t.wrap ? `c${t.note % 12}` : t.note}`;
     case 'mouse': return 'mouse';
     case 'osc': return `osc:${t.address}`;
     case 'beat': return `beat:${t.bpm}:${t.beats}`;
@@ -61,6 +62,16 @@ export function triggerKey(t: TriggerSpec): string {
     case 'value': return sgValueKey(t);
     case 'signal': return signalKey(t.signal);
   }
+}
+
+/**
+ * Every key a note presses (and releases): any note, the exact note and its
+ * pitch class (`c0` C … `c11` B, for triggers that wrap octaves), on all
+ * channels and on its own. The web runtime builds the same list.
+ */
+export function noteKeys(channel: number, note: number): string[] {
+  const pc = `c${((note % 12) + 12) % 12}`;
+  return ['note:0:*', `note:0:${note}`, `note:0:${pc}`, `note:${channel}:*`, `note:${channel}:${note}`, `note:${channel}:${pc}`];
 }
 
 // ── Firing modes (once, held, every N, on release) ──────────────────────────

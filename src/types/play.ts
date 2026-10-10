@@ -97,7 +97,12 @@ export type TriggerOn =
   /** A live-audio band crossing `threshold` (0..1) upward: a kick, a snare, a loud moment. */
   | { on: 'audio'; band: LiveAudioBand; threshold: number }
   | { on: 'key'; code: string }
-  | { on: 'note'; channel: number; note: number }
+  /**
+   * A MIDI note on a channel (0 all). `note` -1 is any note. `wrap`: octaves
+   * wrap, so `note` is a pitch class (0 C … 11 B) and that class in any octave
+   * fires it (C2, C3 and C4 all fire "C").
+   */
+  | { on: 'note'; channel: number; note: number; wrap?: boolean }
   | { on: 'mouse' }
   | { on: 'osc'; address: string }
   /** A pulse on the setup's clock: every `beats` beats at `bpm`. `unit` 'hz' shows it as a rate (bpm / 60 / beats per second); the timing is the same. */
@@ -580,8 +585,10 @@ export type PlaySource =
    * A MIDI stream: `channel` 0 = all, `cc` only for the `cc` signal. Outputs 0..1 (bend −1..1).
    * `locks` (cc): only these exact controls drive it, whichever moved last (types/playMidi.ts).
    * `range` (note, velocity, gate): only notes lo..hi count, and a note reads 0..1 across it.
+   * `wrap` (note, velocity, gate): octaves wrap. Only the range's pitch classes count, in any
+   * octave (all twelve with no range), and a note reads its class 0..1 (kit/midi.js kmWrapRead).
    */
-  | { kind: 'midi'; signal: MidiSignal; channel: number; cc?: number; locks?: MidiLock[]; range?: [number, number] }
+  | { kind: 'midi'; signal: MidiSignal; channel: number; cc?: number; locks?: MidiLock[]; range?: [number, number]; wrap?: boolean }
   /** The pad grid (record.padGrid): the last pad's column, row, velocity or pressure, any pad held, or one cell's level. */
   | { kind: 'pad'; read: PadGridRead; col: number; row: number }
   /** Pointer position over the window (0..1, `y` up) or 1 while a button is held. Active on the Play page. */
@@ -655,7 +662,25 @@ export type PlaySource =
    * (a hold), `back` lets the control go back to its own slider, `value` goes
    * to `rest`. The mapping's smoothing is the glide (0 = jump).
    */
-  | { kind: 'captured'; signal: string; release: CaptureRelease; rest?: number };
+  | { kind: 'captured'; signal: string; release: CaptureRelease; rest?: number }
+  /**
+   * A built-in signal (always there, never stored as a signal, can't be
+   * deleted): `count` the setup's signals, `active` how many are on now,
+   * `share` active / count. As a source the counts read over `max` (full at
+   * that many, default BUILT_IN_SIGNAL_MAX); conditions read them raw as
+   * `sigs:count`, `sigs:active`, `sigs:share` (kit/signals.js sgBuiltIn).
+   */
+  | { kind: 'signals'; read: BuiltInSignalRead; max?: number };
+
+export type BuiltInSignalRead = 'count' | 'active' | 'share';
+/** A count source is full (1) at this many signals unless it says otherwise. */
+export const BUILT_IN_SIGNAL_MAX = 8;
+/** The built-in signals, in the order the Inputs board and the pickers list them. */
+export const BUILT_IN_SIGNALS: ReadonlyArray<{ read: BuiltInSignalRead; ref: string; label: string; hint: string }> = [
+  { read: 'count', ref: 'sigs:count', label: 'Signals: count', hint: 'How many signals the setup has; it changes as signals are added or removed' },
+  { read: 'active', ref: 'sigs:active', label: 'Signals: active', hint: 'How many signals are on right now' },
+  { read: 'share', ref: 'sigs:share', label: 'Signals: active share', hint: 'Active ÷ count, 0 to 1' },
+];
 
 export type CaptureRelease = 'stay' | 'back' | 'value';
 
@@ -1558,7 +1583,12 @@ function parseTriggerOn(raw: unknown): TriggerOn | null {
   const t = raw as Record<string, unknown>;
   switch (t.on) {
     case 'key': { const code = str(t.code); return code ? { on: 'key', code } : null; }
-    case 'note': return { on: 'note', channel: Math.max(0, Math.min(16, Math.round(num(t.channel, 0)))), note: Math.max(-1, Math.min(127, Math.round(num(t.note, -1)))) };
+    case 'note': {
+      const channel = Math.max(0, Math.min(16, Math.round(num(t.channel, 0))));
+      const note = Math.max(-1, Math.min(127, Math.round(num(t.note, -1))));
+      // Wrapped: the note is its pitch class (any note stays any note).
+      return t.wrap === true ? { on: 'note', channel, note: note < 0 ? -1 : note % 12, wrap: true } : { on: 'note', channel, note };
+    }
     case 'mouse': return { on: 'mouse' };
     case 'osc': { const address = str(t.address); return address && address.startsWith('/') ? { on: 'osc', address } : null; }
     case 'beat': { const b: TriggerOn = { on: 'beat', bpm: Math.max(1, num(t.bpm, 120)), beats: Math.max(0.0625, num(t.beats, 1)) }; if (t.unit === 'hz') b.unit = 'hz'; return b; }
@@ -1806,6 +1836,14 @@ function parseSource(raw: unknown): PlaySource | null {
       if (locks) out.locks = locks;
       const range = signal === 'note' || signal === 'velocity' || signal === 'gate' ? parseNoteRange(s.range) : undefined;
       if (range) out.range = range;
+      if (s.wrap === true && (signal === 'note' || signal === 'velocity' || signal === 'gate')) out.wrap = true;
+      return out;
+    }
+    case 'signals': {
+      const read = s.read === 'count' || s.read === 'active' || s.read === 'share' ? s.read : null;
+      if (!read) return null;
+      const out: PlaySource = { kind: 'signals', read };
+      if (read !== 'share' && typeof s.max === 'number' && Number.isFinite(s.max)) out.max = Math.max(1, Math.min(999, Math.round(s.max)));
       return out;
     }
     case 'pad': {

@@ -9,14 +9,21 @@ export interface PlanPass {
   afterAgents?: boolean;
   beforeParticles?: boolean;
   repeat?: number;
+  /** A Shader Texture's fixed square size in pixels. */
+  size?: number;
+  /** A Shader Texture's Update ('change' / 'once'); absent: every frame. */
+  update?: 'change' | 'once';
+  /** Slugs of the passes it reads this frame. */
+  reads?: readonly string[];
 }
-export function ppSize(w: number, h: number, scale: number): [number, number];
+export function ppSize(w: number, h: number, scale: number, size?: number): [number, number];
 export function ppDrawn<T extends Pick<PlanPass, 'live'>>(passes: readonly T[]): T[];
 export function ppRepeat(p: Pick<PlanPass, 'repeat'>): number;
 export function ppPixel(w: number, h: number): [number, number];
-export function ppTargetKey(p: Pick<PlanPass, 'scale' | 'format' | 'filter' | 'wrap' | 'previous'>, w: number, h: number): string;
+export function ppTargetKey(p: Pick<PlanPass, 'scale' | 'format' | 'filter' | 'wrap' | 'previous' | 'size'>, w: number, h: number): string;
 export function ppStaged<T extends Pick<PlanPass, 'afterAgents' | 'beforeParticles'>>(drawn: readonly T[], stage?: 'pre' | 'post', part?: 'particles' | 'rest'): T[];
 export function ppSplitsForParticles(drawn: readonly Pick<PlanPass, 'beforeParticles'>[]): boolean;
 export function ppPrevBound<T extends Pick<PlanPass, 'afterAgents' | 'beforeParticles'>>(drawn: readonly T[], stage?: 'pre' | 'post', part?: 'particles' | 'rest'): T[];
 export interface PlanStep { do: 'passes' | 'particles' | 'agents'; stage?: 'pre' | 'post'; part?: 'particles' | 'rest'; last?: boolean }
 export function ppFrameSteps(o: { passes: boolean; split: boolean; particles: boolean; agents: boolean }): PlanStep[];
+export function ppKeeps(p: Pick<PlanPass, 'update' | 'previous' | 'repeat' | 'reads'>, drawnSig: string | undefined, sig: string): boolean;

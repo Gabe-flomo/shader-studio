@@ -16,6 +16,7 @@ import { affinity, rankTables } from '../../suggestions';
 import { inTargetStage, STAGE_SEARCH_POINTS } from '../../structure/boost';
 import { currentStageTarget } from '../../structure/hintsStore';
 import { CATEGORY_COLORS, HIDDEN_TYPES } from './nodeCategoryMeta';
+import { useHiddenHere } from './useAddScope';
 import { ctp } from '../../theme/palette';
 import { spawnPoint } from './spawnPoint';
 
@@ -28,11 +29,11 @@ interface SearchEntry {
 
 // Built-ins never change; user-published nodes do, so the full list is
 // rebuilt whenever the user-node registry version bumps (see useMemo below).
-function buildEntries(userNodesVersion: number): SearchEntry[] {
+function buildEntries(userNodesVersion: number, hidden: ReadonlySet<string>): SearchEntry[] {
   void userNodesVersion; // the argument is what invalidates the memo below
   return getOfferedDefinitions()
     // Deprecated nodes stay loadable from saved graphs but aren't offered for new ones.
-    .filter(def => !HIDDEN_TYPES.has(def.type))
+    .filter(def => !hidden.has(def.type))
     .map(def => ({
       type: def.type,
       def,
@@ -113,7 +114,9 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
   const listRef   = useRef<HTMLUListElement>(null);
 
   const userNodesVersion = useUserNodesVersion();
-  const ALL_ENTRIES = useMemo(() => buildEntries(userNodesVersion), [userNodesVersion]);
+  // Scene Pos / Scene Output… only inside the group they belong to (nodes/addScope.ts).
+  const hidden = useHiddenHere(HIDDEN_TYPES);
+  const ALL_ENTRIES = useMemo(() => buildEntries(userNodesVersion, hidden), [userNodesVersion, hidden]);
 
   // What usually goes with the node you came from (or the selected one): a nudge within a match tier.
   const boost = useMemo(() => {
