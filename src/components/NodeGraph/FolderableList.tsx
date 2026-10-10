@@ -24,11 +24,19 @@ interface Props<T extends FolderableItem> {
   items: T[];
   renderItem: (item: T, selected: boolean) => React.ReactNode;
   emptyHint?: React.ReactNode;
+  /** Items outside folders, split under headings (Saved Graphs: Today, This week, Earlier). Without it they are one run. */
+  groupLoose?: (items: T[]) => { id: string; label: string; items: T[] }[];
+  /** The order inside each folder (and of the loose items when they aren't grouped). */
+  sortItems?: (items: T[]) => T[];
+  /** Folders as their own section under the loose items, headed "Folders" (with groupLoose: recent work first). */
+  foldersLast?: boolean;
+  /** The list (not its toolbar) scrolls inside itself past this height. */
+  maxHeight?: number | string;
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function FolderableList<T extends FolderableItem>({
-  scopeKey, color, items, renderItem, emptyHint,
+  scopeKey, color, items, renderItem, emptyHint, groupLoose, sortItems, foldersLast = false, maxHeight,
 }: Props<T>) {
   const tk = useTokens();
   const [folders,     setFolders]    = useState<FolderEntry[]>(() => loadFolders(scopeKey));
@@ -134,66 +142,19 @@ export function FolderableList<T extends FolderableItem>({
     );
   }
 
-  const itemsInFolder = (fid: string) => items.filter(i => membership[i.id] === fid);
-  const ungrouped     = items.filter(i => !membership[i.id]);
+  const order         = (list: T[]) => (sortItems ? sortItems(list) : list);
+  const itemsInFolder = (fid: string) => order(items.filter(i => membership[i.id] === fid));
+  // An item whose folder is gone counts as loose (as the Load menu always showed it).
+  const ungrouped     = items.filter(i => !membership[i.id] || !folders.some(f => f.id === membership[i.id]));
+  const looseGroups   = groupLoose ? groupLoose(ungrouped) : null;
+  const sectionHead = (label: string, key: string) => (
+    <div key={key} style={{ padding: '6px 6px 2px', color: tk.text.faint, font: `700 10px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</div>
+  );
   const isEmpty       = items.length === 0 && folders.length === 0;
-  const numSel        = selectedIds.size;
-
-  return (
-    // flexShrink 0: when two lists share a scrolling column (Node Builder: saved
-    // graphs above My nodes) a long list must push the next section down, not
-    // get squashed to its minHeight and spill over it.
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, flexShrink: 0, minHeight: 40, font: `12.5px ${fontFamily.ui}` }}
-      onClick={e => { if (e.target === e.currentTarget) setSelected(new Set()); }}
-    >
-
-      {/* Toolbar: + New Folder button + selection action */}
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 2 }}>
-        <Button size="sm" variant="ghost" icon="plus" title="Create a new folder" onClick={e => { e.stopPropagation(); startCreating(); }}
-          style={{ height: 26, padding: '0 8px', color: tk.text.muted }}>Folder</Button>
-        {numSel > 0 && (
-          <Button
-            size="sm"
-            title="Move selected items to a folder"
-            style={{ height: 26, padding: '0 8px' }}
-            onClick={e => {
-              e.stopPropagation();
-              const rect = e.currentTarget.getBoundingClientRect();
-              setMoveMenu({ x: rect.left, y: rect.bottom + 4, ids: [...selectedIds] });
-            }}
-          >Move {numSel} to…</Button>
-        )}
-      </div>
-
-      {/* Inline new-folder input */}
-      {creatingFolder && (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '0 8px' }}
-          onClick={e => e.stopPropagation()}
-        >
-          <Icon name="folder" size={15} style={{ color: tk.text.faint }} />
-          <input
-            autoFocus
-            value={newFolderVal}
-            onChange={e => setNewFolderVal(e.target.value)}
-            placeholder="Folder name…"
-            onKeyDown={e => {
-              if (e.key === 'Enter') confirmNewFolder();
-              if (e.key === 'Escape') { setCreating(false); }
-              e.stopPropagation();
-            }}
-            onBlur={confirmNewFolder}
-            style={{
-              flex: 1, minWidth: 0, height: 28, background: tk.bg.panel, border: 0, borderRadius: radius.md - 1,
-              boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, color: tk.text.primary, padding: '0 8px',
-              font: `12.5px ${fontFamily.ui}`, outline: 'none',
-            }}
-          />
-        </div>
-      )}
-
-      {isEmpty && !creatingFolder && emptyHint}
-
-      {/* Folders */}
+  // Folders, each opening to its items.
+  const foldersView = (
+    <>
+      {foldersLast && looseGroups && folders.length > 0 && sectionHead('Folders', 'folders-head')}
       {folders.map(folder => {
         const children  = itemsInFolder(folder.id);
         const isTarget  = dropTarget === folder.id;
@@ -255,28 +216,99 @@ export function FolderableList<T extends FolderableItem>({
           </div>
         );
       })}
+    </>
+  );
+  // Items outside folders: one run, or under headings (groupLoose).
+  const looseView = ungrouped.length > 0 && (
+    <div
+      onDragOver={e => { e.preventDefault(); setDropTarget('ungrouped'); }}
+      onDragLeave={() => setDropTarget(null)}
+      onDrop={e => {
+        e.preventDefault(); setDropTarget(null);
+        const ids = parseDrop(e);
+        if (ids) { removeItemsFromFolders(scopeKey, ids); setSelected(new Set()); refresh(); }
+      }}
+      style={{
+        display: 'flex', flexDirection: 'column', gap: 2,
+        paddingTop: folders.length > 0 && !foldersLast ? 6 : 0,
+        paddingBottom: folders.length > 0 && foldersLast ? 6 : 0,
+        borderTop: folders.length > 0 && !foldersLast ? `1px solid ${dropTarget === 'ungrouped' ? alpha(color, 0.5) : tk.border.subtle}` : 'none',
+        borderBottom: folders.length > 0 && foldersLast ? `1px solid ${dropTarget === 'ungrouped' ? alpha(color, 0.5) : tk.border.subtle}` : 'none',
+        transition: 'border-color 0.1s',
+      }}
+    >
+      {looseGroups
+        ? looseGroups.map(g => (
+          <React.Fragment key={g.id}>
+            {sectionHead(g.label, `head-${g.id}`)}
+            {g.items.map(item => renderWrapped(item))}
+          </React.Fragment>
+        ))
+        : order(ungrouped).map(item => renderWrapped(item))}
+    </div>
+  );
+  const numSel        = selectedIds.size;
 
-      {/* Ungrouped items */}
-      {ungrouped.length > 0 && (
-        <div
-          onDragOver={e => { e.preventDefault(); setDropTarget('ungrouped'); }}
-          onDragLeave={() => setDropTarget(null)}
-          onDrop={e => {
-            e.preventDefault(); setDropTarget(null);
-            const ids = parseDrop(e);
-            if (ids) { removeItemsFromFolders(scopeKey, ids); setSelected(new Set()); refresh(); }
-          }}
-          style={{
-            display: 'flex', flexDirection: 'column', gap: 2,
-            paddingTop: folders.length > 0 ? 6 : 0,
-            borderTop: folders.length > 0 ? `1px solid ${dropTarget === 'ungrouped' ? alpha(color, 0.5) : tk.border.subtle}` : 'none',
-            transition: 'border-color 0.1s',
-          }}
+  return (
+    // flexShrink 0: when two lists share a scrolling column (Node Builder: saved
+    // graphs above My nodes) a long list must push the next section down, not
+    // get squashed to its minHeight and spill over it.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, flexShrink: 0, minHeight: 40, font: `12.5px ${fontFamily.ui}` }}
+      onClick={e => { if (e.target === e.currentTarget) setSelected(new Set()); }}
+    >
+
+      {/* Toolbar: + New Folder button + selection action */}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 2 }}>
+        <Button size="sm" variant="ghost" icon="plus" title="Create a new folder" onClick={e => { e.stopPropagation(); startCreating(); }}
+          style={{ height: 26, padding: '0 8px', color: tk.text.muted }}>Folder</Button>
+        {numSel > 0 && (
+          <Button
+            size="sm"
+            title="Move selected items to a folder"
+            style={{ height: 26, padding: '0 8px' }}
+            onClick={e => {
+              e.stopPropagation();
+              const rect = e.currentTarget.getBoundingClientRect();
+              setMoveMenu({ x: rect.left, y: rect.bottom + 4, ids: [...selectedIds] });
+            }}
+          >Move {numSel} to…</Button>
+        )}
+      </div>
+
+      {/* Inline new-folder input */}
+      {creatingFolder && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '0 8px' }}
+          onClick={e => e.stopPropagation()}
         >
-          {ungrouped.map(item => renderWrapped(item))}
+          <Icon name="folder" size={15} style={{ color: tk.text.faint }} />
+          <input
+            autoFocus
+            value={newFolderVal}
+            onChange={e => setNewFolderVal(e.target.value)}
+            placeholder="Folder name…"
+            onKeyDown={e => {
+              if (e.key === 'Enter') confirmNewFolder();
+              if (e.key === 'Escape') { setCreating(false); }
+              e.stopPropagation();
+            }}
+            onBlur={confirmNewFolder}
+            style={{
+              flex: 1, minWidth: 0, height: 28, background: tk.bg.panel, border: 0, borderRadius: radius.md - 1,
+              boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, color: tk.text.primary, padding: '0 8px',
+              font: `12.5px ${fontFamily.ui}`, outline: 'none',
+            }}
+          />
         </div>
       )}
 
+      {isEmpty && !creatingFolder && emptyHint}
+
+      {/* The list: scrolls inside itself past maxHeight. With foldersLast the loose items come first. */}
+      <div data-folderable-scroll={maxHeight != null ? '' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 4, ...(maxHeight != null ? { maxHeight, overflowY: 'auto', overscrollBehavior: 'contain' } : {}) }}
+        onClick={e => { if (e.target === e.currentTarget) setSelected(new Set()); }}
+      >
+        {foldersLast ? <>{looseView}{foldersView}</> : <>{foldersView}{looseView}</>}
+      </div>
 
       {/* Folder right-click menu */}
       {folderMenu && (

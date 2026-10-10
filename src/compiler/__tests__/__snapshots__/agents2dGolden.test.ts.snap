@@ -686,6 +686,20 @@ exports[`2D agents and pass graphs compile as they did before 3D > passReactionD
 }
 `;
 
+exports[`2D agents and pass graphs compile as they did before 3D > passShaderTextureFood 1`] = `
+{
+  "agents": "1c8d7105dd944c03dcc4769dbfbd:18709",
+  "errors": null,
+  "fragmentShader": "0635c829a42766132988f0db666b:3135",
+  "paramBindings": "07f289eede2200187cbe886b9c78:1584",
+  "paramUniforms": "1b8605a15800fc03331811742ef1:1057",
+  "passes": "1a0ef293219b1e176d7767eba6b5:3765",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": "0ca8556ab8249b1b99f3202a463c:18748",
+}
+`;
+
 exports[`2D agents and pass graphs compile as they did before 3D > passSlimeEdges 1`] = `
 {
   "agents": "0c645aef125f5711f4ce8e146b68:25583",

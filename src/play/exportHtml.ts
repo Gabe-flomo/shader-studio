@@ -147,6 +147,11 @@ export interface WebPass {
   beforeParticles?: boolean;
   /** Repeat (phase 7): drawn this many times a frame, each reading the one before. Only when above 1. */
   repeat?: number;
+  /** A Shader Texture's fixed square size in pixels (docs/texture-builder.md). Only when set. */
+  size?: number;
+  /** A Shader Texture's Update, with the passes it reads (kit/passPlan.js ppKeeps). Only when not every frame. */
+  update?: 'change' | 'once';
+  reads?: string[];
   /** u_pass_<slug> and u_passprev_<slug> (each with its `_px`); iter, a repeated pass's step uniform. */
   u: { tex: string; prev: string; iter?: string };
 }

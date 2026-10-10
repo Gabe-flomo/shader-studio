@@ -34,7 +34,7 @@ export const FIELD_TYPES: ReadonlySet<string> = new Set(['float', 'vec2', 'vec3'
 /** Sinks and markers: nothing of their own to show, so no eye and no area. */
 export const SINK_TYPES: ReadonlySet<string> = new Set([
   'output', 'vec4Output', 'agentOutput', 'agentStepOut', 'trailStepOut', 'agentProbeOut', 'agentGridOut',
-  'marchLoopOutput', 'passOutput', 'groupOutput', 'groupInput',
+  'marchLoopOutput', 'passOutput', 'groupOutput', 'groupInput', 'shaderTextureOutput',
 ]);
 
 /** The card has no eye button (the node is a plain source the card already shows). Kept from before. */
@@ -48,6 +48,8 @@ export const SELF_VIZ_TYPES: ReadonlySet<string> = new Set([
   'textureInput', 'videoInput', 'baked', 'midiInput', 'data', 'timeCube', 'audioInput', 'scope', 'lfo',
   // A Pass's card shows its texture live (lib/passRunner.ts draws it): the texture the next nodes read
   'pass',
+  // So does a Shader Texture's (docs/texture-builder.md)
+  'shaderTexture',
 ]);
 
 /** Always-on readouts (AgentPreviewPanels.tsx). */

@@ -585,6 +585,8 @@ export function sgParseValueRef(ref) {
   // A source's reading this frame, 0 to 1 (a source of the record, or an old mapping by its id).
   if (ref.startsWith('src:')) return ref.length > 4 ? { kind: 'source', id: ref.slice(4) } : null;
   if (ref === 'mouse:x' || ref === 'mouse:y') return { kind: 'mouse', axis: ref.slice(6) };
+  // The built-in signals: how many signals the setup has, how many are on now, and the share on (sgBuiltIn).
+  if (ref === 'sigs:count' || ref === 'sigs:active' || ref === 'sigs:share') return { kind: 'builtin', read: ref.slice(5) };
   if (ref.startsWith('dist:')) {
     const i = ref.indexOf('|');
     if (i < 6 || i === ref.length - 1) return null;
@@ -616,6 +618,27 @@ export function sgParseValueRef(ref) {
     return { kind: 'prop', layerId: ref.slice(0, i), key: ref.slice(i + 2) };
   }
   return null;
+}
+
+/**
+ * A built-in signal's value: `count` the signals in the setup, `active` how
+ * many are on now, `share` active / count (0 with none). Raw numbers, as a
+ * condition reads them.
+ */
+export function sgBuiltIn(read, count, active) {
+  if (read === 'count') return count;
+  if (read === 'active') return active;
+  return count > 0 ? active / count : 0;
+}
+
+/**
+ * A built-in signal as a mapping source, 0..1: the share as it is, a count
+ * over `max` (the source's own "full at", at least 1), clamped.
+ */
+export function sgBuiltInUnit(read, count, active, max) {
+  if (read === 'share') return count > 0 ? active / count : 0;
+  const v = read === 'count' ? count : active;
+  return Math.max(0, Math.min(1, v / Math.max(1, max || 1)));
 }
 
 /** A point on the picture from `pt:<x>,<y>`, or null. */

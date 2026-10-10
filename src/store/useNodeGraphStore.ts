@@ -20,6 +20,7 @@ import { askChoice } from '../components/ui/dialogStore';
 import { buildAgentsSubgraph, buildMarchRig, buildMarchSubgraph, buildSceneSubgraph, buildVolumetricRig, graphOutput, instantiateNode, twoDNodesBefore3D } from '../nodes/scene3dDefaults';
 import { agentEyeNodes, hasAgentsNode } from '../compiler/agentGraph';
 import { hasPassNode } from '../compiler/passGraph';
+import { buildShaderTextureSubgraph } from '../nodes/shaderTextureStarters';
 import { hasHiddenBlur } from '../compiler/blurPasses';
 import { agentPreset } from './agentExamples';
 import { addAgentPieceTo, agentStarter, freshIds, placeInFreeSpace, startRuleIn, type AgentPiece, type AgentRuleStart } from './agentSetup';
@@ -425,8 +426,10 @@ export function loadGroupPresets(): GroupPreset[] {
 }
 
 /** What a new Scene Group or march loop contains, or undefined for any other type. */
-function defaultSubgraphFor(type: string): SubgraphData | undefined {
+function defaultSubgraphFor(type: string, params?: Record<string, unknown>): SubgraphData | undefined {
   const nextId = () => idGenerator.next();
+  // A Shader Texture starts from a small graph (docs/texture-builder.md): noise unless `starter` says otherwise.
+  if (type === 'shaderTexture') return buildShaderTextureSubgraph(nextId, params?.starter);
   if (type === 'sceneGroup') return buildSceneSubgraph(nextId);
   if (type === 'marchLoopGroup' || type === 'giLitMarchGroup') return buildMarchSubgraph(nextId);
   if (type === 'agentsGroup') return buildAgentsSubgraph(nextId);
@@ -1072,7 +1075,7 @@ interface NodeGraphState {
    * is kept in the project's history (graphVersions.ts). `note` says what changed.
    */
   /** Save under `name`: kind minor (default with that series open), major (a new family), inPlace (over the open version) or new (a new series, or a new family when the name exists). docs/graph-series-plan.md */
-  saveGraph: (name: string, note?: string, kind?: SaveKind) => Promise<FileResult>;
+  saveGraph: (name: string, note?: string, kind?: SaveKind, opts?: { /** Autosave (files/versionAutosave.ts): the version is marked `auto`, and history trimming drops those first. */ auto?: boolean }) => Promise<FileResult>;
   /** The saved graph open right now (loaded or last saved), and which version; null for examples, imports and new graphs. */
   currentGraph: { name: string; version: number; major: number; minor: number; latest: boolean } | null;
   /** Bumped whenever a whole different graph is loaded (an example, a saved graph, an import): not by edits or undo. */
@@ -2199,9 +2202,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const groupNode = activeNodes.find(n => n.id === id);
     // newPath = the path we'll be at after entering
     const newPath = [...activeGroupPath, id];
-    if ((groupNode?.type === 'sceneGroup' || groupNode?.type === 'marchLoopGroup' || groupNode?.type === 'giLitMarchGroup' || groupNode?.type === 'agentsGroup') && !groupNode.params?.subgraph) {
+    if ((groupNode?.type === 'sceneGroup' || groupNode?.type === 'marchLoopGroup' || groupNode?.type === 'giLitMarchGroup' || groupNode?.type === 'agentsGroup' || groupNode?.type === 'shaderTexture') && !groupNode.params?.subgraph) {
       // Saved before groups got their contents at creation: build them now.
-      const startingSubgraph = defaultSubgraphFor(groupNode.type)!;
+      const startingSubgraph = defaultSubgraphFor(groupNode.type, groupNode.params)!;
       set(state => ({
         activeGroupPath: newPath,
         activeGroupId: id,
@@ -3960,8 +3963,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // Merge overrideParams with defaults
     const mergedParams = { ...(def.defaultParams ?? {}), ...(overrideParams ?? {}) };
     // Scene Groups and march loops are never empty: their required parts exist from the start.
-    const startingSubgraph = defaultSubgraphFor(type);
-    if (startingSubgraph && !mergedParams.subgraph) mergedParams.subgraph = startingSubgraph;
+    const startingSubgraph = mergedParams.subgraph ? undefined : defaultSubgraphFor(type, mergedParams);
+    if (startingSubgraph) mergedParams.subgraph = startingSubgraph;
 
     // Create inputs. Only copy defaultParams into socket.defaultValue for sockets
     // that do NOT have a paramDef (i.e. no slider UI). Param-slider sockets read
@@ -4080,8 +4083,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       assignedIds.push(nodeId);
 
       const mergedParams = { ...(def.defaultParams ?? {}), ...(spec.params ?? {}) };
-      const startingSubgraph = defaultSubgraphFor(spec.type);
-      if (startingSubgraph && !mergedParams.subgraph) mergedParams.subgraph = startingSubgraph;
+      const startingSubgraph = mergedParams.subgraph ? undefined : defaultSubgraphFor(spec.type, mergedParams);
+      if (startingSubgraph) mergedParams.subgraph = startingSubgraph;
 
       const inputs: Record<string, InputSocket> = {};
       for (const [key, socket] of Object.entries(def.inputs)) {
@@ -5219,7 +5222,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         // Inside an Agents group the eye shows what an agent standing at each pixel would see
         // (compiler/agentGraph.ts agentEyeNodes); the simulation keeps running under it.
         const eye = isInGroup && groupNode?.type === 'agentsGroup' ? agentEyeNodes(nodes, activeGroupId, previewNodeId) : null;
-        if (eye) {
+        if (isInGroup && groupNode?.type === 'shaderTexture') {
+          // Inside a Shader Texture (docs/texture-builder.md) the eye shows the node from the inside's own graph, over the picture.
+          graphNodes = buildPreviewGraph(subgraph!.nodes.filter(n => n.type !== 'shaderTextureOutput'), previewNodeId);
+        } else if (eye) {
           const preview = buildPreviewGraph([...eye.rest, ...eye.copies], previewNodeId);
           const ids = new Set(preview.map(n => n.id));
           graphNodes = [...eye.rest.filter(n => !ids.has(n.id)), ...preview];
@@ -5649,11 +5655,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   deselectAll: () => set({ selectedNodeIds: [] }),
 
   // ─── Save / Load ───────────────────────────────────────────────────────────
-  saveGraph: async (name, note, kind) => {
+  saveGraph: async (name, note, kind, opts) => {
     const { nodes, looseGroups, play, datasets, currentGraph: open } = get();
     // `play` (and `datasets`) are left out when empty so graphs without them look as they always did.
     const playField = { ...(isPlayRecordEmpty(play) ? {} : { play }), ...datasetsField(datasets) };
-    const noteField = note?.trim() ? { note: note.trim().slice(0, 300) } : {};
+    const noteField = { ...(note?.trim() ? { note: note.trim().slice(0, 300) } : {}), ...(opts?.auto ? { auto: true } : {}) };
     // Its links to presentations belong to the graph, not to a version: a new version keeps them.
     const linked = linkedPresentationsOf(name);
     const linkField = linked.length ? { [GRAPH_LINK_FIELD]: linked } : {};

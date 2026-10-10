@@ -177,6 +177,10 @@ These categories show sub-group chips inside the browser. Clicking a chip filter
 
 The inline viz shows S-curves with dashed asymptote guides at ±π/2. The waveform pen lifts at discontinuities so the vertical jumps at each asymptote are not drawn as false lines.
 
+## Nodes offered only inside a group
+
+Scene Pos and Scene Output appear only inside a Scene Group, and Scene Distance only inside a March Loop. This applies to the browser, search and the Do bar (`src/nodes/addScope.ts`, docs/groups.md).
+
 ---
 
 ## Searching

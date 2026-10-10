@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import type { PassProgram } from '../compiler/types';
 import { passIterUniform, passPrevUniform, passPxUniform, passUniform } from '../nodes/definitions/passes';
-import { ppDrawn, ppPixel, ppPrevBound, ppRepeat, ppSize, ppSplitsForParticles, ppStaged, ppTargetKey } from '../play/kit/passPlan.js';
+import { ppDrawn, ppKeeps, ppPixel, ppPrevBound, ppRepeat, ppSize, ppSplitsForParticles, ppStaged, ppTargetKey } from '../play/kit/passPlan.js';
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
 
 /** Pass cards register a canvas here (by node id); the live runner draws their thumbnails into it. */
@@ -25,9 +25,38 @@ export const passThumbRegistry = new CanvasProbeRegistry();
 
 type Uniforms = Record<string, THREE.IUniform>;
 
-interface Entry { spec: PassProgram; material: THREE.ShaderMaterial; ready: boolean; failed: boolean; dropped?: boolean }
+interface Entry { spec: PassProgram; material: THREE.ShaderMaterial; ready: boolean; failed: boolean; dropped?: boolean; reads?: string[] }
 
-interface Target { key: string; w: number; h: number; cur: THREE.WebGLRenderTarget; prev: THREE.WebGLRenderTarget | null }
+/** `drawn`: what a Shader Texture's target was last drawn with (passPlan ppKeeps); unset when new or cleared. */
+interface Target { key: string; w: number; h: number; cur: THREE.WebGLRenderTarget; prev: THREE.WebGLRenderTarget | null; drawn?: string }
+
+/**
+ * The uniforms a program reads: those it declares and names again after the declaration (every
+ * program declares Time, the mouse and so on; only one that uses them changes with them).
+ */
+export function uniformsRead(fragmentShader: string, skip: ReadonlySet<string>): string[] {
+  const out: string[] = [];
+  for (const m of fragmentShader.matchAll(/^\s*uniform\s+\w+\s+(\w+)/gm)) {
+    const name = m[1];
+    if (skip.has(name) || out.includes(name)) continue;
+    const uses = fragmentShader.match(new RegExp(`\\b${name}\\b`, 'g'))?.length ?? 0;
+    if (uses > 1) out.push(name);
+  }
+  return out;
+}
+
+/** A uniform's value as text, for telling whether it changed (textures by id and version). */
+export function uniformSig(v: unknown): string {
+  if (v == null) return '-';
+  if (typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') return String(v);
+  if (Array.isArray(v)) return v.map(uniformSig).join(',');
+  if (typeof v === 'object') {
+    const o = v as { isTexture?: boolean; id?: number; version?: number; toArray?: () => number[] };
+    if (o.isTexture) return `t${o.id}:${o.version}`;
+    if (typeof o.toArray === 'function') return o.toArray().join(',');
+  }
+  return '?';
+}
 
 const WRAP: Record<PassProgram['wrap'], THREE.Wrapping> = {
   clamp: THREE.ClampToEdgeWrapping, repeat: THREE.RepeatWrapping, mirror: THREE.MirroredRepeatWrapping,
@@ -47,7 +76,7 @@ export class PassTargets {
     let t = this.targets.get(p.slug);
     if (t && t.key === key) return t;
     if (t) { t.cur.dispose(); t.prev?.dispose(); }
-    const [tw, th] = ppSize(w, h, p.scale);
+    const [tw, th] = ppSize(w, h, p.scale, p.size);
     const filter = p.filter === 'nearest' ? THREE.NearestFilter : THREE.LinearFilter;
     const make = () => {
       const rt = new THREE.WebGLRenderTarget(tw, th, {
@@ -67,6 +96,7 @@ export class PassTargets {
   /** Start every Previous buffer over (black): a new render, a resize, a structural recompile. */
   clearPrevious(): void {
     for (const t of this.targets.values()) {
+      t.drawn = undefined;
       for (const rt of [t.cur, t.prev]) { if (!rt) continue; this.renderer.setRenderTarget(rt); this.renderer.clear(); }
     }
     this.renderer.setRenderTarget(null);
@@ -105,6 +135,7 @@ export class PassRunner {
   private compileScene = new THREE.Scene();
   private compileMesh: THREE.Mesh;
   private boundTo: Uniforms | null = null;
+  private bindEpoch = 0;
   private vertexShader = '';
   // Thumbnails: a small 8-bit copy of a pass, read back into its card's canvas.
   private thumbRt: THREE.WebGLRenderTarget | null = null;
@@ -149,6 +180,8 @@ export class PassRunner {
     if (this.boundTo !== u) {
       for (const e of this.entries) e.material.uniforms = u;
       this.boundTo = u;
+      // A Shader Texture kept from before this (re)binding may have been drawn with uniforms not yet in the table.
+      this.bindEpoch++;
     }
   }
 
@@ -250,6 +283,11 @@ export class PassRunner {
       const e = d.entry;
       if (!e.ready || e.failed || (compiling.size > 0 && d.reads.some(r => compiling.has(r)))) { u[passUniform(d.slug)].value = null; continue; }
       res?.set(t.w, t.h);
+      // A Shader Texture on Update On change / Once (docs/texture-builder.md): keep the picture it has when
+      // nothing it reads changed since it was drawn into this target.
+      const sig = d.update ? this.drawSig(e, t, u) : undefined;
+      if (sig !== undefined && ppKeeps(d, t.drawn, sig)) { u[passUniform(d.slug)].value = t.cur.texture; continue; }
+      t.drawn = sig;
       this.mesh.material = e.material;
       const timed = timer?.begin(`pass:${d.slug}`) ?? false;
       // Repeat (phase 7): N draws, each reading the one before through Previous (the timer covers all N).
@@ -268,6 +306,16 @@ export class PassRunner {
     }
     res?.set(rx, ry);
     renderer.setRenderTarget(null);
+  }
+
+  /** What a Shader Texture would be drawn with now: its program and target, and (On change) the values it reads. */
+  private drawSig(e: Entry, t: Target, u: Uniforms): string {
+    const head = `${e.material.uuid}|${t.key}|${this.bindEpoch}`;
+    if (e.spec.update !== 'change') return head;
+    e.reads ??= uniformsRead(e.spec.fragmentShader, new Set([passUniform(e.spec.slug), passPrevUniform(e.spec.slug), ...(e.spec.stillTime ? ['u_time'] : [])]));
+    let sig = head;
+    for (const name of e.reads) sig += `|${uniformSig(u[name]?.value)}`;
+    return sig;
   }
 
   /** Thumbnails for the Pass cards that are showing (the live runner, every few frames). */
@@ -311,3 +359,4 @@ export class PassRunner {
     this.thumbMat.dispose();
   }
 }
+

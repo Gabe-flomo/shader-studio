@@ -82,6 +82,47 @@ name, so a lock taken from them matches any device.
 
 Stored as `range: [lo, hi]` on the source. Middle C (60) is C4.
 
+## Note classes (any octave)
+
+A note can count by its name (C, C#, D…) whatever octave it is played in, so
+C2, C3 and C4 all count as C. Two places:
+
+- **Note sources** (MIDI note, velocity, gate): the **Octaves** row's **Any
+  octave (wrap)** switch. Only the range's pitch classes count, in every octave
+  (all twelve with no range; a learned single note is that one note name). A
+  **note** source then reads its class across the range's classes (C 0 to B 1
+  with no range), so the octave no longer moves it. The row shows the classes
+  ("C (any octave)", "C–E (any octave)") and the last note played with its
+  class ("last A1 → A"). Stored as `wrap: true` on the source.
+- **Note triggers** (trigger sources, actions and rules on a note, a signal's
+  While…): **Any octave** beside the channel. The note becomes a pitch class
+  picked by name; turning it on keeps the note's name (C4 becomes C), turning it
+  off puts it in the middle octave (C becomes C4). Stored as
+  `{ "on": "note", "note": 0..11, "wrap": true }`. Every note presses its
+  pitch-class key (`note:<ch>:c<0..11>`) as well as its own and the any-note
+  key (`noteKeys` in `play/triggers.ts`; the web runtime does the same).
+
+The pitch class name shows wherever a note does: trigger labels read
+"C (any octave)", the trigger's number field shows the note's name (C#4).
+
+**Map 12 notes → 12 targets** (Inputs → **+ Source** → MIDI): pick up to twelve
+controls or layers in the order they should play; the dialog shows which note
+each gets. **Start on** picks the first note (C by default) and **Channel** the
+MIDI channel. Each pick gets a source of the record: a trigger on its note class
+(an envelope: a short hit, held while the key is down, fading after; harder hits
+peak higher) with one Set route. A control is driven across its range; a layer
+through how solid it is (its opacity, or a shape's fill), resting at 0.15 so all
+twelve stay visible and lighting to full on its note (the control is made when
+the panel doesn't have one, and reused on a second run). Colours, buttons and
+layers with neither are skipped. `play/noteClassMap.ts` (pure, tested);
+`components/play/NoteClassMapDialog.tsx`.
+
+The pad grid reads pads by their exact notes (a layout), so wrapping doesn't
+apply there; drum pads and Audio engine racks are unchanged.
+
+To try it without a controller: `__shaderStudioDev.midiEngine.handleBytes(0x90, 52, 100)`
+plays E3 (`0x80` lets it go).
+
 ## Pad grid (Push, Launchpad)
 
 **Mappings → Set up a pad grid** adds the grid (`record.padGrid`). Its card:
