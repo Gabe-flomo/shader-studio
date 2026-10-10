@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.129',
+    date: '2026-10-09',
+    title: 'Walkers that remember',
+    highlights: [
+      { area: 'Studio', text: 'Agent Builder Memory: name up to four numbers a walker keeps (counter, timer, on/off, a value, a place, a level that fades), each with live range.' },
+      { area: 'Studio', text: 'Change them with cards (count, set, toggle, add up what it smells, decay, reset) or an expression; use them in "only when", sliders and colour.' },
+      { area: 'Studio', text: 'Ants with food is now cards, with carrying and away memories; a card can have two "only when" conditions.' },
+    ],
+  },
+  {
     id: '2026.10.128',
     date: '2026-10-09',
     title: 'Follow a field',
