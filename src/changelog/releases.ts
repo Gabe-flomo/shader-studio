@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.130',
+    date: '2026-10-09',
+    title: 'Depth',
+    highlights: [
+      { area: 'Studio', text: 'Depth node: depth from any image, video or texture, worked out on this device by one of three models you can compare (downloaded once, when first used).', link: { kind: 'doc', path: 'docs/depth-node.md' } },
+      { area: 'Studio', text: 'Outputs a near mask (cut out a subject), normals (relight a flat picture) and parallax UV (a 2.5D shift). Bake depth for smooth video and web pages.' },
+    ],
+  },
+  {
     id: '2026.10.129',
     date: '2026-10-09',
     title: 'Walkers that remember',
