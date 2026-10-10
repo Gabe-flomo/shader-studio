@@ -20,7 +20,7 @@ import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { p } from './helpers';
 import { texUv } from './passes';
 import { TEXTURE_TOOLS_CATEGORY } from './textureTools';
-import { DEPTH_MODELS, DEPTH_SIDES, DEFAULT_DEPTH_MODEL_ID } from '../../depthModel/config';
+import { DEPTH_SIDES, DEFAULT_DEPTH_MODEL_ID } from '../../depthModel/config';
 
 export const DEPTH_TYPE = 'depth';
 /** `// depth-source <depth sampler> <wired sampler>`: what the engine reads (lib/depth/engine.ts). */
@@ -136,7 +136,7 @@ export const DepthNode: NodeDefinition = {
     cutoff: 0.6, softness: 0.1, relief: 0.3, shift: 0.04, focus: 0.5,
   },
   paramDefs: {
-    model: { label: 'Model', type: 'select', section: MODEL_SECTION, hint: 'Which depth model to run. Each is downloaded once, when first used.', help: 'Depth Anything V2 Small (Apache-2.0): fast, sharp edges, the default. Depth Anything V2 Base (CC-BY-NC-4.0): finer, slower, testing only, never in a paid release. MiDaS DPT-Hybrid (Apache-2.0): the classic model, smoother and softer. Compare shows all three on the same frame with their times.', options: DEPTH_MODELS.map(m => ({ value: m.id, label: m.commercial ? m.name : `${m.name} (testing only)` })) },
+    // model: one model now (Depth Anything V2 Small), so no picker; params.model stays for saved graphs and a future second model.
     resolution: { label: 'Resolution', type: 'select', section: MODEL_SECTION, hint: 'The long side of the frame the model sees. Smaller is faster, larger finer. (MiDaS always runs at 384: its model has a fixed size.)', options: DEPTH_SIDES.map(s => ({ value: String(s), label: `${s} px` })) },
     update: { label: 'Update', type: 'select', section: MODEL_SECTION, hint: 'Live: a new depth as fast as the model goes. Every Nth frame: lighter. Baked: play the depth Bake depth stored (smooth and exact; web pages need it).', options: [
       { value: 'live', label: 'Live' }, { value: 'every', label: 'Every Nth frame' }, { value: 'baked', label: 'Baked' },

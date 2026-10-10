@@ -56,7 +56,7 @@ describe('Depth node compiles', () => {
     for (const [k, s] of [...Object.entries(def.inputs), ...Object.entries(def.outputs)]) expect(s.hint?.length ?? 0, k).toBeGreaterThan(10);
     for (const [k, pd] of Object.entries(def.paramDefs ?? {})) expect(pd.hint?.length ?? 0, k).toBeGreaterThan(10);
     expect(def.defaultParams?.model).toBe('depth-anything-v2-small');
-    expect(def.paramDefs!.model.options!.map(o => o.label)).toEqual(['Depth Anything V2 Small', 'Depth Anything V2 Base (testing only)', 'MiDaS DPT-Hybrid']);
+    expect(def.paramDefs!.model).toBeUndefined(); // one model now: no picker
     expect(Object.keys(def.outputs)).toEqual(['depth', 'texture', 'nearMask', 'normal', 'parallaxUv']);
   });
 
@@ -170,6 +170,11 @@ const run = (o: Partial<RunCheck> = {}): boolean => shouldRun({
 });
 
 describe('when a Depth node runs its model', () => {
+  it('never for a video (its depth is baked first)', () => {
+    expect(run({ video: true })).toBe(false);
+    expect(run({ video: false })).toBe(true);
+  });
+
   it('never before the model is downloaded, without a picture, while busy, or when baked', () => {
     expect(run()).toBe(true);
     expect(run({ usable: false })).toBe(false);

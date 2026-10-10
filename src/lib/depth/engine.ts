@@ -24,7 +24,7 @@ import { blendDepth, depthRowsUp, followSource, grabSize, shouldRun } from './pl
 import { getImage, getVideo } from '../backgroundLibrary';
 import { forgetMedia, rememberMedia } from '../mediaSources';
 
-export type DepthState = 'idle' | 'needs-download' | 'no-source' | 'running' | 'ready' | 'baked' | 'missing' | 'error';
+export type DepthState = 'idle' | 'needs-download' | 'needs-bake' | 'no-source' | 'running' | 'ready' | 'baked' | 'missing' | 'error';
 
 export interface DepthStatus {
   state: DepthState;
@@ -227,6 +227,12 @@ class DepthEngine {
       const hasSource = src === 'picture' ? ctx.canvas.width > 0 : !!tex && info.w > 0 && info.h > 0;
       const side = depthSideOf(n);
       const runKey = info.still ? `${info.still}|${model}|${side}` : null;
+      // A video's depth is baked first (it plays smoothly then), never worked out live
+      const video = src !== 'picture' && src in this.videoUniforms;
+      if (video) {
+        if (usable && s.status.state !== 'needs-bake') { s.status = { ...s.status, state: 'needs-bake', message: undefined }; this.changed(); }
+        continue;
+      }
       if (!shouldRun({ update, every: Number(n.params.every) || 4, framesSince: s.framesSince, busy: s.busy, usable, hasSource, stillKey: info.still, lastKey: s.lastKey, runKey, playing: ctx.playing, ranSinceProgram: s.ranSinceProgram })) {
         if (usable && !hasSource && s.status.state !== 'no-source') { s.status = { ...s.status, state: 'no-source', message: 'Its texture has no picture yet.' }; this.changed(); }
         continue;

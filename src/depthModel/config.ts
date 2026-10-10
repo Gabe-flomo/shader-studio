@@ -1,14 +1,13 @@
 /**
  * config.ts — the depth models the Depth node can run on this device (docs/depth-node.md).
  *
- * Three, side by side for testing (docs/depth-and-splats-plan.md section 1): once one proves best the others go.
+ * Depth Anything V2 Small, the one kept after testing (2026-10-10: Base and MiDaS DPT-Hybrid were dropped; the list
+ * stays a list, so another model can be tried the same way later).
  * Each is an opt-in download, offered the first time a Depth node needs it, kept by the browser after that, and
  * nothing is sent anywhere. All are the ONNX exports Transformers.js reads, pinned to a revision. Sizes and
  * licences were checked through the Hugging Face API on 2026-10-09 (`/api/models/<repo>` and `/tree/main/onnx`).
  *
  *   depth-anything-v2-small  Apache-2.0. Fast, sharp edges. The default.
- *   depth-anything-v2-base   CC-BY-NC-4.0: testing only, never in a paid release (the node says so).
- *   dpt-hybrid-midas         Apache-2.0 on the Hugging Face card (Intel/dpt-hybrid-midas); the MiDaS code is MIT.
  *
  * Per backend one weights file: WebGPU runs fp16 maths (fp16, or q4f16: 4-bit weights with fp16 maths),
  * WebAssembly 8-bit (q8 / uint8). tools/fetch-depth-models.mjs reads this file to fetch the same files.
@@ -66,44 +65,6 @@ export const DEPTH_MODELS: readonly DepthModelSpec[] = [
     weights: {
       webgpu: { path: 'onnx/model_fp16.onnx', bytes: 49642442 },
       wasm: { path: 'onnx/model_quantized.onnx', bytes: 27258801 },
-    },
-  },
-  {
-    id: 'depth-anything-v2-base',
-    name: 'Depth Anything V2 Base',
-    short: 'DA2 Base',
-    repo: 'onnx-community/depth-anything-v2-base',
-    revision: 'dd4557d492cd7b563738ac8d9ccff9094620983c',
-    licence: 'CC-BY-NC-4.0',
-    commercial: false,
-    note: 'Cleaner surfaces and finer detail, slower. Testing only: its licence is non-commercial.',
-    nativeSide: 518,
-    dtype: { webgpu: 'q4f16', wasm: 'q8' },
-    files: DA_FILES,
-    weights: {
-      webgpu: { path: 'onnx/model_q4f16.onnx', bytes: 72484282 },
-      wasm: { path: 'onnx/model_quantized.onnx', bytes: 102391398 },
-    },
-  },
-  {
-    id: 'dpt-hybrid-midas',
-    name: 'MiDaS DPT-Hybrid',
-    short: 'MiDaS',
-    repo: 'Xenova/dpt-hybrid-midas',
-    revision: '8af5a62e326ba3e842759aa27e13008c1c758db5',
-    licence: 'Apache-2.0',
-    commercial: true,
-    note: 'The classic model: smoother, softer edges.',
-    nativeSide: 384,
-    fixedSide: true,
-    dtype: { webgpu: 'q4f16', wasm: 'uint8' },
-    files: [
-      { path: 'config.json', bytes: 9985 },
-      { path: 'preprocessor_config.json', bytes: 384 },
-    ],
-    weights: {
-      webgpu: { path: 'onnx/model_q4f16.onnx', bytes: 118219625 },
-      wasm: { path: 'onnx/model_uint8.onnx', bytes: 123702011 },
     },
   },
 ];

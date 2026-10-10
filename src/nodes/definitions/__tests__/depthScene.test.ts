@@ -49,6 +49,25 @@ describe('Depth in 3D scenes', () => {
     expect(r.fragmentShader).toMatch(/dFdx\(/);
   });
 
+  it('Depth Light reads a Glowing scene and Shadows from as distance functions, and compiles', () => {
+    const nodes = sceneWithPicture();
+    const loop = nodes.find(x => x.type === 'marchLoopGroup')!;
+    const sc = loop.inputs.scene!.connection!;
+    const lit = nodes.find(x => x.id === 'lit')!;
+    lit.inputs.glow = { ...lit.inputs.glow, connection: { ...sc } };
+    lit.inputs.occluders = { ...lit.inputs.occluders, connection: { ...sc } };
+    const r = compileGraph({ nodes });
+    expect(r.errors ?? []).toEqual([]);
+    expect(r.success).toBe(true);
+    expect(r.fragmentShader).toMatch(/_shadow = min\(\w+_shadow/);
+    expect(r.fragmentShader).toMatch(/_gd = max\(/);
+  });
+
+  it('without them, no glow or shadow code is emitted', () => {
+    const r = compileGraph({ nodes: sceneWithPicture() });
+    expect(r.fragmentShader).not.toMatch(/_gd = max|_shadow = min/);
+  });
+
   it('the scene wins where it is nearer than the picture, and only where it hit something', () => {
     const def = getNodeDefinition('depthComposite')!;
     const g = def.generateGLSL(n('depthComposite', 'c', 0, 0), { picture: 'P', nearness: 'N', scene: 'S', dist: 'D', hit: 'H' } as Record<string, string>);

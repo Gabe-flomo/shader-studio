@@ -39,11 +39,13 @@ export interface RunCheck {
   playing: boolean;
   /** It has run since the program last changed. */
   ranSinceProgram: boolean;
+  /** The source is a video: its depth is baked first (Bake depth), never worked out live, so it plays smoothly. */
+  video?: boolean;
 }
 
 /** Whether a Depth node runs its model on this frame. */
 export function shouldRun(c: RunCheck): boolean {
-  if (!c.usable || !c.hasSource || c.busy || c.update === 'baked') return false;
+  if (!c.usable || !c.hasSource || c.busy || c.update === 'baked' || c.video) return false;
   if (c.stillKey !== null) return c.runKey !== c.lastKey;
   if (!c.playing && c.ranSinceProgram) return false;
   if (c.update === 'every') return c.framesSince >= Math.max(1, Math.round(c.every) || 1);
