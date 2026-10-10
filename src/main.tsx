@@ -120,6 +120,8 @@ function startApp() {
   // Crash recovery (docs/crash-recovery.md): after the blank graph is up, offer to recover a crashed
   // session's unsaved work, then autosave the open project on the setting's cadence.
   window.setTimeout(() => { void import('./files/recovery').then(m => m.startRecovery()) }, 1000)
+  // Autosave as versions (docs/graph-series-plan.md): a named graph's changes become a new minor version every few minutes.
+  void import('./files/versionAutosaveApp').then(m => m.startVersionAutosave())
 }
 
 if (import.meta.env.DEV && location.hash === '#ui') {

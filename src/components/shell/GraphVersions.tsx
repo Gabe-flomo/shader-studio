@@ -19,6 +19,7 @@ import { Field } from '../ui/Field';
 import { Popover } from '../ui/Popover';
 import { reportFileResult } from './reportFileResult';
 import { GraphPresentationLink } from './GraphLinks';
+import { AutosaveSection } from './AutosaveControls';
 
 export function SaveGraphForm({ onDone }: { onDone?: () => void }) {
   const tk = useTokens();
@@ -82,6 +83,7 @@ export function SaveGraphForm({ onDone }: { onDone?: () => void }) {
           </Button>
         </div>
         {explain}
+        <AutosaveSection />
         <GraphPresentationLink graph={current.name} onNavigated={onDone} />
       </div>
     );
@@ -105,6 +107,7 @@ export function SaveGraphForm({ onDone }: { onDone?: () => void }) {
       {family && <span style={{ color: tk.text.faint, fontSize: 11.5, lineHeight: 1.4 }}>“{n}” is a series already: this adds a new family to it ({seriesLabel(family)}); its other versions stay.</span>}
       {noteField(saveNamed)}
       {explain}
+      {!current && <AutosaveSection />}
       {current && (
         <button type="button" onClick={() => setAsNew(false)} style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.accent.text, font: `500 12px ${fontFamily.ui}`, alignSelf: 'flex-start' }}>
           ← Back to saving “{current.name}”

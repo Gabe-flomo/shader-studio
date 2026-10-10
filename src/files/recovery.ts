@@ -156,6 +156,8 @@ export function holdAutosave(): () => void {
   let done = false;
   return () => { if (!done) { done = true; holds = Math.max(0, holds - 1); } };
 }
+/** A recording, a render or a take holds autosaves (crash snapshots and autosaved versions alike). */
+export function isAutosaveHeld(): boolean { return held(); }
 function held(): boolean {
   if (holds > 0) return true;
   const p = useTakes.getState().phase;
