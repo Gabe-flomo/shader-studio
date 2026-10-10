@@ -20,7 +20,7 @@ import { COND_LABELS, SENSOR_HINTS, SENSOR_LABELS, anchorLayers, anchorOptions, 
 import { layerPorts } from '../../play/layerPorts';
 import { addSignal } from '../../play/pairs';
 import { conditionBands, withUnit } from './conditionModel';
-import { HAND_PINCH_POINT, PAD_ANCHOR, isBandCmp, isDirectionCmp, usesHands, layerNumericProps, parseHandAnchor, type CondCmp, type PlayRecord, type ValueCondition } from '../../types/play';
+import { BUILT_IN_SIGNALS, HAND_PINCH_POINT, PAD_ANCHOR, isBandCmp, isDirectionCmp, usesHands, layerNumericProps, parseHandAnchor, type CondCmp, type PlayRecord, type ValueCondition } from '../../types/play';
 import { finishHost, finishHostLabel, finishHosts, finishNumericProps, finishParamOf } from '../../types/playFinish';
 import { audioFxControlFor, audioFxHosts } from '../../types/playAudioFx';
 import { GroupedPicker } from '../ui/GroupedPicker';
@@ -69,6 +69,8 @@ export function valueSections(play: PlayRecord): PickerSection[] {
   if (finishItems.length) out.push({ heading: 'Finish', items: finishItems });
   const soundItems = audioFxHosts(play.audioFx, play.layers).flatMap(h => h.params.map(d => ({ value: `${h.id}::${d.key}`, label: `${h.label} · ${d.label}`, icon: 'wave' as const, keywords: 'sound audio effect' })));
   if (soundItems.length) out.push({ heading: 'Sound effects', items: soundItems });
+  // The built-in signals, raw: how many there are, how many are on, the share on (always offered).
+  out.push({ heading: 'Signals (built in)', items: BUILT_IN_SIGNALS.map(b => ({ value: b.ref, label: b.label, icon: 'spark' as const, description: `Built in · ${b.hint}`, keywords: 'built in signals count active' })) });
   if (play.mappings.length) out.push({ heading: 'Mapping sources', items: play.mappings.map(m => ({ value: `map:${m.id}`, label: valueRefLabel(`map:${m.id}`, ctx), icon: 'bidir' as const, description: 'What it reads, 0 to 1' })) });
   out.push({ heading: 'Pointer & distance', items: [
     { value: 'mouse:x', label: 'Mouse X', icon: 'mouse', description: '0 to 1 across the picture' },
@@ -87,6 +89,8 @@ export function labelContext(play: PlayRecord): LabelContext {
 export function valueRange(ref: string, play: PlayRecord): { min: number; max: number; step: number } {
   const r = sgParseValueRef(ref);
   if (r?.kind === 'control') { const c = play.controls.find(x => x.id === r.id); if (c && c.max > c.min) return { min: c.min, max: c.max, step: c.step ?? 0.01 }; }
+  // The built-in counts run up to how many signals there are, in whole steps.
+  if (r?.kind === 'builtin' && r.read !== 'share') return { min: 0, max: Math.max(1, play.signals?.length ?? 0), step: 1 };
   if (r?.kind === 'prop') {
     if (r.layerId.startsWith('finish:')) {
       const e = finishHost(play.finish, r.layerId.slice(7));
