@@ -231,17 +231,17 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     const output = nodes.find(n => n.type === 'output' || n.type === 'vec4Output')!;
     const outputAncestors = collect(wiresOf(output), byId, null, undefined, agents);
     // Each group's update shader: its inside plus the outer nodes wired into its ports and Emit.
-    const agentLists = new Map<string, { inside: GraphNode[]; sink: GraphNode; outer: Collected; problems: string[]; stateC: boolean; space3d: boolean; grids: Array<{ nodeId: string; from: { nodeId: string; outputKey: string } }> }>();
+    const agentLists = new Map<string, { inside: GraphNode[]; sink: GraphNode; outer: Collected; problems: string[]; stateC: boolean; stateE: boolean; space3d: boolean; grids: Array<{ nodeId: string; from: { nodeId: string; outputKey: string } }> }>();
     // A Trail filled by a 3D group is a volume: a 3D group's Sense reads it by its layout uniform.
     const volumeOf = (id: string) => { const t = byId.get(id); return t?.type === 'trailField' && isAgent3d(t) ? trailUniform(slugs.get(id) ?? id) : null; };
     for (const g of groupNodes) {
-      const { inner, sink, starts, problems, stateC, space3d, grids } = agentStepNodes(g, volumeOf);
+      const { inner, sink, starts, problems, stateC, stateE, space3d, grids } = agentStepNodes(g, volumeOf);
       const outer = collectOuter(starts, byId);
       // With per-walker state the Emits also say which species they give birth to (a copy, marked for this program).
       if (stateC) for (const [id, n] of outer.nodes) if (n.type === 'agentEmit') outer.nodes.set(id, { ...n, params: { ...n.params, __stateC: true } });
       // The Emits give birth in this group's space (a copy, for this program).
       for (const [id, n] of outer.nodes) if (n.type === 'agentEmit' && isAgent3d(n) !== space3d) outer.nodes.set(id, withAgentSpace(n, space3d, getNodeDefinition));
-      agentLists.set(g.id, { inside: inner, sink, outer, problems, stateC, space3d, grids });
+      agentLists.set(g.id, { inside: inner, sink, outer, problems, stateC, stateE, space3d, grids });
     }
     // Trails with Add / Block wired: their step program's nodes (the ancestors of those inputs).
     const trailLists = new Map<string, Collected>();
@@ -465,6 +465,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
             declarations: typeof seed === 'string' ? [`uniform float ${seed};`] : [],
             respawn: emit.mode === 'respawn',
             ...(a.stateC ? { stateC: true } : {}),
+            ...(a.stateE ? { stateE: true } : {}),
             ...(a.space3d ? { space3d: true } : {}),
             ...(nbNodes.length ? { neighbours: true } : {}),
           },
@@ -491,6 +492,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
           nodeId: g.id, slug: slugOf(g.id), label, fragmentShader: r.fragmentShader,
           side: groupSide(g), species: groupSpecies(g),
           ...(a.stateC ? { stateC: true } : {}),
+          ...(a.stateE ? { stateE: true } : {}),
           ...(a.space3d ? { space3d: true } : {}),
           params: { stepsPerFrame: params.stepsPerFrame as number | string, seed: params.seed as number | string, preroll: params.preroll as number | string, ...(params.restart !== undefined ? { restart: params.restart as number | string } : {}) },
           emit,

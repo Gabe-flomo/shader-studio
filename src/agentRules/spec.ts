@@ -9,7 +9,9 @@
  * State per walker lives in Agent Output's Memory (two floats):
  *  - Memory x: the state index (0, 1, 2…), plus 0.5 once the walker has stuck;
  *  - Memory y: the walker's one free number (a timer, a counter, a phase).
- * That is the limit: a walker can't remember more than a state and one number.
+ * Named memories (docs/agent-builder.md "Memory", memory.ts) live in four more numbers, Agent Output's
+ * More memory (state E): counters, timers, on / off, remembered values and places, levels that fade.
+ * A rule set without memories never touches them, so it generates exactly what it always did.
  */
 
 import { type FieldSpec, DEFAULT_FIELD, fieldName, liveLayers } from './fields';
@@ -46,6 +48,11 @@ export type RuleCondition =
   | { kind: 'state'; state: number; not?: boolean }
   /** Its Memory number (Memory y). */
   | { kind: 'memory'; cmp: Cmp | '='; value: number }
+  /**
+   * A named memory (memory.ts) compared with a value: memory.food > 0.5, a timer "after 2 s"
+   * (> 2), on / off (> 0.5 / < 0.5). A remembered place compares how far the walker is from it.
+   */
+  | { kind: 'mem'; memory: string; cmp: Cmp | '='; value: number }
   /** A mask (a texture or any chain wired into the group) where the walker stands. */
   | { kind: 'mask'; mask: number; cmp: Cmp; value: number }
   /** How many walkers (everyone, its own kind or other kinds) are within `radius` (0: the rule set's view radius): a Neighbours node's Count. */
@@ -53,7 +60,7 @@ export type RuleCondition =
   /** Where the walker stands, inside (or outside) a simple shape on the picture: a circle (radius `size`) or a box (half-width `size`) centred at (x, y). In 3D the shape is a column through the depth (it reads x and y). */
   | { kind: 'shape'; shape: 'circle' | 'box'; x: number; y: number; size: number; outside?: boolean };
 
-export type RuleAction =
+type RuleActionKinds =
   /** Turn toward (or away from) the trail, a point, the centre or the mouse, at most `degrees` a step. */
   | { kind: 'turn'; toward: TurnTarget; away?: boolean; channel?: ChannelRef; x?: number; y?: number; degrees: number }
   /** A random turn of up to `degrees` either way. */
@@ -106,7 +113,32 @@ export type RuleAction =
    * expressions), as a force (`strength` × the field a second²) or, with `grip`, ridden: the
    * velocity eases toward `strength` × the field at `grip` a second.
    */
-  | { kind: 'field'; strength: number; grip?: number; spec: FieldSpec };
+  | { kind: 'field'; strength: number; grip?: number; spec: FieldSpec }
+  /**
+   * Change a named memory (memory.ts): count up or down (`value` a step, or a second), set it
+   * (on / off), toggle it, reset it (a timer starts again), remember where the walker is, remember
+   * or add up what it smells here (`channel`), let it decay (`value` a second), or set it to an
+   * expression of its senses and memories (`expr`, e.g. `food * 0.98 + here.food`).
+   */
+  | { kind: 'mem'; memory: string; op: MemoryOp; value?: number; perSecond?: boolean; channel?: ChannelRef; expr?: string };
+
+/**
+ * Any action's main number may be multiplied by a named memory ("speed × energy"): by its value,
+ * or with `fade`, by e^(−fade · value) (a timer as a fading strength: marks weaker the longer ago).
+ */
+export interface MemoryTimes { memory: string; fade?: number }
+export type RuleAction = RuleActionKinds & { times?: MemoryTimes };
+
+/** What a named memory holds (the Memory section's type pictures). A place takes two numbers. */
+export type MemoryType = 'counter' | 'timer' | 'flag' | 'value' | 'position' | 'level';
+export type MemoryOp = 'add' | 'set' | 'toggle' | 'reset' | 'place' | 'smell' | 'sum' | 'decay' | 'expr';
+
+/**
+ * A named memory: numbers each walker keeps from step to step, in its More memory (Agent Output's,
+ * state E: four numbers; memory.ts gives each its slot in order). 0 when born, or `start`.
+ * A timer counts seconds by itself; a level fades by itself (`fade`, the share lost a second).
+ */
+export interface AgentMemory { id: string; name: string; type: MemoryType; start?: number; fade?: number }
 
 export interface AgentRule {
   /** All must hold (an empty list: always). */
@@ -124,6 +156,8 @@ export interface AgentSpeciesRules {
   name: string;
   /** Picture units a second: each walker starts at it (Set speed / Accelerate change it, and it is kept). */
   speed: number;
+  /** Its steps multiplied by a named memory ("speed × energy"): Move goes speed × it; the speed it keeps is unchanged. */
+  speedTimes?: MemoryTimes;
   /** At least one; the first is the state every walker is born in. */
   states: AgentState[];
   rules: AgentRule[];
@@ -154,6 +188,13 @@ export interface AgentRuleSet {
   collide?: AgentCollide;
   /** One per species (1–4): the group's Species follows it. */
   species: AgentSpeciesRules[];
+  /** Named memories (memory.ts): at most four numbers between them. Missing: none (More memory unused). */
+  memories?: AgentMemory[];
+  /**
+   * Look's "colour by a memory" (the seam with Look): each walker's colour is its memory on Under the
+   * hood's heat map, `lo` black to `hi` white, instead of its state's colour. Missing: by state.
+   */
+  colourBy?: { memory: string; lo: number; hi: number };
 }
 
 /** Collide (3D scene)'s settings for a rules group round a shape: Scene size, Margin, Cushion, Bounce. */
@@ -161,6 +202,7 @@ export interface AgentCollide { reach: number; margin: number; cushion: number; 
 export const DEFAULT_COLLIDE: AgentCollide = { reach: 1.6, margin: 0.03, cushion: 0.18, bounce: 0.2 };
 
 export const MAX_SPECIES = 4;
+export const MEMORY_TYPES: readonly MemoryType[] = ['counter', 'timer', 'flag', 'value', 'position', 'level'];
 export const MAX_STATES = 8;
 export const MAX_MASKS = 2;
 
@@ -334,6 +376,7 @@ export function newCondition(kind: RuleCondition['kind']): RuleCondition {
     case 'mask': return { kind, mask: 0, cmp: '>', value: 0.5 };
     case 'neighbours': return { kind, who: 'all', cmp: '>', count: 8 };
     case 'shape': return { kind, shape: 'circle', x: 0, y: 0, size: 0.4 };
+    case 'mem': return { kind, memory: '', cmp: '>', value: 0.5 };
   }
 }
 
@@ -389,6 +432,37 @@ export function describeCondition(set: AgentRuleSet, sp: number, c: RuleConditio
     case 'mask': return `${maskName(set, c.mask)} ${c.cmp} ${num(c.value)}`;
     case 'neighbours': return `${c.cmp === '>' ? 'more' : 'fewer'} than ${num(c.count)} ${WHO[c.who]} within ${num(reach(set, c.radius))}`;
     case 'shape': return `${c.outside ? 'outside' : 'inside'} a ${c.shape} round (${num(c.x)}, ${num(c.y)}), ${c.shape === 'circle' ? 'radius' : 'half-width'} ${num(c.size)}`;
+    case 'mem': return describeMemCondition(set, c);
+  }
+}
+
+/** A named memory by its id (undefined: gone). */
+export const memoryOf = (set: AgentRuleSet, id: string | undefined) => (id ? set.memories?.find(m => m.id === id) : undefined);
+const memName = (set: AgentRuleSet, id: string) => memoryOf(set, id)?.name || 'a memory';
+const timesText = (set: AgentRuleSet, t: MemoryTimes | undefined) => (t ? ` × ${t.fade ? `fading with ${memName(set, t.memory)} (×${num(t.fade)})` : memName(set, t.memory)}` : '');
+
+export function describeMemCondition(set: AgentRuleSet, c: Extract<RuleCondition, { kind: 'mem' }>): string {
+  const m = memoryOf(set, c.memory);
+  const name = memName(set, c.memory);
+  if (m?.type === 'flag') return `${name} is ${(c.cmp === '<') ? 'off' : 'on'}`;
+  if (m?.type === 'timer' && c.cmp === '>') return `${num(c.value)} s after ${name} started`;
+  if (m?.type === 'position') return `${c.cmp === '<' ? 'within' : 'further than'} ${num(c.value)} of ${name}`;
+  return `${name} ${c.cmp} ${num(c.value)}`;
+}
+
+export function describeMemAction(set: AgentRuleSet, a: Extract<RuleAction, { kind: 'mem' }>): string {
+  const name = memName(set, a.memory);
+  const v = a.value ?? 0;
+  switch (a.op) {
+    case 'add': return `count ${name} ${v < 0 ? 'down' : 'up'} ${num(Math.abs(v))}${a.perSecond ? ' a second' : ''}`;
+    case 'set': return memoryOf(set, a.memory)?.type === 'flag' ? `set ${name} ${v >= 0.5 ? 'on' : 'off'}` : `set ${name} to ${num(v)}`;
+    case 'toggle': return `toggle ${name}`;
+    case 'reset': return memoryOf(set, a.memory)?.type === 'timer' ? `start ${name} again` : `reset ${name}`;
+    case 'place': return `remember where it is as ${name}`;
+    case 'smell': return `remember ${channelName(set, a.channel)} here as ${name}`;
+    case 'sum': return `add up ${channelName(set, a.channel)} here into ${name}${v !== 1 ? ` (×${num(v)})` : ''}`;
+    case 'decay': return `${name} decays ${num(v)} a second`;
+    case 'expr': return `${name} = ${a.expr ?? name}`;
   }
 }
 
@@ -399,6 +473,10 @@ export const reach = (set: AgentRuleSet, r: number | undefined) => (r && r > 0 ?
 const FORCE: Record<ForceField, string> = { gravity: 'gravity', wind: 'wind', curl: 'curl noise', point: 'a pull toward', mouse: 'a pull toward the mouse' };
 
 export function describeAction(set: AgentRuleSet, sp: number, a: RuleAction): string {
+  return describeActionOnly(set, sp, a) + timesText(set, a.times);
+}
+
+function describeActionOnly(set: AgentRuleSet, sp: number, a: RuleAction): string {
   switch (a.kind) {
     case 'turn': {
       const what = a.toward === 'trail' ? channelName(set, a.channel) : a.toward === 'point' ? `the point (${num(a.x ?? 0)}, ${num(a.y ?? 0)})` : a.toward === 'centre' ? 'the centre' : 'the mouse';
@@ -434,6 +512,7 @@ export function describeAction(set: AgentRuleSet, sp: number, a: RuleAction): st
     case 'drag': return `drag ${num(a.amount)} a second`;
     case 'fade': return `fade with age over ${num(a.seconds)} s`;
     case 'field': return `follow a field (${fieldName(a.spec)}) ×${num(a.strength)}${a.grip ? `, riding it (grip ${num(a.grip)})` : ', as a force'}`;
+    case 'mem': return describeMemAction(set, a);
   }
 }
 
@@ -458,6 +537,8 @@ export function sensedChannels(set: AgentRuleSet): string[] {
     for (const a of r.do) {
       if (a.kind === 'turn' && a.toward === 'trail') used.add(String(a.channel ?? 'own'));
       if (a.kind === 'align') used.add('own');
+      // Named memories that remember or add up a smell, or name one in an expression (here.food).
+      if (a.kind === 'mem') for (const k of memorySmells(set, a)) used.add(k);
     }
   }
   return ['own', '0', '1', '2', '3'].filter(k => used.has(k));
@@ -528,6 +609,33 @@ export const neighbourReadOf = (set: AgentRuleSet, who: NeighbourWho, r: number 
   return neighbourReads(set).find(x => x.who === who && x.radius === radius)!;
 };
 
+/**
+ * The channel keys a memory action smells ('own', '0'…'3'): Remember / Add up what it smells, and
+ * every `here.<channel>` an expression names (by the channel's name, `own`, or `trail1`…`trail4`).
+ */
+export function memorySmells(set: AgentRuleSet, a: Extract<RuleAction, { kind: 'mem' }>): string[] {
+  if (a.op === 'smell' || a.op === 'sum') return [String(a.channel ?? 'own')];
+  if (a.op !== 'expr' || !a.expr) return [];
+  const out: string[] = [];
+  for (const m of a.expr.matchAll(/\bhere\.([A-Za-z_]\w*)/g)) {
+    const k = hereChannelKey(set, m[1]);
+    if (k !== null && !out.includes(k)) out.push(k);
+  }
+  return out;
+}
+
+/** The channel a `here.<name>` reads ('own', '0'…'3'), or null when no channel has that name. */
+export function hereChannelKey(set: AgentRuleSet, name: string): string | null {
+  if (name === 'own') return 'own';
+  const t = /^trail([1-4])$/.exec(name);
+  if (t) return String(Number(t[1]) - 1);
+  const i = set.channels.findIndex(c => c.trim() && memoryIdent(c) === name);
+  return i >= 0 ? String(i) : null;
+}
+
+/** A name as an expression can write it: lower case, spaces and dashes to underscores, nothing else. */
+export const memoryIdent = (name: string) => name.trim().toLowerCase().replace(/[\s-]+/g, '_').replace(/[^a-z0-9_]/g, '').replace(/^(\d)/, '_$1');
+
 /** A rule set read from a saved graph, with anything missing filled in (never throws). */
 export function normalizeRuleSet(raw: unknown): AgentRuleSet {
   const d = defaultRuleSet();
@@ -538,6 +646,7 @@ export function normalizeRuleSet(raw: unknown): AgentRuleSet {
     speed: typeof s?.speed === 'number' && isFinite(s.speed) ? s.speed : 0.25,
     states: Array.isArray(s?.states) && s.states.length ? s.states.slice(0, MAX_STATES) : defaultSpecies(i).states,
     rules: Array.isArray(s?.rules) ? s.rules : [],
+    ...(s?.speedTimes && typeof s.speedTimes.memory === 'string' ? { speedTimes: s.speedTimes } : {}),
   })) : d.species;
   const nb = r.neighbours && typeof r.neighbours === 'object' ? r.neighbours : null;
   return {
@@ -551,5 +660,7 @@ export function normalizeRuleSet(raw: unknown): AgentRuleSet {
     flow: { size: r.flow?.size ?? 1, evolve: r.flow?.evolve ?? 0.15 },
     ...(r.collide && typeof r.collide === 'object' ? { collide: { ...DEFAULT_COLLIDE, ...Object.fromEntries(Object.entries(r.collide).filter(([, v]) => typeof v === 'number' && isFinite(v))) } } : {}),
     species,
+    ...(Array.isArray(r.memories) && r.memories.length ? { memories: r.memories.filter(m => m && typeof m.id === 'string' && typeof m.name === 'string' && MEMORY_TYPES.includes(m.type)) } : {}),
+    ...(r.colourBy && typeof r.colourBy === 'object' && typeof r.colourBy.memory === 'string' ? { colourBy: { memory: r.colourBy.memory, lo: Number(r.colourBy.lo) || 0, hi: Number.isFinite(Number(r.colourBy.hi)) ? Number(r.colourBy.hi) : 1 } } : {}),
   };
 }

@@ -405,6 +405,7 @@ export const CONDITION_HELP: Record<RuleCondition['kind'], { hint: string; examp
   mask: { hint: 'A mask (a texture\'s brightness or a number) where the walker stands.', example: 'Food mask > 0.5' },
   neighbours: { hint: 'How many other walkers (everyone, its own kind or other kinds) are within the radius: the walkers themselves, found through the group\'s grid (a Neighbours node).', example: 'more than 8 neighbours within 0.05' },
   shape: { hint: 'Where the walker stands: inside (or outside) a circle or a box round a point. In 3D, a column through the depth.', example: 'inside a circle round (0, 0), radius 0.4' },
+  mem: { hint: 'A named memory (the Agent Builder\'s Memory section) compared with a value: a timer\'s seconds, a counter, on / off, a level; a remembered place by how far it is.', example: 'energy > 0.5' },
 };
 
 /** A plain-language hint for each Agent Rules action (the + do… picker and its "?"). */
@@ -432,6 +433,7 @@ export const ACTION_HELP: Record<RuleAction['kind'], { hint: string; example: st
   drag: { hint: 'Lose this share of the speed every second, like moving through water.', example: 'drag 0.5 a second' },
   fade: { hint: 'Dim to black over the seconds since it was born (its colour; Draw agents\' Colour by State shows it).', example: 'fade with age over 3 s' },
   field: { hint: 'Push (or carry) it along a vector field built from layers: curl noise, a vortex, a source or sink, waves, your own vx and vy… Build the layers in the Agent Builder\'s Follow a field card.', example: 'follow a field (vortex + curl noise × 0.5) ×1, riding it' },
+  mem: { hint: 'Change a named memory (the Agent Builder\'s Memory section): count, set, toggle, reset, remember where it is or what it smells, add it up, decay, or an expression.', example: 'energy = energy * 0.98 + here.food' },
 };
 
 export function helpFor(builder: string, id: string): HelpEntry | null {

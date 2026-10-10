@@ -96,10 +96,10 @@ describe('particles, flocks, crowds and orbiters as cards', () => {
   });
 
   it('each kind\'s sections and words; every card has a name and a hint', () => {
-    expect(KIND_SECTIONS.particles.map(x => x.id)).toEqual(['born', 'forces', 'moving', 'life', 'look']);
-    expect(KIND_SECTIONS.flock.map(x => x.id)).toEqual(['born', 'neighbours', 'steering', 'moving']);
-    expect(KIND_SECTIONS.crowd.map(x => x.id)).toEqual(['born', 'neighbours', 'steering', 'moving']);
-    expect(KIND_SECTIONS.swarm.map(x => x.id)).toEqual(['born', 'orbit', 'neighbours', 'moving']);
+    expect(KIND_SECTIONS.particles.map(x => x.id)).toEqual(['born', 'forces', 'moving', 'life', 'memory', 'look']);
+    expect(KIND_SECTIONS.flock.map(x => x.id)).toEqual(['born', 'neighbours', 'steering', 'moving', 'memory']);
+    expect(KIND_SECTIONS.crowd.map(x => x.id)).toEqual(['born', 'neighbours', 'steering', 'moving', 'memory']);
+    expect(KIND_SECTIONS.swarm.map(x => x.id)).toEqual(['born', 'orbit', 'neighbours', 'moving', 'memory']);
     expect(sectionWordsOf('steering').label).toBe('Turning');
     for (const k of Object.keys(CARD_DEFS)) expect(CARD_WORDS[k as keyof typeof CARD_WORDS].hint.length).toBeLessThan(90);
     for (const k of ['particles', 'flock', 'crowd', 'swarm'] as const) expect(presetsFor(k).length).toBeGreaterThanOrEqual(3);

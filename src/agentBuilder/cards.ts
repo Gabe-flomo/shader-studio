@@ -12,7 +12,7 @@
  * with an "only when" (behaviours.ts). Anything else is an Advanced rule, edited in the rules editor.
  */
 import type { AgentRuleSet, ChannelRef, RuleAction, RuleCondition } from '../agentRules/spec';
-import { addCard, cardRule, locate, patchAt, readBehaviours, setOnAt, type Loc } from './behaviours';
+import { type CardRead, addCard, cardRule, locate, patchAt, readBehaviours, setOnAt, type Loc } from './behaviours';
 
 export type { Loc } from './behaviours';
 
@@ -26,7 +26,7 @@ export const plainRule = cardRule;
 /** Each card's action, the first matching one in reading order (null: not there). */
 export function locateCards(set: AgentRuleSet, sp: number): Record<RuleCard, Loc | null> {
   const out: Record<RuleCard, Loc | null> = { senses: null, wobble: null, trail: null };
-  for (const l of locate(set, sp, RULE_CARDS)) out[l.card as RuleCard] = { rule: l.rule, action: l.action };
+  for (const l of locate(set, sp, RULE_CARDS)) if ((RULE_CARDS as readonly string[]).includes(l.card) && !out[l.card as RuleCard]) out[l.card as RuleCard] = { rule: l.rule, action: l.action };
   return out;
 }
 
@@ -40,6 +40,10 @@ export interface TrailCards {
   trail: { on: boolean; there: boolean; amount: number; channel: ChannelRef };
   /** Each card's "only when" (null: always, or not there). */
   when: Record<RuleCard, RuleCondition | null>;
+  /** Each card's memory condition, the "and …" (null: none). */
+  memWhen: Record<RuleCard, RuleCondition | null>;
+  /** Cards beyond the three (a second Senses or Trail gated by a memory, Head for, Turn round), in reading order. */
+  extras: CardRead[];
   /** Where each card's action is (null: not there). */
   at: Record<RuleCard, Loc | null>;
   /** Rules (by index) with something the cards don't show: each is an Advanced rule card. */
@@ -51,6 +55,7 @@ export function readCards(set: AgentRuleSet, sp: number): TrailCards {
   const s = Math.min(Math.max(sp, 0), set.species.length - 1);
   const b = readBehaviours(set, s, RULE_CARDS);
   const get = (c: RuleCard) => b.cards.find(x => x.card === c);
+  const main = new Set(RULE_CARDS.map(c => get(c)?.key));
   const turn = get('senses')?.action as Extract<RuleAction, { kind: 'turn' }> | undefined;
   const wander = get('wobble')?.action as Extract<RuleAction, { kind: 'wander' }> | undefined;
   const trail = get('trail')?.action as Extract<RuleAction, { kind: 'trail' }> | undefined;
@@ -61,6 +66,8 @@ export function readCards(set: AgentRuleSet, sp: number): TrailCards {
     moving: { speed: set.species[s].speed, edges: set.edges },
     trail: { on: on('trail'), there: !!trail, amount: trail?.amount ?? CARD_DEFAULTS.amount, channel: trail?.channel ?? 'own' },
     when: { senses: get('senses')?.when ?? null, wobble: get('wobble')?.when ?? null, trail: get('trail')?.when ?? null },
+    memWhen: { senses: get('senses')?.memWhen ?? null, wobble: get('wobble')?.memWhen ?? null, trail: get('trail')?.memWhen ?? null },
+    extras: b.cards.filter(c => !main.has(c.key) && c.card !== 'memory'),
     at: { senses: get('senses')?.at ?? null, wobble: get('wobble')?.at ?? null, trail: get('trail')?.at ?? null },
     advanced: b.advanced,
   };

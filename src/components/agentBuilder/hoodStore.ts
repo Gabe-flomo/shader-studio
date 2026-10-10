@@ -45,7 +45,7 @@ export const hood = {
   attach(request: HoodRequest | null): void { useHoodStore.setState({ ...EMPTY, request }); },
   setInfo(info: HoodStateInfo | null): void {
     const was = useHoodStore.getState().info;
-    if (was === info || (was && info && was.side === info.side && was.stateC === info.stateC && was.d3 === info.d3 && was.species === info.species
+    if (was === info || (was && info && was.side === info.side && was.stateC === info.stateC && was.stateE === info.stateE && was.d3 === info.d3 && was.species === info.species
       && was.trail === info.trail && Math.abs(was.aspect - info.aspect) < 1e-3)) return;
     // A new side means new texels: what was picked is someone else now.
     const reset = !info || !was || was.side !== info.side;

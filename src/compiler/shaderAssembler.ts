@@ -27,7 +27,7 @@ import { audioUniformName } from './audioUniformNames';
 import { coerce, coerceLossy } from '../lib/typesCompatible';
 import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { loopColour } from '../nodes/definitions/scene3d';
-import { AG_3D_GLSL, AG_HASH_GLSL, AG_STATE_C_GLSL, AGENT_GLOBALS, AGENT_GLOBALS_3D, AGENT_STATE_C_GLOBALS, agentStateUniform, agentStepUniform, agentWindowUniform } from '../nodes/definitions/agents';
+import { AG_3D_GLSL, AG_HASH_GLSL, AG_STATE_C_GLSL, AGENT_GLOBALS, AGENT_GLOBALS_3D, AGENT_STATE_C_GLOBALS, AGENT_STATE_E_GLOBALS, agentStateUniform, agentStepUniform, agentWindowUniform } from '../nodes/definitions/agents';
 import { agentNbHeader } from '../nodes/definitions/agentNeighbours';
 import { frozenValueOf } from '../nodes/sliderFreeze';
 import { marchJitterDecl, MARCH_STEP_REF_KEY } from './marchJitter';
@@ -678,6 +678,11 @@ export interface AgentProgramOptions {
    */
   stateC?: boolean;
   /**
+   * More memory (with stateC): a fifth output and sampler, E = four more numbers the walker keeps
+   * (a_mem2, Agent Inputs' / Agent Output's More memory).
+   */
+  stateE?: boolean;
+  /**
    * Space 3D (docs/agents-plan.md "3D"): A = (pos.xyz, age), B = (vel.xyz, life); the globals are
    * vec3 (a_dir the heading, a_across this step's random direction across it) and g_uv is a_pos.xy.
    */
@@ -696,9 +701,11 @@ function agentHeader(o: AgentProgramOptions): string {
     'layout(location = 0) out highp vec4 o_a;',
     'layout(location = 1) out highp vec4 o_b;',
     ...(o.stateC ? ['layout(location = 2) out highp vec4 o_c;', 'layout(location = 3) out highp vec4 o_d;'] : []),
+    ...(o.stateC && o.stateE ? ['layout(location = 4) out highp vec4 o_e;'] : []),
     `uniform sampler2D ${agentStateUniform(o.slug, 'A')};`,
     `uniform sampler2D ${agentStateUniform(o.slug, 'B')};`,
     ...(o.stateC ? [`uniform sampler2D ${agentStateUniform(o.slug, 'C')};`, `uniform sampler2D ${agentStateUniform(o.slug, 'D')};`] : []),
+    ...(o.stateC && o.stateE ? [`uniform sampler2D ${agentStateUniform(o.slug, 'E')};`] : []),
     `uniform highp uint ${agentStepUniform(o.slug)};`,
     `uniform vec4 ${agentWindowUniform(o.slug)};`,
     ...o.declarations,
@@ -709,6 +716,7 @@ function agentHeader(o: AgentProgramOptions): string {
     'const float a_dt = 1.0 / 60.0;',
     ...(o.space3d ? AGENT_GLOBALS_3D : AGENT_GLOBALS).map(([t, name]) => `${t} ${name};`),
     ...(o.stateC ? AGENT_STATE_C_GLOBALS.map(([t, name]) => `${t} ${name};`) : []),
+    ...(o.stateC && o.stateE ? AGENT_STATE_E_GLOBALS.map(([t, name]) => `${t} ${name};`) : []),
     'vec4 a_ownChannels;',
     AG_HASH_GLSL,
     ...(o.space3d ? [AG_3D_GLSL] : []),
@@ -726,11 +734,12 @@ function agentPrelude(o: AgentProgramOptions): string {
     `    vec4 a_sA = texelFetch(${A}, a_tex, 0);`,
     `    vec4 a_sB = texelFetch(${B}, a_tex, 0);`,
     ...(o.stateC ? [`    vec4 a_sC = texelFetch(${agentStateUniform(o.slug, 'C')}, a_tex, 0);`, `    vec4 a_sD = texelFetch(${agentStateUniform(o.slug, 'D')}, a_tex, 0);`] : []),
+    ...(o.stateC && o.stateE ? [`    vec4 a_sE = texelFetch(${agentStateUniform(o.slug, 'E')}, a_tex, 0);`] : []),
     '    a_index = float(a_tex.y * a_side + a_tex.x);',
     `    a_born = mod(a_index - ${W}.x + a_count, a_count) < ${W}.y${o.respawn ? ' || a_sB.w <= 0.0' : ''};`,
     // Dead and not born this step: keep the texel as it is, at almost no cost.
     o.stateC
-      ? '    if (!a_born && a_sB.w <= 0.0) { o_a = a_sA; o_b = a_sB; o_c = a_sC; o_d = a_sD; return; }'
+      ? `    if (!a_born && a_sB.w <= 0.0) { o_a = a_sA; o_b = a_sB; o_c = a_sC; o_d = a_sD;${o.stateE ? ' o_e = a_sE;' : ''} return; }`
       : '    if (!a_born && a_sB.w <= 0.0) { o_a = a_sA; o_b = a_sB; return; }',
     `    a_seed = agHash(uint(a_tex.y * a_side + a_tex.x) * 0x9E3779B1u ^ agHash(${agentStepUniform(o.slug)} ^ (uint(max(${o.seed}, 0.0)) * 0x85EBCA6Bu)));`,
     '    a_random = float(a_seed >> 8) / 16777216.0;',
@@ -749,6 +758,7 @@ function agentPrelude(o: AgentProgramOptions): string {
     ]),
     // With per-walker state the species is the one its Emit gave it (state C); else its index's.
     o.stateC ? '    a_species = a_sC.x; a_mem = a_sC.yz; a_colour = agUnpackColour(a_sC.w);' : '    a_species = mod(a_index, a_speciesCount);',
+    ...(o.stateC && o.stateE ? ['    a_mem2 = a_sE;'] : []),
     o.species > 1
       ? '    a_ownChannels = (vec4(equal(vec4(a_species), vec4(0.0, 1.0, 2.0, 3.0))) * 1.5 - 0.5) * vec4(lessThan(vec4(0.0, 1.0, 2.0, 3.0), vec4(a_speciesCount)));'
       : '    a_ownChannels = vec4(1.0, 0.0, 0.0, 0.0);',
@@ -4339,6 +4349,7 @@ function toAgentEyeProgram(fs: string): string {
     'const float a_count = 1.0;',
     ...AGENT_GLOBALS.map(([t, name]) => `${t} ${name};`),
     ...AGENT_STATE_C_GLOBALS.map(([t, name]) => `${t} ${name};`),
+    ...AGENT_STATE_E_GLOBALS.map(([t, name]) => `${t} ${name};`),
     'vec4 a_ownChannels;',
     AG_HASH_GLSL,
     AG_STATE_C_GLSL,
@@ -4347,7 +4358,7 @@ function toAgentEyeProgram(fs: string): string {
   const set = [
     '    a_pos = g_uv; a_vel = vec2(0.0); a_heading = 0.0; a_speed = 0.0; a_age = 0.0; a_life = 1.0e30;',
     '    a_species = 0.0; a_index = 0.0; a_random = 0.5; a_seed = 0u; a_born = false; a_step = 0u;',
-    '    a_mem = vec2(0.0); a_colour = vec3(1.0); a_ownChannels = vec4(1.0, 0.0, 0.0, 0.0);',
+    '    a_mem = vec2(0.0); a_mem2 = vec4(0.0); a_colour = vec3(1.0); a_ownChannels = vec4(1.0, 0.0, 0.0, 0.0);',
     '',
   ].join('\n');
   return fs

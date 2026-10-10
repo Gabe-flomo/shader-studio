@@ -37,7 +37,7 @@ export interface HoodRequest {
 }
 
 /** What the runner says about a group's state: the texel ↔ walker mapping comes from here. */
-export interface HoodStateInfo { side: number; count: number; stateC: boolean; d3: boolean; aspect: number; species: number; trail: boolean }
+export interface HoodStateInfo { side: number; count: number; stateC: boolean; stateE?: boolean; d3: boolean; aspect: number; species: number; trail: boolean }
 
 const requests = new Map<string, HoodRequest>();
 

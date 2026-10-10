@@ -30,7 +30,9 @@ import { type AgentRuleSet, type ChannelRef, type RuleCondition, DEFAULT_NEIGHBO
 import { openGroupAsNodes, setGroupSpace } from '../../agentRules/storeActions';
 import { openAgentRulesWindow } from '../../builders/windows';
 import { patchCard, readCards, sectionSummary, setCardOn, setEdges, setNeighbours, setSensors, setSpeed, smellChips, type RuleCard } from '../../agentBuilder/cards';
-import { type CardRead, readBehaviours, setOnlyWhen, setSpeciesColour } from '../../agentBuilder/behaviours';
+import { type CardRead, readBehaviours, setMemWhen, setOnlyWhen, setSpeciesColour } from '../../agentBuilder/behaviours';
+import { MemoryColourRow, MemoryLens, MemorySection, TimesChip } from './MemorySection';
+import { memorySlotNames } from '../../agentBuilder/memory';
 import { type DiagramFocus, type DiagramSection } from '../../agentBuilder/diagram';
 import { START_CARDS, type StartCard } from '../../agentBuilder/kinds';
 import { presetsFor } from '../../agentBuilder/presets';
@@ -159,6 +161,8 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const [hoodOpen, setHoodOpenState] = useState(readHood);
   const setHoodOpen = (v: boolean) => { setHoodOpenState(v); writeHood(v); };
   const [chipPicked, setChipPicked] = useState(false);
+  // Memory (phase 4): the memory being edited; the viewport colours the walkers by it.
+  const [memPicked, setMemPicked] = useState<string | null>(null);
   const update = (next: AgentRuleSet) => { apply(next); setPreset(null); };
   // A kind added or taken away: start the walkers over once the rules are in, so births share them
   // out among the kinds (walkers born all at once keep the kind they were born with).
@@ -281,8 +285,21 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const onlyWhen = (c: RuleCard) => {
     const at = cards.at[c];
     if (!at) return undefined;
-    return <OnlyWhenLine id={c} set={set} sp={s} when={cards.when[c]}
-      onFocus={x => { focusCard(c); onFocusSetting(x); }} onChange={(w: RuleCondition | null) => update(setOnlyWhen(set, s, at, w))} />;
+    return <OnlyWhenLine id={c} set={set} sp={s} when={cards.when[c]} memWhen={cards.memWhen[c]}
+      onFocus={x => { focusCard(c); onFocusSetting(x); }} onChange={(w: RuleCondition | null) => update(setOnlyWhen(set, s, at, w))}
+      onMemChange={(w: RuleCondition | null) => update(setMemWhen(set, s, at, w))} />;
+  };
+  // Memory: trail followers' cards beyond the three (a second Senses or Trail a memory gates, Head for, Turn round).
+  const extraCards = (ids: string[]) => {
+    const list = cards.extras.filter(c => ids.includes(c.card));
+    if (!list.length) return null;
+    return <SectionCards section={{ id: current, cards: [] }} all={[]} extras={list} set={set} sp={s} update={update} cardsFor={kindCards(kind)}
+      focusCard={focusCard} hotCard={focus.card} onFocusSetting={onFocusSetting} d3={d3} />;
+  };
+  const trailTimes = (c: RuleCard) => {
+    const at = cards.at[c];
+    const a = at ? set.species[s]?.rules[at.rule]?.do[at.action] : undefined;
+    return at && a ? <TimesChip id={c} set={set} times={a.times} onChange={t => update(patchCard(set, s, c, { times: t }))} /> : undefined;
   };
   const sensesCard = (
     <div onPointerEnter={() => focusCard('senses')}>
@@ -297,6 +314,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
           <ChipRow label="Smells" options={chips} value={cards.senses.channel} onChange={v => update(patchCard(set, s, 'senses', { channel: v as ChannelRef }))} />
         </SettingRow>
       </BehaviourCard>
+      {extraCards(['senses'])}
     </div>
   );
   const turningCard = (
@@ -309,13 +327,15 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
           onFocus={onFocusSetting} onChange={v => update(patchCard(set, s, 'wobble', { degrees: v }))}
           right={<span data-card-switch="wobble"><Toggle checked={cards.turning.wobbleOn} onChange={on => update(setCardOn(set, s, 'wobble', on))} /></span>} />
       </BehaviourCard>
+      {extraCards(['wobble', 'goal', 'turnRound'])}
     </div>
   );
   const movingCard = (
     <BehaviourCard id="moving" picture="moving" title="Moving" hint={words('moving').hint} learn={words('moving').learn} guide={words('moving').guide}
       summary={sectionSummary(cards, 'moving')}>
       <SliderSetting id="speed" label="Speed" hint={SETTING_HINTS.speed} value={cards.moving.speed} min={0} max={d3 ? 2 : kind === 'particles' ? 3 : 1} step={0.005}
-        onFocus={onFocusSetting} onChange={v => update(setSpeed(set, s, v))} />
+        onFocus={onFocusSetting} onChange={v => update(setSpeed(set, s, v))}
+        right={<TimesChip id="speed" set={set} times={set.species[s]?.speedTimes} onChange={t => update({ ...set, species: set.species.map((x, i) => (i === s ? { ...x, speedTimes: t } : x)) })} />} />
       <SettingRow id="edges" label="At the edges" hint={SETTING_HINTS.edges} onFocus={onFocusSetting}>
         <Segmented size="sm" fill ariaLabel="At the edges" value={cards.moving.edges} onChange={v => update(setEdges(set, v))}
           options={[{ value: 'wrap' as const, label: 'Wrap' }, { value: 'bounce' as const, label: 'Bounce' }, { value: 'slide' as const, label: 'Slide' }]} />
@@ -330,7 +350,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
           <ChipRow label="Lays" options={chips} value={cards.trail.channel} onChange={v => update(patchCard(set, s, 'trail', { channel: v as ChannelRef }))} />
         </SettingRow>}>
         <SliderSetting id="amount" label="Leaves" hint={SETTING_HINTS.amount} value={cards.trail.amount} min={0} max={4} step={0.05}
-          onFocus={onFocusSetting} onChange={v => update(patchCard(set, s, 'trail', { amount: v }))} />
+          onFocus={onFocusSetting} onChange={v => update(patchCard(set, s, 'trail', { amount: v }))} right={trailTimes('trail')} />
         {trailNode ? <>
           <SliderSetting id="fades" label="Fades" hint={SETTING_HINTS.fades} value={trail.halfLife} min={0.005} max={1} step={0.005}
             onFocus={onFocusSetting} onChange={v => setSetupParam(trailNode.id, { halfLife: Math.max(0.005, v) })} />
@@ -338,6 +358,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
             onFocus={onFocusSetting} onChange={v => setSetupParam(trailNode.id, { diffuse: v })} />
         </> : <span style={{ fontSize: 12, color: tk.text.muted }}>No Trail field: wire the group into a Deposit and a Trail field to see and smell it.</span>}
       </BehaviourCard>
+      {extraCards(['trail'])}
     </div>
   );
 
@@ -383,6 +404,8 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
         <SettingRow id="colour" label={`${set.species[s]?.name ?? 'Its'} colour`} hint={MORE_HINTS.colour} onFocus={onFocusSetting}>
           <ColorSwatch label="Colour" value={colour} onChange={rgb => update(setSpeciesColour(set, s, rgb as [number, number, number]))} />
         </SettingRow>
+        {/* Memory (phase 4) seam: colour by a memory. */}
+        <MemoryColourRow set={set} update={update} onFocus={onFocusSetting} />
       </BehaviourCard>
     </>
   );
@@ -415,6 +438,8 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       case 'neighbours': return KIND_SECTIONS[kind].find(x => x.id === 'neighbours')!.cards.length ? sectionCards('neighbours', viewCard) : <>{sectionHeader('neighbours')}{viewCard}</>;
       case 'steering': return sectionCards('steering');
       case 'orbit': return sectionCards('orbit');
+      case 'memory': return <MemorySection set={set} sp={s} update={update} cards={trailKind ? readBehaviours(set, s, ['senses', 'wobble', 'trail']).cards : behaviours.cards}
+        picked={memPicked} onPick={setMemPicked} onFocusSetting={onFocusSetting} intro={sectionHeader('memory')} d3={d3} />;
       case 'advanced': return advancedCards;
     }
   })();
@@ -454,6 +479,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
         const o = on(['orbit'])[0]?.action;
         return o?.kind === 'orbit' ? `radius ${r3(o.distance)} · ${o.cw ? 'clockwise' : 'anticlockwise'}` : 'none';
       }
+      case 'memory': return set.memories?.length ? set.memories.map(m => m.name).join(' · ') : 'none';
     }
   };
   const dim = (id: SectionId) => (id === 'senses' && !cards.senses.on) || (id === 'trail' && !cards.trail.on)
@@ -531,6 +557,8 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       const sc = (set.species[lit].states[0]?.colour ?? [1, 1, 1]) as [number, number, number];
       spot = <SpeciesSpotlight groupId={groupId} species={lit} colour={sc} name={set.species[lit].name} image={image} onClose={() => setLit(null)} />;
     }
+    // Memory: the walkers coloured by the memory being edited (and the live ranges sampled).
+    if (current === 'memory' && !advanced && !hoodOpen) return <MemoryLens groupId={groupId} set={set} memoryId={memPicked} image={image} />;
     // Under the hood: the plain picture (no diagram), the ring on a walker and its numbers.
     if (hoodOpen) return <>{spot}<HoodLayer box={box} speciesNames={hoodSpecies.map(x => x.name)} /></>;
     if (advanced) return null;
@@ -568,7 +596,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       nav={nav} inspector={inspector} presets={presetStrip}>
       <LiveViewport overlay={overlay} />
       {hoodOpen && (
-        <HoodPanel groupId={groupId} species={hoodSpecies} trails={trailChannels} highlight={hoodLit} onClose={() => setHoodOpen(false)}
+        <HoodPanel groupId={groupId} species={hoodSpecies} trails={trailChannels} highlight={hoodLit} onClose={() => setHoodOpen(false)} memoryNames={memorySlotNames(set)}
           speedMax={Math.max(0.05, ...set.species.map(x => x.speed), num(emit?.params.speed, 0)) * 1.5} lifeMax={num(emit?.params.life, 0)} />
       )}
     </StudioShell>

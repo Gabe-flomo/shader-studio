@@ -31,9 +31,10 @@ import { AG_TRAIL_MEAN_GLSL } from '../../play/kit/agentShaders.js';
 
 /**
  * State textures of a group: A = (pos.xy, heading, age), B = (vel.xy, speed, life); with per-walker
- * state (agentStateC) also C = (species, memory.xy, colour packed in 24 bits) and D = its deposit (vec4).
+ * state (agentStateC) also C = (species, memory.xy, colour packed in 24 bits) and D = its deposit (vec4);
+ * with More memory (agentStateE, docs/agents-group.md "Memory slots") also E = four more numbers (vec4).
  */
-export const agentStateUniform = (slug: string, which: 'A' | 'B' | 'C' | 'D') => `u_ag${which}_${slug}`;
+export const agentStateUniform = (slug: string, which: 'A' | 'B' | 'C' | 'D' | 'E') => `u_ag${which}_${slug}`;
 /** The step number (uint) a group's update shader runs. */
 export const agentStepUniform = (slug: string) => `u_agStep_${slug}`;
 /** This step's birth window: (start, count, 0, 0) in agent indices. */
@@ -94,6 +95,12 @@ export const AGENT_GLOBALS: Array<[string, string]> = [
 ];
 /** Globals only programs with per-walker state (state C) define: its memory and its own colour. */
 export const AGENT_STATE_C_GLOBALS: Array<[string, string]> = [['vec2', 'a_mem'], ['vec3', 'a_colour']];
+/**
+ * Globals only programs with More memory (state E: a fifth state texture, four more numbers a
+ * walker keeps) define. A group gets state E only when something reads or sets More memory, so
+ * every other group compiles exactly as before (and E always comes with C and D).
+ */
+export const AGENT_STATE_E_GLOBALS: Array<[string, string]> = [['vec4', 'a_mem2']];
 
 // ── 3D (docs/agents-plan.md "3D") ───────────────────────────────────────────
 //
@@ -424,9 +431,10 @@ export const AGENT_INPUT_OUTPUTS: Record<string, { type: 'float' | 'vec2'; label
   random: { type: 'float', label: 'Random', expr: 'a_random', hint: 'A fresh 0–1 number for this walker every step (repeatable: it depends only on the step and the seed).' },
 };
 /** Agent Inputs' per-walker state outputs (they need state C; without it Memory reads 0 and Colour white). */
-export const AGENT_INPUT_STATE_OUTPUTS: Record<string, { type: 'vec2' | 'vec3'; label: string; expr: string; hint: string }> = {
+export const AGENT_INPUT_STATE_OUTPUTS: Record<string, { type: 'vec2' | 'vec3' | 'vec4'; label: string; expr: string; hint: string }> = {
   memory: { type: 'vec2', label: 'Memory', expr: 'a_mem', hint: 'Two numbers this walker carries from step to step (what Agent Output\'s Memory set last step; 0 when born). Ants: carrying food or not.' },
   colour: { type: 'vec3', label: 'Colour', expr: 'a_colour', hint: 'Its own colour (what Agent Output\'s Colour set last step; white when born).' },
+  moreMemory: { type: 'vec4', label: 'More memory', expr: 'a_mem2', hint: 'Four more numbers this walker carries from step to step (what Agent Output\'s More memory set last step; 0 when born). The Agent Builder\'s named memories live here.' },
 };
 
 export const AgentInputsNode: NodeDefinition = {
@@ -459,6 +467,7 @@ export const AgentOutputNode: NodeDefinition = {
     speed: { type: 'float', label: 'Speed', hint: 'Its speed now. Unwired: the length of Velocity, or its own.' },
     alive: { type: 'float', label: 'Alive', hint: 'Below 0.5 kills it (Emit can bring it back). Unwired: it lives until its Life runs out.' },
     memory: { type: 'vec2', label: 'Memory', hint: 'Two numbers it keeps for next step (Agent Inputs\' Memory then). Ants: x = carrying food. Unwired: kept as they are.' },
+    moreMemory: { type: 'vec4', label: 'More memory', hint: 'Four more numbers it keeps for next step (Agent Inputs\' More memory then): the Agent Builder\'s named memories. Unwired: kept as they are. Wiring it gives the group a fifth state texture (4 MB at 256k walkers, both copies 8 MB).' },
     deposit: { type: 'vec4', label: 'Deposit', hint: 'How much trail it leaves in each of the four channels this step (times Deposit\'s Amount). Unwired: 1 in its own species\' channel.' },
     colour: { type: 'vec3', label: 'Colour', hint: 'Its own colour, for Draw agents\' Colour by Agent. Unwired: kept as it is (white when born).' },
   },
@@ -508,6 +517,10 @@ export const AgentStepOutNode: NodeDefinition = {
     const liveC = stateC
       ? `        o_c = vec4(a_species, ${v.memory ?? 'a_mem'}, agPackColour(${v.colour ?? 'a_colour'}));\n        o_d = ${v.deposit ?? 'agOneHot(a_species)'};\n`
       : '';
+    // More memory (state E): 0 when born, else what Agent Output's More memory says (unwired: kept).
+    const stateE = stateC && node.params.stateE === true;
+    const bornE = stateE ? '        o_e = vec4(0.0);\n' : '';
+    const liveE = stateE ? `        o_e = ${v.moreMemory ?? 'a_mem2'};\n` : '';
     return {
       code: [
         `    float ${id}_h = ${head};\n`,
@@ -515,11 +528,12 @@ export const AgentStepOutNode: NodeDefinition = {
         `    vec2 ${id}_p = ${pos};\n`,
         `    vec2 ${id}_v = ${vel};\n`,
         `    float ${id}_alive = (${alive}) >= 0.5 && a_age < a_life && !any(isnan(${id}_p)) && !any(isinf(${id}_p)) ? a_life : 0.0;\n`,
-        `    if (a_born) {\n${birth}    } else {\n`,
+        `    if (a_born) {\n${birth}${bornE}    } else {\n`,
         // Headings stay in −π…π so they keep their precision over a long run.
         `        o_a = vec4(${id}_p, mod(${id}_h + 3.1415927, 6.2831853) - 3.1415927, a_age);\n`,
         `        o_b = vec4(${id}_v, ${id}_s, ${id}_alive);\n`,
         liveC,
+        liveE,
         `    }\n`,
       ].join(''),
       outputVars: {},
@@ -561,12 +575,14 @@ function stepOut3d(node: GraphNode, v: Record<string, string>): { code: string; 
   const liveC = stateC
     ? `        o_c = vec4(a_species, ${v.memory ?? 'a_mem'}, agPackColour(${v.colour ?? 'a_colour'}));\n        o_d = ${v.deposit ?? 'agOneHot(a_species)'};\n`
     : '';
+  const stateE = stateC && node.params.stateE === true;
   lines.push(
     `    float ${id}_alive = (${v.alive ?? '1.0'}) >= 0.5 && a_age < a_life && !any(isnan(${id}_p)) && !any(isinf(${id}_p)) && !any(isnan(${id}_v)) ? a_life : 0.0;\n`,
-    `    if (a_born) {\n${birth}    } else {\n`,
+    `    if (a_born) {\n${birth}${stateE ? '        o_e = vec4(0.0);\n' : ''}    } else {\n`,
     `        o_a = vec4(${id}_p, a_age);\n`,
     `        o_b = vec4(${id}_v, ${id}_alive);\n`,
     liveC,
+    stateE ? `        o_e = ${v.moreMemory ?? 'a_mem2'};\n` : '',
     `    }\n`,
   );
   return { code: lines.join(''), outputVars: {} };

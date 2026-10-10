@@ -26,6 +26,8 @@ import {
   usesAction, usesDeposit, usesFade, usesFlow, usesStop,
 } from './spec';
 import { fieldLines, fieldName, normalizeFieldSpec } from './fields';
+import { checkMemoryExpr, memoryExprGlsl, memorySlots, usesMemories } from './memory';
+import { type MemoryTimes, memoryOf } from './spec';
 
 type Wire = [string, string];
 type ExprType = 'float' | 'vec2' | 'vec3' | 'vec4';
@@ -230,9 +232,24 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
   if (die) { startLines.push({ lhs: 'float alive', op: '=', rhs: '1.0' }); startExposed.push({ name: 'alive', type: 'float' }); }
   if (stop) { startLines.push({ lhs: 'float done', op: '=', rhs: '0.0' }); startExposed.push({ name: 'done', type: 'float' }); }
   if (fade) { startLines.push({ lhs: 'float bright', op: '=', rhs: '1.0' }); startExposed.push({ name: 'bright', type: 'float' }); }
+  // Named memories (memory.ts): More memory, set going at birth, timers counting, levels fading.
+  const mems = usesMemories(set);
+  const slots = memorySlots(set);
+  const memNotes: string[] = [];
+  if (mems) {
+    startLines.push({ lhs: 'vec4 mem2', op: '=', rhs: 'more' });
+    for (const m of set.memories ?? []) {
+      const sl = slots.get(m.id);
+      if (!sl) continue;
+      if (m.start) { startLines.push({ lhs: `mem2.${sl}`, op: '=', rhs: `age < 0.025 ? ${m.type === 'position' ? `vec2(${glf(m.start)})` : glf(m.start)} : mem2.${sl}` }); memNotes.push(`mem2.${sl}: ${m.name} starts at ${m.start} on its first step.`); }
+      if (m.type === 'timer') { startLines.push({ lhs: `mem2.${sl}`, op: '+=', rhs: 'a_dt' }); memNotes.push(`mem2.${sl}: ${m.name}, a timer, counts the seconds (a_dt a step).`); }
+      if (m.type === 'level' && (m.fade ?? 0) > 0) { startLines.push({ lhs: `mem2.${sl}`, op: '*=', rhs: `exp(-${glf(m.fade!)} * a_dt)` }); memNotes.push(`mem2.${sl}: ${m.name}, a level, fades: it loses ${m.fade} of itself a second.`); }
+    }
+    startExposed.push({ name: 'mem2', type: 'vec4' });
+  }
   nodes.push(block(id.start, 1260, 200, {
     label: 'Start',
-    inputs: [{ name: 'speed', type: 'float', from: IN('speed') }, { name: 'age', type: 'float', from: IN('age') }, ...(many ? [{ name: 'sp', type: 'float' as ExprType, from: IN('species') }] : [])],
+    inputs: [{ name: 'speed', type: 'float', from: IN('speed') }, { name: 'age', type: 'float', from: IN('age') }, ...(many ? [{ name: 'sp', type: 'float' as ExprType, from: IN('species') }] : []), ...(mems ? [{ name: 'more', type: 'vec4' as ExprType, from: IN('moreMemory') }] : [])],
     lines: startLines,
     result: 'spd', outputType: 'float', exposed: startExposed,
     note: [
@@ -243,6 +260,8 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
       die ? 'alive: 1; a rule\'s "die" makes it 0.' : '',
       stop ? 'done: 0; a rule with "stop after this rule" makes it 1 when it applies, and the rules below then skip this walker this step.' : '',
       fade ? 'bright: 1; "fade with age" dims it, and Finish multiplies the colour by it.' : '',
+      mems ? `mem2: its named memories (More memory: ${(set.memories ?? []).filter(m => slots.has(m.id)).map(m => `${m.name} in ${slots.get(m.id)}`).join(', ')}), as they were last step; the rules below change them.` : '',
+      ...memNotes,
       'result: spd.',
     ].filter(Boolean),
   }));
@@ -252,7 +271,8 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
   if (die) src.alive = [id.start, 'alive'];
   if (stop) src.done = [id.start, 'done'];
   if (fade) src.bright = [id.start, 'bright'];
-  const CHAIN: Record<string, ExprType> = { h: H, spd: 'float', mem: 'vec2', dep: 'vec4', alive: 'float', done: 'float', bright: 'float' };
+  if (mems) src.mem2 = [id.start, 'mem2'];
+  const CHAIN: Record<string, ExprType> = { h: H, spd: 'float', mem: 'vec2', dep: 'vec4', alive: 'float', done: 'float', bright: 'float', mem2: 'vec4' };
 
   // ── The rules, top to bottom (species by species) ──
   let x = 1680;
@@ -274,25 +294,36 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
     return st.length === 1 ? vec3Of(st[0].colour) : st.slice(0, -1).map((c, i) => `state < ${glf(i + 0.5)} ? ${vec3Of(c.colour)} : `).join('') + vec3Of(st[st.length - 1].colour);
   };
   const colours = set.species.map((_, s) => colourOf(s));
-  const colour = colours.length === 1 ? colours[0] : colours.slice(0, -1).map((c, i) => `sp < ${glf(i + 0.5)} ? (${c}) : `).join('') + `(${colours[colours.length - 1]})`;
+  const stateColour = colours.length === 1 ? colours[0] : colours.slice(0, -1).map((c, i) => `sp < ${glf(i + 0.5)} ? (${c}) : `).join('') + `(${colours[colours.length - 1]})`;
+  // Look's "colour by a memory": the memory on Under the hood's heat map (black, red, yellow, white), lo to hi.
+  const byMem = mems && set.colourBy && slots.get(set.colourBy.memory) && memoryOf(set, set.colourBy.memory)?.type !== 'position' ? set.colourBy : null;
+  const colour = byMem ? 'clamp(vec3(heat * 3.0, heat * 3.0 - 1.0, heat * 3.0 - 2.0), 0.0, 1.0)' : stateColour;
+  // Speed × a memory (Moving's Speed slider): the step Move takes; the speed it keeps is unchanged.
+  const stepTimes = mems ? set.species.map(x => x.speedTimes).find(t => t && slots.has(t.memory)) : undefined;
+  const timesOfSpecies = set.species.map(x => (x.speedTimes && slots.has(x.speedTimes.memory) ? x.speedTimes : null));
   nodes.push(block(id.finish, x, 200, {
     label: 'Finish',
     inputs: [
       { name: 'mem', type: 'vec2', from: src.mem }, { name: 'spd', type: 'float', from: src.spd },
       ...(many ? [{ name: 'sp', type: 'float' as ExprType, from: IN('species') }] : []),
       ...(fade ? [{ name: 'bright', type: 'float' as ExprType, from: src.bright }] : []),
+      ...(byMem || stepTimes ? [{ name: 'mem2', type: 'vec4' as ExprType, from: src.mem2 }] : []),
     ],
     lines: [
       { lhs: 'float state', op: '=', rhs: 'floor(mem.x + 0.01)' },
       { lhs: 'float stuck', op: '=', rhs: 'step(0.25, fract(mem.x))' },
       { lhs: 'float speed', op: '=', rhs: 'max(spd, 0.0) * (1.0 - stuck)' },
+      ...(byMem ? [{ lhs: 'float heat', op: '=', rhs: `clamp((mem2.${slots.get(byMem.memory)} - ${glf(byMem.lo)}) / ${glf(Math.abs(byMem.hi - byMem.lo) > 1e-6 ? byMem.hi - byMem.lo : 1)}, 0.0, 1.0)` }] : []),
+      ...(stepTimes ? [{ lhs: 'float stepSpeed', op: '=', rhs: `speed * ${timesOfSpecies.length === 1 || !many ? timesFactor(set, timesOfSpecies[0], 'mem2') : timesOfSpecies.slice(0, -1).map((t, i) => `sp < ${glf(i + 0.5)} ? ${timesFactor(set, t, 'mem2')} : `).join('') + timesFactor(set, timesOfSpecies[timesOfSpecies.length - 1], 'mem2')}` }] : []),
     ],
-    result: fade ? `(${colour}) * bright` : colour, outputType: 'vec3', exposed: [{ name: 'speed', type: 'float' }],
+    result: fade ? `(${colour}) * bright` : colour, outputType: 'vec3', exposed: [{ name: 'speed', type: 'float' }, ...(stepTimes ? [{ name: 'stepSpeed', type: 'float' as ExprType }] : [])],
     note: [
       'Finish (an Expression Block): what the rules decided, made ready for Move and Agent Output.',
       'state: the walker\'s state, Memory x without its stuck half.',
       'stuck: 1 once a rule made it stick (Memory x has a half added), else 0.',
       'speed: the speed the rules left (never below 0), and 0 while stuck.',
+      ...(byMem ? [`heat: ${memoryOf(set, byMem.memory)?.name} from ${byMem.lo} (0) to ${byMem.hi} (1): the colour is it on a heat map, black, red, yellow, white (Look: colour by a memory).`] : []),
+      ...(stepTimes ? ['stepSpeed: the step Move takes: speed times a memory (Moving: Speed × a memory). The speed it keeps for next step is speed.'] : []),
       `result: its colour, its state's colour (${set.species.map(sp => sp.states.map(st => st.name).join(' / ')).join('; ')})${fade ? ', times bright (dimmed by "fade with age")' : ''}, for Draw agents' Colour by Agent.`,
     ],
   }));
@@ -304,7 +335,7 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
     __comment: [
       `Move: one step along the heading the rules left, at Finish's speed. Edges: ${set.edges === 'wrap' ? 'Wrap (out one side, in the other)' : set.edges === 'bounce' ? 'Bounce (reflected back in)' : 'Slide (stopped at the edge)'}.`,
     ].join('\n'),
-  }, { heading: src.h, speed: [id.finish, 'speed'] })));
+  }, { heading: src.h, speed: [id.finish, stepTimes ? 'stepSpeed' : 'speed'] })));
   x += 420;
   const outWires: Record<string, Wire> = {
     position: [id.move, 'position'], heading: [id.move, 'heading'], speed: [id.finish, 'speed'], memory: src.mem, colour: [id.finish, 'result'],
@@ -338,6 +369,7 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
   if (!d3) outWires.velocity = [id.move, 'velocity'];
   if (die) outWires.alive = src.alive;
   if (dep) outWires.deposit = src.dep;
+  if (mems) outWires.moreMemory = src.mem2;
   nodes.push(space(n('agentOutput', id.output, x, 160, {
     _groupOriginal: true,
     // Born walkers leave no trail on the step they are born: the rules decide every deposit.
@@ -383,7 +415,7 @@ function ruleBlock(set: AgentRuleSet, rule: AgentRule, s: number, ri: number, c:
   rule.do.forEach((a, j) => actionLines(set, a, s, ri, j + 1, c, add, read));
   if (rule.stop) add('done', '=', `max(${read('done')}, go)`, 'done: 1 once this rule applied, so the rules below skip this walker this step (stop after this rule).', 'done');
 
-  const order = ['h', 'spd', 'mem', 'dep', 'alive', 'done', 'bright'];
+  const order = ['h', 'spd', 'mem', 'dep', 'alive', 'done', 'bright', 'mem2'];
   const inputs: Array<{ name: string; type: ExprType; from?: Wire }> = [];
   for (const v of order) if (reads.has(v)) inputs.push({ name: v, type: c.chain[v], from: c.src[v] });
   const extra: Record<string, { type: ExprType; from: Wire }> = {
@@ -481,6 +513,13 @@ function conditionTerm(set: AgentRuleSet, cond: RuleCondition, s: number, ri: nu
       return [`float(${m.kind === 'texture' ? `dot(${v}, vec3(0.299, 0.587, 0.114))` : v} ${cond.cmp} ${glf(cond.value)})`];
     }
     case 'neighbours': return [`float(${read(nbVar(set, cond.who, cond.radius, 'Count'))} ${cond.cmp} ${glf(cond.count)})`];
+    case 'mem': {
+      const sl = memorySlots(set).get(cond.memory);
+      if (!sl) return ['0.0'];
+      const m = memoryOf(set, cond.memory)!;
+      const v = m.type === 'position' ? `length(${read('pos')}.xy - ${read('mem2')}.${sl})` : `${read('mem2')}.${sl}`;
+      return [cond.cmp === '=' ? `float(abs(${v} - ${glf(cond.value)}) < 0.001)` : `float(${v} ${cond.cmp} ${glf(cond.value)})`];
+    }
     case 'shape': {
       // In 3D the shape is a column through the depth: only x and y count.
       const p = `${read('pos')}${d3 ? '.xy' : ''}`;
@@ -494,6 +533,9 @@ function conditionTerm(set: AgentRuleSet, cond: RuleCondition, s: number, ri: nu
 function actionLines(set: AgentRuleSet, a: RuleAction, s: number, ri: number, j: number, c: RuleCtx, add: Add, read: (v: string) => string): void {
   const say = describeAction(set, s, a);
   const { d3 } = c;
+  // Its main number × a named memory ("speed × energy"): M is the factor, G a number with it.
+  const M = a.times && memorySlots(set).has(a.times.memory) && memoryOf(set, a.times.memory)?.type !== 'position' ? timesFactor(set, a.times, read('mem2')) : null;
+  const G = (v: number) => (M ? `(${glf(v)} * ${M})` : glf(v));
   // 3D: a direction across the heading to turn in (this step's random plane, kept square to the heading).
   const across = () => {
     add(`vec3 side${j}`, '=', `a_across - ${read('h')} * dot(a_across, h)`, `side${j}: this step's random direction across the heading (a_across), the plane a 3D walker turns in.`);
@@ -501,9 +543,10 @@ function actionLines(set: AgentRuleSet, a: RuleAction, s: number, ri: number, j:
   };
   /** Turn toward a direction `to` (a vector of the walker's space) by at most `deg`. */
   const toward = (to: string, deg: number, what: string) => {
+    const DEG = G(deg);
     if (!d3) {
       add(`vec2 to${j}`, '=', to, `to${j}: the way to ${what}.`);
-      add(`float turn${j}`, '=', `length(to${j}) > 1e-6 ? clamp(mod(atan(to${j}.y, to${j}.x) - ${read('h')} + ${PI}, ${TAU}) - ${PI}, -radians(${glf(deg)}), radians(${glf(deg)})) : 0.0`,
+      add(`float turn${j}`, '=', `length(to${j}) > 1e-6 ? clamp(mod(atan(to${j}.y, to${j}.x) - ${read('h')} + ${PI}, ${TAU}) - ${PI}, -radians(${DEG}), radians(${DEG})) : 0.0`,
         `turn${j}: the angle from the heading to it (the short way round), at most ${deg}° either way.`);
       add('h', '+=', `go * turn${j}`, `h: the heading, turned (${say}).`, 'h');
       return;
@@ -511,7 +554,7 @@ function actionLines(set: AgentRuleSet, a: RuleAction, s: number, ri: number, j:
     add(`vec3 to${j}`, '=', to, `to${j}: the way to ${what}.`);
     add(`to${j}`, '=', `length(to${j}) > 1e-6 ? normalize(to${j}) : ${read('h')}`, '');
     add(`vec3 side${j}`, '=', `to${j} - h * dot(to${j}, h)`, `side${j}: the part of it across the heading, the plane to turn in.`);
-    add(`float turn${j}`, '=', `min(radians(${glf(deg)}), acos(clamp(dot(h, to${j}), -1.0, 1.0)))`, `turn${j}: the angle to it, at most ${deg}°.`);
+    add(`float turn${j}`, '=', `min(radians(${DEG}), acos(clamp(dot(h, to${j}), -1.0, 1.0)))`, `turn${j}: the angle to it, at most ${deg}°.`);
     add('h', '=', `length(side${j}) > 1e-5 ? agTurn3(h, normalize(side${j}), go * turn${j}) : h`, `h: the heading (a direction in 3D), turned (${say}).`, 'h');
   };
   switch (a.kind) {
@@ -522,8 +565,8 @@ function actionLines(set: AgentRuleSet, a: RuleAction, s: number, ri: number, j:
         add(`float coin${j}`, '=', dice(s, ri, 40 + j), `coin${j}: a random number, for which side when both sides smell stronger than ahead.`);
         add(`float turn${j}`, '=', `${r}.y > ${r}.x && ${r}.y > ${r}.z ? 0.0 : ${r}.y < ${r}.x && ${r}.y < ${r}.z ? (coin${j} < 0.5 ? -1.0 : 1.0) : sign(${r}.x - ${r}.z)`,
           `turn${j}: which way to turn ${a.away ? 'away from' : 'toward'} ${channelName(set, a.channel)} (the slime-mold rule): 0 when it is strongest ahead, a random side when both sides beat ahead, else +1 toward the left sensor or −1 toward the right.`);
-        if (d3) { across(); add('h', '=', `agTurn3(${read('h')}, side${j}, go * radians(${glf(a.degrees)}) * turn${j})`, `h: the heading, turned ${a.degrees}° that way (${say}).`, 'h'); }
-        else add('h', '+=', `go * radians(${glf(a.degrees)}) * turn${j}`, `h: the heading, turned ${a.degrees}° that way (${say}).`, 'h');
+        if (d3) { across(); add('h', '=', `agTurn3(${read('h')}, side${j}, go * radians(${G(a.degrees)}) * turn${j})`, `h: the heading, turned ${a.degrees}° that way (${say}).`, 'h'); }
+        else add('h', '+=', `go * radians(${G(a.degrees)}) * turn${j}`, `h: the heading, turned ${a.degrees}° that way (${say}).`, 'h');
         return;
       }
       const target = a.toward === 'mouse' ? MOUSE : a.toward === 'centre' ? 'vec2(0.0)' : `vec2(${glf(a.x ?? 0)}, ${glf(a.y ?? 0)})`;
@@ -540,20 +583,20 @@ function actionLines(set: AgentRuleSet, a: RuleAction, s: number, ri: number, j:
       toward(`${read('crowd')}.${d3 ? 'xyz' : 'xy'}`, a.degrees, 'the way the crowd round it flies (the velocity trail\'s flow here)');
       return;
     case 'wander':
-      add(`float wobble${j}`, '=', `(${dice(s, ri, 60 + j)} * 2.0 - 1.0) * radians(${glf(a.degrees)})`, `wobble${j}: a random turn of up to ${a.degrees}° either way.`);
+      add(`float wobble${j}`, '=', `(${dice(s, ri, 60 + j)} * 2.0 - 1.0) * radians(${G(a.degrees)})`, `wobble${j}: a random turn of up to ${a.degrees}° either way.`);
       if (d3) { across(); add('h', '=', `agTurn3(${read('h')}, side${j}, go * wobble${j})`, `h: the heading, wobbled (${say}).`, 'h'); }
       else add('h', '+=', `go * wobble${j}`, `h: the heading, wobbled (${say}).`, 'h');
       return;
     case 'speed':
       read('spd');
-      if (a.mode === 'set') add('spd', '=', `mix(spd, ${glf(a.value)}, go)`, `spd: the speed (${say}).`, 'spd');
-      else add('spd', '+=', `go * ${glf(a.value)} * a_dt`, `spd: the speed (${say}: a_dt is one step, 1/60 s).`, 'spd');
+      if (a.mode === 'set') add('spd', '=', `mix(spd, ${G(a.value)}, go)`, `spd: the speed (${say}).`, 'spd');
+      else add('spd', '+=', `go * ${G(a.value)} * a_dt`, `spd: the speed (${say}: a_dt is one step, 1/60 s).`, 'spd');
       return;
     case 'trail': {
       read('dep');
       const fade = a.fade ? ` * exp(-${glf(a.fade)} * ${read('mem')}.y)` : '';
-      if (a.channel === 'own' || a.channel === undefined) add('dep', '+=', `go * ${glf(a.amount)}${fade} * vec4(equal(vec4(${read('sp')}), vec4(0.0, 1.0, 2.0, 3.0)))`, `dep: the trail it leaves, ${a.amount} in its own species' channel${a.fade ? ', weaker the bigger its Memory number' : ''} (${say}).`, 'dep');
-      else add(`dep.${'xyzw'[a.channel]}`, '+=', `go * ${glf(a.amount)}${fade}`, `dep.${'xyzw'[a.channel]}: the trail it leaves in channel ${a.channel + 1} (${say}).`, 'dep');
+      if (a.channel === 'own' || a.channel === undefined) add('dep', '+=', `go * ${G(a.amount)}${fade} * vec4(equal(vec4(${read('sp')}), vec4(0.0, 1.0, 2.0, 3.0)))`, `dep: the trail it leaves, ${a.amount} in its own species' channel${a.fade ? ', weaker the bigger its Memory number' : ''} (${say}).`, 'dep');
+      else add(`dep.${'xyzw'[a.channel]}`, '+=', `go * ${G(a.amount)}${fade}`, `dep.${'xyzw'[a.channel]}: the trail it leaves in channel ${a.channel + 1} (${say}).`, 'dep');
       return;
     }
     case 'state':
@@ -639,7 +682,7 @@ function actionLines(set: AgentRuleSet, a: RuleAction, s: number, ri: number, j:
       read('h'); read('spd');
       const P = d3 ? 'vec3' : 'vec2';
       const lift = (v: string) => (d3 ? `vec3(${v}, 0.0)` : v);
-      const sv = glf(a.strength);
+      const sv = G(a.strength);
       const dirOf = (deg: number) => lift(`vec2(${glf(Math.cos(deg * Math.PI / 180))}, ${glf(Math.sin(deg * Math.PI / 180))})`);
       let force: string, why: string;
       if (a.field === 'gravity') { force = `${sv} * ${dirOf(a.angle ?? -90)}`; why = `gravity: ${a.strength} a second², toward ${a.angle ?? -90}° (−90° is down)`; }
@@ -662,7 +705,7 @@ function actionLines(set: AgentRuleSet, a: RuleAction, s: number, ri: number, j:
     case 'field': {
       read('h'); read('spd');
       const fld = read(`fld${j}`);
-      const S = glf(a.strength);
+      const S = G(a.strength);
       add(`${c.P} vel${j}`, '=', `${d3 ? 'h' : 'vec2(cos(h), sin(h))'} * spd`, `vel${j}: its velocity now (heading × speed).`);
       if (a.grip && a.grip > 0) add(`vel${j}`, '=', `mix(vel${j}, ${fld} * ${S}, go * (1.0 - exp(-${glf(a.grip)} * a_dt)))`, `vel${j}: eased toward the field's velocity × ${a.strength} (fld${j}, the Field block's), at ${a.grip} a second (1 − e^(−grip·dt) a step: the same at any frame rate): it rides the field.`);
       else add(`vel${j}`, '+=', `go * ${S} * ${fld} * a_dt`, `vel${j}: pushed by the field × ${a.strength} (fld${j}, the Field block's velocity, as a force) for one step (a_dt, 1/60 s).`);
@@ -672,13 +715,48 @@ function actionLines(set: AgentRuleSet, a: RuleAction, s: number, ri: number, j:
     }
     case 'drag':
       read('spd');
-      add('spd', '*=', `mix(1.0, exp(-${glf(Math.max(a.amount, 0))} * a_dt), go)`, `spd: the speed, losing ${a.amount} of itself a second (e^(−${a.amount}·dt) a step: the same at any frame rate) (${say}).`, 'spd');
+      add('spd', '*=', `mix(1.0, exp(-${G(Math.max(a.amount, 0))} * a_dt), go)`, `spd: the speed, losing ${a.amount} of itself a second (e^(−${a.amount}·dt) a step: the same at any frame rate) (${say}).`, 'spd');
       return;
+    case 'mem': {
+      const sl = memorySlots(set).get(a.memory);
+      const m = memoryOf(set, a.memory);
+      if (!sl || !m) return;
+      const t = `mem2.${sl}`;
+      read('mem2');
+      const v = a.value ?? 0;
+      const zero = m.type === 'position' ? 'vec2(0.0)' : '0.0';
+      const here = () => read(hereVar(String(a.channel ?? 'own')));
+      switch (a.op) {
+        case 'add': add(t, '+=', `go * ${glf(v)}${a.perSecond ? ' * a_dt' : ''}`, `${t}: ${m.name} (${say}${a.perSecond ? ': a_dt is one step, 1/60 s' : ''}).`, 'mem2'); return;
+        case 'set': add(t, '=', `mix(${t}, ${m.type === 'position' ? `vec2(${glf(v)})` : glf(v)}, go)`, `${t}: ${m.name} (${say}).`, 'mem2'); return;
+        case 'toggle': add(t, '=', `mix(${t}, 1.0 - step(0.5, ${t}), go)`, `${t}: ${m.name}, on becomes off and off on (${say}).`, 'mem2'); return;
+        case 'reset': add(t, '=', `mix(${t}, ${zero}, go)`, `${t}: ${m.name} back to 0 (${say}).`, 'mem2'); return;
+        case 'place': add(t, '=', `mix(${t}, ${read('pos')}.xy, go)`, `${t}: ${m.name}, where it is now (${say}).`, 'mem2'); return;
+        case 'smell': add(t, '=', `mix(${t}, ${here()}, go)`, `${t}: ${m.name}, what it smells here now (${say}).`, 'mem2'); return;
+        case 'sum': add(t, '+=', `go * ${glf(v || 1)} * ${here()} * a_dt`, `${t}: ${m.name}, adding up what it smells here, a second's worth a second (${say}).`, 'mem2'); return;
+        case 'decay': add(t, '*=', `mix(1.0, exp(-${glf(Math.max(v, 0))} * a_dt), go)`, `${t}: ${m.name}, losing ${v} of itself a second (e^(−${v}·dt) a step) (${say}).`, 'mem2'); return;
+        case 'expr': {
+          const chk = checkMemoryExpr(set, a.memory, a.expr, d3);
+          if (!chk.ok || !chk.expr) return;
+          const rhs = memoryExprGlsl(set, chk.expr, { read, hereVar, random: dice(s, ri, 100 + j), d3 });
+          add(t, '=', `mix(${t}, ${rhs}, go)`, `${t}: ${m.name} = ${a.expr} (your expression; ${say}).`, 'mem2');
+          return;
+        }
+      }
+      return;
+    }
     case 'fade':
       read('bright');
       add('bright', '*=', `mix(1.0, clamp(1.0 - ${read('age')} / ${glf(Math.max(a.seconds, 1e-3))}, 0.0, 1.0), go)`, `bright: its brightness, from 1 at birth to 0 at ${a.seconds} s old (${say}).`, 'bright');
       return;
   }
+}
+
+/** A memory as a multiplier, read from `mem2`: its value, or e^(−fade · value) (a timer as a fading strength). */
+function timesFactor(set: AgentRuleSet, t: MemoryTimes | null | undefined, mem2: string): string {
+  const sl = t ? memorySlots(set).get(t.memory) : undefined;
+  if (!t || !sl) return '1.0';
+  return t.fade ? `exp(-${glf(t.fade)} * ${mem2}.${sl})` : `${mem2}.${sl}`;
 }
 
 /** The group's note in rules mode: the rules as sentences. */

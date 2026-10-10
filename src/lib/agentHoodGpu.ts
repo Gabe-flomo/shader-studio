@@ -26,12 +26,14 @@ export interface AgentStateView {
   readonly count: number;
   readonly species: number;
   readonly stateC: boolean;
+  /** It keeps More memory (state E: the builder's named memories). */
+  readonly stateE?: boolean;
   readonly d3: boolean;
   /** The picture's width ÷ height at the last live run. */
   readonly aspect: number;
   readonly step: number;
   /** The copy the next step reads (what Draw agents drew this frame). */
-  readonly textures: Readonly<{ A: THREE.Texture; B: THREE.Texture; C: THREE.Texture | null; D: THREE.Texture | null }>;
+  readonly textures: Readonly<{ A: THREE.Texture; B: THREE.Texture; C: THREE.Texture | null; D: THREE.Texture | null; E?: THREE.Texture | null }>;
   /** The trail its Deposit fills (a volume: its front view). */
   readonly trail: Readonly<{ nodeId: string; texture: THREE.Texture; w: number; h: number; velocity: boolean }> | null;
   /** 3D: the camera its first live Draw agents sees through (`scene`: a scene's camera texture, when probed). */
@@ -90,6 +92,7 @@ uniform highp sampler2D u_a;
 uniform highp sampler2D u_b;
 uniform highp sampler2D u_c;
 uniform highp sampler2D u_d;
+uniform highp sampler2D u_e;
 uniform sampler2D u_trail;
 uniform int u_side, u_n, u_H, u_trailOk, u_spN;
 uniform vec4 u_rect[${MAX_TILES}];
@@ -132,7 +135,7 @@ void main() {
   vec4 B = texelFetch(u_b, t, 0);
   // Dead (or not born yet): black in every channel.
   if (B.w <= 0.0) { o = vec4(0.0, 0.0, 0.0, 1.0); return; }
-  vec4 T = src == 0 ? texelFetch(u_a, t, 0) : src == 1 ? B : src == 2 ? texelFetch(u_c, t, 0) : texelFetch(u_d, t, 0);
+  vec4 T = src == 0 ? texelFetch(u_a, t, 0) : src == 1 ? B : src == 2 ? texelFetch(u_c, t, 0) : src == 5 ? texelFetch(u_e, t, 0) : texelFetch(u_d, t, 0);
   float v = T[comp];
   float tt = (v - rg.x) / max(rg.y - rg.x, 1e-6);
   vec3 c;
@@ -224,7 +227,7 @@ export class AgentHoodGpu {
   private atlasMat = new THREE.RawShaderMaterial({
     vertexShader: FULL_VERT, fragmentShader: HOOD_ATLAS_FRAG, glslVersion: THREE.GLSL3, depthTest: false, depthWrite: false,
     uniforms: {
-      u_a: { value: null }, u_b: { value: null }, u_c: { value: null }, u_d: { value: null }, u_trail: { value: null },
+      u_a: { value: null }, u_b: { value: null }, u_c: { value: null }, u_d: { value: null }, u_e: { value: null }, u_trail: { value: null },
       u_side: { value: 1 }, u_n: { value: 0 }, u_H: { value: 1 }, u_trailOk: { value: 0 }, u_spN: { value: 1 },
       u_rect: { value: Array.from({ length: MAX_TILES }, () => new THREE.Vector4()) },
       u_spec: { value: Array.from({ length: MAX_TILES }, () => new THREE.Vector4()) },
@@ -259,7 +262,7 @@ export class AgentHoodGpu {
       let slot = this.slots.get(req.groupId);
       if (!slot) { slot = { atlasAt: -Infinity, atlasStep: -1, atlasSpecs: null, probeIndex: -1, probeStep: -1, picking: false }; this.slots.set(req.groupId, slot); }
       const v = view(req.groupId);
-      req.onState?.(v ? { side: v.side, count: v.count, stateC: v.stateC, d3: v.d3, aspect: v.aspect, species: v.species, trail: !!v.trail } : null);
+      req.onState?.(v ? { side: v.side, count: v.count, stateC: v.stateC, stateE: !!v.stateE, d3: v.d3, aspect: v.aspect, species: v.species, trail: !!v.trail } : null);
       if (!v) continue;
       this.atlas(req, slot, v, now);
       this.probe(req, slot, v);
@@ -286,7 +289,7 @@ export class AgentHoodGpu {
     if (now - slot.atlasAt < HOOD_ATLAS_MS || (slot.atlasStep === v.step && slot.atlasSpecs === req.specs)) return;
     slot.atlasAt = now; slot.atlasStep = v.step; slot.atlasSpecs = req.specs;
     const u = this.atlasMat.uniforms;
-    u.u_a.value = v.textures.A; u.u_b.value = v.textures.B; u.u_c.value = v.textures.C; u.u_d.value = v.textures.D;
+    u.u_a.value = v.textures.A; u.u_b.value = v.textures.B; u.u_c.value = v.textures.C; u.u_d.value = v.textures.D; u.u_e.value = v.textures.E ?? null;
     u.u_trail.value = v.trail?.texture ?? null; u.u_trailOk.value = v.trail ? 1 : 0;
     u.u_side.value = v.side; u.u_H.value = H;
     const n = Math.min(MAX_TILES, req.atlas.tiles.length, req.specs.length);

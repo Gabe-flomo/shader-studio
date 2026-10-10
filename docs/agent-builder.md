@@ -309,6 +309,34 @@ Why this mapping: the rule blocks already integrate forces (Gravity, Curl, Attra
 
 **Whirlpool** (particles): a vortex plus curl noise × 0.5 inside a circle, drifting, ridden; they fade over 6 s.
 
+## Memory: named numbers a walker keeps
+
+The **Memory** section (Trail followers and the other kinds) holds up to four numbers each walker
+carries from step to step, with names you choose.
+
+- **Kinds:** Counter, Timer (counts seconds by itself), On / off, A value, A place (two numbers),
+  A level that fades (drains by itself, like energy). Each has a *Starts at* (and a *Fades* for a
+  level), and its live range shows on the card.
+- **Operation cards** change a memory, each with its own "only when…":
+  - Count up / down;
+  - Set to, set on / off, toggle;
+  - Remember what it smells;
+  - Add up what it smells;
+  - Decay over time;
+  - Reset.
+- **Write it as an expression** for anything else (`energy = energy * 0.98 + here.food`), checked
+  as you type.
+- **Used everywhere:**
+  - in any card's "only when" (`carrying is on`, `energy > 0.5`, a timer's "after 2 s"), with up
+    to two conditions on a card;
+  - as a slider multiplier ("× a memory");
+  - in **Colour by a memory**, which colours the walkers by it while you edit.
+- **Ants with food** is built from memories now (carrying, away) instead of Advanced rules.
+- **Under the hood:** the memories live in a fifth state texture, **E (More memory)**, four numbers
+  per walker. Under the hood shows it with each channel named. Only groups that use memories get it,
+  so every other graph compiles as before. It costs 8 MB more at 256k walkers and 32 MB more at 1M
+  (both copies, float32).
+
 ## Presets
 
 Each kind has its own strip:
