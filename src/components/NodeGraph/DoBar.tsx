@@ -25,6 +25,10 @@ import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore
 import { getOfferedDefinitions } from '../../nodes/definitions';
 import { scoreNodeDef } from '../../nodes/searchNodes';
 import { HIDDEN_TYPES } from './nodeCategoryMeta';
+import { useHiddenHere } from './useAddScope';
+
+/** `create` offers every type except the ones scoped to another group (nodes/addScope.ts). */
+const NO_TYPES: ReadonlySet<string> = new Set();
 import { intoView, spawnPoint } from './spawnPoint';
 import { parseDo, type DoPlan } from '../../suggestions/doBar';
 import { inTargetStage, STAGE_SEARCH_POINTS } from '../../structure/boost';
@@ -164,6 +168,9 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   const [active, setActive] = useState(0);
   const [caret, setCaret] = useState<number | null>(initial.length);
   const scope = useScope();
+  // Scene Pos / Scene Output… only inside the group they belong to (nodes/addScope.ts).
+  const hidden = useHiddenHere(HIDDEN_TYPES);
+  const scopedHidden = useHiddenHere(NO_TYPES);
   // Type-ahead: the language's (graph-aware: create, connect, set…), else the plain-English vocabulary's.
   const assist = useMemo(() => {
     const t = rankTables();
@@ -173,11 +180,11 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
     };
     const none: Assist = { items: [], from: 0, to: 0, signature: null };
     return (tx: string, c: number): Assist => readSafely('type-ahead', tx, () => {
-      const lang = barAssist(tx, c, { nodes: scope.nodes, rank });
+      const lang = barAssist(tx, c, { nodes: scope.nodes, rank, hidden: scopedHidden });
       if (lang.items.length || lang.signature) return lang;
       return doBarAssist(tx, c);
     }, none).value;
-  }, [scope.nodes]);
+  }, [scope.nodes, scopedHidden]);
   // The seed for `random` while you type (a line's own seed= wins); a new one after each run.
   const [seed, setSeed] = useState(freshSeed);
   // What the examples and your saved graphs use: the random line leans toward it, a little (lang/surpriseBias.ts).
@@ -288,13 +295,13 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
     const q = text.trim().toLowerCase().replace(/^(add|make|put|a|an)\s+/, '');
     // The flow strip's next stage leans in a little within a match tier (structure/boost.ts).
     const target = currentStageTarget();
-    const nodes = getOfferedDefinitions().filter(d => !HIDDEN_TYPES.has(d.type))
+    const nodes = getOfferedDefinitions().filter(d => !hidden.has(d.type))
       .map(d => ({ d, s: scoreNodeDef(d, q) })).filter(x => x.s > 0)
       .map(x => ({ ...x, s: x.s + (inTargetStage(x.d.type, target) ? STAGE_SEARCH_POINTS : 0) })).sort((a, b) => b.s - a.s).slice(0, 5)
       .map(x => ({ kind: 'node' as const, type: x.d.type, label: x.d.label, detail: x.d.category }));
     const idioms = (idiomFirst.length ? idiomFirst : matchIdioms(text, 3)).map(spec => ({ kind: 'idiom' as const, spec }));
     return idiomFirst.length ? idioms : [...nodes, ...idioms];
-  }, [] as Fallback[]).value, [text, plan, editing, builder, otherDialect, surprise, langErrors.length]);
+  }, [] as Fallback[]).value, [text, plan, editing, builder, otherDialect, surprise, langErrors.length, hidden]);
   // A reading that threw (logged by readSafely): one line in the bar instead of a blank app.
   const readError = builderRead.error ?? surpriseRead.error ?? lineRead.error ?? planRead.error ?? cmdRead.error;
   useEffect(() => setActive(0), [fallback.length]);
