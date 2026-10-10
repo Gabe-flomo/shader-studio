@@ -25,7 +25,7 @@ import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore
 import { getOfferedDefinitions } from '../../nodes/definitions';
 import { scoreNodeDef } from '../../nodes/searchNodes';
 import { HIDDEN_TYPES } from './nodeCategoryMeta';
-import { spawnPoint } from './spawnPoint';
+import { intoView, spawnPoint } from './spawnPoint';
 import { parseDo, type DoPlan } from '../../suggestions/doBar';
 import { inTargetStage, STAGE_SEARCH_POINTS } from '../../structure/boost';
 import { currentStageTarget } from '../../structure/hintsStore';
@@ -314,12 +314,12 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
       const nextId = () => useNodeGraphStore.getState().newNodeId();
       if (r.dialect === 'scene') {
         const made = sceneNodes(nodes, r.scene!, nextId, spawnPoint());
-        useNodeGraphStore.getState().setNodesRewritten(made.nodes, `Do: ${text.trim()}`);
+        useNodeGraphStore.getState().setNodesRewritten(intoView(nodes, made.nodes), `Do: ${text.trim()}`);
         useNodeGraphStore.getState().focusNode(made.focusId);
         toast.success('3D scene built', { message: 'Right-click the Scene Group → Edit in Scene Builder to change it. Undo takes it back.' });
       } else if (r.dialect === 'agents') {
         const made = agentsNodes(nodes, r.agents!, nextId, spawnPoint());
-        useNodeGraphStore.getState().setNodesRewritten(made.nodes, `Do: ${text.trim()}`);
+        useNodeGraphStore.getState().setNodesRewritten(intoView(nodes, made.nodes), `Do: ${text.trim()}`);
         useNodeGraphStore.getState().focusNode(made.groupId);
         toast.success('Agents added with these rules', { message: 'Double-click the group to open its rules. Undo takes it back.' });
       }

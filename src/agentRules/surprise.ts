@@ -102,7 +102,7 @@ const SPECIES_NAMES: Record<WalkerStyle, string[]> = {
 };
 
 /** Trail followers (tracker, drifter, flocker styles) and carriers (pulsers), written by hand. */
-function styledAgents(rng: Rng, specKind: 'trail' | 'ants', o: { d3?: boolean }): AgentSurprise {
+export function styledAgents(rng: Rng, specKind: 'trail' | 'ants', o: { d3?: boolean }): AgentSurprise {
   const kind: WalkerStyle = specKind === 'ants' ? 'pulser' : rng.weighted<WalkerStyle>([['tracker', 4], ['drifter', 2], ['flocker', 2]]);
   const deposit = rng.float(0.5, 2);
   const cols = harmoniousPalette(rng.fork('colours'), 4, { light: [0.55, 0.78] });
@@ -144,7 +144,7 @@ const VARY: Record<string, [number, number]> = {
 };
 
 /** A copy of an action with each of its numbers times 0.65–1.5, inside its bounds (angles of a force kept). */
-function varyAction(a: RuleAction, rng: Rng): RuleAction {
+export function varyAction(a: RuleAction, rng: Rng): RuleAction {
   const out: Record<string, unknown> = { ...a };
   for (const [k, v] of Object.entries(a)) {
     const b = VARY[k];

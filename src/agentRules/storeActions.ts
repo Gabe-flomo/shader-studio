@@ -5,23 +5,22 @@
  */
 import { useNodeGraphStore, undoManager } from '../store/useNodeGraphStore';
 import { toast } from '../components/ui/toastStore';
-import { applyRulesToGroup, backToRules, ensureBirthEmit, groupRules, openRulesAsNodes, rulesNeedRegenerating } from './apply';
-import { type AgentRuleSet, kindOf } from './spec';
+import { applyRulesToGroup, backToRules, ensureBirthEmit, openRulesAsNodes, rulesNeedRegenerating } from './apply';
+import type { AgentRuleSet } from './spec';
 import type { AgentSurprise } from './surprise';
 import { setAgentsView, type AgentsView } from './outputs';
-import { openAgentBuilder, openAgentRulesWindow } from '../builders/windows';
-import { BUILDER_KINDS } from '../agentBuilder/kinds';
+import { openAgentBuilder } from '../builders/windows';
 import { type AgentSpace, type ShapeKind, addShapeAround, applyTemplate3d, convertGroupSpace, shapeOf, stripShape } from './space3d';
 
 /**
  * Open a rules group in the Agent Builder (the card's Edit rules, its title double-click, Write as
- * rules): every kind opens there since phase 2 (trail followers, ants, particles, flocks, crowds,
- * orbiters); a kind it doesn't know opens the rules editor, which stays for Advanced rules.
+ * rules, the Do… bar): every kind opens there (trail followers, ants, particles, flocks, crowds,
+ * orbiters), and its Advanced rules edit every rule as When … Do … lines, so nothing opens the old
+ * rules editor any more. A kind the builder didn't know would open as trail followers (kindOf).
  */
 export function openAgentRulesEditor(groupId: string): void {
   const g = useNodeGraphStore.getState().nodes.find(x => x.id === groupId);
-  if (g && BUILDER_KINDS.has(kindOf(groupRules(g)))) openAgentBuilder(groupId);
-  else openAgentRulesWindow(groupId);
+  if (g) openAgentBuilder(groupId);
 }
 
 let last = { id: '', at: 0 };

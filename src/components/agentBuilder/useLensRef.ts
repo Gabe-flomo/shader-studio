@@ -1,7 +1,7 @@
 /**
  * The lens's reference distance (agentBuilder/diagram.ts lensFor): the feelers' length when the
  * section was picked, kept while a slider moves within reach (keepRef), so the diagram's feelers
- * grow and shrink as you drag instead of being re-fitted every step.
+ * grow and shrink as you drag; past reach the lens zooms smoothly with the value (never a jump).
  */
 import { useState } from 'react';
 import { keepRef } from '../../agentBuilder/diagram';
