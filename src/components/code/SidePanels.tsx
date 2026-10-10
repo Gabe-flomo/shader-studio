@@ -1,6 +1,6 @@
 /**
- * Collapsible side panels for the code editors (Expression Block, Custom Function): the header's
- * "ƒ Functions" toggle, the Inputs panel's slim rail, the ⌘[ / ⌘] shortcuts, and drawers over
+ * Collapsible side panels for the code editors (Expression Block, Custom Function): the function
+ * palette's fold tab on the right edge, the Inputs panel's slim rail, the ⌘[ / ⌘] shortcuts, and drawers over
  * the code on narrow windows. Open / closed is remembered (editorPanelPrefs.ts).
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -57,19 +57,28 @@ export function useEditorSidePanels(panels: readonly EditorPanel[]) {
   return { narrow, open, set, toggle };
 }
 
-/** The header's toggle for the function palette. */
-export function FunctionsToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+/**
+ * The function palette's fold tab: a slim strip on the editor's right edge, like the Inputs
+ * panel's fold arrow on the left. Closed, it shows ‹ ƒ (click to open the palette beside it);
+ * open, it sits on the palette's edge with › (click to fold it away). Open / closed is
+ * remembered (editorPanelPrefs.ts), and ⌘] does the same.
+ */
+export function FunctionsTab({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   const tk = useTokens();
+  const label = `${open ? 'Hide' : 'Show'} the functions, variables and operators (${PANEL_SHORTCUT.functions})`;
   return (
-    <button type="button" data-panel-toggle="functions" aria-pressed={open}
-      title={`${open ? 'Hide' : 'Show'} the functions, variables and operators (${PANEL_SHORTCUT.functions})`}
+    <button type="button" data-panel-tab="functions" aria-expanded={open} aria-label={label} title={label}
       onClick={onToggle}
       style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6, height: 30, padding: '0 10px', marginRight: 4, border: 0, borderRadius: radius.md, cursor: 'pointer',
-        background: open ? tk.bg.selected : 'none', color: open ? tk.accent.text : tk.text.secondary, font: `600 12.5px ${fontFamily.ui}`,
-        boxShadow: open ? `inset 0 0 0 1px ${tk.border.default}` : 'none',
+        width: 22, flexShrink: 0, alignSelf: 'stretch', border: 0, padding: '14px 0', cursor: 'pointer',
+        borderLeft: `1px solid ${tk.border.subtle}`, background: open ? 'none' : tk.bg.subtle, color: tk.text.faint,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, position: 'relative', zIndex: 6,
       }}>
-      <Icon name="fn" size={14} />Functions
+      <Icon name={open ? 'chevR' : 'chevL'} size={14} />
+      {!open && <Icon name="fn" size={13} />}
+      {!open && (
+        <span style={{ writingMode: 'vertical-rl', font: `650 9.5px ${fontFamily.ui}`, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Functions</span>
+      )}
     </button>
   );
 }

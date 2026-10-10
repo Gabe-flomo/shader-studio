@@ -176,6 +176,7 @@ import { CompilationService } from './managers/CompilationService';
 import { GRAPH_LINK_FIELD, graphDeleted, linkedPresentationsOf } from '../present/links';
 import { pickPreviewOutput, prefOf } from '../lib/nodePreview/showAs';
 import { probedNode } from '../lib/nodePreview/lineProbe';
+import { migrateDescriptionToNote } from '../components/NodeGraph/codeCard/codeCardModel';
 
 // ── Legacy ExprNode → ExprBlockNode migration ─────────────────────────────────
 // ExprNode (type: 'expr') is removed from the registry.  Any saved graph that
@@ -228,7 +229,8 @@ function _upgradeExprNode(node: GraphNode): GraphNode {
  *  nested in subgraph params (groups, SceneGroups, MarchLoopGroups, etc.). */
 function upgradeExprNodes(nodes: GraphNode[]): GraphNode[] {
   return nodes.map(node => {
-    let n = upgradeLegacyNode(_upgradeExprNode(node));
+    // A block's old separate description joins its note (codeCard/codeCardModel.ts)
+    let n = migrateDescriptionToNote(upgradeLegacyNode(_upgradeExprNode(node)));
     // Recurse into subgraph if present
     if (n.params?.subgraph) {
       const sg = n.params.subgraph as { nodes?: GraphNode[] };

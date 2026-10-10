@@ -7,15 +7,17 @@
  *
  *   code        the block's lines as they compile (read-only on the card), or the function body
  *   preview     a live mini preview of the output, the eye preview's own (ValuePreview, Show as)
- *   note        the node's comment (params.__comment) and its credit
- *   description the block's own description (params.__description), only when one is written
+ *   note        the node's comment (params.__comment) and its credit: the one place a block says
+ *               what it does. Older blocks also had a separate description (params.__description);
+ *               loading merges it into the note (migrateDescriptionToNote), and until then the
+ *               note page shows both.
  */
 import type { GraphNode } from '../../../types/nodeGraph';
 import { DETAIL_MODES, modesFor, pickPreviewOutput, previewableOutputs } from '../../../lib/nodePreview/showAs';
 
-export type CardPageId = 'code' | 'preview' | 'note' | 'description';
-export const CARD_PAGE_ORDER: readonly CardPageId[] = ['code', 'preview', 'note', 'description'];
-export const CARD_PAGE_LABEL: Record<CardPageId, string> = { code: 'Code', preview: 'Preview', note: 'Note', description: 'Description' };
+export type CardPageId = 'code' | 'preview' | 'note';
+export const CARD_PAGE_ORDER: readonly CardPageId[] = ['code', 'preview', 'note'];
+export const CARD_PAGE_LABEL: Record<CardPageId, string> = { code: 'Code', preview: 'Preview', note: 'Note' };
 
 export function isCodeCardNode(node: Pick<GraphNode, 'type'>): boolean {
   return node.type === 'exprNode' || node.type === 'customFn';
@@ -68,6 +70,19 @@ export function codeLinesFor(node: GraphNode): string[] {
   for (let i = 0; i < parts.length - 1; i++) out.push(`${parts[i]};`);
   out.push(`return ${parts[parts.length - 1]};`);
   return out;
+}
+
+/**
+ * A block the Function Builder made, and still one it can take back: the Builder's Send marks it
+ * with `fnBuilderFns` (the functions as authored there, FunctionBuilder/Toolbar.tsx), and it
+ * writes one expression back (`lines: []`), so a block that has grown lines since would lose them.
+ */
+export function madeByFunctionBuilder(node: GraphNode): boolean {
+  if (node.type !== 'exprNode') return false;
+  const fns = node.params.fnBuilderFns;
+  if (!Array.isArray(fns) || fns.length === 0) return false;
+  const lines = Array.isArray(node.params.lines) ? (node.params.lines as ExprLine[]) : [];
+  return !lines.some(l => l && l.lhs?.trim() && l.rhs?.trim());
 }
 
 /** Nothing written yet: no lines (or body) of its own, the result is blank, an input passed through, or the default. */
@@ -182,20 +197,46 @@ export function signatureText(sig: Signature): string {
 
 // ── Pages ────────────────────────────────────────────────────────────────────
 
-export function noteOf(node: GraphNode): string {
-  return typeof node.params.__comment === 'string' ? node.params.__comment.trim() : '';
-}
-export function userDescriptionOf(node: GraphNode): string {
-  return typeof node.params.__description === 'string' ? node.params.__description.trim() : '';
+/**
+ * A description and a note as one text: the description (what the block does) first, then the
+ * note. When one already holds the other (a note pasted from the description), the longer one.
+ */
+export function mergeNoteTexts(description: string, note: string): string {
+  const d = description.trim(), n = note.trim();
+  if (!d) return n;
+  if (!n) return d;
+  if (n.includes(d)) return n;
+  if (d.includes(n)) return d;
+  return `${d}\n\n${n}`;
 }
 
-/** Which pages the card has, in order: Code → Preview → Note → Description. Empty ones are left out; the preview is always there. */
+/** The block's note: its comment, with an old separate description merged in (see migrateDescriptionToNote). */
+export function noteOf(node: GraphNode): string {
+  const note = typeof node.params.__comment === 'string' ? node.params.__comment : '';
+  const desc = typeof node.params.__description === 'string' ? node.params.__description : '';
+  return mergeNoteTexts(desc, note);
+}
+
+/**
+ * The description and the note were two texts saying the same thing; now there is only the note
+ * (params.__comment). An old node's description is merged into its note (description first, then
+ * the note; nothing dropped) and the field goes. Any node type, since any node could carry one.
+ */
+export function migrateDescriptionToNote(node: GraphNode): GraphNode {
+  if (!node.params || !('__description' in node.params)) return node;
+  const { __description: _d, ...params } = node.params as Record<string, unknown>;
+  void _d;
+  const merged = noteOf(node);
+  if (merged) params.__comment = merged; else delete params.__comment;
+  return { ...node, params };
+}
+
+/** Which pages the card has, in order: Code → Preview → Note. Empty ones are left out; the preview is always there. */
 export function cardPages(node: GraphNode): CardPageId[] {
   const pages: CardPageId[] = [];
   if (!isEmptyCodeNode(node)) pages.push('code');
   pages.push('preview');
   if (noteOf(node) || node.params.__credit) pages.push('note');
-  if (userDescriptionOf(node)) pages.push('description');
   return pages;
 }
 
