@@ -22,7 +22,7 @@ import { depthModelUsable, estimateDepth, type DepthFrame } from '../../depthMod
 import { depthModelById } from '../../depthModel/config';
 import { effectiveDepthModel } from '../../depthModel/experimental';
 import { metricDistance } from '../../depthModel/workerCore';
-import { blendDepth, depthRowsUp, followSource, grabSize, shouldRun } from './plan';
+import { blendDepth, depthRowsUp, followSource, grabSize, shouldRun, sourceNeedsBake } from './plan';
 import { getImage, getVideo } from '../backgroundLibrary';
 import { forgetMedia, rememberMedia } from '../mediaSources';
 
@@ -59,6 +59,16 @@ export function depthNodesIn(nodes: readonly GraphNode[], out: GraphNode[] = [])
     if (n.type === DEPTH_TYPE) out.push(n);
     const sg = n.params?.subgraph as SubgraphData | undefined;
     if (sg?.nodes?.length) depthNodesIn(sg.nodes, out);
+  }
+  return out;
+}
+
+/** Every webcam source (a Video Input reading the camera, docs/texture-node.md), inside groups too. */
+export function webcamIdsIn(nodes: readonly GraphNode[], out = new Set<string>()): Set<string> {
+  for (const n of nodes) {
+    if (n.type === 'videoInput' && n.params?.source === 'webcam') out.add(n.id);
+    const sg = n.params?.subgraph as SubgraphData | undefined;
+    if (sg?.nodes?.length) webcamIdsIn(sg.nodes, out);
   }
   return out;
 }
@@ -151,6 +161,8 @@ class DepthEngine {
   /** Source video elements of baked nodes (by source sampler's node id), from the hosts that play them. */
   private videoElementOf: ((nodeId: string) => HTMLVideoElement | null) | null = null;
   private videoUniforms: Record<string, string> = {};
+  /** Video Inputs reading the webcam: live, never baked. */
+  private webcamIds = new Set<string>();
 
   setHost(host: DepthHost | null): void {
     this.host = host;
@@ -182,6 +194,7 @@ class DepthEngine {
   }
 
   sync(nodes: readonly GraphNode[]): void {
+    this.webcamIds = webcamIdsIn(nodes);
     const want = new Map(depthNodesIn(nodes).map(n => [n.id, n]));
     for (const [id, s] of this.slots) if (!want.has(id)) this.drop(id, s);
     for (const [id, n] of want) {
@@ -237,9 +250,8 @@ class DepthEngine {
       const hasSource = src === 'picture' ? ctx.canvas.width > 0 : !!tex && info.w > 0 && info.h > 0;
       const side = depthSideOf(n);
       const runKey = info.still ? `${info.still}|${model}|${side}` : null;
-      // A video's depth is baked first (it plays smoothly then), never worked out live
-      const video = src !== 'picture' && src in this.videoUniforms;
-      if (video) {
+      // A video's depth is baked first (it plays smoothly then), never worked out live; a webcam runs live.
+      if (sourceNeedsBake(src, this.videoUniforms, this.webcamIds)) {
         if (usable && s.status.state !== 'needs-bake') { s.status = { ...s.status, state: 'needs-bake', message: undefined }; this.changed(); }
         continue;
       }

@@ -76,7 +76,9 @@ unit is one metre. A bake keeps only nearness.
 - **A video's depth is baked first.** Press **Bake depth**: it runs the model once over the clip, and
   then plays smoothly. A Video Input wired in live shows "press Bake depth" instead of working it out
   frame by frame.
-- **Live** is for stills and the picture itself: a new depth as fast as the model goes. The picture
+- **A webcam runs live.** A Texture node on Webcam is a live feed that can't be baked, so its depth is worked
+  out as it plays, at the node's Update (Generate depth sets every 4th frame).
+- **Live** is for stills, the webcam and the picture itself: a new depth as fast as the model goes. The picture
   never waits: the last depth stays until the next arrives.
 - **Every Nth frame:** lighter.
 - **Smoothing** blends each new depth with the last, to calm the flicker video depth has.
