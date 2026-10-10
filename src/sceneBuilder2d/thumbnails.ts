@@ -13,6 +13,7 @@
  * for the node's noise: the thumbnail shows the character of the warp, not its exact pattern.
  */
 import { SHAPES, SPACES, defaultSize, num, type SpaceOp, type Vec2 } from './spec';
+import { blockMap, combineMap, type Map2 as BlockMap2 } from './blocks';
 
 type Sdf = (x: number, y: number) => number;
 type SizeMap = Record<string, number | Vec2>;
@@ -198,7 +199,9 @@ export function renderShapeThumbnail(kind: string, size: number, ss = 2, over: S
 type Map2 = (x: number, y: number) => [number, number];
 
 /** Where a space transform sends a point: what the shapes below it see. Settings from the op, as the node reads them. */
-export function spaceMap(op: SpaceOp): Map2 {
+export function spaceMap(op: SpaceOp, t = 0): Map2 {
+  if (op.kind === 'block') return op.block ? blockMap(op.block, t) : (x, y) => [x, y];
+  if (op.kind === 'combine') return op.combine ? combineMap(op.combine, t) : (x, y) => [x, y];
   const v = op.values;
   const g = (k: string, d: number) => num(v[k], d);
   switch (op.kind) {
@@ -282,6 +285,55 @@ export function renderSpaceThumbnail(op: SpaceOp, size: number): Uint8ClampedArr
       if (ring < 0.05) c = ACCENT;
       const o = (j * size + i) * 4;
       out[o] = c[0]; out[o + 1] = c[1]; out[o + 2] = c[2]; out[o + 3] = 255;
+    }
+  }
+  return out;
+}
+
+/** The whole space stack as one map: each transform's uv feeds the next. */
+export function stackMap(ops: readonly SpaceOp[], t = 0): Map2 {
+  const maps = ops.map(op => spaceMap(op, t));
+  return (x, y) => { let p: [number, number] = [x, y]; for (const m of maps) p = m(p[0], p[1]); return p; };
+}
+
+/**
+ * RGBA pixels of a grid seen through `map`: thin light lines (8 to a unit, a brighter one through
+ * the axes) on a dark ground, and an accent ring of radius 0.62, so a bend reads at a glance. Line
+ * widths follow how much the map stretches each pixel, so they stay about a pixel wide.
+ */
+export function renderWarpThumbnail(map: BlockMap2, size: number, view = 2.2): Uint8ClampedArray {
+  const n = size + 1;
+  const qx = new Float64Array(n * n), qy = new Float64Array(n * n);
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const [a, b] = map((i / size - 0.5) * view, (0.5 - j / size) * view);
+      qx[j * n + i] = Number.isFinite(a) ? a : 1e6; qy[j * n + i] = Number.isFinite(b) ? b : 1e6;
+    }
+  }
+  const out = new Uint8ClampedArray(size * size * 4);
+  const K = 4; // lines per unit (the view spans about ±1.1)
+  const line = (v: number, dv: number, k: number) => {
+    const f = Math.abs(v * k - Math.round(v * k)) / k;
+    return Math.max(0, 1 - f / Math.max(dv * 0.9, 1e-4));
+  };
+  for (let j = 0; j < size; j++) {
+    for (let i = 0; i < size; i++) {
+      const o = j * n + i;
+      const x = qx[o], y = qy[o];
+      const dx = Math.min(0.5, Math.abs(qx[o + 1] - x) + Math.abs(qx[o + n] - x));
+      const dy = Math.min(0.5, Math.abs(qy[o + 1] - y) + Math.abs(qy[o + n] - y));
+      const far = x === 1e6 || y === 1e6;
+      const g = far ? 0 : Math.max(line(x, dx, K), line(y, dy, K)) * 0.75;
+      const axis = far ? 0 : Math.max(line(x, dx, 0.5) * (Math.abs(x) < 1 ? 1 : 0), line(y, dy, 0.5) * (Math.abs(y) < 1 ? 1 : 0));
+      const rl = Math.hypot(x, y);
+      const ring = far ? 0 : Math.max(0, 1 - Math.abs(rl - 0.62) / Math.max((dx + dy) * 1.2, 0.012));
+      const checker = far ? 0 : ((Math.floor(x * 2) + Math.floor(y * 2)) & 1) * 0.06;
+      let r = 30 + checker * 255, gg = 36 + checker * 255, bb = 52 + checker * 255;
+      const lw = Math.max(g, axis);
+      r += (190 - r) * lw; gg += (200 - gg) * lw; bb += (222 - bb) * lw;
+      r += (ACCENT[0] - r) * ring; gg += (ACCENT[1] - gg) * ring; bb += (ACCENT[2] - bb) * ring;
+      const p = (j * size + i) * 4;
+      out[p] = r; out[p + 1] = gg; out[p + 2] = bb; out[p + 3] = 255;
     }
   }
   return out;

@@ -5,6 +5,7 @@
  */
 import { create } from 'zustand';
 import { starterScene, type Scene2D } from './spec';
+import { surpriseScene2D } from './surprise';
 
 export type Builder2DTab = 'space' | 'shapes' | 'grid' | 'look' | 'output' | 'recipe' | 'templates';
 export const BUILDER_2D_TABS: Builder2DTab[] = ['space', 'shapes', 'grid', 'look', 'output', 'recipe', 'templates'];
@@ -20,6 +21,8 @@ interface Builder2DState {
   tab: Builder2DTab;
   selectedId: string | null;
   dirty: boolean;
+  /** The seed of the last Surprise me (null: none yet). */
+  surpriseSeed: number | null;
 
   openWith: (scene: Scene2D, o?: { targetSceneId?: string | null; at?: { x: number; y: number } | null; tab?: Builder2DTab }) => void;
   close: () => void;
@@ -32,6 +35,8 @@ interface Builder2DState {
   select: (id: string | null) => void;
   setTarget: (id: string | null) => void;
   markBuilt: () => void;
+  /** Surprise me: a random scene from `seed` (surprise.ts), one undo step. */
+  surprise: (seed: number) => void;
 }
 
 let lastCoalesce: { key: string; at: number } | null = null;
@@ -47,6 +52,7 @@ export const useSceneBuilder2D = create<Builder2DState>((set, get) => ({
   tab: 'shapes',
   selectedId: null,
   dirty: false,
+  surpriseSeed: null,
 
   openWith: (scene, o = {}) => set({
     open: true, scene: structuredClone(scene), past: [], future: [], dirty: false,
@@ -84,4 +90,9 @@ export const useSceneBuilder2D = create<Builder2DState>((set, get) => ({
   select: id => set({ selectedId: id }),
   setTarget: id => set({ targetSceneId: id }),
   markBuilt: () => set({ dirty: false }),
+  surprise: seed => {
+    get().replace(surpriseScene2D(seed));
+    const first = get().scene.layers[0];
+    set({ surpriseSeed: seed, selectedId: first?.id ?? null });
+  },
 }));
