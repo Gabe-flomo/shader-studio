@@ -24,6 +24,7 @@ import { misfitBadge, splitCategories } from '../../structure/relevance';
 import { useLibraryPrefs } from '../../structure/libraryPrefs';
 import { useFitsHere, useLibraryContext } from './useLibraryRelevance';
 import { spawnPoint } from './spawnPoint';
+import { useHiddenHere } from './useAddScope';
 
 // ── Nodes hidden from browser ─────────────────────────────────────────────────
 const HIDDEN_NODES = new Set([
@@ -585,7 +586,9 @@ export function NodeBrowser({
   const relevantOnly = useLibraryPrefs(s => s.relevantOnly);
   const setRelevantOnly = useLibraryPrefs(s => s.setRelevantOnly);
   const libCtx = useLibraryContext(relevanceOn);
-  const fits = useFitsHere(relevanceOn && relevantOnly, HIDDEN_NODES);
+  // Scene Pos / Scene Output… only inside the group they belong to (nodes/addScope.ts).
+  const hidden = useHiddenHere(HIDDEN_NODES);
+  const fits = useFitsHere(relevanceOn && relevantOnly, hidden);
   const [showOther, setShowOther] = useState(false);
   // A stage picked on the flow strip (structure/hintsStore.ts); Back clears it.
   const stageBrowse = useStructureHints(st => st.browse);
@@ -688,7 +691,7 @@ export function NodeBrowser({
 
   if (stageBrowse && !isSearching && !isGlsl) {
     // A stage clicked on the flow strip (docs/structure-hints.md): its nodes, by category.
-    const list = typesForStage(stageBrowse.flow, stageBrowse.stage, HIDDEN_NODES);
+    const list = typesForStage(stageBrowse.flow, stageBrowse.stage, hidden);
     const cats = [...new Set(list.map(x => x.category))];
     innerContent = (
       <div data-stage-browse={stageBrowse.stage} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -713,7 +716,7 @@ export function NodeBrowser({
   } else if (isSearching) {
     const trimmed = searchQuery.trim().toLowerCase();
     const results = getOfferedDefinitions()
-      .filter(def => !HIDDEN_NODES.has(def.type))
+      .filter(def => !hidden.has(def.type))
       .map(def => ({ def, score: scoreNodeDef(def, trimmed) }))
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score || a.def.label.localeCompare(b.def.label))
@@ -730,7 +733,7 @@ export function NodeBrowser({
 
   } else if (path.length === 0) {
     const filtering = relevanceOn && relevantOnly;
-    const countOf = (cat: string) => nodesOfRow(cat).filter(d => !HIDDEN_NODES.has(d.type)).length;
+    const countOf = (cat: string) => nodesOfRow(cat).filter(d => !hidden.has(d.type)).length;
     const live = (cat: string) => countOf(cat) > 0;
     const fitsOn = filtering;
     const otherCats: string[] = [];
@@ -744,7 +747,7 @@ export function NodeBrowser({
       otherCats.push(...other);
       return { label: section.label, cats: fit };
     }).filter(s => s.cats.length > 0);
-    const favCount = favorites.filter(t => getNodeDefinition(t) && !HIDDEN_NODES.has(t)).length;
+    const favCount = favorites.filter(t => getNodeDefinition(t) && !hidden.has(t)).length;
     innerContent = (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {libCtx && relevanceOn && (
@@ -776,7 +779,7 @@ export function NodeBrowser({
         ))}
         {/* Any categories not covered by sections (My Nodes, node packs by name) */}
         {categories.filter(cat => !CATEGORY_ORDER.includes(cat)).map(cat => {
-          const n = getNodesByCategory(cat).filter(d => !HIDDEN_NODES.has(d.type)).length;
+          const n = getNodesByCategory(cat).filter(d => !hidden.has(d.type)).length;
           if (n === 0) return null;
           const pack = packForCategory(cat);
           return (
@@ -808,7 +811,7 @@ export function NodeBrowser({
   } else if (path[0] === '__favorites__') {
     const favDefs = favorites
       .map(t => getNodeDefinition(t))
-      .filter((d): d is NonNullable<typeof d> => !!d && !HIDDEN_NODES.has(d.type));
+      .filter((d): d is NonNullable<typeof d> => !!d && !hidden.has(d.type));
     innerContent = (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {crumb('Favorites', favDefs.length)}
@@ -820,7 +823,7 @@ export function NodeBrowser({
 
   } else {
     const cat = path[0];
-    const rawNodes = nodesOfRow(cat).filter(d => !HIDDEN_NODES.has(d.type));
+    const rawNodes = nodesOfRow(cat).filter(d => !hidden.has(d.type));
     // Nodes no group lists still show, under More (and a merged row's other categories by name).
     const listed = CATEGORY_GROUPS[cat];
     const rowTypes = new Set(rawNodes.map(d => d.type));
