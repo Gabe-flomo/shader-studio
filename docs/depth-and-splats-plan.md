@@ -58,6 +58,31 @@ and GLPN (indoor only).
   with their time per frame.
 - **Web export:** a baked depth works on pages. Live depth on pages comes later; the node says so.
 
+## 1b. Depth in 3D scenes (the user's focus: before splats)
+
+With depth and the camera's field of view, every pixel becomes a point in 3D, and its slopes give a
+surface direction. The picture becomes a surface the scene can light and hide things behind.
+
+- **Depth composite.** The picture's colour and depth against a 3D scene's colour and depth: the
+  nearer one wins, per pixel. Objects go behind or in front of people.
+  - **Calibrate:** the model's 0–1 depth is relative, so map it with *Nearest* and *Farthest* sliders
+    in scene units, or "the subject is at distance X".
+  - **Edges:** softness, plus a tighten option for halos around hair.
+  - **Agents:** Draw agents' Depth socket takes it, so walkers pass behind people too.
+- **The picture as a lit surface.** Lights and glowing objects light the picture:
+  - each pixel's 3D point and normal take light from the scene's lights (the light rigs) and from
+    glowing SDF objects (an emissive shape counts as a light at its surface, with its colour and
+    falloff), added to the picture's own colour;
+  - **relight:** dim the picture's own light and add new lights;
+  - **shadows:** a ray from the pixel to each light, checked against the SDF scene, so 3D objects
+    shade the picture; the picture's own depth bumps shade it too, roughly.
+- **The picture as the environment.** Objects reflect the picture and pick up its ambient colour, so
+  a chrome sphere shows the room.
+- **Camera match.** A still photo or tripod footage, with a fixed March Camera at a similar field of
+  view (a "match the picture's camera" helper sets it). Moving cameras wait for tracking (later).
+- **Limits:** the picture's own lighting is baked in (relighting adds and tints, but can't remove a
+  harsh shadow), and the surface is the visible front only.
+
 ## 2. Splat Scene node
 
 - **Load** `.ply` (the 3DGS standard), `.splat`, `.spz` and `.ksplat` files from the workspace or a
@@ -92,8 +117,11 @@ and GLPN (indoor only).
 | Phase | What | Done when |
 |---|---|---|
 | 1 | Depth node with the three models (download, worker, live and baked video, outputs, compare) | The same video's depth from all three, side by side with timings; a near mask cuts out a subject |
+| 1b | Depth in 3D scenes: depth composite (calibrate, edges, agents), the picture lit by lights and glowing objects with shadows, relighting, the picture as the environment | A glowing sphere behind a person in a photo, hidden by them and lighting their shoulder |
 | 2 | Splat Scene node: load and render, with the camera and depth compositing | A scan from Polycam / Luma renders inside a March Loop scene and is occluded correctly |
 | 3 | Per-splat modifiers | A scan dissolving by noise, driven from Play |
 | 4 | Agents as splats: the Splats look, then Emit from a splat file and return home | A scan blown apart by a field, flowing back |
 
 Each phase is one PR with tests, checked in the browser.
+
+**Later: camera tracking** (the user, 2026-10-09: after depth works). First import tracks from other tools (Blender `.chan` / JSON, After Effects, CamTrackAR, Record3D with LiDAR depth) to drive the March Camera per frame, plus an in-app solver for tripod pans. A handheld in-app tracker (features plus depth) and a COLMAP sidecar on the desktop app come later still.
