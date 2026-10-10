@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.131',
+    date: '2026-10-09',
+    title: 'Pictures in 3D scenes',
+    highlights: [
+      { area: 'Studio', text: 'Depth Composite: a picture with depth and a 3D scene, the nearer wins per pixel, so 3D objects pass behind and in front of people.', link: { kind: 'doc', path: 'docs/depth-node.md' } },
+      { area: 'Studio', text: 'Depth Light: a light or glowing object in the scene lights the picture where it faces it, fading with distance; chain several for more lights.' },
+    ],
+  },
+  {
     id: '2026.10.130',
     date: '2026-10-09',
     title: 'Depth',
