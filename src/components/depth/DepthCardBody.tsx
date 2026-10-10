@@ -1,7 +1,8 @@
 /**
  * The Depth card's own lines (docs/depth-node.md): the model's download offer (its size and licence) or its
- * state and time per frame, Compare (the three models on the same frame), Bake depth with progress, and what
- * web pages get. The settings below are the card's usual controls.
+ * state and time per frame, Bake depth with progress, and what web pages get. A folded "Experimental models"
+ * section turns on the experimental depth models (depthModel/experimental.ts): then a model picker and Compare
+ * (every model on the same frame) show. The settings below are the card's usual controls.
  */
 import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -10,15 +11,18 @@ import { radius } from '../../theme/tokens';
 import type { GraphNode } from '../../types/nodeGraph';
 import { depthEngine, type DepthStatus } from '../../lib/depth/engine';
 import { depthBakeOf, depthUpdateOf } from '../../nodes/definitions/depth';
-import { depthModelById, formatDepthBytes, licenceLine } from '../../depthModel/config';
+import { formatDepthBytes, isMetricModel, licenceLine } from '../../depthModel/config';
+import { depthModelOptions, effectiveDepthModel, setDepthExperimental, useDepthExperimental } from '../../depthModel/experimental';
 import { depthOfferBytes, downloadDepthModel, probeLikelyBackend, useDepthModels } from '../../depthModel/client';
 import { Button } from '../ui/Button';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 import type { DepthCompare as DepthCompareT } from './DepthCompare';
-import { DEPTH_MODELS } from '../../depthModel/config';
 
 // The compare view loads on demand, in its own chunk.
 const DepthCompare = lazyWithSuspense<PropsOf<typeof DepthCompareT>>(() => import('./DepthCompare').then(m => ({ default: m.DepthCompare })));
+
+// The folded "Experimental models" section stays as it was left (per node) when the card re-renders.
+const openSections = new Map<string, boolean>();
 
 function useStatus(nodeId: string): DepthStatus {
   const sub = useMemo(() => (fn: () => void) => depthEngine.onChange(fn), []);
@@ -34,7 +38,10 @@ function useStatus(nodeId: string): DepthStatus {
 export function DepthCardBody({ node }: { node: GraphNode; touch?: boolean }) {
   const tk = useTokens();
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
-  const spec = depthModelById(node.params.model);
+  const experimental = useDepthExperimental(s => s.on);
+  const spec = effectiveDepthModel(node.params.model);
+  const [openExp, setOpenExpState] = useState(() => openSections.get(node.id) ?? experimental);
+  const setOpenExp = (f: (o: boolean) => boolean) => setOpenExpState(o => { const v = f(o); openSections.set(node.id, v); return v; });
   const entry = useDepthModels(s => s.models[spec.id]);
   const likely = useDepthModels(s => s.likely);
   const status = useStatus(node.id);
@@ -69,7 +76,10 @@ export function DepthCardBody({ node }: { node: GraphNode; touch?: boolean }) {
     }
     switch (status.state) {
       case 'running': return 'Working out the first depth…';
-      case 'ready': return `${status.ms != null ? `${Math.round(status.ms)} ms a frame` : 'Ready'} · ${status.w}×${status.h}${entry?.backend ? ` · ${entry.backend === 'webgpu' ? 'WebGPU' : 'WebAssembly'}` : ''}`;
+      case 'ready': {
+        const range = isMetricModel(spec) ? depthEngine.metricRange(node.id) : null;
+        return `${status.ms != null ? `${Math.round(status.ms)} ms a frame` : 'Ready'} · ${status.w}×${status.h}${entry?.backend ? ` · ${entry.backend === 'webgpu' ? 'WebGPU' : 'WebAssembly'}` : ''}${range ? ` · ${range[0].toFixed(1)}–${range[1].toFixed(1)} m` : ''}`;
+      }
       case 'no-source': return status.message ?? 'Waiting for a picture.';
       case 'needs-bake': return 'A video\'s depth is baked first, so it plays smoothly: press Bake depth.';
       case 'error': return status.message ?? 'The model failed.';
@@ -103,7 +113,7 @@ export function DepthCardBody({ node }: { node: GraphNode; touch?: boolean }) {
         </>
       )}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {DEPTH_MODELS.length > 1 && <Button size="sm" onClick={() => setComparing(true)} title="The models side by side on the current frame, with their time per frame">Compare models</Button>}
+        {experimental && <Button size="sm" onClick={() => setComparing(true)} title="The models side by side on the current frame, with their time per frame">Compare models</Button>}
         {bake ? (
           <Button size="sm" onClick={() => bake.abort.abort()}>Cancel bake ({bake.done}/{bake.total})</Button>
         ) : (
@@ -113,6 +123,35 @@ export function DepthCardBody({ node }: { node: GraphNode; touch?: boolean }) {
         {update === 'baked' && <Button size="sm" variant="ghost" onClick={() => updateNodeParams(node.id, { update: 'live' })}>Live again</Button>}
       </div>
       {msg && <span style={line}>{msg}</span>}
+      {isMetricModel(spec) && update !== 'baked' && <span style={line}>{spec.short} gives real distances: wire Distance into Depth Composite's or Depth Light's Picture distance, and Nearest / Farthest are skipped.</span>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <button type="button" onClick={() => setOpenExp(o => !o)} aria-expanded={openExp}
+          style={{ all: 'unset', cursor: 'pointer', fontSize: 11.5, color: tk.text.muted, display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ display: 'inline-block', transform: openExp ? 'rotate(90deg)' : 'none', transition: 'transform 0.12s' }}>▸</span>
+          Experimental models{experimental ? `: on (${spec.short})` : ''}
+        </button>
+        {openExp && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, borderRadius: radius.md, background: tk.bg.subtle }}>
+            <label style={{ ...line, display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
+              <input type="checkbox" checked={experimental} data-testid="depth-experimental"
+                onChange={e => { setDepthExperimental(e.target.checked); useNodeGraphStore.getState().compile(); }} style={{ margin: 0, accentColor: tk.accent.base }} />
+              Experimental depth models (every Depth node, this browser)
+            </label>
+            {experimental ? (
+              <>
+                <select value={spec.id} data-testid="depth-model-picker" aria-label="Depth model" onChange={e => updateNodeParams(node.id, { model: e.target.value })}
+                  style={{ font: 'inherit', fontSize: 12, padding: '4px 6px', borderRadius: radius.control, background: tk.bg.field, color: tk.text.primary, border: `1px solid ${tk.border.default}` }}>
+                  {depthModelOptions(true).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                <span style={line}>{spec.note}</span>
+                <span style={spec.commercial ? line : warn}>{licenceLine(spec)}</span>
+              </>
+            ) : (
+              <span style={line}>Off: every Depth node runs Depth Anything V2 Small. On: pick Base, MiDaS, Depth Anything V3, or the metric Depth Pro and ZoeDepth, and compare them.</span>
+            )}
+          </div>
+        )}
+      </div>
       <span style={{ ...line, fontSize: 11 }}>{update === 'baked' && baked ? 'Web pages play this baked depth.' : 'Web pages: only a baked depth goes in a page (live depth on pages comes later).'}</span>
       {comparing && <DepthCompare nodeId={node.id} onClose={() => setComparing(false)} />}
     </div>

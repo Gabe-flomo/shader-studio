@@ -32,6 +32,8 @@ const CONNECTION_GATED = new Set([
   'glassScene.diffuseness',   // the node emits no code at all until its scene inputs are wired
   // Depth Light: the glow settings only with a Glowing scene wired, the shadow ones only with Shadows from
   'depthLight.glowColor', 'depthLight.glowIntensity', 'depthLight.glowReach', 'depthLight.shadowSoftness', 'depthLight.lightRadius',
+  // Picture Environment reads nothing until a picture's Texture is wired
+  'pictureEnvironment.fov', 'pictureEnvironment.blur', 'pictureEnvironment.strength',
   // GI Lit March Group: the PBR lighting block is only emitted once a scene is wired
   'giLitMarchGroup.metallic', 'giLitMarchGroup.roughness', 'giLitMarchGroup.lightStrength',
   'giLitMarchGroup.giStrength', 'giLitMarchGroup.specStrength',

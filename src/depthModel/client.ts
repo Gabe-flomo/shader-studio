@@ -170,6 +170,7 @@ async function load(id: string): Promise<boolean> {
       model: spec.id, repo: spec.repo, revision: spec.revision, dtype: { ...spec.dtype },
       local, localPath: `${import.meta.env?.BASE_URL ?? '/'}${LOCAL_DEPTH_DIR}`,
       webgpu: !/[?&]depthModel=wasm\b/.test(query()),
+      output: spec.output, preprocess: spec.preprocess, subfolder: spec.subfolder, externalData: !!spec.data, modelClass: spec.modelClass,
     };
     const r = await call<{ backend: DepthBackend; ms: number }>({ type: 'load', cfg });
     if (!local) writeFlag(downloadedKey(id), true);
@@ -209,7 +210,11 @@ export interface DepthFrame {
   flipY: boolean;
 }
 
-export interface DepthResult { depth: Float32Array; w: number; h: number; ms: number }
+export interface DepthResult {
+  depth: Float32Array; w: number; h: number; ms: number;
+  /** A metric model's nearest and farthest distance in the frame (metres): see workerCore.metricDistance. */
+  range?: [number, number];
+}
 
 /**
  * A frame's depth with one model, or null when the model isn't downloaded (nothing runs) or failed.

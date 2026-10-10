@@ -19,7 +19,7 @@
  *   - RayMarchNode/RayMarchLitNode receive this as their `scene` inputVar and plug it into the march loop.
  */
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p, pv3, vec3Str } from './helpers';
+import { p, pv3, vec3Str, withNewOutputs } from './helpers';
 import { MARCH_STEP_REF_KEY, stepWeightGlsl } from '../../compiler/marchJitter';
 
 // ─── Loop colours ─────────────────────────────────────────────────────────────
@@ -119,6 +119,13 @@ export const SceneGroupNode: NodeDefinition = {
 // Camera setup for ray marching. Outputs ray origin (ro) and ray direction (rd).
 // Pair with MarchLoopGroupNode: camera → march loop → coloring nodes.
 
+/** The camera's axes as outputs (Picture Environment maps a direction onto the picture with them). */
+const CAMERA_AXES: GraphNode['outputs'] = {
+  forward: { type: 'vec3', label: 'Forward', hint: 'The way the camera looks (its axis), the same for every pixel. With Right and Up: for Picture Environment, which maps directions onto the picture.' },
+  right:   { type: 'vec3', label: 'Right', hint: 'The camera\'s right, across the picture.' },
+  up:      { type: 'vec3', label: 'Up', hint: 'The camera\'s up, along the picture.' },
+};
+
 export const MarchCameraNode: NodeDefinition = {
   type: 'marchCamera', label: 'March Camera', category: '3D Scene',
   description: 'Camera setup for ray marching. Outputs ray origin (ro) and ray direction (rd). Connect to a March Loop Group.',
@@ -133,7 +140,9 @@ export const MarchCameraNode: NodeDefinition = {
     target:       { type: 'vec3',  label: 'Target', axisParams: ['targetX', 'targetY', 'targetZ'], hint: 'The point the camera looks at. Unwired, the Target X/Y/Z sliders.' },
   },
   // Target used to be three float sockets: an older camera keeps one only while something is wired into it.
-  syncSockets: (n: GraphNode) => {
+  syncSockets: (n0: GraphNode) => {
+    // A camera saved before Forward / Right / Up gets them.
+    const n = withNewOutputs(CAMERA_AXES)(n0);
     const stale = ['targetX', 'targetY', 'targetZ'].filter(k => k in n.inputs && !n.inputs[k].connection);
     if (!stale.length) return n;
     const inputs = { ...n.inputs };
@@ -143,6 +152,7 @@ export const MarchCameraNode: NodeDefinition = {
   outputs: {
     ro: { type: 'vec3', label: 'Ray Origin', hint: 'Where the camera sits: every pixel\'s ray starts here.' },
     rd: { type: 'vec3', label: 'Ray Dir',    hint: 'The direction this pixel\'s ray points, one per pixel.' },
+    ...CAMERA_AXES,
   },
   defaultParams: {
     camDist: 3.0, camAngle: 0.6, camElevation: 0.3, rotSpeed: 0.0, fov: 1.5,
@@ -230,7 +240,7 @@ export const MarchCameraNode: NodeDefinition = {
 
     return {
       code,
-      outputVars: { ro: `${id}_ro`, rd: `${id}_rd` },
+      outputVars: { ro: `${id}_ro`, rd: `${id}_rd`, forward: `${id}_fwd`, right: `${id}_rgt`, up: `${id}_up2` },
     };
   },
 };

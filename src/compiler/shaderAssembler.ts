@@ -1,4 +1,5 @@
 import { DEPTH_TYPE, depthSampler } from '../nodes/definitions/depth';
+import { LINK_AT, LINK_COL, LINK_TOKEN_RE, linkColourSource, linkUniformToken, translateChain } from '../nodes/sceneLink';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { dataBlocksFirst } from '../data/dataGlsl';
 import { MAX_GROUP_ITERATIONS } from '../nodes/definitions/group';
@@ -818,6 +819,8 @@ export class ShaderAssembler {
   private nodeSlugMap = new Map<string, string>();
   private sortedNodes: GraphNode[];
   private allNodes: GraphNode[];
+  /** Link colour tokens → their value, for when the swatch isn't a uniform (sceneLinkOutputs). */
+  private linkFallbacks = new Map<string, string>();
   private seedOutputs = new Map<string, Record<string, string>>();
   /** ShaderAssemblerOptions.slugs (Pass node path only). */
   private fixedSlugs: Map<string, string> | undefined;
@@ -2008,6 +2011,8 @@ export class ShaderAssembler {
 
           const sgSorted = topologicalSort(sgPrefixedNodes);
           let sgLastFloatVar = '100.0';  // default return value (large dist = miss)
+          // What each inner node was compiled with, for the link outputs (nodes/sceneLink.ts)
+          const sgRec = new Map<string, { inputs: Record<string, string>; params: Record<string, unknown>; code: string }>();
 
           for (const sn of sgSorted) {
             if (this.nodeOutputs.has(sn.id)) continue;  // scenePos already registered
@@ -2130,9 +2135,11 @@ export class ShaderAssembler {
                 effectiveSn = { ...effectiveSn, params: { ...effectiveSn.params, [paramKey]: v } };
               }
             }
-            const snResult = snDef.generateGLSL(this.patchBodyNode(effectiveSn, snDef, origIdBySlug(sgSubSlugMap, origId)), snInputVars);
+            const patchedSn = this.patchBodyNode(effectiveSn, snDef, origIdBySlug(sgSubSlugMap, origId));
+            const snResult = snDef.generateGLSL(patchedSn, snInputVars);
             sceneFnLines.push(snResult.code);
             this.nodeOutputs.set(sn.id, snResult.outputVars);
+            sgRec.set(sn.id, { inputs: snInputVars, params: patchedSn.params, code: snResult.code });
 
             // Track the latest node's distance as the candidate return value
             { const dv = sceneDistanceVar(snDef, sn, snResult.outputVars); if (dv) sgLastFloatVar = dv; }
@@ -2160,9 +2167,77 @@ export class ShaderAssembler {
           this.functions.add(fnDef);
           if (sgExtraParams.length > 0) this.sceneFnExtraParams.set(fnName, sgExtraParams);
 
-          this.nodeOutputs.set(node.id, { scene: fnName });
+          this.nodeOutputs.set(node.id, { scene: fnName, ...this.sceneLinkOutputs(node, subgraph, sgPrefix, sgSubSlugMap, sgSorted, sgRec) });
           return;
 
+  }
+
+  /**
+   * A Scene Group's link outputs (nodes/sceneLink.ts): for each `at_<inner id>` on its card, where that object is,
+   * as a main() expression; for each `col_<inner id>`, its colour. A Translate's offset is what it reads: a uniform,
+   * a keyframe curve or a value wired from outside the group are main() values already; a chain wired inside the
+   * group that doesn't read Scene Pos is copied into main() (once); anything else falls back to its slider.
+   */
+  private sceneLinkOutputs(
+    node: GraphNode, subgraph: SubgraphData, sgPrefix: string, slugMap: Map<string, string>, sorted: GraphNode[],
+    rec: Map<string, { inputs: Record<string, string>; params: Record<string, unknown>; code: string }>,
+  ): Record<string, string> {
+    const keys = Object.keys(node.outputs ?? {}).filter(k => k.startsWith(LINK_AT) || k.startsWith(LINK_COL));
+    if (!keys.length) return {};
+    const out: Record<string, string> = {};
+    const pre = (id: string) => sgPrefix + (slugMap.get(id) ?? id);
+    const byPre = new Map(sorted.map(n => [n.id, n]));
+    const hoisted = new Set<string>();
+    const readsP = (code: string) => /(?<![\w.])p(?![\w])/.test(code);
+    const local = (expr: string) => expr.includes(sgPrefix) || readsP(expr);
+    // The inner nodes an input reads, in compile order; null when any of them can't run in main().
+    const upstream = (start: GraphNode, key: string): GraphNode[] | null => {
+      const need = new Set<string>();
+      const stack = [start.inputs[key]?.connection?.nodeId].filter(Boolean) as string[];
+      while (stack.length) {
+        const id = stack.pop()!;
+        if (need.has(id)) continue;
+        const n = byPre.get(id);
+        const r = rec.get(id);
+        // Scene Pos (the point being measured) or code that reads `p` can't run in main(); vars of the nodes it is
+        // wired to are fine (they are copied too).
+        if (!n || !r || n.type === 'scenePos' || n.type === 'group' || readsP(r.code)) return null;
+        need.add(id);
+        for (const i of Object.values(n.inputs)) if (i.connection && byPre.has(i.connection.nodeId)) stack.push(i.connection.nodeId);
+      }
+      return sorted.filter(n => need.has(n.id));
+    };
+    const offset = (tId: string, k: string): string => {
+      const r = rec.get(tId);
+      const t = byPre.get(tId);
+      if (!r || !t) return '0.0';
+      const v = r.inputs[k];
+      const param = typeof r.params[k] === 'string' ? String(r.params[k]) : formatFloat(typeof r.params[k] === 'number' ? r.params[k] as number : 0);
+      if (!v) return param;
+      if (!local(v)) return v;
+      const chain = upstream(t, k);
+      if (!chain) return param;
+      for (const n of chain) {
+        if (hoisted.has(n.id)) continue;
+        hoisted.add(n.id);
+        this.mainCode.push(`    // ${node.id}: copied from the Scene Group for a link (where an object is)\n`, rec.get(n.id)!.code);
+      }
+      return v;
+    };
+    for (const key of keys) {
+      const innerId = key.startsWith(LINK_AT) ? key.slice(LINK_AT.length) : key.slice(LINK_COL.length);
+      if (key.startsWith(LINK_AT)) {
+        const terms = translateChain(subgraph.nodes, innerId).map(id => `vec3(${['tx', 'ty', 'tz'].map(k => offset(pre(id), k)).join(', ')})`);
+        out[key] = terms.length ? `(${terms.join(' + ')})` : 'vec3(0.0)';
+      } else {
+        const src = linkColourSource(this.allNodes, node, innerId);
+        if (!src) { out[key] = 'vec3(1.0)'; continue; }
+        const token = linkUniformToken(src.nodeId, src.key);
+        this.linkFallbacks.set(token, `vec3(${src.value.slice(0, 3).map(x => formatFloat(Number(x) || 0)).join(', ')})`);
+        out[key] = token;
+      }
+    }
+    return out;
   }
 
   /**
@@ -4260,6 +4335,12 @@ export class ShaderAssembler {
   }
 
   private buildResult() {
+    // Link colours (nodes/sceneLink.ts): the swatch's live uniform once every node is compiled, else its value.
+    const linkToken = (s: string) => s.replace(LINK_TOKEN_RE, (m: string, id: string, key: string) => {
+      const u = this.paramBindings[`${id}::${key}`];
+      return u && u in this.paramUniforms ? u : this.linkFallbacks.get(m) ?? 'vec3(1.0)';
+    });
+    if (this.linkFallbacks.size) this.mainCode = this.mainCode.map(linkToken);
     const mainBody = this.mainCode.join('') + (this.stepsView ? `    gl_FragColor = vec4(${this.stepsView}, 1.0);\n` : '');
     // Repeat Cell outside a Repeat Scene (or in a path that skips declarationsFor) still needs its global.
     if (!this.declarations.has(CELL3_DECL) && [CELL3_GLOBAL, CELL3SIZE_GLOBAL].some(g => mainBody.includes(g) || [...this.functions].some(f => f.includes(g)))) this.declarations.add(CELL3_DECL);

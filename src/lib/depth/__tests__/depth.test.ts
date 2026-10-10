@@ -56,8 +56,8 @@ describe('Depth node compiles', () => {
     for (const [k, s] of [...Object.entries(def.inputs), ...Object.entries(def.outputs)]) expect(s.hint?.length ?? 0, k).toBeGreaterThan(10);
     for (const [k, pd] of Object.entries(def.paramDefs ?? {})) expect(pd.hint?.length ?? 0, k).toBeGreaterThan(10);
     expect(def.defaultParams?.model).toBe('depth-anything-v2-small');
-    expect(def.paramDefs!.model).toBeUndefined(); // one model now: no picker
-    expect(Object.keys(def.outputs)).toEqual(['depth', 'texture', 'nearMask', 'normal', 'parallaxUv']);
+    expect(def.paramDefs!.model).toBeUndefined(); // the picker is on the card, with experimental models on
+    expect(Object.keys(def.outputs)).toEqual(['depth', 'texture', 'nearMask', 'normal', 'parallaxUv', 'distance']);
   });
 
   for (const output of Object.keys(OUTPUTS)) {

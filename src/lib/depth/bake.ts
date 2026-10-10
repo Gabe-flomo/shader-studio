@@ -15,6 +15,7 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { depthSideOf, type DepthBakeInfo } from '../../nodes/definitions/depth';
 import { depthModelUsable, estimateDepth } from '../../depthModel/client';
 import { depthModelById } from '../../depthModel/config';
+import { effectiveDepthModel } from '../../depthModel/experimental';
 import { addImage, addVideoFile, getVideo } from '../backgroundLibrary';
 import { videoEngine } from '../videoEngine';
 import { bakeEncoder, type BakeEncoder } from '../bake/encode';
@@ -58,7 +59,7 @@ export async function bakeDepth(nodeId: string, onProgress: (p: DepthBakeProgres
   const st = useNodeGraphStore.getState();
   const node = st.nodes.find(n => n.id === nodeId);
   if (!node) throw new Error('Bake depth works on a Depth node at the top level of the graph.');
-  const model = String(node.params.model ?? '');
+  const model = effectiveDepthModel(node.params.model).id;
   if (!depthModelUsable(model)) throw new Error(`Download ${depthModelById(model).name} first.`);
   const src = depthBakeSource(node, st.nodes);
   if (!src.kind) throw new Error(src.why);

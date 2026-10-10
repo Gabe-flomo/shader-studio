@@ -12,6 +12,9 @@ import { KALEIDO_RECIPES, POLAR_RECIPES, REPEAT_RECIPES, SDF_COMBINE_RECIPES, SD
 import { AUDIO_RECIPES, FEEDBACK_RECIPES, LFO_RECIPES, PARTICLE_RECIPES, PASS_RECIPES, PICTURE_EFFECT_RECIPES } from './effectRecipes';
 import { CHANGE_RECIPES, FADE_RECIPES, JUMP_FLOOD_RECIPES } from './textureRecipes';
 import { LIGHT_RECIPES } from './lightRecipes';
+import { PICTURE_DEPTH_RECIPES, PICTURE_DEPTH_SET } from './depthRecipes';
+
+export { PICTURE_DEPTH_SET, FACE_CAMERA_OPTION, pictureSource } from './depthRecipes';
 
 export { LIGHT_SCENE_TYPES } from './lightRecipes';
 
@@ -45,6 +48,8 @@ export const STARTER_RECIPES: Readonly<Record<string, StarterRecipe[]>> = {
   lfo: LFO_RECIPES,
   // Light the scene (docs/light-scene.md): 3D and 4D scenes both march through a March Loop Group.
   marchLoopGroup: LIGHT_RECIPES,
+  // "Add a picture with depth" (docs/depth-node.md): opened from a March Loop / GI Lit card, never on add.
+  [PICTURE_DEPTH_SET]: PICTURE_DEPTH_RECIPES,
   ...each(['bloom', 'vignette', 'grain', 'toneMap', 'chromaShift', 'colorSaturation', 'hueRotate', 'posterize', 'scanlines', 'brightnessContrast', 'toneCurve', 'invert', 'cmykHalftone'], PICTURE_EFFECT_RECIPES),
 };
 

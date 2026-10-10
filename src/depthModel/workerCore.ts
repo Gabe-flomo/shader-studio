@@ -4,14 +4,17 @@
  *
  * Messages in:
  *   { type: 'load', id, cfg }                                 load one model (WebGPU when it has shader-f16, else WebAssembly)
- *   { type: 'depth', id, model, rgba, w, h, flipY, side }     → { type: 'depth', id, depth, w, h, ms }
+ *   { type: 'depth', id, model, rgba, w, h, flipY, side }     → { type: 'depth', id, depth, w, h, ms, range? }
  *   { type: 'unload', id, model }                             free one model
  * Messages out: progress while loading, { type: 'ready', id, model, backend, ms }, { type: 'error', id, message }.
  *
- * Depth comes back as a Float32Array, 0–1 (the model's relative depth stretched to its own min and max), rows top
- * to bottom, at the size the model worked at. Both families give inverse depth: 1 is the nearest thing in the frame.
+ * Depth comes back as a Float32Array of nearness, 0–1 (1 is the nearest thing in the frame), rows top to bottom, at
+ * the size the model worked at. Depth Anything V2 and MiDaS give inverse depth, stretched to its own min and max. Depth
+ * Anything V3 gives depth (big is far) and the metric models depth in metres: those are turned over (1 / depth) first,
+ * and a metric model's answer carries `range: [nearest, farthest]` in metres, so a pixel's distance is
+ * 1 / mix(1 / farthest, 1 / nearest, nearness) exactly (metricDistance).
  */
-import type { DepthBackend, DepthDtype } from './config';
+import type { DepthBackend, DepthDtype, DepthOutput, DepthPreprocess } from './config';
 
 export interface DepthWorkerConfig {
   model: string;
@@ -24,6 +27,16 @@ export interface DepthWorkerConfig {
   localPath: string;
   /** Try WebGPU first. */
   webgpu: boolean;
+  /** What the output means (default inverse depth). */
+  output?: DepthOutput;
+  /** How a frame is prepared (default the repo's processor). */
+  preprocess?: DepthPreprocess;
+  /** The .onnx files' folder ('' for the repo's root; default onnx). */
+  subfolder?: string;
+  /** Weights in an external `_data` file beside the .onnx. */
+  externalData?: boolean;
+  /** A Transformers.js class to load with, when the repo's model_type has none. */
+  modelClass?: string;
 }
 
 /** One loaded model: an RGB frame in, raw depth out (any scale), at the model's working size. */
@@ -52,6 +65,25 @@ export function rgbaToRgb(rgba: ArrayLike<number>, w: number, h: number, flipY: 
   return rgb;
 }
 
+/** Depth (big is far) turned into inverse depth, so it stretches the same way as the inverse-depth models'. */
+export function invertDepth(data: ArrayLike<number>): { inv: Float32Array; near: number; far: number } {
+  const n = data.length, inv = new Float32Array(n);
+  let near = Infinity, far = 0;
+  for (let i = 0; i < n; i++) {
+    const d = Math.max(Number(data[i]), 1e-4);
+    inv[i] = 1 / d;
+    if (d < near) near = d;
+    if (d > far) far = d;
+  }
+  return { inv, near: Number.isFinite(near) ? near : 0, far };
+}
+
+/** A metric model's pixel distance (metres) from its nearness and the frame's range: the inverse of the stretch. */
+export function metricDistance(nearness: number, near: number, far: number): number {
+  const inv = (1 / Math.max(far, 1e-4)) * (1 - nearness) + (1 / Math.max(near, 1e-4)) * nearness;
+  return 1 / Math.max(inv, 1e-6);
+}
+
 /** Stretch raw depth to 0–1 over its own range (a flat frame reads 0). */
 export function normalizeDepth(data: ArrayLike<number>): Float32Array {
   const n = data.length, out = new Float32Array(n);
@@ -65,7 +97,7 @@ export function normalizeDepth(data: ArrayLike<number>): Float32Array {
 }
 
 export function createDepthWorker(loader: DepthLoader, post: Post) {
-  const models = new Map<string, { run: Estimator; backend: DepthBackend; ms: number }>();
+  const models = new Map<string, { run: Estimator; backend: DepthBackend; ms: number; output: DepthOutput }>();
   const loading = new Map<string, Promise<void>>();
 
   async function load(id: number, cfg: DepthWorkerConfig): Promise<void> {
@@ -79,7 +111,7 @@ export function createDepthWorker(loader: DepthLoader, post: Post) {
       backend = 'wasm';
       run = await loader.load(cfg, backend, onProgress);
     }
-    models.set(cfg.model, { run, backend, ms: Math.round(performance.now() - t0) });
+    models.set(cfg.model, { run, backend, ms: Math.round(performance.now() - t0), output: cfg.output ?? 'inverse' });
   }
 
   return async function onMessage(m: { type: string; id: number; cfg?: DepthWorkerConfig; model?: string; rgba?: Uint8Array; w?: number; h?: number; flipY?: boolean; side?: number }): Promise<void> {
@@ -104,8 +136,15 @@ export function createDepthWorker(loader: DepthLoader, post: Post) {
         const t0 = performance.now();
         const rgb = rgbaToRgb(m.rgba!, m.w!, m.h!, !!m.flipY);
         const out = await got.run(rgb, m.w!, m.h!, m.side ?? 518);
-        const depth = normalizeDepth(out.data);
-        post({ type: 'depth', id: m.id, depth, w: out.w, h: out.h, ms: performance.now() - t0 }, [depth.buffer]);
+        const kind = got.output;
+        let depth: Float32Array, range: [number, number] | undefined;
+        if (kind === 'inverse') depth = normalizeDepth(out.data);
+        else {
+          const t = invertDepth(out.data);
+          depth = normalizeDepth(t.inv);
+          if (kind === 'metric') range = [t.near, t.far];
+        }
+        post({ type: 'depth', id: m.id, depth, w: out.w, h: out.h, ms: performance.now() - t0, ...(range ? { range } : {}) }, [depth.buffer]);
         return;
       }
       throw new Error(`Unknown message ${m.type}`);
@@ -113,4 +152,43 @@ export function createDepthWorker(loader: DepthLoader, post: Post) {
       post({ type: 'error', id: m.id, message: e instanceof Error ? e.message : String(e) });
     }
   };
+}
+
+/** The model's input size for a frame: the long side `side`, both sides a multiple of `multiple` (at least one step). */
+export function inputSize(w: number, h: number, side: number, multiple: number): { w: number; h: number } {
+  const k = side / Math.max(w, h, 1);
+  const snap = (v: number) => Math.max(multiple, Math.round((v * k) / multiple) * multiple);
+  return { w: snap(w), h: snap(h) };
+}
+
+const IMAGENET_MEAN = [0.485, 0.456, 0.406], IMAGENET_STD = [0.229, 0.224, 0.225];
+
+/**
+ * A frame prepared by the worker itself, for repos without a usable processor (config.ts DepthPreprocess): bilinear
+ * resize to `inputSize`, then (v / 255 − mean) / std, planar (CHW). `imagenet14`: ImageNet mean/std, sides a multiple
+ * of 14, dims [1, 1, 3, h, w] (Depth Anything V3 takes a batch of views). `half32`: mean/std 0.5, a multiple of 32,
+ * dims [1, 3, h, w] (ZoeDepth).
+ */
+export function preprocessFrame(rgb: ArrayLike<number>, w: number, h: number, side: number, mode: 'imagenet14' | 'half32'): { data: Float32Array; dims: number[]; w: number; h: number } {
+  const multiple = mode === 'imagenet14' ? 14 : 32;
+  const mean = mode === 'imagenet14' ? IMAGENET_MEAN : [0.5, 0.5, 0.5];
+  const std = mode === 'imagenet14' ? IMAGENET_STD : [0.5, 0.5, 0.5];
+  const t = inputSize(w, h, side, multiple);
+  const data = new Float32Array(3 * t.w * t.h);
+  const plane = t.w * t.h;
+  for (let y = 0; y < t.h; y++) {
+    const sy = Math.min(h - 1, Math.max(0, ((y + 0.5) * h) / t.h - 0.5));
+    const y0 = Math.floor(sy), y1 = Math.min(h - 1, y0 + 1), fy = sy - y0;
+    for (let x = 0; x < t.w; x++) {
+      const sx = Math.min(w - 1, Math.max(0, ((x + 0.5) * w) / t.w - 0.5));
+      const x0 = Math.floor(sx), x1 = Math.min(w - 1, x0 + 1), fx = sx - x0;
+      for (let c = 0; c < 3; c++) {
+        const a = Number(rgb[(y0 * w + x0) * 3 + c]), b = Number(rgb[(y0 * w + x1) * 3 + c]);
+        const d = Number(rgb[(y1 * w + x0) * 3 + c]), e = Number(rgb[(y1 * w + x1) * 3 + c]);
+        const v = (a * (1 - fx) + b * fx) * (1 - fy) + (d * (1 - fx) + e * fx) * fy;
+        data[c * plane + y * t.w + x] = (v / 255 - mean[c]) / std[c];
+      }
+    }
+  }
+  return { data, dims: mode === 'imagenet14' ? [1, 1, 3, t.h, t.w] : [1, 3, t.h, t.w], w: t.w, h: t.h };
 }

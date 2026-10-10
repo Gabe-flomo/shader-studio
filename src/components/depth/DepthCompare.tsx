@@ -1,5 +1,5 @@
 /**
- * Compare (docs/depth-node.md): the three depth models side by side on the frame the Depth node last sent to its
+ * Compare (docs/depth-node.md, with experimental depth models on): every depth model side by side on the frame the Depth node last sent to its
  * model, each with its time per frame (the median of three runs after a warm-up, at the node's resolution).
  * Only downloaded models run; the others offer their download here.
  */
@@ -14,7 +14,7 @@ import { depthSideOf } from '../../nodes/definitions/depth';
 import { DEPTH_MODELS, formatDepthBytes, licenceLine, type DepthModelSpec } from '../../depthModel/config';
 import { depthOfferBytes, downloadDepthModel, estimateDepth, useDepthModels } from '../../depthModel/client';
 
-interface Result { ms: number; w: number; h: number; depth: Float32Array; backend: string | null }
+interface Result { ms: number; w: number; h: number; depth: Float32Array; backend: string | null; range?: [number, number] }
 
 const median = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
 
@@ -63,7 +63,7 @@ export function DepthCompare({ nodeId, onClose }: { nodeId: string; onClose: () 
       const times: number[] = [];
       let last = warm;
       for (let i = 0; i < 3; i++) { const r = await one(); if (r) { times.push(r.ms); last = r; } }
-      setResults(r => ({ ...r, [m.id]: { ms: times.length ? median(times) : warm.ms, w: last.w, h: last.h, depth: last.depth, backend: useDepthModels.getState().models[m.id]?.backend ?? null } }));
+      setResults(r => ({ ...r, [m.id]: { ms: times.length ? median(times) : warm.ms, w: last.w, h: last.h, depth: last.depth, backend: useDepthModels.getState().models[m.id]?.backend ?? null, range: last.range } }));
     }
     running.current = false;
   };
@@ -95,6 +95,7 @@ export function DepthCompare({ nodeId, onClose }: { nodeId: string; onClose: () 
             <DepthCanvas depth={r.depth} w={r.w} h={r.h} />
             <span style={{ fontSize: 12, color: tk.text.primary, fontVariantNumeric: 'tabular-nums' }}>{Math.round(r.ms)} ms a frame</span>
             <span style={{ fontSize: 11, color: tk.text.muted }}>{r.w}×{r.h}{r.backend ? ` · ${r.backend === 'webgpu' ? 'WebGPU' : 'WebAssembly'}` : ''}</span>
+            {r.range && <span style={{ fontSize: 11, color: tk.text.muted }}>Metric: {r.range[0].toFixed(2)}–{r.range[1].toFixed(2)} m</span>}
           </>
         )}
         <span style={{ fontSize: 11, color: m.commercial ? tk.text.muted : tk.status.warning }}>{licenceLine(m)}</span>
