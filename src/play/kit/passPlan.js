@@ -6,8 +6,12 @@
 // A pass is { slug, scale, live, previous, afterAgents? } from the compile
 // (compiler/types.ts PassProgram), already in drawing order.
 
-/** A pass's texture size for a picture of w × h: scale × the picture, at least 1 × 1. */
-export function ppSize(w, h, scale) {
+/**
+ * A pass's texture size for a picture of w × h: scale × the picture, at least 1 × 1. `size` (a
+ * Shader Texture's fixed Resolution, docs/texture-builder.md) is a square of that many pixels instead.
+ */
+export function ppSize(w, h, scale, size) {
+  if (typeof size === 'number' && size >= 1) return [Math.round(size), Math.round(size)];
   const s = scale > 0 ? scale : 1;
   return [Math.max(1, Math.round(w * s)), Math.max(1, Math.round(h * s))];
 }
@@ -70,7 +74,7 @@ export function ppPixel(w, h) {
  * previous frame starts black.
  */
 export function ppTargetKey(p, w, h) {
-  const [tw, th] = ppSize(w, h, p.scale);
+  const [tw, th] = ppSize(w, h, p.scale, p.size);
   return `${tw}x${th}:${p.format}:${p.filter}:${p.wrap}:${p.previous ? 2 : 1}`;
 }
 
@@ -94,4 +98,18 @@ export function ppFrameSteps(o) {
   } else if (o.passes) steps.push({ do: 'passes', part });
   for (let i = steps.length - 1; i >= 0; i--) if (steps[i].do === 'passes') { steps[i].last = true; break; }
   return steps;
+}
+
+/**
+ * Whether a pass can keep the picture it already has this frame instead of drawing (a Shader
+ * Texture's Update, docs/texture-builder.md). `drawnSig` is what the target was last drawn with
+ * (undefined: never, or made again since), `sig` what it would be drawn with now: the host builds
+ * it from the program and, for 'change', the values of the uniforms the program reads. Every
+ * other pass (no `update`), a repeated one, one that keeps a Previous or one that reads other
+ * passes (their pictures change without their names changing) always draws.
+ */
+export function ppKeeps(p, drawnSig, sig) {
+  if (p.update !== 'once' && p.update !== 'change') return false;
+  if (p.previous || ppRepeat(p) > 1 || (p.reads && p.reads.length > 0)) return false;
+  return drawnSig !== undefined && drawnSig === sig;
 }

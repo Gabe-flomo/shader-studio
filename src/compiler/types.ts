@@ -43,6 +43,19 @@ export interface PassProgram {
    */
   repeat?: number;
   /**
+   * A Shader Texture (docs/texture-builder.md): a fixed square size in pixels instead of `scale`
+   * × the picture. Only present when set.
+   */
+  size?: number;
+  /**
+   * A Shader Texture's Update: 'change' draws again only when a uniform its program reads changes
+   * (or the program, or its target); 'once' only when the program or its target is new. Absent:
+   * every frame, as every other pass.
+   */
+  update?: 'change' | 'once';
+  /** With update 'change': no Time node inside, so the clock alone never draws it again. Only present when true. */
+  stillTime?: boolean;
+  /**
    * A hidden pass of a Blur or Glow (texture) node (compiler/hiddenBlurs.ts): `nodeId` is that
    * node. Not a Pass node: it doesn't count towards MAX_PASSES and has no card. Only present when true.
    */

@@ -34,6 +34,7 @@ import { KIND_LABEL, imageNameOf, textureKindOf, type TextureKind } from '../../
 import { fetchMedia, TextureUrlError } from '../../lib/texture/pictures';
 import { takePicture } from '../../lib/texture/pictureHost';
 import { isImageFile, isVideoFile, loadLibraryVideo, loadVideoIntoNode, videoMissing } from '../../lib/texture/videoActions';
+import { textureToShaderTexture } from '../shaderTexture/actions';
 import { cameraLayerOf, mirrorParams, setCameraMirror } from '../../lib/texture/webcam';
 import { textureTileOf, textureWrapOf } from '../../nodes/definitions/sources';
 import { TextureImageEditModal } from './TextureImageEditModal';
@@ -48,6 +49,7 @@ export function TextureCardBody({ node, onEditClip }: { node: GraphNode; onEditC
   const generateDepth = useNodeGraphStore(s => s.generateTextureDepth);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const hasPicture = useNodeGraphStore(s => !!s.nodeTextures[node.id]);
+  const topLevel = useNodeGraphStore(s => s.activeGroupPath.length === 0 && s.nodes.some(n => n.id === node.id));
   const play = useNodeGraphStore(s => s.play);
   const setPlay = useNodeGraphStore(s => s.setPlay);
   const nodes = useNodeGraphStore(s => s.nodes);
@@ -179,6 +181,16 @@ export function TextureCardBody({ node, onEditClip }: { node: GraphNode; onEditC
           <span ref={libRef}><Button size="sm" onClick={() => setLibOpen(o => !o)} aria-expanded={libOpen}>Library</Button></span>
           {kind === 'image' && <Button size="sm" disabled={!hasPicture} onClick={() => setEditing(true)} title="Crop, rotate, flip">Edit…</Button>}
           {kind === 'video' && <Button size="sm" disabled={!videoUrl} onClick={onEditClip} title="Trim, segments, speed, loop, crop">Edit clip…</Button>}
+        </div>
+      )}
+      {/* Load a texture (above) or create a new one: a Shader Texture in this card's place (docs/texture-builder.md). */}
+      {kind === 'image' && !hasPicture && !thumb && topLevel && (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={line}>or</span>
+          <Button size="sm" data-create-texture onClick={() => textureToShaderTexture(node.id)}
+            title="Replace this card with a Shader Texture: a texture made by a small shader graph of its own (noise to start), wired where this one was">
+            Create a new texture
+          </Button>
         </div>
       )}
       {libOpen && kind !== 'webcam' && (

@@ -9,7 +9,7 @@
 // lib/passRunner.ts runs too, so the two can't drift.
 //
 // Top-level names start with `ph` (the kit's one-scope rule).
-import { ppDrawn, ppPixel, ppPrevBound, ppRepeat, ppSize, ppSplitsForParticles, ppStaged, ppTargetKey } from './passPlan.js';
+import { ppDrawn, ppKeeps, ppPixel, ppPrevBound, ppRepeat, ppSize, ppSplitsForParticles, ppStaged, ppTargetKey } from './passPlan.js';
 
 /** A pass's texture settings as GL enums. */
 function phWrap(gl, w) {
@@ -18,7 +18,7 @@ function phWrap(gl, w) {
 
 /**
  * passes: the bundle's graphPasses, in drawing order: { slug, label, fragmentShader, scale,
- * format, filter, wrap, previous, live, afterAgents?, beforeParticles?, repeat?, u: { tex, prev, iter? } } (u: the sampler names;
+ * format, filter, wrap, previous, live, afterAgents?, beforeParticles?, repeat?, size?, update?, reads?, u: { tex, prev, iter? } } (u: the sampler names;
  * iter, a repeated pass's step uniform).
  * env: {
  *   link(fragmentShader) → WebGLProgram: compiled as the page compiles its picture (throws on error),
@@ -68,7 +68,7 @@ export function phCreate(gl, passes, env) {
     let t = targets.get(p.slug);
     if (t && t.key === key) return t;
     if (t) drop(t);
-    const [tw, th] = ppSize(w, h, p.scale);
+    const [tw, th] = ppSize(w, h, p.scale, p.size);
     t = { key, w: tw, h: th, cur: makeTarget(p, tw, th), prev: p.previous ? makeTarget(p, tw, th) : null };
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     targets.set(p.slug, t);
@@ -101,6 +101,11 @@ export function phCreate(gl, passes, env) {
       for (const d of ppStaged(drawn, stage, part)) {
         const t = targets.get(d.slug);
         if (!d.program) { env.textures.set(d.u.tex, null); continue; }
+        // A Shader Texture on Update Once keeps its picture once drawn (its target is made again on a resize
+        // or settings change, and starts over). On a page On change draws every frame: the page has no cheap
+        // view of the values a program reads, so it never risks a stale texture.
+        const sig = d.update === 'once' ? 'once' : undefined;
+        if (sig && ppKeeps(d, t.drawn, sig)) { env.textures.set(d.u.tex, t.cur.tex); continue; }
         // Repeat (phase 7): N draws, each reading the one before through Previous.
         const n = ppRepeat(d);
         for (let i = 0; i < n; i++) {
@@ -115,12 +120,14 @@ export function phCreate(gl, passes, env) {
           // Ping-pong: this frame's picture is the next frame's Previous (and the next repeat's).
           if (t.prev) { const c = t.cur; t.cur = t.prev; t.prev = c; }
         }
+        t.drawn = sig;
       }
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     },
     /** Start every Previous over (black): a new render. */
     clearPrevious() {
       gl.clearColor(0, 0, 0, 0);
+      for (const t of targets.values()) t.drawn = undefined;
       for (const t of targets.values()) for (const rt of [t.cur, t.prev]) {
         if (!rt) continue;
         gl.bindFramebuffer(gl.FRAMEBUFFER, rt.fb); gl.viewport(0, 0, t.w, t.h); gl.clear(gl.COLOR_BUFFER_BIT);

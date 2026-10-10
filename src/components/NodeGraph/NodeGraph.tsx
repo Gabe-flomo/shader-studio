@@ -60,6 +60,8 @@ import { BUILDERS } from '../../builders/registry';
 import { openBuilder } from '../../builders/open';
 import { builderSceneOf, describeIntoBuilder, editSceneInBuilder } from '../../sceneBuilder/actions';
 import { useLibraryPrefs } from '../../structure/libraryPrefs';
+import { ShaderTextureInsidePanel } from '../shaderTexture/ShaderTextureCardBody';
+import { turnIntoShaderTexture } from '../shaderTexture/actions';
 const OptimizeModal = lazyWithSuspense<PropsOf<typeof OptimizeModalT>>(() => import('./OptimizeModal').then(m => ({ default: m.OptimizeModal })));
 const BakeDialogHost = lazyWithSuspense<Record<string, never>>(() => import('../bake/BakeDialog').then(m => ({ default: m.BakeDialogHost })));
 const SceneBuilderModal = lazyWithSuspense<Record<string, never>>(() => import('../sceneBuilder/SceneBuilderModal').then(m => ({ default: m.SceneBuilderModal })));
@@ -281,26 +283,28 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   // An Agents group has its own anchored Agent Inputs / Agent Output cards (ports are added on Agent
   // Inputs), so it never shows the generic Group inputs / Group output terminals.
   const isInsideAgentsGroup = activeGroupNode?.type === 'agentsGroup';
+  // A Shader Texture (docs/texture-builder.md) ends in its own Texture Output: no Group terminals either.
+  const isInsideShaderTexture = activeGroupNode?.type === 'shaderTexture';
 
   // Position the Group Output terminal to the right of all subgraph nodes
   const groupOutputTerminalPos = React.useMemo(() => {
-    if (!activeGroupId || isInsideAgentsGroup) return null;
+    if (!activeGroupId || isInsideAgentsGroup || isInsideShaderTexture) return null;
     if (displayNodes.length === 0) return { x: 500, y: 160 }; // default for empty group
     const maxX = Math.max(...displayNodes.map(n => n.position.x)) + NODE_WIDTH + 80;
     const ys   = displayNodes.map(n => n.position.y);
     const midY = (Math.min(...ys) + Math.max(...ys)) / 2 - 40;
     return { x: maxX, y: midY };
-  }, [activeGroupId, displayNodes, isInsideAgentsGroup]);
+  }, [activeGroupId, displayNodes, isInsideAgentsGroup, isInsideShaderTexture]);
 
   // Position the Group Input terminal to the left of all subgraph nodes
   const groupInputTerminalPos = React.useMemo(() => {
-    if (!activeGroupId || isInsideAgentsGroup) return null;
+    if (!activeGroupId || isInsideAgentsGroup || isInsideShaderTexture) return null;
     if (displayNodes.length === 0) return { x: 80, y: 160 }; // default for empty group
     const minX = Math.min(...displayNodes.map(n => n.position.x)) - 220;
     const ys   = displayNodes.map(n => n.position.y);
     const midY = (Math.min(...ys) + Math.max(...ys)) / 2 - 40;
     return { x: minX, y: midY };
-  }, [activeGroupId, displayNodes, isInsideAgentsGroup]);
+  }, [activeGroupId, displayNodes, isInsideAgentsGroup, isInsideShaderTexture]);
 
   // Compile problems mapped onto the cards that caused them (shown on the card, not only in the error panel)
   const glslErrors      = useNodeGraphStore(s => s.glslErrors);
@@ -1529,7 +1533,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
               const outerSg = outer?.params?.subgraph as import('../../types/nodeGraph').SubgraphData | undefined;
               gn = outerSg?.nodes.find(n => n.id === gid);
             }
-            const defaultLbl = gn?.type === 'sceneGroup' ? 'Scene Group' : gn?.type === 'spaceWarpGroup' ? 'Space Warp Group' : gn?.type === 'marchLoopGroup' ? 'March Loop Group' : gn?.type === 'giLitMarchGroup' ? 'GI Lit March Group' : gn?.type === 'agentsGroup' ? 'Agents' : 'Group';
+            const defaultLbl = gn?.type === 'sceneGroup' ? 'Scene Group' : gn?.type === 'spaceWarpGroup' ? 'Space Warp Group' : gn?.type === 'marchLoopGroup' ? 'March Loop Group' : gn?.type === 'giLitMarchGroup' ? 'GI Lit March Group' : gn?.type === 'agentsGroup' ? 'Agents' : gn?.type === 'shaderTexture' ? 'Shader Texture' : 'Group';
             const lbl = typeof gn?.params?.label === 'string' ? gn.params.label : defaultLbl;
             const isLast = depth === activeGroupPath.length - 1;
             return (
@@ -1554,6 +1558,11 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             </span>
           )}
         </div>
+      )}
+
+      {/* Inside a Shader Texture: its live texture and a way out (docs/texture-builder.md). */}
+      {isInsideShaderTexture && activeGroupPath.length === 1 && activeGroupNode && (
+        <ShaderTextureInsidePanel node={activeGroupNode} top={redesignToolbar ? 108 : 56} />
       )}
 
       {/* An empty Agents rule: the walkers stand still. Suggest a starting rule (one click adds and wires it). */}
@@ -1814,6 +1823,14 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     }}>
                       Duplicate Selection
                     </button>
+                    {activeGroupPath.length === 0 && (
+                      <button style={ctxBtnStyle} title="Put these nodes inside a new Shader Texture: their picture is drawn into a texture, wired where their result went" onClick={() => {
+                        setContextMenu(null);
+                        turnIntoShaderTexture(ids);
+                      }}>
+                        Turn into a Shader Texture
+                      </button>
+                    )}
                     <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
                   </>
                 )}
@@ -1935,6 +1952,14 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     }}>
                       Enter Group
                     </button>
+                    {activeGroupPath.length === 0 && (
+                      <button style={ctxBtnStyle} title="Make this group a Shader Texture: its inside is drawn into a texture" onClick={() => {
+                        setContextMenu(null);
+                        turnIntoShaderTexture([clickedNode.id]);
+                      }}>
+                        Turn into a Shader Texture
+                      </button>
+                    )}
                     <button style={ctxBtnStyle} onClick={() => {
                       const id = clickedNode.id;
                       setContextMenu(null);

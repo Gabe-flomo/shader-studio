@@ -74,6 +74,7 @@ const subscribeVideoEngine = (fn: () => void) => videoEngine.onChange(fn);
 import { MidiInputCard } from './MidiInputCard';
 import { GroupParamPicker } from './GroupParamPicker';
 import { NodeInlineViz, AudioFreqRangeViz, hasRealDiagram } from './NodeInlineViz';
+import { ShaderTextureCardBody } from '../shaderTexture/ShaderTextureCardBody';
 import { ValuePreview } from './ValuePreview';
 import { AgentPreviewPanel } from './AgentPreviewPanels';
 import { previewPlan } from '../../lib/nodePreview/previewPlan';
@@ -2845,7 +2846,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           e.stopPropagation();
           // A rules group (docs/agent-rules.md) opens its rules editor; Open as nodes enters it.
           if (node.type === 'agentsGroup' && node.params.ruleMode === 'rules' && !savingMode) openAgentRulesEditor(node.id);
-          else if ((node.type === 'sceneGroup' || node.type === 'agentsGroup') && !savingMode) onEnterGroup?.(node.id);
+          else if ((node.type === 'sceneGroup' || node.type === 'agentsGroup' || node.type === 'shaderTexture') && !savingMode) onEnterGroup?.(node.id);
           else setCollapsed(v => !v);
         }}
         style={{
@@ -3134,6 +3135,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       {node.type === 'pass' && <NodeInlineViz node={node} />}
       {/* The Agents family (docs/agents-plan.md): the group's numbers and Open rule, a Trail's texture */}
       {(node.type === 'agentsGroup' || node.type === 'trailField') && <NodeInlineViz node={node} onEnterGroup={onEnterGroup} />}
+      {node.type === 'shaderTexture' && <ShaderTextureCardBody node={node} onEnterGroup={onEnterGroup} />}
       {node.type === 'agentOutput' && (
         <div style={{ padding: '8px 14px', fontSize: 11.5, lineHeight: 1.45, color: tk.text.faint, borderBottom: `1px solid ${tk.border.subtle}` }}>
           What this walker becomes at the end of the step. Anything left unwired stays as it was, so an empty rule stands still.

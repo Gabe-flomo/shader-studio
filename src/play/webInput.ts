@@ -56,6 +56,9 @@ export function webPasses(passes: readonly PassProgram[]): WebPass[] {
     slug: p.slug, label: p.label, fragmentShader: p.fragmentShader, scale: p.scale, format: p.format, filter: p.filter, wrap: p.wrap,
     previous: p.previous, live: p.live, ...(p.afterAgents ? { afterAgents: true } : {}), ...(p.beforeParticles ? { beforeParticles: true } : {}),
     ...(p.repeat ? { repeat: p.repeat } : {}),
+    // A Shader Texture's fixed size and Update (docs/texture-builder.md); only present when set.
+    ...(p.size ? { size: p.size } : {}),
+    ...(p.update ? { update: p.update, reads: p.reads } : {}),
     u: { tex: passUniform(p.slug), prev: passPrevUniform(p.slug), ...(p.repeat ? { iter: passIterUniform(p.slug) } : {}) },
   }));
 }

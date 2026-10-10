@@ -28,7 +28,8 @@ function hasPass(nodes: GraphNode[]): boolean {
   for (const n of nodes) {
     // A Grid Rules node is a Pass too, once compiled (compiler/gridRulesExpand.ts).
     // So is a Curve Trace in Draw: Beam (compiler/curveBeamExpand.ts).
-    if (n.type === PASS_TYPE || n.type === 'gridRules' || (n.type === 'curveTrace' && n.params?.draw === 'beam')) return true;
+    // And a Shader Texture, a Pass with a graph inside (compiler/shaderTextureExpand.ts).
+    if (n.type === PASS_TYPE || n.type === 'gridRules' || n.type === 'shaderTexture' || (n.type === 'curveTrace' && n.params?.draw === 'beam')) return true;
     const sg = n.params?.subgraph as { nodes?: GraphNode[] } | undefined;
     if (sg?.nodes && hasPass(sg.nodes)) return true;
   }
@@ -68,7 +69,8 @@ export function expandPassGroups(nodes: GraphNode[]): ExpandedGroups | { errors:
   const groups: ExpandedGroups['groups'] = new Map();
   const holds = (n: GraphNode) => {
     const sg = n.params?.subgraph as { nodes?: GraphNode[] } | undefined;
-    return n.type !== PASS_TYPE && !!sg?.nodes && hasPass(sg.nodes);
+    // A Shader Texture isn't a group: compiler/shaderTextureExpand.ts opens it.
+    return n.type !== PASS_TYPE && n.type !== 'shaderTexture' && !!sg?.nodes && hasPass(sg.nodes);
   };
   if (!nodes.some(holds)) return { nodes, groups };
   const errors: string[] = [];
