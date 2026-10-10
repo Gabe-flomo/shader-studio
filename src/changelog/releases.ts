@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.136',
+    date: '2026-10-10',
+    title: 'Autosave',
+    highlights: [
+      { area: 'Files', text: 'Saved graphs are grouped Today, This week and Earlier (newest first), with folders after, and the lists scroll inside themselves.' },
+      { area: 'Studio', text: 'Autosave: a saved graph you change is saved as a new minor version every 5 minutes (2–15), on by default while it is open. The chip shows the countdown.' },
+    ],
+  },
+  {
     id: '2026.10.135',
     date: '2026-10-10',
     title: 'Everyday fixes',
