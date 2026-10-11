@@ -1,13 +1,14 @@
 /**
- * sceneKinds.ts — the one Scene builder (docs/scene-builder.md): its four kinds (2D scene, Agent
- * scene, Grid scene, 3D scene), what a builder already made in a graph, and the routes between the
+ * sceneKinds.ts — the one Scene builder (docs/scene-builder.md): its kinds (2D scene, Agent scene,
+ * Grid scene, Grid simulation, 3D scene, Splat scene), what a builder already made in a graph, and the routes between the
  * kind page and each kind's own builder. The builders keep their code where it is; this only
  * routes to them:
  *
  *  - 2D scene → the 2D Scene Builder (sceneBuilder2d), on a new scene or on a build's saved spec;
  *  - Agent scene → the Agent Builder (agentBuilder), on its "What are you making?" page or a group;
- *  - Grid scene → the Grid builder (gridScene), on a new scene or a build's saved spec; a Grid Rules
- *    node (the simulation the Grid builder's "Make it a simulation" jumps to) opens in its editor;
+ *  - Grid scene → the Grid builder (gridScene), on a new scene or a build's saved spec;
+ *  - Grid simulation → Grid Rules (a new Grid Rules node, its editor open), or a Grid Rules node in its
+ *    editor. The Grid builder's "Make it a simulation" jumps there too, and "Pattern grid" jumps back;
  *  - 3D scene → the 3D Scene Builder (sceneBuilder), on a new scene or on a build's saved spec;
  *  - Splat scene → the Splat builder (splatBuilder), on a new scan (built at once: its picture is the main preview's)
  *    or on a build's saved spec.
@@ -35,7 +36,7 @@ import { useSplatBuilder } from '../splatBuilder/store';
 import { closeSplatBuilder } from '../splatBuilder/actions';
 import { EFFECT_INFO, scanName } from '../splatBuilder/spec';
 
-export type SceneKind = '2d' | 'agents' | 'grid' | '3d' | 'splat';
+export type SceneKind = '2d' | 'agents' | 'grid' | 'simulation' | '3d' | 'splat';
 
 export interface SceneKindInfo {
   id: SceneKind;
@@ -51,7 +52,8 @@ export interface SceneKindInfo {
 export const SCENE_KINDS: readonly SceneKindInfo[] = [
   { id: '2d', title: '2D scene', line: 'Shapes, rings of rings, kaleidoscopes, motion and glow, flat on the picture', icon: 'mask', builder: '2D Scene Builder' },
   { id: 'agents', title: 'Agent scene', line: 'Many small walkers, one big pattern: slime, particles, flocks, crowds, orbiters', icon: 'swarm', builder: 'Agent Builder' },
-  { id: 'grid', title: 'Grid scene', line: 'Shapes you draw on cells, with motion, patterns, warps and rules; or a simulation (Life, sand)', icon: 'grid', builder: 'Grid builder' },
+  { id: 'grid', title: 'Grid scene', line: 'Shapes you draw on cells, with motion, patterns, warps and rules between them', icon: 'grid', builder: 'Grid builder' },
+  { id: 'simulation', title: 'Grid simulation', line: 'Cells that follow a rule every step: Life, sand, heat, Wireworld, smooth patterns', icon: 'loop', builder: 'Grid Rules' },
   { id: '3d', title: '3D scene', line: 'Shapes in space, combined and bent, lit and seen through a camera', icon: 'cube', builder: '3D Scene Builder' },
   { id: 'splat', title: 'Splat scene', line: 'A Gaussian splat scan, placed, dissolved, exploded or tinted, in a world of its own', icon: 'spark', builder: 'Splat builder' },
 ];
@@ -61,7 +63,7 @@ export const sceneKindInfo = (k: SceneKind): SceneKindInfo => SCENE_KINDS.find(x
 /** Something a builder made, as the "Edit this one" prompt lists it. `id` is what its builder opens on. */
 export interface BuiltScene {
   kind: SceneKind;
-  /** 3D: the Scene Group; 2D and a Grid scene: the UV node holding the spec; a simulation: the Grid Rules node; agents: the rules group; a splat scene: its Splat Scene. */
+  /** 3D: the Scene Group; 2D and a Grid scene: the UV node holding the spec; a Grid simulation: the Grid Rules node; agents: the rules group; a splat scene: its Splat Scene. */
   id: string;
   label: string;
   /** "Trail followers · 2D", "3 shapes"… */
@@ -84,7 +86,7 @@ export function builtScenes(nodes: readonly GraphNode[]): BuiltScene[] {
   }
   for (const g of builderGroups(nodes)) out.push({ kind: 'agents', id: g.id, label: g.label, detail: `${g.kind} · ${g.d3 ? '3D' : '2D'}` });
   for (const n of nodes) {
-    if (n.type === 'gridRules') out.push({ kind: 'grid', id: n.id, label: labelOf(n, 'Grid Rules'), detail: `a simulation · ${gridShape(n.params).type} rules` });
+    if (n.type === 'gridRules') out.push({ kind: 'simulation', id: n.id, label: labelOf(n, 'Grid simulation'), detail: `${gridShape(n.params).type} rules` });
   }
   for (const n of nodes) {
     const m = n.type === 'sceneGroup' ? metaOf(n) : null;
@@ -155,7 +157,7 @@ export function openSceneKind(): SceneKind | null {
   if (useGridBuilder.getState().open) return 'grid';
   if (useSplatBuilder.getState().open) return 'splat';
   if (w.agentBuilder) return 'agents';
-  if (w.gridRules) return 'grid';
+  if (w.gridRules) return 'simulation';
   return null;
 }
 

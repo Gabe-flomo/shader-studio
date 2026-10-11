@@ -13,8 +13,13 @@
  * ⌘[ / ⌘], remembered per builder). Under 1100 px the side panels are drawers over the viewport
  * that start closed (code/SidePanels.tsx); on a phone the window fills the screen. The window is
  * the Modal's: scrim, 16 px corners, a 60 px header, Esc closes it when it is on top.
+ *
+ * On a phone (PhoneStudio.tsx) there are no side panels: the viewport fills the top, and the
+ * bottom bar is a row of tabs (the presets first, then the sections the nav lists), with the
+ * selected section's settings in a sheet over it. The sections come from the nav's StudioNavItems,
+ * which register themselves here instead of drawing (NavRegistry), so a builder doesn't list them twice.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useTokens } from '../../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
@@ -26,6 +31,32 @@ import { portalGuard } from '../../ui/portalGuard';
 import { usePhoneDialog } from '../../ui/phoneDialog';
 import { SidePanel, useNarrowWindow } from '../../code/SidePanels';
 import { BUILDER_RECIPE_EVENT } from '../../../builders/windows';
+import { PhoneStudio, type PhonePanel, type PhoneSection } from './PhoneStudio';
+
+// ── The phone's section tabs: the nav's items, registered rather than drawn ──
+
+interface NavEntry extends PhoneSection { selected: boolean; click: () => void }
+interface NavRegistry { put: (e: NavEntry) => void; drop: (id: string) => void }
+const NavRegistryContext = createContext<NavRegistry | null>(null);
+
+/** The registered nav items in the nav's own order, and the selected one. */
+function usePhoneNav(root: React.RefObject<HTMLElement | null>) {
+  const entries = useRef(new Map<string, NavEntry>());
+  const [list, setList] = useState<{ sections: PhoneSection[]; current: string | null }>({ sections: [], current: null });
+  const sync = useCallback(() => {
+    const order = root.current ? Array.from(root.current.querySelectorAll('[data-studio-nav-slot]')).map(el => el.getAttribute('data-studio-nav-slot')) : [];
+    const at = (id: string) => { const i = order.indexOf(id); return i < 0 ? order.length : i; };
+    const all = [...entries.current.values()].sort((a, b) => at(a.id) - at(b.id));
+    const next = { sections: all.map(({ id, label, icon, hint, dim }) => ({ id, label, icon, hint, dim })), current: all.find(e => e.selected)?.id ?? null };
+    setList(prev => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+  }, [root]);
+  const registry = useMemo<NavRegistry>(() => ({
+    put: e => { entries.current.set(e.id, e); sync(); },
+    drop: id => { entries.current.delete(id); sync(); },
+  }), [sync]);
+  const select = useCallback((id: string) => entries.current.get(id)?.click(), []);
+  return { registry, ...list, select };
+}
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
@@ -59,6 +90,8 @@ export interface StudioShellProps {
   space?: { value: '2d' | '3d'; onChange: (v: '2d' | '3d') => void; hint?: string };
   /** Other buttons in the top bar, before the primary one. */
   actions?: ReactNode;
+  /** Surprise me: first in the top bar's actions; on a phone, over the presets in the Presets tab. */
+  surprise?: ReactNode;
   /** Add to graph, or Done. */
   primary?: { label: string; onClick: () => void; title?: string };
   /** Left panel (kinds and sections), right panel (the selected section's settings), bottom strip. */
@@ -67,6 +100,12 @@ export interface StudioShellProps {
   presets?: ReactNode;
   navWidth?: number;
   inspectorWidth?: number;
+  /** On a phone: the nav itself as a tab of the bottom bar (its items still become the section tabs), for a nav with more than sections in it. */
+  phoneNav?: { label: string; icon: IconName };
+  /** On a phone: more panels, each a tab before the sections (the 2D builder's layers). */
+  phonePanels?: PhonePanel[];
+  /** On a phone: the sheet's title when no section is selected ("Under the hood"). */
+  phoneSettingsTitle?: string;
   /** The centre: the live viewport (or the start page). */
   children: ReactNode;
 }
@@ -91,7 +130,10 @@ export function StudioShell(p: StudioShellProps) {
   useEffect(() => { toggle.current = f => set(f, !open[f]); });
   // ⌘⇧D (builders/windows.ts requestBuilderRecipe): the recipe shows in the inspector, so unfold it.
   const showInspector = useRef<() => void>(() => {});
-  useEffect(() => { showInspector.current = () => { if (!open.inspector) set('inspector', true); }; });
+  const [recipeAsks, setRecipeAsks] = useState(0);
+  useEffect(() => { showInspector.current = () => { if (phone) setRecipeAsks(n => n + 1); else if (!open.inspector) set('inspector', true); }; });
+  const navRoot = useRef<HTMLDivElement>(null);
+  const phoneNav = usePhoneNav(navRoot);
   useEffect(() => {
     const on = () => showInspector.current();
     window.addEventListener(BUILDER_RECIPE_EVENT, on);
@@ -134,6 +176,45 @@ export function StudioShell(p: StudioShellProps) {
     </SidePanel>
   );
 
+  // Top bar: Back · name · kind ……… panels · 2D | 3D · actions · primary · close
+  const topBar = (
+    <div data-studio-topbar style={{ height: phone ? 52 : 60, flexShrink: 0, display: 'flex', alignItems: 'center', gap: phone ? 4 : 8, padding: phone ? '0 6px' : '0 12px', borderBottom: `1px solid ${tk.border.subtle}`, minWidth: 0 }}>
+      {p.onBack && <IconButton icon="chevL" label={p.backLabel ?? 'Back'} onClick={p.onBack} data-studio-back />}
+      {!phone && (
+        <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: alpha(tile, 0.12), color: tile, marginLeft: p.onBack ? 0 : 4 }}>
+          <Icon name={p.icon} />
+        </span>
+      )}
+      <span style={{ display: 'flex', flexDirection: 'column', gap: p.crumb ? 0 : 1, minWidth: phone ? 120 : 0, flexShrink: phone ? 0 : 1, maxWidth: phone ? '55%' : undefined, marginRight: 'auto', paddingLeft: phone && !p.onBack ? 6 : 0 }}>
+        {p.crumb && <span data-studio-crumb style={{ fontSize: 11, lineHeight: '14px', color: tk.text.muted, display: 'flex', minWidth: 0, overflow: phone ? 'hidden' : undefined }}>{p.crumb}</span>}
+        <b data-studio-title style={{ fontSize: 15, fontWeight: 650, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</b>
+        {p.kind && !(phone && p.crumb) && <span data-studio-kind style={{ fontSize: 12, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.kind}</span>}
+      </span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: phone ? 2 : 6, minWidth: 0, overflowX: phone ? 'auto' : undefined, scrollbarWidth: 'none' }}>
+        {!phone && p.nav !== undefined && foldButton('nav', 'panelLeft', 'the sections', sc('['))}
+        {!phone && p.presets !== undefined && foldButton('presets', 'panelBottom', 'the presets')}
+        {!phone && p.inspector !== undefined && foldButton('inspector', 'panelRight', 'the settings', sc(']'))}
+        {p.space && (
+          <span data-studio-space={p.space.value} title={p.space.hint} style={{ marginLeft: 4 }}>
+            <Segmented size="sm" ariaLabel="2D or 3D" value={p.space.value} onChange={v => p.space!.onChange(v)}
+              options={[{ value: '2d' as const, label: '2D' }, { value: '3d' as const, label: '3D' }]} />
+          </span>
+        )}
+        {!phone && p.surprise}
+        {p.actions}
+        {p.primary && <Button variant="primary" size="sm" data-studio-primary title={p.primary.title} onClick={p.primary.onClick}>{p.primary.label}</Button>}
+      </span>
+      <IconButton icon="close" label="Close" shortcut="esc" onClick={p.onClose} />
+    </div>
+  );
+
+  // On a phone the nav is never drawn as a panel: its items register as the bottom bar's tabs.
+  const navTree = phone && p.nav !== undefined ? (
+    <NavRegistryContext.Provider value={phoneNav.registry}>
+      <div ref={navRoot} data-studio-panel="nav" style={{ display: 'flex', flexDirection: 'column' }}>{p.nav}</div>
+    </NavRegistryContext.Provider>
+  ) : null;
+
   return createPortal(
     <div {...portalGuard} onPointerDown={e => e.stopPropagation()}
       style={{ position: 'fixed', inset: 0, zIndex: 2000, background: tk.bg.scrim, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: phone ? 0 : 16 }}>
@@ -145,51 +226,42 @@ export function StudioShell(p: StudioShellProps) {
           paddingTop: phone ? 'env(safe-area-inset-top, 0px)' : undefined, paddingBottom: phone ? 'env(safe-area-inset-bottom, 0px)' : undefined,
           font: `12.5px ${fontFamily.ui}`,
         }}>
-        {/* Top bar: Back · name · kind ……… panels · 2D | 3D · actions · primary · close */}
-        <div data-studio-topbar style={{ height: 60, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', borderBottom: `1px solid ${tk.border.subtle}`, minWidth: 0 }}>
-          {p.onBack && <IconButton icon="chevL" label={p.backLabel ?? 'Back'} onClick={p.onBack} data-studio-back />}
-          <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: alpha(tile, 0.12), color: tile, marginLeft: p.onBack ? 0 : 4 }}>
-            <Icon name={p.icon} />
-          </span>
-          <span style={{ display: 'flex', flexDirection: 'column', gap: p.crumb ? 0 : 1, minWidth: 0, marginRight: 'auto' }}>
-            {p.crumb && <span data-studio-crumb style={{ fontSize: 11, lineHeight: '14px', color: tk.text.muted, display: 'flex', minWidth: 0 }}>{p.crumb}</span>}
-            <b data-studio-title style={{ fontSize: 15, fontWeight: 650, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</b>
-            {p.kind && <span data-studio-kind style={{ fontSize: 12, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.kind}</span>}
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflowX: phone ? 'auto' : undefined, scrollbarWidth: 'none' }}>
-            {p.nav !== undefined && foldButton('nav', 'panelLeft', 'the sections', sc('['))}
-            {p.presets !== undefined && foldButton('presets', 'panelBottom', 'the presets')}
-            {p.inspector !== undefined && foldButton('inspector', 'panelRight', 'the settings', sc(']'))}
-            {p.space && (
-              <span data-studio-space={p.space.value} title={p.space.hint} style={{ marginLeft: 4 }}>
-                <Segmented size="sm" ariaLabel="2D or 3D" value={p.space.value} onChange={v => p.space!.onChange(v)}
-                  options={[{ value: '2d' as const, label: '2D' }, { value: '3d' as const, label: '3D' }]} />
-              </span>
-            )}
-            {p.actions}
-            {p.primary && <Button variant="primary" size="sm" data-studio-primary title={p.primary.title} onClick={p.primary.onClick}>{p.primary.label}</Button>}
-          </span>
-          <IconButton icon="close" label="Close" shortcut="esc" onClick={p.onClose} />
-        </div>
-        <div style={{ display: 'flex', flex: 1, minHeight: 0, position: 'relative' }}>
-          {p.nav !== undefined && side('nav', p.nav, p.navWidth ?? 216, 'Sections')}
-          <div data-studio-viewport style={{ flex: 1, minWidth: 0, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>{p.children}</div>
-          {p.inspector !== undefined && side('inspector', p.inspector, p.inspectorWidth ?? 344, 'Settings')}
-        </div>
-        {p.presets !== undefined && open.presets && (
-          <div data-studio-panel="presets" style={{ flexShrink: 0, borderTop: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, padding: '10px 12px 12px', overflowX: 'auto' }}>
-            {p.presets}
+        {phone ? (
+          <PhoneStudio prefsKey={p.prefsKey} top={topBar} sections={phoneNav.sections} current={phoneNav.current}
+            presets={p.presets !== undefined || p.surprise ? <>{p.surprise && <div data-phone-surprise style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>{p.surprise}</div>}{p.presets}</> : undefined}
+            onSection={phoneNav.select} settings={p.inspector} settingsTitle={p.phoneSettingsTitle}
+            settingsSignal={phoneNav.sections.length ? `${phoneNav.current}|${recipeAsks}` : undefined}
+            panels={[...(p.phoneNav && navTree ? [{ id: '__nav', label: p.phoneNav.label, icon: p.phoneNav.icon, content: navTree }] : []), ...(p.phonePanels ?? [])]}>
+            {!p.phoneNav && navTree && <div hidden style={{ display: 'none' }}>{navTree}</div>}
+            {p.children}
+          </PhoneStudio>
+        ) : <>
+          {topBar}
+          <div style={{ display: 'flex', flex: 1, minHeight: 0, position: 'relative' }}>
+            {p.nav !== undefined && side('nav', p.nav, p.navWidth ?? 216, 'Sections')}
+            <div data-studio-viewport style={{ flex: 1, minWidth: 0, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>{p.children}</div>
+            {p.inspector !== undefined && side('inspector', p.inspector, p.inspectorWidth ?? 344, 'Settings')}
           </div>
-        )}
+          {p.presets !== undefined && open.presets && (
+            <div data-studio-panel="presets" style={{ flexShrink: 0, borderTop: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, padding: '10px 12px 12px', overflowX: 'auto' }}>
+              {p.presets}
+            </div>
+          )}
+        </>}
       </div>
     </div>,
     document.body,
   );
 }
 
-/** A small caps label for a panel's group ("Sections", "Presets"). */
-export function StudioLabel({ children, meta }: { children: ReactNode; meta?: ReactNode }) {
+/**
+ * A small caps label for a panel's group ("Sections", "Presets"). `sections`: it heads a list of
+ * StudioNavItems only, so on a phone (where they are the bottom bar's tabs) it isn't drawn.
+ */
+export function StudioLabel({ children, meta, sections = false }: { children: ReactNode; meta?: ReactNode; sections?: boolean }) {
   const tk = useTokens();
+  const onPhone = useContext(NavRegistryContext) !== null;
+  if (sections && onPhone) return null;
   return (
     <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint, textTransform: 'uppercase' }}>
       <span style={{ flex: 1 }}>{children}</span>
@@ -204,6 +276,15 @@ export function StudioNavItem({ icon, label, summary, selected, onClick, hint, d
 }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
+  // On a phone the item is a tab of the bottom bar (PhoneStudio): it registers there and draws nothing here.
+  const reg = useContext(NavRegistryContext);
+  const click = useRef(onClick);
+  useLayoutEffect(() => {
+    click.current = onClick;
+    reg?.put({ id, label, icon, hint, dim, selected, click: () => click.current() });
+  });
+  useLayoutEffect(() => () => reg?.drop(id), [reg, id]);
+  if (reg) return <span hidden data-studio-nav-slot={id} />;
   return (
     <button type="button" data-studio-section={id} aria-current={selected || undefined} title={hint} onClick={onClick}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}

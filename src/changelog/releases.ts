@@ -39,6 +39,25 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.172',
+    date: '2026-10-11',
+    title: 'Preview with the keys',
+    highlights: [
+      { area: 'Files', text: 'Every media picker previews from the keyboard: ↑/↓ move and preview, ←/→ restart or skip, Space plays, Enter picks. Sounds, pictures and videos alike.' },
+      { area: 'Files', text: 'A click now previews instead of choosing straight away; double-click, Enter or Use it chooses. Only one preview plays at a time.' },
+    ],
+  },
+  {
+    id: '2026.10.171',
+    date: '2026-10-11',
+    title: 'Builders on your phone',
+    highlights: [
+      { area: 'Phone', text: 'Every builder fits a phone: the picture on top, the sections as swipeable tabs in the bottom bar, and tapping one opens its settings in a sheet.' },
+      { area: 'Phone', text: 'New graph on a phone starts from the Scene builder (an empty graph is one tap away). Sliders follow your finger; double tap resets.' },
+      { area: 'Studio', text: 'Grid simulation is its own Scene builder kind, opening Grid Rules directly, beside Grid scene.' },
+    ],
+  },
+  {
     id: '2026.10.170',
     date: '2026-10-11',
     title: 'Drawn paths',

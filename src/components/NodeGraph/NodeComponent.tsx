@@ -148,6 +148,8 @@ import { TimeCubeViewKeyInfo } from '../timeCube/TimeCubeViewKeyInfo';
 import { toggleNodeCard } from '../explain/functionCard/fnCardStore';
 import { bakedSourceName } from '../../nodes/definitions/baked';
 import { VOLUMETRIC_LOOP_TYPES } from '../../nodes/volumetricAuto';
+import { LinkedPickButton } from '../linked/LinkedPickButton';
+import { linkedFile } from '../linked/linkedSources';
 import { SwitchNodePicker } from './SwitchNodePicker';
 import { showsSwitchPill } from './switchPickerModel';
 import { SwitchToTransformButton } from './SwitchToTransformButton';
@@ -1216,6 +1218,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             ) : (
               <span style={{ fontSize: '10px', color: tc.surface2 }}>Click or drop WAV / MP3 / M4A / OGG</span>
             )}
+          </div>
+          {/* A sound from a linked folder: the shared picker, arrow through and hear them (components/media). */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '-2px 8px 2px' }} onMouseDown={e => e.stopPropagation()} data-audio-input-linked>
+            <LinkedPickButton filter="audio" label="Linked…" variant="ghost" title="Choose a sound from a linked folder: ↑/↓ to hear them, Enter to use one"
+              onPick={ref => { void linkedFile(ref).then(loadAudioFile, e => console.error('[AudioInput]', e)); }} />
           </div>
 
           {/* Params */}

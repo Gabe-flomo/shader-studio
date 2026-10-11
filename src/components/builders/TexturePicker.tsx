@@ -20,7 +20,8 @@ import { fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { listImages, type BackgroundImageMeta } from '../../lib/backgroundLibrary';
+import { getImage, listImages, type BackgroundImageMeta } from '../../lib/backgroundLibrary';
+import { MediaLibraryGrid } from '../media/MediaLibraryGrid';
 import { readClipboardPicture } from '../../lib/texture/texturePaste';
 import { URL_MESSAGES, TextureUrlError } from '../../lib/texture/pictures';
 import { textureNodes, texNodeLabel, type TexSource } from '../../builders/textures';
@@ -109,15 +110,14 @@ export function PictureWays({ onPicked, list, inScene = [], graph = true, shader
         )}
       </div>
       {lib && (
-        <div data-picture-library-list style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))', gap: 6, maxHeight: 180, overflowY: 'auto' }}>
-          {lib.length === 0 && <span style={{ fontSize: 11.5, color: tk.text.muted, gridColumn: '1 / -1' }}>Nothing in the library yet: pictures you load are kept there.</span>}
-          {lib.map(i => (
-            <button key={i.id} type="button" title={i.name} onClick={() => { setLib(null); run('Opening the picture…', () => pictureFromLibrary(i.id, list)); }}
-              style={{ border: `1px solid ${tk.border.default}`, borderRadius: radius.md, background: tk.bg.field, padding: 3, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-              {i.thumb ? <img src={i.thumb} alt="" style={{ width: '100%', height: 44, objectFit: 'cover', borderRadius: 3 }} /> : <span style={{ height: 44 }} />}
-              <span style={{ fontSize: 10, color: tk.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.name}</span>
-            </button>
-          ))}
+        <div data-picture-library-list style={{ maxHeight: 340, overflowY: 'auto' }} onKeyDown={e => e.stopPropagation()}>
+          {lib.length === 0 && <span style={{ fontSize: 11.5, color: tk.text.muted }}>Nothing in the library yet: pictures you load are kept here.</span>}
+          {lib.length > 0 && (
+            <MediaLibraryGrid kind="image" items={lib} label="Image library" columns="repeat(auto-fill, minmax(70px, 1fr))" thumbHeight={44} previewHeight={130}
+              load={async i => (await getImage(i.id))?.blob ?? null}
+              onClose={() => setLib(null)}
+              onPick={i => { setLib(null); run('Opening the picture…', () => pictureFromLibrary(i.id, list)); }} />
+          )}
         </div>
       )}
       {graph && inGraph.length > 0 && (

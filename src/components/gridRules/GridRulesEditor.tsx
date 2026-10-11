@@ -151,7 +151,7 @@ function GridRulesBuilder({ node, onClose }: { node: GraphNode; onClose: () => v
         <span style={{ fontSize: 11.5, color: tk.text.muted, lineHeight: 1.4, padding: '0 2px' }}>{RULE_TYPES.find(t => t.value === shape.type)?.hint}</span>
       </span>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <StudioLabel meta="the rule, then the board">Sections</StudioLabel>
+        <StudioLabel sections meta="the rule, then the board">Sections</StudioLabel>
         {sections.map(x => (
           <StudioNavItem key={x.id} id={x.id} icon={x.icon ?? 'sliders'} label={x.label} hint={x.how} summary={summary(x.id)} selected={section === x.id} onClick={() => select(x.id)} />
         ))}
@@ -204,7 +204,7 @@ function GridRulesBuilder({ node, onClose }: { node: GraphNode; onClose: () => v
   );
 
   return (
-    <StudioShell prefsKey="grid-rules" icon="grid" title={label} crumb={<SceneCrumb kind="grid" leaf={fromGrid ? 'Simulation' : undefined} />} kind={ruleSummary(params)} onClose={onClose}
+    <StudioShell prefsKey="grid-rules" icon="grid" title={label} crumb={fromGrid ? <SceneCrumb kind="grid" leaf="Simulation" /> : <SceneCrumb kind="simulation" />} kind={ruleSummary(params)} onClose={onClose}
       onEscape={() => { if (hood) { setHood(false); return true; } return false; }}
       actions={<>
         {fromGrid && (
@@ -216,7 +216,7 @@ function GridRulesBuilder({ node, onClose }: { node: GraphNode; onClose: () => v
         <IconButton icon="fn" size="sm" disabled={!!problem} label={problem ?? 'Open as nodes: the same simulation from ordinary nodes, every node with a note'} onClick={() => { if (openAsNodes(node.id)) onClose(); }} data-open-as-nodes />
       </>}
       primary={{ label: 'Done', onClick: () => finishBuilder(onClose, [node.id]), title: 'Close the builder and show the Grid Rules node (every change is already in the graph)' }}
-      nav={nav} inspector={inspector} inspectorWidth={432} navWidth={232} presets={presetStrip}>
+      nav={nav} phoneNav={{ label: 'Rule type', icon: 'grid' }} phoneSettingsTitle={hood ? 'Under the hood' : undefined} inspector={inspector} inspectorWidth={432} navWidth={232} presets={presetStrip}>
       <TryBoard params={params} nodeParams={node.params} focus={{ section, ...focus }} hood={hood} onUseAsStart={useAsStart} />
     </StudioShell>
   );
