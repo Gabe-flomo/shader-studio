@@ -13,6 +13,7 @@ import { HintLabel } from '../builders/BuilderHelp';
 import type { Vec3 } from '../../sceneBuilder/spec';
 import type { SpecPath } from '../../sceneBuilder/paramMap';
 import { lazyParamFor } from './playParam';
+import { MUTED_DIM, MuteToggle, MutedTag } from '../builders/MuteToggle';
 
 const LABEL_W = 116;
 
@@ -82,9 +83,13 @@ export function ColourRow({ label, value, onChange, hint }: { label: ReactNode; 
 /** Which cards are open, kept while the app runs (a card the user opened stays open across tabs). */
 const openCards = new Map<string, boolean>();
 
-/** A folding card: a header with its title, a one-line summary while folded, and actions. */
-export function Card({ id, title, summary, accent, actions, defaultOpen = false, children, selected, onHeaderClick }: {
+/** A card's mute switch (builders/mute.ts): its toggle, its solo (Alt-click) and what it is called. */
+export interface CardMute { muted: boolean; onToggle: () => void; onSolo?: () => void; what?: string }
+
+/** A folding card: a header with its title, a one-line summary while folded, and actions. With `mute`, a ⊘ switch and, muted, a dimmed body. */
+export function Card({ id, title, summary, accent, actions, defaultOpen = false, children, selected, onHeaderClick, mute }: {
   id: string; title: ReactNode; summary?: ReactNode; accent?: string; actions?: ReactNode; defaultOpen?: boolean; children: ReactNode; selected?: boolean; onHeaderClick?: () => void;
+  mute?: CardMute;
 }) {
   const tk = useTokens();
   const [open, setOpenState] = useState(() => openCards.get(id) ?? defaultOpen);
@@ -97,11 +102,15 @@ export function Card({ id, title, summary, accent, actions, defaultOpen = false,
         onClick={() => { setOpen(!open); onHeaderClick?.(); }}>
         <Icon name={open ? 'chevD' : 'chevR'} size={14} style={{ color: tk.text.faint, flexShrink: 0 }} />
         {accent && <span style={{ width: 10, height: 10, borderRadius: 3, background: accent, flexShrink: 0 }} />}
-        <span style={{ fontWeight: 600, fontSize: 13, color: tk.text.primary, flexShrink: 0 }}>{title}</span>
+        <span style={{ fontWeight: 600, fontSize: 13, color: tk.text.primary, flexShrink: 0, ...(mute?.muted ? MUTED_DIM : {}) }}>{title}</span>
+        {mute?.muted && <MutedTag />}
         <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{!open && summary}</span>
-        <span onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>{actions}</span>
+        <span onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {mute && <MuteToggle muted={mute.muted} onToggle={mute.onToggle} onSolo={mute.onSolo} what={mute.what ?? (typeof title === 'string' ? title : 'this card')} />}
+          {actions}
+        </span>
       </div>
-      {open && <div style={{ padding: '4px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${tk.border.subtle}` }}>{children}</div>}
+      {open && <div data-muted={mute?.muted || undefined} style={{ padding: '4px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${tk.border.subtle}`, ...(mute?.muted ? MUTED_DIM : {}) }}>{children}</div>}
     </div>
   );
 }

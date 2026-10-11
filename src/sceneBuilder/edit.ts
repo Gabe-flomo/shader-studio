@@ -3,9 +3,10 @@
  * duplicate, move and nest items, and stack warps. Each mutates the draft it
  * is given (the store hands it a copy) and keeps ids unique.
  */
+import { soloIn, soloKeys, toggleMuted } from '../builders/mute';
 import {
-  findItem, newGroup, newShape, newWarp, nextId, walkItems,
-  type GroupSpec, type SceneItem, type SceneSpec, type ShapeSpec,
+  LOOK_MUTES_3D, findItem, newGroup, newShape, newWarp, nextId, walkItems,
+  type GroupSpec, type LookMute3D, type SceneItem, type SceneSpec, type ShapeSpec,
 } from './spec';
 
 /** Where a new item goes: into the selected group, or beside the selected shape, else at the root. */
@@ -223,4 +224,36 @@ export function moveModifierTo(spec: SceneSpec, itemId: string, warpId: string, 
   if (i < 0) return;
   const [w] = it.warps.splice(i, 1);
   it.warps.splice(Math.max(0, Math.min(it.warps.length, index)), 0, w);
+}
+
+// ── Muting (builders/mute.ts) ────────────────────────────────────────────────
+
+/** Mute or unmute a shape or group (not the root). */
+export function toggleItemMute(spec: SceneSpec, id: string): void {
+  const hit = findItem(spec, id);
+  if (hit && hit.item.id !== spec.root.id) toggleMuted(hit.item);
+}
+
+/** Solo an item among the items of its group (Alt-click): the others muted. */
+export function soloItem(spec: SceneSpec, id: string): void {
+  const hit = findItem(spec, id);
+  if (hit?.parent) soloIn(hit.parent.children, id);
+}
+
+/** Mute or unmute one of an item's warps. */
+export function toggleWarpMute(spec: SceneSpec, itemId: string, warpId: string): void {
+  const w = findItem(spec, itemId)?.item.warps.find(x => x.id === warpId);
+  if (w) toggleMuted(w);
+}
+
+/** Solo a warp in its item's stack. */
+export function soloWarp(spec: SceneSpec, itemId: string, warpId: string): void {
+  const it = findItem(spec, itemId)?.item;
+  if (it) soloIn(it.warps, warpId);
+}
+
+/** Mute or unmute a light or effect of the look; `solo` mutes the others instead. */
+export function toggleLookMute(spec: SceneSpec, key: LookMute3D, solo = false): void {
+  const m = spec.look.mute ?? {};
+  spec.look.mute = solo ? soloKeys(m, LOOK_MUTES_3D, key) : { ...m, [key]: !m[key] };
 }

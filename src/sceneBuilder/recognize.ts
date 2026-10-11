@@ -21,6 +21,7 @@ import {
 import { round, printRecipe } from './recipe';
 import { META_KEY, ROLE_KEY, WARP_KIND_KEY, type SceneBuilderMeta } from './build';
 import { DEFAULT_PALETTE, OUTPUT_BY_SHOW, PALETTES, type OutputShow, type OutputSpec } from './output';
+import { MUTE_PARAM } from '../builders/mute';
 
 export interface DescribeResult {
   spec: SceneSpec;
@@ -41,6 +42,10 @@ export interface DescribeResult {
 const deg = (r: number) => round(r * 180 / Math.PI);
 const roleOf = (n: GraphNode | undefined) => (typeof n?.params?.[ROLE_KEY] === 'string' ? n.params[ROLE_KEY] as string : '');
 const label = (n: GraphNode) => (typeof n.params.label === 'string' && n.params.label.trim()) || getNodeDefinition(n.type)?.label || n.type;
+/** A builder mute on the node (builders/mute.ts): true or false once gated, undefined when it never was. */
+const muteOf = (n: GraphNode | undefined): boolean | undefined => (typeof n?.params?.[MUTE_PARAM] === 'number' ? (n.params[MUTE_PARAM] as number) > 0 : undefined);
+/** `x` with `muted` from the node, when the node has a mute gate. */
+const withMute = <T extends { muted?: boolean }>(x: T, n: GraphNode): T => { const m = muteOf(n); if (m !== undefined) x.muted = m; return x; };
 const subNodes = (n: GraphNode | undefined): GraphNode[] => ((n?.params?.subgraph as SubgraphData | undefined)?.nodes ?? []);
 
 /** Node type → the shape it is (a rounded variant counts as its shape with Round set). */
@@ -95,7 +100,7 @@ function toWarp(r: Reader, n: GraphNode): WarpSpec {
   const id = /^w\d+$/.test(role) ? role : `w_${n.id}`;
   if (!def) { r.unknown.push(`${label(n)} bends space in a way the builder doesn't know: custom.`); return { id, kind: 'custom', values: {}, label: label(n) }; }
   r.wiredParams(n, Object.keys(n.inputs).filter(k => k !== def.posIn && k !== 'dist' && k !== 'time' && k !== def.distStep?.distIn && k !== def.distStep?.posIn), def.label);
-  return { id, kind: def.kind, values: warpValues(n, def) };
+  return withMute({ id, kind: def.kind, values: warpValues(n, def) } as WarpSpec, n);
 }
 
 // ── Transform (docs/transform-node.md) ──────────────────────────────────────
@@ -115,6 +120,9 @@ function pointScale(n: GraphNode): number | null {
 
 /** A 3D Transform as the builder's warps: the one it was made for (_sbKind), else Move, Rotate and Scale in that order. */
 function transformWarps(r: Reader, n: GraphNode): WarpSpec[] {
+  return transformWarps0(r, n).map(w => withMute(w, n));
+}
+function transformWarps0(r: Reader, n: GraphNode): WarpSpec[] {
   r.read.add(n.id);
   const role = roleOf(n);
   const id = /^w\d+$/.test(role) ? role : `w_${n.id}`;
@@ -178,7 +186,7 @@ function readShape(r: Reader, n: GraphNode, def: ShapeDef): ShapeSpec {
   if (n.type === 'roundedCylinderSDF3D') sh.size.r = round(Number(sh.size.r) * 2);
   if (def.field) sh.size.ball = 0;
   r.wiredParams(n, Object.keys(n.inputs).filter(k => k !== def.posKey), `‘${def.label}’`);
-  return sh;
+  return withMute(sh, n);
 }
 
 function readDist(r: Reader, from: GraphNode | undefined, guard = 0): Raw | null {
@@ -234,7 +242,7 @@ function readDist(r: Reader, from: GraphNode | undefined, guard = 0): Raw | null
     }
     const role = roleOf(from);
     const gid = role.split(':')[0];
-    const group = newGroup(/^g\d+$/.test(gid) ? gid : `g_${from.id}`, { op, k, name: typeof from.params._sbName === 'string' ? from.params._sbName : '' });
+    const group = withMute(newGroup(/^g\d+$/.test(gid) ? gid : `g_${from.id}`, { op, k, name: typeof from.params._sbName === 'string' ? from.params._sbName : '' }), from);
     const children: Raw[] = [];
     // A chain of the same combine (same group, or no roles at all) is one group of several children.
     const left = a && OP_OF_TYPE[a.type] === op && round(num(a.params.k, 0)) === k && roleOf(a).split(':')[0] === gid && !a.inputs.k?.connection ? readDist(r, a, guard + 1) : null;
@@ -687,6 +695,12 @@ export function describeGraph(nodes: GraphNode[]): DescribeResult | null {
   const tone = one('toneMap');
   L.tone = tone ? (String(tone.params.mode ?? 'aces') as SceneSpec['look']['tone']) : 'none';
   if (tone) { r.read.add(tone.id); recognized.push(`Tone Map (${L.tone})`); }
+  // Lights and effects muted in the graph or the builder (builders/mute.ts).
+  const mutes: NonNullable<SceneSpec['look']['mute']> = {};
+  const lookMute = (key: keyof typeof mutes, n: GraphNode | undefined) => { const m = muteOf(n); if (m !== undefined) mutes[key] = m; };
+  lookMute('shadows', one('softShadow')); lookMute('ao', one('sdfAo')); lookMute('fog', fog); lookMute('tone', tone);
+  lookMute('shine', nodes.find(n => n.type === 'exprNode' && roleOf(n) === 'shine'));
+  if (Object.keys(mutes).length) L.mute = mutes;
   // Settings the graph doesn't have in this mode keep the builder's defaults.
   if (mode !== 'surface') { L.shadows = DEFAULT_LOOK.shadows; L.ao = DEFAULT_LOOK.ao; }
   if (mode === 'glass') spec.quality = { ...spec.quality, ...emptySpec().quality };

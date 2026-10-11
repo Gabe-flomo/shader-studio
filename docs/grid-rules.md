@@ -557,6 +557,16 @@ for a name that is also another word (`grid swirl`, `grid ripples`, `grid diamon
 the same shader as before), or *State*, *Age* or *Neighbours* as grey, to see why a rule behaves
 as it does. Changing it recompiles.
 
+## Muting
+
+Every stacked card, stencil and block has the builders' ⊘ in its header
+([scene-builder.md](scene-builder.md#muting)): it is the card's old on/off switch with the shared
+look. Click turns the card off (it shows MUTED, its body dims, its settings stay); Alt/Option-click
+solos it (every other card in that list goes off; again turns them all back on). A muted card is left
+out of the step, on the CPU and in the shader, so the step runs as if it were not there. Saved specs
+keep reading: `off` is the stored flag, and a `muted: true` reads as off. In text a muted card prints
+`@off`; `muted` and `@muted` read as off too. Tests: `src/gridRules/__tests__/mute.test.ts`.
+
 ## Built-in guidance
 
 Every builder window (`components/builders/BuilderWindow.tsx`) carries the same help, with its

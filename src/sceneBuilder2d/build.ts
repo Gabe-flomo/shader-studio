@@ -30,6 +30,7 @@ import type { PiecesSpec } from './pieces';
 import { callBody, type FnRef } from './functions';
 import { COMBINE_BY_MODE, blockGlslLines, checkBlock, clampTimes, type SpaceBlock } from './blocks';
 import { BLOCK_BY_ID } from './blockLibrary';
+import { FAR, gateChain, gateNode } from '../builders/mute';
 import { DEPTH_LOOK_LABELS, depthMixParams, depthSummary, type DepthPic2D } from './depth';
 import { DEPTH_MIX_COMBINE_LABELS, DEPTH_SPACE_LABELS } from '../nodes/definitions/depthMix';
 import { FIT_LABELS, LUMA, findTex, fitLines, glf, newTexUse, picUv, sampleWrap, standInId, standIns, type TexSource, type TexUse } from '../builders/textures';
@@ -283,7 +284,7 @@ function emitMotion(b: B, it: Item, name: string): { offset: Ref | null; turn: R
   const { c } = b;
   let last: GraphNode | null = null;
   let hasOffset = false, hasTurn = false, hasGrow = false;
-  for (const m of it.motion) {
+  for (const m of it.motion.filter(x => !x.muted)) {
     const d = MOTION_BY_KIND[m.kind];
     const wires: Record<string, Ref | null> = { time: b.getTime() };
     if (last) {
@@ -292,7 +293,7 @@ function emitMotion(b: B, it: Item, name: string): { offset: Ref | null; turn: R
       if (hasGrow) wires.grow = ref(last, 'grow');
     }
     last = mk(c, 'motion2D', m.id, { mode: m.kind, speed: m.speed, amount: m.amount, phase: m.phase, direction: m.dir }, wires,
-      `${d.label} on ${name}: ${d.blurb} ${motionWords(m)}. Wired into ${name}'s Transform${it.motion.length > 1 ? '; motions are chained, each adds to the one before' : ''}.`);
+      `${d.label} on ${name}: ${d.blurb} ${motionWords(m)}. Wired into ${name}'s Transform${it.motion.filter(x => !x.muted).length > 1 ? '; motions are chained, each adds to the one before' : ''}.`);
     if (m.kind === 'orbit' || m.kind === 'bob') hasOffset = true;
     if (m.kind === 'spin') hasTurn = true;
     if (m.kind === 'pulse') hasGrow = true;
@@ -381,11 +382,13 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
   const def = it.type === 'shape' ? SHAPE_BY_KIND[it.kind] : null;
   if (it.type === 'shape' && !def) { c.warnings.push(`${name}: “${it.kind}” isn't a shape the builder knows; left out.`); return null; }
   const unit = def?.unit ? Number((it as ShapeSpec).size.size ?? def.params[0].def) : 1;
-  const pulse = it.motion.some(m => m.kind === 'pulse');
+  // A muted motion or ring is left out (builders/mute.ts): nothing passes through a motion.
+  const motions = it.motion.filter(m => !m.muted);
+  const pulse = motions.some(m => m.kind === 'pulse');
   const baseScale = it.scale * unit;
   // Depth → size: every top-level layer grows by the picture's depth (its Transform's Grow).
   const depthGrow = depth === 0 ? b.depthGrow ?? null : null;
-  const placed = it.at[0] !== 0 || it.at[1] !== 0 || it.rot !== 0 || baseScale !== 1 || it.motion.length > 0 || !!depthGrow;
+  const placed = it.at[0] !== 0 || it.at[1] !== 0 || it.rot !== 0 || baseScale !== 1 || motions.length > 0 || !!depthGrow;
   let start: Branch = { pos, scales: [] };
   if (placed) {
     const mo = emitMotion(b, it, name);
@@ -400,13 +403,13 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
     if (it.at[0] || it.at[1]) bits.push(`moved to ${v2(it.at)}`);
     if (it.rot) bits.push(`turned ${fmt(it.rot)}°`);
     if (baseScale !== 1) bits.push(def?.unit ? `sized ${fmt(unit)} (a ${def.label.toLowerCase()} has no radius of its own, so its size is this node's Scale)` : `scaled ${fmt(it.scale)}×`);
-    if (it.motion.length) bits.push('moved by its motion');
+    if (motions.length) bits.push('moved by its motion');
     if (depthGrow) bits.push('grown by the picture\'s depth (Grow is wired from Depth Mix\'s Scale: bigger on near things)');
     const pl = mk(c, 'transform', `${it.id}:place`, { dim: '2', x: it.at[0], y: it.at[1], rotate: it.rot, scale: baseScale }, wires,
       `Places ${name}: ${bits.join(', ')}. Transform gives the shape a new view of space: the shape is measured from the point as it sees it, so it ends up where the node says. Its Scale output multiplies the distance back to the picture's units.`);
     start = { pos: ref(pl, 'p'), scales: baseScale !== 1 || pulse || depthGrow ? [ref(pl, 'scale')] : [] };
   }
-  const dup = it.dup && it.dup.count >= 2 ? it.dup : null;
+  const dup = it.dup && !it.dup.muted && it.dup.count >= 2 ? it.dup : null;
   const levels = dup ? Math.max(1, Math.min(6, Math.round(dup.levels))) : 1;
   const branches: Ref[] = [];
   for (let k = 0; k < levels; k++) {
@@ -442,6 +445,9 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
   branches.slice(1).forEach((d, i) => {
     out = ref(mk(c, 'sdfUnion', `${it.id}:sizes${i + 1}`, { k: 0 }, { a: out, b: d }, `Joins the ring of ${name} at size ${i + 2} to the sizes before it: the same ring repeated at bigger scales.`), 'dist');
   });
+  // Muted (builders/mute.ts): its distance is far away, by a live uniform, so it draws nothing and
+  // every union, cut and glow ignores it.
+  gateNode(c.nodes.find(n => n.id === out.nodeId), it.muted, { to: FAR });
   return out;
 }
 
@@ -484,7 +490,12 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
   const uv = mk(c, 'uv', 'uv', {}, {}, `The picture's coordinates: the centre is (0, 0), the top is 1 and the bottom −1. Built by the 2D Scene Builder${spec.space.length ? `; ${spec.space.length} space transform${spec.space.length === 1 ? '' : 's'} follow` : ''}. Right-click → Edit in 2D Scene Builder, or use Rebuild from recipe on its Recipe chip.`);
   const screen = ref(uv, 'uv');
   let pos = screen;
-  for (const op of spec.space) pos = spaceNode(b, op, pos);
+  for (const op of spec.space) {
+    // A muted transform is still built, its node bypassed by a live uniform (builders/mute.ts).
+    const next = spaceNode(b, op, pos);
+    gateChain(c.nodes, pos, next, op.muted);
+    pos = next;
+  }
   // A picture with depth (depth.ts): its picture and Depth node, and the Depth Mix the shapes read.
   const depthPic = spec.depth ? emitDepthPicture(b, spec.depth, screen, pos) : null;
   if (depthPic?.shapes && spec.depth?.space.on) pos = ref(depthPic.shapes, 'uv');
@@ -555,9 +566,11 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     }
     const glows = L.glow.mode === 'all' || (L.glow.mode === 'selected' && it.glow);
     if (glows) {
+      const glowFrom = acc;
       const g = mk(c, 'glowLayer', `${it.id}:glow`, { intensity: L.glow.amount, power: L.glow.falloff }, { d, color: glowTint ?? fill },
         `The glow of ${name}: its colour × (${fmt(L.glow.amount)} ÷ distance) ^ ${fmt(L.glow.falloff)}. A bigger Intensity reaches further; a bigger Power makes it fall off faster. It is added to what is behind, then the shape is painted over it.`);
       acc = ref(mk(c, 'addColor', `${it.id}:addglow`, {}, { a: acc, b: ref(g, 'result') }, `Adds ${name}'s glow to what is behind it. Light adds up, so it can go past 1; Tone Map brings it back.`), 'result');
+      gateChain(c.nodes, glowFrom, acc, L.mute?.glow);
     }
     acc = ref(mk(c, 'sdfFill', `${it.id}:fill`, {}, { d, fillColor: fill, background: acc },
       `Paints ${name} over what is behind it: inside the distance is negative, so the fill colour shows there; the edge is anti-aliased by one pixel.`), 'result');
@@ -577,20 +590,33 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
         ...(it.mask.invert ? [{ lhs: 'm', op: '=', rhs: '1.0 - m' }] : []),
       ]), 'result');
     }
+    // A muted layer: the picture behind it passes straight through (builders/mute.ts).
+    gateChain(c.nodes, behind, acc, it.muted);
   }
-  if (spec.grid) acc = emitGrid(b, spec.grid, pos, screen, acc, anim);
-  if (spec.pieces) acc = emitPieces(b, spec.pieces, pos, acc);
+  if (spec.grid) {
+    const under = acc;
+    acc = emitGrid(b, spec.grid, pos, screen, acc, anim);
+    gateChain(c.nodes, under, acc, spec.grid.muted);
+  }
+  if (spec.pieces) {
+    const under = acc;
+    acc = emitPieces(b, spec.pieces, pos, acc);
+    gateChain(c.nodes, under, acc, spec.pieces.muted);
+  }
   if (depthPic && spec.depth) acc = emitDepthMix(b, spec.depth, depthPic, acc, layers.map(l => l.d));
   let final = acc;
-  if (L.tone !== 'none') final = ref(mk(c, 'toneMap', 'tone', { mode: L.tone }, { color: final }, `Squeezes the bright, linear light into colours a screen can show (${L.tone.toUpperCase()}) without clipping highlights.`), 'color');
+  // A muted effect is still built, bypassed by a live uniform (builders/mute.ts).
+  const M = L.mute ?? {};
+  const effect = (key: keyof typeof M, n: GraphNode, out: string): Ref => { gateNode(n, M[key], { from: 'color' }); return ref(n, out); };
+  if (L.tone !== 'none') final = effect('tone', mk(c, 'toneMap', 'tone', { mode: L.tone }, { color: final }, `Squeezes the bright, linear light into colours a screen can show (${L.tone.toUpperCase()}) without clipping highlights.`), 'color');
   // The Look's grade, then the Effects page, each in its order (builders/look).
   final = emitGrades(c, L.grade, final, { swatches });
   final = emitEffects(c, spec.effects, final, { screen, getTime: b.getTime, texture: (name, what) => texFor(b, name, what)?.out ?? null });
   const P = L.post;
-  if (P.bloom > 0) final = ref(mk(c, 'bloom', 'bloom', { intensity: P.bloom, threshold: 0.35 }, { color: final, uv: screen }, `Bloom: bright areas bleed light into their surroundings. Intensity ${fmt(P.bloom)}.`), 'result');
-  if (P.vignette > 0) final = ref(mk(c, 'vignette', 'vignette', { strength: P.vignette }, { color: final, uv: screen }, `Vignette: darkens the corners. Strength ${fmt(P.vignette)}.`), 'result');
-  if (P.scanlines > 0) final = ref(mk(c, 'scanlines', 'scanlines', { intensity: P.scanlines }, { color: final, uv: screen }, `Scanlines: thin dark lines across the picture. Intensity ${fmt(P.scanlines)}.`), 'result');
-  if (P.grain > 0) final = ref(mk(c, 'grain', 'grain', { amount: P.grain }, { color: final, uv: screen }, `Film grain: a little noise over everything. Amount ${fmt(P.grain)}.`), 'color');
+  if (P.bloom > 0) final = effect('bloom', mk(c, 'bloom', 'bloom', { intensity: P.bloom, threshold: 0.35 }, { color: final, uv: screen }, `Bloom: bright areas bleed light into their surroundings. Intensity ${fmt(P.bloom)}.`), 'result');
+  if (P.vignette > 0) final = effect('vignette', mk(c, 'vignette', 'vignette', { strength: P.vignette }, { color: final, uv: screen }, `Vignette: darkens the corners. Strength ${fmt(P.vignette)}.`), 'result');
+  if (P.scanlines > 0) final = effect('scanlines', mk(c, 'scanlines', 'scanlines', { intensity: P.scanlines }, { color: final, uv: screen }, `Scanlines: thin dark lines across the picture. Intensity ${fmt(P.scanlines)}.`), 'result');
+  if (P.grain > 0) final = effect('grain', mk(c, 'grain', 'grain', { amount: P.grain }, { color: final, uv: screen }, `Film grain: a little noise over everything. Amount ${fmt(P.grain)}.`), 'color');
 
   // Another output: a measurement instead of the picture (the picture's nodes stay, unwired).
   const o = spec.output;

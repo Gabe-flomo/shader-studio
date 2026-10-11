@@ -9,7 +9,7 @@ import { useTokens } from '../../../theme/themeStore';
 import { alpha, radius } from '../../../theme/tokens';
 import { Button, IconButton } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
-import { Toggle } from '../../ui/Choice';
+import { MuteToggle, MutedTag, MUTED_DIM } from '../MuteToggle';
 import { Select } from '../../ui/Select';
 import { ColorSwatch } from '../../ui/ColorPicker';
 import { BuilderSlider } from '../BuilderSlider';
@@ -101,25 +101,33 @@ function StackCard({ it, def, index, count, props }: { it: StackItem; def: Stack
       onDragLeave={() => setDragOver(false)}
       onDrop={ev => { ev.preventDefault(); setDragOver(false); const id = ev.dataTransfer.getData(mime); if (id && id !== it.id) props.onEdit(items => placeStackItem(items, id, it.id)); }}
       style={{
-        borderRadius: radius.control, background: tk.bg.panel, flexShrink: 0, overflow: 'hidden', opacity: it.on ? 1 : 0.6,
+        borderRadius: radius.control, background: tk.bg.panel, flexShrink: 0, overflow: 'hidden', 
         boxShadow: dragOver ? `inset 0 3px 0 ${tk.accent.base}, inset 0 0 0 1px ${tk.border.default}` : `inset 0 0 0 1px ${tk.border.default}`,
       }}>
       <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 8px', minHeight: 42, cursor: 'pointer' }}>
         <Icon name="grip" size={13} style={{ color: tk.text.faint, cursor: 'grab', flexShrink: 0 }} />
         <span style={{ width: 18, height: 18, borderRadius: 5, background: alpha(tk.accent.base, 0.14), color: tk.accent.text, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{index + 1}</span>
         <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-          <b style={{ fontSize: 13 }}>{def.label}</b>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            <b style={{ fontSize: 13, ...(it.on ? {} : MUTED_DIM) }}>{def.label}</b>
+            {!it.on && <MutedTag />}
+          </span>
           <span data-look-stack-summary style={{ fontSize: 11.5, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stackSummary(it, def)}</span>
         </span>
         <span onClick={ev => ev.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Toggle checked={it.on} onChange={on => up(x => { x.on = on; })} />
+          {/* Muting (builders/mute.ts): a muted card stays in the stack and isn't built; Alt-click solos it. */}
+          <MuteToggle muted={!it.on} what={def.label} onToggle={() => up(x => { x.on = !x.on; })}
+            onSolo={() => props.onEdit(items => {
+              const solo = it.on && items.every(x => x.id === it.id || !x.on);
+              return items.map(x => ({ ...x, on: solo ? true : x.id === it.id }));
+            })} />
           <IconButton icon="chevU" size="sm" label="Earlier (applied before)" disabled={index === 0} onClick={() => props.onEdit(items => moveStackItem(items, it.id, -1))} />
           <IconButton icon="chevD" size="sm" label="Later (applied after)" disabled={index === count - 1} onClick={() => props.onEdit(items => moveStackItem(items, it.id, 1))} />
           <IconButton icon="trash" size="sm" label="Remove" onClick={() => props.onEdit(items => items.filter(x => x.id !== it.id))} />
         </span>
       </div>
       {open && (
-        <div style={{ padding: '4px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${tk.border.subtle}` }}>
+        <div style={{ padding: '4px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${tk.border.subtle}`, ...(it.on ? {} : MUTED_DIM) }}>
           <BuilderNote>{def.blurb}</BuilderNote>
           {def.params.filter(p => paramShown(it, p, def)).map(p => (
             <ParamRow key={p.key} p={p} it={it} play={props.playParam?.(it, p.key)} set={(v, key) => up(x => { x.params[p.key] = v; }, key)} />

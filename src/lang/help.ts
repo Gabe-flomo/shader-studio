@@ -21,6 +21,7 @@ import { SHAPE_BY_KIND, shapeDims } from '../sceneBuilder/spec';
 // The dialects' words register themselves on import.
 import './dialects/grid';
 import './dialects/agents';
+import { MUTED_HELP, MUTED_WORD } from '../builders/mute';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -390,10 +391,18 @@ function paramOfEntry(e: HelpEntry, key: string): HelpParam | undefined {
 }
 
 /** The help for the word at `offset` of a line in dialect `d`: a head, a setting or a value. */
+/** The `muted` flag, the same in every dialect. */
+export const MUTED_ENTRY: HelpEntry = {
+  id: 'muted', word: MUTED_WORD, aliases: [], section: 'settings', title: MUTED_HELP.title, summary: MUTED_HELP.summary,
+  more: MUTED_HELP.more, params: [], flags: [], example: MUTED_HELP.example, signature: `<clause> ${MUTED_WORD}`,
+};
+
 export function helpAt(d: Dialect, text: string, offset: number): HelpAt | null {
   const span = wordAt(text, offset);
   if (!span) return null;
   const word = text.slice(span.from, span.to);
+  // `muted` on any clause (builders/mute.ts): the clause is switched off for now.
+  if (word.toLowerCase() === MUTED_WORD) return { ...span, word, kind: 'entry', entry: MUTED_ENTRY, alternatives: [] };
   const after = text.slice(span.to).match(/^\s*(\S)?/)?.[1];
   const beforeM = /([A-Za-z][\w-]*)\s*([*+]?=)\s*$/.exec(text.slice(0, span.from));
   const headWord = headBefore(text, span.from);

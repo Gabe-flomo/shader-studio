@@ -17,9 +17,10 @@ import { useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
-import { Segmented, Toggle } from '../ui/Choice';
+import { Segmented } from '../ui/Choice';
 import { BuilderSlider } from '../builders/BuilderSlider';
 import { HintLabel } from '../builders/BuilderWindow';
+import { MuteToggle, MutedBody, MutedTag } from '../builders/MuteToggle';
 import { GRID_DEFAULTS, MAX_STATES, gridShape } from '../../gridRules/spec';
 import {
   ANY, NOT_EMPTY, SAME, blockConserves,
@@ -27,6 +28,7 @@ import {
 } from '../../gridRules/stencils';
 import { STENCIL_PLACES, blockExample, patternExample, patternSentence } from '../../gridRules/ruleExamples';
 import { stateColour } from './TryBoard';
+import { soloOff } from '../../gridRules/stack';
 import { BlocksTogether, FlipGrid, ruleColour } from './RulePictures';
 
 type P = Record<string, unknown>;
@@ -85,26 +87,28 @@ function CellChoices({ p, value, after = false, anyOk = true, onPick, place }: {
   );
 }
 
-/** A rule's card: its colour, title, actions (on / off, order, remove); pointing at it reports the hover. Shared with StackForm.tsx. */
+/** A rule's card: its colour, title, actions (mute, order, remove); pointing at it reports the hover. Shared with StackForm.tsx. Off is the builders' mute: the MUTED tag, the body dimmed. */
 export function RuleCard({ index, title, off, children, actions, onHover }: { index: number; title: string; off?: boolean; children: ReactNode; actions: ReactNode; onHover?: (on: boolean) => void }) {
   const tk = useTokens();
   return (
     <div data-rule-card={index} onPointerEnter={() => onHover?.(true)} onPointerLeave={() => onHover?.(false)}
-      style={{ borderRadius: radius.card, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, padding: 12, display: 'flex', flexDirection: 'column', gap: 10, opacity: off ? 0.55 : 1, background: tk.bg.panel }}>
+      style={{ borderRadius: radius.card, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, padding: 12, display: 'flex', flexDirection: 'column', gap: 10, background: tk.bg.panel }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ width: 10, height: 10, borderRadius: 3, background: ruleColour(index), flexShrink: 0 }} />
         <b style={{ font: `600 13px ${fontFamily.ui}`, flex: 1 }}>{title}</b>
+        {off && <MutedTag />}
         {actions}
       </div>
-      {children}
+      <MutedBody muted={!!off} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{children}</MutedBody>
     </div>
   );
 }
 
-export function ListActions({ i, n, off, onMove, onDelete, onToggle }: { i: number; n: number; off: boolean; onMove: (d: -1 | 1) => void; onDelete: () => void; onToggle: (on: boolean) => void }) {
+/** A card's actions. The mute is the builders' ⊘ (builders/mute.ts): click turns the rule off / on (`onToggle(on)`), Alt-click solos it. */
+export function ListActions({ i, n, off, onMove, onDelete, onToggle, onSolo, what = 'this rule' }: { i: number; n: number; off: boolean; onMove: (d: -1 | 1) => void; onDelete: () => void; onToggle: (on: boolean) => void; onSolo?: () => void; what?: string }) {
   return (
     <>
-      <Toggle checked={!off} onChange={onToggle} label={off ? 'Off' : 'On'} />
+      <MuteToggle muted={off} onToggle={() => onToggle(off)} onSolo={onSolo} what={what} />
       <IconButton icon="chevU" size="sm" label="Try this rule earlier" disabled={i === 0} onClick={() => onMove(-1)} />
       <IconButton icon="chevD" size="sm" label="Try this rule later" disabled={i === n - 1} onClick={() => onMove(1)} />
       <IconButton icon="trash" size="sm" tone="danger" label="Remove this rule" onClick={onDelete} />
@@ -157,7 +161,7 @@ export function PatternsForm({ p, set, onHoverRule, nodeId }: { p: P; set: Sette
         const ex = patternExample(r, states);
         return (
           <RuleCard key={i} index={i} title={`Rule ${i + 1}`} off={r.off} onHover={on => onHoverRule?.(on ? i : null)}
-            actions={<ListActions i={i} n={rules.length} off={!!r.off} onMove={d => { setPicked(null); save(move(rules, i, d)); }} onDelete={() => { setPicked(null); save(rules.filter((_, k) => k !== i)); }} onToggle={on => edit(i, { off: !on })} />}>
+            actions={<ListActions i={i} n={rules.length} off={!!r.off} onMove={d => { setPicked(null); save(move(rules, i, d)); }} onDelete={() => { setPicked(null); save(rules.filter((_, k) => k !== i)); }} onToggle={on => edit(i, { off: !on })} onSolo={() => { setPicked(null); save(soloOff(rules, i)); }} />}>
             <span data-rule-sentence-stencil style={{ fontSize: 12.5, lineHeight: 1.45 }}>{patternSentence(r)}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 34px)', gap: 3 }} role="group" aria-label={`Rule ${i + 1} stencil`}>
@@ -255,7 +259,7 @@ export function BlocksForm({ p, set, nodeId }: { p: P; set: Setter; nodeId?: str
         const pick = picked && picked[0] === i ? picked : null;
         return (
           <RuleCard key={i} index={i} title={`Rule ${i + 1}`} off={r.off}
-            actions={<ListActions i={i} n={rules.length} off={!!r.off} onMove={d => { setPicked(null); save(move(rules, i, d)); }} onDelete={() => { setPicked(null); save(rules.filter((_, k) => k !== i)); }} onToggle={on => edit(i, { off: !on })} />}>
+            actions={<ListActions i={i} n={rules.length} off={!!r.off} onMove={d => { setPicked(null); save(move(rules, i, d)); }} onDelete={() => { setPicked(null); save(rules.filter((_, k) => k !== i)); }} onToggle={on => edit(i, { off: !on })} onSolo={() => { setPicked(null); save(soloOff(rules, i)); }} />}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               {grid2(i, 'before', r.before)}
               <span style={{ font: `600 18px ${fontFamily.ui}`, color: tk.text.faint }}>→</span>

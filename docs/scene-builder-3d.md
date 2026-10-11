@@ -17,6 +17,25 @@ The same description can be written as a **recipe**, a short line of text:
 volumetric · smooth-union(sphere r=1, cone height=2 rot=(30,0,0)) k=0.3 · twist 0.5 · polar-repeat 6 · camera dist=4 orbit=10
 ```
 
+## Muting
+
+Any shape, group, warp, light or effect can be switched off for a while
+([scene-builder.md](scene-builder.md#muting) has the shared rules: the ⊘ on its card or tree row,
+Alt-click solos, one undo step, saved with the scene):
+
+| What | How it is muted |
+| --- | --- |
+| A shape (tree row or card) | Live: its distance is pushed far away inside the Scene Group, so it draws nothing and unions ignore it. In Materials (a plain group, which has no gates) the same bypass is an Expression Block with a 0/1 Constant, so it never wins a colour. |
+| A group (not the scene itself) | Live: its last combine measures far away. |
+| A warp | Live: its node passes the point straight through; a modifier passes the distance; Scale gates both its halves. |
+| Soft shadows, ambient occlusion | Live: their shade is 1 (fully lit). |
+| The highlight (shine) | Live. |
+| Fog, tone map | Live: the colour passes through. |
+
+Recipe: `sphere r=1 muted`, `union(…) muted`, `@twist(2 muted)`, `shadows 16 muted`,
+`fog 0.05 muted`, `tone aces muted`. The recogniser reads mutes back from a built graph. Tests:
+`src/sceneBuilder/__tests__/mute.test.ts`.
+
 ## Opening it
 
 - **Node browser, Builders (first section):** **Scene builder** → **3D scene** opens it on a
