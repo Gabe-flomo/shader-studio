@@ -160,6 +160,8 @@ shared rules: ⊘ on the card, Alt-click solos, one undo step, saved with the sc
 | A ring of copies (Duplicate) | Left out: one copy. |
 | The grid (Grid → Cells) | Live: the picture under the grid passes through. |
 | Glow, tone map, bloom, vignette, grain, scanlines (Look) | Live: each effect's node passes its colour through. |
+| The picture in pieces | Live: the picture under it passes through. |
+| A Grade card (Look) or an Effects card | Left out of the build (the card's existing off flag, now the ⊘ with Alt-click solo; `muted` in a recipe reads as `off`). |
 
 Recipe: `mirror xy muted`, `circle r=0.3 muted`, `@orbit(0.3 muted)`, `@ring(6 r=0.5 muted)`,
 `grid 12 muted`, `glow muted`, `tone aces muted`, `bloom 0.6 muted`. Tests:

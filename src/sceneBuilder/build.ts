@@ -93,6 +93,7 @@ function ballsPorts(ctx: Ctx, list: Array<{ node: GraphNode; sh: ShapeSpec }>, s
     if (sentinel) node.inputs.picture = { ...node.inputs.picture, connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: key } };
   }
   return { ports, inputs };
+}
 
 /** Muted from either: undefined only when neither was ever muted (no gate at all). */
 const anyMuted = (a: boolean | undefined, b: boolean | undefined): boolean | undefined => (a === undefined && b === undefined ? undefined : !!a || !!b);
@@ -108,7 +109,7 @@ function gate(ctx: Ctx, list: GraphNode[], n: GraphNode, out: Ref, muted: boolea
   if (!ctx.noGate) { gateNode(n, muted, opts); return out; }
   const through = opts.from ? n.inputs[opts.from]?.connection : undefined;
   if (opts.from && !through) return out;
-  const type = opts.from ? (n.inputs[opts.from].type === 'float' ? 'float' : 'vec3') : 'float';
+  const type: 'float' | 'vec3' = opts.from ? (n.inputs[opts.from].type === 'float' ? 'float' : 'vec3') : 'float';
   const role = String(n.params[ROLE_KEY]);
   const what = String(n.params.__comment ?? '').split(':')[0] || 'this part';
   // A Constant, not a block slider: a group's inside reads params as live uniforms, not block sliders.

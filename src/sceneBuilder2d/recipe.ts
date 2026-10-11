@@ -677,16 +677,8 @@ class Parser {
 
   private look(scene: Scene2D, w: string, t: { at: number; end: number }, given: AstArg[]) {
     if (w === 'grid') { this.grid(scene, given); return; }
-    // `tone aces muted`, `bloom 0.6 muted`: the effect switched off for now (builders/mute.ts).
-    const mu = takeMuted(given);
-    const args = mu.rest;
-    const effect = w === 'tone-map' || w === 'tonemap' ? 'tone' : w;
-    if (mu.muted) {
-      if ((LOOK_MUTES_2D as readonly string[]).includes(effect)) scene.look.mute = { ...scene.look.mute, [effect]: true };
-      else this.warnings.push(`${w} can't be muted; muted is left out.`);
-    }
     if (w === 'depth-picture' || w === 'picture-depth') {
-      const d = parseDepthArgs(args, {
+      const d = parseDepthArgs(given, {
         key: a => a.key?.toLowerCase() ?? null, word: a => this.word(a), num: (a, what) => this.num(a, what), vec2: (a, what) => this.vec2(a, what),
         colour: a => this.colour(a), fail: (a, m) => this.fail(a, m),
       }, a => this.texName(a, 'depth-picture'));

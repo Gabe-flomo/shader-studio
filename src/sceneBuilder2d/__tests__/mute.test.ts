@@ -11,6 +11,7 @@ vi.hoisted(() => {
 });
 import { compileGraph } from '../../compiler/graphCompiler';
 import { buildStandalone2D } from '../build';
+import { defaultPieces } from '../pieces';
 import { emptyScene, newMotion, newShape, newSpaceOp, type Scene2D } from '../spec';
 import { parseRecipe2D, printRecipe2D } from '../recipe';
 import { useSceneBuilder2D } from '../store';
@@ -147,5 +148,21 @@ describe('muting in the 2D Scene Builder', () => {
     useSceneBuilder2D.getState().close();
     expect(editScene2DInBuilder(sceneId)).toBe(true);
     expect(useSceneBuilder2D.getState().scene.space[1].muted).toBe(true);
+  });
+
+  it('the picture in pieces mutes live; Look grade and Effects cards read `muted` as off', () => {
+    const s = mirrorScene();
+    s.textures = [{ name: 'brick' }];
+    s.pieces = { ...defaultPieces('brick'), muted: false };
+    const on = compile(s);
+    s.pieces.muted = true;
+    const off = compile(s);
+    expect(off.fragmentShader).toBe(on.fragmentShader);
+    const text = printRecipe2D(s);
+    expect(text).toMatch(/pieces brick[^·]* muted/);
+    expect(parseRecipe2D(text).scene.pieces?.muted).toBe(true);
+    const g = parseRecipe2D('circle · grade saturation 1.3 muted');
+    expect(g.errors).toEqual([]);
+    expect(g.scene.look.grade?.[0].on).toBe(false);
   });
 });
