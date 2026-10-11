@@ -872,6 +872,7 @@ import { arrangementFor, isArrangementEmpty, parseArrangement, type PlayArrangem
 import { sgParseValueRef } from '../play/kit/signals.js';
 import { DEFAULT_FACE, DEFAULT_POSE, faceGesture, parseBakes, parseTracker, parseTrackerSource, parseTrackAnchor, poseGesture, type FaceGesture, type FaceRead, type PlayTracker, type PoseGesture, type PoseRead, type TrackBakeRef } from './playTracking';
 import { PAD_GRID_MAX, PAD_GRID_READS, parseMidiLocks, parseNoteRange, parsePadGrid, type MidiLock, type PadGridRead, type PlayPadGrid } from './playMidi';
+import { parseFrameRate, type FrameRateSetting } from '../lib/frameRate';
 export type { MidiLock, PadGridRead, PlayPadGrid } from './playMidi';
 export type { LayerGroup } from './layerGroups';
 
@@ -1318,6 +1319,11 @@ export interface PlayRecord {
   projection?: ProjectionRecord;
   /** The Background matted by a layer (docs/mattes-and-masks.md). Absent = no matte. */
   backgroundMatte?: BackgroundMatte;
+  /**
+   * The canvas frame rate (lib/frameRate.ts, docs/frame-rate.md): a chosen rate such as 12 fps,
+   * drawn less often and/or with the time stepped by 1/fps. Absent = the default (usually Auto).
+   */
+  frameRate?: FrameRateSetting;
 }
 
 // ── Takes: a performance recorded as keyframes ──────────────────────────────
@@ -2265,6 +2271,8 @@ export function parsePlayRecordAsSaved(raw: unknown): PlayRecord {
   if (projection) out.projection = projection;
   const backgroundMatte = parseBackgroundMatte(r.backgroundMatte, layers);
   if (backgroundMatte) out.backgroundMatte = backgroundMatte;
+  const frameRate = parseFrameRate(r.frameRate);
+  if (frameRate) out.frameRate = frameRate;
   if (Array.isArray(r.takes)) {
     const seenT = new Set<string>();
     const takes: PlayTake[] = [];

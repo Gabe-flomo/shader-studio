@@ -19,7 +19,7 @@ import { parser } from '@shaderfrog/glsl-parser';
 import { snapshotExample } from '../../present/snapshot';
 import { DEFAULT_EMBED, KIT_GROUPS, buildPlaySnippet, kitGroupsFor, kitScript, playBundle, type KitGroup, type PlayHtmlInput } from '../exportHtml';
 import { LITE_BOOTSTRAP, LITE_BOOTSTRAP_MAPS, buildGlslOnly, buildLitePage, buildLiteSnippet, liteBlockers, liteImages, liteMaps, usedUniforms } from '../embedLite';
-import { defaultLayer, emptyPlayRecord, type PlayMapping } from '../../types/play';
+import { defaultLayer, emptyPlayRecord, type PlayMapping, type PlayRecord } from '../../types/play';
 
 const SHADER = `precision highp float;
 uniform float u_time;
@@ -242,6 +242,54 @@ describe('the small snippet with clicks and keys', () => {
   });
 });
 
+describe('the small snippet at a chosen frame rate (docs/frame-rate.md)', () => {
+  const at = (frameRate: PlayRecord['frameRate']): PlayHtmlInput => ({ ...simple(), play: { ...simple().play, frameRate } });
+  const times = (calls: string[]) => calls.filter(c => c.startsWith('uniform1fv u_time ')).map(c => Number(c.split(' ')[2]));
+  const draws = (calls: string[]) => calls.filter(c => c === 'drawArrays').length;
+
+  it('carries the rate, and Auto carries nothing', () => {
+    expect(buildLiteSnippet(at({ fps: 12 }), opts)).toContain('"fps":12');
+    expect(buildLiteSnippet(at({ fps: 8, mode: 'draw' }), opts)).toContain('"fps":8,"fpsMode":"draw"');
+    expect(buildLiteSnippet(at({ fps: 'auto' }), opts)).not.toContain('"fps"');
+    expect(buildLiteSnippet(simple(), opts)).not.toContain('"fps"');
+  });
+
+  it('12 fps: draws 12 times a second on a 60 Hz screen, its time in 1/12 s steps', () => {
+    const page = livePage(buildLiteSnippet(at({ fps: 12 }), opts));
+    const before = draws(page.calls);
+    for (let i = 0; i < 60; i++) page.frame(1000 / 60);
+    expect(draws(page.calls) - before).toBe(12);
+    const ts = times(page.calls);
+    ts.forEach((t, k) => expect(t).toBeCloseTo(k / 12, 6));
+    // renderAt steps too.
+    page.renderAt(0.5 + 0.04);
+    expect(times(page.calls).at(-1)).toBeCloseTo(0.5, 6);
+  });
+
+  it('draw less only: 7 draws a second, the time as it is (not in 1/7 s steps)', () => {
+    const page = livePage(buildLiteSnippet(at({ fps: 7, mode: 'draw' }), opts));
+    const before = draws(page.calls);
+    for (let i = 0; i < 120; i++) page.frame(1000 / 60);
+    expect(draws(page.calls) - before).toBe(14);
+    expect(times(page.calls).some(t => Math.abs(t * 7 - Math.round(t * 7)) > 0.01)).toBe(true);
+  });
+
+  it('step time only: draws every frame, the time stepped', () => {
+    const page = livePage(buildLiteSnippet(at({ fps: 12, mode: 'posterize' }), opts));
+    const before = draws(page.calls);
+    for (let i = 0; i < 60; i++) page.frame(1000 / 60);
+    expect(draws(page.calls) - before).toBe(60);
+    expect(new Set(times(page.calls).map(t => t.toFixed(6))).size).toBe(13);
+  });
+
+  it('Auto draws every frame with a smooth clock', () => {
+    const page = livePage(buildLiteSnippet(simple(), opts));
+    const before = draws(page.calls);
+    for (let i = 0; i < 30; i++) page.frame(1000 / 60);
+    expect(draws(page.calls) - before).toBe(30);
+  });
+});
+
 /** The snippet's bootstrap running on a fake page: frames on demand, window and root events, the uniforms it sets. */
 function livePage(snippet: string) {
   const calls: string[] = [];
@@ -262,6 +310,7 @@ function livePage(snippet: string) {
   raf.shift()!(now += 16);
   const fire = (k: string, e: Record<string, unknown>) => { for (const f of [...(win[k] ?? []), ...(win[`root:${k}`] ?? [])]) f(e); };
   return {
+    calls,
     rootListeners,
     renderAt: (t: number) => (root as unknown as { playfield: { renderAt(t: number): void } }).playfield.renderAt(t),
     frame: (ms = 16) => raf.shift()!(now += ms),
