@@ -436,8 +436,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     /** A helper's group (one pass) rather than an iterated loop. */
     helper?: boolean;
   }
-  /** Is the code being converted inside an iterated loop's group (at any depth)? */
-  const inLoopGroup = (): boolean => { for (let c = loopCtx; c; c = c.parent ?? null) if (!c.helper) return true; return false; };
+
   let loopCtx: LoopCtx | null = null;
   function portRef(ctx: LoopCtx, outerRef: Ref, label: string): Ref {
     let outer = outerRef;
@@ -1012,7 +1011,8 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   function helperGroup(a: Ast, env: Env, f: UserFn): Val | null {
     const body = groupBody(f);
     const args = (a.args as Ast[] | undefined ?? []).filter(x => x.type !== 'literal');
-    if (!body || args.length !== f.params.length) return null;
+    // Inside an iterated group a call stays code: the compiler doesn't run a group inside a loop's group yet.
+    if (!body || args.length !== f.params.length || (loopCtx && !loopCtx.helper)) return null;
     const vals = args.map((x, i) => expr(x, env, (f.params[i].type in N_OF ? f.params[i].type : 'float') as T));
     if (vals.some((v, i) => v.type !== (f.params[i].type === 'int' ? 'float' : f.params[i].type))) return null;
     const ctx: LoopCtx = { ports: new Map(), inputPorts: [], wires: {}, sockets: {}, outerSink: sink, parent: loopCtx, helper: true };
@@ -1535,7 +1535,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
           }
           // An iterated group runs up to 16 times and has no early exit; a loop inside a loop stays code.
           const exits = hasAny(s.body, ['break_statement', 'continue_statement', 'return_statement', 'discard_statement']);
-          if (count >= 1 && count <= 16 && !exits && !inLoopGroup()) { loopGroup(s, env, name, start, step, count, intCounter); return; }
+          if (count >= 1 && count <= 16 && !exits && !loopCtx) { loopGroup(s, env, name, start, step, count, intCounter); return; }
         }
         return loopRegion(s, env, name);
       }

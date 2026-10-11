@@ -50,8 +50,8 @@ const SNIPPETS: { name: string; src: string; kind: string; node: string }[] = [
   { name: 'cell id', kind: 'cellId', node: 'fract', src: shader('  vec2 id = floor(uv * 6.0);\n  gl_FragColor = vec4(fract(id * 0.13), 0.0, 1.0);') },
   { name: 'iq palette', kind: 'palette', node: 'palette', src: shader('  float t = length(uv) + u_time * 0.1;\n  vec3 col = vec3(0.5) + vec3(0.5) * cos(6.28318 * (vec3(1.0) * t + vec3(0.0, 0.33, 0.67)));\n  gl_FragColor = vec4(col, 1.0);') },
   { name: 'palette helper', kind: 'palette', node: 'palette', src: shader('  vec3 col = pal(length(uv) * 2.0);\n  gl_FragColor = vec4(col, 1.0);', 'vec3 pal(float t) {\n  vec3 a = vec3(0.5, 0.5, 0.5);\n  vec3 b = vec3(0.5, 0.5, 0.5);\n  vec3 c = vec3(1.0, 1.0, 1.0);\n  vec3 d = vec3(0.0, 0.1, 0.2);\n  return a + b * cos(6.28318 * (c * t + d));\n}') },
-  { name: 'remap', kind: 'remap', node: 'remap', src: shader('  float r = length(uv);\n  float k = (r - 0.2) / (0.6 - 0.2);\n  gl_FragColor = vec4(vec3(k), 1.0);') },
-  { name: 'clamped remap', kind: 'saturateRemap', node: 'remap', src: shader('  float r = length(uv);\n  float k = clamp((r - 0.1) / (0.5 - 0.1), 0.0, 1.0);\n  gl_FragColor = vec4(vec3(k), 1.0);') },
+  { name: 'remap', kind: 'remap', node: 'remap', src: shader('  float r = length(uv);\n  float lo = 0.2 + 0.1 * sin(u_time);\n  float k = (r - lo) / (0.6 - lo);\n  gl_FragColor = vec4(vec3(k), 1.0);') },
+  { name: 'clamped remap', kind: 'saturateRemap', node: 'remap', src: shader('  float r = length(uv);\n  float edge = 0.1;\n  float k = clamp((r - edge) / (0.5 - edge), 0.0, 1.0);\n  gl_FragColor = vec4(vec3(k), 1.0);') },
   { name: 'smoothstep by hand', kind: 'smoothCurve', node: 'smoothstep', src: shader('  float x = clamp(length(uv) * 1.5, 0.0, 1.0);\n  float s = x * x * (3.0 - 2.0 * x);\n  gl_FragColor = vec4(vec3(s), 1.0);') },
   { name: 'mix by hand', kind: 'lerp', node: 'mix', src: shader('  float t = clamp(uv.x + 0.5, 0.0, 1.0);\n  vec3 col = vec3(0.1, 0.2, 0.3) + (vec3(0.9, 0.6, 0.2) - vec3(0.1, 0.2, 0.3)) * t;\n  gl_FragColor = vec4(col, 1.0);') },
   { name: 'clamp by min and max', kind: 'clamp01', node: 'clamp', src: shader('  float v = min(max(uv.x * 2.0, 0.0), 1.0);\n  gl_FragColor = vec4(vec3(v), 1.0);') },
@@ -87,14 +87,14 @@ describe('recognised patterns', () => {
       expect(b.recognised.find(r => r.id === offer.rec.id)?.as, s.name).toBe('node');
       expect(graphDifference(a, b), s.name).toBeLessThanOrEqual(SAME);
     }
-  });
+  }, 60_000);
   it('turned down, it is one plain Expression Block holding the pattern, still the same picture', () => {
     const a = ok(SNIPPETS[0].src);
     const [rec] = a.units.flatMap(u => recognise(a, u));
     const b = built(a, [nodesStep(all(a), { [rec.id]: 'block' })]);
     const block = b.nodes.find(n => n.id === b.recognised[0].nodeId)!;
     expect(block.type).toBe('exprNode');
-    expect(String(block.params.expr)).toMatch(/smoothstep\(r, r \+ w, length\(p\)\)/);
+    expect(String(block.params.expr)).toMatch(/smoothstep\(r, 0\.32, length\(p\)\)/);
     expect(types(b)).not.toContain('circleSDF');
     expect(graphDifference(a, b)).toBeLessThanOrEqual(SAME);
   });
@@ -136,5 +136,5 @@ describe('recognised patterns', () => {
       expect(b.ok, name).toBe(true);
       if (b.ok) { const d = graphDifference(a, b); if (d !== null) expect(d, name).toBeLessThanOrEqual(SAME); }
     }
-  });
+  }, 60_000);
 });

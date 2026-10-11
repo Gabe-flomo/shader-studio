@@ -1,6 +1,6 @@
 # Guided Convert
 
-*Status: phase 1 and phase 2 built (branch `claude/guided-convert`). Planned 2026-10-09; see "Phases" for what is left.*
+*Status: phases 1–3 built: phase 3 (helpers as groups, recognised patterns) on `claude/guided-convert-2`. Planned 2026-10-09; see "Phases" for what is left.*
 
 The Convert page (docs/glsl-to-nodes.md) turns a whole shader into a graph in one go. **Guided** is the
 other way to use it: you take part, choosing how the graph is cut. The shader's code is on the left; the
@@ -17,7 +17,8 @@ at every step**, and the check under the preview says so (Same picture / Differs
    Output, the same picture as the shader.
 2. **Select lines** in the code (drag over the line numbers or the text). The selection snaps to whole
    statements of `main()`; a selection inside a helper function selects the lines of `main()` that call
-   it. A panel opens under the code:
+   it, and offers to open the helper as a group of its own (see "Helper functions as groups"); a
+   selection inside an opened helper selects statements of its body. A panel opens under the code:
    - the selection's **output, rendered right away** (the last value it makes, shown over the picture,
      as the line previews show a line);
    - **How:** *Nodes* (the converter splits it into library nodes, an Expression Block only where no node
@@ -25,6 +26,8 @@ at every step**, and the check under the preview says so (Same picture / Differs
      (a Custom Function holding the lines as written);
    - **Numbers:** each number in the selection is a chip: *slider* (with a range guessed from its value),
      *input* (a socket fed from a named constant you can rewire), or *fixed* (kept as written);
+   - **Recognised** (Nodes): the idioms in the lines that a library node draws, each as
+     "a soft disc → Circle SDF + SDF Mask", with *Node | Block* (see "Recognised patterns");
    - **Needs / Makes:** the values it reads (its inputs) and the values later lines read (its outputs);
    - **Make nodes** (↵).
 3. The new nodes appear on the canvas, and the lines they came from are tinted in the step's colour,
@@ -42,8 +45,11 @@ at every step**, and the check under the preview says so (Same picture / Differs
 
 ```
 GuidedState = { source: string; steps: Step[] }            // pure data: undo is popping a step
-Step = { kind: 'convert'; id; units: number[]; mode: 'nodes' | 'blocks' | 'function'; name; chips }
+Step = { kind: 'convert'; id; units: number[]; mode: 'nodes' | 'blocks' | 'function'; name; chips;
+         fn?: helperName;                                   // a statement of an opened helper's body
+         recognised?: { [recognitionId]: 'node' | 'block' } }
      | { kind: 'group'; id; name; members: stepId[]; hidden: stableParamKey[] }
+     | { kind: 'helper'; id; fn; name; callers: number[] }    // a helper opened as a group
 ```
 
 Everything else is derived, deterministically, from `(source, steps)`:
@@ -106,6 +112,75 @@ tests (`cpuGlsl.ts`, a small GLSL interpreter: same value at every sample pixel,
 page checks the converted graph against the original on the GPU at every step (`RenderPair`, the
 automatic page's check), with a warning when it differs.
 
+## Helper functions as groups
+
+Selecting lines inside a helper (`float sdCircle(vec2 p, float r) { … }`) shows, above the usual panel,
+**sdCircle() as a group of its own**: *Convert this function* (open it and turn its whole body into nodes)
+or *Open as a group* (its body stays one Custom Function inside the group; select its lines to convert
+them step by step, as for `main()`). Its parameters are the group's input ports, its return value the one
+output.
+
+- **Every call is a copy.** The codebase has no linked group instances (group presets are copies), so
+  each converted call of the helper is its own Group node, made from the same body (the same inside,
+  labelled with the helper's name, `params.__helper`). Opening the helper also converts (as Nodes) the
+  lines of `main()` that call it and aren't converted yet, so the group shows where it is used; a call
+  inside code that stays text (the remainder, a loop kept as code) calls the helper as code.
+- **Staged like main().** `analyse` reads each helper's body as units (with its parameters, return type
+  and callers). An opened helper is staged as `main()` is: converted statements as written, each run not
+  converted yet wrapped in a function (`sdCircle_rest`), the run that holds the `return` giving the
+  helper's value back (`return sdCircle_rest(p, r);`). The staged shader still computes exactly what the
+  original does, checked on the CPU at every step.
+- **The converter's side** (`glslToGraph(…, { helperGroups })`): a call to an opened helper converts its
+  body inside a plain Group (one pass): parameters through input ports (a number argument comes in from a
+  Constants entry named after the parameter), the shader's consts and time / resolution through ports,
+  the return expression the output port. Nodes inside know the helper statement they were made for
+  (`helperOrigins`), so they map back to the step and lines, and the remainder inside is labelled
+  *Not converted yet · lines a–b*.
+- **What can open** (`HelperFn.openable`, else the reason is shown): one definition (no overloads), `in`
+  parameters only, a float or vector back, one `return` at the end (no early return), no `discard`, no
+  writes to `gl_FragColor` or globals. Helper body steps are Nodes or One function (no Expression mode
+  inside a group yet).
+- **Limits:** a loop inside an opened helper stays code inside its group (the compiler doesn't run an
+  iterated group inside another group yet), and a call inside an iterated group stays code for the same
+  reason.
+
+## Recognised patterns
+
+In Nodes mode, the selection's lines are read with the Explain panel's matcher (`src/lib/glslPatterns`:
+`matchPattern` over the idioms' spellings, constants folded, `+`/`*` in any order). An idiom a library
+node draws becomes that node instead of generic math cards (`recognise.ts`, recipes in `recipes.ts`):
+
+| Idiom | Becomes |
+|---|---|
+| `length(p) - r` | Circle SDF |
+| `1 - smoothstep(r, r + w, length(p))` and spellings | Circle SDF + SDF Mask (the fill) |
+| `smoothstep(r, r + w, length(p))` | Circle SDF + Smoothstep |
+| `abs(length(p) - r)` (`- w`) | Ring SDF (+ Subtract) |
+| box SDF (`length(max(abs(p) - b, 0)) + min(max(q.x, q.y), 0)`) | Box SDF |
+| `mat2(cos a, -sin a, sin a, cos a) * p`, `p * M`, `uv *= M` | Transform (2D, turn ±a) |
+| `fract(p * n) - 0.5`, `fract(p * n)`, `floor(p * n)` | Tile, Grid UV, Tile's Cell ID |
+| `a + b * cos(6.28318 * (c * t + d))` | Palette |
+| `(x - a) / (b - a)`, `clamp((x - a) / (b - a), 0, 1)` | Remap (clamp off / on) |
+| `x * x * (3 - 2x)`, `a + (b - a) * t`, `min(max(x, 0), 1)` | Smoothstep, Mix, Clamp |
+| a helper whose body is fractal noise (`fbm()`) | FBM (offered only if the picture matches) |
+
+A helper call is recognised too when its body, inlined (declarations and one return), is one of these:
+`pal(t)` returning a cosine palette becomes a Palette, a `box(p, b)` helper a Box SDF.
+
+- **How it stays the same picture.** The matched code is cut out of the statement as a call to a
+  one-line function of its parts (`rc_softDisc(uv, 0.3, 0.02)` with `return 1.0 - smoothstep(r, r + w,
+  length(p));`), so the staged shader computes exactly what the original does; the converter
+  (`nodeCalls`) makes that call the recipe's nodes, or one Expression Block holding the body (*Block*),
+  or, when the recipe can't take the values, the body as plain nodes.
+- **Offered only when it matches.** `offers.ts` tries each pattern alone: it is offered when its node was
+  really made and the compiled graph draws the same as the plain conversion on the CPU (`check.ts`: the
+  GLSL interpreter on an 8×6 grid at two moments, within 1.5/255). Exact recipes are offered even when
+  the interpreter can't run the shader; the others (a different but equal formula, 6.28318 against the
+  shader's 2π, the FBM node's own noise) are not, with the reason ("Kept as written: the picture would
+  change by up to 87/255"). The page's GPU check (*Same picture*) still runs after every step.
+- **Numbers.** The numbers a node takes the place of (the `1.0 -` of a soft disc) aren't chips; the ones
+  in its arguments stay chips and feed its sliders.
+
 ## Phases
 
 1. **Phase 1 (built):** the analysis, the staged shader, the graph at every step, the layout (code with
@@ -113,10 +188,13 @@ automatic page's check), with a warning when it differs.
    Nodes / One function, the selection's preview, number chips, Convert the rest / keep the rest.
 2. **Phase 2 (built):** groups (name, shown sliders) from the step strip, Expression mode, next-cut
    suggestions, a selection inside a helper selecting its callers, the entry from the GLSL page.
-3. **Later:**
-   - a helper function opened as a group of its own (its body converted, its parameters the group's
-     inputs), instead of a Custom Function per call;
-   - recognised idioms as single library nodes (the Explain panel's pattern matcher);
+3. **Phase 3 (built):** helper functions as groups (above), recognised patterns as library nodes (above).
+4. **Later:**
+   - linked group instances (one body, every call follows an edit) once the Studio has them;
+   - loops inside an opened helper as iterated groups (a group inside a group);
+   - Expression mode inside a helper's group;
+   - more recognitions (SDF unions as an SDF combine node, polar space, hashes) and the matcher folding
+     `(0.6 - 0.2)`-style constants on the pattern side;
    - several outputs on one Custom Function (today the converter packs four components per function);
    - optional extra outputs (a value only the selection uses, exposed anyway);
    - renaming group sockets from the dialog (today: on the card after Materialize);

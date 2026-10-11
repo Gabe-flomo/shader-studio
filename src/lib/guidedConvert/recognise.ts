@@ -178,7 +178,7 @@ function cutOut(a: Analysis, root: Expr, hit: Hit, types: Map<number, GlslType>,
 function inlineHelper(h: HelperFn, argTexts: string[]): Expr | null {
   if (h.openable !== true) return null;
   const local = new Map<string, string>();
-  h.params.forEach((p, i) => local.set(p.name, `(${argTexts[i]})`));
+  h.params.forEach((p, i) => local.set(p.name, argTexts[i]));
   const subst = (text: string): string | null => {
     const r = parseExpr(text);
     if (!r.ok) return null;
@@ -212,7 +212,8 @@ export function fbmShape(h: HelperFn, norm: string): FbmShape | null {
   const text = norm.slice(h.start, h.end);
   const loop = /for\s*\(\s*int\s+\w+\s*=\s*0\s*;\s*\w+\s*<\s*(\d+)\s*;/.exec(text);
   const named = /fbm|fractal|turb/i.test(h.name);
-  const amp = /(\w+)\s*\*=\s*(0?\.\d+|\d+\.\d*)/.exec(text);
+  const ampVar = /\+=\s*(\w+)\s*\*/.exec(text)?.[1];
+  const amp = ampVar ? new RegExp(`\\b(${ampVar})\\s*\\*=\\s*(0?\\.\\d+|\\d+\\.\\d*)`).exec(text) : /(\w+)\s*\*=\s*(0?\.\d+)/.exec(text);
   if (!loop || (!named && !(amp && /\+=\s*\w+\s*\*\s*\w+\s*\(|\+=\s*\w+\s*\([^;]*\)\s*\*\s*\w+\s*;/.test(text)))) return null;
   const P = h.params[0].name;
   const lac = new RegExp(`\\b${P}\\s*\\*=\\s*(\\d+\\.?\\d*)|\\b${P}\\s*=\\s*${P}\\s*\\*\\s*(\\d+\\.?\\d*)`).exec(text);
@@ -284,13 +285,16 @@ export function recognise(a: Analysis, unit: Unit, opened: ReadonlySet<string> =
             return;
           }
           const argTexts = n.args.map(x => a.norm.slice(x.start, x.end));
-          const inl = argTexts.some(t => SIDE_EFFECT.test(t)) ? null : inlineHelper(h, argTexts);
+          // Inlined over placeholders for its parameters, so a part the pattern binds is the helper's own; the argument goes in after.
+          const holders = h.params.map((_, i) => `__a${i}`);
+          const inl = argTexts.some(t => SIDE_EFFECT.test(t)) ? null : inlineHelper(h, holders);
+          const back = (text: string) => text.replace(/__a(\d+)/g, (_m, i: string) => `(${argTexts[Number(i)]})`);
           if (inl) {
-            const itypes = inferTypes(inl, env);
+            const itypes = inferTypes(inl, { ...env, ...Object.fromEntries(h.params.map((p, i) => [`__a${i}`, p.type as GlslType])) });
             const hit = matchAt(inl, itypes);
             if (hit?.recipe) {
               const itree = new Set(allNodes(inl).map(x => x.id));
-              const cut = cutOut(a, inl, hit, itypes, itree, e => ({ text: printExpr(e) }));
+              const cut = cutOut(a, inl, hit, itypes, itree, e => ({ text: back(printExpr(e)) }));
               if (cut) {
                 push({ kind: hit.recipe.kind, variant: hit.variant, what: `${h.name}() is ${hit.recipe.what}`, node: hit.recipe.node, exact: hit.recipe.exact, start: n.start, end: n.end, code: a.norm.slice(n.start, n.end).replace(/\s+/g, ' '), ...cut, helper: h.name });
                 return;
