@@ -128,6 +128,7 @@ export async function renderBake(graph: GraphNode[], plan: BakePlan, handle: Bak
       const step = steps[j];
       await Promise.all([bakedVideos.seek(step.time), videoEngine.seek(step.time), timeCubes.settled()]);
       await depthEngine.seek();
+      await offline.settleSplats?.(step.time);
       offline.renderAtTime(step.time, { dt: 1 / plan.fps, first: j === 0 });
       offline.readPixels(pixels, w, h);
       if (step.preIndex !== null) { pre[step.preIndex] = pixels.slice(); }

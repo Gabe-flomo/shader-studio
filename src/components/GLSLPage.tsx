@@ -165,7 +165,7 @@ function persistShaders(list: SavedShader[]): FileResult {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) {
+export function GLSLPage({ onConvert }: { onConvert?: (code: string, guided?: boolean) => void }) {
   const tk = useTokens();
   const setRawGlslShader = useNodeGraphStore(s => s.setRawGlslShader);
   const nodeGraphShader  = useNodeGraphStore(s => s.fragmentShader);
@@ -442,6 +442,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
           )}
           <Button size="sm" variant="ghost" onClick={tidy} title="Rewrite the text as Playfield GLSL: our names for time, resolution, mouse and the entry point, regular indentation">Tidy</Button>
           {onConvert && <Button size="sm" variant="ghost" icon="nodes" onClick={() => onConvert(code)} title="Open this shader on the Convert page and see the nodes it would become">Convert<ProBadgeFor feature="convert" /></Button>}
+          {onConvert && <Button size="sm" variant="ghost" onClick={() => onConvert(code, true)} title="Convert it step by step: select lines, make nodes, group them (Guided Convert)">Step by step</Button>}
           <IconButton icon="copy" label="Copy the whole shader" size="sm" onClick={() => { navigator.clipboard?.writeText(code).then(() => toast.success('Copied'), () => toast.error('Couldn’t copy')); }} />
           <IconButton icon="search" label="Discover functions: extract from this file, or search the saved shaders" size="sm" onClick={() => setDiscoverOpen(true)} />
           <IconButton icon="code" label="Code Explorer: how written code uses a function, across your code and the examples" size="sm" active={explorerOpen} onClick={toggleExplorer} />

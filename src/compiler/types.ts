@@ -209,6 +209,18 @@ export interface AgentDrawProgram {
   probe?: { uniform: string; camera: string; depth?: string };
 }
 
+/**
+ * A Splat Scene node's probe (compiler/splatGraph.ts): a program of the picture's kind drawn over 8 × 1 texels: the
+ * camera's eye and three rays, and the scan's placement, read by its raster pass (lib/splats/engine.ts).
+ */
+export interface SplatProbeProgram {
+  nodeId: string;
+  fragmentShader: string;
+  paramUniforms: Record<string, number | number[]>;
+  textureUniforms: Record<string, string>;
+  videoUniforms: Record<string, string>;
+}
+
 /** Everything the agents engine runs for a graph (present only when it has an Agents-family node). */
 export interface AgentsSpec {
   groups: AgentGroupProgram[];
@@ -293,6 +305,8 @@ export interface CompilationResult {
    * picture's program, which samples the trails and drawings.
    */
   agents?: AgentsSpec;
+  /** Splat Scene nodes' probe programs (compiler/splatGraph.ts). Present only when the graph has one. */
+  splats?: SplatProbeProgram[];
 }
 
 export const VERTEX_SHADER = `varying vec2 vUv;

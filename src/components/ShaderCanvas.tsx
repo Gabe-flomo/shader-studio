@@ -50,6 +50,7 @@ import { GpuTimer } from '../lib/gpuTimer';
 import { OfflineHistory } from '../lib/offlineHistory';
 import { PassRunner, PassTargets } from '../lib/passRunner';
 import { ppFrameSteps } from '../play/kit/passPlan.js';
+import { splatEngine } from '../lib/splats/engine';
 import { AgentRunner, AgentTargets, agentSpotRegistry } from '../lib/agentRunner';
 import { hoodWanted } from '../lib/agentHood';
 import type { AgentsSpec } from '../compiler/types';
@@ -78,6 +79,11 @@ export interface OfflineRenderHandle {
    * stands alone (a still).
    */
   renderAtTime: (time: number, opts?: { dt?: number; first?: boolean }) => void;
+  /**
+   * Splat Scene nodes (docs/splat-scene.md): read each one's camera at `time` and sort its scan for it, waited for,
+   * so the next renderAtTime draws it in order. Call it before renderAtTime; a graph without one resolves at once.
+   */
+  settleSplats?: (time: number) => Promise<void>;
   /** Read pixels from the last renderAtTime call into `out` (RGBA, top-down) */
   readPixels: (out: Uint8Array, width: number, height: number) => void;
   /** Set a uniform before the next renderAtTime (a take's recorded slider values). Unknown names are ignored. */
@@ -418,6 +424,22 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (s.fragmentShader !== prev.fragmentShader || s.passes !== prev.passes || s.textureUniforms !== prev.textureUniforms || s.videoUniforms !== prev.videoUniforms) program(s);
     });
     return () => { off(); depthEngine.setHost(null); depthEngine.setVideoElements(null); };
+  }, []);
+  // Splat Scene nodes (docs/splat-scene.md): their scans are drawn before the picture into two textures each, bound as
+  // the node's `::color` and `::depth` slots; each compile brings their probe programs (the camera).
+  useEffect(() => {
+    splatEngine.setHost({
+      setTexture: (key, tex) => useNodeGraphStore.getState().setNodeTexture(key, tex),
+      requestRender: () => requestRenderRef.current(),
+    });
+    const st0 = useNodeGraphStore.getState();
+    splatEngine.sync(st0.nodes);
+    splatEngine.setPrograms(st0.splats, st0.vertexShader);
+    const off = useNodeGraphStore.subscribe((s, prev) => {
+      if (s.nodes !== prev.nodes) splatEngine.sync(s.nodes);
+      if (s.splats !== prev.splats || s.vertexShader !== prev.vertexShader) splatEngine.setPrograms(s.splats, s.vertexShader);
+    });
+    return () => { off(); splatEngine.setHost(null); };
   }, []);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
@@ -1138,6 +1160,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           }
           // The live loop's own history stays as it was: put its uniforms back after.
           const keep = ['u_time', 'u_prevFrame', ...Array.from({ length: 6 }, (_, i) => `u_echo${i}`)].map(k => [k, u[k]?.value] as const);
+          // Splat Scene nodes: drawn at this frame's time and size (settleSplats sorted them for it).
+          if (splatEngine.wants()) {
+            u.u_time.value = time;
+            splatEngine.beforeFrame({ renderer, uniforms: u, width: exportW, height: exportH });
+            u.u_time.value = keep[0][1];
+          }
           const feedback = isStatefulRef.current && !!u.u_prevFrame;
           const echo = echoRef.current;
           // Pass nodes: textures of the render's own; a Pass's Previous steps like feedback does.
@@ -1181,6 +1209,15 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           renderer.render(blitScene, camera);
           renderer.setRenderTarget(null);
           for (const [k, v] of keep) if (u[k]) u[k].value = v;
+        },
+        settleSplats: async (time: number) => {
+          if (!splatEngine.wants()) return;
+          ensureRT();
+          const u = material.uniforms;
+          const before = u.u_time.value;
+          u.u_time.value = time;
+          try { await splatEngine.settle({ renderer, uniforms: u, width: exportW, height: exportH }); }
+          finally { u.u_time.value = before; }
         },
         renderQueueGraph: (item: BackgroundItem, time: number, out: Uint8Array) => {
           ensureRT();
@@ -1471,6 +1508,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         passRunner?.contextLost();
         agentRunner?.contextLost();
         depthEngine.contextLost();
+        splatEngine.contextLost();
         // The Particles engines keep raw GL objects: let them go now (the restore makes new ones).
         releaseGpuParticlesRenderer(renderer);
       } catch (err) { console.warn('[ShaderCanvas] dropping GPU objects on context loss failed', err); }
@@ -1732,6 +1770,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         scopeIdsRef.current.size > 0 || previewNodeIdRef.current !== null
         || midiEngine.hasFile() || (passRunner !== null && passRunner.hasPrevious)
         || (agentRunner !== null && agentRunner.active)
+        // Splat Scene: a sort on its way (its order lands on a later frame).
+        || splatEngine.busy()
         // The Motion (texture) node: a Motion layer measures every frame, so a graph reading it keeps drawing.
         || readsMotionNow()
       );
@@ -1795,6 +1835,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         // agents' steps and drawings (lib/agentRunner.ts), then the passes after them (lib/passRunner.ts).
         // A graph without Pass, Particles or Agents nodes has no steps.
         const fw = renderer.domElement.width || 1, fh = renderer.domElement.height || 1;
+        // Splat Scene nodes (docs/splat-scene.md): each scan drawn through its probe's camera, before anything reads it.
+        if (splatEngine.wants()) {
+          gpuTimer.begin('splats');
+          splatEngine.beforeFrame({ renderer, uniforms: material.uniforms, width: fw, height: fh });
+          gpuTimer.end();
+        }
         const frameSteps = ppFrameSteps({
           passes: !!(passRunner && passTargets), split: !!passRunner?.splitsForParticles,
           particles: gpuParticlesActive(), agents: !!(agentRunner && agentTargets),

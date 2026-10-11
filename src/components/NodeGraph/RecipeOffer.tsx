@@ -16,7 +16,7 @@ import { Icon } from '../ui/Icon';
 import { portalGuard } from '../ui/portalGuard';
 import { closeRecipeOffer, useRecipeOffer } from '../../store/recipeOfferStore';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { FACE_CAMERA_OPTION, LIGHT_SCENE_TYPES, PICTURE_DEPTH_SET, recipesFor } from '../../nodes/recipes';
+import { FACE_CAMERA_OPTION, LIGHT_SCENE_TYPES, PICTURE_DEPTH_SET, SPLAT_SCENE_SET, recipesFor } from '../../nodes/recipes';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { getCardSize } from './socketRegistry';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -59,11 +59,13 @@ function OfferCard({ node, set, openedAt, canvasRef, pan, zoom }: {
   const recipes = recipesFor(set);
   const label = (typeof node.params.label === 'string' && node.params.label) || getNodeDefinition(node.type)?.label || node.type;
   const picture = set === PICTURE_DEPTH_SET;
-  const lighting = !picture && LIGHT_SCENE_TYPES.has(node.type);
+  const splat = set === SPLAT_SCENE_SET;
+  const lighting = !picture && !splat && LIGHT_SCENE_TYPES.has(node.type);
   const [faceCamera, setFaceCamera] = useState(true);
-  const title = picture ? 'Add a picture with depth' : lighting ? 'Light the scene' : `Set up ${label}?`;
+  const title = picture ? 'Add a picture with depth' : splat ? 'Add a splat scan' : lighting ? 'Light the scene' : `Set up ${label}?`;
   const sub = picture
     ? 'A picture (drop an image on it), its depth and a Depth Composite, wired to this loop and the Output. Picking again replaces it.'
+    : splat ? 'A Splat Scene seen through this loop\'s camera and put together with the scene by distance. Drop a .ply, .splat or .spz scan on it. Picking again replaces it.'
     : lighting ? 'Pick a look: shadows, AO, lights and tone map are added and wired. Picking again replaces it.' : 'One click adds and wires a few nodes, each with a note.';
 
   // Beside the card: right of it, else left, level with its top; always on screen.
@@ -100,6 +102,7 @@ function OfferCard({ node, set, openedAt, canvasRef, pan, zoom }: {
   const pick = (id: string) => {
     if (dontAsk) closeRecipeOffer(true);
     if (picture) useNodeGraphStore.getState().applyStarterRecipe(node.id, id, set, { [FACE_CAMERA_OPTION]: faceCamera });
+    else if (set !== node.type) useNodeGraphStore.getState().applyStarterRecipe(node.id, id, set);
     else useNodeGraphStore.getState().applyStarterRecipe(node.id, id);
   };
 

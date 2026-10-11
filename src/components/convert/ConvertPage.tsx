@@ -24,11 +24,13 @@
 import { learnGraph, textSignature } from '../../suggestions/learning';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { glslToGraph, normaliseHostShader, type ConversionResult } from '../../glslToGraph';
+import { glslToGraph, type ConversionResult } from '../../glslToGraph';
+import { wrapOriginal } from './wrapOriginal';
 import { suggestFixups, type Fixup } from '../../glslToGraph/fixups';
 import { tidyGlsl } from '../../glsl/format';
 import { optimizeGraph, type OptimizeReport } from '../../optimize/optimizeGraph';
-import { onHandoff, takeHandoff } from './convertHandoff';
+import { handoffIsGuided, onHandoff, takeHandoff } from './convertHandoff';
+import { GuidedConvert } from './guided/GuidedConvert';
 import { CONVERT_EXAMPLES } from '../../glslToGraph/examples';
 import { dialectLabel } from '../../glsl/dialects';
 import { parseGlslError, friendlyGlsl } from '../../compiler/nodeErrors';
@@ -94,14 +96,6 @@ function showStart(nodes: GraphNode[], canvas: HTMLElement | null): void {
 function relaid(nodes: GraphNode[], heightOf: (n: GraphNode) => number): GraphNode[] {
   const at = layoutByRank(nodes, { heightOf, order: (a, b) => a.position.y - b.position.y });
   return nodes.map(n => { const p = at.get(n.id); return p ? { ...n, position: p } : n; });
-}
-
-/** The pasted shader the way the render pair needs it: our uniforms declared once. `toSourceLine` maps a compile error's line back to the paste. */
-function wrapOriginal(source: string): { code: string; toSourceLine: (line: number) => number } {
-  const { code: body, toSourceLine } = normaliseHostShader(source);
-  const declared = (n: string) => new RegExp(`uniform\\s+\\w+\\s+${n}\\b`).test(body);
-  const head = ['precision highp float;', 'varying vec2 vUv;', ...(declared('u_resolution') ? [] : ['uniform vec2 u_resolution;']), ...(declared('u_time') ? [] : ['uniform float u_time;']), ...(declared('u_mouse') ? [] : ['uniform vec2 u_mouse;'])];
-  return { code: `${head.join('\n')}\n${body}`, toSourceLine: (line: number) => toSourceLine(Math.max(1, line - head.length)) };
 }
 
 const PANE_KEY = 'shader-studio:convert:pane';
@@ -616,22 +610,45 @@ function Detail({ node, nodes, report, asBlock, onToggleBlock, onClose }: { node
 }
 
 const SOURCE_KEY = 'shader-studio:convert:source';
+const MODE_KEY = 'shader-studio:convert:mode';
+/** The shader the editor last held (what Guided starts from). */
+function editorCode(): string { try { return localStorage.getItem(CODE_KEY) || EXAMPLES.circle.code; } catch { return EXAMPLES.circle.code; } }
 /**
  * The Convert page: GLSL into nodes, or a p5.js sketch into a Script layer,
- * each with its paste, preview, report and make-it-real.
+ * each with its paste, preview, report and make-it-real. GLSL converts
+ * automatically, or step by step in Guided mode (docs/guided-convert.md).
  */
 export function ConvertPage({ onMaterialized, compact = false }: { onMaterialized: () => void; compact?: boolean }) {
   const tk = useTokens();
   const [source, setSourceState] = useState<'glsl' | 'p5'>(() => { try { return localStorage.getItem(SOURCE_KEY) === 'p5' ? 'p5' : 'glsl'; } catch { return 'glsl'; } });
   const setSource = (v: 'glsl' | 'p5') => { setSourceState(v); try { localStorage.setItem(SOURCE_KEY, v); } catch { /* remembered for this visit only */ } };
+  // Guided: the shader it works on is fixed while it is open (Edit goes back to the editor).
+  const [guided, setGuided] = useState<string | null>(() => {
+    if (handoffIsGuided()) { const c = takeHandoff()!; try { localStorage.setItem(CODE_KEY, c); } catch { /* the editor shows it this visit */ } return c; }
+    try { return localStorage.getItem(MODE_KEY) === 'guided' ? editorCode() : null; } catch { return null; }
+  });
+  const setMode = (m: 'auto' | 'guided') => {
+    setGuided(m === 'guided' ? editorCode() : null);
+    try { localStorage.setItem(MODE_KEY, m); } catch { /* remembered for this visit only */ }
+  };
+  useEffect(() => onHandoff((code, wantsGuided) => {
+    if (!wantsGuided) { setGuided(null); return; }
+    takeHandoff();
+    try { localStorage.setItem(CODE_KEY, code); localStorage.setItem(MODE_KEY, 'guided'); } catch { /* this visit only */ }
+    setSourceState('glsl'); setGuided(code);
+  }), []);
+  const showGuided = guided !== null && !compact && source === 'glsl';
   return (
     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: tk.bg.panel }}>
       <div style={{ height: 40, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', borderBottom: `1px solid ${tk.border.default}` }}>
         <Segmented size="sm" ariaLabel="What to convert" value={source} onChange={setSource} options={[{ value: 'glsl', label: 'GLSL → nodes' }, { value: 'p5', label: 'p5.js → Script layer' }]} />
-        {!compact && <span style={{ fontSize: 11.5, color: tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{source === 'glsl' ? 'A fragment shader becomes a graph you can open in the Studio.' : 'A p5.js sketch or project becomes a Script layer on the Play page.'}</span>}
+        {source === 'glsl' && !compact && <Segmented size="sm" ariaLabel="How to convert" value={showGuided ? 'guided' : 'auto'} onChange={setMode} options={[{ value: 'auto', label: 'Automatic' }, { value: 'guided', label: 'Guided' }]} />}
+        {!compact && <span style={{ fontSize: 11.5, color: tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{source === 'p5' ? 'A p5.js sketch or project becomes a Script layer on the Play page.' : showGuided ? 'Choose how the graph is cut: select lines, make nodes, group them. The rest keeps running as code.' : 'A fragment shader becomes a graph you can open in the Studio.'}</span>}
       </div>
       <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-        {source === 'glsl' ? <GlslConvert onMaterialized={onMaterialized} compact={compact} /> : <P5Convert compact={compact} />}
+        {source === 'p5' ? <P5Convert compact={compact} />
+          : showGuided ? <GuidedConvert key={guided} source={guided!} onExit={() => setMode('auto')} onMaterialized={onMaterialized} />
+          : <GlslConvert onMaterialized={onMaterialized} compact={compact} />}
       </div>
     </div>
   );
