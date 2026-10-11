@@ -112,11 +112,11 @@ describe('spec → graph', () => {
     expect(union.params.k).toBe(0.3);
     const sphere = src(ins, union, 'a')!, cone = src(ins, union, 'b')!;
     expect([sphere.type, cone.type]).toEqual(['sphereSDF3D', 'coneSDF3D']);
+    // The cone's turn is one 3D Transform (Rotate X 30°).
     const rot = src(ins, cone, 'pos')!;
-    expect(rot.type).toBe('rotate3D');
-    expect(rot.params).toMatchObject({ axis: 'x' });
-    expect(rot.params.angle).toBeCloseTo(-Math.PI / 6, 5);
-    const polar = src(ins, rot, 'pos')!;
+    expect(rot.type).toBe('transform');
+    expect(rot.params).toMatchObject({ dim: '3', rx: 30, ry: 0, rz: 0 });
+    const polar = src(ins, rot, 'p')!;
     expect(polar.type).toBe('polarRepeat3D');
     expect(src(ins, sphere, 'pos')?.id).toBe(polar.id);
     const twist = src(ins, polar, 'pos')!;

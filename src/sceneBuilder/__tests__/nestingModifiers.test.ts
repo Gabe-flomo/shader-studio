@@ -99,18 +99,18 @@ describe('per-item modifiers', () => {
     const g = buildStandaloneGraph(spec);
     expect(compileGraph({ nodes: g.nodes }).success).toBe(true);
     const box = byRole(g.nodes, 's1')!;
-    // Point: Scene Pos → Move → Rotate (Y) → Scale → box.
+    // Point: Scene Pos → Move → Rotate (Y) → Scale → box, each a 3D Transform.
     const scale = src(g.nodes, box, 'pos')!;
-    expect([scale.type, scale.params.scale]).toEqual(['scale3d', 0.5]);
+    expect([scale.type, scale.params.dim, scale.params.scale]).toEqual(['transform', '3', 2]);
     const turn = src(g.nodes, scale, 'p')!;
-    expect([turn.type, turn.params.axis, turn.params[ROLE_KEY]]).toEqual(['rotate3D', 'y', 'w2:y']);
-    const move = src(g.nodes, turn, 'pos')!;
-    expect([move.type, move.params.tx]).toEqual(['translate3D', 1]);
-    expect(src(g.nodes, move, 'pos')!.type).toBe('scenePos');
-    // Distance: box → Onion → Offset (round) → Scale's correction → Scene Output.
+    expect([turn.type, turn.params.ry, turn.params[ROLE_KEY]]).toEqual(['transform', 90, 'w2']);
+    const move = src(g.nodes, turn, 'p')!;
+    expect([move.type, move.params.x]).toEqual(['transform', 1]);
+    expect(src(g.nodes, move, 'p')!.type).toBe('scenePos');
+    // Distance: box → Onion → Offset (round) → Scale's correction (a second Transform) → Scene Output.
     const out = every(g.nodes).find(n => n.type === 'sceneOutput')!;
     const fix = src(g.nodes, out, 'dist')!;
-    expect([fix.type, fix.params[ROLE_KEY], fix.params.scale]).toEqual(['scale3d', 'w3:dist', 0.5]);
+    expect([fix.type, fix.params[ROLE_KEY], fix.params.scale]).toEqual(['transform', 'w3:dist', 2]);
     const rnd = src(g.nodes, fix, 'dist')!;
     expect([rnd.type, rnd.params.amount]).toEqual(['sdfOffset', -0.1]);
     const onion = src(g.nodes, rnd, 'sdf')!;
@@ -128,7 +128,7 @@ describe('per-item modifiers', () => {
     expect(onion.type).toBe('sdfOnion');
     expect(src(g.nodes, onion, 'dist')!.type).toBe('sdfUnion');
     const move = byRole(g.nodes, 'w1')!;
-    expect(move.type).toBe('translate3D');
+    expect(move.type).toBe('transform');
     expect(src(g.nodes, byRole(g.nodes, 's1'), 'pos')!.id).toBe(move.id);
   });
 

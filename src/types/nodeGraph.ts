@@ -119,7 +119,8 @@ export interface ParamDef {
   // Options for 'select' type
   options?: { value: string; label: string }[];
   // Conditionally show this param only when another param matches a value
-  showWhen?: { param: string; value: string | string[] };
+  // `and` adds a second condition that must hold too (Transform's Pivot Z: Apply mode and 3D or 4D).
+  showWhen?: { param: string; value: string | string[]; and?: { param: string; value: string | string[] } };
   /**
    * The value is baked into the GLSL as a constant (loop bounds, array sizes)
    * rather than becoming a live uniform; changing it recompiles. Prefer this
@@ -296,6 +297,21 @@ export interface NodeDefinition {
    * up differently.
    */
   syncSockets?: (node: GraphNode) => GraphNode;
+
+  /**
+   * The one-line text a folded param section shows (ParamDef.section), in place of the generic
+   * "N controls · M changed": Transform's "Rotate 30°", "Scale 1.0". Undefined falls back.
+   */
+  sectionSummary?: (section: string, params: Record<string, unknown>) => string | undefined;
+
+  /** A section that never folds (its header shows, with no fold toggle): Transform's Position. */
+  pinnedSection?: string;
+
+  /**
+   * Search words this node is the default answer for: a query that starts one of them (3+ letters)
+   * ranks the node above every other match (Transform for "move", "translate", "place"…).
+   */
+  leadsFor?: string[];
 }
 
 // ── Helper: run migrations on a node's params ─────────────────────────────────

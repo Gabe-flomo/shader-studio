@@ -68,7 +68,7 @@ export const Motion2DNode: NodeDefinition = {
   aliases: ['orbit', 'bob', 'spin', 'pulse', 'shape motion'],
   description:
     'One motion for a shape, driven by Time: Orbit goes round a circle, Bob slides back and forth along a line, Spin turns, Pulse swells and shrinks. ' +
-    'Wire Offset, Turn and Grow into a Transform 2D. To give a shape two motions, chain a second Motion 2D after the first: it adds its motion to what comes in.',
+    'Wire Offset, Turn and Grow into a Transform. To give a shape two motions, chain a second Motion 2D after the first: it adds its motion to what comes in.',
   inputs: {
     time:   { type: 'float', label: 'Time', hint: 'Seconds. Left empty it uses the clock.' },
     offset: { type: 'vec2',  label: 'Offset in', hint: 'Another Motion 2D\'s Offset: this motion is added to it.' },

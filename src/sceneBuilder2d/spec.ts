@@ -118,11 +118,11 @@ export interface SpaceDef {
 }
 
 export const SPACES: SpaceDef[] = [
-  { kind: 'zoom', label: 'Zoom', aliases: ['scale', 'magnify'], type: 'uvTransform2d', posIn: 'uv', posOut: 'result', blurb: 'Magnifies the picture (above 1) or shrinks it.',
+  { kind: 'zoom', label: 'Zoom', aliases: ['scale', 'magnify'], type: 'transform', posIn: 'p', posOut: 'p', blurb: 'Magnifies the picture (above 1) or shrinks it.',
     params: [P('by', 'Zoom', '', 1.5, 0.1, 8)] },
-  { kind: 'rotate', label: 'Rotate', aliases: ['turn', 'spin'], type: 'rotate2d', posIn: 'input', posOut: 'output', animated: true, blurb: 'Turns the picture; Spin keeps it turning.',
+  { kind: 'rotate', label: 'Rotate', aliases: ['turn', 'spin'], type: 'transform', posIn: 'p', posOut: 'p', animated: true, blurb: 'Turns the picture; Spin keeps it turning.',
     params: [P('angle', 'Angle', 'angle', 30, -360, 360, 0.5, { deg: true }), P('spin', 'Spin', '', 0, -2, 2, 0.01, { hint: 'Whole turns a second. 0 stands still.' })] },
-  { kind: 'move', label: 'Move', aliases: ['offset', 'shift', 'pan', 'translate'], type: 'uvTransform2d', posIn: 'uv', posOut: 'result', blurb: 'Slides the picture.',
+  { kind: 'move', label: 'Move', aliases: ['offset', 'shift', 'pan', 'translate'], type: 'transform', posIn: 'p', posOut: 'p', blurb: 'Slides the picture.',
     params: [P('by', 'By', '', [0.25, 0], -3, 3)] },
   { kind: 'pixelate', label: 'Pixelate', aliases: ['pixel', 'mosaic', 'blocks'], type: 'pixelate', posIn: 'uv', posOut: 'uv', blurb: 'Snaps the picture to a coarse grid of blocks.',
     params: [P('size', 'Block size', 'pixelSize', 0.06, 0.005, 0.5, 0.005)] },

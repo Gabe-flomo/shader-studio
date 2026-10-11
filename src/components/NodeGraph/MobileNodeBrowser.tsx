@@ -64,7 +64,8 @@ function buildCategories(userNodesVersion: number, hidden: ReadonlySet<string>):
     .map(([name, subMap]) => ({
       name,
       subgroups: Array.from(subMap.entries())
-        .map(([subName, types]) => ({ name: subName, types: types.sort(byLabel) }))
+        // The universal Transform leads its group (docs/transform-node.md).
+        .map(([subName, types]) => ({ name: subName, types: types.sort((a, b) => (a === 'transform' ? -1 : b === 'transform' ? 1 : byLabel(a, b))) }))
         .sort((a, b) => {
           if (a.name === null) return b.name === null ? 0 : 1;   // unnamed group last
           if (b.name === null) return -1;

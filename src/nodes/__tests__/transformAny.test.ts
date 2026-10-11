@@ -38,7 +38,7 @@ describe('Transform (2D, 3D or 4D)', () => {
     expect(n3.inputs.grow.connection).toEqual({ nodeId: 'm', outputKey: 'grow' });
     const n4 = retypeTransform({ ...n3, params: { ...n3.params, dim: '4' } });
     expect(n4.inputs.p.type).toBe('vec4');
-    expect(n4.inputs.turn).toBeUndefined();
+    expect(n4.inputs.turn.type).toBe('float'); // the turn in the Spin plane
     // Loading runs the same sync.
     const loaded = migrateNodeParams({ ...node('2'), params: { ...node('2').params, dim: '4' } }, getNodeDefinition);
     expect(loaded.outputs.p.type).toBe('vec4');
@@ -47,7 +47,8 @@ describe('Transform (2D, 3D or 4D)', () => {
   it('2D: the same maths as Transform 2D', () => {
     const { code } = TransformNode.generateGLSL(node('2', { x: 0.5, rotate: 90, scale: 2 }), { p: 'uv' });
     expect(code).toContain('vec2 t_q = uv - (vec2(0.5, 0.0));');
-    expect(code).toContain('t_q = trfUnturn(t_q, 90.0 * 0.017453292519943295);');
+    expect(code).toContain('float t_a = (90.0 + 0.0 * u_time) * 0.017453292519943295;');
+    expect(code).toContain('t_q = trfUnturn(t_q, t_a);');
     expect(code).toContain('vec2 t_p = t_q / t_scale;');
   });
 

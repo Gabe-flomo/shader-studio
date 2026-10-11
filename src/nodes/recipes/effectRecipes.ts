@@ -48,10 +48,10 @@ export const FEEDBACK_RECIPES: StarterRecipe[] = [
       params: note('Previous Frame: the picture one frame ago, read through the turned UV.', 'Why: reading it a little shrunk and turned every frame makes the picture flow inward in a spiral.'),
       nodes: [
         n('uv', 'uv', col(-2), 0, note('UV: the position of each pixel, (0, 0) in the middle.')),
-        n('uvTransform2d', 'drift', col(-1), 0, { angle: 0.02, sx: 0.985, sy: 0.985, ...note(
-          'UV Transform 2D: shrinks the UV by 1.5% and turns it a little.',
-          'Why: wired into Previous Frame\'s UV, so last frame is read slightly zoomed and turned: the drift. Angle and Scale change the swirl.',
-        ) }, { uv: ['uv', 'uv'] }),
+        n('transform', 'drift', col(-1), 0, { dim: '2', mode: 'space', rotate: 1.1459, scale: 0.985, ...note(
+          'Transform (Apply mode): shrinks the UV by 1.5% and turns it a little (1.15°).',
+          'Why: wired into Previous Frame\'s UV, so last frame is read slightly zoomed and turned: the drift. Rotate and Scale change the swirl.',
+        ) }, { p: ['uv', 'uv'] }),
         n('time', 'time', col(-1), 360, note('Time: seconds since the start.', 'Why: makes the fresh colour change.')),
         n('fbm', 'noise', col(0), 400, { scale: 2, time_scale: 0.3, ...note('Fractal Noise: fresh, drifting values every frame.') }, { time: ['time', 'time'] }),
         n('palette', 'hue', col(1), 400, { preset: '0', scale: 1.5, ...note('Palette: the noise as colour: the fresh paint added each frame.') }, { value: ['noise', 'value'] }),
@@ -60,7 +60,7 @@ export const FEEDBACK_RECIPES: StarterRecipe[] = [
           'Why: Blend sets how fast the old picture is painted over. Lower for longer smears.',
         ) }, { a: [SELF, 'color'], b: ['hue', 'color'] })),
       ],
-      wire: { uv: ['drift', 'result'] },
+      wire: { uv: ['drift', 'p'] },
       show: ['blend', 'result'],
     }),
   },

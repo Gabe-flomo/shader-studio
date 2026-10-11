@@ -371,9 +371,9 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleAdd = (type: string) => {
+  const handleAdd = (type: string, params?: Record<string, unknown>) => {
     if (swapTargetNodeId) { swapNode(swapTargetNodeId, type); onNodeAdded?.(); return; }
-    addNode(type, spawnPoint());
+    addNode(type, spawnPoint(), params);
     onNodeAdded?.();
   };
 
@@ -402,7 +402,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               leading={<Icon name="search" size={15} style={{ color: tk.text.faint }} />}
               style={{ flexShrink: 0, marginBottom: 6 }}
             />
-            <NodeBrowser onAdd={handleAdd} onDragAdd={(type, pos) => addNode(type, pos)} onDragDone={onNodeAdded} swapTargetNodeId={swapTargetNodeId} favorites={favorites} onToggleFavorite={onToggleFavorite} nodeButtonRefs={nodeButtonRefs} searchQuery={query} context={context} onGlslInsert={onGlslInsert} onBuilderOpened={onNodeAdded} />
+            <NodeBrowser onAdd={handleAdd} onDragAdd={(type, pos, params) => addNode(type, pos, params)} onDragDone={onNodeAdded} swapTargetNodeId={swapTargetNodeId} favorites={favorites} onToggleFavorite={onToggleFavorite} nodeButtonRefs={nodeButtonRefs} searchQuery={query} context={context} onGlslInsert={onGlslInsert} onBuilderOpened={onNodeAdded} />
             {query.trim().length > 0 && (() => {
               // Examples that match the search too, under their own heading: "blur" finds the
               // Blur & Lens folder, "3D" the 3D examples, "midi" the MIDI one.
@@ -849,9 +849,9 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
 
   // ── Drawer mode ───────────────────────────────────────────────────────────
   if (mode === 'drawer') {
-    const handleAdd = (type: string) => {
+    const handleAdd = (type: string, params?: Record<string, unknown>) => {
       if (swapTargetNodeId) { swapNode(swapTargetNodeId, type); onNodeAdded?.(); return; }
-      addNode(type, spawnPoint());
+      addNode(type, spawnPoint(), params);
       onNodeAdded?.();
     };
     return (

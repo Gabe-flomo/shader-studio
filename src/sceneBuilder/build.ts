@@ -18,6 +18,7 @@
 import type { GraphNode, InputSocket, OutputSocket, SubgraphData } from '../types/nodeGraph';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
+import { startingSockets } from '../nodes/definitions/transformAny';
 import { estimateNodeHeight, layoutByRank } from '../store/graphLayout';
 import {
   SHAPE_BY_KIND, WARP_BY_KIND, allShapes, effectiveStepScale, filterTree, itemName, num, opLabel, stepHints,
@@ -63,13 +64,15 @@ export interface Ctx {
 export function mk(ctx: Ctx, type: string, role: string, params: Record<string, unknown>, wires: Record<string, Ref | null | undefined>, note: string, list = ctx.nodes): GraphNode {
   const def = getNodeDefinition(type);
   if (!def) throw new Error(`Scene Builder: unknown node type ${type}`);
+  // A Transform's sockets follow its Dimension (transformAny.ts).
+  const sockets = startingSockets(type, def, { ...(def.defaultParams ?? {}), ...params });
   const inputs: Record<string, InputSocket> = {};
-  for (const [k, s] of Object.entries(def.inputs)) {
+  for (const [k, s] of Object.entries(sockets.inputs)) {
     const w = wires[k];
     inputs[k] = { type: s.type, label: s.label, ...(w ? { connection: { ...w } } : {}) };
   }
   const outputs: Record<string, OutputSocket> = {};
-  for (const [k, s] of Object.entries(def.outputs)) outputs[k] = { type: s.type, label: s.label };
+  for (const [k, s] of Object.entries(sockets.outputs)) outputs[k] = { type: s.type, label: s.label };
   const full = (ctx.rolePrefix ?? '') + role;
   const node: GraphNode = {
     id: ctx.idFor(full), type, position: { x: 0, y: 0 }, inputs, outputs,
@@ -150,8 +153,7 @@ function warpNote(ctx: Ctx, w: WarpSpec, on: string): string {
   });
   if (def.axes) vals.unshift(`${def.axes.label} ${w.values[def.axes.key]}`);
   const step = hint < 1 ? ` It stretches space, so the march takes smaller steps (it asks for Step Scale ${fmt(hint)}; the loop uses ${fmt(effectiveStepScale(ctx.spec))}).` : '';
-  const how = w.kind === 'scale' ? ` Scale 3D multiplies the point by ${fmt(scaleParam(w))} (1 ÷ ${fmt(num(w.values.s, 1.5))}), which grows what it measures; a second Scale 3D after the distance multiplies it back so the march stays exact.`
-    : w.kind === 'round' ? ` An Offset of ${fmt(-num(w.values.r, 0.05))} on the distance: the surface moves out and its edges round off.`
+  const how = w.kind === 'round' ? ` An Offset of ${fmt(-num(w.values.r, 0.05))} on the distance: the surface moves out and its edges round off.`
     : w.kind === 'onion' ? ' abs(distance) − thickness: only a skin is left.'
     : '';
   return `${def.label} on ${on}: ${def.blurb}${vals.length ? ` ${vals.join(', ')}.` : ''}${how}${step}`;
@@ -170,16 +172,12 @@ function emitWarps(ctx: Ctx, warps: WarpSpec[], pos: Ref, on: string, list: Grap
     const def = WARP_BY_KIND[w.kind];
     if (!def) { ctx.warnings.push(`${on}: “${w.label ?? w.kind}” can't be built (it was a custom part); left out.`); continue; }
     if (def.modifier) { modifiers.push({ w, pos }); continue; }
-    if (w.kind === 'rotate') {
-      // Like a shape's Rotation: X, then Y, then Z, so the point turns the other way, Z first.
-      const by = (Array.isArray(w.values.by) ? w.values.by : [0, 0, 0]) as Vec3;
-      const nonzero = ([[2, 'z'], [1, 'y'], [0, 'x']] as const).filter(([i]) => by[i]);
-      const axes = nonzero.length ? nonzero : [[1, 'y'] as const];
-      axes.forEach(([i, axis], k) => {
-        const n = mk(ctx, 'rotate3D', `${w.id}:${axis}`, { axis, angle: -rad(by[i]) }, { pos },
-          `${k === 0 ? warpNote(ctx, w, on) : `Rotate on ${on}, continued.`} This node turns about ${axis.toUpperCase()} by ${fmt(by[i])}° (the point the other way, ${fmt(-rad(by[i]))} radians).`, list);
-        pos = ref(n, 'pos');
-      });
+    // Move, Turn, Rotate and Scale are one Transform each (docs/transform-node.md); _sbKind says which.
+    const trf = transformWarp(w);
+    if (trf) {
+      const n = mk(ctx, 'transform', `${w.id}`, { dim: '3', ...trf.params, [WARP_KIND_KEY]: w.kind }, { p: pos }, `${warpNote(ctx, w, on)} ${trf.how}`, list);
+      pos = ref(n, 'p');
+      if (def.distStep) modifiers.push({ w, pos });
       continue;
     }
     const n = mk(ctx, def.type, `${w.id}`, warpParams(w), { [def.posIn]: pos }, warpNote(ctx, w, on), list);
@@ -189,16 +187,48 @@ function emitWarps(ctx: Ctx, warps: WarpSpec[], pos: Ref, on: string, list: Grap
   return { pos, modifiers };
 }
 
+/** The Scene Builder warp a Transform stands for (Move, Turn, Rotate, Scale), on the node: recognize.ts reads it back. */
+export const WARP_KIND_KEY = '_sbKind';
+
+/** A Move / Turn / Rotate / Scale warp as a 3D Transform's settings, with a sentence on what it does. Null for other warps. */
+export function transformWarp(w: WarpSpec): { params: Record<string, unknown>; how: string } | null {
+  const v3of = (x: unknown) => (Array.isArray(x) ? x : [0, 0, 0]) as Vec3;
+  if (w.kind === 'move') {
+    const by = v3of(w.values.by);
+    return { params: { x: by[0], y: by[1], z: by[2] }, how: `A Transform: Move ${v3(by)}.` };
+  }
+  if (w.kind === 'rotate') {
+    // Like a shape's Rotation: X, then Y, then Z.
+    const by = v3of(w.values.by);
+    return { params: { rx: by[0], ry: by[1], rz: by[2] }, how: `A Transform: Rotate ${v3(by)}° (X, then Y, then Z).` };
+  }
+  if (w.kind === 'turn') {
+    // Turn moves the point about the axis (Apply mode), as Rotate 3D did.
+    const axis = String(w.values.axis ?? 'y');
+    const deg = num(w.values.angle, 0);
+    return { params: { mode: 'space', [`r${['x', 'y', 'z'].includes(axis) ? axis : 'y'}`]: deg }, how: `A Transform in Apply mode: turns the point ${fmt(deg)}° about ${axis.toUpperCase()}.` };
+  }
+  if (w.kind === 'scale') {
+    const s = num(w.values.s, 1.5);
+    return { params: { scale: s }, how: `A Transform: Scale ${fmt(s)} divides the point by ${fmt(s)}, which grows what it measures; a second Transform after the distance multiplies it back so the march stays exact.` };
+  }
+  return null;
+}
+
 /** The distance steps, innermost (the last in the stack) first: a stack reads outside in, like the recipe. */
 function emitModifiers(ctx: Ctx, mods: DistStep[], dist: Ref, on: string, list: GraphNode[]): Ref {
   for (const { w, pos } of [...mods].reverse()) {
     const def = WARP_BY_KIND[w.kind];
     const step = def.distStep!;
     const role = def.modifier ? w.id : `${w.id}:dist`;
-    const params = w.kind === 'scale' ? { scale: scaleParam(w) } : warpParams(w);
-    const note = def.modifier ? warpNote(ctx, w, on)
-      : `Scale on ${on}, the distance half: multiplies the distance by ${fmt(num(w.values.s, 1.5))} (dividing by its Scale ${fmt(scaleParam(w))}), so it is in the scene's units again. Keep its Scale equal to the first Scale 3D's.`;
-    const n = mk(ctx, step.type, role, params, { [step.distIn]: dist, ...(step.posIn ? { [step.posIn]: pos } : {}) }, note, list);
+    if (w.kind === 'scale') {
+      // Scale's distance half: a second Transform with the same Scale, the distance through its Distance sockets.
+      const n = mk(ctx, 'transform', role, { dim: '3', scale: num(w.values.s, 1.5), [WARP_KIND_KEY]: 'scale' }, { dist },
+        `Scale on ${on}, the distance half: multiplies the distance by its Scale ${fmt(num(w.values.s, 1.5))}, so it is in the scene's units again. Keep its Scale equal to the first Transform's.`, list);
+      dist = ref(n, 'dist');
+      continue;
+    }
+    const n = mk(ctx, step.type, role, warpParams(w), { [step.distIn]: dist, ...(step.posIn ? { [step.posIn]: pos } : {}) }, warpNote(ctx, w, on), list);
     dist = ref(n, step.distOut);
   }
   return dist;
@@ -219,18 +249,15 @@ function emitShape(ctx: Ctx, sh: ShapeSpec, pos: Ref, list: GraphNode[]): Ref | 
   const def = SHAPE_BY_KIND[sh.kind];
   const warped = emitWarps(ctx, sh.warps, pos, name, list);
   pos = warped.pos;
-  if (sh.at.some(v => v !== 0)) {
-    const n = mk(ctx, 'translate3D', `${sh.id}:at`, { tx: sh.at[0], ty: sh.at[1], tz: sh.at[2] }, { pos },
-      `Moves ${name} to ${v3(sh.at)}. A shape is measured in its own space, so space is shifted the other way first: that puts the shape there.`, list);
-    pos = ref(n, 'pos');
-  }
-  // Turned X, then Y, then Z: the point is turned the other way, Z first.
-  for (const [i, axis] of [[2, 'z'], [1, 'y'], [0, 'x']] as const) {
-    const deg = sh.rot[i];
-    if (!deg) continue;
-    const n = mk(ctx, 'rotate3D', `${sh.id}:rot${axis}`, { axis, angle: -rad(deg) }, { pos },
-      `Turns ${name} ${fmt(deg)}° about ${axis.toUpperCase()}. The point is turned the other way (${fmt(-rad(deg))} radians) before the shape measures it, which turns the shape this way.`, list);
-    pos = ref(n, 'pos');
+  // Where the shape is and how it is turned: one Transform (Move, then Rotate X, then Y, then Z).
+  if (sh.at.some(v => v !== 0) || sh.rot.some(v => v !== 0)) {
+    const bits = [
+      ...(sh.at.some(v => v !== 0) ? [`moves ${name} to ${v3(sh.at)}`] : []),
+      ...(sh.rot.some(v => v !== 0) ? [`turns it ${v3(sh.rot)}° (about X, then Y, then Z)`] : []),
+    ];
+    const n = mk(ctx, 'transform', `${sh.id}:at`, { dim: '3', x: sh.at[0], y: sh.at[1], z: sh.at[2], rx: sh.rot[0], ry: sh.rot[1], rz: sh.rot[2] }, { p: pos },
+      `Places ${name}: ${bits.join(' and ')}. A shape is measured in its own space, so the point is moved and turned the other way first: that puts the shape there.`, list);
+    pos = ref(n, 'p');
   }
   const rounded = def.roundType && Number(sh.size.round ?? 0) > 0;
   const params: Record<string, unknown> = {};

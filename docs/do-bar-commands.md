@@ -603,7 +603,7 @@ Examples:
 
 ### zoom
 
-Zoom / rotate the space (UV Transform).
+Zoom / rotate the space (a Transform).
 
 Words: `zoom`, `scale`, `rotate`, `turn`, `tilt`, `magnify`
 
