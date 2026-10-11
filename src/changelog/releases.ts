@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.157',
+    date: '2026-10-11',
+    title: 'Faster moving grids',
+    highlights: [
+      { area: 'Studio', text: 'Grid builder: big motion with lag is up to 4× faster, and dragging any shape slider past its built range never clips or rebuilds.' },
+      { area: 'Studio', text: 'Grid builder: "Copies match the drawn cell" makes every repeated copy move and look alike. Fixed: swap rules with a partner failed to compile.' },
+    ],
+  },
+  {
     id: '2026.10.156',
     date: '2026-10-11',
     title: 'Splat builder',

@@ -70,6 +70,8 @@ describe('spec → graph: everything compiles', () => {
     compiles(s);
     const prog = gridProgram(s).functions;
     if (!ruleProblem(s, s.rules[0])) expect(prog).toContain('// r1');
+    // No two underscores in a row anywhere (reserved in GLSL ES: the GPU refuses them; a swap's mirrored rule r1~ once made one).
+    expect(prog).not.toMatch(/__/);
   });
   it('a swap runs both ways', () => {
     const s = twoShapes();
