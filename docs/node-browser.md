@@ -184,3 +184,55 @@ Scene Pos and Scene Output appear only inside a Scene Group, and Scene Distance 
 ## Searching
 
 Type in the search bar to filter across all categories. Results show the node name and category tag. The search also matches the node's GLSL function name and description.
+
+---
+
+## Node search (Shift+Space)
+
+**Shift+Space** on the canvas (or **A**, a wire's **+**, a socket's **Add node…**, the phone's Add node)
+opens the node search: a wide panel (about 16:9, centred; full screen on a phone) in the app's
+light or dark theme. Code: `src/components/NodeGraph/NodeSearchPalette.tsx` (the panel) and
+`nodeSearchModel.ts` (matching, ranking, tiles, keyboard), with the library's rows in
+`libraryRows.ts`, shared with this browser.
+
+**Opening.** With nothing typed it shows tiles, not nodes:
+
+- Shortcuts first: **Builders** (opens the Scene builder), **Usually next** (what usually goes with
+  the selected node, or the node a wire came from), **Recent** (nodes you added lately, here or in
+  the browser), **Favourites** (the browser's starred nodes; star one from the search's preview too)
+  and **Group presets**. Each shows only when it has something in it.
+- Then every category, by section, with its colour, icon, count and a few node names.
+
+A tile opens with a click or Enter: its nodes as a grid, by sub-group, with a breadcrumb. **Esc**,
+**Backspace** in the empty field or the back arrow return to the tiles, with the tile you came from
+highlighted.
+
+**Typing** replaces the tiles with results, in two lightly labelled groups:
+
+1. **Matches**, by tier: the exact name, then names that start with what you typed, then a word of
+   the name starting with it (each word typed may start a different word: "blur gau" finds Gaussian
+   Blur), then fuzzy (inside the name, the type id, or the letters in order from a word start), then
+   keywords (the words a node leads for, like Transform's "move" and "translate", old names, the
+   category, a whole word of the description). Within a tier, closer matches come first, then what
+   fits where you are (below), then the name. The **top 8** are tiles; the rest are a list.
+2. **Related**: nodes the text didn't find that fit where you are: what usually goes with the
+   selected node or the wire's node (your graphs and the examples' prior, suggestions/rank
+   `affinity`, and the examples' follow counts, structure/relevance) and your recent nodes, each
+   with why ("Usually goes with Circle SDF", "Used recently").
+
+Nodes only offered in a scope (Scene Pos inside a Scene Group…) follow the add scope. **Relevant
+only / Show all** works as in the browser: with Relevant only, categories for another kind of graph
+(3D in a 2D graph) move under "Show what's not for this graph", 3D-only matches carry a badge and
+sink to the end of their tier, and Related leaves them out. Opened from a wire, only nodes that fit
+it are listed (a chip in the header says which type) and the added node is wired.
+
+**Keys.** Arrows move across tile grids and lists (while typing, up and down go through the
+results in order and left and right move the text cursor); **Tab** / **Shift+Tab** jump to the
+next or previous group; **Enter** adds the node or opens the tile; **Esc** clears the field, then
+goes back, then closes. The highlighted node's preview, description, sockets and a favourite star
+are in the side panel (on a phone, its one line is in the footer). A node is added where the search
+was opened for (the view's free centre, or beside the socket), as before.
+
+The popups that were still dark in light mode now follow the theme too: the Settings / keyboard
+shortcuts window (`KeyboardShortcutsModal.tsx`), the asset right-click menu
+(`AssetContextMenu.tsx`) and a group's parameter picker (`GroupParamPicker.tsx`).

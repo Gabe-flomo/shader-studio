@@ -17,7 +17,8 @@ import {
 } from '../store/useNodeGraphStore';
 import { pickDirectory } from '../utils/fileIO';
 import { LibraryPanel } from './shell/LibraryPanel';
-import { ctp } from '../theme/palette';
+import { useCtp } from '../theme/nodePalette';
+import { useTokens } from '../theme/themeStore';
 
 const isTauri = (): boolean =>
   typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -29,6 +30,9 @@ interface Props {
 type Tab = 'shortcuts' | 'preferences';
 
 export function KeyboardShortcutsModal({ onClose }: Props) {
+  // Follows the app's light/dark setting (it used to be dark in both).
+  const ctp = useCtp();
+  const tk = useTokens();
   const [tab, setTab] = useState<Tab>('shortcuts');
   const [map, setMap]       = useState<ShortcutMap>(loadShortcutMap);
   const [binding, setBinding] = useState<string | null>(null); // actionId being rebound
@@ -105,7 +109,7 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
 
   const backdrop: React.CSSProperties = {
     position: 'fixed', inset: 0, zIndex: 1000,
-    background: 'rgba(0,0,0,0.6)',
+    background: tk.bg.scrim,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   };
   const modal: React.CSSProperties = {
@@ -117,7 +121,7 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
     maxWidth: '95vw',
     maxHeight: '80vh',
     overflowY: 'auto',
-    boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
+    boxShadow: tk.shadow.modal,
     color: ctp.text,
     fontFamily: 'system-ui, sans-serif',
     fontSize: '13px',

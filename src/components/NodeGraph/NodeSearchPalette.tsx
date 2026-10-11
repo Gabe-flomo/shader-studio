@@ -1,93 +1,53 @@
 /**
- * NodeSearchPalette — floating fuzzy-search popup for adding nodes.
+ * NodeSearchPalette — the node search (Shift+Space, the A shortcut, a wire's "+", Add node…), see
+ * docs/node-browser.md "Node search". A wide panel in the app's theme:
  *
- * Opens on the 'a' shortcut (or via setSearchPaletteOpen from store).
- * Type to fuzzy-filter node types, arrow keys to navigate, Enter/click to place.
- * Escape closes without placing.
+ *  - Empty: the library's categories as tiles (name, colour, count, a few node names), with
+ *    Builders, Usually next, Recent, Favourites and Group presets tiles first. A tile opens its
+ *    nodes as a grid; Back, Esc or Backspace in the empty field goes back.
+ *  - Typing: Matches (exact name, name prefix, word prefix, fuzzy, keywords), the top 8 as tiles and
+ *    the rest as a list, then Related (what usually goes with the node you came from, recent ones).
+ *  - The highlighted node's preview and description sit in the side panel (a footer line on a phone).
+ *  - Arrows move across grids and lists, Tab jumps between groups, Enter adds (or opens).
+ *
+ * Adding places the node at `spawnPosition` (else the view's free centre) and calls `onNodePlaced`,
+ * which wires it when the search was opened from a wire.
  */
-
-import { scoreNodeDef } from '../../nodes/searchNodes';
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
 import { getOfferedDefinitions, getNodeDefinition } from '../../nodes/definitions';
 import { useUserNodesVersion } from '../../nodes/userNodes/useUserNodes';
-import type { NodeDefinition } from '../../types/nodeGraph';
+import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
+import type { GroupPreset } from '../../types/groupPreset';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { affinity, rankTables } from '../../suggestions';
-import { inTargetStage, STAGE_SEARCH_POINTS } from '../../structure/boost';
-import { currentStageTarget } from '../../structure/hintsStore';
-import { CATEGORY_COLORS, HIDDEN_TYPES } from './nodeCategoryMeta';
+import { categoryFits, exampleFollowCounts, misfitBadge } from '../../structure/relevance';
+import { useLibraryPrefs } from '../../structure/libraryPrefs';
+import { FLOWS } from '../../structure/stages';
+import { CATEGORY_ROLES, HIDDEN_TYPES } from './nodeCategoryMeta';
+import { CATEGORY_GROUPS, CATEGORY_INFO, CATEGORY_SECTIONS, HIDDEN_NODES, MERGED_CATEGORIES, ROW_ADD_PARAMS, VIRTUAL_ROWS, byLabel, nodesOfRow, rowLabel } from './libraryRows';
 import { useHiddenHere } from './useAddScope';
-import { ctp } from '../../theme/palette';
+import { useLibraryContext } from './useLibraryRelevance';
 import { spawnPoint } from './spawnPoint';
-
-// ── Build searchable list once ─────────────────────────────────────────────────
-interface SearchEntry {
-  type: string;
-  def: NodeDefinition;
-  searchKey: string; // label + type + category + description, lowercased
-}
-
-// Built-ins never change; user-published nodes do, so the full list is
-// rebuilt whenever the user-node registry version bumps (see useMemo below).
-function buildEntries(userNodesVersion: number, hidden: ReadonlySet<string>): SearchEntry[] {
-  void userNodesVersion; // the argument is what invalidates the memo below
-  return getOfferedDefinitions()
-    // Deprecated nodes stay loadable from saved graphs but aren't offered for new ones.
-    .filter(def => !hidden.has(def.type))
-    .map(def => ({
-      type: def.type,
-      def,
-      searchKey: [def.label, ...(def.aliases ?? []), def.type, def.category, def.description ?? ''].join(' ').toLowerCase(),
-    }));
-}
-
-// ── Scorer — substring/prefix only, no fuzzy char-scatter ────────────────────
-function scoreEntry(entry: SearchEntry, query: string): number {
-  return scoreNodeDef(entry.def, query);
-}
-
-// ── Component ─────────────────────────────────────────────────────────────────
-
-/** The browsing group of learned picks (suggestions). */
-const USUALLY_NEXT = 'Usually next';
-
-// ── Type compatibility helpers ─────────────────────────────────────────────────
-// float can feed into any type; anything can feed into float (promotion)
-function outputMatchesFilter(nodeType: string, filterOutputType: string): boolean {
-  const def = getNodeDefinition(nodeType);
-  if (!def) return false;
-  return Object.values(def.outputs).some(o => {
-    if (o.type === filterOutputType) return true;
-    // float is universally compatible as a source
-    if (o.type === 'float') return true;
-    return false;
-  });
-}
-
-// Expr Block / Custom Fn declare their real sockets dynamically (from
-// params.inputs, rebuilt by updateNodeSockets) — the static NodeDefinition
-// always shows `inputs: {}`. A fresh instance already ships with default
-// inputs of assorted types (and the user can add any type afterward), so
-// treat them as always able to consume whatever's being wired in, rather
-// than filtering them out for having no *static* input to match against.
-const DYNAMIC_INPUT_NODE_TYPES = new Set(['exprNode', 'customFn']);
-
-function inputMatchesFilter(nodeType: string, filterInputType: string): boolean {
-  if (DYNAMIC_INPUT_NODE_TYPES.has(nodeType)) return true;
-  const def = getNodeDefinition(nodeType);
-  if (!def) return false;
-  return Object.values(def.inputs).some(i => {
-    if (i.type === filterInputType) return true;
-    // float output can feed into any type
-    if (filterInputType === 'float') return true;
-    return false;
-  });
-}
+import {
+  TOP_COUNT, SECTION_LOOK, categorySections, contextScore, defsOf, navMove, passesWireFilter, rankMatches, rankRelated,
+  type NavKey, type NavPos, type RelatedContext,
+} from './nodeSearchModel';
+import { recentNodes, recordRecentNode, favoriteNodes, toggleFavoriteNode } from '../../nodes/recentNodes';
+import { BUILDERS, matchBuilders, type BuilderInfo } from '../../builders/registry';
+import { openBuilder } from '../../builders/open';
+import { useTokens } from '../../theme/themeStore';
+import { useCtp, type CtpPalette } from '../../theme/nodePalette';
+import { alpha, fontFamily, radius, type Tokens } from '../../theme/tokens';
+import { Icon } from '../ui/Icon';
+import type { IconName } from '../ui/iconPaths';
+import { Button, IconButton } from '../ui/Button';
+import { DocText } from '../ui/DocText';
+import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  /** Where to place the node — centre of the current viewport if not provided */
+  /** Where to place the node — the free centre of the current view if not provided */
   spawnPosition?: { x: number; y: number };
   /** If set, only show nodes that have at least one output compatible with this type */
   filterOutputType?: string;
@@ -95,34 +55,110 @@ interface Props {
   filterInputType?: string;
   /** Called after addNode with the new node's ID */
   onNodePlaced?: (nodeId: string) => void;
-  /**
-   * Results that usually go with this node type rank higher (suggestions: your graphs, then the
-   * examples). Defaults to the selected node's type.
-   */
+  /** Related results follow this node type (the wire's end). Defaults to the selected node's type. */
   boostFrom?: string;
 }
 
-export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputType, filterInputType, onNodePlaced, boostFrom }: Props) {
+export function NodeSearchPalette(props: Props) {
+  // Mounted only while open, so every opening starts on the categories with an empty field.
+  return props.open ? <SearchPanel {...props} /> : null;
+}
+
+// ── Items and screens ─────────────────────────────────────────────────────────
+
+type Item =
+  | { kind: 'node'; key: string; def: NodeDefinition; why?: string; badge?: string; params?: Record<string, unknown> }
+  | { kind: 'tile'; key: string; title: string; count: number; preview: string[]; icon: IconName; color: string; info?: string; open: () => void }
+  | { kind: 'builder'; key: string; b: BuilderInfo }
+  | { kind: 'preset'; key: string; preset: GroupPreset }
+  | { kind: 'action'; key: string; label: string; run: () => void };
+
+interface Section {
+  id: string;
+  label?: string;
+  /** A light note beside the label ("after Circle SDF"). */
+  note?: string;
+  layout: 'grid' | 'list';
+  items: Item[];
+  /** Search groups, for tests and styling. */
+  group?: 'matches' | 'related';
+}
+
+type View =
+  | { kind: 'home' }
+  | { kind: 'row'; row: string }
+  | { kind: 'favorites' }
+  | { kind: 'recent' }
+  | { kind: 'related' }
+  | { kind: 'presets' };
+
+const viewTitle = (v: View): string => (
+  v.kind === 'row' ? rowLabel(v.row)
+    : v.kind === 'favorites' ? 'Favourites'
+      : v.kind === 'recent' ? 'Recent'
+        : v.kind === 'related' ? 'Usually next'
+          : v.kind === 'presets' ? 'Group presets' : 'Nodes'
+);
+
+/** Phone-sized windows get the full-screen layout. */
+function useNarrow(limit = 720): boolean {
+  const get = () => (typeof window === 'undefined' ? false : window.innerWidth < limit);
+  const [narrow, setNarrow] = useState(get);
+  useEffect(() => {
+    const on = () => setNarrow(get());
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return narrow;
+}
+
+function SearchPanel({ onClose, spawnPosition, filterOutputType, filterInputType, onNodePlaced, boostFrom }: Props) {
+  const tk = useTokens();
+  const pal = useCtp();
+  const narrow = useNarrow();
   const addNode = useNodeGraphStore(s => s.addNode);
   const groupPresets = useNodeGraphStore(s => s.groupPresets);
   const instantiateGroupPreset = useNodeGraphStore(s => s.instantiateGroupPreset);
   const deleteGroupPreset = useNodeGraphStore(s => s.deleteGroupPreset);
 
-  const [query, setQuery]       = useState('');
-  const [activeIdx, setActiveIdx] = useState(0);
-  const inputRef  = useRef<HTMLInputElement>(null);
-  const listRef   = useRef<HTMLUListElement>(null);
+  const [query, setQuery] = useState('');
+  const [view, setView] = useState<View>({ kind: 'home' });
+  const [pos, setPos] = useState<NavPos>({ s: 0, i: 0 });
+  const [showOther, setShowOther] = useState(false);
+  const [favorites, setFavorites] = useState<string[]>(favoriteNodes);
+  const [cols, setCols] = useState(4);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const userNodesVersion = useUserNodesVersion();
   // Scene Pos / Scene Output… only inside the group they belong to (nodes/addScope.ts).
-  const hidden = useHiddenHere(HIDDEN_TYPES);
-  const ALL_ENTRIES = useMemo(() => buildEntries(userNodesVersion, hidden), [userNodesVersion, hidden]);
+  const hiddenSearch = useHiddenHere(HIDDEN_TYPES);
+  const hiddenBrowse = useHiddenHere(HIDDEN_NODES);
+  const libCtx = useLibraryContext(true);
+  const relevantOnly = useLibraryPrefs(s => s.relevantOnly);
+  const setRelevantOnly = useLibraryPrefs(s => s.setRelevantOnly);
+  const wiring = !!(filterOutputType || filterInputType);
 
-  // What usually goes with the node you came from (or the selected one): a nudge within a match tier.
-  const boost = useMemo(() => {
-    if (!open) return () => 0;
+  const wireOk = useCallback((d: NodeDefinition) => passesWireFilter(d, filterOutputType, filterInputType), [filterOutputType, filterInputType]);
+  const misfit = useCallback((d: NodeDefinition) => relevantOnly && !categoryFits(d.category, libCtx.flow), [relevantOnly, libCtx.flow]);
+  const acceptBrowse = useCallback((d: NodeDefinition) => !hiddenBrowse.has(d.type) && wireOk(d), [hiddenBrowse, wireOk]);
+
+  const searchDefs = useMemo(() => {
+    void userNodesVersion; // published node types change the list
+    return getOfferedDefinitions().filter(d => !hiddenSearch.has(d.type) && wireOk(d));
+  }, [userNodesVersion, hiddenSearch, wireOk]);
+
+  // ── Context: the node you came from, what usually goes with it, what you added lately ──
+  const from = useMemo(() => {
+    const wire = useLibraryPrefs.getState().wire;
+    if (boostFrom) return boostFrom;
+    if (wire) return wire.nodeType;
     const st = useNodeGraphStore.getState();
-    const from = boostFrom ?? (st.selectedNodeId ? (st.nodes.find(n => n.id === st.selectedNodeId) ?? getActiveNodes(st.nodes, st.activeGroupPath)?.find(n => n.id === st.selectedNodeId))?.type : undefined);
+    if (!st.selectedNodeId) return null;
+    const n = st.nodes.find(x => x.id === st.selectedNodeId) ?? getActiveNodes(st.nodes, st.activeGroupPath)?.find(x => x.id === st.selectedNodeId);
+    return n?.type ?? null;
+  }, [boostFrom]);
+  const affinityOf = useMemo(() => {
     if (!from) return () => 0;
     const tables = rankTables();
     const cache = new Map<string, number>();
@@ -131,397 +167,540 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
       if (v === undefined) { v = affinity(from, type, tables); cache.set(type, v); }
       return v;
     };
-  }, [open, boostFrom]);
+  }, [from]);
+  const [follows, setFollows] = useState<ReadonlyMap<string, number> | null>(null);
+  useEffect(() => {
+    if (!from) return;
+    let live = true;
+    exampleFollowCounts().then(c => { if (live) setFollows(c.get(from) ?? new Map()); }, () => { /* the examples are a nicety */ });
+    return () => { live = false; };
+  }, [from]);
+  const recents = useMemo(() => recentNodes(), []);
+  const ctx = useMemo<RelatedContext>(() => ({
+    fromType: from, fromLabel: from ? getNodeDefinition(from)?.label ?? from : null, affinity: affinityOf, follows, recents,
+  }), [from, affinityOf, follows, recents]);
+  const offered = useMemo(() => new Set(searchDefs.map(d => d.type)), [searchDefs]);
+  const fitDefs = useMemo(() => searchDefs.filter(d => !misfit(d)), [searchDefs, misfit]);
+  const usuallyNext = useMemo(() => (from ? rankRelated(fitDefs, { ...ctx, recents: [] }, new Set(), 16) : []), [from, fitDefs, ctx]);
 
-  // The flow strip's next stage: a small lean within a match tier (structure/boost.ts).
-  const stageTarget = useMemo(() => (open ? currentStageTarget() : null), [open]);
-
-  // Filtered + ranked results
-  const results = useMemo<SearchEntry[]>(() => {
-    const base = (filterOutputType || filterInputType)
-      ? ALL_ENTRIES.filter(e => {
-          if (filterOutputType && !outputMatchesFilter(e.type, filterOutputType)) return false;
-          if (filterInputType  && !inputMatchesFilter(e.type,  filterInputType))  return false;
-          return true;
-        })
-      : ALL_ENTRIES;
-    if (!query) return base.slice(0, 80);
-    return base
-      .map(e => ({ entry: e, score: scoreEntry(e, query) }))
-      .filter(({ score }) => score > 0)
-      // Usage nudges within a tier (worth under one tier: 15 of the 20 between tiers).
-      .map(x => ({ ...x, score: x.score + Math.min(1, boost(x.entry.type) * 3) * 15 + (inTargetStage(x.entry.type, stageTarget) ? STAGE_SEARCH_POINTS : 0) }))
-      .sort((a, b) => b.score - a.score || a.entry.def.label.localeCompare(b.entry.def.label))
-      .map(({ entry }) => entry);
-  }, [ALL_ENTRIES, query, filterOutputType, filterInputType, boost, stageTarget]);
-
-  // Browsing: what usually goes with the node you came from leads, as its own group.
-  const picks = useMemo<SearchEntry[]>(() => {
-    if (query) return [];
-    const base = (filterOutputType || filterInputType) ? results : ALL_ENTRIES;
-    return base.map(e => ({ e, b: boost(e.type) })).filter(x => x.b > 0.02).sort((a, b) => b.b - a.b).slice(0, 5).map(x => x.e);
-  }, [query, results, ALL_ENTRIES, filterOutputType, filterInputType, boost]);
-
-  // Group results by category
-  const grouped = useMemo(() => {
-    const map = new Map<string, SearchEntry[]>();
-    if (picks.length) map.set(USUALLY_NEXT, picks);
-    for (const e of results) {
-      if (picks.includes(e)) continue;
-      const arr = map.get(e.def.category) ?? [];
-      arr.push(e);
-      map.set(e.def.category, arr);
+  // ── Actions ──
+  const place = useCallback((type: string, params?: Record<string, unknown>) => {
+    const newId = addNode(type, spawnPosition ?? spawnPoint(), params);
+    if (newId) {
+      recordRecentNode(type);
+      onNodePlaced?.(newId);
     }
-    return map;
-  }, [results, picks]);
-
-  // Flat list for keyboard navigation (same order as rendered)
-  const flatList = useMemo(() => (query ? results : [...grouped.values()].flat()), [query, results, grouped]);
-
-  // Reset on open
-  useEffect(() => {
-    if (open) {
-      setQuery('');
-      setActiveIdx(0);
-      setTimeout(() => inputRef.current?.focus(), 0);
-    }
-  }, [open]);
-
-  // Clamp activeIdx when results change
-  useEffect(() => {
-    setActiveIdx(i => Math.min(i, Math.max(0, flatList.length - 1)));
-  }, [flatList]);
-
-  // Scroll active item into view
-  useEffect(() => {
-    const item = listRef.current?.querySelector<HTMLLIElement>('[data-active="true"]');
-    item?.scrollIntoView({ block: 'nearest' });
-  }, [activeIdx]);
-
-  const place = useCallback((type: string) => {
-    const pos = spawnPosition ?? spawnPoint();
-    const newId = addNode(type, pos);
-    if (newId && onNodePlaced) onNodePlaced(newId);
     onClose();
   }, [addNode, spawnPosition, onClose, onNodePlaced]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') { onClose(); return; }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setActiveIdx(i => Math.min(i + 1, flatList.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setActiveIdx(i => Math.max(i - 1, 0));
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      const entry = flatList[activeIdx];
-      if (entry) place(entry.type);
+  const goTo = useCallback((v: View) => { setView(v); setPos({ s: 0, i: 0 }); scrollRef.current?.scrollTo?.({ top: 0 }); inputRef.current?.focus(); }, []);
+  // Back highlights the tile you came from.
+  const returnTo = useRef<string | null>(null);
+  const back = useCallback(() => {
+    returnTo.current = view.kind === 'row' ? `c:${view.row}` : view.kind === 'home' ? null : `t:${view.kind}`;
+    goTo({ kind: 'home' });
+  }, [goTo, view]);
+
+  const nodeItem = useCallback((def: NodeDefinition, extra: Partial<Extract<Item, { kind: 'node' }>> = {}): Item => ({
+    kind: 'node', key: `n:${def.type}`, def,
+    badge: relevantOnly ? misfitBadge(def.category, libCtx.flow) ?? undefined : undefined, ...extra,
+  }), [relevantOnly, libCtx.flow]);
+
+  // ── The screen: its groups of items ──
+  const sections = useMemo<Section[]>(() => {
+    const q = query.trim();
+    if (q) {
+      const matches = rankMatches(searchDefs, q, { context: t => contextScore(t, ctx), misfit });
+      const related = rankRelated(fitDefs, ctx, new Set(matches.map(m => m.def.type)), TOP_COUNT);
+      const out: Section[] = [];
+      const builders = wiring ? [] : matchBuilders(q);
+      if (builders.length) out.push({ id: 'builders', label: 'Builders', layout: 'list', items: builders.map(b => ({ kind: 'builder', key: `b:${b.id}`, b })) });
+      const ql = q.toLowerCase();
+      const presets = wiring ? [] : groupPresets.filter(p => p.label.toLowerCase().includes(ql) || p.description?.toLowerCase().includes(ql));
+      if (presets.length) out.push({ id: 'presets', label: 'Group presets', layout: 'list', items: presets.map(p => ({ kind: 'preset', key: `p:${p.id}`, preset: p })) });
+      out.push({ id: 'top', label: 'Matches', note: matches.length ? String(matches.length) : undefined, layout: 'grid', group: 'matches', items: matches.slice(0, TOP_COUNT).map(m => nodeItem(m.def)) });
+      out.push({ id: 'more', layout: 'list', group: 'matches', items: matches.slice(TOP_COUNT).map(m => nodeItem(m.def)) });
+      out.push({ id: 'related', label: 'Related', note: ctx.fromLabel && usuallyNext.length ? `with ${ctx.fromLabel}` : undefined, layout: 'grid', group: 'related', items: related.map(r => nodeItem(r.def, { why: r.why, key: `r:${r.def.type}` })) });
+      return out;
     }
-  }, [flatList, activeIdx, onClose, place]);
 
-  if (!open) return null;
+    if (view.kind === 'row') {
+      const cat = view.row;
+      const raw = nodesOfRow(cat).filter(acceptBrowse);
+      const params = ROW_ADD_PARAMS[cat];
+      const shown = (list: NodeDefinition[]) => [...list]
+        .sort((a, b) => (a.type === 'transform' ? -1 : b.type === 'transform' ? 1 : byLabel(a.label, b.label)))
+        .map(d => nodeItem(cat === 'Agent presets' ? { ...d, label: d.label.replace(/\s*\(preset\)$/i, '') } : d, { params: params?.[d.type] }));
+      const listed = CATEGORY_GROUPS[cat];
+      if (!listed) return [{ id: 'nodes', layout: 'grid', items: shown(raw) }];
+      const sorted = [...listed].sort((a, b) => (a.label === 'Start here' ? -1 : b.label === 'Start here' ? 1 : byLabel(a.label, b.label)));
+      const rowTypes = new Set(raw.map(d => d.type));
+      const groups = [...sorted, ...(MERGED_CATEGORIES[cat] ?? [cat]).map(c => ({
+        label: c === cat ? 'More' : c,
+        types: (VIRTUAL_ROWS[cat] ? [...rowTypes] : nodesOfRow(c).map(d => d.type)).filter(t => !sorted.some(g => g.types.includes(t))),
+      }))];
+      return groups
+        .map(g => ({ id: `g:${g.label}`, label: g.label, layout: 'grid' as const, items: shown(raw.filter(d => g.types.includes(d.type))) }))
+        .filter(s => s.items.length > 0);
+    }
+    if (view.kind === 'favorites') return [{ id: 'nodes', layout: 'grid', items: defsOf(favorites).filter(acceptBrowse).map(d => nodeItem(d)) }];
+    if (view.kind === 'recent') return [{ id: 'nodes', layout: 'grid', items: defsOf(recents).filter(d => offered.has(d.type)).map(d => nodeItem(d)) }];
+    if (view.kind === 'related') return [{ id: 'nodes', layout: 'grid', note: ctx.fromLabel ?? undefined, items: usuallyNext.map(r => nodeItem(r.def, { why: r.why })) }];
+    if (view.kind === 'presets') return [{ id: 'presets', layout: 'list', items: groupPresets.map(p => ({ kind: 'preset', key: `p:${p.id}`, preset: p })) }];
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+    // Home: the shortcuts, then the categories by section.
+    const start: Item[] = [];
+    if (!wiring) {
+      const b = BUILDERS[0];
+      if (b) start.push({ kind: 'tile', key: 't:builders', title: 'Builders', count: BUILDERS.length, preview: [b.makes], icon: b.icon, color: tk.accent.base, info: `${b.title}: ${b.description}. ${b.action}.`, open: () => { openBuilder(b.id); onClose(); } });
+    }
+    if (usuallyNext.length) start.push({ kind: 'tile', key: 't:related', title: 'Usually next', count: usuallyNext.length, preview: [`after ${ctx.fromLabel}`, ...usuallyNext.slice(0, 2).map(r => r.def.label)], icon: 'spark', color: pal.mauve, info: `Nodes that usually go with ${ctx.fromLabel}, in your graphs and the examples.`, open: () => goTo({ kind: 'related' }) });
+    const recentDefs = defsOf(recents).filter(d => offered.has(d.type));
+    if (recentDefs.length) start.push({ kind: 'tile', key: 't:recent', title: 'Recent', count: recentDefs.length, preview: recentDefs.slice(0, 3).map(d => d.label), icon: 'clock', color: pal.sky, info: 'The nodes you added most recently.', open: () => goTo({ kind: 'recent' }) });
+    const favDefs = defsOf(favorites).filter(acceptBrowse);
+    if (favDefs.length) start.push({ kind: 'tile', key: 't:favorites', title: 'Favourites', count: favDefs.length, preview: favDefs.slice(0, 3).map(d => d.label), icon: 'starF', color: tk.status.warning, info: 'Nodes you starred (here or in the node browser).', open: () => goTo({ kind: 'favorites' }) });
+    if (groupPresets.length && !wiring) start.push({ kind: 'tile', key: 't:presets', title: 'Group presets', count: groupPresets.length, preview: groupPresets.slice(0, 3).map(p => p.label), icon: 'presets', color: pal.yellow, info: 'Groups you saved as presets.', open: () => goTo({ kind: 'presets' }) });
+
+    const out: Section[] = [];
+    if (start.length) out.push({ id: 'start', layout: 'grid', items: start });
+    const other: Item[] = [];
+    for (const sec of categorySections(acceptBrowse)) {
+      const tiles: Item[] = [];
+      for (const t of sec.tiles) {
+        const item: Item = { kind: 'tile', key: `c:${t.row}`, title: rowLabel(t.row), count: t.count, preview: t.preview, icon: t.icon, color: pal[t.role], info: CATEGORY_INFO[t.row], open: () => goTo({ kind: 'row', row: t.row }) };
+        (relevantOnly && !categoryFits(t.row, libCtx.flow) ? other : tiles).push(item);
+      }
+      if (tiles.length) out.push({ id: `s:${sec.label}`, label: sec.label, layout: 'grid', items: tiles });
+    }
+    if (other.length) {
+      out.push({ id: 'other-toggle', layout: 'list', items: [{ kind: 'action', key: 'a:other', label: `${showOther ? 'Hide' : 'Show'} what’s not for this graph (${other.length})`, run: () => setShowOther(v => !v) }] });
+      if (showOther) out.push({ id: 'other', label: 'Not for this graph', layout: 'grid', items: other });
+    }
+    return out;
+  }, [query, view, searchDefs, offered, fitDefs, ctx, misfit, wiring, groupPresets, nodeItem, acceptBrowse, favorites, recents, usuallyNext, tk, pal, relevantOnly, libCtx.flow, showOther, goTo, onClose]);
+
+  const searching = query.trim().length > 0;
+  const navSections = useMemo(() => sections.map(s => ({ layout: s.layout, count: s.items.length })), [sections]);
+  // The highlight, kept on a real item.
+  const activePos = useMemo<NavPos>(() => (sections[pos.s]?.items[pos.i] ? pos : { s: Math.max(0, sections.findIndex(s => s.items.length > 0)), i: 0 }), [sections, pos]);
+  const active: Item | null = sections[activePos.s]?.items[activePos.i] ?? null;
+
+  // Back to the first item whenever the screen changes.
+  useEffect(() => {
+    const want = returnTo.current;
+    returnTo.current = null;
+    if (want && !query) {
+      for (let s = 0; s < sections.length; s++) {
+        const i = sections[s].items.findIndex(it => it.key === want);
+        if (i >= 0) { setPos({ s, i }); return; }
+      }
+    }
+    setPos({ s: Math.max(0, sections.findIndex(s => s.items.length > 0)), i: 0 });
+  }, [query, view]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 0); }, []);
+
+  // Columns follow the panel's width.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setCols(Math.max(1, Math.floor((el.clientWidth - 24 + 8) / (narrow ? 150 : 180 + 8)))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [narrow]);
+
+  useEffect(() => {
+    const el = scrollRef.current?.querySelector<HTMLElement>('[data-active="true"]');
+    el?.scrollIntoView?.({ block: 'nearest' });
+  }, [activePos.s, activePos.i]);
+
+  const activate = useCallback((item: Item | null) => {
+    if (!item) return;
+    switch (item.kind) {
+      case 'node': place(item.def.type, item.params); break;
+      case 'tile': item.open(); break;
+      case 'builder': openBuilder(item.b.id); onClose(); break;
+      case 'preset': instantiateGroupPreset(item.preset.id, spawnPosition ?? spawnPoint()); onClose(); break;
+      case 'action': item.run(); break;
+    }
+  }, [place, onClose, instantiateGroupPreset, spawnPosition]);
+
+  const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    const move = (k: NavKey) => { e.preventDefault(); setPos(navMove(navSections, activePos, k, searching ? 1 : cols)); };
+    switch (e.key) {
+      case 'Escape':
+        e.preventDefault();
+        if (query) setQuery('');
+        else if (view.kind !== 'home') back();
+        else onClose();
+        return;
+      case 'Backspace':
+        if (!query && view.kind !== 'home') { e.preventDefault(); back(); }
+        return;
+      case 'Enter': e.preventDefault(); activate(active); return;
+      case 'Tab': move(e.shiftKey ? 'shiftTab' : 'tab'); return;
+      case 'ArrowDown': move('down'); return;
+      case 'ArrowUp': move('up'); return;
+      // While typing, left and right move the text cursor; up and down go through the results in order.
+      case 'ArrowRight': if (!searching) move('right'); return;
+      case 'ArrowLeft': if (!searching) move('left'); return;
+    }
+  }, [navSections, activePos, searching, cols, query, view.kind, back, onClose, activate, active]);
+
+  const toggleFav = (type: string) => setFavorites(toggleFavoriteNode(type));
+
+  // ── Render ──
+  const total = searching
+    ? sections.filter(s => s.group === 'matches').reduce((n, s) => n + s.items.length, 0)
+    : sections.reduce((n, s) => n + s.items.filter(it => it.kind !== 'action' && !it.key.startsWith('t:')).length, 0);
+  const crumb = !searching && view.kind !== 'home';
+
   return (
     <>
-      {/* Backdrop */}
+      <div data-node-search-backdrop onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 900, background: tk.bg.scrim }} />
       <div
-        onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0, zIndex: 900,
-        }}
-      />
-
-      {/* Palette panel */}
-      <div
+        data-node-search
+        data-view={searching ? 'search' : view.kind}
+        role="dialog"
+        aria-label="Add a node"
         onWheel={e => e.stopPropagation()}
         style={{
-          position: 'fixed',
-          top: '50%', left: '50%',
-          transform: 'translate(-50%, -50%)',
-          zIndex: 901,
-          width: '420px',
-          maxWidth: 'calc(100vw - 32px)',
-          background: ctp.base,
-          border: `1px solid ${ctp.surface1}`,
-          borderRadius: '12px',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          maxHeight: 'min(600px, 80vh)',
+          position: 'fixed', zIndex: 901, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          background: tk.bg.panel, color: tk.text.primary, font: `13px ${fontFamily.ui}`,
+          ...(narrow
+            ? { inset: 0 }
+            : {
+              top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+              width: 'min(1080px, calc(100vw - 48px))', height: 'min(620px, calc(100vh - 64px))',
+              border: `1px solid ${tk.border.default}`, borderRadius: radius.modal, boxShadow: tk.shadow.modal,
+            }),
         }}
       >
-        {/* Search input */}
-        <div style={{
-          padding: '12px 14px',
-          borderBottom: `1px solid ${ctp.surface0}`,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-        }}>
-          <span style={{ color: ctp.surface2, fontSize: '15px' }}>🔍</span>
+        {/* Header: back, where you are, the field, the filters */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: narrow ? '10px 12px' : '12px 16px', borderBottom: `1px solid ${tk.border.subtle}`, flexWrap: narrow ? 'wrap' : 'nowrap' }}>
+          {crumb
+            ? <IconButton icon="chevL" label="Back to categories (Esc)" size="sm" onClick={back} style={{ background: tk.bg.hover, color: tk.text.secondary }} />
+            : <Icon name="search" size={16} style={{ color: tk.text.faint, flexShrink: 0 }} />}
+          {crumb && (
+            <span data-breadcrumb style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, color: tk.text.muted, whiteSpace: 'nowrap' }}>
+              <button onClick={back} style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.muted, font: 'inherit' }}>Nodes</button>
+              <Icon name="chevR" size={12} />
+              <b style={{ color: tk.text.primary, fontWeight: 600 }}>{viewTitle(view)}</b>
+            </span>
+          )}
           <input
             ref={inputRef}
+            data-node-search-input
             value={query}
-            onChange={e => { setQuery(e.target.value); setActiveIdx(0); }}
-            onKeyDown={handleKeyDown}
-            placeholder="Search nodes…"
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={crumb ? 'Search all nodes…' : 'Search nodes, or pick a category…'}
             spellCheck={false}
-            style={{
-              flex: 1,
-              background: 'transparent',
-              border: 'none',
-              outline: 'none',
-              color: ctp.text,
-              fontSize: '14px',
-              fontFamily: 'inherit',
-            }}
+            autoComplete="off"
+            style={{ flex: 1, minWidth: 120, height: 32, padding: '0 10px', borderRadius: radius.md, border: `1px solid ${tk.border.default}`, background: tk.bg.field, color: tk.text.primary, outline: 'none', font: `14px ${fontFamily.ui}` }}
           />
-          <span style={{ fontSize: '11px', color: ctp.surface1, whiteSpace: 'nowrap' }}>
-            {flatList.length} node{flatList.length !== 1 ? 's' : ''}
-          </span>
+          {wiring && (
+            <span data-wire-filter title="Only nodes that fit the wire" style={chipStyle(tk)}>
+              {filterInputType && <>takes {filterInputType}</>}{filterInputType && filterOutputType && ' · '}{filterOutputType && <>gives {filterOutputType}</>}
+            </span>
+          )}
+          <RelevanceToggle tk={tk} relevantOnly={relevantOnly} onChange={setRelevantOnly} flow={FLOWS[libCtx.flow].label} />
+          <span style={{ fontSize: 11, color: tk.text.faint, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{total} {searching ? (total === 1 ? 'match' : 'matches') : view.kind === 'home' ? 'categories' : total === 1 ? 'node' : 'nodes'}</span>
+          <IconButton icon="close" label="Close (Esc)" size="sm" onClick={onClose} />
         </div>
 
-        {/* Results list */}
-        <ul
-          ref={listRef}
-          style={{
-            margin: 0,
-            padding: '6px 0',
-            listStyle: 'none',
-            overflowY: 'auto',
-            flex: 1,
-          }}
-        >
-          {/* Group Presets (always shown at top when not searching, or when query matches) */}
-          {groupPresets.length > 0 && (!query || groupPresets.some(p =>
-            p.label.toLowerCase().includes(query.toLowerCase()) ||
-            p.description?.toLowerCase().includes(query.toLowerCase())
-          )) && (
-            <li>
-              <div style={{
-                padding: '6px 14px 2px',
-                fontSize: '10px',
-                fontWeight: 700,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                color: ctp.yellow,
-              }}>
-                Group Presets
-              </div>
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-                {groupPresets
-                  .filter(p => !query ||
-                    p.label.toLowerCase().includes(query.toLowerCase()) ||
-                    p.description?.toLowerCase().includes(query.toLowerCase())
-                  )
-                  .map(preset => (
-                    <li
-                      key={preset.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        padding: '5px 14px',
-                        cursor: 'pointer',
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.background = ctp.surface0)}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                      onClick={() => {
-                        const pos = spawnPosition ?? spawnPoint();
-                        instantiateGroupPreset(preset.id, pos);
-                        onClose();
-                      }}
-                    >
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: ctp.yellow, flexShrink: 0 }} />
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: '13px', color: ctp.text }}>{preset.label}</span>
-                        {preset.description && (
-                          <span style={{
-                            display: 'block',
-                            fontSize: '10px',
-                            color: ctp.surface2,
-                            marginTop: '1px',
-                            overflow: 'hidden',
-                            whiteSpace: 'nowrap',
-                            textOverflow: 'ellipsis',
-                          }}>
-                            {preset.description}
-                          </span>
-                        )}
-                      </span>
-                      <span style={{ fontSize: '10px', color: ctp.surface1, flexShrink: 0 }}>
-                        {preset.subgraph.nodes.length}n
-                      </span>
-                      <button
-                        title="Delete preset"
-                        onMouseDown={e => e.stopPropagation()}
-                        onClick={e => {
-                          e.stopPropagation();
-                          deleteGroupPreset(preset.id);
-                        }}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: ctp.surface2,
-                          cursor: 'pointer',
-                          fontSize: '12px',
-                          padding: '0 2px',
-                          lineHeight: 1,
-                        }}
-                      >
-                        ✕
-                      </button>
-                    </li>
+        {/* Body: the grid or results, and the preview */}
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+          <div ref={scrollRef} data-node-search-results style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: narrow ? '6px 12px 16px' : '8px 16px 16px' }}>
+            {crumb && view.kind === 'row' && CATEGORY_INFO[view.row] && (
+              <div data-category-info style={{ color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}`, padding: '6px 2px 2px', maxWidth: 720 }}>{CATEGORY_INFO[view.row]}</div>
+            )}
+            {sections.map((sec, si) => (sec.items.length === 0 && !(sec.id === 'top' && searching) ? null : (
+              <div key={sec.id} data-section={sec.id} data-search-group={sec.group}>
+                {sec.label && <SectionLabel tk={tk} label={sec.label} note={sec.note} rule={!sec.group || sec.group === 'related'} />}
+                {sec.id === 'top' && sec.items.length === 0 && (
+                  <div style={{ color: tk.text.faint, fontSize: 12.5, padding: '6px 2px 10px' }}>No nodes match “{query.trim()}”</div>
+                )}
+                <div style={sec.layout === 'grid'
+                  ? { display: 'grid', gridTemplateColumns: `repeat(${narrow ? Math.min(cols, 2) : cols}, minmax(0, 1fr))`, gap: 8 }
+                  : { display: 'flex', flexDirection: 'column', gap: 1, marginTop: sec.id === 'more' ? 8 : 0 }}>
+                  {sec.items.map((item, ii) => (
+                    <ItemView
+                      key={item.key}
+                      item={item}
+                      layout={sec.layout}
+                      showCategory={searching || view.kind !== 'row'}
+                      active={activePos.s === si && activePos.i === ii}
+                      tk={tk}
+                      pal={pal}
+                      onHover={() => setPos({ s: si, i: ii })}
+                      onActivate={() => activate(item)}
+                      onDeletePreset={id => deleteGroupPreset(id)}
+                    />
                   ))}
-              </ul>
-            </li>
+                </div>
+              </div>
+            )))}
+          </div>
+          {!narrow && (
+            <aside data-node-search-preview style={{ width: 300, flexShrink: 0, borderLeft: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, overflowY: 'auto', padding: 14 }}>
+              <Preview item={active} tk={tk} pal={pal} favorites={favorites} onToggleFavorite={toggleFav} onActivate={() => activate(active)} onDeletePreset={id => deleteGroupPreset(id)} />
+            </aside>
           )}
+        </div>
 
-          {flatList.length === 0 && (
-            <li style={{ padding: '24px 16px', textAlign: 'center', color: ctp.surface2, fontSize: '13px' }}>
-              No nodes match "{query}"
-            </li>
-          )}
-          {query
-            // Flat list when searching
-            ? flatList.map((entry, idx) => (
-                <NodeRow
-                  key={entry.type}
-                  entry={entry}
-                  active={idx === activeIdx}
-                  onHover={() => setActiveIdx(idx)}
-                  onSelect={() => place(entry.type)}
-                />
-              ))
-            // Grouped list when browsing
-            : Array.from(grouped.entries()).map(([category, entries]) => (
-                <li key={category}>
-                  <div style={{
-                    padding: '6px 14px 2px',
-                    fontSize: '10px',
-                    fontWeight: 700,
-                    letterSpacing: '0.08em',
-                    textTransform: 'uppercase',
-                    color: CATEGORY_COLORS[category] ?? ctp.surface2,
-                  }}>
-                    {category}
-                  </div>
-                  <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-                    {entries.map(entry => {
-                      const idx = flatList.indexOf(entry);
-                      return (
-                        <NodeRow
-                          key={entry.type}
-                          entry={entry}
-                          active={idx === activeIdx}
-                          onHover={() => setActiveIdx(idx)}
-                          onSelect={() => place(entry.type)}
-                        />
-                      );
-                    })}
-                  </ul>
-                </li>
-              ))
-          }
-        </ul>
-
-        {/* Footer hint */}
-        <div style={{
-          padding: '7px 14px',
-          borderTop: `1px solid ${ctp.surface0}`,
-          display: 'flex',
-          gap: '14px',
-          fontSize: '10px',
-          color: ctp.surface1,
-        }}>
-          <span><kbd style={kbdStyle}>↑↓</kbd> navigate</span>
-          <span><kbd style={kbdStyle}>↵</kbd> place</span>
-          <span><kbd style={kbdStyle}>Esc</kbd> close</span>
+        {/* Footer: keys, or on a phone the highlighted node's line */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '7px 16px', borderTop: `1px solid ${tk.border.subtle}`, fontSize: 11, color: tk.text.faint, minHeight: 30 }}>
+          {narrow
+            ? <span data-node-search-footer style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{active ? footerLine(active) : ''}</span>
+            : <>
+              <span><Kbd tk={tk}>↑↓←→</Kbd> move</span>
+              <span><Kbd tk={tk}>Tab</Kbd> next group</span>
+              <span><Kbd tk={tk}>↵</Kbd> {active?.kind === 'tile' ? 'open' : 'add'}</span>
+              <span><Kbd tk={tk}>Esc</Kbd> {searching ? 'clear' : crumb ? 'back' : 'close'}</span>
+              {crumb && <span><Kbd tk={tk}>⌫</Kbd> back</span>}
+            </>}
         </div>
       </div>
     </>
   );
 }
 
-// ── Row subcomponent ───────────────────────────────────────────────────────────
+// ── Pieces ────────────────────────────────────────────────────────────────────
 
-interface RowProps {
-  entry: SearchEntry;
-  active: boolean;
-  onHover: () => void;
-  onSelect: () => void;
+const descOf = (def: NodeDefinition): string => {
+  const raw = def.description as string | string[] | undefined;
+  return Array.isArray(raw) ? raw.join('\n') : (raw ?? '');
+};
+const firstLine = (s: string) => s.split(/\n|(?<=\.)\s/)[0] ?? '';
+
+function footerLine(item: Item): string {
+  switch (item.kind) {
+    case 'node': return `${item.def.label}${item.why ? ` · ${item.why}` : ''} — ${firstLine(descOf(item.def))}`;
+    case 'tile': return item.info ?? item.title;
+    case 'builder': return item.b.description;
+    case 'preset': return item.preset.description ?? item.preset.label;
+    case 'action': return item.label;
+  }
 }
 
-function NodeRow({ entry, active, onHover, onSelect }: RowProps) {
-  const accent = CATEGORY_COLORS[entry.def.category] ?? ctp.surface2;
+const chipStyle = (tk: Tokens): React.CSSProperties => ({
+  font: `500 11px ${fontFamily.mono}`, color: tk.text.muted, background: tk.bg.hover, borderRadius: radius.sm, padding: '3px 7px', whiteSpace: 'nowrap', flexShrink: 0,
+});
+
+function Kbd({ tk, children }: { tk: Tokens; children: ReactNode }) {
+  return <kbd style={{ display: 'inline-block', background: tk.bg.field, border: `1px solid ${tk.border.default}`, borderRadius: radius.xs, padding: '0 5px', marginRight: 3, font: `10.5px ${fontFamily.ui}`, color: tk.text.secondary }}>{children}</kbd>;
+}
+
+function SectionLabel({ tk, label, note, rule }: { tk: Tokens; label: string; note?: string; rule: boolean }) {
   return (
-    <li
-      data-active={active ? 'true' : undefined}
-      onMouseEnter={onHover}
-      onClick={onSelect}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        padding: '5px 14px',
-        cursor: 'pointer',
-        background: active ? ctp.surface0 : 'transparent',
-        transition: 'background 0.08s',
-      }}
-    >
-      {/* Colour dot */}
-      <span style={{
-        width: '8px', height: '8px',
-        borderRadius: '50%',
-        background: accent,
-        flexShrink: 0,
-        boxShadow: active ? `0 0 6px ${accent}88` : 'none',
-      }} />
-
-      {/* Label + description */}
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ fontSize: '13px', color: ctp.text }}>{entry.def.label}</span>
-        {entry.def.description && (
-          <span style={{
-            fontSize: '11px',
-            color: ctp.surface2,
-            marginLeft: '8px',
-            overflow: 'hidden',
-            whiteSpace: 'nowrap',
-            textOverflow: 'ellipsis',
-          }}>
-            {entry.def.description}
-          </span>
-        )}
-      </span>
-
-      {/* Category tag */}
-      <span style={{
-        fontSize: '10px',
-        color: accent,
-        opacity: 0.7,
-        whiteSpace: 'nowrap',
-        flexShrink: 0,
-      }}>
-        {entry.def.category}
-      </span>
-    </li>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 2px 8px' }}>
+      <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: tk.text.faint }}>{label}</span>
+      {note && <span style={{ fontSize: 11, color: tk.text.faint }}>{note}</span>}
+      {rule && <span style={{ flex: 1, height: 1, background: tk.border.subtle }} />}
+    </div>
   );
 }
 
-// ── Keyboard hint style ────────────────────────────────────────────────────────
+function RelevanceToggle({ tk, relevantOnly, onChange, flow }: { tk: Tokens; relevantOnly: boolean; onChange: (v: boolean) => void; flow: string }) {
+  const seg = (on: boolean, label: string, value: boolean) => (
+    <button key={label} onClick={() => onChange(value)} aria-pressed={on}
+      style={{ height: 24, padding: '0 9px', border: 0, borderRadius: radius.sm, cursor: 'pointer', whiteSpace: 'nowrap', font: `${on ? 600 : 500} 11.5px ${fontFamily.ui}`,
+        background: on ? tk.bg.selected : 'transparent', color: on ? tk.accent.text : tk.text.muted }}>{label}</button>
+  );
+  return (
+    <div data-library-relevance title={`This graph is ${flow}: Relevant only puts nodes for other kinds of graph last`} style={{ display: 'flex', gap: 2, padding: 2, borderRadius: radius.md, background: tk.bg.field, flexShrink: 0 }}>
+      {seg(relevantOnly, 'Relevant only', true)}
+      {seg(!relevantOnly, 'Show all', false)}
+    </div>
+  );
+}
 
-const kbdStyle: React.CSSProperties = {
-  display: 'inline-block',
-  background: ctp.surface0,
-  border: `1px solid ${ctp.surface1}`,
-  borderRadius: '4px',
-  padding: '1px 5px',
-  fontSize: '10px',
-  fontFamily: 'inherit',
-  color: ctp.text,
-  marginRight: '3px',
-};
+function ItemView({ item, layout, showCategory, active, tk, pal, onHover, onActivate, onDeletePreset }: {
+  item: Item; layout: 'grid' | 'list'; showCategory: boolean; active: boolean; tk: Tokens; pal: CtpPalette;
+  onHover: () => void; onActivate: () => void; onDeletePreset: (id: string) => void;
+}) {
+  const base: React.CSSProperties = {
+    border: 0, cursor: 'pointer', textAlign: 'left', color: tk.text.primary, font: `13px ${fontFamily.ui}`, minWidth: 0,
+    background: active ? tk.bg.selected : layout === 'grid' ? tk.bg.field : 'transparent',
+    boxShadow: active ? `inset 0 0 0 1.5px ${tk.accent.base}` : layout === 'grid' ? `inset 0 0 0 1px ${tk.border.subtle}` : 'none',
+    borderRadius: layout === 'grid' ? radius.lg : radius.md, transition: 'background 0.08s',
+  };
+  const common = {
+    'data-item-kind': item.kind,
+    'data-active': active ? 'true' : undefined,
+    onMouseMove: active ? undefined : onHover,
+    onClick: onActivate,
+  };
+
+  if (item.kind === 'tile') {
+    return (
+      <button {...common} data-tile={item.key} title={item.info} style={{ ...base, display: 'flex', gap: 10, alignItems: 'flex-start', padding: 10, minHeight: 76 }}>
+        <span style={{ width: 34, height: 34, borderRadius: radius.md, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: alpha(item.color, 0.16), color: item.color }}>
+          <Icon name={item.icon} size={17} />
+        </span>
+        <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <b style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{item.title}</b>
+            <span data-count style={{ fontSize: 11, color: tk.text.faint, background: tk.bg.hover, borderRadius: radius.sm, padding: '0 6px', fontVariantNumeric: 'tabular-nums' }}>{item.count}</span>
+          </span>
+          <span style={{ fontSize: 11.5, color: tk.text.muted, lineHeight: 1.35, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{item.preview.join(' · ')}</span>
+        </span>
+      </button>
+    );
+  }
+  if (item.kind === 'node') {
+    const accent = nodeAccent(item.def, pal);
+    if (layout === 'grid') {
+      return (
+        <button {...common} data-type={item.def.type} style={{ ...base, display: 'flex', flexDirection: 'column', gap: 4, padding: '9px 10px', minHeight: 76 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: accent, flexShrink: 0 }} />
+            <b style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{item.def.label}</b>
+            {item.badge && <Badge tk={tk}>{item.badge}</Badge>}
+          </span>
+          <span style={{ fontSize: 11.5, color: tk.text.muted, lineHeight: 1.35, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+            {item.why ? <span style={{ color: tk.accent.text }}>{item.why}. </span> : null}{firstLine(descOf(item.def))}
+          </span>
+          {showCategory && <span style={{ fontSize: 10.5, color: tk.text.faint, marginTop: 'auto' }}>{rowLabel(item.def.category)}</span>}
+        </button>
+      );
+    }
+    return (
+      <button {...common} data-type={item.def.type} style={{ ...base, display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', height: 32 }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: accent, flexShrink: 0 }} />
+        <span style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{item.def.label}</span>
+        {item.badge && <Badge tk={tk}>{item.badge}</Badge>}
+        <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.why ?? firstLine(descOf(item.def))}</span>
+        <span style={{ fontSize: 10.5, color: tk.text.faint, whiteSpace: 'nowrap' }}>{rowLabel(item.def.category)}</span>
+      </button>
+    );
+  }
+  if (item.kind === 'builder') {
+    return (
+      <button {...common} data-builder={item.b.id} style={{ ...base, display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', minHeight: 34 }}>
+        <Icon name={item.b.icon} size={15} style={{ color: tk.accent.base }} />
+        <b style={{ fontWeight: 600 }}>{item.b.title}</b>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.b.description}</span>
+      </button>
+    );
+  }
+  if (item.kind === 'preset') {
+    return (
+      <div {...common} role="button" data-preset={item.preset.id} style={{ ...base, display: 'flex', alignItems: 'center', gap: 10, padding: '6px 6px 6px 10px', minHeight: 34 }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: pal.yellow, flexShrink: 0 }} />
+        <span style={{ fontWeight: 500 }}>{item.preset.label}</span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, color: tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.preset.description}</span>
+        <span style={{ fontSize: 10.5, color: tk.text.faint }}>{item.preset.subgraph.nodes.length} nodes</span>
+        <IconButton icon="trash" label="Delete preset" size="sm" tone="danger" onClick={e => { e.stopPropagation(); onDeletePreset(item.preset.id); }} />
+      </div>
+    );
+  }
+  return (
+    <button {...common} data-action={item.key} style={{ ...base, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 4px', color: tk.text.faint, font: `700 10.5px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', marginTop: 8 }}>
+      <Icon name="chevD" size={12} /> {item.label}
+    </button>
+  );
+}
+
+function Badge({ tk, children }: { tk: Tokens; children: ReactNode }) {
+  return <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: tk.text.faint, background: tk.bg.hover, borderRadius: radius.sm, padding: '1px 5px', whiteSpace: 'nowrap' }}>{children}</span>;
+}
+
+/** Each category's library section, for a node's dot colour. */
+const SECTION_OF = new Map(CATEGORY_SECTIONS.flatMap(sec => sec.categories.flatMap(c => [c, ...(MERGED_CATEGORIES[c] ?? []), ...(VIRTUAL_ROWS[c] ? [VIRTUAL_ROWS[c].from] : [])].map(x => [x, sec.label] as const))));
+
+/** A node's dot colour: its category's, else its library section's. */
+function nodeAccent(def: NodeDefinition, pal: CtpPalette): string {
+  const role = CATEGORY_ROLES[def.category] ?? SECTION_LOOK[SECTION_OF.get(def.category) ?? 'More']?.role ?? 'overlay1';
+  return pal[role];
+}
+
+function syntheticNode(def: NodeDefinition): GraphNode {
+  return {
+    id: '__search_preview__', type: def.type, position: { x: 0, y: 0 }, params: {},
+    inputs: Object.fromEntries(Object.entries(def.inputs).map(([k, v]) => [k, { ...v, connection: undefined }])),
+    outputs: Object.fromEntries(Object.entries(def.outputs).map(([k, v]) => [k, { ...v }])),
+  };
+}
+
+function Preview({ item, tk, pal, favorites, onToggleFavorite, onActivate, onDeletePreset }: {
+  item: Item | null; tk: Tokens; pal: CtpPalette; favorites: string[]; onToggleFavorite: (type: string) => void; onActivate: () => void; onDeletePreset: (id: string) => void;
+}) {
+  if (!item) return <div style={{ color: tk.text.faint, fontSize: 12 }}>Nothing here.</div>;
+  const title = (t: ReactNode, extra?: ReactNode) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+      <b style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t}</b>
+      {extra}
+    </div>
+  );
+  if (item.kind === 'node') {
+    const def = item.def;
+    const fav = favorites.includes(def.type);
+    const ins = Object.values(def.inputs), outs = Object.values(def.outputs);
+    return (
+      <div data-preview-type={def.type} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {title(def.label, <>
+          <IconButton icon={fav ? 'starF' : 'star'} label={fav ? 'Remove from favourites' : 'Add to favourites'} size="sm" style={fav ? { color: tk.status.warning } : undefined}
+            onMouseDown={e => e.preventDefault()} onClick={() => onToggleFavorite(def.type)} />
+          <span style={chipStyle(tk)}>{rowLabel(def.category)}</span>
+        </>)}
+        {INLINE_VIZ_TYPES.has(def.type) && (
+          // A render surface: keeps its own dark look in both themes.
+          <div style={{ borderRadius: radius.md, overflow: 'hidden' }}><NodeInlineViz node={syntheticNode(def)} /></div>
+        )}
+        {item.why && <div style={{ fontSize: 12, color: tk.accent.text }}>{item.why}</div>}
+        {descOf(def) && <DocText text={descOf(def)} style={{ fontSize: 12, color: tk.text.muted }} />}
+        {(ins.length > 0 || outs.length > 0) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '6px 8px', borderRadius: radius.md, background: tk.bg.field, fontSize: 11.5 }}>
+            {ins.slice(0, 6).map((s, i) => <SocketRow key={`i${i}`} tk={tk} kind="in" label={s.label} type={s.type} />)}
+            {outs.slice(0, 4).map((s, i) => <SocketRow key={`o${i}`} tk={tk} kind="out" label={s.label} type={s.type} />)}
+          </div>
+        )}
+        <Button size="sm" variant="primary" icon="plus" onClick={onActivate}>Add to graph</Button>
+      </div>
+    );
+  }
+  if (item.kind === 'tile') {
+    return (
+      <div data-preview-tile={item.key} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {title(<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name={item.icon} size={16} style={{ color: item.color }} />{item.title}</span>, <span style={chipStyle(tk)}>{item.count}</span>)}
+        {item.info && <div style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.5 }}>{item.info}</div>}
+        <div style={{ fontSize: 11.5, color: tk.text.faint, lineHeight: 1.6 }}>{item.preview.join(' · ')}</div>
+        <Button size="sm" icon="chevR" onClick={onActivate}>Open</Button>
+      </div>
+    );
+  }
+  if (item.kind === 'builder') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {title(item.b.title)}
+        <div style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.5 }}>{item.b.description}</div>
+        <div style={{ fontSize: 12, color: tk.text.faint }}>Make: <span style={{ color: tk.text.secondary }}>{item.b.makes}</span></div>
+        <Button size="sm" variant="primary" icon={item.b.icon} onClick={onActivate}>Open</Button>
+      </div>
+    );
+  }
+  if (item.kind === 'preset') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {title(item.preset.label, <span style={{ ...chipStyle(tk), color: pal.yellow }}>preset</span>)}
+        {item.preset.description && <div style={{ fontSize: 12, color: tk.text.muted }}>{item.preset.description}</div>}
+        <div style={{ fontSize: 12, color: tk.text.faint }}>{item.preset.subgraph.nodes.length} nodes</div>
+        <Button size="sm" variant="primary" icon="plus" onClick={onActivate}>Add to graph</Button>
+        <Button size="sm" variant="danger" icon="trash" onClick={() => onDeletePreset(item.preset.id)}>Delete preset</Button>
+      </div>
+    );
+  }
+  return <div style={{ color: tk.text.faint, fontSize: 12 }}>{item.label}</div>;
+}
+
+function SocketRow({ tk, kind, label, type }: { tk: Tokens; kind: 'in' | 'out'; label: string; type: string }) {
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
+      <span style={{ color: tk.text.faint, fontSize: 10, width: 26, flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{kind}</span>
+      <span style={{ color: tk.text.primary, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+      <span style={{ fontFamily: fontFamily.mono, color: tk.text.faint }}>{type}</span>
+    </div>
+  );
+}

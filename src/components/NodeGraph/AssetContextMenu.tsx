@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { ctp } from '../../theme/palette';
+import { useCtp } from '../../theme/nodePalette';
+import { useTokens } from '../../theme/themeStore';
 import { portalGuard } from '../ui/portalGuard';
 
 export interface ContextMenuItem {
@@ -19,6 +20,9 @@ interface Props {
 }
 
 export function AssetContextMenu({ x, y, items, onDismiss }: Props) {
+  // Follows the app's light/dark setting (it used to be dark in both).
+  const ctp = useCtp();
+  const tk = useTokens();
   const ref = useRef<HTMLDivElement>(null);
 
   // Clamp to viewport
@@ -56,7 +60,7 @@ export function AssetContextMenu({ x, y, items, onDismiss }: Props) {
         borderRadius: '6px',
         padding: '4px 0',
         minWidth: '170px',
-        boxShadow: '0 6px 20px rgba(0,0,0,0.7)',
+        boxShadow: tk.shadow.popover,
         userSelect: 'none',
       }}
     >
