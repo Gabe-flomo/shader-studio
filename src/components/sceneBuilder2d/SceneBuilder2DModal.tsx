@@ -18,7 +18,7 @@ import { parseRecipe2D, printRecipe2D } from '../../sceneBuilder2d/recipe';
 import { TEMPLATES_2D, templateScene } from '../../sceneBuilder2d/templates';
 import { renderShapeThumbnail, renderSpaceThumbnail } from '../../sceneBuilder2d/thumbnails';
 import { BUILT_IN_FUNCTIONS, findFunctions, functionsFromGraphs, type FnEntry, type FnRole } from '../../sceneBuilder2d/functions';
-import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_LABELS, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, type GridShape, type GridSpec } from '../../sceneBuilder2d/grid';
+import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_LABELS, GRID_PIC_MODES, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, type GridPicMode, type GridShape, type GridSpec } from '../../sceneBuilder2d/grid';
 import { PALETTES } from '../../sceneBuilder/output';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { BuilderLabel, BuilderNote, BuilderWindow } from '../builders/BuilderWindow';
@@ -514,6 +514,7 @@ const DEFAULT_COLOURS: Vec3[] = [[0.35, 0.8, 1], [1, 0.45, 0.7], [1, 0.8, 0.3], 
 function GridTab() {
   const tk = useTokens();
   const grid = useSceneBuilder2D(s => s.scene.grid);
+  const sources = useSceneBuilder2D(s => s.scene.textures) ?? [];
   const set = (fn: (g: GridSpec) => void, key?: string) => edit(d => { if (d.grid) fn(d.grid); }, key && `grid:${key}`);
   if (!grid) {
     return (
@@ -582,6 +583,20 @@ function GridTab() {
           ? <><ColourRow label="First" value={grid.colour} onChange={v => set(g => { g.colour = v; }, 'c1')} /><ColourRow label="Second" value={grid.colour2} onChange={v => set(g => { g.colour2 = v; }, 'c2')} /></>
           : <BuilderNote>Uses the palette on the Look tab.</BuilderNote>}
         <Row label="Glow"><Toggle checked={grid.glow} onChange={v => set(g => { g.glow = v; })} label="Glows (when Look → Glow is on)" /></Row>
+      </Card>
+      <Card id="grid2-picture" defaultOpen={!!grid.pic} title="Picture" summary={grid.pic ? `${grid.pic.tex} · ${GRID_LABELS.pic[grid.pic.mode].label.toLowerCase()}` : 'none'}>
+        <BuilderNote>Cut a picture up into the grid: the shapes carry it, so you see the shapes made of the picture, not the picture itself.</BuilderNote>
+        <TexturePicker id="grid" sources={sources} value={grid.pic?.tex} onAdd={addSource} none="No picture"
+          onChange={name => set(g => { g.pic = name ? { tex: name, mode: g.pic?.mode ?? 'piece' } : null; })} />
+        {grid.pic && (
+          <>
+            <Row label="Mode" hint={GRID_PIC_MODES.map(m => `${GRID_LABELS.pic[m].label}: ${GRID_LABELS.pic[m].blurb}`).join('\n')}>
+              <Select ariaLabel="Grid picture mode" value={grid.pic.mode} options={GRID_PIC_MODES.map(m => ({ value: m, label: GRID_LABELS.pic[m].label }))}
+                onChange={v => set(g => { if (g.pic) g.pic.mode = v as GridPicMode; })} />
+            </Row>
+            <BuilderNote>{GRID_LABELS.pic[grid.pic.mode].blurb}</BuilderNote>
+          </>
+        )}
       </Card>
     </div>
   );

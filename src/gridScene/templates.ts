@@ -78,6 +78,19 @@ export const GRID_TEMPLATES: GridTemplate[] = [
       return s;
     },
   },
+  {
+    key: 'pieces', label: 'A picture in pieces', blurb: 'Circles waving round their cells, each carrying its own piece of a picture (Matte: piece). Pick the picture in Shapes → Picture.', make: () => {
+      const s = emptyGridScene();
+      s.cols = 16; s.rows = 12;
+      s.textures = [{ name: 'picture' }];
+      s.shapes = [newShape('A', { kind: 'circle', size: 0.95, color: [1, 1, 1], tex: 'picture', picMode: 'piece', motion: { path: 'circle', xy: [0.22, 0.22], speed: 0.35, lag: 0.06 } })];
+      // One drawn cell, repeated over the whole grid (Draw mode: Repeat, 1 × 1).
+      s.draw = { mode: 'repeat', period: [1, 1], offset: [0, 0], shift: 0 };
+      s.cells.push({ x: 0, y: 0, s: 'A' });
+      s.look = { ...s.look, lines: false, glow: false, bg: [0.02, 0.02, 0.03] };
+      return s;
+    },
+  },
 ];
 
 export const gridTemplate = (key: string): GridSceneSpec => (GRID_TEMPLATES.find(t => t.key === key) ?? GRID_TEMPLATES[0]).make();

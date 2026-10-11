@@ -493,5 +493,6 @@ export function texturesUsed2D(spec: Scene2D): string[] {
   const out: string[] = [];
   walkItems(spec.layers, it => { if (it.fill) out.push(it.fill.tex); if (it.mask) out.push(it.mask.tex); });
   if (spec.look.bgTex) out.push(spec.look.bgTex.tex);
+  if (spec.grid?.pic) out.push(spec.grid.pic.tex);
   return [...new Set(out)];
 }

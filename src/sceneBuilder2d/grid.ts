@@ -30,6 +30,17 @@ export type GridColourBy = typeof GRID_COLOUR_BYS[number];
 
 export interface RippleSpec { from: RippleFrom; at: Vec2 }
 
+/**
+ * How the grid's shapes carry a picture (docs/scene-builder-2d.md, "Grid"; the Grid builder's modes):
+ *   cell   the whole picture inside every shape;
+ *   mask   the picture stays put on the screen, the shapes are windows onto it;
+ *   matte  each shape one flat colour, the picture's at its cell's centre (a mosaic);
+ *   piece  each shape carries its own piece, from round its cell, turned, pushed and grown with it.
+ */
+export const GRID_PIC_MODES = ['cell', 'mask', 'matte', 'piece'] as const;
+export type GridPicMode = typeof GRID_PIC_MODES[number];
+export interface GridPicture { tex: string; mode: GridPicMode }
+
 export interface GridSpec {
   cols: number;
   rows: number;
@@ -53,6 +64,8 @@ export interface GridSpec {
   colour: Vec3;
   colour2: Vec3;
   glow: boolean;
+  /** A picture the shapes carry (a name in the scene's textures), and how. Absent: none. */
+  pic?: GridPicture | null;
 }
 
 export const GRID_LABELS = {
@@ -60,6 +73,12 @@ export const GRID_LABELS = {
   target: { size: 'Size', rotate: 'Turn', offset: 'Push', morph: 'Morph between shapes', none: 'Nothing (colour only)' } as Record<GridTarget, string>,
   from: { centre: 'The centre', corners: 'The four corners', mouse: 'The mouse', point: 'A point' } as Record<RippleFrom, string>,
   colourBy: { shape: 'Shape (two colours)', ripple: 'The ripple (palette)', cell: 'Each cell (palette)' } as Record<GridColourBy, string>,
+  pic: {
+    cell: { label: 'In each shape', blurb: 'The whole picture inside every shape.' },
+    mask: { label: 'Mask', blurb: 'The picture stays still; the shapes are windows onto it, so moving shapes show different parts of it.' },
+    matte: { label: 'Matte: colour', blurb: 'Each shape is one flat colour: the picture\'s colour at its cell\'s centre. A mosaic.' },
+    piece: { label: 'Matte: piece', blurb: 'Each shape carries its own piece of the picture as it turns, is pushed or grows. At rest the pieces make up the picture.' },
+  } as Record<GridPicMode, { label: string; blurb: string }>,
 };
 
 export function defaultGrid(): GridSpec {
@@ -116,7 +135,7 @@ function assignExpr(g: GridSpec, n: number): string {
 }
 
 /** The Expression Block's lines and result. Inputs: uv, t, (mouse), and sliders size, amount, freq, speed. */
-export function gridProgram(g: GridSpec): { lines: Line[]; result: string; usesMouse: boolean } {
+export function gridProgram(g: GridSpec): { lines: Line[]; result: string; usesMouse: boolean; place: boolean } {
   const cols = Math.max(1, Math.round(g.cols)), rows = Math.max(1, Math.round(g.rows));
   const span = g.span;
   const shapes = (g.shapes.length ? g.shapes : ['circle' as GridShape]).slice(0, 3);
@@ -158,12 +177,20 @@ export function gridProgram(g: GridSpec): { lines: Line[]; result: string; usesM
   else if (shapes.length === 3) d = 'mix(mix(d0, d1, step(0.5, k)), d2, step(1.5, k))';
   lines.push(L('float d', `mix(1.0, ${d}, inGrid)`));
   const kNorm = n > 1 ? `k / ${f(n - 1)}` : '0.0';
-  return { lines, result: `vec3(d, w * 0.5 + 0.5, ${g.colourBy === 'cell' ? 'fract(sin(dot(id, vec2(7.13, 3.71))) * 917.3)' : kNorm})`, usesMouse };
+  // Where the shapes read their picture (Mask reads the screen, outside this block): q is the
+  // point in the shape's own frame (turned and pushed with it), m / s undoes the wave's grow.
+  const mode = g.pic?.mode;
+  const place = !!mode && mode !== 'mask';
+  if (mode === 'cell') lines.push(L('vec2 place', 'q * (m / max(s, 1.0e-4))'));
+  if (mode === 'matte') lines.push(L('vec2 place', 'cc'));
+  if (mode === 'piece') lines.push(L('vec2 place', 'cc + q * (m / max(s, 1.0e-4))'));
+  return {
+    place, lines, result: `vec3(d, w * 0.5 + 0.5, ${g.colourBy === 'cell' ? 'fract(sin(dot(id, vec2(7.13, 3.71))) * 917.3)' : kNorm})`, usesMouse };
 }
 
 // ── Recipe ──────────────────────────────────────────────────────────────────
 
-/** `grid 12 shape=circle shape=box assign=checker size=0.7 ripple=centre ripple=corners freq=8 speed=0.4 target=size amount=0.5 by=ripple color=cyan color2=pink` */
+/** `grid 12 shape=circle shape=box assign=checker size=0.7 ripple=centre ripple=corners freq=8 speed=0.4 target=size amount=0.5 by=ripple color=cyan color2=pink picture=pond picture-mode=piece` */
 export function printGrid(g: GridSpec, colourText: (c: Vec3) => string): string {
   const D = defaultGrid();
   const parts = [g.cols === g.rows ? `grid ${g.cols}` : `grid ${g.cols} ${g.rows}`];
@@ -183,5 +210,6 @@ export function printGrid(g: GridSpec, colourText: (c: Vec3) => string): string 
   if (g.colour.join() !== D.colour.join()) parts.push(`color=${colourText(g.colour)}`);
   if (g.colour2.join() !== D.colour2.join()) parts.push(`color2=${colourText(g.colour2)}`);
   if (!g.glow) parts.push('glow=off');
+  if (g.pic) parts.push(`picture=${g.pic.tex}`, `picture-mode=${g.pic.mode}`);
   return parts.join(' ');
 }

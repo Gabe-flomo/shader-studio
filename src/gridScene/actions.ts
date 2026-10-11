@@ -18,7 +18,7 @@ import { finishBuilder } from '../builders/finish';
 import { closeGridRulesEditor, openGridRulesEditor } from '../builders/windows';
 import { useGridBuilder } from './store';
 import { applyGridScene, findGridBuild, gridFinalOf, gridSceneOfBuild } from './apply';
-import { starterGridScene, type GridSceneSpec } from './spec';
+import { shownCells, starterGridScene, type GridSceneSpec } from './spec';
 import { startCellsFromGrid, type StartCells } from '../gridRules/startCells';
 
 /** On a Grid Rules node made by the jump: the Grid scene (its UV node) it started from. */
@@ -89,7 +89,8 @@ export const simulationOf = (nodes: readonly GraphNode[], sceneId: string) => no
 /** The drawing as a Grid Rules drawn start: every drawn shape a live cell (state 1), rows top first. Null when nothing is drawn. Pure. */
 export function drawnStartOf(spec: GridSceneSpec): StartCells | null {
   const grid = Array.from({ length: spec.rows }, () => Array.from({ length: spec.cols }, () => 0));
-  for (const c of spec.cells) if (grid[c.y]?.[c.x] !== undefined) grid[c.y][c.x] = 1;
+  // What the grid shows (after the draw mode: repeat, mirror and rotate copies count too).
+  shownCells(spec).forEach((id, i) => { if (id) grid[Math.floor(i / spec.cols)][i % spec.cols] = 1; });
   return startCellsFromGrid(grid);
 }
 

@@ -8,10 +8,12 @@
  *   Ground & lines (Expression Block, the cell grid over the background) ◄┘
  *   Glow Layer (d, colour) ─► Add over the ground ─► SDF Fill ─► Tone Map ─► Output
  *
- * The Grid scene node is an Expression Block whose helpers (glsl.ts) draw every cell; its pattern
+ * The Grid scene node is an Expression Block whose helpers (glsl.ts) draw the grid; its pattern
  * numbers (amount, freq, speed, arms) are sliders on it, the shapes' numbers sliders on their own
- * Shape nodes, so dragging any of them never recompiles. Drawing cells, the motion path, the
- * pattern's kind and the rules are structure: they rebuild.
+ * Shape nodes, and the drawing itself hidden sliders on it (g0…: eight cells a number), so dragging
+ * any of them, or drawing and erasing cells, never recompiles. The motion path, the shapes' kinds,
+ * the pattern's kind, the draw mode and the rules are structure: they rebuild the code. Pictures
+ * are sampler inputs (tx0…) the scene function reads itself.
  *
  * Every node has a note (`__comment`) and a role (`_gsRole`); the UV node keeps the spec, so the
  * Scene builder reopens the scene as it was built. Pure: ids from `idFor`.
@@ -23,9 +25,9 @@ import { blockGlslLines, checkBlock, clampTimes, type SpaceBlock } from '../scen
 import { BLOCK_BY_ID } from '../sceneBuilder2d/blockLibrary';
 import { colourText } from '../lang/colours';
 import { gf, gridProgram, shapeArgs, activeMask, activeRules } from './glsl';
-import { LUMA, findTex, fitLines, picUv, standInId, standIns } from '../builders/textures';
+import { findTex, standInId, standIns } from '../builders/textures';
 import {
-  MOTION_LABELS, PATTERN_LABELS, SHAPE_LABELS, TARGET_LABELS, cellSize, ruleText, shapeOf,
+  DRAW_MODE_LABELS, MOTION_LABELS, PATTERN_LABELS, PIC_MODE_LABELS, SHAPE_LABELS, TARGET_LABELS, cellSize, drawOf, picModeOf, ruleText, shapeOf,
   type GShape, type GridSceneSpec,
 } from './spec';
 
@@ -72,7 +74,7 @@ function mk(c: Ctx, type: string, role: string, params: Record<string, unknown>,
   return node;
 }
 
-type In = { name: string; type: 'float' | 'vec2' | 'vec3' | 'vec4'; from?: Ref; slider?: { value: number; min: number; max: number } };
+type In = { name: string; type: 'float' | 'vec2' | 'vec3' | 'vec4' | 'texture'; from?: Ref; slider?: { value: number; min: number; max: number }; hidden?: boolean };
 type Line = { lhs: string; op: string; rhs: string };
 
 /** An Expression Block: typed inputs (wired, or a float slider), lines, a result, exposed outputs, helpers. */
@@ -82,14 +84,15 @@ function expr(c: Ctx, role: string, label: string, inputs: In[], result: string,
   const outputType = o.outputType ?? 'vec3';
   const node: GraphNode = {
     id: c.idFor(role), type: 'exprNode', position: { x: 0, y: 0 },
-    inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type, label: i.name, ...(i.from ? { connection: { ...i.from } } : {}) } as InputSocket])),
+    // A hidden input (the drawing's numbers) is data kept on the node: a live uniform with no socket.
+    inputs: Object.fromEntries(inputs.filter(i => !i.hidden).map(i => [i.name, { type: i.type, label: i.name, ...(i.from ? { connection: { ...i.from } } : {}) } as InputSocket])),
     outputs: {
       result: { type: outputType, label: 'Result' },
       ...Object.fromEntries((o.outputs ?? []).map(x => [x.name, { type: x.type, label: x.label } as OutputSocket])),
     },
     params: {
       label, outputType, lines: o.lines ?? [], result, expr: result,
-      inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: i.slider ? { min: i.slider.min, max: i.slider.max } : null })),
+      inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: i.slider ? { min: i.slider.min, max: i.slider.max } : null, ...(i.hidden ? { hidden: true } : {}) })),
       ...Object.fromEntries(inputs.filter(i => i.slider).map(i => [i.name, i.slider!.value])),
       ...(o.outputs?.length ? { outputs: o.outputs.map(x => x.name) } : {}),
       ...(o.functions ? { glslFunctions: o.functions } : {}),
@@ -126,7 +129,6 @@ function warpNode(c: Ctx, i: number, block: SpaceBlock, pos: Ref): Ref {
 
 /** A shape's sliders: an Expression Block whose result is its motion, with its look and outline beside. */
 function shapeNode(c: Ctx, spec: GridSceneSpec, s: GShape): { node: GraphNode; colour: Ref } {
-  const n = spec.cells.filter(x => x.s === s.id).length;
   const colour = mk(c, 'colorPicker', `${s.id}:color`, { color: [...s.color] }, {}, `Shape ${s.id}'s colour, ${col(s.color)}. Rules can change it per cell (swap, colour).`);
   const m = s.motion;
   const path = MOTION_LABELS[m.path];
@@ -141,7 +143,7 @@ function shapeNode(c: Ctx, spec: GridSceneSpec, s: GShape): { node: GraphNode; c
     { name: 'speed', type: 'float', slider: { value: m.speed, min: -2, max: 2 } },
     { name: 'lag', type: 'float', slider: { value: m.lag, min: -0.5, max: 0.5 } },
   ], 'vec4(moveX, moveY, speed, lag)',
-  `Shape ${s.id}: a ${SHAPE_LABELS[s.kind].toLowerCase()} in ${n} cell${n === 1 ? '' : 's'}${spec.pattern.fill === s.id ? ', and the pattern\'s fill' : ''}. Its sliders feed the Grid scene node and are live. `
+  `Shape ${s.id}: a ${SHAPE_LABELS[s.kind].toLowerCase()}, drawn in the cells you give it${spec.pattern.fill === s.id ? ', and the pattern\'s fill' : ''}. Its sliders feed the Grid scene node and are live. `
     + `Size is the radius as a share of half a cell (1 touches the neighbours); turn in degrees; spin in turns a second; pulse makes the size breathe; outline above 0 draws only the edge. `
     + `Motion: ${path.label.toLowerCase()} (${path.blurb.toLowerCase()}) moveX and moveY are the XY reach in cells, speed in cycles a second, lag delays each cell by (x + y) × lag of a cycle so the motion travels as a wave. `
     + 'The path itself is set in the Grid builder (it shapes the code). Result: the motion (x, y, speed, lag); look: (size, turn in radians, spin, pulse); edge: the outline.',
@@ -157,7 +159,7 @@ function shapeNode(c: Ctx, spec: GridSceneSpec, s: GShape): { node: GraphNode; c
 export function buildGridScene(spec: GridSceneSpec, idFor: (role: string) => string = r => `gs_${r.replace(/[^A-Za-z0-9]/g, '_')}`): GridBuildResult {
   const c: Ctx = { idFor, nodes: [], warnings: [] };
   const look = spec.look;
-  const uv = mk(c, 'uv', 'uv', {}, {}, `The picture's coordinates: the centre is (0, 0), the top is 1. Built by the Grid builder (${spec.cols} × ${spec.rows} cells, ${spec.cells.length} drawn); open the Scene builder (or right-click → Edit in Grid builder) to draw on it again.`);
+  const uv = mk(c, 'uv', 'uv', {}, {}, `The picture's coordinates: the centre is (0, 0), the top is 1. Built by the Grid builder (${spec.cols} × ${spec.rows} cells); open the Scene builder (or right-click → Edit in Grid builder) to draw on it again.`);
   const time = mk(c, 'time', 'time', {}, {}, 'Time in seconds: it drives the motion, spin, pulse and the pattern\'s wave.');
   let pos = ref(uv, 'uv');
   spec.warps.forEach((w, i) => { pos = warpNode(c, i, w, pos); });
@@ -186,84 +188,62 @@ export function buildGridScene(spec: GridSceneSpec, idFor: (role: string) => str
       { name: a.c, type: 'vec3', from: sr.colour },
     );
   }
-  // Pictures (docs/grid-builder.md, "Textures"): a picture over the grid, read at the centre of this pixel's cell.
-  const cs0 = cellSize(spec);
-  const gx = spec.cols * cs0 / 2, gy = spec.rows * cs0 / 2;
-  const cellLum = new Map<string, Ref>();
+  // Pictures (docs/grid-builder.md, "Textures"): each picture the scene reads is a sampler argument of the scene function.
   const texOf = (name: string | undefined, what: string) => {
     const src = findTex(spec.textures, name);
     if (!src) { c.warnings.push(`${what} reads the picture “${name ?? ''}”, which the scene doesn't have: pick one.`); return null; }
     return { src, out: { nodeId: standInId(src), outputKey: 'texture' } as Ref };
   };
-  const brightnessAtCell = (name: string | undefined, what: string): Ref | null => {
-    if (name && cellLum.has(name)) return cellLum.get(name)!;
-    const t = texOf(name, what);
-    if (!t) return null;
-    const key = t.src.name.replace(/[^A-Za-z0-9]/g, '_');
-    const at = expr(c, `pic:${key}:cell`, 'Cell centre on the picture', [{ name: 'uv', type: 'vec2', from: pos }], picUv('st'),
-      `Where the picture “${t.src.name}” is read for this pixel's cell: id is the cell (as the grid counts them), q its centre in picture units, the picture covering the whole grid (Fill, keeping its shape). Every pixel of a cell reads the same place, so a cell takes one brightness.`,
-      { outputType: 'vec2', lines: [
-        L('vec2 cp', `vec2(uv.x / ${gf(cs0)} + ${gf(spec.cols / 2)}, ${gf(spec.rows / 2)} - uv.y / ${gf(cs0)})`),
-        L('vec2 id', 'floor(cp)'),
-        L('vec2 q', `vec2((id.x + 0.5) * ${gf(cs0)} - ${gf(gx)}, ${gf(gy)} - (id.y + 0.5) * ${gf(cs0)})`),
-        L('vec2 ext', `vec2(${gf(gx)}, ${gf(gy)})`),
-        ...fitLines('cover', 'q', 'ext', gf(t.src.aspect ?? 1), '1.0'),
-      ] });
-    const smp = mk(c, 'sampleTexture', `pic:${key}:sample`, {}, { texture: t.out, uv: ref(at, 'result') }, `Reads the picture “${t.src.name}” at the centre of this pixel's cell.`);
-    const lum = expr(c, `pic:${key}:lum`, 'Cell brightness', [{ name: 'col', type: 'vec3', from: ref(smp, 'color') }, { name: 'a', type: 'float', from: ref(smp, 'alpha') }],
-      `${LUMA('col')} * a`, `The brightness of “${t.src.name}” at this cell, 0 to 1 (times its alpha).`, { outputType: 'float' });
-    cellLum.set(t.src.name, ref(lum, 'result'));
-    return ref(lum, 'result');
-  };
-  if (prog.patternPic) {
-    const pb = brightnessAtCell(P.tex, 'The pattern');
-    inputs.push(pb ? { name: 'pb', type: 'float', from: pb } : { name: 'pb', type: 'float', slider: { value: 0.5, min: 0, max: 1 } });
+  for (const s of spec.shapes) if (s.tex && !findTex(spec.textures, s.tex)) texOf(s.tex, `Shape ${s.id}`);
+  if (P.kind === 'picture' && !findTex(spec.textures, P.tex)) texOf(P.tex, 'The pattern');
+  if (spec.picMask && !findTex(spec.textures, spec.picMask.tex)) texOf(spec.picMask.tex, 'The mask');
+  prog.textures.forEach((name, i) => {
+    const t = texOf(name, 'The grid');
+    if (t) inputs.push({ name: `tx${i}`, type: 'texture', from: t.out });
+  });
+  if (prog.maskCut) inputs.push({ name: 'pcut', type: 'float', slider: { value: spec.picMask!.cut, min: 0, max: 1 } });
+  if (prog.screen) inputs.push({ name: 'suv', type: 'vec2', from: ref(uv, 'uv') });
+  // The draw mode Repeat: the tile's period and offset and the rows' shift, live.
+  const D = drawOf(spec);
+  if (prog.repeat) {
+    inputs.push(
+      { name: 'periodX', type: 'float', slider: { value: D.period[0], min: 1, max: spec.cols } },
+      { name: 'periodY', type: 'float', slider: { value: D.period[1], min: 1, max: spec.rows } },
+      { name: 'offsetX', type: 'float', slider: { value: D.offset[0], min: 0, max: spec.cols - 1 } },
+      { name: 'offsetY', type: 'float', slider: { value: D.offset[1], min: 0, max: spec.rows - 1 } },
+      { name: 'shift', type: 'float', slider: { value: D.shift, min: -4, max: 4 } },
+    );
   }
+  // The drawing: eight cells a number, live (drawing and erasing change these, never the code).
+  prog.data.forEach((v, i) => inputs.push({ name: `g${i}`, type: 'float', slider: { value: v, min: 0, max: 16777215 }, hidden: true }));
   const rules = activeRules(spec).filter(r => !r.id.endsWith('~'));
   const fill = shapeOf(spec, P.fill);
   const patternWords = P.kind === 'none' ? 'No pattern.' : `Pattern: ${PATTERN_LABELS[P.kind].label.toLowerCase()} (${PATTERN_LABELS[P.kind].blurb.toLowerCase()}) changing each shape's ${TARGET_LABELS[P.target].toLowerCase()} by amount; freq is waves across the grid, speed cycles a second${P.kind === 'spiral' ? ', arms the spiral\'s arms' : ''}.${fill ? ` It fills the empty cells with shape ${fill.id}.` : ''}${activeMask(spec) ? ` Only in the cells the words "${activeMask(spec)!.text}" cover (gs_mask: the stroke font, one line a stroke).` : ''}`;
+  const carried = spec.shapes.filter(x => x.tex && prog.textures.includes(x.tex));
+  const picWords = prog.textures.length
+    ? ` Pictures (tx0…: ${prog.textures.join(', ')}) are read inside it: ${carried.map(x => `shape ${x.id} carries “${x.tex}” (${PIC_MODE_LABELS[picModeOf(x)].label.toLowerCase()})`).join('; ') || 'no shape carries one'}${P.kind === 'picture' ? '; the pattern\'s wave is the picture\'s brightness at each shape\'s own cell' : ''}${prog.maskCut ? `; shapes show only in cells where the mask picture is ${spec.picMask!.invert ? 'darker' : 'brighter'} than pcut (live)` : ''}.`
+    : '';
+  const callArgs = prog.args.map(a => (a === 'rp' ? 'vec4(periodX, periodY, offsetX, offsetY)' : a === 'rs' ? 'shift' : a));
   const grid = expr(c, 'grid', 'Grid scene', inputs, 'g.rgb',
-    `The grid: ${spec.cols} × ${spec.rows} cells, ${prog.placed} drawn with shapes ${spec.shapes.map(s => s.id).join(', ') || 'none'}. `
-    + `Its helper ${prog.name} (in the node's functions) draws every drawn cell: where its shape is now (its motion), which cell that is, the pattern's wave there, the rules, and its distance; the nearest shape gives the colour. `
-    + `${patternWords} ${rules.length ? `Rules, checked in the shader for every cell: ${rules.map(ruleText).join('; ')}.` : 'No rules.'} `
-    + 'Result: the colour of the nearest shape; d: the distance to it (negative inside). The sliders are live; drawing cells, paths and rules rebuild the code.',
+    `The grid: ${spec.cols} × ${spec.rows} cells, drawn with shapes ${spec.shapes.map(x => x.id).join(', ') || 'none'}${D.mode !== 'here' ? ` (draw mode ${DRAW_MODE_LABELS[D.mode].label.toLowerCase()}: ${DRAW_MODE_LABELS[D.mode].blurb.toLowerCase()})` : ''}. `
+    + `The drawing is data: g0… (hidden) say which shape each cell holds, eight cells a number, so drawing on the grid changes numbers, not the code. Its helper ${prog.name} (in the node's functions) looks up, for each shape, only the drawn cells near this pixel whose shape could be here now (its motion turned backwards), then the pattern's wave there, the rules, and its distance; the nearest shape gives the colour. `
+    + `${patternWords} ${rules.length ? `Rules, checked in the shader for every cell: ${rules.map(ruleText).join('; ')}.` : 'No rules.'}${picWords} `
+    + 'Result: the colour of the nearest shape; d: the distance to it (negative inside); home: the winning shape\'s home cell centre, and piece: the place on a still picture this point of its shape came from (both in picture units: wire either into a Sample (texture)\'s UV for a matte colour or a matte piece of your own). The sliders are live; paths, kinds and rules rebuild the code.',
   {
     outputType: 'vec3',
     lines: [
-      ...(prog.picture ? [L('vec4 pic', 'vec4(0.0, 0.0, 0.0, -1.0)')] : []),
-      L('vec4 g', `${prog.name}(uv, t, vec4(amount, freq, speed, arms)${prog.args.length ? `, ${prog.args.join(', ')}` : ''})`), L('float d', 'g.w'),
+      L(`float gd[${prog.data.length}]`, `float[${prog.data.length}](${prog.data.map((_, i) => `g${i}`).join(', ')})`),
+      L('vec4 hp', 'vec4(0.0)'),
+      L('vec4 g', `${prog.name}(uv, t, vec4(amount, freq, speed, arms), ${callArgs.join(', ')})`),
+      L('float d', 'g.w'),
+      L('vec2 home', 'hp.xy'),
+      L('vec2 piece', 'hp.zw'),
     ],
-    outputs: [{ name: 'd', type: 'float', label: 'Distance' }, ...(prog.picture ? [{ name: 'pic', type: 'vec4', label: 'Picture place' }] : [])],
+    outputs: [{ name: 'd', type: 'float', label: 'Distance' }, { name: 'home', type: 'vec2', label: 'Home' }, { name: 'piece', type: 'vec2', label: 'Piece' }],
     functions: prog.functions,
   });
-  if (prog.patternPic) grid.params.__comment = `${grid.params.__comment} pb is the pattern's picture brightness at this pixel's cell (the wave is pb × 2 − 1).`;
-  let d = ref(grid, 'd');
-  let colour = ref(grid, 'result');
-  // Pictures inside cells: the winning cell's place on its picture (pic), read and painted over its colour.
-  prog.slots.forEach((name, j) => {
-    const t = texOf(name, 'A picture cell');
-    if (!t) return;
-    const key = t.src.name.replace(/[^A-Za-z0-9]/g, '_');
-    const at = expr(c, `cells:${key}:fit`, 'Picture in the cell', [{ name: 'pic', type: 'vec4', from: ref(grid, 'pic') }], picUv('st'),
-      `Where the picture “${t.src.name}” is read inside a cell: pic.xy is the place in the cell's square (0 to 1, turning with the shape), fitted to the picture (Fill, keeping its shape).`,
-      { outputType: 'vec2', lines: [L('vec2 q', 'pic.xy - 0.5'), L('vec2 ext', 'vec2(0.5)'), ...fitLines('cover', 'q', 'ext', gf(t.src.aspect ?? 1), '1.0')] });
-    const smp = mk(c, 'sampleTexture', `cells:${key}:sample`, {}, { texture: t.out, uv: ref(at, 'result') }, `Reads the picture “${t.src.name}” inside its cells.`);
-    colour = ref(expr(c, `cells:${key}:paint`, 'Paint picture cells', [
-      { name: 'base', type: 'vec3', from: colour }, { name: 'tex', type: 'vec3', from: ref(smp, 'color') }, { name: 'a', type: 'float', from: ref(smp, 'alpha') }, { name: 'pic', type: 'vec4', from: ref(grid, 'pic') },
-    ], `mix(base, tex, pic.z * step(abs(pic.w - ${gf(j)}), 0.5) * clamp(a, 0.0, 1.0))`,
-    `The picture “${t.src.name}” where the nearest cell is a picture cell showing it (pic.z 1, slot pic.w ${j}); the shapes' own colours elsewhere.`), 'result');
-  });
-  // The picture mask: shapes only in the cells where the picture is bright (or dark).
-  if (spec.picMask) {
-    const m = spec.picMask;
-    const lum = brightnessAtCell(m.tex, 'The mask');
-    if (lum) {
-      d = ref(expr(c, 'picmask', 'Picture mask', [
-        { name: 'd', type: 'float', from: d }, { name: 'l', type: 'float', from: lum }, { name: 'cut', type: 'float', slider: { value: m.cut, min: 0, max: 1 } },
-      ], `mix(1.0e3, d, ${m.invert ? '1.0 - ' : ''}step(cut, l))`,
-      `Shapes only in the cells where the picture is ${m.invert ? 'darker' : 'brighter'} than cut (live): elsewhere the distance is pushed far away, so nothing is drawn or glows there. Read once per cell, at its centre.`, { outputType: 'float' }), 'result');
-    }
-  }
+  const d = ref(grid, 'd');
+  const colour = ref(grid, 'result');
 
   // The ground: background, a faint checker of the cells, and the grid lines, in the warped space.
   const bg = mk(c, 'colorPicker', 'bg', { color: [...look.bg] }, {}, `The background, ${col(look.bg)}.`);

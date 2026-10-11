@@ -30,7 +30,7 @@ import { PALETTE_BY_KEY, PALETTES } from '../sceneBuilder/output';
 import { BUILT_IN_FUNCTIONS, builtInFunction } from './functions';
 import { COMBINE_MODES, checkBlock, clampTimes, linesText, parseBlockText, rangeFor, type CombineMode, type SpaceBlock } from './blocks';
 import { BLOCK_BY_ID, BLOCK_LIBRARY, blockFromEntry, isLibraryBlock } from './blockLibrary';
-import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, printGrid, type GridShape, type GridSpec } from './grid';
+import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_PIC_MODES, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, printGrid, type GridPicMode, type GridShape, type GridSpec } from './grid';
 import type { RecipeError } from '../sceneBuilder/recipe';
 import { TEX_FITS, findTex, newTexUse, texSlug, type TexFit, type TexSource, type TexUse } from '../builders/textures';
 import {
@@ -499,11 +499,12 @@ class Parser {
 
   fnNames(role: 'space' | 'shape') { return BUILT_IN_FN_NAMES[role].join(', '); }
 
-  /** `grid 12 [rows] shape=… assign=… size=… ripple=… freq=… speed=… target=… amount=… by=… color=… color2=… glow=off` */
+  /** `grid 12 [rows] shape=… assign=… size=… ripple=… freq=… speed=… target=… amount=… by=… color=… color2=… glow=off picture=… picture-mode=cell|mask|matte|piece` */
   private grid(scene: Scene2D, args: AstArg[]) {
     const g = defaultGrid();
     const shapes: GridShape[] = [];
     const ripples: GridSpec['ripples'] = [];
+    const pic: { tex?: string; mode?: GridPicMode } = {};
     let pos = 0;
     const pick = <T extends string>(a: AstArg, list: readonly T[], what: string): T | null => {
       const w = this.word(a);
@@ -540,11 +541,15 @@ class Parser {
         case 'color': case 'colour': { const c = this.colour(a); if (c) g.colour = c; break; }
         case 'color2': case 'colour2': { const c = this.colour(a); if (c) g.colour2 = c; break; }
         case 'glow': { const w = this.word(a); g.glow = !(w === 'off' || w === 'no' || w === 'false'); break; }
+        case 'picture': case 'texture': { const n = this.texName(a, key); if (n) pic.tex = n; break; }
+        case 'picture-mode': case 'pic-mode': { const v = pick(a, GRID_PIC_MODES, 'picture-mode'); if (v) pic.mode = v; break; }
         default: this.fail(a, `grid has no setting “${a.key}”.`);
       }
     }
     if (shapes.length) g.shapes = shapes;
     if (ripples.length) g.ripples = ripples;
+    if (pic.tex) g.pic = { tex: pic.tex, mode: pic.mode ?? 'piece' };
+    else if (pic.mode) this.warnings.push('picture-mode= is for a grid with a picture: add picture=… (a picture\'s name).');
     scene.grid = g;
   }
 
@@ -809,7 +814,8 @@ export const RECIPE_VOCABULARY_2D = {
   combines: ['union', 'smooth-union', 'subtract', 'smooth-subtract', 'intersect', 'smooth-intersect'],
   shapes: SHAPES.map(s => ({ kind: s.kind, keys: s.params.map(p => p.key) })),
   itemKeys: ['at=(x,y)', 'rot=30', 'scale=1.5', 'color=teal', 'inflate=0.02', 'outline=0.02', 'glow', 'name="Sun"', 'fill=brick fit=cover|contain|stretch|tile tiles=3 zoom=1.5', 'mask=brick mask-cut=0.5 mask-invert'],
-  textures: ['texture brick node=node_4 aspect=1.5', 'picture brick h=0.6 fit=cover', 'circle r=0.4 fill=brick fit=tile tiles=3', 'background picture=brick fit=cover [still]'],
+  textures: ['texture brick node=node_4 aspect=1.5', 'picture brick h=0.6 fit=cover', 'circle r=0.4 fill=brick fit=tile tiles=3', 'background picture=brick fit=cover [still]', `grid 12 picture=brick picture-mode=${GRID_PIC_MODES.join('|')}`],
+  grid: [`grid 12 [rows] shape=${GRID_SHAPES.join('|')} assign=${GRID_ASSIGNS.join('|')} size=0.7 ripple=centre|corners|mouse|(x,y) freq=8 speed=0.4 target=${GRID_TARGETS.join('|')} amount=0.5 by=${GRID_COLOUR_BYS.join('|')} color= color2= glow=off picture=brick picture-mode=${GRID_PIC_MODES.join('|')}`],
   motion: ['@orbit(0.3 speed=0.25)', '@bob(0.15 dir=90)', '@spin(0.25)', '@pulse(0.25 speed=0.5)'],
   ring: ['@ring(6 r=0.5)', '@ring(6 r=0.5 inner=(5,0.2))', '@ring(6 r=0.5 levels=3 factor=1.6)'],
   look: ['glow [selected] [amount] falloff= color=', `colour by ${COLOUR_BYS.join('|')} palette= scale= speed=`, `tone ${TONE_MODES.join('|')}`, 'background colour [picture=brick fit= tiles= still]', 'bloom 0.6', 'vignette 0.5', 'grain 0.05', 'scanlines 0.3', 'output distance|mask|space palette='],

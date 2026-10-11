@@ -165,7 +165,7 @@ export const TYPE_STAGE: Record<string, StageOf> = {
   metaballThreshold: 'shapeIt', fieldToLines: 'shapeIt', distanceFalloff: 'shapeIt',
   // Grid: the layout bends space; the rest draws or filters.
   gridPattern: 'shape', arrayField: 'shape', neighborDist: 'shape', neighborAttractCircles: 'shape', noisyGridSDF: 'shape',
-  gridPaint: 'colour', cellFilter: 'shapeIt', waveRadius: 'shapeIt', neighborOffset2d: 'any', animatedCellCenter: 'any',
+  gridPaint: 'colour', cellPicture: 'any', cellPattern: 'any', cellFilter: 'shapeIt', waveRadius: 'shapeIt', neighborOffset2d: 'any', animatedCellCenter: 'any',
   // Halftone: cells are a bend; the CMYK screens are a finish.
   gridUV: 'bend', pixelate: 'bend', rgbToCMYK: 'post', cmykHalftone: 'post',
   // Science: the plate's terms are maths.

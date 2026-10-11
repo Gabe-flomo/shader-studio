@@ -2,7 +2,8 @@
  * MiniGrid — the Grid builder's drawing surface (docs/grid-builder.md, "Drawing"): the grid at a
  * small size, each drawn cell showing its shape in its colour.
  *
- *  - click or drag paints the brush's shape (one undo step a stroke); right-click, or the eraser
+ *  - click or drag paints the brush's shape (one undo step a stroke; under a draw mode, a click on a
+ *    copy paints the cell it copies, and the copies show faintly); right-click, or the eraser
  *    brush, clears; Alt-drag clears too;
  *  - the brush shape's motion paths are drawn faintly through its cells (motionAt, the shader's
  *    sums on the CPU), so a path can be set up before looking at the preview;
@@ -15,7 +16,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { radius } from '../../theme/tokens';
 import { useGridBuilder } from '../../gridScene/store';
-import { eraseCell, motionAt, placeCell, shapeOf } from '../../gridScene/spec';
+import { eraseCell, motionAt, placeCell, shapeOf, sourceCell } from '../../gridScene/spec';
 import { textStampGridCells } from '../../gridScene/textMask';
 import { paintGrid, rgb } from './glyphs';
 
@@ -90,8 +91,11 @@ export function MiniGrid({ size = 288 }: { size?: number }) {
     const s = useGridBuilder.getState().spec;
     return x >= 0 && y >= 0 && x < s.cols && y < s.rows ? [x, y] : null;
   };
-  const apply = (at: [number, number], erase: boolean, key: string) => {
+  const apply = (cellAt: [number, number], erase: boolean, key: string) => {
     const gb = useGridBuilder.getState();
+    // Under a draw mode (repeat, mirror, rotate) a click on a copy draws in the cell it copies.
+    const at = sourceCell(gb.spec, cellAt[0], cellAt[1]);
+    if (!at) return;
     const cur = gb.spec.cells.find(c => c.x === at[0] && c.y === at[1]);
     if (erase ? !cur : cur?.s === gb.brush) return;
     gb.edit(d => { if (erase) eraseCell(d, at[0], at[1]); else placeCell(d, at[0], at[1], gb.brush); }, key);

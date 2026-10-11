@@ -56,7 +56,7 @@ describe('text on the Grid builder', { timeout: 60000 }, () => {
     const prog = gridProgram(s);
     expect(prog.functions).toMatch(/float gs_mask_\w+\(vec2 id\)/);
     expect(prog.functions).toMatch(/w \*= gs_mask_\w+\(floor\(P\)\)/);
-    expect(prog.functions).toMatch(/gs_drawn_\w+\(id\) < 0\.5 && gs_mask_\w+\(id\) > 0\.5/);
+    expect(prog.functions).toMatch(/if \(gs_mask_\w+\(id\) < 0\.5\) continue;/);
     const g = buildStandaloneGrid(s);
     expect(g.warnings).toEqual([]);
     const r = compileGraph({ nodes: g.nodes });
