@@ -21,6 +21,10 @@ import { cloneBlock } from '../sceneBuilder2d/blocks';
 import type { TextMask } from './textMask';
 import type { TexSource } from '../builders/textures';
 import type { Mutable } from '../builders/mute';
+import { defaultDrawnPath, pathAt, pathConfig, samplePoints, type DrawnPath } from './paths';
+
+/** A Drawn path with no stroke yet moves round the default one (as the shader does). */
+const DEFAULT_DRAWN = defaultDrawnPath();
 
 export type Vec2 = [number, number];
 export type Vec3 = [number, number, number];
@@ -59,7 +63,7 @@ export const PIC_MODE_LABELS: Record<PicMode, { label: string; word: string; blu
 /** The picture mode a shape uses (a picture shape defaults to its own: in each cell). */
 export const picModeOf = (s: Pick<GShape, 'picMode'>): PicMode => ((PIC_MODES as readonly string[]).includes(s.picMode as string) ? s.picMode! : 'cell');
 
-export const MOTION_PATHS = ['still', 'updown', 'sideways', 'both', 'circle', 'eight', 'bounce', 'travel', 'hop'] as const;
+export const MOTION_PATHS = ['still', 'updown', 'sideways', 'both', 'circle', 'eight', 'bounce', 'travel', 'hop', 'drawn'] as const;
 export type MotionPath = typeof MOTION_PATHS[number];
 export const MOTION_LABELS: Record<MotionPath, { label: string; blurb: string }> = {
   still: { label: 'Still', blurb: 'Stays in its cell.' },
@@ -71,6 +75,7 @@ export const MOTION_LABELS: Record<MotionPath, { label: string; blurb: string }>
   bounce: { label: 'Bounce', blurb: 'Hops up by Y cells and drops back.' },
   travel: { label: 'Travel', blurb: 'Glides X, Y cells each cycle, wrapping round the grid.' },
   hop: { label: 'Hop', blurb: 'Jumps X, Y cells at a time, wrapping round the grid.' },
+  drawn: { label: 'Drawn', blurb: 'Your own path: draw it on the pad (or Generate one), X wide and Y tall.' },
 };
 
 export const PATTERN_KINDS = ['none', 'ripple', 'diagonal', 'checker', 'rings', 'spiral', 'stripes', 'random', 'picture'] as const;
@@ -106,6 +111,12 @@ export interface Motion {
   speed: number;
   /** Each cell starts this much of a cycle later than the one before it (x + y): a wave of motion. */
   lag: number;
+  /** Degrees: turns the whole path (the XY arrow) round, keeping its length. Absent: 0. Live. */
+  angle?: number;
+  /** Degrees a second the Angle turns on its own. Absent: 0. Live. */
+  angleSpin?: number;
+  /** The Drawn path's stroke and settings (kept when another path is picked, so it comes back). */
+  drawn?: DrawnPath;
 }
 
 export interface GShape {
@@ -471,22 +482,49 @@ const TAU = Math.PI * 2;
 const fract = (v: number) => v - Math.floor(v);
 
 /** Where a shape whose home is cell (hx, hy) is at time t, in cell coordinates (the cell's centre is +0.5; y down). */
-export function motionAt(spec: Pick<GridSceneSpec, 'cols' | 'rows'>, m: Motion, hx: number, hy: number, t: number): Vec2 {
-  const ph = t * m.speed + m.lag * (hx + hy);
+/** The motion's turn at time t, radians: Angle + Spin × t (both in degrees). */
+export const motionTheta = (m: Pick<Motion, 'angle' | 'angleSpin'>, t: number) => ((m.angle ?? 0) + (m.angleSpin ?? 0) * t) * Math.PI / 180;
+/** (x, y) turned `th` radians counter-clockwise, y up (the shader's gs_rot). */
+export function rotate2(v: Vec2, th: number): Vec2 {
+  const c = Math.cos(th), s = Math.sin(th);
+  return [c * v[0] - s * v[1], s * v[0] + c * v[1]];
+}
+
+const sampled = new WeakMap<DrawnPath, Vec2[]>();
+/** A drawn path's arc-length points (cached per path object: the mini grid asks often). */
+export function drawnPoints(p: DrawnPath): Vec2[] {
+  let q = sampled.get(p);
+  if (!q) { q = samplePoints(p); sampled.set(p, q); }
+  return q;
+}
+
+/** A path's offset from its home (cells, y up) at phase `ph` cycles, before the Angle: the shader's pathOffset. */
+export function pathOffsetAt(m: Motion, ph: number): Vec2 {
   const a = ph * TAU;
   const [ax, ay] = m.xy;
-  let ox = 0, oy = 0;
   switch (m.path) {
-    case 'updown': oy = ay * Math.sin(a); break;
-    case 'sideways': ox = ax * Math.sin(a); break;
-    case 'both': ox = ax * Math.sin(a); oy = ay * Math.sin(a); break;
-    case 'circle': ox = ax * Math.cos(a); oy = ay * Math.sin(a); break;
-    case 'eight': ox = ax * Math.sin(a); oy = ay * Math.sin(2 * a); break;
-    case 'bounce': oy = ay * Math.abs(Math.sin(a * 0.5)); break;
-    case 'travel': ox = ax * ph; oy = ay * ph; break;
-    case 'hop': ox = ax * Math.floor(ph); oy = ay * Math.floor(ph); break;
-    default: break;
+    case 'updown': return [0, ay * Math.sin(a)];
+    case 'sideways': return [ax * Math.sin(a), 0];
+    case 'both': return [ax * Math.sin(a), ay * Math.sin(a)];
+    case 'circle': return [ax * Math.cos(a), ay * Math.sin(a)];
+    case 'eight': return [ax * Math.sin(a), ay * Math.sin(2 * a)];
+    case 'bounce': return [0, ay * Math.abs(Math.sin(a * 0.5))];
+    case 'travel': return [ax * ph, ay * ph];
+    case 'hop': return [ax * Math.floor(ph), ay * Math.floor(ph)];
+    case 'drawn': {
+      const d = m.drawn ?? DEFAULT_DRAWN;
+      const p = pathAt(drawnPoints(d), pathConfig(d), ph);
+      return [ax * p[0], ay * p[1]];
+    }
+    default: return [0, 0];
   }
+}
+
+export function motionAt(spec: Pick<GridSceneSpec, 'cols' | 'rows'>, m: Motion, hx: number, hy: number, t: number): Vec2 {
+  const ph = t * m.speed + m.lag * (hx + hy);
+  let [ox, oy] = pathOffsetAt(m, ph);
+  const th = motionTheta(m, t);
+  if (th) [ox, oy] = rotate2([ox, oy], th);
   let px = hx + 0.5 + ox, py = hy + 0.5 - oy;
   if (m.path === 'travel' || m.path === 'hop') { px = fract(px / spec.cols) * spec.cols; py = fract(py / spec.rows) * spec.rows; }
   return [px, py];

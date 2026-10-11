@@ -4,7 +4,7 @@
  * the builder store's `edit`, with a coalesce key so one drag is one undo step.
  */
 import { useState, type ReactNode } from 'react';
-import { BuilderSlider } from '../builders/BuilderSlider';
+import { BuilderSlider, type BuilderSliderProps } from '../builders/BuilderSlider';
 import { ColorSwatch } from '../ui/ColorPicker';
 import { Icon } from '../ui/Icon';
 import { useTokens } from '../../theme/themeStore';
@@ -32,16 +32,18 @@ export function Row({ label, hint, children }: { label: ReactNode; hint?: string
  * double-click resets (to `defaultValue`, else the value it came into view with), a ±N range is
  * bipolar and typing past the end widens it.
  */
-export function NumRow({ label, value, min, max, step = 0.01, onChange, hint, integer, unit, defaultValue, rangeKey, play }: {
+export function NumRow({ label, value, min, max, step = 0.01, onChange, hint, integer, unit, defaultValue, rangeKey, play, lazyParam }: {
   label: ReactNode; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; hint?: string; integer?: boolean; unit?: string;
   defaultValue?: number; rangeKey?: string;
   /** The value of the spec it sets: right-click offers the Play menu of the node param it builds (playParam.ts). */
   play?: SpecPath;
+  /** Another builder's own lookup of the node param it builds (BuilderSlider `lazyParam`), when not a 3D spec path. */
+  lazyParam?: BuilderSliderProps['lazyParam'];
 }) {
   return (
     <Row label={unit ? <>{label} <span style={{ opacity: 0.6 }}>{unit}</span></> : label} hint={hint}>
       <BuilderSlider value={value} min={min} max={max} step={integer ? 1 : step} integer={integer} onChange={onChange} ariaLabel={typeof label === 'string' ? label : 'value'}
-        defaultValue={defaultValue} rangeKey={rangeKey} lazyParam={play ? lazyParamFor(play) : undefined} />
+        defaultValue={defaultValue} rangeKey={rangeKey} lazyParam={play ? lazyParamFor(play) : lazyParam} />
     </Row>
   );
 }

@@ -4,6 +4,7 @@
  * the CPU (cpuGlsl.ts): the memory pass is stepped frame by frame over every cell (its Previous fed
  * back), and the scene reads its bits through a stand-in for the texture read.
  */
+import { motionDecls, motionLines, motionUniforms } from './motionArgs';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.hoisted(() => {
@@ -32,9 +33,9 @@ function uniformsOf(spec: GridSceneSpec): Record<string, Val> {
     u[a.e] = s.outline;
     u[a.c] = [...s.color];
   }
-  return u;
+  return { ...u, ...motionUniforms(spec) };
 }
-const shapeDecls = (spec: GridSceneSpec) => spec.shapes.flatMap(s => { const a = shapeArgs(s.id); return [`uniform vec4 ${a.m};`, `uniform vec4 ${a.l};`, `uniform float ${a.e};`, `uniform vec3 ${a.c};`]; });
+const shapeDecls = (spec: GridSceneSpec) => [...spec.shapes.flatMap(s => { const a = shapeArgs(s.id); return [`uniform vec4 ${a.m};`, `uniform vec4 ${a.l};`, `uniform float ${a.e};`, `uniform vec3 ${a.c};`]; }), ...motionDecls(spec)]
 const gdLines = (data: number[]) => [`  float gd[${data.length}];`, ...data.map((v, i) => `  gd[${i}] = ${v.toFixed(1)};`)];
 
 /**
@@ -49,6 +50,7 @@ function sceneShader(spec: GridSceneSpec, held?: number[]): { run: (cell: [numbe
   const src = ['uniform vec2 p_uv;', 'uniform float p_t;', 'uniform vec4 pt;', 'uniform sampler2D lt;', ...shapeDecls(spec), `float HELD[${N * N}];`, fns,
     'void main() {',
     ...gdLines(p.data),
+    ...motionLines(spec),
     ...(held ?? []).map((v, i) => (v ? `  HELD[${i}] = ${v.toFixed(1)};` : '')).filter(Boolean),
     '  vec4 hp = vec4(0.0);',
     `  gl_FragColor = ${p.name}(p_uv, p_t, pt, ${p.args.join(', ')});`,
@@ -70,7 +72,7 @@ function runMemory(spec: GridSceneSpec, times: number[], o: { resetAt?: number }
   const N = mem.size;
   const call = mem.latchArgs.map(a => (a === 'h' ? 'hU' : a === 't' ? 'p_t' : a === 'pv' ? 'pvU' : a === 'reset' ? 'resetU' : a));
   const src = ['uniform vec2 hU;', 'uniform float p_t;', 'uniform vec4 pvU;', 'uniform float resetU;', ...shapeDecls(spec), mem.latchFunctions,
-    'void main() {', ...gdLines(p.data), `  gl_FragColor = vec4(${mem.latchName}(${call.join(', ')}), 1.0);`, '}'].join('\n');
+    'void main() {', ...gdLines(p.data), ...motionLines(spec), `  gl_FragColor = vec4(${mem.latchName}(${call.join(', ')}), 1.0);`, '}'].join('\n');
   const sh = new CpuShader(src);
   let tex: number[][] = Array.from({ length: N * N }, () => [0, 0, 0, 0]);
   for (const t of times) {

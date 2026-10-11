@@ -33,7 +33,8 @@
  * Shapes are measured with y up. The result is vec4(colour, distance in picture units); `hp` gets the
  * winning shape's home centre and piece place (picture units).
  */
-import { PIC_MODES, SHAPE_KINDS, cellSize, clauseNeedsB, drawOf, picModeOf, ruleClauses, ruleProblem, shapeOf, type GShape, type GridClause, type GridDo, type GridRule, type GridSceneSpec, type MotionPath, type PatternKind, type ShapeKind } from './spec';
+import { PATH_HEAD, PATH_POINTS, defaultDrawnPath, packPath, pathConfig } from './paths';
+import { PIC_MODES, SHAPE_KINDS, cellSize, clauseNeedsB, drawOf, motionTheta, picModeOf, rotate2, ruleClauses, ruleProblem, shapeOf, type GShape, type GridClause, type GridDo, type GridRule, type GridSceneSpec, type MotionPath, type PatternKind, type ShapeKind } from './spec';
 import { findTex } from '../builders/textures';
 import { readTextMask, textMaskGlsl, type TextMask } from './textMask';
 
@@ -115,6 +116,10 @@ vec3 gs_hue$(vec3 c, float a) {
   float ca = cos(a);
   return c * ca + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - ca);
 }`;
+/** v turned a radians (counter-clockwise, y up): the motion's Angle. */
+const ROT = 'vec2 gs_rot$(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }';
+/** The functions every shape's motion needs: the turn, and the drawn path's when a shape has one. */
+const motionHelpers = (spec: GridSceneSpec) => [ROT, ...(spec.shapes.some(s => s.motion.path === 'drawn') ? [drawnFns()] : [])];
 
 /** The offset of a motion path (cells, y up) from a = phase in radians and ph = phase in cycles. */
 function pathOffset(path: MotionPath): string {
@@ -127,8 +132,63 @@ function pathOffset(path: MotionPath): string {
     case 'bounce': return 'vec2(0.0, m.y * abs(sin(a * 0.5)))';
     case 'travel': return 'm.xy * ph';
     case 'hop': return 'm.xy * floor(ph)';
+    case 'drawn': return 'm.xy * gs_path$(x, ph)';
     default: return 'vec2(0.0)';
   }
+}
+
+// ── A shape's motion numbers beyond (x, y, speed, lag): its Angle and its drawn path ──────────
+//
+// x[0] Angle (radians), x[1] its spin (radians a second); a Drawn path adds x[2…5] its settings
+// (closed, end mode, back, ease), x[6…9] its bounds and rates (paths.ts packPath), then the points.
+
+/** Where the drawn path's points start in a shape's motion array. */
+const PATH_AT = 6 + PATH_HEAD;
+/** How long a shape's motion array is. */
+export const motionLen = (s: Pick<GShape, 'motion'>) => (s.motion.path === 'drawn' ? PATH_AT + 2 * PATH_POINTS : 2);
+/** The motion array's numbers at the shape's spec values (what the Grid scene node's line builds). */
+export function motionExtra(s: Pick<GShape, 'motion'>): number[] {
+  const m = s.motion;
+  const head = [(m.angle ?? 0) * Math.PI / 180, (m.angleSpin ?? 0) * Math.PI / 180];
+  if (m.path !== 'drawn') return head;
+  const d = m.drawn ?? defaultDrawnPath();
+  return [...head, ...pathConfig(d), ...packPath(d)];
+}
+/** A shape's motion as a parameter list (`vec4 mA, float xA[K]`), named as given. */
+const mvDecl = (s: Pick<GShape, 'motion'>, m: string, x: string) => `vec4 ${m}, float ${x}[${motionLen(s)}]`;
+/** The same as arguments. */
+const mvArgs = (id: string) => { const a = shapeArgs(id); return `${a.m}, ${a.x}`; };
+
+/** The drawn path (paths.ts pathAt, the same sums): its point at progress s, and its offset at phase ph (pad units). */
+function drawnFns(): string {
+  const K = PATH_AT + 2 * PATH_POINTS, N = gf(PATH_POINTS);
+  const last = PATH_AT + 2 * PATH_POINTS;
+  return [
+    `vec2 gs_along$(float x[${K}], float s, float closed) {`,
+    '  float i; float j; float k;',
+    `  if (closed > 0.5) { float f = fract(s) * ${N}; i = floor(f); k = f - i; i = mod(i, ${N}); j = mod(i + 1.0, ${N}); }`,
+    `  else { float f = clamp(s, 0.0, 1.0) * ${gf(PATH_POINTS - 1)}; i = min(floor(f), ${gf(PATH_POINTS - 2)}); k = f - i; j = i + 1.0; }`,
+    `  int ii = ${PATH_AT} + 2 * int(i + 0.5);`,
+    `  int jj = ${PATH_AT} + 2 * int(j + 0.5);`,
+    '  return mix(vec2(x[ii], x[ii + 1]), vec2(x[jj], x[jj + 1]), k);',
+    '}',
+    '// One cycle: closed round the loop; open snap back (x[3] 0), ease back over x[4] of it (1), or ping-pong (2); x[5] eases it.',
+    `vec2 gs_path$(float x[${K}], float ph) {`,
+    '  float u = fract(ph);',
+    '  float e = x[5];',
+    '  if (x[2] > 0.5) return gs_along$(x, u + (smoothstep(0.0, 1.0, u) - u) * e, 1.0);',
+    '  if (x[3] < 0.5) return gs_along$(x, u + (smoothstep(0.0, 1.0, u) - u) * e, 0.0);',
+    '  if (x[3] < 1.5) {',
+    '    float bk = clamp(x[4], 0.05, 0.9);',
+    '    if (u < 1.0 - bk) { float v = u / (1.0 - bk); return gs_along$(x, v + (smoothstep(0.0, 1.0, v) - v) * e, 0.0); }',
+    `    vec2 a = vec2(x[${last - 2}], x[${last - 1}]);`,
+    `    vec2 b = vec2(x[${PATH_AT}], x[${PATH_AT + 1}]);`,
+    '    return mix(a, b, smoothstep(0.0, 1.0, (u - (1.0 - bk)) / bk));',
+    '  }',
+    '  float v = 1.0 - abs(2.0 * u - 1.0);',
+    '  return gs_along$(x, v + (smoothstep(0.0, 1.0, v) - v) * e, 0.0);',
+    '}',
+  ].join('\n');
 }
 
 /** The pattern's wave −1 … 1 at cell position P (cell units), from pt = (amount, freq, speed, arms). */
@@ -191,7 +251,7 @@ function targetLines(spec: GridSceneSpec, texs: string[], pad: string): string[]
 }
 
 /** The argument names of a shape's numbers: motion, look, edge, colour. */
-export const shapeArgs = (id: string) => ({ m: `m${id}`, l: `l${id}`, e: `e${id}`, c: `c${id}` });
+export const shapeArgs = (id: string) => ({ m: `m${id}`, l: `l${id}`, e: `e${id}`, c: `c${id}`, x: `x${id}`, r: `r${id}`, d: `d${id}` });
 
 /**
  * The rules that run, with their swaps mirrored (A swaps with B: B takes A's colour too). Only a
@@ -277,26 +337,56 @@ export const shapeReach = (spec: GridSceneSpec, s: GShape, fill = false) => reac
  * 2 · D · lag a cell (L, the inverse's contraction).
  */
 function pathRates(path: MotionPath, m: string): { A: string; D: string; mid: string } {
-  const ax = `abs(${m}.x)`, ay = `abs(${m}.y)`, mx = `max(${ax}, ${ay})`;
+  // The path turned by the Angle (th, and q = its cos, sin): bounds as a box round the turned path,
+  // so the Chebyshev reach and rate stay exact for a line and bound the rest (at angle 0, as before).
+  const ax = `abs(${m}.x)`, ay = `abs(${m}.y)`;
+  const k = 'max(abs(q.x), abs(q.y))';
+  const r = `gs_rot$(${m}.xy, th)`;
+  const box = (X: string, Y: string) => `max(${X} * abs(q.x) + ${Y} * abs(q.y), ${X} * abs(q.y) + ${Y} * abs(q.x))`;
   switch (path) {
-    case 'updown': return { A: ay, D: `6.2831853 * ${ay}`, mid: 'vec2(0.0)' };
-    case 'sideways': return { A: ax, D: `6.2831853 * ${ax}`, mid: 'vec2(0.0)' };
-    case 'both': case 'circle': return { A: mx, D: `6.2831853 * ${mx}`, mid: 'vec2(0.0)' };
-    case 'eight': return { A: mx, D: `max(6.2831853 * ${ax}, 12.5663706 * ${ay})`, mid: 'vec2(0.0)' };
-    case 'bounce': return { A: `0.5 * ${ay}`, D: `3.1415927 * ${ay}`, mid: `vec2(0.0, -0.5 * ${m}.y)` };
+    case 'updown': return { A: `${ay} * ${k}`, D: `6.2831853 * ${ay} * ${k}`, mid: 'vec2(0.0)' };
+    case 'sideways': return { A: `${ax} * ${k}`, D: `6.2831853 * ${ax} * ${k}`, mid: 'vec2(0.0)' };
+    case 'both': { const A = `max(abs(${r}.x), abs(${r}.y))`; return { A, D: `6.2831853 * ${A}`, mid: 'vec2(0.0)' }; }
+    case 'circle': { const A = `max(length(${m}.xy * q), length(${m}.xy * q.yx))`; return { A, D: `6.2831853 * ${A}`, mid: 'vec2(0.0)' }; }
+    case 'eight': return { A: box(ax, ay), D: `6.2831853 * ${box(ax, `2.0 * ${ay}`)}`, mid: 'vec2(0.0)' };
+    case 'bounce': return { A: `0.5 * ${ay} * ${k}`, D: `3.1415927 * ${ay} * ${k}`, mid: `-0.5 * ${m}.y * q.yx` };
+    case 'drawn': {
+      // x[6…9]: the points' box (bx, by) and fastest steps (gx, gy, per unit of progress). The progress
+      // runs up to 1.5× (ease), 1 ÷ (1 − back) faster going out with Ease back, twice with ping-pong;
+      // the glide home covers end − start in back of a cycle; Snap back jumps (no rate: with lag the
+      // path's range bounds the search).
+      const H = 6, last = PATH_AT + 2 * PATH_POINTS;
+      const g = `(${ax} * x[${H + 2}] + ${ay} * x[${H + 3}])`;
+      const ends = `(${ax} * abs(x[${last - 2}] - x[${PATH_AT}]) + ${ay} * abs(x[${last - 1}] - x[${PATH_AT + 1}]))`;
+      const D = `(x[2] > 0.5 ? 1.5 * ${g} : x[3] < 0.5 ? 1.0e9 : x[3] < 1.5 ? max(1.5 * ${g} / (1.0 - clamp(x[4], 0.05, 0.9)), 1.5 * ${ends} / clamp(x[4], 0.05, 0.9)) : 3.0 * ${g})`;
+      return { A: box(`${ax} * x[${H}]`, `${ay} * x[${H + 1}]`), D, mid: 'vec2(0.0)' };
+    }
     default: return { A: '0.0', D: '0.0', mid: 'vec2(0.0)' };
   }
 }
 
-/** The same on the CPU, for a shape at its spec's values. */
-function pathRatesCpu(path: MotionPath, xy: [number, number]): { A: number; D: number } {
-  const x = Math.abs(xy[0]), y = Math.abs(xy[1]), m = Math.max(x, y), T = Math.PI * 2;
-  switch (path) {
-    case 'updown': return { A: y, D: T * y };
-    case 'sideways': return { A: x, D: T * x };
-    case 'both': case 'circle': return { A: m, D: T * m };
-    case 'eight': return { A: m, D: Math.max(T * x, 2 * T * y) };
-    case 'bounce': return { A: y / 2, D: Math.PI * y };
+/** The same on the CPU, for a shape at its spec's values, its path turned `th` radians. */
+function pathRatesCpu(s: Pick<GShape, 'motion'>, th: number): { A: number; D: number } {
+  const m = s.motion;
+  const x = Math.abs(m.xy[0]), y = Math.abs(m.xy[1]), T = Math.PI * 2;
+  const c = Math.abs(Math.cos(th)), sn = Math.abs(Math.sin(th)), k = Math.max(c, sn);
+  const box = (X: number, Y: number) => Math.max(X * c + Y * sn, X * sn + Y * c);
+  switch (m.path) {
+    case 'updown': return { A: y * k, D: T * y * k };
+    case 'sideways': return { A: x * k, D: T * x * k };
+    case 'both': { const r = rotate2(m.xy, th); const A = Math.max(Math.abs(r[0]), Math.abs(r[1])); return { A, D: T * A }; }
+    case 'circle': { const A = Math.max(Math.hypot(x * c, y * sn), Math.hypot(x * sn, y * c)); return { A, D: T * A }; }
+    case 'eight': return { A: box(x, y), D: T * box(x, 2 * y) };
+    case 'bounce': return { A: (y / 2) * k, D: Math.PI * y * k };
+    case 'drawn': {
+      const xs = motionExtra(s);
+      const H = 6, last = PATH_AT + 2 * PATH_POINTS;
+      const g = x * xs[H + 2] + y * xs[H + 3];
+      const ends = x * Math.abs(xs[last - 2] - xs[PATH_AT]) + y * Math.abs(xs[last - 1] - xs[PATH_AT + 1]);
+      const bk = Math.max(0.05, Math.min(0.9, xs[4]));
+      const D = xs[2] > 0.5 ? 1.5 * g : xs[3] < 0.5 ? 1e9 : xs[3] < 1.5 ? Math.max(1.5 * g / (1 - bk), 1.5 * ends / bk) : 3 * g;
+      return { A: box(x * xs[H], y * xs[H + 1]), D };
+    }
     default: return { A: 0, D: 0 };
   }
 }
@@ -314,14 +404,22 @@ export function searchRadiusAt(spec: GridSceneSpec, s: GShape, fill = false): nu
   const rch = shapeReach(spec, s, fill) + glow;
   if (fill) return Math.floor(rch + 0.5);
   const m = s.motion;
+  // The Angle as set; spinning, the worst over a turn (the shader works it out each frame).
+  const angles = m.angleSpin ? Array.from({ length: 72 }, (_, i) => (i / 72) * Math.PI * 2) : [motionTheta(m, 0)];
+  return Math.max(...angles.map(th => radiusAtAngle(spec, s, rch, th)));
+}
+
+function radiusAtAngle(spec: GridSceneSpec, s: GShape, rch: number, th: number): number {
+  const m = s.motion;
   const lag = Math.abs(m.lag) < 1e-6 ? 0 : Math.abs(m.lag);
-  const big = Math.max(Math.abs(m.xy[0]), Math.abs(m.xy[1]));
+  const r = rotate2(m.xy, th);
+  const big = Math.max(Math.abs(r[0]), Math.abs(r[1]));
   let R: number;
   if (isWrap(m.path)) {
     const source = copiesMatch(spec) && lag > 0;
     R = rch + (source ? big * lag * (spec.cols + spec.rows) / 2 + (m.path === 'hop' ? big : 0) : 2 * big * lag * (rch + 1) + (m.path === 'hop' && lag ? big / 2 : 0));
   } else {
-    const { A, D } = pathRatesCpu(m.path, m.xy);
+    const { A, D } = pathRatesCpu(s, th);
     const L = copiesMatch(spec) ? (lag ? Infinity : 0) : 2 * lag * D;
     const Ri = L < MAX_CONTRACTION ? rch / (1 - L) : Infinity;
     R = Math.min(Ri, rch + A);
@@ -340,7 +438,9 @@ const copiesMatch = (spec: GridSceneSpec) => drawOf(spec).mode !== 'here' && dra
  * GLSL float, cells) of point X now. The radius is worked out live (gs_find…): the loops run to
  * MAX_SEARCH and stop at it. The body runs once per candidate (it reads the drawing itself).
  */
-function searchLoop(spec: GridSceneSpec, s: GShape, X: string, rch: string, glow: boolean, m: string, body: string[], pad: string): string[] {
+function searchLoop(spec: GridSceneSpec, s: GShape, X: string, rch: string, glow: boolean, mv: string, body: string[], pad: string): string[] {
+  // mv: the shape's motion as arguments ("mA, xA"); m its vec4.
+  const m = mv.split(',')[0].trim();
   const dims = v2(spec.cols, spec.rows);
   const M = MAX_SEARCH;
   const inner = (p: string) => [
@@ -359,16 +459,16 @@ function searchLoop(spec: GridSceneSpec, s: GShape, X: string, rch: string, glow
   // every shape within a cell of X is found, and the glow fades out by then (GLOW_FADE).
   if (glow) rch = `(${rch} + 1.0)`;
   if (!isWrap(s.motion.path)) {
-    return [`${pad}{`, `${pad}  float R;`, `${pad}  vec2 hc = gs_find${s.id}$(${X}, t, ${m}, ${rch}, R);`, `${pad}  R = ${cap('R')};`, ...inner(`${pad}  `), `${pad}}`];
+    return [`${pad}{`, `${pad}  float R;`, `${pad}  vec2 hc = gs_find${s.id}$(${X}, t, ${mv}, ${rch}, R);`, `${pad}  R = ${cap('R')};`, ...inner(`${pad}  `), `${pad}}`];
   }
   // Travel / Hop: each way round the wrap (only the first when every cell moves alike).
   return [
     `${pad}{`,
-    `${pad}  float R = ${cap(`gs_spread${s.id}$(${m}, ${rch})`)};`,
+    `${pad}  float R = ${cap(`gs_spread${s.id}$(${mv}, t, ${rch})`)};`,
     `${pad}  for (int kj = -1; kj <= 1; kj++) {`,
     `${pad}    for (int ki = -1; ki <= 1; ki++) {`,
     `${pad}      if (abs(${m}.w) < 1.0e-6 && (ki != 0 || kj != 0)) continue;`,
-    `${pad}      vec2 hw = gs_home${s.id}$(${X}, t, ${m}, vec2(float(ki), float(kj)));`,
+    `${pad}      vec2 hw = gs_home${s.id}$(${X}, t, ${mv}, vec2(float(ki), float(kj)));`,
     `${pad}      if (hw.x < -R - 1.0 || hw.y < -R - 1.0 || hw.x > ${gf(spec.cols)} + R || hw.y > ${gf(spec.rows)} + R) continue;`,
     `${pad}      vec2 hc = floor(hw + 0.5);`,
     ...inner(`${pad}      `),
@@ -384,11 +484,13 @@ function motionFns(spec: GridSceneSpec, s: GShape): string[] {
   const dims = v2(spec.cols, spec.rows);
   const source = copiesMatch(spec);
   // `ls`: the cell whose lag it runs on (its own, or with "copies match", the drawn cell it copies).
+  const mx = mvDecl(s, 'm', 'x');
   const out = [[
-    `vec2 gs_move${s.id}$(vec2 home, float ls, float t, vec4 m) {`,
+    // The offset turned by the Angle (x[0], spinning x[1] a second): the reach's length is kept.
+    `vec2 gs_move${s.id}$(vec2 home, float ls, float t, ${mx}) {`,
     '  float ph = t * m.z + m.w * ls;',
     '  float a = ph * 6.2831853;',
-    `  vec2 o = ${pathOffset(s.motion.path)};`,
+    `  vec2 o = gs_rot$(${pathOffset(s.motion.path)}, x[0] + t * x[1]);`,
     '  vec2 P = home + 0.5 + vec2(o.x, -o.y);',
     ...(wrap ? [`  P = fract(P / ${dims}) * ${dims};`] : []),
     '  return P;',
@@ -400,13 +502,15 @@ function motionFns(spec: GridSceneSpec, s: GShape): string[] {
       '// The home cell a shape at X comes from: the fixed point h = X − (P(h) − h), the place a cell\'s motion',
       '// puts it at, iterated while lag keeps neighbours close (L < 1); else the middle of the path, widened',
       '// by its range. R: how far round the centre to look (cells, before the glow\'s cell and the cap).',
-      `vec2 gs_find${s.id}$(vec2 X, float t, vec4 m, float rch, out float R) {`,
+      `vec2 gs_find${s.id}$(vec2 X, float t, ${mx}, float rch, out float R) {`,
+      '  float th = x[0] + t * x[1];',
+      '  vec2 q = vec2(cos(th), sin(th));',
       `  float L = ${source ? 'abs(m.w) < 1.0e-6 ? 0.0 : 1.0e9' : `2.0 * abs(m.w) * ${D}`};`,
-      `  vec2 h = X - gs_move${s.id}$(vec2(0.0), 0.0, t, m);`,
+      `  vec2 h = X - gs_move${s.id}$(vec2(0.0), 0.0, t, m, x);`,
       '  float dl = 0.0;',
       '  for (int n = 0; n < 8; n++) {',
       `    if (L >= ${gf(MAX_CONTRACTION)}) break;`,
-      `    vec2 hn = X - (gs_move${s.id}$(h, h.x + h.y, t, m) - h);`,
+      `    vec2 hn = X - (gs_move${s.id}$(h, h.x + h.y, t, m, x) - h);`,
       '    dl = max(abs(hn.x - h.x), abs(hn.y - h.y));',
       '    h = hn;',
       '    if (dl < 1.0e-3) break;',
@@ -419,14 +523,15 @@ function motionFns(spec: GridSceneSpec, s: GShape): string[] {
       '}',
     ].join('\n'));
   } else {
-    const big = 'max(abs(m.x), abs(m.y))';
+    const big = 'max(abs(r.x), abs(r.y))';
     const S = gf((spec.cols + spec.rows) / 2);
     // P = home + 0.5 + a (T + lag (home.x + home.y)) round the grid: solved for home on wrap k (a continuous estimate).
     // With "copies match", a copy's lag comes from the cell it copies: the middle of those is used, the rest is spread.
     out.push([
-      `vec2 gs_home${s.id}$(vec2 X, float t, vec4 m, vec2 k) {`,
+      `vec2 gs_home${s.id}$(vec2 X, float t, ${mx}, vec2 k) {`,
       `  vec2 dims = ${dims};`,
-      '  vec2 a = vec2(m.x, -m.y);',
+      '  vec2 r = gs_rot$(m.xy, x[0] + t * x[1]);',
+      '  vec2 a = vec2(r.x, -r.y);',
       ...(source ? [`  float T = t * m.z + m.w * ${S};`, '  vec2 v = vec2(0.0);'] : [
         s.motion.path === 'hop' ? '  float T = abs(m.w) < 1.0e-6 ? floor(t * m.z) : t * m.z - 0.5;' : '  float T = t * m.z;',
         '  vec2 v = a * m.w;',
@@ -448,7 +553,8 @@ function motionFns(spec: GridSceneSpec, s: GShape): string[] {
       '  vec2 n = floor(nr + 0.5) + k;',
       '  return h0 + c0 * n.x + c1 * n.y;',
       '}',
-      `float gs_spread${s.id}$(vec4 m, float rch) {`,
+      `float gs_spread${s.id}$(${mx}, float t, float rch) {`,
+      '  vec2 r = gs_rot$(m.xy, x[0] + t * x[1]);',
       '  float lag = abs(m.w) < 1.0e-6 ? 0.0 : abs(m.w);',
       source
         ? `  return rch + ${big} * lag * ${S}${s.motion.path === 'hop' ? ` + (lag > 0.0 ? ${big} : 0.0)` : ''};`
@@ -475,12 +581,12 @@ function clauseExpr(r: GridRule, k: number, w: GridClause, cellArgs: string): st
     case 'column': return `abs(C.x - ${gf(w.x ?? 0)}) < 0.5`;
     case 'row': return `abs(C.y - ${gf(w.y ?? 0)}) < 0.5`;
     case 'sameCell':
-    case 'near': return `${ruleFn(r, k)}(P, C, hs, t, ${shapeArgs(w.b!).m}, gd${cellArgs}) > 0.5`;
+    case 'near': return `${ruleFn(r, k)}(P, C, hs, t, ${mvArgs(w.b!)}, gd${cellArgs}) > 0.5`;
   }
 }
 
 /** The call of a rule's condition function, from where P, C, hs, t, the shapes' motions and gd are (the scene, the memory pass). */
-const condCall = (r: GridRule, cellArgs: string) => `${condFn(r)}(P, C, hs, t${partnersOf(r).map(id => `, ${shapeArgs(id).m}`).join('')}, gd${cellArgs})`;
+const condCall = (r: GridRule, cellArgs: string) => `${condFn(r)}(P, C, hs, t${partnersOf(r).map(id => `, ${mvArgs(id)}`).join('')}, gd${cellArgs})`;
 
 function effect(spec: GridSceneSpec, r: GridRule, d: GridDo, pics: boolean, slotOf: (s: GShape) => number): string {
   switch (d.kind) {
@@ -608,8 +714,8 @@ function cellFns(spec: GridSceneSpec, n: number, repeat: boolean): string {
 function memoryFns(spec: GridSceneSpec, sticky: GridRule[], n: number, repeat: boolean, source: boolean, cellArgs: string, ruleFns: string[]): { code: string; args: string[] } {
   const shapes = spec.shapes;
   const rpDecl = repeat ? ', vec4 rp, float rs' : '';
-  const mDecl = shapes.map(s => `, vec4 ${shapeArgs(s.id).m}`).join('');
-  const mArgs = shapes.map(s => `, ${shapeArgs(s.id).m}`).join('');
+  const mDecl = shapes.map(s => `, ${mvDecl(s, shapeArgs(s.id).m, shapeArgs(s.id).x)}`).join('');
+  const mArgs = shapes.map(s => `, ${mvArgs(s.id)}`).join('');
   const fire: string[] = [
     `vec2 gs_fire$(vec2 h, float t${mDecl}, float gd[${n}]${rpDecl}) {`,
     '  vec2 b = vec2(0.0);',
@@ -618,7 +724,7 @@ function memoryFns(spec: GridSceneSpec, sticky: GridRule[], n: number, repeat: b
   shapes.forEach((sh, si) => {
     const mine = sticky.filter(r => r.when.a === sh.id);
     if (!mine.length) return;
-    const m = shapeArgs(sh.id).m;
+    const m = mvArgs(sh.id);
     fire.push(
       `  if (abs(sl - ${gf(si + 1)}) < 0.5) {`,
       source ? `    vec2 hs = gs_src$(h${cellArgs}); vec2 P = gs_move${sh.id}$(h, hs.x + hs.y, t, ${m}) - (h - hs);` : `    vec2 hs = h; vec2 P = gs_move${sh.id}$(h, h.x + h.y, t, ${m});`,
@@ -643,8 +749,8 @@ function memoryFns(spec: GridSceneSpec, sticky: GridRule[], n: number, repeat: b
     '}',
   ];
   // What the conditions need: the drawing, the shapes' motions, the partner searches, the conditions.
-  const code = [cellFns(spec, n, repeat), ...shapes.flatMap(s => motionFns(spec, s)), ...ruleFns, fire.join('\n'), latch.join('\n')].join('\n');
-  return { code, args: ['h', 't', 'pv', 'reset', ...shapes.map(s => shapeArgs(s.id).m), 'gd', ...(repeat ? ['rp', 'rs'] : [])] };
+  const code = [cellFns(spec, n, repeat), ...motionHelpers(spec), ...shapes.flatMap(s => motionFns(spec, s)), ...ruleFns, fire.join('\n'), latch.join('\n')].join('\n');
+  return { code, args: ['h', 't', 'pv', 'reset', ...shapes.flatMap(s => [shapeArgs(s.id).m, shapeArgs(s.id).x]), 'gd', ...(repeat ? ['rp', 'rs'] : [])] };
 }
 
 /**
@@ -669,12 +775,12 @@ export function gridProgram(spec: GridSceneSpec, opts: { brute?: boolean } = {})
   const cs = gf(cellSize(spec));
   const params = [
     'vec2 uv', 'float t', 'vec4 pt',
-    ...shapes.flatMap(s => { const a = shapeArgs(s.id); return [`vec4 ${a.m}`, `vec4 ${a.l}`, `float ${a.e}`, `vec3 ${a.c}`]; }),
+    ...shapes.flatMap(s => { const a = shapeArgs(s.id); return [mvDecl(s, a.m, a.x), `vec4 ${a.l}`, `float ${a.e}`, `vec3 ${a.c}`]; }),
     `float gd[${n}]`, ...(repeat ? ['vec4 rp', 'float rs'] : []),
     ...texs.map((_, i) => `sampler2D ${texArg(i)}`), ...(sticky.length ? ['sampler2D lt'] : []), ...(pm ? ['float pcut'] : []), ...(screen ? ['vec2 suv'] : []), 'inout vec4 hp',
   ];
   const args = [
-    ...shapes.flatMap(s => { const a = shapeArgs(s.id); return [a.m, a.l, a.e, a.c]; }),
+    ...shapes.flatMap(s => { const a = shapeArgs(s.id); return [a.m, a.x, a.l, a.e, a.c]; }),
     'gd', ...(repeat ? ['rp', 'rs'] : []), ...texs.map((_, i) => texArg(i)), ...(sticky.length ? ['lt'] : []), ...(pm ? ['pcut'] : []), ...(screen ? ['suv'] : []), 'hp',
   ];
   // A picture cell is a square (k 10): only then does the shape function know it, so other scenes keep their shapes' code.
@@ -706,6 +812,7 @@ export function gridProgram(spec: GridSceneSpec, opts: { brute?: boolean } = {})
   }
   const pmLine = (C: string) => (pm ? [`vis *= ${pm.invert ? '1.0 - ' : ''}step(pcut, gs_lum$(${texArg(texs.indexOf(pm.tex))}, ${C}, ${gf(aspectOf(spec, pm.tex))}));`] : []);
   const radius: Record<string, number> = {};
+  fns.push(...motionHelpers(spec));
   for (const s of shapes) {
     radius[s.id] = Math.min(MAX_SEARCH, searchRadiusAt(spec, s));
     fns.push(...motionFns(spec, s));
@@ -745,19 +852,19 @@ export function gridProgram(spec: GridSceneSpec, opts: { brute?: boolean } = {})
         // "Copies match": the rule is checked in the drawing's frame, so the partner is one of the drawn cells.
         ...(source ? [`if (gs_src$(h${cellArgs}) != h) continue;`] : []),
         ...(b.id === r.when.a ? ['if (h == self) continue;'] : []),
-        `vec2 PB = gs_move${b.id}$(h, h.x + h.y, t, mB);`,
+        `vec2 PB = gs_move${b.id}$(h, h.x + h.y, t, mB, xB);`,
         near ? `if (distance(P, PB) <= ${gf(dist)}) return 1.0;` : 'if (max(abs(floor(PB).x - C.x), abs(floor(PB).y - C.y)) < 0.5) return 1.0;',
       ];
       ruleFns.push([
-        `float ${ruleFn(r, k)}(vec2 P, vec2 C, vec2 self, float t, vec4 mB, float gd[${n}]${rpDecl}) {`,
-        ...search(b, near ? 'P' : 'C + 0.5', gf(near ? dist : 0.5), false, 'mB', body, '  '),
+        `float ${ruleFn(r, k)}(vec2 P, vec2 C, vec2 self, float t, ${mvDecl(b, 'mB', 'xB')}, float gd[${n}]${rpDecl}) {`,
+        ...search(b, near ? 'P' : 'C + 0.5', gf(near ? dist : 0.5), false, 'mB, xB', body, '  '),
         '  return 0.0;',
         '}',
       ].join('\n'));
     });
     ruleFns.push([
       `// rule ${r.id}: ${clauses.map((c, k) => `${k ? `${c.join} ` : ''}${c.when.kind}`).join(' ')}`,
-      `float ${condFn(r)}(vec2 P, vec2 C, vec2 hs, float t${partnersOf(r).map(id => `, vec4 ${shapeArgs(id).m}`).join('')}, float gd[${n}]${rpDecl}) {`,
+      `float ${condFn(r)}(vec2 P, vec2 C, vec2 hs, float t${partnersOf(r).map(id => `, ${mvDecl(shapeOf(spec, id)!, shapeArgs(id).m, shapeArgs(id).x)}`).join('')}, float gd[${n}]${rpDecl}) {`,
       ...clauses.map((c, k) => (k === 0 ? `  bool c = ${clauseExpr(r, k, c.when, cellArgs)};` : `  c = c ${c.join === 'or' ? '||' : '&&'} (${clauseExpr(r, k, c.when, cellArgs)});`)),
       '  return c ? 1.0 : 0.0;',
       '}',
@@ -799,7 +906,7 @@ export function gridProgram(spec: GridSceneSpec, opts: { brute?: boolean } = {})
       // hs: the cell it runs as (its own; with "copies match", the drawn cell it copies). Its lag, pulse,
       // rules, wave and picture are worked out there (P moved into the drawing's frame), then put back at h.
       source ? `vec2 hs = gs_src$(h${cellArgs}); vec2 dP = h - hs;` : 'vec2 hs = h;',
-      `vec2 P = gs_move${sh.id}$(h, hs.x + hs.y, t, ${a.m});`,
+      `vec2 P = gs_move${sh.id}$(h, hs.x + hs.y, t, ${a.m}, ${a.x});`,
       ...(source ? ['P -= dP;'] : []),
       'vec2 C = floor(P);',
       `float k = ${gf(kindIndex(sh.kind))}; float s = ${a.l}.x * 0.5; vec3 c = ${a.c}; float e = ${a.e} * 0.5; float vis = 1.0;`,
@@ -832,7 +939,7 @@ export function gridProgram(spec: GridSceneSpec, opts: { brute?: boolean } = {})
       '}',
     );
     L.push(`  // shape ${sh.id} (${sh.kind}): the drawn cells whose shape could be here now, round the cell this point's would come from (the radius from its live size, pulse, motion and lag)`);
-    L.push(...search(sh, 'cp', reachSums(spec, sh, false).glsl(), look.glow, a.m, body, '  '));
+    L.push(...search(sh, 'cp', reachSums(spec, sh, false).glsl(), look.glow, mvArgs(sh.id), body, '  '));
   });
   let fillRadius = 0;
   if (fill) {

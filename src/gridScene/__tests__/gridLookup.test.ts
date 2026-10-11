@@ -8,12 +8,14 @@
  * Also: the draw modes' maps (repeat, mirror, rotate) match sourceCell, and a fill shape bigger
  * than its cell reaches over the cell's edge.
  */
+import { motionDecls, motionLines, motionUniforms } from './motionArgs';
 import { describe, expect, it } from 'vitest';
 import { CpuShader } from '../../lib/guidedConvert/cpuGlsl';
 import { gridProgram as legacyProgram } from './legacyGlsl';
 import { GLOW_FADE, gridProgram, searchCapped, shapeArgs } from '../glsl';
 import { GRID_TEMPLATES } from '../templates';
 import { buildStandaloneGrid, GS_ROLE } from '../build';
+import { defaultDrawnPath, generatePath } from '../paths';
 import { surpriseGridScene } from '../surprise';
 import { cellSize, emptyGridScene, newShape, placeCell, shownCells, sourceCell, starterGridScene, type GridSceneSpec } from '../spec';
 
@@ -29,11 +31,11 @@ function uniformsOf(spec: GridSceneSpec): Record<string, Val> {
     u[a.e] = s.outline;
     u[a.c] = [...s.color];
   }
-  return u;
+  return { ...u, ...motionUniforms(spec) };
 }
 
 function shapeDecls(spec: GridSceneSpec): string[] {
-  return spec.shapes.flatMap(s => { const a = shapeArgs(s.id); return [`uniform vec4 ${a.m};`, `uniform vec4 ${a.l};`, `uniform float ${a.e};`, `uniform vec3 ${a.c};`]; });
+  return [...spec.shapes.flatMap(s => { const a = shapeArgs(s.id); return [`uniform vec4 ${a.m};`, `uniform vec4 ${a.l};`, `uniform float ${a.e};`, `uniform vec3 ${a.c};`]; }), ...motionDecls(spec)];
 }
 
 /**
@@ -60,6 +62,7 @@ function lookupSource(spec: GridSceneSpec, extra: string[] = [], out = 'g', brut
     'void main() {',
     `  float gd[${p.data.length}];`,
     ...p.data.map((v, i) => `  gd[${i}] = ${v.toFixed(1)};`),
+    ...motionLines(spec),
     '  vec4 hp = vec4(0.0);',
     `  vec4 g = ${p.name}(p_uv, p_t, pt, ${call.join(', ')});`,
     `  gl_FragColor = ${out};`,
@@ -309,6 +312,36 @@ describe('Grid scene: travel and hop round the wrap, against brute force (the se
       r.draw = { mode, period: [3, 3], offset: [0, 0], shift: 0 };
       expect(compareBrute(r, [5.3], 14)).toBeLessThan(0.03);
     }
+  }, 30_000);
+});
+
+describe('Grid scene: Angle and drawn paths, against brute force', () => {
+  // The search's reach and inverse under a turn (and a turn that spins), and along drawn paths with
+  // each end mode: the refined search finds what looking at every cell finds.
+  it.each([
+    ['both', [2, 1.2], 0.03, 45, 0],
+    ['eight', [1.4, 0.8], 0.12, 120, 0],
+    ['bounce', [0, 2], 0.05, -60, 0],
+    ['updown', [0, 2.5], 0.3, 30, 25],
+    ['circle', [1.6, 0.6], 0.02, 0, 40],
+    ['travel', [-2, 1.5], 0.2, 70, 15],
+  ] as const)('%s, reach %j, lag %s, angle %s°, spinning %s°/s', (path, xy, lag, angle, spin) => {
+    const s = full(10, path, [...xy] as [number, number], lag, 0.6);
+    s.shapes[0].motion.angle = angle;
+    s.shapes[0].motion.angleSpin = spin;
+    expect(compareBrute(s, [0.6, 5.3], 14)).toBeLessThan(0.03);
+  }, 30_000);
+
+  it.each([
+    ['closed', { closed: true }],
+    ['open, snap back', { closed: false, ends: 'snap' }],
+    ['open, ease back', { closed: false, ends: 'ease', back: 0.3 }],
+    ['open, ping-pong', { closed: false, ends: 'pingpong', ease: 0.5 }],
+  ] as const)('drawn path, %s, with lag and an angle', (_n, d) => {
+    const s = full(10, 'drawn', [1.5, 1], 0.1, 0.6);
+    s.shapes[0].motion.angle = 35;
+    s.shapes[0].motion.drawn = { ...defaultDrawnPath(), ...d, pts: generatePath(17, { closed: d.closed, wiggle: 0.7, points: 9 }) };
+    expect(compareBrute(s, [0.6, 5.3], 14)).toBeLessThan(0.03);
   }, 30_000);
 });
 

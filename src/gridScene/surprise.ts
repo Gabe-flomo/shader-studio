@@ -4,12 +4,14 @@
  *
  *   - a grid of 6–14 cells, one to three shapes in one harmonious palette on a dark ground;
  *   - cells drawn as a motif: a mirrored pixel sprite, a ring, a diagonal, a border or a scatter;
- *   - motion for most shapes (paths and reaches that stay readable), a pattern most of the time
+ *   - motion for most shapes (paths and reaches that stay readable; now and then a generated Drawn
+ *     path), a pattern most of the time
  *     (sometimes filling the empty cells), now and then a warp from the 2D builder's library and a
  *     rule between two shapes.
  */
 import { darkBackground, harmoniousPalette, makeRng, type Rng } from '../lib/surprise';
 import { BLOCK_BY_ID, blockFromEntry } from '../sceneBuilder2d/blockLibrary';
+import { PATH_ENDS, defaultDrawnPath, generatePath } from './paths';
 import {
   PATTERN_KINDS, SHAPE_IDS, emptyGridScene, newShape, placeCell, warpOf,
   type GridSceneSpec, type MotionPath, type PatternTarget, type ShapeKind, type Vec3,
@@ -92,6 +94,14 @@ export function surpriseGridScene(seed: number | string): GridSceneSpec {
       speed: r3(sh.float(0.2, 0.6) * (travel ? 1 : sh.sign())),
       lag: sh.chance(0.6) ? r3(sh.float(0.03, 0.12)) : 0,
     };
+    // Now and then a path of its own (its own fork, so the rest of the scene is as it was for this seed).
+    const dr = sh.fork(`drawn${i}`);
+    if (path !== 'still' && !travel && dr.chance(0.1)) {
+      const closed = dr.chance(0.6);
+      shape.motion.path = 'drawn';
+      shape.motion.xy = [r3(dr.float(0.25, 0.5)), r3(dr.float(0.25, 0.5))];
+      shape.motion.drawn = { ...defaultDrawnPath(), closed, ends: dr.pick(PATH_ENDS), pts: generatePath(dr.int(1, 999_999), { closed, wiggle: r3(dr.float(0.2, 0.8)), points: dr.int(6, 14) }) };
+    }
     s.shapes.push(shape);
     draw(sh.fork(`cells${i}`), s, id, i === 0 ? sh.pick(motifs) : sh.pick(['scatter', 'diagonal', 'border', 'ring'] as Motif[]));
   }

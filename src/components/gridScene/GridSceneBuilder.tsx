@@ -43,9 +43,13 @@ import {
   DO_KINDS, DO_LABELS, DRAW_MODES, DRAW_MODE_LABELS, MAX_CELLS, MAX_PLACED, PIC_MODES, PIC_MODE_LABELS, defaultDraw, drawOf, picModeOf, MAX_RULES, MAX_SHAPES, MAX_WARPS, MIN_CELLS, MOTION_LABELS, MOTION_PATHS, PATTERN_KINDS, PATTERN_LABELS,
   PATTERN_TARGETS, SHAPE_KINDS, SHAPE_LABELS, TARGET_LABELS, WHEN_KINDS, WHEN_LABELS, defaultLook, defaultPattern, newRule, newShape, nextShapeId,
   removeShape, resizeGrid, ruleProblem, ruleText, shapeOf, shapeSummary, shownCells, warpOf, JOINS, MAX_ALSO, clauseNeedsB, ruleClauses, MAX_SIM_STATE, simStateOf,
-  type DoKind, type DrawMode, type GridClause, type GridDo, type GridRule, type Join, type GShape, type PicMode, type GridSceneSpec, type MotionPath, type PatternKind, type PatternTarget, type ShapeKind, type Vec2, type WhenKind,
+  motionTheta, pathOffsetAt, rotate2,
+  type DoKind, type DrawMode, type GridClause, type GridDo, type GridRule, type Join, type GShape, type PicMode, type GridSceneSpec, type PatternKind, type PatternTarget, type ShapeKind, type Vec2, type WhenKind,
 } from '../../gridScene/spec';
 import { MiniGrid } from './MiniGrid';
+import { DrawnPathControls, DrawnPathPad } from './DrawnPathPad';
+import { gridPlay } from './playParam';
+import { defaultDrawnPath, type DrawnPath } from '../../gridScene/paths';
 import { MUTED_DIM, MuteToggle, MutedTag } from '../builders/MuteToggle';
 import { soloIn } from '../../builders/mute';
 import { Field } from '../ui/Field';
@@ -101,11 +105,16 @@ function Tiles<T extends string>({ items, value, onPick, label, render, cols = 5
   );
 }
 
-/** The XY control: drag the point to set how far the shape moves (cells, y up), its path drawn round it. */
+/**
+ * The XY control: drag the point to set how far the shape moves (cells, y up), its path drawn round
+ * it. With an Angle the point and path are drawn turned (what the shape does), the X / Y it was set
+ * at faint with the angle's arc between; dragging places the turned point (X / Y are set back).
+ */
 function XYPad({ value, onChange, shape, range = 2 }: { value: Vec2; onChange: (v: Vec2) => void; shape: GShape; range?: number }) {
   const tk = useTokens();
   const ref = useRef<HTMLCanvasElement>(null);
   const size = 132;
+  const th = motionTheta(shape.motion, 0);
   useEffect(() => {
     const cv = ref.current;
     const ctx = cv?.getContext('2d');
@@ -117,48 +126,48 @@ function XYPad({ value, onChange, shape, range = 2 }: { value: Vec2; onChange: (
     const px = (v: number) => size / 2 + (v / range) * (size / 2 - 8);
     ctx.strokeStyle = tk.border.default; ctx.lineWidth = 1;
     for (let i = -range; i <= range; i++) { ctx.beginPath(); ctx.moveTo(px(i), 0); ctx.lineTo(px(i), size); ctx.moveTo(0, px(i)); ctx.lineTo(size, px(i)); ctx.stroke(); }
-    // The path over one cycle, from the centre (cell units, y up on screen).
+    // The path over one cycle, from the centre (cell units, y up on screen), turned by the Angle.
     const m = { ...shape.motion, xy: value, lag: 0 };
+    const hop = m.path === 'hop';
     ctx.strokeStyle = rgb(shape.color, 0.9); ctx.lineWidth = 1.5; ctx.beginPath();
     for (let i = 0; i <= 64; i++) {
-      // One cycle (forwards or back), without wrapping travel and hop round a grid.
-      const p = motionAtRel(m.path, value, (i / 64) * Math.sign(m.speed || 1));
+      // One cycle (forwards or back), without wrapping travel and hop round a grid (hop in thirds, to show its steps).
+      const ph = (i / 64) * Math.sign(m.speed || 1);
+      const p = rotate2(hop ? [value[0] * Math.floor(ph * 3) / 3, value[1] * Math.floor(ph * 3) / 3] : pathOffsetAt(m, ph), th);
       const X = px(p[0]), Y = size - px(p[1]);
       if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y);
     }
     ctx.stroke();
+    const turned = rotate2(value, th);
+    if (Math.abs(th) > 1e-4 && Math.hypot(value[0], value[1]) > 1e-3) {
+      // The X / Y as set (faint), and the Angle's arc from it to where the arrow points now.
+      const len = Math.hypot(value[0], value[1]) / range * (size / 2 - 8);
+      const a0 = Math.atan2(value[1], value[0]);
+      ctx.strokeStyle = alpha(tk.accent.base, 0.55); ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(size / 2, size / 2); ctx.lineTo(px(value[0]), size - px(value[1])); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(size / 2, size / 2, Math.min(len, 24), -a0, -(a0 + th), th > 0); ctx.stroke();
+      ctx.fillStyle = alpha(tk.accent.base, 0.45);
+      ctx.beginPath(); ctx.arc(px(value[0]), size - px(value[1]), 3.5, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.strokeStyle = tk.accent.base; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(size / 2, size / 2); ctx.lineTo(px(turned[0]), size - px(turned[1])); ctx.stroke();
     ctx.fillStyle = tk.accent.base;
-    ctx.beginPath(); ctx.arc(px(value[0]), size - px(value[1]), 5, 0, Math.PI * 2); ctx.fill();
-  }, [value, shape, range, tk]);
+    ctx.beginPath(); ctx.arc(px(turned[0]), size - px(turned[1]), 5, 0, Math.PI * 2); ctx.fill();
+  }, [value, shape, range, tk, th]);
   const set = (e: React.PointerEvent) => {
     const r = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
     const fx = ((e.clientX - r.left) - size / 2) / (size / 2 - 8) * range;
     const fy = -((e.clientY - r.top) - size / 2) / (size / 2 - 8) * range;
-    const q = (v: number) => Math.round(Math.max(-range, Math.min(range, v)) * 20) / 20;
-    onChange([q(fx), q(fy)]);
+    const q = (v: number) => Math.round(Math.max(-3, Math.min(3, v)) * 20) / 20;
+    const base = rotate2([Math.max(-range, Math.min(range, fx)), Math.max(-range, Math.min(range, fy))], -th);
+    onChange([q(base[0]), q(base[1])]);
   };
   return (
     <canvas ref={ref} data-xy-pad aria-label="Motion reach: drag to set X and Y" style={{ width: size, height: size, borderRadius: radius.md, cursor: 'crosshair', touchAction: 'none', flexShrink: 0 }}
       onPointerDown={e => { (e.currentTarget as HTMLCanvasElement).setPointerCapture?.(e.pointerId); set(e); }}
       onPointerMove={e => { if (e.buttons) set(e); }} />
   );
-}
-
-/** A path's offset from the home (cells, y up) at phase `ph` cycles: the XY pad's drawing. */
-function motionAtRel(path: MotionPath, xy: Vec2, ph: number): Vec2 {
-  const a = ph * Math.PI * 2;
-  const [x, y] = xy;
-  switch (path) {
-    case 'updown': return [0, y * Math.sin(a)];
-    case 'sideways': return [x * Math.sin(a), 0];
-    case 'both': return [x * Math.sin(a), y * Math.sin(a)];
-    case 'circle': return [x * Math.cos(a), y * Math.sin(a)];
-    case 'eight': return [x * Math.sin(a), y * Math.sin(2 * a)];
-    case 'bounce': return [0, y * Math.abs(Math.sin(a * 0.5))];
-    case 'travel': return [x * ph, y * ph];
-    case 'hop': return [x * Math.floor(ph * 3) / 3, y * Math.floor(ph * 3) / 3];
-    default: return [0, 0];
-  }
 }
 
 // ── Left: the mini grid, the brush, the sections ──────────────────────────────
@@ -351,11 +360,11 @@ function ShapesSection() {
             render={k => <Glyph kind={k} color={sh.color} size={20} />} />
           {sh.kind === 'picture' && !sh.tex && <BuilderNote>A square that shows a picture: pick it below.</BuilderNote>}
           <ColourRow label="Colour" value={sh.color} onChange={v => editShape(sh.id, s => { s.color = v; }, `col${sh.id}`)} />
-          <NumRow label="Size" hint="The radius as a share of half a cell: 1 touches the neighbours." value={sh.size} min={0.05} max={1.5} defaultValue={DEFAULT_SHAPE.size} onChange={v => editShape(sh.id, s => { s.size = v; }, `size${sh.id}`)} />
-          <NumRow label="Turn" unit="°" value={sh.turn} min={-180} max={180} step={1} defaultValue={0} onChange={v => editShape(sh.id, s => { s.turn = v; }, `turn${sh.id}`)} />
-          <NumRow label="Spin" hint="Turns a second." value={sh.spin} min={-2} max={2} defaultValue={0} onChange={v => editShape(sh.id, s => { s.spin = v; }, `spin${sh.id}`)} />
-          <NumRow label="Pulse" hint="How much the size breathes, once a cycle of its motion." value={sh.pulse} min={0} max={1} defaultValue={0} onChange={v => editShape(sh.id, s => { s.pulse = v; }, `pulse${sh.id}`)} />
-          <NumRow label="Outline" hint="0 is filled; above 0 only the edge, this wide." value={sh.outline} min={0} max={0.5} defaultValue={0} onChange={v => editShape(sh.id, s => { s.outline = v; }, `out${sh.id}`)} />
+          <NumRow label="Size" hint="The radius as a share of half a cell: 1 touches the neighbours." value={sh.size} min={0.05} max={1.5} defaultValue={DEFAULT_SHAPE.size} lazyParam={gridPlay(sh.id, 'size')} onChange={v => editShape(sh.id, s => { s.size = v; }, `size${sh.id}`)} />
+          <NumRow label="Turn" unit="°" value={sh.turn} min={-180} max={180} step={1} defaultValue={0} lazyParam={gridPlay(sh.id, 'turn')} onChange={v => editShape(sh.id, s => { s.turn = v; }, `turn${sh.id}`)} />
+          <NumRow label="Spin" hint="Turns a second." value={sh.spin} min={-2} max={2} defaultValue={0} lazyParam={gridPlay(sh.id, 'spin')} onChange={v => editShape(sh.id, s => { s.spin = v; }, `spin${sh.id}`)} />
+          <NumRow label="Pulse" hint="How much the size breathes, once a cycle of its motion." value={sh.pulse} min={0} max={1} defaultValue={0} lazyParam={gridPlay(sh.id, 'pulse')} onChange={v => editShape(sh.id, s => { s.pulse = v; }, `pulse${sh.id}`)} />
+          <NumRow label="Outline" hint="0 is filled; above 0 only the edge, this wide." value={sh.outline} min={0} max={0.5} defaultValue={0} lazyParam={gridPlay(sh.id, 'outline')} onChange={v => editShape(sh.id, s => { s.outline = v; }, `out${sh.id}`)} />
         </Card>
       )}
       {sh && (
@@ -389,6 +398,9 @@ function MotionSection() {
   const m = sh.motion;
   const usesX = m.path !== 'updown' && m.path !== 'bounce' && m.path !== 'still';
   const usesY = m.path !== 'sideways' && m.path !== 'still';
+  const drawn = m.path === 'drawn';
+  const editDrawn = (fn: (d: DrawnPath) => void, key?: string) => editShape(sh.id, s => { s.motion.drawn ??= defaultDrawnPath(); fn(s.motion.drawn); }, key);
+  const reach = Math.hypot(usesX ? m.xy[0] : 0, usesY ? m.xy[1] : 0);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <Row label="Shape">
@@ -396,24 +408,35 @@ function MotionSection() {
       </Row>
       <Tiles items={MOTION_PATHS} value={m.path} cols={3} label={p => MOTION_LABELS[p].label} onPick={p => editShape(sh.id, s => {
         s.motion.path = p;
+        if (p === 'drawn') { s.motion.drawn ??= defaultDrawnPath(); if (Math.abs(s.motion.xy[0]) < 0.05 && Math.abs(s.motion.xy[1]) < 0.05) s.motion.xy = [0.4, 0.4]; }
         // Travel and hop step a whole cell by default; the others sway a little.
         if ((p === 'travel' || p === 'hop') && Math.abs(s.motion.xy[0]) + Math.abs(s.motion.xy[1]) < 0.5) s.motion.xy = [1, 0];
         if (p !== 'travel' && p !== 'hop' && Math.abs(s.motion.xy[0]) + Math.abs(s.motion.xy[1]) < 0.01) s.motion.xy = [0.3, 0.3];
       })} />
-      <BuilderNote>{MOTION_LABELS[m.path].blurb}{m.path === 'still' ? '' : ' Drag the point (or the sliders) to set the reach in cells; the path is drawn round it and on the mini grid.'}</BuilderNote>
+      <BuilderNote>{MOTION_LABELS[m.path].blurb}{m.path === 'still' || drawn ? '' : ' Drag the point (or the sliders) to set the reach in cells; the path is drawn round it and on the mini grid.'}</BuilderNote>
       {m.path !== 'still' && (
         <>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <XYPad value={m.xy} shape={sh} range={m.path === 'travel' || m.path === 'hop' ? 3 : 2} onChange={v => editShape(sh.id, s => { s.motion.xy = v; }, `xy${sh.id}`)} />
+            {drawn
+              ? <DrawnPathPad shape={sh} onEdit={editDrawn} />
+              : <XYPad value={m.xy} shape={sh} range={m.path === 'travel' || m.path === 'hop' ? 3 : 2} onChange={v => editShape(sh.id, s => { s.motion.xy = v; }, `xy${sh.id}`)} />}
             <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={{ fontSize: 11.5, color: usesX ? undefined : 'GrayText' }}>X (cells)</span>
-              <BuilderSlider value={m.xy[0]} min={-3} max={3} disabled={!usesX} ariaLabel="Move X" defaultValue={0} onChange={v => editShape(sh.id, s => { s.motion.xy = [v, s.motion.xy[1]]; }, `mx${sh.id}`)} />
+              <BuilderSlider value={m.xy[0]} min={-3} max={3} disabled={!usesX} ariaLabel="Move X" defaultValue={0} lazyParam={gridPlay(sh.id, 'moveX')} onChange={v => editShape(sh.id, s => { s.motion.xy = [v, s.motion.xy[1]]; }, `mx${sh.id}`)} />
               <span style={{ fontSize: 11.5, color: usesY ? undefined : 'GrayText' }}>Y (cells, up)</span>
-              <BuilderSlider value={m.xy[1]} min={-3} max={3} disabled={!usesY} ariaLabel="Move Y" defaultValue={0} onChange={v => editShape(sh.id, s => { s.motion.xy = [s.motion.xy[0], v]; }, `my${sh.id}`)} />
+              <BuilderSlider value={m.xy[1]} min={-3} max={3} disabled={!usesY} ariaLabel="Move Y" defaultValue={0} lazyParam={gridPlay(sh.id, 'moveY')} onChange={v => editShape(sh.id, s => { s.motion.xy = [s.motion.xy[0], v]; }, `my${sh.id}`)} />
+              <span data-motion-length style={{ fontSize: 11.5, color: tk.text.muted }}>Length {reach.toFixed(2)} cells{m.angle || m.angleSpin ? ' (the Angle keeps it)' : ''}</span>
             </div>
           </div>
-          <NumRow label="Speed" hint="Cycles a second (negative runs backwards)." value={m.speed} min={-2} max={2} defaultValue={0.5} onChange={v => editShape(sh.id, s => { s.motion.speed = v; }, `sp${sh.id}`)} />
-          <NumRow label="Lag" hint="Each cell starts this much of a cycle after its neighbour (x + y): the motion runs through the drawing as a wave." value={m.lag} min={-0.5} max={0.5} defaultValue={0} onChange={v => editShape(sh.id, s => { s.motion.lag = v; }, `lag${sh.id}`)} />
+          {drawn && <DrawnPathControls shape={sh} onEdit={editDrawn} />}
+          <NumRow label="Angle" unit="°" hint="Turns the whole path round (the XY arrow), keeping its length. Right-click to put it in Play controls; on the built Shape node it is an input: wire an LFO or Time into it."
+            value={m.angle ?? 0} min={-180} max={180} step={1} defaultValue={0} lazyParam={gridPlay(sh.id, 'angle')}
+            onChange={v => editShape(sh.id, s => { s.motion.angle = v; }, `ang${sh.id}`)} />
+          <NumRow label="Angle spin" unit="°/s" hint="Turns the Angle on its own, degrees a second (negative: the other way)."
+            value={m.angleSpin ?? 0} min={-180} max={180} step={1} defaultValue={0} lazyParam={gridPlay(sh.id, 'angleSpin')}
+            onChange={v => editShape(sh.id, s => { s.motion.angleSpin = v; }, `angs${sh.id}`)} />
+          <NumRow label="Speed" hint="Cycles a second (negative runs backwards)." value={m.speed} min={-2} max={2} defaultValue={0.5} lazyParam={gridPlay(sh.id, 'speed')} onChange={v => editShape(sh.id, s => { s.motion.speed = v; }, `sp${sh.id}`)} />
+          <NumRow label="Lag" hint="Each cell starts this much of a cycle after its neighbour (x + y): the motion runs through the drawing as a wave." value={m.lag} min={-0.5} max={0.5} defaultValue={0} lazyParam={gridPlay(sh.id, 'lag')} onChange={v => editShape(sh.id, s => { s.motion.lag = v; }, `lag${sh.id}`)} />
         </>
       )}
       {capped && (
@@ -474,10 +497,10 @@ function PatternsSection() {
         {p.kind !== 'none' && (
           <>
             <Row label="Changes"><Select ariaLabel="What the pattern changes" value={p.target} options={PATTERN_TARGETS.map(t => ({ value: t, label: TARGET_LABELS[t] }))} onChange={v => setP(x => { x.target = v as PatternTarget; })} /></Row>
-            <NumRow label="Amount" value={p.amount} min={0} max={1.5} defaultValue={DEFAULT_PATTERN.amount} onChange={v => setP(x => { x.amount = v; }, 'pa')} />
-            {p.kind !== 'checker' && p.kind !== 'random' && p.kind !== 'picture' && <NumRow label="Waves" hint="Waves across the grid (rings: how wide a ring is)." value={p.freq} min={0} max={16} defaultValue={DEFAULT_PATTERN.freq} onChange={v => setP(x => { x.freq = v; }, 'pf')} />}
-            <NumRow label="Speed" hint="Cycles a second." value={p.speed} min={-2} max={2} defaultValue={DEFAULT_PATTERN.speed} onChange={v => setP(x => { x.speed = v; }, 'ps')} />
-            {p.kind === 'spiral' && <NumRow label="Arms" value={p.arms} min={1} max={8} integer defaultValue={3} onChange={v => setP(x => { x.arms = v; }, 'pr')} />}
+            <NumRow label="Amount" value={p.amount} min={0} max={1.5} defaultValue={DEFAULT_PATTERN.amount} lazyParam={gridPlay('grid', 'amount')} onChange={v => setP(x => { x.amount = v; }, 'pa')} />
+            {p.kind !== 'checker' && p.kind !== 'random' && p.kind !== 'picture' && <NumRow label="Waves" hint="Waves across the grid (rings: how wide a ring is)." value={p.freq} min={0} max={16} defaultValue={DEFAULT_PATTERN.freq} lazyParam={gridPlay('grid', 'freq')} onChange={v => setP(x => { x.freq = v; }, 'pf')} />}
+            <NumRow label="Speed" hint="Cycles a second." value={p.speed} min={-2} max={2} defaultValue={DEFAULT_PATTERN.speed} lazyParam={gridPlay('grid', 'speed')} onChange={v => setP(x => { x.speed = v; }, 'ps')} />
+            {p.kind === 'spiral' && <NumRow label="Arms" value={p.arms} min={1} max={8} integer defaultValue={3} lazyParam={gridPlay('grid', 'arms')} onChange={v => setP(x => { x.arms = v; }, 'pr')} />}
             <Row label="Fill empty cells" hint="Put a shape in every cell you haven't drawn on; its size follows the wave.">
               <Select ariaLabel="Fill empty cells with" value={p.fill ?? ''} options={[{ value: '', label: 'No' }, ...shapes.map(s => ({ value: s.id, label: `With ${s.id} · ${SHAPE_LABELS[s.kind]}` }))]} onChange={v => setP(x => { x.fill = v || null; })} />
             </Row>
@@ -670,8 +693,8 @@ function LookSection() {
               <Select ariaLabel="Glow style" value={look.glowStyle ?? 'soft'} options={[{ value: 'soft', label: 'Soft (one shape)' }, { value: 'halo', label: 'Halo (rim round the shape)' }]}
                 onChange={v => setL(l => { l.glowStyle = v === 'halo' ? 'halo' : undefined; })} />
             </Row>
-            <NumRow label="Amount" value={look.glowAmount} min={0.0005} max={0.05} step={0.0005} defaultValue={DEFAULT_LOOK.glowAmount} onChange={v => setL(l => { l.glowAmount = v; }, 'ga')} />
-            <NumRow label="Falloff" value={look.glowFalloff} min={0.5} max={3} defaultValue={DEFAULT_LOOK.glowFalloff} onChange={v => setL(l => { l.glowFalloff = v; }, 'gf')} />
+            <NumRow label="Amount" value={look.glowAmount} min={0.0005} max={0.05} step={0.0005} defaultValue={DEFAULT_LOOK.glowAmount} lazyParam={gridPlay('glow', look.glowStyle === 'halo' ? 'intensity' : 'amount')} onChange={v => setL(l => { l.glowAmount = v; }, 'ga')} />
+            <NumRow label="Falloff" value={look.glowFalloff} min={0.5} max={3} defaultValue={DEFAULT_LOOK.glowFalloff} lazyParam={gridPlay('glow', look.glowStyle === 'halo' ? 'power' : 'falloff')} onChange={v => setL(l => { l.glowFalloff = v; }, 'gf')} />
           </>
         )}
         <Row label="Tone map"><Select ariaLabel="Tone map" value={look.tone} options={[{ value: 'aces', label: 'ACES' }, { value: 'none', label: 'None' }]} onChange={v => setL(l => { l.tone = v as 'aces' | 'none'; })} /></Row>
