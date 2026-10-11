@@ -15,6 +15,44 @@ const hash = (i: number, k: number) => {
 
 export const DEMO_RING = { radius: 0.8, tube: 0.14 };
 
+/** The generated scans a Splat Scene can draw without a file (params.demo). */
+export const DEMO_KINDS = ['rings', 'blob'] as const;
+export type DemoKind = typeof DEMO_KINDS[number];
+
+/**
+ * `count` splats on a lumpy ball (radius about 0.85): a solid, scan-like surface for the modifier examples (a dissolve
+ * shows its edge best on one). Each splat is flat along the surface; colour runs warm to cool with height, darker in
+ * the folds. In the 3DGS convention (y down), as demoRings.
+ */
+export function demoBlob(count: number): SplatData {
+  const n = Math.max(1, Math.floor(count));
+  const positions = new Float32Array(n * 3), scales = new Float32Array(n * 3), rotations = new Float32Array(n * 4), colors = new Uint8Array(n * 4);
+  const R = 0.85;
+  const s = Math.sqrt((4 * Math.PI * R * R * 1.2) / n) * 0.9;
+  for (let i = 0; i < n; i++) {
+    // Even on the sphere: z uniform in −1…1, angle uniform.
+    const z = hash(i, 3) * 2 - 1, a = hash(i, 4) * Math.PI * 2, rr = Math.sqrt(Math.max(0, 1 - z * z));
+    const dx = rr * Math.cos(a), dy = z, dz = rr * Math.sin(a);
+    const lump = 0.16 * Math.sin(3 * a) * Math.sin(2.5 * dy * Math.PI) + 0.08 * Math.sin(5 * dy + 2 * a);
+    const r = R * (1 + lump);
+    // y down (as scans are): the warm top is at −y.
+    positions[i * 3] = dx * r; positions[i * 3 + 1] = -dy * r; positions[i * 3 + 2] = dz * r;
+    const qx = dx, qy = -dy, qz = dz;
+    const w = 1 + qz;
+    let rw = w, rx = -qy, ry = qx;
+    if (w < 1e-6) { rw = 0; rx = 1; ry = 0; }
+    const l = Math.hypot(rw, rx, ry);
+    rotations[i * 4] = rw / l; rotations[i * 4 + 1] = rx / l; rotations[i * 4 + 2] = ry / l; rotations[i * 4 + 3] = 0;
+    scales[i * 3] = s; scales[i * 3 + 1] = s; scales[i * 3 + 2] = s / 5;
+    const h = 0.5 + 0.5 * dy, fold = 0.7 + 0.3 * Math.max(-1, Math.min(1, lump * 5));
+    colors[i * 4] = Math.round(255 * fold * (0.35 + 0.6 * h));
+    colors[i * 4 + 1] = Math.round(255 * fold * (0.3 + 0.35 * Math.sin(Math.PI * h)));
+    colors[i * 4 + 2] = Math.round(255 * fold * (0.85 - 0.6 * h));
+    colors[i * 4 + 3] = 240;
+  }
+  return { count: n, positions, scales, rotations, colors, shDegree: 0, format: 'splat' };
+}
+
 /**
  * `count` splats on two tori: one flat (in x–z), one standing (in x–y, moved 0.8 along x so they link). Each splat
  * sits on the tube's surface, flattened along its normal (a surfel, as trained scans are), hue round the ring.

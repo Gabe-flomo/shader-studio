@@ -11,6 +11,11 @@
  *  4. with SH degree > 0 adds the view-dependent colour (the 3DGS basis, the view direction in the scan's own space).
  * The fragment shader weighs exp(−|v|²) and writes the premultiplied colour and, to the second target, the distance
  * weighted the same way (Σ αᵢ Tᵢ dᵢ: divided by alpha it is the splats' distance at the pixel).
+ *
+ * Per-splat modifiers (docs/splat-scene.md): SPLAT_VERT_MOD is the same shader with SPLAT_MOD defined, reading each
+ * splat's moved centre, size (or dot radius), colour and opacity from the modifier program's two targets; a splat with
+ * no opacity or size left is skipped before projecting. A dot (Splat Points) is a round quad with a crisp edge.
+ * SPLAT_DEPTH_FRAG works out the moved splats' depths for the sort.
  */
 
 export const SPLAT_VERT = /* glsl */ `precision highp float;
@@ -23,11 +28,18 @@ uniform usampler2D u_sh;
 uniform sampler2D u_probe;
 uniform int u_shDeg;
 uniform vec2 u_view;
+#ifdef SPLAT_MOD
+// The modifier program's targets (one texel per splat, 2048 a row): centre and size (negative: a dot's radius in
+// pixels), and colour and opacity.
+uniform sampler2D u_modA;
+uniform sampler2D u_modB;
+#endif
 in vec3 position;
 in uint splatIndex;
 out vec4 vColor;
 out vec2 vPos;
 out float vDist;
+out float vDot;
 
 const float SH_C1 = 0.4886025119029199;
 const float SH_C2[5] = float[](1.0925484305920792, -1.0925484305920792, 0.31539156525252005, -1.0925484305920792, 0.5462742152960396);
@@ -70,6 +82,17 @@ void main() {
   float sizeMul = c0.w, opacityMul = c1.w;
 
   vec3 w = M * p + T;
+  vec4 col = vec4(float(a.w & 255u), float((a.w >> 8) & 255u), float((a.w >> 16) & 255u), float(a.w >> 24)) / 255.0;
+  float sMul = 1.0, dotPx = 0.0;
+#ifdef SPLAT_MOD
+  ivec2 mt = ivec2(int(i & 2047u), int(i >> 11));
+  vec4 ma = texelFetch(u_modA, mt, 0), mb = texelFetch(u_modB, mt, 0);
+  w = ma.xyz;
+  if (ma.w < 0.0) dotPx = -ma.w; else sMul = ma.w;
+  col = mb;
+  // Gone (no opacity, no size) or broken: skip it before any of the projection.
+  if (col.a * opacityMul < 1.0 / 255.0 || (dotPx == 0.0 && sMul <= 0.0) || any(isnan(w)) || any(isinf(w))) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+#endif
   vec3 t = w - eye;
   float x = dot(t, R), y = dot(t, U), z = dot(t, F);
   if (z < 0.05) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
@@ -78,7 +101,7 @@ void main() {
   if (abs(ndc.x) > 1.3 || abs(ndc.y) > 1.3) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
 
   vec2 u1 = unpackHalf2x16(b.x), u2 = unpackHalf2x16(b.y), u3 = unpackHalf2x16(b.z);
-  mat3 S = mat3(u1.x, u1.y, u2.x, u1.y, u2.y, u3.x, u2.x, u3.x, u3.y) * (0.25 * sizeMul * sizeMul);
+  mat3 S = mat3(u1.x, u1.y, u2.x, u1.y, u2.y, u3.x, u2.x, u3.x, u3.y) * (0.25 * sizeMul * sizeMul * sMul * sMul);
   mat3 Sw = M * S * transpose(M);
   float k = 0.5 * u_view.y;
   vec3 j0 = k * fx * (R / z - x * F / (z * z));
@@ -90,8 +113,9 @@ void main() {
   dv = length(dv) > 1e-12 ? normalize(dv) : (ca >= cc ? vec2(1.0, 0.0) : vec2(0.0, 1.0));
   vec2 major = min(sqrt(2.0 * l1), 1024.0) * dv;
   vec2 minor = min(sqrt(2.0 * l2), 1024.0) * vec2(dv.y, -dv.x);
+  // A crisp dot (Splat Points): a round quad dotPx in radius (the fragment's edge is at |vPos| = 2).
+  if (dotPx > 0.0) { major = vec2(0.5 * dotPx, 0.0); minor = vec2(0.0, 0.5 * dotPx); }
 
-  vec4 col = vec4(float(a.w & 255u), float((a.w >> 8) & 255u), float((a.w >> 16) & 255u), float(a.w >> 24)) / 255.0;
   if (u_shDeg > 0) {
     // The view direction in the scan's own space (M may scale and flip).
     vec3 d = normalize(inverse(M) * normalize(t));
@@ -114,8 +138,41 @@ void main() {
   vColor = col;
   vPos = position.xy;
   vDist = length(t);
+  vDot = dotPx;
   vec2 off = (position.x * major + position.y * minor) * 2.0 / u_view;
   gl_Position = vec4(ndc + off, 0.0, 1.0);
+}
+`;
+
+/** The splat shader with the modifier program's targets read for each splat (docs/splat-scene.md "Per-splat modifiers"). */
+export const SPLAT_VERT_MOD = `#define SPLAT_MOD\n${SPLAT_VERT}`;
+
+/**
+ * The moved splats' depths, for the sort (docs/splat-scene.md "Sorting moved splats"): four splats a texel, each the
+ * distance of its moved centre (the modifier's target A) along the camera's forward ray (the probe). A quarter of the
+ * centres' bytes to read back, and the worker sorts the numbers as they are.
+ */
+export const SPLAT_DEPTH_VERT = /* glsl */ `in vec3 position;
+void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }
+`;
+export const SPLAT_DEPTH_FRAG = /* glsl */ `precision highp float;
+precision highp int;
+uniform sampler2D u_modA;
+uniform sampler2D u_probe;
+uniform int u_count;
+out vec4 outDepth;
+
+void main() {
+  int t = int(gl_FragCoord.y) * 2048 + int(gl_FragCoord.x);
+  vec3 eye = texelFetch(u_probe, ivec2(0, 0), 0).xyz;
+  vec3 F = normalize(texelFetch(u_probe, ivec2(1, 0), 0).xyz);
+  vec4 d = vec4(0.0);
+  for (int k = 0; k < 4; k++) {
+    int i = t * 4 + k;
+    vec3 w = texelFetch(u_modA, ivec2(i & 2047, i >> 11), 0).xyz;
+    d[k] = i < u_count ? dot(w - eye, F) : 0.0;
+  }
+  outDepth = d;
 }
 `;
 
@@ -123,13 +180,17 @@ export const SPLAT_FRAG = /* glsl */ `precision highp float;
 in vec4 vColor;
 in vec2 vPos;
 in float vDist;
+in float vDot;
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec4 outDepth;
 
 void main() {
   float q = dot(vPos, vPos);
   if (q > 4.0) discard;
-  float alpha = min(0.99, exp(-q) * vColor.a);
+  // A dot: solid to its rim (|vPos| = 2), a pixel of antialiasing; else the Gaussian.
+  float alpha = vDot > 0.0
+    ? min(0.99, (1.0 - smoothstep(1.0 - 1.0 / max(vDot, 1.0), 1.0, 0.5 * sqrt(q))) * vColor.a)
+    : min(0.99, exp(-q) * vColor.a);
   if (alpha < 1.0 / 255.0) discard;
   outColor = vec4(vColor.rgb * alpha, alpha);
   outDepth = vec4(vDist * alpha, 0.0, 0.0, alpha);

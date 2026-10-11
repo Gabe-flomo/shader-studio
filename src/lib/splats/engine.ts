@@ -11,26 +11,28 @@
  */
 import * as THREE from 'three';
 import type { GraphNode } from '../../types/nodeGraph';
-import type { SplatProbeProgram } from '../../compiler/types';
+import type { SplatModifierProgram, SplatProbeProgram } from '../../compiler/types';
 import { SPLAT_SCENE_TYPE, splatFileOf, splatMaxOf, splatScaleOf, splatShOf, splatSortOf } from '../../nodes/definitions/splatScene';
 import { SplatPass, type ProbeReading } from './render';
-import { dropSplats, loadSplats, repackSplats, sortKeptSplats } from './client';
+import { dropSplats, loadSplats, repackSplats, sortKeptSplats, sortSplatDepths } from './client';
 import { getSplatFile } from './library';
 import { setVideoThumb } from '../backgroundLibrary';
 import { sortAxis } from './math';
 import type { PackedSplats, SplatInfo } from './pack';
 import { THUMB_H, THUMB_W } from './workerCore';
-import { demoRings } from './demo';
+import { DEMO_KINDS, demoBlob, demoRings } from './demo';
 import { writeSplat } from './format';
 
 /**
- * A generated scan instead of a file (params.demo = 'rings', params.demoCount): the example graph's, and for timing.
+ * A generated scan instead of a file (params.demo = 'rings' or 'blob', params.demoCount): the example graphs', and
+ * for timing.
  * Its key is `demo:<kind>:<count>`.
  */
 export function demoKeyOf(node: GraphNode): string {
-  if (node.params.demo !== 'rings') return '';
+  const kind = node.params.demo;
+  if (!(DEMO_KINDS as readonly unknown[]).includes(kind)) return '';
   const c = Math.max(1, Math.min(8_000_000, Math.floor(Number(node.params.demoCount) || 60000)));
-  return `demo:rings:${c}`;
+  return `demo:${kind}:${c}`;
 }
 
 export type SplatState = 'empty' | 'loading' | 'ready' | 'missing' | 'error' | 'nested';
@@ -49,6 +51,8 @@ export interface SplatStatus {
   sorts: number;
   /** A small picture of the scan (data URL). */
   thumb?: string;
+  /** Its Modifier is wired but this GPU can't draw into float textures: the scan draws unmodified. */
+  modifierRefused?: boolean;
 }
 
 export interface SplatHost {
@@ -76,6 +80,8 @@ interface Slot {
   /** The axis the current order was sorted along (scan space), and the readings count it came from. */
   sortedAxis: [number, number, number] | null;
   readingsSeen: number;
+  /** Modifiers moving the splats: a fingerprint of the depths the last moved sort used (NaN: none yet). */
+  movedSum: number;
 }
 
 const idle = (): SplatStatus => ({ state: 'empty', drawn: 0, shDegree: 0, sorts: 0 });
@@ -98,6 +104,24 @@ export function axisFromReading(r: ProbeReading): [number, number, number] | nul
 export function needsResort(prev: readonly number[] | null, next: readonly number[], everyFrame: boolean): boolean {
   if (!prev || everyFrame) return true;
   return prev[0] * next[0] + prev[1] * next[1] + prev[2] * next[2] < RESORT_COS;
+}
+
+/** Does the modifier move splats now (always, or one of its gates, Explode's Amount or Wave's Amplitude, is non-zero)? */
+export function modifierMoves(mod: SplatModifierProgram | undefined, uniforms: Record<string, { value: unknown }>): boolean {
+  if (!mod) return false;
+  if (mod.moves.always) return true;
+  return mod.moves.gates.some(g => { const v = Number(uniforms[g]?.value); return Number.isFinite(v) && v !== 0; });
+}
+
+/**
+ * A cheap fingerprint of the moved splats' depths (about 4096 of them), so a still scan seen from a still camera isn't
+ * sorted again. The depths are measured from the camera, so a turn of the view changes them too.
+ */
+export function movedSum(depths: Float32Array, count: number): number {
+  const step = Math.max(1, Math.floor(count / 4096));
+  let s = 0;
+  for (let i = 0; i < count; i += step) s += depths[i] * (1 + (i % 13) * 0.071);
+  return s;
 }
 
 /** Top-level Splat Scene nodes (the probe is made for those); nested ones are listed apart. */
@@ -154,7 +178,8 @@ class SplatEngine {
 
   /** A sort is on its way: keep drawing until it lands. */
   busy(): boolean {
-    for (const s of this.slots.values()) if (s.sortBusy || s.status.state === 'loading') return true;
+    // A read of moved centres on its way counts too (it lands on the next frame drawn).
+    for (const s of this.slots.values()) if (s.sortBusy || s.status.state === 'loading' || s.pass?.movedPending) return true;
     return false;
   }
 
@@ -167,7 +192,7 @@ class SplatEngine {
     for (const [id, n] of want) {
       let s = this.slots.get(id);
       if (!s) {
-        s = { node: n, status: idle(), file: '', layout: '', gen: 0, pass: null, packed: null, order: null, sortBusy: false, sortedAxis: null, readingsSeen: 0 };
+        s = { node: n, status: idle(), file: '', layout: '', gen: 0, pass: null, packed: null, order: null, sortBusy: false, sortedAxis: null, readingsSeen: 0, movedSum: NaN };
         this.slots.set(id, s);
       }
       s.node = n;
@@ -193,9 +218,13 @@ class SplatEngine {
     s.status = { ...idle(), state: 'loading', fileName: name, message: 'Reading the scan…' };
     this.changed();
     try {
-      const demo = /^demo:rings:(\d+)$/.exec(s.file);
+      const demo = /^demo:(rings|blob):(\d+)$/.exec(s.file);
       const f = demo
-        ? (() => { const b = writeSplat(demoRings(Number(demo[1]))); return { name: `Generated rings (${Number(demo[1]).toLocaleString()}).splat`, bytes: b.byteLength, blob: new Blob([b.buffer as ArrayBuffer]) }; })()
+        ? (() => {
+          const count = Number(demo[2]);
+          const b = writeSplat(demo[1] === 'blob' ? demoBlob(count) : demoRings(count));
+          return { name: `Generated ${demo[1] === 'blob' ? 'ball' : 'rings'} (${count.toLocaleString()}).splat`, bytes: b.byteLength, blob: new Blob([b.buffer as ArrayBuffer]) };
+        })()
         : await getSplatFile(s.file);
       if (s.gen !== gen) return;
       if (!f) { s.status = { ...idle(), state: 'missing', fileName: name, message: `The scan${name ? ` “${name}”` : ''} isn’t on this device. Load it again (or open the .playfile that carries it).` }; this.changed(); return; }
@@ -257,13 +286,60 @@ class SplatEngine {
       if (!probe) continue;
       const pass = this.ensurePass(id, s, ctx.renderer);
       pass.setProbe(this.vertexShader, probe.fragmentShader, ctx.uniforms);
+      this.setModifier(s, pass, probe, ctx.uniforms);
       const k = splatScaleOf(s.node);
       pass.draw(Math.max(1, Math.round(ctx.width * k)), Math.max(1, Math.round(ctx.height * k)));
-      if (pass.readings !== s.readingsSeen && pass.reading) {
-        s.readingsSeen = pass.readings;
-        this.maybeSort(id, s, pass.reading);
-      }
+      const fresh = pass.readings !== s.readingsSeen && !!pass.reading;
+      if (fresh) s.readingsSeen = pass.readings;
+      // Modifiers moving the splats: sort by the moved centres (read back from the GPU) instead.
+      if (pass.hasModifier() && modifierMoves(probe.modifier, ctx.uniforms)) this.sortMovedFrame(id, s, pass);
+      else if (fresh) this.maybeSort(id, s, pass.reading!);
     }
+  }
+
+  private setModifier(s: Slot, pass: SplatPass, probe: SplatProbeProgram, uniforms: Record<string, THREE.IUniform>): void {
+    const mod = probe.modifier;
+    pass.setModifier(this.vertexShader, mod?.fragmentShader ?? null, uniforms, mod?.uniforms ?? null);
+    const refused = pass.modifierRefused;
+    if (refused !== !!s.status.modifierRefused) { s.status = { ...s.status, modifierRefused: refused }; this.changed(); }
+  }
+
+  /**
+   * One frame of sorting moved splats: when last frame's read of their depths (worked out on the GPU from the moved
+   * centres) has landed, sort them unless nothing changed, else start a read. One read or sort at a time, so it runs
+   * as fast as the worker sorts and stops when the scan and the camera are still.
+   */
+  private sortMovedFrame(id: string, s: Slot, pass: SplatPass): void {
+    if (s.status.state !== 'ready' || !s.packed) return;
+    const got = pass.pollDepths();
+    if (!got) {
+      if (!pass.movedPending && !s.sortBusy) pass.startDepthRead();
+      // Draw again so the read is picked up, even with the clock paused (a slider dragged, a Play control).
+      if (pass.movedPending) this.host?.requestRender();
+      return;
+    }
+    const count = s.packed.count;
+    const sum = movedSum(got, count);
+    if (s.sortBusy || sum === s.movedSum) { pass.recycleDepths(got); return; }
+    s.sortBusy = true;
+    s.movedSum = sum;
+    const gen = s.gen, packed = s.packed;
+    void sortSplatDepths(id, got, count).then(r => {
+      s.sortBusy = false;
+      s.pass?.recycleDepths(r.depths);
+      if (s.gen !== gen || s.packed !== packed || r.order.length !== packed.count) return;
+      this.landOrder(s, r.order, r.ms);
+      // The next unmoved sort starts afresh (this order is the moved one's).
+      s.sortedAxis = null;
+    }, e => { s.sortBusy = false; console.warn('[splats] moved sort', e); });
+  }
+
+  private landOrder(s: Slot, order: Uint32Array, ms: number): void {
+    s.order = order;
+    s.pass?.setOrder(order);
+    s.status = { ...s.status, sortMs: ms, sorts: s.status.sorts + 1 };
+    if (s.status.sorts <= 1 || s.status.sorts % 30 === 0) this.changed();
+    this.host?.requestRender();
   }
 
   private maybeSort(id: string, s: Slot, reading: ProbeReading): Promise<void> | null {
@@ -275,12 +351,10 @@ class SplatEngine {
     return sortKeptSplats(id, axis).then(r => {
       s.sortBusy = false;
       if (s.gen !== gen || s.packed !== packed || r.order.length !== packed.count) return;
-      s.order = r.order;
       s.sortedAxis = axis;
-      s.pass?.setOrder(r.order);
-      s.status = { ...s.status, sortMs: r.ms, sorts: s.status.sorts + 1 };
-      if (s.status.sorts <= 1 || s.status.sorts % 30 === 0) this.changed();
-      this.host?.requestRender();
+      // The next moved sort (if a modifier starts moving them) starts afresh.
+      s.movedSum = NaN;
+      this.landOrder(s, r.order, r.ms);
     }, e => { s.sortBusy = false; console.warn('[splats] sort', e); });
   }
 
@@ -295,12 +369,26 @@ class SplatEngine {
       if (!probe || !s.packed) continue;
       const pass = this.ensurePass(id, s, ctx.renderer);
       pass.setProbe(this.vertexShader, probe.fragmentShader, ctx.uniforms);
+      this.setModifier(s, pass, probe, ctx.uniforms);
+      // The probe, then the modifier program (it reads the probe), for this frame's time.
       pass.runProbe();
       const reading = pass.readProbeNow();
       if (!reading) continue;
       s.readingsSeen = pass.readings;
-      // Wait for a sort already on its way, then sort for this frame if it turned.
+      // Wait for a sort already on its way, then sort for this frame if it turned (or, moved, always).
       while (s.sortBusy) await new Promise(r => setTimeout(r, 2));
+      if (pass.hasModifier() && modifierMoves(probe.modifier, ctx.uniforms)) {
+        const depths = pass.readDepthsNow(), packed = s.packed;
+        if (!depths) continue;
+        s.sortBusy = true;
+        waits.push(sortSplatDepths(id, depths, packed.count).then(r => {
+          s.sortBusy = false;
+          if (s.packed !== packed || r.order.length !== packed.count) return;
+          s.movedSum = NaN; s.sortedAxis = null;
+          this.landOrder(s, r.order, r.ms);
+        }, e => { s.sortBusy = false; console.warn('[splats] moved sort', e); }));
+        continue;
+      }
       const p = this.maybeSort(id, s, reading);
       if (p) waits.push(p);
     }

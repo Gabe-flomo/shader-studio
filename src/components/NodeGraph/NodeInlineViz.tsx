@@ -1711,6 +1711,7 @@ const TYPE_COLORS: Record<DataType, string> = {
   emitter:     '#ffd166',
   deposit:     '#c792ea',
   volume:      '#f5a97f',
+  splat:       '#7fd1e8',
 };
 
 export function SubgraphMiniViz({ node }: { node: GraphNode }) {

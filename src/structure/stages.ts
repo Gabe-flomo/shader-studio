@@ -128,6 +128,8 @@ export const CATEGORY_STAGE: Record<string, StageOf> = {
   '3D Transforms': 'bend',
   '4D': 'bend',
   '3D Scene': 'scene',
+  // Per-splat modifiers (docs/splat-scene.md): they feed a Splat Scene
+  Splats: 'scene',
   '3D Lighting': 'light',
   Passes: 'readout',
   'Texture tools': 'readout',

@@ -49,6 +49,7 @@ ms, a 255 MB SH-3 `.ply` of it in 280 ms.
 | Ray Origin, Ray Dir | The March Camera's (or any camera's rays). Unwired: a camera 3 back on +z, lens 1.5 |
 | Scene, Scene distance, Scene hit | The March Loop's Color (or the lighting after it), Distance and Hit. Unwired: the splats over black |
 | Position, Rotation, Scale | Optional sockets ("Control from outside" on the sliders): wire Time, Play or anything to move the scan |
+| Modifier | A chain of splat nodes run once per splat before drawing ("Per-splat modifiers" below) |
 
 | Output | What |
 |---|---|
@@ -141,6 +142,94 @@ on its card to replace the rings.
 The generated scan is the node's `demo: 'rings'` and `demoCount` params (`lib/splats/demo.ts`); it is also how the
 100 k and 1 M timings above were made.
 
+## Per-splat modifiers
+
+Splats are changed **with nodes in the graph**, before they are drawn (the plan's phase 3). A chain of splat nodes
+wired into the Splat Scene's **Modifier** input runs once for every splat, the way an Agents rule runs once per walker.
+
+### The wire and the nodes
+
+The `splat` wire carries one splat's state (in GLSL a `mat3`: its centre in the scene; its colour; its opacity, size
+multiplier and dot radius). A chain starts from the splat as loaded (any Splat input left unwired) and ends in the
+Modifier. The nodes are in the node browser under **Splats** (3D tools):
+
+| Node | What it does |
+|---|---|
+| **Splat Attributes** | The splat as numbers: Position (in the scene), In the scan (its place in the scan, scene units, +Y up: noise read here sticks to the scan), Color, Opacity, Size, Radius, Index, Random (0–1, its own, never changes), Count |
+| **Set Splat** | Writes back what is wired: Position, Offset (a move), Color, Opacity, Size, Dot size; Amount blends from the splat as it came |
+| **Splat Dissolve** | A threshold (Amount 0 → 1) sweeps through 3D noise in the scan (or a Field you wire): splats below it fade and/or shrink and drift, with a glowing edge (Edge width, colour, Glow) |
+| **Splat Explode** | Blows the splats out from a Center (Amount), each a little later than the last (Stagger), straight out or scattered, spinning; Return home brings them back |
+| **Splat Wave** | A sine travelling along X / Y / Z / out from the middle, pushing any way; or a noisy Wobble; or a Twist |
+| **Splat Colour** | Hue, saturation, brightness, contrast, and a tint that keeps each splat's brightness |
+| **Splat Crop** | Keeps what is below a plane or inside a box or sphere (or the other side), measured in the scan or the scene, softly, with a glowing cut; sweep Offset to reveal |
+| **Splat Size & Opacity** | Size ×, Opacity ×, an Opacity floor (denser), Keep a share of the splats (sparser) |
+| **Splat Points** | Every splat as a crisp round dot, Dot size pixels (On is a switch Play can drive) |
+
+Between Splat Attributes and Set Splat any ordinary node works: Noise, Transform, maths, Expression Blocks, Time, LFOs.
+Nodes that read the pixel (UV, a texture at the pixel) read a fixed point there: a splat isn't a pixel.
+
+**On the card:** Splat Scene → **Add a modifier** adds a recipe (or *Your own nodes*: Splat Attributes → Set Splat) at
+the end of the chain, wired in, one undo step; the card lists the chain ("Modifiers: …"). Modifiers apply in chain
+order: an Opacity floor after a Dissolve brings dissolved splats back; before it, it doesn't.
+
+**Play:** every slider is an ordinary param, a live uniform of the picture's table, so dragging never recompiles and
+Play controls, mappings and keyframes drive them like any other (a top-level node: `nodeId::param`).
+
+### How it runs
+
+The compiler (`compiler/splatGraph.ts`) makes a **modifier program** per Splat Scene from the chain wired into its
+Modifier, ending in an internal SplatModOut: a program of the picture's kind (as the probe is, and as an Agents group's
+update shader is), whose prelude makes each fragment one splat: its index from the texel, its data from the splat
+texture, the scan's placement from the probe, and the per-splat globals (`sp_base`, `sp_local`, `sp_index`,
+`sp_rand`, `sp_count`, `sp_radius`, `sp_T`) the splat nodes read (they carry `__splatProgram` there; anywhere else,
+such as a node's eye preview, they read a pretend splat at the pixel). The picture compiles **without** the chain
+(`pictureGraphOf`: a node that also feeds the picture stays in it), and the chain's uniforms are merged into the
+picture's table (fresh slugs, so two scans' chains never share one).
+
+Per frame (`lib/splats/render.ts`): the probe, then the modifier program over 2048 × ⌈n / 2048⌉ texels into two
+targets (RGBA32F: centre and size, a negative size being a dot's radius; RGBA16F: colour and opacity), then the splats
+with the shader's modifier variant (`SPLAT_VERT_MOD`), which reads them and skips a splat with no opacity or size left
+before projecting it. View-dependent colour (SH) is added on top of the modified colour. Without float render targets
+the scan draws unmodified and the card says so.
+
+### Sorting moved splats
+
+The compile knows which nodes move splats and by which params (Explode's Amount, Wave's Amplitude, Dissolve's Drift,
+Set Splat with Position or Offset wired). While any is non-zero, the engine sorts by the **moved** positions instead
+of the scan's own: a small pass works out every moved splat's depth along the camera's forward ray (four a texel), it
+is read back without stalling (a pixel-pack buffer and a fence: 4 MB at 1 M splats), and the worker sorts those depths
+(`orderByDepth`, the same counting sort). One read or sort at a time, so it runs as fast as the worker sorts (a frame
+or a few behind a fast move, never holding a frame), and stops when the depths stop changing (a fingerprint of them).
+A splat a modifier breaks (NaN) takes no part. Offline renders read and sort for every frame, waited for. Moves along
+the view's sideways axes don't change the order, so they don't sort again.
+
+### Cost (1 M splats, Apple Silicon, browser pane, 2026-10-10)
+
+| | Splat pass at 1280 × 720 |
+|---|---|
+| Generated ball, 1 M, no modifier | 1.9 ms |
+| Same, with Set Splat (colour by an Expression Block) → Explode → Wobble | 2.7 ms (the modifier program alone ≈ 1.2 ms with the probe and a sync) |
+| `train.splat` (1 026 508), no modifier | 3.4 ms |
+| Same, Dissolve at Amount 0 / 0.5 | 4.4 ms / 4.0 ms (dissolved splats are skipped) |
+| Moved-splat sort: depth read (main thread) / worker sort | 0.7 ms / 7–10 ms, every few frames while moving |
+
+### Examples
+
+- **3D: Splat modifiers** (3D Basics): a generated ball (`demo: 'blob'`), Splat Attributes → an Expression Block
+  (colour by height) → Set Splat → Splat Explode (Amount on an LFO, through its param socket) → a wobble.
+- **Splats: a scan dissolving** (Play folder, *Splats in Play*): a generated ball turning, its Modifier a Splat
+  Dissolve; Play sweeps Dissolve (Amount) with an LFO and the mouse sets the edge glow. Drop a real scan on its card.
+
+### For a Splat builder
+
+- Lay modifiers down with `addSplatModifier(nodes, splatId, pick, nextId)` (`nodes/recipes/splatModifierRecipes.ts`),
+  which appends to the chain; `splatModifierChain` reads it back (scan first). A builder's stack is that chain.
+- Each recipe is one node with plain params (all live uniforms): a builder sets params, never GLSL. Custom looks are
+  Splat Attributes → ordinary nodes → Set Splat.
+- A new moving node needs a line in `splatMoveGate` (`nodes/definitions/splatModifiers.ts`), or the sort won't follow
+  it.
+- `SplatModOut` packs state into the targets (size sign = dot); a new per-splat channel needs a third target.
+
 ## Web pages
 
 Not yet. An exported page reads the scan as empty and the rest of the scene draws as usual; the export dialog says
@@ -153,4 +242,7 @@ so (`play/exportScope.ts`, "Splat Scene scans"). Shipping the file and the raste
 - A Splat Scene inside a group (it draws only at the top level; the card says so).
 - The camera's Flatten / Reverse perspective: the splats are drawn with a pinhole camera.
 - Exact per-splat occlusion (see the limit above).
-- Phase 3, per-splat modifiers; phase 4, agents as splats (the plan).
+- Phase 4, agents as splats (the plan).
+- Modifier chains inside a plain group (the `splat` wire through group ports isn't supported; keep chains at the top
+  level), per-splat textures in a modifier (a Sample reads at a fixed point), and the scan's centre as an attribute.
+- Modifiers on exported web pages (with the scan itself).

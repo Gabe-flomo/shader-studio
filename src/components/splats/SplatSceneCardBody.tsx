@@ -13,7 +13,9 @@ import { splatEngine, type SplatStatus } from '../../lib/splats/engine';
 import { SPLAT_ACCEPT, addSplatFile, isSplatFileName, listSplats } from '../../lib/splats/library';
 import { fitParams } from '../../lib/splats/fit';
 import { splatFileOf } from '../../nodes/definitions/splatScene';
-import { hasMarchLoop, wireSplatIntoScene } from '../../nodes/recipes';
+import { SPLAT_MODIFIER_MENU, addSplatModifier, hasMarchLoop, splatModifierChain, wireSplatIntoScene, type SplatModifierPick } from '../../nodes/recipes';
+import { getNodeDefinition } from '../../nodes/definitions';
+import { DEMO_KINDS } from '../../lib/splats/demo';
 import { subscribe as onLibraryChange, type LibraryVideoMeta } from '../../lib/backgroundLibrary';
 import { Button } from '../ui/Button';
 
@@ -22,7 +24,7 @@ function useStatus(nodeId: string): SplatStatus {
   const snap = useRef<{ key: string; v: SplatStatus } | null>(null);
   return useSyncExternalStore(sub, () => {
     const v = splatEngine.status(nodeId);
-    const key = `${v.state}:${v.drawn}:${v.shDegree}:${v.sorts}:${v.message ?? ''}:${v.thumb ? 1 : 0}:${v.fileName ?? ''}`;
+    const key = `${v.state}:${v.drawn}:${v.shDegree}:${v.sorts}:${v.message ?? ''}:${v.thumb ? 1 : 0}:${v.fileName ?? ''}:${v.modifierRefused ? 1 : 0}`;
     if (key !== snap.current?.key) snap.current = { key, v };
     return snap.current.v;
   });
@@ -43,7 +45,10 @@ export function SplatSceneCardBody({ node }: { node: GraphNode }) {
   const loopThere = useNodeGraphStore(s => hasMarchLoop(s.nodes));
   const line = { fontSize: 11.5, color: tk.text.muted, lineHeight: 1.45 } as const;
   const warn = { ...line, color: tk.status.warning } as const;
-  const has = !!splatFileOf(node) || node.params.demo === 'rings';
+  const has = !!splatFileOf(node) || (DEMO_KINDS as readonly unknown[]).includes(node.params.demo);
+  const [addingMod, setAddingMod] = useState(false);
+  // The modifier chain's names, scan first (only re-rendered when the chain's types change).
+  const chain = useNodeGraphStore(s => splatModifierChain(s.nodes, node.id).map(x => (typeof x.params.label === 'string' && x.params.label) || getNodeDefinition(x.type)?.label || x.type).join(' ← '));
 
   useEffect(() => {
     if (!picking) return;
@@ -97,6 +102,13 @@ export function SplatSceneCardBody({ node }: { node: GraphNode }) {
     setMsg(ok ? 'Wired to the March Loop: its camera, and the scene by distance. It is on the Output.' : 'There is no March Loop to put it in.');
   };
 
+  const addModifier = (pick: SplatModifierPick) => {
+    const label = SPLAT_MODIFIER_MENU.find(m => m.pick === pick)?.label ?? 'a modifier';
+    const ok = useNodeGraphStore.getState().rewriteTopLevel((nodes, nextId) => addSplatModifier(nodes, node.id, pick, nextId), `Added ${label} to the scan`);
+    setAddingMod(false);
+    if (ok) setMsg(`${label}: added to the Modifier chain (its card is left of this one). Its sliders are live: map them in Play.`);
+  };
+
   const fit = () => {
     if (!info) return;
     updateNodeParams(node.id, fitParams(node, info.center, info.radius));
@@ -129,7 +141,20 @@ export function SplatSceneCardBody({ node }: { node: GraphNode }) {
         <Button size="sm" variant="ghost" onClick={() => setPicking(p => !p)} title="A scan already in the library (or the workspace folder)">From the library</Button>
         {loopThere && <Button size="sm" onClick={addToScene} title="Wire it to the March Loop: the same camera, and the scene put together by distance, on the Output">Add to scene</Button>}
         {info && <Button size="sm" variant="ghost" onClick={fit} title="Set Position and Scale so the scan sits at the scene's centre, about 3 units across">Fit to the scene</Button>}
+        <Button size="sm" variant="ghost" onClick={() => setAddingMod(a => !a)} title="Change every splat with nodes: dissolve, explode, wave, colour, crop, size, points, or your own chain" data-splat-add-modifier>Add a modifier</Button>
       </div>
+      {addingMod && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: 6, borderRadius: radius.md, background: tk.bg.subtle }} data-splat-modifier-menu>
+          {SPLAT_MODIFIER_MENU.map(m => (
+            <button key={m.pick} type="button" title={m.hint} onClick={() => addModifier(m.pick)} data-splat-modifier={m.pick}
+              style={{ all: 'unset', cursor: 'pointer', padding: '3px 4px', borderRadius: 4, fontSize: 11.5, color: tk.text.primary }}>
+              {m.label} <span style={{ color: tk.text.muted }}>· {m.hint}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {chain && <span style={line} data-splat-chain>Modifiers: {chain}</span>}
+      {status.modifierRefused && <span style={warn}>This GPU can’t draw into float textures, so the modifiers are off: the scan draws as loaded.</span>}
       {picking && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: 8, borderRadius: radius.md, background: tk.bg.subtle, maxHeight: 180, overflowY: 'auto' }}>
           {library === null ? <span style={line}>Looking…</span>

@@ -128,12 +128,23 @@ export function sortScratch(n: number, prev?: SortScratch): SortScratch {
  * order, which doesn't show.
  */
 export function sortSplats(positions: Float32Array, n: number, axis: readonly number[], scratch = sortScratch(n)): Uint32Array {
-  const { keys, counts, out, depth } = scratch;
-  let lo = Infinity, hi = -Infinity;
+  const { depth } = scratch;
   const [ax, ay, az] = axis;
+  for (let i = 0; i < n; i++) depth[i] = positions[i * 3] * ax + positions[i * 3 + 1] * ay + positions[i * 3 + 2] * az;
+  return orderByDepth(depth, n, scratch);
+}
+
+/**
+ * Splat indices far to near by a depth each (bigger is farther): the same counting sort. Per-splat modifiers hand it
+ * the moved splats' depths, worked out on the GPU (lib/splats/render.ts). A depth a modifier broke (NaN, infinite)
+ * takes no part in the range and goes first (that splat isn't drawn).
+ */
+export function orderByDepth(depth: Float32Array, n: number, scratch = sortScratch(n)): Uint32Array {
+  const { keys, counts, out } = scratch;
+  let lo = Infinity, hi = -Infinity;
   for (let i = 0; i < n; i++) {
-    const d = positions[i * 3] * ax + positions[i * 3 + 1] * ay + positions[i * 3 + 2] * az;
-    depth[i] = d;
+    const d = depth[i];
+    if (!(Math.abs(d) < 1e30)) continue;
     if (d < lo) lo = d;
     if (d > hi) hi = d;
   }
@@ -141,7 +152,7 @@ export function sortSplats(positions: Float32Array, n: number, axis: readonly nu
   const span = hi - lo;
   const k = span > 0 ? 65535 / span : 0;
   // Far first: the key counts down from the far end.
-  for (let i = 0; i < n; i++) { const key = Math.min(65535, ((hi - depth[i]) * k) | 0); keys[i] = key; counts[key]++; }
+  for (let i = 0; i < n; i++) { const key = Math.max(0, Math.min(65535, ((hi - depth[i]) * k) | 0)); keys[i] = key; counts[key]++; }
   for (let b = 0, sum = 0; b < 65536; b++) { const c = counts[b]; counts[b] = sum; sum += c; }
   const result = out.length === n ? out : out.subarray(0, n);
   for (let i = 0; i < n; i++) result[counts[keys[i]]++] = i;

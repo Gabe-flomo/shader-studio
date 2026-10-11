@@ -50,6 +50,8 @@ export interface SplatFileInfo {
 }
 
 export const splatFileOf = (node: GraphNode): string => (typeof node.params.videoId === 'string' ? node.params.videoId : '');
+/** The Modifier wire (docs/splat-scene.md "Per-splat modifiers"), if any. */
+export const splatModifierOf = (node: GraphNode) => node.inputs.modifier?.connection;
 export const splatMaxOf = (node: GraphNode): number => {
   const v = Number(node.params.maxSplats);
   return Number.isFinite(v) && v > 0 ? Math.floor(v) : DEFAULT_MAX_SPLATS;
@@ -139,6 +141,7 @@ export const SplatSceneNode: NodeDefinition = {
     dist: { type: 'float', label: 'Scene distance', hint: 'The March Loop\'s Distance: how far each ray went.' },
     hit: { type: 'float', label: 'Scene hit', hint: 'The March Loop\'s Hit. Unwired: everywhere counts as hit.' },
     ...placeInputs,
+    modifier: { type: 'splat', label: 'Modifier', hint: 'A chain of splat nodes (Dissolve, Explode, Wave, Colour, Crop… or Splat Attributes → your nodes → Set Splat) run once for every splat before it is drawn. Unwired: the scan as loaded.' },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color', hint: 'The scan and the scene put together by distance (the splats over black with no Scene wired).' },

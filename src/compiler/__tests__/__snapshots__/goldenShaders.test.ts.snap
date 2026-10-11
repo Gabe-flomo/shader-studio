@@ -1673,6 +1673,13 @@ exports[`golden shaders: every Play example exports the same bundle > scriptPict
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > splatDissolvePlay 1`] = `
+{
+  "bundle": "008db9de318b2b01409a3eed1880:5035",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > waterLayer 1`] = `
 {
   "bundle": "1e5f64b8ec110015485bdc25b416:122049",
@@ -16648,6 +16655,98 @@ exports[`golden shaders: every example compiles as it did > spiralWorld3D 1`] = 
   "passes": null,
   "success": true,
   "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > splatDissolvePlay 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "00ba51b0d65b960647d5d1164bfd:2795",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "18855b98313a701dd6db5bbd1e46:98",
+  "paramBindings": "0b0af2ab4f64c019a1dfe19f9af0:799",
+  "paramUniforms": [
+    "u_p_mkv3x0_b",
+    "u_p_mkv3x0_g",
+    "u_p_mkv3x0_r",
+    "u_p_mulx0_b",
+    "u_p_splatdissox0_amount",
+    "u_p_splatdissox0_drift",
+    "u_p_splatdissox0_edge",
+    "u_p_splatdissox0_edgeColor",
+    "u_p_splatdissox0_evolve",
+    "u_p_splatdissox0_glow",
+    "u_p_splatdissox0_scale",
+    "u_p_splatdissox0_softness",
+    "u_p_splatx0_hitAt",
+    "u_p_splatx0_opacity",
+    "u_p_splatx0_position",
+    "u_p_splatx0_rotation",
+    "u_p_splatx0_scale",
+    "u_p_splatx0_softness",
+    "u_p_splatx0_splatSize",
+  ],
+  "paramValues": "1277f228f78ce61da0bb2a40c387:542",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_splat_0_color": "sdScan::color",
+    "u_tex_splat_0_depth": "sdScan::depth",
+  },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > splatModifiersBall 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "156b0d50d52a3e106f7d4aad0e23:2893",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1c73f324b4df290e84c624db50f1:98",
+  "paramBindings": "1449f1c792b6be003a45641fc6b8:1049",
+  "paramUniforms": [
+    "u_p_lfox0_amplitude",
+    "u_p_lfox0_freq",
+    "u_p_lfox0_offset",
+    "u_p_lfox0_phase",
+    "u_p_mkv3x0_b",
+    "u_p_mkv3x0_g",
+    "u_p_mkv3x0_r",
+    "u_p_mulx0_b",
+    "u_p_splatexplox0_center",
+    "u_p_splatexplox0_distance",
+    "u_p_splatexplox0_returnHome",
+    "u_p_splatexplox0_scatter",
+    "u_p_splatexplox0_spin",
+    "u_p_splatexplox0_stagger",
+    "u_p_splatsetx0_amount",
+    "u_p_splatwavex0_amplitude",
+    "u_p_splatwavex0_frequency",
+    "u_p_splatwavex0_speed",
+    "u_p_splatx0_hitAt",
+    "u_p_splatx0_opacity",
+    "u_p_splatx0_position",
+    "u_p_splatx0_rotation",
+    "u_p_splatx0_scale",
+    "u_p_splatx0_softness",
+    "u_p_splatx0_splatSize",
+  ],
+  "paramValues": "14c27bdd345c9f05752a37c70563:704",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_splat_0_color": "smScan::color",
+    "u_tex_splat_0_depth": "smScan::depth",
+  },
   "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
   "videoUniforms": {},
 }
