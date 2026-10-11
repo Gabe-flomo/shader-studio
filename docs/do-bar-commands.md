@@ -3779,6 +3779,28 @@ Examples:
 
 - `texture pond · box size=0.5 texture=pond @repeat(2)` — on an empty graph (just an Output)
 
+### depth-picture
+
+3D scene · setting. a picture with depth the objects stand in Also: picture-depth.
+
+Words: `depth-picture`, `picture-depth`
+
+```
+depth-picture [name] how= near= far= soft=
+```
+
+| Slot | What |
+|---|---|
+| name (bare) | The picture (a name from a texture clause). |
+| how | In the picture (Depth Composite), lit by the scene (+ Depth Light), or lit and reflected (+ Picture Environment). · composite, lit, reflect |
+| near | Where the picture's nearest thing is, in scene units. |
+| far | Where its farthest thing is. |
+| soft | Edge softness, in scene units. |
+
+Examples:
+
+- `texture pond · sphere r=0.5 · depth-picture pond how=lit` — on an empty graph (just an Output)
+
 ### tone
 
 3D scene · setting. tone map

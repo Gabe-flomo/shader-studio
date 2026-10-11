@@ -16,6 +16,7 @@
 
 import type { OutputSpec } from './output';
 import type { TexSource } from '../builders/textures';
+import type { DepthBakeInfo } from '../nodes/definitions/depth';
 
 export type Vec3 = [number, number, number];
 
@@ -393,7 +394,34 @@ export interface SceneSpec {
   output?: OutputSpec;
   /** The pictures the scene reads (builders/textures.ts): shapes' surfaces and the background. */
   textures?: TexSource[];
+  /** A picture with depth the scene stands in (docs/depth-node.md "Depth in 3D scenes"), or none. */
+  depth?: DepthPic3D | null;
 }
+
+/**
+ * A picture with depth in a 3D scene: the objects go behind and in front of what is in the picture (Depth Composite),
+ * lit by the scene (+ Depth Light: its glowing shapes light the picture, its objects shadow it), and reflected
+ * (+ Picture Environment: the objects mirror the picture and take its colour).
+ */
+export type DepthPic3DHow = 'composite' | 'lit' | 'reflect';
+export const DEPTH_PIC_3D_HOWS: Array<{ how: DepthPic3DHow; label: string; blurb: string }> = [
+  { how: 'composite', label: 'In the picture', blurb: 'The objects go behind and in front of what is in the picture (Depth Composite): the nearer one shows at each pixel.' },
+  { how: 'lit', label: '…lit by the scene', blurb: 'The same, and the scene\'s glowing shapes light the picture while its objects cast soft shadows on it (Depth Light).' },
+  { how: 'reflect', label: '…lit, and reflected', blurb: 'Lit as above, and the objects mirror the picture and take its colour (Picture Environment): a chrome sphere shows the room.' },
+];
+export interface DepthPic3D {
+  /** The picture's name in the scene's textures. */
+  tex: string;
+  how: DepthPic3DHow;
+  /** Where, in scene units, the picture's nearest and farthest things are (Depth Composite's calibration). */
+  near: number;
+  far: number;
+  /** Edge softness, in scene units. */
+  soft: number;
+  /** The depth Generate depth baked (an image in the library); absent: the Depth node works it out live. */
+  bake?: DepthBakeInfo | null;
+}
+export const newDepthPic3D = (tex: string, over: Partial<DepthPic3D> = {}): DepthPic3D => ({ tex, how: 'composite', near: 1.5, far: 8, soft: 0.08, bake: null, ...over });
 
 // ── Defaults ────────────────────────────────────────────────────────────────
 
@@ -572,6 +600,8 @@ export function canonicalSpec(spec: SceneSpec): SceneSpec {
   if (out.look.fogColor && out.look.fogColor.every((v, i) => v === out.look.bg[i])) out.look.fogColor = null;
   if (!out.textures?.length) delete out.textures;
   if (!out.look.bgTex) delete out.look.bgTex;
+  if (!out.depth) delete out.depth;
+  else delete out.depth.bake;
   let s = 0, g = 0, w = 0;
   walkItems(out.root, it => {
     it.id = it.type === 'group' ? `g${++g}` : `s${++s}`;
@@ -586,6 +616,7 @@ export function texturesUsed3D(spec: SceneSpec): string[] {
   const out: string[] = [];
   walkItems(spec.root, it => { if (it.type === 'shape' && it.tex) out.push(it.tex.tex); });
   if (spec.look.bgTex) out.push(spec.look.bgTex);
+  if (spec.depth) out.push(spec.depth.tex);
   return [...new Set(out)];
 }
 

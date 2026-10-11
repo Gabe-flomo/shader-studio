@@ -12,6 +12,7 @@ import {
   TEX_MAPS, TEX_MAP_LABELS, TEX_SHARP_DEFAULT, type TexMap, CAMERA_PROJECTIONS, REVERSE_DEFAULTS, type CameraNumKey, type CameraProjection,
 } from '../../sceneBuilder/spec';
 import { TexturePicker } from '../builders/TexturePicker';
+import { DepthPictureCard } from './DepthPictureCard';
 import { findTex, withSource } from '../../builders/textures';
 import { randomShapeAction, randomiseThisAction } from './surpriseActions';
 import { addModifier, addShape, addWarp, duplicateItem, moveBy, moveItem, moveModifierTo, moveWarp, removeItem, removeWarp, ungroup } from '../../sceneBuilder/edit';
@@ -585,6 +586,7 @@ export function LightSettings() {
             {L.fogColor && <ColourRow label="Fog colour" hint="What distance fades into." value={L.fogColor} onChange={v => set(l => { l.fogColor = v; }, 'fogc')} />}
           </Card>
         )}
+        {lit && <DepthPictureCard />}
         {L.mode !== 'glass' && (
           <Card id="look:bg" title="Background" summary={L.bg2 ? 'gradient' : 'solid'}>
             <Row label="Kind" hint="One colour, or a gradient from Top (looking up) to Bottom (looking down)."><Segmented size="sm" ariaLabel="Background kind" value={L.bg2 ? 'gradient' : 'solid'} options={[{ value: 'solid', label: 'Solid' }, { value: 'gradient', label: 'Gradient' }]}

@@ -338,6 +338,13 @@ function sceneEntries(): Entry[] {
       { key: 'aspect', type: 'number', min: 0.05, max: 20, hint: 'The picture\'s width ÷ height (fits keep it).' },
       { key: 'kind', type: 'choice', options: ['image', 'shader'], hint: 'A picture or a Shader Texture.' },
     ]],
+    ['depth-picture', ['picture-depth'], 'a picture with depth the objects stand in', [
+      { key: 'name', type: 'name', primary: true, hint: 'The picture (a name from a texture clause).' },
+      { key: 'how', type: 'choice', options: ['composite', 'lit', 'reflect'], hint: 'In the picture (Depth Composite), lit by the scene (+ Depth Light), or lit and reflected (+ Picture Environment).' },
+      { key: 'near', type: 'number', min: 0.1, max: 20, hint: 'Where the picture\'s nearest thing is, in scene units.' },
+      { key: 'far', type: 'number', min: 0.2, max: 100, hint: 'Where its farthest thing is.' },
+      { key: 'soft', type: 'number', min: 0, max: 1, hint: 'Edge softness, in scene units.' },
+    ]],
     ['tone', [], 'tone map', [{ key: 'mode', type: 'choice', options: TONE_MODES, primary: true }]],
     ['camera', ['cam'], 'the orbit camera', [
       ...['dist', 'angle', 'elev', 'orbit', 'zoom', 'flatten', 'x', 'y', 'z'].map((k, i) => ({ key: k, type: 'number' as const, ...(i === 0 ? { primary: true } : {}), ...(k === 'dist' ? { rand: { kind: 'num' as const, lo: 3, hi: 6 } } : k === 'orbit' ? { rand: { kind: 'num' as const, lo: 0, hi: 15 } } : k === 'elev' ? { rand: { kind: 'num' as const, lo: 5, hi: 35 } } : {}) })),
@@ -351,6 +358,7 @@ function sceneEntries(): Entry[] {
     sun: 'sphere · sun dir=(1,2,1)', sky: 'sphere · sky (0.5,0.6,0.9)', bounce: 'sphere · bounce (0.3,0.2,0.1)', shadows: 'sphere · shadows 16', ao: 'sphere · ao 0.06',
     fog: 'sphere · fog 0.3', background: 'sphere · background navy', tone: 'sphere · tone agx', camera: 'sphere · camera dist=5 orbit=10', quality: 'sphere · quality steps=128',
     texture: 'texture pond · box size=0.5 texture=pond @repeat(2)',
+    'depth-picture': 'texture pond · sphere r=0.5 · depth-picture pond how=lit',
   };
   for (const [w, aliases, summary, params] of settings) out.push({ id: `scene:${w}`, kind: 'setting', dialects: ['scene'], words: [w, ...aliases], params, summary, examples: [SETTING_EXAMPLES[w] ?? `sphere · ${w}`], stage: w === 'camera' ? 'camera' : 'lighting' });
   out.push({

@@ -7,10 +7,11 @@ A builder for flat pictures, like the 3D Scene Builder: pick shapes, bend the sp
 - **Layers** (left): shapes and combine groups, painted top to bottom (the last is on top). Select one to edit it; move it earlier or later, delete it, join it with the next layer (∪ with next, − next) or ungroup.
 - **Space**: transforms applied to the picture's coordinates before the shapes measure them, top to bottom. At the top, a big **space view** (a grid seen through the whole stack; it stays in view as the stack scrolls, and hovering a transform shows the space after it). Then the stack: **space blocks** (below), and the built-in transforms (zoom, rotate with spin, move, pixelate, tile, mirror tile, mirror, kaleidoscope, polar repeat, polar, swirl, noise warp, wave, fisheye, invert; folded under *Built-in transforms*), and functions (*Add a function*). Each shows a thumbnail of a grid or checkerboard through it.
 - **Shapes**: a gallery of 17 shapes (circle, ring, box, rounded box, triangle, diamond, pentagon, hexagon, octagon, star, burst, hexagram, heart, cross, ellipse, moon, vesica). The selected layer's inspector has its size, colour and glow; **Place** (position, rotate, scale, round, outline only); **Motion** (orbit, bob, spin, pulse, with speed, amount, direction and phase); **Duplicate** (a ring of copies, rings of rings, and the whole ring repeated at bigger sizes).
+- **Depth**: a picture with depth the shapes interact with (below, [Picture with depth](#picture-with-depth)).
 - **Look**: background, colour by (each layer's colour, or length, angle, x, y, time or distance through a palette), glow on all shapes or only layers marked Glow, tone map, bloom, vignette, grain, scanlines.
 - **Output**: the picture, or a view of how it works: distance bands, the mask, or the space as a checkerboard.
 - **Recipe**: the whole scene as one line of the Playfield language, e.g. `kaleidoscope 8 · ring r=0.3 th=0.02 color=cyan @orbit(0.12 speed=0.12) · glow 0.008 · tone aces`. Edit and Apply, or paste one.
-- **Templates**: five starting points.
+- **Templates**: starting points (two with a picture with depth).
 - **Surprise me** (header): a whole random scene from a seed (see below). The seed shows beside it; type one and press Enter to make that scene again.
 - **Preview** (right): the graph Build makes, compiled and drawn live.
 
@@ -192,6 +193,50 @@ grid 16 12 picture=pond picture-mode=piece
 - `picture name` is a picture layer; `background … picture= fit= tiles= [still]`.
 - On the grid: `picture=` and `picture-mode=cell|mask|matte|piece` (piece when left out).
 
+## Picture with depth
+
+The **Depth** tab: a picture with depth the shapes interact with ([depth-mix.md](depth-mix.md)).
+
+- **Picture with depth:** pick it with the shared picker; **Fit** (Fill, Fit, Stretch) says how it covers the frame.
+- **Generate depth** works its depth out now, on this device, as the Texture card's Generate depth does (Depth
+  Anything V2 Small; the first time it offers the one-time 50 MB download, which the browser keeps). The result is
+  kept as an image beside the picture and Build puts it on the Depth node (Update: Baked). Without it, the built
+  Depth node works the depth out live. The preview shows the generated depth, or the depth a Depth node on the canvas
+  already has for the picture, or else the picture's brightness as a stand-in (the tab says which).
+- **Shapes and depth:** **Size by depth** (every layer grows on near things: *Size far*, *Size near*) and **Space by
+  depth** (the point every shape is measured from moves by depth: *Move by* Shift, Zoom or Turn, *Amount*,
+  *Direction*, *Focus*). Either, both or neither.
+- **With the picture:** the look. **On top** (the scene over the picture: *Scene over it* Add, Screen, Over or Tint),
+  **Occlude** (*Scene sits at*, *Softness*), **Fog** (*Density*, *Haze*, *Fog colour*), **Mix** (*Near shows*,
+  *Amount*), **Light** (*Strength*, *Own light*, *Glow*). **Picture** is how bright the picture shows.
+- **Depth range:** *Far end*, *Near end* and *Curve*: which part of the depth counts.
+- **Gradient over depth:** a palette along depth (*On* the scene, the picture or both; *How*; *Amount*, *Cycles*,
+  *Phase*, and *Flow*, which moves it through depth over time).
+
+What Build makes: a **Picture fit** and **Sample (texture)** (the picture over the frame), a **Depth** node reading
+the picture's node at the same place (so depth and colour line up), a **Depth Mix for the shapes** when size or space
+is on (its *Scale* into each top-level layer's Transform *Grow*, times a pulse when it has one; its *Depth UV* as the
+point the layers and the grid are measured from), and a **Depth Mix** after the layers and the grid that puts the
+scene and the picture together (its Scene mask from the layers' union with *Over*; *Time × Flow* into its Phase).
+Every setting is a live slider on those nodes; every node has a note.
+
+Size by depth grows top-level layers; a grid keeps its own sizes (space by depth moves it).
+
+### In a recipe
+
+```
+depth-picture pond size=(0.4,1.6) look=occlude at=0.5
+depth-picture pond space=shift shift=0.6 dir=90 focus=0.3 gradient=sunset cycles=1.5 flow=0.05
+```
+
+`depth-picture name` then: `fit=cover|contain|stretch`, `size` or `size=(far,near)`, `space=shift|zoom|turn`,
+`shift=`, `dir=`, `focus=`, `look=top|occlude|fog|mix|light`, `with=add|screen|over|tint`, `picture=`,
+`range=(far,near)`, `curve=`, `at=`, `soft=`, `fog=`, `haze=`, `fog-color=`, `light=`, `own=`, `glow=`,
+`near=picture|scene`, `mix=`, `gradient=<palette>|off`, `gradient-on=scene|picture|both`,
+`gradient-how=multiply|colorize|add`, `gradient-amount=`, `cycles=`, `phase=`, `flow=`. The palettes are the Palette
+node's: blue-teal, rainbow, warm, lemon, sunset, fire, forest, purple-haze, deep-purple, psychedelic. A recipe
+doesn't carry a generated depth; Apply on the Recipe tab keeps it for the same picture.
+
 ## Surprise me
 
 The header's **Surprise me** makes a good-looking random scene from a seed, as one undo step
@@ -227,7 +272,8 @@ widen when you type past the end.
 
 ## Examples
 
-**2D: Scene Builder** folder: Kaleidoscope of glowing rings, Orbiting shapes, A ring of rings.
+**2D: Scene Builder** folder: Kaleidoscope of glowing rings, Orbiting shapes, A ring of rings, and two pictures with
+depth on the "ridges at dusk" still: Circles sized by depth, Glow beaming through depth ([depth-mix.md](depth-mix.md#examples)).
 
 ## Functions
 

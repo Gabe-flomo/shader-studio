@@ -54,6 +54,26 @@ const waitFor = (el: HTMLVideoElement, ev: string, ms: number) => new Promise<bo
   el.addEventListener('error', () => { clearTimeout(t); res(false); }, { once: true });
 });
 
+/**
+ * A still's depth, once: the model run on the picture (at `side`), kept as a grey PNG in the image library. Bake depth
+ * on a Depth node and Generate depth in the scene builders both use it. Throws with a reason.
+ */
+export async function bakeImageDepth(img: CanvasImageSource & { width: number; height: number }, model: string, side: number, source: string, onProgress: (p: DepthBakeProgress) => void = () => {}): Promise<DepthBakeInfo> {
+  if (!depthModelUsable(model)) throw new Error(`Download ${depthModelById(model).name} first.`);
+  const { w, h } = grabSize(img.width, img.height, side);
+  const { g } = grabCanvas(w, h);
+  g.drawImage(img, 0, 0, w, h);
+  onProgress({ done: 0, total: 1, ms: null });
+  const r = await estimateDepth(model, { rgba: new Uint8Array(g.getImageData(0, 0, w, h).data.buffer), w, h, flipY: false }, side);
+  if (!r) throw new Error('The depth model failed (see the console).');
+  const out = grabCanvas(r.w, r.h);
+  out.g.putImageData(new ImageData(new Uint8ClampedArray(depthToGreyRgba(r.depth, r.w, r.h, r.w, r.h).buffer as ArrayBuffer), r.w, r.h), 0, 0);
+  const blob = await new Promise<Blob>((ok, no) => out.c.toBlob(b => (b ? ok(b) : no(new Error('The depth image couldn’t be made'))), 'image/png'));
+  const meta = await addImage(blob, { name: depthBakeFileName(source, 'png').replace(/\.png$/, ''), width: r.w, height: r.h });
+  onProgress({ done: 1, total: 1, ms: r.ms });
+  return { kind: 'image', libraryId: meta.id, model, side, width: r.w, height: r.h, fps: 0, frames: 1, duration: 0, smoothing: 0, bytes: blob.size, bakedAt: Date.now(), source };
+}
+
 /** Bake the node's depth. Resolves with what it stored (the node's params are updated), or throws with a reason. */
 export async function bakeDepth(nodeId: string, onProgress: (p: DepthBakeProgress) => void, signal?: AbortSignal): Promise<DepthBakeInfo> {
   const st = useNodeGraphStore.getState();
@@ -71,18 +91,7 @@ export async function bakeDepth(nodeId: string, onProgress: (p: DepthBakeProgres
   if (src.kind === 'image') {
     const img = st.nodeTextures[src.node.id]?.image as CanvasImageSource & { width: number; height: number } | undefined;
     if (!img || !img.width) throw new Error('Load a picture into the Texture Input first.');
-    const { w, h } = grabSize(img.width, img.height, side);
-    const { g } = grabCanvas(w, h);
-    g.drawImage(img, 0, 0, w, h);
-    onProgress({ done: 0, total: 1, ms: null });
-    const r = await estimateDepth(model, { rgba: new Uint8Array(g.getImageData(0, 0, w, h).data.buffer), w, h, flipY: false }, side);
-    if (!r) throw new Error('The depth model failed (see the console).');
-    const out = grabCanvas(r.w, r.h);
-    out.g.putImageData(new ImageData(new Uint8ClampedArray(depthToGreyRgba(r.depth, r.w, r.h, r.w, r.h).buffer as ArrayBuffer), r.w, r.h), 0, 0);
-    const blob = await new Promise<Blob>((ok, no) => out.c.toBlob(b => (b ? ok(b) : no(new Error('The depth image couldn’t be made'))), 'image/png'));
-    const meta = await addImage(blob, { name: depthBakeFileName(source, 'png').replace(/\.png$/, ''), width: r.w, height: r.h });
-    onProgress({ done: 1, total: 1, ms: r.ms });
-    info = { kind: 'image', libraryId: meta.id, model, side, width: r.w, height: r.h, fps: 0, frames: 1, duration: 0, smoothing: 0, bytes: blob.size, bakedAt: Date.now(), source };
+    info = await bakeImageDepth(img, model, side, source, onProgress);
   } else {
     const blob = await videoBlobOf(src.node);
     if (!blob) throw new Error('Load a video into the Video node first.');

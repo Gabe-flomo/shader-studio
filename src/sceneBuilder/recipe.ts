@@ -18,8 +18,8 @@
 import {
   DEFAULT_CAMERA, DEFAULT_COLOR, DEFAULT_LOOK, DEFAULT_QUALITY, SHAPES, SHAPE_BY_KIND, TONE_MODES, WARPS, WARP_BY_KIND,
   DIM_WORDS, defaultSize, defaultWarpValues, emptySpec, newGroup, newShape, newWarp, shapeDims, shapeParamWord,
-  TEX_MAPS, CAMERA_PROJECTIONS, REVERSE_DEFAULTS,
-  type CameraNumKey, type CameraProjection, type DimTarget, type DimWord, type ShapeDef, type CombineOp, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type TexMap, type ToneMode, type Vec3, type WarpDef, type WarpSpec,
+  TEX_MAPS, CAMERA_PROJECTIONS, REVERSE_DEFAULTS, DEPTH_PIC_3D_HOWS, newDepthPic3D,
+  type DepthPic3D, type DepthPic3DHow, type CameraNumKey, type CameraProjection, type DimTarget, type DimWord, type ShapeDef, type CombineOp, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type TexMap, type ToneMode, type Vec3, type WarpDef, type WarpSpec,
 } from './spec';
 import { findTex, texSlug, type TexSource } from '../builders/textures';
 import { COLOUR_TABLE, colourText } from '../lang/colours';
@@ -98,7 +98,7 @@ const PROJECTION_WORDS: Record<string, CameraProjection> = {
   reverse: 'reverse', inverse: 'reverse', 'reverse-perspective': 'reverse',
 };
 
-const SETTING_WORDS = ['sun', 'sky', 'bounce', 'shadows', 'shadow', 'ao', 'occlusion', 'fog', 'background', 'bg', 'tone', 'camera', 'cam', 'quality', 'custom', 'custom-warp', 'output', 'show', 'colour', 'color', 'texture'];
+const SETTING_WORDS = ['sun', 'sky', 'bounce', 'shadows', 'shadow', 'ao', 'occlusion', 'fog', 'background', 'bg', 'tone', 'camera', 'cam', 'quality', 'custom', 'custom-warp', 'output', 'show', 'colour', 'color', 'texture', 'depth-picture', 'picture-depth'];
 
 const COLOR_NAMES = COLOUR_TABLE as Readonly<Record<string, Vec3>>;
 
@@ -687,6 +687,25 @@ class Parser {
   setting(spec: SceneSpec, w: string, t: { at: number; end: number }, args: Arg[]) {
     const L = spec.look;
     if (w === 'texture') { this.texture(t, args); return; }
+    if (w === 'depth-picture' || w === 'picture-depth') {
+      // depth-picture <name> [how=composite|lit|reflect] [near=1.5] [far=8] [soft=0.08]
+      let d: DepthPic3D | null = null;
+      const rest: Arg[] = [];
+      for (const a of args) {
+        if (!d && !a.key && (a.value.kind === 'word' || a.value.kind === 'str')) { const n = this.texName(a, 'depth-picture'); if (n) d = newDepthPic3D(n); continue; }
+        rest.push(a);
+      }
+      if (!d) { this.fail(t, 'depth-picture needs a picture\'s name: depth-picture pond how=lit.'); return; }
+      for (const a of rest) {
+        const key = a.key?.toLowerCase();
+        const word = a.value.kind === 'word' ? a.value.v.toLowerCase() : '';
+        if (key === 'how' && DEPTH_PIC_3D_HOWS.some(h => h.how === word)) d.how = word as DepthPic3DHow;
+        else if ((key === 'near' || key === 'far' || key === 'soft') && a.value.kind === 'num') d[key] = a.value.v;
+        else this.fail(a, `depth-picture takes a picture's name, how=${DEPTH_PIC_3D_HOWS.map(h => h.how).join('|')}, near=, far= and soft=.`);
+      }
+      spec.depth = d;
+      return;
+    }
     const first = args[0];
     const firstNum = first && !first.key && first.value.kind === 'num' ? first.value.v : null;
     const off = first && !first.key && first.value.kind === 'word' && /^(off|no|none|false)$/i.test(first.value.v);
@@ -1003,6 +1022,11 @@ export function printRecipe(spec: SceneSpec, opts: { multiline?: boolean; pretty
   else if (!same(L.bg, D.bg)) clauses.push([`background ${fmtColour(L.bg)}`, ...bgPic].join(' '));
   else if (bgPic.length) clauses.push(['background', ...bgPic].join(' '));
   if (L.tone !== D.tone) clauses.push(`tone ${L.tone}`);
+  if (spec.depth) {
+    const d = spec.depth, DD = newDepthPic3D(d.tex);
+    clauses.push(['depth-picture', fmtName(d.tex), ...(d.how !== DD.how ? [`how=${d.how}`] : []),
+      ...(['near', 'far', 'soft'] as const).filter(k => !valueEq(d[k], DD[k])).map(k => `${k}=${fmt(d[k])}`)].join(' '));
+  }
   // Camera and quality.
   const cam = (Object.keys(DEFAULT_CAMERA) as CameraNumKey[]).filter(k => !valueEq(spec.camera[k], DEFAULT_CAMERA[k]));
   const C = spec.camera;

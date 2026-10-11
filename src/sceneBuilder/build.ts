@@ -859,6 +859,11 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     final = ref(compose, 'result');
   }
   if (L.mode !== 'surface' && shapes.some(s => s.tex)) ctx.warnings.push('Pictures on shapes are a Surface-mode feature; in this mode the shapes keep their colours.');
+  // A picture with depth: the objects stand in it (docs/depth-node.md "Depth in 3D scenes").
+  if (spec.depth) {
+    if (march && (L.mode === 'surface' || L.mode === 'gi')) final = emitDepthPicture3D(ctx, spec, cam, ref(scene, 'scene'), march.loop, final);
+    else ctx.warnings.push('A picture with depth needs Surface or GI lit mode (the march has to stop on surfaces to know what is nearer); it is left out.');
+  }
   if (L.tone !== 'none') final = ref(mk(ctx, 'toneMap', 'tone', { mode: L.tone }, { color: final }, toneNote(L.tone)), 'color');
   // Another output: the measurement instead of the picture (the picture's nodes stay, unwired).
   if (!isPicture(spec.output)) {
@@ -868,6 +873,45 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
   }
   tidy(ctx.nodes, 0, 0);
   return { nodes: ctx.nodes, final, sceneId: scene.id, warnings: ctx.warnings };
+}
+
+/**
+ * A picture with depth in the scene: the picture (its Texture node), its Depth node (baked when Generate depth ran),
+ * and a Depth Composite of the picture and `shown` by distance; lit adds a Depth Light (the scene's glowing shapes and
+ * its shadows on the picture), reflect a Picture Environment the objects mirror first. The same wiring as "Add a
+ * picture with depth" on a March Loop card (nodes/recipes/depthRecipes.ts).
+ */
+function emitDepthPicture3D(ctx: Ctx, spec: SceneSpec, cam: GraphNode, scene: Ref, loop: GraphNode, shown: Ref): Ref {
+  const d = spec.depth!;
+  const src = findTex(spec.textures, d.tex);
+  if (!src) { ctx.warnings.push(`The picture with depth reads “${d.tex}”, which the scene doesn't have: pick one under Light & colour → Picture with depth.`); return shown; }
+  const tex = { nodeId: standInId(src), outputKey: 'texture' }, colour = { nodeId: standInId(src), outputKey: 'color' };
+  const dn = mk(ctx, 'depth', 'depth', d.bake ? { update: 'baked', depthBake: structuredClone(d.bake) } : {}, { texture: tex },
+    `Depth: how far each part of “${src.name}” is, worked out on this device by a small model. `
+      + (d.bake ? 'Generate depth ran it once in the Scene Builder and kept it as an image beside the picture (Update: Baked).' : 'It runs once the model is downloaded (the card offers it); Bake depth keeps it.'));
+  let sceneIn = shown;
+  if (d.how === 'reflect') {
+    const dir = exprBlock(ctx, 'depth:mirror', 'Mirror direction', [{ name: 'rd', type: 'vec3', from: ref(cam, 'rd') }, { name: 'normal', type: 'vec3', from: ref(loop, 'normal') }],
+      'reflect(normalize(rd), normalize(normal))', 'Where a mirror at each hit point looks: the camera\'s ray bounced off the surface. Picture Environment reads the picture that way.');
+    const env = mk(ctx, 'pictureEnvironment', 'depth:env', { fov: spec.camera.zoom, blur: 0.01 }, { picture: tex, dir: ref(dir, 'result'), forward: ref(cam, 'forward'), right: ref(cam, 'right'), up: ref(cam, 'up') },
+      `Picture Environment: “${src.name}” as the room round the objects. Color is what a mirror sees, Ambient the picture's average colour. Outside the photo's frame it is mirrored back in.`);
+    sceneIn = ref(exprBlock(ctx, 'depth:reflect', 'Reflect the picture', [
+      { name: 'scene', type: 'vec3', from: shown }, { name: 'env', type: 'vec3', from: ref(env, 'color') }, { name: 'ambient', type: 'vec3', from: ref(env, 'ambient') },
+      { name: 'normal', type: 'vec3', from: ref(loop, 'normal') }, { name: 'rd', type: 'vec3', from: ref(cam, 'rd') }, { name: 'hit', type: 'float', from: ref(loop, 'hit') },
+      { name: 'reflectivity', type: 'float', slider: { value: 0.35, min: 0, max: 1 } }, { name: 'ambientMix', type: 'float', slider: { value: 0.5, min: 0, max: 1 } },
+    ], 'mix(scene * mix(vec3(1.0), ambient * 1.6, ambientMix), env, clamp(hit * (reflectivity + (1.0 - reflectivity) * pow(1.0 - max(dot(-normalize(rd), normalize(normal)), 0.0), 5.0)), 0.0, 1.0))',
+    'The objects mirror the picture: more at grazing angles (Schlick\'s Fresnel), at least Reflectivity facing you; Ambient Mix tints them by the picture\'s average colour.'), 'result');
+  }
+  const comp = mk(ctx, 'depthComposite', 'depth:composite', { nearD: d.near, farD: d.far, softness: d.soft },
+    { picture: colour, nearness: ref(dn, 'depth'), scene: sceneIn, dist: ref(loop, 'dist'), hit: ref(loop, 'hit') },
+    `Depth Composite: “${src.name}” and the scene, the nearer one at each pixel, so the objects pass behind and in front of what is in the picture. Nearest ${fmt(d.near)} and Farthest ${fmt(d.far)} say where the picture's near and far things are, in scene units: set them with Show: Picture distance.`);
+  if (d.how === 'composite') return ref(comp, 'color');
+  const only = exprBlock(ctx, 'depth:only', 'Only the picture', [{ name: 'front', type: 'float', from: ref(comp, 'front') }], '1.0 - front',
+    '1 where the picture shows, 0 where an object is in front: the light relights the picture, not the objects (they have their own).', ctx.nodes, 'float');
+  const light = mk(ctx, 'depthLight', 'depth:light', { nearD: d.near, farD: d.far, glowIntensity: 0.6, glowReach: 0.3 }, {
+    picture: ref(comp, 'color'), nearness: ref(dn, 'depth'), ro: ref(cam, 'ro'), rd: ref(cam, 'rd'), mask: ref(only, 'result'), glow: scene, occluders: scene,
+  }, 'Depth Light: the scene\'s light on the picture. The Glowing scene\'s shapes light it from where they are, and Shadows from lets the objects shade it. Link to scene object… on the card makes its point light follow a shape.');
+  return ref(light, 'color');
 }
 
 /** The spec a built scene carries (on its Scene Group). */

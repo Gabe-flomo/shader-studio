@@ -781,6 +781,36 @@ Shape keys: `texture=` (`tex=`, `picture=`), `map=triplanar|planar|spherical|fac
 `sharp=`, `tex-offset=(x,y)`, `tex-rot=`, `bump=`. The recipe help (hover a word) has entries for
 `texture`, these keys and `background picture=`.
 
+## A picture with depth
+
+The objects stand in a photo: they pass behind and in front of what is in it. **Light & colour → Picture with
+depth** (Surface and GI lit; the march has to stop on surfaces to know what is nearer). It is "Add a picture with
+depth" from the March Loop card ([depth-node.md](depth-node.md#add-a-picture-with-depth)), as plain choices:
+
+- **Pick** the picture with the shared picker.
+- **Generate depth** works its depth out now, on this device (Depth Anything V2 Small; the first time it offers the
+  one-time 50 MB download, which the browser keeps). The result is kept as an image beside the picture, and Build puts
+  it on the Depth node (Update: Baked): ready at once, and it goes into exported pages. Without it, the Depth node
+  works the depth out live once the model is downloaded. Until there is a depth, the builder's preview uses the
+  picture's brightness as a stand-in (the card says which it shows).
+- **How:** **In the picture** (Depth Composite: the nearer one shows at each pixel), **…lit by the scene** (+ Depth
+  Light: the scene's glowing shapes light the picture, its objects shadow it), **…lit, and reflected** (+ Picture
+  Environment: the objects mirror the picture and take its colour).
+- **Nearest** / **Farthest** (where, in scene units, the picture's near and far things are) and **Edge softness**.
+- **Face the picture** turns the camera to angle 0, height 0, no orbit: a photo is seen from the front.
+
+What Build makes: the picture's Texture node → **Depth** → **Depth Composite** (the picture, its depth, and the lit
+scene after fog, with the loop's Distance and Hit) → Tone Map. Lit adds **Only the picture** (1 − Scene in front) and
+a **Depth Light** whose Glowing scene and Shadows from are the scene. Reflected adds a mirror direction, **Picture
+Environment** and **Reflect the picture** before the composite. To make the Depth Light's point light follow a shape,
+use **Link to scene object…** on its card after Build.
+
+In a recipe: `depth-picture pond how=composite|lit|reflect near=1.5 far=8 soft=0.08`. The recipe doesn't carry a
+generated depth (Edit this one keeps it, from the build's saved spec).
+
+Code: `sceneBuilder/build.ts` (`emitDepthPicture3D`), `components/sceneBuilder/DepthPictureCard.tsx`; tests in
+`src/sceneBuilder/__tests__/depthPicture.test.ts`.
+
 ## What Build makes, and what it leaves out
 
 Build makes only what the scene uses: no Fog at density 0, no SDF Ambient Occlusion with AO off,
