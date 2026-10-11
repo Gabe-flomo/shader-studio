@@ -14,7 +14,7 @@ export const motionDecls = (spec: GridSceneSpec) => spec.shapes.map(s => `unifor
 /** The lines in main() that fill each shape's array. */
 export const motionLines = (spec: GridSceneSpec) => spec.shapes.flatMap(s => {
   const a = shapeArgs(s.id);
-  const v = motionExtra(s);
+  const v = motionExtra(s, spec);
   return [`  float ${a.x}[${v.length}];`, `  ${a.x}[0] = ${a.r}.x;`, `  ${a.x}[1] = ${a.r}.y;`, ...v.slice(2).map((n, i) => `  ${a.x}[${i + 2}] = ${lit(n)};`)];
 });
 
