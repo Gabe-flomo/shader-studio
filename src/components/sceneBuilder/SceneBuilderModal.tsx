@@ -23,6 +23,7 @@ import { SceneTree } from './SceneTree';
 import { ScenePreview } from './ScenePreview';
 import { SurpriseBar } from '../surprise/SurpriseBar';
 import { surpriseSceneAction, useSceneSurprise } from './surpriseActions';
+import { SceneCrumb } from '../builders/SceneCrumb';
 import { CameraTab, CombineTab, DescribeTab, LookTab, OutputTab, QualityTab, RecipeTab, ShapesTab, TemplatesTab, WarpsTab } from './tabs';
 
 /** The sections, as the builders' shared tab row (BuilderWindow `tabs`, components/builders/BuilderTabBar.tsx). */
@@ -86,7 +87,10 @@ export function SceneBuilderModal() {
   const tk = useTokens();
   const tab = useSceneBuilder(s => s.tab);
   const setTab = useSceneBuilder(s => s.setTab);
-  const spec = useSceneBuilder(s => s.spec);
+  // Only what the frame shows (a count, the mode), so a slider drag re-renders the tab it is on,
+  // not the whole window (docs/scene-builder.md, "The preview comes first").
+  const shapes = useSceneBuilder(s => allShapes(s.spec).length);
+  const mode = useSceneBuilder(s => s.spec.look.mode);
   const close = useSceneBuilder(s => s.close);
   const undo = useSceneBuilder(s => s.undo);
   const redo = useSceneBuilder(s => s.redo);
@@ -113,7 +117,6 @@ export function SceneBuilderModal() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [undo, redo]);
 
-  const shapes = allShapes(spec).length;
   const body = {
     shapes: <ShapesTab />, combine: <CombineTab />, warps: <WarpsTab />, look: <LookTab />, camera: <CameraTab />, quality: <QualityTab />, output: <OutputTab />,
     recipe: <RecipeTab />, templates: <TemplatesTab />, describe: <DescribeTab />,
@@ -122,8 +125,8 @@ export function SceneBuilderModal() {
   return (
     <BuilderWindow
       prefsKey="scene-builder"
-      title="3D Scene Builder"
-      subtitle={`${editing ? 'Editing a built scene' : 'A new scene'} · ${shapes} shape${shapes === 1 ? '' : 's'} · ${MODE_LABEL[spec.look.mode]}`}
+      title={<SceneCrumb kind="3d" />}
+      subtitle={`3D Scene Builder · ${editing ? 'editing a built scene' : 'a new scene'} · ${shapes} shape${shapes === 1 ? '' : 's'} · ${MODE_LABEL[mode]}`}
       icon="cube"
       iconColor={tk.kind.fn}
       onClose={close}

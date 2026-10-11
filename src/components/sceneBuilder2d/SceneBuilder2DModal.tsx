@@ -37,6 +37,7 @@ import { BLOCK_BY_ID } from '../../sceneBuilder2d/blockLibrary';
 import { SurpriseBar } from '../surprise/SurpriseBar';
 import { announceSurprise } from '../surprise/announce';
 import { newSeed } from '../../lib/surprise';
+import { SceneCrumb } from '../builders/SceneCrumb';
 
 const TABS: Array<{ id: Builder2DTab; label: string; icon: IconName; gapBefore?: boolean }> = [
   { id: 'space', label: 'Space', icon: 'wave' },
@@ -655,7 +656,10 @@ export function SceneBuilder2DModal() {
   const tk = useTokens();
   const tab = useSceneBuilder2D(s => s.tab);
   const setTab = useSceneBuilder2D(s => s.setTab);
-  const scene = useSceneBuilder2D(s => s.scene);
+  // Only what the frame shows, so a slider drag re-renders the tab it is on, not the whole window.
+  const shapes = useSceneBuilder2D(s => allShapes(s.scene).length);
+  const spaceCount = useSceneBuilder2D(s => s.scene.space.length);
+  const gridSize = useSceneBuilder2D(s => (s.scene.grid ? `${s.scene.grid.cols} × ${s.scene.grid.rows}` : null));
   const close = useSceneBuilder2D(s => s.close);
   const undo = useSceneBuilder2D(s => s.undo);
   const redo = useSceneBuilder2D(s => s.redo);
@@ -680,14 +684,13 @@ export function SceneBuilder2DModal() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [undo, redo]);
 
-  const shapes = allShapes(scene).length;
   const body = { space: <SpaceTab />, shapes: <ShapesTab />, grid: <GridTab />, look: <LookTab />, output: <OutputTab />, recipe: <RecipeTab />, templates: <TemplatesTab /> }[tab];
   void num;
   return (
     <BuilderWindow
       prefsKey="scene-builder-2d"
-      title="2D Scene Builder"
-      subtitle={`${editing ? 'Editing a built scene' : 'A new scene'} · ${scene.space.length} space · ${shapes} shape${shapes === 1 ? '' : 's'}${scene.grid ? ` · a ${scene.grid.cols} × ${scene.grid.rows} grid` : ''}`}
+      title={<SceneCrumb kind="2d" />}
+      subtitle={`2D Scene Builder · ${editing ? 'editing a built scene' : 'a new scene'} · ${spaceCount} space · ${shapes} shape${shapes === 1 ? '' : 's'}${gridSize ? ` · a ${gridSize} grid` : ''}`}
       icon="mask"
       iconColor={tk.kind.fn}
       onClose={close}
@@ -715,7 +718,7 @@ export function SceneBuilder2DModal() {
         <span style={{ flex: 1 }} />
         {dirty && <BuilderNote style={{ color: tk.text.faint }}>Not built yet</BuilderNote>}
         <Button onClick={close}>Done</Button>
-        <Button variant="primary" icon="rebuild" disabled={!shapes && !scene.grid} onClick={() => buildFromBuilder2D(false)}>{editing ? 'Rebuild' : 'Build'}</Button>
+        <Button variant="primary" icon="rebuild" disabled={!shapes && !gridSize} onClick={() => buildFromBuilder2D(false)}>{editing ? 'Rebuild' : 'Build'}</Button>
       </>}
     >
       <div style={{ padding: '14px 16px' }}>{body}</div>

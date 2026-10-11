@@ -32,6 +32,7 @@ import { SurpriseBar } from '../surprise/SurpriseBar';
 import { surpriseGridAction, useSurpriseSeeds } from '../surprise/surpriseActions';
 import { Field } from '../ui/Field';
 import { RulerSlider } from '../ui/RulerSlider';
+import { SceneCrumb } from '../builders/SceneCrumb';
 import { Select } from '../ui/Select';
 import { ColorSwatch } from '../ui/ColorPicker';
 import { MiniBoard, RulePreview } from './RulePreview';
@@ -82,7 +83,7 @@ function GridRulesWindow({ node, tab, setTab, tabs, onClose }: {
   return (
     <BuilderWindow
       prefsKey="grid-rules"
-      title="Grid Rules" subtitle={`${label} · ${ruleSummary(params)}`} icon="grid" width={1180} height={780} onClose={onClose}
+      title={<SceneCrumb kind="grid" />} subtitle={`Grid Rules · ${label} · ${ruleSummary(params)}`} icon="grid" width={1180} height={780} onClose={onClose}
       tabs={{ items: tabs, value: tab, onChange: setTab, ariaLabel: 'Grid Rules sections' }}
       headerActions={<>
         <Toggle checked={keepType} onChange={setKeepType} label="Keep the type" />

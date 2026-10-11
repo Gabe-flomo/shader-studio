@@ -1,0 +1,36 @@
+/**
+ * previewPriority.ts — while a builder window with a preview of its own is open, the main preview
+ * behind it is held (lib/previewHold.ts): it stops drawing, keeps its last frame, and its clock
+ * waits, so the builder's preview has the GPU to itself (docs/scene-builder.md, "The preview comes
+ * first"). An output window or a recording keeps full speed, as with every hold.
+ *
+ * Held for: the Scene builder's own pages, the 2D and 3D Scene Builders (their own WebGL previews)
+ * and the Grid Rules editor (its CPU preview). Not for the Agent Builder: its picture IS the main
+ * preview, mirrored (components/builders/studio/LiveViewport.tsx).
+ */
+import { holdPreview } from '../lib/previewHold';
+import { useSceneBuilder } from '../sceneBuilder/store';
+import { useSceneBuilder2D } from '../sceneBuilder2d/store';
+import { useBuilderWindows } from './windows';
+
+/** Whether an open builder window wants the main preview held now. */
+export function builderHoldsPreview(): boolean {
+  const w = useBuilderWindows.getState();
+  return useSceneBuilder.getState().open || useSceneBuilder2D.getState().open || !!w.gridRules || !!w.sceneShell;
+}
+
+/**
+ * Hold the main preview whenever builderHoldsPreview() says so, from now until the returned stop
+ * (which lets go of a hold it still has). BuilderWindowsHost runs it while it is mounted.
+ */
+export function watchBuilderPreview(): () => void {
+  let release: (() => void) | null = null;
+  const sync = () => {
+    const want = builderHoldsPreview();
+    if (want && !release) release = holdPreview();
+    else if (!want && release) { release(); release = null; }
+  };
+  sync();
+  const subs = [useSceneBuilder.subscribe(sync), useSceneBuilder2D.subscribe(sync), useBuilderWindows.subscribe(sync)];
+  return () => { for (const u of subs) u(); release?.(); release = null; };
+}

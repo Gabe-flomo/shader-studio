@@ -46,6 +46,8 @@ export interface StudioShellProps {
   title: ReactNode;
   /** Its kind ("Trail followers · 2D"). */
   kind?: ReactNode;
+  /** A small line over the title: where this is ("Scene builder › Agent scene", components/builders/SceneCrumb.tsx). */
+  crumb?: ReactNode;
   onClose: () => void;
   /** Esc first asks this (a focus view leaves on Esc): true means it was handled and the builder stays open. */
   onEscape?: () => boolean;
@@ -140,7 +142,8 @@ export function StudioShell(p: StudioShellProps) {
           <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: alpha(tile, 0.12), color: tile, marginLeft: p.onBack ? 0 : 4 }}>
             <Icon name={p.icon} />
           </span>
-          <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, marginRight: 'auto' }}>
+          <span style={{ display: 'flex', flexDirection: 'column', gap: p.crumb ? 0 : 1, minWidth: 0, marginRight: 'auto' }}>
+            {p.crumb && <span data-studio-crumb style={{ fontSize: 11, lineHeight: '14px', color: tk.text.muted, display: 'flex', minWidth: 0 }}>{p.crumb}</span>}
             <b data-studio-title style={{ fontSize: 15, fontWeight: 650, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</b>
             {p.kind && <span data-studio-kind style={{ fontSize: 12, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.kind}</span>}
           </span>

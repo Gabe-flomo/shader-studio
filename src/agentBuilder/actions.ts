@@ -176,11 +176,11 @@ const unwired = (n: GraphNode, gone: (id: string) => boolean): GraphNode => ({
  * The start page's "Clear the graph first": everything but the Output (unwired), one undo step of its
  * own ("Agent Builder: cleared the graph"). Returns the graph as it was, for Back.
  */
-export function clearGraphForBuilder(): GraphNode[] {
+export function clearGraphForBuilder(label = 'Agent Builder: cleared the graph'): GraphNode[] {
   const st = useNodeGraphStore.getState();
   if (st.activeGroupPath.length) st.exitToRoot();
   const before = useNodeGraphStore.getState().nodes;
-  undoManager.push(before, { label: 'Agent Builder: cleared the graph' });
+  undoManager.push(before, { label });
   const nodes = before.filter(isOutput).map(n => unwired(n, () => true));
   useNodeGraphStore.setState({ nodes, selectedNodeId: null, selectedNodeIds: [] });
   useNodeGraphStore.getState().compile();
@@ -214,13 +214,20 @@ export function agentSetupIds(nodes: readonly GraphNode[], groupId: string): Set
 }
 
 /** "Start over": take a group and its setup away (agentSetupIds), one undo step. */
-export function removeAgentSetup(groupId: string): boolean {
+export function removeAgentSetup(groupId: string, label = 'Agent Builder: started over'): boolean {
+  return removeSetupNodes(agentSetupIds(useNodeGraphStore.getState().nodes, groupId), label);
+}
+
+/**
+ * Take a set of nodes away (and the wires into them), one undo step: "Start over" on any kind of
+ * builder-made scene (builders/sceneKinds.ts). False when there is nothing to take.
+ */
+export function removeSetupNodes(gone: ReadonlySet<string>, label: string): boolean {
   const st = useNodeGraphStore.getState();
   if (st.activeGroupPath.length) st.exitToRoot();
   const before = useNodeGraphStore.getState().nodes;
-  const gone = agentSetupIds(before, groupId);
-  if (!gone.size) return false;
-  undoManager.push(before, { label: 'Agent Builder: started over' });
+  if (!gone.size || !before.some(n => gone.has(n.id))) return false;
+  undoManager.push(before, { label });
   const nodes = before.filter(n => !gone.has(n.id)).map(n => unwired(n, id => gone.has(id)));
   useNodeGraphStore.setState({ nodes, selectedNodeId: null, selectedNodeIds: [] });
   useNodeGraphStore.getState().compile();
