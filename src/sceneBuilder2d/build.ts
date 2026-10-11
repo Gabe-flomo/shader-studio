@@ -3,12 +3,12 @@
  *
  * The graph is what a skilled user would wire by hand:
  *
- *   UV ─► space transforms ─► per shape: Motion 2D ─► Place 2D ─► (ring: Angular Repeat ─► Place 2D)
+ *   UV ─► space transforms ─► per shape: Motion 2D ─► Transform 2D ─► (ring: Angular Repeat ─► Transform 2D)
  *                                  ─► Shape SDF ─► Offset / Onion ─► × scale ─► combines ─► distance
  *   background ─► (Glow Layer ─► Add) ─► SDF Fill, one pair per layer ─► Tone Map ─► post ─► Output
  *
  * Every node gets a plain-language note (`__comment`) and a role (`_sbRole`): a stable name for the
- * part of the spec it comes from (`s2:place` is shape s2's Place 2D, `p1` the first space
+ * part of the spec it comes from (`s2:place` is shape s2's Transform 2D, `p1` the first space
  * transform), so a rebuild can find the node again, keep its id (Play controls stay pointed at it)
  * and carry the user's own edits over. Numbers go on params, which compile to live uniforms:
  * dragging a generated slider never recompiles.
@@ -218,7 +218,7 @@ function motionWords(m: MotionSpec): string {
   return `${d.label.toLowerCase()} ${fmt(m.speed)} cycles a second${d.amount ? `, ${d.amount.label.toLowerCase()} ${fmt(m.amount)}` : ''}${m.phase ? `, starting ${fmt(m.phase)}° in` : ''}`;
 }
 
-/** An item's Motion 2D chain: what to wire into its Place 2D. */
+/** An item's Motion 2D chain: what to wire into its Transform 2D. */
 function emitMotion(b: B, it: Item, name: string): { offset: Ref | null; turn: Ref | null; grow: Ref | null } {
   const { c } = b;
   let last: GraphNode | null = null;
@@ -232,7 +232,7 @@ function emitMotion(b: B, it: Item, name: string): { offset: Ref | null; turn: R
       if (hasGrow) wires.grow = ref(last, 'grow');
     }
     last = mk(c, 'motion2D', m.id, { mode: m.kind, speed: m.speed, amount: m.amount, phase: m.phase, direction: m.dir }, wires,
-      `${d.label} on ${name}: ${d.blurb} ${motionWords(m)}. Wired into ${name}'s Place 2D${it.motion.length > 1 ? '; motions are chained, each adds to the one before' : ''}.`);
+      `${d.label} on ${name}: ${d.blurb} ${motionWords(m)}. Wired into ${name}'s Transform 2D${it.motion.length > 1 ? '; motions are chained, each adds to the one before' : ''}.`);
     if (m.kind === 'orbit' || m.kind === 'bob') hasOffset = true;
     if (m.kind === 'spin') hasTurn = true;
     if (m.kind === 'pulse') hasGrow = true;
@@ -242,7 +242,7 @@ function emitMotion(b: B, it: Item, name: string): { offset: Ref | null; turn: R
 
 interface Branch { pos: Ref; scales: Ref[] }
 
-/** The ring array of an item from `start`: Angular Repeat, then Place 2D out to the radius (twice for rings of rings). */
+/** The ring array of an item from `start`: Angular Repeat, then Transform 2D out to the radius (twice for rings of rings). */
 function emitRing(b: B, it: Item, dup: DupSpec, start: Branch, k: number, name: string): Branch {
   const { c } = b;
   const suffix = dup.levels > 1 ? `:${k}` : '';
@@ -304,7 +304,7 @@ function shapeNode(b: B, sh: ShapeSpec, pos: Ref, name: string, sfx = ''): Ref {
 }
 
 /**
- * An item's distance from `pos`: placement (Motion 2D → Place 2D), the ring array, the shape or the
+ * An item's distance from `pos`: placement (Motion 2D → Transform 2D), the ring array, the shape or the
  * combine of its children, Round and Outline, and the distance put right for any scaling.
  */
 function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
@@ -327,7 +327,7 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
     if (baseScale !== 1) bits.push(def?.unit ? `sized ${fmt(unit)} (a ${def.label.toLowerCase()} has no radius of its own, so its size is this node's Scale)` : `scaled ${fmt(it.scale)}×`);
     if (it.motion.length) bits.push('moved by its motion');
     const pl = mk(c, 'place2D', `${it.id}:place`, { x: it.at[0], y: it.at[1], rotate: it.rot, scale: baseScale }, wires,
-      `Places ${name}: ${bits.join(', ')}. Place 2D gives the shape a new view of space: the shape is measured from the point as it sees it, so it ends up where the node says. Its Scale output multiplies the distance back to the picture's units.`);
+      `Places ${name}: ${bits.join(', ')}. Transform 2D gives the shape a new view of space: the shape is measured from the point as it sees it, so it ends up where the node says. Its Scale output multiplies the distance back to the picture's units.`);
     start = { pos: ref(pl, 'p'), scales: baseScale !== 1 || pulse ? [ref(pl, 'scale')] : [] };
   }
   const dup = it.dup && it.dup.count >= 2 ? it.dup : null;
@@ -357,7 +357,7 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
     if (it.hollow > 0) dist = ref(mk(c, 'sdfOnion', `${it.id}:hollow${sfx}`, { r: it.hollow }, { dist }, `Outline on ${name}: Onion turns the solid into a line ${fmt(it.hollow)} thick, abs(distance) − ${fmt(it.hollow)}.`), 'dist');
     br.scales.forEach((s, i) => {
       dist = ref(mk(c, 'multiply', `${it.id}:fix${sfx}${br.scales.length > 1 ? `-${i}` : ''}`, {}, { a: dist!, b: s },
-        `Puts ${name}'s distance back in the picture's units: multiplies it by the scale it was drawn at (the Scale output of its Place 2D), so combines, glow and outlines measure true.`), 'result');
+        `Puts ${name}'s distance back in the picture's units: multiplies it by the scale it was drawn at (the Scale output of its Transform 2D), so combines, glow and outlines measure true.`), 'result');
     });
     branches.push(dist!);
   }

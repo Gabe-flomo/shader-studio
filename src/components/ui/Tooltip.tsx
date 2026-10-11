@@ -60,6 +60,8 @@ export function Tooltip({
   return (
     <span
       ref={anchorRef}
+      // An empty title stops the browser's own tooltip from an ancestor's `title` showing next to this one.
+      title={disabled ? undefined : ''}
       style={{ display: 'inline-flex', ...(grow ? { flex: 1, minWidth: 0 } : null) }}
       onMouseEnter={show}
       onMouseLeave={hide}
@@ -74,7 +76,7 @@ export function Tooltip({
           role="tooltip"
           style={{
             position: 'fixed', left: pos?.left ?? -9999, top: pos?.top ?? -9999, zIndex: 10000, pointerEvents: 'none',
-            maxWidth: 280, padding: description ? '8px 10px' : '5px 6px 5px 10px', borderRadius: 8,
+            maxWidth: 'min(280px, calc(100vw - 16px))', overflowWrap: 'anywhere', padding: description ? '8px 10px' : '5px 6px 5px 10px', borderRadius: 8,
             background: tk.tooltip.bg, color: tk.tooltip.text, boxShadow: tk.shadow.popover,
             font: `12px/1.45 ${fontFamily.ui}`,
           }}

@@ -101,3 +101,13 @@ a sampler on whatever texture unit 0 holds, while the small snippet (like the ap
 
 All 230 trimmed player pages were rendered the same way against the whole-kit page: identical
 (0.00), with no errors.
+
+**Download page fix (2026-10-10).** Those comparisons read the canvases' pixels, not what the
+page shows, and missed that the downloaded small page was black: it put `background:#000` on
+`<body>` while the picture sits behind the page at `z-index:-1`, and a body with its own
+background paints over negative z-index content. The page now puts the black on `<html>` only,
+and reads the pointer from the window (the background layer ignores pointer events, so `u_mouse`
+never moved). `src/play/__tests__/embedPixelHearts.test.ts` exports the 2D Scene Builder's Pixel
+hearts both ways and checks the page's CSS, that the bootstrap draws, and the full player page.
+A pasted background snippet (`placement: page`) still sits behind the host page's own `<body>`
+background, if it has one: give that page a transparent body.

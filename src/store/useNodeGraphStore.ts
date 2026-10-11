@@ -46,6 +46,7 @@ import { tidyGroups } from '../types/layerGroups';
 import { isDatasetsEmpty, parseDatasetsRecord, type Dataset, type DatasetsRecord } from '../data/types';
 import { datasetStore } from '../data/datasetStore';
 import { retypeDataNode } from '../nodes/definitions/data';
+import { retypeTransform } from '../nodes/definitions/transformAny';
 import { migratePlayRecord } from './migratePlay';
 import { clearLegacyColumnsWire } from '../nodes/definitions/gridColumns';
 import { playEngine } from '../lib/playEngine';
@@ -529,6 +530,8 @@ function probeValuesEqual(a: Record<string, number[]>, b: Record<string, number[
 function retypeSwizzle(n: GraphNode): GraphNode {
   // A Data card's sockets follow its settings the same way (mode, output groups).
   if (n.type === 'data') return retypeDataNode(n);
+  // A Transform card's sockets follow its Dimension (vec2 / vec3 / vec4).
+  if (n.type === 'transform') return retypeTransform(n);
   if (n.type !== 'swizzle') return n;
   const { input, output } = swizzleTypes(n);
   const inp = n.inputs.input, out = n.outputs.output;
@@ -711,8 +714,9 @@ interface NodeGraphState {
   setNodeHighlightFilter: (filter: string | null) => void;
 
   // Fit-view callback — registered by NodeGraph so App/shortcuts can trigger it
-  _fitViewCallback: (() => void) | null;
-  registerFitView: (cb: () => void) => void;
+  /** Fit every node on the canvas in view; with `ids`, only those nodes (a builder's result, builders/finish.ts). */
+  _fitViewCallback: ((ids?: ReadonlyArray<string>) => void) | null;
+  registerFitView: (cb: (ids?: ReadonlyArray<string>) => void) => void;
   _viewportCenterGetter: (() => { x: number; y: number }) | null;
   registerViewportCenterGetter: (cb: () => { x: number; y: number }) => void;
   /** The part of the graph on screen, in graph coordinates (registered by NodeGraph): where nodes made from a card go. */

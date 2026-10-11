@@ -426,6 +426,28 @@ interface TooltipProps {
 function SocketTooltip({ lines, side, onMouseEnter, onMouseLeave }: TooltipProps) {
   const tk = useTokens();
   const interactive = !!onMouseEnter;
+  // Keep the panel on screen: measure it once it is laid out and nudge it back inside the
+  // window. The canvas may be zoomed, so the nudge is converted back to the card's own units.
+  const boxRef = React.useRef<HTMLDivElement>(null);
+  const [nudge, setNudge] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  React.useLayoutEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const scale = el.offsetWidth > 0 ? r.width / el.offsetWidth : 1;
+    if (!(scale > 0)) return;
+    const M = 8;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    // Undo any nudge already applied before measuring where it would sit unmoved.
+    const left = r.left - nudge.x * scale, top = r.top - nudge.y * scale;
+    let dx = 0, dy = 0;
+    if (left + r.width > vw - M) dx = vw - M - (left + r.width);
+    if (left + dx < M) dx = M - left;
+    if (top + r.height > vh - M) dy = vh - M - (top + r.height);
+    if (top + dy < M) dy = M - top;
+    const next = { x: Math.round(dx / scale), y: Math.round(dy / scale) };
+    if (next.x !== nudge.x || next.y !== nudge.y) setNudge(next);
+  });
   // The outer box starts at the socket dot and pads the gap to the panel, so the pointer
   // can travel from the dot onto the panel without ever leaving the tooltip.
   return (
@@ -444,16 +466,21 @@ function SocketTooltip({ lines, side, onMouseEnter, onMouseLeave }: TooltipProps
         pointerEvents: interactive ? 'auto' : 'none',
       }}
     >
-      <div style={{
+      <div ref={boxRef} style={{
         background: tk.bg.panel,
         borderRadius: radius.md,
         padding: '8px 10px',
+        // Size to the content, up to a readable width; longer lines wrap instead of running out of the box.
+        width: 'max-content',
         minWidth: 180,
-        maxWidth: 280,
+        maxWidth: 320,
+        boxSizing: 'border-box',
         font: `11.5px/1.5 ${fontFamily.ui}`,
         color: tk.text.primary,
         boxShadow: tk.shadow.popover,
-        whiteSpace: 'nowrap',
+        whiteSpace: 'normal',
+        overflowWrap: 'anywhere',
+        transform: nudge.x || nudge.y ? `translate(${nudge.x}px, ${nudge.y}px)` : undefined,
       }}>
         {lines.map((line, i) => <div key={i}>{line}</div>)}
       </div>
@@ -3227,7 +3254,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               <div
                 data-socket="in"
                 ref={el => registerSocket(node.id, 'in', key, el)}
-                title={isKeyframed ? (kfBypassed ? 'Keyframes bypassed — right-click to use them again' : 'Keyframed — right-click for options, double-click to edit') : undefined}
                 style={{
                   width: socketSize,
                   height: socketSize,
@@ -3302,7 +3328,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               {/* Hover tooltip */}
               {isHovered && !draggingType && !kfChipHover && (
                 <SocketTooltip
-                  lines={isExternal ? [`🔒 Wired from outside group`, `(${input.type})`] : buildInputTooltip(key)}
+                  lines={isExternal ? [`🔒 Wired from outside group`, `(${input.type})`] : [
+                    ...buildInputTooltip(key),
+                    // The keyframe note lives here (not in a native title) so only one tooltip shows.
+                    ...(isKeyframed ? [<span style={{ color: tk.text.secondary }}>{kfBypassed ? 'Keyframes bypassed: right-click to use them again' : 'Keyframed: right-click for options, double-click to edit'}</span>] : []),
+                  ]}
                   side="left"
                   onMouseEnter={holdTip}
                   onMouseLeave={() => setHoveredInput(null)}
@@ -3969,7 +3999,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 onMouseEnter={() => { holdTip(); setHoveredOutput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'out' }); }}
                 onMouseLeave={leaveOutputSocket}
                 onDoubleClick={e => { e.stopPropagation(); useNodeGraphStore.getState().disconnectOutput(node.id, key); }}
-                title={`${output.label} (${output.type})`}
                 style={{
                   width: isTouchDevice ? '22px' : '12px',
                   height: isTouchDevice ? '22px' : '12px',
