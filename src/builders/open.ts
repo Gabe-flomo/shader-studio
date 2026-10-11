@@ -4,7 +4,8 @@
  * and the Recipe chips on the cards.
  *
  *  - Scene builder (the one listed): "What kind of scene?", or the scene a builder made here
- *    (builders/sceneKinds.ts); a kind then opens one of the four below.
+ *    (builders/sceneKinds.ts); a kind then opens one of the builders below (or the Splat builder,
+ *    splatBuilder/, for a Splat scene).
  *  - 3D Scene Builder: the builder on a new scene (Build adds it to the graph).
  *  - Grid Rules: a new Grid Rules node (on the Output when the graph is empty), its editor open.
  *    (The kind page's Grid scene opens the Grid builder, gridScene/; it jumps to Grid Rules.)
@@ -32,6 +33,7 @@ import { openAgentRulesEditor } from '../agentRules/storeActions';
 import { editGridSceneInBuilder, openNewGridScene } from '../gridScene/actions';
 import { builderRecipeOf } from './recipe';
 import type { BuilderAction } from './doBuilders';
+import { editSplatSceneInBuilder, openNewSplatScene } from '../splatBuilder/actions';
 
 /**
  * What a new Grid Rules node starts with (newGridRules): params over its defaults, and a drawn start
@@ -100,6 +102,7 @@ export function startSceneKind(kind: SceneKind, o: { at?: { x: number; y: number
   if (kind === '3d') openNewSceneBuilder(o.at);
   else if (kind === '2d') openNewSceneBuilder2D(o.at);
   else if (kind === 'grid') openNewGridScene(o.at);
+  else if (kind === 'splat') openNewSplatScene(o.at);
   else openAgentBuilder(null, { fromShell: o.fromShell });
 }
 
@@ -108,6 +111,7 @@ export function editBuiltScene(b: Pick<BuiltScene, 'kind' | 'id'>): boolean {
   closeSceneShell();
   if (b.kind === '3d') return editSceneInBuilder(b.id);
   if (b.kind === '2d') return editScene2DInBuilder(b.id);
+  if (b.kind === 'splat') return editSplatSceneInBuilder(b.id);
   if (b.kind === 'grid' && useNodeGraphStore.getState().nodes.some(nd => nd.id === b.id && nd.type !== 'gridRules')) return editGridSceneInBuilder(b.id);
   if (b.kind === 'grid') {
     const st = useNodeGraphStore.getState();

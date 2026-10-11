@@ -8,7 +8,9 @@
  *  - Agent scene → the Agent Builder (agentBuilder), on its "What are you making?" page or a group;
  *  - Grid scene → the Grid builder (gridScene), on a new scene or a build's saved spec; a Grid Rules
  *    node (the simulation the Grid builder's "Make it a simulation" jumps to) opens in its editor;
- *  - 3D scene → the 3D Scene Builder (sceneBuilder), on a new scene or on a build's saved spec.
+ *  - 3D scene → the 3D Scene Builder (sceneBuilder), on a new scene or on a build's saved spec;
+ *  - Splat scene → the Splat builder (splatBuilder), on a new scan (built at once: its picture is the main preview's)
+ *    or on a build's saved spec.
  *
  * Opening the Scene builder: a graph a builder made reopens that scene ("Edit this one / Start
  * over / Add another", the Agent Builder's prompt for every kind); any other graph goes to the
@@ -28,8 +30,12 @@ import { gridShape } from '../gridRules/spec';
 import { findGridBuild, gridMetaOf, gridSceneOfBuild } from '../gridScene/apply';
 import { useGridBuilder } from '../gridScene/store';
 import { closeAgentBuilder, closeGridRulesEditor, openSceneShell, useBuilderWindows } from './windows';
+import { findSplatBuild, splatMetaOf, splatSceneOfBuild } from '../splatBuilder/apply';
+import { useSplatBuilder } from '../splatBuilder/store';
+import { closeSplatBuilder } from '../splatBuilder/actions';
+import { EFFECT_INFO, scanName } from '../splatBuilder/spec';
 
-export type SceneKind = '2d' | 'agents' | 'grid' | '3d';
+export type SceneKind = '2d' | 'agents' | 'grid' | '3d' | 'splat';
 
 export interface SceneKindInfo {
   id: SceneKind;
@@ -47,6 +53,7 @@ export const SCENE_KINDS: readonly SceneKindInfo[] = [
   { id: 'agents', title: 'Agent scene', line: 'Many small walkers, one big pattern: slime, particles, flocks, crowds, orbiters', icon: 'swarm', builder: 'Agent Builder' },
   { id: 'grid', title: 'Grid scene', line: 'Shapes you draw on cells, with motion, patterns, warps and rules; or a simulation (Life, sand)', icon: 'grid', builder: 'Grid builder' },
   { id: '3d', title: '3D scene', line: 'Shapes in space, combined and bent, lit and seen through a camera', icon: 'cube', builder: '3D Scene Builder' },
+  { id: 'splat', title: 'Splat scene', line: 'A Gaussian splat scan, placed, dissolved, exploded or tinted, in a world of its own', icon: 'spark', builder: 'Splat builder' },
 ];
 
 export const sceneKindInfo = (k: SceneKind): SceneKindInfo => SCENE_KINDS.find(x => x.id === k)!;
@@ -54,7 +61,7 @@ export const sceneKindInfo = (k: SceneKind): SceneKindInfo => SCENE_KINDS.find(x
 /** Something a builder made, as the "Edit this one" prompt lists it. `id` is what its builder opens on. */
 export interface BuiltScene {
   kind: SceneKind;
-  /** 3D: the Scene Group; 2D and a Grid scene: the UV node holding the spec; a simulation: the Grid Rules node; agents: the rules group. */
+  /** 3D: the Scene Group; 2D and a Grid scene: the UV node holding the spec; a simulation: the Grid Rules node; agents: the rules group; a splat scene: its Splat Scene. */
   id: string;
   label: string;
   /** "Trail followers · 2D", "3 shapes"… */
@@ -83,6 +90,12 @@ export function builtScenes(nodes: readonly GraphNode[]): BuiltScene[] {
     const m = n.type === 'sceneGroup' ? metaOf(n) : null;
     if (m) out.push({ kind: '3d', id: n.id, label: labelOf(n, '3D scene'), detail: `${m.spec.look.mode} · ${plural(allShapes(m.spec).length, 'shape')}` });
   }
+  for (const n of nodes) {
+    const ms = splatMetaOf(n);
+    if (!ms) continue;
+    const fx = ms.spec.effects.filter(e => e.on).map(e => EFFECT_INFO[e.kind]?.label).filter(Boolean);
+    out.push({ kind: 'splat', id: n.id, label: labelOf(n, 'Splat scene'), detail: `${scanName(ms.spec.scan.source)}${fx.length ? ` · ${fx.join(', ')}` : ''}` });
+  }
   return out;
 }
 
@@ -98,7 +111,8 @@ export function selectedBuiltScene(nodes: readonly GraphNode[], selected: readon
     const s2 = scene2dOfBuild(nodes as GraphNode[], id);
     const s3 = sceneOfBuild(nodes as GraphNode[], id);
     const sg = gridSceneOfBuild(nodes, id);
-    const hit = all.find(b => b.id === s2 || b.id === s3 || b.id === sg);
+    const ss = splatSceneOfBuild(nodes, id);
+    const hit = all.find(b => b.id === s2 || b.id === s3 || b.id === sg || b.id === ss);
     if (hit) return hit;
   }
   return null;
@@ -120,6 +134,9 @@ export function builtSceneIds(nodes: readonly GraphNode[], b: Pick<BuiltScene, '
   } else if (b.kind === 'grid') {
     const found = findGridBuild(nodes, b.id);
     if (found) for (const n of found.byRole.values()) seeds.push(n.id);
+  } else if (b.kind === 'splat') {
+    const found = findSplatBuild(nodes, b.id);
+    if (found) for (const n of found.byRole.values()) seeds.push(n.id);
   }
   const ids = new Set<string>();
   for (const s of seeds) for (const id of agentSetupIds(nodes, s)) ids.add(id);
@@ -136,6 +153,7 @@ export function openSceneKind(): SceneKind | null {
   if (useSceneBuilder2D.getState().open) return '2d';
   if (useSceneBuilder.getState().open) return '3d';
   if (useGridBuilder.getState().open) return 'grid';
+  if (useSplatBuilder.getState().open) return 'splat';
   if (w.agentBuilder) return 'agents';
   if (w.gridRules) return 'grid';
   return null;
@@ -146,6 +164,7 @@ export function closeSceneKinds(): void {
   if (useSceneBuilder2D.getState().open) useSceneBuilder2D.getState().close();
   if (useSceneBuilder.getState().open) useSceneBuilder.getState().close();
   if (useGridBuilder.getState().open) useGridBuilder.getState().close();
+  if (useSplatBuilder.getState().open) closeSplatBuilder();
   if (useBuilderWindows.getState().agentBuilder) closeAgentBuilder();
   if (useBuilderWindows.getState().gridRules) closeGridRulesEditor();
 }
