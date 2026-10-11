@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.174',
+    date: '2026-10-11',
+    title: 'Light rays',
+    highlights: [
+      { area: 'Studio', text: 'Radial Fast Blur: long zoom streaks and light rays from any picture, in Average, Brightest (god rays) or Add, with a threshold so only bright parts streak.' },
+      { area: 'Studio', text: 'Light rays also as a builder Effects card and a Play Finish effect. Any length costs about 1 ms at 1080p. Examples: LIGHT, and Colour burst.' },
+    ],
+  },
+  {
     id: '2026.10.173',
     date: '2026-10-11',
     title: 'Math paths and loose grids',
