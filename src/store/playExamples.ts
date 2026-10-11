@@ -38,6 +38,7 @@ import { defaultDisplace, MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type DrumPadLa
 import type { DpSynth } from '../play/kit/drumPads.js';
 import { agPresetLayer } from '../play/kit/agents.js';
 import { HAND_EX, handBeatNodes } from './agentPlayExample';
+import { SPLAT_PLAY, splatDissolvePlayNodes } from './splatExamples';
 import { FOLLOW_HAND_ANCHOR } from '../play/followHand';
 import type { GroupColour, LayerGroup } from '../types/layerGroups';
 
@@ -2757,6 +2758,33 @@ Holding **M** turns Datamosh's **Mosh** on: nothing heals while it's held.
 • Drag **Dust · Max horizontal** to 0 and back: the dust snaps to where it really is.
 • In the Look's Displace, set **Vertical** to **Luminance** too, or set **Behaviour** to **Tile map** to repeat the word across the picture.
 • Show the Word layer to see what the Look is reading.`,
+  })),
+  // Per-splat modifiers (docs/splat-scene.md): the plan's phase 3, "a scan dissolving by noise, driven from Play".
+  ex('splatDissolvePlay', splatDissolvePlayNodes(), play({
+    controls: [
+      ctl('amount', `${SPLAT_PLAY.dissolve}::amount`, 'Dissolve', 0, 1),
+      ctl('glow', `${SPLAT_PLAY.dissolve}::glow`, 'Edge glow', 0, 12),
+      ctl('drift', `${SPLAT_PLAY.dissolve}::drift`, 'Drift', -1, 1),
+      ctl('scale', `${SPLAT_PLAY.dissolve}::scale`, 'Noise scale', 0.2, 6),
+    ],
+    mappings: [
+      map('sweep', 'amount', S.lfo('triangle', 0.06), 0, 1),
+      map('glowMouse', 'glow', S.mouse('x'), 1, 10, { smoothMs: 120 }),
+    ],
+    notes: `**What it shows.** A splat scan dissolving by noise and coming back, driven from Play. Every splat is changed by a node before it is drawn (a per-splat modifier); its sliders are ordinary Play controls.
+
+**How it's built.** In Studio: a **Splat Scene** (a generated ball of 200 000 splats; drop your own .ply, .splat or .spz on its card) turning slowly, with a **Splat Dissolve** wired into its **Modifier**. The Dissolve runs once for every splat: a threshold (**Amount**) sweeps through noise in the scan, the splats below it fade, shrink and drift up, and a band round the threshold glows orange. Each node has a note (the speech-bubble tab on its card).
+
+**The controls.**
+• **Dissolve**: the Dissolve's Amount, 0 (the whole scan) to 1 (all gone). An LFO (a triangle, once every 17 seconds) sweeps it there and back.
+• **Edge glow**: how bright the burning edge is. The mouse's X sets it.
+• **Drift**: how far going splats float up (negative: they fall).
+• **Noise scale**: how fine the dissolve's patches are.
+
+**Try this.**
+• Turn the **sweep** mapping off and drag **Dissolve** yourself, or map it to a key (a trigger envelope) so a press burns the scan away.
+• In Studio, Splat Scene → **Add a modifier → Explode / scatter**: the dissolving splats are also blown apart. Or **Points** for a crisp point cloud.
+• Wire Splat Attributes' **In the scan** → Extract Y into the Dissolve's **Field**: it burns from the bottom up instead of by noise.`,
   })),
 ];
 

@@ -223,3 +223,26 @@ Measured: 1 M splats draw in about 2–5 ms a frame here (Apple Silicon), sortin
 (antimatter15's plush, nike, train) load and render; the train scan (1 M) is the timing above.
 
 Next: phase 3 (per-splat modifiers), phase 4 (agents as splats).
+
+### Phase 3 status (per-splat modifiers, `claude/splat-modifiers`)
+
+Built (docs/splat-scene.md "Per-splat modifiers"):
+- **Nodes in the graph:** a `splat` wire (one splat's state) into the Splat Scene's new **Modifier** input. Splat
+  Attributes gives each splat's position, place in the scan, colour, opacity, size, radius, index, a stable random and
+  the count; Set Splat writes back position, offset, colour, opacity, size or a dot; anything in between (Noise,
+  Transform, maths, Expression Blocks, Time) runs per splat.
+- **How:** the chain compiles into a modifier program of the picture's kind (as the probe and an Agents update shader
+  do), one texel per splat, into two targets the splat shader reads. The picture compiles without the chain; its
+  uniforms join the picture's table, so sliders, Play and keyframes drive it with no recompile.
+- **Recipes** (one node each, "Add a modifier" on the card): Dissolve by noise (threshold, fade/shrink, drift, glowing
+  edge), Explode / scatter (stagger, spin, Return home), Wave / wobble / twist, Colour grade, Crop by plane / box /
+  sphere, Size & opacity (floor, keep a share), Points.
+- **Sorting:** while a modifier moves splats, their depths are worked out on the GPU, read back without stalling and
+  sorted in the worker; it stops when they stop changing.
+- **Examples:** 3D: Splat modifiers (Studio), and Splats: a scan dissolving (Play: an LFO sweeps the dissolve).
+
+Done when (a scan dissolving by noise, driven from Play): checked in the browser with `train.splat` (1 M splats,
+the Play LFO sweeping Amount) and `plush.splat` exploding. Cost at 1 M: about +0.8–1 ms on the splat pass; a moved
+sort reads 4 MB back (0.7 ms on the main thread) and sorts in 7–10 ms in the worker.
+
+Next: phase 4 (agents as splats); a Splat builder on these nodes.

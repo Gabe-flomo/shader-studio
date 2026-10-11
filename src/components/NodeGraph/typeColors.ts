@@ -15,4 +15,5 @@ export const TYPE_COLORS: Record<string, string> = {
   emitter:     '#ffd166',  //   an Emit's births
   deposit:     '#c792ea',  //   Deposits on their way into a Trail
   volume:      '#f5a97f',  // A Time Cube's stacked frames (docs/time-cube.md)
+  splat:       '#7fd1e8',  // One splat's state in a Splat Scene's modifier chain (docs/splat-scene.md)
 };

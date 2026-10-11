@@ -64,4 +64,11 @@ export const repackSplats = (key: string, max: number, sh: number) =>
 export const sortKeptSplats = (key: string, axis: [number, number, number]) =>
   request<{ order: Uint32Array; ms: number }>({ op: 'sort', key, axis });
 
-export const dropSplats = (key: string) => request<unknown>({ op: 'drop', key }).catch(() => {});
+/**
+ * Far-to-near order of splats a modifier moved: `depths` (one per splat, bigger is farther) were worked out on the GPU
+ * from the moved centres. The buffer is handed over and back.
+ */
+export const sortSplatDepths = (key: string, depths: Float32Array, count: number) =>
+  request<{ order: Uint32Array; depths: Float32Array; ms: number }>({ op: 'sortDepths', key, depths, count }, [depths.buffer]);
+
+export const dropSplats =(key: string) => request<unknown>({ op: 'drop', key }).catch(() => {});

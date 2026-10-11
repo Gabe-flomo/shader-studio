@@ -5,16 +5,18 @@
  *   load  { key, bytes, name, max, sh }  → { info, packed, thumb } (the file is kept here, by key)
  *   pack  { key, max, sh }               → { packed } (Max splats or SH degree changed: no new parse)
  *   sort  { key, axis }                  → { order } (far to near, for the splats packed last)
+ *   sortDepths { key, depths, count }   → { order, depths } (modifiers moved them: depths from the GPU)
  *   drop  { key }
  */
 import { parseSplatFile, SplatFormatError, type SplatData } from './format';
-import { packSplats, sortScratch, sortSplats, splatInfo, thumbnailPixels, type SortScratch } from './pack';
+import { orderByDepth, packSplats, sortScratch, sortSplats, splatInfo, thumbnailPixels, type SortScratch } from './pack';
 import { subsetSplats } from './subset';
 
 export type SplatRequest =
   | { op: 'load'; id: number; key: string; bytes: ArrayBuffer; name: string; max: number; sh: number }
   | { op: 'pack'; id: number; key: string; max: number; sh: number }
   | { op: 'sort'; id: number; key: string; axis: [number, number, number] }
+  | { op: 'sortDepths'; id: number; key: string; depths: Float32Array; count: number }
   | { op: 'drop'; id: number; key: string };
 
 export const THUMB_W = 160, THUMB_H = 90;
@@ -55,6 +57,15 @@ export function handleSplatRequest(m: SplatRequest, post: Post): void {
       k.scratch = sortScratch(k.used.count, k.scratch);
       const order = sortSplats(k.used.positions, k.used.count, m.axis, k.scratch).slice();
       post({ id: m.id, ok: true, order, ms: performance.now() - t0 }, [order.buffer]);
+    } else if (m.op === 'sortDepths') {
+      // Per-splat modifiers moved the splats (docs/splat-scene.md): their depths, worked out on the GPU from the moved
+      // centres, sorted far to near; the buffer goes back for the next read.
+      const k = kept.get(m.key);
+      const t0 = performance.now();
+      const scratch = sortScratch(m.count, k?.scratch);
+      if (k) k.scratch = scratch;
+      const order = orderByDepth(m.depths, m.count, scratch).slice();
+      post({ id: m.id, ok: true, order, depths: m.depths, ms: performance.now() - t0 }, [order.buffer, m.depths.buffer]);
     } else if (m.op === 'drop') {
       kept.delete(m.key);
       post({ id: m.id, ok: true });

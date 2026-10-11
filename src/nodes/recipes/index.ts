@@ -17,6 +17,7 @@ import { SPLAT_SCENE_RECIPES, SPLAT_SCENE_SET } from './splatRecipes';
 
 export { PICTURE_DEPTH_SET, FACE_CAMERA_OPTION, pictureSource } from './depthRecipes';
 export { SPLAT_SCENE_SET, wireSplatIntoScene, hasMarchLoop } from './splatRecipes';
+export { SPLAT_MODIFIER_MENU, addSplatModifier, splatModifierChain, type SplatModifierPick } from './splatModifierRecipes';
 
 export { LIGHT_SCENE_TYPES } from './lightRecipes';
 

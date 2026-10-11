@@ -219,6 +219,30 @@ export interface SplatProbeProgram {
   paramUniforms: Record<string, number | number[]>;
   textureUniforms: Record<string, string>;
   videoUniforms: Record<string, string>;
+  /** The chain wired into its Modifier, as a program over one texel per splat (compiler/splatGraph.ts). */
+  modifier?: SplatModifierProgram;
+}
+
+/**
+ * A Splat Scene's modifier program (docs/splat-scene.md "Per-splat modifiers"): the chain wired into its Modifier, of
+ * the picture's kind, drawn over one texel per splat into two targets (centre and size; colour and opacity) that the
+ * splat shader reads. Its own uniforms (`uniforms`) are the engine's; the rest are merged into the picture's table.
+ */
+export interface SplatModifierProgram {
+  nodeId: string;
+  fragmentShader: string;
+  uniforms: { data: string; probe: string; count: string };
+  paramUniforms: Record<string, number | number[]>;
+  paramBindings: Record<string, string>;
+  textureUniforms: Record<string, string>;
+  videoUniforms: Record<string, string>;
+  audioUniforms: Record<string, string>;
+  liveUniforms: Record<string, string>;
+  /**
+   * Does it move splats? Always, or while any of these uniforms is non-zero (Explode's Amount, Wave's Amplitude…).
+   * While it does, the engine sorts by the moved positions, read back from the GPU.
+   */
+  moves: { always: boolean; gates: string[] };
 }
 
 /** Everything the agents engine runs for a graph (present only when it has an Agents-family node). */

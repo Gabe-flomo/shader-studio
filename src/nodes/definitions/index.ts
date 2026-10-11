@@ -14,6 +14,7 @@ import { BakedNode } from './baked';
 import { DepthNode } from './depth';
 import { DepthCompositeNode, DepthLightNode, PictureEnvironmentNode } from './depthScene';
 import { SplatProbeOutNode, SplatSceneNode } from './splatScene';
+import { SetSplatNode, SplatAttributesNode, SplatColorNode, SplatCropNode, SplatDissolveNode, SplatExplodeNode, SplatLookNode, SplatModOutNode, SplatPointsNode, SplatWaveNode } from './splatModifiers';
 import { TimeCubeNode, TimeCubeViewNode, TimeSliceNode } from './timeCube';
 import { FrameStackNode } from './frameStack';
 export { BakedNode };
@@ -323,6 +324,16 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Depth in 3D scenes (docs/depth-node.md): a picture with depth inside a ray-marched scene
   depthComposite: DepthCompositeNode,
   splatScene: SplatSceneNode,
+  // Per-splat modifiers (docs/splat-scene.md): chains run once per splat, wired into a Splat Scene's Modifier
+  splatAttributes: SplatAttributesNode,
+  splatSet: SetSplatNode,
+  splatDissolve: SplatDissolveNode,
+  splatExplode: SplatExplodeNode,
+  splatWave: SplatWaveNode,
+  splatColor: SplatColorNode,
+  splatCrop: SplatCropNode,
+  splatLook: SplatLookNode,
+  splatPoints: SplatPointsNode,
   depthLight: DepthLightNode,
   pictureEnvironment: PictureEnvironmentNode,
   // Time cube (docs/time-cube.md): a video as a box of time
@@ -557,6 +568,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   trailStepOut: TrailStepOutNode,
   agentProbeOut: AgentProbeOutNode,
   splatProbeOut: SplatProbeOutNode,
+  splatModOut: SplatModOutNode,
   agentCollideScene: AgentCollideSceneNode,
   agentNeighbours: AgentNeighboursNode,
   agentRideCurve: AgentRideCurveNode,
