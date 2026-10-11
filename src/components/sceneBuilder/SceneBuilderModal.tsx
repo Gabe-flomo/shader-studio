@@ -182,7 +182,7 @@ export function SceneBuilderModal() {
         ]} />}
       </>}
       primary={{ label: 'Done', onClick: () => void doneAction(), title: editing ? 'Rebuild the scene if it changed, close, and show it on the graph' : 'Build the scene, close, and show it on the graph' }}
-      nav={nav} inspector={inspector} inspectorWidth={hood ? 480 : 400} navWidth={236} presets={<PresetsStrip />}>
+      nav={nav} phoneSettingsTitle={hood ? 'Under the hood' : undefined} inspector={inspector} inspectorWidth={hood ? 480 : 400} navWidth={236} presets={<PresetsStrip />}>
       <SceneViewport onPicked={() => { if (!SHAPE_SECTIONS.includes(section)) pick('shapes'); }} />
     </StudioShell>
   );

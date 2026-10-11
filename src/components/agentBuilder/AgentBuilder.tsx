@@ -699,7 +699,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
           onChange={v => update({ ...set, kind: v as WalkerKind })} />
       </span>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <StudioLabel meta="one step, in order">Sections</StudioLabel>
+        <StudioLabel sections meta="one step, in order">Sections</StudioLabel>
         {sections.map(x => {
           const w = words(x.id);
           return <StudioNavItem key={x.id} id={x.id} icon={w.icon} label={w.label} hint={w.hint} summary={summary(x.id)} selected={shown === x.id} onClick={() => select(x.id)} dim={dim(x.id)} />;
@@ -851,7 +851,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
         <IconButton icon="fn" label="Open as nodes" size="sm" onClick={() => { flush(); onClose(); openGroupAsNodes(groupId); }} />
       </>}
       primary={{ label: madeHere ? 'Add to graph' : 'Done', onClick: close, title: madeHere ? 'Keep it (it is already live in your graph, wired to the Output)' : undefined }}
-      nav={nav} inspector={inspector} presets={presetStrip}>
+      nav={nav} phoneNav={{ label: 'Walkers', icon: 'swarm' }} inspector={inspector} presets={presetStrip}>
       <LiveViewport overlay={overlay} />
       <AgentTransport groupId={groupId} />
       {hoodOpen && (

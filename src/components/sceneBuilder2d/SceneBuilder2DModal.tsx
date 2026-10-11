@@ -30,6 +30,8 @@ import { Toggle } from '../ui/Choice';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Preview2D, compileScene2D } from './Preview2D';
+import { StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
+import { usePhoneDialog } from '../ui/phoneDialog';
 import { DepthTab } from './DepthTab';
 import { BlockEditor, BlockLibrary, CombineEditor, SpaceView, WarpCanvas } from './SpaceBlocks';
 import { blockMap, combineMap, emptyBlock, type CombineSpec, type SpaceBlock } from '../../sceneBuilder2d/blocks';
@@ -881,8 +883,15 @@ function PreviewPanel() {
   );
 }
 
+/** The phone's viewport: the live picture, as large as the sheet leaves it. */
+function PhoneViewport2D() {
+  const live = useSceneBuilder2D(s => s.scene);
+  return <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 8 }}><Preview2D scene={live} height="fill" /></div>;
+}
+
 export function SceneBuilder2DModal() {
   const tk = useTokens();
+  const phone = usePhoneDialog();
   const tab = useSceneBuilder2D(s => s.tab);
   const setTab = useSceneBuilder2D(s => s.setTab);
   // Only what the frame shows, so a slider drag re-renders the tab it is on, not the whole window.
@@ -915,8 +924,40 @@ export function SceneBuilder2DModal() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [undo, redo]);
 
+  const surpriseBar = (
+    <SurpriseBar seed={surpriseSeed} title="A random scene from a new seed: space blocks, shapes, motion and a look (one undo step)" onSurprise={seed => {
+      useSceneBuilder2D.getState().surprise(seed);
+      const made = useSceneBuilder2D.getState().scene;
+      announceSurprise({
+        title: '2D scene surprise', seed,
+        message: `${made.space.length} space transform${made.space.length === 1 ? '' : 's'} · ${made.layers.length} shape${made.layers.length === 1 ? '' : 's'}. Build puts it on the canvas.`,
+        reroll: () => { undo(); useSceneBuilder2D.getState().surprise(newSeed()); },
+        undo: () => undo(),
+        stillCurrent: () => useSceneBuilder2D.getState().scene === made,
+      });
+    }} />
+  );
+  const done = () => finishBuilder(close, scene2dBuildIds(useSceneBuilder2D.getState().targetSceneId));
   const body = { space: <SpaceTab />, shapes: <ShapesTab />, grid: <GridTab />, depth: <DepthTab />, look: <LookTab />, effects: <EffectsTab />, output: <OutputTab />, recipe: <RecipeTab />, templates: <TemplatesTab /> }[tab];
   void num;
+  // A phone: the shared phone layout (StudioShell → PhoneStudio): the picture on top, the sections
+  // as the bottom bar's tabs, Templates and Surprise me as its Presets, the layers a tab of their own.
+  if (phone) return (
+    <StudioShell prefsKey="scene-builder-2d" icon="mask" iconColor={tk.kind.fn} title={editing ? 'Your 2D scene' : 'A new 2D scene'} crumb={<SceneCrumb kind="2d" />}
+      onClose={close}
+      actions={<>
+        <IconButton icon="undo" size="sm" label="Undo" disabled={!canUndo} onClick={undo} />
+        <IconButton icon="redo" size="sm" label="Redo" disabled={!canRedo} onClick={redo} />
+        <Button size="sm" data-scene2d-done onClick={done}>Done</Button>
+      </>}
+      primary={{ label: editing ? 'Rebuild' : 'Build', onClick: () => { if (shapes || gridSize) buildFromBuilder2D(false); }, title: editing ? 'Rebuild the scene it was built as' : 'Add the graph to the canvas and show it on the Output' }}
+      nav={<>{TABS.filter(t => t.id !== 'templates').map(t => <StudioNavItem key={t.id} id={t.id} icon={t.icon} label={t.label} selected={tab === t.id} onClick={() => setTab(t.id)} />)}</>}
+      phonePanels={[{ id: 'layers', label: 'Layers', icon: 'layers', content: <LayerList /> }]}
+      surprise={surpriseBar} presets={<TemplatesTab />}
+      inspector={<div style={{ padding: '4px 16px 16px' }}>{tab === 'templates' ? <TemplatesTab /> : body}</div>}>
+      <PhoneViewport2D />
+    </StudioShell>
+  );
   return (
     <BuilderWindow
       prefsKey="scene-builder-2d"
@@ -930,17 +971,7 @@ export function SceneBuilder2DModal() {
       left={{ label: 'Layers', icon: 'layers', width: 260, content: <LayerList /> }}
       right={{ label: 'Preview', icon: 'eye', width: 340, content: <PreviewPanel /> }}
       headerActions={<>
-        <SurpriseBar seed={surpriseSeed} title="A random scene from a new seed: space blocks, shapes, motion and a look (one undo step)" onSurprise={seed => {
-          useSceneBuilder2D.getState().surprise(seed);
-          const made = useSceneBuilder2D.getState().scene;
-          announceSurprise({
-            title: '2D scene surprise', seed,
-            message: `${made.space.length} space transform${made.space.length === 1 ? '' : 's'} · ${made.layers.length} shape${made.layers.length === 1 ? '' : 's'}. Build puts it on the canvas.`,
-            reroll: () => { undo(); useSceneBuilder2D.getState().surprise(newSeed()); },
-            undo: () => undo(),
-            stillCurrent: () => useSceneBuilder2D.getState().scene === made,
-          });
-        }} />
+        {surpriseBar}
         <IconButton icon="undo" label="Undo" shortcut="cmd+z" disabled={!canUndo} onClick={undo} />
         <IconButton icon="redo" label="Redo" shortcut="cmd+shift+z" disabled={!canRedo} onClick={redo} />
       </>}
@@ -949,7 +980,7 @@ export function SceneBuilder2DModal() {
         <BuilderNote>{editing ? 'Rebuild replaces the scene it was built as, keeping settings you changed on its nodes.' : 'Build adds the graph to the canvas and shows it on the Output.'}</BuilderNote>
         <span style={{ flex: 1 }} />
         {dirty && <BuilderNote style={{ color: tk.text.faint }}>Not built yet</BuilderNote>}
-        <Button onClick={() => finishBuilder(close, scene2dBuildIds(useSceneBuilder2D.getState().targetSceneId))}>Done</Button>
+        <Button onClick={done}>Done</Button>
         <Button variant="primary" icon="rebuild" disabled={!shapes && !gridSize} onClick={() => buildFromBuilder2D(false)}>{editing ? 'Rebuild' : 'Build'}</Button>
       </>}
     >

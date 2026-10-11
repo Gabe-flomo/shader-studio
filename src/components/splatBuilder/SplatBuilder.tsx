@@ -149,7 +149,10 @@ export function SplatBuilder() {
       actions={<>
         <IconButton icon="undo" size="sm" label="Undo" shortcut="cmd+z" disabled={!canUndo} onClick={undo} />
         <IconButton icon="redo" size="sm" label="Redo" shortcut="cmd+shift+z" disabled={!canRedo} onClick={redo} />
+        <IconButton icon="fn" size="sm" data-open-as-nodes label="Open as nodes: close and show the Splat Scene and its effect nodes, every one with a note" onClick={openSplatAsNodes} />
         <IconButton icon="code" size="sm" active={hood} data-hood-toggle label={hood ? 'Hide Under the hood' : 'Under the hood: the scene as a recipe (⌘⇧D)'} onClick={() => useSplatBuilder.getState().setHood(!hood)} />
+      </>}
+      surprise={
         <SurpriseBar seed={seed} title="A random look from a new seed: an effect stack, a background, the camera (your scan stays; one undo step)" onSurprise={s => {
           useSplatBuilder.getState().surprise(s, scanBoxNow(useSplatBuilder.getState().targetId));
           const made = useSplatBuilder.getState().spec;
@@ -160,11 +163,9 @@ export function SplatBuilder() {
             undo: () => undo(),
             stillCurrent: () => useSplatBuilder.getState().spec === made,
           });
-        }} />
-        <IconButton icon="fn" size="sm" data-open-as-nodes label="Open as nodes: close and show the Splat Scene and its effect nodes, every one with a note" onClick={openSplatAsNodes} />
-      </>}
+        }} />}
       primary={{ label: 'Done', onClick: finishSplatBuilder, title: 'Close and show the scene on the graph (it is built as you go)' }}
-      nav={<Nav />} navWidth={248}
+      nav={<Nav />} navWidth={248} phoneSettingsTitle={hood ? 'Under the hood' : undefined}
       inspector={<Inspector />} inspectorWidth={hood ? 480 : 380}
       presets={<Presets />}>
       <SplatViewport />

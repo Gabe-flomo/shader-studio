@@ -12,8 +12,11 @@
  *    card has: Add to (or Remove from) Play controls. A builder that edits a recipe (the 3D Scene
  *    Builder) passes `lazyParam` instead: the node it built, looked up when the menu opens
  *    (sceneBuilder/paramMap.ts), or why there is none yet.
+ *  - in a builder on a phone (PhoneStudio) it takes the touch size: a 40 px track, dragged with a
+ *    finger, double tap to reset.
  */
-import { useState, type ReactNode } from 'react';
+import { useContext, useState, type ReactNode } from 'react';
+import { PhoneStudioContext } from './studio/PhoneStudio';
 import { RulerSlider } from '../ui/RulerSlider';
 import { isSymmetricRange } from '../ui/rulerMath';
 import { ContextMenuArea } from '../ui/ContextMenuArea';
@@ -54,13 +57,14 @@ export interface BuilderSliderProps {
 
 export function BuilderSlider({ value, min, max, step, integer, onChange, ariaLabel, defaultValue, disabled, rangeKey, param, lazyParam, bipolar, hard, unit }: BuilderSliderProps) {
   const [mountValue] = useState(value);
+  const touch = useContext(PhoneStudioContext);
   const [, bump] = useState(0);
   const kept = rangeKey ? widened.get(rangeKey) : undefined;
   const lo = kept ? Math.min(min, kept.min) : min;
   const hi = kept ? Math.max(max, kept.max) : max;
   const slider: ReactNode = (
     <RulerSlider value={value} min={lo} max={hi} step={integer ? 1 : step} integer={integer} onChange={onChange} ariaLabel={ariaLabel}
-      defaultValue={defaultValue ?? mountValue} disabled={disabled} hard={hard} unit={unit}
+      defaultValue={defaultValue ?? mountValue} disabled={disabled} hard={hard} unit={unit} touch={touch}
       bipolar={bipolar ?? isSymmetricRange(lo, hi)} trackMinWidth={TRACK_MIN}
       onRange={rangeKey ? (a, b) => { widened.set(rangeKey, { min: a, max: b }); bump(n => n + 1); } : undefined} />
   );

@@ -16,6 +16,7 @@ import { MobileTopBar } from './components/shell/MobileTopBar';
 import { fontFamily } from './theme/tokens';
 import { Icon } from './components/ui/Icon';
 import { Sheet } from './components/ui/Sheet';
+import { NewGraphSheet } from './components/shell/NewGraphSheet';
 import { CreditTag } from './components/ui/Credit';
 import { Segmented } from './components/ui/Choice';
 import { MobilePreviewPill } from './components/shell/MobilePreviewPill';
@@ -1165,18 +1166,8 @@ function App() {
           </Sheet>
         )}
 
-        {/* Clear confirm — our own sheet instead of window.confirm(), which is unreliable in a Tauri webview */}
-        {showMobileResetConfirm && (
-          <Sheet title="Clear the graph?" onClose={() => setShowMobileResetConfirm(false)}>
-            <p style={{ margin: '0 0 16px', fontSize: 13.5, lineHeight: 1.5, color: tk.text.muted }}>
-              This starts over from a blank graph, and can’t be undone.
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Button variant="danger" style={{ height: 44 }} onClick={() => { setShowMobileResetConfirm(false); loadExampleGraph('blank'); }}>Clear graph</Button>
-              <Button style={{ height: 44 }} onClick={() => setShowMobileResetConfirm(false)}>Cancel</Button>
-            </div>
-          </Sheet>
-        )}
+        {/* New graph: from the Scene builder's kind page, or empty (docs/scene-builder.md, "On a phone") */}
+        {showMobileResetConfirm && <NewGraphSheet onClose={() => setShowMobileResetConfirm(false)} />}
 
         {/* Export modal */}
         {showExport && (
