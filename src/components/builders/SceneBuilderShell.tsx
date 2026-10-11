@@ -52,7 +52,7 @@ function KindPage({ note, keep }: { note?: string; keep?: boolean }) {
   };
   return (
     <StudioShell prefsKey="scene-shell" icon="presets" title="Scene builder" kind="What kind of scene?" onClose={closeShell}>
-      <div data-scene-kinds style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'safe center', padding: '40px 24px 64px', gap: 22 }}>
+      <div data-scene-kinds style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'safe center', padding: phone ? '20px 16px 32px' : '40px 24px 64px', gap: phone ? 16 : 22 }}>
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, textAlign: 'center' }}>
           <b style={{ fontSize: 20, fontWeight: 650, letterSpacing: '-0.01em' }}>What kind of scene?</b>
           <span style={{ fontSize: 12.5, color: tk.text.muted }}>Pick one: the window becomes its builder. “Scene builder” at the top brings you back here.</span>
@@ -72,6 +72,13 @@ function KindPage({ note, keep }: { note?: string; keep?: boolean }) {
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${phone ? 1 : narrow ? 2 : 3}, minmax(0, 1fr))`, gap: 14, width: '100%', maxWidth: narrow ? 640 : 940 }}>
           {SCENE_KINDS.map(k => <KindCard key={k.id} info={k} onPick={() => pick(k.id)} />)}
         </div>
+        {/* A phone starts every new graph here (builders/newGraph.ts): the empty graph stays one tap away. */}
+        {phone && (
+          <button type="button" data-scene-empty onClick={closeShell}
+            style={{ minHeight: 40, padding: '0 12px', border: 0, background: 'none', cursor: 'pointer', color: tk.text.muted, font: 'inherit', fontSize: 13, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+            Start from an empty graph
+          </button>
+        )}
       </div>
     </StudioShell>
   );

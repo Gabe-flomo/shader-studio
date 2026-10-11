@@ -32,8 +32,10 @@ export function Preview2D({ scene, compiled: given, height = 260 }: {
   scene: Scene2D;
   /** The scene already compiled (the Preview panel compiles once for the picture and the node count). */
   compiled?: Compiled;
-  height?: number;
+  /** 'fill': as tall as its box (the phone builder's viewport). */
+  height?: number | 'fill';
 }) {
+  const fill = height === 'fill';
   const tk = useTokens();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Follows a drag (a compile every 50 ms at most); a value kept as a uniform only sets it (useBuilderPreview).
@@ -43,8 +45,8 @@ export function Preview2D({ scene, compiled: given, height = 260 }: {
   const [paused, setPaused] = useState(false);
   const error = useBuilderPreview(canvasRef, compiled, paused);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ position: 'relative', height, borderRadius: radius.md, overflow: 'hidden', background: tk.bg.render }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, ...(fill ? { flex: 1, minHeight: 0 } : {}) }}>
+      <div style={{ position: 'relative', ...(fill ? { flex: 1, minHeight: 0 } : { height }), borderRadius: radius.md, overflow: 'hidden', background: tk.bg.render }}>
         <canvas ref={canvasRef} data-scene2d-preview aria-label="Live preview of the 2D scene" style={{ width: '100%', height: '100%', display: 'block' }} />
         {error && (
           <div style={{ position: 'absolute', inset: 0, padding: 12, overflow: 'auto', color: '#f38ba8', font: `500 11px ${fontFamily.mono}`, background: 'rgba(13,13,18,0.86)' }}>{error}</div>
