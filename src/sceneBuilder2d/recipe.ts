@@ -30,8 +30,10 @@ import { PALETTE_BY_KEY, PALETTES } from '../sceneBuilder/output';
 import { BUILT_IN_FUNCTIONS, builtInFunction } from './functions';
 import { COMBINE_MODES, checkBlock, clampTimes, linesText, parseBlockText, rangeFor, type CombineMode, type SpaceBlock } from './blocks';
 import { BLOCK_BY_ID, BLOCK_LIBRARY, blockFromEntry, isLibraryBlock } from './blockLibrary';
+import { findSavedBlock, loadSavedBlocks, sceneOpFromSaved } from './savedBlocks';
 import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_PIC_MODES, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, printGrid, type GridPicMode, type GridShape, type GridSpec } from './grid';
 import type { RecipeError } from '../sceneBuilder/recipe';
+import { parseDepthArgs, printDepth } from './depth';
 import { TEX_FITS, findTex, newTexUse, texSlug, type TexFit, type TexSource, type TexUse } from '../builders/textures';
 import {
   COLOUR_BYS, DEFAULT_COLOR, DEFAULT_LOOK, MAX_DUP, MAX_LEVELS, MOTIONS, MOTION_BY_KIND, SHAPES, SHAPE_BY_KIND, SHOW_WORDS, SPACES, SPACE_BY_KIND, TONE_MODES,
@@ -62,7 +64,7 @@ const SPACE_WORDS: Record<string, string> = Object.fromEntries(SPACES.flatMap(s 
 const MOTION_WORDS = [...MOTIONS.map(m => m.kind), 'ring'];
 const BUILT_IN_FN_NAMES = { space: BUILT_IN_FUNCTIONS.filter(f => f.role === 'space').map(f => f.name), shape: BUILT_IN_FUNCTIONS.filter(f => f.role === 'shape').map(f => f.name) };
 const BLOCK_WORDS = ['space-block', 'combine-blocks', 'texture'];
-const LOOK_WORDS = ['grid', 'glow', 'colour', 'color', 'tone', 'tone-map', 'tonemap', 'background', 'bg', 'bloom', 'vignette', 'grain', 'scanlines', 'output', 'show'];
+const LOOK_WORDS = ['depth-picture', 'picture-depth', 'grid', 'glow', 'colour', 'color', 'tone', 'tone-map', 'tonemap', 'background', 'bg', 'bloom', 'vignette', 'grain', 'scanlines', 'output', 'show'];
 const CLAUSE_WORDS = [...Object.keys(SHAPE_WORDS), ...Object.keys(OP_WORDS), ...Object.keys(SPACE_WORDS), ...BLOCK_WORDS, ...LOOK_WORDS];
 
 export const round = (n: number) => Math.round(n * 10000) / 10000;
@@ -435,11 +437,23 @@ class Parser {
    * its numbers by name. `prefix` (`a_`, `b_`) picks one side of a combine's settings.
    */
   private block(t: { at: number; end: number }, args: AstArg[], prefix: string, source?: AstArg): SpaceBlock | null {
+    // `my="Wobble rings"`: one of your saved blocks (savedBlocks.ts). With lines in { } beside it,
+    // the lines are used (so the recipe works where that block isn't saved); alone, it is looked up.
+    const myArg = prefix ? undefined : args.find(a => a.key?.toLowerCase() === 'my');
+    const my = myArg && (myArg.value.k === 'str' || myArg.value.k === 'word') ? myArg.value.v.trim() : '';
     const src = source ?? args.find(a => !a.key);
     let b: SpaceBlock | null = null;
-    if (!src) { this.fail(t, `A block needs a library name (${BLOCK_LIBRARY.slice(0, 4).map(e => e.id).join(', ')}…) or lines in { }.`); return null; }
-    const v = src.value;
-    if (v.k === 'code') {
+    if (!src && my) {
+      const saved = findSavedBlock(my);
+      if (!saved?.block) {
+        const s = suggest(my, loadSavedBlocks().filter(x => x.block).map(x => x.name));
+        this.fail(myArg!, `“${my}” isn't one of your saved blocks on this machine.${s ? ` Did you mean “${s}”?` : ' Write its lines in { } too, so the recipe works anywhere.'}`);
+        return null;
+      }
+      b = sceneOpFromSaved(saved).block!;
+    } else if (!src) { this.fail(t, `A block needs a library name (${BLOCK_LIBRARY.slice(0, 4).map(e => e.id).join(', ')}…) or lines in { }.`); return null; }
+    const v = src?.value;
+    if (!src || !v) { /* a saved block, looked up above */ } else if (v.k === 'code') {
       const r = parseBlockText(v.v);
       for (const e of r.errors) this.fail(src, e);
       if (r.errors.length) return null;
@@ -449,8 +463,11 @@ class Parser {
       if (!e) { const s = suggest(v.v.toLowerCase(), BLOCK_LIBRARY.map(x => x.id)); this.fail(src, `“${v.v}” isn't a block in the library.${s ? ` Did you mean “${s}”?` : ''}`); return null; }
       b = blockFromEntry(e);
     } else { this.fail(src, 'A block is a library name or lines in { }.'); return null; }
+    if (!b) return null;
+    if (my && src) { b.my = my; b.name = my; }
+    const at = (src ?? myArg)!;
     for (const a of args) {
-      if (!a.key || a === src) continue;
+      if (!a.key || a === src || a === myArg) continue;
       const key = a.key;
       if (prefix && !key.startsWith(prefix)) continue;
       const k = key.slice(prefix.length);
@@ -461,14 +478,14 @@ class Parser {
       if (n === null) continue;
       const p = b.params.find(q => q.name === k);
       if (p) { p.value = n; p.min = Math.min(p.min, n); p.max = Math.max(p.max, n); continue; }
-      if (b.lib) { const s = suggest(k, b.params.map(q => q.name)); this.fail(a, `${b.name} has no slider “${k}”.${s ? ` Did you mean “${s}”?` : ` It has ${b.params.map(q => q.name).join(', ') || 'none'}.`}`); continue; }
+      if (b.lib || (b.my && !src)) { const s = suggest(k, b.params.map(q => q.name)); this.fail(a, `${b.name} has no slider “${k}”.${s ? ` Did you mean “${s}”?` : ` It has ${b.params.map(q => q.name).join(', ') || 'none'}.`}`); continue; }
       b.params.push({ name: k, value: n, ...rangeFor(n) });
     }
     if (!b.lib && !b.name) b.name = prefix ? `Block ${prefix[0].toUpperCase()}` : 'Block';
     const chk = checkBlock(b);
     if (!chk.ok) {
-      for (const e of chk.errors) this.fail(src, e);
-      chk.lines.forEach((l, i) => { if (!l.ok) this.fail(src, `Line ${i + 1} (${b!.lines[i].target}): ${l.error}`); });
+      for (const e of chk.errors) this.fail(at, e);
+      chk.lines.forEach((l, i) => { if (!l.ok) this.fail(at, `Line ${i + 1} (${b!.lines[i].target}): ${l.error}`); });
       return null;
     }
     return b;
@@ -482,6 +499,7 @@ class Parser {
     const sideB = args.find(a => a.key?.toLowerCase() === 'b');
     for (const a of args) {
       if (a.key) {
+        if (a.key.toLowerCase() === 'my') continue;
         if (a.key.toLowerCase() === 'amount') { const n = this.num(a, 'amount'); if (n !== null) amount = Math.max(0, Math.min(1, n)); }
         else if (!/^(a|b|[ab]_\w+)$/i.test(a.key)) this.fail(a, `combine-blocks takes a=, b=, amount= and a_…/b_… for the blocks' sliders; not “${a.key}”.`);
         continue;
@@ -490,11 +508,28 @@ class Parser {
       const m = COMBINE_MODES.find(x => x.mode === w);
       if (m) mode = m.mode; else this.fail(a, `A combine is one of ${COMBINE_MODES.map(x => x.mode).join(', ')}.`);
     }
+    const myArg = args.find(a => a.key?.toLowerCase() === 'my');
+    const my = myArg && (myArg.value.k === 'str' || myArg.value.k === 'word') ? myArg.value.v.trim() : '';
+    if (my && !sideA && !sideB) {
+      // `combine-blocks my="…"`: one of your saved combines.
+      const saved = findSavedBlock(my);
+      if (!saved?.combine) {
+        const s = suggest(my, loadSavedBlocks().filter(x => x.combine).map(x => x.name));
+        this.fail(myArg!, `“${my}” isn't one of your saved combines on this machine.${s ? ` Did you mean “${s}”?` : ' Write a= and b= too, so the recipe works anywhere.'}`);
+        return null;
+      }
+      const c = sceneOpFromSaved(saved).combine!;
+      const op = newCombineOp(`p${++this.ids.p}`, c.a, c.b, c.mode, c.mode === 'blend' && args.some(a => a.key?.toLowerCase() === 'amount') ? amount : c.amount);
+      op.combine!.my = my;
+      return op;
+    }
     if (!sideA || !sideB) { this.fail(t, 'combine-blocks needs both blocks: a=… and b=… (a library name or lines in { }).'); return null; }
     const A = this.block(sideA, args, 'a_', sideA);
     const B = this.block(sideB, args, 'b_', sideB);
     if (!A || !B) return null;
-    return newCombineOp(`p${++this.ids.p}`, A, B, mode, amount);
+    const op = newCombineOp(`p${++this.ids.p}`, A, B, mode, amount);
+    if (my) op.combine!.my = my;
+    return op;
   }
 
   fnNames(role: 'space' | 'shape') { return BUILT_IN_FN_NAMES[role].join(', '); }
@@ -555,6 +590,15 @@ class Parser {
 
   private look(scene: Scene2D, w: string, t: { at: number; end: number }, args: AstArg[]) {
     if (w === 'grid') { this.grid(scene, args); return; }
+    if (w === 'depth-picture' || w === 'picture-depth') {
+      const d = parseDepthArgs(args, {
+        key: a => a.key?.toLowerCase() ?? null, word: a => this.word(a), num: (a, what) => this.num(a, what), vec2: (a, what) => this.vec2(a, what),
+        colour: a => this.colour(a), fail: (a, m) => this.fail(a, m),
+      }, a => this.texName(a, 'depth-picture'));
+      if (!d) { this.fail(t, 'depth-picture needs a picture\'s name: depth-picture pond size look=fog.'); return; }
+      scene.depth = d;
+      return;
+    }
     const L = scene.look;
     const first = args[0];
     const firstNum = first && !first.key && first.value.k === 'num' ? first.value.v : null;
@@ -664,7 +708,8 @@ export function parseRecipe2D(src: string): ParseResult2D {
 
 /** A block's source (`ripple-rings` or `{lines}`) and its settings, with `prefix` on the keys (a combine's sides). */
 function printBlock(b: SpaceBlock, prefix = ''): { source: string; keys: string[] } {
-  const e = isLibraryBlock(b);
+  // One of your saved blocks: its name and its lines both, so the recipe still works where it isn't saved.
+  const e = b.my && !prefix ? null : isLibraryBlock(b);
   const keys: string[] = [];
   if (e) {
     for (const p of b.params) { const d = e.params.find(q => q.name === p.name); if (!d || !valueEq(d.value, p.value)) keys.push(`${prefix}${p.name}=${fmt(p.value)}`); }
@@ -675,15 +720,20 @@ function printBlock(b: SpaceBlock, prefix = ''): { source: string; keys: string[
   for (const p of b.params) keys.push(`${prefix}${p.name}=${fmt(p.value)}`);
   if (clampTimes(b.times) > 1) keys.push(`${prefix}times=${clampTimes(b.times)}`);
   const auto = prefix ? `Block ${prefix[0].toUpperCase()}` : 'Block';
-  if (b.name && b.name !== auto) keys.push(`${prefix}name=${fmtName(b.name)}`);
+  if (b.my && !prefix) keys.unshift(`my=${fmtName(b.my)}`);
+  if (b.name && b.name !== auto && !(b.my && !prefix && b.name === b.my)) keys.push(`${prefix}name=${fmtName(b.name)}`);
   return { source: `{${linesText(b.lines).replace(/\n/g, '; ')}}`, keys };
 }
 
 function printSpace(op: SpaceOp): string {
-  if (op.kind === 'block' && op.block) { const p = printBlock(op.block); return ['space-block', p.source, ...p.keys].join(' '); }
+  if (op.kind === 'block' && op.block) {
+    const p = printBlock(op.block);
+    // A saved block reads `space-block my="Name" {lines} …`.
+    return (op.block.my ? ['space-block', p.keys[0], p.source, ...p.keys.slice(1)] : ['space-block', p.source, ...p.keys]).join(' ');
+  }
   if (op.kind === 'combine' && op.combine) {
     const k = op.combine, a = printBlock(k.a, 'a_'), b = printBlock(k.b, 'b_');
-    return ['combine-blocks', k.mode, `a=${a.source}`, `b=${b.source}`, ...(k.mode === 'blend' ? [`amount=${fmt(k.amount)}`] : []), ...a.keys, ...b.keys].join(' ');
+    return ['combine-blocks', k.mode, ...(k.my ? [`my=${fmtName(k.my)}`] : []), `a=${a.source}`, `b=${b.source}`, ...(k.mode === 'blend' ? [`amount=${fmt(k.amount)}`] : []), ...a.keys, ...b.keys].join(' ');
   }
   if (op.kind === 'fn') return `fn ${fmtName(String(op.values.name ?? 'f'))}`;
   const def = SPACE_BY_KIND[op.kind];
@@ -797,6 +847,7 @@ export function printRecipe2D(scene: Scene2D, opts: { multiline?: boolean; prett
   if (L.bgTex) clauses.push(['background', ...(!same(L.bg, D.bg) ? [colourText(L.bg)] : []), `picture=${fmtName(L.bgTex.tex)}`, ...printUse(L.bgTex), ...(L.bgTex.warp ? [] : ['still'])].join(' '));
   else if (!same(L.bg, D.bg)) clauses.push(`background ${colourText(L.bg)}`);
   for (const k of ['bloom', 'vignette', 'grain', 'scanlines'] as const) if (L.post[k] > 0) clauses.push(`${k} ${fmt(L.post[k])}`);
+  if (scene.depth) clauses.push(printDepth(scene.depth, { num: fmt, name: fmtName, colour: colourText }));
   if (scene.output && scene.output.show !== 'picture') clauses.push(`output ${scene.output.show}${scene.output.palette ? ` palette=${scene.output.palette}` : ''}`);
   return clauses.join(opts.multiline || opts.pretty ? '\n' : ' · ');
 }
@@ -815,6 +866,7 @@ export const RECIPE_VOCABULARY_2D = {
   shapes: SHAPES.map(s => ({ kind: s.kind, keys: s.params.map(p => p.key) })),
   itemKeys: ['at=(x,y)', 'rot=30', 'scale=1.5', 'color=teal', 'inflate=0.02', 'outline=0.02', 'glow', 'name="Sun"', 'fill=brick fit=cover|contain|stretch|tile tiles=3 zoom=1.5', 'mask=brick mask-cut=0.5 mask-invert'],
   textures: ['texture brick node=node_4 aspect=1.5', 'picture brick h=0.6 fit=cover', 'circle r=0.4 fill=brick fit=tile tiles=3', 'background picture=brick fit=cover [still]', `grid 12 picture=brick picture-mode=${GRID_PIC_MODES.join('|')}`],
+  depth: ['depth-picture pond [fit=cover] [size | size=(0.4,1.6)] [space=shift|zoom|turn shift=0.15 dir=0 focus=0] [look=top|occlude|fog|mix|light] [with=add|screen|over|tint] [picture=1] [range=(0,1)] [curve=1] [at=0.5 soft=0.05] [fog=0.9 haze=0.35 fog-color=] [light=2 own=0.55 glow=1] [near=picture|scene mix=1] [gradient=sunset gradient-on=scene|picture|both gradient-how=multiply|colorize|add gradient-amount=0.8 cycles=1 phase=0 flow=0.1]'],
   grid: [`grid 12 [rows] shape=${GRID_SHAPES.join('|')} assign=${GRID_ASSIGNS.join('|')} size=0.7 ripple=centre|corners|mouse|(x,y) freq=8 speed=0.4 target=${GRID_TARGETS.join('|')} amount=0.5 by=${GRID_COLOUR_BYS.join('|')} color= color2= glow=off picture=brick picture-mode=${GRID_PIC_MODES.join('|')}`],
   motion: ['@orbit(0.3 speed=0.25)', '@bob(0.15 dir=90)', '@spin(0.25)', '@pulse(0.25 speed=0.5)'],
   ring: ['@ring(6 r=0.5)', '@ring(6 r=0.5 inner=(5,0.2))', '@ring(6 r=0.5 levels=3 factor=1.6)'],

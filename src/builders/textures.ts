@@ -145,7 +145,9 @@ export function standIns(list: readonly TexSource[] | undefined): GraphNode[] {
  * and the sources pointing at them.
  */
 export function ensureSources(graph: readonly GraphNode[], list: readonly TexSource[] | undefined, nextId: () => string, at: { x: number; y: number }): { added: GraphNode[]; sources: TexSource[] } {
-  const ids = new Set(graph.map(n => n.id));
+  // A node id from another project (a pasted recipe's `node=`) can name some other node here: only a node with a
+  // Texture output counts.
+  const ids = new Set(graph.filter(n => hasTextureOutput(n) || getNodeDefinition(n.type)?.outputs?.texture?.type === 'texture').map(n => n.id));
   const added: GraphNode[] = [];
   const sources = (list ?? []).map(s => {
     if (s.node && ids.has(s.node)) return s;

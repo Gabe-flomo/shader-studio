@@ -13,7 +13,7 @@
  * lighting, materials and the march loop need no changes.
  */
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, withParamSockets } from './helpers';
 
 export const CAT = '4D';
 
@@ -596,7 +596,7 @@ export function twistAxis(plane: string, along: string): string {
   return 'xyzw'.split('').find(c => c !== a && c !== b)!;
 }
 
-export const Twist4DNode: NodeDefinition = {
+export const Twist4DNode: NodeDefinition = withParamSockets({
   type: 'twist4D', label: 'Twist 4D', category: CAT,
   aliases: ['4d twist', 'screw 4d', 'helix 4d'],
   description:
@@ -638,7 +638,7 @@ export const Twist4DNode: NodeDefinition = {
       outputVars: { p4: `${id}_p4`, dist: `${id}_dist` },
     };
   },
-};
+}, ['stepScale']);
 
 // ─── 4D noise ──────────────────────────────────────────────────────────────────
 
@@ -659,7 +659,7 @@ float noise4d_value(vec4 q) {
     return mix(noise4d_z(i, f.xyz, 0.0), noise4d_z(i, f.xyz, 1.0), f.w);
 }`;
 
-export const Noise4DNode: NodeDefinition = {
+export const Noise4DNode: NodeDefinition = withParamSockets({
   type: 'noise4D', label: 'Noise 4D', category: CAT,
   aliases: ['4d noise', 'value noise 4d', 'fbm 4d', 'evolving noise', 'time noise'],
   description:
@@ -695,7 +695,7 @@ export const Noise4DNode: NodeDefinition = {
     lines.push(`    float ${id}_value = ${id}_sum / ${id}_tot;\n`, `    float ${id}_signed = ${id}_value * 2.0 - 1.0;\n`);
     return { code: lines.join(''), outputVars: { value: `${id}_value`, signed: `${id}_signed` } };
   },
-};
+}, ['gain']);
 
 /** Phase 2 nodes, for the registry. */
 export const FOURD_P2_NODES: Record<string, NodeDefinition> = {

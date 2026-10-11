@@ -102,6 +102,18 @@ let restartAll = false;
 export function restartAgents(nodeId?: string): void {
   if (nodeId) restartRequests.add(nodeId); else restartAll = true;
 }
+/**
+ * A live frame used up the start-over requests of the groups that stepped (`stepped`); the others
+ * wait. A group whose rule is still compiling (a Surprise or a rules edit just changed it) doesn't
+ * step, so its request stays until it does: dropped, the walkers would carry on from where the old
+ * rules left them (frozen, after a Frost) under the new ones. "All" waits until every live group stepped.
+ */
+export function settleRestarts(stepped: readonly string[], live: readonly string[]): void {
+  for (const id of stepped) restartRequests.delete(id);
+  if (restartAll && live.every(id => stepped.includes(id))) restartAll = false;
+}
+/** Whether a start over is still waiting for group `nodeId` (tests, the card). */
+export const restartPending = (nodeId: string): boolean => restartAll || restartRequests.has(nodeId);
 
 /** What one listening node (Sound kick, Chladni) has heard so far (kit/agentPlan.js), and its level history as a texture. */
 interface ListenState extends AgListenState { levelTex: THREE.DataTexture }
@@ -725,6 +737,7 @@ export class AgentRunner {
     // How many steps each group runs this frame.
     const plan: Array<{ e: StepEntry; s: GroupState; steps: number; spf: number; preroll: number }> = [];
     const restarted = new Set<string>();
+    const stepped: string[] = [];
     for (const e of ready) {
       const g = e.spec;
       const s = targets.group(g);
@@ -735,10 +748,10 @@ export class AgentRunner {
       // A step forward by hand: exactly that many fixed steps more (once the group runs on the live clock).
       // After a step back, the steps from the snapshot restored to the step wanted (the same steps again).
       const steps = r.steps + (hand && isFinite(s.live.anchorTime) ? hand.forward + hand.replay : 0);
-      if (o.live) stats.set(g.nodeId, { count: g.side * g.side, stepsPerFrame: r.spf, rate: r.rate, step: s.step + steps });
+      if (o.live) { stats.set(g.nodeId, { count: g.side * g.side, stepsPerFrame: r.spf, rate: r.rate, step: s.step + steps }); stepped.push(g.nodeId); }
       plan.push({ e, s, steps, spf: r.spf, preroll: r.preroll });
     }
-    if (o.live) { restartAll = false; restartRequests.clear(); }
+    if (o.live) settleRestarts(stepped, this.steps.filter(e => e.spec.live && !e.failed).map(e => e.spec.nodeId));
     // A run that started over isn't the one the snapshots are of.
     if (restarted.size) this.snapshots?.startedOver();
 

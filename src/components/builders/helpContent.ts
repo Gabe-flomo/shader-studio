@@ -92,9 +92,13 @@ export const BUILDER_HELP: Record<BuilderKey, Record<string, HelpEntry>> = {
       lines: [
         'An orbit camera: it circles the point it looks at. Distance is how far away, Angle where it stands round the point, Elevation how far above.',
         'Set Orbit speed to turn it over time, or Flatten to 1 for an isometric drawing.',
-        'Once it is built, the March Camera card has Perspective: Reverse makes things farther away look bigger, like a Byzantine icon.',
+        'Projection: Perspective (far things smaller), Orthographic (parallel rays, no change of size with distance) or Reverse (far things bigger, like a Byzantine icon). It builds the March Camera\'s Perspective.',
       ],
-      examples: [{ label: 'Slow orbit from further away', insert: { recipe: 'camera dist=6 orbit=10' } }],
+      examples: [
+        { label: 'Slow orbit from further away', insert: { recipe: 'camera dist=6 orbit=10' } },
+        { label: 'Orthographic', insert: { recipe: 'camera orthographic' } },
+        { label: 'Reverse perspective', insert: { recipe: 'camera reverse converge=6' } },
+      ],
     },
     quality: {
       title: 'Quality',

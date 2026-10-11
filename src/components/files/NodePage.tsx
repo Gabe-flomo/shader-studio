@@ -5,7 +5,8 @@
  * the example graphs and saved graphs that use it, and Insert into the
  * current graph.
  */
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { lazySafe } from '../lazyWithSuspense';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button } from '../ui/Button';
@@ -28,7 +29,7 @@ import { LinkRow } from './NodeView';
 import { Carousel, PosterCard } from './homeUi';
 import { useExamplePosters } from './useItemPosters';
 
-const CodePreviewPane = lazy(() => import('../present/CodePreview').then(m => ({ default: m.CodePreviewPane })));
+const CodePreviewPane = lazySafe(() => import('../present/CodePreview').then(m => ({ default: m.CodePreviewPane })));
 const NO_CONTEXT: SnippetContext = {};
 
 const TYPE_COLOURS: Record<string, string> = {};

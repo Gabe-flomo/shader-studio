@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, withParamSockets } from './helpers';
 
 // sdBox, sdSegment, sdEllipse, opRepeat, opRepeatPolar are now always-available
 // built-ins emitted by shaderAssembler.ts — no per-node glslFunction needed.
@@ -78,7 +78,7 @@ export const SdfOffsetNode: NodeDefinition = {
 
 // ─── SDF Sharpen ──────────────────────────────────────────────────────────────
 // sdf * sharpness: steepens or flattens the gradient without moving the zero-crossing.
-export const SdfSharpenNode: NodeDefinition = {
+export const SdfSharpenNode: NodeDefinition = withParamSockets({
   type: 'sdfSharpen',
   label: 'Sharpen',
   category: 'SDF', subcategory: 'Modify',
@@ -98,7 +98,7 @@ export const SdfSharpenNode: NodeDefinition = {
       outputVars: { result: `${id}_result` },
     };
   },
-};
+}, ['sharpness']);
 
 // ─── SDF Smooth Union 2D ─────────────────────────────────────────────────────
 // smin blend of two SDFs. Outputs merged SDF + blend factor for material interpolation.

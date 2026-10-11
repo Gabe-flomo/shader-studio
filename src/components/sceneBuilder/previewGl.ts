@@ -7,6 +7,7 @@ import { compileGraph } from '../../compiler/graphCompiler';
 import { buildStandaloneGraph } from '../../sceneBuilder/build';
 import type { SceneSpec } from '../../sceneBuilder/spec';
 import type { PreviewPass } from '../builders/previewPasses';
+import { registerPreviewDepth } from '../builders/previewTextures';
 
 export type Compiled = {
   vs: string; fs: string; uniforms: Record<string, number | number[]>; nodes: number; error: string | null; ms: number;
@@ -21,6 +22,7 @@ export function compileSpec(spec: SceneSpec): Compiled {
   try {
     const g = buildStandaloneGraph(spec, { idFor: role => `pv_${role.replace(/[^A-Za-z0-9]/g, '_')}` });
     const r = compileGraph({ nodes: g.nodes });
+    registerPreviewDepth(g.nodes);
     if (!r.success) return { vs: '', fs: '', uniforms: {}, nodes: g.nodes.length, error: (r.errors ?? []).join('; ') || 'The graph did not compile.', ms: performance.now() - t0 };
     return { vs: r.vertexShader, fs: r.fragmentShader, uniforms: r.paramUniforms as Record<string, number | number[]>, nodes: g.nodes.length, error: null, ms: performance.now() - t0, textures: r.textureUniforms };
   } catch (e) {

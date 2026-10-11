@@ -192,6 +192,12 @@ export interface Look {
   glow: boolean;
   glowAmount: number;
   glowFalloff: number;
+  /**
+   * soft (absent): one shape, its colour running out into the glow (colour × (amount ÷ (distance
+   * outside + amount)) ^ falloff, 1 at the edge). halo: the Glow Layer's amount ÷ |distance|, a bright
+   * rim round a flat shape.
+   */
+  glowStyle?: 'soft' | 'halo';
   tone: 'none' | 'aces';
 }
 

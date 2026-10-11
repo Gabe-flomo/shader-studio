@@ -105,6 +105,7 @@ export function showHowPlan(input: HowInput): HowPlan {
   const line = readLine(text, { seed: 1 });
   if (line.dialect === 'scene') return line.errors.length ? { ...empty, problems: line.errors.map(e => e.message) } : scenePlan(line.canonical && readsCanonically(line) ? line.canonical : text);
   if (line.dialect === 'grid' || line.dialect === 'agents') return { ...empty, problems: ['Grid and agent rules run over time: try them in the Do… bar instead.'] };
+  if (line.dialect === 'scene2d' || line.dialect === 'splat') return { ...empty, problems: [`A ${line.dialect === 'splat' ? 'Splat' : '2D Scene'} Builder recipe builds in one go: run it in the Do… bar, then open it in its builder.`] };
   // A canonical picture line runs as the bar runs it (its sentence through the same executor).
   const run = readsCanonically(line) && line.dialect === 'picture' ? line.picture!.sentence! : text;
   const start = input.on ? scratchGraph(input.on) : input.nodes ?? scratchGraph('empty');

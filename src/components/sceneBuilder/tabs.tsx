@@ -9,9 +9,10 @@ import { useSceneBuilder } from '../../sceneBuilder/store';
 import {
   DEFAULT_LOOK, MODIFIER_KINDS, SHAPES, SHAPE_BY_KIND, TONE_MODES, WARPS, WARP_BY_KIND, allShapes, autoStepScale, defaultSize, findItem, itemName, modifierSummary, opLabel, starterSpec, stepHints, walkItems,
   type GroupSpec, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type Vec3, type WarpSpec,
-  TEX_MAPS, TEX_MAP_LABELS, TEX_SHARP_DEFAULT, type TexMap,
+  TEX_MAPS, TEX_MAP_LABELS, TEX_SHARP_DEFAULT, type TexMap, CAMERA_PROJECTIONS, REVERSE_DEFAULTS, type CameraNumKey, type CameraProjection,
 } from '../../sceneBuilder/spec';
 import { TexturePicker } from '../builders/TexturePicker';
+import { DepthPictureCard } from './DepthPictureCard';
 import { findTex, withSource } from '../../builders/textures';
 import { randomShapeAction, randomiseThisAction } from './surpriseActions';
 import { addModifier, addShape, addWarp, duplicateItem, moveBy, moveItem, moveModifierTo, moveWarp, removeItem, removeWarp, ungroup } from '../../sceneBuilder/edit';
@@ -585,6 +586,7 @@ export function LightSettings() {
             {L.fogColor && <ColourRow label="Fog colour" hint="What distance fades into." value={L.fogColor} onChange={v => set(l => { l.fogColor = v; }, 'fogc')} />}
           </Card>
         )}
+        {lit && <DepthPictureCard />}
         {L.mode !== 'glass' && (
           <Card id="look:bg" title="Background" summary={L.bg2 ? 'gradient' : 'solid'}>
             <Row label="Kind" hint="One colour, or a gradient from Top (looking up) to Bottom (looking down)."><Segmented size="sm" ariaLabel="Background kind" value={L.bg2 ? 'gradient' : 'solid'} options={[{ value: 'solid', label: 'Solid' }, { value: 'gradient', label: 'Gradient' }]}
@@ -634,19 +636,39 @@ export function LookTab() {
 
 // ── Camera & quality ────────────────────────────────────────────────────────
 
-/** The orbit camera's sliders. */
+const PROJECTION_LABEL: Record<CameraProjection, string> = { perspective: 'Perspective', orthographic: 'Orthographic', reverse: 'Reverse' };
+const PROJECTION_TITLE: Record<CameraProjection, string> = {
+  perspective: 'Rays fan out from the camera: far things look smaller (camera perspective). Flatten blends it toward orthographic.',
+  orthographic: 'Rays run parallel: size doesn\'t change with distance and parallel edges stay parallel, like an isometric drawing (camera orthographic).',
+  reverse: 'Rays start spread out and meet in front of the camera: far things look bigger, like a Byzantine icon (camera reverse).',
+};
+const PROJECTION_HINT = 'How the camera\'s rays leave it. Perspective: far things smaller. Orthographic: parallel rays, no change of size with distance. Reverse: far things bigger. In a recipe: camera perspective, camera orthographic, camera reverse (with reverse= and converge=).';
+
+/** The orbit camera's sliders, and its projection. */
 export function CameraRows() {
   const C = useSceneBuilder(s => s.spec.camera);
   const edit = useSceneBuilder(s => s.edit);
-  const set = (k: keyof SceneSpec['camera']) => (v: number) => edit(d => { d.camera[k] = v; }, `cam:${k}`);
+  const set = (k: CameraNumKey) => (v: number) => edit(d => { d.camera[k] = v; }, `cam:${k}`);
+  const proj = C.projection ?? 'perspective';
   return (
     <>
+      <Row label="Projection" hint={PROJECTION_HINT}>
+        <span data-camera-projection={proj} style={{ display: 'flex' }}>
+          <Segmented size="sm" ariaLabel="Projection" value={proj} fill
+            options={CAMERA_PROJECTIONS.map(p => ({ value: p, label: PROJECTION_LABEL[p], title: PROJECTION_TITLE[p] }))}
+            onChange={p => edit(d => { if (p === 'perspective') delete d.camera.projection; else d.camera.projection = p; })} />
+        </span>
+      </Row>
       <NumRow label="Distance" hint="How far the camera is from the point it looks at." value={C.dist} defaultValue={DEFAULT_SPEC.camera.dist} min={0.3} max={20} onChange={set('dist')} play={{ at: 'camera', key: 'dist' }} />
       <NumRow label="Angle" unit="°" hint="Where it stands round the point (0: in front)." value={C.angle} defaultValue={DEFAULT_SPEC.camera.angle} min={-180} max={180} step={0.5} onChange={set('angle')} play={{ at: 'camera', key: 'angle' }} />
       <NumRow label="Elevation" unit="°" hint="How far above it looks from: 0 level, 89 straight down." value={C.elev} defaultValue={DEFAULT_SPEC.camera.elev} min={-89} max={89} step={0.5} onChange={set('elev')} play={{ at: 'camera', key: 'elev' }} />
       <NumRow label="Orbit speed" unit="°/s" hint="Turns the camera round the point over time." value={C.orbit} defaultValue={DEFAULT_SPEC.camera.orbit} min={-90} max={90} step={0.5} onChange={set('orbit')} play={{ at: 'camera', key: 'orbit' }} />
       <NumRow label="Zoom" hint="Lens length: higher is zoomed in, with less perspective." value={C.zoom} defaultValue={DEFAULT_SPEC.camera.zoom} min={0.5} max={5} onChange={set('zoom')} play={{ at: 'camera', key: 'zoom' }} />
-      <NumRow label="Flatten" hint="Perspective (0) to orthographic (1), like an isometric drawing." value={C.flatten} defaultValue={DEFAULT_SPEC.camera.flatten} min={0} max={1} onChange={set('flatten')} play={{ at: 'camera', key: 'flatten' }} />
+      {proj === 'perspective' && <NumRow label="Flatten" hint="Perspective (0) to orthographic (1), like an isometric drawing." value={C.flatten} defaultValue={DEFAULT_SPEC.camera.flatten} min={0} max={1} onChange={set('flatten')} play={{ at: 'camera', key: 'flatten' }} />}
+      {proj === 'reverse' && <>
+        <NumRow label="Strength" hint="0: parallel rays (orthographic). 1: the rays meet exactly at Converge at. The point it looks at keeps its size." value={C.reverse ?? REVERSE_DEFAULTS.reverse} defaultValue={REVERSE_DEFAULTS.reverse} min={0} max={1} onChange={set('reverse')} play={{ at: 'camera', key: 'reverse' }} />
+        <NumRow label="Converge at" hint="How far in front of the camera the rays meet. Nearer than this, things look bigger the farther away they are; past it the picture flips." value={C.converge ?? REVERSE_DEFAULTS.converge} defaultValue={REVERSE_DEFAULTS.converge} min={0.5} max={50} step={0.1} onChange={set('converge')} play={{ at: 'camera', key: 'converge' }} />
+      </>}
       <NumRow label="Translate X" hint="Moves the camera and the point it looks at together." value={C.x} defaultValue={DEFAULT_SPEC.camera.x} min={-5} max={5} onChange={set('x')} play={{ at: 'camera', key: 'x' }} />
       <NumRow label="Translate Y" hint="Moves the camera and its point up or down together." value={C.y} defaultValue={DEFAULT_SPEC.camera.y} min={-5} max={5} onChange={set('y')} play={{ at: 'camera', key: 'y' }} />
       <NumRow label="Translate Z" hint="Moves the camera and its point toward or away together." value={C.z} defaultValue={DEFAULT_SPEC.camera.z} min={-5} max={5} onChange={set('z')} play={{ at: 'camera', key: 'z' }} />

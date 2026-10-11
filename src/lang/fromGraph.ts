@@ -19,7 +19,7 @@ import { getNodeDefinition, getNodeDefinitionFor } from '../nodes/definitions';
 import { execCommand } from '../suggestions/doCommands';
 import { runDoPlan } from '../suggestions/doBar';
 import { lex as sugarLex, namesOf, readRef } from '../suggestions/doRefs';
-import { readLine, readsCanonically, gridPlan, sceneNodes, agentsNodes } from './run';
+import { readLine, readsCanonically, gridPlan, sceneNodes, scene2dNodes, splatNodes, agentsNodes } from './run';
 import { sugarRef } from './dialects/picture';
 import { printRef, fmtNum } from './print';
 import type { Ref } from './ast';
@@ -136,6 +136,8 @@ export function simRun(sim: Sim, text: string): SimRun {
         nodes = res.nodes;
         if (res.select) selected = [res.select];
       } else if (r.dialect === 'scene') nodes = sceneNodes(nodes, r.scene!, nextId).nodes;
+      else if (r.dialect === 'scene2d') nodes = scene2dNodes(nodes, r.scene2d!, nextId).nodes;
+      else if (r.dialect === 'splat') nodes = splatNodes(nodes, r.splat!, nextId).nodes;
       else nodes = agentsNodes(nodes, r.agents!, nextId).nodes;
     } else {
       if (r.dialect !== 'picture') return fail(r.errors[0]?.message ?? 'does not read');

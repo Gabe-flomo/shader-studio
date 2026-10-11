@@ -8,7 +8,7 @@
  * Pure: no DOM, no store. The viewport (components/sceneBuilder/SceneViewport.tsx) draws with it.
  */
 import { makeSdf, type Sdf } from './thumbnails';
-import { SHAPE_BY_KIND, allShapes, pathTo, shapeDims, type CameraSpec, type SceneItem, type SceneSpec, type ShapeSpec, type Vec3 } from './spec';
+import { REVERSE_DEFAULTS, SHAPE_BY_KIND, allShapes, pathTo, shapeDims, type CameraSpec, type SceneItem, type SceneSpec, type ShapeSpec, type Vec3 } from './spec';
 
 const rad = (d: number) => d * Math.PI / 180;
 const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -19,7 +19,11 @@ const cross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0
 const norm = (a: Vec3): Vec3 => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
 
 /** The camera at time `t`: where it is and which ways are forward, right and up, as March Camera works them out. */
-export interface CamBasis { ro: Vec3; fwd: Vec3; rgt: Vec3; up: Vec3; fov: number; dist: number; flat: number }
+export interface CamBasis {
+  ro: Vec3; fwd: Vec3; rgt: Vec3; up: Vec3; fov: number; dist: number; flat: number;
+  /** Reverse perspective: strength `a`, rays meeting `D` in front, `c` scene units per unit of g_uv at the camera. */
+  rev?: { a: number; D: number; c: number };
+}
 
 export function cameraBasis(c: CameraSpec, t = 0): CamBasis {
   const ang = rad(c.angle) + t * rad(c.orbit), elev = rad(c.elev);
@@ -30,20 +34,30 @@ export function cameraBasis(c: CameraSpec, t = 0): CamBasis {
   const cup = norm(add(mul(horiz, -Math.sin(elev)), [0, Math.cos(elev), 0]));
   const rgt = norm(cross(cup, fwd));
   const up = cross(fwd, rgt);
-  return { ro, fwd, rgt, up, fov: c.zoom, dist: c.dist, flat: Math.max(0, Math.min(1, c.flatten)) };
+  const fov = Math.max(c.zoom, 0.05);
+  if (c.projection === 'reverse') {
+    // March Camera's reverse block: origins spread over the image plane, rays aimed at a point D in front.
+    const a = Math.max(0, Math.min(1, c.reverse ?? REVERSE_DEFAULTS.reverse)), D = Math.max(c.converge ?? REVERSE_DEFAULTS.converge, 0.1);
+    return { ro, fwd, rgt, up, fov: c.zoom, dist: c.dist, flat: 0, rev: { a, D, c: c.dist / fov / Math.max(1 - a * c.dist / D, 0.2) } };
+  }
+  const flat = c.projection === 'orthographic' ? 1 : Math.max(0, Math.min(1, c.flatten));
+  return { ro, fwd, rgt, up, fov: c.zoom, dist: c.dist, flat };
 }
 
 /** The picture's coordinates: g_uv, x across (−aspect … aspect), y up (−1 … 1). */
 export type Uv = [number, number];
 
 /** Scene units per unit of g_uv at depth `z` in front of the camera (Flatten blends to the orthographic scale). */
-export const unitsPerUv = (b: CamBasis, z: number) => (b.flat * b.dist + (1 - b.flat) * z) / Math.max(b.fov, 0.05);
+export const unitsPerUv = (b: CamBasis, z: number) => b.rev
+  // Reverse: the spread shrinks with depth (O·(1 − a·z/D)), so far things cover more of the picture.
+  ? b.rev.c * (1 - b.rev.a * z / b.rev.D)
+  : (b.flat * b.dist + (1 - b.flat) * z) / Math.max(b.fov, 0.05);
 
 /** Where `p` lands on the picture (and how far in front it is), or null when it is behind the camera. */
 export function project(b: CamBasis, p: Vec3): { uv: Uv; z: number } | null {
   const v = sub(p, b.ro);
   const z = dot(v, b.fwd);
-  if (z <= 1e-4 && b.flat < 1) return null;
+  if (z <= 1e-4 && b.flat < 1 && !b.rev) return null;
   const k = unitsPerUv(b, z);
   if (k <= 1e-6) return null;
   return { uv: [dot(v, b.rgt) / k, dot(v, b.up) / k], z };
@@ -52,6 +66,10 @@ export function project(b: CamBasis, p: Vec3): { uv: Uv; z: number } | null {
 /** The ray through a point of the picture. */
 export function rayAt(b: CamBasis, uv: Uv): { o: Vec3; d: Vec3 } {
   const lat = add(mul(b.rgt, uv[0]), mul(b.up, uv[1]));
+  if (b.rev) {
+    const O = mul(lat, b.rev.c);
+    return { o: add(b.ro, O), d: norm(sub(mul(b.fwd, b.rev.D), mul(O, b.rev.a))) };
+  }
   const fov = Math.max(b.fov, 0.05);
   return { o: add(b.ro, mul(lat, b.flat * b.dist / fov)), d: norm(add(mul(b.fwd, fov), mul(lat, 1 - b.flat))) };
 }

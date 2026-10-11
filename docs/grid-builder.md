@@ -128,7 +128,7 @@ Words in the Agent Builder's stroke font (`agentBuilder/strokeFont.ts`), two way
 | **Motion** | The brush shape's path: still, up and down, side to side, both at once, circle, figure eight, bounce, travel, hop. The **XY control** sets how far (in cells, y up): drag the point, the path is drawn round it; X and Y sliders beside it. Speed (cycles a second) and lag (each cell starts (x + y) × lag of a cycle later: the motion runs through the drawing as a wave). Travel and hop wrap round the grid. |
 | **Patterns & warps** | A wave over the cells: ripple, diagonal, checker, rings, spiral, stripes, random. It changes every shape's size, turn, push, hue or brightness by Amount; Waves is how many across the grid, Speed in cycles a second, Arms for the spiral. **Fill empty cells** puts a shape in every cell you didn't draw on, its size following the wave (checker + fill is a checkerboard that swaps). **Only in words** limits the wave and the fill to the cells some words cover (see Text). **Grid warps**: up to three space blocks from the 2D Scene Builder's library (the same picker: categories, search, Random), bending the space the whole grid is drawn in, lines and all. |
 | **Rules** | When … Do … for every drawn cell, checked in the shader each frame, top to bottom. When a shape *is in the cell (x, y)*, *is in the column*, *is in the row*, *shares a cell with* another shape, or *is near* it (within N cells). Do: *becomes* another shape (its kind, size and colour), *turns a colour*, *swaps colours with* the other shape (both ways), *grows by*, *hides*, *spins*. A rule that names a shape that isn't there is shown as off. |
-| **Look** | Background, grid lines (on or off, colour, width in cells), the grid's size, glow (amount, falloff), tone map. |
+| **Look** | Background, grid lines (on or off, colour, width in cells), the grid's size, glow (amount, falloff, style), tone map. Glow style **Soft** (the default) is one shape: the shape's colour runs out into its glow, colour × (amount ÷ (distance outside + amount)) ^ falloff, which is 1 at the edge and inside, so the fill meets it without a seam. **Halo** is the Glow Layer's amount ÷ \|distance\|: a bright rim round a flat shape (the look before). |
 
 ### Rules that stay changed, and/or, else
 
@@ -151,7 +151,7 @@ UV ─► warps (Expression Blocks) ─┬─► Grid scene (Expression Block + 
 Time ────────────────────────────┤      ▲ motion, look, edge, colour per shape
 per shape: Colour, Shape A (Expression Block of sliders)
 Ground & lines (Expression Block over the background) ◄─ the warped UV
-Glow Layer (d, colour) ─► Add over the ground ─► SDF Fill ─► Tone Map ─► Output
+Soft glow (d, colour; or Glow Layer for Halo) ─► Add over the ground ─► SDF Fill ─► Tone Map ─► Output
 ```
 
 - **Shape A, B…**: an Expression Block whose sliders are the shape's numbers (size, turn, spin,
@@ -185,12 +185,20 @@ Every pixel looks only at the cells near it, not at every drawn cell:
   path's fastest rate a cell; while L is under 0.8 the iteration converges and the search stays
   small (reach ÷ (1 − L)) however big the motion. Lag 0 is exact in one step. Above it, shapes
   overtake each other and no single home is "the" one: the search is the middle of the path widened
-  by its range. Travel and Hop solve their wrap round the grid (with lag, each way round it). A
+  by its range. Travel and Hop solve their wrap round the grid (with lag, each way round it): the
+  wrap count is solved with the lag's coupling (a wrap in x moves the home in y too), so however long
+  the scene has run the home lands mid-grid and its copies one grid either way are tried. (Before,
+  rounding h ÷ grid size alone drifted by lag × reach × wraps cells: with big reach or lag the shapes
+  went missing in bands, cut by a straight seam.) A
   square of cells round that home is read in the drawing; a cell is drawn only if it holds this
   shape.
 - **The square's size is worked out live, every pixel**, from the shape's sliders as they are now:
   its size, pulse, outline, the pattern's grow (size) and push, its rules' grow and become, and the
-  motion (reach and lag) as above. Glow adds a cell so halos stay. The loops run to the cap, 13 × 13,
+  motion (reach and lag) as above. Glow adds a cell to the reach (inside the inverse, so lag widens
+  it too): every shape within a cell of the pixel is found. The glow's distance fades out by then
+  (from 0.35 to 0.95 of a cell past a shape's edge, `GLOW_FADE`), so the halo never steps where
+  neighbouring pixels search different cells (it used to show as faint cell-shaped patches); within
+  0.35 of a cell it is as before. The loops run to the cap, 13 × 13,
   and stop at the live radius, so dragging any slider on the Shape or Grid scene node, as far as you
   like, never cuts a shape and never recompiles. Typically 3 × 3 (no glow) or 5 × 5. When a setting
   would need more than the cap (huge reach with a lot of lag), the builder's Motion section says so:
@@ -220,7 +228,10 @@ Every pixel looks only at the cells near it, not at every drawn cell:
   template and a spread of Surprise scenes draw the same picture with the lookup (within 0.005 of a
   colour step for the templates), compared on the CPU (`gridLookup.test.ts`). The search is also
   checked against brute force (`gridProgram(spec, { brute: true })`, every cell for every shape) for
-  big motion with lag on every non-wrapping path, and with copies matching.
+  big motion with lag on every non-wrapping path, with copies matching, and for Travel and Hop with
+  big reach and lag late in time (near the wrap seam, with Repeat and Mirror too). The glow is
+  sampled along rows crossing cell borders far from the shapes: no step. The old code is compared
+  with the same glow fade applied.
 
 The UV node keeps the spec (`gridScene`), so the Scene builder lists the build ("Grid scene · 10 ×
 10 · 27 cells drawn") and **Edit this one** reopens it exactly as built. A rebuild keeps each node's

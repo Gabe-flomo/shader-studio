@@ -25,6 +25,8 @@ While you type, the suggestions read as plain sentences of what taking one does 
 
 The **builders** (the 3D Scene Builder, Grid Rules, Agent Rules) open from whole phrases: "new 3d scene", "new grid rules", "edit the rules", "show the recipe" (see Builders below). They are also the first section of the node browser and the empty-canvas right-click menu's Builders.
 
+**Pasting a recipe**: a recipe copied from any builder (the 3D and 2D Scene Builders, the Splat builder, Grid Rules' "As text", Agent Rules) pastes into the bar, in this project or another, and Enter builds it: a new scene beside what is there, on the Output, one undo step. Multi-line recipes go in as one line joined by ` · `. The bar says which kind of recipe it read ("This is a 2D Scene Builder recipe"), and the built scene opens in its own builder. What the recipe names from its own project degrades instead of failing: a picture gets an empty Texture node named after it, a scan file this device doesn't have becomes the example scan, with a note.
+
 ## Verbs: editing what is there
 
 ### create
@@ -3777,6 +3779,28 @@ Examples:
 
 - `texture pond · box size=0.5 texture=pond @repeat(2)` — on an empty graph (just an Output)
 
+### depth-picture
+
+3D scene · setting. a picture with depth the objects stand in Also: picture-depth.
+
+Words: `depth-picture`, `picture-depth`
+
+```
+depth-picture [name] how= near= far= soft=
+```
+
+| Slot | What |
+|---|---|
+| name (bare) | The picture (a name from a texture clause). |
+| how | In the picture (Depth Composite), lit by the scene (+ Depth Light), or lit and reflected (+ Picture Environment). · composite, lit, reflect |
+| near | Where the picture's nearest thing is, in scene units. |
+| far | Where its farthest thing is. |
+| soft | Edge softness, in scene units. |
+
+Examples:
+
+- `texture pond · sphere r=0.5 · depth-picture pond how=lit` — on an empty graph (just an Output)
+
 ### tone
 
 3D scene · setting. tone map
@@ -3802,7 +3826,7 @@ Examples:
 Words: `camera`, `cam`
 
 ```
-camera [dist] angle= elev= orbit= zoom= flatten= x= y= z=
+camera [dist] angle= elev= orbit= zoom= flatten= x= y= z= projection= reverse= converge=
 ```
 
 | Slot | What |
@@ -3816,6 +3840,9 @@ camera [dist] angle= elev= orbit= zoom= flatten= x= y= z=
 | x | number |
 | y | number |
 | z | number |
+| projection | How the rays leave the camera: perspective (far things smaller), orthographic (parallel: no change of size with distance) or reverse (far things bigger). The word alone works too: camera reverse. · perspective, orthographic, reverse |
+| reverse | Reverse: how strongly the rays converge (0 parallel … 1 meeting at converge). |
+| converge | Reverse: how far in front of the camera the rays meet. |
 
 Examples:
 

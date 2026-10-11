@@ -90,3 +90,52 @@ export function withNewOutputs(added: GraphNode['outputs']): (node: GraphNode) =
     return missing.length ? { ...node, outputs: { ...have, ...Object.fromEntries(missing.map(([k, v]) => [k, { type: v.type, label: v.label }])) } } : node;
   };
 }
+
+// ── Sliders you can wire ─────────────────────────────────────────────────────
+//
+// The card's convention: an input socket with the same key as a param overrides that slider while something is
+// wired into it (or keyframed on it); unwired, the slider is the value. Hand-written definitions read it as
+// `inputVars.k ?? p(node.params.k, d)`. `withParamSockets` gives a definition that convention for a list of its
+// sliders at once: it adds the sockets (labelled and hinted from the sliders) and hands generateGLSL the node with
+// those params replaced by what is wired in. Every float / vec3 / colour slider that isn't `compileTime` already
+// reaches generateGLSL as a GLSL expression (a live uniform's name, patchNodeParamsForUniforms), so a wire's
+// expression in its place is read the same way. Unwired, nothing changes: the same params, the same code.
+
+/** Socket keys the compiler fills by itself when unwired (UV, the clock): never a slider's socket. */
+const AUTO_FILLED = new Set(['uv', 'p', 'uv2', 't', 'time']);
+
+/** Node type → the sliders withParamSockets gave sockets to (for tests and the docs). */
+export const PARAM_SOCKETS = new Map<string, string[]>();
+
+/**
+ * Give `def` an input socket for each of `keys` (float, vec3 or colour sliders). `shown` lists the sockets the card
+ * shows from the start; the rest come out on demand (right-click the slider → Control from outside, as on the
+ * Particles node), and always while wired. `'all'` shows every one.
+ */
+export function withParamSockets(def: NodeDefinition, keys: readonly string[], shown: readonly string[] | 'all' = []): NodeDefinition {
+  const pd = def.paramDefs ?? {};
+  const inputs: NodeDefinition['inputs'] = { ...def.inputs };
+  const onDemand: Record<string, string[]> = { ...(def.socketsOnDemand ?? {}) };
+  for (const k of keys) {
+    const d = pd[k];
+    if (!d) throw new Error(`withParamSockets: ${def.type} has no slider "${k}"`);
+    if (d.type !== 'float' && d.type !== 'vec3' && d.type !== 'vec3color') throw new Error(`withParamSockets: ${def.type}.${k} is a ${d.type}, not a number, vector or colour`);
+    if (d.compileTime) throw new Error(`withParamSockets: ${def.type}.${k} is compile-time (it shapes the code), so it can't be wired`);
+    if (AUTO_FILLED.has(k) || k in inputs) throw new Error(`withParamSockets: ${def.type} already has an input "${k}"`);
+    inputs[k] = { type: d.type === 'float' ? 'float' : 'vec3', label: d.label, ...(d.hint ? { hint: d.hint } : {}) };
+    if (shown !== 'all' && !shown.includes(k)) onDemand[k] = [k];
+  }
+  const inner = def.generateGLSL;
+  const generateGLSL: NodeDefinition['generateGLSL'] = (node, inputVars) => {
+    let params: Record<string, unknown> | null = null;
+    for (const k of keys) {
+      const v = inputVars[k];
+      if (!v) continue;
+      params ??= { ...node.params };
+      params[k] = v;
+    }
+    return inner(params ? { ...node, params } : node, inputVars);
+  };
+  PARAM_SOCKETS.set(def.type, [...keys]);
+  return { ...def, inputs, ...(Object.keys(onDemand).length ? { socketsOnDemand: onDemand } : {}), generateGLSL };
+}

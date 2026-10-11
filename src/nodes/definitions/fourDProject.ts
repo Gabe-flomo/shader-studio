@@ -17,7 +17,7 @@
  * projection, the stereographic map and its stretch) against the real GLSL run on the CPU.
  */
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, withParamSockets } from './helpers';
 import {
   CAT, DEG, ROTATION_PLANES_4D, planeAxes, shapeNode,
   HypersphereSDFNode, TesseractSDFNode, DuocylinderSDFNode, SpherinderSDFNode, CubinderSDFNode,
@@ -185,7 +185,7 @@ ${lines.join('')}    return min(sqrt(e2) - er, sqrt(v2) - vr);
 
 const rot12 = rotationDefs('xw', 'yz');
 
-export const Wireframe4DNode: NodeDefinition = {
+export const Wireframe4DNode: NodeDefinition = withParamSockets({
   type: 'wireframe4D', label: '4D Wireframe', category: CAT,
   aliases: ['4d projection', 'projected tesseract', 'hypercube wireframe', 'polytope wireframe', 'schlegel', 'tesseract projection', '24-cell wireframe'],
   description:
@@ -231,7 +231,7 @@ export const Wireframe4DNode: NodeDefinition = {
       outputVars: { dist: `${id}_dist` },
     };
   },
-};
+}, ['spin1', 'spin2']);
 
 // ─── Project 4D ────────────────────────────────────────────────────────────────
 
@@ -281,7 +281,7 @@ float sdf4d_project_${shape in PROJECT_SHAPES ? shape : 'duocylinder'}(vec3 pos,
 
 const rot0 = rotationDefs('xw', 'yz');
 
-export const Project4DNode: NodeDefinition = {
+export const Project4DNode: NodeDefinition = withParamSockets({
   type: 'project4D', label: 'Project 4D', category: CAT,
   aliases: ['4d shadow', 'volumetric projection', 'extrusion union', 'project along w', 'solid projection', 'duocylinder shadow'],
   description:
@@ -330,13 +330,13 @@ export const Project4DNode: NodeDefinition = {
       outputVars: { dist: `${id}_dist` },
     };
   },
-};
+}, ['ratio', 'thick', 'smooth', 'stepScale', 'spin1', 'spin2']);
 
 // ─── Stereographic 4D ──────────────────────────────────────────────────────────
 
 const rotS = rotationDefs('xw', 'yz');
 
-export const Stereographic4DNode: NodeDefinition = {
+export const Stereographic4DNode: NodeDefinition = withParamSockets({
   type: 'stereo4D', label: 'Stereographic 4D', category: CAT,
   aliases: ['stereographic projection', 'hopf', 'three-sphere', 'inverse stereographic', 's3', 'conformal'],
   description:
@@ -378,7 +378,7 @@ export const Stereographic4DNode: NodeDefinition = {
       outputVars: { p4: `${id}_p4`, factor: `${id}_factor`, scale: `${id}_s` },
     };
   },
-};
+}, ['spin1', 'spin2']);
 
 export const StereoDistanceNode: NodeDefinition = {
   type: 'stereoDist4D', label: 'Stereographic Distance', category: CAT,
@@ -494,7 +494,7 @@ ${lines.join('')}    return min(sqrt(e2) - er, sqrt(v2) - vr);
 
 const rotFlat = rotationDefs('xw', 'yz');
 
-export const Wireframe4D2DNode: NodeDefinition = {
+export const Wireframe4D2DNode: NodeDefinition = withParamSockets({
   type: 'wireframe4D2D', label: '4D Wireframe 2D', category: CAT,
   aliases: ['tesseract 2d', 'flat tesseract', 'hypercube drawing', '4d to 2d', 'projected tesseract 2d'],
   description:
@@ -542,7 +542,7 @@ export const Wireframe4D2DNode: NodeDefinition = {
       outputVars: { dist: `${id}_dist` },
     };
   },
-};
+}, ['camDist', 'camDist3', 'spin1', 'spin2']);
 
 export const PlaneSlice4DNode: NodeDefinition = {
   type: 'planeSlice4D', label: 'Plane Slice 4D', category: CAT,
