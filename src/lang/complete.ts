@@ -15,7 +15,7 @@
  * Pure: no React, no store.
  */
 import { getNodeDefinition } from '../nodes/definitions';
-import { DIM_WORDS, SHAPES as SCENE_SHAPES, SHAPE_BY_KIND, WARPS, WARP_BY_KIND, TONE_MODES, shapeDims, type ParamDef, type ShapeDef } from '../sceneBuilder/spec';
+import { DIM_WORDS, SHAPES as SCENE_SHAPES, SHAPE_BY_KIND, WARPS, WARP_BY_KIND, TONE_MODES, shapeDims, shapeParamWord, type ParamDef, type ShapeDef } from '../sceneBuilder/spec';
 import { RECIPE_WORDS } from '../sceneBuilder/recipe';
 import { OUTPUTS, PALETTES } from '../sceneBuilder/output';
 import { ACTIONS, SHAPES as WORD_SHAPES, editDistance, fuzzBudget } from './vocabulary';
@@ -91,7 +91,7 @@ export function rankCompletions<T extends { label: string; words?: string[] }>(q
 // ── The recipe's words ──────────────────────────────────────────────────────
 
 const v3 = (v: number | number[]) => (Array.isArray(v) ? `(${v.join(',')})` : String(v));
-const paramText = (p: ParamDef) => `${p.key}=${v3(p.def as number)}`;
+const paramText = (p: ParamDef, s?: ShapeDef) => `${s ? shapeParamWord(s, p.key) : p.key}=${v3(p.def as number)}`;
 const SHAPE_COMMON = [
   { key: 'at', label: 'Position', hint: 'Where its centre is: (x, y, z).', text: 'at=(x,y,z)' },
   { key: 'rot', label: 'Rotation', hint: 'Degrees about X, then Y, then Z.', text: 'rot=(x,y,z)' },
@@ -137,12 +137,12 @@ const SETTINGS: Record<string, { detail: string; params: SignatureParam[] }> = {
 /** Every word a recipe clause can start with. */
 export function recipeClauseWords(): Completion[] {
   const out: Completion[] = [];
-  for (const s of SCENE_SHAPES) out.push({ label: s.kind, insert: s.kind, kind: 'shape', detail: `${s.label}: ${s.blurb}`, signature: `${s.kind} ${s.params.map(paramText).join(' ')} at=(x,y,z)`, words: s.aliases });
+  for (const s of SCENE_SHAPES) out.push({ label: s.kind, insert: s.kind, kind: 'shape', detail: `${s.label}: ${s.blurb}`, signature: `${s.kind} ${s.params.map(p => paramText(p, s)).join(' ')} at=(x,y,z)`, words: s.aliases });
   for (const op of OPS) out.push({ label: op, insert: `${op}(`, kind: 'combine', detail: OP_DETAIL[op], signature: `${op}(shape, shape…)${op.startsWith('smooth') ? ' k=0.3' : ''}` });
   for (const w of WARPS) {
     // D8: the noise warp is written `warp`.
     const word = w.kind === 'noise' ? 'warp' : w.kind;
-    out.push({ label: word, insert: word, kind: 'warp', detail: `${w.label}: ${w.blurb}`, signature: `${word} ${[...(w.axes ? [w.axes.def] : []), ...w.params.map(paramText)].join(' ')}`, words: [...w.aliases.filter(a => a !== word), ...(word !== w.kind ? [w.kind] : [])] });
+    out.push({ label: word, insert: word, kind: 'warp', detail: `${w.label}: ${w.blurb}`, signature: `${word} ${[...(w.axes ? [w.axes.def] : []), ...w.params.map(p => paramText(p))].join(' ')}`, words: [...w.aliases.filter(a => a !== word), ...(word !== w.kind ? [w.kind] : [])] });
   }
   for (const m of Object.keys(MODE_DETAIL)) out.push({ label: m, insert: m, kind: 'mode', detail: `render mode: ${MODE_DETAIL[m]}` });
   for (const [k, s] of Object.entries(SETTINGS)) out.push({ label: k === 'colour' ? 'colour by' : k, insert: k === 'colour' ? 'colour by ' : k, kind: k === 'output' || k === 'colour' ? 'output' : 'setting', detail: s.detail, signature: `${k} ${s.params.map(p => p.text).join(' ')}` });
@@ -155,7 +155,7 @@ export function signatureFor(head: string): Signature | null {
   const shapeKind = RECIPE_WORDS.shapes[w];
   if (shapeKind) {
     const s = SHAPE_BY_KIND[shapeKind];
-    return { head: s.kind, detail: `${s.label}: ${s.blurb}`, params: [...s.params.map(p => ({ key: p.key, label: p.label, hint: p.hint ?? `${p.label}, ${p.min} to ${p.max}${p.deg ? '°' : ''}.`, text: paramText(p) })), ...dimSignature(s), ...SHAPE_COMMON], active: -1 };
+    return { head: s.kind, detail: `${s.label}: ${s.blurb}`, params: [...s.params.map(p => ({ key: shapeParamWord(s, p.key), label: p.label, hint: p.hint ?? `${p.label}, ${p.min} to ${p.max}${p.deg ? '°' : ''}.`, text: paramText(p, s) })), ...dimSignature(s), ...SHAPE_COMMON], active: -1 };
   }
   const warpKind = RECIPE_WORDS.warps[w];
   if (warpKind) {

@@ -101,7 +101,7 @@ export function languageMarkdown(): string {
     '',
     'A shape with several dimensions has them linked: `size=0.5` sets them all; `width=`, `height=` and `depth=` set one each.',
     'A box, a box frame and an ellipsoid: the three parts of their size (`box size=0.3 height=1`); the old vector form `size=(0.3,1,0.3)` still reads.',
-    'A cylinder, a capsule and the prisms: `size` is the radius and the height together, `width=` (or `depth=`) the radius and `height=` the height.',
+    'A cylinder, a capsule and the prisms: `size` is the radius and the height together, `radius=` the radius (`width=` and `depth=` too) and `height=` the height. Cones and the pyramid write `height=` too. Recipes print `radius=` and `height=`; the old `r=` and `h=` still read.',
     'Printed recipes write `size=` when the dimensions are equal, else the ones that changed by name: `box width=0.3 height=1 depth=0.3`.',
     '',
     '## Help in the app',

@@ -244,8 +244,8 @@ function moreOf(d: Dialect, e: Entry, params: HelpParam[]): string {
     const def = SHAPE_BY_KIND[e.words[0]];
     const dims = def ? shapeDims(def) : null;
     const sz = dims?.vector ? ' Its size is linked: size=0.5 sets the width, height and depth together; width=, height= and depth= set one each.'
-      : dims ? ' size=0.5 sets its radius and height together; width= (or depth=) sets the radius, height= the height.' : '';
-    const own = params.filter(p => !['at', 'rot', 'color', 'shine', 'name', 'width', 'height', 'depth'].includes(p.key) && !(dims && !dims.vector && p.key === 'size'));
+      : dims ? ' size=0.5 sets its radius and height together; radius= sets the radius (width= and depth= too), height= the height. The old r= and h= still read.' : '';
+    const own = params.filter(p => !['at', 'rot', 'color', 'shine', 'name', 'width', 'height', 'depth'].includes(p.key) && !(dims && !dims.vector && (p.key === 'size' || p.key === 'radius')));
     return `${e.summary}${sz}${own.length ? ` Its own settings: ${own.map(p => p.key).join(', ')}.` : ''} Like every shape it takes at= (where), rot= (turned, degrees), color=, shine=, glass and name=.`;
   }
   if (d === 'scene' && e.id.startsWith('scene:warp:')) return `${e.summary} Written as its own clause it bends the whole scene; after a shape with @ (box @${e.words[0]}(…)) only that shape. Several warps apply in the order written.`;

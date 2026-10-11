@@ -13,7 +13,7 @@
  * Grid Rules, Agent Rules and pass words (lang/dialects/*). A test checks that no word means two
  * things within one dialect.
  */
-import { DIM_WORDS, SHAPES as SCENE_SHAPES, WARPS, TONE_MODES, shapeDims, type ParamDef, type ShapeDef } from '../sceneBuilder/spec';
+import { DIM_WORDS, SHAPES as SCENE_SHAPES, WARPS, TONE_MODES, shapeDims, shapeParamWord, type ParamDef, type ShapeDef } from '../sceneBuilder/spec';
 import { OUTPUTS, PALETTES } from '../sceneBuilder/output';
 import { ACTIONS, SHAPES as WORD_SHAPES } from './vocabulary';
 import { COMMAND_VERBS } from './commands';
@@ -243,6 +243,19 @@ function dimParams(s: ShapeDef): ParamSpec[] {
   }));
 }
 
+/**
+ * A shape's setting as recipes write it (spec.ts shapeParamWord): a cylinder's, capsule's, prism's or
+ * cone's `radius` and `height`, with `r` / `h` kept as aliases so old recipes read. A round shape's radius
+ * also answers to width / depth (its linked size, spec.ts shapeDims).
+ */
+function shapeWord(s: ShapeDef, p: ParamSpec): ParamSpec {
+  const word = shapeParamWord(s, p.key);
+  const d = shapeDims(s);
+  const across = d && !d.vector && p.key === 'r' ? ['width', 'depth'] : [];
+  if (word === p.key) return across.length ? { ...p, aliases: ['radius', ...across] } : p;
+  return { ...p, key: word, aliases: [p.key, ...across] };
+}
+
 /** D8: the scene's noise warp is written `warp`; `noise` is the 2D node. */
 export const SCENE_WARP_WORD: Readonly<Record<string, string>> = { noise: 'warp' };
 
@@ -259,7 +272,7 @@ function sceneEntries(): Entry[] {
     out.push({
       id: `scene:shape:${s.kind}`, kind: 'maker', dialects: ['scene'], words: [s.kind, ...s.aliases],
       params: [
-        ...s.params.map((p, i) => sceneParam(p, i === 0)).map(p => (shapeDims(s) && !shapeDims(s)!.vector && (p.key === 'r' || p.key === 'h') ? { ...p, aliases: p.key === 'r' ? ['radius', 'width', 'depth'] : ['height'] } : p)),
+        ...s.params.map((p, i) => sceneParam(p, i === 0)).map(p => shapeWord(s, p)),
         ...dimParams(s),
         { key: 'at', aliases: ['pos', 'position'], type: 'vec3', rand: { kind: 'vec', lo: -0.6, hi: 0.6, n: 3 } },
         { key: 'rot', aliases: ['rotate', 'turn'], type: 'vec3', rand: { kind: 'vec', lo: -45, hi: 45, n: 3 } },

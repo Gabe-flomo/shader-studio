@@ -30,7 +30,7 @@ export const SCENE_TEMPLATES: SceneTemplate[] = [
     blurb: 'Spheres and a capsule melted together with a smooth union, on a floor, under a warm sun and a sky gradient.',
     recipe: [
       'surface',
-      'smooth-union(sphere r=0.55 at=(0,0.05,0) color=(0.85,0.45,0.3) shine=0.4 name=Body, sphere r=0.36 at=(0.55,0.5,0.1) color=(0.9,0.7,0.35) shine=0.4 name=Head, sphere r=0.28 at=(-0.5,0.45,-0.25) color=(0.55,0.3,0.6) shine=0.4, capsule h=0.5 r=0.12 at=(0.1,-0.3,0.55) rot=(0,0,60) color=(0.85,0.45,0.3)) k=0.35 name=Sculpture',
+      'smooth-union(sphere r=0.55 at=(0,0.05,0) color=(0.85,0.45,0.3) shine=0.4 name=Body, sphere r=0.36 at=(0.55,0.5,0.1) color=(0.9,0.7,0.35) shine=0.4 name=Head, sphere r=0.28 at=(-0.5,0.45,-0.25) color=(0.55,0.3,0.6) shine=0.4, capsule height=0.5 radius=0.12 at=(0.1,-0.3,0.55) rot=(0,0,60) color=(0.85,0.45,0.3)) k=0.35 name=Sculpture',
       'plane y=-0.6 color=(0.55,0.55,0.6)',
       'sun dir=(0.7,0.8,0.3)',
       'shadows 12',
@@ -43,7 +43,7 @@ export const SCENE_TEMPLATES: SceneTemplate[] = [
     blurb: 'One pillar and capital repeated forever over a floor; fog fades the distance. Repeat costs nothing per copy.',
     recipe: [
       'surface',
-      'union(cylinder r=0.22 h=1.6 round=0.03 color=cream, box size=(0.36,0.06,0.36) round=0.02 at=(0,1.55,0) color=cream, box size=(0.36,0.06,0.36) round=0.02 at=(0,-0.95,0) color=cream) name=Pillar @repeat((2,100,2))',
+      'union(cylinder radius=0.22 height=1.6 round=0.03 color=cream, box size=(0.36,0.06,0.36) round=0.02 at=(0,1.55,0) color=cream, box size=(0.36,0.06,0.36) round=0.02 at=(0,-0.95,0) color=cream) name=Pillar @repeat((2,100,2))',
       'plane y=-1 color=(0.5,0.45,0.4)',
       'sun dir=(0.4,0.8,-0.5) color=(1,0.85,0.65)',
       'fog 0.9',
