@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.141',
+    date: '2026-10-10',
+    title: 'Recipes explain themselves',
+    highlights: [
+      { area: 'Studio', text: 'Recipes and the Do bar: rest on a word to see its help right there, and pick another mode, choice or colour from it.' },
+      { area: 'Studio', text: 'Show the words is now a guide in sections (Modes, Combine, Shapes, Warps, Settings, Camera, Colours, Output) with types and examples.' },
+      { area: 'Studio', text: 'Shapes take size= for every side at once, or width=, height= and depth= one by one. Show me how steps through a command with a render per step.' },
+    ],
+  },
+  {
     id: '2026.10.140',
     date: '2026-10-10',
     title: 'Transform any space',
