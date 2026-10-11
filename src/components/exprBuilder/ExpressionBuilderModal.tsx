@@ -47,6 +47,7 @@ import { RulerSlider } from '../ui/RulerSlider';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { renderChainRows, timePicture, type CpuPicture, type RowField } from './exprPictures';
+import { finishBuilder } from '../../builders/finish';
 
 const DEBOUNCE_MS = 250;
 /** CSS pixels of a tile's picture. */
@@ -662,7 +663,7 @@ export function ExpressionBuilderModal() {
         <BuilderNote>Add to graph makes an Expression Block: a line per step with a note, a slider per number.</BuilderNote>
         <span style={{ flex: 1 }} />
         <Button onClick={close}>Done</Button>
-        <Button variant="primary" icon="plus" data-xb-add="" disabled={!at} onClick={() => { if (addBuilderChainToGraph()) close(); }}>Add to graph</Button>
+        <Button variant="primary" icon="plus" data-xb-add="" disabled={!at} onClick={() => { const id = addBuilderChainToGraph(); if (id) finishBuilder(close, [id]); }}>Add to graph</Button>
       </>}
     >
       <div style={{ padding: '14px 16px' }}>

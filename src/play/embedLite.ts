@@ -269,16 +269,21 @@ ${LITE_BOOTSTRAP}(
 `;
 }
 
-/** A whole page around the small snippet, to host or iframe. */
+/**
+ * A whole page around the small snippet, to host or iframe: the picture fills the window behind
+ * the page. The black goes on <html> only: the snippet sits at z-index −1, and a <body> with its
+ * own background paints over negative z-index content, which left the downloaded page black.
+ * The pointer is read from the window (the background ignores pointer events), so u_mouse works.
+ */
 export function buildLitePage(input: PlayHtmlInput, options: LiteOptions): string {
-  const page = { ...options, mode: 'background' as const, placement: 'page' as const };
+  const page = { ...options, mode: 'background' as const, placement: 'page' as const, followPage: true };
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(input.title)}</title>
-<style>html,body{margin:0;height:100%;background:#000}</style>
+<style>html{height:100%;background:#000}body{margin:0;min-height:100%}</style>
 </head>
 <body>
 ${buildLiteSnippet(input, page).trim()}

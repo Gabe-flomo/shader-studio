@@ -16,6 +16,10 @@ import type { AgentBuilder as AgentBuilderT } from '../agentBuilder/AgentBuilder
 import { useExprBuilder } from '../../exprBuilder/store';
 import { watchBuilderPreview } from '../../builders/previewPriority';
 import type { SceneBuilderShell as SceneBuilderShellT } from './SceneBuilderShell';
+import { finishBuilder } from '../../builders/finish';
+
+/** The Agent Builder's Done (and close): back to the graph, framed on the group it is building. */
+const finishAgentBuilder = () => finishBuilder(closeAgentBuilder, [useBuilderWindows.getState().agentBuilder?.groupId]);
 
 const GridRulesEditor = lazyWithSuspense<PropsOf<typeof GridRulesEditorT>>(() => import('../gridRules/GridRulesEditor').then(m => ({ default: m.GridRulesEditor })));
 const AgentRulesModal = lazyWithSuspense<PropsOf<typeof AgentRulesModalT>>(() => import('../NodeGraph/AgentRulesModal').then(m => ({ default: m.AgentRulesModal })));
@@ -48,7 +52,8 @@ export function BuilderWindowsHost() {
       {gridId && gridThere && <GridRulesEditor key={gridId} nodeId={gridId} onClose={closeGridRulesEditor} />}
       {agentsId && group && isRulesGroup(group) && <AgentRulesModal key={agentsId} node={group} onClose={closeAgentRulesWindow} />}
       {exprOpen && <ExpressionBuilderModal />}
-      {builder && builderGroupOk && <AgentBuilder key="agent-builder" groupId={builder.groupId} onClose={closeAgentBuilder} onOpenGroup={openAgentBuilder} fromShell={!!builder.fromShell} />}
+      {builder && builderGroupOk && <AgentBuilder key="agent-builder" groupId={builder.groupId} onClose={finishAgentBuilder} onOpenGroup={openAgentBuilder} fromShell={!!builder.fromShell} />}
+
       {shell && <SceneBuilderShell key={`${shell.page}:${shell.note ?? ''}:${shell.keep ? 1 : 0}`} page={shell} />}
     </>
   );

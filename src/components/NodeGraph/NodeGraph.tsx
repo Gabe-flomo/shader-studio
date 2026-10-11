@@ -1124,17 +1124,22 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
   }, [pendingSocket, connectNodes]);
 
   // ── Fit to screen helper ────────────────────────────────────────────────────
-  const handleFitView = useCallback(() => {
-    if (!displayNodes.length || !canvasRef.current) return;
+  const handleFitView = useCallback((ids?: ReadonlyArray<string>) => {
+    // With ids (a builder's Done, builders/finish.ts): frame just those nodes, when any are on this level.
+    const want = ids?.length ? new Set(ids) : null;
+    const picked = want ? displayNodes.filter(n => want.has(n.id)) : displayNodes;
+    const fit = picked.length ? picked : displayNodes;
+    if (!fit.length || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const pad = 60;
-    const minX = Math.min(...displayNodes.map(n => n.position.x)) - pad;
-    const minY = Math.min(...displayNodes.map(n => n.position.y)) - pad;
-    const maxX = Math.max(...displayNodes.map(n => n.position.x + NODE_WIDTH)) + pad;
-    const maxY = Math.max(...displayNodes.map(n => n.position.y + 200)) + pad;
+    const minX = Math.min(...fit.map(n => n.position.x)) - pad;
+    const minY = Math.min(...fit.map(n => n.position.y)) - pad;
+    const maxX = Math.max(...fit.map(n => n.position.x + NODE_WIDTH)) + pad;
+    const maxY = Math.max(...fit.map(n => n.position.y + 200)) + pad;
     const cw = canvas.clientWidth;
     const ch = canvas.clientHeight;
-    const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN,
+    // Framing a few nodes stops at 100% rather than blowing one card up to fill the canvas.
+    const newZoom = Math.min(want ? Math.min(1, ZOOM_MAX) : ZOOM_MAX, Math.max(ZOOM_MIN,
       Math.min(cw / (maxX - minX), ch / (maxY - minY))
     ));
     applyView({
@@ -1168,7 +1173,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
   // stable trampoline once and keep the live callback in a ref.
   const handleFitViewRef = useRef(handleFitView);
   handleFitViewRef.current = handleFitView;
-  useEffect(() => { registerFitView(() => handleFitViewRef.current()); }, [registerFitView]);
+  useEffect(() => { registerFitView(ids => handleFitViewRef.current(ids)); }, [registerFitView]);
   useEffect(() => { registerSetView((p, z) => applyView(p, Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)), 'now')); }, [registerSetView, applyView]);
 
   useEffect(() => {
@@ -1414,7 +1419,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           zoom={zoom}
           onZoom={zoomAroundCentre}
           onResetZoom={() => applyView({ x: 0, y: 0 }, 1, 'now')}
-          onFit={handleFitView}
+          onFit={() => handleFitView()}
           onAutoLayout={() => autoLayout()}
           onArrangeByStage={() => autoLayout('stage')}
           showMinimap={showMinimap}
@@ -1477,7 +1482,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         </div>
 
         <button
-          onClick={handleFitView}
+          onClick={() => handleFitView()}
           title="Fit all nodes in view"
           style={isTouchDevice.current ? touchToolbarBtnStyle : toolbarBtnStyle}
           onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = tc.surface1)}

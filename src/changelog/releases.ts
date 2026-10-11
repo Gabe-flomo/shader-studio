@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.140',
+    date: '2026-10-10',
+    title: 'Transform any space',
+    highlights: [
+      { area: 'Studio', text: 'Transform: one node that moves, turns and scales 2D, 3D or 4D space. Place 2D is now called Transform 2D.' },
+      { area: 'Studio', text: 'SDF Fill no longer draws faint lines along grid cell edges (Pixel hearts and other cell scenes).' },
+      { area: 'Studio', text: 'Builders: Done closes the builder and zooms to what it built. Socket tooltips wrap and stay on screen, without the browser tooltip doubling them.' },
+      { area: 'Files', text: 'Fixed: small web export pages showed only black. The mouse now works in them too.' },
+    ],
+  },
+  {
     id: '2026.10.139',
     date: '2026-10-10',
     title: 'Drag the diagrams',

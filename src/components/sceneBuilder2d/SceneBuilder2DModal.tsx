@@ -38,6 +38,8 @@ import { SurpriseBar } from '../surprise/SurpriseBar';
 import { announceSurprise } from '../surprise/announce';
 import { newSeed } from '../../lib/surprise';
 import { SceneCrumb } from '../builders/SceneCrumb';
+import { finishBuilder } from '../../builders/finish';
+import { scene2dBuildIds } from '../../builders/finishScenes';
 
 const TABS: Array<{ id: Builder2DTab; label: string; icon: IconName; gapBefore?: boolean }> = [
   { id: 'space', label: 'Space', icon: 'wave' },
@@ -717,7 +719,7 @@ export function SceneBuilder2DModal() {
         <BuilderNote>{editing ? 'Rebuild replaces the scene it was built as, keeping settings you changed on its nodes.' : 'Build adds the graph to the canvas and shows it on the Output.'}</BuilderNote>
         <span style={{ flex: 1 }} />
         {dirty && <BuilderNote style={{ color: tk.text.faint }}>Not built yet</BuilderNote>}
-        <Button onClick={close}>Done</Button>
+        <Button onClick={() => finishBuilder(close, scene2dBuildIds(useSceneBuilder2D.getState().targetSceneId))}>Done</Button>
         <Button variant="primary" icon="rebuild" disabled={!shapes && !gridSize} onClick={() => buildFromBuilder2D(false)}>{editing ? 'Rebuild' : 'Build'}</Button>
       </>}
     >
