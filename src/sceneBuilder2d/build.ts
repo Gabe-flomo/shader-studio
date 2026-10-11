@@ -587,12 +587,15 @@ function emitDepthPicture(b: B, d: DepthPic2D, screen: Ref, pos: Ref): DepthPicR
   const { c } = b;
   const t = texFor(b, d.tex, 'The picture with depth');
   if (!t) return null;
-  const pic = samplePicture(b, 'depth:pic', newTexUse(t.src.name, { fit: d.fit }), t.src, t.out, screen, SCREEN_EXT, 'the picture with depth');
+  // Stretch reads the picture at the screen's own point (no fit needed); Fill and Fit go through a Picture fit.
+  const pic = d.fit === 'stretch'
+    ? { color: ref(mk(c, 'sampleTexture', 'depth:pic:sample', {}, { texture: t.out, uv: screen }, `Reads the picture “${t.src.name}” stretched over the whole frame: its colour at this pixel.`), 'color'), place: null as Ref | null }
+    : samplePicture(b, 'depth:pic', newTexUse(t.src.name, { fit: d.fit }), t.src, t.out, screen, SCREEN_EXT, 'the picture with depth');
   const baked = !!d.bake;
   const dn = mk(c, 'depth', 'depth', baked ? { update: 'baked', depthBake: structuredClone(d.bake) } : {}, { texture: t.out, uv: pic.place },
     `Depth: how far each part of “${t.src.name}” is (0 far, 1 near), worked out on this device by a small model. `
       + (baked ? 'Generate depth ran it once in the 2D Scene Builder and kept the result as an image beside the picture (Update: Baked), so it is ready at once and goes into exported pages. ' : 'It runs live once the model is downloaded (the card offers it); Bake depth on the card keeps it, smooth and ready for exported pages. ')
-      + 'Its UV is wired from the picture\'s fit, so the depth lines up with the picture whatever its shape.');
+      + (pic.place ? 'Its UV is wired from the picture\'s fit, so the depth lines up with the picture whatever its shape.' : 'It reads this pixel, as the stretched picture does.'));
   let shapes: GraphNode | null = null;
   if (d.size.on || d.space.on) {
     const what = [d.size.on ? `Scale (${fmt(d.size.far)} far … ${fmt(d.size.near)} near) grows every layer through its Transform's Grow` : '', d.space.on ? `Depth UV (${DEPTH_SPACE_LABELS[d.space.style].label.toLowerCase()}, amount ${fmt(d.space.amount)}) is the point every shape is measured from` : ''].filter(Boolean).join('; ');
