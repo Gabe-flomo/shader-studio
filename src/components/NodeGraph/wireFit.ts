@@ -46,6 +46,16 @@ export function socketsAs(type: string, inputs: Sockets, outputs: Sockets, vt: s
   return { inputs: ins, outputs: outs };
 }
 
+/**
+ * The inputs a wire may go into without being asked: not a slider's own socket while it is hidden
+ * (`socketsOnDemand`, the wireable sliders), or every node with a colour slider would fit a vec3 wire.
+ */
+export function visibleInputs(def: Pick<NodeDefinition, 'socketsOnDemand'> | null | undefined, inputs: Sockets, shown: readonly string[] = []): Sockets {
+  const hidden = def?.socketsOnDemand;
+  if (!hidden) return inputs;
+  return Object.fromEntries(Object.entries(inputs).filter(([k]) => !(k in hidden) || shown.includes(k)));
+}
+
 /** The offering rule: same type, or a float broadcast into a vector. (Wires themselves allow more; see typesCompatible.) */
 export function offerFits(from: string, to: string): boolean {
   return from === to || (from === 'float' && typesCompatible(from, to));
@@ -56,7 +66,7 @@ export function fitsWireInsert(def: NodeDefinition, fromType: string, toType: st
   if (DYNAMIC_SOCKET_TYPES.has(def.type)) return true;
   const vt = genTypeFor(def.type, fromType);
   const { inputs, outputs } = vt ? socketsAs(def.type, def.inputs, def.outputs, vt) : def;
-  return Object.values(inputs).some(i => offerFits(fromType, i.type))
+  return Object.values(visibleInputs(def, inputs)).some(i => offerFits(fromType, i.type))
     && Object.values(outputs).some(o => offerFits(o.type, toType));
 }
 
@@ -66,6 +76,6 @@ export function canFollow(def: NodeDefinition, outTypes: readonly string[]): boo
   return outTypes.some(t => {
     const vt = genTypeFor(def.type, t);
     const { inputs } = vt ? socketsAs(def.type, def.inputs, def.outputs, vt) : def;
-    return Object.values(inputs).some(i => offerFits(t, i.type));
+    return Object.values(visibleInputs(def, inputs)).some(i => offerFits(t, i.type));
   });
 }

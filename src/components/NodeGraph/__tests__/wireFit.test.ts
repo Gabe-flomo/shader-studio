@@ -161,6 +161,10 @@ describe('Related after a selected node', () => {
     expect(canFollow(fake('takesVec2', { p: 'vec2' }), ['vec3'])).toBe(false); // no truncate
     expect(canFollow(fake('takesTex', { t: 'sampler2D' }), ['vec3', 'float'])).toBe(false);
     expect(canFollow(def('exprNode'), ['mat2'])).toBe(true);
+    // A wireable slider's socket while hidden doesn't count (or every colour slider would fit a vec3 wire).
+    const hidden = { ...fake('hiddenColour', { amt: 'float', tint: 'vec3' }), socketsOnDemand: { tint: ['tint'] } } as NodeDefinition;
+    expect(canFollow(hidden, ['vec3'])).toBe(false);
+    expect(fitsWireInsert({ ...hidden, outputs: { o: { type: 'vec3', label: 'O' } } } as NodeDefinition, 'vec3', 'vec3')).toBe(false);
 
     const defs = [fake('takesVec3', { c: 'vec3' }), fake('takesVec2', { p: 'vec2' }), fake('takesTex', { t: 'sampler2D' })];
     const ctx = { fromType: 'light', fromLabel: 'Light', affinity: () => 0.5, recents: [] as string[] };

@@ -19,7 +19,8 @@ import { getActiveNodes, undoManager, useNodeGraphStore } from '../../store/useN
 import { closeRecipeOffer } from '../../store/recipeOfferStore';
 import { typesCompatible } from '../../lib/typesCompatible';
 import { VECTORIZABLE_NODES } from '../../nodes/definitions/math';
-import { DYNAMIC_SOCKET_TYPES, genTypeFor, socketsAs } from './wireFit';
+import { DYNAMIC_SOCKET_TYPES, genTypeFor, socketsAs, visibleInputs } from './wireFit';
+import { shownSockets } from '../../lib/socketsOnDemand';
 import type { GraphNode } from '../../types/nodeGraph';
 import type { EdgeInfo } from './WireLayer';
 
@@ -124,7 +125,7 @@ export function typeFitsWire(type: string | undefined, edge: EdgeInfo): boolean 
   if (!def) return false;
   const vt = genTypeFor(t, edge.fromType);
   const { inputs, outputs } = vt ? socketsAs(t, def.inputs, def.outputs, vt) : def;
-  return pickInsertSockets(inputs, outputs, edge.fromType, edge.toType) !== null;
+  return pickInsertSockets(visibleInputs(def, inputs), outputs, edge.fromType, edge.toType) !== null;
 }
 
 /**
@@ -145,12 +146,12 @@ export function insertIntoWire(id: string, edge: EdgeInfo): boolean {
   if (vt && node.params.outputType !== vt) {
     const info = VECTORIZABLE_NODES[node.type];
     const as = socketsAs(node.type, node.inputs, node.outputs, vt);
-    if (!pickInsertSockets(as.inputs, as.outputs, edge.fromType, edge.toType)) return false;
+    if (!pickInsertSockets(visibleInputs(getNodeDefinitionFor(node), as.inputs, shownSockets(node)), as.outputs, edge.fromType, edge.toType)) return false;
     useNodeGraphStore.getState().changeNodeVectorType(id, info.primaryInput, info.primaryOutput, vt);
     node = levelNow().find(n => n.id === id);
     if (!node) return false;
   }
-  const pick = pickInsertSockets(node.inputs, node.outputs, edge.fromType, edge.toType);
+  const pick = pickInsertSockets(visibleInputs(getNodeDefinitionFor(node), node.inputs, shownSockets(node)), node.outputs, edge.fromType, edge.toType);
   if (!pick) return false;
   const st = useNodeGraphStore.getState();
   st.connectNodes(edge.fromNodeId, edge.fromOutputKey, id, pick.inKey);
