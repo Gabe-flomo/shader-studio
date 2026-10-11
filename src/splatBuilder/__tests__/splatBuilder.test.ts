@@ -16,6 +16,7 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { undoManager, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { splatModifierChain } from '../../nodes/recipes/splatModifierRecipes';
 import { fitParams } from '../../lib/splats/fit';
+import { applyModel, modelMatrix } from '../../lib/splats/math';
 import { SP_META, buildSplatStandalone, splatMetaOf } from '../build';
 import { applySplatScene, findSplatBuild, paramDiff, splatSceneOfBuild } from '../apply';
 import { SPLAT_TEMPLATES, splatTemplate, withTemplate } from '../templates';
@@ -340,8 +341,10 @@ describe('the kind page and Place', () => {
     const fit = fitPlace(place, box);
     const card = fitParams({ id: 'x', type: 'splatScene', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { rotation: place.rotation, up: 'minusY' } }, box.center, box.radius);
     expect(fit.scale).toBe(card.scale);
-    fit.position.forEach((v, i) => expect(v).toBeCloseTo(card.position[i], 2));
+    // The builder turns about the file's origin (pivot 'origin', build.ts) and moves Position to keep the middle;
+    // the card turns about the middle. Either way the middle lands at the centre.
     scanCenter(fit, box).forEach(v => expect(v).toBeCloseTo(0, 2));
+    applyModel(modelMatrix({ position: card.position, rotation: place.rotation, scale: card.scale, flip: true, pivot: box.center }), box.center).forEach(v => expect(v).toBeCloseTo(0, 2));
   });
 
   it('Centre, turns and sizes keep the middle; Stand on the floor puts its bottom on it', () => {

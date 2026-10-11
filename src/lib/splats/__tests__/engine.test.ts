@@ -71,7 +71,10 @@ describe('splat engine', () => {
     const center: [number, number, number] = [3, -2, 7];
     const fit = fitParams(node, center, 6);
     expect(fit.scale).toBeCloseTo(0.25, 3);
-    const m = modelMatrix({ position: fit.position, rotation: [0, 45, 0], scale: fit.scale, flip: true });
+    // It turns about its middle from now on, so Position is where the middle sits: the centre.
+    expect(fit.pivot).toBe('middle');
+    expect(fit.position).toEqual([0, 0, 0]);
+    const m = modelMatrix({ position: fit.position, rotation: [0, 45, 0], scale: fit.scale, flip: true, pivot: center });
     applyModel(m, center).forEach(v => expect(Math.abs(v)).toBeLessThan(2e-3));
   });
 

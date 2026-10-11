@@ -47,6 +47,8 @@ export function SplatSceneCardBody({ node }: { node: GraphNode }) {
   const warn = { ...line, color: tk.status.warning } as const;
   const has = !!splatFileOf(node) || (DEMO_KINDS as readonly unknown[]).includes(node.params.demo);
   const [addingMod, setAddingMod] = useState(false);
+  /** The file a pick asked to fit once it is read (the library's id), and whether its reading has begun. */
+  const fitWhenRead = useRef<{ id: string; reading: boolean } | null>(null);
   // The modifier chain's names, scan first (only re-rendered when the chain's types change).
   const chain = useNodeGraphStore(s => splatModifierChain(s.nodes, node.id).map(x => (typeof x.params.label === 'string' && x.params.label) || getNodeDefinition(x.type)?.label || x.type).join(' ← '));
 
@@ -65,6 +67,7 @@ export function SplatSceneCardBody({ node }: { node: GraphNode }) {
     setBusy(true);
     try {
       const meta = await addSplatFile(file);
+      fitWhenRead.current = { id: meta.id, reading: false };
       updateNodeParams(node.id, { videoId: meta.id, fileName: meta.name, bytes: meta.bytes });
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
@@ -114,6 +117,18 @@ export function SplatSceneCardBody({ node }: { node: GraphNode }) {
     updateNodeParams(node.id, fitParams(node, info.center, info.radius));
   };
 
+  // A scan picked here (dropped, loaded or from the library) is fitted once it is read, so it shows whole.
+  const fileId = splatFileOf(node);
+  useEffect(() => {
+    const want = fitWhenRead.current;
+    if (!want || want.id !== fileId) return;
+    // The status still 'ready' from the scan before is not this one: wait for this one's reading to begin and end.
+    if (status.state !== 'ready') { want.reading = true; return; }
+    if (!want.reading || !info) return;
+    fitWhenRead.current = null;
+    updateNodeParams(node.id, fitParams(node, info.center, info.radius));
+  }, [status.state, info, fileId, node, updateNodeParams]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 12px 8px' }} onMouseDown={e => e.stopPropagation()}>
       <div
@@ -140,7 +155,7 @@ export function SplatSceneCardBody({ node }: { node: GraphNode }) {
         <Button size="sm" onClick={() => fileRef.current?.click()} disabled={busy}>{has ? 'Replace…' : 'Load…'}</Button>
         <Button size="sm" variant="ghost" onClick={() => setPicking(p => !p)} title="A scan already in the library (or the workspace folder)">From the library</Button>
         {loopThere && <Button size="sm" onClick={addToScene} title="Wire it to the March Loop: the same camera, and the scene put together by distance, on the Output">Add to scene</Button>}
-        {info && <Button size="sm" variant="ghost" onClick={fit} title="Set Position and Scale so the scan sits at the scene's centre, about 3 units across">Fit to the scene</Button>}
+        {info && <Button size="sm" variant="ghost" onClick={fit} title="Its middle at the scene's centre, about 3 units across, turning about its middle">Fit to the scene</Button>}
         <Button size="sm" variant="ghost" onClick={() => setAddingMod(a => !a)} title="Change every splat with nodes: dissolve, explode, wave, colour, crop, size, points, or your own chain" data-splat-add-modifier>Add a modifier</Button>
       </div>
       {addingMod && (
@@ -160,7 +175,7 @@ export function SplatSceneCardBody({ node }: { node: GraphNode }) {
           {library === null ? <span style={line}>Looking…</span>
             : library.length === 0 ? <span style={line}>No scans in the library yet.</span>
             : library.map(v => (
-              <button key={v.id} type="button" onClick={() => { updateNodeParams(node.id, { videoId: v.id, fileName: v.name, bytes: v.bytes }); setPicking(false); }}
+              <button key={v.id} type="button" onClick={() => { fitWhenRead.current = { id: v.id, reading: false }; updateNodeParams(node.id, { videoId: v.id, fileName: v.name, bytes: v.bytes }); setPicking(false); }}
                 style={{ all: 'unset', cursor: 'pointer', display: 'flex', gap: 8, alignItems: 'center', fontSize: 11.5, color: v.id === splatFileOf(node) ? tk.accent.base : tk.text.primary }}>
                 {v.thumb ? <img src={v.thumb} alt="" style={{ width: 48, height: 27, objectFit: 'cover', borderRadius: 3 }} /> : <span style={{ width: 48, height: 27, borderRadius: 3, background: tk.bg.field, display: 'inline-block' }} />}
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.name}</span>

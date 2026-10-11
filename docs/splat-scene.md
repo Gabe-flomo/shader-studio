@@ -68,13 +68,24 @@ has **Add a splat scan** (the sparkle icon), which adds a Splat Scene wired the 
 ## Settings
 
 - **Place:** Position, Rotation (degrees, X then Y then Z: the Transform node's order), Scale, and **Up is**: most scans
-  have y pointing down (3DGS, COLMAP), so −Y turns them over; +Y leaves them as they are. **Fit to the scene** sets
-  Position and Scale so the scan's middle (its box without the farthest 1 % each way) sits at the centre, about 3
-  units across. Position, Rotation and Scale are live uniforms: dragging them, Play mappings and keyframes never recompile.
+  have y pointing down (3DGS, COLMAP), so −Y turns them over; +Y leaves them as they are. The scan turns and scales
+  **about its middle** (its box without the farthest 1 % each way), and Position is where that middle sits, so a
+  Rotation wired to Time spins it in place. **Fit to the scene** sets Position to the centre and Scale to about 3 units
+  across; a scan picked on the card (dropped, Load…, From the library) is fitted once it is read. Position, Rotation
+  and Scale are live uniforms: dragging them, Play mappings and keyframes never recompile.
+  - *Graphs saved before* (schema version 1) turn about the file's own origin, as they did (`pivot: 'origin'`); a scan
+    whose origin is metres from its middle swung out of the picture as it turned (the "rotating cuts the scan off"
+    report). **Fit to the scene** moves such a node over to turning about its middle. The Splat builder keeps
+    `pivot: 'origin'`: its Place maths (`place.ts`) keep the middle in place themselves.
+  - How: the probe writes the offset as Position − M · middle (`SPLAT_PIVOT_UNIFORM`, the scan's middle in its own
+    coordinates, which the engine sets from the loaded file before each probe draws), so the splat shader, the
+    modifier program and the sort all see the same placement.
 - **Look:** Splat size (scales every Gaussian), Opacity.
 - **Quality:** Max splats (100 k – 4 M), Sort (when the camera moves, or every frame), SH degree (0 flat colour … 3),
   Resolution (full, or half: a quarter of the pixels to fill).
-- **Compositing:** Edge softness (how gently the scene and the splats cross, in scene units), Solid at.
+- **Compositing:** Edge softness (how gently the scene and the splats cross, in scene units), Solid at. They only act
+  with a Scene wired: without one the card dims the section and says "Add a world to blend the scan with it."
+  (`NodeDefinition.sectionNeeds`).
 
 ## How it draws
 
@@ -89,7 +100,8 @@ A raster pass before the picture (`lib/splats/engine.ts`, `render.ts`, `shaders.
    floats; harmonics as bytes in a second texture). The vertex shader rebuilds the camera from the probe (forward is the
    centre ray; right / up and the lens come from how far the side rays lean), places the covariance in the world
    (M Σ Mᵀ), and projects it with the EWA Jacobian (Kerbl et al. 2023): Σ₂ = J W Σ Wᵀ Jᵀ + 0.3 px². The quad spans
-   √(2λ) along the ellipse's axes, and the fragment weighs exp(−|v|²), alpha capped at 0.99, as 3DGS does. With SH
+   √(2λ) along the ellipse's axes, and the fragment weighs exp(−|v|²), alpha capped at 0.99, as 3DGS does. A splat is culled only when its whole quad is off the picture (`math.ts splatOffscreen`); it
+   used to be culled by its centre past 1.3 × the picture's half-size, which clipped big splats at the edges. With SH
    degree > 0, the view-dependent colour is added from the view direction in the scan's own space.
 3. **Back to front.** The worker sorts by depth along the view direction (in the scan's own space, Mᵀ · forward) with a
    counting sort on 16-bit keys. The engine reads the probe back without waiting (a pixel-pack buffer and a fence) and

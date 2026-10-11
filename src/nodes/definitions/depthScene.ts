@@ -135,7 +135,7 @@ export const DepthLightNode: NodeDefinition = withParamSockets({
   defaultParams: { nearD: 1.5, farD: 8, lightPos: [0.6, 0.4, 2.0], lightColor: [1.0, 0.35, 0.2], intensity: 2, range: 1.5, wrap: 0.2, own: 1, glowColor: [0.4, 0.7, 1.0], glowIntensity: 2, glowReach: 0.6, shadowSoftness: 12, lightRadius: 0.05 },
   paramDefs: {
     ...calibrationParams,
-    lightPos: { label: 'Light position', type: 'vec3', min: -10, max: 10, step: 0.01, hint: 'Where the light is in the scene (x right, y up, z away from a default camera).' },
+    lightPos: { label: 'Light position', type: 'vec3', axes: 'xyz', min: -10, max: 10, step: 0.01, hint: 'Where the light is in the scene (x right, y up, z away from a default camera).' },
     lightColor: { label: 'Light colour', type: 'vec3color', hint: 'The light\'s colour.' },
     intensity: { label: 'Intensity', type: 'float', min: 0, max: 20, step: 0.01, hint: 'How bright the light is.' },
     range: { label: 'Reach', type: 'float', min: 0.05, max: 20, step: 0.01, hint: 'How far it reaches: at this distance it has fallen to a quarter.' },
