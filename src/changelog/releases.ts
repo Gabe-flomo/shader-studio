@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.156',
+    date: '2026-10-11',
+    title: 'Splat builder',
+    highlights: [
+      { area: 'Studio', text: 'Splat builder: a Splat scene kind in the Scene builder. Load a scan, place it with handles, stack effects as cards, add a world, camera and turntable.' },
+      { area: 'Studio', text: 'Splat builder templates: Turntable, Dissolve reveal, Exploded view, Hologram, Scan in a scene, Cut reveal. Plus Surprise me and Edit this one.' },
+      { area: 'Studio', text: 'Fixed: an effect added to a scan already on screen ran with all its settings at 0 until the shader rebuilt.' },
+    ],
+  },
+  {
     id: '2026.10.155',
     date: '2026-10-11',
     title: 'Pictures in pieces',
