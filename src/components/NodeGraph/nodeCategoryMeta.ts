@@ -4,26 +4,32 @@ import { ctp } from '../../theme/palette';
 // boundary warns when a component file also exports plain constants).
 
 // ── Category accent colours (matches NodePalette) ─────────────────────────────
-export const CATEGORY_COLORS: Record<string, string> = {
-  Sources:         ctp.blue,
-  Transforms:      ctp.green,
-  Math:            ctp.lavender,
-  Color:           ctp.peach,
-  Noise:           ctp.sapphire,
-  Effects:         ctp.red,
-  Passes:          ctp.maroon,
-  Simulation:      ctp.green,
-  Loops:           ctp.sky,
-  '2D Primitives': ctp.yellow,
-  SDF:             ctp.pink,
-  '2D Space':      ctp.flamingo,
-  Combiners:       ctp.mauve,
-  Spaces:          ctp.flamingo,
-  Science:         ctp.teal,
-  'Group Presets': ctp.yellow,
-  'My Nodes':      ctp.sky,
-  Output:          ctp.teal,
+// Kept as Catppuccin roles so a theme-aware palette (theme/nodePalette.ts useCtp) can resolve them:
+// Mocha on dark, Latte on light. CATEGORY_COLORS is the dark set, for render surfaces.
+export const CATEGORY_ROLES: Record<string, keyof typeof ctp> = {
+  Sources:         'blue',
+  Transforms:      'green',
+  Math:            'lavender',
+  Color:           'peach',
+  Noise:           'sapphire',
+  Effects:         'red',
+  Passes:          'maroon',
+  Simulation:      'green',
+  Loops:           'sky',
+  '2D Primitives': 'yellow',
+  SDF:             'pink',
+  '2D Space':      'flamingo',
+  Combiners:       'mauve',
+  Spaces:          'flamingo',
+  Science:         'teal',
+  'Group Presets': 'yellow',
+  'My Nodes':      'sky',
+  Output:          'teal',
 };
+
+export const CATEGORY_COLORS: Record<string, string> = Object.fromEntries(
+  Object.entries(CATEGORY_ROLES).map(([cat, role]) => [cat, ctp[role]]),
+);
 
 // ── Types to hide from node listings (internal / special) ─────────────────────
 export const HIDDEN_TYPES = new Set(['group', 'forwardCamera', 'marchPos', 'marchDist', 'marchOutput', 'scenePos', 'sceneOutput', 'spaceWarpGroup', 'passOutput', 'blurStage', 'gridRulesStep', 'curveTraceBeamStep', 'baked', 'agentInputs', 'agentOutput', 'agentStepOut', 'trailStepOut', 'agentProbeOut', 'splatProbeOut', 'agentGridOut',

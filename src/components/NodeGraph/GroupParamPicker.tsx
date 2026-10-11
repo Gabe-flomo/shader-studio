@@ -17,7 +17,8 @@ import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import type { GraphNode } from '../../types/nodeGraph';
-import { ctp } from '../../theme/palette';
+import { useCtp } from '../../theme/nodePalette';
+import { useTokens } from '../../theme/themeStore';
 
 interface Props {
   /** The group node whose params we are editing */
@@ -31,6 +32,7 @@ const SKIP_TYPES = new Set(['output', 'vec4Output', 'uv', 'pixelUV', 'time', 'mo
 
 /** An inner node's name in the picker: click to open the group centred on that node */
 function NodeHeading({ label, onGo }: { label: string; onGo: () => void }) {
+  const ctp = useCtp();
   return (
     <button
       type="button"
@@ -47,6 +49,9 @@ function NodeHeading({ label, onGo }: { label: string; onGo: () => void }) {
 }
 
 export function GroupParamPicker({ outerNode, onClose }: Props) {
+  // Follows the app's light/dark setting (it used to be dark in both).
+  const ctp = useCtp();
+  const tk = useTokens();
   const revealNode = useNodeGraphStore(s => s.revealNode);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const subgraph = outerNode.params.subgraph as SubgraphData | undefined;
@@ -123,7 +128,7 @@ export function GroupParamPicker({ outerNode, onClose }: Props) {
           borderRadius: '6px',
           minWidth: '220px',
           maxWidth: '280px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+          boxShadow: tk.shadow.popover,
           padding: '8px 0 6px',
           fontSize: '11px',
           color: ctp.text,
