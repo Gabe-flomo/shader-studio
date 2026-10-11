@@ -16,7 +16,8 @@ import { agentPinnedRows } from '../../nodes/agentPins';
 import { RulerSlider } from '../ui/RulerSlider';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { extendRangePatch } from '../../nodes/sliderRange';
-import { PARAM_LIST_TYPES } from '../../lib/nodePreview/previewPlan';
+import { PARAM_LIST_TYPES, previewTypeOf } from '../../lib/nodePreview/previewPlan';
+import { TransformNode, transformSectionSummary } from '../../nodes/definitions/transformAny';
 import { agentGroups } from '../../lib/agentReadings';
 import { AgentRulesCardButtons, AgentRulesCardLink } from './AgentRulesCard';
 import { RecipeChip } from '../builders/RecipeChip';
@@ -1878,6 +1879,28 @@ export function SubgraphMiniViz({ node }: { node: GraphNode }) {
 // ─── Viz — 3D SDF param grid (sphereSDF3D, boxSDF3D, etc.) ───────────────────
 
 const SDF_SKIP_PARAMS = new Set(['_bands', 'mode', 'preset', 'subgraph', 'surfacedParams']);
+
+/** A 3D or 4D Transform's settings in three lines (the rest of its many params are for other dimensions). */
+function TransformSettingsViz({ node }: { node: GraphNode }) {
+  const p = { ...TransformNode.defaultParams, ...node.params };
+  const axes = String(p.dim) === '4' ? ['x', 'y', 'z', 'w'] : ['x', 'y', 'z'];
+  const n = (v: unknown) => (typeof v === 'number' ? Math.round(v * 1000) / 1000 : String(v));
+  const rows: Array<[string, string]> = [
+    [p.mode === 'space' ? 'Apply' : 'Move', `(${axes.map(a => n(p[a])).join(', ')})`],
+    ['Rotate', transformSectionSummary('Rotate', p)?.replace(/^(Rotate|Turn) /, '') ?? ''],
+    ['Scale', transformSectionSummary('Scale', p)?.replace(/^Scale /, '') ?? ''],
+  ];
+  return (
+    <div style={{ ...vizContainer(), padding: '5px 8px 6px', display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '2px 8px' }}>
+      {rows.map(([k, v]) => (
+        <React.Fragment key={k}>
+          <span style={{ fontSize: '8px', color: pal.overlay0, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{k}</span>
+          <span style={{ fontSize: '9px', color: pal.text, fontFamily: MONO, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
 
 export function SDF3DParamViz({ node }: { node: GraphNode }) {
   const entries = Object.entries(node.params).filter(([k]) => !SDF_SKIP_PARAMS.has(k));
@@ -5013,9 +5036,13 @@ export function NodeInlineViz({ node, onEnterGroup }: { node: GraphNode; onEnter
 }
 
 function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?: (groupId: string) => void }) {
-  // Table-driven families (2D spaces, falloff curves, echo…) live in vizGeneric.tsx
-  if (GENERIC_VIZ_TYPES.has(node.type)) return <GenericViz node={node} />;
-  switch (node.type) {
+  // Table-driven families (2D spaces, falloff curves, echo…) live in vizGeneric.tsx. A Transform's card
+  // follows its Dimension (previewTypeOf): 2D is a space diagram, 3D / 4D list Move, Rotate and Scale.
+  const vt = previewTypeOf(node);
+  if (GENERIC_VIZ_TYPES.has(vt)) return <GenericViz node={node} />;
+  switch (vt) {
+    case 'transform3D':
+    case 'transform4D':    return <TransformSettingsViz   node={node} />;
     case 'toneMap':        return <ToneCurveViz          node={node} />;
     case 'palette':
     case 'gradient':       return <GradientStripViz      node={node} />;
@@ -5358,8 +5385,8 @@ export const INLINE_VIZ_TYPES = new Set<string>([
   'roundedBoxSDF3D', 'boxFrameSDF3D', 'ellipsoidSDF3D', 'cappedTorusSDF3D',
   'linkSDF3D', 'pyramidSDF3D', 'hexPrismSDF3D', 'triPrismSDF3D',
   'cappedConeSDF3D', 'roundedCylinderSDF3D', 'solidAngleSDF3D', 'verticalCapsuleSDF3D',
-  // 3D transforms
-  'translate3D', 'rotate3D', 'repeat3D', 'twist3D', 'fold3D',
+  // 3D transforms (a Transform's preview type follows its Dimension: previewTypeOf)
+  'translate3D', 'rotate3D', 'repeat3D', 'twist3D', 'fold3D', 'transform', 'transform3D', 'transform4D',
   'scale3d', 'rotateAxis3D', 'sinWarp3D', 'bend3D', 'limitedRepeat3D', 'polarRepeat3D', 'displace3D', 'voxelize',
   // 3D boolean ops
   'sdfOnion',

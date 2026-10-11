@@ -55,6 +55,22 @@ const SPACE_MAPS: Record<string, SpaceMap> = {
     return [px + c * ux + sn * uy - num(n, 'moveX', 0) * 2 / 720, py - sn * ux + c * uy - num(n, 'moveY', 0) * 2 / 720];
   },
   rotate2d: (p, n) => rot(p, num(n, 'angle', 0)),
+  // Transform in 2D (transformAny.ts): Place moves, turns back and divides; Apply scales, turns about the pivot, moves.
+  // The card only draws this for a 2D Transform (previewTypeOf); 3D and 4D ones list their settings.
+  transform: ([x, y], n) => {
+    const s = Math.max(num(n, 'scale', 1), 1e-4);
+    const st = n.params.stretch === true || n.params.stretch === 'true';
+    const k: Vec2 = [s * (st ? Math.max(num(n, 'sx', 1), 1e-4) : 1), s * (st ? Math.max(num(n, 'sy', 1), 1e-4) : 1)];
+    const a = num(n, 'rotate', 0) * Math.PI / 180;
+    const mx = num(n, 'x', 0), my = num(n, 'y', 0);
+    if (n.params.mode === 'space') {
+      const px = num(n, 'px', 0), py = num(n, 'py', 0);
+      const [tx, ty] = rot([(x - px) * k[0], (y - py) * k[1]], a);
+      return [tx + px + mx, ty + py + my];
+    }
+    const [qx, qy] = rot([x - mx, y - my], -a);
+    return [qx / k[0], qy / k[1]];
+  },
   uvTransform2d: ([x, y], n) => {
     const px = num(n, 'pivotX', 0), py = num(n, 'pivotY', 0), sx = num(n, 'sx', 1), sy = num(n, 'sy', 1), a = num(n, 'angle', 0);
     const c = Math.cos(a), s = Math.sin(a);

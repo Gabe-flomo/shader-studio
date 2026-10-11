@@ -294,12 +294,19 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     if (sig === 'cos,sin,-sin,cos') return { angle: t[0]!.angle, dir: 1 };
     return null;
   }
-  /** v turned by the rotation (`sign` 1 for m * v, -1 for v * m, which is the transpose): a Rotate 2D node. */
+  /**
+   * v turned by the rotation (`sign` 1 for m * v, -1 for v * m, which is the transpose): a Transform in
+   * 2D, Apply mode (it turns the point itself, as rotate() does; docs/transform-node.md). A number angle
+   * is its Rotate slider (in degrees); a computed one is wired into Turn (radians), exactly as written.
+   */
   function rotate2d(v: Val, rot: NonNullable<Val['rot']>, sign: 1 | -1): Val {
     const a = rot.angle;
     const angle: Val = sign * rot.dir === 1 ? a : anon(a) ? { lit: -a.lit, type: 'float', ast: a.ast } : typed('negate', {}, { input: asRef(a) }, 'output', 'float');
-    if (anon(angle)) report.stats.sliders++;
-    return { ref: ref(mk('rotate2d', {}, { input: asRef(v), angle: asRef(angle) }), 'output', 'vec2'), type: 'vec2', ast: { type: 'made' } };
+    if (anon(angle)) {
+      report.stats.sliders++;
+      return { ref: ref(mk('transform', { dim: '2', mode: 'space', rotate: angle.lit * 180 / Math.PI }, { p: asRef(v) }), 'p', 'vec2'), type: 'vec2', ast: { type: 'made' } };
+    }
+    return { ref: ref(mk('transform', { dim: '2', mode: 'space' }, { p: asRef(v), turn: asRef(angle) }), 'p', 'vec2'), type: 'vec2', ast: { type: 'made' } };
   }
   /**
    * A helper that does nothing but build a rotation from its one float parameter: -1 or 1 as in

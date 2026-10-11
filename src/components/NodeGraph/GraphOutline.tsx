@@ -11,6 +11,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
+import { nodeCategory } from '../../nodes/nodeCategory';
 import { topologicalSort } from '../../compiler/topoSort';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
@@ -204,7 +205,7 @@ export function GraphOutline({ nodes, top, onClose }: { nodes: readonly GraphNod
               <span style={{ width: 20, textAlign: 'right', font: `500 10.5px ${fontFamily.mono}`, color: tk.text.faint, flexShrink: 0 }}>
                 {isOut ? '=' : stepNo + 1}
               </span>
-              <span style={{ width: 8, height: 8, borderRadius: isGroup ? 2 : '50%', flexShrink: 0, background: categoryColor(def?.category ?? 'Utility', mode) }} />
+              <span style={{ width: 8, height: 8, borderRadius: isGroup ? 2 : '50%', flexShrink: 0, background: categoryColor(nodeCategory(n) ?? def?.category ?? 'Utility', mode) }} />
               <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelOf(n)}</span>
               {isGroup && <Icon name="chevR" size={13} style={{ color: tk.text.faint }} />}
             </button>

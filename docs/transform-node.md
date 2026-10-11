@@ -21,6 +21,14 @@ Translate / Rotate / Scale 4D) stay in the library and in saved graphs, unchange
 
 Folded sections remember their state per card for the session, like every sectioned card.
 
+The card follows its Dimension (`previewTypeOf`, `nodeCategory`):
+
+- **Colour**: a 2D / 3D / 4D chip on the header in its category colour (2D Space flamingo, 3D Transforms
+  pink, 4D violet). The graph outline and the graph stats count it in that category too.
+- **Preview**: in 2D the checkerboard diagram of the 2D space nodes (what any pattern looks like through it,
+  Place or Apply); in 3D and 4D a short Move / Rotate / Scale list, as the 3D transforms have. Inside a Scene
+  Group it previews like Translate 3D does there.
+
 ## Sockets
 
 | In | | Out | |
@@ -52,6 +60,29 @@ Each row is checked in `src/nodes/__tests__/transformParity.test.ts` (the GLSL o
 Not covered, and still the node for the job: **Rotate Axis 3D** (a turn about any axis, axis-angle) and
 **Transform Vec** (an expression per component).
 
+## Switch to Transform
+
+Every old transform card has a **Transform** pill (beside Switch). It replaces the node in place with the
+Transform above (`src/nodes/toTransform.ts`), as one undo step: the same id, its wires (a wired Translate /
+Angle / Scale goes to Offset / Turn / Grow), its settings (renamed: tx → Move X; converted: an angle in
+radians → degrees), keyframes and input expressions with their setting, Play controls retargeted, and the
+Scene Group card's overrides renamed. Right-click the pill to switch every old transform node in the graph
+(groups included); the ones that can't switch are left, and the message says why.
+
+The pill is greyed out, with the reason on hover, when the switch would change the picture:
+
+- a setting wired that a Transform has no socket for: Translate's X / Y / Z wired one by one, UV Transform
+  2D's vec2 Scale, Rotate 3D's Angle (Transform's Turn is all three axes), Rotate 4D's Angle (degrees; Turn
+  is radians);
+- an angle in radians that is keyframed, on a Play control or set from the group's card (its values would
+  need converting too);
+- Rotate 2D with nothing in its Input (it turns the point (0, 0); a Transform reads the UV).
+
+`src/nodes/__tests__/toTransform.test.ts` runs each type before and after on the CPU: Transform 2D,
+Translate 3D / 4D, Rotate 4D, Scale 3D / 4D and Rotate 2D with a wired angle give exactly the same numbers;
+the ones whose angle changes from radians to degrees (UV Transform 2D, Rotate 2D's slider, Rotate 3D) agree
+to float rounding (1e-7).
+
 ## Where it comes from
 
 - **Browser**: listed first in 2D Space › Basic, 3D Transforms › Move (added as 3D) and 4D Space (added as 4D).
@@ -68,3 +99,9 @@ Not covered, and still the node for the job: **Rotate Axis 3D** (a turn about an
   Builder writes a shape's place and turn as one Transform and Move / Turn / Rotate / Scale as one each (Describe
   reads both these and the older Translate / Rotate / Scale 3D graphs). A shape added beside another is moved
   aside by a Transform. The Drifting smear recipe and the Zoom / rotate suggestion use it too.
+- **Rebuilding an older 3D builder scene** (Translate / Rotate / Scale 3D): the old node and the Transform
+  that replaces it are the same item. An untouched one rebuilds without a word; a setting you changed on it
+  is carried onto the Transform under its new name and unit, and listed as kept. One that can't be carried
+  (an older Rotate whose role is now part of the shape's Transform) is listed with what to do.
+- **GLSL import**: a rotation (`mat2(c, -s, s, c) * v`, `v * m`, a `rot(a)` helper) becomes a Transform in
+  2D, Apply mode: a number angle is its Rotate (degrees), a computed one is wired into Turn.

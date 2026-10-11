@@ -48,6 +48,7 @@ import { datasetStore } from '../data/datasetStore';
 import { retypeDataNode } from '../nodes/definitions/data';
 import { retypeTransform, transformDefFor, transformDim } from '../nodes/definitions/transformAny';
 import { addScopeOf, transformDimHere } from '../nodes/addScope';
+import { switchToTransformIn } from '../nodes/toTransform';
 import { migratePlayRecord } from './migratePlay';
 import { clearLegacyColumnsWire } from '../nodes/definitions/gridColumns';
 import { playEngine } from '../lib/playEngine';
@@ -746,6 +747,12 @@ interface NodeGraphState {
   setSwapTargetNodeId: (id: string | null) => void;
   /** Switch a node to another type in place (same id): wires mapped, settings, keyframes and Play controls kept (nodes/switchNode.ts). One undo step. */
   swapNode: (nodeId: string, newType: string) => { ok: boolean; keptWires: number } | undefined;
+  /**
+   * Replace old transform nodes (these ids, or every one in the graph) with the universal Transform that
+   * gives the same picture, as one undo step; the ones that can't switch exactly are left, with why
+   * (nodes/toTransform.ts).
+   */
+  switchToTransform: (ids: string[] | 'all') => { switched: number; skipped: Array<{ id: string; label: string; reason: string }> };
 
   // In-canvas node search palette (Shift+Space)
   searchPaletteOpen: boolean;
@@ -3354,6 +3361,21 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     if (notes.length) toast.info(title, { message: `${notes.join(' ')} Undo puts it back.` });
     else toast.success(title);
     return { ok: plan.ok, keptWires: plan.keptWires };
+  },
+
+  switchToTransform: (ids) => {
+    const st = get();
+    const want = ids === 'all' ? null : new Set(ids);
+    const r = switchToTransformIn(st.nodes, st.play, n => !want || want.has(n.id));
+    if (r.switched.length) {
+      undoManager.push(st.nodes, { label: r.switched.length === 1 ? 'Switched to Transform' : `Switched ${r.switched.length} nodes to Transform`, nodeIds: r.switched }, st.play);
+      set({ nodes: r.nodes, ...(r.play !== st.play ? { play: r.play } : {}) });
+      get().compile();
+    }
+    const skippedText = r.skipped.length ? ` ${r.skipped.length === 1 ? 'One was' : `${r.skipped.length} were`} left as they are: ${r.skipped.map(s => s.reason).filter((x, i, a) => a.indexOf(x) === i).join('; ')}.` : '';
+    if (r.switched.length) toast.success(r.switched.length === 1 ? 'Switched to Transform: same picture' : `Switched ${r.switched.length} nodes to Transform: same picture`, skippedText ? { message: `${skippedText.trim()} Undo puts them back.` } : undefined);
+    else toast.info(ids === 'all' && !r.skipped.length ? 'No old transform nodes to switch' : 'Nothing switched', { message: skippedText.trim() || 'There is nothing here a Transform would replace.' });
+    return { switched: r.switched.length, skipped: r.skipped };
   },
 
   undo: () => { get().undoSteps(1); },

@@ -26,7 +26,8 @@ const CUSTOM: Record<string, [string, string]> = {
 const BY_ACCENT: Record<string, Accent> = {
   Sources: 'blue', Transforms: 'green', Math: 'lavender', Color: 'peach', Noise: 'sapphire', Effects: 'red',
   'Post Processing': 'red', Loops: 'sky', '2D Primitives': 'yellow', Combiners: 'mauve', Spaces: 'flamingo', Grid: 'sky',
-  Field: 'sapphire', Shapers: 'yellow', Science: 'teal', Fractals: 'mauve', Output: 'overlay0', '3D Primitives': 'pink',
+  // 2D Space matches the browser's flamingo (it was falling back to grey).
+  '2D Space': 'flamingo', Field: 'sapphire', Shapers: 'yellow', Science: 'teal', Fractals: 'mauve', Output: 'overlay0', '3D Primitives': 'pink',
   '3D Transforms': 'pink', '3D Boolean Ops': 'sky', Animation: 'lavender', Conditionals: 'flamingo',
   Utility: 'overlay0', Particles: 'yellow', 'Particles & Fields': 'yellow', SDF: 'pink', 'Group Presets': 'yellow', Simulation: 'green',
   Functions: 'sky', 'Texture tools': 'flamingo',

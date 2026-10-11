@@ -111,7 +111,9 @@ import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
 import { NumberInput } from './NumberInput';
 import { ctp } from '../../theme/palette';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
-import { useTokens } from '../../theme/themeStore';
+import { useThemeMode, useTokens } from '../../theme/themeStore';
+import { categoryColor } from '../../theme/categories';
+import { nodeCategory } from '../../nodes/nodeCategory';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
@@ -144,6 +146,8 @@ import { bakedSourceName } from '../../nodes/definitions/baked';
 import { VOLUMETRIC_LOOP_TYPES } from '../../nodes/volumetricAuto';
 import { SwitchNodePicker } from './SwitchNodePicker';
 import { showsSwitchPill } from './switchPickerModel';
+import { SwitchToTransformButton } from './SwitchToTransformButton';
+import { TO_TRANSFORM_TYPES } from '../../nodes/toTransform';
 
 function adaptiveStep(value: number, baseStep: number): number {
   const abs = Math.abs(value);
@@ -421,6 +425,20 @@ interface TooltipProps {
   /** Keep the tooltip while the pointer moves onto it, so its links can be clicked. */
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
+}
+
+/** A Transform's Dimension on its header, in that dimension's category colour (2D Space, 3D Transforms, 4D). */
+function TransformDimChip({ node }: { node: GraphNode }) {
+  const mode = useThemeMode();
+  const cat = nodeCategory(node) ?? '2D Space';
+  const colour = categoryColor(cat, mode);
+  const dim = String(node.params.dim ?? '2');
+  return (
+    <span data-transform-dim={dim} title={`${dim}D Transform: coloured as ${cat}`} style={{
+      fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', borderRadius: 5, padding: '2px 6px', flexShrink: 0,
+      color: colour, background: alpha(colour, 0.16), boxShadow: `inset 0 0 0 1px ${alpha(colour, 0.45)}`,
+    }}>{dim}D</span>
+  );
 }
 
 function SocketTooltip({ lines, side, onMouseEnter, onMouseLeave }: TooltipProps) {
@@ -2943,6 +2961,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {!!node.params._groupOriginal && def.anchored && (
           <span title="Anchored — can't be deleted" style={{ display: 'flex', color: tk.text.faint, marginRight: 2 }}><Icon name="lock" size={13} /></span>
         )}
+        {node.type === 'transform' && <TransformDimChip node={node} />}
         {def.deprecated && <CardBadge tone="muted">DEPRECATED</CardBadge>}
         {isBypassed && <CardBadge>BYPASS</CardBadge>}
         {/* From the GLSL → nodes converter: code it kept as code, or a node that isn't quite the GLSL it stands for */}
@@ -4240,6 +4259,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             onClick={() => randomizeNodeParams(node.id)}
             onContextMenu={e => setRandomizeMenu({ x: e.clientX, y: e.clientY })} />
         )}
+        {TO_TRANSFORM_TYPES.has(node.type) && <SwitchToTransformButton node={node} />}
         {showsSwitchPill(node) && <SwitchNodePicker nodeId={node.id} nodeType={node.type} />}
       </div>
       {randomizeMenu && (
