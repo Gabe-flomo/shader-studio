@@ -9,7 +9,7 @@
  */
 import type { WalkerKind } from '../agentRules/spec';
 
-export type StartKind = 'trail' | 'particles' | 'flock' | 'crowd' | 'orbit';
+export type StartKind = 'trail' | 'particles' | 'flock' | 'crowd' | 'orbit' | 'scan';
 
 export interface StartCard {
   id: StartKind;
@@ -31,6 +31,8 @@ export const START_CARDS: readonly StartCard[] = [
   { id: 'flock', label: 'Flocks', makes: 'boids, swarms, schools', kind: 'flock', template: 'boids', template3d: 'flock3d', built: true },
   { id: 'crowd', label: 'Crowds', makes: 'people, traffic, lanes', kind: 'crowd', template: 'crowd', template3d: 'flock3d', built: true },
   { id: 'orbit', label: 'Orbiters', makes: 'galaxies, vortices', kind: 'swarm', template: 'swarm', template3d: 'orbiters3d', built: true },
+  // A splat scan as walkers (Particles' sections): blown apart by a field, flowing back home.
+  { id: 'scan', label: 'Scan to walkers', makes: 'a splat scan, blown apart and back', kind: 'particles', template: 'scanWalkers', template3d: 'scanWalkers3d', built: true },
 ];
 
 export const startCard = (id: StartKind) => START_CARDS.find(c => c.id === id)!;

@@ -19,8 +19,9 @@ export const MEMORY_TYPE_WORDS: Record<MemoryType, { label: string; hint: string
   value: { label: 'A value', hint: 'A number it remembers: what it smelled, how far it went.', example: 'smelled' },
   position: { label: 'A place', hint: 'Where it was (two numbers).', example: 'home' },
   level: { label: 'A level that fades', hint: 'A number that drains by itself, like energy.', example: 'energy' },
+  home: { label: 'Home', hint: 'Where it was born (three numbers, x, y, z): its Emit fills it (Remember home, or a splat scan). Return home pulls it back there.', example: 'home' },
 };
-export const MEMORY_TYPE_ORDER: readonly MemoryType[] = ['counter', 'timer', 'flag', 'value', 'position', 'level'];
+export const MEMORY_TYPE_ORDER: readonly MemoryType[] = ['counter', 'timer', 'flag', 'value', 'position', 'level', 'home'];
 
 /** Room for a memory of this type (four numbers between them). */
 export const roomFor = (set: AgentRuleSet, t: MemoryType) => slotsUsed(set) + slotsOf(t) <= MEMORY_SLOTS;

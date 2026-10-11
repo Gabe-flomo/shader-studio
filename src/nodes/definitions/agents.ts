@@ -43,6 +43,17 @@ export const agentWindowUniform = (slug: string) => `u_agWin_${slug}`;
 export const trailUniform = (slug: string) => `u_trail_${slug}`;
 /** A Draw agents node's picture (half float, the picture's size). */
 export const agentDrawUniform = (slug: string) => `u_agdraw_${slug}`;
+/** An Emit's splat scan (Shape: Splat scan): its texture (lib/splats/walkers.ts) and how many splats it holds. */
+export const agentScanUniforms = (slug: string) => ({ tex: `u_agScan_${slug}`, count: `u_agScanN_${slug}` });
+/** An Emit's scan (Shape: Splat scan): a library file (videoId), else a generated one (demo, demoCount: `demo:<kind>:<n>`); '' for none. */
+export function emitScanSource(params: Record<string, unknown>): string {
+  if (typeof params.videoId === 'string' && params.videoId) return params.videoId;
+  if (params.demo === 'rings' || params.demo === 'blob') {
+    const c = Math.max(1, Math.min(8_000_000, Math.floor(Number(params.demoCount) || 100000)));
+    return `demo:${params.demo}:${c}`;
+  }
+  return '';
+}
 /** A Trail with Add / Block wired: its own step program reads the trail as it was (`Src`) and its settings (`Step`). */
 export const trailStepUniforms = (slug: string) => ({ src: `u_trSrc_${slug}`, step: `u_trStep_${slug}` });
 /**
@@ -508,7 +519,7 @@ export const AgentStepOutNode: NodeDefinition = {
     // Born: its species from the Emit (by index when it doesn't say), no memory, white, its own channel
     // (quietBirth, an Agent Rules group's: no trail on the step it is born; the rules decide every deposit).
     const bornC = stateC
-      ? `        float ${id}_bs = ${em ? `${em}_sp >= 0.0 ? ${em}_sp : ` : ''}mod(a_index, a_speciesCount);\n        o_c = vec4(${id}_bs, 0.0, 0.0, 16777215.0); o_d = ${node.params.quietBirth === true ? 'vec4(0.0)' : `agOneHot(${id}_bs)`};\n`
+      ? `        float ${id}_bs = ${em ? `${em}_sp >= 0.0 ? ${em}_sp : ` : ''}mod(a_index, a_speciesCount);\n        o_c = vec4(${id}_bs, 0.0, 0.0, ${em && node.params.birthMore === true ? `agPackColour(${em}_col)` : '16777215.0'}); o_d = ${node.params.quietBirth === true ? 'vec4(0.0)' : `agOneHot(${id}_bs)`};\n`
       : '';
     const birth = (em
       ? `        o_a = ${em}_a; o_b = ${em}_b;\n`
@@ -519,7 +530,8 @@ export const AgentStepOutNode: NodeDefinition = {
       : '';
     // More memory (state E): 0 when born, else what Agent Output's More memory says (unwired: kept).
     const stateE = stateC && node.params.stateE === true;
-    const bornE = stateE ? '        o_e = vec4(0.0);\n' : '';
+    // Born: no memories, or (Emit from a splat scan, Remember home) its home in x, y, z.
+    const bornE = stateE ? `        o_e = ${em && node.params.birthMore === true ? `${em}_e` : 'vec4(0.0)'};\n` : '';
     const liveE = stateE ? `        o_e = ${v.moreMemory ?? 'a_mem2'};\n` : '';
     return {
       code: [
@@ -566,7 +578,7 @@ function stepOut3d(node: GraphNode, v: Record<string, string>): { code: string; 
   } else if (v.speed) lines.push(`    vec3 ${id}_v = a_dir * max(${v.speed}, 1e-5);\n`);
   else lines.push(`    vec3 ${id}_v = a_vel;\n`);
   const bornC = stateC
-    ? `        float ${id}_bs = ${em ? `${em}_sp >= 0.0 ? ${em}_sp : ` : ''}mod(a_index, a_speciesCount);\n        o_c = vec4(${id}_bs, 0.0, 0.0, 16777215.0); o_d = ${node.params.quietBirth === true ? 'vec4(0.0)' : `agOneHot(${id}_bs)`};\n`
+    ? `        float ${id}_bs = ${em ? `${em}_sp >= 0.0 ? ${em}_sp : ` : ''}mod(a_index, a_speciesCount);\n        o_c = vec4(${id}_bs, 0.0, 0.0, ${em && node.params.birthMore === true ? `agPackColour(${em}_col)` : '16777215.0'}); o_d = ${node.params.quietBirth === true ? 'vec4(0.0)' : `agOneHot(${id}_bs)`};\n`
     : '';
   const birth = (em
     ? `        o_a = ${em}_a; o_b = ${em}_b;\n`
@@ -578,7 +590,7 @@ function stepOut3d(node: GraphNode, v: Record<string, string>): { code: string; 
   const stateE = stateC && node.params.stateE === true;
   lines.push(
     `    float ${id}_alive = (${v.alive ?? '1.0'}) >= 0.5 && a_age < a_life && !any(isnan(${id}_p)) && !any(isinf(${id}_p)) && !any(isnan(${id}_v)) ? a_life : 0.0;\n`,
-    `    if (a_born) {\n${birth}${stateE ? '        o_e = vec4(0.0);\n' : ''}    } else {\n`,
+    `    if (a_born) {\n${birth}${stateE ? `        o_e = ${em && node.params.birthMore === true ? `${em}_e` : 'vec4(0.0)'};\n` : ''}    } else {\n`,
     `        o_a = vec4(${id}_p, a_age);\n`,
     `        o_b = vec4(${id}_v, ${id}_alive);\n`,
     liveC,
@@ -1004,7 +1016,7 @@ export const AgentEmitNode: NodeDefinition = {
   outputs: {
     emitter: { type: 'emitter', label: 'Emitter', hint: 'Wire into an Agents group\'s Emit.' },
   },
-  defaultParams: { mode: 'fill', shape: 'disc', heading: 'inward', at: 'point', x: 0, y: 0, handX: 0.5, handY: 0.5, size: 0.6, rate: 20000, life: 0, lifeVar: 0.2, speed: 0, speedVar: 0, spread: 0, share: 1, burst: 0, species: 'each', threshold: 0.2, miss: 'best' },
+  defaultParams: { mode: 'fill', shape: 'disc', heading: 'inward', at: 'point', x: 0, y: 0, handX: 0.5, handY: 0.5, size: 0.6, rate: 20000, life: 0, lifeVar: 0.2, speed: 0, speedVar: 0, spread: 0, share: 1, burst: 0, species: 'each', threshold: 0.2, miss: 'best', up: '-y', minOpacity: 0.05, home: 'off' },
   paramDefs: {
     mode: { label: 'Births', type: 'select', hint: 'Fill: everyone is born at once when the simulation starts (slime). Rate: a stream of births a second. Keep full: born at once, each reborn the moment it dies (particles with a Life).', options: [
       { value: 'fill', label: 'Fill (all at once)' }, { value: 'rate', label: 'Rate (per second)' }, { value: 'respawn', label: 'Keep full (reborn when they die)' },
@@ -1013,7 +1025,15 @@ export const AgentEmitNode: NodeDefinition = {
       { value: 'point', label: 'Point' }, { value: 'line', label: 'Line (across, Size each way)' }, { value: 'ring', label: 'Ring' }, { value: 'disc', label: 'Disc' }, { value: 'box', label: 'Box' }, { value: 'screen', label: 'Whole picture' },
       { value: 'picture', label: 'Picture (where bright)' }, { value: 'field', label: 'Field (Where ƒ above Threshold)' },
       { value: 'sphere', label: 'Sphere (3D; a ring in 2D)' }, { value: 'ball', label: 'Ball (3D; a disc in 2D)' },
+      { value: 'splats', label: 'Splat scan (each splat a walker)' },
     ] },
+    up: { label: 'Up is', type: 'select', hint: 'Splat scan: which way is up in the file. Most scans have y pointing down (3DGS, COLMAP): −Y turns them over.', options: [
+      { value: '-y', label: '−Y (most scans)' }, { value: 'y', label: '+Y' },
+    ], showWhen: { param: 'shape', value: 'splats' } },
+    minOpacity: { label: 'Skip below', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Splat scan: splats fainter than this opacity aren\'t born (scans have many faint floaters).', showWhen: { param: 'shape', value: 'splats' } },
+    home: { label: 'Remember home', type: 'select', hint: 'Keep where each walker is born in its More memory (x, y, z): a Home memory that Return home pulls it back to. A splat scan always does, with the splat\'s size in w.', help: 'Where each walker was born, kept in its More memory x, y and z (2D: z is 0) for the whole of its life: the rules\' Home memory (a memory of the kind Home always takes x, y, z). Return home (a Forces card) springs it back there. A splat scan always keeps it, and the splat\'s own size in w. Only groups with More memory keep it (a rules group with a Home memory has it).', options: [
+      { value: 'off', label: 'Off' }, { value: 'on', label: 'On' },
+    ], showWhen: { param: 'shape', value: ['point', 'line', 'ring', 'disc', 'box', 'screen', 'picture', 'field', 'sphere', 'ball'] } },
     threshold: { label: 'Threshold', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Picture / Field: how bright (how high) a place must be for walkers to be born there.', showWhen: { param: 'shape', value: ['picture', 'field'] } },
     miss: { label: 'No place found', type: 'select', hint: 'Picture / Field: when none of the 8 tries lands where it is bright enough (a sparse picture): born at the best try anyway, or not born this time (it tries again on a later birth; Keep full: the next step).', options: [
       { value: 'best', label: 'Born at the best try' }, { value: 'skip', label: 'Not born this time' },
@@ -1042,13 +1062,17 @@ export const AgentEmitNode: NodeDefinition = {
   assignable: false,
   glslFunctions: [AG_DIR_GLSL],
   glslFunctionsFor: (node: GraphNode) => (node.params.shape === 'picture' ? [AG_UV_GLSL] : []),
+  // Splat scan: the scan's texture (the agents engine fills it, lib/agentScans.ts) and its count.
+  declarationsFor: (node: GraphNode) => (node.params.shape === 'splats'
+    ? [`uniform highp sampler2D ${agentScanUniforms(node.id).tex};`, `uniform float ${agentScanUniforms(node.id).count};`]
+    : []),
   // Compiled only into a group's update shader: its code runs for the walkers born this step.
   generateGLSL: (node: GraphNode, v) => {
     if (isAgent3d(node)) return emit3d(node, v);
     const id = node.id;
     // Sphere and Ball are 3D shapes: on the picture, a ring and a disc.
     const shape0 = node.params.shape === 'sphere' ? 'ring' : node.params.shape === 'ball' ? 'disc' : node.params.shape;
-    const shape = sel(shape0, ['point', 'line', 'ring', 'disc', 'box', 'screen', 'picture', 'field'], 'disc');
+    const shape = sel(shape0, ['point', 'line', 'ring', 'disc', 'box', 'screen', 'picture', 'field', 'splats'], 'disc');
     const facing = sel(node.params.heading, ['random', 'inward', 'outward', 'up'], 'inward');
     const em = `${id}_em`;
     const centre = v.position ?? (sel(node.params.at, ['point', 'hand'], 'point') === 'hand'
@@ -1063,6 +1087,8 @@ export const AgentEmitNode: NodeDefinition = {
       disc: `${id}_out = agDir(${id}_r1 * 6.2831853); ${id}_pp = ${id}_c + ${size} * sqrt(${id}_r2) * ${id}_out;`,
       box: `${id}_pp = ${id}_c + (vec2(${id}_r1, ${id}_r2) * 2.0 - 1.0) * ${size}; ${id}_out = length(${id}_pp - ${id}_c) > 1e-6 ? normalize(${id}_pp - ${id}_c) : vec2(1.0, 0.0);`,
       screen: `${id}_pp = (vec2(${id}_r1, ${id}_r2) * 2.0 - 1.0) * vec2(u_resolution.x / u_resolution.y, 1.0); ${id}_out = length(${id}_pp) > 1e-6 ? normalize(${id}_pp) : vec2(1.0, 0.0);`,
+      // Splat scan, seen from the front: walker i at splat i's place (x and y).
+      splats: `${scanRead(id)} ${id}_pp = ${id}_c + ${size} * ${id}_S0.xy; ${id}_out = length(${id}_S0.xy) > 1e-6 ? normalize(${id}_S0.xy) : vec2(1.0, 0.0);`,
     };
     // Picture / Field: rejection sampling over the whole picture, 8 hashed tries (the best one if none is taken).
     const tex = v.picture;
@@ -1102,6 +1128,7 @@ export const AgentEmitNode: NodeDefinition = {
       `    float ${em}_w = max(${p(node.params.share, 1)}, 0.0);\n`,
       // Its species (−1: by index, each in turn), only in groups with per-walker state (the compiler marks the Emit).
       stateC ? `    float ${em}_sp = ${species};\n` : '',
+      node.params.__birthMore === true ? `    vec4 ${em}_e = vec4(0.0);\n    vec3 ${em}_col = vec3(1.0);\n` : '',
       `    if (a_born) {\n`,
       `        uint ${id}_s = a_seed ^ 0x${(hashId(id) >>> 0).toString(16).padStart(8, '0')}u;\n`,
       `        float ${id}_r1 = agRnd(${id}_s), ${id}_r2 = agRnd(${id}_s), ${id}_r3 = agRnd(${id}_s), ${id}_r4 = agRnd(${id}_s);\n`,
@@ -1123,11 +1150,12 @@ export const AgentEmitNode: NodeDefinition = {
       `        ${em}_b = vec4(${id}_dir * ${id}_sp, ${id}_sp, max(${id}_life, 1e-3));\n`,
       // Not born this time: dead (life 0), so it tries again on a later birth (Keep full: the next step).
       skip ? `        if (${id}_miss) ${em}_b = vec4(0.0);\n` : '',
+      ...birthMoreLines(node, id, em, shape === 'splats', `vec3(${id}_pp, 0.0)`, size),
     ];
     if (v.also) {
       // Shared births: this Emit keeps its Share of them, the chain behind it the rest.
       lines.push(
-        `        if (agRnd(${id}_s) * (${em}_w + ${v.also}_w) >= ${em}_w) { ${em}_a = ${v.also}_a; ${em}_b = ${v.also}_b;${stateC ? ` ${em}_sp = ${v.also}_sp;` : ''} }\n`,
+        `        if (agRnd(${id}_s) * (${em}_w + ${v.also}_w) >= ${em}_w) { ${em}_a = ${v.also}_a; ${em}_b = ${v.also}_b;${stateC ? ` ${em}_sp = ${v.also}_sp;` : ''}${node.params.__birthMore === true ? ` ${em}_e = ${v.also}_e; ${em}_col = ${v.also}_col;` : ''} }\n`,
       );
     }
     lines.push(`    }\n`);
@@ -1144,7 +1172,7 @@ export const AgentEmitNode: NodeDefinition = {
  */
 function emit3d(node: GraphNode, v: Record<string, string>): { code: string; outputVars: Record<string, string> } {
   const id = node.id;
-  const shape = sel(node.params.shape, ['point', 'line', 'ring', 'disc', 'box', 'screen', 'picture', 'field', 'sphere', 'ball'], 'disc');
+  const shape = sel(node.params.shape, ['point', 'line', 'ring', 'disc', 'box', 'screen', 'picture', 'field', 'sphere', 'ball', 'splats'], 'disc');
   const facing = sel(node.params.heading, ['random', 'inward', 'outward', 'up'], 'inward');
   const em = `${id}_em`;
   const z = p(node.params.z, 0);
@@ -1162,6 +1190,8 @@ function emit3d(node: GraphNode, v: Record<string, string>): { code: string; out
     sphere: `${id}_out = agUnit3(${id}_s); ${id}_pp = ${id}_c + ${size} * ${id}_out;`,
     ball: `${id}_out = agUnit3(${id}_s); ${id}_pp = ${id}_c + ${size} * pow(${id}_r2, 1.0 / 3.0) * ${id}_out;`,
     screen: `${id}_pp = (vec3(${id}_r1, ${id}_r2, agRnd(${id}_s)) * 2.0 - 1.0) * ${B}; ${id}_out = length(${id}_pp) > 1e-6 ? normalize(${id}_pp) : vec3(1.0, 0.0, 0.0);`,
+    // Splat scan: walker i at splat i's place, facing out from the scan's middle.
+    splats: `${scanRead(id)} ${id}_pp = ${id}_c + ${size} * ${id}_S0.xyz; ${id}_out = length(${id}_S0.xyz) > 1e-6 ? normalize(${id}_S0.xyz) : vec3(1.0, 0.0, 0.0);`,
   };
   const tex = v.picture;
   const where = fieldFn(v.where);
@@ -1197,6 +1227,7 @@ function emit3d(node: GraphNode, v: Record<string, string>): { code: string; out
     `    vec4 ${em}_b = vec4(0.0);\n`,
     `    float ${em}_w = max(${p(node.params.share, 1)}, 0.0);\n`,
     stateC ? `    float ${em}_sp = ${species};\n` : '',
+    node.params.__birthMore === true ? `    vec4 ${em}_e = vec4(0.0);\n    vec3 ${em}_col = vec3(1.0);\n` : '',
     `    if (a_born) {\n`,
     `        uint ${id}_s = a_seed ^ 0x${(hashId(id) >>> 0).toString(16).padStart(8, '0')}u;\n`,
     `        float ${id}_r1 = agRnd(${id}_s), ${id}_r2 = agRnd(${id}_s), ${id}_r4 = agRnd(${id}_s);\n`,
@@ -1215,11 +1246,33 @@ function emit3d(node: GraphNode, v: Record<string, string>): { code: string; out
     // Born still, it keeps its facing as a velocity too small to move it.
     `        ${em}_b = vec4(${id}_dir * (abs(${id}_sp) > 1e-5 ? ${id}_sp : 1e-5), max(${id}_life, 1e-3));\n`,
     skip ? `        if (${id}_miss) ${em}_b = vec4(0.0);\n` : '',
+    ...birthMoreLines(node, id, em, shape === 'splats', `${id}_pp`, size),
   ];
-  if (v.also) lines.push(`        if (agRnd(${id}_s) * (${em}_w + ${v.also}_w) >= ${em}_w) { ${em}_a = ${v.also}_a; ${em}_b = ${v.also}_b;${stateC ? ` ${em}_sp = ${v.also}_sp;` : ''} }\n`);
+  if (v.also) lines.push(`        if (agRnd(${id}_s) * (${em}_w + ${v.also}_w) >= ${em}_w) { ${em}_a = ${v.also}_a; ${em}_b = ${v.also}_b;${stateC ? ` ${em}_sp = ${v.also}_sp;` : ''}${node.params.__birthMore === true ? ` ${em}_e = ${v.also}_e; ${em}_col = ${v.also}_col;` : ''} }\n`);
   lines.push(`    }\n`);
   if (v.also) lines.push(`    ${em}_w += ${v.also}_w;\n`);
   return { code: lines.join(''), outputVars: { emitter: em } };
+}
+
+/** Splat scan: splat i's two texels (lib/splats/walkers.ts: its place and size, its colour and opacity), for walker i. */
+function scanRead(id: string): string {
+  const u = agentScanUniforms(id);
+  const at = (dx: number) => `ivec2(int(mod(a_index, 1024.0)) * 2${dx ? ` + ${dx}` : ''}, int(floor(a_index / 1024.0)))`;
+  return `vec4 ${id}_S0 = texelFetch(${u.tex}, ${at(0)}, 0); vec4 ${id}_S1 = texelFetch(${u.tex}, ${at(1)}, 0);`;
+}
+
+/**
+ * What a birth keeps beyond A and B (the compiler marks every Emit of a chain __birthMore when one of them is a splat
+ * scan or remembers home): its home (More memory x, y, z; w the splat's size) and its colour (a splat's own). A splat
+ * scan's walker past the scan's end, or fainter than Skip below, isn't born.
+ */
+function birthMoreLines(node: GraphNode, id: string, em: string, splats: boolean, pp3: string, size: string): string[] {
+  const out: string[] = [];
+  if (splats) out.push(`        if (a_index >= ${agentScanUniforms(id).count} || ${id}_S1.a < ${p(node.params.minOpacity, 0.05)}) ${em}_b = vec4(0.0);\n`);
+  if (node.params.__birthMore !== true) return out;
+  if (splats) out.push(`        ${em}_col = ${id}_S1.rgb;\n        ${em}_e = vec4(${pp3}, ${size} * ${id}_S0.w);\n`);
+  else if (node.params.home === 'on') out.push(`        ${em}_e = vec4(${pp3}, 0.0);\n`);
+  return out;
 }
 
 /** A stable 32-bit number from a node id, so two Emits in a chain draw different random numbers. */
@@ -1386,7 +1439,9 @@ export const AG_PALETTE_OPTIONS = [
   { value: 'ab', label: 'Colour A → B' },
   ...Object.keys(GP_PALETTES).map(k => ({ value: k, label: k[0].toUpperCase() + k.slice(1) })),
 ];
-export const DRAW_STYLES = ['points', 'glow', 'streaks', 'ink'] as const;
+export const DRAW_STYLES = ['points', 'glow', 'streaks', 'ink', 'splats'] as const;
+/** Splats: what sizes each walker (Size by): fixed, its speed, or one of its More memory numbers. */
+export const SPLAT_SIZE_BY = ['fixed', 'speed', 'memX', 'memY', 'memZ', 'memW'] as const;
 export const GP_PALETTE_NAMES = Object.keys(GP_PALETTES);
 export const DRAW_COLOR_BY = ['single', 'species', 'speed', 'heading', 'age', 'agent', 'speedFast', 'headingRound'] as const;
 
@@ -1428,18 +1483,27 @@ export const DrawAgentsNode: NodeDefinition = {
     color: { type: 'vec3', label: 'Color', hint: 'Over with the walkers drawn on it.' },
     density: { type: 'float', label: 'Density', hint: 'How much walker light (Ink: ink) is here.' },
     texture: { type: 'texture', label: 'Image', hint: 'The drawn walkers alone, as an image (a texture): into Glow, Blur, another group, or a Texture tool (Mask, Neighbours, Fade).' },
+    distance: { type: 'float', label: 'Distance', hint: 'Splats in 3D: how far the walkers\' splats are from the camera here (their weighted mean), far (100 000) where there are none. With Color and Density, a Splat Scene can take the walkers as its Scene and the two meet by distance.' },
   },
   defaultParams: {
     style: 'points', colorBy: 'heading', palette: 'ab', size: 1.5, brightness: 0.5, glow: 1, scaleBy: 'walker', streak: 0.25, fade: 'on', speedRef: 0.5,
+    splatSize: 0.012, stretch: 1.5, sizeBy: 'fixed', memScale: 1, opacity: 0.6,
     colorA: [1, 0.75, 0.35], colorB: [0.25, 0.55, 1], paper: [0.95, 0.95, 0.94],
     lights: '0', lightColor: [1, 0.55, 0.25], lightPower: 1.6, lightReach: 0.3, halo: 0.5, lightMotion: 'orbit', lightOrbit: 0.5, lightX: 0, lightY: 0,
     ...DRAW_CAMERA_DEFAULTS,
   },
   paramDefs: {
-    style: { label: 'Style', type: 'select', section: 'Look', hint: 'Points: soft dots. Glow: dots with a wide glow. Streaks: short lines along each walker\'s motion, glowing. Ink: dark ink laid on paper, bleeding a little.', options: [
-      { value: 'points', label: 'Points' }, { value: 'glow', label: 'Glow' }, { value: 'streaks', label: 'Streaks' }, { value: 'ink', label: 'Ink' },
+    style: { label: 'Style', type: 'select', section: 'Look', hint: 'Points: soft dots. Glow: dots with a wide glow. Streaks: short lines along each walker\'s motion, glowing. Ink: dark ink laid on paper, bleeding a little. Splats: soft Gaussians stretched along their motion, laid over each other like a volume (clouds, smoke, liquids; a splat scan).', options: [
+      { value: 'points', label: 'Points' }, { value: 'glow', label: 'Glow' }, { value: 'streaks', label: 'Streaks' }, { value: 'ink', label: 'Ink' }, { value: 'splats', label: 'Splats (soft Gaussians)' },
     ] },
-    size: { label: 'Size', type: 'float', min: 0.25, max: 16, step: 0.25, section: 'Look', hint: 'Dot size in pixels (The crowd: pixels of a 720-pixel-high picture).' },
+    size: { label: 'Size', type: 'float', min: 0.25, max: 16, step: 0.25, section: 'Look', hint: 'Dot size in pixels (The crowd: pixels of a 720-pixel-high picture).', showWhen: { param: 'style', value: ['points', 'glow', 'streaks', 'ink'] } },
+    splatSize: { label: 'Splat size', type: 'float', min: 0.001, max: 0.3, step: 0.001, section: 'Look', hint: 'Splats: how wide each Gaussian is (its sigma), in picture units (the picture is 2 tall). In 3D it shrinks with distance, as a real object does.', showWhen: { param: 'style', value: 'splats' } },
+    stretch: { label: 'Stretch', type: 'float', min: 0, max: 8, step: 0.01, section: 'Look', hint: 'Splats: how much longer a splat is along its motion, per Fast is of speed: 0 round, 2 three times as long at Fast is.', showWhen: { param: 'style', value: 'splats' } },
+    sizeBy: { label: 'Size by', type: 'select', section: 'Look', hint: 'Splats: Fixed: every splat Splat size. Speed: faster ones bigger. A memory: one of its More memory numbers × Memory scale (Emit from a splat scan keeps each splat\'s own size in w).', options: [
+      { value: 'fixed', label: 'Fixed' }, { value: 'speed', label: 'Speed' }, { value: 'memX', label: 'More memory x' }, { value: 'memY', label: 'More memory y' }, { value: 'memZ', label: 'More memory z' }, { value: 'memW', label: 'More memory w (a scan\'s splat size)' },
+    ], showWhen: { param: 'style', value: 'splats' } },
+    memScale: { label: 'Memory scale', type: 'float', min: 0, max: 8, step: 0.01, section: 'Look', hint: 'Splats sized by a memory: its number times this is the splat\'s sigma, picture units.', showWhen: { param: 'sizeBy', value: ['memX', 'memY', 'memZ', 'memW'] } },
+    opacity: { label: 'Opacity', type: 'float', min: 0, max: 1, step: 0.01, section: 'Look', hint: 'Splats: how much each one covers at its middle. Where many overlap the cloud turns solid; few, and it stays see-through.', showWhen: { param: 'style', value: 'splats' } },
     brightness: { label: 'Brightness', type: 'float', min: 0, max: 8, step: 0.01, section: 'Look', hint: 'Light (Ink: ink) each walker adds.' },
     scaleBy: { label: 'Brightness of', type: 'select', section: 'Look', hint: 'Each walker: Brightness is one walker\'s light. The crowd: the Particles node\'s rule, so the whole cloud looks as bright at every count, size and picture size.', options: [
       { value: 'walker', label: 'Each walker' }, { value: 'crowd', label: 'The crowd' },
@@ -1474,19 +1538,28 @@ export const DrawAgentsNode: NodeDefinition = {
   },
   assignable: false,
   // Compiled as a source only (the compiler strips its Agents wire): node.id is the slug.
-  declarationsFor: (node: GraphNode) => [`uniform sampler2D ${agentDrawUniform(node.id)};`, `uniform vec2 ${agentDrawUniform(node.id)}_px;`],
+  declarationsFor: (node: GraphNode) => [
+    `uniform sampler2D ${agentDrawUniform(node.id)};`, `uniform vec2 ${agentDrawUniform(node.id)}_px;`,
+    // Splats: the second target (Σ αw, Σ αwd), for Distance.
+    ...(node.params.style === 'splats' ? [`uniform sampler2D ${agentDrawUniform(node.id)}_dist;`] : []),
+  ],
   glslFunctions: [AG_UV_GLSL],
   generateGLSL: (node: GraphNode, v) => {
     const id = node.id;
     const tex = agentDrawUniform(id);
-    const ink = sel(node.params.style, [...DRAW_STYLES], 'points') === 'ink';
-    // Ink is premultiplied (ink colour × cover, cover): it covers the paper. Light adds to the picture.
-    const color = ink
+    const style = sel(node.params.style, [...DRAW_STYLES], 'points');
+    // Ink and Splats are premultiplied (colour × cover, cover): they cover what is under them. Light adds to the picture.
+    const color = style === 'ink'
       ? `${v.over ?? pv3(node.params.paper, [0.95, 0.95, 0.94])} * (1.0 - clamp(${id}_s.a, 0.0, 1.0)) + max(${id}_s.rgb, vec3(0.0))`
-      : `${v.over ?? 'vec3(0.0)'} + max(${id}_s.rgb, vec3(0.0))`;
+      : style === 'splats'
+        ? `${v.over ?? 'vec3(0.0)'} * (1.0 - clamp(${id}_s.a, 0.0, 1.0)) + max(${id}_s.rgb, vec3(0.0))`
+        : `${v.over ?? 'vec3(0.0)'} + max(${id}_s.rgb, vec3(0.0))`;
+    const dist = style === 'splats'
+      ? `    vec4 ${id}_t = texture2D(${tex}_dist, agUv(g_uv));\n    float ${id}_dist = ${id}_t.r > 1e-6 ? ${id}_t.g / ${id}_t.r : 100000.0;\n`
+      : '';
     return {
-      code: `    vec4 ${id}_s = texture2D(${tex}, agUv(g_uv));\n    vec3 ${id}_color = ${color};\n`,
-      outputVars: { color: `${id}_color`, density: `max(${id}_s.a, 0.0)`, texture: tex },
+      code: `    vec4 ${id}_s = texture2D(${tex}, agUv(g_uv));\n    vec3 ${id}_color = ${color};\n${dist}`,
+      outputVars: { color: `${id}_color`, density: `max(${id}_s.a, 0.0)`, texture: tex, distance: dist ? `${id}_dist` : '100000.0' },
     };
   },
 };

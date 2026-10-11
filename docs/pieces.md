@@ -96,7 +96,10 @@ cycle; Balls example 5.1 ms (p95 7.7); the Picture as balls template 1.8 ms.
 
 ## Not yet
 
-- **Pieces as walkers** (agents with a Return home force, drawn as dots or splats): waits for the shared Return home
-  card from the agents-as-splats work.
+- **Pieces as walkers** (agents with a Return home force, drawn as dots or splats): the shared pieces are there now
+  (docs/splat-scene.md "Agents as splats"): Emit's **Remember home** keeps each walker's birth place in a **Home**
+  memory, the **Return home** rule action / Forces card springs it back (strength, damping, delay; agentRules/home.ts),
+  and Draw agents' **Splats** look draws them. What is left is the Emit shape that births one walker per grid point
+  with the picture's colour there.
 - Travel beyond ~11 cells in the sure search is cut (the cap); a two-pass version (offsets in a texture) would lift it.
 - Balls on their own grid move only along Z; sideways scatter needs the Repeat Scene layout with Nearest 8.

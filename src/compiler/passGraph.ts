@@ -31,7 +31,7 @@ import { generateFragmentShader } from './shaderAssembler';
 import { computeNodeSlug } from './nodeSlug';
 import { PASS_SCALES, passRepeat } from '../nodes/definitions/passes';
 import { getNodeDefinition, getNodeDefinitionFor } from '../nodes/definitions';
-import { isAgent3d, syncAgentSpaces, trailUniform, withAgentSpace } from '../nodes/definitions/agents';
+import { emitScanSource, isAgent3d, syncAgentSpaces, trailUniform, withAgentSpace } from '../nodes/definitions/agents';
 import {
   agentStepNodes, asAgentSource, checkProgramWires, depositSpec, depositTargets, drawProbeSink, drawSeesScene, drawSpec, emitMode, engineParams, gridSink, groupSide, groupSpecies, toProbeCamera,
   groupSound, hasAgentsNode, insideSlugs, isAgentEngineOnly, isAgentLoopWire, isAgentSource, listenersOf, MAX_AGENT_GROUPS, MAX_TRAILS, trailHasStepProgram, trailSpec, trailStepSink,
@@ -250,8 +250,18 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     // A Trail filled by a 3D group is a volume: a 3D group's Sense reads it by its layout uniform.
     const volumeOf = (id: string) => { const t = byId.get(id); return t?.type === 'trailField' && isAgent3d(t) ? trailUniform(slugs.get(id) ?? id) : null; };
     for (const g of groupNodes) {
-      const { inner, sink, starts, problems, stateC, stateE, space3d, grids } = agentStepNodes(g, volumeOf);
+      const stepNodes = agentStepNodes(g, volumeOf);
+      const { inner, starts, problems, stateE, space3d, grids } = stepNodes;
+      let { sink, stateC } = stepNodes;
       const outer = collectOuter(starts, byId);
+      // Emit from a splat scan / Remember home (docs/splat-scene.md "Agents as splats"): a birth keeps its colour (state
+      // C) and its home (More memory, when the group has it), so every Emit of the chain says them (copies, marked).
+      const emitsOut = [...outer.nodes.values()].filter(n => n.type === 'agentEmit');
+      const scanEmit = emitsOut.some(n => n.params.shape === 'splats');
+      const birthMore = scanEmit || emitsOut.some(n => n.params.home === 'on');
+      if (scanEmit && !stateC) stateC = true;
+      if (birthMore || stateC !== stepNodes.stateC) sink = { ...sink, params: { ...sink.params, ...(stateC ? { stateC: true } : {}), ...(birthMore ? { birthMore: true } : {}) } };
+      if (birthMore) for (const n of emitsOut) outer.nodes.set(n.id, { ...n, params: { ...n.params, __birthMore: true } });
       // With per-walker state the Emits also say which species they give birth to (a copy, marked for this program).
       if (stateC) for (const [id, n] of outer.nodes) if (n.type === 'agentEmit') outer.nodes.set(id, { ...n, params: { ...n.params, __stateC: true } });
       // The Emits give birth in this group's space (a copy, for this program).
@@ -523,6 +533,11 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
           readsPasses: [...a.outer.reads].map(slugOf),
           live: liveAgents.has(g.id),
           nodeIds: list.filter(n => n !== a.sink && !isAgentSource(n) && n.type !== PASS_TYPE).map(n => n.id),
+          ...(() => {
+            const scans = outer.filter(n => n.type === 'agentEmit' && n.params.shape === 'splats')
+              .map(n => ({ nodeId: n.id, slug: slugOf(n.id), source: emitScanSource(n.params), flip: n.params.up !== 'y' }));
+            return scans.length ? { scans } : {};
+          })(),
         });
       }
       const groupIds = new Set(groupNodes.map(g => g.id));

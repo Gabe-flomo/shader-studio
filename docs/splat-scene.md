@@ -266,6 +266,66 @@ Built: [splat-builder.md](splat-builder.md) (the Scene builder's Splat scene). W
   `withParamSockets` list.
 - `SplatModOut` packs state into the targets (size sign = dot); a new per-splat channel needs a third target.
 
+## Agents as splats
+
+The plan's phase 4 (docs/depth-and-splats-plan.md, section 3): walkers drawn as splats, and a scan turned into walkers
+that forces and fields move.
+
+### The Splats look (Draw agents)
+
+Draw agents' Style **Splats**: every walker a soft oriented Gaussian, stretched along its velocity, so clouds, smoke and
+liquids read as volumes (and a scan reads as a scan).
+
+- **Splat size** (its sigma, picture units; in 3D it shrinks with distance), **Size by** Fixed, Speed (bigger the
+  faster), or a More memory number × **Memory scale** (an Emit from a splat scan keeps each splat's own size in w);
+  **Stretch** (how much longer along its motion at full speed: Fast is); **Opacity** (how much one covers at its middle).
+- Colour by any of the usual options (Colour by Agent for a scan's own colours); Brightness multiplies it.
+- **Maths:** the Splat Scene's. In 3D the covariance Σ = s⊥² I + (s∥² − s⊥²) v̂v̂ᵀ goes through the camera's EWA Jacobian
+  (built-in camera or a scene's, with Flatten); in 2D through the picture's scale; then the same quad √(2λ) along the
+  ellipse's axes and exp(−|v|²) weight (kit/agentShaders.js AG_SPLAT_VERT; CPU mirror lib/agentSplats.ts, tested).
+- **No sort:** walkers move every step, so they are put together without an order (weighted blended OIT, McGuire &
+  Bavoil 2013): two half-float targets, colour added and cover multiplied, near splats weighted up in 3D
+  ((camera distance / depth)⁴). The resolve is the weighted mean colour × the cover 1 − Π(1 − α). Any order gives the same
+  pixel (tested), so it is deterministic.
+- **Compositing:** with Camera from / Camera ray / Depth wired, splats behind the ray-marched scene are hidden, as dots
+  are. The new **Distance** output (Σαwd / Σαw, far where none) is the Splat Scene's kind: wire Color, Distance and
+  Density (as Hit) into a Splat Scene's Scene inputs and a scan and the walkers meet by distance.
+- Web pages draw Splats as Points (the export dialog says so).
+
+### Emit from a splat scan
+
+Emit's Shape **Splat scan**: each splat is born as a walker, walker i from splat i, at its place (the scan's core box
+fitted to Size round X, Y, Z; 2D seen from the front), in its colour, its **home** (x, y, z) and its **size** (w) kept in
+More memory. The card picks the scan (Load…, From the library, a generated ball; kept by `videoId` like the Splat
+Scene's, so .playfiles carry it). **Up is** turns most scans over; **Skip below** leaves out faint floaters.
+
+- The engine reads the scan through the splat worker, thinned evenly to the group's count, into an RGBA32F texture
+  (lib/agentScans.ts, lib/splats/walkers.ts: two texels a splat) the Emit reads at birth. Until it arrives no walker is
+  born from it; when it lands the group starts over.
+- Any other Shape can **Remember home** too (the Pieces' picture in pieces uses it): the birth place goes into More
+  memory x, y, z.
+- The group keeps per-walker state (colour) by itself; the home needs More memory (a rules group with a Home memory).
+
+### Return home (shared)
+
+A rule action and an Agent Builder Forces card: a spring toward the **Home** memory (a memory kind of its own, always
+More memory x, y, z) with **Strength**, **Damping** (2√strength settles without overshoot) and **After** (seconds from
+birth before it pulls, eased in over half a second). In text: `home home 6 delay=1 damping=3`. The maths is
+agentRules/home.ts; the generated GLSL is checked against it on the CPU. Any kind with a Home can use it: a scan blown
+apart, a picture in pieces (docs/pieces.md).
+
+### Scan to walkers (Agent Builder)
+
+A start card, **Scan to walkers** (Particles' sections), 2D and 3D: a generated ball of 250 000 splats (256k walkers),
+blown out from the middle by a field (your own vx = x, vy = y, vz = z plus curl noise, for its first 1.2 s), then
+Return home (spring 9, damping 4.5, after 1.5 s) and drag bring it back. Look: Splats, sized by its own splat size,
+coloured by its own colour (Look → Colour → Its own). Examples: **Agent rules 12 · Scan to walkers** and **13 · … in 3D**.
+
+### Cost (Apple Silicon, browser pane, 2026-10-11)
+
+262 144 walkers (250 000 live) at 532 × 706: the step 0.7 ms, the splat draw about 10 ms while blown apart (big, near
+splats fill more), noisy (other work on the machine). A smaller Opacity or Splat size, or a lower count, is cheaper.
+
 ## Web pages
 
 Not yet. An exported page reads the scan as empty and the rest of the scene draws as usual; the export dialog says
@@ -278,7 +338,6 @@ so (`play/exportScope.ts`, "Splat Scene scans"). Shipping the file and the raste
 - A Splat Scene inside a group (it draws only at the top level; the card says so).
 - The camera's Flatten / Reverse perspective: the splats are drawn with a pinhole camera.
 - Exact per-splat occlusion (see the limit above).
-- Phase 4, agents as splats (the plan).
 - Modifier chains inside a plain group (the `splat` wire through group ports isn't supported; keep chains at the top
   level), per-splat textures in a modifier (a Sample reads at a fixed point), and the scan's centre as an attribute.
 - Modifiers on exported web pages (with the scan itself).

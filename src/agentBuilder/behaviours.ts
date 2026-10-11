@@ -25,7 +25,7 @@ export type CardId =
   // Trail followers
   | 'senses' | 'wobble' | 'trail'
   // Particles
-  | 'gravity' | 'wind' | 'curl' | 'field' | 'attract' | 'drag' | 'fade' | 'die'
+  | 'gravity' | 'wind' | 'curl' | 'field' | 'attract' | 'drag' | 'home' | 'fade' | 'die'
   // Flocks, crowds and orbiters
   | 'separate' | 'match' | 'cohere' | 'avoidEdges' | 'goal' | 'slow' | 'orbit'
   // Memory (phase 4): a memory operation (any kind), and Turn round (a card when a memory gates it)
@@ -57,6 +57,8 @@ export const CARD_DEFS: Record<CardId, CardDef> = {
   field: { id: 'field', multi: true, match: is('field'), make: () => ({ kind: 'field', strength: 1, grip: 3, spec: DEFAULT_FIELD() }) },
   attract: { id: 'attract', multi: true, match: force(['point', 'mouse']), make: () => ({ kind: 'force', field: 'point', strength: 0.6, x: 0, y: 0 }) },
   drag: { id: 'drag', match: is('drag'), make: () => ({ kind: 'drag', amount: 0.5 }) },
+  // Return home (shared: a scan blown apart, a picture in pieces): its memory '' is the rule set's Home.
+  home: { id: 'home', match: is('home'), make: () => ({ kind: 'home', memory: '', strength: 6, delay: 1, damping: 3 }) },
   fade: { id: 'fade', match: is('fade'), make: () => ({ kind: 'fade', seconds: 3 }) },
   die: { id: 'die', match: is('die'), make: () => ({ kind: 'die' }), when: () => ({ kind: 'age', cmp: '>', seconds: 3 }) },
   separate: { id: 'separate', multi: true, match: is('separate'), make: () => ({ kind: 'separate', who: 'all', degrees: 12 }) },

@@ -134,6 +134,7 @@ unless wired. One undo step (`agentRules/outputs.ts`).
 | apply a force | gravity (along an angle), a gusty wind, curl noise, or a pull toward a point or the mouse (negative pushes away), units a second²: the velocity (heading × speed) changes by force × dt, and the heading and speed follow it. Exact for a constant force at any step length | the point is on the picture's plane |
 | drag | loses that share of its speed a second: × e^(−amount·dt) a step | same |
 | fade with age | its colour dims from full at birth to black at the seconds given (the rules carry a brightness; Finish multiplies the colour) | same |
+| return home | a spring toward its **Home** memory (where it was born: Emit's Remember home, or a splat scan): v ← v · e^(−damping·dt) + strength · (home − p) · dt, from `delay` seconds after birth (eased in over half a second). Damping 2√strength settles without overshoot (agentRules/home.ts; docs/splat-scene.md "Agents as splats") | in 3D |
 
 Particles keep the speed their Emit shot them out at (Speed ±) on their first step; other kinds start at their species' Speed.
 

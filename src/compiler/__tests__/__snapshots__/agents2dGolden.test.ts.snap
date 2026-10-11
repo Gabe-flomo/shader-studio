@@ -350,6 +350,20 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentRulesPre
 }
 `;
 
+exports[`2D agents and pass graphs compile as they did before 3D > agentRulesScan 1`] = `
+{
+  "agents": "1709b29bef814702e3a918b3796e:18007",
+  "errors": null,
+  "fragmentShader": "1c90c6118e3e6516f38f2951ca2c:3782",
+  "paramBindings": "0a5ff2016d86f10785b599278406:1784",
+  "paramUniforms": "03d37b5985830806c59d05b962f1:1202",
+  "passes": "167d269bbddad80189e9f9473b28:2",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": "1cc70646f114331434399e0563b1:18091",
+}
+`;
+
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesSir 1`] = `
 {
   "agents": "15b884f6491b5f1281d11f6b363b:22463",

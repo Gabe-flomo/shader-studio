@@ -280,7 +280,7 @@ Edit verbs leave "the" out: `set glow falloff=8`. A clause that is only a refere
 
 | Head | Also | Settings | Example |
 |---|---|---|---|
-| `agents kind= edges= view= view-max=` |  | kind: trail, particles, flock, ants, swarm, crowd; edges: wrap, bounce, slide; view: random: 0.02–0.08; view-max: count | `agents kind=flock edges=bounce view=0.05` |
+| `agents kind= edges= view= view-max= colour=` |  | kind: trail, particles, flock, ants, swarm, crowd; edges: wrap, bounce, slide; view: random: 0.02–0.08; view-max: count; colour: own | `agents kind=flock edges=bounce view=0.05` |
 | `sensors ahead= angle=` |  | ahead: random: 0.015–0.06 (log); angle: random: 15–60, whole | `sensors ahead=0.035 angle=22.5deg` |
 | `flow size= evolve=` |  | size: random: 0.6–2; evolve: random: 0.05–0.4 | `flow size=1.2 evolve=0.2` |
 | `channels` |  |  | `channels home, food` |
@@ -321,3 +321,4 @@ Edit verbs leave "the" out: `set glow falloff=8`. A clause that is only a refere
 | `force` |  |  | `force gravity 0.75 angle=-90deg` |
 | `drag` |  |  | `drag 0.35` |
 | `fade` |  |  | `fade 3s` |
+| `home` |  |  | `always do home 6 delay=1 damping=3` |

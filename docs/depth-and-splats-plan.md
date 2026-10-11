@@ -255,3 +255,22 @@ the Play LFO sweeping Amount) and `plush.splat` exploding. Cost at 1 M: about +0
 sort reads 4 MB back (0.7 ms on the main thread) and sorts in 7–10 ms in the worker.
 
 Next: phase 4 (agents as splats); a Splat builder on these nodes.
+
+### Phase 4 status (agents as splats, `claude/agents-as-splats`)
+
+Built (docs/splat-scene.md "Agents as splats"):
+- **Splats look** in Draw agents and the Agent Builder's Look: soft oriented Gaussians stretched along the velocity, sized
+  fixed, by speed or by a memory, the Splat Scene's EWA maths in 2D and 3D, put together without a sort (weighted blended
+  OIT, deterministic), hidden behind a ray-marched scene's Depth, and a Distance output so a Splat Scene can composite them.
+- **Emit from a splat scan:** walker i is splat i (place, colour, size), its home in More memory; **Remember home** on
+  any other Emit shape.
+- **Return home**, a shared rule action and Forces card (a spring to the Home memory: strength, damping, delay), for the
+  Pieces' pieces-as-walkers too.
+- **Scan to walkers**, an Agent Builder start card (2D and 3D) and two examples, with generated scans.
+
+Done when (a scan blown apart by a field, flowing back): checked in the browser with the 3D example (250 000 splats,
+262 144 walkers): blown apart into volumetric sheets, back home in about 4 s. Step 0.7 ms, splat draw about 10 ms at
+532 × 706 while blown apart.
+
+Follow-ups: Splats on web pages (drawn as points there), per-walker opacity from the scan, a cheaper draw for big
+splats near the camera (a cap like Max blur), and the walkers' splats in the Splat Scene's own sort.

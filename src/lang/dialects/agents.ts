@@ -129,6 +129,8 @@ function printActionBase(set: AgentRuleSet, sp: AgentSpeciesRules, a: RuleAction
     case 'fade': return `fade ${fmtNum(a.seconds)}s`;
     // The layers ride along as one quoted string (JSON with ' for "): fields.ts fieldToText.
     case 'field': return `field ${fmtNum(a.strength)}${a.grip ? ` grip=${fmtNum(a.grip)}` : ''} layers="${fieldToText(a.spec)}"`;
+    // Return home: home <its Home memory> <strength> delay=1 damping=3.
+    case 'home': return `home ${memoryOf(set, a.memory) ? `${memText(set, a.memory)} ` : ''}${fmtNum(a.strength)}${a.delay ? ` delay=${fmtNum(a.delay)}` : ''}${a.damping ? ` damping=${fmtNum(a.damping)}` : ''}`;
     // A named memory's operation: mem carrying set 1 · mem away reset · mem food sum 1 from=food · mem fuel expr "fuel * 0.98".
     case 'mem': {
       const what = a.op === 'expr' ? ` "${(a.expr ?? '').replace(/"/g, "'")}"` : a.value !== undefined ? ` ${fmtNum(a.value)}${a.perSecond ? '/s' : ''}` : '';
@@ -157,6 +159,8 @@ export function printAgents(raw: AgentRuleSet, opts: { pretty?: boolean } = {}):
   if (set.kind) head.push(`kind=${set.kind}`);
   if (set.edges !== 'wrap') head.push(`edges=${set.edges}`);
   if (set.neighbours) head.push(`view=${fmtNum(set.neighbours.radius)}`, `view-max=${fmtNum(set.neighbours.max)}`);
+  // Look: its own colour from birth (a splat scan's).
+  if (set.look?.by === 'birth') head.push('colour=own');
   top.push(head.join(' '));
   if (set.sensor.distance !== DEF.sensor.distance || set.sensor.angle !== DEF.sensor.angle) top.push(`sensors ahead=${fmtNum(set.sensor.distance)} angle=${deg(set.sensor.angle)}`);
   if (set.flow.size !== DEF.flow.size || set.flow.evolve !== DEF.flow.evolve) top.push(`flow size=${fmtNum(set.flow.size)} evolve=${fmtNum(set.flow.evolve)}`);
@@ -343,7 +347,8 @@ export function parseAgents(src: string, opts: { seed?: number } = {}): AgentsPa
         else if (key === 'edges') { const k = a.v.k === 'word' ? a.v.v.toLowerCase() : ''; if (k === 'wrap' || k === 'bounce' || k === 'slide') set.edges = k; else c.error(a.at, 'edges is wrap, bounce or slide.'); }
         else if (key === 'view') { const n = num(a.v, a.at, 'view'); if (n !== null) set.neighbours = { radius: n, max: set.neighbours?.max ?? 36 }; }
         else if (key === 'view-max') { const n = num(a.v, a.at, 'view-max'); if (n !== null) set.neighbours = { radius: set.neighbours?.radius ?? 0.05, max: Math.round(n) }; }
-        else { const s = suggest(key, ['kind', 'edges', 'view', 'view-max']); c.error(a.at, `agents takes kind=, edges=, view= and view-max=.${s ? ` Did you mean “${s}”?` : ''}`); }
+        else if (key === 'colour' || key === 'color') { const k = a.v.k === 'word' ? a.v.v.toLowerCase() : ''; if (k === 'own') set.look = { by: 'birth' }; else c.error(a.at, 'colour=own: each walker keeps the colour it was born with.'); }
+        else { const s = suggest(key, ['kind', 'edges', 'view', 'view-max', 'colour']); c.error(a.at, `agents takes kind=, edges=, view=, view-max= and colour=own.${s ? ` Did you mean “${s}”?` : ''}`); }
       });
       continue;
     }
@@ -731,6 +736,22 @@ export function parseAgents(src: string, opts: { seed?: number } = {}): AgentsPa
           if (v === null) return null;
           return { kind: 'field', strength: v, ...(grip ? { grip } : {}), spec: spec ?? DEFAULT_FIELD() };
         }
+        case 'home': {
+          // home [its Home memory] 6 delay=1 damping=3 (Return home: a spring to where it was born; no name: the rule set's Home).
+          let id = '';
+          if (c.peek().t === 'word' || c.peek().t === 'str') {
+            const y = c.next();
+            const m = memId(nameOf(y));
+            if (!m) { memUnknown(nameOf(y) || c.text(y), y); return null; }
+            id = m;
+          }
+          const v = numVal('home'); let delay: number | undefined; let damping: number | undefined;
+          while (c.peek().t === 'word' && ['delay', 'damping'].includes(nameOf(c.peek()).toLowerCase()) && c.peek(1).t === '=') {
+            const k = nameOf(c.next()).toLowerCase(); c.next();
+            if (k === 'delay') delay = numVal('delay', u => u === null || u === 's') ?? undefined; else damping = numVal('damping') ?? undefined;
+          }
+          return v === null ? null : { kind: 'home', memory: id, strength: v, ...(delay !== undefined ? { delay } : {}), ...(damping !== undefined ? { damping } : {}) };
+        }
         case 'mem': {
           // mem carrying set 1 · mem away reset · mem food sum 1 from=food · mem fuel expr "fuel * 0.98" (memory.ts's operation cards).
           const y = c.next();
@@ -759,7 +780,7 @@ export function parseAgents(src: string, opts: { seed?: number } = {}): AgentsPa
           }
           return a;
         }
-        default: unknown(x, 'an action', ['mem', 'turn', 'wander', 'speed', 'accelerate', 'leave', 'become', 'memory', 'stop', 'stick', 'die', 'spawn', 'follow', 'against', 'align', 'separate', 'match', 'cohere', 'slow', 'avoid-edges', 'orbit', 'force', 'field', 'drag', 'fade']); while (!c.atClauseEnd() && c.peek().t !== ',' && c.peek().t !== '@') c.next(); return null;
+        default: unknown(x, 'an action', ['mem', 'turn', 'wander', 'speed', 'accelerate', 'leave', 'become', 'memory', 'stop', 'stick', 'die', 'spawn', 'follow', 'against', 'align', 'separate', 'match', 'cohere', 'slow', 'avoid-edges', 'orbit', 'force', 'field', 'home', 'drag', 'fade']); while (!c.atClauseEnd() && c.peek().t !== ',' && c.peek().t !== '@') c.next(); return null;
       }
     };
     for (const at of d.ruleAt) {
@@ -814,12 +835,12 @@ export function parseAgents(src: string, opts: { seed?: number } = {}): AgentsPa
 // ── The registry's agents words ───────────────────────────────────────────
 
 const agentEntries = (): Entry[] => [
-  { id: 'agents:agents', kind: 'header', dialects: ['agents'], words: ['agents'], params: [{ key: 'kind', type: 'choice', options: WALKER_KIND_KEYS }, { key: 'edges', type: 'choice', options: ['wrap', 'bounce', 'slide'] }, { key: 'view', type: 'number', rand: AG_RAND.radius }, { key: 'view-max', type: 'count' }], summary: 'The rule set: what kind of walkers, what the edges do, how far they see each other.', examples: ['agents kind=flock edges=bounce view=0.05'], stage: 'agents' },
+  { id: 'agents:agents', kind: 'header', dialects: ['agents'], words: ['agents'], params: [{ key: 'kind', type: 'choice', options: WALKER_KIND_KEYS }, { key: 'edges', type: 'choice', options: ['wrap', 'bounce', 'slide'] }, { key: 'view', type: 'number', rand: AG_RAND.radius }, { key: 'view-max', type: 'count' }, { key: 'colour', type: 'choice', options: ['own'] }], summary: 'The rule set: what kind of walkers, what the edges do, how far they see each other.', examples: ['agents kind=flock edges=bounce view=0.05'], stage: 'agents' },
   { id: 'agents:sensors', kind: 'setting', dialects: ['agents'], words: ['sensors'], params: [{ key: 'ahead', type: 'number', rand: AG_RAND.ahead }, { key: 'angle', type: 'angle', rand: AG_RAND.angle }], summary: 'The trail sensors: how far ahead and how wide.', examples: ['sensors ahead=0.035 angle=22.5deg'], stage: 'agents' },
   { id: 'agents:flow', kind: 'setting', dialects: ['agents'], words: ['flow'], params: [{ key: 'size', type: 'number', rand: AG_RAND['flow-size'] }, { key: 'evolve', type: 'number', rand: AG_RAND.evolve }], summary: 'The flow field (curl noise) follow flow reads.', examples: ['flow size=1.2 evolve=0.2'], stage: 'agents' },
   { id: 'agents:channels', kind: 'setting', dialects: ['agents'], words: ['channels'], params: [], summary: 'Names for the four trail channels (_ for a blank one).', examples: ['channels home, food'], stage: 'agents' },
   { id: 'agents:masks', kind: 'setting', dialects: ['agents'], words: ['masks'], params: [], summary: 'Up to four masks (inputs on the group card); Name:texture for a texture.', examples: ['masks Food, Nest'], stage: 'agents' },
-  { id: 'agents:remember', kind: 'setting', dialects: ['agents'], words: ['remember'], params: [{ key: 'start', type: 'number' }, { key: 'fade', type: 'number' }], summary: 'A named memory each walker keeps: a counter, timer, flag, value, position or level.', examples: ['remember carrying flag', 'remember energy level start=1 fade=0.3'], stage: 'agents' },
+  { id: 'agents:remember', kind: 'setting', dialects: ['agents'], words: ['remember'], params: [{ key: 'start', type: 'number' }, { key: 'fade', type: 'number' }], summary: 'A named memory each walker keeps: a counter, timer, flag, value, position, level or home (where it was born).', examples: ['remember carrying flag', 'remember energy level start=1 fade=0.3', 'remember home home'], stage: 'agents' },
   { id: 'agents:color-by', kind: 'setting', dialects: ['agents'], words: ['color-by', 'colour-by'], params: [{ key: 'lo', type: 'number' }, { key: 'hi', type: 'number' }], summary: 'Colour each walker by a memory instead of its state.', examples: ['remember energy level · color-by energy lo=0 hi=1'], stage: 'colour' },
   { id: 'agents:collide', kind: 'setting', dialects: ['agents'], words: ['collide'], params: [{ key: 'reach', type: 'number' }, { key: 'margin', type: 'number' }, { key: 'cushion', type: 'number' }, { key: 'bounce', type: 'number' }], summary: 'In 3D: keep the walkers out of the scene wired into the group.', examples: ['collide reach=1.6 margin=0.03 cushion=0.18 bounce=0.2'], stage: 'agents' },
   { id: 'agents:mem', kind: 'action', dialects: ['agents'], words: ['mem'], params: [], summary: 'A named memory: change it (an action) or read it (a condition).', examples: ['remember carrying flag · remember away timer · species Ants: when mem carrying > 0.5 do mem away reset', 'remember energy level · always do mem energy add -0.1/s'] },
@@ -830,7 +851,7 @@ const agentEntries = (): Entry[] => [
   ...[['turn', 'turn toward food 20deg · turn away mouse 30deg · turn around'], ['wander', 'wander 7deg'], ['speed', 'speed 0.4'], ['accelerate', 'accelerate 0.1/s'], ['leave', 'leave food 1 fade=0.15'], ['become', 'become carrying'],
     ['stop', 'stop'], ['stick', 'stick'], ['die', 'die'], ['spawn', 'spawn 1'], ['follow', 'follow flow 10deg'], ['against', 'against flow 10deg'], ['align', 'align 10deg'], ['separate', 'separate 12deg who=others radius=0.045'],
     ['match', 'match 6deg'], ['cohere', 'cohere 3deg'], ['slow', 'slow jam=20'], ['avoid-edges', 'avoid-edges 12deg margin=0.1'], ['orbit', 'orbit centre 8deg distance=0.5 cw'], ['force', 'force gravity 0.75 angle=-90deg · force toward mouse 1'],
-    ['drag', 'drag 0.35'], ['fade', 'fade 3s']].map(([w, ex]): Entry => ({ id: `agents:act:${w}`, kind: 'action', dialects: ['agents'], words: [w], params: [], summary: `Action: ${ACTION_KINDS.find(a => a.kind === w || (w === 'avoid-edges' && a.kind === 'avoidEdges') || (w === 'leave' && a.kind === 'trail') || (w === 'become' && a.kind === 'state') || ((w === 'follow' || w === 'against') && a.kind === 'flow') || (w === 'accelerate' && a.kind === 'speed'))?.label ?? w}.`, examples: ex.split(' · ') })),
+    ['drag', 'drag 0.35'], ['fade', 'fade 3s'], ['home', 'always do home 6 delay=1 damping=3']].map(([w, ex]): Entry => ({ id: `agents:act:${w}`, kind: 'action', dialects: ['agents'], words: [w], params: [], summary: `Action: ${ACTION_KINDS.find(a => a.kind === w || (w === 'avoid-edges' && a.kind === 'avoidEdges') || (w === 'leave' && a.kind === 'trail') || (w === 'become' && a.kind === 'state') || ((w === 'follow' || w === 'against') && a.kind === 'flow') || (w === 'accelerate' && a.kind === 'speed'))?.label ?? w}.`, examples: ex.split(' · ') })),
 ];
 
 registerEntries(agentEntries());

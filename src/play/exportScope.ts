@@ -50,7 +50,7 @@ const WHY: Record<ExportOut, string> = {
   midi: 'MIDI won’t work on a web page; controls MIDI moves will hold their current value, and the pad grid and MIDI-played sounds stay quiet.',
   mic: 'The microphone and live audio won’t work on a web page; controls they move will hold their current value.',
   depth: 'The Depth node’s model won’t run on a web page, so its depth reads 0 there. Bake the depth (a video or an image) to bring it along.',
-  splats: 'Splat Scene scans don’t go onto web pages yet: the scan reads empty there and the rest of the scene draws as usual.',
+  splats: 'Splat Scene scans don’t go onto web pages yet: the scan reads empty there and the rest of the scene draws as usual. Walkers drawn as Splats are dots there, and an Emit from a splat scan gives birth to none.',
 };
 
 /** The sentence for one kind, for tests and the docs. */
@@ -196,5 +196,7 @@ export function webExportScope(input: PlayHtmlInput): { input: PlayHtmlInput; fr
   }
   // A Splat Scene's scan is drawn by the app's raster pass, which pages don't have yet (docs/splat-scene.md).
   if (shaders.includes(SPLAT_MARK)) kinds.add('splats');
+  // Agents as splats (the same doc): the Splats look draws dots on a page, and an Emit from a splat scan has no scan there.
+  if (/u_agdraw_\w+_dist\b/.test(shaders) || (input.agents && JSON.stringify(input.agents).includes('u_agScan_'))) kinds.add('splats');
   return { input: next, frozen: EXPORT_OUTS.filter(k => kinds.has(k)).map(exportFrozenText) };
 }

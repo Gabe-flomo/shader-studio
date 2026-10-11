@@ -21,6 +21,7 @@ The start page shows five cards, each with a small moving picture: **Trail follo
 | Flocks | flock | the Boids example's setup | 3D flock |
 | Crowds | crowd | the Crowd example's setup (two kinds walking opposite ways) | the 3D flock's setup with the crowd's rules, rescaled |
 | Orbiters | swarm | the Swarm example's setup | Orbiters in 3D |
+| Scan to walkers | particles | a splat scan as walkers (Emit: Splat scan, a generated ball), blown apart and flowing back home, drawn as Splats | Scan to walkers in 3D |
 
 Crowds have a card of their own but the Flocks sections. A crowd is a flock with somewhere to go (Head for) that slows in a jam. What you make looks different (people in lanes, not birds) and starts from a different setup, so it gets its own picture and presets.
 
@@ -141,6 +142,8 @@ The rules the cards can't show (two conditions, Stop after this rule, states, ma
   - Attract / repel: Pull (negative pushes), toward A point or The mouse, Across, Up.
   - Follow a field: a vector field you pick, combine or write (below).
   - Drag.
+  - Return home: Strength, Damping, After (s): a spring back to the Home memory (where it was born). Without a Home
+    memory the card offers to add one; the Emit fills it (Remember home, or a splat scan).
 
   They run in order: drag the handle to reorder.
 - **Moving:** Speed, At the edges.
@@ -534,8 +537,8 @@ The trail's four channels are **named colour swatches** (Trail → Channels): a 
 
 Every kind has a Look section (`LookSection.tsx`, `agentBuilder/look.ts`):
 
-- **Drawn as**: Dots, Glow, Streaks or Ink, Size, Brightness (and Streak length): Draw agents. With no Draw agents (trail followers: the trail is the picture), **Draw the walkers too** adds one over what the Output showed.
-- **Colour**: by Kind (Draw agents' Colour by State: the kinds' and states' colours, named and coloured here, + State), Speed (with Fast is), Age, Heading, One colour (Draw agents' palette, or Colour A → B), **A trail** (the rules colour each walker from its kind's colour, dimmed, to a channel's colour as that trail is under it: the rule set's `look`, Finish's colour, Draw agents' Colour by Agent), or **A memory** (phase 4's `colourBy`).
+- **Drawn as**: Dots, Glow, Streaks, Ink or **Splats**, Size, Brightness (and Streak length): Draw agents. Splats has Splat size (or, sized by Its own, the memory scale), Size by (Fixed, Speed, Its own), Stretch and Opacity (docs/splat-scene.md "Agents as splats"). With no Draw agents (trail followers: the trail is the picture), **Draw the walkers too** adds one over what the Output showed.
+- **Colour**: by Kind (Draw agents' Colour by State: the kinds' and states' colours, named and coloured here, + State), Speed (with Fast is), Age, Heading, One colour (Draw agents' palette, or Colour A → B), **A trail** (the rules colour each walker from its kind's colour, dimmed, to a channel's colour as that trail is under it: the rule set's `look`, Finish's colour, Draw agents' Colour by Agent), or **A memory** (phase 4's `colourBy`), or **Its own** (the colour it was born with, a splat scan's: the rule set's `look: { by: 'birth' }` leaves Agent Output's Colour unwired).
 - **The trail**: what the picture shows (the trail, one channel, walker density) and its palette: five ready-made palettes and each stop's colour (the Stops Palette that shows the trail).
 - **3D: Camera**: Distance, Angle, Elevation, Orbit speed, Zoom, Focus, Blur, Max blur (Draw agents' camera), and Around a shape.
 - The legend says what is drawn: "Each walker is a dot with a soft glow, 1.2 pixels across", "Colour: slow particles at the palette's start, fast ones at its end", the trail's palette, the camera. Focus plays a few walkers drawn and coloured that way.

@@ -114,6 +114,12 @@ export interface AgentGroupProgram {
   live: boolean;
   /** Graph nodes compiled into it (inside and outside the group). */
   nodeIds: string[];
+  /**
+   * Emits giving birth from a splat scan (Shape: Splat scan, docs/splat-scene.md "Agents as splats"): the engine reads
+   * each scan (lib/agentScans.ts), thinned to the group's count, into agentScanUniforms(slug) and starts the group over
+   * when it arrives. `source` is a library id or a generated scan (`demo:<kind>:<count>`); `flip` turns it over (Up is −Y).
+   */
+  scans?: Array<{ nodeId: string; slug: string; source: string; flip: boolean }>;
 }
 
 /**
@@ -184,7 +190,7 @@ export interface AgentDrawProgram {
   nodeId: string;
   slug: string;
   group: string;
-  style: 'points' | 'glow' | 'streaks' | 'ink';
+  style: 'points' | 'glow' | 'streaks' | 'ink' | 'splats';
   colorBy: 'single' | 'species' | 'speed' | 'heading' | 'age' | 'agent' | 'speedFast' | 'headingRound';
   /** 'ab' (Colour A → B) or a Particles palette's name. */
   palette: string;
