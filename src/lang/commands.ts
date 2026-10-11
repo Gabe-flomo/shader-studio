@@ -253,7 +253,7 @@ export const COMMAND_VERBS: readonly CommandVerb[] = [
 
 /** What a builder command opens or does (builders/doBuilders.ts reads and plans it, builders/open.ts runs it). */
 export type BuilderCommandId =
-  | 'open-scene-builder' | 'new-3d-scene' | 'edit-scene' | 'new-2d-scene' | 'new-expression'
+  | 'open-scene-builder' | 'new-3d-scene' | 'edit-scene' | 'new-2d-scene' | 'new-grid-scene' | 'new-expression'
   | 'open-grid-rules' | 'new-grid-rules' | 'edit-rules'
   | 'open-agent-rules' | 'new-agent-rules' | 'new-3d-agents' | 'new-3d-agents-shape'
   | 'show-recipe' | 'copy-recipe';
@@ -275,19 +275,24 @@ export interface BuilderCommand {
  */
 export const BUILDER_COMMANDS: readonly BuilderCommand[] = [
   {
-    id: 'open-scene-builder', words: ['open the scene builder', 'open the 3d scene builder', 'scene builder', '3d scene builder', 'open the builder'],
-    summary: 'Opens the 3D Scene Builder on a new scene (its Templates tab). Build adds the scene to the graph.',
+    id: 'open-scene-builder', words: ['open the scene builder', 'scene builder', 'open the builder', 'open the scene builders'],
+    summary: 'Opens the Scene builder: “What kind of scene?” (2D, agents, grid, 3D), or the scene a builder made here, to edit it.',
     examples: [{ text: 'open the scene builder', on: 'empty' }, { text: 'scene builder', on: 'empty' }],
   },
   {
-    id: 'new-3d-scene', words: ['new 3d scene', 'new scene', 'make a 3d scene', 'build a 3d scene', 'create a 3d scene', 'start a 3d scene'],
-    summary: 'The same: the 3D Scene Builder on a new scene.',
+    id: 'new-3d-scene', words: ['new 3d scene', 'open the 3d scene builder', '3d scene builder', 'new scene', 'make a 3d scene', 'build a 3d scene', 'create a 3d scene', 'start a 3d scene'],
+    summary: 'Opens the 3D Scene Builder on a new scene (its Templates tab). Build adds the scene to the graph.',
     examples: [{ text: 'new 3d scene', on: 'empty' }, { text: 'build a 3d scene', on: 'empty' }],
   },
   {
     id: 'new-2d-scene', words: ['new 2d scene', 'open the 2d scene builder', '2d scene builder', 'make a 2d scene', 'build a 2d scene', 'create a 2d scene', 'start a 2d scene', 'new 2d grid'],
     summary: 'Opens the 2D Scene Builder on a new scene: shapes, space, a grid with ripples, functions and a look. Build adds it to the graph.',
     examples: [{ text: 'new 2d scene', on: 'empty' }, { text: '2d scene builder', on: 'empty' }],
+  },
+  {
+    id: 'new-grid-scene', words: ['new grid scene', 'open the grid builder', 'grid builder', 'grid scene builder', 'make a grid scene', 'build a grid scene', 'draw on a grid', 'new pattern grid'],
+    summary: 'Opens the Grid builder on a new grid: draw shapes on cells, move them, add patterns, warps and rules. Done adds it to the graph; “Make it a simulation” turns it into Grid Rules.',
+    examples: [{ text: 'new grid scene', on: 'empty' }, { text: 'grid builder', on: 'empty' }],
   },
   // 'new-expression' (the Expression Builder) is hidden for now: its code stays, the Do… bar no longer offers it.
   {

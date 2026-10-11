@@ -178,7 +178,8 @@ describe('the Recipe chip', () => {
 describe('Do… bar builder phrases', () => {
   const phrases: Array<[string, string]> = [
     ['open the scene builder', 'open-scene-builder'], ['Open scene builder!', 'open-scene-builder'],
-    ['new 3d scene', 'new-3d-scene'], ['edit this scene', 'edit-scene'],
+    ['new 3d scene', 'new-3d-scene'], ['3d scene builder', 'new-3d-scene'], ['edit this scene', 'edit-scene'],
+    ['new grid scene', 'new-grid-scene'], ['grid builder', 'new-grid-scene'],
     ['open grid rules', 'open-grid-rules'], ['new grid rules', 'new-grid-rules'], ['edit the rules', 'edit-rules'],
     ['open agent rules', 'open-agent-rules'], ['new agent rules', 'new-agent-rules'],
     ['new 3d agents', 'new-3d-agents'], ['3D agent builder', 'new-3d-agents'], ['open the 3d agent builder', 'new-3d-agents'],
@@ -202,6 +203,9 @@ describe('Do… bar builder phrases', () => {
     const { graph, scene } = builtScene();
     const march = graph.find(n => n.params[ROLE_KEY] === 'march')!;
     expect(plan('new 3d scene', []).action).toEqual({ kind: 'new-scene' });
+    // "Open the scene builder" opens the kind page (the one Scene builder), not the 3D builder.
+    expect(plan('open the scene builder', []).action).toEqual({ kind: 'open-scenes' });
+    expect(plan('new grid scene', []).action).toEqual({ kind: 'new-grid-scene' });
     expect(plan('edit this scene', graph, [march.id]).action).toEqual({ kind: 'edit-scene', sceneId: scene.id });
     expect(plan('edit this scene', graph).action).toEqual({ kind: 'edit-scene', sceneId: scene.id });
     expect(plan('edit this scene', [handScene()]).problem).toMatch(/no scene the Scene Builder built/);

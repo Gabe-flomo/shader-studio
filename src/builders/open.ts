@@ -7,6 +7,7 @@
  *    (builders/sceneKinds.ts); a kind then opens one of the four below.
  *  - 3D Scene Builder: the builder on a new scene (Build adds it to the graph).
  *  - Grid Rules: a new Grid Rules node (on the Output when the graph is empty), its editor open.
+ *    (The kind page's Grid scene opens the Grid builder, gridScene/; it jumps to Grid Rules.)
  *  - Agent Builder: its start page ("What are you making?"); picking a kind adds the group.
  *  - 3D Agent Builder: a new 3D rules group (agentRules/space3d.ts: Ball Emit, a volume Trail, Draw
  *    agents through an orbiting camera), its rules editor open.
@@ -27,6 +28,7 @@ import { closeSceneShell, openAgentBuilder, openGridRulesEditor, showRecipeOf } 
 import { editScene2DInBuilder } from '../sceneBuilder2d/actions';
 import { openSceneBuilderShell, type BuiltScene, type SceneKind } from './sceneKinds';
 import { openAgentRulesEditor } from '../agentRules/storeActions';
+import { editGridSceneInBuilder, openNewGridScene } from '../gridScene/actions';
 import { builderRecipeOf } from './recipe';
 import type { BuilderAction } from './doBuilders';
 
@@ -78,7 +80,7 @@ export function startSceneKind(kind: SceneKind, o: { at?: { x: number; y: number
   closeSceneShell();
   if (kind === '3d') openNewSceneBuilder(o.at);
   else if (kind === '2d') openNewSceneBuilder2D(o.at);
-  else if (kind === 'grid') newGridRules();
+  else if (kind === 'grid') openNewGridScene(o.at);
   else openAgentBuilder(null, { fromShell: o.fromShell });
 }
 
@@ -87,6 +89,7 @@ export function editBuiltScene(b: Pick<BuiltScene, 'kind' | 'id'>): boolean {
   closeSceneShell();
   if (b.kind === '3d') return editSceneInBuilder(b.id);
   if (b.kind === '2d') return editScene2DInBuilder(b.id);
+  if (b.kind === 'grid' && useNodeGraphStore.getState().nodes.some(nd => nd.id === b.id && nd.type !== 'gridRules')) return editGridSceneInBuilder(b.id);
   if (b.kind === 'grid') {
     const st = useNodeGraphStore.getState();
     if (st.activeGroupPath.length) st.exitToRoot();
@@ -127,6 +130,8 @@ export function copyRecipeOf(nodeId: string): boolean {
 export function runBuilderAction(a: BuilderAction): boolean {
   const st = useNodeGraphStore.getState();
   switch (a.kind) {
+    case 'open-scenes': openSceneBuilderShell(); return true;
+    case 'new-grid-scene': openNewGridScene(); return true;
     case 'new-scene': openNewSceneBuilder(); return true;
     case 'new-scene2d': openNewSceneBuilder2D(); return true;
     case 'new-expression': openExpressionBuilder(); return true;

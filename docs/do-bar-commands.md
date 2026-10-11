@@ -860,9 +860,9 @@ Examples:
 
 ### open the scene builder
 
-Opens the 3D Scene Builder on a new scene (its Templates tab). Build adds the scene to the graph.
+Opens the Scene builder: “What kind of scene?” (2D, agents, grid, 3D), or the scene a builder made here, to edit it.
 
-Words: `open the scene builder`, `open the 3d scene builder`, `scene builder`, `3d scene builder`, `open the builder`
+Words: `open the scene builder`, `scene builder`, `open the builder`, `open the scene builders`
 
 Examples:
 
@@ -871,9 +871,9 @@ Examples:
 
 ### new 3d scene
 
-The same: the 3D Scene Builder on a new scene.
+Opens the 3D Scene Builder on a new scene (its Templates tab). Build adds the scene to the graph.
 
-Words: `new 3d scene`, `new scene`, `make a 3d scene`, `build a 3d scene`, `create a 3d scene`, `start a 3d scene`
+Words: `new 3d scene`, `open the 3d scene builder`, `3d scene builder`, `new scene`, `make a 3d scene`, `build a 3d scene`, `create a 3d scene`, `start a 3d scene`
 
 Examples:
 
@@ -890,6 +890,17 @@ Examples:
 
 - `new 2d scene`
 - `2d scene builder`
+
+### new grid scene
+
+Opens the Grid builder on a new grid: draw shapes on cells, move them, add patterns, warps and rules. Done adds it to the graph; “Make it a simulation” turns it into Grid Rules.
+
+Words: `new grid scene`, `open the grid builder`, `grid builder`, `grid scene builder`, `make a grid scene`, `build a grid scene`, `draw on a grid`, `new pattern grid`
+
+Examples:
+
+- `new grid scene`
+- `grid builder`
 
 ### edit this scene
 
