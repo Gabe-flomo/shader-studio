@@ -299,6 +299,7 @@ class SplatEngine {
 
   private setModifier(s: Slot, pass: SplatPass, probe: SplatProbeProgram, uniforms: Record<string, THREE.IUniform>): void {
     const mod = probe.modifier;
+    pass.setBox(s.status.info?.center, s.status.info?.radius);
     pass.setModifier(this.vertexShader, mod?.fragmentShader ?? null, uniforms, mod?.uniforms ?? null);
     const refused = pass.modifierRefused;
     if (refused !== !!s.status.modifierRefused) { s.status = { ...s.status, modifierRefused: refused }; this.changed(); }

@@ -102,12 +102,12 @@ export function splatModifiersNodes(): GraphNode[] {
     'LFO: a slow sine from 0 to 1, once every eight seconds.',
     'Why: wired into Explode\'s Amount socket, it blows the scan apart and brings it home again, over and over.',
   ) });
-  const explode = n('splatExplode', 'smExplode', 1260, 0, { distance: 1.1, scatter: 0.45, stagger: 0.6, spin: 0.35, ...note(
+  const explode = n('splatExplode', 'smExplode', 1260, 0, { distance: 1.1, scatter: 0.45, stagger: 0.6, spin: 0.35, relative: false, ...note(
     'Splat Explode: blows the splats out from the centre (each a little after the last: Stagger 0.6), turning as they go (Spin).',
     'Its Amount comes from the LFO (the socket beside the slider). The engine sorts the splats by where they have moved to, so they still blend far to near.',
   ) }, { splat: ['smSet', 'splat'] });
   explode.inputs.__param_amount = { type: 'float', label: 'Amount', connection: { nodeId: 'smPulse', outputKey: 'value' } };
-  const wave = n('splatWave', 'smWave', 1680, 0, { mode: 'wobble', amplitude: 0.025, frequency: 4, speed: 0.7, ...note(
+  const wave = n('splatWave', 'smWave', 1680, 0, { mode: 'wobble', amplitude: 0.025, frequency: 4, speed: 0.7, relative: false, ...note(
     'Splat Wave, Wobble: every splat drifts a little through slow noise, so the surface shimmers even at rest.',
     'Try: Kind Wave and Amplitude 0.08 for ripples running across the scan; Twist for a spiral.',
   ) }, { splat: ['smExplode', 'splat'] });
@@ -136,7 +136,7 @@ export const SPLAT_PLAY = { dissolve: 'sdDissolve', scan: 'sdScan' } as const;
 export function splatDissolvePlayNodes(): GraphNode[] {
   return [
     n('splatDissolve', SPLAT_PLAY.dissolve, 0, 0, {
-      amount: 0.35, scale: 1.6, evolve: 0.08, softness: 0.08, edge: 0.06, edgeColor: [1, 0.5, 0.15], glow: 5, mode: 'both', drift: 0.3,
+      amount: 0.35, scale: 1.6, evolve: 0.08, softness: 0.08, edge: 0.06, edgeColor: [1, 0.5, 0.15], glow: 5, mode: 'both', drift: 0.3, relative: false,
       ...note(
         'Splat Dissolve: a threshold (Amount) sweeps through noise in the scan; splats below it fade and shrink away and drift up, and the band round it glows orange.',
         'Amount is a Play control, swept by an LFO; Edge glow follows the mouse. Noise scale 1.6 dissolves in patches about a third of the ball across.',

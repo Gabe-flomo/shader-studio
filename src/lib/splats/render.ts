@@ -17,7 +17,7 @@ import { PACK_WIDTH, SH_WIDTH, type PackedSplats } from './pack';
 /** The modifier targets' width (compiler/splatGraph.ts SPLAT_MOD_WIDTH): one texel per splat. */
 export const MOD_WIDTH = 2048;
 /** A modifier program's own uniform names (compiler/splatGraph.ts splatModUniformNames). */
-export interface ModNames { data: string; probe: string; count: string }
+export interface ModNames { data: string; probe: string; count: string; box?: string }
 
 /** The probe's texels as numbers: eye, three rays, three model columns (w: size, opacity), offset. */
 export type ProbeReading = Float32Array;
@@ -163,6 +163,12 @@ export class SplatPass {
 
   hasModifier(): boolean { return !!this.modMat; }
 
+  /** The scan's box for the modifier program: its middle (in its own coordinates) and its core radius. */
+  private box = new THREE.Vector4(0, 0, 0, 1);
+  setBox(center: readonly number[] | undefined, radius: number | undefined): void {
+    this.box.set(center?.[0] ?? 0, center?.[1] ?? 0, center?.[2] ?? 0, radius && radius > 1e-6 ? radius : 1);
+  }
+
   /** The two modifier targets, one texel per splat: (centre, size) as floats, (colour, opacity) as half floats. */
   private ensureModTarget(): THREE.WebGLRenderTarget {
     const rows = Math.max(1, Math.ceil(this.count / MOD_WIDTH));
@@ -182,6 +188,7 @@ export class SplatPass {
     set(nm.data, this.data);
     set(nm.probe, this.probeTarget.texture);
     set(nm.count, this.count);
+    if (nm.box) set(nm.box, this.box);
     r.setRenderTarget(t);
     r.render(this.modScene, this.ortho);
     this.splatUniforms.u_modA.value = t.textures[0];

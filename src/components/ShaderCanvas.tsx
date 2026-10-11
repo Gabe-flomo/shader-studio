@@ -42,6 +42,7 @@ import { renderKeepAlive } from '../lib/renderKeepAlive';
 import { appFocused, backgroundFrame, backgroundMode, onFocusChange, onLongHidden } from '../lib/backgroundPolicy';
 import { onPreviewHold, previewHeld } from '../lib/previewHold';
 import { previewMirrored, sendPreviewFrame, setPreviewWake } from '../lib/previewMirror';
+import { usePreviewSizeOverride } from '../lib/previewSize';
 import { emitTimeTick } from '../lib/timeTick';
 import { gateFrame, newDrawGate, newOfflineHold, offlineFrame, posterizeTime, resolveFrameRate, useFrameRate, type EffectiveFrameRate } from '../lib/frameRate';
 import { startRefreshDetection } from '../lib/refreshRate';
@@ -2968,7 +2969,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     if (!el) return;
     return attachLayerDrop(el);
   }, []);
-  const [fit, setFit] = useState<{ width: number; height: number } | null>(null);
+  const [fitAspectSize, setFit] = useState<{ width: number; height: number } | null>(null);
+  // A builder that mirrors this preview into a big viewport of its own (the Splat builder) holds it to that size.
+  const sizeOverride = usePreviewSizeOverride();
+  const fit = sizeOverride ?? fitAspectSize;
   useEffect(() => {
     const ratio = PREVIEW_ASPECTS.find(a => a.id === previewAspect)?.ratio ?? null;
     const outer = outerRef.current;

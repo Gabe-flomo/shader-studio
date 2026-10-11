@@ -50,12 +50,19 @@ export interface PlaceSpec {
 
 export const EFFECT_KINDS = ['dissolve', 'explode', 'wave', 'color', 'crop', 'look', 'points'] as const;
 export type EffectKind = typeof EFFECT_KINDS[number];
+/**
+ * A card in the stack: one of the effects, or `custom`, "Your nodes": a run of nodes you added on the Splat Scene card
+ * (Splat Attributes → … → Set Splat, or any splat node), kept where it is in the chain. The builder never builds or
+ * changes those nodes; it only wires them in their place (`tail` is the one that feeds the next card).
+ */
+export type StackKind = EffectKind | 'custom';
 
-export const EFFECT_TYPE: Record<EffectKind, string> = {
-  dissolve: 'splatDissolve', explode: 'splatExplode', wave: 'splatWave', color: 'splatColor', crop: 'splatCrop', look: 'splatLook', points: 'splatPoints',
+export const EFFECT_TYPE: Record<StackKind, string> = {
+  dissolve: 'splatDissolve', explode: 'splatExplode', wave: 'splatWave', color: 'splatColor', crop: 'splatCrop', look: 'splatLook', points: 'splatPoints', custom: '',
 };
 
-export const EFFECT_INFO: Record<EffectKind, { label: string; line: string; /** The setting Animate sweeps. */ main: string }> = {
+export const EFFECT_INFO: Record<StackKind, { label: string; line: string; /** The setting Animate sweeps. */ main: string }> = {
+  custom: { label: 'Your nodes', line: 'Nodes you added on the card, kept in their place in the chain', main: '' },
   dissolve: { label: 'Dissolve', line: 'Splats fade away through noise, with a glowing edge', main: 'amount' },
   explode: { label: 'Explode', line: 'Blown out from a point; Return home brings them back', main: 'amount' },
   wave: { label: 'Wave', line: 'A travelling wave, a wobble or a twist', main: 'amplitude' },
@@ -69,7 +76,11 @@ export type ParamValue = number | string | Vec3;
 
 export interface EffectSpec {
   id: string;
-  kind: EffectKind;
+  kind: StackKind;
+  /** Your nodes: the node that feeds the next card (the run's end on the chain). */
+  tail?: string;
+  /** Your nodes: what the run is made of, in words ("Splat Attributes → Expression → Set Splat"). */
+  label?: string;
   /** Off: left out of the chain (kept in the stack). */
   on: boolean;
   /** The recipe node's params (its own keys). */
@@ -81,7 +92,7 @@ export interface EffectSpec {
 export interface AnimateSpec { param: string; speed: number; from: number; to: number }
 
 /** The sweep Animate starts with for a setting: a range that shows the effect well. */
-export function animateFor(kind: EffectKind, param = EFFECT_INFO[kind].main, speed = 0.1): AnimateSpec {
+export function animateFor(kind: StackKind, param = EFFECT_INFO[kind].main, speed = 0.1): AnimateSpec {
   const ranges: Record<string, [number, number]> = {
     amount: [0, 1], offset: [-1, 1], amplitude: [0, 0.12], hue: [-180, 180], size: [0.2, 1.4], dotSize: [0.6, 4], returnHome: [0, 1],
     saturation: [0, 2], brightness: [0.5, 2], opacity: [0.2, 1], keep: [0.1, 1], glow: [0, 10], spin: [-1, 1], tintAmount: [0, 1],
@@ -91,14 +102,17 @@ export function animateFor(kind: EffectKind, param = EFFECT_INFO[kind].main, spe
 }
 
 /** What a new effect of `kind` starts with: its node's defaults, nudged so it shows at once. */
-export function effectDefaults(kind: EffectKind): Record<string, ParamValue> {
+export function effectDefaults(kind: StackKind): Record<string, ParamValue> {
+  if (kind === 'custom') return {};
   const def = getNodeDefinition(EFFECT_TYPE[kind]);
   const out: Record<string, ParamValue> = {};
   for (const [k, v] of Object.entries(def?.defaultParams ?? {})) {
+    // Not settings: the load stamp; and Relative to the scan, which the builder always has on (build.ts).
+    if (k.startsWith('_') || k === 'relative') continue;
     if (typeof v === 'number' || typeof v === 'string') out[k] = v;
     else if (Array.isArray(v) && v.length === 3) out[k] = [Number(v[0]), Number(v[1]), Number(v[2])];
   }
-  const nudge: Partial<Record<EffectKind, Record<string, ParamValue>>> = {
+  const nudge: Partial<Record<StackKind, Record<string, ParamValue>>> = {
     dissolve: { amount: 0.35 },
     explode: { amount: 0.35 },
     wave: { amplitude: 0.05 },
@@ -156,7 +170,7 @@ export const LIGHT_INFO: Record<LightKind, { label: string; sunDir: Vec3; sunCol
   studio: { label: 'Studio', sunDir: [0.5, 0.8, 0.4], sunColor: [1, 0.95, 0.88], sky: [0.35, 0.4, 0.5], bounce: [0.1, 0.1, 0.1] },
   sunset: { label: 'Sunset', sunDir: [-0.8, 0.25, 0.3], sunColor: [1.4, 0.7, 0.35], sky: [0.25, 0.25, 0.45], bounce: [0.15, 0.08, 0.05] },
   night: { label: 'Night', sunDir: [0.3, 0.9, -0.3], sunColor: [0.35, 0.45, 0.8], sky: [0.06, 0.08, 0.16], bounce: [0.02, 0.02, 0.04] },
-  overcast: { label: 'Overcast', sunDir: [0.2, 1, 0.1], sunColor: [0.6, 0.62, 0.65], sky: [0.5, 0.52, 0.56], bounce: [0.15, 0.15, 0.15] },
+  overcast: { label: 'Overcast', sunDir: [0.2, 1, 0.1], sunColor: [0.45, 0.46, 0.5], sky: [0.32, 0.34, 0.38], bounce: [0.1, 0.1, 0.1] },
 };
 
 export interface WorldSpec {
@@ -253,7 +267,7 @@ export function normalizeSpec(raw: Partial<SplatBuilderSpec> | null | undefined)
     v: 1,
     scan: { ...base.scan, ...(raw.scan ?? {}) },
     place: { ...base.place, ...(raw.place ?? {}) },
-    effects: Array.isArray(raw.effects) ? raw.effects.filter(e => e && (EFFECT_KINDS as readonly string[]).includes(e.kind)).map(e => ({ ...e, params: { ...effectDefaults(e.kind), ...(e.params ?? {}) }, on: e.on !== false, animate: e.animate ?? null })) : [],
+    effects: Array.isArray(raw.effects) ? raw.effects.filter(e => e && ((EFFECT_KINDS as readonly string[]).includes(e.kind) || (e.kind === 'custom' && typeof e.tail === 'string'))).map(e => ({ ...e, params: { ...effectDefaults(e.kind), ...(e.params ?? {}) }, on: e.on !== false, animate: e.animate ?? null })) : [],
     world: { ...base.world, ...(raw.world ?? {}), floor: { ...base.world.floor, ...(raw.world?.floor ?? {}) }, props: Array.isArray(raw.world?.props) ? raw.world!.props : [] },
     background: { ...base.background, ...(raw.background ?? {}) },
     camera: { ...base.camera, ...(raw.camera ?? {}) },
@@ -284,7 +298,7 @@ export function sectionSummary(spec: SplatBuilderSpec, s: SplatSection): string 
     }
     case 'effects': {
       const on = spec.effects.filter(e => e.on);
-      return on.length ? on.map(e => EFFECT_INFO[e.kind].label).join(' → ') : 'none yet';
+      return on.length ? on.map(e => effectLabel(e)).join(' → ') : 'none yet';
     }
     case 'scene': {
       const bg = spec.background.kind === 'picture' ? 'picture background' : spec.background.kind === 'gradient' ? 'gradient' : 'solid background';
@@ -305,9 +319,16 @@ export function sectionSummary(spec: SplatBuilderSpec, s: SplatSection): string 
 
 /** One line for an effect card while folded ("amount 0.35 · animated"). */
 export function effectSummary(e: EffectSpec): string {
+  if (e.kind === 'custom') return `${e.label || 'your own nodes'}${e.on ? '' : ' · off'}`;
   const main = EFFECT_INFO[e.kind].main;
   const v = e.params[main];
   const label = getNodeDefinition(EFFECT_TYPE[e.kind])?.paramDefs?.[main]?.label ?? main;
   const val = typeof v === 'number' ? r2(v) : Array.isArray(v) ? v.map(r2).join(', ') : String(v ?? '');
   return `${label.toLowerCase()} ${val}${e.animate ? ' · animated' : ''}${e.on ? '' : ' · off'}`;
 }
+
+/** A card's name: the effect's, or "Your nodes". */
+export const effectLabel = (e: Pick<EffectSpec, 'kind'>) => EFFECT_INFO[e.kind].label;
+
+/** The stack's "Your nodes" cards kept onto `effects` (a template or a surprise brings its own effects, never your nodes). */
+export const keepCustom = (effects: EffectSpec[], from: readonly EffectSpec[]): EffectSpec[] => [...effects, ...from.filter(e => e.kind === 'custom').map(e => structuredClone(e))];

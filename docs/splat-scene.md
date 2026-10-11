@@ -165,6 +165,10 @@ Modifier. The nodes are in the node browser under **Splats** (3D tools):
 | **Splat Size & Opacity** | Size ×, Opacity ×, an Opacity floor (denser), Keep a share of the splats (sparser) |
 | **Splat Points** | Every splat as a crisp round dot, Dot size pixels (On is a switch Play can drive) |
 
+**Relative to the scan** (Dissolve, Explode, Wave, Crop; on for new nodes, off for nodes saved before, schema
+version 2): sizes and distances in the scan's own size (its core radius × Scale) from its middle, so a look reads the
+same on a small object and a whole place ([splat-builder.md](splat-builder.md), "Effects in the scan's own size").
+
 Between Splat Attributes and Set Splat any ordinary node works: Noise, Transform, maths, Expression Blocks, Time, LFOs.
 Nodes that read the pixel (UV, a texture at the pixel) read a fixed point there: a splat isn't a pixel.
 

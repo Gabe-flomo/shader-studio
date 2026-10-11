@@ -43,8 +43,16 @@ fingerprints, `apply.ts`).
 - **Viewport** (`components/splatBuilder/SplatViewport.tsx`): drag to turn the camera round (Angle, Elevation), scroll
   to come closer (Distance). In **Place** the scan has the 3D Scene Builder's gizmo (`sceneBuilder/viewMath.ts`, March
   Camera's own maths): the white middle moves it across the picture, X / Y / Z along one axis, the yellow square sizes
-  it, the purple ↻ under the ring turns it round the vertical. Sizing and turning keep its middle where it is. Each drag
-  is one undo step. The gizmo follows a turning camera (the preview clock, `timeTick.clockNow`).
+  it, and three rings (red X, green Y, blue Z) turn it round that axis of the world (`place.ts turnAbout`: the turn is
+  composed as a matrix and read back as the Splat Scene's X, Y, Z degrees). Sizing and turning keep its middle where it
+  is. Each drag is one undo step. The gizmo follows a turning camera (the preview clock, `timeTick.clockNow`).
+- **Its own size:** while the window is open the main preview draws at the viewport's size (`lib/previewSize.ts`,
+  `LiveViewport ownSize`), so the picture fills the viewport sharp whatever shape the preview panel has; it goes back
+  when the window closes.
+- **A paused clock** still shows the picture: the viewport keeps asking the main preview for a frame until one comes
+  (the first ask can land while the Scene builder's kind page still holds the preview), so it shows the last frame
+  rather than "the preview is hidden" (that note is only for a preview that really can't draw: its panel hidden). The
+  Agent Builder's viewport is the same code.
 - **Open as nodes** closes and selects the Splat Scene (its card lists the modifier chain). **Done** closes and frames
   the build on the graph.
 
@@ -54,13 +62,39 @@ fingerprints, `apply.ts`).
 |---|---|
 | **Scan** | Drop a scan on the picture, **Load…** / **Replace…**, **From the library**, or **Example** (the generated ball or rings). The file's facts (splats, size, format, SH), its thumbnail and its size in units. **Quality**: Fast (500k, SH 0, half resolution), Balanced (2M, SH 1) or Best (4M, SH 3, sorted every frame), and the four settings under it. A new file is fitted to the view once it is read. |
 | **Place** | **Fit to view** (its middle at the centre, about 3 units across: the card's Fit to the scene), **Centre**, **Stand on the floor** (its lowest point on the world's floor, or y = −1). Which way is up: **Turn over** (−Y / +Y), **Stand it up** (a scan lying on its back), **Turn 90°**. Position, Turn, Scale, Splat size, Opacity. |
-| **Effects** | The Modifier chain as stacked cards: **Dissolve**, **Explode** (Return home), **Wave**, **Colour grade**, **Crop**, **Size & opacity**, **Points**. Add one from the tiles (each a small live picture), drag a card onto another to put it first, or ▲ ▼; the switch turns one off (left out of the chain, kept in the stack); 🗑 removes it. The first card applies first. An open card has a live mini preview of that effect on a point cloud, every setting of its node, and **Animate**: an LFO wired into one setting's socket (From → To, Speed). |
+| **Effects** | The Modifier chain as stacked cards: **Dissolve**, **Explode** (Return home), **Wave**, **Colour grade**, **Crop**, **Size & opacity**, **Points**. Add one from the tiles (each a small live picture), drag a card onto another to put it first, or ▲ ▼; the switch turns one off (left out of the chain, kept in the stack); 🗑 removes it. The first card applies first. An open card has a live mini preview of that effect on a point cloud, every setting of its node, and **Animate**: an LFO wired into one setting's socket (From → To, Speed). **Your nodes**: a run of nodes you added on the Splat Scene card (Splat Attributes → … → Set Splat, or any splat node) shows as a card of its own, in its place; move it, turn it off or take it out of the stack like the others (below). |
 | **Scene** | **A world**: a floor (height, colour), shapes (Ball, Box, Ring, Pillar, Pill, Gem: where, size, colour), a light (Studio, Sunset, Night, Overcast), shadows and fog. The world is the 3D Scene Builder's graph (`buildSceneGraph`); the scan is put together with it by distance. **Background**: a colour, a gradient, or a picture (the shared picture picker). |
 | **Camera** | Distance, Angle, Elevation, Lens, **Turntable** (degrees a second), what it looks at, **Look at the scan**. |
-| **Look** | Tone (As scanned, ACES, AgX, OkLab, Filmic) and Bloom (intensity, threshold, radius). |
+| **Look** | Bloom (intensity, threshold, radius), then Tone (As scanned, ACES, AgX, OkLab, Filmic). |
 
 Sliders are `BuilderSlider`s. Right-click one that sets a node param (an effect's settings, Scale, Splat size, Opacity,
 the camera's Distance and Lens, the bloom, an animation's Speed) for the node card's Play menu.
+
+## Effects in the scan's own size
+
+The builder's effect nodes measure **relative to the scan** (each node's `relative` setting, on): their place in the
+scan is taken from the scan's middle and divided by its size (its core radius × Scale), and their distances (Explode's
+Distance, Wave's Amplitude, Dissolve's Drift) are multiplied by it. Noise scale 1.5 is "patches about a radius / 1.5
+across", Crop's Size 1 is the whole scan and Offset −1 … 1 sweeps through it, on a small object and on a whole place
+like `train.splat` alike, fitted or not. Explode's Center (sliders) is from the scan's middle, in scan sizes.
+
+The modifier program gets the scan's box as a uniform (`u_spb_<id>`: its middle in its own coordinates and its core
+radius, from the file's facts; `compiler/splatGraph.ts`, `lib/splats/render.ts setBox`) and sets `sp_mid`, `sp_midW`
+and `sp_unit` for the nodes. Graphs saved before keep scene units: the four nodes are at schema version 2, and older
+saved nodes load with `relative` off (`SPLAT_RELATIVE_VERSION`), so they look exactly as they did; nodes made now
+(the card's Add a modifier, the node browser) have it on. The examples keep scene units. It is a switch on each
+node's card ("Relative to the scan").
+
+## Your nodes
+
+Anything on the Splat Scene's Modifier chain that the builder didn't make (it marks its own nodes by role, `fx:e2`)
+is yours: **Edit this one** reads the chain and puts each run of your nodes in the stack as a **Your nodes** card,
+after the effect it follows (`apply.ts adoptCustomChains`), named by its nodes ("Splat Attributes → Set Splat"). A
+rebuild never builds, changes or removes them; it wires each run in its place: whatever comes before it in the stack
+feeds the run's start (every Splat input of the run that came from outside it, and a Splat Attributes reading the same
+splat beside it), and the run's end feeds what comes after (`wireRunStart`). Their own wiring stays. Turned off, a run
+is left out of the chain; taken out of the stack, its nodes stay on the graph, unwired. Templates and Surprise me keep
+your cards (after their own effects); the recipe writes them as `yours tail=<node>`.
 
 ## Templates
 
@@ -80,8 +114,9 @@ stay** (on the example scan, the template's own placement).
 
 `splatBuilder/surprise.ts`: a look from a seed (a reveal, a scatter, a hologram, a grade, a wave or a cut), one to four
 effects with settings in ranges that read well, usually one animated; a calm background from one hue; now and then a
-small world; the camera at a pleasant angle, turning most of the time; bloom when something glows. The same seed gives
-the same scene; your scan and its placement stay; one undo step. The seed is shown and can be typed (SurpriseBar).
+small world, with the scan stood on its floor (Place → Stand on the floor, by the scan's box as the engine read it);
+the camera at a pleasant angle, turning most of the time; bloom when something glows. The same seed gives the same
+scene; your scan and its placement stay (with a world, only its height changes); your nodes stay; one undo step. The seed is shown and can be typed (SurpriseBar).
 
 ## Under the hood (⌘⇧D)
 
@@ -127,12 +162,17 @@ so the preview took the slider-only path and dropped the chain's new uniforms: a
 drawn ran with its sliders at 0 (a Dissolve that never dissolved; the card's own **Add a modifier** had the same
 problem). `ShaderCanvas`'s param fast path now adds names the uniform table doesn't have yet.
 
+### Bloom without feedback
+
+The old Bloom node blurs the frame before (`u_prevFrame`), which is the finished picture, its own glow included: on a
+bright scan the glow fed back into itself frame after frame and washed the picture out. The builder now builds the
+same-frame chain the Bloom card's "Upgrade to same-frame glow" makes: Pass → Glow (texture), Bloom → Add glow, so the
+glow only ever reads this frame's picture before it is added. The tone map comes after it. Measured on `train.splat`:
+the picture's mean brightness 108 with bloom off, 116 with it on, the same 1.5 s and 4.5 s later (it no longer climbs).
+
 ## Not yet
 
-- Effects measure in scene units, so they read best on a fitted scan (a new file is fitted for you; a scan of a
-  whole place fits small: scroll in).
-- The gizmo turns only round the vertical; the other turns are sliders.
-- Surprise me's world doesn't stand the scan on its floor (it doesn't know the scan's box): Place → Stand on the floor.
-- No custom node chains (Splat Attributes → your nodes → Set Splat) from the builder: add them on the card; a rebuild
-  replaces the chain the builder made.
-- The viewport is the main preview's shape; a narrow preview gives a narrow picture.
+- A new file is still fitted to the view (the effects no longer need it, but Fit keeps the camera sliders sensible).
+- A run of your nodes that sits first in the chain with its Splat Attributes left unwired keeps reading the splat as
+  loaded when it is moved later (wire Attributes into the run, or move it on the card).
+- Ray-marched props aren't measured relative to the scan.

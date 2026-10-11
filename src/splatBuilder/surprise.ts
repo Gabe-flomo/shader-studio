@@ -9,7 +9,8 @@
  *   - the camera at a pleasant angle, turning slowly most of the time; bloom when something glows.
  */
 import { darkBackground, harmoniousPalette, makeRng, type Rng } from '../lib/surprise';
-import { animateFor, newEffect, starterSplatScene, type EffectSpec, type SplatBuilderSpec, type Vec3, PROP_KINDS, LIGHTS } from './spec';
+import { onFloorPlace, type ScanBox } from './place';
+import { animateFor, keepCustom, newEffect, starterSplatScene, type EffectSpec, type SplatBuilderSpec, type Vec3, PROP_KINDS, LIGHTS } from './spec';
 
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 const v3 = (c: readonly number[]): Vec3 => [r3(c[0]), r3(c[1]), r3(c[2])];
@@ -71,15 +72,21 @@ function effectsFor(rng: Rng, look: Look, accent: Vec3): EffectSpec[] {
   }
 }
 
-/** A splat scene from `seed`, over `current` (its scan and placement stay). Pure: the same seed, the same scene. */
-export function surpriseSplatScene(seed: number, current?: SplatBuilderSpec): SplatBuilderSpec {
+/** The generated example ball's box, for when the engine hasn't read the scan yet. */
+export const EXAMPLE_BOX: ScanBox = { center: [0, 0, 0], radius: 0.85, coreMin: [-0.85, -0.85, -0.85], coreMax: [0.85, 0.85, 0.85] };
+
+/**
+ * A splat scene from `seed`, over `current` (its scan and placement stay; with a world, the scan is stood on its
+ * floor, by `box`, the scan's box as the engine read it). Pure: the same seed and box, the same scene.
+ */
+export function surpriseSplatScene(seed: number, current?: SplatBuilderSpec, box?: ScanBox | null): SplatBuilderSpec {
   const rng = makeRng(seed);
   const s = starterSplatScene();
   if (current) { s.scan = structuredClone(current.scan); s.place = structuredClone(current.place); if (current.textures?.length) s.textures = structuredClone(current.textures); }
   const hue = rng.next();
   const [accent, tint2] = harmoniousPalette(rng, 2, { scheme: 'analogous', sat: [0.6, 0.95], light: [0.55, 0.7] }).map(v3);
   const look = rng.weighted(LOOKS);
-  s.effects = effectsFor(rng, look, accent).map((e, i) => ({ ...e, id: `e${i + 1}` }));
+  s.effects = keepCustom(effectsFor(rng, look, accent).map((e, i) => ({ ...e, id: `e${i + 1}` })), current?.effects ?? []);
 
   // Background: dark and calm, from one hue (a gradient most of the time).
   const bg = v3(darkBackground(rng, hue));
@@ -96,6 +103,9 @@ export function surpriseSplatScene(seed: number, current?: SplatBuilderSpec): Sp
       })),
     };
   }
+
+  // Place → Stand on the floor: the scan's lowest point on the world's floor.
+  if (s.world.on && s.world.floor.on) s.place = onFloorPlace(s.place, box ?? EXAMPLE_BOX, s.world.floor.y);
 
   s.camera = { ...s.camera, dist: r3(rng.float(3.2, 4.4)), angle: r3(rng.float(-50, 50)), elev: r3(rng.float(4, 22)), turntable: rng.chance(0.7) ? r3(rng.float(4, 12)) * (rng.chance(0.3) ? -1 : 1) : 0 };
   const glows = s.effects.some(e => e.kind === 'dissolve' || e.kind === 'crop' || e.kind === 'points');

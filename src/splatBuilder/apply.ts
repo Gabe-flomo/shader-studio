@@ -69,7 +69,7 @@ export function applySplatScene(graph: GraphNode[], spec0: SplatBuilderSpec, opt
     if (!idOfRole.has(role)) idOfRole.set(role, found?.byRole.get(role)?.id ?? nextId());
     return idOfRole.get(role)!;
   };
-  const built = buildSplatGraph(spec, idFor);
+  const built = buildSplatGraph(spec, idFor, { existing: new Set(graph.map(n => n.id)) });
   const prints: Record<string, string> = {};
   let kept = 0;
   for (const node of built.nodes) {
@@ -117,6 +117,11 @@ export function applySplatScene(graph: GraphNode[], spec0: SplatBuilderSpec, opt
   } else {
     top = placeInFreeSpace(graph, built.nodes, opts.at ?? { x: 0, y: 0 });
   }
+  // Your nodes: each run's start reads from what now comes before it in the stack.
+  if (built.customs.length) {
+    const builderIds = new Set([...(found ? [...found.byRole.values()].map(n => n.id) : []), ...top.map(n => n.id)]);
+    for (const c of built.customs) rest = wireRunStart(rest, c.tail, c.from, builderIds);
+  }
   if (!opts.keepOutput) {
     let output = rest.find(n => (n.type === 'output' || n.type === 'vec4Output') && n.inputs.color);
     if (!output) {
@@ -158,6 +163,106 @@ export function paramDiff(prev: readonly GraphNode[], next: readonly GraphNode[]
       (silentParam(k) ? silent : live)[k] = n.params[k];
     }
     if (Object.keys(live).length || Object.keys(silent).length) out.push({ id: n.id, live, silent });
+  }
+  return out;
+}
+
+// ── Your nodes: runs of the chain the builder didn't make ───────────────────
+
+/**
+ * The nodes a run ending in `tail` is made of: `tail` and everything upstream of it that isn't the builder's (it stops
+ * at the builder's nodes). Pure.
+ */
+export function runNodes(graph: readonly GraphNode[], tail: string, builderIds: ReadonlySet<string>): Set<string> {
+  const byId = new Map(graph.map(n => [n.id, n]));
+  const seen = new Set<string>();
+  const stack = [tail];
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (seen.has(id) || builderIds.has(id) || !byId.has(id)) continue;
+    seen.add(id);
+    for (const s of Object.values(byId.get(id)!.inputs)) if (s.connection) stack.push(s.connection.nodeId);
+  }
+  // Side nodes that read the same splat as the run's start and feed only the run (or nothing yet): the Splat
+  // Attributes the card's "Your own nodes" adds beside Set Splat, before you wire it in.
+  const froms = new Set<string>();
+  for (const id of seen) { const c = byId.get(id)!.inputs.splat?.connection; if (c && !seen.has(c.nodeId)) froms.add(`${c.nodeId}:${c.outputKey}`); }
+  for (const n of graph) {
+    if (seen.has(n.id) || builderIds.has(n.id) || !n.type.startsWith('splat') || n.type === 'splatScene') continue;
+    const c = n.inputs.splat?.connection;
+    if (!c || !froms.has(`${c.nodeId}:${c.outputKey}`)) continue;
+    const readers = graph.filter(m => Object.values(m.inputs).some(i => i.connection?.nodeId === n.id));
+    if (readers.every(m => seen.has(m.id))) seen.add(n.id);
+  }
+  return seen;
+}
+
+/**
+ * The run ending in `tail` read from `from` (null: the splat as loaded): every Splat input in the run that came from
+ * outside it (a builder node, or nothing) is wired to `from`. The run's own wiring stays. Pure.
+ */
+export function wireRunStart(graph: GraphNode[], tail: string, from: { nodeId: string; outputKey: string } | null, builderIds: ReadonlySet<string>): GraphNode[] {
+  const run = runNodes(graph, tail, builderIds);
+  return graph.map(n => {
+    const s = n.inputs.splat;
+    if (!run.has(n.id) || !s || s.type !== 'splat') return n;
+    if (s.connection && run.has(s.connection.nodeId)) return n;
+    const same = from ? s.connection?.nodeId === from.nodeId && s.connection.outputKey === from.outputKey : !s.connection;
+    if (same) return n;
+    return { ...n, inputs: { ...n.inputs, splat: { ...s, connection: from ? { ...from } : undefined } } };
+  });
+}
+
+const nodeName = (n: GraphNode) => (typeof n.params.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type;
+
+/**
+ * The spec with the runs of nodes you added on the Splat Scene card (anything on the Modifier chain the builder didn't
+ * make) as "Your nodes" cards, each after the effect it follows on the chain. Cards for runs that are gone are dropped.
+ * What Edit this one opens with, so a rebuild keeps them wired in their place. Pure.
+ */
+export function adoptCustomChains(graph: readonly GraphNode[], scanId: string, spec: SplatBuilderSpec): SplatBuilderSpec {
+  const build = findSplatBuild(graph, scanId);
+  const mine = new Set(build ? [...build.byRole.values()].map(n => n.id) : []);
+  const roleOf = (n: GraphNode) => String(n.params[SP_ROLE] ?? '');
+  // The chain, first applied first: builder effects and runs of your nodes between them.
+  const chain = splatModifierChainOf(graph, scanId).reverse();
+  const runs: Array<{ after: string | null; tail: string; nodes: GraphNode[] }> = [];
+  let after: string | null = null;
+  let cur: GraphNode[] = [];
+  const close = () => { if (cur.length) runs.push({ after, tail: cur[cur.length - 1].id, nodes: cur }); cur = []; };
+  for (const n of chain) {
+    if (mine.has(n.id) && roleOf(n).startsWith('fx:')) { close(); after = roleOf(n).slice(3); continue; }
+    cur.push(n);
+  }
+  close();
+  const tails = new Set(runs.map(r => r.tail));
+  const effects = spec.effects.filter(e => e.kind !== 'custom' || (e.tail && tails.has(e.tail)));
+  const used = new Set(effects.map(e => e.id));
+  const freshId = () => { for (let i = 1; ; i++) if (!used.has(`c${i}`)) { used.add(`c${i}`); return `c${i}`; } };
+  for (const r of runs) {
+    // Splat Attributes and other side nodes of the run (upstream of its line) name it too.
+    const names = [...runNodes(graph as GraphNode[], r.tail, mine)].map(id => graph.find(n => n.id === id)!).filter(n => n.type.startsWith('splat'));
+    const label = (names.length ? names : r.nodes).reverse().map(nodeName).join(' → ');
+    const have = effects.find(e => e.kind === 'custom' && e.tail === r.tail);
+    if (have) { have.label = label; continue; }
+    const card = { id: freshId(), kind: 'custom' as const, on: true, params: {}, animate: null, tail: r.tail, label };
+    // After the effect it follows (and after your nodes already placed there), or first.
+    let at = r.after ? effects.findIndex(e => e.id === r.after) + 1 : 0;
+    while (at < effects.length && effects[at].kind === 'custom' && at > 0) at++;
+    effects.splice(Math.max(0, at), 0, card);
+  }
+  return { ...spec, effects };
+}
+
+/** The nodes along a Splat Scene's Modifier chain, from the scan back (the card's walk, nodes/recipes/splatModifierRecipes.ts). */
+function splatModifierChainOf(graph: readonly GraphNode[], scanId: string): GraphNode[] {
+  const out: GraphNode[] = [];
+  let at = graph.find(x => x.id === scanId)?.inputs.modifier?.connection?.nodeId;
+  while (at && out.length < 64) {
+    const node = graph.find(x => x.id === at);
+    if (!node || out.includes(node)) break;
+    out.push(node);
+    at = node.inputs.splat?.connection?.nodeId;
   }
   return out;
 }
