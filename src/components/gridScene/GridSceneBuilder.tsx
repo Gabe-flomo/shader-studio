@@ -218,7 +218,8 @@ function TextStampRow() {
 /** How the drawing covers the grid (docs/grid-builder.md "Draw modes"): only here, repeat, mirror, rotate. */
 function DrawModeRow() {
   const tk = useTokens();
-  const draw = useGridBuilder(s => drawOf(s.spec));
+  const stored = useGridBuilder(s => s.spec.draw);
+  const draw = drawOf({ draw: stored });
   const cols = useGridBuilder(s => s.spec.cols);
   const rows = useGridBuilder(s => s.spec.rows);
   const set = (fn: (d: NonNullable<GridSceneSpec['draw']>) => void, key?: string) => edit(d => { const x = { ...defaultDraw(), ...(d.draw ?? {}) }; fn(x); d.draw = x.mode === 'here' ? null : x; }, key);
