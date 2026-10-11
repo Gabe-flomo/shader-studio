@@ -67,6 +67,7 @@ import { ShaderTextureInsidePanel } from '../shaderTexture/ShaderTextureCardBody
 import { turnIntoShaderTexture } from '../shaderTexture/actions';
 import { isEditableTarget, readClipboardPicture } from '../../lib/texture/texturePaste';
 import { spawnPoint } from './spawnPoint';
+import { FreezeBehindBuilder } from '../builders/FreezeBehindBuilder';
 const OptimizeModal = lazyWithSuspense<PropsOf<typeof OptimizeModalT>>(() => import('./OptimizeModal').then(m => ({ default: m.OptimizeModal })));
 const BakeDialogHost = lazyWithSuspense<Record<string, never>>(() => import('../bake/BakeDialog').then(m => ({ default: m.BakeDialogHost })));
 const SceneBuilderModal = lazyWithSuspense<Record<string, never>>(() => import('../sceneBuilder/SceneBuilderModal').then(m => ({ default: m.SceneBuilderModal })));
@@ -2128,6 +2129,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         document.body
       )}
 
+      {/* Behind a Splat builder or an Agent Builder window the cards, wires and minimap wait (builders/builderFocus.ts). */}
+      <FreezeBehindBuilder>
       {/* Minimap overlay — screen space, bottom-right (hidden on touch devices) */}
       {showMinimap && !isTouchDevice.current && (
         <Minimap
@@ -2298,6 +2301,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         )}
         </div>
       </div>
+      </FreezeBehindBuilder>
 
       {/* Feature 3: Box/marquee select rect */}
       {boxSelect && (() => {
@@ -2381,9 +2385,11 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       })()}
 
       {/* Starter recipes for a node just added (nodes/recipes): a small offer beside it */}
-      <RecipeOffer nodes={displayNodes} canvasRef={canvasRef} pan={pan} zoom={zoom} />
-      {/* The selected node's next moves (suggestions/): under its card, never over a socket */}
-      <SuggestionStrip nodes={displayNodes} canvasRef={canvasRef} pan={pan} zoom={zoom} readOnly={locked} />
+      <FreezeBehindBuilder>
+        <RecipeOffer nodes={displayNodes} canvasRef={canvasRef} pan={pan} zoom={zoom} />
+        {/* The selected node's next moves (suggestions/): under its card, never over a socket */}
+        <SuggestionStrip nodes={displayNodes} canvasRef={canvasRef} pan={pan} zoom={zoom} readOnly={locked} />
+      </FreezeBehindBuilder>
       {/* The Do… bar (⌘K): typed phrases → moves (suggestions/doBar.ts) */}
       {!locked && <DoBar />}
       <CommandsReference />

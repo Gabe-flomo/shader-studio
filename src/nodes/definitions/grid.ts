@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p, f } from './helpers';
+import { p, f, withParamSockets } from './helpers';
 import { columnsExpr, gridColumnsMigration } from './gridColumns';
 import { GRID_HASH_GLSL } from './gridHash';
 
@@ -60,7 +60,7 @@ export const GridLayoutNode: NodeDefinition = {
 
 // Wave Radius — animates a radius value with a sine wave driven by distance + time.
 // Pairs with Grid and NeighborDist to create pulsing, radial, or wave dot patterns.
-export const WaveRadiusNode: NodeDefinition = {
+export const WaveRadiusNode: NodeDefinition = withParamSockets({
   type: 'waveRadius',
   label: 'Wave Radius',
   category: 'Grid',
@@ -90,7 +90,7 @@ export const WaveRadiusNode: NodeDefinition = {
       outputVars: { wave_radius: `${id}_wr` },
     };
   },
-};
+}, ['speed', 'freq', 'amp', 'base']);
 
 // Neighbor Dist — minimum distance to the nearest dot center across a 3×3 (or 5×5)
 // neighborhood of cells. Solves boundary clipping when a dot's radius or displacement
@@ -205,7 +205,7 @@ export const CellFilterNode: NodeDefinition = {
 };
 
 // Cell Displace — moves cell UV toward a world-space attractor.
-export const CellDisplaceNode: NodeDefinition = {
+export const CellDisplaceNode: NodeDefinition = withParamSockets({
   type: 'cellDisplace',
   label: 'Cell Displace',
   category: 'Grid',
@@ -244,10 +244,10 @@ export const CellDisplaceNode: NodeDefinition = {
       outputVars: { displacedUV: `${id}_disp`, attractAmount: `${id}_attract` },
     };
   },
-};
+}, ['radius', 'maxDisplace']);
 
 // Grid Density Warp — sin-wave warp applied before grid/Fract for non-uniform cell density.
-export const GridDensityWarpNode: NodeDefinition = {
+export const GridDensityWarpNode: NodeDefinition = withParamSockets({
   type: 'gridDensityWarp',
   label: 'Grid Density Warp',
   category: 'Grid',
@@ -307,7 +307,7 @@ export const GridDensityWarpNode: NodeDefinition = {
       outputVars: { warpedUV: `${id}_wuv` },
     };
   },
-};
+}, ['amplitude', 'frequency', 'phase']);
 
 // Neighbor Offset 2D — converts flat loop index to 2D (dx,dy) offset for neighborhood iteration.
 export const NeighborOffset2dNode: NodeDefinition = {
@@ -346,7 +346,7 @@ export const NeighborOffset2dNode: NodeDefinition = {
 };
 
 // Animated Cell Center — returns animated dot center position with per-cell phase offset.
-export const AnimatedCellCenterNode: NodeDefinition = {
+export const AnimatedCellCenterNode: NodeDefinition = withParamSockets({
   type: 'animatedCellCenter',
   label: 'Animated Cell Center',
   category: 'Grid',
@@ -382,14 +382,14 @@ export const AnimatedCellCenterNode: NodeDefinition = {
       outputVars: { center: `${id}_center` },
     };
   },
-};
+}, ['speed', 'amplitude']);
 
 // ─── Neighbor Attract Circles ─────────────────────────────────────────────────
 // Min-SDF of attractor-displaced circles over a 3×3 neighborhood.
 // Circles are drawn in grid-pos space so they render across cell boundaries
 // without clipping. attractAmount drives coloring (e.g., palette node).
 
-export const NeighborAttractCirclesNode: NodeDefinition = {
+export const NeighborAttractCirclesNode: NodeDefinition = withParamSockets({
   type: 'neighborAttractCircles',
   label: 'Attract Circles',
   category: 'Grid',
@@ -448,4 +448,4 @@ export const NeighborAttractCirclesNode: NodeDefinition = {
       outputVars: { sdf: `${id}_sdf`, attractAmount: `${id}_attract` },
     };
   },
-};
+}, ['circleRadius', 'maxDisplace', 'influenceRadius']);

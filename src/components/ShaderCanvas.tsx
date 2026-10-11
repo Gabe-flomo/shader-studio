@@ -41,7 +41,8 @@ import { cameraInput } from '../lib/cameraInput';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
 import { appFocused, backgroundFrame, backgroundMode, onFocusChange, onLongHidden } from '../lib/backgroundPolicy';
 import { onPreviewHold, previewHeld } from '../lib/previewHold';
-import { previewMirrored, sendPreviewFrame, setPreviewWake } from '../lib/previewMirror';
+import { previewMirrored, sendPreviewFrame, setPreviewCanvas, setPreviewWake } from '../lib/previewMirror';
+import { builderFocused } from '../builders/builderFocus';
 import { usePreviewSizeOverride } from '../lib/previewSize';
 import { emitTimeTick } from '../lib/timeTick';
 import { gateFrame, newDrawGate, newOfflineHold, offlineFrame, posterizeTime, resolveFrameRate, useFrameRate, type EffectiveFrameRate } from '../lib/frameRate';
@@ -571,6 +572,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     };
     requestRenderRef.current = requestRender;
     setPreviewWake(requestRender);
+    // The Splat builder's viewport can take the canvas itself while it is open (lib/previewMirror.ts adoptPreviewCanvas).
+    setPreviewCanvas(renderer.domElement);
     // Every store write is a user action (Phase 1 removed the idle ones), so
     // any of them may have changed what the canvas should show.
     const unsubRender = useNodeGraphStore.subscribe(() => requestRender());
@@ -1661,6 +1664,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       }
       lastSlowDraw = now;
       const frameT0 = performance.now();
+      // A builder whose picture is this preview is open (builders/builderFocus.ts): only the picture is drawn. The
+      // readbacks and side drawings for the graph and panels behind its window (thumbnails, probes, scopes, the
+      // histogram, the pixel under the pointer) wait until it closes.
+      const focus = builderFocused();
       pollGpuTimer();
 
       // FPS counter — updated every second
@@ -1849,7 +1856,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         for (const step of frameSteps) {
           if (step.do === 'passes') {
             passRunner!.run(passTargets!, fw, fh, gpuTimer, step.stage, step.part);
-            if (step.last && (frameCount % 10 === 0 || !dynamic)) passRunner!.drawThumbnails(passTargets!);
+            if (step.last && !focus && (frameCount % 10 === 0 || !dynamic)) passRunner!.drawThumbnails(passTargets!);
           } else if (step.do === 'particles') {
             gpuTimer.begin('particles');
             drawGpuParticles(material, { width: fw, height: fh, dt: playing ? dt : 0, time: shaderTime, mouse: particleMouse(fw, fh) });
@@ -1858,7 +1865,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
             const nowMs = performance.now();
             agentRunner!.run(agentTargets!, { width: fw, height: fh, time: shaderTime, live: true, frameMs: lastAgentFrame ? nowMs - lastAgentFrame : 0, timer: gpuTimer });
             lastAgentFrame = nowMs;
-            if (frameCount % 10 === 0 || !dynamic) agentRunner!.drawThumbnails(agentTargets!);
+            if (!focus && (frameCount % 10 === 0 || !dynamic)) agentRunner!.drawThumbnails(agentTargets!);
             // The Agent Builder's species spotlight, only while one is showing.
             if (agentSpotRegistry.size() > 0 && (frameCount % 2 === 0 || !dynamic)) agentRunner!.drawSpotlights(agentTargets!);
             // The Agent Builder's Under the hood, only while one is open (and once more after, to let go).
@@ -1951,7 +1958,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         // demand (slider, hover, recompile) may be the only one for a while, so
         // it always samples — otherwise the readouts would show the old picture.
         frameCount++;
-        const sampleFrame = frameCount % SAMPLE_EVERY === 0 || !dynamic;
+        const sampleFrame = !focus && (frameCount % SAMPLE_EVERY === 0 || !dynamic);
         if (sampleFrame) {
           // Only broadcast time to the store (triggers a re-render in every
           // NodeComponent) when the graph actually has a Time node. The
@@ -2117,7 +2124,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
 
         // ── Scope + LFO nodes: sample every PROBE_SAMPLE_EVERY frames, draw waveform directly to canvas ──
         const scopeIds = scopeIdsRef.current;
-        if (scopeIds.size > 0 && (frameCount % PROBE_SAMPLE_EVERY === 0 || !dynamic)) {
+        if (scopeIds.size > 0 && !focus && (frameCount % PROBE_SAMPLE_EVERY === 0 || !dynamic)) {
           const curScopeFs = fragmentShaderRef.current;
           const curScopeVs = vertexShaderRef.current;
           if (curScopeFs && curScopeVs) {
@@ -2181,7 +2188,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         }
 
         // ── "Show as" value readback (throttled inside; asynchronous, one in flight) ──
-        if (previewNodeIdRef.current || pvTarget) {
+        if ((previewNodeIdRef.current || pvTarget) && !focus) {
           const t = previewNodeIdRef.current ? previewTarget() : null;
           pvRunner.sample(t, fragmentShaderRef.current, vertexShaderRef.current, material,
             renderer.domElement.width || 1, renderer.domElement.height || 1, !dynamic, () => { if (!dynamic) requestRender(); },
@@ -2191,7 +2198,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
 
         // ── Preview scope: waveform + upstream probes when 👁 is active (throttled like scopes) ──
         const previewId = previewNodeIdRef.current;
-        if (previewId && (frameCount % PROBE_SAMPLE_EVERY === 0 || !dynamic)) {
+        if (previewId && !focus && (frameCount % PROBE_SAMPLE_EVERY === 0 || !dynamic)) {
           const previewNode = nodeMapRef.current.get(previewId);
           if (previewNode) {
             const curFs = fragmentShaderRef.current;
@@ -2660,6 +2667,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       cancelAnimationFrame(animFrameRef.current);
       loopRunning = false;
       setPreviewWake(null);
+      // A canvas lent to a builder's viewport comes back before it goes.
+      setPreviewCanvas(null);
       clockAtTeardown = virtualTime;
       unregisterRebuild();
       unsubRender();
@@ -2720,7 +2729,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       setAgentsRef.current = null;
       stopQuality();
       renderer.dispose();
-      container.removeChild(renderer.domElement);
+      renderer.domElement.remove();
     };
   }, []);
 

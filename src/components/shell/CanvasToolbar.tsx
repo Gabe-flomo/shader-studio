@@ -2,7 +2,8 @@ import { randomizeGraphAction } from '../surprise/surpriseActions';
 import { RandomizePopover } from '../surprise/RandomizePopover';
 import { getRandomizeOptions, optionsSummary } from '../../nodes/randomizeOptions';
 import { lockedItems } from '../../nodes/randomizeParams';
-import { lazy, Suspense, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Suspense, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazySafe } from '../lazyWithSuspense';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -20,7 +21,7 @@ import { computeGraphStats, countNodes, mainBodyLines } from './graphStats';
 import { PerfBadge, PerfPanel } from './PerfPanel';
 
 // Loaded on first use: the finder pulls in the compiler and the offscreen renderer.
-const SuggestControlsPanel = lazy(() => import('../play/SuggestControlsPanel'));
+const SuggestControlsPanel = lazySafe(() => import('../play/SuggestControlsPanel'));
 
 /**
  * Floating toolbar at the top centre of the canvas (desktop redesign): node count for the

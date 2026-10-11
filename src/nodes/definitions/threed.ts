@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p, pv3 } from './helpers';
+import { p, pv3, withParamSockets } from './helpers';
 import { PALETTE_GLSL_FN, PALETTE_PRESET_OPTIONS } from './color';
 
 // ─── Shared 3D GLSL helpers ───────────────────────────────────────────────────
@@ -157,7 +157,7 @@ function rmPalVec(v: number[]): string {
   return `vec3(${v[0].toFixed(6)},${v[1].toFixed(6)},${v[2].toFixed(6)})`;
 }
 
-export const RaymarchNode: NodeDefinition = {
+export const RaymarchNode: NodeDefinition = withParamSockets({
   type: 'raymarch3d',
   label: 'Raymarch 3D',
   category: 'Fractals',
@@ -440,7 +440,7 @@ export const RaymarchNode: NodeDefinition = {
       },
     };
   },
-};
+}, ['surf_dist', 'cam_fov', 'ambient', 'specular', 'fog_color']);
 
 // ─── Mandelbulb Node ─────────────────────────────────────────────────────────
 
@@ -466,7 +466,7 @@ float mandelbulbDE(vec3 pos, float maxIter, float power, float bailout) {
 
 const MANDELBULB_GLSL = SDF3D_GLSL + CAMERA3D_GLSL + NOISE3D_GLSL + MANDELBULB_DE_GLSL;
 
-export const MandelbulbNode: NodeDefinition = {
+export const MandelbulbNode: NodeDefinition = withParamSockets({
   type: 'mandelbulb',
   label: 'Mandelbulb 3D',
   category: 'Fractals',
@@ -618,14 +618,14 @@ export const MandelbulbNode: NodeDefinition = {
       },
     };
   },
-};
+}, ['power', 'bailout', 'max_dist', 'cam_fov', 'ambient', 'light_x', 'light_y', 'light_z', 'bg_color']);
 
 // ─── Volumetric Clouds Node ───────────────────────────────────────────────────
 // XorDev-style sunset volumetric raymarching through a cloud slab
 
 const VOLUME_CLOUDS_GLSL = CLOUD_GLSL + CAMERA3D_GLSL;
 
-export const VolumeCloudsNode: NodeDefinition = {
+export const VolumeCloudsNode: NodeDefinition = withParamSockets({
   type: 'volumeClouds',
   label: 'Volume Clouds',
   category: 'Fractals',
@@ -793,12 +793,12 @@ export const VolumeCloudsNode: NodeDefinition = {
       },
     };
   },
-};
+}, ['cloud_min_y', 'cloud_max_y', 'puffiness', 'cloud_scale', 'scatter', 'sun_size', 'sky_top', 'sky_horizon', 'sky_ground', 'cloud_col', 'sun_col', 'absorptionR', 'absorptionG', 'absorptionB', 'phaseG']);
 
 // ─── Chromatic Aberration Node ────────────────────────────────────────────────
 // Post-process: sample R, G, B at slightly offset UVs
 
-export const ChromaticAberrationNode: NodeDefinition = {
+export const ChromaticAberrationNode: NodeDefinition = withParamSockets({
   type: 'chromaticAberration',
   label: 'Chromatic Aberration',
   category: 'Effects',
@@ -898,7 +898,7 @@ export const ChromaticAberrationNode: NodeDefinition = {
       },
     };
   },
-};
+}, ['angle_deg', 'anim_speed']);
 
 // ─── Combine RGB Channels Node ────────────────────────────────────────────────
 // Takes three float/vec3 inputs and combines them into one vec3 with a given channel weight
@@ -978,7 +978,7 @@ export const CombineRGBNode: NodeDefinition = {
 
 // ── SDF Ambient Occlusion ─────────────────────────────────────────────────────
 
-export const SdfAoNode: NodeDefinition = {
+export const SdfAoNode: NodeDefinition = withParamSockets({
   type: 'sdfAo',
   label: 'SDF Ambient Occlusion',
   category: '3D Lighting',
@@ -1021,11 +1021,11 @@ export const SdfAoNode: NodeDefinition = {
       outputVars: { ao: `${id}_ao` },
     };
   },
-};
+}, ['stepDist']);
 
 // ── Soft Shadow ───────────────────────────────────────────────────────────────
 
-export const SoftShadowNode: NodeDefinition = {
+export const SoftShadowNode: NodeDefinition = withParamSockets({
   type: 'softShadow',
   label: 'Soft Shadow',
   category: '3D Lighting',
@@ -1073,7 +1073,7 @@ export const SoftShadowNode: NodeDefinition = {
       outputVars: { shadow: `${id}_shadow` },
     };
   },
-};
+}, ['k', 'tmax']);
 
 // ── Multi-Light (IQ Outdoor Rig) ──────────────────────────────────────────────
 
@@ -1092,7 +1092,7 @@ vec3 multiLight(
   return max(baseColor * light, vec3(0.0));
 }`;
 
-export const MultiLightNode: NodeDefinition = {
+export const MultiLightNode: NodeDefinition = withParamSockets({
   type: 'multiLight',
   label: 'Multi-Light',
   category: '3D Lighting',
@@ -1146,7 +1146,7 @@ export const MultiLightNode: NodeDefinition = {
       outputVars: { color: `${id}_color` },
     };
   },
-};
+}, ['sunR', 'sunG', 'sunB', 'skyR', 'skyG', 'skyB', 'bounceR', 'bounceG', 'bounceB']);
 
 // ── Fresnel ───────────────────────────────────────────────────────────────────
 
@@ -1155,7 +1155,7 @@ float fresnelFactor(vec3 n, vec3 v, float power) {
   return pow(clamp(1.0 - abs(dot(normalize(n), normalize(v))), 0.0, 1.0), power);
 }`;
 
-export const Fresnel3DNode: NodeDefinition = {
+export const Fresnel3DNode: NodeDefinition = withParamSockets({
   type: 'fresnel3d',
   label: 'Fresnel 3D',
   category: '3D Lighting',
@@ -1180,11 +1180,11 @@ export const Fresnel3DNode: NodeDefinition = {
       outputVars: { fresnel: `${id}_fresnel` },
     };
   },
-};
+}, ['power']);
 
 // ── Fake Subsurface Scattering ────────────────────────────────────────────────
 
-export const FakeSSSNode: NodeDefinition = {
+export const FakeSSSNode: NodeDefinition = withParamSockets({
   type: 'fakeSSS',
   label: 'Fake SSS',
   category: '3D Lighting',
@@ -1234,7 +1234,7 @@ export const FakeSSSNode: NodeDefinition = {
       outputVars: { sss: `${id}_sss` },
     };
   },
-};
+}, ['strength', 'stepSize']);
 
 // ── Volumetric Fog ────────────────────────────────────────────────────────────
 
@@ -1244,7 +1244,7 @@ vec3 applyFog(vec3 col, float depth, vec3 fogColor, float density, float hit) {
   return mix(col, fogColor, fog * hit);
 }`;
 
-export const VolumetricFogNode: NodeDefinition = {
+export const VolumetricFogNode: NodeDefinition = withParamSockets({
   type: 'volumetricFog',
   label: 'Volumetric Fog',
   category: '3D Lighting',
@@ -1276,7 +1276,7 @@ export const VolumetricFogNode: NodeDefinition = {
       outputVars: { color: `${id}_color` },
     };
   },
-};
+}, ['density']);
 
 // ─── Material Select Node ─────────────────────────────────────────────────────
 
@@ -1402,7 +1402,7 @@ vec3 glassShade(
   return mix(color, reflColor, frs) + vec3(spec * 0.85) + color * diff * 0.3;
 }`;
 
-export const GlassNode: NodeDefinition = {
+export const GlassNode: NodeDefinition = withParamSockets({
   type: 'glass3d',
   label: 'Glass 3D',
   category: '3D Lighting',
@@ -1511,11 +1511,11 @@ export const GlassNode: NodeDefinition = {
       },
     };
   },
-};
+}, ['ior', 'fresnelPow', 'dispersion', 'shininess', 'diffuseness', 'saturation']);
 
 // ── Phase Function (Henyey-Greenstein) ───────────────────────────────────────
 
-export const PhaseHGNode: NodeDefinition = {
+export const PhaseHGNode: NodeDefinition = withParamSockets({
   type: 'phaseHG',
   label: 'Phase (HG)',
   category: '3D Lighting',
@@ -1546,11 +1546,11 @@ export const PhaseHGNode: NodeDefinition = {
       outputVars: { phase: `${id}_phase` },
     };
   },
-};
+}, ['g']);
 
 // ── Fresnel (Schlick, physical IOR split) ────────────────────────────────────
 
-export const FresnelSchlickNode: NodeDefinition = {
+export const FresnelSchlickNode: NodeDefinition = withParamSockets({
   type: 'fresnelSchlick',
   label: 'Fresnel (Schlick)',
   category: '3D Lighting',
@@ -1584,7 +1584,7 @@ export const FresnelSchlickNode: NodeDefinition = {
       outputVars: { reflectW: `${id}_reflectW`, refractW: `${id}_refractW` },
     };
   },
-};
+}, ['ior']);
 
 // ─── Spectral Dispersion Node (rygcbv 6-channel) ─────────────────────────────
 // Based on Ravishankar Sundararaman's Fourier interpolation technique.
@@ -1660,7 +1660,7 @@ vec3 spectralDisperse(
   return mix(gray, col, saturation);
 }`;
 
-export const SpectralDispersionNode: NodeDefinition = {
+export const SpectralDispersionNode: NodeDefinition = withParamSockets({
   type: 'spectralDispersion',
   label: 'Spectral Dispersion',
   category: '3D Lighting',
@@ -1705,7 +1705,7 @@ export const SpectralDispersionNode: NodeDefinition = {
       outputVars: { color: `${id}_color` },
     };
   },
-};
+}, ['iorR', 'iorY', 'iorG', 'iorC', 'iorB', 'iorV', 'saturation']);
 
 // ─── Blinn-Phong Node ─────────────────────────────────────────────────────────
 
@@ -1722,7 +1722,7 @@ float blinnPhong(vec3 normal, vec3 viewDir, vec3 lightDir, float shininess, floa
   return kSpecular + kDiffuse;
 }`;
 
-export const BlinnPhongNode: NodeDefinition = {
+export const BlinnPhongNode: NodeDefinition = withParamSockets({
   type: 'blinnPhong',
   label: 'Blinn-Phong',
   category: '3D Lighting',
@@ -1754,14 +1754,14 @@ export const BlinnPhongNode: NodeDefinition = {
       outputVars: { light: `${id}_light` },
     };
   },
-};
+}, ['shininess', 'diffuseness']);
 
 // ── Glass Scene Node ──────────────────────────────────────────────────────────
 // Marches two separate SceneGroups: the glass geometry (foreground) and what
 // is visible through it (background). Eliminates the hardcoded dot-grid env
 // from glass3d and lets users compose any SDF scene as the background.
 
-export const GlassSceneNode: NodeDefinition = {
+export const GlassSceneNode: NodeDefinition = withParamSockets({
   type: 'glassScene',
   label: 'Glass Scene',
   category: '3D Scene',
@@ -1932,4 +1932,4 @@ ${bgSection}
       },
     };
   },
-};
+}, ['ior', 'fresnelPow', 'dispersion', 'shininess', 'saturation']);
