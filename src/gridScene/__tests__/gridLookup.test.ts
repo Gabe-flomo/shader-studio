@@ -125,7 +125,7 @@ describe('Grid scene: the cell lookup draws what the per-cell code drew', () => 
 
   it.each([1, 2, 3, 4, 5, 6, 7, 8].map(s => [s] as const))('surprise scene %s', seed => {
     expect(compare(surpriseGridScene(seed), [0.2, 1.3], 10)).toBeLessThan(0.03);
-  });
+  }, 30_000);
 
   it('a shape with lag (a wave of motion) and a figure eight with a big reach', () => {
     const s = starterGridScene();

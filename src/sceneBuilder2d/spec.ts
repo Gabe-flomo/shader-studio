@@ -21,6 +21,7 @@ import type { PiecesSpec } from './pieces';
 import type { FnRef } from './functions';
 import { blockSummary, cloneBlock, COMBINE_BY_MODE, type CombineMode, type CombineSpec, type SpaceBlock } from './blocks';
 import type { TexSource, TexUse } from '../builders/textures';
+import type { StackItem } from '../builders/look/stack';
 import type { DepthPic2D } from './depth';
 
 export type Vec2 = [number, number];
@@ -228,6 +229,8 @@ interface ItemBase {
   hollow: number;
   /** A layer's colour (a nested item's is not used). */
   color: Vec3;
+  /** Its colour from the scene's palette instead: a slot (0 the first swatch). Absent or null: `color`. */
+  slot?: number | null;
   /** With Glow set to "selected": this layer glows. */
   glow: boolean;
   /** Painted with a picture instead of its colour (docs/scene-builder-2d.md, "Textures"). */
@@ -294,7 +297,19 @@ export interface LookSpec {
   glow: { mode: GlowMode; amount: number; falloff: number; tint: Vec3 | null };
   colour: { by: ColourBy; palette: string; scale: number; speed: number };
   tone: ToneMode;
+  /**
+   * The finish. Bloom and Scanlines are no longer offered (the Effects page has Glow and CRT mask);
+   * a scene made with them keeps them, built as before, until they are set to 0.
+   */
   post: { bloom: number; vignette: number; grain: number; scanlines: number };
+  /** The scene's own palette (`colour.palette` is 'custom'): its colours, 2–8 (builders/look/palette.ts). */
+  custom?: Vec3[] | null;
+  /** Its name, for the library. */
+  customName?: string | null;
+  /** The background's colour from a palette slot instead of `bg`. */
+  bgSlot?: number | null;
+  /** The colour grade, a stack built after the tone map (builders/look/grade.ts). */
+  grade?: StackItem[];
 }
 
 export type Show2D = 'picture' | 'distance' | 'mask' | 'space';
@@ -311,6 +326,8 @@ export interface Scene2D {
   output?: OutputSpec;
   /** The pictures the scene reads (builders/textures.ts): fills, picture layers, masks, the background. */
   textures?: TexSource[];
+  /** The Effects page: shader effects on the finished picture, in order (builders/look/effects.ts). */
+  effects?: StackItem[];
   /** A picture with depth the shapes interact with (depth.ts, docs/depth-mix.md), or none. */
   depth?: DepthPic2D | null;
 }
@@ -480,10 +497,17 @@ export function canonicalScene(spec: Scene2D): Scene2D {
   if (!out.textures?.length) delete out.textures;
   if (!out.pieces) delete out.pieces;
   if (!out.look.bgTex) delete out.look.bgTex;
+  if (!out.look.grade?.length) delete out.look.grade;
+  if (!out.effects?.length) delete out.effects;
+  if (!out.look.custom?.length) delete out.look.custom;
+  if (!out.look.customName) delete out.look.customName;
+  if (out.look.bgSlot == null) delete out.look.bgSlot;
+  walkItems(out.layers, it => { if (!it.fill) delete it.fill; if (!it.mask) delete it.mask; if (it.slot == null) delete it.slot; });
   if (!out.depth) delete out.depth;
   else delete out.depth.bake;
-  walkItems(out.layers, it => { if (!it.fill) delete it.fill; if (!it.mask) delete it.mask; });
   let s = 0, g = 0, m = 0, p = 0;
+  out.look.grade?.forEach((x, i) => { x.id = `gr${i + 1}`; });
+  out.effects?.forEach((x, i) => { x.id = `fx${i + 1}`; });
   for (const op of out.space) op.id = `p${++p}`;
   walkItems(out.layers, it => {
     it.id = it.type === 'group' ? `g${++g}` : `s${++s}`;
@@ -503,6 +527,7 @@ export function texturesUsed2D(spec: Scene2D): string[] {
   walkItems(spec.layers, it => { if (it.fill) out.push(it.fill.tex); if (it.mask) out.push(it.mask.tex); });
   if (spec.look.bgTex) out.push(spec.look.bgTex.tex);
   if (spec.grid?.pic) out.push(spec.grid.pic.tex);
+  for (const fx of spec.effects ?? []) if (fx.tex) out.push(fx.tex);
   if (spec.pieces) out.push(spec.pieces.tex);
   if (spec.depth) out.push(spec.depth.tex);
   return [...new Set(out)];

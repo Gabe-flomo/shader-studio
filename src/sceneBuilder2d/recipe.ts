@@ -11,7 +11,8 @@
  *   space      zoom · rotate · move · pixelate · tile · mirror-tile · mirror · kaleidoscope · polar-repeat
  *              · polar · swirl · warp · wave · fisheye · invert        (the stack, top to bottom)
  *   layers     a shape or a combine (union( ) smooth-union( ) subtract( ) intersect( )), painted in order
- *   look       glow · colour by … · tone · background · bloom · vignette · grain · scanlines
+ *   look       glow · colour by … · tone · background · palette · grade … · vignette · grain
+ *   effects    crt … · chroma … · fx displace|swirl|ripple|lens|pixelate|kaleido|blur|glow …  (in order)
  *   output     output distance | mask | space [palette=…]
  *   blocks     space-block ripple-rings amp=0.05 · space-block {uv.x += amp * sin(y * 8 + t)} amp=0.1 times=2
  *              · combine-blocks multiply a=twirl b={uv = abs(uv)} a_amount=3   (space blocks, blocks.ts)
@@ -35,6 +36,8 @@ import { PIECES_MOVES, PIECES_SIZE_BYS, PIECES_VOCABULARY, defaultPieces, printP
 import { PIECE_SHAPES } from '../nodes/definitions/pieces';
 import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_PIC_MODES, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, printGrid, type GridPicMode, type GridShape, type GridSpec } from './grid';
 import type { RecipeError } from '../sceneBuilder/recipe';
+import { LOOK_STACK_WORDS, parseFxClause, parseGradeClause, parsePaletteClause, printFx, printGrade, printPalette } from '../builders/look/recipe';
+import { CUSTOM_PALETTE } from '../builders/look/palette';
 import { parseDepthArgs, printDepth } from './depth';
 import { TEX_FITS, findTex, newTexUse, texSlug, type TexFit, type TexSource, type TexUse } from '../builders/textures';
 import {
@@ -67,7 +70,7 @@ const MOTION_WORDS = [...MOTIONS.map(m => m.kind), 'ring'];
 const BUILT_IN_FN_NAMES = { space: BUILT_IN_FUNCTIONS.filter(f => f.role === 'space').map(f => f.name), shape: BUILT_IN_FUNCTIONS.filter(f => f.role === 'shape').map(f => f.name) };
 const BLOCK_WORDS = ['space-block', 'combine-blocks', 'texture'];
 const LOOK_WORDS = ['depth-picture', 'picture-depth', 'grid', 'glow', 'colour', 'color', 'tone', 'tone-map', 'tonemap', 'background', 'bg', 'bloom', 'vignette', 'grain', 'scanlines', 'output', 'show'];
-const CLAUSE_WORDS = [...Object.keys(SHAPE_WORDS), ...Object.keys(OP_WORDS), ...Object.keys(SPACE_WORDS), ...BLOCK_WORDS, ...LOOK_WORDS];
+const CLAUSE_WORDS = [...Object.keys(SHAPE_WORDS), ...Object.keys(OP_WORDS), ...Object.keys(SPACE_WORDS), ...BLOCK_WORDS, ...LOOK_WORDS, ...LOOK_STACK_WORDS];
 
 export const round = (n: number) => Math.round(n * 10000) / 10000;
 export const fmt = (n: number): string => {
@@ -288,6 +291,7 @@ class Parser {
       if (key === 'rot' || key === 'rotate' || key === 'turn') { const v = this.num(a, 'rot', true); if (v !== null) it.rot = v; continue; }
       if (key === 'scale' || key === 'size-by') { const v = this.num(a, 'scale'); if (v !== null) it.scale = Math.max(0.01, v); continue; }
       if (key === 'color' || key === 'colour' || key === 'c') { const c = this.colour(a); if (c) it.color = c; continue; }
+      if (key === 'slot') { const v = this.num(a, 'slot'); if (v !== null) it.slot = Math.max(0, Math.round(v) - 1); continue; }
       if (key === 'name') { if (a.value.k === 'str' || a.value.k === 'word') it.name = a.value.v; continue; }
       if (key === 'inflate' || key === 'fatten') { const v = this.num(a, 'inflate'); if (v !== null) it.inflate = Math.max(0, v); continue; }
       if (key === 'outline' || key === 'hollow') { const v = this.num(a, 'outline'); if (v !== null) it.hollow = Math.max(0, v); continue; }
@@ -411,6 +415,9 @@ class Parser {
       } else if (SPACE_WORDS[w]) {
         this.c.next();
         scene.space.push(this.space(t, SPACE_WORDS[w]));
+      } else if (LOOK_STACK_WORDS.includes(w)) {
+        this.c.next();
+        this.lookStack(scene, w, t, this.c.args([]));
       } else if (LOOK_WORDS.includes(w)) {
         this.c.next();
         this.look(scene, w, t, this.c.args([]));
@@ -593,6 +600,28 @@ class Parser {
     scene.grid = g;
   }
 
+  /** `palette …`, `grade …`, `crt …`, `chroma …`, `fx …`: the Look's palette and grade, the Effects page (builders/look/recipe.ts). */
+  private lookStack(scene: Scene2D, w: string, t: { at: number; end: number }, args: AstArg[]) {
+    const L = scene.look;
+    if (w === 'palette') {
+      const p = parsePaletteClause(args, this, t);
+      if (!p) return;
+      L.colour.palette = p.key;
+      L.custom = p.custom;
+      L.customName = p.name;
+      if (!p.custom) delete L.custom;
+      if (!p.name) delete L.customName;
+      return;
+    }
+    if (w === 'grade') {
+      const it = parseGradeClause(args, this, t, `gr${(L.grade?.length ?? 0) + 1}`);
+      if (it) (L.grade ??= []).push(it);
+      return;
+    }
+    const it = parseFxClause(w === 'effect' ? 'fx' : w, args, this, t, `fx${(scene.effects?.length ?? 0) + 1}`);
+    if (it) (scene.effects ??= []).push(it);
+  }
+
   /** `pieces brick count=40 shape=… size=1 colour=flat|piece size-by=… move=… amount=0.35 speed=0.1 swirl=0.8` (pieces.ts) */
   private pieces(scene: Scene2D, args: AstArg[]) {
     let p: PiecesSpec | null = null;
@@ -673,7 +702,7 @@ class Parser {
           if (!key && word && !named && (COLOUR_BYS as readonly string[]).includes(word)) { L.colour.by = word as ColourBy; named = true; }
           else if (key === 'palette' || key === 'ramp' || (!key && word && PALETTE_BY_KEY[word])) {
             const k = word ?? '';
-            if (PALETTE_BY_KEY[k]) L.colour.palette = k;
+            if (PALETTE_BY_KEY[k] || k === CUSTOM_PALETTE) L.colour.palette = k;
             else this.fail(a, `“${k}” isn't a palette: ${PALETTES.map(p => p.key).join(', ')}.`);
           } else if (key === 'scale') { const v = this.num(a, 'scale'); if (v !== null) L.colour.scale = v; }
           else if (key === 'speed') { const v = this.num(a, 'speed'); if (v !== null) L.colour.speed = v; }
@@ -702,6 +731,7 @@ class Parser {
           if (key === 'picture' || key === 'texture') { pic = this.texName(a, key); continue; }
           if (key && this.texUseKey(key, a, use)) continue;
           if (!key && this.word(a) === 'still') { warp = false; continue; }
+          if (key === 'slot') { const v = this.num(a, 'slot'); if (v !== null) L.bgSlot = Math.max(0, Math.round(v) - 1); coloured = true; continue; }
           if (!key && !coloured) { const c = this.colour(a); if (c) L.bg = c; coloured = true; continue; }
           if (key === 'color' || key === 'colour') { const c = this.colour(a); if (c) L.bg = c; continue; }
           this.fail(a, 'background takes a colour, picture=, fit=, tiles= and still (the picture not bent by the space).');
@@ -834,6 +864,7 @@ function printItem(it: Item, indent: string | null = null): string {
   if (it.inflate) common.push(`inflate=${fmt(it.inflate)}`);
   if (it.hollow) common.push(`outline=${fmt(it.hollow)}`);
   if (!same(it.color, DEFAULT_COLOR)) common.push(`color=${colourText(it.color)}`);
+  if (it.slot != null) common.push(`slot=${it.slot + 1}`);
   if (it.glow) common.push('glow');
   if (it.name) common.push(`name=${fmtName(it.name)}`);
   const mods = [...it.motion.map(printMotion), ...(it.dup ? [printRing(it.dup)] : [])];
@@ -885,9 +916,16 @@ export function printRecipe2D(scene: Scene2D, opts: { multiline?: boolean; prett
     clauses.push(c.join(' '));
   }
   if (L.tone !== D.tone) clauses.push(`tone ${L.tone}`);
-  if (L.bgTex) clauses.push(['background', ...(!same(L.bg, D.bg) ? [colourText(L.bg)] : []), `picture=${fmtName(L.bgTex.tex)}`, ...printUse(L.bgTex), ...(L.bgTex.warp ? [] : ['still'])].join(' '));
-  else if (!same(L.bg, D.bg)) clauses.push(`background ${colourText(L.bg)}`);
+  const bgSlot = L.bgSlot != null ? [`slot=${L.bgSlot + 1}`] : [];
+  if (L.bgTex) clauses.push(['background', ...(!same(L.bg, D.bg) ? [colourText(L.bg)] : []), ...bgSlot, `picture=${fmtName(L.bgTex.tex)}`, ...printUse(L.bgTex), ...(L.bgTex.warp ? [] : ['still'])].join(' '));
+  else if (!same(L.bg, D.bg) || bgSlot.length) clauses.push(['background', ...(!same(L.bg, D.bg) ? [colourText(L.bg)] : []), ...bgSlot].join(' '));
+  // The palette: its own clause when the colour-by clause above doesn't already name it.
+  const usesPaletteClause = L.colour.palette === CUSTOM_PALETTE || (L.colour.by === 'layer' && L.colour.palette !== D.colour.palette);
+  if (usesPaletteClause) clauses.push(printPalette(L.colour.palette, L.custom, L.customName));
+  clauses.push(...(L.grade ?? []).map(printGrade));
+  // Bloom and Scanlines: only a scene made with them still has them (the Effects page has Glow and CRT mask).
   for (const k of ['bloom', 'vignette', 'grain', 'scanlines'] as const) if (L.post[k] > 0) clauses.push(`${k} ${fmt(L.post[k])}`);
+  clauses.push(...(scene.effects ?? []).map(printFx));
   if (scene.depth) clauses.push(printDepth(scene.depth, { num: fmt, name: fmtName, colour: colourText }));
   if (scene.output && scene.output.show !== 'picture') clauses.push(`output ${scene.output.show}${scene.output.palette ? ` palette=${scene.output.palette}` : ''}`);
   return clauses.join(opts.multiline || opts.pretty ? '\n' : ' · ');
@@ -912,7 +950,8 @@ export const RECIPE_VOCABULARY_2D = {
   pieces: [PIECES_VOCABULARY],
   motion: ['@orbit(0.3 speed=0.25)', '@bob(0.15 dir=90)', '@spin(0.25)', '@pulse(0.25 speed=0.5)'],
   ring: ['@ring(6 r=0.5)', '@ring(6 r=0.5 inner=(5,0.2))', '@ring(6 r=0.5 levels=3 factor=1.6)'],
-  look: ['glow [selected] [amount] falloff= color=', `colour by ${COLOUR_BYS.join('|')} palette= scale= speed=`, `tone ${TONE_MODES.join('|')}`, 'background colour [picture=brick fit= tiles= still]', 'bloom 0.6', 'vignette 0.5', 'grain 0.05', 'scanlines 0.3', 'output distance|mask|space palette='],
+  look: ['glow [selected] [amount] falloff= color=', `colour by ${COLOUR_BYS.join('|')} palette= scale= speed=`, `tone ${TONE_MODES.join('|')}`, 'background colour [picture=brick fit= tiles= still]', 'vignette 0.5', 'grain 0.05', 'palette fire | palette #1b1f3b #e94f37 #f6c90e name=Dusk', 'background slot=1 · circle slot=2', 'grade saturation 1.3 · grade levels blacks=0.05', 'output distance|mask|space palette='],
+  effects: ['crt mask=aperture size=4 strength=0.8 curve=0.04 vignette=0.35', 'chroma 4 mode=directional angle=30', 'fx displace 0.12 scale=2 · fx displace picture=clouds pixels=24', 'fx pixelate 0.025 · fx kaleido 6 · fx swirl 2 · fx ripple · fx lens 0.2', 'fx blur 4 · fx glow 0.8 threshold=0.6'],
   colours: Object.keys(COLOUR_TABLE),
   palettes: PALETTES.map(p => p.key),
 };

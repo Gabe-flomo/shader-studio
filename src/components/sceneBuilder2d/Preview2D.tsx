@@ -9,6 +9,7 @@ import { compileGraph } from '../../compiler/graphCompiler';
 import { buildStandalone2D } from '../../sceneBuilder2d/build';
 import type { Scene2D } from '../../sceneBuilder2d/spec';
 import type { Compiled } from '../sceneBuilder/previewGl';
+import { previewPassesOf } from '../builders/previewPasses';
 import { useBuilderPreview, useThrottled } from '../builders/useBuilderPreview';
 import { useTokens } from '../../theme/themeStore';
 import { registerPreviewDepth } from '../builders/previewTextures';
@@ -21,7 +22,7 @@ export function compileScene2D(scene: Scene2D): Compiled {
     const r = compileGraph({ nodes: g.nodes });
     registerPreviewDepth(g.nodes);
     if (!r.success) return { vs: '', fs: '', uniforms: {}, nodes: g.nodes.length, error: (r.errors ?? []).join('; ') || 'The graph did not compile.', ms: performance.now() - t0 };
-    return { vs: r.vertexShader, fs: r.fragmentShader, uniforms: r.paramUniforms as Record<string, number | number[]>, nodes: g.nodes.length, error: null, ms: performance.now() - t0, textures: r.textureUniforms };
+    return { vs: r.vertexShader, fs: r.fragmentShader, uniforms: r.paramUniforms as Record<string, number | number[]>, nodes: g.nodes.length, error: null, ms: performance.now() - t0, textures: r.textureUniforms, passes: previewPassesOf(r.passes) };
   } catch (e) {
     return { vs: '', fs: '', uniforms: {}, nodes: 0, error: e instanceof Error ? e.message : String(e), ms: 0 };
   }

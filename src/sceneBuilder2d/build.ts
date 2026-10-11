@@ -33,6 +33,9 @@ import { BLOCK_BY_ID } from './blockLibrary';
 import { DEPTH_LOOK_LABELS, depthMixParams, depthSummary, type DepthPic2D } from './depth';
 import { DEPTH_MIX_COMBINE_LABELS, DEPTH_SPACE_LABELS } from '../nodes/definitions/depthMix';
 import { FIT_LABELS, LUMA, findTex, fitLines, glf, newTexUse, picUv, sampleWrap, standInId, standIns, type TexSource, type TexUse } from '../builders/textures';
+import { CUSTOM_PALETTE, paletteLabel, paletteSwatches, slotColour } from '../builders/look/palette';
+import { emitGrades } from '../builders/look/grade';
+import { emitEffects } from '../builders/look/effects';
 
 export { ROLE_KEY };
 /** On the UV node: the scene it was built from (and, once applied, fingerprints of what was built). */
@@ -445,7 +448,11 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
 // ── Colour, glow, composite ─────────────────────────────────────────────────
 
 /** A palette (cosine or ramp) from the colour-by settings: `value` through it. */
-export function paletteNode(c: Ctx, role: string, key: string, value: Ref, anim: Ref | null, scale: number, speed: number, note: string): Ref {
+export function paletteNode(c: Ctx, role: string, key: string, value: Ref, anim: Ref | null, scale: number, speed: number, note: string, custom?: readonly Vec3[] | null, customName?: string | null): Ref {
+  if (key === CUSTOM_PALETTE && custom && custom.length >= 2) {
+    const cols = custom.slice(0, 8);
+    return ref(mk(c, 'colorRamp', role, { stops: String(cols.length), ...Object.fromEntries(cols.map((s, i) => [`color${i}`, [...s]])) }, { t: value }, `${note} ${paletteLabel(key, customName)}: the scene's own palette (${cols.length} colours).`), 'color');
+  }
   const pal = PALETTE_BY_KEY[key] ?? PALETTE_BY_KEY.sunset;
   if (pal.kind === 'palette') {
     return ref(mk(c, 'palette', role, { preset: String(pal.preset ?? 0), scale, speed }, { value, anim }, `${note} The ${pal.label} palette (a cosine palette).`), 'color');
@@ -495,11 +502,25 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     const value = driver ? ref(expr(c, 'drive', `Colour by ${by}`, [{ name: 'uv', type: 'vec2', from: pos }], driver.code, `The number the palette is read with: ${driver.what}, in the warped space. Colour → by ${by}.`, 'float'), 'result') : null;
     const speed = by === 'time' ? (L.colour.speed || 0.2) : L.colour.speed;
     sharedColour = paletteNode(c, 'palette', L.colour.palette, value ?? ref(mk(c, 'constant', 'drive', { value: 0 }, {}, 'Nothing drives the palette but time.'), 'value'), anim, L.colour.scale, speed,
-      `Colours every layer: ${driver ? driver.what : 'time'} read through a palette${speed ? `, moving at ${fmt(speed)}` : ''}.`);
+      `Colours every layer: ${driver ? driver.what : 'time'} read through a palette${speed ? `, moving at ${fmt(speed)}` : ''}.`, L.custom, L.customName);
   }
 
-  const bg = mk(c, 'colorPicker', 'bg', { color: [...L.bg] }, {}, `The background colour, ${col(L.bg)}: what shows where no shape is.`);
-  let acc: Ref = ref(bg, 'rgb');
+  // The palette's slots in use: one Color node each, wired to every part that takes it, so changing
+  // the palette (or that node) recolours them all (builders/look/palette.ts).
+  const swatches = paletteSwatches(L.colour.palette, L.custom);
+  const slots = new Map<number, Ref>();
+  const slotRef = (slot: number): Ref => {
+    const n = ((Math.round(slot) % swatches.length) + swatches.length) % swatches.length;
+    let r = slots.get(n);
+    if (!r) {
+      const colour = slotColour(swatches, n);
+      r = ref(mk(c, 'colorPicker', `palette:slot${n + 1}`, { color: colour }, {}, `Palette slot ${n + 1} of ${paletteLabel(L.colour.palette, L.customName)}, ${col(colour)}: every part coloured from this slot reads it, so changing it here (or the palette in the builder) recolours them all.`), 'rgb');
+      slots.set(n, r);
+    }
+    return r;
+  };
+  let acc: Ref = L.bgSlot != null ? slotRef(L.bgSlot)
+    : ref(mk(c, 'colorPicker', 'bg', { color: [...L.bg] }, {}, `The background colour, ${col(L.bg)}: what shows where no shape is.`), 'rgb');
   if (L.bgTex) {
     const t = texFor(b, L.bgTex.tex, 'The background');
     if (t) {
@@ -519,8 +540,9 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     let fill: Ref;
     if (sharedColour) fill = sharedColour;
     else if (by === 'distance') {
-      fill = paletteNode(c, `${it.id}:palette`, L.colour.palette, d, anim, L.colour.scale, L.colour.speed, `Colours ${name} by its distance field, so it comes out in bands that follow its outline.`);
-    } else fill = ref(mk(c, 'colorPicker', `${it.id}:color`, { color: [...it.color] }, {}, `${name}'s colour, ${col(it.color)}.`), 'rgb');
+      fill = paletteNode(c, `${it.id}:palette`, L.colour.palette, d, anim, L.colour.scale, L.colour.speed, `Colours ${name} by its distance field, so it comes out in bands that follow its outline.`, L.custom, L.customName);
+    } else if (it.slot != null) fill = slotRef(it.slot);
+    else fill = ref(mk(c, 'colorPicker', `${it.id}:color`, { color: [...it.color] }, {}, `${name}'s colour, ${col(it.color)}.`), 'rgb');
     // A picture fill: read at the layer's own point, so the picture moves, turns and repeats with it.
     const t = it.fill ? texFor(b, it.fill.tex, name) : null;
     if (t && it.fill) {
@@ -561,6 +583,9 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
   if (depthPic && spec.depth) acc = emitDepthMix(b, spec.depth, depthPic, acc, layers.map(l => l.d));
   let final = acc;
   if (L.tone !== 'none') final = ref(mk(c, 'toneMap', 'tone', { mode: L.tone }, { color: final }, `Squeezes the bright, linear light into colours a screen can show (${L.tone.toUpperCase()}) without clipping highlights.`), 'color');
+  // The Look's grade, then the Effects page, each in its order (builders/look).
+  final = emitGrades(c, L.grade, final, { swatches });
+  final = emitEffects(c, spec.effects, final, { screen, getTime: b.getTime, texture: (name, what) => texFor(b, name, what)?.out ?? null });
   const P = L.post;
   if (P.bloom > 0) final = ref(mk(c, 'bloom', 'bloom', { intensity: P.bloom, threshold: 0.35 }, { color: final, uv: screen }, `Bloom: bright areas bleed light into their surroundings. Intensity ${fmt(P.bloom)}.`), 'result');
   if (P.vignette > 0) final = ref(mk(c, 'vignette', 'vignette', { strength: P.vignette }, { color: final, uv: screen }, `Vignette: darkens the corners. Strength ${fmt(P.vignette)}.`), 'result');
@@ -694,7 +719,7 @@ function emitGrid(b: B, g: GridSpec, pos: Ref, screen: Ref, behind: Ref, anim: R
   let fill: Ref;
   if (g.colourBy === 'ripple' || g.colourBy === 'cell') {
     fill = paletteNode(c, 'grid:palette', L.colour.palette, ref(sp, g.colourBy === 'ripple' ? 'y' : 'z'), anim, L.colour.scale, L.colour.speed,
-      g.colourBy === 'ripple' ? 'Colours each cell by the ripple passing through it, so the waves show as colour.' : 'Colours each cell with its own random value through a palette.');
+      g.colourBy === 'ripple' ? 'Colours each cell by the ripple passing through it, so the waves show as colour.' : 'Colours each cell with its own random value through a palette.', L.custom, L.customName);
   } else {
     const c1 = mk(c, 'colorPicker', 'grid:color', { color: [...g.colour] }, {}, `The grid's first colour, ${col(g.colour)}: cells with the first shape.`);
     const c2 = mk(c, 'colorPicker', 'grid:color2', { color: [...g.colour2] }, {}, `The grid's second colour, ${col(g.colour2)}: cells with the last shape.`);

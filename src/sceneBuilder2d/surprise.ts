@@ -7,12 +7,17 @@
  *  - one or two blocks (sometimes a combine of two), sliders varied inside their ranges the way
  *    Random varies them; a stack that throws points far away or to NaN is dealt again;
  *  - glowing outlines and rings on a dark ground, colours from one harmonious palette;
- *  - ACES tone mapping (AgX greyed the dark ground), a little bloom and vignette now and then.
+ *  - ACES tone mapping (AgX greyed the dark ground), a little vignette now and then;
+ *  - now and then shapes coloured from a palette's slots, a same-frame glow, a touch of grade and,
+ *    rarely, one tasteful effect (a little chromatic aberration, a CRT mask).
  */
 import { darkBackground, harmoniousPalette, makeRng, type Rng } from '../lib/surprise';
 import { randomChoices } from './blockLibrary';
 import { MOTIONS, emptyScene, newBlockOp, newCombineOp, newDup, newMotion, newShape, type MotionKind, type Scene2D, type ShapeSpec, type Vec3 } from './spec';
 import { stackMap } from './thumbnails';
+import { newStackItem, type StackItem } from '../builders/look/stack';
+import { GRADE_BY_KIND } from '../builders/look/grade';
+import { FX_BY_KIND } from '../builders/look/effects';
 
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 
@@ -103,7 +108,34 @@ export function surpriseScene2D(seed: number | string): Scene2D {
   if (look.chance(0.35)) {
     L.colour = { by: look.pick(['length', 'angle', 'distance'] as const), palette: look.pick(['sunset', 'rainbow', 'teal', 'warm', 'haze', 'ice']), scale: r3(look.float(0.6, 1.6)), speed: look.chance(0.5) ? r3(look.float(0.05, 0.25)) : 0 };
   }
-  if (look.chance(0.4)) L.post.bloom = r3(look.float(0.15, 0.4));
   if (look.chance(0.5)) L.post.vignette = r3(look.float(0.2, 0.5));
+  finish(rng.fork('finish'), s);
   return s;
+}
+
+/** Palettes that colour a glowing scene well, as slots. */
+const SLOT_PALETTES = ['sunset', 'teal', 'warm', 'haze', 'ice', 'heat', 'fire'];
+
+/**
+ * The palette, grade and effects, now and then and lightly: shapes coloured from a library
+ * palette's slots, a same-frame glow (Bloom is no longer offered), a touch of grade, and once in a
+ * while one effect that suits a glowing scene (a little chromatic aberration, a CRT mask).
+ */
+function finish(rng: Rng, s: Scene2D) {
+  const L = s.look;
+  if (rng.chance(0.3) && L.colour.by === 'layer') {
+    L.colour.palette = rng.pick(SLOT_PALETTES);
+    const shift = rng.int(0, 4);
+    s.layers.forEach((it, i) => { it.slot = (i + shift) % 5; });
+  }
+  const grade: StackItem[] = [];
+  if (rng.chance(0.25)) grade.push(newStackItem(GRADE_BY_KIND.saturation, 'gr1', { amount: r3(rng.float(1.1, 1.35)) }));
+  if (rng.chance(0.15)) grade.push(newStackItem(GRADE_BY_KIND.levels, `gr${grade.length + 1}`, { blacks: r3(rng.float(0.01, 0.05)), whites: 1, curve: r3(rng.float(0.3, 0.6)) }));
+  if (grade.length) L.grade = grade;
+  const fx: StackItem[] = [];
+  if (rng.chance(0.3)) fx.push(newStackItem(FX_BY_KIND.glow, 'fx1', { intensity: r3(rng.float(0.4, 0.9)), threshold: r3(rng.float(0.45, 0.7)), radius: Math.round(rng.float(10, 24)) }));
+  const roll = rng.float(0, 1);
+  if (roll < 0.1) fx.push(newStackItem(FX_BY_KIND.chroma, `fx${fx.length + 1}`, { amount: r3(rng.float(1.5, 4)) }));
+  else if (roll < 0.17) fx.push(newStackItem(FX_BY_KIND.crt, `fx${fx.length + 1}`, { mask: rng.pick(['slot', 'aperture']), size: rng.pick([4, 5, 6]), strength: r3(rng.float(0.4, 0.7)), curve: r3(rng.float(0.02, 0.05)) }));
+  if (fx.length) s.effects = fx;
 }

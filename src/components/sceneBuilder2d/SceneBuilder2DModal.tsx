@@ -19,7 +19,6 @@ import { TEMPLATES_2D, templateScene } from '../../sceneBuilder2d/templates';
 import { renderShapeThumbnail, renderSpaceThumbnail } from '../../sceneBuilder2d/thumbnails';
 import { BUILT_IN_FUNCTIONS, findFunctions, functionsFromGraphs, type FnEntry, type FnRole } from '../../sceneBuilder2d/functions';
 import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_LABELS, GRID_PIC_MODES, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, type GridPicMode, type GridShape, type GridSpec } from '../../sceneBuilder2d/grid';
-import { PALETTES } from '../../sceneBuilder/output';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { BuilderLabel, BuilderNote, BuilderWindow } from '../builders/BuilderWindow';
 import { focusRecipeEditor, useBuilderRecipeRequest } from '../../builders/windows';
@@ -47,6 +46,13 @@ import { TexturePicker } from '../builders/TexturePicker';
 import { PIECES_LABELS, PIECES_MOVES, PIECES_SIZE_BYS, defaultPieces, type PiecesSpec } from '../../sceneBuilder2d/pieces';
 import { PIECE_SHAPES } from '../../nodes/definitions/pieces';
 import { FIT_LABELS, TEX_FITS, newTexUse, withSource, type TexFit, type TexSource, type TexUse } from '../../builders/textures';
+import { find2dBuild } from '../../sceneBuilder2d/apply';
+import { paletteLabel, paletteSwatches, swatchGradient } from '../../builders/look/palette';
+import { GRADE_BY_KIND, GRADE_KINDS, gradeParamTarget } from '../../builders/look/grade';
+import { FX_KINDS, fxParamTarget } from '../../builders/look/effects';
+import type { StackItem } from '../../builders/look/stack';
+import { StackCards, type LazyParam } from '../builders/look/StackCards';
+import { PaletteCardBody, SlotColourRow } from '../builders/look/PaletteCard';
 
 const TABS: Array<{ id: Builder2DTab; label: string; icon: IconName; gapBefore?: boolean }> = [
   { id: 'space', label: 'Space', icon: 'wave' },
@@ -54,6 +60,7 @@ const TABS: Array<{ id: Builder2DTab; label: string; icon: IconName; gapBefore?:
   { id: 'grid', label: 'Grid', icon: 'grid' },
   { id: 'depth', label: 'Depth', icon: 'layers' },
   { id: 'look', label: 'Look', icon: 'sun' },
+  { id: 'effects', label: 'Effects', icon: 'spark' },
   { id: 'output', label: 'Output', icon: 'eye' },
   { id: 'recipe', label: 'Recipe', icon: 'text', gapBefore: true },
   { id: 'templates', label: 'Templates', icon: 'presets' },
@@ -429,7 +436,8 @@ function ItemInspector({ id }: { id: string }) {
         ) : shapeDef?.params.map(p => (
           <ParamControl key={p.key} p={p} keyBase={id} value={(it as ShapeSpec).size[p.key]} onChange={v => upd(x => { if (x.type === 'shape') x.size[p.key] = v; }, `size:${p.key}`)} />
         ))}
-        {!f.parent && <ColourRow label="Colour" value={it.color} onChange={v => upd(x => { x.color = v; }, 'color')} />}
+        {!f.parent && <SlotColourRow label="Colour" value={it.color} slot={it.slot} swatches={paletteSwatches(scene.look.colour.palette, scene.look.custom)}
+          onColour={v => upd(x => { x.color = v; }, 'color')} onSlot={s => upd(x => { if (s == null) delete x.slot; else x.slot = s; })} />}
         {!f.parent && <Row label="Glow"><Toggle checked={it.glow} onChange={v => upd(x => { x.glow = v; })} label="Glows when Look → Glow is Selected" /></Row>}
       </Card>
       {!f.parent && <PictureCard id={id} it={it} />}
@@ -649,27 +657,46 @@ function GridCells() {
   );
 }
 
+/** The node a builder setting builds, looked up when its slider's menu opens (right-click → Play). */
+const play2d = (role: string, key: string): LazyParam => () => {
+  const id = useSceneBuilder2D.getState().targetSceneId;
+  const b = id ? find2dBuild(useNodeGraphStore.getState().nodes, id) : null;
+  const n = b?.byRole.get(role);
+  return n ? { nodeId: n.id, key } : { missing: 'Not built yet: Build, then right-click to add it to Play.' };
+};
+const gradePlay = (it: StackItem, key: string) => { const t = gradeParamTarget(it, key); return t ? play2d(t.role, t.param) : undefined; };
+const fxPlay = (it: StackItem, key: string) => { const t = fxParamTarget(it, key); return t ? play2d(t.role, t.param) : undefined; };
+
 function LookTab() {
   const look = useSceneBuilder2D(s => s.scene.look);
   const hasGrid = useSceneBuilder2D(s => !!s.scene.grid && s.scene.grid.colourBy !== 'shape');
   const sources = useSceneBuilder2D(s => s.scene.textures) ?? [];
   const set = (fn: (l: Scene2D['look']) => void, key?: string) => edit(d => fn(d.look), key && `look:${key}`);
+  const swatches = paletteSwatches(look.colour.palette, look.custom);
+  const grade = look.grade ?? [];
+  const P = look.post;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <Card id="look2-colour" defaultOpen title="Colour" summary={look.colour.by === 'layer' ? 'each layer its own' : `by ${look.colour.by} · ${look.colour.palette}`}>
-        <ColourRow label="Background" value={look.bg} onChange={v => set(l => { l.bg = v; }, 'bg')} />
-        <Row label="Colour by">
+      <Card id="look2-palette" defaultOpen title="Palette" summary={paletteLabel(look.colour.palette, look.customName)}
+        accent={swatchGradient(swatches)}>
+        <PaletteCardBody value={{ key: look.colour.palette, custom: look.custom, customName: look.customName }}
+          onChange={(v, key) => set(l => { l.colour.palette = v.key; l.custom = v.custom ?? null; l.customName = v.customName ?? null; if (!l.custom) delete l.custom; if (!l.customName) delete l.customName; }, key)} />
+      </Card>
+      <Card id="look2-colour" title="Colour" summary={`${look.bgSlot != null ? `background slot ${look.bgSlot + 1}` : 'background'} · ${look.colour.by === 'layer' ? 'each layer its own' : `by ${look.colour.by}`}`}>
+        <SlotColourRow label="Background" value={look.bg} slot={look.bgSlot} swatches={swatches}
+          onColour={v => set(l => { l.bg = v; }, 'bg')} onSlot={s => set(l => { if (s == null) delete l.bgSlot; else l.bgSlot = s; })} />
+        <Row label="Colour by" hint="Each layer's colour (its slot or free colour, on Shapes), or the palette read by something about the picture.">
           <Select ariaLabel="Colour by" value={look.colour.by} options={COLOUR_BYS.map(c => ({ value: c, label: c === 'layer' ? "each layer's colour" : c }))} onChange={v => set(l => { l.colour.by = v as typeof l.colour.by; })} />
         </Row>
         {(look.colour.by !== 'layer' || hasGrid) && (
           <>
-            <Row label="Palette" hint={look.colour.by === 'layer' ? 'Used by the grid (Grid → Colour by ripple or cell).' : undefined}><Select ariaLabel="Palette" value={look.colour.palette} options={PALETTES.map(p => ({ value: p.key, label: p.label }))} onChange={v => set(l => { l.colour.palette = v; })} /></Row>
+            {look.colour.by === 'layer' && <BuilderNote>The palette also colours the grid (Grid → Colour by ripple or cell).</BuilderNote>}
             <NumRow label="Scale" value={look.colour.scale} defaultValue={DEFAULT_SCENE_2D.look.colour.scale} min={0.1} max={8} onChange={v => set(l => { l.colour.scale = v; }, 'cs')} />
             <NumRow label="Drift" hint="How fast the palette cycles over time." value={look.colour.speed} defaultValue={DEFAULT_SCENE_2D.look.colour.speed} min={-1} max={1} onChange={v => set(l => { l.colour.speed = v; }, 'cv')} />
           </>
         )}
       </Card>
-      <Card id="look2-picture" defaultOpen={!!look.bgTex} title="Background picture" summary={look.bgTex ? `${look.bgTex.tex}${look.bgTex.warp ? ' · bent by the space' : ''}` : 'none'}>
+      <Card id="look2-picture" title="Background picture" summary={look.bgTex ? `${look.bgTex.tex}${look.bgTex.warp ? ' · bent by the space' : ''}` : 'none'}>
         <BuilderNote>A picture behind every layer. Read at the warped point, every space transform and block bends it: add a block on the Space tab to warp the picture.</BuilderNote>
         <TexturePicker id="bg" sources={sources} value={look.bgTex?.tex} onAdd={addSource} none="Only the colour"
           onChange={name => set(l => { l.bgTex = name ? (l.bgTex ? { ...l.bgTex, tex: name } : { ...newTexUse(name), warp: true }) : null; })} />
@@ -680,7 +707,7 @@ function LookTab() {
           </>
         )}
       </Card>
-      <Card id="look2-glow" defaultOpen title="Glow" summary={look.glow.mode}>
+      <Card id="look2-glow" title="Glow" summary={look.glow.mode}>
         <Row label="Glow">
           <Select ariaLabel="Glow" value={look.glow.mode} options={[{ value: 'off', label: 'Off' }, { value: 'all', label: 'All shapes' }, { value: 'selected', label: 'Only layers marked Glow' }]}
             onChange={v => set(l => { l.glow.mode = v as GlowMode; })} />
@@ -692,13 +719,36 @@ function LookTab() {
           </>
         )}
       </Card>
-      <Card id="look2-finish" title="Finish" summary={`tone ${look.tone}${look.post.bloom ? ' · bloom' : ''}${look.post.vignette ? ' · vignette' : ''}`}>
-        <Row label="Tone map"><Select ariaLabel="Tone map" value={look.tone} options={TONE_MODES.map(t => ({ value: t, label: t }))} onChange={v => set(l => { l.tone = v as ToneMode; })} /></Row>
-        <NumRow label="Bloom" value={look.post.bloom} defaultValue={DEFAULT_SCENE_2D.look.post.bloom} min={0} max={1.5} onChange={v => set(l => { l.post.bloom = v; }, 'pb')} />
-        <NumRow label="Vignette" value={look.post.vignette} defaultValue={DEFAULT_SCENE_2D.look.post.vignette} min={0} max={1} onChange={v => set(l => { l.post.vignette = v; }, 'pv')} />
-        <NumRow label="Grain" value={look.post.grain} defaultValue={DEFAULT_SCENE_2D.look.post.grain} min={0} max={0.5} onChange={v => set(l => { l.post.grain = v; }, 'pg')} />
-        <NumRow label="Scanlines" value={look.post.scanlines} defaultValue={DEFAULT_SCENE_2D.look.post.scanlines} min={0} max={1} onChange={v => set(l => { l.post.scanlines = v; }, 'ps')} />
+      <Card id="look2-grade" title="Grade" summary={grade.length ? grade.map(g => GRADE_BY_KIND[g.kind]?.label ?? g.kind).join(' → ') : 'none'}>
+        <StackCards name="grade" idPrefix="gr" items={grade} defs={GRADE_KINDS} playParam={gradePlay}
+          empty="No grade yet: add one above. Each is a real node after the tone map, in the order shown."
+          onEdit={(fn, key) => edit(d => { const next = fn([...(d.look.grade ?? [])]); if (next.length) d.look.grade = next; else delete d.look.grade; }, key)} />
       </Card>
+      <Card id="look2-finish" title="Finish" summary={`tone ${look.tone}${P.vignette ? ' · vignette' : ''}${P.grain ? ' · grain' : ''}${P.bloom || P.scanlines ? ' · older effects' : ''}`}>
+        <Row label="Tone map"><Select ariaLabel="Tone map" value={look.tone} options={TONE_MODES.map(t => ({ value: t, label: t }))} onChange={v => set(l => { l.tone = v as ToneMode; })} /></Row>
+        <NumRow label="Vignette" value={P.vignette} defaultValue={DEFAULT_SCENE_2D.look.post.vignette} min={0} max={1} onChange={v => set(l => { l.post.vignette = v; }, 'pv')} />
+        <NumRow label="Grain" value={P.grain} defaultValue={DEFAULT_SCENE_2D.look.post.grain} min={0} max={0.5} onChange={v => set(l => { l.post.grain = v; }, 'pg')} />
+        {(P.bloom > 0 || P.scanlines > 0) && (
+          <div data-look-legacy style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <BuilderNote>This scene was made with effects the builder no longer offers. They still build as before; set one to 0 to take it out. Effects → Glow and CRT mask replace them.</BuilderNote>
+            {P.bloom > 0 && <NumRow label="Bloom (older)" hint="The older Bloom reads the frame before, so moving things smear. Effects → Glow is the same-frame kind." value={P.bloom} min={0} max={1.5} onChange={v => set(l => { l.post.bloom = v; }, 'pb')} />}
+            {P.scanlines > 0 && <NumRow label="Scanlines (older)" hint="Effects → CRT mask has scanlines with the tube's mask." value={P.scanlines} min={0} max={1} onChange={v => set(l => { l.post.scanlines = v; }, 'ps')} />}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function EffectsTab() {
+  const effects = useSceneBuilder2D(s => s.scene.effects) ?? [];
+  const sources = useSceneBuilder2D(s => s.scene.textures) ?? [];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <BuilderNote>Shader effects on the finished picture, top to bottom: each one works on what the ones above made. Moves (Displace, Swirl, Pixelate, Kaleidoscope, CRT curvature) bend where the picture is read; Blur, Glow and Chromatic aberration read round each pixel; CRT mask works on the colour. They build as real nodes after the Look's grade.</BuilderNote>
+      <StackCards name="fx" idPrefix="fx" items={effects} defs={FX_KINDS} playParam={fxPlay} sources={sources} onAddSource={addSource}
+        empty="No effects yet: add one above."
+        onEdit={(fn, key) => edit(d => { const next = fn([...(d.effects ?? [])]); if (next.length) d.effects = next; else delete d.effects; }, key && `fx:${key}`)} />
     </div>
   );
 }
@@ -816,7 +866,7 @@ export function SceneBuilder2DModal() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [undo, redo]);
 
-  const body = { space: <SpaceTab />, shapes: <ShapesTab />, grid: <GridTab />, depth: <DepthTab />, look: <LookTab />, output: <OutputTab />, recipe: <RecipeTab />, templates: <TemplatesTab /> }[tab];
+  const body = { space: <SpaceTab />, shapes: <ShapesTab />, grid: <GridTab />, depth: <DepthTab />, look: <LookTab />, effects: <EffectsTab />, output: <OutputTab />, recipe: <RecipeTab />, templates: <TemplatesTab /> }[tab];
   void num;
   return (
     <BuilderWindow
