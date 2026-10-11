@@ -7,10 +7,10 @@ that wired graph, every node with a note, for learning.
 
 **Opening it:** the node browser's **Builders** section (first, on the desktop and on a phone) →
 **Scene builder** → **Grid scene** ([scene-builder.md](scene-builder.md)) adds a Grid Rules node (on
-the Output when the graph is empty) and opens its editor; so do the empty canvas's right-click →
-**Builders** → **Scene builder** and the Do… bar's "new grid rules". The editor's header reads
+the Output when the graph is empty) and opens its builder; so do the empty canvas's right-click →
+**Builders** → **Scene builder** and the Do… bar's "new grid rules". The builder's header reads
 **Scene builder › Grid scene** (back to the kinds); the main preview waits while it is open (its
-own CPU sketch runs); every slider resets on double-click, and right-click offers Add to Play
+own CPU try board runs); every slider resets on double-click, and right-click offers Add to Play
 controls. "open grid rules" or "edit the rules" opens the selected (or only) one's editor; the card's
 ⊞ button and its rule line do too. The card's **Rule** chip shows the rule as text ("Life B3/S23 ·
 240×135 · wrap") with **Copy** and **Open editor**.
@@ -26,7 +26,9 @@ Code:
 | Blocks: the dice and Jitter, as GLSL and as TypeScript (bit for bit the same) | `src/gridRules/dice.ts` |
 | Opening the node into the Pass machinery | `src/compiler/gridRulesExpand.ts` (called from `passGraph.ts`) |
 | Open as nodes | `src/store/gridRulesAsNodes.ts` |
-| Editor window, card, CPU preview | `src/components/gridRules/`, `src/gridRules/cpu.ts` |
+| The builder (shell, try board, sections), card | `src/components/gridRules/` |
+| The CPU step, the try board's step-through, a drawn start | `src/gridRules/cpu.ts`, `tryRun.ts`, `startCells.ts` |
+| Before/after pictures, Smooth in plain words | `src/gridRules/ruleExamples.ts`, `smoothWords.ts` |
 | Examples | `src/store/gridRulesExamples.ts`, `gridRulesExampleIndex.ts` |
 | Tests | `src/compiler/__tests__/gridRules*.test.ts`, `gridHarness.ts`, `glslRun.ts`, `src/gridRules/__tests__/` |
 
@@ -37,30 +39,126 @@ Add **Grid Rules** (Simulation), wire **Color** into the Output. The card shows 
 Hold the mouse button over the picture to paint cells: in the Studio preview, on the Play page and
 on exported pages.
 
-The editor window is tabs, one section at a time, each with its one-line "How this works" at the
-top: **Presets** (the rule type and its presets) · **Neighbourhood** (Count and Stages: Moore,
-von Neumann or a radius, each pictured as the cells it counts) · the rule's own tab (**Born &
-Survive**, **Stages**, **Stencils**, **Blocks** or **Smooth**) · **Start** · **Brush** ·
-**Colours** (what Color shows, and the colours). On the right, a live preview (the rule run on the
-CPU on a 96 × 64 board). Rarely used settings (seed and speed, the brush's fill, afterglow and
-ageing, the rule as B/S text) are folded with a summary. The editor opens on Presets the first
-time, then on the tab last used. On a phone the same tabs fill the screen, with Preview as one
-more tab.
+## The builder
 
-**Born & Survive** explains itself:
+The builder is on the Agent Builder's shell (`components/builders/studio/StudioShell.tsx`, the
+layout of [agent-builder.md](agent-builder.md)): the board you try the rule on fills the middle,
+the settings sit at the side.
 
-- every switch is a tiny 3×3 picture: that many live neighbours round the middle cell, which is
-  empty on the Born row and live on the Survive row. Hovering one says what it does: "empty + 3
-  neighbours → comes alive", "live + 4 → dies (too crowded)", "live + 1 → dies of loneliness" (a
-  count below every Survive count is loneliness, above them crowding).
-- one sentence above them sums the rule up and follows the switches: "Cells are born with exactly
-  3 neighbours and survive with 2 or 3; fewer and they die of loneliness, more and they die of
+- **Top bar:** Scene builder › Grid scene, the node's name and its rule ("Count B3/S23"); **Under
+  the hood**, **Surprise me**, **Open as nodes** and **Done** (closes and frames the node,
+  `builders/finish.ts`).
+- **Left:** **What it is** (the kind of rule: Count, Stages, Stencils, Blocks, Smooth, with one
+  line on each) and the **sections**, each with a one-line summary: the rule first (**Born &
+  Survive**, **Born, Survive & Fade**, **Stencils**, **Blocks**, or Smooth named for what it makes:
+  **Heat**, **Ripples**, **Growing patterns**, **Your own update**), then **Neighbourhood** (Count
+  and Stages), **Start**, **Speed**, **Brush**, **Look** and **As text**. The section shown is
+  remembered; a section the rule type doesn't have falls back to the rule.
+- **Right:** the section's settings, under its name, one line and a **Learn more**.
+- **Bottom:** the kind's presets as pictures (each run on the CPU from its own start, made one at a
+  time, `gridThumbs.ts`), **Keep the kind of rule** and **Surprise me** (a seeded rule that stays
+  alive on a test board, one undo step; the seed shows and can be typed).
+
+The side panels fold (⌘[ and ⌘]) and become drawers under 1100 px; a phone fills the screen.
+
+### The try board
+
+The middle is a small board run on the CPU with the node's own rule (`components/gridRules/
+TryBoard.tsx`, `useTryRun.ts`, `gridRules/tryRun.ts`): 64 × 40 cells for whole-number rules, big
+enough to draw on, and 96 × 60 for Smooth. It is dealt as the node's Start deals a board, and dealt
+again when the kind of rule, the template or the start changes.
+
+- **Draw:** click or drag to place cells of the state picked under the board; pressing a cell
+  already that state erases it (and the drag goes on erasing); Shift-drag erases; ⌫ is state 0.
+  Smooth drops a value. **Clear**, **Deal again** and, for counting rules, a **Test pattern**
+  (Glider, Blinker, R-pentomino, a random blob).
+- **Step through:** ⏮ back to the first step kept, ◀ one generation back, ▶ play or pause,
+  ▶| one forward (← → and Space when the board has focus). The last 400 frames are kept, so back
+  shows the very frame you saw, not a new step. Drawing on a frame keeps it and drops the frames
+  after it. A rule edit keeps the frame shown and drops the ones after it too.
+- **Speed of the try:** Slow (3 steps a second), Medium (10) or **As built** (the node's own pace,
+  up to 240). Smooth starts As built.
+- **The step counter** ("Step 12 · 34 live") and, pointing at a cell, what the rule makes of it:
+  "empty + 3 neighbours → comes alive", a dying cell's stage, a cell's state and the next one, a
+  Smooth cell's values.
+- **Pictures for the section being edited:**
+  - Born & Survive and Neighbourhood: what the next step does, a green ring where a cell is born, a
+    red cross where one dies (Stages: an amber dot where it changes stage); the switch in the
+    corner turns them off. Pointing at a cell outlines the cells it counts.
+  - Pointing at a **count switch** lights the cells it stands for: the empty cells with that many
+    live neighbours (Born) or the live ones (Survive).
+  - Stencils: pointing at a rule lights the cells it matches now, with "Rule 2 matches 14 cells
+    here".
+  - Blocks: the 2×2 blocks the next step will cut the board into (the step's parity and Jitter's
+    dice, as the CPU and GPU cut it).
+- **Under the hood** (top bar): each cell's number (counting rules: how many live cells it counts;
+  Stencils and Blocks: its state; Smooth: its value, zeros left out) and what the GPU keeps per
+  cell (red the state, green the age, blue the clock, alpha the signature).
+- **Use as the start:** the cells on the board become the node's start (**A drawn start**, below),
+  as one undo step. Start's summary then reads "your drawing · 12 cells".
+
+The CPU step is the GPU step: `gridRulesCpuGpu.test.ts` runs both from the same board, step after
+step, for Life, HighLife with walls, von Neumann, a radius-2 circle with walls, Brian's Brain, Star
+Wars, Wireworld, Falling dots, Crystal, sand (Jitter and dice) and the gas (the same states), and
+Heat, Ripples with walls and Mitosis (the same values to 1e-4); stepping forward, back and forward
+again lands on the GPU's boards. The CPU doesn't run a custom Smooth update (it shows plain
+spreading; the node runs it).
+
+### Born & Survive
+
+- one sentence sums the rule up and follows the switches: "Cells are born with exactly 3
+  neighbours and survive with 2 or 3; fewer and they die of loneliness, more and they die of
   crowding."
-- a **mini-board** beside them (the same CPU run, 32 × 32) starts from a test pattern (**Glider**,
-  **Blinker**, **R-pentomino**, **Random blob**), to see what the rule does to it; pause and step it.
+- every switch is a tiny 3×3 picture: that many live neighbours round the middle cell, which is
+  empty on the Born row and live on the Survive row. Pointing at one says what it does ("live + 4
+  → dies (too crowded)") and lights its cells on the board.
+- a radius rule's counts run into the dozens: Born and Survive are ranges (sliders).
+- Stages adds **Fading**: the dying stages pictured as cells fading from on to empty, in the rule's
+  colours, and the number of states.
+- **As B/S text** (folded): type `B36/S23` or a preset's name.
 
-Stages adds its **dying stages** pictured as cells fading from on to empty, in the rule's colours
-(`gridRules/explain.ts` has the words and pictures).
+### Stencils
+
+Each rule is a drawn 3×3 stencil round **this cell** (ringed): a coloured cell must be that state,
+a hatched one isn't looked at (**any**), a dotted one is **not empty**. Click a cell and a row of
+choices opens under the stencil (any, not empty, empty, each state); the cell after the arrow is
+what this cell becomes. Each rule:
+
+- reads as a sentence: "A cell that is 1 with below empty becomes empty.";
+- flips, about once a second, between an example of what it matches and the middle cell after
+  it (a count rule's example has the neighbours it asks for; click to flip by hand);
+- lights the cells it matches on the board when you point at it;
+- has its orientations (as drawn, turned any way, turned or mirrored) and an optional count ("and
+  1 to 2 of the 8 round it are 1").
+
+### Blocks
+
+Each rule is its before → after 2×2 pictures (click a cell for its choices: any, not empty, a
+state; after: unchanged or a state), and beside it a small 4 × 4 grid flipping from the rule's
+before to its after: **the rule alone**. Under the rules, **Together**: one real step of every rule
+on a small seeded board (`ruleExamples.ts comboStep`, the CPU step), flipping before → after with
+each block a rule changed ringed in that rule's colour and a count per rule. Switch rules off and on
+to see each alone, then in combinations; **Next step** goes on from the after, **New board** deals
+another. A badge says whether a rule keeps every cell (it only moves them). Chance and Jitter are
+sliders.
+
+### Smooth, in plain words
+
+Smooth's sections are named for what they make, and every setting has a plain name, one line and,
+where it helps, a feel for the number (`gridRules/smoothWords.ts`). A before/after above the
+settings runs the template's demo on the CPU (a hot dot, a drop, a seed of B) and shows it N steps
+later; moving a slider redraws it.
+
+| Template | Section | Settings (param) |
+|---|---|---|
+| Diffusion | **Heat**: every cell shares its heat with the four beside it | **Spreads** (spread), **Cools** (decay: "half gone after about 173 steps") |
+| Waves | **Ripples**: each cell is the height of the water | **Ripple speed** (waveSpeed), **Ripples last** (damping: "half gone after about 138 steps") |
+| Reaction–diffusion | **Growing patterns**: food (A) and a second chemical (B) that eats it | **Food added** (feed), **Cleared away** (kill); More: **Food spreads**, **B spreads**; and a map of food × cleared away with the presets as dots: click to try a spot |
+| Custom | **Your own update** | the u and v lines, knobs a–d, the names |
+
+**Waves' pace.** Ripples (the preset and the template's look) run one step every other frame, 30 a
+second, with Ripple speed 0.5 (the default too). It used to be 2 steps a frame (120 a second) at
+0.9: far too fast. Surprise me's ripples stay at 30 a second with a speed of 0.3–0.7.
 
 From the **Do… bar** (⌘K), type a preset's name: "game of life", "highlife", "seeds", "day and
 night", "brian's brain", "caves", "heat", "water ripples", "reaction diffusion", "falling sand",
@@ -148,7 +246,7 @@ has no block and is kept empty.
 **The dice** (`src/gridRules/dice.ts`) are a whole-number hash, `grDice`: each round adds an input,
 applies x(2x + 1) mod 2048 (a permutation of 0…2047) and rotates the 11 bits by 5. Every value is
 a whole number below 2²⁴ and every division is by a power of two, so float32 on the GPU holds each
-one exactly: the editor's CPU preview rolls the same numbers, and the same board, frame and Seed
+one exactly: the builder's CPU try board rolls the same numbers, and the same board, frame and Seed
 give the same next board on both (`gridRulesStencils.test.ts` checks it step by step). The GPU's
 frame number is `mod(floor(time × 60), 997)`; the CPU's is its step count.
 
@@ -177,9 +275,9 @@ starter circuit that way.
 
 ## Shared settings
 
-- **Start**: Noise (Density, Seed), Empty, Image (wire a picture into **Start image**: bright cells
-  start on; Smooth takes its brightness), Centre seed. **Deal a new board** in the editor, or the
-  **Reset** param (a Play switch).
+- **Start**: **Your drawing** (below), Noise (How full, Seed), A seed in the middle, Empty, A picture
+  (wire a picture into **Start image**: bright cells start on; Smooth takes its brightness).
+  **Deal a new board** in the builder, or the **Reset** param (a Play switch).
 - **Speed** below 1 steps on some frames only (a clock kept in the board's blue); **Steps a frame**
   above 1 is the board Pass's Repeat.
 - **Board size**: the board Pass's scale, ½ to 1/32 (960 to 60 cells across at 1080p), always
@@ -192,6 +290,26 @@ starter circuit that way.
 - **Colours**: one per state (Empty, On; Stages' first and last dying stages, blended between;
   Smooth: a four-stop ramp), **Afterglow** (a cell that just switched off glows, the glow kept
   times Afterglow each step) and **Age fade** (live cells move towards Old cells as they age).
+
+## A drawn start
+
+Start **Your drawing** (`start: 'cells'`) deals a new board from cells you drew, placed in the middle
+of the board whatever its size (`src/gridRules/startCells.ts`). The drawing is the node's
+`startCells` param: `{ w, h, rows }`, rows top first, `.` empty and a digit (or a–f) the state,
+cropped to its cells, at most 64 × 64. A state above the rule's last is clamped; Smooth starts a
+drawn cell at 1 (Growing patterns: B).
+
+- The GLSL bakes one test per drawn row, state and 16 cells (a bit of a whole-number mask) and
+  places the drawing's bottom-left cell at floor((board − drawing) / 2), as the CPU stamps it.
+- Its signature is 100 and up (past every other start's), with a hash of the drawing, so a new
+  drawing deals a new board.
+- As text it is `start=cells` (the drawing has no words; the text keeps the one on the node).
+- Open as nodes doesn't build a drawn start yet (the button says so).
+
+**From another builder.** `newGridRules({ params, startCells })` (`src/builders/open.ts`) adds a
+Grid Rules node with those params and a drawn start (rows of states, top first, or a StartCells)
+and opens the builder: the way a builder hands its drawn cells to Grid Rules
+(`gridSeedParams` is the pure part). `newGridRules()` with nothing is as before.
 
 ## As text: the Recipe tab
 
@@ -443,8 +561,8 @@ board's. A radius-7 Larger than Life rule reads 224 neighbours a cell.
   empty (so a wrapping board wraps its even part).
 - **Patterns and Blocks** hold up to 8 states; their rules are baked into the GLSL, so an edit
   recompiles.
-- **The CPU preview** in the editor doesn't run a custom Smooth update (it shows diffusion), and
-  previews an Image start as noise.
+- **The try board** (CPU) doesn't run a custom Smooth update (it shows plain spreading), and deals
+  an Image start as noise.
 - **Open as nodes** builds radius 1 and 2 only; it seeds with a different hash.
 - **States** above 8 share colours: Stages blends its dying stages from State 2's colour to State
   3's; Patterns and Blocks give states past 7 the eighth colour.
