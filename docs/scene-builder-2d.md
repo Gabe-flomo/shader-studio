@@ -8,7 +8,8 @@ A builder for flat pictures, like the 3D Scene Builder: pick shapes, bend the sp
 - **Space**: transforms applied to the picture's coordinates before the shapes measure them, top to bottom. At the top, a big **space view** (a grid seen through the whole stack; it stays in view as the stack scrolls, and hovering a transform shows the space after it). Then the stack: **space blocks** (below), and the built-in transforms (zoom, rotate with spin, move, pixelate, tile, mirror tile, mirror, kaleidoscope, polar repeat, polar, swirl, noise warp, wave, fisheye, invert; folded under *Built-in transforms*), and functions (*Add a function*). Each shows a thumbnail of a grid or checkerboard through it.
 - **Shapes**: a gallery of 17 shapes (circle, ring, box, rounded box, triangle, diamond, pentagon, hexagon, octagon, star, burst, hexagram, heart, cross, ellipse, moon, vesica). The selected layer's inspector has its size, colour and glow; **Place** (position, rotate, scale, round, outline only); **Motion** (orbit, bob, spin, pulse, with speed, amount, direction and phase); **Duplicate** (a ring of copies, rings of rings, and the whole ring repeated at bigger sizes).
 - **Depth**: a picture with depth the shapes interact with (below, [Picture with depth](#picture-with-depth)).
-- **Look**: background, colour by (each layer's colour, or length, angle, x, y, time or distance through a palette), glow on all shapes or only layers marked Glow, tone map, bloom, vignette, grain, scanlines.
+- **Look** ([builder-look.md](builder-look.md)): the scene's **palette** (the app's palettes as swatch strips, the palette library's saved ones, or one of your own made right there and saved to the library); the background and each layer can take a **palette slot** instead of a free colour, so changing the palette recolours them; colour by (each layer's colour, or length, angle, x, y, time or distance through the palette); glow on all shapes or only layers marked Glow; the **grade**, a stack of the app's colour-grading nodes in order; tone map, vignette, grain. Bloom and Scanlines are no longer offered (a scene made with them keeps them, under *older effects*): **Effects → Glow** and **CRT mask** replace them.
+- **Effects** ([builder-look.md](builder-look.md#effects)): shader effects on the finished picture as stacked cards, dragged into order: Displace (by noise, or by a picture through the shared picker or a Shader Texture), Swirl, Ripple, Lens, Pixelate, Kaleidoscope, Blur, Glow, Chromatic aberration and CRT mask.
 - **Output**: the picture, or a view of how it works: distance bands, the mask, or the space as a checkerboard.
 - **Recipe**: the whole scene as one line of the Playfield language, e.g. `kaleidoscope 8 · ring r=0.3 th=0.02 color=cyan @orbit(0.12 speed=0.12) · glow 0.008 · tone aces`. Edit and Apply, or paste one.
 - **Templates**: starting points (two with a picture with depth).
@@ -252,7 +253,9 @@ The header's **Surprise me** makes a good-looking random scene from a seed, as o
   sizes); motion (orbit, bob, spin, pulse) on most.
 - **Look:** glow on all, a dark ground near the palette's hue, ACES tone mapping (AgX lifted the
   dark ground to grey in every trial), sometimes colour by length, angle or distance through a
-  palette, a little bloom and vignette.
+  palette, a little vignette; now and then the shapes take a library palette's slots, a same-frame
+  Glow, a touch of grade (saturation, levels) and, rarely, one tasteful effect (a little chromatic
+  aberration, a CRT mask).
 
 Tests (`src/sceneBuilder2d/__tests__/surprise.test.ts`): seeded, 30 seeds build with no warnings,
 compile and read back from their recipe, most use blocks, one undo step with the seed remembered.

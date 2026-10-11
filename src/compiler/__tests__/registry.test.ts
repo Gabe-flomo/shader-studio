@@ -42,6 +42,7 @@ const CONNECTION_GATED = new Set([
   // Texture-sampling nodes (Passes) read black, and none of their settings, until a Pass is wired
   'sampleTexture.offsetX', 'sampleTexture.offsetY', 'edgesTexture.strength', 'edgesTexture.width', 'blurTexture.radius', 'jumpFloodTexture.reach',
   'glowTexture.threshold', 'glowTexture.knee', 'glowTexture.tint', 'glowTexture.tail', 'glowTexture.radius', 'glowTexture.intensity', 'displaceTexture.amount',
+  'chromaTexture.amount', 'chromaTexture.angle', 'chromaTexture.falloff',
   // Texture tools (docs/texture-tools.md) likewise read nothing until a texture is wired; Read's Flow amount needs Flow
   'textureFlow.reach', 'textureNeighbours.spacing', 'textureChange.amount', 'textureChange.level', 'textureChange.width', 'readTexture.flowAmount',
   // The Agents engine reads these from the uniform table (lib/agentRunner.ts), not the picture's shader

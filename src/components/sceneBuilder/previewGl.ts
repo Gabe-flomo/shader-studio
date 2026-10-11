@@ -8,6 +8,7 @@ import { buildStandaloneGraph } from '../../sceneBuilder/build';
 import type { SceneSpec } from '../../sceneBuilder/spec';
 import type { PreviewPass } from '../builders/previewPasses';
 import { registerPreviewDepth } from '../builders/previewTextures';
+import { previewPassesOf } from '../builders/previewPasses';
 
 export type Compiled = {
   vs: string; fs: string; uniforms: Record<string, number | number[]>; nodes: number; error: string | null; ms: number;
@@ -24,7 +25,7 @@ export function compileSpec(spec: SceneSpec): Compiled {
     const r = compileGraph({ nodes: g.nodes });
     registerPreviewDepth(g.nodes);
     if (!r.success) return { vs: '', fs: '', uniforms: {}, nodes: g.nodes.length, error: (r.errors ?? []).join('; ') || 'The graph did not compile.', ms: performance.now() - t0 };
-    return { vs: r.vertexShader, fs: r.fragmentShader, uniforms: r.paramUniforms as Record<string, number | number[]>, nodes: g.nodes.length, error: null, ms: performance.now() - t0, textures: r.textureUniforms };
+    return { vs: r.vertexShader, fs: r.fragmentShader, uniforms: r.paramUniforms as Record<string, number | number[]>, nodes: g.nodes.length, error: null, ms: performance.now() - t0, textures: r.textureUniforms, passes: previewPassesOf(r.passes) };
   } catch (e) {
     return { vs: '', fs: '', uniforms: {}, nodes: 0, error: e instanceof Error ? e.message : String(e), ms: 0 };
   }
