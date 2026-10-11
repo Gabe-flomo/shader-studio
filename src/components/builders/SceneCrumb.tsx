@@ -10,6 +10,9 @@ import { radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import { backToSceneKinds, sceneKindInfo, type SceneKind } from '../../builders/sceneKinds';
 
+/** Every kind's window is the kind page's size (StudioShell's 1440 × 900), so picking a kind doesn't jump. */
+export const SCENE_WINDOW = { width: 1440, height: 900 } as const;
+
 export function SceneCrumb({ kind, leaf, onBack = backToSceneKinds }: { kind: SceneKind; leaf?: ReactNode; onBack?: () => void }) {
   const tk = useTokens();
   const sep = <Icon name="chevR" size={12} style={{ color: tk.text.faint, flexShrink: 0 }} />;

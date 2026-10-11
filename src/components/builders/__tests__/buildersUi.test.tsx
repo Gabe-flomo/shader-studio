@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * The Builders section and the Recipe chip as drawn: each entry opens its builder, the section
+ * The Builders section and the Recipe chip as drawn: its one entry, the Scene builder, opens on its kind page, the section
  * folds and remembers it, a search shows only the builders it finds; the chip shows a built
  * scene's recipe (collapsed, then whole with Copy and Open in Scene Builder), says "edited since
  * build", and isn't there on a hand-made Scene Group.
@@ -45,33 +45,25 @@ const click = (el: Element | null) => { expect(el).toBeTruthy(); act(() => { (el
 
 beforeEach(() => {
   useNodeGraphStore.setState({ nodes: [], activeGroupPath: [], selectedNodeId: null, selectedNodeIds: [] });
-  useBuilderWindows.setState({ gridRules: null, agentRules: null, recipe: null });
+  useBuilderWindows.setState({ gridRules: null, agentRules: null, agentBuilder: null, recipe: null, sceneShell: null });
   useSceneBuilder.setState({ open: false, targetSceneId: null });
   if (useBuildersFold.getState().folded) useBuildersFold.getState().toggle();
 });
 
 describe('BuildersSection', () => {
-  it('shows the four visible builders, each opening its own', () => {
+  it('shows one Scene builder; it opens on its kind page ("What kind of scene?")', () => {
     const opened = vi.fn();
     const host = mount(<BuildersSection onOpened={opened} />);
-    expect([...host.querySelectorAll('[data-builder]')].map(b => b.getAttribute('data-builder'))).toEqual(['scene', 'scene2d', 'grid', 'agents']);
-    expect(host.textContent).toContain('shapes, combine, bend space, look, outputs');
-    expect(host.textContent).toContain('Life, sand, heat, waves, Wireworld…');
-    expect(host.textContent).toContain('slime, ants, flocks, swarms, particles…');
-
-    click(host.querySelector('[data-builder="scene"]'));
-    expect(useSceneBuilder.getState().open).toBe(true);
-    expect(useSceneBuilder.getState().targetSceneId).toBeNull();
-
-    click(host.querySelector('[data-builder="grid"]'));
-    const g = useNodeGraphStore.getState().nodes.find(n => n.type === 'gridRules');
-    expect(useBuilderWindows.getState().gridRules).toBe(g?.id);
-
-    // The Agent Builder opens on its start page ("What are you making?"): no group until a kind is picked.
-    click(host.querySelector('[data-builder="agents"]'));
-    expect(useNodeGraphStore.getState().nodes.find(n => n.type === 'agentsGroup')).toBeUndefined();
-    expect(useBuilderWindows.getState().agentBuilder).toEqual({ groupId: null });
-    expect(opened).toHaveBeenCalledTimes(3);
+    expect([...host.querySelectorAll('[data-builder]')].map(b => b.getAttribute('data-builder'))).toEqual(['scenes']);
+    expect(host.textContent).toContain('Scene builder');
+    expect(host.textContent).toContain('slime and flocks, Life and sand');
+    click(host.querySelector('[data-builder="scenes"]'));
+    expect(useBuilderWindows.getState().sceneShell).toEqual({ page: 'kinds' });
+    // Nothing is made, and no kind's own window opens, until a kind is picked.
+    expect(useSceneBuilder.getState().open).toBe(false);
+    expect(useBuilderWindows.getState().agentBuilder).toBeNull();
+    expect(useNodeGraphStore.getState().nodes).toEqual([]);
+    expect(opened).toHaveBeenCalledTimes(1);
   });
   it('folds, and remembers it', () => {
     const host = mount(<BuildersSection />);
@@ -79,13 +71,13 @@ describe('BuildersSection', () => {
     expect(host.querySelectorAll('[data-builder]')).toHaveLength(0);
     expect(localStorage.getItem('nodeBrowser.buildersFolded')).toBe('1');
     click(host.querySelector('[data-builders-toggle]'));
-    expect(host.querySelectorAll('[data-builder]')).toHaveLength(4);
+    expect(host.querySelectorAll('[data-builder]')).toHaveLength(1);
     expect(localStorage.getItem('nodeBrowser.buildersFolded')).toBe('0');
   });
   it('while searching: only the builders found, unfolded; nothing when none', () => {
     act(() => useBuildersFold.getState().toggle());
     const host = mount(<BuildersSection query="rules" />);
-    expect([...host.querySelectorAll('[data-builder]')].map(b => b.getAttribute('data-builder'))).toEqual(['grid', 'agents']);
+    expect([...host.querySelectorAll('[data-builder]')].map(b => b.getAttribute('data-builder'))).toEqual(['scenes']);
     const none = mount(<BuildersSection query="voronoi" />);
     expect(none.querySelector('[data-builders-section]')).toBeNull();
   });

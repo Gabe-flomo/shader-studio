@@ -63,7 +63,8 @@ beforeEach(() => {
 });
 
 function start(kind: string) {
-  mount(<AgentBuilder groupId={null} onClose={() => {}} onOpenGroup={() => {}} />);
+  // As from the Scene builder's kind page with Keep my graph: the circle stays to be picked.
+  mount(<AgentBuilder groupId={null} onClose={() => {}} onOpenGroup={() => {}} fromShell />);
   click($('[data-start-kind="' + kind + '"]'));
 }
 

@@ -17,6 +17,7 @@ import type { GraphNode } from '../types/nodeGraph';
 import type { IconName } from '../components/ui/iconPaths';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { metaOf } from '../sceneBuilder/build';
+import { allShapes } from '../sceneBuilder/spec';
 import { findBuild, sceneOfBuild } from '../sceneBuilder/apply';
 import { find2dBuild, meta2dOf, scene2dOfBuild } from '../sceneBuilder2d/apply';
 import { useSceneBuilder } from '../sceneBuilder/store';
@@ -73,7 +74,7 @@ export function builtScenes(nodes: readonly GraphNode[]): BuiltScene[] {
   }
   for (const n of nodes) {
     const m = n.type === 'sceneGroup' ? metaOf(n) : null;
-    if (m) out.push({ kind: '3d', id: n.id, label: labelOf(n, '3D scene'), detail: `${m.spec.look.mode} · ${plural(m.spec.root.children.length, 'shape')}` });
+    if (m) out.push({ kind: '3d', id: n.id, label: labelOf(n, '3D scene'), detail: `${m.spec.look.mode} · ${plural(allShapes(m.spec).length, 'shape')}` });
   }
   return out;
 }

@@ -36,24 +36,17 @@ const handScene = (): GraphNode => ({ id: 'hand', type: 'sceneGroup', position: 
 const grid = (params: Record<string, unknown> = {}): GraphNode => ({ id: 'g1', type: 'gridRules', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params });
 
 describe('the Builders section', () => {
-  it('lists the four visible builders with a line each and what they make (Expression and 3D Agent are hidden)', () => {
-    expect(BUILDERS.map(b => b.title)).toEqual(['3D Scene Builder', '2D Scene Builder', 'Grid Rules', 'Agent Builder']);
-    expect(ALL_BUILDERS.filter(b => b.hidden).map(b => b.id)).toEqual(['agents3d', 'expr']);
+  it('lists one Scene builder with a line and what it makes; the four kinds, the Expression and the 3D Agent Builder are hidden', () => {
+    expect(BUILDERS.map(b => b.title)).toEqual(['Scene builder']);
+    expect(ALL_BUILDERS.filter(b => b.hidden).map(b => b.id)).toEqual(['scene', 'scene2d', 'grid', 'agents', 'agents3d', 'expr']);
     for (const b of BUILDERS) { expect(b.description.length).toBeGreaterThan(10); expect(b.makes.length).toBeGreaterThan(5); }
   });
-  it('is searchable: "builder" finds all four, "scene" the Scene Builders, "rules" Grid and Agents, "3d" the 3D ones; hidden builders never show', () => {
-    expect(matchBuilders('builder').map(b => b.id)).toEqual(['scene', 'scene2d', 'grid', 'agents']);
+  it('is searchable: any kind\'s words find the Scene builder; hidden builders never show', () => {
+    for (const q of ['builder', 'scene', '2d', '3d', 'kaleidoscope', 'rules', 'slime', 'agents', '3d agents', 'wireworld', 'raymarch', 'life']) {
+      expect(matchBuilders(q).map(b => b.id)).toEqual(['scenes']);
+    }
     expect(matchBuilders('expression').map(b => b.id)).toEqual([]);
     expect(matchBuilders('glsl').map(b => b.id)).toEqual([]);
-    expect(matchBuilders('scene').map(b => b.id)).toEqual(['scene', 'scene2d']);
-    expect(matchBuilders('2d').map(b => b.id)).toEqual(['scene2d', 'agents']);
-    expect(matchBuilders('kaleidoscope').map(b => b.id)).toEqual(['scene2d']);
-    expect(matchBuilders('rules').map(b => b.id)).toEqual(['grid', 'agents']);
-    expect(matchBuilders('slime').map(b => b.id)).toEqual(['agents']);
-    expect(matchBuilders('agents').map(b => b.id)).toEqual(['agents']);
-    expect(matchBuilders('3d agents').map(b => b.id)).toEqual(['agents']);
-    expect(matchBuilders('wireworld').map(b => b.id)).toEqual(['grid']);
-    expect(matchBuilders('3d').map(b => b.id)).toEqual(['scene', 'agents']);
     expect(matchBuilders('n')).toEqual([]);
     expect(matchBuilders('voronoi')).toEqual([]);
   });

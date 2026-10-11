@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSceneBuilder } from '../../sceneBuilder/store';
 import {
-  DEFAULT_LOOK, MODIFIER_KINDS, SHAPES, SHAPE_BY_KIND, TONE_MODES, WARPS, WARP_BY_KIND, allShapes, autoStepScale, defaultSize, findItem, itemName, modifierSummary, opLabel, stepHints, walkItems,
+  DEFAULT_LOOK, MODIFIER_KINDS, SHAPES, SHAPE_BY_KIND, TONE_MODES, WARPS, WARP_BY_KIND, allShapes, autoStepScale, defaultSize, findItem, itemName, modifierSummary, opLabel, starterSpec, stepHints, walkItems,
   type GroupSpec, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type Vec3, type WarpSpec,
 } from '../../sceneBuilder/spec';
 import { randomShapeAction, randomiseThisAction } from './surpriseActions';
@@ -58,6 +58,9 @@ function useInsertExample() {
   };
 }
 
+/** The starter scene's settings: what a camera, quality or look slider resets to on double-click. */
+const DEFAULT_SPEC = starterSpec();
+
 const fmtN = (n: number) => String(Math.round(n * 1000) / 1000);
 const vecText = (v: Vec3) => `(${v.map(fmtN).join(', ')})`;
 
@@ -70,9 +73,9 @@ function ParamRows({ params, values, onChange, keyPrefix }: {
         const v = values[p.key] ?? p.def;
         if (Array.isArray(p.def)) {
           const vv = (Array.isArray(v) ? v : [Number(v), Number(v), Number(v)]) as Vec3;
-          return <Vec3Row key={`${keyPrefix}${p.key}`} label={p.label} hint={p.hint} value={vv} min={p.min} max={p.max} step={p.step} onChange={nv => onChange(p.key, nv)} />;
+          return <Vec3Row key={`${keyPrefix}${p.key}`} label={p.label} hint={p.hint} value={vv} min={p.min} max={p.max} step={p.step} onChange={nv => onChange(p.key, nv)} defaultValue={p.def as Vec3} />;
         }
-        return <NumRow key={`${keyPrefix}${p.key}`} label={p.label} hint={p.hint} unit={p.deg ? '°' : undefined} value={Number(v)} min={p.min} max={p.max} step={p.step} integer={p.step === 1} onChange={nv => onChange(p.key, nv)} />;
+        return <NumRow key={`${keyPrefix}${p.key}`} label={p.label} hint={p.hint} unit={p.deg ? '°' : undefined} value={Number(v)} min={p.min} max={p.max} step={p.step} integer={p.step === 1} onChange={nv => onChange(p.key, nv)} defaultValue={Number(p.def)} />;
       })}
     </>
   );
@@ -475,32 +478,32 @@ export function LookTab() {
       <BuilderNote>{MODES.find(m => m.value === L.mode)?.blurb}</BuilderNote>
       {L.mode === 'volumetric' && (
         <Card id="look:glow" title="Glow" summary={`density ${L.glow.density} · falloff ${L.glow.falloff}`} defaultOpen>
-          <NumRow label="Density" hint="Light added per bit of ray inside a shape." value={L.glow.density} min={0.001} max={0.3} step={0.001} onChange={v => set(l => { l.glow.density = v; }, 'glow:d')} />
-          <NumRow label="Falloff" hint="How fast the glow fades outside a shape." value={L.glow.falloff} min={0.1} max={60} step={0.1} onChange={v => set(l => { l.glow.falloff = v; }, 'glow:f')} />
-          <NumRow label="Shell" hint="Above 0 only a skin this thick glows: bubbles and rims." value={L.glow.shell} min={0} max={1} step={0.005} onChange={v => set(l => { l.glow.shell = v; }, 'glow:s')} />
-          <NumRow label="Exposure" hint="How bright the gathered glow is before it is squeezed into colour." value={L.glow.exposure} min={0.01} max={20} onChange={v => set(l => { l.glow.exposure = v; }, 'glow:e')} />
+          <NumRow label="Density" hint="Light added per bit of ray inside a shape." value={L.glow.density} defaultValue={DEFAULT_SPEC.look.glow.density} min={0.001} max={0.3} step={0.001} onChange={v => set(l => { l.glow.density = v; }, 'glow:d')} />
+          <NumRow label="Falloff" hint="How fast the glow fades outside a shape." value={L.glow.falloff} defaultValue={DEFAULT_SPEC.look.glow.falloff} min={0.1} max={60} step={0.1} onChange={v => set(l => { l.glow.falloff = v; }, 'glow:f')} />
+          <NumRow label="Shell" hint="Above 0 only a skin this thick glows: bubbles and rims." value={L.glow.shell} defaultValue={DEFAULT_SPEC.look.glow.shell} min={0} max={1} step={0.005} onChange={v => set(l => { l.glow.shell = v; }, 'glow:s')} />
+          <NumRow label="Exposure" hint="How bright the gathered glow is before it is squeezed into colour." value={L.glow.exposure} defaultValue={DEFAULT_SPEC.look.glow.exposure} min={0.01} max={20} onChange={v => set(l => { l.glow.exposure = v; }, 'glow:e')} />
           <ColourRow label="Tint" hint="The glow's colour." value={L.glow.tint} onChange={v => set(l => { l.glow.tint = v; }, 'glow:t')} />
         </Card>
       )}
       {L.mode === 'glass' && (
         <Card id="look:glass" title="Glass" summary={`IOR ${L.glass.ior}`} defaultOpen>
-          <NumRow label="IOR" hint="How much the glass bends light: water 1.33, glass 1.5, diamond 2.4." value={L.glass.ior} min={1} max={3} step={0.01} onChange={v => set(l => { l.glass.ior = v; }, 'glass:ior')} />
-          <NumRow label="Dispersion" hint="Splits the colours a little, like a prism." value={L.glass.dispersion} min={0} max={0.2} step={0.005} onChange={v => set(l => { l.glass.dispersion = v; }, 'glass:disp')} />
+          <NumRow label="IOR" hint="How much the glass bends light: water 1.33, glass 1.5, diamond 2.4." value={L.glass.ior} defaultValue={DEFAULT_SPEC.look.glass.ior} min={1} max={3} step={0.01} onChange={v => set(l => { l.glass.ior = v; }, 'glass:ior')} />
+          <NumRow label="Dispersion" hint="Splits the colours a little, like a prism." value={L.glass.dispersion} defaultValue={DEFAULT_SPEC.look.glass.dispersion} min={0} max={0.2} step={0.005} onChange={v => set(l => { l.glass.dispersion = v; }, 'glass:disp')} />
           <ColourRow label="Tint" hint="Light passing through the glass takes this colour." value={L.glass.tint} onChange={v => set(l => { l.glass.tint = v; }, 'glass:tint')} />
           <BuilderNote>{allShapes(spec).filter(s => s.glass).length} of {allShapes(spec).length} shapes are glass{allShapes(spec).some(s => s.glass) ? '' : ' (none marked: all of them are)'}. Glass Scene has its own sky behind everything.</BuilderNote>
         </Card>
       )}
       {L.mode === 'gi' && (
         <Card id="look:gi" title="Global illumination" summary={`bounce ${L.gi.strength} · rough ${L.gi.rough}`} defaultOpen>
-          <NumRow label="Bounce" hint="How much light bounces off nearby surfaces." value={L.gi.strength} min={0} max={1} onChange={v => set(l => { l.gi.strength = v; }, 'gi:s')} />
-          <NumRow label="Metallic" hint="0 plastic or stone, 1 metal (reflections take the surface colour)." value={L.gi.metal} min={0} max={1} onChange={v => set(l => { l.gi.metal = v; }, 'gi:m')} />
-          <NumRow label="Roughness" hint="0 a mirror, 1 a blurry, matt reflection." value={L.gi.rough} min={0} max={1} onChange={v => set(l => { l.gi.rough = v; }, 'gi:r')} />
-          <NumRow label="Reflection" hint="How strong the reflection is." value={L.gi.spec} min={0} max={1} onChange={v => set(l => { l.gi.spec = v; }, 'gi:spec')} />
+          <NumRow label="Bounce" hint="How much light bounces off nearby surfaces." value={L.gi.strength} defaultValue={DEFAULT_SPEC.look.gi.strength} min={0} max={1} onChange={v => set(l => { l.gi.strength = v; }, 'gi:s')} />
+          <NumRow label="Metallic" hint="0 plastic or stone, 1 metal (reflections take the surface colour)." value={L.gi.metal} defaultValue={DEFAULT_SPEC.look.gi.metal} min={0} max={1} onChange={v => set(l => { l.gi.metal = v; }, 'gi:m')} />
+          <NumRow label="Roughness" hint="0 a mirror, 1 a blurry, matt reflection." value={L.gi.rough} defaultValue={DEFAULT_SPEC.look.gi.rough} min={0} max={1} onChange={v => set(l => { l.gi.rough = v; }, 'gi:r')} />
+          <NumRow label="Reflection" hint="How strong the reflection is." value={L.gi.spec} defaultValue={DEFAULT_SPEC.look.gi.spec} min={0} max={1} onChange={v => set(l => { l.gi.spec = v; }, 'gi:spec')} />
         </Card>
       )}
       {L.mode !== 'volumetric' && (
         <Card id="look:lights" title="Lights" summary={`sun ${vecText(L.sunDir)}`} defaultOpen={L.mode === 'surface'}>
-          <Vec3Row label="Sun direction" hint="Points toward the sun; only its direction matters." value={L.sunDir} min={-1} max={1} onChange={v => set(l => { l.sunDir = v; }, 'sun:dir')} />
+          <Vec3Row label="Sun direction" hint="Points toward the sun; only its direction matters." value={L.sunDir} defaultValue={DEFAULT_SPEC.look.sunDir} min={-1} max={1} onChange={v => set(l => { l.sunDir = v; }, 'sun:dir')} />
           {L.mode !== 'glass' && <>
             <ColourRow label="Sun colour" hint="The sunlight's colour: warm for day, orange for sunset." value={L.sunColor} onChange={v => set(l => { l.sunColor = v; }, 'sun:c')} />
             <ColourRow label="Sky colour" hint="Light from above (the sky dome)." value={L.sky} onChange={v => set(l => { l.sky = v; }, 'sky')} />
@@ -511,14 +514,14 @@ export function LookTab() {
       {L.mode === 'surface' && (
         <Card id="look:shadow" title="Shadows & occlusion" summary={`${L.shadows ? `shadows ${L.shadows}` : 'no shadows'} · ${L.ao ? 'AO' : 'no AO'}`}>
           <Row label="Soft shadows" hint="Shadows from the sun, marched from each surface toward it."><Toggle checked={L.shadows > 0} onChange={v => set(l => { l.shadows = v ? DEFAULT_LOOK.shadows : 0; })} label={L.shadows > 0 ? 'On' : 'Off'} /></Row>
-          {L.shadows > 0 && <NumRow label="Hardness" hint="8 soft … 32 hard." value={L.shadows} min={1} max={64} step={1} onChange={v => set(l => { l.shadows = v; }, 'shadows')} />}
+          {L.shadows > 0 && <NumRow label="Hardness" hint="8 soft … 32 hard." value={L.shadows} defaultValue={DEFAULT_SPEC.look.shadows} min={1} max={64} step={1} onChange={v => set(l => { l.shadows = v; }, 'shadows')} />}
           <Row label="Ambient occl." hint="Ambient occlusion: darkens creases and corners."><Toggle checked={L.ao > 0} onChange={v => set(l => { l.ao = v ? DEFAULT_LOOK.ao : 0; })} label={L.ao > 0 ? 'On' : 'Off'} /></Row>
-          {L.ao > 0 && <NumRow label="AO step" hint="Smaller: finer contact shadows; larger: broader." value={L.ao} min={0.005} max={0.2} step={0.005} onChange={v => set(l => { l.ao = v; }, 'ao')} />}
+          {L.ao > 0 && <NumRow label="AO step" hint="Smaller: finer contact shadows; larger: broader." value={L.ao} defaultValue={DEFAULT_SPEC.look.ao} min={0.005} max={0.2} step={0.005} onChange={v => set(l => { l.ao = v; }, 'ao')} />}
         </Card>
       )}
       {lit && (
         <Card id="look:fog" title="Fog" summary={L.fog > 0 ? `density ${L.fog}` : 'clear'}>
-          <NumRow label="Density" hint="0 is clear. Distance fades into the fog colour." value={L.fog} min={0} max={5} step={0.01} onChange={v => set(l => { l.fog = v; }, 'fog')} />
+          <NumRow label="Density" hint="0 is clear. Distance fades into the fog colour." value={L.fog} defaultValue={DEFAULT_SPEC.look.fog} min={0} max={5} step={0.01} onChange={v => set(l => { l.fog = v; }, 'fog')} />
           <Row label="Colour" hint="Fog the colour of the background, or its own colour."><Toggle checked={!L.fogColor} onChange={v => set(l => { l.fogColor = v ? null : [...l.bg] as Vec3; })} label="Same as the background" /></Row>
           {L.fogColor && <ColourRow label="Fog colour" hint="What distance fades into." value={L.fogColor} onChange={v => set(l => { l.fogColor = v; }, 'fogc')} />}
         </Card>
@@ -550,15 +553,15 @@ export function CameraTab() {
       <BuilderLabel>Camera</BuilderLabel>
       <BuilderHelp id="camera" onExample={insert} />
       <BuilderNote>The orbit camera, as in Time Cube View, Frame Stack and Draw agents. Angles in degrees.</BuilderNote>
-      <NumRow label="Distance" hint="How far the camera is from the point it looks at." value={C.dist} min={0.3} max={20} onChange={set('dist')} />
-      <NumRow label="Angle" unit="°" hint="Where it stands round the point (0: in front)." value={C.angle} min={-180} max={180} step={0.5} onChange={set('angle')} />
-      <NumRow label="Elevation" unit="°" hint="How far above it looks from: 0 level, 89 straight down." value={C.elev} min={-89} max={89} step={0.5} onChange={set('elev')} />
-      <NumRow label="Orbit speed" unit="°/s" hint="Turns the camera round the point over time." value={C.orbit} min={-90} max={90} step={0.5} onChange={set('orbit')} />
-      <NumRow label="Zoom" hint="Lens length: higher is zoomed in, with less perspective." value={C.zoom} min={0.5} max={5} onChange={set('zoom')} />
-      <NumRow label="Flatten" hint="Perspective (0) to orthographic (1), like an isometric drawing." value={C.flatten} min={0} max={1} onChange={set('flatten')} />
-      <NumRow label="Translate X" hint="Moves the camera and the point it looks at together." value={C.x} min={-5} max={5} onChange={set('x')} />
-      <NumRow label="Translate Y" hint="Moves the camera and its point up or down together." value={C.y} min={-5} max={5} onChange={set('y')} />
-      <NumRow label="Translate Z" hint="Moves the camera and its point toward or away together." value={C.z} min={-5} max={5} onChange={set('z')} />
+      <NumRow label="Distance" hint="How far the camera is from the point it looks at." value={C.dist} defaultValue={DEFAULT_SPEC.camera.dist} min={0.3} max={20} onChange={set('dist')} />
+      <NumRow label="Angle" unit="°" hint="Where it stands round the point (0: in front)." value={C.angle} defaultValue={DEFAULT_SPEC.camera.angle} min={-180} max={180} step={0.5} onChange={set('angle')} />
+      <NumRow label="Elevation" unit="°" hint="How far above it looks from: 0 level, 89 straight down." value={C.elev} defaultValue={DEFAULT_SPEC.camera.elev} min={-89} max={89} step={0.5} onChange={set('elev')} />
+      <NumRow label="Orbit speed" unit="°/s" hint="Turns the camera round the point over time." value={C.orbit} defaultValue={DEFAULT_SPEC.camera.orbit} min={-90} max={90} step={0.5} onChange={set('orbit')} />
+      <NumRow label="Zoom" hint="Lens length: higher is zoomed in, with less perspective." value={C.zoom} defaultValue={DEFAULT_SPEC.camera.zoom} min={0.5} max={5} onChange={set('zoom')} />
+      <NumRow label="Flatten" hint="Perspective (0) to orthographic (1), like an isometric drawing." value={C.flatten} defaultValue={DEFAULT_SPEC.camera.flatten} min={0} max={1} onChange={set('flatten')} />
+      <NumRow label="Translate X" hint="Moves the camera and the point it looks at together." value={C.x} defaultValue={DEFAULT_SPEC.camera.x} min={-5} max={5} onChange={set('x')} />
+      <NumRow label="Translate Y" hint="Moves the camera and its point up or down together." value={C.y} defaultValue={DEFAULT_SPEC.camera.y} min={-5} max={5} onChange={set('y')} />
+      <NumRow label="Translate Z" hint="Moves the camera and its point toward or away together." value={C.z} defaultValue={DEFAULT_SPEC.camera.z} min={-5} max={5} onChange={set('z')} />
     </Pane>
   );
 }
@@ -573,14 +576,14 @@ export function QualityTab() {
     <Pane>
       <BuilderLabel>Quality</BuilderLabel>
       <BuilderHelp id="quality" onExample={insert} />
-      <NumRow label="Steps" hint="Most march steps per pixel. More reach further into detail, and cost more." value={Q.steps} min={16} max={256} step={1} integer onChange={v => edit(d => { d.quality.steps = Math.round(v); }, 'q:steps')} />
-      <NumRow label="Max distance" hint="How far a ray goes before it gives up (the background)." value={Q.maxDist} min={5} max={100} step={1} onChange={v => edit(d => { d.quality.maxDist = v; }, 'q:dist')} />
+      <NumRow label="Steps" hint="Most march steps per pixel. More reach further into detail, and cost more." value={Q.steps} defaultValue={DEFAULT_SPEC.quality.steps} min={16} max={256} step={1} integer onChange={v => edit(d => { d.quality.steps = Math.round(v); }, 'q:steps')} />
+      <NumRow label="Max distance" hint="How far a ray goes before it gives up (the background)." value={Q.maxDist} defaultValue={DEFAULT_SPEC.quality.maxDist} min={5} max={100} step={1} onChange={v => edit(d => { d.quality.maxDist = v; }, 'q:dist')} />
       <Row label="Step scale" hint="The part of each step the ray takes. Lower for warps that stretch space.">
         <Toggle checked={Q.stepScale === 'auto'} label={Q.stepScale === 'auto' ? `Auto (${autoStepScale(spec)})` : 'Auto'} onChange={v => edit(d => { d.quality.stepScale = v ? 'auto' : autoStepScale(d); })} />
       </Row>
       {Q.stepScale !== 'auto' && <NumRow label="" value={Q.stepScale} min={0.3} max={1} step={0.05} onChange={v => edit(d => { d.quality.stepScale = v; }, 'q:step')} />}
       {hints.length > 0 && <BuilderNote>Asking for smaller steps: {hints.map(h => `${h.why} (${h.value})`).join('; ')}.</BuilderNote>}
-      <NumRow label="Jitter" hint="Starts each pixel's ray a little way along so steps don't line up into rings." value={Q.jitter} min={0} max={1} onChange={v => edit(d => { d.quality.jitter = v; }, 'q:jitter')} />
+      <NumRow label="Jitter" hint="Starts each pixel's ray a little way along so steps don't line up into rings." value={Q.jitter} defaultValue={DEFAULT_SPEC.quality.jitter} min={0} max={1} onChange={v => edit(d => { d.quality.jitter = v; }, 'q:jitter')} />
       <Row label="Warp safety" hint="Stops twisted, bent or folded space from tearing: Auto learns the stretch, Careful also measures it each step, High takes shorter steps too. Slower in that order.">
         <Segmented size="sm" ariaLabel="Warp safety" value={Q.warp ?? 'off'}
           options={[{ value: 'off', label: 'Off' }, { value: 'auto', label: 'Auto' }, { value: 'careful', label: 'Careful' }, { value: 'high', label: 'High' }]}

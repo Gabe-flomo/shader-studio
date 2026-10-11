@@ -22,7 +22,11 @@ import { ScenePicture } from './scenePictures';
 import { SCENE_KINDS, builtScenes, builderMade, clearForScene, removeBuiltScene, sceneKindInfo, selectedBuiltScene, type BuiltScene, type SceneKind, type SceneKindInfo } from '../../builders/sceneKinds';
 import { editBuiltScene, startSceneKind } from '../../builders/open';
 import { clearableCount } from '../../agentBuilder/actions';
+import { finishBuilder } from '../../builders/finish';
 import { closeSceneShell, openSceneShell, type SceneShellPage } from '../../builders/windows';
+
+/** Close (or Done): the shared builder finish (builders/finish.ts). Nothing is made on these pages, so there is nothing to frame. */
+const closeShell = () => finishBuilder(closeSceneShell);
 
 export function SceneBuilderShell({ page }: { page: SceneShellPage }) {
   return page.page === 'existing' ? <ExistingScenes /> : <KindPage note={page.note} keep={page.keep} />;
@@ -42,8 +46,8 @@ function KindPage({ note, keep }: { note?: string; keep?: boolean }) {
     startSceneKind(k, { fromShell: true });
   };
   return (
-    <StudioShell prefsKey="scene-shell" icon="presets" title="Scene builder" kind="What kind of scene?" onClose={closeSceneShell}>
-      <div data-scene-kinds style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 24px', gap: 22 }}>
+    <StudioShell prefsKey="scene-shell" icon="presets" title="Scene builder" kind="What kind of scene?" onClose={closeShell}>
+      <div data-scene-kinds style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'safe center', padding: '40px 24px 64px', gap: 22 }}>
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, textAlign: 'center' }}>
           <b style={{ fontSize: 20, fontWeight: 650, letterSpacing: '-0.01em' }}>What kind of scene?</b>
           <span style={{ fontSize: 12.5, color: tk.text.muted }}>Pick one: the window becomes its builder. “Scene builder” at the top brings you back here.</span>
@@ -60,7 +64,7 @@ function KindPage({ note, keep }: { note?: string; keep?: boolean }) {
         {clearFirst === 'clear' && clearable > 0 && (
           <span data-scene-clear-note style={{ fontSize: 12, color: tk.status.warningText, marginTop: -10 }}>Picking a kind clears the graph first (all but the Output). Undo brings it back.</span>
         )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, width: '100%', maxWidth: 1080 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, width: '100%', maxWidth: 1240 }}>
           {SCENE_KINDS.map(k => <KindCard key={k.id} info={k} onPick={() => pick(k.id)} />)}
         </div>
       </div>
@@ -78,7 +82,7 @@ function KindCard({ info, onPick }: { info: SceneKindInfo; onPick: () => void })
         display: 'flex', flexDirection: 'column', gap: 10, padding: 10, border: 0, borderRadius: radius.card, cursor: 'pointer', textAlign: 'left',
         background: hover ? tk.bg.hover : tk.bg.panel, boxShadow: hover ? `inset 0 0 0 1.5px ${tk.accent.base}` : `inset 0 0 0 1px ${tk.border.default}`, color: tk.text.primary,
       }}>
-      <span style={{ display: 'flex', justifyContent: 'center' }}><ScenePicture kind={info.id} width={240} height={136} /></span>
+      <span style={{ display: 'flex', justifyContent: 'center' }}><ScenePicture kind={info.id} width={272} height={168} /></span>
       <span style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 4px' }}>
         <b style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 650 }}><Icon name={info.icon} size={15} />{info.title}</b>
         <span style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.4 }}>{info.line}</span>
@@ -107,8 +111,8 @@ function ExistingScenes() {
     if (removeBuiltScene(sel)) openSceneShell({ page: 'kinds', note: `Started over: ${name(sel)} is gone (undo brings it back).` });
   };
   return (
-    <StudioShell prefsKey="scene-shell" icon="presets" title="Scene builder" kind={many ? `${scenes.length} scenes a builder made` : `A ${sceneKindInfo(sel.kind).title} a builder made`} onClose={closeSceneShell}>
-      <div data-scene-existing style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '48px 24px', gap: 20 }}
+    <StudioShell prefsKey="scene-shell" icon="presets" title="Scene builder" kind={many ? `${scenes.length} scenes a builder made` : `A ${sceneKindInfo(sel.kind).title} a builder made`} onClose={closeShell}>
+      <div data-scene-existing style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'safe center', padding: '48px 24px 72px', gap: 20 }}
         onKeyDown={e => { if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'BUTTON') editBuiltScene(sel); }}>
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, textAlign: 'center' }}>
           <b style={{ fontSize: 20, fontWeight: 650, letterSpacing: '-0.01em' }}>{many ? 'A builder made these scenes' : `A builder made this ${sceneKindInfo(sel.kind).title}`}</b>

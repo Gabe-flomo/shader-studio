@@ -20,7 +20,7 @@ const BG = '#0d0d12';
 /** Run `frame` about `fps` times a second while mounted (and the page can be seen). */
 function useTicker(fps: number, frame: (t: number) => void) {
   const live = useRef(frame);
-  live.current = frame;
+  useEffect(() => { live.current = frame; });
   useEffect(() => {
     let raf = 0, last = -Infinity;
     const t0 = performance.now();
@@ -30,6 +30,8 @@ function useTicker(fps: number, frame: (t: number) => void) {
       last = now;
       live.current((now - t0) / 1000);
     };
+    // The first picture at once, not on the first animation frame.
+    live.current(0);
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
   }, [fps]);
@@ -66,12 +68,12 @@ function TwoDPicture({ width, height }: { width: number; height: number }) {
   return <canvas ref={ref} width={width} height={height} style={{ width, height, display: 'block', borderRadius: 10, background: BG }} />;
 }
 
-const LIFE = { ...COUNT_PRESETS.life.params, density: 0.32 };
+const LIFE = { ...COUNT_PRESETS.life.params, density: 0.22 };
 
 function GridPicture({ width, height }: { width: number; height: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const board = useRef<CpuBoard | null>(null);
-  const bw = 96, bh = Math.round(96 * height / width);
+  const bw = 64, bh = Math.round(64 * height / width);
   const steps = useRef(0);
   useTicker(10, () => {
     const c = ref.current, ctx = c?.getContext('2d');

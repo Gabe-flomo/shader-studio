@@ -68,9 +68,9 @@ export function LookSection({ groupId, set, sp, update, draw, d3, intro, onFocus
           <SettingRow id="style" label="Style" hint={MORE_HINTS.style} onFocus={onFocus}>
             <Segmented size="sm" fill ariaLabel="Style" value={(String(draw.params.style ?? 'points')) as typeof STYLES[number]['value']} options={STYLES} onChange={v => setSetupParam(draw.id, { style: v })} />
           </SettingRow>
-          <SliderSetting id="dsize" label="Size" hint={MORE_HINTS.size} value={num(draw.params.size, 1.5)} min={0.25} max={8} step={0.05} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { size: v })} />
-          <SliderSetting id="brightness" label="Brightness" hint={MORE_HINTS.brightness} value={num(draw.params.brightness, 0.5)} min={0} max={3} step={0.01} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { brightness: v })} />
-          {String(draw.params.style) === 'streaks' && <SliderSetting id="streak" label="Streak length" hint="How long each streak is (seconds of travel × 0.12)." value={num(draw.params.streak, 0.25)} min={0} max={4} step={0.01} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { streak: v })} />}
+          <SliderSetting id="dsize" label="Size" hint={MORE_HINTS.size} value={num(draw.params.size, 1.5)} min={0.25} max={8} step={0.05} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { size: v })} param={{ nodeId: draw.id, key: 'size' }} />
+          <SliderSetting id="brightness" label="Brightness" hint={MORE_HINTS.brightness} value={num(draw.params.brightness, 0.5)} min={0} max={3} step={0.01} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { brightness: v })} param={{ nodeId: draw.id, key: 'brightness' }} />
+          {String(draw.params.style) === 'streaks' && <SliderSetting id="streak" label="Streak length" hint="How long each streak is (seconds of travel × 0.12)." value={num(draw.params.streak, 0.25)} min={0} max={4} step={0.01} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { streak: v })} param={{ nodeId: draw.id, key: 'streak' }} />}
         </> : <>
           <span style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.45 }}>No Draw agents shows this group: the trail is the picture. Draw the walkers over it to see them.</span>
           <Button size="sm" icon="plus" data-look-add-draw onClick={() => { flush(); addDrawAgents(groupId); }}>Draw the walkers too</Button>

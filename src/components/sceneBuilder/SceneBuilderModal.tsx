@@ -23,7 +23,8 @@ import { SceneTree } from './SceneTree';
 import { ScenePreview } from './ScenePreview';
 import { SurpriseBar } from '../surprise/SurpriseBar';
 import { surpriseSceneAction, useSceneSurprise } from './surpriseActions';
-import { SceneCrumb } from '../builders/SceneCrumb';
+import { SCENE_WINDOW, SceneCrumb } from '../builders/SceneCrumb';
+import { useThrottled } from '../builders/useBuilderPreview';
 import { CameraTab, CombineTab, DescribeTab, LookTab, OutputTab, QualityTab, RecipeTab, ShapesTab, TemplatesTab, WarpsTab } from './tabs';
 import { finishBuilder } from '../../builders/finish';
 import { scene3dBuildIds } from '../../builders/finishScenes';
@@ -47,9 +48,11 @@ const MODE_LABEL = { surface: 'Surface', volumetric: 'Volumetric glow', glass: '
 function PreviewPanel() {
   const spec = useSceneBuilder(s => s.spec);
   const tk = useTokens();
+  // What Build makes, counted a few times a second while a slider moves (not on every tick).
+  const counted = useThrottled(spec, 250);
   const dry = useMemo(() => {
-    try { return buildSceneGraph(spec); } catch { return null; }
-  }, [spec]);
+    try { return buildSceneGraph(counted); } catch { return null; }
+  }, [counted]);
   const counts = useMemo(() => {
     const byType = new Map<string, number>();
     const walk = (list: NonNullable<typeof dry>['nodes']) => {
@@ -127,6 +130,7 @@ export function SceneBuilderModal() {
   return (
     <BuilderWindow
       prefsKey="scene-builder"
+      width={SCENE_WINDOW.width} height={SCENE_WINDOW.height}
       title={<SceneCrumb kind="3d" />}
       subtitle={`3D Scene Builder · ${editing ? 'editing a built scene' : 'a new scene'} · ${shapes} shape${shapes === 1 ? '' : 's'} · ${MODE_LABEL[mode]}`}
       icon="cube"

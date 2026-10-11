@@ -450,7 +450,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
         </SettingRow>
         {kind === 'particles' && emit && (
           <SliderSetting id="launch" label="Shot out at" hint="Its speed at birth, along its facing (Emit's Speed)." value={num(emit.params.speed, 0)} min={0} max={3} step={0.01} onFocus={onFocusSetting}
-            onChange={v => setSetupParam(emit.id, { speed: v })} />
+            onChange={v => setSetupParam(emit.id, { speed: v })} param={{ nodeId: emit.id, key: 'speed' }} />
         )}
       </>}>
       {!emit && <span style={{ fontSize: 12, color: tk.text.muted }}>No Emit is wired into this group: they are born anywhere, all at once.</span>}
@@ -464,7 +464,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
         </SettingRow>
       )}
       <SliderSetting id="size" label="Size" hint={SETTING_HINTS.size} value={born.size} min={0} max={2} step={0.01} onFocus={onFocusSetting}
-        onChange={v => setSetupParam(emit?.id, { size: v })} disabled={!emit || born.shape === 'screen' || born.shape === 'point'} />
+        param={emit ? { nodeId: emit.id, key: 'size' } : undefined} onChange={v => setSetupParam(emit?.id, { size: v })} disabled={!emit || born.shape === 'screen' || born.shape === 'point'} />
       <SettingRow id="count" label="How many" hint={SETTING_HINTS.count} onFocus={onFocusSetting}>
         <Segmented size="sm" ariaLabel="How many walkers" value={born.count as typeof COUNT_OPTIONS[number]['value']} options={COUNT_OPTIONS} onChange={v => setSetupParam(groupId, { tier: v })} />
       </SettingRow>
@@ -561,16 +561,16 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
           onFocus={onFocusSetting} onChange={v => update(patchCard(set, s, 'trail', { amount: v }))} right={trailTimes('trail')} />
         {trailNode ? <>
           <SliderSetting id="fades" label="Fades" hint={SETTING_HINTS.fades} value={trail.halfLife} min={0.005} max={1} step={0.005}
-            onFocus={onFocusSetting} onChange={v => setSetupParam(trailNode.id, { halfLife: Math.max(0.005, v) })} />
+            onFocus={onFocusSetting} onChange={v => setSetupParam(trailNode.id, { halfLife: Math.max(0.005, v) })} param={{ nodeId: trailNode.id, key: 'halfLife' }} />
           <SliderSetting id="spreads" label="Spreads" hint={SETTING_HINTS.spreads} value={trail.diffuse} min={0} max={1} step={0.01}
-            onFocus={onFocusSetting} onChange={v => setSetupParam(trailNode.id, { diffuse: v })} />
+            onFocus={onFocusSetting} onChange={v => setSetupParam(trailNode.id, { diffuse: v })} param={{ nodeId: trailNode.id, key: 'diffuse' }} />
           <FadeStrip halfLife={trail.halfLife} diffuse={trail.diffuse} colour={chips.find(c => c.value === cards.trail.channel)?.dot} />
           {!d3 && <SettingRow id="food" label="Food" hint="Something painted into the trail every second, so the walkers that smell it grow over it: a shape, words, a mask or a picture (the Trail field's Add)." onFocus={onFocusSetting}>
             <WhereRow id="food" use="food" onFocus={onFocusSetting} />
           </SettingRow>}
           {!d3 && food && <>
             <SliderSetting id="foodAmount" label="How much food" hint="Trail it paints a second where it is (its Food block's amount)." value={food.amount} min={0} max={2000} step={5}
-              onFocus={onFocusSetting} onChange={v => setSetupParam(food.adapter, { amount: Math.max(0, v) })} />
+              onFocus={onFocusSetting} onChange={v => setSetupParam(food.adapter, { amount: Math.max(0, v) })} param={{ nodeId: food.adapter, key: 'amount' }} />
             <SettingRow id="foodChannel" label="Into" hint="The trail channel the food is painted into: the one the walkers smell, to grow over it." onFocus={onFocusSetting}>
               <ChipRow label="Food into" options={chips.filter(c => c.value !== 'own').map(c => ({ ...c, value: c.value as number }))} value={food.channel} onChange={v => setFoodChannel(groupId, v)} />
             </SettingRow>
@@ -608,7 +608,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const lifeIntro = emit ? (
     <BehaviourCard id="lives" picture="life" title="Lives for" hint={MORE_HINTS.life} summary={num(emit.params.life, 0) > 0 ? `${r3(num(emit.params.life, 0))} s` : 'for ever'}>
       <SliderSetting id="life" label="Seconds (0: for ever)" hint={MORE_HINTS.life} value={num(emit.params.life, 0)} min={0} max={30} step={0.1} onFocus={onFocusSetting}
-        onChange={v => setSetupParam(emit.id, { life: Math.max(0, v) })} />
+        onChange={v => setSetupParam(emit.id, { life: Math.max(0, v) })} param={{ nodeId: emit.id, key: 'life' }} />
     </BehaviourCard>
   ) : undefined;
   const lookCard = (
