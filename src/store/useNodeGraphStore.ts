@@ -3373,7 +3373,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       get().compile();
     }
     const skippedText = r.skipped.length ? ` ${r.skipped.length === 1 ? 'One was' : `${r.skipped.length} were`} left as they are: ${r.skipped.map(s => s.reason).filter((x, i, a) => a.indexOf(x) === i).join('; ')}.` : '';
-    if (r.switched.length) toast.success(r.switched.length === 1 ? 'Switched to Transform: same picture' : `Switched ${r.switched.length} nodes to Transform: same picture`, skippedText ? { message: `${skippedText.trim()} Undo puts them back.` } : undefined);
+    // Exact switches give the same picture; an angle carried radians → degrees differs by float rounding only.
+    const same = r.inexact.length === 0 ? 'same picture' : r.exact.length === 0 ? 'same picture, up to a tiny rounding difference' : `same picture (${r.inexact.length} up to a tiny rounding difference)`;
+    if (r.switched.length) toast.success(r.switched.length === 1 ? `Switched to Transform: ${same}` : `Switched ${r.switched.length} nodes to Transform: ${same}`, skippedText ? { message: `${skippedText.trim()} Undo puts them back.` } : undefined);
     else toast.info(ids === 'all' && !r.skipped.length ? 'No old transform nodes to switch' : 'Nothing switched', { message: skippedText.trim() || 'There is nothing here a Transform would replace.' });
     return { switched: r.switched.length, skipped: r.skipped };
   },
